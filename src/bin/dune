@@ -9,7 +9,5 @@
   test_wasm
   convert
   pretty_print
-  run_wasm_testsuite
-  test_parser_modes
-  debug_binary)
+  run_wasm_testsuite)
  (libraries wasm wax conversion menhirLib re unix cmdliner))
