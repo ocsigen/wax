@@ -68,6 +68,13 @@ let rec map_instr f instr =
     | Sequence instrs -> Sequence (List.map (map_instr f) instrs)
     | Select (cond, t, e) ->
         Select (map_instr f cond, map_instr f t, map_instr f e)
+    | If_annotation { cond; then_body; else_body } ->
+        If_annotation
+          {
+            cond;
+            then_body = List.map (map_instr f) then_body;
+            else_body = Option.map (List.map (map_instr f)) else_body;
+          }
   in
   { desc; info = f instr.info }
 

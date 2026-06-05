@@ -544,6 +544,17 @@ statement_list:
 *)
 | i = blockinstr l = statement_list { i :: l }
 | i = statement ";" l = statement_list { i :: l }
+| i = cond_stmt l = statement_list { i :: l }
+
+(* Instruction-level conditional annotation. Braces are required, so the body
+   is a transparent statement list (not a block). *)
+cond_stmt:
+| "#[if(" c = condition ")" "]" "{" t = statement_list "}" e = cond_else
+  { with_loc $sloc (If_annotation {cond = c; then_body = t; else_body = e}) }
+
+cond_else:
+| { None }
+| "#[else]" "{" b = statement_list "}" { Some b }
 
 globalmut:
 | LET { true }

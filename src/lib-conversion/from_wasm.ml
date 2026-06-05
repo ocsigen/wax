@@ -998,9 +998,12 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   | String (t, s) ->
       let s = String.concat "" (List.map (fun s -> s.Ast.desc) s) in
       Stack.push 1 (with_loc (String (Option.map (idx ctx `Type) t, s)))
-  | If_annotation _ ->
-      failwith
-        "Conditional annotations are not supported when converting to Wax."
+  | If_annotation { cond; then_body; else_body } ->
+      let then_body = Stack.run (instructions ctx then_body) in
+      let else_body =
+        Option.map (fun b -> Stack.run (instructions ctx b)) else_body
+      in
+      Stack.push 0 (with_loc (If_annotation { cond; then_body; else_body }))
   (* Later *)
   | ReturnCallIndirect _ | CallIndirect _ | ArrayInitElem _ | ArrayInitData _
   | ArrayNewElem _ | Load _ | LoadS _ | Store _ | StoreS _ | MemorySize _

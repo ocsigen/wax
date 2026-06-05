@@ -129,6 +129,11 @@ type 'info instr_desc =
   | Return of 'info instr option
   | Sequence of 'info instr list
   | Select of 'info instr * 'info instr * 'info instr
+  | If_annotation of {
+      cond : Wasm.Ast.cond;
+      then_body : 'info instr list;
+      else_body : 'info instr list option;
+    }
 
 and 'info instr = ('info instr_desc, 'info) annotated
 

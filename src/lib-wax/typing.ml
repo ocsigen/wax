@@ -932,8 +932,8 @@ let rec count_holes i =
   | Sequence l | ArrayFixed (_, l) ->
       List.fold_left (fun acc i -> acc + count_holes i) 0 l
   | Select (c, t, e) -> count_holes c + count_holes t + count_holes e
-  | Block _ | Loop _ | TryTable _ | Try _ | StructDefault _ | Char _ | String _
-  | Int _ | Float _ | Get _ | Null | Unreachable | Nop
+  | Block _ | Loop _ | TryTable _ | Try _ | If_annotation _ | StructDefault _
+  | Char _ | String _ | Int _ | Float _ | Get _ | Null | Unreachable | Nop
   | Let (_, None)
   | Br (_, None)
   | Throw (_, None)
@@ -951,8 +951,9 @@ let rec check_hole_order_rec ctx i n =
   | _ ->
       let n =
         match i.desc with
-        | Block _ | Loop _ | TryTable _ | Try _ | StructDefault _ | Char _
-        | String _ | Int _ | Float _ | Get _ | Null | Unreachable | Nop
+        | Block _ | Loop _ | TryTable _ | Try _ | If_annotation _
+        | StructDefault _ | Char _ | String _ | Int _ | Float _ | Get _ | Null
+        | Unreachable | Nop
         | Let (_, None)
         | Br (_, None)
         | Throw (_, None)
@@ -1141,6 +1142,17 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
              else_block = else_block';
            })
         results
+  | If_annotation { cond; then_body; else_body } ->
+      (* Reached only by the return-value pass (exploration specializes
+         conditionals away); diagnostics are discarded there. Type each branch
+         as an isolated block to preserve the structure. *)
+      let then_body' = block ctx i.info None [||] [||] [||] then_body in
+      let else_body' =
+        Option.map (fun b -> block ctx i.info None [||] [||] [||] b) else_body
+      in
+      return_statement i
+        (If_annotation { cond; then_body = then_body'; else_body = else_body' })
+        [||]
   | TryTable { label; typ; block = body; catches } ->
       assert (typ.params = [||]);
       let*! results = array_map_opt (internalize ctx) typ.results in
@@ -2417,7 +2429,7 @@ let rec check_constant_instruction ctx i =
   | StructGet _ | StructSet _ | ArrayGet _ | ArraySet _ | Let _ | Br _ | Br_if _
   | Br_table _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
   | Br_on_cast_fail _ | Throw _ | ThrowRef _ | Return _ | Sequence _ | Select _
-    ->
+  | If_annotation _ ->
       Error.constant_expression_required ctx.diagnostics ~location
 
 type ('before, 'after) phased =
@@ -2684,10 +2696,55 @@ let type_configuration diagnostics fields =
    type-checked by exploring every reachable configuration (as the WAT validator
    does), rather than checking both branches as if they coexisted. *)
 
+let rec instr_has_conditional (i : (_ instr_desc, _) annotated) =
+  let any = List.exists instr_has_conditional in
+  let opt = Option.fold ~none:false ~some:instr_has_conditional in
+  match i.desc with
+  | If_annotation _ -> true
+  | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } -> any block
+  | If { cond; if_block; else_block; _ } ->
+      instr_has_conditional cond || any if_block
+      || Option.fold ~none:false ~some:any else_block
+  | Try { block; catches; catch_all; _ } ->
+      any block
+      || List.exists (fun (_, l) -> any l) catches
+      || Option.fold ~none:false ~some:any catch_all
+  | Sequence l -> any l
+  | ArrayFixed (_, l) -> any l
+  | Call (a, l) | TailCall (a, l) -> instr_has_conditional a || any l
+  | Struct (_, l) -> List.exists (fun (_, i) -> instr_has_conditional i) l
+  | BinOp (_, a, b) | Array (_, a, b) | ArrayGet (a, b) | StructSet (a, _, b) ->
+      instr_has_conditional a || instr_has_conditional b
+  | ArraySet (a, b, c) | Select (a, b, c) ->
+      instr_has_conditional a || instr_has_conditional b
+      || instr_has_conditional c
+  | Set (_, i)
+  | Tee (_, i)
+  | Cast (i, _)
+  | Test (i, _)
+  | NonNull i
+  | UnOp (_, i)
+  | StructGet (i, _)
+  | ArrayDefault (_, i)
+  | Br_if (_, i)
+  | Br_table (_, i)
+  | Br_on_null (_, i)
+  | Br_on_non_null (_, i)
+  | Br_on_cast (_, _, i)
+  | Br_on_cast_fail (_, _, i)
+  | ThrowRef i ->
+      instr_has_conditional i
+  | Let (_, i) | Br (_, i) | Throw (_, i) | Return i -> opt i
+  | Unreachable | Nop | Hole | Null | Get _ | Char _ | String _ | Int _
+  | Float _ | StructDefault _ ->
+      false
+
 let rec field_has_conditional (f : (_ modulefield, _) annotated) =
   match f.desc with
   | Conditional _ -> true
   | Group { fields; _ } -> List.exists field_has_conditional fields
+  | Func { body = _, instrs; _ } -> List.exists instr_has_conditional instrs
+  | Global { def; _ } -> instr_has_conditional def
   | _ -> false
 
 (* Resolve every conditional against the assumption [asm], inlining the selected
@@ -2709,6 +2766,82 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
       record c;
       then_branch (S.and_ asm c))
   in
+  (* Instruction-level specializer: resolve each [If_annotation] by splicing the
+     selected branch into the enclosing list; recurse into every sub-instruction
+     and nested block body. [sone] is for single-instruction positions, where an
+     [If_annotation] cannot appear (it is statement-only). *)
+  let rec sinstrs asm l = List.concat_map (sinstr asm) l
+  and sinstr asm (i : (_ instr_desc, _) annotated) =
+    match i.desc with
+    | If_annotation { cond; then_body; else_body } ->
+        choose asm cond ~location:i.info
+          ~then_branch:(fun asm' -> sinstrs asm' then_body)
+          ~else_branch:(fun asm' ->
+            match else_body with Some e -> sinstrs asm' e | None -> [])
+    | desc -> [ { i with desc = sdesc asm desc } ]
+  and sone asm i = match sinstr asm i with [ x ] -> x | _ -> assert false
+  and sdesc asm (desc : _ instr_desc) : _ instr_desc =
+    match desc with
+    | Block { label; typ; block } ->
+        Block { label; typ; block = sinstrs asm block }
+    | Loop { label; typ; block } ->
+        Loop { label; typ; block = sinstrs asm block }
+    | If { label; typ; cond; if_block; else_block } ->
+        If
+          {
+            label;
+            typ;
+            cond = sone asm cond;
+            if_block = sinstrs asm if_block;
+            else_block = Option.map (sinstrs asm) else_block;
+          }
+    | TryTable { label; typ; catches; block } ->
+        TryTable { label; typ; catches; block = sinstrs asm block }
+    | Try { label; typ; block; catches; catch_all } ->
+        Try
+          {
+            label;
+            typ;
+            block = sinstrs asm block;
+            catches = List.map (fun (t, l) -> (t, sinstrs asm l)) catches;
+            catch_all = Option.map (sinstrs asm) catch_all;
+          }
+    | Set (idx, v) -> Set (idx, sone asm v)
+    | Tee (idx, v) -> Tee (idx, sone asm v)
+    | Call (t, args) -> Call (sone asm t, List.map (sone asm) args)
+    | TailCall (t, args) -> TailCall (sone asm t, List.map (sone asm) args)
+    | Cast (v, t) -> Cast (sone asm v, t)
+    | Test (v, t) -> Test (sone asm v, t)
+    | NonNull v -> NonNull (sone asm v)
+    | Struct (idx, fields) ->
+        Struct (idx, List.map (fun (i, v) -> (i, sone asm v)) fields)
+    | StructGet (v, idx) -> StructGet (sone asm v, idx)
+    | StructSet (v, idx, w) -> StructSet (sone asm v, idx, sone asm w)
+    | Array (idx, a, b) -> Array (idx, sone asm a, sone asm b)
+    | ArrayDefault (idx, v) -> ArrayDefault (idx, sone asm v)
+    | ArrayFixed (idx, l) -> ArrayFixed (idx, List.map (sone asm) l)
+    | ArrayGet (a, b) -> ArrayGet (sone asm a, sone asm b)
+    | ArraySet (a, b, c) -> ArraySet (sone asm a, sone asm b, sone asm c)
+    | BinOp (op, a, b) -> BinOp (op, sone asm a, sone asm b)
+    | UnOp (op, v) -> UnOp (op, sone asm v)
+    | Let (bs, body) -> Let (bs, Option.map (sone asm) body)
+    | Br (l, v) -> Br (l, Option.map (sone asm) v)
+    | Br_if (l, v) -> Br_if (l, sone asm v)
+    | Br_table (ls, v) -> Br_table (ls, sone asm v)
+    | Br_on_null (l, v) -> Br_on_null (l, sone asm v)
+    | Br_on_non_null (l, v) -> Br_on_non_null (l, sone asm v)
+    | Br_on_cast (l, t, v) -> Br_on_cast (l, t, sone asm v)
+    | Br_on_cast_fail (l, t, v) -> Br_on_cast_fail (l, t, sone asm v)
+    | Throw (idx, v) -> Throw (idx, Option.map (sone asm) v)
+    | ThrowRef v -> ThrowRef (sone asm v)
+    | Return v -> Return (Option.map (sone asm) v)
+    | Sequence l -> Sequence (sinstrs asm l)
+    | Select (c, t, e) -> Select (sone asm c, sone asm t, sone asm e)
+    | If_annotation _ -> assert false (* handled in [sinstr] *)
+    | ( Unreachable | Nop | Hole | Null | Get _ | Char _ | String _ | Int _
+      | Float _ | StructDefault _ ) as x ->
+        x
+  in
   let rec sfields asm fl = List.concat_map (sfield asm) fl
   and sfield asm (f : (_ modulefield, _) annotated) =
     match f.desc with
@@ -2719,6 +2852,10 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
             match else_fields with Some e -> sfields asm' e | None -> [])
     | Group { attributes; fields } ->
         [ { f with desc = Group { attributes; fields = sfields asm fields } } ]
+    | Func ({ body = lbl, instrs; _ } as r) ->
+        [ { f with desc = Func { r with body = (lbl, sinstrs asm instrs) } } ]
+    | Global ({ def; _ } as g) ->
+        [ { f with desc = Global { g with def = sone asm def } } ]
     | _ -> [ f ]
   in
   sfields asm0 fields

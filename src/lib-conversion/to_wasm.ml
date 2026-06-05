@@ -732,6 +732,10 @@ let rec instruction ret ctx i : location Text.instr list =
   | Char c -> folded loc (Char c) []
   | String (ty, s) ->
       folded loc (String (Option.map index ty, [ { desc = s; info = loc } ])) []
+  | If_annotation _ ->
+      failwith
+        "Wax conditional annotations are not yet supported when converting to \
+         WAT."
 
 let import attributes =
   List.find_map

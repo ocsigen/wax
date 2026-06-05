@@ -423,7 +423,7 @@ let array_instr pp nm f =
 
 let get_prec (i : _ Ast.instr) =
   match i.desc with
-  | Block _ | Loop _ | If _ | Try _ | TryTable _ -> Atom
+  | Block _ | Loop _ | If _ | Try _ | TryTable _ | If_annotation _ -> Atom
   | Unreachable | Nop | Hole | Null | Get _ | Char _ | String _ | Int _
   | Float _ | Struct _ | StructDefault _ | Array _ | ArrayDefault _
   | ArrayFixed _ | ArrayGet _ | ArraySet _ | Sequence _ ->
@@ -445,7 +445,7 @@ let get_prec (i : _ Ast.instr) =
 
 let is_block (i : _ Ast.instr) =
   match i.desc with
-  | Block _ | Loop _ | If _ | Try _ | TryTable _ -> true
+  | Block _ | Loop _ | If _ | Try _ | TryTable _ | If_annotation _ -> true
   | Call _ | Unreachable | Nop | Hole | Null | Get _ | Set _ | Tee _
   | TailCall _ | Char _ | String _ | Int _ | Float _ | Cast _ | Test _
   | NonNull _ | Struct _ | StructDefault _ | StructGet _ | StructSet _ | Array _
@@ -460,7 +460,7 @@ let rec starts_with_block_prec prec (i : 'a Ast.instr) =
   if prec > actual then false
   else
     match i.desc with
-    | Block _ | Loop _ | If _ | Try _ | TryTable _ -> true
+    | Block _ | Loop _ | If _ | Try _ | TryTable _ | If_annotation _ -> true
     | Call (i, _) | ArrayGet (i, _) | ArraySet (i, _, _) ->
         starts_with_block_prec CallAndFieldAccess i
     | Cast (i, _) | Test (i, _) -> starts_with_block_prec Cast i
@@ -488,6 +488,29 @@ let array_element_precedence nm first i =
     | _ -> Instruction
   else Instruction
 
+let cond_op_string (op : Wasm.Ast.cmp_op) =
+  match op with
+  | Eq -> "="
+  | Ne -> "!="
+  | Lt -> "<"
+  | Gt -> ">"
+  | Le -> "<="
+  | Ge -> ">="
+
+let rec cond_to_string (c : Wasm.Ast.cond) =
+  match c with
+  | Cond_var v -> v.desc
+  | Cond_string s -> Printf.sprintf "%S" s.desc
+  | Cond_version (a, b, c) -> Printf.sprintf "(%d, %d, %d)" a b c
+  | Cond_cmp (op, a, b) ->
+      Printf.sprintf "%s %s %s" (cond_to_string a) (cond_op_string op)
+        (cond_to_string b)
+  | Cond_and l -> Printf.sprintf "all(%s)" (cond_list l)
+  | Cond_or l -> Printf.sprintf "any(%s)" (cond_list l)
+  | Cond_not c -> Printf.sprintf "not(%s)" (cond_to_string c)
+
+and cond_list l = String.concat ", " (List.map cond_to_string l)
+
 let rec instr prec pp (i : _ instr) =
   parentheses prec (get_prec i) pp @@ fun () ->
   match i.desc with
@@ -495,6 +518,22 @@ let rec instr prec pp (i : _ instr) =
       block pp label
         (if true || need_blocktype typ then Some "do" else None)
         typ l
+  | If_annotation { cond; then_body; else_body } ->
+      let branch body =
+        space pp ();
+        punctuation pp "{";
+        block_contents pp body;
+        punctuation pp "}"
+      in
+      hvbox pp (fun () ->
+          attribute pp (Printf.sprintf "#[if(%s)]" (cond_to_string cond));
+          branch then_body;
+          Option.iter
+            (fun b ->
+              newline pp ();
+              attribute pp "#[else]";
+              branch b)
+            else_body)
   | Loop { label; typ; block = l } -> block pp label (Some "loop") typ l
   | If { label; typ; cond; if_block; else_block } ->
       hvbox pp (fun () ->
@@ -914,29 +953,6 @@ let print_attr_prefix pp attributes_list content_fn =
         print_attributes pp attributes_list;
         newline pp ());
       content_fn ())
-
-let cond_op_string (op : Wasm.Ast.cmp_op) =
-  match op with
-  | Eq -> "="
-  | Ne -> "!="
-  | Lt -> "<"
-  | Gt -> ">"
-  | Le -> "<="
-  | Ge -> ">="
-
-let rec cond_to_string (c : Wasm.Ast.cond) =
-  match c with
-  | Cond_var v -> v.desc
-  | Cond_string s -> Printf.sprintf "%S" s.desc
-  | Cond_version (a, b, c) -> Printf.sprintf "(%d, %d, %d)" a b c
-  | Cond_cmp (op, a, b) ->
-      Printf.sprintf "%s %s %s" (cond_to_string a) (cond_op_string op)
-        (cond_to_string b)
-  | Cond_and l -> Printf.sprintf "all(%s)" (cond_list l)
-  | Cond_or l -> Printf.sprintf "any(%s)" (cond_list l)
-  | Cond_not c -> Printf.sprintf "not(%s)" (cond_to_string c)
-
-and cond_list l = String.concat ", " (List.map cond_to_string l)
 
 let rec modulefield pp field =
   match field.desc with
