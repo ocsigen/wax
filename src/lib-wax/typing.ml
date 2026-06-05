@@ -2943,6 +2943,125 @@ let rec check_let_in_conditionals diagnostics (i : (_ instr_desc, _) annotated)
   | _ -> ());
   List.iter (check_let_in_conditionals diagnostics) (sub_instrs i)
 
+(* Select the module-level conditional branches consistent with [a_full],
+   keeping the [Conditional] nodes but emptying the inactive branch. The result
+   has the original structure, but every name visible at module level belongs to
+   the configuration [a_full] — so a single [type_configuration] of it resolves
+   each reference to the right per-branch declaration (a function may be imported
+   with a different signature in each branch). Instruction-level conditionals are
+   left untouched; they are typed branch-by-branch by [type_configuration], as
+   their two branches resolve module-level names identically. *)
+let rec select_module_branches env cdiag a_full fields =
+  List.map
+    (fun (f : (_ modulefield, _) annotated) ->
+      match f.desc with
+      | Conditional { cond; then_fields; else_fields } ->
+          let c = Wasm.Cond_solver.of_cond env cdiag ~location:f.info cond in
+          let desc =
+            if Wasm.Cond_solver.logical_implies a_full c then
+              Conditional
+                {
+                  cond;
+                  then_fields =
+                    select_module_branches env cdiag a_full then_fields;
+                  else_fields = Option.map (fun _ -> []) else_fields;
+                }
+            else
+              Conditional
+                {
+                  cond;
+                  then_fields = [];
+                  else_fields =
+                    Option.map
+                      (select_module_branches env cdiag a_full)
+                      else_fields;
+                }
+          in
+          { f with desc }
+      | Group { attributes; fields } ->
+          {
+            f with
+            desc =
+              Group
+                {
+                  attributes;
+                  fields = select_module_branches env cdiag a_full fields;
+                };
+          }
+      | _ -> f)
+    fields
+
+(* Stitch the per-configuration typed modules into one. All [configs] share the
+   same module structure (every [Conditional] node is present in each, only the
+   branch contents differ); for each conditional, the [@then] branch is taken
+   from the configurations where its condition holds and the [@else] branch from
+   those where it does not, recursively. Concrete fields are configuration-
+   independent, so the first configuration's typing is kept. *)
+let stitch_modules env cdiag configs =
+  let rec merge entries =
+    match entries with
+    | [] -> []
+    | (_, rep) :: _ ->
+        List.mapi
+          (fun idx _ ->
+            merge_field (List.map (fun (a, fl) -> (a, List.nth fl idx)) entries))
+          rep
+  and merge_field at =
+    let _, rep = List.hd at in
+    match rep.desc with
+    | Conditional { cond; _ } ->
+        let c = Wasm.Cond_solver.of_cond env cdiag ~location:rep.info cond in
+        let branch sel get =
+          merge
+            (List.filter_map
+               (fun (a, f) -> if sel a then Some (a, get f) else None)
+               at)
+        in
+        let then_fields =
+          branch
+            (fun a -> Wasm.Cond_solver.logical_implies a c)
+            (fun f ->
+              match f.desc with
+              | Conditional { then_fields; _ } -> then_fields
+              | _ -> assert false)
+        in
+        let has_else =
+          List.exists
+            (fun (_, f) ->
+              match f.desc with
+              | Conditional { else_fields = Some _; _ } -> true
+              | _ -> false)
+            at
+        in
+        let else_fields =
+          if has_else then
+            Some
+              (branch
+                 (fun a ->
+                   Wasm.Cond_solver.logical_implies a (Wasm.Cond_solver.not_ c))
+                 (fun f ->
+                   match f.desc with
+                   | Conditional { else_fields; _ } ->
+                       Option.value ~default:[] else_fields
+                   | _ -> assert false))
+          else None
+        in
+        { rep with desc = Conditional { cond; then_fields; else_fields } }
+    | Group { attributes; _ } ->
+        let fields =
+          merge
+            (List.map
+               (fun (a, f) ->
+                 match f.desc with
+                 | Group { fields; _ } -> (a, fields)
+                 | _ -> assert false)
+               at)
+        in
+        { rep with desc = Group { attributes; fields } }
+    | _ -> rep
+  in
+  merge configs
+
 let f diagnostics fields =
   Ast_utils.iter_fields
     (fun (field : (_ modulefield, _) annotated) ->
@@ -2955,19 +3074,52 @@ let f diagnostics fields =
   if not (List.exists field_has_conditional fields) then
     type_configuration diagnostics fields
   else begin
+    (* Validate by exploring every configuration (reporting each diagnostic once,
+       with its reachability), and collect the feasible configurations'
+       assumptions so the typed module can be rebuilt from them. The solver [env]
+       is shared across the exploration, so the accumulated assumptions are
+       comparable. *)
+    let configs = ref [] in
+    let shared_env = ref None in
     Wasm.Cond_explore.check_all diagnostics
       ?truncation_location:
         (match fields with hd :: _ -> Some hd.info | [] -> None)
       ~explain:(fun env c -> Wasm.Cond_solver.explain env ~style:`Wax c)
       ~specialize:(fun env asm ~enqueue ~record ->
-        specialize_fields env diagnostics ~enqueue ~record asm fields)
+        let a_full = ref asm in
+        let record lit =
+          record lit;
+          a_full := Wasm.Cond_solver.and_ !a_full lit
+        in
+        let m = specialize_fields env diagnostics ~enqueue ~record asm fields in
+        shared_env := Some env;
+        configs := !a_full :: !configs;
+        m)
       ~check:(fun ctx m -> ignore (type_configuration ctx m))
       ();
-    (* The typed module is consumed only by the (deferred) WAT conversion;
-       wax -> wax ignores it. Produce it by typing the full module with
-       conditionals preserved, discarding its (imprecise, cross-branch)
-       diagnostics — the exploration above did the real checking. *)
-    type_configuration (Utils.Diagnostic.collector ~source:None ()) fields
+    (* Rebuild the typed module (consumed only by the deferred WAT conversion;
+       wax -> wax ignores it) by typing each configuration with its module-level
+       branches selected — so names resolve per branch — and stitching the
+       results back together. Diagnostics are discarded; the exploration above
+       did the real checking. *)
+    let cdiag = Utils.Diagnostic.collector ~source:None () in
+    match !shared_env with
+    | None -> type_configuration cdiag fields
+    | Some env ->
+        let typed =
+          List.map
+            (fun a_full ->
+              let sel = select_module_branches env cdiag a_full fields in
+              let types, fields = type_configuration cdiag sel in
+              (types, (a_full, fields)))
+            !configs
+        in
+        let types =
+          match typed with
+          | (t, _) :: _ -> t
+          | [] -> Tbl.make (Namespace.make ()) "type"
+        in
+        (types, stitch_modules env cdiag (List.map snd typed))
   end
 
 let erase_types m =
