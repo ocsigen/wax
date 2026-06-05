@@ -53,7 +53,7 @@ fn jsstring_of_substring(s: &string, pos: i32, len: i32) -> &?any {
     let i: i32;
     let c: i32;
     if text_converters_available {
-        return decodeStringFromUTF8Array(s, pos, pos + len) as &?any;
+        return decodeStringFromUTF8Array(s, pos, pos + len) as &any;
     }
     'continue: if string_builtins_available & (len <=u utf16_buffer_size) {
         'loop: loop {
@@ -65,7 +65,7 @@ fn jsstring_of_substring(s: &string, pos: i32, len: i32) -> &?any {
                 br 'loop;
             }
         } /* 'loop */
-        return fromCharCodeArray(buffer, 0, len) as &?any;
+        return fromCharCodeArray(buffer, 0, len) as &any;
     }
     become jsstring_of_substring_fallback(s, pos, len);
 }

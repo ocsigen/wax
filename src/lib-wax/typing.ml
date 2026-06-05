@@ -1517,6 +1517,23 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
   | Cast (i', typ) ->
       let* i' = instruction ctx i' in
       let ty' = expression_type ctx i' in
+      (* [extern.convert_any]/[any.convert_extern] preserve non-nullness, so a
+         cast to [&?extern]/[&?any] of a non-nullable argument actually yields
+         [&extern]/[&any]; refine the target accordingly.
+         ZZZ This should eventually be guarded by a flag deciding whether to
+         apply such refinements or keep the cast as written. *)
+      let arg_non_nullable =
+        match UnionFind.find ty' with
+        | Valtype { typ = Ref { nullable = false; _ }; _ } -> true
+        | _ -> false
+      in
+      let typ =
+        match typ with
+        | Valtype (Ref ({ typ = Extern | Any; nullable = true } as r))
+          when arg_non_nullable ->
+            Ast.Valtype (Ref { r with nullable = false })
+        | _ -> typ
+      in
       let*! ty =
         internalize ctx
           (match typ with

@@ -670,7 +670,7 @@ fn caml_ba_from_typed_array(x: &eq) -> &eq {
 }
 #[export = "caml_ba_to_typed_array"]
 fn caml_ba_to_typed_array(x: &eq) -> &eq {
-    wrap((x as &bigarray).ba_data as &?any);
+    wrap((x as &bigarray).ba_data as &any);
 }
 fn caml_ba_get_at_offset(ba: &bigarray, i: i32) -> &eq {
     let data: &extern;
@@ -1569,7 +1569,7 @@ fn caml_uint8_array_of_string(x: &eq) -> &eq {
     len = s.length;
     ta = ta_create(3, len);
     ta_blit_from_string(s, 0, ta, 0, len);
-    wrap(ta as &?any);
+    wrap(ta as &any);
 }
 #[export = "caml_ba_get_kind"]
 fn caml_ba_get_kind(x: &eq) -> i32 { (x as &bigarray).ba_kind as i32_u; }
