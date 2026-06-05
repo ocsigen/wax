@@ -312,11 +312,11 @@ type context = {
   output : Format.formatter;
 }
 
-let make ?color ~source ?(related = []) ?(exit_on_error = true)
+let make ?color ~source ?(related = []) ?(exit_on_error = true) ?(max = 1)
     ?(output = Format.err_formatter) () =
   let theme = get_theme ?color () in
   {
-    max = 1;
+    max;
     queue = Queue.create ();
     source;
     theme;
@@ -324,6 +324,24 @@ let make ?color ~source ?(related = []) ?(exit_on_error = true)
     exit_on_error;
     output;
   }
+
+(* A formatter that discards everything, used by collecting contexts. *)
+let null_formatter = Format.make_formatter (fun _ _ _ -> ()) (fun () -> ())
+
+(* A context that accumulates errors in its queue without ever printing or
+   exiting, so they can be inspected with [collected]. *)
+let collector ?color ~source ?related () =
+  make ?color ~source ?related ~exit_on_error:false ~max:max_int
+    ~output:null_formatter ()
+
+type entry = t
+
+let collected context = List.of_seq (Queue.to_seq context.queue)
+let entry_location (e : entry) = e.location
+let entry_severity (e : entry) = e.severity
+let entry_message (e : entry) = e.message
+let entry_hint (e : entry) = e.hint
+let entry_related (e : entry) = e.related
 
 let output_errors ?exit_on_error context =
   let exit_on_error =

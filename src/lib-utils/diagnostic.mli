@@ -29,6 +29,33 @@ val report :
 (** [report context ~location ~severity ?hint ?related ~message ()] reports a
     diagnostic. *)
 
+(** {1 Collecting diagnostics}
+
+    A [collector] context accumulates reported errors instead of printing them,
+    so they can be inspected and re-reported. Used for path-sensitive
+    validation, where the same code is validated under several assumptions. *)
+
+val collector :
+  ?color:Colors.flag ->
+  source:string option ->
+  ?related:label list ->
+  unit ->
+  context
+(** A context that buffers reported errors without printing or exiting. *)
+
+type entry
+(** A collected diagnostic. *)
+
+val collected : context -> entry list
+(** [collected context] returns the errors accumulated in [context] (without
+    clearing or printing them). *)
+
+val entry_location : entry -> Ast.location
+val entry_severity : entry -> severity
+val entry_message : entry -> Format.formatter -> unit -> unit
+val entry_hint : entry -> (Format.formatter -> unit -> unit) option
+val entry_related : entry -> label list
+
 type theme
 (** A theme for diagnostic output. *)
 

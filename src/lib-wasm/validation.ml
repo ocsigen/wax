@@ -2217,7 +2217,7 @@ let start ctx fields =
       | _ -> ())
     fields
 
-let f diagnostics (_, fields) =
+let validate_configuration diagnostics (_, fields) =
   let type_context =
     {
       types = Types.create ();
@@ -2259,6 +2259,245 @@ let f diagnostics (_, fields) =
   functions ctx fields;
   exports ctx fields;
   start ctx fields
+
+(* Path-sensitive validation of conditional annotations.
+
+   The module containing [(@if ...)] conditionals denotes one concrete module per
+   "configuration" (a choice of branch at every reachable conditional). We
+   explore every reachable configuration with a worklist of assumptions (path
+   conditions tracked as BDDs), specialize the module for each (splicing in the
+   selected branches to obtain a conditional-free module), validate it with
+   {!validate_configuration}, and report each distinct error once, annotated with
+   the minimal assumption under which it occurs. *)
+
+module Diagnostic = Utils.Diagnostic
+
+module Bdd_tbl = Hashtbl.Make (struct
+  type t = Cond_solver.t
+
+  let equal = Cond_solver.equal
+  let hash = Cond_solver.hash
+end)
+
+let rec instr_has_conditional (i : _ Ast.Text.instr) =
+  match i.desc with
+  | If_annotation _ -> true
+  | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
+      List.exists instr_has_conditional block
+  | If { if_block; else_block; _ } ->
+      List.exists instr_has_conditional if_block
+      || List.exists instr_has_conditional else_block
+  | Try { block; catches; catch_all; _ } ->
+      List.exists instr_has_conditional block
+      || List.exists (fun (_, l) -> List.exists instr_has_conditional l) catches
+      || Option.fold ~none:false
+           ~some:(List.exists instr_has_conditional)
+           catch_all
+  | Folded (h, l) ->
+      instr_has_conditional h || List.exists instr_has_conditional l
+  | _ -> false
+
+let field_has_conditional (f : (_ Ast.Text.modulefield, _) Ast.annotated) =
+  match f.desc with
+  | Module_if_annotation _ -> true
+  | Func { instrs; _ } -> List.exists instr_has_conditional instrs
+  | Global { init; _ } -> List.exists instr_has_conditional init
+  | Elem { init; _ } -> List.exists (List.exists instr_has_conditional) init
+  | Table { init; _ } -> (
+      match init with
+      | Init_default -> false
+      | Init_expr e -> List.exists instr_has_conditional e
+      | Init_segment segs ->
+          List.exists (List.exists instr_has_conditional) segs)
+  | _ -> false
+
+(* Specialize a module for one configuration: resolve every conditional using
+   the assumption [asm], splicing in the selected branch. Undetermined
+   conditionals select [@then] and [enqueue] the [@else] configuration; each
+   selected branch literal is passed to [record] to build the configuration's
+   full assumption. *)
+let specialize diagnostics ~enqueue ~record asm0 fields =
+  let choose asm cond ~location ~then_branch ~else_branch =
+    let c = Cond_solver.of_cond diagnostics ~location cond in
+    if Cond_solver.logical_implies asm c then (
+      record c;
+      then_branch (Cond_solver.and_ asm c))
+    else if Cond_solver.logical_implies asm (Cond_solver.not_ c) then (
+      record (Cond_solver.not_ c);
+      else_branch (Cond_solver.and_ asm (Cond_solver.not_ c)))
+    else (
+      enqueue (Cond_solver.and_ asm (Cond_solver.not_ c));
+      record c;
+      then_branch (Cond_solver.and_ asm c))
+  in
+  let rec sfields asm fl = List.concat_map (sfield asm) fl
+  and sfield asm (f : (_ Ast.Text.modulefield, _) Ast.annotated) =
+    match f.desc with
+    | Module_if_annotation { cond; then_fields; else_fields } ->
+        choose asm cond ~location:f.info
+          ~then_branch:(fun asm' -> sfields asm' then_fields)
+          ~else_branch:(fun asm' ->
+            match else_fields with Some e -> sfields asm' e | None -> [])
+    | Func { id; typ; locals; instrs; exports } ->
+        let desc : _ Ast.Text.modulefield =
+          Func { id; typ; locals; instrs = sinstrs asm instrs; exports }
+        in
+        [ { f with desc } ]
+    | Global { id; typ; init; exports } ->
+        let desc : _ Ast.Text.modulefield =
+          Global { id; typ; init = sinstrs asm init; exports }
+        in
+        [ { f with desc } ]
+    | Table { id; typ; init; exports } ->
+        let init : _ Ast.Text.tableinit =
+          match init with
+          | Init_default -> Init_default
+          | Init_expr e -> Init_expr (sinstrs asm e)
+          | Init_segment segs -> Init_segment (List.map (sinstrs asm) segs)
+        in
+        let desc : _ Ast.Text.modulefield = Table { id; typ; init; exports } in
+        [ { f with desc } ]
+    | Elem { id; typ; init; mode } ->
+        let desc : _ Ast.Text.modulefield =
+          Elem { id; typ; init = List.map (sinstrs asm) init; mode }
+        in
+        [ { f with desc } ]
+    | _ -> [ f ]
+  and sinstrs asm l = List.concat_map (sinstr asm) l
+  and sinstr asm (i : _ Ast.Text.instr) =
+    match i.desc with
+    | If_annotation { cond; then_body; else_body } ->
+        choose asm cond ~location:i.info
+          ~then_branch:(fun asm' -> sinstrs asm' then_body)
+          ~else_branch:(fun asm' ->
+            match else_body with Some e -> sinstrs asm' e | None -> [])
+    | desc -> [ { i with desc = sstructured asm desc } ]
+  and sstructured asm (desc : _ Ast.Text.instr_desc) =
+    match desc with
+    | Block b -> Block { b with block = sinstrs asm b.block }
+    | Loop b -> Loop { b with block = sinstrs asm b.block }
+    | If b ->
+        If
+          {
+            b with
+            if_block = sinstrs asm b.if_block;
+            else_block = sinstrs asm b.else_block;
+          }
+    | TryTable b -> TryTable { b with block = sinstrs asm b.block }
+    | Try b ->
+        Try
+          {
+            b with
+            block = sinstrs asm b.block;
+            catches = List.map (fun (idx, l) -> (idx, sinstrs asm l)) b.catches;
+            catch_all = Option.map (sinstrs asm) b.catch_all;
+          }
+    | Folded (h, l) ->
+        Folded ({ h with desc = sstructured asm h.desc }, sinstrs asm l)
+    | desc -> desc
+  in
+  sfields asm0 fields
+
+let max_configurations = 4096
+
+let f diagnostics ((name, fields) as modul) =
+  if not (List.exists field_has_conditional fields) then
+    validate_configuration diagnostics modul
+  else begin
+    let queue = Queue.create () in
+    Queue.push Cond_solver.true_ queue;
+    let processed = Bdd_tbl.create 16 in
+    (* error key -> (captured diagnostic, accumulated reachability) *)
+    let errors : (string, Diagnostic.entry * Cond_solver.t) Hashtbl.t =
+      Hashtbl.create 16
+    in
+    let count = ref 0 in
+    let truncated = ref false in
+    while (not (Queue.is_empty queue)) && not !truncated do
+      let asm = Queue.pop queue in
+      if Bdd_tbl.mem processed asm || not (Cond_solver.is_satisfiable asm) then
+        ()
+      else if !count >= max_configurations then truncated := true
+      else begin
+        Bdd_tbl.add processed asm ();
+        incr count;
+        let a_full = ref Cond_solver.true_ in
+        let record lit = a_full := Cond_solver.and_ !a_full lit in
+        let enqueue b = Queue.push b queue in
+        let sfields = specialize diagnostics ~enqueue ~record asm fields in
+        let cctx = Diagnostic.collector ~source:None () in
+        validate_configuration cctx (name, sfields);
+        (* Discard errors from an infeasible configuration: undetermined
+           conditionals are explored optimistically, so a configuration's full
+           assumption [a_full] may turn out unsatisfiable (e.g. contradictory
+           version bounds). *)
+        if Cond_solver.is_satisfiable !a_full then
+          List.iter
+            (fun e ->
+              let loc = Diagnostic.entry_location e in
+              let key =
+                Printf.sprintf "%d:%d:%s" loc.loc_start.pos_cnum
+                  loc.loc_end.pos_cnum
+                  (Format.asprintf "%a"
+                     (fun f () -> Diagnostic.entry_message e f ())
+                     ())
+              in
+              let reach =
+                match Hashtbl.find_opt errors key with
+                | Some (_, r) -> Cond_solver.or_ r !a_full
+                | None -> !a_full
+              in
+              Hashtbl.replace errors key (e, reach))
+            (Diagnostic.collected cctx)
+      end
+    done;
+    let entries = Hashtbl.fold (fun _ v acc -> v :: acc) errors [] in
+    let entries =
+      List.sort
+        (fun (e1, _) (e2, _) ->
+          let l1 = Diagnostic.entry_location e1
+          and l2 = Diagnostic.entry_location e2 in
+          compare
+            (l1.loc_start.pos_cnum, l1.loc_end.pos_cnum)
+            (l2.loc_start.pos_cnum, l2.loc_end.pos_cnum))
+        entries
+    in
+    List.iter
+      (fun (e, reach) ->
+        let base_hint = Diagnostic.entry_hint e in
+        let hint =
+          match Cond_solver.explain reach with
+          | None -> base_hint
+          | Some s ->
+              Some
+                (fun f () ->
+                  (match base_hint with
+                  | Some h ->
+                      h f ();
+                      Format.pp_print_space f ()
+                  | None -> ());
+                  Format.fprintf f "reachable when %s" s)
+        in
+        Diagnostic.report diagnostics
+          ~location:(Diagnostic.entry_location e)
+          ~severity:(Diagnostic.entry_severity e)
+          ?hint
+          ~related:(Diagnostic.entry_related e)
+          ~message:(Diagnostic.entry_message e)
+          ())
+      entries;
+    if !truncated then
+      match fields with
+      | f :: _ ->
+          Diagnostic.report diagnostics ~location:f.Ast.info ~severity:Warning
+            ~message:(fun fmt () ->
+              Format.fprintf fmt
+                "Too many conditional configurations (over %d); validation \
+                 coverage was truncated."
+                max_configurations)
+            ()
+      | [] -> ()
+  end
 
 let eq_heaptype h1 h2 =
   let open Ast.Text in
