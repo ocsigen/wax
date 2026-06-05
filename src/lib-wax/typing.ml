@@ -72,6 +72,7 @@ vs
 *)
 
 open Ast
+module Cond = Wasm.Cond_solver
 
 type typed_module_annotation = Ast.storagetype option array * Ast.location
 
@@ -268,49 +269,101 @@ let ( let*@ ) = Option.bind
 let ( let+@ ) o f = Option.map f o
 let ( let>@ ) o f = Option.iter f o
 
+(* Names are resolved relative to a "current assumption" — the conjunction of
+   the conditional-branch conditions enclosing the point being typed. The cell
+   is shared by every namespace and table of one module typing, and updated as
+   the passes descend into [#[if]]/[#[else]] branches. When no conditionals are
+   present (or when checking a single specialized configuration) it stays
+   [true_] and these structures behave like plain name-keyed tables. *)
 module Namespace = struct
-  type t = (string, string * location) Hashtbl.t
+  type t = {
+    cond : Cond.t ref;
+    tbl : (string, (string * location * Cond.t) list) Hashtbl.t;
+  }
 
-  let make () = Hashtbl.create 16
+  let make cond = { cond; tbl = Hashtbl.create 16 }
+  let entries ns x = try Hashtbl.find ns.tbl x.desc with Not_found -> []
 
-  let exists d ns x =
-    match Hashtbl.find_opt ns x.desc with
-    | None -> false
-    | Some (kind, _) ->
-        Error.name_already_bound d ~location:x.info kind x;
-        true
+  (* A name conflicts with an earlier declaration only if their assumptions can
+     both hold; declarations in mutually-exclusive branches do not conflict. *)
+  let conflict ns x =
+    let c = !(ns.cond) in
+    List.find_opt
+      (fun (_, _, c') -> Cond.is_satisfiable (Cond.and_ c c'))
+      (entries ns x)
 
   let register d ns kind x =
-    match Hashtbl.find_opt ns x.desc with
-    | None -> Hashtbl.replace ns x.desc (kind, x.info)
-    | Some (kind', _loc') -> Error.name_already_bound d ~location:x.info kind' x
+    (match conflict ns x with
+    | Some (kind', _, _) -> Error.name_already_bound d ~location:x.info kind' x
+    | None -> ());
+    Hashtbl.replace ns.tbl x.desc ((kind, x.info, !(ns.cond)) :: entries ns x)
+
+  let exists d ns x =
+    match conflict ns x with
+    | Some (kind', _, _) ->
+        Error.name_already_bound d ~location:x.info kind' x;
+        true
+    | None -> false
 end
 
 module Tbl = struct
   type 'a t = {
     kind : string;
     namespace : Namespace.t;
-    tbl : (string, 'a) Hashtbl.t;
+    tbl : (string, (Cond.t * 'a) list) Hashtbl.t;
   }
 
   let make namespace kind = { kind; namespace; tbl = Hashtbl.create 16 }
+  let cur env = !(env.namespace.cond)
+  let entries env x = try Hashtbl.find env.tbl x.desc with Not_found -> []
 
   let add d env x v =
     Namespace.register d env.namespace env.kind x;
-    Hashtbl.replace env.tbl x.desc v
+    Hashtbl.replace env.tbl x.desc ((cur env, v) :: entries env x)
 
   let exists d env x = Namespace.exists d env.namespace x
-  let override env x v = Hashtbl.replace env.tbl x.desc v
+
+  (* Replace the most recently added entry (added by [add] under the current
+     assumption); used by [add_type] to fix up rectype indices in place. *)
+  let override env x v =
+    match entries env x with
+    | _ :: tl -> Hashtbl.replace env.tbl x.desc ((cur env, v) :: tl)
+    | [] -> Hashtbl.replace env.tbl x.desc [ (cur env, v) ]
+
+  (* Pick the declaration whose assumption is entailed by the current one,
+     falling back to one merely compatible with it, then to the most recent. *)
+  let resolve env x =
+    match entries env x with
+    | [] -> None
+    | [ (_, v) ] -> Some v
+    | l -> (
+        let c = cur env in
+        let pick p = Option.map snd (List.find_opt (fun (c', _) -> p c') l) in
+        match pick (fun c' -> Cond.logical_implies c c') with
+        | Some _ as r -> r
+        | None -> (
+            match pick (fun c' -> Cond.is_satisfiable (Cond.and_ c c')) with
+            | Some _ as r -> r
+            | None -> ( match l with (_, v) :: _ -> Some v | [] -> None)))
 
   let find d env x =
-    try Some (Hashtbl.find env.tbl x.desc)
-    with Not_found ->
-      Error.unbound_name d ~location:x.info env.kind x;
-      None
+    match resolve env x with
+    | Some _ as r -> r
+    | None ->
+        Error.unbound_name d ~location:x.info env.kind x;
+        None
 
-  let find_opt env x = Hashtbl.find_opt env.tbl x.desc
-  let iter env f = Hashtbl.iter f env.tbl
-  let remove env x = Hashtbl.remove env.tbl x.desc
+  let find_opt env x = resolve env x
+
+  let iter env f =
+    Hashtbl.iter (fun k l -> List.iter (fun (_, v) -> f k v) l) env.tbl
+
+  (* Drop the most recently added entry (the temporary [add_type] placeholder),
+     keeping any declaration of the same name from another branch. *)
+  let remove env x =
+    match entries env x with
+    | _ :: (_ :: _ as tl) -> Hashtbl.replace env.tbl x.desc tl
+    | _ -> Hashtbl.remove env.tbl x.desc
 end
 
 type types = (int * subtype) Tbl.t
@@ -473,7 +526,22 @@ type module_context = {
   mutable locals : inferred_valtype StringMap.t;
   control_types : (string option * inferred_type UnionFind.t array) list;
   return_types : inferred_type UnionFind.t array;
+  cond : Cond.t ref;
+      (* Current branch assumption (shared with every namespace/table above);
+         set while typing a conditional branch so names resolve per branch. *)
+  cond_env : Cond.env;
 }
+
+(* Type [f] under the assumption of a conditional branch ([positive] for
+   [@then], negative for [@else]), restoring the previous assumption after. *)
+let with_cond_ref cond_ref cond_env diagnostics ~location cond positive f =
+  let saved = !cond_ref in
+  let c = Cond.of_cond cond_env diagnostics ~location cond in
+  cond_ref := Cond.and_ saved (if positive then c else Cond.not_ c);
+  Fun.protect ~finally:(fun () -> cond_ref := saved) f
+
+let with_cond ctx ~location cond positive f =
+  with_cond_ref ctx.cond ctx.cond_env ctx.diagnostics ~location cond positive f
 
 let lookup_func_type ?location ctx name =
   let*@ ty = Tbl.find_opt ctx.type_context.types name in
@@ -1151,12 +1219,19 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
            })
         results
   | If_annotation { cond; then_body; else_body } ->
-      (* Reached only by the return-value pass (exploration specializes
-         conditionals away); diagnostics are discarded there. Type each branch
-         as an isolated block to preserve the structure. *)
-      let then_body' = block ctx i.info None [||] [||] [||] then_body in
+      (* Type each branch as an isolated block, under the branch's assumption so
+         names resolve per branch (a name may be declared only in, or with a
+         different type in, the matching configuration). *)
+      let then_body' =
+        with_cond ctx ~location:i.info cond true (fun () ->
+            block ctx i.info None [||] [||] [||] then_body)
+      in
       let else_body' =
-        Option.map (fun b -> block ctx i.info None [||] [||] [||] b) else_body
+        Option.map
+          (fun b ->
+            with_cond ctx ~location:i.info cond false (fun () ->
+                block ctx i.info None [||] [||] [||] b))
+          else_body
       in
       return_statement i
         (If_annotation { cond; then_body = then_body'; else_body = else_body' })
@@ -2475,12 +2550,19 @@ let rec globals ctx fields =
       | Group { fields; _ } ->
           let fields = globals ctx fields in
           PhasedGroup { before = field; fields }
-      | Conditional { then_fields; else_fields; _ } ->
+      | Conditional { cond; then_fields; else_fields } ->
           PhasedConditional
             {
               before = field;
-              then_ = globals ctx then_fields;
-              else_ = Option.map (globals ctx) else_fields;
+              then_ =
+                with_cond ctx ~location:field.info cond true (fun () ->
+                    globals ctx then_fields);
+              else_ =
+                Option.map
+                  (fun e ->
+                    with_cond ctx ~location:field.info cond false (fun () ->
+                        globals ctx e))
+                  else_fields;
             }
       | _ -> Before field)
     fields
@@ -2551,8 +2633,15 @@ let rec functions ctx fields =
                 Conditional
                   {
                     cond;
-                    then_fields = functions ctx then_;
-                    else_fields = Option.map (functions ctx) else_;
+                    then_fields =
+                      with_cond ctx ~location:info cond true (fun () ->
+                          functions ctx then_);
+                    else_fields =
+                      Option.map
+                        (fun e ->
+                          with_cond ctx ~location:info cond false (fun () ->
+                              functions ctx e))
+                        else_;
                   };
             }
       | PhasedGroup _ | PhasedConditional _
@@ -2594,26 +2683,43 @@ let fundecl ctx name typ sign =
         | None -> assert false (*ZZZ*))
 
 let type_configuration diagnostics fields =
+  let cond = ref Cond.true_ in
+  let cond_env = Cond.create () in
   let type_context =
     {
       internal_types = Wasm.Types.create ();
-      types = Tbl.make (Namespace.make ()) "type";
+      types = Tbl.make (Namespace.make cond) "type";
     }
   in
-  let rec register_types fields =
-    Ast_utils.iter_fields
+  (* Walk module fields, recursing into groups and threading the branch
+     assumption through conditionals so each [Type]/declaration is registered
+     under the assumption of the branch it appears in. *)
+  let rec walk_fields f fields =
+    List.iter
       (fun (field : (_ modulefield, _) annotated) ->
         match field.desc with
-        | Type rectype ->
-            let _ : int option = add_type diagnostics type_context rectype in
-            ()
-        | Group { fields; _ } -> register_types fields
-        | _ -> ())
+        | Group { fields; _ } -> walk_fields f fields
+        | Conditional { cond = c; then_fields; else_fields } ->
+            with_cond_ref cond cond_env diagnostics ~location:field.info c true
+              (fun () -> walk_fields f then_fields);
+            Option.iter
+              (fun e ->
+                with_cond_ref cond cond_env diagnostics ~location:field.info c
+                  false (fun () -> walk_fields f e))
+              else_fields
+        | _ -> f field)
       fields
   in
-  register_types fields;
+  walk_fields
+    (fun (field : (_ modulefield, _) annotated) ->
+      match field.desc with
+      | Type rectype ->
+          let _ : int option = add_type diagnostics type_context rectype in
+          ()
+      | _ -> ())
+    fields;
   let ctx =
-    let namespace = Namespace.make () in
+    let namespace = Namespace.make cond in
     {
       diagnostics;
       type_context;
@@ -2622,14 +2728,16 @@ let type_configuration diagnostics fields =
       functions = Tbl.make namespace "function";
       globals = Tbl.make namespace "global";
       (*      memories = Tbl.make (Namespace.make ()) "memories";*)
-      tags = Tbl.make (Namespace.make ()) "tag";
+      tags = Tbl.make (Namespace.make cond) "tag";
       locals = StringMap.empty;
       control_types = [];
       return_types = [||];
+      cond;
+      cond_env;
     }
   in
   check_type_definitions ctx;
-  Ast_utils.iter_fields
+  walk_fields
     (fun field ->
       match field.desc with
       | Fundecl { name; typ; sign; _ } ->
@@ -2943,125 +3051,6 @@ let rec check_let_in_conditionals diagnostics (i : (_ instr_desc, _) annotated)
   | _ -> ());
   List.iter (check_let_in_conditionals diagnostics) (sub_instrs i)
 
-(* Select the module-level conditional branches consistent with [a_full],
-   keeping the [Conditional] nodes but emptying the inactive branch. The result
-   has the original structure, but every name visible at module level belongs to
-   the configuration [a_full] — so a single [type_configuration] of it resolves
-   each reference to the right per-branch declaration (a function may be imported
-   with a different signature in each branch). Instruction-level conditionals are
-   left untouched; they are typed branch-by-branch by [type_configuration], as
-   their two branches resolve module-level names identically. *)
-let rec select_module_branches env cdiag a_full fields =
-  List.map
-    (fun (f : (_ modulefield, _) annotated) ->
-      match f.desc with
-      | Conditional { cond; then_fields; else_fields } ->
-          let c = Wasm.Cond_solver.of_cond env cdiag ~location:f.info cond in
-          let desc =
-            if Wasm.Cond_solver.logical_implies a_full c then
-              Conditional
-                {
-                  cond;
-                  then_fields =
-                    select_module_branches env cdiag a_full then_fields;
-                  else_fields = Option.map (fun _ -> []) else_fields;
-                }
-            else
-              Conditional
-                {
-                  cond;
-                  then_fields = [];
-                  else_fields =
-                    Option.map
-                      (select_module_branches env cdiag a_full)
-                      else_fields;
-                }
-          in
-          { f with desc }
-      | Group { attributes; fields } ->
-          {
-            f with
-            desc =
-              Group
-                {
-                  attributes;
-                  fields = select_module_branches env cdiag a_full fields;
-                };
-          }
-      | _ -> f)
-    fields
-
-(* Stitch the per-configuration typed modules into one. All [configs] share the
-   same module structure (every [Conditional] node is present in each, only the
-   branch contents differ); for each conditional, the [@then] branch is taken
-   from the configurations where its condition holds and the [@else] branch from
-   those where it does not, recursively. Concrete fields are configuration-
-   independent, so the first configuration's typing is kept. *)
-let stitch_modules env cdiag configs =
-  let rec merge entries =
-    match entries with
-    | [] -> []
-    | (_, rep) :: _ ->
-        List.mapi
-          (fun idx _ ->
-            merge_field (List.map (fun (a, fl) -> (a, List.nth fl idx)) entries))
-          rep
-  and merge_field at =
-    let _, rep = List.hd at in
-    match rep.desc with
-    | Conditional { cond; _ } ->
-        let c = Wasm.Cond_solver.of_cond env cdiag ~location:rep.info cond in
-        let branch sel get =
-          merge
-            (List.filter_map
-               (fun (a, f) -> if sel a then Some (a, get f) else None)
-               at)
-        in
-        let then_fields =
-          branch
-            (fun a -> Wasm.Cond_solver.logical_implies a c)
-            (fun f ->
-              match f.desc with
-              | Conditional { then_fields; _ } -> then_fields
-              | _ -> assert false)
-        in
-        let has_else =
-          List.exists
-            (fun (_, f) ->
-              match f.desc with
-              | Conditional { else_fields = Some _; _ } -> true
-              | _ -> false)
-            at
-        in
-        let else_fields =
-          if has_else then
-            Some
-              (branch
-                 (fun a ->
-                   Wasm.Cond_solver.logical_implies a (Wasm.Cond_solver.not_ c))
-                 (fun f ->
-                   match f.desc with
-                   | Conditional { else_fields; _ } ->
-                       Option.value ~default:[] else_fields
-                   | _ -> assert false))
-          else None
-        in
-        { rep with desc = Conditional { cond; then_fields; else_fields } }
-    | Group { attributes; _ } ->
-        let fields =
-          merge
-            (List.map
-               (fun (a, f) ->
-                 match f.desc with
-                 | Group { fields; _ } -> (a, fields)
-                 | _ -> assert false)
-               at)
-        in
-        { rep with desc = Group { attributes; fields } }
-    | _ -> rep
-  in
-  merge configs
-
 let f diagnostics fields =
   Ast_utils.iter_fields
     (fun (field : (_ modulefield, _) annotated) ->
@@ -3074,52 +3063,23 @@ let f diagnostics fields =
   if not (List.exists field_has_conditional fields) then
     type_configuration diagnostics fields
   else begin
-    (* Validate by exploring every configuration (reporting each diagnostic once,
-       with its reachability), and collect the feasible configurations'
-       assumptions so the typed module can be rebuilt from them. The solver [env]
-       is shared across the exploration, so the accumulated assumptions are
-       comparable. *)
-    let configs = ref [] in
-    let shared_env = ref None in
+    (* Check every reachable configuration: each is specialized to be
+       conditional-free and typed independently, so a diagnostic is reported
+       once with the assumption under which it is reachable. *)
     Wasm.Cond_explore.check_all diagnostics
       ?truncation_location:
         (match fields with hd :: _ -> Some hd.info | [] -> None)
       ~explain:(fun env c -> Wasm.Cond_solver.explain env ~style:`Wax c)
       ~specialize:(fun env asm ~enqueue ~record ->
-        let a_full = ref asm in
-        let record lit =
-          record lit;
-          a_full := Wasm.Cond_solver.and_ !a_full lit
-        in
-        let m = specialize_fields env diagnostics ~enqueue ~record asm fields in
-        shared_env := Some env;
-        configs := !a_full :: !configs;
-        m)
+        specialize_fields env diagnostics ~enqueue ~record asm fields)
       ~check:(fun ctx m -> ignore (type_configuration ctx m))
       ();
-    (* Rebuild the typed module (consumed only by the deferred WAT conversion;
-       wax -> wax ignores it) by typing each configuration with its module-level
-       branches selected — so names resolve per branch — and stitching the
-       results back together. Diagnostics are discarded; the exploration above
-       did the real checking. *)
-    let cdiag = Utils.Diagnostic.collector ~source:None () in
-    match !shared_env with
-    | None -> type_configuration cdiag fields
-    | Some env ->
-        let typed =
-          List.map
-            (fun a_full ->
-              let sel = select_module_branches env cdiag a_full fields in
-              let types, fields = type_configuration cdiag sel in
-              (types, (a_full, fields)))
-            !configs
-        in
-        let types =
-          match typed with
-          | (t, _) :: _ -> t
-          | [] -> Tbl.make (Namespace.make ()) "type"
-        in
-        (types, stitch_modules env cdiag (List.map snd typed))
+    (* Build the typed module (consumed only by the deferred WAT conversion;
+       wax -> wax ignores it) by typing the module with conditionals preserved.
+       [type_configuration] resolves names per branch (condition-aware tables),
+       so each branch is typed under its own assumption. Diagnostics are
+       discarded — the exploration above did the real checking. *)
+    type_configuration (Utils.Diagnostic.collector ~source:None ()) fields
   end
 
 let erase_types m =

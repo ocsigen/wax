@@ -65,6 +65,21 @@ mutually-exclusive branches); declare the local before the conditional instead.
   4 │ 
   [128]
 
+An instruction-level conditional can reference a name imported only in the
+matching module-level branch: here `g` exists only when `wasi`, and is called
+only from the `wasi` branch. Each branch is type-checked under its own
+assumption, so this is accepted and converts with the call preserved.
+
+  $ wax --validate crossref.wax -o checked_crossref.wax
+  $ wax crossref.wax -o crossref.wat && cat crossref.wat
+  (@if $wasi (@then (import "m" "g" (func $g (result i32))) ) )
+  (func $h (result i32)
+    (local $x i32)
+    (@if $wasi (@then (local.set $x (call $g)) )
+    (@else (local.set $x (i32.const 0)) ) )
+    (local.get $x)
+  )
+
 The conversion composes both ways: round-tripping the Wax through WAT and back
 reproduces the same Wax.
 
