@@ -785,7 +785,9 @@ let reorder_imports lst =
       :: rem ->
         traverse (f :: acc) rem
     | {
-        desc = Func _ | Memory _ | Table _ | Tag _ | Global _ | String_global _;
+        desc =
+          ( Func _ | Memory _ | Table _ | Tag _ | Global _ | String_global _
+          | Module_if_annotation _ );
         _;
       }
       :: _ ->

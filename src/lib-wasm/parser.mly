@@ -159,6 +159,9 @@ ZZZ
 %token TUPLE_MAKE
 %token TUPLE_EXTRACT
 %token STRING_ANNOT CHAR_ANNOT
+%token IF_ANNOT THEN_ANNOT ELSE_ANNOT
+%token AND OR NOT
+%token CMP_EQ CMP_NE CMP_LT CMP_GT CMP_LE CMP_GE
 
 %token DEFINITION
 %token BINARY
@@ -659,8 +662,37 @@ instructions:
 | i = plain_instruction r = instructions { i :: r }
 | i = blockinstr r = instructions { i :: r }
 | i = folded_instruction r = instructions { i :: r }
+| i = cond_instr r = instructions { i :: r }
 
 string_list: l = list(STRING) { l }
+
+(* Conditional annotations, as used by the js_of_ocaml WAT preprocessor.
+   The condition is parsed and preserved but not evaluated. *)
+
+cond:
+| s = STRING { Ast.Cond_string s }
+| v = ID { Ast.Cond_var v }
+| "(" maj = NAT min = NAT pat = NAT ")"
+    { Ast.Cond_version (int_of_string maj, int_of_string min, int_of_string pat) }
+| "(" AND l = cond+ ")" { Ast.Cond_and l }
+| "(" OR l = cond+ ")" { Ast.Cond_or l }
+| "(" NOT e = cond ")" { Ast.Cond_not e }
+| "(" op = cmp_op a = cond b = cond ")" { Ast.Cond_cmp (op, a, b) }
+
+cmp_op:
+| CMP_EQ { Ast.Eq }
+| CMP_NE { Ast.Ne }
+| CMP_LT { Ast.Lt }
+| CMP_GT { Ast.Gt }
+| CMP_LE { Ast.Le }
+| CMP_GE { Ast.Ge }
+
+cond_instr:
+| IF_ANNOT c = cond
+  THEN_ANNOT then_body = instructions ")"
+  else_body = option(ELSE_ANNOT e = instructions ")" { e })
+  ")"
+  { with_loc $sloc (If_annotation { cond = c; then_body; else_body }) }
 
 folded_instruction:
 | "(" i = plain_instruction l = folded_instruction * ")"
@@ -916,7 +948,15 @@ module_field:
 | f = elem
 | f = data
 | f = globalstring
+| f = cond_module_field
   { f }
+
+cond_module_field:
+| IF_ANNOT c = cond
+  THEN_ANNOT then_fields = list(module_field) ")"
+  else_fields = option(ELSE_ANNOT e = list(module_field) ")" { e })
+  ")"
+  { with_loc $sloc (Module_if_annotation { cond = c; then_fields; else_fields }) }
 
 parse:
 | "(" MODULE name = ID ? l = module_field * ")" EOF

@@ -340,7 +340,7 @@ let rec instr (names : B.names) local_names label_names label_counter stack
     | Pop v -> Pop (valtype names.types v)
     | TupleMake i -> TupleMake i
     | TupleExtract (i1, i2) -> TupleExtract (i1, i2)
-    | String _ | Char _ -> (*ZZZZ *) assert false
+    | String _ | Char _ | If_annotation _ -> (*ZZZZ *) assert false
   in
   { desc; info = i.info }
 

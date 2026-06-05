@@ -2,33 +2,39 @@ module Uint32 = Utils.Uint32
 open Ast.Text
 
 let map_instrs func (name, fields) =
-  ( name,
-    List.map
-      (fun f ->
-        let desc =
-          match f.Ast.desc with
-          | Func ({ typ; locals; instrs; _ } as f) ->
-              Func { f with instrs = func (Some (typ, locals)) instrs }
-          | Global ({ init; _ } as g) -> Global { g with init = func None init }
-          | Table ({ init; _ } as t) ->
-              Table
-                {
-                  t with
-                  init =
-                    (match init with
-                    | Init_default -> Init_default
-                    | Init_expr init -> Init_expr (func None init)
-                    | Init_segment seg ->
-                        Init_segment (List.map (fun e -> func None e) seg));
-                }
-          | Elem ({ init; _ } as e) ->
-              Elem { e with init = List.map (fun l -> func None l) init }
-          | Types _ | Import _ | Memory _ | Tag _ | Export _ | Start _ | Data _
-          | String_global _ ->
-              f.desc
-        in
-        { f with desc })
-      fields )
+  let rec map_field f =
+    let desc =
+      match f.Ast.desc with
+      | Func ({ typ; locals; instrs; _ } as f) ->
+          Func { f with instrs = func (Some (typ, locals)) instrs }
+      | Global ({ init; _ } as g) -> Global { g with init = func None init }
+      | Table ({ init; _ } as t) ->
+          Table
+            {
+              t with
+              init =
+                (match init with
+                | Init_default -> Init_default
+                | Init_expr init -> Init_expr (func None init)
+                | Init_segment seg ->
+                    Init_segment (List.map (fun e -> func None e) seg));
+            }
+      | Elem ({ init; _ } as e) ->
+          Elem { e with init = List.map (fun l -> func None l) init }
+      | Module_if_annotation ({ then_fields; else_fields; _ } as b) ->
+          Module_if_annotation
+            {
+              b with
+              then_fields = List.map map_field then_fields;
+              else_fields = Option.map (List.map map_field) else_fields;
+            }
+      | Types _ | Import _ | Memory _ | Tag _ | Export _ | Start _ | Data _
+      | String_global _ ->
+          f.desc
+    in
+    { f with desc }
+  in
+  (name, List.map map_field fields)
 
 (****)
 
@@ -71,55 +77,69 @@ type outer_env = {
   locals : valtype Tbl.t;
 }
 
+(* A conditional annotation may contain definitions in both its branches.
+   Since we do not evaluate the condition, we register both branches; this is
+   enough to compute arities for instruction folding. *)
+let fold_fields add tbl then_fields else_fields =
+  let tbl = List.fold_left add tbl then_fields in
+  match else_fields with Some l -> List.fold_left add tbl l | None -> tbl
+
 let types m =
-  List.fold_left
-    (fun tbl f ->
-      match f.Ast.desc with
-      | Types l ->
-          Array.fold_left (fun tbl (id, typ) -> Tbl.add id typ tbl) tbl l
-      | Import _ | Func _ | Memory _ | Table _ | Tag _ | Global _ | Export _
-      | Start _ | Elem _ | Data _ | String_global _ ->
-          tbl)
-    Tbl.empty m
+  let rec add tbl f =
+    match f.Ast.desc with
+    | Types l -> Array.fold_left (fun tbl (id, typ) -> Tbl.add id typ tbl) tbl l
+    | Module_if_annotation { then_fields; else_fields; _ } ->
+        fold_fields add tbl then_fields else_fields
+    | Import _ | Func _ | Memory _ | Table _ | Tag _ | Global _ | Export _
+    | Start _ | Elem _ | Data _ | String_global _ ->
+        tbl
+  in
+  List.fold_left add Tbl.empty m
 
 let functions f =
-  List.fold_left
-    (fun tbl f ->
-      match f.Ast.desc with
-      | Func { id; typ; _ } | Import { id; desc = Func typ; _ } ->
-          Tbl.add id typ tbl
-      | Import { desc = Memory _ | Table _ | Global _ | Tag _; _ }
-      | Types _ | Memory _ | Table _ | Tag _ | Global _ | Export _ | Start _
-      | Elem _ | Data _ | String_global _ ->
-          tbl)
-    Tbl.empty f
+  let rec add tbl f =
+    match f.Ast.desc with
+    | Func { id; typ; _ } | Import { id; desc = Func typ; _ } ->
+        Tbl.add id typ tbl
+    | Module_if_annotation { then_fields; else_fields; _ } ->
+        fold_fields add tbl then_fields else_fields
+    | Import { desc = Memory _ | Table _ | Global _ | Tag _; _ }
+    | Types _ | Memory _ | Table _ | Tag _ | Global _ | Export _ | Start _
+    | Elem _ | Data _ | String_global _ ->
+        tbl
+  in
+  List.fold_left add Tbl.empty f
 
 let globals f =
-  List.fold_left
-    (fun tbl f ->
-      match f.Ast.desc with
-      | Global { id; typ; _ } | Import { id; desc = Global typ; _ } ->
-          Tbl.add id typ tbl
-      | String_global { id; _ } ->
-          (* Wrong type, but we only care about the arity *)
-          Tbl.add (Some id) { mut = false; typ = (I32 : valtype) } tbl
-      | Import { desc = Func _ | Memory _ | Table _ | Tag _; _ }
-      | Types _ | Func _ | Memory _ | Table _ | Tag _ | Export _ | Start _
-      | Elem _ | Data _ ->
-          tbl)
-    Tbl.empty f
+  let rec add tbl f =
+    match f.Ast.desc with
+    | Global { id; typ; _ } | Import { id; desc = Global typ; _ } ->
+        Tbl.add id typ tbl
+    | String_global { id; _ } ->
+        (* Wrong type, but we only care about the arity *)
+        Tbl.add (Some id) { mut = false; typ = (I32 : valtype) } tbl
+    | Module_if_annotation { then_fields; else_fields; _ } ->
+        fold_fields add tbl then_fields else_fields
+    | Import { desc = Func _ | Memory _ | Table _ | Tag _; _ }
+    | Types _ | Func _ | Memory _ | Table _ | Tag _ | Export _ | Start _
+    | Elem _ | Data _ ->
+        tbl
+  in
+  List.fold_left add Tbl.empty f
 
 let tags f =
-  List.fold_left
-    (fun tbl f ->
-      match f.Ast.desc with
-      | Tag { id; typ; _ } | Import { id; desc = Tag typ; _ } ->
-          Tbl.add id typ tbl
-      | Import { desc = Func _ | Memory _ | Table _ | Global _; _ }
-      | Types _ | Func _ | Memory _ | Table _ | Global _ | Export _ | Start _
-      | Elem _ | Data _ | String_global _ ->
-          tbl)
-    Tbl.empty f
+  let rec add tbl f =
+    match f.Ast.desc with
+    | Tag { id; typ; _ } | Import { id; desc = Tag typ; _ } ->
+        Tbl.add id typ tbl
+    | Module_if_annotation { then_fields; else_fields; _ } ->
+        fold_fields add tbl then_fields else_fields
+    | Import { desc = Func _ | Memory _ | Table _ | Global _; _ }
+    | Types _ | Func _ | Memory _ | Table _ | Global _ | Export _ | Start _
+    | Elem _ | Data _ | String_global _ ->
+        tbl
+  in
+  List.fold_left add Tbl.empty f
 
 let locals env typ l =
   let tbl =
@@ -326,6 +346,10 @@ let arity env i =
   | TupleExtract (n, _) -> (Uint32.to_int n, 1)
   | VecTernOp _ -> (3, 1)
   | String _ | Char _ -> (0, 1)
+  (* A conditional annotation is treated as a statement boundary: its branches
+     are folded independently and it neither consumes nor produces stack
+     values for the purpose of folding. *)
+  | If_annotation _ -> (0, 0)
 
 (****)
 
@@ -428,6 +452,17 @@ let rec fold_stream env folded stream : _ Ast.Text.instr list =
            } )
         :: folded)
         rem
+  | ({ Ast.desc = If_annotation ({ then_body; else_body; _ } as b); _ } as i)
+    :: rem ->
+      let then_body = fold_stream env [] then_body in
+      let else_body = Option.map (fold_stream env []) else_body in
+      let inputs, outputs = arity env i in
+      let folded = consume inputs folded in
+      fold_stream env
+        (( outputs,
+           { i with desc = If_annotation { b with then_body; else_body } } )
+        :: folded)
+        rem
   | { Ast.desc = Folded (i, l); _ } :: rem ->
       fold_stream env folded (l @ (i :: rem))
   | i :: rem ->
@@ -507,6 +542,13 @@ let rec unfold_stream stream start =
                 block = unfold_instrs block;
                 catches = List.map (fun (i, l) -> (i, unfold_instrs l)) catches;
                 catch_all = Option.map unfold_instrs catch_all;
+              }
+        | If_annotation ({ then_body; else_body; _ } as b) ->
+            If_annotation
+              {
+                b with
+                then_body = unfold_instrs then_body;
+                else_body = Option.map unfold_instrs else_body;
               }
         | Folded _ -> assert false
         | _ -> i.desc

@@ -1753,6 +1753,8 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let ty = Ref { nullable = false; typ = Type (string ctx.modul.types) } in
       push (Some loc) ty
   | Char _ -> push (Some loc) I32
+  | If_annotation _ ->
+      failwith "Conditional annotations are not supported by the validator."
   | TupleExtract _ ->
       Format.eprintf "%a@." print_instr i;
       raise Exit
@@ -1820,7 +1822,7 @@ let rec check_constant_instruction ctx (i : _ Ast.Text.instr) =
   | VecBitselect | VecUnOp _ | VecBinOp _ | VecTest _ | VecShift _
   | VecBitmask _ | VecLoad _ | VecStore _ | VecLoadLane _ | VecStoreLane _
   | VecLoadSplat _ | VecExtract _ | VecReplace _ | VecSplat _ | VecShuffle _
-  | VecTernOp _ | TupleMake _ | TupleExtract _ ->
+  | VecTernOp _ | TupleMake _ | TupleExtract _ | If_annotation _ ->
       Error.constant_expression_required ctx.diagnostics ~location:i.info
 
 and check_constant_instructions ctx l =
@@ -1932,6 +1934,9 @@ and register_typeuses' d ctx (i : _ Ast.Text.instr) =
   | CallIndirect (_, use) | ReturnCallIndirect (_, use) ->
       ignore (typeuse' d ctx use)
   | String _ -> ignore (string ctx)
+  | If_annotation { then_body; else_body; _ } ->
+      register_typeuses d ctx then_body;
+      Option.iter (register_typeuses d ctx) else_body
   | Folded (i, l) ->
       register_typeuses' d ctx i;
       register_typeuses d ctx l
@@ -2525,7 +2530,8 @@ let check_syntax diagnostics (_, lst) =
       | Export _ | Start _ -> ()
       | Elem { id; _ } -> check_unbound elems "elem" id
       | Data { id; _ } -> check_unbound datas "data" id
-      | String_global { id; _ } -> check_unbound globals "global" (Some id))
+      | String_global { id; _ } -> check_unbound globals "global" (Some id)
+      | Module_if_annotation _ -> ())
     lst;
   ignore
     (List.fold_left
@@ -2545,7 +2551,9 @@ let check_syntax diagnostics (_, lst) =
              (Func _ | Memory _ | Table _ | Tag _ | Global _ | String_global _)
            )
          | None, Import _
-         | _, (Types _ | Export _ | Start _ | Elem _ | Data _) ->
+         | ( _,
+             ( Types _ | Export _ | Start _ | Elem _ | Data _
+             | Module_if_annotation _ ) ) ->
              can_import)
        None lst);
   (*ZZZ*)

@@ -214,6 +214,9 @@ let rec token_rec ctx lexbuf =
       token_rec ctx lexbuf
   | "(@string" -> STRING_ANNOT
   | "(@char" -> CHAR_ANNOT
+  | "(@if" -> IF_ANNOT
+  | "(@then" -> THEN_ANNOT
+  | "(@else" -> ELSE_ANNOT
   | "(@", Plus idchar ->
       skip_annotation 1 lexbuf;
       Utils.Trivia.report_item ctx Annotation "";
@@ -222,6 +225,9 @@ let rec token_rec ctx lexbuf =
       let s = string lexbuf in
       if s = "string" then STRING_ANNOT
       else if s = "char" then CHAR_ANNOT
+      else if s = "if" then IF_ANNOT
+      else if s = "then" then THEN_ANNOT
+      else if s = "else" then ELSE_ANNOT
       else (
         if not (String.is_valid_utf_8 s) then
           raise
@@ -889,6 +895,16 @@ let rec token_rec ctx lexbuf =
   | "script" -> SCRIPT
   | "input" -> INPUT
   | "output" -> OUTPUT
+  (* Operators of conditional annotation conditions *)
+  | "and" -> AND
+  | "or" -> OR
+  | "not" -> NOT
+  | "=" -> CMP_EQ
+  | "<>" -> CMP_NE
+  | "<" -> CMP_LT
+  | ">" -> CMP_GT
+  | "<=" -> CMP_LE
+  | ">=" -> CMP_GE
   | keyword ->
       raise
         (Parsing.Syntax_error

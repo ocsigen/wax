@@ -237,6 +237,20 @@ type memarg = {
   align : Uint64.t (* The wasm test suite contains large align values *);
 }
 
+(* Condition of a conditional annotation [(@if ...)], as used by the
+   js_of_ocaml WAT preprocessor. We parse and preserve these conditions but
+   do not evaluate them. *)
+type cmp_op = Eq | Ne | Lt | Gt | Le | Ge
+
+type cond =
+  | Cond_var of (string, location) annotated (* a variable, written [$name] *)
+  | Cond_string of (string, location) annotated
+  | Cond_version of int * int * int
+  | Cond_and of cond list
+  | Cond_or of cond list
+  | Cond_not of cond
+  | Cond_cmp of cmp_op * cond * cond
+
 module Make_instructions (X : sig
   type idx
   type typeuse
@@ -550,6 +564,11 @@ end) : sig
     (* Our extensions *)
     | String of X.idx option * (string, location) annotated list
     | Char of Uchar.t
+    | If_annotation of {
+        cond : cond;
+        then_body : 'info instr list;
+        else_body : 'info instr list option;
+      }
 
   and 'info instr = ('info instr_desc, 'info) annotated
 
@@ -661,6 +680,11 @@ module Text : sig
     | Data of { id : name option; init : datastring; mode : 'info datamode }
     (* Our extensions *)
     | String_global of { id : name; typ : idx option; init : datastring }
+    | Module_if_annotation of {
+        cond : cond;
+        then_fields : ('info modulefield, location) annotated list;
+        else_fields : ('info modulefield, location) annotated list option;
+      }
 
   type 'info module_ =
     name option * ('info modulefield, location) annotated list

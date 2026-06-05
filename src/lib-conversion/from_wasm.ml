@@ -967,6 +967,9 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   | String (t, s) ->
       let s = String.concat "" (List.map (fun s -> s.Ast.desc) s) in
       Stack.push 1 (with_loc (String (Option.map (idx ctx `Type) t, s)))
+  | If_annotation _ ->
+      failwith
+        "Conditional annotations are not supported when converting to Wax."
   (* Later *)
   | ReturnCallIndirect _ | CallIndirect _ | ArrayInitElem _ | ArrayInitData _
   | ArrayNewElem _ | Load _ | LoadS _ | Store _ | StoreS _ | MemorySize _
@@ -1210,6 +1213,9 @@ let modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
                  };
                attributes = [];
              })
+    | Module_if_annotation _ ->
+        failwith
+          "Conditional annotations are not supported when converting to Wax."
   in
   Option.map (fun desc -> { f with desc }) desc
 
@@ -1259,7 +1265,8 @@ let register_names ctx export_tbl fields =
       | Tag { id; exports; typ; _ } ->
           register_type ctx export_tbl Tag id exports typ
       | String_global { id; _ } ->
-          Sequence.register ctx.globals export_tbl (Some Global) (Some id) [])
+          Sequence.register ctx.globals export_tbl (Some Global) (Some id) []
+      | Module_if_annotation _ -> ())
     fields;
   List.iter
     (fun (field : (_ Src.modulefield, _) Ast.annotated) ->
@@ -1272,7 +1279,7 @@ let register_names ctx export_tbl fields =
       | Func { id; exports; typ; _ } ->
           register_type ctx export_tbl Func id exports typ
       | Types _ | Global _ | Export _ | Start _ | Elem _ | Data _ | Memory _
-      | Table _ | Tag _ | String_global _ ->
+      | Table _ | Tag _ | String_global _ | Module_if_annotation _ ->
           ())
     fields
 

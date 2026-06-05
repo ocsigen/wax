@@ -609,6 +609,38 @@ let catches l =
       | CatchAllRef l -> list [ keyword "catch_all_ref"; index l ])
     l
 
+let cmp_op_string (op : Ast.cmp_op) =
+  match op with
+  | Eq -> "="
+  | Ne -> "<>"
+  | Lt -> "<"
+  | Gt -> ">"
+  | Le -> "<="
+  | Ge -> ">="
+
+let rec cond_doc (c : Ast.cond) =
+  match c with
+  | Cond_var v -> id ~style:Annotation ~loc:v.Ast.info v.Ast.desc
+  | Cond_string s ->
+      let i, str = escape_string s.Ast.desc in
+      Atom
+        {
+          loc = Some s.Ast.info;
+          style = Annotation;
+          len = Some (i + 2);
+          s = "\"" ^ str ^ "\"";
+        }
+  | Cond_version (a, b, c) ->
+      list
+        (List.map
+           (fun n -> atom ~style:Annotation (string_of_int n))
+           [ a; b; c ])
+  | Cond_and l -> list (atom ~style:Annotation "and" :: List.map cond_doc l)
+  | Cond_or l -> list (atom ~style:Annotation "or" :: List.map cond_doc l)
+  | Cond_not e -> list [ atom ~style:Annotation "not"; cond_doc e ]
+  | Cond_cmp (op, a, b) ->
+      list [ atom ~style:Annotation (cmp_op_string op); cond_doc a; cond_doc b ]
+
 let rec instr i =
   let loc = i.Ast.info in
   match i.Ast.desc with
@@ -1067,6 +1099,19 @@ let rec instr i =
              });
           atom ~style:Annotation ")";
         ]
+  | If_annotation { cond; then_body; else_body }
+  | Folded ({ desc = If_annotation { cond; then_body; else_body }; _ }, []) ->
+      let clause head body =
+        block
+          ((atom ~style:Annotation ("(@" ^ head) :: List.map instr body)
+          @ [ atom ~style:Annotation ")" ])
+      in
+      block ~loc
+        (atom ~style:Annotation "(@if"
+         :: cond_doc cond
+         :: [ clause "then" then_body ]
+        @ option (fun e -> [ clause "else" e ]) else_body
+        @ [ atom ~style:Annotation ")" ])
   | Folded (i, l) ->
       list ~loc [ block ~transparent:true (instr i :: List.map instr l) ]
 
@@ -1133,7 +1178,7 @@ let function_indices lst =
     Some (List.filter_map extract lst)
   else None
 
-let modulefield f =
+let rec modulefield f =
   let loc = f.Ast.info in
   match f.Ast.desc with
   | Types [| t |] -> subtype ~loc t
@@ -1295,6 +1340,18 @@ let modulefield f =
                   s = "\"" ^ s ^ "\"";
                 })
             init
+        @ [ atom ~style:Annotation ")" ])
+  | Module_if_annotation { cond; then_fields; else_fields } ->
+      let clause head fields =
+        block
+          ((atom ~style:Annotation ("(@" ^ head) :: List.map modulefield fields)
+          @ [ atom ~style:Annotation ")" ])
+      in
+      block ~loc
+        (atom ~style:Annotation "(@if"
+         :: cond_doc cond
+         :: [ clause "then" then_fields ]
+        @ option (fun e -> [ clause "else" e ]) else_fields
         @ [ atom ~style:Annotation ")" ])
 
 let module_ ?(color = Auto) ?out_channel printer ~trivia (id, fields) =
