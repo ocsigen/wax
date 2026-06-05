@@ -31,7 +31,7 @@ which it is reachable.
   4 │ const x: i32 = nan;
     ·                ^^^
   5 │ 
-  Hint: reachable when not $debug
+  Hint: reachable when not debug
   [128]
 
 Conversion to WAT is not yet supported for conditionals.

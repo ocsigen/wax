@@ -9,7 +9,8 @@ end)
 
 let max_configurations = 4096
 
-let check_all diagnostics ?truncation_location ~specialize ~check () =
+let check_all diagnostics ?truncation_location
+    ?(explain = fun c -> Cond_solver.explain c) ~specialize ~check () =
   let queue = Queue.create () in
   Queue.push Cond_solver.true_ queue;
   let processed = Bdd_tbl.create 16 in
@@ -70,7 +71,7 @@ let check_all diagnostics ?truncation_location ~specialize ~check () =
     (fun (e, reach) ->
       let base_hint = Diagnostic.entry_hint e in
       let hint =
-        match Cond_solver.explain reach with
+        match explain reach with
         | None -> base_hint
         | Some s ->
             Some

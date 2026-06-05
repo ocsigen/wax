@@ -11,6 +11,7 @@
 val check_all :
   Utils.Diagnostic.context ->
   ?truncation_location:Ast.location ->
+  ?explain:(Cond_solver.t -> string option) ->
   specialize:
     (Cond_solver.t ->
     enqueue:(Cond_solver.t -> unit) ->
@@ -34,7 +35,9 @@ val check_all :
     - otherwise folds them into a table keyed by (location, message), OR-ing the
       reachability assumptions;
     - finally reports each distinct diagnostic once to [diagnostics] with a
-      "reachable when …" hint derived from {!Cond_solver.explain}.
+      "reachable when …" hint derived from [explain] (default
+      {!Cond_solver.explain}; pass a style-specific renderer to match the source
+      syntax).
 
     If exploration exceeds an internal configuration cap, a truncation warning
     is emitted at [truncation_location] (when provided). *)

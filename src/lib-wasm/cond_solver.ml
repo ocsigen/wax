@@ -181,11 +181,20 @@ and cmp ctx ~location op (a : Ast.cond) (b : Ast.cond) =
 
 let of_cond ctx ~location c = to_bdd ctx ~location c
 
-let render_constraint (c : Bdd.atomic_constraint) =
+(* The two surface syntaxes render conditions differently: WAT uses
+   [$]-prefixed variables, dotted versions and [<>]; Wax uses bare variables,
+   version tuples and [!=]. *)
+let version_string style (a, b, c) =
+  match style with
+  | `Wat -> Printf.sprintf "%d.%d.%d" a b c
+  | `Wax -> Printf.sprintf "(%d, %d, %d)" a b c
+
+let render_constraint style (c : Bdd.atomic_constraint) =
+  let prefix = match style with `Wat -> "$" | `Wax -> "" in
   match Bdd.view_constraint c with
   | Bdd.Constraint { var; payload = Bool; value } ->
       let name = lookup bool_names var in
-      if value then "$" ^ name else "not $" ^ name
+      if value then prefix ^ name else "not " ^ prefix ^ name
   | Bdd.Constraint { var; payload = Theory desc; value } -> (
       match desc with
       | Theory.Left (VLeq.Bound { limit; inclusive }) ->
@@ -197,15 +206,21 @@ let render_constraint (c : Bdd.atomic_constraint) =
             | false, true -> "<"
             | false, false -> ">="
           in
-          Printf.sprintf "$%s %s %s" name op (Version.to_string limit)
+          Printf.sprintf "%s%s %s %s" prefix name op
+            (version_string style limit)
       | Theory.Right (SEq.Const s) ->
           let name = lookup string_names var in
-          Printf.sprintf "$%s %s %s" name
-            (if value then "=" else "<>")
-            (Str.to_string s))
+          let op =
+            match (value, style) with
+            | true, _ -> "="
+            | false, `Wat -> "<>"
+            | false, `Wax -> "!="
+          in
+          Printf.sprintf "%s%s %s %s" prefix name op (Str.to_string s))
 
-let explain (f : t) =
+let explain ?(style = `Wat) (f : t) =
   match Bdd.shortest_sat f with
   | None | Some [] -> None
   | Some constraints ->
-      Some (String.concat " and " (List.map render_constraint constraints))
+      Some
+        (String.concat " and " (List.map (render_constraint style) constraints))

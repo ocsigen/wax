@@ -2730,6 +2730,7 @@ let f diagnostics fields =
     Wasm.Cond_explore.check_all diagnostics
       ?truncation_location:
         (match fields with hd :: _ -> Some hd.info | [] -> None)
+      ~explain:(fun c -> Wasm.Cond_solver.explain ~style:`Wax c)
       ~specialize:(fun asm ~enqueue ~record ->
         specialize_fields diagnostics ~enqueue ~record asm fields)
       ~check:(fun ctx m -> ignore (type_configuration ctx m))

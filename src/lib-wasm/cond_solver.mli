@@ -32,7 +32,10 @@ val of_cond : Utils.Diagnostic.context -> location:Ast.location -> Ast.cond -> t
     exploration can proceed. [location] is the enclosing conditional, used when
     a sub-condition carries no location of its own. *)
 
-val explain : t -> string option
-(** [explain f] returns a minimal human-readable assumption that makes [f]
-    satisfiable (via [shortest_sat]), e.g. ["$oxcaml and not $debug"]. Returns
-    [None] when [f] is a tautology (always reachable) or unsatisfiable. *)
+val explain : ?style:[ `Wat | `Wax ] -> t -> string option
+(** [explain ?style f] returns a minimal human-readable assumption that makes
+    [f] satisfiable (via [shortest_sat]), e.g. ["$oxcaml and not $debug"].
+    [style] selects the surface syntax for rendering variables, versions and
+    operators ([`Wat], the default, uses [$]-prefixed names, dotted versions and
+    [<>]; [`Wax] uses bare names, version tuples and [!=]). Returns [None] when
+    [f] is a tautology (always reachable) or unsatisfiable. *)
