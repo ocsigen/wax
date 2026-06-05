@@ -64,3 +64,8 @@ mutually-exclusive branches); declare the local before the conditional instead.
   3 │ }
   4 │ 
   [128]
+
+The conversion composes both ways: round-tripping the Wax through WAT and back
+reproduces the same Wax.
+
+  $ wax fromwat.wax -o rt.wat && wax rt.wat -o rt.wax && diff fromwat.wax rt.wax
