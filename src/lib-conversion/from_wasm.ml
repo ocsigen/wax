@@ -11,9 +11,13 @@ module Sequence = struct
     mutable current_index : int;
     namespace : Namespace.t;
     default : string;
+    forbid_numeric : bool;
+        (* When set (module-level sequences of a module containing conditional
+           annotations), numeric references are refused: a field's index depends
+           on which branch is taken, so it cannot be resolved to one name. *)
   }
 
-  let make namespace default =
+  let make ?(forbid_numeric = false) namespace default =
     {
       index_mapping = Hashtbl.create 16;
       label_mapping = Hashtbl.create 16;
@@ -21,32 +25,51 @@ module Sequence = struct
       current_index = 0;
       namespace;
       default;
+      forbid_numeric;
     }
 
   let register' seq export_tbl (kind : Src.exportable option)
       (id : Src.name option) exports =
     let idx = Uint32.of_int seq.last_index in
-    let name =
-      let name =
-        match (id, exports) with
-        | (Some nm, _ | None, nm :: _)
-          when Lexer.is_valid_identifier nm.Ast.desc ->
-            nm.Ast.desc
-        | _ -> (
-            match kind with
-            | None -> seq.default
-            | Some kind -> (
-                match Hashtbl.find_opt export_tbl (kind, Src.Num idx) with
-                | Some (nm :: _) when Lexer.is_valid_identifier nm.Ast.desc ->
-                    nm.Ast.desc
-                | _ -> seq.default))
-      in
-      Namespace.add seq.namespace name
-    in
-    seq.last_index <- seq.last_index + 1;
-    Hashtbl.add seq.index_mapping idx name;
-    Option.iter (fun id -> Hashtbl.add seq.label_mapping id.Ast.desc name) id;
-    name
+    match id with
+    | Some nm
+      when seq.forbid_numeric && Hashtbl.mem seq.label_mapping nm.Ast.desc ->
+        (* The same [$id] was already registered (it appears in another branch
+           of a conditional). Reuse its Wax name so references stay coherent,
+           but still consume an index slot so positional naming via
+           [get_current] stays aligned with the conversion order. This only
+           applies to module-level sequences of a conditional module
+           ([forbid_numeric]); locals reuse a single sequence across functions,
+           where a repeated [$id] is a distinct variable, not the same entity. *)
+        let name = Hashtbl.find seq.label_mapping nm.Ast.desc in
+        seq.last_index <- seq.last_index + 1;
+        Hashtbl.add seq.index_mapping idx name;
+        name
+    | _ ->
+        let name =
+          let name =
+            match (id, exports) with
+            | (Some nm, _ | None, nm :: _)
+              when Lexer.is_valid_identifier nm.Ast.desc ->
+                nm.Ast.desc
+            | _ -> (
+                match kind with
+                | None -> seq.default
+                | Some kind -> (
+                    match Hashtbl.find_opt export_tbl (kind, Src.Num idx) with
+                    | Some (nm :: _) when Lexer.is_valid_identifier nm.Ast.desc
+                      ->
+                        nm.Ast.desc
+                    | _ -> seq.default))
+          in
+          Namespace.add seq.namespace name
+        in
+        seq.last_index <- seq.last_index + 1;
+        Hashtbl.add seq.index_mapping idx name;
+        Option.iter
+          (fun id -> Hashtbl.add seq.label_mapping id.Ast.desc name)
+          id;
+        name
 
   let register seq export_tbl kind id exports =
     ignore (register' seq export_tbl kind id exports)
@@ -56,7 +79,15 @@ module Sequence = struct
       idx with
       desc =
         (match idx.desc with
-        | Num n -> Hashtbl.find seq.index_mapping n
+        | Num n ->
+            if seq.forbid_numeric then
+              failwith
+                (Printf.sprintf
+                   "Numeric references to module fields are not supported in a \
+                    module with conditional annotations (index %s); use a \
+                    symbolic $name."
+                   (Uint32.to_string n));
+            Hashtbl.find seq.index_mapping n
         | Id id -> Hashtbl.find seq.label_mapping id);
     }
 
@@ -1060,7 +1091,7 @@ let import module_ name =
 
 let single_expression l = match l with [ e ] -> e | _ -> assert false
 
-let modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
+let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
   let desc : _ Ast.modulefield option =
     match f.desc with
     | Types t -> Some (Type (rectype ctx t))
@@ -1213,102 +1244,144 @@ let modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
                  };
                attributes = [];
              })
-    | Module_if_annotation _ ->
-        failwith
-          "Conditional annotations are not supported when converting to Wax."
+    | Module_if_annotation { cond; then_fields; else_fields } ->
+        Some
+          (Conditional
+             {
+               cond;
+               then_fields =
+                 List.filter_map (modulefield ctx export_tbl) then_fields;
+               else_fields =
+                 Option.map
+                   (List.filter_map (modulefield ctx export_tbl))
+                   else_fields;
+             })
   in
   Option.map (fun desc -> { f with desc }) desc
 
 let register_names ctx export_tbl fields =
-  List.iter
-    (fun (field : (_ Src.modulefield, _) Ast.annotated) ->
-      match field.desc with
-      | Import { id; desc; exports; _ } -> (
-          (* ZZZ Check for non-import fields *)
-          match desc with
-          | Func _ -> ()
-          | Memory _ ->
-              Sequence.register ctx.memories export_tbl
-                (Some (Memory : Src.exportable))
-                id exports
-          | Table _ ->
-              Sequence.register ctx.tables export_tbl (Some Table) id exports
-          | Global _ ->
-              Sequence.register ctx.globals export_tbl (Some Global) id exports
-          | Tag ty -> register_type ctx export_tbl Tag id exports ty)
-      | Types rectype ->
-          Array.iter
-            (fun (id, ty) ->
-              let name = Sequence.register' ctx.types export_tbl None id [] in
-              Tbl.add ctx.type_defs name ty;
-              match (ty : Src.subtype).typ with
-              | Func _ | Array _ -> ()
-              | Struct l ->
-                  let seq = Sequence.make (Namespace.make ()) "f" in
-                  let fields =
-                    Array.map
-                      (fun t ->
-                        Sequence.register' seq export_tbl None (get_annot t) [])
-                      l
-                  in
-                  Hashtbl.replace ctx.struct_fields name
-                    (seq, Array.to_list fields))
-            rectype
-      | Global { id; exports; _ } ->
-          Sequence.register ctx.globals export_tbl (Some Global) id exports
-      | Func _ | Export _ | Start _ -> ()
-      | Elem _ | Data _ -> () (*ZZZ*)
-      | Memory { id; exports; _ } ->
-          Sequence.register ctx.memories export_tbl (Some Memory) id exports
-      | Table { id; exports; _ } ->
-          Sequence.register ctx.tables export_tbl (Some Table) id exports
-      | Tag { id; exports; typ; _ } ->
-          register_type ctx export_tbl Tag id exports typ
-      | String_global { id; _ } ->
-          Sequence.register ctx.globals export_tbl (Some Global) (Some id) []
-      | Module_if_annotation _ -> ())
-    fields;
-  List.iter
-    (fun (field : (_ Src.modulefield, _) Ast.annotated) ->
-      match field.desc with
-      | Import { id; desc; exports; _ } -> (
-          (* ZZZ Check for non-import fields *)
-          match desc with
-          | Func typ -> register_type ctx export_tbl Func id exports typ
-          | Memory _ | Table _ | Global _ | Tag _ -> ())
-      | Func { id; exports; typ; _ } ->
-          register_type ctx export_tbl Func id exports typ
-      | Types _ | Global _ | Export _ | Start _ | Elem _ | Data _ | Memory _
-      | Table _ | Tag _ | String_global _ | Module_if_annotation _ ->
-          ())
-    fields
+  (* Both passes recurse into the branches of a conditional, in the same order
+     the converter visits them, so positional naming stays aligned. *)
+  let rec pass1 fields =
+    List.iter
+      (fun (field : (_ Src.modulefield, _) Ast.annotated) ->
+        match field.desc with
+        | Import { id; desc; exports; _ } -> (
+            (* ZZZ Check for non-import fields *)
+            match desc with
+            | Func _ -> ()
+            | Memory _ ->
+                Sequence.register ctx.memories export_tbl
+                  (Some (Memory : Src.exportable))
+                  id exports
+            | Table _ ->
+                Sequence.register ctx.tables export_tbl (Some Table) id exports
+            | Global _ ->
+                Sequence.register ctx.globals export_tbl (Some Global) id
+                  exports
+            | Tag ty -> register_type ctx export_tbl Tag id exports ty)
+        | Types rectype ->
+            Array.iter
+              (fun (id, ty) ->
+                let name = Sequence.register' ctx.types export_tbl None id [] in
+                Tbl.add ctx.type_defs name ty;
+                match (ty : Src.subtype).typ with
+                | Func _ | Array _ -> ()
+                | Struct l ->
+                    let seq = Sequence.make (Namespace.make ()) "f" in
+                    let fields =
+                      Array.map
+                        (fun t ->
+                          Sequence.register' seq export_tbl None (get_annot t)
+                            [])
+                        l
+                    in
+                    Hashtbl.replace ctx.struct_fields name
+                      (seq, Array.to_list fields))
+              rectype
+        | Global { id; exports; _ } ->
+            Sequence.register ctx.globals export_tbl (Some Global) id exports
+        | Func _ | Export _ | Start _ -> ()
+        | Elem _ | Data _ -> () (*ZZZ*)
+        | Memory { id; exports; _ } ->
+            Sequence.register ctx.memories export_tbl (Some Memory) id exports
+        | Table { id; exports; _ } ->
+            Sequence.register ctx.tables export_tbl (Some Table) id exports
+        | Tag { id; exports; typ; _ } ->
+            register_type ctx export_tbl Tag id exports typ
+        | String_global { id; _ } ->
+            Sequence.register ctx.globals export_tbl (Some Global) (Some id) []
+        | Module_if_annotation { then_fields; else_fields; _ } ->
+            pass1 then_fields;
+            Option.iter pass1 else_fields)
+      fields
+  in
+  let rec pass2 fields =
+    List.iter
+      (fun (field : (_ Src.modulefield, _) Ast.annotated) ->
+        match field.desc with
+        | Import { id; desc; exports; _ } -> (
+            (* ZZZ Check for non-import fields *)
+            match desc with
+            | Func typ -> register_type ctx export_tbl Func id exports typ
+            | Memory _ | Table _ | Global _ | Tag _ -> ())
+        | Func { id; exports; typ; _ } ->
+            register_type ctx export_tbl Func id exports typ
+        | Module_if_annotation { then_fields; else_fields; _ } ->
+            pass2 then_fields;
+            Option.iter pass2 else_fields
+        | Types _ | Global _ | Export _ | Start _ | Elem _ | Data _ | Memory _
+        | Table _ | Tag _ | String_global _ ->
+            ())
+      fields
+  in
+  pass1 fields;
+  pass2 fields
 
 let collect_exports fields =
   let tbl = Hashtbl.create 16 in
   let lst = ref [] in
-  List.iter
-    (fun (field : (_ Src.modulefield, _) Ast.annotated) ->
-      match field.desc with
-      | Export { name; kind; index } ->
-          lst := (kind, index, name) :: !lst;
-          let k = (kind, index.Ast.desc) in
-          Hashtbl.replace tbl k
-            (name :: (try Hashtbl.find tbl k with Not_found -> []))
-      | _ -> ())
-    fields;
+  let rec go fields =
+    List.iter
+      (fun (field : (_ Src.modulefield, _) Ast.annotated) ->
+        match field.desc with
+        | Export { name; kind; index } ->
+            lst := (kind, index, name) :: !lst;
+            let k = (kind, index.Ast.desc) in
+            Hashtbl.replace tbl k
+              (name :: (try Hashtbl.find tbl k with Not_found -> []))
+        | Module_if_annotation { then_fields; else_fields; _ } ->
+            go then_fields;
+            Option.iter go else_fields
+        | _ -> ())
+      fields
+  in
+  go fields;
   (tbl, !lst)
 
+let rec module_has_conditional fields =
+  List.exists
+    (fun (f : (_ Src.modulefield, _) Ast.annotated) ->
+      match f.desc with
+      | Module_if_annotation { then_fields; else_fields; _ } ->
+          module_has_conditional then_fields
+          || Option.fold ~none:false ~some:module_has_conditional else_fields
+          || true
+      | _ -> false)
+    fields
+
 let module_ (_, fields) =
+  let forbid_numeric = module_has_conditional fields in
   let ctx =
     let common_namespace = Namespace.make () in
     {
-      types = Sequence.make (Namespace.make ~kind:`Type ()) "t";
+      types = Sequence.make ~forbid_numeric (Namespace.make ~kind:`Type ()) "t";
       struct_fields = Hashtbl.create 16;
-      globals = Sequence.make common_namespace "g";
-      functions = Sequence.make common_namespace "f";
-      memories = Sequence.make (Namespace.make ()) "m";
-      tables = Sequence.make (Namespace.make ()) "m";
-      tags = Sequence.make (Namespace.make ()) "t";
+      globals = Sequence.make ~forbid_numeric common_namespace "g";
+      functions = Sequence.make ~forbid_numeric common_namespace "f";
+      memories = Sequence.make ~forbid_numeric (Namespace.make ()) "m";
+      tables = Sequence.make ~forbid_numeric (Namespace.make ()) "m";
+      tags = Sequence.make ~forbid_numeric (Namespace.make ()) "t";
       type_defs = Tbl.make ();
       function_types = Tbl.make ();
       tag_types = Tbl.make ();
