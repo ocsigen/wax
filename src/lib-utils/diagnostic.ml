@@ -329,10 +329,10 @@ let make ?color ~source ?(related = []) ?(exit_on_error = true) ?(max = 1)
 let null_formatter = Format.make_formatter (fun _ _ _ -> ()) (fun () -> ())
 
 (* A context that accumulates errors in its queue without ever printing or
-   exiting, so they can be inspected with [collected]. *)
-let collector ?color ~source ?related () =
-  make ?color ~source ?related ~exit_on_error:false ~max:max_int
-    ~output:null_formatter ()
+   exiting, so they can be inspected with [collected]. Output parameters
+   ([source], [color], …) are irrelevant since nothing is rendered. *)
+let collector () =
+  make ~source:None ~exit_on_error:false ~max:max_int ~output:null_formatter ()
 
 type entry = t
 

@@ -34,7 +34,7 @@ let check_all diagnostics ?truncation_location
       let record lit = a_full := Cond_solver.and_ !a_full lit in
       let enqueue b = Queue.push b queue in
       let cfg = specialize env asm ~enqueue ~record in
-      let cctx = Diagnostic.collector ~source:None () in
+      let cctx = Diagnostic.collector () in
       check cctx cfg;
       (* Backstop: [specialize] prunes unreachable branches up front, so a
          configuration's full assumption is normally satisfiable. This guards

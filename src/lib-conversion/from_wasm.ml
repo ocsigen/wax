@@ -1468,7 +1468,7 @@ let module_ (_, fields) =
       label_arities = [];
       return_arity = 0;
       cond_env = Cond.create ();
-      cond_diag = Utils.Diagnostic.collector ~source:None ();
+      cond_diag = Utils.Diagnostic.collector ();
       cond_asm = Cond.true_;
     }
   in

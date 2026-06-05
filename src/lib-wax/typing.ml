@@ -3080,7 +3080,7 @@ let f diagnostics fields =
        [type_configuration] resolves names per branch (condition-aware tables),
        so each branch is typed under its own assumption. Diagnostics are
        discarded — the exploration above did the real checking. *)
-    type_configuration (Utils.Diagnostic.collector ~source:None ()) fields
+    type_configuration (Utils.Diagnostic.collector ()) fields
   end
 
 let erase_types m =

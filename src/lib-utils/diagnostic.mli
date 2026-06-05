@@ -35,13 +35,10 @@ val report :
     so they can be inspected and re-reported. Used for path-sensitive
     validation, where the same code is validated under several assumptions. *)
 
-val collector :
-  ?color:Colors.flag ->
-  source:string option ->
-  ?related:label list ->
-  unit ->
-  context
-(** A context that buffers reported errors without printing or exiting. *)
+val collector : unit -> context
+(** A context that buffers reported errors without printing or exiting. As it
+    never renders diagnostics, it needs none of {!run}'s output parameters
+    ([source], [color], …). *)
 
 type entry
 (** A collected diagnostic. *)

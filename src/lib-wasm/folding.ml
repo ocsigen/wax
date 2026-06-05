@@ -66,7 +66,7 @@ let make_cond_ctx () =
   {
     cur = ref Cond.true_;
     env = Cond.create ();
-    diag = Utils.Diagnostic.collector ~source:None ();
+    diag = Utils.Diagnostic.collector ();
   }
 
 (* Fold [f] under the assumption of a conditional branch, restoring after. *)
