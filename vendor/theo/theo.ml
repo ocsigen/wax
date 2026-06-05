@@ -661,22 +661,40 @@ module Make (T : Theory) = struct
 
   type constant_result = Constant of bool | NonConstant
 
-  (* Constant_cache: Memoization for ite_constant checks.
-   Keys are (f, g, h). Stores constant_result. *)
+  (* Constant_cache: Memoization for ite_constant checks. Keyed by (f, |g|, h);
+   [g]'s polarity selects a cell field, since [ite_constant f g h] and
+   [ite_constant f (not g) h] differ (mirrors {!ITE_cache}). *)
   module ITE_constant_cache = struct
+    type cell = {
+      mutable pos : constant_result option;
+      mutable neg : constant_result option;
+    }
+
+    let empty_cell () = { pos = None; neg = None }
+
     module Store = Ephemeron.Kn.Make (Node)
 
     let cache = Store.create 1024
 
     let find u g w =
-      let _, v = split g in
+      let is_neg, v = split g in
       let keys = [| u; v; w |] in
-      Store.find_opt cache keys
+      match Store.find_opt cache keys with
+      | None -> None
+      | Some cell -> if is_neg then cell.neg else cell.pos
 
     let add u g w res =
-      let _, v = split g in
+      let is_neg, v = split g in
       let keys = [| u; v; w |] in
-      Store.add cache keys res
+      let cell =
+        match Store.find_opt cache keys with
+        | Some c -> c
+        | None ->
+            let c = empty_cell () in
+            Store.add cache keys c;
+            c
+      in
+      if is_neg then cell.neg <- Some res else cell.pos <- Some res
   end
 
   let rec ite_constant f g h =
