@@ -36,9 +36,10 @@ let check_all diagnostics ?truncation_location
       let cfg = specialize env asm ~enqueue ~record in
       let cctx = Diagnostic.collector ~source:None () in
       check cctx cfg;
-      (* Discard errors from an infeasible configuration: undetermined
-         conditionals are explored optimistically, so a configuration's full
-         assumption may turn out unsatisfiable (e.g. contradictory bounds). *)
+      (* Backstop: [specialize] prunes unreachable branches up front, so a
+         configuration's full assumption is normally satisfiable. This guards
+         against any residual incompleteness by discarding errors should an
+         infeasible configuration slip through. *)
       if Cond_solver.is_satisfiable !a_full then
         List.iter
           (fun e ->

@@ -2309,24 +2309,26 @@ let field_has_conditional (f : (_ Ast.Text.modulefield, _) Ast.annotated) =
    full assumption. *)
 let specialize env diagnostics ~enqueue ~record asm0 fields =
   (* Resolve one conditional and return both the specialized branch and the
-     assumption that holds afterwards. Threading this assumption into the
-     following siblings keeps us from exploring infeasible configurations: once
-     [cond1] forces [$wasi], a sibling [(@if (not $wasi) …)] becomes determined
-     and its branch is dropped, rather than independently selected (which would
-     build the contradictory [$wasi & not $wasi] configuration). *)
+     assumption that holds afterwards. Each branch is taken only if it is
+     reachable under [asm] (its conjunction with the branch condition is
+     satisfiable); an unreachable branch is pruned, so we never explore an
+     infeasible configuration. The surviving assumption is threaded into the
+     following siblings, so e.g. once [cond1] forces [$wasi], a sibling
+     [(@if (not $wasi) …)] has its [@then] pruned. *)
   let choose asm cond ~location ~then_branch ~else_branch =
     let c = Cond_solver.of_cond env diagnostics ~location cond in
-    if Cond_solver.logical_implies asm c then (
-      record c;
-      (then_branch asm, asm))
-    else if Cond_solver.logical_implies asm (Cond_solver.not_ c) then (
+    let then_asm = Cond_solver.and_ asm c
+    and else_asm = Cond_solver.and_ asm (Cond_solver.not_ c) in
+    if not (Cond_solver.is_satisfiable then_asm) then (
       record (Cond_solver.not_ c);
-      (else_branch asm, asm))
-    else (
-      enqueue (Cond_solver.and_ asm (Cond_solver.not_ c));
+      (else_branch else_asm, else_asm))
+    else if not (Cond_solver.is_satisfiable else_asm) then (
       record c;
-      let asm = Cond_solver.and_ asm c in
-      (then_branch asm, asm))
+      (then_branch then_asm, then_asm))
+    else (
+      enqueue else_asm;
+      record c;
+      (then_branch then_asm, then_asm))
   in
   let rec sfields asm fl =
     match fl with

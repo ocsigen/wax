@@ -2870,24 +2870,25 @@ let rec field_has_conditional (f : (_ modulefield, _) annotated) =
 let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
   let module S = Wasm.Cond_solver in
   (* Resolve one conditional and return both the specialized branch and the
-     assumption that holds afterwards. Threading this assumption into the
-     following siblings keeps us from exploring infeasible configurations: once
-     [cond1] forces [$wasi], a sibling [#[if(not wasi)]] becomes determined and
-     its branch is dropped, rather than independently selected (which would
-     build the contradictory [$wasi & not $wasi] configuration). *)
+     assumption that holds afterwards. Each branch is taken only if it is
+     reachable under [asm] (its conjunction with the branch condition is
+     satisfiable); an unreachable branch is pruned, so we never explore an
+     infeasible configuration. The surviving assumption is threaded into the
+     following siblings, so e.g. once [cond1] forces [$wasi], a sibling
+     [#[if(not wasi)]] has its [@then] pruned. *)
   let choose asm cond ~location ~then_branch ~else_branch =
     let c = S.of_cond env diagnostics ~location cond in
-    if S.logical_implies asm c then (
-      record c;
-      (then_branch asm, asm))
-    else if S.logical_implies asm (S.not_ c) then (
+    let then_asm = S.and_ asm c and else_asm = S.and_ asm (S.not_ c) in
+    if not (S.is_satisfiable then_asm) then (
       record (S.not_ c);
-      (else_branch asm, asm))
-    else (
-      enqueue (S.and_ asm (S.not_ c));
+      (else_branch else_asm, else_asm))
+    else if not (S.is_satisfiable else_asm) then (
       record c;
-      let asm = S.and_ asm c in
-      (then_branch asm, asm))
+      (then_branch then_asm, then_asm))
+    else (
+      enqueue else_asm;
+      record c;
+      (then_branch then_asm, then_asm))
   in
   (* Instruction-level specializer: resolve each [If_annotation] by splicing the
      selected branch into the enclosing list; recurse into every sub-instruction
