@@ -32,6 +32,7 @@ wax [OPTIONS] [INPUT]
     - Perform validation during conversion.
     - For Wax: Runs type checking.
     - For Wasm Text: Runs well-formedness checks.
+    - For input containing conditional annotations (`#[if]` / `(@if ...)`), every reachable combination of conditions is checked independently, and each error is reported with the assumption (`reachable when ...`) under which it occurs.
     - Disabled by default.
 
 - **`-s`**, **`--strict-validate`**

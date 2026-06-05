@@ -182,6 +182,27 @@ A field can be both imported and re-exported:
 const value: i32;
 ```
 
+## Conditional Annotations
+
+Both formats can guard module fields by a condition that a downstream preprocessor evaluates. Wax uses `#[if(...)]` / `#[else]`; WAT uses the annotation form `(@if <cond> (@then ...) (@else ...))`.
+
+```wax
+#[if(ocaml_version >= (5, 1, 0))]
+const size: i32 = 16;
+#[else]
+const size: i32 = 20;
+```
+
+```wat
+(@if (>= $ocaml_version (5 1 0))
+  (@then (global $size i32 (i32.const 16)))
+  (@else (global $size i32 (i32.const 20))))
+```
+
+The conditions are equivalent — note the surface differences: Wax variables are bare (`ocaml_version`) while WAT variables are `$`-prefixed; Wax versions are tuples `(5, 1, 0)` while WAT writes them `(5 1 0)`; Wax combines conditions with `all`/`any`/`not`, WAT with `and`/`or`/`not`.
+
+The conditions are preserved, not evaluated. Type checking (`--validate`) explores each reachable combination independently (see the [Language Guide](../language.md#conditional-compilation)). Conversion between the Wax and WAT forms is not yet implemented; conditionals are currently supported within each format on its own.
+
 ## Tables and Memories
 
 Wax focuses on GC-based memory management and does not provide dedicated syntax for linear memory or tables. When converting from WAT/WASM:

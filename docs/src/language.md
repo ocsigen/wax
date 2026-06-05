@@ -478,3 +478,52 @@ fn example() -> i32 {
 ```
 
 This is useful for writing concise code where intermediate values flow naturally.
+
+## Conditional Compilation
+
+Top-level items can be guarded by conditions, using a Rust-like attribute syntax. `#[if(<condition>)]` keeps the following item only when `<condition>` holds; an optional `#[else]` provides an alternative:
+
+```wax
+#[if(ocaml_version >= (5, 1, 0))]
+const caml_marshal_header_size: i32 = 16;
+#[else]
+const caml_marshal_header_size: i32 = 20;
+```
+
+A condition is one of:
+
+- a **boolean variable**, e.g. `debug`;
+- a **comparison** `variable op literal`, where `op` is `=`, `!=`, `<`, `<=`, `>` or `>=`, and the literal is either a **version** tuple `(major, minor, patch)` or a **string** `"..."`:
+
+  ```wax
+  #[if(feature = "gc")]
+  #[if(ocaml_version >= (5, 1, 0))]
+  ```
+
+- a **combination** built with `all(...)` (conjunction), `any(...)` (disjunction) or `not(...)` (negation), nested arbitrarily:
+
+  ```wax
+  #[if(all(debug, not(target = "wasm32")))]
+  ```
+
+To guard several items at once, follow the attribute with a block:
+
+```wax
+#[if(debug)]
+{
+    const debug_enabled: i32 = 1;
+    fn debug_log(msg: i32) {
+        // ...
+    }
+}
+```
+
+The conditions are **not evaluated** by the compiler; they are preserved for a downstream preprocessor. The `#[if]` and `#[else]` branches are **mutually exclusive** — they never coexist — so, for instance, the same name may be defined in both.
+
+When type checking is enabled (`--validate`), every reachable combination of conditions is checked independently. Because branches are mutually exclusive, a name defined in both the `#[if]` and `#[else]` branch is accepted. An error that occurs only under some conditions is reported together with the assumption that makes it reachable:
+
+```
+Error: This instruction has type float but is expected to have type i32.
+ ──➤  example.wax:4:16
+Hint: reachable when not debug
+```
