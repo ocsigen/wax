@@ -2761,24 +2761,36 @@ let rec field_has_conditional (f : (_ modulefield, _) annotated) =
    configuration, and [record] the chosen literal. *)
 let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
   let module S = Wasm.Cond_solver in
+  (* Resolve one conditional and return both the specialized branch and the
+     assumption that holds afterwards. Threading this assumption into the
+     following siblings keeps us from exploring infeasible configurations: once
+     [cond1] forces [$wasi], a sibling [#[if(not wasi)]] becomes determined and
+     its branch is dropped, rather than independently selected (which would
+     build the contradictory [$wasi & not $wasi] configuration). *)
   let choose asm cond ~location ~then_branch ~else_branch =
     let c = S.of_cond env diagnostics ~location cond in
     if S.logical_implies asm c then (
       record c;
-      then_branch (S.and_ asm c))
+      (then_branch asm, asm))
     else if S.logical_implies asm (S.not_ c) then (
       record (S.not_ c);
-      else_branch (S.and_ asm (S.not_ c)))
+      (else_branch asm, asm))
     else (
       enqueue (S.and_ asm (S.not_ c));
       record c;
-      then_branch (S.and_ asm c))
+      let asm = S.and_ asm c in
+      (then_branch asm, asm))
   in
   (* Instruction-level specializer: resolve each [If_annotation] by splicing the
      selected branch into the enclosing list; recurse into every sub-instruction
      and nested block body. [sone] is for single-instruction positions, where an
      [If_annotation] cannot appear (it is statement-only). *)
-  let rec sinstrs asm l = List.concat_map (sinstr asm) l
+  let rec sinstrs asm l =
+    match l with
+    | [] -> []
+    | i :: rest ->
+        let instrs, asm = sinstr asm i in
+        instrs @ sinstrs asm rest
   and sinstr asm (i : (_ instr_desc, _) annotated) =
     match i.desc with
     | If_annotation { cond; then_body; else_body } ->
@@ -2786,8 +2798,8 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
           ~then_branch:(fun asm' -> sinstrs asm' then_body)
           ~else_branch:(fun asm' ->
             match else_body with Some e -> sinstrs asm' e | None -> [])
-    | desc -> [ { i with desc = sdesc asm desc } ]
-  and sone asm i = match sinstr asm i with [ x ] -> x | _ -> assert false
+    | desc -> ([ { i with desc = sdesc asm desc } ], asm)
+  and sone asm i = match sinstr asm i with [ x ], _ -> x | _ -> assert false
   and sdesc asm (desc : _ instr_desc) : _ instr_desc =
     match desc with
     | Block { label; typ; block } ->
@@ -2850,7 +2862,12 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
       | Float _ | StructDefault _ ) as x ->
         x
   in
-  let rec sfields asm fl = List.concat_map (sfield asm) fl
+  let rec sfields asm fl =
+    match fl with
+    | [] -> []
+    | f :: rest ->
+        let fields, asm = sfield asm f in
+        fields @ sfields asm rest
   and sfield asm (f : (_ modulefield, _) annotated) =
     match f.desc with
     | Conditional { cond; then_fields; else_fields } ->
@@ -2859,12 +2876,14 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
           ~else_branch:(fun asm' ->
             match else_fields with Some e -> sfields asm' e | None -> [])
     | Group { attributes; fields } ->
-        [ { f with desc = Group { attributes; fields = sfields asm fields } } ]
+        ( [ { f with desc = Group { attributes; fields = sfields asm fields } } ],
+          asm )
     | Func ({ body = lbl, instrs; _ } as r) ->
-        [ { f with desc = Func { r with body = (lbl, sinstrs asm instrs) } } ]
+        ( [ { f with desc = Func { r with body = (lbl, sinstrs asm instrs) } } ],
+          asm )
     | Global ({ def; _ } as g) ->
-        [ { f with desc = Global { g with def = sone asm def } } ]
-    | _ -> [ f ]
+        ([ { f with desc = Global { g with def = sone asm def } } ], asm)
+    | _ -> ([ f ], asm)
   in
   sfields asm0 fields
 

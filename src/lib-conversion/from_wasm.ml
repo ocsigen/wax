@@ -1248,17 +1248,18 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
                attributes = [];
              })
     | Module_if_annotation { cond; then_fields; else_fields } ->
-        Some
-          (Conditional
-             {
-               cond;
-               then_fields =
-                 List.filter_map (modulefield ctx export_tbl) then_fields;
-               else_fields =
-                 Option.map
-                   (List.filter_map (modulefield ctx export_tbl))
-                   else_fields;
-             })
+        (* Convert [then] before [else]: positional naming via [get_current]
+           must consume names in the same order [register_names] registered
+           them (then-branch first). A record literal would leave the field
+           evaluation order unspecified (OCaml evaluates right-to-left), which
+           would consume the names swapped and scramble them across branches. *)
+        let then_fields =
+          List.filter_map (modulefield ctx export_tbl) then_fields
+        in
+        let else_fields =
+          Option.map (List.filter_map (modulefield ctx export_tbl)) else_fields
+        in
+        Some (Conditional { cond; then_fields; else_fields })
   in
   Option.map (fun desc -> { f with desc }) desc
 

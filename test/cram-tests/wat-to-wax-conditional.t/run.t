@@ -14,6 +14,32 @@ error, because the branches are mutually exclusive):
 
   $ wax --validate cond.wat -o checked.wax
 
+Branches with different import sets (and a shared `$id`) keep each Wax name
+attached to its own import; a sibling conditional on the negated condition does
+not produce an infeasible configuration, so the result type-checks.
+
+  $ wax deps.wat -o deps.wax && cat deps.wax
+  #[if(wasi)]
+  {
+      #[import = ("a", "x")]
+      fn x() -> i32;
+      #[import = ("a", "g")]
+      fn g() -> i32;
+  }
+  #[else]
+  {
+      #[import = ("b", "y")]
+      fn y() -> i32;
+      #[import = ("b", "g")]
+      fn g() -> i32;
+      #[import = ("b", "z")]
+      fn z() -> i32;
+  }
+  #[if(not(wasi))]
+  fn h() -> i32 { g(); }
+  fn f() -> i32 { g(); }
+  $ wax --validate deps.wat -o checked_deps.wax
+
 Numeric references to module fields are refused when the module has a
 conditional annotation, since a field's index depends on which branch is taken.
 
