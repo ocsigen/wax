@@ -161,21 +161,17 @@ module CondTbl = struct
     match Hashtbl.find tbl name with
     | [ (_, v) ] -> v
     | entries -> (
-        (* Prefer a declaration whose condition is entailed by the current
-           assumption; fall back to one merely compatible with it, then to the
-           most recent. *)
+        (* Resolve to the declaration whose branch is reachable under the
+           current assumption, pruning declarations from mutually-exclusive
+           branches. Falls back to the most recent if none is compatible
+           (only for a reference that is itself unreachable). *)
         match
-          List.find_opt (fun (c, _) -> Cond.logical_implies asm c) entries
+          List.find_opt
+            (fun (c, _) -> Cond.is_satisfiable (Cond.and_ asm c))
+            entries
         with
         | Some (_, v) -> v
-        | None -> (
-            match
-              List.find_opt
-                (fun (c, _) -> Cond.is_satisfiable (Cond.and_ asm c))
-                entries
-            with
-            | Some (_, v) -> v
-            | None -> snd (List.hd entries)))
+        | None -> snd (List.hd entries))
 end
 
 type ctx = {
