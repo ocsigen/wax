@@ -2694,10 +2694,10 @@ let rec field_has_conditional (f : (_ modulefield, _) annotated) =
    branch to produce a conditional-free module (groups are kept and recursed
    into). For an undetermined conditional, select [then], [enqueue] the [else]
    configuration, and [record] the chosen literal. *)
-let specialize_fields diagnostics ~enqueue ~record asm0 fields =
+let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
   let module S = Wasm.Cond_solver in
   let choose asm cond ~location ~then_branch ~else_branch =
-    let c = S.of_cond diagnostics ~location cond in
+    let c = S.of_cond env diagnostics ~location cond in
     if S.logical_implies asm c then (
       record c;
       then_branch (S.and_ asm c))
@@ -2730,9 +2730,9 @@ let f diagnostics fields =
     Wasm.Cond_explore.check_all diagnostics
       ?truncation_location:
         (match fields with hd :: _ -> Some hd.info | [] -> None)
-      ~explain:(fun c -> Wasm.Cond_solver.explain ~style:`Wax c)
-      ~specialize:(fun asm ~enqueue ~record ->
-        specialize_fields diagnostics ~enqueue ~record asm fields)
+      ~explain:(fun env c -> Wasm.Cond_solver.explain env ~style:`Wax c)
+      ~specialize:(fun env asm ~enqueue ~record ->
+        specialize_fields env diagnostics ~enqueue ~record asm fields)
       ~check:(fun ctx m -> ignore (type_configuration ctx m))
       ();
     (* The typed module is consumed only by the (deferred) WAT conversion;

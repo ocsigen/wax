@@ -2307,9 +2307,9 @@ let field_has_conditional (f : (_ Ast.Text.modulefield, _) Ast.annotated) =
    conditionals select [@then] and [enqueue] the [@else] configuration; each
    selected branch literal is passed to [record] to build the configuration's
    full assumption. *)
-let specialize diagnostics ~enqueue ~record asm0 fields =
+let specialize env diagnostics ~enqueue ~record asm0 fields =
   let choose asm cond ~location ~then_branch ~else_branch =
-    let c = Cond_solver.of_cond diagnostics ~location cond in
+    let c = Cond_solver.of_cond env diagnostics ~location cond in
     if Cond_solver.logical_implies asm c then (
       record c;
       then_branch (Cond_solver.and_ asm c))
@@ -2396,8 +2396,8 @@ let f diagnostics ((name, fields) as modul) =
     Cond_explore.check_all diagnostics
       ?truncation_location:
         (match fields with f :: _ -> Some f.Ast.info | [] -> None)
-      ~specialize:(fun asm ~enqueue ~record ->
-        (name, specialize diagnostics ~enqueue ~record asm fields))
+      ~specialize:(fun env asm ~enqueue ~record ->
+        (name, specialize env diagnostics ~enqueue ~record asm fields))
       ~check:validate_configuration ()
 
 let eq_heaptype h1 h2 =

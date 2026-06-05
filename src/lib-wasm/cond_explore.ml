@@ -10,7 +10,10 @@ end)
 let max_configurations = 4096
 
 let check_all diagnostics ?truncation_location
-    ?(explain = fun c -> Cond_solver.explain c) ~specialize ~check () =
+    ?(explain = fun env c -> Cond_solver.explain env c) ~specialize ~check () =
+  (* A fresh solver state per call, so interning/diagnostics never leak between
+     modules processed in the same process. *)
+  let env = Cond_solver.create () in
   let queue = Queue.create () in
   Queue.push Cond_solver.true_ queue;
   let processed = Bdd_tbl.create 16 in
@@ -30,7 +33,7 @@ let check_all diagnostics ?truncation_location
       let a_full = ref Cond_solver.true_ in
       let record lit = a_full := Cond_solver.and_ !a_full lit in
       let enqueue b = Queue.push b queue in
-      let cfg = specialize asm ~enqueue ~record in
+      let cfg = specialize env asm ~enqueue ~record in
       let cctx = Diagnostic.collector ~source:None () in
       check cctx cfg;
       (* Discard errors from an infeasible configuration: undetermined
@@ -71,7 +74,7 @@ let check_all diagnostics ?truncation_location
     (fun (e, reach) ->
       let base_hint = Diagnostic.entry_hint e in
       let hint =
-        match explain reach with
+        match explain env reach with
         | None -> base_hint
         | Some s ->
             Some

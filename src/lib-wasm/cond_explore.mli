@@ -11,9 +11,10 @@
 val check_all :
   Utils.Diagnostic.context ->
   ?truncation_location:Ast.location ->
-  ?explain:(Cond_solver.t -> string option) ->
+  ?explain:(Cond_solver.env -> Cond_solver.t -> string option) ->
   specialize:
-    (Cond_solver.t ->
+    (Cond_solver.env ->
+    Cond_solver.t ->
     enqueue:(Cond_solver.t -> unit) ->
     record:(Cond_solver.t -> unit) ->
     'cfg) ->
@@ -24,11 +25,12 @@ val check_all :
 
     - seeds a worklist with the assumption [Cond_solver.true_];
     - for each assumption (deduplicated by BDD identity, skipping unsatisfiable
-      ones): calls [specialize asm ~enqueue ~record] to produce a
-      conditional-free configuration. [specialize] resolves each conditional
-      against [asm]; for an undetermined conditional it selects one branch,
-      [enqueue]s the assumption for the other, and [record]s the chosen branch's
-      literal (so the configuration's full assumption can be accumulated);
+      ones): calls [specialize env asm ~enqueue ~record] to produce a
+      conditional-free configuration, interning condition variables in the fresh
+      per-call [env]. [specialize] resolves each conditional against [asm]; for
+      an undetermined conditional it selects one branch, [enqueue]s the
+      assumption for the other, and [record]s the chosen branch's literal (so
+      the configuration's full assumption can be accumulated);
     - runs [check cctx cfg] into a buffering [cctx];
     - discards the configuration's diagnostics if its accumulated assumption is
       unsatisfiable (an optimistically-explored, infeasible combination);

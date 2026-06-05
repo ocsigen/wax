@@ -39,15 +39,34 @@ let logical_implies = Bdd.logical_implies
 let equal = Bdd.equal
 let hash = Bdd.hash
 
-(* Variable interning, by name and kind. A name has a single kind; using it at
-   two kinds is an ill-formed condition. *)
+(* Per-module state: variable interning (by name and kind), the kind each name
+   is used at (to flag inconsistent uses), and deduplication of ill-formed
+   condition diagnostics (by source location). One [env] is used to process a
+   single module, so nothing leaks between modules. (The underlying BDD engine
+   {!Theo} keeps its own global hash-consing/memoization, which is
+   correctness-safe across modules.) *)
+type env = {
+  bool_vars : (string, bool Theo.Var.t) Hashtbl.t;
+  version_vars : (string, VLeq.kind Theo.Var.t) Hashtbl.t;
+  string_vars : (string, SEq.kind Theo.Var.t) Hashtbl.t;
+  bool_names : (bool Theo.Var.t * string) list ref;
+  version_names : (VLeq.kind Theo.Var.t * string) list ref;
+  string_names : (SEq.kind Theo.Var.t * string) list ref;
+  reported : (Lexing.position * Lexing.position, unit) Hashtbl.t;
+  var_kind : (string, string) Hashtbl.t;
+}
 
-let bool_vars : (string, bool Theo.Var.t) Hashtbl.t = Hashtbl.create 16
-let version_vars : (string, VLeq.kind Theo.Var.t) Hashtbl.t = Hashtbl.create 16
-let string_vars : (string, SEq.kind Theo.Var.t) Hashtbl.t = Hashtbl.create 16
-let bool_names : (bool Theo.Var.t * string) list ref = ref []
-let version_names : (VLeq.kind Theo.Var.t * string) list ref = ref []
-let string_names : (SEq.kind Theo.Var.t * string) list ref = ref []
+let create () =
+  {
+    bool_vars = Hashtbl.create 16;
+    version_vars = Hashtbl.create 16;
+    string_vars = Hashtbl.create 16;
+    bool_names = ref [];
+    version_names = ref [];
+    string_names = ref [];
+    reported = Hashtbl.create 16;
+    var_kind = Hashtbl.create 16;
+  }
 
 let intern tbl names name =
   match Hashtbl.find_opt tbl name with
@@ -63,28 +82,20 @@ let lookup names var =
   | Some (_, name) -> name
   | None -> "?"
 
-(* Diagnostics for ill-formed conditions, deduplicated by source location. *)
-
-let reported : (Lexing.position * Lexing.position, unit) Hashtbl.t =
-  Hashtbl.create 16
-
-let report_ill_formed ctx (location : Ast.location) msg =
+let report_ill_formed env ctx (location : Ast.location) msg =
   let key = (location.loc_start, location.loc_end) in
-  if not (Hashtbl.mem reported key) then (
-    Hashtbl.add reported key ();
+  if not (Hashtbl.mem env.reported key) then (
+    Hashtbl.add env.reported key ();
     Diagnostic.report ctx ~location ~severity:Error
       ~message:(fun f () -> Format.pp_print_string f msg)
       ())
 
-(* Track the kind a variable name is used at, to flag inconsistent uses. *)
-let var_kind : (string, string) Hashtbl.t = Hashtbl.create 16
-
-let check_kind ctx location name kind =
-  match Hashtbl.find_opt var_kind name with
+let check_kind env ctx location name kind =
+  match Hashtbl.find_opt env.var_kind name with
   | Some k when not (String.equal k kind) ->
-      report_ill_formed ctx location
+      report_ill_formed env ctx location
         (Printf.sprintf "Variable $%s is used with inconsistent types." name)
-  | _ -> Hashtbl.replace var_kind name kind
+  | _ -> Hashtbl.replace env.var_kind name kind
 
 let swap_op : Ast.cmp_op -> Ast.cmp_op = function
   | Le -> Ge
@@ -115,12 +126,12 @@ let version_atom var (op : Ast.cmp_op) ver =
   | Eq -> var = ver
   | Ne -> var <> ver
 
-let string_atom ctx location var (op : Ast.cmp_op) s =
+let string_atom env ctx location var (op : Ast.cmp_op) s =
   match op with
   | Eq -> S.(var = s)
   | Ne -> S.(var <> s)
   | Lt | Gt | Le | Ge ->
-      report_ill_formed ctx location
+      report_ill_formed env ctx location
         "Strings can only be compared with = or <> in a condition.";
       Bdd.bool (Theo.Var.fresh ())
 
@@ -128,27 +139,27 @@ let is_literal = function
   | Ast.Cond_version _ | Ast.Cond_string _ -> true
   | _ -> false
 
-let rec to_bdd ctx ~location (c : Ast.cond) : t =
+let rec to_bdd env ctx ~location (c : Ast.cond) : t =
   match c with
   | Cond_var v ->
-      check_kind ctx v.info v.desc "boolean";
-      Bdd.bool (intern bool_vars bool_names v.desc)
-  | Cond_and l -> Bdd.and_list (List.map (to_bdd ctx ~location) l)
-  | Cond_or l -> Bdd.or_list (List.map (to_bdd ctx ~location) l)
-  | Cond_not e -> Bdd.not (to_bdd ctx ~location e)
-  | Cond_cmp (op, a, b) -> cmp ctx ~location op a b
+      check_kind env ctx v.info v.desc "boolean";
+      Bdd.bool (intern env.bool_vars env.bool_names v.desc)
+  | Cond_and l -> Bdd.and_list (List.map (to_bdd env ctx ~location) l)
+  | Cond_or l -> Bdd.or_list (List.map (to_bdd env ctx ~location) l)
+  | Cond_not e -> Bdd.not (to_bdd env ctx ~location e)
+  | Cond_cmp (op, a, b) -> cmp env ctx ~location op a b
   | Cond_string _ | Cond_version _ ->
-      report_ill_formed ctx location "This condition should be a boolean.";
+      report_ill_formed env ctx location "This condition should be a boolean.";
       Bdd.bool (Theo.Var.fresh ())
 
-and cmp ctx ~location op (a : Ast.cond) (b : Ast.cond) =
+and cmp env ctx ~location op (a : Ast.cond) (b : Ast.cond) =
   let version_var loc name =
-    check_kind ctx loc name "version";
-    intern version_vars version_names name
+    check_kind env ctx loc name "version";
+    intern env.version_vars env.version_names name
   in
   let string_var loc name =
-    check_kind ctx loc name "string";
-    intern string_vars string_names name
+    check_kind env ctx loc name "string";
+    intern env.string_vars env.string_names name
   in
   match (a, b) with
   | Cond_var v, Cond_version (x, y, z) ->
@@ -156,9 +167,10 @@ and cmp ctx ~location op (a : Ast.cond) (b : Ast.cond) =
   | Cond_version (x, y, z), Cond_var v ->
       version_atom (version_var v.info v.desc) (swap_op op) (x, y, z)
   | Cond_var v, Cond_string s ->
-      string_atom ctx location (string_var v.info v.desc) op s.desc
+      string_atom env ctx location (string_var v.info v.desc) op s.desc
   | Cond_string s, Cond_var v ->
-      string_atom ctx location (string_var v.info v.desc) (swap_op op) s.desc
+      string_atom env ctx location (string_var v.info v.desc) (swap_op op)
+        s.desc
   | Cond_version (x1, y1, z1), Cond_version (x2, y2, z2) ->
       bool_const (apply_order op (Version.compare (x1, y1, z1) (x2, y2, z2)))
   | Cond_string x, Cond_string y -> (
@@ -166,20 +178,21 @@ and cmp ctx ~location op (a : Ast.cond) (b : Ast.cond) =
       | Eq -> bool_const (String.equal x.desc y.desc)
       | Ne -> bool_const (not (String.equal x.desc y.desc))
       | _ ->
-          report_ill_formed ctx location
+          report_ill_formed env ctx location
             "Strings can only be compared with = or <> in a condition.";
           Bdd.bool (Theo.Var.fresh ()))
   | _ -> (
       match op with
       | (Eq | Ne) when (not (is_literal a)) && not (is_literal b) ->
-          let ba = to_bdd ctx ~location a and bb = to_bdd ctx ~location b in
+          let ba = to_bdd env ctx ~location a
+          and bb = to_bdd env ctx ~location b in
           if op = Ast.Eq then Bdd.iff ba bb else Bdd.xor ba bb
       | _ ->
-          report_ill_formed ctx location
+          report_ill_formed env ctx location
             "This comparison in a condition is not supported.";
           Bdd.bool (Theo.Var.fresh ()))
 
-let of_cond ctx ~location c = to_bdd ctx ~location c
+let of_cond env ctx ~location c = to_bdd env ctx ~location c
 
 (* The two surface syntaxes render conditions differently: WAT uses
    [$]-prefixed variables, dotted versions and [<>]; Wax uses bare variables,
@@ -189,16 +202,16 @@ let version_string style (a, b, c) =
   | `Wat -> Printf.sprintf "%d.%d.%d" a b c
   | `Wax -> Printf.sprintf "(%d, %d, %d)" a b c
 
-let render_constraint style (c : Bdd.atomic_constraint) =
+let render_constraint env style (c : Bdd.atomic_constraint) =
   let prefix = match style with `Wat -> "$" | `Wax -> "" in
   match Bdd.view_constraint c with
   | Bdd.Constraint { var; payload = Bool; value } ->
-      let name = lookup bool_names var in
+      let name = lookup env.bool_names var in
       if value then prefix ^ name else "not " ^ prefix ^ name
   | Bdd.Constraint { var; payload = Theory desc; value } -> (
       match desc with
       | Theory.Left (VLeq.Bound { limit; inclusive }) ->
-          let name = lookup version_names var in
+          let name = lookup env.version_names var in
           let op =
             match (inclusive, value) with
             | true, true -> "<="
@@ -209,7 +222,7 @@ let render_constraint style (c : Bdd.atomic_constraint) =
           Printf.sprintf "%s%s %s %s" prefix name op
             (version_string style limit)
       | Theory.Right (SEq.Const s) ->
-          let name = lookup string_names var in
+          let name = lookup env.string_names var in
           let op =
             match (value, style) with
             | true, _ -> "="
@@ -218,9 +231,10 @@ let render_constraint style (c : Bdd.atomic_constraint) =
           in
           Printf.sprintf "%s%s %s %s" prefix name op (Str.to_string s))
 
-let explain ?(style = `Wat) (f : t) =
+let explain env ?(style = `Wat) (f : t) =
   match Bdd.shortest_sat f with
   | None | Some [] -> None
   | Some constraints ->
       Some
-        (String.concat " and " (List.map (render_constraint style) constraints))
+        (String.concat " and "
+           (List.map (render_constraint env style) constraints))
