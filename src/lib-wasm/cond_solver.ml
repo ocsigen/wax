@@ -35,7 +35,15 @@ let and_ = Bdd.and_
 let or_ = Bdd.or_
 let not_ = Bdd.not
 let is_satisfiable = Bdd.is_satisfiable
-let logical_implies = Bdd.logical_implies
+
+(* [Bdd.logical_implies] (and [Bdd.is_disjoint]) are built on [ite_constant],
+   whose cofactor recursion does not apply the theory simplification that the
+   regular [ite]/[and_] path does. So they are theory-incomplete: e.g.
+   [logical_implies (ver >= 5) (ver >= 1)] returns false even though
+   [ver >= 5 ∧ ver < 1] is unsatisfiable. Define implication through the
+   theory-complete [is_satisfiable]/[and_] path instead, so that
+   [logical_implies a b] always agrees with [not (sat (a ∧ not b))]. *)
+let logical_implies a b = not (Bdd.is_satisfiable (Bdd.and_ a (Bdd.not b)))
 let equal = Bdd.equal
 let hash = Bdd.hash
 
