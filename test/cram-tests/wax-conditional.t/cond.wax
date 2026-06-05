@@ -1,0 +1,15 @@
+#[if(ocaml_version >= (5, 1, 0))]
+const caml_marshal_header_size: i32 = 16;
+#[else]
+const caml_marshal_header_size: i32 = 20;
+
+#[if(feature = "gc")]
+fn gc_init() {
+}
+
+#[if(all(debug, not(target = "wasm32")))]
+{
+    const debug_enabled: i32 = 1;
+    fn debug_log(msg: i32) {
+    }
+}

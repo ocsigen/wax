@@ -8,6 +8,8 @@
 %token INF NAN
 %token SEMI ";"
 %token SHARP "#"
+%token HASH_IF "#[if("
+%token HASH_ELSE "#[else]"
 %token QUESTIONMARK "?"
 %token LPAREN "("
 %token RPAREN ")"
@@ -581,6 +583,37 @@ module_field:
 | attributes = list(attribute) d = definition { d attributes }
 | attributes = list(attribute) "{" fields = list(module_field) "}"
   { with_loc $sloc (Group {attributes; fields}) }
+| "#[if(" c = condition ")" "]" t = module_field e = else_clause
+  { with_loc $sloc (Conditional {cond = c; then_fields = [t]; else_fields = e}) }
+
+else_clause:
+| { None }
+| "#[else]" e = module_field { Some [e] }
+
+(* Conditions of conditional annotations. Reuse the WAT-level [Wasm.Ast.cond]
+   (we do not evaluate them; they are preserved for the preprocessor). *)
+condition:
+| name = ident { Wasm.Ast.Cond_var name }
+| name = ident op = condition_relop rhs = condition_literal
+  { Wasm.Ast.Cond_cmp (op, Wasm.Ast.Cond_var name, rhs) }
+| name = ident "(" l = separated_list(",", condition) ")"
+  { match name.desc, l with
+    | "all", _ -> Wasm.Ast.Cond_and l
+    | "any", _ -> Wasm.Ast.Cond_or l
+    | "not", [c] -> Wasm.Ast.Cond_not c
+    | _ ->
+      raise
+        (Wasm.Parsing.Syntax_error
+           ($loc, "Expected 'all', 'any', or 'not(<cond>)' in a condition.")) }
+
+condition_literal:
+| "(" a = INT "," b = INT "," c = INT ")"
+  { Wasm.Ast.Cond_version (int_of_string a, int_of_string b, int_of_string c) }
+| s = STRING { Wasm.Ast.Cond_string s }
+
+condition_relop:
+| "=" { Wasm.Ast.Eq } | "!=" { Wasm.Ast.Ne } | "<" { Wasm.Ast.Lt }
+| ">" { Wasm.Ast.Gt } | "<=" { Wasm.Ast.Le } | ">=" { Wasm.Ast.Ge }
 
 parse: 
 | EOF { [] }

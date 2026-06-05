@@ -2424,6 +2424,11 @@ type ('before, 'after) phased =
   | Before of 'before
   | After of 'after
   | PhasedGroup of { before : 'before; fields : ('before, 'after) phased list }
+  | PhasedConditional of {
+      before : 'before;
+      then_ : ('before, 'after) phased list;
+      else_ : ('before, 'after) phased list option;
+    }
 
 let rec globals ctx fields =
   List.map
@@ -2450,6 +2455,13 @@ let rec globals ctx fields =
       | Group { fields; _ } ->
           let fields = globals ctx fields in
           PhasedGroup { before = field; fields }
+      | Conditional { then_fields; else_fields; _ } ->
+          PhasedConditional
+            {
+              before = field;
+              then_ = globals ctx then_fields;
+              else_ = Option.map (globals ctx) else_fields;
+            }
       | _ -> Before field)
     fields
 
@@ -2510,7 +2522,22 @@ let rec functions ctx fields =
           { before = { desc = Group { attributes; _ }; info }; fields } ->
           Some
             { info; desc = Group { attributes; fields = functions ctx fields } }
-      | PhasedGroup _ | Before { desc = Global _ | Group _; _ } -> assert false
+      | PhasedConditional
+          { before = { desc = Conditional { cond; _ }; info }; then_; else_ } ->
+          Some
+            {
+              info;
+              desc =
+                Conditional
+                  {
+                    cond;
+                    then_fields = functions ctx then_;
+                    else_fields = Option.map (functions ctx) else_;
+                  };
+            }
+      | PhasedGroup _ | PhasedConditional _
+      | Before { desc = Global _ | Group _ | Conditional _; _ } ->
+          assert false
       | After f -> Some f
       | Before ({ desc = Type _ | Fundecl _ | GlobalDecl _ | Tag _; _ } as f) ->
           Some f)
@@ -2546,7 +2573,7 @@ let fundecl ctx name typ sign =
             (i, name.desc)
         | None -> assert false (*ZZZ*))
 
-let f diagnostics fields =
+let type_configuration diagnostics fields =
   let type_context =
     {
       internal_types = Wasm.Types.create ();
@@ -2606,7 +2633,7 @@ let f diagnostics fields =
             | None, None -> assert false (*ZZZ*)
           in
           Tbl.add diagnostics ctx.tags name typ
-      | Group _ | Type _ | Global _ -> ())
+      | Group _ | Conditional _ | Type _ | Global _ -> ())
     fields;
   let _ : _ option =
     let name = Ast.no_loc "<string>" in
@@ -2652,6 +2679,67 @@ let f diagnostics fields =
         in
         { f with desc })
       typed_fields )
+
+(* Conditional annotations denote mutually-exclusive branches, so they are
+   type-checked by exploring every reachable configuration (as the WAT validator
+   does), rather than checking both branches as if they coexisted. *)
+
+let rec field_has_conditional (f : (_ modulefield, _) annotated) =
+  match f.desc with
+  | Conditional _ -> true
+  | Group { fields; _ } -> List.exists field_has_conditional fields
+  | _ -> false
+
+(* Resolve every conditional against the assumption [asm], inlining the selected
+   branch to produce a conditional-free module (groups are kept and recursed
+   into). For an undetermined conditional, select [then], [enqueue] the [else]
+   configuration, and [record] the chosen literal. *)
+let specialize_fields diagnostics ~enqueue ~record asm0 fields =
+  let module S = Wasm.Cond_solver in
+  let choose asm cond ~location ~then_branch ~else_branch =
+    let c = S.of_cond diagnostics ~location cond in
+    if S.logical_implies asm c then (
+      record c;
+      then_branch (S.and_ asm c))
+    else if S.logical_implies asm (S.not_ c) then (
+      record (S.not_ c);
+      else_branch (S.and_ asm (S.not_ c)))
+    else (
+      enqueue (S.and_ asm (S.not_ c));
+      record c;
+      then_branch (S.and_ asm c))
+  in
+  let rec sfields asm fl = List.concat_map (sfield asm) fl
+  and sfield asm (f : (_ modulefield, _) annotated) =
+    match f.desc with
+    | Conditional { cond; then_fields; else_fields } ->
+        choose asm cond ~location:f.info
+          ~then_branch:(fun asm' -> sfields asm' then_fields)
+          ~else_branch:(fun asm' ->
+            match else_fields with Some e -> sfields asm' e | None -> [])
+    | Group { attributes; fields } ->
+        [ { f with desc = Group { attributes; fields = sfields asm fields } } ]
+    | _ -> [ f ]
+  in
+  sfields asm0 fields
+
+let f diagnostics fields =
+  if not (List.exists field_has_conditional fields) then
+    type_configuration diagnostics fields
+  else begin
+    Wasm.Cond_explore.check_all diagnostics
+      ?truncation_location:
+        (match fields with hd :: _ -> Some hd.info | [] -> None)
+      ~specialize:(fun asm ~enqueue ~record ->
+        specialize_fields diagnostics ~enqueue ~record asm fields)
+      ~check:(fun ctx m -> ignore (type_configuration ctx m))
+      ();
+    (* The typed module is consumed only by the (deferred) WAT conversion;
+       wax -> wax ignores it. Produce it by typing the full module with
+       conditionals preserved, discarding its (imprecise, cross-branch)
+       diagnostics — the exploration above did the real checking. *)
+    type_configuration (Utils.Diagnostic.collector ~source:None ()) fields
+  end
 
 let erase_types m =
   List.map (fun m -> { m with desc = Ast_utils.map_modulefield snd m.desc }) m

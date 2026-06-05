@@ -851,7 +851,7 @@ let module_ diagnostics types fields =
       | GlobalDecl { name; _ } -> Hashtbl.replace ctx.globals name.desc ()
       | Global { name; _ } -> Hashtbl.replace ctx.globals name.desc ()
       | Fundecl { name; _ } -> Hashtbl.replace ctx.functions name.desc ()
-      | Tag _ | Group _ -> ())
+      | Tag _ | Group _ | Conditional _ -> ())
     fields;
   let fields = flatten fields in
   let wasm_fields =
@@ -959,6 +959,10 @@ let module_ diagnostics types fields =
                   exports = exports attributes;
                 }
           | Group _ -> assert false
+          | Conditional _ ->
+              failwith
+                "Wax conditional annotations are not yet supported when \
+                 converting to WAT."
         in
         { field with desc })
       fields

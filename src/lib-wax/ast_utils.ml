@@ -89,6 +89,16 @@ let rec map_modulefield f field =
               (fun a -> { a with desc = map_modulefield f a.desc })
               fields;
         }
+  | Conditional { cond; then_fields; else_fields } ->
+      let map_fields =
+        List.map (fun a -> { a with desc = map_modulefield f a.desc })
+      in
+      Conditional
+        {
+          cond;
+          then_fields = map_fields then_fields;
+          else_fields = Option.map map_fields else_fields;
+        }
 
 let rec iter_fields f l =
   List.iter
@@ -96,5 +106,8 @@ let rec iter_fields f l =
       f field;
       match field.desc with
       | Group { fields; _ } -> iter_fields f fields
+      | Conditional { then_fields; else_fields; _ } ->
+          iter_fields f then_fields;
+          Option.iter (iter_fields f) else_fields
       | _ -> ())
     l

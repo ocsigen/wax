@@ -915,6 +915,29 @@ let print_attr_prefix pp attributes_list content_fn =
         newline pp ());
       content_fn ())
 
+let cond_op_string (op : Wasm.Ast.cmp_op) =
+  match op with
+  | Eq -> "="
+  | Ne -> "!="
+  | Lt -> "<"
+  | Gt -> ">"
+  | Le -> "<="
+  | Ge -> ">="
+
+let rec cond_to_string (c : Wasm.Ast.cond) =
+  match c with
+  | Cond_var v -> v.desc
+  | Cond_string s -> Printf.sprintf "%S" s.desc
+  | Cond_version (a, b, c) -> Printf.sprintf "(%d, %d, %d)" a b c
+  | Cond_cmp (op, a, b) ->
+      Printf.sprintf "%s %s %s" (cond_to_string a) (cond_op_string op)
+        (cond_to_string b)
+  | Cond_and l -> Printf.sprintf "all(%s)" (cond_list l)
+  | Cond_or l -> Printf.sprintf "any(%s)" (cond_list l)
+  | Cond_not c -> Printf.sprintf "not(%s)" (cond_to_string c)
+
+and cond_list l = String.concat ", " (List.map cond_to_string l)
+
 let rec modulefield pp field =
   match field.desc with
   | Type t -> rectype pp t
@@ -978,6 +1001,34 @@ let rec modulefield pp field =
                       fields);
                 space pp ());
               punctuation pp "}"))
+  | Conditional { cond; then_fields; else_fields } ->
+      let branch fields =
+        match fields with
+        | [ f ] -> modulefield pp f
+        | _ ->
+            hvbox pp (fun () ->
+                punctuation pp "{";
+                if fields <> [] then (
+                  indent pp indent_level (fun () ->
+                      List.iter
+                        (fun f ->
+                          space pp ();
+                          modulefield pp f)
+                        fields);
+                  space pp ());
+                punctuation pp "}")
+      in
+      hvbox pp (fun () ->
+          attribute pp (Printf.sprintf "#[if(%s)]" (cond_to_string cond));
+          newline pp ();
+          branch then_fields;
+          Option.iter
+            (fun e ->
+              newline pp ();
+              attribute pp "#[else]";
+              newline pp ();
+              branch e)
+            else_fields)
 
 let module_ ?(color = Auto) ?out_channel printer l =
   let use_color = should_use_color ~color ~out_channel in

@@ -145,6 +145,8 @@ let rec token_rec ctx lexbuf =
       Utils.Trivia.report_item ctx Block_comment s;
       token_rec ctx lexbuf
   | ';' -> SEMI
+  | "#[if(" -> HASH_IF
+  | "#[else]" -> HASH_ELSE
   | '#' -> SHARP
   | '?' -> QUESTIONMARK
   | '(' -> LPAREN

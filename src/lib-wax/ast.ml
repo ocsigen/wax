@@ -171,5 +171,10 @@ type 'info modulefield =
       attributes : attributes;
       fields : ('info modulefield, location) annotated list;
     }
+  | Conditional of {
+      cond : Wasm.Ast.cond;
+      then_fields : ('info modulefield, location) annotated list;
+      else_fields : ('info modulefield, location) annotated list option;
+    }
 
 type 'info module_ = ('info modulefield, location) annotated list

@@ -1,0 +1,4 @@
+#[if(debug)]
+const x: i32 = 1;
+#[else]
+const x: i32 = nan;
