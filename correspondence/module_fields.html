@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-de095ff6.js";
+            window.path_to_searchindex_js = "../searchindex-e2421690.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f031991a.js"></script>
@@ -290,6 +290,19 @@ tag error(code: i32);
 #[export = "value"]
 const value: i32;
 </code></pre>
+<h2 id="conditional-annotations"><a class="header" href="#conditional-annotations">Conditional Annotations</a></h2>
+<p>Both formats can guard module fields by a condition that a downstream preprocessor evaluates. Wax uses <code>#[if(...)]</code> / <code>#[else]</code>; WAT uses the annotation form <code>(@if &lt;cond&gt; (@then ...) (@else ...))</code>.</p>
+<pre><code class="language-wax">#[if(ocaml_version &gt;= (5, 1, 0))]
+const size: i32 = 16;
+#[else]
+const size: i32 = 20;
+</code></pre>
+<pre><code class="language-wat">(@if (&gt;= $ocaml_version (5 1 0))
+  (@then (global $size i32 (i32.const 16)))
+  (@else (global $size i32 (i32.const 20))))
+</code></pre>
+<p>The conditions are equivalent — note the surface differences: Wax variables are bare (<code>ocaml_version</code>) while WAT variables are <code>$</code>-prefixed; Wax versions are tuples <code>(5, 1, 0)</code> while WAT writes them <code>(5 1 0)</code>; Wax combines conditions with <code>all</code>/<code>any</code>/<code>not</code>, WAT with <code>and</code>/<code>or</code>/<code>not</code>.</p>
+<p>The conditions are preserved, not evaluated. Type checking (<code>--validate</code>) explores each reachable combination independently (see the <a href="../language.html#conditional-compilation">Language Guide</a>). Conversion between the Wax and WAT forms is not yet implemented; conditionals are currently supported within each format on its own.</p>
 <h2 id="tables-and-memories"><a class="header" href="#tables-and-memories">Tables and Memories</a></h2>
 <p>Wax focuses on GC-based memory management and does not provide dedicated syntax for linear memory or tables. When converting from WAT/WASM:</p>
 <ul>

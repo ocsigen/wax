@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-de095ff6.js";
+            window.path_to_searchindex_js = "searchindex-e2421690.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -567,6 +567,45 @@ arr.length                  // Array length
 }
 </code></pre>
 <p>This is useful for writing concise code where intermediate values flow naturally.</p>
+<h2 id="conditional-compilation"><a class="header" href="#conditional-compilation">Conditional Compilation</a></h2>
+<p>Top-level items can be guarded by conditions, using a Rust-like attribute syntax. <code>#[if(&lt;condition&gt;)]</code> keeps the following item only when <code>&lt;condition&gt;</code> holds; an optional <code>#[else]</code> provides an alternative:</p>
+<pre><code class="language-wax">#[if(ocaml_version &gt;= (5, 1, 0))]
+const caml_marshal_header_size: i32 = 16;
+#[else]
+const caml_marshal_header_size: i32 = 20;
+</code></pre>
+<p>A condition is one of:</p>
+<ul>
+<li>
+<p>a <strong>boolean variable</strong>, e.g. <code>debug</code>;</p>
+</li>
+<li>
+<p>a <strong>comparison</strong> <code>variable op literal</code>, where <code>op</code> is <code>=</code>, <code>!=</code>, <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code> or <code>&gt;=</code>, and the literal is either a <strong>version</strong> tuple <code>(major, minor, patch)</code> or a <strong>string</strong> <code>"..."</code>:</p>
+<pre><code class="language-wax">#[if(feature = "gc")]
+#[if(ocaml_version &gt;= (5, 1, 0))]
+</code></pre>
+</li>
+<li>
+<p>a <strong>combination</strong> built with <code>all(...)</code> (conjunction), <code>any(...)</code> (disjunction) or <code>not(...)</code> (negation), nested arbitrarily:</p>
+<pre><code class="language-wax">#[if(all(debug, not(target = "wasm32")))]
+</code></pre>
+</li>
+</ul>
+<p>To guard several items at once, follow the attribute with a block:</p>
+<pre><code class="language-wax">#[if(debug)]
+{
+    const debug_enabled: i32 = 1;
+    fn debug_log(msg: i32) {
+        // ...
+    }
+}
+</code></pre>
+<p>The conditions are <strong>not evaluated</strong> by the compiler; they are preserved for a downstream preprocessor. The <code>#[if]</code> and <code>#[else]</code> branches are <strong>mutually exclusive</strong> — they never coexist — so, for instance, the same name may be defined in both.</p>
+<p>When type checking is enabled (<code>--validate</code>), every reachable combination of conditions is checked independently. Because branches are mutually exclusive, a name defined in both the <code>#[if]</code> and <code>#[else]</code> branch is accepted. An error that occurs only under some conditions is reported together with the assumption that makes it reachable:</p>
+<pre><code>Error: This instruction has type float but is expected to have type i32.
+ ──➤  example.wax:4:16
+Hint: reachable when not debug
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="examples"><a class="header" href="#examples">Examples</a></h1>
 <p>Complete examples demonstrating Wax features and their WebAssembly equivalents.</p>
@@ -1276,6 +1315,19 @@ tag error(code: i32);
 #[export = "value"]
 const value: i32;
 </code></pre>
+<h2 id="conditional-annotations"><a class="header" href="#conditional-annotations">Conditional Annotations</a></h2>
+<p>Both formats can guard module fields by a condition that a downstream preprocessor evaluates. Wax uses <code>#[if(...)]</code> / <code>#[else]</code>; WAT uses the annotation form <code>(@if &lt;cond&gt; (@then ...) (@else ...))</code>.</p>
+<pre><code class="language-wax">#[if(ocaml_version &gt;= (5, 1, 0))]
+const size: i32 = 16;
+#[else]
+const size: i32 = 20;
+</code></pre>
+<pre><code class="language-wat">(@if (&gt;= $ocaml_version (5 1 0))
+  (@then (global $size i32 (i32.const 16)))
+  (@else (global $size i32 (i32.const 20))))
+</code></pre>
+<p>The conditions are equivalent — note the surface differences: Wax variables are bare (<code>ocaml_version</code>) while WAT variables are <code>$</code>-prefixed; Wax versions are tuples <code>(5, 1, 0)</code> while WAT writes them <code>(5 1 0)</code>; Wax combines conditions with <code>all</code>/<code>any</code>/<code>not</code>, WAT with <code>and</code>/<code>or</code>/<code>not</code>.</p>
+<p>The conditions are preserved, not evaluated. Type checking (<code>--validate</code>) explores each reachable combination independently (see the <a href="#conditional-compilation">Language Guide</a>). Conversion between the Wax and WAT forms is not yet implemented; conditionals are currently supported within each format on its own.</p>
 <h2 id="tables-and-memories"><a class="header" href="#tables-and-memories">Tables and Memories</a></h2>
 <p>Wax focuses on GC-based memory management and does not provide dedicated syntax for linear memory or tables. When converting from WAT/WASM:</p>
 <ul>
@@ -1361,6 +1413,7 @@ fn compute(x: i32) -&gt; i32 {
 <li>Perform validation during conversion.</li>
 <li>For Wax: Runs type checking.</li>
 <li>For Wasm Text: Runs well-formedness checks.</li>
+<li>For input containing conditional annotations (<code>#[if]</code> / <code>(@if ...)</code>), every reachable combination of conditions is checked independently, and each error is reported with the assumption (<code>reachable when ...</code>) under which it occurs.</li>
 <li>Disabled by default.</li>
 </ul>
 </li>

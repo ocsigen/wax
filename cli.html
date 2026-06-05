@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-de095ff6.js";
+            window.path_to_searchindex_js = "searchindex-e2421690.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -220,6 +220,7 @@
 <li>Perform validation during conversion.</li>
 <li>For Wax: Runs type checking.</li>
 <li>For Wasm Text: Runs well-formedness checks.</li>
+<li>For input containing conditional annotations (<code>#[if]</code> / <code>(@if ...)</code>), every reachable combination of conditions is checked independently, and each error is reported with the assumption (<code>reachable when ...</code>) under which it occurs.</li>
 <li>Disabled by default.</li>
 </ul>
 </li>
