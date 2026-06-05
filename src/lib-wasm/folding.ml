@@ -1,7 +1,8 @@
 module Uint32 = Utils.Uint32
 open Ast.Text
 
-let map_instrs func (name, fields) =
+let map_instrs ?(enter = fun ~location:_ _cond _positive f -> f ()) func
+    (name, fields) =
   let rec map_field f =
     let desc =
       match f.Ast.desc with
@@ -21,12 +22,19 @@ let map_instrs func (name, fields) =
             }
       | Elem ({ init; _ } as e) ->
           Elem { e with init = List.map (fun l -> func None l) init }
-      | Module_if_annotation ({ then_fields; else_fields; _ } as b) ->
+      | Module_if_annotation ({ cond; then_fields; else_fields } as b) ->
           Module_if_annotation
             {
               b with
-              then_fields = List.map map_field then_fields;
-              else_fields = Option.map (List.map map_field) else_fields;
+              then_fields =
+                enter ~location:f.info cond true (fun () ->
+                    List.map map_field then_fields);
+              else_fields =
+                Option.map
+                  (fun e ->
+                    enter ~location:f.info cond false (fun () ->
+                        List.map map_field e))
+                  else_fields;
             }
       | Types _ | Import _ | Memory _ | Tag _ | Export _ | Start _ | Data _
       | String_global _ ->
@@ -40,36 +48,86 @@ let map_instrs func (name, fields) =
 
 module Uint32Map = Map.Make (Uint32)
 module StringMap = Map.Make (String)
+module Cond = Cond_solver
+
+(* Shared state for condition-aware arity resolution: the current branch
+   assumption (set while folding a conditional branch), the solver env used to
+   intern condition variables, and a throwaway diagnostics sink for [of_cond].
+   A name declared in two mutually-exclusive branches with different arities
+   (e.g. a function imported with a different signature in each) resolves to the
+   declaration of the branch currently being folded. *)
+type cond_ctx = {
+  cur : Cond.t ref;
+  env : Cond.env;
+  diag : Utils.Diagnostic.context;
+}
+
+let make_cond_ctx () =
+  {
+    cur = ref Cond.true_;
+    env = Cond.create ();
+    diag = Utils.Diagnostic.collector ~source:None ();
+  }
+
+(* Fold [f] under the assumption of a conditional branch, restoring after. *)
+let with_cond cctx ~location cond positive f =
+  let saved = !(cctx.cur) in
+  let c = Cond.of_cond cctx.env cctx.diag ~location cond in
+  cctx.cur := Cond.and_ saved (if positive then c else Cond.not_ c);
+  Fun.protect ~finally:(fun () -> cctx.cur := saved) f
 
 module Tbl = struct
   type 'a t = {
     by_index : 'a Uint32Map.t;
-    by_name : 'a StringMap.t;
+    by_name : (Cond.t * 'a) list StringMap.t;
     next : int;
+    cctx : cond_ctx;
   }
 
-  let empty =
-    { by_index = Uint32Map.empty; by_name = StringMap.empty; next = 0 }
+  let empty cctx =
+    { by_index = Uint32Map.empty; by_name = StringMap.empty; next = 0; cctx }
 
   let add id v tbl =
     {
+      tbl with
       by_index = Uint32Map.add (Uint32.of_int tbl.next) v tbl.by_index;
       by_name =
         (match id with
         | None -> tbl.by_name
-        | Some id -> StringMap.add id.Ast.desc v tbl.by_name);
+        | Some id ->
+            let prev =
+              try StringMap.find id.Ast.desc tbl.by_name with Not_found -> []
+            in
+            StringMap.add id.Ast.desc ((!(tbl.cctx.cur), v) :: prev) tbl.by_name);
       next = tbl.next + 1;
     }
+
+  (* Resolve a by-name reference against the current branch assumption: a
+     declaration whose assumption is entailed by it, else one compatible with
+     it, else the most recent. *)
+  let resolve tbl name =
+    match StringMap.find name tbl.by_name with
+    | [ (_, v) ] -> v
+    | l -> (
+        let c = !(tbl.cctx.cur) in
+        let pick p = List.find_opt (fun (c', _) -> p c') l in
+        let r =
+          match pick (fun c' -> Cond.logical_implies c c') with
+          | Some _ as r -> r
+          | None -> pick (fun c' -> Cond.is_satisfiable (Cond.and_ c c'))
+        in
+        match r with Some (_, v) -> v | None -> snd (List.hd l))
 end
 
 let lookup (tbl : _ Tbl.t) idx =
   try
     match idx.Ast.desc with
     | Num i -> Uint32Map.find i tbl.by_index
-    | Id i -> StringMap.find i tbl.by_name
+    | Id i -> Tbl.resolve tbl i
   with Not_found -> assert false (*ZZZ *)
 
 type outer_env = {
+  cctx : cond_ctx;
   types : subtype Tbl.t;
   functions : typeuse Tbl.t;
   globals : globaltype Tbl.t;
@@ -78,39 +136,46 @@ type outer_env = {
 }
 
 (* A conditional annotation may contain definitions in both its branches.
-   Since we do not evaluate the condition, we register both branches; this is
-   enough to compute arities for instruction folding. *)
-let fold_fields add tbl then_fields else_fields =
-  let tbl = List.fold_left add tbl then_fields in
-  match else_fields with Some l -> List.fold_left add tbl l | None -> tbl
+   Register each under the assumption of the branch it appears in, so a name
+   declared with a different arity per branch resolves correctly while folding
+   that branch. *)
+let fold_fields cctx add tbl ~location cond then_fields else_fields =
+  let tbl =
+    with_cond cctx ~location cond true (fun () ->
+        List.fold_left add tbl then_fields)
+  in
+  match else_fields with
+  | Some l ->
+      with_cond cctx ~location cond false (fun () -> List.fold_left add tbl l)
+  | None -> tbl
 
-let types m =
+let types cctx m =
   let rec add tbl f =
     match f.Ast.desc with
     | Types l -> Array.fold_left (fun tbl (id, typ) -> Tbl.add id typ tbl) tbl l
-    | Module_if_annotation { then_fields; else_fields; _ } ->
-        fold_fields add tbl then_fields else_fields
+    | Module_if_annotation { cond; then_fields; else_fields } ->
+        fold_fields cctx add tbl ~location:f.info cond then_fields else_fields
     | Import _ | Func _ | Memory _ | Table _ | Tag _ | Global _ | Export _
     | Start _ | Elem _ | Data _ | String_global _ ->
         tbl
   in
-  List.fold_left add Tbl.empty m
+  List.fold_left add (Tbl.empty cctx) m
 
-let functions f =
+let functions cctx f =
   let rec add tbl f =
     match f.Ast.desc with
     | Func { id; typ; _ } | Import { id; desc = Func typ; _ } ->
         Tbl.add id typ tbl
-    | Module_if_annotation { then_fields; else_fields; _ } ->
-        fold_fields add tbl then_fields else_fields
+    | Module_if_annotation { cond; then_fields; else_fields } ->
+        fold_fields cctx add tbl ~location:f.info cond then_fields else_fields
     | Import { desc = Memory _ | Table _ | Global _ | Tag _; _ }
     | Types _ | Memory _ | Table _ | Tag _ | Global _ | Export _ | Start _
     | Elem _ | Data _ | String_global _ ->
         tbl
   in
-  List.fold_left add Tbl.empty f
+  List.fold_left add (Tbl.empty cctx) f
 
-let globals f =
+let globals cctx f =
   let rec add tbl f =
     match f.Ast.desc with
     | Global { id; typ; _ } | Import { id; desc = Global typ; _ } ->
@@ -118,28 +183,28 @@ let globals f =
     | String_global { id; _ } ->
         (* Wrong type, but we only care about the arity *)
         Tbl.add (Some id) { mut = false; typ = (I32 : valtype) } tbl
-    | Module_if_annotation { then_fields; else_fields; _ } ->
-        fold_fields add tbl then_fields else_fields
+    | Module_if_annotation { cond; then_fields; else_fields } ->
+        fold_fields cctx add tbl ~location:f.info cond then_fields else_fields
     | Import { desc = Func _ | Memory _ | Table _ | Tag _; _ }
     | Types _ | Func _ | Memory _ | Table _ | Tag _ | Export _ | Start _
     | Elem _ | Data _ ->
         tbl
   in
-  List.fold_left add Tbl.empty f
+  List.fold_left add (Tbl.empty cctx) f
 
-let tags f =
+let tags cctx f =
   let rec add tbl f =
     match f.Ast.desc with
     | Tag { id; typ; _ } | Import { id; desc = Tag typ; _ } ->
         Tbl.add id typ tbl
-    | Module_if_annotation { then_fields; else_fields; _ } ->
-        fold_fields add tbl then_fields else_fields
+    | Module_if_annotation { cond; then_fields; else_fields } ->
+        fold_fields cctx add tbl ~location:f.info cond then_fields else_fields
     | Import { desc = Func _ | Memory _ | Table _ | Global _; _ }
     | Types _ | Func _ | Memory _ | Table _ | Global _ | Export _ | Start _
     | Elem _ | Data _ | String_global _ ->
         tbl
   in
-  List.fold_left add Tbl.empty f
+  List.fold_left add (Tbl.empty cctx) f
 
 let locals env typ l =
   let tbl =
@@ -154,18 +219,19 @@ let locals env typ l =
     in
     Array.fold_left
       (fun tbl (id, typ) -> Tbl.add id typ tbl)
-      Tbl.empty ty.params
+      (Tbl.empty env.cctx) ty.params
   in
   List.fold_left (fun tbl (id, typ) -> Tbl.add id typ tbl) tbl l
 
 let module_env (_, m) =
-  let types = types m in
+  let cctx = make_cond_ctx () in
   {
-    types;
-    functions = functions m;
-    globals = globals m;
-    tags = tags m;
-    locals = Tbl.empty;
+    cctx;
+    types = types cctx m;
+    functions = functions cctx m;
+    globals = globals cctx m;
+    tags = tags cctx m;
+    locals = Tbl.empty cctx;
   }
 
 (****)
@@ -452,10 +518,20 @@ let rec fold_stream env folded stream : _ Ast.Text.instr list =
            } )
         :: folded)
         rem
-  | ({ Ast.desc = If_annotation ({ then_body; else_body; _ } as b); _ } as i)
+  | ({ Ast.desc = If_annotation ({ cond; then_body; else_body } as b); _ } as i)
     :: rem ->
-      let then_body = fold_stream env [] then_body in
-      let else_body = Option.map (fold_stream env []) else_body in
+      let cctx = env.outer_env.cctx in
+      let then_body =
+        with_cond cctx ~location:i.info cond true (fun () ->
+            fold_stream env [] then_body)
+      in
+      let else_body =
+        Option.map
+          (fun e ->
+            with_cond cctx ~location:i.info cond false (fun () ->
+                fold_stream env [] e))
+          else_body
+      in
       let inputs, outputs = arity env i in
       let folded = consume inputs folded in
       fold_stream env
@@ -499,6 +575,8 @@ and fold_instr env folded args tentative_args stream i inputs outputs =
 let fold m =
   let env = { outer_env = module_env m; labels = []; return_arity = 0 } in
   map_instrs
+    ~enter:(fun ~location cond positive f ->
+      with_cond env.outer_env.cctx ~location cond positive f)
     (fun typ str ->
       let env =
         match typ with
