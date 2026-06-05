@@ -1,6 +1,7 @@
 open Wax
 module Src = Wasm.Ast.Text
 module Uint32 = Utils.Uint32
+module Cond = Wasm.Cond_solver
 module StringMap = Map.Make (String)
 
 module Sequence = struct
@@ -139,12 +140,42 @@ module LabelStack = struct
   let make () = { ns = Namespace.make ~kind:`Label (); stack = [] }
 end
 
-module Tbl = struct
-  type 'a t = (string, 'a) Hashtbl.t
+module CondTbl = struct
+  (* A single Wax name may stand for several declarations across conditional
+     branches with different definitions (e.g. a function imported with a
+     different signature, hence a different arity, in each branch of an
+     [(@if …)]). Each declaration is recorded with the assumption under which
+     it holds, and a lookup resolves against the current branch's assumption,
+     so a reference in a given branch sees the matching declaration. With a
+     single declaration this degenerates to a plain name-keyed table. *)
+  type 'a t = (string, (Cond.t * 'a) list) Hashtbl.t
 
-  let make () = Hashtbl.create 16
-  let find = Hashtbl.find
-  let add = Hashtbl.add
+  let make () : _ t = Hashtbl.create 16
+
+  let add tbl asm name v =
+    let prev = try Hashtbl.find tbl name with Not_found -> [] in
+    Hashtbl.replace tbl name ((asm, v) :: prev)
+
+  (* Raises [Not_found] when the name is unknown, like the plain table did. *)
+  let find tbl asm name =
+    match Hashtbl.find tbl name with
+    | [ (_, v) ] -> v
+    | entries -> (
+        (* Prefer a declaration whose condition is entailed by the current
+           assumption; fall back to one merely compatible with it, then to the
+           most recent. *)
+        match
+          List.find_opt (fun (c, _) -> Cond.logical_implies asm c) entries
+        with
+        | Some (_, v) -> v
+        | None -> (
+            match
+              List.find_opt
+                (fun (c, _) -> Cond.is_satisfiable (Cond.and_ asm c))
+                entries
+            with
+            | Some (_, v) -> v
+            | None -> snd (List.hd entries)))
 end
 
 type ctx = {
@@ -155,14 +186,20 @@ type ctx = {
   memories : Sequence.t;
   tables : Sequence.t;
   tags : Sequence.t;
-  type_defs : Src.subtype Tbl.t;
-  function_types : Src.typeuse Tbl.t;
+  type_defs : Src.subtype CondTbl.t;
+  function_types : Src.typeuse CondTbl.t;
   exports : (Src.exportable * string, Src.name list) Hashtbl.t;
   locals : Sequence.t;
   labels : LabelStack.t;
-  tag_types : Src.typeuse Tbl.t;
+  tag_types : Src.typeuse CondTbl.t;
   label_arities : (string option * int) list;
   return_arity : int;
+  cond_env : Cond.env;
+  cond_diag : Utils.Diagnostic.context;
+  mutable cond_asm : Cond.t;
+      (* Assumption for the conditional branch currently being registered or
+         converted; threaded through [Module_if_annotation]/[If_annotation] so
+         the type tables above resolve to the right per-branch declaration. *)
 }
 
 let get_annot (a, _) = a
@@ -266,8 +303,21 @@ type _ kind =
   | Func : Src.typeuse kind
   | Tag : Src.typeuse kind
 
+(* Run [f] with [ctx.cond_asm] extended by the branch condition [cond] (taken
+   positively for [@then], negatively for [@else]), restoring it afterwards.
+   Used in both the name-registration passes and the conversion so that type
+   declarations are recorded under, and references resolved against, the
+   assumption of the branch they appear in. *)
+let with_cond ctx ~location cond positive f =
+  let saved = ctx.cond_asm in
+  let c = Cond.of_cond ctx.cond_env ctx.cond_diag ~location cond in
+  ctx.cond_asm <- Cond.and_ saved (if positive then c else Cond.not_ c);
+  Fun.protect ~finally:(fun () -> ctx.cond_asm <- saved) f
+
 let lookup_type (type typ) ctx (kind : typ kind) idx : typ =
-  let get seq tbl idx = Tbl.find tbl (Sequence.get seq idx).desc in
+  let get seq tbl idx =
+    CondTbl.find tbl ctx.cond_asm (Sequence.get seq idx).desc
+  in
   match kind with
   | Type -> get ctx.types ctx.type_defs idx
   | Func -> get ctx.functions ctx.function_types idx
@@ -276,7 +326,9 @@ let lookup_type (type typ) ctx (kind : typ kind) idx : typ =
 let register_type (type typ) ctx export_tbl (kind : typ kind) idx exports
     (typ : typ) =
   let register seq tbl kind idx =
-    Tbl.add tbl (Sequence.register' seq export_tbl kind idx exports) typ
+    CondTbl.add tbl ctx.cond_asm
+      (Sequence.register' seq export_tbl kind idx exports)
+      typ
   in
   match kind with
   | Type -> assert false
@@ -999,9 +1051,16 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       let s = String.concat "" (List.map (fun s -> s.Ast.desc) s) in
       Stack.push 1 (with_loc (String (Option.map (idx ctx `Type) t, s)))
   | If_annotation { cond; then_body; else_body } ->
-      let then_body = Stack.run (instructions ctx then_body) in
+      let then_body =
+        with_cond ctx ~location:i.info cond true (fun () ->
+            Stack.run (instructions ctx then_body))
+      in
       let else_body =
-        Option.map (fun b -> Stack.run (instructions ctx b)) else_body
+        Option.map
+          (fun b ->
+            with_cond ctx ~location:i.info cond false (fun () ->
+                Stack.run (instructions ctx b)))
+          else_body
       in
       Stack.push 0 (with_loc (If_annotation { cond; then_body; else_body }))
   (* Later *)
@@ -1252,12 +1311,20 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
            must consume names in the same order [register_names] registered
            them (then-branch first). A record literal would leave the field
            evaluation order unspecified (OCaml evaluates right-to-left), which
-           would consume the names swapped and scramble them across branches. *)
+           would consume the names swapped and scramble them across branches.
+           [with_cond] sets the branch assumption so per-branch declarations
+           (e.g. an import with a branch-dependent signature) resolve correctly
+           in the branch's bodies. *)
         let then_fields =
-          List.filter_map (modulefield ctx export_tbl) then_fields
+          with_cond ctx ~location:f.info cond true (fun () ->
+              List.filter_map (modulefield ctx export_tbl) then_fields)
         in
         let else_fields =
-          Option.map (List.filter_map (modulefield ctx export_tbl)) else_fields
+          Option.map
+            (fun e ->
+              with_cond ctx ~location:f.info cond false (fun () ->
+                  List.filter_map (modulefield ctx export_tbl) e))
+            else_fields
         in
         Some (Conditional { cond; then_fields; else_fields })
   in
@@ -1288,7 +1355,7 @@ let register_names ctx export_tbl fields =
             Array.iter
               (fun (id, ty) ->
                 let name = Sequence.register' ctx.types export_tbl None id [] in
-                Tbl.add ctx.type_defs name ty;
+                CondTbl.add ctx.type_defs ctx.cond_asm name ty;
                 match (ty : Src.subtype).typ with
                 | Func _ | Array _ -> ()
                 | Struct l ->
@@ -1315,9 +1382,14 @@ let register_names ctx export_tbl fields =
             register_type ctx export_tbl Tag id exports typ
         | String_global { id; _ } ->
             Sequence.register ctx.globals export_tbl (Some Global) (Some id) []
-        | Module_if_annotation { then_fields; else_fields; _ } ->
-            pass1 then_fields;
-            Option.iter pass1 else_fields)
+        | Module_if_annotation { then_fields; else_fields; cond } ->
+            with_cond ctx ~location:field.info cond true (fun () ->
+                pass1 then_fields);
+            Option.iter
+              (fun e ->
+                with_cond ctx ~location:field.info cond false (fun () ->
+                    pass1 e))
+              else_fields)
       fields
   in
   let rec pass2 fields =
@@ -1331,9 +1403,14 @@ let register_names ctx export_tbl fields =
             | Memory _ | Table _ | Global _ | Tag _ -> ())
         | Func { id; exports; typ; _ } ->
             register_type ctx export_tbl Func id exports typ
-        | Module_if_annotation { then_fields; else_fields; _ } ->
-            pass2 then_fields;
-            Option.iter pass2 else_fields
+        | Module_if_annotation { then_fields; else_fields; cond } ->
+            with_cond ctx ~location:field.info cond true (fun () ->
+                pass2 then_fields);
+            Option.iter
+              (fun e ->
+                with_cond ctx ~location:field.info cond false (fun () ->
+                    pass2 e))
+              else_fields
         | Types _ | Global _ | Export _ | Start _ | Elem _ | Data _ | Memory _
         | Table _ | Tag _ | String_global _ ->
             ())
@@ -1386,14 +1463,17 @@ let module_ (_, fields) =
       memories = Sequence.make ~forbid_numeric (Namespace.make ()) "m";
       tables = Sequence.make ~forbid_numeric (Namespace.make ()) "m";
       tags = Sequence.make ~forbid_numeric (Namespace.make ()) "t";
-      type_defs = Tbl.make ();
-      function_types = Tbl.make ();
-      tag_types = Tbl.make ();
+      type_defs = CondTbl.make ();
+      function_types = CondTbl.make ();
+      tag_types = CondTbl.make ();
       exports = Hashtbl.create 16;
       locals = Sequence.make common_namespace "x";
       labels = LabelStack.make ();
       label_arities = [];
       return_arity = 0;
+      cond_env = Cond.create ();
+      cond_diag = Utils.Diagnostic.collector ~source:None ();
+      cond_asm = Cond.true_;
     }
   in
   let export_tbl, export_lst = collect_exports fields in
