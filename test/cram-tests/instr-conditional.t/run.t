@@ -40,10 +40,27 @@ accepted (the branches are mutually exclusive).
 
   $ wax --validate cond.wax -o checked.wax
 
-Converting Wax conditionals to WAT is not yet supported.
+Conversion to WAT produces an instruction-level `(@if …)`.
 
-  $ wax cond.wax -o out.wat
-  wax: internal error, uncaught exception:
-       Failure("Wax conditional annotations are not yet supported when converting to WAT.")
-       
-  [125]
+  $ wax cond.wax -o out.wat && cat out.wat
+  (func $f (result i32)
+    (local $x i32)
+    (@if (and $debug (not (= $target "wasm32")))
+    (@then (local.set $x (i32.const 1)) ) (@else (local.set $x (i32.const 2)) )
+    )
+    (local.get $x)
+  )
+
+A `let` binding inside a conditional branch is rejected (it would leak past the
+mutually-exclusive branches); declare the local before the conditional instead.
+
+  $ wax --validate letbad.wax -o checked.wax
+  Error:
+    A let binding is not allowed inside a conditional annotation; declare the local before the conditional.
+   ──➤  letbad.wax:2:20
+  1 │ fn f() {
+  2 │     #[if(debug)] { let x: i32 = 1; }
+    ·                    ^^^^^^^^^^^^^^
+  3 │ }
+  4 │ 
+  [128]

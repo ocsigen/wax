@@ -149,6 +149,14 @@ module Error = struct
       ~message:(fun f () -> Format.fprintf f "The stack is empty.")
       ()
 
+  let let_in_conditional context ~location =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f
+          "A let binding is not allowed inside a conditional annotation; \
+           declare the local before the conditional.")
+      ()
+
   let non_empty_stack context ~location output_stack =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
@@ -2860,7 +2868,71 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
   in
   sfields asm0 fields
 
+(* Immediate sub-instructions of an instruction (lists flattened), for generic
+   traversals. *)
+let sub_instrs (i : (_ instr_desc, _) annotated) =
+  match i.desc with
+  | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } -> block
+  | If { cond; if_block; else_block; _ } ->
+      (cond :: if_block) @ Option.value ~default:[] else_block
+  | Try { block; catches; catch_all; _ } ->
+      block @ List.concat_map snd catches @ Option.value ~default:[] catch_all
+  | If_annotation { then_body; else_body; _ } ->
+      then_body @ Option.value ~default:[] else_body
+  | Sequence l | ArrayFixed (_, l) -> l
+  | Call (a, l) | TailCall (a, l) -> a :: l
+  | Struct (_, l) -> List.map snd l
+  | BinOp (_, a, b) | Array (_, a, b) | ArrayGet (a, b) | StructSet (a, _, b) ->
+      [ a; b ]
+  | ArraySet (a, b, c) | Select (a, b, c) -> [ a; b; c ]
+  | Set (_, i)
+  | Tee (_, i)
+  | Cast (i, _)
+  | Test (i, _)
+  | NonNull i
+  | UnOp (_, i)
+  | StructGet (i, _)
+  | ArrayDefault (_, i)
+  | Br_if (_, i)
+  | Br_table (_, i)
+  | Br_on_null (_, i)
+  | Br_on_non_null (_, i)
+  | Br_on_cast (_, _, i)
+  | Br_on_cast_fail (_, _, i)
+  | ThrowRef i ->
+      [ i ]
+  | Let (_, o) | Br (_, o) | Throw (_, o) | Return o -> Option.to_list o
+  | Unreachable | Nop | Hole | Null | Get _ | Char _ | String _ | Int _
+  | Float _ | StructDefault _ ->
+      []
+
+(* [let] bindings are not allowed inside a conditional branch: branches are
+   transparent and mutually exclusive, so a binding declared in one would leak
+   past the conditional and clash with the other branch. *)
+let rec check_let_in_conditionals diagnostics (i : (_ instr_desc, _) annotated)
+    =
+  (match i.desc with
+  | If_annotation { then_body; else_body; _ } ->
+      let check_branch =
+        List.iter (fun (s : (_ instr_desc, _) annotated) ->
+            match s.desc with
+            | Let _ -> Error.let_in_conditional diagnostics ~location:s.info
+            | _ -> ())
+      in
+      check_branch then_body;
+      Option.iter check_branch else_body
+  | _ -> ());
+  List.iter (check_let_in_conditionals diagnostics) (sub_instrs i)
+
 let f diagnostics fields =
+  Ast_utils.iter_fields
+    (fun (field : (_ modulefield, _) annotated) ->
+      match field.desc with
+      | Func { body = _, instrs; _ } ->
+          List.iter (check_let_in_conditionals diagnostics) instrs
+      | Global { def; _ } -> check_let_in_conditionals diagnostics def
+      | _ -> ())
+    fields;
   if not (List.exists field_has_conditional fields) then
     type_configuration diagnostics fields
   else begin

@@ -732,10 +732,17 @@ let rec instruction ret ctx i : location Text.instr list =
   | Char c -> folded loc (Char c) []
   | String (ty, s) ->
       folded loc (String (Option.map index ty, [ { desc = s; info = loc } ])) []
-  | If_annotation _ ->
-      failwith
-        "Wax conditional annotations are not yet supported when converting to \
-         WAT."
+  | If_annotation { cond; then_body; else_body } ->
+      let conv body = List.concat_map (instruction ret ctx) body in
+      [
+        with_loc loc
+          (Text.If_annotation
+             {
+               cond;
+               then_body = conv then_body;
+               else_body = Option.map conv else_body;
+             });
+      ]
 
 let import attributes =
   List.find_map
@@ -805,14 +812,6 @@ let reorder_imports lst =
   in
   traverse [] lst
 
-let rec flatten fields =
-  List.concat_map
-    (fun field ->
-      match field.desc with
-      | Group { fields = flds; _ } -> flatten flds
-      | _ -> [ field ])
-    fields
-
 let module_ diagnostics types fields =
   let func_refs_in_func = Hashtbl.create 16 in
   let func_refs_outside_func = Hashtbl.create 16 in
@@ -857,120 +856,135 @@ let module_ diagnostics types fields =
       | Fundecl { name; _ } -> Hashtbl.replace ctx.functions name.desc ()
       | Tag _ | Group _ | Conditional _ -> ())
     fields;
-  let fields = flatten fields in
-  let wasm_fields =
-    List.map
+  let rec convert_fields fields =
+    List.concat_map
       (fun field ->
-        let desc =
-          match field.desc with
-          | Type rectype ->
-              Text.Types
-                (Array.map (fun (idx, s) -> (Some idx, subtype s)) rectype)
-          | Global { name; mut; typ; def; attributes } ->
-              let typ =
-                match typ with
-                | Some typ -> typ
-                | None ->
-                    (*ZZZ *)
-                    let typ = expr_valtype def in
-                    ensure_type_is_defined ctx typ;
-                    typ
-              in
-              let init =
-                let ctx =
-                  { ctx with referenced_functions = func_refs_outside_func }
-                in
-                instruction None ctx def
-              in
-              Text.Global
-                {
-                  id = Some name;
-                  typ = globaltype mut typ;
-                  init;
-                  exports = exports attributes;
-                }
-          | GlobalDecl { name; mut; typ; attributes } ->
-              let module_, import_name = Option.get (import attributes) in
-              Text.Import
-                {
-                  module_;
-                  name = import_name;
-                  id = Some name;
-                  desc = Global (globaltype mut typ);
-                  exports = exports attributes;
-                }
-          | Fundecl { name; typ; sign; attributes } ->
-              let module_, import_name = Option.get (import attributes) in
-              Text.Import
-                {
-                  module_;
-                  name = import_name;
-                  id = Some name;
-                  desc = Func (typeuse typ sign);
-                  exports = exports attributes;
-                }
-          | Tag { name; typ; sign; attributes } -> (
-              let exports = exports attributes in
-              match import attributes with
-              | Some (module_, import_name) ->
+        match field.desc with
+        | Group { fields = flds; _ } -> convert_fields flds
+        | Conditional { cond; then_fields; else_fields } ->
+            [
+              {
+                field with
+                desc =
+                  Text.Module_if_annotation
+                    {
+                      cond;
+                      then_fields = convert_fields then_fields;
+                      else_fields = Option.map convert_fields else_fields;
+                    };
+              };
+            ]
+        | _ ->
+            let desc =
+              match field.desc with
+              | Type rectype ->
+                  Text.Types
+                    (Array.map (fun (idx, s) -> (Some idx, subtype s)) rectype)
+              | Global { name; mut; typ; def; attributes } ->
+                  let typ =
+                    match typ with
+                    | Some typ -> typ
+                    | None ->
+                        (*ZZZ *)
+                        let typ = expr_valtype def in
+                        ensure_type_is_defined ctx typ;
+                        typ
+                  in
+                  let init =
+                    let ctx =
+                      { ctx with referenced_functions = func_refs_outside_func }
+                    in
+                    instruction None ctx def
+                  in
+                  Text.Global
+                    {
+                      id = Some name;
+                      typ = globaltype mut typ;
+                      init;
+                      exports = exports attributes;
+                    }
+              | GlobalDecl { name; mut; typ; attributes } ->
+                  let module_, import_name = Option.get (import attributes) in
                   Text.Import
                     {
                       module_;
                       name = import_name;
                       id = Some name;
-                      desc = Tag (typeuse typ sign);
-                      exports;
+                      desc = Global (globaltype mut typ);
+                      exports = exports attributes;
                     }
-              | None ->
-                  Text.Tag { id = Some name; typ = typeuse typ sign; exports })
-          | Func { name; sign; typ; body = label, instrs; attributes } ->
-              let namespace = Namespace.make () in
-              let allocated_locals = ref [] in
-              let locals =
-                Array.fold_left
-                  (fun locals (id, _) ->
-                    match id with
-                    | Some id ->
-                        let wasm_name = Namespace.add namespace id.desc in
-                        StringMap.add id.desc wasm_name locals
-                    | None -> locals)
-                  StringMap.empty
-                  (match sign with Some sign -> sign.params | None -> [||])
-              in
-              let ctx =
-                {
-                  ctx with
-                  namespace;
-                  allocated_locals;
-                  locals;
-                  referenced_functions = func_refs_in_func;
-                }
-              in
-              let instrs =
-                List.concat_map
-                  (instruction
-                     (Option.map (fun label -> (label.desc, 0)) label)
-                     ctx)
-                  instrs
-              in
-              let func_locals = List.rev !allocated_locals in
-              Text.Func
-                {
-                  id = Some name;
-                  typ = typeuse typ sign;
-                  locals = func_locals;
-                  instrs;
-                  exports = exports attributes;
-                }
-          | Group _ -> assert false
-          | Conditional _ ->
-              failwith
-                "Wax conditional annotations are not yet supported when \
-                 converting to WAT."
-        in
-        { field with desc })
+              | Fundecl { name; typ; sign; attributes } ->
+                  let module_, import_name = Option.get (import attributes) in
+                  Text.Import
+                    {
+                      module_;
+                      name = import_name;
+                      id = Some name;
+                      desc = Func (typeuse typ sign);
+                      exports = exports attributes;
+                    }
+              | Tag { name; typ; sign; attributes } -> (
+                  let exports = exports attributes in
+                  match import attributes with
+                  | Some (module_, import_name) ->
+                      Text.Import
+                        {
+                          module_;
+                          name = import_name;
+                          id = Some name;
+                          desc = Tag (typeuse typ sign);
+                          exports;
+                        }
+                  | None ->
+                      Text.Tag
+                        { id = Some name; typ = typeuse typ sign; exports })
+              | Func { name; sign; typ; body = label, instrs; attributes } ->
+                  let namespace = Namespace.make () in
+                  let allocated_locals = ref [] in
+                  let locals =
+                    Array.fold_left
+                      (fun locals (id, _) ->
+                        match id with
+                        | Some id ->
+                            let wasm_name = Namespace.add namespace id.desc in
+                            StringMap.add id.desc wasm_name locals
+                        | None -> locals)
+                      StringMap.empty
+                      (match sign with
+                      | Some sign -> sign.params
+                      | None -> [||])
+                  in
+                  let ctx =
+                    {
+                      ctx with
+                      namespace;
+                      allocated_locals;
+                      locals;
+                      referenced_functions = func_refs_in_func;
+                    }
+                  in
+                  let instrs =
+                    List.concat_map
+                      (instruction
+                         (Option.map (fun label -> (label.desc, 0)) label)
+                         ctx)
+                      instrs
+                  in
+                  let func_locals = List.rev !allocated_locals in
+                  Text.Func
+                    {
+                      id = Some name;
+                      typ = typeuse typ sign;
+                      locals = func_locals;
+                      instrs;
+                      exports = exports attributes;
+                    }
+              | Group _ | Conditional _ -> assert false
+            in
+            [ { field with desc } ])
       fields
   in
+  let wasm_fields = convert_fields fields in
   let extra_types =
     Hashtbl.fold
       (fun _ (idx, s) rem ->

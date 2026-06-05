@@ -34,10 +34,23 @@ which it is reachable.
   Hint: reachable when not debug
   [128]
 
-Conversion to WAT is not yet supported for conditionals.
+Conversion to WAT produces `(@if …)` module-field annotations.
 
-  $ wax cond.wax -o out.wat
+  $ wax cond.wax -o out.wat && cat out.wat
+  (@if (>= $ocaml_version (5 1 0))
+  (@then (global $caml_marshal_header_size i32 (i32.const 16)) )
+  (@else (global $caml_marshal_header_size i32 (i32.const 20)) ) )
+  (@if (= $feature "gc") (@then (func $gc_init) ) )
+  (@if (and $debug (not (= $target "wasm32")))
+  (@then (global $debug_enabled i32 (i32.const 1))
+  (func $debug_log (param $msg i32)) ) )
+
+Conversion to the WASM binary is still unsupported (binary cannot represent
+conditionals).
+
+  $ wax cond.wax -o out.wasm
   wax: internal error, uncaught exception:
-       Failure("Wax conditional annotations are not yet supported when converting to WAT.")
+       Failure("Conditional annotations are not supported in binary output.")
        
   [125]
+
