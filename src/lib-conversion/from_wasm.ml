@@ -842,6 +842,14 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
         Sequence.get (fst (Hashtbl.find ctx.struct_fields type_name.desc)) f
       in
       let* arg = Stack.pop in
+      let arg =
+        {
+          arg with
+          desc =
+            Ast.Cast
+              (arg, Valtype (Ref { nullable = true; typ = Type type_name }));
+        }
+      in
       let e = with_loc (StructGet (arg, name)) in
       Stack.push 1
         (match s with
@@ -856,6 +864,14 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       in
       let* e2 = Stack.pop in
       let* e1 = Stack.pop in
+      let e1 =
+        {
+          e1 with
+          desc =
+            Ast.Cast
+              (e1, Valtype (Ref { nullable = true; typ = Type type_name }));
+        }
+      in
       Stack.push 1 (with_loc (StructSet (e1, name, e2)))
   | ArrayNew t ->
       let* len = Stack.pop in
