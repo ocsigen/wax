@@ -48,3 +48,16 @@ conditional annotation, since a field's index depends on which branch is taken.
        Failure("Numeric references to module fields are not supported in a module with conditional annotations (index 0); use a symbolic $name.")
        
   [125]
+
+
+A name declared with different arities in mutually-exclusive branches, but
+referenced where the branch is undetermined (here `$g` from the unconditional
+`$h`), has no single Wax conversion and is reported (it still validates as WAT):
+
+  $ wax --validate ambig-arity.wat -f wat -o /dev/null
+  $ wax ambig-arity.wat -o ambig.wax
+  wax: internal error, uncaught exception:
+       Failure("Function $g is declared with different arities in mutually-exclusive conditional branches but referenced where the branch is undetermined; this cannot be converted to Wax.")
+       
+  [125]
+

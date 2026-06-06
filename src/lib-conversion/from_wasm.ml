@@ -172,6 +172,17 @@ module CondTbl = struct
         with
         | Some (_, v) -> v
         | None -> snd (List.hd entries))
+
+  (* All declarations whose branch is reachable under [asm]. More than one
+     means the reference does not select a single branch. *)
+  let compatible tbl asm name =
+    match Hashtbl.find_opt tbl name with
+    | None -> []
+    | Some entries ->
+        List.filter_map
+          (fun (c, v) ->
+            if Cond.is_satisfiable (Cond.and_ asm c) then Some v else None)
+          entries
 end
 
 type ctx = {
@@ -351,8 +362,33 @@ let blocktype_arity ctx (typ : Src.blocktype option) =
   | Some (Valtype _) -> (0, 1)
   | Some (Typeuse t) -> typeuse_arity ctx t
 
-let function_arity ctx f = typeuse_arity ctx (lookup_type ctx Func f)
-let tag_arity ctx t = typeuse_arity ctx (lookup_type ctx Tag t)
+(* The arity used to convert a reference (how many operands a call consumes) is
+   fixed in the produced Wax, so it must be the same in every branch reachable
+   here. If a name is declared with different arities in mutually-exclusive
+   branches and the reference does not select one (e.g. it sits in unconditional
+   code, as [dv_make] does in io.wat), there is no single faithful conversion;
+   report it rather than emit a wrong-arity call. *)
+let checked_arity ctx kind tbl what name_idx compatible =
+  let arity = typeuse_arity ctx (lookup_type ctx kind name_idx) in
+  let name = (Sequence.get tbl name_idx).Ast.desc in
+  (match compatible ctx.cond_asm name with
+  | _ :: _ :: _ as l when List.exists (fun t -> typeuse_arity ctx t <> arity) l
+    ->
+      failwith
+        (Printf.sprintf
+           "%s $%s is declared with different arities in mutually-exclusive \
+            conditional branches but referenced where the branch is \
+            undetermined; this cannot be converted to Wax."
+           what name)
+  | _ -> ());
+  arity
+
+let function_arity ctx f =
+  checked_arity ctx Func ctx.functions "Function" f
+    (CondTbl.compatible ctx.function_types)
+
+let tag_arity ctx t =
+  checked_arity ctx Tag ctx.tags "Tag" t (CondTbl.compatible ctx.tag_types)
 
 let label_arity ctx (idx : Src.idx) =
   match idx.desc with
