@@ -80,7 +80,10 @@ let wat_to_wax ~input_file ~output_file ~validate ~color ~fold_mode:_
   if validate then
     Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
         Wasm.Validation.f d ast);
-  let wax_ast = Conversion.From_wasm.module_ ast in
+  let wax_ast =
+    Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
+        Conversion.From_wasm.module_ d ast)
+  in
   let wax_ast =
     Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
         Wax.Typing.f d wax_ast)
@@ -209,7 +212,10 @@ let wasm_to_wax ~input_file ~output_file ~validate ~color ~fold_mode:_
   if validate then
     Utils.Diagnostic.run ~color ~source:None (fun d ->
         Wasm.Validation.f d text_ast);
-  let wax_ast = Conversion.From_wasm.module_ text_ast in
+  let wax_ast =
+    Utils.Diagnostic.run ~color ~source:None (fun d ->
+        Conversion.From_wasm.module_ d text_ast)
+  in
   if validate then
     ignore
       (Utils.Diagnostic.run ~color ~source:None (fun d ->

@@ -201,6 +201,7 @@ type ctx = {
   tag_types : Src.typeuse CondTbl.t;
   label_arities : (string option * int) list;
   return_arity : int;
+  diagnostics : Utils.Diagnostic.context;
   cond_env : Cond.env;
   cond_diag : Utils.Diagnostic.context;
   mutable cond_asm : Cond.t;
@@ -374,12 +375,15 @@ let checked_arity ctx kind tbl what name_idx compatible =
   (match compatible ctx.cond_asm name with
   | _ :: _ :: _ as l when List.exists (fun t -> typeuse_arity ctx t <> arity) l
     ->
-      failwith
-        (Printf.sprintf
-           "%s $%s is declared with different arities in mutually-exclusive \
-            conditional branches but referenced where the branch is \
-            undetermined; this cannot be converted to Wax."
-           what name)
+      Utils.Diagnostic.report ctx.diagnostics ~location:name_idx.Ast.info
+        ~severity:Error
+        ~message:(fun f () ->
+          Format.fprintf f
+            "%s %s is declared with different arities in mutually-exclusive \
+             conditional branches but referenced where the branch is \
+             undetermined; this cannot be converted to Wax."
+            what name)
+        ()
   | _ -> ());
   arity
 
@@ -1499,11 +1503,12 @@ let rec module_has_conditional fields =
       | _ -> false)
     fields
 
-let module_ (_, fields) =
+let module_ diagnostics (_, fields) =
   let forbid_numeric = module_has_conditional fields in
   let ctx =
     let common_namespace = Namespace.make () in
     {
+      diagnostics;
       types = Sequence.make ~forbid_numeric (Namespace.make ~kind:`Type ()) "t";
       struct_fields = Hashtbl.create 16;
       globals = Sequence.make ~forbid_numeric common_namespace "g";

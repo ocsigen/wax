@@ -352,7 +352,9 @@ let runtest filename _ =
   List.iter
     (fun (_, m, source) ->
       if not !wasm_only then
-        match Conversion.From_wasm.module_ m with
+        match
+          Conversion.From_wasm.module_ (Utils.Diagnostic.collector ()) m
+        with
         | exception e ->
             prerr_endline (Printexc.to_string e);
             if false then Format.eprintf "@[%a@]@." (print_module ~color) m

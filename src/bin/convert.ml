@@ -14,7 +14,10 @@ let convert ~filename =
   let ast, _ctx = P.parse_from_string ~filename source in
   Wasm.Validation.validate_refs := false;
   Utils.Diagnostic.run ~source:(Some source) (fun d -> Wasm.Validation.f d ast);
-  let ast' = Conversion.From_wasm.module_ ast in
+  let ast' =
+    Utils.Diagnostic.run ~source:(Some source) (fun d ->
+        Conversion.From_wasm.module_ d ast)
+  in
   let _, ast3 =
     Utils.Diagnostic.run ~source:(Some source) (fun d -> Wax.Typing.f d ast')
   in
