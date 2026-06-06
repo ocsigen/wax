@@ -57,7 +57,7 @@ referenced where the branch is undetermined (here `$g` from the unconditional
   $ wax --validate ambig-arity.wat -f wat -o /dev/null
   $ wax ambig-arity.wat -o ambig.wax
   Error:
-    Function g is declared with different arities in mutually-exclusive conditional branches but referenced where the branch is undetermined; this cannot be converted to Wax.
+    Function $g is declared with different arities in mutually-exclusive conditional branches but referenced where the branch is undetermined; this cannot be converted to Wax.
     ──➤  ambig-arity.wat:11:26
    9 │     (@else (import "m" "g" (func $g (param i32) (result i32)))))
   10 │   (func $h (result (ref $t))

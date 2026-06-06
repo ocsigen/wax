@@ -379,7 +379,7 @@ let checked_arity ctx kind tbl what name_idx compatible =
         ~severity:Error
         ~message:(fun f () ->
           Format.fprintf f
-            "%s %s is declared with different arities in mutually-exclusive \
+            "%s $%s is declared with different arities in mutually-exclusive \
              conditional branches but referenced where the branch is \
              undetermined; this cannot be converted to Wax."
             what name)
