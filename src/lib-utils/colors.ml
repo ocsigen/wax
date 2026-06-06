@@ -17,7 +17,7 @@ let should_use_color ~color ~out_channel =
             with Unix.Unix_error _ -> false))
 
 let update_flag ~color =
-  if should_use_color ~color ~out_channel:(Some stdout) then Always else Never
+  if should_use_color ~color ~out_channel:(Some stderr) then Always else Never
 
 module Ansi = struct
   let reset = "\027[0m"
