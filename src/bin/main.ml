@@ -50,8 +50,8 @@ let output_wat ~fold_mode ~output_file ~color ~trivia ast =
       let fmt = Format.formatter_of_out_channel oc in
       Format.fprintf fmt "%a@." print_wat ast)
 
-let wat_to_wat ~input_file ~output_file ~validate ~color ~fold_mode
-    ~source_map_file:opt_source_map_file =
+let wat_to_wat ~input_file ~output_file ~validate ~color ~output_color
+    ~fold_mode ~source_map_file:opt_source_map_file =
   let _ = opt_source_map_file in
   (* Ignored for non-wasm output *)
   let text = with_open_in input_file In_channel.input_all in
@@ -63,12 +63,12 @@ let wat_to_wat ~input_file ~output_file ~validate ~color ~fold_mode
   if validate then
     Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
         Wasm.Validation.f d ast);
-  output_wat ~fold_mode ~output_file ~color
+  output_wat ~fold_mode ~output_file ~color:output_color
     ~trivia:(Utils.Trivia.associate ctx)
     ast
 
-let wat_to_wax ~input_file ~output_file ~validate ~color ~fold_mode:_
-    ~source_map_file:opt_source_map_file =
+let wat_to_wax ~input_file ~output_file ~validate ~color ~output_color
+    ~fold_mode:_ ~source_map_file:opt_source_map_file =
   let _ = opt_source_map_file in
   (* Ignored for non-wasm output *)
   let text = with_open_in input_file In_channel.input_all in
@@ -92,13 +92,13 @@ let wat_to_wax ~input_file ~output_file ~validate ~color ~fold_mode:_
   with_open_out output_file (fun oc ->
       let print_wax f m =
         Utils.Printer.run f (fun p ->
-            Wax.Output.module_ p ~color ~out_channel:oc m)
+            Wax.Output.module_ p ~color:output_color ~out_channel:oc m)
       in
       let fmt = Format.formatter_of_out_channel oc in
       Format.fprintf fmt "%a@." print_wax wax_ast)
 
-let wax_to_wat ~input_file ~output_file ~validate ~color ~fold_mode
-    ~source_map_file:opt_source_map_file =
+let wax_to_wat ~input_file ~output_file ~validate ~color ~output_color
+    ~fold_mode ~source_map_file:opt_source_map_file =
   let _ = opt_source_map_file in
   (* Ignored for non-wasm output *)
   let text = with_open_in input_file In_channel.input_all in
@@ -119,10 +119,10 @@ let wax_to_wat ~input_file ~output_file ~validate ~color ~fold_mode
     Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
         Wasm.Validation.f d wasm_ast);
   let trivia = (*ZZZ*) Hashtbl.create 0 in
-  output_wat ~fold_mode ~output_file ~color ~trivia wasm_ast
+  output_wat ~fold_mode ~output_file ~color:output_color ~trivia wasm_ast
 
-let wax_to_wax ~input_file ~output_file ~validate ~color ~fold_mode:_
-    ~source_map_file:opt_source_map_file =
+let wax_to_wax ~input_file ~output_file ~validate ~color ~output_color
+    ~fold_mode:_ ~source_map_file:opt_source_map_file =
   let _ = opt_source_map_file in
   (* Ignored for non-wasm output *)
   let text = with_open_in input_file In_channel.input_all in
@@ -138,13 +138,13 @@ let wax_to_wax ~input_file ~output_file ~validate ~color ~fold_mode:_
   with_open_out output_file (fun oc ->
       let print_wax f m =
         Utils.Printer.run f (fun p ->
-            Wax.Output.module_ p ~color ~out_channel:oc m)
+            Wax.Output.module_ p ~color:output_color ~out_channel:oc m)
       in
       let fmt = Format.formatter_of_out_channel oc in
       Format.fprintf fmt "%a@." print_wax ast)
 
-let wax_to_wasm ~input_file ~output_file ~validate ~color ~fold_mode:_
-    ~source_map_file:(opt_source_map_file : string option) =
+let wax_to_wasm ~input_file ~output_file ~validate ~color ~output_color:_
+    ~fold_mode:_ ~source_map_file:(opt_source_map_file : string option) =
   let text = with_open_in input_file In_channel.input_all in
   let ast, _ctx =
     Wax_parser.parse_from_string
@@ -167,8 +167,8 @@ let wax_to_wasm ~input_file ~output_file ~validate ~color ~fold_mode:_
       Wasm.Wasm_output.module_ ~out_channel:oc ?opt_source_map_file
         wasm_ast_binary)
 
-let wat_to_wasm ~input_file ~output_file ~validate ~color ~fold_mode:_
-    ~source_map_file:opt_source_map_file =
+let wat_to_wasm ~input_file ~output_file ~validate ~color ~output_color:_
+    ~fold_mode:_ ~source_map_file:opt_source_map_file =
   let text = with_open_in input_file In_channel.input_all in
   let ast, _ctx =
     Wat_parser.parse_from_string
@@ -184,15 +184,15 @@ let wat_to_wasm ~input_file ~output_file ~validate ~color ~fold_mode:_
         wasm_ast_binary)
 
 let wasm_to_wasm ~input_file ~output_file ~validate:_validate ~color:_
-    ~fold_mode:_ ~source_map_file:opt_source_map_file =
+    ~output_color:_ ~fold_mode:_ ~source_map_file:opt_source_map_file =
   let text = with_open_in input_file In_channel.input_all in
   let ast = Wasm.Wasm_parser.module_ text in
   (* if validate then Wasm.Validation.f ast; *)
   with_open_out output_file (fun oc ->
       Wasm.Wasm_output.module_ ~out_channel:oc ?opt_source_map_file ast)
 
-let wasm_to_wat ~input_file ~output_file ~validate ~color ~fold_mode
-    ~source_map_file:opt_source_map_file =
+let wasm_to_wat ~input_file ~output_file ~validate ~color ~output_color
+    ~fold_mode ~source_map_file:opt_source_map_file =
   let _ = opt_source_map_file in
   let text = with_open_in input_file In_channel.input_all in
   let binary_ast = Wasm.Wasm_parser.module_ text in
@@ -201,10 +201,10 @@ let wasm_to_wat ~input_file ~output_file ~validate ~color ~fold_mode
     Utils.Diagnostic.run ~color ~source:None (fun d ->
         Wasm.Validation.f d text_ast);
   let trivia = Hashtbl.create 0 in
-  output_wat ~fold_mode ~output_file ~color ~trivia text_ast
+  output_wat ~fold_mode ~output_file ~color:output_color ~trivia text_ast
 
-let wasm_to_wax ~input_file ~output_file ~validate ~color ~fold_mode:_
-    ~source_map_file:opt_source_map_file =
+let wasm_to_wax ~input_file ~output_file ~validate ~color ~output_color
+    ~fold_mode:_ ~source_map_file:opt_source_map_file =
   let _ = opt_source_map_file in
   let text = with_open_in input_file In_channel.input_all in
   let binary_ast = Wasm.Wasm_parser.module_ text in
@@ -223,7 +223,7 @@ let wasm_to_wax ~input_file ~output_file ~validate ~color ~fold_mode:_
   with_open_out output_file (fun oc ->
       let print_wax f m =
         Utils.Printer.run f (fun p ->
-            Wax.Output.module_ p ~color ~out_channel:oc m)
+            Wax.Output.module_ p ~color:output_color ~out_channel:oc m)
       in
       let fmt = Format.formatter_of_out_channel oc in
       Format.fprintf fmt "%a@." print_wax wax_ast)
@@ -286,13 +286,16 @@ let convert input_file output_file input_format_opt output_format_opt validate
   if output_format = Wasm && output_file = None && Unix.isatty Unix.stdout then (
     Printf.eprintf "Binary output not allowed on terminal\n";
     exit 123);
-  let color, with_pager =
+  (* [update_flag] resolves color for the wat/wax output only (against the real
+     stdout, before the pager redirects it). Errors keep the original flag, so
+     [Diagnostic] resolves them against stderr. *)
+  let output_color, with_pager =
     match output_file with
     | None -> (Utils.Colors.update_flag ~color, Utils.Pager.use)
     | Some _ -> (color, fun f -> f ())
   in
   with_pager @@ fun () ->
-  convert ~input_file ~output_file ~validate ~color
+  convert ~input_file ~output_file ~validate ~color ~output_color
     ~source_map_file:opt_source_map_file ~fold_mode
 
 (* Define the input file argument (optional for stdin) *)
