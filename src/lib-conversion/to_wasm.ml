@@ -393,12 +393,14 @@ let rec instruction ret ctx i : location Text.instr list =
             let value = List.nth args 1 in
             let value_code = instruction ret ctx value in
             let desc =
-              match (meth.desc, expr_valtype value) with
-              | "store8", I64 -> Text.StoreS (memidx, memarg, `I64, `I8)
+              (* The value type is unknown ([None]) in unreachable code; the
+                 width is what matters there, so default to the i32 form. *)
+              match (meth.desc, expr_opt_valtype value) with
+              | "store8", Some I64 -> Text.StoreS (memidx, memarg, `I64, `I8)
               | "store8", _ -> Text.StoreS (memidx, memarg, `I32, `I8)
-              | "store16", I64 -> Text.StoreS (memidx, memarg, `I64, `I16)
+              | "store16", Some I64 -> Text.StoreS (memidx, memarg, `I64, `I16)
               | "store16", _ -> Text.StoreS (memidx, memarg, `I32, `I16)
-              | "store32", I64 -> Text.StoreS (memidx, memarg, `I64, `I32)
+              | "store32", Some I64 -> Text.StoreS (memidx, memarg, `I64, `I32)
               | "store32", _ -> Text.Store (memidx, memarg, NumI32)
               | "store64", _ -> Text.Store (memidx, memarg, NumI64)
               | "storef32", _ -> Text.Store (memidx, memarg, NumF32)
