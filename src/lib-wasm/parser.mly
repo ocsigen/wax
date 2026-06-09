@@ -447,11 +447,15 @@ blockinstr:
   label3 = label
   { check_labels label label2;
     check_labels label label3;
-    with_loc $sloc (If {label; typ; if_block; else_block }) }
+    with_loc $sloc
+      (If {label; typ; if_block = Ast.no_loc if_block;
+           else_block = Ast.no_loc else_block }) }
 | IF label = label typ = block_type if_block = instructions END
   label2 = label
   { check_labels label label2;
-    with_loc $sloc (If {label; typ; if_block; else_block = [] }) }
+    with_loc $sloc
+      (If {label; typ; if_block = Ast.no_loc if_block;
+           else_block = Ast.no_loc [] }) }
 | TRY_TABLE label = label typ = block_type catches = catches block = instructions
   END label2 = label
    { check_labels label label2;
@@ -712,14 +716,14 @@ folded_instruction:
   { with_loc $sloc
       (Folded (with_loc ($startpos, $endpos(block)) (Loop {label; typ; block}), [])) }
 | "(" IF label = label
-  typ = block_type l = folded_instructions LPAREN_THEN if_block =  instructions ")"
-  else_block = option("(" ELSE l = instructions ")" { l })
+  typ = block_type l = folded_instructions if_block = folded_then
+  else_block = option(folded_else)
   ")"
   { with_loc $sloc
       (Folded
         (with_loc ($startpos, $endpos(else_block))
           (If {label; typ; if_block;
-               else_block = Option.value ~default:[] else_block }),
+               else_block = Option.value ~default:(Ast.no_loc []) else_block }),
          l)) }
 | "(" TRY_TABLE label = label typ = block_type catches = catches
   block = instructions  ")"
@@ -748,6 +752,15 @@ folded_instruction:
                Printf.sprintf "Malformed char \"%s\".\n"
                  (snd (Misc.escape_string s.desc))));
       with_loc $sloc (Char (Uchar.utf_decode_uchar c)) }
+
+(* The (then ...) / (else ...) clauses of a folded if. Each carries the
+   location of the whole clause (parens included) so a comment trailing
+   the clause attaches to it rather than leaking into the next clause. *)
+folded_then:
+| LPAREN_THEN block = instructions ")" { with_loc $sloc block }
+
+folded_else:
+| "(" ELSE block = instructions ")" { with_loc $sloc block }
 
 folded_catches:
 | { [], None }

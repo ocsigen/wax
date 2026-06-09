@@ -157,13 +157,15 @@ let rec instr (names : B.names) local_names label_names label_counter stack
             label = Option.map Ast.no_loc name;
             typ = Option.map (blocktype names.types) typ;
             if_block =
-              List.map
-                (instr names local_names label_names label_counter stack')
-                if_block;
+              Ast.no_loc
+                (List.map
+                   (instr names local_names label_names label_counter stack')
+                   if_block.desc);
             else_block =
-              List.map
-                (instr names local_names label_names label_counter stack')
-                else_block;
+              Ast.no_loc
+                (List.map
+                   (instr names local_names label_names label_counter stack')
+                   else_block.desc);
           }
     | TryTable { label = _; typ; catches; block } ->
         let name = get_label_name label_names label_counter in

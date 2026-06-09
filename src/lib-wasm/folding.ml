@@ -472,8 +472,12 @@ let rec fold_stream env folded stream : _ Ast.Text.instr list =
         let _, i = blocktype_arity env typ in
         { env with labels = (label, i) :: env.labels }
       in
-      let if_block = fold_stream env' [] if_block in
-      let else_block = fold_stream env' [] else_block in
+      let if_block =
+        { if_block with desc = fold_stream env' [] if_block.desc }
+      in
+      let else_block =
+        { else_block with desc = fold_stream env' [] else_block.desc }
+      in
       let inputs, outputs = arity env i in
       fold_instr env folded [] [] rem
         { i with desc = If { b with if_block; else_block } }
@@ -608,8 +612,9 @@ let rec unfold_stream stream start =
             If
               {
                 b with
-                if_block = unfold_instrs if_block;
-                else_block = unfold_instrs else_block;
+                if_block = { if_block with desc = unfold_instrs if_block.desc };
+                else_block =
+                  { else_block with desc = unfold_instrs else_block.desc };
               }
         | TryTable ({ block; _ } as b) ->
             TryTable { b with block = unfold_instrs block }

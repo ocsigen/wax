@@ -204,10 +204,10 @@ module Encoder = struct
     | If { typ; if_block; else_block; _ } ->
         byte b 0x04;
         (match typ with Some t -> blocktype b t | None -> byte b 0x40);
-        List.iter (instr ~source_map_t b) if_block;
-        if else_block <> [] then (
+        List.iter (instr ~source_map_t b) if_block.desc;
+        if else_block.desc <> [] then (
           byte b 0x05;
-          List.iter (instr ~source_map_t b) else_block);
+          List.iter (instr ~source_map_t b) else_block.desc);
         byte b 0x0B
     | TryTable { typ; block; catches; _ } ->
         byte b 0x1F;

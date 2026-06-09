@@ -938,8 +938,8 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let*! params, results = blocktype ctx typ in
       let* () = pop ctx loc I32 in
       let* () = pop_args ctx loc params in
-      block ctx loc label params results results if_block;
-      block ctx loc label params results results else_block;
+      block ctx loc label params results results if_block.desc;
+      block ctx loc label params results results else_block.desc;
       push_results results
   | TryTable { label; typ; block = b; catches } ->
       let*! params, results = blocktype ctx typ in
@@ -2276,8 +2276,8 @@ let rec instr_has_conditional (i : _ Ast.Text.instr) =
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
       List.exists instr_has_conditional block
   | If { if_block; else_block; _ } ->
-      List.exists instr_has_conditional if_block
-      || List.exists instr_has_conditional else_block
+      List.exists instr_has_conditional if_block.desc
+      || List.exists instr_has_conditional else_block.desc
   | Try { block; catches; catch_all; _ } ->
       List.exists instr_has_conditional block
       || List.exists (fun (_, l) -> List.exists instr_has_conditional l) catches
@@ -2390,8 +2390,9 @@ let specialize env diagnostics ~enqueue ~record asm0 fields =
         If
           {
             b with
-            if_block = sinstrs asm b.if_block;
-            else_block = sinstrs asm b.else_block;
+            if_block = { b.if_block with desc = sinstrs asm b.if_block.desc };
+            else_block =
+              { b.else_block with desc = sinstrs asm b.else_block.desc };
           }
     | TryTable b -> TryTable { b with block = sinstrs asm b.block }
     | Try b ->
@@ -2558,8 +2559,8 @@ let check_syntax diagnostics (_, lst) =
         | Ast.Text.TryTable { block; _ } ->
             iter_instrs f block
         | Ast.Text.If { if_block; else_block; _ } ->
-            iter_instrs f if_block;
-            iter_instrs f else_block
+            iter_instrs f if_block.desc;
+            iter_instrs f else_block.desc
         | Ast.Text.Try { block; catches; catch_all; _ } ->
             iter_instrs f block;
             List.iter (fun (_, c) -> iter_instrs f c) catches;

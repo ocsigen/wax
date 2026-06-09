@@ -738,10 +738,10 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
         (with_loc (Loop { label = label (); typ = blocktype ctx typ; block }))
   | If { label; typ; if_block; else_block } ->
       let label, ctx = push_label ctx ~loop:false label typ in
-      let if_block = Stack.run (instructions ctx if_block) in
+      let if_block = Stack.run (instructions ctx if_block.desc) in
       let else_block =
-        if else_block = [] then None
-        else Some (Stack.run (instructions ctx else_block))
+        if else_block.desc = [] then None
+        else Some (Stack.run (instructions ctx else_block.desc))
       in
       let inputs, outputs = blocktype_arity ctx typ in
       let* cond = Stack.pop in
@@ -1174,8 +1174,8 @@ let rec reserve_globals_in_instr ctx ns (i : _ Src.instr) =
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
       reserve_globals_in_instrs ctx ns block
   | If { if_block; else_block; _ } ->
-      reserve_globals_in_instrs ctx ns if_block;
-      reserve_globals_in_instrs ctx ns else_block
+      reserve_globals_in_instrs ctx ns if_block.desc;
+      reserve_globals_in_instrs ctx ns else_block.desc
   | Try { block; catches; catch_all; _ } ->
       reserve_globals_in_instrs ctx ns block;
       List.iter

@@ -934,13 +934,13 @@ let rec instr i =
   | If { label; typ; if_block; else_block } ->
       structured_block ~loc
         (Delimiter (block (instruction "if" :: (opt_id label @ blocktype typ)))
-        :: Contents (List.map instr if_block)
+        :: Contents (List.map instr if_block.desc)
         ::
-        (if else_block = [] then [ Delimiter (instruction "end") ]
+        (if else_block.desc = [] then [ Delimiter (instruction "end") ]
          else
            [
              Delimiter (instruction "else");
-             Contents (List.map instr else_block);
+             Contents (List.map instr else_block.desc);
              Delimiter (instruction "end");
            ]))
   | Drop -> instruction ~loc "drop"
@@ -1025,13 +1025,20 @@ let rec instr i =
           u32 ~style:Constant j;
         ]
   | Folded ({ desc = If { label; typ; if_block; else_block }; _ }, l) ->
+      (* Give each clause the location of its (then ...)/(else ...) group so
+         a comment trailing the clause attaches to it. *)
+      let clause ?(always = false) name b =
+        if (not always) && b.Ast.desc = [] then []
+        else
+          [
+            list ~loc:b.Ast.info (instruction name :: List.map instr b.Ast.desc);
+          ]
+      in
       list ~loc
         (block ~transparent:true
            (block (instruction "if" :: (opt_id label @ blocktype typ))
            :: List.map instr l)
-        :: (make_list ~kind:instruction ~always:true "then" (List.map instr)
-              if_block
-           @ make_list ~kind:instruction "else" (List.map instr) else_block))
+        :: (clause ~always:true "then" if_block @ clause "else" else_block))
   | Folded ({ desc = Block { label; typ; block = b }; _ }, l) ->
       assert (l = []);
       list ~loc

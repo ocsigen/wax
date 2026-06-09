@@ -7,8 +7,8 @@ let rec iter_instr f instr =
   match instr.desc with
   | Block { block; _ } | Loop { block; _ } -> List.iter (iter_instr f) block
   | If { if_block; else_block; _ } ->
-      List.iter (iter_instr f) if_block;
-      List.iter (iter_instr f) else_block
+      List.iter (iter_instr f) if_block.desc;
+      List.iter (iter_instr f) else_block.desc
   | TryTable { block; _ } -> List.iter (iter_instr f) block
   | Try { block; catches; catch_all; _ } ->
       List.iter (iter_instr f) block;

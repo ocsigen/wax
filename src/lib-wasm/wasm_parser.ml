@@ -367,7 +367,13 @@ and instruction ch =
             b)
           else []
         in
-        If { label = (); typ; if_block; else_block }
+        If
+          {
+            label = ();
+            typ;
+            if_block = Ast.no_loc if_block;
+            else_block = Ast.no_loc else_block;
+          }
     | 0x06 ->
         let typ = blocktype ch in
         let block = instructions ch [] in

@@ -444,8 +444,8 @@ end) : sig
     | If of {
         label : X.label;
         typ : blocktype option;
-        if_block : 'info instr list;
-        else_block : 'info instr list;
+        if_block : ('info instr list, location) annotated;
+        else_block : ('info instr list, location) annotated;
       }
     | TryTable of {
         label : X.label;

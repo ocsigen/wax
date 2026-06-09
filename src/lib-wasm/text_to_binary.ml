@@ -207,13 +207,15 @@ let rec instr ~resolve_string_type ~resolve_func_type ctx (i : 'info T.instr) =
             label = ();
             typ = Option.map (block_type ~resolve_func_type ctx) typ;
             if_block =
-              List.map
-                (instr ~resolve_string_type ~resolve_func_type ctx')
-                if_block;
+              Ast.no_loc
+                (List.map
+                   (instr ~resolve_string_type ~resolve_func_type ctx')
+                   if_block.desc);
             else_block =
-              List.map
-                (instr ~resolve_string_type ~resolve_func_type ctx')
-                else_block;
+              Ast.no_loc
+                (List.map
+                   (instr ~resolve_string_type ~resolve_func_type ctx')
+                   else_block.desc);
           }
     | Unreachable -> Unreachable
     | Nop -> Nop
@@ -419,7 +421,7 @@ let collect_labels instrs ctr map =
         | Block { label; block; _ } | Loop { label; block; _ } ->
             add ctr map label |> go block ctr
         | If { label; if_block; else_block; _ } ->
-            add ctr map label |> go if_block ctr |> go else_block ctr
+            add ctr map label |> go if_block.desc ctr |> go else_block.desc ctr
         | TryTable { label; block; _ } -> add ctr map label |> go block ctr
         | Try { label; block; catches; catch_all; _ } -> (
             let map = add ctr map label |> go block ctr in

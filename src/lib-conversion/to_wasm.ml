@@ -252,7 +252,13 @@ let rec instruction ret ctx i : location Text.instr list =
         | None -> []
       in
       folded loc
-        (If { label; typ = blocktype typ; if_block; else_block })
+        (If
+           {
+             label;
+             typ = blocktype typ;
+             if_block = Ast.no_loc if_block;
+             else_block = Ast.no_loc else_block;
+           })
         cond_code
   | TryTable { label = labl; typ; block; catches } ->
       let inner_ctx = { ctx with locals = ctx.locals } in

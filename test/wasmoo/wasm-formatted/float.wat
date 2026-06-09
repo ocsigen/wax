@@ -186,8 +186,8 @@
       (local.get $s)))
   (if (local.get $sign)
     (then (array.set $string (local.get $s) (i32.const 0) (i32.const 45)))
+    ;; '-'
     (else
-      ;; '-'
       (if (i32.ne (local.get $style) (i32.const 45)) ;; '-'
         (then
           (array.set $string (local.get $s) (i32.const 0) (local.get $style))))))
@@ -301,15 +301,15 @@
       (br $sign (local.get $s))))
   (if (local.get $negative)
     (then (array.set $string (local.get $s) (i32.const 0) (i32.const 45)))
+    ;; '-'
     (else
-      ;; '-'
       (if (local.get $sign_style)
         (then
           (if (i32.eq (local.get $sign_style) (i32.const 1))
             (then
               (array.set $string (local.get $s) (i32.const 0) (i32.const 43)))
+            ;; '+'
             (else
-              ;; '+'
               (array.set $string (local.get $s) (i32.const 0) (i32.const 32))))))))
   ;; ' '
   (if (local.get $uppercase)
@@ -699,21 +699,16 @@
     (if (result i32) (f64.ge (local.get $a) (f64.const 0x1p-1022))
       (then
         (if (result i32) (f64.lt (local.get $a) (f64.const inf))
-          (then (i32.const 0))
-          (else
-            ;; normal
-            (i32.const 3))))
+          (then (i32.const 0)) ;; normal
+          (else (i32.const 3))))
+      ;; infinity
       (else
-        ;; infinity
         (if (result i32) (f64.eq (local.get $a) (f64.const 0))
-          (then (i32.const 2))
+          (then (i32.const 2)) ;; zero
           (else
-            ;; zero
             (if (result i32) (f64.eq (local.get $a) (local.get $a))
-              (then (i32.const 1))
-              (else
-                ;; subnormal
-                (i32.const 4))))))))
+              (then (i32.const 1)) ;; subnormal
+              (else (i32.const 4))))))))
 ) ;; nan
 
 (func (export "caml_modf_float") (param (ref eq)) (result (ref eq))

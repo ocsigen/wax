@@ -296,15 +296,15 @@
     (br_if $write (i64.ne (local.get $d) (i64.const 0))))
   (if (local.get $negative)
     (then (array.set $string (local.get $s) (i32.const 0) (i32.const 45)))
+    ;; '-'
     (else
-      ;; '-'
       (if (local.get $sign_style)
         (then
           (if (i32.eq (local.get $sign_style) (i32.const 1))
             (then
               (array.set $string (local.get $s) (i32.const 0) (i32.const 43)))
+            ;; '+'
             (else
-              ;; '+'
               (array.set $string (local.get $s) (i32.const 0) (i32.const 32))))))))
   ;; ' '
   (if (local.get $alternate)
