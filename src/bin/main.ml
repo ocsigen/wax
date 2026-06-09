@@ -60,6 +60,25 @@ let specialize_wat ?ctx ~color ~text defines ast =
     Option.iter (fun ctx -> Utils.Trivia.drop_in_ranges ctx dropped) ctx;
     ast
 
+(* Lower a text module to the binary format. A leftover conditional annotation
+   cannot be represented in binary; report it as a located diagnostic (rather
+   than an uncaught exception) and suggest resolving it. *)
+let to_binary ~color ~source ast =
+  Utils.Diagnostic.run ~color ~source (fun d ->
+      try Wasm.Text_to_binary.module_ ast
+      with Wasm.Text_to_binary.Conditional_in_binary location ->
+        Utils.Diagnostic.report d ~location ~severity:Error
+          ~message:(fun f () ->
+            Format.pp_print_string f
+              "Conditional annotations cannot be emitted to the WebAssembly \
+               binary format.")
+          ~hint:(fun f () ->
+            Format.pp_print_string f
+              "Resolve the conditionals with -D/--define, or convert to a text \
+               format (wat or wax).")
+          ();
+        Utils.Diagnostic.abort ())
+
 type fold_mode = Auto | Fold | Unfold
 
 let output_wat ?(tail = []) ~fold_mode ~output_file ~color ~trivia ast =
@@ -244,7 +263,7 @@ let wax_to_wasm ~input_file ~output_file ~validate ~color ~output_color:_
   if validate then
     Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
         Wasm.Validation.f d wasm_ast_text);
-  let wasm_ast_binary = Wasm.Text_to_binary.module_ wasm_ast_text in
+  let wasm_ast_binary = to_binary ~color ~source:(Some text) wasm_ast_text in
   with_open_out output_file (fun oc ->
       Wasm.Wasm_output.module_ ~out_channel:oc ?opt_source_map_file
         wasm_ast_binary)
@@ -261,7 +280,7 @@ let wat_to_wasm ~input_file ~output_file ~validate ~color ~output_color:_
   if validate then
     Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
         Wasm.Validation.f d ast);
-  let wasm_ast_binary = Wasm.Text_to_binary.module_ ast in
+  let wasm_ast_binary = to_binary ~color ~source:(Some text) ast in
   with_open_out output_file (fun oc ->
       Wasm.Wasm_output.module_ ~out_channel:oc ?opt_source_map_file
         wasm_ast_binary)

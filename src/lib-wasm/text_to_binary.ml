@@ -3,6 +3,8 @@ module T = Text
 module B = Binary
 module StringMap = Map.Make (String)
 
+exception Conditional_in_binary of location
+
 type index_space = { map : B.idx StringMap.t; count : int }
 
 let empty_space = { map = StringMap.empty; count = 0 }
@@ -420,8 +422,7 @@ let rec instr ~resolve_string_type ~resolve_func_type ctx (i : 'info T.instr) =
         in
         string i ty s
     | Char c -> Const (I32 (Int32.of_int (Uchar.to_int c)))
-    | If_annotation _ ->
-        failwith "Conditional annotations are not supported in binary output."
+    | If_annotation _ -> raise (Conditional_in_binary i.info)
     | Folded (i, is) ->
         Folded
           ( instr ~resolve_string_type ~resolve_func_type ctx i,
@@ -530,9 +531,7 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
         | T.String_global { id; _ } ->
             ( { ctx with globals = fst (add_name ctx.globals (Some id)) },
               acc_func_types )
-        | T.Module_if_annotation _ ->
-            failwith
-              "Conditional annotations are not supported in binary output."
+        | T.Module_if_annotation _ -> raise (Conditional_in_binary f.Ast.info)
         | T.Start _ | T.Export _ -> (ctx, acc_func_types))
       (ctx, func_types_by_idx) fields
   in

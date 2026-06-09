@@ -66,8 +66,20 @@ Conversion to the WASM binary is still unsupported (binary cannot represent
 conditionals).
 
   $ wax cond.wax -o out.wasm
-  wax: internal error, uncaught exception:
-       Failure("Conditional annotations are not supported in binary output.")
-       
-  [125]
+  Error:
+    Conditional annotations cannot be emitted to the WebAssembly binary format.
+   ──➤  cond.wax:1:1
+  1 │ #[if(ocaml_version >= (5, 1, 0))]
+    · ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  2 │ const caml_marshal_header_size: i32 = 16;
+    · ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  3 │ #[else]
+    · ^^^^^^^^
+  4 │ const caml_marshal_header_size: i32 = 20;
+    · ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  5 │ 
+  6 │ #[if(feature = "gc")]
+  Hint:
+    Resolve the conditionals with -D/--define, or convert to a text format (wat or wax).
+  [128]
 

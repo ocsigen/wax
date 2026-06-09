@@ -26,10 +26,25 @@ The output round-trips to itself (it is idempotent).
 They cannot be lowered to the binary format.
 
   $ wax cond.wat -o out.wasm
-  wax: internal error, uncaught exception:
-       Failure("Conditional annotations are not supported in binary output.")
-       
-  [125]
+  Error:
+    Conditional annotations cannot be emitted to the WebAssembly binary format.
+   ──➤  cond.wat:2:3
+  1 │ (module
+  2 │   (@if $oxcaml
+    ·   ^^^^^^^^^^^^^
+  3 │     (@then
+    · ^^^^^^^^^^^
+  4 │       (func $a (result i32) (i32.const 1)))
+    · ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  5 │     (@else
+    · ^^^^^^^^^^^
+  6 │       (func $a (result i32) (i32.const 2))))
+    · ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  7 │   (func $f (result i32)
+  8 │     (@if (and $oxcaml
+  Hint:
+    Resolve the conditionals with -D/--define, or convert to a text format (wat or wax).
+  [128]
 
 
 Folding is arity-driven and resolves names per branch: `$g` is imported with a
