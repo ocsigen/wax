@@ -117,7 +117,7 @@ let wat_to_wax ~input_file ~output_file ~validate ~color ~output_color
   in
   let wax_ast =
     Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
-        Wax.Typing.f d wax_ast)
+        Wax.Typing.f ~simplify:true d wax_ast)
     |> snd |> Wax.Typing.erase_types
   in
   (* The converted Wax nodes carry the source Wat locations, so the source
@@ -271,10 +271,13 @@ let wasm_to_wax ~input_file ~output_file ~validate ~color ~output_color
     Utils.Diagnostic.run ~color ~source:None (fun d ->
         Conversion.From_wasm.module_ d text_ast)
   in
-  if validate then
-    ignore
-      (Utils.Diagnostic.run ~color ~source:None (fun d ->
-           Wax.Typing.f d wax_ast));
+  (* Type the converted module to drop casts the precise types make redundant
+     and tighten [&?extern]/[&?any] casts, as the WAT-to-Wax path does. *)
+  let wax_ast =
+    Utils.Diagnostic.run ~color ~source:None (fun d ->
+        Wax.Typing.f ~simplify:true d wax_ast)
+    |> snd |> Wax.Typing.erase_types
+  in
   with_open_out output_file (fun oc ->
       let print_wax f m =
         Utils.Printer.run f (fun p ->

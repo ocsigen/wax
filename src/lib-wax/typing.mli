@@ -4,11 +4,18 @@ type typed_module_annotation = Ast.storagetype option array * Ast.location
 type types
 
 val f :
+  ?simplify:bool ->
   Utils.Diagnostic.context ->
   Ast.location Ast.module_ ->
   types * typed_module_annotation Ast.module_
 (** [f fields] performs type checking on the given list of Wax module fields. It
-    verifies types, signatures, and other semantic rules. *)
+    verifies types, signatures, and other semantic rules.
+
+    When [simplify] is set (default [false]), the typed AST is also rewritten:
+    casts the inferred types make redundant are dropped, and [&?extern]/[&?any]
+    casts of non-nullable arguments are tightened to [&extern]/[&any]. This is
+    intended for the Wasm-to-Wax conversion, where casts are inserted to pin
+    types; hand-written Wax is left untouched. *)
 
 val erase_types :
   typed_module_annotation Ast.module_ -> Ast.location Ast.module_

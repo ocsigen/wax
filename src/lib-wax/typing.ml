@@ -627,6 +627,12 @@ type module_context = {
       (* Current branch assumption (shared with every namespace/table above);
          set while typing a conditional branch so names resolve per branch. *)
   cond_env : Cond.env;
+  simplify : bool;
+      (* Whether to rewrite the AST while typing: drop casts the inferred types
+         make redundant and tighten [&?extern]/[&?any] casts to
+         [&extern]/[&any]. Enabled only when converting from Wasm; for
+         hand-written Wax (formatting, or compiling to Wasm) casts are kept as
+         written. *)
 }
 
 (* Type [f] under the assumption of a conditional branch ([positive] for
@@ -2212,9 +2218,9 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       let ty' = expression_type ctx i' in
       (* [extern.convert_any]/[any.convert_extern] preserve non-nullness, so a
          cast to [&?extern]/[&?any] of a non-nullable argument actually yields
-         [&extern]/[&any]; refine the target accordingly.
-         ZZZ This should eventually be guarded by a flag deciding whether to
-         apply such refinements or keep the cast as written. *)
+         [&extern]/[&any]; refine the target accordingly. Like the
+         redundant-cast removal below, this only applies when converting from
+         Wasm ([ctx.simplify]); otherwise the cast is kept as written. *)
       let arg_non_nullable =
         match UnionFind.find ty' with
         | Valtype { typ = Ref { nullable = false; _ }; _ } -> true
@@ -2223,7 +2229,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       let typ =
         match typ with
         | Valtype (Ref ({ typ = Extern | Any; nullable = true } as r))
-          when arg_non_nullable ->
+          when ctx.simplify && arg_non_nullable ->
             Ast.Valtype (Ref { r with nullable = false })
         | _ -> typ
       in
@@ -2262,16 +2268,14 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                   Error.invalid_cast ctx.diagnostics ~location:i.info ty'
             | Valtype _ | Functype _ -> assert false)
       in
-      (* We skip unnecessary cast:
-         - when converting to Wax, we introduce them to avoid loosing
-           type information
-         - when converting to Wasm, we add precise types, so some
-           casts used to resolve ambiguities become unnecessary.
-         ZZZ Handle select instruction better
-         ZZZ Do not do it when just formatting the code
-      *)
+      (* Drop a cast the inferred types already make redundant. This is only
+         desirable when converting from Wasm ([ctx.simplify]): there casts are
+         inserted to pin types and precise inference makes some unnecessary. For
+         hand-written Wax (formatting, or compiling to Wasm) we keep casts as
+         written.
+         ZZZ Handle select instruction better *)
       let unnecessary_cast =
-        UnionFind.find ty' <> Unknown && subtype ctx ty' ty
+        ctx.simplify && UnionFind.find ty' <> Unknown && subtype ctx ty' ty
       in
       if unnecessary_cast then return { i' with info = ([| ty |], snd i'.info) }
       else return_expression i (Cast (i', typ)) ty
@@ -3754,7 +3758,7 @@ let fundecl ctx name typ sign =
             (i, name.desc)
         | None -> assert false (*ZZZ*))
 
-let type_configuration diagnostics fields =
+let type_configuration ~simplify diagnostics fields =
   let cond = ref Cond.true_ in
   let cond_env = Cond.create () in
   let type_context =
@@ -3809,6 +3813,7 @@ let type_configuration diagnostics fields =
       return_types = [||];
       cond;
       cond_env;
+      simplify;
     }
   in
   check_type_definitions ctx;
@@ -4180,7 +4185,7 @@ let rec check_let_in_conditionals diagnostics (i : (_ instr_desc, _) annotated)
   | _ -> ());
   List.iter (check_let_in_conditionals diagnostics) (sub_instrs i)
 
-let f diagnostics fields =
+let f ?(simplify = false) diagnostics fields =
   Ast_utils.iter_fields
     (fun (field : (_ modulefield, _) annotated) ->
       match field.desc with
@@ -4190,7 +4195,7 @@ let f diagnostics fields =
       | _ -> ())
     fields;
   if not (List.exists field_has_conditional fields) then
-    type_configuration diagnostics fields
+    type_configuration ~simplify diagnostics fields
   else begin
     (* Check every reachable configuration: each is specialized to be
        conditional-free and typed independently, so a diagnostic is reported
@@ -4201,14 +4206,14 @@ let f diagnostics fields =
       ~explain:(fun env c -> Wasm.Cond_solver.explain env ~style:`Wax c)
       ~specialize:(fun env asm ~enqueue ~record ->
         specialize_fields env diagnostics ~enqueue ~record asm fields)
-      ~check:(fun ctx m -> ignore (type_configuration ctx m))
+      ~check:(fun ctx m -> ignore (type_configuration ~simplify ctx m))
       ();
     (* Build the typed module (consumed only by the deferred WAT conversion;
        wax -> wax ignores it) by typing the module with conditionals preserved.
        [type_configuration] resolves names per branch (condition-aware tables),
        so each branch is typed under its own assumption. Diagnostics are
        discarded — the exploration above did the real checking. *)
-    type_configuration (Utils.Diagnostic.collector ()) fields
+    type_configuration ~simplify (Utils.Diagnostic.collector ()) fields
   end
 
 let erase_types m =
