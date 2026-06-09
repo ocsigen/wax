@@ -240,13 +240,13 @@ fn caml_ojs_iterate_properties(o: &eq, f: &eq) -> &eq {
 
 #[export = "caml_js_object"]
 fn caml_js_object(x: &eq) -> &eq {
-    let a: &block = x as &block;
-    let l: i32 = a.length;
-    let i: i32 = 1;
-    let o: &?any = new_obj();
+    let a = x as &block;
+    let l = a.length;
+    let i = 1;
+    let o = new_obj();
     'loop: loop {
         if i <u l {
-            let p: &block = a[i] as &block;
+            let p = a[i] as &block;
             set(o, unwrap(caml_jsstring_of_string(p[1])), unwrap(p[2]));
             i = i + 1;
             br 'loop;
@@ -277,7 +277,7 @@ fn caml_js_from_array(va: &eq) -> &eq {
             return {js| f: a' as &any };
         } // 'not_array
     ;
-    let fa: &float_array = va as &float_array;
+    let fa = va as &float_array;
     l = fa.length;
     a' = new_array(l);
     i = 0;
@@ -293,12 +293,12 @@ fn caml_js_from_array(va: &eq) -> &eq {
 
 #[export = "caml_js_to_array"]
 fn caml_js_to_array(x: &eq) -> &eq {
-    let a: &extern = (unwrap(x) as &?extern)!;
-    let l: i32 = array_length(a);
+    let a = (unwrap(x) as &?extern)!;
+    let l = array_length(a);
     let i: i32;
     if l {
         if array_get(a, 0) is &float {
-            let fa: &float_array = [float_array|0; l];
+            let fa = [float_array|0; l];
             i = 0;
             'loop: loop {
                 if i <u l {
@@ -310,7 +310,7 @@ fn caml_js_to_array(x: &eq) -> &eq {
             return fa;
         }
     }
-    let a': &block = [block|0 as &i31; l + 1];
+    let a' = [block|0 as &i31; l + 1];
     i = 0;
     'loop: loop {
         if i <u l { a'[i + 1] = wrap(array_get(a, i)); i = i + 1; br 'loop; }
@@ -320,9 +320,9 @@ fn caml_js_to_array(x: &eq) -> &eq {
 
 #[export = "caml_js_to_string_array"]
 fn caml_js_to_string_array(a: &extern) -> &eq {
-    let l: i32 = array_length(a);
-    let a': &block = [block|0 as &i31; l + 1];
-    let i: i32 = 0;
+    let l = array_length(a);
+    let a' = [block|0 as &i31; l + 1];
+    let i = 0;
     'loop: loop {
         if i <u l {
             a'[i + 1] = caml_string_of_jsstring(wrap(array_get(a, i)));
@@ -381,7 +381,7 @@ fn caml_callback
 (f: &eq, count: i32, args: &extern, kind: i32 // 0 ==> strict / 2 ==> unsafe
 ) -> &?any {
     let arg: &eq;
-    let acc: &eq = f;
+    let acc = f;
     let i: i32;
     if kind == 2 {
         'loop: loop {
@@ -414,16 +414,16 @@ fn caml_callback
 
     "caml_js_from_string"]
 fn caml_jsstring_of_string(x: &eq) -> &eq {
-    let s: &string = x as &string;
+    let s = x as &string;
     return {js| f: jsstring_of_string(s) };
 }
 
 #[export = "caml_jsbytes_of_string"]
 fn caml_jsbytes_of_string(x: &eq) -> &eq {
-    let s: &string = x as &string;
-    let l: i32 = s.length;
-    let i: i32 = 0;
-    let n: i32 = 0;
+    let s = x as &string;
+    let l = s.length;
+    let i = 0;
+    let n = 0;
     'count: loop {
         if i <u l {
             if s[i] as i32_u >=u 128 { n = n + 1; }
@@ -432,12 +432,12 @@ fn caml_jsbytes_of_string(x: &eq) -> &eq {
         }
     } // 'count
     if !n { return {js| f: jsstring_of_string(s) }; }
-    let s': &string = [string|0; i + n];
+    let s' = [string|0; i + n];
     i = 0;
     n = 0;
     'fill: loop {
         if i <u l {
-            let c: i32 = s[i] as i32_u;
+            let c = s[i] as i32_u;
             if c <u 128 {
                 s'[n] = c;
                 n = n + 1;
@@ -463,10 +463,10 @@ fn caml_string_of_jsstring(s: &eq) -> &eq {
 
 #[export = "caml_string_of_jsbytes"]
 fn caml_string_of_jsbytes(s: &eq) -> &eq {
-    let s': &string = string_of_jsstring((s as &js).f);
-    let l: i32 = s'.length;
-    let i: i32 = 0;
-    let n: i32 = 0;
+    let s' = string_of_jsstring((s as &js).f);
+    let l = s'.length;
+    let i = 0;
+    let n = 0;
     'count: loop {
         if i <u l {
             if s'[i] as i32_u >=u 0xC0 { n = n + 1; }
@@ -475,12 +475,12 @@ fn caml_string_of_jsbytes(s: &eq) -> &eq {
         }
     } // 'count
     if !n { return s'; }
-    let s'': &string = [string|0; i - n];
+    let s'' = [string|0; i - n];
     i = 0;
     n = 0;
     'fill: loop {
         if i <u l {
-            let c: i32 = s'[i] as i32_u;
+            let c = s'[i] as i32_u;
             if c <u 0xC0 {
                 s''[n] = c;
                 i = i + 1;
@@ -497,8 +497,8 @@ fn caml_string_of_jsbytes(s: &eq) -> &eq {
 
 #[export = "caml_list_to_js_array"]
 fn caml_list_to_js_array(x: &eq) -> &eq {
-    let i: i32 = 0;
-    let l: &eq = x;
+    let i = 0;
+    let l = x;
     _ =
         'done: do &eq {
             'compute_length: loop &eq {
@@ -508,7 +508,7 @@ fn caml_list_to_js_array(x: &eq) -> &eq {
             }
         } // 'done
     ;
-    let a: &extern = new_array(i);
+    let a = new_array(i);
     i = 0;
     l = x;
     let b: &block;
@@ -528,9 +528,9 @@ fn caml_list_to_js_array(x: &eq) -> &eq {
 
 #[export = "caml_list_of_js_array"]
 fn caml_list_of_js_array(x: &eq) -> &eq {
-    let a: &extern = (unwrap(x) as &?extern)!;
-    let len: i32 = array_length(a);
-    let i: i32 = 0;
+    let a = (unwrap(x) as &?extern)!;
+    let len = array_length(a);
+    let i = 0;
     let l: &eq = 0 as &i31;
     'loop: loop {
         if i <u len {
@@ -550,7 +550,7 @@ data toString = "toString";
 
 #[export = "caml_wrap_exception"]
 fn caml_wrap_exception(x: &?extern) -> &eq {
-    let exn: &?any = x as &?any;
+    let exn = x as &?any;
     // ZZZ special case for stack overflows?
     'undef: do {
         return
@@ -573,7 +573,7 @@ fn caml_wrap_exception(x: &?extern) -> &eq {
 
 #[export = "caml_js_error_option_of_exception"]
 fn caml_js_error_option_of_exception(x: &eq) -> &eq {
-    let exn: &block = x as &block;
+    let exn = x as &block;
     if exn[0] == 0 as &i31 {
         if exn[1] == caml_named_value(jsError) {
             return [block|0 as &i31, exn[2]];
@@ -584,7 +584,7 @@ fn caml_js_error_option_of_exception(x: &eq) -> &eq {
 
 #[export = "caml_js_error_of_exception"]
 fn caml_js_error_of_exception(x: &eq) -> &eq {
-    let exn: &block = x as &block;
+    let exn = x as &block;
     if exn[0] == 0 as &i31 {
         if exn[1] == caml_named_value(jsError) { return exn[2]; }
     }

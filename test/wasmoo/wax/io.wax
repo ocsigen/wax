@@ -133,7 +133,7 @@ let fd_offsets: &?extern = null;
 
 fn get_fd_offsets() -> &extern {
     if !fd_offsets {
-        let m: &extern = map_new();
+        let m = map_new();
         map_set(m, 0, {fd_offset| offset: 0, seeked: 0 });
         map_set(m, 1, {fd_offset| offset: 0, seeked: 0 });
         map_set(m, 2, {fd_offset| offset: 0, seeked: 0 });
@@ -181,7 +181,7 @@ fn convert_flag_list(vflags: &eq) -> i32 {
 
 #[export = "caml_sys_open"]
 fn caml_sys_open(path: &eq, vflags: &eq, perm: &eq) -> &eq {
-    let flags: i32 = convert_flag_list(vflags);
+    let flags = convert_flag_list(vflags);
     let fd: i32;
     let offset: i64;
     try {
@@ -201,7 +201,7 @@ fn caml_sys_open(path: &eq, vflags: &eq, perm: &eq) -> &eq {
 
 #[export = "caml_sys_close"]
 fn caml_sys_close(x: &eq) -> &eq {
-    let fd: i32 = x as &i31 as i32_u;
+    let fd = x as &i31 as i32_u;
     release_fd_offset(fd);
     try {
         close(fd);
@@ -254,11 +254,11 @@ fn caml_ml_open_descriptor_out(fd: &eq) -> &eq {
 
 #[export = "caml_ml_close_channel"]
 fn caml_ml_close_channel(x: &eq) -> &eq {
-    let ch: &channel = x as &channel;
+    let ch = x as &channel;
     ch.curr = 0;
     ch.max = 0;
     ch.size = 0;
-    let fd: i32 = ch.fd;
+    let fd = ch.fd;
     if fd != -1 {
         ch.fd = -1;
         unregister_channel(ch);
@@ -276,9 +276,9 @@ fn caml_ml_close_channel(x: &eq) -> &eq {
 }
 
 fn caml_do_read(ch: &channel, pos: i32, len: i32) -> i32 {
-    let fd: i32 = ch.fd;
-    let fd_offset: &fd_offset = get_fd_offset(fd);
-    let offset: i64 = fd_offset.offset;
+    let fd = ch.fd;
+    let fd_offset = get_fd_offset(fd);
+    let offset = fd_offset.offset;
     let n: i32;
     try {
         n =
@@ -291,8 +291,8 @@ fn caml_do_read(ch: &channel, pos: i32, len: i32) -> i32 {
 }
 
 fn caml_refill(ch: &channel) -> i32 {
-    let buf: &extern = ch.buffer;
-    let n: i32 = caml_do_read(ch, 0, ch.size);
+    let buf = ch.buffer;
+    let n = caml_do_read(ch, 0, ch.size);
     if !n { caml_raise_end_of_file(); }
     ch.max = n;
     ch.curr = 1;
@@ -302,15 +302,15 @@ fn caml_refill(ch: &channel) -> i32 {
 #[export = "caml_getblock"]
 fn caml_getblock(vch: &eq, s: &string, pos: i32, len: i32) -> i32 {
     if !len { return 0; }
-    let ch: &channel = vch as &channel;
-    let avail: i32 = ch.max - ch.curr;
+    let ch = vch as &channel;
+    let avail = ch.max - ch.curr;
     if avail {
         if len >u avail { len = avail; }
         ta_blit_to_string(ch.buffer, ch.curr, s, pos, len);
         ch.curr = ch.curr + len;
         return len;
     }
-    let nread: i32 = caml_do_read(ch, 0, ch.size);
+    let nread = caml_do_read(ch, 0, ch.size);
     ch.max = nread;
     if len >u nread { len = nread; }
     ta_blit_to_string(ch.buffer, 0, s, pos, len);
@@ -320,10 +320,10 @@ fn caml_getblock(vch: &eq, s: &string, pos: i32, len: i32) -> i32 {
 
 #[export = "caml_really_getblock"]
 fn caml_really_getblock(ch: &eq, s: &string, pos: i32, len: i32) -> i32 {
-    let n: i32 = len;
+    let n = len;
     'loop: loop {
         if n {
-            let read: i32 = caml_getblock(ch, s, pos, n);
+            let read = caml_getblock(ch, s, pos, n);
             if !read { return len - n; }
             pos = pos + read;
             n = n - read;
@@ -336,18 +336,18 @@ fn caml_really_getblock(ch: &eq, s: &string, pos: i32, len: i32) -> i32 {
 #[export = "caml_ml_input"]
 fn caml_ml_input(vch: &eq, vs: &eq, vpos: &eq, vlen: &eq) -> &eq {
     let i: i32;
-    let ch: &channel = vch as &channel;
-    let s: &string = vs as &string;
-    let pos: i32 = vpos as &i31 as i32_u;
-    let len: i32 = vlen as &i31 as i32_u;
-    let buf: &extern = ch.buffer;
-    let curr: i32 = ch.curr;
-    let avail: i32 = ch.max - curr;
+    let ch = vch as &channel;
+    let s = vs as &string;
+    let pos = vpos as &i31 as i32_u;
+    let len = vlen as &i31 as i32_u;
+    let buf = ch.buffer;
+    let curr = ch.curr;
+    let avail = ch.max - curr;
     if len >u avail {
         if avail >u 0 {
             len = avail;
         } else {
-            let nread: i32 = caml_do_read(ch, 0, ch.size);
+            let nread = caml_do_read(ch, 0, ch.size);
             ch.max = nread;
             curr = 0;
             if len >u nread { len = nread; }
@@ -359,7 +359,7 @@ fn caml_ml_input(vch: &eq, vs: &eq, vpos: &eq, vlen: &eq) -> &eq {
 }
 
 fn caml_getch(ch: &channel) -> i32 {
-    let curr: i32 = ch.curr;
+    let curr = ch.curr;
     if curr >=u ch.max { become caml_refill(ch); }
     ch.curr = curr + 1;
     become ta_get_ui8(ch.buffer, curr);
@@ -370,8 +370,8 @@ fn caml_ml_input_char(ch: &eq) -> &eq { caml_getch(ch as &channel) as &i31; }
 
 #[export = "caml_ml_input_int"]
 fn caml_ml_input_int(vch: &eq) -> &eq {
-    let ch: &channel = vch as &channel;
-    let res: i32 = caml_getch(ch) << 24;
+    let ch = vch as &channel;
+    let res = caml_getch(ch) << 24;
     res = res | caml_getch(ch) << 16;
     res = res | caml_getch(ch) << 8;
     return (res | caml_getch(ch)) as &i31;
@@ -379,33 +379,33 @@ fn caml_ml_input_int(vch: &eq) -> &eq {
 
 #[export = "caml_ml_pos_in"]
 fn caml_ml_pos_in(vch: &eq) -> &eq {
-    let ch: &channel = vch as &channel;
+    let ch = vch as &channel;
     (get_fd_offset(ch.fd).offset as i32 - (ch.max - ch.curr)) as &i31;
 }
 
 #[export = "caml_ml_pos_in_64"]
 fn caml_ml_pos_in_64(vch: &eq) -> &eq {
-    let ch: &channel = vch as &channel;
+    let ch = vch as &channel;
     caml_copy_int64
         (get_fd_offset(ch.fd).offset - (ch.max - ch.curr) as i64_s);
 }
 
 #[export = "caml_ml_pos_out"]
 fn caml_ml_pos_out(vch: &eq) -> &eq {
-    let ch: &channel = vch as &channel;
+    let ch = vch as &channel;
     (get_fd_offset(ch.fd).offset as i32 + ch.curr) as &i31;
 }
 
 #[export = "caml_ml_pos_out_64"]
 fn caml_ml_pos_out_64(vch: &eq) -> &eq {
-    let ch: &channel = vch as &channel;
+    let ch = vch as &channel;
     caml_copy_int64(get_fd_offset(ch.fd).offset + ch.curr as i64_s);
 }
 
 fn caml_seek_in(ch: &channel, dest: i64) -> &eq {
-    let fd: i32 = ch.fd;
-    let fd_offset: &fd_offset = get_fd_offset(fd);
-    let offset: i64 = fd_offset.offset;
+    let fd = ch.fd;
+    let fd_offset = get_fd_offset(fd);
+    let offset = fd_offset.offset;
     if (dest >=s offset - ch.max as i64_s) & (dest <=s offset) {
         ch.curr = ch.max - (offset - dest) as i32;
     } else {
@@ -430,10 +430,10 @@ fn caml_ml_seek_in_64(ch: &eq, dest: &eq) -> &eq {
 
 #[export = "caml_ml_seek_out"]
 fn caml_ml_seek_out(vch: &eq, voffset: &eq) -> &eq {
-    let ch: &channel = vch as &channel;
+    let ch = vch as &channel;
     caml_flush(ch);
     // ZZZ Check for error
-    let fd_offset: &fd_offset = get_fd_offset(ch.fd);
+    let fd_offset = get_fd_offset(ch.fd);
     fd_offset.offset = voffset as &i31 as i32_s as i64_s;
     fd_offset.seeked = 1;
     0 as &i31;
@@ -441,10 +441,10 @@ fn caml_ml_seek_out(vch: &eq, voffset: &eq) -> &eq {
 
 #[export = "caml_ml_seek_out_64"]
 fn caml_ml_seek_out_64(vch: &eq, voffset: &eq) -> &eq {
-    let ch: &channel = vch as &channel;
+    let ch = vch as &channel;
     caml_flush(ch);
     // ZZZ Check for error
-    let fd_offset: &fd_offset = get_fd_offset(ch.fd);
+    let fd_offset = get_fd_offset(ch.fd);
     fd_offset.offset = Int64_val(voffset);
     fd_offset.seeked = 1;
     0 as &i31;
@@ -452,8 +452,8 @@ fn caml_ml_seek_out_64(vch: &eq, voffset: &eq) -> &eq {
 
 #[export = "caml_ml_input_scan_line"]
 fn caml_ml_input_scan_line(vch: &eq) -> &eq {
-    let ch: &channel = vch as &channel;
-    let p: i32 = ch.curr;
+    let ch = vch as &channel;
+    let p = ch.curr;
     'loop: loop {
         if p >=u ch.max {
             let n: i32;
@@ -487,24 +487,24 @@ fn caml_flush(ch: &channel) {
 
 #[export = "caml_flush_if_unbuffered"]
 fn caml_flush_if_unbuffered(vch: &eq) {
-    let ch: &channel = vch as &channel;
+    let ch = vch as &channel;
     if ch.unbuffered { caml_flush(ch); }
 }
 
 #[export = "caml_ml_flush"]
 fn caml_ml_flush(vch: &eq) -> &eq {
-    let ch: &channel = vch as &channel;
+    let ch = vch as &channel;
     if ch.fd != -1 { caml_flush(ch); }
     0 as &i31;
 }
 
 fn caml_flush_partial(ch: &channel) -> i32 {
-    let towrite: i32 = ch.curr;
+    let towrite = ch.curr;
     if towrite >u 0 {
-        let buf: &extern = ch.buffer;
-        let fd: i32 = ch.fd;
-        let fd_offset: &fd_offset = get_fd_offset(fd);
-        let offset: i64 = fd_offset.offset;
+        let buf = ch.buffer;
+        let fd = ch.fd;
+        let fd_offset = get_fd_offset(fd);
+        let offset = fd_offset.offset;
         let written: i32;
         try {
             written =
@@ -521,10 +521,10 @@ fn caml_flush_partial(ch: &channel) -> i32 {
 }
 
 fn caml_putblock(ch: &channel, s: &string, pos: i32, len: i32) -> i32 {
-    let curr: i32 = ch.curr;
-    let free: i32 = ch.size - curr;
+    let curr = ch.curr;
+    let free = ch.size - curr;
     if len >=u free { len = free; }
-    let buf: &extern = ch.buffer;
+    let buf = ch.buffer;
     ta_blit_from_string(s, pos, buf, curr, len);
     ch.curr = curr + len;
     if len >=u free { _ = caml_flush_partial(ch); }
@@ -535,7 +535,7 @@ fn caml_putblock(ch: &channel, s: &string, pos: i32, len: i32) -> i32 {
 fn caml_really_putblock(ch: &eq, s: &string, pos: i32, len: i32) {
     'loop: loop {
         if len {
-            let written: i32 = caml_putblock(ch as &channel, s, pos, len);
+            let written = caml_putblock(ch as &channel, s, pos, len);
             pos = pos + written;
             len = len - written;
             br 'loop;
@@ -548,11 +548,11 @@ fn caml_really_putblock(ch: &eq, s: &string, pos: i32, len: i32) {
 
     "caml_ml_output_bytes"]
 fn caml_ml_output(ch: &eq, s: &eq, vpos: &eq, vlen: &eq) -> &eq {
-    let pos: i32 = vpos as &i31 as i32_u;
-    let len: i32 = vlen as &i31 as i32_u;
+    let pos = vpos as &i31 as i32_u;
+    let len = vlen as &i31 as i32_u;
     'loop: loop {
         if len >u 0 {
-            let written: i32 =
+            let written =
                 caml_putblock(ch as &channel, s as &string, pos, len);
             pos = pos + written;
             len = len - written;
@@ -565,7 +565,7 @@ fn caml_ml_output(ch: &eq, s: &eq, vpos: &eq, vlen: &eq) -> &eq {
 
 fn caml_putch(ch: &channel, c: i32) {
     if ch.curr >=u ch.size { _ = caml_flush_partial(ch); }
-    let curr: i32 = ch.curr;
+    let curr = ch.curr;
     ta_set_ui8(ch.buffer, curr, c);
     ch.curr = curr + 1;
 }
@@ -579,8 +579,8 @@ fn caml_ml_output_char(ch: &eq, c: &eq) -> &eq {
 
 #[export = "caml_ml_output_int"]
 fn caml_ml_output_int(vch: &eq, vn: &eq) -> &eq {
-    let ch: &channel = vch as &channel;
-    let n: i32 = vn as &i31 as i32_u;
+    let ch = vch as &channel;
+    let n = vn as &i31 as i32_u;
     caml_putch(ch, n >>u 24);
     caml_putch(ch, n >>u 16);
     caml_putch(ch, n >>u 8);
@@ -596,7 +596,7 @@ fn caml_ml_is_buffered(ch: &eq) -> &eq {
 
 #[export = "caml_ml_set_buffered"]
 fn caml_ml_set_buffered(vch: &eq, mode: &eq) -> &eq {
-    let ch: &channel = vch as &channel;
+    let ch = vch as &channel;
     if mode as &i31 as i32_s {
         ch.unbuffered = 0;
     } else { ch.unbuffered = 1; if ch.fd != -1 { caml_flush(ch); } }

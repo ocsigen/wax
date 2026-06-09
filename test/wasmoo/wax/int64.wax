@@ -67,13 +67,13 @@ const int64_ops: &custom_operations =
 type int64: custom = { f: &custom_operations, f_2: i64 };
 
 fn int64_cmp(v1: &eq, v2: &eq, x: i32) -> i32 {
-    let i1: i64 = (v1 as &int64).f_2;
-    let i2: i64 = (v2 as &int64).f_2;
+    let i1 = (v1 as &int64).f_2;
+    let i2 = (v2 as &int64).f_2;
     (i1 >s i2) - (i1 <s i2);
 }
 
 fn int64_hash(v: &eq) -> i32 {
-    let i: i64 = (v as &int64).f_2;
+    let i = (v as &int64).f_2;
     i as i32 ^ (i >>u 32) as i32;
 }
 
@@ -122,16 +122,16 @@ const INT64_ERRMSG: &string =
 fn caml_i64_of_digits
 (base: i32, signedness: i32, sign: i32, s: &string, i: i32, errmsg: &string)
 -> i64 {
-    let len: i32 = s.length;
+    let len = s.length;
     if !len { caml_failwith(errmsg); }
-    let threshold: i64 = -1 /u base as i64_u;
-    let d: i32 = parse_digit(s[i] as i32_u);
+    let threshold = -1 /u base as i64_u;
+    let d = parse_digit(s[i] as i32_u);
     if d >=u base { caml_failwith(errmsg); }
-    let res: i64 = d as i64_u;
+    let res = d as i64_u;
     'loop: loop {
         i = i + 1;
         if i <s len {
-            let c: i32 = s[i] as i32_u;
+            let c = s[i] as i32_u;
             br_if 'loop c == 95 // '_'
             ;
             d = parse_digit(c);
@@ -153,12 +153,12 @@ fn caml_i64_of_digits
 
 #[export = "caml_int64_of_string"]
 fn caml_int64_of_string(v: &eq) -> &eq {
-    let s: &string = v as &string;
+    let s = v as &string;
     parse_sign_and_base(s);
-    let base: i32 = _;
-    let sign: i32 = _;
-    let signedness: i32 = _;
-    let i: i32 = _;
+    let base = _;
+    let sign = _;
+    let signedness = _;
+    let i = _;
     become caml_copy_int64
         (caml_i64_of_digits(base, signedness, sign, s, i, INT64_ERRMSG));
 }
@@ -169,9 +169,9 @@ fn format_int64_default(d: i64) -> &eq {
     let negative: i32;
     let i: i32;
     if d <s 0 { negative = 1; i = 1; d = 0 - d; }
-    let n: i64 = d;
+    let n = d;
     'count: loop { i = i + 1; n = n /u 10; br_if 'count n != 0; }
-    let s: &string = [string|0; i];
+    let s = [string|0; i];
     'write: loop {
         i = i - 1;
         s[i] = 48 + (d %u 10) as i32;
@@ -186,8 +186,8 @@ type chars = [i8];
 
 #[export = "caml_int64_format"]
 fn caml_int64_format(x: &eq, x_2: &eq) -> &eq {
-    let s: &string = x as &string;
-    let d: i64 = (x_2 as &int64).f_2;
+    let s = x as &string;
+    let d = (x_2 as &int64).f_2;
     if s.length == 2 {
         if
             s[1] as i32_u == 100 // 'd'
@@ -196,14 +196,14 @@ fn caml_int64_format(x: &eq, x_2: &eq) -> &eq {
         }
     }
     parse_int_format(s);
-    let uppercase: i32 = _;
-    let base: i64 = _ as i64_u;
-    let signed: i32 = _;
-    let alternate: i32 = _;
-    let sign_style: i32 = _;
+    let uppercase = _;
+    let base = _ as i64_u;
+    let signed = _;
+    let alternate = _;
+    let sign_style = _;
     let negative: i32;
     if signed & (d <s 0) { negative = 1; d = 0 - d; }
-    let n: i64 = d;
+    let n = d;
     let i: i32;
     'count: loop { i = i + 1; n = n /u base; br_if 'count n != 0; }
     if negative | sign_style { i = i + 1; }
@@ -213,7 +213,7 @@ fn caml_int64_format(x: &eq, x_2: &eq) -> &eq {
             if base == 8 { i = i + 1; }
         }
     }
-    let chars: &chars = uppercase?uppercase_hex_table:lowercase_hex_table;
+    let chars = uppercase?uppercase_hex_table:lowercase_hex_table;
     s = [string|0; i];
     'write: loop {
         i = i - 1;

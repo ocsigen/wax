@@ -69,7 +69,7 @@ fn caml_hash_mix_int64(h: i32, d: i64) -> i32 {
 
 #[export = "caml_hash_mix_double"]
 fn caml_hash_mix_double(h: i32, d: f64) -> i32 {
-    let i: i64 = d.to_bits;
+    let i = d.to_bits;
     if i & 0x7FF0000000000000 == 0x7ff0000000000000 {
         if i & 0xFFFFFFFFFFFFF != 0 { i = 0x7ff0000000000001; }
     }
@@ -79,7 +79,7 @@ fn caml_hash_mix_double(h: i32, d: f64) -> i32 {
 
 #[export = "caml_hash_mix_float"]
 fn caml_hash_mix_float(h: i32, d: f32) -> i32 {
-    let i: i32 = d.to_bits;
+    let i = d.to_bits;
     if i & 0x7F800000 == 0x7F800000 {
         if i & 0x7FFFFF != 0 { i = 0x7F800001; }
     }
@@ -89,8 +89,8 @@ fn caml_hash_mix_float(h: i32, d: f32) -> i32 {
 
 #[export = "caml_hash_mix_string"]
 fn caml_hash_mix_string(h: i32, s: &string) -> i32 {
-    let len: i32 = s.length;
-    let i: i32 = 0;
+    let len = s.length;
+    let i = 0;
     'loop: loop {
         if i + 4 <=u len {
             h =
@@ -102,7 +102,7 @@ fn caml_hash_mix_string(h: i32, s: &string) -> i32 {
             br 'loop;
         }
     } // 'loop
-    let w: i32 = 0;
+    let w = 0;
     'l_2: do {
         'l_3: do {
             'l_4: do {
@@ -124,16 +124,16 @@ const caml_hash_queue: &block = [block|0 as &i31; HASH_QUEUE_SIZE];
 
 #[export = "caml_hash"]
 fn caml_hash(count: &eq, limit: &eq, seed: &eq, obj: &eq) -> &eq {
-    let sz: i32 = limit as &i31 as i32_u;
+    let sz = limit as &i31 as i32_u;
     if sz >u HASH_QUEUE_SIZE { sz = HASH_QUEUE_SIZE; }
-    let num: i32 = count as &i31 as i32_u;
-    let h: i32 = seed as &i31 as i32_s;
+    let num = count as &i31 as i32_u;
+    let h = seed as &i31 as i32_s;
     caml_hash_queue[0] = obj;
-    let rd: i32 = 0;
-    let wr: i32 = 1;
+    let rd = 0;
+    let wr = 1;
     'loop: loop {
         if (rd <u wr) & (num >u 0) {
-            let v: &eq = caml_hash_queue[rd];
+            let v = caml_hash_queue[rd];
             rd = rd + 1;
             'again: do {
                 _ =

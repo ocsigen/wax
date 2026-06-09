@@ -65,8 +65,8 @@ const int32_ops: &custom_operations =
 type int32: custom = { f: &custom_operations, f_2: i32 };
 
 fn int32_cmp(v1: &eq, v2: &eq, x: i32) -> i32 {
-    let i1: i32 = (v1 as &int32).f_2;
-    let i2: i32 = (v2 as &int32).f_2;
+    let i1 = (v1 as &int32).f_2;
+    let i2 = (v2 as &int32).f_2;
     (i1 >s i2) - (i1 <s i2);
 }
 
@@ -84,7 +84,7 @@ fn int32_deserialize(s: &eq) -> (&eq, i32) {
 }
 
 fn int32_dup(v: &eq) -> &eq {
-    let d: &int32 = v as &int32;
+    let d = v as &int32;
     {int32| f: d.f, f_2: d.f_2 };
 }
 

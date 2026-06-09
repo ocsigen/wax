@@ -1086,6 +1086,22 @@ let check_type ctx i ty =
     Error.instruction_type_mismatch ctx.diagnostics ~location:(snd i.info) ty'
       ty
 
+(* The concrete type an initializer would take with no annotation, matching the
+   resolution of the unannotated [let] case. Returns [None] for types we never
+   want to drop an annotation for (packed or still unconstrained). Pure: it does
+   not mutate [ty], so it can be read before [check_type] constrains it. *)
+let standalone_valtype ctx ty =
+  match UnionFind.find ty with
+  | Valtype v -> Some v
+  | Int | Number -> Some { typ = I32; internal = I32 }
+  | Float -> Some { typ = F64; internal = F64 }
+  | Null -> internalize_valtype ctx (Ref { nullable = true; typ = None_ })
+  | Int8 | Int16 | Unknown -> None
+
+let valtype_equal ctx (a : inferred_valtype) (b : inferred_valtype) =
+  Wasm.Types.val_subtype ctx.subtyping_info a.internal b.internal
+  && Wasm.Types.val_subtype ctx.subtyping_info b.internal a.internal
+
 (* Check a list of typed operands against an array of expected types. *)
 let check_operands ctx l expected =
   if Array.length expected = List.length l then
@@ -2783,10 +2799,25 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       return_statement i desc [||]
   | Let ([ (Some name, Some typ) ], Some i') ->
       let* i' = instruction ctx i' in
-      (let>@ ity = internalize_valtype ctx typ in
-       check_type ctx i' (UnionFind.make (Valtype ity));
-       ctx.locals <- StringMap.add name.desc ity ctx.locals);
-      return_statement i (Let ([ (Some name, Some typ) ], Some i')) [||]
+      (* The type the initializer would take on its own, captured before
+         [check_type] constrains it; if it already equals the annotation, the
+         annotation is redundant and dropped (only when converting from Wasm). *)
+      let standalone = standalone_valtype ctx (expression_type ctx i') in
+      let drop_annotation =
+        Option.value ~default:false
+          (let+@ ity = internalize_valtype ctx typ in
+           check_type ctx i' (UnionFind.make (Valtype ity));
+           ctx.locals <- StringMap.add name.desc ity ctx.locals;
+           ctx.simplify
+           && Option.fold ~none:false
+                ~some:(fun v -> valtype_equal ctx v ity)
+                standalone)
+      in
+      let bindings =
+        if drop_annotation then [ (Some name, None) ]
+        else [ (Some name, Some typ) ]
+      in
+      return_statement i (Let (bindings, Some i')) [||]
   | Let ([ (Some name, None) ], Some i') ->
       let* i' = instruction ctx i' in
       let ty = expression_type ctx i' in

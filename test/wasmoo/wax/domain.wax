@@ -21,7 +21,7 @@ type closure = open { /*(field i32)*/ f: &function_1 };
 
 #[export = "caml_atomic_cas"]
 fn caml_atomic_cas(ref: &eq, o: &eq, n: &eq) -> &eq {
-    let b: &block = ref as &block;
+    let b = ref as &block;
     if b[1] == o => &eq { b[1] = n; 1 as &i31; } else { 0 as &i31; }
 }
 
@@ -30,16 +30,16 @@ fn caml_atomic_load(x: &eq) -> &eq { (x as &block)[1]; }
 
 #[export = "caml_atomic_fetch_add"]
 fn caml_atomic_fetch_add(ref: &eq, i: &eq) -> &eq {
-    let b: &block = ref as &block;
-    let old: &eq = b[1];
+    let b = ref as &block;
+    let old = b[1];
     b[1] = (old as &i31 as i32_s + i as &i31 as i32_s) as &i31;
     old;
 }
 
 #[export = "caml_atomic_exchange"]
 fn caml_atomic_exchange(ref: &eq, v: &eq) -> &eq {
-    let b: &block = ref as &block;
-    let r: &eq = b[1];
+    let b = ref as &block;
+    let r = b[1];
     b[1] = v;
     r;
 }

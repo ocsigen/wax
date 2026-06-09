@@ -69,7 +69,7 @@ fn caml_sys_exit(x: &eq) -> &eq { throw ocaml_exit x as &i31 as i32_s; }
 
     "caml_sys_unsafe_getenv"]
 fn caml_sys_getenv(x: &eq) -> &eq {
-    let res: &?any = getenv(unwrap(caml_jsstring_of_string(x)));
+    let res = getenv(unwrap(caml_jsstring_of_string(x)));
     if !jsstring_test(res) { caml_raise_not_found(); }
     become caml_string_of_jsstring(wrap(res));
 }
@@ -106,10 +106,10 @@ fn caml_sys_system_command(x: &eq) -> &eq {
 
 #[export = "caml_sys_random_seed"]
 fn caml_sys_random_seed(x: &eq) -> &eq {
-    let r: &extern = random_seed();
-    let n: i32 = ta_length(r);
-    let a: &block = [block|0 as &i31; n + 1];
-    let i: i32 = 0;
+    let r = random_seed();
+    let n = ta_length(r);
+    let a = [block|0 as &i31; n + 1];
+    let i = 0;
     'loop: loop {
         if i <u n {
             a[i + 1] = ta_get_i32(r, i) as &i31;

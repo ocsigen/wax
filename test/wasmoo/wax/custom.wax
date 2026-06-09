@@ -58,8 +58,8 @@ fn caml_dup_custom(v: &eq) -> &eq {
 
 #[export = "custom_compare_id"]
 fn custom_compare_id(x: &eq, x_2: &eq, x_3: i32) -> i32 {
-    let i1: i64 = (x as &custom_with_id).id;
-    let i2: i64 = (x_2 as &custom_with_id).id;
+    let i1 = (x as &custom_with_id).id;
+    let i2 = (x_2 as &custom_with_id).id;
     (i1 >s i2) - (i1 <s i2);
 }
 
@@ -69,7 +69,7 @@ fn custom_hash_id(x: &eq) -> i32 { (x as &custom_with_id).id as i32; }
 let next_id: i64 = 0;
 
 #[export = "custom_next_id"]
-fn custom_next_id() -> i64 { let id: i64 = next_id; next_id = id + 1; id; }
+fn custom_next_id() -> i64 { let id = next_id; next_id = id + 1; id; }
 
 type custom_operations_list = {
     ops: &custom_operations,

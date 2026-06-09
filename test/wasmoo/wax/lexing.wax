@@ -22,7 +22,7 @@ type block = [mut &eq];
 type string = [mut i8];
 
 fn get(a: &eq, i: i32) -> i32 {
-    let s: &string = a as &string;
+    let s = a as &string;
     i = i + i;
     (s[i] as i32_u | s[i + 1] as i32_u << 8).extend16_s;
 }
@@ -51,26 +51,26 @@ data lexing_empty_token = "lexing: empty token";
 
 #[export = "caml_lex_engine"]
 fn caml_lex_engine(vtbl: &eq, start_state: &eq, vlexbuf: &eq) -> &eq {
-    let tbl: &block = vtbl as &block;
-    let lexbuf: &block = vlexbuf as &block;
-    let state: i32 = start_state as &i31 as i32_s;
-    let buffer: &string = lexbuf[lex_buffer] as &string;
+    let tbl = vtbl as &block;
+    let lexbuf = vlexbuf as &block;
+    let state = start_state as &i31 as i32_s;
+    let buffer = lexbuf[lex_buffer] as &string;
     if state >=s 0 {
-        let vpos: &eq = lexbuf[lex_curr_pos];
+        let vpos = lexbuf[lex_curr_pos];
         lexbuf[lex_last_pos] = vpos;
         lexbuf[lex_start_pos] = vpos;
         lexbuf[lex_last_action] = -1 as &i31;
     } else { state = -1 - state; }
-    let lex_base_2: &string = tbl[lex_base] as &string;
-    let lex_backtrk_2: &string = tbl[lex_backtrk] as &string;
-    let lex_check_2: &string = tbl[lex_check] as &string;
-    let lex_check_code_2: &string = tbl[lex_check_code] as &string;
-    let lex_trans_2: &string = tbl[lex_trans] as &string;
-    let lex_default_2: &string = tbl[lex_default] as &string;
+    let lex_base_2 = tbl[lex_base] as &string;
+    let lex_backtrk_2 = tbl[lex_backtrk] as &string;
+    let lex_check_2 = tbl[lex_check] as &string;
+    let lex_check_code_2 = tbl[lex_check_code] as &string;
+    let lex_trans_2 = tbl[lex_trans] as &string;
+    let lex_default_2 = tbl[lex_default] as &string;
     'loop: loop {
-        let base: i32 = get(lex_base_2, state);
+        let base = get(lex_base_2, state);
         if base <s 0 { return (-1 - base) as &i31; }
-        let backtrk: i32 = get(lex_backtrk_2, state);
+        let backtrk = get(lex_backtrk_2, state);
         if backtrk >=s 0 {
             lexbuf[lex_last_pos] = lexbuf[lex_curr_pos];
             lexbuf[lex_last_action] = backtrk as &i31;
@@ -84,7 +84,7 @@ fn caml_lex_engine(vtbl: &eq, start_state: &eq, vlexbuf: &eq) -> &eq {
                 return (-1 - state) as &i31;
             } else { c = 256; }
         } else {
-            let pos: i32 = lexbuf[lex_curr_pos] as &i31 as i32_u;
+            let pos = lexbuf[lex_curr_pos] as &i31 as i32_u;
             c = buffer[pos] as i32_u;
             lexbuf[lex_curr_pos] = (pos + 1) as &i31;
         }
@@ -93,7 +93,7 @@ fn caml_lex_engine(vtbl: &eq, start_state: &eq, vlexbuf: &eq) -> &eq {
         } else { state = get(lex_default_2, state); }
         if state <s 0 {
             lexbuf[lex_curr_pos] = lexbuf[lex_last_pos];
-            let action: &eq = lexbuf[lex_last_action];
+            let action = lexbuf[lex_last_action];
             if action == -1 as &i31 {
                 caml_failwith([string|lexing_empty_token @ 0; 19]);
             }
@@ -106,11 +106,11 @@ fn caml_lex_engine(vtbl: &eq, start_state: &eq, vlexbuf: &eq) -> &eq {
 }
 
 fn run_mem(s: &string, i: i32, lexbuf: &block, curr_pos: &eq) {
-    let mem: &block = lexbuf[lex_mem] as &block;
+    let mem = lexbuf[lex_mem] as &block;
     'loop: loop {
-        let dst: i32 = s[i] as i32_u;
+        let dst = s[i] as i32_u;
         if dst == 0xff { return; }
-        let src: i32 = s[i + 1] as i32_u;
+        let src = s[i + 1] as i32_u;
         i = i + 2;
         mem[dst + 1] =
             if src == 0xff => &eq { curr_pos; } else { mem[src + 1]; };
@@ -124,36 +124,36 @@ fn run_tag(s: &string, i: i32, lexbuf: &block) {
 
 #[export = "caml_new_lex_engine"]
 fn caml_new_lex_engine(vtbl: &eq, start_state: &eq, vlexbuf: &eq) -> &eq {
-    let tbl: &block = vtbl as &block;
-    let lexbuf: &block = vlexbuf as &block;
-    let state: i32 = start_state as &i31 as i32_s;
-    let buffer: &string = lexbuf[lex_buffer] as &string;
+    let tbl = vtbl as &block;
+    let lexbuf = vlexbuf as &block;
+    let state = start_state as &i31 as i32_s;
+    let buffer = lexbuf[lex_buffer] as &string;
     if state >=s 0 {
-        let vpos: &eq = lexbuf[lex_curr_pos];
+        let vpos = lexbuf[lex_curr_pos];
         lexbuf[lex_last_pos] = vpos;
         lexbuf[lex_start_pos] = vpos;
         lexbuf[lex_last_action] = -1 as &i31;
     } else { state = -1 - state; }
-    let lex_code_2: &string = tbl[lex_code] as &string;
-    let lex_base_2: &string = tbl[lex_base] as &string;
-    let lex_base_code_2: &string = tbl[lex_base_code] as &string;
-    let lex_backtrk_2: &string = tbl[lex_backtrk] as &string;
-    let lex_backtrk_code_2: &string = tbl[lex_backtrk_code] as &string;
-    let lex_check_2: &string = tbl[lex_check] as &string;
-    let lex_check_code_2: &string = tbl[lex_check_code] as &string;
-    let lex_trans_2: &string = tbl[lex_trans] as &string;
-    let lex_trans_code_2: &string = tbl[lex_trans_code] as &string;
-    let lex_default_2: &string = tbl[lex_default] as &string;
-    let lex_default_code_2: &string = tbl[lex_default_code] as &string;
+    let lex_code_2 = tbl[lex_code] as &string;
+    let lex_base_2 = tbl[lex_base] as &string;
+    let lex_base_code_2 = tbl[lex_base_code] as &string;
+    let lex_backtrk_2 = tbl[lex_backtrk] as &string;
+    let lex_backtrk_code_2 = tbl[lex_backtrk_code] as &string;
+    let lex_check_2 = tbl[lex_check] as &string;
+    let lex_check_code_2 = tbl[lex_check_code] as &string;
+    let lex_trans_2 = tbl[lex_trans] as &string;
+    let lex_trans_code_2 = tbl[lex_trans_code] as &string;
+    let lex_default_2 = tbl[lex_default] as &string;
+    let lex_default_code_2 = tbl[lex_default_code] as &string;
     'loop: loop {
-        let base: i32 = get(lex_base_2, state);
+        let base = get(lex_base_2, state);
         let pc_off: i32;
         if base <s 0 {
             pc_off = get(lex_base_code_2, state);
             run_tag(lex_code_2, pc_off, lexbuf);
             return (-1 - base) as &i31;
         }
-        let backtrk: i32 = get(lex_backtrk_2, state);
+        let backtrk = get(lex_backtrk_2, state);
         if backtrk >=s 0 {
             pc_off = get(lex_backtrk_code_2, state);
             run_tag(lex_code_2, pc_off, lexbuf);
@@ -169,23 +169,23 @@ fn caml_new_lex_engine(vtbl: &eq, start_state: &eq, vlexbuf: &eq) -> &eq {
                 return (-1 - state) as &i31;
             } else { c = 256; }
         } else {
-            let pos: i32 = lexbuf[lex_curr_pos] as &i31 as i32_u;
+            let pos = lexbuf[lex_curr_pos] as &i31 as i32_u;
             c = buffer[pos] as i32_u;
             lexbuf[lex_curr_pos] = (pos + 1) as &i31;
         }
-        let pstate: i32 = state;
+        let pstate = state;
         if get(lex_check_2, base + c) == state {
             state = get(lex_trans_2, base + c);
         } else { state = get(lex_default_2, state); }
         if state <s 0 {
             lexbuf[lex_curr_pos] = lexbuf[lex_last_pos];
-            let action: &eq = lexbuf[lex_last_action];
+            let action = lexbuf[lex_last_action];
             if action == -1 as &i31 {
                 caml_failwith([string|lexing_empty_token @ 0; 19]);
             }
             return action;
         }
-        let base_code: i32 = get(lex_base_code_2, pstate);
+        let base_code = get(lex_base_code_2, pstate);
         pc_off =
             if get(lex_check_code_2, base_code + c) == pstate => i32 {
                 get(lex_trans_code_2, base_code + c);

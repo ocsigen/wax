@@ -210,7 +210,7 @@ fn caml_obj_dup(x: &eq) -> &eq {
 
 #[export = "caml_obj_with_tag"]
 fn caml_obj_with_tag(tag_2: &eq, x: &eq) -> &eq {
-    let res: &eq = caml_obj_dup(x);
+    let res = caml_obj_dup(x);
     (res as &block)[0] = tag_2;
     res;
 }
@@ -218,7 +218,7 @@ fn caml_obj_with_tag(tag_2: &eq, x: &eq) -> &eq {
 #[export = "caml_obj_block"]
 fn caml_obj_block(tag_2: &eq, size: &eq) -> &eq {
     // ZZZ float array / specific types?
-    let res: &block = [block|0 as &i31; size as &i31 as i32_s + 1];
+    let res = [block|0 as &i31; size as &i31 as i32_s + 1];
     res[0] = tag_2;
     res;
 }
@@ -241,7 +241,7 @@ fn caml_obj_tag(v: &eq) -> &eq {
 
 #[export = "caml_obj_make_forward"]
 fn caml_obj_make_forward(b: &eq, v: &eq) -> &eq {
-    let block: &block = b as &block;
+    let block = b as &block;
     block[0] = forward_tag as &i31;
     block[1] = v;
     0 as &i31;
@@ -251,7 +251,7 @@ fn caml_obj_make_forward(b: &eq, v: &eq) -> &eq {
 fn caml_lazy_make_forward(x: &eq) -> &eq { [block|forward_tag as &i31, x]; }
 
 fn obj_update_tag(x: &eq, o: i32, n: i32) -> i32 {
-    let b: &block = x as &block;
+    let b = x as &block;
     if b[0] == o as &i31 => i32 { b[0] = n as &i31; 1; } else { 0; }
 }
 
@@ -277,8 +277,8 @@ fn caml_lazy_update_to_forcing(x: &eq) -> &eq {
 
 #[export = "caml_obj_compare_and_swap"]
 fn caml_obj_compare_and_swap(x: &eq, x_2: &eq, old: &eq, new: &eq) -> &eq {
-    let b: &block = x as &block;
-    let i: i32 = x_2 as &i31 as i32_u + 1;
+    let b = x as &block;
+    let i = x_2 as &i31 as i32_u + 1;
     if b[i] == old => &eq { b[i] = new; 1 as &i31; } else { 0 as &i31; }
 }
 
@@ -316,23 +316,23 @@ let method_cache: &int_array = [int_array|0; 8];
 
 #[export = "caml_get_public_method"]
 fn caml_get_public_method(obj: &eq, x: &eq, x_2: &eq) -> &eq {
-    let meths: &block = (obj as &block)[1] as &block;
-    let tag_2: i32 = x as &i31 as i32_s;
-    let cacheid: i32 = x_2 as &i31 as i32_u;
-    let len: i32 = method_cache.length;
+    let meths = (obj as &block)[1] as &block;
+    let tag_2 = x as &i31 as i32_s;
+    let cacheid = x_2 as &i31 as i32_u;
+    let len = method_cache.length;
     if cacheid >=s len {
         'size: loop { len = len << 1; br_if 'size cacheid >=s len; }
-        let a: &int_array = [int_array|0; len];
+        let a = [int_array|0; len];
         a.copy(0, method_cache, 0, method_cache.length);
         method_cache = a;
     }
-    let ofs: i32 = method_cache[cacheid];
+    let ofs = method_cache[cacheid];
     if tag_2 == meths[ofs] as &i31 as i32_s { return meths[ofs - 1]; }
-    let li: i32 = 3;
-    let hi: i32 = (meths[1] as &i31 as i32_u << 1) + 1;
+    let li = 3;
+    let hi = (meths[1] as &i31 as i32_u << 1) + 1;
     'loop: loop {
         if li <u hi {
-            let mi: i32 = li + hi >>u 1 | 1;
+            let mi = li + hi >>u 1 | 1;
             if tag_2 <s meths[mi + 1] as &i31 as i32_s {
                 hi = mi - 2;
             } else { li = mi; }
@@ -349,7 +349,7 @@ let caml_oo_last_id: i32 = 0;
 
 #[export = "caml_set_oo_id"]
 fn caml_set_oo_id(x: &eq) -> &eq {
-    let id: i32 = caml_oo_last_id;
+    let id = caml_oo_last_id;
     (x as &block)[2] = id as &i31;
     caml_oo_last_id = id + 1;
     x;
@@ -357,7 +357,7 @@ fn caml_set_oo_id(x: &eq) -> &eq {
 
 #[export = "caml_fresh_oo_id"]
 fn caml_fresh_oo_id(x: &eq) -> &eq {
-    let id: i32 = caml_oo_last_id;
+    let id = caml_oo_last_id;
     caml_oo_last_id = id + 1;
     id as &i31;
 }

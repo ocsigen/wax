@@ -29,11 +29,11 @@ fn caml_format_int(x: &eq, x_2: &eq) -> &eq {
 
 #[export = "parse_sign_and_base"]
 fn parse_sign_and_base(s: &string) -> (i32, i32, i32, i32) {
-    let i: i32 = 0;
-    let len: i32 = s.length;
-    let signedness: i32 = 1;
-    let sign: i32 = 1;
-    let base: i32 = 10;
+    let i = 0;
+    let len = s.length;
+    let signedness = 1;
+    let sign = 1;
+    let base = 10;
     let c: i32;
     if len != 0 {
         c = s[0] as i32_u;
@@ -82,23 +82,23 @@ fn parse_digit(c: i32) -> i32 {
 
 #[export = "parse_int"]
 fn parse_int(v: &eq, nbits: i32, errmsg: &string) -> i32 {
-    let s: &string = v as &string;
-    let len: i32 = s.length;
+    let s = v as &string;
+    let len = s.length;
     if !len { caml_failwith(errmsg); }
     parse_sign_and_base(s);
-    let base: i32 = _;
-    let sign: i32 = _;
-    let signedness: i32 = _;
-    let i: i32 = _;
-    let threshold: i32 = -1 /u base;
+    let base = _;
+    let sign = _;
+    let signedness = _;
+    let i = _;
+    let threshold = -1 /u base;
     if i >=s len { caml_failwith(errmsg); }
-    let d: i32 = parse_digit(s[i] as i32_u);
+    let d = parse_digit(s[i] as i32_u);
     if d >=u base { caml_failwith(errmsg); }
-    let res: i32 = d;
+    let res = d;
     'loop: loop {
         i = i + 1;
         if i <s len {
-            let c: i32 = s[i] as i32_u;
+            let c = s[i] as i32_u;
             br_if 'loop c == 95 // '_'
             ;
             d = parse_digit(c);
@@ -132,7 +132,7 @@ fn caml_int_of_string(v: &eq) -> &eq {
 
 #[export = "caml_bswap16"]
 fn caml_bswap16(x: &eq) -> &eq {
-    let x_2: i32 = x as &i31 as i32_s;
+    let x_2 = x as &i31 as i32_s;
     ((x_2 & 0xFF) << 8 | x_2 >>u 8 & 0xFF) as &i31;
 }
 
@@ -148,9 +148,9 @@ fn format_int_default(d: i32) -> &eq {
     let negative: i32;
     let i: i32;
     if d <s 0 { negative = 1; i = 1; d = 0 - d; }
-    let n: i32 = d;
+    let n = d;
     'count: loop { i = i + 1; n = n /u 10; br_if 'count n; }
-    let s: &string = [string|0; i];
+    let s = [string|0; i];
     'write: loop {
         i = i - 1;
         s[i] = 48 + d %u 10;
@@ -165,8 +165,8 @@ data format_error = "format_int: bad format";
 
 #[export = "parse_int_format"]
 fn parse_int_format(s: &string) -> (i32, i32, i32, i32, i32) {
-    let len: i32 = s.length;
-    let i: i32 = 1;
+    let len = s.length;
+    let i = 1;
     let sign_style: i32;
     let alternate: i32;
     let base: i32;
@@ -177,7 +177,7 @@ fn parse_int_format(s: &string) -> (i32, i32, i32, i32, i32) {
             br_if 'bad_format len <u 2;
             br_if 'bad_format s[0] as i32_u != 37 // '%'
             ;
-            let c: i32 = s[1] as i32_u;
+            let c = s[1] as i32_u;
             if
                 c == 43 // '+'
             {
@@ -259,7 +259,7 @@ fn parse_int_format(s: &string) -> (i32, i32, i32, i32, i32) {
 
 #[export = "format_int"]
 fn format_int(x: &eq, d: i32, small: i32) -> &eq {
-    let s: &string = x as &string;
+    let s = x as &string;
     if s.length == 2 {
         if
             s[1] as i32_u == 100 // 'd'
@@ -268,11 +268,11 @@ fn format_int(x: &eq, d: i32, small: i32) -> &eq {
         }
     }
     parse_int_format(s);
-    let uppercase: i32 = _;
-    let base: i32 = _;
-    let signed: i32 = _;
-    let alternate: i32 = _;
-    let sign_style: i32 = _;
+    let uppercase = _;
+    let base = _;
+    let signed = _;
+    let alternate = _;
+    let sign_style = _;
     let negative: i32;
     if d <s 0 {
         if signed {
@@ -280,14 +280,14 @@ fn format_int(x: &eq, d: i32, small: i32) -> &eq {
             d = 0 - d;
         } else { if small { d = d & 0x7fffffff; } }
     }
-    let n: i32 = d;
+    let n = d;
     let i: i32;
     'count: loop { i = i + 1; n = n /u base; br_if 'count n; }
     if negative | sign_style { i = i + 1; }
     if alternate {
         if d { if base == 16 { i = i + 2; } if base == 8 { i = i + 1; } }
     }
-    let chars: &chars = uppercase?uppercase_hex_table:lowercase_hex_table;
+    let chars = uppercase?uppercase_hex_table:lowercase_hex_table;
     s = [string|0; i];
     'write: loop {
         i = i - 1;
