@@ -5,6 +5,12 @@ module Uint32 = Utils.Uint32
 module Cond = Wasm.Cond_solver
 module StringMap = Map.Make (String)
 
+(* Raised by [Sequence.get] for a numeric field reference in a module with
+   conditional annotations: the field's index depends on which branch is taken,
+   so it cannot be resolved to a single Wax name. Caught in [module_] and
+   reported as a located diagnostic. *)
+exception Numeric_ref_in_conditional of Wasm.Ast.location
+
 module Sequence = struct
   type t = {
     index_mapping : (Uint32.t, string) Hashtbl.t;
@@ -83,12 +89,7 @@ module Sequence = struct
         (match idx.desc with
         | Num n ->
             if seq.forbid_numeric then
-              failwith
-                (Printf.sprintf
-                   "Numeric references to module fields are not supported in a \
-                    module with conditional annotations (index %s); use a \
-                    symbolic $name."
-                   (Uint32.to_string n));
+              raise (Numeric_ref_in_conditional idx.Ast.info);
             Hashtbl.find seq.index_mapping n
         | Id id -> Hashtbl.find seq.label_mapping id);
     }
@@ -2250,80 +2251,91 @@ let rec count_memories fields =
     0 fields
 
 let module_ diagnostics (_, fields) =
-  let forbid_numeric = module_has_conditional fields in
-  (* Loads/stores reference the memory implicitly by index 0. When the module
+  try
+    let forbid_numeric = module_has_conditional fields in
+    (* Loads/stores reference the memory implicitly by index 0. When the module
      has a single memory that numeric reference is unambiguous (even if the
      memory itself sits in a conditional branch), so numeric memory references
      are allowed; with several memories, indices may shift across branches like
      any other field, so the general constraint stands. *)
-  let forbid_numeric_memory = forbid_numeric && count_memories fields > 1 in
-  let ctx =
-    let common_namespace = Namespace.make () in
-    {
-      diagnostics;
-      types = Sequence.make ~forbid_numeric (Namespace.make ~kind:`Type ()) "t";
-      struct_fields = Hashtbl.create 16;
-      globals = Sequence.make ~forbid_numeric common_namespace "g";
-      functions = Sequence.make ~forbid_numeric common_namespace "f";
-      memories =
-        Sequence.make ~forbid_numeric:forbid_numeric_memory common_namespace "m";
-      tables = Sequence.make ~forbid_numeric common_namespace "t";
-      tags = Sequence.make ~forbid_numeric (Namespace.make ()) "t";
-      datas = Sequence.make ~forbid_numeric (Namespace.make ()) "d";
-      elems = Sequence.make ~forbid_numeric (Namespace.make ()) "e";
-      referenced_elems = Hashtbl.create 16;
-      type_defs = CondTbl.make ();
-      implicit_types = Hashtbl.create 16;
-      function_types = CondTbl.make ();
-      tag_types = CondTbl.make ();
-      exports = Hashtbl.create 16;
-      locals = Sequence.make common_namespace "x";
-      labels = LabelStack.make ();
-      label_arities = [];
-      return_arity = 0;
-      cond_env = Cond.create ();
-      cond_diag = Utils.Diagnostic.collector ();
-      cond_asm = Cond.true_;
-    }
-  in
-  let export_tbl, export_lst = collect_exports fields in
-  register_names ctx export_tbl fields;
-  if not forbid_numeric then elaborate_implicit_types ctx fields;
-  List.iter
-    (fun (kind, index, name) ->
-      let k =
-        ( kind,
-          (idx ctx
-             (match (kind : Src.exportable) with
-             | Func -> `Func
-             | Memory -> `Mem
-             | Table -> `Table
-             | Tag -> `Tag
-             | Global -> `Global)
-             index)
-            .desc )
-      in
-      let l =
-        name
-        ::
-        (match Hashtbl.find_opt ctx.exports k with
-        | None -> []
-        | Some l -> l)
-      in
-      Hashtbl.replace ctx.exports k l)
-    export_lst;
-  (* Record which element segments are referenced by table.init / elem.drop /
+    let forbid_numeric_memory = forbid_numeric && count_memories fields > 1 in
+    let ctx =
+      let common_namespace = Namespace.make () in
+      {
+        diagnostics;
+        types =
+          Sequence.make ~forbid_numeric (Namespace.make ~kind:`Type ()) "t";
+        struct_fields = Hashtbl.create 16;
+        globals = Sequence.make ~forbid_numeric common_namespace "g";
+        functions = Sequence.make ~forbid_numeric common_namespace "f";
+        memories =
+          Sequence.make ~forbid_numeric:forbid_numeric_memory common_namespace
+            "m";
+        tables = Sequence.make ~forbid_numeric common_namespace "t";
+        tags = Sequence.make ~forbid_numeric (Namespace.make ()) "t";
+        datas = Sequence.make ~forbid_numeric (Namespace.make ()) "d";
+        elems = Sequence.make ~forbid_numeric (Namespace.make ()) "e";
+        referenced_elems = Hashtbl.create 16;
+        type_defs = CondTbl.make ();
+        implicit_types = Hashtbl.create 16;
+        function_types = CondTbl.make ();
+        tag_types = CondTbl.make ();
+        exports = Hashtbl.create 16;
+        locals = Sequence.make common_namespace "x";
+        labels = LabelStack.make ();
+        label_arities = [];
+        return_arity = 0;
+        cond_env = Cond.create ();
+        cond_diag = Utils.Diagnostic.collector ();
+        cond_asm = Cond.true_;
+      }
+    in
+    let export_tbl, export_lst = collect_exports fields in
+    register_names ctx export_tbl fields;
+    if not forbid_numeric then elaborate_implicit_types ctx fields;
+    List.iter
+      (fun (kind, index, name) ->
+        let k =
+          ( kind,
+            (idx ctx
+               (match (kind : Src.exportable) with
+               | Func -> `Func
+               | Memory -> `Mem
+               | Table -> `Table
+               | Tag -> `Tag
+               | Global -> `Global)
+               index)
+              .desc )
+        in
+        let l =
+          name
+          ::
+          (match Hashtbl.find_opt ctx.exports k with
+          | None -> []
+          | Some l -> l)
+        in
+        Hashtbl.replace ctx.exports k l)
+      export_lst;
+    (* Record which element segments are referenced by table.init / elem.drop /
      array.*_elem (recursing into conditional branches), so a declarative
      segment used this way is declared rather than dropped. *)
-  let rec collect_field (f : (_ Src.modulefield, _) Ast.annotated) =
-    match f.Ast.desc with
-    | Func { instrs; _ } ->
-        collect_elem_refs_instrs ctx ctx.referenced_elems instrs
-    | Module_if_annotation { then_fields; else_fields; _ } ->
-        List.iter collect_field then_fields;
-        Option.iter (List.iter collect_field) else_fields
-    | _ -> ()
-  in
-  List.iter collect_field fields;
-  Sink_let.module_
-    (List.filter_map (fun f -> modulefield ctx export_tbl f) fields)
+    let rec collect_field (f : (_ Src.modulefield, _) Ast.annotated) =
+      match f.Ast.desc with
+      | Func { instrs; _ } ->
+          collect_elem_refs_instrs ctx ctx.referenced_elems instrs
+      | Module_if_annotation { then_fields; else_fields; _ } ->
+          List.iter collect_field then_fields;
+          Option.iter (List.iter collect_field) else_fields
+      | _ -> ()
+    in
+    List.iter collect_field fields;
+    Sink_let.module_
+      (List.filter_map (fun f -> modulefield ctx export_tbl f) fields)
+  with Numeric_ref_in_conditional location ->
+    Utils.Diagnostic.report diagnostics ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.pp_print_string f
+          "Numeric references to module fields are not supported in a module \
+           with conditional annotations; use a symbolic $name.")
+      ();
+    Utils.Diagnostic.abort ()

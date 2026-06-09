@@ -51,10 +51,15 @@ Numeric references to module fields are refused when the module has a
 conditional annotation, since a field's index depends on which branch is taken.
 
   $ wax numref.wat -o out2.wax
-  wax: internal error, uncaught exception:
-       Failure("Numeric references to module fields are not supported in a module with conditional annotations (index 0); use a symbolic $name.")
-       
-  [125]
+  Error:
+    Numeric references to module fields are not supported in a module with conditional annotations; use a symbolic $name.
+   ──➤  numref.wat:5:31
+  3 │     (@then (func $a (result i32) (i32.const 1)))
+  4 │     (@else (func $a (result i32) (i32.const 2))))
+  5 │   (func $b (result i32) (call 0)))
+    ·                               ^
+  6 │ 
+  [128]
 
 
 A name declared with different arities in mutually-exclusive branches, but
