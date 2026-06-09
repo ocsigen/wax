@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-006ce041.js";
+            window.path_to_searchindex_js = "searchindex-acdbb4fa.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -1352,12 +1352,112 @@ m.load32(p, 1, 16);   // i32.load align=1 offset=16
 </div>
 <p>Operands are written in WebAssembly stack order, so the continuation reference is the last argument. The handler list in <code>[ ... ]</code> mirrors the <code>try ... catch [ ... ]</code> syntax: <code>tag -&gt; 'l</code> is an <code>(on $tag $l)</code> clause and <code>tag -&gt; switch</code> is an <code>(on $tag switch)</code> clause.</p>
 <p>Tags used with <code>suspend</code>/<code>resume</code> may have result types (unlike exception tags); see <a href="#tags-1">Tags</a>. When a function reference is passed to <code>cont_new</code> for a continuation whose function type belongs to a recursion group, declare the function with an explicit type (<code>fn f: ft (...) { ... }</code>) so its type matches the continuation’s.</p>
-<h2 id="unsupported-features"><a class="header" href="#unsupported-features">Unsupported Features</a></h2>
-<p>The following WebAssembly features do not have dedicated Wax syntax. When converting from WAT/WASM to Wax, these instructions are preserved as-is or may be dropped:</p>
-<ul>
-<li><strong>SIMD</strong>: All <code>v128</code> vector instructions. The <code>v128</code> type exists but operations are not exposed.</li>
-<li><strong>Tuples</strong>: <code>tuple.extract</code> (the multi-value/tuple proposal) has no dedicated syntax.</li>
-</ul>
+<h2 id="simd-vector-instructions"><a class="header" href="#simd-vector-instructions">SIMD (Vector) Instructions</a></h2>
+<p><code>v128</code> vector operations are written as method intrinsics with the lane shape baked into the name. The Wax name is the WebAssembly mnemonic with the leading shape moved to the end: <code>i32x4.add</code> becomes <code>add_i32x4</code>, <code>f32x4.sqrt</code> becomes <code>sqrt_f32x4</code>, and the whole-vector <code>v128.and</code> becomes <code>and_v128</code>. Signed/unsigned variants keep the <code>_s</code>/<code>_u</code> (<code>min_s_i8x16</code>, <code>extract_lane_u_i8x16</code>). Constant lane immediates (lane indices, shuffle indices) come first in the argument list, before any remaining stack operands.</p>
+<p>Lanewise unary and binary operations (the receiver is the first operand):</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Wasm</th><th>Wax</th></tr>
+</thead>
+<tbody>
+<tr><td><code>i32x4.add</code></td><td><code>a.add_i32x4(b)</code></td></tr>
+<tr><td><code>f32x4.mul</code></td><td><code>a.mul_f32x4(b)</code></td></tr>
+<tr><td><code>i8x16.min_s</code> / <code>i8x16.min_u</code></td><td><code>a.min_s_i8x16(b)</code> / <code>a.min_u_i8x16(b)</code></td></tr>
+<tr><td><code>i16x8.lt_u</code></td><td><code>a.lt_u_i16x8(b)</code></td></tr>
+<tr><td><code>i32x4.neg</code></td><td><code>v.neg_i32x4()</code></td></tr>
+<tr><td><code>f64x2.sqrt</code></td><td><code>v.sqrt_f64x2()</code></td></tr>
+<tr><td><code>i8x16.narrow_i16x8_s</code></td><td><code>a.narrow_i16x8_s_i8x16(b)</code></td></tr>
+<tr><td><code>f32x4.convert_i32x4_s</code></td><td><code>v.convert_i32x4_s_f32x4()</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>Whole-vector bitwise operations, bit selection (a free function):</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Wasm</th><th>Wax</th></tr>
+</thead>
+<tbody>
+<tr><td><code>v128.and</code> / <code>or</code> / <code>xor</code> / <code>andnot</code></td><td><code>a.and_v128(b)</code>, <code>a.or_v128(b)</code>, <code>a.xor_v128(b)</code>, <code>a.andnot_v128(b)</code></td></tr>
+<tr><td><code>v128.not</code></td><td><code>v.not_v128()</code></td></tr>
+<tr><td><code>v128.bitselect</code></td><td><code>v128_bitselect(a, b, mask)</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>Splat, lane access, and shuffle:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Wasm</th><th>Wax</th></tr>
+</thead>
+<tbody>
+<tr><td><code>i32x4.splat</code></td><td><code>x.splat_i32x4()</code></td></tr>
+<tr><td><code>i32x4.extract_lane</code></td><td><code>v.extract_lane_i32x4(lane)</code></td></tr>
+<tr><td><code>i8x16.extract_lane_u</code></td><td><code>v.extract_lane_u_i8x16(lane)</code></td></tr>
+<tr><td><code>i32x4.replace_lane</code></td><td><code>v.replace_lane_i32x4(lane, x)</code></td></tr>
+<tr><td><code>i8x16.shuffle</code></td><td><code>a.shuffle_i8x16(l0, ..., l15, b)</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>Shifts, tests, and bitmask:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Wasm</th><th>Wax</th></tr>
+</thead>
+<tbody>
+<tr><td><code>i16x8.shl</code></td><td><code>v.shl_i16x8(n)</code></td></tr>
+<tr><td><code>i32x4.shr_s</code> / <code>i32x4.shr_u</code></td><td><code>v.shr_s_i32x4(n)</code> / <code>v.shr_u_i32x4(n)</code></td></tr>
+<tr><td><code>v128.any_true</code></td><td><code>v.any_true_v128()</code></td></tr>
+<tr><td><code>i32x4.all_true</code></td><td><code>v.all_true_i32x4()</code></td></tr>
+<tr><td><code>i8x16.bitmask</code></td><td><code>v.bitmask_i8x16()</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>Constants are free functions (one argument per lane: 16, 8, 4, or 2). <code>v128.const</code> is a constant expression, so it may initialise a global:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Wasm</th><th>Wax</th></tr>
+</thead>
+<tbody>
+<tr><td><code>v128.const i32x4 1 2 3 4</code></td><td><code>v128_const_i32x4(1, 2, 3, 4)</code></td></tr>
+<tr><td><code>v128.const f32x4 1.5 2.5 3.5 4.5</code></td><td><code>v128_const_f32x4(1.5, 2.5, 3.5, 4.5)</code></td></tr>
+<tr><td><code>v128.const i8x16 0 1 ... 15</code></td><td><code>v128_const_i8x16(0, 1, ..., 15)</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>Memory loads and stores are methods on a <a href="#memories-1">memory</a>, like the scalar accesses above (the optional trailing <code>align</code>/<code>offset</code> arguments work the same way):</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Wax</th><th>Wasm</th></tr>
+</thead>
+<tbody>
+<tr><td><code>m.v128_load(p)</code></td><td><code>v128.load</code></td></tr>
+<tr><td><code>m.v128_store(p, v)</code></td><td><code>v128.store</code></td></tr>
+<tr><td><code>m.v128_load8x8_s(p)</code></td><td><code>v128.load8x8_s</code> (and <code>16x4</code>/<code>32x2</code>, <code>_s</code>/<code>_u</code>)</td></tr>
+<tr><td><code>m.v128_load32_zero(p)</code></td><td><code>v128.load32_zero</code> (and <code>64_zero</code>)</td></tr>
+<tr><td><code>m.v128_load8_splat(p)</code></td><td><code>v128.load8_splat</code> (and <code>16</code>/<code>32</code>/<code>64</code>)</td></tr>
+<tr><td><code>m.v128_load8_lane(p, v, lane)</code></td><td><code>v128.load8_lane</code> (and <code>16</code>/<code>32</code>/<code>64</code>)</td></tr>
+<tr><td><code>m.v128_store8_lane(p, v, lane)</code></td><td><code>v128.store8_lane</code> (and <code>16</code>/<code>32</code>/<code>64</code>)</td></tr>
+</tbody>
+</table>
+</div>
+<p>Relaxed-SIMD operations follow the same scheme:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Wasm</th><th>Wax</th></tr>
+</thead>
+<tbody>
+<tr><td><code>f32x4.relaxed_madd</code></td><td><code>a.relaxed_madd_f32x4(b, c)</code></td></tr>
+<tr><td><code>i8x16.relaxed_swizzle</code></td><td><code>a.relaxed_swizzle_i8x16(b)</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>These intrinsic names are reserved: when converting from WAT/WASM, a module entity whose name would collide with one is renamed (e.g. a function <code>$v128_bitselect</code> becomes <code>v128_bitselect_2</code>).</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="module-fields"><a class="header" href="#module-fields">Module Fields</a></h1>
 <p>Wax modules are defined by a sequence of top-level fields: types, functions, globals, tags, memories, and data segments.</p>
