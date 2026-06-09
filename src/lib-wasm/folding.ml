@@ -124,7 +124,7 @@ let lookup (tbl : _ Tbl.t) idx =
     match idx.Ast.desc with
     | Num i -> Uint32Map.find i tbl.by_index
     | Id i -> Tbl.resolve tbl i
-  with Not_found -> assert false (*ZZZ *)
+  with Not_found -> assert false
 
 type outer_env = {
   cctx : cond_ctx;
@@ -259,7 +259,7 @@ let functype_arity { params; results } =
 let type_arity env idx =
   match (lookup_type env idx).typ with
   | Func ty -> functype_arity ty
-  | Struct _ | Array _ | Cont _ -> assert false (*ZZZ*)
+  | Struct _ | Array _ | Cont _ -> assert false
 
 (* The function type underlying a continuation type [(cont $ft)]. *)
 let cont_functype env idx =
@@ -407,7 +407,7 @@ let arity env i =
   | StructNew t -> (
       match (lookup_type env t).typ with
       | Struct f -> (Array.length f, 1)
-      | Func _ | Array _ | Cont _ -> assert false (*ZZZ*))
+      | Func _ | Array _ | Cont _ -> assert false)
   | StructNewDefault _ -> (0, 1)
   | StructGet _ -> (1, 1)
   | StructSet _ -> (2, 0)
