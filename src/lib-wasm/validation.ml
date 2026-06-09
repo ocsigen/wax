@@ -142,31 +142,33 @@ module Error = struct
     | None ->
         Diagnostic.report context ~location ~severity:Error
           ~message:(fun f () ->
-            Format.fprintf f "Expected reference type but got type@ @[<2>%a@]."
+            Format.fprintf f
+              "Type mismatch: expected reference type but got type@ @[<2>%a@]."
               print_valtype ty)
           ()
     | Some location ->
         Diagnostic.report context ~location ~severity:Error
           ~message:(fun f () ->
             Format.fprintf f
-              "This instruction should return a reference type but has type@ \
-               @[<2>%a@]."
+              "Type mismatch: this instruction should return a reference type \
+               but has type@ @[<2>%a@]."
               print_valtype ty)
           ()
 
   let table_type_mismatch context ~location idx ty =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
-        Format.fprintf f "The table %a@ %a@ @[%a@]." print_index idx print_text
-          "should contain functions but its elements have type" print_valtype ty)
+        Format.fprintf f "Type mismatch: the table %a@ %a@ @[%a@]." print_index
+          idx print_text "should contain functions but its elements have type"
+          print_valtype ty)
       ()
 
   let elem_segment_type_mismatch context ~location elem_ty table_ty =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
-          "The element segment has type@ @[<2>%a@],@ which is not a subtype of \
-           the table element type@ @[<2>%a@]."
+          "Type mismatch: the element segment has type@ @[<2>%a@],@ which is \
+           not a subtype of the table element type@ @[<2>%a@]."
           print_valtype elem_ty print_valtype table_ty)
       ()
 
@@ -179,22 +181,24 @@ module Error = struct
   let type_mismatch context ~location ty' ty =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
-        Format.fprintf f "Expecting type@ @[<2>%a@]@ but got type@ @[<2>%a@]."
+        Format.fprintf f
+          "Type mismatch: expecting type@ @[<2>%a@]@ but got type@ @[<2>%a@]."
           print_valtype ty print_valtype ty')
       ()
 
   let br_cast_type_mismatch context ~location =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
-        Format.fprintf f "The first type must be a supertype of the second one.")
+        Format.fprintf f
+          "Type mismatch: the first type must be a supertype of the second one.")
       ()
 
   let select_type_mismatch context ~location ty1 ty2 =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
-          "Both branches of a select should have the same type.@ Here, they \
-           have type@ @[<2>%a@]@ and@ @[<2>%a@]."
+          "Type mismatch: both branches of a select should have the same \
+           type.@ Here, they have type@ @[<2>%a@]@ and@ @[<2>%a@]."
           print_valtype ty1 print_valtype ty2)
       ()
 
@@ -216,8 +220,8 @@ module Error = struct
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
-          "The default branch target@ %a@ expects@ %d@ parameters, while \
-           branch target@ %a@ expects@ %d@ parameters."
+          "Type mismatch: the default branch target@ %a@ expects@ %d@ \
+           parameters, while branch target@ %a@ expects@ %d@ parameters."
           print_index label len print_index label' len')
       ()
 
@@ -331,7 +335,8 @@ module Error = struct
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
-          "The type of the elements of this table must be nullable.")
+          "Type mismatch: the type of the elements of this table must be \
+           nullable.")
       ()
 
   let uninitialized_local context ~location idx =
@@ -390,7 +395,8 @@ module Error = struct
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
-          "Expecting a numeric or vector type but got type@ @[<2>%a@]."
+          "Type mismatch: expecting a numeric or vector type but got type@ \
+           @[<2>%a@]."
           print_valtype ty)
       ()
 
@@ -2708,8 +2714,8 @@ let validate_configuration diagnostics (_, fields) =
       tables = Sequence.make "table";
       globals = Sequence.make "global";
       tags = Sequence.make "tag";
-      data = Sequence.make "data";
-      elem = Sequence.make "elem";
+      data = Sequence.make "data segment";
+      elem = Sequence.make "elem segment";
       exports = Hashtbl.create 16;
       refs = Hashtbl.create 16;
     }
