@@ -196,23 +196,45 @@ This maps directly to Wasm's `select` instruction.
 
 ### Blocks
 
-A block is a sequence of expressions. The last expression is the block's value:
+A block groups a sequence of statements, written with `do`. (A bare `{ … }` is
+accepted as shorthand for `do { … }`.)
 
 ```wax
-{
+do {
     let x: i32;
     x = compute();
-    x + 1;
+    use(x);
 }
 ```
 
-Use `do` with a type annotation when the block returns a value:
+By default a block is **void**: it produces no value, so — like a function with
+no result type — its body must leave the operand stack empty.
+
+To make a block produce a value, give it a result type after `do`. The body
+must leave a value of that type on the stack, and that becomes the block's
+value:
 
 ```wax
-do i32 {
+answer = do i32 {
     42;
+};
+```
+
+This is a stack discipline, not a "last expression" rule: the body must leave
+*exactly* the values the block's type describes — no more, no less. A void
+block that leaves a value, or a `do i32` block that leaves two, is an error.
+
+A block type may also take parameters off the enclosing stack, using the full
+`(params) -> results` form:
+
+```wax
+do (i32) -> i32 {
+    // the i32 operand below the block is available here
 }
 ```
+
+Blocks can be labelled and used as branch targets; see
+[Labels and Branches](#labels-and-branches).
 
 ### If Expressions
 
