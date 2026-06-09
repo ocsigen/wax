@@ -202,6 +202,15 @@ type ctx = {
          [to_wasm] from ref.func usage), but one that is referenced this way
          needs an explicit declaration so the reference resolves. *)
   type_defs : Src.subtype CondTbl.t;
+  implicit_types : (Uint32.t, Src.functype) Hashtbl.t;
+      (* Function types that the WAT text format synthesises from inline
+         [(param)]/[(result)] signatures (the type-use abbreviation), keyed by
+         the type index they occupy. The source AST keeps such uses inline and
+         does not materialise them as [Types] fields, so this table is what lets
+         a numeric [(type N)] elsewhere resolve to the implicit type. These types
+         are anonymous: they are rendered inline ([&fn(..)] / an inline [sign]),
+         never as a named Wax type. Empty for modules with conditional
+         annotations, where numeric references are forbidden anyway. *)
   function_types : Src.typeuse CondTbl.t;
   exports : (Src.exportable * string, Src.name list) Hashtbl.t;
   locals : Sequence.t;
@@ -371,12 +380,24 @@ let conversion_error ctx ~location message =
 let functype_arity { Src.params; results } =
   (Array.length params, Array.length results)
 
+(* The implicit (anonymous) function type a numeric [(type N)] denotes, if [N]
+   was synthesised from an inline signature; [None] for a named/explicit type or
+   a symbolic reference. Consulted before the named-type tables so such a
+   reference resolves to its signature rather than raising. *)
+let implicit_functype ctx (idx : Src.idx) =
+  match idx.Ast.desc with
+  | Src.Num n -> Hashtbl.find_opt ctx.implicit_types n
+  | Id _ -> None
+
 let type_arity ctx idx =
-  match (lookup_type ctx Type idx).typ with
-  | Func ty -> functype_arity ty
-  | Struct _ | Array _ | Cont _ ->
-      conversion_error ctx ~location:idx.Ast.info (fun f () ->
-          Format.fprintf f "This type should be a function type.")
+  match implicit_functype ctx idx with
+  | Some ty -> functype_arity ty
+  | None -> (
+      match (lookup_type ctx Type idx).typ with
+      | Func ty -> functype_arity ty
+      | Struct _ | Array _ | Cont _ ->
+          conversion_error ctx ~location:idx.Ast.info (fun f () ->
+              Format.fprintf f "This type should be a function type."))
 
 let typeuse_arity ctx (i, ty) =
   match (i, ty) with
@@ -803,24 +824,27 @@ let indirect_callee ctx with_loc tab ((tyidx, sign) : Src.typeuse) index =
   let tabget =
     with_loc (Ast.ArrayGet (with_loc (Ast.Get (idx ctx `Table tab)), index))
   in
+  let inline_functype (s : Src.functype) : Ast.casttype =
+    let sign : Ast.functype =
+      {
+        params = Array.map (fun (_, t) -> (None, valtype ctx t)) s.params;
+        results = Array.map (fun t -> valtype ctx t) s.results;
+      }
+    in
+    Ast.Functype { nullable = true; sign }
+  in
   let cast_type : Ast.casttype option =
-    match tyidx with
-    | Some ti ->
-        Some
-          (Ast.Valtype
-             (Ast.Ref { nullable = true; typ = Ast.Type (idx ctx `Type ti) }))
-    | None ->
-        Option.map
-          (fun (s : Src.functype) ->
-            let sign : Ast.functype =
-              {
-                params =
-                  Array.map (fun (_, t) -> (None, valtype ctx t)) s.params;
-                results = Array.map (fun t -> valtype ctx t) s.results;
-              }
-            in
-            Ast.Functype { nullable = true; sign })
-          sign
+    match Option.bind tyidx (implicit_functype ctx) with
+    | Some ft ->
+        (* Anonymous implicit type: no named type to reference, render inline. *)
+        Some (inline_functype ft)
+    | None -> (
+        match tyidx with
+        | Some ti ->
+            Some
+              (Ast.Valtype
+                 (Ast.Ref { nullable = true; typ = Ast.Type (idx ctx `Type ti) }))
+        | None -> Option.map inline_functype sign)
   in
   match cast_type with
   | Some ct -> with_loc (Ast.Cast (tabget, ct))
@@ -1564,23 +1588,26 @@ let bind_locals st l =
 
 let typeuse ctx ((typ, sign) : Src.typeuse) =
   let ns = Namespace.make () in
-  ( Option.map (fun i -> idx ctx `Type i) typ,
-    match (typ, sign) with
-    | _, None -> None
-    | _, Some { params; results } ->
-        Some
-          {
-            Ast.params =
-              Array.map
-                (fun (id, t) ->
-                  ( Option.map
-                      (fun id ->
-                        { id with Ast.desc = Namespace.add ns id.Ast.desc })
-                      id,
-                    valtype ctx t ))
-                params;
-            results = Array.map (fun t -> valtype ctx t) results;
-          } )
+  let signature ({ params; results } : Src.functype) : Ast.functype =
+    {
+      params =
+        Array.map
+          (fun (id, t) ->
+            ( Option.map
+                (fun id -> { id with Ast.desc = Namespace.add ns id.Ast.desc })
+                id,
+              valtype ctx t ))
+          params;
+      results = Array.map (fun t -> valtype ctx t) results;
+    }
+  in
+  match Option.bind typ (implicit_functype ctx) with
+  | Some ft ->
+      (* The reference points at an anonymous implicit type; there is no named
+         type to refer to, so render it inline. *)
+      (None, Some (signature (match sign with Some s -> s | None -> ft)))
+  | None ->
+      (Option.map (fun i -> idx ctx `Type i) typ, Option.map signature sign)
 
 let string_of_name (nm : Src.name) =
   { nm with desc = Ast.String (None, nm.desc) }
@@ -1692,9 +1719,17 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
                 Ast.params;
                 results = Array.map (fun t -> valtype ctx t) results;
               }
-          | Some idx, None -> (
-              match (lookup_type ctx Type idx).typ with
-              | Func { params; results } ->
+          | Some i, None -> (
+              let functype =
+                match implicit_functype ctx i with
+                | Some ft -> Some ft
+                | None -> (
+                    match (lookup_type ctx Type i).typ with
+                    | Func ft -> Some ft
+                    | Struct _ | Array _ | Cont _ -> None)
+              in
+              match functype with
+              | Some { params; results } ->
                   let params =
                     Array.map
                       (fun (id, t) ->
@@ -1713,10 +1748,16 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
                     Ast.params;
                     results = Array.map (fun t -> valtype ctx t) results;
                   }
-              | Struct _ | Array _ | Cont _ -> assert false)
+              | None -> assert false)
           | None, None -> assert false (* Should not happen *)
         in
-        let typ = Option.map (fun i -> idx ctx `Type i) (fst typ) in
+        (* An anonymous implicit type has no name to reference; the inline [sign]
+           above already carries its signature, so drop the named reference. *)
+        let typ =
+          match fst typ with
+          | Some i when Option.is_some (implicit_functype ctx i) -> None
+          | t -> Option.map (fun i -> idx ctx `Type i) t
+        in
         List.iter
           (fun e ->
             Sequence.register ctx.locals export_tbl None (fst e.Ast.desc) [])
@@ -1963,6 +2004,117 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
   in
   Option.map (fun desc -> { f with desc }) desc
 
+(* Structural equality on function types, ignoring parameter names and source
+   locations. Used to replicate the WAT type-use abbreviation, where an inline
+   signature reuses an identical existing type rather than minting a new one. *)
+let rec valtype_eq (a : Src.valtype) (b : Src.valtype) =
+  match (a, b) with
+  | I32, I32 | I64, I64 | F32, F32 | F64, F64 | V128, V128 -> true
+  | Ref x, Ref y -> x.nullable = y.nullable && heaptype_eq x.typ y.typ
+  | (I32 | I64 | F32 | F64 | V128 | Ref _), _ -> false
+
+and heaptype_eq (a : Src.heaptype) (b : Src.heaptype) =
+  match (a, b) with
+  | Type i, Type j -> (
+      match (i.Ast.desc, j.Ast.desc) with
+      | Num m, Num n -> Uint32.compare m n = 0
+      | Id s, Id t -> String.equal s t
+      | (Num _ | Id _), _ -> false)
+  | _ -> a = b
+
+let functype_eq (a : Src.functype) (b : Src.functype) =
+  let valtypes a = List.map snd (Array.to_list a) in
+  Array.length a.params = Array.length b.params
+  && Array.length a.results = Array.length b.results
+  && List.for_all2 valtype_eq (valtypes a.params) (valtypes b.params)
+  && List.for_all2 valtype_eq (Array.to_list a.results)
+       (Array.to_list b.results)
+
+let empty_functype : Src.functype = { params = [||]; results = [||] }
+
+(* Populate [ctx.implicit_types] with the function types the WAT text format
+   synthesises from inline [(param)]/[(result)] signatures. Explicit type
+   definitions occupy the low indices in source order; each inline signature
+   then reuses the lowest-indexed identical type, or appends a new one at the
+   end of the index space. This mirrors the spec's elaboration so that a numeric
+   [(type N)] referring to such a type resolves to the right signature.
+
+   Only called for modules without conditional annotations (where numeric
+   references are allowed); there the index space is unambiguous. *)
+let elaborate_implicit_types ctx fields =
+  let next = ref 0 in
+  (* Known function types by index, explicit ones first, then minted implicit
+     ones, used to decide whether an inline signature needs a fresh index. *)
+  let known = ref [] in
+  let record ft = known := (Uint32.of_int !next, ft) :: !known in
+  (* Phase 1: explicit type definitions, in source order. *)
+  List.iter
+    (fun (field : (_ Src.modulefield, _) Ast.annotated) ->
+      match field.desc with
+      | Types rectype ->
+          Array.iter
+            (fun e ->
+              (match (snd e.Ast.desc : Src.subtype).typ with
+              | Func ft -> record ft
+              | Struct _ | Array _ | Cont _ -> ());
+              incr next)
+            rectype
+      | _ -> ())
+    fields;
+  (* Phase 2: every inline signature, in source order, appended after the
+     explicit types. *)
+  let consider ((typ, sign) : Src.typeuse) =
+    match typ with
+    | Some _ -> () (* references an existing type; mints nothing *)
+    | None ->
+        let ft = Option.value sign ~default:empty_functype in
+        if not (List.exists (fun (_, ft') -> functype_eq ft ft') !known) then (
+          Hashtbl.replace ctx.implicit_types (Uint32.of_int !next) ft;
+          record ft;
+          incr next)
+  in
+  let blocktype = function Some (Src.Typeuse tu) -> consider tu | _ -> () in
+  let rec instr (i : _ Src.instr) =
+    match i.Ast.desc with
+    | CallIndirect (_, tu) | ReturnCallIndirect (_, tu) -> consider tu
+    | Block { typ; block; _ } | Loop { typ; block; _ } ->
+        blocktype typ;
+        instrs block
+    | If { typ; if_block; else_block; _ } ->
+        blocktype typ;
+        instrs if_block.Ast.desc;
+        instrs else_block.Ast.desc
+    | TryTable { typ; block; _ } ->
+        blocktype typ;
+        instrs block
+    | Try { typ; block; catches; catch_all; _ } ->
+        blocktype typ;
+        instrs block;
+        List.iter (fun (_, b) -> instrs b) catches;
+        Option.iter instrs catch_all
+    | Folded (i, l) ->
+        instr i;
+        instrs l
+    | _ -> ()
+  and instrs l = List.iter instr l in
+  List.iter
+    (fun (field : (_ Src.modulefield, _) Ast.annotated) ->
+      match field.desc with
+      | Func { typ; instrs = body; _ } ->
+          consider typ;
+          instrs body
+      | Import { desc = Func tu; _ } | Import { desc = Tag tu; _ } ->
+          consider tu
+      | Tag { typ; _ } -> consider typ
+      | Global { init; _ } -> instrs init
+      | Elem { init; _ } -> List.iter instrs init
+      | Table { init = Init_expr e; _ } -> instrs e
+      | Table { init = Init_segment l; _ } -> List.iter instrs l
+      | Types _ | Import _ | Memory _ | Table _ | Export _ | Start _ | Data _
+      | String_global _ | Module_if_annotation _ ->
+          ())
+    fields
+
 let register_names ctx export_tbl fields =
   (* Both passes recurse into the branches of a conditional, in the same order
      the converter visits them, so positional naming stays aligned. *)
@@ -2121,6 +2273,7 @@ let module_ diagnostics (_, fields) =
       elems = Sequence.make ~forbid_numeric (Namespace.make ()) "e";
       referenced_elems = Hashtbl.create 16;
       type_defs = CondTbl.make ();
+      implicit_types = Hashtbl.create 16;
       function_types = CondTbl.make ();
       tag_types = CondTbl.make ();
       exports = Hashtbl.create 16;
@@ -2135,6 +2288,7 @@ let module_ diagnostics (_, fields) =
   in
   let export_tbl, export_lst = collect_exports fields in
   register_names ctx export_tbl fields;
+  if not forbid_numeric then elaborate_implicit_types ctx fields;
   List.iter
     (fun (kind, index, name) ->
       let k =
