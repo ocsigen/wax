@@ -1,2 +1,4 @@
 (cram
- (deps %{bin:wax}))
+ (deps
+  %{bin:wax}
+  (glob_files_rec %{project_root}/docs/src/*.md)))
