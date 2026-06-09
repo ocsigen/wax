@@ -232,10 +232,16 @@ let wat_to_wasm ~input_file ~output_file ~validate ~color ~output_color:_
       Wasm.Wasm_output.module_ ~out_channel:oc ?opt_source_map_file
         wasm_ast_binary)
 
-let wasm_to_wasm ~input_file ~output_file ~validate:_validate ~color:_
+(* Parse a Wasm binary, reporting malformed input as a diagnostic (and exiting)
+   through the standard diagnostics machinery. *)
+let parse_wasm ~color ?filename text =
+  Utils.Diagnostic.run ~color ~source:None (fun d ->
+      Wasm.Wasm_parser.module_ d ?filename text)
+
+let wasm_to_wasm ~input_file ~output_file ~validate:_validate ~color
     ~output_color:_ ~fold_mode:_ ~source_map_file:opt_source_map_file =
   let text = with_open_in input_file In_channel.input_all in
-  let ast = Wasm.Wasm_parser.module_ text in
+  let ast = parse_wasm ~color ?filename:input_file text in
   (* if validate then Wasm.Validation.f ast; *)
   with_open_out output_file (fun oc ->
       Wasm.Wasm_output.module_ ~out_channel:oc ?opt_source_map_file ast)
@@ -244,7 +250,7 @@ let wasm_to_wat ~input_file ~output_file ~validate ~color ~output_color
     ~fold_mode ~source_map_file:opt_source_map_file =
   let _ = opt_source_map_file in
   let text = with_open_in input_file In_channel.input_all in
-  let binary_ast = Wasm.Wasm_parser.module_ text in
+  let binary_ast = parse_wasm ~color ?filename:input_file text in
   let text_ast = Wasm.Binary_to_text.module_ binary_ast in
   if validate then
     Utils.Diagnostic.run ~color ~source:None (fun d ->
@@ -256,7 +262,7 @@ let wasm_to_wax ~input_file ~output_file ~validate ~color ~output_color
     ~fold_mode:_ ~source_map_file:opt_source_map_file =
   let _ = opt_source_map_file in
   let text = with_open_in input_file In_channel.input_all in
-  let binary_ast = Wasm.Wasm_parser.module_ text in
+  let binary_ast = parse_wasm ~color ?filename:input_file text in
   let text_ast = Wasm.Binary_to_text.module_ binary_ast in
   if validate then
     Utils.Diagnostic.run ~color ~source:None (fun d ->

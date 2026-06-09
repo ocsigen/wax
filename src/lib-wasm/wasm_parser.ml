@@ -2,43 +2,69 @@ open Ast.Binary
 
 let header = "\000asm\001\000\000\000"
 
-let check_header file contents =
-  if
-    String.length contents < 8
-    || not (String.equal header (String.sub contents 0 8))
-  then failwith (file ^ " is not a Wasm binary file (bad magic)")
-
 type ch = {
   filename : string option;
   buf : string;
   mutable pos : int;
   limit : int;
   mutable has_data_count : bool;
+  diagnostics : Utils.Diagnostic.context;
 }
+
+let position ch pos =
+  {
+    Lexing.pos_fname = Option.value ~default:"-" ch.filename;
+    pos_lnum = 1;
+    pos_bol = 0;
+    pos_cnum = pos;
+  }
+
+(* Report a diagnostic anchored at byte offset [pos] (default: the current
+   position) and abort. Used for every malformed-input case, so the parser
+   never escapes through [assert false]/[failwith]. *)
+let error ?pos ch fmt =
+  let loc_start = position ch (match pos with Some p -> p | None -> ch.pos) in
+  Format.kasprintf
+    (fun msg ->
+      Utils.Diagnostic.report ch.diagnostics
+        ~location:{ Ast.loc_start; loc_end = position ch ch.pos }
+        ~severity:Error
+        ~message:(fun f () -> Format.pp_print_string f msg)
+        ();
+      Utils.Diagnostic.abort ())
+    fmt
+
+let check_header ch =
+  if ch.limit < 8 || not (String.equal header (String.sub ch.buf 0 8)) then
+    error ~pos:0 ch "not a WebAssembly binary file (invalid magic header)"
 
 let pos_in ch = ch.pos
 let seek_in ch pos = ch.pos <- pos
 
 let input_byte ch =
   let pos = ch.pos in
+  if pos >= ch.limit then error ch "unexpected end of input";
   ch.pos <- pos + 1;
   Char.code ch.buf.[pos]
 
-let peek_byte ch = Char.code ch.buf.[ch.pos]
+let peek_byte ch =
+  if ch.pos >= ch.limit then error ch "unexpected end of input";
+  Char.code ch.buf.[ch.pos]
 
 let really_input_string ch len =
   let pos = ch.pos in
+  if len < 0 || pos + len > ch.limit then error ch "unexpected end of input";
   ch.pos <- pos + len;
   String.sub ch.buf pos len
 
 let rec uint ?(n = 5) ch =
   let i = input_byte ch in
-  if n = 1 then assert (i < 16);
+  if n = 1 && i >= 16 then error ch "integer too large";
   if i < 128 then i else i - 128 + (uint ~n:(n - 1) ch lsl 7)
 
 let rec uint64_rec ?(n = 10) ch =
   let i = input_byte ch in
-  if n = 1 then assert (i < 2);
+  if n = 1 && i >= 2 then error ch "integer too large";
   if i < 128 then Int64.of_int i
   else
     Int64.add
@@ -49,29 +75,34 @@ let uint64 ch = Utils.Uint64.of_int64 (uint64_rec ch)
 
 let rec sint ?(n = 5) ch =
   let i = input_byte ch in
-  if n = 1 then assert (i < 8 || (i > 120 && i < 128));
+  if n = 1 && not (i < 8 || (i > 120 && i < 128)) then
+    error ch "integer too large";
   if i < 64 then i
   else if i < 128 then i - 128
   else i - 128 + (sint ~n:(n - 1) ch lsl 7)
 
 let rec sint32 ?(n = 5) ch =
   let i = Int32.of_int (input_byte ch) in
-  if n = 1 then (
-    assert (Int32.compare i 128l < 0);
-    let sign_bit = Int32.logand i 0x08l <> 0l in
-    let unused_bits = Int32.logand i 0x70l in
-    if sign_bit then assert (unused_bits = 0x70l) else assert (unused_bits = 0l));
+  (if n = 1 then
+     let sign_bit = Int32.logand i 0x08l <> 0l in
+     let unused_bits = Int32.logand i 0x70l in
+     if
+       Int32.compare i 128l >= 0
+       || if sign_bit then unused_bits <> 0x70l else unused_bits <> 0l
+     then error ch "integer too large");
   if Int32.compare i 64l < 0 then i
   else if Int32.compare i 128l < 0 then Int32.sub i 128l
   else Int32.add (Int32.sub i 128l) (Int32.shift_left (sint32 ~n:(n - 1) ch) 7)
 
 let rec sint64 ?(n = 10) ch =
   let i = Int64.of_int (input_byte ch) in
-  if n = 1 then (
-    assert (Int64.compare i 128L < 0);
-    let sign_bit = Int64.logand i 1L <> 0L in
-    let unused_bits = Int64.logand i 0x7EL in
-    if sign_bit then assert (unused_bits = 0x7EL) else assert (unused_bits = 0L));
+  (if n = 1 then
+     let sign_bit = Int64.logand i 1L <> 0L in
+     let unused_bits = Int64.logand i 0x7EL in
+     if
+       Int64.compare i 128L >= 0
+       || if sign_bit then unused_bits <> 0x7EL else unused_bits <> 0L
+     then error ch "integer too large");
   if Int64.compare i 64L < 0 then i
   else if Int64.compare i 128L < 0 then Int64.sub i 128L
   else Int64.add (Int64.sub i 128L) (Int64.shift_left (sint64 ~n:(n - 1) ch) 7)
@@ -111,8 +142,7 @@ let v128 ch = really_input_string ch 16
 
 let name ch =
   let s = really_input_string ch (uint ch) in
-  assert (String.is_valid_utf_8 s);
-  (*ZZZ*)
+  if not (String.is_valid_utf_8 s) then error ch "malformed UTF-8 encoding";
   s
 
 type section = { id : int; pos : int; size : int }
@@ -125,7 +155,7 @@ let next_section ch =
     Some { id; pos = pos_in ch; size }
 
 let skip_section (ch : ch) { pos; size; _ } =
-  assert (ch.pos <= pos + size);
+  if ch.pos > pos + size then error ch "section size mismatch";
   seek_in ch (pos + size)
 
 let heaptype ch =
@@ -146,7 +176,7 @@ let heaptype ch =
   | 0x68 -> Cont
   | 0x75 -> NoCont
   | _ ->
-      if i < 0 then failwith (Printf.sprintf "Unknown heaptype %x" i);
+      if i < 0 then error ch "unknown heap type %d" i;
       Type i
 
 let nullable typ = { nullable = true; typ }
@@ -169,7 +199,7 @@ let reftype i ch =
   | 0x75 -> nullable NoCont
   | 0x63 -> nullable (heaptype ch)
   | 0x64 -> { nullable = false; typ = heaptype ch }
-  | _ -> failwith (Printf.sprintf "Unknown reftype %x@." i)
+  | _ -> error ch "unknown reference type 0x%02x" i
 
 let reftype_first_byte ch = reftype (input_byte ch) ch
 let ref_i31 = Ref ref_i31
@@ -214,8 +244,7 @@ let fieldtype ch =
   let typ = storagetype ch in
   let c = input_byte ch in
   let mut =
-    match c with 0 -> false | 1 -> true | _ -> assert false
-    (*ZZZ*)
+    match c with 0 -> false | 1 -> true | _ -> error ch "malformed mutability"
   in
   { mut; typ }
 
@@ -224,14 +253,14 @@ let comptype i ch =
   | 0x5D -> (
       match heaptype ch with
       | Type i -> Cont i
-      | _ -> failwith "Invalid continuation type")
+      | _ -> error ch "invalid continuation type")
   | 0x5E -> Array (fieldtype ch)
   | 0x5F -> Struct (vec fieldtype ch)
   | 0x60 ->
       let params = vec valtype_first_byte ch in
       let results = vec valtype_first_byte ch in
       Func { params; results }
-  | c -> failwith (Printf.sprintf "Unknown comptype %d" c)
+  | c -> error ch "unknown composite type 0x%02x" c
 
 let supertype ch =
   match input_byte ch with
@@ -239,7 +268,7 @@ let supertype ch =
   | 1 ->
       let t = uint ch in
       Some t
-  | _ -> assert false
+  | _ -> error ch "malformed sub type"
 
 let subtype i ch =
   match i with
@@ -262,7 +291,7 @@ let type_section ch =
 
 let limits ch =
   let kind = input_byte ch in
-  assert (kind < 8);
+  if kind >= 8 then error ch "malformed limits flags";
   let address_type = if kind land 4 = 0 then `I32 else `I64 in
   let mi = uint64 ch in
   let ma = if kind land 1 = 0 then None else Some (uint64 ch) in
@@ -280,14 +309,14 @@ let typeidx ch = uint ch
 let globaltype ch =
   let typ = valtype_first_byte ch in
   let mut = input_byte ch in
-  assert (mut < 2);
+  if mut >= 2 then error ch "malformed mutability";
   { mut = mut <> 0; typ }
 
 let import ch =
   let module_ = name ch in
   let name = name ch in
   let d = uint ch in
-  if d > 4 then failwith (Printf.sprintf "Unknown import %x@." d);
+  if d > 4 then error ch "unknown import description 0x%02x" d;
   let map i = i in
   let importdesc =
     match d with
@@ -297,7 +326,7 @@ let import ch =
     | 3 -> Global (globaltype ch)
     | 4 ->
         let b = uint ch in
-        assert (b = 0);
+        if b <> 0 then error ch "malformed tag attribute";
         Tag (map (uint ch))
     | _ -> assert false
   in
@@ -315,7 +344,7 @@ let exportable_kind d : exportable =
 let export ch =
   let export_name = name ch in
   let d = uint ch in
-  if d > 4 then failwith (Printf.sprintf "Unknown export %x@." d);
+  if d > 4 then error ch "unknown export description 0x%02x" d;
   let idx = uint ch in
   let kind = exportable_kind d in
   { name = export_name; kind; index = idx }
@@ -324,22 +353,18 @@ let memarg ch =
   let a = uint ch in
   let o = uint64 ch in
   let m, a = if a land 0x40 <> 0 then (uint ch, a lxor 0x40) else (0, a) in
-  assert (a < 64);
+  if a >= 64 then error ch "malformed memory alignment";
   (m, { align = Utils.Uint64.of_int (1 lsl a); offset = o })
-
-let position ch pos =
-  {
-    Lexing.pos_fname = Option.value ~default:"-" ch.filename;
-    pos_lnum = 1;
-    pos_bol = 0;
-    pos_cnum = pos;
-  }
 
 let with_loc ch pos desc =
   {
     Ast.desc;
     info = { Ast.loc_start = position ch pos; loc_end = position ch ch.pos };
   }
+
+(* Consume the [end] opcode (0x0B) that terminates a block or expression. *)
+let expect_end ch =
+  if input_byte ch <> 0x0B then error ch "expected end opcode (0x0b)"
 
 let on_clause ch =
   match input_byte ch with
@@ -350,7 +375,7 @@ let on_clause ch =
   | 0x01 ->
       let tag = uint ch in
       OnSwitch tag
-  | c -> failwith (Printf.sprintf "Invalid on clause %d" c)
+  | c -> error ch "invalid on clause 0x%02x" c
 
 let resumetable ch =
   let n = uint ch in
@@ -373,12 +398,12 @@ and instruction ch =
     | 0x02 ->
         let typ = blocktype ch in
         let block = instructions ch [] in
-        assert (input_byte ch = 0x0B);
+        expect_end ch;
         Block { label = (); typ; block }
     | 0x03 ->
         let typ = blocktype ch in
         let block = instructions ch [] in
-        assert (input_byte ch = 0x0B);
+        expect_end ch;
         Loop { label = (); typ; block }
     | 0x04 ->
         let typ = blocktype ch in
@@ -386,7 +411,7 @@ and instruction ch =
         let else_block =
           if input_byte ch = 0x05 then (
             let b = instructions ch [] in
-            assert (input_byte ch = 0x0B);
+            expect_end ch;
             b)
           else []
         in
@@ -409,10 +434,10 @@ and instruction ch =
               loop_catches ((tag, body) :: catches)
           | 0x19 ->
               let body = instructions ch [] in
-              assert (input_byte ch = 0x0B);
+              expect_end ch;
               (List.rev catches, Some body)
-          | 0x18 -> failwith "Delegate not supported"
-          | c -> failwith (Printf.sprintf "Unexpected token in Try: 0x%02X" c)
+          | 0x18 -> error ch "delegate is not supported"
+          | c -> error ch "unexpected opcode 0x%02x in try block" c
         in
         let catches, catch_all = loop_catches [] in
         Try { label = (); typ; block; catches; catch_all }
@@ -483,12 +508,10 @@ and instruction ch =
               | 3 ->
                   let l = uint ch in
                   CatchAllRef l
-              | _ -> failwith "Invalid catch tag")
+              | _ -> error ch "invalid catch clause")
         in
         let block = instructions ch [] in
-        let c = input_byte ch in
-        if c <> 0x0B then Format.eprintf "%x@." c;
-        assert (c = 0x0B);
+        expect_end ch;
         TryTable { label = (); typ; catches; block }
     | 0x20 -> LocalGet (uint ch)
     | 0x21 -> LocalSet (uint ch)
@@ -774,7 +797,7 @@ and instruction ch =
         | 28 -> RefI31
         | 29 -> I31Get Signed
         | 30 -> I31Get Unsigned
-        | c -> failwith (Printf.sprintf "Unknown GC op %d" c))
+        | c -> error ch "unknown GC opcode %d" c)
     | 0xFC -> (
         match uint ch with
         | 0 -> UnOp (I32 (TruncSat (`F32, Signed)))
@@ -786,12 +809,12 @@ and instruction ch =
         | 6 -> UnOp (I64 (TruncSat (`F64, Signed)))
         | 7 -> UnOp (I64 (TruncSat (`F64, Unsigned)))
         | 8 ->
-            if not ch.has_data_count then failwith "data count section required";
+            if not ch.has_data_count then error ch "data count section required";
             let i = uint ch in
             let m = uint ch in
             MemoryInit (i, m)
         | 9 ->
-            if not ch.has_data_count then failwith "data count section required";
+            if not ch.has_data_count then error ch "data count section required";
             DataDrop (uint ch)
         | 10 ->
             let m_dst = uint ch in
@@ -810,11 +833,11 @@ and instruction ch =
         | 15 -> TableGrow (uint ch)
         | 16 -> TableSize (uint ch)
         | 17 -> TableFill (uint ch)
-        | c -> failwith (Printf.sprintf "Unknown 0xFC op %d" c))
-    | 0x05 -> failwith "Unexpected Else instruction"
-    | 0x07 -> failwith "Unexpected Catch instruction"
-    | 0x09 -> failwith "Unknown opcode 0x09"
-    | 0x0B -> failwith "Unexpected End instruction"
+        | c -> error ch "unknown 0xfc opcode %d" c)
+    | 0x05 -> error ch "unexpected else opcode"
+    | 0x07 -> error ch "unexpected catch opcode"
+    | 0x09 -> error ch "unknown opcode 0x09"
+    | 0x0B -> error ch "unexpected end opcode"
     | 0xFD -> (
         match uint ch with
         | 0 ->
@@ -1126,14 +1149,14 @@ and instruction ch =
         | 0x111 -> VecBinOp VecRelaxedQ15Mulr
         | 0x112 -> VecBinOp VecRelaxedDot
         | 0x113 -> VecTernOp VecRelaxedDotAdd
-        | c -> failwith (Printf.sprintf "Unknown SIMD opcode 0x%02X" c))
-    | c -> failwith (Printf.sprintf "Unknown opcode 0x%02X" c)
+        | c -> error ch "unknown SIMD opcode 0x%02x" c)
+    | c -> error ch "unknown opcode 0x%02x" c
   in
   with_loc ch pos desc
 
 let expr ch =
   let instrs = instructions ch [] in
-  if input_byte ch <> 0x0B then failwith "expr must end with 0x0B";
+  expect_end ch;
   instrs
 
 let elem ch =
@@ -1203,7 +1226,7 @@ let elem ch =
       let typ = reftype_first_byte ch in
       let init = Array.to_list (vec expr ch) in
       { typ; init; mode = Declare }
-  | _ -> failwith (Printf.sprintf "Unknown elem mode 0x%02X" mode_byte)
+  | _ -> error ch "unknown element segment kind 0x%02x" mode_byte
 
 let table ch =
   let next_byte = peek_byte ch in
@@ -1211,8 +1234,8 @@ let table ch =
     (* Case 2: 0x40 0x00 tabletype expr *)
     let marker = input_byte ch in
     let attribute = input_byte ch in
-    assert (marker = 0x40);
-    assert (attribute = 0x00);
+    if marker <> 0x40 || attribute <> 0x00 then
+      error ch "malformed table definition";
     let typ = tabletype ch in
     let expr = expr ch in
     { typ; expr = Some expr })
@@ -1229,16 +1252,15 @@ let code ch =
     let n = uint ch in
     let vec_locals ch =
       let n = uint ch in
-      assert (n <= 65535);
+      if n > 65535 then error ch "too many locals";
       count := !count + n;
-      assert (n <= 65535);
       let t = valtype_first_byte ch in
       List.init n (fun _ -> t)
     in
     List.flatten (Array.to_list (repeat n vec_locals ch))
   in
   let instrs = expr ch in
-  assert (pos_in ch = start_pos + size);
+  if pos_in ch <> start_pos + size then error ch "function body size mismatch";
   { locals; instrs }
 
 let data ch =
@@ -1255,7 +1277,7 @@ let data ch =
         let mem_idx = uint ch in
         let offset_expr = expr ch in
         Active (mem_idx, offset_expr)
-    | _ -> failwith (Printf.sprintf "Unknown data mode 0x%02X" mode_byte)
+    | _ -> error ch "unknown data segment kind 0x%02x" mode_byte
   in
   let init_len = uint ch in
   let init_str = really_input_string ch init_len in
@@ -1263,7 +1285,7 @@ let data ch =
 
 let tag ch =
   let b = input_byte ch in
-  assert (b = 0);
+  if b <> 0 then error ch "malformed tag attribute";
   typeidx ch
 
 let empty_names =
@@ -1288,7 +1310,7 @@ let name_map' f ch =
     Array.fold_left
       (fun last_idx (idx, _) ->
         (match last_idx with
-        | Some last when idx <= last -> failwith "name map not sorted"
+        | Some last when idx <= last -> error ch "name map not sorted"
         | _ -> ());
         Some idx)
       None arr
@@ -1308,20 +1330,20 @@ let indirect_name_map ch =
       (i, name_map ch))
     ch
 
-let module_ ?filename buf =
-  check_header "input" buf;
+let module_ diagnostics ?filename buf =
   let ch =
     {
       filename;
       buf;
-      pos = 8;
+      pos = 0;
       limit = String.length buf;
       has_data_count = false;
+      diagnostics;
     }
   in
+  check_header ch;
   let data_count = ref None in
   ch.pos <- 8;
-  (* Reset position after index scan *)
   let rec loop m last_section_order =
     match next_section ch with
     | None -> m
@@ -1336,7 +1358,7 @@ let module_ ?filename buf =
           | i -> i
         in
         if sect.id <> 0 && current_order <= last_section_order then
-          failwith "section out of order";
+          error ch "section out of order";
         let next_section_order =
           if sect.id = 0 then last_section_order else current_order
         in
@@ -1473,9 +1495,7 @@ let module_ ?filename buf =
                 (* Skip other custom sections *)
                 skip_section ch sect;
                 loop m next_section_order)
-        | _ -> assert false
-        (*            skip_section ch sect;
-            loop m*))
+        | _ -> error ch "malformed section id %d" sect.id)
   in
   let res =
     loop
@@ -1496,7 +1516,10 @@ let module_ ?filename buf =
       }
       0
   in
-  assert (
-    match !data_count with None -> true | Some n -> n = List.length res.data);
-  assert (List.length res.functions = List.length res.code);
+  (match !data_count with
+  | Some n when n <> List.length res.data ->
+      error ch "data count and data section have inconsistent lengths"
+  | _ -> ());
+  if List.length res.functions <> List.length res.code then
+    error ch "function and code section have inconsistent lengths";
   res

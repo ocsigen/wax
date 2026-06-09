@@ -217,6 +217,21 @@ let print_module ~color f m =
   let trivia = Hashtbl.create 0 in
   Utils.Printer.run f (fun p -> Wasm.Output.module_ p ~color ~trivia m)
 
+let null_formatter = Format.make_formatter (fun _ _ _ -> ()) (fun () -> ())
+
+(* Parse a Wasm binary, reporting a malformed-input diagnostic through the
+   standard [run] machinery (rendered to stderr, or discarded when [quiet]) and
+   returning [None] on failure. [run ~exit:false] flushes the diagnostic and
+   re-raises [Aborted] rather than exiting the process. *)
+let parse_binary ~color ?filename ?(quiet = false) txt =
+  let output = if quiet then null_formatter else Format.err_formatter in
+  match
+    Utils.Diagnostic.run ~color ~source:None ~exit:false ~output (fun d ->
+        Wasm.Wasm_parser.module_ d ?filename txt)
+  with
+  | m -> Some m
+  | exception Utils.Diagnostic.Aborted -> None
+
 let runtest filename _ =
   let quiet = not !all_errors in
   let color = !color in
@@ -235,15 +250,18 @@ let runtest filename _ =
               ( status,
                 ModuleParser.parse_from_string ~color ~filename txt |> fst,
                 Some txt )
-        | ((`Valid | `Invalid _) as status), `Binary txt ->
-            let m =
-              Wasm.Binary_to_text.module_
-                (Wasm.Wasm_parser.module_ ~filename txt)
-            in
-            (*
+        | ((`Valid | `Invalid _) as status), `Binary txt -> (
+            match parse_binary ~color ~filename txt with
+            | None ->
+                Format.eprintf "Parsing failed unexpectedly: %s@."
+                  (String.escaped txt);
+                None
+            | Some binary_ast ->
+                let m = Wasm.Binary_to_text.module_ binary_ast in
+                (*
             Format.eprintf "%a@." (print_module ~color:!color) m;
 *)
-            Some (status, m, None)
+                Some (status, m, None))
         | `Malformed _, `Parsed _ -> assert false
         | `Malformed reason, `Text txt ->
             let ok =
@@ -261,24 +279,29 @@ let runtest filename _ =
             if ok then
               Format.eprintf "Parsing should have failed (%s): %s@." reason txt;
             None
-        | `Malformed reason, `Binary txt ->
-            let ok =
-              in_child_process ~quiet (fun () ->
-                  let ast =
-                    Wasm.Binary_to_text.module_
-                      (Wasm.Wasm_parser.module_ ~filename txt)
-                  in
-                  Utils.Diagnostic.run ~color ~source:(Some txt) (fun d ->
-                      Wasm.Validation.check_syntax d ast;
-                      Wasm.Validation.f d ast);
-                  if false then
-                    Format.printf "@[<2>Result:@ %a@]@." (print_module ~color)
-                      ast)
-            in
-            if ok then
-              Format.eprintf "Parsing should have failed (%s): %s@." reason
-                (String.escaped txt);
-            None)
+        | `Malformed reason, `Binary txt -> (
+            match parse_binary ~color ~filename ~quiet txt with
+            | None ->
+                (* Parsing failed, as expected. The diagnostic is rendered
+                   above unless [quiet]. *)
+                if not quiet then
+                  Format.eprintf "(expected to be malformed: %s)@." reason;
+                None
+            | Some binary_ast ->
+                let ast = Wasm.Binary_to_text.module_ binary_ast in
+                let ok =
+                  in_child_process ~quiet (fun () ->
+                      Utils.Diagnostic.run ~color ~source:(Some txt) (fun d ->
+                          Wasm.Validation.check_syntax d ast;
+                          Wasm.Validation.f d ast);
+                      if false then
+                        Format.printf "@[<2>Result:@ %a@]@."
+                          (print_module ~color) ast)
+                in
+                if ok then
+                  Format.eprintf "Parsing should have failed (%s): %s@." reason
+                    (String.escaped txt);
+                None))
       lst
   in
   (* Serialization and reparsing *)
@@ -300,7 +323,7 @@ let runtest filename _ =
         (fun (status, m, _) ->
           match status with
           | `Invalid _ -> None
-          | `Valid ->
+          | `Valid -> (
               if false then (
                 prerr_endline " BEFORE";
                 Format.eprintf "@[%a@]@." (print_module ~color) m
@@ -313,13 +336,16 @@ let runtest filename _ =
               close_out out_channel;
               let text = read_file temp in
               Sys.remove temp;
-              let m =
-                Wasm.Binary_to_text.module_ (Wasm.Wasm_parser.module_ text)
-              in
-              if false then (
-                prerr_endline "AFTER ";
-                Format.eprintf "@[%a@]@." (print_module ~color) m);
-              Some (status, m, None))
+              match parse_binary ~color text with
+              | None ->
+                  Format.eprintf "Reparsing serialized binary failed.@.";
+                  None
+              | Some binary_ast ->
+                  let m = Wasm.Binary_to_text.module_ binary_ast in
+                  if false then (
+                    prerr_endline "AFTER ";
+                    Format.eprintf "@[%a@]@." (print_module ~color) m);
+                  Some (status, m, None)))
         lst
   in
   (* Validation *)
