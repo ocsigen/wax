@@ -17,8 +17,7 @@
 
 type block = [mut &eq];
 type function_1 = fn(&eq, &eq) -> &eq;
-type closure = open { f: &function_1 };
-/*(field i32)*/
+type closure = open { /*(field i32)*/ f: &function_1 };
 
 #[export = "caml_atomic_cas"]
 fn caml_atomic_cas(ref: &eq, o: &eq, n: &eq) -> &eq {

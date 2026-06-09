@@ -554,13 +554,16 @@ let comptype d ctx (ty : comptype) =
   | Struct fields ->
       let _ : StringSet.t =
         Array.fold_left
-          (fun s (name, _) ->
+          (fun s field ->
+            let name, _ = field.desc in
             if StringSet.mem name.desc s then
               Error.duplicated_field d ~location:name.info name;
             StringSet.add name.desc s)
           StringSet.empty fields
       in
-      let+@ fields = array_map_opt (fun (_, ty) -> fieldtype d ctx ty) fields in
+      let+@ fields =
+        array_map_opt (fun field -> fieldtype d ctx (snd field.desc)) fields
+      in
       (Struct fields : Internal.comptype)
   | Array field ->
       let+@ field = fieldtype d ctx field in
@@ -581,21 +584,25 @@ let subtype d ctx current { typ; supertype; final } =
   in
   { Internal.typ; supertype; final }
 
-let rectype d ctx ty = array_mapi_opt (fun i (_, ty) -> subtype d ctx i ty) ty
+let rectype d ctx ty =
+  array_mapi_opt (fun i elt -> subtype d ctx i (snd elt.desc)) ty
 
 let add_type d ctx ty =
   Array.iteri
-    (fun i (name, (typ : subtype)) -> Tbl.add d ctx.types name (lnot i, typ))
+    (fun i elt ->
+      let name, (typ : subtype) = elt.desc in
+      Tbl.add d ctx.types name (lnot i, typ))
     ty;
   match rectype d ctx ty with
   | None ->
       (* Remove temporary names on failure *)
-      Array.iter (fun (name, _) -> Tbl.remove ctx.types name) ty;
+      Array.iter (fun elt -> Tbl.remove ctx.types (fst elt.desc)) ty;
       None
   | Some ity ->
       let i' = Wasm.Types.add_rectype ctx.internal_types ity in
       Array.iteri
-        (fun i (name, (typ : subtype)) ->
+        (fun i elt ->
+          let name, (typ : subtype) = elt.desc in
           Tbl.override ctx.types name (i' + i, typ))
         ty;
       Some i'
@@ -1229,7 +1236,8 @@ let rec check_hole_order_rec ctx i n =
                       in
                       (* Reorder fields according to definition *)
                       Array.map
-                        (fun (name, _) -> StringMap.find name.desc field_map)
+                        (fun field ->
+                          StringMap.find (fst field.desc).desc field_map)
                         fields
                       |> Array.to_list
                   | None -> List.map snd l)
@@ -1420,7 +1428,9 @@ let anon_function_type ctx (sign : functype) =
   if Tbl.find_opt ctx.type_context.types name = None then
     ignore
       (add_type ctx.diagnostics ctx.type_context
-         [| (name, { supertype = None; typ = Func sign; final = true }) |]
+         [|
+           Ast.no_loc (name, { supertype = None; typ = Func sign; final = true });
+         |]
         : int option);
   name
 
@@ -2161,7 +2171,8 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
               ~provided:(List.length fields);
           let* fields' =
             Array.fold_left
-              (fun prev (name, (f : fieldtype)) ->
+              (fun prev field ->
+                let name, (f : fieldtype) = field.desc in
                 match
                   List.find_opt (fun (idx, _) -> name.desc = idx.desc) fields
                 with
@@ -2185,7 +2196,11 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       | None -> assert false (*ZZZ*)
       | Some ty ->
           let*! fields = lookup_struct_type ctx ty in
-          if not (Array.for_all (fun (_, ty) -> field_has_default ty) fields)
+          if
+            not
+              (Array.for_all
+                 (fun field -> field_has_default (snd field.desc))
+                 fields)
           then Error.not_defaultable ctx.diagnostics ~location:i.info;
           let*! typ =
             internalize ctx (Ref { nullable = false; typ = Type ty })
@@ -2202,7 +2217,8 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
             | Struct fields ->
                 let*@ typ =
                   Array.find_map
-                    (fun (nm, typ) ->
+                    (fun f ->
+                      let nm, typ = f.desc in
                       if nm.desc = field.desc then Some typ else None)
                     fields
                 in
@@ -2246,7 +2262,9 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
           let*! typ = lookup_struct_type ctx ty in
           match
             Array.find_map
-              (fun (nm, typ) -> if nm.desc = field.desc then Some typ else None)
+              (fun f ->
+                let nm, typ = f.desc in
+                if nm.desc = field.desc then Some typ else None)
               typ
           with
           | None ->
@@ -3562,12 +3580,13 @@ let fundecl ctx name typ sign =
             let+@ i =
               add_type ctx.diagnostics ctx.type_context
                 [|
-                  ( name,
-                    {
-                      supertype = None;
-                      typ = Func (funsig ctx sign);
-                      final = true;
-                    } );
+                  Ast.no_loc
+                    ( name,
+                      {
+                        supertype = None;
+                        typ = Func (funsig ctx sign);
+                        final = true;
+                      } );
                 |]
             in
             (i, name.desc)
@@ -3679,12 +3698,13 @@ let type_configuration diagnostics fields =
     let name = Ast.no_loc "<string>" in
     add_type ctx.diagnostics ctx.type_context
       [|
-        ( name,
-          {
-            supertype = None;
-            typ = Array { mut = true; typ = Packed I8 };
-            final = true;
-          } );
+        Ast.no_loc
+          ( name,
+            {
+              supertype = None;
+              typ = Array { mut = true; typ = Packed I8 };
+              final = true;
+            } );
       |]
   in
   let ctx =

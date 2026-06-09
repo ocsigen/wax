@@ -17,7 +17,7 @@ type ident = (string, location) annotated
 
 include module type of Wasm.Ast.Make_types (struct
   type idx = ident
-  type 'a annotated_array = (ident * 'a) array
+  type 'a annotated_array = (ident * 'a, location) annotated array
   type 'a opt_annotated_array = (ident option * 'a) array
 end)
 

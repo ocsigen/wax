@@ -1137,8 +1137,13 @@ let subtype s : Text.subtype =
     | Struct fields ->
         Struct
           (Array.map
-             (fun (name, { mut; typ }) ->
-               Ast.no_loc (Some name, { Text.Types.mut; typ = storagetype typ }))
+             (fun field ->
+               let name, { mut; typ } = field.desc in
+               {
+                 Ast.desc =
+                   (Some name, { Text.Types.mut; typ = storagetype typ });
+                 info = field.info;
+               })
              fields)
     | Array { mut; typ } -> Array { mut; typ = storagetype typ }
     | Cont idx -> Cont (index idx)
@@ -1198,7 +1203,8 @@ let module_ diagnostics types fields =
       match field.desc with
       | Type rectype ->
           Array.iter
-            (fun (idx, subtype) ->
+            (fun rt ->
+              let idx, subtype = rt.desc in
               let kind =
                 match subtype.typ with
                 | Func _ -> `Func
@@ -1209,7 +1215,7 @@ let module_ diagnostics types fields =
                 | Struct fields ->
                     let field_names =
                       Array.to_list
-                        (Array.map (fun (name, _) -> name.desc) fields)
+                        (Array.map (fun field -> (fst field.desc).desc) fields)
                     in
                     Hashtbl.add ctx.struct_fields idx.desc field_names;
                     `Struct
@@ -1375,7 +1381,9 @@ let module_ diagnostics types fields =
               | Type rectype ->
                   Text.Types
                     (Array.map
-                       (fun (idx, s) -> Ast.no_loc (Some idx, subtype s))
+                       (fun rt ->
+                         let idx, s = rt.desc in
+                         Ast.no_loc (Some idx, subtype s))
                        rectype)
               | Global { name; mut; typ; def; attributes } ->
                   let typ =

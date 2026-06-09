@@ -172,7 +172,11 @@ let raw_functype pp { params; results } =
     (fun pp (id, t) ->
       match id with
       | None -> valtype pp t
-      | Some _ -> print_typed_pat pp (id, Some t))
+      | Some name ->
+          (* Look the parameter's trivia up by its name location, so a comment
+             trailing it attaches here rather than bubbling to a sibling. *)
+          atomic_node pp (Some name.info) (fun () ->
+              print_typed_pat pp (id, Some t)))
     pp (Array.to_list params);
   if results <> [||] then (
     space pp ();
@@ -213,7 +217,12 @@ let comptype pp (t : comptype) =
       indent pp indent_level (fun () ->
           space pp ();
           list_commasep
-            (fun pp (nm, t) -> print_key_value pp nm.desc fieldtype t)
+            (fun pp field ->
+              let nm, t = field.desc in
+              (* Look the field's trivia up by its own location, so a trailing
+                 comment attaches to the whole field. *)
+              atomic_node pp (Some field.info) (fun () ->
+                  print_key_value pp nm.desc fieldtype t))
             pp (Array.to_list l));
       space pp ();
       punctuation pp "}"
@@ -226,7 +235,9 @@ let comptype pp (t : comptype) =
       space pp ();
       type_ pp s.desc
 
-let subtype pp (nm, { typ; supertype; final }) =
+let subtype pp field =
+  let nm, { typ; supertype; final } = field.desc in
+  atomic_node pp (Some field.info) @@ fun () ->
   hvbox pp (fun () ->
       let is_struct = match typ with Struct _ -> true | _ -> false in
       box pp (fun () ->

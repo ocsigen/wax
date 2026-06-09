@@ -307,7 +307,7 @@ field_name:
 | i = ident { i }
 
 structure_type_field:
-| x = field_name ":" t = field_type { (x, t) }
+| x = field_name ":" t = field_type { with_loc $sloc (x, t) }
 
 structure_type:
 | l = separated_list(",", structure_type_field) { l }
@@ -338,11 +338,13 @@ typedef:
 | TYPE name = type_name
   supertype = option(":" s = type_name { s })
   "=" op = boption(OPEN) typ = composite_type ";"
-    { (name, {typ; supertype; final = not op}) }
+    { with_loc $sloc (name, {typ; supertype; final = not op}) }
 
 rectype:
 | REC "{" l = list(typedef) "}" { with_loc $loc($1) (Array.of_list l) }
-| t = typedef { with_loc $sloc [|t|] }
+(* Reuse the typedef's own (already registered) location rather than register a
+   duplicate one for the same span, which would split trivia between them. *)
+| t = typedef { {desc = [|t|]; info = t.info} }
 
 attribute_expression: e = expression { e }
 

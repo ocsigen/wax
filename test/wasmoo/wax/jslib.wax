@@ -110,8 +110,7 @@ type float_array = [mut f64];
 type string = [mut i8];
 type js = { f: &?any };
 type function_1 = fn(&eq, &eq) -> &eq;
-type closure = open { f: &function_1 };
-/*(field i32)*/
+type closure = open { /*(field i32)*/ f: &function_1 };
 type function_2 = fn(&eq, &eq, &eq) -> &eq;
 type cps_closure = open { f: &function_2 };
 
@@ -389,10 +388,10 @@ fn caml_ojs_wrap_fun_arguments(x: &eq) -> &eq {
     become wrap(wrap_fun_arguments(wrap_callback_strict(1, x)));
 }
 
-#[export =
-    "caml_callback" // 0 ==> strict / 2 ==> unsafe
-    ]
-fn caml_callback(f: &eq, count: i32, args: &extern, kind: i32) -> &?any {
+#[export = "caml_callback"]
+fn caml_callback
+(f: &eq, count: i32, args: &extern, kind: i32 // 0 ==> strict / 2 ==> unsafe
+) -> &?any {
     let acc: &eq;
     let i: i32;
     let arg: &eq;

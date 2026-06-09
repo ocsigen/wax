@@ -14,7 +14,11 @@ type ident = (string, location) annotated
 
 include Wasm.Ast.Make_types (struct
   type idx = ident
-  type 'a annotated_array = (ident * 'a) array
+
+  (* Each element carries a source location spanning the whole entry (e.g. a
+     struct field [name: type]), so a trailing comment can attach to it even
+     when the name is absent or synthesized. *)
+  type 'a annotated_array = (ident * 'a, location) annotated array
   type 'a opt_annotated_array = (ident option * 'a) array
 end)
 

@@ -25,14 +25,11 @@
 
 (type $context
   (struct
-    (field $f (ref $int_array))
-    (field $f_2 (mut i64))
-    (field $f_3 (ref $int_array))
+    (field $f (ref $int_array)) ;; w
+    (field $f_2 (mut i64)) ;; len
+    (field $f_3 (ref $int_array)) ;; buffer
     (field $f_4 (ref $string)))
-) ;; w
-;; len
-;; buffer
-;; intermediate buffer
+) ;; intermediate buffer
 (func $caml_md5_string (export "caml_md5_string") (export "caml_md5_bytes")
   (param $x (ref eq)) (param $x_2 (ref eq)) (param $x_3 (ref eq))
   (result (ref eq))

@@ -32,10 +32,10 @@
 (type $block (array (mut (ref eq)))) (type $string (array (mut i8)))
 (type $float (struct (field $f f64))) (type $float_array (array (mut f64)))
 (type $function_1 (func (param (ref eq) (ref eq)) (result (ref eq))))
-(type $closure (sub (struct (field $f (ref $function_1))))) (;(field i32);)
+(type $closure (;(field i32);) (sub (struct (field $f (ref $function_1)))))
 (type $closure_last_arg
-  (sub $closure (struct (field $f (ref $function_1))))
-) (;(field i32);)
+  (sub $closure (;(field i32);) (struct (field $f (ref $function_1))))
+)
 (type $function_2
   (func (param (ref eq) (ref eq) (ref eq)) (result (ref eq)))
 ) (type $cps_closure (sub (struct (field $f (ref $function_2)))))

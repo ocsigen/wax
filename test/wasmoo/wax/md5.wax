@@ -24,14 +24,11 @@ type string = [mut i8];
 type int_array = [mut i32];
 
 type context = {
-    f: &int_array,
-    f_2: mut i64,
-    f_3: &int_array,
+    f: &int_array, // w
+    f_2: mut i64, // len
+    f_3: &int_array, // buffer
     f_4: &string
-}; // w
- // len
- // buffer
- // intermediate buffer
+}; // intermediate buffer
 #[export = "caml_md5_string"]
 #[export = "caml_md5_bytes"]
 fn caml_md5_string(x: &eq, x_2: &eq, x_3: &eq) -> &eq {

@@ -118,7 +118,7 @@
 (type $float_array (array (mut f64))) (type $string (array (mut i8)))
 (type $js (struct (field $f anyref)))
 (type $function_1 (func (param (ref eq) (ref eq)) (result (ref eq))))
-(type $closure (sub (struct (field $f (ref $function_1))))) (;(field i32);)
+(type $closure (;(field i32);) (sub (struct (field $f (ref $function_1)))))
 (type $function_2
   (func (param (ref eq) (ref eq) (ref eq)) (result (ref eq)))
 )
@@ -476,11 +476,12 @@
       (call $wrap_callback_strict (i32.const 1) (local.get $x))))
 )
 
-(func $caml_callback
-  (export "caml_callback" ;; 0 ==> strict / 2 ==> unsafe
-  )
+(func $caml_callback (export "caml_callback")
   (param $f (ref eq)) (param $count i32) (param $args (ref extern))
-  (param $kind i32) (result anyref)
+  (param
+    $kind ;; 0 ==> strict / 2 ==> unsafe
+    i32)
+  (result anyref)
   (local $acc (ref eq)) (local $i i32) (local $arg (ref eq))
   (local.set $acc (local.get $f))
   (if (i32.eq (local.get $kind) (i32.const 2))

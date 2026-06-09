@@ -166,16 +166,12 @@ type int_array = [mut i32];
 
 type bigarray: custom = {
     f: &custom_operations,
-    ba_data: mut &extern,
-    ba_dim: &int_array,
-    ba_num_dims: i8,
-    ba_kind: i8,
+    ba_data: mut &extern, // data
+    ba_dim: &int_array, // size in each dimension
+    ba_num_dims: i8, // number of dimensions
+    ba_kind: i8, // kind
     ba_layout: i8
-}; // data
- // size in each dimension
- // number of dimensions
- // kind
- // layout
+}; // layout
 fn bigarray_hash(x: &eq) -> i32 {
     let b: &bigarray;
     let h: i32;

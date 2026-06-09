@@ -42,7 +42,7 @@
 
 (type $block (array (mut (ref eq)))) (type $string (array (mut i8)))
 (type $function_1 (func (param (ref eq) (ref eq)) (result (ref eq))))
-(type $closure (sub (struct (field $f (ref $function_1))))) (;(field i32);)
+(type $closure (;(field i32);) (sub (struct (field $f (ref $function_1)))))
 (type $function_3
   (func (param (ref eq) (ref eq) (ref eq) (ref eq)) (result (ref eq)))
 )

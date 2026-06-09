@@ -214,7 +214,11 @@ type ctx = {
 
 let get_annot e = fst e.Ast.desc
 let get_type e = snd e.Ast.desc
-let annotated a t = (a, t)
+
+(* Build a located [annotated_array] element ([name : type] in a struct, or a
+   subtype in a rec group), keeping the source location so a trailing comment
+   attaches to the whole entry. *)
+let annotated loc a t = { Ast.desc = (a, t); info = loc }
 
 let idx ctx kind i =
   match kind with
@@ -286,12 +290,13 @@ let comptype st name (t : Src.comptype) : Ast.comptype =
       Struct
         (Array.mapi
            (fun i t ->
-             annotated
-               (Sequence.get seq
-                  (match get_annot t with
-                  | None -> Ast.no_loc (Src.Num (Uint32.of_int i))
-                  | Some id -> { id with desc = Id id.Ast.desc }))
-               (fieldtype st (get_type t)))
+             let id =
+               Sequence.get seq
+                 (match get_annot t with
+                 | None -> Ast.no_loc (Src.Num (Uint32.of_int i))
+                 | Some id -> { id with desc = Id id.Ast.desc })
+             in
+             annotated t.Ast.info id (fieldtype st (get_type t)))
            l)
   | Array t -> Array (fieldtype st t)
   | Cont i -> Cont (idx st `Type i)
@@ -307,7 +312,7 @@ let rectype st (t : Src.rectype) : Ast.rectype =
   Array.map
     (fun t ->
       let name = Sequence.get_current st.types in
-      annotated name (subtype st name.desc (get_type t)))
+      annotated t.Ast.info name (subtype st name.desc (get_type t)))
     t
 
 let globaltype st = muttype valtype st

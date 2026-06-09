@@ -693,22 +693,22 @@ type output_block = {
 };
 
 type extern_state = {
+    // Flags
     no_sharing: i32,
     user_provided_output: i32,
+    // Header information
     obj_counter: mut i32,
     size_32: mut i32,
     size_64: mut i32,
+    // Position of already marshalled objects
     pos_table: &any,
+    // Buffers
     buf: mut &string,
     pos: mut i32,
     limit: mut i32,
     output_first: &output_block,
     output_last: mut &output_block
 };
-// Flags
-// Header information
-// Position of already marshalled objects
-// Buffers
 
 fn init_extern_state
 (flags: &eq, output: &output_block, pos: i32, user_provided_output: i32) ->

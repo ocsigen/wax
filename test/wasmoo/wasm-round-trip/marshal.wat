@@ -780,22 +780,22 @@
 
 (type $extern_state
   (struct
+    ;; Flags
     (field $no_sharing i32)
     (field $user_provided_output i32)
+    ;; Header information
     (field $obj_counter (mut i32))
     (field $size_32 (mut i32))
     (field $size_64 (mut i32))
+    ;; Position of already marshalled objects
     (field $pos_table (ref any))
+    ;; Buffers
     (field $buf (mut (ref $string)))
     (field $pos (mut i32))
     (field $limit (mut i32))
     (field $output_first (ref $output_block))
     (field $output_last (mut (ref $output_block))))
 )
-;; Flags
-;; Header information
-;; Position of already marshalled objects
-;; Buffers
 
 (func $init_extern_state
   (param $flags (ref eq)) (param $output (ref $output_block))

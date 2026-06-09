@@ -41,8 +41,7 @@ fn resume_fiber(&?extern, &eq);
 type block = [mut &eq];
 type string = [mut i8];
 type function_1 = fn(&eq, &eq) -> &eq;
-type closure = open { f: &function_1 };
-/*(field i32)*/
+type closure = open { /*(field i32)*/ f: &function_1 };
 type function_3 = fn(&eq, &eq, &eq, &eq) -> &eq;
 type closure_3: closure = open { f: &function_1, f_2: &function_3 };
 

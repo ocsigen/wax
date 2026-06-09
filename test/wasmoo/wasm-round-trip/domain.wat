@@ -17,7 +17,7 @@
 
 (type $block (array (mut (ref eq))))
 (type $function_1 (func (param (ref eq) (ref eq)) (result (ref eq))))
-(type $closure (sub (struct (field $f (ref $function_1))))) (;(field i32);)
+(type $closure (;(field i32);) (sub (struct (field $f (ref $function_1)))))
 
 (func $caml_atomic_cas (export "caml_atomic_cas")
   (param $ref (ref eq)) (param $o (ref eq)) (param $n (ref eq))

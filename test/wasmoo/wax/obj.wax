@@ -31,10 +31,8 @@ type string = [mut i8];
 type float = { f: f64 };
 type float_array = [mut f64];
 type function_1 = fn(&eq, &eq) -> &eq;
-type closure = open { f: &function_1 };
-/*(field i32)*/
-type closure_last_arg: closure = open { f: &function_1 };
-/*(field i32)*/
+type closure = open { /*(field i32)*/ f: &function_1 };
+type closure_last_arg: closure = open { /*(field i32)*/ f: &function_1 };
 type function_2 = fn(&eq, &eq, &eq) -> &eq;
 type cps_closure = open { f: &function_2 };
 type cps_closure_last_arg: cps_closure = open { f: &function_2 };
