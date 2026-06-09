@@ -539,6 +539,18 @@ let rec instruction ret ctx i : location Text.instr list =
             folded loc (UnOp (I64 Ctz)) (instruction ret ctx instr_val)
         | "popcnt", I64 ->
             folded loc (UnOp (I64 Popcnt)) (instruction ret ctx instr_val)
+        | "extend8_s", I32 ->
+            folded loc (UnOp (I32 (ExtendS `_8)))
+              (instruction ret ctx instr_val)
+        | "extend16_s", I32 ->
+            folded loc (UnOp (I32 (ExtendS `_16)))
+              (instruction ret ctx instr_val)
+        | "extend8_s", I64 ->
+            folded loc (UnOp (I64 (ExtendS `_8)))
+              (instruction ret ctx instr_val)
+        | "extend16_s", I64 ->
+            folded loc (UnOp (I64 (ExtendS `_16)))
+              (instruction ret ctx instr_val)
         (* Float Unary *)
         | "abs", F32 ->
             folded loc (UnOp (F32 Abs)) (instruction ret ctx instr_val)

@@ -4,7 +4,12 @@
   (local $s (ref $string))
   (local.set $s (ref.cast (ref $string) (local.get $a)))
   (local.set $i (i32.add (local.get $i) (local.get $i)))
-  (unreachable)
+  (i32.extend16_s
+    (i32.or (array.get_u $string (local.get $s) (local.get $i))
+      (i32.shl
+        (array.get_u $string (local.get $s)
+          (i32.add (local.get $i) (i32.const 1)))
+        (i32.const 8))))
 ) (global $lex_buffer i32 (i32.const 2))
 (global $lex_buffer_len i32 (i32.const 3))
 (global $lex_start_pos i32 (i32.const 5))

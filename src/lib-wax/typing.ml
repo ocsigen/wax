@@ -1728,7 +1728,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
         | Valtype { typ = F64; _ }, "to_bits" ->
             Some (UnionFind.make (Valtype { typ = I64; internal = I64 }))
         | ( ((Number | Int | Valtype { typ = I32 | I64; _ }) as ty'),
-            ("clz" | "ctz" | "popcnt") ) ->
+            ("clz" | "ctz" | "popcnt" | "extend8_s" | "extend16_s") ) ->
             if ty' = Number then UnionFind.set ty Int;
             Some ty
         | ( ((Number | Float | Valtype { typ = F32 | F64; _ }) as ty'),

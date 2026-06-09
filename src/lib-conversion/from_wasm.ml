@@ -612,7 +612,10 @@ let int_un_op i0 sz (op : Src.int_un_op) =
                 if e' = None then e
                 else { e with desc = Ast.Cast (e, Valtype (inttype `I32)) }),
                Signedtype { typ = sz; signage = Signed; strict = false } ))
-    | ExtendS _ -> with_loc Unreachable (* ZZZ *))
+    | ExtendS `_8 ->
+        with_loc (StructGet (e (inttype sz), Ast.no_loc "extend8_s"))
+    | ExtendS `_16 ->
+        with_loc (StructGet (e (inttype sz), Ast.no_loc "extend16_s")))
 
 let int_bin_op i0 (op : Src.int_bin_op) =
   let with_loc (i : _ Ast.instr_desc) = { i0 with Ast.desc = i } in

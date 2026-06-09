@@ -24,7 +24,7 @@
   (local $s (ref $string))
   (local.set $s (ref.cast (ref $string) (local.get $a)))
   (local.set $i (i32.add (local.get $i) (local.get $i)))
-  (i32.extend8_s
+  (i32.extend16_s
     (i32.or (array.get_u $string (local.get $s) (local.get $i))
       (i32.shl
         (array.get_u $string (local.get $s)

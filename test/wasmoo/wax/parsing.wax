@@ -21,7 +21,7 @@ fn get(a: &eq, i: i32) -> i32 {
     let s: &string;
     s = a as &string;
     i = i + i;
-    unreachable;
+    (s[i] as i32_u | s[i + 1] as i32_u << 8).extend16_s;
 }
 let caml_parser_trace: i32 = 0;
 const ERRCODE: i32 = 256;
