@@ -210,6 +210,14 @@ module Error = struct
           output_inferred_type ty output_inferred_type ty')
       ()
 
+  let value_count_mismatch context ~location ~expected ~provided =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f
+          "This instruction provides %d value(s) but %d was/were expected."
+          provided expected)
+      ()
+
   let select_type_mismatch context ~location ty1 ty2 =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
@@ -989,15 +997,16 @@ let expression_type ctx i =
       Error.not_an_expression ctx.diagnostics ~location (Array.length typ);
       UnionFind.make Unknown
 
-let check_subtype ctx ty' ty =
-  let ok = subtype ctx ty' ty in
-  if not ok then
-    Format.eprintf "%a <: %a@." output_inferred_type ty' output_inferred_type ty;
-  assert ok
+let check_subtype ctx ~location ty' ty =
+  if not (subtype ctx ty' ty) then
+    Error.instruction_type_mismatch ctx.diagnostics ~location ty' ty
 
-let check_subtypes ctx types' types =
-  assert (Array.length types' = Array.length types);
-  Array.iter2 (fun ty' ty -> check_subtype ctx ty' ty) types' types
+let check_subtypes ctx ~location types' types =
+  if Array.length types' <> Array.length types then
+    Error.value_count_mismatch ctx.diagnostics ~location
+      ~expected:(Array.length types) ~provided:(Array.length types')
+  else
+    Array.iter2 (fun ty' ty -> check_subtype ctx ~location ty' ty) types' types
 
 let check_type ctx i ty =
   let ty' = expression_type ctx i in
@@ -1316,7 +1325,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       let body' = block ctx i.info label [||] results results body in
       let check_catch types label =
         let params = branch_target ctx label in
-        check_subtypes ctx types params
+        check_subtypes ctx ~location:i.info types params
       in
       List.iter
         (fun catch ->
@@ -1577,7 +1586,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
              (fun i ty -> check_type ctx i ty)
              (Array.of_list l') param_types);
           (let>@ returned_types = array_map_opt (internalize ctx) typ.results in
-           check_subtypes ctx returned_types ctx.return_types);
+           check_subtypes ctx ~location:i.info returned_types ctx.return_types);
           return_statement i (TailCall (i', l')) [||]
       | _ ->
           Format.eprintf "%a@." Output.instr i;
@@ -2094,7 +2103,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
         match i' with
         | Some i' ->
             let* i' = instruction ctx i' in
-            check_subtypes ctx (fst i'.info) params;
+            check_subtypes ctx ~location:i.info (fst i'.info) params;
             return (Some i')
         | None ->
             assert (params = [||]);
@@ -2104,15 +2113,15 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
   | Br_if (label, i') ->
       let* i' = instruction ctx i' in
       let ty, types = split_on_last_type i' in
-      check_subtype ctx ty
+      check_subtype ctx ~location:i.info ty
         (UnionFind.make (Valtype { typ = I32; internal = I32 }));
       let params = branch_target ctx label in
-      check_subtypes ctx types params;
+      check_subtypes ctx ~location:i.info types params;
       return_statement i (Br_if (label, i')) params
   | Br_table (labels, i') ->
       let* i' = instruction ctx i' in
       let ty, types = split_on_last_type i' in
-      check_subtype ctx ty
+      check_subtype ctx ~location:i.info ty
         (UnionFind.make (Valtype { typ = I32; internal = I32 }));
       let len = Array.length (branch_target ctx (List.hd labels)) in
       List.iter
@@ -2120,7 +2129,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
           let params = branch_target ctx label in
           assert (Array.length params = len);
           (*ZZZ*)
-          check_subtypes ctx types params)
+          check_subtypes ctx ~location:i.info types params)
         labels;
       return_statement i (Br_table (labels, i')) [||]
   | Br_on_null (idx, i') ->
@@ -2144,7 +2153,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
         | _ -> assert false (*ZZZ*)
       in
       let params = branch_target ctx idx in
-      check_subtypes ctx types params;
+      check_subtypes ctx ~location:i.info types params;
       return_statement i (Br_on_null (idx, i')) (Array.append params [| typ' |])
   | Br_on_non_null (idx, i') ->
       let* i' = instruction ctx i' in
@@ -2158,7 +2167,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
             typ = Ref { nullable = _; typ; _ };
             internal = Ref { nullable = _; typ = ityp; _ };
           } ->
-          check_subtypes ctx
+          check_subtypes ctx ~location:i.info
             (Array.append types
                [|
                  UnionFind.make
@@ -2181,7 +2190,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
        let typ =
          UnionFind.make (Valtype { typ = Ref ty; internal = Ref ityp })
        in
-       check_subtypes ctx (Array.append types [| typ |]) params);
+       check_subtypes ctx ~location:i.info (Array.append types [| typ |]) params);
       let*! typ1, typ2 =
         match UnionFind.find typ' with
         | Valtype { typ = Ref ty'; _ } ->
@@ -2213,7 +2222,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
         | _ -> assert false
       in
       let params = branch_target ctx label in
-      check_subtypes ctx (Array.append types [| typ2 |]) params;
+      check_subtypes ctx ~location:i.info (Array.append types [| typ2 |]) params;
       let typ =
         UnionFind.make (Valtype { typ = Ref ty; internal = Ref ityp })
       in
@@ -2237,7 +2246,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
          array_map_opt (fun (_, typ) -> internalize ctx typ) params
        in
        match i' with
-       | Some i' -> check_subtypes ctx (fst i'.info) types
+       | Some i' -> check_subtypes ctx ~location:i.info (fst i'.info) types
        | None -> assert (types = [||]));
       return_statement i (Throw (tag, i')) [||]
   | ThrowRef i' ->
@@ -2372,7 +2381,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
         match i' with
         | Some i' ->
             let* i' = instruction ctx i' in
-            check_subtypes ctx (fst i'.info) ctx.return_types;
+            check_subtypes ctx ~location:i.info (fst i'.info) ctx.return_types;
             return (Some i')
         | None ->
             assert (ctx.return_types = [||]);
@@ -2492,7 +2501,7 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
       let body' = block ctx i.info label params results results body in
       let check_catch types label =
         let params = branch_target ctx label in
-        check_subtypes ctx types params
+        check_subtypes ctx ~location:i.info types params
       in
       List.iter
         (fun catch ->
