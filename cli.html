@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-0f895a09.js";
+            window.path_to_searchindex_js = "searchindex-60234db7.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -236,6 +236,21 @@ files (see <a href="#formatting">Formatting</a>) and <code>check</code> validate
 </ul>
 </li>
 <li>
+<p><strong><code>-D</code></strong> <em>NAME[=VALUE]</em>, <strong><code>--define</code></strong> <em>NAME[=VALUE]</em></p>
+<ul>
+<li>Set a conditional-compilation variable, specializing <code>#[if(...)]</code> (Wax) and
+<code>(@if ...)</code> (WAT) annotations. A fully determined conditional is removed —
+its surviving branch is spliced in — and a partially determined one is kept
+with its condition simplified (the set variables substituted, the rest
+left). Comments inside a removed branch are dropped.</li>
+<li>The value kind is inferred: a bare <em>NAME</em> (or <code>NAME=true</code> / <code>NAME=false</code>)
+sets a boolean; <code>NAME=N.N.N</code> (three integers) sets a version; any other
+<code>NAME=VALUE</code> sets a string.</li>
+<li>Repeatable, to set several variables. Has no effect on Wasm binary input
+(which carries no conditionals).</li>
+</ul>
+</li>
+<li>
 <p><strong><code>--color</code></strong> <em>WHEN</em></p>
 <ul>
 <li>Colorize output.</li>
@@ -276,6 +291,9 @@ files (see <a href="#formatting">Formatting</a>) and <code>check</code> validate
 </code></pre>
 <p><strong>Read from stdin and write to stdout:</strong></p>
 <pre><code class="language-sh">cat input.wax | wax -f wasm &gt; output.wasm
+</code></pre>
+<p><strong>Specialize conditional compilation while converting:</strong></p>
+<pre><code class="language-sh">wax input.wax -D debug=false -D ocaml_version=5.1.0 -D target=wasi -o output.wasm
 </code></pre>
 <h2 id="formatting"><a class="header" href="#formatting">Formatting</a></h2>
 <p>The <code>format</code> subcommand reformats files in their own format (<code>.wat</code> → <code>.wat</code>,

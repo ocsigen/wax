@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-0f895a09.js";
+            window.path_to_searchindex_js = "searchindex-60234db7.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -597,6 +597,7 @@ const caml_marshal_header_size: i32 = 20;
 }
 </code></pre>
 <p>The conditions are <strong>not evaluated</strong> by the compiler; they are preserved for a downstream preprocessor. The <code>#[if]</code> and <code>#[else]</code> branches are <strong>mutually exclusive</strong> — they never coexist — so, for instance, the same name may be defined in both.</p>
+<p>Variables can be given values on the command line with <a href="cli.html"><code>-D</code>/<code>--define</code></a>, which specializes the conditionals: a condition that becomes fully determined causes its conditional to be removed (the surviving branch is spliced in), and one that still mentions unset variables is kept with its condition simplified. For example, <code>wax -D debug=true</code> turns <code>#[if(all(debug, target = "wasi"))]</code> into <code>#[if(target = "wasi")]</code>, and <code>wax -D debug=false</code> removes that conditional altogether.</p>
 <p>When type checking is enabled (<code>--validate</code>), every reachable combination of conditions is checked independently. Because branches are mutually exclusive, a name defined in both the <code>#[if]</code> and <code>#[else]</code> branch is accepted. An error that occurs only under some conditions is reported together with the assumption that makes it reachable:</p>
 <pre><code>Error: Expecting type i32 but got type float.
  ──➤  example.wax:4:16
