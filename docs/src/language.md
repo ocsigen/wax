@@ -532,7 +532,10 @@ try {
 
 ## Holes
 
-Wax supports holes (`_`) as placeholders for values that can be inferred from earlier expressions in a sequence:
+A hole (`_`) is a placeholder for a value that an **earlier statement in the
+same sequence** has left on WebAssembly's implicit operand stack. It is the
+surface syntax for that stack flow: rather than naming an intermediate value,
+you leave a hole where it should be plugged in.
 
 ```wax
 fn example() -> i32 {
@@ -540,7 +543,55 @@ fn example() -> i32 {
 }
 ```
 
-This is useful for writing concise code where intermediate values flow naturally.
+Here the statements `1` and `2` each push a value; the two holes in `_ + _`
+consume them.
+
+**How many, and in what order.** The number of holes in an expression is the
+number of stack values it pulls in. They are filled **left-to-right with the
+stack values in the order those values were produced** — the earliest value
+fills the leftmost hole. Order therefore matters for non-commutative
+operators:
+
+```wax
+fn diff() -> i32 {
+    10; 20; _ - _;    // 10 - 20, not 20 - 10
+}
+```
+
+A single hole is common when combining one stacked value with an explicit
+operand:
+
+```wax
+fn add_one(x: i32) -> i32 {
+    x; _ + 1;
+}
+```
+
+**Holes must come first.** Within an expression, every hole must precede (in
+evaluation order) any explicit value-producing operand. Once a non-hole operand
+appears, no further holes may follow it. Explicit operands *after* all the holes
+are fine:
+
+```wax
+fn ok() -> i32 {
+    1; 2; _ + _ + 3;    // OK: the literal 3 comes after both holes
+}
+```
+
+but an explicit operand wedged *before* an unfilled hole is rejected:
+
+```wax
+fn bad() -> i32 {
+    2; 3; _ + 3 + _;    // Error: This expression occurs before a hole '_'.
+}
+```
+
+This restriction keeps holes unambiguous: they always refer to values already on
+the stack, never to operands appearing later in the expression.
+
+When decompiling WASM or WAT back to Wax, the compiler introduces holes wherever
+an instruction takes an operand from the stack instead of from a nested
+sub-expression, so this same mechanism round-trips stack-style code.
 
 ## Conditional Compilation
 
