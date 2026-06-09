@@ -123,6 +123,12 @@ Maps to:
 (tag $multi_arg (param i32) (param (ref $string)))
 ```
 
+A tag may also declare a result type, in which case it is used as a suspension tag for [stack switching](instructions.md#stack-switching-instructions) rather than for exceptions:
+
+```wax
+tag yield(value: i32) -> i32;
+```
+
 ### Imported Tags
 
 ```wax

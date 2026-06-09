@@ -37,9 +37,11 @@ Storage types are used in fields of structs and arrays to define packed data.
 | `array` | `array` |
 | `i31` | `i31` |
 | `exn` | `exn` |
+| `cont` | `cont` |
 | `noextern` | `noextern` |
 | `nofunc` | `nofunc` |
 | `noexn` | `noexn` |
+| `nocont` | `nocont` |
 | `none` | `none` |
 | `<typeidx>` | `<identifier>` | 
 
@@ -75,6 +77,15 @@ Maps to Wasm `(type $bytes (array i8))`.
 type binop = fn(_: i32, _: i32) -> i32
 ```
 Maps to Wasm `(type $binop (func (param i32 i32) (result i32)))`.
+### Continuations
+A continuation type (from the [stack-switching proposal](https://github.com/WebAssembly/stack-switching)) wraps a function type:
+```wax
+type ft = fn(i32) -> i32
+type k = cont ft
+```
+Maps to Wasm `(type $k (cont $ft))`. See [Stack Switching Instructions](instructions.md#stack-switching-instructions) for the operations on continuations.
+
+`cont` and `nocont` are reserved heap types (like `func`/`struct`), so the abstract continuation references `&cont`, `&?cont` and `&nocont` are available directly in addition to references to declared continuation types (`&k`, `&?k`). Because these names are reserved, a WebAssembly type literally named `$cont` is renamed (e.g. to `cont_2`) when decompiling to Wax.
 ### Supertypes and Finality
 
 Types are final by default. To make a type open (extensible), use the `open` keyword.

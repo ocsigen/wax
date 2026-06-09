@@ -173,6 +173,26 @@ if cond => (i32) -> i32 { ... } else { ... }
 
 The `try { ... } catch [ ... ]` syntax compiles to WebAssembly's `try_table` instruction (the current standard). The `try { ... } catch { tag => { ... } }` syntax compiles to the older `try`/`catch` instructions (deprecated but still supported for compatibility).
 
+## Stack Switching Instructions
+
+These correspond to the WebAssembly [stack-switching proposal](https://github.com/WebAssembly/stack-switching). A continuation type is declared with `type k = cont ft;` (see [Types](types.md)); `<k>` and `<tag>` below are the names of a continuation type and a tag respectively.
+
+| Wasm | Wax |
+|------|-----|
+| `cont.new $k` | `cont_new k (func)` |
+| `cont.bind $k1 $k2` | `cont_bind k1 k2 (args, cont)` |
+| `suspend $tag` | `suspend tag (args)` |
+| `resume $k` | `resume k [] (args, cont)` |
+| `resume $k (on $tag $l) ...` | `resume k [ tag -> 'l, ... ] (args, cont)` |
+| `resume $k (on $tag switch) ...` | `resume k [ tag -> switch, ... ] (args, cont)` |
+| `resume_throw $k $tag ...` | `resume_throw k tag [ ... ] (args, cont)` |
+| `resume_throw_ref $k ...` | `resume_throw_ref k [ ... ] (exn, cont)` |
+| `switch $k $tag` | `switch k tag (args, cont)` |
+
+Operands are written in WebAssembly stack order, so the continuation reference is the last argument. The handler list in `[ ... ]` mirrors the `try ... catch [ ... ]` syntax: `tag -> 'l` is an `(on $tag $l)` clause and `tag -> switch` is an `(on $tag switch)` clause.
+
+Tags used with `suspend`/`resume` may have result types (unlike exception tags); see [Tags](module_fields.md#tags). When a function reference is passed to `cont_new` for a continuation whose function type belongs to a recursion group, declare the function with an explicit type (`fn f: ft (...) { ... }`) so its type matches the continuation's.
+
 ## Unsupported Features
 
 The following WebAssembly features do not have dedicated Wax syntax. When converting from WAT/WASM to Wax, these instructions are preserved as-is or may be dropped:

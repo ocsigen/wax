@@ -226,6 +226,13 @@ let rec token_rec ctx lexbuf =
   | "catch" -> CATCH
   | "throw" -> THROW
   | "throw_ref" -> THROW_REF
+  | "cont_new" -> CONT_NEW
+  | "cont_bind" -> CONT_BIND
+  | "suspend" -> SUSPEND
+  | "resume" -> RESUME
+  | "resume_throw" -> RESUME_THROW
+  | "resume_throw_ref" -> RESUME_THROW_REF
+  | "switch" -> SWITCH
   | int -> INT (Sedlexing.Utf8.lexeme lexbuf)
   | float -> FLOAT (Sedlexing.Utf8.lexeme lexbuf)
   | ident -> IDENT (Sedlexing.Utf8.lexeme lexbuf)

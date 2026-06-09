@@ -575,6 +575,16 @@ let lookup_array_type ?location ctx name =
         ~location:(Option.value ~default:name.info location);
       None
 
+(* The name of the function type a continuation type wraps. *)
+let lookup_cont_inner ?location ctx name =
+  let*@ ty = Tbl.find_opt ctx.type_context.types name in
+  match (snd ty).typ with
+  | Cont ft -> Some ft
+  | Func _ | Struct _ | Array _ ->
+      Error.expected_func_type ctx.diagnostics
+        ~location:(Option.value ~default:name.info location);
+      None
+
 let top_heap_type ctx (t : heaptype) : heaptype option =
   match t with
   | Any | Eq | I31 | Struct | Array | None_ -> Some Any
@@ -989,6 +999,24 @@ let check_type ctx i ty =
     Error.instruction_type_mismatch ctx.diagnostics ~location:(snd i.info) ty'
       ty
 
+(* Check a list of typed operands against an array of expected types. *)
+let check_operands ctx l expected =
+  if Array.length expected = List.length l then
+    List.iter2 (fun i ty -> check_type ctx i ty) l (Array.to_list expected)
+
+(* Resolve the references in a [resume]/[resume_throw] handler table. The full
+   structural checks are performed on the compiled wasm by [Wasm.Validation]. *)
+let check_resume_handlers ctx handlers =
+  List.iter
+    (fun handler ->
+      match handler with
+      | OnLabel (tag, label) ->
+          ignore (Tbl.find ctx.diagnostics ctx.tags tag : functype option);
+          ignore (branch_target ctx label)
+      | OnSwitch tag ->
+          ignore (Tbl.find ctx.diagnostics ctx.tags tag : functype option))
+    handlers
+
 let rec count_holes i =
   match i.desc with
   | Hole -> 1
@@ -1015,12 +1043,20 @@ let rec count_holes i =
   | ArrayDefault (_, i)
   | Throw (_, Some i)
   | ThrowRef i
+  | ContNew (_, i)
   | Return (Some i)
   | StructGet (i, _) ->
       count_holes i
   | StructSet (i1, _, i2) -> count_holes i1 + count_holes i2
   | Struct (_, l) -> List.fold_left (fun acc (_, i) -> acc + count_holes i) 0 l
-  | Sequence l | ArrayFixed (_, l) ->
+  | Sequence l
+  | ArrayFixed (_, l)
+  | ContBind (_, _, l)
+  | Suspend (_, l)
+  | Resume (_, _, l)
+  | ResumeThrow (_, _, _, l)
+  | ResumeThrowRef (_, _, l)
+  | Switch (_, _, l) ->
       List.fold_left (fun acc i -> acc + count_holes i) 0 l
   | Select (c, t, e) -> count_holes c + count_holes t + count_holes e
   | Block _ | Loop _ | TryTable _ | Try _ | If_annotation _ | StructDefault _
@@ -1075,12 +1111,21 @@ let rec check_hole_order_rec ctx i n =
         | ArrayDefault (_, i)
         | Throw (_, Some i)
         | ThrowRef i
+        | ContNew (_, i)
         | Return (Some i)
         | StructGet (i, _) ->
             check_hole_order_rec ctx i n
         | StructSet (i1, _, i2) ->
             n |> check_hole_order_rec ctx i1 |> check_hole_order_rec ctx i2
-        | Sequence l | ArrayFixed (_, l) -> check_hole_order_in_list ctx l n
+        | Sequence l
+        | ArrayFixed (_, l)
+        | ContBind (_, _, l)
+        | Suspend (_, l)
+        | Resume (_, _, l)
+        | ResumeThrow (_, _, _, l)
+        | ResumeThrowRef (_, _, l)
+        | Switch (_, _, l) ->
+            check_hole_order_in_list ctx l n
         | Struct (_, l) ->
             let fields =
               match UnionFind.find (expression_type ctx i) with
@@ -2178,6 +2223,110 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       (let>@ typ = internalize ctx (Ref { nullable = true; typ = Exn }) in
        check_type ctx i' typ);
       return_statement i (ThrowRef i') [||]
+  | ContNew (ct, f) ->
+      let* f' = instruction ctx f in
+      let*! ft = lookup_cont_inner ctx ct in
+      (let>@ fref = internalize ctx (Ref { nullable = true; typ = Type ft }) in
+       check_type ctx f' fref);
+      let*! cref = internalize ctx (Ref { nullable = false; typ = Type ct }) in
+      return_expression i (ContNew (ct, f')) cref
+  | ContBind (src, dst, l) ->
+      let* l' = instructions ctx l in
+      let*! src_inner = lookup_cont_inner ctx src in
+      let*! src_sig = lookup_func_type ctx src_inner in
+      let*! dst_inner = lookup_cont_inner ctx dst in
+      let*! dst_sig = lookup_func_type ctx dst_inner in
+      (let n = Array.length src_sig.params - Array.length dst_sig.params in
+       let>@ bound =
+         array_map_opt
+           (fun (_, typ) -> internalize ctx typ)
+           (Array.sub src_sig.params 0 (max 0 n))
+       in
+       let>@ srcref =
+         internalize ctx (Ref { nullable = true; typ = Type src })
+       in
+       check_operands ctx l' (Array.append bound [| srcref |]));
+      let*! dstref =
+        internalize ctx (Ref { nullable = false; typ = Type dst })
+      in
+      return_expression i (ContBind (src, dst, l')) dstref
+  | Suspend (tag, l) ->
+      let* l' = instructions ctx l in
+      let*! { params; results } = Tbl.find ctx.diagnostics ctx.tags tag in
+      (let>@ ptypes =
+         array_map_opt (fun (_, typ) -> internalize ctx typ) params
+       in
+       check_operands ctx l' ptypes);
+      let*! rtypes = array_map_opt (internalize ctx) results in
+      return_statement i (Suspend (tag, l')) rtypes
+  | Resume (ct, handlers, l) ->
+      let* l' = instructions ctx l in
+      let*! inner = lookup_cont_inner ctx ct in
+      let*! sg = lookup_func_type ctx inner in
+      (let>@ ptypes =
+         array_map_opt (fun (_, typ) -> internalize ctx typ) sg.params
+       in
+       let>@ cref = internalize ctx (Ref { nullable = true; typ = Type ct }) in
+       check_operands ctx l' (Array.append ptypes [| cref |]));
+      check_resume_handlers ctx handlers;
+      let*! rtypes = array_map_opt (internalize ctx) sg.results in
+      return_statement i (Resume (ct, handlers, l')) rtypes
+  | ResumeThrow (ct, tag, handlers, l) ->
+      let* l' = instructions ctx l in
+      let*! inner = lookup_cont_inner ctx ct in
+      let*! sg = lookup_func_type ctx inner in
+      let*! { params = tparams; _ } = Tbl.find ctx.diagnostics ctx.tags tag in
+      (let>@ ptypes =
+         array_map_opt (fun (_, typ) -> internalize ctx typ) tparams
+       in
+       let>@ cref = internalize ctx (Ref { nullable = true; typ = Type ct }) in
+       check_operands ctx l' (Array.append ptypes [| cref |]));
+      check_resume_handlers ctx handlers;
+      let*! rtypes = array_map_opt (internalize ctx) sg.results in
+      return_statement i (ResumeThrow (ct, tag, handlers, l')) rtypes
+  | ResumeThrowRef (ct, handlers, l) ->
+      let* l' = instructions ctx l in
+      let*! inner = lookup_cont_inner ctx ct in
+      let*! sg = lookup_func_type ctx inner in
+      (let>@ exnref = internalize ctx (Ref { nullable = true; typ = Exn }) in
+       let>@ cref = internalize ctx (Ref { nullable = true; typ = Type ct }) in
+       check_operands ctx l' [| exnref; cref |]);
+      check_resume_handlers ctx handlers;
+      let*! rtypes = array_map_opt (internalize ctx) sg.results in
+      return_statement i (ResumeThrowRef (ct, handlers, l')) rtypes
+  | Switch (ct, tag, l) ->
+      let* l' = instructions ctx l in
+      let*! inner = lookup_cont_inner ctx ct in
+      let*! sg = lookup_func_type ctx inner in
+      ignore (Tbl.find ctx.diagnostics ctx.tags tag : functype option);
+      let np = Array.length sg.params in
+      (if np >= 1 then
+         let>@ lead =
+           array_map_opt
+             (fun (_, typ) -> internalize ctx typ)
+             (Array.sub sg.params 0 (np - 1))
+         in
+         let>@ cref =
+           internalize ctx (Ref { nullable = true; typ = Type ct })
+         in
+         check_operands ctx l' (Array.append lead [| cref |]));
+      (* The result is the parameter types of the continuation referenced by the
+         last parameter of [ct]'s function type. *)
+      let result_params =
+        match if np = 0 then None else Some (snd sg.params.(np - 1)) with
+        | Some (Ref { typ = Type ct2; _ }) -> (
+            match lookup_cont_inner ctx ct2 with
+            | Some inner2 -> (
+                match lookup_func_type ctx inner2 with
+                | Some s2 -> s2.params
+                | None -> [||])
+            | None -> [||])
+        | _ -> [||]
+      in
+      let*! rtypes =
+        array_map_opt (fun (_, typ) -> internalize ctx typ) result_params
+      in
+      return_statement i (Switch (ct, tag, l')) rtypes
   | NonNull i' -> (
       let* i' = instruction ctx i' in
       match UnionFind.find (expression_type ctx i') with
@@ -2554,8 +2703,9 @@ let rec check_constant_instruction ctx i =
   | Set _ | Tee _ | Call _ | TailCall _ | Cast _ | Test _ | NonNull _
   | StructGet _ | StructSet _ | ArrayGet _ | ArraySet _ | Let _ | Br _ | Br_if _
   | Br_table _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
-  | Br_on_cast_fail _ | Throw _ | ThrowRef _ | Return _ | Sequence _ | Select _
-  | If_annotation _ ->
+  | Br_on_cast_fail _ | Throw _ | ThrowRef _ | ContNew _ | ContBind _
+  | Suspend _ | Resume _ | ResumeThrow _ | ResumeThrowRef _ | Switch _
+  | Return _ | Sequence _ | Select _ | If_annotation _ ->
       Error.constant_expression_required ctx.diagnostics ~location
 
 type ('before, 'after) phased =
@@ -2870,6 +3020,13 @@ let rec instr_has_conditional (i : (_ instr_desc, _) annotated) =
       || Option.fold ~none:false ~some:any catch_all
   | Sequence l -> any l
   | ArrayFixed (_, l) -> any l
+  | ContBind (_, _, l)
+  | Suspend (_, l)
+  | Resume (_, _, l)
+  | ResumeThrow (_, _, _, l)
+  | ResumeThrowRef (_, _, l)
+  | Switch (_, _, l) ->
+      any l
   | Call (a, l) | TailCall (a, l) -> instr_has_conditional a || any l
   | Struct (_, l) -> List.exists (fun (_, i) -> instr_has_conditional i) l
   | BinOp (_, a, b) | Array (_, a, b) | ArrayGet (a, b) | StructSet (a, _, b) ->
@@ -2891,7 +3048,8 @@ let rec instr_has_conditional (i : (_ instr_desc, _) annotated) =
   | Br_on_non_null (_, i)
   | Br_on_cast (_, _, i)
   | Br_on_cast_fail (_, _, i)
-  | ThrowRef i ->
+  | ThrowRef i
+  | ContNew (_, i) ->
       instr_has_conditional i
   | Let (_, i) | Br (_, i) | Throw (_, i) | Return i -> opt i
   | Unreachable | Nop | Hole | Null | Get _ | Char _ | String _ | Int _
@@ -3006,6 +3164,14 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
     | Br_on_cast_fail (l, t, v) -> Br_on_cast_fail (l, t, sone asm v)
     | Throw (idx, v) -> Throw (idx, Option.map (sone asm) v)
     | ThrowRef v -> ThrowRef (sone asm v)
+    | ContNew (ct, v) -> ContNew (ct, sone asm v)
+    | ContBind (src, dst, l) -> ContBind (src, dst, List.map (sone asm) l)
+    | Suspend (tag, l) -> Suspend (tag, List.map (sone asm) l)
+    | Resume (ct, h, l) -> Resume (ct, h, List.map (sone asm) l)
+    | ResumeThrow (ct, tag, h, l) ->
+        ResumeThrow (ct, tag, h, List.map (sone asm) l)
+    | ResumeThrowRef (ct, h, l) -> ResumeThrowRef (ct, h, List.map (sone asm) l)
+    | Switch (ct, tag, l) -> Switch (ct, tag, List.map (sone asm) l)
     | Return v -> Return (Option.map (sone asm) v)
     | Sequence l -> Sequence (sinstrs asm l)
     | Select (c, t, e) -> Select (sone asm c, sone asm t, sone asm e)
@@ -3051,6 +3217,13 @@ let sub_instrs (i : (_ instr_desc, _) annotated) =
   | If_annotation { then_body; else_body; _ } ->
       then_body @ Option.value ~default:[] else_body
   | Sequence l | ArrayFixed (_, l) -> l
+  | ContBind (_, _, l)
+  | Suspend (_, l)
+  | Resume (_, _, l)
+  | ResumeThrow (_, _, _, l)
+  | ResumeThrowRef (_, _, l)
+  | Switch (_, _, l) ->
+      l
   | Call (a, l) | TailCall (a, l) -> a :: l
   | Struct (_, l) -> List.map snd l
   | BinOp (_, a, b) | Array (_, a, b) | ArrayGet (a, b) | StructSet (a, _, b) ->
@@ -3070,7 +3243,8 @@ let sub_instrs (i : (_ instr_desc, _) annotated) =
   | Br_on_non_null (_, i)
   | Br_on_cast (_, _, i)
   | Br_on_cast_fail (_, _, i)
-  | ThrowRef i ->
+  | ThrowRef i
+  | ContNew (_, i) ->
       [ i ]
   | Let (_, o) | Br (_, o) | Throw (_, o) | Return o -> Option.to_list o
   | Unreachable | Nop | Hole | Null | Get _ | Char _ | String _ | Int _

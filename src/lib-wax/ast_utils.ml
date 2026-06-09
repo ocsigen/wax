@@ -64,6 +64,17 @@ let rec map_instr f instr =
     | Br_on_cast_fail (label, t, v) -> Br_on_cast_fail (label, t, map_instr f v)
     | Throw (idx, args) -> Throw (idx, Option.map (map_instr f) args)
     | ThrowRef v -> ThrowRef (map_instr f v)
+    | ContNew (ct, v) -> ContNew (ct, map_instr f v)
+    | ContBind (src, dst, args) ->
+        ContBind (src, dst, List.map (map_instr f) args)
+    | Suspend (tag, args) -> Suspend (tag, List.map (map_instr f) args)
+    | Resume (ct, handlers, args) ->
+        Resume (ct, handlers, List.map (map_instr f) args)
+    | ResumeThrow (ct, tag, handlers, args) ->
+        ResumeThrow (ct, tag, handlers, List.map (map_instr f) args)
+    | ResumeThrowRef (ct, handlers, args) ->
+        ResumeThrowRef (ct, handlers, List.map (map_instr f) args)
+    | Switch (ct, tag, args) -> Switch (ct, tag, List.map (map_instr f) args)
     | Return v -> Return (Option.map (map_instr f) v)
     | Sequence instrs -> Sequence (List.map (map_instr f) instrs)
     | Select (cond, t, e) ->

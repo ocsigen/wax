@@ -71,6 +71,8 @@
 %token BR_ON_CAST BR_ON_CAST_FAIL
 %token BR_ON_NULL BR_ON_NON_NULL
 %token TRY CATCH
+%token CONT_NEW CONT_BIND
+%token SUSPEND RESUME RESUME_THROW RESUME_THROW_REF SWITCH
 %token DISPATCH
 
 %on_error_reduce statement plaininstr separated_nonempty_list(",",structure_type_field) list(module_field) separated_nonempty_list(",",value_type) block_type separated_nonempty_list(",",function_parameter) list(label) list(attribute) list(typedef) list(legacy_catch) separated_nonempty_list(",",catch) separated_nonempty_list(",",let_pattern) blockinstr statement_list loption(separated_nonempty_list(",",catch)) separated_nonempty_list(",",expression) let_pattern structure_field separated_nonempty_list(",",structure_field) constant_expression attribute_expression parenthesized_expression index_expression then_branch condition_expression length_expression optional_function_type structure_type result_type_ expression_list structure
@@ -117,6 +119,8 @@ let absheaptype_tbl =
      "nofunc", NoFunc;
      "exn", Exn;
      "noexn", NoExn;
+     "cont", Cont;
+     "nocont", NoCont;
      "extern", Extern;
      "noextern", NoExtern;
      "any", Any;
@@ -279,6 +283,14 @@ composite_type:
 | t = structtype { Struct t }
 | t = function_type_definition { Func t }
 | t = arraytype { Array t }
+(* [cont] is not a reserved word (it is used as an ordinary identifier, e.g.
+   user type names and labels), so a continuation type is recognised here by
+   matching the identifier [cont] followed by the function type name. *)
+| name = ident t = type_name
+  { if name.desc <> "cont" then
+      raise (Wasm.Parsing.Syntax_error ($sloc,
+        Printf.sprintf "Expecting a composite type.\n"));
+    Cont t }
 
 type_name:
 | i = ident { i }
@@ -357,6 +369,13 @@ catch:
 | t = ident "&" "->" l = label { CatchRef (t, l) }
 | "_" "->" l = label { CatchAll l }
 | "_" "&" "->" l = label { CatchAllRef l }
+
+on_clause:
+| t = ident "->" l = label { OnLabel (t, l) }
+| t = ident "->" SWITCH { OnSwitch t }
+
+on_clauses:
+| "[" l = separated_list(",", on_clause) "]" { l }
 
 legacy_catch:
 | t = ident "=>" "{" l = statement_list "}" { (t, l) }
@@ -488,6 +507,20 @@ plaininstr:
 | BR_ON_NON_NULL l = label i = expression { with_loc $sloc (Br_on_non_null (l, i)) }  %prec prec_branch
 | BR_ON_CAST l = label t = reference_type i = expression { with_loc $sloc (Br_on_cast (l, t, i)) } %prec prec_branch
 | BR_ON_CAST_FAIL l = label t = reference_type i = expression { with_loc $sloc (Br_on_cast_fail (l, t, i)) } %prec prec_branch
+| CONT_NEW t = type_name "(" i = expression ")"
+  { with_loc $sloc (ContNew (t, i)) }
+| CONT_BIND src = type_name dst = type_name "(" l = expression_list ")"
+  { with_loc $sloc (ContBind (src, dst, l)) }
+| SUSPEND t = tag_name "(" l = expression_list ")"
+  { with_loc $sloc (Suspend (t, l)) }
+| RESUME t = type_name h = on_clauses "(" l = expression_list ")"
+  { with_loc $sloc (Resume (t, h, l)) }
+| RESUME_THROW t = type_name tag = tag_name h = on_clauses "(" l = expression_list ")"
+  { with_loc $sloc (ResumeThrow (t, tag, h, l)) }
+| RESUME_THROW_REF t = type_name h = on_clauses "(" l = expression_list ")"
+  { with_loc $sloc (ResumeThrowRef (t, h, l)) }
+| SWITCH t = type_name tag = tag_name "(" l = expression_list ")"
+  { with_loc $sloc (Switch (t, tag, l)) }
 | i1 = expression "[" i2 = index_expression "]"
   { with_loc $sloc (ArrayGet (i1, i2)) }
 | i1 = expression "?" i2 = then_branch ":" i3 = expression

@@ -18,6 +18,8 @@ let reserved =
       "br_table";
       "catch";
       "const";
+      "cont_bind";
+      "cont_new";
       "do";
       "else";
       "fn";
@@ -32,7 +34,12 @@ let reserved =
       "null";
       "open";
       "rec";
+      "resume";
+      "resume_throw";
+      "resume_throw_ref";
       "return";
+      "suspend";
+      "switch";
       "tag";
       "throw";
       "throw_ref";
@@ -49,11 +56,13 @@ let reserved_heap_types =
        [
          "any";
          "array";
+         "cont";
          "eq";
          "exn";
          "extern";
          "func";
          "i31";
+         "nocont";
          "noexn";
          "noextern";
          "nofunc";

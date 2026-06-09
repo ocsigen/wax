@@ -66,6 +66,8 @@ type catch =
   | CatchAll of label
   | CatchAllRef of label
 
+type on_clause = OnLabel of ident * label | OnSwitch of ident
+
 type 'info instr_desc =
   | Block of { label : label option; typ : functype; block : 'info instr list }
   | Loop of { label : label option; typ : functype; block : 'info instr list }
@@ -126,6 +128,13 @@ type 'info instr_desc =
   | Br_on_cast_fail of label * reftype * 'info instr
   | Throw of ident * 'info instr option
   | ThrowRef of 'info instr
+  | ContNew of ident * 'info instr
+  | ContBind of ident * ident * 'info instr list
+  | Suspend of ident * 'info instr list
+  | Resume of ident * on_clause list * 'info instr list
+  | ResumeThrow of ident * ident * on_clause list * 'info instr list
+  | ResumeThrowRef of ident * on_clause list * 'info instr list
+  | Switch of ident * ident * 'info instr list
   | Return of 'info instr option
   | Sequence of 'info instr list
   | Select of 'info instr * 'info instr * 'info instr

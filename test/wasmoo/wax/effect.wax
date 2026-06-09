@@ -32,10 +32,13 @@ fn apply_pair(p: &pair) -> &eq {
     become (f as &closure).f(p.snd, f := p.fst);
 }
 type cont_func = fn(&pair, &eq);
-type cont = open { cont_func: &cont_func };
-type called_with_continuation = fn(&cont, &eq);
+type cont_2 = open { cont_func: &cont_func };
+type called_with_continuation = fn(&cont_2, &eq);
 type thunk = { f: &called_with_continuation, f_2: &eq };
-type cont_resume: cont = { cont_func: &cont_func, cont_resolver: &?extern };
+type cont_resume: cont_2 = {
+    cont_func: &cont_func,
+    cont_resolver: &?extern
+};
 fn invoke_promise_resolver(p: &pair, x: &eq) {
     become resume_fiber((x as &cont_resume).cont_resolver, p);
 }
@@ -56,7 +59,7 @@ type handlers = { value: &eq, exn: &eq, effect: &eq };
 type generic_fiber = open { handlers: mut &handlers };
 type fiber: generic_fiber = {
     handlers: mut &handlers,
-    cont: &cont,
+    cont: &cont_2,
     next: &?fiber
 };
 fn raise_unhandled(eff: &eq, x: &eq) -> &eq {
@@ -71,8 +74,8 @@ fn raise_unhandled(eff: &eq, x: &eq) -> &eq {
     0 as &i31;
 }
 fn uncaught_effect_handler(eff: &eq, cont: &eq, k: &eq, x: &eq) -> &eq {
-    let k': &cont;
-    k' = push_stack((cont as &block)[1] as &fiber, k as &cont);
+    let k': &cont_2;
+    k' = push_stack((cont as &block)[1] as &fiber, k as &cont_2);
     k'.cont_func({pair| fst: {closure| f: raise_unhandled }, snd: eff }, k');
     0 as &i31;
 }
@@ -87,16 +90,16 @@ let stack: &?fiber =
                 effect:
                     {closure_3| f: dummy_fun, f_2: uncaught_effect_handler }
             },
-        cont: {cont| cont_func: default_continuation },
+        cont: {cont_2| cont_func: default_continuation },
         next: null as &?fiber
     };
-fn pop_fiber() -> &cont {
+fn pop_fiber() -> &cont_2 {
     let f: &fiber;
     f = stack!;
     stack = f.next;
     f.cont;
 }
-fn push_stack(stack_2: &fiber, k: &cont) -> &cont {
+fn push_stack(stack_2: &fiber, k: &cont_2) -> &cont_2 {
     'done: do {
         'loop: loop {
             stack =
@@ -108,7 +111,7 @@ fn push_stack(stack_2: &fiber, k: &cont) -> &cont {
     } /* 'done */
     k;
 }
-fn do_resume(k: &cont, vp: &eq) {
+fn do_resume(k: &cont_2, vp: &eq) {
     let p: &pair;
     let stack: &fiber;
     p = vp as &pair;
@@ -119,7 +122,7 @@ fn do_resume(k: &cont, vp: &eq) {
 }
 #[export = "%resume"]
 fn f(stack: &eq, f: &eq, v: &eq) -> &eq {
-    let k: &cont;
+    let k: &cont_2;
     let pair: &pair;
     if stack == 0 as &i31 {
         caml_raise_constant(caml_named_value(string#"foo")!);
@@ -140,11 +143,11 @@ fn call_effect_handler(k: &eq, venv: &eq) -> &eq {
     become handler.f_2
         (env.eff, env.cont, k, handler := env.handler as &closure_3);
 }
-fn do_perform(k0: &cont, vp: &eq) {
+fn do_perform(k0: &cont_2, vp: &eq) {
     let eff: &eq;
     let cont: &block;
     let handler: &eq;
-    let k1: &cont;
+    let k1: &cont_2;
     let p: &pair;
     let next_fiber: &eq;
     p = vp as &pair;
@@ -183,7 +186,7 @@ fn f_2(eff: &eq) -> &eq {
     become reperform(eff, [block|cont_tag as &i31, 0 as &i31, 0 as &i31]);
 }
 fn call_handler(f: &eq, x: &eq) {
-    let cont: &cont;
+    let cont: &cont_2;
     become cont.cont_func({pair| fst: f, snd: x }, cont := pop_fiber());
 }
 #[export = "caml_start_fiber"]
@@ -212,7 +215,7 @@ fn initial_cont(p: &pair, x: &eq) { become start_fiber(p); }
 fn caml_alloc_stack(hv: &eq, hx: &eq, hf: &eq) -> &eq {
     {fiber|
         handlers: {handlers| value: hv, exn: hx, effect: hf },
-        cont: {cont| cont_func: initial_cont },
+        cont: {cont_2| cont_func: initial_cont },
         next: null as &?fiber
     };
 }

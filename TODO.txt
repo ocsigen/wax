@@ -3,7 +3,6 @@ ISSUES
 - linear-memory ops (i32.load/store, tables) that Wax doesn't
   model; from_wasm's Unreachable placeholder produces holes that crash the
   typer (maybe we should add a cast on struct.get first argument)
-- stack-switching
 - ExtendS => x.extend8_s()
 
 =====================

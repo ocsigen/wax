@@ -406,6 +406,31 @@ let label_arity ctx (idx : Src.idx) =
            ctx.label_arities)
   | Num i -> snd (List.nth ctx.label_arities (Uint32.to_int i))
 
+(* (parameter count, result count) of the function type a continuation type
+   wraps. *)
+let cont_arity ctx idx =
+  match (lookup_type ctx Type idx).typ with
+  | Cont ft -> type_arity ctx ft
+  | Func _ | Struct _ | Array _ -> assert false
+
+(* Number of values a [switch] to continuation [ct] produces: the parameters of
+   the continuation referenced by the last parameter of [ct]'s function type. *)
+let switch_output ctx ct =
+  match (lookup_type ctx Type ct).typ with
+  | Cont ft -> (
+      match (lookup_type ctx Type ft).typ with
+      | Func { params; _ } when Array.length params > 0 -> (
+          match snd params.(Array.length params - 1) with
+          | Ref { typ = Type ct2; _ } -> fst (cont_arity ctx ct2)
+          | _ -> 0)
+      | Func _ | Struct _ | Array _ | Cont _ -> 0)
+  | Func _ | Struct _ | Array _ -> 0
+
+let on_clause ctx (c : Src.on_clause) : Ast.on_clause =
+  match c with
+  | OnLabel (tag, lbl) -> OnLabel (idx ctx `Tag tag, label ctx lbl)
+  | OnSwitch tag -> OnSwitch (idx ctx `Tag tag)
+
 (*
 Step 1: traverse types and find existing names
 Step 2: use this info to generate using names without reusing existing names
@@ -1080,12 +1105,49 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   | ThrowRef ->
       let* e = Stack.pop in
       Stack.push_poly (with_loc (ThrowRef e))
-  (* Stack-switching instructions have no Wax surface syntax. They are only
-     reachable when translating a Wasm module to Wax, which the [--wasm-only]
-     test mode skips. *)
-  | ContNew _ | ContBind _ | Suspend _ | Resume _ | ResumeThrow _
-  | ResumeThrowRef _ | Switch _ ->
-      assert false
+  | ContNew ct ->
+      let* f = Stack.pop in
+      Stack.push 1 (with_loc (ContNew (idx ctx `Type ct, f)))
+  | ContBind (src, dst) ->
+      let sp, _ = cont_arity ctx src in
+      let dp, _ = cont_arity ctx dst in
+      let* args = Stack.grab (sp - dp + 1) in
+      Stack.push 1
+        (with_loc (ContBind (idx ctx `Type src, idx ctx `Type dst, args)))
+  | Suspend t ->
+      let input, output = tag_arity ctx t in
+      let* args = Stack.grab input in
+      Stack.push output (with_loc (Suspend (idx ctx `Tag t, args)))
+  | Resume (ct, handlers) ->
+      let input, output = cont_arity ctx ct in
+      let* args = Stack.grab (input + 1) in
+      Stack.push output
+        (with_loc
+           (Resume (idx ctx `Type ct, List.map (on_clause ctx) handlers, args)))
+  | ResumeThrow (ct, tag, handlers) ->
+      let tinput, _ = tag_arity ctx tag in
+      let _, output = cont_arity ctx ct in
+      let* args = Stack.grab (tinput + 1) in
+      Stack.push output
+        (with_loc
+           (ResumeThrow
+              ( idx ctx `Type ct,
+                idx ctx `Tag tag,
+                List.map (on_clause ctx) handlers,
+                args )))
+  | ResumeThrowRef (ct, handlers) ->
+      let _, output = cont_arity ctx ct in
+      let* args = Stack.grab 2 in
+      Stack.push output
+        (with_loc
+           (ResumeThrowRef
+              (idx ctx `Type ct, List.map (on_clause ctx) handlers, args)))
+  | Switch (ct, tag) ->
+      let input, _ = cont_arity ctx ct in
+      let output = switch_output ctx ct in
+      let* args = Stack.grab input in
+      Stack.push output
+        (with_loc (Switch (idx ctx `Type ct, idx ctx `Tag tag, args)))
   | RefAsNonNull ->
       let* e = Stack.pop in
       Stack.push 1 (with_loc (NonNull e))

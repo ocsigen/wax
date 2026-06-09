@@ -402,6 +402,28 @@ let call_instr instr pp ?prefix i l =
       cut pp ();
       print_paren_list (instr Instruction) pp l)
 
+let print_on_clauses pp handlers =
+  punctuation pp "[";
+  box pp (fun () ->
+      list_commasep
+        (fun pp clause ->
+          match clause with
+          | OnLabel (tag, label) ->
+              identifier pp tag.desc;
+              space pp ();
+              punctuation pp "->";
+              space pp ();
+              identifier pp "'";
+              identifier pp label.desc
+          | OnSwitch tag ->
+              identifier pp tag.desc;
+              space pp ();
+              punctuation pp "->";
+              space pp ();
+              keyword pp "switch")
+        pp handlers);
+  punctuation pp "]"
+
 let print_container pp ~opening ~closing ?(indent = 0) opt_type f =
   hvbox pp ~indent (fun () ->
       box pp (fun () ->
@@ -436,6 +458,9 @@ let get_prec (i : _ Ast.instr) =
       Atom
   | Set _ | Tee _ -> Assignement
   | Call _ | TailCall _ -> CallAndFieldAccess
+  | ContNew _ | ContBind _ | Suspend _ | Resume _ | ResumeThrow _
+  | ResumeThrowRef _ | Switch _ ->
+      CallAndFieldAccess
   | Cast _ | Test _ -> Cast
   | NonNull _ -> UnaryPostfix
   | UnOp _ -> UnaryPrefix
@@ -457,8 +482,9 @@ let is_block (i : _ Ast.instr) =
   | NonNull _ | Struct _ | StructDefault _ | StructGet _ | StructSet _ | Array _
   | ArrayDefault _ | ArrayFixed _ | ArrayGet _ | ArraySet _ | BinOp _ | UnOp _
   | Let _ | Br _ | Br_if _ | Br_table _ | Br_on_null _ | Br_on_non_null _
-  | Br_on_cast _ | Br_on_cast_fail _ | Throw _ | ThrowRef _ | Return _
-  | Sequence _ | Select _ ->
+  | Br_on_cast _ | Br_on_cast_fail _ | Throw _ | ThrowRef _ | ContNew _
+  | ContBind _ | Suspend _ | Resume _ | ResumeThrow _ | ResumeThrowRef _
+  | Switch _ | Return _ | Sequence _ | Select _ ->
       false
 
 let rec starts_with_block_prec prec (i : 'a Ast.instr) =
@@ -482,7 +508,8 @@ let rec starts_with_block_prec prec (i : 'a Ast.instr) =
     | Char _ | String _ | Int _ | Float _ | Struct _ | StructDefault _ | Array _
     | ArrayDefault _ | ArrayFixed _ | Let _ | Br _ | Br_if _ | Br_table _
     | Br_on_null _ | Br_on_non_null _ | Br_on_cast _ | Br_on_cast_fail _
-    | Throw _ | ThrowRef _ | Return _ | Sequence _ ->
+    | Throw _ | ThrowRef _ | ContNew _ | ContBind _ | Suspend _ | Resume _
+    | ResumeThrow _ | ResumeThrowRef _ | Switch _ | Return _ | Sequence _ ->
         false
 
 let starts_with_block i = starts_with_block_prec Instruction i
@@ -877,6 +904,67 @@ let rec instr prec pp (i : _ instr) =
           keyword pp "throw_ref";
           space pp ();
           instr Branch pp i)
+  | ContNew (ct, i) ->
+      box pp ~indent:indent_level (fun () ->
+          keyword pp "cont_new";
+          space pp ();
+          identifier pp ct.desc;
+          cut pp ();
+          print_paren_list (instr Instruction) pp [ i ])
+  | ContBind (src, dst, l) ->
+      box pp ~indent:indent_level (fun () ->
+          keyword pp "cont_bind";
+          space pp ();
+          identifier pp src.desc;
+          space pp ();
+          identifier pp dst.desc;
+          cut pp ();
+          print_paren_list (instr Instruction) pp l)
+  | Suspend (tag, l) ->
+      box pp ~indent:indent_level (fun () ->
+          keyword pp "suspend";
+          space pp ();
+          identifier pp tag.desc;
+          cut pp ();
+          print_paren_list (instr Instruction) pp l)
+  | Resume (ct, handlers, l) ->
+      box pp ~indent:indent_level (fun () ->
+          keyword pp "resume";
+          space pp ();
+          identifier pp ct.desc;
+          space pp ();
+          print_on_clauses pp handlers;
+          cut pp ();
+          print_paren_list (instr Instruction) pp l)
+  | ResumeThrow (ct, tag, handlers, l) ->
+      box pp ~indent:indent_level (fun () ->
+          keyword pp "resume_throw";
+          space pp ();
+          identifier pp ct.desc;
+          space pp ();
+          identifier pp tag.desc;
+          space pp ();
+          print_on_clauses pp handlers;
+          cut pp ();
+          print_paren_list (instr Instruction) pp l)
+  | ResumeThrowRef (ct, handlers, l) ->
+      box pp ~indent:indent_level (fun () ->
+          keyword pp "resume_throw_ref";
+          space pp ();
+          identifier pp ct.desc;
+          space pp ();
+          print_on_clauses pp handlers;
+          cut pp ();
+          print_paren_list (instr Instruction) pp l)
+  | Switch (ct, tag, l) ->
+      box pp ~indent:indent_level (fun () ->
+          keyword pp "switch";
+          space pp ();
+          identifier pp ct.desc;
+          space pp ();
+          identifier pp tag.desc;
+          cut pp ();
+          print_paren_list (instr Instruction) pp l)
   | Sequence l -> print_paren_list (instr Instruction) pp l
   | Select (i1, i2, i3) ->
       box pp ~indent:indent_level (fun () ->

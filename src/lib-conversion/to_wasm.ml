@@ -210,6 +210,11 @@ let label ret (lab : ident) =
       { lab with desc = Text.Num (Uint32.of_int depth) }
   | _ -> { lab with desc = Text.Id lab.desc }
 
+let on_clause ret (c : on_clause) : Text.on_clause =
+  match c with
+  | OnLabel (tag, labl) -> OnLabel (index tag, label ret labl)
+  | OnSwitch tag -> OnSwitch (index tag)
+
 let push ret label =
   match (ret, label) with
   | Some (label, _), Some label' when label = label'.desc -> None
@@ -722,6 +727,29 @@ let rec instruction ret ctx i : location Text.instr list =
       in
       folded loc (Throw (index tag_idx)) args
   | ThrowRef expr -> folded loc ThrowRef (instruction ret ctx expr)
+  | ContNew (ct, f) -> folded loc (ContNew (index ct)) (instruction ret ctx f)
+  | ContBind (src, dst, l) ->
+      folded loc
+        (ContBind (index src, index dst))
+        (List.concat_map (instruction ret ctx) l)
+  | Suspend (tag, l) ->
+      folded loc (Suspend (index tag)) (List.concat_map (instruction ret ctx) l)
+  | Resume (ct, handlers, l) ->
+      folded loc
+        (Resume (index ct, List.map (on_clause ret) handlers))
+        (List.concat_map (instruction ret ctx) l)
+  | ResumeThrow (ct, tag, handlers, l) ->
+      folded loc
+        (ResumeThrow (index ct, index tag, List.map (on_clause ret) handlers))
+        (List.concat_map (instruction ret ctx) l)
+  | ResumeThrowRef (ct, handlers, l) ->
+      folded loc
+        (ResumeThrowRef (index ct, List.map (on_clause ret) handlers))
+        (List.concat_map (instruction ret ctx) l)
+  | Switch (ct, tag, l) ->
+      folded loc
+        (Switch (index ct, index tag))
+        (List.concat_map (instruction ret ctx) l)
   | Return None -> folded loc Return []
   | Return (Some expr) -> folded loc Return (instruction ret ctx expr)
   | Sequence body -> List.concat_map (instruction ret ctx) body
