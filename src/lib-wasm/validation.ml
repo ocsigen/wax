@@ -349,6 +349,79 @@ module Error = struct
         Format.fprintf f
           "Continuation types cannot be used in a cast instruction.")
       ()
+
+  let expected_number_or_vec context ~location ty =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f
+          "Expecting a numeric or vector type but got type@ @[<2>%a@]."
+          print_valtype ty)
+      ()
+
+  let immutable context ~location what =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () -> Format.fprintf f "This %s is immutable." what)
+      ()
+
+  let not_defaultable context ~location =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f "This type has no default value for all its fields.")
+      ()
+
+  let field_index_out_of_bounds context ~location ~index ~count =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f
+          "The field index %d is out of bounds: the structure has %d field(s)."
+          index count)
+      ()
+
+  let unknown_field context ~location =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () -> Format.fprintf f "There is no such field.")
+      ()
+
+  let numeric_array_required context ~location =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f "This operation requires an array of numeric elements.")
+      ()
+
+  let incompatible_array_element context ~location =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f "The array element type is incompatible.")
+      ()
+
+  let ref_func_inaccessible context ~location idx =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f
+          "The function %a is not declared as referenceable (ref.func)."
+          print_index idx)
+      ()
+
+  let non_constant_global context ~location idx =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f
+          "Only an immutable global may be used in a constant expression: %a."
+          print_index idx)
+      ()
+
+  let start_function_signature context ~location =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f
+          "The start function must have no parameters and no results.")
+      ()
+
+  let multiple_start context ~location =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f "A module can have at most one start function.")
+      ()
 end
 
 let print_instr f i = Utils.Printer.run f (fun p -> Output.instr p i)
@@ -633,6 +706,22 @@ let lookup_struct_type ctx idx =
   | _ ->
       Error.expected_struct_type ctx.diagnostics ~location:idx.info idx;
       None
+
+let struct_field_index ctx idx' field_map fields =
+  match idx'.Ast.desc with
+  | Ast.Text.Id id -> (
+      match List.assoc_opt id field_map with
+      | Some n -> Some n
+      | None ->
+          Error.unknown_field ctx.modul.diagnostics ~location:idx'.Ast.info;
+          None)
+  | Ast.Text.Num n ->
+      let n = Uint32.to_int n in
+      if n < Array.length fields then Some n
+      else (
+        Error.field_index_out_of_bounds ctx.modul.diagnostics
+          ~location:idx'.Ast.info ~index:n ~count:(Array.length fields);
+        None)
 
 let lookup_array_type ctx idx =
   let ctx = ctx.modul in
@@ -1411,21 +1500,17 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       match (ty1, ty2) with
       | None, None -> push_poly loc None
       | Some ty1, Some ty2 ->
-          (*ZZZ*)
           if not (number_or_vec ty1) then
-            Format.eprintf "%a@." print_valtype ty1;
+            Error.expected_number_or_vec ctx.modul.diagnostics ~location:loc ty1;
           if not (number_or_vec ty2) then
-            Format.eprintf "%a@." print_valtype ty2;
-          (*ZZZ*)
-          assert (number_or_vec ty1);
-          assert (number_or_vec ty2);
+            Error.expected_number_or_vec ctx.modul.diagnostics ~location:loc ty2;
           if ty1 <> ty2 then
             Error.select_type_mismatch ctx.modul.diagnostics ~location:loc ty1
               ty2;
           push (Some loc) ty1
       | Some ty, None | None, Some ty ->
-          assert (number_or_vec ty);
-          (*ZZZ*)
+          if not (number_or_vec ty) then
+            Error.expected_number_or_vec ctx.modul.diagnostics ~location:loc ty;
           push (Some loc) ty)
   | Select (Some lst) -> (
       match lst with
@@ -1639,8 +1724,8 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let* () = pop ctx loc V128 in
       push (Some loc) V128
   | VecShuffle lanes ->
-      (*ZZZ*)
-      assert (String.for_all (fun l -> Char.code l < 32) lanes);
+      if not (String.for_all (fun l -> Char.code l < 32) lanes) then
+        Error.invalid_lane_index ctx.modul.diagnostics ~location:loc 32;
       let* () = pop ctx loc V128 in
       let* () = pop ctx loc V128 in
       push (Some loc) V128
@@ -1672,10 +1757,13 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
   | TableCopy (idx, idx') ->
       let*! ty = Sequence.get ctx.modul.diagnostics ctx.modul.tables idx in
       let*! ty' = Sequence.get ctx.modul.diagnostics ctx.modul.tables idx' in
-      (*ZZZ*)
-      assert (
-        Types.val_subtype ctx.modul.subtyping_info (Ref ty'.reftype)
-          (Ref ty.reftype));
+      if
+        not
+          (Types.val_subtype ctx.modul.subtyping_info (Ref ty'.reftype)
+             (Ref ty.reftype))
+      then
+        Error.type_mismatch ctx.modul.diagnostics ~location:loc
+          (Ref ty'.reftype) (Ref ty.reftype);
       let address_type =
         match (ty.limits.address_type, ty'.limits.address_type) with
         | `I32, _ | _, `I32 -> `I32
@@ -1692,10 +1780,13 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
         Sequence.get ctx.modul.diagnostics ctx.modul.tables idx
       in
       let*! typ = Sequence.get ctx.modul.diagnostics ctx.modul.elem idx' in
-      (*ZZZ*)
-      assert (
-        Types.val_subtype ctx.modul.subtyping_info (Ref typ)
-          (Ref tabletype.reftype));
+      if
+        not
+          (Types.val_subtype ctx.modul.subtyping_info (Ref typ)
+             (Ref tabletype.reftype))
+      then
+        Error.type_mismatch ctx.modul.diagnostics ~location:loc (Ref typ)
+          (Ref tabletype.reftype);
       let addr_ty = address_type_to_valtype tabletype.limits.address_type in
       let* () = pop ctx loc I32 in
       let* () = pop ctx loc I32 in
@@ -1708,8 +1799,8 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       push (Some loc) (Ref { nullable = true; typ })
   | RefFunc idx ->
       let*! i = Sequence.get ctx.modul.diagnostics ctx.modul.functions idx in
-      (*ZZZ*)
-      assert ((not !validate_refs) || Hashtbl.mem ctx.modul.refs i);
+      if not ((not !validate_refs) || Hashtbl.mem ctx.modul.refs i) then
+        Error.ref_func_inaccessible ctx.modul.diagnostics ~location:loc idx;
       push (Some loc) (Ref { nullable = false; typ = Type i })
   | RefIsNull -> (
       let* ty, loc' = pop_any ctx loc in
@@ -1763,21 +1854,13 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       push (Some loc) (Ref { nullable = false; typ = Type ty })
   | StructNewDefault idx ->
       let*! ty, _, fields = lookup_struct_type ctx idx in
-      (*ZZZ*)
-      assert (Array.for_all field_has_default fields);
+      if not (Array.for_all field_has_default fields) then
+        Error.not_defaultable ctx.modul.diagnostics ~location:i.info;
       push (Some loc) (Ref { nullable = false; typ = Type ty })
   | StructGet (signage, idx, idx') ->
       let*! ty, field_map, fields = lookup_struct_type ctx idx in
       let* () = pop ctx loc (Ref { nullable = true; typ = Type ty }) in
-      let n =
-        match idx'.desc with
-        | Id id -> List.assoc id field_map (*ZZZ*)
-        | Num n ->
-            let n = Uint32.to_int n in
-            assert (n < Array.length fields);
-            (*ZZZ*)
-            n
-      in
+      let*! n = struct_field_index ctx idx' field_map fields in
       (match fields.(n).typ with
       | Packed _ ->
           if signage = None then
@@ -1790,13 +1873,9 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       push (Some loc) (unpack_type fields.(n))
   | StructSet (idx, idx') ->
       let*! ty, field_map, fields = lookup_struct_type ctx idx in
-      let n =
-        match idx'.desc with
-        | Id id -> List.assoc id field_map (*ZZZ*)
-        | Num n -> Uint32.to_int n
-      in
-      (*ZZZ*)
-      assert fields.(n).mut;
+      let*! n = struct_field_index ctx idx' field_map fields in
+      if not fields.(n).mut then
+        Error.immutable ctx.modul.diagnostics ~location:i.info "field";
       let* () = pop ctx loc (unpack_type fields.(n)) in
       pop ctx loc (Ref { nullable = true; typ = Type ty })
   | ArrayNew idx ->
@@ -1806,8 +1885,8 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       push (Some loc) (Ref { nullable = false; typ = Type ty })
   | ArrayNewDefault idx ->
       let*! ty, field = lookup_array_type ctx idx in
-      (*ZZZ*)
-      assert (field_has_default field);
+      if not (field_has_default field) then
+        Error.not_defaultable ctx.modul.diagnostics ~location:i.info;
       let* () = pop ctx loc I32 in
       push (Some loc) (Ref { nullable = false; typ = Type ty })
   | ArrayNewFixed (idx, n) ->
@@ -1817,22 +1896,22 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
   | ArrayNewData (idx, idx') ->
       let*! ty, field = lookup_array_type ctx idx in
       ignore (Sequence.get ctx.modul.diagnostics ctx.modul.data idx');
-      (*ZZZ*)
-      assert (
-        match field.typ with
-        | Packed _ | Value (I32 | I64 | F32 | F64 | V128) -> true
-        | Value (Ref _ | Tuple _) -> false);
+      (match field.typ with
+      | Packed _ | Value (I32 | I64 | F32 | F64 | V128) -> ()
+      | Value (Ref _ | Tuple _) ->
+          Error.numeric_array_required ctx.modul.diagnostics ~location:i.info);
       let* () = pop ctx loc I32 in
       let* () = pop ctx loc I32 in
       push (Some loc) (Ref { nullable = false; typ = Type ty })
   | ArrayNewElem (idx, idx') ->
       let*! ty, field = lookup_array_type ctx idx in
       let*! ty' = Sequence.get ctx.modul.diagnostics ctx.modul.elem idx' in
-      (*ZZZ*)
-      assert (
-        match field.typ with
-        | Packed _ -> false
-        | Value ty -> Types.val_subtype ctx.modul.subtyping_info (Ref ty') ty);
+      (match field.typ with
+      | Value ty when Types.val_subtype ctx.modul.subtyping_info (Ref ty') ty ->
+          ()
+      | _ ->
+          Error.incompatible_array_element ctx.modul.diagnostics
+            ~location:i.info);
       let* () = pop ctx loc I32 in
       let* () = pop ctx loc I32 in
       push (Some loc) (Ref { nullable = false; typ = Type ty })
@@ -1850,8 +1929,8 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       push (Some loc) (unpack_type field)
   | ArraySet idx ->
       let*! ty, field = lookup_array_type ctx idx in
-      (*ZZZ*)
-      assert field.mut;
+      if not field.mut then
+        Error.immutable ctx.modul.diagnostics ~location:i.info "array";
       let* () = pop ctx loc (unpack_type field) in
       let* () = pop ctx loc I32 in
       pop ctx loc (Ref { nullable = true; typ = Type ty })
@@ -1860,8 +1939,8 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       push (Some loc) I32
   | ArrayFill idx ->
       let*! ty, field = lookup_array_type ctx idx in
-      (*ZZZ*)
-      assert field.mut;
+      if not field.mut then
+        Error.immutable ctx.modul.diagnostics ~location:i.info "array";
       let* () = pop ctx loc I32 in
       let* () = pop ctx loc (unpack_type field) in
       let* () = pop ctx loc I32 in
@@ -1869,9 +1948,11 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
   | ArrayCopy (idx1, idx2) ->
       let*! ty1, field1 = lookup_array_type ctx idx1 in
       let*! ty2, field2 = lookup_array_type ctx idx2 in
-      (*ZZZ*)
-      assert field1.mut;
-      assert (storage_subtype ctx.modul.subtyping_info field1.typ field2.typ);
+      if not field1.mut then
+        Error.immutable ctx.modul.diagnostics ~location:i.info "array";
+      if not (storage_subtype ctx.modul.subtyping_info field1.typ field2.typ)
+      then
+        Error.incompatible_array_element ctx.modul.diagnostics ~location:i.info;
       let* () = pop ctx loc I32 in
       let* () = pop ctx loc I32 in
       let* () = pop ctx loc (Ref { nullable = true; typ = Type ty2 }) in
@@ -1880,12 +1961,12 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
   | ArrayInitData (idx, idx') ->
       let*! ty, field = lookup_array_type ctx idx in
       ignore (Sequence.get ctx.modul.diagnostics ctx.modul.data idx');
-      (*ZZZ*)
-      assert field.mut;
-      assert (
-        match field.typ with
-        | Packed _ | Value (I32 | I64 | F32 | F64 | V128) -> true
-        | Value (Ref _ | Tuple _) -> false);
+      if not field.mut then
+        Error.immutable ctx.modul.diagnostics ~location:i.info "array";
+      (match field.typ with
+      | Packed _ | Value (I32 | I64 | F32 | F64 | V128) -> ()
+      | Value (Ref _ | Tuple _) ->
+          Error.numeric_array_required ctx.modul.diagnostics ~location:i.info);
       let* () = pop ctx loc I32 in
       let* () = pop ctx loc I32 in
       let* () = pop ctx loc I32 in
@@ -1893,12 +1974,14 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
   | ArrayInitElem (idx, idx') ->
       let*! ty, field = lookup_array_type ctx idx in
       let*! ty' = Sequence.get ctx.modul.diagnostics ctx.modul.elem idx' in
-      (*ZZZ*)
-      assert field.mut;
-      assert (
-        match field.typ with
-        | Packed _ -> false
-        | Value ty -> Types.val_subtype ctx.modul.subtyping_info (Ref ty') ty);
+      if not field.mut then
+        Error.immutable ctx.modul.diagnostics ~location:i.info "array";
+      (match field.typ with
+      | Value ty when Types.val_subtype ctx.modul.subtyping_info (Ref ty') ty ->
+          ()
+      | _ ->
+          Error.incompatible_array_element ctx.modul.diagnostics
+            ~location:i.info);
       let* () = pop ctx loc I32 in
       let* () = pop ctx loc I32 in
       let* () = pop ctx loc I32 in
@@ -1961,20 +2044,18 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let* ty, _ = pop_any ctx loc in
       Option.iter
         (fun ty ->
-          (*ZZZ*)
-          assert (
-            Types.val_subtype ctx.modul.subtyping_info ty
-              (Ref { nullable = true; typ = Any })))
+          let expected = Ref { nullable = true; typ = Any } in
+          if not (Types.val_subtype ctx.modul.subtyping_info ty expected) then
+            Error.type_mismatch ctx.modul.diagnostics ~location:loc ty expected)
         ty;
       push (Some loc) (Ref { nullable = is_nullable ty; typ = Extern })
   | AnyConvertExtern ->
       let* ty, _ = pop_any ctx loc in
       Option.iter
         (fun ty ->
-          (*ZZZ*)
-          assert (
-            Types.val_subtype ctx.modul.subtyping_info ty
-              (Ref { nullable = true; typ = Extern })))
+          let expected = Ref { nullable = true; typ = Extern } in
+          if not (Types.val_subtype ctx.modul.subtyping_info ty expected) then
+            Error.type_mismatch ctx.modul.diagnostics ~location:loc ty expected)
         ty;
       push (Some loc) (Ref { nullable = is_nullable ty; typ = Any })
   | Folded (i, l) ->
@@ -1995,7 +2076,8 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let*! ty, field = lookup_array_type ctx idx in
       (match field.typ with
       | Value (I32 | I64 | F32 | F64) | Packed _ -> ()
-      | Value (Ref _ | V128 | Tuple _) -> assert false (*ZZZ*));
+      | Value (Ref _ | V128 | Tuple _) ->
+          Error.numeric_array_required ctx.modul.diagnostics ~location:i.info);
       push (Some loc) (Ref { nullable = false; typ = Type ty })
   | String (None, _) ->
       let ty = Ref { nullable = false; typ = Type (string ctx.modul.types) } in
@@ -2033,8 +2115,8 @@ let rec check_constant_instruction ctx (i : _ Ast.Text.instr) =
   match i.desc with
   | GlobalGet idx ->
       let*? ty = Sequence.get ctx.diagnostics ctx.globals idx in
-      (*ZZZ*)
-      assert (not ty.mut)
+      if ty.mut then
+        Error.non_constant_global ctx.diagnostics ~location:idx.info idx
   | RefFunc i ->
       let*? ty = Sequence.get ctx.diagnostics ctx.functions i in
       Hashtbl.replace ctx.refs ty ()
@@ -2481,8 +2563,10 @@ let start ctx fields =
           let*? ty = Sequence.get ctx.diagnostics ctx.functions idx in
           match (Types.get_subtype ctx.subtyping_info ty).typ with
           | Struct _ | Array _ | Cont _ -> assert false (* Should not happen *)
-          | Func { params; results } -> assert (params = [||] && results = [||])
-          )
+          | Func { params; results } ->
+              if not (params = [||] && results = [||]) then
+                Error.start_function_signature ctx.diagnostics
+                  ~location:idx.info)
       | _ -> ())
     fields
 
@@ -2986,11 +3070,12 @@ let check_syntax diagnostics (_, lst) =
              | Module_if_annotation _ ) ) ->
              can_import)
        None lst);
-  (*ZZZ*)
-  assert (
-    List.length
-      (List.filter
-         (fun field ->
-           match field.Ast.desc with Ast.Text.Start _ -> true | _ -> false)
-         lst)
-    <= 1)
+  match
+    List.filter
+      (fun field ->
+        match field.Ast.desc with Ast.Text.Start _ -> true | _ -> false)
+      lst
+  with
+  | _ :: second :: _ ->
+      Error.multiple_start diagnostics ~location:second.Ast.info
+  | _ -> ()
