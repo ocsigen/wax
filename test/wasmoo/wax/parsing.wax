@@ -1,3 +1,20 @@
+// Wasm_of_ocaml runtime support
+// http://www.ocsigen.org/js_of_ocaml/
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, with linking exception;
+// either version 2.1 of the License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with this program; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 #[import = ("jslib", "wrap")]
 fn wrap(&?any) -> &eq;
 #[import = ("jslib", "caml_string_of_jsstring")]
@@ -14,17 +31,22 @@ fn caml_ml_flush(&eq) -> &eq;
 fn caml_format_int(&eq, &eq) -> &eq;
 #[import = ("float", "caml_format_float")]
 fn caml_format_float(&eq, &eq) -> &eq;
+
 type float = { f: f64 };
 type block = [mut &eq];
 type string = [mut i8];
+
 fn get(a: &eq, i: i32) -> i32 {
     let s: &string;
     s = a as &string;
     i = i + i;
     (s[i] as i32_u | s[i + 1] as i32_u << 8).extend16_s;
 }
+
 let caml_parser_trace: i32 = 0;
+
 const ERRCODE: i32 = 256;
+
 const START: i32 = 0;
 const TOKEN_READ: i32 = 1;
 const STACKS_GROWN_1: i32 = 2;
@@ -36,12 +58,14 @@ const testshift: i32 = 7;
 const shift: i32 = 8;
 const shift_recover: i32 = 9;
 const reduce: i32 = 10;
+
 const READ_TOKEN: i32 = 0;
 const RAISE_PARSE_ERROR: i32 = 1;
 const GROW_STACKS_1: i32 = 2;
 const GROW_STACKS_2: i32 = 3;
 const COMPUTE_SEMANTIC_ACTION: i32 = 4;
 const CALL_ERROR_FUNCTION: i32 = 5;
+
 const env_s_stack: i32 = 1;
 const env_v_stack: i32 = 2;
 const env_symb_start_stack: i32 = 3;
@@ -58,6 +82,7 @@ const env_rule_number: i32 = 13;
 const env_sp: i32 = 14;
 const env_state: i32 = 15;
 const env_errflag: i32 = 16;
+
 const tbl_transl_const: i32 = 2;
 const tbl_transl_block: i32 = 3;
 const tbl_lhs: i32 = 4;
@@ -72,6 +97,7 @@ const tbl_table: i32 = 12;
 const tbl_check: i32 = 13;
 const tbl_names_const: i32 = 15;
 const tbl_names_block: i32 = 16;
+
 fn strlen(s: &string, p: i32) -> i32 {
     let i: i32;
     i = p;
@@ -80,6 +106,7 @@ fn strlen(s: &string, p: i32) -> i32 {
     } /* 'loop */
     i - p;
 }
+
 data unknown_token = "<unknown token>";
 fn token_name(vnames: &eq, number: i32) -> &eq {
     let names: &string;
@@ -100,18 +127,23 @@ fn token_name(vnames: &eq, number: i32) -> &eq {
     name.copy(0, names, i, len);
     name;
 }
+
 fn output(x: &eq) {
     let s: &string;
     s = x as &string;
     _ = caml_ml_output(caml_stderr, s, 0 as &i31, s.length as &i31);
 }
+
 fn output_nl() {
     _ = caml_ml_output(caml_stderr, string#"\n", 0 as &i31, 1 as &i31);
     _ = caml_ml_flush(caml_stderr);
 }
+
 fn output_int(x: i32) { output(caml_format_int(string#"%d", x as &i31)); }
+
 data State = "State ";
 data read_token = ": read token ";
+
 fn print_token(tables: &block, state: i32, tok: &eq) {
     let b: &block;
     let v: &eq;
@@ -144,12 +176,14 @@ fn print_token(tables: &block, state: i32, tok: &eq) {
         output_nl();
     }
 }
+
 data recovering_in_state = "Recovering in state ";
 data discarding_state = "Discarding state ";
 data no_more_states_to_discard = "No more states to discard";
 data discarding_last_token_read = "Discarding last token read";
 data shift_to_state = ": shift to state ";
 data reduce_by_rule = ": reduce by rule ";
+
 #[export = "caml_parse_engine"]
 fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
     let res: i32;
@@ -522,6 +556,7 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
     env[env_errflag] = errflag as &i31;
     res as &i31;
 }
+
 #[export = "caml_set_parser_trace"]
 fn caml_set_parser_trace(x: &eq) -> &eq {
     let oldflag: i32;

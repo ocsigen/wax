@@ -1,12 +1,32 @@
+// Wasm_of_ocaml runtime support
+// http://www.ocsigen.org/js_of_ocaml/
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, with linking exception;
+// either version 2.1 of the License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with this program; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 #[import = ("fail", "caml_failwith")]
 fn caml_failwith(&eq);
 #[import = ("fail", "caml_invalid_argument")]
 fn caml_invalid_argument(&eq);
+
 type string = [mut i8];
+
 #[export = "caml_format_int"]
 fn caml_format_int(x: &eq, x_2: &eq) -> &eq {
     become format_int(x, x_2 as &i31 as i32_s, 1);
 }
+
 #[export = "parse_sign_and_base"]
 fn parse_sign_and_base(s: &string) -> (i32, i32, i32, i32) {
     let i: i32;
@@ -56,6 +76,7 @@ fn parse_sign_and_base(s: &string) -> (i32, i32, i32, i32) {
     sign;
     base;
 }
+
 #[export = "parse_digit"]
 fn parse_digit(c: i32) -> i32 {
     if (c >=u 48) & (c <=u 57) { return c - 48; }
@@ -63,6 +84,7 @@ fn parse_digit(c: i32) -> i32 {
     if (c >=u 97) & (c <=u 122) { return c - 87; }
     return -1;
 }
+
 #[export = "parse_int"]
 fn parse_int(v: &eq, nbits: i32, errmsg: &string) -> i32 {
     let s: &string;
@@ -112,22 +134,31 @@ fn parse_int(v: &eq, nbits: i32, errmsg: &string) -> i32 {
     if sign <s 0 { res = 0 - res; }
     res;
 }
-const INT_ERRMSG: &string = string#"int_of_string";
+
+const INT_ERRMSG: &string = string#"int_of_string"
+    // "int.of_string"
+    ;
+
 #[export = "caml_int_of_string"]
 fn caml_int_of_string(v: &eq) -> &eq {
     parse_int(v, 31, INT_ERRMSG) as &i31;
 }
+
 #[export = "caml_bswap16"]
 fn caml_bswap16(x: &eq) -> &eq {
     let x_2: i32;
     x_2 = x as &i31 as i32_s;
     ((x_2 & 0xFF) << 8 | x_2 >>u 8 & 0xFF) as &i31;
 }
+
 type chars = [i8];
+
 #[export = "lowercase_hex_table"]
 const lowercase_hex_table: &chars = chars#"0123456789abcdef";
+
 #[export = "uppercase_hex_table"]
 const uppercase_hex_table: &chars = chars#"0123456789ABCDEF";
+
 fn format_int_default(d: i32) -> &eq {
     let s: &string;
     let negative: i32;
@@ -146,7 +177,9 @@ fn format_int_default(d: i32) -> &eq {
     if negative { s[0] = 45; }
     s;
 }
+
 data format_error = "format_int: bad format";
+
 #[export = "parse_int_format"]
 fn parse_int_format(s: &string) -> (i32, i32, i32, i32, i32) {
     let i: i32;
@@ -206,6 +239,7 @@ fn parse_int_format(s: &string) -> (i32, i32, i32, i32, i32) {
     base;
     uppercase;
 }
+
 #[export = "format_int"]
 fn format_int(x: &eq, d: i32, small: i32) -> &eq {
     let s: &string;

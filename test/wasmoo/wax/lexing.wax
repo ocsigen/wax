@@ -1,13 +1,33 @@
+// Wasm_of_ocaml runtime support
+// http://www.ocsigen.org/js_of_ocaml/
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, with linking exception;
+// either version 2.1 of the License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with this program; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 #[import = ("fail", "caml_failwith")]
 fn caml_failwith(&eq);
+
 type block = [mut &eq];
 type string = [mut i8];
+
 fn get(a: &eq, i: i32) -> i32 {
     let s: &string;
     s = a as &string;
     i = i + i;
     (s[i] as i32_u | s[i + 1] as i32_u << 8).extend16_s;
 }
+
 const lex_buffer: i32 = 2;
 const lex_buffer_len: i32 = 3;
 const lex_start_pos: i32 = 5;
@@ -27,7 +47,9 @@ const lex_default_code: i32 = 8;
 const lex_trans_code: i32 = 9;
 const lex_check_code: i32 = 10;
 const lex_code: i32 = 11;
+
 data lexing_empty_token = "lexing: empty token";
+
 #[export = "caml_lex_engine"]
 fn caml_lex_engine(vtbl: &eq, start_state: &eq, vlexbuf: &eq) -> &eq {
     let tbl: &block;
@@ -98,6 +120,7 @@ fn caml_lex_engine(vtbl: &eq, start_state: &eq, vlexbuf: &eq) -> &eq {
     } /* 'loop */
     unreachable;
 }
+
 fn run_mem(s: &string, i: i32, lexbuf: &block, curr_pos: &eq) {
     let dst: i32;
     let src: i32;
@@ -113,9 +136,11 @@ fn run_mem(s: &string, i: i32, lexbuf: &block, curr_pos: &eq) {
         br 'loop;
     } /* 'loop */
 }
+
 fn run_tag(s: &string, i: i32, lexbuf: &block) {
     become run_mem(s, i, lexbuf, -1 as &i31);
 }
+
 #[export = "caml_new_lex_engine"]
 fn caml_new_lex_engine(vtbl: &eq, start_state: &eq, vlexbuf: &eq) -> &eq {
     let tbl: &block;

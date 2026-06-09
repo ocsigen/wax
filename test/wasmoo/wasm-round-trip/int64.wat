@@ -33,7 +33,11 @@
     (field $deserialize (ref null $deserialize))
     (field $dup (ref null $dup)))
 ) (type $custom (sub (struct (field $f (ref $custom_operations)))))
-(global $int64_ops (export "int64_ops") (ref $custom_operations)
+(global $int64_ops
+  (export
+
+    "int64_ops")
+  (ref $custom_operations)
   (struct.new $custom_operations (@string $string "_j" )
     (ref.func $int64_cmp) (ref.null $compare) (ref.func $int64_hash)
     (struct.new $fixed_length (i32.const 8) (i32.const 8))
@@ -44,6 +48,7 @@
   (sub final $custom
     (struct (field $f (ref $custom_operations)) (field $f_2 i64)))
 )
+
 (func $int64_cmp
   (param $v1 (ref eq)) (param $v2 (ref eq)) (param $x i32) (result i32)
   (local $i1 i64) (local $i2 i64)
@@ -54,6 +59,7 @@
   (i32.sub (i64.gt_s (local.get $i1) (local.get $i2))
     (i64.lt_s (local.get $i1) (local.get $i2)))
 )
+
 (func $int64_hash (param $v (ref eq)) (result i32)
   (local $i i64)
   (local.set $i
@@ -61,6 +67,7 @@
   (i32.xor (i32.wrap_i64 (local.get $i))
     (i32.wrap_i64 (i64.shr_u (local.get $i) (i64.const 32))))
 )
+
 (func $int64_serialize
   (param $s (ref eq)) (param $v (ref eq)) (result i32 i32)
   (call $caml_serialize_int_8 (local.get $s)
@@ -68,23 +75,35 @@
   (i32.const 8)
   (i32.const 8)
 )
+
 (func $int64_deserialize (param $s (ref eq)) (result (ref eq) i32)
   (struct.new $int64 (global.get $int64_ops)
     (call $caml_deserialize_int_8 (local.get $s)))
   (i32.const 8)
 )
+
 (func $int64_dup (param $v (ref eq)) (result (ref eq))
   (struct.new $int64 (global.get $int64_ops)
     (struct.get $int64 $f_2 (ref.cast (ref $int64) (local.get $v))))
 )
-(func $caml_copy_int64 (export "caml_copy_int64")
+(func $caml_copy_int64
+  (export
+
+    "caml_copy_int64")
   (param $i i64) (result (ref eq))
   (struct.new $int64 (global.get $int64_ops) (local.get $i))
 )
-(func $Int64_val (export "Int64_val") (param $x (ref eq)) (result i64)
+(func $Int64_val
+  (export
+
+    "Int64_val")
+  (param $x (ref eq)) (result i64)
   (struct.get $int64 $f_2 (ref.cast (ref $int64) (local.get $x)))
 )
-(func $caml_int64_bswap (export "caml_int64_bswap")
+(func $caml_int64_bswap
+  (export
+
+    "caml_int64_bswap")
   (param $i i64) (result i64)
   (i64.or
     (i64.or
@@ -98,13 +117,29 @@
       (i64.rotl (i64.and (local.get $i) (i64.const 0xFF000000FF000000))
         (i64.const 8))))
 )
-(func $caml_int64_compare (export "caml_int64_compare")
+(func $caml_int64_compare
+  (export
+
+    "caml_int64_compare")
   (param $i1 i64) (param $i2 i64) (result (ref eq))
   (ref.i31
     (i32.sub (i64.gt_s (local.get $i1) (local.get $i2))
       (i64.lt_s (local.get $i1) (local.get $i2))))
-) (global $INT64_ERRMSG (ref $string) (@string $string "Int64.of_string" ))
-(func $caml_i64_of_digits (export "caml_i64_of_digits")
+)
+
+(global $INT64_ERRMSG (ref $string)
+  (@string $string "Int64.of_string" )
+;; "Int64.of_string"
+)
+(func $caml_i64_of_digits
+  (export
+
+    ;; Parse a sequence of digits into an i64 as dicted by $base,
+    ;; $signedness and $sign. The sequence is read in $s starting from $i.
+    ;; In case of failure raise [Failure $errmsg].
+    ;; Used by $caml_int64_of_string below and by $caml_uint64_of_string in
+    ;; package "integers".
+    "caml_i64_of_digits")
   (param $base i32) (param $signedness i32) (param $sign i32)
   (param $s (ref $string)) (param $i i32) (param $errmsg (ref $string))
   (result i64)
@@ -138,6 +173,7 @@
         (if (i64.lt_u (local.get $res) (i64.extend_i32_u (local.get $d)))
           (then (call $caml_failwith (local.get $errmsg))))
         (br $loop))))
+  (; 'loop ;)
   (if (local.get $signedness)
     (then
       (if (i32.gt_s (local.get $sign) (i32.const 0))
@@ -153,7 +189,10 @@
     (then (local.set $res (i64.sub (i64.const 0) (local.get $res)))))
   (local.get $res)
 )
-(func $caml_int64_of_string (export "caml_int64_of_string")
+(func $caml_int64_of_string
+  (export
+
+    "caml_int64_of_string")
   (param $v (ref eq)) (result (ref eq))
   (local $s (ref $string)) (local $i i32) (local $signedness i32)
   (local $sign i32) (local $base i32)
@@ -167,7 +206,10 @@
     (call $caml_i64_of_digits (local.get $base) (local.get $signedness)
       (local.get $sign) (local.get $s) (local.get $i)
       (global.get $INT64_ERRMSG)))
-) (data $caml_int64_create_lo_mi_hi "caml_int64_create_lo_mi_hi")
+)
+
+(data $caml_int64_create_lo_mi_hi "caml_int64_create_lo_mi_hi")
+
 (func $format_int64_default (param $d i64) (result (ref eq))
   (local $s (ref $string)) (local $negative i32) (local $i i32)
   (local $n i64)
@@ -193,7 +235,10 @@
     (then (array.set $string (local.get $s) (i32.const 0) (i32.const 45))))
   (local.get $s)
 ) (type $chars (array i8))
-(func $caml_int64_format (export "caml_int64_format")
+(func $caml_int64_format
+  (export
+
+    "caml_int64_format")
   (param $x (ref eq)) (param $x_2 (ref eq)) (result (ref eq))
   (local $d i64) (local $s (ref $string)) (local $sign_style i32)
   (local $alternate i32) (local $signed i32) (local $base i64)

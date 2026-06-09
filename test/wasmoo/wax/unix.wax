@@ -1,3 +1,20 @@
+// Wasm_of_ocaml runtime support
+// http://www.ocsigen.org/js_of_ocaml/
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, with linking exception;
+// either version 2.1 of the License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with this program; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 #[import = ("bindings", "gettimeofday")]
 fn gettimeofday() -> f64;
 #[import = ("bindings", "gmtime")]
@@ -6,11 +23,13 @@ fn gmtime(f64) -> &eq;
 fn localtime(f64) -> &eq;
 #[import = ("bindings", "mktime")]
 fn mktime(i32, i32, i32, i32, i32, i32) -> f64;
+
 type block = [mut &eq];
 type float = { f: f64 };
 #[export = "unix_gettimeofday"]
 #[export = "caml_unix_gettimeofday"]
 fn unix_gettimeofday(x: &eq) -> &eq { {float| f: gettimeofday() }; }
+
 #[export = "caml_alloc_tm"]
 fn caml_alloc_tm
 (sec: i32, min: i32, hour: i32, mday: i32, mon: i32, year: i32, wday: i32,

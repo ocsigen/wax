@@ -1,0 +1,8 @@
+// A leading comment on the function
+fn add(a: i32, b: i32) -> i32 {
+    a + b;
+}
+
+// A comment between definitions
+const answer: i32 = 42;
+// A trailing comment at the end of the file

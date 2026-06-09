@@ -2,7 +2,9 @@
   (func $caml_invalid_argument (param (ref eq)))
 ) (import "fail" "caml_failwith" (func $caml_failwith (param (ref eq))))
 (type $string (array (mut i8))) (type $block (array (mut (ref eq))))
-(type $char_table (array i8)) (type $int_array (array (mut i32)))
+(type $char_table (array i8))
+(type $int_array (array (mut i32)))
+
 (global $re_word_letters (ref $char_table)
   (array.new_fixed $char_table 32 (i32.const 0x00) (i32.const 0x00)
     (i32.const 0x00) (i32.const 0x00) (i32.const 0x00) (i32.const 0x00)
@@ -29,6 +31,7 @@
       (field $idx i32)
       (field $val i32)))
 )
+
 (func $is_word_letter (param $c i32) (result i32)
   (i32.and (i32.const 1)
     (i32.shr_u
@@ -36,6 +39,7 @@
         (i32.shr_u (local.get $c) (i32.const 3)))
       (i32.and (local.get $c) (i32.const 7))))
 )
+
 (func $in_bitset (param $s (ref $string)) (param $c i32) (result i32)
   (i32.and (i32.const 1)
     (i32.shr_u
@@ -43,6 +47,7 @@
         (i32.shr_u (local.get $c) (i32.const 3)))
       (i32.and (local.get $c) (i32.const 7))))
 )
+
 (func $re_match
   (param $vre (ref eq)) (param $s (ref $string)) (param $pos i32)
   (param $accept_partial_match i32) (result (ref eq))
@@ -136,6 +141,7 @@
                                                 (i32.add (local.get $pos)
                                                   (i32.const 1)))
                                               (br $continue))
+                                            (; 'CHARNORM ;)
                                             (br_if $prefix_match
                                               (i32.eq (local.get $pos)
                                                 (local.get $len)))
@@ -153,6 +159,7 @@
                                               (i32.add (local.get $pos)
                                                 (i32.const 1)))
                                             (br $continue))
+                                          (; 'STRING ;)
                                           (local.set $arg
                                             (i32.shr_u (local.get $instr)
                                               (i32.const 8)))
@@ -188,7 +195,9 @@
                                                   (i32.add (local.get $i)
                                                     (i32.const 1)))
                                                 (br $loop))))
+                                          (; 'loop ;)
                                           (br $continue))
+                                        (; 'STRINGNORM ;)
                                         (local.set $arg
                                           (i32.shr_u (local.get $instr)
                                             (i32.const 8)))
@@ -226,7 +235,9 @@
                                                 (i32.add (local.get $i)
                                                   (i32.const 1)))
                                               (br $loop))))
+                                        (; 'loop ;)
                                         (br $continue))
+                                      (; 'CHARCLASS ;)
                                       (br_if $prefix_match
                                         (i32.eq (local.get $pos)
                                           (local.get $len)))
@@ -247,6 +258,7 @@
                                         (i32.add (local.get $pos)
                                           (i32.const 1)))
                                       (br $continue))
+                                    (; 'BOL ;)
                                     (br_if $continue
                                       (i32.eqz (local.get $pos)))
                                     (br_if $continue
@@ -255,6 +267,7 @@
                                           (i32.sub (local.get $pos)
                                             (i32.const 1)))))
                                     (br $backtrack))
+                                  (; 'EOL ;)
                                   (br_if $continue
                                     (i32.eq (local.get $pos) (local.get $len)))
                                   (br_if $continue
@@ -262,6 +275,7 @@
                                       (array.get_u $string (local.get $s)
                                         (local.get $pos))))
                                   (br $backtrack))
+                                (; 'WORDBOUNDARY ;)
                                 (if (i32.eqz (local.get $pos))
                                   (then
                                     (br_if $prefix_match
@@ -297,6 +311,7 @@
                                                 (local.get $s)
                                                 (local.get $pos)))))
                                         (br $backtrack))))))
+                              (; 'BEGGROUP ;)
                               (local.set $arg
                                 (i32.shr_u (local.get $instr) (i32.const 8)))
                               (local.set $stack
@@ -307,6 +322,7 @@
                               (array.set $int_array (local.get $group_start)
                                 (local.get $arg) (local.get $pos))
                               (br $continue))
+                            (; 'ENDGROUP ;)
                             (local.set $arg
                               (i32.shr_u (local.get $instr) (i32.const 8)))
                             (local.set $stack
@@ -317,6 +333,7 @@
                             (array.set $int_array (local.get $group_end)
                               (local.get $arg) (local.get $pos))
                             (br $continue))
+                          (; 'REFGROUP ;)
                           (local.set $arg
                             (i32.shr_u (local.get $instr) (i32.const 8)))
                           (local.set $i
@@ -344,7 +361,9 @@
                                 (local.set $i
                                   (i32.add (local.get $i) (i32.const 1)))
                                 (br $loop))))
+                          (; 'loop ;)
                           (br $continue))
+                        (; 'SIMPLEOPT ;)
                         (local.set $arg
                           (i32.shr_u (local.get $instr) (i32.const 8)))
                         (if (i32.lt_u (local.get $pos) (local.get $len))
@@ -360,6 +379,7 @@
                                 (local.set $pos
                                   (i32.add (local.get $pos) (i32.const 1)))))))
                         (br $continue))
+                      (; 'SIMPLESTAR ;)
                       (local.set $arg
                         (i32.shr_u (local.get $instr) (i32.const 8)))
                       (local.set $set
@@ -377,7 +397,9 @@
                                 (local.set $pos
                                   (i32.add (local.get $pos) (i32.const 1)))
                                 (br $loop))))))
+                      (; 'loop ;)
                       (br $continue))
+                    (; 'SIMPLEPLUS ;)
                     (br_if $prefix_match
                       (i32.eq (local.get $pos) (local.get $len)))
                     (local.set $arg
@@ -400,17 +422,21 @@
                             (call $in_bitset (local.get $set)
                               (array.get_u $string (local.get $s)
                                 (local.get $pos)))))))
+                    (; 'loop ;)
                     (br $continue))
+                  (; 'GOTO ;)
                   (local.set $pc
                     (i32.add (local.get $pc)
                       (i32.shr_s (local.get $instr) (i32.const 8))))
                   (br $continue))
+                (; 'PUSHBACK ;)
                 (local.set $stack
                   (struct.new $pos (local.get $stack)
                     (i32.add (local.get $pc)
                       (i32.shr_s (local.get $instr) (i32.const 8)))
                     (local.get $pos)))
                 (br $continue))
+              (; 'SETMARK ;)
               (local.set $arg (i32.shr_u (local.get $instr) (i32.const 8)))
               (local.set $stack
                 (struct.new $undo (local.get $stack) (local.get $re_register)
@@ -420,13 +446,16 @@
               (array.set $int_array (local.get $re_register) (local.get $arg)
                 (local.get $pos))
               (br $continue))
+            (; 'CHECKPROGRESS ;)
             (local.set $arg (i32.shr_u (local.get $instr) (i32.const 8)))
             (br_if $backtrack
               (i32.eq (local.get $pos)
                 (array.get $int_array (local.get $re_register)
                   (local.get $arg))))
             (br $continue))
+          (; 'prefix_match ;)
           (br_if $ACCEPT (local.get $accept_partial_match)))
+        (; 'backtrack ;)
         (loop $loop
           (local.set $u
             (ref.cast (ref $undo)
@@ -438,12 +467,16 @@
                 (local.set $pos (struct.get $pos $pos (local.get $p)))
                 (local.set $stack
                   (struct.get $pos $pos_previous (local.get $p)))
-                (br $continue))))
+                (br $continue))
+              (; 'undo ;)
+            ))
           (array.set $int_array (struct.get $undo $tbl (local.get $u))
             (struct.get $undo $idx (local.get $u))
             (struct.get $undo $val (local.get $u)))
           (local.set $stack (struct.get $undo $undo_previous (local.get $u)))
-          (br $loop))))
+          (br $loop)))
+      (; 'continue ;)
+    ) (; 'ACCEPT ;)
     (array.set $int_array (local.get $group_end) (i32.const 0)
       (local.get $pos))
     (local.set $res
@@ -481,10 +514,17 @@
                   (array.get $int_array (local.get $group_end) (local.get $i))))))
           (local.set $i (i32.add (local.get $i) (i32.const 1)))
           (br $loop))))
+    (; 'loop ;)
     (return (local.get $res)))
+  (; 'reject ;)
   (ref.i31 (i32.const 0))
-) (data $search_forward "Str.search_forward")
-(func $re_search_forward (export "re_search_forward")
+)
+
+(data $search_forward "Str.search_forward")
+(func $re_search_forward
+  (export
+
+    "re_search_forward")
   (param $re (ref eq)) (param $vs (ref eq)) (param $vpos (ref eq))
   (result (ref eq))
   (local $s (ref $string)) (local $pos i32) (local $len i32)
@@ -504,9 +544,15 @@
       (then (return (local.get $res))))
     (local.set $pos (i32.add (local.get $pos) (i32.const 1)))
     (br_if $loop (i32.le_u (local.get $pos) (local.get $len))))
+  (; 'loop ;)
   (array.new_fixed $block 1 (ref.i31 (i32.const 0)))
-) (data $search_backward "Str.search_backward")
-(func $re_search_backward (export "re_search_backward")
+)
+
+(data $search_backward "Str.search_backward")
+(func $re_search_backward
+  (export
+
+    "re_search_backward")
   (param $re (ref eq)) (param $vs (ref eq)) (param $vpos (ref eq))
   (result (ref eq))
   (local $s (ref $string)) (local $pos i32) (local $len i32)
@@ -526,9 +572,15 @@
       (then (return (local.get $res))))
     (local.set $pos (i32.sub (local.get $pos) (i32.const 1)))
     (br_if $loop (i32.ge_s (local.get $pos) (i32.const 0))))
+  (; 'loop ;)
   (array.new_fixed $block 1 (ref.i31 (i32.const 0)))
-) (data $string_match "Str.string_match")
-(func $re_string_match (export "re_string_match")
+)
+
+(data $string_match "Str.string_match")
+(func $re_string_match
+  (export
+
+    "re_string_match")
   (param $re (ref eq)) (param $vs (ref eq)) (param $vpos (ref eq))
   (result (ref eq))
   (local $s (ref $string)) (local $pos i32) (local $len i32)
@@ -546,8 +598,13 @@
   (if (ref.test (ref $block) (local.get $res))
     (then (return (local.get $res))))
   (array.new_fixed $block 1 (ref.i31 (i32.const 0)))
-) (data $string_partial_match "Str.string_partial_match")
-(func $re_partial_match (export "re_partial_match")
+)
+
+(data $string_partial_match "Str.string_partial_match")
+(func $re_partial_match
+  (export
+
+    "re_partial_match")
   (param $re (ref eq)) (param $vs (ref eq)) (param $vpos (ref eq))
   (result (ref eq))
   (local $s (ref $string)) (local $pos i32) (local $len i32)
@@ -566,9 +623,14 @@
   (if (ref.test (ref $block) (local.get $res))
     (then (return (local.get $res))))
   (array.new_fixed $block 1 (ref.i31 (i32.const 0)))
-) (data $illegal_backslash "Str.replace: illegal backslash sequence")
+)
+
+(data $illegal_backslash "Str.replace: illegal backslash sequence")
 (data $unmatched_group "Str.replace: reference to unmatched group")
-(func $re_replacement_text (export "re_replacement_text")
+(func $re_replacement_text
+  (export
+
+    "re_replacement_text")
   (param $vrepl (ref eq)) (param $vgroups (ref eq)) (param $vorig (ref eq))
   (result (ref eq))
   (local $repl (ref $string)) (local $groups (ref $block))
@@ -631,6 +693,7 @@
           (i32.add (local.get $len)
             (i32.sub (local.get $end) (local.get $start))))
         (br $loop))))
+  (; 'loop ;)
   (local.set $res (array.new $string (i32.const 0) (local.get $len)))
   (local.set $i (i32.const 0))
   (loop $loop
@@ -682,5 +745,6 @@
           (local.get $orig) (local.get $start) (local.get $len))
         (local.set $j (i32.add (local.get $j) (local.get $len)))
         (br $loop))))
+  (; 'loop ;)
   (local.get $res)
 )

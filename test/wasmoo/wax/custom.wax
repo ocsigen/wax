@@ -1,3 +1,20 @@
+// Wasm_of_ocaml runtime support
+// http://www.ocsigen.org/js_of_ocaml/
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, with linking exception;
+// either version 2.1 of the License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with this program; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 #[import = ("int32", "int32_ops")]
 const int32_ops: &custom_operations;
 #[import = ("int32", "nativeint_ops")]
@@ -8,6 +25,7 @@ const int64_ops: &custom_operations;
 const bigarray_ops: &custom_operations;
 #[import = ("string", "caml_string_equal")]
 fn caml_string_equal(&eq, &eq) -> &eq;
+
 type string = [mut i8];
 type compare = fn(&eq, &eq, i32) -> i32;
 type hash = fn(&eq) -> i32;
@@ -26,14 +44,18 @@ type custom_operations = {
     dup: &?dup
 };
 type custom = open { f: &custom_operations };
+
 type custom_with_id: custom = open { f: &custom_operations, id: i64 };
+
 #[export = "caml_is_custom"]
 fn caml_is_custom(x: &eq) -> i32 { x is &custom; }
+
 #[export = "caml_dup_custom"]
 fn caml_dup_custom(v: &eq) -> &eq {
     ('custom: do &custom { _ = br_on_cast 'custom &custom v; unreachable; }.f.dup!)
         (v);
 }
+
 #[export = "custom_compare_id"]
 fn custom_compare_id(x: &eq, x_2: &eq, x_3: i32) -> i32 {
     let i1: i64;
@@ -42,9 +64,12 @@ fn custom_compare_id(x: &eq, x_2: &eq, x_3: i32) -> i32 {
     i2 = (x_2 as &custom_with_id).id;
     (i1 >s i2) - (i1 <s i2);
 }
+
 #[export = "custom_hash_id"]
 fn custom_hash_id(x: &eq) -> i32 { (x as &custom_with_id).id as i32; }
+
 let next_id: i64 = 0;
+
 #[export = "custom_next_id"]
 fn custom_next_id() -> i64 {
     let id: i64;
@@ -52,17 +77,21 @@ fn custom_next_id() -> i64 {
     next_id = id + 1;
     id;
 }
+
 type custom_operations_list = {
     ops: &custom_operations,
     next: &?custom_operations_list
 };
+
 let custom_operations: &?custom_operations_list =
     null as &?custom_operations_list;
+
 #[export = "caml_register_custom_operations"]
 fn caml_register_custom_operations(ops: &custom_operations) {
     custom_operations =
         {custom_operations_list| ops: ops, next: custom_operations };
 }
+
 #[export = "caml_find_custom_operations"]
 fn caml_find_custom_operations(id: &string) -> &?custom_operations {
     let l: &?custom_operations_list;
@@ -78,7 +107,9 @@ fn caml_find_custom_operations(id: &string) -> &?custom_operations {
     } /* 'not_found */
     null as &?custom_operations;
 }
+
 let initialized: i32 = 0;
+
 #[export = "caml_init_custom_operations"]
 fn caml_init_custom_operations() {
     if initialized { return; }
@@ -88,5 +119,6 @@ fn caml_init_custom_operations() {
     caml_register_custom_operations(bigarray_ops);
     initialized = 1;
 }
+
 #[export = "caml_custom_identifier"]
 fn caml_custom_identifier(v: &eq) -> &eq { (v as &custom).f.id; }

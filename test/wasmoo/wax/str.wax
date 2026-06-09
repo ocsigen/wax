@@ -1,11 +1,31 @@
+// Wasm_of_ocaml runtime support
+// http://www.ocsigen.org/js_of_ocaml/
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, with linking exception;
+// either version 2.1 of the License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with this program; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 #[import = ("fail", "caml_invalid_argument")]
 fn caml_invalid_argument(&eq);
 #[import = ("fail", "caml_failwith")]
 fn caml_failwith(&eq);
+
 type string = [mut i8];
 type block = [mut &eq];
+
 type char_table = [i8];
 type int_array = [mut i32];
+
 const re_word_letters: &char_table =
     [char_table|
         0x00,
@@ -40,6 +60,8 @@ const re_word_letters: &char_table =
         0xFF,
         0x7F,
         0xFF];
+// Latin-1 accented lowercase
+
 type stack = open { f: &?stack };
 type pos: stack = { pos_previous: &?stack, pc: i32, pos: i32 };
 type undo: stack = {
@@ -48,12 +70,15 @@ type undo: stack = {
     idx: i32,
     val: i32
 };
+
 fn is_word_letter(c: i32) -> i32 {
     1 & re_word_letters[c >>u 3] as i32_u >>u (c & 7);
 }
+
 fn in_bitset(s: &string, c: i32) -> i32 {
     1 & s[c >>u 3] as i32_u >>u (c & 7);
 }
+
 fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq
 {
     let res: &block;
@@ -518,7 +543,9 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq
     } /* 'reject */
     0 as &i31;
 }
+
 data search_forward = "Str.search_forward";
+
 #[export = "re_search_forward"]
 fn re_search_forward(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     let s: &string;
@@ -537,7 +564,9 @@ fn re_search_forward(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     } /* 'loop */
     [block|0 as &i31];
 }
+
 data search_backward = "Str.search_backward";
+
 #[export = "re_search_backward"]
 fn re_search_backward(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     let s: &string;
@@ -558,7 +587,9 @@ fn re_search_backward(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     } /* 'loop */
     [block|0 as &i31];
 }
+
 data string_match = "Str.string_match";
+
 #[export = "re_string_match"]
 fn re_string_match(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     let s: &string;
@@ -573,7 +604,9 @@ fn re_string_match(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     if res is &block { return res; }
     [block|0 as &i31];
 }
+
 data string_partial_match = "Str.string_partial_match";
+
 #[export = "re_partial_match"]
 fn re_partial_match(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     let s: &string;
@@ -590,8 +623,10 @@ fn re_partial_match(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     if res is &block { return res; }
     [block|0 as &i31];
 }
+
 data illegal_backslash = "Str.replace: illegal backslash sequence";
 data unmatched_group = "Str.replace: reference to unmatched group";
+
 #[export = "re_replacement_text"]
 fn re_replacement_text(vrepl: &eq, vgroups: &eq, vorig: &eq) -> &eq {
     let repl: &string;

@@ -5,8 +5,11 @@ exposed in Wax and compile to WebAssembly, with validation.
   $ wax gen.wax --validate -f wat
   (type $ft0 (func (result i32))) (type $k0 (cont $ft0))
   (type $ft1 (func (param i32) (result i32))) (type $k1 (cont $ft1))
-  (tag $yield (param i32) (result i32)) (tag $myexn (param i32))
+  (tag $yield (param i32) (result i32))
+  (tag $myexn (param i32))
+  
   (func $g1 (param $x i32) (result i32) (suspend $yield (local.get $x)))
+  
   (func $t_new (result (ref $k1)) (cont.new $k1 (ref.func $g1)))
   (func $t_bind (param $c (ref $k1)) (result (ref $k0))
     (cont.bind $k1 $k0 (i32.const 7) (local.get $c))
@@ -21,6 +24,8 @@ exposed in Wax and compile to WebAssembly, with validation.
     (param $c (ref $k0)) (param $e (ref null exn)) (result i32)
     (resume_throw_ref $k0 (local.get $e) (local.get $c))
   )
+  
+  ;; the abstract cont / nocont heap types are written &cont / &nocont
   (func $abstract_refs
     (param $a (ref null cont)) (param $b (ref nocont)) (result i32)
     (i32.const 0)
@@ -30,6 +35,7 @@ A WebAssembly module using resume handlers (both `on $tag -> 'label` and
 `on $tag -> switch`) and the switch instruction decompiles to Wax:
 
   $ wax handlers.wat --validate -f wax -o handlers.wax && cat handlers.wax
+  // resume with an on-label handler
   type ft = fn(i32) -> i32;
   type ct = cont ft;
   tag yield(i32) -> i32;
@@ -38,6 +44,7 @@ A WebAssembly module using resume handlers (both `on $tag -> 'label` and
       _ = _;
       return _;
   }
+  // switch between two continuations
   rec {
       type ft1 = fn(&?ct2) -> i32;
       type ct1 = cont ft1;
@@ -46,6 +53,7 @@ A WebAssembly module using resume handlers (both `on $tag -> 'label` and
   }
   tag e() -> i32;
   fn sw(k: &?ct1) -> i32 { switch ct1 e(k); }
+  // resume with an on-switch handler
   rec { type sft = fn(&?sct) -> i32; type sct = cont sft; }
   tag swap() -> i32;
   fn f: sft (x: &?sct) -> i32 { 0; }

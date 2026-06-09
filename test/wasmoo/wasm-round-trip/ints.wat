@@ -2,12 +2,18 @@
 (import "fail" "caml_invalid_argument"
   (func $caml_invalid_argument (param (ref eq)))
 ) (type $string (array (mut i8)))
-(func $caml_format_int (export "caml_format_int")
+(func $caml_format_int
+  (export
+
+    "caml_format_int")
   (param $x (ref eq)) (param $x_2 (ref eq)) (result (ref eq))
   (return_call $format_int (local.get $x)
     (i31.get_s (ref.cast (ref i31) (local.get $x_2))) (i32.const 1))
 )
-(func $parse_sign_and_base (export "parse_sign_and_base")
+(func $parse_sign_and_base
+  (export
+
+    "parse_sign_and_base")
   (param $s (ref $string)) (result i32 i32 i32 i32)
   (local $i i32) (local $len i32) (local $c i32) (local $signedness i32)
   (local $sign i32) (local $base i32)
@@ -69,7 +75,11 @@
   (local.get $sign)
   (local.get $base)
 )
-(func $parse_digit (export "parse_digit") (param $c i32) (result i32)
+(func $parse_digit
+  (export
+
+    "parse_digit")
+  (param $c i32) (result i32)
   (if
     (i32.and (i32.ge_u (local.get $c) (i32.const 48))
       (i32.le_u (local.get $c) (i32.const 57)))
@@ -84,7 +94,10 @@
     (then (return (i32.sub (local.get $c) (i32.const 87)))))
   (return (i32.const -1))
 )
-(func $parse_int (export "parse_int")
+(func $parse_int
+  (export
+
+    "parse_int")
   (param $v (ref eq)) (param $nbits i32) (param $errmsg (ref $string))
   (result i32)
   (local $s (ref $string)) (local $i i32) (local $len i32) (local $d i32)
@@ -124,6 +137,7 @@
         (if (i32.lt_u (local.get $res) (local.get $d))
           (then (call $caml_failwith (local.get $errmsg))))
         (br $loop))))
+  (; 'loop ;)
   (if (local.get $signedness)
     (then
       (local.set $threshold
@@ -144,13 +158,24 @@
   (if (i32.lt_s (local.get $sign) (i32.const 0))
     (then (local.set $res (i32.sub (i32.const 0) (local.get $res)))))
   (local.get $res)
-) (global $INT_ERRMSG (ref $string) (@string $string "int_of_string" ))
-(func $caml_int_of_string (export "caml_int_of_string")
+)
+
+(global $INT_ERRMSG (ref $string)
+  (@string $string "int_of_string" )
+;; "int.of_string"
+)
+(func $caml_int_of_string
+  (export
+
+    "caml_int_of_string")
   (param $v (ref eq)) (result (ref eq))
   (ref.i31
     (call $parse_int (local.get $v) (i32.const 31) (global.get $INT_ERRMSG)))
 )
-(func $caml_bswap16 (export "caml_bswap16")
+(func $caml_bswap16
+  (export
+
+    "caml_bswap16")
   (param $x (ref eq)) (result (ref eq))
   (local $x_2 i32)
   (local.set $x_2 (i31.get_s (ref.cast (ref i31) (local.get $x))))
@@ -159,12 +184,21 @@
       (i32.shl (i32.and (local.get $x_2) (i32.const 0xFF)) (i32.const 8))
       (i32.and (i32.shr_u (local.get $x_2) (i32.const 8)) (i32.const 0xFF))))
 ) (type $chars (array i8))
-(global $lowercase_hex_table (export "lowercase_hex_table") (ref $chars)
+(global $lowercase_hex_table
+  (export
+
+    "lowercase_hex_table")
+  (ref $chars)
   (@string $chars "0123456789abcdef" )
 )
-(global $uppercase_hex_table (export "uppercase_hex_table") (ref $chars)
+(global $uppercase_hex_table
+  (export
+
+    "uppercase_hex_table")
+  (ref $chars)
   (@string $chars "0123456789ABCDEF" )
 )
+
 (func $format_int_default (param $d i32) (result (ref eq))
   (local $s (ref $string)) (local $negative i32) (local $i i32)
   (local $n i32)
@@ -188,8 +222,13 @@
   (if (local.get $negative)
     (then (array.set $string (local.get $s) (i32.const 0) (i32.const 45))))
   (local.get $s)
-) (data $format_error "format_int: bad format")
-(func $parse_int_format (export "parse_int_format")
+)
+
+(data $format_error "format_int: bad format")
+(func $parse_int_format
+  (export
+
+    "parse_int_format")
   (param $s (ref $string)) (result i32 i32 i32 i32 i32)
   (local $i i32) (local $len i32) (local $c i32) (local $sign_style i32)
   (local $alternate i32) (local $base i32) (local $signed i32)
@@ -250,15 +289,20 @@
                         (then (local.set $base (i32.const 8)))
                         (else (br $bad_format)))))))))))
       (br $return))
+    (; 'bad_format ;)
     (call $caml_invalid_argument
       (array.new_data $string $format_error (i32.const 0) (i32.const 22))))
+  (; 'return ;)
   (local.get $sign_style)
   (local.get $alternate)
   (local.get $signed)
   (local.get $base)
   (local.get $uppercase)
 )
-(func $format_int (export "format_int")
+(func $format_int
+  (export
+
+    "format_int")
   (param $x (ref eq)) (param $d i32) (param $small i32) (result (ref eq))
   (local $s (ref $string)) (local $sign_style i32) (local $alternate i32)
   (local $signed i32) (local $base i32) (local $uppercase i32)

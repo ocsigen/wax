@@ -7,7 +7,10 @@
 (import "bigarray" "caml_ba_get_data"
   (func $caml_ba_get_data (param (ref eq)) (result (ref extern)))
 )
-(func $caml_lxm_next (export "caml_lxm_next")
+(func $caml_lxm_next
+  (export
+
+    "caml_lxm_next")
   (param $v (ref eq)) (result i64)
   (local $data (ref extern)) (local $a i64) (local $s i64) (local $q0 i64)
   (local $q1 i64) (local $z i64)

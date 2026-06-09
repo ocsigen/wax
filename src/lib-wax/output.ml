@@ -25,10 +25,15 @@ let get_theme use_color =
     }
   else no_color
 
-type ctx = {
+type 'info ctx = {
   printer : Utils.Printer.t;
   theme : theme;
   mutable style_override : style option;
+  trivia : Utils.Trivia.t;
+  seen : (location, unit) Hashtbl.t;
+  (* Extract a source location from a node's annotation, to look its trivia up.
+     [fun _ -> None] when printing typed ASTs for diagnostics (no trivia). *)
+  locate : 'info -> location option;
 }
 
 let print_styled pp style ?(len = None) text =
@@ -58,6 +63,17 @@ let type_ pp s = print_styled pp Type s
 let comment pp s = print_styled pp Comment s
 let string pp ?len s = print_styled pp String ?len s
 let attribute pp s = print_styled pp Attribute s
+
+(* Comment preservation: emit the trivia (comments, blank lines) the lexer
+   collected, looked up by AST-node location. The rendering logic is shared with
+   the WebAssembly printer in [Utils.Trivia]. *)
+
+let print_trivia pp lst =
+  Utils.Trivia.print pp.printer ~comment:(comment pp) lst
+
+let atomic_node pp (loc : location option) f =
+  Utils.Trivia.around pp.printer ~comment:(comment pp) pp.trivia ~seen:pp.seen
+    loc f
 
 let with_style ctx style f =
   match ctx.style_override with
@@ -548,6 +564,7 @@ let rec cond_to_string (c : Wasm.Ast.cond) =
 and cond_list l = String.concat ", " (List.map cond_to_string l)
 
 let rec instr prec pp (i : _ instr) =
+  atomic_node pp (pp.locate i.info) @@ fun () ->
   parentheses prec (get_prec i) pp @@ fun () ->
   match i.desc with
   | Block { label; typ; block = l } ->
@@ -1100,6 +1117,7 @@ let print_memdata pp (d : _ Ast.memdata) =
   punctuation pp ";"
 
 let rec modulefield pp field =
+  atomic_node pp (Some field.info) @@ fun () ->
   match field.desc with
   | Type t -> rectype pp t
   | Func { name; typ; sign; body = label, body; attributes = a } ->
@@ -1313,26 +1331,72 @@ let rec modulefield pp field =
               branch e)
             else_fields)
 
-let module_ ?(color = Auto) ?out_channel printer l =
+let module_ ?(color = Auto) ?out_channel ?(tail = []) printer ~trivia
+    (l : location module_) =
   let use_color = should_use_color ~color ~out_channel in
   let theme = get_theme use_color in
-  let pp = { printer; theme; style_override = None } in
-  hvbox pp (fun () -> list ~sep:space modulefield pp l)
+  let pp =
+    {
+      printer;
+      theme;
+      style_override = None;
+      trivia;
+      seen = Hashtbl.create 16;
+      locate = (fun l -> Some l);
+    }
+  in
+  hvbox pp (fun () -> list ~sep:space modulefield pp l);
+  (* Trailing comments owned by no node. Drop trailing blank lines so the file
+     does not end with spurious blank lines. *)
+  let rec drop_trailing_blanks = function
+    | { Utils.Trivia.trivia = Utils.Trivia.Blank_line; _ } :: rest ->
+        drop_trailing_blanks rest
+    | l -> l
+  in
+  let tail = List.rev (drop_trailing_blanks (List.rev tail)) in
+  print_trivia pp tail
 
 let instr printer i =
   let use_color = should_use_color ~color:Auto ~out_channel:(Some stderr) in
   let theme = get_theme use_color in
-  let pp = { printer; theme; style_override = None } in
+  let pp =
+    {
+      printer;
+      theme;
+      style_override = None;
+      trivia = Hashtbl.create 0;
+      seen = Hashtbl.create 0;
+      locate = (fun _ -> None);
+    }
+  in
   instr Instruction pp i
 
 let valtype printer i =
   let use_color = should_use_color ~color:Auto ~out_channel:(Some stderr) in
   let theme = get_theme use_color in
-  let pp = { printer; theme; style_override = None } in
+  let pp =
+    {
+      printer;
+      theme;
+      style_override = None;
+      trivia = Hashtbl.create 0;
+      seen = Hashtbl.create 0;
+      locate = (fun _ -> None);
+    }
+  in
   valtype pp i
 
 let storagetype printer i =
   let use_color = should_use_color ~color:Auto ~out_channel:(Some stderr) in
   let theme = get_theme use_color in
-  let pp = { printer; theme; style_override = None } in
+  let pp =
+    {
+      printer;
+      theme;
+      style_override = None;
+      trivia = Hashtbl.create 0;
+      seen = Hashtbl.create 0;
+      locate = (fun _ -> None);
+    }
+  in
   storagetype pp i

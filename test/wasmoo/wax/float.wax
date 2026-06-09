@@ -1,3 +1,20 @@
+// Wasm_of_ocaml runtime support
+// http://www.ocsigen.org/js_of_ocaml/
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, with linking exception;
+// either version 2.1 of the License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with this program; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 #[import = ("jslib", "unwrap")]
 fn unwrap(&eq) -> &?any;
 #[import = ("bindings", "format_float")]
@@ -16,14 +33,20 @@ const lowercase_hex_table: &chars;
 fn jsstring_of_string(&string) -> &?any;
 #[import = ("jsstring", "string_of_jsstring")]
 fn string_of_jsstring(&?any) -> &string;
+
 type float = { f: f64 };
 type string = [mut i8];
 type block = [mut &eq];
+
 type chars = [i8];
+
 const infinity: &chars = chars#"infinity";
+
 const nan_2: &chars = chars#"nan";
+
 #[export = "Double_val"]
 fn Double_val(x: &eq) -> f64 { (x as &float).f; }
+
 #[export = "caml_hexstring_of_float"]
 fn caml_hexstring_of_float(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
     let b: i64;
@@ -113,7 +136,9 @@ fn caml_hexstring_of_float(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
     if sign { s[0] = 45; } else { if style != 45 { s[0] = style; } }
     s;
 }
+
 data format_error = "format_float: bad format";
+
 fn parse_format(s: &string) -> (i32, i32, i32, i32) {
     let i: i32;
     let len: i32;
@@ -154,7 +179,9 @@ fn parse_format(s: &string) -> (i32, i32, i32, i32) {
     conversion;
     uppercase;
 }
+
 const inf_2: &chars = chars#"inf";
+
 #[export = "caml_format_float"]
 fn caml_format_float(x: &eq, x_2: &eq) -> &eq {
     let f: f64;
@@ -218,7 +245,9 @@ fn caml_format_float(x: &eq, x_2: &eq) -> &eq {
     }
     s;
 }
+
 data float_of_string = "float_of_string";
+
 fn caml_float_of_hex(s: &string, i: i32) -> f64 {
     let len: i32;
     let c: i32;
@@ -316,11 +345,13 @@ fn caml_float_of_hex(s: &string, i: i32) -> f64 {
     caml_failwith([string|float_of_string @ 0; 15]);
     0;
 }
+
 fn on_whitespace(s: &string, i: i32) -> i32 {
     let c: i32;
     c = s[i] as i32_u;
     (c == 32) | (c - 9 <=u 4);
 }
+
 #[export = "caml_float_of_string"]
 fn caml_float_of_string(x: &eq) -> &eq {
     let s: &string;
@@ -443,6 +474,7 @@ fn caml_float_of_string(x: &eq) -> &eq {
     caml_failwith([string|float_of_string @ 0; 15]);
     return 0 as &i31;
 }
+
 #[export = "caml_nextafter_float"]
 fn caml_nextafter_float(x: f64, y: f64) -> f64 {
     let i: i64;
@@ -459,6 +491,7 @@ fn caml_nextafter_float(x: f64, y: f64) -> f64 {
         return i.from_bits;
     }
 }
+
 #[export = "caml_classify_float"]
 fn caml_classify_float(x: f64) -> &eq {
     let a: f64;
@@ -469,6 +502,8 @@ fn caml_classify_float(x: f64) -> &eq {
          if a == 0 => i32 { 2; } else { if a == a => i32 { 1; } else { 4; } }
      } as &i31);
 }
+// nan
+
 #[export = "caml_modf_float"]
 fn caml_modf_float(x: &eq) -> &eq {
     let x_2: f64;
@@ -487,6 +522,7 @@ fn caml_modf_float(x: &eq) -> &eq {
     } else { i = x_2; f = x_2; }
     [block|0 as &i31, {float| f: f }, {float| f: i }];
 }
+
 fn ldexp(x: f64, n: i32) -> f64 {
     if n >s 1023 {
         x = x * 0x1p1023;
@@ -509,8 +545,10 @@ fn ldexp(x: f64, n: i32) -> f64 {
     }
     x * (n as i64_s + 0x3ff << 52).from_bits;
 }
+
 #[export = "caml_ldexp_float"]
 fn caml_ldexp_float(x: f64, i: &eq) -> f64 { ldexp(x, i as &i31 as i32_s); }
+
 fn frexp(x: f64) -> (f64, i32) {
     let y: i64;
     let e: i32;
@@ -528,6 +566,7 @@ fn frexp(x: f64) -> (f64, i32) {
     (y & 0x800fffffffffffff | 0x3fe0000000000000).from_bits;
     e - 0x3fe;
 }
+
 #[export = "caml_frexp_float"]
 fn caml_frexp_float(x: &eq) -> &eq {
     let m: f64;
@@ -537,8 +576,10 @@ fn caml_frexp_float(x: &eq) -> &eq {
     m = _;
     [block|0 as &i31, {float| f: m }, e as &i31];
 }
+
 #[export = "caml_signbit_float"]
 fn caml_signbit_float(x: f64) -> &eq { (x.to_bits >>u 63) as i32 as &i31; }
+
 #[export = "caml_erf_float"]
 fn erf(x: f64) -> f64 {
     let a1: f64;
@@ -562,8 +603,10 @@ fn erf(x: f64) -> f64 {
                 (t * exp(-(x * x)));
     y.copysign(x);
 }
+
 #[export = "caml_erfc_float"]
 fn caml_erfc_float(x: f64) -> f64 { 1 - erf(x); }
+
 #[export = "caml_fma_float"]
 fn caml_fma_float(vx: &eq, vy: &eq, vz: &eq) -> &eq {
     let x: f64;
@@ -725,10 +768,12 @@ fn caml_fma_float(vx: &eq, vy: &eq, vz: &eq) -> &eq {
     } /* 'l_2 */
     {float| f: y };
 }
+
 #[export = "caml_float_compare"]
 fn caml_float_compare(x: f64, y: f64) -> &eq {
     ((x > y) - (x < y) + ((x == x) - (y == y))) as &i31;
 }
+
 #[export = "caml_round"]
 fn caml_round(x: f64) -> f64 {
     let y: f64;

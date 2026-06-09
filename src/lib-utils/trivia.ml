@@ -202,3 +202,112 @@ let associate ctx =
      the last node, or — when the module has no locations at all (e.g. an empty
      [(module)]) — the whole file. The caller prints them as tail trivia. *)
   (tbl, leftover)
+
+(* Rendering. Shared by the Wax and WebAssembly printers; the comment styling is
+   provided by the [comment] callback. *)
+
+let print pp ~comment lst =
+  List.iter
+    (fun e ->
+      match (e.trivia, e.position) with
+      | Item { kind = Block_comment; content; _ }, _ ->
+          Printer.space pp ();
+          comment content;
+          Printer.space pp ()
+      | Item { kind = Line_comment; content; _ }, Inline ->
+          Printer.space pp ();
+          comment (String.trim content);
+          Printer.newline pp ()
+      | Item { kind = Line_comment; content; _ }, Line_start ->
+          Printer.newline pp ();
+          comment (String.trim content);
+          Printer.newline pp ()
+      | Item { kind = Annotation; _ }, _ -> ()
+      | Blank_line, _ -> Printer.blank_line pp ())
+    lst
+
+let dummy_assoc = { before = []; within = []; after = [] }
+
+let get trivia ~seen loc =
+  match loc with
+  | None -> dummy_assoc
+  | Some loc -> (
+      match Hashtbl.find_opt trivia loc with
+      | None -> dummy_assoc
+      | Some assoc ->
+          if Hashtbl.mem seen loc then dummy_assoc
+          else (
+            Hashtbl.add seen loc ();
+            assoc))
+
+let around pp ~comment trivia ~seen loc f =
+  let assoc = get trivia ~seen loc in
+  print pp ~comment assoc.before;
+  f ();
+  print pp ~comment assoc.within;
+  print pp ~comment assoc.after
+
+(* Cross-format delimiter translation. *)
+
+type comment_syntax = {
+  line : string;
+  block_open : string;
+  block_close : string;
+}
+
+let wax_syntax = { line = "//"; block_open = "/*"; block_close = "*/" }
+let wat_syntax = { line = ";;"; block_open = "(;"; block_close = ";)" }
+
+let replace_all ~sub ~by s =
+  let sl = String.length sub in
+  if sl = 0 then s
+  else
+    let n = String.length s in
+    let buf = Buffer.create n in
+    let rec aux i =
+      if i >= n then Buffer.contents buf
+      else if i + sl <= n && String.sub s i sl = sub then (
+        Buffer.add_string buf by;
+        aux (i + sl))
+      else (
+        Buffer.add_char buf s.[i];
+        aux (i + 1))
+    in
+    aux 0
+
+let retarget_content ~src ~dst kind content =
+  match kind with
+  | Line_comment ->
+      if String.starts_with ~prefix:src.line content then
+        dst.line
+        ^ String.sub content (String.length src.line)
+            (String.length content - String.length src.line)
+      else content
+  | Block_comment ->
+      content
+      |> replace_all ~sub:src.block_open ~by:dst.block_open
+      |> replace_all ~sub:src.block_close ~by:dst.block_close
+  | Annotation -> content
+
+let retarget_entry ~src ~dst e =
+  match e.trivia with
+  | Item { content; kind } ->
+      {
+        e with
+        trivia =
+          Item { content = retarget_content ~src ~dst kind content; kind };
+      }
+  | Blank_line -> e
+
+let retarget ~src ~dst tbl tail =
+  let conv = retarget_entry ~src ~dst in
+  let conv_assoc a =
+    {
+      before = List.map conv a.before;
+      within = List.map conv a.within;
+      after = List.map conv a.after;
+    }
+  in
+  let tbl' = Hashtbl.create (Hashtbl.length tbl) in
+  Hashtbl.iter (fun k v -> Hashtbl.add tbl' k (conv_assoc v)) tbl;
+  (tbl', List.map conv tail)

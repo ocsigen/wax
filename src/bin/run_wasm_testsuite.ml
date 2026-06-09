@@ -347,7 +347,8 @@ let runtest filename _ =
   in
   (* Translation to new syntax *)
   let print_wax ~color f m =
-    Utils.Printer.run f (fun p -> Wax.Output.module_ ~color p m)
+    Utils.Printer.run f (fun p ->
+        Wax.Output.module_ ~color p ~trivia:(Hashtbl.create 0) m)
   in
   List.iter
     (fun (_, m, source) ->
@@ -380,7 +381,8 @@ let runtest filename _ =
                   in
                   if not ok then (
                     Format.eprintf "@[%a@]@." (print_module ~color) m';
-                    Format.eprintf "@[%a@]@." (print_wax ~color) m))
+                    Format.eprintf "@[%a@]@." (print_wax ~color)
+                      (Wax.Typing.erase_types m)))
             in
             if not ok then Format.eprintf "@[%a@]@." (print_wax ~color) m;
             let text = Format.asprintf "%a@." (print_wax ~color:Never) m in

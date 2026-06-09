@@ -1,5 +1,7 @@
 (import "fail" "caml_failwith" (func $caml_failwith (param (ref eq))))
-(type $block (array (mut (ref eq)))) (type $string (array (mut i8)))
+(type $block (array (mut (ref eq))))
+(type $string (array (mut i8)))
+
 (func $get (param $a (ref eq)) (param $i i32) (result i32)
   (local $s (ref $string))
   (local.set $s (ref.cast (ref $string) (local.get $a)))
@@ -10,7 +12,9 @@
         (array.get_u $string (local.get $s)
           (i32.add (local.get $i) (i32.const 1)))
         (i32.const 8))))
-) (global $lex_buffer i32 (i32.const 2))
+)
+
+(global $lex_buffer i32 (i32.const 2))
 (global $lex_buffer_len i32 (i32.const 3))
 (global $lex_start_pos i32 (i32.const 5))
 (global $lex_curr_pos i32 (i32.const 6))
@@ -27,8 +31,12 @@
 (global $lex_trans_code i32 (i32.const 9))
 (global $lex_check_code i32 (i32.const 10))
 (global $lex_code i32 (i32.const 11))
+
 (data $lexing_empty_token "lexing: empty token")
-(func $caml_lex_engine (export "caml_lex_engine")
+(func $caml_lex_engine
+  (export
+
+    "caml_lex_engine")
   (param $vtbl (ref eq)) (param $start_state (ref eq))
   (param $vlexbuf (ref eq)) (result (ref eq))
   (local $tbl (ref $block)) (local $lexbuf (ref $block)) (local $c i32)
@@ -142,8 +150,10 @@
         (array.set $block (local.get $lexbuf) (global.get $lex_eof_reached)
           (ref.i31 (i32.const 0)))))
     (br $loop))
+  (; 'loop ;)
   (unreachable)
 )
+
 (func $run_mem
   (param $s (ref $string)) (param $i i32) (param $lexbuf (ref $block))
   (param $curr_pos (ref eq))
@@ -166,13 +176,18 @@
           (array.get $block (local.get $mem)
             (i32.add (local.get $src) (i32.const 1))))))
     (br $loop))
+  (; 'loop ;)
 )
+
 (func $run_tag
   (param $s (ref $string)) (param $i i32) (param $lexbuf (ref $block))
   (return_call $run_mem (local.get $s) (local.get $i) (local.get $lexbuf)
     (ref.i31 (i32.const -1)))
 )
-(func $caml_new_lex_engine (export "caml_new_lex_engine")
+(func $caml_new_lex_engine
+  (export
+
+    "caml_new_lex_engine")
   (param $vtbl (ref eq)) (param $start_state (ref eq))
   (param $vlexbuf (ref eq)) (result (ref eq))
   (local $tbl (ref $block)) (local $lexbuf (ref $block)) (local $c i32)
@@ -331,5 +346,6 @@
         (array.set $block (local.get $lexbuf) (global.get $lex_eof_reached)
           (ref.i31 (i32.const 0)))))
     (br $loop))
+  (; 'loop ;)
   (unreachable)
 )

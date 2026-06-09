@@ -1,0 +1,10 @@
+// A leading comment on the first function
+fn add(a: i32, b: i32) -> i32 {
+    let x: i32 = a; // a trailing comment
+    /* a block comment */
+    x + b;
+}
+
+// A comment between definitions
+const answer: i32 = 42;
+// A trailing comment at the end of the file

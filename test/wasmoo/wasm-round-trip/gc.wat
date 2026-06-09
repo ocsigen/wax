@@ -1,21 +1,36 @@
 (type $float (struct (field $f f64))) (type $block (array (mut (ref eq))))
-(func $caml_gc_minor (export "caml_gc_minor")
+(func $caml_gc_minor
+  (export
+
+    "caml_gc_minor")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
-(func $caml_gc_major (export "caml_gc_major")
+(func $caml_gc_major
+  (export
+
+    "caml_gc_major")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
-(func $caml_gc_full_major (export "caml_gc_full_major")
+(func $caml_gc_full_major
+  (export
+
+    "caml_gc_full_major")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
-(func $caml_gc_compaction (export "caml_gc_compaction")
+(func $caml_gc_compaction
+  (export
+
+    "caml_gc_compaction")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
-(func $caml_gc_counters (export "caml_gc_counters")
+(func $caml_gc_counters
+  (export
+
+    "caml_gc_counters")
   (param $x (ref eq)) (result (ref eq))
   (local $f (ref eq))
   (local.set $f (struct.new $float (f64.const 0)))
@@ -34,11 +49,17 @@
     (ref.i31 (i32.const 0)) (ref.i31 (i32.const 0)) (ref.i31 (i32.const 0))
     (ref.i31 (i32.const 0)))
 )
-(func $caml_gc_set (export "caml_gc_set")
+(func $caml_gc_set
+  (export
+
+    "caml_gc_set")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
-(func $caml_gc_get (export "caml_gc_get")
+(func $caml_gc_get
+  (export
+
+    "caml_gc_get")
   (param $x (ref eq)) (result (ref eq))
   (array.new_fixed $block 12 (ref.i31 (i32.const 0)) (ref.i31 (i32.const 0))
     (ref.i31 (i32.const 0)) (ref.i31 (i32.const 0)) (ref.i31 (i32.const 0))
@@ -46,61 +67,102 @@
     (ref.i31 (i32.const 0)) (ref.i31 (i32.const 0)) (ref.i31 (i32.const 0))
     (ref.i31 (i32.const 0)))
 )
-(func $caml_gc_huge_fallback_count (export "caml_gc_huge_fallback_count")
+(func $caml_gc_huge_fallback_count
+  (export
+
+    "caml_gc_huge_fallback_count")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
-(func $caml_gc_major_slice (export "caml_gc_major_slice")
+(func $caml_gc_major_slice
+  (export
+
+    "caml_gc_major_slice")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
-(func $caml_gc_major_bucket (export "caml_gc_major_bucket")
+(func $caml_gc_major_bucket
+  (export
+
+    "caml_gc_major_bucket")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
-(func $caml_gc_major_credit (export "caml_gc_major_credit")
+(func $caml_gc_major_credit
+  (export
+
+    "caml_gc_major_credit")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
-(func $caml_gc_minor_free (export "caml_gc_minor_free")
+(func $caml_gc_minor_free
+  (export
+
+    "caml_gc_minor_free")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
-(func $caml_gc_minor_words (export "caml_gc_minor_words")
+(func $caml_gc_minor_words
+  (export
+
+    "caml_gc_minor_words")
   (param $x (ref eq)) (result (ref eq))
   (struct.new $float (f64.const 0))
 )
-(func $caml_final_register (export "caml_final_register")
+(func $caml_final_register
+  (export
+
+    "caml_final_register")
   (param $x (ref eq)) (param $x_2 (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
 (func $caml_final_register_called_without_value
-  (export "caml_final_register_called_without_value")
+  (export
+
+    "caml_final_register_called_without_value")
   (param $x (ref eq)) (param $x_2 (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
-(func $caml_final_release (export "caml_final_release")
+(func $caml_final_release
+  (export
+
+    "caml_final_release")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
-(func $caml_memprof_start (export "caml_memprof_start")
+(func $caml_memprof_start
+  (export
+
+    "caml_memprof_start")
   (param $x (ref eq)) (param $x_2 (ref eq)) (param $x_3 (ref eq))
   (result (ref eq))
   (ref.i31 (i32.const 0))
 )
-(func $caml_memprof_set (export "caml_memprof_set")
+(func $caml_memprof_set
+  (export
+
+    "caml_memprof_set")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
-(func $caml_memprof_stop (export "caml_memprof_stop")
+(func $caml_memprof_stop
+  (export
+
+    "caml_memprof_stop")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
-(func $caml_eventlog_pause (export "caml_eventlog_pause")
+(func $caml_eventlog_pause
+  (export
+
+    "caml_eventlog_pause")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
-(func $caml_eventlog_resume (export "caml_eventlog_resume")
+(func $caml_eventlog_resume
+  (export
+
+    "caml_eventlog_resume")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )

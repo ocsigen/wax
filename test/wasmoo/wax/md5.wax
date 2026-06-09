@@ -1,15 +1,36 @@
+// Wasm_of_ocaml runtime support
+// http://www.ocsigen.org/js_of_ocaml/
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, with linking exception;
+// either version 2.1 of the License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with this program; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 #[import = ("io", "caml_getblock")]
 fn caml_getblock(&eq, &string, i32, i32) -> i32;
 #[import = ("fail", "caml_raise_end_of_file")]
 fn caml_raise_end_of_file();
+
 type string = [mut i8];
 type int_array = [mut i32];
+
 type context = {
     f: &int_array,
     f_2: mut i64,
     f_3: &int_array,
     f_4: &string
 };
+// intermediate buffer
+
 #[export = "caml_md5_string"]
 #[export = "caml_md5_bytes"]
 fn caml_md5_string(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
@@ -18,6 +39,7 @@ fn caml_md5_string(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
     MD5Update(ctx, x as &string, x_2 as &i31 as i32_u, x_3 as &i31 as i32_u);
     become MD5Final(ctx);
 }
+
 #[export = "caml_md5_chan"]
 fn caml_md5_chan(ch: &eq, vlen: &eq) -> &eq {
     let len: i32;
@@ -45,25 +67,32 @@ fn caml_md5_chan(ch: &eq, vlen: &eq) -> &eq {
     }
     become MD5Final(ctx);
 }
+
 fn xx(q: i32, a: i32, b: i32, x: i32, s: i32, t: i32) -> i32 {
     (a + q + (x + t)).rotl(s) + b;
 }
+
 fn ff(a: i32, b: i32, c: i32, d: i32, x: i32, s: i32, t: i32) -> i32 {
     xx(d ^ b & (c ^ d), a, b, x, s, t);
 }
+
 fn gg(a: i32, b: i32, c: i32, d: i32, x: i32, s: i32, t: i32) -> i32 {
     xx(c ^ d & (b ^ c), a, b, x, s, t);
 }
+
 fn hh(a: i32, b: i32, c: i32, d: i32, x: i32, s: i32, t: i32) -> i32 {
     xx(b ^ (c ^ d), a, b, x, s, t);
 }
+
 fn ii(a: i32, b: i32, c: i32, d: i32, x: i32, s: i32, t: i32) -> i32 {
     xx(c ^ (b | d ^ -1), a, b, x, s, t);
 }
+
 fn get_32(s: &string, p: i32) -> i32 {
     s[p] as i32_u | s[p + 1] as i32_u << 8 |
         (s[p + 2] as i32_u << 16 | s[p + 3] as i32_u << 24);
 }
+
 fn MD5Transform(w: &int_array, buffer: &int_array, buffer': &string, p: i32)
 {
     let i: i32;
@@ -150,6 +179,7 @@ fn MD5Transform(w: &int_array, buffer: &int_array, buffer': &string, p: i32)
     w[2] = w[2] + c;
     w[3] = w[3] + d;
 }
+
 fn MD5Init() -> &context {
     {context|
         f: [int_array|0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476],
@@ -158,6 +188,7 @@ fn MD5Init() -> &context {
         f_4: [string|0; 64]
     };
 }
+
 fn MD5Update(ctx: &context, input: &string, input_pos: i32, input_len: i32) {
     let in_buf: i32;
     let len: i64;
@@ -186,6 +217,7 @@ fn MD5Update(ctx: &context, input: &string, input_pos: i32, input_len: i32) {
     } /* 'loop */
     if input_len { ctx.f_4.copy(0, input, input_pos, input_len); }
 }
+
 fn MD5Final(ctx: &context) -> &string {
     let in_buf: i32;
     let i: i32;

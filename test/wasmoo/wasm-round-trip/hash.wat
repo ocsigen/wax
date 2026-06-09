@@ -24,7 +24,10 @@
     (field $deserialize (ref null $deserialize))
     (field $dup (ref null $dup)))
 ) (type $custom (sub (struct (field $f (ref $custom_operations)))))
-(func $caml_hash_mix_int (export "caml_hash_mix_int")
+(func $caml_hash_mix_int
+  (export
+
+    "caml_hash_mix_int")
   (param $h i32) (param $d i32) (result i32)
   (i32.add
     (i32.mul
@@ -39,7 +42,10 @@
       (i32.const 5))
     (i32.const 0xe6546b64))
 )
-(func $caml_hash_mix_final (export "caml_hash_mix_final")
+(func $caml_hash_mix_final
+  (export
+
+    "caml_hash_mix_final")
   (param $h i32) (result i32)
   (local.set $h
     (i32.xor (local.get $h) (i32.shr_u (local.get $h) (i32.const 16))))
@@ -49,13 +55,19 @@
   (local.set $h (i32.mul (local.get $h) (i32.const 0xc2b2ae35)))
   (i32.xor (local.get $h) (i32.shr_u (local.get $h) (i32.const 16)))
 )
-(func $caml_hash_mix_int64 (export "caml_hash_mix_int64")
+(func $caml_hash_mix_int64
+  (export
+
+    "caml_hash_mix_int64")
   (param $h i32) (param $d i64) (result i32)
   (return_call $caml_hash_mix_int
     (call $caml_hash_mix_int (local.get $h) (i32.wrap_i64 (local.get $d)))
     (i32.wrap_i64 (i64.shr_u (local.get $d) (i64.const 32))))
 )
-(func $caml_hash_mix_double (export "caml_hash_mix_double")
+(func $caml_hash_mix_double
+  (export
+
+    "caml_hash_mix_double")
   (param $h i32) (param $d f64) (result i32)
   (local $i i64)
   (local.set $i (i64.reinterpret_f64 (local.get $d)))
@@ -71,7 +83,10 @@
     (then (local.set $i (i64.const 0))))
   (return_call $caml_hash_mix_int64 (local.get $h) (local.get $i))
 )
-(func $caml_hash_mix_float (export "caml_hash_mix_float")
+(func $caml_hash_mix_float
+  (export
+
+    "caml_hash_mix_float")
   (param $h i32) (param $d f32) (result i32)
   (local $i i32)
   (local.set $i (i32.reinterpret_f32 (local.get $d)))
@@ -86,7 +101,10 @@
     (then (local.set $i (i32.const 0))))
   (return_call $caml_hash_mix_int (local.get $h) (local.get $i))
 )
-(func $caml_hash_mix_string (export "caml_hash_mix_string")
+(func $caml_hash_mix_string
+  (export
+
+    "caml_hash_mix_string")
   (param $h i32) (param $s (ref $string)) (result i32)
   (local $i i32) (local $len i32) (local $w i32)
   (local.set $len (array.len (local.get $s)))
@@ -113,6 +131,7 @@
                   (i32.const 24))))))
         (local.set $i (i32.add (local.get $i) (i32.const 4)))
         (br $loop))))
+  (; 'loop ;)
   (local.set $w (i32.const 0))
   (block $l_2
     (block $l_3
@@ -131,17 +150,25 @@
             (array.get_u $string (local.get $s)
               (i32.add (local.get $i) (i32.const 1)))
             (i32.const 8)))))
+    (; 'l_3 ;)
     (local.set $w
       (i32.or (local.get $w)
         (array.get_u $string (local.get $s) (local.get $i))))
     (local.set $h (call $caml_hash_mix_int (local.get $h) (local.get $w))))
+  (; 'l_2 ;)
   (i32.xor (local.get $h) (local.get $len))
-) (global $HASH_QUEUE_SIZE i32 (i32.const 256))
+)
+
+(global $HASH_QUEUE_SIZE i32 (i32.const 256))
 (global $MAX_FORWARD_DEREFERENCE i32 (i32.const 1000))
+
 (global $caml_hash_queue (ref $block)
   (array.new $block (ref.i31 (i32.const 0)) (global.get $HASH_QUEUE_SIZE))
 )
-(func $caml_hash (export "caml_hash")
+(func $caml_hash
+  (export
+
+    "caml_hash")
   (param $count (ref eq)) (param $limit (ref eq)) (param $seed (ref eq))
   (param $obj (ref eq)) (result (ref eq))
   (local $sz i32) (local $num i32) (local $h i32) (local $rd i32)
@@ -215,7 +242,9 @@
                         (br_if $loop
                           (i32.eq (local.get $i)
                             (global.get $MAX_FORWARD_DEREFERENCE)))
-                        (br $forward)))
+                        (br $forward))
+                      (; 'not_block' ;)
+                    )
                     (br $again))))
               (if (i32.eq (local.get $tag_2) (global.get $object_tag))
                 (then
@@ -241,7 +270,10 @@
                   (array.get $block (local.get $b) (local.get $i)))
                 (local.set $wr (i32.add (local.get $wr) (i32.const 1)))
                 (local.set $i (i32.add (local.get $i) (i32.const 1)))
-                (br $block_iter))))
+                (br $block_iter))
+              (; 'block_iter ;)
+            ) (; 'not_block ;)
+          )
           (drop
             (block $not_float (result (ref eq))
               (local.set $h
@@ -275,14 +307,20 @@
               (local.set $h
                 (call $jsstring_hash (local.get $h) (local.get $str)))
               (ref.i31 (i32.const 0))))
-          (br $loop)))))
+          (br $loop))
+        (; 'again ;)
+      )))
+  (; 'loop ;)
   (array.fill $block (global.get $caml_hash_queue) (i32.const 0)
     (ref.i31 (i32.const 0)) (local.get $wr))
   (ref.i31
     (i32.and (call $caml_hash_mix_final (local.get $h))
       (i32.const 0x3FFFFFFF)))
 )
-(func $caml_string_hash (export "caml_string_hash")
+(func $caml_string_hash
+  (export
+
+    "caml_string_hash")
   (param $x (ref eq)) (param $x_2 (ref eq)) (result (ref eq))
   (local $h i32)
   (ref.i31

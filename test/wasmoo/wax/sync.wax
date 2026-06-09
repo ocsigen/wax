@@ -1,3 +1,20 @@
+// Wasm_of_ocaml runtime support
+// http://www.ocsigen.org/js_of_ocaml/
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, with linking exception;
+// either version 2.1 of the License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with this program; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 #[import = ("fail", "caml_failwith")]
 fn caml_failwith(&eq);
 #[import = ("custom", "custom_compare_id")]
@@ -6,6 +23,7 @@ fn custom_compare_id(&eq, &eq, i32) -> i32;
 fn custom_hash_id(&eq) -> i32;
 #[import = ("custom", "custom_next_id")]
 fn custom_next_id() -> i64;
+
 type string = [mut i8];
 type compare = fn(&eq, &eq, i32) -> i32;
 type hash = fn(&eq) -> i32;
@@ -25,9 +43,11 @@ type custom_operations = {
 };
 type custom = open { f: &custom_operations };
 type custom_with_id: custom = open { f: &custom_operations, id: i64 };
+
 const mutex_ops: &custom_operations =
     {custom_operations|
-        id: string#"_mutex",
+        id: string#"_mutex" // "_mutex"
+        ,
         compare: custom_compare_id,
         compare_ext: null as &?compare,
         hash: custom_hash_id,
@@ -36,16 +56,20 @@ const mutex_ops: &custom_operations =
         deserialize: null as &?deserialize,
         dup: null as &?dup
     };
+
 type mutex: custom_with_id = {
     f: &custom_operations,
     f_2: i64,
     state: mut i32
 };
+
 #[export = "caml_ml_mutex_new"]
 fn caml_ml_mutex_new(x: &eq) -> &eq {
     {mutex| f: mutex_ops, f_2: custom_next_id(), state: 0 };
 }
+
 data lock_failure = "Mutex.lock: mutex already locked. Cannot wait.";
+
 #[export = "caml_ml_mutex_lock"]
 fn caml_ml_mutex_lock(x: &eq) -> &eq {
     let t: &mutex;
@@ -54,26 +78,33 @@ fn caml_ml_mutex_lock(x: &eq) -> &eq {
     t.state = 1;
     0 as &i31;
 }
+
 #[export = "caml_ml_mutex_try_lock"]
 fn caml_ml_mutex_try_lock(x: &eq) -> &eq {
     let t: &mutex;
     t = x as &mutex;
     if t.state => &eq { 0 as &i31; } else { t.state = 1; 1 as &i31; }
 }
+
 #[export = "caml_ml_mutex_unlock"]
 fn caml_ml_mutex_unlock(x: &eq) -> &eq {
     (x as &mutex).state = 0;
     0 as &i31;
 }
+
 #[export = "caml_ml_condition_new"]
 fn caml_ml_condition_new(x: &eq) -> &eq { 0 as &i31; }
+
 data condition_failure = "Condition.wait: cannot wait";
+
 #[export = "caml_ml_condition_wait"]
 fn caml_ml_condition_wait(x: &eq, x_2: &eq) -> &eq {
     caml_failwith([string|condition_failure @ 0; 27]);
     0 as &i31;
 }
+
 #[export = "caml_ml_condition_signal"]
 fn caml_ml_condition_signal(x: &eq) -> &eq { 0 as &i31; }
+
 #[export = "caml_ml_condition_broadcast"]
 fn caml_ml_condition_broadcast(x: &eq) -> &eq { 0 as &i31; }

@@ -1,3 +1,20 @@
+// Wasm_of_ocaml runtime support
+// http://www.ocsigen.org/js_of_ocaml/
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, with linking exception;
+// either version 2.1 of the License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with this program; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 #[import = ("bindings", "ta_create")]
 fn ta_create(i32, i32) -> &extern;
 #[import = ("bindings", "ta_normalize")]
@@ -108,10 +125,12 @@ fn caml_deserialize_sint_2(&eq) -> i32;
 fn caml_deserialize_int_4(&eq) -> i32;
 #[import = ("marshal", "caml_deserialize_int_8")]
 fn caml_deserialize_int_8(&eq) -> i64;
+
 type block = [mut &eq];
 type string = [mut i8];
 type float = { f: f64 };
 type float_array = [mut f64];
+
 type compare = fn(&eq, &eq, i32) -> i32;
 type hash = fn(&eq) -> i32;
 type fixed_length = { bsize_32: i32, bsize_64: i32 };
@@ -129,10 +148,12 @@ type custom_operations = {
     dup: &?dup
 };
 type custom = open { f: &custom_operations };
+
 #[export = "bigarray_ops"]
 const bigarray_ops: &custom_operations =
     {custom_operations|
-        id: string#"_bigarr02",
+        id: string#"_bigarr02" // "_bigarr02"
+        ,
         compare: caml_ba_compare,
         compare_ext: null as &?compare,
         hash: bigarray_hash,
@@ -141,7 +162,9 @@ const bigarray_ops: &custom_operations =
         deserialize: bigarray_deserialize,
         dup: null as &?dup
     };
+
 type int_array = [mut i32];
+
 type bigarray: custom = {
     f: &custom_operations,
     ba_data: mut &extern,
@@ -150,6 +173,8 @@ type bigarray: custom = {
     ba_kind: i8,
     ba_layout: i8
 };
+// layout
+
 fn bigarray_hash(x: &eq) -> i32 {
     let b: &bigarray;
     let h: i32;
@@ -311,6 +336,7 @@ fn bigarray_hash(x: &eq) -> i32 {
     } /* 'loop */
     return h;
 }
+
 fn bigarray_serialize(s: &eq, v: &eq) -> (i32, i32) {
     let b: &bigarray;
     let num_dims: i32;
@@ -442,8 +468,10 @@ fn bigarray_serialize(s: &eq, v: &eq) -> (i32, i32) {
     (4 + num_dims) * 4;
     (4 + num_dims) * 8;
 }
+
 data intern_overflow =
 "input_value: cannot read bigarray with 64-bit OCaml ints";
+
 fn bigarray_deserialize(s: &eq) -> (&eq, i32) {
     let b: &bigarray;
     let num_dims: i32;
@@ -589,6 +617,7 @@ fn bigarray_deserialize(s: &eq) -> (&eq, i32) {
     b;
     (4 + num_dims) * 4;
 }
+
 fn caml_ba_get_size(dim: &int_array) -> i32 {
     let i: i32;
     let n: i32;
@@ -606,9 +635,11 @@ fn caml_ba_get_size(dim: &int_array) -> i32 {
     } /* 'loop */
     sz as i32;
 }
+
 fn caml_ba_size_per_element(kind: i32) -> i32 {
     (kind == 7) | ((kind == 10) | (kind == 11))?2:1;
 }
+
 #[export = "caml_ba_create_buffer"]
 fn caml_ba_create_buffer(kind: i32, sz: i32) -> &extern {
     let l: i64;
@@ -616,9 +647,12 @@ fn caml_ba_create_buffer(kind: i32, sz: i32) -> &extern {
     if l != l as i32 as i64_s { caml_raise_out_of_memory(); }
     become ta_create(kind, l as i32);
 }
+
 const CAML_BA_MAX_NUM_DIMS: i32 = 16;
+
 data ba_create_bad_dims = "Bigarray.create: bad number of dimensions";
 data ba_create_negative_dim = "Bigarray.create: negative dimension";
+
 #[export = "caml_ba_create"]
 fn caml_ba_create(vkind: &eq, layout: &eq, d: &eq) -> &eq {
     let vdim: &block;
@@ -656,8 +690,10 @@ fn caml_ba_create(vkind: &eq, layout: &eq, d: &eq) -> &eq {
         ba_layout: layout as &i31 as i32_s
     };
 }
+
 data ta_unsupported_kind = "Typed_array.to_genarray: unsupported kind";
 data ta_too_large = "Typed_array.to_genarray: too large";
+
 #[export = "caml_ba_from_typed_array"]
 fn caml_ba_from_typed_array(x: &eq) -> &eq {
     let data: &extern;
@@ -680,10 +716,12 @@ fn caml_ba_from_typed_array(x: &eq) -> &eq {
         ba_layout: 0
     };
 }
+
 #[export = "caml_ba_to_typed_array"]
 fn caml_ba_to_typed_array(x: &eq) -> &eq {
     wrap((x as &bigarray).ba_data as &any);
 }
+
 fn caml_ba_get_at_offset(ba: &bigarray, i: i32) -> &eq {
     let data: &extern;
     data = ba.ba_data;
@@ -748,6 +786,7 @@ fn caml_ba_get_at_offset(ba: &bigarray, i: i32) -> &eq {
     } /* 'float32 */
     return {float| f: ta_get_f32(data, i) };
 }
+
 fn caml_ba_set_at_offset(ba: &bigarray, i: i32, v: &eq) {
     let data: &extern;
     let b: &float_array;
@@ -821,7 +860,9 @@ fn caml_ba_set_at_offset(ba: &bigarray, i: i32, v: &eq) {
     ta_set_f32(data, i, (v as &float).f);
     return;
 }
+
 data Bigarray_dim = "Bigarray.dim";
+
 #[export = "caml_ba_dim"]
 fn caml_ba_dim(x: &eq, x_2: &eq) -> &eq {
     let dim: &int_array;
@@ -833,8 +874,10 @@ fn caml_ba_dim(x: &eq, x_2: &eq) -> &eq {
     }
     dim[i] as &i31;
 }
+
 #[export = "caml_ba_dim_1"]
 fn caml_ba_dim_1(x: &eq) -> &eq { become caml_ba_dim(x, 0 as &i31); }
+
 #[export = "caml_ba_get_1"]
 fn caml_ba_get_1(x: &eq, x_2: &eq) -> &eq {
     let ba: &bigarray;
@@ -845,6 +888,7 @@ fn caml_ba_get_1(x: &eq, x_2: &eq) -> &eq {
     if i >=u ba.ba_dim[0] { caml_bound_error(); }
     become caml_ba_get_at_offset(ba, i);
 }
+
 #[export = "caml_ba_set_1"]
 fn caml_ba_set_1(x: &eq, x_2: &eq, v: &eq) -> &eq {
     let ba: &bigarray;
@@ -856,6 +900,7 @@ fn caml_ba_set_1(x: &eq, x_2: &eq, v: &eq) -> &eq {
     caml_ba_set_at_offset(ba, i, v);
     0 as &i31;
 }
+
 #[export = "caml_ba_get_2"]
 fn caml_ba_get_2(vba: &eq, vi: &eq, vj: &eq) -> &eq {
     let ba: &bigarray;
@@ -875,6 +920,7 @@ fn caml_ba_get_2(vba: &eq, vi: &eq, vj: &eq) -> &eq {
     if (i >=u dim[0]) | (j >=u dim[1]) { caml_bound_error(); }
     become caml_ba_get_at_offset(ba, offset);
 }
+
 #[export = "caml_ba_set_2"]
 fn caml_ba_set_2(vba: &eq, vi: &eq, vj: &eq, v: &eq) -> &eq {
     let ba: &bigarray;
@@ -895,8 +941,10 @@ fn caml_ba_set_2(vba: &eq, vi: &eq, vj: &eq, v: &eq) -> &eq {
     caml_ba_set_at_offset(ba, offset, v);
     0 as &i31;
 }
+
 #[export = "caml_ba_dim_2"]
 fn caml_ba_dim_2(x: &eq) -> &eq { become caml_ba_dim(x, 1 as &i31); }
+
 #[export = "caml_ba_get_3"]
 fn caml_ba_get_3(vba: &eq, vi: &eq, vj: &eq, vk: &eq) -> &eq {
     let ba: &bigarray;
@@ -921,6 +969,7 @@ fn caml_ba_get_3(vba: &eq, vi: &eq, vj: &eq, vk: &eq) -> &eq {
     }
     become caml_ba_get_at_offset(ba, offset);
 }
+
 #[export = "caml_ba_set_3"]
 fn caml_ba_set_3(vba: &eq, vi: &eq, vj: &eq, vk: &eq, v: &eq) -> &eq {
     let ba: &bigarray;
@@ -946,8 +995,10 @@ fn caml_ba_set_3(vba: &eq, vi: &eq, vj: &eq, vk: &eq, v: &eq) -> &eq {
     caml_ba_set_at_offset(ba, offset, v);
     0 as &i31;
 }
+
 #[export = "caml_ba_dim_3"]
 fn caml_ba_dim_3(x: &eq) -> &eq { become caml_ba_dim(x, 2 as &i31); }
+
 fn caml_ba_offset(b: &bigarray, index: &int_array) -> i32 {
     let dim: &int_array;
     let num_dims: i32;
@@ -983,6 +1034,7 @@ fn caml_ba_offset(b: &bigarray, index: &int_array) -> i32 {
     }
     offset;
 }
+
 fn caml_ba_offset'(b: &bigarray, index: &block) -> i32 {
     let dim: &int_array;
     let num_dims: i32;
@@ -1018,12 +1070,14 @@ fn caml_ba_offset'(b: &bigarray, index: &block) -> i32 {
     }
     offset;
 }
+
 #[export = "caml_ba_get_generic"]
 fn caml_ba_get_generic(vba: &eq, index: &eq) -> &eq {
     let ba: &bigarray;
     ba = vba as &bigarray;
     become caml_ba_get_at_offset(ba, caml_ba_offset'(ba, index as &block));
 }
+
 #[export = "caml_ba_set_generic"]
 fn caml_ba_set_generic(vba: &eq, index: &eq, v: &eq) -> &eq {
     let ba: &bigarray;
@@ -1031,7 +1085,9 @@ fn caml_ba_set_generic(vba: &eq, index: &eq, v: &eq) -> &eq {
     caml_ba_set_at_offset(ba, caml_ba_offset'(ba, index as &block), v);
     0 as &i31;
 }
+
 data too_many_indices = "Bigarray.slice: too many indices";
+
 #[export = "caml_ba_slice"]
 fn caml_ba_slice(vb: &eq, vind: &eq) -> &eq {
     let b: &bigarray;
@@ -1089,7 +1145,9 @@ fn caml_ba_slice(vb: &eq, vind: &eq) -> &eq {
         ba_layout: b.ba_layout as i32_u
     };
 }
+
 data bad_subarray = "Bigarray.sub: bad sub-array";
+
 #[export = "caml_ba_sub"]
 fn caml_ba_sub(vba: &eq, vofs: &eq, vlen: &eq) -> &eq {
     let ba: &bigarray;
@@ -1139,6 +1197,7 @@ fn caml_ba_sub(vba: &eq, vofs: &eq, vlen: &eq) -> &eq {
         ba_layout: ba.ba_layout as i32_u
     };
 }
+
 #[export = "caml_ba_fill"]
 fn caml_ba_fill(vba: &eq, v: &eq) -> &eq {
     let ba: &bigarray;
@@ -1216,7 +1275,9 @@ fn caml_ba_fill(vba: &eq, v: &eq) -> &eq {
     ta_fill_float(data, (v as &float).f);
     return 0 as &i31;
 }
+
 data dim_mismatch = "Bigarray.blit: dimension mismatch";
+
 #[export = "caml_ba_blit"]
 fn caml_ba_blit(vsrc: &eq, vdst: &eq) -> &eq {
     let src: &bigarray;
@@ -1245,9 +1306,11 @@ fn caml_ba_blit(vsrc: &eq, vdst: &eq) -> &eq {
     ta_blit(src.ba_data, dst.ba_data);
     0 as &i31;
 }
+
 data bad_number_dim = "Bigarray.reshape: bad number of dimensions";
 data negative_dim = "Bigarray.reshape: negative dimension";
 data size_mismatch = "Bigarray.reshape: size mismatch";
+
 #[export = "caml_ba_reshape"]
 fn caml_ba_reshape(vb: &eq, vd: &eq) -> &eq {
     let vdim: &block;
@@ -1292,6 +1355,7 @@ fn caml_ba_reshape(vb: &eq, vd: &eq) -> &eq {
         ba_layout: b.ba_layout as i32_u
     };
 }
+
 #[export = "caml_ba_change_layout"]
 fn caml_ba_change_layout(vb: &eq, vlayout: &eq) -> &eq {
     let b: &bigarray;
@@ -1323,16 +1387,20 @@ fn caml_ba_change_layout(vb: &eq, vlayout: &eq) -> &eq {
         };
     } else { vb; }
 }
+
 #[export = "caml_ba_num_dims"]
 fn caml_ba_num_dims(x: &eq) -> &eq {
     (x as &bigarray).ba_num_dims as i32_u as &i31;
 }
+
 #[export = "caml_ba_kind"]
 fn caml_ba_kind(x: &eq) -> &eq { (x as &bigarray).ba_kind as i32_u as &i31; }
+
 #[export = "caml_ba_layout"]
 fn caml_ba_layout(x: &eq) -> &eq {
     (x as &bigarray).ba_layout as i32_u as &i31;
 }
+
 fn caml_ba_compare(v1: &eq, v2: &eq, total: i32) -> i32 {
     let b1: &bigarray;
     let b2: &bigarray;
@@ -1494,6 +1562,7 @@ fn caml_ba_compare(v1: &eq, v2: &eq, total: i32) -> i32 {
     } /* 'loop */
     return 0;
 }
+
 #[export = "caml_ba_uint8_get16"]
 fn caml_ba_uint8_get16(vba: &eq, i: &eq) -> &eq {
     let ba: &bigarray;
@@ -1506,6 +1575,7 @@ fn caml_ba_uint8_get16(vba: &eq, i: &eq) -> &eq {
     if p + 1 >=u ba.ba_dim[0] { caml_bound_error(); }
     ta_get16_ui8(data, p) as &i31;
 }
+
 #[export = "caml_ba_uint8_get32"]
 fn caml_ba_uint8_get32(vba: &eq, i: &eq) -> i32 {
     let ba: &bigarray;
@@ -1518,6 +1588,7 @@ fn caml_ba_uint8_get32(vba: &eq, i: &eq) -> i32 {
     if p + 3 >=u ba.ba_dim[0] { caml_bound_error(); }
     become ta_get32_ui8(data, p);
 }
+
 #[export = "caml_ba_uint8_get64"]
 fn caml_ba_uint8_get64(vba: &eq, i: &eq) -> i64 {
     let ba: &bigarray;
@@ -1530,6 +1601,7 @@ fn caml_ba_uint8_get64(vba: &eq, i: &eq) -> i64 {
     if p + 7 >=u ba.ba_dim[0] { caml_bound_error(); }
     ta_get32_ui8(data, p) as i64_u | ta_get32_ui8(data, p + 4) as i64_u << 32;
 }
+
 #[export = "caml_ba_uint8_set16"]
 fn caml_ba_uint8_set16(vba: &eq, i: &eq, v: &eq) -> &eq {
     let ba: &bigarray;
@@ -1545,6 +1617,7 @@ fn caml_ba_uint8_set16(vba: &eq, i: &eq, v: &eq) -> &eq {
     ta_set16_ui8(data, p, d);
     0 as &i31;
 }
+
 #[export = "caml_ba_uint8_set32"]
 fn caml_ba_uint8_set32(vba: &eq, i: &eq, d: i32) -> &eq {
     let ba: &bigarray;
@@ -1558,6 +1631,7 @@ fn caml_ba_uint8_set32(vba: &eq, i: &eq, d: i32) -> &eq {
     ta_set32_ui8(data, p, d);
     0 as &i31;
 }
+
 #[export = "caml_ba_uint8_set64"]
 fn caml_ba_uint8_set64(vba: &eq, i: &eq, d: i64) -> &eq {
     let ba: &bigarray;
@@ -1596,16 +1670,22 @@ fn caml_uint8_array_of_string(x: &eq) -> &eq {
     ta_blit_from_string(s, 0, ta, 0, len);
     wrap(ta as &any);
 }
+
 #[export = "caml_ba_get_kind"]
 fn caml_ba_get_kind(x: &eq) -> i32 { (x as &bigarray).ba_kind as i32_u; }
+
 #[export = "caml_ba_get_layout"]
 fn caml_ba_get_layout(x: &eq) -> i32 { (x as &bigarray).ba_layout as i32_u; }
+
 #[export = "caml_ba_get_data"]
 fn caml_ba_get_data(x: &eq) -> &extern { (x as &bigarray).ba_data; }
+
 #[export = "caml_ba_set_data"]
 fn caml_ba_set_data(x: &eq, x_2: &extern) { (x as &bigarray).ba_data = x_2; }
+
 #[export = "caml_ba_get_dim"]
 fn caml_ba_get_dim(x: &eq) -> &int_array { (x as &bigarray).ba_dim; }
+
 #[export = "caml_ba_alloc"]
 fn caml_ba_alloc
 (kind: i32, layout: i32, num_dims: i32, data: &extern, dim: &int_array) ->
@@ -1619,10 +1699,12 @@ fn caml_ba_alloc
         ba_layout: layout
     };
 }
+
 #[export = "string_set"]
 fn string_set(s: &?extern, i: i32, v: i32) {
     (s as &?any as &?string)[i] = v;
 }
+
 #[export = "string_get"]
 fn string_get(s: &?extern, i: i32) -> i32 {
     (s as &?any as &?string)[i] as i32_u;

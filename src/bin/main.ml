@@ -71,7 +71,7 @@ let wat_to_wax ~input_file ~output_file ~validate ~color ~output_color
   let _ = opt_source_map_file in
   (* Ignored for non-wasm output *)
   let text = with_open_in input_file In_channel.input_all in
-  let ast, _ctx =
+  let ast, ctx =
     Wat_parser.parse_from_string
       ~filename:(Option.value ~default:"-" input_file)
       text
@@ -88,10 +88,19 @@ let wat_to_wax ~input_file ~output_file ~validate ~color ~output_color
         Wax.Typing.f d wax_ast)
     |> snd |> Wax.Typing.erase_types
   in
+  (* The converted Wax nodes carry the source Wat locations, so the source
+     trivia (keyed by those locations) maps onto them; rewrite the comment
+     delimiters from Wat to Wax syntax. *)
+  let trivia, tail = Utils.Trivia.associate ctx in
+  let trivia, tail =
+    Utils.Trivia.retarget ~src:Utils.Trivia.wat_syntax
+      ~dst:Utils.Trivia.wax_syntax trivia tail
+  in
   with_open_out output_file (fun oc ->
       let print_wax f m =
         Utils.Printer.run f (fun p ->
-            Wax.Output.module_ p ~color:output_color ~out_channel:oc m)
+            Wax.Output.module_ p ~color:output_color ~out_channel:oc ~trivia
+              ~tail m)
       in
       let fmt = Format.formatter_of_out_channel oc in
       Format.fprintf fmt "%a@." print_wax wax_ast)
@@ -101,7 +110,7 @@ let wax_to_wat ~input_file ~output_file ~validate ~color ~output_color
   let _ = opt_source_map_file in
   (* Ignored for non-wasm output *)
   let text = with_open_in input_file In_channel.input_all in
-  let ast, _ctx =
+  let ast, ctx =
     Wax_parser.parse_from_string
       ~filename:(Option.value ~default:"-" input_file)
       text
@@ -117,15 +126,22 @@ let wax_to_wat ~input_file ~output_file ~validate ~color ~output_color
   if validate then
     Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
         Wasm.Validation.f d wasm_ast);
-  let trivia = (*ZZZ*) Hashtbl.create 0 in
-  output_wat ~fold_mode ~output_file ~color:output_color ~trivia wasm_ast
+  (* Typing and conversion preserve the source Wax locations, so the source
+     trivia (keyed by those locations) maps onto the converted Wasm nodes;
+     rewrite the comment delimiters from Wax to Wat syntax. *)
+  let trivia, tail = Utils.Trivia.associate ctx in
+  let trivia, tail =
+    Utils.Trivia.retarget ~src:Utils.Trivia.wax_syntax
+      ~dst:Utils.Trivia.wat_syntax trivia tail
+  in
+  output_wat ~fold_mode ~output_file ~color:output_color ~trivia ~tail wasm_ast
 
 let wax_to_wax ~input_file ~output_file ~validate ~color ~output_color
     ~fold_mode:_ ~source_map_file:opt_source_map_file =
   let _ = opt_source_map_file in
   (* Ignored for non-wasm output *)
   let text = with_open_in input_file In_channel.input_all in
-  let ast, _ctx =
+  let ast, ctx =
     Wax_parser.parse_from_string
       ~filename:(Option.value ~default:"-" input_file)
       text
@@ -134,10 +150,12 @@ let wax_to_wax ~input_file ~output_file ~validate ~color ~output_color
     ignore
       (Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
            Wax.Typing.f d ast));
+  let trivia, tail = Utils.Trivia.associate ctx in
   with_open_out output_file (fun oc ->
       let print_wax f m =
         Utils.Printer.run f (fun p ->
-            Wax.Output.module_ p ~color:output_color ~out_channel:oc m)
+            Wax.Output.module_ p ~color:output_color ~out_channel:oc ~trivia
+              ~tail m)
       in
       let fmt = Format.formatter_of_out_channel oc in
       Format.fprintf fmt "%a@." print_wax ast)
@@ -222,7 +240,8 @@ let wasm_to_wax ~input_file ~output_file ~validate ~color ~output_color
   with_open_out output_file (fun oc ->
       let print_wax f m =
         Utils.Printer.run f (fun p ->
-            Wax.Output.module_ p ~color:output_color ~out_channel:oc m)
+            Wax.Output.module_ p ~color:output_color ~out_channel:oc
+              ~trivia:(Hashtbl.create 0) m)
       in
       let fmt = Format.formatter_of_out_channel oc in
       Format.fprintf fmt "%a@." print_wax wax_ast)

@@ -9,6 +9,7 @@
   (func $caml_format_int (param (ref eq) (ref eq)) (result (ref eq)))
 ) (type $block (array (mut (ref eq)))) (type $string (array (mut i8)))
 (type $buffer (struct (field $f (mut i32)) (field $f_2 (ref $string))))
+
 (func $add_char (param $buf (ref $buffer)) (param $c i32)
   (local $pos i32) (local $data (ref $string))
   (local.set $pos (struct.get $buffer $f (local.get $buf)))
@@ -19,6 +20,7 @@
       (struct.set $buffer $f (local.get $buf)
         (i32.add (local.get $pos) (i32.const 1)))))
 )
+
 (func $add_string (param $buf (ref $buffer)) (param $v (ref eq))
   (local $pos i32) (local $len i32) (local $data (ref $string))
   (local $s (ref $string))
@@ -37,7 +39,10 @@
   (struct.set $buffer $f (local.get $buf)
     (i32.add (local.get $pos) (local.get $len)))
 )
-(func $caml_format_exception (export "caml_format_exception")
+(func $caml_format_exception
+  (export
+
+    "caml_format_exception")
   (param $x (ref eq)) (result (ref eq))
   (local $exn (ref $block)) (local $buf (ref $buffer)) (local $v (ref eq))
   (local $bucket (ref $block)) (local $i i32) (local $len i32)
@@ -73,8 +78,11 @@
                   (ref.i31 (i32.const 0)))))
             (local.set $i (i32.const 1))
             (br $continue (local.get $bucket)))
+          (; 'default ;)
           (local.set $i (i32.const 2))
-          (local.get $exn)))
+          (local.get $exn))
+        (; 'continue ;)
+      )
       (local.set $len (array.len (local.get $bucket)))
       (if (i32.lt_u (local.get $i) (local.get $len))
         (then
@@ -100,6 +108,7 @@
                 (call $add_char (local.get $buf) (i32.const 44))
                 (call $add_char (local.get $buf) (i32.const 32))
                 (br $loop))))
+          (; 'loop ;)
           (call $add_char (local.get $buf) (i32.const 41))))
       (local.set $s
         (array.new $string (i32.const 0)

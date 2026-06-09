@@ -49,20 +49,25 @@
     (field $serialize (ref null $serialize))
     (field $deserialize (ref null $deserialize))
     (field $dup (ref null $dup)))
-) (type $custom (sub (struct (field $f (ref $custom_operations)))))
+)
+(type $custom (sub (struct (field $f (ref $custom_operations)))))
+
 (global $dummy_block (ref $block)
   (array.new $block (ref.i31 (i32.const 0)) (i32.const 0))
 )
+
 (global $default_compare_stack (ref $compare_stack)
   (struct.new $compare_stack (i32.const -1)
     (array.new $block_array (global.get $dummy_block) (i32.const 8))
     (array.new $block_array (global.get $dummy_block) (i32.const 8))
     (array.new $int_array (i32.const 0) (i32.const 8)))
 )
+
 (func $compare_stack_is_not_empty
   (param $stack (ref $compare_stack)) (result i32)
   (i32.ge_s (struct.get $compare_stack $f (local.get $stack)) (i32.const 0))
 )
+
 (func $pop_compare_stack
   (param $stack (ref $compare_stack)) (result (ref eq) (ref eq))
   (local $i i32) (local $p i32) (local $p' i32) (local $v1 (ref $block))
@@ -93,6 +98,7 @@
   (array.get $block (local.get $v1) (local.get $p))
   (array.get $block (local.get $v2) (local.get $p))
 )
+
 (func $push_compare_stack
   (param $stack (ref $compare_stack)) (param $v1 (ref $block))
   (param $v2 (ref $block)) (param $p i32) (result (ref $compare_stack))
@@ -131,7 +137,15 @@
   (array.set $int_array (struct.get $compare_stack $f_4 (local.get $stack))
     (local.get $i) (local.get $p))
   (local.get $stack)
-) (global $unordered (export "unordered") i32 (i32.const 0x80000000))
+)
+(global $unordered
+  (export
+
+    "unordered")
+  i32
+  (i32.const 0x80000000)
+)
+
 (func $compare_strings
   (param $s1 (ref $string)) (param $s2 (ref $string)) (result i32)
   (local $l1 i32) (local $l2 i32) (local $len i32) (local $i i32)
@@ -155,8 +169,10 @@
               (else (return (i32.const 1))))))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
         (br $loop))))
+  (; 'loop ;)
   (i32.sub (local.get $l1) (local.get $l2))
 )
+
 (func $clear_compare_stack
   (local $stack (ref $compare_stack)) (local $n i32) (local $res i32)
   (local.set $stack (global.get $default_compare_stack))
@@ -171,6 +187,7 @@
         (struct.get $compare_stack $f_3 (local.get $stack)) (i32.const 0)
         (global.get $dummy_block) (local.get $n))))
 )
+
 (func $compare_val
   (param $v1 (ref eq)) (param $v2 (ref eq)) (param $total i32) (result i32)
   (local $stack (ref $compare_stack)) (local $n i32) (local $res i32)
@@ -181,9 +198,12 @@
       (local.get $total)))
   (call $clear_compare_stack)
   (local.get $res)
-) (data $abstract_value "compare: abstract value")
+)
+
+(data $abstract_value "compare: abstract value")
 (data $functional_value "compare: functional value")
 (data $continuation_value "compare: continuation value")
+
 (func $do_compare_val
   (param $stack (ref $compare_stack)) (param $v1 (ref eq))
   (param $v2 (ref eq)) (param $total i32) (result i32)
@@ -227,7 +247,9 @@
                   (local.set $v2
                     (array.get $block (local.get $b2) (i32.const 1)))
                   (br $loop)))
-              (ref.i31 (i32.const 1))))
+              (ref.i31 (i32.const 1)))
+            (; 'v2_not_forward ;)
+          )
           (block $v2_not_comparable
             (drop
               (block $v2_not_custom (result (ref eq))
@@ -242,7 +264,9 @@
                         (struct.get $custom $f (local.get $c2))))))
                 (br_if $next_item (i32.eqz (local.get $res)))
                 (return (local.get $res)))))
-          (return (i32.const -1))))
+          (return (i32.const -1)))
+        (; 'v1_is_not_int ;)
+      )
       (if (ref.test (ref i31) (local.get $v2))
         (then
           (drop
@@ -259,7 +283,9 @@
                   (local.set $v1
                     (array.get $block (local.get $b1) (i32.const 1)))
                   (br $loop)))
-              (ref.i31 (i32.const 1))))
+              (ref.i31 (i32.const 1)))
+            (; 'v1_not_forward ;)
+          )
           (block $v1_not_comparable
             (drop
               (block $v1_not_custom (result (ref eq))
@@ -325,7 +351,9 @@
                       (local.get $b1) (local.get $b2) (i32.const 2)))))
               (local.set $v1 (array.get $block (local.get $b1) (i32.const 1)))
               (local.set $v2 (array.get $block (local.get $b2) (i32.const 1)))
-              (br $loop)))
+              (br $loop))
+            (; 'v1_not_block ;)
+          )
           (drop
             (block $v1_not_float (result (ref eq))
               (local.set $f1
@@ -348,7 +376,9 @@
                     (then (return (i32.const 1))))
                   (if (f64.eq (local.get $f2) (local.get $f2))
                     (then (return (i32.const -1))))))
-              (br $next_item)))
+              (br $next_item))
+            (; 'v1_not_float ;)
+          )
           (drop
             (block $v1_not_string (result (ref eq))
               (local.set $str1
@@ -360,7 +390,9 @@
               (local.set $res
                 (call $compare_strings (local.get $str1) (local.get $str2)))
               (br_if $next_item (i32.eqz (local.get $res)))
-              (return (local.get $res))))
+              (return (local.get $res)))
+            (; 'v1_not_string ;)
+          )
           (drop
             (block $v1_not_float_array (result (ref eq))
               (local.set $fa1
@@ -395,7 +427,10 @@
                           (then (return (i32.const -1))))))
                     (local.set $i (i32.add (local.get $i) (i32.const 1)))
                     (br $float_array))))
-              (br $next_item)))
+              (; 'float_array ;)
+              (br $next_item))
+            (; 'v1_not_float_array ;)
+          )
           (drop
             (block $v1_not_custom (result (ref eq))
               (local.set $c1
@@ -430,7 +465,9 @@
               (call $caml_invalid_argument
                 (array.new_data $string $abstract_value (i32.const 0)
                   (i32.const 23)))
-              (ref.i31 (i32.const 0))))
+              (ref.i31 (i32.const 0)))
+            (; 'v1_not_custom ;)
+          )
           (drop
             (block $v1_not_js (result (ref eq))
               (local.set $js1
@@ -450,12 +487,15 @@
                   (call $jsstring_compare (local.get $js1) (local.get $js2)))
                 (br_if $next_item (i32.eqz (local.get $res)))
                 (return (local.get $res)))
+              (; 'not_jsstring ;)
               (if (i32.eqz (local.get $total))
                 (then
                   (br_if $next_item
                     (call $equals (local.get $js1) (local.get $js2)))
                   (return (global.get $unordered))))
-              (br $heterogeneous (ref.i31 (i32.const 0)))))
+              (br $heterogeneous (ref.i31 (i32.const 0))))
+            (; 'v1_not_js ;)
+          )
           (if (call $caml_is_closure (local.get $v1))
             (then
               (drop
@@ -474,7 +514,9 @@
               (call $caml_invalid_argument
                 (array.new_data $string $continuation_value (i32.const 0)
                   (i32.const 27)))))
-          (ref.i31 (i32.const 0))))
+          (ref.i31 (i32.const 0)))
+        (; 'heterogeneous ;)
+      )
       (local.set $t1
         (i31.get_u (ref.cast (ref i31) (call $caml_obj_tag (local.get $v1)))))
       (local.set $t2
@@ -499,6 +541,7 @@
             (array.new_data $string $abstract_value (i32.const 0)
               (i32.const 23)))))
       (return (local.get $res)))
+    (; 'next_item ;)
     (if (call $compare_stack_is_not_empty (local.get $stack))
       (then
         (call $pop_compare_stack (local.get $stack))
@@ -506,8 +549,12 @@
         (local.set $v1)
         (br $loop))))
   (i32.const 0)
+  (; 'loop ;)
 )
-(func $caml_compare (export "caml_compare")
+(func $caml_compare
+  (export
+
+    "caml_compare")
   (param $v1 (ref eq)) (param $v2 (ref eq)) (result (ref eq))
   (local $res i32)
   (local.set $res
@@ -518,19 +565,28 @@
     (then (return (ref.i31 (i32.const 1)))))
   (ref.i31 (i32.const 0))
 )
-(func $caml_equal (export "caml_equal")
+(func $caml_equal
+  (export
+
+    "caml_equal")
   (param $v1 (ref eq)) (param $v2 (ref eq)) (result (ref eq))
   (ref.i31
     (i32.eqz
       (call $compare_val (local.get $v1) (local.get $v2) (i32.const 0))))
 )
-(func $caml_notequal (export "caml_notequal")
+(func $caml_notequal
+  (export
+
+    "caml_notequal")
   (param $v1 (ref eq)) (param $v2 (ref eq)) (result (ref eq))
   (ref.i31
     (i32.ne (i32.const 0)
       (call $compare_val (local.get $v1) (local.get $v2) (i32.const 0))))
 )
-(func $caml_lessthan (export "caml_lessthan")
+(func $caml_lessthan
+  (export
+
+    "caml_lessthan")
   (param $v1 (ref eq)) (param $v2 (ref eq)) (result (ref eq))
   (local $res i32)
   (local.set $res
@@ -539,7 +595,10 @@
     (i32.and (i32.lt_s (local.get $res) (i32.const 0))
       (i32.ne (local.get $res) (global.get $unordered))))
 )
-(func $caml_lessequal (export "caml_lessequal")
+(func $caml_lessequal
+  (export
+
+    "caml_lessequal")
   (param $v1 (ref eq)) (param $v2 (ref eq)) (result (ref eq))
   (local $res i32)
   (local.set $res
@@ -548,13 +607,19 @@
     (i32.and (i32.le_s (local.get $res) (i32.const 0))
       (i32.ne (local.get $res) (global.get $unordered))))
 )
-(func $caml_greaterthan (export "caml_greaterthan")
+(func $caml_greaterthan
+  (export
+
+    "caml_greaterthan")
   (param $v1 (ref eq)) (param $v2 (ref eq)) (result (ref eq))
   (ref.i31
     (i32.lt_s (i32.const 0)
       (call $compare_val (local.get $v1) (local.get $v2) (i32.const 0))))
 )
-(func $caml_greaterequal (export "caml_greaterequal")
+(func $caml_greaterequal
+  (export
+
+    "caml_greaterequal")
   (param $v1 (ref eq)) (param $v2 (ref eq)) (result (ref eq))
   (ref.i31
     (i32.le_s (i32.const 0)

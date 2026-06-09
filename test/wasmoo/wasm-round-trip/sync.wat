@@ -26,8 +26,10 @@
 (type $custom_with_id
   (sub $custom (struct (field $f (ref $custom_operations)) (field $id i64)))
 )
+
 (global $mutex_ops (ref $custom_operations)
-  (struct.new $custom_operations (@string $string "_mutex" )
+  (struct.new $custom_operations
+    (@string $string "_mutex" ) ;; "_mutex"
     (ref.func $custom_compare_id) (ref.null $compare)
     (ref.func $custom_hash_id) (ref.null $fixed_length) (ref.null $serialize)
     (ref.null $deserialize) (ref.null $dup))
@@ -39,12 +41,20 @@
       (field $f_2 i64)
       (field $state (mut i32))))
 )
-(func $caml_ml_mutex_new (export "caml_ml_mutex_new")
+(func $caml_ml_mutex_new
+  (export
+
+    "caml_ml_mutex_new")
   (param $x (ref eq)) (result (ref eq))
   (struct.new $mutex (global.get $mutex_ops) (call $custom_next_id)
     (i32.const 0))
-) (data $lock_failure "Mutex.lock: mutex already locked. Cannot wait.")
-(func $caml_ml_mutex_lock (export "caml_ml_mutex_lock")
+)
+
+(data $lock_failure "Mutex.lock: mutex already locked. Cannot wait.")
+(func $caml_ml_mutex_lock
+  (export
+
+    "caml_ml_mutex_lock")
   (param $x (ref eq)) (result (ref eq))
   (local $t (ref $mutex))
   (local.set $t (ref.cast (ref $mutex) (local.get $x)))
@@ -55,7 +65,10 @@
   (struct.set $mutex $state (local.get $t) (i32.const 1))
   (ref.i31 (i32.const 0))
 )
-(func $caml_ml_mutex_try_lock (export "caml_ml_mutex_try_lock")
+(func $caml_ml_mutex_try_lock
+  (export
+
+    "caml_ml_mutex_try_lock")
   (param $x (ref eq)) (result (ref eq))
   (local $t (ref $mutex))
   (local.set $t (ref.cast (ref $mutex) (local.get $x)))
@@ -65,27 +78,44 @@
       (struct.set $mutex $state (local.get $t) (i32.const 1))
       (ref.i31 (i32.const 1))))
 )
-(func $caml_ml_mutex_unlock (export "caml_ml_mutex_unlock")
+(func $caml_ml_mutex_unlock
+  (export
+
+    "caml_ml_mutex_unlock")
   (param $x (ref eq)) (result (ref eq))
   (struct.set $mutex $state (ref.cast (ref $mutex) (local.get $x))
     (i32.const 0))
   (ref.i31 (i32.const 0))
 )
-(func $caml_ml_condition_new (export "caml_ml_condition_new")
+(func $caml_ml_condition_new
+  (export
+
+    "caml_ml_condition_new")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
-) (data $condition_failure "Condition.wait: cannot wait")
-(func $caml_ml_condition_wait (export "caml_ml_condition_wait")
+)
+
+(data $condition_failure "Condition.wait: cannot wait")
+(func $caml_ml_condition_wait
+  (export
+
+    "caml_ml_condition_wait")
   (param $x (ref eq)) (param $x_2 (ref eq)) (result (ref eq))
   (call $caml_failwith
     (array.new_data $string $condition_failure (i32.const 0) (i32.const 27)))
   (ref.i31 (i32.const 0))
 )
-(func $caml_ml_condition_signal (export "caml_ml_condition_signal")
+(func $caml_ml_condition_signal
+  (export
+
+    "caml_ml_condition_signal")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
-(func $caml_ml_condition_broadcast (export "caml_ml_condition_broadcast")
+(func $caml_ml_condition_broadcast
+  (export
+
+    "caml_ml_condition_broadcast")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )

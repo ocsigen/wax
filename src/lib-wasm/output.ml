@@ -41,6 +41,7 @@ type ctx = {
   format : format;
   indent_level : int;
   trivia : Trivia.t;
+  seen : (Ast.location, unit) Hashtbl.t;
 }
 
 let _ = (Compact, Hybrid, Adaptive)
@@ -53,56 +54,15 @@ let print_styled ctx style ?(len = None) text =
   | Some len -> Printer.string_as ctx.printer len text);
   if seq <> "" then Printer.string_as ctx.printer 0 ctx.theme.reset
 
-let debug = false
-
 (* ZZZ Deal with multiline comments / UTF-8 characters *)
-let print_trivia ctx lst =
-  let open Trivia in
-  let pp = ctx.printer in
-  List.iter
-    (fun e ->
-      match (e.trivia, e.position) with
-      | Item { kind = Block_comment; content; _ }, _ ->
-          Printer.space pp ();
-          print_styled ctx Comment content;
-          Printer.space pp ()
-      | Item { kind = Line_comment; content; _ }, Inline ->
-          if debug then Format.eprintf "COMMENT %s@." (String.trim content);
-          Printer.space pp ();
-          print_styled ctx Comment (String.trim content);
-          Printer.newline pp ()
-      | Item { kind = Line_comment; content; _ }, Line_start ->
-          if debug then Format.eprintf "COMMENT %s@." (String.trim content);
-          Printer.newline pp ();
-          print_styled ctx Comment (String.trim content);
-          Printer.newline pp ()
-      | Item { kind = Annotation; _ }, _ -> ()
-      | Blank_line, _ ->
-          if debug then Format.eprintf "BLANK LINE@.";
-          Printer.blank_line pp ())
-    lst;
-  if debug then if lst <> [] then prerr_endline "===="
-
-let dummy_assoc = { Trivia.before = []; within = []; after = [] }
-
-let get_trivia ctx loc =
-  if false then
-    Option.iter
-      (fun loc ->
-        Format.eprintf "%d--%d@." loc.Ast.loc_start.pos_cnum
-          loc.loc_end.pos_cnum)
-      loc;
-  match loc with
-  | None -> dummy_assoc
-  | Some loc -> (
-      try Hashtbl.find ctx.trivia loc with Not_found -> dummy_assoc)
+(* The rendering logic is shared with the Wax printer in [Utils.Trivia]. *)
+let comment ctx s = print_styled ctx Comment s
+let print_trivia ctx lst = Trivia.print ctx.printer ~comment:(comment ctx) lst
+let get_trivia ctx loc = Trivia.get ctx.trivia ~seen:ctx.seen loc
 
 let atomic_node ctx (loc : Ast.location option) f =
-  let trivia = get_trivia ctx loc in
-  print_trivia ctx trivia.before;
-  f ();
-  print_trivia ctx trivia.within;
-  print_trivia ctx trivia.after
+  Trivia.around ctx.printer ~comment:(comment ctx) ctx.trivia ~seen:ctx.seen loc
+    f
 
 let string_node ctx loc style len s =
   atomic_node ctx loc @@ fun () -> print_styled ctx style ~len s
@@ -1426,7 +1386,16 @@ let module_ ?(color = Auto) ?out_channel ?(tail = []) printer ~trivia
     (id, fields) =
   let use_color = should_use_color ~color ~out_channel in
   let theme = get_theme use_color in
-  let ctx = { printer; theme; format = Hybrid; indent_level = 2; trivia } in
+  let ctx =
+    {
+      printer;
+      theme;
+      format = Hybrid;
+      indent_level = 2;
+      trivia;
+      seen = Hashtbl.create 16;
+    }
+  in
   let sexp =
     if id = None then block ~transparent:true (List.map modulefield fields)
     else
@@ -1457,5 +1426,6 @@ let instr printer i =
       format = Compact;
       indent_level = 2;
       trivia = Hashtbl.create 16;
+      seen = Hashtbl.create 16;
     }
     (instr i)

@@ -10,7 +10,10 @@
   (export "caml_unix_gettimeofday") (param $x (ref eq)) (result (ref eq))
   (struct.new $float (call $gettimeofday))
 )
-(func $caml_alloc_tm (export "caml_alloc_tm")
+(func $caml_alloc_tm
+  (export
+
+    "caml_alloc_tm")
   (param $sec i32) (param $min i32) (param $hour i32) (param $mday i32)
   (param $mon i32) (param $year i32) (param $wday i32) (param $yday i32)
   (param $isdst i32) (result (ref eq))

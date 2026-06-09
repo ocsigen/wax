@@ -1,3 +1,20 @@
+// Wasm_of_ocaml runtime support
+// http://www.ocsigen.org/js_of_ocaml/
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, with linking exception;
+// either version 2.1 of the License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with this program; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 #[import = ("bindings", "ta_length")]
 fn ta_length(&extern) -> i32;
 #[import = ("bindings", "ta_get_i32")]
@@ -36,11 +53,14 @@ fn array_get(&extern, i32) -> &?any;
 tag javascript_exception(&?extern);
 #[import = ("jsstring", "jsstring_test")]
 fn jsstring_test(&?any) -> i32;
+
 type block = [mut &eq];
 type string = [mut i8];
 type float = { f: f64 };
+
 #[export = "ocaml_exit"]
 tag ocaml_exit(i32);
+
 #[export = "caml_sys_exit"]
 fn caml_sys_exit(x: &eq) -> &eq { throw ocaml_exit x as &i31 as i32_s; }
 #[export = "caml_sys_getenv"]
@@ -51,8 +71,10 @@ fn caml_sys_getenv(x: &eq) -> &eq {
     if !jsstring_test(res) { caml_raise_not_found(); }
     become caml_string_of_jsstring(wrap(res));
 }
+
 #[export = "caml_sys_argv"]
 fn caml_sys_argv(x: &eq) -> &eq { caml_js_to_string_array(argv()); }
+
 #[export = "caml_sys_executable_name"]
 fn caml_sys_executable_name(x: &eq) -> &eq {
     (caml_js_to_string_array(argv()) as &block)[1];
@@ -60,6 +82,7 @@ fn caml_sys_executable_name(x: &eq) -> &eq {
 #[export = "caml_sys_time"]
 #[export = "caml_sys_time_include_children"]
 fn caml_sys_time(x: &eq) -> &eq { {float| f: time() * 0.001 }; }
+
 #[export = "caml_sys_system_command"]
 fn caml_sys_system_command(x: &eq) -> &eq {
     try &eq {
@@ -71,6 +94,7 @@ fn caml_sys_system_command(x: &eq) -> &eq {
         }
     }
 }
+
 #[export = "caml_sys_random_seed"]
 fn caml_sys_random_seed(x: &eq) -> &eq {
     let r: &extern;
@@ -90,44 +114,62 @@ fn caml_sys_random_seed(x: &eq) -> &eq {
     } /* 'loop */
     a;
 }
+
 #[export = "caml_sys_const_bigendian"]
 fn caml_sys_const_bigendian(x: &eq) -> &eq { 0 as &i31; }
+
 #[export = "caml_sys_const_word_size"]
 fn caml_sys_const_word_size(x: &eq) -> &eq { 32 as &i31; }
+
 #[export = "caml_sys_const_int_size"]
 fn caml_sys_const_int_size(x: &eq) -> &eq { 31 as &i31; }
+
 #[export = "caml_sys_const_max_wosize"]
 fn caml_sys_const_max_wosize(x: &eq) -> &eq { 0xfffffff as &i31; }
+
 #[export = "caml_sys_const_ostype_unix"]
 fn caml_sys_const_ostype_unix(x: &eq) -> &eq { 1 as &i31; }
+
 #[export = "caml_sys_const_ostype_win32"]
 fn caml_sys_const_ostype_win32(x: &eq) -> &eq { 0 as &i31; }
+
 #[export = "caml_sys_const_ostype_cygwin"]
 fn caml_sys_const_ostype_cygwin(x: &eq) -> &eq { 0 as &i31; }
+
 data Unix = "Unix";
+
 #[export = "caml_sys_get_config"]
 fn caml_sys_get_config(x: &eq) -> &eq {
     [block|0 as &i31, [string|Unix @ 0; 4], 32 as &i31, 0 as &i31];
 }
+
 #[export = "caml_sys_isatty"]
 fn caml_sys_isatty(x: &eq) -> &eq { 0 as &i31; }
+
 #[export = "caml_runtime_variant"]
 fn caml_runtime_variant(x: &eq) -> &eq { [string|]; }
+
 #[export = "caml_runtime_parameters"]
 fn caml_runtime_parameters(x: &eq) -> &eq { [string|]; }
+
 #[export = "caml_install_signal_handler"]
 fn caml_install_signal_handler(x: &eq, x_2: &eq) -> &eq { 0 as &i31; }
+
 let caml_runtime_warnings: i32 = 0;
+
 #[export = "caml_ml_enable_runtime_warnings"]
 fn caml_ml_enable_runtime_warnings(x: &eq) -> &eq {
     caml_runtime_warnings = x as &i31 as i32_u;
     0 as &i31;
 }
+
 #[export = "caml_ml_runtime_warnings_enabled"]
 fn caml_ml_runtime_warnings_enabled(x: &eq) -> &eq {
     caml_runtime_warnings as &i31;
 }
+
 data toString = "toString";
+
 #[export = "caml_handle_sys_error"]
 fn caml_handle_sys_error(exn: &?extern) {
     caml_raise_sys_error

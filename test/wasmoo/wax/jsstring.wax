@@ -1,3 +1,20 @@
+// Wasm_of_ocaml runtime support
+// http://www.ocsigen.org/js_of_ocaml/
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, with linking exception;
+// either version 2.1 of the License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with this program; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 #[import = ("wasm:js-string", "compare")]
 fn compare_strings(&?extern, &?extern) -> i32;
 #[import = ("wasm:js-string", "test")]
@@ -7,10 +24,12 @@ fn is_string(&?extern) -> i32;
 fn hash_string(i32, &?any) -> i32;
 #[import = ("wasm:js-string", "fromCharCodeArray")]
 fn fromCharCodeArray(&?wstring, i32, i32) -> &extern;
+
 #[import = ("wasm:text-decoder", "decodeStringFromUTF8Array")]
 fn decodeStringFromUTF8Array(&?string, i32, i32) -> &extern;
 #[import = ("wasm:text-encoder", "encodeStringToUTF8Array")]
 fn encodeStringToUTF8Array(&?extern) -> &string;
+
 #[import = ("bindings", "read_string")]
 fn read_string(i32) -> &?any;
 #[import = ("bindings", "read_string_stream")]
@@ -19,12 +38,16 @@ fn read_string_stream(i32, i32) -> &?any;
 fn write_string(&?any) -> i32;
 #[import = ("bindings", "append_string")]
 fn append_string(&?any, &?any) -> &?any;
+
 type string = [mut i8];
 type wstring = [mut i16];
+
 let text_converters_available: i32 = 0;
 let string_builtins_available: i32 = 0;
+
 const utf16_buffer_size: i32 = 32768;
 let buffer: &wstring = [wstring|0; 0];
+
 fn init() {
     text_converters_available =
         0 !=
@@ -42,12 +65,16 @@ fn init() {
         }
     }
 }
+
 #[export = "jsstring_compare"]
 fn jsstring_compare(s: &?any, s': &?any) -> i32 {
     become compare_strings(s as &?extern, s' as &?extern);
 }
+
 #[export = "jsstring_test"]
 fn jsstring_test(s: &?any) -> i32 { become is_string(s as &?extern); }
+
+// Used by package zarith_stubs_js
 #[export = "jsstring_of_substring"]
 fn jsstring_of_substring(s: &string, pos: i32, len: i32) -> &?any {
     let i: i32;
@@ -69,10 +96,12 @@ fn jsstring_of_substring(s: &string, pos: i32, len: i32) -> &?any {
     }
     become jsstring_of_substring_fallback(s, pos, len);
 }
+
 #[export = "jsstring_of_string"]
 fn jsstring_of_string(s: &string) -> &?any {
     become jsstring_of_substring(s, 0, s.length);
 }
+
 #[export = "string_of_jsstring"]
 fn string_of_jsstring(s: &?any) -> &string {
     if text_converters_available {
@@ -80,9 +109,14 @@ fn string_of_jsstring(s: &?any) -> &string {
     }
     become string_of_jsstring_fallback(s);
 }
+
+// Fallback implementation of string conversion functions
+
 #[export = "caml_buffer"]
 memory caml_buffer: i32 [1];
+
 const buffer_size: i32 = 65536;
+
 fn write_to_buffer(s: &string, pos: i32, len: i32) {
     let i: i32;
     'loop: loop {
@@ -93,6 +127,7 @@ fn write_to_buffer(s: &string, pos: i32, len: i32) {
         }
     } /* 'loop */
 }
+
 fn jsstring_of_substring_fallback(s: &string, pos: i32, len: i32) -> &?any {
     let s': &?any;
     let continued: i32;
@@ -114,6 +149,7 @@ fn jsstring_of_substring_fallback(s: &string, pos: i32, len: i32) -> &?any {
     } /* 'loop */
     s';
 }
+
 fn read_from_buffer(s: &string, pos: i32, len: i32) {
     let i: i32;
     'loop: loop {
@@ -124,8 +160,10 @@ fn read_from_buffer(s: &string, pos: i32, len: i32) {
         }
     } /* 'loop */
 }
+
 type stack = { s: &string, next: &?stack };
 let stack: &?stack = null as &?stack;
+
 fn string_of_jsstring_fallback(s: &?any) -> &string {
     let ofs: i32;
     let len: i32;
@@ -162,6 +200,7 @@ fn string_of_jsstring_fallback(s: &?any) -> &string {
     } /* 'done */
     s';
 }
+
 #[export = "caml_extract_string"]
 fn caml_extract_string(len: i32) {
     let s: &string;

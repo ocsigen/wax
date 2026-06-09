@@ -1,3 +1,20 @@
+// Wasm_of_ocaml runtime support
+// http://www.ocsigen.org/js_of_ocaml/
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, with linking exception;
+// either version 2.1 of the License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with this program; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 #[import = ("ints", "parse_int")]
 fn parse_int(&eq, i32, &string) -> i32;
 #[import = ("ints", "format_int")]
@@ -12,6 +29,7 @@ fn caml_serialize_int_4(&eq, i32);
 fn caml_deserialize_uint_1(&eq) -> i32;
 #[import = ("marshal", "caml_deserialize_int_4")]
 fn caml_deserialize_int_4(&eq) -> i32;
+
 type string = [mut i8];
 type compare = fn(&eq, &eq, i32) -> i32;
 type hash = fn(&eq) -> i32;
@@ -30,6 +48,7 @@ type custom_operations = {
     dup: &?dup
 };
 type custom = open { f: &custom_operations };
+
 #[export = "int32_ops"]
 const int32_ops: &custom_operations =
     {custom_operations|
@@ -42,7 +61,9 @@ const int32_ops: &custom_operations =
         deserialize: int32_deserialize,
         dup: int32_dup
     };
+
 type int32: custom = { f: &custom_operations, f_2: i32 };
+
 fn int32_cmp(v1: &eq, v2: &eq, x: i32) -> i32 {
     let i1: i32;
     let i2: i32;
@@ -50,21 +71,26 @@ fn int32_cmp(v1: &eq, v2: &eq, x: i32) -> i32 {
     i2 = (v2 as &int32).f_2;
     (i1 >s i2) - (i1 <s i2);
 }
+
 fn int32_hash(v: &eq) -> i32 { (v as &int32).f_2; }
+
 fn int32_serialize(s: &eq, v: &eq) -> (i32, i32) {
     caml_serialize_int_4(s, (v as &int32).f_2);
     4;
     4;
 }
+
 fn int32_deserialize(s: &eq) -> (&eq, i32) {
     {int32| f: int32_ops, f_2: caml_deserialize_int_4(s) };
     4;
 }
+
 fn int32_dup(v: &eq) -> &eq {
     let d: &int32;
     d = v as &int32;
     {int32| f: d.f, f_2: d.f_2 };
 }
+
 #[export = "caml_copy_int32"]
 fn caml_copy_int32(i: i32) -> &eq { {int32| f: int32_ops, f_2: i }; }
 #[export = "Int32_val"]
@@ -75,7 +101,11 @@ fn Int32_val(x: &eq) -> i32 { (x as &int32).f_2; }
 fn caml_int32_bswap(i: i32) -> i32 {
     (i & 0x00FF00FF).rotr(8) | (i & 0xFF00FF00).rotl(8);
 }
-const INT32_ERRMSG: &string = string#"Int32.of_string";
+
+const INT32_ERRMSG: &string = string#"Int32.of_string"
+    // "Int32.of_string"
+    ;
+
 #[export = "caml_int32_of_string"]
 fn caml_int32_of_string(v: &eq) -> &eq {
     become caml_copy_int32(parse_int(v, 32, INT32_ERRMSG));
@@ -85,6 +115,7 @@ fn caml_int32_of_string(v: &eq) -> &eq {
 fn caml_int32_compare(i1: i32, i2: i32) -> &eq {
     ((i1 >s i2) - (i1 <s i2)) as &i31;
 }
+
 #[export = "nativeint_ops"]
 const nativeint_ops: &custom_operations =
     {custom_operations|
@@ -97,13 +128,16 @@ const nativeint_ops: &custom_operations =
         deserialize: nativeint_deserialize,
         dup: int32_dup
     };
+
 fn nativeint_serialize(s: &eq, v: &eq) -> (i32, i32) {
     caml_serialize_int_1(s, 1);
     caml_serialize_int_4(s, (v as &int32).f_2);
     4;
     8;
 }
+
 data integer_too_large = "input_value: native integer value too large";
+
 fn nativeint_deserialize(s: &eq) -> (&eq, i32) {
     if caml_deserialize_uint_1(s) != 1 {
         caml_failwith([string|integer_too_large @ 0; 43]);
@@ -111,9 +145,14 @@ fn nativeint_deserialize(s: &eq) -> (&eq, i32) {
     {int32| f: nativeint_ops, f_2: caml_deserialize_int_4(s) };
     4;
 }
+
 #[export = "caml_copy_nativeint"]
 fn caml_copy_nativeint(i: i32) -> &eq { {int32| f: nativeint_ops, f_2: i }; }
-const NATIVEINT_ERRMSG: &string = string#"Native.of_string";
+
+const NATIVEINT_ERRMSG: &string = string#"Native.of_string"
+    // "Nativeint.of_string"
+    ;
+
 #[export = "caml_nativeint_of_string"]
 fn caml_nativeint_of_string(v: &eq) -> &eq {
     become caml_copy_nativeint(parse_int(v, 32, NATIVEINT_ERRMSG));

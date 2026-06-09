@@ -7,6 +7,8 @@ val storagetype : Utils.Printer.t -> Ast.storagetype -> unit
 val module_ :
   ?color:Utils.Colors.flag ->
   ?out_channel:out_channel ->
+  ?tail:Utils.Trivia.entry list ->
   Utils.Printer.t ->
-  'a Ast.module_ ->
+  trivia:Utils.Trivia.t ->
+  Ast.location Ast.module_ ->
   unit

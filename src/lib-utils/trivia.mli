@@ -35,3 +35,61 @@ val report_token : context -> int -> unit
 
 val with_pos : context -> Ast.location -> 'a -> ('a, Ast.location) Ast.annotated
 (** [with_pos ctx loc v] wraps [v] with location [loc]. *)
+
+(** {1 Rendering}
+
+    Shared logic for emitting associated trivia while pretty-printing, used by
+    both the Wax and the WebAssembly printers. The only printer-specific part is
+    the comment styling, passed in as the [comment] callback. *)
+
+val dummy_assoc : associated
+(** The empty association ([before], [within] and [after] all empty). *)
+
+val get :
+  t -> seen:(Ast.location, unit) Hashtbl.t -> Ast.location option -> associated
+(** [get trivia ~seen loc] returns the trivia associated with [loc], with
+    de-duplication: it returns {!dummy_assoc} for [None], a missing location, or
+    a location already present in [seen]; on the first real hit it records the
+    location in [seen] and returns its association. De-duplication is a no-op
+    for formatters (each parser location occurs once) and prevents a comment
+    from being emitted repeatedly when conversion replicates one source location
+    onto several output nodes. *)
+
+val print : Printer.t -> comment:(string -> unit) -> entry list -> unit
+(** [print pp ~comment lst] emits the trivia entries [lst] to [pp], rendering
+    comment text with [comment] and blank lines/spacing with [pp]. *)
+
+val around :
+  Printer.t ->
+  comment:(string -> unit) ->
+  t ->
+  seen:(Ast.location, unit) Hashtbl.t ->
+  Ast.location option ->
+  (unit -> unit) ->
+  unit
+(** [around pp ~comment trivia ~seen loc f] looks up [loc] (with {!get}) and
+    prints its [before] trivia, then runs [f], then its [within] and [after]
+    trivia. *)
+
+(** {1 Cross-format translation}
+
+    The comment text stored by a lexer keeps the source syntax's delimiters
+    ([;; …]/[(; … ;)] for WebAssembly, [// …]/[/* … */] for Wax). When trivia
+    collected from one format is replayed onto an AST that is printed in the
+    other format (during conversion), the delimiters must be rewritten. *)
+
+type comment_syntax = {
+  line : string;  (** line-comment prefix, e.g. [";;"] or ["//"] *)
+  block_open : string;  (** block-comment opener, e.g. ["(;"] or ["/*"] *)
+  block_close : string;  (** block-comment closer, e.g. [";)"] or ["*/"] *)
+}
+
+val wax_syntax : comment_syntax
+val wat_syntax : comment_syntax
+
+val retarget :
+  src:comment_syntax -> dst:comment_syntax -> t -> entry list -> t * entry list
+(** [retarget ~src ~dst trivia tail] rewrites every comment's delimiters from
+    the [src] syntax to the [dst] syntax (line-comment prefix and block-comment
+    delimiters), leaving blank lines and annotations untouched. Block delimiters
+    are balanced in stored content, so a global swap preserves nesting. *)

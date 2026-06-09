@@ -1,3 +1,20 @@
+// Wasm_of_ocaml runtime support
+// http://www.ocsigen.org/js_of_ocaml/
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, with linking exception;
+// either version 2.1 of the License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with this program; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 #[import = ("bindings", "equals")]
 fn equals(&?any, &?any) -> i32;
 #[import = ("obj", "forward_tag")]
@@ -20,11 +37,13 @@ fn caml_string_compare(&eq, &eq) -> &eq;
 fn jsstring_test(&?any) -> i32;
 #[import = ("jsstring", "jsstring_compare")]
 fn jsstring_compare(&?any, &?any) -> i32;
+
 type block = [mut &eq];
 type string = [mut i8];
 type float = { f: f64 };
 type float_array = [mut f64];
 type js = { f: &?any };
+
 type int_array = [mut i32];
 type block_array = [mut &block];
 type compare_stack = {
@@ -33,6 +52,8 @@ type compare_stack = {
     f_3: &block_array,
     f_4: &int_array
 };
+// position in value
+
 type compare = fn(&eq, &eq, i32) -> i32;
 type hash = fn(&eq) -> i32;
 type fixed_length = { bsize_32: i32, bsize_64: i32 };
@@ -50,7 +71,9 @@ type custom_operations = {
     dup: &?dup
 };
 type custom = open { f: &custom_operations };
+
 const dummy_block: &block = [block|0 as &i31; 0];
+
 const default_compare_stack: &compare_stack =
     {compare_stack|
         f: -1,
@@ -58,9 +81,11 @@ const default_compare_stack: &compare_stack =
         f_3: [block_array|dummy_block; 8],
         f_4: [int_array|0; 8]
     };
+
 fn compare_stack_is_not_empty(stack: &compare_stack) -> i32 {
     stack.f >=s 0;
 }
+
 fn pop_compare_stack(stack: &compare_stack) -> (&eq, &eq) {
     let i: i32;
     let p: i32;
@@ -81,6 +106,7 @@ fn pop_compare_stack(stack: &compare_stack) -> (&eq, &eq) {
     v1[p];
     v2[p];
 }
+
 fn push_compare_stack(stack: &compare_stack, v1: &block, v2: &block, p: i32)
 -> &compare_stack {
     let i: i32;
@@ -109,8 +135,10 @@ fn push_compare_stack(stack: &compare_stack, v1: &block, v2: &block, p: i32)
     stack.f_4[i] = p;
     stack;
 }
+
 #[export = "unordered"]
 const unordered: i32 = 0x80000000;
+
 fn compare_strings(s1: &string, s2: &string) -> i32 {
     let l1: i32;
     let l2: i32;
@@ -134,6 +162,7 @@ fn compare_strings(s1: &string, s2: &string) -> i32 {
     } /* 'loop */
     l1 - l2;
 }
+
 fn clear_compare_stack() {
     let stack: &compare_stack;
     let n: i32;
@@ -146,6 +175,7 @@ fn clear_compare_stack() {
         stack.f_3.fill(0, dummy_block, n);
     }
 }
+
 fn compare_val(v1: &eq, v2: &eq, total: i32) -> i32 {
     let stack: &compare_stack;
     let n: i32;
@@ -156,9 +186,11 @@ fn compare_val(v1: &eq, v2: &eq, total: i32) -> i32 {
     clear_compare_stack();
     res;
 }
+
 data abstract_value = "compare: abstract value";
 data functional_value = "compare: functional value";
 data continuation_value = "compare: continuation value";
+
 fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
 {
     let i: i32;
@@ -395,6 +427,7 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
     } /* 'loop */
     0;
 }
+
 #[export = "caml_compare"]
 fn caml_compare(v1: &eq, v2: &eq) -> &eq {
     let res: i32;
@@ -403,28 +436,34 @@ fn caml_compare(v1: &eq, v2: &eq) -> &eq {
     if res >s 0 { return 1 as &i31; }
     0 as &i31;
 }
+
 #[export = "caml_equal"]
 fn caml_equal(v1: &eq, v2: &eq) -> &eq { !compare_val(v1, v2, 0) as &i31; }
+
 #[export = "caml_notequal"]
 fn caml_notequal(v1: &eq, v2: &eq) -> &eq {
     (0 != compare_val(v1, v2, 0)) as &i31;
 }
+
 #[export = "caml_lessthan"]
 fn caml_lessthan(v1: &eq, v2: &eq) -> &eq {
     let res: i32;
     res = compare_val(v1, v2, 0);
     ((res <s 0) & (res != unordered)) as &i31;
 }
+
 #[export = "caml_lessequal"]
 fn caml_lessequal(v1: &eq, v2: &eq) -> &eq {
     let res: i32;
     res = compare_val(v1, v2, 0);
     ((res <=s 0) & (res != unordered)) as &i31;
 }
+
 #[export = "caml_greaterthan"]
 fn caml_greaterthan(v1: &eq, v2: &eq) -> &eq {
     (0 <s compare_val(v1, v2, 0)) as &i31;
 }
+
 #[export = "caml_greaterequal"]
 fn caml_greaterequal(v1: &eq, v2: &eq) -> &eq {
     (0 <=s compare_val(v1, v2, 0)) as &i31;

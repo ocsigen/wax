@@ -24,6 +24,7 @@
           (then (return (ref.i31 (i32.const 0)))))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
         (br $loop))))
+  (; 'loop ;)
   (ref.i31 (i32.const 1))
 )
 (func $caml_string_notequal (export "caml_string_notequal")
@@ -36,6 +37,7 @@
           (ref.cast (ref i31)
             (call $caml_string_equal (local.get $p1) (local.get $p2)))))))
 )
+
 (func $string_compare (param $p1 (ref eq)) (param $p2 (ref eq)) (result i32)
   (local $s1 (ref $string)) (local $s2 (ref $string)) (local $l1 i32)
   (local $l2 i32) (local $len i32) (local $i i32) (local $c1 i32)
@@ -60,6 +62,7 @@
           (then (return (i32.const 1))))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
         (br $loop))))
+  (; 'loop ;)
   (if (i32.lt_u (local.get $l1) (local.get $l2))
     (then (return (i32.const -1))))
   (if (i32.gt_u (local.get $l1) (local.get $l2))
@@ -102,8 +105,13 @@
 (func $caml_string_of_bytes (export "caml_string_of_bytes")
   (export "caml_bytes_of_string") (param $v (ref eq)) (result (ref eq))
   (local.get $v)
-) (data $Bytes_create "Bytes.create")
-(func $caml_create_bytes (export "caml_create_bytes")
+)
+
+(data $Bytes_create "Bytes.create")
+(func $caml_create_bytes
+  (export
+
+    "caml_create_bytes")
   (param $len (ref eq)) (result (ref eq))
   (local $l i32)
   (local.set $l (i31.get_s (ref.cast (ref i31) (local.get $len))))
@@ -124,7 +132,10 @@
     (i31.get_s (ref.cast (ref i31) (local.get $n))))
   (ref.i31 (i32.const 0))
 )
-(func $caml_fill_bytes (export "caml_fill_bytes")
+(func $caml_fill_bytes
+  (export
+
+    "caml_fill_bytes")
   (param $v (ref eq)) (param $offset (ref eq)) (param $len (ref eq))
   (param $init (ref eq)) (result (ref eq))
   (array.fill $string (ref.cast (ref $string) (local.get $v))
@@ -233,7 +244,10 @@
               (i32.add (local.get $p) (i32.const 7))))
           (i64.const 56)))))
 )
-(func $caml_bytes_set16 (export "caml_bytes_set16")
+(func $caml_bytes_set16
+  (export
+
+    "caml_bytes_set16")
   (param $x (ref eq)) (param $x_2 (ref eq)) (param $x_3 (ref eq))
   (result (ref eq))
   (local $s (ref $string)) (local $p i32) (local $v i32)
@@ -250,7 +264,10 @@
     (i32.shr_u (local.get $v) (i32.const 8)))
   (ref.i31 (i32.const 0))
 )
-(func $caml_bytes_set32 (export "caml_bytes_set32")
+(func $caml_bytes_set32
+  (export
+
+    "caml_bytes_set32")
   (param $x (ref eq)) (param $x_2 (ref eq)) (param $v i32) (result (ref eq))
   (local $s (ref $string)) (local $p i32)
   (local.set $s (ref.cast (ref $string) (local.get $x)))
@@ -269,7 +286,10 @@
     (i32.shr_u (local.get $v) (i32.const 24)))
   (ref.i31 (i32.const 0))
 )
-(func $caml_bytes_set64 (export "caml_bytes_set64")
+(func $caml_bytes_set64
+  (export
+
+    "caml_bytes_set64")
   (param $x (ref eq)) (param $x_2 (ref eq)) (param $v i64) (result (ref eq))
   (local $s (ref $string)) (local $p i32)
   (local.set $s (ref.cast (ref $string) (local.get $x)))
@@ -297,7 +317,10 @@
     (i32.wrap_i64 (i64.shr_u (local.get $v) (i64.const 56))))
   (ref.i31 (i32.const 0))
 )
-(func $caml_string_concat (export "caml_string_concat")
+(func $caml_string_concat
+  (export
+
+    "caml_string_concat")
   (param $vs1 (ref eq)) (param $vs2 (ref eq)) (result (ref eq))
   (local $s1 (ref $string)) (local $s2 (ref $string))
   (local $s (ref $string)) (local $l1 i32) (local $l2 i32)

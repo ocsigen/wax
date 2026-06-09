@@ -1,13 +1,35 @@
+// Wasm_of_ocaml runtime support
+// http://www.ocsigen.org/js_of_ocaml/
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, with linking exception;
+// either version 2.1 of the License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with this program; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 type float = { f: f64 };
 type block = [mut &eq];
+
 #[export = "caml_gc_minor"]
 fn caml_gc_minor(x: &eq) -> &eq { 0 as &i31; }
+
 #[export = "caml_gc_major"]
 fn caml_gc_major(x: &eq) -> &eq { 0 as &i31; }
+
 #[export = "caml_gc_full_major"]
 fn caml_gc_full_major(x: &eq) -> &eq { 0 as &i31; }
+
 #[export = "caml_gc_compaction"]
 fn caml_gc_compaction(x: &eq) -> &eq { 0 as &i31; }
+
 #[export = "caml_gc_counters"]
 fn caml_gc_counters(x: &eq) -> &eq {
     let f: &eq;
@@ -39,8 +61,10 @@ fn caml_gc_stat(x: &eq) -> &eq {
         0 as &i31,
         0 as &i31];
 }
+
 #[export = "caml_gc_set"]
 fn caml_gc_set(x: &eq) -> &eq { 0 as &i31; }
+
 #[export = "caml_gc_get"]
 fn caml_gc_get(x: &eq) -> &eq {
     [block|
@@ -57,33 +81,47 @@ fn caml_gc_get(x: &eq) -> &eq {
         0 as &i31,
         0 as &i31];
 }
+
 #[export = "caml_gc_huge_fallback_count"]
 fn caml_gc_huge_fallback_count(x: &eq) -> &eq { 0 as &i31; }
+
 #[export = "caml_gc_major_slice"]
 fn caml_gc_major_slice(x: &eq) -> &eq { 0 as &i31; }
+
 #[export = "caml_gc_major_bucket"]
 fn caml_gc_major_bucket(x: &eq) -> &eq { 0 as &i31; }
+
 #[export = "caml_gc_major_credit"]
 fn caml_gc_major_credit(x: &eq) -> &eq { 0 as &i31; }
+
 #[export = "caml_gc_minor_free"]
 fn caml_gc_minor_free(x: &eq) -> &eq { 0 as &i31; }
+
 #[export = "caml_gc_minor_words"]
 fn caml_gc_minor_words(x: &eq) -> &eq { {float| f: 0 }; }
+
 #[export = "caml_final_register"]
 fn caml_final_register(x: &eq, x_2: &eq) -> &eq { 0 as &i31; }
+
 #[export = "caml_final_register_called_without_value"]
 fn caml_final_register_called_without_value(x: &eq, x_2: &eq) -> &eq {
     0 as &i31;
 }
+
 #[export = "caml_final_release"]
 fn caml_final_release(x: &eq) -> &eq { 0 as &i31; }
+
 #[export = "caml_memprof_start"]
 fn caml_memprof_start(x: &eq, x_2: &eq, x_3: &eq) -> &eq { 0 as &i31; }
+
 #[export = "caml_memprof_set"]
 fn caml_memprof_set(x: &eq) -> &eq { 0 as &i31; }
+
 #[export = "caml_memprof_stop"]
 fn caml_memprof_stop(x: &eq) -> &eq { 0 as &i31; }
+
 #[export = "caml_eventlog_pause"]
 fn caml_eventlog_pause(x: &eq) -> &eq { 0 as &i31; }
+
 #[export = "caml_eventlog_resume"]
 fn caml_eventlog_resume(x: &eq) -> &eq { 0 as &i31; }

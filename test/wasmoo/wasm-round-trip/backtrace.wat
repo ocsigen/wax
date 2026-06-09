@@ -2,26 +2,41 @@
   (func $caml_invalid_argument (param (ref eq)))
 ) (type $block (array (mut (ref eq)))) (type $string (array (mut i8)))
 (func $caml_get_exception_raw_backtrace
-  (export "caml_get_exception_raw_backtrace")
+  (export
+
+    "caml_get_exception_raw_backtrace")
   (param $x (ref eq)) (result (ref eq))
   (array.new_fixed $block 1 (ref.i31 (i32.const 0)))
 )
-(func $caml_backtrace_status (export "caml_backtrace_status")
+(func $caml_backtrace_status
+  (export
+
+    "caml_backtrace_status")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
-(func $caml_convert_raw_backtrace (export "caml_convert_raw_backtrace")
+(func $caml_convert_raw_backtrace
+  (export
+
+    "caml_convert_raw_backtrace")
   (param $x (ref eq)) (result (ref eq))
   (array.new_fixed $block 1 (ref.i31 (i32.const 0)))
 )
-(func $caml_raw_backtrace_next_slot (export "caml_raw_backtrace_next_slot")
+(func $caml_raw_backtrace_next_slot
+  (export
+
+    "caml_raw_backtrace_next_slot")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
+
 (data $raw_backtrace_slot_err
   "Printexc.get_raw_backtrace_slot: index out of bounds"
 )
-(func $caml_raw_backtrace_slot (export "caml_raw_backtrace_slot")
+(func $caml_raw_backtrace_slot
+  (export
+
+    "caml_raw_backtrace_slot")
   (param $x (ref eq)) (param $x_2 (ref eq)) (result (ref eq))
   (call $caml_invalid_argument
     (array.new_data $string $raw_backtrace_slot_err (i32.const 0)
@@ -29,23 +44,37 @@
   (ref.i31 (i32.const 0))
 )
 (func $caml_convert_raw_backtrace_slot
-  (export "caml_convert_raw_backtrace_slot")
+  (export
+
+    "caml_convert_raw_backtrace_slot")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
-(func $caml_restore_raw_backtrace (export "caml_restore_raw_backtrace")
+(func $caml_restore_raw_backtrace
+  (export
+
+    "caml_restore_raw_backtrace")
   (param $x (ref eq)) (param $x_2 (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
-(func $caml_get_current_callstack (export "caml_get_current_callstack")
+(func $caml_get_current_callstack
+  (export
+
+    "caml_get_current_callstack")
   (param $x (ref eq)) (result (ref eq))
   (array.new_fixed $block 1 (ref.i31 (i32.const 0)))
 )
-(func $caml_ml_debug_info_status (export "caml_ml_debug_info_status")
+(func $caml_ml_debug_info_status
+  (export
+
+    "caml_ml_debug_info_status")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
-(func $caml_record_backtrace (export "caml_record_backtrace")
+(func $caml_record_backtrace
+  (export
+
+    "caml_record_backtrace")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )

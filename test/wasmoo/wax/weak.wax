@@ -1,3 +1,20 @@
+// Wasm_of_ocaml runtime support
+// http://www.ocsigen.org/js_of_ocaml/
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, with linking exception;
+// either version 2.1 of the License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with this program; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 #[import = ("obj", "abstract_tag")]
 const abstract_tag: i32;
 #[import = ("obj", "caml_obj_dup")]
@@ -21,9 +38,19 @@ fn wrap(&?any) -> &eq;
 type block = [mut &eq];
 type string = [mut i8];
 type js = { f: &?any };
+
+// A weak array is a an abstract value composed of possibly some
+// data and an array of keys.
+// Keys are either caml_ephe_none (unset), a 31-bit integer, or a
+// weak reference.
+// To access the data, we need to traverse a series of weak maps
+// indexed by the keys (omitting integers).
+
 const caml_ephe_data_offset: i32 = 2;
 const caml_ephe_key_offset: i32 = 3;
+
 const caml_ephe_none: &eq = [block|abstract_tag as &i31];
+
 #[export = "caml_ephe_get_data"]
 fn caml_ephe_get_data(vx: &eq) -> &eq {
     let x: &block;
@@ -57,6 +84,7 @@ fn caml_ephe_get_data(vx: &eq) -> &eq {
     } /* 'no_data */
     0 as &i31;
 }
+
 #[export = "caml_ephe_get_data_copy"]
 fn caml_ephe_get_data_copy(x: &eq) -> &eq {
     let r: &eq;
@@ -72,6 +100,7 @@ fn caml_ephe_get_data_copy(x: &eq) -> &eq {
         };
     r;
 }
+
 #[export = "caml_ephe_set_data"]
 fn caml_ephe_set_data(vx: &eq, data: &eq) -> &eq {
     let x: &block;
@@ -102,6 +131,7 @@ fn caml_ephe_set_data(vx: &eq, data: &eq) -> &eq {
     x[caml_ephe_data_offset] = wrap(m);
     0 as &i31;
 }
+
 #[export = "caml_ephe_unset_data"]
 fn caml_ephe_unset_data(vx: &eq) -> &eq {
     let x: &block;
@@ -109,10 +139,12 @@ fn caml_ephe_unset_data(vx: &eq) -> &eq {
     x[caml_ephe_data_offset] = caml_ephe_none;
     0 as &i31;
 }
+
 #[export = "caml_ephe_check_data"]
 fn caml_ephe_check_data(x: &eq) -> &eq {
     !(caml_ephe_get_data(x) == 0 as &i31) as &i31;
 }
+
 fn caml_ephe_set_data_opt(x: &eq, opt_data: &eq) {
     _ =
         'no_data: do &eq {
@@ -181,6 +213,7 @@ fn caml_ephe_check_key(vx: &eq, vi: &eq) -> &eq {
     } /* 'value */
     1 as &i31;
 }
+
 #[export = "caml_ephe_set_key"]
 fn caml_ephe_set_key(vx: &eq, vi: &eq, v: &eq) -> &eq {
     let x: &block;
@@ -196,6 +229,7 @@ fn caml_ephe_set_key(vx: &eq, vi: &eq, v: &eq) -> &eq {
     caml_ephe_set_data_opt(vx, d);
     0 as &i31;
 }
+
 #[export = "caml_ephe_unset_key"]
 fn caml_ephe_unset_key(vx: &eq, vi: &eq) -> &eq {
     let x: &block;
@@ -209,6 +243,7 @@ fn caml_ephe_unset_key(vx: &eq, vi: &eq) -> &eq {
     caml_ephe_set_data_opt(vx, d);
     0 as &i31;
 }
+
 data Weak_create = "Weak.create";
 #[export = "caml_ephe_create"]
 #[export = "caml_weak_create"]
@@ -221,6 +256,7 @@ fn caml_ephe_create(vlen: &eq) -> &eq {
     res[0] = abstract_tag as &i31;
     res;
 }
+
 #[export = "caml_ephe_blit_data"]
 fn caml_ephe_blit_data(x: &eq, y: &eq) -> &eq {
     caml_ephe_set_data_opt(y, caml_ephe_get_data(x));
@@ -237,6 +273,7 @@ fn caml_ephe_blit_key(x: &eq, i: &eq, y: &eq, j: &eq, l: &eq) -> &eq {
     caml_ephe_set_data_opt(y, d);
     0 as &i31;
 }
+
 #[export = "caml_weak_set"]
 fn caml_weak_set(x: &eq, i: &eq, v: &eq) -> &eq {
     _ =

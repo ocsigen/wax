@@ -6,8 +6,10 @@ round-trip. Versions are integer tuples; conditions combine with all/any/not.
   const caml_marshal_header_size: i32 = 16;
   #[else]
   const caml_marshal_header_size: i32 = 20;
+  
   #[if(feature = "gc")]
   fn gc_init() {}
+  
   #[if(all(debug, not(target = "wasm32")))]
   { const debug_enabled: i32 = 1; fn debug_log(msg: i32) {} }
 
@@ -40,7 +42,9 @@ Conversion to WAT produces `(@if …)` module-field annotations.
   (@if (>= $ocaml_version (5 1 0))
   (@then (global $caml_marshal_header_size i32 (i32.const 16)) )
   (@else (global $caml_marshal_header_size i32 (i32.const 20)) ) )
+  
   (@if (= $feature "gc") (@then (func $gc_init) ) )
+  
   (@if (and $debug (not (= $target "wasm32")))
   (@then (global $debug_enabled i32 (i32.const 1))
   (func $debug_log (param $msg i32)) ) )

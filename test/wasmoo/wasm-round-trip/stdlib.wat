@@ -32,11 +32,15 @@
     (field $f (ref $string))
     (field $f_2 (mut (ref eq)))
     (field $f_3 (mut (ref null $assoc))))
-) (type $assoc_array (array (mut (ref null $assoc))))
+)
+(type $assoc_array (array (mut (ref null $assoc))))
+
 (global $Named_value_size i32 (i32.const 13))
+
 (global $named_value_table (ref $assoc_array)
   (array.new $assoc_array (ref.null $assoc) (global.get $Named_value_size))
 )
+
 (func $find_named_value
   (param $s (ref eq)) (param $l (ref null $assoc)) (result (ref null $assoc))
   (local $a (ref $assoc))
@@ -52,9 +56,14 @@
         (then (return (local.get $a))))
       (local.set $l (struct.get $assoc $f_3 (local.get $a)))
       (br $loop))
+    (; 'loop ;)
     (unreachable))
+  (; 'tail ;)
 )
-(func $caml_named_value (export "caml_named_value")
+(func $caml_named_value
+  (export
+
+    "caml_named_value")
   (param $s (ref $string)) (result eqref)
   (block $not_found
     (return
@@ -70,7 +79,10 @@
                 (global.get $Named_value_size))))))))
   (return (ref.null eq))
 )
-(func $caml_register_named_value (export "caml_register_named_value")
+(func $caml_register_named_value
+  (export
+
+    "caml_register_named_value")
   (param $x (ref eq)) (param $x_2 (ref eq)) (result (ref eq))
   (local $h i32) (local $r (ref null $assoc))
   (local.set $h
@@ -92,7 +104,11 @@
       (local.get $x_2) (local.get $r)))
   (ref.i31 (i32.const 0))
 )
-(func $caml_unregister_named_value (export "caml_unregister_named_value")
+(func $caml_unregister_named_value
+  (export
+
+    ;; Used only for testing (tests-jsoo/bin), but inconvenient to pull out
+    "caml_unregister_named_value")
   (param $name (ref eq)) (result (ref eq))
   (local $h i32) (local $r (ref null $assoc)) (local $a (ref $assoc))
   (local.set $h
@@ -127,13 +143,22 @@
             (struct.get $assoc $f_3 (local.get $a)))
           (br $done)))
       (local.set $r (struct.get $assoc $f_3 (local.get $a)))
-      (br $loop)))
+      (br $loop))
+    (; 'loop ;)
+  ) (; 'done ;)
   (ref.i31 (i32.const 0))
 )
-(global $caml_global_data (export "caml_global_data") (mut (ref $block))
+(global $caml_global_data
+  (export
+
+    "caml_global_data")
+  (mut (ref $block))
   (array.new $block (ref.i31 (i32.const 0)) (i32.const 12))
 )
-(func $caml_register_global (export "caml_register_global")
+(func $caml_register_global
+  (export
+
+    "caml_register_global")
   (param $x (ref eq)) (param $v (ref eq)) (param $x_2 (ref eq))
   (result (ref eq))
   (local $i i32)
@@ -144,24 +169,38 @@
         (local.get $v))))
   (ref.i31 (i32.const 0))
 )
-(func $caml_get_global_data (export "caml_get_global_data")
+(func $caml_get_global_data
+  (export
+
+    "caml_get_global_data")
   (param $x (ref eq)) (result (ref eq))
   (global.get $caml_global_data)
-) (type $func_2 (func (result (ref eq))))
+)
+(type $func_2 (func (result (ref eq))))
+
 (data $fatal_error "Fatal error: exception ")
 (data $handle_uncaught_exception "Printexc.handle_uncaught_exception")
 (data $do_at_exit "Pervasives.do_at_exit")
+
 (global $uncaught_exception (mut externref) (ref.null extern))
+
 (func $reraise_exception (result (ref eq))
   (call $throw_2 (global.get $uncaught_exception))
   (ref.i31 (i32.const 0))
 )
 (func $caml_handle_uncaught_exception
-  (export "caml_handle_uncaught_exception") (param $exn externref)
+  (export
+
+    "caml_handle_uncaught_exception")
+  (param $exn externref)
   (global.set $uncaught_exception (local.get $exn))
   (call $caml_main (ref.func $reraise_exception))
 )
-(func $caml_main (export "caml_main") (param $start (ref func))
+(func $caml_main
+  (export
+
+    "caml_main")
+  (param $start (ref func))
   (local $exn (ref eq))
   (try
     (do (drop (call_ref $func_2 (ref.cast (ref $func_2) (local.get $start)))))
@@ -195,5 +234,6 @@
                 (call $caml_string_concat
                   (call $caml_format_exception (local.get $exn))
                   (@string $string "\n" )))))))
+      (; 'exit ;)
       (call $exit (i32.const 2))))
 ) (elem declare func $reraise_exception)

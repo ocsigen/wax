@@ -88,8 +88,10 @@
 (type $custom_with_id
   (sub $custom (struct (field $f (ref $custom_operations)) (field $id i64)))
 )
+
 (global $channel_ops (ref $custom_operations)
-  (struct.new $custom_operations (@string $string "_chan" )
+  (struct.new $custom_operations
+    (@string $string "_chan" ) ;; "_chan"
     (ref.func $custom_compare_id) (ref.null $compare)
     (ref.func $custom_hash_id) (ref.null $fixed_length) (ref.null $serialize)
     (ref.null $deserialize) (ref.null $dup))
@@ -108,7 +110,10 @@
 )
 (type $fd_offset
   (struct (field $offset (mut i64)) (field $seeked (mut i32)))
-) (global $fd_offsets (mut externref) (ref.null extern))
+)
+
+(global $fd_offsets (mut externref) (ref.null extern))
+
 (func $get_fd_offsets (result (ref extern))
   (local $m (ref extern))
   (if (ref.is_null (global.get $fd_offsets))
@@ -123,22 +128,35 @@
       (global.set $fd_offsets (local.get $m))))
   (ref.as_non_null (global.get $fd_offsets))
 )
+
 (func $initialize_fd_offset (param $fd i32) (param $offset i64)
   (call $map_set (call $get_fd_offsets) (local.get $fd)
     (struct.new $fd_offset (local.get $offset) (i32.const 0)))
 )
+
 (func $release_fd_offset (param $fd i32)
   (call $map_delete (call $get_fd_offsets) (local.get $fd))
 )
+
 (func $get_fd_offset (param $fd i32) (result (ref $fd_offset))
   (call $map_get (call $get_fd_offsets) (local.get $fd))
-) (global $IO_BUFFER_SIZE i32 (i32.const 65536))
+)
+
+(global $IO_BUFFER_SIZE i32 (i32.const 65536))
 (type $open_flags (array i8))
+;;  1 O_RDONLY
+;;  2 O_WRONLY
+;;  4 O_APPEND
+;;  8 O_CREAT
+;; 16 O_TRUNC
+;; 32 O_EXCL
+;; 64 O_NONBLOCK
 (global $sys_open_flags (ref $open_flags)
   (array.new_fixed $open_flags 9 (i32.const 1) (i32.const 2) (i32.const 6)
     (i32.const 8) (i32.const 16) (i32.const 32) (i32.const 0) (i32.const 0)
     (i32.const 64))
 )
+
 (func $convert_flag_list (param $vflags (ref eq)) (result i32)
   (local $flags i32) (local $cons (ref $block))
   (loop $loop
@@ -156,7 +174,10 @@
         (br $loop))))
   (local.get $flags)
 )
-(func $caml_sys_open (export "caml_sys_open")
+(func $caml_sys_open
+  (export
+
+    "caml_sys_open")
   (param $path (ref eq)) (param $vflags (ref eq)) (param $perm (ref eq))
   (result (ref eq))
   (local $fd i32) (local $flags i32) (local $offset i64)
@@ -174,7 +195,10 @@
   (call $initialize_fd_offset (local.get $fd) (local.get $offset))
   (ref.i31 (local.get $fd))
 )
-(func $caml_sys_close (export "caml_sys_close")
+(func $caml_sys_close
+  (export
+
+    "caml_sys_close")
   (param $x (ref eq)) (result (ref eq))
   (local $fd i32)
   (local.set $fd (i31.get_u (ref.cast (ref i31) (local.get $x))))
@@ -184,25 +208,41 @@
     (catch $javascript_exception (call $caml_handle_sys_error)))
   (ref.i31 (i32.const 0))
 )
-(func $caml_ml_set_channel_name (export "caml_ml_set_channel_name")
+(func $caml_ml_set_channel_name
+  (export
+
+    "caml_ml_set_channel_name")
   (param $x (ref eq)) (param $x_2 (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
-(func $caml_ml_out_channels_list (export "caml_ml_out_channels_list")
+(func $caml_ml_out_channels_list
+  (export
+
+    "caml_ml_out_channels_list")
   (param $x (ref eq)) (result (ref eq))
   (return_call $caml_list_of_js_array (call $wrap (call $channel_list)))
 )
-(func $caml_ml_open_descriptor_in (export "caml_ml_open_descriptor_in")
+(func $caml_ml_open_descriptor_in
+  (export
+
+    "caml_ml_open_descriptor_in")
   (param $fd (ref eq)) (result (ref eq))
   (struct.new $channel (global.get $channel_ops) (call $custom_next_id)
     (i31.get_u (ref.cast (ref i31) (local.get $fd)))
     (call $ta_new (global.get $IO_BUFFER_SIZE)) (i32.const 0) (i32.const 0)
     (global.get $IO_BUFFER_SIZE) (i32.const 0))
 )
-(global $caml_stderr (export "caml_stderr") (mut (ref eq))
+(global $caml_stderr
+  (export
+
+    "caml_stderr")
+  (mut (ref eq))
   (ref.i31 (i32.const 0))
 )
-(func $caml_ml_open_descriptor_out (export "caml_ml_open_descriptor_out")
+(func $caml_ml_open_descriptor_out
+  (export
+
+    "caml_ml_open_descriptor_out")
   (param $fd (ref eq)) (result (ref eq))
   (local $res (ref eq))
   (local.set $res
@@ -215,7 +255,10 @@
     (then (global.set $caml_stderr (local.get $res))))
   (local.get $res)
 )
-(func $caml_ml_close_channel (export "caml_ml_close_channel")
+(func $caml_ml_close_channel
+  (export
+
+    "caml_ml_close_channel")
   (param $x (ref eq)) (result (ref eq))
   (local $ch (ref $channel)) (local $fd i32)
   (local.set $ch (ref.cast (ref $channel) (local.get $x)))
@@ -233,6 +276,7 @@
         (catch $javascript_exception (drop)))))
   (ref.i31 (i32.const 0))
 )
+
 (func $caml_do_read
   (param $ch (ref $channel)) (param $pos i32) (param $len i32) (result i32)
   (local $fd i32) (local $fd_offset (ref $fd_offset)) (local $offset i64)
@@ -258,6 +302,7 @@
     (i64.add (local.get $offset) (i64.extend_i32_u (local.get $n))))
   (local.get $n)
 )
+
 (func $caml_refill (param $ch (ref $channel)) (result i32)
   (local $n i32) (local $buf (ref extern))
   (local.set $buf (struct.get $channel $buffer (local.get $ch)))
@@ -269,7 +314,10 @@
   (struct.set $channel $curr (local.get $ch) (i32.const 1))
   (return (call $ta_get_ui8 (local.get $buf) (i32.const 0)))
 )
-(func $caml_getblock (export "caml_getblock")
+(func $caml_getblock
+  (export
+
+    "caml_getblock")
   (param $vch (ref eq)) (param $s (ref $string)) (param $pos i32)
   (param $len i32) (result i32)
   (local $ch (ref $channel)) (local $avail i32) (local $nread i32)
@@ -299,7 +347,10 @@
   (struct.set $channel $curr (local.get $ch) (local.get $len))
   (local.get $len)
 )
-(func $caml_really_getblock (export "caml_really_getblock")
+(func $caml_really_getblock
+  (export
+
+    "caml_really_getblock")
   (param $ch (ref eq)) (param $s (ref $string)) (param $pos i32)
   (param $len i32) (result i32)
   (local $read i32) (local $n i32)
@@ -315,9 +366,13 @@
         (local.set $pos (i32.add (local.get $pos) (local.get $read)))
         (local.set $n (i32.sub (local.get $n) (local.get $read)))
         (br $loop))))
+  (; 'loop ;)
   (local.get $len)
 )
-(func $caml_ml_input (export "caml_ml_input")
+(func $caml_ml_input
+  (export
+
+    "caml_ml_input")
   (param $vch (ref eq)) (param $vs (ref eq)) (param $vpos (ref eq))
   (param $vlen (ref eq)) (result (ref eq))
   (local $ch (ref $channel)) (local $s (ref $string)) (local $pos i32)
@@ -349,6 +404,7 @@
     (i32.add (local.get $curr) (local.get $len)))
   (ref.i31 (local.get $len))
 )
+
 (func $caml_getch (param $ch (ref $channel)) (result i32)
   (local $curr i32)
   (local.set $curr (struct.get $channel $curr (local.get $ch)))
@@ -359,11 +415,17 @@
   (return_call $ta_get_ui8 (struct.get $channel $buffer (local.get $ch))
     (local.get $curr))
 )
-(func $caml_ml_input_char (export "caml_ml_input_char")
+(func $caml_ml_input_char
+  (export
+
+    "caml_ml_input_char")
   (param $ch (ref eq)) (result (ref eq))
   (ref.i31 (call $caml_getch (ref.cast (ref $channel) (local.get $ch))))
 )
-(func $caml_ml_input_int (export "caml_ml_input_int")
+(func $caml_ml_input_int
+  (export
+
+    "caml_ml_input_int")
   (param $vch (ref eq)) (result (ref eq))
   (local $ch (ref $channel)) (local $res i32)
   (local.set $ch (ref.cast (ref $channel) (local.get $vch)))
@@ -377,7 +439,10 @@
   (return
     (ref.i31 (i32.or (local.get $res) (call $caml_getch (local.get $ch)))))
 )
-(func $caml_ml_pos_in (export "caml_ml_pos_in")
+(func $caml_ml_pos_in
+  (export
+
+    "caml_ml_pos_in")
   (param $vch (ref eq)) (result (ref eq))
   (local $ch (ref $channel))
   (local.set $ch (ref.cast (ref $channel) (local.get $vch)))
@@ -389,7 +454,10 @@
       (i32.sub (struct.get $channel $max (local.get $ch))
         (struct.get $channel $curr (local.get $ch)))))
 )
-(func $caml_ml_pos_in_64 (export "caml_ml_pos_in_64")
+(func $caml_ml_pos_in_64
+  (export
+
+    "caml_ml_pos_in_64")
   (param $vch (ref eq)) (result (ref eq))
   (local $ch (ref $channel))
   (local.set $ch (ref.cast (ref $channel) (local.get $vch)))
@@ -401,7 +469,10 @@
         (i32.sub (struct.get $channel $max (local.get $ch))
           (struct.get $channel $curr (local.get $ch))))))
 )
-(func $caml_ml_pos_out (export "caml_ml_pos_out")
+(func $caml_ml_pos_out
+  (export
+
+    "caml_ml_pos_out")
   (param $vch (ref eq)) (result (ref eq))
   (local $ch (ref $channel))
   (local.set $ch (ref.cast (ref $channel) (local.get $vch)))
@@ -412,7 +483,10 @@
           (call $get_fd_offset (struct.get $channel $fd (local.get $ch)))))
       (struct.get $channel $curr (local.get $ch))))
 )
-(func $caml_ml_pos_out_64 (export "caml_ml_pos_out_64")
+(func $caml_ml_pos_out_64
+  (export
+
+    "caml_ml_pos_out_64")
   (param $vch (ref eq)) (result (ref eq))
   (local $ch (ref $channel))
   (local.set $ch (ref.cast (ref $channel) (local.get $vch)))
@@ -422,6 +496,7 @@
         (call $get_fd_offset (struct.get $channel $fd (local.get $ch))))
       (i64.extend_i32_s (struct.get $channel $curr (local.get $ch)))))
 )
+
 (func $caml_seek_in
   (param $ch (ref $channel)) (param $dest i64) (result (ref eq))
   (local $fd i32) (local $offset i64) (local $fd_offset (ref $fd_offset))
@@ -445,17 +520,26 @@
       (struct.set $channel $max (local.get $ch) (i32.const 0))))
   (ref.i31 (i32.const 0))
 )
-(func $caml_ml_seek_in (export "caml_ml_seek_in")
+(func $caml_ml_seek_in
+  (export
+
+    "caml_ml_seek_in")
   (param $ch (ref eq)) (param $dest (ref eq)) (result (ref eq))
   (return_call $caml_seek_in (ref.cast (ref $channel) (local.get $ch))
     (i64.extend_i32_s (i31.get_s (ref.cast (ref i31) (local.get $dest)))))
 )
-(func $caml_ml_seek_in_64 (export "caml_ml_seek_in_64")
+(func $caml_ml_seek_in_64
+  (export
+
+    "caml_ml_seek_in_64")
   (param $ch (ref eq)) (param $dest (ref eq)) (result (ref eq))
   (return_call $caml_seek_in (ref.cast (ref $channel) (local.get $ch))
     (call $Int64_val (local.get $dest)))
 )
-(func $caml_ml_seek_out (export "caml_ml_seek_out")
+(func $caml_ml_seek_out
+  (export
+
+    "caml_ml_seek_out")
   (param $vch (ref eq)) (param $voffset (ref eq)) (result (ref eq))
   (local $ch (ref $channel)) (local $fd_offset (ref $fd_offset))
   (local.set $ch (ref.cast (ref $channel) (local.get $vch)))
@@ -467,7 +551,10 @@
   (struct.set $fd_offset $seeked (local.get $fd_offset) (i32.const 1))
   (ref.i31 (i32.const 0))
 )
-(func $caml_ml_seek_out_64 (export "caml_ml_seek_out_64")
+(func $caml_ml_seek_out_64
+  (export
+
+    "caml_ml_seek_out_64")
   (param $vch (ref eq)) (param $voffset (ref eq)) (result (ref eq))
   (local $ch (ref $channel)) (local $fd_offset (ref $fd_offset))
   (local.set $ch (ref.cast (ref $channel) (local.get $vch)))
@@ -479,7 +566,10 @@
   (struct.set $fd_offset $seeked (local.get $fd_offset) (i32.const 1))
   (ref.i31 (i32.const 0))
 )
-(func $caml_ml_input_scan_line (export "caml_ml_input_scan_line")
+(func $caml_ml_input_scan_line
+  (export
+
+    "caml_ml_input_scan_line")
   (param $vch (ref eq)) (result (ref eq))
   (local $ch (ref $channel)) (local $p i32) (local $n i32)
   (local.set $ch (ref.cast (ref $channel) (local.get $vch)))
@@ -532,20 +622,28 @@
                 (struct.get $channel $curr (local.get $ch))))))))
     (local.set $p (i32.add (local.get $p) (i32.const 1)))
     (br $loop))
+  (; 'loop ;)
   (unreachable)
 )
+
 (func $caml_flush (param $ch (ref $channel))
   (loop $loop
     (br_if $loop (i32.eqz (call $caml_flush_partial (local.get $ch)))))
 )
-(func $caml_flush_if_unbuffered (export "caml_flush_if_unbuffered")
+(func $caml_flush_if_unbuffered
+  (export
+
+    "caml_flush_if_unbuffered")
   (param $vch (ref eq))
   (local $ch (ref $channel))
   (local.set $ch (ref.cast (ref $channel) (local.get $vch)))
   (if (struct.get $channel $unbuffered (local.get $ch))
     (then (call $caml_flush (local.get $ch))))
 )
-(func $caml_ml_flush (export "caml_ml_flush")
+(func $caml_ml_flush
+  (export
+
+    "caml_ml_flush")
   (param $vch (ref eq)) (result (ref eq))
   (local $ch (ref $channel))
   (local.set $ch (ref.cast (ref $channel) (local.get $vch)))
@@ -553,6 +651,7 @@
     (then (call $caml_flush (local.get $ch))))
   (ref.i31 (i32.const 0))
 )
+
 (func $caml_flush_partial (param $ch (ref $channel)) (result i32)
   (local $towrite i32) (local $written i32) (local $fd i32)
   (local $fd_offset (ref $fd_offset)) (local $offset i64)
@@ -587,6 +686,7 @@
       (struct.set $channel $curr (local.get $ch) (local.get $towrite))))
   (i32.eqz (local.get $towrite))
 )
+
 (func $caml_putblock
   (param $ch (ref $channel)) (param $s (ref $string)) (param $pos i32)
   (param $len i32) (result i32)
@@ -605,7 +705,10 @@
     (then (drop (call $caml_flush_partial (local.get $ch)))))
   (local.get $len)
 )
-(func $caml_really_putblock (export "caml_really_putblock")
+(func $caml_really_putblock
+  (export
+
+    "caml_really_putblock")
   (param $ch (ref eq)) (param $s (ref $string)) (param $pos i32)
   (param $len i32)
   (local $written i32)
@@ -618,6 +721,7 @@
         (local.set $pos (i32.add (local.get $pos) (local.get $written)))
         (local.set $len (i32.sub (local.get $len) (local.get $written)))
         (br $loop))))
+  (; 'loop ;)
 )
 (func $caml_ml_output (export "caml_ml_output")
   (export "caml_ml_output_bytes")
@@ -636,9 +740,11 @@
         (local.set $pos (i32.add (local.get $pos) (local.get $written)))
         (local.set $len (i32.sub (local.get $len) (local.get $written)))
         (br $loop))))
+  (; 'loop ;)
   (call $caml_flush_if_unbuffered (local.get $ch))
   (ref.i31 (i32.const 0))
 )
+
 (func $caml_putch (param $ch (ref $channel)) (param $c i32)
   (local $curr i32)
   (if
@@ -651,14 +757,20 @@
   (struct.set $channel $curr (local.get $ch)
     (i32.add (local.get $curr) (i32.const 1)))
 )
-(func $caml_ml_output_char (export "caml_ml_output_char")
+(func $caml_ml_output_char
+  (export
+
+    "caml_ml_output_char")
   (param $ch (ref eq)) (param $c (ref eq)) (result (ref eq))
   (call $caml_putch (ref.cast (ref $channel) (local.get $ch))
     (i31.get_u (ref.cast (ref i31) (local.get $c))))
   (call $caml_flush_if_unbuffered (local.get $ch))
   (ref.i31 (i32.const 0))
 )
-(func $caml_ml_output_int (export "caml_ml_output_int")
+(func $caml_ml_output_int
+  (export
+
+    "caml_ml_output_int")
   (param $vch (ref eq)) (param $vn (ref eq)) (result (ref eq))
   (local $ch (ref $channel)) (local $n i32)
   (local.set $ch (ref.cast (ref $channel) (local.get $vch)))
@@ -670,14 +782,20 @@
   (call $caml_flush_if_unbuffered (local.get $ch))
   (ref.i31 (i32.const 0))
 )
-(func $caml_ml_is_buffered (export "caml_ml_is_buffered")
+(func $caml_ml_is_buffered
+  (export
+
+    "caml_ml_is_buffered")
   (param $ch (ref eq)) (result (ref eq))
   (ref.i31
     (i32.eqz
       (struct.get $channel $unbuffered
         (ref.cast (ref $channel) (local.get $ch)))))
 )
-(func $caml_ml_set_buffered (export "caml_ml_set_buffered")
+(func $caml_ml_set_buffered
+  (export
+
+    "caml_ml_set_buffered")
   (param $vch (ref eq)) (param $mode (ref eq)) (result (ref eq))
   (local $ch (ref $channel))
   (local.set $ch (ref.cast (ref $channel) (local.get $vch)))
@@ -689,27 +807,42 @@
         (then (call $caml_flush (local.get $ch))))))
   (ref.i31 (i32.const 0))
 )
-(func $caml_ml_channel_size (export "caml_ml_channel_size")
+(func $caml_ml_channel_size
+  (export
+
+    "caml_ml_channel_size")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31
     (i32.wrap_i64
       (call $file_size (call $caml_ml_get_channel_fd (local.get $x)))))
 )
-(func $caml_ml_channel_size_64 (export "caml_ml_channel_size_64")
+(func $caml_ml_channel_size_64
+  (export
+
+    "caml_ml_channel_size_64")
   (param $x (ref eq)) (result (ref eq))
   (call $caml_copy_int64
     (call $file_size (call $caml_ml_get_channel_fd (local.get $x))))
 )
-(func $caml_ml_get_channel_fd (export "caml_ml_get_channel_fd")
+(func $caml_ml_get_channel_fd
+  (export
+
+    "caml_ml_get_channel_fd")
   (param $x (ref eq)) (result i32)
   (struct.get $channel $fd (ref.cast (ref $channel) (local.get $x)))
 )
-(func $caml_ml_set_channel_fd (export "caml_ml_set_channel_fd")
+(func $caml_ml_set_channel_fd
+  (export
+
+    "caml_ml_set_channel_fd")
   (param $x (ref eq)) (param $x_2 i32)
   (struct.set $channel $fd (ref.cast (ref $channel) (local.get $x))
     (local.get $x_2))
 )
-(func $caml_ml_get_channel_offset (export "caml_ml_get_channel_offset")
+(func $caml_ml_get_channel_offset
+  (export
+
+    "caml_ml_get_channel_offset")
   (param $ch (ref eq)) (result i64)
   (struct.get $fd_offset $offset
     (call $get_fd_offset

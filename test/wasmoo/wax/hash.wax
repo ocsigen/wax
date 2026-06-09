@@ -1,3 +1,20 @@
+// Wasm_of_ocaml runtime support
+// http://www.ocsigen.org/js_of_ocaml/
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, with linking exception;
+// either version 2.1 of the License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with this program; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 #[import = ("obj", "object_tag")]
 const object_tag: i32;
 #[import = ("obj", "forward_tag")]
@@ -6,10 +23,12 @@ const forward_tag: i32;
 fn jsstring_test(&?any) -> i32;
 #[import = ("jsstring", "jsstring_hash")]
 fn jsstring_hash(i32, &?any) -> i32;
+
 type block = [mut &eq];
 type string = [mut i8];
 type float = { f: f64 };
 type js = { f: &?any };
+
 type compare = fn(&eq, &eq, i32) -> i32;
 type hash = fn(&eq) -> i32;
 type fixed_length = { bsize_32: i32, bsize_64: i32 };
@@ -27,10 +46,12 @@ type custom_operations = {
     dup: &?dup
 };
 type custom = open { f: &custom_operations };
+
 #[export = "caml_hash_mix_int"]
 fn caml_hash_mix_int(h: i32, d: i32) -> i32 {
     ((d * 0xcc9e2d51).rotl(15) * 0x1b873593 ^ h).rotl(13) * 5 + 0xe6546b64;
 }
+
 #[export = "caml_hash_mix_final"]
 fn caml_hash_mix_final(h: i32) -> i32 {
     h = h ^ h >>u 16;
@@ -39,11 +60,13 @@ fn caml_hash_mix_final(h: i32) -> i32 {
     h = h * 0xc2b2ae35;
     h ^ h >>u 16;
 }
+
 #[export = "caml_hash_mix_int64"]
 fn caml_hash_mix_int64(h: i32, d: i64) -> i32 {
     become caml_hash_mix_int
         (caml_hash_mix_int(h, d as i32), (d >>u 32) as i32);
 }
+
 #[export = "caml_hash_mix_double"]
 fn caml_hash_mix_double(h: i32, d: f64) -> i32 {
     let i: i64;
@@ -54,6 +77,7 @@ fn caml_hash_mix_double(h: i32, d: f64) -> i32 {
     if i == 0x8000000000000000 { i = 0; }
     become caml_hash_mix_int64(h, i);
 }
+
 #[export = "caml_hash_mix_float"]
 fn caml_hash_mix_float(h: i32, d: f32) -> i32 {
     let i: i32;
@@ -64,6 +88,7 @@ fn caml_hash_mix_float(h: i32, d: f32) -> i32 {
     if i == 0x80000000 { i = 0; }
     become caml_hash_mix_int(h, i);
 }
+
 #[export = "caml_hash_mix_string"]
 fn caml_hash_mix_string(h: i32, s: &string) -> i32 {
     let i: i32;
@@ -96,9 +121,12 @@ fn caml_hash_mix_string(h: i32, s: &string) -> i32 {
     } /* 'l_2 */
     h ^ len;
 }
+
 const HASH_QUEUE_SIZE: i32 = 256;
 const MAX_FORWARD_DEREFERENCE: i32 = 1000;
+
 const caml_hash_queue: &block = [block|0 as &i31; HASH_QUEUE_SIZE];
+
 #[export = "caml_hash"]
 fn caml_hash(count: &eq, limit: &eq, seed: &eq, obj: &eq) -> &eq {
     let sz: i32;
@@ -217,6 +245,7 @@ fn caml_hash(count: &eq, limit: &eq, seed: &eq, obj: &eq) -> &eq {
     caml_hash_queue.fill(0, 0 as &i31, wr);
     (caml_hash_mix_final(h) & 0x3FFFFFFF) as &i31;
 }
+
 #[export = "caml_string_hash"]
 fn caml_string_hash(x: &eq, x_2: &eq) -> &eq {
     let h: i32;

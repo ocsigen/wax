@@ -1,3 +1,20 @@
+// Wasm_of_ocaml runtime support
+// http://www.ocsigen.org/js_of_ocaml/
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, with linking exception;
+// either version 2.1 of the License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with this program; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 #[import = ("hash", "caml_string_hash")]
 fn caml_string_hash(&eq, &eq) -> &eq;
 #[import = ("string", "caml_string_equal")]
@@ -28,13 +45,19 @@ tag ocaml_exception(&eq);
 fn exit(i32);
 #[import = ("bindings", "throw")]
 fn throw_2(&?extern);
+
 type block = [mut &eq];
 type string = [mut i8];
+
 type assoc = { f: &string, f_2: mut &eq, f_3: mut &?assoc };
+
 type assoc_array = [mut &?assoc];
+
 const Named_value_size: i32 = 13;
+
 const named_value_table: &assoc_array =
     [assoc_array|null as &?assoc; Named_value_size];
+
 fn find_named_value(s: &eq, l: &?assoc) -> &?assoc {
     let a: &assoc;
     'tail: do &?assoc {
@@ -47,6 +70,7 @@ fn find_named_value(s: &eq, l: &?assoc) -> &?assoc {
         unreachable;
     } /* 'tail */
 }
+
 #[export = "caml_named_value"]
 fn caml_named_value(s: &string) -> &?eq {
     'not_found: do {
@@ -60,6 +84,7 @@ fn caml_named_value(s: &string) -> &?eq {
     }
     return null as &?eq;
 }
+
 #[export = "caml_register_named_value"]
 fn caml_register_named_value(x: &eq, x_2: &eq) -> &eq {
     let h: i32;
@@ -73,6 +98,8 @@ fn caml_register_named_value(x: &eq, x_2: &eq) -> &eq {
     named_value_table[h] = {assoc| f: x as &string, f_2: x_2, f_3: r };
     0 as &i31;
 }
+
+// Used only for testing (tests-jsoo/bin), but inconvenient to pull out
 #[export = "caml_unregister_named_value"]
 fn caml_unregister_named_value(name: &eq) -> &eq {
     let h: i32;
@@ -101,8 +128,10 @@ fn caml_unregister_named_value(name: &eq) -> &eq {
     } /* 'done */
     0 as &i31;
 }
+
 #[export = "caml_global_data"]
 let caml_global_data: &block = [block|0 as &i31; 12];
+
 #[export = "caml_register_global"]
 fn caml_register_global(x: &eq, v: &eq, x_2: &eq) -> &eq {
     let i: i32;
@@ -110,19 +139,26 @@ fn caml_register_global(x: &eq, v: &eq, x_2: &eq) -> &eq {
     if i <u caml_global_data.length { caml_global_data[i] = v; }
     0 as &i31;
 }
+
 #[export = "caml_get_global_data"]
 fn caml_get_global_data(x: &eq) -> &eq { caml_global_data; }
+
 type func_2 = fn() -> &eq;
+
 data fatal_error = "Fatal error: exception ";
 data handle_uncaught_exception = "Printexc.handle_uncaught_exception";
 data do_at_exit = "Pervasives.do_at_exit";
+
 let uncaught_exception: &?extern = null;
+
 fn reraise_exception() -> &eq { throw_2(uncaught_exception); 0 as &i31; }
+
 #[export = "caml_handle_uncaught_exception"]
 fn caml_handle_uncaught_exception(exn: &?extern) {
     uncaught_exception = exn;
     caml_main(reraise_exception);
 }
+
 #[export = "caml_main"]
 fn caml_main(start: &func) {
     let exn: &eq;

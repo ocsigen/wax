@@ -20,12 +20,24 @@
 (import "jslib" "wrap" (func $wrap (param anyref) (result (ref eq))))
 (type $block (array (mut (ref eq)))) (type $string (array (mut i8)))
 (type $js (struct (field $f anyref)))
+
+;; A weak array is a an abstract value composed of possibly some
+;; data and an array of keys.
+;; Keys are either caml_ephe_none (unset), a 31-bit integer, or a
+;; weak reference.
+;; To access the data, we need to traverse a series of weak maps
+;; indexed by the keys (omitting integers).
+
 (global $caml_ephe_data_offset i32 (i32.const 2))
 (global $caml_ephe_key_offset i32 (i32.const 3))
+
 (global $caml_ephe_none (ref eq)
   (array.new_fixed $block 1 (ref.i31 (global.get $abstract_tag)))
 )
-(func $caml_ephe_get_data (export "caml_ephe_get_data")
+(func $caml_ephe_get_data
+  (export
+
+    "caml_ephe_get_data")
   (param $vx (ref eq)) (result (ref eq))
   (local $x (ref $block)) (local $d (ref eq)) (local $v (ref eq))
   (local $m (ref any)) (local $i i32) (local $len i32)
@@ -52,14 +64,20 @@
               (br_on_null $released
                 (call $map_get (local.get $m) (local.get $v))))
             (br $loop))))
+      (; 'loop ;)
       (return
         (array.new_fixed $block 2 (ref.i31 (i32.const 0))
           (ref.cast (ref eq) (local.get $m)))))
+    (; 'released ;)
     (array.set $block (local.get $x) (global.get $caml_ephe_data_offset)
       (global.get $caml_ephe_none)))
+  (; 'no_data ;)
   (ref.i31 (i32.const 0))
 )
-(func $caml_ephe_get_data_copy (export "caml_ephe_get_data_copy")
+(func $caml_ephe_get_data_copy
+  (export
+
+    "caml_ephe_get_data_copy")
   (param $x (ref eq)) (result (ref eq))
   (local $r (ref eq))
   (local.set $r (call $caml_ephe_get_data (local.get $x)))
@@ -75,7 +93,10 @@
                 (i32.const 1))))))))
   (local.get $r)
 )
-(func $caml_ephe_set_data (export "caml_ephe_set_data")
+(func $caml_ephe_set_data
+  (export
+
+    "caml_ephe_set_data")
   (param $vx (ref eq)) (param $data (ref eq)) (result (ref eq))
   (local $x (ref $block)) (local $v (ref eq)) (local $m (ref any))
   (local $m' (ref any)) (local $i i32)
@@ -97,14 +118,19 @@
           (call $map_set (local.get $m') (local.get $v) (local.get $m))
           (local.set $m (local.get $m'))
           (br $loop))
+        (; 'released ;)
         (array.set $block (local.get $x) (local.get $i)
           (global.get $caml_ephe_none))
         (br $loop))))
+  (; 'loop ;)
   (array.set $block (local.get $x) (global.get $caml_ephe_data_offset)
     (call $wrap (local.get $m)))
   (ref.i31 (i32.const 0))
 )
-(func $caml_ephe_unset_data (export "caml_ephe_unset_data")
+(func $caml_ephe_unset_data
+  (export
+
+    "caml_ephe_unset_data")
   (param $vx (ref eq)) (result (ref eq))
   (local $x (ref $block))
   (local.set $x (ref.cast (ref $block) (local.get $vx)))
@@ -112,13 +138,17 @@
     (global.get $caml_ephe_none))
   (ref.i31 (i32.const 0))
 )
-(func $caml_ephe_check_data (export "caml_ephe_check_data")
+(func $caml_ephe_check_data
+  (export
+
+    "caml_ephe_check_data")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31
     (i32.eqz
       (ref.eq (call $caml_ephe_get_data (local.get $x))
         (ref.i31 (i32.const 0)))))
 )
+
 (func $caml_ephe_set_data_opt (param $x (ref eq)) (param $opt_data (ref eq))
   (drop
     (block $no_data (result (ref eq))
@@ -150,7 +180,9 @@
         (global.get $caml_ephe_none))
       (array.set $block (local.get $x) (global.get $caml_ephe_data_offset)
         (global.get $caml_ephe_none)))
+    (; 'no_value ;)
     (return (ref.i31 (i32.const 0))))
+  (; 'value ;)
   (array.new_fixed $block 2 (ref.i31 (i32.const 0)) (local.get $v))
 )
 (func $caml_ephe_get_key_copy (export "caml_ephe_get_key_copy")
@@ -190,10 +222,15 @@
         (global.get $caml_ephe_none))
       (array.set $block (local.get $x) (global.get $caml_ephe_data_offset)
         (global.get $caml_ephe_none)))
+    (; 'no_value ;)
     (return (ref.i31 (i32.const 0))))
+  (; 'value ;)
   (ref.i31 (i32.const 1))
 )
-(func $caml_ephe_set_key (export "caml_ephe_set_key")
+(func $caml_ephe_set_key
+  (export
+
+    "caml_ephe_set_key")
   (param $vx (ref eq)) (param $vi (ref eq)) (param $v (ref eq))
   (result (ref eq))
   (local $x (ref $block)) (local $d (ref eq)) (local $i i32)
@@ -215,7 +252,10 @@
   (call $caml_ephe_set_data_opt (local.get $vx) (local.get $d))
   (ref.i31 (i32.const 0))
 )
-(func $caml_ephe_unset_key (export "caml_ephe_unset_key")
+(func $caml_ephe_unset_key
+  (export
+
+    "caml_ephe_unset_key")
   (param $vx (ref eq)) (param $vi (ref eq)) (result (ref eq))
   (local $x (ref $block)) (local $d (ref eq)) (local $i i32)
   (local.set $x (ref.cast (ref $block) (local.get $vx)))
@@ -229,7 +269,9 @@
     (global.get $caml_ephe_none))
   (call $caml_ephe_set_data_opt (local.get $vx) (local.get $d))
   (ref.i31 (i32.const 0))
-) (data $Weak_create "Weak.create")
+)
+
+(data $Weak_create "Weak.create")
 (func $caml_ephe_create (export "caml_ephe_create")
   (export "caml_weak_create") (param $vlen (ref eq)) (result (ref eq))
   (local $len i32) (local $res (ref $block))
@@ -245,7 +287,10 @@
     (ref.i31 (global.get $abstract_tag)))
   (local.get $res)
 )
-(func $caml_ephe_blit_data (export "caml_ephe_blit_data")
+(func $caml_ephe_blit_data
+  (export
+
+    "caml_ephe_blit_data")
   (param $x (ref eq)) (param $y (ref eq)) (result (ref eq))
   (call $caml_ephe_set_data_opt (local.get $y)
     (call $caml_ephe_get_data (local.get $x)))
@@ -267,7 +312,10 @@
   (call $caml_ephe_set_data_opt (local.get $y) (local.get $d))
   (ref.i31 (i32.const 0))
 )
-(func $caml_weak_set (export "caml_weak_set")
+(func $caml_weak_set
+  (export
+
+    "caml_weak_set")
   (param $x (ref eq)) (param $i (ref eq)) (param $v (ref eq))
   (result (ref eq))
   (drop

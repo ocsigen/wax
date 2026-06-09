@@ -52,7 +52,10 @@
 (import "hash" "caml_hash_mix_int"
   (func $caml_hash_mix_int (param i32 i32) (result i32))
 ) (type $string (array (mut i8)))
-(func $caml_hash_mix_bigstring (export "caml_hash_mix_bigstring")
+(func $caml_hash_mix_bigstring
+  (export
+
+    "caml_hash_mix_bigstring")
   (param $h i32) (param $b (ref eq)) (result i32)
   (local $data (ref extern)) (local $len i32) (local $i i32) (local $w i32)
   (local.set $data (call $caml_ba_get_data (local.get $b)))
@@ -65,6 +68,7 @@
             (call $ta_get32_ui8 (local.get $data) (local.get $i))))
         (local.set $i (i32.add (local.get $i) (i32.const 4)))
         (br $loop))))
+  (; 'loop ;)
   (local.set $w (i32.const 0))
   (block $l_2
     (block $l_3
@@ -83,36 +87,55 @@
             (call $ta_get_ui8 (local.get $data)
               (i32.add (local.get $i) (i32.const 1)))
             (i32.const 8)))))
+    (; 'l_3 ;)
     (local.set $w
       (i32.or (local.get $w)
         (call $ta_get_ui8 (local.get $data) (local.get $i))))
     (local.set $h (call $caml_hash_mix_int (local.get $h) (local.get $w))))
+  (; 'l_2 ;)
   (i32.xor (local.get $h) (local.get $len))
-) (data $buffer "buffer")
-(func $bigstring_to_array_buffer (export "bigstring_to_array_buffer")
+)
+
+(data $buffer "buffer")
+(func $bigstring_to_array_buffer
+  (export
+
+    "bigstring_to_array_buffer")
   (param $bs (ref eq)) (result (ref eq))
   (return_call $caml_js_get (call $caml_ba_to_typed_array (local.get $bs))
     (array.new_data $string $buffer (i32.const 0) (i32.const 6)))
 )
-(func $bigstring_of_array_buffer (export "bigstring_of_array_buffer")
+(func $bigstring_of_array_buffer
+  (export
+
+    "bigstring_of_array_buffer")
   (param $x (ref eq)) (result (ref eq))
   (return_call $caml_ba_from_typed_array
     (call $wrap
       (call $ta_create (i32.const 12) (call $unwrap (local.get $x)))))
 )
-(func $bigstring_of_typed_array (export "bigstring_of_typed_array")
+(func $bigstring_of_typed_array
+  (export
+
+    "bigstring_of_typed_array")
   (param $x (ref eq)) (result (ref eq))
   (return_call $caml_ba_from_typed_array
     (call $wrap (call $ta_bytes (call $unwrap (local.get $x)))))
 )
-(func $caml_bigstring_memset (export "caml_bigstring_memset")
+(func $caml_bigstring_memset
+  (export
+
+    "caml_bigstring_memset")
   (param $s (ref eq)) (param $pos (ref eq)) (param $len (ref eq))
   (param $v (ref eq)) (result (ref eq))
   (return_call $caml_ba_fill
     (call $caml_ba_sub (local.get $s) (local.get $pos) (local.get $len))
     (local.get $v))
 )
-(func $caml_bigstring_memcmp (export "caml_bigstring_memcmp")
+(func $caml_bigstring_memcmp
+  (export
+
+    "caml_bigstring_memcmp")
   (param $s1 (ref eq)) (param $vpos1 (ref eq)) (param $s2 (ref eq))
   (param $vpos2 (ref eq)) (param $vlen (ref eq)) (result (ref eq))
   (local $i i32) (local $pos1 i32) (local $pos2 i32) (local $len i32)
@@ -138,9 +161,13 @@
           (select (result (ref i31)) (ref.i31 (i32.const -1))
             (ref.i31 (i32.const 1))
             (i32.lt_u (local.get $c1) (local.get $c2)))))))
+  (; 'loop ;)
   (ref.i31 (i32.const 0))
 )
-(func $caml_bigstring_memcmp_string (export "caml_bigstring_memcmp_string")
+(func $caml_bigstring_memcmp_string
+  (export
+
+    "caml_bigstring_memcmp_string")
   (param $s1 (ref eq)) (param $vpos1 (ref eq)) (param $vs2 (ref eq))
   (param $vpos2 (ref eq)) (param $vlen (ref eq)) (result (ref eq))
   (local $i i32) (local $pos1 i32) (local $pos2 i32) (local $len i32)
@@ -166,9 +193,13 @@
           (select (result (ref i31)) (ref.i31 (i32.const -1))
             (ref.i31 (i32.const 1))
             (i32.lt_u (local.get $c1) (local.get $c2)))))))
+  (; 'loop ;)
   (ref.i31 (i32.const 0))
 )
-(func $caml_bigstring_memchr (export "caml_bigstring_memchr")
+(func $caml_bigstring_memchr
+  (export
+
+    "caml_bigstring_memchr")
   (param $s (ref eq)) (param $vc (ref eq)) (param $vpos (ref eq))
   (param $vlen (ref eq)) (result (ref eq))
   (local $pos i32) (local $len i32) (local $c i32) (local $d (ref extern))
@@ -186,6 +217,7 @@
         (local.set $len (i32.sub (local.get $len) (i32.const 1)))
         (local.set $pos (i32.add (local.get $pos) (i32.const 1)))
         (br $loop))))
+  (; 'loop ;)
   (ref.i31 (i32.const -1))
 )
 (func $caml_bigstring_blit_bytes_to_ba
@@ -205,7 +237,9 @@
   (ref.i31 (i32.const 0))
 )
 (func $caml_bigstring_blit_ba_to_bytes
-  (export "caml_bigstring_blit_ba_to_bytes")
+  (export
+
+    "caml_bigstring_blit_ba_to_bytes")
   (param $ba1 (ref eq)) (param $vpos1 (ref eq)) (param $str2 (ref eq))
   (param $vpos2 (ref eq)) (param $vlen (ref eq)) (result (ref eq))
   (local $pos1 i32) (local $pos2 i32) (local $len i32)
@@ -219,7 +253,10 @@
     (local.get $pos2) (local.get $len))
   (ref.i31 (i32.const 0))
 )
-(func $caml_bigstring_blit_ba_to_ba (export "caml_bigstring_blit_ba_to_ba")
+(func $caml_bigstring_blit_ba_to_ba
+  (export
+
+    "caml_bigstring_blit_ba_to_ba")
   (param $ba1 (ref eq)) (param $vpos1 (ref eq)) (param $ba2 (ref eq))
   (param $vpos2 (ref eq)) (param $vlen (ref eq)) (result (ref eq))
   (local $pos1 i32) (local $pos2 i32) (local $len i32)

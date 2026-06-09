@@ -19,6 +19,10 @@ attached to its own import; a sibling conditional on the negated condition does
 not produce an infeasible configuration, so the result type-checks.
 
   $ wax deps.wat -o deps.wax && cat deps.wax
+  // Two branches importing different sets of functions, in different orders,
+  // with a shared $id ($g) in both. Names must stay attached to the right
+  // import (the converter must visit @then before @else, matching the order
+  // names were registered).
   #[if(wasi)]
   {
       #[import = ("a", "x")]
@@ -35,6 +39,9 @@ not produce an infeasible configuration, so the result type-checks.
       #[import = ("b", "z")]
       fn z() -> i32;
   }
+  // A sibling conditional on the negated condition. $h is defined and used
+  // only when (not $wasi); the explorer must not build the infeasible
+  // $wasi & (not $wasi) configuration where $h would be used but undefined.
   #[if(not(wasi))]
   fn h() -> i32 { g(); }
   fn f() -> i32 { g(); }

@@ -73,7 +73,9 @@
     (struct
       (field $f (ref $function_2))
       (field $f_2 (mut (ref null $cps_closure)))))
-) (global $forcing_tag i32 (i32.const 244))
+)
+
+(global $forcing_tag i32 (i32.const 244))
 (global $cont_tag (export "cont_tag") i32 (i32.const 245))
 (global $lazy_tag (export "lazy_tag") i32 (i32.const 246))
 (global $closure_tag i32 (i32.const 247))
@@ -84,27 +86,42 @@
 (global $float_tag i32 (i32.const 253))
 (global $double_array_tag (export "double_array_tag") i32 (i32.const 254))
 (global $custom_tag i32 (i32.const 255))
-(func $caml_is_closure (export "caml_is_closure")
+(func $caml_is_closure
+  (export
+
+    "caml_is_closure")
   (param $v (ref eq)) (result i32)
   (i32.or (ref.test (ref $closure) (local.get $v))
     (ref.test (ref $cps_closure) (local.get $v)))
 )
-(func $caml_is_last_arg (export "caml_is_last_arg")
+(func $caml_is_last_arg
+  (export
+
+    "caml_is_last_arg")
   (param $v (ref eq)) (result i32)
   (i32.or (ref.test (ref $closure_last_arg) (local.get $v))
     (ref.test (ref $cps_closure_last_arg) (local.get $v)))
 )
-(func $caml_alloc_dummy (export "caml_alloc_dummy")
+(func $caml_alloc_dummy
+  (export
+
+    "caml_alloc_dummy")
   (param $size (ref eq)) (result (ref eq))
   (array.new $block (ref.i31 (i32.const 0))
     (i32.add (i31.get_u (ref.cast (ref i31) (local.get $size))) (i32.const 1)))
 )
-(func $caml_alloc_dummy_float (export "caml_alloc_dummy_float")
+(func $caml_alloc_dummy_float
+  (export
+
+    "caml_alloc_dummy_float")
   (param $size (ref eq)) (result (ref eq))
   (array.new $float_array (f64.const 0)
     (i31.get_u (ref.cast (ref i31) (local.get $size))))
 )
-(func $caml_update_dummy (export "caml_update_dummy")
+(func $caml_update_dummy
+  (export
+
+    "caml_update_dummy")
   (param $dummy (ref eq)) (param $newval (ref eq)) (result (ref eq))
   (local $i i32) (local $dst (ref $block)) (local $fdst (ref $float_array))
   (local $src (ref $block))
@@ -162,7 +179,10 @@
       (return (ref.i31 (i32.const 0)))))
   (unreachable)
 )
-(func $caml_obj_dup (export "caml_obj_dup")
+(func $caml_obj_dup
+  (export
+
+    "caml_obj_dup")
   (param $x (ref eq)) (result (ref eq))
   (local $orig (ref $block)) (local $res (ref $block))
   (local $forig (ref $float_array)) (local $fres (ref $float_array))
@@ -178,7 +198,9 @@
       (array.copy $block $block (local.get $res) (i32.const 1)
         (local.get $orig) (i32.const 1)
         (i32.sub (local.get $len) (i32.const 1)))
-      (return (local.get $res))))
+      (return (local.get $res)))
+    (; 'not_block ;)
+  )
   (drop
     (block $not_float_array (result (ref eq))
       (local.set $forig
@@ -189,7 +211,9 @@
         (array.new $float_array (f64.const 0) (local.get $len)))
       (array.copy $float_array $float_array (local.get $fres) (i32.const 0)
         (local.get $forig) (i32.const 0) (local.get $len))
-      (return (local.get $fres))))
+      (return (local.get $fres)))
+    (; 'not_float_array ;)
+  )
   (drop
     (block $not_string (result (ref eq))
       (local.set $s
@@ -198,7 +222,9 @@
       (local.set $s' (array.new $string (i32.const 0) (local.get $len)))
       (array.copy $string $string (local.get $s') (i32.const 0)
         (local.get $s) (i32.const 0) (local.get $len))
-      (return (local.get $s'))))
+      (return (local.get $s')))
+    (; 'not_string ;)
+  )
   (drop
     (block $not_float (result (ref eq))
       (return
@@ -207,7 +233,10 @@
             (br_on_cast_fail $not_float (ref eq) (ref $float) (local.get $x)))))))
   (call $caml_dup_custom (local.get $x))
 )
-(func $caml_obj_with_tag (export "caml_obj_with_tag")
+(func $caml_obj_with_tag
+  (export
+
+    "caml_obj_with_tag")
   (param $tag_2 (ref eq)) (param $x (ref eq)) (result (ref eq))
   (local $res (ref eq))
   (local.set $res (call $caml_obj_dup (local.get $x)))
@@ -215,7 +244,10 @@
     (local.get $tag_2))
   (local.get $res)
 )
-(func $caml_obj_block (export "caml_obj_block")
+(func $caml_obj_block
+  (export
+
+    "caml_obj_block")
   (param $tag_2 (ref eq)) (param $size (ref eq)) (result (ref eq))
   (local $res (ref $block))
   (local.set $res
@@ -225,7 +257,10 @@
   (array.set $block (local.get $res) (i32.const 0) (local.get $tag_2))
   (local.get $res)
 )
-(func $caml_obj_tag (export "caml_obj_tag")
+(func $caml_obj_tag
+  (export
+
+    "caml_obj_tag")
   (param $v (ref eq)) (result (ref eq))
   (if (ref.test (ref i31) (local.get $v))
     (then (return (ref.i31 (i32.const 1000)))))
@@ -249,7 +284,10 @@
     (then (return (ref.i31 (global.get $cont_tag)))))
   (ref.i31 (global.get $abstract_tag))
 )
-(func $caml_obj_make_forward (export "caml_obj_make_forward")
+(func $caml_obj_make_forward
+  (export
+
+    "caml_obj_make_forward")
   (param $b (ref eq)) (param $v (ref eq)) (result (ref eq))
   (local $block (ref $block))
   (local.set $block (ref.cast (ref $block) (local.get $b)))
@@ -258,11 +296,15 @@
   (array.set $block (local.get $block) (i32.const 1) (local.get $v))
   (ref.i31 (i32.const 0))
 )
-(func $caml_lazy_make_forward (export "caml_lazy_make_forward")
+(func $caml_lazy_make_forward
+  (export
+
+    "caml_lazy_make_forward")
   (param $x (ref eq)) (result (ref eq))
   (array.new_fixed $block 2 (ref.i31 (global.get $forward_tag))
     (local.get $x))
 )
+
 (func $obj_update_tag
   (param $x (ref eq)) (param $o i32) (param $n i32) (result i32)
   (local $b (ref $block))
@@ -275,21 +317,30 @@
       (i32.const 1))
     (else (i32.const 0)))
 )
-(func $caml_lazy_reset_to_lazy (export "caml_lazy_reset_to_lazy")
+(func $caml_lazy_reset_to_lazy
+  (export
+
+    "caml_lazy_reset_to_lazy")
   (param $x (ref eq)) (result (ref eq))
   (drop
     (call $obj_update_tag (local.get $x) (global.get $forcing_tag)
       (global.get $lazy_tag)))
   (ref.i31 (i32.const 0))
 )
-(func $caml_lazy_update_to_forward (export "caml_lazy_update_to_forward")
+(func $caml_lazy_update_to_forward
+  (export
+
+    "caml_lazy_update_to_forward")
   (param $x (ref eq)) (result (ref eq))
   (drop
     (call $obj_update_tag (local.get $x) (global.get $forcing_tag)
       (global.get $forward_tag)))
   (ref.i31 (i32.const 0))
 )
-(func $caml_lazy_update_to_forcing (export "caml_lazy_update_to_forcing")
+(func $caml_lazy_update_to_forcing
+  (export
+
+    "caml_lazy_update_to_forcing")
   (param $x (ref eq)) (result (ref eq))
   (if (ref.test (ref $block) (local.get $x))
     (then
@@ -299,7 +350,10 @@
         (then (return (ref.i31 (i32.const 0)))))))
   (ref.i31 (i32.const 1))
 )
-(func $caml_obj_compare_and_swap (export "caml_obj_compare_and_swap")
+(func $caml_obj_compare_and_swap
+  (export
+
+    "caml_obj_compare_and_swap")
   (param $x (ref eq)) (param $x_2 (ref eq)) (param $old (ref eq))
   (param $new (ref eq)) (result (ref eq))
   (local $b (ref $block)) (local $i i32)
@@ -313,40 +367,63 @@
       (ref.i31 (i32.const 1)))
     (else (ref.i31 (i32.const 0))))
 )
-(func $caml_obj_is_shared (export "caml_obj_is_shared")
+(func $caml_obj_is_shared
+  (export
+
+    "caml_obj_is_shared")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 1))
 )
-(func $caml_obj_raw_field (export "caml_obj_raw_field")
+(func $caml_obj_raw_field
+  (export
+
+    "caml_obj_raw_field")
   (param $o (ref eq)) (param $i (ref eq)) (result (ref eq))
   (array.get $block (ref.cast (ref $block) (local.get $o))
     (i32.add (i31.get_u (ref.cast (ref i31) (local.get $i))) (i32.const 1)))
 )
-(func $caml_obj_set_raw_field (export "caml_obj_set_raw_field")
+(func $caml_obj_set_raw_field
+  (export
+
+    "caml_obj_set_raw_field")
   (param $o (ref eq)) (param $i (ref eq)) (param $v (ref eq))
   (result (ref eq))
   (array.set $block (ref.cast (ref $block) (local.get $o))
     (i32.add (i31.get_u (ref.cast (ref i31) (local.get $i))) (i32.const 1))
     (local.get $v))
   (ref.i31 (i32.const 0))
-) (data $not_implemented "Obj.add_offset is not supported")
-(func $caml_obj_add_offset (export "caml_obj_add_offset")
+)
+
+(data $not_implemented "Obj.add_offset is not supported")
+(func $caml_obj_add_offset
+  (export
+
+    "caml_obj_add_offset")
   (param $x (ref eq)) (param $x_2 (ref eq)) (result (ref eq))
   (call $caml_failwith
     (array.new_data $string $not_implemented (i32.const 0) (i32.const 31)))
   (ref.i31 (i32.const 0))
-) (data $truncate_not_implemented "Obj.truncate is not supported")
-(func $caml_obj_truncate (export "caml_obj_truncate")
+)
+
+(data $truncate_not_implemented "Obj.truncate is not supported")
+(func $caml_obj_truncate
+  (export
+
+    "caml_obj_truncate")
   (param $x (ref eq)) (param $x_2 (ref eq)) (result (ref eq))
   (call $caml_failwith
     (array.new_data $string $truncate_not_implemented (i32.const 0)
       (i32.const 29)))
   (ref.i31 (i32.const 0))
 )
+
 (global $method_cache (mut (ref $int_array))
   (array.new $int_array (i32.const 0) (i32.const 8))
 )
-(func $caml_get_public_method (export "caml_get_public_method")
+(func $caml_get_public_method
+  (export
+
+    "caml_get_public_method")
   (param $obj (ref eq)) (param $x (ref eq)) (param $x_2 (ref eq))
   (result (ref eq))
   (local $meths (ref $block)) (local $tag_2 i32) (local $cacheid i32)
@@ -406,6 +483,7 @@
           (then (local.set $hi (i32.sub (local.get $mi) (i32.const 2))))
           (else (local.set $li (local.get $mi))))
         (br $loop))))
+  (; 'loop ;)
   (array.set $int_array (global.get $method_cache) (local.get $cacheid)
     (i32.add (local.get $li) (i32.const 1)))
   (if (result (ref eq))
@@ -416,8 +494,13 @@
             (i32.add (local.get $li) (i32.const 1))))))
     (then (array.get $block (local.get $meths) (local.get $li)))
     (else (ref.i31 (i32.const 0))))
-) (global $caml_oo_last_id (mut i32) (i32.const 0))
-(func $caml_set_oo_id (export "caml_set_oo_id")
+)
+
+(global $caml_oo_last_id (mut i32) (i32.const 0))
+(func $caml_set_oo_id
+  (export
+
+    "caml_set_oo_id")
   (param $x (ref eq)) (result (ref eq))
   (local $id i32)
   (local.set $id (global.get $caml_oo_last_id))
@@ -426,18 +509,27 @@
   (global.set $caml_oo_last_id (i32.add (local.get $id) (i32.const 1)))
   (local.get $x)
 )
-(func $caml_fresh_oo_id (export "caml_fresh_oo_id")
+(func $caml_fresh_oo_id
+  (export
+
+    "caml_fresh_oo_id")
   (param $x (ref eq)) (result (ref eq))
   (local $id i32)
   (local.set $id (global.get $caml_oo_last_id))
   (global.set $caml_oo_last_id (i32.add (local.get $id) (i32.const 1)))
   (ref.i31 (local.get $id))
 )
-(func $caml_obj_reachable_words (export "caml_obj_reachable_words")
+(func $caml_obj_reachable_words
+  (export
+
+    "caml_obj_reachable_words")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
-(func $caml_callback_1 (export "caml_callback_1")
+(func $caml_callback_1
+  (export
+
+    "caml_callback_1")
   (param $f (ref eq)) (param $x (ref eq)) (result (ref eq))
   (drop
     (block $cps (result (ref eq))
@@ -448,7 +540,10 @@
     (array.new_fixed $block 2 (ref.i31 (i32.const 0)) (local.get $x))
     (ref.as_non_null (global.get $caml_trampoline_ref)))
 )
-(func $caml_callback_2 (export "caml_callback_2")
+(func $caml_callback_2
+  (export
+
+    "caml_callback_2")
   (param $f (ref eq)) (param $x (ref eq)) (param $y (ref eq))
   (result (ref eq))
   (drop
