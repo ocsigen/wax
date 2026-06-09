@@ -88,13 +88,14 @@ module Error = struct
   let unbound_label context ~location id lst =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
-        Format.fprintf f "The label %a is not bound." print_index id)
+        Format.fprintf f "Unknown label: %a is not bound." print_index id)
       ?hint:(did_you_mean lst) ()
 
   let unbound_index context ~location kind id lst =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
-        Format.fprintf f "The %s index %a is not bound." kind print_index id)
+        Format.fprintf f "Unknown %s: index %a is not bound." kind print_index
+          id)
       ?hint:(did_you_mean lst) ()
 
   let packed_array_access context ~location =
@@ -131,8 +132,8 @@ module Error = struct
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
-          "This instruction is expected to have type@ @[<2>%a@]@ but has type@ \
-           @[<2>%a@]"
+          "Type mismatch: this instruction expects type@ @[<2>%a@]@ but the \
+           stack has type@ @[<2>%a@]"
           print_valtype ty print_valtype ty')
       ()
 
@@ -199,13 +200,16 @@ module Error = struct
 
   let empty_stack context ~location =
     Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () -> Format.fprintf f "The stack is empty.")
+      ~message:(fun f () ->
+        Format.fprintf f
+          "Type mismatch: the stack is empty (a value is missing).")
       ()
 
   let non_empty_stack context ~location output_stack =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
-        Format.fprintf f "Some values remain on the stack:%a" output_stack ())
+        Format.fprintf f "Type mismatch: unexpected values left on the stack:%a"
+          output_stack ())
       ()
 
   let branch_parameter_count_mismatch context ~location label len label' len' =

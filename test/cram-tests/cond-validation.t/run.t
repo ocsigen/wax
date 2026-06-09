@@ -5,7 +5,8 @@ An error confined to the else branch is reachable only when the condition is
 false:
 
   $ wax --validate else_error.wat -o out.wat
-  Error: This instruction is expected to have type i32 but has type f32
+  Error: Type mismatch: this instruction expects type i32
+    but the stack has type f32
    ──➤  else_error.wat:5:15
   3 │     (@if $x
   4 │       (@then (i32.const 1))
@@ -18,7 +19,8 @@ false:
 The same holds at the module-field level:
 
   $ wax --validate modulefield.wat -o out.wat
-  Error: This instruction is expected to have type i32 but has type f32
+  Error: Type mismatch: this instruction expects type i32
+    but the stack has type f32
    ──➤  modulefield.wat:4:32
   2 │   (@if $x
   3 │     (@then (func (result i32) (i32.const 1)))
@@ -32,7 +34,7 @@ An error whose occurrence depends on a different (sibling) conditional reports
 the full assumption — here the stack underflows only when $d is false:
 
   $ wax --validate sibling.wat -o out.wat
-  Error: The stack is empty.
+  Error: Type mismatch: the stack is empty (a value is missing).
    ──➤  sibling.wat:7:6
   5 │     (i32.const 0)
   6 │     (@if $d (@then (i32.const 0)))
