@@ -66,9 +66,9 @@ fn find_named_value(s: &eq, l: &?assoc) -> &?assoc {
             if caml_string_equal(s, a.f) as &i31 as i32_u { return a; }
             l = a.f_3;
             br 'loop;
-        } /* 'loop */
+        } // 'loop
         unreachable;
-    } /* 'tail */
+    } // 'tail
 }
 
 #[export = "caml_named_value"]
@@ -124,8 +124,8 @@ fn caml_unregister_named_value(name: &eq) -> &eq {
             }
             r = a.f_3;
             br 'loop;
-        } /* 'loop */
-    } /* 'done */
+        } // 'loop
+    } // 'done
     0 as &i31;
 }
 
@@ -199,7 +199,8 @@ fn caml_main(start: &func) {
                                     caml_string_concat
                                         (caml_format_exception(exn),
                                          string#"\n")))));
-            } /* 'exit */ // `\n`
+            } // 'exit
+             // `\n`
             exit(2);
         }
     }

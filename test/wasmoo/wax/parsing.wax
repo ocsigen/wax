@@ -101,9 +101,7 @@ const tbl_names_block: i32 = 16;
 fn strlen(s: &string, p: i32) -> i32 {
     let i: i32;
     i = p;
-    'loop: loop {
-        if s[i] as i32_u != 0 { i = i + 1; br 'loop; }
-    } /* 'loop */
+    'loop: loop { if s[i] as i32_u != 0 { i = i + 1; br 'loop; } } // 'loop
     i - p;
 }
 
@@ -121,7 +119,7 @@ fn token_name(vnames: &eq, number: i32) -> &eq {
             number = number - 1;
             br 'loop;
         }
-    } /* 'loop */
+    } // 'loop
     len = strlen(names, i);
     name = [string|0; len];
     name.copy(0, names, i, len);
@@ -262,7 +260,7 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                                                         // START:
                                                         state = 0;
                                                         errflag = 0;
-                                                    } /* 'loop */
+                                                    } // 'loop
                                                     // Fall through
                                                     // loop:
                                                     n =
@@ -283,7 +281,7 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                                                     }
                                                     res = READ_TOKEN;
                                                     br 'exit;
-                                                } /* 'TOKEN_READ */
+                                                } // 'TOKEN_READ
                                                 // TOKEN_READ:
                                                 'cont: do {
                                                     _ =
@@ -320,7 +318,7 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                                                     print_token
                                                         (tables, state, varg);
                                                 }
-                                            } /* 'testshift */
+                                            } // 'testshift
                                             // Fall through
                                             // testshift:
                                             n1 = get(tbl_sindex_2, state);
@@ -375,7 +373,7 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                                                 res = CALL_ERROR_FUNCTION;
                                                 br 'exit;
                                             }
-                                        } /* 'ERROR_DETECTED */
+                                        } // 'ERROR_DETECTED
                                         // Fall through
                                         // ERROR_DETECTED:
                                         if errflag <s 3 {
@@ -454,7 +452,7 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                                                 }
                                                 sp = sp - 1;
                                                 br 'loop2;
-                                            } /* 'loop2 */
+                                            } // 'loop2
                                         } else {
                                             if
                                                 env[env_curr_char] ==
@@ -476,13 +474,13 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                                             cmd = loop_2;
                                             br 'next;
                                         }
-                                    } /* 'shift */
+                                    } // 'shift
                                     // shift:
                                     env[env_curr_char] = -1 as &i31;
                                     if errflag >s 0 {
                                         errflag = errflag - 1;
                                     }
-                                } /* 'shift_recover */
+                                } // 'shift_recover
                                 // Fall through
                                 // shift_recover:
                                 if caml_parser_trace {
@@ -499,7 +497,7 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                                     res = GROW_STACKS_1;
                                     br 'exit;
                                 }
-                            } /* 'STACKS_GROWN_1 */
+                            } // 'STACKS_GROWN_1
                             // Fall through
                             // STACKS_GROWN_1:
                             (env[env_s_stack] as &block)[sp + 1] =
@@ -512,7 +510,7 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                                 env[env_symb_end];
                             cmd = loop_2;
                             br 'next;
-                        } /* 'reduce */
+                        } // 'reduce
                         // reduce:
                         if caml_parser_trace {
                             output([string|State @ 0; 6]);
@@ -545,17 +543,17 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                                 }
                             }
                             state = get(tbl_dgoto_2, m);
-                        } /* 'cont */
+                        } // 'cont
                         if sp >=s env[env_stacksize] as &i31 as i32_s {
                             res = GROW_STACKS_2;
                             br 'exit;
                         }
-                    } /* 'STACKS_GROWN_2 */
+                    } // 'STACKS_GROWN_2
                     // Fall through
                     // STACKS_GROWN_2:
                     res = COMPUTE_SEMANTIC_ACTION;
                     br 'exit;
-                } /* 'SEMANTIC_ACTION_COMPUTED */
+                } // 'SEMANTIC_ACTION_COMPUTED
                 // SEMANTIC_ACTION_COMPUTED:
                 (env[env_s_stack] as &block)[sp + 1] = state as &i31;
                 (env[env_v_stack] as &block)[sp + 1] = varg;
@@ -569,11 +567,11 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                 }
                 cmd = loop_2;
                 br 'next;
-            } /* 'default */
+            } // 'default
             // default:
             return RAISE_PARSE_ERROR as &i31;
-        } /* 'next */
-    } /* 'exit */
+        } // 'next
+    } // 'exit
     // SAVE
     env[env_sp] = sp as &i31;
     env[env_state] = state as &i31;

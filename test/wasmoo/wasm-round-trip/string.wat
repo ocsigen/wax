@@ -44,8 +44,7 @@
             (array.get_u $string (local.get $s2) (local.get $i)))
           (then (return (ref.i31 (i32.const 0)))))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $loop))))
-  (; 'loop ;)
+        (br $loop)))) ;; 'loop
   (ref.i31 (i32.const 1))
 )
 (func $caml_string_notequal (export "caml_string_notequal")
@@ -84,8 +83,7 @@
         (if (i32.gt_u (local.get $c1) (local.get $c2))
           (then (return (i32.const 1))))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $loop))))
-  (; 'loop ;)
+        (br $loop)))) ;; 'loop
   (if (i32.lt_u (local.get $l1) (local.get $l2))
     (then (return (i32.const -1))))
   (if (i32.gt_u (local.get $l1) (local.get $l2))

@@ -118,7 +118,8 @@ fn caml_array_sub(a: &eq, i: &eq, vlen: &eq) -> &eq {
             a2[0] = a1[0];
             a2.copy(1, a1, i as &i31 as i32_u + 1, len);
             return a2;
-        } /* 'not_block */;
+        } // 'not_block
+    ;
     fa1 = a as &float_array;
     fa2 = [float_array|0; len];
     fa2.copy(0, fa1, i as &i31 as i32_u, len);
@@ -169,7 +170,8 @@ fn caml_array_append(va1: &eq, va2: &eq) -> &eq {
                     a.copy(1, a1, 1, l1 - 1);
                     a.copy(l1, a2, 1, l2 - 1);
                     return a;
-                } /* 'a2_not_block */;
+                } // 'a2_not_block
+            ;
             become caml_floatarray_dup(va2 as &float_array);
         };
     fa1 = va1 as &float_array;
@@ -182,7 +184,8 @@ fn caml_array_append(va1: &eq, va2: &eq) -> &eq {
             fa.copy(0, fa1, 0, l1);
             fa.copy(l1, fa2, 0, l2);
             return fa;
-        } /* 'a2_not_float_array */;
+        } // 'a2_not_float_array
+    ;
     become caml_floatarray_dup(fa1);
 }
 
@@ -203,7 +206,8 @@ fn caml_floatarray_append(va1: &eq, va2: &eq) -> &eq {
             fa.copy(0, fa1, 0, l1);
             fa.copy(l1, fa2, 0, l2);
             return fa;
-        } /* 'a2_not_float_array */;
+        } // 'a2_not_float_array
+    ;
     become caml_floatarray_dup(fa1);
 }
 
@@ -240,7 +244,8 @@ fn caml_array_concat(x: &eq) -> &eq {
                 }
                 l = b[2];
                 br 'compute_length;
-            } /* 'exit */;
+            } // 'exit
+        ;
     }
     if isfloat => &eq {
         fa = [float_array|0; len];
@@ -259,7 +264,8 @@ fn caml_array_concat(x: &eq) -> &eq {
                             fa.copy(i, fa', 0, len);
                             i = i + len;
                             br 'fill;
-                        } /* 'not_float */;
+                        } // 'not_float
+                    ;
                     br 'fill;
                 };
         }
@@ -278,7 +284,8 @@ fn caml_array_concat(x: &eq) -> &eq {
                     i = i + len;
                     l = b[2];
                     br 'fill;
-                } /* 'exit */;
+                } // 'exit
+            ;
         }
         a;
     }

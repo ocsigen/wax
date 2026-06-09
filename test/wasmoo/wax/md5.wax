@@ -51,7 +51,7 @@ fn caml_md5_chan(ch: &eq, vlen: &eq) -> &eq {
         'loop: loop {
             read = caml_getblock(ch, buf, 0, 4096);
             if read { MD5Update(ctx, buf, 0, read); br 'loop; }
-        } /* 'loop */
+        } // 'loop
     } else {
         'loop: loop {
             if len {
@@ -61,7 +61,7 @@ fn caml_md5_chan(ch: &eq, vlen: &eq) -> &eq {
                 len = len - read;
                 br 'loop;
             }
-        } /* 'loop */
+        } // 'loop
     }
     become MD5Final(ctx);
 }
@@ -212,7 +212,7 @@ fn MD5Update(ctx: &context, input: &string, input_pos: i32, input_len: i32) {
             input_len = input_len - 64;
             br 'loop;
         }
-    } /* 'loop */
+    } // 'loop
     if input_len { ctx.f_4.copy(0, input, input_pos, input_len); }
 }
 
@@ -230,9 +230,7 @@ fn MD5Final(ctx: &context) -> &string {
     in_buf = in_buf + 1;
     if in_buf >u 56 {
         i = in_buf;
-        'loop: loop {
-            if i <u 64 { buffer[i] = 0; i = i + 1; br 'loop; }
-        } /* 'loop */
+        'loop: loop { if i <u 64 { buffer[i] = 0; i = i + 1; br 'loop; } } // 'loop
         MD5Transform(ctx.f, ctx.f_3, buffer, 0);
         in_buf = 0;
     }

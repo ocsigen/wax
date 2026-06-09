@@ -101,7 +101,7 @@ fn caml_hexstring_of_float(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
             j = 0;
             'prec: loop {
                 if frac != 0 { j = j + 1; frac = frac << 4; br 'prec; }
-            } /* 'prec */
+            } // 'prec
             if prec <s j { prec = j; }
             if exp >=s 0 { d = exp; } else { d = 0 - exp; }
             j = 0;
@@ -135,11 +135,12 @@ fn caml_hexstring_of_float(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
                     prec = prec - 1;
                     i = i + 1;
                     br_if 'write prec >s 0;
-                } /* 'write */
+                } // 'write
             }
             s[i] = 112;
             s;
-        } /* 'sign */;
+        } // 'sign
+    ;
     if sign {
         s[0] = 45 // '-'
         ;
@@ -199,15 +200,15 @@ fn parse_format(s: &string) -> (i32, i32, i32, i32) {
                     precision = precision * 10 + (c - 48);
                     br 'precision;
                 }
-            } /* 'precision */
+            } // 'precision
             br_if 'bad_format i + 1 != len;
             uppercase = c <s 96;
             conversion = (c & 0xdf) - 69 // 'E'
             ;
             br_if 'return conversion <=u 2;
-        } /* 'bad_format */
+        } // 'bad_format
         caml_invalid_argument([string|format_error @ 0; 22]);
-    } /* 'return */
+    } // 'return
     sign_style;
     precision;
     conversion;
@@ -259,7 +260,8 @@ fn caml_format_float(x: &eq, x_2: &eq) -> &eq {
             num = format_float(precision, conversion, i, f.abs);
             s = string_of_jsstring(num);
             br 'sign s;
-        } /* 'sign */;
+        } // 'sign
+    ;
     if negative {
         s[0] = 45 // '-'
         ;
@@ -286,7 +288,7 @@ fn caml_format_float(x: &eq, x_2: &eq) -> &eq {
             }
             i = i + 1;
             br_if 'uppercase i <u len;
-        } /* 'uppercase */
+        } // 'uppercase
     }
     s;
 }
@@ -355,13 +357,13 @@ fn caml_float_of_hex(s: &string, i: i32) -> f64 {
                                 i = i + 1;
                                 br 'parse_exponent;
                             }
-                        } /* 'parse_exponent */
+                        } // 'parse_exponent
                         if negative {
                             br_if 'overflow exp >u 0x80000000;
                             exp = 0 - exp;
                         } else { br_if 'overflow exp >=u 0x80000000; }
                         br 'parse;
-                    } /* 'overflow */
+                    } // 'overflow
                     if negative | !m { return 0; } else { return inf; }
                 }
                 if (c >=u 48) & (c <=u 57) {
@@ -383,7 +385,7 @@ fn caml_float_of_hex(s: &string, i: i32) -> f64 {
                 } else { if d { m = m | 1; } x_bits = x_bits + 4; }
                 br 'parse;
             }
-        } /* 'parse */
+        } // 'parse
         br_if 'error !n_bits;
         f = m as f64_s;
         adj = x_bits;
@@ -397,7 +399,7 @@ fn caml_float_of_hex(s: &string, i: i32) -> f64 {
         }
         if exp { f = ldexp(f, exp); }
         return f;
-    } /* 'error */
+    } // 'error
     caml_failwith([string|float_of_string @ 0; 15]);
     0;
 }
@@ -432,7 +434,7 @@ fn caml_float_of_string(x: &eq) -> &eq {
             i = i + 1;
             br 'count;
         }
-    } /* 'count */
+    } // 'count
     if j {
         s' = [string|0; len - j];
         i = 0;
@@ -449,7 +451,7 @@ fn caml_float_of_string(x: &eq) -> &eq {
                 }
                 br 'copy;
             }
-        } /* 'copy */
+        } // 'copy
         len = s'.length;
         s = s';
     }
@@ -458,7 +460,7 @@ fn caml_float_of_string(x: &eq) -> &eq {
         if i <u len {
             if on_whitespace(s, i) { i = i + 1; br 'skip_spaces; }
         }
-    } /* 'skip_spaces */
+    } // 'skip_spaces
     'error: do {
         br_if 'error i == len;
         br_if 'error on_whitespace(s, len - 1);
@@ -580,7 +582,7 @@ fn caml_float_of_string(x: &eq) -> &eq {
         f = parse_float(jsstring_of_string(s));
         br_if 'error f != f;
         return {float| f: f };
-    } /* 'error */
+    } // 'error
     caml_failwith([string|float_of_string @ 0; 15]);
     return 0 as &i31;
 }
@@ -767,7 +769,7 @@ fn caml_fma_float(vx: &eq, vy: &eq, vz: &eq) -> &eq {
             br_if 'l_3 x_6 <=u 1076;
             x_9 = 0;
             br 'l_2;
-        } /* 'l_3 */
+        } // 'l_3
         x_7 = x_7 >>u 52 & 2047;
         'cont: do {
             br_if 'cont x_3 == 2047;
@@ -788,16 +790,16 @@ fn caml_fma_float(vx: &eq, vy: &eq, vz: &eq) -> &eq {
                 br_if 'then y == 0;
                 br_if 'then x == 0;
                 br_if 'cont x_7 != 2047;
-            } /* 'then */
+            } // 'then
             return {float| f: x * y + z };
-        } /* 'cont */
+        } // 'cont
         'cont: do { br_if 'cont x_6 <u 3071; return {float| f: x * y }; }
         'cont: do {
             br_if 'cont x_6 >u 967;
             y = x_2 ^ x_4 >s -1?0x1p-1074:-0x1p-1074;
             'cont2: do { br_if 'cont2 x_7 <u 3; return {float| f: y + z }; }
             return {float| f: (z * 0x1p54 + y) * 0x1p-54 };
-        } /* 'cont */
+        } // 'cont
         'l_3: do {
             'l_4: do {
                 'l_5: do {
@@ -806,7 +808,7 @@ fn caml_fma_float(vx: &eq, vy: &eq, vz: &eq) -> &eq {
                     x = (x_8 := x_5 >u x_3)?x * 0x1p-53:x;
                     y = x_8?y:y * 0x1p-53;
                     br 'l_4;
-                } /* 'l_5 */
+                } // 'l_5
                 br_if 'l_3 x_7 <u 1994;
                 'l_5: do {
                     'l_6: do {
@@ -818,20 +820,20 @@ fn caml_fma_float(vx: &eq, vy: &eq, vz: &eq) -> &eq {
                         }
                         y = y * 0x1p108;
                         br 'l_5;
-                    } /* 'l_6 */
+                    } // 'l_6
                     'l_6: do {
                         br_if 'l_6 x_5 <=u x_3;
                         x = x_5 >u 53?x * 0x1p-53:x;
                         br 'l_5;
                     }
                     y = x_3 >u 53?y * 0x1p-53:y;
-                } /* 'l_5 */
+                } // 'l_5
                 z = z * 0x1p-53;
-            } /* 'l_4 */
+            } // 'l_4
             x_9 = 0;
             x_8 = 1;
             br 'l_2;
-        } /* 'l_3 */
+        } // 'l_3
         'l_3: do {
             'l_4: do {
                 br_if 'l_4 x_5 <u 1994;
@@ -850,10 +852,10 @@ fn caml_fma_float(vx: &eq, vy: &eq, vz: &eq) -> &eq {
             y = x_8?y:y * 0x1p108;
             x_8 = 0;
             br 'l_2;
-        } /* 'l_3 */
+        } // 'l_3
         x_8 = 0;
         x_9 = 0;
-    } /* 'l_2 */
+    } // 'l_2
     'cont: do {
         br_if 'cont z != 0;
         br_if 'cont !((y == 0) | (x == 0));
@@ -890,7 +892,7 @@ fn caml_fma_float(vx: &eq, vy: &eq, vz: &eq) -> &eq {
         y = x + y;
         'cont: do { br_if 'cont !x_8; return {float| f: y * 0x1p53 }; }
         y = x_9?y * 0x1p-108:y;
-    } /* 'l_2 */
+    } // 'l_2
     {float| f: y };
 }
 

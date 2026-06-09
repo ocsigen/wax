@@ -130,11 +130,9 @@
       (local.set $l
         (br_on_null $not_found
           (struct.get $custom_operations_list $next (local.get $l))))
-      (br $loop))
-    (; 'loop ;)
+      (br $loop)) ;; 'loop
   )
-  (ref.null $custom_operations)
-  (; 'not_found ;)
+  (ref.null $custom_operations) ;; 'not_found
 )
 
 (global $initialized (mut i32) (i32.const 0))

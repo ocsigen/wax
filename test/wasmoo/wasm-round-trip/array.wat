@@ -139,8 +139,7 @@
         (i32.add (i31.get_u (ref.cast (ref i31) (local.get $i)))
           (i32.const 1))
         (local.get $len))
-      (return (local.get $a2)))
-    (; 'not_block ;)
+      (return (local.get $a2))) ;; 'not_block
   )
   (local.set $fa1 (ref.cast (ref $float_array) (local.get $a)))
   (local.set $fa2 (array.new $float_array (f64.const 0) (local.get $len)))
@@ -200,8 +199,7 @@
           (array.copy $block $block (local.get $a) (local.get $l1)
             (local.get $a2) (i32.const 1)
             (i32.sub (local.get $l2) (i32.const 1)))
-          (return (local.get $a)))
-        (; 'a2_not_block ;)
+          (return (local.get $a))) ;; 'a2_not_block
       )
       (return_call $caml_floatarray_dup
         (ref.cast (ref $float_array) (local.get $va2)))))
@@ -220,8 +218,7 @@
         (local.get $fa1) (i32.const 0) (local.get $l1))
       (array.copy $float_array $float_array (local.get $fa) (local.get $l1)
         (local.get $fa2) (i32.const 0) (local.get $l2))
-      (return (local.get $fa)))
-    (; 'a2_not_float_array ;)
+      (return (local.get $fa))) ;; 'a2_not_float_array
   )
   (return_call $caml_floatarray_dup (local.get $fa1))
 )
@@ -245,8 +242,7 @@
         (local.get $fa1) (i32.const 0) (local.get $l1))
       (array.copy $float_array $float_array (local.get $fa) (local.get $l1)
         (local.get $fa2) (i32.const 0) (local.get $l2))
-      (return (local.get $fa)))
-    (; 'a2_not_float_array ;)
+      (return (local.get $fa))) ;; 'a2_not_float_array
   )
   (return_call $caml_floatarray_dup (local.get $fa1))
 )
@@ -281,8 +277,7 @@
               (array.len (ref.cast (ref $float_array) (local.get $v)))))
           (local.set $isfloat (i32.const 1)))
         (local.set $l (array.get $block (local.get $b) (i32.const 2)))
-        (br $compute_length))
-      (; 'exit ;)
+        (br $compute_length)) ;; 'exit
     ))
   (if (result (ref eq)) (local.get $isfloat)
     (then
@@ -305,8 +300,7 @@
                   (local.get $i) (local.get $fa') (i32.const 0)
                   (local.get $len))
                 (local.set $i (i32.add (local.get $i) (local.get $len)))
-                (br $fill))
-              (; 'not_float ;)
+                (br $fill)) ;; 'not_float
             )
             (br $fill))))
       (local.get $fa))
@@ -330,8 +324,7 @@
               (local.get $a') (i32.const 1) (local.get $len))
             (local.set $i (i32.add (local.get $i) (local.get $len)))
             (local.set $l (array.get $block (local.get $b) (i32.const 2)))
-            (br $fill))
-          (; 'exit ;)
+            (br $fill)) ;; 'exit
         ))
       (local.get $a)))
 )

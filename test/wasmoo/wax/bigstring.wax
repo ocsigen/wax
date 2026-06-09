@@ -74,7 +74,7 @@ fn caml_hash_mix_bigstring(h: i32, b: &eq) -> i32 {
             i = i + 4;
             br 'loop;
         }
-    } /* 'loop */
+    } // 'loop
     w = 0;
     'l_2: do {
         'l_3: do {
@@ -83,10 +83,10 @@ fn caml_hash_mix_bigstring(h: i32, b: &eq) -> i32 {
                 w = ta_get_ui8(data, i + 2) << 16;
             }
             w = w | ta_get_ui8(data, i + 1) << 8;
-        } /* 'l_3 */
+        } // 'l_3
         w = w | ta_get_ui8(data, i);
         h = caml_hash_mix_int(h, w);
-    } /* 'l_2 */
+    } // 'l_2
     h ^ len;
 }
 
@@ -136,7 +136,7 @@ fn caml_bigstring_memcmp(s1: &eq, vpos1: &eq, s2: &eq, vpos2: &eq, vlen: &eq)
             br_if 'loop c1 == c2;
             return c1 <u c2?-1 as &i31:1 as &i31;
         }
-    } /* 'loop */
+    } // 'loop
     0 as &i31;
 }
 
@@ -164,7 +164,7 @@ fn caml_bigstring_memcmp_string
             br_if 'loop c1 == c2;
             return c1 <u c2?-1 as &i31:1 as &i31;
         }
-    } /* 'loop */
+    } // 'loop
     0 as &i31;
 }
 
@@ -185,7 +185,7 @@ fn caml_bigstring_memchr(s: &eq, vc: &eq, vpos: &eq, vlen: &eq) -> &eq {
             pos = pos + 1;
             br 'loop;
         }
-    } /* 'loop */
+    } // 'loop
     -1 as &i31;
 }
 #[export = "caml_bigstring_blit_bytes_to_ba"]

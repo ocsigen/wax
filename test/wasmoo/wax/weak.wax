@@ -77,11 +77,11 @@ fn caml_ephe_get_data(vx: &eq) -> &eq {
                     m = br_on_null 'released map_get(m, v);
                     br 'loop;
                 }
-            } /* 'loop */
+            } // 'loop
             return [block|0 as &i31, m as &eq];
-        } /* 'released */
+        } // 'released
         x[caml_ephe_data_offset] = caml_ephe_none;
-    } /* 'no_data */
+    } // 'no_data
     0 as &i31;
 }
 
@@ -123,11 +123,11 @@ fn caml_ephe_set_data(vx: &eq, data: &eq) -> &eq {
                 map_set(m', v, m);
                 m = m';
                 br 'loop;
-            } /* 'released */
+            } // 'released
             x[i] = caml_ephe_none;
             br 'loop;
         }
-    } /* 'loop */
+    } // 'loop
     x[caml_ephe_data_offset] = wrap(m);
     0 as &i31;
 }
@@ -174,9 +174,9 @@ fn caml_ephe_get_key(vx: &eq, vi: &eq) -> &eq {
             }
             x[i] = caml_ephe_none;
             x[caml_ephe_data_offset] = caml_ephe_none;
-        } /* 'no_value */
+        } // 'no_value
         return 0 as &i31;
-    } /* 'value */
+    } // 'value
     [block|0 as &i31, v];
 }
 #[export = "caml_ephe_get_key_copy"]
@@ -217,9 +217,9 @@ fn caml_ephe_check_key(vx: &eq, vi: &eq) -> &eq {
             br_if 'value !!weak_deref(unwrap(v));
             x[i] = caml_ephe_none;
             x[caml_ephe_data_offset] = caml_ephe_none;
-        } /* 'no_value */
+        } // 'no_value
         return 0 as &i31;
-    } /* 'value */
+    } // 'value
     1 as &i31;
 }
 

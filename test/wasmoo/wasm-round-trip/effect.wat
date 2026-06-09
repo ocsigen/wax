@@ -201,8 +201,7 @@
       (local.set $stack_2
         (br_on_null $done (struct.get $fiber $next (local.get $stack_2))))
       (br $loop)))
-  (local.get $k)
-  (; 'done ;)
+  (local.get $k) ;; 'done
 )
 
 ;; Resume
@@ -593,9 +592,8 @@
         (catch $ocaml_exception (local.set $exn) (br $loop))
         (catch $javascript_exception
           (local.set $exn (call $caml_wrap_exception))
-          (br $loop))))
-    (; 'empty ;)
-  ) (; 'loop ;)
+          (br $loop)))) ;; 'empty
+  ) ;; 'loop
   (global.set $exn_stack (local.get $saved_exn_stack))
   (global.set $cps_fiber_stack (local.get $saved_fiber_stack))
   (throw $ocaml_exception (local.get $exn))
@@ -635,11 +633,9 @@
           (local.set $stack
             (br_on_null $done
               (struct.get $cps_fiber $next (local.get $stack))))
-          (br $loop))
-        (; 'loop ;)
-      ) (; 'done ;)
-      (return (local.get $k)))
-    (; 'already_resumed ;)
+          (br $loop)) ;; 'loop
+      ) ;; 'done
+      (return (local.get $k))) ;; 'already_resumed
   )
   (call $caml_raise_constant
     (ref.as_non_null

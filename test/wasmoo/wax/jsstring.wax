@@ -96,7 +96,7 @@ fn jsstring_of_substring(s: &string, pos: i32, len: i32) -> &?any {
                 i = i + 1;
                 br 'loop;
             }
-        } /* 'loop */
+        } // 'loop
         return fromCharCodeArray(buffer, 0, len) as &any;
     }
     become jsstring_of_substring_fallback(s, pos, len);
@@ -130,7 +130,7 @@ fn write_to_buffer(s: &string, pos: i32, len: i32) {
             i = i + 1;
             br 'loop;
         }
-    } /* 'loop */
+    } // 'loop
 }
 
 fn jsstring_of_substring_fallback(s: &string, pos: i32, len: i32) -> &?any {
@@ -151,7 +151,7 @@ fn jsstring_of_substring_fallback(s: &string, pos: i32, len: i32) -> &?any {
             append_string
                 (s', read_string_stream(continued?buffer_size:len, continued));
         br_if 'loop continued;
-    } /* 'loop */
+    } // 'loop
     s';
 }
 
@@ -163,7 +163,7 @@ fn read_from_buffer(s: &string, pos: i32, len: i32) {
             i = i + 1;
             br 'loop;
         }
-    } /* 'loop */
+    } // 'loop
 }
 
 type stack = { s: &string, next: &?stack };
@@ -188,7 +188,7 @@ fn string_of_jsstring_fallback(s: &?any) -> &string {
             item = br_on_null 'done item.next;
             br 'loop;
         }
-    } /* 'done */
+    } // 'done
     s' = [string|0; len + ofs];
     read_from_buffer(s', ofs, len);
     'done: do {
@@ -201,8 +201,8 @@ fn string_of_jsstring_fallback(s: &?any) -> &string {
             s'.copy(ofs, s'', 0, len);
             item = br_on_null 'done item.next;
             br 'loop;
-        } /* 'loop */
-    } /* 'done */
+        } // 'loop
+    } // 'done
     s';
 }
 

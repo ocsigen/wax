@@ -181,7 +181,8 @@ fn caml_obj_dup(x: &eq) -> &eq {
             res = [block|orig[0]; len];
             res.copy(1, orig, 1, len - 1);
             return res;
-        } /* 'not_block */;
+        } // 'not_block
+    ;
     _ =
         'not_float_array: do &eq {
             forig = br_on_cast_fail 'not_float_array &float_array x;
@@ -189,7 +190,8 @@ fn caml_obj_dup(x: &eq) -> &eq {
             fres = [float_array|0; len];
             fres.copy(0, forig, 0, len);
             return fres;
-        } /* 'not_float_array */;
+        } // 'not_float_array
+    ;
     _ =
         'not_string: do &eq {
             s = br_on_cast_fail 'not_string &string x;
@@ -197,7 +199,8 @@ fn caml_obj_dup(x: &eq) -> &eq {
             s' = [string|0; len];
             s'.copy(0, s, 0, len);
             return s';
-        } /* 'not_string */;
+        } // 'not_string
+    ;
     _ =
         'not_float: do &eq {
             return {float| f: (br_on_cast_fail 'not_float &float x).f };
@@ -350,7 +353,7 @@ fn caml_get_public_method(obj: &eq, x: &eq, x_2: &eq) -> &eq {
             } else { li = mi; }
             br 'loop;
         }
-    } /* 'loop */
+    } // 'loop
     method_cache[cacheid] = li + 1;
     if tag_2 == meths[li + 1] as &i31 as i32_s => &eq {
         meths[li];

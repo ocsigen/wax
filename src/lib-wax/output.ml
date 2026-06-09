@@ -379,14 +379,37 @@ let block_label pp label =
       space pp ())
     label
 
-let label_comment pp (l, label) =
+(* Does the block (at [loc]) already carry its [// 'label] hint as a source
+   comment — e.g. one emitted on a previous pass and round-tripped back? A raw
+   lookup (no dedup) so it does not disturb the node's own trivia emission. *)
+let block_has_label_comment pp loc label =
+  match loc with
+  | None -> false
+  | Some loc -> (
+      match Hashtbl.find_opt pp.trivia loc with
+      | None -> false
+      | Some { Utils.Trivia.within; after; _ } ->
+          let target = "// '" ^ label.desc in
+          List.exists
+            (fun (e : Utils.Trivia.entry) ->
+              match e.trivia with
+              | Item { kind = Line_comment; content; _ } ->
+                  String.trim content = target
+              | _ -> false)
+            (within @ after))
+
+(* The closing brace of a long block is followed by a [// 'label] hint recalling
+   which block it ends. It is emitted through the generic trailing-comment
+   mechanism, and skipped when the source already carries it, so a round-tripped
+   hint is not duplicated. *)
+let label_comment pp ~loc (l, label) =
   if long_block l then
     Option.iter
       (fun label ->
-        space pp ();
-        comment pp "/* '";
-        comment pp label.desc;
-        comment pp " */")
+        if not (block_has_label_comment pp loc label) then
+          Utils.Printer.defer_eol pp.printer (fun () ->
+              Utils.Printer.string pp.printer " ";
+              comment pp ("// '" ^ label.desc)))
       label
 
 let need_blocktype bt = bt.params <> [||] || bt.results <> [||]
@@ -582,7 +605,7 @@ let rec instr prec pp (i : _ instr) =
   parentheses prec (get_prec i) pp @@ fun () ->
   match i.desc with
   | Block { label; typ; block = l } ->
-      block pp label
+      block pp ~loc:(pp.locate i.info) label
         (if true || need_blocktype typ then Some "do" else None)
         typ l
   | If_annotation { cond; then_body; else_body } ->
@@ -601,7 +624,8 @@ let rec instr prec pp (i : _ instr) =
               attribute pp "#[else]";
               branch b)
             else_body)
-  | Loop { label; typ; block = l } -> block pp label (Some "loop") typ l
+  | Loop { label; typ; block = l } ->
+      block pp ~loc:(pp.locate i.info) label (Some "loop") typ l
   | If { label; typ; cond; if_block; else_block } ->
       hvbox pp (fun () ->
           box pp (fun () ->
@@ -1032,7 +1056,7 @@ and field_receiver pp i =
           punctuation pp ")")
   | _ -> instr CallAndFieldAccess pp i
 
-and block pp label kind bt (l : _ instr list) =
+and block pp ~loc label kind bt (l : _ instr list) =
   hvbox pp (fun () ->
       box pp (fun () ->
           block_label pp label;
@@ -1048,7 +1072,7 @@ and block pp label kind bt (l : _ instr list) =
       block_contents pp l;
       box pp (fun () ->
           punctuation pp "}";
-          label_comment pp (l, label)))
+          label_comment pp ~loc (l, label)))
 
 and deliminated_instr pp (i : _ instr) =
   if is_block i then instr Instruction pp i

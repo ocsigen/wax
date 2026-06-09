@@ -78,15 +78,12 @@
             (local.set $m
               (br_on_null $released
                 (call $map_get (local.get $m) (local.get $v))))
-            (br $loop))))
-      (; 'loop ;)
+            (br $loop)))) ;; 'loop
       (return
         (array.new_fixed $block 2 (ref.i31 (i32.const 0))
-          (ref.cast (ref eq) (local.get $m)))))
-    (; 'released ;)
+          (ref.cast (ref eq) (local.get $m))))) ;; 'released
     (array.set $block (local.get $x) (global.get $caml_ephe_data_offset)
-      (global.get $caml_ephe_none)))
-  (; 'no_data ;)
+      (global.get $caml_ephe_none))) ;; 'no_data
   (ref.i31 (i32.const 0))
 )
 
@@ -128,12 +125,10 @@
           (local.set $m' (call $weak_map_new))
           (call $map_set (local.get $m') (local.get $v) (local.get $m))
           (local.set $m (local.get $m'))
-          (br $loop))
-        (; 'released ;)
+          (br $loop)) ;; 'released
         (array.set $block (local.get $x) (local.get $i)
           (global.get $caml_ephe_none))
-        (br $loop))))
-  (; 'loop ;)
+        (br $loop)))) ;; 'loop
   (array.set $block (local.get $x) (global.get $caml_ephe_data_offset)
     (call $wrap (local.get $m)))
   (ref.i31 (i32.const 0))
@@ -188,10 +183,8 @@
       (array.set $block (local.get $x) (local.get $i)
         (global.get $caml_ephe_none))
       (array.set $block (local.get $x) (global.get $caml_ephe_data_offset)
-        (global.get $caml_ephe_none)))
-    (; 'no_value ;)
-    (return (ref.i31 (i32.const 0))))
-  (; 'value ;)
+        (global.get $caml_ephe_none))) ;; 'no_value
+    (return (ref.i31 (i32.const 0)))) ;; 'value
   (array.new_fixed $block 2 (ref.i31 (i32.const 0)) (local.get $v))
 )
 (func $caml_ephe_get_key_copy (export "caml_ephe_get_key_copy")
@@ -234,10 +227,8 @@
       (array.set $block (local.get $x) (local.get $i)
         (global.get $caml_ephe_none))
       (array.set $block (local.get $x) (global.get $caml_ephe_data_offset)
-        (global.get $caml_ephe_none)))
-    (; 'no_value ;)
-    (return (ref.i31 (i32.const 0))))
-  (; 'value ;)
+        (global.get $caml_ephe_none))) ;; 'no_value
+    (return (ref.i31 (i32.const 0)))) ;; 'value
   (ref.i31 (i32.const 1))
 )
 

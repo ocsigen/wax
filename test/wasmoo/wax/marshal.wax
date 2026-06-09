@@ -236,9 +236,7 @@ fn readstr(s: &intern_state) -> &string {
     let src: &string;
     src = s.src;
     pos = s.pos;
-    'loop: loop {
-        if src[pos + len] as i32_u { len = len + 1; br 'loop; }
-    } /* 'loop */
+    'loop: loop { if src[pos + len] as i32_u { len = len + 1; br 'loop; } } // 'loop
     res = [string|0; len];
     res.copy(0, src, pos, len);
     s.pos = pos + (len + 1);
@@ -280,7 +278,7 @@ fn readfloats(s: &intern_state, code: i32, len: i32) -> &eq {
     dest = [float_array|0; len];
     'loop: loop {
         if i <u len { dest[i] = readfloat(s, code); i = i + 1; br 'loop; }
-    } /* 'loop */
+    } // 'loop
     dest;
 }
 
@@ -362,9 +360,9 @@ fn intern_custom(s: &intern_state, code: i32) -> &eq {
                 caml_failwith([string|incorrect_size @ 0; 56]);
             }
             return res;
-        } /* 'no_length */
+        } // 'no_length
         caml_failwith([string|expected_size @ 0; 47]);
-    } /* 'unknown */
+    } // 'unknown
     caml_failwith([string|unknown_custom @ 0; 44]);
     0 as &i31;
 }
@@ -488,8 +486,7 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                                                                     0;
                                                                     31]);
                                                                     br 'done;
-                                                                    }
-                                                                    /* 'CUSTOM */
+                                                                    } // 'CUSTOM
                                                                     // CUSTOM
                                                                     v =
                                                                     intern_custom
@@ -497,8 +494,7 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                                                                     register_object
                                                                     (s, v);
                                                                     br 'done;
-                                                                    }
-                                                                    /* 'CODEPOINTER */
+                                                                    } // 'CODEPOINTER
                                                                     // CODEPOINTER
                                                                     caml_failwith
                                                                     ([string|
@@ -507,22 +503,19 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                                                                     0;
                                                                     25]);
                                                                     br 'done;
-                                                                    }
-                                                                    /* 'DOUBLE_ARRAY32 */
+                                                                    } // 'DOUBLE_ARRAY32
                                                                     // DOUBLE_ARRAY32
                                                                     len =
                                                                     read32(s);
                                                                     br
                                                                     'read_double_array;
-                                                                    }
-                                                                    /* 'DOUBLE_ARRAY8 */
+                                                                    } // 'DOUBLE_ARRAY8
                                                                     // DOUBLE_ARRAY8
                                                                     len =
                                                                     read8u(s);
                                                                     br
                                                                     'read_double_array;
-                                                                    }
-                                                                    /* 'DOUBLE */
+                                                                    } // 'DOUBLE
                                                                     // DOUBLE
                                                                     v =
                                                                     {float|
@@ -533,22 +526,19 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                                                                     register_object
                                                                     (s, v);
                                                                     br 'done;
-                                                                    }
-                                                                    /* 'STRING32 */
+                                                                    } // 'STRING32
                                                                     // STRING32
                                                                     len =
                                                                     read32(s);
                                                                     br
                                                                     'read_string;
-                                                                    }
-                                                                    /* 'STRING8 */
+                                                                    } // 'STRING8
                                                                     // STRING8
                                                                     len =
                                                                     read8u(s);
                                                                     br
                                                                     'read_string;
-                                                                    }
-                                                                    /* 'BLOCK32 */
+                                                                    } // 'BLOCK32
                                                                     // BLOCK32
                                                                     header =
                                                                     read32(s);
@@ -560,22 +550,21 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                                                                     >>u 10;
                                                                     br
                                                                     'read_block;
-                                                                }
-                                                                /* 'SHARED32 */
+                                                                } // 'SHARED32
                                                                 // SHARED32
                                                                 ofs =
                                                                     read32(s);
                                                                 br
                                                                     'read_shared;
-                                                            } /* 'SHARED16 */
+                                                            } // 'SHARED16
                                                             // SHARED16
                                                             ofs = read16u(s);
                                                             br 'read_shared;
-                                                        } /* 'SHARED8 */
+                                                        } // 'SHARED8
                                                         // SHARED8
                                                         ofs = read8u(s);
                                                         br 'read_shared;
-                                                    } /* 'INT64 */
+                                                    } // 'INT64
                                                     // INT64
                                                     caml_failwith
                                                         ([string|
@@ -584,38 +573,38 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                                                              0;
                                                              30]);
                                                     br 'done;
-                                                } /* 'INT32 */
+                                                } // 'INT32
                                                 // INT32
                                                 v = read32(s) as &i31;
                                                 br 'done;
-                                            } /* 'INT16 */
+                                            } // 'INT16
                                             // INT16
                                             v = read16s(s) as &i31;
                                             br 'done;
-                                        } /* 'INT8 */
+                                        } // 'INT8
                                         // INT8
                                         v = read8s(s) as &i31;
                                         br 'done;
                                     }
                                 }
-                            } /* 'read_shared */
+                            } // 'read_shared
                             // read_shared
                             ofs = s.obj_counter - ofs;
                             v = (s.obj_table!)[ofs];
                             br 'done;
-                        } /* 'read_double_array */
+                        } // 'read_double_array
                         // read_double_array
                         v = readfloats(s, code, len);
                         register_object(s, v);
                         br 'done;
-                    } /* 'read_string */
+                    } // 'read_string
                     // read_string
                     str = [string|0; len];
                     readblock(s, str);
                     v = str;
                     register_object(s, v);
                     br 'done;
-                } /* 'read_block */
+                } // 'read_block
                 // read_block
                 b = [block|0 as &i31; size + 1];
                 b[0] = tag_2 as &i31;
@@ -625,12 +614,12 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                 }
                 v = b;
                 br 'done;
-            } /* 'done */
+            } // 'done
             // done
             dest[pos] = v;
             br 'loop;
-        } /* 'loop */
-    } /* 'exit */
+        } // 'loop
+    } // 'exit
     res[0];
 }
 
@@ -722,7 +711,8 @@ fn init_extern_state
                 if b[1] == 0 as &i31 { no_sharing = 1; }
                 flags = b[2];
                 br 'parse_flags;
-            } /* 'done */;
+            } // 'done
+        ;
     }
     {extern_state|
         no_sharing: no_sharing,
@@ -864,7 +854,7 @@ fn writefloats(s: &extern_state, b: &float_array) {
             j = j + 1;
             br 'loop2;
         }
-    } /* 'loop2 */
+    } // 'loop2
 }
 
 fn extern_lookup_position(s: &extern_state, obj: &eq) -> i32 {
@@ -975,7 +965,7 @@ fn extern_custom(s: &extern_state, v: &custom) -> (i32, i32) {
                          ([string|incorrect_sizes @ 0; 49], ops.id));
             }
             return (sz32, sz64);
-        } /* 'variable_length */
+        } // 'variable_length
         // variable length
         write(s, CODE_CUSTOM_LEN);
         writeblock(s, ops.id);
@@ -988,7 +978,7 @@ fn extern_custom(s: &extern_state, v: &custom) -> (i32, i32) {
         store32(buf, pos, sz32);
         store32(buf, pos + 8, sz64);
         return (sz32, sz64);
-    } /* 'abstract */
+    } // 'abstract
     caml_invalid_argument([string|cust_value @ 0; 37]);
     return (0, 0);
 }
@@ -1037,7 +1027,8 @@ fn extern_rec(s: &extern_state, v: &eq) {
                     }
                     v = b[1];
                     br 'loop;
-                } /* 'not_block */;
+                } // 'not_block
+            ;
             pos = extern_lookup_position(s, v);
             if pos >=s 0 {
                 extern_shared_reference(s, s.obj_counter - pos);
@@ -1051,7 +1042,8 @@ fn extern_rec(s: &extern_state, v: &eq) {
                     sz = str.length;
                     extern_size(s, 1 + (sz >>u 2), 1 + (sz >>u 3));
                     br 'next_item;
-                } /* 'not_string */;
+                } // 'not_string
+            ;
             _ =
                 'not_float: do &eq {
                     extern_float(s, (br_on_cast_fail 'not_float &float v).f);
@@ -1065,7 +1057,8 @@ fn extern_rec(s: &extern_state, v: &eq) {
                     extern_float_array(s, fa);
                     extern_size(s, sz * 2, sz);
                     br 'next_item;
-                } /* 'not_float_array */;
+                } // 'not_float_array
+            ;
             _ =
                 'not_custom: do &eq {
                     extern_custom(s, br_on_cast_fail 'not_custom &custom v);
@@ -1073,7 +1066,8 @@ fn extern_rec(s: &extern_state, v: &eq) {
                     sz32 = _;
                     extern_size(s, sz32 + 7 >>u 2, sz64 + 15 >>u 3);
                     br 'next_item;
-                } /* 'not_custom */;
+                } // 'not_custom
+            ;
             if caml_is_closure(v) {
                 caml_invalid_argument([string|func_value @ 0; 30]);
             }
@@ -1082,7 +1076,7 @@ fn extern_rec(s: &extern_state, v: &eq) {
             }
             if v is &js { caml_invalid_argument([string|js_value @ 0; 47]); }
             caml_invalid_argument([string|abstract_value @ 0; 28]);
-        } /* 'next_item */
+        } // 'next_item
         // next_item
         'done: do {
             item = br_on_null 'done sp;
@@ -1093,8 +1087,8 @@ fn extern_rec(s: &extern_state, v: &eq) {
             item.pos = pos;
             if pos == b.length { sp = item.next; }
             br 'loop;
-        } /* 'done */
-    } /* 'loop */
+        } // 'done
+    } // 'loop
 }
 
 fn extern_output_length(s: &extern_state, pos: i32) -> i32 {
@@ -1111,7 +1105,7 @@ fn extern_output_length(s: &extern_state, pos: i32) -> i32 {
                 output_block = br_on_null 'done output_block.next;
                 br 'loop;
             }
-        } /* 'loop */
+        } // 'loop
         return len;
     }
 }
@@ -1166,8 +1160,8 @@ fn caml_output_value_to_string(v: &eq, flags: &eq) -> &eq {
             pos = pos + len;
             blk = br_on_null 'done blk.next;
             br 'loop;
-        } /* 'done */
-    } /* 'loop */
+        } // 'done
+    } // 'loop
     res;
 }
 
@@ -1225,7 +1219,7 @@ fn caml_output_value(ch: &eq, v: &eq, flags: &eq) -> &eq {
             blk = br_on_null 'done blk.next;
             br 'loop;
         }
-    } /* 'loop */
+    } // 'loop
     caml_flush_if_unbuffered(ch);
     0 as &i31;
 }

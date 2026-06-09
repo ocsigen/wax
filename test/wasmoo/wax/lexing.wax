@@ -117,7 +117,7 @@ fn caml_lex_engine(vtbl: &eq, start_state: &eq, vlexbuf: &eq) -> &eq {
         }
         if c == 256 { lexbuf[lex_eof_reached] = 0 as &i31; }
         br 'loop;
-    } /* 'loop */
+    } // 'loop
     unreachable;
 }
 
@@ -134,7 +134,7 @@ fn run_mem(s: &string, i: i32, lexbuf: &block, curr_pos: &eq) {
         mem[dst + 1] =
             if src == 0xff => &eq { curr_pos; } else { mem[src + 1]; };
         br 'loop;
-    } /* 'loop */
+    } // 'loop
 }
 
 fn run_tag(s: &string, i: i32, lexbuf: &block) {
@@ -234,6 +234,6 @@ fn caml_new_lex_engine(vtbl: &eq, start_state: &eq, vlexbuf: &eq) -> &eq {
         run_mem(lex_code_2, pc_off, lexbuf, lexbuf[lex_curr_pos]);
         if c == 256 { lexbuf[lex_eof_reached] = 0 as &i31; }
         br 'loop;
-    } /* 'loop */
+    } // 'loop
     unreachable;
 }

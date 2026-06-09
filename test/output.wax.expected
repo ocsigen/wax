@@ -211,9 +211,9 @@ fn bigarray_hash(x: &eq) -> i32 {
                                         i = i + 2;
                                         br 'loop;
                                     }
-                                } /* 'loop */
+                                } // 'loop
                                 return h;
-                            } /* 'int32 */
+                            } // 'int32
                             // int32
                             if len >u 64 { len = 64; }
                             'loop: loop {
@@ -224,9 +224,9 @@ fn bigarray_hash(x: &eq) -> i32 {
                                     i = i + 1;
                                     br 'loop;
                                 }
-                            } /* 'loop */
+                            } // 'loop
                             return h;
-                        } /* 'uint16 */
+                        } // 'uint16
                         // uint16
                         if len >u 128 { len = 128; }
                         'loop: loop {
@@ -239,12 +239,12 @@ fn bigarray_hash(x: &eq) -> i32 {
                                 i = i + 2;
                                 br 'loop;
                             }
-                        } /* 'loop */
+                        } // 'loop
                         if len & 1 {
                             h = caml_hash_mix_int(h, ta_get_ui16(data, i));
                         }
                         return h;
-                    } /* 'int16 */
+                    } // 'int16
                     // int16
                     if len >u 128 { len = 128; }
                     'loop: loop {
@@ -257,12 +257,12 @@ fn bigarray_hash(x: &eq) -> i32 {
                             i = i + 2;
                             br 'loop;
                         }
-                    } /* 'loop */
+                    } // 'loop
                     if len & 1 {
                         h = caml_hash_mix_int(h, ta_get_i16(data, i));
                     }
                     return h;
-                } /* 'uint8 */
+                } // 'uint8
                 // uint8
                 if len >u 256 { len = 256; }
                 'loop: loop {
@@ -271,7 +271,7 @@ fn bigarray_hash(x: &eq) -> i32 {
                         i = i + 4;
                         br 'loop;
                     }
-                } /* 'loop */
+                } // 'loop
                 w = 0;
                 'l_2: do {
                     'l_3: do {
@@ -282,12 +282,12 @@ fn bigarray_hash(x: &eq) -> i32 {
                             w = ta_get_ui8(data, i + 2) << 16;
                         }
                         w = w | ta_get_ui8(data, i + 1) << 8;
-                    } /* 'l_3 */
+                    } // 'l_3
                     w = w | ta_get_ui8(data, i);
                     h = caml_hash_mix_int(h, w);
-                } /* 'l_2 */
+                } // 'l_2
                 return h;
-            } /* 'int8 */
+            } // 'int8
             // int8
             if len >u 256 { len = 256; }
             'loop: loop {
@@ -302,7 +302,7 @@ fn bigarray_hash(x: &eq) -> i32 {
                     i = i + 4;
                     br 'loop;
                 }
-            } /* 'loop */
+            } // 'loop
             w = 0;
             'l_2: do {
                 'l_3: do {
@@ -313,12 +313,12 @@ fn bigarray_hash(x: &eq) -> i32 {
                         w = ta_get_i8(data, i + 2) << 16;
                     }
                     w = w | ta_get_i8(data, i + 1) << 8;
-                } /* 'l_3 */
+                } // 'l_3
                 w = w | ta_get_i8(data, i);
                 h = caml_hash_mix_int(h, w);
-            } /* 'l_2 */
+            } // 'l_2
             return h;
-        } /* 'float32 */
+        } // 'float32
         // float32
         if len >u 64 { len = 64; }
         'loop: loop {
@@ -327,9 +327,9 @@ fn bigarray_hash(x: &eq) -> i32 {
                 i = i + 1;
                 br 'loop;
             }
-        } /* 'loop */
+        } // 'loop
         return h;
-    } /* 'float64 */
+    } // 'float64
     // float64
     if len >u 32 { len = 32; }
     'loop: loop {
@@ -338,7 +338,7 @@ fn bigarray_hash(x: &eq) -> i32 {
             i = i + 1;
             br 'loop;
         }
-    } /* 'loop */
+    } // 'loop
     return h;
 }
 
@@ -366,7 +366,7 @@ fn bigarray_serialize(s: &eq, v: &eq) -> (i32, i32) {
             i = i + 1;
             br 'loop;
         }
-    } /* 'loop */
+    } // 'loop
     'done: do {
         data = b.ba_data;
         len = ta_length(data);
@@ -401,12 +401,12 @@ fn bigarray_serialize(s: &eq, v: &eq) -> (i32, i32) {
                                                 i = i + 2;
                                                 br 'loop;
                                             }
-                                        } /* 'loop */
+                                        } // 'loop
                                         br 'done;
-                                    } /* 'int */
+                                    } // 'int
                                     // int
                                     caml_serialize_int_1(s, 0);
-                                } /* 'int32 */
+                                } // 'int32
                                 // int32
                                 'loop: loop {
                                     if i <u len {
@@ -415,9 +415,9 @@ fn bigarray_serialize(s: &eq, v: &eq) -> (i32, i32) {
                                         i = i + 1;
                                         br 'loop;
                                     }
-                                } /* 'loop */
+                                } // 'loop
                                 br 'done;
-                            } /* 'uint16 */
+                            } // 'uint16
                             // uint16
                             'loop: loop {
                                 if i <u len {
@@ -426,9 +426,9 @@ fn bigarray_serialize(s: &eq, v: &eq) -> (i32, i32) {
                                     i = i + 1;
                                     br 'loop;
                                 }
-                            } /* 'loop */
+                            } // 'loop
                             br 'done;
-                        } /* 'int16 */
+                        } // 'int16
                         // int16
                         'loop: loop {
                             if i <u len {
@@ -436,9 +436,9 @@ fn bigarray_serialize(s: &eq, v: &eq) -> (i32, i32) {
                                 i = i + 1;
                                 br 'loop;
                             }
-                        } /* 'loop */
+                        } // 'loop
                         br 'done;
-                    } /* 'uint8 */
+                    } // 'uint8
                     // uint8
                     'loop: loop {
                         if i <u len {
@@ -446,9 +446,9 @@ fn bigarray_serialize(s: &eq, v: &eq) -> (i32, i32) {
                             i = i + 1;
                             br 'loop;
                         }
-                    } /* 'loop */
+                    } // 'loop
                     br 'done;
-                } /* 'int8 */
+                } // 'int8
                 // int8
                 'loop: loop {
                     if i <u len {
@@ -456,9 +456,9 @@ fn bigarray_serialize(s: &eq, v: &eq) -> (i32, i32) {
                         i = i + 1;
                         br 'loop;
                     }
-                } /* 'loop */
+                } // 'loop
                 br 'done;
-            } /* 'float32 */
+            } // 'float32
             // float32
             'loop: loop {
                 if i <u len {
@@ -467,9 +467,9 @@ fn bigarray_serialize(s: &eq, v: &eq) -> (i32, i32) {
                     i = i + 1;
                     br 'loop;
                 }
-            } /* 'loop */
+            } // 'loop
             br 'done;
-        } /* 'float64 */
+        } // 'float64
         // float64
         'loop: loop {
             if i <u len {
@@ -477,8 +477,8 @@ fn bigarray_serialize(s: &eq, v: &eq) -> (i32, i32) {
                 i = i + 1;
                 br 'loop;
             }
-        } /* 'loop */
-    } /* 'done */
+        } // 'loop
+    } // 'done
     (4 + num_dims) * 4;
     (4 + num_dims) * 8;
 }
@@ -511,7 +511,7 @@ fn bigarray_deserialize(s: &eq) -> (&eq, i32) {
             i = i + 1;
             br 'loop;
         }
-    } /* 'loop */
+    } // 'loop
     b =
         {bigarray|
             f: bigarray_ops,
@@ -553,15 +553,15 @@ fn bigarray_deserialize(s: &eq) -> (&eq, i32) {
                                                 i = i + 2;
                                                 br 'loop;
                                             }
-                                        } /* 'loop */
+                                        } // 'loop
                                         br 'done;
-                                    } /* 'int */
+                                    } // 'int
                                     // int
                                     if caml_deserialize_uint_1(s) {
                                         caml_failwith
                                             ([string|intern_overflow @ 0; 56]);
                                     }
-                                } /* 'int32 */
+                                } // 'int32
                                 // int32
                                 'loop: loop {
                                     if i <u len {
@@ -571,9 +571,9 @@ fn bigarray_deserialize(s: &eq) -> (&eq, i32) {
                                         i = i + 1;
                                         br 'loop;
                                     }
-                                } /* 'loop */
+                                } // 'loop
                                 br 'done;
-                            } /* 'uint16 */
+                            } // 'uint16
                             // uint16
                             'loop: loop {
                                 if i <u len {
@@ -583,9 +583,9 @@ fn bigarray_deserialize(s: &eq) -> (&eq, i32) {
                                     i = i + 1;
                                     br 'loop;
                                 }
-                            } /* 'loop */
+                            } // 'loop
                             br 'done;
-                        } /* 'int16 */
+                        } // 'int16
                         // int16
                         'loop: loop {
                             if i <u len {
@@ -595,9 +595,9 @@ fn bigarray_deserialize(s: &eq) -> (&eq, i32) {
                                 i = i + 1;
                                 br 'loop;
                             }
-                        } /* 'loop */
+                        } // 'loop
                         br 'done;
-                    } /* 'uint8 */
+                    } // 'uint8
                     // uint8
                     'loop: loop {
                         if i <u len {
@@ -606,9 +606,9 @@ fn bigarray_deserialize(s: &eq) -> (&eq, i32) {
                             i = i + 1;
                             br 'loop;
                         }
-                    } /* 'loop */
+                    } // 'loop
                     br 'done;
-                } /* 'int8 */
+                } // 'int8
                 // int8
                 'loop: loop {
                     if i <u len {
@@ -617,9 +617,9 @@ fn bigarray_deserialize(s: &eq) -> (&eq, i32) {
                         i = i + 1;
                         br 'loop;
                     }
-                } /* 'loop */
+                } // 'loop
                 br 'done;
-            } /* 'float32 */
+            } // 'float32
             // float32
             'loop: loop {
                 if i <u len {
@@ -628,9 +628,9 @@ fn bigarray_deserialize(s: &eq) -> (&eq, i32) {
                     i = i + 1;
                     br 'loop;
                 }
-            } /* 'loop */
+            } // 'loop
             br 'done;
-        } /* 'float64 */
+        } // 'float64
         // float64
         'loop: loop {
             if i <u len {
@@ -638,8 +638,8 @@ fn bigarray_deserialize(s: &eq) -> (&eq, i32) {
                 i = i + 1;
                 br 'loop;
             }
-        } /* 'loop */
-    } /* 'done */
+        } // 'loop
+    } // 'done
     b;
     (4 + num_dims) * 4;
 }
@@ -658,7 +658,7 @@ fn caml_ba_get_size(dim: &int_array) -> i32 {
             i = i + 1;
             br 'loop;
         }
-    } /* 'loop */
+    } // 'loop
     sz as i32;
 }
 
@@ -706,7 +706,7 @@ fn caml_ba_create(vkind: &eq, layout: &eq, d: &eq) -> &eq {
             i = i + 1;
             br 'loop;
         }
-    } /* 'loop */
+    } // 'loop
     {bigarray|
         f: bigarray_ops,
         ba_data: caml_ba_create_buffer(kind, caml_ba_get_size(dim)),
@@ -785,46 +785,46 @@ fn caml_ba_get_at_offset(ba: &bigarray, i: i32) -> &eq {
                                                         ta_get_f64(data, i),
                                                         ta_get_f64
                                                             (data, i + 1)];
-                                            } /* 'complex32 */
+                                            } // 'complex32
                                             // complex32
                                             i = i << 1;
                                             return
                                                 [float_array|
                                                     ta_get_f32(data, i),
                                                     ta_get_f32(data, i + 1)];
-                                        } /* 'nativeint */
+                                        } // 'nativeint
                                         // nativeint
                                         become caml_copy_nativeint
                                             (ta_get_i32(data, i));
-                                    } /* 'int */
+                                    } // 'int
                                     // int
                                     return ta_get_i32(data, i) as &i31;
-                                } /* 'int64 */
+                                } // 'int64
                                 // int64
                                 i = i << 1;
                                 become caml_copy_int64
                                     (ta_get_i32(data, i) as i64_u |
                                          ta_get_i32(data, i + 1) as i64_u <<
                                              32);
-                            } /* 'int32 */
+                            } // 'int32
                             // int32
                             become caml_copy_int32(ta_get_i32(data, i));
-                        } /* 'uint16 */
+                        } // 'uint16
                         // uint16
                         return ta_get_ui16(data, i) as &i31;
-                    } /* 'int16 */
+                    } // 'int16
                     // int16
                     return ta_get_i16(data, i) as &i31;
-                } /* 'uint8 */
+                } // 'uint8
                 // uint8
                 return ta_get_ui8(data, i) as &i31;
-            } /* 'int8 */
+            } // 'int8
             // int8
             return ta_get_i8(data, i) as &i31;
-        } /* 'float64 */
+        } // 'float64
         // float64
         return {float| f: ta_get_f64(data, i) };
-    } /* 'float32 */
+    } // 'float32
     // float32
     return {float| f: ta_get_f32(data, i) };
 }
@@ -863,53 +863,53 @@ fn caml_ba_set_at_offset(ba: &bigarray, i: i32, v: &eq) {
                                                 ta_set_f64(data, i, b[0]);
                                                 ta_set_f64(data, i + 1, b[1]);
                                                 return;
-                                            } /* 'complex32 */
+                                            } // 'complex32
                                             // complex32
                                             i = i << 1;
                                             b = v as &float_array;
                                             ta_set_f32(data, i, b[0]);
                                             ta_set_f32(data, i + 1, b[1]);
                                             return;
-                                        } /* 'nativeint */
+                                        } // 'nativeint
                                         // nativeint
                                         ta_set_i32(data, i, Int32_val(v));
                                         return;
-                                    } /* 'int */
+                                    } // 'int
                                     // int
                                     ta_set_i32(data, i, v as &i31 as i32_s);
                                     return;
-                                } /* 'int64 */
+                                } // 'int64
                                 // int64
                                 i = i << 1;
                                 l = Int64_val(v);
                                 ta_set_i32(data, i, l as i32);
                                 ta_set_i32(data, i + 1, (l >>u 32) as i32);
                                 return;
-                            } /* 'int32 */
+                            } // 'int32
                             // int32
                             ta_set_i32(data, i, Int32_val(v));
                             return;
-                        } /* 'uint16 */
+                        } // 'uint16
                         // uint16
                         ta_set_ui16(data, i, v as &i31);
                         return;
-                    } /* 'int16 */
+                    } // 'int16
                     // int16
                     ta_set_i16(data, i, v as &i31);
                     return;
-                } /* 'uint8 */
+                } // 'uint8
                 // uint8
                 ta_set_ui8(data, i, v as &i31);
                 return;
-            } /* 'int8 */
+            } // 'int8
             // int8
             ta_set_i8(data, i, v as &i31);
             return;
-        } /* 'float64 */
+        } // 'float64
         // float64
         ta_set_f64(data, i, (v as &float).f);
         return;
-    } /* 'float32 */
+    } // 'float32
     // float32
     ta_set_f32(data, i, (v as &float).f);
     return;
@@ -1072,7 +1072,7 @@ fn caml_ba_offset(b: &bigarray, index: &int_array) -> i32 {
                 i = i - 1;
                 br 'loop;
             }
-        } /* 'loop */
+        } // 'loop
     } else {
         num_dims = b.ba_num_dims as i32_u;
         'loop: loop {
@@ -1084,7 +1084,7 @@ fn caml_ba_offset(b: &bigarray, index: &int_array) -> i32 {
                 i = i + 1;
                 br 'loop;
             }
-        } /* 'loop */
+        } // 'loop
     }
     offset;
 }
@@ -1108,7 +1108,7 @@ fn caml_ba_offset'(b: &bigarray, index: &block) -> i32 {
                 i = i - 1;
                 br 'loop;
             }
-        } /* 'loop */
+        } // 'loop
     } else {
         num_dims = b.ba_num_dims as i32_u;
         'loop: loop {
@@ -1120,7 +1120,7 @@ fn caml_ba_offset'(b: &bigarray, index: &block) -> i32 {
                 i = i + 1;
                 br 'loop;
             }
-        } /* 'loop */
+        } // 'loop
     }
     offset;
 }
@@ -1172,7 +1172,7 @@ fn caml_ba_slice(vb: &eq, vind: &eq) -> &eq {
                 i = i + 1;
                 br 'loop;
             }
-        } /* 'loop */
+        } // 'loop
         offset = caml_ba_offset(b, index);
         sub_dim.copy(0, b.ba_dim, 0, num_dims - num_inds);
     } else {
@@ -1183,7 +1183,7 @@ fn caml_ba_slice(vb: &eq, vind: &eq) -> &eq {
                 i = i + 1;
                 br 'loop;
             }
-        } /* 'loop */
+        } // 'loop
         offset = caml_ba_offset(b, index);
         sub_dim.copy(0, b.ba_dim, num_inds, num_dims - num_inds);
     }
@@ -1226,13 +1226,13 @@ fn caml_ba_sub(vba: &eq, vofs: &eq, vlen: &eq) -> &eq {
         i = 0;
         'loop: loop {
             if i <u changed_dim { mul = mul * dim[i]; i = i + 1; br 'loop; }
-        } /* 'loop */
+        } // 'loop
     } else {
         changed_dim = 0;
         i = 1;
         'loop: loop {
             if i <u num_dims { mul = mul * dim[i]; i = i + 1; br 'loop; }
-        } /* 'loop */
+        } // 'loop
     }
     if (ofs <s 0) | (len <s 0) | (ofs + len >s dim[changed_dim]) {
         caml_invalid_argument([string|bad_subarray @ 0; 27]);
@@ -1290,9 +1290,9 @@ fn caml_ba_fill(vba: &eq, v: &eq) -> &eq {
                                 i = i + 2;
                                 br 'loop;
                             }
-                        } /* 'loop */
+                        } // 'loop
                         return 0 as &i31;
-                    } /* 'complex32 */
+                    } // 'complex32
                     // complex32
                     len = ta_length(data);
                     b = v as &float_array;
@@ -1305,9 +1305,9 @@ fn caml_ba_fill(vba: &eq, v: &eq) -> &eq {
                             i = i + 2;
                             br 'loop;
                         }
-                    } /* 'loop */
+                    } // 'loop
                     return 0 as &i31;
-                } /* 'int64 */
+                } // 'int64
                 // int64
                 len = ta_length(data);
                 l = Int64_val(v);
@@ -1320,17 +1320,17 @@ fn caml_ba_fill(vba: &eq, v: &eq) -> &eq {
                         i = i + 2;
                         br 'loop;
                     }
-                } /* 'loop */
+                } // 'loop
                 return 0 as &i31;
-            } /* 'int32 */
+            } // 'int32
             // int32
             ta_fill_int(data, Int32_val(v));
             return 0 as &i31;
-        } /* 'int */
+        } // 'int
         // int
         ta_fill_int(data, v as &i31 as i32_s);
         return 0 as &i31;
-    } /* 'float */
+    } // 'float
     // float
     ta_fill_float(data, (v as &float).f);
     return 0 as &i31;
@@ -1362,7 +1362,7 @@ fn caml_ba_blit(vsrc: &eq, vdst: &eq) -> &eq {
             i = i + 1;
             br 'loop;
         }
-    } /* 'loop */
+    } // 'loop
     ta_blit(src.ba_data, dst.ba_data);
     0 as &i31;
 }
@@ -1402,7 +1402,7 @@ fn caml_ba_reshape(vb: &eq, vd: &eq) -> &eq {
             i = i + 1;
             br 'loop;
         }
-    } /* 'loop */
+    } // 'loop
     if num_elts as i32 != caml_ba_get_size(b.ba_dim) {
         caml_invalid_argument([string|size_mismatch @ 0; 31]);
     }
@@ -1436,7 +1436,7 @@ fn caml_ba_change_layout(vb: &eq, vlayout: &eq) -> &eq {
                 i = i + 1;
                 br 'loop;
             }
-        } /* 'loop */
+        } // 'loop
         {bigarray|
             f: bigarray_ops,
             ba_data: b.ba_data,
@@ -1492,7 +1492,7 @@ fn caml_ba_compare(v1: &eq, v2: &eq, total: i32) -> i32 {
             i = i + 1;
             br 'loop;
         }
-    } /* 'loop */
+    } // 'loop
     d1 = b1.ba_data;
     d2 = b2.ba_data;
     len = ta_length(d1);
@@ -1526,9 +1526,9 @@ fn caml_ba_compare(v1: &eq, v2: &eq, total: i32) -> i32 {
                                         i = i + 2;
                                         br 'loop;
                                     }
-                                } /* 'loop */
+                                } // 'loop
                                 return 0;
-                            } /* 'int32 */
+                            } // 'int32
                             // int32
                             'loop: loop {
                                 if i <u len {
@@ -1539,9 +1539,9 @@ fn caml_ba_compare(v1: &eq, v2: &eq, total: i32) -> i32 {
                                     i = i + 1;
                                     br 'loop;
                                 }
-                            } /* 'loop */
+                            } // 'loop
                             return 0;
-                        } /* 'uint16 */
+                        } // 'uint16
                         // uint16
                         'loop: loop {
                             if i <u len {
@@ -1552,9 +1552,9 @@ fn caml_ba_compare(v1: &eq, v2: &eq, total: i32) -> i32 {
                                 i = i + 1;
                                 br 'loop;
                             }
-                        } /* 'loop */
+                        } // 'loop
                         return 0;
-                    } /* 'int16 */
+                    } // 'int16
                     // int16
                     'loop: loop {
                         if i <u len {
@@ -1565,9 +1565,9 @@ fn caml_ba_compare(v1: &eq, v2: &eq, total: i32) -> i32 {
                             i = i + 1;
                             br 'loop;
                         }
-                    } /* 'loop */
+                    } // 'loop
                     return 0;
-                } /* 'uint8 */
+                } // 'uint8
                 // uint8
                 'loop: loop {
                     if i <u len {
@@ -1578,9 +1578,9 @@ fn caml_ba_compare(v1: &eq, v2: &eq, total: i32) -> i32 {
                         i = i + 1;
                         br 'loop;
                     }
-                } /* 'loop */
+                } // 'loop
                 return 0;
-            } /* 'int8 */
+            } // 'int8
             // int8
             'loop: loop {
                 if i <u len {
@@ -1591,9 +1591,9 @@ fn caml_ba_compare(v1: &eq, v2: &eq, total: i32) -> i32 {
                     i = i + 1;
                     br 'loop;
                 }
-            } /* 'loop */
+            } // 'loop
             return 0;
-        } /* 'float64 */
+        } // 'float64
         // float64
         'loop: loop {
             if i <u len {
@@ -1609,9 +1609,9 @@ fn caml_ba_compare(v1: &eq, v2: &eq, total: i32) -> i32 {
                 i = i + 1;
                 br 'loop;
             }
-        } /* 'loop */
+        } // 'loop
         return 0;
-    } /* 'float32 */
+    } // 'float32
     // float32
     'loop: loop {
         if i <u len {
@@ -1627,7 +1627,7 @@ fn caml_ba_compare(v1: &eq, v2: &eq, total: i32) -> i32 {
             i = i + 1;
             br 'loop;
         }
-    } /* 'loop */
+    } // 'loop
     return 0;
 }
 

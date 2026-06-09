@@ -106,7 +106,7 @@ fn caml_hash_mix_string(h: i32, s: &string) -> i32 {
             i = i + 4;
             br 'loop;
         }
-    } /* 'loop */
+    } // 'loop
     w = 0;
     'l_2: do {
         'l_3: do {
@@ -115,10 +115,10 @@ fn caml_hash_mix_string(h: i32, s: &string) -> i32 {
                 w = s[i + 2] as i32_u << 16;
             }
             w = w | s[i + 1] as i32_u << 8;
-        } /* 'l_3 */
+        } // 'l_3
         w = w | s[i] as i32_u;
         h = caml_hash_mix_int(h, w);
-    } /* 'l_2 */
+    } // 'l_2
     h ^ len;
 }
 
@@ -190,7 +190,8 @@ fn caml_hash(count: &eq, limit: &eq, seed: &eq, obj: &eq) -> &eq {
                                         br_if 'loop
                                             i == MAX_FORWARD_DEREFERENCE;
                                         br 'forward;
-                                    } /* 'not_block' */;
+                                    } // 'not_block'
+                                ;
                                 br 'again;
                             }
                         }
@@ -208,8 +209,9 @@ fn caml_hash(count: &eq, limit: &eq, seed: &eq, obj: &eq) -> &eq {
                             wr = wr + 1;
                             i = i + 1;
                             br 'block_iter;
-                        } /* 'block_iter */
-                    } /* 'not_block */;
+                        } // 'block_iter
+                    } // 'not_block
+                ;
                 _ =
                     'not_float: do &eq {
                         h =
@@ -240,9 +242,9 @@ fn caml_hash(count: &eq, limit: &eq, seed: &eq, obj: &eq) -> &eq {
                     };
                 // closures and continuations and other js values are ignored
                 br 'loop;
-            } /* 'again */
+            } // 'again
         }
-    } /* 'loop */
+    } // 'loop
     // clear the queue to avoid a memory leak
     caml_hash_queue.fill(0, 0 as &i31, wr);
     (caml_hash_mix_final(h) & 0x3FFFFFFF) as &i31;

@@ -370,8 +370,7 @@
           (then (return (i32.sub (local.get $len) (local.get $n)))))
         (local.set $pos (i32.add (local.get $pos) (local.get $read)))
         (local.set $n (i32.sub (local.get $n) (local.get $read)))
-        (br $loop))))
-  (; 'loop ;)
+        (br $loop)))) ;; 'loop
   (local.get $len)
 )
 
@@ -606,8 +605,7 @@
               (i32.sub (local.get $p)
                 (struct.get $channel $curr (local.get $ch))))))))
     (local.set $p (i32.add (local.get $p) (i32.const 1)))
-    (br $loop))
-  (; 'loop ;)
+    (br $loop)) ;; 'loop
   (unreachable)
 )
 
@@ -699,8 +697,7 @@
             (local.get $s) (local.get $pos) (local.get $len)))
         (local.set $pos (i32.add (local.get $pos) (local.get $written)))
         (local.set $len (i32.sub (local.get $len) (local.get $written)))
-        (br $loop))))
-  (; 'loop ;)
+        (br $loop)))) ;; 'loop
 )
 (func $caml_ml_output (export "caml_ml_output")
   (export
@@ -720,8 +717,7 @@
             (local.get $len)))
         (local.set $pos (i32.add (local.get $pos) (local.get $written)))
         (local.set $len (i32.sub (local.get $len) (local.get $written)))
-        (br $loop))))
-  (; 'loop ;)
+        (br $loop)))) ;; 'loop
   (call $caml_flush_if_unbuffered (local.get $ch))
   (ref.i31 (i32.const 0))
 )

@@ -105,8 +105,7 @@
     (if
       (i32.ne (array.get_u $string (local.get $s) (local.get $i))
         (i32.const 0))
-      (then (local.set $i (i32.add (local.get $i) (i32.const 1))) (br $loop))))
-  (; 'loop ;)
+      (then (local.set $i (i32.add (local.get $i) (i32.const 1))) (br $loop)))) ;; 'loop
   (i32.sub (local.get $i) (local.get $p))
 )
 
@@ -128,8 +127,7 @@
             (i32.add (call $strlen (local.get $names) (local.get $i))
               (i32.const 1))))
         (local.set $number (i32.sub (local.get $number) (i32.const 1)))
-        (br $loop))))
-  (; 'loop ;)
+        (br $loop)))) ;; 'loop
   (local.set $len (call $strlen (local.get $names) (local.get $i)))
   (local.set $name (array.new $string (i32.const 0) (local.get $len)))
   (array.copy $string $string (local.get $name) (i32.const 0)
@@ -291,8 +289,7 @@
                                 (local.get $cmd)))
                             ;; START:
                             (local.set $state (i32.const 0))
-                            (local.set $errflag (i32.const 0)))
-                          (; 'loop ;)
+                            (local.set $errflag (i32.const 0))) ;; 'loop
                           ;; Fall through
                           ;; loop:
                           (local.set $n
@@ -313,8 +310,7 @@
                               (local.set $cmd (global.get $testshift))
                               (br $next)))
                           (local.set $res (global.get $READ_TOKEN))
-                          (br $exit))
-                        (; 'TOKEN_READ ;)
+                          (br $exit)) ;; 'TOKEN_READ
                         ;; TOKEN_READ:
                         (block $cont
                           (drop
@@ -354,8 +350,7 @@
                         (if (global.get $caml_parser_trace)
                           (then
                             (call $print_token (local.get $tables)
-                              (local.get $state) (local.get $varg)))))
-                      (; 'testshift ;)
+                              (local.get $state) (local.get $varg))))) ;; 'testshift
                       ;; Fall through
                       ;; testshift:
                       (local.set $n1
@@ -424,8 +419,7 @@
                       (if (i32.le_s (local.get $errflag) (i32.const 0))
                         (then
                           (local.set $res (global.get $CALL_ERROR_FUNCTION))
-                          (br $exit))))
-                    (; 'ERROR_DETECTED ;)
+                          (br $exit)))) ;; 'ERROR_DETECTED
                     ;; Fall through
                     ;; ERROR_DETECTED:
                     (if (i32.lt_s (local.get $errflag) (i32.const 3))
@@ -499,8 +493,7 @@
                                 (ref.i31 (global.get $RAISE_PARSE_ERROR)))))
                           (local.set $sp
                             (i32.sub (local.get $sp) (i32.const 1)))
-                          (br $loop2))
-                        (; 'loop2 ;)
+                          (br $loop2)) ;; 'loop2
                       )
                       (else
                         (if
@@ -521,16 +514,14 @@
                           (global.get $env_curr_char)
                           (ref.i31 (i32.const -1)))
                         (local.set $cmd (global.get $loop_2))
-                        (br $next))))
-                  (; 'shift ;)
+                        (br $next)))) ;; 'shift
                   ;; shift:
                   (array.set $block (local.get $env)
                     (global.get $env_curr_char) (ref.i31 (i32.const -1)))
                   (if (i32.gt_s (local.get $errflag) (i32.const 0))
                     (then
                       (local.set $errflag
-                        (i32.sub (local.get $errflag) (i32.const 1))))))
-                (; 'shift_recover ;)
+                        (i32.sub (local.get $errflag) (i32.const 1)))))) ;; 'shift_recover
                 ;; Fall through
                 ;; shift_recover:
                 (if (global.get $caml_parser_trace)
@@ -556,8 +547,7 @@
                           (global.get $env_stacksize)))))
                   (then
                     (local.set $res (global.get $GROW_STACKS_1))
-                    (br $exit))))
-              (; 'STACKS_GROWN_1 ;)
+                    (br $exit)))) ;; 'STACKS_GROWN_1
               ;; Fall through
               ;; STACKS_GROWN_1:
               (array.set $block
@@ -586,8 +576,7 @@
                 (i32.add (local.get $sp) (i32.const 1))
                 (array.get $block (local.get $env) (global.get $env_symb_end)))
               (local.set $cmd (global.get $loop_2))
-              (br $next))
-            (; 'reduce ;)
+              (br $next)) ;; 'reduce
             ;; reduce:
             (if (global.get $caml_parser_trace)
               (then
@@ -642,21 +631,18 @@
                               (local.get $n2)))
                           (br $cont)))))))
               (local.set $state
-                (call $get (local.get $tbl_dgoto_2) (local.get $m))))
-            (; 'cont ;)
+                (call $get (local.get $tbl_dgoto_2) (local.get $m)))) ;; 'cont
             (if
               (i32.ge_s (local.get $sp)
                 (i31.get_s
                   (ref.cast (ref i31)
                     (array.get $block (local.get $env)
                       (global.get $env_stacksize)))))
-              (then (local.set $res (global.get $GROW_STACKS_2)) (br $exit))))
-          (; 'STACKS_GROWN_2 ;)
+              (then (local.set $res (global.get $GROW_STACKS_2)) (br $exit)))) ;; 'STACKS_GROWN_2
           ;; Fall through
           ;; STACKS_GROWN_2:
           (local.set $res (global.get $COMPUTE_SEMANTIC_ACTION))
-          (br $exit))
-        (; 'SEMANTIC_ACTION_COMPUTED ;)
+          (br $exit)) ;; 'SEMANTIC_ACTION_COMPUTED
         ;; SEMANTIC_ACTION_COMPUTED:
         (array.set $block
           (ref.cast (ref $block)
@@ -695,12 +681,10 @@
                     (global.get $env_symb_end_stack)))
                 (i32.add (local.get $asp) (i32.const 1))))))
         (local.set $cmd (global.get $loop_2))
-        (br $next))
-      (; 'default ;)
+        (br $next)) ;; 'default
       ;; default:
-      (return (ref.i31 (global.get $RAISE_PARSE_ERROR))))
-    (; 'next ;)
-  ) (; 'exit ;)
+      (return (ref.i31 (global.get $RAISE_PARSE_ERROR)))) ;; 'next
+  ) ;; 'exit
   ;; SAVE
   (array.set $block (local.get $env) (global.get $env_sp)
     (ref.i31 (local.get $sp)))

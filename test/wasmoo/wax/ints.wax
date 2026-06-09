@@ -123,7 +123,7 @@ fn parse_int(v: &eq, nbits: i32, errmsg: &string) -> i32 {
             if res <u d { caml_failwith(errmsg); }
             br 'loop;
         }
-    } /* 'loop */
+    } // 'loop
     if signedness {
         threshold = 1 << nbits - 1;
         if sign >s 0 {
@@ -268,9 +268,9 @@ fn parse_int_format(s: &string) -> (i32, i32, i32, i32, i32) {
                 }
             }
             br 'return;
-        } /* 'bad_format */
+        } // 'bad_format
         caml_invalid_argument([string|format_error @ 0; 22]);
-    } /* 'return */
+    } // 'return
     sign_style;
     alternate;
     signed;
