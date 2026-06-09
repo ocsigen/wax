@@ -1,6 +1,6 @@
 # Module Fields
 
-Wax modules are defined by a sequence of top-level fields: types, functions, globals, and tags.
+Wax modules are defined by a sequence of top-level fields: types, functions, globals, tags, memories, and data segments.
 
 ## Types
 
@@ -211,14 +211,60 @@ The conditions are equivalent — note the surface differences: Wax variables ar
 
 The conditions are preserved, not evaluated. Type checking (`--validate`) explores each reachable combination independently (see the [Language Guide](../language.md#conditional-compilation)). Conversion between the Wax and WAT forms is not yet implemented; conditionals are currently supported within each format on its own.
 
-## Tables and Memories
+## Memories
 
-Wax focuses on GC-based memory management and does not provide dedicated syntax for linear memory or tables. When converting from WAT/WASM:
+A memory is declared with `memory`, followed by its address type (`i32` or `i64`) and, optionally, its limits as `[min]` or `[min, max]` (in pages of 64 KiB):
 
-- Memory definitions are dropped (Wax uses GC structs and arrays)
-- Table definitions are dropped (Wax uses typed function references)
+```wax
+memory mem0: i32 [1, 1000];
+memory mem1: i64 [2];
+memory mem2: i32;
+```
 
-If you need linear memory or tables, write that portion in WAT and link it with your Wax code.
+Maps to:
+
+```wat
+(memory $mem0 i32 1 1000)
+(memory $mem1 i64 2)
+(memory $mem2 i32 ...)
+```
+
+When the limits are omitted, the minimum size is derived from the extent of the memory's data segments (using their literal offsets).
+
+Loads and stores use method-call syntax on the memory, with the value's width in the method name and its signedness expressed by the surrounding [`as iN_s`/`as iN_u` cast](instructions.md#memory-access) — the same convention as packed array access:
+
+```wax
+let x: i32 = mem0.load32(p);
+let b: i32 = mem0.load8(p) as i32_u;
+mem0.store16(p, v);
+mem0.store32(p, v, 1, 16);     // align=1, offset=16
+```
+
+See [Memory Access](instructions.md#memory-access) for the full instruction mapping.
+
+### Data Segments
+
+A memory declaration may carry active data segments in a block, placed at a constant offset:
+
+```wax
+memory mem1: i64 {
+    data _ @ [0x1000] = "hello world";
+    data greeting @ [0x2000] = "hi";
+}
+```
+
+Top-level `data` defines a passive segment, or an active segment for a named memory:
+
+```wax
+data seg = "raw\00bytes";
+data init @ mem0 [0] = "hello";
+```
+
+Data bytes are ordinary string literals; escapes such as `\xNN` and `\00` decode to raw bytes.
+
+## Tables
+
+Wax does not provide dedicated syntax for tables; table definitions are dropped on conversion from WAT/WASM (Wax uses typed function references instead). If you need tables, write that portion in WAT and link it with your Wax code.
 
 ## Module Structure
 

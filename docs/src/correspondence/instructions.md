@@ -157,7 +157,34 @@ if cond => (i32) -> i32 { ... } else { ... }
 | `array.set $t` | `arr[idx] = val` |
 | `array.len` | `arr.length` |
 
+## Memory Access
 
+Loads and stores are method calls on a [memory](module_fields.md#memories). The method name carries the access width; the value's signedness (for narrow loads) and its `i32`/`i64` type are expressed with the surrounding `as iN_s`/`as iN_u` cast, mirroring packed array access.
+
+| Wax | Wasm |
+|-----|------|
+| `m.load32(p)` | `i32.load` |
+| `m.load64(p)` | `i64.load` |
+| `m.loadf32(p)` / `m.loadf64(p)` | `f32.load` / `f64.load` |
+| `m.load8(p) as i32_s` | `i32.load8_s` |
+| `m.load16(p) as i32_u` | `i32.load16_u` |
+| `m.load32(p) as i64_s` | `i32.load` + `i64.extend_i32_s` (≡ `i64.load32_s`) |
+| `m.load8(p) as i32_s as i64_s` | `i32.load8_s` + `i64.extend_i32_s` (≡ `i64.load8_s`) |
+| `m.store32(p, v)` | `i32.store` (`v: i32`) or `i64.store32` (`v: i64`) |
+| `m.store16(p, v)` | `i32.store16` or `i64.store16` (by `v`'s type) |
+| `m.store64(p, v)` / `m.storef64(p, v)` | `i64.store` / `f64.store` |
+
+A bare narrow load (`m.load8(p)` with no cast) defaults to unsigned `i32`, like `array.get_u`. The store value's `i32`/`i64` type is inferred from the operand.
+
+Two optional trailing arguments give the `align` and `offset` of the access (both constant integers); `offset` requires `align` to fill its positional slot:
+
+```wax
+m.load32(p);          // i32.load
+m.load32(p, 1);       // i32.load align=1
+m.load32(p, 1, 16);   // i32.load align=1 offset=16
+```
+
+The alignment defaults to the access's natural alignment and is only printed when it differs; the offset defaults to `0`.
 
 ## Exception Instructions
 
@@ -198,7 +225,7 @@ Tags used with `suspend`/`resume` may have result types (unlike exception tags);
 
 The following WebAssembly features do not have dedicated Wax syntax. When converting from WAT/WASM to Wax, these instructions are preserved as-is or may be dropped:
 
-*   **Linear Memory**: `memory.size`, `memory.grow`, `load`, `store` (all variants). Wax focuses on GC-based memory management using structs and arrays.
+*   **Linear Memory management**: `memory.size`, `memory.grow`, `memory.fill`, `memory.copy`, `memory.init`, `data.drop`. Loads and stores have [dedicated syntax](#memory-access), but these management instructions do not yet.
 *   **Tables**: `table.get`, `table.set`, `call_indirect` (and related instructions). Use typed function references instead.
 *   **SIMD**: All `v128` vector instructions. The `v128` type exists but operations are not exposed.
 *   **Indirect Calls via Tables**: `return_call_indirect`, `call_indirect`. Use `call_ref` with function references instead.

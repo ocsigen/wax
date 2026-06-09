@@ -416,6 +416,44 @@ arr[i] = val;               // Set element (if mutable)
 arr.length                  // Array length
 ```
 
+## Memories
+
+### Declaration
+
+```wax
+memory mem0: i32 [1, 1000];     // address type i32, min 1 page, max 1000
+memory mem1: i64 [2];           // min 2 pages, no maximum
+memory mem2: i32;               // size derived from data segments
+```
+
+### Data Segments
+
+```wax
+memory mem1: i64 {
+    data _ @ [0x1000] = "hello world";   // active, anonymous
+    data greeting @ [0x2000] = "hi";     // active, named
+}
+
+data seg = "raw\00bytes";                // top-level passive segment
+data init @ mem0 [0] = "hello";          // top-level active segment
+```
+
+### Load and Store
+
+```wax
+mem0.load32(p)              // i32 load
+mem0.load64(p)              // i64 load
+mem0.load8(p) as i32_u      // narrow load, zero-extended
+mem0.load16(p) as i32_s     // narrow load, sign-extended
+mem0.load32(p) as i64_s     // load then widen to i64
+
+mem0.store32(p, v);         // store (width by method, type by value)
+mem0.store16(p, v);
+mem0.store32(p, v, 1, 16);  // align=1, offset=16
+```
+
+The two optional trailing arguments are the access `align` and `offset` (constant integers).
+
 ## Exceptions
 
 ### Tags
