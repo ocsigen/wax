@@ -1183,6 +1183,15 @@ let rec check_hole_order_rec ctx i n =
         | Throw (_, None)
         | Return None ->
             n
+        (* A table reference [tab[..]] has a static receiver (the table name),
+           not an evaluated operand, so it does not count as occurring before a
+           hole; only the index/value do. *)
+        | ArrayGet ({ desc = Get tab; _ }, r)
+          when Tbl.find_opt ctx.tables tab <> None ->
+            check_hole_order_rec ctx r n
+        | ArraySet ({ desc = Get tab; _ }, idx, v)
+          when Tbl.find_opt ctx.tables tab <> None ->
+            n |> check_hole_order_rec ctx idx |> check_hole_order_rec ctx v
         | BinOp (_, l, r)
         | Array (_, l, r)
         | ArraySegment (_, _, l, r)
