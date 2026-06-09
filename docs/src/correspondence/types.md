@@ -53,15 +53,15 @@ Wax allows defining recursive reference types using `rec { ... }`.
 
 ```wax
 rec {
-    type list = { head: i32, tail: node };
-    type node = [list];
+    type tree = { value: i32, children: &forest };
+    type forest = [&?tree];
 }
 ```
 
 ### Structs
 ```wax
 type point = { x: i32, y: i32 };
-type mutable_point = { mut x: i32, mut y: i32 };
+type mutable_point = { x: mut i32, y: mut i32 };
 ```
 Maps to Wasm `(type $point (struct (field i32) (field i32)))`.
 

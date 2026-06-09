@@ -24,11 +24,10 @@ Wax supports C-style comments:
 0b101010    // Binary
 ```
 
-Integer literals are typed based on context. Suffix with `_i64` for 64-bit:
+Integer literals are typed based on context:
 
 ```wax
-let x: i64 = 42;        // Inferred from type annotation
-let y: i64 = 42_i64;    // Explicit suffix
+let x: i64 = 42;        // Inferred from the type annotation
 ```
 
 ### Floating Point
@@ -83,7 +82,7 @@ Globals are declared at module level:
 
 ```wax
 const PI: f64 = 3.14159;        // Immutable global
-let mut counter: i32 = 0;       // Mutable global
+let counter: i32 = 0;           // Mutable global
 ```
 
 ## Expressions
@@ -375,7 +374,7 @@ val as &type    // Cast val to type (trap on failure)
 
 ```wax
 type point = { x: i32, y: i32 };
-type mutable_point = { mut x: i32, mut y: i32 };
+type mutable_point = { x: mut i32, y: mut i32 };
 ```
 
 ### Creation
@@ -430,7 +429,7 @@ tag my_error(code: i32);
 ### Throw
 
 ```wax
-throw my_error(42);
+throw my_error 42;
 ```
 
 ### Try/Catch (try_table style)

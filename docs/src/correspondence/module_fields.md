@@ -20,8 +20,8 @@ Use `rec` when types reference each other:
 
 ```wax
 rec {
-    type node = { value: i32, next: &?list };
-    type list = node;
+    type list = { head: i32, tail: &?node };
+    type node = { rest: &list };
 }
 ```
 
@@ -30,8 +30,8 @@ rec {
 Types are final (non-extensible) by default. Use `open` to allow subtypes:
 
 ```wax
-type open shape = { x: i32, y: i32 };
-type circle : shape = { radius: i32 };
+type shape = open { x: i32, y: i32 };
+type circle : shape = { x: i32, y: i32, radius: i32 };
 ```
 
 Maps to:
@@ -89,8 +89,8 @@ const MAX_SIZE: i32 = 1024;
 ### Mutable Globals
 
 ```wax
-let mut counter: i32 = 0;
-let mut state: &?any = null;
+let counter: i32 = 0;
+let state: &?any = null;
 ```
 
 ### Imported Globals
@@ -100,7 +100,7 @@ let mut state: &?any = null;
 const base: i32;
 
 #[import = ("env", "counter")]
-let mut counter: i32;
+let counter: i32;
 ```
 
 ## Tags
@@ -239,11 +239,11 @@ tag my_error(code: i32);
 
 // 4. Module globals
 const FACTOR: i32 = 100;
-let mut counter: i32 = 0;
+let counter: i32 = 0;
 
 // 5. Internal functions
 fn helper(x: i32) -> i32 {
-    x * FACTOR
+    x * FACTOR;
 }
 
 // 6. Exported functions
@@ -251,7 +251,7 @@ fn helper(x: i32) -> i32 {
 fn compute(x: i32) -> i32 {
     counter = counter + 1;
     log(counter);
-    helper(x + base)
+    helper(x + base);
 }
 ```
 

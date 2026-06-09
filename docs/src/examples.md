@@ -90,8 +90,10 @@ fn factorial_helper(n: i32, acc: i32) -> i32 {
 ### Wax
 
 ```wax
+type ints = [i32];
+
 #[export = "find_first_zero"]
-fn find_first_zero(arr: &[i32]) -> i32 {
+fn find_first_zero(arr: &ints) -> i32 {
     let i: i32;
     let len: i32;
     len = arr.length;
@@ -171,7 +173,7 @@ fn distance_squared(p1: &point, p2: &point) -> i32 {
 ### Wax
 
 ```wax
-type counter = { mut value: i32 };
+type counter = { value: mut i32 };
 
 #[export = "new_counter"]
 fn new_counter() -> &counter {
@@ -224,7 +226,7 @@ fn fill_bytes(arr: &bytes, val: i32) {
         if i >= len {
             return;
         }
-        arr[i] = val as i8;
+        arr[i] = val;
         i = i + 1;
         br 'loop;
     }
@@ -242,7 +244,7 @@ tag overflow();
 #[export = "safe_divide"]
 fn safe_divide(a: i32, b: i32) -> i32 {
     if b == 0 {
-        throw divide_by_zero();
+        throw divide_by_zero;
     }
     a /s b;
 }
@@ -264,14 +266,11 @@ fn try_divide(a: i32, b: i32) -> i32 {
 ### Wax
 
 ```wax
-rec {
-    type node = { value: i32, next: &?list };
-    type list = node;
-}
+type list = { value: i32, next: &?list };
 
 #[export = "make_node"]
-fn make_node(value: i32, next: &?list) -> &node {
-    {node| value: value, next: next};
+fn make_node(value: i32, next: &?list) -> &list {
+    {list| value: value, next: next};
 }
 
 #[export = "sum_list"]
@@ -279,7 +278,7 @@ fn sum_list(head: &?list) -> i32 {
     if !head {
         return 0;
     }
-    let n: &node;
+    let n: &list;
     n = head!;
     n.value + sum_list(n.next);
 }
