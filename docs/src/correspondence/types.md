@@ -22,7 +22,9 @@ Storage types are used in fields of structs and arrays to define packed data.
 |------|-----|-------|
 | `i8` | `i8` | 8-bit integer (packed) |
 | `i16` | `i16` | 16-bit integer (packed) |
-| `valtype` | `valtype` | Any value type |
+
+Any [value type](#value-types) is also a valid storage type; `i8` and `i16` are
+the additional packed types available only in struct and array fields.
 
 
 ## Heap Types
@@ -43,7 +45,7 @@ Storage types are used in fields of structs and arrays to define packed data.
 | `noexn` | `noexn` |
 | `nocont` | `nocont` |
 | `none` | `none` |
-| `<typeidx>` | `<identifier>` | 
+| `<typeidx>` | `<identifier>` |
 
 ## Composite Types
 

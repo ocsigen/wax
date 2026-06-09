@@ -52,11 +52,11 @@ files (see [Formatting](#formatting)) and `check` validates them (see
 
 - **`--fold`**
     - Fold instructions into nested S-expressions.
-    - Applies typically to Wasm Text output.
+    - Affects WAT output (the default form is chosen automatically).
 
 - **`--unfold`**
     - Unfold instructions into flat instruction lists.
-    - Applies typically to Wasm Text output.
+    - Affects WAT output (the default form is chosen automatically).
 
 - **`--source-map-file`** *FILE*
     - Generate a source map file.

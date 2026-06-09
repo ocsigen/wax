@@ -76,6 +76,9 @@ Use `:=` for assignment that also returns the value (like `local.tee`):
 y = (x := 42) + 1;  // x is set to 42, y is set to 43
 ```
 
+`:=` works on local variables only — WebAssembly has no `global.tee`, so applying
+it to a global is an error.
+
 ### Global Variables
 
 Globals are declared at module level:
@@ -637,7 +640,7 @@ The conditions are **not evaluated** by the compiler; they are preserved for a d
 When type checking is enabled (`--validate`), every reachable combination of conditions is checked independently. Because branches are mutually exclusive, a name defined in both the `#[if]` and `#[else]` branch is accepted. An error that occurs only under some conditions is reported together with the assumption that makes it reachable:
 
 ```
-Error: This instruction has type float but is expected to have type i32.
+Error: Expecting type i32 but got type float.
  ──➤  example.wax:4:16
 Hint: reachable when not debug
 ```

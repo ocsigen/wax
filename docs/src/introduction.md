@@ -100,14 +100,17 @@ Enable type checking with the `-v` flag:
 wax hello.wax -v -o hello.wasm
 ```
 
-This catches type errors before generating output:
+This catches type errors before generating output. For example, adding an `i32`
+and an `f64`:
 
 ```
-error: type mismatch
-  --> hello.wax:3:5
-   |
- 3 |     x + y
-   |     ^^^^^ expected f32, found i32
+Error: This operator cannot be applied to operands of types i32 and f64.
+ ──➤  hello.wax:3:5
+1 │ #[export = "add"]
+2 │ fn add(x: i32, y: f64) -> i32 {
+3 │     x + y;
+  ·     ^^^^^
+4 │ }
 ```
 
 ## Next Steps
