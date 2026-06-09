@@ -5,8 +5,12 @@ The `wax` binary is the primary interface for the Wax toolchain. It supports con
 ## Usage
 
 ```sh
-wax [OPTIONS] [INPUT]
+wax [OPTIONS] [INPUT]        # convert (the default command)
+wax format [OPTIONS] FILE…   # reformat files
 ```
+
+By default `wax` converts between formats. The `format` subcommand reformats
+files (see [Formatting](#formatting) below).
 
 ## Positional Arguments
 
@@ -75,4 +79,48 @@ wax input.wax -f wax
 **Read from stdin and write to stdout:**
 ```sh
 cat input.wax | wax -f wasm > output.wasm
+```
+
+## Formatting
+
+The `format` subcommand reformats files in their own format (`.wat` → `.wat`,
+`.wax` → `.wax`, `.wasm` → `.wasm`), detected from each file's extension.
+
+```sh
+wax format [OPTIONS] FILE…
+```
+
+### Options
+
+- **`-i`**, **`--inplace`**
+    - Write the formatted output back to each input file.
+    - Without this flag (and without `--check`), exactly one file must be given
+      and its formatted output is written to `stdout`.
+- **`-c`**, **`--check`**
+    - Write nothing; list the files that are not already formatted and exit with
+      a non-zero status if any are found. Useful in CI. Cannot be combined with
+      `--inplace`.
+- **`-f`**, **`--format`**, **`--input-format`** *FORMAT*
+    - Treat all input files as this format (`wat`, `wasm` or `wax`), overriding
+      the detection from each file's extension.
+- **`-v`**, **`--validate`**
+    - Also type-check (Wax) / well-formedness-check (Wasm) while formatting.
+- **`--color`** *WHEN* — as above (ignored when writing back in place).
+- **`--fold`** / **`--unfold`** — as above.
+
+### Examples
+
+**Format a single file to stdout:**
+```sh
+wax format input.wat
+```
+
+**Reformat several files in place:**
+```sh
+wax format -i a.wax b.wax c.wax
+```
+
+**Check formatting in CI (non-zero exit if any file differs):**
+```sh
+wax format --check src/*.wax
 ```

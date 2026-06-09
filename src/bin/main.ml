@@ -354,6 +354,69 @@ let convert input_file output_file input_format_opt output_format_opt validate
   convert ~input_file ~output_file ~validate ~color ~output_color
     ~source_map_file:opt_source_map_file ~fold_mode
 
+(* Format files: re-print each in its own format (wat -> wat, wax -> wax, wasm
+   -> wasm), detected from the extension unless [format_opt] forces one. With
+   [--inplace] the result is written back to each file; with [--check] nothing
+   is written and files that are not already formatted are listed (a non-zero
+   exit status reports this); otherwise exactly one file is formatted to stdout.
+   [validate] additionally type-checks (Wax) / well-formedness-checks (Wasm). *)
+let format inplace check format_opt validate color fold_mode files =
+  if inplace && check then (
+    Printf.eprintf "--inplace and --check cannot be combined.\n";
+    exit 123);
+  if (not inplace) && (not check) && List.length files <> 1 then (
+    Printf.eprintf
+      "Exactly one input file must be specified without --inplace or --check.\n";
+    exit 123);
+  let read path = In_channel.with_open_bin path In_channel.input_all in
+  (* Returns false on an error or, in check mode, a file that needs formatting. *)
+  let format_one file =
+    match
+      match format_opt with Some _ -> format_opt | None -> detect_format file
+    with
+    | None ->
+        Printf.eprintf
+          "%s: cannot detect format (expected .wat, .wax or .wasm)\n" file;
+        false
+    | Some fmt ->
+        let same_format =
+          match fmt with
+          | Wat -> wat_to_wat
+          | Wax -> wax_to_wax
+          | Wasm -> wasm_to_wasm
+        in
+        let run ~output_file ~output_color =
+          same_format ~input_file:(Some file) ~output_file ~validate ~color
+            ~output_color ~source_map_file:None ~fold_mode
+        in
+        if check then
+          (* Format into a temporary file and compare with the original, so the
+             check matches exactly what --inplace would write. *)
+          let tmp = Filename.temp_file "wax-format-" "" in
+          Fun.protect
+            ~finally:(fun () -> try Sys.remove tmp with Sys_error _ -> ())
+            (fun () ->
+              run ~output_file:(Some tmp) ~output_color:Utils.Colors.Never;
+              String.equal (read file) (read tmp)
+              ||
+              (print_endline file;
+               false))
+        else if (not inplace) && fmt = Wasm && Unix.isatty Unix.stdout then (
+          Printf.eprintf "Binary output not allowed on terminal\n";
+          false)
+        else
+          (* Writing back into a source file must never embed ANSI colors;
+             when formatting to stdout, resolve color as usual. *)
+          let output_color =
+            if inplace then Utils.Colors.Never
+            else Utils.Colors.update_flag ~color
+          in
+          run ~output_file:(if inplace then Some file else None) ~output_color;
+          true
+  in
+  if not (List.fold_left (fun ok file -> format_one file && ok) true files) then
+    exit 123
+
 (* Define the input file argument (optional for stdin) *)
 let input_file =
   let doc =
@@ -444,6 +507,41 @@ let fold_mode_option =
   let unfold = (Unfold, Arg.info [ "unfold" ] ~doc) in
   Arg.(value & vflag Auto [ fold; unfold ])
 
+(* Define the --inplace/-i flag (format command) *)
+let inplace_flag =
+  let doc = "Write the formatted output back to each input file." in
+  Arg.(value & flag & info [ "i"; "inplace" ] ~doc)
+
+(* Define the --check/-c flag (format command) *)
+let check_flag =
+  let doc =
+    "Do not write anything; list the files that are not already formatted and \
+     exit with a non-zero status if any are found."
+  in
+  Arg.(value & flag & info [ "c"; "check" ] ~doc)
+
+(* Define the format of the input files (format command). [-i] is taken by
+   --inplace, so the format override uses -f here. *)
+let format_input =
+  let doc =
+    "Treat all input files as this format (wat, wasm or wax), overriding the \
+     detection from each file's extension."
+  in
+  let format_conv =
+    Arg.conv
+      ( format_of_string,
+        fun ppf fmt -> Format.fprintf ppf "%s" (string_of_format fmt) )
+  in
+  Arg.(
+    value
+    & opt (some format_conv) None
+    & info [ "f"; "format"; "input-format" ] ~docv:"FORMAT" ~doc)
+
+(* Define the input files of the format command *)
+let format_files =
+  let doc = "Input files (.wat, .wasm or .wax) to format." in
+  Arg.(non_empty & pos_all string [] & info [] ~docv:"FILE" ~doc)
+
 (* Combine into command *)
 let convert_term =
   let+ input = input_file
@@ -458,14 +556,57 @@ let convert_term =
   convert input output in_fmt out_fmt validate strict_validate color
     source_map_file fold_mode
 
+let format_term =
+  let+ inplace = inplace_flag
+  and+ check = check_flag
+  and+ format_opt = format_input
+  and+ validate = validate_flag
+  and+ color = color_option
+  and+ fold_mode = fold_mode_option
+  and+ files = format_files in
+  format inplace check format_opt validate color fold_mode files
+
+let format_cmd =
+  let doc = "Format WebAssembly source files (.wat, .wasm, .wax)" in
+  let man =
+    [
+      `S Manpage.s_description;
+      `P
+        "Reformat each input file in its own format (Wat to Wat, Wax to Wax, \
+         Wasm to Wasm).";
+      `P
+        "With --inplace, the formatted output is written back to each file. \
+         With --check, nothing is written and files that are not already \
+         formatted are listed (with a non-zero exit status). Otherwise exactly \
+         one file must be given and its formatted output is written to stdout.";
+      `P
+        "The format of each file is detected from its extension unless \
+         --format forces one.";
+      `S Manpage.s_examples;
+      `P "Format a single file to stdout:";
+      `Pre "  $(mname) $(tname) input.wat";
+      `P "Reformat several files in place:";
+      `Pre "  $(mname) $(tname) -i a.wax b.wax c.wax";
+      `P "Check formatting in CI (non-zero exit if any file differs):";
+      `Pre "  $(mname) $(tname) --check src/*.wax";
+      `S Manpage.s_options;
+    ]
+  in
+  Cmd.v (Cmd.info "format" ~doc ~man) format_term
+
 let convert_cmd =
+  let doc = "Convert between WebAssembly formats (the default command)" in
+  Cmd.v (Cmd.info "convert" ~doc) convert_term
+
+let main_cmd =
   let doc = "Convert between WebAssembly formats (.wat, .wasm, .wax)" in
   let man =
     [
       `S Manpage.s_description;
       `P
-        "Convert between different WebAssembly formats: .wat (text), .wasm \
-         (binary), and .wax.";
+        "By default, convert between different WebAssembly formats: .wat \
+         (text), .wasm (binary), and .wax. The $(b,format) command reformats \
+         files in place.";
       `P "Supports reading from stdin and writing to stdout.";
       `P "Currently supported conversions:";
       `P "- Wat to Wat (formatting / round-trip)";
@@ -483,14 +624,35 @@ let convert_cmd =
       `Pre "  $(tname) input.wat -o output.wasm";
       `P "Read from stdin, write to stdout:";
       `Pre "  cat input.wat | $(tname) -i wat -f wasm > output.wasm";
-      `P "Read from stdin, write to file:";
-      `Pre "  cat input.wax | $(tname) -i wax -o output.wasm";
-      `P "Explicit format specification:";
-      `Pre "  $(tname) input -i wat -o output -f wasm";
+      `P "Format files in place:";
+      `Pre "  $(tname) format -i a.wax b.wax";
       `S Manpage.s_options;
     ]
   in
-  let info = Cmd.info "wax" ~doc ~man in
-  Cmd.v info convert_term
+  Cmd.group (Cmd.info "wax" ~doc ~man) ~default:convert_term
+    [ convert_cmd; format_cmd ]
 
-let () = exit (Cmd.eval convert_cmd)
+(* cmdliner reads the first token as a subcommand name and, even with a default
+   command, errors on an unrecognised one rather than falling through. So that
+   the bare [wax <file>] form keeps working (it is the common case, and the one
+   every test uses), rewrite the argv as js_of_ocaml does: a leading token that
+   is neither an option nor a bare command word (e.g. a filename, which carries
+   a [.] extension) is dispatched to the default [convert] command explicitly. *)
+let () =
+  let argv =
+    (* A lone "-" is the stdin positional, not an option, so it must reach the
+       default command rather than being read as a subcommand name. *)
+    let like_arg x = String.length x > 1 && Char.equal x.[0] '-' in
+    let like_command x =
+      String.length x > 0
+      && (not (Char.equal x.[0] '-'))
+      && String.for_all
+           (function 'a' .. 'z' | 'A' .. 'Z' | '-' -> true | _ -> false)
+           x
+    in
+    match Array.to_list Sys.argv with
+    | exe :: first :: rest when not (like_command first || like_arg first) ->
+        Array.of_list (exe :: Cmd.name convert_cmd :: first :: rest)
+    | _ -> Sys.argv
+  in
+  exit (Cmd.eval ~argv main_cmd)

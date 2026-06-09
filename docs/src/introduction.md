@@ -70,6 +70,12 @@ Or convert to WebAssembly text format to see the generated WAT:
 wax hello.wax -f wat
 ```
 
+Reformat files in place with the `format` command:
+
+```sh
+wax format -i hello.wax
+```
+
 ## Supported Conversions
 
 Wax supports all 9 combinations of input and output formats:

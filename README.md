@@ -33,7 +33,7 @@ You can also build the documentation locally using `mdbook build docs`.
 ## CLI Interface
 
 
-**Usage:** `wax [OPTION]… [INPUT]
+**Usage:** `wax [OPTION]… [INPUT]` (convert, the default command) or `wax format [OPTION]… FILE…` (reformat files).
 
 ### Positional Arguments
 
@@ -49,6 +49,16 @@ You can also build the documentation locally using `mdbook build docs`.
 *   `--color`: Color output: `always`, `never`, or `auto` (default). `auto` colors only if output is a TTY.
 *   `--fold`: Fold instructions into nested S-expressions (for Wasm Text output).
 *   `--unfold`: Unfold instructions into flat instruction lists (for Wasm Text output).
+
+### `format` command
+
+`wax format [OPTION]… FILE…` reformats files in their own format (detected from each extension).
+
+*   `-i`, `--inplace`: Write the formatted output back to each file. Without it (and without `--check`), exactly one file is formatted to `stdout`.
+*   `-c`, `--check`: Write nothing; list files that are not already formatted and exit non-zero if any are found.
+*   `-f`, `--format`, `--input-format`: Treat all files as this format (`wat`, `wasm`, `wax`), overriding extension detection.
+*   `-v`, `--validate`: Also type-check / well-formedness-check while formatting.
+*   `--color`, `--fold`, `--unfold`: as above.
 
 ## Example
 

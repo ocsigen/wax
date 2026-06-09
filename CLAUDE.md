@@ -35,7 +35,12 @@ All 9 conversion pipelines are supported (any combination of wax/wat/wasm as inp
 
 ## CLI Interface
 
-Usage: `dune exec wax -- [options] [INPUT]`. `INPUT` is optional; reads from stdin if omitted.
+`wax` is a `Cmd.group` with `convert` as the default command and a `format`
+subcommand. cmdliner won't fall through to the default on a leading positional,
+so `main.ml` rewrites `Sys.argv` (the js_of_ocaml trick) to keep the bare
+`wax <file>` form working — edit that heuristic if adding subcommands.
+
+**convert** (default) — `dune exec wax -- [options] [INPUT]`. `INPUT` is optional; reads from stdin if omitted.
 
 | Flag | Long | Description |
 |------|------|-------------|
@@ -49,6 +54,16 @@ Usage: `dune exec wax -- [options] [INPUT]`. `INPUT` is optional; reads from std
 |      | `--source-map-file` | Emit a source map to the given file |
 
 Binary output to a terminal is blocked; use `-o` to write WASM to a file.
+
+**format** — `dune exec wax -- format [options] FILE…`. Reformats each file in its own format (detected from the extension unless `-f` forces one).
+
+| Flag | Long | Description |
+|------|------|-------------|
+| `-i` | `--inplace` | Write back to each file; otherwise exactly one file is formatted to stdout |
+| `-c` | `--check` | Write nothing; list unformatted files, exit non-zero if any (mutually exclusive with `--inplace`) |
+| `-f` | `--format` / `--input-format` | Force the format of all files (overrides extension detection) |
+| `-v` | `--validate` | Also type-check / well-formedness-check while formatting |
+|      | `--color` / `--fold` / `--unfold` | As for convert |
 
 ## Non-Negotiable Rules
 
