@@ -210,28 +210,34 @@ let module_ ctx env ((name, fields) : Ast.location Ast.Text.module_) :
     Ast.location Ast.Text.module_ * (int * int) list =
   let open Ast.Text in
   let ranges = ref [] in
-  (* Then kept, else dropped: the dropped span runs from the end of the
-     then-branch to the end of the conditional. *)
-  let drop_else loc then_nodes =
-    ranges :=
-      (branch_end ~default:(start_of loc) then_nodes, end_of loc) :: !ranges
+  (* The boundary between the two branches. With no else the conditional ends at
+     the then-branch, so its own end (past any closing brace) is exact; with an
+     else, the best position the AST offers is the end of the last then-node. *)
+  let split loc then_nodes ~else_present =
+    if else_present then branch_end ~default:(end_of loc) then_nodes
+    else end_of loc
+  in
+  (* Then kept, else dropped: the dropped span runs from the boundary to the end
+     of the conditional. *)
+  let drop_else loc then_nodes ~else_present =
+    ranges := (split loc then_nodes ~else_present, end_of loc) :: !ranges
   in
   (* Else kept (or nothing), then dropped: the dropped span runs from the start
-     of the conditional through the end of the then-branch. *)
-  let drop_then loc then_nodes =
-    ranges :=
-      (start_of loc, branch_end ~default:(end_of loc) then_nodes) :: !ranges
+     of the conditional through the boundary. *)
+  let drop_then loc then_nodes ~else_present =
+    ranges := (start_of loc, split loc then_nodes ~else_present) :: !ranges
   in
   let rec sfields fl = List.concat_map sfield fl
   and sfield (f : (Ast.location modulefield, Ast.location) Ast.annotated) =
     match f.desc with
     | Module_if_annotation { cond; then_fields; else_fields } -> (
+        let else_present = Option.is_some else_fields in
         match eval ctx env cond with
         | True ->
-            drop_else f.info then_fields;
+            drop_else f.info then_fields ~else_present;
             sfields then_fields
         | False -> (
-            drop_then f.info then_fields;
+            drop_then f.info then_fields ~else_present;
             match else_fields with Some e -> sfields e | None -> [])
         | Residual cond ->
             [
@@ -263,12 +269,13 @@ let module_ ctx env ((name, fields) : Ast.location Ast.Text.module_) :
   and sinstr (i : Ast.location instr) =
     match i.desc with
     | If_annotation { cond; then_body; else_body } -> (
+        let else_present = Option.is_some else_body in
         match eval ctx env cond with
         | True ->
-            drop_else i.info then_body;
+            drop_else i.info then_body ~else_present;
             sinstrs then_body
         | False -> (
-            drop_then i.info then_body;
+            drop_then i.info then_body ~else_present;
             match else_body with Some e -> sinstrs e | None -> [])
         | Residual cond ->
             [
