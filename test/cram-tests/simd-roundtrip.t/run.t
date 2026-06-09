@@ -44,12 +44,12 @@ lowering back (wax -> wat); the binary is byte-identical modulo debug names.
       _ = a.bitmask_i8x16();
       _ = v128_bitselect(a, b, a);
       _ = a.relaxed_madd_f32x4(b, a);
-      _ = m.v128_load(0, 1);
-      _ = m.v128_load8x8_s(0, 1);
-      _ = m.v128_load32_zero(0, 1);
+      _ = m.v128_load(0);
+      _ = m.v128_load8x8_s(0);
+      _ = m.v128_load32_zero(0);
       _ = m.v128_load8_splat(0);
       _ = m.v128_load8_lane(0, a, 3);
-      m.v128_store(0, a, 1);
+      m.v128_store(0, a);
       m.v128_store8_lane(0, a, 3);
       a;
   }
@@ -94,12 +94,12 @@ Lowering back to WAT reproduces the instructions (the wax round-trips):
     (drop (i8x16.bitmask (local.get $a)))
     (drop (v128.bitselect (local.get $a) (local.get $b) (local.get $a)))
     (drop (f32x4.relaxed_madd (local.get $a) (local.get $b) (local.get $a)))
-    (drop (v128.load $m align=1 (i32.const 0)))
-    (drop (v128.load8x8_s $m align=1 (i32.const 0)))
-    (drop (v128.load32_zero $m align=1 (i32.const 0)))
+    (drop (v128.load $m (i32.const 0)))
+    (drop (v128.load8x8_s $m (i32.const 0)))
+    (drop (v128.load32_zero $m (i32.const 0)))
     (drop (v128.load8_splat $m (i32.const 0)))
     (drop (v128.load8_lane $m 3 (i32.const 0) (local.get $a)))
-    (v128.store $m align=1 (i32.const 0) (local.get $a))
+    (v128.store $m (i32.const 0) (local.get $a))
     (v128.store8_lane $m 3 (i32.const 0) (local.get $a))
     (local.get $a)
   )

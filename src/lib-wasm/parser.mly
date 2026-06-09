@@ -224,6 +224,24 @@ let lane_width : [ `I8 | `I16 | `I32 | `I64 ] -> Uint64.t = function
   | `I32 -> Uint64.of_int 4
   | `I64 -> Uint64.of_int 8
 
+(* Natural alignment (the access size, in bytes) of a memory access. An omitted
+   [align=] defaults to this, per the spec. *)
+let storage_width : [ `I8 | `I16 | `I32 ] -> Uint64.t = function
+  | `I8 -> Uint64.of_int 1
+  | `I16 -> Uint64.of_int 2
+  | `I32 -> Uint64.of_int 4
+
+let num_type_width : num_type -> Uint64.t = function
+  | NumI32 | NumF32 -> Uint64.of_int 4
+  | NumI64 | NumF64 -> Uint64.of_int 8
+
+let vec_load_width : vec_load_op -> Uint64.t = function
+  | Load128 -> Uint64.of_int 16
+  | Load8x8S | Load8x8U | Load16x4S | Load16x4U | Load32x2S | Load32x2U
+  | Load64Zero ->
+      Uint64.of_int 8
+  | Load32Zero -> Uint64.of_int 4
+
 let with_loc loc desc =
   Utils.Trivia.with_pos Context.context {loc_start = fst loc; loc_end = snd loc} desc
 
@@ -561,18 +579,18 @@ plain_instruction:
 | GLOBAL_GET i = index { with_loc $sloc (GlobalGet i) }
 | GLOBAL_SET i = index { with_loc $sloc (GlobalSet i) }
 | sz = LOAD i = memindex m = memarg
-  { with_loc $sloc (Load (i, m (Uint64.one), sz)) }
+  { with_loc $sloc (Load (i, m (num_type_width sz), sz)) }
 | op = VEC_LOAD i = memindex m = memarg
-  { with_loc $sloc (VecLoad (i, op, m (Uint64.one))) }
+  { with_loc $sloc (VecLoad (i, op, m (vec_load_width op))) }
 | k = LOADS i = memindex m = memarg
   { let (sz, sz', s) = k in
-    with_loc $sloc (LoadS (i, m Uint64.one, sz, sz', s)) }
+    with_loc $sloc (LoadS (i, m (storage_width sz'), sz, sz', s)) }
 | sz = STORE i = memindex m = memarg
-  { with_loc $sloc (Store (i, m (Uint64.one), sz)) }
+  { with_loc $sloc (Store (i, m (num_type_width sz), sz)) }
 | VEC_STORE i = memindex m = memarg
-  { with_loc $sloc (VecStore (i, m (Uint64.one))) }
+  { with_loc $sloc (VecStore (i, m (Uint64.of_int 16))) }
 | sz = STORES i = memindex m = memarg
-  { with_loc $sloc (StoreS (i, m Uint64.one, fst sz, snd sz)) }
+  { with_loc $sloc (StoreS (i, m (storage_width (snd sz)), fst sz, snd sz)) }
 | MEMORY_SIZE i = memindex { with_loc $sloc (MemorySize i) }
 | MEMORY_GROW i = memindex { with_loc $sloc (MemoryGrow i) }
 | MEMORY_FILL i = memindex { with_loc $sloc (MemoryFill i) }
