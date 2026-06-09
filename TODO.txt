@@ -1,27 +1,24 @@
-ISSUES
-======
-- linear-memory ops (i32.load/store, tables) that Wax doesn't
-  model; from_wasm's Unreachable placeholder produces holes that crash the
-  typer (maybe we should add a cast on struct.get first argument)
-- ExtendS => x.extend8_s()
+Priorities
+==========
+- Improve typing / validation
+- Fix library names
+- Library to use within Js_of_ocaml
+
+Improvements
+============
+- Check output format
+- Improve comment preservation
+- More robust support for conditional compilation
+- Use plain attributes for conditional compilation, rather than the current hack
+  where #[if( and #[else] are token
 
 =====================
-
-- Support for conditional compilation
-- Comments
-
-- Properly handle typeuse
-
-- Fix syntactic type checks
 
 Use a wrapper library to print errors
 ==> deal with line breaking / proper string width for escaped strings
 
 rewrite trapping int instructions into non-trapping instruction when
 the type is undeterminate
-
-Attributes for conditional compilation:
-    #[if(A)] ... #[else] ...
 
 ============
 
@@ -48,20 +45,15 @@ syntaxic sugar:
 
 ====
 
+Maybe
+=====
+
 We are dropping duplicated names when converting from wasm to wat.
 We could put name annotations so as not to loose this information.
 
-Keep strings as strings
-
-allow comma at end of block
+allow comma/semicolon at end of block
 
 include a file (e.g. common types, imports)
-
-conditional compilation using attributes
-
-Use typechecking to eliminate unnecessary type annotations
-  - we know the number type for other reasons
-  - the value is known to have a more precise type
 
 Two-step inference?
   - preserve overloading of number functions
@@ -69,23 +61,8 @@ Two-step inference?
 
 ============
 
-tuples
-
 strings: we should probably not escape them as much as we do
 
-desugar tuples
-==============
-tuple.make  ==> just push to the stack   (e1, ..., en)
-local.set  ===> store actually in n variables
-local.get  ===> push all to the stack
-tuple.extract(local.get x,i)
-    ==> if x is a variable, just load from associated variable
-    ==> otherwise, if first component, drop all other components
-        else store in a temp variable before
-          let (_, _, x, _, _) = e;
-          x
-
-=====
 
 fn caml_string_equal(p1: &eq, p2: &eq) -> &eq {
   if p1 == p2 { return 1 }
@@ -114,14 +91,3 @@ for (i = ...; e; i = ...) { ... }
 
 Attaching comments: https://jayconrod.com/posts/129/preserving-comments-when-parsing-and-formatting-code
 https://journal.stuffwithstuff.com/2015/09/08/the-hardest-program-ive-ever-written/#4-note
-
-
-Track empty lines?
-Two kind of comments : inline / line
-Distinguish comment on its own line?
-
-- Get all expr locations
-- Sort tokens
-- Attach comments
-
-line comments are before except if there is a blank line inbetween
