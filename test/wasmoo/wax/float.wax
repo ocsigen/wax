@@ -479,9 +479,9 @@ fn caml_modf_float(x: &eq) -> &eq {
         if a < inf {
             i = a.floor;
             f = a - i;
-            i = copysign(i, x_2);
-            f = copysign(f, x_2);
-        } else { i = x_2; f = copysign(0, x_2); }
+            i = i.copysign(x_2);
+            f = f.copysign(x_2);
+        } else { i = x_2; f = (0).copysign(x_2); }
     } else { i = x_2; f = x_2; }
     [block|0 as &i31, {float| f: f }, {float| f: i }];
 }
@@ -558,7 +558,7 @@ fn erf(x: f64) -> f64 {
         1 -
             ((((a5 * t + a4) * t + a3) * t + a2) * t + a1) *
                 (t * exp(-(x * x)));
-    copysign(y, x);
+    y.copysign(x);
 }
 #[export = "caml_erfc_float"]
 fn caml_erfc_float(x: f64) -> f64 { 1 - erf(x); }

@@ -317,7 +317,7 @@ A more complex example showing bitwise operations:
 ```wax
 #[export = "hash_mix_int"]
 fn hash_mix_int(h: i32, d: i32) -> i32 {
-    rotl(rotl(d * 0xcc9e2d51, 15) * 0x1b873593 ^ h, 13) * 5 + 0xe6546b64
+    ((d * 0xcc9e2d51).rotl(15) * 0x1b873593 ^ h).rotl(13) * 5 + 0xe6546b64
 }
 
 #[export = "hash_finalize"]

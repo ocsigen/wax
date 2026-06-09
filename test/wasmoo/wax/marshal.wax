@@ -222,7 +222,7 @@ fn readfloat(s: &intern_state, code: i32) -> f64 {
         }
     } else {
         'loop: loop {
-            d = rotr(d | src[pos + i] as i32_u as i64_u, 8);
+            d = (d | src[pos + i] as i32_u as i64_u).rotr(8);
             i = i + 1;
             br_if 'loop i <u 8;
         }

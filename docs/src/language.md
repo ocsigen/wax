@@ -151,16 +151,19 @@ x.nearest   // Round to nearest
 x.clz       // Count leading zeros
 x.ctz       // Count trailing zeros
 x.popcnt    // Population count
+x.extend8_s   // Sign-extend the low 8 bits
+x.extend16_s  // Sign-extend the low 16 bits
 ```
 
-Two-argument operations:
+Two-argument operations also use method syntax, with the second operand
+passed as an argument:
 
 ```wax
-min(x, y)
-max(x, y)
-copysign(x, y)
-rotl(x, y)      // Rotate left
-rotr(x, y)      // Rotate right
+x.min(y)
+x.max(y)
+x.copysign(y)
+x.rotl(y)      // Rotate left
+x.rotr(y)      // Rotate right
 ```
 
 ### Type Conversions

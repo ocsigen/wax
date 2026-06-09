@@ -5,8 +5,6 @@ TODO:
   + typeuse when converting to binary
 - error messages
 - locations on the heap when push several values?
-- more methods rather than global functions (no ambiguity)?
-  rotl(..), rotr(..), min(..), max(..), copysign(..)
 - try to use declared types instead of adding <string>
 - floating type String? (with default to array<i8>)
 - desugar by default
@@ -1502,8 +1500,9 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
              [ i1'; a2'; i2'; n' ] ))
         [||]
   | Call
-      ( ({ desc = Get ({ desc = "rotl" | "rotr"; _ } as meth); _ } as func),
-        [ i1; i2 ] ) ->
+      ( ({ desc = StructGet (i1, ({ desc = "rotl" | "rotr"; _ } as meth)); _ }
+         as func),
+        [ i2 ] ) ->
       let* i1' = instruction ctx i1 in
       let* i2' = instruction ctx i2 in
       let ty =
@@ -1511,13 +1510,19 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       in
       return_expression i
         (Call
-           ( { desc = Get meth; info = ([| (*unused*) |], func.info) },
-             [ i1'; i2' ] ))
+           ( {
+               desc = StructGet (i1', meth);
+               info = ([| (*unused*) |], func.info);
+             },
+             [ i2' ] ))
         ty
   | Call
-      ( ({ desc = Get ({ desc = "copysign" | "min" | "max"; _ } as meth); _ } as
-         func),
-        [ i1; i2 ] ) ->
+      ( ({
+           desc =
+             StructGet (i1, ({ desc = "copysign" | "min" | "max"; _ } as meth));
+           _;
+         } as func),
+        [ i2 ] ) ->
       let* i1' = instruction ctx i1 in
       let* i2' = instruction ctx i2 in
       let ty =
@@ -1525,8 +1530,11 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       in
       return_expression i
         (Call
-           ( { desc = Get meth; info = ([| (*unused*) |], func.info) },
-             [ i1'; i2' ] ))
+           ( {
+               desc = StructGet (i1', meth);
+               info = ([| (*unused*) |], func.info);
+             },
+             [ i2' ] ))
         ty
   | Call (i', l) -> (
       let* l' = instructions ctx l in

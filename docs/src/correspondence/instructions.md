@@ -32,14 +32,15 @@ Binary and unary operations use standard mathematical operators. Signedness is o
 | `f32.mul` / `f64.mul` | `*` |
 | `f32.div` / `f64.div` | `/` |
 | `f32.abs` ... `f64.sqrt` | `val.abs`, `val.neg`, `val.ceil`, `val.floor`, `val.trunc`, `val.nearest`, `val.sqrt` |
-| `f32.min` ... `f64.copysign` | `min(v1, v2)`, `max(v1, v2)`, `copysign(v1, v2)` |
+| `f32.min` ... `f64.copysign` | `v1.min(v2)`, `v1.max(v2)`, `v1.copysign(v2)` |
 
 ### Advanced Integer Operations
 
 | Wasm | Wax |
 |---|---|
 | `i32.clz` ... `i64.popcnt` | `val.clz`, `val.ctz`, `val.popcnt` |
-| `i32.rotl` ... `i64.rotr` | `rotl(v1, v2)`, `rotr(v1, v2)` |
+| `i32.extend8_s` ... `i64.extend16_s` | `val.extend8_s`, `val.extend16_s` |
+| `i32.rotl` ... `i64.rotr` | `v1.rotl(v2)`, `v1.rotr(v2)` |
 
 
 

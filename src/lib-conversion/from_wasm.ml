@@ -636,11 +636,15 @@ let int_bin_op i0 (op : Src.int_bin_op) =
   | Shl -> symbol Shl
   | Shr s -> symbol (Shr s)
   | Rotl ->
-      let* args = Stack.grab 2 in
-      Stack.push 1 (with_loc (Call (with_loc (Get (Ast.no_loc "rotl")), args)))
+      let* e2 = Stack.pop in
+      let* e1 = Stack.pop in
+      Stack.push 1
+        (with_loc (Call (with_loc (StructGet (e1, Ast.no_loc "rotl")), [ e2 ])))
   | Rotr ->
-      let* args = Stack.grab 2 in
-      Stack.push 1 (with_loc (Call (with_loc (Get (Ast.no_loc "rotr")), args)))
+      let* e2 = Stack.pop in
+      let* e1 = Stack.pop in
+      Stack.push 1
+        (with_loc (Call (with_loc (StructGet (e1, Ast.no_loc "rotr")), [ e2 ])))
   | Eq -> symbol Eq
   | Ne -> symbol Ne
   | Lt s -> symbol (Lt (Some s))
@@ -691,15 +695,21 @@ let float_bin_op i0 (op : Src.float_bin_op) =
   | Mul -> symbol Mul
   | Div -> symbol (Div None)
   | Min ->
-      let* args = Stack.grab 2 in
-      Stack.push 1 (with_loc (Call (with_loc (Get (Ast.no_loc "min")), args)))
-  | Max ->
-      let* args = Stack.grab 2 in
-      Stack.push 1 (with_loc (Call (with_loc (Get (Ast.no_loc "max")), args)))
-  | CopySign ->
-      let* args = Stack.grab 2 in
+      let* e2 = Stack.pop in
+      let* e1 = Stack.pop in
       Stack.push 1
-        (with_loc (Call (with_loc (Get (Ast.no_loc "copysign")), args)))
+        (with_loc (Call (with_loc (StructGet (e1, Ast.no_loc "min")), [ e2 ])))
+  | Max ->
+      let* e2 = Stack.pop in
+      let* e1 = Stack.pop in
+      Stack.push 1
+        (with_loc (Call (with_loc (StructGet (e1, Ast.no_loc "max")), [ e2 ])))
+  | CopySign ->
+      let* e2 = Stack.pop in
+      let* e1 = Stack.pop in
+      Stack.push 1
+        (with_loc
+           (Call (with_loc (StructGet (e1, Ast.no_loc "copysign")), [ e2 ])))
   | Eq -> symbol Eq
   | Ne -> symbol Ne
   | Lt -> symbol (Lt None)

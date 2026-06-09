@@ -335,43 +335,45 @@ let rec instruction ret ctx i : location Text.instr list =
   | Call (f, args) -> (
       let arg_code = List.concat_map (instruction ret ctx) args in
       match f.desc with
-      (* Check for intrinsics calls *)
-      | Get idx -> (
-          match idx.desc with
-          | "rotl" -> (
-              match expr_valtype i with
-              | I32 -> folded loc (BinOp (I32 Rotl)) arg_code
-              | I64 -> folded loc (BinOp (I64 Rotl)) arg_code
-              | _ -> assert false)
-          | "rotr" -> (
-              match expr_valtype i with
-              | I32 -> folded loc (BinOp (I32 Rotr)) arg_code
-              | I64 -> folded loc (BinOp (I64 Rotr)) arg_code
-              | _ -> assert false)
-          | "min" -> (
-              match expr_valtype i with
-              | F32 -> folded loc (BinOp (F32 Min)) arg_code
-              | F64 -> folded loc (BinOp (F64 Min)) arg_code
-              | _ -> assert false)
-          | "max" -> (
-              match expr_valtype i with
-              | F32 -> folded loc (BinOp (F32 Max)) arg_code
-              | F64 -> folded loc (BinOp (F64 Max)) arg_code
-              | _ -> assert false)
-          | "copysign" -> (
-              match expr_valtype i with
-              | F32 -> folded loc (BinOp (F32 CopySign)) arg_code
-              | F64 -> folded loc (BinOp (F64 CopySign)) arg_code
-              | _ -> assert false)
-          | _ ->
-              if
-                Hashtbl.mem ctx.functions idx.desc
-                && not (StringMap.mem idx.desc ctx.locals)
-              then folded loc (Call (index idx)) arg_code
-              else
-                let code = instruction ret ctx f in
-                folded loc (CallRef (index (expr_type_name f))) (arg_code @ code)
-          )
+      | Get idx ->
+          if
+            Hashtbl.mem ctx.functions idx.desc
+            && not (StringMap.mem idx.desc ctx.locals)
+          then folded loc (Call (index idx)) arg_code
+          else
+            let code = instruction ret ctx f in
+            folded loc (CallRef (index (expr_type_name f))) (arg_code @ code)
+      (* Binary intrinsics, written with the dot notation *)
+      | StructGet (obj, { desc = "rotl"; _ }) -> (
+          let obj_code = instruction ret ctx obj in
+          match expr_valtype i with
+          | I32 -> folded loc (BinOp (I32 Rotl)) (obj_code @ arg_code)
+          | I64 -> folded loc (BinOp (I64 Rotl)) (obj_code @ arg_code)
+          | _ -> assert false)
+      | StructGet (obj, { desc = "rotr"; _ }) -> (
+          let obj_code = instruction ret ctx obj in
+          match expr_valtype i with
+          | I32 -> folded loc (BinOp (I32 Rotr)) (obj_code @ arg_code)
+          | I64 -> folded loc (BinOp (I64 Rotr)) (obj_code @ arg_code)
+          | _ -> assert false)
+      | StructGet (obj, { desc = "min"; _ }) -> (
+          let obj_code = instruction ret ctx obj in
+          match expr_valtype i with
+          | F32 -> folded loc (BinOp (F32 Min)) (obj_code @ arg_code)
+          | F64 -> folded loc (BinOp (F64 Min)) (obj_code @ arg_code)
+          | _ -> assert false)
+      | StructGet (obj, { desc = "max"; _ }) -> (
+          let obj_code = instruction ret ctx obj in
+          match expr_valtype i with
+          | F32 -> folded loc (BinOp (F32 Max)) (obj_code @ arg_code)
+          | F64 -> folded loc (BinOp (F64 Max)) (obj_code @ arg_code)
+          | _ -> assert false)
+      | StructGet (obj, { desc = "copysign"; _ }) -> (
+          let obj_code = instruction ret ctx obj in
+          match expr_valtype i with
+          | F32 -> folded loc (BinOp (F32 CopySign)) (obj_code @ arg_code)
+          | F64 -> folded loc (BinOp (F64 CopySign)) (obj_code @ arg_code)
+          | _ -> assert false)
       | StructGet (obj, { desc = "fill"; _ }) ->
           let array_code = instruction ret ctx obj in
           let type_name_idx = expr_type_name obj in

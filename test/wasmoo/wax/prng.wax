@@ -25,9 +25,9 @@ fn caml_lxm_next(v: &eq) -> i64 {
     ta_set_i32(data, 2, s as i32);
     ta_set_i32(data, 3, (s >>u 32) as i32);
     q1 = q1 ^ q0;
-    q0 = rotl(q0, 24);
+    q0 = q0.rotl(24);
     q0 = q0 ^ q1 ^ q1 << 16;
-    q1 = rotl(q1, 37);
+    q1 = q1.rotl(37);
     ta_set_i32(data, 4, q0 as i32);
     ta_set_i32(data, 5, (q0 >>u 32) as i32);
     ta_set_i32(data, 6, q1 as i32);

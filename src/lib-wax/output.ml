@@ -772,12 +772,12 @@ let rec instr prec pp (i : _ instr) =
             pp l)
   | StructDefault nm -> struct_instr pp nm (fun () -> punctuation pp "..")
   | StructGet (i, s) ->
-      instr CallAndFieldAccess pp i;
+      field_receiver pp i;
       operator pp ".";
       identifier pp s.desc
   | StructSet (i, s, i') ->
       box pp ~indent:indent_level (fun () ->
-          instr CallAndFieldAccess pp i;
+          field_receiver pp i;
           operator pp ".";
           identifier pp s.desc;
           space pp ();
@@ -976,6 +976,17 @@ let rec instr prec pp (i : _ instr) =
           operator pp ":";
           instr Assignement pp i3)
   | Null -> keyword pp "null"
+
+and field_receiver pp i =
+  (* A bare numeric literal receiver would be misparsed: [0.foo] lexes [0.]
+     as a float, so parenthesize it. *)
+  match i.desc with
+  | Int _ | Float _ ->
+      punctuation pp "(";
+      box pp (fun () ->
+          instr Instruction pp i;
+          punctuation pp ")")
+  | _ -> instr CallAndFieldAccess pp i
 
 and block pp label kind bt (l : _ instr list) =
   hvbox pp (fun () ->

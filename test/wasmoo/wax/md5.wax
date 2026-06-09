@@ -46,7 +46,7 @@ fn caml_md5_chan(ch: &eq, vlen: &eq) -> &eq {
     become MD5Final(ctx);
 }
 fn xx(q: i32, a: i32, b: i32, x: i32, s: i32, t: i32) -> i32 {
-    rotl(a + q + (x + t), s) + b;
+    (a + q + (x + t)).rotl(s) + b;
 }
 fn ff(a: i32, b: i32, c: i32, d: i32, x: i32, s: i32, t: i32) -> i32 {
     xx(d ^ b & (c ^ d), a, b, x, s, t);

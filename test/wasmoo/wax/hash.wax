@@ -29,7 +29,7 @@ type custom_operations = {
 type custom = open { f: &custom_operations };
 #[export = "caml_hash_mix_int"]
 fn caml_hash_mix_int(h: i32, d: i32) -> i32 {
-    rotl(rotl(d * 0xcc9e2d51, 15) * 0x1b873593 ^ h, 13) * 5 + 0xe6546b64;
+    ((d * 0xcc9e2d51).rotl(15) * 0x1b873593 ^ h).rotl(13) * 5 + 0xe6546b64;
 }
 #[export = "caml_hash_mix_final"]
 fn caml_hash_mix_final(h: i32) -> i32 {
