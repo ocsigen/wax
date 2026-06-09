@@ -93,11 +93,7 @@ fn caml_raise_no_such_file(vname: &eq) {
     len = name.length;
     msg = [string|0; len + 27];
     msg.copy(0, name, 0, len);
-    msg;
-    len;
-    0;
-    27;
-    unreachable;
+    msg.init(no_such_file, len, 0, 27);
     caml_raise_sys_error(msg);
 }
 data caml_read_file_content = "caml_read_file_content";

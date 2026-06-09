@@ -814,6 +814,23 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
                 (with_loc (Ast.Get (idx ctx `Mem m)), Ast.no_loc meth)),
            args ))
   in
+  let table_call t meth args =
+    with_loc
+      (Ast.Call
+         ( with_loc
+             (Ast.StructGet
+                (with_loc (Ast.Get (idx ctx `Table t)), Ast.no_loc meth)),
+           args ))
+  in
+  (* [seg.drop()] on a data or element segment. *)
+  let drop_call kind seg =
+    with_loc
+      (Ast.Call
+         ( with_loc
+             (Ast.StructGet
+                (with_loc (Ast.Get (idx ctx kind seg)), Ast.no_loc "drop")),
+           [] ))
+  in
   match i.desc with
   | Block { label; typ; block } ->
       let label, ctx = push_label ctx ~loop:false label typ in
@@ -1336,12 +1353,69 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
           else_body
       in
       Stack.push 0 (with_loc (If_annotation { cond; then_body; else_body }))
+  | MemorySize m -> Stack.push 1 (mem_call m "size" [])
+  | MemoryGrow m ->
+      let* d = Stack.pop in
+      Stack.push 1 (mem_call m "grow" [ d ])
+  | MemoryFill m ->
+      let* n = Stack.pop in
+      let* v = Stack.pop in
+      let* d = Stack.pop in
+      Stack.push 0 (mem_call m "fill" [ d; v; n ])
+  | MemoryCopy (m, _) ->
+      let* n = Stack.pop in
+      let* s = Stack.pop in
+      let* d = Stack.pop in
+      Stack.push 0 (mem_call m "copy" [ d; s; n ])
+  | MemoryInit (m, data) ->
+      let* n = Stack.pop in
+      let* s = Stack.pop in
+      let* d = Stack.pop in
+      let seg = with_loc (Ast.Get (idx ctx `Data data)) in
+      Stack.push 0 (mem_call m "init" [ seg; d; s; n ])
+  | DataDrop data -> Stack.push 0 (drop_call `Data data)
+  | TableSize t -> Stack.push 1 (table_call t "size" [])
+  | TableGrow t ->
+      let* n = Stack.pop in
+      let* v = Stack.pop in
+      Stack.push 1 (table_call t "grow" [ v; n ])
+  | TableFill t ->
+      let* n = Stack.pop in
+      let* v = Stack.pop in
+      let* d = Stack.pop in
+      Stack.push 0 (table_call t "fill" [ d; v; n ])
+  | TableCopy (t, _) ->
+      let* n = Stack.pop in
+      let* s = Stack.pop in
+      let* d = Stack.pop in
+      Stack.push 0 (table_call t "copy" [ d; s; n ])
+  | TableInit (t, elem) ->
+      let* n = Stack.pop in
+      let* s = Stack.pop in
+      let* d = Stack.pop in
+      let seg = with_loc (Ast.Get (idx ctx `Elem elem)) in
+      Stack.push 0 (table_call t "init" [ seg; d; s; n ])
+  | ElemDrop elem -> Stack.push 0 (drop_call `Elem elem)
+  | ArrayInitData (_, data) ->
+      let* n = Stack.pop in
+      let* s = Stack.pop in
+      let* d = Stack.pop in
+      let* a = Stack.pop in
+      let seg = with_loc (Ast.Get (idx ctx `Data data)) in
+      Stack.push 0
+        (with_loc
+           (Call (with_loc (StructGet (a, Ast.no_loc "init")), [ seg; d; s; n ])))
+  | ArrayInitElem (_, elem) ->
+      let* n = Stack.pop in
+      let* s = Stack.pop in
+      let* d = Stack.pop in
+      let* a = Stack.pop in
+      let seg = with_loc (Ast.Get (idx ctx `Elem elem)) in
+      Stack.push 0
+        (with_loc
+           (Call (with_loc (StructGet (a, Ast.no_loc "init")), [ seg; d; s; n ])))
   (* Later *)
-  | ArrayInitElem _ | ArrayInitData _ | MemorySize _ | MemoryGrow _
-  | MemoryFill _ | MemoryCopy _ | MemoryInit _ | DataDrop _ | TableSize _
-  | TableGrow _ | TableFill _ | TableCopy _ | TableInit _ | ElemDrop _
-  | TupleExtract _ ->
-      Stack.push_poly (with_loc Unreachable)
+  | TupleExtract _ -> Stack.push_poly (with_loc Unreachable)
   | VecUnOp _ | VecBinOp _ | VecTest _ | VecShift _ | VecBitmask _ | VecLoad _
   | VecStore _ | VecLoadLane _ | VecStoreLane _ | VecLoadSplat _ | VecExtract _
   | VecReplace _ | VecSplat _ | VecShuffle _ | VecBitselect | VecTernOp _ ->

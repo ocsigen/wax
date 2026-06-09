@@ -1381,6 +1381,11 @@ let mem_store_method meth =
 
 let is_mem_method meth = mem_load_result meth <> None || mem_store_method meth
 
+(* Management methods shared by memories and tables, dispatched by the receiver
+   (a memory or table name). *)
+let is_mgmt_method m =
+  match m with "size" | "grow" | "fill" | "copy" | "init" -> true | _ -> false
+
 (* Mint (or reuse) an anonymous function type for an inline [as &fn(..) -> ..]
    cast target. The name encodes the signature so identical casts share one
    type, and to_wasm materialises it through the [<..>] synthetic-type path. *)
@@ -1717,6 +1722,139 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
              },
              args' ))
         result
+  (* Memory management: mem.size/grow/fill/copy/init, on a memory name. *)
+  | Call
+      ( ({ desc = StructGet (({ desc = Get name; _ } as recv), meth); _ } as func),
+        args )
+    when is_mgmt_method meth.desc && Tbl.find_opt ctx.memories name <> None -> (
+      let _, at =
+        match Tbl.find_opt ctx.memories name with
+        | Some x -> x
+        | None -> assert false
+      in
+      let addr () = UnionFind.make (Valtype (address_valtype at)) in
+      let i32 () = UnionFind.make (Valtype { typ = I32; internal = I32 }) in
+      let recv' = { desc = Get name; info = ([||], recv.info) } in
+      let mk args' =
+        Ast.Call
+          ({ desc = StructGet (recv', meth); info = ([||], func.info) }, args')
+      in
+      let bad () =
+        Error.value_count_mismatch ctx.diagnostics ~location:i.info ~expected:0
+          ~provided:(List.length args);
+        return_statement i (mk []) [||]
+      in
+      match (meth.desc, args) with
+      | "size", [] -> return_expression i (mk []) (addr ())
+      | "grow", [ d ] ->
+          let* d' = instruction ctx d in
+          check_type ctx d' (addr ());
+          return_expression i (mk [ d' ]) (addr ())
+      | "fill", [ d; v; n ] ->
+          let* d' = instruction ctx d in
+          let* v' = instruction ctx v in
+          let* n' = instruction ctx n in
+          check_type ctx d' (addr ());
+          check_type ctx v' (i32 ());
+          check_type ctx n' (addr ());
+          return_statement i (mk [ d'; v'; n' ]) [||]
+      | "copy", [ d; s; n ] ->
+          let* d' = instruction ctx d in
+          let* s' = instruction ctx s in
+          let* n' = instruction ctx n in
+          check_type ctx d' (addr ());
+          check_type ctx s' (addr ());
+          check_type ctx n' (addr ());
+          return_statement i (mk [ d'; s'; n' ]) [||]
+      | "init", { desc = Get seg; info = sinfo } :: ([ _; _; _ ] as rest) ->
+          ignore (Tbl.find ctx.diagnostics ctx.datas seg : unit option);
+          let seg' = { desc = Get seg; info = ([||], sinfo) } in
+          let* rest' = instructions ctx rest in
+          (match rest' with
+          | [ d'; s'; n' ] ->
+              check_type ctx d' (addr ());
+              check_type ctx s' (i32 ());
+              check_type ctx n' (i32 ())
+          | _ -> ());
+          return_statement i (mk (seg' :: rest')) [||]
+      | _ -> bad ())
+  (* Table management: tab.size/grow/fill/copy/init, on a table name. *)
+  | Call
+      ( ({ desc = StructGet (({ desc = Get name; _ } as recv), meth); _ } as func),
+        args )
+    when is_mgmt_method meth.desc && Tbl.find_opt ctx.tables name <> None -> (
+      let at, rt =
+        match Tbl.find_opt ctx.tables name with
+        | Some x -> x
+        | None -> assert false
+      in
+      let addr () = UnionFind.make (Valtype (address_valtype at)) in
+      let i32 () = UnionFind.make (Valtype { typ = I32; internal = I32 }) in
+      let check_elt e =
+        let>@ t = internalize ctx (Ref rt) in
+        check_type ctx e t
+      in
+      let recv' = { desc = Get name; info = ([||], recv.info) } in
+      let mk args' =
+        Ast.Call
+          ({ desc = StructGet (recv', meth); info = ([||], func.info) }, args')
+      in
+      let bad () =
+        Error.value_count_mismatch ctx.diagnostics ~location:i.info ~expected:0
+          ~provided:(List.length args);
+        return_statement i (mk []) [||]
+      in
+      match (meth.desc, args) with
+      | "size", [] -> return_expression i (mk []) (addr ())
+      | "grow", [ v; n ] ->
+          let* v' = instruction ctx v in
+          let* n' = instruction ctx n in
+          check_elt v';
+          check_type ctx n' (addr ());
+          return_expression i (mk [ v'; n' ]) (addr ())
+      | "fill", [ d; v; n ] ->
+          let* d' = instruction ctx d in
+          let* v' = instruction ctx v in
+          let* n' = instruction ctx n in
+          check_type ctx d' (addr ());
+          check_elt v';
+          check_type ctx n' (addr ());
+          return_statement i (mk [ d'; v'; n' ]) [||]
+      | "copy", [ d; s; n ] ->
+          let* d' = instruction ctx d in
+          let* s' = instruction ctx s in
+          let* n' = instruction ctx n in
+          check_type ctx d' (addr ());
+          check_type ctx s' (addr ());
+          check_type ctx n' (addr ());
+          return_statement i (mk [ d'; s'; n' ]) [||]
+      | "init", { desc = Get seg; info = sinfo } :: ([ _; _; _ ] as rest) ->
+          ignore (Tbl.find ctx.diagnostics ctx.elems seg : reftype option);
+          let seg' = { desc = Get seg; info = ([||], sinfo) } in
+          let* rest' = instructions ctx rest in
+          (match rest' with
+          | [ d'; s'; n' ] ->
+              check_type ctx d' (addr ());
+              check_type ctx s' (i32 ());
+              check_type ctx n' (i32 ())
+          | _ -> ());
+          return_statement i (mk (seg' :: rest')) [||]
+      | _ -> bad ())
+  (* data.drop / elem.drop, on a segment name. *)
+  | Call
+      ( ({
+           desc =
+             StructGet
+               (({ desc = Get name; _ } as recv), ({ desc = "drop"; _ } as meth));
+           _;
+         } as func),
+        [] )
+    when Tbl.find_opt ctx.datas name <> None
+         || Tbl.find_opt ctx.elems name <> None ->
+      let recv' = { desc = Get name; info = ([||], recv.info) } in
+      return_statement i
+        (Call ({ desc = StructGet (recv', meth); info = ([||], func.info) }, []))
+        [||]
   | Call
       ( ({ desc = StructGet (a, ({ desc = "fill"; _ } as meth)); _ } as func),
         [ j; v; n ] ) ->
@@ -1778,6 +1916,36 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                info = ([| (*unused*) |], func.info);
              },
              [ i1'; a2'; i2'; n' ] ))
+        [||]
+  (* array.init_data / array.init_elem: arr.init(seg, dest, src, len). The
+     element type selects data vs elem (as for array.new). *)
+  | Call
+      ( ({ desc = StructGet (a, ({ desc = "init"; _ } as meth)); _ } as func),
+        { desc = Get seg; info = sinfo } :: ([ _; _; _ ] as rest) ) ->
+      let* a' = instruction ctx a in
+      let* rest' = instructions ctx rest in
+      let i32 = UnionFind.make (Valtype { typ = I32; internal = I32 }) in
+      (match rest' with
+      | [ d'; s'; n' ] ->
+          check_type ctx d' i32;
+          check_type ctx s' i32;
+          check_type ctx n' i32
+      | _ -> ());
+      (match UnionFind.find (expression_type ctx a') with
+      | Valtype { typ = Ref { typ = Type ty; _ }; _ } -> (
+          let>@ field = lookup_array_type ctx ty in
+          if not field.mut then
+            Error.immutable ctx.diagnostics ~location:a.info "array";
+          match field.typ with
+          | Value (Ref _) ->
+              ignore (Tbl.find ctx.diagnostics ctx.elems seg : reftype option)
+          | _ -> ignore (Tbl.find ctx.diagnostics ctx.datas seg : unit option))
+      | _ -> Error.expected_array_type ctx.diagnostics ~location:a.info);
+      let seg' = { desc = Get seg; info = ([||], sinfo) } in
+      return_statement i
+        (Call
+           ( { desc = StructGet (a', meth); info = ([||], func.info) },
+             seg' :: rest' ))
         [||]
   | Call
       ( ({ desc = StructGet (i1, ({ desc = "rotl" | "rotr"; _ } as meth)); _ }

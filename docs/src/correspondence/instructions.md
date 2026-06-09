@@ -153,6 +153,8 @@ if cond => (i32) -> i32 { ... } else { ... }
 | `array.new_fixed $t` | `[t\| val, ...]` |
 | `array.new_data $t $d` | `[t\| d @ offset; count]` |
 | `array.new_elem $t $e` | `[t\| e @ offset; count]` |
+| `array.init_data $t $d` | `arr.init(d, dest, src, count)` |
+| `array.init_elem $t $e` | `arr.init(e, dest, src, count)` |
 | `array.get $t` | `arr[idx]` |
 | `array.get_s $t` | `arr[idx] as i32_s` |
 | `array.get_u $t` | `arr[idx] as i32_u` |
@@ -188,6 +190,17 @@ m.load32(p, 1, 16);   // i32.load align=1 offset=16
 
 The alignment defaults to the access's natural alignment and is only printed when it differs; the offset defaults to `0`.
 
+The remaining memory operations are also methods on the memory (a data segment is named directly, not as a value):
+
+| Wax | Wasm |
+|-----|------|
+| `m.size()` | `memory.size` |
+| `m.grow(n)` | `memory.grow` |
+| `m.fill(dest, val, len)` | `memory.fill` |
+| `m.copy(dest, src, len)` | `memory.copy` |
+| `m.init(seg, dest, src, len)` | `memory.init seg` |
+| `seg.drop()` | `data.drop seg` |
+
 ## Table Access
 
 A [table](module_fields.md#tables) is indexed like an array, and an indirect call is written as a call through a table slot cast to the callee's function type.
@@ -201,6 +214,19 @@ A [table](module_fields.md#tables) is indexed like an array, and an indirect cal
 | `return_call_indirect $t (type $ft)` | `return (t[i] as &ft)(args)` |
 
 `call_indirect` is reconstructed from this pattern on conversion to WAT/WASM, so it round-trips. The cast target names the callee's function type: either a defined type (`&ft`) or an inline one written `&fn(params) -> results` (used when the WAT type is anonymous). When the table's element type is already the concrete function type `&ft`, the cast may be omitted (`t[i](args)`).
+
+The other table operations are methods on the table (an element segment is named directly):
+
+| Wax | Wasm |
+|-----|------|
+| `t.size()` | `table.size` |
+| `t.grow(val, n)` | `table.grow` |
+| `t.fill(dest, val, len)` | `table.fill` |
+| `t.copy(dest, src, len)` | `table.copy` |
+| `t.init(seg, dest, src, len)` | `table.init seg` |
+| `seg.drop()` | `elem.drop seg` |
+
+A GC array can also be filled from a segment with `arr.init(seg, dest, src, len)` (`array.init_data`/`array.init_elem`, selected by the array's element type) — the segment-from-array counterpart of [`array.new_data`/`array.new_elem`](#aggregate-instructions).
 
 ## Exception Instructions
 
@@ -241,6 +267,5 @@ Tags used with `suspend`/`resume` may have result types (unlike exception tags);
 
 The following WebAssembly features do not have dedicated Wax syntax. When converting from WAT/WASM to Wax, these instructions are preserved as-is or may be dropped:
 
-*   **Linear Memory management**: `memory.size`, `memory.grow`, `memory.fill`, `memory.copy`, `memory.init`, `data.drop`. Loads and stores have [dedicated syntax](#memory-access), but these management instructions do not yet.
-*   **Table management**: `table.size`, `table.grow`, `table.fill`, `table.copy`, `table.init`, `elem.drop`. Table access (`table.get`/`set`) and `call_indirect` have [dedicated syntax](#table-access), but these management instructions do not yet.
 *   **SIMD**: All `v128` vector instructions. The `v128` type exists but operations are not exposed.
+*   **Tuples**: `tuple.extract` (the multi-value/tuple proposal) has no dedicated syntax.

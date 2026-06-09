@@ -56,6 +56,9 @@ and valtype ty : Text.valtype =
 let reftype r : Text.reftype = { nullable = r.nullable; typ = heaptype r.typ }
 let unpack_type f = match f with Value v -> v | Packed _ -> I32
 
+let is_mgmt_method m =
+  match m with "size" | "grow" | "fill" | "copy" | "init" -> true | _ -> false
+
 let functype typ : Text.functype =
   let params = Array.map (fun (id, t) -> (id, valtype t)) typ.params in
   let results = Array.map valtype typ.results in
@@ -453,6 +456,49 @@ let rec instruction ret ctx i : location Text.instr list =
           | F32 -> folded loc (BinOp (F32 CopySign)) (obj_code @ arg_code)
           | F64 -> folded loc (BinOp (F64 CopySign)) (obj_code @ arg_code)
           | _ -> assert false)
+      (* Memory management: mem.size/grow/fill/copy/init *)
+      | StructGet ({ desc = Get name; _ }, meth)
+        when Hashtbl.mem ctx.memories name.desc && is_mgmt_method meth.desc -> (
+          let m = index name in
+          match meth.desc with
+          | "size" -> folded loc (MemorySize m) []
+          | "grow" -> folded loc (MemoryGrow m) arg_code
+          | "fill" -> folded loc (MemoryFill m) arg_code
+          | "copy" -> folded loc (MemoryCopy (m, m)) arg_code
+          | _ (* init *) ->
+              let seg =
+                match args with
+                | { desc = Get s; _ } :: _ -> s
+                | _ -> assert false
+              in
+              let rest_code =
+                List.concat_map (instruction ret ctx) (List.tl args)
+              in
+              folded loc (MemoryInit (m, index seg)) rest_code)
+      (* Table management: tab.size/grow/fill/copy/init *)
+      | StructGet ({ desc = Get name; _ }, meth)
+        when Hashtbl.mem ctx.tables name.desc && is_mgmt_method meth.desc -> (
+          let t = index name in
+          match meth.desc with
+          | "size" -> folded loc (TableSize t) []
+          | "grow" -> folded loc (TableGrow t) arg_code
+          | "fill" -> folded loc (TableFill t) arg_code
+          | "copy" -> folded loc (TableCopy (t, t)) arg_code
+          | _ (* init *) ->
+              let seg =
+                match args with
+                | { desc = Get s; _ } :: _ -> s
+                | _ -> assert false
+              in
+              let rest_code =
+                List.concat_map (instruction ret ctx) (List.tl args)
+              in
+              folded loc (TableInit (t, index seg)) rest_code)
+      (* data.drop / elem.drop *)
+      | StructGet ({ desc = Get name; _ }, { desc = "drop"; _ }) ->
+          if Hashtbl.mem ctx.elems name.desc then
+            folded loc (ElemDrop (index name)) []
+          else folded loc (DataDrop (index name)) []
       | StructGet (obj, { desc = "fill"; _ }) ->
           let array_code = instruction ret ctx obj in
           let type_name_idx = expr_type_name obj in
@@ -465,6 +511,22 @@ let rec instruction ret ctx i : location Text.instr list =
           folded loc
             (ArrayCopy (index type_a1, index type_a2))
             (a1_code @ arg_code)
+      (* array.init_data / array.init_elem: arr.init(seg, dest, src, len) *)
+      | StructGet (obj, { desc = "init"; _ }) ->
+          let seg =
+            match args with { desc = Get s; _ } :: _ -> s | _ -> assert false
+          in
+          let obj_code = instruction ret ctx obj in
+          let rest_code =
+            List.concat_map (instruction ret ctx) (List.tl args)
+          in
+          let arrty = expr_type_name obj in
+          let desc : _ Text.instr_desc =
+            if Hashtbl.mem ctx.elems seg.desc then
+              ArrayInitElem (index arrty, index seg)
+            else ArrayInitData (index arrty, index seg)
+          in
+          folded loc desc (obj_code @ rest_code)
       (* Indirect call: re-fuse [(tab[i] as &$ft)(args)] (and the cast-free
          [tab[i](args)] when the table element is already a concrete &$ft) back
          to [call_indirect]. *)
