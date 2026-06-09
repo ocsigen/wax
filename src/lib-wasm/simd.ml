@@ -590,3 +590,33 @@ let mem_method name : mem_intrinsic option =
   | _ -> None
 
 let is_mem_method name = mem_method name <> None
+
+(* Every reserved intrinsic name (methods, free functions and memory ops), so
+   [from_wasm] can rename any module entity that would otherwise shadow one. *)
+let all_names : string list =
+  let methods = Hashtbl.fold (fun k _ acc -> k :: acc) table [] in
+  let consts =
+    List.map const_name
+      ([ I8x16; I16x8; I32x4; I64x2; F32x4; F64x2 ] : Utils.V128.shape list)
+  in
+  let loads =
+    List.map vec_load_name
+      ([
+         Load128;
+         Load8x8S;
+         Load8x8U;
+         Load16x4S;
+         Load16x4U;
+         Load32x2S;
+         Load32x2U;
+         Load32Zero;
+         Load64Zero;
+       ]
+        : Ast.vec_load_op list)
+  in
+  let lane_ops =
+    List.concat_map
+      (fun w -> [ load_splat_name w; load_lane_name w; store_lane_name w ])
+      [ `I8; `I16; `I32; `I64 ]
+  in
+  methods @ consts @ loads @ (store_name :: lane_ops)

@@ -87,3 +87,7 @@ type mem_intrinsic = {
 
 val mem_method : string -> mem_intrinsic option
 val is_mem_method : string -> bool
+
+val all_names : string list
+(** Every reserved intrinsic name (methods, free functions, memory ops). Used to
+    keep generated wax names from shadowing an intrinsic. *)
