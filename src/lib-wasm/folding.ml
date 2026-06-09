@@ -226,7 +226,11 @@ let locals env typ l =
       (fun tbl (id, typ) -> Tbl.add id typ tbl)
       (Tbl.empty env.cctx) ty.params
   in
-  List.fold_left (fun tbl (id, typ) -> Tbl.add id typ tbl) tbl l
+  List.fold_left
+    (fun tbl e ->
+      let id, typ = e.Ast.desc in
+      Tbl.add id typ tbl)
+    tbl l
 
 let module_env (_, m) =
   let cctx = make_cond_ctx () in

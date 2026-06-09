@@ -830,9 +830,14 @@ exports:
 locals:
 | { [] }
 | LPAREN_LOCAL i = ID t = value_type ")" r = locals
-  { (Some i, t) :: r }
+  { with_loc $sloc (Some i, t) :: r }
+(* As for fields, only the single-local case gets a comment-anchoring
+   location; an anonymous (local t1 t2 ...) shares one span. *)
 | LPAREN_LOCAL l = value_type * ")" r = locals
-  { List.map (fun t -> (None, t)) l @ r }
+  { (match l with
+     | [ t ] -> [ with_loc $sloc (None, t) ]
+     | _ -> List.map (fun t -> Ast.no_loc (None, t)) l)
+    @ r }
 
 memory:
 | "(" MEMORY id = ID? exports = exports limits = memory_type ")"

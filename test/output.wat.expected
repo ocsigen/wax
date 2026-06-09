@@ -1973,11 +1973,8 @@
 (export "caml_bytes_of_array" (func $caml_string_of_array))
 (func $caml_string_of_array (export "caml_string_of_array")
   (param (ref eq)) (result (ref eq))
-  (local
-    ;; used to convert a typed array to a string
-    $a
-    (ref extern))
-  (local $len i32) (local $s (ref $string))
+  ;; used to convert a typed array to a string
+  (local $a (ref extern)) (local $len i32) (local $s (ref $string))
   (local.set $a
     (ref.as_non_null (extern.convert_any (call $unwrap (local.get 0)))))
   (local.set $len (call $ta_length (local.get $a)))
@@ -1990,11 +1987,8 @@
 (export "caml_uint8_array_of_bytes" (func $caml_uint8_array_of_string))
 (func $caml_uint8_array_of_string (export "caml_uint8_array_of_string")
   (param (ref eq)) (result (ref eq))
-  (local
-    ;; Convert a string to a typed array
-    $ta
-    (ref extern))
-  (local $len i32) (local $s (ref $string))
+  ;; Convert a string to a typed array
+  (local $ta (ref extern)) (local $len i32) (local $s (ref $string))
   (local.set $s (ref.cast (ref $string) (local.get 0)))
   (local.set $len (array.len (local.get $s)))
   (local.set $ta

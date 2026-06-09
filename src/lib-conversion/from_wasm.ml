@@ -1139,7 +1139,8 @@ and instructions ctx l =
 
 let bind_locals st l =
   List.map
-    (fun (_, t) ->
+    (fun e ->
+      let _, t = e.Ast.desc in
       Ast.no_loc
         (Ast.Let
            ( [ (Some (Sequence.get_current st.locals), Some (valtype st t)) ],
@@ -1273,7 +1274,8 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
         in
         let typ = Option.map (fun i -> idx ctx `Type i) (fst typ) in
         List.iter
-          (fun (id, _) -> Sequence.register ctx.locals export_tbl None id [])
+          (fun e ->
+            Sequence.register ctx.locals export_tbl None (fst e.Ast.desc) [])
           locals;
         let locals = bind_locals ctx locals in
         let name = Sequence.get_current ctx.functions in

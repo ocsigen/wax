@@ -95,12 +95,10 @@
 )
 
 (func (export "caml_input_value") (param $ch (ref eq)) (result (ref eq))
-  (local
-    ;; ZZZ check binary channel?
-    $r
-    i32)
-  (local $len i32) (local $header (ref $string)) (local $buf (ref $string))
-  (local $s (ref $intern_state)) (local $h (ref $marshal_header))
+  ;; ZZZ check binary channel?
+  (local $r i32) (local $len i32) (local $header (ref $string))
+  (local $buf (ref $string)) (local $s (ref $intern_state))
+  (local $h (ref $marshal_header))
   (local.set $header (array.new $string (i32.const 0) (i32.const 20)))
   (local.set $r
     (call $caml_really_getblock (local.get $ch) (local.get $header)

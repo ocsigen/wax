@@ -553,11 +553,9 @@
 (func (export "re_search_forward")
   (param $re (ref eq)) (param $vs (ref eq)) (param $vpos (ref eq))
   (result (ref eq))
-  (local
-    ;; ZZZ startchars
-    $s
-    (ref $string))
-  (local $pos i32) (local $len i32) (local $res (ref eq))
+  ;; ZZZ startchars
+  (local $s (ref $string)) (local $pos i32) (local $len i32)
+  (local $res (ref eq))
   (local.set $s (ref.cast (ref $string) (local.get $vs)))
   (local.set $pos (i31.get_s (ref.cast (ref i31) (local.get $vpos))))
   (local.set $len (array.len (local.get $s)))
@@ -581,11 +579,9 @@
 (func (export "re_search_backward")
   (param $re (ref eq)) (param $vs (ref eq)) (param $vpos (ref eq))
   (result (ref eq))
-  (local
-    ;; ZZZ startchars
-    $s
-    (ref $string))
-  (local $pos i32) (local $len i32) (local $res (ref eq))
+  ;; ZZZ startchars
+  (local $s (ref $string)) (local $pos i32) (local $len i32)
+  (local $res (ref eq))
   (local.set $s (ref.cast (ref $string) (local.get $vs)))
   (local.set $pos (i31.get_s (ref.cast (ref i31) (local.get $vpos))))
   (local.set $len (array.len (local.get $s)))
@@ -609,11 +605,9 @@
 (func (export "re_string_match")
   (param $re (ref eq)) (param $vs (ref eq)) (param $vpos (ref eq))
   (result (ref eq))
-  (local
-    ;; ZZZ startchars
-    $s
-    (ref $string))
-  (local $pos i32) (local $len i32) (local $res (ref eq))
+  ;; ZZZ startchars
+  (local $s (ref $string)) (local $pos i32) (local $len i32)
+  (local $res (ref eq))
   (local.set $s (ref.cast (ref $string) (local.get $vs)))
   (local.set $pos (i31.get_s (ref.cast (ref i31) (local.get $vpos))))
   (local.set $len (array.len (local.get $s)))
@@ -634,11 +628,9 @@
 (func (export "re_partial_match")
   (param $re (ref eq)) (param $vs (ref eq)) (param $vpos (ref eq))
   (result (ref eq))
-  (local
-    ;; ZZZ startchars
-    $s
-    (ref $string))
-  (local $pos i32) (local $len i32) (local $res (ref eq))
+  ;; ZZZ startchars
+  (local $s (ref $string)) (local $pos i32) (local $len i32)
+  (local $res (ref eq))
   (local.set $s (ref.cast (ref $string) (local.get $vs)))
   (local.set $pos (i31.get_s (ref.cast (ref i31) (local.get $vpos))))
   (local.set $len (array.len (local.get $s)))

@@ -2168,7 +2168,8 @@ let functions ctx fields =
                   Sequence.register locals None typ)
                 func_typ.params);
           List.iter
-            (fun (id, typ) ->
+            (fun e ->
+              let id, typ = e.Ast.desc in
               let typ =
                 match valtype ctx.diagnostics ctx.types typ with
                 | None -> (* Dummy value *) Ref { nullable = true; typ = Any }
@@ -2638,19 +2639,19 @@ let check_syntax diagnostics (_, lst) =
     | _ -> ()
   in
   let check_duplicate_locals typ locals =
-    let params =
+    let param_ids =
       match snd typ with
-      | Some { Ast.Text.params; _ } -> Array.to_list params
+      | Some { Ast.Text.params; _ } -> Array.to_list (Array.map fst params)
       | None -> []
     in
-    let all_locals = params @ locals in
+    let local_ids = List.map (fun e -> fst e.Ast.desc) locals in
     let seen = Hashtbl.create 16 in
     List.iter
-      (fun (id, _) ->
+      (fun id ->
         let*? id : Ast.Text.name = id in
         if Hashtbl.mem seen id.desc then failwith ("duplicate local $" ^ id.desc)
         else Hashtbl.add seen id.desc ())
-      all_locals
+      (param_ids @ local_ids)
   in
   List.iter
     (fun (field : (_ Ast.Text.modulefield, _) Ast.annotated) ->

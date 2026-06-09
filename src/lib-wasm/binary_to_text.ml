@@ -488,7 +488,8 @@ let module_ (m : _ B.module_) : _ T.module_ =
                List.mapi
                  (fun i v ->
                    let name = B.IntMap.find_opt (offset + i) local_names in
-                   (Option.map Ast.no_loc name, valtype m.names.types v))
+                   Ast.no_loc
+                     (Option.map Ast.no_loc name, valtype m.names.types v))
                  code.locals);
             instrs =
               List.map

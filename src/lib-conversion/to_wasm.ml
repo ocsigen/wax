@@ -983,7 +983,7 @@ let module_ diagnostics types fields =
                     {
                       id = Some name;
                       typ = typeuse typ sign;
-                      locals = func_locals;
+                      locals = List.map Ast.no_loc func_locals;
                       instrs;
                       exports = exports attributes;
                     }

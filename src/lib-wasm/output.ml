@@ -115,7 +115,12 @@ type sexp =
       s : string;
     }
   | List of Ast.location option * sexp list
-  | Block of { loc : Ast.location option; l : sexp list; transparent : bool }
+  | Block of {
+      loc : Ast.location option;
+      l : sexp list;
+      transparent : bool;
+      bk : [ `Box | `Hov | `Hv ];
+    }
   | Vertical_block of sexp list
   | Structured_block of Ast.location option * structure list
 
@@ -157,13 +162,17 @@ let rec format_sexp in_block depth first ctx s =
           Printer.box p (fun () ->
               print_styled ctx Punctuation ")";
               print_trivia ctx trivia.after))
-  | Block { l; transparent; loc } ->
+  | Block { l; transparent; loc; bk } ->
       let trivia = get_trivia ctx loc in
       let indent = if first then ctx.indent_level - 1 else 0 in
       print_trivia ctx trivia.before;
-      (if (not in_block) && transparent && ctx.format = Expansive then
-         Printer.vbox
-       else Printer.box) p ~indent (fun () ->
+      (match bk with
+      | `Hv -> Printer.hvbox
+      | `Hov -> Printer.hovbox
+      | `Box ->
+          if (not in_block) && transparent && ctx.format = Expansive then
+            Printer.vbox
+          else Printer.box) p ~indent (fun () ->
           List.iteri
             (fun i v ->
               if i > 0 then Printer.space p ();
@@ -213,7 +222,10 @@ let keyword ?loc s = atom ~style:Keyword ?loc s
 let instruction ?loc s = atom ~style:Instruction ?loc s
 let type_ ?loc s = atom ~style:Type ?loc s
 let list ?loc l = List (loc, l)
-let block ?loc ?(transparent = false) l = Block { loc; l; transparent }
+
+let block ?loc ?(transparent = false) ?(bk = `Box) l =
+  Block { loc; l; transparent; bk }
+
 let structured_block ?loc l = Structured_block (loc, l)
 let option f x = match x with None -> [] | Some x -> f x
 let u32 ~style ?loc i = atom ~style ?loc (Uint32.to_string i)
@@ -1195,18 +1207,25 @@ let rec modulefield f =
   | Types [| t |] -> subtype t
   | Types l -> list ~loc (keyword "rec" :: List.map subtype (Array.to_list l))
   | Func { id; typ; locals; instrs = i; exports = e } ->
+      let local_sexp idx e =
+        let nm, t = e.Ast.desc in
+        (* The first local's location is carried by the group (below) so a
+           comment leading the locals merges with the line break before the
+           group instead of leaving a blank line; the others keep theirs, and
+           the hovbox lets a comment before any of them break correctly while
+           the locals stay packed. *)
+        let loc = if idx = 0 then None else Some e.Ast.info in
+        list ?loc (keyword "local" :: (opt_id nm @ [ valtype t ]))
+      in
+      let locals_block =
+        match locals with
+        | [] -> []
+        | first :: _ ->
+            [ block ~loc:first.Ast.info ~bk:`Hov (List.mapi local_sexp locals) ]
+      in
       list ~loc
         (block (keyword "func" :: (opt_id id @ exports e @ fundecl typ))
-        :: ((if locals = [] then []
-             else
-               [
-                 block
-                   (List.map
-                      (fun (i, t) ->
-                        list (keyword "local" :: (opt_id i @ [ valtype t ])))
-                      locals);
-               ])
-           @ instrs i))
+        :: (locals_block @ instrs i))
   | Import { module_; name; id; desc; exports = e } -> (
       let kind, typ =
         match desc with

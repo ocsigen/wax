@@ -296,10 +296,8 @@
 ;; Allocate a stack
 
 (func $call_handler (param $f (ref eq)) (param $x (ref eq))
-  (local
-    ;; Propagate a value or an exception to the parent fiber
-    $cont
-    (ref $cont))
+  ;; Propagate a value or an exception to the parent fiber
+  (local $cont (ref $cont))
   (return_call_ref $cont_func
     (struct.new $pair (local.get $f) (local.get $x))
     (local.tee $cont (call $pop_fiber))
@@ -307,11 +305,8 @@
 )
 
 (func (export "caml_start_fiber") (param $p eqref)
-  (local
-    ;; Start executing some code in a new fiber
-    $exn
-    (ref eq))
-  (local $res (ref eq))
+  ;; Start executing some code in a new fiber
+  (local $exn (ref eq)) (local $res (ref eq))
   (local.set $res
     (try (result (ref eq))
       (do

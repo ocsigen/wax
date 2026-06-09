@@ -698,17 +698,16 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
                   | None -> assert false)
               | _ -> 0
             in
-            let all_variables_for_mapping =
-              match typ with
-              | _, Some { params; _ } -> Array.to_list params @ locals
-              | _, None -> locals
+            let all_ids =
+              (match typ with
+                | _, Some { params; _ } -> Array.to_list (Array.map fst params)
+                | _, None -> [])
+              @ List.map (fun e -> fst e.Ast.desc) locals
             in
             List.fold_left
-              (fun space (id, _) ->
-                let space, _ = add_name space id in
-                space)
+              (fun space id -> fst (add_name space id))
               { empty_space with count = num_unnamed_params }
-              all_variables_for_mapping
+              all_ids
           in
           let func_ctx = { ctx with locals = locals_space } in
 
@@ -722,7 +721,9 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
           if not (B.IntMap.is_empty label_map) then
             labels_names := B.IntMap.add func_idx label_map !labels_names;
 
-          let b_locals = List.map (fun (_, v) -> valtype ctx v) locals in
+          let b_locals =
+            List.map (fun e -> valtype ctx (snd e.Ast.desc)) locals
+          in
           let converted_func =
             {
               B.locals = b_locals;

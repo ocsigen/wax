@@ -191,11 +191,8 @@
 )
 
 (func $clear_compare_stack
-  (local
-    ;; clear stack (to avoid memory leaks)
-    $stack
-    (ref $compare_stack))
-  (local $n i32) (local $res i32)
+  ;; clear stack (to avoid memory leaks)
+  (local $stack (ref $compare_stack)) (local $n i32) (local $res i32)
   (local.set $stack (global.get $default_compare_stack))
   (local.set $n (struct.get $compare_stack 0 (local.get $stack)))
   (if (i32.ge_s (local.get $n) (i32.const 0))

@@ -635,7 +635,7 @@ module Text = struct
     | Func of {
         id : name option;
         typ : typeuse;
-        locals : (name option * valtype) list;
+        locals : (name option * valtype, location) annotated list;
         instrs : 'info instr list;
         exports : name list;
       }
