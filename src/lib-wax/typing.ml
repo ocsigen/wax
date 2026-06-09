@@ -1742,6 +1742,31 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
           check_type ctx s' (addr ());
           check_type ctx n' (addr ());
           return_statement i (mk [ d'; s'; n' ]) [||]
+      (* Cross-memory copy: dst.copy(src, d, s, n). The dest offset has the
+         destination's address type, the source offset the source's, and the
+         length the smaller of the two. *)
+      | "copy", { desc = Get src; info = sinfo } :: ([ _; _; _ ] as rest)
+        when Tbl.find_opt ctx.memories src <> None ->
+          let src_at =
+            match Tbl.find_opt ctx.memories src with
+            | Some (_, a) -> a
+            | None -> at
+          in
+          let addr_of a = UnionFind.make (Valtype (address_valtype a)) in
+          let min_at =
+            match (at, src_at) with
+            | `I32, _ | _, `I32 -> `I32
+            | `I64, `I64 -> `I64
+          in
+          let src' = { desc = Get src; info = ([||], sinfo) } in
+          let* rest' = instructions ctx rest in
+          (match rest' with
+          | [ d'; s'; n' ] ->
+              check_type ctx d' (addr_of at);
+              check_type ctx s' (addr_of src_at);
+              check_type ctx n' (addr_of min_at)
+          | _ -> ());
+          return_statement i (mk (src' :: rest')) [||]
       | "init", { desc = Get seg; info = sinfo } :: ([ _; _; _ ] as rest) ->
           ignore (Tbl.find ctx.diagnostics ctx.datas seg : unit option);
           let seg' = { desc = Get seg; info = ([||], sinfo) } in
@@ -1804,6 +1829,31 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
           check_type ctx s' (addr ());
           check_type ctx n' (addr ());
           return_statement i (mk [ d'; s'; n' ]) [||]
+      (* Cross-table copy: dst.copy(src, d, s, n). The dest offset has the
+         destination's address type, the source offset the source's, and the
+         length the smaller of the two. *)
+      | "copy", { desc = Get src; info = sinfo } :: ([ _; _; _ ] as rest)
+        when Tbl.find_opt ctx.tables src <> None ->
+          let src_at =
+            match Tbl.find_opt ctx.tables src with
+            | Some (a, _) -> a
+            | None -> at
+          in
+          let addr_of a = UnionFind.make (Valtype (address_valtype a)) in
+          let min_at =
+            match (at, src_at) with
+            | `I32, _ | _, `I32 -> `I32
+            | `I64, `I64 -> `I64
+          in
+          let src' = { desc = Get src; info = ([||], sinfo) } in
+          let* rest' = instructions ctx rest in
+          (match rest' with
+          | [ d'; s'; n' ] ->
+              check_type ctx d' (addr_of at);
+              check_type ctx s' (addr_of src_at);
+              check_type ctx n' (addr_of min_at)
+          | _ -> ());
+          return_statement i (mk (src' :: rest')) [||]
       | "init", { desc = Get seg; info = sinfo } :: ([ _; _; _ ] as rest) ->
           ignore (Tbl.find ctx.diagnostics ctx.elems seg : reftype option);
           let seg' = { desc = Get seg; info = ([||], sinfo) } in

@@ -463,7 +463,14 @@ let rec instruction ret ctx i : location Text.instr list =
           | "size" -> folded loc (MemorySize m) []
           | "grow" -> folded loc (MemoryGrow m) arg_code
           | "fill" -> folded loc (MemoryFill m) arg_code
-          | "copy" -> folded loc (MemoryCopy (m, m)) arg_code
+          | "copy" -> (
+              (* Cross-memory copy names the source memory as the first arg. *)
+              match args with
+              | { desc = Get src; _ } :: rest
+                when Hashtbl.mem ctx.memories src.desc ->
+                  let rest_code = List.concat_map (instruction ret ctx) rest in
+                  folded loc (MemoryCopy (m, index src)) rest_code
+              | _ -> folded loc (MemoryCopy (m, m)) arg_code)
           | _ (* init *) ->
               let seg =
                 match args with
@@ -482,7 +489,14 @@ let rec instruction ret ctx i : location Text.instr list =
           | "size" -> folded loc (TableSize t) []
           | "grow" -> folded loc (TableGrow t) arg_code
           | "fill" -> folded loc (TableFill t) arg_code
-          | "copy" -> folded loc (TableCopy (t, t)) arg_code
+          | "copy" -> (
+              (* Cross-table copy names the source table as the first arg. *)
+              match args with
+              | { desc = Get src; _ } :: rest
+                when Hashtbl.mem ctx.tables src.desc ->
+                  let rest_code = List.concat_map (instruction ret ctx) rest in
+                  folded loc (TableCopy (t, index src)) rest_code
+              | _ -> folded loc (TableCopy (t, t)) arg_code)
           | _ (* init *) ->
               let seg =
                 match args with

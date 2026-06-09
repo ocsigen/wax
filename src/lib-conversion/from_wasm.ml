@@ -1360,11 +1360,16 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       let* v = Stack.pop in
       let* d = Stack.pop in
       Stack.push 0 (mem_call m "fill" [ d; v; n ])
-  | MemoryCopy (m, _) ->
+  | MemoryCopy (m, m') ->
       let* n = Stack.pop in
       let* s = Stack.pop in
       let* d = Stack.pop in
-      Stack.push 0 (mem_call m "copy" [ d; s; n ])
+      (* A copy between two different memories names the source explicitly. *)
+      let args =
+        if (idx ctx `Mem m).desc = (idx ctx `Mem m').desc then [ d; s; n ]
+        else with_loc (Ast.Get (idx ctx `Mem m')) :: [ d; s; n ]
+      in
+      Stack.push 0 (mem_call m "copy" args)
   | MemoryInit (m, data) ->
       let* n = Stack.pop in
       let* s = Stack.pop in
@@ -1382,11 +1387,15 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       let* v = Stack.pop in
       let* d = Stack.pop in
       Stack.push 0 (table_call t "fill" [ d; v; n ])
-  | TableCopy (t, _) ->
+  | TableCopy (t, t') ->
       let* n = Stack.pop in
       let* s = Stack.pop in
       let* d = Stack.pop in
-      Stack.push 0 (table_call t "copy" [ d; s; n ])
+      let args =
+        if (idx ctx `Table t).desc = (idx ctx `Table t').desc then [ d; s; n ]
+        else with_loc (Ast.Get (idx ctx `Table t')) :: [ d; s; n ]
+      in
+      Stack.push 0 (table_call t "copy" args)
   | TableInit (t, elem) ->
       let* n = Stack.pop in
       let* s = Stack.pop in

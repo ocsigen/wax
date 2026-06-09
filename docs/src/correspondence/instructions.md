@@ -197,7 +197,8 @@ The remaining memory operations are also methods on the memory (a data segment i
 | `m.size()` | `memory.size` |
 | `m.grow(n)` | `memory.grow` |
 | `m.fill(dest, val, len)` | `memory.fill` |
-| `m.copy(dest, src, len)` | `memory.copy` |
+| `m.copy(dest, src, len)` | `memory.copy` (within `m`) |
+| `m.copy(m2, dest, src, len)` | `memory.copy m m2` (copy from `m2` into `m`) |
 | `m.init(seg, dest, src, len)` | `memory.init seg` |
 | `seg.drop()` | `data.drop seg` |
 
@@ -222,7 +223,8 @@ The other table operations are methods on the table (an element segment is named
 | `t.size()` | `table.size` |
 | `t.grow(val, n)` | `table.grow` |
 | `t.fill(dest, val, len)` | `table.fill` |
-| `t.copy(dest, src, len)` | `table.copy` |
+| `t.copy(dest, src, len)` | `table.copy` (within `t`) |
+| `t.copy(t2, dest, src, len)` | `table.copy t t2` (copy from `t2` into `t`) |
 | `t.init(seg, dest, src, len)` | `table.init seg` |
 | `seg.drop()` | `elem.drop seg` |
 
