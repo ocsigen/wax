@@ -11,7 +11,7 @@ Confirm the expected number of examples was extracted (bump this and promote
 when you add or remove an example):
 
   $ ls blk*.wax | wc -l
-  11
+  12
 
 Each example must type-check and convert to WAT. A failing block prints its
 name and first error; success prints nothing:

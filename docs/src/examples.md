@@ -329,3 +329,33 @@ fn hash_finalize(h: i32) -> i32 {
     h ^ h >>u 16;
 }
 ```
+
+## Holes (Stack Values)
+
+Holes (`_`) plug in values that earlier statements leave on the operand stack.
+The two holes in `_ + _` consume `x * 2` and `y * 3`, left-to-right in the order
+they were produced. See [Holes](language.md#holes) for the full rules.
+
+### Wax
+
+```wax
+#[export = "blend"]
+fn blend(x: i32, y: i32) -> i32 {
+    x * 2;
+    y * 3;
+    _ + _;
+}
+```
+
+### Equivalent WAT
+
+```wat
+(func $blend (export "blend") (param $x i32) (param $y i32) (result i32)
+  local.get $x
+  i32.const 2
+  i32.mul
+  local.get $y
+  i32.const 3
+  i32.mul
+  i32.add)
+```
