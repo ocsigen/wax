@@ -41,11 +41,10 @@ val report_token : context -> int -> unit
 val with_pos : context -> Ast.location -> 'a -> ('a, Ast.location) Ast.annotated
 (** [with_pos ctx loc v] wraps [v] with location [loc]. *)
 
-(** {1 Rendering}
+(** {1 Association lookup}
 
-    Shared logic for emitting associated trivia while pretty-printing, used by
-    both the Wax and the WebAssembly printers. The only printer-specific part is
-    the comment styling, passed in as the [comment] callback. *)
+    Looking up the trivia attached to a location. Rendering it to styled output
+    lives in {!Styled_printer}, which owns the colour theme. *)
 
 val dummy_assoc : associated
 (** The empty association ([before], [within] and [after] all empty). *)
@@ -64,26 +63,9 @@ val get :
     from being emitted repeatedly when conversion replicates one source location
     onto several output nodes. *)
 
-val print : Printer.t -> comment:(string -> unit) -> entry list -> unit
-(** [print pp ~comment lst] emits the trivia entries [lst] to [pp], rendering
-    comment text with [comment] and blank lines/spacing with [pp]. *)
-
 val drop_trailing_blank_lines : entry list -> entry list
 (** Drop blank-line entries at the end of the list, so emitted tail trivia does
     not leave spurious blank lines at the end of the file. *)
-
-val around :
-  ?collect:(Ast.location, unit) Hashtbl.t ->
-  Printer.t ->
-  comment:(string -> unit) ->
-  t ->
-  seen:(Ast.location, unit) Hashtbl.t ->
-  Ast.location option ->
-  (unit -> unit) ->
-  unit
-(** [around pp ~comment trivia ~seen loc f] looks up [loc] (with {!get}) and
-    prints its [before] trivia, then runs [f], then its [within] and [after]
-    trivia. *)
 
 (** {1 Cross-format translation}
 

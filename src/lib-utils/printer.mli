@@ -3,9 +3,10 @@ type t
     spaces/newlines, and attached comments/blank lines. *)
 
 val indent : t -> int -> (unit -> unit) -> unit
-(** [indent pp indent f] executes the function [f] with the current indentation
-    level increased by [indent]. The indentation level is restored after [f]
-    completes. *)
+(** [indent pp n f] runs [f] with the break-indentation set to [n] — the offset
+    applied when a {!space}/{!newline}/{!cut} within [f] breaks the line. The
+    enclosing box resets this offset to 0, so [n] is measured from the box's own
+    indentation. The previous value is restored after [f] completes. *)
 
 val string : t -> string -> unit
 (** Prints a string to the formatter, flushing any pending items first. *)

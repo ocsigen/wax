@@ -27,12 +27,40 @@ let print_styled t style ?(len = None) text =
   if seq <> "" then Printer.string_as t.printer 0 t.theme.reset
 
 let comment t s = print_styled t Comment s
-let print_trivia t lst = Trivia.print t.printer ~comment:(comment t) lst
+
+(* Emit a list of trivia entries (comments, blank lines), styling comment text
+   with the theme and laying out spacing with the printer. *)
+let print_trivia t lst =
+  let open Trivia in
+  List.iter
+    (fun e ->
+      match (e.trivia, e.position) with
+      | Item { kind = Block_comment; content; _ }, _ ->
+          Printer.space t.printer ();
+          comment t content;
+          Printer.space t.printer ()
+      | Item { kind = Line_comment; content; _ }, Inline ->
+          (* Trailing comment: defer it past a following separator (e.g. a list
+             comma) so the separator stays on this line, ahead of the comment. *)
+          Printer.defer_eol t.printer (fun () ->
+              Printer.string t.printer " ";
+              comment t (String.trim content))
+      | Item { kind = Line_comment; content; _ }, Line_start ->
+          Printer.newline t.printer ();
+          comment t (String.trim content);
+          Printer.newline t.printer ()
+      | Item { kind = Annotation; _ }, _ -> ()
+      | Blank_line, _ -> Printer.blank_line t.printer ())
+    lst
+
 let get_trivia t loc = Trivia.get ?collect:t.collect t.trivia ~seen:t.seen loc
 
 let atomic_node t loc f =
-  Trivia.around ?collect:t.collect t.printer ~comment:(comment t) t.trivia
-    ~seen:t.seen loc f
+  let assoc = get_trivia t loc in
+  print_trivia t assoc.before;
+  f ();
+  print_trivia t assoc.within;
+  print_trivia t assoc.after
 
 let with_style t style f =
   match t.style_override with

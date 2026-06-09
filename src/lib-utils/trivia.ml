@@ -1,5 +1,3 @@
-let debug_report = false
-
 type position = Line_start | Inline
 type kind = Line_comment | Block_comment | Annotation
 type trivia = Item of { content : string; kind : kind } | Blank_line
@@ -16,29 +14,16 @@ type t = (Ast.location, associated) Hashtbl.t
 type context = {
   mutable comments : entry list;
   mutable at_start_of_line : bool;
-  mutable last_loc : Ast.location option;
   mutable prev_token_end : int;
   mutable locations : Ast.location list;
 }
 
 let make () =
-  {
-    comments = [];
-    at_start_of_line = true;
-    last_loc = None;
-    prev_token_end = 0;
-    locations = [];
-  }
+  { comments = []; at_start_of_line = true; prev_token_end = 0; locations = [] }
 
 let add_entry ctx entry = ctx.comments <- entry :: ctx.comments
 
 let report_item ctx kind content =
-  if debug_report then
-    Format.eprintf "ITEM %b %s@." ctx.at_start_of_line
-      (match kind with
-      | Line_comment -> "line comment"
-      | Block_comment -> "block comment"
-      | Annotation -> "annotation");
   add_entry ctx
     {
       anchor = ctx.prev_token_end;
@@ -48,7 +33,6 @@ let report_item ctx kind content =
   ctx.at_start_of_line <- kind = Line_comment
 
 let report_newline ctx =
-  if debug_report then Format.eprintf "NEWLINE %b@." ctx.at_start_of_line;
   if ctx.at_start_of_line then
     add_entry ctx
       {
@@ -59,38 +43,10 @@ let report_newline ctx =
   ctx.at_start_of_line <- true
 
 let report_token ctx pos =
-  if debug_report then Format.eprintf "TOKEN@.";
   ctx.at_start_of_line <- false;
   ctx.prev_token_end <- pos
 
-let check_loc ctx (loc : Ast.location) =
-  if false then
-    let start_pos = loc.loc_start in
-    let end_pos = loc.loc_end in
-    match ctx.last_loc with
-    | None -> ()
-    | Some last ->
-        let last_start = last.loc_start in
-        let last_end = last.loc_end in
-        let strictly_before =
-          last_end.Lexing.pos_cnum <= start_pos.Lexing.pos_cnum
-        in
-        let within =
-          start_pos.Lexing.pos_cnum <= last_start.Lexing.pos_cnum
-          && last_end.Lexing.pos_cnum <= end_pos.Lexing.pos_cnum
-        in
-        if not (strictly_before || within) then
-          Printf.eprintf
-            "Location check failed: previous (%d-%d), current (%d-%d)\n%!"
-            last_start.Lexing.pos_cnum last_end.Lexing.pos_cnum
-            start_pos.Lexing.pos_cnum end_pos.Lexing.pos_cnum
-
 let with_pos ctx info desc =
-  (if false then
-     let loc = info in
-     Format.eprintf "%d--%d@." loc.Ast.loc_start.pos_cnum loc.loc_end.pos_cnum);
-  check_loc ctx info;
-  ctx.last_loc <- Some info;
   ctx.locations <- info :: ctx.locations;
   { Ast.desc; info }
 
@@ -107,9 +63,6 @@ let associate ?only ctx =
   in
   let tbl = Hashtbl.create (List.length locations) in
   let comments = List.rev ctx.comments in
-  if false then (
-    List.iter (fun c -> Format.eprintf "%d " c.anchor) comments;
-    Format.eprintf "@.");
   let locs =
     List.sort
       (fun a b ->
@@ -205,51 +158,15 @@ let associate ?only ctx =
               | None -> get_after loc.Ast.loc_end.Lexing.pos_cnum ~upto rem3)
           | None -> get_after loc.Ast.loc_end.Lexing.pos_cnum ~upto rem3
         in
-        if false then
-          Format.eprintf "%d--%d %d %d %d@." loc.loc_start.pos_cnum
-            loc.loc_end.pos_cnum (List.length before)
-            (List.length within_candidates)
-            (List.length final_after);
         Hashtbl.add tbl loc
           { before; within = within_candidates; after = final_after };
         process siblings rem4
   in
-  if false then
-    List.iter
-      (fun loc ->
-        Format.eprintf "%d--%d@." loc.Ast.loc_start.pos_cnum
-          loc.loc_end.pos_cnum)
-      locs;
   let leftover = process locs comments in
   (* [leftover] holds comments that no location owns: trailing comments after
      the last node, or — when the module has no locations at all (e.g. an empty
      [(module)]) — the whole file. The caller prints them as tail trivia. *)
   (tbl, leftover)
-
-(* Rendering. Shared by the Wax and WebAssembly printers; the comment styling is
-   provided by the [comment] callback. *)
-
-let print pp ~comment lst =
-  List.iter
-    (fun e ->
-      match (e.trivia, e.position) with
-      | Item { kind = Block_comment; content; _ }, _ ->
-          Printer.space pp ();
-          comment content;
-          Printer.space pp ()
-      | Item { kind = Line_comment; content; _ }, Inline ->
-          (* Trailing comment: defer it past a following separator (e.g. a list
-             comma) so the separator stays on this line, ahead of the comment. *)
-          Printer.defer_eol pp (fun () ->
-              Printer.string pp " ";
-              comment (String.trim content))
-      | Item { kind = Line_comment; content; _ }, Line_start ->
-          Printer.newline pp ();
-          comment (String.trim content);
-          Printer.newline pp ()
-      | Item { kind = Annotation; _ }, _ -> ()
-      | Blank_line, _ -> Printer.blank_line pp ())
-    lst
 
 let drop_trailing_blank_lines entries =
   let rec drop = function
@@ -276,13 +193,6 @@ let get ?collect trivia ~seen loc =
           else (
             Hashtbl.add seen loc ();
             assoc))
-
-let around ?collect pp ~comment trivia ~seen loc f =
-  let assoc = get ?collect trivia ~seen loc in
-  print pp ~comment assoc.before;
-  f ();
-  print pp ~comment assoc.within;
-  print pp ~comment assoc.after
 
 (* Cross-format delimiter translation. *)
 
