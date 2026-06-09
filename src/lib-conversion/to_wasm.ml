@@ -549,18 +549,49 @@ let rec instruction ret ctx i : location Text.instr list =
             folded loc instr code
       in
       match expr.desc with
-      | Call ({ desc = StructGet ({ desc = Get memname; _ }, meth); _ }, args)
+      (* (mem.load8/16(p) as i32_S) as i64_S  ->  i64.load8/16_S *)
+      | Cast
+          ( {
+              desc =
+                Call
+                  ( { desc = StructGet ({ desc = Get memname; _ }, meth); _ },
+                    args );
+              _;
+            },
+            Signedtype { typ = `I32; signage = s1; _ } )
         when Hashtbl.mem ctx.memories memname.desc
              && (meth.desc = "load8" || meth.desc = "load16") -> (
           match cast_ty with
-          | Signedtype { typ = `I32; signage; _ } ->
+          | Signedtype { typ = `I64; signage = s2; _ } when s1 = s2 ->
               let memidx = index memname in
               let memarg = mem_memarg meth.desc 1 args in
               let addr_code = instruction ret ctx (List.nth args 0) in
               let size = if meth.desc = "load8" then `I8 else `I16 in
               folded (snd expr.info)
-                (LoadS (memidx, memarg, `I32, size, signage))
+                (LoadS (memidx, memarg, `I64, size, s1))
                 addr_code
+          | _ -> default_cast ())
+      (* mem.load8/16(p) as i32_S -> i32.load8/16_S ; mem.load32(p) as i64_S ->
+         i64.load32_S *)
+      | Call ({ desc = StructGet ({ desc = Get memname; _ }, meth); _ }, args)
+        when Hashtbl.mem ctx.memories memname.desc
+             && (meth.desc = "load8" || meth.desc = "load16"
+               || meth.desc = "load32") -> (
+          let emit result_ty size signage =
+            let memidx = index memname in
+            let memarg = mem_memarg meth.desc 1 args in
+            let addr_code = instruction ret ctx (List.nth args 0) in
+            folded (snd expr.info)
+              (LoadS (memidx, memarg, result_ty, size, signage))
+              addr_code
+          in
+          match (meth.desc, cast_ty) with
+          | "load8", Signedtype { typ = `I32; signage; _ } ->
+              emit `I32 `I8 signage
+          | "load16", Signedtype { typ = `I32; signage; _ } ->
+              emit `I32 `I16 signage
+          | "load32", Signedtype { typ = `I64; signage; _ } ->
+              emit `I64 `I32 signage
           | _ -> default_cast ())
       | StructGet (instr_val, field_idx) -> (
           match (expr_type expr, cast_ty) with
