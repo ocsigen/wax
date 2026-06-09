@@ -82,15 +82,14 @@ fn jsstring_test(s: &?any) -> i32 { become is_string(s as &?extern); }
 // Used by package zarith_stubs_js
 #[export = "jsstring_of_substring"]
 fn jsstring_of_substring(s: &string, pos: i32, len: i32) -> &?any {
-    let i: i32;
-    let c: i32;
     if text_converters_available {
         return decodeStringFromUTF8Array(s, pos, pos + len) as &any;
     }
     'continue: if string_builtins_available & (len <=u utf16_buffer_size) {
         'loop: loop {
+            let i: i32;
             if i <u len {
-                c = s[pos + i] as i32_u;
+                let c: i32 = s[pos + i] as i32_u;
                 br_if 'continue c >=u 128;
                 buffer[i] = c;
                 i = i + 1;
@@ -123,8 +122,8 @@ memory caml_buffer: i32 [1];
 const buffer_size: i32 = 65536;
 
 fn write_to_buffer(s: &string, pos: i32, len: i32) {
-    let i: i32;
     'loop: loop {
+        let i: i32;
         if i <u len {
             caml_buffer.store8(i, s[pos + i] as i32_u);
             i = i + 1;
@@ -134,18 +133,16 @@ fn write_to_buffer(s: &string, pos: i32, len: i32) {
 }
 
 fn jsstring_of_substring_fallback(s: &string, pos: i32, len: i32) -> &?any {
-    let s': &?any;
-    let continued: i32;
     if len <=u buffer_size {
         write_to_buffer(s, pos, len);
         become read_string(len);
     }
     write_to_buffer(s, pos, buffer_size);
-    s' = read_string_stream(buffer_size, 1);
+    let s': &?any = read_string_stream(buffer_size, 1);
     'loop: loop {
         len = len - buffer_size;
         pos = pos + buffer_size;
-        continued = len >u buffer_size;
+        let continued: i32 = len >u buffer_size;
         write_to_buffer(s, pos, continued?buffer_size:len);
         s' =
             append_string
@@ -156,8 +153,8 @@ fn jsstring_of_substring_fallback(s: &string, pos: i32, len: i32) -> &?any {
 }
 
 fn read_from_buffer(s: &string, pos: i32, len: i32) {
-    let i: i32;
     'loop: loop {
+        let i: i32;
         if i <u len {
             s[pos + i] = caml_buffer.load8(i) as i32_u;
             i = i + 1;
@@ -170,17 +167,15 @@ type stack = { s: &string, next: &?stack };
 let stack: &?stack = null as &?stack;
 
 fn string_of_jsstring_fallback(s: &?any) -> &string {
-    let ofs: i32;
-    let len: i32;
+    let len: i32 = write_string(s);
     let s': &string;
-    let s'': &string;
-    let item: &stack;
-    len = write_string(s);
     if !stack {
         s' = [string|0; len];
         read_from_buffer(s', 0, len);
         return s';
     }
+    let ofs: i32;
+    let item: &stack;
     'done: do {
         item = br_on_null 'done stack;
         'loop: loop {
@@ -195,7 +190,7 @@ fn string_of_jsstring_fallback(s: &?any) -> &string {
         item = br_on_null 'done stack;
         stack = null as &?stack;
         'loop: loop {
-            s'' = item.s;
+            let s'': &string = item.s;
             len = s''.length;
             ofs = ofs - len;
             s'.copy(ofs, s'', 0, len);
@@ -208,8 +203,7 @@ fn string_of_jsstring_fallback(s: &?any) -> &string {
 
 #[export = "caml_extract_string"]
 fn caml_extract_string(len: i32) {
-    let s: &string;
-    s = [string|0; len];
+    let s: &string = [string|0; len];
     read_from_buffer(s, 0, len);
     stack = {stack| s: s, next: stack };
 }

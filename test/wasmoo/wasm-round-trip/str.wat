@@ -84,16 +84,15 @@
 (func $re_match
   (param $vre (ref eq)) (param $s (ref $string)) (param $pos i32)
   (param $accept_partial_match i32) (result (ref eq))
-  (local $res (ref $block)) (local $s' (ref $string))
-  (local $set (ref $string)) (local $len i32) (local $instr i32)
-  (local $arg i32) (local $i i32) (local $j i32) (local $l i32)
-  (local $re (ref $block)) (local $prog (ref $block))
+  (local $len i32) (local $re (ref $block)) (local $prog (ref $block))
   (local $cpool (ref $block)) (local $normtable (ref $string))
   (local $numgroups i32) (local $numregisters i32)
   (local $group_start (ref $int_array)) (local $group_end (ref $int_array))
-  (local $re_register (ref $int_array)) (local $pc i32)
-  (local $stack (ref null $stack)) (local $u (ref $undo))
-  (local $p (ref $pos))
+  (local $re_register (ref $int_array)) (local $pc i32) (local $i i32)
+  (local $j i32) (local $stack (ref null $stack)) (local $instr i32)
+  (local $arg i32) (local $set (ref $string)) (local $s' (ref $string))
+  (local $l i32) (local $p (ref $pos)) (local $u (ref $undo))
+  (local $res (ref $block))
   (local.set $len (array.len (local.get $s)))
   (local.set $re (ref.cast (ref $block) (local.get $vre)))
   (local.set $prog
@@ -504,7 +503,8 @@
             (struct.get $undo $idx (local.get $u))
             (struct.get $undo $val (local.get $u)))
           (local.set $stack (struct.get $undo $undo_previous (local.get $u)))
-          (br $loop))) ;; 'continue
+          (br $loop)) ;; 'loop
+      ) ;; 'continue
     ) ;; 'ACCEPT
     ;; ACCEPT
     (array.set $int_array (local.get $group_end) (i32.const 0)
@@ -654,10 +654,10 @@
 (func $re_replacement_text (export "re_replacement_text")
   (param $vrepl (ref eq)) (param $vgroups (ref eq)) (param $vorig (ref eq))
   (result (ref eq))
-  (local $repl (ref $string)) (local $groups (ref $block))
-  (local $orig (ref $string)) (local $res (ref $string)) (local $i i32)
-  (local $j i32) (local $l i32) (local $len i32) (local $c i32)
-  (local $start i32) (local $end i32)
+  (local $repl (ref $string)) (local $l i32) (local $groups (ref $block))
+  (local $orig (ref $string)) (local $i i32) (local $len i32) (local $c i32)
+  (local $start i32) (local $end i32) (local $res (ref $string))
+  (local $j i32)
   (local.set $repl (ref.cast (ref $string) (local.get $vrepl)))
   (local.set $l (array.len (local.get $repl)))
   (local.set $groups (ref.cast (ref $block) (local.get $vgroups)))

@@ -85,17 +85,12 @@ fn compare_stack_is_not_empty(stack: &compare_stack) -> i32 {
 }
 
 fn pop_compare_stack(stack: &compare_stack) -> (&eq, &eq) {
-    let i: i32;
-    let p: i32;
-    let p': i32;
-    let v1: &block;
-    let v2: &block;
-    i = stack.f;
-    p = stack.f_4[i];
-    p' = p + 1;
+    let i: i32 = stack.f;
+    let p: i32 = stack.f_4[i];
+    let p': i32 = p + 1;
     stack.f_4[i] = p';
-    v1 = stack.f_2[i];
-    v2 = stack.f_3[i];
+    let v1: &block = stack.f_2[i];
+    let v2: &block = stack.f_3[i];
     if p' == v1.length {
         stack.f_2[i] = dummy_block;
         stack.f_3[i] = dummy_block;
@@ -107,15 +102,11 @@ fn pop_compare_stack(stack: &compare_stack) -> (&eq, &eq) {
 
 fn push_compare_stack(stack: &compare_stack, v1: &block, v2: &block, p: i32)
 -> &compare_stack {
-    let i: i32;
-    let len: i32;
-    let len': i32;
-    let stack': &compare_stack;
-    i = stack.f + 1;
-    len = stack.f_2.length;
+    let i: i32 = stack.f + 1;
+    let len: i32 = stack.f_2.length;
     if i >=u len {
-        len' = len << 1;
-        stack' =
+        let len': i32 = len << 1;
+        let stack': &compare_stack =
             {compare_stack|
                 f: i,
                 f_2: [block_array|dummy_block; len'],
@@ -138,21 +129,15 @@ fn push_compare_stack(stack: &compare_stack, v1: &block, v2: &block, p: i32)
 const unordered: i32 = 0x80000000;
 
 fn compare_strings(s1: &string, s2: &string) -> i32 {
-    let l1: i32;
-    let l2: i32;
-    let len: i32;
-    let i: i32;
-    let c1: i32;
-    let c2: i32;
     if s1 == s2 { return 0; }
-    l1 = s1.length;
-    l2 = s2.length;
-    len = l1 <=u l2?l1:l2;
-    i = 0;
+    let l1: i32 = s1.length;
+    let l2: i32 = s2.length;
+    let len: i32 = l1 <=u l2?l1:l2;
+    let i: i32 = 0;
     'loop: loop {
         if i <s len {
-            c1 = s1[i] as i32_u;
-            c2 = s2[i] as i32_u;
+            let c1: i32 = s1[i] as i32_u;
+            let c2: i32 = s2[i] as i32_u;
             if c1 != c2 { if c1 <=u c2 { return -1; } else { return 1; } }
             i = i + 1;
             br 'loop;
@@ -162,12 +147,10 @@ fn compare_strings(s1: &string, s2: &string) -> i32 {
 }
 
 fn clear_compare_stack() {
-    let stack: &compare_stack;
-    let n: i32;
     let res: i32;
     // clear stack (to avoid memory leaks)
-    stack = default_compare_stack;
-    n = stack.f;
+    let stack: &compare_stack = default_compare_stack;
+    let n: i32 = stack.f;
     if n >=s 0 {
         n = n + 1;
         stack.f_2.fill(0, dummy_block, n);
@@ -176,12 +159,10 @@ fn clear_compare_stack() {
 }
 
 fn compare_val(v1: &eq, v2: &eq, total: i32) -> i32 {
-    let stack: &compare_stack;
     let n: i32;
-    let res: i32;
-    stack = default_compare_stack;
+    let stack: &compare_stack = default_compare_stack;
     stack.f = -1;
-    res = do_compare_val(stack, v1, v2, total);
+    let res: i32 = do_compare_val(stack, v1, v2, total);
     clear_compare_stack();
     res;
 }
@@ -192,29 +173,15 @@ data continuation_value = "compare: continuation value";
 
 fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
 {
-    let i: i32;
-    let i1: &i31;
-    let i2: &i31;
-    let b1: &block;
-    let b2: &block;
-    let t1: i32;
-    let t2: i32;
-    let s1: i32;
-    let s2: i32;
-    let f1: f64;
-    let f2: f64;
-    let fa1: &float_array;
-    let fa2: &float_array;
-    let str1: &string;
-    let str2: &string;
-    let c1: &custom;
-    let c2: &custom;
-    let js1: &?any;
-    let js2: &?any;
-    let res: i32;
     'loop: loop {
         'next_item: do {
             if total { br_if 'next_item v1 == v2; }
+            let i1: &i31;
+            let i2: &i31;
+            let b2: &block;
+            let t2: i32;
+            let c2: &custom;
+            let res: i32;
             _ =
                 'v1_is_not_int: do &eq {
                     i1 = br_on_cast_fail 'v1_is_not_int &i31 v1;
@@ -251,6 +218,9 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
                     return -1;
                 } // 'v1_is_not_int
             ;
+            let b1: &block;
+            let t1: i32;
+            let c1: &custom;
             if v2 is &i31 {
                 // check for forward tag
                 _ =
@@ -276,6 +246,17 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
                 // v1 block > v1 long
                 return 1;
             }
+            let i: i32;
+            let s1: i32;
+            let s2: i32;
+            let f1: f64;
+            let f2: f64;
+            let fa1: &float_array;
+            let fa2: &float_array;
+            let str1: &string;
+            let str2: &string;
+            let js1: &?any;
+            let js2: &?any;
             _ =
                 'heterogeneous: do &eq {
                     _ =
@@ -450,8 +431,7 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
 
 #[export = "caml_compare"]
 fn caml_compare(v1: &eq, v2: &eq) -> &eq {
-    let res: i32;
-    res = compare_val(v1, v2, 1);
+    let res: i32 = compare_val(v1, v2, 1);
     if res <s 0 { return -1 as &i31; }
     if res >s 0 { return 1 as &i31; }
     0 as &i31;
@@ -467,15 +447,13 @@ fn caml_notequal(v1: &eq, v2: &eq) -> &eq {
 
 #[export = "caml_lessthan"]
 fn caml_lessthan(v1: &eq, v2: &eq) -> &eq {
-    let res: i32;
-    res = compare_val(v1, v2, 0);
+    let res: i32 = compare_val(v1, v2, 0);
     ((res <s 0) & (res != unordered)) as &i31;
 }
 
 #[export = "caml_lessequal"]
 fn caml_lessequal(v1: &eq, v2: &eq) -> &eq {
-    let res: i32;
-    res = compare_val(v1, v2, 0);
+    let res: i32 = compare_val(v1, v2, 0);
     ((res <=s 0) & (res != unordered)) as &i31;
 }
 

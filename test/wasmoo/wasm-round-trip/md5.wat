@@ -43,8 +43,8 @@
 
 (func $caml_md5_chan (export "caml_md5_chan")
   (param $ch (ref eq)) (param $vlen (ref eq)) (result (ref eq))
-  (local $len i32) (local $read i32) (local $buf (ref $string))
-  (local $ctx (ref $context))
+  (local $len i32) (local $buf (ref $string)) (local $ctx (ref $context))
+  (local $read i32)
   (local.set $len (i31.get_s (ref.cast (ref i31) (local.get $vlen))))
   (local.set $buf (array.new $string (i32.const 0) (i32.const 4096)))
   (local.set $ctx (call $MD5Init))
@@ -427,7 +427,7 @@
       (local.get $c)))
   (array.set $int_array (local.get $w) (i32.const 3)
     (i32.add (array.get $int_array (local.get $w) (i32.const 3))
-      (local.get $d)))
+      (local.get $d))) ;; 'loop
 )
 
 (func $MD5Init (result (ref $context))
@@ -441,7 +441,7 @@
 (func $MD5Update
   (param $ctx (ref $context)) (param $input (ref $string))
   (param $input_pos i32) (param $input_len i32)
-  (local $in_buf i32) (local $len i64) (local $missing i32)
+  (local $len i64) (local $in_buf i32) (local $missing i32)
   (local.set $len (struct.get $context $f_2 (local.get $ctx)))
   (local.set $in_buf
     (i32.and (i32.wrap_i64 (local.get $len)) (i32.const 0x3f)))
@@ -483,9 +483,8 @@
 )
 
 (func $MD5Final (param $ctx (ref $context)) (result (ref $string))
-  (local $in_buf i32) (local $i i32) (local $len i64)
-  (local $w (ref $int_array)) (local $buffer (ref $string))
-  (local $res (ref $string))
+  (local $len i64) (local $in_buf i32) (local $buffer (ref $string))
+  (local $i i32) (local $res (ref $string)) (local $w (ref $int_array))
   (local.set $len (struct.get $context $f_2 (local.get $ctx)))
   (local.set $in_buf
     (i32.and (i32.wrap_i64 (local.get $len)) (i32.const 0x3f)))

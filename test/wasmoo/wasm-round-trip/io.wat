@@ -202,7 +202,7 @@
 (func $caml_sys_open (export "caml_sys_open")
   (param $path (ref eq)) (param $vflags (ref eq)) (param $perm (ref eq))
   (result (ref eq))
-  (local $fd i32) (local $flags i32) (local $offset i64)
+  (local $flags i32) (local $fd i32) (local $offset i64)
   (local.set $flags (call $convert_flag_list (local.get $vflags)))
   (try
     (do
@@ -313,7 +313,7 @@
 )
 
 (func $caml_refill (param $ch (ref $channel)) (result i32)
-  (local $n i32) (local $buf (ref extern))
+  (local $buf (ref extern)) (local $n i32)
   (local.set $buf (struct.get $channel $buffer (local.get $ch)))
   (local.set $n
     (call $caml_do_read (local.get $ch) (i32.const 0)
@@ -358,7 +358,7 @@
 (func $caml_really_getblock (export "caml_really_getblock")
   (param $ch (ref eq)) (param $s (ref $string)) (param $pos i32)
   (param $len i32) (result i32)
-  (local $read i32) (local $n i32)
+  (local $n i32) (local $read i32)
   (local.set $n (local.get $len))
   (loop $loop
     (if (local.get $n)
@@ -377,9 +377,9 @@
 (func $caml_ml_input (export "caml_ml_input")
   (param $vch (ref eq)) (param $vs (ref eq)) (param $vpos (ref eq))
   (param $vlen (ref eq)) (result (ref eq))
-  (local $ch (ref $channel)) (local $s (ref $string)) (local $pos i32)
-  (local $len i32) (local $curr i32) (local $i i32) (local $avail i32)
-  (local $nread i32) (local $buf (ref extern))
+  (local $i i32) (local $ch (ref $channel)) (local $s (ref $string))
+  (local $pos i32) (local $len i32) (local $buf (ref extern))
+  (local $curr i32) (local $avail i32) (local $nread i32)
   (local.set $ch (ref.cast (ref $channel) (local.get $vch)))
   (local.set $s (ref.cast (ref $string) (local.get $vs)))
   (local.set $pos (i31.get_u (ref.cast (ref i31) (local.get $vpos))))
@@ -489,7 +489,7 @@
 
 (func $caml_seek_in
   (param $ch (ref $channel)) (param $dest i64) (result (ref eq))
-  (local $fd i32) (local $offset i64) (local $fd_offset (ref $fd_offset))
+  (local $fd i32) (local $fd_offset (ref $fd_offset)) (local $offset i64)
   (local.set $fd (struct.get $channel $fd (local.get $ch)))
   (local.set $fd_offset (call $get_fd_offset (local.get $fd)))
   (local.set $offset (struct.get $fd_offset $offset (local.get $fd_offset)))
@@ -632,9 +632,9 @@
 )
 
 (func $caml_flush_partial (param $ch (ref $channel)) (result i32)
-  (local $towrite i32) (local $written i32) (local $fd i32)
+  (local $towrite i32) (local $buf (ref extern)) (local $fd i32)
   (local $fd_offset (ref $fd_offset)) (local $offset i64)
-  (local $buf (ref extern))
+  (local $written i32)
   (local.set $towrite (struct.get $channel $curr (local.get $ch)))
   (if (i32.gt_u (local.get $towrite) (i32.const 0))
     (then
@@ -669,7 +669,7 @@
 (func $caml_putblock
   (param $ch (ref $channel)) (param $s (ref $string)) (param $pos i32)
   (param $len i32) (result i32)
-  (local $free i32) (local $curr i32) (local $buf (ref extern))
+  (local $curr i32) (local $free i32) (local $buf (ref extern))
   (local.set $curr (struct.get $channel $curr (local.get $ch)))
   (local.set $free
     (i32.sub (struct.get $channel $size (local.get $ch)) (local.get $curr)))

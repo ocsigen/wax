@@ -27,16 +27,12 @@ type string = [mut i8];
 
     "caml_bytes_equal"]
 fn caml_string_equal(p1: &eq, p2: &eq) -> &eq {
-    let s1: &string;
-    let s2: &string;
-    let len: i32;
-    let i: i32;
     if p1 == p2 { return 1 as &i31; }
-    s1 = p1 as &string;
-    s2 = p2 as &string;
-    len = s1.length;
+    let s1: &string = p1 as &string;
+    let s2: &string = p2 as &string;
+    let len: i32 = s1.length;
     if len != s2.length { return 0 as &i31; }
-    i = 0;
+    let i: i32 = 0;
     'loop: loop {
         if i <s len {
             if s1[i] as i32_u != s2[i] as i32_u { return 0 as &i31; }
@@ -56,25 +52,17 @@ fn caml_string_notequal(p1: &eq, p2: &eq) -> &eq {
 }
 
 fn string_compare(p1: &eq, p2: &eq) -> i32 {
-    let s1: &string;
-    let s2: &string;
-    let l1: i32;
-    let l2: i32;
-    let len: i32;
-    let i: i32;
-    let c1: i32;
-    let c2: i32;
     if p1 == p2 { return 0; }
-    s1 = p1 as &string;
-    s2 = p2 as &string;
-    l1 = s1.length;
-    l2 = s2.length;
-    len = l1 <=u l2?l1:l2;
-    i = 0;
+    let s1: &string = p1 as &string;
+    let s2: &string = p2 as &string;
+    let l1: i32 = s1.length;
+    let l2: i32 = s2.length;
+    let len: i32 = l1 <=u l2?l1:l2;
+    let i: i32 = 0;
     'loop: loop {
         if i <s len {
-            c1 = s1[i] as i32_u;
-            c2 = s2[i] as i32_u;
+            let c1: i32 = s1[i] as i32_u;
+            let c2: i32 = s2[i] as i32_u;
             if c1 <u c2 { return -1; }
             if c1 >u c2 { return 1; }
             i = i + 1;
@@ -136,8 +124,7 @@ data Bytes_create = "Bytes.create";
 
 #[export = "caml_create_bytes"]
 fn caml_create_bytes(len: &eq) -> &eq {
-    let l: i32;
-    l = len as &i31 as i32_s;
+    let l: i32 = len as &i31 as i32_s;
     if l <s 0 { caml_invalid_argument([string|Bytes_create @ 0; 12]); }
     [string|0; l];
 }
@@ -165,10 +152,8 @@ fn caml_fill_bytes(v: &eq, offset: &eq, len: &eq, init: &eq) -> &eq {
 
     "caml_string_get16"]
 fn caml_bytes_get16(v: &eq, i: &eq) -> &eq {
-    let s: &string;
-    let p: i32;
-    s = v as &string;
-    p = i as &i31 as i32_s;
+    let s: &string = v as &string;
+    let p: i32 = i as &i31 as i32_s;
     if p <s 0 { caml_bound_error(); }
     if p + 1 >=u s.length { caml_bound_error(); }
     (s[p] as i32_u | s[p + 1] as i32_u << 8) as &i31;
@@ -179,10 +164,8 @@ fn caml_bytes_get16(v: &eq, i: &eq) -> &eq {
 
     "caml_string_get32"]
 fn caml_bytes_get32(v: &eq, i: &eq) -> i32 {
-    let s: &string;
-    let p: i32;
-    s = v as &string;
-    p = i as &i31 as i32_s;
+    let s: &string = v as &string;
+    let p: i32 = i as &i31 as i32_s;
     if p <s 0 { caml_bound_error(); }
     if p + 3 >=u s.length { caml_bound_error(); }
     s[p] as i32_u | s[p + 1] as i32_u << 8 |
@@ -194,10 +177,8 @@ fn caml_bytes_get32(v: &eq, i: &eq) -> i32 {
 
     "caml_string_get64"]
 fn caml_bytes_get64(v: &eq, i: &eq) -> i64 {
-    let s: &string;
-    let p: i32;
-    s = v as &string;
-    p = i as &i31 as i32_s;
+    let s: &string = v as &string;
+    let p: i32 = i as &i31 as i32_s;
     if p <s 0 { caml_bound_error(); }
     if p + 7 >=u s.length { caml_bound_error(); }
     s[p] as i32_u as i64_u | s[p + 1] as i32_u as i64_u << 8 |
@@ -211,12 +192,9 @@ fn caml_bytes_get64(v: &eq, i: &eq) -> i64 {
 
 #[export = "caml_bytes_set16"]
 fn caml_bytes_set16(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
-    let s: &string;
-    let p: i32;
-    let v: i32;
-    s = x as &string;
-    p = x_2 as &i31 as i32_s;
-    v = x_3 as &i31 as i32_s;
+    let s: &string = x as &string;
+    let p: i32 = x_2 as &i31 as i32_s;
+    let v: i32 = x_3 as &i31 as i32_s;
     if p <s 0 { caml_bound_error(); }
     if p + 1 >=u s.length { caml_bound_error(); }
     s[p] = v;
@@ -226,10 +204,8 @@ fn caml_bytes_set16(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
 
 #[export = "caml_bytes_set32"]
 fn caml_bytes_set32(x: &eq, x_2: &eq, v: i32) -> &eq {
-    let s: &string;
-    let p: i32;
-    s = x as &string;
-    p = x_2 as &i31 as i32_s;
+    let s: &string = x as &string;
+    let p: i32 = x_2 as &i31 as i32_s;
     if p <s 0 { caml_bound_error(); }
     if p + 3 >=u s.length { caml_bound_error(); }
     s[p] = v;
@@ -241,10 +217,8 @@ fn caml_bytes_set32(x: &eq, x_2: &eq, v: i32) -> &eq {
 
 #[export = "caml_bytes_set64"]
 fn caml_bytes_set64(x: &eq, x_2: &eq, v: i64) -> &eq {
-    let s: &string;
-    let p: i32;
-    s = x as &string;
-    p = x_2 as &i31 as i32_s;
+    let s: &string = x as &string;
+    let p: i32 = x_2 as &i31 as i32_s;
     if p <s 0 { caml_bound_error(); }
     if p + 7 >=u s.length { caml_bound_error(); }
     s[p] = v as i32;
@@ -260,16 +234,11 @@ fn caml_bytes_set64(x: &eq, x_2: &eq, v: i64) -> &eq {
 
 #[export = "caml_string_concat"]
 fn caml_string_concat(vs1: &eq, vs2: &eq) -> &eq {
-    let s1: &string;
-    let s2: &string;
-    let s: &string;
-    let l1: i32;
-    let l2: i32;
-    s1 = vs1 as &string;
-    s2 = vs2 as &string;
-    l1 = s1.length;
-    l2 = s2.length;
-    s = [string|0; l1 + l2];
+    let s1: &string = vs1 as &string;
+    let s2: &string = vs2 as &string;
+    let l1: i32 = s1.length;
+    let l2: i32 = s2.length;
+    let s: &string = [string|0; l1 + l2];
     s.copy(0, s1, 0, l1);
     s.copy(l1, s2, 0, l2);
     s;

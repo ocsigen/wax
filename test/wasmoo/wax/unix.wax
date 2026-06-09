@@ -74,10 +74,8 @@ fn unix_time(x: &eq) -> &eq { {float| f: gettimeofday().floor }; }
 
     "caml_unix_mktime"]
 fn unix_mktime(x: &eq) -> &eq {
-    let tm: &block;
-    let t: f64;
-    tm = x as &block;
-    t =
+    let tm: &block = x as &block;
+    let t: f64 =
         mktime
             (tm[6] as &i31 as i32_s + 1900, tm[5] as &i31 as i32_s,
              tm[4] as &i31 as i32_s, tm[3] as &i31 as i32_s,

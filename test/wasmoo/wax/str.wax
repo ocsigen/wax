@@ -79,49 +79,33 @@ fn in_bitset(s: &string, c: i32) -> i32 {
 
 fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq
 {
-    let res: &block;
-    let s': &string;
-    let set: &string;
-    let len: i32;
-    let instr: i32;
-    let arg: i32;
-    let i: i32;
-    let j: i32;
-    let l: i32;
-    let re: &block;
-    let prog: &block;
-    let cpool: &block;
-    let normtable: &string;
-    let numgroups: i32;
-    let numregisters: i32;
-    let group_start: &int_array;
-    let group_end: &int_array;
-    let re_register: &int_array;
-    let pc: i32;
-    let stack: &?stack;
-    let u: &undo;
-    let p: &pos;
-    len = s.length;
-    re = vre as &block;
-    prog = re[1] as &block;
-    cpool = re[2] as &block;
-    normtable = re[3] as &string;
-    numgroups = re[4] as &i31 as i32_s;
-    numregisters = re[5] as &i31 as i32_s;
-    group_start = [int_array|-1; numgroups];
-    group_end = [int_array|-1; numgroups];
-    re_register = [int_array|-1; numregisters];
-    pc = 1;
+    let len: i32 = s.length;
+    let re: &block = vre as &block;
+    let prog: &block = re[1] as &block;
+    let cpool: &block = re[2] as &block;
+    let normtable: &string = re[3] as &string;
+    let numgroups: i32 = re[4] as &i31 as i32_s;
+    let numregisters: i32 = re[5] as &i31 as i32_s;
+    let group_start: &int_array = [int_array|-1; numgroups];
+    let group_end: &int_array = [int_array|-1; numgroups];
+    let re_register: &int_array = [int_array|-1; numregisters];
+    let pc: i32 = 1;
     group_start[0] = pos;
     'reject: do {
+        let i: i32;
+        let j: i32;
         'ACCEPT: do {
             'continue: loop {
+                let stack: &?stack;
                 'backtrack: do {
                     'prefix_match: do {
+                        let instr: i32;
+                        let arg: i32;
                         'CHECKPROGRESS: do {
                             'SETMARK: do {
                                 'PUSHBACK: do {
                                     'GOTO: do {
+                                        let set: &string;
                                         'SIMPLEPLUS: do {
                                             'SIMPLESTAR: do {
                                                 'SIMPLEOPT: do {
@@ -136,6 +120,11 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq
                                                                     {
                                                                     'CHARCLASS:
                                                                     do {
+                                                                    let
+                                                                    s':
+                                                                    &string;
+                                                                    let
+                                                                    l: i32;
                                                                     'STRINGNORM:
                                                                     do {
                                                                     'STRING:
@@ -517,7 +506,8 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq
                 } // 'backtrack
                 // backtrack
                 'loop: loop {
-                    u =
+                    let p: &pos;
+                    let u: &undo =
                         'undo: do &stack {
                             p =
                                 br_on_cast_fail 'undo &pos
@@ -531,12 +521,12 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq
                     u.tbl[u.idx] = u.val;
                     stack = u.undo_previous;
                     br 'loop;
-                }
+                } // 'loop
             } // 'continue
         } // 'ACCEPT
         // ACCEPT
         group_end[0] = pos;
-        res = [block|0 as &i31; (numgroups << 1) + 1];
+        let res: &block = [block|0 as &i31; (numgroups << 1) + 1];
         i = 0;
         'loop: loop {
             if i <u numgroups {
@@ -562,17 +552,13 @@ data search_forward = "Str.search_forward";
 
 #[export = "re_search_forward"]
 fn re_search_forward(re: &eq, vs: &eq, vpos: &eq) -> &eq {
-    let s: &string;
-    let pos: i32;
-    let len: i32;
-    let res: &eq;
     // ZZZ startchars
-    s = vs as &string;
-    pos = vpos as &i31 as i32_s;
-    len = s.length;
+    let s: &string = vs as &string;
+    let pos: i32 = vpos as &i31 as i32_s;
+    let len: i32 = s.length;
     if pos >u len { caml_invalid_argument([string|search_forward @ 0; 18]); }
     'loop: loop {
-        res = re_match(re, s, pos, 0);
+        let res: &eq = re_match(re, s, pos, 0);
         if res is &block { return res; }
         pos = pos + 1;
         br_if 'loop pos <=u len;
@@ -584,19 +570,15 @@ data search_backward = "Str.search_backward";
 
 #[export = "re_search_backward"]
 fn re_search_backward(re: &eq, vs: &eq, vpos: &eq) -> &eq {
-    let s: &string;
-    let pos: i32;
-    let len: i32;
-    let res: &eq;
     // ZZZ startchars
-    s = vs as &string;
-    pos = vpos as &i31 as i32_s;
-    len = s.length;
+    let s: &string = vs as &string;
+    let pos: i32 = vpos as &i31 as i32_s;
+    let len: i32 = s.length;
     if pos >u len {
         caml_invalid_argument([string|search_backward @ 0; 19]);
     }
     'loop: loop {
-        res = re_match(re, s, pos, 0);
+        let res: &eq = re_match(re, s, pos, 0);
         if res is &block { return res; }
         pos = pos - 1;
         br_if 'loop pos >=s 0;
@@ -608,16 +590,12 @@ data string_match = "Str.string_match";
 
 #[export = "re_string_match"]
 fn re_string_match(re: &eq, vs: &eq, vpos: &eq) -> &eq {
-    let s: &string;
-    let pos: i32;
-    let len: i32;
-    let res: &eq;
     // ZZZ startchars
-    s = vs as &string;
-    pos = vpos as &i31 as i32_s;
-    len = s.length;
+    let s: &string = vs as &string;
+    let pos: i32 = vpos as &i31 as i32_s;
+    let len: i32 = s.length;
     if pos >u len { caml_invalid_argument([string|string_match @ 0; 16]); }
-    res = re_match(re, s, pos, 0);
+    let res: &eq = re_match(re, s, pos, 0);
     if res is &block { return res; }
     [block|0 as &i31];
 }
@@ -626,18 +604,14 @@ data string_partial_match = "Str.string_partial_match";
 
 #[export = "re_partial_match"]
 fn re_partial_match(re: &eq, vs: &eq, vpos: &eq) -> &eq {
-    let s: &string;
-    let pos: i32;
-    let len: i32;
-    let res: &eq;
     // ZZZ startchars
-    s = vs as &string;
-    pos = vpos as &i31 as i32_s;
-    len = s.length;
+    let s: &string = vs as &string;
+    let pos: i32 = vpos as &i31 as i32_s;
+    let len: i32 = s.length;
     if pos >u len {
         caml_invalid_argument([string|string_partial_match @ 0; 24]);
     }
-    res = re_match(re, s, pos, 1);
+    let res: &eq = re_match(re, s, pos, 1);
     if res is &block { return res; }
     [block|0 as &i31];
 }
@@ -647,21 +621,15 @@ data unmatched_group = "Str.replace: reference to unmatched group";
 
 #[export = "re_replacement_text"]
 fn re_replacement_text(vrepl: &eq, vgroups: &eq, vorig: &eq) -> &eq {
-    let repl: &string;
-    let groups: &block;
-    let orig: &string;
-    let res: &string;
+    let repl: &string = vrepl as &string;
+    let l: i32 = repl.length;
+    let groups: &block = vgroups as &block;
+    let orig: &string = vorig as &string;
     let i: i32;
-    let j: i32;
-    let l: i32;
     let len: i32;
     let c: i32;
     let start: i32;
     let end: i32;
-    repl = vrepl as &string;
-    l = repl.length;
-    groups = vgroups as &block;
-    orig = vorig as &string;
     'loop: loop {
         if i <u l {
             c = repl[i] as i32_u;
@@ -697,12 +665,13 @@ fn re_replacement_text(vrepl: &eq, vgroups: &eq, vorig: &eq) -> &eq {
             br 'loop;
         }
     } // 'loop
-    res = [string|0; len];
+    let res: &string = [string|0; len];
     i = 0;
     'loop: loop {
         if i <u l {
             c = repl[i] as i32_u;
             i = i + 1;
+            let j: i32;
             if
                 c != 92 // '\\'
             {

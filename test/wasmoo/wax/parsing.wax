@@ -37,8 +37,7 @@ type block = [mut &eq];
 type string = [mut i8];
 
 fn get(a: &eq, i: i32) -> i32 {
-    let s: &string;
-    s = a as &string;
+    let s: &string = a as &string;
     i = i + i;
     (s[i] as i32_u | s[i + 1] as i32_u << 8).extend16_s;
 }
@@ -99,19 +98,15 @@ const tbl_names_const: i32 = 15;
 const tbl_names_block: i32 = 16;
 
 fn strlen(s: &string, p: i32) -> i32 {
-    let i: i32;
-    i = p;
+    let i: i32 = p;
     'loop: loop { if s[i] as i32_u != 0 { i = i + 1; br 'loop; } } // 'loop
     i - p;
 }
 
 data unknown_token = "<unknown token>";
 fn token_name(vnames: &eq, number: i32) -> &eq {
-    let names: &string;
+    let names: &string = vnames as &string;
     let i: i32;
-    let len: i32;
-    let name: &string;
-    names = vnames as &string;
     'loop: loop {
         if !(names[i] as i32_u) { return [string|unknown_token @ 0; 15]; }
         if number != 0 {
@@ -120,15 +115,14 @@ fn token_name(vnames: &eq, number: i32) -> &eq {
             br 'loop;
         }
     } // 'loop
-    len = strlen(names, i);
-    name = [string|0; len];
+    let len: i32 = strlen(names, i);
+    let name: &string = [string|0; len];
     name.copy(0, names, i, len);
     name;
 }
 
 fn output(x: &eq) {
-    let s: &string;
-    s = x as &string;
+    let s: &string = x as &string;
     _ = caml_ml_output(caml_stderr, s, 0 as &i31, s.length as &i31);
 }
 
@@ -143,8 +137,6 @@ data State = "State ";
 data read_token = ": read token ";
 
 fn print_token(tables: &block, state: i32, tok: &eq) {
-    let b: &block;
-    let v: &eq;
     if tok is &i31 {
         output([string|State @ 0; 6]);
         output_int(state);
@@ -155,12 +147,12 @@ fn print_token(tables: &block, state: i32, tok: &eq) {
         output([string|State @ 0; 6]);
         output_int(state);
         output([string|read_token @ 0; 13]);
-        b = tok as &block;
+        let b: &block = tok as &block;
         output(token_name(tables[tbl_names_block], b[0] as &i31 as i32_u));
         output
             (string#"(" // "("
             );
-        v = b[1];
+        let v: &eq = b[1];
         if v is &i31 {
             output_int(v as &i31 as i32_s);
         } else {
@@ -188,49 +180,31 @@ data reduce_by_rule = ": reduce by rule ";
 
 #[export = "caml_parse_engine"]
 fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
+    let tables: &block = vtables as &block;
+    let tbl_defred_2: &string = tables[tbl_defred] as &string;
+    let tbl_sindex_2: &string = tables[tbl_sindex] as &string;
+    let tbl_check_2: &string = tables[tbl_check] as &string;
+    let tbl_rindex_2: &string = tables[tbl_rindex] as &string;
+    let tbl_table_2: &string = tables[tbl_table] as &string;
+    let tbl_len_2: &string = tables[tbl_len] as &string;
+    let tbl_lhs_2: &string = tables[tbl_lhs] as &string;
+    let tbl_gindex_2: &string = tables[tbl_gindex] as &string;
+    let tbl_dgoto_2: &string = tables[tbl_dgoto] as &string;
+    let env: &block = venv as &block;
+    let cmd: i32 = vcmd as &i31 as i32_s;
+    let sp: i32 = env[env_sp] as &i31 as i32_s;
+    let state: i32 = env[env_state] as &i31 as i32_s;
+    let errflag: i32 = env[env_errflag] as &i31 as i32_s;
     let res: i32;
-    let n: i32;
-    let n1: i32;
-    let n2: i32;
-    let m: i32;
-    let state1: i32;
-    let sp: i32;
-    let asp: i32;
-    let state: i32;
-    let errflag: i32;
-    let tables: &block;
-    let env: &block;
-    let cmd: i32;
-    let arg: &block;
-    let tbl_defred_2: &string;
-    let tbl_sindex_2: &string;
-    let tbl_check_2: &string;
-    let tbl_rindex_2: &string;
-    let tbl_table_2: &string;
-    let tbl_len_2: &string;
-    let tbl_lhs_2: &string;
-    let tbl_gindex_2: &string;
-    let tbl_dgoto_2: &string;
-    tables = vtables as &block;
-    tbl_defred_2 = tables[tbl_defred] as &string;
-    tbl_sindex_2 = tables[tbl_sindex] as &string;
-    tbl_check_2 = tables[tbl_check] as &string;
-    tbl_rindex_2 = tables[tbl_rindex] as &string;
-    tbl_table_2 = tables[tbl_table] as &string;
-    tbl_len_2 = tables[tbl_len] as &string;
-    tbl_lhs_2 = tables[tbl_lhs] as &string;
-    tbl_gindex_2 = tables[tbl_gindex] as &string;
-    tbl_dgoto_2 = tables[tbl_dgoto] as &string;
-    env = venv as &block;
-    cmd = vcmd as &i31 as i32_s;
-    sp = env[env_sp] as &i31 as i32_s;
-    state = env[env_state] as &i31 as i32_s;
-    errflag = env[env_errflag] as &i31 as i32_s;
     'exit: do {
         'next: loop {
             'default: do {
                 'SEMANTIC_ACTION_COMPUTED: do {
                     'STACKS_GROWN_2: do {
+                        let n: i32;
+                        let n1: i32;
+                        let n2: i32;
+                        let state1: i32;
                         'reduce: do {
                             'STACKS_GROWN_1: do {
                                 'shift_recover: do {
@@ -284,6 +258,7 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                                                 } // 'TOKEN_READ
                                                 // TOKEN_READ:
                                                 'cont: do {
+                                                    let arg: &block;
                                                     _ =
                                                         'not_block: do &eq {
                                                             arg =
@@ -519,7 +494,7 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                             output_int(n);
                             output_nl();
                         }
-                        m = get(tbl_len_2, n);
+                        let m: i32 = get(tbl_len_2, n);
                         env[env_asp] = sp as &i31;
                         env[env_rule_number] = n as &i31;
                         env[env_rule_len] = m as &i31;
@@ -557,7 +532,7 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                 // SEMANTIC_ACTION_COMPUTED:
                 (env[env_s_stack] as &block)[sp + 1] = state as &i31;
                 (env[env_v_stack] as &block)[sp + 1] = varg;
-                asp = env[env_asp] as &i31 as i32_s;
+                let asp: i32 = env[env_asp] as &i31 as i32_s;
                 (env[env_symb_end_stack] as &block)[sp + 1] =
                     (env[env_symb_end_stack] as &block)[asp + 1];
                 if sp >s asp {
@@ -581,8 +556,7 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
 
 #[export = "caml_set_parser_trace"]
 fn caml_set_parser_trace(x: &eq) -> &eq {
-    let oldflag: i32;
-    oldflag = caml_parser_trace;
+    let oldflag: i32 = caml_parser_trace;
     caml_parser_trace = x as &i31 as i32_s;
     oldflag as &i31;
 }

@@ -2325,4 +2325,5 @@ let module_ diagnostics (_, fields) =
     | _ -> ()
   in
   List.iter collect_field fields;
-  List.filter_map (fun f -> modulefield ctx export_tbl f) fields
+  Sink_let.module_
+    (List.filter_map (fun f -> modulefield ctx export_tbl f) fields)

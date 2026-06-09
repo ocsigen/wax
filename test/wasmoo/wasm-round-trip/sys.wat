@@ -114,8 +114,8 @@
 
 (func $caml_sys_random_seed (export "caml_sys_random_seed")
   (param $x (ref eq)) (result (ref eq))
-  (local $r (ref extern)) (local $a (ref $block)) (local $i i32)
-  (local $n i32)
+  (local $r (ref extern)) (local $n i32) (local $a (ref $block))
+  (local $i i32)
   (local.set $r (call $random_seed))
   (local.set $n (call $ta_length (local.get $r)))
   (local.set $a

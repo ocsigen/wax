@@ -59,10 +59,9 @@ const named_value_table: &assoc_array =
     [assoc_array|null as &?assoc; Named_value_size];
 
 fn find_named_value(s: &eq, l: &?assoc) -> &?assoc {
-    let a: &assoc;
     'tail: do &?assoc {
         'loop: loop {
-            a = br_on_cast_fail 'tail &assoc l;
+            let a: &assoc = br_on_cast_fail 'tail &assoc l;
             if caml_string_equal(s, a.f) as &i31 as i32_u { return a; }
             l = a.f_3;
             br 'loop;
@@ -87,10 +86,9 @@ fn caml_named_value(s: &string) -> &?eq {
 
 #[export = "caml_register_named_value"]
 fn caml_register_named_value(x: &eq, x_2: &eq) -> &eq {
-    let h: i32;
-    let r: &?assoc;
-    h = caml_string_hash(0 as &i31, x) as &i31 as i32_s %u Named_value_size;
-    r = named_value_table[h];
+    let h: i32 =
+        caml_string_hash(0 as &i31, x) as &i31 as i32_s %u Named_value_size;
+    let r: &?assoc = named_value_table[h];
     'not_found: do {
         (br_on_null 'not_found find_named_value(x, r)).f_2 = x_2;
         return 0 as &i31;
@@ -102,15 +100,12 @@ fn caml_register_named_value(x: &eq, x_2: &eq) -> &eq {
 // Used only for testing (tests-jsoo/bin), but inconvenient to pull out
 #[export = "caml_unregister_named_value"]
 fn caml_unregister_named_value(name: &eq) -> &eq {
-    let h: i32;
-    let r: &?assoc;
-    let a: &assoc;
-    h =
+    let h: i32 =
         caml_string_hash(0 as &i31, name) as &i31 as i32_s %u
             Named_value_size;
-    r = named_value_table[h];
+    let r: &?assoc = named_value_table[h];
     'done: do {
-        a = br_on_null 'done r;
+        let a: &assoc = br_on_null 'done r;
         r = a.f_3;
         if caml_string_equal(name, a.f) as &i31 as i32_u {
             named_value_table[h] = r;
@@ -134,8 +129,7 @@ let caml_global_data: &block = [block|0 as &i31; 12];
 
 #[export = "caml_register_global"]
 fn caml_register_global(x: &eq, v: &eq, x_2: &eq) -> &eq {
-    let i: i32;
-    i = x as &i31 as i32_u;
+    let i: i32 = x as &i31 as i32_u;
     if i <u caml_global_data.length { caml_global_data[i] = v; }
     0 as &i31;
 }
@@ -161,13 +155,12 @@ fn caml_handle_uncaught_exception(exn: &?extern) {
 
 #[export = "caml_main"]
 fn caml_main(start: &func) {
-    let exn: &eq;
     try {
         _ = (start as &func_2)();
     } catch {
         ocaml_exit => { exit(_); }
         ocaml_exception => {
-            exn = _;
+            let exn: &eq = _;
             'exit: do {
                 'not_registered: do {
                     _ =

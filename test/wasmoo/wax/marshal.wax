@@ -56,14 +56,10 @@ const input_val_from_string: &string = string#"input_val_from_string";
 
     "caml_input_value_from_string"]
 fn caml_input_value_from_bytes(vstr: &eq, vofs: &eq) -> &eq {
-    let str: &string;
-    let ofs: i32;
-    let s: &intern_state;
-    let h: &marshal_header;
-    str = vstr as &string;
-    ofs = vofs as &i31 as i32_u;
-    s = get_intern_state(str, ofs);
-    h = parse_header(s, input_val_from_string);
+    let str: &string = vstr as &string;
+    let ofs: i32 = vofs as &i31 as i32_u;
+    let s: &intern_state = get_intern_state(str, ofs);
+    let h: &marshal_header = parse_header(s, input_val_from_string);
     if ofs + (h.data_len + 20) >s str.length {
         bad_length(input_val_from_string);
     }
@@ -76,21 +72,15 @@ const input_value: &string = string#"input_value";
 
 #[export = "caml_input_value"]
 fn caml_input_value(ch: &eq) -> &eq {
-    let r: i32;
-    let len: i32;
-    let header: &string;
-    let buf: &string;
-    let s: &intern_state;
-    let h: &marshal_header;
     // ZZZ check binary channel?
-    header = [string|0; 20];
-    r = caml_really_getblock(ch, header, 0, 20);
+    let header: &string = [string|0; 20];
+    let r: i32 = caml_really_getblock(ch, header, 0, 20);
     if !r { caml_raise_end_of_file(); }
     if r <u 20 { caml_failwith([string|truncated_obj @ 0; 29]); }
-    s = get_intern_state(header, 0);
-    h = parse_header(s, input_value);
-    len = h.data_len;
-    buf = [string|0; len];
+    let s: &intern_state = get_intern_state(header, 0);
+    let h: &marshal_header = parse_header(s, input_value);
+    let len: i32 = h.data_len;
+    let buf: &string = [string|0; len];
     if caml_really_getblock(ch, buf, 0, len) <u len {
         caml_failwith([string|truncated_obj @ 0; 29]);
     }
@@ -168,52 +158,39 @@ fn get_intern_state(src: &string, pos: i32) -> &intern_state {
 }
 
 fn read8u(s: &intern_state) -> i32 {
-    let pos: i32;
-    let res: i32;
-    pos = s.pos;
-    res = s.src[pos] as i32_u;
+    let pos: i32 = s.pos;
+    let res: i32 = s.src[pos] as i32_u;
     s.pos = pos + 1;
     res;
 }
 
 fn read8s(s: &intern_state) -> i32 {
-    let pos: i32;
-    let res: i32;
-    pos = s.pos;
-    res = s.src[pos] as i32_s;
+    let pos: i32 = s.pos;
+    let res: i32 = s.src[pos] as i32_s;
     s.pos = pos + 1;
     res;
 }
 
 fn read16u(s: &intern_state) -> i32 {
-    let src: &string;
-    let pos: i32;
-    let res: i32;
-    src = s.src;
-    pos = s.pos;
-    res = src[pos] as i32_u << 8 | src[pos + 1] as i32_u;
+    let src: &string = s.src;
+    let pos: i32 = s.pos;
+    let res: i32 = src[pos] as i32_u << 8 | src[pos + 1] as i32_u;
     s.pos = pos + 2;
     res;
 }
 
 fn read16s(s: &intern_state) -> i32 {
-    let src: &string;
-    let pos: i32;
-    let res: i32;
-    src = s.src;
-    pos = s.pos;
-    res = src[pos] as i32_s << 8 | src[pos + 1] as i32_u;
+    let src: &string = s.src;
+    let pos: i32 = s.pos;
+    let res: i32 = src[pos] as i32_s << 8 | src[pos + 1] as i32_u;
     s.pos = pos + 2;
     res;
 }
 
 fn read32(s: &intern_state) -> i32 {
-    let src: &string;
-    let pos: i32;
-    let res: i32;
-    src = s.src;
-    pos = s.pos;
-    res =
+    let src: &string = s.src;
+    let pos: i32 = s.pos;
+    let res: i32 =
         src[pos] as i32_u << 24 | src[pos + 1] as i32_u << 16 |
             (src[pos + 2] as i32_u << 8 | src[pos + 3] as i32_u);
     s.pos = pos + 4;
@@ -221,38 +198,31 @@ fn read32(s: &intern_state) -> i32 {
 }
 
 fn readblock(s: &intern_state, str: &string) {
-    let len: i32;
-    let pos: i32;
-    len = str.length;
-    pos = s.pos;
+    let len: i32 = str.length;
+    let pos: i32 = s.pos;
     str.copy(0, s.src, pos, len);
     s.pos = pos + len;
 }
 
 fn readstr(s: &intern_state) -> &string {
+    let src: &string = s.src;
+    let pos: i32 = s.pos;
     let len: i32;
-    let pos: i32;
-    let res: &string;
-    let src: &string;
-    src = s.src;
-    pos = s.pos;
     'loop: loop { if src[pos + len] as i32_u { len = len + 1; br 'loop; } } // 'loop
-    res = [string|0; len];
+    let res: &string = [string|0; len];
     res.copy(0, src, pos, len);
     s.pos = pos + (len + 1);
     res;
 }
 
 fn readfloat(s: &intern_state, code: i32) -> f64 {
-    let src: &string;
-    let pos: i32;
+    let v: &eq;
     let res: i32;
+    let src: &string = s.src;
+    let pos: i32 = s.pos;
+    s.pos = pos + 8;
     let d: i64;
     let i: i32;
-    let v: &eq;
-    src = s.src;
-    pos = s.pos;
-    s.pos = pos + 8;
     if code == CODE_DOUBLE_BIG {
         'loop: loop {
             d = d << 8 | src[pos + i] as i32_u as i64_u;
@@ -270,13 +240,12 @@ fn readfloat(s: &intern_state, code: i32) -> f64 {
 }
 
 fn readfloats(s: &intern_state, code: i32, len: i32) -> &eq {
-    let dest: &float_array;
-    let i: i32;
     code =
         (code == CODE_DOUBLE_ARRAY8_BIG) | (code == CODE_DOUBLE_ARRAY32_BIG)
             ?CODE_DOUBLE_BIG:CODE_DOUBLE_LITTLE;
-    dest = [float_array|0; len];
+    let dest: &float_array = [float_array|0; len];
     'loop: loop {
+        let i: i32;
         if i <u len { dest[i] = readfloat(s, code); i = i + 1; br 'loop; }
     } // 'loop
     dest;
@@ -309,17 +278,14 @@ fn caml_deserialize_int_4(s: &eq) -> i32 {
 
 #[export = "caml_deserialize_int_8"]
 fn caml_deserialize_int_8(vs: &eq) -> i64 {
-    let s: &intern_state;
-    s = vs as &intern_state;
+    let s: &intern_state = vs as &intern_state;
     read32(s) as i64_u << 32 | read32(s) as i64_u;
 }
 
 fn register_object(s: &intern_state, v: &eq) {
-    let obj_table: &block;
-    let p: i32;
     'exit: do {
-        obj_table = br_on_null 'exit s.obj_table;
-        p = s.obj_counter;
+        let obj_table: &block = br_on_null 'exit s.obj_table;
+        let p: i32 = s.obj_counter;
         obj_table[p] = v;
         s.obj_counter = p + 1;
     }
@@ -337,13 +303,11 @@ data incorrect_size =
 "input_value: incorrect length of serialized custom block";
 
 fn intern_custom(s: &intern_state, code: i32) -> &eq {
-    let ops: &custom_operations;
-    let expected_size: i32;
-    let res: &eq;
-    let sz: i32;
     'unknown: do {
-        ops = br_on_null 'unknown caml_find_custom_operations(readstr(s));
+        let ops: &custom_operations =
+            br_on_null 'unknown caml_find_custom_operations(readstr(s));
         'no_length: do {
+            let expected_size: i32;
             if code == CODE_CUSTOM_FIXED {
                 expected_size =
                     (br_on_null 'no_length ops.fixed_length).bsize_32;
@@ -354,8 +318,8 @@ fn intern_custom(s: &intern_state, code: i32) -> &eq {
                 }
             }
             ops.deserialize(s);
-            sz = _;
-            res = _;
+            let sz: i32 = _;
+            let res: &eq = _;
             if (sz != expected_size) & (code != CODE_CUSTOM) {
                 caml_failwith([string|incorrect_size @ 0; 56]);
             }
@@ -368,41 +332,31 @@ fn intern_custom(s: &intern_state, code: i32) -> &eq {
 }
 
 fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
-    let res: &block;
-    let dest: &block;
-    let sp: &?stack_item;
-    let item: &stack_item;
-    let code: i32;
-    let header: i32;
-    let tag_2: i32;
-    let size: i32;
-    let len: i32;
-    let pos: i32;
-    let pos': i32;
-    let ofs: i32;
-    let b: &block;
-    let str: &string;
-    let v: &eq;
     caml_init_custom_operations();
-    res = [block|0 as &i31];
-    sp = {stack_item| blk: res, pos: 0, next: null as &?stack_item };
-    size = h.num_objects;
+    let res: &block = [block|0 as &i31];
+    let sp: &?stack_item =
+        {stack_item| blk: res, pos: 0, next: null as &?stack_item };
+    let size: i32 = h.num_objects;
     if size { s.obj_table = [block|0 as &i31; size]; }
-    v =
+    let v: &eq =
         0 // keep validator happy
             as &i31;
     'exit: do {
         'loop: loop {
-            item = br_on_null 'exit sp;
-            dest = item.blk;
-            pos = item.pos;
-            pos' = pos + 1;
+            let item: &stack_item = br_on_null 'exit sp;
+            let dest: &block = item.blk;
+            let pos: i32 = item.pos;
+            let pos': i32 = pos + 1;
             item.pos = pos';
             if pos' == dest.length { sp = item.next; }
             'done: do {
+                let tag_2: i32;
                 'read_block: do {
+                    let len: i32;
                     'read_string: do {
+                        let code: i32;
                         'read_double_array: do {
+                            let ofs: i32;
                             'read_shared: do {
                                 code = read8u(s);
                                 if code >=u PREFIX_SMALL_INT {
@@ -540,7 +494,9 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                                                                     'read_string;
                                                                     } // 'BLOCK32
                                                                     // BLOCK32
-                                                                    header =
+                                                                    let
+                                                                    header:
+                                                                    i32 =
                                                                     read32(s);
                                                                     tag_2 =
                                                                     header &
@@ -599,14 +555,14 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                         br 'done;
                     } // 'read_string
                     // read_string
-                    str = [string|0; len];
+                    let str: &string = [string|0; len];
                     readblock(s, str);
                     v = str;
                     register_object(s, v);
                     br 'done;
                 } // 'read_block
                 // read_block
-                b = [block|0 as &i31; size + 1];
+                let b: &block = [block|0 as &i31; size + 1];
                 b[0] = tag_2 as &i31;
                 if size {
                     register_object(s, b);
@@ -644,15 +600,12 @@ fn bad_length(prim: &string) {
 type marshal_header = { data_len: i32, num_objects: i32 };
 
 fn parse_header(s: &intern_state, prim: &string) -> &marshal_header {
-    let magic: i32;
-    let data_len: i32;
-    let num_objects: i32;
     let whsize: i32;
-    magic = read32(s);
+    let magic: i32 = read32(s);
     if magic == Intext_magic_number_big { too_large(prim); }
     if magic != Intext_magic_number_small { bad_object(prim); }
-    data_len = read32(s);
-    num_objects = read32(s);
+    let data_len: i32 = read32(s);
+    let num_objects: i32 = read32(s);
     _ = read32(s);
     _ = read32(s);
     {marshal_header| data_len: data_len, num_objects: num_objects };
@@ -662,10 +615,9 @@ data marshal_data_size = "Marshal.data_size";
 
 #[export = "caml_marshal_data_size"]
 fn caml_marshal_data_size(buf: &eq, ofs: &eq) -> &eq {
-    let s: &intern_state;
-    let magic: i32;
-    s = get_intern_state(buf as &string, ofs as &i31 as i32_u);
-    magic = read32(s);
+    let s: &intern_state =
+        get_intern_state(buf as &string, ofs as &i31 as i32_u);
+    let magic: i32 = read32(s);
     if magic == Intext_magic_number_big {
         too_large([string|marshal_data_size @ 0; 17]);
     }
@@ -702,9 +654,9 @@ type extern_state = {
 fn init_extern_state
 (flags: &eq, output: &output_block, pos: i32, user_provided_output: i32) ->
 &extern_state {
-    let b: &block;
     let no_sharing: i32;
     'parse_flags: loop {
+        let b: &block;
         _ =
             'done: do &eq {
                 b = br_on_cast_fail 'done &block flags;
@@ -734,21 +686,18 @@ data buffer_overflow = "Marshal.to_buffer: buffer overflow";
 const SIZE_EXTERN_OUTPUT_BLOCK: i32 = 8100;
 
 fn reserve_extern_output(s: &extern_state, required: i32) -> i32 {
-    let last: &output_block;
-    let blk: &output_block;
-    let pos: i32;
-    let extra: i32;
-    let buf: &string;
-    pos = s.pos;
+    let pos: i32 = s.pos;
     if pos + required <=u s.limit { s.pos = pos + required; return pos; }
     if s.user_provided_output {
         caml_failwith([string|buffer_overflow @ 0; 34]);
     }
-    last = s.output_last;
+    let last: &output_block = s.output_last;
     last.end = s.pos;
+    let extra: i32;
     if required >s SIZE_EXTERN_OUTPUT_BLOCK >>u 1 { extra = required; }
-    buf = [string|0; SIZE_EXTERN_OUTPUT_BLOCK + extra];
-    blk = {output_block| next: null as &?output_block, end: 0, data: buf };
+    let buf: &string = [string|0; SIZE_EXTERN_OUTPUT_BLOCK + extra];
+    let blk: &output_block =
+        {output_block| next: null as &?output_block, end: 0, data: buf };
     last.next = blk;
     s.output_last = blk;
     s.buf = buf;
@@ -775,55 +724,43 @@ fn store64(s: &string, pos: i32, n: i64) {
 }
 
 fn write(s: &extern_state, c: i32) {
-    let pos: i32;
-    pos = reserve_extern_output(s, 1);
+    let pos: i32 = reserve_extern_output(s, 1);
     s.buf[pos] = c;
 }
 
 fn writecode8(s: &extern_state, c: i32, v: i32) {
-    let pos: i32;
-    let buf: &string;
-    pos = reserve_extern_output(s, 2);
-    buf = s.buf;
+    let pos: i32 = reserve_extern_output(s, 2);
+    let buf: &string = s.buf;
     buf[pos] = c;
     buf[pos + 1] = v;
 }
 
 fn writecode16(s: &extern_state, c: i32, v: i32) {
-    let pos: i32;
-    let buf: &string;
-    pos = reserve_extern_output(s, 3);
-    buf = s.buf;
+    let pos: i32 = reserve_extern_output(s, 3);
+    let buf: &string = s.buf;
     buf[pos] = c;
     store16(buf, pos + 1, v);
 }
 
 fn writecode32(s: &extern_state, c: i32, v: i32) {
-    let pos: i32;
-    let buf: &string;
-    pos = reserve_extern_output(s, 5);
-    buf = s.buf;
+    let pos: i32 = reserve_extern_output(s, 5);
+    let buf: &string = s.buf;
     buf[pos] = c;
     store32(buf, pos + 1, v);
 }
 
 fn writeblock(s: &extern_state, str: &string) {
-    let len: i32;
-    let pos: i32;
-    len = str.length;
-    pos = reserve_extern_output(s, len);
+    let len: i32 = str.length;
+    let pos: i32 = reserve_extern_output(s, len);
     s.buf.copy(pos, str, 0, len);
 }
 
 fn writefloat(s: &extern_state, f: f64) {
-    let pos: i32;
-    let buf: &string;
-    let d: i64;
-    let i: i32;
-    pos = reserve_extern_output(s, 8);
-    buf = s.buf;
-    d = f.to_bits;
+    let pos: i32 = reserve_extern_output(s, 8);
+    let buf: &string = s.buf;
+    let d: i64 = f.to_bits;
     'loop: loop {
+        let i: i32;
         buf[pos + i] = (d >>u (i << 3) as i64_u) as i32;
         i = i + 1;
         br_if 'loop i <u 8;
@@ -831,20 +768,14 @@ fn writefloat(s: &extern_state, f: f64) {
 }
 
 fn writefloats(s: &extern_state, b: &float_array) {
-    let pos: i32;
-    let sz: i32;
-    let buf: &string;
-    let d: i64;
-    let i: i32;
-    let j: i32;
-    sz = b.length;
-    pos = reserve_extern_output(s, sz << 3);
-    buf = s.buf;
-    j = 0;
+    let sz: i32 = b.length;
+    let pos: i32 = reserve_extern_output(s, sz << 3);
+    let buf: &string = s.buf;
+    let j: i32 = 0;
     'loop2: loop {
         if j <u sz {
-            d = b[j].to_bits;
-            i = 0;
+            let d: i64 = b[j].to_bits;
+            let i: i32 = 0;
             'loop: loop {
                 buf[pos + i] = (d >>u (i << 3) as i64_u) as i32;
                 i = i + 1;
@@ -866,9 +797,8 @@ fn extern_lookup_position(s: &extern_state, obj: &eq) -> i32 {
 }
 
 fn extern_record_location(s: &extern_state, obj: &eq) {
-    let pos: i32;
     if s.no_sharing { return; }
-    pos = s.obj_counter;
+    let pos: i32 = s.obj_counter;
     s.obj_counter = pos + 1;
     map_set(s.pos_table, obj, pos as &i31);
 }
@@ -909,8 +839,7 @@ fn extern_header(s: &extern_state, sz: i32, tag_2: i32) {
 }
 
 fn extern_string(s: &extern_state, v: &string) {
-    let len: i32;
-    len = v.length;
+    let len: i32 = v.length;
     if len <u 0x20 {
         write(s, PREFIX_SMALL_STRING + len);
     } else {
@@ -927,8 +856,7 @@ fn extern_float(s: &extern_state, v: f64) {
 }
 
 fn extern_float_array(s: &extern_state, v: &float_array) {
-    let nfloats: i32;
-    nfloats = v.length;
+    let nfloats: i32 = v.length;
     if nfloats <u 0x100 {
         writecode8(s, CODE_DOUBLE_ARRAY8_LITTLE, nfloats);
     } else { writecode32(s, CODE_DOUBLE_ARRAY32_LITTLE, nfloats); }
@@ -938,18 +866,14 @@ fn extern_float_array(s: &extern_state, v: &float_array) {
 data incorrect_sizes = "output_value: incorrect fixed sizes specified by ";
 
 fn extern_custom(s: &extern_state, v: &custom) -> (i32, i32) {
-    let ops: &custom_operations;
-    let serialize: &serialize;
-    let fixed_length: &fixed_length;
-    let pos: i32;
-    let buf: &string;
-    let sz32: i32;
-    let sz64: i32;
-    ops = v.f;
+    let ops: &custom_operations = v.f;
     'abstract: do {
-        serialize = br_on_null 'abstract ops.serialize;
+        let serialize: &serialize = br_on_null 'abstract ops.serialize;
+        let sz32: i32;
+        let sz64: i32;
         'variable_length: do {
-            fixed_length = br_on_null 'variable_length ops.fixed_length;
+            let fixed_length: &fixed_length =
+                br_on_null 'variable_length ops.fixed_length;
             write(s, CODE_CUSTOM_FIXED);
             writeblock(s, ops.id);
             write(s, 0);
@@ -970,8 +894,8 @@ fn extern_custom(s: &extern_state, v: &custom) -> (i32, i32) {
         write(s, CODE_CUSTOM_LEN);
         writeblock(s, ops.id);
         write(s, 0);
-        pos = reserve_extern_output(s, 12);
-        buf = s.buf;
+        let pos: i32 = reserve_extern_output(s, 12);
+        let buf: &string = s.buf;
         serialize(s, v);
         sz64 = _;
         sz32 = _;
@@ -990,24 +914,19 @@ data abstract_value = "output_value: abstract value";
 data cust_value = "output_value: abstract value (Custom)";
 
 fn extern_rec(s: &extern_state, v: &eq) {
-    let sp: &?stack_item;
-    let item: &stack_item;
-    let b: &block;
-    let str: &string;
-    let fa: &float_array;
     let hd: i32;
-    let tag_2: i32;
-    let sz: i32;
-    let pos: i32;
-    let sz32: i32;
-    let sz64: i32;
     'loop: loop {
+        let sp: &?stack_item;
+        let b: &block;
+        let pos: i32;
         'next_item: do {
             _ =
                 'not_int: do &eq {
                     extern_int(s, (br_on_cast_fail 'not_int &i31 v) as i32_s);
                     br 'next_item;
                 };
+            let tag_2: i32;
+            let sz: i32;
             _ =
                 'not_block: do &eq {
                     b = br_on_cast_fail 'not_block &block v;
@@ -1035,6 +954,7 @@ fn extern_rec(s: &extern_state, v: &eq) {
                 br 'next_item;
             }
             extern_record_location(s, v);
+            let str: &string;
             _ =
                 'not_string: do &eq {
                     str = br_on_cast_fail 'not_string &string v;
@@ -1050,6 +970,7 @@ fn extern_rec(s: &extern_state, v: &eq) {
                     extern_size(s, 2, 1);
                     br 'next_item;
                 };
+            let fa: &float_array;
             _ =
                 'not_float_array: do &eq {
                     fa = br_on_cast_fail 'not_float_array &float_array v;
@@ -1059,6 +980,8 @@ fn extern_rec(s: &extern_state, v: &eq) {
                     br 'next_item;
                 } // 'not_float_array
             ;
+            let sz32: i32;
+            let sz64: i32;
             _ =
                 'not_custom: do &eq {
                     extern_custom(s, br_on_cast_fail 'not_custom &custom v);
@@ -1079,7 +1002,7 @@ fn extern_rec(s: &extern_state, v: &eq) {
         } // 'next_item
         // next_item
         'done: do {
-            item = br_on_null 'done sp;
+            let item: &stack_item = br_on_null 'done sp;
             b = item.blk;
             pos = item.pos;
             v = b[pos];
@@ -1092,13 +1015,12 @@ fn extern_rec(s: &extern_state, v: &eq) {
 }
 
 fn extern_output_length(s: &extern_state, pos: i32) -> i32 {
-    let len: i32;
-    let output_block: &output_block;
     if s.user_provided_output => i32 {
         return s.pos - pos;
     } else {
         s.output_last.end = s.pos;
-        output_block = s.output_first;
+        let output_block: &output_block = s.output_first;
+        let len: i32;
         'loop: loop {
             'done: do {
                 len = len + output_block.end;
@@ -1114,13 +1036,11 @@ fn extern_value
 (flags: &eq, output: &output_block, pos: i32, user_provided_output: i32,
  v: &eq)
 -> (i32, &string, &extern_state) {
-    let s: &extern_state;
-    let len: i32;
-    let header: &string;
-    s = init_extern_state(flags, output, pos, user_provided_output);
+    let s: &extern_state =
+        init_extern_state(flags, output, pos, user_provided_output);
     extern_rec(s, v);
-    len = extern_output_length(s, pos);
-    header = [string|0; 20];
+    let len: i32 = extern_output_length(s, pos);
+    let header: &string = [string|0; 20];
     store32(header, 0, Intext_magic_number_small);
     store32(header, 4, len);
     store32(header, 8, s.obj_counter);
@@ -1133,29 +1053,22 @@ fn extern_value
 
 #[export = "caml_output_value_to_string"]
 fn caml_output_value_to_string(v: &eq, flags: &eq) -> &eq {
-    let sz: i32;
-    let buf: &string;
-    let st: &extern_state;
-    let blk: &output_block;
-    let pos: i32;
-    let len: i32;
-    let res: &string;
-    blk =
+    let blk: &output_block =
         {output_block|
             next: null as &?output_block,
             end: SIZE_EXTERN_OUTPUT_BLOCK,
             data: [string|0; SIZE_EXTERN_OUTPUT_BLOCK]
         };
     extern_value(flags, blk, 0, 0, v);
-    st = _;
-    buf = _;
-    sz = _;
-    res = [string|0; sz + 20];
+    let st: &extern_state = _;
+    let buf: &string = _;
+    let sz: i32 = _;
+    let res: &string = [string|0; sz + 20];
     res.copy(0, buf, 0, 20);
-    pos = 20;
+    let pos: i32 = 20;
     'loop: loop {
         'done: do {
-            len = blk.end;
+            let len: i32 = blk.end;
             res.copy(pos, blk.data, 0, len);
             pos = pos + len;
             blk = br_on_null 'done blk.next;
@@ -1168,17 +1081,13 @@ fn caml_output_value_to_string(v: &eq, flags: &eq) -> &eq {
 #[export = "caml_output_value_to_buffer"]
 fn caml_output_value_to_buffer
 (vbuf: &eq, vpos: &eq, vlen: &eq, v: &eq, flags: &eq) -> &eq {
-    let buf: &string;
-    let pos: i32;
-    let len: i32;
-    let sz: i32;
-    let buf_2: &string;
     let st: &extern_state;
-    let blk: &output_block;
-    buf_2 = vbuf as &string;
-    pos = vpos as &i31 as i32_u;
-    len = vlen as &i31 as i32_u;
-    blk =
+    let sz: i32;
+    let buf: &string;
+    let buf_2: &string = vbuf as &string;
+    let pos: i32 = vpos as &i31 as i32_u;
+    let len: i32 = vlen as &i31 as i32_u;
+    let blk: &output_block =
         {output_block|
             next: null as &?output_block,
             end: pos + len,
@@ -1194,27 +1103,22 @@ fn caml_output_value_to_buffer
 
 #[export = "caml_output_value"]
 fn caml_output_value(ch: &eq, v: &eq, flags: &eq) -> &eq {
-    let sz: i32;
-    let buf: &string;
-    let st: &extern_state;
-    let blk: &output_block;
-    let len: i32;
     let res: &string;
     // ZZZ check if binary channel?
-    blk =
+    let blk: &output_block =
         {output_block|
             next: null as &?output_block,
             end: SIZE_EXTERN_OUTPUT_BLOCK,
             data: [string|0; SIZE_EXTERN_OUTPUT_BLOCK]
         };
     extern_value(flags, blk, 0, 0, v);
-    st = _;
-    buf = _;
-    sz = _;
+    let st: &extern_state = _;
+    let buf: &string = _;
+    let sz: i32 = _;
     caml_really_putblock(ch, buf, 0, 20);
     'loop: loop {
         'done: do {
-            len = blk.end;
+            let len: i32 = blk.end;
             caml_really_putblock(ch, blk.data, 0, blk.end);
             blk = br_on_null 'done blk.next;
             br 'loop;
@@ -1226,36 +1130,28 @@ fn caml_output_value(ch: &eq, v: &eq, flags: &eq) -> &eq {
 
 #[export = "caml_serialize_int_1"]
 fn caml_serialize_int_1(vs: &eq, i: i32) {
-    let s: &extern_state;
-    let pos: i32;
-    s = vs as &extern_state;
-    pos = reserve_extern_output(s, 1);
+    let s: &extern_state = vs as &extern_state;
+    let pos: i32 = reserve_extern_output(s, 1);
     s.buf[pos] = i;
 }
 
 #[export = "caml_serialize_int_2"]
 fn caml_serialize_int_2(vs: &eq, i: i32) {
-    let s: &extern_state;
-    let pos: i32;
-    s = vs as &extern_state;
-    pos = reserve_extern_output(s, 2);
+    let s: &extern_state = vs as &extern_state;
+    let pos: i32 = reserve_extern_output(s, 2);
     store16(s.buf, pos, i);
 }
 
 #[export = "caml_serialize_int_4"]
 fn caml_serialize_int_4(vs: &eq, i: i32) {
-    let s: &extern_state;
-    let pos: i32;
-    s = vs as &extern_state;
-    pos = reserve_extern_output(s, 4);
+    let s: &extern_state = vs as &extern_state;
+    let pos: i32 = reserve_extern_output(s, 4);
     store32(s.buf, pos, i);
 }
 
 #[export = "caml_serialize_int_8"]
 fn caml_serialize_int_8(vs: &eq, i: i64) {
-    let s: &extern_state;
-    let pos: i32;
-    s = vs as &extern_state;
-    pos = reserve_extern_output(s, 8);
+    let s: &extern_state = vs as &extern_state;
+    let pos: i32 = reserve_extern_output(s, 8);
     store64(s.buf, pos, i);
 }

@@ -52,7 +52,7 @@
 (func $caml_hexstring_of_float (export "caml_hexstring_of_float")
   (param $x (ref eq)) (param $x_2 (ref eq)) (param $x_3 (ref eq))
   (result (ref eq))
-  (local $b i64) (local $prec i32) (local $style i32) (local $sign i32)
+  (local $prec i32) (local $style i32) (local $b i64) (local $sign i32)
   (local $exp i32) (local $m i64) (local $i i32) (local $j i32)
   (local $d i32) (local $txt (ref $chars)) (local $len i32)
   (local $s (ref $string)) (local $unit i64) (local $half i64)
@@ -192,8 +192,9 @@
 (data $format_error "format_float: bad format")
 
 (func $parse_format (param $s (ref $string)) (result i32 i32 i32 i32)
-  (local $i i32) (local $len i32) (local $c i32) (local $sign_style i32)
+  (local $len i32) (local $i i32) (local $sign_style i32)
   (local $precision i32) (local $conversion i32) (local $uppercase i32)
+  (local $c i32)
   (local.set $len (array.len (local.get $s)))
   (local.set $i (i32.const 1))
   (block $return
@@ -250,11 +251,11 @@
 
 (func $caml_format_float (export "caml_format_float")
   (param $x (ref eq)) (param $x_2 (ref eq)) (result (ref eq))
-  (local $f f64) (local $b i64) (local $sign_style i32)
-  (local $precision i32) (local $conversion i32) (local $uppercase i32)
-  (local $negative i32) (local $exp i32) (local $m i64) (local $i i32)
-  (local $len i32) (local $c i32) (local $s (ref $string))
-  (local $txt (ref $chars)) (local $num anyref)
+  (local $f f64) (local $b i64) (local $uppercase i32)
+  (local $conversion i32) (local $precision i32) (local $sign_style i32)
+  (local $negative i32) (local $i i32) (local $exp i32) (local $m i64)
+  (local $len i32) (local $s (ref $string)) (local $txt (ref $chars))
+  (local $num anyref) (local $c i32)
   (local.set $f
     (struct.get $float $f (ref.cast (ref $float) (local.get $x_2))))
   (local.set $b (i64.reinterpret_f64 (local.get $f)))
@@ -331,10 +332,9 @@
 (data $float_of_string "float_of_string")
 
 (func $caml_float_of_hex (param $s (ref $string)) (param $i i32) (result f64)
-  (local $len i32) (local $c i32) (local $d i32) (local $m i64)
-  (local $f f64) (local $negative i32) (local $dec_point i32)
-  (local $exp i32) (local $adj i32) (local $n_bits i32) (local $m_bits i32)
-  (local $x_bits i32)
+  (local $len i32) (local $dec_point i32) (local $m i64) (local $exp i32)
+  (local $n_bits i32) (local $x_bits i32) (local $c i32) (local $d i32)
+  (local $negative i32) (local $m_bits i32) (local $f f64) (local $adj i32)
   (local.set $len (array.len (local.get $s)))
   (local.set $dec_point (i32.const -1))
   (block $error
@@ -466,7 +466,7 @@
 (func $caml_float_of_string (export "caml_float_of_string")
   (param $x (ref eq)) (result (ref eq))
   (local $s (ref $string)) (local $len i32) (local $i i32) (local $j i32)
-  (local $s' (ref $string)) (local $negative i32) (local $c i32)
+  (local $c i32) (local $s' (ref $string)) (local $negative i32)
   (local $f f64)
   (local.set $s (ref.cast (ref $string) (local.get $x)))
   (local.set $len (array.len (local.get $s)))
@@ -779,7 +779,7 @@
 
 (func $caml_frexp_float (export "caml_frexp_float")
   (param $x (ref eq)) (result (ref eq))
-  (local $m f64) (local $e i32)
+  (local $e i32) (local $m f64)
   (call $frexp (struct.get $float $f (ref.cast (ref $float) (local.get $x))))
   (local.set $e)
   (local.set $m)

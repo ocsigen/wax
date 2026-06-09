@@ -113,12 +113,9 @@ fn caml_sys_file_exists(name: &eq) -> &eq {
 data no_such_file = ": No such file or directory";
 
 fn caml_raise_no_such_file(vname: &eq) {
-    let name: &string;
-    let msg: &string;
-    let len: i32;
-    name = vname as &string;
-    len = name.length;
-    msg = [string|0; len + 27];
+    let name: &string = vname as &string;
+    let len: i32 = name.length;
+    let msg: &string = [string|0; len + 27];
     msg.copy(0, name, 0, len);
     msg.init(no_such_file, len, 0, 27);
     caml_raise_sys_error(msg);

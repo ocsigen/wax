@@ -53,23 +53,17 @@ const caml_ephe_none: &eq = [block|abstract_tag as &i31];
 
 #[export = "caml_ephe_get_data"]
 fn caml_ephe_get_data(vx: &eq) -> &eq {
-    let x: &block;
-    let d: &eq;
-    let v: &eq;
-    let m: &any;
-    let i: i32;
-    let len: i32;
-    x = vx as &block;
-    d = x[caml_ephe_data_offset];
+    let x: &block = vx as &block;
+    let d: &eq = x[caml_ephe_data_offset];
     'no_data: do {
         'released: do {
             br_if 'no_data d == caml_ephe_none;
-            i = caml_ephe_key_offset;
-            len = x.length;
-            m = unwrap(d)!;
+            let i: i32 = caml_ephe_key_offset;
+            let len: i32 = x.length;
+            let m: &any = unwrap(d)!;
             'loop: loop {
                 if i <u len {
-                    v = x[i];
+                    let v: &eq = x[i];
                     i = i + 1;
                     br_if 'loop v == caml_ephe_none;
                     br_if 'loop v is &i31;
@@ -87,8 +81,7 @@ fn caml_ephe_get_data(vx: &eq) -> &eq {
 
 #[export = "caml_ephe_get_data_copy"]
 fn caml_ephe_get_data_copy(x: &eq) -> &eq {
-    let r: &eq;
-    r = caml_ephe_get_data(x);
+    let r: &eq = caml_ephe_get_data(x);
     _ =
         'no_copy: do &eq {
             return
@@ -103,23 +96,18 @@ fn caml_ephe_get_data_copy(x: &eq) -> &eq {
 
 #[export = "caml_ephe_set_data"]
 fn caml_ephe_set_data(vx: &eq, data: &eq) -> &eq {
-    let x: &block;
-    let v: &eq;
-    let m: &any;
-    let m': &any;
-    let i: i32;
-    x = vx as &block;
-    i = x.length;
-    m = data;
+    let x: &block = vx as &block;
+    let i: i32 = x.length;
+    let m: &any = data;
     'loop: loop {
         i = i - 1;
         if i >=u caml_ephe_key_offset {
-            v = x[i];
+            let v: &eq = x[i];
             br_if 'loop v == caml_ephe_none;
             br_if 'loop v is &i31;
             'released: do {
                 v = br_on_null 'released weak_deref(unwrap(v));
-                m' = weak_map_new();
+                let m': &any = weak_map_new();
                 map_set(m', v, m);
                 m = m';
                 br 'loop;
@@ -134,8 +122,7 @@ fn caml_ephe_set_data(vx: &eq, data: &eq) -> &eq {
 
 #[export = "caml_ephe_unset_data"]
 fn caml_ephe_unset_data(vx: &eq) -> &eq {
-    let x: &block;
-    x = vx as &block;
+    let x: &block = vx as &block;
     x[caml_ephe_data_offset] = caml_ephe_none;
     0 as &i31;
 }
@@ -158,12 +145,9 @@ fn caml_ephe_set_data_opt(x: &eq, opt_data: &eq) {
 
     "caml_weak_get"]
 fn caml_ephe_get_key(vx: &eq, vi: &eq) -> &eq {
-    let x: &block;
-    let i: i32;
-    let v: &eq;
-    x = vx as &block;
-    i = caml_ephe_key_offset + vi as &i31 as i32_s;
-    v = x[i];
+    let x: &block = vx as &block;
+    let i: i32 = caml_ephe_key_offset + vi as &i31 as i32_s;
+    let v: &eq = x[i];
     'value: do {
         'no_value: do {
             br_if 'no_value v == caml_ephe_none;
@@ -185,8 +169,7 @@ fn caml_ephe_get_key(vx: &eq, vi: &eq) -> &eq {
 
     "caml_weak_get_copy"]
 fn caml_ephe_get_key_copy(x: &eq, i: &eq) -> &eq {
-    let r: &eq;
-    r = caml_ephe_get_key(x, i);
+    let r: &eq = caml_ephe_get_key(x, i);
     _ =
         'no_copy: do &eq {
             return
@@ -204,12 +187,9 @@ fn caml_ephe_get_key_copy(x: &eq, i: &eq) -> &eq {
 
     "caml_weak_check"]
 fn caml_ephe_check_key(vx: &eq, vi: &eq) -> &eq {
-    let x: &block;
-    let i: i32;
-    let v: &eq;
-    x = vx as &block;
-    i = vi as &i31 as i32_s + caml_ephe_key_offset;
-    v = x[i];
+    let x: &block = vx as &block;
+    let i: i32 = vi as &i31 as i32_s + caml_ephe_key_offset;
+    let v: &eq = x[i];
     'value: do {
         'no_value: do {
             br_if 'no_value v == caml_ephe_none;
@@ -225,12 +205,9 @@ fn caml_ephe_check_key(vx: &eq, vi: &eq) -> &eq {
 
 #[export = "caml_ephe_set_key"]
 fn caml_ephe_set_key(vx: &eq, vi: &eq, v: &eq) -> &eq {
-    let x: &block;
-    let d: &eq;
-    let i: i32;
-    x = vx as &block;
-    i = vi as &i31 as i32_s + caml_ephe_key_offset;
-    d = 0 as &i31;
+    let x: &block = vx as &block;
+    let i: i32 = vi as &i31 as i32_s + caml_ephe_key_offset;
+    let d: &eq = 0 as &i31;
     if v is &i31 {
         if x[i] is &js { d = caml_ephe_get_data(vx); }
         x[i] = v;
@@ -241,12 +218,9 @@ fn caml_ephe_set_key(vx: &eq, vi: &eq, v: &eq) -> &eq {
 
 #[export = "caml_ephe_unset_key"]
 fn caml_ephe_unset_key(vx: &eq, vi: &eq) -> &eq {
-    let x: &block;
-    let d: &eq;
-    let i: i32;
-    x = vx as &block;
-    i = vi as &i31 as i32_s + caml_ephe_key_offset;
-    d = 0 as &i31;
+    let x: &block = vx as &block;
+    let i: i32 = vi as &i31 as i32_s + caml_ephe_key_offset;
+    let d: &eq = 0 as &i31;
     if x[i] is &js { d = caml_ephe_get_data(vx); }
     x[i] = caml_ephe_none;
     caml_ephe_set_data_opt(vx, d);
@@ -260,11 +234,9 @@ data Weak_create = "Weak.create";
 
     "caml_weak_create"]
 fn caml_ephe_create(vlen: &eq) -> &eq {
-    let len: i32;
-    let res: &block;
-    len = vlen as &i31 as i32_s;
+    let len: i32 = vlen as &i31 as i32_s;
     if len <s 0 { caml_invalid_argument([string|Weak_create @ 0; 11]); }
-    res = [block|caml_ephe_none; len + caml_ephe_key_offset];
+    let res: &block = [block|caml_ephe_none; len + caml_ephe_key_offset];
     res[0] = abstract_tag as &i31;
     res;
 }
@@ -280,8 +252,7 @@ fn caml_ephe_blit_data(x: &eq, y: &eq) -> &eq {
 
     "caml_weak_blit"]
 fn caml_ephe_blit_key(x: &eq, i: &eq, y: &eq, j: &eq, l: &eq) -> &eq {
-    let d: &eq;
-    d = caml_ephe_get_data(y);
+    let d: &eq = caml_ephe_get_data(y);
     (y as &block).copy
         (j as &i31 as i32_s + caml_ephe_key_offset, x as &block,
          i as &i31 as i32_s + caml_ephe_key_offset, l as &i31 as i32_s);

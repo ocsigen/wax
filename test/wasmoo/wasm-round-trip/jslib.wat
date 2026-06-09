@@ -295,8 +295,8 @@
 
 (func $caml_js_object (export "caml_js_object")
   (param $x (ref eq)) (result (ref eq))
-  (local $a (ref $block)) (local $p (ref $block)) (local $i i32)
-  (local $l i32) (local $o anyref)
+  (local $a (ref $block)) (local $l i32) (local $i i32) (local $o anyref)
+  (local $p (ref $block))
   (local.set $a (ref.cast (ref $block) (local.get $x)))
   (local.set $l (array.len (local.get $a)))
   (local.set $i (i32.const 1))
@@ -319,8 +319,8 @@
 
 (func $caml_js_from_array (export "caml_js_from_array")
   (param $va (ref eq)) (result (ref eq))
-  (local $a (ref $block)) (local $fa (ref $float_array))
-  (local $a' (ref extern)) (local $i i32) (local $l i32)
+  (local $a (ref $block)) (local $a' (ref extern)) (local $i i32)
+  (local $l i32) (local $fa (ref $float_array))
   (drop
     (block $not_array (result (ref eq))
       (local.set $a
@@ -356,8 +356,8 @@
 
 (func $caml_js_to_array (export "caml_js_to_array")
   (param $x (ref eq)) (result (ref eq))
-  (local $a (ref extern)) (local $a' (ref $block))
-  (local $fa (ref $float_array)) (local $i i32) (local $l i32)
+  (local $a (ref extern)) (local $l i32) (local $i i32)
+  (local $fa (ref $float_array)) (local $a' (ref $block))
   (local.set $a
     (ref.as_non_null (extern.convert_any (call $unwrap (local.get $x)))))
   (local.set $l (call $array_length (local.get $a)))
@@ -396,7 +396,7 @@
 
 (func $caml_js_to_string_array (export "caml_js_to_string_array")
   (param $a (ref extern)) (result (ref eq))
-  (local $a' (ref $block)) (local $l i32) (local $i i32)
+  (local $l i32) (local $a' (ref $block)) (local $i i32)
   (local.set $l (call $array_length (local.get $a)))
   (local.set $a'
     (array.new $block (ref.i31 (i32.const 0))
@@ -475,7 +475,7 @@
     $kind ;; 0 ==> strict / 2 ==> unsafe
     i32)
   (result anyref)
-  (local $acc (ref eq)) (local $i i32) (local $arg (ref eq))
+  (local $arg (ref eq)) (local $acc (ref eq)) (local $i i32)
   (local.set $acc (local.get $f))
   (if (i32.eq (local.get $kind) (i32.const 2))
     (then
@@ -520,8 +520,8 @@
 
 (func $caml_jsbytes_of_string (export "caml_jsbytes_of_string")
   (param $x (ref eq)) (result (ref eq))
-  (local $s (ref $string)) (local $s' (ref $string)) (local $l i32)
-  (local $i i32) (local $n i32) (local $c i32)
+  (local $s (ref $string)) (local $l i32) (local $i i32) (local $n i32)
+  (local $s' (ref $string)) (local $c i32)
   (local.set $s (ref.cast (ref $string) (local.get $x)))
   (local.set $l (array.len (local.get $s)))
   (local.set $i (i32.const 0))
@@ -573,8 +573,8 @@
 
 (func $caml_string_of_jsbytes (export "caml_string_of_jsbytes")
   (param $s (ref eq)) (result (ref eq))
-  (local $l i32) (local $i i32) (local $n i32) (local $c i32)
-  (local $s' (ref $string)) (local $s'' (ref $string))
+  (local $s' (ref $string)) (local $l i32) (local $i i32) (local $n i32)
+  (local $s'' (ref $string)) (local $c i32)
   (local.set $s'
     (call $string_of_jsstring
       (struct.get $js $f (ref.cast (ref $js) (local.get $s)))))
@@ -618,7 +618,7 @@
 
 (func $caml_list_to_js_array (export "caml_list_to_js_array")
   (param $x (ref eq)) (result (ref eq))
-  (local $i i32) (local $a (ref extern)) (local $l (ref eq))
+  (local $i i32) (local $l (ref eq)) (local $a (ref extern))
   (local $b (ref $block))
   (local.set $i (i32.const 0))
   (local.set $l (local.get $x))
@@ -652,7 +652,7 @@
 
 (func $caml_list_of_js_array (export "caml_list_of_js_array")
   (param $x (ref eq)) (result (ref eq))
-  (local $l (ref eq)) (local $i i32) (local $len i32) (local $a (ref extern))
+  (local $a (ref extern)) (local $len i32) (local $i i32) (local $l (ref eq))
   (local.set $a
     (ref.as_non_null (extern.convert_any (call $unwrap (local.get $x)))))
   (local.set $len (call $array_length (local.get $a)))

@@ -217,8 +217,8 @@
 (global $stack (mut (ref null $stack)) (ref.null $stack))
 
 (func $string_of_jsstring_fallback (param $s anyref) (result (ref $string))
-  (local $ofs i32) (local $len i32) (local $s' (ref $string))
-  (local $s'' (ref $string)) (local $item (ref $stack))
+  (local $len i32) (local $s' (ref $string)) (local $ofs i32)
+  (local $item (ref $stack)) (local $s'' (ref $string))
   (local.set $len (call $write_string (local.get $s)))
   (if (ref.is_null (global.get $stack))
     (then

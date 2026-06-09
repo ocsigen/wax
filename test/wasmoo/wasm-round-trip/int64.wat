@@ -150,8 +150,8 @@
   (param $base i32) (param $signedness i32) (param $sign i32)
   (param $s (ref $string)) (param $i i32) (param $errmsg (ref $string))
   (result i64)
-  (local $len i32) (local $d i32) (local $c i32) (local $res i64)
-  (local $threshold i64)
+  (local $len i32) (local $threshold i64) (local $d i32) (local $res i64)
+  (local $c i32)
   (local.set $len (array.len (local.get $s)))
   (if (i32.eqz (local.get $len))
     (then (call $caml_failwith (local.get $errmsg))))
@@ -199,8 +199,8 @@
 
 (func $caml_int64_of_string (export "caml_int64_of_string")
   (param $v (ref eq)) (result (ref eq))
-  (local $s (ref $string)) (local $i i32) (local $signedness i32)
-  (local $sign i32) (local $base i32)
+  (local $s (ref $string)) (local $base i32) (local $sign i32)
+  (local $signedness i32) (local $i i32)
   (local.set $s (ref.cast (ref $string) (local.get $v)))
   (call $parse_sign_and_base (local.get $s))
   (local.set $base)
@@ -216,8 +216,8 @@
 (data $caml_int64_create_lo_mi_hi "caml_int64_create_lo_mi_hi")
 
 (func $format_int64_default (param $d i64) (result (ref eq))
-  (local $s (ref $string)) (local $negative i32) (local $i i32)
-  (local $n i64)
+  (local $negative i32) (local $i i32) (local $n i64)
+  (local $s (ref $string))
   (if (i64.lt_s (local.get $d) (i64.const 0))
     (then
       (local.set $negative (i32.const 1))
@@ -245,9 +245,9 @@
 
 (func $caml_int64_format (export "caml_int64_format")
   (param $x (ref eq)) (param $x_2 (ref eq)) (result (ref eq))
-  (local $d i64) (local $s (ref $string)) (local $sign_style i32)
-  (local $alternate i32) (local $signed i32) (local $base i64)
-  (local $uppercase i32) (local $negative i32) (local $i i32) (local $n i64)
+  (local $s (ref $string)) (local $d i64) (local $uppercase i32)
+  (local $base i64) (local $signed i32) (local $alternate i32)
+  (local $sign_style i32) (local $negative i32) (local $n i64) (local $i i32)
   (local $chars (ref $chars))
   (local.set $s (ref.cast (ref $string) (local.get $x)))
   (local.set $d

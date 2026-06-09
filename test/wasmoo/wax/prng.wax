@@ -24,18 +24,16 @@ fn caml_ba_get_data(&eq) -> &extern;
 
 #[export = "caml_lxm_next"]
 fn caml_lxm_next(v: &eq) -> i64 {
-    let data: &extern;
-    let a: i64;
-    let s: i64;
-    let q0: i64;
-    let q1: i64;
-    let z: i64;
-    data = caml_ba_get_data(v);
-    a = ta_get_i32(data, 0) as i64_u | ta_get_i32(data, 1) as i64_u << 32;
-    s = ta_get_i32(data, 2) as i64_u | ta_get_i32(data, 3) as i64_u << 32;
-    q0 = ta_get_i32(data, 4) as i64_u | ta_get_i32(data, 5) as i64_u << 32;
-    q1 = ta_get_i32(data, 6) as i64_u | ta_get_i32(data, 7) as i64_u << 32;
-    z = s + q0;
+    let data: &extern = caml_ba_get_data(v);
+    let a: i64 =
+        ta_get_i32(data, 0) as i64_u | ta_get_i32(data, 1) as i64_u << 32;
+    let s: i64 =
+        ta_get_i32(data, 2) as i64_u | ta_get_i32(data, 3) as i64_u << 32;
+    let q0: i64 =
+        ta_get_i32(data, 4) as i64_u | ta_get_i32(data, 5) as i64_u << 32;
+    let q1: i64 =
+        ta_get_i32(data, 6) as i64_u | ta_get_i32(data, 7) as i64_u << 32;
+    let z: i64 = s + q0;
     z = (z ^ z >>u 32) * 0xdaba0b6eb09322e3;
     z = (z ^ z >>u 32) * 0xdaba0b6eb09322e3;
     z = z ^ z >>u 32;

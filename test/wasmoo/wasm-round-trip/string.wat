@@ -352,8 +352,8 @@
 
 (func $caml_string_concat (export "caml_string_concat")
   (param $vs1 (ref eq)) (param $vs2 (ref eq)) (result (ref eq))
-  (local $s1 (ref $string)) (local $s2 (ref $string))
-  (local $s (ref $string)) (local $l1 i32) (local $l2 i32)
+  (local $s1 (ref $string)) (local $s2 (ref $string)) (local $l1 i32)
+  (local $l2 i32) (local $s (ref $string))
   (local.set $s1 (ref.cast (ref $string) (local.get $vs1)))
   (local.set $s2 (ref.cast (ref $string) (local.get $vs2)))
   (local.set $l1 (array.len (local.get $s1)))

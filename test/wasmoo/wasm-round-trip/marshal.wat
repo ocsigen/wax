@@ -88,9 +88,9 @@
 
 (func $caml_input_value (export "caml_input_value")
   (param $ch (ref eq)) (result (ref eq))
-  (local $r i32) (local $len i32) (local $header (ref $string))
-  (local $buf (ref $string)) (local $s (ref $intern_state))
-  (local $h (ref $marshal_header))
+  (local $header (ref $string)) (local $r i32) (local $s (ref $intern_state))
+  (local $h (ref $marshal_header)) (local $len i32)
+  (local $buf (ref $string))
   ;; ZZZ check binary channel?
   (local.set $header (array.new $string (i32.const 0) (i32.const 20)))
   (local.set $r
@@ -272,8 +272,8 @@
 )
 
 (func $readstr (param $s (ref $intern_state)) (result (ref $string))
-  (local $len i32) (local $pos i32) (local $res (ref $string))
-  (local $src (ref $string))
+  (local $src (ref $string)) (local $pos i32) (local $len i32)
+  (local $res (ref $string))
   (local.set $src (struct.get $intern_state $src (local.get $s)))
   (local.set $pos (struct.get $intern_state $pos (local.get $s)))
   (loop $loop
@@ -293,8 +293,8 @@
 
 (func $readfloat
   (param $s (ref $intern_state)) (param $code i32) (result f64)
-  (local $src (ref $string)) (local $pos i32) (local $res i32) (local $d i64)
-  (local $i i32) (local $v (ref eq))
+  (local $v (ref eq)) (local $res i32) (local $src (ref $string))
+  (local $pos i32) (local $d i64) (local $i i32)
   (local.set $src (struct.get $intern_state $src (local.get $s)))
   (local.set $pos (struct.get $intern_state $pos (local.get $s)))
   (struct.set $intern_state $pos (local.get $s)
@@ -407,7 +407,7 @@
 (func $intern_custom
   (param $s (ref $intern_state)) (param $code i32) (result (ref eq))
   (local $ops (ref $custom_operations)) (local $expected_size i32)
-  (local $res (ref eq)) (local $sz i32)
+  (local $sz i32) (local $res (ref eq))
   (block $unknown
     (local.set $ops
       (br_on_null $unknown
@@ -448,11 +448,11 @@
 (func $intern_rec
   (param $s (ref $intern_state)) (param $h (ref $marshal_header))
   (result (ref eq))
-  (local $res (ref $block)) (local $dest (ref $block))
-  (local $sp (ref null $stack_item)) (local $item (ref $stack_item))
-  (local $code i32) (local $header i32) (local $tag_2 i32) (local $size i32)
-  (local $len i32) (local $pos i32) (local $pos' i32) (local $ofs i32)
-  (local $b (ref $block)) (local $str (ref $string)) (local $v (ref eq))
+  (local $res (ref $block)) (local $sp (ref null $stack_item))
+  (local $size i32) (local $v (ref eq)) (local $item (ref $stack_item))
+  (local $dest (ref $block)) (local $pos i32) (local $pos' i32)
+  (local $tag_2 i32) (local $len i32) (local $code i32) (local $ofs i32)
+  (local $header i32) (local $str (ref $string)) (local $b (ref $block))
   (call $caml_init_custom_operations)
   (local.set $res (array.new_fixed $block 1 (ref.i31 (i32.const 0))))
   (local.set $sp
@@ -708,8 +708,8 @@
 (func $parse_header
   (param $s (ref $intern_state)) (param $prim (ref $string))
   (result (ref $marshal_header))
-  (local $magic i32) (local $data_len i32) (local $num_objects i32)
-  (local $whsize i32)
+  (local $whsize i32) (local $magic i32) (local $data_len i32)
+  (local $num_objects i32)
   (local.set $magic (call $read32 (local.get $s)))
   (if (i32.eq (local.get $magic) (global.get $Intext_magic_number_big))
     (then (call $too_large (local.get $prim))))
@@ -776,7 +776,7 @@
   (param $flags (ref eq)) (param $output (ref $output_block))
   (param $pos i32) (param $user_provided_output i32)
   (result (ref $extern_state))
-  (local $b (ref $block)) (local $no_sharing i32)
+  (local $no_sharing i32) (local $b (ref $block))
   (loop $parse_flags
     (drop
       (block $done (result (ref eq))
@@ -803,8 +803,8 @@
 
 (func $reserve_extern_output
   (param $s (ref $extern_state)) (param $required i32) (result i32)
-  (local $last (ref $output_block)) (local $blk (ref $output_block))
-  (local $pos i32) (local $extra i32) (local $buf (ref $string))
+  (local $pos i32) (local $last (ref $output_block)) (local $extra i32)
+  (local $buf (ref $string)) (local $blk (ref $output_block))
   (local.set $pos (struct.get $extern_state $pos (local.get $s)))
   (if
     (i32.le_u (i32.add (local.get $pos) (local.get $required))
@@ -927,8 +927,8 @@
 
 (func $writefloats
   (param $s (ref $extern_state)) (param $b (ref $float_array))
-  (local $pos i32) (local $sz i32) (local $buf (ref $string)) (local $d i64)
-  (local $i i32) (local $j i32)
+  (local $sz i32) (local $pos i32) (local $buf (ref $string)) (local $j i32)
+  (local $d i64) (local $i i32)
   (local.set $sz (array.len (local.get $b)))
   (local.set $pos
     (call $reserve_extern_output (local.get $s)
@@ -1085,8 +1085,9 @@
 (func $extern_custom
   (param $s (ref $extern_state)) (param $v (ref $custom)) (result i32 i32)
   (local $ops (ref $custom_operations)) (local $serialize (ref $serialize))
+  (local $sz32 i32) (local $sz64 i32)
   (local $fixed_length (ref $fixed_length)) (local $pos i32)
-  (local $buf (ref $string)) (local $sz32 i32) (local $sz64 i32)
+  (local $buf (ref $string))
   (local.set $ops (struct.get $custom $f (local.get $v)))
   (block $abstract
     (local.set $serialize
@@ -1144,10 +1145,10 @@
 (data $cust_value "output_value: abstract value (Custom)")
 
 (func $extern_rec (param $s (ref $extern_state)) (param $v (ref eq))
-  (local $sp (ref null $stack_item)) (local $item (ref $stack_item))
-  (local $b (ref $block)) (local $str (ref $string))
-  (local $fa (ref $float_array)) (local $hd i32) (local $tag_2 i32)
-  (local $sz i32) (local $pos i32) (local $sz32 i32) (local $sz64 i32)
+  (local $hd i32) (local $sp (ref null $stack_item)) (local $b (ref $block))
+  (local $pos i32) (local $tag_2 i32) (local $sz i32)
+  (local $str (ref $string)) (local $fa (ref $float_array)) (local $sz32 i32)
+  (local $sz64 i32) (local $item (ref $stack_item))
   (loop $loop
     (block $next_item
       (drop
@@ -1276,7 +1277,7 @@
 
 (func $extern_output_length
   (param $s (ref $extern_state)) (param $pos i32) (result i32)
-  (local $len i32) (local $output_block (ref $output_block))
+  (local $output_block (ref $output_block)) (local $len i32)
   (if (result i32)
     (struct.get $extern_state $user_provided_output (local.get $s))
     (then
@@ -1330,9 +1331,9 @@
 
 (func $caml_output_value_to_string (export "caml_output_value_to_string")
   (param $v (ref eq)) (param $flags (ref eq)) (result (ref eq))
-  (local $sz i32) (local $buf (ref $string)) (local $st (ref $extern_state))
-  (local $blk (ref $output_block)) (local $pos i32) (local $len i32)
-  (local $res (ref $string))
+  (local $blk (ref $output_block)) (local $st (ref $extern_state))
+  (local $buf (ref $string)) (local $sz i32) (local $res (ref $string))
+  (local $pos i32) (local $len i32)
   (local.set $blk
     (struct.new $output_block (ref.null $output_block)
       (global.get $SIZE_EXTERN_OUTPUT_BLOCK)
@@ -1364,9 +1365,9 @@
 (func $caml_output_value_to_buffer (export "caml_output_value_to_buffer")
   (param $vbuf (ref eq)) (param $vpos (ref eq)) (param $vlen (ref eq))
   (param $v (ref eq)) (param $flags (ref eq)) (result (ref eq))
-  (local $buf (ref $string)) (local $pos i32) (local $len i32)
-  (local $sz i32) (local $buf_2 (ref $string))
-  (local $st (ref $extern_state)) (local $blk (ref $output_block))
+  (local $st (ref $extern_state)) (local $sz i32) (local $buf (ref $string))
+  (local $buf_2 (ref $string)) (local $pos i32) (local $len i32)
+  (local $blk (ref $output_block))
   (local.set $buf_2 (ref.cast (ref $string) (local.get $vbuf)))
   (local.set $pos (i31.get_u (ref.cast (ref i31) (local.get $vpos))))
   (local.set $len (i31.get_u (ref.cast (ref i31) (local.get $vlen))))
@@ -1386,9 +1387,9 @@
 (func $caml_output_value (export "caml_output_value")
   (param $ch (ref eq)) (param $v (ref eq)) (param $flags (ref eq))
   (result (ref eq))
-  (local $sz i32) (local $buf (ref $string)) (local $st (ref $extern_state))
-  (local $blk (ref $output_block)) (local $len i32)
-  (local $res (ref $string))
+  (local $res (ref $string)) (local $blk (ref $output_block))
+  (local $st (ref $extern_state)) (local $buf (ref $string)) (local $sz i32)
+  (local $len i32)
   ;; ZZZ check if binary channel?
   (local.set $blk
     (struct.new $output_block (ref.null $output_block)

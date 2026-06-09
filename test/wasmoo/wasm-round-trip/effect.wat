@@ -222,7 +222,7 @@
 (func $f (export "%resume")
   (param $stack (ref eq)) (param $f (ref eq)) (param $v (ref eq))
   (result (ref eq))
-  (local $k (ref $cont_2)) (local $pair (ref $pair))
+  (local $pair (ref $pair)) (local $k (ref $cont_2))
   (if (ref.eq (local.get $stack) (ref.i31 (i32.const 0)))
     (then
       (call $caml_raise_constant
@@ -260,9 +260,9 @@
 )
 
 (func $do_perform (param $k0 (ref $cont_2)) (param $vp (ref eq))
-  (local $eff (ref eq)) (local $cont (ref $block)) (local $handler (ref eq))
-  (local $k1 (ref $cont_2)) (local $p (ref $pair))
-  (local $next_fiber (ref eq))
+  (local $p (ref $pair)) (local $eff (ref eq)) (local $cont (ref $block))
+  (local $handler (ref eq)) (local $next_fiber (ref eq))
+  (local $k1 (ref $cont_2))
   (local.set $p (ref.cast (ref $pair) (local.get $vp)))
   (local.set $eff (struct.get $pair $fst (local.get $p)))
   (local.set $cont
@@ -539,10 +539,9 @@
 
 (func $caml_trampoline (export "caml_trampoline")
   (param $f (ref eq)) (param $vargs (ref eq)) (result (ref eq))
-  (local $args (ref $block)) (local $i i32) (local $res (ref eq))
-  (local $exn (ref eq)) (local $top (ref $exn_stack))
-  (local $saved_exn_stack (ref null $exn_stack))
-  (local $saved_fiber_stack (ref null $cps_fiber))
+  (local $i i32) (local $saved_exn_stack (ref null $exn_stack))
+  (local $saved_fiber_stack (ref null $cps_fiber)) (local $args (ref $block))
+  (local $res (ref eq)) (local $exn (ref eq)) (local $top (ref $exn_stack))
   (local.set $saved_exn_stack (global.get $exn_stack))
   (local.set $saved_fiber_stack (global.get $cps_fiber_stack))
   (global.set $exn_stack (ref.null $exn_stack))
@@ -647,9 +646,8 @@
 (func $caml_perform_effect (export "caml_perform_effect")
   (param $eff (ref eq)) (param $vcont (ref eq)) (param $k0 (ref eq))
   (result (ref eq))
-  (local $handlers (ref $handlers)) (local $handler (ref eq))
-  (local $k1 (ref eq)) (local $cont (ref $block))
-  (local $next_fiber (ref eq))
+  (local $cont (ref $block)) (local $handlers (ref $handlers))
+  (local $handler (ref eq)) (local $next_fiber (ref eq)) (local $k1 (ref eq))
   (local.set $cont
     (block $reperform (result (ref $block))
       (drop (br_on_cast $reperform (ref eq) (ref $block) (local.get $vcont)))

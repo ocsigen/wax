@@ -121,7 +121,7 @@
 (data $no_such_file ": No such file or directory")
 
 (func $caml_raise_no_such_file (param $vname (ref eq))
-  (local $name (ref $string)) (local $msg (ref $string)) (local $len i32)
+  (local $name (ref $string)) (local $len i32) (local $msg (ref $string))
   (local.set $name (ref.cast (ref $string) (local.get $vname)))
   (local.set $len (array.len (local.get $name)))
   (local.set $msg

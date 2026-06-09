@@ -190,7 +190,7 @@
 )
 
 (func $clear_compare_stack
-  (local $stack (ref $compare_stack)) (local $n i32) (local $res i32)
+  (local $res i32) (local $stack (ref $compare_stack)) (local $n i32)
   ;; clear stack (to avoid memory leaks)
   (local.set $stack (global.get $default_compare_stack))
   (local.set $n (struct.get $compare_stack $f (local.get $stack)))
@@ -207,7 +207,7 @@
 
 (func $compare_val
   (param $v1 (ref eq)) (param $v2 (ref eq)) (param $total i32) (result i32)
-  (local $stack (ref $compare_stack)) (local $n i32) (local $res i32)
+  (local $n i32) (local $stack (ref $compare_stack)) (local $res i32)
   (local.set $stack (global.get $default_compare_stack))
   (struct.set $compare_stack $f (local.get $stack) (i32.const -1))
   (local.set $res
@@ -224,14 +224,13 @@
 (func $do_compare_val
   (param $stack (ref $compare_stack)) (param $v1 (ref eq))
   (param $v2 (ref eq)) (param $total i32) (result i32)
-  (local $i i32) (local $i1 (ref i31)) (local $i2 (ref i31))
-  (local $b1 (ref $block)) (local $b2 (ref $block)) (local $t1 i32)
-  (local $t2 i32) (local $s1 i32) (local $s2 i32) (local $f1 f64)
+  (local $i1 (ref i31)) (local $i2 (ref i31)) (local $b2 (ref $block))
+  (local $t2 i32) (local $c2 (ref $custom)) (local $res i32)
+  (local $b1 (ref $block)) (local $t1 i32) (local $c1 (ref $custom))
+  (local $i i32) (local $s1 i32) (local $s2 i32) (local $f1 f64)
   (local $f2 f64) (local $fa1 (ref $float_array))
   (local $fa2 (ref $float_array)) (local $str1 (ref $string))
-  (local $str2 (ref $string)) (local $c1 (ref $custom))
-  (local $c2 (ref $custom)) (local $js1 anyref) (local $js2 anyref)
-  (local $res i32)
+  (local $str2 (ref $string)) (local $js1 anyref) (local $js2 anyref)
   (loop $loop
     (block $next_item
       (if (local.get $total)

@@ -43,8 +43,8 @@
 )
 
 (func $add_string (param $buf (ref $buffer)) (param $v (ref eq))
-  (local $pos i32) (local $len i32) (local $data (ref $string))
-  (local $s (ref $string))
+  (local $pos i32) (local $data (ref $string)) (local $s (ref $string))
+  (local $len i32)
   (local.set $pos (struct.get $buffer $f (local.get $buf)))
   (local.set $data (struct.get $buffer $f_2 (local.get $buf)))
   (local.set $s (ref.cast (ref $string) (local.get $v)))

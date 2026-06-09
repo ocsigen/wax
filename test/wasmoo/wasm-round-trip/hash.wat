@@ -116,7 +116,7 @@
 
 (func $caml_hash_mix_string (export "caml_hash_mix_string")
   (param $h i32) (param $s (ref $string)) (result i32)
-  (local $i i32) (local $len i32) (local $w i32)
+  (local $len i32) (local $i i32) (local $w i32)
   (local.set $len (array.len (local.get $s)))
   (local.set $i (i32.const 0))
   (loop $loop

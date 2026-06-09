@@ -54,8 +54,8 @@
 
 (func $caml_ephe_get_data (export "caml_ephe_get_data")
   (param $vx (ref eq)) (result (ref eq))
-  (local $x (ref $block)) (local $d (ref eq)) (local $v (ref eq))
-  (local $m (ref any)) (local $i i32) (local $len i32)
+  (local $x (ref $block)) (local $d (ref eq)) (local $i i32) (local $len i32)
+  (local $m (ref any)) (local $v (ref eq))
   (local.set $x (ref.cast (ref $block) (local.get $vx)))
   (local.set $d
     (array.get $block (local.get $x) (global.get $caml_ephe_data_offset)))
@@ -106,8 +106,8 @@
 
 (func $caml_ephe_set_data (export "caml_ephe_set_data")
   (param $vx (ref eq)) (param $data (ref eq)) (result (ref eq))
-  (local $x (ref $block)) (local $v (ref eq)) (local $m (ref any))
-  (local $m' (ref any)) (local $i i32)
+  (local $x (ref $block)) (local $i i32) (local $m (ref any))
+  (local $v (ref eq)) (local $m' (ref any))
   (local.set $x (ref.cast (ref $block) (local.get $vx)))
   (local.set $i (array.len (local.get $x)))
   (local.set $m (local.get $data))
@@ -235,7 +235,7 @@
 (func $caml_ephe_set_key (export "caml_ephe_set_key")
   (param $vx (ref eq)) (param $vi (ref eq)) (param $v (ref eq))
   (result (ref eq))
-  (local $x (ref $block)) (local $d (ref eq)) (local $i i32)
+  (local $x (ref $block)) (local $i i32) (local $d (ref eq))
   (local.set $x (ref.cast (ref $block) (local.get $vx)))
   (local.set $i
     (i32.add (i31.get_s (ref.cast (ref i31) (local.get $vi)))
@@ -257,7 +257,7 @@
 
 (func $caml_ephe_unset_key (export "caml_ephe_unset_key")
   (param $vx (ref eq)) (param $vi (ref eq)) (result (ref eq))
-  (local $x (ref $block)) (local $d (ref eq)) (local $i i32)
+  (local $x (ref $block)) (local $i i32) (local $d (ref eq))
   (local.set $x (ref.cast (ref $block) (local.get $vx)))
   (local.set $i
     (i32.add (i31.get_s (ref.cast (ref i31) (local.get $vi)))

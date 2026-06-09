@@ -146,8 +146,8 @@
 
 (func $caml_update_dummy (export "caml_update_dummy")
   (param $dummy (ref eq)) (param $newval (ref eq)) (result (ref eq))
-  (local $i i32) (local $dst (ref $block)) (local $fdst (ref $float_array))
-  (local $src (ref $block))
+  (local $i i32) (local $dst (ref $block)) (local $src (ref $block))
+  (local $fdst (ref $float_array))
   (drop
     (block $not_block (result (ref eq))
       (local.set $dst
@@ -205,9 +205,9 @@
 
 (func $caml_obj_dup (export "caml_obj_dup")
   (param $x (ref eq)) (result (ref eq))
-  (local $orig (ref $block)) (local $res (ref $block))
+  (local $orig (ref $block)) (local $res (ref $block)) (local $len i32)
   (local $forig (ref $float_array)) (local $fres (ref $float_array))
-  (local $s (ref $string)) (local $s' (ref $string)) (local $len i32)
+  (local $s (ref $string)) (local $s' (ref $string))
   (drop
     (block $not_block (result (ref eq))
       (local.set $orig
@@ -416,8 +416,8 @@
   (param $obj (ref eq)) (param $x (ref eq)) (param $x_2 (ref eq))
   (result (ref eq))
   (local $meths (ref $block)) (local $tag_2 i32) (local $cacheid i32)
-  (local $ofs i32) (local $li i32) (local $mi i32) (local $hi i32)
-  (local $a (ref $int_array)) (local $len i32)
+  (local $len i32) (local $a (ref $int_array)) (local $ofs i32)
+  (local $li i32) (local $hi i32) (local $mi i32)
   (local.set $meths
     (ref.cast (ref $block)
       (array.get $block (ref.cast (ref $block) (local.get $obj))

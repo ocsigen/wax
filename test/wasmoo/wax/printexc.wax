@@ -30,22 +30,16 @@ type string = [mut i8];
 type buffer = { f: mut i32, f_2: &string };
 
 fn add_char(buf: &buffer, c: i32) {
-    let pos: i32;
-    let data: &string;
-    pos = buf.f;
-    data = buf.f_2;
+    let pos: i32 = buf.f;
+    let data: &string = buf.f_2;
     if pos <u data.length { data[pos] = c; buf.f = pos + 1; }
 }
 
 fn add_string(buf: &buffer, v: &eq) {
-    let pos: i32;
-    let len: i32;
-    let data: &string;
-    let s: &string;
-    pos = buf.f;
-    data = buf.f_2;
-    s = v as &string;
-    len = s.length;
+    let pos: i32 = buf.f;
+    let data: &string = buf.f_2;
+    let s: &string = v as &string;
+    let len: i32 = s.length;
     if pos + len >u data.length { len = data.length - pos; }
     data.copy(pos, s, 0, len);
     buf.f = pos + len;
@@ -53,17 +47,13 @@ fn add_string(buf: &buffer, v: &eq) {
 
 #[export = "caml_format_exception"]
 fn caml_format_exception(x: &eq) -> &eq {
-    let exn: &block;
-    let buf: &buffer;
-    let v: &eq;
-    let bucket: &block;
-    let i: i32;
-    let len: i32;
-    let s: &string;
-    exn = x as &block;
+    let exn: &block = x as &block;
     if exn[0] == 0 as &i31 => &eq {
-        buf = {buffer| f: 0, f_2: [string|0; 256] };
+        let buf: &buffer = {buffer| f: 0, f_2: [string|0; 256] };
         add_string(buf, (exn[1] as &block)[1]);
+        let v: &eq;
+        let bucket: &block;
+        let i: i32;
         bucket =
             'continue: do &block {
                 'default: do {
@@ -80,7 +70,7 @@ fn caml_format_exception(x: &eq) -> &eq {
                 exn;
             } // 'continue
         ;
-        len = bucket.length;
+        let len: i32 = bucket.length;
         if i <u len {
             add_char
                 (buf, 40 // '\('
@@ -117,7 +107,7 @@ fn caml_format_exception(x: &eq) -> &eq {
             } // 'loop
             add_char(buf, 41);
         } // '\)'
-        s = [string|0; buf.f];
+        let s: &string = [string|0; buf.f];
         s.copy(0, buf.f_2, 0, buf.f);
         s;
     } else { exn[1]; }
