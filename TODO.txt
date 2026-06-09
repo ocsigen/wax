@@ -3,6 +3,7 @@ Priorities
 - Improve typing / validation
 - Fix library names
 - Library to use within Js_of_ocaml
+- Fix end of then location in conditionals
 
 Improvements
 ============
