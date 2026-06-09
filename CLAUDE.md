@@ -49,6 +49,7 @@ bare `wax <file>` form working — edit that heuristic if adding subcommands.
 | `-o` | `--output` | Output file (default: stdout) |
 | `-v` | `--validate` | Enable type checking (disabled by default) |
 | `-s` | `--strict-validate` | Stricter validation |
+| `-D` | `--define` | Set a conditional-compilation variable (`NAME`, `NAME=true/false`, `NAME=N.N.N`, `NAME=STR`); specializes `#[if]`/`(@if)` annotations. Repeatable |
 |      | `--fold` / `--unfold` | Force folded / unfolded instruction form (default: auto) |
 |      | `--color` | Color output: `auto`/`always`/`never` |
 |      | `--source-map-file` | Emit a source map to the given file |

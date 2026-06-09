@@ -1,0 +1,12 @@
+#[if(debug)]
+const x: i32 = 1;
+#[else]
+const x: i32 = 2;
+
+#[if(ocaml_version >= (5, 1, 0))]
+const size: i32 = 16;
+#[else]
+const size: i32 = 20;
+
+#[if(all(debug, target = "wasi"))]
+const y: i32 = 3;

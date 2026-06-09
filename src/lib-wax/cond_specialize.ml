@@ -1,0 +1,161 @@
+module CS = Wasm.Cond_specialize
+open Ast
+
+(* Splice out / simplify every conditional in a Wax module, returning the byte
+   ranges of removed branches so their comments can be dropped (see
+   {!Utils.Trivia.drop_in_ranges}). The set of nodes recursed through matches
+   [Typing.specialize_fields]; the difference is that an undetermined
+   conditional is kept (with its condition simplified) rather than explored. The
+   split between branches is the end of the then-branch (just before the
+   [#[else]]), avoiding any need for the [#[else]] token's own position. *)
+let module_ ctx env (fields : location Ast.module_) :
+    location Ast.module_ * (int * int) list =
+  let eval cond = CS.eval ctx env cond in
+  let ranges = ref [] in
+  let start_of (l : location) = l.loc_start.Lexing.pos_cnum in
+  let end_of (l : location) = l.loc_end.Lexing.pos_cnum in
+  let branch_end ~default nodes =
+    match List.rev nodes with n :: _ -> end_of n.info | [] -> default
+  in
+  (* Then kept, else dropped: span from the then-branch's end to the
+     conditional's end. *)
+  let drop_else loc then_nodes =
+    ranges :=
+      (branch_end ~default:(start_of loc) then_nodes, end_of loc) :: !ranges
+  in
+  (* Else kept (or nothing), then dropped: span from the conditional's start
+     through the then-branch's end. *)
+  let drop_then loc then_nodes =
+    ranges :=
+      (start_of loc, branch_end ~default:(end_of loc) then_nodes) :: !ranges
+  in
+  let rec sinstrs l = List.concat_map sinstr l
+  and sinstr (i : location instr) : location instr list =
+    match i.desc with
+    | If_annotation { cond; then_body; else_body } -> (
+        match eval cond with
+        | True ->
+            drop_else i.info then_body;
+            sinstrs then_body
+        | False -> (
+            drop_then i.info then_body;
+            match else_body with Some e -> sinstrs e | None -> [])
+        | Residual cond ->
+            [
+              {
+                i with
+                desc =
+                  If_annotation
+                    {
+                      cond;
+                      then_body = sinstrs then_body;
+                      else_body = Option.map sinstrs else_body;
+                    };
+              };
+            ])
+    | desc -> [ { i with desc = sdesc desc } ]
+  (* [sone] is for single-instruction positions, where an [If_annotation]
+     (statement-only) cannot appear, so the result is always a singleton. *)
+  and sone i = match sinstr i with [ x ] -> x | _ -> assert false
+  and sdesc (desc : location instr_desc) : location instr_desc =
+    match desc with
+    | Block { label; typ; block } -> Block { label; typ; block = sinstrs block }
+    | Loop { label; typ; block } -> Loop { label; typ; block = sinstrs block }
+    | If { label; typ; cond; if_block; else_block } ->
+        If
+          {
+            label;
+            typ;
+            cond = sone cond;
+            if_block = sinstrs if_block;
+            else_block = Option.map sinstrs else_block;
+          }
+    | TryTable { label; typ; catches; block } ->
+        TryTable { label; typ; catches; block = sinstrs block }
+    | Try { label; typ; block; catches; catch_all } ->
+        Try
+          {
+            label;
+            typ;
+            block = sinstrs block;
+            catches = List.map (fun (t, l) -> (t, sinstrs l)) catches;
+            catch_all = Option.map sinstrs catch_all;
+          }
+    | Set (idx, v) -> Set (idx, sone v)
+    | Tee (idx, v) -> Tee (idx, sone v)
+    | Call (t, args) -> Call (sone t, List.map sone args)
+    | TailCall (t, args) -> TailCall (sone t, List.map sone args)
+    | Cast (v, t) -> Cast (sone v, t)
+    | Test (v, t) -> Test (sone v, t)
+    | NonNull v -> NonNull (sone v)
+    | Struct (idx, fields) ->
+        Struct (idx, List.map (fun (i, v) -> (i, sone v)) fields)
+    | StructGet (v, idx) -> StructGet (sone v, idx)
+    | StructSet (v, idx, w) -> StructSet (sone v, idx, sone w)
+    | Array (idx, a, b) -> Array (idx, sone a, sone b)
+    | ArrayDefault (idx, v) -> ArrayDefault (idx, sone v)
+    | ArrayFixed (idx, l) -> ArrayFixed (idx, List.map sone l)
+    | ArraySegment (idx, d, a, b) -> ArraySegment (idx, d, sone a, sone b)
+    | ArrayGet (a, b) -> ArrayGet (sone a, sone b)
+    | ArraySet (a, b, c) -> ArraySet (sone a, sone b, sone c)
+    | BinOp (op, a, b) -> BinOp (op, sone a, sone b)
+    | UnOp (op, v) -> UnOp (op, sone v)
+    | Let (bs, body) -> Let (bs, Option.map sone body)
+    | Br (l, v) -> Br (l, Option.map sone v)
+    | Br_if (l, v) -> Br_if (l, sone v)
+    | Br_table (ls, v) -> Br_table (ls, sone v)
+    | Br_on_null (l, v) -> Br_on_null (l, sone v)
+    | Br_on_non_null (l, v) -> Br_on_non_null (l, sone v)
+    | Br_on_cast (l, t, v) -> Br_on_cast (l, t, sone v)
+    | Br_on_cast_fail (l, t, v) -> Br_on_cast_fail (l, t, sone v)
+    | Throw (idx, v) -> Throw (idx, Option.map sone v)
+    | ThrowRef v -> ThrowRef (sone v)
+    | ContNew (ct, v) -> ContNew (ct, sone v)
+    | ContBind (src, dst, l) -> ContBind (src, dst, List.map sone l)
+    | Suspend (tag, l) -> Suspend (tag, List.map sone l)
+    | Resume (ct, h, l) -> Resume (ct, h, List.map sone l)
+    | ResumeThrow (ct, tag, h, l) -> ResumeThrow (ct, tag, h, List.map sone l)
+    | ResumeThrowRef (ct, h, l) -> ResumeThrowRef (ct, h, List.map sone l)
+    | Switch (ct, tag, l) -> Switch (ct, tag, List.map sone l)
+    | Return v -> Return (Option.map sone v)
+    | Sequence l -> Sequence (sinstrs l)
+    | Select (c, t, e) -> Select (sone c, sone t, sone e)
+    | If_annotation _ -> assert false (* handled in [sinstr] *)
+    | ( Unreachable | Nop | Hole | Null | Get _ | Char _ | String _ | Int _
+      | Float _ | StructDefault _ ) as x ->
+        x
+  in
+  let rec sfields fl = List.concat_map sfield fl
+  and sfield (f : (location modulefield, location) annotated) =
+    match f.desc with
+    | Conditional { cond; then_fields; else_fields } -> (
+        match eval cond with
+        | True ->
+            drop_else f.info then_fields;
+            sfields then_fields
+        | False -> (
+            drop_then f.info then_fields;
+            match else_fields with Some e -> sfields e | None -> [])
+        | Residual cond ->
+            [
+              {
+                f with
+                desc =
+                  Conditional
+                    {
+                      cond;
+                      then_fields = sfields then_fields;
+                      else_fields = Option.map sfields else_fields;
+                    };
+              };
+            ])
+    | Group { attributes; fields } ->
+        [ { f with desc = Group { attributes; fields = sfields fields } } ]
+    | Func ({ body = lbl, instrs; _ } as r) ->
+        [ { f with desc = Func { r with body = (lbl, sinstrs instrs) } } ]
+    | Global ({ def; _ } as g) ->
+        [ { f with desc = Global { g with def = sone def } } ]
+    | _ -> [ f ]
+  in
+  let fields = sfields fields in
+  (fields, List.rev !ranges)

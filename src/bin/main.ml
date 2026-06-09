@@ -33,6 +33,33 @@ let with_open_out file f =
   | Some file -> Out_channel.with_open_bin file f
   | None -> f stdout
 
+(* Apply the [-D]/[--define] bindings to a freshly-parsed source module,
+   splicing out and simplifying conditional annotations. With no bindings this
+   is the identity, so the common case is untouched. Specialization runs before
+   validation and conversion, so the rest of the pipeline sees the specialized
+   module. The comments inside a removed branch are dropped from the parse
+   context [ctx] (when one is given — text output only), so they do not
+   re-attach to a surviving node. *)
+let specialize_wax ?ctx ~color ~text defines ast =
+  if Wasm.Cond_specialize.is_empty defines then ast
+  else
+    let ast, dropped =
+      Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
+          Wax.Cond_specialize.module_ d defines ast)
+    in
+    Option.iter (fun ctx -> Utils.Trivia.drop_in_ranges ctx dropped) ctx;
+    ast
+
+let specialize_wat ?ctx ~color ~text defines ast =
+  if Wasm.Cond_specialize.is_empty defines then ast
+  else
+    let ast, dropped =
+      Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
+          Wasm.Cond_specialize.module_ d defines ast)
+    in
+    Option.iter (fun ctx -> Utils.Trivia.drop_in_ranges ctx dropped) ctx;
+    ast
+
 type fold_mode = Auto | Fold | Unfold
 
 let output_wat ?(tail = []) ~fold_mode ~output_file ~color ~trivia ast =
@@ -83,7 +110,7 @@ let wax_trivia ?retarget ctx ast =
   | Some (src, dst) -> Utils.Trivia.retarget ~src ~dst trivia tail
 
 let wat_to_wat ~input_file ~output_file ~validate ~color ~output_color
-    ~fold_mode ~source_map_file:opt_source_map_file =
+    ~fold_mode ~defines ~source_map_file:opt_source_map_file =
   let _ = opt_source_map_file in
   (* Ignored for non-wasm output *)
   let text = with_open_in input_file In_channel.input_all in
@@ -92,6 +119,7 @@ let wat_to_wat ~input_file ~output_file ~validate ~color ~output_color
       ~filename:(Option.value ~default:"-" input_file)
       text
   in
+  let ast = specialize_wat ~ctx ~color ~text defines ast in
   if validate then
     Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
         Wasm.Validation.f d ast);
@@ -99,7 +127,7 @@ let wat_to_wat ~input_file ~output_file ~validate ~color ~output_color
   output_wat ~fold_mode ~output_file ~color:output_color ~trivia ~tail ast
 
 let wat_to_wax ~input_file ~output_file ~validate ~color ~output_color
-    ~fold_mode:_ ~source_map_file:opt_source_map_file =
+    ~fold_mode:_ ~defines ~source_map_file:opt_source_map_file =
   let _ = opt_source_map_file in
   (* Ignored for non-wasm output *)
   let text = with_open_in input_file In_channel.input_all in
@@ -108,6 +136,7 @@ let wat_to_wax ~input_file ~output_file ~validate ~color ~output_color
       ~filename:(Option.value ~default:"-" input_file)
       text
   in
+  let ast = specialize_wat ~ctx ~color ~text defines ast in
   if validate then
     Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
         Wasm.Validation.f d ast);
@@ -138,7 +167,7 @@ let wat_to_wax ~input_file ~output_file ~validate ~color ~output_color
       Format.fprintf fmt "%a@." print_wax wax_ast)
 
 let wax_to_wat ~input_file ~output_file ~validate ~color ~output_color
-    ~fold_mode ~source_map_file:opt_source_map_file =
+    ~fold_mode ~defines ~source_map_file:opt_source_map_file =
   let _ = opt_source_map_file in
   (* Ignored for non-wasm output *)
   let text = with_open_in input_file In_channel.input_all in
@@ -147,6 +176,7 @@ let wax_to_wat ~input_file ~output_file ~validate ~color ~output_color
       ~filename:(Option.value ~default:"-" input_file)
       text
   in
+  let ast = specialize_wax ~ctx ~color ~text defines ast in
   let types, ast =
     Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
         Wax.Typing.f d ast)
@@ -169,7 +199,7 @@ let wax_to_wat ~input_file ~output_file ~validate ~color ~output_color
   output_wat ~fold_mode ~output_file ~color:output_color ~trivia ~tail wasm_ast
 
 let wax_to_wax ~input_file ~output_file ~validate ~color ~output_color
-    ~fold_mode:_ ~source_map_file:opt_source_map_file =
+    ~fold_mode:_ ~defines ~source_map_file:opt_source_map_file =
   let _ = opt_source_map_file in
   (* Ignored for non-wasm output *)
   let text = with_open_in input_file In_channel.input_all in
@@ -178,6 +208,7 @@ let wax_to_wax ~input_file ~output_file ~validate ~color ~output_color
       ~filename:(Option.value ~default:"-" input_file)
       text
   in
+  let ast = specialize_wax ~ctx ~color ~text defines ast in
   if validate then
     ignore
       (Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
@@ -193,13 +224,15 @@ let wax_to_wax ~input_file ~output_file ~validate ~color ~output_color
       Format.fprintf fmt "%a@." print_wax ast)
 
 let wax_to_wasm ~input_file ~output_file ~validate ~color ~output_color:_
-    ~fold_mode:_ ~source_map_file:(opt_source_map_file : string option) =
+    ~fold_mode:_ ~defines ~source_map_file:(opt_source_map_file : string option)
+    =
   let text = with_open_in input_file In_channel.input_all in
   let ast, _ctx =
     Wax_parser.parse_from_string
       ~filename:(Option.value ~default:"-" input_file)
       text
   in
+  let ast = specialize_wax ~color ~text defines ast in
   let types, ast =
     Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
         Wax.Typing.f d ast)
@@ -217,13 +250,14 @@ let wax_to_wasm ~input_file ~output_file ~validate ~color ~output_color:_
         wasm_ast_binary)
 
 let wat_to_wasm ~input_file ~output_file ~validate ~color ~output_color:_
-    ~fold_mode:_ ~source_map_file:opt_source_map_file =
+    ~fold_mode:_ ~defines ~source_map_file:opt_source_map_file =
   let text = with_open_in input_file In_channel.input_all in
   let ast, _ctx =
     Wat_parser.parse_from_string
       ~filename:(Option.value ~default:"-" input_file)
       text
   in
+  let ast = specialize_wat ~color ~text defines ast in
   if validate then
     Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
         Wasm.Validation.f d ast);
@@ -239,7 +273,8 @@ let parse_wasm ~color ?filename text =
       Wasm.Wasm_parser.module_ d ?filename text)
 
 let wasm_to_wasm ~input_file ~output_file ~validate:_validate ~color
-    ~output_color:_ ~fold_mode:_ ~source_map_file:opt_source_map_file =
+    ~output_color:_ ~fold_mode:_ ~defines:_ ~source_map_file:opt_source_map_file
+    =
   let text = with_open_in input_file In_channel.input_all in
   let ast = parse_wasm ~color ?filename:input_file text in
   (* if validate then Wasm.Validation.f ast; *)
@@ -247,7 +282,7 @@ let wasm_to_wasm ~input_file ~output_file ~validate:_validate ~color
       Wasm.Wasm_output.module_ ~out_channel:oc ?opt_source_map_file ast)
 
 let wasm_to_wat ~input_file ~output_file ~validate ~color ~output_color
-    ~fold_mode ~source_map_file:opt_source_map_file =
+    ~fold_mode ~defines:_ ~source_map_file:opt_source_map_file =
   let _ = opt_source_map_file in
   let text = with_open_in input_file In_channel.input_all in
   let binary_ast = parse_wasm ~color ?filename:input_file text in
@@ -259,7 +294,7 @@ let wasm_to_wat ~input_file ~output_file ~validate ~color ~output_color
   output_wat ~fold_mode ~output_file ~color:output_color ~trivia text_ast
 
 let wasm_to_wax ~input_file ~output_file ~validate ~color ~output_color
-    ~fold_mode:_ ~source_map_file:opt_source_map_file =
+    ~fold_mode:_ ~defines:_ ~source_map_file:opt_source_map_file =
   let _ = opt_source_map_file in
   let text = with_open_in input_file In_channel.input_all in
   let binary_ast = parse_wasm ~color ?filename:input_file text in
@@ -321,8 +356,9 @@ let resolve_format file_opt format_opt ~default =
   | None, None -> default
 
 let convert input_file output_file input_format_opt output_format_opt validate
-    strict_validate color opt_source_map_file fold_mode =
+    strict_validate color opt_source_map_file fold_mode defines =
   Wasm.Validation.validate_refs := strict_validate;
+  let defines = Wasm.Cond_specialize.of_list defines in
   let std file = Option.bind file (fun f -> if f = "-" then None else Some f) in
   let input_file = std input_file in
   let output_file = std output_file in
@@ -355,7 +391,7 @@ let convert input_file output_file input_format_opt output_format_opt validate
   in
   with_pager @@ fun () ->
   convert ~input_file ~output_file ~validate ~color ~output_color
-    ~source_map_file:opt_source_map_file ~fold_mode
+    ~source_map_file:opt_source_map_file ~fold_mode ~defines
 
 (* Format files: re-print each in its own format (wat -> wat, wax -> wax, wasm
    -> wasm), detected from the extension unless [format_opt] forces one. With
@@ -391,6 +427,7 @@ let format inplace check format_opt validate color fold_mode files =
         let run ~output_file ~output_color =
           same_format ~input_file:(Some file) ~output_file ~validate ~color
             ~output_color ~source_map_file:None ~fold_mode
+            ~defines:(Wasm.Cond_specialize.of_list [])
         in
         if check then
           (* Format into a temporary file and compare with the original, so the
@@ -558,6 +595,34 @@ let source_map_file_option =
     & opt (some string) None
     & info [ "source-map-file" ] ~docv:"FILE" ~doc)
 
+(* Define the --define/-D option (set conditional-compilation variables) *)
+let define_option =
+  let doc =
+    "Set a conditional-compilation variable, specializing $(b,#[if(...)]) / \
+     $(b,(@if ...)) annotations: fully-determined conditionals are removed and \
+     partially-determined ones are simplified. $(i,NAME) on its own sets a \
+     boolean to true; $(i,NAME=true)/$(i,NAME=false) set a boolean, \
+     $(i,NAME=N.N.N) a version, and any other $(i,NAME=VALUE) a string. \
+     Repeatable."
+  in
+  let define_conv =
+    let parse s =
+      match Wasm.Cond_specialize.parse_define s with
+      | Ok v -> Ok v
+      | Error e -> Error (`Msg e)
+    in
+    let print ppf ((name, v) : string * Wasm.Cond_specialize.value) =
+      match v with
+      | Bool b -> Format.fprintf ppf "%s=%b" name b
+      | Version (a, b, c) -> Format.fprintf ppf "%s=%d.%d.%d" name a b c
+      | String s -> Format.fprintf ppf "%s=%s" name s
+    in
+    Arg.conv (parse, print)
+  in
+  Arg.(
+    value & opt_all define_conv []
+    & info [ "D"; "define" ] ~docv:"NAME[=VALUE]" ~doc)
+
 (* Define the --fold/--unfold option *)
 let fold_mode_option =
   let doc = "Fold instructions into nested S-expressions." in
@@ -616,9 +681,10 @@ let convert_term =
   and+ strict_validate = strict_validate_flag
   and+ color = color_option
   and+ source_map_file = source_map_file_option
-  and+ fold_mode = fold_mode_option in
+  and+ fold_mode = fold_mode_option
+  and+ defines = define_option in
   convert input output in_fmt out_fmt validate strict_validate color
-    source_map_file fold_mode
+    source_map_file fold_mode defines
 
 let format_term =
   let+ inplace = inplace_flag

@@ -44,6 +44,18 @@ files (see [Formatting](#formatting)) and `check` validates them (see
 - **`-s`**, **`--strict-validate`**
     - Perform strict reference validation (for Wasm Text). Overrides default relaxed validation.
 
+- **`-D`** *NAME[=VALUE]*, **`--define`** *NAME[=VALUE]*
+    - Set a conditional-compilation variable, specializing `#[if(...)]` (Wax) and
+      `(@if ...)` (WAT) annotations. A fully determined conditional is removed —
+      its surviving branch is spliced in — and a partially determined one is kept
+      with its condition simplified (the set variables substituted, the rest
+      left). Comments inside a removed branch are dropped.
+    - The value kind is inferred: a bare *NAME* (or `NAME=true` / `NAME=false`)
+      sets a boolean; `NAME=N.N.N` (three integers) sets a version; any other
+      `NAME=VALUE` sets a string.
+    - Repeatable, to set several variables. Has no effect on Wasm binary input
+      (which carries no conditionals).
+
 - **`--color`** *WHEN*
     - Colorize output.
     - Values: `always`, `never`, `auto`.
@@ -81,6 +93,11 @@ wax input.wax -f wax
 **Read from stdin and write to stdout:**
 ```sh
 cat input.wax | wax -f wasm > output.wasm
+```
+
+**Specialize conditional compilation while converting:**
+```sh
+wax input.wax -D debug=false -D ocaml_version=5.1.0 -D target=wasi -o output.wasm
 ```
 
 ## Formatting

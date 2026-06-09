@@ -50,6 +50,39 @@ let with_pos ctx info desc =
   ctx.locations <- info :: ctx.locations;
   { Ast.desc; info }
 
+let drop_in_ranges ctx ranges =
+  match ranges with
+  | [] -> ()
+  | _ ->
+      let ranges =
+        List.sort (fun (a, _) (b, _) -> compare (a : int) b) ranges
+      in
+      (* [ctx.comments] is built in reverse (most recent first); [List.rev] puts
+         it back in lexing order. A stable sort by anchor then keeps the lexing
+         order of comments sharing an anchor (consecutive line comments anchor
+         at the same preceding token). Sweep the ascending comments alongside
+         the ascending ranges in one pass, dropping any comment whose anchor
+         lies in a deleted range [\[start, end)], and restore the reverse order
+         {!associate} expects. *)
+      let comments =
+        List.stable_sort
+          (fun a b -> compare a.anchor b.anchor)
+          (List.rev ctx.comments)
+      in
+      let rec sweep ranges = function
+        | [] -> []
+        | (c : entry) :: rest -> (
+            let rec skip = function
+              | (_, e) :: rs when e <= c.anchor -> skip rs
+              | rs -> rs
+            in
+            let ranges = skip ranges in
+            match ranges with
+            | (s, _) :: _ when s <= c.anchor -> sweep ranges rest
+            | _ -> c :: sweep ranges rest)
+      in
+      ctx.comments <- List.rev (sweep ranges comments)
+
 let associate ?only ctx =
   (* Only consider locations the caller will actually look up while printing
      (when [only] is given). A comment otherwise risks being attached to a node

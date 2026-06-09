@@ -41,6 +41,14 @@ val report_token : context -> int -> unit
 val with_pos : context -> Ast.location -> 'a -> ('a, Ast.location) Ast.annotated
 (** [with_pos ctx loc v] wraps [v] with location [loc]. *)
 
+val drop_in_ranges : context -> (int * int) list -> unit
+(** [drop_in_ranges ctx ranges] removes every comment whose anchor falls within
+    one of the half-open byte ranges [\[start, end)]. Used after conditional
+    specialization splices out a branch: the comments inside the removed source
+    span are discarded rather than re-attaching to a surviving neighbour. The
+    ranges and comments are each sorted once and swept together in a single
+    pass. *)
+
 (** {1 Association lookup}
 
     Looking up the trivia attached to a location. Rendering it to styled output
