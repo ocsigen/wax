@@ -1334,10 +1334,13 @@ let rec modulefield f =
         ]
   | Elem { id; typ; init; mode } ->
       let lst =
-        (* We don't check the nullability of the type. This may make
-           it non-nullable, but this is safe. *)
-        match typ.typ with
-        | Func -> function_indices init
+        (* The [func] shorthand denotes element type [(ref func)] (non-null,
+           matching the [ref.func] elements), not the nullable [funcref]. It
+           may therefore only be used for a non-nullable [Func] type;
+           abbreviating a [funcref] segment would silently drop its
+           nullability. *)
+        match typ with
+        | { nullable = false; typ = Func } -> function_indices init
         | _ -> None
       in
       list ~loc

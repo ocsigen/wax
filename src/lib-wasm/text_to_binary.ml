@@ -575,6 +575,12 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
   let string_type = ref None in
   let extra_types = ref [] in
   let type_count = ref ctx.types.count in
+  (* Number of parameters of each implicit function type, keyed by its index.
+     [func_types_by_idx] below only covers explicitly-defined types; this
+     records the implicit ones appended for inline signatures so that a
+     function declared as [(func (type N))] referring to such a type can still
+     determine how many (unnamed) parameters precede its locals. *)
+  let impl_func_params = ref B.IntMap.empty in
 
   (* Populate type_map with existing explicit types *)
   let () =
@@ -644,6 +650,8 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
         type_count := i + 1;
         Hashtbl.add type_map ft i;
         extra_types := B.Func ft :: !extra_types;
+        impl_func_params :=
+          B.IntMap.add i (Array.length ft.B.Types.params) !impl_func_params;
         i
   in
 
@@ -716,7 +724,12 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
                   let resolved_idx = resolve_idx ctx.types type_idx in
                   match B.IntMap.find_opt resolved_idx func_types_by_idx with
                   | Some num_params -> num_params
-                  | None -> assert false)
+                  | None -> (
+                      match
+                        B.IntMap.find_opt resolved_idx !impl_func_params
+                      with
+                      | Some num_params -> num_params
+                      | None -> assert false))
               | _ -> 0
             in
             let all_ids =

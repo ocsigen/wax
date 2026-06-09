@@ -69,6 +69,8 @@ type t = {
 let create () =
   { types = RecTypeTbl.create 2000; last_index = 0; rev_list = [] }
 
+let last_index types = types.last_index
+
 let add_rectype types typ =
   try RecTypeTbl.find types.types typ
   with Not_found ->

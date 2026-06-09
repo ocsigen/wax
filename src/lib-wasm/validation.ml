@@ -2272,6 +2272,73 @@ and register_typeuses' d ctx (i : _ Ast.Text.instr) =
   | VecReplace _ | VecSplat _ | VecShuffle _ | VecTernOp _ | Char _ ->
       ()
 
+(* Collect the implicit function types denoted by inline signatures (function
+   and tag definitions, imports, block types and [call_indirect]). Following
+   the text format, such a type reuses a structurally-equal type if one already
+   exists, and is otherwise appended to the end of the type index space, where
+   it can be referred to by index. We must do this before resolving any type
+   reference so that those indices are bound, and before computing the
+   subtyping information so that it covers every type. Relies on
+   {!Types.add_rectype} deduplicating: a [typeuse] encountered later during
+   validation then resolves to the type collected here instead of growing the
+   type table. *)
+let collect_implicit_types d ctx fields =
+  let collect sign =
+    let>@ ft = functype d ctx sign in
+    let before = Types.last_index ctx.types in
+    let idx =
+      Types.add_rectype ctx.types
+        [| { typ = Func ft; supertype = None; final = true } |]
+    in
+    if Types.last_index ctx.types > before then (
+      Hashtbl.replace ctx.index_mapping (Uint32.of_int ctx.last_index) (idx, []);
+      ctx.last_index <- ctx.last_index + 1)
+  in
+  let rec collect_instrs l = List.iter collect_instr l
+  and collect_instr (i : _ Ast.Text.instr) =
+    (match i.desc with
+    | Block { typ = Some (Typeuse (None, Some ft)); _ }
+    | Loop { typ = Some (Typeuse (None, Some ft)); _ }
+    | If { typ = Some (Typeuse (None, Some ft)); _ }
+    | Try { typ = Some (Typeuse (None, Some ft)); _ }
+    | TryTable { typ = Some (Typeuse (None, Some ft)); _ } ->
+        collect ft
+    | CallIndirect (_, (None, Some ft)) | ReturnCallIndirect (_, (None, Some ft))
+      ->
+        collect ft
+    | _ -> ());
+    match i.desc with
+    | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
+        collect_instrs block
+    | If { if_block; else_block; _ } ->
+        collect_instrs if_block.desc;
+        collect_instrs else_block.desc
+    | Try { block; catches; catch_all; _ } ->
+        collect_instrs block;
+        List.iter (fun (_, c) -> collect_instrs c) catches;
+        Option.iter collect_instrs catch_all
+    | If_annotation { then_body; else_body; _ } ->
+        collect_instrs then_body;
+        Option.iter collect_instrs else_body
+    | Folded (i, l) ->
+        collect_instr i;
+        collect_instrs l
+    | _ -> ()
+  in
+  List.iter
+    (fun (field : (_ Ast.Text.modulefield, _) Ast.annotated) ->
+      (match field.desc with
+      | Import { desc = Func (None, Some sign); _ }
+      | Import { desc = Tag (None, Some sign); _ }
+      | Func { typ = None, Some sign; _ }
+      | Tag { typ = None, Some sign; _ } ->
+          collect sign
+      | _ -> ());
+      match field.desc with
+      | Func { instrs; _ } -> collect_instrs instrs
+      | _ -> ())
+    fields
+
 let build_initial_env ctx fields =
   List.iter
     (fun (field : (_ Ast.Text.modulefield, _) Ast.annotated) ->
@@ -2560,6 +2627,7 @@ let validate_configuration diagnostics (_, fields) =
       | Types rectype -> add_type diagnostics type_context rectype
       | _ -> ())
     fields;
+  collect_implicit_types diagnostics type_context fields;
   let ctx =
     {
       diagnostics;

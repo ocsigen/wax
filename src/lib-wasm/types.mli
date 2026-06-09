@@ -11,6 +11,10 @@ val add_rectype : t -> Ast.Binary.rectype -> int
     first type defined. Assumes normalized types (use negative numbers for
     recursive references). *)
 
+val last_index : t -> int
+(** [last_index context] returns the index that the next freshly-added type
+    would receive (i.e. the number of types currently defined). *)
+
 type subtyping_info
 (** Information needed for subtyping checks. *)
 
