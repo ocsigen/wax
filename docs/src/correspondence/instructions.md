@@ -151,6 +151,7 @@ if cond => (i32) -> i32 { ... } else { ... }
 | `array.new $t` | `[t\| val; len]` |
 | `array.new_default $t` | `[t\| ..; len]` |
 | `array.new_fixed $t` | `[t\| val, ...]` |
+| `array.new_data $t $d` | `[t\| d @ offset; count]` |
 | `array.get $t` | `arr[idx]` |
 | `array.get_s $t` | `arr[idx] as i32_s` |
 | `array.get_u $t` | `arr[idx] as i32_u` |

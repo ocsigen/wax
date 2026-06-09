@@ -92,7 +92,7 @@
 (func $bigstring_to_array_buffer (export "bigstring_to_array_buffer")
   (param $bs (ref eq)) (result (ref eq))
   (return_call $caml_js_get (call $caml_ba_to_typed_array (local.get $bs))
-    (@string $string "foo" ))
+    (array.new_data $string $buffer (i32.const 0) (i32.const 6)))
 )
 (func $bigstring_of_array_buffer (export "bigstring_of_array_buffer")
   (param $x (ref eq)) (result (ref eq))

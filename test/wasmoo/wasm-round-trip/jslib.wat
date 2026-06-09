@@ -607,7 +607,8 @@
       (call $wrap
         (call $meth_call (local.get $exn)
           (call $unwrap
-            (call $caml_jsstring_of_string (@string $string "foo" )))
+            (call $caml_jsstring_of_string
+              (array.new_data $string $toString (i32.const 0) (i32.const 8))))
           (any.convert_extern (call $new_array (i32.const 0)))))))
 )
 (func $caml_js_error_option_of_exception

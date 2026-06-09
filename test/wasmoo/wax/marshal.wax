@@ -60,13 +60,13 @@ fn caml_input_value(ch: &eq) -> &eq {
     header = [string|0; 20];
     r = caml_really_getblock(ch, header, 0, 20);
     if !r { caml_raise_end_of_file(); }
-    if r <u 20 { caml_failwith(string#"foo"); }
+    if r <u 20 { caml_failwith([string|truncated_obj @ 0; 29]); }
     s = get_intern_state(header, 0);
     h = parse_header(s, input_value);
     len = h.data_len;
     buf = [string|0; len];
     if caml_really_getblock(ch, buf, 0, len) <u len {
-        caml_failwith(string#"foo");
+        caml_failwith([string|truncated_obj @ 0; 29]);
     }
     s = get_intern_state(buf, 0);
     become intern_rec(s, h);
@@ -307,13 +307,13 @@ fn intern_custom(s: &intern_state, code: i32) -> &eq {
             sz = _;
             res = _;
             if (sz != expected_size) & (code != CODE_CUSTOM) {
-                caml_failwith(string#"foo");
+                caml_failwith([string|incorrect_size @ 0; 56]);
             }
             return res;
         } /* 'no_length */
-        caml_failwith(string#"foo");
+        caml_failwith([string|expected_size @ 0; 47]);
     } /* 'unknown */
-    caml_failwith(string#"foo");
+    caml_failwith([string|unknown_custom @ 0; 44]);
     0 as &i31;
 }
 fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
@@ -424,7 +424,11 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                                                                     ] code;
                                                                     }
                                                                     caml_failwith
-                                                                    (string#"foo");
+                                                                    ([string|
+                                                                    ill_formed
+                                                                    @
+                                                                    0;
+                                                                    31]);
                                                                     br 'done;
                                                                     }
                                                                     /* 'CUSTOM */
@@ -437,7 +441,11 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                                                                     }
                                                                     /* 'CODEPOINTER */
                                                                     caml_failwith
-                                                                    (string#"foo");
+                                                                    ([string|
+                                                                    code_pointer
+                                                                    @
+                                                                    0;
+                                                                    25]);
                                                                     br 'done;
                                                                     }
                                                                     /* 'DOUBLE_ARRAY32 */
@@ -500,7 +508,11 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                                                         br 'read_shared;
                                                     } /* 'INT64 */
                                                     caml_failwith
-                                                        (string#"foo");
+                                                        ([string|
+                                                             integer_too_large
+                                                             @
+                                                             0;
+                                                             30]);
                                                     br 'done;
                                                 } /* 'INT32 */
                                                 v = read32(s) as &i31;
@@ -545,15 +557,15 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
 }
 data too_large = ": object too large to be read back on a 32-bit platform";
 fn too_large(prim: &string) {
-    caml_failwith(caml_string_concat(prim, string#"foo"));
+    caml_failwith(caml_string_concat(prim, [string|too_large @ 0; 55]));
 }
 data bad_object = ": bad object";
 fn bad_object(prim: &string) {
-    caml_failwith(caml_string_concat(prim, string#"foo"));
+    caml_failwith(caml_string_concat(prim, [string|bad_object @ 0; 12]));
 }
 data bad_length = ": bad length";
 fn bad_length(prim: &string) {
-    caml_failwith(caml_string_concat(prim, string#"foo"));
+    caml_failwith(caml_string_concat(prim, [string|bad_length @ 0; 12]));
 }
 type marshal_header = { data_len: i32, num_objects: i32 };
 fn parse_header(s: &intern_state, prim: &string) -> &marshal_header {
@@ -577,8 +589,12 @@ fn caml_marshal_data_size(buf: &eq, ofs: &eq) -> &eq {
     let magic: i32;
     s = get_intern_state(buf as &string, ofs as &i31 as i32_u);
     magic = read32(s);
-    if magic == Intext_magic_number_big { too_large(string#"foo"); }
-    if magic != Intext_magic_number_small { bad_object(string#"foo"); }
+    if magic == Intext_magic_number_big {
+        too_large([string|marshal_data_size @ 0; 17]);
+    }
+    if magic != Intext_magic_number_small {
+        bad_object([string|marshal_data_size @ 0; 17]);
+    }
     (20 - caml_marshal_header_size + read32(s)) as &i31;
 }
 type output_block = {
@@ -637,7 +653,9 @@ fn reserve_extern_output(s: &extern_state, required: i32) -> i32 {
     let buf: &string;
     pos = s.pos;
     if pos + required <=u s.limit { s.pos = pos + required; return pos; }
-    if s.user_provided_output { caml_failwith(string#"foo"); }
+    if s.user_provided_output {
+        caml_failwith([string|buffer_overflow @ 0; 34]);
+    }
     last = s.output_last;
     last.end = s.pos;
     if required >s SIZE_EXTERN_OUTPUT_BLOCK >>u 1 { extra = required; }
@@ -833,7 +851,9 @@ fn extern_custom(s: &extern_state, v: &custom) -> (i32, i32) {
                 (sz32 != fixed_length.bsize_32) |
                     (sz64 != fixed_length.bsize_64)
             {
-                caml_failwith(caml_string_concat(string#"foo", ops.id));
+                caml_failwith
+                    (caml_string_concat
+                         ([string|incorrect_sizes @ 0; 49], ops.id));
             }
             return (sz32, sz64);
         } /* 'variable_length */
@@ -849,7 +869,7 @@ fn extern_custom(s: &extern_state, v: &custom) -> (i32, i32) {
         store32(buf, pos + 8, sz64);
         return (sz32, sz64);
     } /* 'abstract */
-    caml_invalid_argument(string#"foo");
+    caml_invalid_argument([string|cust_value @ 0; 37]);
     return (0, 0);
 }
 data func_value = "output_value: functional value";
@@ -932,12 +952,14 @@ fn extern_rec(s: &extern_state, v: &eq) {
                     extern_size(s, sz32 + 7 >>u 2, sz64 + 15 >>u 3);
                     br 'next_item;
                 } /* 'not_custom */;
-            if caml_is_closure(v) { caml_invalid_argument(string#"foo"); }
-            if caml_is_continuation(v) {
-                caml_invalid_argument(string#"foo");
+            if caml_is_closure(v) {
+                caml_invalid_argument([string|func_value @ 0; 30]);
             }
-            if v is &js { caml_invalid_argument(string#"foo"); }
-            caml_invalid_argument(string#"foo");
+            if caml_is_continuation(v) {
+                caml_invalid_argument([string|cont_value @ 0; 32]);
+            }
+            if v is &js { caml_invalid_argument([string|js_value @ 0; 47]); }
+            caml_invalid_argument([string|abstract_value @ 0; 28]);
         } /* 'next_item */
         'done: do {
             item = br_on_null 'done sp;

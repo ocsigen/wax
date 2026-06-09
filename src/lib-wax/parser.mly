@@ -486,6 +486,8 @@ plaininstr:
   { with_loc $sloc (Array (Some t, i1, i2)) }
 | "[" t = ident "|" ".." ";" i = length_expression "]"
   { with_loc $sloc (ArrayDefault (Some t, i)) }
+| "[" t = ident "|" d = ident "@" off = expression ";" len = length_expression "]"
+  { with_loc $sloc (ArrayData (Some t, d, off, len)) }
 | x = ident ":=" i = expression { with_loc $sloc (Tee (x, i)) }
 | i = expression AS t = cast_type { with_loc $sloc (Cast(i, t)) }
 | i = expression IS t = reference_type { with_loc $sloc (Test(i, t)) }

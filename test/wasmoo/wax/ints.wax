@@ -198,7 +198,7 @@ fn parse_int_format(s: &string) -> (i32, i32, i32, i32, i32) {
             }
             br 'return;
         } /* 'bad_format */
-        caml_invalid_argument(string#"foo");
+        caml_invalid_argument([string|format_error @ 0; 22]);
     } /* 'return */
     sign_style;
     alternate;

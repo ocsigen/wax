@@ -93,7 +93,7 @@ data Bytes_create = "Bytes.create";
 fn caml_create_bytes(len: &eq) -> &eq {
     let l: i32;
     l = len as &i31 as i32_s;
-    if l <s 0 { caml_invalid_argument(string#"foo"); }
+    if l <s 0 { caml_invalid_argument([string|Bytes_create @ 0; 12]); }
     [string|0; l];
 }
 #[export = "caml_blit_string"]

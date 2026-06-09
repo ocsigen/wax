@@ -44,7 +44,8 @@
     (local.get $arg))
 ) (data $index_out_of_bounds "index out of bounds")
 (func $caml_bound_error (export "caml_bound_error")
-  (return_call $caml_invalid_argument (@string $string "foo" ))
+  (return_call $caml_invalid_argument
+    (array.new_data $string $index_out_of_bounds (i32.const 0) (i32.const 19)))
 ) (global $END_OF_FILE_EXN i32 (i32.const 4))
 (func $caml_raise_end_of_file (export "caml_raise_end_of_file")
   (return_call $caml_raise_constant

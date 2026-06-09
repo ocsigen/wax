@@ -147,7 +147,7 @@ fn parse_format(s: &string) -> (i32, i32, i32, i32) {
             conversion = (c & 0xdf) - 69;
             br_if 'return conversion <=u 2;
         } /* 'bad_format */
-        caml_invalid_argument(string#"foo");
+        caml_invalid_argument([string|format_error @ 0; 22]);
     } /* 'return */
     sign_style;
     precision;
@@ -313,7 +313,7 @@ fn caml_float_of_hex(s: &string, i: i32) -> f64 {
         if exp { f = ldexp(f, exp); }
         return f;
     } /* 'error */
-    caml_failwith(string#"foo");
+    caml_failwith([string|float_of_string @ 0; 15]);
     0;
 }
 fn on_whitespace(s: &string, i: i32) -> i32 {
@@ -440,7 +440,7 @@ fn caml_float_of_string(x: &eq) -> &eq {
         br_if 'error f != f;
         return {float| f: f };
     } /* 'error */
-    caml_failwith(string#"foo");
+    caml_failwith([string|float_of_string @ 0; 15]);
     return 0 as &i31;
 }
 #[export = "caml_nextafter_float"]

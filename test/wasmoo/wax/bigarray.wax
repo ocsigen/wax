@@ -511,7 +511,8 @@ fn bigarray_deserialize(s: &eq) -> (&eq, i32) {
                                         br 'done;
                                     } /* 'int */
                                     if caml_deserialize_uint_1(s) {
-                                        caml_failwith(string#"foo");
+                                        caml_failwith
+                                            ([string|intern_overflow @ 0; 56]);
                                     }
                                 } /* 'int32 */
                                 'loop: loop {
@@ -630,14 +631,17 @@ fn caml_ba_create(vkind: &eq, layout: &eq, d: &eq) -> &eq {
     vdim = d as &block;
     num_dims = vdim.length - 1;
     if num_dims >u CAML_BA_MAX_NUM_DIMS {
-        caml_invalid_argument(string#"foo");
+        caml_invalid_argument([string|ba_create_bad_dims @ 0; 41]);
     }
     dim = [int_array|0; num_dims];
     i = 0;
     'loop: loop {
         if i <u num_dims {
             n = vdim[i + 1] as &i31 as i32_s;
-            if n <s 0 { caml_invalid_argument(string#"foo"); }
+            if n <s 0 {
+                caml_invalid_argument
+                    ([string|ba_create_negative_dim @ 0; 35]);
+            }
             dim[i] = n;
             i = i + 1;
             br 'loop;
@@ -661,10 +665,12 @@ fn caml_ba_from_typed_array(x: &eq) -> &eq {
     let len: i32;
     data = ta_normalize((unwrap(x) as &?extern)!);
     kind = ta_kind(data);
-    if kind <s 0 { caml_invalid_argument(string#"foo"); }
+    if kind <s 0 {
+        caml_invalid_argument([string|ta_unsupported_kind @ 0; 41]);
+    }
     if kind == 13 { kind = 3; }
     len = ta_length(data);
-    if len <s 0 { caml_invalid_argument(string#"foo"); }
+    if len <s 0 { caml_invalid_argument([string|ta_too_large @ 0; 34]); }
     {bigarray|
         f: bigarray_ops,
         ba_data: data,
@@ -822,7 +828,9 @@ fn caml_ba_dim(x: &eq, x_2: &eq) -> &eq {
     let i: i32;
     dim = (x as &bigarray).ba_dim;
     i = x_2 as &i31 as i32_s;
-    if i >=u dim.length { caml_invalid_argument(string#"foo"); }
+    if i >=u dim.length {
+        caml_invalid_argument([string|Bigarray_dim @ 0; 12]);
+    }
     dim[i] as &i31;
 }
 #[export = "caml_ba_dim_1"]
@@ -1043,7 +1051,7 @@ fn caml_ba_slice(vb: &eq, vind: &eq) -> &eq {
     num_inds = ind.length - 1;
     num_dims = b.ba_num_dims as i32_u;
     if num_inds >u b.ba_num_dims as i32_u {
-        caml_invalid_argument(string#"foo");
+        caml_invalid_argument([string|too_many_indices @ 0; 32]);
     }
     sub_dim = [int_array|0; num_dims - num_inds];
     if b.ba_layout as i32_u {
@@ -1115,7 +1123,7 @@ fn caml_ba_sub(vba: &eq, vofs: &eq, vlen: &eq) -> &eq {
         } /* 'loop */
     }
     if (ofs <s 0) | (len <s 0) | (ofs + len >s dim[changed_dim]) {
-        caml_invalid_argument(string#"foo");
+        caml_invalid_argument([string|bad_subarray @ 0; 27]);
     }
     new_dim = [int_array|0; num_dims];
     new_dim.copy(0, dim, 0, num_dims);
@@ -1221,13 +1229,15 @@ fn caml_ba_blit(vsrc: &eq, vdst: &eq) -> &eq {
     dst = vdst as &bigarray;
     len = dst.ba_num_dims as i32_u;
     if len != src.ba_num_dims as i32_u {
-        caml_invalid_argument(string#"foo");
+        caml_invalid_argument([string|dim_mismatch @ 0; 33]);
     }
     sdim = src.ba_dim;
     ddim = dst.ba_dim;
     'loop: loop {
         if i <s len {
-            if sdim[i] != ddim[i] { caml_invalid_argument(string#"foo"); }
+            if sdim[i] != ddim[i] {
+                caml_invalid_argument([string|dim_mismatch @ 0; 33]);
+            }
             i = i + 1;
             br 'loop;
         }
@@ -1251,14 +1261,16 @@ fn caml_ba_reshape(vb: &eq, vd: &eq) -> &eq {
     num_dims = vdim.length - 1;
     b = vb as &bigarray;
     if num_dims >u CAML_BA_MAX_NUM_DIMS {
-        caml_invalid_argument(string#"foo");
+        caml_invalid_argument([string|bad_number_dim @ 0; 42]);
     }
     num_elts = 1;
     dim = [int_array|0; num_dims];
     'loop: loop {
         if i <u num_dims {
             d = vdim[i + 1] as &i31 as i32_s;
-            if d <s 0 { caml_invalid_argument(string#"foo"); }
+            if d <s 0 {
+                caml_invalid_argument([string|negative_dim @ 0; 36]);
+            }
             dim[i] = d;
             num_elts = num_elts * d as i64_s;
             if num_elts != num_elts as i32 as i64_s {
@@ -1269,7 +1281,7 @@ fn caml_ba_reshape(vb: &eq, vd: &eq) -> &eq {
         }
     } /* 'loop */
     if num_elts as i32 != caml_ba_get_size(b.ba_dim) {
-        caml_invalid_argument(string#"foo");
+        caml_invalid_argument([string|size_mismatch @ 0; 31]);
     }
     {bigarray|
         f: bigarray_ops,

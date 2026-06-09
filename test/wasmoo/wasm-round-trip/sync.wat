@@ -49,7 +49,9 @@
   (local $t (ref $mutex))
   (local.set $t (ref.cast (ref $mutex) (local.get $x)))
   (if (struct.get $mutex $state (local.get $t))
-    (then (call $caml_failwith (@string $string "foo" ))))
+    (then
+      (call $caml_failwith
+        (array.new_data $string $lock_failure (i32.const 0) (i32.const 46)))))
   (struct.set $mutex $state (local.get $t) (i32.const 1))
   (ref.i31 (i32.const 0))
 )
@@ -75,7 +77,8 @@
 ) (data $condition_failure "Condition.wait: cannot wait")
 (func $caml_ml_condition_wait (export "caml_ml_condition_wait")
   (param $x (ref eq)) (param $x_2 (ref eq)) (result (ref eq))
-  (call $caml_failwith (@string $string "foo" ))
+  (call $caml_failwith
+    (array.new_data $string $condition_failure (i32.const 0) (i32.const 27)))
   (ref.i31 (i32.const 0))
 )
 (func $caml_ml_condition_signal (export "caml_ml_condition_signal")

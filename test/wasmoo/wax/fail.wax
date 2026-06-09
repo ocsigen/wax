@@ -37,7 +37,9 @@ fn caml_invalid_argument(arg: &eq) {
 }
 data index_out_of_bounds = "index out of bounds";
 #[export = "caml_bound_error"]
-fn caml_bound_error() { become caml_invalid_argument(string#"foo"); }
+fn caml_bound_error() {
+    become caml_invalid_argument([string|index_out_of_bounds @ 0; 19]);
+}
 const END_OF_FILE_EXN: i32 = 4;
 #[export = "caml_raise_end_of_file"]
 fn caml_raise_end_of_file() {

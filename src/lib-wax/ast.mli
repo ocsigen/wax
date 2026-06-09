@@ -114,6 +114,7 @@ type 'info instr_desc =
   | Array of ident option * 'info instr * 'info instr
   | ArrayDefault of ident option * 'info instr
   | ArrayFixed of ident option * 'info instr list
+  | ArrayData of ident option * ident * 'info instr * 'info instr
   | ArrayGet of 'info instr * 'info instr
   | ArraySet of 'info instr * 'info instr * 'info instr
   | BinOp of binop * 'info instr * 'info instr

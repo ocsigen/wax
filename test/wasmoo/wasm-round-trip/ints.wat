@@ -250,7 +250,8 @@
                         (then (local.set $base (i32.const 8)))
                         (else (br $bad_format)))))))))))
       (br $return))
-    (call $caml_invalid_argument (@string $string "foo" )))
+    (call $caml_invalid_argument
+      (array.new_data $string $format_error (i32.const 0) (i32.const 22))))
   (local.get $sign_style)
   (local.get $alternate)
   (local.get $signed)

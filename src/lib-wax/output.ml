@@ -454,7 +454,7 @@ let get_prec (i : _ Ast.instr) =
   | Block _ | Loop _ | If _ | Try _ | TryTable _ | If_annotation _ -> Atom
   | Unreachable | Nop | Hole | Null | Get _ | Char _ | String _ | Int _
   | Float _ | Struct _ | StructDefault _ | Array _ | ArrayDefault _
-  | ArrayFixed _ | ArrayGet _ | ArraySet _ | Sequence _ ->
+  | ArrayFixed _ | ArrayData _ | ArrayGet _ | ArraySet _ | Sequence _ ->
       Atom
   | Set _ | Tee _ -> Assignement
   | Call _ | TailCall _ -> CallAndFieldAccess
@@ -480,11 +480,11 @@ let is_block (i : _ Ast.instr) =
   | Call _ | Unreachable | Nop | Hole | Null | Get _ | Set _ | Tee _
   | TailCall _ | Char _ | String _ | Int _ | Float _ | Cast _ | Test _
   | NonNull _ | Struct _ | StructDefault _ | StructGet _ | StructSet _ | Array _
-  | ArrayDefault _ | ArrayFixed _ | ArrayGet _ | ArraySet _ | BinOp _ | UnOp _
-  | Let _ | Br _ | Br_if _ | Br_table _ | Br_on_null _ | Br_on_non_null _
-  | Br_on_cast _ | Br_on_cast_fail _ | Throw _ | ThrowRef _ | ContNew _
-  | ContBind _ | Suspend _ | Resume _ | ResumeThrow _ | ResumeThrowRef _
-  | Switch _ | Return _ | Sequence _ | Select _ ->
+  | ArrayDefault _ | ArrayFixed _ | ArrayData _ | ArrayGet _ | ArraySet _
+  | BinOp _ | UnOp _ | Let _ | Br _ | Br_if _ | Br_table _ | Br_on_null _
+  | Br_on_non_null _ | Br_on_cast _ | Br_on_cast_fail _ | Throw _ | ThrowRef _
+  | ContNew _ | ContBind _ | Suspend _ | Resume _ | ResumeThrow _
+  | ResumeThrowRef _ | Switch _ | Return _ | Sequence _ | Select _ ->
       false
 
 let rec starts_with_block_prec prec (i : 'a Ast.instr) =
@@ -506,10 +506,11 @@ let rec starts_with_block_prec prec (i : 'a Ast.instr) =
     | Select (i, _, _) -> starts_with_block_prec Select i
     | Unreachable | Nop | Hole | Null | Get _ | Set _ | Tee _ | TailCall _
     | Char _ | String _ | Int _ | Float _ | Struct _ | StructDefault _ | Array _
-    | ArrayDefault _ | ArrayFixed _ | Let _ | Br _ | Br_if _ | Br_table _
-    | Br_on_null _ | Br_on_non_null _ | Br_on_cast _ | Br_on_cast_fail _
-    | Throw _ | ThrowRef _ | ContNew _ | ContBind _ | Suspend _ | Resume _
-    | ResumeThrow _ | ResumeThrowRef _ | Switch _ | Return _ | Sequence _ ->
+    | ArrayDefault _ | ArrayFixed _ | ArrayData _ | Let _ | Br _ | Br_if _
+    | Br_table _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
+    | Br_on_cast_fail _ | Throw _ | ThrowRef _ | ContNew _ | ContBind _
+    | Suspend _ | Resume _ | ResumeThrow _ | ResumeThrowRef _ | Switch _
+    | Return _ | Sequence _ ->
         false
 
 let starts_with_block i = starts_with_block_prec Instruction i
@@ -802,6 +803,16 @@ let rec instr prec pp (i : _ instr) =
               instr (array_element_precedence nm first i) ctx i)
             pp
             (List.mapi (fun n i -> (n = 0, i)) l))
+  | ArrayData (nm, d, off, len) ->
+      array_instr pp nm (fun () ->
+          identifier pp d.desc;
+          space pp ();
+          operator pp "@";
+          space pp ();
+          instr Instruction pp off;
+          punctuation pp ";";
+          space pp ();
+          instr Instruction pp len)
   | ArrayGet (i1, i2) ->
       box pp ~indent:indent_level (fun () ->
           instr CallAndFieldAccess pp i1;

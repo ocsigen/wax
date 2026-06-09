@@ -173,19 +173,25 @@
           (drop
             (call $caml_callback_2
               (br_on_null $not_registered
-                (call $caml_named_value (@string $string "foo" )))
+                (call $caml_named_value
+                  (array.new_data $string $handle_uncaught_exception
+                    (i32.const 0) (i32.const 34))))
               (local.get $exn) (ref.i31 (i32.const 0))))
           (br $exit))
         (block $null
           (drop
             (call $caml_callback_1
               (br_on_null $null
-                (call $caml_named_value (@string $string "foo" )))
+                (call $caml_named_value
+                  (array.new_data $string $do_at_exit (i32.const 0)
+                    (i32.const 21))))
               (ref.i31 (i32.const 0)))))
         (call $write (i32.const 2)
           (call $unwrap
             (call $caml_jsstring_of_string
-              (call $caml_string_concat (@string $string "foo" )
+              (call $caml_string_concat
+                (array.new_data $string $fatal_error (i32.const 0)
+                  (i32.const 23))
                 (call $caml_string_concat
                   (call $caml_format_exception (local.get $exn))
                   (@string $string "\n" )))))))

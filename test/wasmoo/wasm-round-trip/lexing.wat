@@ -132,7 +132,10 @@
         (local.set $action
           (array.get $block (local.get $lexbuf) (global.get $lex_last_action)))
         (if (ref.eq (local.get $action) (ref.i31 (i32.const -1)))
-          (then (call $caml_failwith (@string $string "foo" ))))
+          (then
+            (call $caml_failwith
+              (array.new_data $string $lexing_empty_token (i32.const 0)
+                (i32.const 19)))))
         (return (local.get $action))))
     (if (i32.eq (local.get $c) (i32.const 256))
       (then
@@ -303,7 +306,10 @@
         (local.set $action
           (array.get $block (local.get $lexbuf) (global.get $lex_last_action)))
         (if (ref.eq (local.get $action) (ref.i31 (i32.const -1)))
-          (then (call $caml_failwith (@string $string "foo" ))))
+          (then
+            (call $caml_failwith
+              (array.new_data $string $lexing_empty_token (i32.const 0)
+                (i32.const 19)))))
         (return (local.get $action))))
     (local.set $base_code
       (call $get (local.get $lex_base_code_2) (local.get $pstate)))

@@ -50,7 +50,7 @@ data lock_failure = "Mutex.lock: mutex already locked. Cannot wait.";
 fn caml_ml_mutex_lock(x: &eq) -> &eq {
     let t: &mutex;
     t = x as &mutex;
-    if t.state { caml_failwith(string#"foo"); }
+    if t.state { caml_failwith([string|lock_failure @ 0; 46]); }
     t.state = 1;
     0 as &i31;
 }
@@ -70,7 +70,7 @@ fn caml_ml_condition_new(x: &eq) -> &eq { 0 as &i31; }
 data condition_failure = "Condition.wait: cannot wait";
 #[export = "caml_ml_condition_wait"]
 fn caml_ml_condition_wait(x: &eq, x_2: &eq) -> &eq {
-    caml_failwith(string#"foo");
+    caml_failwith([string|condition_failure @ 0; 27]);
     0 as &i31;
 }
 #[export = "caml_ml_condition_signal"]

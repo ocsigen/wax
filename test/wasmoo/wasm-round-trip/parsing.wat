@@ -86,7 +86,9 @@
   (local.set $names (ref.cast (ref $string) (local.get $vnames)))
   (loop $loop
     (if (i32.eqz (array.get_u $string (local.get $names) (local.get $i)))
-      (then (return (@string $string "foo" ))))
+      (then
+        (return
+          (array.new_data $string $unknown_token (i32.const 0) (i32.const 15)))))
     (if (i32.ne (local.get $number) (i32.const 0))
       (then
         (local.set $i
@@ -123,18 +125,22 @@
   (local $b (ref $block)) (local $v (ref eq))
   (if (ref.test (ref i31) (local.get $tok))
     (then
-      (call $output (@string $string "foo" ))
+      (call $output
+        (array.new_data $string $State (i32.const 0) (i32.const 6)))
       (call $output_int (local.get $state))
-      (call $output (@string $string "foo" ))
+      (call $output
+        (array.new_data $string $read_token (i32.const 0) (i32.const 13)))
       (call $output
         (call $token_name
           (array.get $block (local.get $tables) (global.get $tbl_names_const))
           (i31.get_u (ref.cast (ref i31) (local.get $tok)))))
       (call $output_nl))
     (else
-      (call $output (@string $string "foo" ))
+      (call $output
+        (array.new_data $string $State (i32.const 0) (i32.const 6)))
       (call $output_int (local.get $state))
-      (call $output (@string $string "foo" ))
+      (call $output
+        (array.new_data $string $read_token (i32.const 0) (i32.const 13)))
       (local.set $b (ref.cast (ref $block) (local.get $tok)))
       (call $output
         (call $token_name
@@ -402,7 +408,9 @@
                                       (if (global.get $caml_parser_trace)
                                         (then
                                           (call $output
-                                            (@string $string "foo" ))
+                                            (array.new_data $string
+                                              $recovering_in_state
+                                              (i32.const 0) (i32.const 20)))
                                           (call $output_int
                                             (local.get $state1))
                                           (call $output_nl)))
@@ -411,7 +419,9 @@
                                       (br $next)))))))
                           (if (global.get $caml_parser_trace)
                             (then
-                              (call $output (@string $string "foo" ))
+                              (call $output
+                                (array.new_data $string $discarding_state
+                                  (i32.const 0) (i32.const 17)))
                               (call $output_int (local.get $state1))
                               (call $output_nl)))
                           (if
@@ -423,7 +433,10 @@
                             (then
                               (if (global.get $caml_parser_trace)
                                 (then
-                                  (call $output (@string $string "foo" ))
+                                  (call $output
+                                    (array.new_data $string
+                                      $no_more_states_to_discard
+                                      (i32.const 0) (i32.const 25)))
                                   (call $output_nl)))
                               (return
                                 (ref.i31 (global.get $RAISE_PARSE_ERROR)))))
@@ -440,7 +453,10 @@
                             (return (ref.i31 (global.get $RAISE_PARSE_ERROR)))))
                         (if (global.get $caml_parser_trace)
                           (then
-                            (call $output (@string $string "foo" ))
+                            (call $output
+                              (array.new_data $string
+                                $discarding_last_token_read (i32.const 0)
+                                (i32.const 26)))
                             (call $output_nl)))
                         (array.set $block (local.get $env)
                           (global.get $env_curr_char)
@@ -455,9 +471,13 @@
                         (i32.sub (local.get $errflag) (i32.const 1))))))
                 (if (global.get $caml_parser_trace)
                   (then
-                    (call $output (@string $string "foo" ))
+                    (call $output
+                      (array.new_data $string $State (i32.const 0)
+                        (i32.const 6)))
                     (call $output_int (local.get $state))
-                    (call $output (@string $string "foo" ))
+                    (call $output
+                      (array.new_data $string $shift_to_state (i32.const 0)
+                        (i32.const 17)))
                     (call $output_int
                       (call $get (local.get $tbl_table_2) (local.get $n2)))
                     (call $output_nl)))
@@ -502,9 +522,12 @@
               (br $next))
             (if (global.get $caml_parser_trace)
               (then
-                (call $output (@string $string "foo" ))
+                (call $output
+                  (array.new_data $string $State (i32.const 0) (i32.const 6)))
                 (call $output_int (local.get $state))
-                (call $output (@string $string "foo" ))
+                (call $output
+                  (array.new_data $string $reduce_by_rule (i32.const 0)
+                    (i32.const 17)))
                 (call $output_int (local.get $n))
                 (call $output_nl)))
             (local.set $m (call $get (local.get $tbl_len_2) (local.get $n)))

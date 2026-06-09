@@ -618,6 +618,7 @@ type module_context = {
   globals : (*mutable:*) (bool * inferred_valtype) Tbl.t;
   tags : functype Tbl.t;
   memories : (int * [ `I32 | `I64 ]) Tbl.t;
+  datas : unit Tbl.t;
   mutable locals : inferred_valtype StringMap.t;
   control_types : (string option * inferred_type UnionFind.t array) list;
   return_types : inferred_type UnionFind.t array;
@@ -1111,7 +1112,8 @@ let check_resume_handlers ctx handlers =
 let rec count_holes i =
   match i.desc with
   | Hole -> 1
-  | BinOp (_, l, r) | Array (_, l, r) | ArrayGet (l, r) ->
+  | BinOp (_, l, r) | Array (_, l, r) | ArrayData (_, _, l, r) | ArrayGet (l, r)
+    ->
       count_holes l + count_holes r
   | ArraySet (t, i, v) -> count_holes t + count_holes i + count_holes v
   | Call (f, args) | TailCall (f, args) ->
@@ -1177,7 +1179,10 @@ let rec check_hole_order_rec ctx i n =
         | Throw (_, None)
         | Return None ->
             n
-        | BinOp (_, l, r) | Array (_, l, r) | ArrayGet (l, r) ->
+        | BinOp (_, l, r)
+        | Array (_, l, r)
+        | ArrayData (_, _, l, r)
+        | ArrayGet (l, r) ->
             n |> check_hole_order_rec ctx l |> check_hole_order_rec ctx r
         | ArraySet (t, i, v) ->
             n |> check_hole_order_rec ctx t |> check_hole_order_rec ctx i
@@ -2021,6 +2026,23 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
             internalize ctx (Ref { nullable = false; typ = Type ty })
           in
           return_expression i (ArrayFixed (Some ty, List.rev instrs')) typ)
+  | ArrayData (ty, d, off, len) -> (
+      let* off' = instruction ctx off in
+      let* len' = instruction ctx len in
+      check_type ctx off'
+        (UnionFind.make (Valtype { typ = I32; internal = I32 }));
+      check_type ctx len'
+        (UnionFind.make (Valtype { typ = I32; internal = I32 }));
+      ignore (Tbl.find ctx.diagnostics ctx.datas d : unit option);
+      match ty with
+      | None -> assert false (*ZZZ*)
+      | Some ty ->
+          (let>@ _field = lookup_array_type ctx ty in
+           ());
+          let*! typ =
+            internalize ctx (Ref { nullable = false; typ = Type ty })
+          in
+          return_expression i (ArrayData (Some ty, d, off', len')) typ)
   | ArrayGet (i1, i2) -> (
       let* i1' = instruction ctx i1 in
       let* i2' = instruction ctx i2 in
@@ -2965,8 +2987,8 @@ let rec check_constant_instruction ctx i =
         _ )
   | Block _ | Loop _ | If _ | TryTable _ | Try _ | Unreachable | Nop | Hole
   | Set _ | Tee _ | Call _ | TailCall _ | Cast _ | Test _ | NonNull _
-  | StructGet _ | StructSet _ | ArrayGet _ | ArraySet _ | Let _ | Br _ | Br_if _
-  | Br_table _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
+  | StructGet _ | StructSet _ | ArrayData _ | ArrayGet _ | ArraySet _ | Let _
+  | Br _ | Br_if _ | Br_table _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
   | Br_on_cast_fail _ | Throw _ | ThrowRef _ | ContNew _ | ContBind _
   | Suspend _ | Resume _ | ResumeThrow _ | ResumeThrowRef _ | Switch _
   | Return _ | Sequence _ | Select _ | If_annotation _ ->
@@ -3225,6 +3247,7 @@ let type_configuration diagnostics fields =
       functions = Tbl.make namespace "function";
       globals = Tbl.make namespace "global";
       memories = Tbl.make (Namespace.make cond) "memory";
+      datas = Tbl.make (Namespace.make cond) "data segment";
       tags = Tbl.make (Namespace.make cond) "tag";
       locals = StringMap.empty;
       control_types = [];
@@ -3238,10 +3261,16 @@ let type_configuration diagnostics fields =
   walk_fields
     (fun field ->
       match field.desc with
-      | Memory { name; address_type; _ } ->
+      | Memory { name; address_type; data; _ } ->
           let i = !memory_index in
           incr memory_index;
-          Tbl.add diagnostics ctx.memories name (i, address_type)
+          Tbl.add diagnostics ctx.memories name (i, address_type);
+          List.iter
+            (fun (d : _ Ast.memdata) ->
+              Option.iter
+                (fun n -> Tbl.add diagnostics ctx.datas n ())
+                d.data_name)
+            data
       | Fundecl { name; typ; sign; _ } ->
           let>@ decl = fundecl ctx name typ sign in
           Tbl.add diagnostics ctx.functions name decl
@@ -3265,7 +3294,9 @@ let type_configuration diagnostics fields =
             | None, None -> assert false (*ZZZ*)
           in
           Tbl.add diagnostics ctx.tags name typ
-      | Data _ | Group _ | Conditional _ | Type _ | Global _ -> ())
+      | Data { name; _ } ->
+          Option.iter (fun n -> Tbl.add diagnostics ctx.datas n ()) name
+      | Group _ | Conditional _ | Type _ | Global _ -> ())
     fields;
   let _ : _ option =
     let name = Ast.no_loc "<string>" in
@@ -3340,7 +3371,11 @@ let rec instr_has_conditional (i : (_ instr_desc, _) annotated) =
       any l
   | Call (a, l) | TailCall (a, l) -> instr_has_conditional a || any l
   | Struct (_, l) -> List.exists (fun (_, i) -> instr_has_conditional i) l
-  | BinOp (_, a, b) | Array (_, a, b) | ArrayGet (a, b) | StructSet (a, _, b) ->
+  | BinOp (_, a, b)
+  | Array (_, a, b)
+  | ArrayData (_, _, a, b)
+  | ArrayGet (a, b)
+  | StructSet (a, _, b) ->
       instr_has_conditional a || instr_has_conditional b
   | ArraySet (a, b, c) | Select (a, b, c) ->
       instr_has_conditional a || instr_has_conditional b
@@ -3461,6 +3496,7 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
     | Array (idx, a, b) -> Array (idx, sone asm a, sone asm b)
     | ArrayDefault (idx, v) -> ArrayDefault (idx, sone asm v)
     | ArrayFixed (idx, l) -> ArrayFixed (idx, List.map (sone asm) l)
+    | ArrayData (idx, d, a, b) -> ArrayData (idx, d, sone asm a, sone asm b)
     | ArrayGet (a, b) -> ArrayGet (sone asm a, sone asm b)
     | ArraySet (a, b, c) -> ArraySet (sone asm a, sone asm b, sone asm c)
     | BinOp (op, a, b) -> BinOp (op, sone asm a, sone asm b)
@@ -3537,7 +3573,11 @@ let sub_instrs (i : (_ instr_desc, _) annotated) =
       l
   | Call (a, l) | TailCall (a, l) -> a :: l
   | Struct (_, l) -> List.map snd l
-  | BinOp (_, a, b) | Array (_, a, b) | ArrayGet (a, b) | StructSet (a, _, b) ->
+  | BinOp (_, a, b)
+  | Array (_, a, b)
+  | ArrayData (_, _, a, b)
+  | ArrayGet (a, b)
+  | StructSet (a, _, b) ->
       [ a; b ]
   | ArraySet (a, b, c) | Select (a, b, c) -> [ a; b; c ]
   | Set (_, i)

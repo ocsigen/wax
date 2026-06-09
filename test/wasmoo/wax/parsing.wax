@@ -88,7 +88,7 @@ fn token_name(vnames: &eq, number: i32) -> &eq {
     let name: &string;
     names = vnames as &string;
     'loop: loop {
-        if !(names[i] as i32_u) { return string#"foo"; }
+        if !(names[i] as i32_u) { return [string|unknown_token @ 0; 15]; }
         if number != 0 {
             i = i + (strlen(names, i) + 1);
             number = number - 1;
@@ -116,15 +116,15 @@ fn print_token(tables: &block, state: i32, tok: &eq) {
     let b: &block;
     let v: &eq;
     if tok is &i31 {
-        output(string#"foo");
+        output([string|State @ 0; 6]);
         output_int(state);
-        output(string#"foo");
+        output([string|read_token @ 0; 13]);
         output(token_name(tables[tbl_names_const], tok as &i31 as i32_u));
         output_nl();
     } else {
-        output(string#"foo");
+        output([string|State @ 0; 6]);
         output_int(state);
-        output(string#"foo");
+        output([string|read_token @ 0; 13]);
         b = tok as &block;
         output(token_name(tables[tbl_names_block], b[0] as &i31 as i32_u));
         output(string#"(");
@@ -362,7 +362,11 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                                                             {
                                                                 output
                                                                     (
-                                                                    string#"foo");
+                                                                    [string|
+                                                                    recovering_in_state
+                                                                    @
+                                                                    0;
+                                                                    20]);
                                                                 output_int
                                                                     (
                                                                     state1);
@@ -375,7 +379,12 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                                                     }
                                                 }
                                                 if caml_parser_trace {
-                                                    output(string#"foo");
+                                                    output
+                                                        ([string|
+                                                             discarding_state
+                                                             @
+                                                             0;
+                                                             17]);
                                                     output_int(state1);
                                                     output_nl();
                                                 }
@@ -385,7 +394,12 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                                                             as &i31 as i32_s
                                                 {
                                                     if caml_parser_trace {
-                                                        output(string#"foo");
+                                                        output
+                                                            ([string|
+                                                                 no_more_states_to_discard
+                                                                 @
+                                                                 0;
+                                                                 25]);
                                                         output_nl();
                                                     }
                                                     return
@@ -404,7 +418,12 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                                                     RAISE_PARSE_ERROR as &i31;
                                             }
                                             if caml_parser_trace {
-                                                output(string#"foo");
+                                                output
+                                                    ([string|
+                                                         discarding_last_token_read
+                                                         @
+                                                         0;
+                                                         26]);
                                                 output_nl();
                                             }
                                             env[env_curr_char] = -1 as &i31;
@@ -418,9 +437,9 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                                     }
                                 } /* 'shift_recover */
                                 if caml_parser_trace {
-                                    output(string#"foo");
+                                    output([string|State @ 0; 6]);
                                     output_int(state);
-                                    output(string#"foo");
+                                    output([string|shift_to_state @ 0; 17]);
                                     output_int(get(tbl_table_2, n2));
                                     output_nl();
                                 }
@@ -444,9 +463,9 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                             br 'next;
                         } /* 'reduce */
                         if caml_parser_trace {
-                            output(string#"foo");
+                            output([string|State @ 0; 6]);
                             output_int(state);
-                            output(string#"foo");
+                            output([string|reduce_by_rule @ 0; 17]);
                             output_int(n);
                             output_nl();
                         }

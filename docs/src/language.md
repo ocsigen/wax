@@ -406,7 +406,10 @@ type mutable_ints = [mut i32];
 [bytes| 0; 100]             // New array: 100 elements, all 0
 [bytes| ..; 100]            // New array: 100 elements, default value
 [bytes| 1, 2, 3, 4]         // New array with specific values
+[bytes| seg @ 0; 100]       // New array from a data segment (offset, count)
 ```
+
+The last form is `array.new_data`: it initializes the array from the named [data segment](module_fields.md#data-segments) `seg`, reading `count` elements starting at byte `offset`.
 
 ### Element Access
 

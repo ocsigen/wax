@@ -65,7 +65,7 @@ type fiber: generic_fiber = {
 data effect_unhandled = "Effect.Unhandled";
 fn raise_unhandled(eff: &eq, x: &eq) -> &eq {
     let effect_unhandled: &string;
-    effect_unhandled = string#"foo";
+    effect_unhandled = [string|effect_unhandled @ 0; 16];
     'null: do {
         caml_raise_with_arg
             (br_on_null 'null caml_named_value(effect_unhandled), eff);
@@ -127,7 +127,8 @@ fn f(stack: &eq, f: &eq, v: &eq) -> &eq {
     let k: &cont_2;
     let pair: &pair;
     if stack == 0 as &i31 {
-        caml_raise_constant(caml_named_value(string#"foo")!);
+        caml_raise_constant
+            (caml_named_value([string|already_resumed @ 0; 35])!);
     }
     become capture_continuation
         (do_resume, {pair| fst: stack, snd: {pair| fst: f, snd: v } });
@@ -436,7 +437,7 @@ fn caml_resume_stack(vstack: &eq, k: &eq) -> &eq {
             } /* 'done */
             return k;
         } /* 'already_resumed */;
-    caml_raise_constant(caml_named_value(string#"foo")!);
+    caml_raise_constant(caml_named_value([string|already_resumed @ 0; 35])!);
     0 as &i31;
 }
 #[export = "caml_perform_effect"]

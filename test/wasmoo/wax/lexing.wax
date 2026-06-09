@@ -88,7 +88,9 @@ fn caml_lex_engine(vtbl: &eq, start_state: &eq, vlexbuf: &eq) -> &eq {
         if state <s 0 {
             lexbuf[lex_curr_pos] = lexbuf[lex_last_pos];
             action = lexbuf[lex_last_action];
-            if action == -1 as &i31 { caml_failwith(string#"foo"); }
+            if action == -1 as &i31 {
+                caml_failwith([string|lexing_empty_token @ 0; 19]);
+            }
             return action;
         }
         if c == 256 { lexbuf[lex_eof_reached] = 0 as &i31; }
@@ -194,7 +196,9 @@ fn caml_new_lex_engine(vtbl: &eq, start_state: &eq, vlexbuf: &eq) -> &eq {
         if state <s 0 {
             lexbuf[lex_curr_pos] = lexbuf[lex_last_pos];
             action = lexbuf[lex_last_action];
-            if action == -1 as &i31 { caml_failwith(string#"foo"); }
+            if action == -1 as &i31 {
+                caml_failwith([string|lexing_empty_token @ 0; 19]);
+            }
             return action;
         }
         base_code = get(lex_base_code_2, pstate);

@@ -200,7 +200,8 @@
       (local.set $conversion
         (i32.sub (i32.and (local.get $c) (i32.const 0xdf)) (i32.const 69)))
       (br_if $return (i32.le_u (local.get $conversion) (i32.const 2))))
-    (call $caml_invalid_argument (@string $string "foo" )))
+    (call $caml_invalid_argument
+      (array.new_data $string $format_error (i32.const 0) (i32.const 22))))
   (local.get $sign_style)
   (local.get $precision)
   (local.get $conversion)
@@ -397,7 +398,8 @@
     (if (local.get $exp)
       (then (local.set $f (call $ldexp (local.get $f) (local.get $exp)))))
     (return (local.get $f)))
-  (call $caml_failwith (@string $string "foo" ))
+  (call $caml_failwith
+    (array.new_data $string $float_of_string (i32.const 0) (i32.const 15)))
   (f64.const 0)
 )
 (func $on_whitespace (param $s (ref $string)) (param $i i32) (result i32)
@@ -589,7 +591,8 @@
       (call $parse_float (call $jsstring_of_string (local.get $s))))
     (br_if $error (f64.ne (local.get $f) (local.get $f)))
     (return (struct.new $float (local.get $f))))
-  (call $caml_failwith (@string $string "foo" ))
+  (call $caml_failwith
+    (array.new_data $string $float_of_string (i32.const 0) (i32.const 15)))
   (return (ref.i31 (i32.const 0)))
 )
 (func $caml_nextafter_float (export "caml_nextafter_float")

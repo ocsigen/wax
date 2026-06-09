@@ -105,7 +105,9 @@ fn nativeint_serialize(s: &eq, v: &eq) -> (i32, i32) {
 }
 data integer_too_large = "input_value: native integer value too large";
 fn nativeint_deserialize(s: &eq) -> (&eq, i32) {
-    if caml_deserialize_uint_1(s) != 1 { caml_failwith(string#"foo"); }
+    if caml_deserialize_uint_1(s) != 1 {
+        caml_failwith([string|integer_too_large @ 0; 43]);
+    }
     {int32| f: nativeint_ops, f_2: caml_deserialize_int_4(s) };
     4;
 }

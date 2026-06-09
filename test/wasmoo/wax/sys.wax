@@ -107,7 +107,7 @@ fn caml_sys_const_ostype_cygwin(x: &eq) -> &eq { 0 as &i31; }
 data Unix = "Unix";
 #[export = "caml_sys_get_config"]
 fn caml_sys_get_config(x: &eq) -> &eq {
-    [block|0 as &i31, string#"foo", 32 as &i31, 0 as &i31];
+    [block|0 as &i31, [string|Unix @ 0; 4], 32 as &i31, 0 as &i31];
 }
 #[export = "caml_sys_isatty"]
 fn caml_sys_isatty(x: &eq) -> &eq { 0 as &i31; }
@@ -133,5 +133,6 @@ fn caml_handle_sys_error(exn: &?extern) {
     caml_raise_sys_error
         (caml_string_of_jsstring
              (caml_js_meth_call
-                  (wrap(exn as &?any), string#"foo", [block|0 as &i31])));
+                  (wrap(exn as &?any), [string|toString @ 0; 8],
+                   [block|0 as &i31])));
 }

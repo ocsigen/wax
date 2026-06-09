@@ -193,6 +193,7 @@ type ctx = {
   memories : Sequence.t;
   tables : Sequence.t;
   tags : Sequence.t;
+  datas : Sequence.t;
   type_defs : Src.subtype CondTbl.t;
   function_types : Src.typeuse CondTbl.t;
   exports : (Src.exportable * string, Src.name list) Hashtbl.t;
@@ -222,6 +223,7 @@ let idx ctx kind i =
   | `Mem -> Sequence.get ctx.memories i
   | `Table -> Sequence.get ctx.tables i
   | `Tag -> Sequence.get ctx.tags i
+  | `Data -> Sequence.get ctx.datas i
   | `Local -> Sequence.get ctx.locals i
 
 let label ctx i = LabelStack.get ctx.labels i
@@ -1098,10 +1100,12 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       let* e = Stack.pop in
       Stack.push 1
         (with_loc (Cast (e, Valtype (Ref { nullable = true; typ = Any }))))
-  | ArrayNewData (t, _) ->
-      (*ZZZ*)
-      let* _ = Stack.grab 2 in
-      Stack.push 1 (with_loc (String (Some (idx ctx `Type t), "foo")))
+  | ArrayNewData (t, d) ->
+      let* len = Stack.pop in
+      let* off = Stack.pop in
+      Stack.push 1
+        (with_loc
+           (ArrayData (Some (idx ctx `Type t), idx ctx `Data d, off, len)))
   | ArrayLen ->
       let* e = Stack.pop in
       Stack.push 1 (with_loc (StructGet (e, Ast.no_loc "length")))
@@ -1532,7 +1536,8 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
                data;
                attributes = exports ctx Memory name e;
              })
-    | Data { id; init; mode } ->
+    | Data { init; mode; _ } ->
+        let name = Sequence.get_current ctx.datas in
         let s = String.concat "" (List.map (fun b -> b.Ast.desc) init) in
         let mode' : _ Ast.datamode =
           match mode with
@@ -1542,7 +1547,8 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
                 ( idx ctx `Mem memidx,
                   single_expression (Stack.run (instructions ctx off)) )
         in
-        Some (Data { name = id; mode = mode'; init = s; attributes = [] })
+        Some
+          (Data { name = Some name; mode = mode'; init = s; attributes = [] })
     | Table _ | Start _ | Export _ | Elem _ -> None
     | String_global { typ; init; _ } ->
         let name = Sequence.get_current ctx.globals in
@@ -1631,7 +1637,8 @@ let register_names ctx export_tbl fields =
         | Global { id; exports; _ } ->
             Sequence.register ctx.globals export_tbl (Some Global) id exports
         | Func _ | Export _ | Start _ -> ()
-        | Elem _ | Data _ -> () (*ZZZ*)
+        | Elem _ -> () (*ZZZ*)
+        | Data { id; _ } -> Sequence.register ctx.datas export_tbl None id []
         | Memory { id; exports; _ } ->
             Sequence.register ctx.memories export_tbl (Some Memory) id exports
         | Table { id; exports; _ } ->
@@ -1741,6 +1748,7 @@ let module_ diagnostics (_, fields) =
           "m";
       tables = Sequence.make ~forbid_numeric (Namespace.make ()) "m";
       tags = Sequence.make ~forbid_numeric (Namespace.make ()) "t";
+      datas = Sequence.make ~forbid_numeric (Namespace.make ()) "d";
       type_defs = CondTbl.make ();
       function_types = CondTbl.make ();
       tag_types = CondTbl.make ();

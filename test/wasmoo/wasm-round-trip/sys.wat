@@ -130,7 +130,8 @@
 ) (data $Unix "Unix")
 (func $caml_sys_get_config (export "caml_sys_get_config")
   (param $x (ref eq)) (result (ref eq))
-  (array.new_fixed $block 4 (ref.i31 (i32.const 0)) (@string $string "foo" )
+  (array.new_fixed $block 4 (ref.i31 (i32.const 0))
+    (array.new_data $string $Unix (i32.const 0) (i32.const 4))
     (ref.i31 (i32.const 32)) (ref.i31 (i32.const 0)))
 )
 (func $caml_sys_isatty (export "caml_sys_isatty")
@@ -167,6 +168,6 @@
     (call $caml_string_of_jsstring
       (call $caml_js_meth_call
         (call $wrap (any.convert_extern (local.get $exn)))
-        (@string $string "foo" )
+        (array.new_data $string $toString (i32.const 0) (i32.const 8))
         (array.new_fixed $block 1 (ref.i31 (i32.const 0))))))
 )

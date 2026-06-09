@@ -728,6 +728,11 @@ let rec instruction ret ctx i : location Text.instr list =
       let args_code = List.concat_map (instruction ret ctx) instrs in
       let len = Uint32.of_int (List.length instrs) in
       folded loc (ArrayNewFixed (index idx, len)) args_code
+  | ArrayData (opt_idx, d, off_instr, len_instr) ->
+      let idx = Option.value ~default:(expr_type_name i) opt_idx in
+      folded loc
+        (ArrayNewData (index idx, index d))
+        (instruction ret ctx off_instr @ instruction ret ctx len_instr)
   | ArrayGet (arr_instr, idx_instr) ->
       (* Signed accesses are under a cast *)
       folded loc

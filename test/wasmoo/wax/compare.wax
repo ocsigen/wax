@@ -336,7 +336,8 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
                                 return res;
                             }
                             clear_compare_stack();
-                            caml_invalid_argument(string#"foo");
+                            caml_invalid_argument
+                                ([string|abstract_value @ 0; 23]);
                             0 as &i31;
                         } /* 'v1_not_custom */;
                     _ =
@@ -361,14 +362,16 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
                             br_if 'heterogeneous
                                 (0 as &i31, !caml_is_closure(v2));
                         clear_compare_stack();
-                        caml_invalid_argument(string#"foo");
+                        caml_invalid_argument
+                            ([string|functional_value @ 0; 25]);
                     }
                     if caml_is_continuation(v1) {
                         _ =
                             br_if 'heterogeneous
                                 (0 as &i31, !caml_is_continuation(v2));
                         clear_compare_stack();
-                        caml_invalid_argument(string#"foo");
+                        caml_invalid_argument
+                            ([string|continuation_value @ 0; 27]);
                     }
                     0 as &i31;
                 } /* 'heterogeneous */;
@@ -379,7 +382,7 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
             res = t1 - t2;
             if !res {
                 clear_compare_stack();
-                caml_invalid_argument(string#"foo");
+                caml_invalid_argument([string|abstract_value @ 0; 23]);
             }
             return res;
         } /* 'next_item */

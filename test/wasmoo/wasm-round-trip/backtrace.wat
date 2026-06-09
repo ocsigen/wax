@@ -23,7 +23,9 @@
 )
 (func $caml_raw_backtrace_slot (export "caml_raw_backtrace_slot")
   (param $x (ref eq)) (param $x_2 (ref eq)) (result (ref eq))
-  (call $caml_invalid_argument (@string $string "foo" ))
+  (call $caml_invalid_argument
+    (array.new_data $string $raw_backtrace_slot_err (i32.const 0)
+      (i32.const 52)))
   (ref.i31 (i32.const 0))
 )
 (func $caml_convert_raw_backtrace_slot

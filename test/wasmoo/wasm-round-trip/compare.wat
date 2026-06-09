@@ -427,7 +427,9 @@
                 (br_if $next_item (i32.eqz (local.get $res)))
                 (return (local.get $res)))
               (call $clear_compare_stack)
-              (call $caml_invalid_argument (@string $string "foo" ))
+              (call $caml_invalid_argument
+                (array.new_data $string $abstract_value (i32.const 0)
+                  (i32.const 23)))
               (ref.i31 (i32.const 0))))
           (drop
             (block $v1_not_js (result (ref eq))
@@ -460,14 +462,18 @@
                 (br_if $heterogeneous (ref.i31 (i32.const 0))
                   (i32.eqz (call $caml_is_closure (local.get $v2)))))
               (call $clear_compare_stack)
-              (call $caml_invalid_argument (@string $string "foo" ))))
+              (call $caml_invalid_argument
+                (array.new_data $string $functional_value (i32.const 0)
+                  (i32.const 25)))))
           (if (call $caml_is_continuation (local.get $v1))
             (then
               (drop
                 (br_if $heterogeneous (ref.i31 (i32.const 0))
                   (i32.eqz (call $caml_is_continuation (local.get $v2)))))
               (call $clear_compare_stack)
-              (call $caml_invalid_argument (@string $string "foo" ))))
+              (call $caml_invalid_argument
+                (array.new_data $string $continuation_value (i32.const 0)
+                  (i32.const 27)))))
           (ref.i31 (i32.const 0))))
       (local.set $t1
         (i31.get_u (ref.cast (ref i31) (call $caml_obj_tag (local.get $v1)))))
@@ -489,7 +495,9 @@
       (if (i32.eqz (local.get $res))
         (then
           (call $clear_compare_stack)
-          (call $caml_invalid_argument (@string $string "foo" ))))
+          (call $caml_invalid_argument
+            (array.new_data $string $abstract_value (i32.const 0)
+              (i32.const 23)))))
       (return (local.get $res)))
     (if (call $compare_stack_is_not_empty (local.get $stack))
       (then

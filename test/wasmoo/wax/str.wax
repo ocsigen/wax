@@ -528,7 +528,7 @@ fn re_search_forward(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     s = vs as &string;
     pos = vpos as &i31 as i32_s;
     len = s.length;
-    if pos >u len { caml_invalid_argument(string#"foo"); }
+    if pos >u len { caml_invalid_argument([string|search_forward @ 0; 18]); }
     'loop: loop {
         res = re_match(re, s, pos, 0);
         if res is &block { return res; }
@@ -547,7 +547,9 @@ fn re_search_backward(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     s = vs as &string;
     pos = vpos as &i31 as i32_s;
     len = s.length;
-    if pos >u len { caml_invalid_argument(string#"foo"); }
+    if pos >u len {
+        caml_invalid_argument([string|search_backward @ 0; 19]);
+    }
     'loop: loop {
         res = re_match(re, s, pos, 0);
         if res is &block { return res; }
@@ -566,7 +568,7 @@ fn re_string_match(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     s = vs as &string;
     pos = vpos as &i31 as i32_s;
     len = s.length;
-    if pos >u len { caml_invalid_argument(string#"foo"); }
+    if pos >u len { caml_invalid_argument([string|string_match @ 0; 16]); }
     res = re_match(re, s, pos, 0);
     if res is &block { return res; }
     [block|0 as &i31];
@@ -581,7 +583,9 @@ fn re_partial_match(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     s = vs as &string;
     pos = vpos as &i31 as i32_s;
     len = s.length;
-    if pos >u len { caml_invalid_argument(string#"foo"); }
+    if pos >u len {
+        caml_invalid_argument([string|string_partial_match @ 0; 24]);
+    }
     res = re_match(re, s, pos, 1);
     if res is &block { return res; }
     [block|0 as &i31];
@@ -610,17 +614,21 @@ fn re_replacement_text(vrepl: &eq, vgroups: &eq, vorig: &eq) -> &eq {
             c = repl[i] as i32_u;
             i = i + 1;
             if c != 92 { len = len + 1; br 'loop; }
-            if i == l { caml_failwith(string#"foo"); }
+            if i == l { caml_failwith([string|illegal_backslash @ 0; 39]); }
             c = repl[i] as i32_u;
             i = i + 1;
             if c == 92 { len = len + 1; br 'loop; }
             c = c - 48;
             if c >u 9 { len = len + 2; br 'loop; }
             c = c << 1;
-            if c + 1 >u groups.length { caml_failwith(string#"foo"); }
+            if c + 1 >u groups.length {
+                caml_failwith([string|unmatched_group @ 0; 41]);
+            }
             start = groups[c + 1] as &i31 as i32_s;
             end = groups[c + 2] as &i31 as i32_s;
-            if start == -1 { caml_failwith(string#"foo"); }
+            if start == -1 {
+                caml_failwith([string|unmatched_group @ 0; 41]);
+            }
             len = len + (end - start);
             br 'loop;
         }
@@ -643,7 +651,9 @@ fn re_replacement_text(vrepl: &eq, vgroups: &eq, vorig: &eq) -> &eq {
                 br 'loop;
             }
             c = c << 1;
-            if c + 1 >u groups.length { caml_failwith(string#"foo"); }
+            if c + 1 >u groups.length {
+                caml_failwith([string|unmatched_group @ 0; 41]);
+            }
             start = groups[c + 1] as &i31 as i32_s;
             end = groups[c + 2] as &i31 as i32_s;
             len = end - start;
