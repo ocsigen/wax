@@ -1381,6 +1381,68 @@ let mem_store_method meth =
 
 let is_mem_method meth = mem_load_result meth <> None || mem_store_method meth
 
+(* Mint (or reuse) an anonymous function type for an inline [as &fn(..) -> ..]
+   cast target. The name encodes the signature so identical casts share one
+   type, and to_wasm materialises it through the [<..>] synthetic-type path. *)
+let anon_function_type ctx (sign : functype) =
+  let buf = Buffer.create 32 in
+  let rec vt (t : valtype) =
+    match t with
+    | I32 -> Buffer.add_char buf 'i'
+    | I64 -> Buffer.add_char buf 'I'
+    | F32 -> Buffer.add_char buf 'f'
+    | F64 -> Buffer.add_char buf 'F'
+    | V128 -> Buffer.add_char buf 'v'
+    | Ref { nullable; typ } ->
+        Buffer.add_char buf '&';
+        if nullable then Buffer.add_char buf '?';
+        ht typ
+    | Tuple l ->
+        Buffer.add_char buf '(';
+        List.iter vt l;
+        Buffer.add_char buf ')'
+  and ht (h : heaptype) =
+    Buffer.add_string buf
+      (match h with
+      | Func -> "func"
+      | NoFunc -> "nofunc"
+      | Exn -> "exn"
+      | NoExn -> "noexn"
+      | Cont -> "cont"
+      | NoCont -> "nocont"
+      | Extern -> "extern"
+      | NoExtern -> "noextern"
+      | Any -> "any"
+      | Eq -> "eq"
+      | I31 -> "i31"
+      | Struct -> "struct"
+      | Array -> "array"
+      | None_ -> "none"
+      | Type id -> "$" ^ id.desc)
+  in
+  Buffer.add_string buf "<fn:";
+  Array.iter
+    (fun (_, t) ->
+      vt t;
+      Buffer.add_char buf ';')
+    sign.params;
+  Buffer.add_string buf "->";
+  Array.iter
+    (fun t ->
+      vt t;
+      Buffer.add_char buf ';')
+    sign.results;
+  Buffer.add_char buf '>';
+  let name = Ast.no_loc (Buffer.contents buf) in
+  (* A pure existence check: [Tbl.exists] would also *report* a spurious
+     "already bound" error on the second cast with the same signature. *)
+  if Tbl.find_opt ctx.type_context.types name = None then
+    ignore
+      (add_type ctx.diagnostics ctx.type_context
+         [| (name, { supertype = None; typ = Func sign; final = true }) |]
+        : int option);
+  name
+
 let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
   (*
   let* () = print_stack in
@@ -1837,25 +1899,40 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
             Ast.Valtype (Ref { r with nullable = false })
         | _ -> typ
       in
+      (* The cast target as a valtype, resolving an inline function type
+         [&fn(..)] to a minted anonymous function type. The AST node keeps the
+         original [typ] (so an inline function-type cast prints and lowers
+         faithfully); only [ty]/validation use the resolved type. *)
+      let target_valtype =
+        match typ with
+        | Valtype t -> Some t
+        | Functype { nullable; sign } ->
+            Some (Ref { nullable; typ = Type (anon_function_type ctx sign) })
+        | Signedtype _ -> None
+      in
       let*! ty =
         internalize ctx
-          (match typ with
-          | Valtype typ -> typ
-          | Signedtype { typ; _ } -> (
+          (match target_valtype with
+          | Some t -> t
+          | None -> (
               match typ with
-              | `I32 -> I32
-              | `I64 -> I64
-              | `F32 -> F32
-              | `F64 -> F64))
+              | Signedtype { typ = `I32; _ } -> I32
+              | Signedtype { typ = `I64; _ } -> I64
+              | Signedtype { typ = `F32; _ } -> F32
+              | Signedtype { typ = `F64; _ } -> F64
+              | Valtype _ | Functype _ -> assert false))
       in
       let () =
-        match typ with
-        | Valtype typ ->
-            if not (cast ctx ty' typ) then
+        match target_valtype with
+        | Some t ->
+            if not (cast ctx ty' t) then
               Error.invalid_cast ctx.diagnostics ~location:i.info ty'
-        | Signedtype { typ; _ } ->
-            if not (signed_cast ctx ty' typ) then
-              Error.invalid_cast ctx.diagnostics ~location:i.info ty'
+        | None -> (
+            match typ with
+            | Signedtype { typ; _ } ->
+                if not (signed_cast ctx ty' typ) then
+                  Error.invalid_cast ctx.diagnostics ~location:i.info ty'
+            | Valtype _ | Functype _ -> assert false)
       in
       (* We skip unnecessary cast:
          - when converting to Wax, we introduce them to avoid loosing

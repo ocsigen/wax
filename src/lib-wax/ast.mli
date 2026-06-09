@@ -50,6 +50,7 @@ type label = ident
 
 type casttype =
   | Valtype of valtype
+  | Functype of { nullable : bool; sign : functype }
   | Signedtype of {
       typ : [ `I32 | `I64 | `F32 | `F64 ];
       signage : signage;

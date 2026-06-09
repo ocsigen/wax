@@ -774,20 +774,34 @@ let mem_extra with_loc (memarg : Src.memarg) nat =
   else []
 
 (* The callee of an indirect call: [tab[index]] narrowed to the call's function
-   type, i.e. [tab[index] as &$ft]. The cast is always emitted; [to_wasm]
-   re-fuses the whole pattern back to [call_indirect]. *)
-let indirect_callee ctx with_loc tab (tu : Src.typeuse) index =
+   type, i.e. [tab[index] as &$ft] (named type) or [tab[index] as &fn(..)] (an
+   inline type, with no named type to reference). The cast is always emitted;
+   [to_wasm] re-fuses the whole pattern back to [call_indirect]. *)
+let indirect_callee ctx with_loc tab ((tyidx, sign) : Src.typeuse) index =
   let tabget =
     with_loc (Ast.ArrayGet (with_loc (Ast.Get (idx ctx `Table tab)), index))
   in
-  match fst tu with
-  | Some ti ->
-      with_loc
-        (Ast.Cast
-           ( tabget,
-             Ast.Valtype
-               (Ast.Ref { nullable = true; typ = Ast.Type (idx ctx `Type ti) })
-           ))
+  let cast_type : Ast.casttype option =
+    match tyidx with
+    | Some ti ->
+        Some
+          (Ast.Valtype
+             (Ast.Ref { nullable = true; typ = Ast.Type (idx ctx `Type ti) }))
+    | None ->
+        Option.map
+          (fun (s : Src.functype) ->
+            let sign : Ast.functype =
+              {
+                params =
+                  Array.map (fun (_, t) -> (None, valtype ctx t)) s.params;
+                results = Array.map (fun t -> valtype ctx t) s.results;
+              }
+            in
+            Ast.Functype { nullable = true; sign })
+          sign
+  in
+  match cast_type with
+  | Some ct -> with_loc (Ast.Cast (tabget, ct))
   | None -> tabget
 
 let rec instruction ctx (i : _ Src.instr) : unit Stack.t =

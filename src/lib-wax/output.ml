@@ -365,6 +365,9 @@ let need_blocktype bt = bt.params <> [||] || bt.results <> [||]
 let casttype pp ty =
   match ty with
   | Valtype ty -> valtype pp ty
+  | Functype { nullable; sign } ->
+      punctuation pp (if nullable then "&?" else "&");
+      functype pp sign
   | Signedtype { typ; signage; strict } ->
       type_ pp (Ast.format_signed_type typ signage strict)
 

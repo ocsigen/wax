@@ -267,6 +267,8 @@ cast_type:
          raise (Wasm.Parsing.Syntax_error
                   ($sloc, Printf.sprintf "Identifier '%s' is not a cast type.\n" t )) }
 | t = reference_type { Valtype (Ref t) }
+| "&" nullable = boption("?") FN s = function_type
+   { Functype { nullable; sign = s } }
 (*
 | functype { assert false }
 *)

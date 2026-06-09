@@ -474,6 +474,15 @@ let rec instruction ret ctx i : location Text.instr list =
           folded loc
             (CallIndirect (index tab, (Some (index ft), None)))
             (arg_code @ index_code)
+      | Cast
+          ( { desc = ArrayGet ({ desc = Get tab; _ }, idx_expr); _ },
+            Functype { sign; _ } )
+        when Hashtbl.mem ctx.tables tab.desc ->
+          (* Inline function type: emit an inline typeuse [(result ..)]. *)
+          let index_code = instruction ret ctx idx_expr in
+          folded loc
+            (CallIndirect (index tab, (None, Some (functype sign))))
+            (arg_code @ index_code)
       | ArrayGet ({ desc = Get tab; _ }, idx_expr)
         when Hashtbl.mem ctx.tables tab.desc
              &&
@@ -505,6 +514,14 @@ let rec instruction ret ctx i : location Text.instr list =
           let index_code = instruction ret ctx idx_expr in
           folded loc
             (ReturnCallIndirect (index tab, (Some (index ft), None)))
+            (arg_code @ index_code)
+      | Cast
+          ( { desc = ArrayGet ({ desc = Get tab; _ }, idx_expr); _ },
+            Functype { sign; _ } )
+        when Hashtbl.mem ctx.tables tab.desc ->
+          let index_code = instruction ret ctx idx_expr in
+          folded loc
+            (ReturnCallIndirect (index tab, (None, Some (functype sign))))
             (arg_code @ index_code)
       | ArrayGet ({ desc = Get tab; _ }, idx_expr)
         when Hashtbl.mem ctx.tables tab.desc
@@ -594,6 +611,11 @@ let rec instruction ret ctx i : location Text.instr list =
               | F32, Valtype F32
               | F64, Valtype F64 ->
                   Nop
+              (* Cast to an inline function type: ref.cast to the anonymous
+                 function type minted for the cast's result. *)
+              | _, Functype _ ->
+                  ensure_type_is_defined ctx (Ref (expr_reftype i));
+                  RefCast (reftype (expr_reftype i))
               | _ ->
                   print_valtype in_ty;
                   print_instr i;

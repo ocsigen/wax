@@ -197,9 +197,10 @@ A [table](module_fields.md#tables) is indexed like an array, and an indirect cal
 | `table.get $t` | `t[i]` |
 | `table.set $t` | `t[i] = v` |
 | `call_indirect $t (type $ft)` | `(t[i] as &ft)(args)` |
+| `call_indirect $t (result i32)` | `(t[i] as &fn() -> i32)(args)` |
 | `return_call_indirect $t (type $ft)` | `return (t[i] as &ft)(args)` |
 
-`call_indirect` is reconstructed from this pattern on conversion to WAT/WASM, so it round-trips. When the table's element type is already the concrete function type `&ft`, the cast may be omitted (`t[i](args)`).
+`call_indirect` is reconstructed from this pattern on conversion to WAT/WASM, so it round-trips. The cast target names the callee's function type: either a defined type (`&ft`) or an inline one written `&fn(params) -> results` (used when the WAT type is anonymous). When the table's element type is already the concrete function type `&ft`, the cast may be omitted (`t[i](args)`).
 
 ## Exception Instructions
 
