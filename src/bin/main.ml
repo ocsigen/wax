@@ -417,6 +417,62 @@ let format inplace check format_opt validate color fold_mode files =
   if not (List.fold_left (fun ok file -> format_one file && ok) true files) then
     exit 123
 
+(* Check files: parse and validate each (type-check Wax, well-formedness Wasm)
+   without producing any output, reporting diagnostics and exiting with a
+   non-zero status if any file fails. [format_opt] forces the format; otherwise
+   it is detected from the extension. *)
+let check format_opt strict color files =
+  Wasm.Validation.validate_refs := strict;
+  let check_one file =
+    match
+      match format_opt with Some _ -> format_opt | None -> detect_format file
+    with
+    | None ->
+        Printf.eprintf
+          "%s: cannot detect format (expected .wat, .wax or .wasm)\n" file;
+        false
+    | Some fmt -> (
+        let text = with_open_in (Some file) In_channel.input_all in
+        let source = match fmt with Wasm -> None | Wat | Wax -> Some text in
+        (* Collect errors without printing or exiting, so every file is checked
+           and all its errors are reported, then re-report them below. *)
+        let d = Utils.Diagnostic.collector () in
+        (try
+           match fmt with
+           | Wax ->
+               let ast, _ =
+                 Wax_parser.parse_from_string ~color ~filename:file text
+               in
+               ignore (Wax.Typing.f d ast : _ * _)
+           | Wat ->
+               let ast, _ =
+                 Wat_parser.parse_from_string ~color ~filename:file text
+               in
+               Wasm.Validation.f d ast
+           | Wasm ->
+               let binary = parse_wasm ~color ~filename:file text in
+               Wasm.Validation.f d (Wasm.Binary_to_text.module_ binary)
+         with Utils.Diagnostic.Aborted -> ());
+        match Utils.Diagnostic.collected d with
+        | [] -> true
+        | entries ->
+            ignore
+              (Utils.Diagnostic.run ~color ~source ~exit:false (fun d ->
+                   List.iter
+                     (fun e ->
+                       Utils.Diagnostic.report d
+                         ~location:(Utils.Diagnostic.entry_location e)
+                         ~severity:(Utils.Diagnostic.entry_severity e)
+                         ?hint:(Utils.Diagnostic.entry_hint e)
+                         ~related:(Utils.Diagnostic.entry_related e)
+                         ~message:(Utils.Diagnostic.entry_message e)
+                         ())
+                     entries));
+            false)
+  in
+  if not (List.fold_left (fun ok file -> check_one file && ok) true files) then
+    exit 123
+
 (* Define the input file argument (optional for stdin) *)
 let input_file =
   let doc =
@@ -542,6 +598,11 @@ let format_files =
   let doc = "Input files (.wat, .wasm or .wax) to format." in
   Arg.(non_empty & pos_all string [] & info [] ~docv:"FILE" ~doc)
 
+(* Define the input files of the check command *)
+let check_files =
+  let doc = "Input files (.wat, .wasm or .wax) to validate." in
+  Arg.(non_empty & pos_all string [] & info [] ~docv:"FILE" ~doc)
+
 (* Combine into command *)
 let convert_term =
   let+ input = input_file
@@ -594,6 +655,33 @@ let format_cmd =
   in
   Cmd.v (Cmd.info "format" ~doc ~man) format_term
 
+let check_term =
+  let+ format_opt = format_input
+  and+ strict = strict_validate_flag
+  and+ color = color_option
+  and+ files = check_files in
+  check format_opt strict color files
+
+let check_cmd =
+  let doc = "Validate WebAssembly files without producing output" in
+  let man =
+    [
+      `S Manpage.s_description;
+      `P
+        "Parse and validate each input file (type-checking for Wax, \
+         well-formedness for Wasm) without producing any output. Reports \
+         diagnostics and exits with a non-zero status if any file fails.";
+      `P
+        "The format of each file is detected from its extension unless \
+         --format forces one.";
+      `S Manpage.s_examples;
+      `P "Type-check several Wax files:";
+      `Pre "  $(mname) $(tname) src/*.wax";
+      `S Manpage.s_options;
+    ]
+  in
+  Cmd.v (Cmd.info "check" ~doc ~man) check_term
+
 let convert_cmd =
   let doc = "Convert between WebAssembly formats (the default command)" in
   Cmd.v (Cmd.info "convert" ~doc) convert_term
@@ -626,11 +714,13 @@ let main_cmd =
       `Pre "  cat input.wat | $(tname) -i wat -f wasm > output.wasm";
       `P "Format files in place:";
       `Pre "  $(tname) format -i a.wax b.wax";
+      `P "Validate files:";
+      `Pre "  $(tname) check src/*.wax";
       `S Manpage.s_options;
     ]
   in
   Cmd.group (Cmd.info "wax" ~doc ~man) ~default:convert_term
-    [ convert_cmd; format_cmd ]
+    [ convert_cmd; format_cmd; check_cmd ]
 
 (* cmdliner reads the first token as a subcommand name and, even with a default
    command, errors on an unrecognised one rather than falling through. So that

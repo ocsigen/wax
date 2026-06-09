@@ -35,10 +35,10 @@ All 9 conversion pipelines are supported (any combination of wax/wat/wasm as inp
 
 ## CLI Interface
 
-`wax` is a `Cmd.group` with `convert` as the default command and a `format`
-subcommand. cmdliner won't fall through to the default on a leading positional,
-so `main.ml` rewrites `Sys.argv` (the js_of_ocaml trick) to keep the bare
-`wax <file>` form working — edit that heuristic if adding subcommands.
+`wax` is a `Cmd.group` with `convert` as the default command and `format` /
+`check` subcommands. cmdliner won't fall through to the default on a leading
+positional, so `main.ml` rewrites `Sys.argv` (the js_of_ocaml trick) to keep the
+bare `wax <file>` form working — edit that heuristic if adding subcommands.
 
 **convert** (default) — `dune exec wax -- [options] [INPUT]`. `INPUT` is optional; reads from stdin if omitted.
 
@@ -64,6 +64,14 @@ Binary output to a terminal is blocked; use `-o` to write WASM to a file.
 | `-f` | `--format` / `--input-format` | Force the format of all files (overrides extension detection) |
 | `-v` | `--validate` | Also type-check / well-formedness-check while formatting |
 |      | `--color` / `--fold` / `--unfold` | As for convert |
+
+**check** — `dune exec wax -- check [options] FILE…`. Validates each file (type-check Wax / well-formedness Wasm), no output, exits non-zero on failure.
+
+| Flag | Long | Description |
+|------|------|-------------|
+| `-f` | `--format` / `--input-format` | Force the format of all files (overrides extension detection) |
+| `-s` | `--strict-validate` | Strict reference validation (Wasm Text) |
+|      | `--color` | As for convert |
 
 ## Non-Negotiable Rules
 

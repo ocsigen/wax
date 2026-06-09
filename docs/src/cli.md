@@ -7,10 +7,12 @@ The `wax` binary is the primary interface for the Wax toolchain. It supports con
 ```sh
 wax [OPTIONS] [INPUT]        # convert (the default command)
 wax format [OPTIONS] FILE…   # reformat files
+wax check [OPTIONS] FILE…    # validate files
 ```
 
 By default `wax` converts between formats. The `format` subcommand reformats
-files (see [Formatting](#formatting) below).
+files (see [Formatting](#formatting)) and `check` validates them (see
+[Checking](#checking)).
 
 ## Positional Arguments
 
@@ -123,4 +125,29 @@ wax format -i a.wax b.wax c.wax
 **Check formatting in CI (non-zero exit if any file differs):**
 ```sh
 wax format --check src/*.wax
+```
+
+## Checking
+
+The `check` subcommand validates files (type-checking for Wax, well-formedness
+for Wasm) without producing any output, reporting diagnostics and exiting with a
+non-zero status if any file fails. It takes one or more files.
+
+```sh
+wax check [OPTIONS] FILE…
+```
+
+### Options
+
+- **`-f`**, **`--format`**, **`--input-format`** *FORMAT* — force the format of
+  all files, overriding extension detection.
+- **`-s`**, **`--strict-validate`** — strict reference validation (for Wasm
+  Text), as above.
+- **`--color`** *WHEN* — as above.
+
+### Example
+
+**Type-check several Wax files (e.g. in CI):**
+```sh
+wax check src/*.wax
 ```

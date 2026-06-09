@@ -33,7 +33,7 @@ You can also build the documentation locally using `mdbook build docs`.
 ## CLI Interface
 
 
-**Usage:** `wax [OPTION]… [INPUT]` (convert, the default command) or `wax format [OPTION]… FILE…` (reformat files).
+**Usage:** `wax [OPTION]… [INPUT]` (convert, the default command), `wax format [OPTION]… FILE…` (reformat files), or `wax check [OPTION]… FILE…` (validate files).
 
 ### Positional Arguments
 
@@ -59,6 +59,14 @@ You can also build the documentation locally using `mdbook build docs`.
 *   `-f`, `--format`, `--input-format`: Treat all files as this format (`wat`, `wasm`, `wax`), overriding extension detection.
 *   `-v`, `--validate`: Also type-check / well-formedness-check while formatting.
 *   `--color`, `--fold`, `--unfold`: as above.
+
+### `check` command
+
+`wax check [OPTION]… FILE…` validates files (type-checking Wax, well-formedness Wasm) without producing output, exiting non-zero if any file fails.
+
+*   `-f`, `--format`, `--input-format`: Treat all files as this format, overriding extension detection.
+*   `-s`, `--strict-validate`: Strict reference validation (for Wasm Text).
+*   `--color`: as above.
 
 ## Example
 
