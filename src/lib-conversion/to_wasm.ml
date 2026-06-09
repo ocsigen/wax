@@ -2,6 +2,7 @@ module Uint32 = Utils.Uint32
 module Ast = Wasm.Ast
 module Binary = Ast.Binary
 module Text = Ast.Text
+module Simd = Wasm.Simd
 open Wax.Ast
 module StringMap = Map.Make (String)
 
@@ -273,6 +274,18 @@ let mem_memarg meth nstack args : Ast.memarg =
   in
   { offset; align }
 
+(* Literal value of a [v128_const_*] lane argument, as a string for
+   [Utils.V128.t]; a negative literal is [UnOp (Neg, _)]. *)
+let rec literal_string a =
+  match a.desc with
+  | Int s | Float s -> s
+  | UnOp (Neg, b) -> "-" ^ literal_string b
+  | _ -> assert false
+
+(* Read a constant integer immediate (lane index). *)
+let lane_imm a =
+  match a.desc with Int s -> int_of_string s | _ -> assert false
+
 let rec instruction ret ctx i : location Text.instr list =
   let _, loc = i.info in
   match i.desc with
@@ -378,6 +391,18 @@ let rec instruction ret ctx i : location Text.instr list =
   | Call (f, args) -> (
       let arg_code = List.concat_map (instruction ret ctx) args in
       match f.desc with
+      (* SIMD free-function intrinsics: [v128_const_<shape>(...)] and
+         [v128_bitselect(a, b, mask)]. A user binding of the same name wins. *)
+      | Get name
+        when Simd.is_free_intrinsic name.desc
+             && (not (Hashtbl.mem ctx.functions name.desc))
+             && (not (Hashtbl.mem ctx.globals name.desc))
+             && not (StringMap.mem name.desc ctx.locals) -> (
+          match Simd.const_shape_of_name name.desc with
+          | Some shape ->
+              let components = List.map literal_string args in
+              folded loc (VecConst { Utils.V128.shape; components }) []
+          | None -> folded loc VecBitselect arg_code)
       | Get idx ->
           if
             Hashtbl.mem ctx.functions idx.desc
@@ -424,6 +449,40 @@ let rec instruction ret ctx i : location Text.instr list =
               | _ -> Text.Load (memidx, memarg, NumF64)
             in
             folded loc desc addr_code
+      (* SIMD memory accesses: mem.v128_load(addr [,align[,offset]]),
+         mem.v128_store(addr, v, ...), mem.v128_load8_lane(addr, v, lane, ...).
+         Stack operands first, then the constant lane immediate (if any), then
+         align/offset. *)
+      | StructGet ({ desc = Get memname; _ }, meth)
+        when Hashtbl.mem ctx.memories memname.desc
+             && Simd.is_mem_method meth.desc ->
+          let mop = Option.get (Simd.mem_method meth.desc) in
+          let memidx = index memname in
+          let nstack = List.length mop.m_operands in
+          let nimm = if mop.m_lane then 1 else 0 in
+          let lane =
+            if mop.m_lane then lane_imm (List.nth args nstack) else 0
+          in
+          let extra = List.filteri (fun k _ -> k >= nstack + nimm) args in
+          let int_lit a =
+            match a.desc with
+            | Int s -> Utils.Uint64.of_string s
+            | _ -> assert false
+          in
+          let align =
+            match extra with
+            | a :: _ -> int_lit a
+            | [] -> Utils.Uint64.of_int mop.m_nat_align
+          in
+          let offset =
+            match extra with _ :: o :: _ -> int_lit o | _ -> Utils.Uint64.zero
+          in
+          let memarg : Ast.memarg = { offset; align } in
+          let operand_code =
+            List.concat_map (instruction ret ctx)
+              (List.filteri (fun k _ -> k < nstack) args)
+          in
+          folded loc (mop.m_make memidx memarg lane) operand_code
       (* Binary intrinsics, written with the dot notation *)
       | StructGet (obj, { desc = "rotl"; _ }) -> (
           let obj_code = instruction ret ctx obj in
@@ -455,6 +514,21 @@ let rec instruction ret ctx i : location Text.instr list =
           | F32 -> folded loc (BinOp (F32 CopySign)) (obj_code @ arg_code)
           | F64 -> folded loc (BinOp (F64 CopySign)) (obj_code @ arg_code)
           | _ -> assert false)
+      (* SIMD vector op written as a method intrinsic, [recv.add_i32x4(b)]. The
+         lane shape comes from the method name; arguments are the lane immediates
+         (if any) followed by the remaining stack operands. *)
+      | StructGet (obj, meth) when Simd.classify meth.desc <> None ->
+          let op = Option.get (Simd.classify meth.desc) in
+          let nimm =
+            match op.imm with No_imm -> 0 | Lane _ -> 1 | Shuffle -> 16
+          in
+          let lanes =
+            List.filteri (fun k _ -> k < nimm) args |> List.map lane_imm
+          in
+          let stack_args = List.filteri (fun k _ -> k >= nimm) args in
+          let obj_code = instruction ret ctx obj in
+          let stack_code = List.concat_map (instruction ret ctx) stack_args in
+          folded loc (op.build lanes) (obj_code @ stack_code)
       (* Memory management: mem.size/grow/fill/copy/init *)
       | StructGet ({ desc = Get name; _ }, meth)
         when Hashtbl.mem ctx.memories name.desc && is_mgmt_method meth.desc -> (

@@ -114,6 +114,7 @@ module UnionFind = struct
 end
 
 module Internal = Wasm.Ast.Binary.Types
+module Simd = Wasm.Simd
 
 type inferred_valtype = { typ : valtype; internal : Internal.valtype }
 
@@ -1348,6 +1349,16 @@ let address_valtype (at : [ `I32 | `I64 ]) : inferred_valtype =
   | `I32 -> { typ = I32; internal = I32 }
   | `I64 -> { typ = I64; internal = I64 }
 
+(* Expected operand/result type of a SIMD intrinsic, as a fresh type cell. *)
+let simd_valtype : Simd.ty -> inferred_valtype = function
+  | TV128 -> { typ = V128; internal = V128 }
+  | TI32 -> { typ = I32; internal = I32 }
+  | TI64 -> { typ = I64; internal = I64 }
+  | TF32 -> { typ = F32; internal = F32 }
+  | TF64 -> { typ = F64; internal = F64 }
+
+let simd_cell t = UnionFind.make (Valtype (simd_valtype t))
+
 (* Memory access method names. The value width is in the name; signedness and the
    i32/i64 result come from a surrounding [as iN_s/u] cast (see [to_wasm]). *)
 let mem_load_result meth : inferred_type option =
@@ -1707,6 +1718,54 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
              },
              args' ))
         result
+  (* SIMD memory accesses: mem.v128_load(addr), mem.v128_store(addr, v),
+     mem.v128_load8_lane(addr, v, lane), etc. Stack operands first, then the
+     constant lane immediate (if any), then the usual align/offset literals. *)
+  | Call
+      ( ({ desc = StructGet (({ desc = Get memname; _ } as recv), meth); _ } as
+         func),
+        args )
+    when Simd.is_mem_method meth.desc
+         && Tbl.find_opt ctx.memories memname <> None ->
+      let mop = Option.get (Simd.mem_method meth.desc) in
+      let _, address_type =
+        match Tbl.find_opt ctx.memories memname with
+        | Some x -> x
+        | None -> assert false
+      in
+      let addr_vt = UnionFind.make (Valtype (address_valtype address_type)) in
+      let nstack = List.length mop.m_operands in
+      let nimm = if mop.m_lane then 1 else 0 in
+      let* args' = instructions ctx args in
+      let nargs = List.length args' in
+      if nargs < nstack + nimm || nargs > nstack + nimm + 2 then
+        Error.value_count_mismatch ctx.diagnostics ~location:i.info
+          ~expected:(nstack + nimm) ~provided:nargs;
+      List.iteri
+        (fun k a ->
+          if k = 0 then check_type ctx a addr_vt
+          else if k < nstack then
+            check_type ctx a (simd_cell (List.nth mop.m_operands k))
+          else
+            match a.desc with
+            | Ast.Int _ -> ()
+            | _ ->
+                Error.constant_expression_required ctx.diagnostics
+                  ~location:(snd a.info))
+        args';
+      let result =
+        match mop.m_result with Some t -> [| simd_cell t |] | None -> [||]
+      in
+      return_statement i
+        (Call
+           ( {
+               desc =
+                 StructGet
+                   ({ desc = Get memname; info = ([||], recv.info) }, meth);
+               info = ([||], func.info);
+             },
+             args' ))
+        result
   (* Memory management: mem.size/grow/fill/copy/init, on a memory name. *)
   | Call
       ( ({ desc = StructGet (({ desc = Get name; _ } as recv), meth); _ } as func),
@@ -2021,6 +2080,72 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
              },
              [ i2' ] ))
         ty
+  (* SIMD vector op written as a method intrinsic, [recv.add_i32x4(b)]. The lane
+     shape is read from the method name (the receiver is always v128, or a scalar
+     for splat); arguments are the lane immediates (if any) followed by the
+     remaining stack operands. *)
+  | Call (({ desc = StructGet (recv, meth); _ } as func), args)
+    when Simd.classify meth.desc <> None ->
+      let op = Option.get (Simd.classify meth.desc) in
+      let* recv' = instruction ctx recv in
+      let* args' = instructions ctx args in
+      let nimm =
+        match op.imm with No_imm -> 0 | Lane _ -> 1 | Shuffle -> 16
+      in
+      let nstack_extra = List.length op.operands - 1 in
+      let nargs = List.length args' in
+      if nargs <> nimm + nstack_extra then
+        Error.value_count_mismatch ctx.diagnostics ~location:i.info
+          ~expected:(nimm + nstack_extra) ~provided:nargs;
+      check_type ctx recv' (simd_cell (List.hd op.operands));
+      List.iteri
+        (fun k a ->
+          if k < nimm then
+            match a.desc with
+            | Ast.Int _ -> ()
+            | _ ->
+                Error.constant_expression_required ctx.diagnostics
+                  ~location:(snd a.info)
+          else
+            let operand = 1 + (k - nimm) in
+            if operand < List.length op.operands then
+              check_type ctx a (simd_cell (List.nth op.operands operand)))
+        args';
+      let result =
+        match op.result with Some t -> [| simd_cell t |] | None -> [||]
+      in
+      return_statement i
+        (Call
+           ({ desc = StructGet (recv', meth); info = ([||], func.info) }, args'))
+        result
+  (* SIMD free-function intrinsics: [v128_const_<shape>(...)] and
+     [v128_bitselect(a, b, mask)]. A user binding of the same name takes
+     precedence (these only fire when the name is unbound). *)
+  | Call (({ desc = Get name; _ } as func), args)
+    when Simd.is_free_intrinsic name.desc
+         && StringMap.find_opt name.desc ctx.locals = None
+         && Tbl.find_opt ctx.globals name = None
+         && Tbl.find_opt ctx.functions name = None ->
+      let* args' = instructions ctx args in
+      (match Simd.const_shape_of_name name.desc with
+      | Some shape ->
+          let arity = Simd.const_arity shape in
+          if List.length args' <> arity then
+            Error.value_count_mismatch ctx.diagnostics ~location:i.info
+              ~expected:arity ~provided:(List.length args');
+          List.iter
+            (fun a ->
+              match a.desc with
+              | Ast.Int _ | Ast.Float _ -> ()
+              | Ast.UnOp (Neg, { desc = Ast.Int _ | Ast.Float _; _ }) -> ()
+              | _ ->
+                  Error.constant_expression_required ctx.diagnostics
+                    ~location:(snd a.info))
+            args'
+      | None -> List.iter (fun a -> check_type ctx a (simd_cell TV128)) args');
+      return_expression i
+        (Call ({ desc = Get name; info = ([||], func.info) }, args'))
+        (simd_cell TV128)
   | Call (i', l) -> (
       let* l' = instructions ctx l in
       let* i' = instruction ctx i' in
@@ -3318,6 +3443,11 @@ let rec check_constant_instruction ctx i =
       then Error.constant_expression_required ctx.diagnostics ~location
   | UnOp (Pos, i') -> check_constant_instruction ctx i'
   | UnOp (Neg, { desc = Float _ | Int _; _ }) -> ()
+  (* [v128.const] is a constant expression; its lanes are literals. Other SIMD
+     ops are not constant. *)
+  | Call ({ desc = Get name; _ }, args)
+    when Simd.const_shape_of_name name.desc <> None ->
+      List.iter (check_constant_instruction ctx) args
   | UnOp ((Neg | Not), _)
   | BinOp
       ( ( Div _ | Rem _ | And | Or | Xor | Shl | Shr _ | Eq | Ne | Lt _ | Gt _

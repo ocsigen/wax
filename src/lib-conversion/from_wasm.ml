@@ -1,5 +1,6 @@
 open Wax
 module Src = Wasm.Ast.Text
+module Simd = Wasm.Simd
 module Uint32 = Utils.Uint32
 module Cond = Wasm.Cond_solver
 module StringMap = Map.Make (String)
@@ -847,6 +848,14 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
                 (with_loc (Ast.Get (idx ctx kind seg)), Ast.no_loc "drop")),
            [] ))
   in
+  (* [recv.meth(args)] method call and [f(args)] free-function call, used for
+     SIMD intrinsics. *)
+  let meth_call recv meth args =
+    with_loc (Ast.Call (with_loc (Ast.StructGet (recv, Ast.no_loc meth)), args))
+  in
+  let free_call name args =
+    with_loc (Ast.Call (with_loc (Ast.Get (Ast.no_loc name)), args))
+  in
   match i.desc with
   | Block { label; typ; block } ->
       let label, ctx = push_label ctx ~loop:false label typ in
@@ -1438,13 +1447,98 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       Stack.push 0
         (with_loc
            (Call (with_loc (StructGet (a, Ast.no_loc "init")), [ seg; d; s; n ])))
-  | VecUnOp _ | VecBinOp _ | VecTest _ | VecShift _ | VecBitmask _ | VecLoad _
-  | VecStore _ | VecLoadLane _ | VecStoreLane _ | VecLoadSplat _ | VecExtract _
-  | VecReplace _ | VecSplat _ | VecShuffle _ | VecBitselect | VecTernOp _ ->
-      Stack.push_poly (with_loc Unreachable)
-  (*      failwith "SIMD instructions not supported in Wax"*)
-  (* ZZZ *)
-  | VecConst _ -> failwith "SIMD instructions not supported in Wax"
+  | VecUnOp op ->
+      let* v = Stack.pop in
+      Stack.push 1 (meth_call v (Simd.unop_name op) [])
+  | VecBinOp op ->
+      let* e2 = Stack.pop in
+      let* e1 = Stack.pop in
+      Stack.push 1 (meth_call e1 (Simd.binop_name op) [ e2 ])
+  | VecTernOp op ->
+      let* e3 = Stack.pop in
+      let* e2 = Stack.pop in
+      let* e1 = Stack.pop in
+      Stack.push 1 (meth_call e1 (Simd.ternop_name op) [ e2; e3 ])
+  | VecShift op ->
+      let* count = Stack.pop in
+      let* v = Stack.pop in
+      Stack.push 1 (meth_call v (Simd.shift_name op) [ count ])
+  | VecTest op ->
+      let* v = Stack.pop in
+      Stack.push 1 (meth_call v (Simd.test_name op) [])
+  | VecBitmask op ->
+      let* v = Stack.pop in
+      Stack.push 1 (meth_call v (Simd.bitmask_name op) [])
+  | VecSplat s ->
+      let* x = Stack.pop in
+      Stack.push 1 (meth_call x (Simd.splat_name s) [])
+  | VecBitselect ->
+      let* e3 = Stack.pop in
+      let* e2 = Stack.pop in
+      let* e1 = Stack.pop in
+      Stack.push 1 (free_call Simd.bitselect_name [ e1; e2; e3 ])
+  | VecExtract (s, sign, lane) ->
+      let* v = Stack.pop in
+      Stack.push 1
+        (meth_call v (Simd.extract_name s sign)
+           [ integer i (Int.to_string lane) ])
+  | VecReplace (s, lane) ->
+      let* value = Stack.pop in
+      let* v = Stack.pop in
+      Stack.push 1
+        (meth_call v (Simd.replace_name s)
+           [ integer i (Int.to_string lane); value ])
+  | VecShuffle lanes ->
+      let* e2 = Stack.pop in
+      let* e1 = Stack.pop in
+      let imms =
+        List.init 16 (fun k -> integer i (Int.to_string (Char.code lanes.[k])))
+      in
+      Stack.push 1 (meth_call e1 Simd.shuffle_name (imms @ [ e2 ]))
+  | VecConst v ->
+      let lit =
+        match v.Utils.V128.shape with
+        | F32x4 | F64x2 -> float i
+        | I8x16 | I16x8 | I32x4 | I64x2 -> integer i
+      in
+      Stack.push 1
+        (free_call (Simd.const_name v.shape) (List.map lit v.components))
+  | VecLoad (m, op, memarg) ->
+      let* addr = Stack.pop in
+      let nat = Simd.vec_load_nat_align op in
+      Stack.push 1
+        (mem_call m (Simd.vec_load_name op)
+           (addr :: mem_extra with_loc memarg nat))
+  | VecStore (m, memarg) ->
+      let* value = Stack.pop in
+      let* addr = Stack.pop in
+      Stack.push 0
+        (mem_call m Simd.store_name
+           (addr :: value :: mem_extra with_loc memarg 16))
+  | VecLoadSplat (m, w, memarg) ->
+      let* addr = Stack.pop in
+      let nat = Simd.lane_nat_align w in
+      Stack.push 1
+        (mem_call m (Simd.load_splat_name w)
+           (addr :: mem_extra with_loc memarg nat))
+  | VecLoadLane (m, w, memarg, lane) ->
+      let* v = Stack.pop in
+      let* addr = Stack.pop in
+      let nat = Simd.lane_nat_align w in
+      Stack.push 1
+        (mem_call m (Simd.load_lane_name w)
+           (addr :: v
+           :: integer i (Int.to_string lane)
+           :: mem_extra with_loc memarg nat))
+  | VecStoreLane (m, w, memarg, lane) ->
+      let* v = Stack.pop in
+      let* addr = Stack.pop in
+      let nat = Simd.lane_nat_align w in
+      Stack.push 0
+        (mem_call m (Simd.store_lane_name w)
+           (addr :: v
+           :: integer i (Int.to_string lane)
+           :: mem_extra with_loc memarg nat))
 
 and instructions ctx l =
   match l with
