@@ -192,6 +192,15 @@ module Error = struct
           n)
       ()
 
+  let binop_type_mismatch context ~location ty1 ty2 =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f
+          "This operator cannot be applied to operands of types@ @[<2>%a@]@ \
+           and@ @[<2>%a@]."
+          output_inferred_type ty1 output_inferred_type ty2)
+      ()
+
   let instruction_type_mismatch context ~location ty ty' =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
@@ -932,7 +941,7 @@ let branch_target ctx label =
   in
   find ctx.control_types label
 
-let check_int_bin_op typ1 typ2 =
+let check_int_bin_op ctx ~location typ1 typ2 =
   (match (UnionFind.find typ1, UnionFind.find typ2) with
   | Valtype { internal = I32; _ }, Valtype { internal = I32; _ }
   | Valtype { internal = I64; _ }, Valtype { internal = I64; _ }
@@ -941,10 +950,10 @@ let check_int_bin_op typ1 typ2 =
   | (Number | Int), Valtype { internal = I32 | I64; _ } ->
       UnionFind.merge typ1 typ2 (UnionFind.find typ2)
   | Number, Number -> UnionFind.merge typ1 typ2 Int
-  | _ -> assert false (*ZZZ*));
+  | _ -> Error.binop_type_mismatch ctx.diagnostics ~location typ1 typ2);
   typ1
 
-let check_float_bin_op typ1 typ2 =
+let check_float_bin_op ctx ~location typ1 typ2 =
   (match (UnionFind.find typ1, UnionFind.find typ2) with
   | Valtype { internal = F32; _ }, Valtype { internal = F32; _ }
   | Valtype { internal = F64; _ }, Valtype { internal = F64; _ }
@@ -953,7 +962,7 @@ let check_float_bin_op typ1 typ2 =
   | (Number | Float), Valtype { internal = F32 | F64; _ } ->
       UnionFind.merge typ1 typ2 (UnionFind.find typ2)
   | Number, Number -> UnionFind.merge typ1 typ2 Float
-  | _ -> assert false (*ZZZ*));
+  | _ -> Error.binop_type_mismatch ctx.diagnostics ~location typ1 typ2);
   typ1
 
 let field_has_default (ty : fieldtype) =
@@ -1506,7 +1515,8 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       let* i1' = instruction ctx i1 in
       let* i2' = instruction ctx i2 in
       let ty =
-        check_int_bin_op (expression_type ctx i1') (expression_type ctx i2')
+        check_int_bin_op ctx ~location:i.info (expression_type ctx i1')
+          (expression_type ctx i2')
       in
       return_expression i
         (Call
@@ -1526,7 +1536,8 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       let* i1' = instruction ctx i1 in
       let* i2' = instruction ctx i2 in
       let ty =
-        check_float_bin_op (expression_type ctx i1') (expression_type ctx i2')
+        check_float_bin_op ctx ~location:i.info (expression_type ctx i1')
+          (expression_type ctx i2')
       in
       return_expression i
         (Call
@@ -1855,6 +1866,9 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       let ty =
         let ty1 = expression_type ctx i1' in
         let ty2 = expression_type ctx i2' in
+        let mismatch () =
+          Error.binop_type_mismatch ctx.diagnostics ~location:i.info ty1 ty2
+        in
         match (UnionFind.find ty1, UnionFind.find ty2) with
         | Unknown, Unknown -> (
             match op with
@@ -1895,7 +1909,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                 | Valtype { internal = F64; _ }
                 | Number | Int | Float ->
                     ()
-                | _ -> assert false (*ZZZ*));
+                | _ -> mismatch ());
                 UnionFind.make (Valtype { typ = I32; internal = I32 })
             | Add | Sub | Mul ->
                 (match typ with
@@ -1905,11 +1919,11 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                 | Valtype { internal = F64; _ }
                 | Number | Int | Float ->
                     ()
-                | _ -> assert false (*ZZZ*));
+                | _ -> mismatch ());
                 ty1
             | Div (Some _) | Rem _ | And | Or | Xor | Shl | Shr _ ->
-                check_int_bin_op ty1 ty2
-            | Div None -> check_float_bin_op ty1 ty2
+                check_int_bin_op ctx ~location:i.info ty1 ty2
+            | Div None -> check_float_bin_op ctx ~location:i.info ty1 ty2
             | Lt (Some _) | Gt (Some _) | Le (Some _) | Ge (Some _) ->
                 (match typ with
                 | Valtype { internal = I32; _ }
@@ -1917,7 +1931,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                 | Int ->
                     ()
                 | Number -> UnionFind.set ty1 Int
-                | _ -> assert false (*ZZZ*));
+                | _ -> mismatch ());
                 UnionFind.make (Valtype { typ = I32; internal = I32 })
             | Lt None | Gt None | Le None | Ge None ->
                 (match typ with
@@ -1926,7 +1940,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                 | Float ->
                     ()
                 | Number -> UnionFind.set ty1 Float
-                | _ -> assert false (*ZZZ*));
+                | _ -> mismatch ());
                 UnionFind.make (Valtype { typ = I32; internal = I32 })
             | Ne ->
                 (match typ with
@@ -1936,7 +1950,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                 | Valtype { internal = F64; _ }
                 | Number | Int | Float ->
                     ()
-                | _ -> assert false (*ZZZ*));
+                | _ -> mismatch ());
                 UnionFind.make (Valtype { typ = I32; internal = I32 }))
         | _ -> (
             match op with
@@ -1973,7 +1987,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                 | (Number | Int), Valtype { internal = I32 | I64; _ }
                 | (Number | Float), Valtype { internal = F32 | F64; _ } ->
                     UnionFind.merge ty1 ty2 (UnionFind.find ty2)
-                | _ -> assert false (*ZZZ*));
+                | _ -> mismatch ());
                 UnionFind.make (Valtype { typ = I32; internal = I32 })
             | Add | Sub | Mul ->
                 (match (UnionFind.find ty1, UnionFind.find ty2) with
@@ -1990,11 +2004,11 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                 | (Number | Int), Valtype { internal = I32 | I64; _ }
                 | (Number | Float), Valtype { internal = F32 | F64; _ } ->
                     UnionFind.merge ty1 ty2 (UnionFind.find ty2)
-                | _ -> assert false (*ZZZ*));
+                | _ -> mismatch ());
                 ty1
             | Div (Some _) | Rem _ | And | Or | Xor | Shl | Shr _ ->
-                check_int_bin_op ty1 ty2
-            | Div None -> check_float_bin_op ty1 ty2
+                check_int_bin_op ctx ~location:i.info ty1 ty2
+            | Div None -> check_float_bin_op ctx ~location:i.info ty1 ty2
             | Lt (Some _) | Gt (Some _) | Le (Some _) | Ge (Some _) ->
                 (match (UnionFind.find ty1, UnionFind.find ty2) with
                 | Valtype { internal = I32; _ }, Valtype { internal = I32; _ }
@@ -2004,7 +2018,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                 | (Number | Int), Valtype { internal = I32 | I64; _ } ->
                     UnionFind.merge ty1 ty2 (UnionFind.find ty2)
                 | Number, Number -> UnionFind.merge ty1 ty2 Int
-                | _ -> assert false (*ZZZ*));
+                | _ -> mismatch ());
                 UnionFind.make (Valtype { typ = I32; internal = I32 })
             | Lt None | Gt None | Le None | Ge None ->
                 (match (UnionFind.find ty1, UnionFind.find ty2) with
@@ -2016,7 +2030,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                 | (Number | Float), Valtype { internal = F32 | F64; _ } ->
                     UnionFind.merge ty1 ty2 (UnionFind.find ty2)
                 | Number, Number -> UnionFind.merge ty1 ty2 Float
-                | _ -> assert false (*ZZZ*));
+                | _ -> mismatch ());
                 UnionFind.make (Valtype { typ = I32; internal = I32 })
             | Ne ->
                 (match (UnionFind.find ty1, UnionFind.find ty2) with
@@ -2033,7 +2047,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                 | (Number | Int), Valtype { internal = I32 | I64; _ }
                 | (Number | Float), Valtype { internal = F32 | F64; _ } ->
                     UnionFind.merge ty1 ty2 (UnionFind.find ty2)
-                | _ -> assert false (*ZZZ*));
+                | _ -> mismatch ());
                 UnionFind.make (Valtype { typ = I32; internal = I32 }))
       in
       return_expression i (BinOp (op, i1', i2')) ty
