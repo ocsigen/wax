@@ -23,48 +23,66 @@ let position ch pos =
    position) and abort. Used for every malformed-input case, so the parser
    never escapes through [assert false]/[failwith]. *)
 let error ?pos ch fmt =
-  let loc_start = position ch (match pos with Some p -> p | None -> ch.pos) in
+  let start = match pos with Some p -> p | None -> ch.pos in
+  let loc_start = position ch start in
+  let loc_end = position ch (max ch.pos start) in
   Format.kasprintf
     (fun msg ->
       Utils.Diagnostic.report ch.diagnostics
-        ~location:{ Ast.loc_start; loc_end = position ch ch.pos }
-        ~severity:Error
+        ~location:{ Ast.loc_start; loc_end } ~severity:Error
         ~message:(fun f () -> Format.pp_print_string f msg)
         ();
       Utils.Diagnostic.abort ())
     fmt
 
+(* Follow the reference decoder's read order so the diagnostic matches the spec:
+   the 4 magic bytes, then the 4 version bytes, each preceded by an
+   end-of-input check. *)
 let check_header ch =
-  if ch.limit < 8 || not (String.equal header (String.sub ch.buf 0 8)) then
-    error ~pos:0 ch "not a WebAssembly binary file (invalid magic header)"
+  if ch.limit < 4 then error ~pos:0 ch "unexpected end"
+  else if not (String.equal (String.sub ch.buf 0 4) (String.sub header 0 4))
+  then error ~pos:0 ch "magic header not detected"
+  else if ch.limit < 8 then error ~pos:4 ch "unexpected end"
+  else if not (String.equal (String.sub ch.buf 4 4) (String.sub header 4 4))
+  then error ~pos:4 ch "unknown binary version"
 
 let pos_in ch = ch.pos
 let seek_in ch pos = ch.pos <- pos
 
 let input_byte ch =
   let pos = ch.pos in
-  if pos >= ch.limit then error ch "unexpected end of input";
+  if pos >= ch.limit then error ch "unexpected end of section or function";
   ch.pos <- pos + 1;
   Char.code ch.buf.[pos]
 
 let peek_byte ch =
-  if ch.pos >= ch.limit then error ch "unexpected end of input";
+  if ch.pos >= ch.limit then error ch "unexpected end of section or function";
   Char.code ch.buf.[ch.pos]
 
+(* Reads a length-prefixed byte range (a name or segment payload); an
+   overlong length is reported as the spec's "length out of bounds". *)
 let really_input_string ch len =
   let pos = ch.pos in
-  if len < 0 || pos + len > ch.limit then error ch "unexpected end of input";
+  if len < 0 || pos + len > ch.limit then error ch "length out of bounds";
   ch.pos <- pos + len;
   String.sub ch.buf pos len
 
+(* On the last permitted byte, a set continuation bit (>= 128) means the
+   encoding is longer than the type allows ("integer representation too long"),
+   while extra value bits mean the number is out of range ("integer too
+   large"). *)
 let rec uint ?(n = 5) ch =
   let i = input_byte ch in
-  if n = 1 && i >= 16 then error ch "integer too large";
+  if n = 1 then
+    if i >= 128 then error ch "integer representation too long"
+    else if i >= 16 then error ch "integer too large";
   if i < 128 then i else i - 128 + (uint ~n:(n - 1) ch lsl 7)
 
 let rec uint64_rec ?(n = 10) ch =
   let i = input_byte ch in
-  if n = 1 && i >= 2 then error ch "integer too large";
+  if n = 1 then
+    if i >= 128 then error ch "integer representation too long"
+    else if i >= 2 then error ch "integer too large";
   if i < 128 then Int64.of_int i
   else
     Int64.add
@@ -75,8 +93,10 @@ let uint64 ch = Utils.Uint64.of_int64 (uint64_rec ch)
 
 let rec sint ?(n = 5) ch =
   let i = input_byte ch in
-  if n = 1 && not (i < 8 || (i > 120 && i < 128)) then
-    error ch "integer too large";
+  if n = 1 then
+    if i >= 128 then error ch "integer representation too long"
+    else if not (i < 8 || (i > 120 && i < 128)) then
+      error ch "integer too large";
   if i < 64 then i
   else if i < 128 then i - 128
   else i - 128 + (sint ~n:(n - 1) ch lsl 7)
@@ -84,12 +104,13 @@ let rec sint ?(n = 5) ch =
 let rec sint32 ?(n = 5) ch =
   let i = Int32.of_int (input_byte ch) in
   (if n = 1 then
-     let sign_bit = Int32.logand i 0x08l <> 0l in
-     let unused_bits = Int32.logand i 0x70l in
-     if
-       Int32.compare i 128l >= 0
-       || if sign_bit then unused_bits <> 0x70l else unused_bits <> 0l
-     then error ch "integer too large");
+     if Int32.compare i 128l >= 0 then
+       error ch "integer representation too long"
+     else
+       let sign_bit = Int32.logand i 0x08l <> 0l in
+       let unused_bits = Int32.logand i 0x70l in
+       if if sign_bit then unused_bits <> 0x70l else unused_bits <> 0l then
+         error ch "integer too large");
   if Int32.compare i 64l < 0 then i
   else if Int32.compare i 128l < 0 then Int32.sub i 128l
   else Int32.add (Int32.sub i 128l) (Int32.shift_left (sint32 ~n:(n - 1) ch) 7)
@@ -97,12 +118,13 @@ let rec sint32 ?(n = 5) ch =
 let rec sint64 ?(n = 10) ch =
   let i = Int64.of_int (input_byte ch) in
   (if n = 1 then
-     let sign_bit = Int64.logand i 1L <> 0L in
-     let unused_bits = Int64.logand i 0x7EL in
-     if
-       Int64.compare i 128L >= 0
-       || if sign_bit then unused_bits <> 0x7EL else unused_bits <> 0L
-     then error ch "integer too large");
+     if Int64.compare i 128L >= 0 then
+       error ch "integer representation too long"
+     else
+       let sign_bit = Int64.logand i 1L <> 0L in
+       let unused_bits = Int64.logand i 0x7EL in
+       if if sign_bit then unused_bits <> 0x7EL else unused_bits <> 0L then
+         error ch "integer too large");
   if Int64.compare i 64L < 0 then i
   else if Int64.compare i 128L < 0 then Int64.sub i 128L
   else Int64.add (Int64.sub i 128L) (Int64.shift_left (sint64 ~n:(n - 1) ch) 7)
@@ -199,7 +221,7 @@ let reftype i ch =
   | 0x75 -> nullable NoCont
   | 0x63 -> nullable (heaptype ch)
   | 0x64 -> { nullable = false; typ = heaptype ch }
-  | _ -> error ch "unknown reference type 0x%02x" i
+  | _ -> error ch "malformed reference type 0x%02x" i
 
 let reftype_first_byte ch = reftype (input_byte ch) ch
 let ref_i31 = Ref ref_i31
@@ -316,7 +338,7 @@ let import ch =
   let module_ = name ch in
   let name = name ch in
   let d = uint ch in
-  if d > 4 then error ch "unknown import description 0x%02x" d;
+  if d > 4 then error ch "malformed import kind 0x%02x" d;
   let map i = i in
   let importdesc =
     match d with
@@ -353,7 +375,7 @@ let memarg ch =
   let a = uint ch in
   let o = uint64 ch in
   let m, a = if a land 0x40 <> 0 then (uint ch, a lxor 0x40) else (0, a) in
-  if a >= 64 then error ch "malformed memory alignment";
+  if a >= 64 then error ch "malformed memop flags";
   (m, { align = Utils.Uint64.of_int (1 lsl a); offset = o })
 
 let with_loc ch pos desc =
@@ -363,8 +385,7 @@ let with_loc ch pos desc =
   }
 
 (* Consume the [end] opcode (0x0B) that terminates a block or expression. *)
-let expect_end ch =
-  if input_byte ch <> 0x0B then error ch "expected end opcode (0x0b)"
+let expect_end ch = if input_byte ch <> 0x0B then error ch "END opcode expected"
 
 let on_clause ch =
   match input_byte ch with
@@ -1150,7 +1171,7 @@ and instruction ch =
         | 0x112 -> VecBinOp VecRelaxedDot
         | 0x113 -> VecTernOp VecRelaxedDotAdd
         | c -> error ch "unknown SIMD opcode 0x%02x" c)
-    | c -> error ch "unknown opcode 0x%02x" c
+    | c -> error ch "illegal opcode %02x" c
   in
   with_loc ch pos desc
 
@@ -1358,7 +1379,7 @@ let module_ diagnostics ?filename buf =
           | i -> i
         in
         if sect.id <> 0 && current_order <= last_section_order then
-          error ch "section out of order";
+          error ch "unexpected content after last section";
         let next_section_order =
           if sect.id = 0 then last_section_order else current_order
         in

@@ -217,20 +217,28 @@ let print_module ~color f m =
   let trivia = Hashtbl.create 0 in
   Utils.Printer.run f (fun p -> Wasm.Output.module_ p ~color ~trivia m)
 
-let null_formatter = Format.make_formatter (fun _ _ _ -> ()) (fun () -> ())
+let contains_substring s sub =
+  let n = String.length s and m = String.length sub in
+  let rec loop i =
+    i + m <= n && (String.equal (String.sub s i m) sub || loop (i + 1))
+  in
+  m = 0 || loop 0
 
-(* Parse a Wasm binary, reporting a malformed-input diagnostic through the
-   standard [run] machinery (rendered to stderr, or discarded when [quiet]) and
-   returning [None] on failure. [run ~exit:false] flushes the diagnostic and
-   re-raises [Aborted] rather than exiting the process. *)
-let parse_binary ~color ?filename ?(quiet = false) txt =
-  let output = if quiet then null_formatter else Format.err_formatter in
+(* Parse a Wasm binary. On malformed input the diagnostic is rendered into a
+   string (via [run ~exit:false], which flushes and re-raises [Aborted] instead
+   of exiting the process) and returned as [Error text]; the caller decides
+   whether to print it and how to check it against the expected reason. *)
+let parse_binary ~color ?filename txt =
+  let buf = Buffer.create 256 in
+  let output = Format.formatter_of_buffer buf in
   match
     Utils.Diagnostic.run ~color ~source:None ~exit:false ~output (fun d ->
         Wasm.Wasm_parser.module_ d ?filename txt)
   with
-  | m -> Some m
-  | exception Utils.Diagnostic.Aborted -> None
+  | m -> Ok m
+  | exception Utils.Diagnostic.Aborted ->
+      Format.pp_print_flush output ();
+      Error (Buffer.contents buf)
 
 let runtest filename _ =
   let quiet = not !all_errors in
@@ -252,11 +260,11 @@ let runtest filename _ =
                 Some txt )
         | ((`Valid | `Invalid _) as status), `Binary txt -> (
             match parse_binary ~color ~filename txt with
-            | None ->
-                Format.eprintf "Parsing failed unexpectedly: %s@."
-                  (String.escaped txt);
+            | Error rendered ->
+                Format.eprintf "Parsing failed unexpectedly: %s@.%s"
+                  (String.escaped txt) rendered;
                 None
-            | Some binary_ast ->
+            | Ok binary_ast ->
                 let m = Wasm.Binary_to_text.module_ binary_ast in
                 (*
             Format.eprintf "%a@." (print_module ~color:!color) m;
@@ -280,14 +288,18 @@ let runtest filename _ =
               Format.eprintf "Parsing should have failed (%s): %s@." reason txt;
             None
         | `Malformed reason, `Binary txt -> (
-            match parse_binary ~color ~filename ~quiet txt with
-            | None ->
-                (* Parsing failed, as expected. The diagnostic is rendered
-                   above unless [quiet]. *)
-                if not quiet then
-                  Format.eprintf "(expected to be malformed: %s)@." reason;
+            match parse_binary ~color ~filename txt with
+            | Error rendered ->
+                (* Parsing failed, as expected. Under [--all-errors] show the
+                   diagnostic, and flag it when our message does not match the
+                   spec's expected reason. *)
+                if not quiet then (
+                  Format.eprintf "%s" rendered;
+                  if not (contains_substring rendered reason) then
+                    Format.eprintf
+                      "  message diverges from expected reason: %s@." reason);
                 None
-            | Some binary_ast ->
+            | Ok binary_ast ->
                 let ast = Wasm.Binary_to_text.module_ binary_ast in
                 let ok =
                   in_child_process ~quiet (fun () ->
@@ -337,10 +349,11 @@ let runtest filename _ =
               let text = read_file temp in
               Sys.remove temp;
               match parse_binary ~color text with
-              | None ->
-                  Format.eprintf "Reparsing serialized binary failed.@.";
+              | Error rendered ->
+                  Format.eprintf "Reparsing serialized binary failed:@.%s"
+                    rendered;
                   None
-              | Some binary_ast ->
+              | Ok binary_ast ->
                   let m = Wasm.Binary_to_text.module_ binary_ast in
                   if false then (
                     prerr_endline "AFTER ";
