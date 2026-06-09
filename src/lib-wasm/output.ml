@@ -317,8 +317,10 @@ let comptype (typ : comptype) =
       list
         (keyword "struct"
         :: List.map
-             (fun (nm, f) ->
-               list (keyword "field" :: (opt_id nm @ [ fieldtype f ])))
+             (fun fld ->
+               let nm, f = fld.Ast.desc in
+               list ~loc:fld.Ast.info
+                 (keyword "field" :: (opt_id nm @ [ fieldtype f ])))
              (Array.to_list l))
   | Array ty -> list [ keyword "array"; fieldtype ty ]
 
@@ -1124,7 +1126,9 @@ let rec instr i =
 
 let instrs l = if l = [] then [] else [ Vertical_block (List.map instr l) ]
 
-let subtype ?loc (id, { typ; supertype; final }) =
+let subtype t =
+  let id, { typ; supertype; final } = t.Ast.desc in
+  let loc = Some t.Ast.info in
   if final && Option.is_none supertype then
     list ?loc [ block (keyword "type" :: opt_id id); block [ comptype typ ] ]
   else
@@ -1188,9 +1192,8 @@ let function_indices lst =
 let rec modulefield f =
   let loc = f.Ast.info in
   match f.Ast.desc with
-  | Types [| t |] -> subtype ~loc t
-  | Types l ->
-      list ~loc (keyword "rec" :: List.map (subtype ?loc:None) (Array.to_list l))
+  | Types [| t |] -> subtype t
+  | Types l -> list ~loc (keyword "rec" :: List.map subtype (Array.to_list l))
   | Func { id; typ; locals; instrs = i; exports = e } ->
       list ~loc
         (block (keyword "func" :: (opt_id id @ exports e @ fundecl typ))

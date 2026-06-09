@@ -590,7 +590,7 @@ module Text : sig
 
   module X : sig
     type nonrec idx = idx
-    type 'a annotated_array = (name option * 'a) array
+    type 'a annotated_array = (name option * 'a, location) annotated array
     type 'a opt_annotated_array = (name option * 'a) array
     type label = name option
   end

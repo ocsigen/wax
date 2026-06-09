@@ -152,7 +152,12 @@ let fold_fields cctx add tbl ~location cond then_fields else_fields =
 let types cctx m =
   let rec add tbl f =
     match f.Ast.desc with
-    | Types l -> Array.fold_left (fun tbl (id, typ) -> Tbl.add id typ tbl) tbl l
+    | Types l ->
+        Array.fold_left
+          (fun tbl e ->
+            let id, typ = e.Ast.desc in
+            Tbl.add id typ tbl)
+          tbl l
     | Module_if_annotation { cond; then_fields; else_fields } ->
         fold_fields cctx add tbl ~location:f.info cond then_fields else_fields
     | Import _ | Func _ | Memory _ | Table _ | Tag _ | Global _ | Export _

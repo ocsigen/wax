@@ -210,8 +210,8 @@ type ctx = {
          the type tables above resolve to the right per-branch declaration. *)
 }
 
-let get_annot (a, _) = a
-let get_type (_, t) = t
+let get_annot e = fst e.Ast.desc
+let get_type e = snd e.Ast.desc
 let annotated a t = (a, t)
 
 let idx ctx kind i =
@@ -1405,7 +1405,8 @@ let register_names ctx export_tbl fields =
             | Tag ty -> register_type ctx export_tbl Tag id exports ty)
         | Types rectype ->
             Array.iter
-              (fun (id, ty) ->
+              (fun e ->
+                let id, ty = e.Ast.desc in
                 let name = Sequence.register' ctx.types export_tbl None id [] in
                 CondTbl.add ctx.type_defs ctx.cond_asm name ty;
                 match (ty : Src.subtype).typ with

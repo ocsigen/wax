@@ -755,25 +755,17 @@
 
 (type $extern_state
   (struct
-    (field
-      ;; Flags
-      $no_sharing
-      i32)
+    ;; Flags
+    (field $no_sharing i32)
     (field $user_provided_output i32)
-    (field
-      ;; Header information
-      $obj_counter
-      (mut i32))
+    ;; Header information
+    (field $obj_counter (mut i32))
     (field $size_32 (mut i32))
     (field $size_64 (mut i32))
-    (field
-      ;; Position of already marshalled objects
-      $pos_table
-      (ref any))
-    (field
-      ;; Buffers
-      $buf
-      (mut (ref $string)))
+    ;; Position of already marshalled objects
+    (field $pos_table (ref any))
+    ;; Buffers
+    (field $buf (mut (ref $string)))
     (field $pos (mut i32))
     (field $limit (mut i32))
     (field $output_first (ref $output_block))

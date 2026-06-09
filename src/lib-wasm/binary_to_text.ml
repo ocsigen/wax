@@ -64,7 +64,7 @@ let comptype (names : B.names) s_idx (c : B.comptype) : T.comptype =
       Struct
         (Array.mapi
            (fun f_idx f ->
-             (field_name names s_idx f_idx, fieldtype names.types f))
+             Ast.no_loc (field_name names s_idx f_idx, fieldtype names.types f))
            fa)
   | Array ft -> Array (fieldtype names.types ft)
 
@@ -84,7 +84,7 @@ let rectype (names : B.names) index r =
         | Some s -> Some (no_loc s)
         | None -> None
       in
-      (name, subtype names idx s))
+      no_loc (name, subtype names idx s))
     r
 
 let globaltype type_names g = muttype (valtype type_names) g

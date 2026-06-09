@@ -785,7 +785,7 @@ let subtype s : Text.subtype =
         Struct
           (Array.map
              (fun (name, { mut; typ }) ->
-               (Some name, { Text.Types.mut; typ = storagetype typ }))
+               Ast.no_loc (Some name, { Text.Types.mut; typ = storagetype typ }))
              fields)
     | Array { mut; typ } -> Array { mut; typ = storagetype typ }
   in
@@ -885,7 +885,9 @@ let module_ diagnostics types fields =
               match field.desc with
               | Type rectype ->
                   Text.Types
-                    (Array.map (fun (idx, s) -> (Some idx, subtype s)) rectype)
+                    (Array.map
+                       (fun (idx, s) -> Ast.no_loc (Some idx, subtype s))
+                       rectype)
               | Global { name; mut; typ; def; attributes } ->
                   let typ =
                     match typ with
@@ -994,7 +996,7 @@ let module_ diagnostics types fields =
   let extra_types =
     Hashtbl.fold
       (fun _ (idx, s) rem ->
-        Ast.no_loc (Text.Types [| (Some idx, subtype s) |]) :: rem)
+        Ast.no_loc (Text.Types [| Ast.no_loc (Some idx, subtype s) |]) :: rem)
       ctx.extra_types []
   in
   let elem_declare : (_ Text.modulefield, _) Ast.annotated list =

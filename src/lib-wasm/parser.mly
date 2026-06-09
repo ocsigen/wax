@@ -383,8 +383,14 @@ parameters_and_results_without_bindings:
      results = Array.of_list r } }
 
 field:
-| "(" FIELD i = ID t = field_type ")" { [(Some i, t)] }
-| "(" FIELD l = field_type * ")" { List.map (fun t -> (None, t)) l }
+| "(" FIELD i = ID t = field_type ")" { [ with_loc $sloc (Some i, t) ] }
+(* An anonymous (field t1 t2 ...) declares several fields sharing one source
+   span; locating them all at $sloc would create duplicate keys, so only the
+   single-field case gets a real (comment-anchoring) location. *)
+| "(" FIELD l = field_type * ")"
+  { match l with
+    | [ t ] -> [ with_loc $sloc (None, t) ]
+    | _ -> List.map (fun t -> Ast.no_loc (None, t)) l }
 
 field_type:
 | typ = storage_type { {mut = false; typ} }
@@ -401,9 +407,8 @@ composite_type:
 
 rectype:
 | "(" REC l = typedef * ")"
-  { with_loc $sloc
-      (Types  (Array.map (fun t -> t.Ast.desc) (Array.of_list l))) }
-| t = typedef { {t with desc = Types [|t.Ast.desc|]} }
+  { with_loc $sloc (Types (Array.of_list l)) }
+| t = typedef { {t with desc = Types [| t |]} }
 
 typedef:
 | LPAREN_TYPE name = ID ? t = subtype ")"

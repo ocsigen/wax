@@ -494,7 +494,9 @@ let comptype d ctx (ty : Ast.Text.comptype) =
       let+@ ty = functype d ctx ty in
       Func ty
   | Struct fields ->
-      let+@ fields = array_map_opt (fun (_, ty) -> fieldtype d ctx ty) fields in
+      let+@ fields =
+        array_map_opt (fun e -> fieldtype d ctx (snd e.Ast.desc)) fields
+      in
       Struct fields
   | Array field ->
       let+@ field = fieldtype d ctx field in
@@ -524,7 +526,8 @@ let subtype d ctx current { Ast.Text.typ; supertype; final } =
   in
   { typ; supertype; final }
 
-let rectype d ctx ty = array_mapi_opt (fun i (_, ty) -> subtype d ctx i ty) ty
+let rectype d ctx ty =
+  array_mapi_opt (fun i e -> subtype d ctx i (snd e.Ast.desc)) ty
 
 let signature d ctx { Ast.Text.params; results } =
   let*@ params = array_map_opt (fun (_, ty) -> valtype d ctx ty) params in
@@ -1845,7 +1848,8 @@ let constant_expression ctx ty expr =
 
 let add_type d ctx ty =
   Array.iteri
-    (fun i (label, _) ->
+    (fun i e ->
+      let label = fst e.Ast.desc in
       Hashtbl.replace ctx.index_mapping
         (Uint32.of_int (ctx.last_index + i))
         (lnot i, []);
@@ -1857,7 +1861,8 @@ let add_type d ctx ty =
   match rectype d ctx ty with
   | None ->
       Array.iteri
-        (fun i (label, _) ->
+        (fun i e ->
+          let label = fst e.Ast.desc in
           Hashtbl.remove ctx.index_mapping (Uint32.of_int (ctx.last_index + i));
           Option.iter
             (fun label -> Hashtbl.remove ctx.label_mapping label.Ast.desc)
@@ -1866,13 +1871,14 @@ let add_type d ctx ty =
   | Some ty' ->
       let i' = Types.add_rectype ctx.types ty' in
       Array.iteri
-        (fun i (label, typ) ->
+        (fun i e ->
+          let label, typ = e.Ast.desc in
           let fields =
             match (typ : Ast.Text.subtype).typ with
             | Struct fields ->
                 Array.mapi
-                  (fun i (id, _) ->
-                    match id with
+                  (fun i e ->
+                    match fst e.Ast.desc with
                     | Some id -> Some (id.Ast.desc, i)
                     | None -> None)
                   fields
@@ -2488,7 +2494,8 @@ let check_syntax diagnostics (_, lst) =
       match field.Ast.desc with
       | Ast.Text.Types lst ->
           Array.iter
-            (fun (id, subtype) ->
+            (fun e ->
+              let id, subtype = e.Ast.desc in
               let idx = types_ctx.last_index in
               let>@ def = comptype diagnostics types_ctx subtype.Ast.Text.typ in
               let mapping = (idx, []) in
@@ -2650,13 +2657,13 @@ let check_syntax diagnostics (_, lst) =
       match field.desc with
       | Types lst ->
           Array.iter
-            (fun (_, subtype) ->
-              match subtype.Ast.Text.typ with
+            (fun e ->
+              match (snd e.Ast.desc).Ast.Text.typ with
               | Ast.Text.Types.Func _ | Array _ -> ()
               | Struct lst ->
                   let fields = Hashtbl.create 16 in
                   Array.iter
-                    (fun (id, _) -> check_unbound fields "field" id)
+                    (fun e -> check_unbound fields "field" (fst e.Ast.desc))
                     lst)
             lst
       | Import { id; desc; _ } -> (

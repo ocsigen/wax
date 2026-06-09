@@ -50,19 +50,10 @@
 (type $block_array (array (mut (ref $block))))
 (type $compare_stack
   (struct
-    (field (mut i32))
-    (field
-      (ref
-        ;; position in stack
-        $block_array))
-    (field
-      (ref
-        ;; first value
-        $block_array))
-    (field
-      (ref
-        ;; second value
-        $int_array)))
+    (field (mut i32)) ;; position in stack
+    (field (ref $block_array)) ;; first value
+    (field (ref $block_array)) ;; second value
+    (field (ref $int_array)))
 ) ;; position in value
 
 (type $compare (func (param (ref eq) (ref eq) i32) (result i32)))

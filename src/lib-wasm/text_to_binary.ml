@@ -114,7 +114,7 @@ let func_type ctx (f : T.functype) : B.functype =
 let comp_type ctx (c : T.comptype) : B.comptype =
   match c with
   | Func f -> Func (func_type ctx f)
-  | Struct f -> Struct (Array.map (fun (_, ft) -> field_type ctx ft) f)
+  | Struct f -> Struct (Array.map (fun e -> field_type ctx (snd e.Ast.desc)) f)
   | Array f -> Array (field_type ctx f)
 
 let sub_type ctx (s : T.subtype) : B.subtype =
@@ -124,7 +124,7 @@ let sub_type ctx (s : T.subtype) : B.subtype =
     final = s.final;
   }
 
-let rec_type ctx r = Array.map (fun (_, s) -> sub_type ctx s) r
+let rec_type ctx r = Array.map (fun e -> sub_type ctx (snd e.Ast.desc)) r
 let global_type ctx g = mut_type valtype ctx g
 
 let table_type ctx (t : T.tabletype) : B.tabletype =
@@ -451,14 +451,15 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
         | T.Types r ->
             let types_space, _ =
               Array.fold_left
-                (fun (space, _) (id, _) -> add_name space id)
+                (fun (space, _) e -> add_name space (fst e.Ast.desc))
                 (ctx.types, 0) r
             in
             let current_type_idx = ctx.types.count in
             let acc_func_types =
               let ctx' = { ctx with types = types_space } in
               Array.fold_left
-                (fun (acc_map, idx_in_arr) (_, subtype) ->
+                (fun (acc_map, idx_in_arr) e ->
+                  let subtype = snd e.Ast.desc in
                   match subtype.T.typ with
                   | T.Func func_t ->
                       let b_func_t = func_type ctx' func_t in
@@ -523,13 +524,13 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
       | { desc = T.Types r; _ } :: rest ->
           let acc, _ =
             Array.fold_left
-              (fun (acc, i) (_, subtype) ->
-                match subtype.T.typ with
+              (fun (acc, i) e ->
+                match (snd e.Ast.desc).T.typ with
                 | T.Struct field_defs ->
                     let field_map =
                       Array.fold_left
-                        (fun (fmap, fidx) (fname, _) ->
-                          match fname with
+                        (fun (fmap, fidx) e ->
+                          match fst e.Ast.desc with
                           | Some n ->
                               (StringMap.add n.Ast.desc fidx fmap, fidx + 1)
                           | None -> (fmap, fidx + 1))
@@ -562,7 +563,13 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
       | {
           desc =
             T.Types
-              [| (_, { final = true; supertype = None; typ = T.Func f }) |];
+              [|
+                {
+                  Ast.desc =
+                    _, { final = true; supertype = None; typ = T.Func f };
+                  _;
+                };
+              |];
           _;
         }
         :: rest ->
@@ -573,12 +580,16 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
           desc =
             T.Types
               [|
-                ( _,
-                  {
-                    final = true;
-                    supertype = None;
-                    typ = T.Array { mut = true; typ = Packed I8 };
-                  } );
+                {
+                  Ast.desc =
+                    ( _,
+                      {
+                        final = true;
+                        supertype = None;
+                        typ = T.Array { mut = true; typ = Packed I8 };
+                      } );
+                  _;
+                };
               |];
           _;
         }

@@ -196,23 +196,11 @@
   (sub final $custom
     (struct
       (field (ref $custom_operations))
-      (field $ba_data (mut (ref extern)))
-      (field
-        ;; data
-        $ba_dim
-        (ref $int_array))
-      (field
-        ;; size in each dimension
-        $ba_num_dims
-        i8)
-      (field
-        ;; number of dimensions
-        $ba_kind
-        i8)
-      (field
-        ;; kind
-        $ba_layout
-        i8)))
+      (field $ba_data (mut (ref extern))) ;; data
+      (field $ba_dim (ref $int_array)) ;; size in each dimension
+      (field $ba_num_dims i8) ;; number of dimensions
+      (field $ba_kind i8) ;; kind
+      (field $ba_layout i8)))
 ) ;; layout
 
 (func $bigarray_hash (param (ref eq)) (result i32)
