@@ -21,7 +21,9 @@
 )
 (import "custom" "custom_hash_id"
   (func $custom_hash_id (param (ref eq)) (result i32))
-) (import "custom" "custom_next_id" (func $custom_next_id (result i64)))
+)
+(import "custom" "custom_next_id" (func $custom_next_id (result i64)))
+
 (type $string (array (mut i8)))
 (type $compare (func (param (ref eq) (ref eq) i32) (result i32)))
 (type $hash (func (param (ref eq)) (result i32)))
@@ -51,6 +53,7 @@
     (ref.func $custom_hash_id) (ref.null $fixed_length) (ref.null $serialize)
     (ref.null $deserialize) (ref.null $dup))
 )
+
 (type $mutex
   (sub final $custom_with_id
     (struct

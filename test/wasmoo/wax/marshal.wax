@@ -51,7 +51,10 @@ const caml_marshal_header_size: i32;
 
 const input_val_from_string: &string = string#"input_val_from_string";
 #[export = "caml_input_value_from_bytes"]
-#[export = "caml_input_value_from_string"]
+#[export
+    =
+
+    "caml_input_value_from_string"]
 fn caml_input_value_from_bytes(vstr: &eq, vofs: &eq) -> &eq {
     let str: &string;
     let ofs: i32;
@@ -79,6 +82,7 @@ fn caml_input_value(ch: &eq) -> &eq {
     let buf: &string;
     let s: &intern_state;
     let h: &marshal_header;
+    // ZZZ check binary channel?
     header = [string|0; 20];
     r = caml_really_getblock(ch, header, 0, 20);
     if !r { caml_raise_end_of_file(); }
@@ -386,7 +390,9 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
     sp = {stack_item| blk: res, pos: 0, next: null as &?stack_item };
     size = h.num_objects;
     if size { s.obj_table = [block|0 as &i31; size]; }
-    v = 0 as &i31;
+    v =
+        0 // keep validator happy
+            as &i31;
     'exit: do {
         'loop: loop {
             item = br_on_null 'exit sp;
@@ -403,10 +409,12 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                                 code = read8u(s);
                                 if code >=u PREFIX_SMALL_INT {
                                     if code >=u PREFIX_SMALL_BLOCK {
+                                        // Small block
                                         tag_2 = code & 0xF;
                                         size = code >>u 4 & 0x7;
                                         br 'read_block;
                                     } else {
+                                        // Small int
                                         v = (code & 0x3F) as &i31;
                                         br 'done;
                                     }
@@ -472,6 +480,7 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                                                                     'default
                                                                     ] code;
                                                                     }
+                                                                    // default
                                                                     caml_failwith
                                                                     ([string|
                                                                     ill_formed
@@ -481,6 +490,7 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                                                                     br 'done;
                                                                     }
                                                                     /* 'CUSTOM */
+                                                                    // CUSTOM
                                                                     v =
                                                                     intern_custom
                                                                     (s, code);
@@ -489,6 +499,7 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                                                                     br 'done;
                                                                     }
                                                                     /* 'CODEPOINTER */
+                                                                    // CODEPOINTER
                                                                     caml_failwith
                                                                     ([string|
                                                                     code_pointer
@@ -498,18 +509,21 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                                                                     br 'done;
                                                                     }
                                                                     /* 'DOUBLE_ARRAY32 */
+                                                                    // DOUBLE_ARRAY32
                                                                     len =
                                                                     read32(s);
                                                                     br
                                                                     'read_double_array;
                                                                     }
                                                                     /* 'DOUBLE_ARRAY8 */
+                                                                    // DOUBLE_ARRAY8
                                                                     len =
                                                                     read8u(s);
                                                                     br
                                                                     'read_double_array;
                                                                     }
                                                                     /* 'DOUBLE */
+                                                                    // DOUBLE
                                                                     v =
                                                                     {float|
                                                                     f:
@@ -521,18 +535,21 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                                                                     br 'done;
                                                                     }
                                                                     /* 'STRING32 */
+                                                                    // STRING32
                                                                     len =
                                                                     read32(s);
                                                                     br
                                                                     'read_string;
                                                                     }
                                                                     /* 'STRING8 */
+                                                                    // STRING8
                                                                     len =
                                                                     read8u(s);
                                                                     br
                                                                     'read_string;
                                                                     }
                                                                     /* 'BLOCK32 */
+                                                                    // BLOCK32
                                                                     header =
                                                                     read32(s);
                                                                     tag_2 =
@@ -545,17 +562,21 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                                                                     'read_block;
                                                                 }
                                                                 /* 'SHARED32 */
+                                                                // SHARED32
                                                                 ofs =
                                                                     read32(s);
                                                                 br
                                                                     'read_shared;
                                                             } /* 'SHARED16 */
+                                                            // SHARED16
                                                             ofs = read16u(s);
                                                             br 'read_shared;
                                                         } /* 'SHARED8 */
+                                                        // SHARED8
                                                         ofs = read8u(s);
                                                         br 'read_shared;
                                                     } /* 'INT64 */
+                                                    // INT64
                                                     caml_failwith
                                                         ([string|
                                                              integer_too_large
@@ -564,31 +585,38 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                                                              30]);
                                                     br 'done;
                                                 } /* 'INT32 */
+                                                // INT32
                                                 v = read32(s) as &i31;
                                                 br 'done;
                                             } /* 'INT16 */
+                                            // INT16
                                             v = read16s(s) as &i31;
                                             br 'done;
                                         } /* 'INT8 */
+                                        // INT8
                                         v = read8s(s) as &i31;
                                         br 'done;
                                     }
                                 }
                             } /* 'read_shared */
+                            // read_shared
                             ofs = s.obj_counter - ofs;
                             v = (s.obj_table!)[ofs];
                             br 'done;
                         } /* 'read_double_array */
+                        // read_double_array
                         v = readfloats(s, code, len);
                         register_object(s, v);
                         br 'done;
                     } /* 'read_string */
+                    // read_string
                     str = [string|0; len];
                     readblock(s, str);
                     v = str;
                     register_object(s, v);
                     br 'done;
                 } /* 'read_block */
+                // read_block
                 b = [block|0 as &i31; size + 1];
                 b[0] = tag_2 as &i31;
                 if size {
@@ -598,6 +626,7 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                 v = b;
                 br 'done;
             } /* 'done */
+            // done
             dest[pos] = v;
             br 'loop;
         } /* 'loop */
@@ -676,6 +705,10 @@ type extern_state = {
     output_first: &output_block,
     output_last: mut &output_block
 };
+// Flags
+// Header information
+// Position of already marshalled objects
+// Buffers
 
 fn init_extern_state
 (flags: &eq, output: &output_block, pos: i32, user_provided_output: i32) ->
@@ -943,6 +976,7 @@ fn extern_custom(s: &extern_state, v: &custom) -> (i32, i32) {
             }
             return (sz32, sz64);
         } /* 'variable_length */
+        // variable length
         write(s, CODE_CUSTOM_LEN);
         writeblock(s, ops.id);
         write(s, 0);
@@ -1049,6 +1083,7 @@ fn extern_rec(s: &extern_state, v: &eq) {
             if v is &js { caml_invalid_argument([string|js_value @ 0; 47]); }
             caml_invalid_argument([string|abstract_value @ 0; 28]);
         } /* 'next_item */
+        // next_item
         'done: do {
             item = br_on_null 'done sp;
             b = item.blk;
@@ -1171,6 +1206,7 @@ fn caml_output_value(ch: &eq, v: &eq, flags: &eq) -> &eq {
     let blk: &output_block;
     let len: i32;
     let res: &string;
+    // ZZZ check if binary channel?
     blk =
         {output_block|
             next: null as &?output_block,

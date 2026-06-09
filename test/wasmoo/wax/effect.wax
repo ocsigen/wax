@@ -42,6 +42,7 @@ type block = [mut &eq];
 type string = [mut i8];
 type function_1 = fn(&eq, &eq) -> &eq;
 type closure = open { f: &function_1 };
+/*(field i32)*/
 type function_3 = fn(&eq, &eq, &eq, &eq) -> &eq;
 type closure_3: closure = open { f: &function_1, f_2: &function_3 };
 
@@ -254,6 +255,7 @@ fn f_2(eff: &eq) -> &eq {
 
 fn call_handler(f: &eq, x: &eq) {
     let cont: &cont_2;
+    // Propagate a value or an exception to the parent fiber
     become cont.cont_func({pair| fst: f, snd: x }, cont := pop_fiber());
 }
 
@@ -261,6 +263,7 @@ fn call_handler(f: &eq, x: &eq) {
 fn caml_start_fiber(p: &?eq) {
     let exn: &eq;
     let res: &eq;
+    // Start executing some code in a new fiber
     res =
         try &eq {
             try &eq {

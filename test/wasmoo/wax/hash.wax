@@ -238,10 +238,12 @@ fn caml_hash(count: &eq, limit: &eq, seed: &eq, obj: &eq) -> &eq {
                         h = jsstring_hash(h, str);
                         0 as &i31;
                     };
+                // closures and continuations and other js values are ignored
                 br 'loop;
             } /* 'again */
         }
     } /* 'loop */
+    // clear the queue to avoid a memory leak
     caml_hash_queue.fill(0, 0 as &i31, wr);
     (caml_hash_mix_final(h) & 0x3FFFFFFF) as &i31;
 }

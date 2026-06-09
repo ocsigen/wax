@@ -228,8 +228,7 @@
     (local.set $d (i32.div_u (local.get $d) (i32.const 10)))
     (br_if $write (local.get $d)))
   (if (local.get $negative)
-    (then (array.set $string (local.get $s) (i32.const 0) (i32.const 45))))
-  ;; '-'
+    (then (array.set $string (local.get $s) (i32.const 0) (i32.const 45)))) ;; '-'
   (local.get $s)
 )
 
@@ -247,8 +246,7 @@
       (br_if $bad_format (i32.lt_u (local.get $len) (i32.const 2)))
       (br_if $bad_format
         (i32.ne (array.get_u $string (local.get $s) (i32.const 0))
-          (i32.const 37)))
-      ;; '%'
+          (i32.const 37))) ;; '%'
       (local.set $c (array.get_u $string (local.get $s) (i32.const 1)))
       (if (i32.eq (local.get $c) (i32.const 43)) ;; '+'
         (then
@@ -268,10 +266,8 @@
         (i32.or
           (i32.or
             (i32.eq (local.get $c) (i32.const 76)) ;; 'L'
-            (i32.eq (local.get $c) (i32.const 108)))
-          ;; 'l'
-          (i32.eq (local.get $c) (i32.const 110)))
-        ;; 'n'
+            (i32.eq (local.get $c) (i32.const 108))) ;; 'l'
+          (i32.eq (local.get $c) (i32.const 110))) ;; 'n'
         (then
           (local.set $i (i32.add (local.get $i) (i32.const 1)))
           (br_if $bad_format (i32.eq (local.get $i) (local.get $len)))
@@ -281,8 +277,7 @@
       (if
         (i32.or
           (i32.eq (local.get $c) (i32.const 100)) ;; 'd'
-          (i32.eq (local.get $c) (i32.const 105)))
-        ;; 'i'
+          (i32.eq (local.get $c) (i32.const 105))) ;; 'i'
         (then
           (local.set $base (i32.const 10))
           (local.set $signed (i32.const 1)))
@@ -322,8 +317,7 @@
     (then
       (if
         (i32.eq (array.get_u $string (local.get $s) (i32.const 1))
-          (i32.const 100))
-        ;; 'd'
+          (i32.const 100)) ;; 'd'
         (then (return_call $format_int_default (local.get $d))))))
   (call $parse_int_format (local.get $s))
   (local.set $uppercase)
@@ -368,24 +362,20 @@
     (local.set $d (i32.div_u (local.get $d) (local.get $base)))
     (br_if $write (local.get $d)))
   (if (local.get $negative)
-    (then (array.set $string (local.get $s) (i32.const 0) (i32.const 45)))
-    ;; '-'
+    (then (array.set $string (local.get $s) (i32.const 0) (i32.const 45))) ;; '-'
     (else
       (if (local.get $sign_style)
         (then
           (if (i32.eq (local.get $sign_style) (i32.const 1))
             (then
-              (array.set $string (local.get $s) (i32.const 0) (i32.const 43)))
-            ;; '+'
+              (array.set $string (local.get $s) (i32.const 0) (i32.const 43))) ;; '+'
             (else
-              (array.set $string (local.get $s) (i32.const 0) (i32.const 32))))))))
-  ;; ' '
+              (array.set $string (local.get $s) (i32.const 0) (i32.const 32)))))))) ;; ' '
   (if (local.get $alternate)
     (then
       (if (local.get $i)
         (then
-          (array.set $string (local.get $s) (i32.const 0) (i32.const 48))
-          ;; '0'
+          (array.set $string (local.get $s) (i32.const 0) (i32.const 48)) ;; '0'
           (if (i32.eq (local.get $base) (i32.const 16))
             (then
               (array.set $string (local.get $s) (i32.const 1)

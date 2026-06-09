@@ -49,6 +49,7 @@
 (import "sys" "caml_handle_sys_error"
   (func $caml_handle_sys_error (param externref))
 )
+
 (type $string (array (mut i8)))
 
 (func $caml_sys_getcwd (export "caml_sys_getcwd")

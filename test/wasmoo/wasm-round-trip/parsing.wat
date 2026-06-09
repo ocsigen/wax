@@ -34,7 +34,9 @@
 )
 (import "float" "caml_format_float"
   (func $caml_format_float (param (ref eq) (ref eq)) (result (ref eq)))
-) (type $float (struct (field $f f64))) (type $block (array (mut (ref eq))))
+)
+
+(type $float (struct (field $f f64))) (type $block (array (mut (ref eq))))
 (type $string (array (mut i8)))
 
 (func $get (param $a (ref eq)) (param $i i32) (result i32)
@@ -186,7 +188,8 @@
           (i31.get_u
             (ref.cast (ref i31)
               (array.get $block (local.get $b) (i32.const 0))))))
-      (call $output (@string $string "(" ))
+      (call $output (@string $string "(" ) ;; "("
+      )
       (local.set $v (array.get $block (local.get $b) (i32.const 1)))
       (if (ref.test (ref i31) (local.get $v))
         (then
@@ -200,8 +203,9 @@
                   (call $output
                     (call $caml_format_float (@string $string "%g" )
                       (local.get $v))))
-                (else (call $output (@string $string "_" ))))))))
-      (call $output (@string $string ")" ))
+                (else (call $output (@string $string "_" )))))))) ;; '_'
+      (call $output (@string $string ")" ) ;; ")"
+      )
       (call $output_nl)))
 )
 
@@ -285,9 +289,12 @@
                                 $ERROR_DETECTED $loop $testshift $shift
                                 $shift_recover $reduce $default
                                 (local.get $cmd)))
+                            ;; START:
                             (local.set $state (i32.const 0))
                             (local.set $errflag (i32.const 0)))
                           (; 'loop ;)
+                          ;; Fall through
+                          ;; loop:
                           (local.set $n
                             (call $get (local.get $tbl_defred_2)
                               (local.get $state)))
@@ -308,6 +315,7 @@
                           (local.set $res (global.get $READ_TOKEN))
                           (br $exit))
                         (; 'TOKEN_READ ;)
+                        ;; TOKEN_READ:
                         (block $cont
                           (drop
                             (block $not_block (result (ref eq))
@@ -348,6 +356,8 @@
                             (call $print_token (local.get $tables)
                               (local.get $state) (local.get $varg)))))
                       (; 'testshift ;)
+                      ;; Fall through
+                      ;; testshift:
                       (local.set $n1
                         (call $get (local.get $tbl_sindex_2)
                           (local.get $state)))
@@ -416,6 +426,8 @@
                           (local.set $res (global.get $CALL_ERROR_FUNCTION))
                           (br $exit))))
                     (; 'ERROR_DETECTED ;)
+                    ;; Fall through
+                    ;; ERROR_DETECTED:
                     (if (i32.lt_s (local.get $errflag) (i32.const 3))
                       (then
                         (local.set $errflag (i32.const 3))
@@ -511,6 +523,7 @@
                         (local.set $cmd (global.get $loop_2))
                         (br $next))))
                   (; 'shift ;)
+                  ;; shift:
                   (array.set $block (local.get $env)
                     (global.get $env_curr_char) (ref.i31 (i32.const -1)))
                   (if (i32.gt_s (local.get $errflag) (i32.const 0))
@@ -518,6 +531,8 @@
                       (local.set $errflag
                         (i32.sub (local.get $errflag) (i32.const 1))))))
                 (; 'shift_recover ;)
+                ;; Fall through
+                ;; shift_recover:
                 (if (global.get $caml_parser_trace)
                   (then
                     (call $output
@@ -543,6 +558,8 @@
                     (local.set $res (global.get $GROW_STACKS_1))
                     (br $exit))))
               (; 'STACKS_GROWN_1 ;)
+              ;; Fall through
+              ;; STACKS_GROWN_1:
               (array.set $block
                 (ref.cast (ref $block)
                   (array.get $block (local.get $env)
@@ -571,6 +588,7 @@
               (local.set $cmd (global.get $loop_2))
               (br $next))
             (; 'reduce ;)
+            ;; reduce:
             (if (global.get $caml_parser_trace)
               (then
                 (call $output
@@ -634,9 +652,12 @@
                       (global.get $env_stacksize)))))
               (then (local.set $res (global.get $GROW_STACKS_2)) (br $exit))))
           (; 'STACKS_GROWN_2 ;)
+          ;; Fall through
+          ;; STACKS_GROWN_2:
           (local.set $res (global.get $COMPUTE_SEMANTIC_ACTION))
           (br $exit))
         (; 'SEMANTIC_ACTION_COMPUTED ;)
+        ;; SEMANTIC_ACTION_COMPUTED:
         (array.set $block
           (ref.cast (ref $block)
             (array.get $block (local.get $env) (global.get $env_s_stack)))
@@ -662,6 +683,7 @@
             (i32.add (local.get $asp) (i32.const 1))))
         (if (i32.gt_s (local.get $sp) (local.get $asp))
           (then
+            ;; This is an epsilon production. Take symb_start equal to symb_end.
             (array.set $block
               (ref.cast (ref $block)
                 (array.get $block (local.get $env)
@@ -675,9 +697,11 @@
         (local.set $cmd (global.get $loop_2))
         (br $next))
       (; 'default ;)
+      ;; default:
       (return (ref.i31 (global.get $RAISE_PARSE_ERROR))))
     (; 'next ;)
   ) (; 'exit ;)
+  ;; SAVE
   (array.set $block (local.get $env) (global.get $env_sp)
     (ref.i31 (local.get $sp)))
   (array.set $block (local.get $env) (global.get $env_state)

@@ -111,6 +111,7 @@ type string = [mut i8];
 type js = { f: &?any };
 type function_1 = fn(&eq, &eq) -> &eq;
 type closure = open { f: &function_1 };
+/*(field i32)*/
 type function_2 = fn(&eq, &eq, &eq) -> &eq;
 type cps_closure = open { f: &function_2 };
 
@@ -388,7 +389,9 @@ fn caml_ojs_wrap_fun_arguments(x: &eq) -> &eq {
     become wrap(wrap_fun_arguments(wrap_callback_strict(1, x)));
 }
 
-#[export = "caml_callback"]
+#[export =
+    "caml_callback" // 0 ==> strict / 2 ==> unsafe
+    ]
 fn caml_callback(f: &eq, count: i32, args: &extern, kind: i32) -> &?any {
     let acc: &eq;
     let i: i32;
@@ -420,7 +423,10 @@ fn caml_callback(f: &eq, count: i32, args: &extern, kind: i32) -> &?any {
     become unwrap(acc);
 }
 #[export = "caml_jsstring_of_string"]
-#[export = "caml_js_from_string"]
+#[export
+    =
+
+    "caml_js_from_string"]
 fn caml_jsstring_of_string(x: &eq) -> &eq {
     let s: &string;
     s = x as &string;
@@ -468,7 +474,10 @@ fn caml_jsbytes_of_string(x: &eq) -> &eq {
     return {js| f: jsstring_of_string(s') };
 }
 #[export = "caml_string_of_jsstring"]
-#[export = "caml_js_to_string"]
+#[export
+    =
+
+    "caml_js_to_string"]
 fn caml_string_of_jsstring(s: &eq) -> &eq {
     become string_of_jsstring((s as &js).f);
 }
@@ -565,8 +574,8 @@ fn caml_list_of_js_array(x: &eq) -> &eq {
     l;
 }
 
-const jsError: &string = string#"jsError"
-    // 'jsError'
+const jsError: &string =
+    string#"jsError" // 'jsError'
     ;
 
 data toString = "toString";
@@ -575,6 +584,7 @@ data toString = "toString";
 fn caml_wrap_exception(x: &?extern) -> &eq {
     let exn: &?any;
     exn = x as &?any;
+    // ZZZ special case for stack overflows?
     'undef: do {
         return
             [block|

@@ -206,8 +206,7 @@
                         (i32.const 103))
                       (local.get $v))))
                 (else
-                  (call $output (array.new_fixed $string 1 (i32.const 95)))))))))
-      ;; '_'
+                  (call $output (array.new_fixed $string 1 (i32.const 95))))))))) ;; '_'
       (call $output (array.new_fixed $string 1 (i32.const 41))) ;; ")"
       (call $output_nl)))
 )

@@ -34,7 +34,9 @@
 )
 (import "js" "caml_js_html_entities"
   (func $caml_js_html_entities (param anyref) (result anyref))
-) (type $block (array (mut (ref eq))))
+)
+
+(type $block (array (mut (ref eq))))
 (type $string (array (mut i8)))
 
 (func $caml_js_on_ie_2 (export "caml_js_on_ie")

@@ -71,7 +71,10 @@ fn caml_hexstring_of_float(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
     sign = (b >>u 63) as i32;
     exp = (b >>u 52) as i32 & 0x7FF;
     m = b & (1 << 52) - 1;
-    i = sign | (style != 45);
+    i =
+        sign |
+            (style != 45 // '-'
+             );
     s =
         'sign: do &string {
             if exp == 0x7FF {
@@ -114,12 +117,16 @@ fn caml_hexstring_of_float(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
                 br_if 'write d;
             }
             s[len - 1] = exp >=s 0?43:45;
-            s[i] = 48;
-            s[i + 1] = 120;
-            s[i + 2] = (m >>u 52) as i32 + 48;
+            s[i] = 48 // '0'
+            ;
+            s[i + 1] = 120 // 'x'
+            ;
+            s[i + 2] = (m >>u 52) as i32 + 48 // '0'
+            ;
             i = i + 3;
             if prec >s 0 {
-                s[i] = 46;
+                s[i] = 46 // '.'
+                ;
                 i = i + 1;
                 frac = m << 12;
                 'write: loop {
@@ -133,7 +140,16 @@ fn caml_hexstring_of_float(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
             s[i] = 112;
             s;
         } /* 'sign */;
-    if sign { s[0] = 45; } else { if style != 45 { s[0] = style; } }
+    if sign {
+        s[0] = 45 // '-'
+        ;
+    } else {
+        if
+            style != 45 // '-'
+        {
+            s[0] = style;
+        }
+    }
     s;
 }
 
@@ -152,24 +168,42 @@ fn parse_format(s: &string) -> (i32, i32, i32, i32) {
     'return: do {
         'bad_format: do {
             br_if 'bad_format len <u 2;
-            br_if 'bad_format s[0] as i32_u != 37;
+            br_if 'bad_format s[0] as i32_u != 37 // '%'
+            ;
             c = s[1] as i32_u;
-            if c == 43 { sign_style = 1; i = i + 1; }
-            if c == 32 { sign_style = 2; i = i + 1; }
+            if
+                c == 43 // '+'
+            {
+                sign_style = 1;
+                i = i + 1;
+            }
+            if
+                c == 32 // ' '
+            {
+                sign_style = 2;
+                i = i + 1;
+            }
             br_if 'bad_format i == len;
-            br_if 'bad_format s[i] as i32_u != 46;
+            br_if 'bad_format s[i] as i32_u != 46 // '.'
+            ;
             'precision: loop {
                 i = i + 1;
                 br_if 'bad_format i == len;
                 c = s[i] as i32_u;
-                if (c >=u 48) & (c <=u 57) {
+                if
+                    (c >=u 48 // '0'
+                     ) &
+                        (c <=u 57 // '9'
+                         )
+                {
                     precision = precision * 10 + (c - 48);
                     br 'precision;
                 }
             } /* 'precision */
             br_if 'bad_format i + 1 != len;
             uppercase = c <s 96;
-            conversion = (c & 0xdf) - 69;
+            conversion = (c & 0xdf) - 69 // 'E'
+            ;
             br_if 'return conversion <=u 2;
         } /* 'bad_format */
         caml_invalid_argument([string|format_error @ 0; 22]);
@@ -227,18 +261,29 @@ fn caml_format_float(x: &eq, x_2: &eq) -> &eq {
             br 'sign s;
         } /* 'sign */;
     if negative {
-        s[0] = 45;
+        s[0] = 45 // '-'
+        ;
     } else {
         if sign_style {
-            if sign_style == 1 { s[0] = 43; } else { s[0] = 32; }
+            if sign_style == 1 {
+                s[0] = 43 // '+'
+                ;
+            } else { s[0] = 32; }
         }
-    }
+    } // ' '
     if uppercase {
         i = 0;
         len = s.length;
         'uppercase: loop {
             c = s[i] as i32_u;
-            if (c >=u 97) & (c <=u 122) { s[i] = c - 32; }
+            if
+                (c >=u 97 // 'a'
+                 ) &
+                    (c <=u 122 // 'z'
+                     )
+            {
+                s[i] = c - 32;
+            }
             i = i + 1;
             br_if 'uppercase i <u len;
         } /* 'uppercase */
@@ -268,22 +313,33 @@ fn caml_float_of_hex(s: &string, i: i32) -> f64 {
             if i <u len {
                 c = s[i] as i32_u;
                 i = i + 1;
-                if c == 46 {
+                if
+                    c == 46 // '.'
+                {
                     br_if 'error dec_point >=s 0;
                     dec_point = n_bits;
                     br 'parse;
                 }
-                if (c == 80) | (c == 112) {
+                if
+                    (c == 80 // 'P'
+                     ) |
+                        (c == 112 // 'p'
+                         )
+                {
                     br_if 'error i == len;
                     c = s[i] as i32_u;
                     i = i + 1;
-                    if c == 45 {
+                    if
+                        c == 45 // '-'
+                    {
                         negative = 1;
                         br_if 'error i == len;
                         c = s[i] as i32_u;
                         i = i + 1;
                     }
-                    if c == 43 {
+                    if
+                        c == 43 // '+'
+                    {
                         br_if 'error i == len;
                         c = s[i] as i32_u;
                         i = i + 1;
@@ -349,7 +405,8 @@ fn caml_float_of_hex(s: &string, i: i32) -> f64 {
 fn on_whitespace(s: &string, i: i32) -> i32 {
     let c: i32;
     c = s[i] as i32_u;
-    (c == 32) | (c - 9 <=u 4);
+    (c == 32 // ' '
+     ) | (c - 9 <=u 4);
 }
 
 #[export = "caml_float_of_string"]
@@ -366,7 +423,12 @@ fn caml_float_of_string(x: &eq) -> &eq {
     len = s.length;
     'count: loop {
         if i <u len {
-            if 95 == s[i] as i32_u { j = j + 1; }
+            if
+                95 // '_'
+                    == s[i] as i32_u
+            {
+                j = j + 1;
+            }
             i = i + 1;
             br 'count;
         }
@@ -379,7 +441,12 @@ fn caml_float_of_string(x: &eq) -> &eq {
             if i <u len {
                 c = s[i] as i32_u;
                 i = i + 1;
-                if c != 95 { s'[j] = c; j = j + 1; }
+                if
+                    c != 95 // '_'
+                {
+                    s'[j] = c;
+                    j = j + 1;
+                }
                 br 'copy;
             }
         } /* 'copy */
@@ -396,11 +463,24 @@ fn caml_float_of_string(x: &eq) -> &eq {
         br_if 'error i == len;
         br_if 'error on_whitespace(s, len - 1);
         c = s[0] as i32_u;
-        if c == 45 { negative = 1; i = 1; }
-        if c == 43 { i = 1; }
+        if
+            c == 45 // '-'
+        {
+            negative = 1;
+            i = 1;
+        }
+        if
+            c == 43 // '+'
+        {
+            i = 1;
+        }
         if i + 2 <u len {
-            if s[i] as i32_u == 48 {
-                if s[i + 1] as i32_u & 0xdf == 88 {
+            if
+                s[i] as i32_u == 48 // '0'
+            {
+                if
+                    s[i + 1] as i32_u & 0xdf == 88 // 'X'
+                {
                     f = caml_float_of_hex(s, i + 2);
                     if negative { f = -f; }
                     return {float| f: f };
@@ -409,22 +489,36 @@ fn caml_float_of_string(x: &eq) -> &eq {
         }
         if i + 3 == len {
             c = s[i] as i32_u;
-            if c & 0xdf == 78 {
+            if
+                c & 0xdf == 78 // 'N'
+            {
                 i = i + 1;
                 c = s[i] as i32_u;
-                if c & 0xdf == 65 {
+                if
+                    c & 0xdf == 65 // 'A'
+                {
                     i = i + 1;
                     c = s[i] as i32_u;
-                    if c & 0xdf == 78 { return {float| f: nan }; }
+                    if
+                        c & 0xdf == 78 // 'N'
+                    {
+                        return {float| f: nan };
+                    }
                 }
             }
-            if c & 0xdf == 73 {
+            if
+                c & 0xdf == 73 // 'I'
+            {
                 i = i + 1;
                 c = s[i] as i32_u;
-                if c & 0xdf == 78 {
+                if
+                    c & 0xdf == 78 // 'N'
+                {
                     i = i + 1;
                     c = s[i] as i32_u;
-                    if c & 0xdf == 70 {
+                    if
+                        c & 0xdf == 70 // 'F'
+                    {
                         return {float| f: negative?-inf:inf };
                     }
                 }
@@ -432,28 +526,44 @@ fn caml_float_of_string(x: &eq) -> &eq {
         }
         if i + 8 == len {
             c = s[i] as i32_u;
-            if c & 0xdf == 73 {
+            if
+                c & 0xdf == 73 // 'I'
+            {
                 i = i + 1;
                 c = s[i] as i32_u;
-                if c & 0xdf == 78 {
+                if
+                    c & 0xdf == 78 // 'N'
+                {
                     i = i + 1;
                     c = s[i] as i32_u;
-                    if c & 0xdf == 70 {
+                    if
+                        c & 0xdf == 70 // 'F'
+                    {
                         i = i + 1;
                         c = s[i] as i32_u;
-                        if c & 0xdf == 73 {
+                        if
+                            c & 0xdf == 73 // 'I'
+                        {
                             i = i + 1;
                             c = s[i] as i32_u;
-                            if c & 0xdf == 78 {
+                            if
+                                c & 0xdf == 78 // 'N'
+                            {
                                 i = i + 1;
                                 c = s[i] as i32_u;
-                                if c & 0xdf == 73 {
+                                if
+                                    c & 0xdf == 73 // 'I'
+                                {
                                     i = i + 1;
                                     c = s[i] as i32_u;
-                                    if c & 0xdf == 84 {
+                                    if
+                                        c & 0xdf == 84 // 'T'
+                                    {
                                         i = i + 1;
                                         c = s[i] as i32_u;
-                                        if c & 0xdf == 89 {
+                                        if
+                                            c & 0xdf == 89 // 'Y'
+                                        {
                                             return
                                                 {float|
                                                     f: negative?-inf:inf
@@ -497,13 +607,22 @@ fn caml_classify_float(x: f64) -> &eq {
     let a: f64;
     a = x.abs;
     (if a >= 0x1p-1022 => i32 {
-         if a < inf => i32 { 0; } else { 3; }
+         if a < inf => i32 {
+             0 // normal
+             ;
+         } else { 3; } // infinity
      } else {
-         if a == 0 => i32 { 2; } else { if a == a => i32 { 1; } else { 4; } }
+         if a == 0 => i32 {
+             2 // zero
+             ;
+         } else {
+             if a == a => i32 {
+                 1 // subnormal
+                 ;
+             } else { 4; }
+         }
      } as &i31);
-}
-// nan
-
+} // nan
 #[export = "caml_modf_float"]
 fn caml_modf_float(x: &eq) -> &eq {
     let x_2: f64;
@@ -513,12 +632,17 @@ fn caml_modf_float(x: &eq) -> &eq {
     x_2 = (x as &float).f;
     a = x_2.abs;
     if a >= 0 {
-        if a < inf {
+        if
+            a < inf // normal
+        {
             i = a.floor;
             f = a - i;
             i = i.copysign(x_2);
-            f = f.copysign(x_2);
-        } else { i = x_2; f = (0).copysign(x_2); }
+            f =
+                f.copysign
+                    (x_2 // infinity
+                    );
+        } else { i = x_2; f = (0).copysign(x_2); } // zero or nan
     } else { i = x_2; f = x_2; }
     [block|0 as &i31, {float| f: f }, {float| f: i }];
 }
@@ -528,6 +652,7 @@ fn ldexp(x: f64, n: i32) -> f64 {
         x = x * 0x1p1023;
         n = n - 1023;
         if n >s 1023 {
+            // subnormal
             x = x * 0x1p1023;
             n = n - 1023;
             if n >s 1023 { n = 1023; }

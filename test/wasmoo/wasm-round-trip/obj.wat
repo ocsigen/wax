@@ -27,27 +27,36 @@
 )
 (import "effect" "caml_trampoline_ref"
   (global $caml_trampoline_ref (mut (ref null $function_1)))
-) (type $block (array (mut (ref eq)))) (type $string (array (mut i8)))
+)
+
+(type $block (array (mut (ref eq)))) (type $string (array (mut i8)))
 (type $float (struct (field $f f64))) (type $float_array (array (mut f64)))
 (type $function_1 (func (param (ref eq) (ref eq)) (result (ref eq))))
-(type $closure (sub (struct (field $f (ref $function_1)))))
-(type $closure_last_arg (sub $closure (struct (field $f (ref $function_1)))))
+(type $closure (sub (struct (field $f (ref $function_1))))) (;(field i32);)
+(type $closure_last_arg
+  (sub $closure (struct (field $f (ref $function_1))))
+) (;(field i32);)
 (type $function_2
   (func (param (ref eq) (ref eq) (ref eq)) (result (ref eq)))
 ) (type $cps_closure (sub (struct (field $f (ref $function_2)))))
 (type $cps_closure_last_arg
   (sub $cps_closure (struct (field $f (ref $function_2))))
-) (type $int_array (array (mut i32)))
+)
+
+(type $int_array (array (mut i32)))
+
 (type $dummy_closure_1
   (sub final $closure_last_arg
     (struct
       (field $f (ref $function_1))
       (field $f_2 (mut (ref null $closure)))))
 )
+
 (type $closure_2
   (sub $closure
     (struct (field $f (ref $function_1)) (field $f_2 (ref $function_2))))
 )
+
 (type $dummy_closure_2
   (sub final $closure_2
     (struct
@@ -55,13 +64,16 @@
       (field $f_2 (ref $function_2))
       (field $f_3 (mut (ref null $closure_2)))))
 )
+
 (type $function_3
   (func (param (ref eq) (ref eq) (ref eq) (ref eq)) (result (ref eq)))
 )
+
 (type $closure_3
   (sub $closure
     (struct (field $f (ref $function_1)) (field $f_2 (ref $function_3))))
 )
+
 (type $dummy_closure_3
   (sub final $closure_3
     (struct
@@ -69,15 +81,18 @@
       (field $f_2 (ref $function_3))
       (field $f_3 (mut (ref null $closure_3)))))
 )
+
 (type $function_4
   (func
     (param (ref eq) (ref eq) (ref eq) (ref eq) (ref eq))
     (result (ref eq)))
 )
+
 (type $closure_4
   (sub $closure
     (struct (field $f (ref $function_1)) (field $f_2 (ref $function_4))))
 )
+
 (type $dummy_closure_4
   (sub final $closure_4
     (struct
@@ -85,6 +100,7 @@
       (field $f_2 (ref $function_4))
       (field $f_3 (mut (ref null $closure_4)))))
 )
+
 (type $cps_dummy_closure
   (sub final $cps_closure_last_arg
     (struct
@@ -251,6 +267,7 @@
 (func $caml_obj_block (export "caml_obj_block")
   (param $tag_2 (ref eq)) (param $size (ref eq)) (result (ref eq))
   (local $res (ref $block))
+  ;; ZZZ float array / specific types?
   (local.set $res
     (array.new $block (ref.i31 (i32.const 0))
       (i32.add (i31.get_s (ref.cast (ref i31) (local.get $size)))

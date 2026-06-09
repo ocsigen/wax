@@ -159,7 +159,9 @@ fn print_token(tables: &block, state: i32, tok: &eq) {
         output([string|read_token @ 0; 13]);
         b = tok as &block;
         output(token_name(tables[tbl_names_block], b[0] as &i31 as i32_u));
-        output(string#"(");
+        output
+            (string#"(" // "("
+            );
         v = b[1];
         if v is &i31 {
             output_int(v as &i31 as i32_s);
@@ -171,8 +173,10 @@ fn print_token(tables: &block, state: i32, tok: &eq) {
                     output(caml_format_float(string#"%g", v));
                 } else { output(string#"_"); }
             }
-        }
-        output(string#")");
+        } // '_'
+        output
+            (string#")" // ")"
+            );
         output_nl();
     }
 }
@@ -255,9 +259,12 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                                                                     ]
                                                                 cmd;
                                                         }
+                                                        // START:
                                                         state = 0;
                                                         errflag = 0;
                                                     } /* 'loop */
+                                                    // Fall through
+                                                    // loop:
                                                     n =
                                                         get
                                                             (tbl_defred_2,
@@ -277,6 +284,7 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                                                     res = READ_TOKEN;
                                                     br 'exit;
                                                 } /* 'TOKEN_READ */
+                                                // TOKEN_READ:
                                                 'cont: do {
                                                     _ =
                                                         'not_block: do &eq {
@@ -313,6 +321,8 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                                                         (tables, state, varg);
                                                 }
                                             } /* 'testshift */
+                                            // Fall through
+                                            // testshift:
                                             n1 = get(tbl_sindex_2, state);
                                             n2 =
                                                 n1 +
@@ -366,6 +376,8 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                                                 br 'exit;
                                             }
                                         } /* 'ERROR_DETECTED */
+                                        // Fall through
+                                        // ERROR_DETECTED:
                                         if errflag <s 3 {
                                             errflag = 3;
                                             'loop2: loop {
@@ -465,11 +477,14 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                                             br 'next;
                                         }
                                     } /* 'shift */
+                                    // shift:
                                     env[env_curr_char] = -1 as &i31;
                                     if errflag >s 0 {
                                         errflag = errflag - 1;
                                     }
                                 } /* 'shift_recover */
+                                // Fall through
+                                // shift_recover:
                                 if caml_parser_trace {
                                     output([string|State @ 0; 6]);
                                     output_int(state);
@@ -485,6 +500,8 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                                     br 'exit;
                                 }
                             } /* 'STACKS_GROWN_1 */
+                            // Fall through
+                            // STACKS_GROWN_1:
                             (env[env_s_stack] as &block)[sp + 1] =
                                 state as &i31;
                             (env[env_v_stack] as &block)[sp + 1] =
@@ -496,6 +513,7 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                             cmd = loop_2;
                             br 'next;
                         } /* 'reduce */
+                        // reduce:
                         if caml_parser_trace {
                             output([string|State @ 0; 6]);
                             output_int(state);
@@ -533,24 +551,30 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                             br 'exit;
                         }
                     } /* 'STACKS_GROWN_2 */
+                    // Fall through
+                    // STACKS_GROWN_2:
                     res = COMPUTE_SEMANTIC_ACTION;
                     br 'exit;
                 } /* 'SEMANTIC_ACTION_COMPUTED */
+                // SEMANTIC_ACTION_COMPUTED:
                 (env[env_s_stack] as &block)[sp + 1] = state as &i31;
                 (env[env_v_stack] as &block)[sp + 1] = varg;
                 asp = env[env_asp] as &i31 as i32_s;
                 (env[env_symb_end_stack] as &block)[sp + 1] =
                     (env[env_symb_end_stack] as &block)[asp + 1];
                 if sp >s asp {
+                    // This is an epsilon production. Take symb_start equal to symb_end.
                     (env[env_symb_start_stack] as &block)[sp + 1] =
                         (env[env_symb_end_stack] as &block)[asp + 1];
                 }
                 cmd = loop_2;
                 br 'next;
             } /* 'default */
+            // default:
             return RAISE_PARSE_ERROR as &i31;
         } /* 'next */
     } /* 'exit */
+    // SAVE
     env[env_sp] = sp as &i31;
     env[env_state] = state as &i31;
     env[env_errflag] = errflag as &i31;

@@ -50,8 +50,7 @@
 )
 (import "bindings" "ta_set_ui8"
   (func $ta_set_ui8 (param (ref extern) i32 i32))
-)
-;; ZZZ ??
+) ;; ZZZ ??
 (import "bindings" "ta_get_ui8"
   (func $ta_get_ui8 (param (ref extern) i32) (result i32))
 )
@@ -86,8 +85,10 @@
   (func $map_set (param (ref extern) i32 (ref $fd_offset)))
 )
 (import "bindings" "map_delete" (func $map_delete (param (ref extern) i32)))
+
 (type $block (array (mut (ref eq)))) (type $string (array (mut i8)))
 (type $offset_array (array (mut i64)))
+
 (type $compare (func (param (ref eq) (ref eq) i32) (result i32)))
 (type $hash (func (param (ref eq)) (result i32)))
 (type $fixed_length (struct (field $bsize_32 i32) (field $bsize_64 i32)))
@@ -116,6 +117,7 @@
     (ref.func $custom_hash_id) (ref.null $fixed_length) (ref.null $serialize)
     (ref.null $deserialize) (ref.null $dup))
 )
+
 (type $channel
   (sub final $custom_with_id
     (struct
@@ -128,6 +130,7 @@
       (field $size (mut i32))
       (field $unbuffered (mut i32))))
 )
+
 (type $fd_offset
   (struct (field $offset (mut i64)) (field $seeked (mut i32)))
 )
@@ -163,6 +166,7 @@
 )
 
 (global $IO_BUFFER_SIZE i32 (i32.const 65536))
+
 (type $open_flags (array i8))
 ;;  1 O_RDONLY
 ;;  2 O_WRONLY
@@ -207,7 +211,7 @@
           (call $unwrap (call $caml_jsstring_of_string (local.get $path)))
           (local.get $flags)
           (i31.get_u (ref.cast (ref i31) (local.get $perm)))))
-      (if (i32.and (local.get $flags) (i32.const 4))
+      (if (i32.and (local.get $flags) (i32.const 4)) ;; O_APPEND
         (then (local.set $offset (call $file_size (local.get $fd))))))
     (catch $javascript_exception (call $caml_handle_sys_error)))
   (call $initialize_fd_offset (local.get $fd) (local.get $offset))
@@ -276,7 +280,9 @@
       (call $release_fd_offset (local.get $fd))
       (try
         (do (call $close (local.get $fd)))
-        (catch $javascript_exception (drop)))))
+        (catch $javascript_exception
+          ;; ignore exception
+          (drop)))))
   (ref.i31 (i32.const 0))
 )
 
@@ -499,6 +505,7 @@
         (i32.sub (struct.get $channel $max (local.get $ch))
           (i32.wrap_i64 (i64.sub (local.get $offset) (local.get $dest))))))
     (else
+      ;; ZZZ Check for error
       (struct.set $fd_offset $offset (local.get $fd_offset) (local.get $dest))
       (struct.set $fd_offset $seeked (local.get $fd_offset) (i32.const 1))
       (struct.set $channel $curr (local.get $ch) (i32.const 0))
@@ -523,6 +530,7 @@
   (local $ch (ref $channel)) (local $fd_offset (ref $fd_offset))
   (local.set $ch (ref.cast (ref $channel) (local.get $vch)))
   (call $caml_flush (local.get $ch))
+  ;; ZZZ Check for error
   (local.set $fd_offset
     (call $get_fd_offset (struct.get $channel $fd (local.get $ch))))
   (struct.set $fd_offset $offset (local.get $fd_offset)
@@ -536,6 +544,7 @@
   (local $ch (ref $channel)) (local $fd_offset (ref $fd_offset))
   (local.set $ch (ref.cast (ref $channel) (local.get $vch)))
   (call $caml_flush (local.get $ch))
+  ;; ZZZ Check for error
   (local.set $fd_offset
     (call $get_fd_offset (struct.get $channel $fd (local.get $ch))))
   (struct.set $fd_offset $offset (local.get $fd_offset)
@@ -586,7 +595,8 @@
         (struct.set $channel $max (local.get $ch)
           (i32.add (struct.get $channel $max (local.get $ch)) (local.get $n)))))
     (if
-      (i32.eq (i32.const 10)
+      (i32.eq
+        (i32.const 10) ;; '\n'
         (call $ta_get_ui8 (struct.get $channel $buffer (local.get $ch))
           (local.get $p)))
       (then
@@ -693,7 +703,9 @@
   (; 'loop ;)
 )
 (func $caml_ml_output (export "caml_ml_output")
-  (export "caml_ml_output_bytes")
+  (export
+
+    "caml_ml_output_bytes")
   (param $ch (ref eq)) (param $s (ref eq)) (param $vpos (ref eq))
   (param $vlen (ref eq)) (result (ref eq))
   (local $pos i32) (local $len i32) (local $written i32)
@@ -771,6 +783,7 @@
 
 (func $caml_ml_channel_size (export "caml_ml_channel_size")
   (param $x (ref eq)) (result (ref eq))
+  ;; ZZZ check for overflow
   (ref.i31
     (i32.wrap_i64
       (call $file_size (call $caml_ml_get_channel_fd (local.get $x)))))

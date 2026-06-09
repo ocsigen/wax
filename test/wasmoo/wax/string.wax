@@ -22,7 +22,10 @@ fn caml_invalid_argument(arg: &eq);
 
 type string = [mut i8];
 #[export = "caml_string_equal"]
-#[export = "caml_bytes_equal"]
+#[export
+    =
+
+    "caml_bytes_equal"]
 fn caml_string_equal(p1: &eq, p2: &eq) -> &eq {
     let s1: &string;
     let s2: &string;
@@ -44,7 +47,10 @@ fn caml_string_equal(p1: &eq, p2: &eq) -> &eq {
     1 as &i31;
 }
 #[export = "caml_string_notequal"]
-#[export = "caml_bytes_notequal"]
+#[export
+    =
+
+    "caml_bytes_notequal"]
 fn caml_string_notequal(p1: &eq, p2: &eq) -> &eq {
     return !(caml_string_equal(p1, p2) as &i31 as i32_u) as &i31;
 }
@@ -80,32 +86,50 @@ fn string_compare(p1: &eq, p2: &eq) -> i32 {
     0;
 }
 #[export = "caml_string_compare"]
-#[export = "caml_bytes_compare"]
+#[export
+    =
+
+    "caml_bytes_compare"]
 fn caml_string_compare(x: &eq, x_2: &eq) -> &eq {
     string_compare(x, x_2) as &i31;
 }
 #[export = "caml_string_lessequal"]
-#[export = "caml_bytes_lessequal"]
+#[export
+    =
+
+    "caml_bytes_lessequal"]
 fn caml_string_lessequal(x: &eq, x_2: &eq) -> &eq {
     (string_compare(x, x_2) <=s 0) as &i31;
 }
 #[export = "caml_string_lessthan"]
-#[export = "caml_bytes_lessthan"]
+#[export
+    =
+
+    "caml_bytes_lessthan"]
 fn caml_string_lessthan(x: &eq, x_2: &eq) -> &eq {
     (string_compare(x, x_2) <s 0) as &i31;
 }
 #[export = "caml_string_greaterequal"]
-#[export = "caml_bytes_greaterequal"]
+#[export
+    =
+
+    "caml_bytes_greaterequal"]
 fn caml_string_greaterequal(x: &eq, x_2: &eq) -> &eq {
     (string_compare(x, x_2) >=s 0) as &i31;
 }
 #[export = "caml_string_greaterthan"]
-#[export = "caml_bytes_greaterthan"]
+#[export
+    =
+
+    "caml_bytes_greaterthan"]
 fn caml_string_greaterthan(x: &eq, x_2: &eq) -> &eq {
     (string_compare(x, x_2) >s 0) as &i31;
 }
 #[export = "caml_string_of_bytes"]
-#[export = "caml_bytes_of_string"]
+#[export
+    =
+
+    "caml_bytes_of_string"]
 fn caml_string_of_bytes(v: &eq) -> &eq { v; }
 
 data Bytes_create = "Bytes.create";
@@ -118,7 +142,10 @@ fn caml_create_bytes(len: &eq) -> &eq {
     [string|0; l];
 }
 #[export = "caml_blit_string"]
-#[export = "caml_blit_bytes"]
+#[export
+    =
+
+    "caml_blit_bytes"]
 fn caml_blit_string(v1: &eq, i1: &eq, v2: &eq, i2: &eq, n: &eq) -> &eq {
     (v2 as &string).copy
         (i2 as &i31 as i32_s, v1 as &string, i1 as &i31 as i32_s,
@@ -133,7 +160,10 @@ fn caml_fill_bytes(v: &eq, offset: &eq, len: &eq, init: &eq) -> &eq {
     0 as &i31;
 }
 #[export = "caml_bytes_get16"]
-#[export = "caml_string_get16"]
+#[export
+    =
+
+    "caml_string_get16"]
 fn caml_bytes_get16(v: &eq, i: &eq) -> &eq {
     let s: &string;
     let p: i32;
@@ -144,7 +174,10 @@ fn caml_bytes_get16(v: &eq, i: &eq) -> &eq {
     (s[p] as i32_u | s[p + 1] as i32_u << 8) as &i31;
 }
 #[export = "caml_bytes_get32"]
-#[export = "caml_string_get32"]
+#[export
+    =
+
+    "caml_string_get32"]
 fn caml_bytes_get32(v: &eq, i: &eq) -> i32 {
     let s: &string;
     let p: i32;
@@ -156,7 +189,10 @@ fn caml_bytes_get32(v: &eq, i: &eq) -> i32 {
         (s[p + 2] as i32_u << 16 | s[p + 3] as i32_u << 24);
 }
 #[export = "caml_bytes_get64"]
-#[export = "caml_string_get64"]
+#[export
+    =
+
+    "caml_string_get64"]
 fn caml_bytes_get64(v: &eq, i: &eq) -> i64 {
     let s: &string;
     let p: i32;

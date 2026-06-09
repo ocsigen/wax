@@ -42,6 +42,7 @@ type ctx = {
   indent_level : int;
   trivia : Trivia.t;
   seen : (Ast.location, unit) Hashtbl.t;
+  collect : (Ast.location, unit) Hashtbl.t option;
 }
 
 let _ = (Compact, Hybrid, Adaptive)
@@ -58,11 +59,13 @@ let print_styled ctx style ?(len = None) text =
 (* The rendering logic is shared with the Wax printer in [Utils.Trivia]. *)
 let comment ctx s = print_styled ctx Comment s
 let print_trivia ctx lst = Trivia.print ctx.printer ~comment:(comment ctx) lst
-let get_trivia ctx loc = Trivia.get ctx.trivia ~seen:ctx.seen loc
+
+let get_trivia ctx loc =
+  Trivia.get ?collect:ctx.collect ctx.trivia ~seen:ctx.seen loc
 
 let atomic_node ctx (loc : Ast.location option) f =
-  Trivia.around ctx.printer ~comment:(comment ctx) ctx.trivia ~seen:ctx.seen loc
-    f
+  Trivia.around ?collect:ctx.collect ctx.printer ~comment:(comment ctx)
+    ctx.trivia ~seen:ctx.seen loc f
 
 let string_node ctx loc style len s =
   atomic_node ctx loc @@ fun () -> print_styled ctx style ~len s
@@ -1137,9 +1140,9 @@ let instrs l =
       in
       [ Vertical_block (Some first.Ast.info, sexps) ]
 
-let subtype t =
+let subtype ?loc t =
   let id, { typ; supertype; final } = t.Ast.desc in
-  let loc = Some t.Ast.info in
+  let loc = match loc with Some _ -> loc | None -> Some t.Ast.info in
   if final && Option.is_none supertype then
     list ?loc [ block (keyword "type" :: opt_id id); block [ comptype typ ] ]
   else
@@ -1203,7 +1206,10 @@ let function_indices lst =
 let rec modulefield f =
   let loc = f.Ast.info in
   match f.Ast.desc with
-  | Types [| t |] -> subtype t
+  (* Carry the field location (which spans the whole type definition) so a
+     leading comment or blank line attaches before the type rather than to its
+     inner name — the array element itself is built with a dummy location. *)
+  | Types [| t |] -> subtype ~loc t
   | Types l -> list ~loc (keyword "rec" :: List.map subtype (Array.to_list l))
   | Func { id; typ; locals; instrs = i; exports = e } ->
       let local_sexp idx e =
@@ -1382,7 +1388,7 @@ let rec modulefield f =
         @ option (fun e -> [ clause "else" e ]) else_fields
         @ [ atom ~style:Annotation ")" ])
 
-let module_ ?(color = Auto) ?out_channel ?(tail = []) printer ~trivia
+let module_ ?(color = Auto) ?out_channel ?(tail = []) ?collect printer ~trivia
     (id, fields) =
   let use_color = should_use_color ~color ~out_channel in
   let theme = get_theme use_color in
@@ -1394,6 +1400,7 @@ let module_ ?(color = Auto) ?out_channel ?(tail = []) printer ~trivia
       indent_level = 2;
       trivia;
       seen = Hashtbl.create 16;
+      collect;
     }
   in
   let sexp =
@@ -1427,5 +1434,6 @@ let instr printer i =
       indent_level = 2;
       trivia = Hashtbl.create 16;
       seen = Hashtbl.create 16;
+      collect = None;
     }
     (instr i)

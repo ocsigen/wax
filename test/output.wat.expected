@@ -202,7 +202,6 @@
       (field $ba_kind i8) ;; kind
       (field $ba_layout i8)))
 ) ;; layout
-
 (func $bigarray_hash (param (ref eq)) (result i32)
   (local $b (ref $bigarray)) (local $h i32) (local $len i32) (local $i i32)
   (local $w i32) (local $data (ref extern))

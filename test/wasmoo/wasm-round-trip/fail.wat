@@ -21,7 +21,9 @@
 (tag $javascript_exception (export "javascript_exception")
   (import "bindings" "jstag")
   (param externref)
-) (type $block (array (mut (ref eq))))
+)
+
+(type $block (array (mut (ref eq))))
 (type $string (array (mut i8)))
 
 (tag $ocaml_exception (export "ocaml_exception") (param (ref eq)))

@@ -21,7 +21,11 @@
 (import "wasm:js-string" "test"
   (func $is_string (param externref) (result i32))
 )
-(func $hash_string (export "jsstring_hash") (import "wasm:js-string" "hash")
+(func $hash_string
+  (export
+
+    "jsstring_hash")
+  (import "wasm:js-string" "hash")
   (param i32 anyref) (result i32)
 )
 (import "wasm:js-string" "fromCharCodeArray"
@@ -48,7 +52,9 @@
 )
 (import "bindings" "append_string"
   (func $append_string (param anyref anyref) (result anyref))
-) (type $string (array (mut i8)))
+)
+
+(type $string (array (mut i8)))
 (type $wstring (array (mut i16)))
 
 (global $text_converters_available (mut i32) (i32.const 0))
@@ -60,6 +66,8 @@
 )
 
 (func $init
+  ;; Our dummy implementation of string conversion always returns
+  ;; the empty string.
   (global.set $text_converters_available
     (i32.ne (i32.const 0)
       (call $compare_strings
@@ -206,6 +214,7 @@
         (br $loop))))
   (; 'loop ;)
 )
+
 (type $stack
   (struct (field $s (ref $string)) (field $next (ref null $stack)))
 )

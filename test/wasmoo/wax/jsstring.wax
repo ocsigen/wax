@@ -20,7 +20,10 @@ fn compare_strings(&?extern, &?extern) -> i32;
 #[import = ("wasm:js-string", "test")]
 fn is_string(&?extern) -> i32;
 #[import = ("wasm:js-string", "hash")]
-#[export = "jsstring_hash"]
+#[export
+    =
+
+    "jsstring_hash"]
 fn hash_string(i32, &?any) -> i32;
 #[import = ("wasm:js-string", "fromCharCodeArray")]
 fn fromCharCodeArray(&?wstring, i32, i32) -> &extern;
@@ -49,6 +52,8 @@ const utf16_buffer_size: i32 = 32768;
 let buffer: &wstring = [wstring|0; 0];
 
 fn init() {
+    // Our dummy implementation of string conversion always returns
+    // the empty string.
     text_converters_available =
         0 !=
             compare_strings

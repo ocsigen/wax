@@ -24,7 +24,9 @@
 )
 (import "string" "caml_string_equal"
   (func $caml_string_equal (param (ref eq) (ref eq)) (result (ref eq)))
-) (type $string (array (mut i8)))
+)
+
+(type $string (array (mut i8)))
 (type $compare (func (param (ref eq) (ref eq) i32) (result i32)))
 (type $hash (func (param (ref eq)) (result i32)))
 (type $fixed_length (struct (field $bsize_32 i32) (field $bsize_64 i32)))
@@ -41,7 +43,9 @@
     (field $serialize (ref null $serialize))
     (field $deserialize (ref null $deserialize))
     (field $dup (ref null $dup)))
-) (type $custom (sub (struct (field $f (ref $custom_operations)))))
+)
+(type $custom (sub (struct (field $f (ref $custom_operations)))))
+
 (type $custom_with_id
   (sub $custom (struct (field $f (ref $custom_operations)) (field $id i64)))
 )
@@ -90,6 +94,7 @@
   (global.set $next_id (i64.add (local.get $id) (i64.const 1)))
   (local.get $id)
 )
+
 (type $custom_operations_list
   (struct
     (field $ops (ref $custom_operations))

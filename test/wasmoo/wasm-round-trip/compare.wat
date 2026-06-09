@@ -40,9 +40,13 @@
 )
 (import "jsstring" "jsstring_compare"
   (func $jsstring_compare (param anyref anyref) (result i32))
-) (type $block (array (mut (ref eq)))) (type $string (array (mut i8)))
+)
+
+(type $block (array (mut (ref eq)))) (type $string (array (mut i8)))
 (type $float (struct (field $f f64))) (type $float_array (array (mut f64)))
-(type $js (struct (field $f anyref))) (type $int_array (array (mut i32)))
+(type $js (struct (field $f anyref)))
+
+(type $int_array (array (mut i32)))
 (type $block_array (array (mut (ref $block))))
 (type $compare_stack
   (struct
@@ -50,7 +54,11 @@
     (field $f_2 (ref $block_array))
     (field $f_3 (ref $block_array))
     (field $f_4 (ref $int_array)))
-) (type $compare (func (param (ref eq) (ref eq) i32) (result i32)))
+) ;; position in stack
+;; first value
+;; second value
+;; position in value
+(type $compare (func (param (ref eq) (ref eq) i32) (result i32)))
 (type $hash (func (param (ref eq)) (result i32)))
 (type $fixed_length (struct (field $bsize_32 i32) (field $bsize_64 i32)))
 (type $serialize (func (param (ref eq) (ref eq)) (result i32 i32)))
@@ -187,6 +195,7 @@
 
 (func $clear_compare_stack
   (local $stack (ref $compare_stack)) (local $n i32) (local $res i32)
+  ;; clear stack (to avoid memory leaks)
   (local.set $stack (global.get $default_compare_stack))
   (local.set $n (struct.get $compare_stack $f (local.get $stack)))
   (if (i32.ge_s (local.get $n) (i32.const 0))
@@ -242,9 +251,11 @@
               (local.set $i2
                 (br_on_cast_fail $v2_is_not_int (ref eq) (ref i31)
                   (local.get $v2)))
+              ;; v1 and v2 are both integers
               (return
                 (i32.sub (i31.get_s (local.get $i1))
                   (i31.get_s (local.get $i2))))))
+          ;; check for forward tag
           (drop
             (block $v2_not_forward (result (ref eq))
               (local.set $b2
@@ -276,11 +287,13 @@
                         (struct.get $custom $f (local.get $c2))))))
                 (br_if $next_item (i32.eqz (local.get $res)))
                 (return (local.get $res)))))
+          ;; v1 long < v2 block
           (return (i32.const -1)))
         (; 'v1_is_not_int ;)
       )
       (if (ref.test (ref i31) (local.get $v2))
         (then
+          ;; check for forward tag
           (drop
             (block $v1_not_forward (result (ref eq))
               (local.set $b1
@@ -312,6 +325,7 @@
                         (struct.get $custom $f (local.get $c1))))))
                 (br_if $next_item (i32.eqz (local.get $res)))
                 (return (local.get $res)))))
+          ;; v1 block > v1 long
           (return (i32.const 1))))
       (drop
         (block $heterogeneous (result (ref eq))
@@ -334,6 +348,7 @@
               (drop
                 (br_if $heterogeneous (ref.i31 (i32.const 0))
                   (i32.ne (local.get $t1) (local.get $t2))))
+              ;; forward tag
               (if (i32.eq (local.get $t1) (global.get $forward_tag))
                 (then
                   (local.set $v1
@@ -353,6 +368,7 @@
                       (i31.get_s (ref.cast (ref i31) (local.get $v2)))))))
               (local.set $s1 (array.len (local.get $b1)))
               (local.set $s2 (array.len (local.get $b2)))
+              ;; compare size first
               (if (i32.ne (local.get $s1) (local.get $s2))
                 (then (return (i32.sub (local.get $s1) (local.get $s2)))))
               (br_if $next_item (i32.eq (local.get $s1) (i32.const 1)))
@@ -500,6 +516,8 @@
                 (br_if $next_item (i32.eqz (local.get $res)))
                 (return (local.get $res)))
               (; 'not_jsstring ;)
+              ;; We cannot order two JavaScript objects,
+              ;; but we can tell whether they are equal or not
               (if (i32.eqz (local.get $total))
                 (then
                   (br_if $next_item
@@ -527,8 +545,9 @@
                 (array.new_data $string $continuation_value (i32.const 0)
                   (i32.const 27)))))
           (ref.i31 (i32.const 0)))
-        (; 'heterogeneous ;)
+        (; 'heterogeneous ;) ;; fall through
       )
+      ;; heterogeneous comparison
       (local.set $t1
         (i31.get_u (ref.cast (ref i31) (call $caml_obj_tag (local.get $v1)))))
       (local.set $t2

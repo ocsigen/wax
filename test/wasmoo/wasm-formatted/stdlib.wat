@@ -230,7 +230,6 @@
                   (i32.const 23))
                 (call $caml_string_concat
                   (call $caml_format_exception (local.get $exn))
-                  (array.new_fixed $string 1 (i32.const 10))))))))
-      ;; `\n`
+                  (array.new_fixed $string 1 (i32.const 10)))))))) ;; `\n`
       (call $exit (i32.const 2))))
 )

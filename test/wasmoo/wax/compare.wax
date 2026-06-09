@@ -51,9 +51,10 @@ type compare_stack = {
     f_2: &block_array,
     f_3: &block_array,
     f_4: &int_array
-};
-// position in value
-
+}; // position in stack
+ // first value
+ // second value
+ // position in value
 type compare = fn(&eq, &eq, i32) -> i32;
 type hash = fn(&eq) -> i32;
 type fixed_length = { bsize_32: i32, bsize_64: i32 };
@@ -167,6 +168,7 @@ fn clear_compare_stack() {
     let stack: &compare_stack;
     let n: i32;
     let res: i32;
+    // clear stack (to avoid memory leaks)
     stack = default_compare_stack;
     n = stack.f;
     if n >=s 0 {
@@ -223,8 +225,10 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
                     _ =
                         'v2_is_not_int: do &eq {
                             i2 = br_on_cast_fail 'v2_is_not_int &i31 v2;
+                            // v1 and v2 are both integers
                             return i1 as i32_s - i2 as i32_s;
                         };
+                    // check for forward tag
                     _ =
                         'v2_not_forward: do &eq {
                             b2 = br_on_cast_fail 'v2_not_forward &block v2;
@@ -245,9 +249,11 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
                                 return res;
                             };
                     }
+                    // v1 long < v2 block
                     return -1;
                 } /* 'v1_is_not_int */;
             if v2 is &i31 {
+                // check for forward tag
                 _ =
                     'v1_not_forward: do &eq {
                         b1 = br_on_cast_fail 'v1_not_forward &block v1;
@@ -267,6 +273,7 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
                             return res;
                         };
                 }
+                // v1 block > v1 long
                 return 1;
             }
             _ =
@@ -278,6 +285,7 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
                             b2 = br_on_cast_fail 'heterogeneous &block v2;
                             t2 = b2[0] as &i31 as i32_u;
                             _ = br_if 'heterogeneous (0 as &i31, t1 != t2);
+                            // forward tag
                             if t1 == forward_tag {
                                 v1 = b1[1];
                                 v2 = b2[1];
@@ -292,6 +300,7 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
                             }
                             s1 = b1.length;
                             s2 = b2.length;
+                            // compare size first
                             if s1 != s2 { return s1 - s2; }
                             br_if 'next_item s1 == 1;
                             if s1 >u 2 {
@@ -383,6 +392,8 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
                                 br_if 'next_item !res;
                                 return res;
                             } /* 'not_jsstring */
+                            // We cannot order two JavaScript objects,
+                            // but we can tell whether they are equal or not
                             if !total {
                                 br_if 'next_item equals(js1, js2);
                                 return unordered;
@@ -406,7 +417,9 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
                             ([string|continuation_value @ 0; 27]);
                     }
                     0 as &i31;
-                } /* 'heterogeneous */;
+                } /* 'heterogeneous */ // fall through
+            ;
+            // heterogeneous comparison
             t1 = caml_obj_tag(v1) as &i31 as i32_u;
             t2 = caml_obj_tag(v2) as &i31 as i32_u;
             if t1 == forward_tag { v1 = (v1 as &block)[1]; br 'loop; }

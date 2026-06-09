@@ -43,13 +43,17 @@
 (import "fail" "ocaml_exception" (tag $ocaml_exception (param (ref eq))))
 (import "bindings" "exit" (func $exit (param i32)))
 (import "bindings" "throw" (func $throw_2 (param externref)))
-(type $block (array (mut (ref eq)))) (type $string (array (mut i8)))
+
+(type $block (array (mut (ref eq))))
+(type $string (array (mut i8)))
+
 (type $assoc
   (struct
     (field $f (ref $string))
     (field $f_2 (mut (ref eq)))
     (field $f_3 (mut (ref null $assoc))))
 )
+
 (type $assoc_array (array (mut (ref null $assoc))))
 
 (global $Named_value_size i32 (i32.const 13))
@@ -180,6 +184,7 @@
   (param $x (ref eq)) (result (ref eq))
   (global.get $caml_global_data)
 )
+
 (type $func_2 (func (result (ref eq))))
 
 (data $fatal_error "Fatal error: exception ")
@@ -233,6 +238,6 @@
                 (call $caml_string_concat
                   (call $caml_format_exception (local.get $exn))
                   (@string $string "\n" )))))))
-      (; 'exit ;)
+      (; 'exit ;) ;; `\n`
       (call $exit (i32.const 2))))
 ) (elem declare func $reraise_exception)

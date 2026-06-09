@@ -236,8 +236,7 @@
     (local.set $d (i64.div_u (local.get $d) (i64.const 10)))
     (br_if $write (i64.ne (local.get $d) (i64.const 0))))
   (if (local.get $negative)
-    (then (array.set $string (local.get $s) (i32.const 0) (i32.const 45))))
-  ;; '-'
+    (then (array.set $string (local.get $s) (i32.const 0) (i32.const 45)))) ;; '-'
   (local.get $s)
 )
 
@@ -255,8 +254,7 @@
     (then
       (if
         (i32.eq (array.get_u $string (local.get $s) (i32.const 1))
-          (i32.const 100))
-        ;; 'd'
+          (i32.const 100)) ;; 'd'
         (then (return_call $format_int64_default (local.get $d))))))
   (call $parse_int_format (local.get $s))
   (local.set $uppercase)
@@ -295,24 +293,20 @@
     (local.set $d (i64.div_u (local.get $d) (local.get $base)))
     (br_if $write (i64.ne (local.get $d) (i64.const 0))))
   (if (local.get $negative)
-    (then (array.set $string (local.get $s) (i32.const 0) (i32.const 45)))
-    ;; '-'
+    (then (array.set $string (local.get $s) (i32.const 0) (i32.const 45))) ;; '-'
     (else
       (if (local.get $sign_style)
         (then
           (if (i32.eq (local.get $sign_style) (i32.const 1))
             (then
-              (array.set $string (local.get $s) (i32.const 0) (i32.const 43)))
-            ;; '+'
+              (array.set $string (local.get $s) (i32.const 0) (i32.const 43))) ;; '+'
             (else
-              (array.set $string (local.get $s) (i32.const 0) (i32.const 32))))))))
-  ;; ' '
+              (array.set $string (local.get $s) (i32.const 0) (i32.const 32)))))))) ;; ' '
   (if (local.get $alternate)
     (then
       (if (local.get $i)
         (then
-          (array.set $string (local.get $s) (i32.const 0) (i32.const 48))
-          ;; '0'
+          (array.set $string (local.get $s) (i32.const 0) (i32.const 48)) ;; '0'
           (if (i64.eq (local.get $base) (i64.const 16))
             (then
               (array.set $string (local.get $s) (i32.const 1)

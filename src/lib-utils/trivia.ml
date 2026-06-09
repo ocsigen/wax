@@ -94,8 +94,18 @@ let with_pos ctx info desc =
   ctx.locations <- info :: ctx.locations;
   { Ast.desc; info }
 
-let associate ctx =
-  let tbl = Hashtbl.create (List.length ctx.locations) in
+let associate ?only ctx =
+  (* Only consider locations the caller will actually look up while printing
+     (when [only] is given). A comment otherwise risks being attached to a node
+     that the printer never emits trivia for — e.g. a struct-field label printed
+     via its [.desc] only — and would then be silently dropped. Restricting to
+     emitted locations makes every comment bubble up to a location that prints. *)
+  let locations =
+    match only with
+    | None -> ctx.locations
+    | Some set -> List.filter (fun l -> Hashtbl.mem set l) ctx.locations
+  in
+  let tbl = Hashtbl.create (List.length locations) in
   let comments = List.rev ctx.comments in
   if false then (
     List.iter (fun c -> Format.eprintf "%d " c.anchor) comments;
@@ -109,7 +119,7 @@ let associate ctx =
         in
         if c <> 0 then c
         else compare b.Ast.loc_end.Lexing.pos_cnum a.Ast.loc_end.Lexing.pos_cnum)
-      ctx.locations
+      locations
   in
   let pos_of_entry e = e.anchor in
   let split_before threshold comments =
@@ -119,12 +129,19 @@ let associate ctx =
     in
     aux [] comments
   in
-  let get_after parent_end comments =
+  (* Trailing comments of a node: those anchored in [\[parent_end, upto)], where
+     [upto] is the next sibling's start (so a comment separated from the node by
+     a punctuation token — e.g. a list comma — still trails it rather than
+     leading the next sibling). An inline line comment ends the node's line and
+     is its trailing comment; a line-start comment or blank line begins the next
+     sibling and is left in place. *)
+  let get_after parent_end ~upto comments =
+    let in_gap anchor = anchor >= parent_end && anchor < upto in
     let rec aux acc = function
       | ({ anchor; trivia = Item { kind = Line_comment; _ }; position = Inline }
          as c)
         :: rest
-        when anchor = parent_end ->
+        when in_gap anchor ->
           (List.rev (c :: acc), rest)
       | ({
            anchor;
@@ -132,13 +149,11 @@ let associate ctx =
            position = Line_start;
          } as c)
         :: rest
-        when anchor = parent_end ->
+        when in_gap anchor ->
           (List.rev acc, c :: rest)
-      | ({ anchor; trivia = Item _; _ } as c) :: rest when anchor = parent_end
-        ->
+      | ({ anchor; trivia = Item _; _ } as c) :: rest when in_gap anchor ->
           aux (c :: acc) rest
-      | ({ anchor; trivia = Blank_line; _ } as c) :: rest
-        when anchor = parent_end ->
+      | ({ anchor; trivia = Blank_line; _ } as c) :: rest when in_gap anchor ->
           (List.rev acc, c :: rest)
       | l -> (List.rev acc, l)
     in
@@ -156,6 +171,14 @@ let associate ctx =
           | rs -> (List.rev acc, rs)
         in
         let children, siblings = span [] rest_locs in
+        (* Trailing comments reach up to the next sibling's start; with no next
+           sibling, only those exactly at the node's end (so trailing comments
+           after the last child stay with the parent). *)
+        let upto =
+          match siblings with
+          | s :: _ -> s.Ast.loc_start.Lexing.pos_cnum
+          | [] -> loc.Ast.loc_end.Lexing.pos_cnum + 1
+        in
         let before, rem1 =
           split_before loc.Ast.loc_start.Lexing.pos_cnum comments
         in
@@ -179,8 +202,8 @@ let associate ctx =
                   let stolen = assoc.after in
                   Hashtbl.replace tbl last_child { assoc with after = [] };
                   (stolen, rem3)
-              | None -> get_after loc.Ast.loc_end.Lexing.pos_cnum rem3)
-          | None -> get_after loc.Ast.loc_end.Lexing.pos_cnum rem3
+              | None -> get_after loc.Ast.loc_end.Lexing.pos_cnum ~upto rem3)
+          | None -> get_after loc.Ast.loc_end.Lexing.pos_cnum ~upto rem3
         in
         if false then
           Format.eprintf "%d--%d %d %d %d@." loc.loc_start.pos_cnum
@@ -215,9 +238,11 @@ let print pp ~comment lst =
           comment content;
           Printer.space pp ()
       | Item { kind = Line_comment; content; _ }, Inline ->
-          Printer.space pp ();
-          comment (String.trim content);
-          Printer.newline pp ()
+          (* Trailing comment: defer it past a following separator (e.g. a list
+             comma) so the separator stays on this line, ahead of the comment. *)
+          Printer.defer_eol pp (fun () ->
+              Printer.string pp " ";
+              comment (String.trim content))
       | Item { kind = Line_comment; content; _ }, Line_start ->
           Printer.newline pp ();
           comment (String.trim content);
@@ -228,7 +253,12 @@ let print pp ~comment lst =
 
 let dummy_assoc = { before = []; within = []; after = [] }
 
-let get trivia ~seen loc =
+let get ?collect trivia ~seen loc =
+  (* A dry pass records every looked-up location into [collect]; the real pass
+     then restricts {!associate} to that set. *)
+  (match (collect, loc) with
+  | Some set, Some loc -> Hashtbl.replace set loc ()
+  | _ -> ());
   match loc with
   | None -> dummy_assoc
   | Some loc -> (
@@ -240,8 +270,8 @@ let get trivia ~seen loc =
             Hashtbl.add seen loc ();
             assoc))
 
-let around pp ~comment trivia ~seen loc f =
-  let assoc = get trivia ~seen loc in
+let around ?collect pp ~comment trivia ~seen loc f =
+  let assoc = get ?collect trivia ~seen loc in
   print pp ~comment assoc.before;
   f ();
   print pp ~comment assoc.within;

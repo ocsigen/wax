@@ -24,7 +24,11 @@
 )
 (import "ints" "caml_format_int"
   (func $caml_format_int (param (ref eq) (ref eq)) (result (ref eq)))
-) (type $block (array (mut (ref eq)))) (type $string (array (mut i8)))
+)
+
+(type $block (array (mut (ref eq))))
+(type $string (array (mut i8)))
+
 (type $buffer (struct (field $f (mut i32)) (field $f_2 (ref $string))))
 
 (func $add_char (param $buf (ref $buffer)) (param $c i32)
@@ -101,30 +105,36 @@
       (local.set $len (array.len (local.get $bucket)))
       (if (i32.lt_u (local.get $i) (local.get $len))
         (then
-          (call $add_char (local.get $buf) (i32.const 40))
+          (call $add_char (local.get $buf) (i32.const 40) ;; '\('
+          )
           (loop $loop
             (local.set $v
               (array.get $block (local.get $bucket) (local.get $i)))
             (if (ref.test (ref i31) (local.get $v))
               (then
                 (call $add_string (local.get $buf)
-                  (call $caml_format_int (@string $string "%d" )
+                  (call $caml_format_int
+                    (@string $string "%d" ) ;; %d
                     (ref.cast (ref i31) (local.get $v)))))
               (else
                 (if (ref.test (ref $string) (local.get $v))
                   (then
-                    (call $add_char (local.get $buf) (i32.const 34))
+                    (call $add_char (local.get $buf) (i32.const 34) ;; '\"'
+                    )
                     (call $add_string (local.get $buf) (local.get $v))
-                    (call $add_char (local.get $buf) (i32.const 34)))
-                  (else (call $add_char (local.get $buf) (i32.const 95))))))
+                    (call $add_char (local.get $buf) (i32.const 34) ;; '\"'
+                    ))
+                  (else (call $add_char (local.get $buf) (i32.const 95)))))) ;; '_'
             (local.set $i (i32.add (local.get $i) (i32.const 1)))
             (if (i32.lt_u (local.get $i) (local.get $len))
               (then
-                (call $add_char (local.get $buf) (i32.const 44))
-                (call $add_char (local.get $buf) (i32.const 32))
+                (call $add_char (local.get $buf) (i32.const 44) ;; ','
+                )
+                (call $add_char (local.get $buf) (i32.const 32) ;; ' '
+                )
                 (br $loop))))
           (; 'loop ;)
-          (call $add_char (local.get $buf) (i32.const 41))))
+          (call $add_char (local.get $buf) (i32.const 41)))) ;; '\)'
       (local.set $s
         (array.new $string (i32.const 0)
           (struct.get $buffer $f (local.get $buf))))

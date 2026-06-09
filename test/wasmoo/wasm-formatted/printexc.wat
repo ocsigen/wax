@@ -109,26 +109,22 @@
               (then
                 (call $add_string (local.get $buf)
                   (call $caml_format_int
-                    (array.new_fixed $string 2 (i32.const 37) (i32.const 100))
-                    ;; %d
+                    (array.new_fixed $string 2 (i32.const 37) (i32.const 100)) ;; %d
                     (ref.cast (ref i31) (local.get $v)))))
               (else
                 (if (ref.test (ref $string) (local.get $v))
                   (then
                     (call $add_char (local.get $buf) (i32.const 34)) ;; '\"'
                     (call $add_string (local.get $buf) (local.get $v))
-                    (call $add_char (local.get $buf) (i32.const 34)))
-                  ;; '\"'
-                  (else (call $add_char (local.get $buf) (i32.const 95))))))
-            ;; '_'
+                    (call $add_char (local.get $buf) (i32.const 34))) ;; '\"'
+                  (else (call $add_char (local.get $buf) (i32.const 95)))))) ;; '_'
             (local.set $i (i32.add (local.get $i) (i32.const 1)))
             (if (i32.lt_u (local.get $i) (local.get $len))
               (then
                 (call $add_char (local.get $buf) (i32.const 44)) ;; ','
                 (call $add_char (local.get $buf) (i32.const 32)) ;; ' '
                 (br $loop))))
-          (call $add_char (local.get $buf) (i32.const 41))))
-      ;; '\)'
+          (call $add_char (local.get $buf) (i32.const 41)))) ;; '\)'
       (local.set $s
         (array.new $string (i32.const 0)
           (struct.get $buffer 0 (local.get $buf))))

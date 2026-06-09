@@ -38,9 +38,11 @@
 )
 (import "bindings" "resume_fiber"
   (func $resume_fiber (param externref (ref eq)))
-) (type $block (array (mut (ref eq)))) (type $string (array (mut i8)))
+)
+
+(type $block (array (mut (ref eq)))) (type $string (array (mut i8)))
 (type $function_1 (func (param (ref eq) (ref eq)) (result (ref eq))))
-(type $closure (sub (struct (field $f (ref $function_1)))))
+(type $closure (sub (struct (field $f (ref $function_1))))) (;(field i32);)
 (type $function_3
   (func (param (ref eq) (ref eq) (ref eq) (ref eq)) (result (ref eq)))
 )
@@ -48,6 +50,9 @@
   (sub $closure
     (struct (field $f (ref $function_1)) (field $f_2 (ref $function_3))))
 )
+
+;; Apply a function f to a value v, both contained in a pair (f, v)
+
 (type $pair (struct (field $fst (ref eq)) (field $snd (ref eq))))
 
 (func $apply_pair (param $p (ref $pair)) (result (ref eq))
@@ -55,12 +60,21 @@
   (return_call_ref $function_1 (struct.get $pair $snd (local.get $p))
     (local.tee $f (struct.get $pair $fst (local.get $p)))
     (struct.get $closure $f (ref.cast (ref $closure) (local.get $f))))
-) (type $cont_func (func (param (ref $pair) (ref eq))))
+)
+
+;; Low-level primitives
+
+;; Capturing the current continuation
+
+(type $cont_func (func (param (ref $pair) (ref eq))))
 (type $cont_2 (sub (struct (field $cont_func (ref $cont_func)))))
+
 (type $called_with_continuation (func (param (ref $cont_2) (ref eq))))
+
 (type $thunk
   (struct (field $f (ref $called_with_continuation)) (field $f_2 (ref eq)))
 )
+
 (type $cont_resume
   (sub final $cont_2
     (struct
@@ -93,13 +107,18 @@
       (call $suspend_fiber (ref.func $apply_continuation)
         (struct.new $thunk (local.get $f) (local.get $v)))))
 )
+
+;; Stack of fibers
+
 (type $handlers
   (struct
     (field $value (ref eq))
     (field $exn (ref eq))
     (field $effect (ref eq)))
 )
+
 (type $generic_fiber (sub (struct (field $handlers (mut (ref $handlers))))))
+
 (type $fiber
   (sub final $generic_fiber
     (struct
@@ -216,6 +235,9 @@
     (struct.new $pair (local.get $stack)
       (struct.new $pair (local.get $f) (local.get $v))))
 )
+
+;; Perform
+
 (type $call_handler_env
   (sub final $closure
     (struct
@@ -282,6 +304,7 @@
 
 (func $call_handler (param $f (ref eq)) (param $x (ref eq))
   (local $cont (ref $cont_2))
+  ;; Propagate a value or an exception to the parent fiber
   (return_call_ref $cont_func
     (struct.new $pair (local.get $f) (local.get $x))
     (local.tee $cont (call $pop_fiber))
@@ -290,6 +313,7 @@
 
 (func $caml_start_fiber (export "caml_start_fiber") (param $p eqref)
   (local $exn (ref eq)) (local $res (ref eq))
+  ;; Start executing some code in a new fiber
   (local.set $res
     (try (result (ref eq))
       (do
@@ -374,6 +398,9 @@
           (ref.i31 (global.get $cont_tag))))))
   (i32.const 0)
 )
+
+;; Effects through CPS transformation
+
 (type $function_2
   (func (param (ref eq) (ref eq) (ref eq)) (result (ref eq)))
 )
@@ -387,6 +414,7 @@
   (sub $cps_closure
     (struct (field $f (ref $function_2)) (field $f_2 (ref $function_4))))
 )
+
 (type $iterator
   (sub final $closure
     (struct
@@ -394,9 +422,11 @@
       (field $i (mut i32))
       (field $args (ref $block))))
 )
+
 (type $exn_stack
   (struct (field $h (ref eq)) (field $next (ref null $exn_stack)))
 )
+
 (type $cps_fiber
   (sub final $generic_fiber
     (struct

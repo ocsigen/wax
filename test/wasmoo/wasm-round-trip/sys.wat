@@ -54,7 +54,9 @@
 )
 (import "jsstring" "jsstring_test"
   (func $jsstring_test (param anyref) (result i32))
-) (type $block (array (mut (ref eq)))) (type $string (array (mut i8)))
+)
+
+(type $block (array (mut (ref eq)))) (type $string (array (mut i8)))
 (type $float (struct (field $f f64)))
 
 (tag $ocaml_exit (export "ocaml_exit") (param i32))
@@ -64,7 +66,10 @@
   (throw $ocaml_exit (i31.get_s (ref.cast (ref i31) (local.get $x))))
 )
 (func $caml_sys_getenv (export "caml_sys_getenv")
-  (export "caml_sys_unsafe_getenv") (param $x (ref eq)) (result (ref eq))
+  (export
+
+    "caml_sys_unsafe_getenv")
+  (param $x (ref eq)) (result (ref eq))
   (local $res anyref)
   (local.set $res
     (call $getenv
@@ -76,6 +81,7 @@
 
 (func $caml_sys_argv (export "caml_sys_argv")
   (param $x (ref eq)) (result (ref eq))
+  ;; ZZZ
   (call $caml_js_to_string_array (call $argv))
 )
 
@@ -86,13 +92,16 @@
     (i32.const 1))
 )
 (func $caml_sys_time (export "caml_sys_time")
-  (export "caml_sys_time_include_children")
+  (export
+
+    "caml_sys_time_include_children")
   (param $x (ref eq)) (result (ref eq))
   (struct.new $float (f64.mul (call $time) (f64.const 0.001)))
 )
 
 (func $caml_sys_system_command (export "caml_sys_system_command")
   (param $x (ref eq)) (result (ref eq))
+  ;; ZZZ
   (try (result (ref eq))
     (do
       (return
@@ -147,16 +156,19 @@
 
 (func $caml_sys_const_ostype_unix (export "caml_sys_const_ostype_unix")
   (param $x (ref eq)) (result (ref eq))
+  ;; ZZZ
   (ref.i31 (i32.const 1))
 )
 
 (func $caml_sys_const_ostype_win32 (export "caml_sys_const_ostype_win32")
   (param $x (ref eq)) (result (ref eq))
+  ;; ZZZ
   (ref.i31 (i32.const 0))
 )
 
 (func $caml_sys_const_ostype_cygwin (export "caml_sys_const_ostype_cygwin")
   (param $x (ref eq)) (result (ref eq))
+  ;; ZZZ
   (ref.i31 (i32.const 0))
 )
 
@@ -164,6 +176,8 @@
 
 (func $caml_sys_get_config (export "caml_sys_get_config")
   (param $x (ref eq)) (result (ref eq))
+  ;; ZZZ
+  ;; (call $log_js (string.const "caml_sys_get_config"))
   (array.new_fixed $block 4 (ref.i31 (i32.const 0))
     (array.new_data $string $Unix (i32.const 0) (i32.const 4))
     (ref.i31 (i32.const 32)) (ref.i31 (i32.const 0)))

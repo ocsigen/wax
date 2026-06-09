@@ -17,17 +17,22 @@
 
 (import "io" "caml_getblock"
   (func $caml_getblock (param (ref eq) (ref $string) i32 i32) (result i32))
-) (import "fail" "caml_raise_end_of_file" (func $caml_raise_end_of_file))
-(type $string (array (mut i8))) (type $int_array (array (mut i32)))
+)
+(import "fail" "caml_raise_end_of_file" (func $caml_raise_end_of_file))
+
+(type $string (array (mut i8)))
+(type $int_array (array (mut i32)))
+
 (type $context
   (struct
     (field $f (ref $int_array))
     (field $f_2 (mut i64))
     (field $f_3 (ref $int_array))
     (field $f_4 (ref $string)))
-)
+) ;; w
+;; len
+;; buffer
 ;; intermediate buffer
-
 (func $caml_md5_string (export "caml_md5_string") (export "caml_md5_bytes")
   (param $x (ref eq)) (param $x_2 (ref eq)) (param $x_3 (ref eq))
   (result (ref eq))

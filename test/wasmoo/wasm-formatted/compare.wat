@@ -55,7 +55,6 @@
     (field (ref $block_array)) ;; second value
     (field (ref $int_array)))
 ) ;; position in value
-
 (type $compare (func (param (ref eq) (ref eq) i32) (result i32)))
 (type $hash (func (param (ref eq)) (result i32)))
 (type $fixed_length (struct (field $bsize_32 i32) (field $bsize_64 i32)))
@@ -521,8 +520,7 @@
               (call $caml_invalid_argument
                 (array.new_data $string $continuation_value (i32.const 0)
                   (i32.const 27)))))
-          (ref.i31 (i32.const 0))))
-      ;; fall through
+          (ref.i31 (i32.const 0)))) ;; fall through
       ;; heterogeneous comparison
       (local.set $t1
         (i31.get_u (ref.cast (ref i31) (call $caml_obj_tag (local.get $v1)))))

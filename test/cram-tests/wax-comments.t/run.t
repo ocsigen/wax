@@ -5,8 +5,7 @@ lines between definitions, and end-of-file comments all survive a round-trip.
   $ wax comments.wax -o out.wax && cat out.wax
   // A leading comment on the first function
   fn add(a: i32, b: i32) -> i32 {
-      let x: i32 = a;
-      // a trailing comment
+      let x: i32 = a; // a trailing comment
       /* a block comment */
       x + b;
   }

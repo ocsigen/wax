@@ -22,8 +22,12 @@
 )
 (import "jsstring" "jsstring_hash"
   (func $jsstring_hash (param i32 anyref) (result i32))
-) (type $block (array (mut (ref eq)))) (type $string (array (mut i8)))
-(type $float (struct (field $f f64))) (type $js (struct (field $f anyref)))
+)
+
+(type $block (array (mut (ref eq)))) (type $string (array (mut i8)))
+(type $float (struct (field $f f64)))
+(type $js (struct (field $f anyref)))
+
 (type $compare (func (param (ref eq) (ref eq) i32) (result i32)))
 (type $hash (func (param (ref eq)) (result i32)))
 (type $fixed_length (struct (field $bsize_32 i32) (field $bsize_64 i32)))
@@ -311,10 +315,12 @@
               (local.set $h
                 (call $jsstring_hash (local.get $h) (local.get $str)))
               (ref.i31 (i32.const 0))))
+          ;; closures and continuations and other js values are ignored
           (br $loop))
         (; 'again ;)
       )))
   (; 'loop ;)
+  ;; clear the queue to avoid a memory leak
   (array.fill $block (global.get $caml_hash_queue) (i32.const 0)
     (ref.i31 (i32.const 0)) (local.get $wr))
   (ref.i31

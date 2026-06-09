@@ -14,11 +14,16 @@ type associated = {
 
 type t = (Ast.location, associated) Hashtbl.t
 
-val associate : context -> t * entry list
+val associate :
+  ?only:(Ast.location, unit) Hashtbl.t -> context -> t * entry list
 (** [associate ctx] associates trivia to locations. The second component holds
     the leftover comments that no location owns (trailing comments, or every
     comment when there are no locations); the caller prints them as tail trivia.
-*)
+
+    [only] restricts the association to the given set of locations — those the
+    printer will actually look up (see {!val:get}). Comments that would
+    otherwise attach to a non-emitted node bubble up to an emitted one instead
+    of being lost. Collect the set with a dry printing pass. *)
 
 val make : unit -> context
 (** Create a new trivia context. *)
@@ -46,7 +51,11 @@ val dummy_assoc : associated
 (** The empty association ([before], [within] and [after] all empty). *)
 
 val get :
-  t -> seen:(Ast.location, unit) Hashtbl.t -> Ast.location option -> associated
+  ?collect:(Ast.location, unit) Hashtbl.t ->
+  t ->
+  seen:(Ast.location, unit) Hashtbl.t ->
+  Ast.location option ->
+  associated
 (** [get trivia ~seen loc] returns the trivia associated with [loc], with
     de-duplication: it returns {!dummy_assoc} for [None], a missing location, or
     a location already present in [seen]; on the first real hit it records the
@@ -60,6 +69,7 @@ val print : Printer.t -> comment:(string -> unit) -> entry list -> unit
     comment text with [comment] and blank lines/spacing with [pp]. *)
 
 val around :
+  ?collect:(Ast.location, unit) Hashtbl.t ->
   Printer.t ->
   comment:(string -> unit) ->
   t ->

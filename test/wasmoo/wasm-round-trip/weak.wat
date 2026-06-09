@@ -166,7 +166,9 @@
           (i32.const 1)))))
 )
 (func $caml_ephe_get_key (export "caml_ephe_get_key")
-  (export "caml_weak_get")
+  (export
+
+    "caml_weak_get")
   (param $vx (ref eq)) (param $vi (ref eq)) (result (ref eq))
   (local $x (ref $block)) (local $i i32) (local $v (ref eq))
   (local.set $x (ref.cast (ref $block) (local.get $vx)))
@@ -193,7 +195,9 @@
   (array.new_fixed $block 2 (ref.i31 (i32.const 0)) (local.get $v))
 )
 (func $caml_ephe_get_key_copy (export "caml_ephe_get_key_copy")
-  (export "caml_weak_get_copy")
+  (export
+
+    "caml_weak_get_copy")
   (param $x (ref eq)) (param $i (ref eq)) (result (ref eq))
   (local $r (ref eq))
   (local.set $r (call $caml_ephe_get_key (local.get $x) (local.get $i)))
@@ -210,7 +214,9 @@
   (local.get $r)
 )
 (func $caml_ephe_check_key (export "caml_ephe_check_key")
-  (export "caml_weak_check")
+  (export
+
+    "caml_weak_check")
   (param $vx (ref eq)) (param $vi (ref eq)) (result (ref eq))
   (local $x (ref $block)) (local $i i32) (local $v (ref eq))
   (local.set $x (ref.cast (ref $block) (local.get $vx)))
@@ -276,7 +282,10 @@
 
 (data $Weak_create "Weak.create")
 (func $caml_ephe_create (export "caml_ephe_create")
-  (export "caml_weak_create") (param $vlen (ref eq)) (result (ref eq))
+  (export
+
+    "caml_weak_create")
+  (param $vlen (ref eq)) (result (ref eq))
   (local $len i32) (local $res (ref $block))
   (local.set $len (i31.get_s (ref.cast (ref i31) (local.get $vlen))))
   (if (i32.lt_s (local.get $len) (i32.const 0))
@@ -298,7 +307,9 @@
   (ref.i31 (i32.const 0))
 )
 (func $caml_ephe_blit_key (export "caml_ephe_blit_key")
-  (export "caml_weak_blit")
+  (export
+
+    "caml_weak_blit")
   (param $x (ref eq)) (param $i (ref eq)) (param $y (ref eq))
   (param $j (ref eq)) (param $l (ref eq)) (result (ref eq))
   (local $d (ref eq))

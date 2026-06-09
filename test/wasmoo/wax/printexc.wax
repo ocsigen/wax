@@ -81,27 +81,41 @@ fn caml_format_exception(x: &eq) -> &eq {
             } /* 'continue */;
         len = bucket.length;
         if i <u len {
-            add_char(buf, 40);
+            add_char
+                (buf, 40 // '\('
+                );
             'loop: loop {
                 v = bucket[i];
                 if v is &i31 {
-                    add_string(buf, caml_format_int(string#"%d", v as &i31));
+                    add_string
+                        (buf,
+                         caml_format_int
+                             (string#"%d", // %d
+                              v as &i31));
                 } else {
                     if v is &string {
-                        add_char(buf, 34);
+                        add_char
+                            (buf, 34 // '\"'
+                            );
                         add_string(buf, v);
-                        add_char(buf, 34);
+                        add_char
+                            (buf, 34 // '\"'
+                            );
                     } else { add_char(buf, 95); }
-                }
+                } // '_'
                 i = i + 1;
                 if i <u len {
-                    add_char(buf, 44);
-                    add_char(buf, 32);
+                    add_char
+                        (buf, 44 // ','
+                        );
+                    add_char
+                        (buf, 32 // ' '
+                        );
                     br 'loop;
                 }
             } /* 'loop */
             add_char(buf, 41);
-        }
+        } // '\)'
         s = [string|0; buf.f];
         s.copy(0, buf.f_2, 0, buf.f);
         s;

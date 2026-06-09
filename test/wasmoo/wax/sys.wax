@@ -64,7 +64,10 @@ tag ocaml_exit(i32);
 #[export = "caml_sys_exit"]
 fn caml_sys_exit(x: &eq) -> &eq { throw ocaml_exit x as &i31 as i32_s; }
 #[export = "caml_sys_getenv"]
-#[export = "caml_sys_unsafe_getenv"]
+#[export
+    =
+
+    "caml_sys_unsafe_getenv"]
 fn caml_sys_getenv(x: &eq) -> &eq {
     let res: &?any;
     res = getenv(unwrap(caml_jsstring_of_string(x)));
@@ -73,18 +76,25 @@ fn caml_sys_getenv(x: &eq) -> &eq {
 }
 
 #[export = "caml_sys_argv"]
-fn caml_sys_argv(x: &eq) -> &eq { caml_js_to_string_array(argv()); }
+fn caml_sys_argv(x: &eq) -> &eq {
+    // ZZZ
+    caml_js_to_string_array(argv());
+}
 
 #[export = "caml_sys_executable_name"]
 fn caml_sys_executable_name(x: &eq) -> &eq {
     (caml_js_to_string_array(argv()) as &block)[1];
 }
 #[export = "caml_sys_time"]
-#[export = "caml_sys_time_include_children"]
+#[export
+    =
+
+    "caml_sys_time_include_children"]
 fn caml_sys_time(x: &eq) -> &eq { {float| f: time() * 0.001 }; }
 
 #[export = "caml_sys_system_command"]
 fn caml_sys_system_command(x: &eq) -> &eq {
+    // ZZZ
     try &eq {
         return system(unwrap(caml_jsstring_of_string(x)));
     } catch {
@@ -128,18 +138,29 @@ fn caml_sys_const_int_size(x: &eq) -> &eq { 31 as &i31; }
 fn caml_sys_const_max_wosize(x: &eq) -> &eq { 0xfffffff as &i31; }
 
 #[export = "caml_sys_const_ostype_unix"]
-fn caml_sys_const_ostype_unix(x: &eq) -> &eq { 1 as &i31; }
+fn caml_sys_const_ostype_unix(x: &eq) -> &eq {
+    // ZZZ
+    1 as &i31;
+}
 
 #[export = "caml_sys_const_ostype_win32"]
-fn caml_sys_const_ostype_win32(x: &eq) -> &eq { 0 as &i31; }
+fn caml_sys_const_ostype_win32(x: &eq) -> &eq {
+    // ZZZ
+    0 as &i31;
+}
 
 #[export = "caml_sys_const_ostype_cygwin"]
-fn caml_sys_const_ostype_cygwin(x: &eq) -> &eq { 0 as &i31; }
+fn caml_sys_const_ostype_cygwin(x: &eq) -> &eq {
+    // ZZZ
+    0 as &i31;
+}
 
 data Unix = "Unix";
 
 #[export = "caml_sys_get_config"]
 fn caml_sys_get_config(x: &eq) -> &eq {
+    // ZZZ
+    // (call $log_js (string.const "caml_sys_get_config"))
     [block|0 as &i31, [string|Unix @ 0; 4], 32 as &i31, 0 as &i31];
 }
 

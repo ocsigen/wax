@@ -114,7 +114,8 @@ fn parse_int(v: &eq, nbits: i32, errmsg: &string) -> i32 {
         i = i + 1;
         if i <s len {
             c = s[i] as i32_u;
-            br_if 'loop c == 95;
+            br_if 'loop c == 95 // '_'
+            ;
             d = parse_digit(c);
             if d >=u base { caml_failwith(errmsg); }
             if res >u threshold { caml_failwith(errmsg); }
@@ -135,8 +136,8 @@ fn parse_int(v: &eq, nbits: i32, errmsg: &string) -> i32 {
     res;
 }
 
-const INT_ERRMSG: &string = string#"int_of_string"
-    // "int.of_string"
+const INT_ERRMSG: &string =
+    string#"int_of_string" // "int.of_string"
     ;
 
 #[export = "caml_int_of_string"]
@@ -174,7 +175,7 @@ fn format_int_default(d: i32) -> &eq {
         d = d /u 10;
         br_if 'write d;
     }
-    if negative { s[0] = 45; }
+    if negative { s[0] = 45; } // '-'
     s;
 }
 
@@ -195,34 +196,71 @@ fn parse_int_format(s: &string) -> (i32, i32, i32, i32, i32) {
     'return: do {
         'bad_format: do {
             br_if 'bad_format len <u 2;
-            br_if 'bad_format s[0] as i32_u != 37;
+            br_if 'bad_format s[0] as i32_u != 37 // '%'
+            ;
             c = s[1] as i32_u;
-            if c == 43 { sign_style = 1; i = i + 1; }
-            if c == 32 { sign_style = 2; i = i + 1; }
-            if c == 35 { alternate = 1; i = i + 1; }
+            if
+                c == 43 // '+'
+            {
+                sign_style = 1;
+                i = i + 1;
+            }
+            if
+                c == 32 // ' '
+            {
+                sign_style = 2;
+                i = i + 1;
+            }
+            if
+                c == 35 // '#'
+            {
+                alternate = 1;
+                i = i + 1;
+            }
             br_if 'bad_format i == len;
             c = s[i] as i32_u;
-            if (c == 76) | (c == 108) | (c == 110) {
+            if
+                (c == 76 // 'L'
+                 ) |
+                    (c == 108 // 'l'
+                     )
+                    |
+                    (c == 110 // 'n'
+                     )
+            {
                 i = i + 1;
                 br_if 'bad_format i == len;
                 c = s[i] as i32_u;
             }
             br_if 'bad_format i + 1 != len;
-            if (c == 100) | (c == 105) {
+            if
+                (c == 100 // 'd'
+                 ) |
+                    (c == 105 // 'i'
+                     )
+            {
                 base = 10;
                 signed = 1;
             } else {
-                if c == 117 {
+                if
+                    c == 117 // 'u'
+                {
                     base = 10;
                 } else {
-                    if c == 120 {
+                    if
+                        c == 120 // 'x'
+                    {
                         base = 16;
                     } else {
-                        if c == 88 {
+                        if
+                            c == 88 // 'X'
+                        {
                             base = 16;
                             uppercase = 1;
                         } else {
-                            if c == 111 {
+                            if
+                                c == 111 // 'o'
+                            {
                                 base = 8;
                             } else { br 'bad_format; }
                         }
@@ -254,7 +292,11 @@ fn format_int(x: &eq, d: i32, small: i32) -> &eq {
     let chars: &chars;
     s = x as &string;
     if s.length == 2 {
-        if s[1] as i32_u == 100 { become format_int_default(d); }
+        if
+            s[1] as i32_u == 100 // 'd'
+        {
+            become format_int_default(d);
+        }
     }
     parse_int_format(s);
     uppercase = _;
@@ -283,14 +325,25 @@ fn format_int(x: &eq, d: i32, small: i32) -> &eq {
         br_if 'write d;
     }
     if negative {
-        s[0] = 45;
+        s[0] = 45 // '-'
+        ;
     } else {
         if sign_style {
-            if sign_style == 1 { s[0] = 43; } else { s[0] = 32; }
+            if sign_style == 1 {
+                s[0] = 43 // '+'
+                ;
+            } else { s[0] = 32; }
         }
-    }
+    } // ' '
     if alternate {
-        if i { s[0] = 48; if base == 16 { s[1] = uppercase?88:120; } }
+        if i {
+            s[0] = 48 // '0'
+            ;
+            if base == 16 {
+                s[1] = uppercase?88:120 // 'X' 'x'
+                ;
+            }
+        }
     }
     s;
 }

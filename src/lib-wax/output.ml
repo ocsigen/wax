@@ -31,6 +31,7 @@ type 'info ctx = {
   mutable style_override : style option;
   trivia : Utils.Trivia.t;
   seen : (location, unit) Hashtbl.t;
+  collect : (location, unit) Hashtbl.t option;
   (* Extract a source location from a node's annotation, to look its trivia up.
      [fun _ -> None] when printing typed ASTs for diagnostics (no trivia). *)
   locate : 'info -> location option;
@@ -72,8 +73,8 @@ let print_trivia pp lst =
   Utils.Trivia.print pp.printer ~comment:(comment pp) lst
 
 let atomic_node pp (loc : location option) f =
-  Utils.Trivia.around pp.printer ~comment:(comment pp) pp.trivia ~seen:pp.seen
-    loc f
+  Utils.Trivia.around ?collect:pp.collect pp.printer ~comment:(comment pp)
+    pp.trivia ~seen:pp.seen loc f
 
 let with_style ctx style f =
   match ctx.style_override with
@@ -98,7 +99,9 @@ let list ?(sep = space) f pp l =
 let list_commasep f pp l =
   list
     ~sep:(fun pp () ->
-      punctuation pp ",";
+      (* Hold any deferred trailing comment so the comma prints on the comment's
+         line, ahead of it. *)
+      Utils.Printer.with_held_eol pp.printer (fun () -> punctuation pp ",");
       space pp ())
     f pp l
 
@@ -1331,7 +1334,7 @@ let rec modulefield pp field =
               branch e)
             else_fields)
 
-let module_ ?(color = Auto) ?out_channel ?(tail = []) printer ~trivia
+let module_ ?(color = Auto) ?out_channel ?(tail = []) ?collect printer ~trivia
     (l : location module_) =
   let use_color = should_use_color ~color ~out_channel in
   let theme = get_theme use_color in
@@ -1342,6 +1345,7 @@ let module_ ?(color = Auto) ?out_channel ?(tail = []) printer ~trivia
       style_override = None;
       trivia;
       seen = Hashtbl.create 16;
+      collect;
       locate = (fun l -> Some l);
     }
   in
@@ -1366,6 +1370,7 @@ let instr printer i =
       style_override = None;
       trivia = Hashtbl.create 0;
       seen = Hashtbl.create 0;
+      collect = None;
       locate = (fun _ -> None);
     }
   in
@@ -1381,6 +1386,7 @@ let valtype printer i =
       style_override = None;
       trivia = Hashtbl.create 0;
       seen = Hashtbl.create 0;
+      collect = None;
       locate = (fun _ -> None);
     }
   in
@@ -1396,6 +1402,7 @@ let storagetype printer i =
       style_override = None;
       trivia = Hashtbl.create 0;
       seen = Hashtbl.create 0;
+      collect = None;
       locate = (fun _ -> None);
     }
   in

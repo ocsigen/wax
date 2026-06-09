@@ -32,7 +32,9 @@
 )
 (import "ints" "uppercase_hex_table"
   (global $uppercase_hex_table (ref $chars))
-) (type $string (array (mut i8)))
+)
+
+(type $string (array (mut i8)))
 (type $compare (func (param (ref eq) (ref eq) i32) (result i32)))
 (type $hash (func (param (ref eq)) (result i32)))
 (type $fixed_length (struct (field $bsize_32 i32) (field $bsize_64 i32)))
@@ -53,12 +55,14 @@
 (type $custom (sub (struct (field $f (ref $custom_operations)))))
 
 (global $int64_ops (export "int64_ops") (ref $custom_operations)
-  (struct.new $custom_operations (@string $string "_j" )
+  (struct.new $custom_operations
+    (@string $string "_j" ) ;; "_j"
     (ref.func $int64_cmp) (ref.null $compare) (ref.func $int64_hash)
     (struct.new $fixed_length (i32.const 8) (i32.const 8))
     (ref.func $int64_serialize) (ref.func $int64_deserialize)
     (ref.func $int64_dup))
 )
+
 (type $int64
   (sub final $custom
     (struct (field $f (ref $custom_operations)) (field $f_2 i64)))
@@ -134,8 +138,7 @@
 )
 
 (global $INT64_ERRMSG (ref $string)
-  (@string $string "Int64.of_string" )
-;; "Int64.of_string"
+  (@string $string "Int64.of_string" ) ;; "Int64.of_string"
 )
 
 ;; Parse a sequence of digits into an i64 as dicted by $base,
@@ -164,7 +167,8 @@
     (if (i32.lt_s (local.get $i) (local.get $len))
       (then
         (local.set $c (array.get_u $string (local.get $s) (local.get $i)))
-        (br_if $loop (i32.eq (local.get $c) (i32.const 95)))
+        (br_if $loop (i32.eq (local.get $c) (i32.const 95)) ;; '_'
+        )
         (local.set $d (call $parse_digit (local.get $c)))
         (if (i32.ge_u (local.get $d) (local.get $base))
           (then (call $caml_failwith (local.get $errmsg))))
@@ -234,9 +238,10 @@
     (local.set $d (i64.div_u (local.get $d) (i64.const 10)))
     (br_if $write (i64.ne (local.get $d) (i64.const 0))))
   (if (local.get $negative)
-    (then (array.set $string (local.get $s) (i32.const 0) (i32.const 45))))
+    (then (array.set $string (local.get $s) (i32.const 0) (i32.const 45)))) ;; '-'
   (local.get $s)
 )
+
 (type $chars (array i8))
 
 (func $caml_int64_format (export "caml_int64_format")
@@ -252,7 +257,7 @@
     (then
       (if
         (i32.eq (array.get_u $string (local.get $s) (i32.const 1))
-          (i32.const 100))
+          (i32.const 100)) ;; 'd'
         (then (return_call $format_int64_default (local.get $d))))))
   (call $parse_int_format (local.get $s))
   (local.set $uppercase)
@@ -291,23 +296,26 @@
     (local.set $d (i64.div_u (local.get $d) (local.get $base)))
     (br_if $write (i64.ne (local.get $d) (i64.const 0))))
   (if (local.get $negative)
-    (then (array.set $string (local.get $s) (i32.const 0) (i32.const 45)))
+    (then (array.set $string (local.get $s) (i32.const 0) (i32.const 45)) ;; '-'
+    )
     (else
       (if (local.get $sign_style)
         (then
           (if (i32.eq (local.get $sign_style) (i32.const 1))
             (then
-              (array.set $string (local.get $s) (i32.const 0) (i32.const 43)))
+              (array.set $string (local.get $s) (i32.const 0) (i32.const 43)) ;; '+'
+            )
             (else
-              (array.set $string (local.get $s) (i32.const 0) (i32.const 32))))))))
+              (array.set $string (local.get $s) (i32.const 0) (i32.const 32)))))))) ;; ' '
   (if (local.get $alternate)
     (then
       (if (local.get $i)
         (then
-          (array.set $string (local.get $s) (i32.const 0) (i32.const 48))
+          (array.set $string (local.get $s) (i32.const 0) (i32.const 48)) ;; '0'
           (if (i64.eq (local.get $base) (i64.const 16))
             (then
               (array.set $string (local.get $s) (i32.const 1)
-                (select (i32.const 88) (i32.const 120) (local.get $uppercase)))))))))
+                (select (i32.const 88) (i32.const 120) (local.get $uppercase)) ;; 'X' 'x'
+              )))))))
   (local.get $s)
 )

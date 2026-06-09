@@ -17,7 +17,9 @@
 
 (import "fail" "caml_invalid_argument"
   (func $caml_invalid_argument (param (ref eq)))
-) (type $block (array (mut (ref eq))))
+)
+
+(type $block (array (mut (ref eq))))
 (type $string (array (mut i8)))
 
 (func $caml_get_exception_raw_backtrace

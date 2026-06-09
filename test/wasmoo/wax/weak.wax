@@ -153,7 +153,10 @@ fn caml_ephe_set_data_opt(x: &eq, opt_data: &eq) {
         };
 }
 #[export = "caml_ephe_get_key"]
-#[export = "caml_weak_get"]
+#[export
+    =
+
+    "caml_weak_get"]
 fn caml_ephe_get_key(vx: &eq, vi: &eq) -> &eq {
     let x: &block;
     let i: i32;
@@ -177,7 +180,10 @@ fn caml_ephe_get_key(vx: &eq, vi: &eq) -> &eq {
     [block|0 as &i31, v];
 }
 #[export = "caml_ephe_get_key_copy"]
-#[export = "caml_weak_get_copy"]
+#[export
+    =
+
+    "caml_weak_get_copy"]
 fn caml_ephe_get_key_copy(x: &eq, i: &eq) -> &eq {
     let r: &eq;
     r = caml_ephe_get_key(x, i);
@@ -193,7 +199,10 @@ fn caml_ephe_get_key_copy(x: &eq, i: &eq) -> &eq {
     r;
 }
 #[export = "caml_ephe_check_key"]
-#[export = "caml_weak_check"]
+#[export
+    =
+
+    "caml_weak_check"]
 fn caml_ephe_check_key(vx: &eq, vi: &eq) -> &eq {
     let x: &block;
     let i: i32;
@@ -246,7 +255,10 @@ fn caml_ephe_unset_key(vx: &eq, vi: &eq) -> &eq {
 
 data Weak_create = "Weak.create";
 #[export = "caml_ephe_create"]
-#[export = "caml_weak_create"]
+#[export
+    =
+
+    "caml_weak_create"]
 fn caml_ephe_create(vlen: &eq) -> &eq {
     let len: i32;
     let res: &block;
@@ -263,7 +275,10 @@ fn caml_ephe_blit_data(x: &eq, y: &eq) -> &eq {
     0 as &i31;
 }
 #[export = "caml_ephe_blit_key"]
-#[export = "caml_weak_blit"]
+#[export
+    =
+
+    "caml_weak_blit"]
 fn caml_ephe_blit_key(x: &eq, i: &eq, y: &eq, j: &eq, l: &eq) -> &eq {
     let d: &eq;
     d = caml_ephe_get_data(y);

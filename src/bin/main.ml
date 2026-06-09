@@ -50,6 +50,38 @@ let output_wat ?(tail = []) ~fold_mode ~output_file ~color ~trivia ast =
       let fmt = Format.formatter_of_out_channel oc in
       Format.fprintf fmt "%a@." print_wat ast)
 
+(* A formatter that discards everything, for the dry pass that records which
+   locations the printer looks up. *)
+let null_formatter () = Format.make_formatter (fun _ _ _ -> ()) (fun () -> ())
+
+(* Build the trivia for printing [ast], restricting the association to the
+   locations the printer actually emits (collected by a dry pass). This keeps a
+   comment from attaching to a node the printer skips — which would drop it.
+   [retarget], when given, rewrites the comment delimiters between formats. *)
+let wat_trivia ?retarget ~fold_mode ctx ast =
+  let ast =
+    match fold_mode with
+    | Auto -> ast
+    | Fold -> Wasm.Folding.fold ast
+    | Unfold -> Wasm.Folding.unfold ast
+  in
+  let used = Hashtbl.create 256 in
+  Utils.Printer.run (null_formatter ()) (fun p ->
+      Wasm.Output.module_ p ~trivia:(Hashtbl.create 0) ~collect:used ast);
+  let trivia, tail = Utils.Trivia.associate ~only:used ctx in
+  match retarget with
+  | None -> (trivia, tail)
+  | Some (src, dst) -> Utils.Trivia.retarget ~src ~dst trivia tail
+
+let wax_trivia ?retarget ctx ast =
+  let used = Hashtbl.create 256 in
+  Utils.Printer.run (null_formatter ()) (fun p ->
+      Wax.Output.module_ p ~trivia:(Hashtbl.create 0) ~collect:used ast);
+  let trivia, tail = Utils.Trivia.associate ~only:used ctx in
+  match retarget with
+  | None -> (trivia, tail)
+  | Some (src, dst) -> Utils.Trivia.retarget ~src ~dst trivia tail
+
 let wat_to_wat ~input_file ~output_file ~validate ~color ~output_color
     ~fold_mode ~source_map_file:opt_source_map_file =
   let _ = opt_source_map_file in
@@ -63,7 +95,7 @@ let wat_to_wat ~input_file ~output_file ~validate ~color ~output_color
   if validate then
     Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
         Wasm.Validation.f d ast);
-  let trivia, tail = Utils.Trivia.associate ctx in
+  let trivia, tail = wat_trivia ~fold_mode ctx ast in
   output_wat ~fold_mode ~output_file ~color:output_color ~trivia ~tail ast
 
 let wat_to_wax ~input_file ~output_file ~validate ~color ~output_color
@@ -91,10 +123,10 @@ let wat_to_wax ~input_file ~output_file ~validate ~color ~output_color
   (* The converted Wax nodes carry the source Wat locations, so the source
      trivia (keyed by those locations) maps onto them; rewrite the comment
      delimiters from Wat to Wax syntax. *)
-  let trivia, tail = Utils.Trivia.associate ctx in
   let trivia, tail =
-    Utils.Trivia.retarget ~src:Utils.Trivia.wat_syntax
-      ~dst:Utils.Trivia.wax_syntax trivia tail
+    wax_trivia
+      ~retarget:(Utils.Trivia.wat_syntax, Utils.Trivia.wax_syntax)
+      ctx wax_ast
   in
   with_open_out output_file (fun oc ->
       let print_wax f m =
@@ -129,10 +161,10 @@ let wax_to_wat ~input_file ~output_file ~validate ~color ~output_color
   (* Typing and conversion preserve the source Wax locations, so the source
      trivia (keyed by those locations) maps onto the converted Wasm nodes;
      rewrite the comment delimiters from Wax to Wat syntax. *)
-  let trivia, tail = Utils.Trivia.associate ctx in
   let trivia, tail =
-    Utils.Trivia.retarget ~src:Utils.Trivia.wax_syntax
-      ~dst:Utils.Trivia.wat_syntax trivia tail
+    wat_trivia
+      ~retarget:(Utils.Trivia.wax_syntax, Utils.Trivia.wat_syntax)
+      ~fold_mode ctx wasm_ast
   in
   output_wat ~fold_mode ~output_file ~color:output_color ~trivia ~tail wasm_ast
 
@@ -150,7 +182,7 @@ let wax_to_wax ~input_file ~output_file ~validate ~color ~output_color
     ignore
       (Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
            Wax.Typing.f d ast));
-  let trivia, tail = Utils.Trivia.associate ctx in
+  let trivia, tail = wax_trivia ctx ast in
   with_open_out output_file (fun oc ->
       let print_wax f m =
         Utils.Printer.run f (fun p ->

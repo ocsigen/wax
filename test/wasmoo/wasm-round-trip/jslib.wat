@@ -112,11 +112,13 @@
 )
 (import "int32" "Nativeint_val"
   (func $Nativeint_val (param (ref eq)) (result i32))
-) (type $block (array (mut (ref eq)))) (type $float (struct (field $f f64)))
+)
+
+(type $block (array (mut (ref eq)))) (type $float (struct (field $f f64)))
 (type $float_array (array (mut f64))) (type $string (array (mut i8)))
 (type $js (struct (field $f anyref)))
 (type $function_1 (func (param (ref eq) (ref eq)) (result (ref eq))))
-(type $closure (sub (struct (field $f (ref $function_1)))))
+(type $closure (sub (struct (field $f (ref $function_1))))) (;(field i32);)
 (type $function_2
   (func (param (ref eq) (ref eq) (ref eq)) (result (ref eq)))
 )
@@ -474,7 +476,9 @@
       (call $wrap_callback_strict (i32.const 1) (local.get $x))))
 )
 
-(func $caml_callback (export "caml_callback")
+(func $caml_callback
+  (export "caml_callback" ;; 0 ==> strict / 2 ==> unsafe
+  )
   (param $f (ref eq)) (param $count i32) (param $args (ref extern))
   (param $kind i32) (result anyref)
   (local $acc (ref eq)) (local $i i32) (local $arg (ref eq))
@@ -512,7 +516,10 @@
   (return_call $unwrap (local.get $acc))
 )
 (func $caml_jsstring_of_string (export "caml_jsstring_of_string")
-  (export "caml_js_from_string") (param $x (ref eq)) (result (ref eq))
+  (export
+
+    "caml_js_from_string")
+  (param $x (ref eq)) (result (ref eq))
   (local $s (ref $string))
   (local.set $s (ref.cast (ref $string) (local.get $x)))
   (return (struct.new $js (call $jsstring_of_string (local.get $s))))
@@ -565,7 +572,10 @@
   (return (struct.new $js (call $jsstring_of_string (local.get $s'))))
 )
 (func $caml_string_of_jsstring (export "caml_string_of_jsstring")
-  (export "caml_js_to_string") (param $s (ref eq)) (result (ref eq))
+  (export
+
+    "caml_js_to_string")
+  (param $s (ref eq)) (result (ref eq))
   (return_call $string_of_jsstring
     (struct.get $js $f (ref.cast (ref $js) (local.get $s))))
 )
@@ -675,8 +685,7 @@
 )
 
 (global $jsError (ref $string)
-  (@string $string "jsError" )
-;; 'jsError'
+  (@string $string "jsError" ) ;; 'jsError'
 )
 
 (data $toString "toString")
@@ -685,6 +694,7 @@
   (param $x externref) (result (ref eq))
   (local $exn anyref)
   (local.set $exn (any.convert_extern (local.get $x)))
+  ;; ZZZ special case for stack overflows?
   (block $undef
     (return
       (array.new_fixed $block 3 (ref.i31 (i32.const 0))

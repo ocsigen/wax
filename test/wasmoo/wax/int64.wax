@@ -54,7 +54,7 @@ type custom = open { f: &custom_operations };
 #[export = "int64_ops"]
 const int64_ops: &custom_operations =
     {custom_operations|
-        id: string#"_j",
+        id: string#"_j", // "_j"
         compare: int64_cmp,
         compare_ext: null as &?compare,
         hash: int64_hash,
@@ -112,8 +112,8 @@ fn caml_int64_compare(i1: i64, i2: i64) -> &eq {
     ((i1 >s i2) - (i1 <s i2)) as &i31;
 }
 
-const INT64_ERRMSG: &string = string#"Int64.of_string"
-    // "Int64.of_string"
+const INT64_ERRMSG: &string =
+    string#"Int64.of_string" // "Int64.of_string"
     ;
 
 // Parse a sequence of digits into an i64 as dicted by $base,
@@ -140,7 +140,8 @@ fn caml_i64_of_digits
         i = i + 1;
         if i <s len {
             c = s[i] as i32_u;
-            br_if 'loop c == 95;
+            br_if 'loop c == 95 // '_'
+            ;
             d = parse_digit(c);
             if d >=u base { caml_failwith(errmsg); }
             if res >u threshold { caml_failwith(errmsg); }
@@ -192,7 +193,7 @@ fn format_int64_default(d: i64) -> &eq {
         d = d /u 10;
         br_if 'write d != 0;
     }
-    if negative { s[0] = 45; }
+    if negative { s[0] = 45; } // '-'
     s;
 }
 
@@ -214,7 +215,11 @@ fn caml_int64_format(x: &eq, x_2: &eq) -> &eq {
     s = x as &string;
     d = (x_2 as &int64).f_2;
     if s.length == 2 {
-        if s[1] as i32_u == 100 { become format_int64_default(d); }
+        if
+            s[1] as i32_u == 100 // 'd'
+        {
+            become format_int64_default(d);
+        }
     }
     parse_int_format(s);
     uppercase = _;
@@ -241,14 +246,25 @@ fn caml_int64_format(x: &eq, x_2: &eq) -> &eq {
         br_if 'write d != 0;
     }
     if negative {
-        s[0] = 45;
+        s[0] = 45 // '-'
+        ;
     } else {
         if sign_style {
-            if sign_style == 1 { s[0] = 43; } else { s[0] = 32; }
+            if sign_style == 1 {
+                s[0] = 43 // '+'
+                ;
+            } else { s[0] = 32; }
         }
-    }
+    } // ' '
     if alternate {
-        if i { s[0] = 48; if base == 16 { s[1] = uppercase?88:120; } }
+        if i {
+            s[0] = 48 // '0'
+            ;
+            if base == 16 {
+                s[1] = uppercase?88:120 // 'X' 'x'
+                ;
+            }
+        }
     }
     s;
 }
