@@ -251,6 +251,13 @@ let print pp ~comment lst =
       | Blank_line, _ -> Printer.blank_line pp ())
     lst
 
+let drop_trailing_blank_lines entries =
+  let rec drop = function
+    | { trivia = Blank_line; _ } :: rest -> drop rest
+    | rest -> rest
+  in
+  List.rev (drop (List.rev entries))
+
 let dummy_assoc = { before = []; within = []; after = [] }
 
 let get ?collect trivia ~seen loc =

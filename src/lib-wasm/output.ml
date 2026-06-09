@@ -1,16 +1,7 @@
-(*
-ZZZ Comments
-- traverse the parse tree to collect locations
-- associate trivia to locations
-- print
-- print tail comments (after any location)
-- check that all locations have been accounted for
-
-- skip space before closing parenthese
-*)
 open Utils.Colors
 module Printer = Utils.Printer
 module Trivia = Utils.Trivia
+module Styled = Utils.Styled_printer
 module Uint32 = Utils.Uint32
 module Uint64 = Utils.Uint64
 open Ast.Text
@@ -34,38 +25,18 @@ let get_theme use_color =
   else no_color
 
 type format = Compact | Expansive | Hybrid | Adaptive
-
-type ctx = {
-  printer : Printer.t;
-  theme : theme;
-  format : format;
-  indent_level : int;
-  trivia : Trivia.t;
-  seen : (Ast.location, unit) Hashtbl.t;
-  collect : (Ast.location, unit) Hashtbl.t option;
-}
+type ctx = { base : Styled.t; format : format; indent_level : int }
 
 let _ = (Compact, Hybrid, Adaptive)
 
+(* The styling and trivia plumbing is shared with the Wax printer in
+   [Utils.Styled_printer]; only [format]/[indent_level] are specific here. *)
 let print_styled ctx style ?(len = None) text =
-  let seq = escape_sequence ctx.theme style in
-  if seq <> "" then Printer.string_as ctx.printer 0 seq;
-  (match len with
-  | None -> Printer.string ctx.printer text
-  | Some len -> Printer.string_as ctx.printer len text);
-  if seq <> "" then Printer.string_as ctx.printer 0 ctx.theme.reset
+  Styled.print_styled ctx.base style ~len text
 
-(* ZZZ Deal with multiline comments / UTF-8 characters *)
-(* The rendering logic is shared with the Wax printer in [Utils.Trivia]. *)
-let comment ctx s = print_styled ctx Comment s
-let print_trivia ctx lst = Trivia.print ctx.printer ~comment:(comment ctx) lst
-
-let get_trivia ctx loc =
-  Trivia.get ?collect:ctx.collect ctx.trivia ~seen:ctx.seen loc
-
-let atomic_node ctx (loc : Ast.location option) f =
-  Trivia.around ?collect:ctx.collect ctx.printer ~comment:(comment ctx)
-    ctx.trivia ~seen:ctx.seen loc f
+let print_trivia ctx lst = Styled.print_trivia ctx.base lst
+let get_trivia ctx loc = Styled.get_trivia ctx.base loc
+let atomic_node ctx loc f = Styled.atomic_node ctx.base loc f
 
 let string_node ctx loc style len s =
   atomic_node ctx loc @@ fun () -> print_styled ctx style ~len s
@@ -90,7 +61,7 @@ type sexp =
 and structure = Delimiter of sexp | Contents of sexp list
 
 let rec format_sexp in_block depth first ctx s =
-  let p = ctx.printer in
+  let p = ctx.base.printer in
   match s with
   | Atom { loc; len; style; s } -> string_node ctx loc style len s
   | List (loc, l)
@@ -114,13 +85,13 @@ let rec format_sexp in_block depth first ctx s =
       (if (not in_block) && ctx.format = Expansive then Printer.vbox
        else Printer.hvbox) p (fun () ->
           print_styled ctx Punctuation "(";
-          Printer.indent ctx.printer ctx.indent_level (fun () ->
+          Printer.indent p ctx.indent_level (fun () ->
               List.iteri
                 (fun i v ->
                   if i > 0 then Printer.space p ();
                   format_sexp in_block (depth + 1) (i = 0) ctx v)
                 l);
-          Printer.cut ctx.printer ();
+          Printer.cut p ();
           print_trivia ctx trivia.within;
           Printer.box p (fun () ->
               print_styled ctx Punctuation ")";
@@ -222,22 +193,9 @@ let index ?(style = Identifier) x =
   match x.desc with Num i -> u32 ~style ~loc i | Id s -> id ~style ~loc s
 
 let heaptype (ty : heaptype) =
-  match ty with
-  | Func -> type_ "func"
-  | NoFunc -> type_ "nofunc"
-  | Exn -> type_ "exn"
-  | NoExn -> type_ "noexn"
-  | Cont -> type_ "cont"
-  | NoCont -> type_ "nocont"
-  | Extern -> type_ "extern"
-  | NoExtern -> type_ "noextern"
-  | Any -> type_ "any"
-  | Eq -> type_ "eq"
-  | I31 -> type_ "i31"
-  | Struct -> type_ "struct"
-  | Array -> type_ "array"
-  | None_ -> type_ "none"
-  | Type t -> index t
+  match heaptype_keyword ty with
+  | Some kw -> type_ kw
+  | None -> ( match ty with Type t -> index t | _ -> assert false)
 
 let reftype { nullable; typ } =
   match (nullable, typ) with
@@ -1397,13 +1355,9 @@ let module_ ?(color = Auto) ?out_channel ?(tail = []) ?collect printer ~trivia
   let theme = get_theme use_color in
   let ctx =
     {
-      printer;
-      theme;
+      base = Styled.create ~printer ~theme ?collect ~trivia ();
       format = Hybrid;
       indent_level = 2;
-      trivia;
-      seen = Hashtbl.create 16;
-      collect;
     }
   in
   let sexp =
@@ -1418,12 +1372,7 @@ let module_ ?(color = Auto) ?out_channel ?(tail = []) ?collect printer ~trivia
      empty module) are printed last so they are not dropped. Blank lines at the
      very end are dropped (end-of-file whitespace), but blank lines separating
      tail comments are kept. *)
-  let rec drop_trailing_blanks = function
-    | { Trivia.trivia = Trivia.Blank_line; _ } :: rest ->
-        drop_trailing_blanks rest
-    | rest -> rest
-  in
-  let tail = List.rev (drop_trailing_blanks (List.rev tail)) in
+  let tail = Trivia.drop_trailing_blank_lines tail in
   print_trivia ctx tail
 
 let instr printer i =
@@ -1431,12 +1380,8 @@ let instr printer i =
   let theme = get_theme use_color in
   format_sexp false 2 false
     {
-      printer;
-      theme;
+      base = Styled.create ~printer ~theme ~trivia:(Hashtbl.create 16) ();
       format = Compact;
       indent_level = 2;
-      trivia = Hashtbl.create 16;
-      seen = Hashtbl.create 16;
-      collect = None;
     }
     (instr i)

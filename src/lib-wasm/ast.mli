@@ -80,6 +80,10 @@ end) : sig
   }
 
   type globaltype = valtype muttype
+
+  val heaptype_keyword : heaptype -> string option
+  (** The keyword naming a heap type (e.g. [Some "func"]); [None] for the [Type]
+      case, whose index each printer renders in its own way. *)
 end
 
 (* Instructions *)

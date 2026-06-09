@@ -68,6 +68,10 @@ val print : Printer.t -> comment:(string -> unit) -> entry list -> unit
 (** [print pp ~comment lst] emits the trivia entries [lst] to [pp], rendering
     comment text with [comment] and blank lines/spacing with [pp]. *)
 
+val drop_trailing_blank_lines : entry list -> entry list
+(** Drop blank-line entries at the end of the list, so emitted tail trivia does
+    not leave spurious blank lines at the end of the file. *)
+
 val around :
   ?collect:(Ast.location, unit) Hashtbl.t ->
   Printer.t ->

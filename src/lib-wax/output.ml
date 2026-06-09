@@ -26,32 +26,21 @@ let get_theme use_color =
   else no_color
 
 type 'info ctx = {
-  printer : Utils.Printer.t;
-  theme : theme;
-  mutable style_override : style option;
-  trivia : Utils.Trivia.t;
-  seen : (location, unit) Hashtbl.t;
-  collect : (location, unit) Hashtbl.t option;
+  base : Utils.Styled_printer.t;
   (* Extract a source location from a node's annotation, to look its trivia up.
      [fun _ -> None] when printing typed ASTs for diagnostics (no trivia). *)
   locate : 'info -> location option;
 }
 
 let print_styled pp style ?(len = None) text =
-  let style = Option.value ~default:style pp.style_override in
-  let seq = escape_sequence pp.theme style in
-  if seq <> "" then Utils.Printer.string_as pp.printer 0 seq;
-  (match len with
-  | None -> Utils.Printer.string pp.printer text
-  | Some len -> Utils.Printer.string_as pp.printer len text);
-  if seq <> "" then Utils.Printer.string_as pp.printer 0 pp.theme.reset
+  Utils.Styled_printer.print_styled pp.base style ~len text
 
-let box pp ?indent f = Utils.Printer.box pp.printer ?indent f
-let hvbox pp ?indent f = Utils.Printer.hvbox pp.printer ?indent f
-let indent pp i f = Utils.Printer.indent pp.printer i f
-let space pp () = Utils.Printer.space pp.printer ()
-let cut pp () = Utils.Printer.cut pp.printer ()
-let newline pp () = Utils.Printer.newline pp.printer ()
+let box pp ?indent f = Utils.Printer.box pp.base.printer ?indent f
+let hvbox pp ?indent f = Utils.Printer.hvbox pp.base.printer ?indent f
+let indent pp i f = Utils.Printer.indent pp.base.printer i f
+let space pp () = Utils.Printer.space pp.base.printer ()
+let cut pp () = Utils.Printer.cut pp.base.printer ()
+let newline pp () = Utils.Printer.newline pp.base.printer ()
 let punctuation pp s = print_styled pp Punctuation s
 let operator pp s = print_styled pp Operator s
 
@@ -69,20 +58,12 @@ let attribute pp s = print_styled pp Attribute s
    collected, looked up by AST-node location. The rendering logic is shared with
    the WebAssembly printer in [Utils.Trivia]. *)
 
-let print_trivia pp lst =
-  Utils.Trivia.print pp.printer ~comment:(comment pp) lst
+let print_trivia pp lst = Utils.Styled_printer.print_trivia pp.base lst
 
 let atomic_node pp (loc : location option) f =
-  Utils.Trivia.around ?collect:pp.collect pp.printer ~comment:(comment pp)
-    pp.trivia ~seen:pp.seen loc f
+  Utils.Styled_printer.atomic_node pp.base loc f
 
-let with_style ctx style f =
-  match ctx.style_override with
-  | Some _ -> f ()
-  | None ->
-      ctx.style_override <- Some style;
-      f ();
-      ctx.style_override <- None
+let with_style ctx style f = Utils.Styled_printer.with_style ctx.base style f
 
 let list ?(sep = space) f pp l =
   match l with
@@ -101,7 +82,7 @@ let list_commasep f pp l =
     ~sep:(fun pp () ->
       (* Hold any deferred trailing comment so the comma prints on the comment's
          line, ahead of it. *)
-      Utils.Printer.with_held_eol pp.printer (fun () -> punctuation pp ",");
+      Utils.Printer.with_held_eol pp.base.printer (fun () -> punctuation pp ",");
       space pp ())
     f pp l
 
@@ -111,23 +92,9 @@ let print_paren_list f pp l =
   punctuation pp ")"
 
 let heaptype pp (t : heaptype) =
-  type_ pp
-    (match t with
-    | Func -> "func"
-    | NoFunc -> "nofunc"
-    | Exn -> "exn"
-    | NoExn -> "noexn"
-    | Cont -> "cont"
-    | NoCont -> "nocont"
-    | Extern -> "extern"
-    | NoExtern -> "noextern"
-    | Any -> "any"
-    | Eq -> "eq"
-    | I31 -> "i31"
-    | Struct -> "struct"
-    | Array -> "array"
-    | None_ -> "none"
-    | Type s -> s.desc)
+  match heaptype_keyword t with
+  | Some kw -> type_ pp kw
+  | None -> ( match t with Type s -> type_ pp s.desc | _ -> assert false)
 
 let reftype pp { nullable; typ } =
   punctuation pp (if nullable then "&?" else "&");
@@ -386,7 +353,7 @@ let block_has_label_comment pp loc label =
   match loc with
   | None -> false
   | Some loc -> (
-      match Hashtbl.find_opt pp.trivia loc with
+      match Hashtbl.find_opt pp.base.trivia loc with
       | None -> false
       | Some { Utils.Trivia.within; after; _ } ->
           let target = "// '" ^ label.desc in
@@ -407,8 +374,8 @@ let label_comment pp ~loc (l, label) =
     Option.iter
       (fun label ->
         if not (block_has_label_comment pp loc label) then
-          Utils.Printer.defer_eol pp.printer (fun () ->
-              Utils.Printer.string pp.printer " ";
+          Utils.Printer.defer_eol pp.base.printer (fun () ->
+              Utils.Printer.string pp.base.printer " ";
               comment pp ("// '" ^ label.desc)))
       label
 
@@ -1375,70 +1342,27 @@ let module_ ?(color = Auto) ?out_channel ?(tail = []) ?collect printer ~trivia
   let theme = get_theme use_color in
   let pp =
     {
-      printer;
-      theme;
-      style_override = None;
-      trivia;
-      seen = Hashtbl.create 16;
-      collect;
+      base = Utils.Styled_printer.create ~printer ~theme ?collect ~trivia ();
       locate = (fun l -> Some l);
     }
   in
   hvbox pp (fun () -> list ~sep:space modulefield pp l);
   (* Trailing comments owned by no node. Drop trailing blank lines so the file
      does not end with spurious blank lines. *)
-  let rec drop_trailing_blanks = function
-    | { Utils.Trivia.trivia = Utils.Trivia.Blank_line; _ } :: rest ->
-        drop_trailing_blanks rest
-    | l -> l
-  in
-  let tail = List.rev (drop_trailing_blanks (List.rev tail)) in
+  let tail = Utils.Trivia.drop_trailing_blank_lines tail in
   print_trivia pp tail
 
-let instr printer i =
+(* Context for printing AST fragments in diagnostics: no trivia, no location
+   lookup, colour decided from [stderr]. *)
+let diagnostic_ctx printer =
   let use_color = should_use_color ~color:Auto ~out_channel:(Some stderr) in
   let theme = get_theme use_color in
-  let pp =
-    {
-      printer;
-      theme;
-      style_override = None;
-      trivia = Hashtbl.create 0;
-      seen = Hashtbl.create 0;
-      collect = None;
-      locate = (fun _ -> None);
-    }
-  in
-  instr Instruction pp i
+  {
+    base =
+      Utils.Styled_printer.create ~printer ~theme ~trivia:(Hashtbl.create 0) ();
+    locate = (fun _ -> None);
+  }
 
-let valtype printer i =
-  let use_color = should_use_color ~color:Auto ~out_channel:(Some stderr) in
-  let theme = get_theme use_color in
-  let pp =
-    {
-      printer;
-      theme;
-      style_override = None;
-      trivia = Hashtbl.create 0;
-      seen = Hashtbl.create 0;
-      collect = None;
-      locate = (fun _ -> None);
-    }
-  in
-  valtype pp i
-
-let storagetype printer i =
-  let use_color = should_use_color ~color:Auto ~out_channel:(Some stderr) in
-  let theme = get_theme use_color in
-  let pp =
-    {
-      printer;
-      theme;
-      style_override = None;
-      trivia = Hashtbl.create 0;
-      seen = Hashtbl.create 0;
-      collect = None;
-      locate = (fun _ -> None);
-    }
-  in
-  storagetype pp i
+let instr printer i = instr Instruction (diagnostic_ctx printer) i
+let valtype printer i = valtype (diagnostic_ctx printer) i
+let storagetype printer i = storagetype (diagnostic_ctx printer) i
