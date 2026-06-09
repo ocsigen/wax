@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-e2421690.js";
+            window.path_to_searchindex_js = "searchindex-006ce041.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -193,9 +193,8 @@
 0o52        // Octal
 0b101010    // Binary
 </code></pre>
-<p>Integer literals are typed based on context. Suffix with <code>_i64</code> for 64-bit:</p>
-<pre><code class="language-wax">let x: i64 = 42;        // Inferred from type annotation
-let y: i64 = 42_i64;    // Explicit suffix
+<p>Integer literals are typed based on context:</p>
+<pre><code class="language-wax">let x: i64 = 42;        // Inferred from the type annotation
 </code></pre>
 <h3 id="floating-point"><a class="header" href="#floating-point">Floating Point</a></h3>
 <pre><code class="language-wax">3.14        // Decimal
@@ -212,7 +211,7 @@ nan         // Not a number
     let y: i32;
     x = 10;
     y = 20;
-    x + y
+    x + y;
 }
 </code></pre>
 <p>You can declare multiple variables:</p>
@@ -228,7 +227,7 @@ nan         // Not a number
 <h3 id="global-variables"><a class="header" href="#global-variables">Global Variables</a></h3>
 <p>Globals are declared at module level:</p>
 <pre><code class="language-wax">const PI: f64 = 3.14159;        // Immutable global
-let mut counter: i32 = 0;       // Mutable global
+let counter: i32 = 0;           // Mutable global
 </code></pre>
 <h2 id="expressions"><a class="header" href="#expressions">Expressions</a></h2>
 <p>Wax is expression-oriented. Most constructs produce values.</p>
@@ -278,13 +277,16 @@ x.nearest   // Round to nearest
 x.clz       // Count leading zeros
 x.ctz       // Count trailing zeros
 x.popcnt    // Population count
+x.extend8_s   // Sign-extend the low 8 bits
+x.extend16_s  // Sign-extend the low 16 bits
 </code></pre>
-<p>Two-argument operations:</p>
-<pre><code class="language-wax">min(x, y)
-max(x, y)
-copysign(x, y)
-rotl(x, y)      // Rotate left
-rotr(x, y)      // Rotate right
+<p>Two-argument operations also use method syntax, with the second operand
+passed as an argument:</p>
+<pre><code class="language-wax">x.min(y)
+x.max(y)
+x.copysign(y)
+x.rotl(y)      // Rotate left
+x.rotr(y)      // Rotate right
 </code></pre>
 <h3 id="type-conversions"><a class="header" href="#type-conversions">Type Conversions</a></h3>
 <p>Use <code>as</code> for type conversions:</p>
@@ -308,26 +310,26 @@ x.from_bits     // Reinterpret int as float
 <pre><code class="language-wax">{
     let x: i32;
     x = compute();
-    x + 1
+    x + 1;
 }
 </code></pre>
 <p>Use <code>do</code> with a type annotation when the block returns a value:</p>
 <pre><code class="language-wax">do i32 {
-    42
+    42;
 }
 </code></pre>
 <h3 id="if-expressions"><a class="header" href="#if-expressions">If Expressions</a></h3>
 <pre><code class="language-wax">if condition {
-    then_branch
+    then_branch;
 } else {
-    else_branch
+    else_branch;
 }
 </code></pre>
 <p>With a result type:</p>
 <pre><code class="language-wax">if condition =&gt; i32 {
-    1
+    1;
 } else {
-    0
+    0;
 }
 </code></pre>
 <h3 id="loops"><a class="header" href="#loops">Loops</a></h3>
@@ -364,17 +366,17 @@ br_table ['a, 'b else 'default] index;  // Branch table
 <h3 id="tail-calls"><a class="header" href="#tail-calls">Tail Calls</a></h3>
 <p>Use <code>become</code> for tail calls (guaranteed not to grow the stack):</p>
 <pre><code class="language-wax">fn factorial_helper(n: i32, acc: i32) -&gt; i32 {
-    if n &lt;= 1 {
-        acc
+    if n &lt;=s 1 =&gt; i32 {
+        acc;
     } else {
-        become factorial_helper(n - 1, n * acc)
+        become factorial_helper(n - 1, n * acc);
     }
 }
 </code></pre>
 <h2 id="functions"><a class="header" href="#functions">Functions</a></h2>
 <h3 id="definition"><a class="header" href="#definition">Definition</a></h3>
 <pre><code class="language-wax">fn name(param1: type1, param2: type2) -&gt; return_type {
-    body
+    body;
 }
 </code></pre>
 <p>Functions without a return type return nothing:</p>
@@ -415,7 +417,7 @@ val as &amp;type    // Cast val to type (trap on failure)
 <h2 id="structs"><a class="header" href="#structs">Structs</a></h2>
 <h3 id="definition-1"><a class="header" href="#definition-1">Definition</a></h3>
 <pre><code class="language-wax">type point = { x: i32, y: i32 };
-type mutable_point = { mut x: i32, mut y: i32 };
+type mutable_point = { x: mut i32, y: mut i32 };
 </code></pre>
 <h3 id="creation"><a class="header" href="#creation">Creation</a></h3>
 <pre><code class="language-wax">{point| x: 10, y: 20}       // New struct with explicit type
@@ -434,11 +436,53 @@ type mutable_ints = [mut i32];
 <pre><code class="language-wax">[bytes| 0; 100]             // New array: 100 elements, all 0
 [bytes| ..; 100]            // New array: 100 elements, default value
 [bytes| 1, 2, 3, 4]         // New array with specific values
+[bytes| seg @ 0; 100]       // New array from a data segment (offset, count)
 </code></pre>
+<p>The last form is <code>array.new_data</code>: it initializes the array from the named <a href="module_fields.html#data-segments">data segment</a> <code>seg</code>, reading <code>count</code> elements starting at byte <code>offset</code>.</p>
 <h3 id="element-access"><a class="header" href="#element-access">Element Access</a></h3>
 <pre><code class="language-wax">arr[i]                      // Get element
 arr[i] = val;               // Set element (if mutable)
 arr.length                  // Array length
+</code></pre>
+<h2 id="memories"><a class="header" href="#memories">Memories</a></h2>
+<h3 id="declaration"><a class="header" href="#declaration">Declaration</a></h3>
+<pre><code class="language-wax">memory mem0: i32 [1, 1000];     // address type i32, min 1 page, max 1000
+memory mem1: i64 [2];           // min 2 pages, no maximum
+memory mem2: i32;               // size derived from data segments
+</code></pre>
+<h3 id="data-segments"><a class="header" href="#data-segments">Data Segments</a></h3>
+<pre><code class="language-wax">memory mem1: i64 {
+    data _ @ [0x1000] = "hello world";   // active, anonymous
+    data greeting @ [0x2000] = "hi";     // active, named
+}
+
+data seg = "raw\00bytes";                // top-level passive segment
+data init @ mem0 [0] = "hello";          // top-level active segment
+</code></pre>
+<h3 id="load-and-store"><a class="header" href="#load-and-store">Load and Store</a></h3>
+<pre><code class="language-wax">mem0.load32(p)              // i32 load
+mem0.load64(p)              // i64 load
+mem0.load8(p) as i32_u      // narrow load, zero-extended
+mem0.load16(p) as i32_s     // narrow load, sign-extended
+mem0.load32(p) as i64_s     // load then widen to i64
+
+mem0.store32(p, v);         // store (width by method, type by value)
+mem0.store16(p, v);
+mem0.store32(p, v, 1, 16);  // align=1, offset=16
+</code></pre>
+<p>The two optional trailing arguments are the access <code>align</code> and <code>offset</code> (constant integers).</p>
+<h2 id="tables-and-element-segments"><a class="header" href="#tables-and-element-segments">Tables and Element Segments</a></h2>
+<p>A table holds references and is indexed like an array. Element segments declare lists of references, optionally initializing a table.</p>
+<pre><code class="language-wax">table funcs: &amp;?func [1, 10];          // table of function references
+elem init: &amp;?func @ funcs[0] = [f];   // active: initialize funcs at offset 0
+elem pool: &amp;?func = [f, g, h];        // passive segment
+
+funcs[i]                              // table.get
+funcs[i] = g;                         // table.set
+(funcs[i] as &amp;cmp)(x, y)              // indirect call (call_indirect)
+</code></pre>
+<p>A passive element segment initializes a GC array of references with the same <code>[t| seg @ off; count]</code> form used for data segments — a reference element type selects the element segment:</p>
+<pre><code class="language-wax">[handlers| pool @ 0; 3]               // array.new_elem
 </code></pre>
 <h2 id="exceptions"><a class="header" href="#exceptions">Exceptions</a></h2>
 <h3 id="tags"><a class="header" href="#tags">Tags</a></h3>
@@ -446,7 +490,7 @@ arr.length                  // Array length
 <pre><code class="language-wax">tag my_error(code: i32);
 </code></pre>
 <h3 id="throw"><a class="header" href="#throw">Throw</a></h3>
-<pre><code class="language-wax">throw my_error(42);
+<pre><code class="language-wax">throw my_error 42;
 </code></pre>
 <h3 id="trycatch-try_table-style"><a class="header" href="#trycatch-try_table-style">Try/Catch (try_table style)</a></h3>
 <pre><code class="language-wax">'handler: do {

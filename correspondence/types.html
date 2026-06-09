@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e2421690.js";
+            window.path_to_searchindex_js = "../searchindex-006ce041.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f031991a.js"></script>
@@ -225,9 +225,11 @@
 <tr><td><code>array</code></td><td><code>array</code></td></tr>
 <tr><td><code>i31</code></td><td><code>i31</code></td></tr>
 <tr><td><code>exn</code></td><td><code>exn</code></td></tr>
+<tr><td><code>cont</code></td><td><code>cont</code></td></tr>
 <tr><td><code>noextern</code></td><td><code>noextern</code></td></tr>
 <tr><td><code>nofunc</code></td><td><code>nofunc</code></td></tr>
 <tr><td><code>noexn</code></td><td><code>noexn</code></td></tr>
+<tr><td><code>nocont</code></td><td><code>nocont</code></td></tr>
 <tr><td><code>none</code></td><td><code>none</code></td></tr>
 <tr><td><code>&lt;typeidx&gt;</code></td><td><code>&lt;identifier&gt;</code></td></tr>
 </tbody>
@@ -237,31 +239,37 @@
 <h3 id="recursive-types"><a class="header" href="#recursive-types">Recursive Types</a></h3>
 <p>Wax allows defining recursive reference types using <code>rec { ... }</code>.</p>
 <pre><code class="language-wax">rec {
-    type list = { head: i32, tail: node }
-    type node = [list]
+    type tree = { value: i32, children: &amp;forest };
+    type forest = [&amp;?tree];
 }
 </code></pre>
 <h3 id="structs"><a class="header" href="#structs">Structs</a></h3>
-<pre><code class="language-wax">type point = { x: i32, y: i32 }
-type mutable_point = { mut x: i32, mut y: i32 }
+<pre><code class="language-wax">type point = { x: i32, y: i32 };
+type mutable_point = { x: mut i32, y: mut i32 };
 </code></pre>
 <p>Maps to Wasm <code>(type $point (struct (field i32) (field i32)))</code>.</p>
 <h3 id="arrays"><a class="header" href="#arrays">Arrays</a></h3>
-<pre><code class="language-wax">type bytes = [i8]
-type mutable_bytes = [mut i8]
+<pre><code class="language-wax">type bytes = [i8];
+type mutable_bytes = [mut i8];
 </code></pre>
 <p>Maps to Wasm <code>(type $bytes (array i8))</code>.</p>
 <h3 id="functions"><a class="header" href="#functions">Functions</a></h3>
-<pre><code class="language-wax">type binop = fn(_: i32, _: i32) -&gt; i32
+<pre><code class="language-wax">type binop = fn(_: i32, _: i32) -&gt; i32;
 </code></pre>
 <p>Maps to Wasm <code>(type $binop (func (param i32 i32) (result i32)))</code>.</p>
+<h3 id="continuations"><a class="header" href="#continuations">Continuations</a></h3>
+<p>A continuation type (from the <a href="https://github.com/WebAssembly/stack-switching">stack-switching proposal</a>) wraps a function type:</p>
+<pre><code class="language-wax">type ft = fn(i32) -&gt; i32;
+type k = cont ft;
+</code></pre>
+<p>Maps to Wasm <code>(type $k (cont $ft))</code>. See <a href="instructions.html#stack-switching-instructions">Stack Switching Instructions</a> for the operations on continuations.</p>
+<p><code>cont</code> and <code>nocont</code> are reserved heap types (like <code>func</code>/<code>struct</code>), so the abstract continuation references <code>&amp;cont</code>, <code>&amp;?cont</code> and <code>&amp;nocont</code> are available directly in addition to references to declared continuation types (<code>&amp;k</code>, <code>&amp;?k</code>). Because these names are reserved, a WebAssembly type literally named <code>$cont</code> is renamed (e.g. to <code>cont_2</code>) when decompiling to Wax.</p>
 <h3 id="supertypes-and-finality"><a class="header" href="#supertypes-and-finality">Supertypes and Finality</a></h3>
 <p>Types are final by default. To make a type open (extensible), use the <code>open</code> keyword.
 To specify a supertype, use <code>: supertype</code> before the assignment.</p>
-<pre><code class="language-wax">type point = { x: i32, y: i32 }
-type point3d : point = { z: i32 }        ;; extend point (if point was open)
-type open_point = open { x: i32 }        ;; non-final type
-type sub_point : open_point = { y: i32 } ;; ok
+<pre><code class="language-wax">type point = { x: i32, y: i32 };                  // final by default
+type open_point = open { x: i32 };                // non-final: extensible
+type sub_point : open_point = { x: i32, y: i32 }; // extends open_point
 </code></pre>
 
                     </main>

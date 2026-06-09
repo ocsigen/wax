@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-e2421690.js";
+            window.path_to_searchindex_js = "searchindex-006ce041.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -189,7 +189,7 @@
 </code></pre>
 <p>Wax provides an expression-oriented syntax that feels more natural:</p>
 <pre><code class="language-wax">fn add(x: i32, y: i32) -&gt; i32 {
-    x + y
+    x + y;
 }
 </code></pre>
 <p>Both compile to identical WebAssembly bytecode.</p>
@@ -208,15 +208,15 @@ opam install .
 <p>Create a file <code>hello.wax</code>:</p>
 <pre><code class="language-wax">#[export = "add"]
 fn add(x: i32, y: i32) -&gt; i32 {
-    x + y
+    x + y;
 }
 
 #[export = "factorial"]
 fn factorial(n: i32) -&gt; i32 {
-    if n &lt;= 1 {
-        1
+    if n &lt;=s 1 =&gt; i32 {
+        1;
     } else {
-        n * factorial(n - 1)
+        n * factorial(n - 1);
     }
 }
 </code></pre>
@@ -280,9 +280,8 @@ fn factorial(n: i32) -&gt; i32 {
 0o52        // Octal
 0b101010    // Binary
 </code></pre>
-<p>Integer literals are typed based on context. Suffix with <code>_i64</code> for 64-bit:</p>
-<pre><code class="language-wax">let x: i64 = 42;        // Inferred from type annotation
-let y: i64 = 42_i64;    // Explicit suffix
+<p>Integer literals are typed based on context:</p>
+<pre><code class="language-wax">let x: i64 = 42;        // Inferred from the type annotation
 </code></pre>
 <h3 id="floating-point"><a class="header" href="#floating-point">Floating Point</a></h3>
 <pre><code class="language-wax">3.14        // Decimal
@@ -299,7 +298,7 @@ nan         // Not a number
     let y: i32;
     x = 10;
     y = 20;
-    x + y
+    x + y;
 }
 </code></pre>
 <p>You can declare multiple variables:</p>
@@ -315,7 +314,7 @@ nan         // Not a number
 <h3 id="global-variables"><a class="header" href="#global-variables">Global Variables</a></h3>
 <p>Globals are declared at module level:</p>
 <pre><code class="language-wax">const PI: f64 = 3.14159;        // Immutable global
-let mut counter: i32 = 0;       // Mutable global
+let counter: i32 = 0;           // Mutable global
 </code></pre>
 <h2 id="expressions"><a class="header" href="#expressions">Expressions</a></h2>
 <p>Wax is expression-oriented. Most constructs produce values.</p>
@@ -365,13 +364,16 @@ x.nearest   // Round to nearest
 x.clz       // Count leading zeros
 x.ctz       // Count trailing zeros
 x.popcnt    // Population count
+x.extend8_s   // Sign-extend the low 8 bits
+x.extend16_s  // Sign-extend the low 16 bits
 </code></pre>
-<p>Two-argument operations:</p>
-<pre><code class="language-wax">min(x, y)
-max(x, y)
-copysign(x, y)
-rotl(x, y)      // Rotate left
-rotr(x, y)      // Rotate right
+<p>Two-argument operations also use method syntax, with the second operand
+passed as an argument:</p>
+<pre><code class="language-wax">x.min(y)
+x.max(y)
+x.copysign(y)
+x.rotl(y)      // Rotate left
+x.rotr(y)      // Rotate right
 </code></pre>
 <h3 id="type-conversions"><a class="header" href="#type-conversions">Type Conversions</a></h3>
 <p>Use <code>as</code> for type conversions:</p>
@@ -395,26 +397,26 @@ x.from_bits     // Reinterpret int as float
 <pre><code class="language-wax">{
     let x: i32;
     x = compute();
-    x + 1
+    x + 1;
 }
 </code></pre>
 <p>Use <code>do</code> with a type annotation when the block returns a value:</p>
 <pre><code class="language-wax">do i32 {
-    42
+    42;
 }
 </code></pre>
 <h3 id="if-expressions"><a class="header" href="#if-expressions">If Expressions</a></h3>
 <pre><code class="language-wax">if condition {
-    then_branch
+    then_branch;
 } else {
-    else_branch
+    else_branch;
 }
 </code></pre>
 <p>With a result type:</p>
 <pre><code class="language-wax">if condition =&gt; i32 {
-    1
+    1;
 } else {
-    0
+    0;
 }
 </code></pre>
 <h3 id="loops"><a class="header" href="#loops">Loops</a></h3>
@@ -451,17 +453,17 @@ br_table ['a, 'b else 'default] index;  // Branch table
 <h3 id="tail-calls"><a class="header" href="#tail-calls">Tail Calls</a></h3>
 <p>Use <code>become</code> for tail calls (guaranteed not to grow the stack):</p>
 <pre><code class="language-wax">fn factorial_helper(n: i32, acc: i32) -&gt; i32 {
-    if n &lt;= 1 {
-        acc
+    if n &lt;=s 1 =&gt; i32 {
+        acc;
     } else {
-        become factorial_helper(n - 1, n * acc)
+        become factorial_helper(n - 1, n * acc);
     }
 }
 </code></pre>
 <h2 id="functions"><a class="header" href="#functions">Functions</a></h2>
 <h3 id="definition"><a class="header" href="#definition">Definition</a></h3>
 <pre><code class="language-wax">fn name(param1: type1, param2: type2) -&gt; return_type {
-    body
+    body;
 }
 </code></pre>
 <p>Functions without a return type return nothing:</p>
@@ -502,7 +504,7 @@ val as &amp;type    // Cast val to type (trap on failure)
 <h2 id="structs"><a class="header" href="#structs">Structs</a></h2>
 <h3 id="definition-1"><a class="header" href="#definition-1">Definition</a></h3>
 <pre><code class="language-wax">type point = { x: i32, y: i32 };
-type mutable_point = { mut x: i32, mut y: i32 };
+type mutable_point = { x: mut i32, y: mut i32 };
 </code></pre>
 <h3 id="creation"><a class="header" href="#creation">Creation</a></h3>
 <pre><code class="language-wax">{point| x: 10, y: 20}       // New struct with explicit type
@@ -521,11 +523,53 @@ type mutable_ints = [mut i32];
 <pre><code class="language-wax">[bytes| 0; 100]             // New array: 100 elements, all 0
 [bytes| ..; 100]            // New array: 100 elements, default value
 [bytes| 1, 2, 3, 4]         // New array with specific values
+[bytes| seg @ 0; 100]       // New array from a data segment (offset, count)
 </code></pre>
+<p>The last form is <code>array.new_data</code>: it initializes the array from the named <a href="module_fields.html#data-segments">data segment</a> <code>seg</code>, reading <code>count</code> elements starting at byte <code>offset</code>.</p>
 <h3 id="element-access"><a class="header" href="#element-access">Element Access</a></h3>
 <pre><code class="language-wax">arr[i]                      // Get element
 arr[i] = val;               // Set element (if mutable)
 arr.length                  // Array length
+</code></pre>
+<h2 id="memories"><a class="header" href="#memories">Memories</a></h2>
+<h3 id="declaration"><a class="header" href="#declaration">Declaration</a></h3>
+<pre><code class="language-wax">memory mem0: i32 [1, 1000];     // address type i32, min 1 page, max 1000
+memory mem1: i64 [2];           // min 2 pages, no maximum
+memory mem2: i32;               // size derived from data segments
+</code></pre>
+<h3 id="data-segments"><a class="header" href="#data-segments">Data Segments</a></h3>
+<pre><code class="language-wax">memory mem1: i64 {
+    data _ @ [0x1000] = "hello world";   // active, anonymous
+    data greeting @ [0x2000] = "hi";     // active, named
+}
+
+data seg = "raw\00bytes";                // top-level passive segment
+data init @ mem0 [0] = "hello";          // top-level active segment
+</code></pre>
+<h3 id="load-and-store"><a class="header" href="#load-and-store">Load and Store</a></h3>
+<pre><code class="language-wax">mem0.load32(p)              // i32 load
+mem0.load64(p)              // i64 load
+mem0.load8(p) as i32_u      // narrow load, zero-extended
+mem0.load16(p) as i32_s     // narrow load, sign-extended
+mem0.load32(p) as i64_s     // load then widen to i64
+
+mem0.store32(p, v);         // store (width by method, type by value)
+mem0.store16(p, v);
+mem0.store32(p, v, 1, 16);  // align=1, offset=16
+</code></pre>
+<p>The two optional trailing arguments are the access <code>align</code> and <code>offset</code> (constant integers).</p>
+<h2 id="tables-and-element-segments"><a class="header" href="#tables-and-element-segments">Tables and Element Segments</a></h2>
+<p>A table holds references and is indexed like an array. Element segments declare lists of references, optionally initializing a table.</p>
+<pre><code class="language-wax">table funcs: &amp;?func [1, 10];          // table of function references
+elem init: &amp;?func @ funcs[0] = [f];   // active: initialize funcs at offset 0
+elem pool: &amp;?func = [f, g, h];        // passive segment
+
+funcs[i]                              // table.get
+funcs[i] = g;                         // table.set
+(funcs[i] as &amp;cmp)(x, y)              // indirect call (call_indirect)
+</code></pre>
+<p>A passive element segment initializes a GC array of references with the same <code>[t| seg @ off; count]</code> form used for data segments — a reference element type selects the element segment:</p>
+<pre><code class="language-wax">[handlers| pool @ 0; 3]               // array.new_elem
 </code></pre>
 <h2 id="exceptions"><a class="header" href="#exceptions">Exceptions</a></h2>
 <h3 id="tags"><a class="header" href="#tags">Tags</a></h3>
@@ -533,7 +577,7 @@ arr.length                  // Array length
 <pre><code class="language-wax">tag my_error(code: i32);
 </code></pre>
 <h3 id="throw"><a class="header" href="#throw">Throw</a></h3>
-<pre><code class="language-wax">throw my_error(42);
+<pre><code class="language-wax">throw my_error 42;
 </code></pre>
 <h3 id="trycatch-try_table-style"><a class="header" href="#trycatch-try_table-style">Try/Catch (try_table style)</a></h3>
 <pre><code class="language-wax">'handler: do {
@@ -613,12 +657,12 @@ Hint: reachable when not debug
 <h3 id="wax"><a class="header" href="#wax">Wax</a></h3>
 <pre><code class="language-wax">#[export = "add"]
 fn add(x: i32, y: i32) -&gt; i32 {
-    x + y
+    x + y;
 }
 
 #[export = "multiply"]
 fn multiply(x: i32, y: i32) -&gt; i32 {
-    x * y
+    x * y;
 }
 </code></pre>
 <h3 id="equivalent-wat"><a class="header" href="#equivalent-wat">Equivalent WAT</a></h3>
@@ -636,10 +680,10 @@ fn multiply(x: i32, y: i32) -&gt; i32 {
 <h3 id="wax-1"><a class="header" href="#wax-1">Wax</a></h3>
 <pre><code class="language-wax">#[export = "factorial"]
 fn factorial(n: i32) -&gt; i32 {
-    if n &lt;= 1 {
-        1
+    if n &lt;=s 1 =&gt; i32 {
+        1;
     } else {
-        n * factorial(n - 1)
+        n * factorial(n - 1);
     }
 }
 </code></pre>
@@ -663,35 +707,38 @@ fn factorial(n: i32) -&gt; i32 {
 <h3 id="wax-2"><a class="header" href="#wax-2">Wax</a></h3>
 <pre><code class="language-wax">#[export = "factorial"]
 fn factorial(n: i32) -&gt; i32 {
-    become factorial_helper(n, 1)
+    become factorial_helper(n, 1);
 }
 
 fn factorial_helper(n: i32, acc: i32) -&gt; i32 {
-    if n &lt;= 1 {
-        acc
+    if n &lt;=s 1 =&gt; i32 {
+        acc;
     } else {
-        become factorial_helper(n - 1, n * acc)
+        become factorial_helper(n - 1, n * acc);
     }
 }
 </code></pre>
 <h2 id="loop-with-early-exit"><a class="header" href="#loop-with-early-exit">Loop with Early Exit</a></h2>
 <h3 id="wax-3"><a class="header" href="#wax-3">Wax</a></h3>
-<pre><code class="language-wax">#[export = "find_first_zero"]
-fn find_first_zero(arr: &amp;[i32]) -&gt; i32 {
+<pre><code class="language-wax">type ints = [i32];
+
+#[export = "find_first_zero"]
+fn find_first_zero(arr: &amp;ints) -&gt; i32 {
     let i: i32;
     let len: i32;
     len = arr.length;
     i = 0;
     'search: loop {
-        if i &gt;= len {
-            return -1
+        if i &gt;=s len {
+            return -1;
         }
         if arr[i] == 0 {
-            return i
+            return i;
         }
         i = i + 1;
         br 'search;
     }
+    unreachable;
 }
 </code></pre>
 <h3 id="equivalent-wat-2"><a class="header" href="#equivalent-wat-2">Equivalent WAT</a></h3>
@@ -732,7 +779,7 @@ fn find_first_zero(arr: &amp;[i32]) -&gt; i32 {
 
 #[export = "make_point"]
 fn make_point(x: i32, y: i32) -&gt; &amp;point {
-    {point| x: x, y: y}
+    {point| x: x, y: y};
 }
 
 #[export = "distance_squared"]
@@ -741,16 +788,16 @@ fn distance_squared(p1: &amp;point, p2: &amp;point) -&gt; i32 {
     let dy: i32;
     dx = p1.x - p2.x;
     dy = p1.y - p2.y;
-    dx * dx + dy * dy
+    dx * dx + dy * dy;
 }
 </code></pre>
 <h2 id="mutable-structs"><a class="header" href="#mutable-structs">Mutable Structs</a></h2>
 <h3 id="wax-5"><a class="header" href="#wax-5">Wax</a></h3>
-<pre><code class="language-wax">type counter = { mut value: i32 };
+<pre><code class="language-wax">type counter = { value: mut i32 };
 
 #[export = "new_counter"]
 fn new_counter() -&gt; &amp;counter {
-    {counter| value: 0}
+    {counter| value: 0};
 }
 
 #[export = "increment"]
@@ -760,7 +807,7 @@ fn increment(c: &amp;counter) {
 
 #[export = "get_value"]
 fn get_value(c: &amp;counter) -&gt; i32 {
-    c.value
+    c.value;
 }
 </code></pre>
 <h2 id="arrays-1"><a class="header" href="#arrays-1">Arrays</a></h2>
@@ -775,14 +822,15 @@ fn sum_bytes(arr: &amp;bytes) -&gt; i32 {
     sum = 0;
     i = 0;
     len = arr.length;
-    loop {
-        if i &gt;= len {
-            return sum
+    'loop: loop {
+        if i &gt;=s len {
+            return sum;
         }
         sum = sum + arr[i] as i32_u;
         i = i + 1;
         br 'loop;
     }
+    unreachable;
 }
 
 #[export = "fill_bytes"]
@@ -791,11 +839,11 @@ fn fill_bytes(arr: &amp;bytes, val: i32) {
     let len: i32;
     i = 0;
     len = arr.length;
-    loop {
-        if i &gt;= len {
-            return
+    'loop: loop {
+        if i &gt;=s len {
+            return;
         }
-        arr[i] = val as i8;
+        arr[i] = val;
         i = i + 1;
         br 'loop;
     }
@@ -809,42 +857,38 @@ tag overflow();
 #[export = "safe_divide"]
 fn safe_divide(a: i32, b: i32) -&gt; i32 {
     if b == 0 {
-        throw divide_by_zero();
+        throw divide_by_zero;
     }
-    a /s b
+    a /s b;
 }
 
 #[export = "try_divide"]
 fn try_divide(a: i32, b: i32) -&gt; i32 {
-    'handler: do i32 {
+    'on_error: do {
         try {
-            become safe_divide(a, b)
-        } catch [divide_by_zero -&gt; 'handler]
-        unreachable
+            return safe_divide(a, b);
+        } catch [divide_by_zero -&gt; 'on_error]
     }
-    0   // Return 0 on division by zero
+    0;   // Return 0 on division by zero
 }
 </code></pre>
 <h2 id="recursive-types-linked-list"><a class="header" href="#recursive-types-linked-list">Recursive Types (Linked List)</a></h2>
 <h3 id="wax-8"><a class="header" href="#wax-8">Wax</a></h3>
-<pre><code class="language-wax">rec {
-    type node = { value: i32, next: &amp;?list };
-    type list = node;
-}
+<pre><code class="language-wax">type list = { value: i32, next: &amp;?list };
 
 #[export = "make_node"]
-fn make_node(value: i32, next: &amp;?list) -&gt; &amp;node {
-    {node| value: value, next: next}
+fn make_node(value: i32, next: &amp;?list) -&gt; &amp;list {
+    {list| value: value, next: next};
 }
 
 #[export = "sum_list"]
 fn sum_list(head: &amp;?list) -&gt; i32 {
     if !head {
-        return 0
+        return 0;
     }
-    let n: &amp;node;
+    let n: &amp;list;
     n = head!;
-    n.value + sum_list(n.next)
+    n.value + sum_list(n.next);
 }
 </code></pre>
 <h2 id="imports-and-exports"><a class="header" href="#imports-and-exports">Imports and Exports</a></h2>
@@ -863,7 +907,7 @@ fn compute_and_log(x: i32) -&gt; i32 {
     let result: i32;
     result = x + base_value;
     log(result);
-    result
+    result;
 }
 </code></pre>
 <h2 id="hash-function"><a class="header" href="#hash-function">Hash Function</a></h2>
@@ -871,7 +915,7 @@ fn compute_and_log(x: i32) -&gt; i32 {
 <h3 id="wax-10"><a class="header" href="#wax-10">Wax</a></h3>
 <pre><code class="language-wax">#[export = "hash_mix_int"]
 fn hash_mix_int(h: i32, d: i32) -&gt; i32 {
-    rotl(rotl(d * 0xcc9e2d51, 15) * 0x1b873593 ^ h, 13) * 5 + 0xe6546b64
+    ((d * 0xcc9e2d51).rotl(15) * 0x1b873593 ^ h).rotl(13) * 5 + 0xe6546b64;
 }
 
 #[export = "hash_finalize"]
@@ -880,7 +924,7 @@ fn hash_finalize(h: i32) -&gt; i32 {
     h = h * 0x85ebca6b;
     h = h ^ h &gt;&gt;u 13;
     h = h * 0xc2b2ae35;
-    h ^ h &gt;&gt;u 16
+    h ^ h &gt;&gt;u 16;
 }
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div>
@@ -944,9 +988,11 @@ fn hash_finalize(h: i32) -&gt; i32 {
 <tr><td><code>array</code></td><td><code>array</code></td></tr>
 <tr><td><code>i31</code></td><td><code>i31</code></td></tr>
 <tr><td><code>exn</code></td><td><code>exn</code></td></tr>
+<tr><td><code>cont</code></td><td><code>cont</code></td></tr>
 <tr><td><code>noextern</code></td><td><code>noextern</code></td></tr>
 <tr><td><code>nofunc</code></td><td><code>nofunc</code></td></tr>
 <tr><td><code>noexn</code></td><td><code>noexn</code></td></tr>
+<tr><td><code>nocont</code></td><td><code>nocont</code></td></tr>
 <tr><td><code>none</code></td><td><code>none</code></td></tr>
 <tr><td><code>&lt;typeidx&gt;</code></td><td><code>&lt;identifier&gt;</code></td></tr>
 </tbody>
@@ -956,31 +1002,37 @@ fn hash_finalize(h: i32) -&gt; i32 {
 <h3 id="recursive-types"><a class="header" href="#recursive-types">Recursive Types</a></h3>
 <p>Wax allows defining recursive reference types using <code>rec { ... }</code>.</p>
 <pre><code class="language-wax">rec {
-    type list = { head: i32, tail: node }
-    type node = [list]
+    type tree = { value: i32, children: &amp;forest };
+    type forest = [&amp;?tree];
 }
 </code></pre>
 <h3 id="structs-1"><a class="header" href="#structs-1">Structs</a></h3>
-<pre><code class="language-wax">type point = { x: i32, y: i32 }
-type mutable_point = { mut x: i32, mut y: i32 }
+<pre><code class="language-wax">type point = { x: i32, y: i32 };
+type mutable_point = { x: mut i32, y: mut i32 };
 </code></pre>
 <p>Maps to Wasm <code>(type $point (struct (field i32) (field i32)))</code>.</p>
 <h3 id="arrays-2"><a class="header" href="#arrays-2">Arrays</a></h3>
-<pre><code class="language-wax">type bytes = [i8]
-type mutable_bytes = [mut i8]
+<pre><code class="language-wax">type bytes = [i8];
+type mutable_bytes = [mut i8];
 </code></pre>
 <p>Maps to Wasm <code>(type $bytes (array i8))</code>.</p>
 <h3 id="functions-1"><a class="header" href="#functions-1">Functions</a></h3>
-<pre><code class="language-wax">type binop = fn(_: i32, _: i32) -&gt; i32
+<pre><code class="language-wax">type binop = fn(_: i32, _: i32) -&gt; i32;
 </code></pre>
 <p>Maps to Wasm <code>(type $binop (func (param i32 i32) (result i32)))</code>.</p>
+<h3 id="continuations"><a class="header" href="#continuations">Continuations</a></h3>
+<p>A continuation type (from the <a href="https://github.com/WebAssembly/stack-switching">stack-switching proposal</a>) wraps a function type:</p>
+<pre><code class="language-wax">type ft = fn(i32) -&gt; i32;
+type k = cont ft;
+</code></pre>
+<p>Maps to Wasm <code>(type $k (cont $ft))</code>. See <a href="#stack-switching-instructions">Stack Switching Instructions</a> for the operations on continuations.</p>
+<p><code>cont</code> and <code>nocont</code> are reserved heap types (like <code>func</code>/<code>struct</code>), so the abstract continuation references <code>&amp;cont</code>, <code>&amp;?cont</code> and <code>&amp;nocont</code> are available directly in addition to references to declared continuation types (<code>&amp;k</code>, <code>&amp;?k</code>). Because these names are reserved, a WebAssembly type literally named <code>$cont</code> is renamed (e.g. to <code>cont_2</code>) when decompiling to Wax.</p>
 <h3 id="supertypes-and-finality"><a class="header" href="#supertypes-and-finality">Supertypes and Finality</a></h3>
 <p>Types are final by default. To make a type open (extensible), use the <code>open</code> keyword.
 To specify a supertype, use <code>: supertype</code> before the assignment.</p>
-<pre><code class="language-wax">type point = { x: i32, y: i32 }
-type point3d : point = { z: i32 }        ;; extend point (if point was open)
-type open_point = open { x: i32 }        ;; non-final type
-type sub_point : open_point = { y: i32 } ;; ok
+<pre><code class="language-wax">type point = { x: i32, y: i32 };                  // final by default
+type open_point = open { x: i32 };                // non-final: extensible
+type sub_point : open_point = { x: i32, y: i32 }; // extends open_point
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="instructions"><a class="header" href="#instructions">Instructions</a></h1>
@@ -1022,7 +1074,7 @@ type sub_point : open_point = { y: i32 } ;; ok
 <tr><td><code>f32.mul</code> / <code>f64.mul</code></td><td><code>*</code></td></tr>
 <tr><td><code>f32.div</code> / <code>f64.div</code></td><td><code>/</code></td></tr>
 <tr><td><code>f32.abs</code> … <code>f64.sqrt</code></td><td><code>val.abs</code>, <code>val.neg</code>, <code>val.ceil</code>, <code>val.floor</code>, <code>val.trunc</code>, <code>val.nearest</code>, <code>val.sqrt</code></td></tr>
-<tr><td><code>f32.min</code> … <code>f64.copysign</code></td><td><code>min(v1, v2)</code>, <code>max(v1, v2)</code>, <code>copysign(v1, v2)</code></td></tr>
+<tr><td><code>f32.min</code> … <code>f64.copysign</code></td><td><code>v1.min(v2)</code>, <code>v1.max(v2)</code>, <code>v1.copysign(v2)</code></td></tr>
 </tbody>
 </table>
 </div>
@@ -1034,7 +1086,8 @@ type sub_point : open_point = { y: i32 } ;; ok
 </thead>
 <tbody>
 <tr><td><code>i32.clz</code> … <code>i64.popcnt</code></td><td><code>val.clz</code>, <code>val.ctz</code>, <code>val.popcnt</code></td></tr>
-<tr><td><code>i32.rotl</code> … <code>i64.rotr</code></td><td><code>rotl(v1, v2)</code>, <code>rotr(v1, v2)</code></td></tr>
+<tr><td><code>i32.extend8_s</code> … <code>i64.extend16_s</code></td><td><code>val.extend8_s</code>, <code>val.extend16_s</code></td></tr>
+<tr><td><code>i32.rotl</code> … <code>i64.rotr</code></td><td><code>v1.rotl(v2)</code>, <code>v1.rotr(v2)</code></td></tr>
 </tbody>
 </table>
 </div>
@@ -1166,6 +1219,10 @@ if cond =&gt; (i32) -&gt; i32 { ... } else { ... }
 <tr><td><code>array.new $t</code></td><td><code>[t| val; len]</code></td></tr>
 <tr><td><code>array.new_default $t</code></td><td><code>[t| ..; len]</code></td></tr>
 <tr><td><code>array.new_fixed $t</code></td><td><code>[t| val, ...]</code></td></tr>
+<tr><td><code>array.new_data $t $d</code></td><td><code>[t| d @ offset; count]</code></td></tr>
+<tr><td><code>array.new_elem $t $e</code></td><td><code>[t| e @ offset; count]</code></td></tr>
+<tr><td><code>array.init_data $t $d</code></td><td><code>arr.init(d, dest, src, count)</code></td></tr>
+<tr><td><code>array.init_elem $t $e</code></td><td><code>arr.init(e, dest, src, count)</code></td></tr>
 <tr><td><code>array.get $t</code></td><td><code>arr[idx]</code></td></tr>
 <tr><td><code>array.get_s $t</code></td><td><code>arr[idx] as i32_s</code></td></tr>
 <tr><td><code>array.get_u $t</code></td><td><code>arr[idx] as i32_u</code></td></tr>
@@ -1174,6 +1231,86 @@ if cond =&gt; (i32) -&gt; i32 { ... } else { ... }
 </tbody>
 </table>
 </div>
+<h2 id="memory-access"><a class="header" href="#memory-access">Memory Access</a></h2>
+<p>Loads and stores are method calls on a <a href="#memories-1">memory</a>. The method name carries the access width; the value’s signedness (for narrow loads) and its <code>i32</code>/<code>i64</code> type are expressed with the surrounding <code>as iN_s</code>/<code>as iN_u</code> cast, mirroring packed array access.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Wax</th><th>Wasm</th></tr>
+</thead>
+<tbody>
+<tr><td><code>m.load32(p)</code></td><td><code>i32.load</code></td></tr>
+<tr><td><code>m.load64(p)</code></td><td><code>i64.load</code></td></tr>
+<tr><td><code>m.loadf32(p)</code> / <code>m.loadf64(p)</code></td><td><code>f32.load</code> / <code>f64.load</code></td></tr>
+<tr><td><code>m.load8(p) as i32_s</code></td><td><code>i32.load8_s</code></td></tr>
+<tr><td><code>m.load16(p) as i32_u</code></td><td><code>i32.load16_u</code></td></tr>
+<tr><td><code>m.load32(p) as i64_s</code></td><td><code>i32.load</code> + <code>i64.extend_i32_s</code> (≡ <code>i64.load32_s</code>)</td></tr>
+<tr><td><code>m.load8(p) as i32_s as i64_s</code></td><td><code>i32.load8_s</code> + <code>i64.extend_i32_s</code> (≡ <code>i64.load8_s</code>)</td></tr>
+<tr><td><code>m.store32(p, v)</code></td><td><code>i32.store</code> (<code>v: i32</code>) or <code>i64.store32</code> (<code>v: i64</code>)</td></tr>
+<tr><td><code>m.store16(p, v)</code></td><td><code>i32.store16</code> or <code>i64.store16</code> (by <code>v</code>’s type)</td></tr>
+<tr><td><code>m.store64(p, v)</code> / <code>m.storef64(p, v)</code></td><td><code>i64.store</code> / <code>f64.store</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>A bare narrow load (<code>m.load8(p)</code> with no cast) defaults to unsigned <code>i32</code>, like <code>array.get_u</code>. The store value’s <code>i32</code>/<code>i64</code> type is inferred from the operand.</p>
+<p>Two optional trailing arguments give the <code>align</code> and <code>offset</code> of the access (both constant integers); <code>offset</code> requires <code>align</code> to fill its positional slot:</p>
+<pre><code class="language-wax">m.load32(p);          // i32.load
+m.load32(p, 1);       // i32.load align=1
+m.load32(p, 1, 16);   // i32.load align=1 offset=16
+</code></pre>
+<p>The alignment defaults to the access’s natural alignment and is only printed when it differs; the offset defaults to <code>0</code>.</p>
+<p>The remaining memory operations are also methods on the memory (a data segment is named directly, not as a value):</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Wax</th><th>Wasm</th></tr>
+</thead>
+<tbody>
+<tr><td><code>m.size()</code></td><td><code>memory.size</code></td></tr>
+<tr><td><code>m.grow(n)</code></td><td><code>memory.grow</code></td></tr>
+<tr><td><code>m.fill(dest, val, len)</code></td><td><code>memory.fill</code></td></tr>
+<tr><td><code>m.copy(dest, src, len)</code></td><td><code>memory.copy</code> (within <code>m</code>)</td></tr>
+<tr><td><code>m.copy(m2, dest, src, len)</code></td><td><code>memory.copy m m2</code> (copy from <code>m2</code> into <code>m</code>)</td></tr>
+<tr><td><code>m.init(seg, dest, src, len)</code></td><td><code>memory.init seg</code></td></tr>
+<tr><td><code>seg.drop()</code></td><td><code>data.drop seg</code></td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="table-access"><a class="header" href="#table-access">Table Access</a></h2>
+<p>A <a href="#tables">table</a> is indexed like an array, and an indirect call is written as a call through a table slot cast to the callee’s function type.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Wasm</th><th>Wax</th></tr>
+</thead>
+<tbody>
+<tr><td><code>table.get $t</code></td><td><code>t[i]</code></td></tr>
+<tr><td><code>table.set $t</code></td><td><code>t[i] = v</code></td></tr>
+<tr><td><code>call_indirect $t (type $ft)</code></td><td><code>(t[i] as &amp;ft)(args)</code></td></tr>
+<tr><td><code>call_indirect $t (result i32)</code></td><td><code>(t[i] as &amp;fn() -&gt; i32)(args)</code></td></tr>
+<tr><td><code>return_call_indirect $t (type $ft)</code></td><td><code>return (t[i] as &amp;ft)(args)</code></td></tr>
+</tbody>
+</table>
+</div>
+<p><code>call_indirect</code> is reconstructed from this pattern on conversion to WAT/WASM, so it round-trips. The cast target names the callee’s function type: either a defined type (<code>&amp;ft</code>) or an inline one written <code>&amp;fn(params) -&gt; results</code> (used when the WAT type is anonymous). When the table’s element type is already the concrete function type <code>&amp;ft</code>, the cast may be omitted (<code>t[i](args)</code>).</p>
+<p>The other table operations are methods on the table (an element segment is named directly):</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Wax</th><th>Wasm</th></tr>
+</thead>
+<tbody>
+<tr><td><code>t.size()</code></td><td><code>table.size</code></td></tr>
+<tr><td><code>t.grow(val, n)</code></td><td><code>table.grow</code></td></tr>
+<tr><td><code>t.fill(dest, val, len)</code></td><td><code>table.fill</code></td></tr>
+<tr><td><code>t.copy(dest, src, len)</code></td><td><code>table.copy</code> (within <code>t</code>)</td></tr>
+<tr><td><code>t.copy(t2, dest, src, len)</code></td><td><code>table.copy t t2</code> (copy from <code>t2</code> into <code>t</code>)</td></tr>
+<tr><td><code>t.init(seg, dest, src, len)</code></td><td><code>table.init seg</code></td></tr>
+<tr><td><code>seg.drop()</code></td><td><code>elem.drop seg</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>A GC array can also be filled from a segment with <code>arr.init(seg, dest, src, len)</code> (<code>array.init_data</code>/<code>array.init_elem</code>, selected by the array’s element type) — the segment-from-array counterpart of <a href="#aggregate-instructions"><code>array.new_data</code>/<code>array.new_elem</code></a>.</p>
 <h2 id="exception-instructions"><a class="header" href="#exception-instructions">Exception Instructions</a></h2>
 <div class="table-wrapper">
 <table>
@@ -1193,17 +1330,37 @@ if cond =&gt; (i32) -&gt; i32 { ... } else { ... }
 </table>
 </div>
 <p>The <code>try { ... } catch [ ... ]</code> syntax compiles to WebAssembly’s <code>try_table</code> instruction (the current standard). The <code>try { ... } catch { tag =&gt; { ... } }</code> syntax compiles to the older <code>try</code>/<code>catch</code> instructions (deprecated but still supported for compatibility).</p>
+<h2 id="stack-switching-instructions"><a class="header" href="#stack-switching-instructions">Stack Switching Instructions</a></h2>
+<p>These correspond to the WebAssembly <a href="https://github.com/WebAssembly/stack-switching">stack-switching proposal</a>. A continuation type is declared with <code>type k = cont ft;</code> (see <a href="#types">Types</a>); <code>&lt;k&gt;</code> and <code>&lt;tag&gt;</code> below are the names of a continuation type and a tag respectively.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Wasm</th><th>Wax</th></tr>
+</thead>
+<tbody>
+<tr><td><code>cont.new $k</code></td><td><code>cont_new k (func)</code></td></tr>
+<tr><td><code>cont.bind $k1 $k2</code></td><td><code>cont_bind k1 k2 (args, cont)</code></td></tr>
+<tr><td><code>suspend $tag</code></td><td><code>suspend tag (args)</code></td></tr>
+<tr><td><code>resume $k</code></td><td><code>resume k [] (args, cont)</code></td></tr>
+<tr><td><code>resume $k (on $tag $l) ...</code></td><td><code>resume k [ tag -&gt; 'l, ... ] (args, cont)</code></td></tr>
+<tr><td><code>resume $k (on $tag switch) ...</code></td><td><code>resume k [ tag -&gt; switch, ... ] (args, cont)</code></td></tr>
+<tr><td><code>resume_throw $k $tag ...</code></td><td><code>resume_throw k tag [ ... ] (args, cont)</code></td></tr>
+<tr><td><code>resume_throw_ref $k ...</code></td><td><code>resume_throw_ref k [ ... ] (exn, cont)</code></td></tr>
+<tr><td><code>switch $k $tag</code></td><td><code>switch k tag (args, cont)</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>Operands are written in WebAssembly stack order, so the continuation reference is the last argument. The handler list in <code>[ ... ]</code> mirrors the <code>try ... catch [ ... ]</code> syntax: <code>tag -&gt; 'l</code> is an <code>(on $tag $l)</code> clause and <code>tag -&gt; switch</code> is an <code>(on $tag switch)</code> clause.</p>
+<p>Tags used with <code>suspend</code>/<code>resume</code> may have result types (unlike exception tags); see <a href="#tags-1">Tags</a>. When a function reference is passed to <code>cont_new</code> for a continuation whose function type belongs to a recursion group, declare the function with an explicit type (<code>fn f: ft (...) { ... }</code>) so its type matches the continuation’s.</p>
 <h2 id="unsupported-features"><a class="header" href="#unsupported-features">Unsupported Features</a></h2>
 <p>The following WebAssembly features do not have dedicated Wax syntax. When converting from WAT/WASM to Wax, these instructions are preserved as-is or may be dropped:</p>
 <ul>
-<li><strong>Linear Memory</strong>: <code>memory.size</code>, <code>memory.grow</code>, <code>load</code>, <code>store</code> (all variants). Wax focuses on GC-based memory management using structs and arrays.</li>
-<li><strong>Tables</strong>: <code>table.get</code>, <code>table.set</code>, <code>call_indirect</code> (and related instructions). Use typed function references instead.</li>
 <li><strong>SIMD</strong>: All <code>v128</code> vector instructions. The <code>v128</code> type exists but operations are not exposed.</li>
-<li><strong>Indirect Calls via Tables</strong>: <code>return_call_indirect</code>, <code>call_indirect</code>. Use <code>call_ref</code> with function references instead.</li>
+<li><strong>Tuples</strong>: <code>tuple.extract</code> (the multi-value/tuple proposal) has no dedicated syntax.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="module-fields"><a class="header" href="#module-fields">Module Fields</a></h1>
-<p>Wax modules are defined by a sequence of top-level fields: types, functions, globals, and tags.</p>
+<p>Wax modules are defined by a sequence of top-level fields: types, functions, globals, tags, memories, and data segments.</p>
 <h2 id="types-1"><a class="header" href="#types-1">Types</a></h2>
 <p>Types are defined using <code>type</code> for single definitions or <code>rec { ... }</code> for mutually recursive types.</p>
 <h3 id="simple-types"><a class="header" href="#simple-types">Simple Types</a></h3>
@@ -1214,14 +1371,14 @@ type callback = fn(_: i32) -&gt; i32;
 <h3 id="recursive-types-1"><a class="header" href="#recursive-types-1">Recursive Types</a></h3>
 <p>Use <code>rec</code> when types reference each other:</p>
 <pre><code class="language-wax">rec {
-    type node = { value: i32, next: &amp;?list };
-    type list = node;
+    type list = { head: i32, tail: &amp;?node };
+    type node = { rest: &amp;list };
 }
 </code></pre>
 <h3 id="supertypes-and-finality-1"><a class="header" href="#supertypes-and-finality-1">Supertypes and Finality</a></h3>
 <p>Types are final (non-extensible) by default. Use <code>open</code> to allow subtypes:</p>
-<pre><code class="language-wax">type open shape = { x: i32, y: i32 };
-type circle : shape = { radius: i32 };
+<pre><code class="language-wax">type shape = open { x: i32, y: i32 };
+type circle : shape = { x: i32, y: i32, radius: i32 };
 </code></pre>
 <p>Maps to:</p>
 <pre><code class="language-wat">(type $shape (sub (struct (field $x i32) (field $y i32))))
@@ -1254,20 +1411,22 @@ type circle : shape = { radius: i32 };
 const MAX_SIZE: i32 = 1024;
 </code></pre>
 <h3 id="mutable-globals"><a class="header" href="#mutable-globals">Mutable Globals</a></h3>
-<pre><code class="language-wax">let mut counter: i32 = 0;
-let mut state: &amp;?any = null;
+<pre><code class="language-wax">let counter: i32 = 0;
+let state: &amp;?any = null;
 </code></pre>
 <h3 id="imported-globals"><a class="header" href="#imported-globals">Imported Globals</a></h3>
 <pre><code class="language-wax">#[import = ("env", "base")]
 const base: i32;
 
 #[import = ("env", "counter")]
-let mut counter: i32;
+let counter: i32;
 </code></pre>
 <h2 id="tags-1"><a class="header" href="#tags-1">Tags</a></h2>
 <p>Tags define exception types for structured exception handling.</p>
 <h3 id="definition-1-1"><a class="header" href="#definition-1-1">Definition</a></h3>
-<pre><code class="language-wax">tag my_error(code: i32);
+<pre><code class="language-wax">type string = [mut i8];
+
+tag my_error(code: i32);
 tag empty_error();
 tag multi_arg(a: i32, b: &amp;string);
 </code></pre>
@@ -1275,6 +1434,9 @@ tag multi_arg(a: i32, b: &amp;string);
 <pre><code class="language-wat">(tag $my_error (param i32))
 (tag $empty_error)
 (tag $multi_arg (param i32) (param (ref $string)))
+</code></pre>
+<p>A tag may also declare a result type, in which case it is used as a suspension tag for <a href="#stack-switching-instructions">stack switching</a> rather than for exceptions:</p>
+<pre><code class="language-wax">tag yield(value: i32) -&gt; i32;
 </code></pre>
 <h3 id="imported-tags"><a class="header" href="#imported-tags">Imported Tags</a></h3>
 <pre><code class="language-wax">#[import = ("env", "js_error")]
@@ -1285,7 +1447,7 @@ tag js_error(&amp;?extern);
 <h3 id="export-attribute"><a class="header" href="#export-attribute">Export Attribute</a></h3>
 <p>Export a field with a given name:</p>
 <pre><code class="language-wax">#[export = "add"]
-fn add(x: i32, y: i32) -&gt; i32 { x + y }
+fn add(x: i32, y: i32) -&gt; i32 { x + y; }
 
 #[export = "PI"]
 const PI: f64 = 3.14159;
@@ -1296,7 +1458,7 @@ tag my_error(code: i32);
 <p>Multiple exports can share the same function:</p>
 <pre><code class="language-wax">#[export = "add"]
 #[export = "plus"]
-fn add(x: i32, y: i32) -&gt; i32 { x + y }
+fn add(x: i32, y: i32) -&gt; i32 { x + y; }
 </code></pre>
 <h3 id="import-attribute"><a class="header" href="#import-attribute">Import Attribute</a></h3>
 <p>Import a field from a module. Takes a tuple of <code>("module", "name")</code>:</p>
@@ -1328,13 +1490,67 @@ const size: i32 = 20;
 </code></pre>
 <p>The conditions are equivalent — note the surface differences: Wax variables are bare (<code>ocaml_version</code>) while WAT variables are <code>$</code>-prefixed; Wax versions are tuples <code>(5, 1, 0)</code> while WAT writes them <code>(5 1 0)</code>; Wax combines conditions with <code>all</code>/<code>any</code>/<code>not</code>, WAT with <code>and</code>/<code>or</code>/<code>not</code>.</p>
 <p>The conditions are preserved, not evaluated. Type checking (<code>--validate</code>) explores each reachable combination independently (see the <a href="#conditional-compilation">Language Guide</a>). Conversion between the Wax and WAT forms is not yet implemented; conditionals are currently supported within each format on its own.</p>
-<h2 id="tables-and-memories"><a class="header" href="#tables-and-memories">Tables and Memories</a></h2>
-<p>Wax focuses on GC-based memory management and does not provide dedicated syntax for linear memory or tables. When converting from WAT/WASM:</p>
-<ul>
-<li>Memory definitions are dropped (Wax uses GC structs and arrays)</li>
-<li>Table definitions are dropped (Wax uses typed function references)</li>
-</ul>
-<p>If you need linear memory or tables, write that portion in WAT and link it with your Wax code.</p>
+<h2 id="memories-1"><a class="header" href="#memories-1">Memories</a></h2>
+<p>A memory is declared with <code>memory</code>, followed by its address type (<code>i32</code> or <code>i64</code>) and, optionally, its limits as <code>[min]</code> or <code>[min, max]</code> (in pages of 64 KiB):</p>
+<pre><code class="language-wax">memory mem0: i32 [1, 1000];
+memory mem1: i64 [2];
+memory mem2: i32;
+</code></pre>
+<p>Maps to:</p>
+<pre><code class="language-wat">(memory $mem0 i32 1 1000)
+(memory $mem1 i64 2)
+(memory $mem2 i32 ...)
+</code></pre>
+<p>When the limits are omitted, the minimum size is derived from the extent of the memory’s data segments (using their literal offsets).</p>
+<p>Loads and stores use method-call syntax on the memory, with the value’s width in the method name and its signedness expressed by the surrounding <a href="#memory-access"><code>as iN_s</code>/<code>as iN_u</code> cast</a> — the same convention as packed array access:</p>
+<pre><code class="language-wax">let x: i32 = mem0.load32(p);
+let b: i32 = mem0.load8(p) as i32_u;
+mem0.store16(p, v);
+mem0.store32(p, v, 1, 16);     // align=1, offset=16
+</code></pre>
+<p>See <a href="#memory-access">Memory Access</a> for the full instruction mapping.</p>
+<h3 id="data-segments-1"><a class="header" href="#data-segments-1">Data Segments</a></h3>
+<p>A memory declaration may carry active data segments in a block, placed at a constant offset:</p>
+<pre><code class="language-wax">memory mem1: i64 {
+    data _ @ [0x1000] = "hello world";
+    data greeting @ [0x2000] = "hi";
+}
+</code></pre>
+<p>Top-level <code>data</code> defines a passive segment, or an active segment for a named memory:</p>
+<pre><code class="language-wax">data seg = "raw\00bytes";
+data init @ mem0 [0] = "hello";
+</code></pre>
+<p>Data bytes are ordinary string literals; escapes such as <code>\xNN</code> and <code>\00</code> decode to raw bytes.</p>
+<h2 id="tables"><a class="header" href="#tables">Tables</a></h2>
+<p>A table is declared with <code>table</code>, followed by its element <a href="#types">reference type</a> and, optionally, its limits as <code>[min]</code> or <code>[min, max]</code>:</p>
+<pre><code class="language-wax">table funcs: &amp;?func [1, 10];
+table objs: &amp;?any [0];
+</code></pre>
+<p>Maps to:</p>
+<pre><code class="language-wat">(table $funcs 1 10 funcref)
+(table $objs 0 anyref)
+</code></pre>
+<p>A table element is read and written with index syntax, like an array — <code>tab[i]</code> is <code>table.get</code> and <code>tab[i] = v</code> is <code>table.set</code>:</p>
+<pre><code class="language-wax">let f: &amp;?func = funcs[i];
+funcs[i] = g;
+</code></pre>
+<p>There is no dedicated <code>call_indirect</code> syntax: it is written as a call through a table slot, narrowing the slot to the callee’s <a href="#functions-2">function type</a> with a cast. WAT <code>call_indirect</code> round-trips through this form:</p>
+<pre><code class="language-wax">type cmp = fn(_: i32, _: i32) -&gt; i32;
+
+(funcs[i] as &amp;cmp)(x, y)        // call_indirect $funcs (type $cmp)
+</code></pre>
+<p>Other table-management instructions (<code>table.size</code>/<code>grow</code>/<code>fill</code>/<code>copy</code>/<code>init</code>) do not yet have dedicated syntax.</p>
+<h2 id="element-segments"><a class="header" href="#element-segments">Element Segments</a></h2>
+<p>An element segment is declared with <code>elem</code>, its element reference type, and a bracketed list of constant element expressions. A bare <code>elem</code> is passive; <code>@ table[offset]</code> makes it an active segment that initializes a table:</p>
+<pre><code class="language-wax">elem dispatch: &amp;?func = [handler_a, handler_b, handler_c];   // passive
+elem init: &amp;?func @ funcs[0] = [handler_a, handler_b];       // active
+elem nums: &amp;?i31 = [1 as &amp;i31, 2 as &amp;i31];                   // expression form
+</code></pre>
+<p>A passive element segment can initialize a GC array with <a href="#aggregate-instructions"><code>array.new_elem</code></a>, written with the same <code>[t| seg @ off; count]</code> syntax as <code>array.new_data</code> — which one applies is determined by the array’s element type (a reference element selects the element segment):</p>
+<pre><code class="language-wax">type handlers = [&amp;?func];
+
+let hs: &amp;handlers = [handlers| dispatch @ 0; 3];
+</code></pre>
 <h2 id="module-structure"><a class="header" href="#module-structure">Module Structure</a></h2>
 <p>A typical Wax module follows this structure:</p>
 <pre><code class="language-wax">// 1. Type definitions
@@ -1353,11 +1569,11 @@ tag my_error(code: i32);
 
 // 4. Module globals
 const FACTOR: i32 = 100;
-let mut counter: i32 = 0;
+let counter: i32 = 0;
 
 // 5. Internal functions
 fn helper(x: i32) -&gt; i32 {
-    x * FACTOR
+    x * FACTOR;
 }
 
 // 6. Exported functions
@@ -1365,7 +1581,7 @@ fn helper(x: i32) -&gt; i32 {
 fn compute(x: i32) -&gt; i32 {
     counter = counter + 1;
     log(counter);
-    helper(x + base)
+    helper(x + base);
 }
 </code></pre>
 <p>This order is conventional but not required; Wax allows fields in any order.</p>

@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e2421690.js";
+            window.path_to_searchindex_js = "../searchindex-006ce041.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f031991a.js"></script>
@@ -178,7 +178,7 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="module-fields"><a class="header" href="#module-fields">Module Fields</a></h1>
-<p>Wax modules are defined by a sequence of top-level fields: types, functions, globals, and tags.</p>
+<p>Wax modules are defined by a sequence of top-level fields: types, functions, globals, tags, memories, and data segments.</p>
 <h2 id="types"><a class="header" href="#types">Types</a></h2>
 <p>Types are defined using <code>type</code> for single definitions or <code>rec { ... }</code> for mutually recursive types.</p>
 <h3 id="simple-types"><a class="header" href="#simple-types">Simple Types</a></h3>
@@ -189,14 +189,14 @@ type callback = fn(_: i32) -&gt; i32;
 <h3 id="recursive-types"><a class="header" href="#recursive-types">Recursive Types</a></h3>
 <p>Use <code>rec</code> when types reference each other:</p>
 <pre><code class="language-wax">rec {
-    type node = { value: i32, next: &amp;?list };
-    type list = node;
+    type list = { head: i32, tail: &amp;?node };
+    type node = { rest: &amp;list };
 }
 </code></pre>
 <h3 id="supertypes-and-finality"><a class="header" href="#supertypes-and-finality">Supertypes and Finality</a></h3>
 <p>Types are final (non-extensible) by default. Use <code>open</code> to allow subtypes:</p>
-<pre><code class="language-wax">type open shape = { x: i32, y: i32 };
-type circle : shape = { radius: i32 };
+<pre><code class="language-wax">type shape = open { x: i32, y: i32 };
+type circle : shape = { x: i32, y: i32, radius: i32 };
 </code></pre>
 <p>Maps to:</p>
 <pre><code class="language-wat">(type $shape (sub (struct (field $x i32) (field $y i32))))
@@ -229,20 +229,22 @@ type circle : shape = { radius: i32 };
 const MAX_SIZE: i32 = 1024;
 </code></pre>
 <h3 id="mutable-globals"><a class="header" href="#mutable-globals">Mutable Globals</a></h3>
-<pre><code class="language-wax">let mut counter: i32 = 0;
-let mut state: &amp;?any = null;
+<pre><code class="language-wax">let counter: i32 = 0;
+let state: &amp;?any = null;
 </code></pre>
 <h3 id="imported-globals"><a class="header" href="#imported-globals">Imported Globals</a></h3>
 <pre><code class="language-wax">#[import = ("env", "base")]
 const base: i32;
 
 #[import = ("env", "counter")]
-let mut counter: i32;
+let counter: i32;
 </code></pre>
 <h2 id="tags"><a class="header" href="#tags">Tags</a></h2>
 <p>Tags define exception types for structured exception handling.</p>
 <h3 id="definition-1"><a class="header" href="#definition-1">Definition</a></h3>
-<pre><code class="language-wax">tag my_error(code: i32);
+<pre><code class="language-wax">type string = [mut i8];
+
+tag my_error(code: i32);
 tag empty_error();
 tag multi_arg(a: i32, b: &amp;string);
 </code></pre>
@@ -250,6 +252,9 @@ tag multi_arg(a: i32, b: &amp;string);
 <pre><code class="language-wat">(tag $my_error (param i32))
 (tag $empty_error)
 (tag $multi_arg (param i32) (param (ref $string)))
+</code></pre>
+<p>A tag may also declare a result type, in which case it is used as a suspension tag for <a href="instructions.html#stack-switching-instructions">stack switching</a> rather than for exceptions:</p>
+<pre><code class="language-wax">tag yield(value: i32) -&gt; i32;
 </code></pre>
 <h3 id="imported-tags"><a class="header" href="#imported-tags">Imported Tags</a></h3>
 <pre><code class="language-wax">#[import = ("env", "js_error")]
@@ -260,7 +265,7 @@ tag js_error(&amp;?extern);
 <h3 id="export-attribute"><a class="header" href="#export-attribute">Export Attribute</a></h3>
 <p>Export a field with a given name:</p>
 <pre><code class="language-wax">#[export = "add"]
-fn add(x: i32, y: i32) -&gt; i32 { x + y }
+fn add(x: i32, y: i32) -&gt; i32 { x + y; }
 
 #[export = "PI"]
 const PI: f64 = 3.14159;
@@ -271,7 +276,7 @@ tag my_error(code: i32);
 <p>Multiple exports can share the same function:</p>
 <pre><code class="language-wax">#[export = "add"]
 #[export = "plus"]
-fn add(x: i32, y: i32) -&gt; i32 { x + y }
+fn add(x: i32, y: i32) -&gt; i32 { x + y; }
 </code></pre>
 <h3 id="import-attribute"><a class="header" href="#import-attribute">Import Attribute</a></h3>
 <p>Import a field from a module. Takes a tuple of <code>("module", "name")</code>:</p>
@@ -303,13 +308,67 @@ const size: i32 = 20;
 </code></pre>
 <p>The conditions are equivalent — note the surface differences: Wax variables are bare (<code>ocaml_version</code>) while WAT variables are <code>$</code>-prefixed; Wax versions are tuples <code>(5, 1, 0)</code> while WAT writes them <code>(5 1 0)</code>; Wax combines conditions with <code>all</code>/<code>any</code>/<code>not</code>, WAT with <code>and</code>/<code>or</code>/<code>not</code>.</p>
 <p>The conditions are preserved, not evaluated. Type checking (<code>--validate</code>) explores each reachable combination independently (see the <a href="../language.html#conditional-compilation">Language Guide</a>). Conversion between the Wax and WAT forms is not yet implemented; conditionals are currently supported within each format on its own.</p>
-<h2 id="tables-and-memories"><a class="header" href="#tables-and-memories">Tables and Memories</a></h2>
-<p>Wax focuses on GC-based memory management and does not provide dedicated syntax for linear memory or tables. When converting from WAT/WASM:</p>
-<ul>
-<li>Memory definitions are dropped (Wax uses GC structs and arrays)</li>
-<li>Table definitions are dropped (Wax uses typed function references)</li>
-</ul>
-<p>If you need linear memory or tables, write that portion in WAT and link it with your Wax code.</p>
+<h2 id="memories"><a class="header" href="#memories">Memories</a></h2>
+<p>A memory is declared with <code>memory</code>, followed by its address type (<code>i32</code> or <code>i64</code>) and, optionally, its limits as <code>[min]</code> or <code>[min, max]</code> (in pages of 64 KiB):</p>
+<pre><code class="language-wax">memory mem0: i32 [1, 1000];
+memory mem1: i64 [2];
+memory mem2: i32;
+</code></pre>
+<p>Maps to:</p>
+<pre><code class="language-wat">(memory $mem0 i32 1 1000)
+(memory $mem1 i64 2)
+(memory $mem2 i32 ...)
+</code></pre>
+<p>When the limits are omitted, the minimum size is derived from the extent of the memory’s data segments (using their literal offsets).</p>
+<p>Loads and stores use method-call syntax on the memory, with the value’s width in the method name and its signedness expressed by the surrounding <a href="instructions.html#memory-access"><code>as iN_s</code>/<code>as iN_u</code> cast</a> — the same convention as packed array access:</p>
+<pre><code class="language-wax">let x: i32 = mem0.load32(p);
+let b: i32 = mem0.load8(p) as i32_u;
+mem0.store16(p, v);
+mem0.store32(p, v, 1, 16);     // align=1, offset=16
+</code></pre>
+<p>See <a href="instructions.html#memory-access">Memory Access</a> for the full instruction mapping.</p>
+<h3 id="data-segments"><a class="header" href="#data-segments">Data Segments</a></h3>
+<p>A memory declaration may carry active data segments in a block, placed at a constant offset:</p>
+<pre><code class="language-wax">memory mem1: i64 {
+    data _ @ [0x1000] = "hello world";
+    data greeting @ [0x2000] = "hi";
+}
+</code></pre>
+<p>Top-level <code>data</code> defines a passive segment, or an active segment for a named memory:</p>
+<pre><code class="language-wax">data seg = "raw\00bytes";
+data init @ mem0 [0] = "hello";
+</code></pre>
+<p>Data bytes are ordinary string literals; escapes such as <code>\xNN</code> and <code>\00</code> decode to raw bytes.</p>
+<h2 id="tables"><a class="header" href="#tables">Tables</a></h2>
+<p>A table is declared with <code>table</code>, followed by its element <a href="types.html">reference type</a> and, optionally, its limits as <code>[min]</code> or <code>[min, max]</code>:</p>
+<pre><code class="language-wax">table funcs: &amp;?func [1, 10];
+table objs: &amp;?any [0];
+</code></pre>
+<p>Maps to:</p>
+<pre><code class="language-wat">(table $funcs 1 10 funcref)
+(table $objs 0 anyref)
+</code></pre>
+<p>A table element is read and written with index syntax, like an array — <code>tab[i]</code> is <code>table.get</code> and <code>tab[i] = v</code> is <code>table.set</code>:</p>
+<pre><code class="language-wax">let f: &amp;?func = funcs[i];
+funcs[i] = g;
+</code></pre>
+<p>There is no dedicated <code>call_indirect</code> syntax: it is written as a call through a table slot, narrowing the slot to the callee’s <a href="#functions">function type</a> with a cast. WAT <code>call_indirect</code> round-trips through this form:</p>
+<pre><code class="language-wax">type cmp = fn(_: i32, _: i32) -&gt; i32;
+
+(funcs[i] as &amp;cmp)(x, y)        // call_indirect $funcs (type $cmp)
+</code></pre>
+<p>Other table-management instructions (<code>table.size</code>/<code>grow</code>/<code>fill</code>/<code>copy</code>/<code>init</code>) do not yet have dedicated syntax.</p>
+<h2 id="element-segments"><a class="header" href="#element-segments">Element Segments</a></h2>
+<p>An element segment is declared with <code>elem</code>, its element reference type, and a bracketed list of constant element expressions. A bare <code>elem</code> is passive; <code>@ table[offset]</code> makes it an active segment that initializes a table:</p>
+<pre><code class="language-wax">elem dispatch: &amp;?func = [handler_a, handler_b, handler_c];   // passive
+elem init: &amp;?func @ funcs[0] = [handler_a, handler_b];       // active
+elem nums: &amp;?i31 = [1 as &amp;i31, 2 as &amp;i31];                   // expression form
+</code></pre>
+<p>A passive element segment can initialize a GC array with <a href="instructions.html#aggregate-instructions"><code>array.new_elem</code></a>, written with the same <code>[t| seg @ off; count]</code> syntax as <code>array.new_data</code> — which one applies is determined by the array’s element type (a reference element selects the element segment):</p>
+<pre><code class="language-wax">type handlers = [&amp;?func];
+
+let hs: &amp;handlers = [handlers| dispatch @ 0; 3];
+</code></pre>
 <h2 id="module-structure"><a class="header" href="#module-structure">Module Structure</a></h2>
 <p>A typical Wax module follows this structure:</p>
 <pre><code class="language-wax">// 1. Type definitions
@@ -328,11 +387,11 @@ tag my_error(code: i32);
 
 // 4. Module globals
 const FACTOR: i32 = 100;
-let mut counter: i32 = 0;
+let counter: i32 = 0;
 
 // 5. Internal functions
 fn helper(x: i32) -&gt; i32 {
-    x * FACTOR
+    x * FACTOR;
 }
 
 // 6. Exported functions
@@ -340,7 +399,7 @@ fn helper(x: i32) -&gt; i32 {
 fn compute(x: i32) -&gt; i32 {
     counter = counter + 1;
     log(counter);
-    helper(x + base)
+    helper(x + base);
 }
 </code></pre>
 <p>This order is conventional but not required; Wax allows fields in any order.</p>

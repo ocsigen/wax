@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-e2421690.js";
+            window.path_to_searchindex_js = "searchindex-006ce041.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -188,7 +188,7 @@
 </code></pre>
 <p>Wax provides an expression-oriented syntax that feels more natural:</p>
 <pre><code class="language-wax">fn add(x: i32, y: i32) -&gt; i32 {
-    x + y
+    x + y;
 }
 </code></pre>
 <p>Both compile to identical WebAssembly bytecode.</p>
@@ -207,15 +207,15 @@ opam install .
 <p>Create a file <code>hello.wax</code>:</p>
 <pre><code class="language-wax">#[export = "add"]
 fn add(x: i32, y: i32) -&gt; i32 {
-    x + y
+    x + y;
 }
 
 #[export = "factorial"]
 fn factorial(n: i32) -&gt; i32 {
-    if n &lt;= 1 {
-        1
+    if n &lt;=s 1 =&gt; i32 {
+        1;
     } else {
-        n * factorial(n - 1)
+        n * factorial(n - 1);
     }
 }
 </code></pre>

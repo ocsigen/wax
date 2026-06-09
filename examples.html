@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-e2421690.js";
+            window.path_to_searchindex_js = "searchindex-006ce041.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -183,12 +183,12 @@
 <h3 id="wax"><a class="header" href="#wax">Wax</a></h3>
 <pre><code class="language-wax">#[export = "add"]
 fn add(x: i32, y: i32) -&gt; i32 {
-    x + y
+    x + y;
 }
 
 #[export = "multiply"]
 fn multiply(x: i32, y: i32) -&gt; i32 {
-    x * y
+    x * y;
 }
 </code></pre>
 <h3 id="equivalent-wat"><a class="header" href="#equivalent-wat">Equivalent WAT</a></h3>
@@ -206,10 +206,10 @@ fn multiply(x: i32, y: i32) -&gt; i32 {
 <h3 id="wax-1"><a class="header" href="#wax-1">Wax</a></h3>
 <pre><code class="language-wax">#[export = "factorial"]
 fn factorial(n: i32) -&gt; i32 {
-    if n &lt;= 1 {
-        1
+    if n &lt;=s 1 =&gt; i32 {
+        1;
     } else {
-        n * factorial(n - 1)
+        n * factorial(n - 1);
     }
 }
 </code></pre>
@@ -233,35 +233,38 @@ fn factorial(n: i32) -&gt; i32 {
 <h3 id="wax-2"><a class="header" href="#wax-2">Wax</a></h3>
 <pre><code class="language-wax">#[export = "factorial"]
 fn factorial(n: i32) -&gt; i32 {
-    become factorial_helper(n, 1)
+    become factorial_helper(n, 1);
 }
 
 fn factorial_helper(n: i32, acc: i32) -&gt; i32 {
-    if n &lt;= 1 {
-        acc
+    if n &lt;=s 1 =&gt; i32 {
+        acc;
     } else {
-        become factorial_helper(n - 1, n * acc)
+        become factorial_helper(n - 1, n * acc);
     }
 }
 </code></pre>
 <h2 id="loop-with-early-exit"><a class="header" href="#loop-with-early-exit">Loop with Early Exit</a></h2>
 <h3 id="wax-3"><a class="header" href="#wax-3">Wax</a></h3>
-<pre><code class="language-wax">#[export = "find_first_zero"]
-fn find_first_zero(arr: &amp;[i32]) -&gt; i32 {
+<pre><code class="language-wax">type ints = [i32];
+
+#[export = "find_first_zero"]
+fn find_first_zero(arr: &amp;ints) -&gt; i32 {
     let i: i32;
     let len: i32;
     len = arr.length;
     i = 0;
     'search: loop {
-        if i &gt;= len {
-            return -1
+        if i &gt;=s len {
+            return -1;
         }
         if arr[i] == 0 {
-            return i
+            return i;
         }
         i = i + 1;
         br 'search;
     }
+    unreachable;
 }
 </code></pre>
 <h3 id="equivalent-wat-2"><a class="header" href="#equivalent-wat-2">Equivalent WAT</a></h3>
@@ -302,7 +305,7 @@ fn find_first_zero(arr: &amp;[i32]) -&gt; i32 {
 
 #[export = "make_point"]
 fn make_point(x: i32, y: i32) -&gt; &amp;point {
-    {point| x: x, y: y}
+    {point| x: x, y: y};
 }
 
 #[export = "distance_squared"]
@@ -311,16 +314,16 @@ fn distance_squared(p1: &amp;point, p2: &amp;point) -&gt; i32 {
     let dy: i32;
     dx = p1.x - p2.x;
     dy = p1.y - p2.y;
-    dx * dx + dy * dy
+    dx * dx + dy * dy;
 }
 </code></pre>
 <h2 id="mutable-structs"><a class="header" href="#mutable-structs">Mutable Structs</a></h2>
 <h3 id="wax-5"><a class="header" href="#wax-5">Wax</a></h3>
-<pre><code class="language-wax">type counter = { mut value: i32 };
+<pre><code class="language-wax">type counter = { value: mut i32 };
 
 #[export = "new_counter"]
 fn new_counter() -&gt; &amp;counter {
-    {counter| value: 0}
+    {counter| value: 0};
 }
 
 #[export = "increment"]
@@ -330,7 +333,7 @@ fn increment(c: &amp;counter) {
 
 #[export = "get_value"]
 fn get_value(c: &amp;counter) -&gt; i32 {
-    c.value
+    c.value;
 }
 </code></pre>
 <h2 id="arrays"><a class="header" href="#arrays">Arrays</a></h2>
@@ -345,14 +348,15 @@ fn sum_bytes(arr: &amp;bytes) -&gt; i32 {
     sum = 0;
     i = 0;
     len = arr.length;
-    loop {
-        if i &gt;= len {
-            return sum
+    'loop: loop {
+        if i &gt;=s len {
+            return sum;
         }
         sum = sum + arr[i] as i32_u;
         i = i + 1;
         br 'loop;
     }
+    unreachable;
 }
 
 #[export = "fill_bytes"]
@@ -361,11 +365,11 @@ fn fill_bytes(arr: &amp;bytes, val: i32) {
     let len: i32;
     i = 0;
     len = arr.length;
-    loop {
-        if i &gt;= len {
-            return
+    'loop: loop {
+        if i &gt;=s len {
+            return;
         }
-        arr[i] = val as i8;
+        arr[i] = val;
         i = i + 1;
         br 'loop;
     }
@@ -379,42 +383,38 @@ tag overflow();
 #[export = "safe_divide"]
 fn safe_divide(a: i32, b: i32) -&gt; i32 {
     if b == 0 {
-        throw divide_by_zero();
+        throw divide_by_zero;
     }
-    a /s b
+    a /s b;
 }
 
 #[export = "try_divide"]
 fn try_divide(a: i32, b: i32) -&gt; i32 {
-    'handler: do i32 {
+    'on_error: do {
         try {
-            become safe_divide(a, b)
-        } catch [divide_by_zero -&gt; 'handler]
-        unreachable
+            return safe_divide(a, b);
+        } catch [divide_by_zero -&gt; 'on_error]
     }
-    0   // Return 0 on division by zero
+    0;   // Return 0 on division by zero
 }
 </code></pre>
 <h2 id="recursive-types-linked-list"><a class="header" href="#recursive-types-linked-list">Recursive Types (Linked List)</a></h2>
 <h3 id="wax-8"><a class="header" href="#wax-8">Wax</a></h3>
-<pre><code class="language-wax">rec {
-    type node = { value: i32, next: &amp;?list };
-    type list = node;
-}
+<pre><code class="language-wax">type list = { value: i32, next: &amp;?list };
 
 #[export = "make_node"]
-fn make_node(value: i32, next: &amp;?list) -&gt; &amp;node {
-    {node| value: value, next: next}
+fn make_node(value: i32, next: &amp;?list) -&gt; &amp;list {
+    {list| value: value, next: next};
 }
 
 #[export = "sum_list"]
 fn sum_list(head: &amp;?list) -&gt; i32 {
     if !head {
-        return 0
+        return 0;
     }
-    let n: &amp;node;
+    let n: &amp;list;
     n = head!;
-    n.value + sum_list(n.next)
+    n.value + sum_list(n.next);
 }
 </code></pre>
 <h2 id="imports-and-exports"><a class="header" href="#imports-and-exports">Imports and Exports</a></h2>
@@ -433,7 +433,7 @@ fn compute_and_log(x: i32) -&gt; i32 {
     let result: i32;
     result = x + base_value;
     log(result);
-    result
+    result;
 }
 </code></pre>
 <h2 id="hash-function"><a class="header" href="#hash-function">Hash Function</a></h2>
@@ -441,7 +441,7 @@ fn compute_and_log(x: i32) -&gt; i32 {
 <h3 id="wax-10"><a class="header" href="#wax-10">Wax</a></h3>
 <pre><code class="language-wax">#[export = "hash_mix_int"]
 fn hash_mix_int(h: i32, d: i32) -&gt; i32 {
-    rotl(rotl(d * 0xcc9e2d51, 15) * 0x1b873593 ^ h, 13) * 5 + 0xe6546b64
+    ((d * 0xcc9e2d51).rotl(15) * 0x1b873593 ^ h).rotl(13) * 5 + 0xe6546b64;
 }
 
 #[export = "hash_finalize"]
@@ -450,7 +450,7 @@ fn hash_finalize(h: i32) -&gt; i32 {
     h = h * 0x85ebca6b;
     h = h ^ h &gt;&gt;u 13;
     h = h * 0xc2b2ae35;
-    h ^ h &gt;&gt;u 16
+    h ^ h &gt;&gt;u 16;
 }
 </code></pre>
 
