@@ -1,3 +1,20 @@
+;; Wasm_of_ocaml runtime support
+;; http://www.ocsigen.org/js_of_ocaml/
+;;
+;; This program is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU Lesser General Public License as published by
+;; the Free Software Foundation, with linking exception;
+;; either version 2.1 of the License, or (at your option) any later version.
+;;
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU Lesser General Public License for more details.
+;;
+;; You should have received a copy of the GNU Lesser General Public License
+;; along with this program; if not, write to the Free Software
+;; Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 (import "ints" "parse_int"
   (func $parse_int (param (ref eq) i32 (ref $string)) (result i32))
 )
@@ -32,12 +49,10 @@
     (field $serialize (ref null $serialize))
     (field $deserialize (ref null $deserialize))
     (field $dup (ref null $dup)))
-) (type $custom (sub (struct (field $f (ref $custom_operations)))))
-(global $int32_ops
-  (export
+)
+(type $custom (sub (struct (field $f (ref $custom_operations)))))
 
-    "int32_ops")
-  (ref $custom_operations)
+(global $int32_ops (export "int32_ops") (ref $custom_operations)
   (struct.new $custom_operations (@string $string "_i" )
     (ref.func $int32_cmp) (ref.null $compare) (ref.func $int32_hash)
     (struct.new $fixed_length (i32.const 4) (i32.const 4))
@@ -84,10 +99,8 @@
   (struct.new $int32 (struct.get $int32 $f (local.get $d))
     (struct.get $int32 $f_2 (local.get $d)))
 )
-(func $caml_copy_int32
-  (export
 
-    "caml_copy_int32")
+(func $caml_copy_int32 (export "caml_copy_int32")
   (param $i i32) (result (ref eq))
   (struct.new $int32 (global.get $int32_ops) (local.get $i))
 )
@@ -106,10 +119,8 @@
   (@string $string "Int32.of_string" )
 ;; "Int32.of_string"
 )
-(func $caml_int32_of_string
-  (export
 
-    "caml_int32_of_string")
+(func $caml_int32_of_string (export "caml_int32_of_string")
   (param $v (ref eq)) (result (ref eq))
   (return_call $caml_copy_int32
     (call $parse_int (local.get $v) (i32.const 32) (global.get $INT32_ERRMSG)))
@@ -121,11 +132,8 @@
     (i32.sub (i32.gt_s (local.get $i1) (local.get $i2))
       (i32.lt_s (local.get $i1) (local.get $i2))))
 )
-(global $nativeint_ops
-  (export
 
-    "nativeint_ops")
-  (ref $custom_operations)
+(global $nativeint_ops (export "nativeint_ops") (ref $custom_operations)
   (struct.new $custom_operations (@string $string "_n" )
     (ref.func $int32_cmp) (ref.null $compare) (ref.func $int32_hash)
     (struct.new $fixed_length (i32.const 4) (i32.const 8))
@@ -154,10 +162,8 @@
     (call $caml_deserialize_int_4 (local.get $s)))
   (i32.const 4)
 )
-(func $caml_copy_nativeint
-  (export
 
-    "caml_copy_nativeint")
+(func $caml_copy_nativeint (export "caml_copy_nativeint")
   (param $i i32) (result (ref eq))
   (struct.new $int32 (global.get $nativeint_ops) (local.get $i))
 )
@@ -166,10 +172,8 @@
   (@string $string "Native.of_string" )
 ;; "Nativeint.of_string"
 )
-(func $caml_nativeint_of_string
-  (export
 
-    "caml_nativeint_of_string")
+(func $caml_nativeint_of_string (export "caml_nativeint_of_string")
   (param $v (ref eq)) (result (ref eq))
   (return_call $caml_copy_nativeint
     (call $parse_int (local.get $v) (i32.const 32)

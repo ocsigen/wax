@@ -1,3 +1,20 @@
+;; Wasm_of_ocaml runtime support
+;; http://www.ocsigen.org/js_of_ocaml/
+;;
+;; This program is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU Lesser General Public License as published by
+;; the Free Software Foundation, with linking exception;
+;; either version 2.1 of the License, or (at your option) any later version.
+;;
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU Lesser General Public License for more details.
+;;
+;; You should have received a copy of the GNU Lesser General Public License
+;; along with this program; if not, write to the Free Software
+;; Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 (import "fail" "caml_failwith" (func $caml_failwith (param (ref eq))))
 (import "custom" "custom_compare_id"
   (func $custom_compare_id (param (ref eq) (ref eq) i32) (result i32))
@@ -41,20 +58,16 @@
       (field $f_2 i64)
       (field $state (mut i32))))
 )
-(func $caml_ml_mutex_new
-  (export
 
-    "caml_ml_mutex_new")
+(func $caml_ml_mutex_new (export "caml_ml_mutex_new")
   (param $x (ref eq)) (result (ref eq))
   (struct.new $mutex (global.get $mutex_ops) (call $custom_next_id)
     (i32.const 0))
 )
 
 (data $lock_failure "Mutex.lock: mutex already locked. Cannot wait.")
-(func $caml_ml_mutex_lock
-  (export
 
-    "caml_ml_mutex_lock")
+(func $caml_ml_mutex_lock (export "caml_ml_mutex_lock")
   (param $x (ref eq)) (result (ref eq))
   (local $t (ref $mutex))
   (local.set $t (ref.cast (ref $mutex) (local.get $x)))
@@ -65,10 +78,8 @@
   (struct.set $mutex $state (local.get $t) (i32.const 1))
   (ref.i31 (i32.const 0))
 )
-(func $caml_ml_mutex_try_lock
-  (export
 
-    "caml_ml_mutex_try_lock")
+(func $caml_ml_mutex_try_lock (export "caml_ml_mutex_try_lock")
   (param $x (ref eq)) (result (ref eq))
   (local $t (ref $mutex))
   (local.set $t (ref.cast (ref $mutex) (local.get $x)))
@@ -78,44 +89,34 @@
       (struct.set $mutex $state (local.get $t) (i32.const 1))
       (ref.i31 (i32.const 1))))
 )
-(func $caml_ml_mutex_unlock
-  (export
 
-    "caml_ml_mutex_unlock")
+(func $caml_ml_mutex_unlock (export "caml_ml_mutex_unlock")
   (param $x (ref eq)) (result (ref eq))
   (struct.set $mutex $state (ref.cast (ref $mutex) (local.get $x))
     (i32.const 0))
   (ref.i31 (i32.const 0))
 )
-(func $caml_ml_condition_new
-  (export
 
-    "caml_ml_condition_new")
+(func $caml_ml_condition_new (export "caml_ml_condition_new")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
 
 (data $condition_failure "Condition.wait: cannot wait")
-(func $caml_ml_condition_wait
-  (export
 
-    "caml_ml_condition_wait")
+(func $caml_ml_condition_wait (export "caml_ml_condition_wait")
   (param $x (ref eq)) (param $x_2 (ref eq)) (result (ref eq))
   (call $caml_failwith
     (array.new_data $string $condition_failure (i32.const 0) (i32.const 27)))
   (ref.i31 (i32.const 0))
 )
-(func $caml_ml_condition_signal
-  (export
 
-    "caml_ml_condition_signal")
+(func $caml_ml_condition_signal (export "caml_ml_condition_signal")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
-(func $caml_ml_condition_broadcast
-  (export
 
-    "caml_ml_condition_broadcast")
+(func $caml_ml_condition_broadcast (export "caml_ml_condition_broadcast")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )

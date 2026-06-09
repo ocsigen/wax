@@ -1,3 +1,20 @@
+;; Wasm_of_ocaml runtime support
+;; http://www.ocsigen.org/js_of_ocaml/
+;;
+;; This program is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU Lesser General Public License as published by
+;; the Free Software Foundation, with linking exception;
+;; either version 2.1 of the License, or (at your option) any later version.
+;;
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU Lesser General Public License for more details.
+;;
+;; You should have received a copy of the GNU Lesser General Public License
+;; along with this program; if not, write to the Free Software
+;; Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 (import "hash" "caml_string_hash"
   (func $caml_string_hash (param (ref eq) (ref eq)) (result (ref eq)))
 )
@@ -60,10 +77,8 @@
     (unreachable))
   (; 'tail ;)
 )
-(func $caml_named_value
-  (export
 
-    "caml_named_value")
+(func $caml_named_value (export "caml_named_value")
   (param $s (ref $string)) (result eqref)
   (block $not_found
     (return
@@ -79,10 +94,8 @@
                 (global.get $Named_value_size))))))))
   (return (ref.null eq))
 )
-(func $caml_register_named_value
-  (export
 
-    "caml_register_named_value")
+(func $caml_register_named_value (export "caml_register_named_value")
   (param $x (ref eq)) (param $x_2 (ref eq)) (result (ref eq))
   (local $h i32) (local $r (ref null $assoc))
   (local.set $h
@@ -104,11 +117,9 @@
       (local.get $x_2) (local.get $r)))
   (ref.i31 (i32.const 0))
 )
-(func $caml_unregister_named_value
-  (export
 
-    ;; Used only for testing (tests-jsoo/bin), but inconvenient to pull out
-    "caml_unregister_named_value")
+;; Used only for testing (tests-jsoo/bin), but inconvenient to pull out
+(func $caml_unregister_named_value (export "caml_unregister_named_value")
   (param $name (ref eq)) (result (ref eq))
   (local $h i32) (local $r (ref null $assoc)) (local $a (ref $assoc))
   (local.set $h
@@ -148,17 +159,12 @@
   ) (; 'done ;)
   (ref.i31 (i32.const 0))
 )
-(global $caml_global_data
-  (export
 
-    "caml_global_data")
-  (mut (ref $block))
+(global $caml_global_data (export "caml_global_data") (mut (ref $block))
   (array.new $block (ref.i31 (i32.const 0)) (i32.const 12))
 )
-(func $caml_register_global
-  (export
 
-    "caml_register_global")
+(func $caml_register_global (export "caml_register_global")
   (param $x (ref eq)) (param $v (ref eq)) (param $x_2 (ref eq))
   (result (ref eq))
   (local $i i32)
@@ -169,10 +175,8 @@
         (local.get $v))))
   (ref.i31 (i32.const 0))
 )
-(func $caml_get_global_data
-  (export
 
-    "caml_get_global_data")
+(func $caml_get_global_data (export "caml_get_global_data")
   (param $x (ref eq)) (result (ref eq))
   (global.get $caml_global_data)
 )
@@ -188,19 +192,14 @@
   (call $throw_2 (global.get $uncaught_exception))
   (ref.i31 (i32.const 0))
 )
-(func $caml_handle_uncaught_exception
-  (export
 
-    "caml_handle_uncaught_exception")
-  (param $exn externref)
+(func $caml_handle_uncaught_exception
+  (export "caml_handle_uncaught_exception") (param $exn externref)
   (global.set $uncaught_exception (local.get $exn))
   (call $caml_main (ref.func $reraise_exception))
 )
-(func $caml_main
-  (export
 
-    "caml_main")
-  (param $start (ref func))
+(func $caml_main (export "caml_main") (param $start (ref func))
   (local $exn (ref eq))
   (try
     (do (drop (call_ref $func_2 (ref.cast (ref $func_2) (local.get $start)))))

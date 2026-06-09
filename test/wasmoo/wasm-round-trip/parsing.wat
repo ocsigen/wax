@@ -1,3 +1,20 @@
+;; Wasm_of_ocaml runtime support
+;; http://www.ocsigen.org/js_of_ocaml/
+;;
+;; This program is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU Lesser General Public License as published by
+;; the Free Software Foundation, with linking exception;
+;; either version 2.1 of the License, or (at your option) any later version.
+;;
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU Lesser General Public License for more details.
+;;
+;; You should have received a copy of the GNU Lesser General Public License
+;; along with this program; if not, write to the Free Software
+;; Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 (import "jslib" "wrap" (func $wrap (param anyref) (result (ref eq))))
 (import "jslib" "caml_string_of_jsstring"
   (func $caml_string_of_jsstring (param (ref eq)) (result (ref eq)))
@@ -194,10 +211,8 @@
 (data $discarding_last_token_read "Discarding last token read")
 (data $shift_to_state ": shift to state ")
 (data $reduce_by_rule ": reduce by rule ")
-(func $caml_parse_engine
-  (export
 
-    "caml_parse_engine")
+(func $caml_parse_engine (export "caml_parse_engine")
   (param $vtables (ref eq)) (param $venv (ref eq)) (param $vcmd (ref eq))
   (param $varg (ref eq)) (result (ref eq))
   (local $res i32) (local $n i32) (local $n1 i32) (local $n2 i32)
@@ -671,10 +686,8 @@
     (ref.i31 (local.get $errflag)))
   (ref.i31 (local.get $res))
 )
-(func $caml_set_parser_trace
-  (export
 
-    "caml_set_parser_trace")
+(func $caml_set_parser_trace (export "caml_set_parser_trace")
   (param $x (ref eq)) (result (ref eq))
   (local $oldflag i32)
   (local.set $oldflag (global.get $caml_parser_trace))

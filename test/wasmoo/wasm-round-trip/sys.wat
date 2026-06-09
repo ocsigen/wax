@@ -1,3 +1,20 @@
+;; Wasm_of_ocaml runtime support
+;; http://www.ocsigen.org/js_of_ocaml/
+;;
+;; This program is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU Lesser General Public License as published by
+;; the Free Software Foundation, with linking exception;
+;; either version 2.1 of the License, or (at your option) any later version.
+;;
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU Lesser General Public License for more details.
+;;
+;; You should have received a copy of the GNU Lesser General Public License
+;; along with this program; if not, write to the Free Software
+;; Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 (import "bindings" "ta_length"
   (func $ta_length (param (ref extern)) (result i32))
 )
@@ -39,17 +56,10 @@
   (func $jsstring_test (param anyref) (result i32))
 ) (type $block (array (mut (ref eq)))) (type $string (array (mut i8)))
 (type $float (struct (field $f f64)))
-(tag
-  $ocaml_exit
-  (export
 
-    "ocaml_exit")
-  (param i32)
-)
-(func $caml_sys_exit
-  (export
+(tag $ocaml_exit (export "ocaml_exit") (param i32))
 
-    "caml_sys_exit")
+(func $caml_sys_exit (export "caml_sys_exit")
   (param $x (ref eq)) (result (ref eq))
   (throw $ocaml_exit (i31.get_s (ref.cast (ref i31) (local.get $x))))
 )
@@ -63,17 +73,13 @@
     (then (call $caml_raise_not_found)))
   (return_call $caml_string_of_jsstring (call $wrap (local.get $res)))
 )
-(func $caml_sys_argv
-  (export
 
-    "caml_sys_argv")
+(func $caml_sys_argv (export "caml_sys_argv")
   (param $x (ref eq)) (result (ref eq))
   (call $caml_js_to_string_array (call $argv))
 )
-(func $caml_sys_executable_name
-  (export
 
-    "caml_sys_executable_name")
+(func $caml_sys_executable_name (export "caml_sys_executable_name")
   (param $x (ref eq)) (result (ref eq))
   (array.get $block
     (ref.cast (ref $block) (call $caml_js_to_string_array (call $argv)))
@@ -84,10 +90,8 @@
   (param $x (ref eq)) (result (ref eq))
   (struct.new $float (f64.mul (call $time) (f64.const 0.001)))
 )
-(func $caml_sys_system_command
-  (export
 
-    "caml_sys_system_command")
+(func $caml_sys_system_command (export "caml_sys_system_command")
   (param $x (ref eq)) (result (ref eq))
   (try (result (ref eq))
     (do
@@ -98,10 +102,8 @@
       (call $caml_handle_sys_error)
       (return (ref.i31 (i32.const 0)))))
 )
-(func $caml_sys_random_seed
-  (export
 
-    "caml_sys_random_seed")
+(func $caml_sys_random_seed (export "caml_sys_random_seed")
   (param $x (ref eq)) (result (ref eq))
   (local $r (ref extern)) (local $a (ref $block)) (local $i i32)
   (local $n i32)
@@ -122,118 +124,90 @@
   (; 'loop ;)
   (local.get $a)
 )
-(func $caml_sys_const_bigendian
-  (export
 
-    "caml_sys_const_bigendian")
+(func $caml_sys_const_bigendian (export "caml_sys_const_bigendian")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
-(func $caml_sys_const_word_size
-  (export
 
-    "caml_sys_const_word_size")
+(func $caml_sys_const_word_size (export "caml_sys_const_word_size")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 32))
 )
-(func $caml_sys_const_int_size
-  (export
 
-    "caml_sys_const_int_size")
+(func $caml_sys_const_int_size (export "caml_sys_const_int_size")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 31))
 )
-(func $caml_sys_const_max_wosize
-  (export
 
-    "caml_sys_const_max_wosize")
+(func $caml_sys_const_max_wosize (export "caml_sys_const_max_wosize")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0xfffffff))
 )
-(func $caml_sys_const_ostype_unix
-  (export
 
-    "caml_sys_const_ostype_unix")
+(func $caml_sys_const_ostype_unix (export "caml_sys_const_ostype_unix")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 1))
 )
-(func $caml_sys_const_ostype_win32
-  (export
 
-    "caml_sys_const_ostype_win32")
+(func $caml_sys_const_ostype_win32 (export "caml_sys_const_ostype_win32")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
-(func $caml_sys_const_ostype_cygwin
-  (export
 
-    "caml_sys_const_ostype_cygwin")
+(func $caml_sys_const_ostype_cygwin (export "caml_sys_const_ostype_cygwin")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
 
 (data $Unix "Unix")
-(func $caml_sys_get_config
-  (export
 
-    "caml_sys_get_config")
+(func $caml_sys_get_config (export "caml_sys_get_config")
   (param $x (ref eq)) (result (ref eq))
   (array.new_fixed $block 4 (ref.i31 (i32.const 0))
     (array.new_data $string $Unix (i32.const 0) (i32.const 4))
     (ref.i31 (i32.const 32)) (ref.i31 (i32.const 0)))
 )
-(func $caml_sys_isatty
-  (export
 
-    "caml_sys_isatty")
+(func $caml_sys_isatty (export "caml_sys_isatty")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
-(func $caml_runtime_variant
-  (export
 
-    "caml_runtime_variant")
+(func $caml_runtime_variant (export "caml_runtime_variant")
   (param $x (ref eq)) (result (ref eq))
   (array.new_fixed $string 0)
 )
-(func $caml_runtime_parameters
-  (export
 
-    "caml_runtime_parameters")
+(func $caml_runtime_parameters (export "caml_runtime_parameters")
   (param $x (ref eq)) (result (ref eq))
   (array.new_fixed $string 0)
 )
-(func $caml_install_signal_handler
-  (export
 
-    "caml_install_signal_handler")
+(func $caml_install_signal_handler (export "caml_install_signal_handler")
   (param $x (ref eq)) (param $x_2 (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
 
 (global $caml_runtime_warnings (mut i32) (i32.const 0))
-(func $caml_ml_enable_runtime_warnings
-  (export
 
-    "caml_ml_enable_runtime_warnings")
+(func $caml_ml_enable_runtime_warnings
+  (export "caml_ml_enable_runtime_warnings")
   (param $x (ref eq)) (result (ref eq))
   (global.set $caml_runtime_warnings
     (i31.get_u (ref.cast (ref i31) (local.get $x))))
   (ref.i31 (i32.const 0))
 )
-(func $caml_ml_runtime_warnings_enabled
-  (export
 
-    "caml_ml_runtime_warnings_enabled")
+(func $caml_ml_runtime_warnings_enabled
+  (export "caml_ml_runtime_warnings_enabled")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (global.get $caml_runtime_warnings))
 )
 
 (data $toString "toString")
-(func $caml_handle_sys_error
-  (export
 
-    "caml_handle_sys_error")
+(func $caml_handle_sys_error (export "caml_handle_sys_error")
   (param $exn externref)
   (call $caml_raise_sys_error
     (call $caml_string_of_jsstring

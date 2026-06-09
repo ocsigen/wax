@@ -1,3 +1,20 @@
+;; Wasm_of_ocaml runtime support
+;; http://www.ocsigen.org/js_of_ocaml/
+;;
+;; This program is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU Lesser General Public License as published by
+;; the Free Software Foundation, with linking exception;
+;; either version 2.1 of the License, or (at your option) any later version.
+;;
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU Lesser General Public License for more details.
+;;
+;; You should have received a copy of the GNU Lesser General Public License
+;; along with this program; if not, write to the Free Software
+;; Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 (import "fail" "caml_failwith" (func $caml_failwith (param (ref eq))))
 (type $block (array (mut (ref eq))))
 (type $string (array (mut i8)))
@@ -33,10 +50,8 @@
 (global $lex_code i32 (i32.const 11))
 
 (data $lexing_empty_token "lexing: empty token")
-(func $caml_lex_engine
-  (export
 
-    "caml_lex_engine")
+(func $caml_lex_engine (export "caml_lex_engine")
   (param $vtbl (ref eq)) (param $start_state (ref eq))
   (param $vlexbuf (ref eq)) (result (ref eq))
   (local $tbl (ref $block)) (local $lexbuf (ref $block)) (local $c i32)
@@ -184,10 +199,8 @@
   (return_call $run_mem (local.get $s) (local.get $i) (local.get $lexbuf)
     (ref.i31 (i32.const -1)))
 )
-(func $caml_new_lex_engine
-  (export
 
-    "caml_new_lex_engine")
+(func $caml_new_lex_engine (export "caml_new_lex_engine")
   (param $vtbl (ref eq)) (param $start_state (ref eq))
   (param $vlexbuf (ref eq)) (result (ref eq))
   (local $tbl (ref $block)) (local $lexbuf (ref $block)) (local $c i32)

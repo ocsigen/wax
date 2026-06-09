@@ -1,3 +1,20 @@
+;; Wasm_of_ocaml runtime support
+;; http://www.ocsigen.org/js_of_ocaml/
+;;
+;; This program is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU Lesser General Public License as published by
+;; the Free Software Foundation, with linking exception;
+;; either version 2.1 of the License, or (at your option) any later version.
+;;
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU Lesser General Public License for more details.
+;;
+;; You should have received a copy of the GNU Lesser General Public License
+;; along with this program; if not, write to the Free Software
+;; Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 (import "bindings" "gettimeofday" (func $gettimeofday (result f64)))
 (import "bindings" "gmtime" (func $gmtime (param f64) (result (ref eq))))
 (import "bindings" "localtime"
@@ -10,10 +27,8 @@
   (export "caml_unix_gettimeofday") (param $x (ref eq)) (result (ref eq))
   (struct.new $float (call $gettimeofday))
 )
-(func $caml_alloc_tm
-  (export
 
-    "caml_alloc_tm")
+(func $caml_alloc_tm (export "caml_alloc_tm")
   (param $sec i32) (param $min i32) (param $hour i32) (param $mday i32)
   (param $mon i32) (param $year i32) (param $wday i32) (param $yday i32)
   (param $isdst i32) (result (ref eq))

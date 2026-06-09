@@ -1,3 +1,20 @@
+;; Wasm_of_ocaml runtime support
+;; http://www.ocsigen.org/js_of_ocaml/
+;;
+;; This program is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU Lesser General Public License as published by
+;; the Free Software Foundation, with linking exception;
+;; either version 2.1 of the License, or (at your option) any later version.
+;;
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU Lesser General Public License for more details.
+;;
+;; You should have received a copy of the GNU Lesser General Public License
+;; along with this program; if not, write to the Free Software
+;; Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 (import "fail" "caml_failwith" (func $caml_failwith (param (ref eq))))
 (import "fail" "caml_invalid_argument"
   (func $caml_invalid_argument (param (ref eq)))
@@ -35,6 +52,7 @@
   (func $caml_find_custom_operations
     (param (ref $string)) (result (ref null $custom_operations)))
 )
+
 (import "version-dependent" "caml_marshal_header_size"
   (global $caml_marshal_header_size i32)
 )
@@ -65,10 +83,8 @@
 (data $truncated_obj "input_value: truncated object")
 
 (global $input_value (ref $string) (@string $string "input_value" ))
-(func $caml_input_value
-  (export
 
-    "caml_input_value")
+(func $caml_input_value (export "caml_input_value")
   (param $ch (ref eq)) (result (ref eq))
   (local $r i32) (local $len i32) (local $header (ref $string))
   (local $buf (ref $string)) (local $s (ref $intern_state))
@@ -320,45 +336,33 @@
   (; 'loop ;)
   (local.get $dest)
 )
-(func $caml_deserialize_uint_1
-  (export
 
-    "caml_deserialize_uint_1")
+(func $caml_deserialize_uint_1 (export "caml_deserialize_uint_1")
   (param $s (ref eq)) (result i32)
   (return_call $read8u (ref.cast (ref $intern_state) (local.get $s)))
 )
-(func $caml_deserialize_sint_1
-  (export
 
-    "caml_deserialize_sint_1")
+(func $caml_deserialize_sint_1 (export "caml_deserialize_sint_1")
   (param $s (ref eq)) (result i32)
   (return_call $read8s (ref.cast (ref $intern_state) (local.get $s)))
 )
-(func $caml_deserialize_uint_2
-  (export
 
-    "caml_deserialize_uint_2")
+(func $caml_deserialize_uint_2 (export "caml_deserialize_uint_2")
   (param $s (ref eq)) (result i32)
   (return_call $read16u (ref.cast (ref $intern_state) (local.get $s)))
 )
-(func $caml_deserialize_sint_2
-  (export
 
-    "caml_deserialize_sint_2")
+(func $caml_deserialize_sint_2 (export "caml_deserialize_sint_2")
   (param $s (ref eq)) (result i32)
   (return_call $read16s (ref.cast (ref $intern_state) (local.get $s)))
 )
-(func $caml_deserialize_int_4
-  (export
 
-    "caml_deserialize_int_4")
+(func $caml_deserialize_int_4 (export "caml_deserialize_int_4")
   (param $s (ref eq)) (result i32)
   (return_call $read32 (ref.cast (ref $intern_state) (local.get $s)))
 )
-(func $caml_deserialize_int_8
-  (export
 
-    "caml_deserialize_int_8")
+(func $caml_deserialize_int_8 (export "caml_deserialize_int_8")
   (param $vs (ref eq)) (result i64)
   (local $s (ref $intern_state))
   (local.set $s (ref.cast (ref $intern_state) (local.get $vs)))
@@ -710,10 +714,8 @@
 )
 
 (data $marshal_data_size "Marshal.data_size")
-(func $caml_marshal_data_size
-  (export
 
-    "caml_marshal_data_size")
+(func $caml_marshal_data_size (export "caml_marshal_data_size")
   (param $buf (ref eq)) (param $ofs (ref eq)) (result (ref eq))
   (local $s (ref $intern_state)) (local $magic i32)
   (local.set $s
@@ -1320,10 +1322,8 @@
   (local.get $header)
   (local.get $s)
 )
-(func $caml_output_value_to_string
-  (export
 
-    "caml_output_value_to_string")
+(func $caml_output_value_to_string (export "caml_output_value_to_string")
   (param $v (ref eq)) (param $flags (ref eq)) (result (ref eq))
   (local $sz i32) (local $buf (ref $string)) (local $st (ref $extern_state))
   (local $blk (ref $output_block)) (local $pos i32) (local $len i32)
@@ -1356,10 +1356,8 @@
   ) (; 'loop ;)
   (local.get $res)
 )
-(func $caml_output_value_to_buffer
-  (export
 
-    "caml_output_value_to_buffer")
+(func $caml_output_value_to_buffer (export "caml_output_value_to_buffer")
   (param $vbuf (ref eq)) (param $vpos (ref eq)) (param $vlen (ref eq))
   (param $v (ref eq)) (param $flags (ref eq)) (result (ref eq))
   (local $buf (ref $string)) (local $pos i32) (local $len i32)
@@ -1380,10 +1378,8 @@
     (local.get $buf_2) (i32.const 0) (i32.const 20))
   (ref.i31 (i32.const 0))
 )
-(func $caml_output_value
-  (export
 
-    "caml_output_value")
+(func $caml_output_value (export "caml_output_value")
   (param $ch (ref eq)) (param $v (ref eq)) (param $flags (ref eq))
   (result (ref eq))
   (local $sz i32) (local $buf (ref $string)) (local $st (ref $extern_state))
@@ -1413,10 +1409,8 @@
   (call $caml_flush_if_unbuffered (local.get $ch))
   (ref.i31 (i32.const 0))
 )
-(func $caml_serialize_int_1
-  (export
 
-    "caml_serialize_int_1")
+(func $caml_serialize_int_1 (export "caml_serialize_int_1")
   (param $vs (ref eq)) (param $i i32)
   (local $s (ref $extern_state)) (local $pos i32)
   (local.set $s (ref.cast (ref $extern_state) (local.get $vs)))
@@ -1424,10 +1418,8 @@
   (array.set $string (struct.get $extern_state $buf (local.get $s))
     (local.get $pos) (local.get $i))
 )
-(func $caml_serialize_int_2
-  (export
 
-    "caml_serialize_int_2")
+(func $caml_serialize_int_2 (export "caml_serialize_int_2")
   (param $vs (ref eq)) (param $i i32)
   (local $s (ref $extern_state)) (local $pos i32)
   (local.set $s (ref.cast (ref $extern_state) (local.get $vs)))
@@ -1435,10 +1427,8 @@
   (call $store16 (struct.get $extern_state $buf (local.get $s))
     (local.get $pos) (local.get $i))
 )
-(func $caml_serialize_int_4
-  (export
 
-    "caml_serialize_int_4")
+(func $caml_serialize_int_4 (export "caml_serialize_int_4")
   (param $vs (ref eq)) (param $i i32)
   (local $s (ref $extern_state)) (local $pos i32)
   (local.set $s (ref.cast (ref $extern_state) (local.get $vs)))
@@ -1446,10 +1436,8 @@
   (call $store32 (struct.get $extern_state $buf (local.get $s))
     (local.get $pos) (local.get $i))
 )
-(func $caml_serialize_int_8
-  (export
 
-    "caml_serialize_int_8")
+(func $caml_serialize_int_8 (export "caml_serialize_int_8")
   (param $vs (ref eq)) (param $i i64)
   (local $s (ref $extern_state)) (local $pos i32)
   (local.set $s (ref.cast (ref $extern_state) (local.get $vs)))

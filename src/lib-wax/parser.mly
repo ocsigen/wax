@@ -169,6 +169,14 @@ let storagetype_tbl =
 let with_loc loc desc =
    Utils.Trivia.with_pos Context.context {loc_start = fst loc; loc_end = snd loc} desc
 
+(* Apply a module field's leading attributes. When there are attributes, widen
+   the field location (built by [d] from the definition alone) to span them, so
+   comments and blank lines preceding the attributes attach to the field rather
+   than to an attribute's inner expression. *)
+let attributed loc attributes d =
+  let f = d attributes in
+  match attributes with [] -> f | _ :: _ -> with_loc loc f.desc
+
 let blocktype bt = Option.value ~default:{params = [||]; results = [||]} bt
 
 (* Parse an integer literal (decimal, hex, with [_] separators) to a [Uint64].
@@ -724,8 +732,8 @@ elem:
 
 module_field:
 | r = rectype { {desc = Type r.desc; info = r.info} }
-| attributes = list(attribute) d = declaration { d attributes }
-| attributes = list(attribute) d = definition { d attributes }
+| attributes = list(attribute) d = declaration { attributed $sloc attributes d }
+| attributes = list(attribute) d = definition { attributed $sloc attributes d }
 | attributes = list(attribute) "{" fields = list(module_field) "}"
   { with_loc $sloc (Group {attributes; fields}) }
 | "#[if(" c = condition ")" "]" t = module_field e = else_clause

@@ -1,3 +1,20 @@
+;; Wasm_of_ocaml runtime support
+;; http://www.ocsigen.org/js_of_ocaml/
+;;
+;; This program is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU Lesser General Public License as published by
+;; the Free Software Foundation, with linking exception;
+;; either version 2.1 of the License, or (at your option) any later version.
+;;
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU Lesser General Public License for more details.
+;;
+;; You should have received a copy of the GNU Lesser General Public License
+;; along with this program; if not, write to the Free Software
+;; Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 (import "jslib" "unwrap" (func $unwrap (param (ref eq)) (result anyref)))
 (import "bindings" "format_float"
   (func $format_float (param i32 i32 i32 f64) (result anyref))
@@ -24,17 +41,12 @@
 (global $infinity (ref $chars) (@string $chars "infinity" ))
 
 (global $nan_2 (ref $chars) (@string $chars "nan" ))
-(func $Double_val
-  (export
 
-    "Double_val")
-  (param $x (ref eq)) (result f64)
+(func $Double_val (export "Double_val") (param $x (ref eq)) (result f64)
   (struct.get $float $f (ref.cast (ref $float) (local.get $x)))
 )
-(func $caml_hexstring_of_float
-  (export
 
-    "caml_hexstring_of_float")
+(func $caml_hexstring_of_float (export "caml_hexstring_of_float")
   (param $x (ref eq)) (param $x_2 (ref eq)) (param $x_3 (ref eq))
   (result (ref eq))
   (local $b i64) (local $prec i32) (local $style i32) (local $sign i32)
@@ -230,10 +242,8 @@
 )
 
 (global $inf_2 (ref $chars) (@string $chars "inf" ))
-(func $caml_format_float
-  (export
 
-    "caml_format_float")
+(func $caml_format_float (export "caml_format_float")
   (param $x (ref eq)) (param $x_2 (ref eq)) (result (ref eq))
   (local $f f64) (local $b i64) (local $sign_style i32)
   (local $precision i32) (local $conversion i32) (local $uppercase i32)
@@ -446,10 +456,8 @@
   (i32.or (i32.eq (local.get $c) (i32.const 32))
     (i32.le_u (i32.sub (local.get $c) (i32.const 9)) (i32.const 4)))
 )
-(func $caml_float_of_string
-  (export
 
-    "caml_float_of_string")
+(func $caml_float_of_string (export "caml_float_of_string")
   (param $x (ref eq)) (result (ref eq))
   (local $s (ref $string)) (local $len i32) (local $i i32) (local $j i32)
   (local $s' (ref $string)) (local $negative i32) (local $c i32)
@@ -640,10 +648,8 @@
     (array.new_data $string $float_of_string (i32.const 0) (i32.const 15)))
   (return (ref.i31 (i32.const 0)))
 )
-(func $caml_nextafter_float
-  (export
 
-    "caml_nextafter_float")
+(func $caml_nextafter_float (export "caml_nextafter_float")
   (param $x f64) (param $y f64) (result f64)
   (local $i i64) (local $j i64)
   (if (f64.ne (local.get $x) (local.get $x)) (then (return (local.get $x))))
@@ -664,10 +670,8 @@
         (else (local.set $i (i64.sub (local.get $i) (i64.const 1)))))
       (return (f64.reinterpret_i64 (local.get $i)))))
 )
-(func $caml_classify_float
-  (export
 
-    "caml_classify_float")
+(func $caml_classify_float (export "caml_classify_float")
   (param $x f64) (result (ref eq))
   (local $a f64)
   (local.set $a (f64.abs (local.get $x)))
@@ -685,11 +689,9 @@
               (then (i32.const 1))
               (else (i32.const 4))))))))
 )
-(func $caml_modf_float
-  (export
-    ;; nan
+;; nan
 
-    "caml_modf_float")
+(func $caml_modf_float (export "caml_modf_float")
   (param $x (ref eq)) (result (ref eq))
   (local $x_2 f64) (local $a f64) (local $i f64) (local $f f64)
   (local.set $x_2
@@ -738,10 +740,8 @@
       (i64.shl (i64.add (i64.extend_i32_s (local.get $n)) (i64.const 0x3ff))
         (i64.const 52))))
 )
-(func $caml_ldexp_float
-  (export
 
-    "caml_ldexp_float")
+(func $caml_ldexp_float (export "caml_ldexp_float")
   (param $x f64) (param $i (ref eq)) (result f64)
   (call $ldexp (local.get $x) (i31.get_s (ref.cast (ref i31) (local.get $i))))
 )
@@ -769,10 +769,8 @@
       (i64.const 0x3fe0000000000000)))
   (i32.sub (local.get $e) (i32.const 0x3fe))
 )
-(func $caml_frexp_float
-  (export
 
-    "caml_frexp_float")
+(func $caml_frexp_float (export "caml_frexp_float")
   (param $x (ref eq)) (result (ref eq))
   (local $m f64) (local $e i32)
   (call $frexp (struct.get $float $f (ref.cast (ref $float) (local.get $x))))
@@ -781,20 +779,15 @@
   (array.new_fixed $block 3 (ref.i31 (i32.const 0))
     (struct.new $float (local.get $m)) (ref.i31 (local.get $e)))
 )
-(func $caml_signbit_float
-  (export
 
-    "caml_signbit_float")
+(func $caml_signbit_float (export "caml_signbit_float")
   (param $x f64) (result (ref eq))
   (ref.i31
     (i32.wrap_i64
       (i64.shr_u (i64.reinterpret_f64 (local.get $x)) (i64.const 63))))
 )
-(func $erf
-  (export
 
-    "caml_erf_float")
-  (param $x f64) (result f64)
+(func $erf (export "caml_erf_float") (param $x f64) (result f64)
   (local $a1 f64) (local $a2 f64) (local $a3 f64) (local $a4 f64)
   (local $a5 f64) (local $p f64) (local $t f64) (local $y f64)
   (local.set $a1 (f64.const 0.254829592))
@@ -828,17 +821,12 @@
           (call $exp (f64.neg (f64.mul (local.get $x) (local.get $x))))))))
   (f64.copysign (local.get $y) (local.get $x))
 )
-(func $caml_erfc_float
-  (export
 
-    "caml_erfc_float")
-  (param $x f64) (result f64)
+(func $caml_erfc_float (export "caml_erfc_float") (param $x f64) (result f64)
   (f64.sub (f64.const 1) (call $erf (local.get $x)))
 )
-(func $caml_fma_float
-  (export
 
-    "caml_fma_float")
+(func $caml_fma_float (export "caml_fma_float")
   (param $vx (ref eq)) (param $vy (ref eq)) (param $vz (ref eq))
   (result (ref eq))
   (local $x f64) (local $y f64) (local $z f64) (local $x_2 i64)
@@ -1086,10 +1074,8 @@
   (; 'l_2 ;)
   (struct.new $float (local.get $y))
 )
-(func $caml_float_compare
-  (export
 
-    "caml_float_compare")
+(func $caml_float_compare (export "caml_float_compare")
   (param $x f64) (param $y f64) (result (ref eq))
   (ref.i31
     (i32.add
@@ -1098,11 +1084,8 @@
       (i32.sub (f64.eq (local.get $x) (local.get $x))
         (f64.eq (local.get $y) (local.get $y)))))
 )
-(func $caml_round
-  (export
 
-    "caml_round")
-  (param $x f64) (result f64)
+(func $caml_round (export "caml_round") (param $x f64) (result f64)
   (local $y f64)
   (if (result f64) (f64.ge (local.get $x) (f64.const 0))
     (then

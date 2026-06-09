@@ -1,31 +1,42 @@
+;; Wasm_of_ocaml runtime support
+;; http://www.ocsigen.org/js_of_ocaml/
+;;
+;; This program is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU Lesser General Public License as published by
+;; the Free Software Foundation, with linking exception;
+;; either version 2.1 of the License, or (at your option) any later version.
+;;
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU Lesser General Public License for more details.
+;;
+;; You should have received a copy of the GNU Lesser General Public License
+;; along with this program; if not, write to the Free Software
+;; Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 (import "fail" "caml_invalid_argument"
   (func $caml_invalid_argument (param (ref eq)))
-) (type $block (array (mut (ref eq)))) (type $string (array (mut i8)))
-(func $caml_get_exception_raw_backtrace
-  (export
+) (type $block (array (mut (ref eq))))
+(type $string (array (mut i8)))
 
-    "caml_get_exception_raw_backtrace")
+(func $caml_get_exception_raw_backtrace
+  (export "caml_get_exception_raw_backtrace")
   (param $x (ref eq)) (result (ref eq))
   (array.new_fixed $block 1 (ref.i31 (i32.const 0)))
 )
-(func $caml_backtrace_status
-  (export
 
-    "caml_backtrace_status")
+(func $caml_backtrace_status (export "caml_backtrace_status")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
-(func $caml_convert_raw_backtrace
-  (export
 
-    "caml_convert_raw_backtrace")
+(func $caml_convert_raw_backtrace (export "caml_convert_raw_backtrace")
   (param $x (ref eq)) (result (ref eq))
   (array.new_fixed $block 1 (ref.i31 (i32.const 0)))
 )
-(func $caml_raw_backtrace_next_slot
-  (export
 
-    "caml_raw_backtrace_next_slot")
+(func $caml_raw_backtrace_next_slot (export "caml_raw_backtrace_next_slot")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
@@ -33,48 +44,37 @@
 (data $raw_backtrace_slot_err
   "Printexc.get_raw_backtrace_slot: index out of bounds"
 )
-(func $caml_raw_backtrace_slot
-  (export
 
-    "caml_raw_backtrace_slot")
+(func $caml_raw_backtrace_slot (export "caml_raw_backtrace_slot")
   (param $x (ref eq)) (param $x_2 (ref eq)) (result (ref eq))
   (call $caml_invalid_argument
     (array.new_data $string $raw_backtrace_slot_err (i32.const 0)
       (i32.const 52)))
   (ref.i31 (i32.const 0))
 )
-(func $caml_convert_raw_backtrace_slot
-  (export
 
-    "caml_convert_raw_backtrace_slot")
+(func $caml_convert_raw_backtrace_slot
+  (export "caml_convert_raw_backtrace_slot")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
-(func $caml_restore_raw_backtrace
-  (export
 
-    "caml_restore_raw_backtrace")
+(func $caml_restore_raw_backtrace (export "caml_restore_raw_backtrace")
   (param $x (ref eq)) (param $x_2 (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
-(func $caml_get_current_callstack
-  (export
 
-    "caml_get_current_callstack")
+(func $caml_get_current_callstack (export "caml_get_current_callstack")
   (param $x (ref eq)) (result (ref eq))
   (array.new_fixed $block 1 (ref.i31 (i32.const 0)))
 )
-(func $caml_ml_debug_info_status
-  (export
 
-    "caml_ml_debug_info_status")
+(func $caml_ml_debug_info_status (export "caml_ml_debug_info_status")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
-(func $caml_record_backtrace
-  (export
 
-    "caml_record_backtrace")
+(func $caml_record_backtrace (export "caml_record_backtrace")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )

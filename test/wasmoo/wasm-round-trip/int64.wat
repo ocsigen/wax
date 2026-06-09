@@ -1,3 +1,20 @@
+;; Wasm_of_ocaml runtime support
+;; http://www.ocsigen.org/js_of_ocaml/
+;;
+;; This program is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU Lesser General Public License as published by
+;; the Free Software Foundation, with linking exception;
+;; either version 2.1 of the License, or (at your option) any later version.
+;;
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU Lesser General Public License for more details.
+;;
+;; You should have received a copy of the GNU Lesser General Public License
+;; along with this program; if not, write to the Free Software
+;; Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 (import "ints" "parse_sign_and_base"
   (func $parse_sign_and_base (param (ref $string)) (result i32 i32 i32 i32))
 ) (import "ints" "parse_digit" (func $parse_digit (param i32) (result i32)))
@@ -32,12 +49,10 @@
     (field $serialize (ref null $serialize))
     (field $deserialize (ref null $deserialize))
     (field $dup (ref null $dup)))
-) (type $custom (sub (struct (field $f (ref $custom_operations)))))
-(global $int64_ops
-  (export
+)
+(type $custom (sub (struct (field $f (ref $custom_operations)))))
 
-    "int64_ops")
-  (ref $custom_operations)
+(global $int64_ops (export "int64_ops") (ref $custom_operations)
   (struct.new $custom_operations (@string $string "_j" )
     (ref.func $int64_cmp) (ref.null $compare) (ref.func $int64_hash)
     (struct.new $fixed_length (i32.const 8) (i32.const 8))
@@ -86,24 +101,17 @@
   (struct.new $int64 (global.get $int64_ops)
     (struct.get $int64 $f_2 (ref.cast (ref $int64) (local.get $v))))
 )
-(func $caml_copy_int64
-  (export
 
-    "caml_copy_int64")
+(func $caml_copy_int64 (export "caml_copy_int64")
   (param $i i64) (result (ref eq))
   (struct.new $int64 (global.get $int64_ops) (local.get $i))
 )
-(func $Int64_val
-  (export
 
-    "Int64_val")
-  (param $x (ref eq)) (result i64)
+(func $Int64_val (export "Int64_val") (param $x (ref eq)) (result i64)
   (struct.get $int64 $f_2 (ref.cast (ref $int64) (local.get $x)))
 )
-(func $caml_int64_bswap
-  (export
 
-    "caml_int64_bswap")
+(func $caml_int64_bswap (export "caml_int64_bswap")
   (param $i i64) (result i64)
   (i64.or
     (i64.or
@@ -117,10 +125,8 @@
       (i64.rotl (i64.and (local.get $i) (i64.const 0xFF000000FF000000))
         (i64.const 8))))
 )
-(func $caml_int64_compare
-  (export
 
-    "caml_int64_compare")
+(func $caml_int64_compare (export "caml_int64_compare")
   (param $i1 i64) (param $i2 i64) (result (ref eq))
   (ref.i31
     (i32.sub (i64.gt_s (local.get $i1) (local.get $i2))
@@ -131,15 +137,13 @@
   (@string $string "Int64.of_string" )
 ;; "Int64.of_string"
 )
-(func $caml_i64_of_digits
-  (export
 
-    ;; Parse a sequence of digits into an i64 as dicted by $base,
-    ;; $signedness and $sign. The sequence is read in $s starting from $i.
-    ;; In case of failure raise [Failure $errmsg].
-    ;; Used by $caml_int64_of_string below and by $caml_uint64_of_string in
-    ;; package "integers".
-    "caml_i64_of_digits")
+;; Parse a sequence of digits into an i64 as dicted by $base,
+;; $signedness and $sign. The sequence is read in $s starting from $i.
+;; In case of failure raise [Failure $errmsg].
+;; Used by $caml_int64_of_string below and by $caml_uint64_of_string in
+;; package "integers".
+(func $caml_i64_of_digits (export "caml_i64_of_digits")
   (param $base i32) (param $signedness i32) (param $sign i32)
   (param $s (ref $string)) (param $i i32) (param $errmsg (ref $string))
   (result i64)
@@ -189,10 +193,8 @@
     (then (local.set $res (i64.sub (i64.const 0) (local.get $res)))))
   (local.get $res)
 )
-(func $caml_int64_of_string
-  (export
 
-    "caml_int64_of_string")
+(func $caml_int64_of_string (export "caml_int64_of_string")
   (param $v (ref eq)) (result (ref eq))
   (local $s (ref $string)) (local $i i32) (local $signedness i32)
   (local $sign i32) (local $base i32)
@@ -234,11 +236,10 @@
   (if (local.get $negative)
     (then (array.set $string (local.get $s) (i32.const 0) (i32.const 45))))
   (local.get $s)
-) (type $chars (array i8))
-(func $caml_int64_format
-  (export
+)
+(type $chars (array i8))
 
-    "caml_int64_format")
+(func $caml_int64_format (export "caml_int64_format")
   (param $x (ref eq)) (param $x_2 (ref eq)) (result (ref eq))
   (local $d i64) (local $s (ref $string)) (local $sign_style i32)
   (local $alternate i32) (local $signed i32) (local $base i64)

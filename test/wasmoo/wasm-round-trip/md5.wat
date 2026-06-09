@@ -1,3 +1,20 @@
+;; Wasm_of_ocaml runtime support
+;; http://www.ocsigen.org/js_of_ocaml/
+;;
+;; This program is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU Lesser General Public License as published by
+;; the Free Software Foundation, with linking exception;
+;; either version 2.1 of the License, or (at your option) any later version.
+;;
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU Lesser General Public License for more details.
+;;
+;; You should have received a copy of the GNU Lesser General Public License
+;; along with this program; if not, write to the Free Software
+;; Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 (import "io" "caml_getblock"
   (func $caml_getblock (param (ref eq) (ref $string) i32 i32) (result i32))
 ) (import "fail" "caml_raise_end_of_file" (func $caml_raise_end_of_file))
@@ -9,12 +26,9 @@
     (field $f_3 (ref $int_array))
     (field $f_4 (ref $string)))
 )
-(func $caml_md5_string
-  (export
-    ;; intermediate buffer
+;; intermediate buffer
 
-    "caml_md5_string")
-  (export "caml_md5_bytes")
+(func $caml_md5_string (export "caml_md5_string") (export "caml_md5_bytes")
   (param $x (ref eq)) (param $x_2 (ref eq)) (param $x_3 (ref eq))
   (result (ref eq))
   (local $ctx (ref $context))
@@ -24,10 +38,8 @@
     (i31.get_u (ref.cast (ref i31) (local.get $x_3))))
   (return_call $MD5Final (local.get $ctx))
 )
-(func $caml_md5_chan
-  (export
 
-    "caml_md5_chan")
+(func $caml_md5_chan (export "caml_md5_chan")
   (param $ch (ref eq)) (param $vlen (ref eq)) (result (ref eq))
   (local $len i32) (local $read i32) (local $buf (ref $string))
   (local $ctx (ref $context))

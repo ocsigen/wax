@@ -1,3 +1,20 @@
+;; Wasm_of_ocaml runtime support
+;; http://www.ocsigen.org/js_of_ocaml/
+;;
+;; This program is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU Lesser General Public License as published by
+;; the Free Software Foundation, with linking exception;
+;; either version 2.1 of the License, or (at your option) any later version.
+;;
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU Lesser General Public License for more details.
+;;
+;; You should have received a copy of the GNU Lesser General Public License
+;; along with this program; if not, write to the Free Software
+;; Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 (import "jslib" "wrap" (func $wrap (param anyref) (result (ref eq))))
 (import "jslib" "unwrap" (func $unwrap (param (ref eq)) (result anyref)))
 (import "jslib" "caml_js_get"
@@ -51,11 +68,10 @@
 )
 (import "hash" "caml_hash_mix_int"
   (func $caml_hash_mix_int (param i32 i32) (result i32))
-) (type $string (array (mut i8)))
-(func $caml_hash_mix_bigstring
-  (export
+)
+(type $string (array (mut i8)))
 
-    "caml_hash_mix_bigstring")
+(func $caml_hash_mix_bigstring (export "caml_hash_mix_bigstring")
   (param $h i32) (param $b (ref eq)) (result i32)
   (local $data (ref extern)) (local $len i32) (local $i i32) (local $w i32)
   (local.set $data (call $caml_ba_get_data (local.get $b)))
@@ -97,45 +113,35 @@
 )
 
 (data $buffer "buffer")
-(func $bigstring_to_array_buffer
-  (export
 
-    "bigstring_to_array_buffer")
+(func $bigstring_to_array_buffer (export "bigstring_to_array_buffer")
   (param $bs (ref eq)) (result (ref eq))
   (return_call $caml_js_get (call $caml_ba_to_typed_array (local.get $bs))
     (array.new_data $string $buffer (i32.const 0) (i32.const 6)))
 )
-(func $bigstring_of_array_buffer
-  (export
 
-    "bigstring_of_array_buffer")
+(func $bigstring_of_array_buffer (export "bigstring_of_array_buffer")
   (param $x (ref eq)) (result (ref eq))
   (return_call $caml_ba_from_typed_array
     (call $wrap
       (call $ta_create (i32.const 12) (call $unwrap (local.get $x)))))
 )
-(func $bigstring_of_typed_array
-  (export
 
-    "bigstring_of_typed_array")
+(func $bigstring_of_typed_array (export "bigstring_of_typed_array")
   (param $x (ref eq)) (result (ref eq))
   (return_call $caml_ba_from_typed_array
     (call $wrap (call $ta_bytes (call $unwrap (local.get $x)))))
 )
-(func $caml_bigstring_memset
-  (export
 
-    "caml_bigstring_memset")
+(func $caml_bigstring_memset (export "caml_bigstring_memset")
   (param $s (ref eq)) (param $pos (ref eq)) (param $len (ref eq))
   (param $v (ref eq)) (result (ref eq))
   (return_call $caml_ba_fill
     (call $caml_ba_sub (local.get $s) (local.get $pos) (local.get $len))
     (local.get $v))
 )
-(func $caml_bigstring_memcmp
-  (export
 
-    "caml_bigstring_memcmp")
+(func $caml_bigstring_memcmp (export "caml_bigstring_memcmp")
   (param $s1 (ref eq)) (param $vpos1 (ref eq)) (param $s2 (ref eq))
   (param $vpos2 (ref eq)) (param $vlen (ref eq)) (result (ref eq))
   (local $i i32) (local $pos1 i32) (local $pos2 i32) (local $len i32)
@@ -164,10 +170,8 @@
   (; 'loop ;)
   (ref.i31 (i32.const 0))
 )
-(func $caml_bigstring_memcmp_string
-  (export
 
-    "caml_bigstring_memcmp_string")
+(func $caml_bigstring_memcmp_string (export "caml_bigstring_memcmp_string")
   (param $s1 (ref eq)) (param $vpos1 (ref eq)) (param $vs2 (ref eq))
   (param $vpos2 (ref eq)) (param $vlen (ref eq)) (result (ref eq))
   (local $i i32) (local $pos1 i32) (local $pos2 i32) (local $len i32)
@@ -196,10 +200,8 @@
   (; 'loop ;)
   (ref.i31 (i32.const 0))
 )
-(func $caml_bigstring_memchr
-  (export
 
-    "caml_bigstring_memchr")
+(func $caml_bigstring_memchr (export "caml_bigstring_memchr")
   (param $s (ref eq)) (param $vc (ref eq)) (param $vpos (ref eq))
   (param $vlen (ref eq)) (result (ref eq))
   (local $pos i32) (local $len i32) (local $c i32) (local $d (ref extern))
@@ -236,10 +238,9 @@
     (local.get $d2) (local.get $pos2) (local.get $len))
   (ref.i31 (i32.const 0))
 )
-(func $caml_bigstring_blit_ba_to_bytes
-  (export
 
-    "caml_bigstring_blit_ba_to_bytes")
+(func $caml_bigstring_blit_ba_to_bytes
+  (export "caml_bigstring_blit_ba_to_bytes")
   (param $ba1 (ref eq)) (param $vpos1 (ref eq)) (param $str2 (ref eq))
   (param $vpos2 (ref eq)) (param $vlen (ref eq)) (result (ref eq))
   (local $pos1 i32) (local $pos2 i32) (local $len i32)
@@ -253,10 +254,8 @@
     (local.get $pos2) (local.get $len))
   (ref.i31 (i32.const 0))
 )
-(func $caml_bigstring_blit_ba_to_ba
-  (export
 
-    "caml_bigstring_blit_ba_to_ba")
+(func $caml_bigstring_blit_ba_to_ba (export "caml_bigstring_blit_ba_to_ba")
   (param $ba1 (ref eq)) (param $vpos1 (ref eq)) (param $ba2 (ref eq))
   (param $vpos2 (ref eq)) (param $vlen (ref eq)) (result (ref eq))
   (local $pos1 i32) (local $pos2 i32) (local $len i32)

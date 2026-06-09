@@ -1,3 +1,20 @@
+;; Wasm_of_ocaml runtime support
+;; http://www.ocsigen.org/js_of_ocaml/
+;;
+;; This program is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU Lesser General Public License as published by
+;; the Free Software Foundation, with linking exception;
+;; either version 2.1 of the License, or (at your option) any later version.
+;;
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU Lesser General Public License for more details.
+;;
+;; You should have received a copy of the GNU Lesser General Public License
+;; along with this program; if not, write to the Free Software
+;; Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 (import "fail" "caml_invalid_argument"
   (func $caml_invalid_argument (param (ref eq)))
 ) (type $block (array (mut (ref eq)))) (type $string (array (mut i8)))
@@ -9,11 +26,8 @@
 (global $empty_array (ref eq)
   (array.new_fixed $block 1 (ref.i31 (i32.const 0)))
 )
-(func $caml_make_vect
-  (export
 
-    "caml_make_vect")
-  (export "caml_array_make")
+(func $caml_make_vect (export "caml_make_vect") (export "caml_array_make")
   (param $n (ref eq)) (param $v (ref eq)) (result (ref eq))
   (local $sz i32) (local $b (ref $block)) (local $f f64)
   (local.set $sz (i31.get_s (ref.cast (ref i31) (local.get $n))))
@@ -33,10 +47,8 @@
   (array.set $block (local.get $b) (i32.const 0) (ref.i31 (i32.const 0)))
   (local.get $b)
 )
-(func $caml_floatarray_make
-  (export
 
-    "caml_floatarray_make")
+(func $caml_floatarray_make (export "caml_floatarray_make")
   (param $n (ref eq)) (param $v (ref eq)) (result (ref eq))
   (local $sz i32) (local $f f64)
   (local.set $sz (i31.get_s (ref.cast (ref i31) (local.get $n))))
@@ -48,10 +60,8 @@
   (local.set $f (struct.get $float $f (ref.cast (ref $float) (local.get $v))))
   (array.new $float_array (local.get $f) (local.get $sz))
 )
-(func $caml_floatarray_create
-  (export
 
-    "caml_make_float_vect")
+(func $caml_floatarray_create (export "caml_make_float_vect")
   (export "caml_floatarray_create") (export "caml_array_create_float")
   (param $n (ref eq)) (result (ref eq))
   (local $sz i32)
@@ -63,10 +73,8 @@
   (if (i32.eqz (local.get $sz)) (then (return (global.get $empty_array))))
   (array.new $float_array (f64.const 0) (local.get $sz))
 )
-(func $caml_array_of_uniform_array
-  (export
 
-    "caml_array_of_uniform_array")
+(func $caml_array_of_uniform_array (export "caml_array_of_uniform_array")
   (param $vinit (ref eq)) (result (ref eq))
   (local $init (ref $block)) (local $res (ref $float_array))
   (local $size i32) (local $i i32)
@@ -92,19 +100,15 @@
           (return (local.get $res))))))
   (return (local.get $init))
 )
-(func $caml_floatarray_unsafe_get
-  (export
 
-    "caml_floatarray_unsafe_get")
+(func $caml_floatarray_unsafe_get (export "caml_floatarray_unsafe_get")
   (param $a (ref eq)) (param $i (ref eq)) (result (ref eq))
   (struct.new $float
     (array.get $float_array (ref.cast (ref $float_array) (local.get $a))
       (i31.get_s (ref.cast (ref i31) (local.get $i)))))
 )
-(func $caml_floatarray_unsafe_set
-  (export
 
-    "caml_floatarray_unsafe_set")
+(func $caml_floatarray_unsafe_set (export "caml_floatarray_unsafe_set")
   (param $a (ref eq)) (param $i (ref eq)) (param $v (ref eq))
   (result (ref eq))
   (array.set $float_array (ref.cast (ref $float_array) (local.get $a))
@@ -112,10 +116,8 @@
     (struct.get $float $f (ref.cast (ref $float) (local.get $v))))
   (ref.i31 (i32.const 0))
 )
-(func $caml_array_sub
-  (export
 
-    "caml_array_sub")
+(func $caml_array_sub (export "caml_array_sub")
   (param $a (ref eq)) (param $i (ref eq)) (param $vlen (ref eq))
   (result (ref eq))
   (local $a1 (ref $block)) (local $a2 (ref $block)) (local $len i32)
@@ -145,10 +147,8 @@
     (local.get $len))
   (local.get $fa2)
 )
-(func $caml_floatarray_sub
-  (export
 
-    "caml_floatarray_sub")
+(func $caml_floatarray_sub (export "caml_floatarray_sub")
   (param $a (ref eq)) (param $i (ref eq)) (param $vlen (ref eq))
   (result (ref eq))
   (local $len i32) (local $fa1 (ref $float_array))
@@ -171,10 +171,8 @@
     (local.get $a) (i32.const 0) (local.get $len))
   (local.get $a')
 )
-(func $caml_array_append
-  (export
 
-    "caml_array_append")
+(func $caml_array_append (export "caml_array_append")
   (param $va1 (ref eq)) (param $va2 (ref eq)) (result (ref eq))
   (local $a1 (ref $block)) (local $a2 (ref $block)) (local $a (ref $block))
   (local $fa1 (ref $float_array)) (local $fa2 (ref $float_array))
@@ -225,10 +223,8 @@
   )
   (return_call $caml_floatarray_dup (local.get $fa1))
 )
-(func $caml_floatarray_append
-  (export
 
-    "caml_floatarray_append")
+(func $caml_floatarray_append (export "caml_floatarray_append")
   (param $va1 (ref eq)) (param $va2 (ref eq)) (result (ref eq))
   (local $fa1 (ref $float_array)) (local $fa2 (ref $float_array))
   (local $fa (ref $float_array)) (local $l1 i32) (local $l2 i32)
@@ -252,10 +248,8 @@
   )
   (return_call $caml_floatarray_dup (local.get $fa1))
 )
-(func $caml_array_concat
-  (export
 
-    "caml_array_concat")
+(func $caml_array_concat (export "caml_array_concat")
   (param $x (ref eq)) (result (ref eq))
   (local $i i32) (local $len i32) (local $l (ref eq)) (local $v (ref eq))
   (local $isfloat i32) (local $b (ref $block)) (local $a (ref $block))
@@ -339,10 +333,8 @@
         ))
       (local.get $a)))
 )
-(func $caml_floatarray_blit
-  (export
 
-    "caml_floatarray_blit")
+(func $caml_floatarray_blit (export "caml_floatarray_blit")
   (param $a1 (ref eq)) (param $i1 (ref eq)) (param $a2 (ref eq))
   (param $i2 (ref eq)) (param $vlen (ref eq)) (result (ref eq))
   (local $len i32)
@@ -356,10 +348,8 @@
         (i31.get_s (ref.cast (ref i31) (local.get $i1))) (local.get $len))))
   (ref.i31 (i32.const 0))
 )
-(func $caml_array_blit
-  (export
 
-    "caml_array_blit")
+(func $caml_array_blit (export "caml_array_blit")
   (param $a1 (ref eq)) (param $i1 (ref eq)) (param $a2 (ref eq))
   (param $i2 (ref eq)) (param $vlen (ref eq)) (result (ref eq))
   (local $len i32)
@@ -380,10 +370,8 @@
             (local.get $len))))))
   (ref.i31 (i32.const 0))
 )
-(func $caml_array_fill
-  (export
 
-    "caml_array_fill")
+(func $caml_array_fill (export "caml_array_fill")
   (param $a (ref eq)) (param $i (ref eq)) (param $vlen (ref eq))
   (param $v (ref eq)) (result (ref eq))
   (local $len i32)
@@ -404,10 +392,8 @@
         (local.get $len))))
   (ref.i31 (i32.const 0))
 )
-(func $caml_floatarray_fill
-  (export
 
-    "caml_floatarray_fill")
+(func $caml_floatarray_fill (export "caml_floatarray_fill")
   (param $a (ref eq)) (param $i (ref eq)) (param $vlen (ref eq))
   (param $v (ref eq)) (result (ref eq))
   (local $len i32)

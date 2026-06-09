@@ -1,3 +1,20 @@
+;; Wasm_of_ocaml runtime support
+;; http://www.ocsigen.org/js_of_ocaml/
+;;
+;; This program is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU Lesser General Public License as published by
+;; the Free Software Foundation, with linking exception;
+;; either version 2.1 of the License, or (at your option) any later version.
+;;
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU Lesser General Public License for more details.
+;;
+;; You should have received a copy of the GNU Lesser General Public License
+;; along with this program; if not, write to the Free Software
+;; Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 (import "obj" "abstract_tag" (global $abstract_tag i32))
 (import "obj" "caml_obj_dup"
   (func $caml_obj_dup (param (ref eq)) (result (ref eq)))
@@ -34,10 +51,8 @@
 (global $caml_ephe_none (ref eq)
   (array.new_fixed $block 1 (ref.i31 (global.get $abstract_tag)))
 )
-(func $caml_ephe_get_data
-  (export
 
-    "caml_ephe_get_data")
+(func $caml_ephe_get_data (export "caml_ephe_get_data")
   (param $vx (ref eq)) (result (ref eq))
   (local $x (ref $block)) (local $d (ref eq)) (local $v (ref eq))
   (local $m (ref any)) (local $i i32) (local $len i32)
@@ -74,10 +89,8 @@
   (; 'no_data ;)
   (ref.i31 (i32.const 0))
 )
-(func $caml_ephe_get_data_copy
-  (export
 
-    "caml_ephe_get_data_copy")
+(func $caml_ephe_get_data_copy (export "caml_ephe_get_data_copy")
   (param $x (ref eq)) (result (ref eq))
   (local $r (ref eq))
   (local.set $r (call $caml_ephe_get_data (local.get $x)))
@@ -93,10 +106,8 @@
                 (i32.const 1))))))))
   (local.get $r)
 )
-(func $caml_ephe_set_data
-  (export
 
-    "caml_ephe_set_data")
+(func $caml_ephe_set_data (export "caml_ephe_set_data")
   (param $vx (ref eq)) (param $data (ref eq)) (result (ref eq))
   (local $x (ref $block)) (local $v (ref eq)) (local $m (ref any))
   (local $m' (ref any)) (local $i i32)
@@ -127,10 +138,8 @@
     (call $wrap (local.get $m)))
   (ref.i31 (i32.const 0))
 )
-(func $caml_ephe_unset_data
-  (export
 
-    "caml_ephe_unset_data")
+(func $caml_ephe_unset_data (export "caml_ephe_unset_data")
   (param $vx (ref eq)) (result (ref eq))
   (local $x (ref $block))
   (local.set $x (ref.cast (ref $block) (local.get $vx)))
@@ -138,10 +147,8 @@
     (global.get $caml_ephe_none))
   (ref.i31 (i32.const 0))
 )
-(func $caml_ephe_check_data
-  (export
 
-    "caml_ephe_check_data")
+(func $caml_ephe_check_data (export "caml_ephe_check_data")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31
     (i32.eqz
@@ -227,10 +234,8 @@
   (; 'value ;)
   (ref.i31 (i32.const 1))
 )
-(func $caml_ephe_set_key
-  (export
 
-    "caml_ephe_set_key")
+(func $caml_ephe_set_key (export "caml_ephe_set_key")
   (param $vx (ref eq)) (param $vi (ref eq)) (param $v (ref eq))
   (result (ref eq))
   (local $x (ref $block)) (local $d (ref eq)) (local $i i32)
@@ -252,10 +257,8 @@
   (call $caml_ephe_set_data_opt (local.get $vx) (local.get $d))
   (ref.i31 (i32.const 0))
 )
-(func $caml_ephe_unset_key
-  (export
 
-    "caml_ephe_unset_key")
+(func $caml_ephe_unset_key (export "caml_ephe_unset_key")
   (param $vx (ref eq)) (param $vi (ref eq)) (result (ref eq))
   (local $x (ref $block)) (local $d (ref eq)) (local $i i32)
   (local.set $x (ref.cast (ref $block) (local.get $vx)))
@@ -287,10 +290,8 @@
     (ref.i31 (global.get $abstract_tag)))
   (local.get $res)
 )
-(func $caml_ephe_blit_data
-  (export
 
-    "caml_ephe_blit_data")
+(func $caml_ephe_blit_data (export "caml_ephe_blit_data")
   (param $x (ref eq)) (param $y (ref eq)) (result (ref eq))
   (call $caml_ephe_set_data_opt (local.get $y)
     (call $caml_ephe_get_data (local.get $x)))
@@ -312,10 +313,8 @@
   (call $caml_ephe_set_data_opt (local.get $y) (local.get $d))
   (ref.i31 (i32.const 0))
 )
-(func $caml_weak_set
-  (export
 
-    "caml_weak_set")
+(func $caml_weak_set (export "caml_weak_set")
   (param $x (ref eq)) (param $i (ref eq)) (param $v (ref eq))
   (result (ref eq))
   (drop

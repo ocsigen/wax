@@ -1,3 +1,20 @@
+;; Wasm_of_ocaml runtime support
+;; http://www.ocsigen.org/js_of_ocaml/
+;;
+;; This program is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU Lesser General Public License as published by
+;; the Free Software Foundation, with linking exception;
+;; either version 2.1 of the License, or (at your option) any later version.
+;;
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU Lesser General Public License for more details.
+;;
+;; You should have received a copy of the GNU Lesser General Public License
+;; along with this program; if not, write to the Free Software
+;; Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 (import "jslib" "unwrap" (func $unwrap (param (ref eq)) (result anyref)))
 (import "jslib" "caml_jsstring_of_string"
   (func $caml_jsstring_of_string (param (ref eq)) (result (ref eq)))
@@ -39,10 +56,8 @@
   (struct.set $buffer $f (local.get $buf)
     (i32.add (local.get $pos) (local.get $len)))
 )
-(func $caml_format_exception
-  (export
 
-    "caml_format_exception")
+(func $caml_format_exception (export "caml_format_exception")
   (param $x (ref eq)) (result (ref eq))
   (local $exn (ref $block)) (local $buf (ref $buffer)) (local $v (ref eq))
   (local $bucket (ref $block)) (local $i i32) (local $len i32)

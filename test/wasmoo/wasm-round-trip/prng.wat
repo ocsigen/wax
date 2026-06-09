@@ -1,3 +1,20 @@
+;; Wasm_of_ocaml runtime support
+;; http://www.ocsigen.org/js_of_ocaml/
+;;
+;; This program is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU Lesser General Public License as published by
+;; the Free Software Foundation, with linking exception;
+;; either version 2.1 of the License, or (at your option) any later version.
+;;
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU Lesser General Public License for more details.
+;;
+;; You should have received a copy of the GNU Lesser General Public License
+;; along with this program; if not, write to the Free Software
+;; Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 (import "bindings" "ta_get_i32"
   (func $ta_get_i32 (param (ref extern) i32) (result i32))
 )
@@ -7,10 +24,8 @@
 (import "bigarray" "caml_ba_get_data"
   (func $caml_ba_get_data (param (ref eq)) (result (ref extern)))
 )
-(func $caml_lxm_next
-  (export
 
-    "caml_lxm_next")
+(func $caml_lxm_next (export "caml_lxm_next")
   (param $v (ref eq)) (result i64)
   (local $data (ref extern)) (local $a i64) (local $s i64) (local $q0 i64)
   (local $q1 i64) (local $z i64)

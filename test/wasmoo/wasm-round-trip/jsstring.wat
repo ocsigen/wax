@@ -1,3 +1,20 @@
+;; Wasm_of_ocaml runtime support
+;; http://www.ocsigen.org/js_of_ocaml/
+;;
+;; This program is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU Lesser General Public License as published by
+;; the Free Software Foundation, with linking exception;
+;; either version 2.1 of the License, or (at your option) any later version.
+;;
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU Lesser General Public License for more details.
+;;
+;; You should have received a copy of the GNU Lesser General Public License
+;; along with this program; if not, write to the Free Software
+;; Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 (import "wasm:js-string" "compare"
   (func $compare_strings (param externref externref) (result i32))
 )
@@ -11,6 +28,7 @@
   (func $fromCharCodeArray
     (param (ref null $wstring) i32 i32) (result (ref extern)))
 )
+
 (import "wasm:text-decoder" "decodeStringFromUTF8Array"
   (func $decodeStringFromUTF8Array
     (param (ref null $string) i32 i32) (result (ref extern)))
@@ -18,6 +36,7 @@
 (import "wasm:text-encoder" "encodeStringToUTF8Array"
   (func $encodeStringToUTF8Array (param externref) (result (ref $string)))
 )
+
 (import "bindings" "read_string"
   (func $read_string (param i32) (result anyref))
 )
@@ -64,26 +83,19 @@
           (global.set $buffer
             (array.new $wstring (i32.const 0) (global.get $utf16_buffer_size)))))))
 )
-(func $jsstring_compare
-  (export
 
-    "jsstring_compare")
+(func $jsstring_compare (export "jsstring_compare")
   (param $s anyref) (param $s' anyref) (result i32)
   (return_call $compare_strings (extern.convert_any (local.get $s))
     (extern.convert_any (local.get $s')))
 )
-(func $jsstring_test
-  (export
 
-    "jsstring_test")
-  (param $s anyref) (result i32)
+(func $jsstring_test (export "jsstring_test") (param $s anyref) (result i32)
   (return_call $is_string (extern.convert_any (local.get $s)))
 )
-(func $jsstring_of_substring
-  (export
 
-    ;; Used by package zarith_stubs_js
-    "jsstring_of_substring")
+;; Used by package zarith_stubs_js
+(func $jsstring_of_substring (export "jsstring_of_substring")
   (param $s (ref $string)) (param $pos i32) (param $len i32) (result anyref)
   (local $i i32) (local $c i32)
   (if (global.get $text_converters_available)
@@ -115,18 +127,14 @@
   (return_call $jsstring_of_substring_fallback (local.get $s)
     (local.get $pos) (local.get $len))
 )
-(func $jsstring_of_string
-  (export
 
-    "jsstring_of_string")
+(func $jsstring_of_string (export "jsstring_of_string")
   (param $s (ref $string)) (result anyref)
   (return_call $jsstring_of_substring (local.get $s) (i32.const 0)
     (array.len (local.get $s)))
 )
-(func $string_of_jsstring
-  (export
 
-    "string_of_jsstring")
+(func $string_of_jsstring (export "string_of_jsstring")
   (param $s anyref) (result (ref $string))
   (if (global.get $text_converters_available)
     (then
@@ -134,14 +142,10 @@
         (extern.convert_any (local.get $s)))))
   (return_call $string_of_jsstring_fallback (local.get $s))
 )
-(memory $caml_buffer
-  (export
 
-    ;; Fallback implementation of string conversion functions
+;; Fallback implementation of string conversion functions
 
-    "caml_buffer")
-  1
-)
+(memory $caml_buffer (export "caml_buffer") 1)
 
 (global $buffer_size i32 (i32.const 65536))
 
@@ -246,11 +250,8 @@
   ) (; 'done ;)
   (local.get $s')
 )
-(func $caml_extract_string
-  (export
 
-    "caml_extract_string")
-  (param $len i32)
+(func $caml_extract_string (export "caml_extract_string") (param $len i32)
   (local $s (ref $string))
   (local.set $s (array.new $string (i32.const 0) (local.get $len)))
   (call $read_from_buffer (local.get $s) (i32.const 0) (local.get $len))

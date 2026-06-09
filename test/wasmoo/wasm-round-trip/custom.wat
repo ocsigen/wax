@@ -1,3 +1,20 @@
+;; Wasm_of_ocaml runtime support
+;; http://www.ocsigen.org/js_of_ocaml/
+;;
+;; This program is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU Lesser General Public License as published by
+;; the Free Software Foundation, with linking exception;
+;; either version 2.1 of the License, or (at your option) any later version.
+;;
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU Lesser General Public License for more details.
+;;
+;; You should have received a copy of the GNU Lesser General Public License
+;; along with this program; if not, write to the Free Software
+;; Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 (import "int32" "int32_ops" (global $int32_ops (ref $custom_operations)))
 (import "int32" "nativeint_ops"
   (global $nativeint_ops (ref $custom_operations))
@@ -28,17 +45,13 @@
 (type $custom_with_id
   (sub $custom (struct (field $f (ref $custom_operations)) (field $id i64)))
 )
-(func $caml_is_custom
-  (export
 
-    "caml_is_custom")
+(func $caml_is_custom (export "caml_is_custom")
   (param $x (ref eq)) (result i32)
   (ref.test (ref $custom) (local.get $x))
 )
-(func $caml_dup_custom
-  (export
 
-    "caml_dup_custom")
+(func $caml_dup_custom (export "caml_dup_custom")
   (param $v (ref eq)) (result (ref eq))
   (call_ref $dup (local.get $v)
     (ref.as_non_null
@@ -48,10 +61,8 @@
             (drop (br_on_cast $custom (ref eq) (ref $custom) (local.get $v)))
             (unreachable))))))
 )
-(func $custom_compare_id
-  (export
 
-    "custom_compare_id")
+(func $custom_compare_id (export "custom_compare_id")
   (param $x (ref eq)) (param $x_2 (ref eq)) (param $x_3 i32) (result i32)
   (local $i1 i64) (local $i2 i64)
   (local.set $i1
@@ -63,10 +74,8 @@
   (i32.sub (i64.gt_s (local.get $i1) (local.get $i2))
     (i64.lt_s (local.get $i1) (local.get $i2)))
 )
-(func $custom_hash_id
-  (export
 
-    "custom_hash_id")
+(func $custom_hash_id (export "custom_hash_id")
   (param $x (ref eq)) (result i32)
   (i32.wrap_i64
     (struct.get $custom_with_id $id
@@ -74,11 +83,8 @@
 )
 
 (global $next_id (mut i64) (i64.const 0))
-(func $custom_next_id
-  (export
 
-    "custom_next_id")
-  (result i64)
+(func $custom_next_id (export "custom_next_id") (result i64)
   (local $id i64)
   (local.set $id (global.get $next_id))
   (global.set $next_id (i64.add (local.get $id) (i64.const 1)))
@@ -93,19 +99,16 @@
 (global $custom_operations (mut (ref null $custom_operations_list))
   (ref.null $custom_operations_list)
 )
-(func $caml_register_custom_operations
-  (export
 
-    "caml_register_custom_operations")
+(func $caml_register_custom_operations
+  (export "caml_register_custom_operations")
   (param $ops (ref $custom_operations))
   (global.set $custom_operations
     (struct.new $custom_operations_list (local.get $ops)
       (global.get $custom_operations)))
 )
-(func $caml_find_custom_operations
-  (export
 
-    "caml_find_custom_operations")
+(func $caml_find_custom_operations (export "caml_find_custom_operations")
   (param $id (ref $string)) (result (ref null $custom_operations))
   (local $l (ref null $custom_operations_list))
   (block $not_found
@@ -130,10 +133,8 @@
 )
 
 (global $initialized (mut i32) (i32.const 0))
-(func $caml_init_custom_operations
-  (export
 
-    "caml_init_custom_operations")
+(func $caml_init_custom_operations (export "caml_init_custom_operations")
   (if (global.get $initialized) (then (return)))
   (call $caml_register_custom_operations (global.get $int32_ops))
   (call $caml_register_custom_operations (global.get $nativeint_ops))
@@ -141,10 +142,8 @@
   (call $caml_register_custom_operations (global.get $bigarray_ops))
   (global.set $initialized (i32.const 1))
 )
-(func $caml_custom_identifier
-  (export
 
-    "caml_custom_identifier")
+(func $caml_custom_identifier (export "caml_custom_identifier")
   (param $v (ref eq)) (result (ref eq))
   (struct.get $custom_operations $id
     (struct.get $custom $f (ref.cast (ref $custom) (local.get $v))))

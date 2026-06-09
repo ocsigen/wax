@@ -1,3 +1,20 @@
+;; Wasm_of_ocaml runtime support
+;; http://www.ocsigen.org/js_of_ocaml/
+;;
+;; This program is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU Lesser General Public License as published by
+;; the Free Software Foundation, with linking exception;
+;; either version 2.1 of the License, or (at your option) any later version.
+;;
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU Lesser General Public License for more details.
+;;
+;; You should have received a copy of the GNU Lesser General Public License
+;; along with this program; if not, write to the Free Software
+;; Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 (import "jslib" "log_str" (func $log_str (param (ref $string))))
 (import "bindings" "getcwd" (func $getcwd (result anyref)))
 (import "bindings" "chdir" (func $chdir (param anyref)))
@@ -31,18 +48,15 @@
 )
 (import "sys" "caml_handle_sys_error"
   (func $caml_handle_sys_error (param externref))
-) (type $string (array (mut i8)))
-(func $caml_sys_getcwd
-  (export
+)
+(type $string (array (mut i8)))
 
-    "caml_sys_getcwd")
+(func $caml_sys_getcwd (export "caml_sys_getcwd")
   (param $x (ref eq)) (result (ref eq))
   (return_call $caml_string_of_jsstring (call $wrap (call $getcwd)))
 )
-(func $caml_sys_chdir
-  (export
 
-    "caml_sys_chdir")
+(func $caml_sys_chdir (export "caml_sys_chdir")
   (param $name (ref eq)) (result (ref eq))
   (try
     (do
@@ -51,10 +65,8 @@
     (catch $javascript_exception (call $caml_handle_sys_error)))
   (ref.i31 (i32.const 0))
 )
-(func $caml_sys_mkdir
-  (export
 
-    "caml_sys_mkdir")
+(func $caml_sys_mkdir (export "caml_sys_mkdir")
   (param $name (ref eq)) (param $perm (ref eq)) (result (ref eq))
   (try
     (do
@@ -64,10 +76,8 @@
     (catch $javascript_exception (call $caml_handle_sys_error)))
   (ref.i31 (i32.const 0))
 )
-(func $caml_sys_read_directory
-  (export
 
-    "caml_sys_read_directory")
+(func $caml_sys_read_directory (export "caml_sys_read_directory")
   (param $name (ref eq)) (result (ref eq))
   (try (result (ref eq))
     (do
@@ -79,10 +89,8 @@
       (call $caml_handle_sys_error)
       (return (ref.i31 (i32.const 0)))))
 )
-(func $caml_sys_remove
-  (export
 
-    "caml_sys_remove")
+(func $caml_sys_remove (export "caml_sys_remove")
   (param $name (ref eq)) (result (ref eq))
   (try
     (do
@@ -91,10 +99,8 @@
     (catch $javascript_exception (call $caml_handle_sys_error)))
   (ref.i31 (i32.const 0))
 )
-(func $caml_sys_rename
-  (export
 
-    "caml_sys_rename")
+(func $caml_sys_rename (export "caml_sys_rename")
   (param $o (ref eq)) (param $n (ref eq)) (result (ref eq))
   (try
     (do
@@ -104,10 +110,8 @@
     (catch $javascript_exception (call $caml_handle_sys_error)))
   (ref.i31 (i32.const 0))
 )
-(func $caml_sys_file_exists
-  (export
 
-    "caml_sys_file_exists")
+(func $caml_sys_file_exists (export "caml_sys_file_exists")
   (param $name (ref eq)) (result (ref eq))
   (return_call $file_exists
     (call $unwrap (call $caml_jsstring_of_string (local.get $name))))
@@ -130,27 +134,20 @@
 )
 
 (data $caml_read_file_content "caml_read_file_content")
-(func $caml_read_file_content
-  (export
 
-    "caml_read_file_content")
+(func $caml_read_file_content (export "caml_read_file_content")
   (param $x (ref eq)) (result (ref eq))
   (call $caml_raise_no_such_file (local.get $x))
   (ref.i31 (i32.const 0))
 )
-(func $caml_fs_init
-  (export
 
-    "caml_fs_init")
-  (result (ref eq))
+(func $caml_fs_init (export "caml_fs_init") (result (ref eq))
   (ref.i31 (i32.const 0))
 )
 
 (data $caml_sys_is_directory "caml_sys_is_directory")
-(func $caml_sys_is_directory
-  (export
 
-    "caml_sys_is_directory")
+(func $caml_sys_is_directory (export "caml_sys_is_directory")
   (param $name (ref eq)) (result (ref eq))
   (try (result (ref eq))
     (do

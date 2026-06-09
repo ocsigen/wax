@@ -1,3 +1,20 @@
+;; Wasm_of_ocaml runtime support
+;; http://www.ocsigen.org/js_of_ocaml/
+;;
+;; This program is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU Lesser General Public License as published by
+;; the Free Software Foundation, with linking exception;
+;; either version 2.1 of the License, or (at your option) any later version.
+;;
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU Lesser General Public License for more details.
+;;
+;; You should have received a copy of the GNU Lesser General Public License
+;; along with this program; if not, write to the Free Software
+;; Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 (import "bindings" "log" (func $log_js (param anyref)))
 (import "bindings" "identity" (func $to_float (param anyref) (result f64)))
 (import "bindings" "identity" (func $from_float (param f64) (result anyref)))
@@ -102,132 +119,99 @@
 (type $closure (sub (struct (field $f (ref $function_1)))))
 (type $function_2
   (func (param (ref eq) (ref eq) (ref eq)) (result (ref eq)))
-) (type $cps_closure (sub (struct (field $f (ref $function_2)))))
-(func $wrap
-  (export
+)
+(type $cps_closure (sub (struct (field $f (ref $function_2)))))
 
-    "wrap")
-  (param $x anyref) (result (ref eq))
+(func $wrap (export "wrap") (param $x anyref) (result (ref eq))
   (block $is_eq (result (ref eq))
     (return
       (struct.new $js (br_on_cast $is_eq anyref (ref eq) (local.get $x)))))
 )
-(func $unwrap
-  (export
 
-    "unwrap")
-  (param $x (ref eq)) (result anyref)
+(func $unwrap (export "unwrap") (param $x (ref eq)) (result anyref)
   (block $not_js (result anyref)
     (return
       (struct.get $js $f
         (br_on_cast_fail $not_js (ref eq) (ref $js) (local.get $x)))))
 )
-(func $caml_js_equals
-  (export
 
-    "caml_js_equals")
+(func $caml_js_equals (export "caml_js_equals")
   (param $x (ref eq)) (param $x_2 (ref eq)) (result (ref eq))
   (ref.i31
     (call $equals (call $unwrap (local.get $x))
       (call $unwrap (local.get $x_2))))
 )
-(func $caml_js_strict_equals
-  (export
 
-    "caml_js_strict_equals")
+(func $caml_js_strict_equals (export "caml_js_strict_equals")
   (param $x (ref eq)) (param $x_2 (ref eq)) (result (ref eq))
   (ref.i31
     (call $strict_equals (call $unwrap (local.get $x))
       (call $unwrap (local.get $x_2))))
 )
-(func $caml_js_global
-  (export
 
-    "caml_js_global")
+(func $caml_js_global (export "caml_js_global")
   (param $x (ref eq)) (result (ref eq))
   (call $wrap (global.get $global_this))
 )
-(func $caml_js_to_float
-  (export
 
-    "caml_js_to_float")
+(func $caml_js_to_float (export "caml_js_to_float")
   (param $x (ref eq)) (result (ref eq))
   (struct.new $float (call $to_float (call $unwrap (local.get $x))))
 )
-(func $caml_js_from_float
-  (export
 
-    "caml_js_from_float")
+(func $caml_js_from_float (export "caml_js_from_float")
   (param $x (ref eq)) (result (ref eq))
   (return_call $wrap
     (call $from_float
       (struct.get $float $f (ref.cast (ref $float) (local.get $x)))))
 )
-(func $caml_js_to_bool
-  (export
 
-    "caml_js_to_bool")
+(func $caml_js_to_bool (export "caml_js_to_bool")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (call $to_bool (call $unwrap (local.get $x))))
 )
-(func $caml_js_from_bool
-  (export
 
-    "caml_js_from_bool")
+(func $caml_js_from_bool (export "caml_js_from_bool")
   (param $x (ref eq)) (result (ref eq))
   (struct.new $js
     (call $from_bool (i31.get_s (ref.cast (ref i31) (local.get $x)))))
 )
-(func $caml_js_to_int32
-  (export
 
-    "caml_js_to_int32")
+(func $caml_js_to_int32 (export "caml_js_to_int32")
   (param $x (ref eq)) (result (ref eq))
   (return_call $caml_copy_int32
     (call $to_int32 (call $unwrap (local.get $x))))
 )
-(func $caml_js_from_int32
-  (export
 
-    "caml_js_from_int32")
+(func $caml_js_from_int32 (export "caml_js_from_int32")
   (param $x (ref eq)) (result (ref eq))
   (return_call $wrap (call $from_int32 (call $Int32_val (local.get $x))))
 )
-(func $caml_js_to_nativeint
-  (export
 
-    "caml_js_to_nativeint")
+(func $caml_js_to_nativeint (export "caml_js_to_nativeint")
   (param $x (ref eq)) (result (ref eq))
   (return_call $caml_copy_nativeint
     (call $to_int32 (call $unwrap (local.get $x))))
 )
-(func $caml_js_from_nativeint
-  (export
 
-    "caml_js_from_nativeint")
+(func $caml_js_from_nativeint (export "caml_js_from_nativeint")
   (param $x (ref eq)) (result (ref eq))
   (return_call $wrap (call $from_int32 (call $Nativeint_val (local.get $x))))
 )
-(func $caml_js_pure_expr
-  (export
 
-    "caml_js_pure_expr")
+(func $caml_js_pure_expr (export "caml_js_pure_expr")
   (param $f (ref eq)) (result (ref eq))
   (return_call $caml_callback_1 (local.get $f) (ref.i31 (i32.const 0)))
 )
-(func $caml_js_fun_call
-  (export
 
-    "caml_js_fun_call")
+(func $caml_js_fun_call (export "caml_js_fun_call")
   (param $f (ref eq)) (param $args (ref eq)) (result (ref eq))
   (return_call $wrap
     (call $fun_call (call $unwrap (local.get $f)) (ref.null any)
       (call $unwrap (call $caml_js_from_array (local.get $args)))))
 )
-(func $caml_js_call
-  (export
 
-    "caml_js_call")
+(func $caml_js_call (export "caml_js_call")
   (param $f (ref eq)) (param $o (ref eq)) (param $args (ref eq))
   (result (ref eq))
   (return_call $wrap
@@ -235,10 +219,8 @@
       (call $unwrap (local.get $o))
       (call $unwrap (call $caml_js_from_array (local.get $args)))))
 )
-(func $caml_js_meth_call
-  (export
 
-    "caml_js_meth_call")
+(func $caml_js_meth_call (export "caml_js_meth_call")
   (param $o (ref eq)) (param $f (ref eq)) (param $args (ref eq))
   (result (ref eq))
   (if (ref.test (ref $string) (local.get $f))
@@ -248,10 +230,8 @@
       (call $unwrap (local.get $f))
       (call $unwrap (call $caml_js_from_array (local.get $args)))))
 )
-(func $caml_js_get
-  (export
 
-    "caml_js_get")
+(func $caml_js_get (export "caml_js_get")
   (param $x (ref eq)) (param $x_2 (ref eq)) (result (ref eq))
   (if (ref.test (ref $string) (local.get $x_2))
     (then (local.set $x_2 (call $caml_jsbytes_of_string (local.get $x_2)))))
@@ -260,10 +240,8 @@
       (ref.as_non_null (extern.convert_any (call $unwrap (local.get $x))))
       (call $unwrap (local.get $x_2))))
 )
-(func $caml_js_set
-  (export
 
-    "caml_js_set")
+(func $caml_js_set (export "caml_js_set")
   (param $x (ref eq)) (param $x_2 (ref eq)) (param $x_3 (ref eq))
   (result (ref eq))
   (if (ref.test (ref $string) (local.get $x_2))
@@ -272,62 +250,48 @@
     (call $unwrap (local.get $x_3)))
   (ref.i31 (i32.const 0))
 )
-(func $caml_js_delete
-  (export
 
-    "caml_js_delete")
+(func $caml_js_delete (export "caml_js_delete")
   (param $x (ref eq)) (param $x_2 (ref eq)) (result (ref eq))
   (if (ref.test (ref $string) (local.get $x_2))
     (then (local.set $x_2 (call $caml_jsbytes_of_string (local.get $x_2)))))
   (call $delete (call $unwrap (local.get $x)) (call $unwrap (local.get $x_2)))
   (ref.i31 (i32.const 0))
 )
-(func $caml_js_instanceof
-  (export
 
-    "caml_js_instanceof")
+(func $caml_js_instanceof (export "caml_js_instanceof")
   (param $x (ref eq)) (param $x_2 (ref eq)) (result (ref eq))
   (ref.i31
     (call $instanceof (call $unwrap (local.get $x))
       (call $unwrap (local.get $x_2))))
 )
-(func $caml_js_typeof
-  (export
 
-    "caml_js_typeof")
+(func $caml_js_typeof (export "caml_js_typeof")
   (param $x (ref eq)) (result (ref eq))
   (struct.new $js (call $typeof (call $unwrap (local.get $x))))
 )
-(func $caml_js_new
-  (export
 
-    "caml_js_new")
+(func $caml_js_new (export "caml_js_new")
   (param $c (ref eq)) (param $args (ref eq)) (result (ref eq))
   (return_call $wrap
     (call $new (call $unwrap (local.get $c))
       (call $unwrap (call $caml_js_from_array (local.get $args)))))
 )
-(func $caml_ojs_new_arr
-  (export
 
-    "caml_ojs_new_arr")
+(func $caml_ojs_new_arr (export "caml_ojs_new_arr")
   (param $c (ref eq)) (param $args (ref eq)) (result (ref eq))
   (return_call $wrap
     (call $new (call $unwrap (local.get $c)) (call $unwrap (local.get $args))))
 )
-(func $caml_ojs_iterate_properties
-  (export
 
-    "caml_ojs_iterate_properties")
+(func $caml_ojs_iterate_properties (export "caml_ojs_iterate_properties")
   (param $o (ref eq)) (param $f (ref eq)) (result (ref eq))
   (call $iter_props (call $unwrap (local.get $o))
     (call $unwrap (local.get $f)))
   (ref.i31 (i32.const 0))
 )
-(func $caml_js_object
-  (export
 
-    "caml_js_object")
+(func $caml_js_object (export "caml_js_object")
   (param $x (ref eq)) (result (ref eq))
   (local $a (ref $block)) (local $p (ref $block)) (local $i i32)
   (local $l i32) (local $o anyref)
@@ -351,10 +315,8 @@
   (; 'loop ;)
   (struct.new $js (local.get $o))
 )
-(func $caml_js_from_array
-  (export
 
-    "caml_js_from_array")
+(func $caml_js_from_array (export "caml_js_from_array")
   (param $va (ref eq)) (result (ref eq))
   (local $a (ref $block)) (local $fa (ref $float_array))
   (local $a' (ref extern)) (local $i i32) (local $l i32)
@@ -393,10 +355,8 @@
   (; 'loop ;)
   (struct.new $js (any.convert_extern (local.get $a')))
 )
-(func $caml_js_to_array
-  (export
 
-    "caml_js_to_array")
+(func $caml_js_to_array (export "caml_js_to_array")
   (param $x (ref eq)) (result (ref eq))
   (local $a (ref extern)) (local $a' (ref $block))
   (local $fa (ref $float_array)) (local $i i32) (local $l i32)
@@ -437,10 +397,8 @@
   (; 'loop ;)
   (local.get $a')
 )
-(func $caml_js_to_string_array
-  (export
 
-    "caml_js_to_string_array")
+(func $caml_js_to_string_array (export "caml_js_to_string_array")
   (param $a (ref extern)) (result (ref eq))
   (local $a' (ref $block)) (local $l i32) (local $i i32)
   (local.set $l (call $array_length (local.get $a)))
@@ -460,79 +418,63 @@
   (; 'loop ;)
   (local.get $a')
 )
-(func $caml_js_wrap_callback
-  (export
 
-    "caml_js_wrap_callback")
+(func $caml_js_wrap_callback (export "caml_js_wrap_callback")
   (param $x (ref eq)) (result (ref eq))
   (return_call $wrap (call $wrap_callback (local.get $x)))
 )
-(func $caml_js_wrap_callback_arguments
-  (export
 
-    "caml_js_wrap_callback_arguments")
+(func $caml_js_wrap_callback_arguments
+  (export "caml_js_wrap_callback_arguments")
   (param $x (ref eq)) (result (ref eq))
   (return_call $wrap (call $wrap_callback_args (local.get $x)))
 )
-(func $caml_js_wrap_callback_strict
-  (export
 
-    "caml_js_wrap_callback_strict")
+(func $caml_js_wrap_callback_strict (export "caml_js_wrap_callback_strict")
   (param $x (ref eq)) (param $x_2 (ref eq)) (result (ref eq))
   (return_call $wrap
     (call $wrap_callback_strict
       (i31.get_u (ref.cast (ref i31) (local.get $x))) (local.get $x_2)))
 )
-(func $caml_js_wrap_callback_unsafe
-  (export
 
-    "caml_js_wrap_callback_unsafe")
+(func $caml_js_wrap_callback_unsafe (export "caml_js_wrap_callback_unsafe")
   (param $x (ref eq)) (result (ref eq))
   (return_call $wrap (call $wrap_callback_unsafe (local.get $x)))
 )
-(func $caml_js_wrap_meth_callback
-  (export
 
-    "caml_js_wrap_meth_callback")
+(func $caml_js_wrap_meth_callback (export "caml_js_wrap_meth_callback")
   (param $x (ref eq)) (result (ref eq))
   (return_call $wrap (call $wrap_meth_callback (local.get $x)))
 )
-(func $caml_js_wrap_meth_callback_arguments
-  (export
 
-    "caml_js_wrap_meth_callback_arguments")
+(func $caml_js_wrap_meth_callback_arguments
+  (export "caml_js_wrap_meth_callback_arguments")
   (param $x (ref eq)) (result (ref eq))
   (return_call $wrap (call $wrap_meth_callback_args (local.get $x)))
 )
-(func $caml_js_wrap_meth_callback_strict
-  (export
 
-    "caml_js_wrap_meth_callback_strict")
+(func $caml_js_wrap_meth_callback_strict
+  (export "caml_js_wrap_meth_callback_strict")
   (param $x (ref eq)) (param $x_2 (ref eq)) (result (ref eq))
   (return_call $wrap
     (call $wrap_meth_callback_strict
       (i31.get_u (ref.cast (ref i31) (local.get $x))) (local.get $x_2)))
 )
-(func $caml_js_wrap_meth_callback_unsafe
-  (export
 
-    "caml_js_wrap_meth_callback_unsafe")
+(func $caml_js_wrap_meth_callback_unsafe
+  (export "caml_js_wrap_meth_callback_unsafe")
   (param $x (ref eq)) (result (ref eq))
   (return_call $wrap (call $wrap_meth_callback_unsafe (local.get $x)))
 )
-(func $caml_ojs_wrap_fun_arguments
-  (export
 
-    "caml_ojs_wrap_fun_arguments")
+(func $caml_ojs_wrap_fun_arguments (export "caml_ojs_wrap_fun_arguments")
   (param $x (ref eq)) (result (ref eq))
   (return_call $wrap
     (call $wrap_fun_arguments
       (call $wrap_callback_strict (i32.const 1) (local.get $x))))
 )
-(func $caml_callback
-  (export
 
-    "caml_callback")
+(func $caml_callback (export "caml_callback")
   (param $f (ref eq)) (param $count i32) (param $args (ref extern))
   (param $kind i32) (result anyref)
   (local $acc (ref eq)) (local $i i32) (local $arg (ref eq))
@@ -575,10 +517,8 @@
   (local.set $s (ref.cast (ref $string) (local.get $x)))
   (return (struct.new $js (call $jsstring_of_string (local.get $s))))
 )
-(func $caml_jsbytes_of_string
-  (export
 
-    "caml_jsbytes_of_string")
+(func $caml_jsbytes_of_string (export "caml_jsbytes_of_string")
   (param $x (ref eq)) (result (ref eq))
   (local $s (ref $string)) (local $s' (ref $string)) (local $l i32)
   (local $i i32) (local $n i32) (local $c i32)
@@ -629,10 +569,8 @@
   (return_call $string_of_jsstring
     (struct.get $js $f (ref.cast (ref $js) (local.get $s))))
 )
-(func $caml_string_of_jsbytes
-  (export
 
-    "caml_string_of_jsbytes")
+(func $caml_string_of_jsbytes (export "caml_string_of_jsbytes")
   (param $s (ref eq)) (result (ref eq))
   (local $l i32) (local $i i32) (local $n i32) (local $c i32)
   (local $s' (ref $string)) (local $s'' (ref $string))
@@ -678,10 +616,8 @@
   (; 'fill ;)
   (local.get $s'')
 )
-(func $caml_list_to_js_array
-  (export
 
-    "caml_list_to_js_array")
+(func $caml_list_to_js_array (export "caml_list_to_js_array")
   (param $x (ref eq)) (result (ref eq))
   (local $i i32) (local $a (ref extern)) (local $l (ref eq))
   (local $b (ref $block))
@@ -716,10 +652,8 @@
   )
   (struct.new $js (any.convert_extern (local.get $a)))
 )
-(func $caml_list_of_js_array
-  (export
 
-    "caml_list_of_js_array")
+(func $caml_list_of_js_array (export "caml_list_of_js_array")
   (param $x (ref eq)) (result (ref eq))
   (local $l (ref eq)) (local $i i32) (local $len i32) (local $a (ref extern))
   (local.set $a
@@ -746,10 +680,8 @@
 )
 
 (data $toString "toString")
-(func $caml_wrap_exception
-  (export
 
-    "caml_wrap_exception")
+(func $caml_wrap_exception (export "caml_wrap_exception")
   (param $x externref) (result (ref eq))
   (local $exn anyref)
   (local.set $exn (any.convert_extern (local.get $x)))
@@ -767,10 +699,9 @@
               (array.new_data $string $toString (i32.const 0) (i32.const 8))))
           (any.convert_extern (call $new_array (i32.const 0)))))))
 )
-(func $caml_js_error_option_of_exception
-  (export
 
-    "caml_js_error_option_of_exception")
+(func $caml_js_error_option_of_exception
+  (export "caml_js_error_option_of_exception")
   (param $x (ref eq)) (result (ref eq))
   (local $exn (ref $block))
   (local.set $exn (ref.cast (ref $block) (local.get $x)))
@@ -787,10 +718,8 @@
               (array.get $block (local.get $exn) (i32.const 2))))))))
   (ref.i31 (i32.const 0))
 )
-(func $caml_js_error_of_exception
-  (export
 
-    "caml_js_error_of_exception")
+(func $caml_js_error_of_exception (export "caml_js_error_of_exception")
   (param $x (ref eq)) (result (ref eq))
   (local $exn (ref $block))
   (local.set $exn (ref.cast (ref $block) (local.get $x)))
@@ -804,10 +733,7 @@
         (then (return (array.get $block (local.get $exn) (i32.const 2)))))))
   (call $wrap (ref.null any))
 )
-(func $log_str
-  (export
 
-    "log_str")
-  (param $s (ref $string))
+(func $log_str (export "log_str") (param $s (ref $string))
   (call $log_js (call $unwrap (call $caml_jsstring_of_string (local.get $s))))
 )

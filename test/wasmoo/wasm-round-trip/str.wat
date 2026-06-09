@@ -1,3 +1,20 @@
+;; Wasm_of_ocaml runtime support
+;; http://www.ocsigen.org/js_of_ocaml/
+;;
+;; This program is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU Lesser General Public License as published by
+;; the Free Software Foundation, with linking exception;
+;; either version 2.1 of the License, or (at your option) any later version.
+;;
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU Lesser General Public License for more details.
+;;
+;; You should have received a copy of the GNU Lesser General Public License
+;; along with this program; if not, write to the Free Software
+;; Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 (import "fail" "caml_invalid_argument"
   (func $caml_invalid_argument (param (ref eq)))
 ) (import "fail" "caml_failwith" (func $caml_failwith (param (ref eq))))
@@ -521,10 +538,8 @@
 )
 
 (data $search_forward "Str.search_forward")
-(func $re_search_forward
-  (export
 
-    "re_search_forward")
+(func $re_search_forward (export "re_search_forward")
   (param $re (ref eq)) (param $vs (ref eq)) (param $vpos (ref eq))
   (result (ref eq))
   (local $s (ref $string)) (local $pos i32) (local $len i32)
@@ -549,10 +564,8 @@
 )
 
 (data $search_backward "Str.search_backward")
-(func $re_search_backward
-  (export
 
-    "re_search_backward")
+(func $re_search_backward (export "re_search_backward")
   (param $re (ref eq)) (param $vs (ref eq)) (param $vpos (ref eq))
   (result (ref eq))
   (local $s (ref $string)) (local $pos i32) (local $len i32)
@@ -577,10 +590,8 @@
 )
 
 (data $string_match "Str.string_match")
-(func $re_string_match
-  (export
 
-    "re_string_match")
+(func $re_string_match (export "re_string_match")
   (param $re (ref eq)) (param $vs (ref eq)) (param $vpos (ref eq))
   (result (ref eq))
   (local $s (ref $string)) (local $pos i32) (local $len i32)
@@ -601,10 +612,8 @@
 )
 
 (data $string_partial_match "Str.string_partial_match")
-(func $re_partial_match
-  (export
 
-    "re_partial_match")
+(func $re_partial_match (export "re_partial_match")
   (param $re (ref eq)) (param $vs (ref eq)) (param $vpos (ref eq))
   (result (ref eq))
   (local $s (ref $string)) (local $pos i32) (local $len i32)
@@ -627,10 +636,8 @@
 
 (data $illegal_backslash "Str.replace: illegal backslash sequence")
 (data $unmatched_group "Str.replace: reference to unmatched group")
-(func $re_replacement_text
-  (export
 
-    "re_replacement_text")
+(func $re_replacement_text (export "re_replacement_text")
   (param $vrepl (ref eq)) (param $vgroups (ref eq)) (param $vorig (ref eq))
   (result (ref eq))
   (local $repl (ref $string)) (local $groups (ref $block))

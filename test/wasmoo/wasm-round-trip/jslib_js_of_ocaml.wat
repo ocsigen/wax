@@ -1,3 +1,20 @@
+;; Wasm_of_ocaml runtime support
+;; http://www.ocsigen.org/js_of_ocaml/
+;;
+;; This program is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU Lesser General Public License as published by
+;; the Free Software Foundation, with linking exception;
+;; either version 2.1 of the License, or (at your option) any later version.
+;;
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU Lesser General Public License for more details.
+;;
+;; You should have received a copy of the GNU Lesser General Public License
+;; along with this program; if not, write to the Free Software
+;; Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
 (import "jslib" "wrap" (func $wrap (param anyref) (result (ref eq))))
 (import "jslib" "unwrap" (func $unwrap (param (ref eq)) (result anyref)))
 (import "jslib" "caml_js_global"
@@ -17,46 +34,37 @@
 )
 (import "js" "caml_js_html_entities"
   (func $caml_js_html_entities (param anyref) (result anyref))
-) (type $block (array (mut (ref eq)))) (type $string (array (mut i8)))
-(func $caml_js_on_ie_2
-  (export
+) (type $block (array (mut (ref eq))))
+(type $string (array (mut i8)))
 
-    "caml_js_on_ie")
+(func $caml_js_on_ie_2 (export "caml_js_on_ie")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (call $caml_js_on_ie))
 )
-(func $caml_js_html_escape_2
-  (export
 
-    "caml_js_html_escape")
+(func $caml_js_html_escape_2 (export "caml_js_html_escape")
   (param $x (ref eq)) (result (ref eq))
   (return_call $wrap
     (call $caml_js_html_escape (call $unwrap (local.get $x))))
 )
-(func $caml_js_html_entities_2
-  (export
 
-    "caml_js_html_entities")
+(func $caml_js_html_entities_2 (export "caml_js_html_entities")
   (param $x (ref eq)) (result (ref eq))
   (return_call $wrap
     (call $caml_js_html_entities (call $unwrap (local.get $x))))
 )
 
 (data $console "console")
-(func $caml_js_get_console
-  (export
 
-    "caml_js_get_console")
+(func $caml_js_get_console (export "caml_js_get_console")
   (param $x (ref eq)) (result (ref eq))
   (return_call $caml_js_get (call $caml_js_global (ref.i31 (i32.const 0)))
     (array.new_data $string $console (i32.const 0) (i32.const 7)))
 )
 
 (data $XMLHttpRequest "XMLHttpRequest")
-(func $caml_xmlhttprequest_create
-  (export
 
-    "caml_xmlhttprequest_create")
+(func $caml_xmlhttprequest_create (export "caml_xmlhttprequest_create")
   (param $x (ref eq)) (result (ref eq))
   (return_call $caml_js_new
     (call $caml_js_get (call $caml_js_global (ref.i31 (i32.const 0)))
