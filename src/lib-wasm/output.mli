@@ -8,6 +8,7 @@ val escape_string : string -> int * string
 val module_ :
   ?color:Utils.Colors.flag ->
   ?out_channel:out_channel ->
+  ?tail:Utils.Trivia.entry list ->
   Utils.Printer.t ->
   trivia:Utils.Trivia.t ->
   Ast.location Ast.Text.module_ ->

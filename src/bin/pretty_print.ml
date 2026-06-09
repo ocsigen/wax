@@ -10,10 +10,9 @@ module P =
     (Wasm.Lexer)
 
 let print_module trivia f m =
+  let trivia, tail = Utils.Trivia.associate trivia in
   Utils.Printer.run f (fun p ->
-      Wasm.Output.module_ ~out_channel:stdout p
-        ~trivia:(Utils.Trivia.associate trivia)
-        m)
+      Wasm.Output.module_ ~out_channel:stdout ~tail p ~trivia m)
 
 let convert ~filename =
   let ast, trivia = P.parse ~filename () in

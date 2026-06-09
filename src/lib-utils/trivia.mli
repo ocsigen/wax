@@ -14,8 +14,11 @@ type associated = {
 
 type t = (Ast.location, associated) Hashtbl.t
 
-val associate : context -> (Ast.location, associated) Hashtbl.t
-(** [associate ctx] associates trivia to locations. *)
+val associate : context -> t * entry list
+(** [associate ctx] associates trivia to locations. The second component holds
+    the leftover comments that no location owns (trailing comments, or every
+    comment when there are no locations); the caller prints them as tail trivia.
+*)
 
 val make : unit -> context
 (** Create a new trivia context. *)

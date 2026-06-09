@@ -1361,9 +1361,11 @@ let rec modulefield f =
         @ option (fun e -> [ clause "else" e ]) else_fields
         @ [ atom ~style:Annotation ")" ])
 
-let module_ ?(color = Auto) ?out_channel printer ~trivia (id, fields) =
+let module_ ?(color = Auto) ?out_channel ?(tail = []) printer ~trivia
+    (id, fields) =
   let use_color = should_use_color ~color ~out_channel in
   let theme = get_theme use_color in
+  let ctx = { printer; theme; format = Hybrid; indent_level = 2; trivia } in
   let sexp =
     if id = None then block ~transparent:true (List.map modulefield fields)
     else
@@ -1371,11 +1373,18 @@ let module_ ?(color = Auto) ?out_channel printer ~trivia (id, fields) =
         (block ~transparent:true (keyword "module" :: opt_id id)
         :: List.map modulefield fields)
   in
-  format_sexp false
-    (if id = None then 1 else 0)
-    false
-    { printer; theme; format = Hybrid; indent_level = 2; trivia }
-    sexp
+  format_sexp false (if id = None then 1 else 0) false ctx sexp;
+  (* Comments owned by no location (trailing comments, or the whole file for an
+     empty module) are printed last so they are not dropped. Blank lines at the
+     very end are dropped (end-of-file whitespace), but blank lines separating
+     tail comments are kept. *)
+  let rec drop_trailing_blanks = function
+    | { Trivia.trivia = Trivia.Blank_line; _ } :: rest ->
+        drop_trailing_blanks rest
+    | rest -> rest
+  in
+  let tail = List.rev (drop_trailing_blanks (List.rev tail)) in
+  print_trivia ctx tail
 
 let instr printer i =
   let use_color = should_use_color ~color:Auto ~out_channel:(Some stderr) in

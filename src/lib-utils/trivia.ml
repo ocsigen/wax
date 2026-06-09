@@ -197,5 +197,8 @@ let associate ctx =
         Format.eprintf "%d--%d@." loc.Ast.loc_start.pos_cnum
           loc.loc_end.pos_cnum)
       locs;
-  ignore (process locs comments);
-  tbl
+  let leftover = process locs comments in
+  (* [leftover] holds comments that no location owns: trailing comments after
+     the last node, or — when the module has no locations at all (e.g. an empty
+     [(module)]) — the whole file. The caller prints them as tail trivia. *)
+  (tbl, leftover)
