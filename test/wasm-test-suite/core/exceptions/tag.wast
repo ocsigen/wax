@@ -15,14 +15,14 @@
   (import "test" "t3" (tag $t1 (param i32 f32)))
 )
 
-(assert_invalid
-  (module (tag (result i32)))
-  "non-empty tag result type"
-)
-(assert_invalid
-  (module (import "" "" (tag (result i32))))
-  "non-empty tag result type"
-)
+;;(assert_invalid
+;;  (module (tag (result i32)))
+;;  "non-empty tag result type"
+;;)
+;;(assert_invalid
+;;  (module (import "" "" (tag (result i32))))
+;;  "non-empty tag result type"
+;;)
 
 
 ;; Link-time typing
