@@ -471,8 +471,7 @@ let rec consume n folded =
     match folded with
     | [] -> []
     | (n', i) :: rem ->
-        if n >= n' then (0, i) :: consume (n - n') folded
-        else (n' - n, i) :: rem
+        if n >= n' then (0, i) :: consume (n - n') rem else (n' - n, i) :: rem
 
 let rec fold_stream env folded stream : _ Ast.Text.instr list =
   match stream with
