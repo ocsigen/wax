@@ -373,6 +373,13 @@ let runtest filename _ =
         | `Invalid reason, m ->
             let ok =
               in_child_process ~quiet (fun () ->
+                  (* Under [--all-errors], print the spec's expected reason just
+                     before validation reports its own message, so the two can
+                     be compared (validation [exit]s at the first error, so we
+                     cannot capture and check it in the parent the way we do for
+                     malformed binaries). *)
+                  if not quiet then
+                    Format.eprintf "Expected reason: %s@." reason;
                   Utils.Diagnostic.run ~color ~source (fun d ->
                       Wasm.Validation.f d m);
                   if false then

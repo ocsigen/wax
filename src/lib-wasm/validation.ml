@@ -185,16 +185,15 @@ module Error = struct
   let br_cast_type_mismatch context ~location =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
-        Format.fprintf f
-          "The first type must be a supertype of the seconde one.")
+        Format.fprintf f "The first type must be a supertype of the second one.")
       ()
 
   let select_type_mismatch context ~location ty1 ty2 =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
-          "Both branch of a select should have the same type.@ Here, they have \
-           type@ @[<2>%a@]@ and@ @[<2>%a@]."
+          "Both branches of a select should have the same type.@ Here, they \
+           have type@ @[<2>%a@]@ and@ @[<2>%a@]."
           print_valtype ty1 print_valtype ty2)
       ()
 
@@ -269,7 +268,7 @@ module Error = struct
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
-          "The %s size it too large. It should be less than 0x%Lx." kind
+          "The %s size is too large. It should be less than 0x%Lx." kind
           (Uint64.to_int64 max))
       ()
 
@@ -290,7 +289,7 @@ module Error = struct
   let import_after_definition context ~location kind =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
-        Format.fprintf f "This imports is after a %s definition." kind)
+        Format.fprintf f "This import is after a %s definition." kind)
       ()
 
   let supertype_mismatch context ~location =
@@ -2702,11 +2701,11 @@ let validate_configuration diagnostics (_, fields) =
       subtyping_info = Types.subtyping_info type_context.types;
       functions = Sequence.make "function";
       memories = Sequence.make "memory";
-      tables = Sequence.make "tables";
+      tables = Sequence.make "table";
       globals = Sequence.make "global";
       tags = Sequence.make "tag";
       data = Sequence.make "data";
-      elem = Sequence.make "data";
+      elem = Sequence.make "elem";
       exports = Hashtbl.create 16;
       refs = Hashtbl.create 16;
     }
