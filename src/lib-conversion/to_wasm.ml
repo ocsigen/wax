@@ -1048,7 +1048,7 @@ let rec instruction ret ctx i : location Text.instr list =
       let binding (id, ty) e =
         match id with
         | Some name ->
-            let ty = Option.value ~default:(expr_valtype i) ty in
+            let ty = match ty with Some ty -> ty | None -> expr_valtype e in
             let wasm_name = Namespace.add ctx.namespace name.desc in
             ctx.locals <- StringMap.add name.desc wasm_name ctx.locals;
             ctx.allocated_locals :=

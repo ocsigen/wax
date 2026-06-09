@@ -1,0 +1,10 @@
+fn typed() -> i64 {
+    let x: i64 = 7;
+    x;
+}
+
+fn inferred() -> f64 {
+    let n = 1;
+    let f = 2.5;
+    f;
+}

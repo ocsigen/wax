@@ -2777,12 +2777,45 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       (let>@ typ = internalize_valtype ctx typ in
        ctx.locals <- StringMap.add name.desc typ ctx.locals);
       return_statement i desc [||]
+  | Let ([ (Some name, Some typ) ], Some i') ->
+      let* i' = instruction ctx i' in
+      (let>@ ity = internalize_valtype ctx typ in
+       check_type ctx i' (UnionFind.make (Valtype ity));
+       ctx.locals <- StringMap.add name.desc ity ctx.locals);
+      return_statement i (Let ([ (Some name, Some typ) ], Some i')) [||]
+  | Let ([ (Some name, None) ], Some i') ->
+      let* i' = instruction ctx i' in
+      let ty = expression_type ctx i' in
+      (* No annotation: the local takes the initializer's type. Resolve an
+         as-yet-unconstrained literal the same way the final type erasure does
+         (int/number -> i32, float -> f64) so the local gets a concrete type. *)
+      (let>@ ity =
+         match UnionFind.find ty with
+         | Valtype v -> Some v
+         | Int | Number | Int8 | Int16 ->
+             let v = { typ = I32; internal = I32 } in
+             UnionFind.set ty (Valtype v);
+             Some v
+         | Float ->
+             let v = { typ = F64; internal = F64 } in
+             UnionFind.set ty (Valtype v);
+             Some v
+         | Null ->
+             let+@ v =
+               internalize_valtype ctx (Ref { nullable = true; typ = None_ })
+             in
+             UnionFind.set ty (Valtype v);
+             v
+         | Unknown ->
+             let v = { typ = I32; internal = I32 } in
+             UnionFind.set ty (Valtype v);
+             Some v
+       in
+       ctx.locals <- StringMap.add name.desc ity ctx.locals);
+      return_statement i (Let ([ (Some name, None) ], Some i')) [||]
   | Let ([ (None, None) ], Some i') ->
       let* i' = instruction ctx i' in
       return_statement i (Let ([ (None, None) ], Some i')) [||]
-  (*
-  | Let of (idx option * valtype option) list * instr option
-*)
   | Br (label, i') ->
       (* Sequence of instructions *)
       let params = branch_target ctx label in
