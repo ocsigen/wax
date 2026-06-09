@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-acdbb4fa.js";
+            window.path_to_searchindex_js = "searchindex-0f895a09.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -225,6 +225,9 @@ fn factorial(n: i32) -&gt; i32 {
 <p>Or convert to WebAssembly text format to see the generated WAT:</p>
 <pre><code class="language-sh">wax hello.wax -f wat
 </code></pre>
+<p>Reformat files in place with the <code>format</code> command:</p>
+<pre><code class="language-sh">wax format -i hello.wax
+</code></pre>
 <h2 id="supported-conversions"><a class="header" href="#supported-conversions">Supported Conversions</a></h2>
 <p>Wax supports all 9 combinations of input and output formats:</p>
 <div class="table-wrapper">
@@ -249,12 +252,15 @@ fn factorial(n: i32) -&gt; i32 {
 <p>Enable type checking with the <code>-v</code> flag:</p>
 <pre><code class="language-sh">wax hello.wax -v -o hello.wasm
 </code></pre>
-<p>This catches type errors before generating output:</p>
-<pre><code>error: type mismatch
-  --&gt; hello.wax:3:5
-   |
- 3 |     x + y
-   |     ^^^^^ expected f32, found i32
+<p>This catches type errors before generating output. For example, adding an <code>i32</code>
+and an <code>f64</code>:</p>
+<pre><code>Error: This operator cannot be applied to operands of types i32 and f64.
+ ──➤  hello.wax:3:5
+1 │ #[export = "add"]
+2 │ fn add(x: i32, y: f64) -&gt; i32 {
+3 │     x + y;
+  ·     ^^^^^
+4 │ }
 </code></pre>
 <h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
 <ul>

@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-acdbb4fa.js";
+            window.path_to_searchindex_js = "searchindex-0f895a09.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -452,6 +452,28 @@ fn hash_finalize(h: i32) -&gt; i32 {
     h = h * 0xc2b2ae35;
     h ^ h &gt;&gt;u 16;
 }
+</code></pre>
+<h2 id="holes-stack-values"><a class="header" href="#holes-stack-values">Holes (Stack Values)</a></h2>
+<p>Holes (<code>_</code>) plug in values that earlier statements leave on the operand stack.
+The two holes in <code>_ + _</code> consume <code>x * 2</code> and <code>y * 3</code>, left-to-right in the order
+they were produced. See <a href="language.html#holes">Holes</a> for the full rules.</p>
+<h3 id="wax-11"><a class="header" href="#wax-11">Wax</a></h3>
+<pre><code class="language-wax">#[export = "blend"]
+fn blend(x: i32, y: i32) -&gt; i32 {
+    x * 2;
+    y * 3;
+    _ + _;
+}
+</code></pre>
+<h3 id="equivalent-wat-3"><a class="header" href="#equivalent-wat-3">Equivalent WAT</a></h3>
+<pre><code class="language-wat">(func $blend (export "blend") (param $x i32) (param $y i32) (result i32)
+  local.get $x
+  i32.const 2
+  i32.mul
+  local.get $y
+  i32.const 3
+  i32.mul
+  i32.add)
 </code></pre>
 
                     </main>

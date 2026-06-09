@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-acdbb4fa.js";
+            window.path_to_searchindex_js = "searchindex-0f895a09.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -224,6 +224,8 @@ nan         // Not a number
 <p>Use <code>:=</code> for assignment that also returns the value (like <code>local.tee</code>):</p>
 <pre><code class="language-wax">y = (x := 42) + 1;  // x is set to 42, y is set to 43
 </code></pre>
+<p><code>:=</code> works on local variables only — WebAssembly has no <code>global.tee</code>, so applying
+it to a global is an error.</p>
 <h3 id="global-variables"><a class="header" href="#global-variables">Global Variables</a></h3>
 <p>Globals are declared at module level:</p>
 <pre><code class="language-wax">const PI: f64 = 3.14159;        // Immutable global
@@ -518,12 +520,49 @@ funcs[i] = g;                         // table.set
 }
 </code></pre>
 <h2 id="holes"><a class="header" href="#holes">Holes</a></h2>
-<p>Wax supports holes (<code>_</code>) as placeholders for values that can be inferred from earlier expressions in a sequence:</p>
+<p>A hole (<code>_</code>) is a placeholder for a value that an <strong>earlier statement in the
+same sequence</strong> has left on WebAssembly’s implicit operand stack. It is the
+surface syntax for that stack flow: rather than naming an intermediate value,
+you leave a hole where it should be plugged in.</p>
 <pre><code class="language-wax">fn example() -&gt; i32 {
     1; 2; _ + _;    // Equivalent to: let a = 1; let b = 2; a + b
 }
 </code></pre>
-<p>This is useful for writing concise code where intermediate values flow naturally.</p>
+<p>Here the statements <code>1</code> and <code>2</code> each push a value; the two holes in <code>_ + _</code>
+consume them.</p>
+<p><strong>How many, and in what order.</strong> The number of holes in an expression is the
+number of stack values it pulls in. They are filled <strong>left-to-right with the
+stack values in the order those values were produced</strong> — the earliest value
+fills the leftmost hole. Order therefore matters for non-commutative
+operators:</p>
+<pre><code class="language-wax">fn diff() -&gt; i32 {
+    10; 20; _ - _;    // 10 - 20, not 20 - 10
+}
+</code></pre>
+<p>A single hole is common when combining one stacked value with an explicit
+operand:</p>
+<pre><code class="language-wax">fn add_one(x: i32) -&gt; i32 {
+    x; _ + 1;
+}
+</code></pre>
+<p><strong>Holes must come first.</strong> Within an expression, every hole must precede (in
+evaluation order) any explicit value-producing operand. Once a non-hole operand
+appears, no further holes may follow it. Explicit operands <em>after</em> all the holes
+are fine:</p>
+<pre><code class="language-wax">fn ok() -&gt; i32 {
+    1; 2; _ + _ + 3;    // OK: the literal 3 comes after both holes
+}
+</code></pre>
+<p>but an explicit operand wedged <em>before</em> an unfilled hole is rejected:</p>
+<pre><code class="language-wax">fn bad() -&gt; i32 {
+    2; 3; _ + 3 + _;    // Error: This expression occurs before a hole '_'.
+}
+</code></pre>
+<p>This restriction keeps holes unambiguous: they always refer to values already on
+the stack, never to operands appearing later in the expression.</p>
+<p>When decompiling WASM or WAT back to Wax, the compiler introduces holes wherever
+an instruction takes an operand from the stack instead of from a nested
+sub-expression, so this same mechanism round-trips stack-style code.</p>
 <h2 id="conditional-compilation"><a class="header" href="#conditional-compilation">Conditional Compilation</a></h2>
 <p>Top-level items can be guarded by conditions, using a Rust-like attribute syntax. <code>#[if(&lt;condition&gt;)]</code> keeps the following item only when <code>&lt;condition&gt;</code> holds; an optional <code>#[else]</code> provides an alternative:</p>
 <pre><code class="language-wax">#[if(ocaml_version &gt;= (5, 1, 0))]
@@ -559,7 +598,7 @@ const caml_marshal_header_size: i32 = 20;
 </code></pre>
 <p>The conditions are <strong>not evaluated</strong> by the compiler; they are preserved for a downstream preprocessor. The <code>#[if]</code> and <code>#[else]</code> branches are <strong>mutually exclusive</strong> — they never coexist — so, for instance, the same name may be defined in both.</p>
 <p>When type checking is enabled (<code>--validate</code>), every reachable combination of conditions is checked independently. Because branches are mutually exclusive, a name defined in both the <code>#[if]</code> and <code>#[else]</code> branch is accepted. An error that occurs only under some conditions is reported together with the assumption that makes it reachable:</p>
-<pre><code>Error: This instruction has type float but is expected to have type i32.
+<pre><code>Error: Expecting type i32 but got type float.
  ──➤  example.wax:4:16
 Hint: reachable when not debug
 </code></pre>

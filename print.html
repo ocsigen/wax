@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-acdbb4fa.js";
+            window.path_to_searchindex_js = "searchindex-0f895a09.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -226,6 +226,9 @@ fn factorial(n: i32) -&gt; i32 {
 <p>Or convert to WebAssembly text format to see the generated WAT:</p>
 <pre><code class="language-sh">wax hello.wax -f wat
 </code></pre>
+<p>Reformat files in place with the <code>format</code> command:</p>
+<pre><code class="language-sh">wax format -i hello.wax
+</code></pre>
 <h2 id="supported-conversions"><a class="header" href="#supported-conversions">Supported Conversions</a></h2>
 <p>Wax supports all 9 combinations of input and output formats:</p>
 <div class="table-wrapper">
@@ -250,12 +253,15 @@ fn factorial(n: i32) -&gt; i32 {
 <p>Enable type checking with the <code>-v</code> flag:</p>
 <pre><code class="language-sh">wax hello.wax -v -o hello.wasm
 </code></pre>
-<p>This catches type errors before generating output:</p>
-<pre><code>error: type mismatch
-  --&gt; hello.wax:3:5
-   |
- 3 |     x + y
-   |     ^^^^^ expected f32, found i32
+<p>This catches type errors before generating output. For example, adding an <code>i32</code>
+and an <code>f64</code>:</p>
+<pre><code>Error: This operator cannot be applied to operands of types i32 and f64.
+ ──➤  hello.wax:3:5
+1 │ #[export = "add"]
+2 │ fn add(x: i32, y: f64) -&gt; i32 {
+3 │     x + y;
+  ·     ^^^^^
+4 │ }
 </code></pre>
 <h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
 <ul>
@@ -311,6 +317,8 @@ nan         // Not a number
 <p>Use <code>:=</code> for assignment that also returns the value (like <code>local.tee</code>):</p>
 <pre><code class="language-wax">y = (x := 42) + 1;  // x is set to 42, y is set to 43
 </code></pre>
+<p><code>:=</code> works on local variables only — WebAssembly has no <code>global.tee</code>, so applying
+it to a global is an error.</p>
 <h3 id="global-variables"><a class="header" href="#global-variables">Global Variables</a></h3>
 <p>Globals are declared at module level:</p>
 <pre><code class="language-wax">const PI: f64 = 3.14159;        // Immutable global
@@ -605,12 +613,49 @@ funcs[i] = g;                         // table.set
 }
 </code></pre>
 <h2 id="holes"><a class="header" href="#holes">Holes</a></h2>
-<p>Wax supports holes (<code>_</code>) as placeholders for values that can be inferred from earlier expressions in a sequence:</p>
+<p>A hole (<code>_</code>) is a placeholder for a value that an <strong>earlier statement in the
+same sequence</strong> has left on WebAssembly’s implicit operand stack. It is the
+surface syntax for that stack flow: rather than naming an intermediate value,
+you leave a hole where it should be plugged in.</p>
 <pre><code class="language-wax">fn example() -&gt; i32 {
     1; 2; _ + _;    // Equivalent to: let a = 1; let b = 2; a + b
 }
 </code></pre>
-<p>This is useful for writing concise code where intermediate values flow naturally.</p>
+<p>Here the statements <code>1</code> and <code>2</code> each push a value; the two holes in <code>_ + _</code>
+consume them.</p>
+<p><strong>How many, and in what order.</strong> The number of holes in an expression is the
+number of stack values it pulls in. They are filled <strong>left-to-right with the
+stack values in the order those values were produced</strong> — the earliest value
+fills the leftmost hole. Order therefore matters for non-commutative
+operators:</p>
+<pre><code class="language-wax">fn diff() -&gt; i32 {
+    10; 20; _ - _;    // 10 - 20, not 20 - 10
+}
+</code></pre>
+<p>A single hole is common when combining one stacked value with an explicit
+operand:</p>
+<pre><code class="language-wax">fn add_one(x: i32) -&gt; i32 {
+    x; _ + 1;
+}
+</code></pre>
+<p><strong>Holes must come first.</strong> Within an expression, every hole must precede (in
+evaluation order) any explicit value-producing operand. Once a non-hole operand
+appears, no further holes may follow it. Explicit operands <em>after</em> all the holes
+are fine:</p>
+<pre><code class="language-wax">fn ok() -&gt; i32 {
+    1; 2; _ + _ + 3;    // OK: the literal 3 comes after both holes
+}
+</code></pre>
+<p>but an explicit operand wedged <em>before</em> an unfilled hole is rejected:</p>
+<pre><code class="language-wax">fn bad() -&gt; i32 {
+    2; 3; _ + 3 + _;    // Error: This expression occurs before a hole '_'.
+}
+</code></pre>
+<p>This restriction keeps holes unambiguous: they always refer to values already on
+the stack, never to operands appearing later in the expression.</p>
+<p>When decompiling WASM or WAT back to Wax, the compiler introduces holes wherever
+an instruction takes an operand from the stack instead of from a nested
+sub-expression, so this same mechanism round-trips stack-style code.</p>
 <h2 id="conditional-compilation"><a class="header" href="#conditional-compilation">Conditional Compilation</a></h2>
 <p>Top-level items can be guarded by conditions, using a Rust-like attribute syntax. <code>#[if(&lt;condition&gt;)]</code> keeps the following item only when <code>&lt;condition&gt;</code> holds; an optional <code>#[else]</code> provides an alternative:</p>
 <pre><code class="language-wax">#[if(ocaml_version &gt;= (5, 1, 0))]
@@ -646,7 +691,7 @@ const caml_marshal_header_size: i32 = 20;
 </code></pre>
 <p>The conditions are <strong>not evaluated</strong> by the compiler; they are preserved for a downstream preprocessor. The <code>#[if]</code> and <code>#[else]</code> branches are <strong>mutually exclusive</strong> — they never coexist — so, for instance, the same name may be defined in both.</p>
 <p>When type checking is enabled (<code>--validate</code>), every reachable combination of conditions is checked independently. Because branches are mutually exclusive, a name defined in both the <code>#[if]</code> and <code>#[else]</code> branch is accepted. An error that occurs only under some conditions is reported together with the assumption that makes it reachable:</p>
-<pre><code>Error: This instruction has type float but is expected to have type i32.
+<pre><code>Error: Expecting type i32 but got type float.
  ──➤  example.wax:4:16
 Hint: reachable when not debug
 </code></pre>
@@ -927,6 +972,28 @@ fn hash_finalize(h: i32) -&gt; i32 {
     h ^ h &gt;&gt;u 16;
 }
 </code></pre>
+<h2 id="holes-stack-values"><a class="header" href="#holes-stack-values">Holes (Stack Values)</a></h2>
+<p>Holes (<code>_</code>) plug in values that earlier statements leave on the operand stack.
+The two holes in <code>_ + _</code> consume <code>x * 2</code> and <code>y * 3</code>, left-to-right in the order
+they were produced. See <a href="#holes">Holes</a> for the full rules.</p>
+<h3 id="wax-11"><a class="header" href="#wax-11">Wax</a></h3>
+<pre><code class="language-wax">#[export = "blend"]
+fn blend(x: i32, y: i32) -&gt; i32 {
+    x * 2;
+    y * 3;
+    _ + _;
+}
+</code></pre>
+<h3 id="equivalent-wat-3"><a class="header" href="#equivalent-wat-3">Equivalent WAT</a></h3>
+<pre><code class="language-wat">(func $blend (export "blend") (param $x i32) (param $y i32) (result i32)
+  local.get $x
+  i32.const 2
+  i32.mul
+  local.get $y
+  i32.const 3
+  i32.mul
+  i32.add)
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="introduction-1"><a class="header" href="#introduction-1">Introduction</a></h1>
 <p>This guide documents the correspondence between WebAssembly (Wasm) and Wax constructs. It is intended for developers who are familiar with Wasm and want to understand how Wax maps to it.</p>
@@ -969,10 +1036,11 @@ fn hash_finalize(h: i32) -&gt; i32 {
 <tbody>
 <tr><td><code>i8</code></td><td><code>i8</code></td><td>8-bit integer (packed)</td></tr>
 <tr><td><code>i16</code></td><td><code>i16</code></td><td>16-bit integer (packed)</td></tr>
-<tr><td><code>valtype</code></td><td><code>valtype</code></td><td>Any value type</td></tr>
 </tbody>
 </table>
 </div>
+<p>Any <a href="#value-types">value type</a> is also a valid storage type; <code>i8</code> and <code>i16</code> are
+the additional packed types available only in struct and array fields.</p>
 <h2 id="heap-types"><a class="header" href="#heap-types">Heap Types</a></h2>
 <div class="table-wrapper">
 <table>
@@ -1689,8 +1757,13 @@ fn compute(x: i32) -&gt; i32 {
 <h1 id="cli-reference"><a class="header" href="#cli-reference">CLI Reference</a></h1>
 <p>The <code>wax</code> binary is the primary interface for the Wax toolchain. It supports conversion between Wax, WebAssembly Text (WAT), and WebAssembly Binary (Wasm) formats.</p>
 <h2 id="usage"><a class="header" href="#usage">Usage</a></h2>
-<pre><code class="language-sh">wax [OPTIONS] [INPUT]
+<pre><code class="language-sh">wax [OPTIONS] [INPUT]        # convert (the default command)
+wax format [OPTIONS] FILE…   # reformat files
+wax check [OPTIONS] FILE…    # validate files
 </code></pre>
+<p>By default <code>wax</code> converts between formats. The <code>format</code> subcommand reformats
+files (see <a href="#formatting">Formatting</a>) and <code>check</code> validates them (see
+<a href="#checking">Checking</a>).</p>
 <h2 id="positional-arguments"><a class="header" href="#positional-arguments">Positional Arguments</a></h2>
 <ul>
 <li><code>[INPUT]</code>: Source file to convert/format. Supported extensions: <code>.wax</code>, <code>.wat</code>, <code>.wasm</code>.
@@ -1751,14 +1824,14 @@ fn compute(x: i32) -&gt; i32 {
 <p><strong><code>--fold</code></strong></p>
 <ul>
 <li>Fold instructions into nested S-expressions.</li>
-<li>Applies typically to Wasm Text output.</li>
+<li>Affects WAT output (the default form is chosen automatically).</li>
 </ul>
 </li>
 <li>
 <p><strong><code>--unfold</code></strong></p>
 <ul>
 <li>Unfold instructions into flat instruction lists.</li>
-<li>Applies typically to Wasm Text output.</li>
+<li>Affects WAT output (the default form is chosen automatically).</li>
 </ul>
 </li>
 <li>
@@ -1780,6 +1853,69 @@ fn compute(x: i32) -&gt; i32 {
 </code></pre>
 <p><strong>Read from stdin and write to stdout:</strong></p>
 <pre><code class="language-sh">cat input.wax | wax -f wasm &gt; output.wasm
+</code></pre>
+<h2 id="formatting"><a class="header" href="#formatting">Formatting</a></h2>
+<p>The <code>format</code> subcommand reformats files in their own format (<code>.wat</code> → <code>.wat</code>,
+<code>.wax</code> → <code>.wax</code>, <code>.wasm</code> → <code>.wasm</code>), detected from each file’s extension.</p>
+<pre><code class="language-sh">wax format [OPTIONS] FILE…
+</code></pre>
+<h3 id="options-1"><a class="header" href="#options-1">Options</a></h3>
+<ul>
+<li><strong><code>-i</code></strong>, <strong><code>--inplace</code></strong>
+<ul>
+<li>Write the formatted output back to each input file.</li>
+<li>Without this flag (and without <code>--check</code>), exactly one file must be given
+and its formatted output is written to <code>stdout</code>.</li>
+</ul>
+</li>
+<li><strong><code>-c</code></strong>, <strong><code>--check</code></strong>
+<ul>
+<li>Write nothing; list the files that are not already formatted and exit with
+a non-zero status if any are found. Useful in CI. Cannot be combined with
+<code>--inplace</code>.</li>
+</ul>
+</li>
+<li><strong><code>-f</code></strong>, <strong><code>--format</code></strong>, <strong><code>--input-format</code></strong> <em>FORMAT</em>
+<ul>
+<li>Treat all input files as this format (<code>wat</code>, <code>wasm</code> or <code>wax</code>), overriding
+the detection from each file’s extension.</li>
+</ul>
+</li>
+<li><strong><code>-v</code></strong>, <strong><code>--validate</code></strong>
+<ul>
+<li>Also type-check (Wax) / well-formedness-check (Wasm) while formatting.</li>
+</ul>
+</li>
+<li><strong><code>--color</code></strong> <em>WHEN</em> — as above (ignored when writing back in place).</li>
+<li><strong><code>--fold</code></strong> / <strong><code>--unfold</code></strong> — as above.</li>
+</ul>
+<h3 id="examples-1-1"><a class="header" href="#examples-1-1">Examples</a></h3>
+<p><strong>Format a single file to stdout:</strong></p>
+<pre><code class="language-sh">wax format input.wat
+</code></pre>
+<p><strong>Reformat several files in place:</strong></p>
+<pre><code class="language-sh">wax format -i a.wax b.wax c.wax
+</code></pre>
+<p><strong>Check formatting in CI (non-zero exit if any file differs):</strong></p>
+<pre><code class="language-sh">wax format --check src/*.wax
+</code></pre>
+<h2 id="checking"><a class="header" href="#checking">Checking</a></h2>
+<p>The <code>check</code> subcommand validates files (type-checking for Wax, well-formedness
+for Wasm) without producing any output, reporting diagnostics and exiting with a
+non-zero status if any file fails. It takes one or more files.</p>
+<pre><code class="language-sh">wax check [OPTIONS] FILE…
+</code></pre>
+<h3 id="options-2"><a class="header" href="#options-2">Options</a></h3>
+<ul>
+<li><strong><code>-f</code></strong>, <strong><code>--format</code></strong>, <strong><code>--input-format</code></strong> <em>FORMAT</em> — force the format of
+all files, overriding extension detection.</li>
+<li><strong><code>-s</code></strong>, <strong><code>--strict-validate</code></strong> — strict reference validation (for Wasm
+Text), as above.</li>
+<li><strong><code>--color</code></strong> <em>WHEN</em> — as above.</li>
+</ul>
+<h3 id="example"><a class="header" href="#example">Example</a></h3>
+<p><strong>Type-check several Wax files (e.g. in CI):</strong></p>
+<pre><code class="language-sh">wax check src/*.wax
 </code></pre>
 
                     </main>

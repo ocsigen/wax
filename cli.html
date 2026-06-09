@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-acdbb4fa.js";
+            window.path_to_searchindex_js = "searchindex-0f895a09.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -180,8 +180,13 @@
                         <h1 id="cli-reference"><a class="header" href="#cli-reference">CLI Reference</a></h1>
 <p>The <code>wax</code> binary is the primary interface for the Wax toolchain. It supports conversion between Wax, WebAssembly Text (WAT), and WebAssembly Binary (Wasm) formats.</p>
 <h2 id="usage"><a class="header" href="#usage">Usage</a></h2>
-<pre><code class="language-sh">wax [OPTIONS] [INPUT]
+<pre><code class="language-sh">wax [OPTIONS] [INPUT]        # convert (the default command)
+wax format [OPTIONS] FILE…   # reformat files
+wax check [OPTIONS] FILE…    # validate files
 </code></pre>
+<p>By default <code>wax</code> converts between formats. The <code>format</code> subcommand reformats
+files (see <a href="#formatting">Formatting</a>) and <code>check</code> validates them (see
+<a href="#checking">Checking</a>).</p>
 <h2 id="positional-arguments"><a class="header" href="#positional-arguments">Positional Arguments</a></h2>
 <ul>
 <li><code>[INPUT]</code>: Source file to convert/format. Supported extensions: <code>.wax</code>, <code>.wat</code>, <code>.wasm</code>.
@@ -242,14 +247,14 @@
 <p><strong><code>--fold</code></strong></p>
 <ul>
 <li>Fold instructions into nested S-expressions.</li>
-<li>Applies typically to Wasm Text output.</li>
+<li>Affects WAT output (the default form is chosen automatically).</li>
 </ul>
 </li>
 <li>
 <p><strong><code>--unfold</code></strong></p>
 <ul>
 <li>Unfold instructions into flat instruction lists.</li>
-<li>Applies typically to Wasm Text output.</li>
+<li>Affects WAT output (the default form is chosen automatically).</li>
 </ul>
 </li>
 <li>
@@ -271,6 +276,69 @@
 </code></pre>
 <p><strong>Read from stdin and write to stdout:</strong></p>
 <pre><code class="language-sh">cat input.wax | wax -f wasm &gt; output.wasm
+</code></pre>
+<h2 id="formatting"><a class="header" href="#formatting">Formatting</a></h2>
+<p>The <code>format</code> subcommand reformats files in their own format (<code>.wat</code> → <code>.wat</code>,
+<code>.wax</code> → <code>.wax</code>, <code>.wasm</code> → <code>.wasm</code>), detected from each file’s extension.</p>
+<pre><code class="language-sh">wax format [OPTIONS] FILE…
+</code></pre>
+<h3 id="options-1"><a class="header" href="#options-1">Options</a></h3>
+<ul>
+<li><strong><code>-i</code></strong>, <strong><code>--inplace</code></strong>
+<ul>
+<li>Write the formatted output back to each input file.</li>
+<li>Without this flag (and without <code>--check</code>), exactly one file must be given
+and its formatted output is written to <code>stdout</code>.</li>
+</ul>
+</li>
+<li><strong><code>-c</code></strong>, <strong><code>--check</code></strong>
+<ul>
+<li>Write nothing; list the files that are not already formatted and exit with
+a non-zero status if any are found. Useful in CI. Cannot be combined with
+<code>--inplace</code>.</li>
+</ul>
+</li>
+<li><strong><code>-f</code></strong>, <strong><code>--format</code></strong>, <strong><code>--input-format</code></strong> <em>FORMAT</em>
+<ul>
+<li>Treat all input files as this format (<code>wat</code>, <code>wasm</code> or <code>wax</code>), overriding
+the detection from each file’s extension.</li>
+</ul>
+</li>
+<li><strong><code>-v</code></strong>, <strong><code>--validate</code></strong>
+<ul>
+<li>Also type-check (Wax) / well-formedness-check (Wasm) while formatting.</li>
+</ul>
+</li>
+<li><strong><code>--color</code></strong> <em>WHEN</em> — as above (ignored when writing back in place).</li>
+<li><strong><code>--fold</code></strong> / <strong><code>--unfold</code></strong> — as above.</li>
+</ul>
+<h3 id="examples-1"><a class="header" href="#examples-1">Examples</a></h3>
+<p><strong>Format a single file to stdout:</strong></p>
+<pre><code class="language-sh">wax format input.wat
+</code></pre>
+<p><strong>Reformat several files in place:</strong></p>
+<pre><code class="language-sh">wax format -i a.wax b.wax c.wax
+</code></pre>
+<p><strong>Check formatting in CI (non-zero exit if any file differs):</strong></p>
+<pre><code class="language-sh">wax format --check src/*.wax
+</code></pre>
+<h2 id="checking"><a class="header" href="#checking">Checking</a></h2>
+<p>The <code>check</code> subcommand validates files (type-checking for Wax, well-formedness
+for Wasm) without producing any output, reporting diagnostics and exiting with a
+non-zero status if any file fails. It takes one or more files.</p>
+<pre><code class="language-sh">wax check [OPTIONS] FILE…
+</code></pre>
+<h3 id="options-2"><a class="header" href="#options-2">Options</a></h3>
+<ul>
+<li><strong><code>-f</code></strong>, <strong><code>--format</code></strong>, <strong><code>--input-format</code></strong> <em>FORMAT</em> — force the format of
+all files, overriding extension detection.</li>
+<li><strong><code>-s</code></strong>, <strong><code>--strict-validate</code></strong> — strict reference validation (for Wasm
+Text), as above.</li>
+<li><strong><code>--color</code></strong> <em>WHEN</em> — as above.</li>
+</ul>
+<h3 id="example"><a class="header" href="#example">Example</a></h3>
+<p><strong>Type-check several Wax files (e.g. in CI):</strong></p>
+<pre><code class="language-sh">wax check src/*.wax
 </code></pre>
 
                     </main>
