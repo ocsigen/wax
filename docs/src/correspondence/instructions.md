@@ -338,9 +338,3 @@ Relaxed-SIMD operations follow the same scheme:
 | `i8x16.relaxed_swizzle` | `a.relaxed_swizzle_i8x16(b)` |
 
 These intrinsic names are reserved: when converting from WAT/WASM, a module entity whose name would collide with one is renamed (e.g. a function `$v128_bitselect` becomes `v128_bitselect_2`).
-
-## Unsupported Features
-
-The following WebAssembly features do not have dedicated Wax syntax. When converting from WAT/WASM to Wax, these instructions are preserved as-is or may be dropped:
-
-*   **Tuples**: `tuple.extract` (the multi-value/tuple proposal) has no dedicated syntax.
