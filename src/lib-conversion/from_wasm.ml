@@ -354,13 +354,23 @@ let register_type (type typ) ctx export_tbl (kind : typ kind) idx exports
   | Func -> register ctx.functions ctx.function_types (Some Func) idx
   | Tag -> register ctx.tags ctx.tag_types (Some Tag) idx
 
+(* The source module is converted without being validated first (validation is
+   off by default), so it may be type-invalid in ways the conversion cannot
+   represent. Report such a case and abort the conversion rather than crashing
+   on an [assert false]. *)
+let conversion_error ctx ~location message =
+  Utils.Diagnostic.report ctx.diagnostics ~location ~severity:Error ~message ();
+  Utils.Diagnostic.abort ()
+
 let functype_arity { Src.params; results } =
   (Array.length params, Array.length results)
 
 let type_arity ctx idx =
   match (lookup_type ctx Type idx).typ with
   | Func ty -> functype_arity ty
-  | Struct _ | Array _ | Cont _ -> assert false
+  | Struct _ | Array _ | Cont _ ->
+      conversion_error ctx ~location:idx.Ast.info (fun f () ->
+          Format.fprintf f "This type should be a function type.")
 
 let typeuse_arity ctx (i, ty) =
   match (i, ty) with
@@ -419,7 +429,9 @@ let label_arity ctx (idx : Src.idx) =
 let cont_arity ctx idx =
   match (lookup_type ctx Type idx).typ with
   | Cont ft -> type_arity ctx ft
-  | Func _ | Struct _ | Array _ -> assert false
+  | Func _ | Struct _ | Array _ ->
+      conversion_error ctx ~location:idx.Ast.info (fun f () ->
+          Format.fprintf f "This type should be a continuation type.")
 
 (* Number of values a [switch] to continuation [ct] produces: the parameters of
    the continuation referenced by the last parameter of [ct]'s function type. *)
@@ -1508,7 +1520,12 @@ let import module_ name =
   ( "import",
     Ast.no_loc (Ast.Sequence [ string_of_name module_; string_of_name name ]) )
 
-let single_expression l = match l with [ e ] -> e | _ -> assert false
+let single_expression ctx ~location l =
+  match l with
+  | [ e ] -> e
+  | _ ->
+      conversion_error ctx ~location (fun f () ->
+          Format.fprintf f "A constant expression must produce a single value.")
 
 let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
   let desc : _ Ast.modulefield option =
@@ -1661,7 +1678,9 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
                name;
                mut = typ'.mut;
                typ = Some typ'.typ;
-               def = single_expression (Stack.run (instructions ctx init));
+               def =
+                 single_expression ctx ~location:f.info
+                   (Stack.run (instructions ctx init));
                attributes = exports ctx Global name e;
              })
     | Tag { typ; exports = e; _ } ->
@@ -1702,7 +1721,8 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
           | Active (memidx, off) ->
               Active
                 ( idx ctx `Mem memidx,
-                  single_expression (Stack.run (instructions ctx off)) )
+                  single_expression ctx ~location:f.info
+                    (Stack.run (instructions ctx off)) )
         in
         Some
           (Data { name = Some name; mode = mode'; init = s; attributes = [] })
@@ -1713,7 +1733,9 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
           match init with
           | Init_default -> None
           | Init_expr ex ->
-              Some (single_expression (Stack.run (instructions ctx ex)))
+              Some
+                (single_expression ctx ~location:f.info
+                   (Stack.run (instructions ctx ex)))
           | Init_segment _ -> None (* per-element init not represented *)
         in
         Some
@@ -1736,7 +1758,9 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
             let name = Sequence.get_current ctx.elems in
             let init =
               List.map
-                (fun e -> single_expression (Stack.run (instructions ctx e)))
+                (fun e ->
+                  single_expression ctx ~location:f.info
+                    (Stack.run (instructions ctx e)))
                 init
             in
             let mode' : _ Ast.elemmode =
@@ -1745,7 +1769,8 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
               | Active (tab, off) ->
                   EActive
                     ( idx ctx `Table tab,
-                      single_expression (Stack.run (instructions ctx off)) )
+                      single_expression ctx ~location:f.info
+                        (Stack.run (instructions ctx off)) )
               | Declare -> assert false
             in
             Some

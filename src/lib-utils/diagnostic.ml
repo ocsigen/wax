@@ -369,8 +369,18 @@ let report context ~location ~severity ?hint ?(related = []) ~message () =
         context.queue;
       if Queue.length context.queue = context.max then output_errors context
 
+exception Aborted
+
+let abort () = raise Aborted
+
 let run ?color ~source ?related ?(exit = true) ?output f =
   let d = make ?color ~source ?related ~exit_on_error:exit ?output () in
-  let res = f d in
-  output_errors d;
-  res
+  match f d with
+  | res ->
+      output_errors d;
+      res
+  | exception Aborted ->
+      (* Flush the queued diagnostics (which exits the process when
+         [exit_on_error]); only re-raised in a non-exiting context. *)
+      output_errors d;
+      raise Aborted

@@ -29,6 +29,16 @@ val report :
 (** [report context ~location ~severity ?hint ?related ~message ()] reports a
     diagnostic. *)
 
+exception Aborted
+(** Raised by {!abort} to unwind a pass that cannot meaningfully continue after
+    an error. {!run} catches it, flushes the queued diagnostics (exiting the
+    process when its context exits on error), and otherwise re-raises it. *)
+
+val abort : unit -> 'a
+(** [abort ()] raises {!Aborted}. Use after {!report} in a pass (such as a
+    format conversion) where continuing past the error would only produce
+    spurious failures. *)
+
 (** {1 Collecting diagnostics}
 
     A [collector] context accumulates reported errors instead of printing them,

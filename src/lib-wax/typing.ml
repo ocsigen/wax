@@ -177,7 +177,7 @@ module Error = struct
       ~message:(fun f () -> Format.fprintf f "Expected array type.")
       ()
 
-  let _type_mismatch context ~location ty' ty =
+  let type_mismatch context ~location ty' ty =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f "Expecting type@ @[<2>%a@]@ but got type@ @[<2>%a@]."
@@ -945,12 +945,9 @@ let rec pop_many ctx i n accu =
 let pop ctx ty st =
   match st with
   | Unreachable -> (st, ())
-  | Cons (_, ty', r) ->
-      let ok = subtype ctx ty' ty in
-      if not ok then
-        Format.eprintf "%a <: %a@." output_inferred_type ty'
-          output_inferred_type ty;
-      assert ok;
+  | Cons (loc, ty', r) ->
+      if not (subtype ctx ty' ty) then
+        Error.type_mismatch ctx.diagnostics ~location:loc ty' ty;
       (r, ())
   | Empty ->
       (*ZZZ*)
@@ -1009,7 +1006,9 @@ let unpack_type (f : fieldtype) =
 let branch_target ctx label =
   let rec find l label =
     match l with
-    | [] -> assert false (* ZZZ *)
+    | [] ->
+        Error.unbound_name ctx.diagnostics ~location:label.info "label" label;
+        [||]
     | (Some label', res) :: _ when label.desc = label' -> res
     | _ :: rem -> find rem label
   in
