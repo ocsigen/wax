@@ -1068,8 +1068,7 @@ module Encoder = struct
           | VecRelaxedDotAdd -> 0x113
           | VecRelaxedLaneSelect (F32x4 | F64x2) -> assert false)
     | String _ | Char _ -> assert false (* Desugared *)
-    | If_annotation _ ->
-        failwith "Conditional annotations are not supported in binary output."
+    | If_annotation _ -> assert false (* Reported by [Text_to_binary]. *)
     | Folded (i, is) ->
         List.iter (instr ~source_map_t b) is;
         instr ~source_map_t b i
