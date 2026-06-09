@@ -39,7 +39,7 @@ fn multiply(x: i32, y: i32) -> i32 {
 ```wax
 #[export = "factorial"]
 fn factorial(n: i32) -> i32 {
-    if n <= 1 {
+    if n <=s 1 => i32 {
         1;
     } else {
         n * factorial(n - 1);
@@ -77,7 +77,7 @@ fn factorial(n: i32) -> i32 {
 }
 
 fn factorial_helper(n: i32, acc: i32) -> i32 {
-    if n <= 1 {
+    if n <=s 1 => i32 {
         acc;
     } else {
         become factorial_helper(n - 1, n * acc);
@@ -99,7 +99,7 @@ fn find_first_zero(arr: &ints) -> i32 {
     len = arr.length;
     i = 0;
     'search: loop {
-        if i >= len {
+        if i >=s len {
             return -1;
         }
         if arr[i] == 0 {
@@ -108,6 +108,7 @@ fn find_first_zero(arr: &ints) -> i32 {
         i = i + 1;
         br 'search;
     }
+    unreachable;
 }
 ```
 
@@ -206,14 +207,15 @@ fn sum_bytes(arr: &bytes) -> i32 {
     sum = 0;
     i = 0;
     len = arr.length;
-    loop {
-        if i >= len {
+    'loop: loop {
+        if i >=s len {
             return sum;
         }
         sum = sum + arr[i] as i32_u;
         i = i + 1;
         br 'loop;
     }
+    unreachable;
 }
 
 #[export = "fill_bytes"]
@@ -222,8 +224,8 @@ fn fill_bytes(arr: &bytes, val: i32) {
     let len: i32;
     i = 0;
     len = arr.length;
-    loop {
-        if i >= len {
+    'loop: loop {
+        if i >=s len {
             return;
         }
         arr[i] = val;
@@ -251,13 +253,12 @@ fn safe_divide(a: i32, b: i32) -> i32 {
 
 #[export = "try_divide"]
 fn try_divide(a: i32, b: i32) -> i32 {
-    'handler: do i32 {
-        try {
-            become safe_divide(a, b);
-        } catch [divide_by_zero -> 'handler]
-        unreachable;
+    try {
+        return safe_divide(a, b);
+    } catch {
+        divide_by_zero => { return 0; }   // Return 0 on division by zero
     }
-    0;   // Return 0 on division by zero
+    unreachable;
 }
 ```
 

@@ -92,8 +92,7 @@ Types are final by default. To make a type open (extensible), use the `open` key
 To specify a supertype, use `: supertype` before the assignment.
 
 ```wax
-type point = { x: i32, y: i32 };
-type point3d : point = { z: i32 };        // extend point (if point was open)
-type open_point = open { x: i32 };        // non-final type
-type sub_point : open_point = { y: i32 }; // ok
+type point = { x: i32, y: i32 };                  // final by default
+type open_point = open { x: i32 };                // non-final: extensible
+type sub_point : open_point = { x: i32, y: i32 }; // extends open_point
 ```

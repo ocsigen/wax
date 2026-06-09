@@ -285,7 +285,7 @@ Use `become` for tail calls (guaranteed not to grow the stack):
 
 ```wax
 fn factorial_helper(n: i32, acc: i32) -> i32 {
-    if n <= 1 {
+    if n <=s 1 => i32 {
         acc;
     } else {
         become factorial_helper(n - 1, n * acc);

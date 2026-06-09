@@ -50,7 +50,7 @@ fn add(x: i32, y: i32) -> i32 {
 
 #[export = "factorial"]
 fn factorial(n: i32) -> i32 {
-    if n <= 1 {
+    if n <=s 1 => i32 {
         1;
     } else {
         n * factorial(n - 1);

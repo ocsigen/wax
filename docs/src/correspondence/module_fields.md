@@ -110,6 +110,8 @@ Tags define exception types for structured exception handling.
 ### Definition
 
 ```wax
+type string = [mut i8];
+
 tag my_error(code: i32);
 tag empty_error();
 tag multi_arg(a: i32, b: &string);
