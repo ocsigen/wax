@@ -299,6 +299,31 @@ module Error = struct
         Format.fprintf f "The supertype is not of the same kind as this type.")
       ()
 
+  let invalid_subtype context ~location =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f
+          "This type is not a valid subtype of its declared supertype.")
+      ()
+
+  let not_function_type context ~location =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () -> Format.fprintf f "This should be a function type.")
+      ()
+
+  let exception_tag_with_results context ~location =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f "The type of an exception tag must have no results.")
+      ()
+
+  let select_result_count context ~location =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f
+          "A typed select must be annotated with exactly one result type.")
+      ()
+
   let non_nullable_table_type context ~location =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
@@ -742,9 +767,12 @@ let lookup_tag_type ctx tag =
   let ctx = ctx.modul in
   let+@ ty = Sequence.get ctx.diagnostics ctx.tags tag in
   match (Types.get_subtype ctx.subtyping_info ty).typ with
-  | Struct _ | Array _ | Cont _ -> assert false (* Already checked *)
+  | Struct _ | Array _ | Cont _ ->
+      Error.not_function_type ctx.diagnostics ~location:tag.info;
+      [||]
   | Func { params; results } ->
-      assert (results = [||]);
+      if results <> [||] then
+        Error.exception_tag_with_results ctx.diagnostics ~location:tag.info;
       params
 
 (* Full function type of a tag, used for stack-switching suspension tags whose
@@ -754,7 +782,9 @@ let lookup_tag_signature ctx tag =
   let+@ ty = Sequence.get ctx.diagnostics ctx.tags tag in
   match (Types.get_subtype ctx.subtyping_info ty).typ with
   | Func ft -> ft
-  | Struct _ | Array _ | Cont _ -> assert false (* Already checked *)
+  | Struct _ | Array _ | Cont _ ->
+      Error.not_function_type ctx.diagnostics ~location:tag.info;
+      { params = [||]; results = [||] }
 
 (* Resolve a continuation type index to its own index and the function type it
    wraps. Emits an error if the type is not a continuation type. *)
@@ -861,7 +891,9 @@ let is_nullable ty =
   match ty with
   | None -> true
   | Some (Ref { nullable; _ }) -> nullable
-  | _ -> assert false (* Should not happen *)
+  (* The caller has already reported a type mismatch on a non-reference
+     operand; treat it as nullable rather than crashing. *)
+  | _ -> true
 
 let is_defaultable ty =
   match ty with
@@ -1521,7 +1553,9 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           let* () = pop ctx loc typ in
           let* () = pop ctx loc typ in
           push (Some loc) typ
-      | _ -> (*ZZZ*) assert false)
+      | _ ->
+          Error.select_result_count ctx.modul.diagnostics ~location:loc;
+          pop ctx loc I32)
   | LocalGet i ->
       let*! ty = get_local ctx i in
       push (Some loc) ty
@@ -2420,34 +2454,46 @@ let check_type_definitions ctx =
     | Func _ | Struct _ | Array _ -> ());
     let*? j = ty.supertype in
     let ty' = Types.get_subtype ctx.subtyping_info j in
-    (*ZZZ*)
-    assert (not ty'.final);
-    match (ty.typ, ty'.typ) with
-    | Func { params; results }, Func { params = params'; results = results' } ->
-        (*ZZZ*)
-        assert (Array.length params = Array.length params');
-        assert (Array.length results = Array.length results');
-        Array.iter2
-          (fun p p' -> assert (Types.val_subtype ctx.subtyping_info p' p))
-          params params';
-        Array.iter2
-          (fun r r' -> assert (Types.val_subtype ctx.subtyping_info r r'))
-          results results'
-    | Struct fields, Struct fields' ->
-        assert (Array.length fields' <= Array.length fields);
-        for i = 0 to Array.length fields' - 1 do
-          assert (field_subtype ctx.subtyping_info fields.(i) fields'.(i))
-        done
-    | Array field, Array field' ->
-        assert (field_subtype ctx.subtyping_info field field')
-    | Cont ft, Cont ft' ->
-        assert (Types.heap_subtype ctx.subtyping_info (Type ft) (Type ft'))
-    | Func _, (Struct _ | Array _ | Cont _)
-    | Struct _, (Func _ | Array _ | Cont _)
-    | Array _, (Func _ | Struct _ | Cont _)
-    | Cont _, (Func _ | Struct _ | Array _) ->
-        Error.supertype_mismatch ctx.diagnostics
-          ~location:(Ast.no_loc ()).info (*ZZZ*)
+    let location =
+      (Ast.no_loc ()).info
+      (*ZZZ*)
+    in
+    let invalid () = Error.invalid_subtype ctx.diagnostics ~location in
+    if ty'.final then invalid ()
+    else
+      match (ty.typ, ty'.typ) with
+      | Func { params; results }, Func { params = params'; results = results' }
+        ->
+          if
+            Array.length params <> Array.length params'
+            || Array.length results <> Array.length results'
+            || not
+                 (Array.for_all2
+                    (fun p p' -> Types.val_subtype ctx.subtyping_info p' p)
+                    params params'
+                 && Array.for_all2
+                      (fun r r' -> Types.val_subtype ctx.subtyping_info r r')
+                      results results')
+          then invalid ()
+      | Struct fields, Struct fields' ->
+          if
+            Array.length fields' > Array.length fields
+            || not
+                 (Array.for_all2
+                    (field_subtype ctx.subtyping_info)
+                    (Array.sub fields 0 (Array.length fields'))
+                    fields')
+          then invalid ()
+      | Array field, Array field' ->
+          if not (field_subtype ctx.subtyping_info field field') then invalid ()
+      | Cont ft, Cont ft' ->
+          if not (Types.heap_subtype ctx.subtyping_info (Type ft) (Type ft'))
+          then invalid ()
+      | Func _, (Struct _ | Array _ | Cont _)
+      | Struct _, (Func _ | Array _ | Cont _)
+      | Array _, (Func _ | Struct _ | Cont _)
+      | Cont _, (Func _ | Struct _ | Array _) ->
+          Error.supertype_mismatch ctx.diagnostics ~location
   done
 
 let tables_and_memories ctx fields =
@@ -2543,10 +2589,12 @@ let functions ctx fields =
       match field.desc with
       | Func { id = _; typ; locals = locs; instrs; exports } ->
           let>@ func_typ =
-            let+@ typ = typeuse ctx.diagnostics ctx.types typ in
+            let*@ typ = typeuse ctx.diagnostics ctx.types typ in
             match (Types.get_subtype ctx.subtyping_info typ).typ with
-            | Func typ -> typ
-            | _ -> assert false (*ZZZ*)
+            | Func typ -> Some typ
+            | _ ->
+                Error.not_function_type ctx.diagnostics ~location:field.info;
+                None
           in
           let return_types = func_typ.results in
           let locals = Sequence.make "local" in
@@ -2622,7 +2670,8 @@ let start ctx fields =
       | Start idx -> (
           let*? ty = Sequence.get ctx.diagnostics ctx.functions idx in
           match (Types.get_subtype ctx.subtyping_info ty).typ with
-          | Struct _ | Array _ | Cont _ -> assert false (* Should not happen *)
+          | Struct _ | Array _ | Cont _ ->
+              Error.not_function_type ctx.diagnostics ~location:idx.info
           | Func { params; results } ->
               if not (params = [||] && results = [||]) then
                 Error.start_function_signature ctx.diagnostics
