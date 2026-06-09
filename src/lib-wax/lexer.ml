@@ -236,6 +236,8 @@ let rec token_rec ctx lexbuf =
   | "switch" -> SWITCH
   | "memory" -> MEMORY
   | "data" -> DATA
+  | "table" -> TABLE
+  | "elem" -> ELEM
   | int -> INT (Sedlexing.Utf8.lexeme lexbuf)
   | float -> FLOAT (Sedlexing.Utf8.lexeme lexbuf)
   | ident -> IDENT (Sedlexing.Utf8.lexeme lexbuf)

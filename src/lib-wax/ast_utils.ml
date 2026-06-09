@@ -49,8 +49,8 @@ let rec map_instr f instr =
     | Array (idx, len, init) -> Array (idx, map_instr f len, map_instr f init)
     | ArrayDefault (idx, len) -> ArrayDefault (idx, map_instr f len)
     | ArrayFixed (idx, elems) -> ArrayFixed (idx, List.map (map_instr f) elems)
-    | ArrayData (idx, d, off, len) ->
-        ArrayData (idx, d, map_instr f off, map_instr f len)
+    | ArraySegment (idx, seg, off, len) ->
+        ArraySegment (idx, seg, map_instr f off, map_instr f len)
     | ArrayGet (arr, idx) -> ArrayGet (map_instr f arr, map_instr f idx)
     | ArraySet (arr, idx, val_) ->
         ArraySet (map_instr f arr, map_instr f idx, map_instr f val_)
@@ -115,6 +115,17 @@ let rec map_modulefield f field =
             (match mode with
             | Passive -> Passive
             | Active (mem, off) -> Active (mem, map_instr f off));
+        }
+  | Table t -> Table t
+  | Elem ({ mode; init; _ } as e) ->
+      Elem
+        {
+          e with
+          mode =
+            (match mode with
+            | EPassive -> EPassive
+            | EActive (tab, off) -> EActive (tab, map_instr f off));
+          init = List.map (map_instr f) init;
         }
   | Group { attributes; fields } ->
       Group

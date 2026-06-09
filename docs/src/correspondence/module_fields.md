@@ -264,7 +264,54 @@ Data bytes are ordinary string literals; escapes such as `\xNN` and `\00` decode
 
 ## Tables
 
-Wax does not provide dedicated syntax for tables; table definitions are dropped on conversion from WAT/WASM (Wax uses typed function references instead). If you need tables, write that portion in WAT and link it with your Wax code.
+A table is declared with `table`, followed by its element [reference type](types.md) and, optionally, its limits as `[min]` or `[min, max]`:
+
+```wax
+table funcs: &?func [1, 10];
+table objs: &?any [0];
+```
+
+Maps to:
+
+```wat
+(table $funcs 1 10 funcref)
+(table $objs 0 anyref)
+```
+
+A table element is read and written with index syntax, like an array — `tab[i]` is `table.get` and `tab[i] = v` is `table.set`:
+
+```wax
+let f: &?func = funcs[i];
+funcs[i] = g;
+```
+
+There is no dedicated `call_indirect` syntax: it is written as a call through a table slot, narrowing the slot to the callee's [function type](#functions) with a cast. WAT `call_indirect` round-trips through this form:
+
+```wax
+type cmp = fn(_: i32, _: i32) -> i32;
+
+(funcs[i] as &cmp)(x, y)        // call_indirect $funcs (type $cmp)
+```
+
+Other table-management instructions (`table.size`/`grow`/`fill`/`copy`/`init`) do not yet have dedicated syntax.
+
+## Element Segments
+
+An element segment is declared with `elem`, its element reference type, and a bracketed list of constant element expressions. A bare `elem` is passive; `@ table[offset]` makes it an active segment that initializes a table:
+
+```wax
+elem dispatch: &?func = [handler_a, handler_b, handler_c];   // passive
+elem init: &?func @ funcs[0] = [handler_a, handler_b];       // active
+elem nums: &?i31 = [1 as &i31, 2 as &i31];                   // expression form
+```
+
+A passive element segment can initialize a GC array with [`array.new_elem`](instructions.md#aggregate-instructions), written with the same `[t| seg @ off; count]` syntax as `array.new_data` — which one applies is determined by the array's element type (a reference element selects the element segment):
+
+```wax
+type handlers = [&?func];
+
+let hs: &handlers = [handlers| dispatch @ 0; 3];
+```
 
 ## Module Structure
 

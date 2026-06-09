@@ -194,6 +194,7 @@ type ctx = {
   tables : Sequence.t;
   tags : Sequence.t;
   datas : Sequence.t;
+  elems : Sequence.t;
   type_defs : Src.subtype CondTbl.t;
   function_types : Src.typeuse CondTbl.t;
   exports : (Src.exportable * string, Src.name list) Hashtbl.t;
@@ -224,6 +225,7 @@ let idx ctx kind i =
   | `Table -> Sequence.get ctx.tables i
   | `Tag -> Sequence.get ctx.tags i
   | `Data -> Sequence.get ctx.datas i
+  | `Elem -> Sequence.get ctx.elems i
   | `Local -> Sequence.get ctx.locals i
 
 let label ctx i = LabelStack.get ctx.labels i
@@ -771,6 +773,23 @@ let mem_extra with_loc (memarg : Src.memarg) nat =
   else if Utils.Uint64.compare memarg.align nat <> 0 then [ lit memarg.align ]
   else []
 
+(* The callee of an indirect call: [tab[index]] narrowed to the call's function
+   type, i.e. [tab[index] as &$ft]. The cast is always emitted; [to_wasm]
+   re-fuses the whole pattern back to [call_indirect]. *)
+let indirect_callee ctx with_loc tab (tu : Src.typeuse) index =
+  let tabget =
+    with_loc (Ast.ArrayGet (with_loc (Ast.Get (idx ctx `Table tab)), index))
+  in
+  match fst tu with
+  | Some ti ->
+      with_loc
+        (Ast.Cast
+           ( tabget,
+             Ast.Valtype
+               (Ast.Ref { nullable = true; typ = Ast.Type (idx ctx `Type ti) })
+           ))
+  | None -> tabget
+
 let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   let with_loc (i' : _ Ast.instr_desc) = { i with Ast.desc = i' } in
   let mem_call m meth args =
@@ -1105,7 +1124,36 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       let* off = Stack.pop in
       Stack.push 1
         (with_loc
-           (ArrayData (Some (idx ctx `Type t), idx ctx `Data d, off, len)))
+           (ArraySegment (Some (idx ctx `Type t), idx ctx `Data d, off, len)))
+  | ArrayNewElem (t, e) ->
+      let* len = Stack.pop in
+      let* off = Stack.pop in
+      Stack.push 1
+        (with_loc
+           (ArraySegment (Some (idx ctx `Type t), idx ctx `Elem e, off, len)))
+  | TableGet t ->
+      let* index = Stack.pop in
+      Stack.push 1
+        (with_loc (ArrayGet (with_loc (Get (idx ctx `Table t)), index)))
+  | TableSet t ->
+      let* value = Stack.pop in
+      let* index = Stack.pop in
+      Stack.push 1
+        (with_loc (ArraySet (with_loc (Get (idx ctx `Table t)), index, value)))
+  (* call_indirect desugars to [(tab[i] as &$functype)(args)] (a call_ref);
+     [to_wasm] re-fuses this back to call_indirect. *)
+  | CallIndirect (tab, tu) ->
+      let input, output = typeuse_arity ctx tu in
+      let* index = Stack.pop in
+      let* args = Stack.grab input in
+      let f = indirect_callee ctx with_loc tab tu index in
+      Stack.push output (with_loc (Call (f, args)))
+  | ReturnCallIndirect (tab, tu) ->
+      let input, _ = typeuse_arity ctx tu in
+      let* index = Stack.pop in
+      let* args = Stack.grab input in
+      let f = indirect_callee ctx with_loc tab tu index in
+      Stack.push_poly (with_loc (TailCall (f, args)))
   | ArrayLen ->
       let* e = Stack.pop in
       Stack.push 1 (with_loc (StructGet (e, Ast.no_loc "length")))
@@ -1275,9 +1323,8 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       in
       Stack.push 0 (with_loc (If_annotation { cond; then_body; else_body }))
   (* Later *)
-  | ReturnCallIndirect _ | CallIndirect _ | ArrayInitElem _ | ArrayInitData _
-  | ArrayNewElem _ | MemorySize _ | MemoryGrow _ | MemoryFill _ | MemoryCopy _
-  | MemoryInit _ | DataDrop _ | TableGet _ | TableSet _ | TableSize _
+  | ArrayInitElem _ | ArrayInitData _ | MemorySize _ | MemoryGrow _
+  | MemoryFill _ | MemoryCopy _ | MemoryInit _ | DataDrop _ | TableSize _
   | TableGrow _ | TableFill _ | TableCopy _ | TableInit _ | ElemDrop _
   | TupleExtract _ ->
       Stack.push_poly (with_loc Unreachable)
@@ -1494,7 +1541,17 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
                    data = [];
                    attributes = import module_ nm :: exports ctx Memory name e;
                  })
-        | Table _ -> None (*ZZZ*))
+        | Table tt ->
+            let name = Sequence.get_current ctx.tables in
+            let l = tt.Src.limits.Ast.desc in
+            Some
+              (Table
+                 {
+                   name;
+                   reftype = reftype ctx tt.Src.reftype;
+                   limits = Some (l.mi, l.ma);
+                   attributes = import module_ nm :: exports ctx Table name e;
+                 }))
     | Global { typ; init; exports = e; _ } ->
         let typ' = globaltype ctx typ in
         let name = Sequence.get_current ctx.globals in
@@ -1549,7 +1606,49 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
         in
         Some
           (Data { name = Some name; mode = mode'; init = s; attributes = [] })
-    | Table _ | Start _ | Export _ | Elem _ -> None
+    | Table { typ = tt; exports = e; _ } ->
+        let name = Sequence.get_current ctx.tables in
+        let l = tt.Src.limits.Ast.desc in
+        Some
+          (Table
+             {
+               name;
+               reftype = reftype ctx tt.Src.reftype;
+               limits = Some (l.mi, l.ma);
+               attributes = exports ctx Table name e;
+             })
+    | Elem { typ; init; mode; _ } -> (
+        (* Declare elems are regenerated by [to_wasm] from [call_ref] usage. *)
+        match mode with
+        | Declare ->
+            let _ : Ast.ident = Sequence.get_current ctx.elems in
+            None
+        | Passive | Active _ ->
+            let name = Sequence.get_current ctx.elems in
+            let init =
+              List.map
+                (fun e -> single_expression (Stack.run (instructions ctx e)))
+                init
+            in
+            let mode' : _ Ast.elemmode =
+              match mode with
+              | Passive -> EPassive
+              | Active (tab, off) ->
+                  EActive
+                    ( idx ctx `Table tab,
+                      single_expression (Stack.run (instructions ctx off)) )
+              | Declare -> assert false
+            in
+            Some
+              (Elem
+                 {
+                   name;
+                   reftype = reftype ctx typ;
+                   mode = mode';
+                   init;
+                   attributes = [];
+                 }))
+    | Start _ | Export _ -> None
     | String_global { typ; init; _ } ->
         let name = Sequence.get_current ctx.globals in
         Some
@@ -1637,7 +1736,7 @@ let register_names ctx export_tbl fields =
         | Global { id; exports; _ } ->
             Sequence.register ctx.globals export_tbl (Some Global) id exports
         | Func _ | Export _ | Start _ -> ()
-        | Elem _ -> () (*ZZZ*)
+        | Elem { id; _ } -> Sequence.register ctx.elems export_tbl None id []
         | Data { id; _ } -> Sequence.register ctx.datas export_tbl None id []
         | Memory { id; exports; _ } ->
             Sequence.register ctx.memories export_tbl (Some Memory) id exports
@@ -1744,11 +1843,11 @@ let module_ diagnostics (_, fields) =
       globals = Sequence.make ~forbid_numeric common_namespace "g";
       functions = Sequence.make ~forbid_numeric common_namespace "f";
       memories =
-        Sequence.make ~forbid_numeric:forbid_numeric_memory (Namespace.make ())
-          "m";
-      tables = Sequence.make ~forbid_numeric (Namespace.make ()) "m";
+        Sequence.make ~forbid_numeric:forbid_numeric_memory common_namespace "m";
+      tables = Sequence.make ~forbid_numeric common_namespace "t";
       tags = Sequence.make ~forbid_numeric (Namespace.make ()) "t";
       datas = Sequence.make ~forbid_numeric (Namespace.make ()) "d";
+      elems = Sequence.make ~forbid_numeric (Namespace.make ()) "e";
       type_defs = CondTbl.make ();
       function_types = CondTbl.make ();
       tag_types = CondTbl.make ();

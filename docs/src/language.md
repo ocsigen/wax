@@ -457,6 +457,26 @@ mem0.store32(p, v, 1, 16);  // align=1, offset=16
 
 The two optional trailing arguments are the access `align` and `offset` (constant integers).
 
+## Tables and Element Segments
+
+A table holds references and is indexed like an array. Element segments declare lists of references, optionally initializing a table.
+
+```wax
+table funcs: &?func [1, 10];          // table of function references
+elem init: &?func @ funcs[0] = [f];   // active: initialize funcs at offset 0
+elem pool: &?func = [f, g, h];        // passive segment
+
+funcs[i]                              // table.get
+funcs[i] = g;                         // table.set
+(funcs[i] as &cmp)(x, y)              // indirect call (call_indirect)
+```
+
+A passive element segment initializes a GC array of references with the same `[t| seg @ off; count]` form used for data segments — a reference element type selects the element segment:
+
+```wax
+[handlers| pool @ 0; 3]               // array.new_elem
+```
+
 ## Exceptions
 
 ### Tags

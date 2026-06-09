@@ -114,7 +114,7 @@ type 'info instr_desc =
   | Array of ident option * 'info instr * 'info instr
   | ArrayDefault of ident option * 'info instr
   | ArrayFixed of ident option * 'info instr list
-  | ArrayData of ident option * ident * 'info instr * 'info instr
+  | ArraySegment of ident option * ident * 'info instr * 'info instr
   | ArrayGet of 'info instr * 'info instr
   | ArraySet of 'info instr * 'info instr * 'info instr
   | BinOp of binop * 'info instr * 'info instr
@@ -156,6 +156,7 @@ type 'info memdata = {
 }
 
 type 'info datamode = Passive | Active of ident * 'info instr
+type 'info elemmode = EPassive | EActive of ident * 'info instr
 
 type 'info modulefield =
   | Type of rectype
@@ -202,6 +203,19 @@ type 'info modulefield =
       name : ident option;
       mode : 'info datamode;
       init : string;
+      attributes : attributes;
+    }
+  | Table of {
+      name : ident;
+      reftype : reftype;
+      limits : (Utils.Uint64.t * Utils.Uint64.t option) option;
+      attributes : attributes;
+    }
+  | Elem of {
+      name : ident;
+      reftype : reftype;
+      mode : 'info elemmode;
+      init : 'info instr list;
       attributes : attributes;
     }
   | Group of {

@@ -619,6 +619,8 @@ type module_context = {
   tags : functype Tbl.t;
   memories : (int * [ `I32 | `I64 ]) Tbl.t;
   datas : unit Tbl.t;
+  tables : reftype Tbl.t;
+  elems : reftype Tbl.t;
   mutable locals : inferred_valtype StringMap.t;
   control_types : (string option * inferred_type UnionFind.t array) list;
   return_types : inferred_type UnionFind.t array;
@@ -1112,8 +1114,10 @@ let check_resume_handlers ctx handlers =
 let rec count_holes i =
   match i.desc with
   | Hole -> 1
-  | BinOp (_, l, r) | Array (_, l, r) | ArrayData (_, _, l, r) | ArrayGet (l, r)
-    ->
+  | BinOp (_, l, r)
+  | Array (_, l, r)
+  | ArraySegment (_, _, l, r)
+  | ArrayGet (l, r) ->
       count_holes l + count_holes r
   | ArraySet (t, i, v) -> count_holes t + count_holes i + count_holes v
   | Call (f, args) | TailCall (f, args) ->
@@ -1181,7 +1185,7 @@ let rec check_hole_order_rec ctx i n =
             n
         | BinOp (_, l, r)
         | Array (_, l, r)
-        | ArrayData (_, _, l, r)
+        | ArraySegment (_, _, l, r)
         | ArrayGet (l, r) ->
             n |> check_hole_order_rec ctx l |> check_hole_order_rec ctx r
         | ArraySet (t, i, v) ->
@@ -2026,23 +2030,43 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
             internalize ctx (Ref { nullable = false; typ = Type ty })
           in
           return_expression i (ArrayFixed (Some ty, List.rev instrs')) typ)
-  | ArrayData (ty, d, off, len) -> (
+  | ArraySegment (ty, seg, off, len) -> (
       let* off' = instruction ctx off in
       let* len' = instruction ctx len in
       check_type ctx off'
         (UnionFind.make (Valtype { typ = I32; internal = I32 }));
       check_type ctx len'
         (UnionFind.make (Valtype { typ = I32; internal = I32 }));
-      ignore (Tbl.find ctx.diagnostics ctx.datas d : unit option);
       match ty with
       | None -> assert false (*ZZZ*)
       | Some ty ->
-          (let>@ _field = lookup_array_type ctx ty in
-           ());
+          (* A reference element means [array.new_elem] (the segment is an
+             element segment); a numeric/packed element means [array.new_data]
+             (a data segment). *)
+          (let>@ field = lookup_array_type ctx ty in
+           match field.typ with
+           | Value (Ref _) ->
+               ignore (Tbl.find ctx.diagnostics ctx.elems seg : reftype option)
+           | _ -> ignore (Tbl.find ctx.diagnostics ctx.datas seg : unit option));
           let*! typ =
             internalize ctx (Ref { nullable = false; typ = Type ty })
           in
-          return_expression i (ArrayData (Some ty, d, off', len')) typ)
+          return_expression i (ArraySegment (Some ty, seg, off', len')) typ)
+  (* [tab[i]] on a table name is [table.get]; the receiver is not a value. *)
+  | ArrayGet (({ desc = Get tabname; _ } as recv), i2)
+    when Tbl.find_opt ctx.tables tabname <> None ->
+      let rt =
+        match Tbl.find_opt ctx.tables tabname with
+        | Some rt -> rt
+        | None -> assert false
+      in
+      let* i2' = instruction ctx i2 in
+      check_type ctx i2'
+        (UnionFind.make (Valtype { typ = I32; internal = I32 }));
+      let*! typ = internalize ctx (Ref rt) in
+      return_expression i
+        (ArrayGet ({ desc = Get tabname; info = ([||], recv.info) }, i2'))
+        typ
   | ArrayGet (i1, i2) -> (
       let* i1' = instruction ctx i1 in
       let* i2' = instruction ctx i2 in
@@ -2056,6 +2080,26 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       | _ ->
           Error.expected_array_type ctx.diagnostics ~location:i1.info;
           return_expression i (ArrayGet (i1', i2')) (UnionFind.make Unknown))
+  (* [tab[i] = v] on a table name is [table.set]; the receiver is not a value. *)
+  | ArraySet (({ desc = Get tabname; _ } as recv), i2, i3)
+    when Tbl.find_opt ctx.tables tabname <> None ->
+      let rt =
+        match Tbl.find_opt ctx.tables tabname with
+        | Some rt -> rt
+        | None -> assert false
+      in
+      let* i2' = instruction ctx i2 in
+      let* i3' = instruction ctx i3 in
+      check_type ctx i2'
+        (UnionFind.make (Valtype { typ = I32; internal = I32 }));
+      (let>@ ty = internalize ctx (Ref rt) in
+       let ty' = expression_type ctx i3' in
+       if not (subtype ctx ty' ty) then
+         Error.instruction_type_mismatch ctx.diagnostics
+           ~location:(snd i3'.info) ty' ty);
+      return_statement i
+        (ArraySet ({ desc = Get tabname; info = ([||], recv.info) }, i2', i3'))
+        [||]
   | ArraySet (i1, i2, i3) -> (
       let* i1' = instruction ctx i1 in
       let* i2' = instruction ctx i2 in
@@ -2987,7 +3031,7 @@ let rec check_constant_instruction ctx i =
         _ )
   | Block _ | Loop _ | If _ | TryTable _ | Try _ | Unreachable | Nop | Hole
   | Set _ | Tee _ | Call _ | TailCall _ | Cast _ | Test _ | NonNull _
-  | StructGet _ | StructSet _ | ArrayData _ | ArrayGet _ | ArraySet _ | Let _
+  | StructGet _ | StructSet _ | ArraySegment _ | ArrayGet _ | ArraySet _ | Let _
   | Br _ | Br_if _ | Br_table _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
   | Br_on_cast_fail _ | Throw _ | ThrowRef _ | ContNew _ | ContBind _
   | Suspend _ | Resume _ | ResumeThrow _ | ResumeThrowRef _ | Switch _
@@ -3042,6 +3086,28 @@ let rec globals ctx fields =
                 Active (mem, type_data_offset ctx address_type off)
           in
           After { field with desc = Data { d with mode } }
+      | Elem ({ reftype = rt; mode; init; _ } as e) ->
+          (* Active-elem offsets index a table, whose address type is i32. *)
+          let mode =
+            match mode with
+            | EPassive -> EPassive
+            | EActive (tab, off) -> EActive (tab, type_data_offset ctx `I32 off)
+          in
+          let elem_typ = internalize ctx (Ref rt) in
+          let init =
+            List.map
+              (fun i ->
+                let i' =
+                  with_empty_stack ctx ~location:i.info ~kind:Expression
+                    (toplevel_instruction ctx i)
+                in
+                (let>@ typ = elem_typ in
+                 check_type ctx i' typ);
+                check_constant_instruction ctx i';
+                i')
+              init
+          in
+          After { field with desc = Elem { e with mode; init } }
       | Global ({ name; mut; typ; def; _ } as g) ->
           let def' =
             with_empty_stack ctx ~location:def.info ~kind:Expression
@@ -3163,11 +3229,16 @@ let rec functions ctx fields =
             }
       | PhasedGroup _ | PhasedConditional _
       | Before
-          { desc = Global _ | Group _ | Conditional _ | Memory _ | Data _; _ }
-        ->
+          {
+            desc =
+              Global _ | Group _ | Conditional _ | Memory _ | Data _ | Elem _;
+            _;
+          } ->
           assert false
       | After f -> Some f
-      | Before ({ desc = Type _ | Fundecl _ | GlobalDecl _ | Tag _; _ } as f) ->
+      | Before
+          ({ desc = Type _ | Fundecl _ | GlobalDecl _ | Tag _ | Table _; _ } as
+           f) ->
           Some f)
     fields
 
@@ -3246,8 +3317,10 @@ let type_configuration diagnostics fields =
       types = type_context.types;
       functions = Tbl.make namespace "function";
       globals = Tbl.make namespace "global";
-      memories = Tbl.make (Namespace.make cond) "memory";
+      memories = Tbl.make namespace "memory";
       datas = Tbl.make (Namespace.make cond) "data segment";
+      tables = Tbl.make namespace "table";
+      elems = Tbl.make (Namespace.make cond) "element segment";
       tags = Tbl.make (Namespace.make cond) "tag";
       locals = StringMap.empty;
       control_types = [];
@@ -3296,6 +3369,9 @@ let type_configuration diagnostics fields =
           Tbl.add diagnostics ctx.tags name typ
       | Data { name; _ } ->
           Option.iter (fun n -> Tbl.add diagnostics ctx.datas n ()) name
+      | Table { name; reftype = rt; _ } ->
+          Tbl.add diagnostics ctx.tables name rt
+      | Elem { name; reftype = rt; _ } -> Tbl.add diagnostics ctx.elems name rt
       | Group _ | Conditional _ | Type _ | Global _ -> ())
     fields;
   let _ : _ option =
@@ -3373,7 +3449,7 @@ let rec instr_has_conditional (i : (_ instr_desc, _) annotated) =
   | Struct (_, l) -> List.exists (fun (_, i) -> instr_has_conditional i) l
   | BinOp (_, a, b)
   | Array (_, a, b)
-  | ArrayData (_, _, a, b)
+  | ArraySegment (_, _, a, b)
   | ArrayGet (a, b)
   | StructSet (a, _, b) ->
       instr_has_conditional a || instr_has_conditional b
@@ -3496,7 +3572,8 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
     | Array (idx, a, b) -> Array (idx, sone asm a, sone asm b)
     | ArrayDefault (idx, v) -> ArrayDefault (idx, sone asm v)
     | ArrayFixed (idx, l) -> ArrayFixed (idx, List.map (sone asm) l)
-    | ArrayData (idx, d, a, b) -> ArrayData (idx, d, sone asm a, sone asm b)
+    | ArraySegment (idx, d, a, b) ->
+        ArraySegment (idx, d, sone asm a, sone asm b)
     | ArrayGet (a, b) -> ArrayGet (sone asm a, sone asm b)
     | ArraySet (a, b, c) -> ArraySet (sone asm a, sone asm b, sone asm c)
     | BinOp (op, a, b) -> BinOp (op, sone asm a, sone asm b)
@@ -3575,7 +3652,7 @@ let sub_instrs (i : (_ instr_desc, _) annotated) =
   | Struct (_, l) -> List.map snd l
   | BinOp (_, a, b)
   | Array (_, a, b)
-  | ArrayData (_, _, a, b)
+  | ArraySegment (_, _, a, b)
   | ArrayGet (a, b)
   | StructSet (a, _, b) ->
       [ a; b ]

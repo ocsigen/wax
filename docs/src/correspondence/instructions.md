@@ -152,6 +152,7 @@ if cond => (i32) -> i32 { ... } else { ... }
 | `array.new_default $t` | `[t\| ..; len]` |
 | `array.new_fixed $t` | `[t\| val, ...]` |
 | `array.new_data $t $d` | `[t\| d @ offset; count]` |
+| `array.new_elem $t $e` | `[t\| e @ offset; count]` |
 | `array.get $t` | `arr[idx]` |
 | `array.get_s $t` | `arr[idx] as i32_s` |
 | `array.get_u $t` | `arr[idx] as i32_u` |
@@ -186,6 +187,19 @@ m.load32(p, 1, 16);   // i32.load align=1 offset=16
 ```
 
 The alignment defaults to the access's natural alignment and is only printed when it differs; the offset defaults to `0`.
+
+## Table Access
+
+A [table](module_fields.md#tables) is indexed like an array, and an indirect call is written as a call through a table slot cast to the callee's function type.
+
+| Wasm | Wax |
+|------|-----|
+| `table.get $t` | `t[i]` |
+| `table.set $t` | `t[i] = v` |
+| `call_indirect $t (type $ft)` | `(t[i] as &ft)(args)` |
+| `return_call_indirect $t (type $ft)` | `return (t[i] as &ft)(args)` |
+
+`call_indirect` is reconstructed from this pattern on conversion to WAT/WASM, so it round-trips. When the table's element type is already the concrete function type `&ft`, the cast may be omitted (`t[i](args)`).
 
 ## Exception Instructions
 
@@ -227,6 +241,5 @@ Tags used with `suspend`/`resume` may have result types (unlike exception tags);
 The following WebAssembly features do not have dedicated Wax syntax. When converting from WAT/WASM to Wax, these instructions are preserved as-is or may be dropped:
 
 *   **Linear Memory management**: `memory.size`, `memory.grow`, `memory.fill`, `memory.copy`, `memory.init`, `data.drop`. Loads and stores have [dedicated syntax](#memory-access), but these management instructions do not yet.
-*   **Tables**: `table.get`, `table.set`, `call_indirect` (and related instructions). Use typed function references instead.
+*   **Table management**: `table.size`, `table.grow`, `table.fill`, `table.copy`, `table.init`, `elem.drop`. Table access (`table.get`/`set`) and `call_indirect` have [dedicated syntax](#table-access), but these management instructions do not yet.
 *   **SIMD**: All `v128` vector instructions. The `v128` type exists but operations are not exposed.
-*   **Indirect Calls via Tables**: `return_call_indirect`, `call_indirect`. Use `call_ref` with function references instead.

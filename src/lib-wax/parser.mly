@@ -75,7 +75,7 @@
 %token CONT_NEW CONT_BIND
 %token SUSPEND RESUME RESUME_THROW RESUME_THROW_REF SWITCH
 %token DISPATCH
-%token MEMORY DATA
+%token MEMORY DATA TABLE ELEM
 
 %on_error_reduce statement plaininstr separated_nonempty_list(",",structure_type_field) list(module_field) separated_nonempty_list(",",value_type) block_type separated_nonempty_list(",",function_parameter) list(label) list(attribute) list(typedef) list(legacy_catch) separated_nonempty_list(",",catch) separated_nonempty_list(",",let_pattern) blockinstr statement_list loption(separated_nonempty_list(",",catch)) separated_nonempty_list(",",expression) let_pattern structure_field separated_nonempty_list(",",structure_field) constant_expression attribute_expression parenthesized_expression index_expression then_branch condition_expression length_expression optional_function_type structure_type result_type_ expression_list structure
 
@@ -191,6 +191,8 @@ dummy_ctx: EOF { assert false }
    remain usable as ordinary identifiers. *)
 | MEMORY { with_loc $sloc "memory" }
 | DATA { with_loc $sloc "data" }
+| TABLE { with_loc $sloc "table" }
+| ELEM { with_loc $sloc "elem" }
 
 ident_or_keyword:
 | t = IDENT { t }
@@ -233,6 +235,8 @@ ident_or_keyword:
 | SWITCH { "switch" }
 | MEMORY { "memory" }
 | DATA { "data" }
+| TABLE { "table" }
+| ELEM { "elem" }
 | DISPATCH { "dispatch" }
 | INF { "inf" }
 | NAN { "nan" }
@@ -487,7 +491,7 @@ plaininstr:
 | "[" t = ident "|" ".." ";" i = length_expression "]"
   { with_loc $sloc (ArrayDefault (Some t, i)) }
 | "[" t = ident "|" d = ident "@" off = expression ";" len = length_expression "]"
-  { with_loc $sloc (ArrayData (Some t, d, off, len)) }
+  { with_loc $sloc (ArraySegment (Some t, d, off, len)) }
 | x = ident ":=" i = expression { with_loc $sloc (Tee (x, i)) }
 | i = expression AS t = cast_type { with_loc $sloc (Cast(i, t)) }
 | i = expression IS t = reference_type { with_loc $sloc (Test(i, t)) }
@@ -648,6 +652,8 @@ definition:
 | g = global { g }
 | m = memory { m }
 | d = data { d }
+| t = table { t }
+| e = elem { e }
 
 address_type:
 | t = IDENT
@@ -691,6 +697,24 @@ data:
   { fun attributes ->
       with_loc $sloc
         (Data {name = n; mode = Active (mem, off); init = s.desc; attributes}) }
+
+table:
+| TABLE name = ident ":" rt = reference_type lim = ioption(mem_limits) ";"
+  { fun attributes ->
+      with_loc $sloc (Table {name; reftype = rt; limits = lim; attributes}) }
+
+elem:
+| ELEM name = ident ":" rt = reference_type "=" "[" l = expression_list "]" ";"
+  { fun attributes ->
+      with_loc $sloc
+        (Elem {name; reftype = rt; mode = EPassive; init = l; attributes}) }
+| ELEM name = ident ":" rt = reference_type
+  "@" tab = ident "[" off = constant_expression "]"
+  "=" "[" l = expression_list "]" ";"
+  { fun attributes ->
+      with_loc $sloc
+        (Elem {name; reftype = rt; mode = EActive (tab, off); init = l;
+               attributes}) }
 
 module_field:
 | r = rectype { {desc = Type r.desc; info = r.info} }

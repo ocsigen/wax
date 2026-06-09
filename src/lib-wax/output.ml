@@ -454,7 +454,7 @@ let get_prec (i : _ Ast.instr) =
   | Block _ | Loop _ | If _ | Try _ | TryTable _ | If_annotation _ -> Atom
   | Unreachable | Nop | Hole | Null | Get _ | Char _ | String _ | Int _
   | Float _ | Struct _ | StructDefault _ | Array _ | ArrayDefault _
-  | ArrayFixed _ | ArrayData _ | ArrayGet _ | ArraySet _ | Sequence _ ->
+  | ArrayFixed _ | ArraySegment _ | ArrayGet _ | ArraySet _ | Sequence _ ->
       Atom
   | Set _ | Tee _ -> Assignement
   | Call _ | TailCall _ -> CallAndFieldAccess
@@ -480,7 +480,7 @@ let is_block (i : _ Ast.instr) =
   | Call _ | Unreachable | Nop | Hole | Null | Get _ | Set _ | Tee _
   | TailCall _ | Char _ | String _ | Int _ | Float _ | Cast _ | Test _
   | NonNull _ | Struct _ | StructDefault _ | StructGet _ | StructSet _ | Array _
-  | ArrayDefault _ | ArrayFixed _ | ArrayData _ | ArrayGet _ | ArraySet _
+  | ArrayDefault _ | ArrayFixed _ | ArraySegment _ | ArrayGet _ | ArraySet _
   | BinOp _ | UnOp _ | Let _ | Br _ | Br_if _ | Br_table _ | Br_on_null _
   | Br_on_non_null _ | Br_on_cast _ | Br_on_cast_fail _ | Throw _ | ThrowRef _
   | ContNew _ | ContBind _ | Suspend _ | Resume _ | ResumeThrow _
@@ -506,7 +506,7 @@ let rec starts_with_block_prec prec (i : 'a Ast.instr) =
     | Select (i, _, _) -> starts_with_block_prec Select i
     | Unreachable | Nop | Hole | Null | Get _ | Set _ | Tee _ | TailCall _
     | Char _ | String _ | Int _ | Float _ | Struct _ | StructDefault _ | Array _
-    | ArrayDefault _ | ArrayFixed _ | ArrayData _ | Let _ | Br _ | Br_if _
+    | ArrayDefault _ | ArrayFixed _ | ArraySegment _ | Let _ | Br _ | Br_if _
     | Br_table _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
     | Br_on_cast_fail _ | Throw _ | ThrowRef _ | ContNew _ | ContBind _
     | Suspend _ | Resume _ | ResumeThrow _ | ResumeThrowRef _ | Switch _
@@ -803,7 +803,7 @@ let rec instr prec pp (i : _ instr) =
               instr (array_element_precedence nm first i) ctx i)
             pp
             (List.mapi (fun n i -> (n = 0, i)) l))
-  | ArrayData (nm, d, off, len) ->
+  | ArraySegment (nm, d, off, len) ->
       array_instr pp nm (fun () ->
           identifier pp d.desc;
           space pp ();
@@ -1205,6 +1205,57 @@ let rec modulefield pp field =
               punctuation pp "=";
               space pp ();
               print_data_bytes pp init;
+              punctuation pp ";"))
+  | Table { name; reftype = rt; limits; attributes = a } ->
+      print_attr_prefix pp a (fun () ->
+          box pp (fun () ->
+              keyword pp "table";
+              space pp ();
+              identifier pp name.desc;
+              punctuation pp ":";
+              space pp ();
+              reftype pp rt;
+              Option.iter
+                (fun (mi, ma) ->
+                  space pp ();
+                  punctuation pp "[";
+                  constant pp (Utils.Uint64.to_string mi);
+                  Option.iter
+                    (fun m ->
+                      punctuation pp ",";
+                      space pp ();
+                      constant pp (Utils.Uint64.to_string m))
+                    ma;
+                  punctuation pp "]")
+                limits;
+              punctuation pp ";"))
+  | Elem { name; reftype = rt; mode; init; attributes = a } ->
+      print_attr_prefix pp a (fun () ->
+          box pp (fun () ->
+              keyword pp "elem";
+              space pp ();
+              identifier pp name.desc;
+              punctuation pp ":";
+              space pp ();
+              reftype pp rt;
+              (match mode with
+              | EPassive -> ()
+              | EActive (tab, off) ->
+                  space pp ();
+                  operator pp "@";
+                  space pp ();
+                  identifier pp tab.desc;
+                  space pp ();
+                  punctuation pp "[";
+                  instr Instruction pp off;
+                  punctuation pp "]");
+              space pp ();
+              punctuation pp "=";
+              space pp ();
+              punctuation pp "[";
+              box pp (fun () ->
+                  list_commasep (fun pp i -> instr Instruction pp i) pp init);
+              punctuation pp "]";
               punctuation pp ";"))
   | Group { attributes; fields } ->
       print_attr_prefix pp attributes (fun () ->

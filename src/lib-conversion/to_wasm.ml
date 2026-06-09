@@ -9,6 +9,8 @@ type ctx = {
   globals : (string, unit) Hashtbl.t;
   functions : (string, unit) Hashtbl.t;
   memories : (string, unit) Hashtbl.t;
+  tables : (string, reftype) Hashtbl.t;
+  elems : (string, unit) Hashtbl.t;
   mutable locals : string StringMap.t;
   allocated_locals : (Text.name option * Text.valtype) list ref;
   namespace : Namespace.t;
@@ -459,6 +461,32 @@ let rec instruction ret ctx i : location Text.instr list =
           folded loc
             (ArrayCopy (index type_a1, index type_a2))
             (a1_code @ arg_code)
+      (* Indirect call: re-fuse [(tab[i] as &$ft)(args)] (and the cast-free
+         [tab[i](args)] when the table element is already a concrete &$ft) back
+         to [call_indirect]. *)
+      | Cast
+          ( { desc = ArrayGet ({ desc = Get tab; _ }, idx_expr); _ },
+            Valtype (Ref { typ = Type ft; _ }) )
+        when Hashtbl.mem ctx.tables tab.desc ->
+          let index_code = instruction ret ctx idx_expr in
+          folded loc
+            (CallIndirect (index tab, (Some (index ft), None)))
+            (arg_code @ index_code)
+      | ArrayGet ({ desc = Get tab; _ }, idx_expr)
+        when Hashtbl.mem ctx.tables tab.desc
+             &&
+             match Hashtbl.find ctx.tables tab.desc with
+             | { typ = Type _; _ } -> true
+             | _ -> false ->
+          let ft =
+            match Hashtbl.find ctx.tables tab.desc with
+            | { typ = Type ft; _ } -> ft
+            | _ -> assert false
+          in
+          let index_code = instruction ret ctx idx_expr in
+          folded loc
+            (CallIndirect (index tab, (Some (index ft), None)))
+            (arg_code @ index_code)
       | _ ->
           let code = instruction ret ctx f in
           folded loc (CallRef (index (expr_type_name f))) (arg_code @ code))
@@ -468,6 +496,29 @@ let rec instruction ret ctx i : location Text.instr list =
       match f.desc with
       | Get idx when Hashtbl.mem ctx.functions idx.desc ->
           folded loc (ReturnCall (index idx)) arg_code
+      | Cast
+          ( { desc = ArrayGet ({ desc = Get tab; _ }, idx_expr); _ },
+            Valtype (Ref { typ = Type ft; _ }) )
+        when Hashtbl.mem ctx.tables tab.desc ->
+          let index_code = instruction ret ctx idx_expr in
+          folded loc
+            (ReturnCallIndirect (index tab, (Some (index ft), None)))
+            (arg_code @ index_code)
+      | ArrayGet ({ desc = Get tab; _ }, idx_expr)
+        when Hashtbl.mem ctx.tables tab.desc
+             &&
+             match Hashtbl.find ctx.tables tab.desc with
+             | { typ = Type _; _ } -> true
+             | _ -> false ->
+          let ft =
+            match Hashtbl.find ctx.tables tab.desc with
+            | { typ = Type ft; _ } -> ft
+            | _ -> assert false
+          in
+          let index_code = instruction ret ctx idx_expr in
+          folded loc
+            (ReturnCallIndirect (index tab, (Some (index ft), None)))
+            (arg_code @ index_code)
       | _ ->
           let code = instruction ret ctx f in
           folded loc (ReturnCallRef (index (expr_type_name f))) (arg_code @ code)
@@ -728,16 +779,31 @@ let rec instruction ret ctx i : location Text.instr list =
       let args_code = List.concat_map (instruction ret ctx) instrs in
       let len = Uint32.of_int (List.length instrs) in
       folded loc (ArrayNewFixed (index idx, len)) args_code
-  | ArrayData (opt_idx, d, off_instr, len_instr) ->
+  | ArraySegment (opt_idx, seg, off_instr, len_instr) ->
       let idx = Option.value ~default:(expr_type_name i) opt_idx in
-      folded loc
-        (ArrayNewData (index idx, index d))
+      (* An element segment means [array.new_elem]; otherwise a data segment. *)
+      let desc : _ Text.instr_desc =
+        if Hashtbl.mem ctx.elems seg.desc then
+          ArrayNewElem (index idx, index seg)
+        else ArrayNewData (index idx, index seg)
+      in
+      folded loc desc
         (instruction ret ctx off_instr @ instruction ret ctx len_instr)
+  (* [tab[i]] on a table name is [table.get]. *)
+  | ArrayGet ({ desc = Get name; _ }, idx_instr)
+    when Hashtbl.mem ctx.tables name.desc ->
+      folded loc (TableGet (index name)) (instruction ret ctx idx_instr)
   | ArrayGet (arr_instr, idx_instr) ->
       (* Signed accesses are under a cast *)
       folded loc
         (ArrayGet (None, index (expr_type_name arr_instr)))
         (instruction ret ctx arr_instr @ instruction ret ctx idx_instr)
+  (* [tab[i] = v] on a table name is [table.set]. *)
+  | ArraySet ({ desc = Get name; _ }, idx_instr, val_instr)
+    when Hashtbl.mem ctx.tables name.desc ->
+      folded loc
+        (TableSet (index name))
+        (instruction ret ctx idx_instr @ instruction ret ctx val_instr)
   | ArraySet (arr_instr, idx_instr, val_instr) ->
       folded loc
         (ArraySet (index (expr_type_name arr_instr)))
@@ -1013,6 +1079,8 @@ let module_ diagnostics types fields =
       globals = Hashtbl.create 16;
       functions = Hashtbl.create 16;
       memories = Hashtbl.create 16;
+      tables = Hashtbl.create 16;
+      elems = Hashtbl.create 16;
       locals = StringMap.empty;
       allocated_locals = ref [];
       namespace = Namespace.make ();
@@ -1052,6 +1120,9 @@ let module_ diagnostics types fields =
       | Global { name; _ } -> Hashtbl.replace ctx.globals name.desc ()
       | Fundecl { name; _ } -> Hashtbl.replace ctx.functions name.desc ()
       | Memory { name; _ } -> Hashtbl.replace ctx.memories name.desc ()
+      | Table { name; reftype = rt; _ } ->
+          Hashtbl.replace ctx.tables name.desc rt
+      | Elem { name; _ } -> Hashtbl.replace ctx.elems name.desc ()
       | Tag _ | Data _ | Group _ | Conditional _ -> ())
     fields;
   let rec convert_fields fields =
@@ -1126,6 +1197,53 @@ let module_ diagnostics types fields =
                       init = [ { desc = init; info = field.info } ];
                       mode;
                     };
+              };
+            ]
+        | Table { name; reftype = rt; limits; attributes } ->
+            let exports = exports attributes in
+            let mi, ma =
+              match limits with
+              | Some (mi, ma) -> (mi, ma)
+              | None -> (Utils.Uint64.of_int 0, None)
+            in
+            let typ : Text.tabletype =
+              {
+                limits = Ast.no_loc { Ast.mi; ma; address_type = `I32 };
+                reftype = reftype rt;
+              }
+            in
+            let table_field =
+              match import attributes with
+              | Some (module_, import_name) ->
+                  Text.Import
+                    {
+                      module_;
+                      name = import_name;
+                      id = Some name;
+                      desc = Table typ;
+                      exports;
+                    }
+              | None ->
+                  Text.Table
+                    { id = Some name; typ; init = Init_default; exports }
+            in
+            [ { field with desc = table_field } ]
+        | Elem { name; reftype = rt; mode; init; _ } ->
+            let ictx =
+              { ctx with referenced_functions = func_refs_outside_func }
+            in
+            let mode : _ Text.elemmode =
+              match mode with
+              | EPassive -> Passive
+              | EActive (tab, off) ->
+                  Active (index tab, instruction None ictx off)
+            in
+            let init = List.map (fun e -> instruction None ictx e) init in
+            [
+              {
+                field with
+                desc =
+                  Text.Elem { id = Some name; typ = reftype rt; init; mode };
               };
             ]
         | Conditional { cond; then_fields; else_fields } ->
@@ -1248,7 +1366,9 @@ let module_ diagnostics types fields =
                       instrs;
                       exports = exports attributes;
                     }
-              | Group _ | Conditional _ | Memory _ | Data _ -> assert false
+              | Group _ | Conditional _ | Memory _ | Data _ | Table _ | Elem _
+                ->
+                  assert false
             in
             [ { field with desc } ])
       fields
