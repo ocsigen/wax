@@ -78,6 +78,11 @@
 %on_error_reduce statement plaininstr separated_nonempty_list(",",structure_type_field) list(module_field) separated_nonempty_list(",",value_type) block_type separated_nonempty_list(",",function_parameter) list(label) list(attribute) list(typedef) list(legacy_catch) separated_nonempty_list(",",catch) separated_nonempty_list(",",let_pattern) blockinstr statement_list loption(separated_nonempty_list(",",catch)) separated_nonempty_list(",",expression) let_pattern structure_field separated_nonempty_list(",",structure_field) constant_expression attribute_expression parenthesized_expression index_expression then_branch condition_expression length_expression optional_function_type structure_type result_type_ expression_list structure
 
 
+(* Dangling [#[else]]: an [#[else]] binds to the nearest [#[if]], i.e. shifting
+   is preferred over reducing the empty [else_clause]. *)
+%nonassoc prec_no_else
+%nonassoc "#[else]"
+
 %nonassoc prec_ident (* {a|...} *) prec_block
 %right prec_branch
 %right ":=" "="
@@ -638,7 +643,7 @@ module_field:
   { with_loc $sloc (Conditional {cond = c; then_fields = [t]; else_fields = e}) }
 
 else_clause:
-| { None }
+| %prec prec_no_else { None }
 | "#[else]" e = module_field { Some [e] }
 
 (* Conditions of conditional annotations. Reuse the WAT-level [Wasm.Ast.cond]
