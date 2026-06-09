@@ -853,9 +853,6 @@ let rec token_rec ctx lexbuf =
   | "i64.extend32_s" -> INSTR (UnOp (I64 (ExtendS `_32)))
   | "extern.convert_any" -> INSTR ExternConvertAny
   | "any.convert_extern" -> INSTR AnyConvertExtern
-  | "tuple" -> TUPLE
-  | "tuple.make" -> TUPLE_MAKE
-  | "tuple.extract" -> TUPLE_EXTRACT
   | "tag" -> TAG
   | "try" -> TRY
   | "try_table" -> TRY_TABLE

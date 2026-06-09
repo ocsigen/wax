@@ -1323,7 +1323,7 @@
          (struct.get $extern_state $size_32 (local.get $s)))
       (call $store32 (local.get $header) (i32.const 16)
          (struct.get $extern_state $size_64 (local.get $s)))
-      (tuple.make 3 (local.get $len) (local.get $header) (local.get $s)))
+      (local.get $len) (local.get $header) (local.get $s))
 
    (func (export "caml_output_value_to_string")
       (param $v (ref eq)) (param $flags (ref eq)) (result (ref eq))

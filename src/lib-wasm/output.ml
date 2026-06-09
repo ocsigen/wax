@@ -292,7 +292,7 @@ let reftype { nullable; typ } =
       let r = [ heaptype typ ] in
       list (type_ "ref" :: (if nullable then type_ "null" :: r else r))
 
-let rec valtype (t : valtype) =
+let valtype (t : valtype) =
   match t with
   | I32 -> type_ "i32"
   | I64 -> type_ "i64"
@@ -300,7 +300,6 @@ let rec valtype (t : valtype) =
   | F64 -> type_ "f64"
   | V128 -> type_ "v128"
   | Ref ty -> reftype ty
-  | Tuple l -> list (type_ "tuple" :: List.map valtype l)
 
 let packedtype t = match t with I8 -> type_ "i8" | I16 -> type_ "i16"
 
@@ -1059,15 +1058,6 @@ let rec instr i =
       block ~loc [ instruction "struct.set"; index typ; index i ]
   | ReturnCall f -> block ~loc [ instruction "return_call"; index f ]
   | ReturnCallRef typ -> block ~loc [ instruction "return_call_ref"; index typ ]
-  | TupleMake i ->
-      block ~loc [ instruction "tuple.make"; u32 ~style:Constant i ]
-  | TupleExtract (i, j) ->
-      block ~loc
-        [
-          instruction "tuple.extract";
-          u32 ~style:Constant i;
-          u32 ~style:Constant j;
-        ]
   | Folded ({ desc = If { label; typ; if_block; else_block }; _ }, l) ->
       (* Give each clause the location of its (then ...)/(else ...) group so
          a comment trailing the clause attaches to it. *)

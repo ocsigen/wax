@@ -283,7 +283,7 @@ let blocktype_arity env t =
   | Some (Typeuse t) -> typeuse_arity env t
 
 let function_arity env f = typeuse_arity env (lookup env.outer_env.functions f)
-let valtype_arity t = match t with Tuple l -> List.length l | _ -> 1
+let valtype_arity (_ : valtype) = 1
 let globaltype_arity (t : globaltype) = valtype_arity t.typ
 let global_arity env g = globaltype_arity (lookup env.outer_env.globals g)
 
@@ -453,8 +453,6 @@ let arity env i =
   | Folded _ -> assert false
   (* Binaryen extensions *)
   | Pop _ -> (0, 1)
-  | TupleMake n -> (Uint32.to_int n, Uint32.to_int n)
-  | TupleExtract (n, _) -> (Uint32.to_int n, 1)
   | VecTernOp _ -> (3, 1)
   | String _ | Char _ -> (0, 1)
   (* A conditional annotation is treated as a statement boundary: its branches

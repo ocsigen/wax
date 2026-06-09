@@ -86,14 +86,14 @@
   (param $s (ref eq)) (param $v (ref eq)) (result i32 i32)
   (call $caml_serialize_int_4 (local.get $s)
     (struct.get $int32 1 (ref.cast (ref $int32) (local.get $v))))
-  (tuple.make 2 (i32.const 4) (i32.const 4))
+  (i32.const 4)
+  (i32.const 4)
 )
 
 (func $int32_deserialize (param $s (ref eq)) (result (ref eq) i32)
-  (tuple.make 2
-    (struct.new $int32 (global.get $int32_ops)
-      (call $caml_deserialize_int_4 (local.get $s)))
-    (i32.const 4))
+  (struct.new $int32 (global.get $int32_ops)
+    (call $caml_deserialize_int_4 (local.get $s)))
+  (i32.const 4)
 )
 
 (func $int32_dup (param $v (ref eq)) (result (ref eq))
@@ -156,7 +156,8 @@
   (call $caml_serialize_int_1 (local.get $s) (i32.const 1))
   (call $caml_serialize_int_4 (local.get $s)
     (struct.get $int32 1 (ref.cast (ref $int32) (local.get $v))))
-  (tuple.make 2 (i32.const 4) (i32.const 8))
+  (i32.const 4)
+  (i32.const 8)
 )
 
 (data $integer_too_large "input_value: native integer value too large")
@@ -167,10 +168,9 @@
       (call $caml_failwith
         (array.new_data $string $integer_too_large (i32.const 0)
           (i32.const 43)))))
-  (tuple.make 2
-    (struct.new $int32 (global.get $nativeint_ops)
-      (call $caml_deserialize_int_4 (local.get $s)))
-    (i32.const 4))
+  (struct.new $int32 (global.get $nativeint_ops)
+    (call $caml_deserialize_int_4 (local.get $s)))
+  (i32.const 4)
 )
 
 (func $caml_copy_nativeint (export "caml_copy_nativeint")

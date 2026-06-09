@@ -245,8 +245,10 @@
       (br_if $return (i32.le_u (local.get $conversion) (i32.const 2))))
     (call $caml_invalid_argument
       (array.new_data $string $format_error (i32.const 0) (i32.const 22))))
-  (tuple.make 4 (local.get $sign_style) (local.get $precision)
-    (local.get $conversion) (local.get $uppercase))
+  (local.get $sign_style)
+  (local.get $precision)
+  (local.get $conversion)
+  (local.get $uppercase)
 )
 
 (global $inf (ref $chars)
@@ -784,15 +786,14 @@
           (local.set $e)
           (local.set $m)
           (return (local.get $m) (i32.sub (local.get $e) (i32.const 64))))
-        (else (return (tuple.make 2 (local.get $x) (i32.const 0))))))
+        (else (return (local.get $x) (i32.const 0)))))
     (else
       (if (i32.eq (local.get $e) (i32.const 0x7ff))
-        (then (return (tuple.make 2 (local.get $x) (i32.const 0)))))))
-  (tuple.make 2
-    (f64.reinterpret_i64
-      (i64.or (i64.and (local.get $y) (i64.const 0x800fffffffffffff))
-        (i64.const 0x3fe0000000000000)))
-    (i32.sub (local.get $e) (i32.const 0x3fe)))
+        (then (return (local.get $x) (i32.const 0))))))
+  (f64.reinterpret_i64
+    (i64.or (i64.and (local.get $y) (i64.const 0x800fffffffffffff))
+      (i64.const 0x3fe0000000000000)))
+  (i32.sub (local.get $e) (i32.const 0x3fe))
 )
 
 (func (export "caml_frexp_float") (param (ref eq)) (result (ref eq))

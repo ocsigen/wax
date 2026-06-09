@@ -89,14 +89,14 @@
   (param $s (ref eq)) (param $v (ref eq)) (result i32 i32)
   (call $caml_serialize_int_8 (local.get $s)
     (struct.get $int64 1 (ref.cast (ref $int64) (local.get $v))))
-  (tuple.make 2 (i32.const 8) (i32.const 8))
+  (i32.const 8)
+  (i32.const 8)
 )
 
 (func $int64_deserialize (param $s (ref eq)) (result (ref eq) i32)
-  (tuple.make 2
-    (struct.new $int64 (global.get $int64_ops)
-      (call $caml_deserialize_int_8 (local.get $s)))
-    (i32.const 8))
+  (struct.new $int64 (global.get $int64_ops)
+    (call $caml_deserialize_int_8 (local.get $s)))
+  (i32.const 8)
 )
 
 (func $int64_dup (param $v (ref eq)) (result (ref eq))

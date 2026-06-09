@@ -77,9 +77,8 @@
                      (local.set $signedness (i32.const 0))
                      (local.set $i (i32.add (local.get $i)
                         (i32.const 2)))))))))))))))
-      (tuple.make 4
-         (local.get $i) (local.get $signedness) (local.get $sign)
-         (local.get $base)))
+      (local.get $i) (local.get $signedness) (local.get $sign)
+      (local.get $base))
 
    (func $parse_digit (export "parse_digit") (param $c i32) (result i32)
       (if (i32.and (i32.ge_u (local.get $c) (i32.const 48))
@@ -285,12 +284,11 @@
          (call $caml_invalid_argument
             (array.new_data $string $format_error
                (i32.const 0) (i32.const 22))))
-      (tuple.make 5
-         (local.get $sign_style)
-         (local.get $alternate)
-         (local.get $signed)
-         (local.get $base)
-         (local.get $uppercase)))
+      (local.get $sign_style)
+      (local.get $alternate)
+      (local.get $signed)
+      (local.get $base)
+      (local.get $uppercase))
 
    (func $format_int (export "format_int")
       (param (ref eq)) (param $d i32) (param $small i32) (result (ref eq))

@@ -51,7 +51,6 @@ and valtype ty : Text.valtype =
   | F64 -> F64
   | V128 -> V128
   | Ref { nullable; typ } -> Ref { nullable; typ = heaptype typ }
-  | Tuple l -> Tuple (List.map valtype l)
 
 let reftype r : Text.reftype = { nullable = r.nullable; typ = heaptype r.typ }
 let unpack_type f = match f with Value v -> v | Packed _ -> I32

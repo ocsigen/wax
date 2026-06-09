@@ -44,7 +44,6 @@ let print_valtype f ty =
       if nullable then
         Format.fprintf f "@[<1>(ref@ null@ %a)@]" print_heaptype typ
       else Format.fprintf f "@[<1>(ref@ %a)@]" print_heaptype typ
-  | Tuple _ -> Format.fprintf f "tuple"
 
 let print_string f s =
   let s = s.Ast.desc in
@@ -324,12 +323,6 @@ module Error = struct
         Format.fprintf f "Type %a should be an array type." print_index idx)
       ()
 
-  let unsupported_tuple_type context ~location =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f "Tuple types are not supported yet.")
-      ()
-
   let expected_cont_type context ~location idx =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
@@ -537,9 +530,6 @@ let valtype d ctx (ty : Ast.Text.valtype) =
   | Ref r ->
       let+@ ty = reftype d ctx r in
       Ref ty
-  | Tuple _ ->
-      Error.unsupported_tuple_type d ~location:(Ast.no_loc ()).info;
-      None
 
 let array_map_opt f arr =
   let exception Short_circuit in
@@ -862,12 +852,9 @@ let is_defaultable ty =
   match ty with
   | I32 | I64 | F32 | F64 | V128 -> true
   | Ref { nullable; _ } -> nullable
-  | Tuple _ -> assert false
 
 let number_or_vec ty =
-  match ty with
-  | I32 | I64 | F32 | F64 | V128 -> true
-  | Ref _ | Tuple _ -> false
+  match ty with I32 | I64 | F32 | F64 | V128 -> true | Ref _ -> false
 
 let int_un_op_type ty (op : Ast.Text.int_un_op) =
   match op with
@@ -1078,8 +1065,7 @@ let field_has_default (ty : fieldtype) =
   | Value ty -> (
       match ty with
       | I32 | I64 | F32 | F64 | V128 -> true
-      | Ref { nullable; _ } -> nullable
-      | Tuple _ -> assert false)
+      | Ref { nullable; _ } -> nullable)
 
 let shape_type (shape : Ast.vec_shape) =
   match shape with
@@ -1898,7 +1884,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       ignore (Sequence.get ctx.modul.diagnostics ctx.modul.data idx');
       (match field.typ with
       | Packed _ | Value (I32 | I64 | F32 | F64 | V128) -> ()
-      | Value (Ref _ | Tuple _) ->
+      | Value (Ref _) ->
           Error.numeric_array_required ctx.modul.diagnostics ~location:i.info);
       let* () = pop ctx loc I32 in
       let* () = pop ctx loc I32 in
@@ -1965,7 +1951,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
         Error.immutable ctx.modul.diagnostics ~location:i.info "array";
       (match field.typ with
       | Packed _ | Value (I32 | I64 | F32 | F64 | V128) -> ()
-      | Value (Ref _ | Tuple _) ->
+      | Value (Ref _) ->
           Error.numeric_array_required ctx.modul.diagnostics ~location:i.info);
       let* () = pop ctx loc I32 in
       let* () = pop ctx loc I32 in
@@ -2061,22 +2047,15 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
   | Folded (i, l) ->
       let* () = instructions ctx l in
       instruction ctx i
-  | TupleMake _ -> return ()
   | Pop ty ->
       let*! ty = valtype ctx.modul.diagnostics ctx.modul.types ty in
       let* () = pop ctx loc ty in
       push (Some loc) ty
-  (*
-    (* Binaryen extensions *)
-    | Pop of X.valtype
-    | TupleMake of Int32.t
-    | TupleExtract of Int32.t * Int32.t
-*)
   | String (Some idx, _) ->
       let*! ty, field = lookup_array_type ctx idx in
       (match field.typ with
       | Value (I32 | I64 | F32 | F64) | Packed _ -> ()
-      | Value (Ref _ | V128 | Tuple _) ->
+      | Value (Ref _ | V128) ->
           Error.numeric_array_required ctx.modul.diagnostics ~location:i.info);
       push (Some loc) (Ref { nullable = false; typ = Type ty })
   | String (None, _) ->
@@ -2085,9 +2064,6 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
   | Char _ -> push (Some loc) I32
   | If_annotation _ ->
       failwith "Conditional annotations are not supported by the validator."
-  | TupleExtract _ ->
-      Format.eprintf "%a@." print_instr i;
-      raise Exit
 
 and instructions ctx l =
   match l with
@@ -2154,7 +2130,7 @@ let rec check_constant_instruction ctx (i : _ Ast.Text.instr) =
   | VecBitselect | VecUnOp _ | VecBinOp _ | VecTest _ | VecShift _
   | VecBitmask _ | VecLoad _ | VecStore _ | VecLoadLane _ | VecStoreLane _
   | VecLoadSplat _ | VecExtract _ | VecReplace _ | VecSplat _ | VecShuffle _
-  | VecTernOp _ | TupleMake _ | TupleExtract _ | If_annotation _ ->
+  | VecTernOp _ | If_annotation _ ->
       Error.constant_expression_required ctx.diagnostics ~location:i.info
 
 and check_constant_instructions ctx l =
@@ -2290,11 +2266,10 @@ and register_typeuses' d ctx (i : _ Ast.Text.instr) =
   | ArrayGet _ | ArraySet _ | ArrayLen | ArrayFill _ | ArrayCopy _
   | ArrayInitData _ | ArrayInitElem _ | RefI31 | I31Get _ | Const _ | UnOp _
   | BinOp _ | I32WrapI64 | I64ExtendI32 _ | F32DemoteF64 | F64PromoteF32
-  | ExternConvertAny | AnyConvertExtern | Pop _ | TupleMake _ | TupleExtract _
-  | VecBitselect | VecConst _ | VecUnOp _ | VecBinOp _ | VecTest _ | VecShift _
-  | VecBitmask _ | VecLoad _ | VecStore _ | VecLoadLane _ | VecStoreLane _
-  | VecLoadSplat _ | VecExtract _ | VecReplace _ | VecSplat _ | VecShuffle _
-  | VecTernOp _ | Char _ ->
+  | ExternConvertAny | AnyConvertExtern | Pop _ | VecBitselect | VecConst _
+  | VecUnOp _ | VecBinOp _ | VecTest _ | VecShift _ | VecBitmask _ | VecLoad _
+  | VecStore _ | VecLoadLane _ | VecStoreLane _ | VecLoadSplat _ | VecExtract _
+  | VecReplace _ | VecSplat _ | VecShuffle _ | VecTernOp _ | Char _ ->
       ()
 
 let build_initial_env ctx fields =
@@ -2787,7 +2762,7 @@ let eq_reftype r1 r2 =
   r1.Ast.Text.nullable = r2.Ast.Text.nullable
   && eq_heaptype r1.Ast.Text.typ r2.Ast.Text.typ
 
-let rec eq_valtype v1 v2 =
+let eq_valtype v1 v2 =
   let open Ast.Text in
   match (v1, v2) with
   | Ast.Text.Types.I32, Ast.Text.Types.I32
@@ -2797,8 +2772,6 @@ let rec eq_valtype v1 v2 =
   | Ast.Text.Types.V128, Ast.Text.Types.V128 ->
       true
   | Ref r1, Ref r2 -> eq_reftype r1 r2
-  | Tuple l1, Tuple l2 ->
-      List.length l1 = List.length l2 && List.for_all2 eq_valtype l1 l2
   | _ -> false
 
 let eq_functype (f1 : Ast.Text.functype) (f2 : Ast.Text.functype) =

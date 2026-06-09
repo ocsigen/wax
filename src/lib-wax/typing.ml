@@ -260,12 +260,6 @@ module Error = struct
         Format.fprintf f "This expression occurs before a hole '_'.")
       ()
 
-  let unsupported_tuple_type context ~location =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f "Tuple types are not supported yet.")
-      ()
-
   let duplicated_field context ~location x =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
@@ -502,9 +496,6 @@ let valtype d ctx ty : Internal.valtype option =
   | Ref r ->
       let+@ ty = reftype d ctx r in
       (Ref ty : Internal.valtype)
-  | Tuple _ ->
-      Error.unsupported_tuple_type d ~location:(Ast.no_loc ()).info;
-      None
 
 let array_map_opt f arr =
   let exception Short_circuit in
@@ -752,23 +743,16 @@ let subtype ctx ty ty' =
       | Valtype
           {
             internal =
-              ( I32 | I64 | F32 | F64 | V128
-              | Ref { nullable = false; _ }
-              | Tuple _ );
+              I32 | I64 | F32 | F64 | V128 | Ref { nullable = false; _ };
             _;
           } ) )
   | Valtype _, Null
-  | Valtype { internal = V128 | Ref _ | Tuple _; _ }, Number
-  | Valtype { internal = F32 | F64 | V128 | Ref _ | Tuple _; _ }, Int
-  | Valtype { internal = I32 | I64 | V128 | Ref _ | Tuple _; _ }, Float
-  | ( Number,
-      (Null | Int | Float | Valtype { internal = V128 | Ref _ | Tuple _; _ }) )
-  | ( Int,
-      ( Null | Float
-      | Valtype { internal = F32 | F64 | V128 | Ref _ | Tuple _; _ } ) )
-  | ( Float,
-      (Null | Int | Valtype { internal = I32 | I64 | V128 | Ref _ | Tuple _; _ })
-    )
+  | Valtype { internal = V128 | Ref _; _ }, Number
+  | Valtype { internal = F32 | F64 | V128 | Ref _; _ }, Int
+  | Valtype { internal = I32 | I64 | V128 | Ref _; _ }, Float
+  | Number, (Null | Int | Float | Valtype { internal = V128 | Ref _; _ })
+  | Int, (Null | Float | Valtype { internal = F32 | F64 | V128 | Ref _; _ })
+  | Float, (Null | Int | Valtype { internal = I32 | I64 | V128 | Ref _; _ })
   | (Int8 | Int16), _
   | _, (Int8 | Int16) ->
       false
@@ -829,16 +813,14 @@ let cast ctx ty ty' =
               | Any | Eq | Array | Struct | Type _ | None_ );
             _;
           }
-      | V128 | Tuple _ ) )
+      | V128 ) )
   | Valtype { internal = F32 | F64; _ }, (I32 | I64)
   | Valtype { internal = I32 | I64; _ }, (F32 | F64)
   | Valtype { internal = I32; _ }, I64
   | ( (Float | Valtype { internal = I64 | F32 | F64 | V128; _ }),
       (I32 | Ref { typ = I31; _ }) )
-  | ( (Null | Valtype { internal = Ref _; _ }),
-      (I32 | I64 | F32 | F64 | V128 | Tuple _) )
-  | Valtype { internal = V128; _ }, (I64 | F32 | F64 | Ref _ | Tuple _)
-  | Valtype { internal = Tuple _; _ }, _
+  | (Null | Valtype { internal = Ref _; _ }), (I32 | I64 | F32 | F64 | V128)
+  | Valtype { internal = V128; _ }, (I64 | F32 | F64 | Ref _)
   | (Int8 | Int16), _ ->
       false
   | Unknown, _ -> true
@@ -888,8 +870,7 @@ let signed_cast ctx ty ty' =
                       ( Func | NoFunc | Exn | NoExn | Cont | NoCont | Extern
                       | NoExtern );
                     _;
-                  }
-              | Tuple _ );
+                  } );
             _;
           } ),
       _ ) ->
@@ -1057,8 +1038,7 @@ let field_has_default (ty : fieldtype) =
   | Value ty -> (
       match ty with
       | I32 | I64 | F32 | F64 | V128 -> true
-      | Ref { nullable; _ } -> nullable
-      | Tuple _ -> assert false)
+      | Ref { nullable; _ } -> nullable)
 
 let return_statement (i : location instr)
     (desc : (inferred_type UnionFind.t array * location) instr_desc)
@@ -1402,10 +1382,6 @@ let anon_function_type ctx (sign : functype) =
         Buffer.add_char buf '&';
         if nullable then Buffer.add_char buf '?';
         ht typ
-    | Tuple l ->
-        Buffer.add_char buf '(';
-        List.iter vt l;
-        Buffer.add_char buf ')'
   and ht (h : heaptype) =
     Buffer.add_string buf
       (match h with
@@ -2040,7 +2016,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
             (let>@ field = lookup_array_type ctx ty in
              match field.typ with
              | Value (I32 | I64 | F32 | F64) | Packed _ -> ()
-             | Value (Ref _ | V128 | Tuple _) -> assert false (*ZZZ*));
+             | Value (Ref _ | V128) -> assert false (*ZZZ*));
             ty
       in
       let*! typ = internalize ctx (Ref { nullable = false; typ = Type ty }) in

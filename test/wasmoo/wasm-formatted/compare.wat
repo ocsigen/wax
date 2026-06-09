@@ -118,8 +118,8 @@
         (global.get $dummy_block))
       (struct.set $compare_stack 0 (local.get $stack)
         (i32.sub (local.get $i) (i32.const 1)))))
-  (tuple.make 2 (array.get $block (local.get $v1) (local.get $p))
-    (array.get $block (local.get $v2) (local.get $p)))
+  (array.get $block (local.get $v1) (local.get $p))
+  (array.get $block (local.get $v2) (local.get $p))
 )
 
 (func $push_compare_stack

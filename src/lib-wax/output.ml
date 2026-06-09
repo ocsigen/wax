@@ -122,7 +122,6 @@ let rec valtype pp t =
   | F64 -> type_ pp "f64"
   | V128 -> type_ pp "v128"
   | Ref t -> reftype pp t
-  | Tuple l -> tuple false pp l
 
 and tuple always_paren pp l =
   match l with

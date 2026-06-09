@@ -31,7 +31,7 @@ let rec heaptype type_names (h : B.heaptype) : T.heaptype =
 and reftype type_names (r : B.reftype) : T.reftype =
   { nullable = r.nullable; typ = heaptype type_names r.typ }
 
-let rec valtype type_names (v : B.valtype) : T.valtype =
+let valtype type_names (v : B.valtype) : T.valtype =
   match v with
   | I32 -> I32
   | I64 -> I64
@@ -39,7 +39,6 @@ let rec valtype type_names (v : B.valtype) : T.valtype =
   | F64 -> F64
   | V128 -> V128
   | Ref r -> Ref (reftype type_names r)
-  | Tuple l -> Tuple (List.map (valtype type_names) l)
 
 let storagetype type_names (s : B.storagetype) : T.storagetype =
   match s with Value v -> Value (valtype type_names v) | Packed p -> Packed p
@@ -365,8 +364,6 @@ let rec instr (names : B.names) local_names label_names label_counter stack
     | VecShuffle v -> VecShuffle v
     | VecTernOp op -> VecTernOp op
     | Pop v -> Pop (valtype names.types v)
-    | TupleMake i -> TupleMake i
-    | TupleExtract (i1, i2) -> TupleExtract (i1, i2)
     | String _ | Char _ | If_annotation _ -> (*ZZZZ *) assert false
   in
   { desc; info = i.info }

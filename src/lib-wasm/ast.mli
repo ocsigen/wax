@@ -52,15 +52,7 @@ end) : sig
     | Type of X.idx
 
   type reftype = { nullable : bool; typ : heaptype }
-
-  type valtype =
-    | I32
-    | I64
-    | F32
-    | F64
-    | V128
-    | Ref of reftype
-    | Tuple of valtype list
+  type valtype = I32 | I64 | F32 | F64 | V128 | Ref of reftype
 
   type functype = {
     params : valtype X.opt_annotated_array;
@@ -571,8 +563,6 @@ end) : sig
     | Folded of 'info instr * 'info instr list
     (* Binaryen extensions *)
     | Pop of X.valtype
-    | TupleMake of Uint32.t
-    | TupleExtract of Uint32.t * Uint32.t
     (* Our extensions *)
     | String of X.idx option * (string, location) annotated list
     | Char of Uchar.t

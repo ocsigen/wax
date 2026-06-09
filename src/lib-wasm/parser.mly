@@ -167,9 +167,6 @@ ZZZ
 %token <string> MEM_OFFSET
 (* Binaryen extensions *)
 %token POP
-%token TUPLE
-%token TUPLE_MAKE
-%token TUPLE_EXTRACT
 %token STRING_ANNOT CHAR_ANNOT
 %token IF_ANNOT THEN_ANNOT ELSE_ANNOT
 %token AND OR NOT
@@ -358,9 +355,6 @@ reference_type:
 | EXTERNREF { {nullable = true; typ = Extern} }
 | NULLEXTERNREF { {nullable = true; typ = NoExtern} }
 
-tupletype:
-| "(" TUPLE l = list(value_type) ")" { l }
-
 value_type:
 | I32 { I32 }
 | I64 { I64 }
@@ -368,7 +362,6 @@ value_type:
 | F64 { F64 }
 | V128 { V128 }
 | t = reference_type { Ref t }
-| t = tupletype { Tuple t }
 
 functype:
 | "(" FUNC r = parameters_and_results ")"{ r }
@@ -668,9 +661,6 @@ plain_instruction:
       (VecStoreLane (i, op, m (lane_width op), int_of_string l)) }
 | op = VEC_LOAD_SPLAT i = memindex m = memarg
   { with_loc $sloc (VecLoadSplat (i, op, m (lane_width op))) }
-| TUPLE_MAKE l = u32 { with_loc $sloc (TupleMake l) }
-| TUPLE_EXTRACT l = u32 i = u32
-  { with_loc $sloc (TupleExtract (l, i)) }
 | i = INSTR { with_loc $sloc i }
 | i = callindirect { i }
 | i = select { i }

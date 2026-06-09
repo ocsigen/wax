@@ -251,7 +251,7 @@ let heaptype st (t : Src.heaptype) : Ast.heaptype =
 let reftype st (t : Src.reftype) : Ast.reftype =
   { nullable = t.nullable; typ = heaptype st t.typ }
 
-let rec valtype st (t : Src.valtype) : Ast.valtype =
+let valtype st (t : Src.valtype) : Ast.valtype =
   match t with
   | I32 -> I32
   | I64 -> I64
@@ -259,7 +259,6 @@ let rec valtype st (t : Src.valtype) : Ast.valtype =
   | F64 -> F64
   | V128 -> V128
   | Ref t -> Ref (reftype st t)
-  | Tuple l -> Tuple (List.map (fun t -> valtype st t) l)
 
 let functype st (t : Src.functype) : Ast.functype =
   {
@@ -1116,7 +1115,6 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   | Return ->
       let* args = Stack.grab ctx.return_arity in
       Stack.push_poly (with_loc (Return (sequence_opt args)))
-  | TupleMake _ -> return ()
   | Const (I32 n) | Const (I64 n) -> Stack.push 1 (integer i n)
   | Const (F32 f) | Const (F64 f) -> Stack.push 1 (float i f)
   | RefI31 ->
@@ -1414,8 +1412,6 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       Stack.push 0
         (with_loc
            (Call (with_loc (StructGet (a, Ast.no_loc "init")), [ seg; d; s; n ])))
-  (* Later *)
-  | TupleExtract _ -> Stack.push_poly (with_loc Unreachable)
   | VecUnOp _ | VecBinOp _ | VecTest _ | VecShift _ | VecBitmask _ | VecLoad _
   | VecStore _ | VecLoadLane _ | VecStoreLane _ | VecLoadSplat _ | VecExtract _
   | VecReplace _ | VecSplat _ | VecShuffle _ | VecBitselect | VecTernOp _ ->

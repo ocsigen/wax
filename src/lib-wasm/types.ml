@@ -93,7 +93,6 @@ let subtyping_info t =
     match ty with
     | I32 | I64 | F32 | F64 | V128 -> ty
     | Ref { nullable; typ } -> Ref { nullable; typ = update_heaptype i typ }
-    | Tuple _ -> assert false
   in
   let update_functype i { params; results } =
     {

@@ -100,7 +100,6 @@ module Encoder = struct
     | F64 -> byte b 0x7C
     | V128 -> byte b 0x7B
     | Ref r -> reftype b r
-    | Tuple _ -> failwith "Tuples not supported"
 
   let mut b m = byte b (if m then 0x01 else 0x00)
 
@@ -737,8 +736,7 @@ module Encoder = struct
     | I31Get Unsigned ->
         byte b 0xFB;
         byte b 0x1E
-    | Pop _ | TupleMake _ -> ()
-    | TupleExtract _ -> failwith "unsupported binaryen extension"
+    | Pop _ -> ()
     | VecLoad (idx, op, m) ->
         byte b 0xFD;
         uint b

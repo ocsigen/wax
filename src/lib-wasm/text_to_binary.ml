@@ -91,7 +91,7 @@ let heaptype ctx (h : T.heaptype) : B.heaptype =
 let reftype ctx (r : T.reftype) : B.reftype =
   { nullable = r.nullable; typ = heaptype ctx r.typ }
 
-let rec valtype ctx (v : T.valtype) : B.valtype =
+let valtype ctx (v : T.valtype) : B.valtype =
   match v with
   | I32 -> I32
   | I64 -> I64
@@ -99,7 +99,6 @@ let rec valtype ctx (v : T.valtype) : B.valtype =
   | F64 -> F64
   | V128 -> V128
   | Ref r -> Ref (reftype ctx r)
-  | Tuple l -> Tuple (List.map (valtype ctx) l)
 
 let storage_type ctx (s : T.storagetype) : B.storagetype =
   match s with Value v -> Value (valtype ctx v) | Packed p -> Packed p
@@ -394,8 +393,6 @@ let rec instr ~resolve_string_type ~resolve_func_type ctx (i : 'info T.instr) =
     | ExternConvertAny -> ExternConvertAny
     | AnyConvertExtern -> AnyConvertExtern
     | Pop i -> Pop (valtype ctx i)
-    | TupleMake u -> TupleMake u
-    | TupleExtract (u1, u2) -> TupleExtract (u1, u2)
     | VecLoad (o, op, m) -> VecLoad (resolve_idx ctx.memories o, op, m)
     | VecStore (o, m) -> VecStore (resolve_idx ctx.memories o, m)
     | VecLoadLane (o, op, m, lane) ->
