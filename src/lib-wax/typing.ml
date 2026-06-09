@@ -619,7 +619,7 @@ type module_context = {
   tags : functype Tbl.t;
   memories : (int * [ `I32 | `I64 ]) Tbl.t;
   datas : unit Tbl.t;
-  tables : reftype Tbl.t;
+  tables : ([ `I32 | `I64 ] * reftype) Tbl.t;
   elems : reftype Tbl.t;
   mutable locals : inferred_valtype StringMap.t;
   control_types : (string option * inferred_type UnionFind.t array) list;
@@ -2141,14 +2141,13 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
   (* [tab[i]] on a table name is [table.get]; the receiver is not a value. *)
   | ArrayGet (({ desc = Get tabname; _ } as recv), i2)
     when Tbl.find_opt ctx.tables tabname <> None ->
-      let rt =
+      let at, rt =
         match Tbl.find_opt ctx.tables tabname with
-        | Some rt -> rt
+        | Some x -> x
         | None -> assert false
       in
       let* i2' = instruction ctx i2 in
-      check_type ctx i2'
-        (UnionFind.make (Valtype { typ = I32; internal = I32 }));
+      check_type ctx i2' (UnionFind.make (Valtype (address_valtype at)));
       let*! typ = internalize ctx (Ref rt) in
       return_expression i
         (ArrayGet ({ desc = Get tabname; info = ([||], recv.info) }, i2'))
@@ -2169,15 +2168,14 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
   (* [tab[i] = v] on a table name is [table.set]; the receiver is not a value. *)
   | ArraySet (({ desc = Get tabname; _ } as recv), i2, i3)
     when Tbl.find_opt ctx.tables tabname <> None ->
-      let rt =
+      let at, rt =
         match Tbl.find_opt ctx.tables tabname with
-        | Some rt -> rt
+        | Some x -> x
         | None -> assert false
       in
       let* i2' = instruction ctx i2 in
       let* i3' = instruction ctx i3 in
-      check_type ctx i2'
-        (UnionFind.make (Valtype { typ = I32; internal = I32 }));
+      check_type ctx i2' (UnionFind.make (Valtype (address_valtype at)));
       (let>@ ty = internalize ctx (Ref rt) in
        let ty' = expression_type ctx i3' in
        if not (subtype ctx ty' ty) then
@@ -3173,11 +3171,20 @@ let rec globals ctx fields =
           in
           After { field with desc = Data { d with mode } }
       | Elem ({ reftype = rt; mode; init; _ } as e) ->
-          (* Active-elem offsets index a table, whose address type is i32. *)
           let mode =
             match mode with
             | EPassive -> EPassive
-            | EActive (tab, off) -> EActive (tab, type_data_offset ctx `I32 off)
+            | EActive (tab, off) ->
+                (* The offset indexes [tab], whose address type may be i64. *)
+                let address_type =
+                  match Tbl.find_opt ctx.tables tab with
+                  | Some (at, _) -> at
+                  | None ->
+                      Error.unbound_name ctx.diagnostics ~location:tab.info
+                        "table" tab;
+                      `I32
+                in
+                EActive (tab, type_data_offset ctx address_type off)
           in
           let elem_typ = internalize ctx (Ref rt) in
           let init =
@@ -3194,6 +3201,21 @@ let rec globals ctx fields =
               init
           in
           After { field with desc = Elem { e with mode; init } }
+      | Table ({ reftype = rt; init; _ } as t) ->
+          let init =
+            Option.map
+              (fun e ->
+                let e' =
+                  with_empty_stack ctx ~location:e.info ~kind:Expression
+                    (toplevel_instruction ctx e)
+                in
+                (let>@ typ = internalize ctx (Ref rt) in
+                 check_type ctx e' typ);
+                check_constant_instruction ctx e';
+                e')
+              init
+          in
+          After { field with desc = Table { t with init } }
       | Global ({ name; mut; typ; def; _ } as g) ->
           let def' =
             with_empty_stack ctx ~location:def.info ~kind:Expression
@@ -3317,14 +3339,13 @@ let rec functions ctx fields =
       | Before
           {
             desc =
-              Global _ | Group _ | Conditional _ | Memory _ | Data _ | Elem _;
+              ( Global _ | Group _ | Conditional _ | Memory _ | Data _ | Elem _
+              | Table _ );
             _;
           } ->
           assert false
       | After f -> Some f
-      | Before
-          ({ desc = Type _ | Fundecl _ | GlobalDecl _ | Tag _ | Table _; _ } as
-           f) ->
+      | Before ({ desc = Type _ | Fundecl _ | GlobalDecl _ | Tag _; _ } as f) ->
           Some f)
     fields
 
@@ -3455,8 +3476,8 @@ let type_configuration diagnostics fields =
           Tbl.add diagnostics ctx.tags name typ
       | Data { name; _ } ->
           Option.iter (fun n -> Tbl.add diagnostics ctx.datas n ()) name
-      | Table { name; reftype = rt; _ } ->
-          Tbl.add diagnostics ctx.tables name rt
+      | Table { name; address_type; reftype = rt; _ } ->
+          Tbl.add diagnostics ctx.tables name (address_type, rt)
       | Elem { name; reftype = rt; _ } -> Tbl.add diagnostics ctx.elems name rt
       | Group _ | Conditional _ | Type _ | Global _ -> ())
     fields;

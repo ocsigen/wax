@@ -172,8 +172,9 @@ let with_loc loc desc =
 let blocktype bt = Option.value ~default:{params = [||]; results = [||]} bt
 
 (* Parse an integer literal (decimal, hex, with [_] separators) to a [Uint64].
-   Used for memory limits, which are small page counts. *)
-let u64_of_int_literal n = Utils.Uint64.of_int64 (Int64.of_string n)
+   Used for memory/table limits; a table64 bound may exceed [Int64.max_int],
+   so parse across the full unsigned range. *)
+let u64_of_int_literal n = Utils.Uint64.of_string n
 %}
 
 %start <location module_> parse
@@ -701,9 +702,12 @@ data:
         (Data {name = n; mode = Active (mem, off); init = s.desc; attributes}) }
 
 table:
-| TABLE name = ident ":" rt = reference_type lim = ioption(mem_limits) ";"
+| TABLE name = ident ":" at = ioption(address_type) rt = reference_type
+  lim = ioption(mem_limits) init = ioption("=" e = expression { e }) ";"
   { fun attributes ->
-      with_loc $sloc (Table {name; reftype = rt; limits = lim; attributes}) }
+      with_loc $sloc
+        (Table {name; address_type = Option.value ~default:`I32 at;
+                reftype = rt; limits = lim; init; attributes}) }
 
 elem:
 | ELEM name = ident ":" rt = reference_type "=" "[" l = expression_list "]" ";"

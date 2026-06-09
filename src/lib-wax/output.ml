@@ -1209,7 +1209,7 @@ let rec modulefield pp field =
               space pp ();
               print_data_bytes pp init;
               punctuation pp ";"))
-  | Table { name; reftype = rt; limits; attributes = a } ->
+  | Table { name; address_type; reftype = rt; limits; init; attributes = a } ->
       print_attr_prefix pp a (fun () ->
           box pp (fun () ->
               keyword pp "table";
@@ -1217,6 +1217,11 @@ let rec modulefield pp field =
               identifier pp name.desc;
               punctuation pp ":";
               space pp ();
+              (match address_type with
+              | `I32 -> ()
+              | `I64 ->
+                  keyword pp "i64";
+                  space pp ());
               reftype pp rt;
               Option.iter
                 (fun (mi, ma) ->
@@ -1231,6 +1236,13 @@ let rec modulefield pp field =
                     ma;
                   punctuation pp "]")
                 limits;
+              Option.iter
+                (fun e ->
+                  space pp ();
+                  punctuation pp "=";
+                  space pp ();
+                  instr Instruction pp e)
+                init;
               punctuation pp ";"))
   | Elem { name; reftype = rt; mode; init; attributes = a } ->
       print_attr_prefix pp a (fun () ->

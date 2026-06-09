@@ -1562,8 +1562,10 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
               (Table
                  {
                    name;
+                   address_type = l.address_type;
                    reftype = reftype ctx tt.Src.reftype;
                    limits = Some (l.mi, l.ma);
+                   init = None;
                    attributes = import module_ nm :: exports ctx Table name e;
                  }))
     | Global { typ; init; exports = e; _ } ->
@@ -1620,15 +1622,24 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
         in
         Some
           (Data { name = Some name; mode = mode'; init = s; attributes = [] })
-    | Table { typ = tt; exports = e; _ } ->
+    | Table { typ = tt; init; exports = e; _ } ->
         let name = Sequence.get_current ctx.tables in
         let l = tt.Src.limits.Ast.desc in
+        let init =
+          match init with
+          | Init_default -> None
+          | Init_expr ex ->
+              Some (single_expression (Stack.run (instructions ctx ex)))
+          | Init_segment _ -> None (* per-element init not represented *)
+        in
         Some
           (Table
              {
                name;
+               address_type = l.address_type;
                reftype = reftype ctx tt.Src.reftype;
                limits = Some (l.mi, l.ma);
+               init;
                attributes = exports ctx Table name e;
              })
     | Elem { typ; init; mode; _ } -> (

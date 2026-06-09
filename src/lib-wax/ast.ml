@@ -207,8 +207,10 @@ type 'info modulefield =
     }
   | Table of {
       name : ident;
+      address_type : [ `I32 | `I64 ];
       reftype : reftype;
       limits : (Utils.Uint64.t * Utils.Uint64.t option) option;
+      init : 'info instr option;
       attributes : attributes;
     }
   | Elem of {

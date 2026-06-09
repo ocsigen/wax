@@ -255,7 +255,9 @@ let mem_natural_align = function
 let mem_memarg meth nstack args : Ast.memarg =
   let int_lit a =
     match a.desc with
-    | Int s -> Utils.Uint64.of_int64 (Int64.of_string s)
+    (* [Uint64.of_string] handles the full unsigned 64-bit range; a memory64
+       offset/align may exceed [Int64.max_int]. *)
+    | Int s -> Utils.Uint64.of_string s
     | _ -> assert false
   in
   let extra = List.filteri (fun k _ -> k >= nstack) args in
@@ -1223,7 +1225,8 @@ let module_ diagnostics types fields =
                     };
               };
             ]
-        | Table { name; reftype = rt; limits; attributes } ->
+        | Table { name; address_type; reftype = rt; limits; init; attributes }
+          ->
             let exports = exports attributes in
             let mi, ma =
               match limits with
@@ -1232,9 +1235,18 @@ let module_ diagnostics types fields =
             in
             let typ : Text.tabletype =
               {
-                limits = Ast.no_loc { Ast.mi; ma; address_type = `I32 };
+                limits = Ast.no_loc { Ast.mi; ma; address_type };
                 reftype = reftype rt;
               }
+            in
+            let init_value : _ Text.tableinit =
+              match init with
+              | None -> Init_default
+              | Some e ->
+                  let ictx =
+                    { ctx with referenced_functions = func_refs_outside_func }
+                  in
+                  Init_expr (instruction None ictx e)
             in
             let table_field =
               match import attributes with
@@ -1248,8 +1260,7 @@ let module_ diagnostics types fields =
                       exports;
                     }
               | None ->
-                  Text.Table
-                    { id = Some name; typ; init = Init_default; exports }
+                  Text.Table { id = Some name; typ; init = init_value; exports }
             in
             [ { field with desc = table_field } ]
         | Elem { name; reftype = rt; mode; init; _ } ->

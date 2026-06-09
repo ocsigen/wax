@@ -116,7 +116,8 @@ let rec map_modulefield f field =
             | Passive -> Passive
             | Active (mem, off) -> Active (mem, map_instr f off));
         }
-  | Table t -> Table t
+  | Table ({ init; _ } as t) ->
+      Table { t with init = Option.map (map_instr f) init }
   | Elem ({ mode; init; _ } as e) ->
       Elem
         {
