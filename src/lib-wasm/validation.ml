@@ -160,6 +160,21 @@ module Error = struct
           "should contain functions but its elements have type" print_valtype ty)
       ()
 
+  let elem_segment_type_mismatch context ~location elem_ty table_ty =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f
+          "The element segment has type@ @[<2>%a@],@ which is not a subtype of \
+           the table element type@ @[<2>%a@]."
+          print_valtype elem_ty print_valtype table_ty)
+      ()
+
+  let duplicate_local context ~location name =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f "The local $%s is already defined." name)
+      ()
+
   let type_mismatch context ~location ty' ty =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
@@ -2062,8 +2077,9 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let ty = Ref { nullable = false; typ = Type (string ctx.modul.types) } in
       push (Some loc) ty
   | Char _ -> push (Some loc) I32
-  | If_annotation _ ->
-      failwith "Conditional annotations are not supported by the validator."
+  (* Conditional annotations are spliced out by [specialize] before a
+     configuration is validated, so none can remain at this point. *)
+  | If_annotation _ -> assert false
 
 and instructions ctx l =
   match l with
@@ -2130,8 +2146,10 @@ let rec check_constant_instruction ctx (i : _ Ast.Text.instr) =
   | VecBitselect | VecUnOp _ | VecBinOp _ | VecTest _ | VecShift _
   | VecBitmask _ | VecLoad _ | VecStore _ | VecLoadLane _ | VecStoreLane _
   | VecLoadSplat _ | VecExtract _ | VecReplace _ | VecSplat _ | VecShuffle _
-  | VecTernOp _ | If_annotation _ ->
+  | VecTernOp _ ->
       Error.constant_expression_required ctx.diagnostics ~location:i.info
+  (* Spliced out by [specialize] before validation; cannot occur here. *)
+  | If_annotation _ -> assert false
 
 and check_constant_instructions ctx l =
   List.iter (fun i -> check_constant_instruction ctx i) l
@@ -2245,9 +2263,9 @@ and register_typeuses' d ctx (i : _ Ast.Text.instr) =
   | CallIndirect (_, use) | ReturnCallIndirect (_, use) ->
       ignore (typeuse' d ctx use)
   | String _ -> ignore (string ctx)
-  | If_annotation { then_body; else_body; _ } ->
-      register_typeuses d ctx then_body;
-      Option.iter (register_typeuses d ctx) else_body
+  | If_annotation _ ->
+      (* Spliced out by [specialize] before validation; cannot occur here. *)
+      assert false
   | Folded (i, l) ->
       register_typeuses' d ctx i;
       register_typeuses d ctx l
@@ -2317,9 +2335,7 @@ let collect_implicit_types d ctx fields =
         collect_instrs block;
         List.iter (fun (_, c) -> collect_instrs c) catches;
         Option.iter collect_instrs catch_all
-    | If_annotation { then_body; else_body; _ } ->
-        collect_instrs then_body;
-        Option.iter collect_instrs else_body
+    | If_annotation _ -> assert false
     | Folded (i, l) ->
         collect_instr i;
         collect_instrs l
@@ -2510,7 +2526,9 @@ let segments ctx fields =
                 not
                   (Types.val_subtype ctx.subtyping_info (Ref typ)
                      (Ref tabletype.reftype))
-              then failwith "type mismatch";
+              then
+                Error.elem_segment_type_mismatch ctx.diagnostics
+                  ~location:field.info (Ref typ) (Ref tabletype.reftype);
               constant_expression ctx
                 (address_type_to_valtype tabletype.limits.address_type)
                 e);
@@ -3007,7 +3025,7 @@ let check_syntax diagnostics (_, lst) =
         if not (eq_functype f target) then
           Error.inline_function_type_mismatch diagnostics ~location:idx.Ast.info
             f
-    | _ -> failwith "indexed type is not a function type"
+    | _ -> Error.expected_func_type diagnostics ~location:idx.Ast.info idx
   in
   let check_instr_inline desc =
     let check_typeuse = function
@@ -3036,7 +3054,8 @@ let check_syntax diagnostics (_, lst) =
     List.iter
       (fun id ->
         let*? id : Ast.Text.name = id in
-        if Hashtbl.mem seen id.desc then failwith ("duplicate local $" ^ id.desc)
+        if Hashtbl.mem seen id.desc then
+          Error.duplicate_local diagnostics ~location:id.Ast.info id.desc
         else Hashtbl.add seen id.desc ())
       (param_ids @ local_ids)
   in
