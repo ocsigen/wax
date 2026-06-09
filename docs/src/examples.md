@@ -253,12 +253,12 @@ fn safe_divide(a: i32, b: i32) -> i32 {
 
 #[export = "try_divide"]
 fn try_divide(a: i32, b: i32) -> i32 {
-    try {
-        return safe_divide(a, b);
-    } catch {
-        divide_by_zero => { return 0; }   // Return 0 on division by zero
+    'on_error: do {
+        try {
+            return safe_divide(a, b);
+        } catch [divide_by_zero -> 'on_error]
     }
-    unreachable;
+    0;   // Return 0 on division by zero
 }
 ```
 
