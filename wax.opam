@@ -5,7 +5,7 @@ description:
   "A compiler toolchain for Wax, a Rust-like syntax for WebAssembly. Capabilities: Formatting, Type Checking, Syntax Conversion (Wax <-> Wasm Text <-> Wasm Binary)."
 maintainer: ["Jérôme Vouillon"]
 authors: ["Jérôme Vouillon"]
-license: "LGPL-2.1-or-later WITH OCaml-LGPL-linking-exception"
+license: "Apache-2.0"
 homepage: "https://github.com/vouillon/wasm-syntax"
 bug-reports: "https://github.com/vouillon/wasm-syntax/issues"
 depends: [

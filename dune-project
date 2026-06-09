@@ -6,7 +6,7 @@
 (authors "Jérôme Vouillon")
 (maintainers "Jérôme Vouillon")
 (source (github vouillon/wasm-syntax))
-(license "LGPL-2.1-or-later WITH OCaml-LGPL-linking-exception")
+(license "Apache-2.0")
 
 (package
   (name wax)
