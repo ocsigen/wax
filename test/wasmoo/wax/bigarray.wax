@@ -150,7 +150,7 @@ type custom_operations = {
 type custom = open { f: &custom_operations };
 
 #[export = "bigarray_ops"]
-const bigarray_ops: &custom_operations =
+const bigarray_ops =
     {custom_operations|
         id: string#"_bigarr02", // "_bigarr02"
         compare: caml_ba_compare,
@@ -657,7 +657,7 @@ fn caml_ba_create_buffer(kind: i32, sz: i32) -> &extern {
     become ta_create(kind, l as i32);
 }
 
-const CAML_BA_MAX_NUM_DIMS: i32 = 16;
+const CAML_BA_MAX_NUM_DIMS = 16;
 
 data ba_create_bad_dims = "Bigarray.create: bad number of dimensions";
 data ba_create_negative_dim = "Bigarray.create: negative dimension";

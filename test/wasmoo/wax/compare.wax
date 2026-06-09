@@ -70,9 +70,9 @@ type custom_operations = {
 };
 type custom = open { f: &custom_operations };
 
-const dummy_block: &block = [block|0 as &i31; 0];
+const dummy_block = [block|0 as &i31; 0];
 
-const default_compare_stack: &compare_stack =
+const default_compare_stack =
     {compare_stack|
         f: -1,
         f_2: [block_array|dummy_block; 8],
@@ -126,7 +126,7 @@ fn push_compare_stack(stack: &compare_stack, v1: &block, v2: &block, p: i32)
 }
 
 #[export = "unordered"]
-const unordered: i32 = 0x80000000;
+const unordered = 0x80000000;
 
 fn compare_strings(s1: &string, s2: &string) -> i32 {
     if s1 == s2 { return 0; }

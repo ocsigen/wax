@@ -26,7 +26,7 @@ type block = [mut &eq];
 type char_table = [i8];
 type int_array = [mut i32];
 
-const re_word_letters: &char_table =
+const re_word_letters =
     [char_table|
         0x00,
         0x00,

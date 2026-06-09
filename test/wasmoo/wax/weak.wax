@@ -46,8 +46,8 @@ type js = { f: &?any };
 // To access the data, we need to traverse a series of weak maps
 // indexed by the keys (omitting integers).
 
-const caml_ephe_data_offset: i32 = 2;
-const caml_ephe_key_offset: i32 = 3;
+const caml_ephe_data_offset = 2;
+const caml_ephe_key_offset = 3;
 
 const caml_ephe_none: &eq = [block|abstract_tag as &i31];
 

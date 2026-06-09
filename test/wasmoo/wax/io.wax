@@ -104,7 +104,7 @@ type custom_operations = {
 type custom = open { f: &custom_operations };
 type custom_with_id: custom = open { f: &custom_operations, id: i64 };
 
-const channel_ops: &custom_operations =
+const channel_ops =
     {custom_operations|
         id: string#"_chan", // "_chan"
         compare: custom_compare_id,
@@ -150,7 +150,7 @@ fn release_fd_offset(fd: i32) { map_delete(get_fd_offsets(), fd); }
 
 fn get_fd_offset(fd: i32) -> &fd_offset { map_get(get_fd_offsets(), fd); }
 
-const IO_BUFFER_SIZE: i32 = 65536;
+const IO_BUFFER_SIZE = 65536;
 
 type open_flags = [i8];
 //  1 O_RDONLY
@@ -160,8 +160,7 @@ type open_flags = [i8];
 // 16 O_TRUNC
 // 32 O_EXCL
 // 64 O_NONBLOCK
-const sys_open_flags: &open_flags =
-    [open_flags|1, 2, 6, 8, 16, 32, 0, 0, 64];
+const sys_open_flags = [open_flags|1, 2, 6, 8, 16, 32, 0, 0, 64];
 
 fn convert_flag_list(vflags: &eq) -> i32 {
     let flags: i32;

@@ -52,7 +52,7 @@ type custom_operations = {
 type custom = open { f: &custom_operations };
 
 #[export = "int64_ops"]
-const int64_ops: &custom_operations =
+const int64_ops =
     {custom_operations|
         id: string#"_j", // "_j"
         compare: int64_cmp,
@@ -109,7 +109,7 @@ fn caml_int64_compare(i1: i64, i2: i64) -> &eq {
     ((i1 >s i2) - (i1 <s i2)) as &i31;
 }
 
-const INT64_ERRMSG: &string =
+const INT64_ERRMSG =
     string#"Int64.of_string" // "Int64.of_string"
     ;
 

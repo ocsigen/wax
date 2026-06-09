@@ -45,11 +45,11 @@ fn append_string(&?any, &?any) -> &?any;
 type string = [mut i8];
 type wstring = [mut i16];
 
-let text_converters_available: i32 = 0;
-let string_builtins_available: i32 = 0;
+let text_converters_available = 0;
+let string_builtins_available = 0;
 
-const utf16_buffer_size: i32 = 32768;
-let buffer: &wstring = [wstring|0; 0];
+const utf16_buffer_size = 32768;
+let buffer = [wstring|0; 0];
 
 fn init() {
     // Our dummy implementation of string conversion always returns
@@ -119,7 +119,7 @@ fn string_of_jsstring(s: &?any) -> &string {
 #[export = "caml_buffer"]
 memory caml_buffer: i32 [1];
 
-const buffer_size: i32 = 65536;
+const buffer_size = 65536;
 
 fn write_to_buffer(s: &string, pos: i32, len: i32) {
     'loop: loop {

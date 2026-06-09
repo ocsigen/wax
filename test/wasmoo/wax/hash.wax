@@ -117,10 +117,10 @@ fn caml_hash_mix_string(h: i32, s: &string) -> i32 {
     h ^ len;
 }
 
-const HASH_QUEUE_SIZE: i32 = 256;
-const MAX_FORWARD_DEREFERENCE: i32 = 1000;
+const HASH_QUEUE_SIZE = 256;
+const MAX_FORWARD_DEREFERENCE = 1000;
 
-const caml_hash_queue: &block = [block|0 as &i31; HASH_QUEUE_SIZE];
+const caml_hash_queue = [block|0 as &i31; HASH_QUEUE_SIZE];
 
 #[export = "caml_hash"]
 fn caml_hash(count: &eq, limit: &eq, seed: &eq, obj: &eq) -> &eq {

@@ -49,7 +49,7 @@ fn caml_find_custom_operations(&string) -> &?custom_operations;
 #[import = ("version-dependent", "caml_marshal_header_size")]
 const caml_marshal_header_size: i32;
 
-const input_val_from_string: &string = string#"input_val_from_string";
+const input_val_from_string = string#"input_val_from_string";
 #[export = "caml_input_value_from_bytes"]
 #[export
     =
@@ -68,7 +68,7 @@ fn caml_input_value_from_bytes(vstr: &eq, vofs: &eq) -> &eq {
 
 data truncated_obj = "input_value: truncated object";
 
-const input_value: &string = string#"input_value";
+const input_value = string#"input_value";
 
 #[export = "caml_input_value"]
 fn caml_input_value(ch: &eq) -> &eq {
@@ -112,34 +112,34 @@ type custom_operations = {
 };
 type custom = open { f: &custom_operations };
 
-const Intext_magic_number_small: i32 = 0x8495A6BE;
-const Intext_magic_number_big: i32 = 0x8495A6BF;
+const Intext_magic_number_small = 0x8495A6BE;
+const Intext_magic_number_big = 0x8495A6BF;
 
-const PREFIX_SMALL_BLOCK: i32 = 0x80;
-const PREFIX_SMALL_INT: i32 = 0x40;
-const PREFIX_SMALL_STRING: i32 = 0x20;
-const CODE_INT8: i32 = 0x00;
-const CODE_INT16: i32 = 0x01;
-const CODE_INT32: i32 = 0x02;
-const CODE_INT64: i32 = 0x03;
-const CODE_SHARED8: i32 = 0x04;
-const CODE_SHARED16: i32 = 0x05;
-const CODE_SHARED32: i32 = 0x06;
-const CODE_BLOCK32: i32 = 0x08;
-const CODE_BLOCK64: i32 = 0x13;
-const CODE_STRING8: i32 = 0x09;
-const CODE_STRING32: i32 = 0x0A;
-const CODE_DOUBLE_BIG: i32 = 0x0B;
-const CODE_DOUBLE_LITTLE: i32 = 0x0C;
-const CODE_DOUBLE_ARRAY8_BIG: i32 = 0x0D;
-const CODE_DOUBLE_ARRAY8_LITTLE: i32 = 0x0E;
-const CODE_DOUBLE_ARRAY32_BIG: i32 = 0x0F;
-const CODE_DOUBLE_ARRAY32_LITTLE: i32 = 0x07;
-const CODE_CODEPOINTER: i32 = 0x10;
-const CODE_INFIXPOINTER: i32 = 0x11;
-const CODE_CUSTOM: i32 = 0x12;
-const CODE_CUSTOM_LEN: i32 = 0x18;
-const CODE_CUSTOM_FIXED: i32 = 0x19;
+const PREFIX_SMALL_BLOCK = 0x80;
+const PREFIX_SMALL_INT = 0x40;
+const PREFIX_SMALL_STRING = 0x20;
+const CODE_INT8 = 0x00;
+const CODE_INT16 = 0x01;
+const CODE_INT32 = 0x02;
+const CODE_INT64 = 0x03;
+const CODE_SHARED8 = 0x04;
+const CODE_SHARED16 = 0x05;
+const CODE_SHARED32 = 0x06;
+const CODE_BLOCK32 = 0x08;
+const CODE_BLOCK64 = 0x13;
+const CODE_STRING8 = 0x09;
+const CODE_STRING32 = 0x0A;
+const CODE_DOUBLE_BIG = 0x0B;
+const CODE_DOUBLE_LITTLE = 0x0C;
+const CODE_DOUBLE_ARRAY8_BIG = 0x0D;
+const CODE_DOUBLE_ARRAY8_LITTLE = 0x0E;
+const CODE_DOUBLE_ARRAY32_BIG = 0x0F;
+const CODE_DOUBLE_ARRAY32_LITTLE = 0x07;
+const CODE_CODEPOINTER = 0x10;
+const CODE_INFIXPOINTER = 0x11;
+const CODE_CUSTOM = 0x12;
+const CODE_CUSTOM_LEN = 0x18;
+const CODE_CUSTOM_FIXED = 0x19;
 
 type intern_state = {
     src: &string,
@@ -680,7 +680,7 @@ fn init_extern_state
 
 data buffer_overflow = "Marshal.to_buffer: buffer overflow";
 
-const SIZE_EXTERN_OUTPUT_BLOCK: i32 = 8100;
+const SIZE_EXTERN_OUTPUT_BLOCK = 8100;
 
 fn reserve_extern_output(s: &extern_state, required: i32) -> i32 {
     let pos = s.pos;

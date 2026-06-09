@@ -101,7 +101,7 @@ fn caml_find_custom_operations(id: &string) -> &?custom_operations {
     null as &?custom_operations;
 }
 
-let initialized: i32 = 0;
+let initialized = 0;
 
 #[export = "caml_init_custom_operations"]
 fn caml_init_custom_operations() {

@@ -17,7 +17,7 @@
 
 type block = [mut &eq];
 
-let caml_custom_event_index: i32 = 0;
+let caml_custom_event_index = 0;
 
 #[export = "caml_runtime_events_user_register"]
 fn caml_runtime_events_user_register(evname: &eq, evtag: &eq, evtype: &eq) ->

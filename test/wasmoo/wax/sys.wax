@@ -171,7 +171,7 @@ fn caml_runtime_parameters(x: &eq) -> &eq { [string|]; }
 #[export = "caml_install_signal_handler"]
 fn caml_install_signal_handler(x: &eq, x_2: &eq) -> &eq { 0 as &i31; }
 
-let caml_runtime_warnings: i32 = 0;
+let caml_runtime_warnings = 0;
 
 #[export = "caml_ml_enable_runtime_warnings"]
 fn caml_ml_enable_runtime_warnings(x: &eq) -> &eq {

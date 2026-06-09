@@ -77,23 +77,23 @@ type cps_dummy_closure: cps_closure_last_arg = {
     f_2: mut &?cps_closure
 };
 
-const forcing_tag: i32 = 244;
+const forcing_tag = 244;
 #[export = "cont_tag"]
-const cont_tag: i32 = 245;
+const cont_tag = 245;
 #[export = "lazy_tag"]
-const lazy_tag: i32 = 246;
-const closure_tag: i32 = 247;
+const lazy_tag = 246;
+const closure_tag = 247;
 #[export = "object_tag"]
-const object_tag: i32 = 248;
+const object_tag = 248;
 #[export = "forward_tag"]
-const forward_tag: i32 = 250;
+const forward_tag = 250;
 #[export = "abstract_tag"]
-const abstract_tag: i32 = 251;
-const string_tag: i32 = 252;
-const float_tag: i32 = 253;
+const abstract_tag = 251;
+const string_tag = 252;
+const float_tag = 253;
 #[export = "double_array_tag"]
-const double_array_tag: i32 = 254;
-const custom_tag: i32 = 255;
+const double_array_tag = 254;
+const custom_tag = 255;
 
 #[export = "caml_is_closure"]
 fn caml_is_closure(v: &eq) -> i32 { v is &closure | v is &cps_closure; }
@@ -312,7 +312,7 @@ fn caml_obj_truncate(x: &eq, x_2: &eq) -> &eq {
     0 as &i31;
 }
 
-let method_cache: &int_array = [int_array|0; 8];
+let method_cache = [int_array|0; 8];
 
 #[export = "caml_get_public_method"]
 fn caml_get_public_method(obj: &eq, x: &eq, x_2: &eq) -> &eq {
@@ -345,7 +345,7 @@ fn caml_get_public_method(obj: &eq, x: &eq, x_2: &eq) -> &eq {
     } else { 0 as &i31; }
 }
 
-let caml_oo_last_id: i32 = 0;
+let caml_oo_last_id = 0;
 
 #[export = "caml_set_oo_id"]
 fn caml_set_oo_id(x: &eq) -> &eq {

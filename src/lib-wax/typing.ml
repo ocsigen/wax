@@ -1098,6 +1098,51 @@ let standalone_valtype ctx ty =
   | Null -> internalize_valtype ctx (Ref { nullable = true; typ = None_ })
   | Int8 | Int16 | Unknown -> None
 
+(* Resolve the type that an omitted annotation takes from its initializer, as in
+   [let x = e] or [const x = e]: an as-yet-unconstrained literal is pinned to a
+   concrete type the way the final type erasure does (int/number -> i32,
+   float -> f64, null -> nullref), so the binding gets a definite type. Mutates
+   [ty] so later uses observe the resolved type. *)
+let resolve_omitted_valtype ctx ty =
+  match UnionFind.find ty with
+  | Valtype v -> Some v
+  | Int | Number | Int8 | Int16 | Unknown ->
+      let v = { typ = I32; internal = I32 } in
+      UnionFind.set ty (Valtype v);
+      Some v
+  | Float ->
+      let v = { typ = F64; internal = F64 } in
+      UnionFind.set ty (Valtype v);
+      Some v
+  | Null ->
+      let+@ v =
+        internalize_valtype ctx (Ref { nullable = true; typ = None_ })
+      in
+      UnionFind.set ty (Valtype v);
+      v
+
+(* Whether [i] is a (possibly cast-wrapped) [null].
+
+   This guards the dropping of a redundant type annotation on an initialized
+   binding ([let]/[const]) when converting from Wasm. The general rule is to
+   drop the annotation when the initializer's type already equals it. That is
+   unsound for [null]: [from_wasm] lowers [ref.null t] to [(null : &?t)] (a cast),
+   so the initializer's inferred type is the concrete [&?t] and the comparison
+   reports the annotation as redundant — but the printed bare [null] re-infers to
+   the *floating* null type [&?none], not [&?t], so dropping the annotation would
+   not round-trip. The annotation (or the cast) is what pins the type, so we must
+   keep it.
+
+   A cleaner fix would compare against what omitting the annotation actually
+   re-infers to (resolving the floating [null] under the cast to [&?none] rather
+   than reading the cast's concrete type); until then we keep the annotation
+   whenever the initializer is a [null]. *)
+let rec is_null_initializer (i : _ instr) =
+  match i.desc with
+  | Null -> true
+  | Cast (e, _) -> is_null_initializer e
+  | _ -> false
+
 let valtype_equal ctx (a : inferred_valtype) (b : inferred_valtype) =
   Wasm.Types.val_subtype ctx.subtyping_info a.internal b.internal
   && Wasm.Types.val_subtype ctx.subtyping_info b.internal a.internal
@@ -2820,32 +2865,8 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       return_statement i (Let (bindings, Some i')) [||]
   | Let ([ (Some name, None) ], Some i') ->
       let* i' = instruction ctx i' in
-      let ty = expression_type ctx i' in
-      (* No annotation: the local takes the initializer's type. Resolve an
-         as-yet-unconstrained literal the same way the final type erasure does
-         (int/number -> i32, float -> f64) so the local gets a concrete type. *)
-      (let>@ ity =
-         match UnionFind.find ty with
-         | Valtype v -> Some v
-         | Int | Number | Int8 | Int16 ->
-             let v = { typ = I32; internal = I32 } in
-             UnionFind.set ty (Valtype v);
-             Some v
-         | Float ->
-             let v = { typ = F64; internal = F64 } in
-             UnionFind.set ty (Valtype v);
-             Some v
-         | Null ->
-             let+@ v =
-               internalize_valtype ctx (Ref { nullable = true; typ = None_ })
-             in
-             UnionFind.set ty (Valtype v);
-             v
-         | Unknown ->
-             let v = { typ = I32; internal = I32 } in
-             UnionFind.set ty (Valtype v);
-             Some v
-       in
+      (* No annotation: the local takes the initializer's type. *)
+      (let>@ ity = resolve_omitted_valtype ctx (expression_type ctx i') in
        ctx.locals <- StringMap.add name.desc ity ctx.locals);
       return_statement i (Let ([ (Some name, None) ], Some i')) [||]
   | Let ([ (None, None) ], Some i') ->
@@ -3630,19 +3651,39 @@ let rec globals ctx fields =
             with_empty_stack ctx ~location:def.info ~kind:Expression
               (toplevel_instruction ctx def)
           in
-          (match typ with
-          | Some typ ->
-              let>@ typ = internalize_valtype ctx typ in
-              Tbl.add ctx.diagnostics ctx.globals name (mut, typ);
-              check_type ctx def' (UnionFind.make (Valtype typ))
-          | None -> (
-              let typ = UnionFind.find (expression_type ctx def') in
-              match typ with
-              | Valtype typ ->
-                  Tbl.add ctx.diagnostics ctx.globals name (mut, typ)
-              | _ -> assert false (*ZZZ floating*)));
+          let typ =
+            match typ with
+            | Some annot ->
+                (* The type the initializer would take on its own, captured
+                   before [check_type] constrains it; when it already equals the
+                   annotation, the annotation is redundant and dropped (only when
+                   converting from Wasm), mirroring a [let] binding. *)
+                let standalone =
+                  standalone_valtype ctx (expression_type ctx def')
+                in
+                let drop_annotation =
+                  Option.value ~default:false
+                    (let+@ ity = internalize_valtype ctx annot in
+                     Tbl.add ctx.diagnostics ctx.globals name (mut, ity);
+                     check_type ctx def' (UnionFind.make (Valtype ity));
+                     ctx.simplify
+                     && (not (is_null_initializer def'))
+                     && Option.fold ~none:false
+                          ~some:(fun v -> valtype_equal ctx v ity)
+                          standalone)
+                in
+                if drop_annotation then None else Some annot
+            | None ->
+                (* No annotation: the global takes the initializer's type, the
+                   way a [let] binding without an annotation does. *)
+                (let>@ ity =
+                   resolve_omitted_valtype ctx (expression_type ctx def')
+                 in
+                 Tbl.add ctx.diagnostics ctx.globals name (mut, ity));
+                None
+          in
           check_constant_instruction ctx def';
-          After { field with desc = Global { g with def = def' } }
+          After { field with desc = Global { g with typ; def = def' } }
       | Group { fields; _ } ->
           let fields = globals ctx fields in
           PhasedGroup { before = field; fields }

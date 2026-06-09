@@ -365,7 +365,7 @@ fn caml_maybe_attach_backtrace(exn: &eq, x: &eq) -> &eq { exn; }
 
 fn identity_2(x: &eq, x_2: &eq) -> &eq { x; }
 
-const identity: &closure = {closure| f: identity_2 };
+const identity = {closure| f: identity_2 };
 
 fn trampoline_iterator(f: &eq, venv: &eq) -> &eq {
     let env = venv as &iterator;
@@ -541,13 +541,13 @@ fn value_handler_2(x: &eq, x_2: &eq) -> &eq {
     become cps_call_handler((cps_fiber_stack!).handlers.value, x);
 }
 
-const value_handler: &closure = {closure| f: value_handler_2 };
+const value_handler = {closure| f: value_handler_2 };
 
 fn exn_handler_2(x: &eq, x_2: &eq) -> &eq {
     become cps_call_handler((cps_fiber_stack!).handlers.exn, x);
 }
 
-const exn_handler: &closure = {closure| f: exn_handler_2 };
+const exn_handler = {closure| f: exn_handler_2 };
 
 #[export = "caml_cps_alloc_stack"]
 fn caml_cps_alloc_stack(hv: &eq, hx: &eq, hf: &eq) -> &eq {

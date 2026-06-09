@@ -50,7 +50,7 @@ type custom_operations = {
 type custom = open { f: &custom_operations };
 
 #[export = "int32_ops"]
-const int32_ops: &custom_operations =
+const int32_ops =
     {custom_operations|
         id: string#"_i", // "_i"
         compare: int32_cmp,
@@ -105,7 +105,7 @@ fn caml_int32_bswap(i: i32) -> i32 {
     (i & 0x00FF00FF).rotr(8) | (i & 0xFF00FF00).rotl(8);
 }
 
-const INT32_ERRMSG: &string =
+const INT32_ERRMSG =
     string#"Int32.of_string" // "Int32.of_string"
     ;
 
@@ -123,7 +123,7 @@ fn caml_int32_compare(i1: i32, i2: i32) -> &eq {
 }
 
 #[export = "nativeint_ops"]
-const nativeint_ops: &custom_operations =
+const nativeint_ops =
     {custom_operations|
         id: string#"_n", // "_n"
         compare: int32_cmp,
@@ -155,7 +155,7 @@ fn nativeint_deserialize(s: &eq) -> (&eq, i32) {
 #[export = "caml_copy_nativeint"]
 fn caml_copy_nativeint(i: i32) -> &eq { {int32| f: nativeint_ops, f_2: i }; }
 
-const NATIVEINT_ERRMSG: &string =
+const NATIVEINT_ERRMSG =
     string#"Native.of_string" // "Nativeint.of_string"
     ;
 

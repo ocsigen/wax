@@ -35,21 +35,21 @@ fn caml_raise_with_arg(tag_2: &eq, arg: &eq) {
     throw ocaml_exception [block|0 as &i31, tag_2, arg];
 }
 
-const OUT_OF_MEMORY_EXN: i32 = 0;
+const OUT_OF_MEMORY_EXN = 0;
 
 #[export = "caml_raise_out_of_memory"]
 fn caml_raise_out_of_memory() {
     become caml_raise_constant(caml_global_data[OUT_OF_MEMORY_EXN]);
 }
 
-const SYS_ERROR_EXN: i32 = 1;
+const SYS_ERROR_EXN = 1;
 
 #[export = "caml_raise_sys_error"]
 fn caml_raise_sys_error(msg: &eq) {
     become caml_raise_with_arg(caml_global_data[SYS_ERROR_EXN], msg);
 }
 
-const FAILURE_EXN: i32 = 2;
+const FAILURE_EXN = 2;
 
 #[export = "caml_failwith_tag"]
 fn caml_failwith_tag() -> &eq { caml_global_data[FAILURE_EXN]; }
@@ -59,7 +59,7 @@ fn caml_failwith(arg: &eq) {
     become caml_raise_with_arg(caml_global_data[FAILURE_EXN], arg);
 }
 
-const INVALID_EXN: i32 = 3;
+const INVALID_EXN = 3;
 
 #[export = "caml_invalid_argument"]
 fn caml_invalid_argument(arg: &eq) {
@@ -73,30 +73,30 @@ fn caml_bound_error() {
     become caml_invalid_argument([string|index_out_of_bounds @ 0; 19]);
 }
 
-const END_OF_FILE_EXN: i32 = 4;
+const END_OF_FILE_EXN = 4;
 
 #[export = "caml_raise_end_of_file"]
 fn caml_raise_end_of_file() {
     become caml_raise_constant(caml_global_data[END_OF_FILE_EXN]);
 }
 
-const ZERO_DIVIDE_EXN: i32 = 5;
+const ZERO_DIVIDE_EXN = 5;
 
 #[export = "caml_raise_zero_divide"]
 fn caml_raise_zero_divide() {
     become caml_raise_constant(caml_global_data[ZERO_DIVIDE_EXN]);
 }
 
-const NOT_FOUND_EXN: i32 = 6;
+const NOT_FOUND_EXN = 6;
 
 #[export = "caml_raise_not_found"]
 fn caml_raise_not_found() {
     become caml_raise_constant(caml_global_data[NOT_FOUND_EXN]);
 }
 
-const MATCH_FAILURE_EXN: i32 = 7;
-const ASSERT_FAILURE_EXN: i32 = 10;
-const UNDEFINED_RECURSIVE_MODULE_EXN: i32 = 11;
+const MATCH_FAILURE_EXN = 7;
+const ASSERT_FAILURE_EXN = 10;
+const UNDEFINED_RECURSIVE_MODULE_EXN = 11;
 
 #[export = "caml_is_special_exception"]
 fn caml_is_special_exception(x: &eq) -> i32 {

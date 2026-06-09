@@ -107,4 +107,4 @@ Lowering back to WAT reproduces the instructions (the wax round-trips):
 A v128.const global initializer is a constant expression:
 
   $ wax global.wat -f wax -o g.wax && cat g.wax
-  let g: v128 = v128_const_i32x4(0, 1, 2, 3);
+  let g = v128_const_i32x4(0, 1, 2, 3);

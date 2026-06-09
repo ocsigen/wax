@@ -4,9 +4,9 @@ references stay coherent.
 
   $ wax cond.wat -o out.wax && cat out.wax
   #[if(ocaml_version >= (5, 1, 0))]
-  const size: i32 = 16;
+  const size = 16;
   #[else]
-  const size: i32 = 20;
+  const size = 20;
   fn get() -> i32 { size; }
 
 The produced Wax type-checks (the shared name is not a duplicate-definition

@@ -27,25 +27,25 @@ fn get(a: &eq, i: i32) -> i32 {
     (s[i] as i32_u | s[i + 1] as i32_u << 8).extend16_s;
 }
 
-const lex_buffer: i32 = 2;
-const lex_buffer_len: i32 = 3;
-const lex_start_pos: i32 = 5;
-const lex_curr_pos: i32 = 6;
-const lex_last_pos: i32 = 7;
-const lex_last_action: i32 = 8;
-const lex_eof_reached: i32 = 9;
-const lex_mem: i32 = 10;
-const lex_base: i32 = 1;
-const lex_backtrk: i32 = 2;
-const lex_default: i32 = 3;
-const lex_trans: i32 = 4;
-const lex_check: i32 = 5;
-const lex_base_code: i32 = 6;
-const lex_backtrk_code: i32 = 7;
-const lex_default_code: i32 = 8;
-const lex_trans_code: i32 = 9;
-const lex_check_code: i32 = 10;
-const lex_code: i32 = 11;
+const lex_buffer = 2;
+const lex_buffer_len = 3;
+const lex_start_pos = 5;
+const lex_curr_pos = 6;
+const lex_last_pos = 7;
+const lex_last_action = 8;
+const lex_eof_reached = 9;
+const lex_mem = 10;
+const lex_base = 1;
+const lex_backtrk = 2;
+const lex_default = 3;
+const lex_trans = 4;
+const lex_check = 5;
+const lex_base_code = 6;
+const lex_backtrk_code = 7;
+const lex_default_code = 8;
+const lex_trans_code = 9;
+const lex_check_code = 10;
+const lex_code = 11;
 
 data lexing_empty_token = "lexing: empty token";
 

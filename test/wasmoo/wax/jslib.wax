@@ -542,7 +542,7 @@ fn caml_list_of_js_array(x: &eq) -> &eq {
     l;
 }
 
-const jsError: &string =
+const jsError =
     string#"jsError" // 'jsError'
     ;
 

@@ -10,6 +10,6 @@ its leading comment must still be emitted exactly once, not once per node.
   // an indirect-call helper
   fn call(i: i32, x: i32) -> i32 { (t[i] as &?ft)(x); }
   // a global
-  const answer: i32 = 42;
+  const answer = 42;
   // End of file
   
