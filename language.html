@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-60234db7.js";
+            window.path_to_searchindex_js = "searchindex-49f89d18.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -308,18 +308,34 @@ x.from_bits     // Reinterpret int as float
 <p>This maps directly to Wasm’s <code>select</code> instruction.</p>
 <h2 id="control-flow"><a class="header" href="#control-flow">Control Flow</a></h2>
 <h3 id="blocks"><a class="header" href="#blocks">Blocks</a></h3>
-<p>A block is a sequence of expressions. The last expression is the block’s value:</p>
-<pre><code class="language-wax">{
+<p>A block groups a sequence of statements, written with <code>do</code>. (A bare <code>{ … }</code> is
+accepted as shorthand for <code>do { … }</code>.)</p>
+<pre><code class="language-wax">do {
     let x: i32;
     x = compute();
-    x + 1;
+    use(x);
 }
 </code></pre>
-<p>Use <code>do</code> with a type annotation when the block returns a value:</p>
-<pre><code class="language-wax">do i32 {
+<p>By default a block is <strong>void</strong>: it produces no value, so — like a function with
+no result type — its body must leave the operand stack empty.</p>
+<p>To make a block produce a value, give it a result type after <code>do</code>. The body
+must leave a value of that type on the stack, and that becomes the block’s
+value:</p>
+<pre><code class="language-wax">answer = do i32 {
     42;
+};
+</code></pre>
+<p>This is a stack discipline, not a “last expression” rule: the body must leave
+<em>exactly</em> the values the block’s type describes — no more, no less. A void
+block that leaves a value, or a <code>do i32</code> block that leaves two, is an error.</p>
+<p>A block type may also take parameters off the enclosing stack, using the full
+<code>(params) -&gt; results</code> form:</p>
+<pre><code class="language-wax">do (i32) -&gt; i32 {
+    // the i32 operand below the block is available here
 }
 </code></pre>
+<p>Blocks can be labelled and used as branch targets; see
+<a href="#labels-and-branches">Labels and Branches</a>.</p>
 <h3 id="if-expressions"><a class="header" href="#if-expressions">If Expressions</a></h3>
 <pre><code class="language-wax">if condition {
     then_branch;
