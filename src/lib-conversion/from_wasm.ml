@@ -232,6 +232,8 @@ let heaptype st (t : Src.heaptype) : Ast.heaptype =
   | NoFunc -> NoFunc
   | Exn -> Exn
   | NoExn -> NoExn
+  | Cont -> Cont
+  | NoCont -> NoCont
   | Extern -> Extern
   | NoExtern -> NoExtern
   | Any -> Any
@@ -289,6 +291,7 @@ let comptype st name (t : Src.comptype) : Ast.comptype =
                (fieldtype st (get_type t)))
            l)
   | Array t -> Array (fieldtype st t)
+  | Cont i -> Cont (idx st `Type i)
 
 let subtype st name (t : Src.subtype) : Ast.subtype =
   {
@@ -349,7 +352,7 @@ let functype_arity { Src.params; results } =
 let type_arity ctx idx =
   match (lookup_type ctx Type idx).typ with
   | Func ty -> functype_arity ty
-  | Struct _ | Array _ -> assert false
+  | Struct _ | Array _ | Cont _ -> assert false
 
 let typeuse_arity ctx (i, ty) =
   match (i, ty) with
@@ -687,7 +690,7 @@ let blocktype ctx (typ : Src.blocktype option) =
         | Some idx, _ -> (
             let ty = lookup_type ctx Type idx in
             match ty.typ with
-            | Struct _ | Array _ -> assert false
+            | Struct _ | Array _ | Cont _ -> assert false
             | Func sign -> sign)
         | None, None -> assert false
       in
@@ -1077,6 +1080,12 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   | ThrowRef ->
       let* e = Stack.pop in
       Stack.push_poly (with_loc (ThrowRef e))
+  (* Stack-switching instructions have no Wax surface syntax. They are only
+     reachable when translating a Wasm module to Wax, which the [--wasm-only]
+     test mode skips. *)
+  | ContNew _ | ContBind _ | Suspend _ | Resume _ | ResumeThrow _
+  | ResumeThrowRef _ | Switch _ ->
+      assert false
   | RefAsNonNull ->
       let* e = Stack.pop in
       Stack.push 1 (with_loc (NonNull e))
@@ -1269,7 +1278,7 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
                     Ast.params;
                     results = Array.map (fun t -> valtype ctx t) results;
                   }
-              | Struct _ | Array _ -> assert false)
+              | Struct _ | Array _ | Cont _ -> assert false)
           | None, None -> assert false (* Should not happen *)
         in
         let typ = Option.map (fun i -> idx ctx `Type i) (fst typ) in
@@ -1412,7 +1421,7 @@ let register_names ctx export_tbl fields =
                 let name = Sequence.register' ctx.types export_tbl None id [] in
                 CondTbl.add ctx.type_defs ctx.cond_asm name ty;
                 match (ty : Src.subtype).typ with
-                | Func _ | Array _ -> ()
+                | Func _ | Array _ | Cont _ -> ()
                 | Struct l ->
                     let seq = Sequence.make (Namespace.make ()) "f" in
                     let fields =

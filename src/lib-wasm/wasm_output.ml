@@ -84,6 +84,8 @@ module Encoder = struct
     | Struct -> byte b 0x6B
     | Array -> byte b 0x6A
     | Exn -> byte b 0x69
+    | Cont -> byte b 0x68
+    | NoCont -> byte b 0x75
     | Type idx -> sint b idx
 
   let reftype b (t : reftype) =
@@ -143,6 +145,9 @@ module Encoder = struct
     | Array field ->
         byte b 0x5E;
         fieldtype b field
+    | Cont idx ->
+        byte b 0x5D;
+        heaptype b (Type idx)
 
   let subtype b (t : subtype) =
     if t.final && t.supertype = None then comptype b t.typ
@@ -173,6 +178,19 @@ module Encoder = struct
   let blocktype b (t : blocktype) =
     match t with Valtype v -> valtype b v | Typeuse i -> sint b i
 
+  let resumetable b clauses =
+    vec
+      (fun b c ->
+        match c with
+        | OnLabel (tag, label) ->
+            byte b 0x00;
+            uint b tag;
+            uint b label
+        | OnSwitch tag ->
+            byte b 0x01;
+            uint b tag)
+      b clauses
+
   let rec instr ~source_map_t b (i : Ast.location instr) =
     (*ZZZ push absence of mapping *)
     (if
@@ -191,6 +209,33 @@ module Encoder = struct
         byte b 0x08;
         uint b i
     | ThrowRef -> byte b 0x0A
+    | ContNew i ->
+        byte b 0xE0;
+        uint b i
+    | ContBind (i, j) ->
+        byte b 0xE1;
+        uint b i;
+        uint b j
+    | Suspend i ->
+        byte b 0xE2;
+        uint b i
+    | Resume (i, clauses) ->
+        byte b 0xE3;
+        uint b i;
+        resumetable b clauses
+    | ResumeThrow (i, j, clauses) ->
+        byte b 0xE4;
+        uint b i;
+        uint b j;
+        resumetable b clauses
+    | ResumeThrowRef (i, clauses) ->
+        byte b 0xE5;
+        uint b i;
+        resumetable b clauses
+    | Switch (i, j) ->
+        byte b 0xE6;
+        uint b i;
+        uint b j
     | Block { typ; block; _ } ->
         byte b 0x02;
         (match typ with Some t -> blocktype b t | None -> byte b 0x40);

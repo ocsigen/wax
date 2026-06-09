@@ -264,6 +264,8 @@ let heaptype (ty : heaptype) =
   | NoFunc -> type_ "nofunc"
   | Exn -> type_ "exn"
   | NoExn -> type_ "noexn"
+  | Cont -> type_ "cont"
+  | NoCont -> type_ "nocont"
   | Extern -> type_ "extern"
   | NoExtern -> type_ "noextern"
   | Any -> type_ "any"
@@ -342,6 +344,7 @@ let comptype (typ : comptype) =
                  (keyword "field" :: (opt_id nm @ [ fieldtype f ])))
              (Array.to_list l))
   | Array ty -> list [ keyword "array"; fieldtype ty ]
+  | Cont idx -> list [ keyword "cont"; index idx ]
 
 let typeuse idx = [ list [ keyword "type"; index idx ] ]
 let typeuse' (idx, typ) = option typeuse idx @ option functype typ
@@ -628,6 +631,14 @@ let catches l =
       | CatchRef (x, l) -> list [ keyword "catch_ref"; index x; index l ]
       | CatchAll l -> list [ keyword "catch_all"; index l ]
       | CatchAllRef l -> list [ keyword "catch_all_ref"; index l ])
+    l
+
+let on_clauses l =
+  List.map
+    (fun c ->
+      match c with
+      | OnLabel (x, l) -> list [ keyword "on"; index x; index l ]
+      | OnSwitch x -> list [ keyword "on"; index x; keyword "switch" ])
     l
 
 let cmp_op_string (op : Ast.cmp_op) =
@@ -1029,6 +1040,18 @@ let rec instr i =
   | Return -> instruction ~loc "return"
   | Throw tag -> block ~loc [ instruction "throw"; index tag ]
   | ThrowRef -> block ~loc [ instruction "throw_ref" ]
+  | ContNew i -> block ~loc [ instruction "cont.new"; index i ]
+  | ContBind (i, j) -> block ~loc [ instruction "cont.bind"; index i; index j ]
+  | Suspend i -> block ~loc [ instruction "suspend"; index i ]
+  | Resume (i, clauses) ->
+      block ~loc (instruction "resume" :: index i :: on_clauses clauses)
+  | ResumeThrow (i, j, clauses) ->
+      block ~loc
+        (instruction "resume_throw" :: index i :: index j :: on_clauses clauses)
+  | ResumeThrowRef (i, clauses) ->
+      block ~loc
+        (instruction "resume_throw_ref" :: index i :: on_clauses clauses)
+  | Switch (i, j) -> block ~loc [ instruction "switch"; index i; index j ]
   | Nop -> instruction ~loc "nop"
   | Unreachable -> instruction ~loc "unreachable"
   | ArraySet typ -> block ~loc [ instruction "array.set"; index typ ]

@@ -39,6 +39,8 @@ end) : sig
     | NoFunc
     | Exn
     | NoExn
+    | Cont
+    | NoCont
     | Extern
     | NoExtern
     | Any
@@ -74,6 +76,7 @@ end) : sig
     | Func of functype
     | Struct of fieldtype X.annotated_array
     | Array of fieldtype
+    | Cont of X.idx
 
   type subtype = { typ : comptype; supertype : X.idx option; final : bool }
   type rectype = subtype X.annotated_array
@@ -430,6 +433,8 @@ end) : sig
     | CatchAll of X.idx
     | CatchAllRef of X.idx
 
+  type on_clause = OnLabel of X.idx * X.idx | OnSwitch of X.idx
+
   type 'info instr_desc =
     | Block of {
         label : X.label;
@@ -464,6 +469,13 @@ end) : sig
     | Nop
     | Throw of X.idx
     | ThrowRef
+    | ContNew of X.idx
+    | ContBind of X.idx * X.idx
+    | Suspend of X.idx
+    | Resume of X.idx * on_clause list
+    | ResumeThrow of X.idx * X.idx * on_clause list
+    | ResumeThrowRef of X.idx * on_clause list
+    | Switch of X.idx * X.idx
     | Br of X.idx
     | Br_if of X.idx
     | Br_table of X.idx list * X.idx

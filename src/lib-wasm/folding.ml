@@ -219,7 +219,7 @@ let locals env typ l =
       | Some ty, None -> (
           match (lookup env.types ty).typ with
           | Func ty -> ty
-          | Struct _ | Array _ -> assert false)
+          | Struct _ | Array _ | Cont _ -> assert false)
       | None, None -> assert false
     in
     Array.fold_left
@@ -259,7 +259,16 @@ let functype_arity { params; results } =
 let type_arity env idx =
   match (lookup_type env idx).typ with
   | Func ty -> functype_arity ty
-  | Struct _ | Array _ -> assert false (*ZZZ*)
+  | Struct _ | Array _ | Cont _ -> assert false (*ZZZ*)
+
+(* The function type underlying a continuation type [(cont $ft)]. *)
+let cont_functype env idx =
+  match (lookup_type env idx).typ with
+  | Cont ft -> (
+      match (lookup_type env ft).typ with
+      | Func ty -> ty
+      | Struct _ | Array _ | Cont _ -> assert false)
+  | Func _ | Struct _ | Array _ -> assert false
 
 let typeuse_arity env (i, ty) =
   match (i, ty) with
@@ -341,6 +350,33 @@ let arity env i =
   | Nop -> (0, 0)
   | Throw idx -> (fst (tag_arity env idx), unreachable)
   | ThrowRef -> (1, unreachable)
+  | ContNew _ -> (1, 1)
+  | ContBind (i, j) ->
+      let n1 = Array.length (cont_functype env i).params in
+      let n2 = Array.length (cont_functype env j).params in
+      (n1 - n2 + 1, 1)
+  | Suspend idx -> tag_arity env idx
+  | Resume (i, _) ->
+      let ft = cont_functype env i in
+      (Array.length ft.params + 1, Array.length ft.results)
+  | ResumeThrow (i, j, _) ->
+      let ft = cont_functype env i in
+      (fst (tag_arity env j) + 1, Array.length ft.results)
+  | ResumeThrowRef (i, _) ->
+      let ft = cont_functype env i in
+      (2, Array.length ft.results)
+  | Switch (i, _) ->
+      let ft = cont_functype env i in
+      let output =
+        match ft.params with
+        | [||] -> 0
+        | params -> (
+            match snd params.(Array.length params - 1) with
+            | Ref { typ = Type ct2; _ } ->
+                Array.length (cont_functype env ct2).params
+            | _ -> 0)
+      in
+      (Array.length ft.params, output)
   | Drop -> (1, 0)
   | Select _ -> (3, 1)
   | LocalGet l -> (0, local_arity env l)
@@ -371,7 +407,7 @@ let arity env i =
   | StructNew t -> (
       match (lookup_type env t).typ with
       | Struct f -> (Array.length f, 1)
-      | Func _ | Array _ -> assert false (*ZZZ*))
+      | Func _ | Array _ | Cont _ -> assert false (*ZZZ*))
   | StructNewDefault _ -> (0, 1)
   | StructGet _ -> (1, 1)
   | StructSet _ -> (2, 0)

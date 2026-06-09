@@ -42,6 +42,7 @@ module RecTypeTbl = Hashtbl.Make (struct
         array_for_all2 valtype_eq p1 p2 && array_for_all2 valtype_eq r1 r2
     | Struct l1, Struct l2 -> array_for_all2 fieldtype_eq l1 l2
     | Array f1, Array f2 -> fieldtype_eq f1 f2
+    | Cont i1, Cont i2 -> heaptype_eq (Type i1) (Type i2)
     | _ -> false
 
   let subtype_eq { final = f1; supertype = s1; typ = t1; _ }
@@ -83,8 +84,8 @@ let subtyping_info t =
   let update_index i i' = if i' >= 0 then i' else i + lnot i' in
   let update_heaptype i (ty : heaptype) =
     match ty with
-    | Func | NoFunc | Exn | NoExn | Extern | NoExtern | Any | Eq | I31 | Struct
-    | Array | None_ ->
+    | Func | NoFunc | Exn | NoExn | Cont | NoCont | Extern | NoExtern | Any | Eq
+    | I31 | Struct | Array | None_ ->
         ty
     | Type i' -> Type (update_index i i')
   in
@@ -110,6 +111,7 @@ let subtyping_info t =
     | Func ty -> Func (update_functype i ty)
     | Struct a -> Struct (Array.map (update_fieldtype i) a)
     | Array ty -> Array (update_fieldtype i ty)
+    | Cont i' -> Cont (update_index i i')
   in
   let l =
     List.map
@@ -143,6 +145,8 @@ let heap_subtype (subtyping_info : subtype array) (ty : heaptype)
   | NoFunc, NoFunc
   | (Exn | NoExn), Exn
   | NoExn, NoExn
+  | (Cont | NoCont), Cont
+  | NoCont, NoCont
   | (Extern | NoExtern), Extern
   | NoExtern, NoExtern
   | (Any | Eq | I31 | Struct | Array | None_), Any
@@ -155,27 +159,35 @@ let heap_subtype (subtyping_info : subtype array) (ty : heaptype)
   | Type i, (Any | Eq) -> (
       match subtyping_info.(i).typ with
       | Struct _ | Array _ -> true
-      | Func _ -> false)
+      | Func _ | Cont _ -> false)
   | Type i, Struct -> (
       match subtyping_info.(i).typ with
       | Struct _ -> true
-      | Array _ | Func _ -> false)
+      | Array _ | Func _ | Cont _ -> false)
   | Type i, Array -> (
       match subtyping_info.(i).typ with
       | Array _ -> true
-      | Struct _ | Func _ -> false)
+      | Struct _ | Func _ | Cont _ -> false)
   | Type i, Func -> (
       match subtyping_info.(i).typ with
       | Func _ -> true
-      | Struct _ | Array _ -> false)
+      | Struct _ | Array _ | Cont _ -> false)
+  | Type i, Cont -> (
+      match subtyping_info.(i).typ with
+      | Cont _ -> true
+      | Func _ | Struct _ | Array _ -> false)
   | None_, Type i -> (
       match subtyping_info.(i).typ with
       | Struct _ | Array _ -> true
-      | Func _ -> false)
+      | Func _ | Cont _ -> false)
   | NoFunc, Type i -> (
       match subtyping_info.(i).typ with
       | Func _ -> true
-      | Struct _ | Array _ -> false)
+      | Struct _ | Array _ | Cont _ -> false)
+  | NoCont, Type i -> (
+      match subtyping_info.(i).typ with
+      | Cont _ -> true
+      | Func _ | Struct _ | Array _ -> false)
   | Type i, Type i' -> subtype subtyping_info i i'
   | _ -> false
 

@@ -16,6 +16,8 @@ let rec heaptype type_names (h : B.heaptype) : T.heaptype =
   | NoFunc -> NoFunc
   | Exn -> Exn
   | NoExn -> NoExn
+  | Cont -> Cont
+  | NoCont -> NoCont
   | Extern -> Extern
   | NoExtern -> NoExtern
   | Any -> Any
@@ -67,6 +69,7 @@ let comptype (names : B.names) s_idx (c : B.comptype) : T.comptype =
              Ast.no_loc (field_name names s_idx f_idx, fieldtype names.types f))
            fa)
   | Array ft -> Array (fieldtype names.types ft)
+  | Cont i -> Cont (index ~map:names.types i)
 
 let subtype (names : B.names) idx (s : B.subtype) : T.subtype =
   {
@@ -110,6 +113,12 @@ let catch (names : B.names) stack (c : B.catch) : T.catch =
       CatchRef (index ~map:names.tags tag, get_label_reference stack label)
   | CatchAll label -> CatchAll (get_label_reference stack label)
   | CatchAllRef label -> CatchAllRef (get_label_reference stack label)
+
+let on_clause (names : B.names) stack (c : B.on_clause) : T.on_clause =
+  match c with
+  | OnLabel (tag, label) ->
+      OnLabel (index ~map:names.tags tag, get_label_reference stack label)
+  | OnSwitch tag -> OnSwitch (index ~map:names.tags tag)
 
 let get_label_name label_names label_counter =
   let idx = !label_counter in
@@ -209,6 +218,22 @@ let rec instr (names : B.names) local_names label_names label_counter stack
     | Nop -> Nop
     | Throw i -> Throw (index ~map:names.tags i)
     | ThrowRef -> ThrowRef
+    | ContNew i -> ContNew (index ~map:names.types i)
+    | ContBind (i, j) ->
+        ContBind (index ~map:names.types i, index ~map:names.types j)
+    | Suspend i -> Suspend (index ~map:names.tags i)
+    | Resume (i, clauses) ->
+        Resume
+          (index ~map:names.types i, List.map (on_clause names stack) clauses)
+    | ResumeThrow (i, j, clauses) ->
+        ResumeThrow
+          ( index ~map:names.types i,
+            index ~map:names.tags j,
+            List.map (on_clause names stack) clauses )
+    | ResumeThrowRef (i, clauses) ->
+        ResumeThrowRef
+          (index ~map:names.types i, List.map (on_clause names stack) clauses)
+    | Switch (i, j) -> Switch (index ~map:names.types i, index ~map:names.tags j)
     | Br i -> Br (get_label_reference stack i)
     | Br_if i -> Br_if (get_label_reference stack i)
     | Br_table (l, d) ->

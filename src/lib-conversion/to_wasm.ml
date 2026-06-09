@@ -28,6 +28,8 @@ let rec heaptype (h : heaptype) : Text.heaptype =
   | NoFunc -> NoFunc
   | Exn -> Exn
   | NoExn -> NoExn
+  | Cont -> Cont
+  | NoCont -> NoCont
   | Extern -> Extern
   | NoExtern -> NoExtern
   | Any -> Any
@@ -788,6 +790,7 @@ let subtype s : Text.subtype =
                Ast.no_loc (Some name, { Text.Types.mut; typ = storagetype typ }))
              fields)
     | Array { mut; typ } -> Array { mut; typ = storagetype typ }
+    | Cont idx -> Cont (index idx)
   in
   { typ; supertype = Option.map index s.supertype; final = s.final }
 
@@ -845,6 +848,9 @@ let module_ diagnostics types fields =
               let kind =
                 match subtype.typ with
                 | Func _ -> `Func
+                (* Continuation types have no Wax surface syntax, so this case
+                   is unreachable for Wax-native input. *)
+                | Cont _ -> `Func
                 | Array _ -> `Array
                 | Struct fields ->
                     let field_names =

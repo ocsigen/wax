@@ -385,6 +385,8 @@ let heaptype d ctx (h : heaptype) : Internal.heaptype option =
   | NoFunc -> Some NoFunc
   | Exn -> Some Exn
   | NoExn -> Some NoExn
+  | Cont -> Some Cont
+  | NoCont -> Some NoCont
   | Extern -> Some Extern
   | NoExtern -> Some NoExtern
   | Any -> Some Any
@@ -483,6 +485,9 @@ let comptype d ctx (ty : comptype) =
   | Array field ->
       let+@ field = fieldtype d ctx field in
       (Array field : Internal.comptype)
+  | Cont idx ->
+      let+@ ty = resolve_type_name d ctx idx in
+      (Cont ty : Internal.comptype)
 
 let subtype d ctx current { typ; supertype; final } =
   let*@ typ = comptype d ctx typ in
@@ -547,7 +552,7 @@ let lookup_func_type ?location ctx name =
   let*@ ty = Tbl.find_opt ctx.type_context.types name in
   match (snd ty).typ with
   | Func f -> Some f
-  | Struct _ | Array _ ->
+  | Struct _ | Array _ | Cont _ ->
       Error.expected_func_type ctx.diagnostics
         ~location:(Option.value ~default:name.info location);
       None
@@ -556,7 +561,7 @@ let lookup_struct_type ?location ctx name =
   let*@ ty = Tbl.find_opt ctx.type_context.types name in
   match (snd ty).typ with
   | Struct fields -> Some fields
-  | Func _ | Array _ ->
+  | Func _ | Array _ | Cont _ ->
       Error.expected_struct_type ctx.diagnostics
         ~location:(Option.value ~default:name.info location);
       None
@@ -565,7 +570,7 @@ let lookup_array_type ?location ctx name =
   let*@ ty = Tbl.find_opt ctx.type_context.types name in
   match (snd ty).typ with
   | Array field -> Some field
-  | Func _ | Struct _ ->
+  | Func _ | Struct _ | Cont _ ->
       Error.expected_array_type ctx.diagnostics
         ~location:(Option.value ~default:name.info location);
       None
@@ -575,10 +580,14 @@ let top_heap_type ctx (t : heaptype) : heaptype option =
   | Any | Eq | I31 | Struct | Array | None_ -> Some Any
   | Func | NoFunc -> Some Func
   | Exn | NoExn -> Some Exn
+  | Cont | NoCont -> Some Cont
   | Extern | NoExtern -> Some Extern
   | Type ty -> (
       let+@ ty = Tbl.find ctx.diagnostics ctx.types ty in
-      match (snd ty).typ with Struct _ | Array _ -> Any | Func _ -> Func)
+      match (snd ty).typ with
+      | Struct _ | Array _ -> Any
+      | Func _ -> Func
+      | Cont _ -> Cont)
 
 let diff_ref_type t1 t2 =
   { nullable = t1.nullable && not t2.nullable; typ = t1.typ }
@@ -713,8 +722,8 @@ let cast ctx ty ty' =
       ( Ref
           {
             typ =
-              ( Func | NoFunc | Exn | NoExn | Extern | NoExtern | Any | Eq
-              | Array | Struct | Type _ | None_ );
+              ( Func | NoFunc | Exn | NoExn | Cont | NoCont | Extern | NoExtern
+              | Any | Eq | Array | Struct | Type _ | None_ );
             _;
           }
       | V128 | Tuple _ ) )
@@ -770,7 +779,13 @@ let signed_cast ctx ty ty' =
           {
             internal =
               ( V128
-              | Ref { typ = Func | NoFunc | Exn | NoExn | Extern | NoExtern; _ }
+              | Ref
+                  {
+                    typ =
+                      ( Func | NoFunc | Exn | NoExn | Cont | NoCont | Extern
+                      | NoExtern );
+                    _;
+                  }
               | Tuple _ );
             _;
           } ),
@@ -1125,6 +1140,7 @@ let immediate_supertype s : Ast.heaptype =
   | None, Struct _ -> Struct
   | None, Array _ -> Array
   | None, Func _ -> Func
+  | None, Cont _ -> Cont
 
 (* The type lookups below never fail *)
 let rec heap_lub ctx (h1 : Ast.heaptype) (h2 : Ast.heaptype) =
@@ -1162,6 +1178,8 @@ let rec heap_lub ctx (h1 : Ast.heaptype) (h2 : Ast.heaptype) =
   | (NoExtern | Extern), Extern | Extern, NoExtern -> Some Extern
   | NoExn, NoExn -> Some NoExn
   | (NoExn | Exn), Exn | Exn, NoExn -> Some Exn
+  | NoCont, NoCont -> Some NoCont
+  | (NoCont | Cont), Cont | Cont, NoCont -> Some Cont
   | ( (None_ | Eq | I31 | Struct | Array | Any),
       (NoExtern | Extern | NoExn | Exn | NoFunc | Func) )
   | ( (NoExtern | Extern | NoExn | Exn | NoFunc | Func),
@@ -1169,7 +1187,11 @@ let rec heap_lub ctx (h1 : Ast.heaptype) (h2 : Ast.heaptype) =
   | (NoFunc | Func), (NoExtern | Extern | NoExn | Exn)
   | (NoExtern | Extern | NoExn | Exn), (NoFunc | Func)
   | (NoExtern | Extern), (NoExn | Exn)
-  | (NoExn | Exn), (NoExtern | Extern) ->
+  | (NoExn | Exn), (NoExtern | Extern)
+  (* Continuation types form their own hierarchy, incompatible with all
+     others (and have no Wax surface syntax). *)
+  | (Cont | NoCont), _
+  | _, (Cont | NoCont) ->
       None
 
 let val_lub ctx v1 v2 =
@@ -1643,7 +1665,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                 fieldtype ctx typ
             | Array _ when field.desc = "length" ->
                 Some (UnionFind.make (Valtype { typ = I32; internal = I32 }))
-            | Func _ | Array _ ->
+            | Func _ | Array _ | Cont _ ->
                 (*ZZZ Fix location*)
                 if field.desc = "length" then
                   Error.expected_array_type ctx.diagnostics ~location:ty.info
@@ -2457,9 +2479,13 @@ let check_type_definitions ctx =
                 assert (field_subtype ctx fields.(i) fields'.(i))
               done
           | Array field, Array field' -> assert (field_subtype ctx field field')
-          | Func _, (Struct _ | Array _)
-          | Struct _, (Func _ | Array _)
-          | Array _, (Func _ | Struct _) ->
+          | Cont ft, Cont ft' ->
+              assert (
+                Wasm.Types.heap_subtype ctx.subtyping_info (Type ft) (Type ft'))
+          | Func _, (Struct _ | Array _ | Cont _)
+          | Struct _, (Func _ | Array _ | Cont _)
+          | Array _, (Func _ | Struct _ | Cont _)
+          | Cont _, (Func _ | Struct _ | Array _) ->
               assert false))
 
 let rec check_constant_instruction ctx i =

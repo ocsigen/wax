@@ -143,6 +143,8 @@ let heaptype ch =
   | 0x6B -> Struct
   | 0x6A -> Array
   | 0x69 -> Exn
+  | 0x68 -> Cont
+  | 0x75 -> NoCont
   | _ ->
       if i < 0 then failwith (Printf.sprintf "Unknown heaptype %x" i);
       Type i
@@ -163,6 +165,8 @@ let reftype i ch =
   | 0x6C -> nullable I31
   | 0x6B -> nullable Struct
   | 0x6A -> nullable Array
+  | 0x68 -> nullable Cont
+  | 0x75 -> nullable NoCont
   | 0x63 -> nullable (heaptype ch)
   | 0x64 -> { nullable = false; typ = heaptype ch }
   | _ -> failwith (Printf.sprintf "Unknown reftype %x@." i)
@@ -217,6 +221,10 @@ let fieldtype ch =
 
 let comptype i ch =
   match i with
+  | 0x5D -> (
+      match heaptype ch with
+      | Type i -> Cont i
+      | _ -> failwith "Invalid continuation type")
   | 0x5E -> Array (fieldtype ch)
   | 0x5F -> Struct (vec fieldtype ch)
   | 0x60 ->
@@ -333,6 +341,21 @@ let with_loc ch pos desc =
     info = { Ast.loc_start = position ch pos; loc_end = position ch ch.pos };
   }
 
+let on_clause ch =
+  match input_byte ch with
+  | 0x00 ->
+      let tag = uint ch in
+      let label = uint ch in
+      OnLabel (tag, label)
+  | 0x01 ->
+      let tag = uint ch in
+      OnSwitch tag
+  | c -> failwith (Printf.sprintf "Invalid on clause %d" c)
+
+let resumetable ch =
+  let n = uint ch in
+  List.init n (fun _ -> on_clause ch)
+
 let rec instructions ch acc =
   if pos_in ch = ch.limit then List.rev acc
   else
@@ -395,6 +418,29 @@ and instruction ch =
         Try { label = (); typ; block; catches; catch_all }
     | 0x08 -> Throw (uint ch)
     | 0x0A -> ThrowRef
+    | 0xE0 -> ContNew (uint ch)
+    | 0xE1 ->
+        let i = uint ch in
+        let j = uint ch in
+        ContBind (i, j)
+    | 0xE2 -> Suspend (uint ch)
+    | 0xE3 ->
+        let i = uint ch in
+        let clauses = resumetable ch in
+        Resume (i, clauses)
+    | 0xE4 ->
+        let i = uint ch in
+        let j = uint ch in
+        let clauses = resumetable ch in
+        ResumeThrow (i, j, clauses)
+    | 0xE5 ->
+        let i = uint ch in
+        let clauses = resumetable ch in
+        ResumeThrowRef (i, clauses)
+    | 0xE6 ->
+        let i = uint ch in
+        let j = uint ch in
+        Switch (i, j)
     | 0x0C -> Br (uint ch)
     | 0x0D -> Br_if (uint ch)
     | 0x0E ->

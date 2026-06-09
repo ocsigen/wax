@@ -266,6 +266,8 @@ let rec token_rec ctx lexbuf =
   | "nofunc" -> NOFUNC
   | "exn" -> EXN
   | "noexn" -> NOEXN
+  | "cont" -> CONT
+  | "nocont" -> NOCONT
   | "extern" -> EXTERN
   | "noextern" -> NOEXTERN
   | "anyref" -> ANYREF
@@ -278,6 +280,8 @@ let rec token_rec ctx lexbuf =
   | "nullfuncref" -> NULLFUNCREF
   | "exnref" -> EXNREF
   | "nullexnref" -> NULLEXNREF
+  | "contref" -> CONTREF
+  | "nullcontref" -> NULLCONTREF
   | "externref" -> EXTERNREF
   | "nullexternref" -> NULLEXTERNREF
   | "ref" -> REF
@@ -862,6 +866,14 @@ let rec token_rec ctx lexbuf =
   | "catch_all_ref" -> LPAREN_CATCH_ALL_REF
   | "throw" -> THROW
   | "throw_ref" -> THROW_REF
+  | "cont.new" -> CONT_NEW
+  | "cont.bind" -> CONT_BIND
+  | "suspend" -> SUSPEND
+  | "resume" -> RESUME
+  | "resume_throw" -> RESUME_THROW
+  | "resume_throw_ref" -> RESUME_THROW_REF
+  | "switch" -> SWITCH
+  | "on" -> LPAREN_ON
   | "align=", uN ->
       MEM_ALIGN
         (Sedlexing.Utf8.sub_lexeme lexbuf 6
@@ -880,6 +892,7 @@ let rec token_rec ctx lexbuf =
   | "ref.host" -> REF_HOST
   | "assert_return" -> ASSERT_RETURN
   | "assert_exception" -> ASSERT_EXCEPTION
+  | "assert_suspension" -> ASSERT_SUSPENSION
   | "assert_trap" -> ASSERT_TRAP
   | "assert_exhaustion" -> ASSERT_EXHAUSTION
   | "assert_malformed" -> ASSERT_MALFORMED
@@ -934,7 +947,7 @@ let token ctx =
       | ( None,
           ( LPAREN_CATCH_ALL_REF | LPAREN_CATCH_REF | LPAREN_EXPORT
           | LPAREN_IMPORT | LPAREN_LOCAL | LPAREN_PARAM | LPAREN_RESULT
-          | LPAREN_THEN | LPAREN_TYPE ) ) ->
+          | LPAREN_THEN | LPAREN_TYPE | LPAREN_ON ) ) ->
           raise
             (Parsing.Syntax_error
                ( Sedlexing.lexing_bytes_positions lexbuf,
@@ -953,7 +966,7 @@ let token ctx =
       | ( Some LPAREN,
           ( LPAREN_CATCH_ALL_REF | LPAREN_CATCH_REF | LPAREN_EXPORT
           | LPAREN_IMPORT | LPAREN_LOCAL | LPAREN_PARAM | LPAREN_RESULT
-          | LPAREN_THEN | LPAREN_TYPE ) ) ->
+          | LPAREN_THEN | LPAREN_TYPE | LPAREN_ON ) ) ->
           prev_token := None;
           t
       | Some t', _ ->

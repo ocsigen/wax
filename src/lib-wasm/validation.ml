@@ -21,6 +21,8 @@ let print_heaptype f (ty : heaptype) =
   | NoFunc -> Format.fprintf f "nofunc"
   | Exn -> Format.fprintf f "exn"
   | NoExn -> Format.fprintf f "noexn"
+  | Cont -> Format.fprintf f "cont"
+  | NoCont -> Format.fprintf f "nocont"
   | Extern -> Format.fprintf f "extern"
   | NoExtern -> Format.fprintf f "noextern"
   | Any -> Format.fprintf f "any"
@@ -327,6 +329,26 @@ module Error = struct
       ~message:(fun f () ->
         Format.fprintf f "Tuple types are not supported yet.")
       ()
+
+  let expected_cont_type context ~location idx =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f "Type %a should be a continuation type." print_index
+          idx)
+      ()
+
+  let stack_switching_type_mismatch context ~location =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f "Type mismatch in stack switching instruction.")
+      ()
+
+  let invalid_cast_type context ~location =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f
+          "Continuation types cannot be used in a cast instruction.")
+      ()
 end
 
 let print_instr f i = Utils.Printer.run f (fun p -> Output.instr p i)
@@ -414,6 +436,8 @@ let heaptype d ctx (h : Ast.Text.heaptype) : heaptype option =
   | NoFunc -> Some NoFunc
   | Exn -> Some Exn
   | NoExn -> Some NoExn
+  | Cont -> Some Cont
+  | NoCont -> Some NoCont
   | Extern -> Some Extern
   | NoExtern -> Some NoExtern
   | Any -> Some Any
@@ -501,6 +525,9 @@ let comptype d ctx (ty : Ast.Text.comptype) =
   | Array field ->
       let+@ field = fieldtype d ctx field in
       Array field
+  | Cont idx ->
+      let+@ ty = resolve_type_index d ctx idx in
+      Cont ty
 
 let subtype d ctx current { Ast.Text.typ; supertype; final } =
   let*@ typ = comptype d ctx typ in
@@ -621,10 +648,68 @@ let lookup_tag_type ctx tag =
   let ctx = ctx.modul in
   let+@ ty = Sequence.get ctx.diagnostics ctx.tags tag in
   match (Types.get_subtype ctx.subtyping_info ty).typ with
-  | Struct _ | Array _ -> assert false (* Already checked *)
+  | Struct _ | Array _ | Cont _ -> assert false (* Already checked *)
   | Func { params; results } ->
       assert (results = [||]);
       params
+
+(* Full function type of a tag, used for stack-switching suspension tags whose
+   results may be non-empty (unlike exception tags). *)
+let lookup_tag_signature ctx tag =
+  let ctx = ctx.modul in
+  let+@ ty = Sequence.get ctx.diagnostics ctx.tags tag in
+  match (Types.get_subtype ctx.subtyping_info ty).typ with
+  | Func ft -> ft
+  | Struct _ | Array _ | Cont _ -> assert false (* Already checked *)
+
+(* Resolve a continuation type index to its own index and the function type it
+   wraps. Emits an error if the type is not a continuation type. *)
+let lookup_cont_type ctx idx =
+  let mctx = ctx.modul in
+  let*@ ty = resolve_type_index mctx.diagnostics mctx.types idx in
+  match (Types.get_subtype mctx.subtyping_info ty).typ with
+  | Cont ft -> (
+      match (Types.get_subtype mctx.subtyping_info ft).typ with
+      | Func f -> Some (ty, ft, f)
+      | Struct _ | Array _ | Cont _ ->
+          Error.expected_cont_type mctx.diagnostics ~location:idx.info idx;
+          None)
+  | Struct _ | Array _ | Func _ ->
+      Error.expected_cont_type mctx.diagnostics ~location:idx.info idx;
+      None
+
+(* The continuation type referenced by a heap type, if any. *)
+let cont_functype_of_heaptype ctx (h : heaptype) =
+  match h with
+  | Type ty -> (
+      match (Types.get_subtype ctx.modul.subtyping_info ty).typ with
+      | Cont ft -> (
+          match (Types.get_subtype ctx.modul.subtyping_info ft).typ with
+          | Func f -> Some f
+          | Struct _ | Array _ | Cont _ -> None)
+      | Func _ | Struct _ | Array _ -> None)
+  | _ -> None
+
+(* [functype_matches info ft ft'] holds when [ft] is a subtype of [ft']:
+   parameters are contravariant and results covariant. *)
+let functype_matches info (ft : functype) (ft' : functype) =
+  Array.length ft.params = Array.length ft'.params
+  && Array.length ft.results = Array.length ft'.results
+  && Array.for_all Fun.id
+       (Array.mapi
+          (fun i p -> Types.val_subtype info ft'.params.(i) p)
+          ft.params)
+  && Array.for_all Fun.id
+       (Array.mapi
+          (fun i r -> Types.val_subtype info r ft'.results.(i))
+          ft.results)
+
+(* [result_subtype info ts ts'] holds when result type [ts] matches [ts']
+   (same length, covariant element by element). *)
+let result_subtype info (ts : valtype array) (ts' : valtype array) =
+  Array.length ts = Array.length ts'
+  && Array.for_all Fun.id
+       (Array.mapi (fun i t -> Types.val_subtype info t ts'.(i)) ts)
 
 type stack =
   | Unreachable
@@ -823,11 +908,13 @@ let top_heap_type ctx (t : heaptype) : heaptype =
   | Any | Eq | I31 | Struct | Array | None_ -> Any
   | Func | NoFunc -> Func
   | Exn | NoExn -> Exn
+  | Cont | NoCont -> Cont
   | Extern | NoExtern -> Extern
   | Type ty -> (
       match (Types.get_subtype ctx.modul.subtyping_info ty).typ with
       | Struct _ | Array _ -> Any
-      | Func _ -> Func)
+      | Func _ -> Func
+      | Cont _ -> Cont)
 
 let storage_subtype info ty ty' =
   match (ty, ty') with
@@ -923,6 +1010,56 @@ let check_shape_lanes ctx location (shape : Ast.vec_shape) lane =
   if lane >= max_lane then
     Error.invalid_lane_index ctx.modul.diagnostics ~location max_lane
 
+(* Validate the handler clauses of a [resume]/[resume_throw] instruction. [ts2]
+   is the result type of the resumed continuation. *)
+let check_resume_table ctx loc ts2 clauses =
+  let info = ctx.modul.subtyping_info in
+  List.iter
+    (fun (clause : Ast.Text.on_clause) ->
+      match clause with
+      | OnLabel (tag, label) -> (
+          match lookup_tag_signature ctx tag with
+          | None -> ()
+          | Some { params = ts3; results = ts4 } -> (
+              match branch_target ctx label with
+              | None -> ()
+              | Some ts' ->
+                  let n = Array.length ts' in
+                  let mismatch () =
+                    Error.stack_switching_type_mismatch ctx.modul.diagnostics
+                      ~location:label.info
+                  in
+                  (* The handler label receives the tag's parameters followed by
+                     a continuation of type [cont (ts4 -> ts2)]. *)
+                  if n <> Array.length ts3 + 1 then mismatch ()
+                  else begin
+                    Array.iteri
+                      (fun i t ->
+                        if not (Types.val_subtype info t ts'.(i)) then
+                          mismatch ())
+                      ts3;
+                    match ts'.(n - 1) with
+                    | Ref { typ = ht; _ } -> (
+                        match cont_functype_of_heaptype ctx ht with
+                        | Some ft' ->
+                            if
+                              not
+                                (functype_matches info
+                                   { params = ts4; results = ts2 }
+                                   ft')
+                            then mismatch ()
+                        | None -> mismatch ())
+                    | _ -> mismatch ()
+                  end))
+      | OnSwitch tag -> (
+          match lookup_tag_signature ctx tag with
+          | None -> ()
+          | Some { params = ts3; _ } ->
+              if Array.length ts3 <> 0 then
+                Error.stack_switching_type_mismatch ctx.modul.diagnostics
+                  ~location:loc))
+    clauses
+
 let rec instruction ctx (i : _ Ast.Text.instr) =
   if false then Format.eprintf "%a@." print_instr i;
   let loc = i.info in
@@ -1003,6 +1140,100 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
   | ThrowRef ->
       let* () = pop ctx loc (Ref { nullable = true; typ = Exn }) in
       unreachable
+  | ContNew x ->
+      let*! ty, ft, _ = lookup_cont_type ctx x in
+      let* () = pop ctx loc (Ref { nullable = true; typ = Type ft }) in
+      push_results [| Ref { nullable = false; typ = Type ty } |]
+  | ContBind (x, y) ->
+      let*! xty, _, ftx = lookup_cont_type ctx x in
+      let*! yty, _, fty = lookup_cont_type ctx y in
+      let n1 = Array.length ftx.params in
+      let n1' = Array.length fty.params in
+      if n1 < n1' then (
+        Error.stack_switching_type_mismatch ctx.modul.diagnostics ~location:loc;
+        unreachable)
+      else begin
+        let ts11 = Array.sub ftx.params 0 (n1 - n1') in
+        let ts12 = Array.sub ftx.params (n1 - n1') n1' in
+        if
+          not
+            (functype_matches ctx.modul.subtyping_info
+               { params = ts12; results = ftx.results }
+               fty)
+        then
+          Error.stack_switching_type_mismatch ctx.modul.diagnostics
+            ~location:loc;
+        let* () =
+          pop_args ctx loc
+            (Array.append ts11 [| Ref { nullable = true; typ = Type xty } |])
+        in
+        push_results [| Ref { nullable = false; typ = Type yty } |]
+      end
+  | Suspend x ->
+      let*! { params = ts1; results = ts2 } = lookup_tag_signature ctx x in
+      let* () = pop_args ctx loc ts1 in
+      push_results ts2
+  | Resume (x, clauses) ->
+      let*! xty, _, ftx = lookup_cont_type ctx x in
+      check_resume_table ctx loc ftx.results clauses;
+      let* () =
+        pop_args ctx loc
+          (Array.append ftx.params
+             [| Ref { nullable = true; typ = Type xty } |])
+      in
+      push_results ftx.results
+  | ResumeThrow (x, y, clauses) ->
+      let*! xty, _, ftx = lookup_cont_type ctx x in
+      let*! { params = ts0; _ } = lookup_tag_signature ctx y in
+      check_resume_table ctx loc ftx.results clauses;
+      let* () =
+        pop_args ctx loc
+          (Array.append ts0 [| Ref { nullable = true; typ = Type xty } |])
+      in
+      push_results ftx.results
+  | ResumeThrowRef (x, clauses) ->
+      let*! xty, _, ftx = lookup_cont_type ctx x in
+      check_resume_table ctx loc ftx.results clauses;
+      let* () =
+        pop_args ctx loc
+          [|
+            Ref { nullable = true; typ = Exn };
+            Ref { nullable = true; typ = Type xty };
+          |]
+      in
+      push_results ftx.results
+  | Switch (x, y) ->
+      let*! xty, _, ftx = lookup_cont_type ctx x in
+      let ts11 = ftx.params in
+      let n = Array.length ts11 in
+      let inner =
+        match if n = 0 then None else Some ts11.(n - 1) with
+        | Some (Ref { typ = ht; _ }) -> cont_functype_of_heaptype ctx ht
+        | _ -> None
+      in
+      (match inner with
+      | None ->
+          Error.stack_switching_type_mismatch ctx.modul.diagnostics
+            ~location:loc
+      | Some inner_ft -> (
+          match lookup_tag_signature ctx y with
+          | None -> ()
+          | Some { params = ts31; results = t } ->
+              let info = ctx.modul.subtyping_info in
+              if
+                Array.length ts31 <> 0
+                || (not (result_subtype info ftx.results t))
+                || not (result_subtype info t inner_ft.results)
+              then
+                Error.stack_switching_type_mismatch ctx.modul.diagnostics
+                  ~location:loc));
+      let ts21 = match inner with Some ft -> ft.params | None -> [||] in
+      let ts11' = if n = 0 then [||] else Array.sub ts11 0 (n - 1) in
+      let* () =
+        pop_args ctx loc
+          (Array.append ts11' [| Ref { nullable = true; typ = Type xty } |])
+      in
+      push_results ts21
   | Br idx ->
       let*! params = branch_target ctx idx in
       let* () = pop_args ctx loc params in
@@ -1060,6 +1291,10 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
   | Br_on_cast (idx, ty1, ty2) ->
       let*! ty1 = reftype ctx.modul.diagnostics ctx.modul.types ty1 in
       let*! ty2 = reftype ctx.modul.diagnostics ctx.modul.types ty2 in
+      (match (top_heap_type ctx ty1.typ, top_heap_type ctx ty2.typ) with
+      | Cont, _ | _, Cont ->
+          Error.invalid_cast_type ctx.modul.diagnostics ~location:loc
+      | _ -> ());
       (* ZZZ Relaxed condition *)
       if not (Types.val_subtype ctx.modul.subtyping_info (Ref ty2) (Ref ty1))
       then Error.br_cast_type_mismatch ctx.modul.diagnostics ~location:loc;
@@ -1073,6 +1308,10 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
   | Br_on_cast_fail (idx, ty1, ty2) ->
       let*! ty1 = reftype ctx.modul.diagnostics ctx.modul.types ty1 in
       let*! ty2 = reftype ctx.modul.diagnostics ctx.modul.types ty2 in
+      (match (top_heap_type ctx ty1.typ, top_heap_type ctx ty2.typ) with
+      | Cont, _ | _, Cont ->
+          Error.invalid_cast_type ctx.modul.diagnostics ~location:loc
+      | _ -> ());
       if not (Types.val_subtype ctx.modul.subtyping_info (Ref ty2) (Ref ty1))
       then Error.br_cast_type_mismatch ctx.modul.diagnostics ~location:loc;
       let* () = pop ctx loc (Ref ty1) in
@@ -1088,7 +1327,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
   | Call idx -> (
       let*! ty = Sequence.get ctx.modul.diagnostics ctx.modul.functions idx in
       match (Types.get_subtype ctx.modul.subtyping_info ty).typ with
-      | Struct _ | Array _ ->
+      | Struct _ | Array _ | Cont _ ->
           Error.expected_func_type ctx.modul.diagnostics ~location:loc idx;
           unreachable
       | Func { params; results } ->
@@ -1110,7 +1349,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
         Error.table_type_mismatch ctx.modul.diagnostics ~location:loc idx
           (Ref typ.reftype);
       match (Types.get_subtype ctx.modul.subtyping_info ty).typ with
-      | Struct _ | Array _ ->
+      | Struct _ | Array _ | Cont _ ->
           Error.expected_func_type ctx.modul.diagnostics ~location:loc idx;
           unreachable
       | Func { params; results } ->
@@ -1122,7 +1361,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
   | ReturnCall idx -> (
       let*! ty = Sequence.get ctx.modul.diagnostics ctx.modul.functions idx in
       match (Types.get_subtype ctx.modul.subtyping_info ty).typ with
-      | Struct _ | Array _ ->
+      | Struct _ | Array _ | Cont _ ->
           Error.expected_func_type ctx.modul.diagnostics ~location:loc idx;
           unreachable
       | Func { params; results } ->
@@ -1150,7 +1389,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
         Error.table_type_mismatch ctx.modul.diagnostics ~location:loc idx
           (Ref typ.reftype);
       match (Types.get_subtype ctx.modul.subtyping_info ty).typ with
-      | Struct _ | Array _ ->
+      | Struct _ | Array _ | Cont _ ->
           Error.expected_func_type ctx.modul.diagnostics ~location:loc idx;
           unreachable
       | Func { params; results } ->
@@ -1496,12 +1735,18 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       push (Some loc) I32
   | RefTest ty ->
       let*! ty = reftype ctx.modul.diagnostics ctx.modul.types ty in
+      (match top_heap_type ctx ty.typ with
+      | Cont -> Error.invalid_cast_type ctx.modul.diagnostics ~location:loc
+      | _ -> ());
       let* () =
         pop ctx loc (Ref { nullable = true; typ = top_heap_type ctx ty.typ })
       in
       push (Some loc) I32
   | RefCast ty ->
       let*! ty = reftype ctx.modul.diagnostics ctx.modul.types ty in
+      (match top_heap_type ctx ty.typ with
+      | Cont -> Error.invalid_cast_type ctx.modul.diagnostics ~location:loc
+      | _ -> ());
       let* () =
         pop ctx loc (Ref { nullable = true; typ = top_heap_type ctx ty.typ })
       in
@@ -1802,17 +2047,19 @@ let rec check_constant_instruction ctx (i : _ Ast.Text.instr) =
       check_constant_instruction ctx i;
       check_constant_instructions ctx l
   | Block _ | Loop _ | If _ | TryTable _ | Try _ | Unreachable | Nop | Throw _
-  | ThrowRef | Br _ | Br_if _ | Br_table _ | Br_on_null _ | Br_on_non_null _
-  | Br_on_cast _ | Br_on_cast_fail _ | Return | Call _ | CallRef _
-  | CallIndirect _ | ReturnCall _ | ReturnCallRef _ | ReturnCallIndirect _
-  | Drop | Select _ | LocalGet _ | LocalSet _ | LocalTee _ | GlobalSet _
-  | Load _ | LoadS _ | Store _ | StoreS _ | MemorySize _ | MemoryGrow _
-  | MemoryFill _ | MemoryCopy _ | MemoryInit _ | DataDrop _ | TableGet _
-  | TableSet _ | TableSize _ | TableGrow _ | TableFill _ | TableCopy _
-  | TableInit _ | ElemDrop _ | RefIsNull | RefAsNonNull | RefEq | RefTest _
-  | RefCast _ | StructGet _ | StructSet _ | ArrayNewData _ | ArrayNewElem _
-  | ArrayGet _ | ArraySet _ | ArrayLen | ArrayFill _ | ArrayCopy _
-  | ArrayInitData _ | ArrayInitElem _ | I31Get _ | UnOp _
+  | ThrowRef | ContNew _ | ContBind _ | Suspend _ | Resume _ | ResumeThrow _
+  | ResumeThrowRef _ | Switch _ | Br _ | Br_if _ | Br_table _ | Br_on_null _
+  | Br_on_non_null _ | Br_on_cast _ | Br_on_cast_fail _ | Return | Call _
+  | CallRef _ | CallIndirect _ | ReturnCall _ | ReturnCallRef _
+  | ReturnCallIndirect _ | Drop | Select _ | LocalGet _ | LocalSet _
+  | LocalTee _ | GlobalSet _ | Load _ | LoadS _ | Store _ | StoreS _
+  | MemorySize _ | MemoryGrow _ | MemoryFill _ | MemoryCopy _ | MemoryInit _
+  | DataDrop _ | TableGet _ | TableSet _ | TableSize _ | TableGrow _
+  | TableFill _ | TableCopy _ | TableInit _ | ElemDrop _ | RefIsNull
+  | RefAsNonNull | RefEq | RefTest _ | RefCast _ | StructGet _ | StructSet _
+  | ArrayNewData _ | ArrayNewElem _ | ArrayGet _ | ArraySet _ | ArrayLen
+  | ArrayFill _ | ArrayCopy _ | ArrayInitData _ | ArrayInitElem _ | I31Get _
+  | UnOp _
   | BinOp
       ( F32 _ | F64 _
       | I32
@@ -1946,24 +2193,26 @@ and register_typeuses' d ctx (i : _ Ast.Text.instr) =
   | Folded (i, l) ->
       register_typeuses' d ctx i;
       register_typeuses d ctx l
-  | Unreachable | Nop | Throw _ | ThrowRef | Br _ | Br_if _ | Br_table _
-  | Br_on_null _ | Br_on_non_null _ | Br_on_cast _ | Br_on_cast_fail _ | Return
-  | Call _ | CallRef _ | ReturnCall _ | ReturnCallRef _ | Drop | Select _
-  | LocalGet _ | LocalSet _ | LocalTee _ | GlobalGet _ | GlobalSet _ | Load _
-  | LoadS _ | Store _ | StoreS _ | MemorySize _ | MemoryGrow _ | MemoryFill _
-  | MemoryCopy _ | MemoryInit _ | DataDrop _ | TableGet _ | TableSet _
-  | TableSize _ | TableGrow _ | TableFill _ | TableCopy _ | TableInit _
-  | ElemDrop _ | RefNull _ | RefFunc _ | RefIsNull | RefAsNonNull | RefEq
-  | RefTest _ | RefCast _ | StructNew _ | StructNewDefault _ | StructGet _
-  | StructSet _ | ArrayNew _ | ArrayNewDefault _ | ArrayNewFixed _
-  | ArrayNewData _ | ArrayNewElem _ | ArrayGet _ | ArraySet _ | ArrayLen
-  | ArrayFill _ | ArrayCopy _ | ArrayInitData _ | ArrayInitElem _ | RefI31
-  | I31Get _ | Const _ | UnOp _ | BinOp _ | I32WrapI64 | I64ExtendI32 _
-  | F32DemoteF64 | F64PromoteF32 | ExternConvertAny | AnyConvertExtern | Pop _
-  | TupleMake _ | TupleExtract _ | VecBitselect | VecConst _ | VecUnOp _
-  | VecBinOp _ | VecTest _ | VecShift _ | VecBitmask _ | VecLoad _ | VecStore _
-  | VecLoadLane _ | VecStoreLane _ | VecLoadSplat _ | VecExtract _
-  | VecReplace _ | VecSplat _ | VecShuffle _ | VecTernOp _ | Char _ ->
+  | Unreachable | Nop | Throw _ | ThrowRef | ContNew _ | ContBind _ | Suspend _
+  | Resume _ | ResumeThrow _ | ResumeThrowRef _ | Switch _ | Br _ | Br_if _
+  | Br_table _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
+  | Br_on_cast_fail _ | Return | Call _ | CallRef _ | ReturnCall _
+  | ReturnCallRef _ | Drop | Select _ | LocalGet _ | LocalSet _ | LocalTee _
+  | GlobalGet _ | GlobalSet _ | Load _ | LoadS _ | Store _ | StoreS _
+  | MemorySize _ | MemoryGrow _ | MemoryFill _ | MemoryCopy _ | MemoryInit _
+  | DataDrop _ | TableGet _ | TableSet _ | TableSize _ | TableGrow _
+  | TableFill _ | TableCopy _ | TableInit _ | ElemDrop _ | RefNull _ | RefFunc _
+  | RefIsNull | RefAsNonNull | RefEq | RefTest _ | RefCast _ | StructNew _
+  | StructNewDefault _ | StructGet _ | StructSet _ | ArrayNew _
+  | ArrayNewDefault _ | ArrayNewFixed _ | ArrayNewData _ | ArrayNewElem _
+  | ArrayGet _ | ArraySet _ | ArrayLen | ArrayFill _ | ArrayCopy _
+  | ArrayInitData _ | ArrayInitElem _ | RefI31 | I31Get _ | Const _ | UnOp _
+  | BinOp _ | I32WrapI64 | I64ExtendI32 _ | F32DemoteF64 | F64PromoteF32
+  | ExternConvertAny | AnyConvertExtern | Pop _ | TupleMake _ | TupleExtract _
+  | VecBitselect | VecConst _ | VecUnOp _ | VecBinOp _ | VecTest _ | VecShift _
+  | VecBitmask _ | VecLoad _ | VecStore _ | VecLoadLane _ | VecStoreLane _
+  | VecLoadSplat _ | VecExtract _ | VecReplace _ | VecSplat _ | VecShuffle _
+  | VecTernOp _ | Char _ ->
       ()
 
 let build_initial_env ctx fields =
@@ -2019,6 +2268,16 @@ let check_type_definitions ctx =
         (Ast.no_loc (Ast.Text.Num (Uint32.of_int i)))
     in
     let ty = Types.get_subtype ctx.subtyping_info i in
+    (* A continuation type must wrap a function type. *)
+    (match ty.typ with
+    | Cont ft -> (
+        match (Types.get_subtype ctx.subtyping_info ft).typ with
+        | Func _ -> ()
+        | Struct _ | Array _ | Cont _ ->
+            Error.expected_func_type ctx.diagnostics
+              ~location:(Ast.no_loc ()).info (*ZZZ*)
+              (Ast.no_loc (Ast.Text.Num (Uint32.of_int ft))))
+    | Func _ | Struct _ | Array _ -> ());
     let*? j = ty.supertype in
     let ty' = Types.get_subtype ctx.subtyping_info j in
     (*ZZZ*)
@@ -2041,9 +2300,12 @@ let check_type_definitions ctx =
         done
     | Array field, Array field' ->
         assert (field_subtype ctx.subtyping_info field field')
-    | Func _, (Struct _ | Array _)
-    | Struct _, (Func _ | Array _)
-    | Array _, (Func _ | Struct _) ->
+    | Cont ft, Cont ft' ->
+        assert (Types.heap_subtype ctx.subtyping_info (Type ft) (Type ft'))
+    | Func _, (Struct _ | Array _ | Cont _)
+    | Struct _, (Func _ | Array _ | Cont _)
+    | Array _, (Func _ | Struct _ | Cont _)
+    | Cont _, (Func _ | Struct _ | Array _) ->
         Error.supertype_mismatch ctx.diagnostics
           ~location:(Ast.no_loc ()).info (*ZZZ*)
   done
@@ -2218,7 +2480,7 @@ let start ctx fields =
       | Start idx -> (
           let*? ty = Sequence.get ctx.diagnostics ctx.functions idx in
           match (Types.get_subtype ctx.subtyping_info ty).typ with
-          | Struct _ | Array _ -> assert false (* Should not happen *)
+          | Struct _ | Array _ | Cont _ -> assert false (* Should not happen *)
           | Func { params; results } -> assert (params = [||] && results = [||])
           )
       | _ -> ())
@@ -2660,7 +2922,7 @@ let check_syntax diagnostics (_, lst) =
           Array.iter
             (fun e ->
               match (snd e.Ast.desc).Ast.Text.typ with
-              | Ast.Text.Types.Func _ | Array _ -> ()
+              | Ast.Text.Types.Func _ | Array _ | Cont _ -> ()
               | Struct lst ->
                   let fields = Hashtbl.create 16 in
                   Array.iter

@@ -25,6 +25,8 @@ ZZZ
 %token NOFUNC
 %token EXN
 %token NOEXN
+%token CONT
+%token NOCONT
 %token EXTERN
 %token NOEXTERN
 %token ANYREF
@@ -37,6 +39,8 @@ ZZZ
 %token NULLFUNCREF
 %token EXNREF
 %token NULLEXNREF
+%token CONTREF
+%token NULLCONTREF
 %token EXTERNREF
 %token NULLEXTERNREF
 %token REF
@@ -50,6 +54,7 @@ ZZZ
 %token LPAREN_CATCH_ALL
 %token LPAREN_CATCH_ALL_REF
 %token LPAREN_CATCH_REF
+%token LPAREN_ON
 %token LPAREN_EXPORT
 %token LPAREN_IMPORT
 %token LPAREN_LOCAL
@@ -151,6 +156,13 @@ ZZZ
 %token CATCH_ALL
 %token THROW
 %token THROW_REF
+%token CONT_NEW
+%token CONT_BIND
+%token SUSPEND
+%token RESUME
+%token RESUME_THROW
+%token RESUME_THROW_REF
+%token SWITCH
 %token <string> MEM_ALIGN
 %token <string> MEM_OFFSET
 (* Binaryen extensions *)
@@ -182,6 +194,7 @@ ZZZ
 %token ASSERT_RETURN
 %token ASSERT_RETURN_NAN
 %token ASSERT_EXCEPTION
+%token ASSERT_SUSPENSION
 %token ASSERT_TRAP
 %token ASSERT_EXHAUSTION
 %token ASSERT_MALFORMED
@@ -321,6 +334,8 @@ heap_type:
 | NOFUNC { NoFunc }
 | EXN { Exn }
 | NOEXN { NoExn }
+| CONT { Cont }
+| NOCONT { NoCont }
 | EXTERN { Extern }
 | NOEXTERN { NoExtern }
 | i = index { Type i }
@@ -338,6 +353,8 @@ reference_type:
 | NULLFUNCREF { {nullable = true; typ = NoFunc} }
 | EXNREF { {nullable = true; typ = Exn} }
 | NULLEXNREF { {nullable = true; typ = NoExn} }
+| CONTREF { {nullable = true; typ = Cont} }
+| NULLCONTREF { {nullable = true; typ = NoCont} }
 | EXTERNREF { {nullable = true; typ = Extern} }
 | NULLEXTERNREF { {nullable = true; typ = NoExtern} }
 
@@ -403,6 +420,7 @@ storage_type:
 composite_type:
 | "(" ARRAY t = field_type ")" { Array t }
 | "(" STRUCT l = field * ")" { Struct (Array.of_list (List.flatten l)) }
+| "(" CONT i = index ")" { Cont i }
 | t = functype { Func t }
 
 rectype:
@@ -481,6 +499,13 @@ catches:
 | LPAREN_CATCH_ALL_REF l = index ")" c = catches
   { CatchAllRef l :: c }
 
+on_clauses:
+| { [] }
+| LPAREN_ON x = index l = index ")" c = on_clauses
+  { OnLabel(x, l) :: c }
+| LPAREN_ON x = index SWITCH ")" c = on_clauses
+  { OnSwitch x :: c }
+
 legacy_catches:
 | END { [], None }
 | CATCH_ALL l = instructions END { [], Some l }
@@ -508,6 +533,15 @@ list_of_indices: l = index+ { l }
 plain_instruction:
 | THROW i = index { with_loc $sloc (Throw i) }
 | THROW_REF { with_loc $sloc ThrowRef }
+| CONT_NEW i = index { with_loc $sloc (ContNew i) }
+| CONT_BIND i = index j = index { with_loc $sloc (ContBind (i, j)) }
+| SUSPEND i = index { with_loc $sloc (Suspend i) }
+| RESUME i = index c = on_clauses { with_loc $sloc (Resume (i, c)) }
+| RESUME_THROW i = index j = index c = on_clauses
+  { with_loc $sloc (ResumeThrow (i, j, c)) }
+| RESUME_THROW_REF i = index c = on_clauses
+  { with_loc $sloc (ResumeThrowRef (i, c)) }
+| SWITCH i = index j = index { with_loc $sloc (Switch (i, j)) }
 | BR i = index { with_loc $sloc (Br i) }
 | BR_IF i = index { with_loc $sloc (Br_if i) }
 | BR_TABLE l = index+
@@ -1066,6 +1100,7 @@ assertion:
 | "(" ASSERT_RETURN action result_pat* ")" { [] }
 | "(" ASSERT_RETURN_NAN action ")" { [] }
 | "(" ASSERT_EXCEPTION action ")" { [] }
+| "(" ASSERT_SUSPENSION action STRING ")" { [] }
 | "(" ASSERT_TRAP action STRING ")" { [] }
 | "(" ASSERT_EXHAUSTION action STRING ")" { [] }
 | "(" ASSERT_MALFORMED m = module_ r = STRING ")"

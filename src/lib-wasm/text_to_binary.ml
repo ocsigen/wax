@@ -76,6 +76,8 @@ let heaptype ctx (h : T.heaptype) : B.heaptype =
   | NoFunc -> NoFunc
   | Exn -> Exn
   | NoExn -> NoExn
+  | Cont -> Cont
+  | NoCont -> NoCont
   | Extern -> Extern
   | NoExtern -> NoExtern
   | Any -> Any
@@ -116,6 +118,7 @@ let comp_type ctx (c : T.comptype) : B.comptype =
   | Func f -> Func (func_type ctx f)
   | Struct f -> Struct (Array.map (fun e -> field_type ctx (snd e.Ast.desc)) f)
   | Array f -> Array (field_type ctx f)
+  | Cont i -> Cont (resolve_idx ctx.types i)
 
 let sub_type ctx (s : T.subtype) : B.subtype =
   {
@@ -145,6 +148,12 @@ let catch ctx (c : T.catch) : B.catch =
       CatchRef (resolve_idx ctx.tags tag, resolve_label ctx.labels label)
   | CatchAll label -> CatchAll (resolve_label ctx.labels label)
   | CatchAllRef label -> CatchAllRef (resolve_label ctx.labels label)
+
+let on_clause ctx (c : T.on_clause) : B.on_clause =
+  match c with
+  | OnLabel (tag, label) ->
+      OnLabel (resolve_idx ctx.tags tag, resolve_label ctx.labels label)
+  | OnSwitch tag -> OnSwitch (resolve_idx ctx.tags tag)
 
 let resolve_field_idx ctx type_idx (field_idx_text : T.idx) : B.idx =
   match field_idx_text.desc with
@@ -323,6 +332,21 @@ let rec instr ~resolve_string_type ~resolve_func_type ctx (i : 'info T.instr) =
           }
     | Throw i -> Throw (resolve_idx ctx.tags i)
     | ThrowRef -> ThrowRef
+    | ContNew i -> ContNew (resolve_idx ctx.types i)
+    | ContBind (i, j) ->
+        ContBind (resolve_idx ctx.types i, resolve_idx ctx.types j)
+    | Suspend i -> Suspend (resolve_idx ctx.tags i)
+    | Resume (i, clauses) ->
+        Resume (resolve_idx ctx.types i, List.map (on_clause ctx) clauses)
+    | ResumeThrow (i, j, clauses) ->
+        ResumeThrow
+          ( resolve_idx ctx.types i,
+            resolve_idx ctx.tags j,
+            List.map (on_clause ctx) clauses )
+    | ResumeThrowRef (i, clauses) ->
+        ResumeThrowRef
+          (resolve_idx ctx.types i, List.map (on_clause ctx) clauses)
+    | Switch (i, j) -> Switch (resolve_idx ctx.types i, resolve_idx ctx.tags j)
     | Br_on_null i -> Br_on_null (resolve_label ctx.labels i)
     | Br_on_non_null i -> Br_on_non_null (resolve_label ctx.labels i)
     | Br_on_cast (i, r1, r2) ->

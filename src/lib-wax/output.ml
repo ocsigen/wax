@@ -98,6 +98,8 @@ let heaptype pp (t : heaptype) =
     | NoFunc -> "nofunc"
     | Exn -> "exn"
     | NoExn -> "noexn"
+    | Cont -> "cont"
+    | NoCont -> "nocont"
     | Extern -> "extern"
     | NoExtern -> "noextern"
     | Any -> "any"
@@ -201,6 +203,10 @@ let comptype pp (t : comptype) =
       punctuation pp "[";
       box pp (fun () -> fieldtype pp t);
       punctuation pp "]"
+  | Cont s ->
+      type_ pp "cont";
+      space pp ();
+      type_ pp s.desc
 
 let subtype pp (nm, { typ; supertype; final }) =
   hvbox pp (fun () ->

@@ -15,6 +15,6 @@ Validation should have failed (non-empty tag result type): (tag (result i32))
 Validation should have failed (non-empty tag result type):
   (import "" "" (tag (result i32)))
 ==== core/func.wast ====
-Fatal error: exception File "src/lib-wasm/text_to_binary.ml", line 698, characters 28-34: Assertion failed
+Fatal error: exception File "src/lib-wasm/text_to_binary.ml", line 722, characters 28-34: Assertion failed
 ==== core/stack.wast ====
 Fatal error: exception Invalid_argument("index out of bounds")
