@@ -17,7 +17,7 @@ Wax provides an expression-oriented syntax that feels more natural:
 
 ```wax
 fn add(x: i32, y: i32) -> i32 {
-    x + y
+    x + y;
 }
 ```
 
@@ -45,15 +45,15 @@ Create a file `hello.wax`:
 ```wax
 #[export = "add"]
 fn add(x: i32, y: i32) -> i32 {
-    x + y
+    x + y;
 }
 
 #[export = "factorial"]
 fn factorial(n: i32) -> i32 {
     if n <= 1 {
-        1
+        1;
     } else {
-        n * factorial(n - 1)
+        n * factorial(n - 1);
     }
 }
 ```

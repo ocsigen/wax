@@ -53,7 +53,7 @@ fn example() -> i32 {
     let y: i32;
     x = 10;
     y = 20;
-    x + y
+    x + y;
 }
 ```
 
@@ -200,7 +200,7 @@ A block is a sequence of expressions. The last expression is the block's value:
 {
     let x: i32;
     x = compute();
-    x + 1
+    x + 1;
 }
 ```
 
@@ -208,7 +208,7 @@ Use `do` with a type annotation when the block returns a value:
 
 ```wax
 do i32 {
-    42
+    42;
 }
 ```
 
@@ -216,9 +216,9 @@ do i32 {
 
 ```wax
 if condition {
-    then_branch
+    then_branch;
 } else {
-    else_branch
+    else_branch;
 }
 ```
 
@@ -226,9 +226,9 @@ With a result type:
 
 ```wax
 if condition => i32 {
-    1
+    1;
 } else {
-    0
+    0;
 }
 ```
 
@@ -287,9 +287,9 @@ Use `become` for tail calls (guaranteed not to grow the stack):
 ```wax
 fn factorial_helper(n: i32, acc: i32) -> i32 {
     if n <= 1 {
-        acc
+        acc;
     } else {
-        become factorial_helper(n - 1, n * acc)
+        become factorial_helper(n - 1, n * acc);
     }
 }
 ```
@@ -300,7 +300,7 @@ fn factorial_helper(n: i32, acc: i32) -> i32 {
 
 ```wax
 fn name(param1: type1, param2: type2) -> return_type {
-    body
+    body;
 }
 ```
 

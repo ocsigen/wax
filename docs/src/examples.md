@@ -9,12 +9,12 @@ Complete examples demonstrating Wax features and their WebAssembly equivalents.
 ```wax
 #[export = "add"]
 fn add(x: i32, y: i32) -> i32 {
-    x + y
+    x + y;
 }
 
 #[export = "multiply"]
 fn multiply(x: i32, y: i32) -> i32 {
-    x * y
+    x * y;
 }
 ```
 
@@ -40,9 +40,9 @@ fn multiply(x: i32, y: i32) -> i32 {
 #[export = "factorial"]
 fn factorial(n: i32) -> i32 {
     if n <= 1 {
-        1
+        1;
     } else {
-        n * factorial(n - 1)
+        n * factorial(n - 1);
     }
 }
 ```
@@ -73,14 +73,14 @@ fn factorial(n: i32) -> i32 {
 ```wax
 #[export = "factorial"]
 fn factorial(n: i32) -> i32 {
-    become factorial_helper(n, 1)
+    become factorial_helper(n, 1);
 }
 
 fn factorial_helper(n: i32, acc: i32) -> i32 {
     if n <= 1 {
-        acc
+        acc;
     } else {
-        become factorial_helper(n - 1, n * acc)
+        become factorial_helper(n - 1, n * acc);
     }
 }
 ```
@@ -98,10 +98,10 @@ fn find_first_zero(arr: &[i32]) -> i32 {
     i = 0;
     'search: loop {
         if i >= len {
-            return -1
+            return -1;
         }
         if arr[i] == 0 {
-            return i
+            return i;
         }
         i = i + 1;
         br 'search;
@@ -153,7 +153,7 @@ type point = { x: i32, y: i32 };
 
 #[export = "make_point"]
 fn make_point(x: i32, y: i32) -> &point {
-    {point| x: x, y: y}
+    {point| x: x, y: y};
 }
 
 #[export = "distance_squared"]
@@ -162,7 +162,7 @@ fn distance_squared(p1: &point, p2: &point) -> i32 {
     let dy: i32;
     dx = p1.x - p2.x;
     dy = p1.y - p2.y;
-    dx * dx + dy * dy
+    dx * dx + dy * dy;
 }
 ```
 
@@ -175,7 +175,7 @@ type counter = { mut value: i32 };
 
 #[export = "new_counter"]
 fn new_counter() -> &counter {
-    {counter| value: 0}
+    {counter| value: 0};
 }
 
 #[export = "increment"]
@@ -185,7 +185,7 @@ fn increment(c: &counter) {
 
 #[export = "get_value"]
 fn get_value(c: &counter) -> i32 {
-    c.value
+    c.value;
 }
 ```
 
@@ -206,7 +206,7 @@ fn sum_bytes(arr: &bytes) -> i32 {
     len = arr.length;
     loop {
         if i >= len {
-            return sum
+            return sum;
         }
         sum = sum + arr[i] as i32_u;
         i = i + 1;
@@ -222,7 +222,7 @@ fn fill_bytes(arr: &bytes, val: i32) {
     len = arr.length;
     loop {
         if i >= len {
-            return
+            return;
         }
         arr[i] = val as i8;
         i = i + 1;
@@ -244,18 +244,18 @@ fn safe_divide(a: i32, b: i32) -> i32 {
     if b == 0 {
         throw divide_by_zero();
     }
-    a /s b
+    a /s b;
 }
 
 #[export = "try_divide"]
 fn try_divide(a: i32, b: i32) -> i32 {
     'handler: do i32 {
         try {
-            become safe_divide(a, b)
+            become safe_divide(a, b);
         } catch [divide_by_zero -> 'handler]
-        unreachable
+        unreachable;
     }
-    0   // Return 0 on division by zero
+    0;   // Return 0 on division by zero
 }
 ```
 
@@ -271,17 +271,17 @@ rec {
 
 #[export = "make_node"]
 fn make_node(value: i32, next: &?list) -> &node {
-    {node| value: value, next: next}
+    {node| value: value, next: next};
 }
 
 #[export = "sum_list"]
 fn sum_list(head: &?list) -> i32 {
     if !head {
-        return 0
+        return 0;
     }
     let n: &node;
     n = head!;
-    n.value + sum_list(n.next)
+    n.value + sum_list(n.next);
 }
 ```
 
@@ -304,7 +304,7 @@ fn compute_and_log(x: i32) -> i32 {
     let result: i32;
     result = x + base_value;
     log(result);
-    result
+    result;
 }
 ```
 
@@ -317,7 +317,7 @@ A more complex example showing bitwise operations:
 ```wax
 #[export = "hash_mix_int"]
 fn hash_mix_int(h: i32, d: i32) -> i32 {
-    ((d * 0xcc9e2d51).rotl(15) * 0x1b873593 ^ h).rotl(13) * 5 + 0xe6546b64
+    ((d * 0xcc9e2d51).rotl(15) * 0x1b873593 ^ h).rotl(13) * 5 + 0xe6546b64;
 }
 
 #[export = "hash_finalize"]
@@ -326,6 +326,6 @@ fn hash_finalize(h: i32) -> i32 {
     h = h * 0x85ebca6b;
     h = h ^ h >>u 13;
     h = h * 0xc2b2ae35;
-    h ^ h >>u 16
+    h ^ h >>u 16;
 }
 ```

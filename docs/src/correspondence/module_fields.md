@@ -146,7 +146,7 @@ Export a field with a given name:
 
 ```wax
 #[export = "add"]
-fn add(x: i32, y: i32) -> i32 { x + y }
+fn add(x: i32, y: i32) -> i32 { x + y; }
 
 #[export = "PI"]
 const PI: f64 = 3.14159;
@@ -160,7 +160,7 @@ Multiple exports can share the same function:
 ```wax
 #[export = "add"]
 #[export = "plus"]
-fn add(x: i32, y: i32) -> i32 { x + y }
+fn add(x: i32, y: i32) -> i32 { x + y; }
 ```
 
 ### Import Attribute

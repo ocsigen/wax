@@ -53,35 +53,35 @@ Wax allows defining recursive reference types using `rec { ... }`.
 
 ```wax
 rec {
-    type list = { head: i32, tail: node }
-    type node = [list]
+    type list = { head: i32, tail: node };
+    type node = [list];
 }
 ```
 
 ### Structs
 ```wax
-type point = { x: i32, y: i32 }
-type mutable_point = { mut x: i32, mut y: i32 }
+type point = { x: i32, y: i32 };
+type mutable_point = { mut x: i32, mut y: i32 };
 ```
 Maps to Wasm `(type $point (struct (field i32) (field i32)))`.
 
 ### Arrays
 ```wax
-type bytes = [i8]
-type mutable_bytes = [mut i8]
+type bytes = [i8];
+type mutable_bytes = [mut i8];
 ```
 Maps to Wasm `(type $bytes (array i8))`.
 
 ### Functions
 ```wax
-type binop = fn(_: i32, _: i32) -> i32
+type binop = fn(_: i32, _: i32) -> i32;
 ```
 Maps to Wasm `(type $binop (func (param i32 i32) (result i32)))`.
 ### Continuations
 A continuation type (from the [stack-switching proposal](https://github.com/WebAssembly/stack-switching)) wraps a function type:
 ```wax
-type ft = fn(i32) -> i32
-type k = cont ft
+type ft = fn(i32) -> i32;
+type k = cont ft;
 ```
 Maps to Wasm `(type $k (cont $ft))`. See [Stack Switching Instructions](instructions.md#stack-switching-instructions) for the operations on continuations.
 
@@ -92,8 +92,8 @@ Types are final by default. To make a type open (extensible), use the `open` key
 To specify a supertype, use `: supertype` before the assignment.
 
 ```wax
-type point = { x: i32, y: i32 }
-type point3d : point = { z: i32 }        ;; extend point (if point was open)
-type open_point = open { x: i32 }        ;; non-final type
-type sub_point : open_point = { y: i32 } ;; ok
+type point = { x: i32, y: i32 };
+type point3d : point = { z: i32 };        // extend point (if point was open)
+type open_point = open { x: i32 };        // non-final type
+type sub_point : open_point = { y: i32 }; // ok
 ```
