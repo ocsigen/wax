@@ -1709,8 +1709,25 @@ let rec module_has_conditional fields =
       | _ -> false)
     fields
 
+let rec count_memories fields =
+  List.fold_left
+    (fun n (f : (_ Src.modulefield, _) Ast.annotated) ->
+      match f.desc with
+      | Memory _ | Import { desc = Memory _; _ } -> n + 1
+      | Module_if_annotation { then_fields; else_fields; _ } ->
+          n + count_memories then_fields
+          + Option.fold ~none:0 ~some:count_memories else_fields
+      | _ -> n)
+    0 fields
+
 let module_ diagnostics (_, fields) =
   let forbid_numeric = module_has_conditional fields in
+  (* Loads/stores reference the memory implicitly by index 0. When the module
+     has a single memory that numeric reference is unambiguous (even if the
+     memory itself sits in a conditional branch), so numeric memory references
+     are allowed; with several memories, indices may shift across branches like
+     any other field, so the general constraint stands. *)
+  let forbid_numeric_memory = forbid_numeric && count_memories fields > 1 in
   let ctx =
     let common_namespace = Namespace.make () in
     {
@@ -1719,7 +1736,9 @@ let module_ diagnostics (_, fields) =
       struct_fields = Hashtbl.create 16;
       globals = Sequence.make ~forbid_numeric common_namespace "g";
       functions = Sequence.make ~forbid_numeric common_namespace "f";
-      memories = Sequence.make ~forbid_numeric (Namespace.make ()) "m";
+      memories =
+        Sequence.make ~forbid_numeric:forbid_numeric_memory (Namespace.make ())
+          "m";
       tables = Sequence.make ~forbid_numeric (Namespace.make ()) "m";
       tags = Sequence.make ~forbid_numeric (Namespace.make ()) "t";
       type_defs = CondTbl.make ();
