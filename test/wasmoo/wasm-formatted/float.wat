@@ -311,6 +311,7 @@
             (else
               ;; '+'
               (array.set $string (local.get $s) (i32.const 0) (i32.const 32))))))))
+  ;; ' '
   (if (local.get $uppercase)
     (then
       (local.set $i (i32.const 0))

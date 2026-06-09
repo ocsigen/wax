@@ -697,17 +697,27 @@ cond_instr:
 folded_instruction:
 | "(" i = plain_instruction l = folded_instruction * ")"
   { with_loc $sloc (Folded (i, l)) }
+(* The inner block-family node is given a span ending at the body
+   ($endpos(<body>)), i.e. before the closing paren, so it differs from
+   the enclosing Folded's $sloc. Otherwise the two nodes share an
+   identical location and collide as duplicate keys in the comment-trivia
+   table; worse, a comment trailing the closing paren would attach to the
+   inner node (which the printer never looks up) and be dropped. Ending
+   the inner span before ")" leaves the outer Folded as the sole owner of
+   that closing position. *)
 | "(" BLOCK label = label typ = block_type block = instructions ")"
-  { with_loc $sloc (Folded (with_loc $sloc (Block {label; typ; block}), [])) }
+  { with_loc $sloc
+      (Folded (with_loc ($startpos, $endpos(block)) (Block {label; typ; block}), [])) }
 | "(" LOOP label = label typ = block_type block = instructions ")"
-  { with_loc $sloc (Folded (with_loc $sloc (Loop {label; typ; block}), [])) }
+  { with_loc $sloc
+      (Folded (with_loc ($startpos, $endpos(block)) (Loop {label; typ; block}), [])) }
 | "(" IF label = label
   typ = block_type l = folded_instructions LPAREN_THEN if_block =  instructions ")"
   else_block = option("(" ELSE l = instructions ")" { l })
   ")"
   { with_loc $sloc
       (Folded
-        (with_loc $sloc
+        (with_loc ($startpos, $endpos(else_block))
           (If {label; typ; if_block;
                else_block = Option.value ~default:[] else_block }),
          l)) }
@@ -715,7 +725,7 @@ folded_instruction:
   block = instructions  ")"
    { with_loc $sloc
        (Folded
-          (with_loc $sloc (TryTable {label; typ; catches; block}),
+          (with_loc ($startpos, $endpos(block)) (TryTable {label; typ; catches; block}),
           [])) }
 | "(" TRY label = label
   typ = block_type "(" DO block = instructions ")"
@@ -723,7 +733,7 @@ folded_instruction:
   { let (catches, catch_all) = c in
     with_loc $sloc
       (Folded
-        (with_loc $sloc (Try {label; typ; block; catches; catch_all}), [])) }
+        (with_loc ($startpos, $endpos(c)) (Try {label; typ; block; catches; catch_all}), [])) }
 | STRING_ANNOT id = option(index) l = string_list ")"
     { with_loc $sloc (String (id, l)) }
 | CHAR_ANNOT s = STRING ")"

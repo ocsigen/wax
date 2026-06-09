@@ -121,6 +121,7 @@
                   (else
                     ;; '\"'
                     (call $add_char (local.get $buf) (i32.const 95))))))
+            ;; '_'
             (local.set $i (i32.add (local.get $i) (i32.const 1)))
             (if (i32.lt_u (local.get $i) (local.get $len))
               (then
@@ -128,6 +129,7 @@
                 (call $add_char (local.get $buf) (i32.const 32)) ;; ' '
                 (br $loop))))
           (call $add_char (local.get $buf) (i32.const 41))))
+      ;; '\)'
       (local.set $s
         (array.new $string (i32.const 0)
           (struct.get $buffer 0 (local.get $buf))))

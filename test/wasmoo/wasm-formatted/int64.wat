@@ -237,6 +237,7 @@
     (br_if $write (i64.ne (local.get $d) (i64.const 0))))
   (if (local.get $negative)
     (then (array.set $string (local.get $s) (i32.const 0) (i32.const 45))))
+  ;; '-'
   (local.get $s)
 )
 
@@ -305,6 +306,7 @@
             (else
               ;; '+'
               (array.set $string (local.get $s) (i32.const 0) (i32.const 32))))))))
+  ;; ' '
   (if (local.get $alternate)
     (then
       (if (local.get $i)
