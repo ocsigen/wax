@@ -758,8 +758,27 @@ let bottom_heap_type ctx (t : Src.heaptype) : Ast.heaptype =
       | Struct _ | Array _ -> None_
       | Func _ -> NoFunc)
 *)
+(* Trailing [align]/[offset] literal arguments of a memory access: [align] only
+   when it differs from the natural alignment, [offset] only when non-zero (and
+   then [align] too, since they are positional). *)
+let mem_extra with_loc (memarg : Src.memarg) nat =
+  let lit v = with_loc (Ast.Int (Utils.Uint64.to_string v)) in
+  let nat = Utils.Uint64.of_int nat in
+  if Utils.Uint64.compare memarg.offset Utils.Uint64.zero <> 0 then
+    [ lit memarg.align; lit memarg.offset ]
+  else if Utils.Uint64.compare memarg.align nat <> 0 then [ lit memarg.align ]
+  else []
+
 let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   let with_loc (i' : _ Ast.instr_desc) = { i with Ast.desc = i' } in
+  let mem_call m meth args =
+    with_loc
+      (Ast.Call
+         ( with_loc
+             (Ast.StructGet
+                (with_loc (Ast.Get (idx ctx `Mem m)), Ast.no_loc meth)),
+           args ))
+  in
   match i.desc with
   | Block { label; typ; block } ->
       let label, ctx = push_label ctx ~loop:false label typ in
@@ -1182,6 +1201,58 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
         (with_loc
            (Call
               (with_loc (StructGet (a1, Ast.no_loc "copy")), [ i1; a2; i2; n ])))
+  | Load (m, memarg, nt) ->
+      let* addr = Stack.pop in
+      let meth, nat =
+        match nt with
+        | NumI32 -> ("load32", 4)
+        | NumI64 -> ("load64", 8)
+        | NumF32 -> ("loadf32", 4)
+        | NumF64 -> ("loadf64", 8)
+      in
+      Stack.push 1 (mem_call m meth (addr :: mem_extra with_loc memarg nat))
+  | LoadS (m, memarg, result_ty, size, signage) ->
+      let* addr = Stack.pop in
+      let meth, nat =
+        match size with
+        | `I8 -> ("load8", 1)
+        | `I16 -> ("load16", 2)
+        | `I32 -> ("load32", 4)
+      in
+      let call = mem_call m meth (addr :: mem_extra with_loc memarg nat) in
+      let cast typ e =
+        with_loc (Ast.Cast (e, Signedtype { typ; signage; strict = false }))
+      in
+      let result =
+        match (size, result_ty) with
+        | _, `I32 -> cast `I32 call
+        | `I32, `I64 -> cast `I64 call
+        | (`I8 | `I16), `I64 -> cast `I64 (cast `I32 call)
+      in
+      Stack.push 1 result
+  | Store (m, memarg, nt) ->
+      let* value = Stack.pop in
+      let* addr = Stack.pop in
+      let meth, nat =
+        match nt with
+        | NumI32 -> ("store32", 4)
+        | NumI64 -> ("store64", 8)
+        | NumF32 -> ("storef32", 4)
+        | NumF64 -> ("storef64", 8)
+      in
+      Stack.push 0
+        (mem_call m meth (addr :: value :: mem_extra with_loc memarg nat))
+  | StoreS (m, memarg, _result_ty, size) ->
+      let* value = Stack.pop in
+      let* addr = Stack.pop in
+      let meth, nat =
+        match size with
+        | `I8 -> ("store8", 1)
+        | `I16 -> ("store16", 2)
+        | `I32 -> ("store32", 4)
+      in
+      Stack.push 0
+        (mem_call m meth (addr :: value :: mem_extra with_loc memarg nat))
   | Char c -> Stack.push 1 (with_loc (Char c))
   | String (t, s) ->
       let s = String.concat "" (List.map (fun s -> s.Ast.desc) s) in
@@ -1201,10 +1272,10 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       Stack.push 0 (with_loc (If_annotation { cond; then_body; else_body }))
   (* Later *)
   | ReturnCallIndirect _ | CallIndirect _ | ArrayInitElem _ | ArrayInitData _
-  | ArrayNewElem _ | Load _ | LoadS _ | Store _ | StoreS _ | MemorySize _
-  | MemoryGrow _ | MemoryFill _ | MemoryCopy _ | MemoryInit _ | DataDrop _
-  | TableGet _ | TableSet _ | TableSize _ | TableGrow _ | TableFill _
-  | TableCopy _ | TableInit _ | ElemDrop _ | TupleExtract _ ->
+  | ArrayNewElem _ | MemorySize _ | MemoryGrow _ | MemoryFill _ | MemoryCopy _
+  | MemoryInit _ | DataDrop _ | TableGet _ | TableSet _ | TableSize _
+  | TableGrow _ | TableFill _ | TableCopy _ | TableInit _ | ElemDrop _
+  | TupleExtract _ ->
       Stack.push_poly (with_loc Unreachable)
   | VecUnOp _ | VecBinOp _ | VecTest _ | VecShift _ | VecBitmask _ | VecLoad _
   | VecStore _ | VecLoadLane _ | VecStoreLane _ | VecLoadSplat _ | VecExtract _
@@ -1407,7 +1478,19 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
                    typ = typ'.typ;
                    attributes = import module_ nm :: exports ctx Global name e;
                  })
-        | Memory _ | Table _ -> None (*ZZZ*))
+        | Memory lim ->
+            let l = lim.Ast.desc in
+            let name = Sequence.get_current ctx.memories in
+            Some
+              (Memory
+                 {
+                   name;
+                   address_type = l.address_type;
+                   limits = Some (l.mi, l.ma);
+                   data = [];
+                   attributes = import module_ nm :: exports ctx Memory name e;
+                 })
+        | Table _ -> None (*ZZZ*))
     | Global { typ; init; exports = e; _ } ->
         let typ' = globaltype ctx typ in
         let name = Sequence.get_current ctx.globals in
@@ -1424,7 +1507,43 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
         let typ, sign = typeuse ctx typ in
         let name = Sequence.get_current ctx.tags in
         Some (Tag { name; typ; sign; attributes = exports ctx Tag name e })
-    | Memory _ | Table _ | Start _ | Export _ | Elem _ | Data _ -> None
+    | Memory { limits = lim; init; exports = e; _ } ->
+        let l = lim.Ast.desc in
+        let name = Sequence.get_current ctx.memories in
+        let data =
+          match init with
+          | None -> []
+          | Some bytes ->
+              let s = String.concat "" (List.map (fun b -> b.Ast.desc) bytes) in
+              [
+                {
+                  Ast.data_name = None;
+                  offset = Ast.no_loc (Ast.Int "0");
+                  init = s;
+                };
+              ]
+        in
+        Some
+          (Memory
+             {
+               name;
+               address_type = l.address_type;
+               limits = Some (l.mi, l.ma);
+               data;
+               attributes = exports ctx Memory name e;
+             })
+    | Data { id; init; mode } ->
+        let s = String.concat "" (List.map (fun b -> b.Ast.desc) init) in
+        let mode' : _ Ast.datamode =
+          match mode with
+          | Passive -> Passive
+          | Active (memidx, off) ->
+              Active
+                ( idx ctx `Mem memidx,
+                  single_expression (Stack.run (instructions ctx off)) )
+        in
+        Some (Data { name = id; mode = mode'; init = s; attributes = [] })
+    | Table _ | Start _ | Export _ | Elem _ -> None
     | String_global { typ; init; _ } ->
         let name = Sequence.get_current ctx.globals in
         Some

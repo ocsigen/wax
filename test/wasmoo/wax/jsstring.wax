@@ -80,14 +80,14 @@ fn string_of_jsstring(s: &?any) -> &string {
     }
     become string_of_jsstring_fallback(s);
 }
+#[export = "caml_buffer"]
+memory caml_buffer: i32 [1];
 const buffer_size: i32 = 65536;
 fn write_to_buffer(s: &string, pos: i32, len: i32) {
     let i: i32;
     'loop: loop {
         if i <u len {
-            i;
-            s[pos + i] as i32_u;
-            unreachable;
+            caml_buffer.store8(i, s[pos + i] as i32_u);
             i = i + 1;
             br 'loop;
         }
@@ -118,11 +118,7 @@ fn read_from_buffer(s: &string, pos: i32, len: i32) {
     let i: i32;
     'loop: loop {
         if i <u len {
-            s;
-            pos + i;
-            i;
-            unreachable;
-            (_ as &?string)[_] = _;
+            s[pos + i] = caml_buffer.load8(i) as i32_u;
             i = i + 1;
             br 'loop;
         }

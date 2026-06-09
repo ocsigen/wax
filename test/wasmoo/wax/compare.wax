@@ -156,6 +156,9 @@ fn compare_val(v1: &eq, v2: &eq, total: i32) -> i32 {
     clear_compare_stack();
     res;
 }
+data abstract_value = "compare: abstract value";
+data functional_value = "compare: functional value";
+data continuation_value = "compare: continuation value";
 fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
 {
     let i: i32;

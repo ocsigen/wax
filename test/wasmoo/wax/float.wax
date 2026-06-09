@@ -113,6 +113,7 @@ fn caml_hexstring_of_float(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
     if sign { s[0] = 45; } else { if style != 45 { s[0] = style; } }
     s;
 }
+data format_error = "format_float: bad format";
 fn parse_format(s: &string) -> (i32, i32, i32, i32) {
     let i: i32;
     let len: i32;
@@ -217,6 +218,7 @@ fn caml_format_float(x: &eq, x_2: &eq) -> &eq {
     }
     s;
 }
+data float_of_string = "float_of_string";
 fn caml_float_of_hex(s: &string, i: i32) -> f64 {
     let len: i32;
     let c: i32;

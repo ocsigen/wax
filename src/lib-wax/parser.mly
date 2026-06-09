@@ -23,6 +23,7 @@
 %token FATARROW "=>"
 %token EQUAL "="
 %token COLONEQUAL ":="
+%token AT "@"
 %token QUOTE "'"
 %token DOT "."
 %token DOTDOT ".."
@@ -74,6 +75,7 @@
 %token CONT_NEW CONT_BIND
 %token SUSPEND RESUME RESUME_THROW RESUME_THROW_REF SWITCH
 %token DISPATCH
+%token MEMORY DATA
 
 %on_error_reduce statement plaininstr separated_nonempty_list(",",structure_type_field) list(module_field) separated_nonempty_list(",",value_type) block_type separated_nonempty_list(",",function_parameter) list(label) list(attribute) list(typedef) list(legacy_catch) separated_nonempty_list(",",catch) separated_nonempty_list(",",let_pattern) blockinstr statement_list loption(separated_nonempty_list(",",catch)) separated_nonempty_list(",",expression) let_pattern structure_field separated_nonempty_list(",",structure_field) constant_expression attribute_expression parenthesized_expression index_expression then_branch condition_expression length_expression optional_function_type structure_type result_type_ expression_list structure
 
@@ -168,6 +170,10 @@ let with_loc loc desc =
    Utils.Trivia.with_pos Context.context {loc_start = fst loc; loc_end = snd loc} desc
 
 let blocktype bt = Option.value ~default:{params = [||]; results = [||]} bt
+
+(* Parse an integer literal (decimal, hex, with [_] separators) to a [Uint64].
+   Used for memory limits, which are small page counts. *)
+let u64_of_int_literal n = Utils.Uint64.of_int64 (Int64.of_string n)
 %}
 
 %start <location module_> parse
@@ -181,6 +187,10 @@ dummy_ctx: EOF { assert false }
 
 %inline ident:
 | t = IDENT { with_loc $sloc t }
+(* [memory] and [data] are soft keywords: they lead memory/data declarations but
+   remain usable as ordinary identifiers. *)
+| MEMORY { with_loc $sloc "memory" }
+| DATA { with_loc $sloc "data" }
 
 ident_or_keyword:
 | t = IDENT { t }
@@ -221,6 +231,8 @@ ident_or_keyword:
 | RESUME_THROW { "resume_throw" }
 | RESUME_THROW_REF { "resume_throw_ref" }
 | SWITCH { "switch" }
+| MEMORY { "memory" }
+| DATA { "data" }
 | DISPATCH { "dispatch" }
 | INF { "inf" }
 | NAN { "nan" }
@@ -632,6 +644,51 @@ declaration:
 definition:
 | f = func { f }
 | g = global { g }
+| m = memory { m }
+| d = data { d }
+
+address_type:
+| t = IDENT
+  { match t with
+    | "i32" -> `I32
+    | "i64" -> `I64
+    | _ ->
+        raise (Wasm.Parsing.Syntax_error
+                 ($sloc, "Expected a memory address type 'i32' or 'i64'.\n")) }
+
+mem_limits:
+| "[" mi = INT ma = ioption("," m = INT { u64_of_int_literal m }) "]"
+  { (u64_of_int_literal mi, ma) }
+
+data_name:
+| "_" { None }
+| x = ident { Some x }
+
+data_item:
+| DATA n = data_name "@" "[" off = constant_expression "]" "=" s = STRING ";"
+  { { data_name = n; offset = off; init = s.desc } }
+
+memory:
+| MEMORY name = ident ":" at = address_type lim = ioption(mem_limits) ";"
+  { fun attributes ->
+      with_loc $sloc
+        (Memory {name; address_type = at; limits = lim; data = []; attributes}) }
+| MEMORY name = ident ":" at = address_type lim = ioption(mem_limits)
+  "{" items = list(data_item) "}"
+  { fun attributes ->
+      with_loc $sloc
+        (Memory
+           {name; address_type = at; limits = lim; data = items; attributes}) }
+
+data:
+| DATA n = data_name "=" s = STRING ";"
+  { fun attributes ->
+      with_loc $sloc (Data {name = n; mode = Passive; init = s.desc; attributes}) }
+| DATA n = data_name "@" mem = ident "[" off = constant_expression "]"
+  "=" s = STRING ";"
+  { fun attributes ->
+      with_loc $sloc
+        (Data {name = n; mode = Active (mem, off); init = s.desc; attributes}) }
 
 module_field:
 | r = rectype { {desc = Type r.desc; info = r.info} }

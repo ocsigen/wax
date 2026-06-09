@@ -98,6 +98,22 @@ let rec map_modulefield f field =
   | Func ({ body = s, instrs; _ } as func) ->
       Func { func with body = (s, List.map (map_instr f) instrs) }
   | Global g -> Global { g with def = map_instr f g.def }
+  | Memory m ->
+      Memory
+        {
+          m with
+          data =
+            List.map (fun d -> { d with offset = map_instr f d.offset }) m.data;
+        }
+  | Data ({ mode; _ } as d) ->
+      Data
+        {
+          d with
+          mode =
+            (match mode with
+            | Passive -> Passive
+            | Active (mem, off) -> Active (mem, map_instr f off));
+        }
   | Group { attributes; fields } ->
       Group
         {

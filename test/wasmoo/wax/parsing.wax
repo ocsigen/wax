@@ -80,6 +80,7 @@ fn strlen(s: &string, p: i32) -> i32 {
     } /* 'loop */
     i - p;
 }
+data unknown_token = "<unknown token>";
 fn token_name(vnames: &eq, number: i32) -> &eq {
     let names: &string;
     let i: i32;
@@ -109,6 +110,8 @@ fn output_nl() {
     _ = caml_ml_flush(caml_stderr);
 }
 fn output_int(x: i32) { output(caml_format_int(string#"%d", x as &i31)); }
+data State = "State ";
+data read_token = ": read token ";
 fn print_token(tables: &block, state: i32, tok: &eq) {
     let b: &block;
     let v: &eq;
@@ -141,6 +144,12 @@ fn print_token(tables: &block, state: i32, tok: &eq) {
         output_nl();
     }
 }
+data recovering_in_state = "Recovering in state ";
+data discarding_state = "Discarding state ";
+data no_more_states_to_discard = "No more states to discard";
+data discarding_last_token_read = "Discarding last token read";
+data shift_to_state = ": shift to state ";
+data reduce_by_rule = ": reduce by rule ";
 #[export = "caml_parse_engine"]
 fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
     let res: i32;

@@ -209,6 +209,7 @@ fn caml_ephe_unset_key(vx: &eq, vi: &eq) -> &eq {
     caml_ephe_set_data_opt(vx, d);
     0 as &i31;
 }
+data Weak_create = "Weak.create";
 #[export = "caml_ephe_create"]
 #[export = "caml_weak_create"]
 fn caml_ephe_create(vlen: &eq) -> &eq {

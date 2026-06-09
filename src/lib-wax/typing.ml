@@ -616,7 +616,8 @@ type module_context = {
   types : (int * subtype) Tbl.t;
   functions : (int * string) Tbl.t;
   globals : (*mutable:*) (bool * inferred_valtype) Tbl.t;
-  tags : functype Tbl.t; (*  memories : limits Tbl.t;*)
+  tags : functype Tbl.t;
+  memories : (int * [ `I32 | `I64 ]) Tbl.t;
   mutable locals : inferred_valtype StringMap.t;
   control_types : (string option * inferred_type UnionFind.t array) list;
   return_types : inferred_type UnionFind.t array;
@@ -1337,6 +1338,31 @@ let val_lub ctx v1 v2 =
       Ref { nullable; typ = lub }
   | _ -> if v1 = v2 then Some v1 else None
 
+let address_valtype (at : [ `I32 | `I64 ]) : inferred_valtype =
+  match at with
+  | `I32 -> { typ = I32; internal = I32 }
+  | `I64 -> { typ = I64; internal = I64 }
+
+(* Memory access method names. The value width is in the name; signedness and the
+   i32/i64 result come from a surrounding [as iN_s/u] cast (see [to_wasm]). *)
+let mem_load_result meth : inferred_type option =
+  match meth with
+  | "load8" -> Some Int8
+  | "load16" -> Some Int16
+  | "load32" -> Some (Valtype { typ = I32; internal = I32 })
+  | "load64" -> Some (Valtype { typ = I64; internal = I64 })
+  | "loadf32" -> Some (Valtype { typ = F32; internal = F32 })
+  | "loadf64" -> Some (Valtype { typ = F64; internal = F64 })
+  | _ -> None
+
+let mem_store_method meth =
+  match meth with
+  | "store8" | "store16" | "store32" | "store64" | "storef32" | "storef64" ->
+      true
+  | _ -> false
+
+let is_mem_method meth = mem_load_result meth <> None || mem_store_method meth
+
 let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
   (*
   let* () = print_stack in
@@ -1540,6 +1566,77 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       in
       check_type ctx i' ty;
       return_expression i (Tee (idx, i')) ty
+  | Call
+      ( ({ desc = StructGet (({ desc = Get memname; _ } as recv), meth); _ } as
+         func),
+        args )
+    when is_mem_method meth.desc && Tbl.find_opt ctx.memories memname <> None ->
+      let _, address_type =
+        match Tbl.find_opt ctx.memories memname with
+        | Some x -> x
+        | None -> assert false
+      in
+      let addr_vt = UnionFind.make (Valtype (address_valtype address_type)) in
+      let is_store = mem_store_method meth.desc in
+      let nstack = if is_store then 2 else 1 in
+      let* args' = instructions ctx args in
+      let nargs = List.length args' in
+      if nargs < nstack || nargs > nstack + 2 then
+        Error.value_count_mismatch ctx.diagnostics ~location:i.info
+          ~expected:nstack ~provided:nargs;
+      (match args' with
+      | addr' :: rest -> (
+          check_type ctx addr' addr_vt;
+          if is_store then
+            match rest with
+            | value' :: _ -> (
+                let vty = expression_type ctx value' in
+                match meth.desc with
+                | "store64" ->
+                    check_type ctx value'
+                      (UnionFind.make (Valtype { typ = I64; internal = I64 }))
+                | "storef32" ->
+                    check_type ctx value'
+                      (UnionFind.make (Valtype { typ = F32; internal = F32 }))
+                | "storef64" ->
+                    check_type ctx value'
+                      (UnionFind.make (Valtype { typ = F64; internal = F64 }))
+                | _ -> (
+                    match UnionFind.find vty with
+                    | Valtype { internal = I32 | I64; _ }
+                    | Int | Number | Unknown ->
+                        ()
+                    | _ ->
+                        Error.instruction_type_mismatch ctx.diagnostics
+                          ~location:(snd value'.info) vty (UnionFind.make Int)))
+            | [] -> ())
+      | [] -> ());
+      List.iteri
+        (fun k a ->
+          if k >= nstack then
+            match a.desc with
+            | Ast.Int _ -> ()
+            | _ ->
+                Error.constant_expression_required ctx.diagnostics
+                  ~location:(snd a.info))
+        args';
+      let result =
+        if is_store then [||]
+        else
+          match mem_load_result meth.desc with
+          | Some t -> [| UnionFind.make t |]
+          | None -> [||]
+      in
+      return_statement i
+        (Call
+           ( {
+               desc =
+                 StructGet
+                   ({ desc = Get memname; info = ([||], recv.info) }, meth);
+               info = ([||], func.info);
+             },
+             args' ))
+        result
   | Call
       ( ({ desc = StructGet (a, ({ desc = "fill"; _ } as meth)); _ } as func),
         [ j; v; n ] ) ->
@@ -2885,10 +2982,44 @@ type ('before, 'after) phased =
       else_ : ('before, 'after) phased list option;
     }
 
+(* Type a data-segment offset as a constant expression of the memory address type. *)
+let type_data_offset ctx address_type off =
+  let off' =
+    with_empty_stack ctx ~location:off.info ~kind:Expression
+      (toplevel_instruction ctx off)
+  in
+  check_type ctx off' (UnionFind.make (Valtype (address_valtype address_type)));
+  check_constant_instruction ctx off';
+  off'
+
 let rec globals ctx fields =
   List.map
     (fun field ->
       match field.desc with
+      | Memory ({ address_type; data; _ } as m) ->
+          let data =
+            List.map
+              (fun (d : _ Ast.memdata) ->
+                { d with offset = type_data_offset ctx address_type d.offset })
+              data
+          in
+          After { field with desc = Memory { m with data } }
+      | Data ({ mode; _ } as d) ->
+          let mode =
+            match mode with
+            | Passive -> Passive
+            | Active (mem, off) ->
+                let address_type =
+                  match Tbl.find_opt ctx.memories mem with
+                  | Some (_, at) -> at
+                  | None ->
+                      Error.unbound_name ctx.diagnostics ~location:mem.info
+                        "memory" mem;
+                      `I32
+                in
+                Active (mem, type_data_offset ctx address_type off)
+          in
+          After { field with desc = Data { d with mode } }
       | Global ({ name; mut; typ; def; _ } as g) ->
           let def' =
             with_empty_stack ctx ~location:def.info ~kind:Expression
@@ -3009,7 +3140,9 @@ let rec functions ctx fields =
                   };
             }
       | PhasedGroup _ | PhasedConditional _
-      | Before { desc = Global _ | Group _ | Conditional _; _ } ->
+      | Before
+          { desc = Global _ | Group _ | Conditional _ | Memory _ | Data _; _ }
+        ->
           assert false
       | After f -> Some f
       | Before ({ desc = Type _ | Fundecl _ | GlobalDecl _ | Tag _; _ } as f) ->
@@ -3091,7 +3224,7 @@ let type_configuration diagnostics fields =
       types = type_context.types;
       functions = Tbl.make namespace "function";
       globals = Tbl.make namespace "global";
-      (*      memories = Tbl.make (Namespace.make ()) "memories";*)
+      memories = Tbl.make (Namespace.make cond) "memory";
       tags = Tbl.make (Namespace.make cond) "tag";
       locals = StringMap.empty;
       control_types = [];
@@ -3101,9 +3234,14 @@ let type_configuration diagnostics fields =
     }
   in
   check_type_definitions ctx;
+  let memory_index = ref 0 in
   walk_fields
     (fun field ->
       match field.desc with
+      | Memory { name; address_type; _ } ->
+          let i = !memory_index in
+          incr memory_index;
+          Tbl.add diagnostics ctx.memories name (i, address_type)
       | Fundecl { name; typ; sign; _ } ->
           let>@ decl = fundecl ctx name typ sign in
           Tbl.add diagnostics ctx.functions name decl
@@ -3127,7 +3265,7 @@ let type_configuration diagnostics fields =
             | None, None -> assert false (*ZZZ*)
           in
           Tbl.add diagnostics ctx.tags name typ
-      | Group _ | Conditional _ | Type _ | Global _ -> ())
+      | Data _ | Group _ | Conditional _ | Type _ | Global _ -> ())
     fields;
   let _ : _ option =
     let name = Ast.no_loc "<string>" in

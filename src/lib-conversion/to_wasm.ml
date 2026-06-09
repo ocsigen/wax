@@ -8,6 +8,7 @@ module StringMap = Map.Make (String)
 type ctx = {
   globals : (string, unit) Hashtbl.t;
   functions : (string, unit) Hashtbl.t;
+  memories : (string, unit) Hashtbl.t;
   mutable locals : string StringMap.t;
   allocated_locals : (Text.name option * Text.valtype) list ref;
   namespace : Namespace.t;
@@ -230,6 +231,42 @@ let ensure_type_is_defined ctx typ =
           (Wax.Typing.get_type_definition ctx.diagnostics ctx.types nm)
   | _ -> ()
 
+let mem_store_method = function
+  | "store8" | "store16" | "store32" | "store64" | "storef32" | "storef64" ->
+      true
+  | _ -> false
+
+let mem_load_method = function
+  | "load8" | "load16" | "load32" | "load64" | "loadf32" | "loadf64" -> true
+  | _ -> false
+
+let is_mem_method m = mem_store_method m || mem_load_method m
+
+let mem_natural_align = function
+  | "load8" | "store8" -> 1
+  | "load16" | "store16" -> 2
+  | "load32" | "store32" | "loadf32" | "storef32" -> 4
+  | _ -> 8
+
+(* Build a [memarg] from the trailing literal [align]/[offset] arguments (after
+   the [nstack] stack operands), defaulting [align] to the natural alignment. *)
+let mem_memarg meth nstack args : Ast.memarg =
+  let int_lit a =
+    match a.desc with
+    | Int s -> Utils.Uint64.of_int64 (Int64.of_string s)
+    | _ -> assert false
+  in
+  let extra = List.filteri (fun k _ -> k >= nstack) args in
+  let align =
+    match extra with
+    | a :: _ -> int_lit a
+    | [] -> Utils.Uint64.of_int (mem_natural_align meth)
+  in
+  let offset =
+    match extra with _ :: o :: _ -> int_lit o | _ -> Utils.Uint64.zero
+  in
+  { offset; align }
+
 let rec instruction ret ctx i : location Text.instr list =
   let _, loc = i.info in
   match i.desc with
@@ -343,6 +380,42 @@ let rec instruction ret ctx i : location Text.instr list =
           else
             let code = instruction ret ctx f in
             folded loc (CallRef (index (expr_type_name f))) (arg_code @ code)
+      (* Memory access: mem.loadN/storeN(addr [, align [, offset]]). Signed
+         narrow loads are handled (under an [as iN_s] cast) in the Cast case. *)
+      | StructGet ({ desc = Get memname; _ }, meth)
+        when Hashtbl.mem ctx.memories memname.desc && is_mem_method meth.desc ->
+          let memidx = index memname in
+          if mem_store_method meth.desc then
+            let memarg = mem_memarg meth.desc 2 args in
+            let addr_code = instruction ret ctx (List.nth args 0) in
+            let value = List.nth args 1 in
+            let value_code = instruction ret ctx value in
+            let desc =
+              match (meth.desc, expr_valtype value) with
+              | "store8", I64 -> Text.StoreS (memidx, memarg, `I64, `I8)
+              | "store8", _ -> Text.StoreS (memidx, memarg, `I32, `I8)
+              | "store16", I64 -> Text.StoreS (memidx, memarg, `I64, `I16)
+              | "store16", _ -> Text.StoreS (memidx, memarg, `I32, `I16)
+              | "store32", I64 -> Text.StoreS (memidx, memarg, `I64, `I32)
+              | "store32", _ -> Text.Store (memidx, memarg, NumI32)
+              | "store64", _ -> Text.Store (memidx, memarg, NumI64)
+              | "storef32", _ -> Text.Store (memidx, memarg, NumF32)
+              | _ -> Text.Store (memidx, memarg, NumF64)
+            in
+            folded loc desc (addr_code @ value_code)
+          else
+            let memarg = mem_memarg meth.desc 1 args in
+            let addr_code = instruction ret ctx (List.nth args 0) in
+            let desc =
+              match meth.desc with
+              | "load8" -> Text.LoadS (memidx, memarg, `I32, `I8, Unsigned)
+              | "load16" -> Text.LoadS (memidx, memarg, `I32, `I16, Unsigned)
+              | "load32" -> Text.Load (memidx, memarg, NumI32)
+              | "load64" -> Text.Load (memidx, memarg, NumI64)
+              | "loadf32" -> Text.Load (memidx, memarg, NumF32)
+              | _ -> Text.Load (memidx, memarg, NumF64)
+            in
+            folded loc desc addr_code
       (* Binary intrinsics, written with the dot notation *)
       | StructGet (obj, { desc = "rotl"; _ }) -> (
           let obj_code = instruction ret ctx obj in
@@ -476,6 +549,19 @@ let rec instruction ret ctx i : location Text.instr list =
             folded loc instr code
       in
       match expr.desc with
+      | Call ({ desc = StructGet ({ desc = Get memname; _ }, meth); _ }, args)
+        when Hashtbl.mem ctx.memories memname.desc
+             && (meth.desc = "load8" || meth.desc = "load16") -> (
+          match cast_ty with
+          | Signedtype { typ = `I32; signage; _ } ->
+              let memidx = index memname in
+              let memarg = mem_memarg meth.desc 1 args in
+              let addr_code = instruction ret ctx (List.nth args 0) in
+              let size = if meth.desc = "load8" then `I8 else `I16 in
+              folded (snd expr.info)
+                (LoadS (memidx, memarg, `I32, size, signage))
+                addr_code
+          | _ -> default_cast ())
       | StructGet (instr_val, field_idx) -> (
           match (expr_type expr, cast_ty) with
           | Packed _, Signedtype { typ = `I32; signage; _ } ->
@@ -818,6 +904,26 @@ let exports attributes =
 
 let globaltype mut t : Text.globaltype = { mut; typ = valtype t }
 
+(* Smallest memory size (in 64KiB pages) that holds the declared active data
+   segments, used when a memory omits explicit limits. Only literal offsets
+   contribute; others are ignored. *)
+let derive_min_pages (data : _ Wax.Ast.memdata list) =
+  let extent =
+    List.fold_left
+      (fun acc (d : _ Wax.Ast.memdata) ->
+        match d.offset.desc with
+        | Wax.Ast.Int s -> (
+            try
+              Int64.max acc
+                (Int64.add (Int64.of_string s)
+                   (Int64.of_int (String.length d.init)))
+            with _ -> acc)
+        | _ -> acc)
+      0L data
+  in
+  let pages = Int64.div (Int64.add extent 65535L) 65536L in
+  Utils.Uint64.of_int64 (if Int64.compare pages 1L < 0 then 1L else pages)
+
 let storagetype typ : Text.storagetype =
   match typ with Value v -> Value (valtype v) | Packed p -> Packed p
 
@@ -870,6 +976,7 @@ let module_ diagnostics types fields =
     {
       globals = Hashtbl.create 16;
       functions = Hashtbl.create 16;
+      memories = Hashtbl.create 16;
       locals = StringMap.empty;
       allocated_locals = ref [];
       namespace = Namespace.make ();
@@ -908,13 +1015,83 @@ let module_ diagnostics types fields =
       | GlobalDecl { name; _ } -> Hashtbl.replace ctx.globals name.desc ()
       | Global { name; _ } -> Hashtbl.replace ctx.globals name.desc ()
       | Fundecl { name; _ } -> Hashtbl.replace ctx.functions name.desc ()
-      | Tag _ | Group _ | Conditional _ -> ())
+      | Memory { name; _ } -> Hashtbl.replace ctx.memories name.desc ()
+      | Tag _ | Data _ | Group _ | Conditional _ -> ())
     fields;
   let rec convert_fields fields =
     List.concat_map
       (fun field ->
         match field.desc with
         | Group { fields = flds; _ } -> convert_fields flds
+        | Memory { name; address_type; limits; data; attributes } ->
+            let exports = exports attributes in
+            let limits_value : Ast.limits =
+              match limits with
+              | Some (mi, ma) -> { mi; ma; address_type }
+              | None -> { mi = derive_min_pages data; ma = None; address_type }
+            in
+            let memory_field =
+              match import attributes with
+              | Some (module_, import_name) ->
+                  Text.Import
+                    {
+                      module_;
+                      name = import_name;
+                      id = Some name;
+                      desc = Memory (Ast.no_loc limits_value);
+                      exports;
+                    }
+              | None ->
+                  Text.Memory
+                    {
+                      id = Some name;
+                      limits = Ast.no_loc limits_value;
+                      init = None;
+                      exports;
+                    }
+            in
+            let ictx =
+              { ctx with referenced_functions = func_refs_outside_func }
+            in
+            let data_fields =
+              List.map
+                (fun (d : _ Wax.Ast.memdata) ->
+                  {
+                    field with
+                    desc =
+                      Text.Data
+                        {
+                          id = d.data_name;
+                          init = [ { desc = d.init; info = field.info } ];
+                          mode =
+                            Active (index name, instruction None ictx d.offset);
+                        };
+                  })
+                data
+            in
+            { field with desc = memory_field } :: data_fields
+        | Data { name; mode; init; _ } ->
+            let mode : _ Text.datamode =
+              match mode with
+              | Passive -> Passive
+              | Active (mem, off) ->
+                  let ictx =
+                    { ctx with referenced_functions = func_refs_outside_func }
+                  in
+                  Active (index mem, instruction None ictx off)
+            in
+            [
+              {
+                field with
+                desc =
+                  Text.Data
+                    {
+                      id = name;
+                      init = [ { desc = init; info = field.info } ];
+                      mode;
+                    };
+              };
+            ]
         | Conditional { cond; then_fields; else_fields } ->
             [
               {
@@ -1035,7 +1212,7 @@ let module_ diagnostics types fields =
                       instrs;
                       exports = exports attributes;
                     }
-              | Group _ | Conditional _ -> assert false
+              | Group _ | Conditional _ | Memory _ | Data _ -> assert false
             in
             [ { field with desc } ])
       fields

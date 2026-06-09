@@ -248,11 +248,13 @@ fn caml_obj_set_raw_field(o: &eq, i: &eq, v: &eq) -> &eq {
     (o as &block)[i as &i31 as i32_u + 1] = v;
     0 as &i31;
 }
+data not_implemented = "Obj.add_offset is not supported";
 #[export = "caml_obj_add_offset"]
 fn caml_obj_add_offset(x: &eq, x_2: &eq) -> &eq {
     caml_failwith(string#"foo");
     0 as &i31;
 }
+data truncate_not_implemented = "Obj.truncate is not supported";
 #[export = "caml_obj_truncate"]
 fn caml_obj_truncate(x: &eq, x_2: &eq) -> &eq {
     caml_failwith(string#"foo");

@@ -102,7 +102,7 @@
 (func $caml_string_of_bytes (export "caml_string_of_bytes")
   (export "caml_bytes_of_string") (param $v (ref eq)) (result (ref eq))
   (local.get $v)
-)
+) (data $Bytes_create "Bytes.create")
 (func $caml_create_bytes (export "caml_create_bytes")
   (param $len (ref eq)) (result (ref eq))
   (local $l i32)

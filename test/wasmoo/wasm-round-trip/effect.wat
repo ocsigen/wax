@@ -84,7 +84,7 @@
       (field $handlers (mut (ref $handlers)))
       (field $cont (ref $cont_2))
       (field $next (ref null $fiber))))
-)
+) (data $effect_unhandled "Effect.Unhandled")
 (func $raise_unhandled
   (param $eff (ref eq)) (param $x (ref eq)) (result (ref eq))
   (local $effect_unhandled (ref $string))
@@ -158,7 +158,7 @@
   (local.set $k (call $push_stack (local.get $stack) (local.get $k)))
   (return_call_ref $cont_func (local.get $p) (local.get $k)
     (struct.get $cont_2 $cont_func (local.get $k)))
-)
+) (data $already_resumed "Effect.Continuation_already_resumed")
 (func $f (export "%resume")
   (param $stack (ref eq)) (param $f (ref eq)) (param $v (ref eq))
   (result (ref eq))

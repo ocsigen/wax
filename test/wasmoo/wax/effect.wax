@@ -62,6 +62,7 @@ type fiber: generic_fiber = {
     cont: &cont_2,
     next: &?fiber
 };
+data effect_unhandled = "Effect.Unhandled";
 fn raise_unhandled(eff: &eq, x: &eq) -> &eq {
     let effect_unhandled: &string;
     effect_unhandled = string#"foo";
@@ -120,6 +121,7 @@ fn do_resume(k: &cont_2, vp: &eq) {
     k = push_stack(stack, k);
     become k.cont_func(p, k);
 }
+data already_resumed = "Effect.Continuation_already_resumed";
 #[export = "%resume"]
 fn f(stack: &eq, f: &eq, v: &eq) -> &eq {
     let k: &cont_2;

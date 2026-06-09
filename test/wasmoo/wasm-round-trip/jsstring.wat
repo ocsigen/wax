@@ -111,17 +111,17 @@
       (return_call $encodeStringToUTF8Array
         (extern.convert_any (local.get $s)))))
   (return_call $string_of_jsstring_fallback (local.get $s))
-) (global $buffer_size i32 (i32.const 65536))
+) (memory $caml_buffer (export "caml_buffer") 1)
+(global $buffer_size i32 (i32.const 65536))
 (func $write_to_buffer
   (param $s (ref $string)) (param $pos i32) (param $len i32)
   (local $i i32)
   (loop $loop
     (if (i32.lt_u (local.get $i) (local.get $len))
       (then
-        (local.get $i)
-        (array.get_u $string (local.get $s)
-          (i32.add (local.get $pos) (local.get $i)))
-        (unreachable)
+        (i32.store8 $caml_buffer (local.get $i)
+          (array.get_u $string (local.get $s)
+            (i32.add (local.get $pos) (local.get $i))))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
         (br $loop))))
 )
@@ -159,11 +159,9 @@
   (loop $loop
     (if (i32.lt_u (local.get $i) (local.get $len))
       (then
-        (local.get $s)
-        (i32.add (local.get $pos) (local.get $i))
-        (local.get $i)
-        (unreachable)
-        (array.set $string)
+        (array.set $string (local.get $s)
+          (i32.add (local.get $pos) (local.get $i))
+          (i32.load8_u $caml_buffer (local.get $i)))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
         (br $loop))))
 )

@@ -504,6 +504,7 @@ fn caml_list_of_js_array(x: &eq) -> &eq {
     l;
 }
 const jsError: &string = string#"jsError";
+data toString = "toString";
 #[export = "caml_wrap_exception"]
 fn caml_wrap_exception(x: &?extern) -> &eq {
     let exn: &?any;

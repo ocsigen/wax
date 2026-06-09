@@ -104,6 +104,7 @@ fn caml_sys_const_ostype_unix(x: &eq) -> &eq { 1 as &i31; }
 fn caml_sys_const_ostype_win32(x: &eq) -> &eq { 0 as &i31; }
 #[export = "caml_sys_const_ostype_cygwin"]
 fn caml_sys_const_ostype_cygwin(x: &eq) -> &eq { 0 as &i31; }
+data Unix = "Unix";
 #[export = "caml_sys_get_config"]
 fn caml_sys_get_config(x: &eq) -> &eq {
     [block|0 as &i31, string#"foo", 32 as &i31, 0 as &i31];
@@ -126,6 +127,7 @@ fn caml_ml_enable_runtime_warnings(x: &eq) -> &eq {
 fn caml_ml_runtime_warnings_enabled(x: &eq) -> &eq {
     caml_runtime_warnings as &i31;
 }
+data toString = "toString";
 #[export = "caml_handle_sys_error"]
 fn caml_handle_sys_error(exn: &?extern) {
     caml_raise_sys_error

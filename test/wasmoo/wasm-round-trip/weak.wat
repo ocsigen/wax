@@ -229,7 +229,7 @@
     (global.get $caml_ephe_none))
   (call $caml_ephe_set_data_opt (local.get $vx) (local.get $d))
   (ref.i31 (i32.const 0))
-)
+) (data $Weak_create "Weak.create")
 (func $caml_ephe_create (export "caml_ephe_create")
   (export "caml_weak_create") (param $vlen (ref eq)) (result (ref eq))
   (local $len i32) (local $res (ref $block))

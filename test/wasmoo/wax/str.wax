@@ -518,6 +518,7 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq
     } /* 'reject */
     0 as &i31;
 }
+data search_forward = "Str.search_forward";
 #[export = "re_search_forward"]
 fn re_search_forward(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     let s: &string;
@@ -536,6 +537,7 @@ fn re_search_forward(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     } /* 'loop */
     [block|0 as &i31];
 }
+data search_backward = "Str.search_backward";
 #[export = "re_search_backward"]
 fn re_search_backward(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     let s: &string;
@@ -554,6 +556,7 @@ fn re_search_backward(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     } /* 'loop */
     [block|0 as &i31];
 }
+data string_match = "Str.string_match";
 #[export = "re_string_match"]
 fn re_string_match(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     let s: &string;
@@ -568,6 +571,7 @@ fn re_string_match(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     if res is &block { return res; }
     [block|0 as &i31];
 }
+data string_partial_match = "Str.string_partial_match";
 #[export = "re_partial_match"]
 fn re_partial_match(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     let s: &string;
@@ -582,6 +586,8 @@ fn re_partial_match(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     if res is &block { return res; }
     [block|0 as &i31];
 }
+data illegal_backslash = "Str.replace: illegal backslash sequence";
+data unmatched_group = "Str.replace: reference to unmatched group";
 #[export = "re_replacement_text"]
 fn re_replacement_text(vrepl: &eq, vgroups: &eq, vorig: &eq) -> &eq {
     let repl: &string;

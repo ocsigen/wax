@@ -188,7 +188,7 @@
   (if (local.get $negative)
     (then (array.set $string (local.get $s) (i32.const 0) (i32.const 45))))
   (local.get $s)
-)
+) (data $format_error "format_int: bad format")
 (func $parse_int_format (export "parse_int_format")
   (param $s (ref $string)) (result i32 i32 i32 i32 i32)
   (local $i i32) (local $len i32) (local $c i32) (local $sign_style i32)

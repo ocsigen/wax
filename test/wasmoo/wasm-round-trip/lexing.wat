@@ -27,6 +27,7 @@
 (global $lex_trans_code i32 (i32.const 9))
 (global $lex_check_code i32 (i32.const 10))
 (global $lex_code i32 (i32.const 11))
+(data $lexing_empty_token "lexing: empty token")
 (func $caml_lex_engine (export "caml_lex_engine")
   (param $vtbl (ref eq)) (param $start_state (ref eq))
   (param $vlexbuf (ref eq)) (result (ref eq))

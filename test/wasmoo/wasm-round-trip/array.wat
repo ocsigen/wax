@@ -2,6 +2,7 @@
   (func $caml_invalid_argument (param (ref eq)))
 ) (type $block (array (mut (ref eq)))) (type $string (array (mut i8)))
 (type $float (struct (field $f f64))) (type $float_array (array (mut f64)))
+(data $Array_make "Array.make")
 (global $empty_array (ref eq)
   (array.new_fixed $block 1 (ref.i31 (i32.const 0)))
 )

@@ -31,12 +31,12 @@
   (param $x (ref eq)) (result (ref eq))
   (return_call $wrap
     (call $caml_js_html_entities (call $unwrap (local.get $x))))
-)
+) (data $console "console")
 (func $caml_js_get_console (export "caml_js_get_console")
   (param $x (ref eq)) (result (ref eq))
   (return_call $caml_js_get (call $caml_js_global (ref.i31 (i32.const 0)))
     (@string $string "foo" ))
-)
+) (data $XMLHttpRequest "XMLHttpRequest")
 (func $caml_xmlhttprequest_create (export "caml_xmlhttprequest_create")
   (param $x (ref eq)) (result (ref eq))
   (return_call $caml_js_new

@@ -135,6 +135,7 @@ fn caml_int64_of_string(v: &eq) -> &eq {
     become caml_copy_int64
         (caml_i64_of_digits(base, signedness, sign, s, i, INT64_ERRMSG));
 }
+data caml_int64_create_lo_mi_hi = "caml_int64_create_lo_mi_hi";
 fn format_int64_default(d: i64) -> &eq {
     let s: &string;
     let negative: i32;

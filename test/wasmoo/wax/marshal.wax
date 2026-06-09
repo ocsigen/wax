@@ -47,6 +47,7 @@ fn caml_input_value_from_bytes(vstr: &eq, vofs: &eq) -> &eq {
     }
     become intern_rec(s, h);
 }
+data truncated_obj = "input_value: truncated object";
 const input_value: &string = string#"input_value";
 #[export = "caml_input_value"]
 fn caml_input_value(ch: &eq) -> &eq {
@@ -278,6 +279,13 @@ fn register_object(s: &intern_state, v: &eq) {
     }
 }
 type stack_item = { blk: &block, pos: mut i32, next: &?stack_item };
+data integer_too_large = "input_value: integer too large";
+data code_pointer = "input_value: code pointer";
+data ill_formed = "input_value: ill-formed message";
+data unknown_custom = "input_value: unknown custom block identifier";
+data expected_size = "input_value: expected a fixed-size custom block";
+data incorrect_size =
+"input_value: incorrect length of serialized custom block";
 fn intern_custom(s: &intern_state, code: i32) -> &eq {
     let ops: &custom_operations;
     let expected_size: i32;
@@ -535,12 +543,15 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
     } /* 'exit */
     res[0];
 }
+data too_large = ": object too large to be read back on a 32-bit platform";
 fn too_large(prim: &string) {
     caml_failwith(caml_string_concat(prim, string#"foo"));
 }
+data bad_object = ": bad object";
 fn bad_object(prim: &string) {
     caml_failwith(caml_string_concat(prim, string#"foo"));
 }
+data bad_length = ": bad length";
 fn bad_length(prim: &string) {
     caml_failwith(caml_string_concat(prim, string#"foo"));
 }
@@ -559,6 +570,7 @@ fn parse_header(s: &intern_state, prim: &string) -> &marshal_header {
     _ = read32(s);
     {marshal_header| data_len: data_len, num_objects: num_objects };
 }
+data marshal_data_size = "Marshal.data_size";
 #[export = "caml_marshal_data_size"]
 fn caml_marshal_data_size(buf: &eq, ofs: &eq) -> &eq {
     let s: &intern_state;
@@ -615,6 +627,7 @@ fn init_extern_state
         output_last: output
     };
 }
+data buffer_overflow = "Marshal.to_buffer: buffer overflow";
 const SIZE_EXTERN_OUTPUT_BLOCK: i32 = 8100;
 fn reserve_extern_output(s: &extern_state, required: i32) -> i32 {
     let last: &output_block;
@@ -796,6 +809,7 @@ fn extern_float_array(s: &extern_state, v: &float_array) {
     } else { writecode32(s, CODE_DOUBLE_ARRAY32_LITTLE, nfloats); }
     writefloats(s, v);
 }
+data incorrect_sizes = "output_value: incorrect fixed sizes specified by ";
 fn extern_custom(s: &extern_state, v: &custom) -> (i32, i32) {
     let ops: &custom_operations;
     let serialize: &serialize;
@@ -838,6 +852,11 @@ fn extern_custom(s: &extern_state, v: &custom) -> (i32, i32) {
     caml_invalid_argument(string#"foo");
     return (0, 0);
 }
+data func_value = "output_value: functional value";
+data cont_value = "output_value: continuation value";
+data js_value = "output_value: abstract value (JavaScript value)";
+data abstract_value = "output_value: abstract value";
+data cust_value = "output_value: abstract value (Custom)";
 fn extern_rec(s: &extern_state, v: &eq) {
     let sp: &?stack_item;
     let item: &stack_item;

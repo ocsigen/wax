@@ -592,6 +592,7 @@
         (br $loop))))
   (local.get $l)
 ) (global $jsError (ref $string) (@string $string "jsError" ))
+(data $toString "toString")
 (func $caml_wrap_exception (export "caml_wrap_exception")
   (param $x externref) (result (ref eq))
   (local $exn anyref)

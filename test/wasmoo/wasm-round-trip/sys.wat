@@ -127,7 +127,7 @@
 (func $caml_sys_const_ostype_cygwin (export "caml_sys_const_ostype_cygwin")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
-)
+) (data $Unix "Unix")
 (func $caml_sys_get_config (export "caml_sys_get_config")
   (param $x (ref eq)) (result (ref eq))
   (array.new_fixed $block 4 (ref.i31 (i32.const 0)) (@string $string "foo" )
@@ -160,7 +160,7 @@
   (export "caml_ml_runtime_warnings_enabled")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (global.get $caml_runtime_warnings))
-)
+) (data $toString "toString")
 (func $caml_handle_sys_error (export "caml_handle_sys_error")
   (param $exn externref)
   (call $caml_raise_sys_error

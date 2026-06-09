@@ -167,7 +167,7 @@
     (call $caml_i64_of_digits (local.get $base) (local.get $signedness)
       (local.get $sign) (local.get $s) (local.get $i)
       (global.get $INT64_ERRMSG)))
-)
+) (data $caml_int64_create_lo_mi_hi "caml_int64_create_lo_mi_hi")
 (func $format_int64_default (param $d i64) (result (ref eq))
   (local $s (ref $string)) (local $negative i32) (local $i i32)
   (local $n i64)

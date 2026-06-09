@@ -161,6 +161,7 @@ let rec token_rec ctx lexbuf =
   | "=>" -> FATARROW
   | '=' -> EQUAL
   | ":=" -> COLONEQUAL
+  | "@" -> AT
   | "'" -> QUOTE
   | "." -> DOT
   | ".." -> DOTDOT
@@ -233,6 +234,8 @@ let rec token_rec ctx lexbuf =
   | "resume_throw" -> RESUME_THROW
   | "resume_throw_ref" -> RESUME_THROW_REF
   | "switch" -> SWITCH
+  | "memory" -> MEMORY
+  | "data" -> DATA
   | int -> INT (Sedlexing.Utf8.lexeme lexbuf)
   | float -> FLOAT (Sedlexing.Utf8.lexeme lexbuf)
   | ident -> IDENT (Sedlexing.Utf8.lexeme lexbuf)

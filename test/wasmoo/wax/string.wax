@@ -88,6 +88,7 @@ fn caml_string_greaterthan(x: &eq, x_2: &eq) -> &eq {
 #[export = "caml_string_of_bytes"]
 #[export = "caml_bytes_of_string"]
 fn caml_string_of_bytes(v: &eq) -> &eq { v; }
+data Bytes_create = "Bytes.create";
 #[export = "caml_create_bytes"]
 fn caml_create_bytes(len: &eq) -> &eq {
     let l: i32;

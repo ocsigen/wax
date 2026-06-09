@@ -45,6 +45,7 @@ type mutex: custom_with_id = {
 fn caml_ml_mutex_new(x: &eq) -> &eq {
     {mutex| f: mutex_ops, f_2: custom_next_id(), state: 0 };
 }
+data lock_failure = "Mutex.lock: mutex already locked. Cannot wait.";
 #[export = "caml_ml_mutex_lock"]
 fn caml_ml_mutex_lock(x: &eq) -> &eq {
     let t: &mutex;
@@ -66,6 +67,7 @@ fn caml_ml_mutex_unlock(x: &eq) -> &eq {
 }
 #[export = "caml_ml_condition_new"]
 fn caml_ml_condition_new(x: &eq) -> &eq { 0 as &i31; }
+data condition_failure = "Condition.wait: cannot wait";
 #[export = "caml_ml_condition_wait"]
 fn caml_ml_condition_wait(x: &eq, x_2: &eq) -> &eq {
     caml_failwith(string#"foo");

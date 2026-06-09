@@ -115,7 +115,7 @@
     (struct.get $int32 $f_2 (ref.cast (ref $int32) (local.get $v))))
   (i32.const 4)
   (i32.const 8)
-)
+) (data $integer_too_large "input_value: native integer value too large")
 (func $nativeint_deserialize (param $s (ref eq)) (result (ref eq) i32)
   (if (i32.ne (call $caml_deserialize_uint_1 (local.get $s)) (i32.const 1))
     (then (call $caml_failwith (@string $string "foo" ))))

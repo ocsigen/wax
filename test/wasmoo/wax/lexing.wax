@@ -27,6 +27,7 @@ const lex_default_code: i32 = 8;
 const lex_trans_code: i32 = 9;
 const lex_check_code: i32 = 10;
 const lex_code: i32 = 11;
+data lexing_empty_token = "lexing: empty token";
 #[export = "caml_lex_engine"]
 fn caml_lex_engine(vtbl: &eq, start_state: &eq, vlexbuf: &eq) -> &eq {
     let tbl: &block;

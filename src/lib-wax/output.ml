@@ -1059,6 +1059,33 @@ let print_attr_prefix pp attributes_list content_fn =
         newline pp ());
       content_fn ())
 
+let print_data_bytes pp s =
+  let len, s = Wasm.Output.escape_string s in
+  string pp "\"";
+  string pp ~len:(Some len) s;
+  string pp "\""
+
+let print_data_name pp n =
+  match n with
+  | Some (n : ident) -> identifier pp n.desc
+  | None -> punctuation pp "_"
+
+let print_memdata pp (d : _ Ast.memdata) =
+  keyword pp "data";
+  space pp ();
+  print_data_name pp d.data_name;
+  space pp ();
+  operator pp "@";
+  space pp ();
+  punctuation pp "[";
+  instr Instruction pp d.offset;
+  punctuation pp "]";
+  space pp ();
+  punctuation pp "=";
+  space pp ();
+  print_data_bytes pp d.init;
+  punctuation pp ";"
+
 let rec modulefield pp field =
   match field.desc with
   | Type t -> rectype pp t
@@ -1108,6 +1135,65 @@ let rec modulefield pp field =
               punctuation pp ":";
               space pp ();
               valtype pp typ;
+              punctuation pp ";"))
+  | Memory { name; address_type; limits; data; attributes = a } ->
+      print_attr_prefix pp a (fun () ->
+          hvbox pp (fun () ->
+              box pp (fun () ->
+                  keyword pp "memory";
+                  space pp ();
+                  identifier pp name.desc;
+                  punctuation pp ":";
+                  space pp ();
+                  keyword pp
+                    (match address_type with `I32 -> "i32" | `I64 -> "i64");
+                  Option.iter
+                    (fun (mi, ma) ->
+                      space pp ();
+                      punctuation pp "[";
+                      constant pp (Utils.Uint64.to_string mi);
+                      Option.iter
+                        (fun m ->
+                          punctuation pp ",";
+                          space pp ();
+                          constant pp (Utils.Uint64.to_string m))
+                        ma;
+                      punctuation pp "]")
+                    limits);
+              match data with
+              | [] -> punctuation pp ";"
+              | _ ->
+                  space pp ();
+                  punctuation pp "{";
+                  indent pp indent_level (fun () ->
+                      List.iter
+                        (fun d ->
+                          space pp ();
+                          print_memdata pp d)
+                        data);
+                  space pp ();
+                  punctuation pp "}"))
+  | Data { name; mode; init; attributes = a } ->
+      print_attr_prefix pp a (fun () ->
+          box pp (fun () ->
+              keyword pp "data";
+              space pp ();
+              print_data_name pp name;
+              (match mode with
+              | Passive -> ()
+              | Active (mem, off) ->
+                  space pp ();
+                  operator pp "@";
+                  space pp ();
+                  identifier pp mem.desc;
+                  space pp ();
+                  punctuation pp "[";
+                  instr Instruction pp off;
+                  punctuation pp "]");
+              space pp ();
+              punctuation pp "=";
+              space pp ();
+              print_data_bytes pp init;
               punctuation pp ";"))
   | Group { attributes; fields } ->
       print_attr_prefix pp attributes (fun () ->

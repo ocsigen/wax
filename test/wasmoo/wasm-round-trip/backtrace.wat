@@ -18,6 +18,9 @@
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
+(data $raw_backtrace_slot_err
+  "Printexc.get_raw_backtrace_slot: index out of bounds"
+)
 (func $caml_raw_backtrace_slot (export "caml_raw_backtrace_slot")
   (param $x (ref eq)) (param $x_2 (ref eq)) (result (ref eq))
   (call $caml_invalid_argument (@string $string "foo" ))

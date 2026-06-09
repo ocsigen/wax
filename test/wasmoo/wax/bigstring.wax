@@ -67,6 +67,7 @@ fn caml_hash_mix_bigstring(h: i32, b: &eq) -> i32 {
     } /* 'l_2 */
     h ^ len;
 }
+data buffer = "buffer";
 #[export = "bigstring_to_array_buffer"]
 fn bigstring_to_array_buffer(bs: &eq) -> &eq {
     become caml_js_get(caml_ba_to_typed_array(bs), string#"foo");

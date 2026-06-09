@@ -157,7 +157,7 @@
         (then
           (array.set $string (local.get $s) (i32.const 0) (local.get $style))))))
   (local.get $s)
-)
+) (data $format_error "format_float: bad format")
 (func $parse_format (param $s (ref $string)) (result i32 i32 i32 i32)
   (local $i i32) (local $len i32) (local $c i32) (local $sign_style i32)
   (local $precision i32) (local $conversion i32) (local $uppercase i32)
@@ -278,7 +278,7 @@
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
         (br_if $uppercase (i32.lt_u (local.get $i) (local.get $len))))))
   (local.get $s)
-)
+) (data $float_of_string "float_of_string")
 (func $caml_float_of_hex (param $s (ref $string)) (param $i i32) (result f64)
   (local $len i32) (local $c i32) (local $d i32) (local $m i64)
   (local $f f64) (local $negative i32) (local $dec_point i32)

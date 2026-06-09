@@ -113,6 +113,9 @@ fn caml_register_global(x: &eq, v: &eq, x_2: &eq) -> &eq {
 #[export = "caml_get_global_data"]
 fn caml_get_global_data(x: &eq) -> &eq { caml_global_data; }
 type func_2 = fn() -> &eq;
+data fatal_error = "Fatal error: exception ";
+data handle_uncaught_exception = "Printexc.handle_uncaught_exception";
+data do_at_exit = "Pervasives.do_at_exit";
 let uncaught_exception: &?extern = null;
 fn reraise_exception() -> &eq { throw_2(uncaught_exception); 0 as &i31; }
 #[export = "caml_handle_uncaught_exception"]

@@ -84,6 +84,7 @@ fn caml_sys_rename(o: &eq, n: &eq) -> &eq {
 fn caml_sys_file_exists(name: &eq) -> &eq {
     become file_exists(unwrap(caml_jsstring_of_string(name)));
 }
+data no_such_file = ": No such file or directory";
 fn caml_raise_no_such_file(vname: &eq) {
     let name: &string;
     let msg: &string;
@@ -99,6 +100,7 @@ fn caml_raise_no_such_file(vname: &eq) {
     unreachable;
     caml_raise_sys_error(msg);
 }
+data caml_read_file_content = "caml_read_file_content";
 #[export = "caml_read_file_content"]
 fn caml_read_file_content(x: &eq) -> &eq {
     caml_raise_no_such_file(x);
@@ -106,6 +108,7 @@ fn caml_read_file_content(x: &eq) -> &eq {
 }
 #[export = "caml_fs_init"]
 fn caml_fs_init() -> &eq { 0 as &i31; }
+data caml_sys_is_directory = "caml_sys_is_directory";
 #[export = "caml_sys_is_directory"]
 fn caml_sys_is_directory(name: &eq) -> &eq {
     try &eq {

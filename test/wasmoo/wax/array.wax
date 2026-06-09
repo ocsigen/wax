@@ -4,6 +4,7 @@ type block = [mut &eq];
 type string = [mut i8];
 type float = { f: f64 };
 type float_array = [mut f64];
+data Array_make = "Array.make";
 const empty_array: &eq = [block|0 as &i31];
 #[export = "caml_make_vect"]
 #[export = "caml_array_make"]

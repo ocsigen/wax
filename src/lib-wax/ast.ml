@@ -147,6 +147,14 @@ and 'info instr = ('info instr_desc, 'info) annotated
 
 type attributes = (string * location instr) list
 
+type 'info memdata = {
+  data_name : ident option;
+  offset : 'info instr;
+  init : string;
+}
+
+type 'info datamode = Passive | Active of ident * 'info instr
+
 type 'info modulefield =
   | Type of rectype
   | Fundecl of {
@@ -179,6 +187,19 @@ type 'info modulefield =
       name : ident;
       typ : ident option;
       sign : functype option;
+      attributes : attributes;
+    }
+  | Memory of {
+      name : ident;
+      address_type : [ `I32 | `I64 ];
+      limits : (Utils.Uint64.t * Utils.Uint64.t option) option;
+      data : 'info memdata list;
+      attributes : attributes;
+    }
+  | Data of {
+      name : ident option;
+      mode : 'info datamode;
+      init : string;
       attributes : attributes;
     }
   | Group of {

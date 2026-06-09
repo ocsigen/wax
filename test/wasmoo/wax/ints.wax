@@ -146,6 +146,7 @@ fn format_int_default(d: i32) -> &eq {
     if negative { s[0] = 45; }
     s;
 }
+data format_error = "format_int: bad format";
 #[export = "parse_int_format"]
 fn parse_int_format(s: &string) -> (i32, i32, i32, i32, i32) {
     let i: i32;

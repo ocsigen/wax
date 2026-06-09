@@ -10,6 +10,8 @@ fn caml_backtrace_status(x: &eq) -> &eq { 0 as &i31; }
 fn caml_convert_raw_backtrace(x: &eq) -> &eq { [block|0 as &i31]; }
 #[export = "caml_raw_backtrace_next_slot"]
 fn caml_raw_backtrace_next_slot(x: &eq) -> &eq { 0 as &i31; }
+data raw_backtrace_slot_err =
+"Printexc.get_raw_backtrace_slot: index out of bounds";
 #[export = "caml_raw_backtrace_slot"]
 fn caml_raw_backtrace_slot(x: &eq, x_2: &eq) -> &eq {
     caml_invalid_argument(string#"foo");

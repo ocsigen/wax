@@ -181,7 +181,9 @@
       (local.get $total)))
   (call $clear_compare_stack)
   (local.get $res)
-)
+) (data $abstract_value "compare: abstract value")
+(data $functional_value "compare: functional value")
+(data $continuation_value "compare: continuation value")
 (func $do_compare_val
   (param $stack (ref $compare_stack)) (param $v1 (ref eq))
   (param $v2 (ref eq)) (param $total i32) (result i32)

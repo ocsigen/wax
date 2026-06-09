@@ -442,6 +442,8 @@ fn bigarray_serialize(s: &eq, v: &eq) -> (i32, i32) {
     (4 + num_dims) * 4;
     (4 + num_dims) * 8;
 }
+data intern_overflow =
+"input_value: cannot read bigarray with 64-bit OCaml ints";
 fn bigarray_deserialize(s: &eq) -> (&eq, i32) {
     let b: &bigarray;
     let num_dims: i32;
@@ -614,6 +616,8 @@ fn caml_ba_create_buffer(kind: i32, sz: i32) -> &extern {
     become ta_create(kind, l as i32);
 }
 const CAML_BA_MAX_NUM_DIMS: i32 = 16;
+data ba_create_bad_dims = "Bigarray.create: bad number of dimensions";
+data ba_create_negative_dim = "Bigarray.create: negative dimension";
 #[export = "caml_ba_create"]
 fn caml_ba_create(vkind: &eq, layout: &eq, d: &eq) -> &eq {
     let vdim: &block;
@@ -648,6 +652,8 @@ fn caml_ba_create(vkind: &eq, layout: &eq, d: &eq) -> &eq {
         ba_layout: layout as &i31 as i32_s
     };
 }
+data ta_unsupported_kind = "Typed_array.to_genarray: unsupported kind";
+data ta_too_large = "Typed_array.to_genarray: too large";
 #[export = "caml_ba_from_typed_array"]
 fn caml_ba_from_typed_array(x: &eq) -> &eq {
     let data: &extern;
@@ -809,6 +815,7 @@ fn caml_ba_set_at_offset(ba: &bigarray, i: i32, v: &eq) {
     ta_set_f32(data, i, (v as &float).f);
     return;
 }
+data Bigarray_dim = "Bigarray.dim";
 #[export = "caml_ba_dim"]
 fn caml_ba_dim(x: &eq, x_2: &eq) -> &eq {
     let dim: &int_array;
@@ -1016,6 +1023,7 @@ fn caml_ba_set_generic(vba: &eq, index: &eq, v: &eq) -> &eq {
     caml_ba_set_at_offset(ba, caml_ba_offset'(ba, index as &block), v);
     0 as &i31;
 }
+data too_many_indices = "Bigarray.slice: too many indices";
 #[export = "caml_ba_slice"]
 fn caml_ba_slice(vb: &eq, vind: &eq) -> &eq {
     let b: &bigarray;
@@ -1073,6 +1081,7 @@ fn caml_ba_slice(vb: &eq, vind: &eq) -> &eq {
         ba_layout: b.ba_layout as i32_u
     };
 }
+data bad_subarray = "Bigarray.sub: bad sub-array";
 #[export = "caml_ba_sub"]
 fn caml_ba_sub(vba: &eq, vofs: &eq, vlen: &eq) -> &eq {
     let ba: &bigarray;
@@ -1199,6 +1208,7 @@ fn caml_ba_fill(vba: &eq, v: &eq) -> &eq {
     ta_fill_float(data, (v as &float).f);
     return 0 as &i31;
 }
+data dim_mismatch = "Bigarray.blit: dimension mismatch";
 #[export = "caml_ba_blit"]
 fn caml_ba_blit(vsrc: &eq, vdst: &eq) -> &eq {
     let src: &bigarray;
@@ -1225,6 +1235,9 @@ fn caml_ba_blit(vsrc: &eq, vdst: &eq) -> &eq {
     ta_blit(src.ba_data, dst.ba_data);
     0 as &i31;
 }
+data bad_number_dim = "Bigarray.reshape: bad number of dimensions";
+data negative_dim = "Bigarray.reshape: negative dimension";
+data size_mismatch = "Bigarray.reshape: size mismatch";
 #[export = "caml_ba_reshape"]
 fn caml_ba_reshape(vb: &eq, vd: &eq) -> &eq {
     let vdim: &block;

@@ -88,7 +88,7 @@
         (call $ta_get_ui8 (local.get $data) (local.get $i))))
     (local.set $h (call $caml_hash_mix_int (local.get $h) (local.get $w))))
   (i32.xor (local.get $h) (local.get $len))
-)
+) (data $buffer "buffer")
 (func $bigstring_to_array_buffer (export "bigstring_to_array_buffer")
   (param $bs (ref eq)) (result (ref eq))
   (return_call $caml_js_get (call $caml_ba_to_typed_array (local.get $bs))

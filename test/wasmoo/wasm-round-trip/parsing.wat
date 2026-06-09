@@ -78,7 +78,7 @@
         (i32.const 0))
       (then (local.set $i (i32.add (local.get $i) (i32.const 1))) (br $loop))))
   (i32.sub (local.get $i) (local.get $p))
-)
+) (data $unknown_token "<unknown token>")
 (func $token_name
   (param $vnames (ref eq)) (param $number i32) (result (ref eq))
   (local $names (ref $string)) (local $i i32) (local $len i32)
@@ -117,7 +117,7 @@
 (func $output_int (param $x i32)
   (call $output
     (call $caml_format_int (@string $string "%d" ) (ref.i31 (local.get $x))))
-)
+) (data $State "State ") (data $read_token ": read token ")
 (func $print_token
   (param $tables (ref $block)) (param $state i32) (param $tok (ref eq))
   (local $b (ref $block)) (local $v (ref eq))
@@ -159,7 +159,12 @@
                 (else (call $output (@string $string "_" ))))))))
       (call $output (@string $string ")" ))
       (call $output_nl)))
-)
+) (data $recovering_in_state "Recovering in state ")
+(data $discarding_state "Discarding state ")
+(data $no_more_states_to_discard "No more states to discard")
+(data $discarding_last_token_read "Discarding last token read")
+(data $shift_to_state ": shift to state ")
+(data $reduce_by_rule ": reduce by rule ")
 (func $caml_parse_engine (export "caml_parse_engine")
   (param $vtables (ref eq)) (param $venv (ref eq)) (param $vcmd (ref eq))
   (param $varg (ref eq)) (result (ref eq))
