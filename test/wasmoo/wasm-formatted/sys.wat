@@ -78,7 +78,6 @@
 )
 
 (func (export "caml_sys_argv") (param (ref eq)) (result (ref eq))
-  
   ;; ZZZ
   (call $caml_js_to_string_array (call $argv))
 )
@@ -96,7 +95,6 @@
 )
 
 (func (export "caml_sys_system_command") (param (ref eq)) (result (ref eq))
-  
   ;; ZZZ
   (try (result (ref eq))
     (do
@@ -146,21 +144,18 @@
 
 (func (export "caml_sys_const_ostype_unix")
   (param (ref eq)) (result (ref eq))
-  
   ;; ZZZ
   (ref.i31 (i32.const 1))
 )
 
 (func (export "caml_sys_const_ostype_win32")
   (param (ref eq)) (result (ref eq))
-  
   ;; ZZZ
   (ref.i31 (i32.const 0))
 )
 
 (func (export "caml_sys_const_ostype_cygwin")
   (param (ref eq)) (result (ref eq))
-  
   ;; ZZZ
   (ref.i31 (i32.const 0))
 )
@@ -168,7 +163,6 @@
 (data $Unix "Unix")
 
 (func (export "caml_sys_get_config") (param (ref eq)) (result (ref eq))
-  
   ;; ZZZ
   ;; (call $log_js (string.const "caml_sys_get_config"))
   (array.new_fixed $block 4 (ref.i31 (i32.const 0))

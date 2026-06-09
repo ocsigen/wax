@@ -121,7 +121,7 @@ type sexp =
       transparent : bool;
       bk : [ `Box | `Hov | `Hv ];
     }
-  | Vertical_block of sexp list
+  | Vertical_block of Ast.location option * sexp list
   | Structured_block of Ast.location option * structure list
 
 and structure = Delimiter of sexp | Contents of sexp list
@@ -184,13 +184,20 @@ let rec format_sexp in_block depth first ctx s =
             l;
           print_trivia ctx trivia.within;
           print_trivia ctx trivia.after)
-  | Vertical_block l ->
+  | Vertical_block (loc, l) ->
+      let trivia = get_trivia ctx loc in
+      (* Printed before the box opens so a comment leading the first element
+         merges with the line break before the block instead of doubling it
+         into a blank line. *)
+      print_trivia ctx trivia.before;
       Printer.vbox p (fun () ->
           List.iteri
             (fun i v ->
               if i > 0 then Printer.space p ();
               format_sexp in_block depth false ctx v)
-            l)
+            l;
+          print_trivia ctx trivia.within;
+          print_trivia ctx trivia.after)
   | Structured_block (loc, l) ->
       let trivia = get_trivia ctx loc in
       print_trivia ctx trivia.before;
@@ -1136,7 +1143,26 @@ let rec instr i =
   | Folded (i, l) ->
       list ~loc [ block ~transparent:true (instr i :: List.map instr l) ]
 
-let instrs l = if l = [] then [] else [ Vertical_block (List.map instr l) ]
+let strip_loc = function
+  | Atom a -> Atom { a with loc = None }
+  | List (_, l) -> List (None, l)
+  | Block b -> Block { b with loc = None }
+  | Vertical_block (_, l) -> Vertical_block (None, l)
+  | Structured_block (_, l) -> Structured_block (None, l)
+
+let instrs l =
+  match l with
+  | [] -> []
+  | first :: _ ->
+      (* Carry the first instruction's location on the block so a comment
+         leading the body is printed above the (vertical) block rather than
+         wedged inside it after the line break. *)
+      let sexps =
+        match List.map instr l with
+        | s :: rest -> strip_loc s :: rest
+        | [] -> []
+      in
+      [ Vertical_block (Some first.Ast.info, sexps) ]
 
 let subtype t =
   let id, { typ; supertype; final } = t.Ast.desc in

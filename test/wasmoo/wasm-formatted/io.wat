@@ -772,7 +772,6 @@
 )
 
 (func (export "caml_ml_channel_size") (param (ref eq)) (result (ref eq))
-  
   ;; ZZZ check for overflow
   (ref.i31
     (i32.wrap_i64

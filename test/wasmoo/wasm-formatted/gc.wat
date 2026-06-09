@@ -99,7 +99,6 @@
 
 (func (export "caml_final_register_called_without_value")
   (param (ref eq) (ref eq)) (result (ref eq))
-  
   ;; ZZZ Use FinalizationRegistry?
   (ref.i31 (i32.const 0))
 )

@@ -1384,7 +1384,6 @@
   (local $sz i32) (local $buf (ref $string)) (local $st (ref $extern_state))
   (local $blk (ref $output_block)) (local $len i32)
   (local $res (ref $string))
-  
   ;; ZZZ check if binary channel?
   (local.set $blk
     (struct.new $output_block (ref.null $output_block)

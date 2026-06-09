@@ -64,7 +64,6 @@
 (start $init)
 
 (func $init
-  
   ;; Our dummy implementation of string conversion always returns
   ;; the empty string.
   (global.set $text_converters_available
