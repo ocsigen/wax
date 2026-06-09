@@ -218,6 +218,21 @@ module Error = struct
           provided expected)
       ()
 
+  let final_supertype context ~location name =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f
+          "The type %a is final and cannot be extended; declare it 'open'."
+          print_name name)
+      ()
+
+  let invalid_subtype context ~location name =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f "This type is not a valid subtype of %a." print_name
+          name)
+      ()
+
   let select_type_mismatch context ~location ty1 ty2 =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
@@ -2633,40 +2648,51 @@ let fundecl ctx typ sign =
 
 let check_type_definitions ctx =
   (*ZZZ In-order check? *)
-  Tbl.iter ctx.types (fun _ (i, _) ->
+  Tbl.iter ctx.types (fun _ (i, (st : subtype)) ->
       let ty = Wasm.Types.get_subtype ctx.subtyping_info i in
-      match ty.supertype with
-      | None -> ()
-      | Some j -> (
+      (* Every check below is about the type's relationship to its declared
+         supertype, so the supertype reference [sup] is the place to point. *)
+      match (ty.supertype, st.supertype) with
+      | None, _ | _, None -> ()
+      | Some j, Some sup ->
+          let location = sup.info in
           let ty' = Wasm.Types.get_subtype ctx.subtyping_info j in
-          assert (not ty'.final);
-          match (ty.typ, ty'.typ) with
-          | ( Func { params; results },
-              Func { params = params'; results = results' } ) ->
-              assert (Array.length params = Array.length params');
-              assert (Array.length results = Array.length results');
-              Array.iter2
-                (fun p p' ->
-                  assert (Wasm.Types.val_subtype ctx.subtyping_info p' p))
-                params params';
-              Array.iter2
-                (fun r r' ->
-                  assert (Wasm.Types.val_subtype ctx.subtyping_info r r'))
-                results results'
-          | Struct fields, Struct fields' ->
-              assert (Array.length fields' <= Array.length fields);
-              for i = 0 to Array.length fields' - 1 do
-                assert (field_subtype ctx fields.(i) fields'.(i))
-              done
-          | Array field, Array field' -> assert (field_subtype ctx field field')
-          | Cont ft, Cont ft' ->
-              assert (
-                Wasm.Types.heap_subtype ctx.subtyping_info (Type ft) (Type ft'))
-          | Func _, (Struct _ | Array _ | Cont _)
-          | Struct _, (Func _ | Array _ | Cont _)
-          | Array _, (Func _ | Struct _ | Cont _)
-          | Cont _, (Func _ | Struct _ | Array _) ->
-              assert false))
+          if ty'.final then Error.final_supertype ctx.diagnostics ~location sup
+          else
+            let valid_subtype =
+              match (ty.typ, ty'.typ) with
+              | ( Func { params; results },
+                  Func { params = params'; results = results' } ) ->
+                  Array.length params = Array.length params'
+                  && Array.length results = Array.length results'
+                  && Array.for_all2
+                       (fun p p' ->
+                         Wasm.Types.val_subtype ctx.subtyping_info p' p)
+                       params params'
+                  && Array.for_all2
+                       (fun r r' ->
+                         Wasm.Types.val_subtype ctx.subtyping_info r r')
+                       results results'
+              | Struct fields, Struct fields' ->
+                  Array.length fields' <= Array.length fields
+                  &&
+                  let rec loop k =
+                    k >= Array.length fields'
+                    || (field_subtype ctx fields.(k) fields'.(k) && loop (k + 1))
+                  in
+                  loop 0
+              | Array field, Array field' -> field_subtype ctx field field'
+              | Cont ft, Cont ft' ->
+                  Wasm.Types.heap_subtype ctx.subtyping_info (Type ft)
+                    (Type ft')
+              | Func _, (Struct _ | Array _ | Cont _)
+              | Struct _, (Func _ | Array _ | Cont _)
+              | Array _, (Func _ | Struct _ | Cont _)
+              | Cont _, (Func _ | Struct _ | Array _) ->
+                  false
+            in
+            if not valid_subtype then
+              Error.invalid_subtype ctx.diagnostics ~location sup)
 
 let rec check_constant_instruction ctx i =
   let location = snd i.info in
