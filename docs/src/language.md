@@ -44,22 +44,25 @@ nan         // Not a number
 
 ### Local Variables
 
-Declare local variables with `let`. Variables must be typed:
+Declare local variables with `let`. Each variable gets a type, either from an
+explicit annotation or from an initializer:
 
 ```wax
 fn example() -> i32 {
-    let x: i32;
-    let y: i32;
+    let x: i32;        // annotated, no initializer
+    let y = 20;        // type inferred from the initializer (i32)
     x = 10;
-    y = 20;
     x + y;
 }
 ```
 
-You can declare multiple variables:
+A local declared without an initializer starts at its type's zero value (`0`,
+`0.0`, or `null`). When the type is omitted, it is taken from the initializer;
+an otherwise-unconstrained integer literal then defaults to `i32` and a float to
+`f64`. An annotation and an initializer can be combined, and must agree:
 
 ```wax
-let x: i32, y: i32, z: f64;
+let count: i64 = 0;
 ```
 
 ### Assignment
@@ -81,16 +84,41 @@ it to a global is an error.
 
 ### Global Variables
 
-Globals are declared at module level:
+Globals are declared at module level. `const` is immutable; `let` is mutable:
 
 ```wax
-const PI: f64 = 3.14159;        // Immutable global
-let counter: i32 = 0;           // Mutable global
+const PI: f64 = 3.14159;        // immutable global
+let counter: i32 = 0;           // mutable global
 ```
+
+As with locals, an initialized global may omit its type and take it from the
+initializer (an unconstrained integer literal defaults to `i32`):
+
+```wax
+const answer = 42;              // i32
+```
+
+A global's initializer must be a constant expression (a literal, another
+global, or a simple reference-building expression).
 
 ## Expressions
 
-Wax is expression-oriented. Most constructs produce values.
+Wax is a readable layer over WebAssembly, and it keeps WebAssembly's execution
+model: the **operand stack**. A function or block body is a sequence of
+statements, each ended with `;`. Evaluating a statement may push values onto the
+stack and pop values off it, and whatever remains on the stack when the body
+ends is its result — which must match the declared result type. A
+value-returning function therefore ends with a statement that leaves that value:
+
+```wax
+fn double(x: i32) -> i32 {
+    x * 2;
+}
+```
+
+Most expressions produce a value. This same stack model underlies
+[blocks](#blocks), [holes](#holes), and functions or blocks with more than one
+result.
 
 ### Arithmetic
 
@@ -238,15 +266,18 @@ Blocks can be labelled and used as branch targets; see
 
 ### If Expressions
 
+`if` tests a condition — any `i32`, where non-zero means true — and runs the
+matching branch. Like a block it is **void** by default (the branches leave no
+value), and the `else` is optional:
+
 ```wax
 if condition {
     then_branch;
-} else {
-    else_branch;
 }
 ```
 
-With a result type:
+To make `if` produce a value, give it a result type with `=> <type>`. Both
+branches must then leave a value of that type, so the `else` becomes required:
 
 ```wax
 if condition => i32 {
@@ -258,33 +289,45 @@ if condition => i32 {
 
 ### Loops
 
-Loops repeat until explicitly broken out of:
+A `loop` runs its body once and then falls through to whatever follows — it does
+*not* repeat on its own. What makes it a loop is its label: branching to a
+loop's label jumps back to the **start** of its body. So a loop iterates by
+branching to itself, and stops once control reaches the end of the body without
+branching back.
 
 ```wax
-loop {
-    // body
-    br 'loop;   // Continue looping
+'next: loop {
+    total = total + i;
+    i = i + 1;
+    br_if 'next i <s n;   // jump back to the start while i < n
 }
 ```
 
-With a label:
+This is the opposite of a `do` block, whose label branches *past* the block (see
+[Labels and Branches](#labels-and-branches)). To leave a loop early, branch to
+an enclosing block's label.
+
+Loops nest, and a branch may target any enclosing label:
 
 ```wax
 'outer: loop {
     'inner: loop {
-        br 'outer;  // Break to outer
+        br 'outer;   // jump back to the start of the outer loop
     }
 }
 ```
 
 ### Labels and Branches
 
-Labels start with `'` and are used with branch instructions:
+Labels start with `'` and prefix a block, loop, `if`, or `try`. A branch targets
+a label; **where** it lands depends on the labelled construct: branching to a
+block, `if`, or `try` jumps *past* it (an exit), while branching to a `loop`
+jumps to its *start* (an iteration — see [Loops](#loops)).
 
 ```wax
-'my_block: do {
+'done: do {
     if condition {
-        br 'my_block;   // Exit the block
+        br 'done;   // jump past the block — exits it
     }
     // ...
 }
@@ -293,10 +336,14 @@ Labels start with `'` and are used with branch instructions:
 Branch instructions:
 
 ```wax
-br 'label;              // Unconditional branch
-br_if 'label cond;      // Branch if condition is true
-br_table ['a, 'b else 'default] index;  // Branch table
+br 'label;                          // unconditional branch
+br_if 'label cond;                  // branch if cond (an i32) is non-zero
+br_table ['a 'b else 'default] i;   // branch to the i-th label, else 'default
 ```
+
+The labels in a `br_table` are separated by spaces, and `else` gives the
+fallback for an out-of-range index. A branch also carries any values its target
+expects — a `do i32` target receives an `i32`, and so on.
 
 ### Return
 
@@ -333,6 +380,16 @@ Functions without a return type return nothing:
 ```wax
 fn log_value(x: i32) {
     // side effects only
+}
+```
+
+A function may return several values, written as a parenthesized list; the body
+leaves them all on the stack, in order:
+
+```wax
+fn divmod(a: i32, b: i32) -> (i32, i32) {
+    a /s b;
+    a %s b;
 }
 ```
 
@@ -393,9 +450,16 @@ val is &type    // Test if val is of type (returns i32)
 val as &type    // Cast val to type (trap on failure)
 ```
 
+Structs and arrays are WebAssembly GC heap types: a value of such a type is
+always held through a reference (`&point`, `&bytes`, …), not inline.
+
 ## Structs
 
 ### Definition
+
+A struct is a named record. Mark a field `mut` to allow assignment after
+creation; a plain field is set only at creation time. A value of `type point`
+is held as `&point`.
 
 ```wax
 type point = { x: i32, y: i32 };
@@ -404,16 +468,20 @@ type mutable_point = { x: mut i32, y: mut i32 };
 
 ### Creation
 
+`{T| …}` allocates a new struct of type `T` and yields a `&T`. Give every field
+a value, or use `..` to default them all (each field type must have a zero/null
+default):
+
 ```wax
-{point| x: 10, y: 20}       // New struct with explicit type
-{point| ..}                 // New struct with default values
+{point| x: 10, y: 20}       // all fields given
+{point| ..}                 // every field defaulted
 ```
 
 ### Field Access
 
 ```wax
-p.x                         // Get field
-p.x = 42;                   // Set field (if mutable)
+p.x                         // read a field
+p.x = 42;                   // write a field (only if it is `mut`)
 ```
 
 ## Arrays
@@ -434,7 +502,7 @@ type mutable_ints = [mut i32];
 [bytes| seg @ 0; 100]       // New array from a data segment (offset, count)
 ```
 
-The last form is `array.new_data`: it initializes the array from the named [data segment](module_fields.md#data-segments) `seg`, reading `count` elements starting at byte `offset`.
+The last form is `array.new_data`: it initializes the array from the named [data segment](#data-segments) `seg`, reading `count` elements starting at byte `offset`.
 
 ### Element Access
 
@@ -506,54 +574,55 @@ A passive element segment initializes a GC array of references with the same `[t
 
 ### Tags
 
-Define exception tags:
+A tag declares an exception. It carries a payload — one value or several:
 
 ```wax
-tag my_error(code: i32);
+tag overflow(i32);          // carries an i32
+tag pair(i32, f64);         // carries several values
 ```
 
 ### Throw
 
+`throw` raises a tag together with its payload:
+
 ```wax
-throw my_error 42;
+throw overflow 42;
 ```
 
-### Try/Catch (try_table style)
+### Try / Catch
+
+A `try` runs its body and routes a matching thrown tag to a handler. Like a
+block it may carry a result type (`try i32 { … }`) that the body and every
+handler produce. A caught tag's payload is left on the operand stack for the
+handler to pick up with a [hole](#holes) `_`:
 
 ```wax
-'handler: do {
-    try {
-        might_throw();
-    } catch [my_error -> 'handler]
+fn lookup(k: i32) -> i32 {
+    try i32 {
+        find(k);             // may throw `overflow`
+    } catch {
+        overflow => { _; }   // `_` is the thrown i32 payload
+        _ => { 0; }          // catch-all
+    }
 }
 ```
 
-With reference to exception:
+Each `tag => { … }` handler matches one tag; a bare `_ => { … }` matches any
+exception. Leave the catch-all out to let unmatched exceptions propagate.
+
+### Branching handlers (try_table)
+
+A lower-level form branches to a label instead of running an inline handler,
+mapping directly to WebAssembly's `try_table`:
 
 ```wax
-try {
-    might_throw();
-} catch [my_error & -> 'handler]    // & captures the exnref
+try { might_throw(); } catch [overflow -> 'h]    // on `overflow`, branch to 'h
+try { might_throw(); } catch [overflow & -> 'h]  // also deliver the exnref
+try { might_throw(); } catch [_ -> 'h]           // catch any exception
 ```
 
-Catch all:
-
-```wax
-try {
-    might_throw();
-} catch [_ -> 'handler]             // Catch any exception
-```
-
-### Try/Catch (legacy style)
-
-```wax
-try {
-    might_throw();
-} catch {
-    my_error => { handle_error(); }
-    _ => { handle_any(); }
-}
-```
+The target label receives the payload (and, with `&`, the `exnref`), so the
+labelled block's type must match what it is handed.
 
 ## Holes
 
