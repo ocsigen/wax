@@ -1,0 +1,132 @@
+==== core/call_ref.wast ====
+Wax type-checking should have failed (type mismatch):
+  type t = fn(); fn f(r: &?func) { (r as &?t)(); }
+from wasm:
+  (type $t (func)) (func $f (param $r funcref) (call_ref $t (local.get $r)))
+==== core/conversions.wast ====
+Wax type-checking should have failed (type mismatch):
+  fn f() -> i64 { 0 as f32 as i64_s; }
+from wasm: (func (result i64) (i64.extend_i32_s (f32.const 0)))
+Wax type-checking should have failed (type mismatch):
+  fn f() -> i64 { 0 as f32 as i64_u; }
+from wasm: (func (result i64) (i64.extend_i32_u (f32.const 0)))
+Wax type-checking should have failed (type mismatch):
+  fn f() -> i64 { 0 as i32 as i64_s_strict; }
+from wasm: (func (result i64) (i64.trunc_f32_s (i32.const 0)))
+Wax type-checking should have failed (type mismatch):
+  fn f() -> i64 { 0 as i32 as i64_u_strict; }
+from wasm: (func (result i64) (i64.trunc_f32_u (i32.const 0)))
+Wax type-checking should have failed (type mismatch):
+  fn f() -> i64 { 0 as i32 as i64_s_strict; }
+from wasm: (func (result i64) (i64.trunc_f64_s (i32.const 0)))
+Wax type-checking should have failed (type mismatch):
+  fn f() -> i64 { 0 as i32 as i64_u_strict; }
+from wasm: (func (result i64) (i64.trunc_f64_u (i32.const 0)))
+Wax type-checking should have failed (type mismatch):
+  fn f() -> f32 { 0 as i64 as f32_s; }
+from wasm: (func (result f32) (f32.convert_i32_s (i64.const 0)))
+Wax type-checking should have failed (type mismatch):
+  fn f() -> f32 { 0 as i64 as f32_u; }
+from wasm: (func (result f32) (f32.convert_i32_u (i64.const 0)))
+Wax type-checking should have failed (type mismatch):
+  fn f() -> f32 { 0 as i32 as f32_s; }
+from wasm: (func (result f32) (f32.convert_i64_s (i32.const 0)))
+Wax type-checking should have failed (type mismatch):
+  fn f() -> f32 { 0 as i32 as f32_u; }
+from wasm: (func (result f32) (f32.convert_i64_u (i32.const 0)))
+Wax type-checking should have failed (type mismatch):
+  fn f() -> f32 { (0 as i64 as i32).from_bits(); }
+from wasm: (func (result f32) (f32.reinterpret_i32 (i64.const 0)))
+Wax type-checking should have failed (type mismatch):
+  fn f() -> f64 { 0 as i64 as f64_s; }
+from wasm: (func (result f64) (f64.convert_i32_s (i64.const 0)))
+Wax type-checking should have failed (type mismatch):
+  fn f() -> f64 { 0 as i64 as f64_u; }
+from wasm: (func (result f64) (f64.convert_i32_u (i64.const 0)))
+Wax type-checking should have failed (type mismatch):
+  fn f() -> f64 { 0 as i32 as f64_s; }
+from wasm: (func (result f64) (f64.convert_i64_s (i32.const 0)))
+Wax type-checking should have failed (type mismatch):
+  fn f() -> f64 { 0 as i32 as f64_u; }
+from wasm: (func (result f64) (f64.convert_i64_u (i32.const 0)))
+==== core/gc/br_on_cast.wast ====
+Wax type-checking should have failed (type mismatch):
+  type t = { };
+  fn f(x: &any) -> &?t 'l: { do &any { br_on_cast 'l &?t x; } unreachable; }
+from wasm:
+  (type $t (struct))
+  (func (param (ref any)) (result (ref null $t))
+    (block (result (ref any))
+      (br_on_cast 1 (ref any) (ref null $t) (local.get 0)))
+    (unreachable)
+  )
+Wax type-checking should have failed (type mismatch):
+  fn f() -> &?any 'l: { unreachable; br_on_cast 'l &?any _; }
+from wasm: (func (result anyref) (br_on_cast 0 eqref anyref (unreachable)))
+Wax type-checking should have failed (type mismatch):
+  fn f() -> &?any 'l: { unreachable; br_on_cast 'l &?array _; }
+from wasm:
+  (func (result anyref) (br_on_cast 0 structref arrayref (unreachable)))
+==== core/gc/br_on_cast_fail.wast ====
+Wax type-checking should have failed (type mismatch):
+  type t = { };
+  fn f(x: &any) -> &any 'l: { (do &?t { br_on_cast_fail 'l &?t x; }!); }
+from wasm:
+  (type $t (struct))
+  (func (param (ref any)) (result (ref any))
+    (block (result (ref null $t))
+      (br_on_cast_fail 1 (ref any) (ref null $t) (local.get 0)))
+    (ref.as_non_null)
+  )
+Wax type-checking should have failed (type mismatch):
+  fn f() -> &?any 'l: { unreachable; br_on_cast_fail 'l &?any _; }
+from wasm:
+  (func (result anyref) (br_on_cast_fail 0 eqref anyref (unreachable)))
+Wax type-checking should have failed (type mismatch):
+  fn f() -> &?any 'l: { unreachable; br_on_cast_fail 'l &?array _; }
+from wasm:
+  (func (result anyref) (br_on_cast_fail 0 structref arrayref (unreachable)))
+==== core/i32.wast ====
+Wax type-checking should have failed (type mismatch):
+  fn f() -> i32 { !(0 as i64); }
+from wasm: (func (result i32) (i32.eqz (i64.const 0)))
+==== core/ref_func.wast ====
+Wax type-checking should have failed (undeclared function reference):
+  fn f() { _ = f; }
+from wasm: (func $f (drop (ref.func $f)))
+Wax type-checking should have failed (undeclared function reference):
+  #[start]
+  fn f() { _ = f; }
+from wasm: (start $f) (func $f (drop (ref.func $f)))
+==== core/return_call_ref.wast ====
+Wax type-checking should have failed (type mismatch):
+  type t = fn(); fn f(r: &?func) { become (r as &?t)(); }
+from wasm:
+  (type $t (func))
+  (func $f (param $r funcref) (return_call_ref $t (local.get $r)))
+==== core/select.wast ====
+Wax type-checking should have failed (type mismatch):
+  type t = fn(); fn f(r: &t) { _ = 1 as i32?r:r; }
+from wasm:
+  (type $t (func))
+  (func $type-ref-implicit (param $r (ref $t))
+    (drop (select (local.get $r) (local.get $r) (i32.const 1)))
+  )
+Wax type-checking should have failed (type mismatch):
+  fn f(r: &?func) { _ = 1 as i32?r:r; }
+from wasm:
+  (func $type-funcref-implicit (param $r funcref)
+    (drop (select (local.get $r) (local.get $r) (i32.const 1)))
+  )
+Wax type-checking should have failed (type mismatch):
+  fn f(r: &?extern) { _ = 1 as i32?r:r; }
+from wasm:
+  (func $type-externref-implicit (param $r externref)
+    (drop (select (local.get $r) (local.get $r) (i32.const 1)))
+  )
+==== core/unreached-invalid.wast ====
+Wax type-checking should have failed (type mismatch):
+  fn f() { unreachable; _ = !(0 as i32); }
+from wasm:
+  (func $type-num-vs-num (unreachable)
+                         (drop (i64.eqz (i32.const 0))))

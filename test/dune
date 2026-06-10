@@ -25,7 +25,7 @@
  (action
   (with-stdout-to
    wasm_test_suite.output
-   (run ../src/bin/run_wasm_testsuite.exe --wasm-only --no-color))))
+   (run ../src/bin/run_wasm_testsuite.exe --no-color))))
 
 (rule
  (alias runtest)
