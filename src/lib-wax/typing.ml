@@ -4365,10 +4365,14 @@ let fundecl ctx name typ sign =
   if Tbl.exists ctx.diagnostics ctx.functions name then None
   else
     match typ with
-    | Some typ ->
-        let+@ info = Tbl.find ctx.diagnostics ctx.types typ in
-        (*ZZZ Check signature*)
-        (fst info, typ.desc)
+    | Some typ -> (
+        let*@ info = Tbl.find ctx.diagnostics ctx.types typ in
+        (* The referenced type must be a function type (as for tags below). *)
+        match snd info with
+        | { typ = Func _; _ } -> Some (fst info, typ.desc)
+        | _ ->
+            Error.expected_func_type ctx.diagnostics ~location:typ.info;
+            None)
     | None -> (
         match sign with
         | Some sign ->

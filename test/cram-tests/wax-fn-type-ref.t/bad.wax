@@ -1,0 +1,2 @@
+type point = { x: i32, y: i32 };
+#[import = ("m", "n")] fn f: point;
