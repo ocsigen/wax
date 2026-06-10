@@ -794,6 +794,13 @@ let field_subtype info (ty : Wasm.Ast.Binary.fieldtype)
   && storage_subtype' info ty.typ ty'.typ
   && ((not ty.mut) || storage_subtype' info ty'.typ ty.typ)
 
+(* Whether the inferred type [ty] is a subtype of the expected type [ty'].
+   Not a pure relation: when the two are compatible it *unifies* their
+   union-find cells (so an as-yet-unconstrained literal like [Int]/[Number]
+   gets pinned to the concrete type it is checked against). [Unknown] on the
+   left (error-recovery / dead code) is a subtype of anything; [Unknown] never
+   appears on the right because expected types always come from a real
+   declaration, annotation or instruction signature — hence the [assert]. *)
 let subtype ctx ty ty' =
   let ity = UnionFind.find ty in
   let ity' = UnionFind.find ty' in
@@ -1274,11 +1281,6 @@ let valtype_equal ctx (a : inferred_valtype) (b : inferred_valtype) =
   Wasm.Types.val_subtype ctx.subtyping_info a.internal b.internal
   && Wasm.Types.val_subtype ctx.subtyping_info b.internal a.internal
 
-(* Type-check one [let] binding against [result_ty] — the value it takes off the
-   stack — and record the local. Returns the binding to emit: an annotation that
-   [simplify] finds redundant (it equals what the value would infer to on its
-   own) is dropped, so Wax printed back from Wasm omits it. Used for both the
-   single-value form and each name of a multi-value [let]. *)
 (* A value type is defaultable unless it is a non-nullable reference: such a
    local has no zero value and must be assigned before use. *)
 let is_defaultable (ty : valtype) =
@@ -1287,6 +1289,11 @@ let is_defaultable (ty : valtype) =
 let mark_initialized ctx name =
   ctx.initialized_locals <- StringSet.add name ctx.initialized_locals
 
+(* Type-check one [let] binding against [result_ty] — the value it takes off the
+   stack — and record the local. Returns the binding to emit: an annotation that
+   [simplify] finds redundant (it equals what the value would infer to on its
+   own) is dropped, so Wax printed back from Wasm omits it. Used for both the
+   single-value form and each name of a multi-value [let]. *)
 let bind_let_value ctx ~location result_ty (name, typ) =
   match typ with
   | Some typ ->
@@ -1813,6 +1820,11 @@ let is_unary_method m =
 (* Mint (or reuse) an anonymous function type for an inline [as &fn(..) -> ..]
    cast target. The name encodes the signature so identical casts share one
    type, and to_wasm materialises it through the [<..>] synthetic-type path. *)
+(* Register (once) a type definition for an anonymous function signature and
+   return the synthetic name standing for it — used when a cast or [call_ref]
+   needs a named [func] type but the source wrote the signature inline. The name
+   is a deterministic mangling of the signature, so identical signatures map to
+   the same definition. *)
 let anon_function_type ctx (sign : functype) =
   let buf = Buffer.create 32 in
   let rec vt (t : valtype) =
