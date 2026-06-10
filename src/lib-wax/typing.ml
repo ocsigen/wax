@@ -250,6 +250,13 @@ module Error = struct
           print_name name)
       ()
 
+  let non_nullable_table context ~location =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f
+          "A table with a non-nullable element type must have an initializer.")
+      ()
+
   let final_supertype context ~location name =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
@@ -4219,6 +4226,10 @@ let rec globals ctx fields =
       | Table ({ reftype = rt; init; _ } as t) ->
           check_limits ctx ~location:field.info "table" t.address_type t.limits
             max_table_size;
+          (* Without an initializer the table is filled with the element type's
+             default value, which a non-nullable reference does not have. *)
+          if Option.is_none init && not rt.nullable then
+            Error.non_nullable_table ctx.diagnostics ~location:field.info;
           let init =
             Option.map
               (fun e ->

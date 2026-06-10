@@ -1,0 +1,3 @@
+fn g() {}
+table t: &func [1] = g;
+table u: &?func [1];

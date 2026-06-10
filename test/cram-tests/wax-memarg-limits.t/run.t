@@ -63,6 +63,21 @@ Table size limits are checked too:
   2 │ 
   [123]
 
+A table whose element type is non-nullable must have an initializer (otherwise
+its default-filled elements would have no value):
+
+  $ wax check non-nullable-table.wax
+  Error: A table with a non-nullable element type must have an initializer.
+   ──➤  non-nullable-table.wax:1:1
+  1 │ table t: &func [0];
+    · ^^^^^^^^^^^^^^^^^^^
+  2 │ 
+  [123]
+
+Giving an initializer, or using a nullable element type, is fine:
+
+  $ wax check nullable-or-init-table.wax
+
 A module may not export the same name twice:
 
   $ wax check dup-export.wax
