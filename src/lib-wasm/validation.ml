@@ -2464,7 +2464,6 @@ let build_initial_env ctx fields =
     (fun (field : (_ Ast.Text.modulefield, _) Ast.annotated) ->
       match field.desc with
       | Import { id; desc; exports; module_ = _; name = _ } -> (
-          (* ZZZ Check for non-import fields *)
           register_exports ctx exports;
           match desc with
           | Func tu ->
@@ -2957,7 +2956,36 @@ let specialize env diagnostics ~enqueue ~record asm0 fields =
   in
   sfields asm0 fields
 
+(* WebAssembly requires every import to precede all non-import definitions
+   (functions, tables, memories, globals, tags). Report any import that follows
+   such a definition. *)
+let check_import_order diagnostics fields =
+  ignore
+    (List.fold_left
+       (fun can_import (field : (_ Ast.Text.modulefield, _) Ast.annotated) ->
+         match (can_import, field.desc) with
+         | Some previous, Import _ ->
+             Error.import_after_definition diagnostics ~location:field.info
+               previous;
+             can_import
+         | None, Func _ -> Some "function"
+         | None, Memory _ -> Some "memory"
+         | None, Table _ -> Some "table"
+         | None, Tag _ -> Some "tag"
+         | None, Global _ -> Some "global"
+         | None, String_global _ -> Some "string"
+         | ( Some _,
+             (Func _ | Memory _ | Table _ | Tag _ | Global _ | String_global _)
+           )
+         | None, Import _
+         | ( _,
+             ( Types _ | Export _ | Start _ | Elem _ | Data _
+             | Module_if_annotation _ ) ) ->
+             can_import)
+       None fields)
+
 let f diagnostics ((name, fields) as modul) =
+  check_import_order diagnostics fields;
   if not (List.exists field_has_conditional fields) then
     validate_configuration diagnostics modul
   else
@@ -3242,29 +3270,8 @@ let check_syntax diagnostics (_, lst) =
       | String_global { id; _ } -> check_unbound globals "global" (Some id)
       | Module_if_annotation _ -> ())
     lst;
-  ignore
-    (List.fold_left
-       (fun can_import (field : (_ Ast.Text.modulefield, _) Ast.annotated) ->
-         match (can_import, field.desc) with
-         | Some previous, Import _ ->
-             Error.import_after_definition diagnostics ~location:field.info
-               previous;
-             can_import
-         | None, Func _ -> Some "function"
-         | None, Memory _ -> Some "memory"
-         | None, Table _ -> Some "table"
-         | None, Tag _ -> Some "tag"
-         | None, Global _ -> Some "global"
-         | None, String_global _ -> Some "string"
-         | ( Some _,
-             (Func _ | Memory _ | Table _ | Tag _ | Global _ | String_global _)
-           )
-         | None, Import _
-         | ( _,
-             ( Types _ | Export _ | Start _ | Elem _ | Data _
-             | Module_if_annotation _ ) ) ->
-             can_import)
-       None lst);
+  (* Import ordering is enforced by {!check_import_order}, which runs as part
+     of {!f}. *)
   match
     List.filter
       (fun field ->
