@@ -180,3 +180,18 @@ shares its canonical index — $f1 is named with $a, not $b:
     ·                ^^^^^^^^^^^
   8 │ 
   [128]
+
+Components resolve through the use-site reference too, so a struct.get on $a
+names its field's type ($x) even though the identical $b (whose field is the
+identical $y) shares both canonical indices:
+
+  $ wax --validate struct_field_shared_index.wat -o out.wat
+  Error: Type mismatch: this instruction expects type i32
+    but the stack has type (ref $x)
+   ──➤  struct_field_shared_index.wat:7:6
+  5 │   (type $b (struct (field (ref $y))))
+  6 │   (func (param (ref $a)) (result i32)
+  7 │     (struct.get $a 0 (local.get 0))))
+    ·      ^^^^^^^^^^^^^^^
+  8 │ 
+  [128]

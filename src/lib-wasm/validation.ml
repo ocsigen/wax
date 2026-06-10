@@ -580,8 +580,17 @@ end
 type type_context = {
   types : Types.t;
   mutable last_index : int;
-  index_mapping : (Uint32.t, int * (string * int) list) Hashtbl.t;
-  label_mapping : (string, int * (string * int) list) Hashtbl.t;
+  (* Keyed by a source type reference (numeric index / name): the resolved
+     global index, a struct's field-name-to-position map, and the source
+     composite type. The last lets an error name a component (a struct field,
+     an array element, a function result) as the source wrote it; keying by the
+     reference (rather than the deduplicated global index) keeps it injective,
+     so [$a] is named with [$a] even when a structurally-equal [$b] shares its
+     global index. *)
+  index_mapping :
+    (Uint32.t, int * (string * int) list * Ast.Text.comptype option) Hashtbl.t;
+  label_mapping :
+    (string, int * (string * int) list * Ast.Text.comptype option) Hashtbl.t;
   (* For each type definition, keyed by its text-level index: its source index
      node (its name when it has one, else its numeric index, carrying the
      definition's location), and — for a continuation type — the source
@@ -590,13 +599,30 @@ type type_context = {
      check on a type is reported at the exact definition and names types as they
      appear in the source. *)
   type_defs : (int, Ast.Text.idx * Ast.Text.idx option) Hashtbl.t;
-  (* Each type definition's source composite type, keyed by its resolved global
-     index. Lets an error name a component (a struct field, an array element, a
-     function result) as the source wrote it, not just by canonical index.
-     Identical types share a global index, so this picks one source definition;
-     they are structurally equal, so the component types agree. *)
-  source_defs : (int, Ast.Text.comptype) Hashtbl.t;
 }
+
+(* The source composite type a reference resolves to, named as the source wrote
+   it (injective), or [None] for an unbound or sourceless reference. Does not
+   report errors — callers that resolve the reference do. *)
+let reference_comptype tc (idx : Ast.Text.idx) =
+  let entry =
+    match idx.desc with
+    | Num x -> Hashtbl.find_opt tc.index_mapping x
+    | Id id -> Hashtbl.find_opt tc.label_mapping id
+  in
+  match entry with Some (_, _, c) -> c | None -> None
+
+(* The source function type a reference resolves to, when it names one. *)
+let reference_functype tc idx =
+  match reference_comptype tc idx with Some (Func ft) -> Some ft | _ -> None
+
+(* The source function type a [typeuse] denotes: its inline signature, or the
+   one named by its type reference. *)
+let typeuse_functype tc (tu_idx, tu_sign) =
+  match tu_sign with
+  | Some ft -> Some ft
+  | None -> (
+      match tu_idx with Some idx -> reference_functype tc idx | None -> None)
 
 let get_type_info d ctx (idx : Ast.Text.idx) =
   try
@@ -616,8 +642,8 @@ let get_type_info d ctx (idx : Ast.Text.idx) =
     None
 
 let resolve_type_index d ctx idx =
-  let+@ ty = get_type_info d ctx idx in
-  fst ty
+  let+@ gidx, _, _ = get_type_info d ctx idx in
+  gidx
 
 let heaptype d ctx (h : Ast.Text.heaptype) : heaptype option =
   match h with
@@ -730,7 +756,7 @@ let subtype d ctx current { Ast.Text.typ; supertype; final } =
                  Utils.Spell_check.f
                    (fun f ->
                      Hashtbl.iter
-                       (fun id' (i, _) -> if i > lnot current then f id')
+                       (fun id' (i, _, _) -> if i > lnot current then f id')
                        ctx.label_mapping)
                    id
            in
@@ -818,7 +844,7 @@ let lookup_func_type ctx idx =
 
 let lookup_struct_type ctx idx =
   let ctx = ctx.modul in
-  let*@ ty, field_map = get_type_info ctx.diagnostics ctx.types idx in
+  let*@ ty, field_map, _ = get_type_info ctx.diagnostics ctx.types idx in
   let def = Types.get_subtype ctx.subtyping_info ty in
   match def.typ with
   | Struct fields -> Some (ty, field_map, fields)
@@ -924,19 +950,20 @@ let result_subtype info (ts : valtype array) (ts' : valtype array) =
   && Array.for_all Fun.id
        (Array.mapi (fun i t -> Types.val_subtype info t ts'.(i)) ts)
 
-(* Source type of struct field [n] of the composite type with global index
-   [gidx], when the field has a (non-packed) value type and the source
-   definition is known. Packed fields surface as i32, so they get no name. *)
-let source_field_valtype ctx gidx n : Ast.Text.valtype option =
-  match Hashtbl.find_opt ctx.modul.types.source_defs gidx with
+(* Source type of struct field [n] of the type that reference [idx] names, when
+   the field has a (non-packed) value type. Packed fields surface as i32, so
+   they get no name. Resolving through the reference (not the deduplicated
+   global index) names the field as written at this very type. *)
+let source_field_valtype ctx idx n : Ast.Text.valtype option =
+  match reference_comptype ctx.modul.types idx with
   | Some (Struct fields) when n < Array.length fields -> (
       let _, (ft : Ast.Text.fieldtype) = fields.(n).Ast.desc in
       match ft.typ with Value v -> Some v | Packed _ -> None)
   | _ -> None
 
-(* Source type of the element of the array type with global index [gidx]. *)
-let source_element_valtype ctx gidx : Ast.Text.valtype option =
-  match Hashtbl.find_opt ctx.modul.types.source_defs gidx with
+(* Source type of the element of the array type that reference [idx] names. *)
+let source_element_valtype ctx idx : Ast.Text.valtype option =
+  match reference_comptype ctx.modul.types idx with
   | Some (Array (ft : Ast.Text.fieldtype)) -> (
       match ft.typ with Value v -> Some v | Packed _ -> None)
   | _ -> None
@@ -947,22 +974,10 @@ let functype_arg_text ({ params; results } : Ast.Text.functype) =
   ( Some (Array.map (fun (_, v) -> Some v) params),
     Some (Array.map (fun v -> Some v) results) )
 
-(* Same, for the function type with global index [gidx], from its stored source
-   definition; both [None] when the definition is unknown. Prefer a source
-   signature held directly (e.g. a function's own declaration) where available,
-   since a global index can be shared by several structurally-equal types. *)
-let source_arg_text ctx gidx =
-  match Hashtbl.find_opt ctx.modul.types.source_defs gidx with
-  | Some (Func ft) -> functype_arg_text ft
-  | _ -> (None, None)
-
-(* Argument/result source types for a call: prefer a source signature held
-   directly (the called function's, or an instruction's inline type), falling
-   back to the function type's stored definition for a plain type reference. *)
-let arg_text ctx ty sign =
-  match sign with
-  | Some ft -> functype_arg_text ft
-  | None -> source_arg_text ctx ty
+(* Argument/result source types for a call from the callee's source signature
+   ([None] when unknown). *)
+let arg_text sign =
+  match sign with Some ft -> functype_arg_text ft | None -> (None, None)
 
 (* Each stack entry carries the interned type used for subtype checking and,
    when known, the source type the value was written as ([text]). Errors print
@@ -1650,12 +1665,12 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           Error.expected_func_type ctx.modul.diagnostics ~location:loc idx;
           unreachable
       | Func { params; results } ->
-          let ptext, rtext = arg_text ctx ty sign in
+          let ptext, rtext = arg_text sign in
           let* () = pop_args ctx loc ?text:ptext params in
           push_results ?text:rtext results)
   | CallRef idx ->
       let*! type_idx, { params; results } = lookup_func_type ctx idx in
-      let ptext, rtext = source_arg_text ctx type_idx in
+      let ptext, rtext = arg_text (reference_functype ctx.modul.types idx) in
       let* () =
         pop ctx loc ~expected_text:(ref_null_text idx)
           (Ref { nullable = true; typ = Type type_idx })
@@ -1677,7 +1692,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           Error.expected_func_type ctx.modul.diagnostics ~location:loc idx;
           unreachable
       | Func { params; results } ->
-          let ptext, rtext = arg_text ctx ty (snd tu) in
+          let ptext, rtext = arg_text (typeuse_functype ctx.modul.types tu) in
           let* () =
             pop ctx loc (address_type_to_valtype typ.limits.address_type)
           in
@@ -1692,14 +1707,14 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           Error.expected_func_type ctx.modul.diagnostics ~location:loc idx;
           unreachable
       | Func { params; results } ->
-          let ptext, _ = arg_text ctx ty sign in
+          let ptext, _ = arg_text sign in
           let* () = pop_args ctx loc ?text:ptext params in
           compare_types ctx.modul ~location:loc ~descr:"this tail call"
             ~provided:results ~expected:ctx.return_types;
           unreachable)
   | ReturnCallRef idx ->
       let*! type_idx, { params; results } = lookup_func_type ctx idx in
-      let ptext, _ = source_arg_text ctx type_idx in
+      let ptext, _ = arg_text (reference_functype ctx.modul.types idx) in
       let* () =
         pop ctx loc ~expected_text:(ref_null_text idx)
           (Ref { nullable = true; typ = Type type_idx })
@@ -1723,7 +1738,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           Error.expected_func_type ctx.modul.diagnostics ~location:loc idx;
           unreachable
       | Func { params; results } ->
-          let ptext, _ = arg_text ctx ty (snd tu) in
+          let ptext, _ = arg_text (typeuse_functype ctx.modul.types tu) in
           let* () =
             pop ctx loc (address_type_to_valtype typ.limits.address_type)
           in
@@ -2134,7 +2149,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       (*ZZZ signage + validate n*)
       ignore signage;
       push
-        ?text:(source_field_valtype ctx ty n)
+        ?text:(source_field_valtype ctx idx n)
         (Some loc)
         (unpack_type fields.(n))
   | StructSet (idx, idx') ->
@@ -2144,7 +2159,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
         Error.immutable ctx.modul.diagnostics ~location:i.info "field";
       let* () =
         pop ctx loc
-          ?expected_text:(source_field_valtype ctx ty n)
+          ?expected_text:(source_field_valtype ctx idx n)
           (unpack_type fields.(n))
       in
       pop ctx loc ~expected_text:(ref_null_text idx)
@@ -2205,14 +2220,14 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
         pop ctx loc ~expected_text:(ref_null_text idx)
           (Ref { nullable = true; typ = Type ty })
       in
-      push ?text:(source_element_valtype ctx ty) (Some loc) (unpack_type field)
+      push ?text:(source_element_valtype ctx idx) (Some loc) (unpack_type field)
   | ArraySet idx ->
       let*! ty, field = lookup_array_type ctx idx in
       if not field.mut then
         Error.immutable ctx.modul.diagnostics ~location:i.info "array";
       let* () =
         pop ctx loc
-          ?expected_text:(source_element_valtype ctx ty)
+          ?expected_text:(source_element_valtype ctx idx)
           (unpack_type field)
       in
       let* () = pop ctx loc I32 in
@@ -2466,10 +2481,10 @@ let add_type d ctx ty =
       let label = fst e.Ast.desc in
       Hashtbl.replace ctx.index_mapping
         (Uint32.of_int (ctx.last_index + i))
-        (lnot i, []);
+        (lnot i, [], None);
       Option.iter
         (fun label ->
-          Hashtbl.replace ctx.label_mapping label.Ast.desc (lnot i, []))
+          Hashtbl.replace ctx.label_mapping label.Ast.desc (lnot i, [], None))
         label)
     ty;
   match rectype d ctx ty with
@@ -2501,7 +2516,7 @@ let add_type d ctx ty =
           in
           Hashtbl.replace ctx.index_mapping
             (Uint32.of_int (ctx.last_index + i))
-            (i' + i, fields);
+            (i' + i, fields, Some typ.typ);
           let def_idx =
             let desc =
               match label with
@@ -2516,10 +2531,10 @@ let add_type d ctx ty =
             | Func _ | Struct _ | Array _ -> None
           in
           Hashtbl.replace ctx.type_defs (ctx.last_index + i) (def_idx, cont_ref);
-          Hashtbl.replace ctx.source_defs (i' + i) typ.typ;
           Option.iter
             (fun label ->
-              Hashtbl.replace ctx.label_mapping label.Ast.desc (i' + i, fields))
+              Hashtbl.replace ctx.label_mapping label.Ast.desc
+                (i' + i, fields, Some typ.typ))
             label)
         ty;
       ctx.last_index <- ctx.last_index + Array.length ty
@@ -2615,7 +2630,9 @@ let collect_implicit_types d ctx fields =
         [| { typ = Func ft; supertype = None; final = true } |]
     in
     if Types.last_index ctx.types > before then (
-      Hashtbl.replace ctx.index_mapping (Uint32.of_int ctx.last_index) (idx, []);
+      Hashtbl.replace ctx.index_mapping
+        (Uint32.of_int ctx.last_index)
+        (idx, [], Some (Func sign));
       ctx.last_index <- ctx.last_index + 1)
   in
   let rec collect_instrs l = List.iter collect_instr l
@@ -2671,7 +2688,8 @@ let build_initial_env ctx fields =
           | Func tu ->
               ignore
                 (let+@ ty = typeuse ctx.diagnostics ctx.types tu in
-                 Sequence.register ctx.functions id (ty, snd tu))
+                 Sequence.register ctx.functions id
+                   (ty, typeuse_functype ctx.types tu))
           | Memory lim ->
               limits ctx "memory" lim max_memory_size;
               Sequence.register ctx.memories id lim.desc
@@ -2693,7 +2711,7 @@ let build_initial_env ctx fields =
 *)
               Sequence.register ctx.tags id ty)
       | Func { id; typ; instrs; _ } ->
-          let sign = snd typ in
+          let sign = typeuse_functype ctx.types typ in
           let>@ ty = typeuse ctx.diagnostics ctx.types typ in
           Sequence.register ctx.functions id (ty, sign);
           register_typeuses ctx.diagnostics ctx.types instrs
@@ -2717,7 +2735,7 @@ let check_type_definitions ctx =
         (Hashtbl.find_opt ctx.types.type_defs i)
     in
     let location = def_idx.Ast.info in
-    let>@ gidx, _ =
+    let>@ gidx, _, _ =
       get_type_info ctx.diagnostics ctx.types
         (Ast.no_loc (Ast.Text.Num (Uint32.of_int i)))
     in
@@ -3125,7 +3143,6 @@ let validate_configuration diagnostics (_, fields) =
       index_mapping = Hashtbl.create 16;
       label_mapping = Hashtbl.create 16;
       type_defs = Hashtbl.create 16;
-      source_defs = Hashtbl.create 16;
     }
   in
   List.iter
