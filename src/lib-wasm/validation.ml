@@ -846,8 +846,8 @@ type module_context = {
      (deduplicated) type index that another structurally-equal type may own. *)
   functions : (int * Ast.Text.functype option) Sequence.t;
   memories : limits Sequence.t;
-  tables : (Ast.Binary.tabletype * Ast.Text.valtype option) Sequence.t;
-  globals : (globaltype * Ast.Text.valtype option) Sequence.t;
+  tables : (Ast.Binary.tabletype * Ast.Text.valtype) Sequence.t;
+  globals : (globaltype * Ast.Text.valtype) Sequence.t;
   (* Each tag carries its type's global index and, when declared with an inline
      signature, that source signature — to name a thrown payload's types. *)
   tags : (int * Ast.Text.functype option) Sequence.t;
@@ -860,9 +860,9 @@ type module_context = {
 module IntSet = Set.Make (Int)
 
 type ctx = {
-  (* Each local carries the interned type and, when it was declared with an
-     inline type, the source type for error messages. *)
-  locals : (valtype * Ast.Text.valtype option) Sequence.t;
+  (* Each local carries the interned type and the source type for error
+     messages (reconstructed from the interned type if no source is known). *)
+  locals : (valtype * Ast.Text.valtype) Sequence.t;
   (* Each entry is a branch target: its optional label, the interned types a
      branch carries to it, and their source types for error messages. *)
   control_types :
@@ -1800,7 +1800,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
              (Ref { nullable = true; typ = Func }))
       then
         Error.table_type_mismatch ctx.modul.diagnostics ~location:loc
-          ?text:table_text idx (Ref typ.reftype);
+          ~text:table_text idx (Ref typ.reftype);
       match (Types.get_subtype ctx.modul.subtyping_info ty).typ with
       | Struct _ | Array _ | Cont _ ->
           Error.expected_func_type ctx.modul.diagnostics ~location:loc idx;
@@ -1850,7 +1850,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
              (Ref { nullable = true; typ = Func }))
       then
         Error.table_type_mismatch ctx.modul.diagnostics ~location:loc
-          ?text:table_text idx (Ref typ.reftype);
+          ~text:table_text idx (Ref typ.reftype);
       match (Types.get_subtype ctx.modul.subtyping_info ty).typ with
       | Struct _ | Array _ | Cont _ ->
           Error.expected_func_type ctx.modul.diagnostics ~location:loc idx;
@@ -1904,26 +1904,26 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           pop ctx loc I32)
   | LocalGet i ->
       let*! ty, text = get_local ctx i in
-      push ?text (Some loc) ty
+      push ~text (Some loc) ty
   | LocalSet i ->
       let*! ty, text = get_local ~initialize:true ctx i in
-      pop ctx loc ?expected_text:text ty
+      pop ctx loc ~expected_text:text ty
   | LocalTee i ->
       let*! ty, text = get_local ~initialize:true ctx i in
-      let* () = pop ctx loc ?expected_text:text ty in
-      push ?text (Some loc) ty
+      let* () = pop ctx loc ~expected_text:text ty in
+      push ~text (Some loc) ty
   | GlobalGet idx ->
       let*! ty, text =
         Sequence.get ctx.modul.diagnostics ctx.modul.globals idx
       in
-      push ?text (Some loc) ty.typ
+      push ~text (Some loc) ty.typ
   | GlobalSet idx ->
       let*! ty, text =
         Sequence.get ctx.modul.diagnostics ctx.modul.globals idx
       in
       if not ty.mut then
         Error.immutable_global ctx.modul.diagnostics ~location:loc idx;
-      pop ctx loc ?expected_text:text ty.typ
+      pop ctx loc ~expected_text:text ty.typ
   | Load (idx, memarg, ty) ->
       let*! limits =
         Sequence.get ctx.modul.diagnostics ctx.modul.memories idx
@@ -2120,13 +2120,13 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       in
       let addr_ty = address_type_to_valtype typ.limits.address_type in
       let* () = pop ctx loc addr_ty in
-      push ?text (Some loc) (Ref typ.reftype)
+      push ~text (Some loc) (Ref typ.reftype)
   | TableSet idx ->
       let*! typ, text =
         Sequence.get ctx.modul.diagnostics ctx.modul.tables idx
       in
       let addr_ty = address_type_to_valtype typ.limits.address_type in
-      let* () = pop ctx loc ?expected_text:text (Ref typ.reftype) in
+      let* () = pop ctx loc ~expected_text:text (Ref typ.reftype) in
       pop ctx loc addr_ty
   | TableSize idx ->
       let*! typ, _ = Sequence.get ctx.modul.diagnostics ctx.modul.tables idx in
@@ -2137,7 +2137,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       in
       let addr_ty = address_type_to_valtype typ.limits.address_type in
       let* () = pop ctx loc addr_ty in
-      let* () = pop ctx loc ?expected_text:text (Ref typ.reftype) in
+      let* () = pop ctx loc ~expected_text:text (Ref typ.reftype) in
       push (Some loc) addr_ty
   | TableFill idx ->
       let*! typ, text =
@@ -2145,7 +2145,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       in
       let addr_ty = address_type_to_valtype typ.limits.address_type in
       let* () = pop ctx loc addr_ty in
-      let* () = pop ctx loc ?expected_text:text (Ref typ.reftype) in
+      let* () = pop ctx loc ~expected_text:text (Ref typ.reftype) in
       pop ctx loc addr_ty
   | TableCopy (idx, idx') ->
       let*! ty, dst_text =
@@ -2160,7 +2160,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
              (Ref ty.reftype))
       then
         Error.type_mismatch ctx.modul.diagnostics ~location:loc
-          ?provided_text:src_text ?expected_text:dst_text (Ref ty'.reftype)
+          ~provided_text:src_text ~expected_text:dst_text (Ref ty'.reftype)
           (Ref ty.reftype);
       let address_type =
         match (ty.limits.address_type, ty'.limits.address_type) with
@@ -2834,11 +2834,11 @@ let build_initial_env ctx fields =
               limits ctx "table" typ.limits max_table_size;
               let src = Ast.Text.Ref typ.reftype in
               let>@ typ = tabletype ctx.diagnostics ctx.types typ in
-              Sequence.register ctx.tables id (typ, Some src)
+              Sequence.register ctx.tables id (typ, src)
           | Global ty ->
               let src = ty.typ in
               let>@ ty = globaltype ctx.diagnostics ctx.types ty in
-              Sequence.register ctx.globals id (ty, Some src)
+              Sequence.register ctx.globals id (ty, src)
           | Tag tu ->
               let sign = typeuse_functype ctx.types tu in
               let>@ ty = typeuse ctx.diagnostics ctx.types tu in
@@ -2955,7 +2955,7 @@ let tables_and_memories ctx fields =
           | Init_expr e ->
               constant_expression ctx ~location:field.info (Ref typ.reftype) e
           | Init_segment _ -> ());
-          Sequence.register ctx.tables id (typ, Some src);
+          Sequence.register ctx.tables id (typ, src);
           register_exports ctx exports
       | _ -> ())
     fields
@@ -2968,7 +2968,7 @@ let globals ctx fields =
           let src = typ.typ in
           let>@ typ = globaltype ctx.diagnostics ctx.types typ in
           constant_expression ctx ~location:field.info typ.typ init;
-          Sequence.register ctx.globals id (typ, Some src);
+          Sequence.register ctx.globals id (typ, src);
           register_exports ctx exports
       | String_global { id; _ } ->
           let typ =
@@ -2977,7 +2977,7 @@ let globals ctx fields =
               typ = Ref { nullable = false; typ = Type (string ctx.types) };
             }
           in
-          Sequence.register ctx.globals (Some id) (typ, None)
+          Sequence.register ctx.globals (Some id) (typ, text_of_valtype typ.typ)
       | _ -> ())
     fields
 
@@ -3022,7 +3022,7 @@ let segments ctx fields =
                      (Ref tabletype.reftype))
               then
                 Error.elem_segment_type_mismatch ctx.diagnostics
-                  ~location:field.info ~elem_text ?table_text (Ref typ)
+                  ~location:field.info ~elem_text ~table_text (Ref typ)
                   (Ref tabletype.reftype);
               constant_expression ctx ~location:field.info
                 (address_type_to_valtype tabletype.limits.address_type)
@@ -3062,12 +3062,13 @@ let functions ctx fields =
                 (fun (id, typ) ->
                   initialized_locals := IntSet.add !i !initialized_locals;
                   incr i;
-                  Sequence.register locals id
-                    (match valtype ctx.diagnostics ctx.types typ with
+                  let interned =
+                    match valtype ctx.diagnostics ctx.types typ with
                     | None ->
-                        (* Dummy value *)
-                        (Ref { nullable = false; typ = None_ }, None)
-                    | Some typ' -> (typ', Some typ)))
+                        (* Dummy value *) Ref { nullable = false; typ = None_ }
+                    | Some typ' -> typ'
+                  in
+                  Sequence.register locals id (interned, typ))
                 params
           | _ ->
               (* No inline parameter list: take the parameters' source types
@@ -3081,7 +3082,12 @@ let functions ctx fields =
                 (fun j typ ->
                   initialized_locals := IntSet.add !i !initialized_locals;
                   incr i;
-                  Sequence.register locals None (typ, param_text.(j)))
+                  let text =
+                    match param_text.(j) with
+                    | Some t -> t
+                    | None -> text_of_valtype typ
+                  in
+                  Sequence.register locals None (typ, text))
                 func_typ.params);
           List.iter
             (fun e ->
@@ -3094,7 +3100,7 @@ let functions ctx fields =
               if is_defaultable typ' then
                 initialized_locals := IntSet.add !i !initialized_locals;
               incr i;
-              Sequence.register locals id (typ', Some typ))
+              Sequence.register locals id (typ', typ))
             locs;
           with_empty_stack ctx field.info (*ZZZ*)
             (let ctx =
