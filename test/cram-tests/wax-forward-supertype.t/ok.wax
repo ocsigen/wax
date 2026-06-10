@@ -1,0 +1,4 @@
+rec {
+  type a = open { };
+  type b: a = open { };
+}

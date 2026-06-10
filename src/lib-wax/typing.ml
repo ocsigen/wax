@@ -713,9 +713,13 @@ let subtype d ctx current { typ; supertype; final } =
   let+@ supertype =
     match supertype with
     | None -> Some None
-    | Some ty ->
-        let+@ ty = resolve_type_name d ctx ty in
-        assert (ty > lnot current);
+    | Some sup ->
+        let+@ ty = resolve_type_name d ctx sup in
+        (* A supertype must be declared before; a self-reference or a forward
+           reference within the same rec group is treated as unbound, matching
+           the validator (rather than crashing). *)
+        if ty <= lnot current then
+          Error.unbound_name d ~location:sup.info "type" sup;
         Some ty
   in
   { Internal.typ; supertype; final }
