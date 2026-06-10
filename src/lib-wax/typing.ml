@@ -144,198 +144,131 @@ module Error = struct
 
   let print_name f x = Format.fprintf f "'%s'" x.desc
 
+  (* All errors share the same envelope: severity [Error], a formatted message,
+     and an optional hint. [report] captures that boilerplate so each error
+     below is just its message (and, where relevant, a hint). *)
+  let report ?hint context ~location fmt =
+    Format.kdprintf
+      (fun msg ->
+        Diagnostic.report context ~location ~severity:Error ?hint
+          ~message:(fun f () -> msg f)
+          ())
+      fmt
+
   let empty_stack context ~location =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () -> Format.fprintf f "The stack is empty.")
-      ()
+    report context ~location "The stack is empty."
 
   let let_in_conditional context ~location =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f
-          "A let binding is not allowed inside a conditional annotation; \
-           declare the local before the conditional.")
-      ()
+    report context ~location
+      "A let binding is not allowed inside a conditional annotation; declare \
+       the local before the conditional."
 
   let non_empty_stack context ~location output_stack =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f "Some values remain on the stack:%a" output_stack ())
+    report context ~location "Some values remain on the stack:%a" output_stack
       ()
 
   let expected_func_type context ~location =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () -> Format.fprintf f "Expected function type.")
-      ()
+    report context ~location "Expected function type."
 
   let expected_struct_type context ~location =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () -> Format.fprintf f "Expected struct type.")
-      ()
+    report context ~location "Expected struct type."
 
   let expected_array_type context ~location =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () -> Format.fprintf f "Expected array type.")
-      ()
+    report context ~location "Expected array type."
 
   let method_needs_parentheses context ~location name =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f
-          "'%s' is an instruction method and must be called with parentheses, \
-           as '%s()'."
-          name name)
-      ()
+    report context ~location
+      "'%s' is an instruction method and must be called with parentheses, as \
+       '%s()'."
+      name name
 
   let type_mismatch context ~location ty' ty =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f "Expecting type@ @[<2>%a@]@ but got type@ @[<2>%a@]."
-          output_inferred_type ty output_inferred_type ty')
-      ()
+    report context ~location
+      "Expecting type@ @[<2>%a@]@ but got type@ @[<2>%a@]." output_inferred_type
+      ty output_inferred_type ty'
 
   let not_an_expression context ~location n =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f
-          "An expression is expected here. This instruction returns %d values."
-          n)
-      ()
+    report context ~location
+      "An expression is expected here. This instruction returns %d values." n
 
   let binop_type_mismatch context ~location ty1 ty2 =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f
-          "This operator cannot be applied to operands of types@ @[<2>%a@]@ \
-           and@ @[<2>%a@]."
-          output_inferred_type ty1 output_inferred_type ty2)
-      ()
+    report context ~location
+      "This operator cannot be applied to operands of types@ @[<2>%a@]@ and@ \
+       @[<2>%a@]."
+      output_inferred_type ty1 output_inferred_type ty2
 
   let instruction_type_mismatch context ~location ty ty' =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f
-          "This instruction has type@ @[<2>%a@]@ but is expected to have type@ \
-           @[<2>%a@]."
-          output_inferred_type ty output_inferred_type ty')
-      ()
+    report context ~location
+      "This instruction has type@ @[<2>%a@]@ but is expected to have type@ \
+       @[<2>%a@]."
+      output_inferred_type ty output_inferred_type ty'
 
   let value_count_mismatch context ~location ~expected ~provided =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f
-          "This instruction provides %d value(s) but %d was/were expected."
-          provided expected)
-      ()
+    report context ~location
+      "This instruction provides %d value(s) but %d was/were expected." provided
+      expected
 
   let invalid_method_receiver context ~location ty =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f
-          "This operation cannot be applied to a value of type@ @[<2>%a@]."
-          output_inferred_type ty)
-      ()
+    report context ~location
+      "This operation cannot be applied to a value of type@ @[<2>%a@]."
+      output_inferred_type ty
 
   let if_without_else context ~location =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f
-          "This 'if' must produce a value and so requires an 'else' branch.")
-      ()
+    report context ~location
+      "This 'if' must produce a value and so requires an 'else' branch."
 
   let parameterized_block_expression context ~location =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f
-          "A block, loop or if used as an expression cannot take parameters.")
-      ()
+    report context ~location
+      "A block, loop or if used as an expression cannot take parameters."
 
   let uninitialized_local context ~location name =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f "The local variable %a has not been initialized."
-          print_name name)
-      ()
+    report context ~location "The local variable %a has not been initialized."
+      print_name name
 
   let non_nullable_table context ~location =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f
-          "A table with a non-nullable element type must have an initializer.")
-      ()
+    report context ~location
+      "A table with a non-nullable element type must have an initializer."
 
   let start_function_signature context ~location =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f
-          "The start function must have no parameters and no results.")
-      ()
+    report context ~location
+      "The start function must have no parameters and no results."
 
   let multiple_start context ~location =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f "A module can have at most one start function.")
-      ()
+    report context ~location "A module can have at most one start function."
 
   let unknown_annotation context ~location name =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () -> Format.fprintf f "Unknown annotation %S." name)
-      ()
+    report context ~location "Unknown annotation %S." name
 
   let annotation_value_mismatch context ~location name expected =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f "The %s annotation expects %s." name expected)
-      ()
+    report context ~location "The %s annotation expects %s." name expected
 
   let annotation_not_allowed context ~location name =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f "The %s annotation is not allowed here." name)
-      ()
+    report context ~location "The %s annotation is not allowed here." name
 
   let declaration_without_import context ~location =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f
-          "This declaration has no definition; it needs an import annotation.")
-      ()
+    report context ~location
+      "This declaration has no definition; it needs an import annotation."
 
   let multiple_import context ~location =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f "A field can have at most one import annotation.")
-      ()
+    report context ~location "A field can have at most one import annotation."
 
   let final_supertype context ~location name =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f
-          "The type %a is final and cannot be extended; declare it 'open'."
-          print_name name)
-      ()
+    report context ~location
+      "The type %a is final and cannot be extended; declare it 'open'."
+      print_name name
 
   let invalid_subtype context ~location name =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f "This type is not a valid subtype of %a." print_name
-          name)
-      ()
+    report context ~location "This type is not a valid subtype of %a."
+      print_name name
 
   let select_type_mismatch context ~location ty1 ty2 =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f
-          "The two branches of the select does not have a common supertype. \
-           There types are respectively@ @[<2>%a@]@ and@ @[<2>%a@]."
-          output_inferred_type ty1 output_inferred_type ty2)
-      ()
+    report context ~location
+      "The two branches of the select does not have a common supertype. There \
+       types are respectively@ @[<2>%a@]@ and@ @[<2>%a@]."
+      output_inferred_type ty1 output_inferred_type ty2
 
   let name_already_bound context ~location kind x =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f "A %s named %a is already bound." kind print_name x)
-      ()
+    report context ~location "A %s named %a is already bound." kind print_name x
 
   let did_you_mean suggestions =
     match List.rev suggestions with
@@ -354,163 +287,92 @@ module Error = struct
               pp last)
 
   let unbound_name context ~location ?(suggestions = []) kind x =
-    Diagnostic.report context ~location ~severity:Error
-      ?hint:(did_you_mean suggestions)
-      ~message:(fun f () ->
-        Format.fprintf f "The %s %a is not bound." kind print_name x)
-      ()
+    report ?hint:(did_you_mean suggestions) context ~location
+      "The %s %a is not bound." kind print_name x
 
   let before_hole context ~location =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f "This expression occurs before a hole '_'.")
-      ()
+    report context ~location "This expression occurs before a hole '_'."
 
   let duplicated_field context ~location x =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f "Several fields have the same name %a." print_name x)
-      ()
+    report context ~location "Several fields have the same name %a." print_name
+      x
 
   let duplicated_parameter context ~location x =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f "Several parameters have the same name %a." print_name
-          x)
-      ()
+    report context ~location "Several parameters have the same name %a."
+      print_name x
 
   let constant_expression_required context ~location =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f "Only constant expressions are allowed here.")
-      ()
+    report context ~location "Only constant expressions are allowed here."
 
   let memory_offset_too_large context ~location max_offset =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f "The memory offset should be less than 0x%Lx."
-          (Utils.Uint64.to_int64 max_offset))
-      ()
+    report context ~location "The memory offset should be less than 0x%Lx."
+      (Utils.Uint64.to_int64 max_offset)
 
   let memory_align_too_large context ~location natural =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f
-          "The memory alignment is larger than the natural alignment %d."
-          natural)
-      ()
+    report context ~location
+      "The memory alignment is larger than the natural alignment %d." natural
 
   let bad_memory_align context ~location =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f "The memory alignment should be a power of two.")
-      ()
+    report context ~location "The memory alignment should be a power of two."
 
   let invalid_lane_index context ~location max_lane =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f "The lane index should be less than %d." max_lane)
-      ()
+    report context ~location "The lane index should be less than %d." max_lane
 
   let limit_too_large context ~location kind max =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f
-          "The %s size is too large. It should be less than 0x%Lx." kind
-          (Utils.Uint64.to_int64 max))
-      ()
+    report context ~location
+      "The %s size is too large. It should be less than 0x%Lx." kind
+      (Utils.Uint64.to_int64 max)
 
   let limit_mismatch context ~location kind =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f
-          "The %s maximum size should be larger than the minimal size." kind)
-      ()
+    report context ~location
+      "The %s maximum size should be larger than the minimal size." kind
 
   let duplicated_export context ~location name =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f "There is already an export of name %S." name)
-      ()
+    report context ~location "There is already an export of name %S." name
 
   let invalid_cast_type context ~location =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f
-          "Continuation types cannot be used in a cast instruction.")
-      ()
+    report context ~location
+      "Continuation types cannot be used in a cast instruction."
 
   let stack_switching_type_mismatch context ~location ~descr =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f
-          "Type mismatch in this stack switching instruction:@ %s." descr)
-      ()
+    report context ~location
+      "Type mismatch in this stack switching instruction:@ %s." descr
 
   let constant_global_required context ~location =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f "Only accessing a constant global is allowed here.")
-      ()
+    report context ~location "Only accessing a constant global is allowed here."
 
   let immutable context ~location what =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f "This %s is immutable and cannot be assigned." what)
-      ()
+    report context ~location "This %s is immutable and cannot be assigned." what
 
   let not_assignable context ~location x =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f "%a cannot be assigned." print_name x)
-      ()
+    report context ~location "%a cannot be assigned." print_name x
 
   let field_count_mismatch context ~location ~expected ~provided =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f
-          "This structure provides %d field(s) but %d was/were expected."
-          provided expected)
-      ()
+    report context ~location
+      "This structure provides %d field(s) but %d was/were expected." provided
+      expected
 
   let missing_field context ~location x =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f "There is no field named %a." print_name x)
-      ()
+    report context ~location "There is no field named %a." print_name x
 
   let invalid_cast context ~location ty' =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f
-          "This value of type@ @[<2>%a@]@ cannot be cast to the target type."
-          output_inferred_type ty')
-      ()
+    report context ~location
+      "This value of type@ @[<2>%a@]@ cannot be cast to the target type."
+      output_inferred_type ty'
 
   let tag_with_results context ~location =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f "An exception tag cannot have result values.")
-      ()
+    report context ~location "An exception tag cannot have result values."
 
   let not_defaultable context ~location =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f "This type has no default value for all its fields.")
-      ()
+    report context ~location
+      "This type has no default value for all its fields."
 
   let incompatible_array_elements context ~location =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f
-          "The source and destination array element types are incompatible.")
-      ()
+    report context ~location
+      "The source and destination array element types are incompatible."
 
   let expected_ref context ~location =
-    Diagnostic.report context ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.fprintf f "A reference type is expected here.")
-      ()
+    report context ~location "A reference type is expected here."
 end
 
 module StringSet = Set.Make (String)
