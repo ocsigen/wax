@@ -1128,6 +1128,26 @@ let set_suggestions ctx name =
 let local_suggestions ctx name =
   Utils.Spell_check.f (fun f -> StringMap.iter (fun k _ -> f k) ctx.locals) name
 
+(* A name in value position resolves, in order, to a local, then a global, then
+   a function (as a non-null reference); [Get]/[Set]/[Tee] share this ladder and
+   only differ in what they do with each outcome. *)
+type resolved_var =
+  | Local of inferred_valtype
+  | Global of bool (* mutable *) * inferred_valtype
+  | Func_ref of int * string
+  | Unbound
+
+let resolve_variable ctx idx =
+  match StringMap.find_opt idx.desc ctx.locals with
+  | Some ty -> Local ty
+  | None -> (
+      match Tbl.find_opt ctx.globals idx with
+      | Some (mut, ty) -> Global (mut, ty)
+      | None -> (
+          match Tbl.find_opt ctx.functions idx with
+          | Some (ty, ty') -> Func_ref (ty, ty')
+          | None -> Unbound))
+
 let check_int_bin_op ctx ~location typ1 typ2 =
   (match (UnionFind.find typ1, UnionFind.find typ2) with
   | Valtype { internal = I32; _ }, Valtype { internal = I32; _ }
@@ -2007,30 +2027,24 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
   | Null -> return_expression i Null (UnionFind.make Null)
   | Get idx as desc ->
       let ty =
-        match StringMap.find_opt idx.desc ctx.locals with
-        | Some ty ->
+        match resolve_variable ctx idx with
+        | Local ty ->
             if not (StringSet.mem idx.desc ctx.initialized_locals) then
               Error.uninitialized_local ctx.diagnostics ~location:idx.info idx;
             UnionFind.make (Valtype ty)
-        | None -> (
-            match Tbl.find_opt ctx.globals idx with
-            | Some (_, ty) -> UnionFind.make (Valtype ty)
-            | None -> (
-                match Tbl.find_opt ctx.functions idx with
-                | Some (ty, ty') ->
-                    UnionFind.make
-                      (Valtype
-                         {
-                           typ =
-                             Ref
-                               { nullable = false; typ = Type (Ast.no_loc ty') };
-                           internal = Ref { nullable = false; typ = Type ty };
-                         })
-                | None ->
-                    Error.unbound_name ctx.diagnostics ~location:idx.info
-                      ~suggestions:(get_suggestions ctx idx.desc)
-                      "variable" idx;
-                    UnionFind.make Unknown))
+        | Global (_, ty) -> UnionFind.make (Valtype ty)
+        | Func_ref (ty, ty') ->
+            UnionFind.make
+              (Valtype
+                 {
+                   typ = Ref { nullable = false; typ = Type (Ast.no_loc ty') };
+                   internal = Ref { nullable = false; typ = Type ty };
+                 })
+        | Unbound ->
+            Error.unbound_name ctx.diagnostics ~location:idx.info
+              ~suggestions:(get_suggestions ctx idx.desc)
+              "variable" idx;
+            UnionFind.make Unknown
       in
       return_expression i desc ty
   | Set (None, i') ->
@@ -2038,47 +2052,38 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       return_statement i (Set (None, i')) [||]
   | Set (Some idx, i') ->
       let* i' = instruction ctx i' in
-      (match StringMap.find_opt idx.desc ctx.locals with
-      | Some ty ->
+      (match resolve_variable ctx idx with
+      | Local ty ->
           check_type ctx i' (UnionFind.make (Valtype ty));
           mark_initialized ctx idx.desc
-      | None -> (
-          match Tbl.find_opt ctx.globals idx with
-          | Some (mut, ty) ->
-              if not mut then
-                Error.immutable ctx.diagnostics ~location:idx.info "global";
-              check_type ctx i' (UnionFind.make (Valtype ty))
-          | None -> (
-              match Tbl.find_opt ctx.functions idx with
-              | Some _ ->
-                  Error.not_assignable ctx.diagnostics ~location:idx.info idx
-              | None ->
-                  Error.unbound_name ctx.diagnostics ~location:idx.info
-                    ~suggestions:(set_suggestions ctx idx.desc)
-                    "variable" idx)));
+      | Global (mut, ty) ->
+          if not mut then
+            Error.immutable ctx.diagnostics ~location:idx.info "global";
+          check_type ctx i' (UnionFind.make (Valtype ty))
+      | Func_ref _ ->
+          Error.not_assignable ctx.diagnostics ~location:idx.info idx
+      | Unbound ->
+          Error.unbound_name ctx.diagnostics ~location:idx.info
+            ~suggestions:(set_suggestions ctx idx.desc)
+            "variable" idx);
       return_statement i (Set (Some idx, i')) [||]
   | Tee (idx, i') ->
       let* i' = instruction ctx i' in
-      (*ZZZ local *)
+      (* Only a local is assignable; anything else is an error, after which we
+         recover with the operand's own type rather than [Unknown], which
+         [check_type] cannot match against. *)
       let ty =
-        match StringMap.find_opt idx.desc ctx.locals with
-        | Some ty ->
+        match resolve_variable ctx idx with
+        | Local ty ->
             mark_initialized ctx idx.desc;
             UnionFind.make (Valtype ty)
-        | None ->
-            (match Tbl.find_opt ctx.globals idx with
-            | Some _ ->
-                Error.not_assignable ctx.diagnostics ~location:idx.info idx
-            | None -> (
-                match Tbl.find_opt ctx.functions idx with
-                | Some _ ->
-                    Error.not_assignable ctx.diagnostics ~location:idx.info idx
-                | None ->
-                    Error.unbound_name ctx.diagnostics ~location:idx.info
-                      ~suggestions:(local_suggestions ctx idx.desc)
-                      "variable" idx));
-            (* No assignable target: recover with the operand's own type rather
-               than [Unknown], which [check_type] cannot match against. *)
+        | Global _ | Func_ref _ ->
+            Error.not_assignable ctx.diagnostics ~location:idx.info idx;
+            expression_type ctx i'
+        | Unbound ->
+            Error.unbound_name ctx.diagnostics ~location:idx.info
+              ~suggestions:(local_suggestions ctx idx.desc)
+              "variable" idx;
             expression_type ctx i'
       in
       check_type ctx i' ty;
