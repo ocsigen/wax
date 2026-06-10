@@ -1034,19 +1034,21 @@ type stack =
   | Empty
   | Cons of Ast.location option * (valtype * Ast.Text.valtype) option * stack
 
+(* Returns the popped value as the interned/source type pair it was pushed as
+   ([None] on an unreachable or empty stack), along with its push location. *)
 let pop_any ctx loc st =
   match st with
-  | Unreachable -> (Unreachable, (None, None, None))
-  | Cons (loc, ty, r) -> (r, (Option.map fst ty, Option.map snd ty, loc))
+  | Unreachable -> (Unreachable, (None, None))
+  | Cons (loc, ty, r) -> (r, (ty, loc))
   | Empty ->
       Error.empty_stack ctx.modul.diagnostics ~location:loc;
-      (st, (None, None, None))
+      (st, (None, None))
 
 (* The non-null version of a popped reference's source type, for an instruction
    that re-pushes the value with the null case removed. *)
 let non_null_text text =
   match text with
-  | Some (Ast.Text.Ref r) -> Some (Ast.Text.Ref { r with nullable = false })
+  | Ast.Text.Ref r -> Some (Ast.Text.Ref { r with nullable = false })
   | _ -> None
 
 let pop ctx loc ?expected_text ty st =
@@ -1687,24 +1689,24 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       in
       unreachable
   | Br_on_null idx -> (
-      let* ty, text, loc' = pop_any ctx loc in
+      let* ty, loc' = pop_any ctx loc in
       match ty with
       | None -> return ()
-      | Some (Ref { nullable = _; typ }) ->
+      | Some (Ref { nullable = _; typ }, text) ->
           let*! params, ptext = branch_target ctx idx in
           let* () = pop_args ctx loc ~text:ptext params in
           let* () = push_results ~text:ptext params in
           push ?text:(non_null_text text) (Some loc)
             (Ref { nullable = false; typ })
-      | Some ty ->
+      | Some (ty, _) ->
           Error.expected_ref_type ctx.modul.diagnostics ~location:loc
             ~src_loc:loc' ty;
           unreachable)
   | Br_on_non_null idx -> (
-      let* ty, text, loc' = pop_any ctx loc in
+      let* ty, loc' = pop_any ctx loc in
       match ty with
       | None -> return ()
-      | Some (Ref { nullable = _; typ }) ->
+      | Some (Ref { nullable = _; typ }, text) ->
           let* () =
             push ?text:(non_null_text text) None (Ref { nullable = false; typ })
           in
@@ -1713,7 +1715,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           let* () = push_results ~text:ptext params in
           let* _ = pop_any ctx loc in
           return ()
-      | Some ty ->
+      | Some (ty, _) ->
           Error.expected_ref_type ctx.modul.diagnostics ~location:loc
             ~src_loc:loc' ty;
           unreachable)
@@ -1862,11 +1864,11 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       return ()
   | Select None -> (
       let* () = pop ctx loc I32 in
-      let* ty1, _, _ = pop_any ctx loc in
-      let* ty2, _, _ = pop_any ctx loc in
+      let* ty1, _ = pop_any ctx loc in
+      let* ty2, _ = pop_any ctx loc in
       match (ty1, ty2) with
       | None, None -> push_poly loc None
-      | Some ty1, Some ty2 ->
+      | Some (ty1, _), Some (ty2, _) ->
           if not (number_or_vec ty1) then
             Error.expected_number_or_vec ctx.modul.diagnostics ~location:loc ty1;
           if not (number_or_vec ty2) then
@@ -1875,7 +1877,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
             Error.select_type_mismatch ctx.modul.diagnostics ~location:loc ty1
               ty2;
           push (Some loc) ty1
-      | Some ty, None | None, Some ty ->
+      | Some (ty, _), None | None, Some (ty, _) ->
           if not (number_or_vec ty) then
             Error.expected_number_or_vec ctx.modul.diagnostics ~location:loc ty;
           push (Some loc) ty)
@@ -2186,22 +2188,22 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
         Error.ref_func_inaccessible ctx.modul.diagnostics ~location:loc idx;
       push (Some loc) (Ref { nullable = false; typ = Type i })
   | RefIsNull -> (
-      let* ty, _, loc' = pop_any ctx loc in
+      let* ty, loc' = pop_any ctx loc in
       match ty with
       | None -> return ()
-      | Some (Ref _) -> push (Some loc) I32
-      | Some ty ->
+      | Some (Ref _, _) -> push (Some loc) I32
+      | Some (ty, _) ->
           Error.expected_ref_type ctx.modul.diagnostics ~location:loc
             ~src_loc:loc' ty;
           unreachable)
   | RefAsNonNull -> (
-      let* ty, text, loc' = pop_any ctx loc in
+      let* ty, loc' = pop_any ctx loc in
       match ty with
       | None -> return ()
-      | Some (Ref ty) ->
+      | Some (Ref ty, text) ->
           push ?text:(non_null_text text) (Some loc)
             (Ref { ty with nullable = false })
-      | Some ty ->
+      | Some (ty, _) ->
           Error.expected_ref_type ctx.modul.diagnostics ~location:loc
             ~src_loc:loc' ty;
           unreachable)
@@ -2460,7 +2462,8 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let* () = pop ctx loc F32 in
       push (Some loc) F64
   | ExternConvertAny ->
-      let* ty, _, _ = pop_any ctx loc in
+      let* ty, _ = pop_any ctx loc in
+      let ty = Option.map fst ty in
       Option.iter
         (fun ty ->
           let expected = Ref { nullable = true; typ = Any } in
@@ -2469,7 +2472,8 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
         ty;
       push (Some loc) (Ref { nullable = is_nullable ty; typ = Extern })
   | AnyConvertExtern ->
-      let* ty, _, _ = pop_any ctx loc in
+      let* ty, _ = pop_any ctx loc in
+      let ty = Option.map fst ty in
       Option.iter
         (fun ty ->
           let expected = Ref { nullable = true; typ = Extern } in
