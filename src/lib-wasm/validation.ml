@@ -44,13 +44,6 @@ let print_valtype f ty =
         Format.fprintf f "@[<1>(ref@ null@ %a)@]" print_heaptype typ
       else Format.fprintf f "@[<1>(ref@ %a)@]" print_heaptype typ
 
-let print_valtypes f tys =
-  Format.fprintf f "@[<1>[%a]@]"
-    (Format.pp_print_list
-       ~pp_sep:(fun f () -> Format.pp_print_space f ())
-       print_valtype)
-    (Array.to_list tys)
-
 let print_string f s =
   let s = s.Ast.desc in
   let len, s = Output.escape_string s in
@@ -288,22 +281,43 @@ module Error = struct
           output_stack ())
       ()
 
-  let argument_count_mismatch context ~location ~descr provided expected =
+  (* Print a list of types, preferring each element's source form when known. *)
+  let print_valtypes_text ?text f tys =
+    let at i =
+      match text with Some t when i < Array.length t -> t.(i) | _ -> None
+    in
+    Format.fprintf f "@[<1>[%a]@]"
+      (Format.pp_print_list
+         ~pp_sep:(fun f () -> Format.pp_print_space f ())
+         (fun f (i, ty) -> print_ty ?text:(at i) f ty))
+      (Array.to_list (Array.mapi (fun i ty -> (i, ty)) tys))
+
+  let argument_count_mismatch context ~location ~descr ?provided_text
+      ?expected_text provided expected =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "Type mismatch: %s provides type@ @[<2>%a@]@ but type@ @[<2>%a@]@ \
            was expected."
-          descr print_valtypes provided print_valtypes expected)
+          descr
+          (print_valtypes_text ?text:provided_text)
+          provided
+          (print_valtypes_text ?text:expected_text)
+          expected)
       ()
 
-  let argument_type_mismatch context ~location ~descr provided expected =
+  let argument_type_mismatch context ~location ~descr ?provided_text
+      ?expected_text provided expected =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "Type mismatch: %s provides type@ @[<2>%a@]@ but type@ @[<2>%a@]@ \
            was expected."
-          descr print_valtype provided print_valtype expected)
+          descr
+          (print_ty ?text:provided_text)
+          provided
+          (print_ty ?text:expected_text)
+          expected)
       ()
 
   let branch_parameter_count_mismatch context ~location label len label' len' =
@@ -881,6 +895,7 @@ type ctx = {
   control_types :
     (string option * valtype array * Ast.Text.valtype option array) list;
   return_types : valtype array;
+  return_text : Ast.Text.valtype option array;
   modul : module_context;
   mutable initialized_locals : IntSet.t;
 }
@@ -1248,16 +1263,22 @@ let with_empty_stack ctx location f =
    corresponding parameter. [descr] names the construct supplying the
    arguments. Reporting the two lists directly gives a far clearer message than
    simulating the comparison on the value stack. *)
-let compare_types ctx ~location ~descr ~provided ~expected =
+let compare_types ctx ~location ~descr ?provided_text ?expected_text ~provided
+    ~expected () =
+  let text_at text i =
+    match text with Some t when i < Array.length t -> t.(i) | _ -> None
+  in
   if Array.length provided <> Array.length expected then
-    Error.argument_count_mismatch ctx.diagnostics ~location ~descr provided
-      expected
+    Error.argument_count_mismatch ctx.diagnostics ~location ~descr
+      ?provided_text ?expected_text provided expected
   else
     Array.iteri
       (fun i p ->
         let e = expected.(i) in
         if not (Types.val_subtype ctx.subtyping_info p e) then
-          Error.argument_type_mismatch ctx.diagnostics ~location ~descr p e)
+          Error.argument_type_mismatch ctx.diagnostics ~location ~descr
+            ?provided_text:(text_at provided_text i)
+            ?expected_text:(text_at expected_text i) p e)
       provided
 
 let branch_target ctx (idx : Ast.Text.idx) =
@@ -1482,32 +1503,37 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
         (fun (catch : Ast.Text.catch) ->
           match catch with
           | Catch (tag, label) ->
-              let*? args, _ = lookup_tag_type ctx tag in
-              let*? params, _ = branch_target ctx label in
+              let*? args, atext = lookup_tag_type ctx tag in
+              let*? params, ptext = branch_target ctx label in
               compare_types ctx.modul ~location:loc
-                ~descr:"this exception handler" ~provided:args ~expected:params
+                ~descr:"this exception handler" ?provided_text:atext
+                ~expected_text:ptext ~provided:args ~expected:params ()
           | CatchRef (tag, label) ->
-              let*? args, _ = lookup_tag_type ctx tag in
-              let*? params, _ = branch_target ctx label in
+              let*? args, atext = lookup_tag_type ctx tag in
+              let*? params, ptext = branch_target ctx label in
               let provided =
                 Array.append args [| Ref { nullable = false; typ = Exn } |]
               in
+              let provided_text =
+                Option.map (fun t -> Array.append t [| None |]) atext
+              in
               compare_types ctx.modul ~location:loc
-                ~descr:"this exception handler" ~provided ~expected:params
+                ~descr:"this exception handler" ?provided_text
+                ~expected_text:ptext ~provided ~expected:params ()
           | CatchAll label ->
               Option.iter
-                (fun (params, _) ->
+                (fun (params, ptext) ->
                   compare_types ctx.modul ~location:loc
-                    ~descr:"this exception handler" ~provided:[||]
-                    ~expected:params)
+                    ~descr:"this exception handler" ~expected_text:ptext
+                    ~provided:[||] ~expected:params ())
                 (branch_target ctx label)
           | CatchAllRef label ->
               Option.iter
-                (fun (params, _) ->
+                (fun (params, ptext) ->
                   compare_types ctx.modul ~location:loc
-                    ~descr:"this exception handler"
+                    ~descr:"this exception handler" ~expected_text:ptext
                     ~provided:[| Ref { nullable = false; typ = Exn } |]
-                    ~expected:params)
+                    ~expected:params ())
                 (branch_target ctx label))
         catches;
       push_results ?text:rtext results
@@ -1767,7 +1793,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let* _ = pop_any ctx loc in
       push ~text:src_ty2 (Some loc) (Ref ty2)
   | Return ->
-      let* () = pop_args ctx loc ctx.return_types in
+      let* () = pop_args ctx loc ~text:ctx.return_text ctx.return_types in
       unreachable
   | Call idx -> (
       let*! ty, sign =
@@ -1820,21 +1846,23 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           Error.expected_func_type ctx.modul.diagnostics ~location:loc idx;
           unreachable
       | Func { params; results } ->
-          let ptext, _ = arg_text sign in
+          let ptext, rtext = arg_text sign in
           let* () = pop_args ctx loc ?text:ptext params in
           compare_types ctx.modul ~location:loc ~descr:"this tail call"
-            ~provided:results ~expected:ctx.return_types;
+            ?provided_text:rtext ~expected_text:ctx.return_text
+            ~provided:results ~expected:ctx.return_types ();
           unreachable)
   | ReturnCallRef idx ->
       let*! type_idx, { params; results } = lookup_func_type ctx idx in
-      let ptext, _ = arg_text (reference_functype ctx.modul.types idx) in
+      let ptext, rtext = arg_text (reference_functype ctx.modul.types idx) in
       let* () =
         pop ctx loc ~expected_text:(ref_null_text idx)
           (Ref { nullable = true; typ = Type type_idx })
       in
       let* () = pop_args ctx loc ?text:ptext params in
       compare_types ctx.modul ~location:loc ~descr:"this tail call"
-        ~provided:results ~expected:ctx.return_types;
+        ?provided_text:rtext ~expected_text:ctx.return_text ~provided:results
+        ~expected:ctx.return_types ();
       unreachable
   | ReturnCallIndirect (idx, tu) -> (
       let*! typ, _ = Sequence.get ctx.modul.diagnostics ctx.modul.tables idx in
@@ -1851,13 +1879,14 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           Error.expected_func_type ctx.modul.diagnostics ~location:loc idx;
           unreachable
       | Func { params; results } ->
-          let ptext, _ = arg_text (typeuse_functype ctx.modul.types tu) in
+          let ptext, rtext = arg_text (typeuse_functype ctx.modul.types tu) in
           let* () =
             pop ctx loc (address_type_to_valtype typ.limits.address_type)
           in
           let* () = pop_args ctx loc ?text:ptext params in
           compare_types ctx.modul ~location:loc ~descr:"this tail call"
-            ~provided:results ~expected:ctx.return_types;
+            ?provided_text:rtext ~expected_text:ctx.return_text
+            ~provided:results ~expected:ctx.return_types ();
           unreachable)
   | Drop ->
       let* _ = pop_any ctx loc in
@@ -2590,6 +2619,7 @@ let constant_expression ctx ~location ty expr =
          locals = Sequence.make "local";
          control_types = [];
          return_types = [||];
+         return_text = [||];
          modul = ctx;
          initialized_locals = IntSet.empty;
        }
@@ -3076,6 +3106,7 @@ let functions ctx fields =
                  locals;
                  control_types = [ (None, return_types, return_text) ];
                  return_types;
+                 return_text;
                  modul = ctx;
                  initialized_locals = !initialized_locals;
                }

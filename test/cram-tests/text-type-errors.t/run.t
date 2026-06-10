@@ -293,3 +293,30 @@ the target ($c) and the value it carries ($b):
   8 │       (unreachable))
   9 │     (drop)
   [128]
+
+A tail call's result list is named from the callee's declared results:
+
+  $ wax --validate return_call_result.wat -o out.wat
+  Error: Type mismatch: this tail call provides type (ref $t) but type 
+    i32 was expected.
+   ──➤  return_call_result.wat:5:6
+  3 │   (func $g (result (ref $t)) (unreachable))
+  4 │   (func (result i32)
+  5 │     (return_call $g)))
+    ·      ^^^^^^^^^^^^^^
+  6 │ 
+  [128]
+
+An exception handler names the tag's payload from its declared type:
+
+  $ wax --validate catch_handler.wat -o out.wat
+  Error: Type mismatch: this exception handler provides type (ref $t) but type
+    i32 was expected.
+   ──➤  catch_handler.wat:6:8
+  4 │   (func
+  5 │     (block $b (result i32)
+  6 │       (try_table (catch $e $b))
+    ·        ^^^^^^^^^^^^^^^^^^^^^^^
+  7 │       (return))
+  8 │     (drop)))
+  [128]
