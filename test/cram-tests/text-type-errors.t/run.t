@@ -20,7 +20,7 @@ A ref.cast result feeding an instruction that wants an i32:
 A struct.new_default whose result does not match the declared result type:
 
   $ wax --validate struct_new.wat -o out.wat
-  Error: Type mismatch: this instruction expects type (ref 1)
+  Error: Type mismatch: this instruction expects type (ref $other)
     but the stack has type (ref $point)
    ──➤  struct_new.wat:5:6
   3 │   (type $other (struct (field f64)))
@@ -321,6 +321,18 @@ An exception handler names the tag's payload from its declared type:
   8 │     (drop)))
   [128]
 
+And a legacy try/catch handler names the tag's payload pushed onto its stack:
+
+  $ wax --validate try_catch.wat -o out.wat
+  Error: Type mismatch: expecting type i32 but got type (ref $t).
+   ──➤  try_catch.wat:7:18
+  5 │     (try (result i32)
+  6 │       (do (i32.const 0))
+  7 │       (catch $e (i32.add (i32.const 1))))))
+    ·                  ^^^^^^^
+  8 │ 
+  [128]
+
 A call_indirect on a non-function table names the table's declared element type:
 
   $ wax --validate table_element.wat -o out.wat
@@ -372,4 +384,19 @@ source type, taken from that type's definition:
   5 │     (drop (i32.add (local.get 0) (i32.const 1)))))
     ·                     ^^^^^^^^^^^
   6 │ 
+  [128]
+
+A ref.func result names the function's type through a source reference, not the
+deduplicated internal index: $f has type $b, which shares its canonical index
+with the structurally-identical $a, yet the reference is still named $b:
+
+  $ wax --validate ref_func_dedup.wat -o out.wat
+  Error: Type mismatch: this instruction expects type i32
+    but the stack has type (ref $b)
+   ──➤  ref_func_dedup.wat:6:6
+  4 │   (func $f (type $b))
+  5 │   (func (result i32)
+  6 │     (ref.func $f)))
+    ·      ^^^^^^^^^^^
+  7 │ 
   [128]

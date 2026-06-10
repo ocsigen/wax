@@ -1,9 +1,3 @@
-(*
-ZZZ
-- tag validation
-- resolve all type uses
-*)
-
 let validate_refs = ref true
 
 module Uint32 = Utils.Uint32
@@ -147,36 +141,24 @@ module Error = struct
           "This instruction is only valid for packed fields. Use struct.get.")
       ()
 
-  (* Print a type as the source wrote it. When no source form is supplied (an
-     expected type the caller did not name), reconstruct one from the interned
-     type, naming an indexed type by its canonical index. Used for both the
-     expected type and the value found on the stack. *)
-  let print_ty ?text f ty =
-    match text with
-    | Some text -> print_text_valtype f text
-    | None -> print_text_valtype f (text_of_valtype ty)
-
-  let instruction_type_mismatch context ~location ?provided_text ?expected_text
-      ty' ty =
+  let instruction_type_mismatch context ~location ~provided_text ~expected_text
+      =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "Type mismatch: this instruction expects type@ @[<2>%a@]@ but the \
            stack has type@ @[<2>%a@]"
-          (print_ty ?text:expected_text)
-          ty
-          (print_ty ?text:provided_text)
-          ty')
+          print_text_valtype expected_text print_text_valtype provided_text)
       ()
 
-  let expected_ref_type context ~location ~src_loc ?text ty =
+  let expected_ref_type context ~location ~src_loc ~text =
     match src_loc with
     | None ->
         Diagnostic.report context ~location ~severity:Error
           ~message:(fun f () ->
             Format.fprintf f
               "Type mismatch: expected reference type but got type@ @[<2>%a@]."
-              (print_ty ?text) ty)
+              print_text_valtype text)
           ()
     | Some location ->
         Diagnostic.report context ~location ~severity:Error
@@ -184,27 +166,24 @@ module Error = struct
             Format.fprintf f
               "Type mismatch: this instruction should return a reference type \
                but has type@ @[<2>%a@]."
-              (print_ty ?text) ty)
+              print_text_valtype text)
           ()
 
-  let table_type_mismatch context ~location ?text idx ty =
+  let table_type_mismatch context ~location ~text idx =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f "Type mismatch: the table %a@ %a@ @[%a@]." print_index
           idx print_text "should contain functions but its elements have type"
-          (print_ty ?text) ty)
+          print_text_valtype text)
       ()
 
-  let elem_segment_type_mismatch context ~location ?elem_text ?table_text
-      elem_ty table_ty =
+  let elem_segment_type_mismatch context ~location ~elem_text ~table_text =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "Type mismatch: the element segment has type@ @[<2>%a@],@ which is \
            not a subtype of the table element type@ @[<2>%a@]."
-          (print_ty ?text:elem_text) elem_ty
-          (print_ty ?text:table_text)
-          table_ty)
+          print_text_valtype elem_text print_text_valtype table_text)
       ()
 
   let duplicate_local context ~location name =
@@ -213,15 +192,12 @@ module Error = struct
         Format.fprintf f "The local $%s is already defined." name)
       ()
 
-  let type_mismatch context ~location ?provided_text ?expected_text ty' ty =
+  let type_mismatch context ~location ~provided_text ~expected_text =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "Type mismatch: expecting type@ @[<2>%a@]@ but got type@ @[<2>%a@]."
-          (print_ty ?text:expected_text)
-          ty
-          (print_ty ?text:provided_text)
-          ty')
+          print_text_valtype expected_text print_text_valtype provided_text)
       ()
 
   let br_cast_type_mismatch context ~location =
@@ -231,13 +207,13 @@ module Error = struct
           "Type mismatch: the first type must be a supertype of the second one.")
       ()
 
-  let select_type_mismatch context ~location ?text1 ?text2 ty1 ty2 =
+  let select_type_mismatch context ~location ~text1 ~text2 =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "Type mismatch: both branches of a select should have the same \
            type.@ Here, they have type@ @[<2>%a@]@ and@ @[<2>%a@]."
-          (print_ty ?text:text1) ty1 (print_ty ?text:text2) ty2)
+          print_text_valtype text1 print_text_valtype text2)
       ()
 
   let empty_stack context ~location =
@@ -254,43 +230,34 @@ module Error = struct
           output_stack ())
       ()
 
-  (* Print a list of types, preferring each element's source form when known. *)
-  let print_valtypes_text ?text f tys =
-    let at i =
-      match text with Some t when i < Array.length t -> t.(i) | _ -> None
-    in
+  (* Print a list of source types. *)
+  let print_valtypes_text f text =
     Format.fprintf f "@[<1>[%a]@]"
       (Format.pp_print_list
          ~pp_sep:(fun f () -> Format.pp_print_space f ())
-         (fun f (i, ty) -> print_ty ?text:(at i) f ty))
-      (Array.to_list (Array.mapi (fun i ty -> (i, ty)) tys))
+         print_text_valtype)
+      (Array.to_list text)
 
-  let argument_count_mismatch context ~location ~descr ?provided_text
-      ?expected_text provided expected =
+  let argument_count_mismatch context ~location ~descr ~provided_text
+      ~expected_text =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "Type mismatch: %s provides type@ @[<2>%a@]@ but type@ @[<2>%a@]@ \
            was expected."
-          descr
-          (print_valtypes_text ?text:provided_text)
-          provided
-          (print_valtypes_text ?text:expected_text)
-          expected)
+          descr print_valtypes_text provided_text print_valtypes_text
+          expected_text)
       ()
 
-  let argument_type_mismatch context ~location ~descr ?provided_text
-      ?expected_text provided expected =
+  let argument_type_mismatch context ~location ~descr ~provided_text
+      ~expected_text =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "Type mismatch: %s provides type@ @[<2>%a@]@ but type@ @[<2>%a@]@ \
            was expected."
-          descr
-          (print_ty ?text:provided_text)
-          provided
-          (print_ty ?text:expected_text)
-          expected)
+          descr print_text_valtype provided_text print_text_valtype
+          expected_text)
       ()
 
   let branch_parameter_count_mismatch context ~location label len label' len' =
@@ -469,13 +436,13 @@ module Error = struct
           "Continuation types cannot be used in a cast instruction.")
       ()
 
-  let expected_number_or_vec context ~location ?text ty =
+  let expected_number_or_vec context ~location ~text =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "Type mismatch: expecting a numeric or vector type but got type@ \
            @[<2>%a@]."
-          (print_ty ?text) ty)
+          print_text_valtype text)
       ()
 
   let immutable context ~location what =
@@ -619,54 +586,81 @@ type type_context = {
   type_defs : (int, Ast.Text.idx * Ast.Text.idx option) Hashtbl.t;
 }
 
+(* Map an interned (canonical, deduplicated) type index back to a source
+   reference for diagnostics. The interned and source index spaces differ — the
+   former is deduplicated — so a numeric reconstruction would name an unrelated
+   type or be out of range. Several source types can share a canonical index;
+   any one of them is structurally the type at hand, and we prefer its declared
+   name via [type_defs]. Returns [None] for a synthesized type (e.g. the
+   internal string type) that has no source reference at all. *)
+let source_idx_of_canonical tc i : Ast.Text.idx option =
+  let src =
+    Hashtbl.fold
+      (fun s (canon, _, _) acc ->
+        match acc with
+        | Some _ -> acc
+        | None -> if canon = i then Some s else None)
+      tc.index_mapping None
+  in
+  match src with
+  | None -> None
+  | Some s -> (
+      match Hashtbl.find_opt tc.type_defs (Uint32.to_int s) with
+      | Some (def_idx, _) -> Some def_idx
+      | None -> Some (Ast.no_loc (Ast.Text.Num s)))
+
+(* Source rendering of a valtype: a named reference has its interned index
+   translated back to a source reference (see [source_idx_of_canonical]); other
+   types carry no index and reconstruct directly. The numeric fallback for an
+   untranslatable index is reached only for synthesized types with no source
+   form. *)
+let source_valtype tc (ty : valtype) : Ast.Text.valtype =
+  match ty with
+  | Ref { nullable; typ = Type i } -> (
+      match source_idx_of_canonical tc i with
+      | Some idx -> Ref { nullable; typ = Type idx }
+      | None -> text_of_valtype ty)
+  | _ -> text_of_valtype ty
+
 (* The source composite type a reference resolves to, named as the source wrote
    it (injective), or [None] for an unbound or sourceless reference. Does not
    report errors — callers that resolve the reference do. *)
 let reference_comptype tc (idx : Ast.Text.idx) =
-  let entry =
+  let _, _, c =
     match idx.desc with
-    | Num x -> Hashtbl.find_opt tc.index_mapping x
-    | Id id -> Hashtbl.find_opt tc.label_mapping id
+    | Num x -> Hashtbl.find tc.index_mapping x
+    | Id id -> Hashtbl.find tc.label_mapping id
   in
-  match entry with Some (_, _, c) -> Some c | None -> None
+  c
 
 (* The source function type a reference resolves to, when it names one. *)
 let reference_functype tc idx =
-  match reference_comptype tc idx with Some (Func ft) -> Some ft | _ -> None
+  match reference_comptype tc idx with
+  | Func ft -> ft
+  | _ -> { params = [||]; results = [||] }
 
 (* The source function type a [typeuse] denotes: its inline signature, or the
    one named by its type reference. *)
 let typeuse_functype tc (tu_idx, tu_sign) =
-  match tu_sign with
-  | Some ft -> Some ft
-  | None -> (
-      match tu_idx with Some idx -> reference_functype tc idx | None -> None)
-
-(* The source signature stored for a function or tag. Always present: a valid
-   definition has one (inline or via its type reference); the empty fallback is
-   reached only when the reference is not a function type, an error that is
-   reported before the signature would be shown. *)
-let typeuse_functype_or_empty tc tu : Ast.Text.functype =
-  match typeuse_functype tc tu with
-  | Some ft -> ft
-  | None -> { params = [||]; results = [||] }
+  match (tu_sign, tu_idx) with
+  | Some ft, _ -> ft
+  | None, Some idx -> reference_functype tc idx
+  | _ -> assert false
 
 (* Per-element source types for a source function type's params and results, to
-   pass straight to [pop_args]/[push_results]'s [?text]. *)
+   pass straight to [pop_args]/[push_results]'s [~text]. *)
 let functype_arg_text ({ params; results } : Ast.Text.functype) =
-  ( Some (Array.map (fun (_, v) -> Some v) params),
-    Some (Array.map (fun v -> Some v) results) )
+  (Array.map snd params, results)
 
 (* Argument/result source types for a call from the callee's source signature
    ([None] when unknown). *)
-let arg_text sign =
-  match sign with Some ft -> functype_arg_text ft | None -> (None, None)
+let arg_text ft = functype_arg_text ft
 
 (* The source function type that the continuation type named by [idx] wraps. *)
 let cont_source_functype tc idx =
   match reference_comptype tc idx with
-  | Some (Cont r) -> reference_functype tc r
-  | _ -> None
+  | Cont r -> reference_functype tc r
+  | _ -> { params = [||]; results = [||] }
 
 let get_type_info d ctx (idx : Ast.Text.idx) =
   try
@@ -874,10 +868,9 @@ type ctx = {
   locals : (valtype * Ast.Text.valtype) Sequence.t;
   (* Each entry is a branch target: its optional label, the interned types a
      branch carries to it, and their source types for error messages. *)
-  control_types :
-    (string option * valtype array * Ast.Text.valtype option array) list;
+  control_types : (string option * valtype array * Ast.Text.valtype array) list;
   return_types : valtype array;
-  return_text : Ast.Text.valtype option array;
+  return_text : Ast.Text.valtype array;
   modul : module_context;
   mutable initialized_locals : IntSet.t;
 }
@@ -940,7 +933,7 @@ let lookup_tag_type ctx tag =
   | Func { params; results } ->
       if results <> [||] then
         Error.exception_tag_with_results ctx.diagnostics ~location:tag.info;
-      (params, Array.map (fun (_, v) -> Some v) sign.params)
+      (params, Array.map snd sign.params)
 
 (* Full function type of a tag, used for stack-switching suspension tags whose
    results may be non-empty (unlike exception tags). *)
@@ -1006,19 +999,19 @@ let result_subtype info (ts : valtype array) (ts' : valtype array) =
    the field has a (non-packed) value type. Packed fields surface as i32, so
    they get no name. Resolving through the reference (not the deduplicated
    global index) names the field as written at this very type. *)
-let source_field_valtype ctx idx n : Ast.Text.valtype option =
+let source_field_valtype ctx idx n : Ast.Text.valtype =
   match reference_comptype ctx.modul.types idx with
-  | Some (Struct fields) when n < Array.length fields -> (
+  | Struct fields -> (
       let _, (ft : Ast.Text.fieldtype) = fields.(n).Ast.desc in
-      match ft.typ with Value v -> Some v | Packed _ -> None)
-  | _ -> None
+      match ft.typ with Value v -> v | Packed _ -> I32)
+  | _ -> assert false
 
 (* Source type of the element of the array type that reference [idx] names. *)
-let source_element_valtype ctx idx : Ast.Text.valtype option =
+let source_element_valtype ctx idx : Ast.Text.valtype =
   match reference_comptype ctx.modul.types idx with
-  | Some (Array (ft : Ast.Text.fieldtype)) -> (
-      match ft.typ with Value v -> Some v | Packed _ -> None)
-  | _ -> None
+  | Array (ft : Ast.Text.fieldtype) -> (
+      match ft.typ with Value v -> v | Packed _ -> I32)
+  | _ -> assert false
 
 (* Each concrete stack entry pairs the interned type used for subtype checking
    with the source type the value was written as, mirroring the Wax side's
@@ -1045,10 +1038,10 @@ let pop_any ctx loc st =
    that re-pushes the value with the null case removed. *)
 let non_null_text text =
   match text with
-  | Ast.Text.Ref r -> Some (Ast.Text.Ref { r with nullable = false })
-  | _ -> None
+  | Ast.Text.Ref r -> Ast.Text.Ref { r with nullable = false }
+  | _ -> assert false
 
-let pop ctx loc ?expected_text ty st =
+let pop ctx loc ~expected_text ty st =
   match st with
   | Unreachable -> (Unreachable, ())
   | Cons (_, None, r) -> (r, ())
@@ -1058,21 +1051,24 @@ let pop ctx loc ?expected_text ty st =
          match location with
          | Some location ->
              Error.instruction_type_mismatch ctx.modul.diagnostics ~location
-               ~provided_text:text ?expected_text ty' ty
+               ~provided_text:text ~expected_text
          | None ->
              Error.type_mismatch ctx.modul.diagnostics ~location:loc
-               ~provided_text:text ?expected_text ty' ty);
+               ~provided_text:text ~expected_text);
       (r, ())
   | Empty ->
       Error.empty_stack ctx.modul.diagnostics ~location:loc;
       (Unreachable, ())
 
-let push_poly loc ty st =
-  (Cons (Some loc, Option.map (fun t -> (t, text_of_valtype t)) ty, st), ())
+(* Pop a value whose expected type has no user-written source form — a builtin,
+   address, or abstract reference type — so its rendering is reconstructed. *)
+let pop_known ctx loc ty = pop ctx loc ~expected_text:(text_of_valtype ty) ty
+let push_poly loc st = (Cons (Some loc, None, st), ())
+let push ~text loc ty st = (Cons (loc, Some (ty, text), st), ())
 
-let push ?text loc ty st =
-  let text = match text with Some t -> t | None -> text_of_valtype ty in
-  (Cons (loc, Some (ty, text), st), ())
+(* Push a value whose type has no user-written source form, reconstructing its
+   rendering from the type. *)
+let push_known loc ty = push ~text:(text_of_valtype ty) loc ty
 
 (* The source rendering of a reference to the named type [idx], used as the
    [text] form of a value an instruction pushes ([ref_text], non-null) or
@@ -1082,21 +1078,14 @@ let ref_text idx : Ast.Text.valtype = Ref { nullable = false; typ = Type idx }
 let ref_null_text idx : Ast.Text.valtype =
   Ref { nullable = true; typ = Type idx }
 
-(* Source-type array for popping [n] arguments (left unnamed) followed by a
-   continuation of the type named by [x]. *)
-let cont_operand_text n x =
-  Array.append (Array.make n None) [| Some (ref_null_text x) |]
+(* Source-type array for popping the prefix arguments [ptext] followed by a
+   continuation operand of the type named by [x]. *)
+let cont_operand_text ptext x = Array.append ptext [| ref_null_text x |]
 
-(* Same, but naming the [n] arguments from the source function type the
-   continuation [x] wraps (they are exactly that type's parameters). *)
-let resume_operand_text ctx x n =
-  let ptext =
-    match cont_source_functype ctx.modul.types x with
-    | Some ft when Array.length ft.params = n ->
-        Array.map (fun (_, v) -> Some v) ft.params
-    | _ -> Array.make n None
-  in
-  Array.append ptext [| Some (ref_null_text x) |]
+(* Source params of the function type the continuation type [x] wraps; they are
+   exactly that function type's parameters. *)
+let cont_param_text ctx x =
+  Array.map snd (cont_source_functype ctx.modul.types x).params
 
 let unreachable _ = (Unreachable, ())
 let return v st = (st, v)
@@ -1169,10 +1158,10 @@ let float_bin_op_type ty (op : Ast.Text.float_bin_op) =
   | Eq | Ne | Lt | Gt | Le | Ge -> I32
 
 (* Returns the interned block parameter and result types, plus their per-element
-   source types (for [pop_args]/[push_results]'s [?text]). *)
+   source types (for [pop_args]/[push_results]'s [~text]). *)
 let blocktype ctx (ty : Ast.Text.blocktype option) =
   match ty with
-  | None -> Some ([||], [||], None, None)
+  | None -> Some ([||], [||], [||], [||])
   | Some (Typeuse (_, Some ({ params; results } as ft))) ->
       let*@ iparams =
         array_map_opt
@@ -1191,27 +1180,22 @@ let blocktype ctx (ty : Ast.Text.blocktype option) =
   | Some (Typeuse (None, None)) -> assert false (* Should not happen *)
   | Some (Valtype ty) ->
       let+@ t = valtype ctx.modul.diagnostics ctx.modul.types ty in
-      ([||], [| t |], Some [||], Some [| Some ty |])
+      ([||], [| t |], [||], [| ty |])
 
-(* [text], when given, supplies the source type of each argument/result by
-   index, so a mismatch on one of them names the type as the source wrote it. *)
-let text_at text i =
-  match text with Some t when i < Array.length t -> t.(i) | _ -> None
-
-let pop_args ctx loc ?text args =
+let pop_args ctx loc ~text args =
   let rec loop i =
     if i < 0 then return ()
     else
-      let* () = pop ctx loc ?expected_text:(text_at text i) args.(i) in
+      let* () = pop ctx loc ~expected_text:text.(i) args.(i) in
       loop (i - 1)
   in
   loop (Array.length args - 1)
 
-let push_results ?text results =
+let push_results ~text results =
   let rec loop i =
     if i >= Array.length results then return ()
     else
-      let* () = push ?text:(text_at text i) None results.(i) in
+      let* () = push ~text:text.(i) None results.(i) in
       loop (i + 1)
   in
   loop 0
@@ -1245,22 +1229,18 @@ let with_empty_stack ctx location f =
    corresponding parameter. [descr] names the construct supplying the
    arguments. Reporting the two lists directly gives a far clearer message than
    simulating the comparison on the value stack. *)
-let compare_types ctx ~location ~descr ?provided_text ?expected_text ~provided
+let compare_types ctx ~location ~descr ~provided_text ~expected_text ~provided
     ~expected () =
-  let text_at text i =
-    match text with Some t when i < Array.length t -> t.(i) | _ -> None
-  in
   if Array.length provided <> Array.length expected then
     Error.argument_count_mismatch ctx.diagnostics ~location ~descr
-      ?provided_text ?expected_text provided expected
+      ~provided_text ~expected_text
   else
     Array.iteri
       (fun i p ->
         let e = expected.(i) in
         if not (Types.val_subtype ctx.subtyping_info p e) then
           Error.argument_type_mismatch ctx.diagnostics ~location ~descr
-            ?provided_text:(text_at provided_text i)
-            ?expected_text:(text_at expected_text i) p e)
+            ~provided_text:provided_text.(i) ~expected_text:expected_text.(i))
       provided
 
 let branch_target ctx (idx : Ast.Text.idx) =
@@ -1460,27 +1440,27 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
   match i.desc with
   | Block { label; typ; block = b } ->
       let*! params, results, ptext, rtext = blocktype ctx typ in
-      let* () = pop_args ctx loc ?text:ptext params in
-      block ctx loc label ?ptext ?rtext ?br_text:rtext params results results b;
-      push_results ?text:rtext results
+      let* () = pop_args ctx loc ~text:ptext params in
+      block ctx loc label ~ptext ~rtext ~br_text:rtext params results results b;
+      push_results ~text:rtext results
   | Loop { label; typ; block = b } ->
       let*! params, results, ptext, rtext = blocktype ctx typ in
-      let* () = pop_args ctx loc ?text:ptext params in
-      block ctx loc label ?ptext ?rtext ?br_text:ptext params results params b;
-      push_results ?text:rtext results
+      let* () = pop_args ctx loc ~text:ptext params in
+      block ctx loc label ~ptext ~rtext ~br_text:ptext params results params b;
+      push_results ~text:rtext results
   | If { label; typ; if_block; else_block } ->
       let*! params, results, ptext, rtext = blocktype ctx typ in
-      let* () = pop ctx loc I32 in
-      let* () = pop_args ctx loc ?text:ptext params in
-      block ctx loc label ?ptext ?rtext ?br_text:rtext params results results
+      let* () = pop_known ctx loc I32 in
+      let* () = pop_args ctx loc ~text:ptext params in
+      block ctx loc label ~ptext ~rtext ~br_text:rtext params results results
         if_block.desc;
-      block ctx loc label ?ptext ?rtext ?br_text:rtext params results results
+      block ctx loc label ~ptext ~rtext ~br_text:rtext params results results
         else_block.desc;
-      push_results ?text:rtext results
+      push_results ~text:rtext results
   | TryTable { label; typ; block = b; catches } ->
       let*! params, results, ptext, rtext = blocktype ctx typ in
-      let* () = pop_args ctx loc ?text:ptext params in
-      block ctx loc label ?ptext ?rtext ?br_text:rtext params results results b;
+      let* () = pop_args ctx loc ~text:ptext params in
+      block ctx loc label ~ptext ~rtext ~br_text:rtext params results results b;
       List.iter
         (fun (catch : Ast.Text.catch) ->
           match catch with
@@ -1496,7 +1476,9 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
               let provided =
                 Array.append args [| Ref { nullable = false; typ = Exn } |]
               in
-              let provided_text = Array.append atext [| None |] in
+              let provided_text =
+                Array.append atext [| Ref { nullable = false; typ = Exn } |]
+              in
               compare_types ctx.modul ~location:loc
                 ~descr:"this exception handler" ~provided_text
                 ~expected_text:ptext ~provided ~expected:params ()
@@ -1504,34 +1486,37 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
               Option.iter
                 (fun (params, ptext) ->
                   compare_types ctx.modul ~location:loc
-                    ~descr:"this exception handler" ~expected_text:ptext
-                    ~provided:[||] ~expected:params ())
+                    ~descr:"this exception handler" ~provided_text:[||]
+                    ~expected_text:ptext ~provided:[||] ~expected:params ())
                 (branch_target ctx label)
           | CatchAllRef label ->
               Option.iter
                 (fun (params, ptext) ->
                   compare_types ctx.modul ~location:loc
-                    ~descr:"this exception handler" ~expected_text:ptext
+                    ~descr:"this exception handler"
+                    ~provided_text:[| Ref { nullable = false; typ = Exn } |]
+                    ~expected_text:ptext
                     ~provided:[| Ref { nullable = false; typ = Exn } |]
                     ~expected:params ())
                 (branch_target ctx label))
         catches;
-      push_results ?text:rtext results
+      push_results ~text:rtext results
   | Try { label; typ; block = b; catches; catch_all } ->
       let*! params, results, ptext, rtext = blocktype ctx typ in
-      let* () = pop_args ctx loc ?text:ptext params in
-      block ctx loc label ?ptext ?rtext ?br_text:rtext params results results b;
+      let* () = pop_args ctx loc ~text:ptext params in
+      block ctx loc label ~ptext ~rtext ~br_text:rtext params results results b;
       List.iter
         (fun (tag, b) ->
-          let*? params', _ = lookup_tag_type ctx tag in
-          block ctx loc label params' results ?rtext ?br_text:rtext results b)
+          let*? params', ptext = lookup_tag_type ctx tag in
+          block ctx loc label ~ptext ~rtext ~br_text:rtext params' results
+            results b)
         catches;
       Option.iter
         (fun b ->
-          block ctx loc label ?ptext ?rtext ?br_text:rtext params results
+          block ctx loc label ~ptext ~rtext ~br_text:rtext params results
             results b)
         catch_all;
-      push_results ?text:rtext results
+      push_results ~text:rtext results
   | Unreachable -> unreachable
   | Nop -> return ()
   | Throw idx ->
@@ -1539,17 +1524,17 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let* () = pop_args ctx loc ~text:ptext params in
       unreachable
   | ThrowRef ->
-      let* () = pop ctx loc (Ref { nullable = true; typ = Exn }) in
+      let* () = pop_known ctx loc (Ref { nullable = true; typ = Exn }) in
       unreachable
   | ContNew x ->
       let*! ty, ft, _ = lookup_cont_type ctx x in
       let func_text =
         match reference_comptype ctx.modul.types x with
-        | Some (Cont r) -> Some (ref_null_text r)
-        | _ -> None
+        | Cont r -> ref_null_text r
+        | _ -> assert false
       in
       let* () =
-        pop ctx loc ?expected_text:func_text
+        pop ctx loc ~expected_text:func_text
           (Ref { nullable = true; typ = Type ft })
       in
       push ~text:(ref_text x) (Some loc)
@@ -1581,7 +1566,10 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
                continuation types";
         let* () =
           pop_args ctx loc
-            ~text:(cont_operand_text (Array.length ts11) x)
+            ~text:
+              (cont_operand_text
+                 (Array.sub (cont_param_text ctx x) 0 (n1 - n1'))
+                 x)
             (Array.append ts11 [| Ref { nullable = true; typ = Type xty } |])
         in
         push ~text:(ref_text y) (Some loc)
@@ -1592,43 +1580,43 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
         lookup_tag_signature ctx x
       in
       let ptext, rtext = functype_arg_text sign in
-      let* () = pop_args ctx loc ?text:ptext ts1 in
-      push_results ?text:rtext ts2
+      let* () = pop_args ctx loc ~text:ptext ts1 in
+      push_results ~text:rtext ts2
   | Resume (x, clauses) ->
       let*! xty, _, ftx = lookup_cont_type ctx x in
       check_resume_table ctx loc ftx.results clauses;
       let _, rtext = arg_text (cont_source_functype ctx.modul.types x) in
       let* () =
         pop_args ctx loc
-          ~text:(resume_operand_text ctx x (Array.length ftx.params))
+          ~text:(cont_operand_text (cont_param_text ctx x) x)
           (Array.append ftx.params
              [| Ref { nullable = true; typ = Type xty } |])
       in
-      push_results ?text:rtext ftx.results
+      push_results ~text:rtext ftx.results
   | ResumeThrow (x, y, clauses) ->
       let*! xty, _, ftx = lookup_cont_type ctx x in
-      let*! { params = ts0; _ }, _ = lookup_tag_signature ctx y in
+      let*! { params = ts0; _ }, sign = lookup_tag_signature ctx y in
       check_resume_table ctx loc ftx.results clauses;
       let _, rtext = arg_text (cont_source_functype ctx.modul.types x) in
       let* () =
         pop_args ctx loc
-          ~text:(cont_operand_text (Array.length ts0) x)
+          ~text:(cont_operand_text (fst (functype_arg_text sign)) x)
           (Array.append ts0 [| Ref { nullable = true; typ = Type xty } |])
       in
-      push_results ?text:rtext ftx.results
+      push_results ~text:rtext ftx.results
   | ResumeThrowRef (x, clauses) ->
       let*! xty, _, ftx = lookup_cont_type ctx x in
       check_resume_table ctx loc ftx.results clauses;
       let _, rtext = arg_text (cont_source_functype ctx.modul.types x) in
       let* () =
         pop_args ctx loc
-          ~text:[| None; Some (ref_null_text x) |]
+          ~text:[| Ref { nullable = true; typ = Exn }; ref_null_text x |]
           [|
             Ref { nullable = true; typ = Exn };
             Ref { nullable = true; typ = Type xty };
           |]
       in
-      push_results ?text:rtext ftx.results
+      push_results ~text:rtext ftx.results
   | Switch (x, y) ->
       let*! xty, _, ftx = lookup_cont_type ctx x in
       let ts11 = ftx.params in
@@ -1661,24 +1649,37 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
                     "the 'switch' tag must take no parameters and its results \
                      must match the two continuation types"));
       let ts21 = match inner with Some ft -> ft.params | None -> [||] in
+      (* The inner continuation is named by [x]'s last parameter, so its
+         parameters' source types are that continuation's source params. *)
+      let ts21_text =
+        match inner with
+        | None -> [||]
+        | Some _ -> (
+            match (cont_param_text ctx x).(n - 1) with
+            | Ref { typ = Type idx; _ } -> cont_param_text ctx idx
+            | _ -> Array.map (source_valtype ctx.modul.types) ts21)
+      in
       let ts11' = if n = 0 then [||] else Array.sub ts11 0 (n - 1) in
+      let ts11'_text =
+        if n = 0 then [||] else Array.sub (cont_param_text ctx x) 0 (n - 1)
+      in
       let* () =
         pop_args ctx loc
-          ~text:(cont_operand_text (Array.length ts11') x)
+          ~text:(cont_operand_text ts11'_text x)
           (Array.append ts11' [| Ref { nullable = true; typ = Type xty } |])
       in
-      push_results ts21
+      push_results ~text:ts21_text ts21
   | Br idx ->
       let*! params, ptext = branch_target ctx idx in
       let* () = pop_args ctx loc ~text:ptext params in
       unreachable
   | Br_if idx ->
-      let* () = pop ctx loc I32 in
+      let* () = pop_known ctx loc I32 in
       let*! params, ptext = branch_target ctx idx in
       let* () = pop_args ctx loc ~text:ptext params in
       push_results ~text:ptext params
   | Br_table (lst, idx) ->
-      let* () = pop ctx loc I32 in
+      let* () = pop_known ctx loc I32 in
       let*! params, _ = branch_target ctx idx in
       let len = Array.length params in
       let* () =
@@ -1702,11 +1703,11 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           let*! params, ptext = branch_target ctx idx in
           let* () = pop_args ctx loc ~text:ptext params in
           let* () = push_results ~text:ptext params in
-          push ?text:(non_null_text text) (Some loc)
+          push ~text:(non_null_text text) (Some loc)
             (Ref { nullable = false; typ })
-      | Some (ty, text) ->
+      | Some (_, text) ->
           Error.expected_ref_type ctx.modul.diagnostics ~location:loc
-            ~src_loc:loc' ~text ty;
+            ~src_loc:loc' ~text;
           unreachable)
   | Br_on_non_null idx -> (
       let* ty, loc' = pop_any ctx loc in
@@ -1714,16 +1715,16 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       | None -> return ()
       | Some (Ref { nullable = _; typ }, text) ->
           let* () =
-            push ?text:(non_null_text text) None (Ref { nullable = false; typ })
+            push ~text:(non_null_text text) None (Ref { nullable = false; typ })
           in
           let*! params, ptext = branch_target ctx idx in
           let* () = pop_args ctx loc ~text:ptext params in
           let* () = push_results ~text:ptext params in
           let* _ = pop_any ctx loc in
           return ()
-      | Some (ty, text) ->
+      | Some (_, text) ->
           Error.expected_ref_type ctx.modul.diagnostics ~location:loc
-            ~src_loc:loc' ~text ty;
+            ~src_loc:loc' ~text;
           unreachable)
   | Br_on_cast (idx, ty1, ty2) ->
       let src_ty1 = Ast.Text.Ref ty1 and src_ty2 = Ast.Text.Ref ty2 in
@@ -1785,8 +1786,8 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           unreachable
       | Func { params; results } ->
           let ptext, rtext = functype_arg_text sign in
-          let* () = pop_args ctx loc ?text:ptext params in
-          push_results ?text:rtext results)
+          let* () = pop_args ctx loc ~text:ptext params in
+          push_results ~text:rtext results)
   | CallRef idx ->
       let*! type_idx, { params; results } = lookup_func_type ctx idx in
       let ptext, rtext = arg_text (reference_functype ctx.modul.types idx) in
@@ -1794,8 +1795,8 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
         pop ctx loc ~expected_text:(ref_null_text idx)
           (Ref { nullable = true; typ = Type type_idx })
       in
-      let* () = pop_args ctx loc ?text:ptext params in
-      push_results ?text:rtext results
+      let* () = pop_args ctx loc ~text:ptext params in
+      push_results ~text:rtext results
   | CallIndirect (idx, tu) -> (
       let*! typ, table_text =
         Sequence.get ctx.modul.diagnostics ctx.modul.tables idx
@@ -1807,7 +1808,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
              (Ref { nullable = true; typ = Func }))
       then
         Error.table_type_mismatch ctx.modul.diagnostics ~location:loc
-          ~text:table_text idx (Ref typ.reftype);
+          ~text:table_text idx;
       match (Types.get_subtype ctx.modul.subtyping_info ty).typ with
       | Struct _ | Array _ | Cont _ ->
           Error.expected_func_type ctx.modul.diagnostics ~location:loc idx;
@@ -1815,10 +1816,10 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       | Func { params; results } ->
           let ptext, rtext = arg_text (typeuse_functype ctx.modul.types tu) in
           let* () =
-            pop ctx loc (address_type_to_valtype typ.limits.address_type)
+            pop_known ctx loc (address_type_to_valtype typ.limits.address_type)
           in
-          let* () = pop_args ctx loc ?text:ptext params in
-          push_results ?text:rtext results)
+          let* () = pop_args ctx loc ~text:ptext params in
+          push_results ~text:rtext results)
   | ReturnCall idx -> (
       let*! ty, sign =
         Sequence.get ctx.modul.diagnostics ctx.modul.functions idx
@@ -1829,9 +1830,9 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           unreachable
       | Func { params; results } ->
           let ptext, rtext = functype_arg_text sign in
-          let* () = pop_args ctx loc ?text:ptext params in
+          let* () = pop_args ctx loc ~text:ptext params in
           compare_types ctx.modul ~location:loc ~descr:"this tail call"
-            ?provided_text:rtext ~expected_text:ctx.return_text
+            ~provided_text:rtext ~expected_text:ctx.return_text
             ~provided:results ~expected:ctx.return_types ();
           unreachable)
   | ReturnCallRef idx ->
@@ -1841,9 +1842,9 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
         pop ctx loc ~expected_text:(ref_null_text idx)
           (Ref { nullable = true; typ = Type type_idx })
       in
-      let* () = pop_args ctx loc ?text:ptext params in
+      let* () = pop_args ctx loc ~text:ptext params in
       compare_types ctx.modul ~location:loc ~descr:"this tail call"
-        ?provided_text:rtext ~expected_text:ctx.return_text ~provided:results
+        ~provided_text:rtext ~expected_text:ctx.return_text ~provided:results
         ~expected:ctx.return_types ();
       unreachable
   | ReturnCallIndirect (idx, tu) -> (
@@ -1857,7 +1858,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
              (Ref { nullable = true; typ = Func }))
       then
         Error.table_type_mismatch ctx.modul.diagnostics ~location:loc
-          ~text:table_text idx (Ref typ.reftype);
+          ~text:table_text idx;
       match (Types.get_subtype ctx.modul.subtyping_info ty).typ with
       | Struct _ | Array _ | Cont _ ->
           Error.expected_func_type ctx.modul.diagnostics ~location:loc idx;
@@ -1865,50 +1866,50 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       | Func { params; results } ->
           let ptext, rtext = arg_text (typeuse_functype ctx.modul.types tu) in
           let* () =
-            pop ctx loc (address_type_to_valtype typ.limits.address_type)
+            pop_known ctx loc (address_type_to_valtype typ.limits.address_type)
           in
-          let* () = pop_args ctx loc ?text:ptext params in
+          let* () = pop_args ctx loc ~text:ptext params in
           compare_types ctx.modul ~location:loc ~descr:"this tail call"
-            ?provided_text:rtext ~expected_text:ctx.return_text
+            ~provided_text:rtext ~expected_text:ctx.return_text
             ~provided:results ~expected:ctx.return_types ();
           unreachable)
   | Drop ->
       let* _ = pop_any ctx loc in
       return ()
   | Select None -> (
-      let* () = pop ctx loc I32 in
+      let* () = pop_known ctx loc I32 in
       let* ty1, _ = pop_any ctx loc in
       let* ty2, _ = pop_any ctx loc in
       match (ty1, ty2) with
-      | None, None -> push_poly loc None
+      | None, None -> push_poly loc
       | Some (ty1, text1), Some (ty2, text2) ->
           if not (number_or_vec ty1) then
             Error.expected_number_or_vec ctx.modul.diagnostics ~location:loc
-              ~text:text1 ty1;
+              ~text:text1;
           if not (number_or_vec ty2) then
             Error.expected_number_or_vec ctx.modul.diagnostics ~location:loc
-              ~text:text2 ty2;
+              ~text:text2;
           if ty1 <> ty2 then
             Error.select_type_mismatch ctx.modul.diagnostics ~location:loc
-              ~text1 ~text2 ty1 ty2;
-          push (Some loc) ty1
+              ~text1 ~text2;
+          push ~text:text1 (Some loc) ty1
       | Some (ty, text), None | None, Some (ty, text) ->
           if not (number_or_vec ty) then
             Error.expected_number_or_vec ctx.modul.diagnostics ~location:loc
-              ~text ty;
-          push (Some loc) ty)
+              ~text;
+          push ~text (Some loc) ty)
   | Select (Some lst) -> (
       match lst with
       | [ typ ] ->
           let src_typ = typ in
           let*! typ = valtype ctx.modul.diagnostics ctx.modul.types typ in
-          let* () = pop ctx loc I32 in
+          let* () = pop_known ctx loc I32 in
           let* () = pop ctx loc ~expected_text:src_typ typ in
           let* () = pop ctx loc ~expected_text:src_typ typ in
           push ~text:src_typ (Some loc) typ
       | _ ->
           Error.select_result_count ctx.modul.diagnostics ~location:loc;
-          pop ctx loc I32)
+          pop_known ctx loc I32)
   | LocalGet i ->
       let*! ty, text = get_local ctx i in
       push ~text (Some loc) ty
@@ -1937,8 +1938,10 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       in
       let ty, sz = memory_instruction_type_and_size ty in
       check_memarg ctx loc limits sz memarg;
-      let* () = pop ctx loc (address_type_to_valtype limits.address_type) in
-      push (Some loc) ty
+      let* () =
+        pop_known ctx loc (address_type_to_valtype limits.address_type)
+      in
+      push ~text:(text_of_valtype ty) (Some loc) ty
   | LoadS (idx, memarg, ty, sz, _) ->
       let*! limits =
         Sequence.get ctx.modul.diagnostics ctx.modul.memories idx
@@ -1947,16 +1950,20 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       check_memarg ctx loc limits
         (sz :> [ `I8 | `I16 | `I32 | `I64 | `V128 ])
         memarg;
-      let* () = pop ctx loc (address_type_to_valtype limits.address_type) in
-      push (Some loc) ty
+      let* () =
+        pop_known ctx loc (address_type_to_valtype limits.address_type)
+      in
+      push ~text:(text_of_valtype ty) (Some loc) ty
   | Store (idx, memarg, ty) ->
       let*! limits =
         Sequence.get ctx.modul.diagnostics ctx.modul.memories idx
       in
       let ty, sz = memory_instruction_type_and_size ty in
       check_memarg ctx loc limits sz memarg;
-      let* () = pop ctx loc ty in
-      let* () = pop ctx loc (address_type_to_valtype limits.address_type) in
+      let* () = pop_known ctx loc ty in
+      let* () =
+        pop_known ctx loc (address_type_to_valtype limits.address_type)
+      in
       return ()
   | StoreS (idx, memarg, ty, sz) ->
       let*! limits =
@@ -1966,28 +1973,29 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       check_memarg ctx loc limits
         (sz :> [ `I8 | `I16 | `I32 | `I64 | `V128 ])
         memarg;
-      let* () = pop ctx loc ty in
-      pop ctx loc (address_type_to_valtype limits.address_type)
+      let* () = pop_known ctx loc ty in
+      pop_known ctx loc (address_type_to_valtype limits.address_type)
   | MemorySize idx ->
       let*! limits =
         Sequence.get ctx.modul.diagnostics ctx.modul.memories idx
       in
-      push (Some loc) (address_type_to_valtype limits.address_type)
+      let ty = address_type_to_valtype limits.address_type in
+      push ~text:(text_of_valtype ty) (Some loc) ty
   | MemoryGrow idx ->
       let*! limits =
         Sequence.get ctx.modul.diagnostics ctx.modul.memories idx
       in
       let addr_ty = address_type_to_valtype limits.address_type in
-      let* () = pop ctx loc addr_ty in
-      push (Some loc) addr_ty
+      let* () = pop_known ctx loc addr_ty in
+      push ~text:(text_of_valtype addr_ty) (Some loc) addr_ty
   | MemoryFill idx ->
       let*! limits =
         Sequence.get ctx.modul.diagnostics ctx.modul.memories idx
       in
       let addr_ty = address_type_to_valtype limits.address_type in
-      let* () = pop ctx loc addr_ty in
-      let* () = pop ctx loc I32 in
-      pop ctx loc addr_ty
+      let* () = pop_known ctx loc addr_ty in
+      let* () = pop_known ctx loc I32 in
+      pop_known ctx loc addr_ty
   | MemoryCopy (idx, idx') ->
       let*! limits =
         Sequence.get ctx.modul.diagnostics ctx.modul.memories idx
@@ -2003,52 +2011,53 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let addr_ty = address_type_to_valtype limits.address_type in
       let addr_ty' = address_type_to_valtype limits.address_type in
       let addr_ty'' = address_type_to_valtype address_type in
-      let* () = pop ctx loc addr_ty'' in
-      let* () = pop ctx loc addr_ty' in
-      pop ctx loc addr_ty
+      let* () = pop_known ctx loc addr_ty'' in
+      let* () = pop_known ctx loc addr_ty' in
+      pop_known ctx loc addr_ty
   | MemoryInit (idx, idx') ->
       let*! limits =
         Sequence.get ctx.modul.diagnostics ctx.modul.memories idx
       in
       ignore (Sequence.get ctx.modul.diagnostics ctx.modul.data idx');
       let addr_ty = address_type_to_valtype limits.address_type in
-      let* () = pop ctx loc I32 in
-      let* () = pop ctx loc I32 in
-      pop ctx loc addr_ty
+      let* () = pop_known ctx loc I32 in
+      let* () = pop_known ctx loc I32 in
+      pop_known ctx loc addr_ty
   | DataDrop idx ->
       ignore (Sequence.get ctx.modul.diagnostics ctx.modul.data idx);
       return ()
   | VecBinOp _ ->
-      let* () = pop ctx loc V128 in
-      let* () = pop ctx loc V128 in
-      push (Some loc) V128
-  | VecConst _ -> push (Some loc) V128
+      let* () = pop_known ctx loc V128 in
+      let* () = pop_known ctx loc V128 in
+      push_known (Some loc) V128
+  | VecConst _ -> push_known (Some loc) V128
   | VecUnOp _ ->
-      let* () = pop ctx loc V128 in
-      push (Some loc) V128
+      let* () = pop_known ctx loc V128 in
+      push_known (Some loc) V128
   | VecTest _ ->
-      let* () = pop ctx loc V128 in
-      push (Some loc) I32
+      let* () = pop_known ctx loc V128 in
+      push_known (Some loc) I32
   | VecShift _ ->
-      let* () = pop ctx loc I32 in
-      let* () = pop ctx loc V128 in
-      push (Some loc) V128
+      let* () = pop_known ctx loc I32 in
+      let* () = pop_known ctx loc V128 in
+      push_known (Some loc) V128
   | VecBitmask _ ->
-      let* () = pop ctx loc V128 in
-      push (Some loc) I32
+      let* () = pop_known ctx loc V128 in
+      push_known (Some loc) I32
   | VecTernOp _ ->
-      let* () = pop ctx loc V128 in
-      let* () = pop ctx loc V128 in
-      let* () = pop ctx loc V128 in
-      push (Some loc) V128
+      let* () = pop_known ctx loc V128 in
+      let* () = pop_known ctx loc V128 in
+      let* () = pop_known ctx loc V128 in
+      push_known (Some loc) V128
   | VecBitselect ->
-      let* () = pop ctx loc V128 in
-      let* () = pop ctx loc V128 in
-      let* () = pop ctx loc V128 in
-      push (Some loc) V128
+      let* () = pop_known ctx loc V128 in
+      let* () = pop_known ctx loc V128 in
+      let* () = pop_known ctx loc V128 in
+      push_known (Some loc) V128
   | VecSplat shape ->
-      let* () = pop ctx loc (shape_type shape) in
-      push (Some loc) V128
+      let ty = shape_type shape in
+      let* () = pop_known ctx loc ty in
+      push_known (Some loc) V128
   | VecLoad (idx, sz, memarg) ->
       let*! limits =
         Sequence.get ctx.modul.diagnostics ctx.modul.memories idx
@@ -2061,15 +2070,19 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
             `I64
         | Load32Zero -> `I32)
         memarg;
-      let* () = pop ctx loc (address_type_to_valtype limits.address_type) in
-      push (Some loc) V128
+      let* () =
+        pop_known ctx loc (address_type_to_valtype limits.address_type)
+      in
+      push_known (Some loc) V128
   | VecStore (idx, memarg) ->
       let*! limits =
         Sequence.get ctx.modul.diagnostics ctx.modul.memories idx
       in
       check_memarg ctx loc limits `V128 memarg;
-      let* () = pop ctx loc V128 in
-      let* () = pop ctx loc (address_type_to_valtype limits.address_type) in
+      let* () = pop_known ctx loc V128 in
+      let* () =
+        pop_known ctx loc (address_type_to_valtype limits.address_type)
+      in
       return ()
   | VecLoadLane (idx, op, mem, lane) ->
       let*! limits =
@@ -2081,9 +2094,11 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let sz = match op with `I8 -> 1 | `I16 -> 2 | `I32 -> 4 | `I64 -> 8 in
       if lane >= 16 / sz then
         Error.invalid_lane_index ctx.modul.diagnostics ~location:loc (16 / sz);
-      let* () = pop ctx loc V128 in
-      let* () = pop ctx loc (address_type_to_valtype limits.address_type) in
-      push (Some loc) V128
+      let* () = pop_known ctx loc V128 in
+      let* () =
+        pop_known ctx loc (address_type_to_valtype limits.address_type)
+      in
+      push_known (Some loc) V128
   | VecStoreLane (idx, op, mem, lane) ->
       let*! limits =
         Sequence.get ctx.modul.diagnostics ctx.modul.memories idx
@@ -2094,8 +2109,10 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let sz = match op with `I8 -> 1 | `I16 -> 2 | `I32 -> 4 | `I64 -> 8 in
       if lane >= 16 / sz then
         Error.invalid_lane_index ctx.modul.diagnostics ~location:loc (16 / sz);
-      let* () = pop ctx loc V128 in
-      let* () = pop ctx loc (address_type_to_valtype limits.address_type) in
+      let* () = pop_known ctx loc V128 in
+      let* () =
+        pop_known ctx loc (address_type_to_valtype limits.address_type)
+      in
       return ()
   | VecLoadSplat (idx, op, mem) ->
       let*! limits =
@@ -2104,29 +2121,31 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       check_memarg ctx loc limits
         (op :> [ `I8 | `I16 | `I32 | `I64 | `F32 | `F64 | `V128 ])
         mem;
-      let* () = pop ctx loc (address_type_to_valtype limits.address_type) in
-      push (Some loc) V128
+      let* () =
+        pop_known ctx loc (address_type_to_valtype limits.address_type)
+      in
+      push_known (Some loc) V128
   | VecExtract (shape, _, lane) ->
       check_shape_lanes ctx loc shape lane;
-      let* () = pop ctx loc V128 in
-      push (Some loc) (shape_type shape)
+      let* () = pop_known ctx loc V128 in
+      push_known (Some loc) (shape_type shape)
   | VecReplace (shape, lane) ->
       check_shape_lanes ctx loc shape lane;
-      let* () = pop ctx loc (shape_type shape) in
-      let* () = pop ctx loc V128 in
-      push (Some loc) V128
+      let* () = pop_known ctx loc (shape_type shape) in
+      let* () = pop_known ctx loc V128 in
+      push_known (Some loc) V128
   | VecShuffle lanes ->
       if not (String.for_all (fun l -> Char.code l < 32) lanes) then
         Error.invalid_lane_index ctx.modul.diagnostics ~location:loc 32;
-      let* () = pop ctx loc V128 in
-      let* () = pop ctx loc V128 in
-      push (Some loc) V128
+      let* () = pop_known ctx loc V128 in
+      let* () = pop_known ctx loc V128 in
+      push_known (Some loc) V128
   | TableGet idx ->
       let*! typ, text =
         Sequence.get ctx.modul.diagnostics ctx.modul.tables idx
       in
       let addr_ty = address_type_to_valtype typ.limits.address_type in
-      let* () = pop ctx loc addr_ty in
+      let* () = pop_known ctx loc addr_ty in
       push ~text (Some loc) (Ref typ.reftype)
   | TableSet idx ->
       let*! typ, text =
@@ -2134,26 +2153,26 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       in
       let addr_ty = address_type_to_valtype typ.limits.address_type in
       let* () = pop ctx loc ~expected_text:text (Ref typ.reftype) in
-      pop ctx loc addr_ty
+      pop_known ctx loc addr_ty
   | TableSize idx ->
       let*! typ, _ = Sequence.get ctx.modul.diagnostics ctx.modul.tables idx in
-      push (Some loc) (address_type_to_valtype typ.limits.address_type)
+      push_known (Some loc) (address_type_to_valtype typ.limits.address_type)
   | TableGrow idx ->
       let*! typ, text =
         Sequence.get ctx.modul.diagnostics ctx.modul.tables idx
       in
       let addr_ty = address_type_to_valtype typ.limits.address_type in
-      let* () = pop ctx loc addr_ty in
+      let* () = pop_known ctx loc addr_ty in
       let* () = pop ctx loc ~expected_text:text (Ref typ.reftype) in
-      push (Some loc) addr_ty
+      push_known (Some loc) addr_ty
   | TableFill idx ->
       let*! typ, text =
         Sequence.get ctx.modul.diagnostics ctx.modul.tables idx
       in
       let addr_ty = address_type_to_valtype typ.limits.address_type in
-      let* () = pop ctx loc addr_ty in
+      let* () = pop_known ctx loc addr_ty in
       let* () = pop ctx loc ~expected_text:text (Ref typ.reftype) in
-      pop ctx loc addr_ty
+      pop_known ctx loc addr_ty
   | TableCopy (idx, idx') ->
       let*! ty, dst_text =
         Sequence.get ctx.modul.diagnostics ctx.modul.tables idx
@@ -2167,8 +2186,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
              (Ref ty.reftype))
       then
         Error.type_mismatch ctx.modul.diagnostics ~location:loc
-          ~provided_text:src_text ~expected_text:dst_text (Ref ty'.reftype)
-          (Ref ty.reftype);
+          ~provided_text:src_text ~expected_text:dst_text;
       let address_type =
         match (ty.limits.address_type, ty'.limits.address_type) with
         | `I32, _ | _, `I32 -> `I32
@@ -2177,11 +2195,11 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let addr_ty = address_type_to_valtype ty.limits.address_type in
       let addr_ty' = address_type_to_valtype ty'.limits.address_type in
       let addr_ty'' = address_type_to_valtype address_type in
-      let* () = pop ctx loc addr_ty'' in
-      let* () = pop ctx loc addr_ty' in
-      pop ctx loc addr_ty
+      let* () = pop_known ctx loc addr_ty'' in
+      let* () = pop_known ctx loc addr_ty' in
+      pop_known ctx loc addr_ty
   | TableInit (idx, idx') ->
-      let*! tabletype, _ =
+      let*! tabletype, table_text =
         Sequence.get ctx.modul.diagnostics ctx.modul.tables idx
       in
       let*! typ = Sequence.get ctx.modul.diagnostics ctx.modul.elem idx' in
@@ -2190,12 +2208,13 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           (Types.val_subtype ctx.modul.subtyping_info (Ref typ)
              (Ref tabletype.reftype))
       then
-        Error.type_mismatch ctx.modul.diagnostics ~location:loc (Ref typ)
-          (Ref tabletype.reftype);
+        Error.type_mismatch ctx.modul.diagnostics ~location:loc
+          ~provided_text:(source_valtype ctx.modul.types (Ref typ))
+          ~expected_text:table_text;
       let addr_ty = address_type_to_valtype tabletype.limits.address_type in
-      let* () = pop ctx loc I32 in
-      let* () = pop ctx loc I32 in
-      pop ctx loc addr_ty
+      let* () = pop_known ctx loc I32 in
+      let* () = pop_known ctx loc I32 in
+      pop_known ctx loc addr_ty
   | ElemDrop idx ->
       let*! _ = Sequence.get ctx.modul.diagnostics ctx.modul.elem idx in
       return ()
@@ -2207,40 +2226,42 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let*! i, _ = Sequence.get ctx.modul.diagnostics ctx.modul.functions idx in
       if not ((not !validate_refs) || Hashtbl.mem ctx.modul.refs i) then
         Error.ref_func_inaccessible ctx.modul.diagnostics ~location:loc idx;
-      push (Some loc) (Ref { nullable = false; typ = Type i })
+      let ty = Ref { nullable = false; typ = Type i } in
+      push ~text:(source_valtype ctx.modul.types ty) (Some loc) ty
   | RefIsNull -> (
       let* ty, loc' = pop_any ctx loc in
       match ty with
       | None -> return ()
-      | Some (Ref _, _) -> push (Some loc) I32
-      | Some (ty, text) ->
+      | Some (Ref _, _) -> push_known (Some loc) I32
+      | Some (_, text) ->
           Error.expected_ref_type ctx.modul.diagnostics ~location:loc
-            ~src_loc:loc' ~text ty;
+            ~src_loc:loc' ~text;
           unreachable)
   | RefAsNonNull -> (
       let* ty, loc' = pop_any ctx loc in
       match ty with
       | None -> return ()
       | Some (Ref ty, text) ->
-          push ?text:(non_null_text text) (Some loc)
+          push ~text:(non_null_text text) (Some loc)
             (Ref { ty with nullable = false })
-      | Some (ty, text) ->
+      | Some (_, text) ->
           Error.expected_ref_type ctx.modul.diagnostics ~location:loc
-            ~src_loc:loc' ~text ty;
+            ~src_loc:loc' ~text;
           unreachable)
   | RefEq ->
-      let* () = pop ctx loc (Ref { nullable = true; typ = Eq }) in
-      let* () = pop ctx loc (Ref { nullable = true; typ = Eq }) in
-      push (Some loc) I32
+      let* () = pop_known ctx loc (Ref { nullable = true; typ = Eq }) in
+      let* () = pop_known ctx loc (Ref { nullable = true; typ = Eq }) in
+      push_known (Some loc) I32
   | RefTest ty ->
       let*! ty = reftype ctx.modul.diagnostics ctx.modul.types ty in
       (match top_heap_type ctx ty.typ with
       | Cont -> Error.invalid_cast_type ctx.modul.diagnostics ~location:loc
       | _ -> ());
       let* () =
-        pop ctx loc (Ref { nullable = true; typ = top_heap_type ctx ty.typ })
+        pop_known ctx loc
+          (Ref { nullable = true; typ = top_heap_type ctx ty.typ })
       in
-      push (Some loc) I32
+      push_known (Some loc) I32
   | RefCast ty ->
       let text = Ast.Text.(Ref ty) in
       let*! ty = reftype ctx.modul.diagnostics ctx.modul.types ty in
@@ -2248,13 +2269,16 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       | Cont -> Error.invalid_cast_type ctx.modul.diagnostics ~location:loc
       | _ -> ());
       let* () =
-        pop ctx loc (Ref { nullable = true; typ = top_heap_type ctx ty.typ })
+        pop_known ctx loc
+          (Ref { nullable = true; typ = top_heap_type ctx ty.typ })
       in
       push ~text (Some loc) (Ref ty)
   | StructNew idx ->
       let*! ty, _, fields = lookup_struct_type ctx idx in
       let* () =
         pop_args ctx loc
+          ~text:
+            (Array.init (Array.length fields) (source_field_valtype ctx idx))
           (Array.map
              (fun (f : fieldtype) ->
                match f.typ with Value v -> v | Packed _ -> I32)
@@ -2285,7 +2309,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       (*ZZZ signage + validate n*)
       ignore signage;
       push
-        ?text:(source_field_valtype ctx idx n)
+        ~text:(source_field_valtype ctx idx n)
         (Some loc)
         (unpack_type fields.(n))
   | StructSet (idx, idx') ->
@@ -2295,27 +2319,36 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
         Error.immutable ctx.modul.diagnostics ~location:i.info "field";
       let* () =
         pop ctx loc
-          ?expected_text:(source_field_valtype ctx idx n)
+          ~expected_text:(source_field_valtype ctx idx n)
           (unpack_type fields.(n))
       in
       pop ctx loc ~expected_text:(ref_null_text idx)
         (Ref { nullable = true; typ = Type ty })
   | ArrayNew idx ->
       let*! ty, field = lookup_array_type ctx idx in
-      let* () = pop ctx loc I32 in
-      let* () = pop ctx loc (unpack_type field) in
+      let* () = pop_known ctx loc I32 in
+      let* () =
+        pop ctx loc
+          ~expected_text:(source_element_valtype ctx idx)
+          (unpack_type field)
+      in
       push ~text:(ref_text idx) (Some loc)
         (Ref { nullable = false; typ = Type ty })
   | ArrayNewDefault idx ->
       let*! ty, field = lookup_array_type ctx idx in
       if not (field_has_default field) then
         Error.not_defaultable ctx.modul.diagnostics ~location:i.info;
-      let* () = pop ctx loc I32 in
+      let* () = pop_known ctx loc I32 in
       push ~text:(ref_text idx) (Some loc)
         (Ref { nullable = false; typ = Type ty })
   | ArrayNewFixed (idx, n) ->
       let*! ty, field = lookup_array_type ctx idx in
-      let* () = repeat (Uint32.to_int n) (pop ctx loc (unpack_type field)) in
+      let* () =
+        repeat (Uint32.to_int n)
+          (pop ctx loc
+             ~expected_text:(source_element_valtype ctx idx)
+             (unpack_type field))
+      in
       push ~text:(ref_text idx) (Some loc)
         (Ref { nullable = false; typ = Type ty })
   | ArrayNewData (idx, idx') ->
@@ -2325,8 +2358,8 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       | Packed _ | Value (I32 | I64 | F32 | F64 | V128) -> ()
       | Value (Ref _) ->
           Error.numeric_array_required ctx.modul.diagnostics ~location:i.info);
-      let* () = pop ctx loc I32 in
-      let* () = pop ctx loc I32 in
+      let* () = pop_known ctx loc I32 in
+      let* () = pop_known ctx loc I32 in
       push ~text:(ref_text idx) (Some loc)
         (Ref { nullable = false; typ = Type ty })
   | ArrayNewElem (idx, idx') ->
@@ -2338,8 +2371,8 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       | _ ->
           Error.incompatible_array_element ctx.modul.diagnostics
             ~location:i.info);
-      let* () = pop ctx loc I32 in
-      let* () = pop ctx loc I32 in
+      let* () = pop_known ctx loc I32 in
+      let* () = pop_known ctx loc I32 in
       push ~text:(ref_text idx) (Some loc)
         (Ref { nullable = false; typ = Type ty })
   | ArrayGet (signage, idx) ->
@@ -2351,34 +2384,38 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       | Value _ ->
           if signage <> None then
             Error.unpacked_array_access ctx.modul.diagnostics ~location:i.info);
-      let* () = pop ctx loc I32 in
+      let* () = pop_known ctx loc I32 in
       let* () =
         pop ctx loc ~expected_text:(ref_null_text idx)
           (Ref { nullable = true; typ = Type ty })
       in
-      push ?text:(source_element_valtype ctx idx) (Some loc) (unpack_type field)
+      push ~text:(source_element_valtype ctx idx) (Some loc) (unpack_type field)
   | ArraySet idx ->
       let*! ty, field = lookup_array_type ctx idx in
       if not field.mut then
         Error.immutable ctx.modul.diagnostics ~location:i.info "array";
       let* () =
         pop ctx loc
-          ?expected_text:(source_element_valtype ctx idx)
+          ~expected_text:(source_element_valtype ctx idx)
           (unpack_type field)
       in
-      let* () = pop ctx loc I32 in
+      let* () = pop_known ctx loc I32 in
       pop ctx loc ~expected_text:(ref_null_text idx)
         (Ref { nullable = true; typ = Type ty })
   | ArrayLen ->
-      let* () = pop ctx loc (Ref { nullable = true; typ = Array }) in
-      push (Some loc) I32
+      let* () = pop_known ctx loc (Ref { nullable = true; typ = Array }) in
+      push_known (Some loc) I32
   | ArrayFill idx ->
       let*! ty, field = lookup_array_type ctx idx in
       if not field.mut then
         Error.immutable ctx.modul.diagnostics ~location:i.info "array";
-      let* () = pop ctx loc I32 in
-      let* () = pop ctx loc (unpack_type field) in
-      let* () = pop ctx loc I32 in
+      let* () = pop_known ctx loc I32 in
+      let* () =
+        pop ctx loc
+          ~expected_text:(source_element_valtype ctx idx)
+          (unpack_type field)
+      in
+      let* () = pop_known ctx loc I32 in
       pop ctx loc ~expected_text:(ref_null_text idx)
         (Ref { nullable = true; typ = Type ty })
   | ArrayCopy (idx1, idx2) ->
@@ -2389,13 +2426,13 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       if not (storage_subtype ctx.modul.subtyping_info field1.typ field2.typ)
       then
         Error.incompatible_array_element ctx.modul.diagnostics ~location:i.info;
-      let* () = pop ctx loc I32 in
-      let* () = pop ctx loc I32 in
+      let* () = pop_known ctx loc I32 in
+      let* () = pop_known ctx loc I32 in
       let* () =
         pop ctx loc ~expected_text:(ref_null_text idx2)
           (Ref { nullable = true; typ = Type ty2 })
       in
-      let* () = pop ctx loc I32 in
+      let* () = pop_known ctx loc I32 in
       pop ctx loc ~expected_text:(ref_null_text idx1)
         (Ref { nullable = true; typ = Type ty1 })
   | ArrayInitData (idx, idx') ->
@@ -2407,9 +2444,9 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       | Packed _ | Value (I32 | I64 | F32 | F64 | V128) -> ()
       | Value (Ref _) ->
           Error.numeric_array_required ctx.modul.diagnostics ~location:i.info);
-      let* () = pop ctx loc I32 in
-      let* () = pop ctx loc I32 in
-      let* () = pop ctx loc I32 in
+      let* () = pop_known ctx loc I32 in
+      let* () = pop_known ctx loc I32 in
+      let* () = pop_known ctx loc I32 in
       pop ctx loc ~expected_text:(ref_null_text idx)
         (Ref { nullable = true; typ = Type ty })
   | ArrayInitElem (idx, idx') ->
@@ -2423,92 +2460,95 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       | _ ->
           Error.incompatible_array_element ctx.modul.diagnostics
             ~location:i.info);
-      let* () = pop ctx loc I32 in
-      let* () = pop ctx loc I32 in
-      let* () = pop ctx loc I32 in
+      let* () = pop_known ctx loc I32 in
+      let* () = pop_known ctx loc I32 in
+      let* () = pop_known ctx loc I32 in
       pop ctx loc ~expected_text:(ref_null_text idx)
         (Ref { nullable = true; typ = Type ty })
   | RefI31 ->
-      let* () = pop ctx loc I32 in
-      push (Some loc) (Ref { nullable = false; typ = I31 })
+      let* () = pop_known ctx loc I32 in
+      push_known (Some loc) (Ref { nullable = false; typ = I31 })
   | I31Get _ ->
-      let* () = pop ctx loc (Ref { nullable = true; typ = I31 }) in
-      push (Some loc) I32
-  | Const (I32 _) -> push (Some loc) I32
-  | Const (I64 _) -> push (Some loc) I64
-  | Const (F32 _) -> push (Some loc) F32
-  | Const (F64 _) -> push (Some loc) F64
+      let* () = pop_known ctx loc (Ref { nullable = true; typ = I31 }) in
+      push_known (Some loc) I32
+  | Const (I32 _) -> push_known (Some loc) I32
+  | Const (I64 _) -> push_known (Some loc) I64
+  | Const (F32 _) -> push_known (Some loc) F32
+  | Const (F64 _) -> push_known (Some loc) F64
   | UnOp (I32 op) ->
       let expected, returned = int_un_op_type I32 op in
-      let* () = pop ctx loc expected in
-      push (Some loc) returned
+      let* () = pop_known ctx loc expected in
+      push_known (Some loc) returned
   | UnOp (I64 op) ->
       let expected, returned = int_un_op_type I64 op in
-      let* () = pop ctx loc expected in
-      push (Some loc) returned
+      let* () = pop_known ctx loc expected in
+      push_known (Some loc) returned
   | UnOp (F32 op) ->
       let expected = float_un_op_type F32 op in
-      let* () = pop ctx loc expected in
-      push (Some loc) F32
+      let* () = pop_known ctx loc expected in
+      push_known (Some loc) F32
   | UnOp (F64 op) ->
       let expected = float_un_op_type F64 op in
-      let* () = pop ctx loc expected in
-      push (Some loc) F64
+      let* () = pop_known ctx loc expected in
+      push_known (Some loc) F64
   | BinOp (I32 op) ->
-      let* () = pop ctx loc I32 in
-      let* () = pop ctx loc I32 in
-      push (Some loc) (int_bin_op_type I32 op)
+      let* () = pop_known ctx loc I32 in
+      let* () = pop_known ctx loc I32 in
+      push_known (Some loc) (int_bin_op_type I32 op)
   | BinOp (I64 op) ->
-      let* () = pop ctx loc I64 in
-      let* () = pop ctx loc I64 in
-      push (Some loc) (int_bin_op_type I64 op)
+      let* () = pop_known ctx loc I64 in
+      let* () = pop_known ctx loc I64 in
+      push_known (Some loc) (int_bin_op_type I64 op)
   | BinOp (F32 op) ->
-      let* () = pop ctx loc F32 in
-      let* () = pop ctx loc F32 in
-      push (Some loc) (float_bin_op_type F32 op)
+      let* () = pop_known ctx loc F32 in
+      let* () = pop_known ctx loc F32 in
+      push_known (Some loc) (float_bin_op_type F32 op)
   | BinOp (F64 op) ->
-      let* () = pop ctx loc F64 in
-      let* () = pop ctx loc F64 in
-      push (Some loc) (float_bin_op_type F64 op)
+      let* () = pop_known ctx loc F64 in
+      let* () = pop_known ctx loc F64 in
+      push_known (Some loc) (float_bin_op_type F64 op)
   | I32WrapI64 ->
-      let* () = pop ctx loc I64 in
-      push (Some loc) I32
+      let* () = pop_known ctx loc I64 in
+      push_known (Some loc) I32
   | I64ExtendI32 _ ->
-      let* () = pop ctx loc I32 in
-      push (Some loc) I64
+      let* () = pop_known ctx loc I32 in
+      push_known (Some loc) I64
   | F32DemoteF64 ->
-      let* () = pop ctx loc F64 in
-      push (Some loc) F32
+      let* () = pop_known ctx loc F64 in
+      push_known (Some loc) F32
   | F64PromoteF32 ->
-      let* () = pop ctx loc F32 in
-      push (Some loc) F64
+      let* () = pop_known ctx loc F32 in
+      push_known (Some loc) F64
   | ExternConvertAny ->
-      let* ty, _ = pop_any ctx loc in
-      let ty = Option.map fst ty in
+      let* tt, _ = pop_any ctx loc in
+      let ty = Option.map fst tt in
       Option.iter
-        (fun ty ->
+        (fun (ty, text) ->
           let expected = Ref { nullable = true; typ = Any } in
           if not (Types.val_subtype ctx.modul.subtyping_info ty expected) then
-            Error.type_mismatch ctx.modul.diagnostics ~location:loc ty expected)
-        ty;
-      push (Some loc) (Ref { nullable = is_nullable ty; typ = Extern })
+            Error.type_mismatch ctx.modul.diagnostics ~location:loc
+              ~provided_text:text ~expected_text:(text_of_valtype expected))
+        tt;
+      push_known (Some loc) (Ref { nullable = is_nullable ty; typ = Extern })
   | AnyConvertExtern ->
-      let* ty, _ = pop_any ctx loc in
-      let ty = Option.map fst ty in
+      let* tt, _ = pop_any ctx loc in
+      let ty = Option.map fst tt in
       Option.iter
-        (fun ty ->
+        (fun (ty, text) ->
           let expected = Ref { nullable = true; typ = Extern } in
           if not (Types.val_subtype ctx.modul.subtyping_info ty expected) then
-            Error.type_mismatch ctx.modul.diagnostics ~location:loc ty expected)
-        ty;
-      push (Some loc) (Ref { nullable = is_nullable ty; typ = Any })
+            Error.type_mismatch ctx.modul.diagnostics ~location:loc
+              ~provided_text:text ~expected_text:(text_of_valtype expected))
+        tt;
+      push_known (Some loc) (Ref { nullable = is_nullable ty; typ = Any })
   | Folded (i, l) ->
       let* () = instructions ctx l in
       instruction ctx i
   | Pop ty ->
+      let src_ty = ty in
       let*! ty = valtype ctx.modul.diagnostics ctx.modul.types ty in
-      let* () = pop ctx loc ty in
-      push (Some loc) ty
+      let* () = pop ctx loc ~expected_text:src_ty ty in
+      push ~text:src_ty (Some loc) ty
   | String (Some idx, _) ->
       let*! ty, field = lookup_array_type ctx idx in
       (match field.typ with
@@ -2519,8 +2559,8 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
         (Ref { nullable = false; typ = Type ty })
   | String (None, _) ->
       let ty = Ref { nullable = false; typ = Type (string ctx.modul.types) } in
-      push (Some loc) ty
-  | Char _ -> push (Some loc) I32
+      push ~text:(source_valtype ctx.modul.types ty) (Some loc) ty
+  | Char _ -> push_known (Some loc) I32
   (* Conditional annotations are spliced out by [specialize] before a
      configuration is validated, so none can remain at this point. *)
   | If_annotation _ -> assert false
@@ -2532,14 +2572,9 @@ and instructions ctx l =
       let* () = instruction ctx i in
       instructions ctx r
 
-and block ctx loc label ?ptext ?rtext ?br_text params results br_params block =
+and block ctx loc label ~ptext ~rtext ~br_text params results br_params block =
   with_empty_stack ctx.modul loc (*ZZZ*)
-    (let* () = push_results ?text:ptext params in
-     let br_text =
-       match br_text with
-       | Some t -> t
-       | None -> Array.make (Array.length br_params) None
-     in
+    (let* () = push_results ~text:ptext params in
      let* () =
        instructions
          {
@@ -2550,7 +2585,7 @@ and block ctx loc label ?ptext ?rtext ?br_text params results br_params block =
          }
          block
      in
-     pop_args ctx loc ?text:rtext (*ZZZ More precise loc*) results)
+     pop_args ctx loc ~text:rtext (*ZZZ More precise loc*) results)
 
 let rec check_constant_instruction ctx (i : _ Ast.Text.instr) =
   match i.desc with
@@ -2603,7 +2638,7 @@ let rec check_constant_instruction ctx (i : _ Ast.Text.instr) =
 and check_constant_instructions ctx l =
   List.iter (fun i -> check_constant_instruction ctx i) l
 
-let constant_expression ctx ~location ty expr =
+let constant_expression ctx ~location ~expected_text ty expr =
   check_constant_instructions ctx expr;
   with_empty_stack ctx location
     (let ctx =
@@ -2617,7 +2652,7 @@ let constant_expression ctx ~location ty expr =
        }
      in
      let* () = instructions ctx expr in
-     pop ctx location ty)
+     pop ctx location ~expected_text ty)
 
 let add_type d ctx ty =
   Array.iteri
@@ -2836,7 +2871,7 @@ let build_initial_env ctx fields =
               ignore
                 (let+@ ty = typeuse ctx.diagnostics ctx.types tu in
                  Sequence.register ctx.functions id
-                   (ty, typeuse_functype_or_empty ctx.types tu))
+                   (ty, typeuse_functype ctx.types tu))
           | Memory lim ->
               limits ctx "memory" lim max_memory_size;
               Sequence.register ctx.memories id lim.desc
@@ -2850,8 +2885,8 @@ let build_initial_env ctx fields =
               let>@ ty = globaltype ctx.diagnostics ctx.types ty in
               Sequence.register ctx.globals id (ty, src)
           | Tag tu ->
-              let sign = typeuse_functype_or_empty ctx.types tu in
               let>@ ty = typeuse ctx.diagnostics ctx.types tu in
+              let sign = typeuse_functype ctx.types tu in
               (*
               (match (Types.get_subtype ctx.subtyping_info ty).typ with
               | Func { results; _ } -> assert (results = [||])
@@ -2859,13 +2894,13 @@ let build_initial_env ctx fields =
 *)
               Sequence.register ctx.tags id (ty, sign))
       | Func { id; typ; instrs; _ } ->
-          let sign = typeuse_functype_or_empty ctx.types typ in
           let>@ ty = typeuse ctx.diagnostics ctx.types typ in
+          let sign = typeuse_functype ctx.types typ in
           Sequence.register ctx.functions id (ty, sign);
           register_typeuses ctx.diagnostics ctx.types instrs
       | Tag { id; typ; exports } ->
-          let sign = typeuse_functype_or_empty ctx.types typ in
           let>@ ty = typeuse ctx.diagnostics ctx.types typ in
+          let sign = typeuse_functype ctx.types typ in
           (*
           (match (Types.get_subtype ctx.subtyping_info ty).typ with
           | Func { results; _ } -> assert (results = [||])
@@ -2963,7 +2998,8 @@ let tables_and_memories ctx fields =
                 Error.non_nullable_table_type ctx.diagnostics
                   ~location:field.info (*ZZZ*)
           | Init_expr e ->
-              constant_expression ctx ~location:field.info (Ref typ.reftype) e
+              constant_expression ctx ~location:field.info ~expected_text:src
+                (Ref typ.reftype) e
           | Init_segment _ -> ());
           Sequence.register ctx.tables id (typ, src);
           register_exports ctx exports
@@ -2977,7 +3013,8 @@ let globals ctx fields =
       | Global { id; typ; init; exports } ->
           let src = typ.typ in
           let>@ typ = globaltype ctx.diagnostics ctx.types typ in
-          constant_expression ctx ~location:field.info typ.typ init;
+          constant_expression ctx ~location:field.info ~expected_text:src
+            typ.typ init;
           Sequence.register ctx.globals id (typ, src);
           register_exports ctx exports
       | String_global { id; _ } ->
@@ -2987,7 +3024,8 @@ let globals ctx fields =
               typ = Ref { nullable = false; typ = Type (string ctx.types) };
             }
           in
-          Sequence.register ctx.globals (Some id) (typ, text_of_valtype typ.typ)
+          Sequence.register ctx.globals (Some id)
+            (typ, source_valtype ctx.types typ.typ)
       | _ -> ())
     fields
 
@@ -3003,18 +3041,20 @@ let segments ctx fields =
           | Passive -> ()
           | Active (i, e) ->
               let*? limits = Sequence.get ctx.diagnostics ctx.memories i in
+              let aty = address_type_to_valtype limits.address_type in
               constant_expression ctx ~location:field.info
-                (address_type_to_valtype limits.address_type)
-                e);
+                ~expected_text:(text_of_valtype aty) aty e);
           Sequence.register ctx.data id ()
       | Table { typ; init; _ } -> (
           match init with
           | Init_default | Init_expr _ -> ()
           | Init_segment lst ->
+              let src = Ast.Text.Ref typ.reftype in
               let>@ typ = reftype ctx.diagnostics ctx.types typ.reftype in
               List.iter
                 (fun e ->
-                  constant_expression ctx ~location:field.info (Ref typ) e)
+                  constant_expression ctx ~location:field.info
+                    ~expected_text:src (Ref typ) e)
                 lst;
               Sequence.register ctx.elem None typ)
       | Elem { id; typ; init; mode } ->
@@ -3032,13 +3072,14 @@ let segments ctx fields =
                      (Ref tabletype.reftype))
               then
                 Error.elem_segment_type_mismatch ctx.diagnostics
-                  ~location:field.info ~elem_text ~table_text (Ref typ)
-                  (Ref tabletype.reftype);
+                  ~location:field.info ~elem_text ~table_text;
+              let aty = address_type_to_valtype tabletype.limits.address_type in
               constant_expression ctx ~location:field.info
-                (address_type_to_valtype tabletype.limits.address_type)
-                e);
+                ~expected_text:(text_of_valtype aty) aty e);
           List.iter
-            (fun e -> constant_expression ctx ~location:field.info (Ref typ) e)
+            (fun e ->
+              constant_expression ctx ~location:field.info
+                ~expected_text:elem_text (Ref typ) e)
             init;
           Sequence.register ctx.elem id typ
       | _ -> ())
@@ -3058,11 +3099,7 @@ let functions ctx fields =
                 None
           in
           let return_types = func_typ.results in
-          let return_text =
-            match snd (arg_text (typeuse_functype ctx.types typ)) with
-            | Some t -> t
-            | None -> Array.make (Array.length return_types) None
-          in
+          let return_text = snd (arg_text (typeuse_functype ctx.types typ)) in
           let locals = Sequence.make "local" in
           let initialized_locals = ref IntSet.empty in
           let i = ref 0 in
@@ -3084,19 +3121,13 @@ let functions ctx fields =
               (* No inline parameter list: take the parameters' source types
                  from the referenced function type's definition. *)
               let param_text =
-                match fst (arg_text (typeuse_functype ctx.types typ)) with
-                | Some t -> t
-                | None -> Array.make (Array.length func_typ.params) None
+                fst (arg_text (typeuse_functype ctx.types typ))
               in
               Array.iteri
                 (fun j typ ->
                   initialized_locals := IntSet.add !i !initialized_locals;
                   incr i;
-                  let text =
-                    match param_text.(j) with
-                    | Some t -> t
-                    | None -> text_of_valtype typ
-                  in
+                  let text = param_text.(j) in
                   Sequence.register locals None (typ, text))
                 func_typ.params);
           List.iter
@@ -3124,7 +3155,7 @@ let functions ctx fields =
                }
              in
              let* () = instructions ctx instrs in
-             pop_args ctx field.info (*ZZZ*) return_types);
+             pop_args ctx field.info (*ZZZ*) ~text:return_text return_types);
           register_exports ctx exports
       | _ -> ())
     fields
