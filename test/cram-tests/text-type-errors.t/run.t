@@ -264,3 +264,32 @@ nullable reference yields the non-null form named as the source wrote it:
     ·      ^^^^^^^^^^^^^^^
   5 │ 
   [128]
+
+A branch names its target's declared type. A br carrying the wrong value to a
+labelled block:
+
+  $ wax --validate br_target.wat -o out.wat
+  Error: Type mismatch: this instruction expects type (ref $t)
+    but the stack has type i32
+   ──➤  br_target.wat:5:15
+  3 │   (func (result i32)
+  4 │     (block $b (result (ref $t))
+  5 │       (br $b (i32.const 0)))
+    ·               ^^^^^^^^^^^
+  6 │     (drop)
+  7 │     (i32.const 0)))
+  [128]
+
+And a br_on_cast whose cast type does not match the branch target names both —
+the target ($c) and the value it carries ($b):
+
+  $ wax --validate br_on_cast_target.wat -o out.wat
+  Error: Type mismatch: expecting type (ref $c) but got type (ref $b).
+   ──➤  br_on_cast_target.wat:7:8
+  5 │   (func (param (ref $a)) (result i32)
+  6 │     (block $l (result (ref $c))
+  7 │       (br_on_cast $l (ref $a) (ref $b) (local.get 0))
+    ·        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  8 │       (unreachable))
+  9 │     (drop)
+  [128]

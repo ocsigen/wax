@@ -1,0 +1,10 @@
+(module
+  (type $a (sub (struct)))
+  (type $b (sub $a (struct (field i32))))
+  (type $c (struct))
+  (func (param (ref $a)) (result i32)
+    (block $l (result (ref $c))
+      (br_on_cast $l (ref $a) (ref $b) (local.get 0))
+      (unreachable))
+    (drop)
+    (i32.const 0)))

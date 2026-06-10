@@ -876,7 +876,10 @@ type ctx = {
   (* Each local carries the interned type and, when it was declared with an
      inline type, the source type for error messages. *)
   locals : (valtype * Ast.Text.valtype option) Sequence.t;
-  control_types : (string option * valtype array) list;
+  (* Each entry is a branch target: its optional label, the interned types a
+     branch carries to it, and their source types for error messages. *)
+  control_types :
+    (string option * valtype array * Ast.Text.valtype option array) list;
   return_types : valtype array;
   modul : module_context;
   mutable initialized_locals : IntSet.t;
@@ -1258,7 +1261,9 @@ let compare_types ctx ~location ~descr ~provided ~expected =
 let branch_target ctx (idx : Ast.Text.idx) =
   match idx.desc with
   | Num i -> (
-      try Some (snd (List.nth ctx.control_types (Uint32.to_int i)))
+      try
+        let _, params, text = List.nth ctx.control_types (Uint32.to_int i) in
+        Some (params, text)
       with Failure _ ->
         Error.unbound_label ctx.modul.diagnostics ~location:idx.Ast.info idx [];
         None)
@@ -1270,7 +1275,7 @@ let branch_target ctx (idx : Ast.Text.idx) =
               Utils.Spell_check.f
                 (fun f ->
                   List.iter
-                    (fun (id_opt, _) ->
+                    (fun (id_opt, _, _) ->
                       match id_opt with Some id -> f id | None -> ())
                     ctx.control_types)
                 id
@@ -1278,7 +1283,7 @@ let branch_target ctx (idx : Ast.Text.idx) =
             Error.unbound_label ctx.modul.diagnostics ~location:idx.Ast.info idx
               lst;
             None
-        | (Some id', res) :: _ when id = id' -> Some res
+        | (Some id', params, text) :: _ when id = id' -> Some (params, text)
         | _ :: rem -> find rem id
       in
       find ctx.control_types id
@@ -1402,7 +1407,7 @@ let check_resume_table ctx loc ts2 clauses =
           | Some ({ params = ts3; results = ts4 }, _) -> (
               match branch_target ctx label with
               | None -> ()
-              | Some ts' ->
+              | Some (ts', _) ->
                   let n = Array.length ts' in
                   let mismatch () =
                     Error.stack_switching_type_mismatch ctx.modul.diagnostics
@@ -1451,35 +1456,37 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
   | Block { label; typ; block = b } ->
       let*! params, results, ptext, rtext = blocktype ctx typ in
       let* () = pop_args ctx loc ?text:ptext params in
-      block ctx loc label ?ptext ?rtext params results results b;
+      block ctx loc label ?ptext ?rtext ?br_text:rtext params results results b;
       push_results ?text:rtext results
   | Loop { label; typ; block = b } ->
       let*! params, results, ptext, rtext = blocktype ctx typ in
       let* () = pop_args ctx loc ?text:ptext params in
-      block ctx loc label ?ptext ?rtext params results params b;
+      block ctx loc label ?ptext ?rtext ?br_text:ptext params results params b;
       push_results ?text:rtext results
   | If { label; typ; if_block; else_block } ->
       let*! params, results, ptext, rtext = blocktype ctx typ in
       let* () = pop ctx loc I32 in
       let* () = pop_args ctx loc ?text:ptext params in
-      block ctx loc label ?ptext ?rtext params results results if_block.desc;
-      block ctx loc label ?ptext ?rtext params results results else_block.desc;
+      block ctx loc label ?ptext ?rtext ?br_text:rtext params results results
+        if_block.desc;
+      block ctx loc label ?ptext ?rtext ?br_text:rtext params results results
+        else_block.desc;
       push_results ?text:rtext results
   | TryTable { label; typ; block = b; catches } ->
       let*! params, results, ptext, rtext = blocktype ctx typ in
       let* () = pop_args ctx loc ?text:ptext params in
-      block ctx loc label ?ptext ?rtext params results results b;
+      block ctx loc label ?ptext ?rtext ?br_text:rtext params results results b;
       List.iter
         (fun (catch : Ast.Text.catch) ->
           match catch with
           | Catch (tag, label) ->
               let*? args, _ = lookup_tag_type ctx tag in
-              let*? params = branch_target ctx label in
+              let*? params, _ = branch_target ctx label in
               compare_types ctx.modul ~location:loc
                 ~descr:"this exception handler" ~provided:args ~expected:params
           | CatchRef (tag, label) ->
               let*? args, _ = lookup_tag_type ctx tag in
-              let*? params = branch_target ctx label in
+              let*? params, _ = branch_target ctx label in
               let provided =
                 Array.append args [| Ref { nullable = false; typ = Exn } |]
               in
@@ -1487,14 +1494,14 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
                 ~descr:"this exception handler" ~provided ~expected:params
           | CatchAll label ->
               Option.iter
-                (fun params ->
+                (fun (params, _) ->
                   compare_types ctx.modul ~location:loc
                     ~descr:"this exception handler" ~provided:[||]
                     ~expected:params)
                 (branch_target ctx label)
           | CatchAllRef label ->
               Option.iter
-                (fun params ->
+                (fun (params, _) ->
                   compare_types ctx.modul ~location:loc
                     ~descr:"this exception handler"
                     ~provided:[| Ref { nullable = false; typ = Exn } |]
@@ -1505,14 +1512,16 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
   | Try { label; typ; block = b; catches; catch_all } ->
       let*! params, results, ptext, rtext = blocktype ctx typ in
       let* () = pop_args ctx loc ?text:ptext params in
-      block ctx loc label ?ptext ?rtext params results results b;
+      block ctx loc label ?ptext ?rtext ?br_text:rtext params results results b;
       List.iter
         (fun (tag, b) ->
           let*? params', _ = lookup_tag_type ctx tag in
-          block ctx loc label params' results ?rtext results b)
+          block ctx loc label params' results ?rtext ?br_text:rtext results b)
         catches;
       Option.iter
-        (fun b -> block ctx loc label ?ptext ?rtext params results results b)
+        (fun b ->
+          block ctx loc label ?ptext ?rtext ?br_text:rtext params results
+            results b)
         catch_all;
       push_results ?text:rtext results
   | Unreachable -> unreachable
@@ -1652,28 +1661,28 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       in
       push_results ts21
   | Br idx ->
-      let*! params = branch_target ctx idx in
-      let* () = pop_args ctx loc params in
+      let*! params, ptext = branch_target ctx idx in
+      let* () = pop_args ctx loc ~text:ptext params in
       unreachable
   | Br_if idx ->
       let* () = pop ctx loc I32 in
-      let*! params = branch_target ctx idx in
-      let* () = pop_args ctx loc params in
-      push_results params
+      let*! params, ptext = branch_target ctx idx in
+      let* () = pop_args ctx loc ~text:ptext params in
+      push_results ~text:ptext params
   | Br_table (lst, idx) ->
       let* () = pop ctx loc I32 in
-      let*! params = branch_target ctx idx in
+      let*! params, _ = branch_target ctx idx in
       let len = Array.length params in
       let* () =
         with_current_stack (fun st ->
             List.iter
               (fun idx' ->
-                let*? params = branch_target ctx idx' in
+                let*? params, ptext = branch_target ctx idx' in
                 let len' = Array.length params in
                 if len <> len' then
                   Error.branch_parameter_count_mismatch ctx.modul.diagnostics
                     ~location:loc idx len idx' len'
-                else ignore (pop_args ctx loc params st))
+                else ignore (pop_args ctx loc ~text:ptext params st))
               (idx :: lst))
       in
       unreachable
@@ -1682,9 +1691,9 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       match ty with
       | None -> return ()
       | Some (Ref { nullable = _; typ }) ->
-          let*! params = branch_target ctx idx in
-          let* () = pop_args ctx loc params in
-          let* () = push_results params in
+          let*! params, ptext = branch_target ctx idx in
+          let* () = pop_args ctx loc ~text:ptext params in
+          let* () = push_results ~text:ptext params in
           push ?text:(non_null_text text) (Some loc)
             (Ref { nullable = false; typ })
       | Some ty ->
@@ -1699,9 +1708,9 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           let* () =
             push ?text:(non_null_text text) None (Ref { nullable = false; typ })
           in
-          let*! params = branch_target ctx idx in
-          let* () = pop_args ctx loc params in
-          let* () = push_results params in
+          let*! params, ptext = branch_target ctx idx in
+          let* () = pop_args ctx loc ~text:ptext params in
+          let* () = push_results ~text:ptext params in
           let* _ = pop_any ctx loc in
           return ()
       | Some ty ->
@@ -1709,7 +1718,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
             ~src_loc:loc' ty;
           unreachable)
   | Br_on_cast (idx, ty1, ty2) ->
-      let src_ty1 = Ast.Text.Ref ty1 in
+      let src_ty1 = Ast.Text.Ref ty1 and src_ty2 = Ast.Text.Ref ty2 in
       (* The value that falls through has [ty1]'s heap type, non-null once a
          nullable [ty2] has consumed the null case. *)
       let src_diff =
@@ -1726,10 +1735,10 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       if not (Types.val_subtype ctx.modul.subtyping_info (Ref ty2) (Ref ty1))
       then Error.br_cast_type_mismatch ctx.modul.diagnostics ~location:loc;
       let* () = pop ctx loc ~expected_text:src_ty1 (Ref ty1) in
-      let* () = push None (Ref ty2) in
-      let*! params = branch_target ctx idx in
-      let* () = pop_args ctx loc params in
-      let* () = push_results params in
+      let* () = push ~text:src_ty2 None (Ref ty2) in
+      let*! params, ptext = branch_target ctx idx in
+      let* () = pop_args ctx loc ~text:ptext params in
+      let* () = push_results ~text:ptext params in
       let* _ = pop_any ctx loc in
       push ~text:src_diff (Some loc) (Ref (diff_ref_type ty1 ty2))
   | Br_on_cast_fail (idx, ty1, ty2) ->
@@ -1750,9 +1759,9 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       then Error.br_cast_type_mismatch ctx.modul.diagnostics ~location:loc;
       let* () = pop ctx loc ~expected_text:src_ty1 (Ref ty1) in
       let* () = push ~text:src_diff None (Ref (diff_ref_type ty1 ty2)) in
-      let*! params = branch_target ctx idx in
-      let* () = pop_args ctx loc params in
-      let* () = push_results params in
+      let*! params, ptext = branch_target ctx idx in
+      let* () = pop_args ctx loc ~text:ptext params in
+      let* () = push_results ~text:ptext params in
       let* _ = pop_any ctx loc in
       push ~text:src_ty2 (Some loc) (Ref ty2)
   | Return ->
@@ -2498,15 +2507,20 @@ and instructions ctx l =
       let* () = instruction ctx i in
       instructions ctx r
 
-and block ctx loc label ?ptext ?rtext params results br_params block =
+and block ctx loc label ?ptext ?rtext ?br_text params results br_params block =
   with_empty_stack ctx.modul loc (*ZZZ*)
     (let* () = push_results ?text:ptext params in
+     let br_text =
+       match br_text with
+       | Some t -> t
+       | None -> Array.make (Array.length br_params) None
+     in
      let* () =
        instructions
          {
            ctx with
            control_types =
-             (Option.map (fun l -> l.Ast.desc) label, br_params)
+             (Option.map (fun l -> l.Ast.desc) label, br_params, br_text)
              :: ctx.control_types;
          }
          block
@@ -3011,6 +3025,11 @@ let functions ctx fields =
                 None
           in
           let return_types = func_typ.results in
+          let return_text =
+            match snd (arg_text (typeuse_functype ctx.types typ)) with
+            | Some t -> t
+            | None -> Array.make (Array.length return_types) None
+          in
           let locals = Sequence.make "local" in
           let initialized_locals = ref IntSet.empty in
           let i = ref 0 in
@@ -3051,7 +3070,7 @@ let functions ctx fields =
             (let ctx =
                {
                  locals;
-                 control_types = [ (None, return_types) ];
+                 control_types = [ (None, return_types, return_text) ];
                  return_types;
                  modul = ctx;
                  initialized_locals = !initialized_locals;
