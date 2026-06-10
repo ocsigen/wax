@@ -271,6 +271,18 @@ do (i32) -> i32 {
 }
 ```
 
+Parameters only work when the block stands on its own as a statement, where
+those values come from the operand stack. A block used *inside* an expression
+has no enclosing stack to draw from, so it cannot take parameters. To combine a
+parameterized block's result with other operands, keep the block at statement
+level and pick up its result with a [hole](#holes):
+
+```wax
+x;                        // leaves an i32 on the stack
+do (i32) -> i32 { … };    // a statement: consumes that i32, leaves an i32
+_ + 1;                    // the hole plugs in the block's result
+```
+
 Blocks can be labelled and used as branch targets; see
 [Labels and Branches](#labels-and-branches).
 
@@ -402,6 +414,22 @@ fn divmod(a: i32, b: i32) -> (i32, i32) {
     a %s b;
 }
 ```
+
+### Start Function
+
+A function marked with the `#[start]` attribute runs automatically when the
+module is instantiated. It must take no parameters and return nothing, and a
+module may have at most one:
+
+```wax
+#[start]
+fn init() {
+    // initialization code
+}
+```
+
+(This maps to the WebAssembly `start` field; see
+[Module Fields](./correspondence/module_fields.md#start-attribute).)
 
 ### Function Types
 
