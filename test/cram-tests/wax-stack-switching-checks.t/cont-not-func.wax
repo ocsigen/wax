@@ -1,0 +1,1 @@
+type ct = cont ct;

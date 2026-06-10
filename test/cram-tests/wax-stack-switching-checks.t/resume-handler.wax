@@ -1,0 +1,10 @@
+type ft = fn();
+type ct = cont ft;
+tag foo();
+fn f() {
+    _ =
+        'on_foo: do &ft {
+            resume ct [foo -> 'on_foo](null as &?ct);
+            unreachable;
+        };
+}

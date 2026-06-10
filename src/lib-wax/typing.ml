@@ -354,6 +354,20 @@ module Error = struct
         Format.fprintf f "There is already an export of name %S." name)
       ()
 
+  let invalid_cast_type context ~location =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f
+          "Continuation types cannot be used in a cast instruction.")
+      ()
+
+  let stack_switching_type_mismatch context ~location ~descr =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f
+          "Type mismatch in this stack switching instruction:@ %s." descr)
+      ()
+
   let constant_global_required context ~location =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
@@ -775,6 +789,19 @@ let top_heap_type ctx (t : heaptype) : heaptype option =
       | Struct _ | Array _ -> Any
       | Func _ -> Func
       | Cont _ -> Cont)
+
+(* Whether a heap type belongs to the continuation hierarchy, without reporting
+   an unbound reference (the caller's normal resolution handles that). *)
+let is_cont_heaptype ctx (t : heaptype) =
+  match t with
+  | Cont | NoCont -> true
+  | Type ty -> (
+      match Tbl.find_opt ctx.types ty with
+      | Some x -> ( match (snd x).typ with Cont _ -> true | _ -> false)
+      | None -> false)
+  | Any | Eq | I31 | Struct | Array | None_ | Func | NoFunc | Exn | NoExn
+  | Extern | NoExtern ->
+      false
 
 let diff_ref_type t1 t2 =
   { nullable = t1.nullable && not t2.nullable; typ = t1.typ }
@@ -1292,17 +1319,122 @@ let check_operands ctx l expected =
   if Array.length expected = List.length l then
     List.iter2 (fun i ty -> check_type ctx i ty) l (Array.to_list expected)
 
-(* Resolve the references in a [resume]/[resume_throw] handler table. The full
-   structural checks are performed on the compiled wasm by [Wasm.Validation]. *)
-let check_resume_handlers ctx handlers =
+(* The function type wrapped by a continuation type, given its (canonical) heap
+   type. Mirrors [Validation.cont_functype_of_heaptype]. *)
+let cont_functype ctx (h : Internal.heaptype) : Internal.functype option =
+  match h with
+  | Type ty -> (
+      match (Wasm.Types.get_subtype ctx.subtyping_info ty).typ with
+      | Cont ft -> (
+          match (Wasm.Types.get_subtype ctx.subtyping_info ft).typ with
+          | Func f -> Some f
+          | Struct _ | Array _ | Cont _ -> None)
+      | Func _ | Struct _ | Array _ -> None)
+  | _ -> None
+
+(* [ft] matches [ft'] when their arities agree and [ft']'s parameters /
+   [ft]'s results are respectively subtypes. Mirrors [Validation.functype_matches]. *)
+let functype_matches info (ft : Internal.functype) (ft' : Internal.functype) =
+  Array.length ft.params = Array.length ft'.params
+  && Array.length ft.results = Array.length ft'.results
+  && Array.for_all Fun.id
+       (Array.mapi
+          (fun i p -> Wasm.Types.val_subtype info ft'.params.(i) p)
+          ft.params)
+  && Array.for_all Fun.id
+       (Array.mapi
+          (fun i r -> Wasm.Types.val_subtype info r ft'.results.(i))
+          ft.results)
+
+(* A source function type with its parameter and result types resolved to their
+   canonical (Binary) form, for structural comparison with [functype_matches]. *)
+let internal_functype ctx (ft : functype) : Internal.functype option =
+  let*@ params =
+    array_map_opt
+      (fun (_, t) ->
+        let+@ iv = internalize_valtype ctx t in
+        iv.internal)
+      ft.params
+  in
+  let+@ results =
+    array_map_opt
+      (fun t ->
+        let+@ iv = internalize_valtype ctx t in
+        iv.internal)
+      ft.results
+  in
+  ({ params; results } : Internal.functype)
+
+(* Validate a [resume]/[resume_throw] handler table. [result_types] is the
+   result type of the resumed continuation. Mirrors
+   [Validation.check_resume_table]. *)
+let check_resume_handlers ctx ~result_types handlers =
+  let info = ctx.subtyping_info in
+  let internal_of_inferred ty =
+    match UnionFind.find ty with
+    | Valtype { internal; _ } -> Some internal
+    | _ -> None
+  in
+  let to_internal arr =
+    array_map_opt
+      (fun typ ->
+        let+@ iv = internalize_valtype ctx typ in
+        iv.internal)
+      arr
+  in
   List.iter
     (fun handler ->
       match handler with
-      | OnLabel (tag, label) ->
-          ignore (Tbl.find ctx.diagnostics ctx.tags tag : functype option);
-          ignore (branch_target ctx label)
-      | OnSwitch tag ->
-          ignore (Tbl.find ctx.diagnostics ctx.tags tag : functype option))
+      | OnLabel (tag, label) -> (
+          match Tbl.find ctx.diagnostics ctx.tags tag with
+          | None -> ignore (branch_target ctx label)
+          | Some { params = ts3; results = ts4 } ->
+              let ts' = branch_target ctx label in
+              let mismatch () =
+                Error.stack_switching_type_mismatch ctx.diagnostics
+                  ~location:label.info
+                  ~descr:
+                    "this handler must take the tag's parameters followed by a \
+                     continuation of the remaining result type"
+              in
+              (* The handler label receives the tag's parameters followed by a
+                 continuation of type [cont (ts4 -> result_types)]. *)
+              let n = Array.length ts' in
+              if n <> Array.length ts3 + 1 then mismatch ()
+              else begin
+                Array.iteri
+                  (fun i (_, t) ->
+                    match
+                      (internalize_valtype ctx t, internal_of_inferred ts'.(i))
+                    with
+                    | Some it, Some it' ->
+                        if not (Wasm.Types.val_subtype info it.internal it')
+                        then mismatch ()
+                    | _ -> ())
+                  ts3;
+                match internal_of_inferred ts'.(n - 1) with
+                | Some (Ref { typ = ht; _ }) -> (
+                    match cont_functype ctx ht with
+                    | Some ft' -> (
+                        match (to_internal ts4, to_internal result_types) with
+                        | Some params, Some results ->
+                            if
+                              not
+                                (functype_matches info { params; results } ft')
+                            then mismatch ()
+                        | _ -> ())
+                    | None -> mismatch ())
+                | _ -> mismatch ()
+              end)
+      | OnSwitch tag -> (
+          match Tbl.find ctx.diagnostics ctx.tags tag with
+          | None -> ()
+          | Some { params = ts3; _ } ->
+              if Array.length ts3 <> 0 then
+                Error.stack_switching_type_mismatch ctx.diagnostics
+                  ~location:tag.info
+                  ~descr:"the tag of a 'switch' handler must take no parameters"
+          ))
     handlers
 
 let rec count_holes i =
@@ -2598,6 +2730,15 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
             Some (Ref { nullable; typ = Type (anon_function_type ctx sign) })
         | Signedtype _ -> None
       in
+      (* A continuation type cannot be the target of a cast instruction. A null
+         cast to a nullable reference lowers to [ref.null] (no cast) and is
+         allowed; every other form lowers to a [ref.cast]. *)
+      (match target_valtype with
+      | Some (Ref { typ; nullable })
+        when is_cont_heaptype ctx typ && not (nullable && is_null_initializer i')
+        ->
+          Error.invalid_cast_type ctx.diagnostics ~location:i.info
+      | _ -> ());
       let*! ty =
         internalize ctx
           (match target_valtype with
@@ -2635,6 +2776,8 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       else return_expression i (Cast (i', typ)) ty
   | Test (i, ty) ->
       let* i' = instruction ctx i in
+      if is_cont_heaptype ctx ty.typ then
+        Error.invalid_cast_type ctx.diagnostics ~location:i.info;
       (let>@ typ = top_heap_type ctx ty.typ in
        let>@ typ = internalize ctx (Ref { nullable = true; typ }) in
        check_type ctx i' typ);
@@ -3258,6 +3401,8 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
         (Array.sub params 0 (Array.length params - 1))
   | Br_on_cast (label, ty, i') ->
       let* i' = instruction ctx i' in
+      if is_cont_heaptype ctx ty.typ then
+        Error.invalid_cast_type ctx.diagnostics ~location:i.info;
       let typ', types = split_on_last_type i' in
       let params = branch_target ctx label in
       (let>@ ityp = reftype ctx.diagnostics ctx.type_context ty in
@@ -3285,6 +3430,8 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
         (Array.append (Array.sub params 0 (Array.length params - 1)) [| typ2 |])
   | Br_on_cast_fail (label, ty, i') ->
       let* i' = instruction ctx i' in
+      if is_cont_heaptype ctx ty.typ then
+        Error.invalid_cast_type ctx.diagnostics ~location:i.info;
       let typ', types = split_on_last_type i' in
       let*! ityp = reftype ctx.diagnostics ctx.type_context ty in
       let*! typ1, typ2 =
@@ -3349,11 +3496,34 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       let*! src_sig = lookup_func_type ctx src_inner in
       let*! dst_inner = lookup_cont_inner ctx dst in
       let*! dst_sig = lookup_func_type ctx dst_inner in
-      (let n = Array.length src_sig.params - Array.length dst_sig.params in
+      let np = Array.length src_sig.params - Array.length dst_sig.params in
+      (* The destination continuation must be [src] with its leading [np]
+         parameters bound away: the unbound tail and the results must match.
+         Mirrors [Validation]'s [ContBind] check. *)
+      (if np < 0 then
+         Error.stack_switching_type_mismatch ctx.diagnostics ~location:i.info
+           ~descr:
+             "the resulting continuation takes more parameters than the \
+              original one"
+       else
+         let>@ src_ft = internal_functype ctx src_sig in
+         let>@ dst_ft = internal_functype ctx dst_sig in
+         let ts12 = Array.sub src_ft.params np (Array.length dst_ft.params) in
+         if
+           not
+             (functype_matches ctx.subtyping_info
+                { params = ts12; results = src_ft.results }
+                dst_ft)
+         then
+           Error.stack_switching_type_mismatch ctx.diagnostics ~location:i.info
+             ~descr:
+               "the bound parameters and results do not match between the two \
+                continuation types");
+      (let n = max 0 np in
        let>@ bound =
          array_map_opt
            (fun (_, typ) -> internalize ctx typ)
-           (Array.sub src_sig.params 0 (max 0 n))
+           (Array.sub src_sig.params 0 n)
        in
        let>@ srcref =
          internalize ctx (Ref { nullable = true; typ = Type src })
@@ -3381,7 +3551,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
        in
        let>@ cref = internalize ctx (Ref { nullable = true; typ = Type ct }) in
        check_operands ctx l' (Array.append ptypes [| cref |]));
-      check_resume_handlers ctx handlers;
+      check_resume_handlers ctx ~result_types:sg.results handlers;
       let*! rtypes = array_map_opt (internalize ctx) sg.results in
       return_statement i (Resume (ct, handlers, l')) rtypes
   | ResumeThrow (ct, tag, handlers, l) ->
@@ -3394,7 +3564,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
        in
        let>@ cref = internalize ctx (Ref { nullable = true; typ = Type ct }) in
        check_operands ctx l' (Array.append ptypes [| cref |]));
-      check_resume_handlers ctx handlers;
+      check_resume_handlers ctx ~result_types:sg.results handlers;
       let*! rtypes = array_map_opt (internalize ctx) sg.results in
       return_statement i (ResumeThrow (ct, tag, handlers, l')) rtypes
   | ResumeThrowRef (ct, handlers, l) ->
@@ -3404,7 +3574,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       (let>@ exnref = internalize ctx (Ref { nullable = true; typ = Exn }) in
        let>@ cref = internalize ctx (Ref { nullable = true; typ = Type ct }) in
        check_operands ctx l' [| exnref; cref |]);
-      check_resume_handlers ctx handlers;
+      check_resume_handlers ctx ~result_types:sg.results handlers;
       let*! rtypes = array_map_opt (internalize ctx) sg.results in
       return_statement i (ResumeThrowRef (ct, handlers, l')) rtypes
   | Switch (ct, tag, l) ->
@@ -3731,6 +3901,15 @@ let check_type_definitions ctx =
   (*ZZZ In-order check? *)
   Tbl.iter ctx.types (fun _ (i, (st : subtype)) ->
       let ty = Wasm.Types.get_subtype ctx.subtyping_info i in
+      (* A continuation type must wrap a function type. Point at the wrapped
+         type as the source wrote it. *)
+      (match (ty.typ, st.typ) with
+      | Cont ft, Cont src_ref -> (
+          match (Wasm.Types.get_subtype ctx.subtyping_info ft).typ with
+          | Func _ -> ()
+          | Struct _ | Array _ | Cont _ ->
+              Error.expected_func_type ctx.diagnostics ~location:src_ref.info)
+      | _ -> ());
       (* Every check below is about the type's relationship to its declared
          supertype, so the supertype reference [sup] is the place to point. *)
       match (ty.supertype, st.supertype) with

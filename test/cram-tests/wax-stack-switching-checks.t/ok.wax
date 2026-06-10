@@ -1,0 +1,3 @@
+type ft = fn();
+type ct = cont ft;
+fn f(c: &?ct) { _ = c; let d: &?ct = null as &?ct; _ = d; }
