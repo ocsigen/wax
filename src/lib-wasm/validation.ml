@@ -1316,7 +1316,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
   | ContNew x ->
       let*! ty, ft, _ = lookup_cont_type ctx x in
       let* () = pop ctx loc (Ref { nullable = true; typ = Type ft }) in
-      push_results [| Ref { nullable = false; typ = Type ty } |]
+      push (Some loc) (Ref { nullable = false; typ = Type ty })
   | ContBind (x, y) ->
       let*! xty, _, ftx = lookup_cont_type ctx x in
       let*! yty, _, fty = lookup_cont_type ctx y in
@@ -1340,7 +1340,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           pop_args ctx loc
             (Array.append ts11 [| Ref { nullable = true; typ = Type xty } |])
         in
-        push_results [| Ref { nullable = false; typ = Type yty } |]
+        push (Some loc) (Ref { nullable = false; typ = Type yty })
       end
   | Suspend x ->
       let*! { params = ts1; results = ts2 } = lookup_tag_signature ctx x in
