@@ -306,6 +306,48 @@ module Error = struct
         Format.fprintf f "Only constant expressions are allowed here.")
       ()
 
+  let memory_offset_too_large context ~location max_offset =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f "The memory offset should be less than 0x%Lx."
+          (Utils.Uint64.to_int64 max_offset))
+      ()
+
+  let memory_align_too_large context ~location natural =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f
+          "The memory alignment is larger than the natural alignment %d."
+          natural)
+      ()
+
+  let bad_memory_align context ~location =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f "The memory alignment should be a power of two.")
+      ()
+
+  let invalid_lane_index context ~location max_lane =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f "The lane index should be less than %d." max_lane)
+      ()
+
+  let limit_too_large context ~location kind max =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f
+          "The %s size is too large. It should be less than 0x%Lx." kind
+          (Utils.Uint64.to_int64 max))
+      ()
+
+  let limit_mismatch context ~location kind =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f
+          "The %s maximum size should be larger than the minimal size." kind)
+      ()
+
   let constant_global_required context ~location =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
@@ -1538,6 +1580,71 @@ let mem_store_method meth =
 
 let is_mem_method meth = mem_load_result meth <> None || mem_store_method meth
 
+(* Natural alignment (in bytes) of a scalar memory access. *)
+let mem_natural_align meth =
+  match meth with
+  | "load8" | "store8" -> 1
+  | "load16" | "store16" -> 2
+  | "load32" | "store32" | "loadf32" | "storef32" -> 4
+  | "load64" | "store64" | "loadf64" | "storef64" -> 8
+  | _ -> 1
+
+(* The unsigned integer denoted by a constant literal argument, if any. *)
+let int_literal a =
+  match a.Ast.desc with
+  | Ast.Int s -> ( try Some (Utils.Uint64.of_string s) with _ -> None)
+  | _ -> None
+
+let max_offset_i32_exclusive = Utils.Uint64.of_string "0x1_0000_0000" (* 2^32 *)
+let max_align = Utils.Uint64.of_int 16
+
+(* Validate the trailing [align]/[offset] literals of a memory access against
+   the access's natural alignment (in bytes) and the address type. Mirrors
+   [Validation.check_memarg]. [align] and [offset] are the corresponding
+   argument expressions, when present. *)
+let check_memarg ctx ~address_type ~natural ~align ~offset =
+  (let>@ offset = offset in
+   let>@ o = int_literal offset in
+   if
+     address_type = `I32 && Utils.Uint64.compare o max_offset_i32_exclusive >= 0
+   then
+     Error.memory_offset_too_large ctx.diagnostics ~location:(snd offset.info)
+       max_offset_i32_exclusive);
+  let>@ align = align in
+  let>@ a = int_literal align in
+  if Utils.Uint64.compare a max_align > 0 || Utils.Uint64.to_int a > natural
+  then
+    Error.memory_align_too_large ctx.diagnostics ~location:(snd align.info)
+      natural
+  else
+    match Utils.Uint64.to_int a with
+    | 1 | 2 | 4 | 8 | 16 -> ()
+    | _ -> Error.bad_memory_align ctx.diagnostics ~location:(snd align.info)
+
+let max_memory_size = function
+  | `I32 -> Utils.Uint64.of_int 65536
+  | `I64 -> Utils.Uint64.of_string "0x1_0000_0000_0000"
+
+let max_table_size = function
+  | `I32 -> Utils.Uint64.of_string "0xffff_ffff"
+  | `I64 -> Utils.Uint64.of_string "0xffff_ffff_ffff_ffff"
+
+(* Validate a memory/table size limit. Mirrors [Validation.limits]. *)
+let check_limits ctx ~location kind address_type limits max_fn =
+  match limits with
+  | None -> ()
+  | Some (mi, ma) -> (
+      let max = max_fn address_type in
+      match ma with
+      | None ->
+          if Utils.Uint64.compare mi max > 0 then
+            Error.limit_too_large ctx.diagnostics ~location kind max
+      | Some ma ->
+          if Utils.Uint64.compare mi ma > 0 then
+            Error.limit_mismatch ctx.diagnostics ~location kind;
+          if Utils.Uint64.compare ma max > 0 then
+            Error.limit_too_large ctx.diagnostics ~location kind max)
+
 (* Management methods shared by memories and tables, dispatched by the receiver
    (a memory or table name). *)
 let is_mgmt_method m =
@@ -1883,6 +1990,10 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                 Error.constant_expression_required ctx.diagnostics
                   ~location:(snd a.info))
         args';
+      check_memarg ctx ~address_type
+        ~natural:(mem_natural_align meth.desc)
+        ~align:(List.nth_opt args' nstack)
+        ~offset:(List.nth_opt args' (nstack + 1));
       let result =
         if is_store then [||]
         else
@@ -1935,6 +2046,16 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                 Error.constant_expression_required ctx.diagnostics
                   ~location:(snd a.info))
         args';
+      (if mop.m_lane then
+         let>@ lane = List.nth_opt args' nstack in
+         let>@ l = int_literal lane in
+         let max_lane = 16 / mop.m_nat_align in
+         if Utils.Uint64.to_int l >= max_lane then
+           Error.invalid_lane_index ctx.diagnostics ~location:(snd lane.info)
+             max_lane);
+      check_memarg ctx ~address_type ~natural:mop.m_nat_align
+        ~align:(List.nth_opt args' (nstack + nimm))
+        ~offset:(List.nth_opt args' (nstack + nimm + 1));
       let result =
         match mop.m_result with Some t -> [| simd_cell t |] | None -> [||]
       in
@@ -2320,14 +2441,25 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
         Error.value_count_mismatch ctx.diagnostics ~location:i.info
           ~expected:(nimm + nstack_extra) ~provided:nargs;
       check_type ctx recv' (simd_cell (List.hd op.operands));
+      let lane_bound =
+        match op.imm with
+        | No_imm -> None
+        | Lane shape -> Some (Simd.lane_count shape)
+        | Shuffle -> Some 32
+      in
       List.iteri
         (fun k a ->
-          if k < nimm then
-            match a.desc with
+          if k < nimm then (
+            (match a.desc with
             | Ast.Int _ -> ()
             | _ ->
                 Error.constant_expression_required ctx.diagnostics
-                  ~location:(snd a.info)
+                  ~location:(snd a.info));
+            let>@ bound = lane_bound in
+            let>@ l = int_literal a in
+            if Utils.Uint64.to_int l >= bound then
+              Error.invalid_lane_index ctx.diagnostics ~location:(snd a.info)
+                bound)
           else
             let operand = 1 + (k - nimm) in
             if operand < List.length op.operands then
@@ -3738,6 +3870,8 @@ let rec globals ctx fields =
     (fun field ->
       match field.desc with
       | Memory ({ address_type; data; _ } as m) ->
+          check_limits ctx ~location:field.info "memory" address_type m.limits
+            max_memory_size;
           let data =
             List.map
               (fun (d : _ Ast.memdata) ->
@@ -3803,6 +3937,8 @@ let rec globals ctx fields =
           in
           After { field with desc = Elem { e with mode; init } }
       | Table ({ reftype = rt; init; _ } as t) ->
+          check_limits ctx ~location:field.info "table" t.address_type t.limits
+            max_table_size;
           let init =
             Option.map
               (fun e ->

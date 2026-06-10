@@ -1,0 +1,1 @@
+memory m: i32 [0]; fn f() { _ = m.load8(0, 2) as i32_s; }
