@@ -63,6 +63,23 @@ Table size limits are checked too:
   2 │ 
   [123]
 
+A module may not export the same name twice:
+
+  $ wax check dup-export.wax
+  Error: There is already an export of name "a".
+   ──➤  dup-export.wax:2:12
+  1 │ #[export = "a"]
+  2 │ #[export = "a"]
+    ·            ^^^
+  3 │ fn a() {}
+  4 │ 
+  [123]
+
+Exporting one item under several distinct names, or different items under
+distinct names, is fine:
+
+  $ wax check distinct-exports.wax
+
 A module that respects all of these passes silently:
 
   $ wax check ok.wax

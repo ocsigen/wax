@@ -348,6 +348,12 @@ module Error = struct
           "The %s maximum size should be larger than the minimal size." kind)
       ()
 
+  let duplicated_export context ~location name =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f "There is already an export of name %S." name)
+      ()
+
   let constant_global_required context ~location =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
@@ -4137,6 +4143,21 @@ let fundecl ctx name typ sign =
             (i, name.desc)
         | None -> assert false (*ZZZ*))
 
+let field_attributes (field : _ modulefield) =
+  match field with
+  | Fundecl { attributes; _ }
+  | Func { attributes; _ }
+  | GlobalDecl { attributes; _ }
+  | Global { attributes; _ }
+  | Tag { attributes; _ }
+  | Memory { attributes; _ }
+  | Data { attributes; _ }
+  | Table { attributes; _ }
+  | Elem { attributes; _ }
+  | Group { attributes; _ } ->
+      attributes
+  | Type _ | Conditional _ -> []
+
 let type_configuration ~simplify diagnostics fields =
   let cond = ref Cond.true_ in
   let cond_env = Cond.create () in
@@ -4239,6 +4260,23 @@ let type_configuration ~simplify diagnostics fields =
           Tbl.add diagnostics ctx.tables name (address_type, rt)
       | Elem { name; reftype = rt; _ } -> Tbl.add diagnostics ctx.elems name rt
       | Group _ | Conditional _ | Type _ | Global _ -> ())
+    fields;
+  (* A module may not export the same name twice. Each [#[export = "..."]]
+     attribute is one export; [walk_fields] descends into groups and resolves
+     conditionals per branch, so exports in mutually exclusive branches do not
+     clash. *)
+  let exports = Hashtbl.create 16 in
+  walk_fields
+    (fun field ->
+      List.iter
+        (fun (key, (v : _ instr)) ->
+          match (key, v.desc) with
+          | "export", String (_, name) ->
+              if Hashtbl.mem exports name then
+                Error.duplicated_export diagnostics ~location:v.info name
+              else Hashtbl.add exports name ()
+          | _ -> ())
+        (field_attributes field.desc))
     fields;
   let _ : _ option =
     let name = Ast.no_loc "<string>" in

@@ -1,0 +1,2 @@
+#[export = "a"] #[export = "b"] fn f() {}
+#[export = "c"] memory m: i32 [1];
