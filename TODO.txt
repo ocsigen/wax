@@ -12,6 +12,8 @@ Improvements
 - More robust support for conditional compilation
 - Use plain attributes for conditional compilation, rather than the current hack
   where #[if( and #[else] are token
+- warning for unused variables (never read)
+
 
 =====================
 
