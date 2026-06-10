@@ -927,11 +927,18 @@ let lookup_tag_type ctx tag =
   match (Types.get_subtype ctx.subtyping_info ty).typ with
   | Struct _ | Array _ | Cont _ ->
       Error.not_function_type ctx.diagnostics ~location:tag.info;
-      ([||], None)
+      ([||], [||])
   | Func { params; results } ->
       if results <> [||] then
         Error.exception_tag_with_results ctx.diagnostics ~location:tag.info;
-      (params, fst (arg_text sign))
+      let ptext =
+        match fst (arg_text sign) with
+        | Some t -> t
+        (* No explicit signature: name the parameters from the corresponding
+           function type. *)
+        | None -> Array.map (fun v -> Some (text_of_valtype v)) params
+      in
+      (params, ptext)
 
 (* Full function type of a tag, used for stack-switching suspension tags whose
    results may be non-empty (unlike exception tags). *)
@@ -939,10 +946,22 @@ let lookup_tag_signature ctx tag =
   let ctx = ctx.modul in
   let+@ ty, sign = Sequence.get ctx.diagnostics ctx.tags tag in
   match (Types.get_subtype ctx.subtyping_info ty).typ with
-  | Func ft -> (ft, sign)
+  | Func ft ->
+      let src : Ast.Text.functype =
+        match sign with
+        | Some s -> s
+        (* No explicit signature: reconstruct it from the corresponding
+           function type. *)
+        | None ->
+            {
+              params = Array.map (fun v -> (None, text_of_valtype v)) ft.params;
+              results = Array.map text_of_valtype ft.results;
+            }
+      in
+      (ft, src)
   | Struct _ | Array _ | Cont _ ->
       Error.not_function_type ctx.diagnostics ~location:tag.info;
-      ({ params = [||]; results = [||] }, None)
+      ({ params = [||]; results = [||] }, { params = [||]; results = [||] })
 
 (* Resolve a continuation type index to its own index and the function type it
    wraps. Emits an error if the type is not a continuation type. *)
@@ -1479,7 +1498,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
               let*? args, atext = lookup_tag_type ctx tag in
               let*? params, ptext = branch_target ctx label in
               compare_types ctx.modul ~location:loc
-                ~descr:"this exception handler" ?provided_text:atext
+                ~descr:"this exception handler" ~provided_text:atext
                 ~expected_text:ptext ~provided:args ~expected:params ()
           | CatchRef (tag, label) ->
               let*? args, atext = lookup_tag_type ctx tag in
@@ -1487,11 +1506,9 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
               let provided =
                 Array.append args [| Ref { nullable = false; typ = Exn } |]
               in
-              let provided_text =
-                Option.map (fun t -> Array.append t [| None |]) atext
-              in
+              let provided_text = Array.append atext [| None |] in
               compare_types ctx.modul ~location:loc
-                ~descr:"this exception handler" ?provided_text
+                ~descr:"this exception handler" ~provided_text
                 ~expected_text:ptext ~provided ~expected:params ()
           | CatchAll label ->
               Option.iter
@@ -1529,7 +1546,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
   | Nop -> return ()
   | Throw idx ->
       let*! params, ptext = lookup_tag_type ctx idx in
-      let* () = pop_args ctx loc ?text:ptext params in
+      let* () = pop_args ctx loc ~text:ptext params in
       unreachable
   | ThrowRef ->
       let* () = pop ctx loc (Ref { nullable = true; typ = Exn }) in
@@ -1584,7 +1601,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let*! { params = ts1; results = ts2 }, sign =
         lookup_tag_signature ctx x
       in
-      let ptext, rtext = arg_text sign in
+      let ptext, rtext = functype_arg_text sign in
       let* () = pop_args ctx loc ?text:ptext ts1 in
       push_results ?text:rtext ts2
   | Resume (x, clauses) ->
