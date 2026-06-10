@@ -11,6 +11,12 @@ module StringMap = Map.Make (String)
    reported as a located diagnostic. *)
 exception Numeric_ref_in_conditional of Wasm.Ast.location
 
+(* Raised when an index or label reference resolves to nothing — it is out of
+   range, or names an undeclared entity. This only happens on a module that
+   validation would reject (with an "unknown ..." error), so conversion gives up
+   rather than inventing a target. *)
+exception Unresolved_reference
+
 module Sequence = struct
   type t = {
     index_mapping : (Uint32.t, string) Hashtbl.t;
@@ -87,11 +93,16 @@ module Sequence = struct
       idx with
       desc =
         (match idx.desc with
-        | Num n ->
+        | Num n -> (
             if seq.forbid_numeric then
               raise (Numeric_ref_in_conditional idx.Ast.info);
-            Hashtbl.find seq.index_mapping n
-        | Id id -> Hashtbl.find seq.label_mapping id);
+            match Hashtbl.find_opt seq.index_mapping n with
+            | Some name -> name
+            | None -> raise Unresolved_reference)
+        | Id id -> (
+            match Hashtbl.find_opt seq.label_mapping id with
+            | Some name -> name
+            | None -> raise Unresolved_reference));
     }
 
   let get_current seq =
@@ -133,8 +144,14 @@ module LabelStack = struct
   let get st (idx : Src.idx) =
     let name, used =
       match idx.desc with
-      | Num n -> snd (List.nth st.stack (Uint32.to_int n))
-      | Id id -> List.assoc (Some id) st.stack
+      | Num n -> (
+          match List.nth_opt st.stack (Uint32.to_int n) with
+          | Some entry -> snd entry
+          | None -> raise Unresolved_reference)
+      | Id id -> (
+          match List.assoc_opt (Some id) st.stack with
+          | Some entry -> entry
+          | None -> raise Unresolved_reference)
     in
     used := true;
     { idx with desc = name }
@@ -450,12 +467,18 @@ let tag_arity ctx t =
 
 let label_arity ctx (idx : Src.idx) =
   match idx.desc with
-  | Id id ->
-      snd
-        (List.find
-           (fun e -> match e with Some id', _ -> id = id' | _ -> false)
-           ctx.label_arities)
-  | Num i -> snd (List.nth ctx.label_arities (Uint32.to_int i))
+  | Id id -> (
+      match
+        List.find_opt
+          (fun e -> match e with Some id', _ -> id = id' | _ -> false)
+          ctx.label_arities
+      with
+      | Some e -> snd e
+      | None -> raise Unresolved_reference)
+  | Num i -> (
+      match List.nth_opt ctx.label_arities (Uint32.to_int i) with
+      | Some e -> snd e
+      | None -> raise Unresolved_reference)
 
 (* (parameter count, result count) of the function type a continuation type
    wraps. *)

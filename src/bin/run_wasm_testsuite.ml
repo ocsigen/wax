@@ -411,6 +411,16 @@ let runtest filename _ =
             (Utils.Diagnostic.collector ())
             wasm_m
         with
+        | exception
+            (( Conversion.From_wasm.Unresolved_reference
+             | Utils.Diagnostic.Aborted ) as e) -> (
+            (* On an invalid module, conversion legitimately gives up: an
+               out-of-range / undeclared reference, or a type-invalid construct
+               it cannot represent (which it reports and aborts on). Surface it
+               only if it somehow happens on a module that should convert. *)
+            match status with
+            | `Invalid _ -> ()
+            | `Valid -> prerr_endline (Printexc.to_string e))
         | exception e ->
             prerr_endline (Printexc.to_string e);
             if false then Format.eprintf "@[%a@]@." (print_module ~color) wasm_m

@@ -1,3 +1,9 @@
+exception Unresolved_reference
+(** Raised by {!module_} when an index or label reference resolves to nothing
+    (it is out of range or names an undeclared entity). Such a module would be
+    rejected by validation; conversion gives up rather than inventing a target.
+*)
+
 val module_ :
   ?strict_constants:bool ->
   Utils.Diagnostic.context ->
