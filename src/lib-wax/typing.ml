@@ -277,6 +277,30 @@ module Error = struct
         Format.fprintf f "A module can have at most one start function.")
       ()
 
+  let unknown_annotation context ~location name =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () -> Format.fprintf f "Unknown annotation %S." name)
+      ()
+
+  let annotation_value_mismatch context ~location name expected =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f "The %s annotation expects %s." name expected)
+      ()
+
+  let annotation_not_allowed context ~location name =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f "The %s annotation is not allowed here." name)
+      ()
+
+  let declaration_without_import context ~location =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f
+          "This declaration has no definition; it needs an import annotation.")
+      ()
+
   let final_supertype context ~location name =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
@@ -4495,6 +4519,63 @@ let field_attributes (field : _ modulefield) =
       attributes
   | Type _ | Conditional _ -> []
 
+(* Validate the annotations on a module field: reject unknown ones, check the
+   value shape of [export] / [import] / [start], allow each only where it is
+   meaningful, and require an [import] on a body-less declaration. *)
+let check_attributes diagnostics field =
+  let export_ok, import_ok, start_ok =
+    match field.desc with
+    | Func _ -> (true, false, true)
+    | Fundecl _ | GlobalDecl _ -> (true, true, false)
+    | Global _ -> (true, false, false)
+    | Memory _ | Table _ | Tag _ -> (true, true, false)
+    | Data _ | Elem _ | Type _ | Group _ | Conditional _ -> (false, false, false)
+  in
+  List.iter
+    (fun (name, value) ->
+      let location = match value with Some v -> v.info | None -> field.info in
+      match name with
+      | "export" ->
+          (match value with
+          | Some { desc = String _; _ } -> ()
+          | _ ->
+              Error.annotation_value_mismatch diagnostics ~location "export"
+                "a string");
+          if not export_ok then
+            Error.annotation_not_allowed diagnostics ~location "export"
+      | "import" ->
+          (match value with
+          | Some
+              {
+                desc =
+                  Sequence [ { desc = String _; _ }; { desc = String _; _ } ];
+                _;
+              } ->
+              ()
+          | _ ->
+              Error.annotation_value_mismatch diagnostics ~location "import"
+                "a module and name, e.g. (\"env\", \"f\")");
+          if not import_ok then
+            Error.annotation_not_allowed diagnostics ~location "import"
+      | "start" ->
+          (match value with
+          | None -> ()
+          | Some _ ->
+              Error.annotation_value_mismatch diagnostics ~location "start"
+                "no value");
+          if not start_ok then
+            Error.annotation_not_allowed diagnostics ~location "start"
+      | _ -> Error.unknown_annotation diagnostics ~location name)
+    (field_attributes field.desc);
+  match field.desc with
+  | (Fundecl _ | GlobalDecl _)
+    when not
+           (List.exists
+              (fun (n, _) -> n = "import")
+              (field_attributes field.desc)) ->
+      Error.declaration_without_import diagnostics ~location:field.info
+  | _ -> ()
+
 let type_configuration ~simplify diagnostics fields =
   let cond = ref Cond.true_ in
   let cond_env = Cond.create () in
@@ -4608,6 +4689,7 @@ let type_configuration ~simplify diagnostics fields =
   let start_seen = ref false in
   walk_fields
     (fun field ->
+      check_attributes diagnostics field;
       List.iter
         (fun (key, v) ->
           match (key, Option.map (fun (v : _ instr) -> v.desc) v) with

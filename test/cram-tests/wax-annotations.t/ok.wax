@@ -1,0 +1,3 @@
+#[import = ("env", "f")]
+#[export = "f"]
+fn f();
