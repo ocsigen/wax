@@ -1316,7 +1316,12 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   | RefIsNull ->
       let* e = Stack.pop in
       Stack.push 1 (with_loc (UnOp (Not, e)))
-  | Select _ ->
+  | Select tys ->
+      (* The Wax [?:] carries no result type, but resolve the annotation (if
+         any) so an out-of-range type reference is still caught. *)
+      Option.iter
+        (List.iter (fun t -> ignore (valtype ctx t : Ast.valtype)))
+        tys;
       let* cond = Stack.pop in
       let* e2 = Stack.pop in
       let* e1 = Stack.pop in
