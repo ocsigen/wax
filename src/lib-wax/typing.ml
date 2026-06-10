@@ -554,18 +554,22 @@ let array_mapi_opt f arr =
     Some result
   with Short_circuit -> None
 
+(* Report any parameter name used more than once in a signature. *)
+let check_unique_param_names d params =
+  ignore
+    (Array.fold_left
+       (fun s (name_opt, _) ->
+         match name_opt with
+         | None -> s
+         | Some name ->
+             if StringSet.mem name.desc s then
+               Error.duplicated_parameter d ~location:name.info name;
+             StringSet.add name.desc s)
+       StringSet.empty params
+      : StringSet.t)
+
 let functype d ctx { params; results } =
-  let _ : StringSet.t =
-    Array.fold_left
-      (fun s (name_opt, _) ->
-        match name_opt with
-        | None -> s
-        | Some name ->
-            if StringSet.mem name.desc s then
-              Error.duplicated_parameter d ~location:name.info name;
-            StringSet.add name.desc s)
-      StringSet.empty params
-  in
+  check_unique_param_names d params;
   let*@ params = array_map_opt (fun (_, ty) -> valtype d ctx ty) params in
   let+@ results = array_map_opt (fun ty -> valtype d ctx ty) results in
   { Internal.params; results }
@@ -4353,8 +4357,8 @@ let rec functions ctx fields =
           Some f)
     fields
 
-let funsig _ctx sign =
-  (*ZZZ Check signature (unique names) *)
+let funsig ctx sign =
+  check_unique_param_names ctx.diagnostics sign.params;
   sign
 
 let fundecl ctx name typ sign =
@@ -4370,15 +4374,13 @@ let fundecl ctx name typ sign =
         | Some sign ->
             let name = { name with desc = "<func:" ^ name.desc ^ ">" } in
             let+@ i =
+              (* [add_type] runs the [functype] converter, which already checks
+                 parameter-name uniqueness, so [sign] needs no separate
+                 [funsig] pass here (that would report duplicates twice). *)
               add_type ctx.diagnostics ctx.type_context
                 [|
                   Ast.no_loc
-                    ( name,
-                      {
-                        supertype = None;
-                        typ = Func (funsig ctx sign);
-                        final = true;
-                      } );
+                    (name, { supertype = None; typ = Func sign; final = true });
                 |]
             in
             (i, name.desc)
