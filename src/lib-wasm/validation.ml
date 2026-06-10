@@ -606,9 +606,9 @@ type type_context = {
      so [$a] is named with [$a] even when a structurally-equal [$b] shares its
      global index. *)
   index_mapping :
-    (Uint32.t, int * (string * int) list * Ast.Text.comptype option) Hashtbl.t;
+    (Uint32.t, int * (string * int) list * Ast.Text.comptype) Hashtbl.t;
   label_mapping :
-    (string, int * (string * int) list * Ast.Text.comptype option) Hashtbl.t;
+    (string, int * (string * int) list * Ast.Text.comptype) Hashtbl.t;
   (* For each type definition, keyed by its text-level index: its source index
      node (its name when it has one, else its numeric index, carrying the
      definition's location), and — for a continuation type — the source
@@ -628,7 +628,7 @@ let reference_comptype tc (idx : Ast.Text.idx) =
     | Num x -> Hashtbl.find_opt tc.index_mapping x
     | Id id -> Hashtbl.find_opt tc.label_mapping id
   in
-  match entry with Some (_, _, c) -> c | None -> None
+  match entry with Some (_, _, c) -> Some c | None -> None
 
 (* The source function type a reference resolves to, when it names one. *)
 let reference_functype tc idx =
@@ -2615,13 +2615,16 @@ let constant_expression ctx ~location ty expr =
 let add_type d ctx ty =
   Array.iteri
     (fun i e ->
-      let label = fst e.Ast.desc in
+      let label, (sub : Ast.Text.subtype) = e.Ast.desc in
+      (* These forward references are placeholders during the rec group's own
+         resolution and are replaced (or dropped) below; the composite type is
+         not consulted meanwhile, but carrying it keeps the field total. *)
       Hashtbl.replace ctx.index_mapping
         (Uint32.of_int (ctx.last_index + i))
-        (lnot i, [], None);
+        (lnot i, [], sub.typ);
       Option.iter
         (fun label ->
-          Hashtbl.replace ctx.label_mapping label.Ast.desc (lnot i, [], None))
+          Hashtbl.replace ctx.label_mapping label.Ast.desc (lnot i, [], sub.typ))
         label)
     ty;
   match rectype d ctx ty with
@@ -2653,7 +2656,7 @@ let add_type d ctx ty =
           in
           Hashtbl.replace ctx.index_mapping
             (Uint32.of_int (ctx.last_index + i))
-            (i' + i, fields, Some typ.typ);
+            (i' + i, fields, typ.typ);
           let def_idx =
             let desc =
               match label with
@@ -2671,7 +2674,7 @@ let add_type d ctx ty =
           Option.iter
             (fun label ->
               Hashtbl.replace ctx.label_mapping label.Ast.desc
-                (i' + i, fields, Some typ.typ))
+                (i' + i, fields, typ.typ))
             label)
         ty;
       ctx.last_index <- ctx.last_index + Array.length ty
@@ -2769,7 +2772,7 @@ let collect_implicit_types d ctx fields =
     if Types.last_index ctx.types > before then (
       Hashtbl.replace ctx.index_mapping
         (Uint32.of_int ctx.last_index)
-        (idx, [], Some (Func sign));
+        (idx, [], Func sign);
       ctx.last_index <- ctx.last_index + 1)
   in
   let rec collect_instrs l = List.iter collect_instr l
