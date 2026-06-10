@@ -110,3 +110,30 @@ A br_on_cast whose operand is not a reference names the cast's source type:
   6 │       (unreachable))
   7 │     (drop)
   [128]
+
+The source type even reaches *components* of a named type: a struct.get names
+the field's declared type, recovered from the stored source definition:
+
+  $ wax --validate struct_field.wat -o out.wat
+  Error: Type mismatch: this instruction expects type i32
+    but the stack has type (ref $inner)
+   ──➤  struct_field.wat:5:6
+  3 │   (type $outer (struct (field (ref $inner))))
+  4 │   (func (param (ref $outer)) (result i32)
+  5 │     (struct.get $outer 0 (local.get 0))))
+    ·      ^^^^^^^^^^^^^^^^^^^
+  6 │ 
+  [128]
+
+An array.set names the element's declared type:
+
+  $ wax --validate array_elem.wat -o out.wat
+  Error: Type mismatch: this instruction expects type (ref $elem)
+    but the stack has type i32
+   ──➤  array_elem.wat:5:50
+  3 │   (type $arr (array (mut (ref $elem))))
+  4 │   (func (param (ref $arr))
+  5 │     (array.set $arr (local.get 0) (i32.const 0) (i32.const 1))))
+    ·                                                  ^^^^^^^^^^^
+  6 │ 
+  [128]

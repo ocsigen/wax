@@ -590,6 +590,12 @@ type type_context = {
      check on a type is reported at the exact definition and names types as they
      appear in the source. *)
   type_defs : (int, Ast.Text.idx * Ast.Text.idx option) Hashtbl.t;
+  (* Each type definition's source composite type, keyed by its resolved global
+     index. Lets an error name a component (a struct field, an array element, a
+     function result) as the source wrote it, not just by canonical index.
+     Identical types share a global index, so this picks one source definition;
+     they are structurally equal, so the component types agree. *)
+  source_defs : (int, Ast.Text.comptype) Hashtbl.t;
 }
 
 let get_type_info d ctx (idx : Ast.Text.idx) =
@@ -913,6 +919,23 @@ let result_subtype info (ts : valtype array) (ts' : valtype array) =
   Array.length ts = Array.length ts'
   && Array.for_all Fun.id
        (Array.mapi (fun i t -> Types.val_subtype info t ts'.(i)) ts)
+
+(* Source type of struct field [n] of the composite type with global index
+   [gidx], when the field has a (non-packed) value type and the source
+   definition is known. Packed fields surface as i32, so they get no name. *)
+let source_field_valtype ctx gidx n : Ast.Text.valtype option =
+  match Hashtbl.find_opt ctx.modul.types.source_defs gidx with
+  | Some (Struct fields) when n < Array.length fields -> (
+      let _, (ft : Ast.Text.fieldtype) = fields.(n).Ast.desc in
+      match ft.typ with Value v -> Some v | Packed _ -> None)
+  | _ -> None
+
+(* Source type of the element of the array type with global index [gidx]. *)
+let source_element_valtype ctx gidx : Ast.Text.valtype option =
+  match Hashtbl.find_opt ctx.modul.types.source_defs gidx with
+  | Some (Array (ft : Ast.Text.fieldtype)) -> (
+      match ft.typ with Value v -> Some v | Packed _ -> None)
+  | _ -> None
 
 (* Each stack entry carries the interned type used for subtype checking and,
    when known, the source type the value was written as ([text]). Errors print
@@ -2064,13 +2087,20 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
             Error.unpacked_struct_access ctx.modul.diagnostics ~location:i.info);
       (*ZZZ signage + validate n*)
       ignore signage;
-      push (Some loc) (unpack_type fields.(n))
+      push
+        ?text:(source_field_valtype ctx ty n)
+        (Some loc)
+        (unpack_type fields.(n))
   | StructSet (idx, idx') ->
       let*! ty, field_map, fields = lookup_struct_type ctx idx in
       let*! n = struct_field_index ctx idx' field_map fields in
       if not fields.(n).mut then
         Error.immutable ctx.modul.diagnostics ~location:i.info "field";
-      let* () = pop ctx loc (unpack_type fields.(n)) in
+      let* () =
+        pop ctx loc
+          ?expected_text:(source_field_valtype ctx ty n)
+          (unpack_type fields.(n))
+      in
       pop ctx loc ~expected_text:(ref_null_text idx)
         (Ref { nullable = true; typ = Type ty })
   | ArrayNew idx ->
@@ -2129,12 +2159,16 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
         pop ctx loc ~expected_text:(ref_null_text idx)
           (Ref { nullable = true; typ = Type ty })
       in
-      push (Some loc) (unpack_type field)
+      push ?text:(source_element_valtype ctx ty) (Some loc) (unpack_type field)
   | ArraySet idx ->
       let*! ty, field = lookup_array_type ctx idx in
       if not field.mut then
         Error.immutable ctx.modul.diagnostics ~location:i.info "array";
-      let* () = pop ctx loc (unpack_type field) in
+      let* () =
+        pop ctx loc
+          ?expected_text:(source_element_valtype ctx ty)
+          (unpack_type field)
+      in
       let* () = pop ctx loc I32 in
       pop ctx loc ~expected_text:(ref_null_text idx)
         (Ref { nullable = true; typ = Type ty })
@@ -2436,6 +2470,7 @@ let add_type d ctx ty =
             | Func _ | Struct _ | Array _ -> None
           in
           Hashtbl.replace ctx.type_defs (ctx.last_index + i) (def_idx, cont_ref);
+          Hashtbl.replace ctx.source_defs (i' + i) typ.typ;
           Option.iter
             (fun label ->
               Hashtbl.replace ctx.label_mapping label.Ast.desc (i' + i, fields))
@@ -3043,6 +3078,7 @@ let validate_configuration diagnostics (_, fields) =
       index_mapping = Hashtbl.create 16;
       label_mapping = Hashtbl.create 16;
       type_defs = Hashtbl.create 16;
+      source_defs = Hashtbl.create 16;
     }
   in
   List.iter
