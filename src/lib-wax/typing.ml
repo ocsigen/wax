@@ -258,8 +258,25 @@ module Error = struct
         Format.fprintf f "A %s named %a is already bound." kind print_name x)
       ()
 
-  let unbound_name context ~location kind x =
+  let did_you_mean suggestions =
+    match List.rev suggestions with
+    | [] -> None
+    | last :: rest ->
+        let rest = List.rev rest in
+        let pp f = Format.fprintf f "%s" in
+        Some
+          (fun f () ->
+            Format.fprintf f "Did@ you@ mean@ %a%s%a?"
+              (Format.pp_print_list
+                 ~pp_sep:(fun f () -> Format.fprintf f ",@ ")
+                 pp)
+              rest
+              (if rest = [] then "" else " or ")
+              pp last)
+
+  let unbound_name context ~location ?(suggestions = []) kind x =
     Diagnostic.report context ~location ~severity:Error
+      ?hint:(did_you_mean suggestions)
       ~message:(fun f () ->
         Format.fprintf f "The %s %a is not bound." kind print_name x)
       ()
@@ -443,7 +460,12 @@ module Tbl = struct
     match resolve env x with
     | Some _ as r -> r
     | None ->
-        Error.unbound_name d ~location:x.info env.kind x;
+        let suggestions =
+          Utils.Spell_check.f
+            (fun f -> Hashtbl.iter (fun k _ -> f k) env.tbl)
+            x.desc
+        in
+        Error.unbound_name d ~location:x.info ~suggestions env.kind x;
         None
 
   let find_opt env x = resolve env x
@@ -1022,12 +1044,42 @@ let branch_target ctx label =
   let rec find l label =
     match l with
     | [] ->
-        Error.unbound_name ctx.diagnostics ~location:label.info "label" label;
+        let suggestions =
+          Utils.Spell_check.f
+            (fun f ->
+              List.iter (fun (l, _) -> Option.iter f l) ctx.control_types)
+            label.desc
+        in
+        Error.unbound_name ctx.diagnostics ~location:label.info ~suggestions
+          "label" label;
         [||]
     | (Some label', res) :: _ when label.desc = label' -> res
     | _ :: rem -> find rem label
   in
   find ctx.control_types label
+
+(* Draw "did you mean" suggestions from the namespaces an identifier may
+   legitimately name, which depends on how it is used:
+   - [Get] reads any value, so a local, a global or a function;
+   - [Set] assigns, so a local or a mutable global;
+   - [Tee] only ever targets a local. *)
+let get_suggestions ctx name =
+  Utils.Spell_check.f
+    (fun f ->
+      StringMap.iter (fun k _ -> f k) ctx.locals;
+      Tbl.iter ctx.globals (fun k _ -> f k);
+      Tbl.iter ctx.functions (fun k _ -> f k))
+    name
+
+let set_suggestions ctx name =
+  Utils.Spell_check.f
+    (fun f ->
+      StringMap.iter (fun k _ -> f k) ctx.locals;
+      Tbl.iter ctx.globals (fun k (mut, _) -> if mut then f k))
+    name
+
+let local_suggestions ctx name =
+  Utils.Spell_check.f (fun f -> StringMap.iter (fun k _ -> f k) ctx.locals) name
 
 let check_int_bin_op ctx ~location typ1 typ2 =
   (match (UnionFind.find typ1, UnionFind.find typ2) with
@@ -1726,6 +1778,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                          })
                 | None ->
                     Error.unbound_name ctx.diagnostics ~location:idx.info
+                      ~suggestions:(get_suggestions ctx idx.desc)
                       "variable" idx;
                     UnionFind.make Unknown))
       in
@@ -1749,6 +1802,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                   Error.not_assignable ctx.diagnostics ~location:idx.info idx
               | None ->
                   Error.unbound_name ctx.diagnostics ~location:idx.info
+                    ~suggestions:(set_suggestions ctx idx.desc)
                     "variable" idx)));
       return_statement i (Set (Some idx, i')) [||]
   | Tee (idx, i') ->
@@ -1767,8 +1821,11 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                     Error.not_assignable ctx.diagnostics ~location:idx.info idx
                 | None ->
                     Error.unbound_name ctx.diagnostics ~location:idx.info
+                      ~suggestions:(local_suggestions ctx idx.desc)
                       "variable" idx));
-            UnionFind.make Unknown
+            (* No assignable target: recover with the operand's own type rather
+               than [Unknown], which [check_type] cannot match against. *)
+            expression_type ctx i'
       in
       check_type ctx i' ty;
       return_expression i (Tee (idx, i')) ty
@@ -3697,8 +3754,13 @@ let rec globals ctx fields =
                   match Tbl.find_opt ctx.memories mem with
                   | Some (_, at) -> at
                   | None ->
+                      let suggestions =
+                        Utils.Spell_check.f
+                          (fun f -> Tbl.iter ctx.memories (fun k _ -> f k))
+                          mem.desc
+                      in
                       Error.unbound_name ctx.diagnostics ~location:mem.info
-                        "memory" mem;
+                        ~suggestions "memory" mem;
                       `I32
                 in
                 Active (mem, type_data_offset ctx address_type off)
@@ -3714,8 +3776,13 @@ let rec globals ctx fields =
                   match Tbl.find_opt ctx.tables tab with
                   | Some (at, _) -> at
                   | None ->
+                      let suggestions =
+                        Utils.Spell_check.f
+                          (fun f -> Tbl.iter ctx.tables (fun k _ -> f k))
+                          tab.desc
+                      in
                       Error.unbound_name ctx.diagnostics ~location:tab.info
-                        "table" tab;
+                        ~suggestions "table" tab;
                       `I32
                 in
                 EActive (tab, type_data_offset ctx address_type off)

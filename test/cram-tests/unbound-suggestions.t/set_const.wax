@@ -1,0 +1,5 @@
+const limit: i32 = 0;
+
+fn f() {
+    limt = 1;
+}

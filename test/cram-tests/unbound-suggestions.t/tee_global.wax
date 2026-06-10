@@ -1,0 +1,5 @@
+let counter: i32 = 0;
+
+fn f() -> i32 {
+    (countr := 1) + 0;
+}

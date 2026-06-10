@@ -1,0 +1,6 @@
+type vec = [mut i32];
+
+fn f(p: &vec) -> i32 {
+    let q: &vec = (p as &veec);
+    q.length();
+}
