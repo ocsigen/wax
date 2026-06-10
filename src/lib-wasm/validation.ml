@@ -92,6 +92,37 @@ let print_text_valtype f (ty : Ast.Text.valtype) =
         Format.fprintf f "@[<1>(ref@ null@ %a)@]" print_text_heaptype typ
       else Format.fprintf f "@[<1>(ref@ %a)@]" print_text_heaptype typ
 
+(* Reconstruct a source type from an interned one, naming an indexed type by its
+   canonical index. Used as the source type of a pushed value when no truer
+   reference is available, so every concrete stack value carries a source type
+   (as on the Wax side, where an inferred type bundles both forms). *)
+let text_of_heaptype (h : heaptype) : Ast.Text.heaptype =
+  match h with
+  | Func -> Func
+  | NoFunc -> NoFunc
+  | Exn -> Exn
+  | NoExn -> NoExn
+  | Cont -> Cont
+  | NoCont -> NoCont
+  | Extern -> Extern
+  | NoExtern -> NoExtern
+  | Any -> Any
+  | Eq -> Eq
+  | I31 -> I31
+  | Struct -> Struct
+  | Array -> Array
+  | None_ -> None_
+  | Type i -> Type (Ast.no_loc (Ast.Text.Num (Uint32.of_int i)))
+
+let text_of_valtype (ty : valtype) : Ast.Text.valtype =
+  match ty with
+  | I32 -> I32
+  | I64 -> I64
+  | F32 -> F32
+  | F64 -> F64
+  | V128 -> V128
+  | Ref { nullable; typ } -> Ref { nullable; typ = text_of_heaptype typ }
+
 module Error = struct
   open Utils
 
@@ -983,20 +1014,21 @@ let source_element_valtype ctx idx : Ast.Text.valtype option =
       match ft.typ with Value v -> Some v | Packed _ -> None)
   | _ -> None
 
-(* Each stack entry carries the interned type used for subtype checking and,
-   when known, the source type the value was written as ([text]). Errors print
-   [text] in preference to the interned form, which would show a canonical
-   index instead of the source's [$name]. *)
+(* Each concrete stack entry pairs the interned type used for subtype checking
+   with the source type the value was written as, mirroring the Wax side's
+   [inferred_valtype]. The source type is always present: a push that does not
+   supply one reconstructs it from the interned type (naming an indexed type by
+   its canonical index). The [valtype] is wrapped in [option] only to leave the
+   bottom (polymorphic) entry of an unreachable stack untyped. *)
 type stack =
   | Unreachable
   | Empty
-  | Cons of
-      Ast.location option * valtype option * Ast.Text.valtype option * stack
+  | Cons of Ast.location option * (valtype * Ast.Text.valtype) option * stack
 
 let pop_any ctx loc st =
   match st with
   | Unreachable -> (Unreachable, (None, None))
-  | Cons (loc, ty, _text, r) -> (r, (ty, loc))
+  | Cons (loc, ty, r) -> (r, (Option.map fst ty, loc))
   | Empty ->
       Error.empty_stack ctx.modul.diagnostics ~location:loc;
       (st, (None, None))
@@ -1004,24 +1036,28 @@ let pop_any ctx loc st =
 let pop ctx loc ?expected_text ty st =
   match st with
   | Unreachable -> (Unreachable, ())
-  | Cons (_, None, _, r) -> (r, ())
-  | Cons (location, Some ty', text, r) ->
+  | Cons (_, None, r) -> (r, ())
+  | Cons (location, Some (ty', text), r) ->
       let ok = Types.val_subtype ctx.modul.subtyping_info ty' ty in
       (if not ok then
          match location with
          | Some location ->
              Error.instruction_type_mismatch ctx.modul.diagnostics ~location
-               ?provided_text:text ?expected_text ty' ty
+               ~provided_text:text ?expected_text ty' ty
          | None ->
              Error.type_mismatch ctx.modul.diagnostics ~location:loc
-               ?provided_text:text ?expected_text ty' ty);
+               ~provided_text:text ?expected_text ty' ty);
       (r, ())
   | Empty ->
       Error.empty_stack ctx.modul.diagnostics ~location:loc;
       (Unreachable, ())
 
-let push_poly loc ty st = (Cons (Some loc, ty, None, st), ())
-let push ?text loc ty st = (Cons (loc, Some ty, text, st), ())
+let push_poly loc ty st =
+  (Cons (Some loc, Option.map (fun t -> (t, text_of_valtype t)) ty, st), ())
+
+let push ?text loc ty st =
+  let text = match text with Some t -> t | None -> text_of_valtype ty in
+  (Cons (loc, Some (ty, text), st), ())
 
 (* The source rendering of a reference to the named type [idx], used as the
    [text] form of a value an instruction pushes ([ref_text], non-null) or
@@ -1153,15 +1189,10 @@ let rec output_stack ~full f st =
   match st with
   | Empty -> ()
   | Unreachable -> if full then Format.fprintf f "@ unreachable"
-  | Cons (_, ty, text, st) ->
-      (match text with
-      | Some text -> Format.fprintf f "@ %a" print_text_valtype text
-      | None ->
-          Format.fprintf f "@ %a"
-            (Format.pp_print_option
-               ~none:(fun f _ -> Format.fprintf f "bot")
-               print_valtype)
-            ty);
+  | Cons (_, ty, st) ->
+      (match ty with
+      | Some (_, text) -> Format.fprintf f "@ %a" print_text_valtype text
+      | None -> Format.fprintf f "@ bot");
       output_stack ~full f st
 
 let print_stack st =
@@ -1628,6 +1659,12 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           unreachable)
   | Br_on_cast (idx, ty1, ty2) ->
       let src_ty1 = Ast.Text.Ref ty1 in
+      (* The value that falls through has [ty1]'s heap type, non-null once a
+         nullable [ty2] has consumed the null case. *)
+      let src_diff =
+        Ast.Text.Ref
+          { nullable = ty1.nullable && not ty2.nullable; typ = ty1.typ }
+      in
       let*! ty1 = reftype ctx.modul.diagnostics ctx.modul.types ty1 in
       let*! ty2 = reftype ctx.modul.diagnostics ctx.modul.types ty2 in
       (match (top_heap_type ctx ty1.typ, top_heap_type ctx ty2.typ) with
@@ -1643,9 +1680,15 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let* () = pop_args ctx loc params in
       let* () = push_results params in
       let* _ = pop_any ctx loc in
-      push (Some loc) (Ref (diff_ref_type ty1 ty2))
+      push ~text:src_diff (Some loc) (Ref (diff_ref_type ty1 ty2))
   | Br_on_cast_fail (idx, ty1, ty2) ->
       let src_ty1 = Ast.Text.Ref ty1 and src_ty2 = Ast.Text.Ref ty2 in
+      (* The value sent to the branch has [ty1]'s heap type, non-null once a
+         nullable [ty2] has consumed the null case. *)
+      let src_diff =
+        Ast.Text.Ref
+          { nullable = ty1.nullable && not ty2.nullable; typ = ty1.typ }
+      in
       let*! ty1 = reftype ctx.modul.diagnostics ctx.modul.types ty1 in
       let*! ty2 = reftype ctx.modul.diagnostics ctx.modul.types ty2 in
       (match (top_heap_type ctx ty1.typ, top_heap_type ctx ty2.typ) with
@@ -1655,7 +1698,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       if not (Types.val_subtype ctx.modul.subtyping_info (Ref ty2) (Ref ty1))
       then Error.br_cast_type_mismatch ctx.modul.diagnostics ~location:loc;
       let* () = pop ctx loc ~expected_text:src_ty1 (Ref ty1) in
-      let* () = push None (Ref (diff_ref_type ty1 ty2)) in
+      let* () = push ~text:src_diff None (Ref (diff_ref_type ty1 ty2)) in
       let*! params = branch_target ctx idx in
       let* () = pop_args ctx loc params in
       let* () = push_results params in
