@@ -359,35 +359,38 @@ let runtest filename _ =
                   Some (status, m, None)))
         lst
   in
-  (* Validation *)
+  (* Validation. The wasm validator is run over every variant (the originals,
+     the modules reparsed from printed text and from the serialized binary),
+     reporting any module that should have been rejected but was not. *)
+  List.iter
+    (fun (status, m, source) ->
+      match (status, m) with
+      | `Valid, m ->
+          if false then Format.eprintf "@[%a@]@." (print_module ~color) m;
+          Utils.Diagnostic.run ~color ~source (fun d -> Wasm.Validation.f d m)
+      | `Invalid reason, m ->
+          let ok =
+            in_child_process ~quiet (fun () ->
+                (* Under [--all-errors], print the spec's expected reason just
+                   before validation reports its own message, so the two can be
+                   compared (validation [exit]s at the first error, so we cannot
+                   capture and check it in the parent the way we do for malformed
+                   binaries). *)
+                if not quiet then Format.eprintf "Expected reason: %s@." reason;
+                Utils.Diagnostic.run ~color ~source (fun d ->
+                    Wasm.Validation.f d m);
+                if false then
+                  Format.printf "@[<2>Result:@ %a@]@." (print_module ~color) m)
+          in
+          if ok then
+            Format.eprintf "@[<2>Validation should have failed (%s):@ %a@]@."
+              reason (print_module ~color) m)
+    (lst @ lst' @ lst'');
+  (* The translation phase keeps every valid variant, but only the original
+     copy of each invalid module: the reparsed variants would just repeat the
+     same wax check. *)
   let lst =
-    List.filter
-      (fun (status, m, source) ->
-        match (status, m) with
-        | `Valid, m ->
-            if false then Format.eprintf "@[%a@]@." (print_module ~color) m;
-            Utils.Diagnostic.run ~color ~source (fun d -> Wasm.Validation.f d m);
-            true
-        | `Invalid reason, m ->
-            let ok =
-              in_child_process ~quiet (fun () ->
-                  (* Under [--all-errors], print the spec's expected reason just
-                     before validation reports its own message, so the two can
-                     be compared (validation [exit]s at the first error, so we
-                     cannot capture and check it in the parent the way we do for
-                     malformed binaries). *)
-                  if not quiet then
-                    Format.eprintf "Expected reason: %s@." reason;
-                  Utils.Diagnostic.run ~color ~source (fun d ->
-                      Wasm.Validation.f d m);
-                  if false then
-                    Format.printf "@[<2>Result:@ %a@]@." (print_module ~color) m)
-            in
-            if ok then
-              Format.eprintf "@[<2>Validation should have failed (%s):@ %a@]@."
-                reason (print_module ~color) m;
-            false)
-      (lst @ lst' @ lst'')
+    lst @ List.filter (fun (status, _, _) -> status = `Valid) lst' @ lst''
   in
   (* Translation to new syntax *)
   let print_wax ~color f m =
@@ -395,7 +398,7 @@ let runtest filename _ =
         Wax.Output.module_ ~color p ~trivia:(Hashtbl.create 0) m)
   in
   List.iter
-    (fun (_, m, source) ->
+    (fun (status, m, source) ->
       if not !wasm_only then
         match
           Conversion.From_wasm.module_ (Utils.Diagnostic.collector ()) m
@@ -403,54 +406,75 @@ let runtest filename _ =
         | exception e ->
             prerr_endline (Printexc.to_string e);
             if false then Format.eprintf "@[%a@]@." (print_module ~color) m
-        | m ->
-            let ok =
-              in_child_process (fun () ->
-                  let _, m =
-                    Utils.Diagnostic.run ~color ~source (fun d ->
-                        Wax.Typing.f d m)
-                  in
-                  let types, m =
-                    Utils.Diagnostic.run ~color ~source (fun d ->
-                        Wax.Typing.f d (Wax.Typing.erase_types m))
-                  in
-                  let m' =
-                    Utils.Diagnostic.run ~color ~source (fun d ->
-                        Conversion.To_wasm.module_ d types m)
-                  in
-                  let ok =
-                    in_child_process (fun () ->
+        | m -> (
+            match status with
+            | `Invalid reason ->
+                (* The wasm module is invalid; after translating it to wax,
+                   printing and reparsing, wax type-checking should reject it
+                   too. *)
+                let text = Format.asprintf "%a@." (print_wax ~color:Never) m in
+                let ok =
+                  in_child_process ~quiet (fun () ->
+                      let m', _ctx =
+                        WaxParser.parse_from_string ~color ~filename text
+                      in
+                      ignore
+                        (Utils.Diagnostic.run ~color ~source:(Some text)
+                           (fun d -> Wax.Typing.f d m')))
+                in
+                if ok then
+                  Format.eprintf
+                    "@[<2>Wax type-checking should have failed (%s):@ %a@]@."
+                    reason (print_wax ~color) m
+            | `Valid ->
+                let ok =
+                  in_child_process (fun () ->
+                      let _, m =
                         Utils.Diagnostic.run ~color ~source (fun d ->
-                            Wasm.Validation.f d m'))
-                  in
-                  if not ok then (
-                    Format.eprintf "@[%a@]@." (print_module ~color) m';
-                    Format.eprintf "@[%a@]@." (print_wax ~color)
-                      (Wax.Typing.erase_types m)))
-            in
-            if not ok then Format.eprintf "@[%a@]@." (print_wax ~color) m;
-            let text = Format.asprintf "%a@." (print_wax ~color:Never) m in
-            let ok =
-              in_child_process (fun () ->
-                  let m', _ctx =
-                    WaxParser.parse_from_string ~color ~filename text
-                  in
-                  if true then
-                    let ok =
-                      in_child_process (fun () ->
-                          ignore
-                            (Utils.Diagnostic.run ~color ~source:(Some text)
-                               (fun d -> Wax.Typing.f d m')))
-                    in
-                    if not ok then
-                      if false then prerr_endline "(after parsing)"
-                      else (
-                        Format.eprintf "@[%a@]@." (print_wax ~color) m';
-                        prerr_endline "===";
-                        Format.eprintf "@[%a@]@." (print_wax ~color) m))
-            in
-            if not ok then
-              if true then prerr_endline "(parsing)" else print_flushed text)
+                            Wax.Typing.f d m)
+                      in
+                      let types, m =
+                        Utils.Diagnostic.run ~color ~source (fun d ->
+                            Wax.Typing.f d (Wax.Typing.erase_types m))
+                      in
+                      let m' =
+                        Utils.Diagnostic.run ~color ~source (fun d ->
+                            Conversion.To_wasm.module_ d types m)
+                      in
+                      let ok =
+                        in_child_process (fun () ->
+                            Utils.Diagnostic.run ~color ~source (fun d ->
+                                Wasm.Validation.f d m'))
+                      in
+                      if not ok then (
+                        Format.eprintf "@[%a@]@." (print_module ~color) m';
+                        Format.eprintf "@[%a@]@." (print_wax ~color)
+                          (Wax.Typing.erase_types m)))
+                in
+                if not ok then Format.eprintf "@[%a@]@." (print_wax ~color) m;
+                let text = Format.asprintf "%a@." (print_wax ~color:Never) m in
+                let ok =
+                  in_child_process (fun () ->
+                      let m', _ctx =
+                        WaxParser.parse_from_string ~color ~filename text
+                      in
+                      if true then
+                        let ok =
+                          in_child_process (fun () ->
+                              ignore
+                                (Utils.Diagnostic.run ~color ~source:(Some text)
+                                   (fun d -> Wax.Typing.f d m')))
+                        in
+                        if not ok then
+                          if false then prerr_endline "(after parsing)"
+                          else (
+                            Format.eprintf "@[%a@]@." (print_wax ~color) m';
+                            prerr_endline "===";
+                            Format.eprintf "@[%a@]@." (print_wax ~color) m))
+                in
+                if not ok then
+                  if true then prerr_endline "(parsing)" else print_flushed text
+            ))
     lst
 
 let output path s =
