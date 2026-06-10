@@ -23,16 +23,31 @@ like [x.min(y)].
   )
 
 
-The old parenthesis-free form is rejected, with an error pointing at the
-parenthesised form to use.
+The old parenthesis-free form is rejected, with an error underlining the
+method name and naming the parenthesised form to use.
 
   $ wax check bare.wax
   Error:
     'sqrt' is an instruction method and must be called with parentheses, as 'sqrt()'.
-   ──➤  bare.wax:2:5
+   ──➤  bare.wax:2:7
   1 │ fn f(x: f64) -> f64 {
   2 │     x.sqrt;
-    ·     ^^^^^^
+    ·       ^^^^
   3 │ }
   4 │ 
+  [123]
+
+This also applies to the array [length] method on a typed reference, where the
+receiver's type resolves to a non-struct definition:
+
+  $ wax check bare_array.wax
+  Error:
+    'length' is an instruction method and must be called with parentheses, as 'length()'.
+   ──➤  bare_array.wax:4:7
+  2 │ 
+  3 │ fn f(v: &vec) -> i32 {
+  4 │     v.length;
+    ·       ^^^^^^
+  5 │ }
+  6 │ 
   [123]

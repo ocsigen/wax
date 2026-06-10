@@ -2511,12 +2511,12 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                 in
                 fieldtype ctx typ
             | Func _ | Array _ | Cont _ ->
-                (*ZZZ Fix location*)
                 if is_unary_method field.desc then
                   Error.method_needs_parentheses ctx.diagnostics
-                    ~location:i.info field.desc
+                    ~location:field.info field.desc
                 else
-                  Error.expected_struct_type ctx.diagnostics ~location:ty.info;
+                  Error.expected_struct_type ctx.diagnostics
+                    ~location:(snd i'.info);
                 None)
         (* Leave an unresolved receiver alone (its own error, if any, is
            reported elsewhere). A name that is an instruction method was likely
@@ -2524,7 +2524,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
            a non-struct type has no fields to find. *)
         | Unknown, _ -> None
         | _ when is_unary_method field.desc ->
-            Error.method_needs_parentheses ctx.diagnostics ~location:i.info
+            Error.method_needs_parentheses ctx.diagnostics ~location:field.info
               field.desc;
             None
         | _ ->

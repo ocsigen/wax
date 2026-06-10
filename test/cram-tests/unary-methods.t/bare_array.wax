@@ -1,0 +1,5 @@
+type vec = [mut i32];
+
+fn f(v: &vec) -> i32 {
+    v.length;
+}
