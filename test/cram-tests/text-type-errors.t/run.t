@@ -69,3 +69,44 @@ A call_ref whose callee operand is not a reference:
     ·                    ^^^^^^^^^^^
   5 │ 
   [128]
+
+The type also rides on values read from declared locals, globals and tables. A
+local.get of a reference local:
+
+  $ wax --validate local_get.wat -o out.wat
+  Error: Type mismatch: this instruction expects type i32
+    but the stack has type (ref $t)
+   ──➤  local_get.wat:4:6
+  2 │   (type $t (struct))
+  3 │   (func (param $p (ref $t)) (result i32)
+  4 │     (local.get $p)))
+    ·      ^^^^^^^^^^^^
+  5 │ 
+  [128]
+
+A global.set with the wrong value type names the global's declared type:
+
+  $ wax --validate global_set.wat -o out.wat
+  Error: Type mismatch: this instruction expects type (ref null $t)
+    but the stack has type i32
+   ──➤  global_set.wat:5:21
+  3 │   (global $g (mut (ref null $t)) (ref.null $t))
+  4 │   (func
+  5 │     (global.set $g (i32.const 0))))
+    ·                     ^^^^^^^^^^^
+  6 │ 
+  [128]
+
+A br_on_cast whose operand is not a reference names the cast's source type:
+
+  $ wax --validate br_on_cast.wat -o out.wat
+  Error: Type mismatch: this instruction expects type (ref $t)
+    but the stack has type i32
+   ──➤  br_on_cast.wat:5:41
+  3 │   (func (result i32)
+  4 │     (block $b (result (ref $t))
+  5 │       (br_on_cast $b (ref $t) (ref $t) (i32.const 0))
+    ·                                         ^^^^^^^^^^^
+  6 │       (unreachable))
+  7 │     (drop)
+  [128]

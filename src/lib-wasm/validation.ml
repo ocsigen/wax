@@ -775,8 +775,8 @@ type module_context = {
   subtyping_info : Types.subtyping_info;
   functions : int Sequence.t;
   memories : limits Sequence.t;
-  tables : Ast.Binary.tabletype Sequence.t;
-  globals : globaltype Sequence.t;
+  tables : (Ast.Binary.tabletype * Ast.Text.valtype option) Sequence.t;
+  globals : (globaltype * Ast.Text.valtype option) Sequence.t;
   tags : int Sequence.t;
   data : unit Sequence.t;
   elem : reftype Sequence.t;
@@ -787,7 +787,9 @@ type module_context = {
 module IntSet = Set.Make (Int)
 
 type ctx = {
-  locals : valtype Sequence.t;
+  (* Each local carries the interned type and, when it was declared with an
+     inline type, the source type for error messages. *)
+  locals : (valtype * Ast.Text.valtype option) Sequence.t;
   control_types : (string option * valtype array) list;
   return_types : valtype array;
   modul : module_context;
@@ -1414,7 +1416,8 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           pop_args ctx loc
             (Array.append ts11 [| Ref { nullable = true; typ = Type xty } |])
         in
-        push (Some loc) (Ref { nullable = false; typ = Type yty })
+        push ~text:(ref_text y) (Some loc)
+          (Ref { nullable = false; typ = Type yty })
       end
   | Suspend x ->
       let*! { params = ts1; results = ts2 } = lookup_tag_signature ctx x in
@@ -1542,6 +1545,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
             ~src_loc:loc' ty;
           unreachable)
   | Br_on_cast (idx, ty1, ty2) ->
+      let src_ty1 = Ast.Text.Ref ty1 in
       let*! ty1 = reftype ctx.modul.diagnostics ctx.modul.types ty1 in
       let*! ty2 = reftype ctx.modul.diagnostics ctx.modul.types ty2 in
       (match (top_heap_type ctx ty1.typ, top_heap_type ctx ty2.typ) with
@@ -1551,7 +1555,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       (* ZZZ Relaxed condition *)
       if not (Types.val_subtype ctx.modul.subtyping_info (Ref ty2) (Ref ty1))
       then Error.br_cast_type_mismatch ctx.modul.diagnostics ~location:loc;
-      let* () = pop ctx loc (Ref ty1) in
+      let* () = pop ctx loc ~expected_text:src_ty1 (Ref ty1) in
       let* () = push None (Ref ty2) in
       let*! params = branch_target ctx idx in
       let* () = pop_args ctx loc params in
@@ -1559,6 +1563,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let* _ = pop_any ctx loc in
       push (Some loc) (Ref (diff_ref_type ty1 ty2))
   | Br_on_cast_fail (idx, ty1, ty2) ->
+      let src_ty1 = Ast.Text.Ref ty1 and src_ty2 = Ast.Text.Ref ty2 in
       let*! ty1 = reftype ctx.modul.diagnostics ctx.modul.types ty1 in
       let*! ty2 = reftype ctx.modul.diagnostics ctx.modul.types ty2 in
       (match (top_heap_type ctx ty1.typ, top_heap_type ctx ty2.typ) with
@@ -1567,13 +1572,13 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       | _ -> ());
       if not (Types.val_subtype ctx.modul.subtyping_info (Ref ty2) (Ref ty1))
       then Error.br_cast_type_mismatch ctx.modul.diagnostics ~location:loc;
-      let* () = pop ctx loc (Ref ty1) in
+      let* () = pop ctx loc ~expected_text:src_ty1 (Ref ty1) in
       let* () = push None (Ref (diff_ref_type ty1 ty2)) in
       let*! params = branch_target ctx idx in
       let* () = pop_args ctx loc params in
       let* () = push_results params in
       let* _ = pop_any ctx loc in
-      push (Some loc) (Ref ty2)
+      push ~text:src_ty2 (Some loc) (Ref ty2)
   | Return ->
       let* () = pop_args ctx loc ctx.return_types in
       unreachable
@@ -1595,7 +1600,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let* () = pop_args ctx loc params in
       push_results results
   | CallIndirect (idx, tu) -> (
-      let*! typ = Sequence.get ctx.modul.diagnostics ctx.modul.tables idx in
+      let*! typ, _ = Sequence.get ctx.modul.diagnostics ctx.modul.tables idx in
       let*! ty = typeuse' ctx.modul.diagnostics ctx.modul.types tu in
       if
         not
@@ -1636,7 +1641,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
         ~provided:results ~expected:ctx.return_types;
       unreachable
   | ReturnCallIndirect (idx, tu) -> (
-      let*! typ = Sequence.get ctx.modul.diagnostics ctx.modul.tables idx in
+      let*! typ, _ = Sequence.get ctx.modul.diagnostics ctx.modul.tables idx in
       let*! ty = typeuse' ctx.modul.diagnostics ctx.modul.types tu in
       if
         not
@@ -1682,32 +1687,37 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
   | Select (Some lst) -> (
       match lst with
       | [ typ ] ->
+          let src_typ = typ in
           let*! typ = valtype ctx.modul.diagnostics ctx.modul.types typ in
           let* () = pop ctx loc I32 in
-          let* () = pop ctx loc typ in
-          let* () = pop ctx loc typ in
-          push (Some loc) typ
+          let* () = pop ctx loc ~expected_text:src_typ typ in
+          let* () = pop ctx loc ~expected_text:src_typ typ in
+          push ~text:src_typ (Some loc) typ
       | _ ->
           Error.select_result_count ctx.modul.diagnostics ~location:loc;
           pop ctx loc I32)
   | LocalGet i ->
-      let*! ty = get_local ctx i in
-      push (Some loc) ty
+      let*! ty, text = get_local ctx i in
+      push ?text (Some loc) ty
   | LocalSet i ->
-      let*! ty = get_local ~initialize:true ctx i in
-      pop ctx loc ty
+      let*! ty, text = get_local ~initialize:true ctx i in
+      pop ctx loc ?expected_text:text ty
   | LocalTee i ->
-      let*! ty = get_local ~initialize:true ctx i in
-      let* () = pop ctx loc ty in
-      push (Some loc) ty
+      let*! ty, text = get_local ~initialize:true ctx i in
+      let* () = pop ctx loc ?expected_text:text ty in
+      push ?text (Some loc) ty
   | GlobalGet idx ->
-      let*! ty = Sequence.get ctx.modul.diagnostics ctx.modul.globals idx in
-      push (Some loc) ty.typ
+      let*! ty, text =
+        Sequence.get ctx.modul.diagnostics ctx.modul.globals idx
+      in
+      push ?text (Some loc) ty.typ
   | GlobalSet idx ->
-      let*! ty = Sequence.get ctx.modul.diagnostics ctx.modul.globals idx in
+      let*! ty, text =
+        Sequence.get ctx.modul.diagnostics ctx.modul.globals idx
+      in
       if not ty.mut then
         Error.immutable_global ctx.modul.diagnostics ~location:loc idx;
-      pop ctx loc ty.typ
+      pop ctx loc ?expected_text:text ty.typ
   | Load (idx, memarg, ty) ->
       let*! limits =
         Sequence.get ctx.modul.diagnostics ctx.modul.memories idx
@@ -1899,33 +1909,41 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let* () = pop ctx loc V128 in
       push (Some loc) V128
   | TableGet idx ->
-      let*! typ = Sequence.get ctx.modul.diagnostics ctx.modul.tables idx in
+      let*! typ, text =
+        Sequence.get ctx.modul.diagnostics ctx.modul.tables idx
+      in
       let addr_ty = address_type_to_valtype typ.limits.address_type in
       let* () = pop ctx loc addr_ty in
-      push (Some loc) (Ref typ.reftype)
+      push ?text (Some loc) (Ref typ.reftype)
   | TableSet idx ->
-      let*! typ = Sequence.get ctx.modul.diagnostics ctx.modul.tables idx in
+      let*! typ, text =
+        Sequence.get ctx.modul.diagnostics ctx.modul.tables idx
+      in
       let addr_ty = address_type_to_valtype typ.limits.address_type in
-      let* () = pop ctx loc (Ref typ.reftype) in
+      let* () = pop ctx loc ?expected_text:text (Ref typ.reftype) in
       pop ctx loc addr_ty
   | TableSize idx ->
-      let*! typ = Sequence.get ctx.modul.diagnostics ctx.modul.tables idx in
+      let*! typ, _ = Sequence.get ctx.modul.diagnostics ctx.modul.tables idx in
       push (Some loc) (address_type_to_valtype typ.limits.address_type)
   | TableGrow idx ->
-      let*! typ = Sequence.get ctx.modul.diagnostics ctx.modul.tables idx in
+      let*! typ, text =
+        Sequence.get ctx.modul.diagnostics ctx.modul.tables idx
+      in
       let addr_ty = address_type_to_valtype typ.limits.address_type in
       let* () = pop ctx loc addr_ty in
-      let* () = pop ctx loc (Ref typ.reftype) in
+      let* () = pop ctx loc ?expected_text:text (Ref typ.reftype) in
       push (Some loc) addr_ty
   | TableFill idx ->
-      let*! typ = Sequence.get ctx.modul.diagnostics ctx.modul.tables idx in
+      let*! typ, text =
+        Sequence.get ctx.modul.diagnostics ctx.modul.tables idx
+      in
       let addr_ty = address_type_to_valtype typ.limits.address_type in
       let* () = pop ctx loc addr_ty in
-      let* () = pop ctx loc (Ref typ.reftype) in
+      let* () = pop ctx loc ?expected_text:text (Ref typ.reftype) in
       pop ctx loc addr_ty
   | TableCopy (idx, idx') ->
-      let*! ty = Sequence.get ctx.modul.diagnostics ctx.modul.tables idx in
-      let*! ty' = Sequence.get ctx.modul.diagnostics ctx.modul.tables idx' in
+      let*! ty, _ = Sequence.get ctx.modul.diagnostics ctx.modul.tables idx in
+      let*! ty', _ = Sequence.get ctx.modul.diagnostics ctx.modul.tables idx' in
       if
         not
           (Types.val_subtype ctx.modul.subtyping_info (Ref ty'.reftype)
@@ -1945,7 +1963,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let* () = pop ctx loc addr_ty' in
       pop ctx loc addr_ty
   | TableInit (idx, idx') ->
-      let*! tabletype =
+      let*! tabletype, _ =
         Sequence.get ctx.modul.diagnostics ctx.modul.tables idx
       in
       let*! typ = Sequence.get ctx.modul.diagnostics ctx.modul.elem idx' in
@@ -2299,7 +2317,7 @@ and block ctx loc label params results br_params block =
 let rec check_constant_instruction ctx (i : _ Ast.Text.instr) =
   match i.desc with
   | GlobalGet idx ->
-      let*? ty = Sequence.get ctx.diagnostics ctx.globals idx in
+      let*? ty, _ = Sequence.get ctx.diagnostics ctx.globals idx in
       if ty.mut then
         Error.non_constant_global ctx.diagnostics ~location:idx.info idx
   | RefFunc i ->
@@ -2578,11 +2596,13 @@ let build_initial_env ctx fields =
               Sequence.register ctx.memories id lim.desc
           | Table typ ->
               limits ctx "table" typ.limits max_table_size;
+              let src = Ast.Text.Ref typ.reftype in
               let>@ typ = tabletype ctx.diagnostics ctx.types typ in
-              Sequence.register ctx.tables id typ
+              Sequence.register ctx.tables id (typ, Some src)
           | Global ty ->
+              let src = ty.typ in
               let>@ ty = globaltype ctx.diagnostics ctx.types ty in
-              Sequence.register ctx.globals id ty
+              Sequence.register ctx.globals id (ty, Some src)
           | Tag tu ->
               let>@ ty = typeuse ctx.diagnostics ctx.types tu in
               (*
@@ -2686,6 +2706,7 @@ let tables_and_memories ctx fields =
           register_exports ctx exports
       | Table { id; typ; init; exports } ->
           limits ctx "table" typ.limits max_table_size;
+          let src = Ast.Text.Ref typ.reftype in
           let>@ typ = tabletype ctx.diagnostics ctx.types typ in
           (match init with
           | Init_default ->
@@ -2695,7 +2716,7 @@ let tables_and_memories ctx fields =
           | Init_expr e ->
               constant_expression ctx ~location:field.info (Ref typ.reftype) e
           | Init_segment _ -> ());
-          Sequence.register ctx.tables id typ;
+          Sequence.register ctx.tables id (typ, Some src);
           register_exports ctx exports
       | _ -> ())
     fields
@@ -2705,9 +2726,10 @@ let globals ctx fields =
     (fun (field : (_ Ast.Text.modulefield, _) Ast.annotated) ->
       match field.desc with
       | Global { id; typ; init; exports } ->
+          let src = typ.typ in
           let>@ typ = globaltype ctx.diagnostics ctx.types typ in
           constant_expression ctx ~location:field.info typ.typ init;
-          Sequence.register ctx.globals id typ;
+          Sequence.register ctx.globals id (typ, Some src);
           register_exports ctx exports
       | String_global { id; _ } ->
           let typ =
@@ -2716,7 +2738,7 @@ let globals ctx fields =
               typ = Ref { nullable = false; typ = Type (string ctx.types) };
             }
           in
-          Sequence.register ctx.globals (Some id) typ
+          Sequence.register ctx.globals (Some id) (typ, None)
       | _ -> ())
     fields
 
@@ -2751,7 +2773,7 @@ let segments ctx fields =
           (match mode with
           | Passive | Declare -> ()
           | Active (i, e) ->
-              let*? tabletype = Sequence.get ctx.diagnostics ctx.tables i in
+              let*? tabletype, _ = Sequence.get ctx.diagnostics ctx.tables i in
               if
                 not
                   (Types.val_subtype ctx.subtyping_info (Ref typ)
@@ -2795,28 +2817,29 @@ let functions ctx fields =
                   Sequence.register locals id
                     (match valtype ctx.diagnostics ctx.types typ with
                     | None ->
-                        (* Dummy value *) Ref { nullable = false; typ = None_ }
-                    | Some typ -> typ))
+                        (* Dummy value *)
+                        (Ref { nullable = false; typ = None_ }, None)
+                    | Some typ' -> (typ', Some typ)))
                 params
           | _ ->
               Array.iter
                 (fun typ ->
                   initialized_locals := IntSet.add !i !initialized_locals;
                   incr i;
-                  Sequence.register locals None typ)
+                  Sequence.register locals None (typ, None))
                 func_typ.params);
           List.iter
             (fun e ->
               let id, typ = e.Ast.desc in
-              let typ =
+              let typ' =
                 match valtype ctx.diagnostics ctx.types typ with
                 | None -> (* Dummy value *) Ref { nullable = true; typ = Any }
                 | Some typ -> typ
               in
-              if is_defaultable typ then
+              if is_defaultable typ' then
                 initialized_locals := IntSet.add !i !initialized_locals;
               incr i;
-              Sequence.register locals id typ)
+              Sequence.register locals id (typ', Some typ))
             locs;
           with_empty_stack ctx field.info (*ZZZ*)
             (let ctx =
