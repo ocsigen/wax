@@ -624,6 +624,17 @@ let typeuse_functype tc (tu_idx, tu_sign) =
   | None -> (
       match tu_idx with Some idx -> reference_functype tc idx | None -> None)
 
+(* Per-element source types for a source function type's params and results, to
+   pass straight to [pop_args]/[push_results]'s [?text]. *)
+let functype_arg_text ({ params; results } : Ast.Text.functype) =
+  ( Some (Array.map (fun (_, v) -> Some v) params),
+    Some (Array.map (fun v -> Some v) results) )
+
+(* Argument/result source types for a call from the callee's source signature
+   ([None] when unknown). *)
+let arg_text sign =
+  match sign with Some ft -> functype_arg_text ft | None -> (None, None)
+
 let get_type_info d ctx (idx : Ast.Text.idx) =
   try
     match idx.desc with
@@ -813,7 +824,9 @@ type module_context = {
   memories : limits Sequence.t;
   tables : (Ast.Binary.tabletype * Ast.Text.valtype option) Sequence.t;
   globals : (globaltype * Ast.Text.valtype option) Sequence.t;
-  tags : int Sequence.t;
+  (* Each tag carries its type's global index and, when declared with an inline
+     signature, that source signature — to name a thrown payload's types. *)
+  tags : (int * Ast.Text.functype option) Sequence.t;
   data : unit Sequence.t;
   elem : reftype Sequence.t;
   exports : (string, unit) Hashtbl.t;
@@ -878,23 +891,25 @@ let lookup_array_type ctx idx =
       Error.expected_array_type ctx.diagnostics ~location:idx.info idx;
       None
 
+(* The parameter types of an exception [tag] and, when known, their source
+   types for naming a thrown payload. *)
 let lookup_tag_type ctx tag =
   let ctx = ctx.modul in
-  let+@ ty = Sequence.get ctx.diagnostics ctx.tags tag in
+  let+@ ty, sign = Sequence.get ctx.diagnostics ctx.tags tag in
   match (Types.get_subtype ctx.subtyping_info ty).typ with
   | Struct _ | Array _ | Cont _ ->
       Error.not_function_type ctx.diagnostics ~location:tag.info;
-      [||]
+      ([||], None)
   | Func { params; results } ->
       if results <> [||] then
         Error.exception_tag_with_results ctx.diagnostics ~location:tag.info;
-      params
+      (params, fst (arg_text sign))
 
 (* Full function type of a tag, used for stack-switching suspension tags whose
    results may be non-empty (unlike exception tags). *)
 let lookup_tag_signature ctx tag =
   let ctx = ctx.modul in
-  let+@ ty = Sequence.get ctx.diagnostics ctx.tags tag in
+  let+@ ty, _ = Sequence.get ctx.diagnostics ctx.tags tag in
   match (Types.get_subtype ctx.subtyping_info ty).typ with
   | Func ft -> ft
   | Struct _ | Array _ | Cont _ ->
@@ -967,17 +982,6 @@ let source_element_valtype ctx idx : Ast.Text.valtype option =
   | Some (Array (ft : Ast.Text.fieldtype)) -> (
       match ft.typ with Value v -> Some v | Packed _ -> None)
   | _ -> None
-
-(* Per-element source types for a source function type's params and results, to
-   pass straight to [pop_args]/[push_results]'s [?text]. *)
-let functype_arg_text ({ params; results } : Ast.Text.functype) =
-  ( Some (Array.map (fun (_, v) -> Some v) params),
-    Some (Array.map (fun v -> Some v) results) )
-
-(* Argument/result source types for a call from the callee's source signature
-   ([None] when unknown). *)
-let arg_text sign =
-  match sign with Some ft -> functype_arg_text ft | None -> (None, None)
 
 (* Each stack entry carries the interned type used for subtype checking and,
    when known, the source type the value was written as ([text]). Errors print
@@ -1409,12 +1413,12 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
         (fun (catch : Ast.Text.catch) ->
           match catch with
           | Catch (tag, label) ->
-              let*? args = lookup_tag_type ctx tag in
+              let*? args, _ = lookup_tag_type ctx tag in
               let*? params = branch_target ctx label in
               compare_types ctx.modul ~location:loc
                 ~descr:"this exception handler" ~provided:args ~expected:params
           | CatchRef (tag, label) ->
-              let*? args = lookup_tag_type ctx tag in
+              let*? args, _ = lookup_tag_type ctx tag in
               let*? params = branch_target ctx label in
               let provided =
                 Array.append args [| Ref { nullable = false; typ = Exn } |]
@@ -1444,7 +1448,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       block ctx loc label ?ptext ?rtext params results results b;
       List.iter
         (fun (tag, b) ->
-          let*? params' = lookup_tag_type ctx tag in
+          let*? params', _ = lookup_tag_type ctx tag in
           block ctx loc label params' results ?rtext results b)
         catches;
       Option.iter
@@ -1454,8 +1458,8 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
   | Unreachable -> unreachable
   | Nop -> return ()
   | Throw idx ->
-      let*! params = lookup_tag_type ctx idx in
-      let* () = pop_args ctx loc params in
+      let*! params, ptext = lookup_tag_type ctx idx in
+      let* () = pop_args ctx loc ?text:ptext params in
       unreachable
   | ThrowRef ->
       let* () = pop ctx loc (Ref { nullable = true; typ = Exn }) in
@@ -2707,19 +2711,21 @@ let build_initial_env ctx fields =
               let>@ ty = globaltype ctx.diagnostics ctx.types ty in
               Sequence.register ctx.globals id (ty, Some src)
           | Tag tu ->
+              let sign = typeuse_functype ctx.types tu in
               let>@ ty = typeuse ctx.diagnostics ctx.types tu in
               (*
               (match (Types.get_subtype ctx.subtyping_info ty).typ with
               | Func { results; _ } -> assert (results = [||])
               | Struct _ | Array _ -> assert false (*ZZZ*));
 *)
-              Sequence.register ctx.tags id ty)
+              Sequence.register ctx.tags id (ty, sign))
       | Func { id; typ; instrs; _ } ->
           let sign = typeuse_functype ctx.types typ in
           let>@ ty = typeuse ctx.diagnostics ctx.types typ in
           Sequence.register ctx.functions id (ty, sign);
           register_typeuses ctx.diagnostics ctx.types instrs
       | Tag { id; typ; exports } ->
+          let sign = typeuse_functype ctx.types typ in
           let>@ ty = typeuse ctx.diagnostics ctx.types typ in
           (*
           (match (Types.get_subtype ctx.subtyping_info ty).typ with
@@ -2727,7 +2733,7 @@ let build_initial_env ctx fields =
           | Struct _ | Array _ -> assert false (*ZZZ*));
 *)
           register_exports ctx exports;
-          Sequence.register ctx.tags id ty
+          Sequence.register ctx.tags id (ty, sign)
       | _ -> ())
     fields
 

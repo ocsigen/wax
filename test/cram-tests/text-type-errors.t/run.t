@@ -210,3 +210,16 @@ leaves the wrong value:
   6 │     (drop)))
   7 │ 
   [128]
+
+A thrown exception payload is named from the tag's declared parameter type:
+
+  $ wax --validate throw_payload.wat -o out.wat
+  Error: Type mismatch: this instruction expects type (ref $t)
+    but the stack has type i32
+   ──➤  throw_payload.wat:5:16
+  3 │   (tag $e (param (ref $t)))
+  4 │   (func
+  5 │     (throw $e (i32.const 0))))
+    ·                ^^^^^^^^^^^
+  6 │ 
+  [128]
