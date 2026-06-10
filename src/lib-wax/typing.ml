@@ -243,6 +243,13 @@ module Error = struct
           "This 'if' must produce a value and so requires an 'else' branch.")
       ()
 
+  let parameterized_block_expression context ~location =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f
+          "A block, loop or if used as an expression cannot take parameters.")
+      ()
+
   let uninitialized_local context ~location name =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
@@ -1956,20 +1963,23 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
   if false then Format.eprintf "%a@." Output.instr i;
   match i.desc with
   | Block { label; typ; block = instrs } ->
-      (*ZZZ Blocks take argument from the stack *)
-      assert (typ.params = [||]);
+      (* An expression-position block draws nothing from a stack, so a parameter
+         type has no source; report it and proceed as if there were none. *)
+      if Array.length typ.params > 0 then
+        Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
       let*! results = array_map_opt (internalize ctx) typ.results in
       let instrs' = block ctx i.info label [||] results results instrs in
       return_statement i (Block { label; typ; block = instrs' }) results
   | Loop { label; typ; block = instrs } ->
-      assert (typ.params = [||]);
+      if Array.length typ.params > 0 then
+        Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
       let*! results = array_map_opt (internalize ctx) typ.results in
       let instrs' = block ctx i.info label [||] results [||] instrs in
       return_statement i (Loop { label; typ; block = instrs' }) results
   | If { label; typ; cond; if_block; else_block } ->
       let* cond' = instruction ctx cond in
-      assert (typ.params = [||]);
-      (*ZZZ*)
+      if Array.length typ.params > 0 then
+        Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
       let*! results = array_map_opt (internalize ctx) typ.results in
       let if_block' =
         {
@@ -2019,7 +2029,8 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
         (If_annotation { cond; then_body = then_body'; else_body = else_body' })
         [||]
   | TryTable { label; typ; block = body; catches } ->
-      assert (typ.params = [||]);
+      if Array.length typ.params > 0 then
+        Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
       let*! results = array_map_opt (internalize ctx) typ.results in
       let body' = block ctx i.info label [||] results results body in
       let check_catch types label =
