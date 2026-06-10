@@ -642,6 +642,15 @@ let typeuse_functype tc (tu_idx, tu_sign) =
   | None -> (
       match tu_idx with Some idx -> reference_functype tc idx | None -> None)
 
+(* The source signature stored for a function or tag. Always present: a valid
+   definition has one (inline or via its type reference); the empty fallback is
+   reached only when the reference is not a function type, an error that is
+   reported before the signature would be shown. *)
+let typeuse_functype_or_empty tc tu : Ast.Text.functype =
+  match typeuse_functype tc tu with
+  | Some ft -> ft
+  | None -> { params = [||]; results = [||] }
+
 (* Per-element source types for a source function type's params and results, to
    pass straight to [pop_args]/[push_results]'s [?text]. *)
 let functype_arg_text ({ params; results } : Ast.Text.functype) =
@@ -840,17 +849,17 @@ type module_context = {
   diagnostics : Utils.Diagnostic.context;
   types : type_context;
   subtyping_info : Types.subtyping_info;
-  (* Each function carries its type's global index and, when it was declared
-     with an inline signature, that source signature — so a call names argument
+  (* Each function carries its type's global index and its source signature
+     (from its declaration, or its referenced type) — so a call names argument
      and result types from the function's own declaration rather than a shared
      (deduplicated) type index that another structurally-equal type may own. *)
-  functions : (int * Ast.Text.functype option) Sequence.t;
+  functions : (int * Ast.Text.functype) Sequence.t;
   memories : limits Sequence.t;
   tables : (Ast.Binary.tabletype * Ast.Text.valtype) Sequence.t;
   globals : (globaltype * Ast.Text.valtype) Sequence.t;
-  (* Each tag carries its type's global index and, when declared with an inline
-     signature, that source signature — to name a thrown payload's types. *)
-  tags : (int * Ast.Text.functype option) Sequence.t;
+  (* Each tag carries its type's global index and its source signature, to name
+     a thrown payload's types. *)
+  tags : (int * Ast.Text.functype) Sequence.t;
   data : unit Sequence.t;
   elem : reftype Sequence.t;
   exports : (string, unit) Hashtbl.t;
@@ -931,14 +940,7 @@ let lookup_tag_type ctx tag =
   | Func { params; results } ->
       if results <> [||] then
         Error.exception_tag_with_results ctx.diagnostics ~location:tag.info;
-      let ptext =
-        match fst (arg_text sign) with
-        | Some t -> t
-        (* No explicit signature: name the parameters from the corresponding
-           function type. *)
-        | None -> Array.map (fun v -> Some (text_of_valtype v)) params
-      in
-      (params, ptext)
+      (params, Array.map (fun (_, v) -> Some v) sign.params)
 
 (* Full function type of a tag, used for stack-switching suspension tags whose
    results may be non-empty (unlike exception tags). *)
@@ -946,19 +948,7 @@ let lookup_tag_signature ctx tag =
   let ctx = ctx.modul in
   let+@ ty, sign = Sequence.get ctx.diagnostics ctx.tags tag in
   match (Types.get_subtype ctx.subtyping_info ty).typ with
-  | Func ft ->
-      let src : Ast.Text.functype =
-        match sign with
-        | Some s -> s
-        (* No explicit signature: reconstruct it from the corresponding
-           function type. *)
-        | None ->
-            {
-              params = Array.map (fun v -> (None, text_of_valtype v)) ft.params;
-              results = Array.map text_of_valtype ft.results;
-            }
-      in
-      (ft, src)
+  | Func ft -> (ft, sign)
   | Struct _ | Array _ | Cont _ ->
       Error.not_function_type ctx.diagnostics ~location:tag.info;
       ({ params = [||]; results = [||] }, { params = [||]; results = [||] })
@@ -1794,7 +1784,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           Error.expected_func_type ctx.modul.diagnostics ~location:loc idx;
           unreachable
       | Func { params; results } ->
-          let ptext, rtext = arg_text sign in
+          let ptext, rtext = functype_arg_text sign in
           let* () = pop_args ctx loc ?text:ptext params in
           push_results ?text:rtext results)
   | CallRef idx ->
@@ -1838,7 +1828,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           Error.expected_func_type ctx.modul.diagnostics ~location:loc idx;
           unreachable
       | Func { params; results } ->
-          let ptext, rtext = arg_text sign in
+          let ptext, rtext = functype_arg_text sign in
           let* () = pop_args ctx loc ?text:ptext params in
           compare_types ctx.modul ~location:loc ~descr:"this tail call"
             ?provided_text:rtext ~expected_text:ctx.return_text
@@ -2846,7 +2836,7 @@ let build_initial_env ctx fields =
               ignore
                 (let+@ ty = typeuse ctx.diagnostics ctx.types tu in
                  Sequence.register ctx.functions id
-                   (ty, typeuse_functype ctx.types tu))
+                   (ty, typeuse_functype_or_empty ctx.types tu))
           | Memory lim ->
               limits ctx "memory" lim max_memory_size;
               Sequence.register ctx.memories id lim.desc
@@ -2860,7 +2850,7 @@ let build_initial_env ctx fields =
               let>@ ty = globaltype ctx.diagnostics ctx.types ty in
               Sequence.register ctx.globals id (ty, src)
           | Tag tu ->
-              let sign = typeuse_functype ctx.types tu in
+              let sign = typeuse_functype_or_empty ctx.types tu in
               let>@ ty = typeuse ctx.diagnostics ctx.types tu in
               (*
               (match (Types.get_subtype ctx.subtyping_info ty).typ with
@@ -2869,12 +2859,12 @@ let build_initial_env ctx fields =
 *)
               Sequence.register ctx.tags id (ty, sign))
       | Func { id; typ; instrs; _ } ->
-          let sign = typeuse_functype ctx.types typ in
+          let sign = typeuse_functype_or_empty ctx.types typ in
           let>@ ty = typeuse ctx.diagnostics ctx.types typ in
           Sequence.register ctx.functions id (ty, sign);
           register_typeuses ctx.diagnostics ctx.types instrs
       | Tag { id; typ; exports } ->
-          let sign = typeuse_functype ctx.types typ in
+          let sign = typeuse_functype_or_empty ctx.types typ in
           let>@ ty = typeuse ctx.diagnostics ctx.types typ in
           (*
           (match (Types.get_subtype ctx.subtyping_info ty).typ with
