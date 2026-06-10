@@ -403,10 +403,11 @@ module Error = struct
           idx)
       ()
 
-  let stack_switching_type_mismatch context ~location =
+  let stack_switching_type_mismatch context ~location ~descr =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
-        Format.fprintf f "Type mismatch in stack switching instruction.")
+        Format.fprintf f
+          "Type mismatch in this stack switching instruction:@ %s." descr)
       ()
 
   let invalid_cast_type context ~location =
@@ -1209,6 +1210,9 @@ let check_resume_table ctx loc ts2 clauses =
                   let mismatch () =
                     Error.stack_switching_type_mismatch ctx.modul.diagnostics
                       ~location:label.info
+                      ~descr:
+                        "this handler must take the tag's parameters followed \
+                         by a continuation of the remaining result type"
                   in
                   (* The handler label receives the tag's parameters followed by
                      a continuation of type [cont (ts4 -> ts2)]. *)
@@ -1238,7 +1242,9 @@ let check_resume_table ctx loc ts2 clauses =
           | Some { params = ts3; _ } ->
               if Array.length ts3 <> 0 then
                 Error.stack_switching_type_mismatch ctx.modul.diagnostics
-                  ~location:loc))
+                  ~location:loc
+                  ~descr:"the tag of a 'switch' handler must take no parameters"
+          ))
     clauses
 
 let rec instruction ctx (i : _ Ast.Text.instr) =
@@ -1331,7 +1337,10 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let n1 = Array.length ftx.params in
       let n1' = Array.length fty.params in
       if n1 < n1' then (
-        Error.stack_switching_type_mismatch ctx.modul.diagnostics ~location:loc;
+        Error.stack_switching_type_mismatch ctx.modul.diagnostics ~location:loc
+          ~descr:
+            "the resulting continuation takes more parameters than the \
+             original one";
         unreachable)
       else begin
         let ts11 = Array.sub ftx.params 0 (n1 - n1') in
@@ -1343,7 +1352,10 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
                fty)
         then
           Error.stack_switching_type_mismatch ctx.modul.diagnostics
-            ~location:loc;
+            ~location:loc
+            ~descr:
+              "the bound parameters and results do not match between the two \
+               continuation types";
         let* () =
           pop_args ctx loc
             (Array.append ts11 [| Ref { nullable = true; typ = Type xty } |])
@@ -1396,6 +1408,9 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       | None ->
           Error.stack_switching_type_mismatch ctx.modul.diagnostics
             ~location:loc
+            ~descr:
+              "the continuation's last parameter must itself be a continuation \
+               type"
       | Some inner_ft -> (
           match lookup_tag_signature ctx y with
           | None -> ()
@@ -1407,7 +1422,10 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
                 || not (result_subtype info t inner_ft.results)
               then
                 Error.stack_switching_type_mismatch ctx.modul.diagnostics
-                  ~location:loc));
+                  ~location:loc
+                  ~descr:
+                    "the 'switch' tag must take no parameters and its results \
+                     must match the two continuation types"));
       let ts21 = match inner with Some ft -> ft.params | None -> [||] in
       let ts11' = if n = 0 then [||] else Array.sub ts11 0 (n - 1) in
       let* () =
