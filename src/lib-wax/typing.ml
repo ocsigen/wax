@@ -2402,11 +2402,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
   (* [tab[i]] on a table name is [table.get]; the receiver is not a value. *)
   | ArrayGet (({ desc = Get tabname; _ } as recv), i2)
     when Tbl.find_opt ctx.tables tabname <> None ->
-      let at, rt =
-        match Tbl.find_opt ctx.tables tabname with
-        | Some x -> x
-        | None -> assert false
-      in
+      let at, rt = Option.get (Tbl.find_opt ctx.tables tabname) in
       let* i2' = instruction ctx i2 in
       check_type ctx i2' (UnionFind.make (Valtype (address_valtype at)));
       let*! typ = internalize ctx (Ref rt) in
@@ -2429,11 +2425,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
   (* [tab[i] = v] on a table name is [table.set]; the receiver is not a value. *)
   | ArraySet (({ desc = Get tabname; _ } as recv), i2, i3)
     when Tbl.find_opt ctx.tables tabname <> None ->
-      let at, rt =
-        match Tbl.find_opt ctx.tables tabname with
-        | Some x -> x
-        | None -> assert false
-      in
+      let at, rt = Option.get (Tbl.find_opt ctx.tables tabname) in
       let* i2' = instruction ctx i2 in
       let* i3' = instruction ctx i3 in
       check_type ctx i2' (UnionFind.make (Valtype (address_valtype at)));
@@ -3145,11 +3137,7 @@ and call_instruction ctx i =
          func),
         args )
     when is_mem_method meth.desc && Tbl.find_opt ctx.memories memname <> None ->
-      let _, address_type =
-        match Tbl.find_opt ctx.memories memname with
-        | Some x -> x
-        | None -> assert false
-      in
+      let _, address_type = Option.get (Tbl.find_opt ctx.memories memname) in
       let addr_vt = UnionFind.make (Valtype (address_valtype address_type)) in
       let is_store = mem_store_method meth.desc in
       let nstack = if is_store then 2 else 1 in
@@ -3225,11 +3213,7 @@ and call_instruction ctx i =
     when Simd.is_mem_method meth.desc
          && Tbl.find_opt ctx.memories memname <> None ->
       let mop = Option.get (Simd.mem_method meth.desc) in
-      let _, address_type =
-        match Tbl.find_opt ctx.memories memname with
-        | Some x -> x
-        | None -> assert false
-      in
+      let _, address_type = Option.get (Tbl.find_opt ctx.memories memname) in
       let addr_vt = UnionFind.make (Valtype (address_valtype address_type)) in
       let nstack = List.length mop.m_operands in
       let nimm = if mop.m_lane then 1 else 0 in
@@ -3278,11 +3262,7 @@ and call_instruction ctx i =
       ( ({ desc = StructGet (({ desc = Get name; _ } as recv), meth); _ } as func),
         args )
     when is_mgmt_method meth.desc && Tbl.find_opt ctx.memories name <> None -> (
-      let _, at =
-        match Tbl.find_opt ctx.memories name with
-        | Some x -> x
-        | None -> assert false
-      in
+      let _, at = Option.get (Tbl.find_opt ctx.memories name) in
       let addr () = UnionFind.make (Valtype (address_valtype at)) in
       let i32 () = UnionFind.make (Valtype { typ = I32; internal = I32 }) in
       let recv' = { desc = Get name; info = ([||], recv.info) } in
@@ -3359,11 +3339,7 @@ and call_instruction ctx i =
       ( ({ desc = StructGet (({ desc = Get name; _ } as recv), meth); _ } as func),
         args )
     when is_mgmt_method meth.desc && Tbl.find_opt ctx.tables name <> None -> (
-      let at, rt =
-        match Tbl.find_opt ctx.tables name with
-        | Some x -> x
-        | None -> assert false
-      in
+      let at, rt = Option.get (Tbl.find_opt ctx.tables name) in
       let addr () = UnionFind.make (Valtype (address_valtype at)) in
       let i32 () = UnionFind.make (Valtype { typ = I32; internal = I32 }) in
       let check_elt e =
