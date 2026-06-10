@@ -937,6 +937,17 @@ let source_element_valtype ctx gidx : Ast.Text.valtype option =
       match ft.typ with Value v -> Some v | Packed _ -> None)
   | _ -> None
 
+(* Per-element source types for the params and results of the function type
+   with global index [gidx], from its stored source definition; each is [None]
+   when the definition is unknown, so callers can pass them straight to
+   [pop_args]/[push_results]'s [?text]. *)
+let source_arg_text ctx gidx =
+  match Hashtbl.find_opt ctx.modul.types.source_defs gidx with
+  | Some (Func { params; results }) ->
+      ( Some (Array.map (fun (_, v) -> Some v) params),
+        Some (Array.map (fun v -> Some v) results) )
+  | _ -> (None, None)
+
 (* Each stack entry carries the interned type used for subtype checking and,
    when known, the source type the value was written as ([text]). Errors print
    [text] in preference to the interned form, which would show a canonical
@@ -1076,19 +1087,28 @@ let blocktype ctx (ty : Ast.Text.blocktype option) =
       let+@ ty = valtype ctx.modul.diagnostics ctx.modul.types ty in
       ([||], [| ty |])
 
-let pop_args ctx loc args =
-  Array.fold_right
-    (fun ty rem ->
-      let* () = rem in
-      pop ctx loc ty)
-    args (return ())
+(* [text], when given, supplies the source type of each argument/result by
+   index, so a mismatch on one of them names the type as the source wrote it. *)
+let text_at text i =
+  match text with Some t when i < Array.length t -> t.(i) | _ -> None
 
-let push_results results =
-  Array.fold_left
-    (fun rem ty ->
-      let* () = rem in
-      push None ty)
-    (return ()) results
+let pop_args ctx loc ?text args =
+  let rec loop i =
+    if i < 0 then return ()
+    else
+      let* () = pop ctx loc ?expected_text:(text_at text i) args.(i) in
+      loop (i - 1)
+  in
+  loop (Array.length args - 1)
+
+let push_results ?text results =
+  let rec loop i =
+    if i >= Array.length results then return ()
+    else
+      let* () = push ?text:(text_at text i) None results.(i) in
+      loop (i + 1)
+  in
+  loop 0
 
 let rec output_stack ~full f st =
   match st with
@@ -1612,16 +1632,18 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           Error.expected_func_type ctx.modul.diagnostics ~location:loc idx;
           unreachable
       | Func { params; results } ->
-          let* () = pop_args ctx loc params in
-          push_results results)
+          let ptext, rtext = source_arg_text ctx ty in
+          let* () = pop_args ctx loc ?text:ptext params in
+          push_results ?text:rtext results)
   | CallRef idx ->
       let*! type_idx, { params; results } = lookup_func_type ctx idx in
+      let ptext, rtext = source_arg_text ctx type_idx in
       let* () =
         pop ctx loc ~expected_text:(ref_null_text idx)
           (Ref { nullable = true; typ = Type type_idx })
       in
-      let* () = pop_args ctx loc params in
-      push_results results
+      let* () = pop_args ctx loc ?text:ptext params in
+      push_results ?text:rtext results
   | CallIndirect (idx, tu) -> (
       let*! typ, _ = Sequence.get ctx.modul.diagnostics ctx.modul.tables idx in
       let*! ty = typeuse' ctx.modul.diagnostics ctx.modul.types tu in
@@ -1637,11 +1659,12 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           Error.expected_func_type ctx.modul.diagnostics ~location:loc idx;
           unreachable
       | Func { params; results } ->
+          let ptext, rtext = source_arg_text ctx ty in
           let* () =
             pop ctx loc (address_type_to_valtype typ.limits.address_type)
           in
-          let* () = pop_args ctx loc params in
-          push_results results)
+          let* () = pop_args ctx loc ?text:ptext params in
+          push_results ?text:rtext results)
   | ReturnCall idx -> (
       let*! ty = Sequence.get ctx.modul.diagnostics ctx.modul.functions idx in
       match (Types.get_subtype ctx.modul.subtyping_info ty).typ with
@@ -1649,17 +1672,19 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           Error.expected_func_type ctx.modul.diagnostics ~location:loc idx;
           unreachable
       | Func { params; results } ->
-          let* () = pop_args ctx loc params in
+          let ptext, _ = source_arg_text ctx ty in
+          let* () = pop_args ctx loc ?text:ptext params in
           compare_types ctx.modul ~location:loc ~descr:"this tail call"
             ~provided:results ~expected:ctx.return_types;
           unreachable)
   | ReturnCallRef idx ->
       let*! type_idx, { params; results } = lookup_func_type ctx idx in
+      let ptext, _ = source_arg_text ctx type_idx in
       let* () =
         pop ctx loc ~expected_text:(ref_null_text idx)
           (Ref { nullable = true; typ = Type type_idx })
       in
-      let* () = pop_args ctx loc params in
+      let* () = pop_args ctx loc ?text:ptext params in
       compare_types ctx.modul ~location:loc ~descr:"this tail call"
         ~provided:results ~expected:ctx.return_types;
       unreachable
@@ -1678,10 +1703,11 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           Error.expected_func_type ctx.modul.diagnostics ~location:loc idx;
           unreachable
       | Func { params; results } ->
+          let ptext, _ = source_arg_text ctx ty in
           let* () =
             pop ctx loc (address_type_to_valtype typ.limits.address_type)
           in
-          let* () = pop_args ctx loc params in
+          let* () = pop_args ctx loc ?text:ptext params in
           compare_types ctx.modul ~location:loc ~descr:"this tail call"
             ~provided:results ~expected:ctx.return_types;
           unreachable)
@@ -2568,6 +2594,7 @@ let collect_implicit_types d ctx fields =
       Types.add_rectype ctx.types
         [| { typ = Func ft; supertype = None; final = true } |]
     in
+    Hashtbl.replace ctx.source_defs idx (Func sign);
     if Types.last_index ctx.types > before then (
       Hashtbl.replace ctx.index_mapping (Uint32.of_int ctx.last_index) (idx, []);
       ctx.last_index <- ctx.last_index + 1)

@@ -137,3 +137,31 @@ An array.set names the element's declared type:
     ·                                                  ^^^^^^^^^^^
   6 │ 
   [128]
+
+Function arguments and results carry their declared source types too — even
+for the inline (implicit) function type of a definition. A wrong call argument:
+
+  $ wax --validate call_arg.wat -o out.wat
+  Error: Type mismatch: this instruction expects type (ref $t)
+    but the stack has type i32
+   ──➤  call_arg.wat:5:15
+  3 │   (func $g (param (ref $t)))
+  4 │   (func
+  5 │     (call $g (i32.const 0))))
+    ·               ^^^^^^^^^^^
+  6 │ 
+  [128]
+
+A call result that does not match what the caller declares:
+
+  $ wax --validate call_result.wat -o out.wat
+  Error: Type mismatch: expecting type i32 but got type (ref $t).
+   ──➤  call_result.wat:4:4
+  2 │   (type $t (struct))
+  3 │   (func $g (result (ref $t)) (unreachable))
+  4 │   (func (result i32)
+    ·    ^^^^^^^^^^^^^^^^^^
+  5 │     (call $g)))
+    · ^^^^^^^^^^^^^^
+  6 │ 
+  [128]
