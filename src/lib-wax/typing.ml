@@ -958,7 +958,7 @@ let rec pop_many ctx i n accu =
   The nth argument should have type BLA but has type BLA
   (unless we have a locationfrom the stack)
 *)
-let pop ctx ty st =
+let pop ctx ~location ty st =
   match st with
   | Unreachable -> (st, ())
   | Cons (loc, ty', r) ->
@@ -966,15 +966,14 @@ let pop ctx ty st =
         Error.type_mismatch ctx.diagnostics ~location:loc ty' ty;
       (r, ())
   | Empty ->
-      (*ZZZ*)
-      Error.empty_stack ctx.diagnostics ~location:(Ast.no_loc ()).info;
+      Error.empty_stack ctx.diagnostics ~location;
       (st, ())
 
-let pop_args ctx args =
+let pop_args ctx ~location args =
   Array.fold_right
     (fun ty rem ->
       let* () = rem in
-      pop ctx ty)
+      pop ctx ~location ty)
     args (return ())
 
 let push loc ty st = (Cons (loc, ty, st), ())
@@ -3357,7 +3356,7 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
         array_map_opt (fun (_, typ) -> internalize ctx typ) typ.params
       in
       let*! results = array_map_opt (internalize ctx) typ.results in
-      let* () = pop_args ctx params in
+      let* () = pop_args ctx ~location:i.info params in
       let instrs' = block ctx i.info label params results results instrs in
       return_statement i (Block { label; typ; block = instrs' }) results
   | Loop { label; typ; block = instrs } ->
@@ -3365,7 +3364,7 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
         array_map_opt (fun (_, typ) -> internalize ctx typ) typ.params
       in
       let*! results = array_map_opt (internalize ctx) typ.results in
-      let* () = pop_args ctx params in
+      let* () = pop_args ctx ~location:i.info params in
       let instrs' = block ctx i.info label params results params instrs in
       return_statement i (Loop { label; typ; block = instrs' }) results
   | If { label; typ; cond; if_block; else_block } ->
@@ -3374,7 +3373,7 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
         array_map_opt (fun (_, typ) -> internalize ctx typ) typ.params
       in
       let*! results = array_map_opt (internalize ctx) typ.results in
-      let* () = pop_args ctx params in
+      let* () = pop_args ctx ~location:i.info params in
       let if_block =
         {
           if_block with
@@ -3396,7 +3395,7 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
         array_map_opt (fun (_, typ) -> internalize ctx typ) typ.params
       in
       let*! results = array_map_opt (internalize ctx) typ.results in
-      let* () = pop_args ctx params in
+      let* () = pop_args ctx ~location:i.info params in
       let body' = block ctx i.info label params results results body in
       let check_catch types label =
         let params = branch_target ctx label in
@@ -3443,7 +3442,7 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
         array_map_opt (fun (_, typ) -> internalize ctx typ) typ.params
       in
       let*! results = array_map_opt (internalize ctx) typ.results in
-      let* () = pop_args ctx params in
+      let* () = pop_args ctx ~location:i.info params in
       let body' = block ctx i.info label params results results body in
       let catches =
         List.filter_map
@@ -3515,7 +3514,7 @@ and block ctx loc label params results br_params block =
          }
          block
      in
-     let* () = pop_args ctx results in
+     let* () = pop_args ctx ~location:loc results in
      return block')
 
 (*ZZZ
@@ -3858,7 +3857,7 @@ let rec functions ctx fields =
           let body =
             with_empty_stack ctx ~location ~kind:Function
               (let* body = block_contents ctx body in
-               let* () = pop_args ctx return_types in
+               let* () = pop_args ctx ~location return_types in
                return body)
           in
           Some
