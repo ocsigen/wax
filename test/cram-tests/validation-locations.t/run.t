@@ -36,6 +36,19 @@ definition:
   4 │ 
   [128]
 
+The wrapped type is named as the source wrote it, even when an identical type
+($b here) shares its canonical index:
+
+  $ wax --validate cont_not_func_dup.wat -o out.wat
+  Error: Type $a should be a function type.
+   ──➤  cont_not_func_dup.wat:4:4
+  2 │   (type $a (struct))
+  3 │   (type $b (struct))
+  4 │   (type $c (cont $a)))
+    ·    ^^^^^^^^^^^^^^^^^^
+  5 │ 
+  [128]
+
 An invalid subtype declaration points at the offending type definition:
 
   $ wax --validate bad_subtype.wat -o out.wat

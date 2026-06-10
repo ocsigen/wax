@@ -547,11 +547,14 @@ type type_context = {
   mutable last_index : int;
   index_mapping : (Uint32.t, int * (string * int) list) Hashtbl.t;
   label_mapping : (string, int * (string * int) list) Hashtbl.t;
-  (* Source index node of each type definition (its name when it has one, else
-     its text-level numeric index, carrying the definition's location), keyed by
-     the resolved global type index. Lets checks on a type be reported at its
-     definition and name it as it appears in the source. *)
-  type_defs : (int, Ast.Text.idx) Hashtbl.t;
+  (* For each type definition, keyed by its text-level index: its source index
+     node (its name when it has one, else its numeric index, carrying the
+     definition's location), and — for a continuation type — the source
+     reference to the wrapped type. Keying by text index (rather than the
+     resolved, deduplicated global index) keeps the mapping injective, so a
+     check on a type is reported at the exact definition and names types as they
+     appear in the source. *)
+  type_defs : (int, Ast.Text.idx * Ast.Text.idx option) Hashtbl.t;
 }
 
 let get_type_info d ctx (idx : Ast.Text.idx) =
@@ -2306,7 +2309,12 @@ let add_type d ctx ty =
             in
             { Ast.desc; info = e.Ast.info }
           in
-          Hashtbl.replace ctx.type_defs (i' + i) def_idx;
+          let cont_ref =
+            match (typ : Ast.Text.subtype).typ with
+            | Cont r -> Some r
+            | Func _ | Struct _ | Array _ -> None
+          in
+          Hashtbl.replace ctx.type_defs (ctx.last_index + i) (def_idx, cont_ref);
           Option.iter
             (fun label ->
               Hashtbl.replace ctx.label_mapping label.Ast.desc (i' + i, fields))
@@ -2498,25 +2506,33 @@ let build_initial_env ctx fields =
     fields
 
 let check_type_definitions ctx =
-  let type_index gidx =
-    Option.value
-      ~default:(Ast.no_loc (Ast.Text.Num (Uint32.of_int gidx)))
-      (Hashtbl.find_opt ctx.types.type_defs gidx)
-  in
   for i = 0 to ctx.types.last_index - 1 do
-    let>@ i, _ =
+    let def_idx, cont_ref =
+      Option.value
+        ~default:(Ast.no_loc (Ast.Text.Num (Uint32.of_int i)), None)
+        (Hashtbl.find_opt ctx.types.type_defs i)
+    in
+    let location = def_idx.Ast.info in
+    let>@ gidx, _ =
       get_type_info ctx.diagnostics ctx.types
         (Ast.no_loc (Ast.Text.Num (Uint32.of_int i)))
     in
-    let location = (type_index i).Ast.info in
-    let ty = Types.get_subtype ctx.subtyping_info i in
+    let ty = Types.get_subtype ctx.subtyping_info gidx in
     (* A continuation type must wrap a function type. *)
     (match ty.typ with
     | Cont ft -> (
         match (Types.get_subtype ctx.subtyping_info ft).typ with
         | Func _ -> ()
         | Struct _ | Array _ | Cont _ ->
-            Error.expected_func_type ctx.diagnostics ~location (type_index ft))
+            (* Name the wrapped type as the source wrote it: the resolved index
+               [ft] is canonical, so identical types would otherwise be
+               indistinguishable. *)
+            let wrapped =
+              Option.value
+                ~default:(Ast.no_loc (Ast.Text.Num (Uint32.of_int ft)))
+                cont_ref
+            in
+            Error.expected_func_type ctx.diagnostics ~location wrapped)
     | Func _ | Struct _ | Array _ -> ());
     let*? j = ty.supertype in
     let ty' = Types.get_subtype ctx.subtyping_info j in
