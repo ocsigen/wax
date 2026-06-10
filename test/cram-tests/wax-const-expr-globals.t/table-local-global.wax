@@ -1,0 +1,2 @@
+const g: &?func = null as &?func;
+table t: &?func [10] = g;

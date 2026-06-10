@@ -750,6 +750,11 @@ type module_context = {
   types : (int * subtype) Tbl.t;
   functions : (int * string) Tbl.t;
   globals : (*mutable:*) (bool * inferred_valtype) Tbl.t;
+  import_globals : (bool * inferred_valtype) Tbl.t;
+      (* The globals in scope for a table initializer: only the imported ones.
+         A table is typed before the module's own globals are registered, so its
+         initializer can reference only imports (unlike a global initializer,
+         which sees the globals declared before it). *)
   tags : functype Tbl.t;
   memories : (int * [ `I32 | `I64 ]) Tbl.t;
   datas : unit Tbl.t;
@@ -4243,16 +4248,18 @@ let rec globals ctx fields =
              default value, which a non-nullable reference does not have. *)
           if Option.is_none init && not rt.nullable then
             Error.non_nullable_table ctx.diagnostics ~location:field.info;
+          (* A table initializer may reference only imported globals. *)
+          let init_ctx = { ctx with globals = ctx.import_globals } in
           let init =
             Option.map
               (fun e ->
                 let e' =
-                  with_empty_stack ctx ~location:e.info ~kind:Expression
-                    (toplevel_instruction ctx e)
+                  with_empty_stack init_ctx ~location:e.info ~kind:Expression
+                    (toplevel_instruction init_ctx e)
                 in
                 (let>@ typ = internalize ctx (Ref rt) in
                  check_type ctx e' typ);
-                check_constant_instruction ctx e';
+                check_constant_instruction init_ctx e';
                 e')
               init
           in
@@ -4514,6 +4521,7 @@ let type_configuration ~simplify diagnostics fields =
       types = type_context.types;
       functions = Tbl.make namespace "function";
       globals = Tbl.make namespace "global";
+      import_globals = Tbl.make namespace "global";
       memories = Tbl.make namespace "memory";
       datas = Tbl.make (Namespace.make cond) "data segment";
       tables = Tbl.make namespace "table";
@@ -4614,6 +4622,9 @@ let type_configuration ~simplify diagnostics fields =
     {
       ctx with
       subtyping_info = Wasm.Types.subtyping_info type_context.internal_types;
+      (* Only imports are registered at this point; snapshot them as the global
+         scope visible to table initializers. *)
+      import_globals = { ctx.globals with tbl = Hashtbl.copy ctx.globals.tbl };
     }
   in
   let phased_fields = globals ctx fields in
