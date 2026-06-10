@@ -178,6 +178,15 @@ module Error = struct
       ~message:(fun f () -> Format.fprintf f "Expected array type.")
       ()
 
+  let method_needs_parentheses context ~location name =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f
+          "'%s' is an instruction method and must be called with parentheses, \
+           as '%s()'."
+          name name)
+      ()
+
   let type_mismatch context ~location ty' ty =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
@@ -2498,13 +2507,21 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                 fieldtype ctx typ
             | Func _ | Array _ | Cont _ ->
                 (*ZZZ Fix location*)
-                Error.expected_struct_type ctx.diagnostics ~location:ty.info;
+                if is_unary_method field.desc then
+                  Error.method_needs_parentheses ctx.diagnostics
+                    ~location:i.info field.desc
+                else
+                  Error.expected_struct_type ctx.diagnostics ~location:ty.info;
                 None)
         (* Leave an unresolved receiver alone (its own error, if any, is
-           reported elsewhere); any other concrete type has no fields. The
-           instruction methods that once lived here now require parentheses
-           ([x.sqrt()]) and are handled in the [Call] case. *)
+           reported elsewhere). A name that is an instruction method was likely
+           meant as the parenthesised call [x.sqrt()]; any other field access on
+           a non-struct type has no fields to find. *)
         | Unknown, _ -> None
+        | _ when is_unary_method field.desc ->
+            Error.method_needs_parentheses ctx.diagnostics ~location:i.info
+              field.desc;
+            None
         | _ ->
             Error.expected_struct_type ctx.diagnostics ~location:(snd i'.info);
             None

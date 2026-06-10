@@ -23,15 +23,16 @@ like [x.min(y)].
   )
 
 
-The old parenthesis-free form is no longer a method; it is read as a field
-access and rejected.
+The old parenthesis-free form is rejected, with an error pointing at the
+parenthesised form to use.
 
   $ wax check bare.wax
-  Error: Expected struct type.
+  Error:
+    'sqrt' is an instruction method and must be called with parentheses, as 'sqrt()'.
    ──➤  bare.wax:2:5
   1 │ fn f(x: f64) -> f64 {
   2 │     x.sqrt;
-    ·     ^
+    ·     ^^^^^^
   3 │ }
   4 │ 
   [123]
