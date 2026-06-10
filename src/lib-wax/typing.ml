@@ -532,6 +532,8 @@ let valtype d ctx ty : Internal.valtype option =
       let+@ ty = reftype d ctx r in
       (Ref ty : Internal.valtype)
 
+(* Like [Array.map] into an option, returning [None] as soon as [f] returns
+   [None] on any element (so [let*!] propagates a single failure). *)
 let array_map_opt f arr =
   let exception Short_circuit in
   try
@@ -1848,11 +1850,11 @@ let anon_function_type ctx (sign : functype) =
         : int option);
   name
 
+(* Set to [true] to trace each instruction as it is type-checked. *)
+let debug = false
+
 let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
-  (*
-  let* () = print_stack in
-*)
-  if false then Format.eprintf "%a@." Output.instr i;
+  if debug then Format.eprintf "%a@." Output.instr i;
   match i.desc with
   | Block { label; typ; block = instrs } ->
       (* An expression-position block draws nothing from a stack, so a parameter
@@ -1993,10 +1995,11 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
         (Try { label; typ; block = body'; catches; catch_all })
         results
   | Unreachable ->
-      (* ZZZ Only at top_level *)
+      (* TODO: these are only meaningful in statement (top-level) position;
+         reject them in expression position. *)
       return_statement i Unreachable [||]
   | Nop ->
-      (* ZZZ Only at top_level *)
+      (* TODO: only meaningful in statement (top-level) position. *)
       return_statement i Nop [||]
   | Hole ->
       let* ty = pop_parameter in
@@ -3735,10 +3738,7 @@ and instructions ctx l : _ -> _ * _ list =
       return (i' :: r')
 
 and toplevel_instruction ctx i : stack -> stack * 'b =
-  (*
-  let* () = print_stack in
-*)
-  if false then Format.eprintf "%a@." Output.instr i;
+  if debug then Format.eprintf "%a@." Output.instr i;
   match i.desc with
   | Block { label; typ; block = instrs } ->
       (*ZZZ Blocks take argument from the stack *)
@@ -4277,7 +4277,7 @@ let rec functions ctx fields =
                   | None -> ())
                 params
           | _ -> ());
-          if false then Format.eprintf "=== %s@." name.desc;
+          if debug then Format.eprintf "=== %s@." name.desc;
           let ctx =
             {
               ctx with
