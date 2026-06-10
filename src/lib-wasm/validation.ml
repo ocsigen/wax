@@ -1097,26 +1097,30 @@ let float_bin_op_type ty (op : Ast.Text.float_bin_op) =
   | Add | Sub | Mul | Div | Min | Max | CopySign -> ty
   | Eq | Ne | Lt | Gt | Le | Ge -> I32
 
+(* Returns the interned block parameter and result types, plus their per-element
+   source types (for [pop_args]/[push_results]'s [?text]). *)
 let blocktype ctx (ty : Ast.Text.blocktype option) =
   match ty with
-  | None -> Some ([||], [||])
-  | Some (Typeuse (_, Some { params; results })) ->
-      let*@ params =
+  | None -> Some ([||], [||], None, None)
+  | Some (Typeuse (_, Some ({ params; results } as ft))) ->
+      let*@ iparams =
         array_map_opt
           (fun (_, ty) -> valtype ctx.modul.diagnostics ctx.modul.types ty)
           params
       in
-      let+@ results =
+      let+@ iresults =
         array_map_opt (valtype ctx.modul.diagnostics ctx.modul.types) results
       in
-      (params, results)
+      let ptext, rtext = functype_arg_text ft in
+      (iparams, iresults, ptext, rtext)
   | Some (Typeuse (Some idx, None)) ->
       let+@ _, { params; results } = lookup_func_type ctx idx in
-      (params, results)
+      let ptext, rtext = arg_text (reference_functype ctx.modul.types idx) in
+      (params, results, ptext, rtext)
   | Some (Typeuse (None, None)) -> assert false (* Should not happen *)
   | Some (Valtype ty) ->
-      let+@ ty = valtype ctx.modul.diagnostics ctx.modul.types ty in
-      ([||], [| ty |])
+      let+@ t = valtype ctx.modul.diagnostics ctx.modul.types ty in
+      ([||], [| t |], Some [||], Some [| Some ty |])
 
 (* [text], when given, supplies the source type of each argument/result by
    index, so a mismatch on one of them names the type as the source wrote it. *)
@@ -1381,26 +1385,26 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
   let loc = i.info in
   match i.desc with
   | Block { label; typ; block = b } ->
-      let*! params, results = blocktype ctx typ in
-      let* () = pop_args ctx loc params in
-      block ctx loc label params results results b;
-      push_results results
+      let*! params, results, ptext, rtext = blocktype ctx typ in
+      let* () = pop_args ctx loc ?text:ptext params in
+      block ctx loc label ?ptext ?rtext params results results b;
+      push_results ?text:rtext results
   | Loop { label; typ; block = b } ->
-      let*! params, results = blocktype ctx typ in
-      let* () = pop_args ctx loc params in
-      block ctx loc label params results params b;
-      push_results results
+      let*! params, results, ptext, rtext = blocktype ctx typ in
+      let* () = pop_args ctx loc ?text:ptext params in
+      block ctx loc label ?ptext ?rtext params results params b;
+      push_results ?text:rtext results
   | If { label; typ; if_block; else_block } ->
-      let*! params, results = blocktype ctx typ in
+      let*! params, results, ptext, rtext = blocktype ctx typ in
       let* () = pop ctx loc I32 in
-      let* () = pop_args ctx loc params in
-      block ctx loc label params results results if_block.desc;
-      block ctx loc label params results results else_block.desc;
-      push_results results
+      let* () = pop_args ctx loc ?text:ptext params in
+      block ctx loc label ?ptext ?rtext params results results if_block.desc;
+      block ctx loc label ?ptext ?rtext params results results else_block.desc;
+      push_results ?text:rtext results
   | TryTable { label; typ; block = b; catches } ->
-      let*! params, results = blocktype ctx typ in
-      let* () = pop_args ctx loc params in
-      block ctx loc label params results results b;
+      let*! params, results, ptext, rtext = blocktype ctx typ in
+      let* () = pop_args ctx loc ?text:ptext params in
+      block ctx loc label ?ptext ?rtext params results results b;
       List.iter
         (fun (catch : Ast.Text.catch) ->
           match catch with
@@ -1433,20 +1437,20 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
                     ~expected:params)
                 (branch_target ctx label))
         catches;
-      push_results results
+      push_results ?text:rtext results
   | Try { label; typ; block = b; catches; catch_all } ->
-      let*! params, results = blocktype ctx typ in
-      let* () = pop_args ctx loc params in
-      block ctx loc label params results results b;
+      let*! params, results, ptext, rtext = blocktype ctx typ in
+      let* () = pop_args ctx loc ?text:ptext params in
+      block ctx loc label ?ptext ?rtext params results results b;
       List.iter
         (fun (tag, b) ->
           let*? params' = lookup_tag_type ctx tag in
-          block ctx loc label params' results results b)
+          block ctx loc label params' results ?rtext results b)
         catches;
       Option.iter
-        (fun b -> block ctx loc label params results results b)
+        (fun b -> block ctx loc label ?ptext ?rtext params results results b)
         catch_all;
-      push_results results
+      push_results ?text:rtext results
   | Unreachable -> unreachable
   | Nop -> return ()
   | Throw idx ->
@@ -2394,9 +2398,9 @@ and instructions ctx l =
       let* () = instruction ctx i in
       instructions ctx r
 
-and block ctx loc label params results br_params block =
+and block ctx loc label ?ptext ?rtext params results br_params block =
   with_empty_stack ctx.modul loc (*ZZZ*)
-    (let* () = push_results params in
+    (let* () = push_results ?text:ptext params in
      let* () =
        instructions
          {
@@ -2407,7 +2411,7 @@ and block ctx loc label params results br_params block =
          }
          block
      in
-     pop_args ctx loc (*ZZZ More precise loc*) results)
+     pop_args ctx loc ?text:rtext (*ZZZ More precise loc*) results)
 
 let rec check_constant_instruction ctx (i : _ Ast.Text.instr) =
   match i.desc with

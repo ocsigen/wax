@@ -195,3 +195,18 @@ identical $y) shares both canonical indices:
     ·      ^^^^^^^^^^^^^^^
   8 │ 
   [128]
+
+A block result type is named from the block's declared type when the body
+leaves the wrong value:
+
+  $ wax --validate block_result.wat -o out.wat
+  Error: Type mismatch: this instruction expects type (ref $t)
+    but the stack has type i32
+   ──➤  block_result.wat:5:8
+  3 │   (func
+  4 │     (block (result (ref $t))
+  5 │       (i32.const 0))
+    ·        ^^^^^^^^^^^
+  6 │     (drop)))
+  7 │ 
+  [128]
