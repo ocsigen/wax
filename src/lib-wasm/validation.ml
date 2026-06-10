@@ -199,14 +199,14 @@ module Error = struct
           ty')
       ()
 
-  let expected_ref_type context ~location ~src_loc ty =
+  let expected_ref_type context ~location ~src_loc ?text ty =
     match src_loc with
     | None ->
         Diagnostic.report context ~location ~severity:Error
           ~message:(fun f () ->
             Format.fprintf f
               "Type mismatch: expected reference type but got type@ @[<2>%a@]."
-              print_valtype ty)
+              (print_ty ?text) ty)
           ()
     | Some location ->
         Diagnostic.report context ~location ~severity:Error
@@ -214,7 +214,7 @@ module Error = struct
             Format.fprintf f
               "Type mismatch: this instruction should return a reference type \
                but has type@ @[<2>%a@]."
-              print_valtype ty)
+              (print_ty ?text) ty)
           ()
 
   let table_type_mismatch context ~location ?text idx ty =
@@ -261,13 +261,13 @@ module Error = struct
           "Type mismatch: the first type must be a supertype of the second one.")
       ()
 
-  let select_type_mismatch context ~location ty1 ty2 =
+  let select_type_mismatch context ~location ?text1 ?text2 ty1 ty2 =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "Type mismatch: both branches of a select should have the same \
            type.@ Here, they have type@ @[<2>%a@]@ and@ @[<2>%a@]."
-          print_valtype ty1 print_valtype ty2)
+          (print_ty ?text:text1) ty1 (print_ty ?text:text2) ty2)
       ()
 
   let empty_stack context ~location =
@@ -1727,9 +1727,9 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           let* () = push_results ~text:ptext params in
           push ?text:(non_null_text text) (Some loc)
             (Ref { nullable = false; typ })
-      | Some (ty, _) ->
+      | Some (ty, text) ->
           Error.expected_ref_type ctx.modul.diagnostics ~location:loc
-            ~src_loc:loc' ty;
+            ~src_loc:loc' ~text ty;
           unreachable)
   | Br_on_non_null idx -> (
       let* ty, loc' = pop_any ctx loc in
@@ -1744,9 +1744,9 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           let* () = push_results ~text:ptext params in
           let* _ = pop_any ctx loc in
           return ()
-      | Some (ty, _) ->
+      | Some (ty, text) ->
           Error.expected_ref_type ctx.modul.diagnostics ~location:loc
-            ~src_loc:loc' ty;
+            ~src_loc:loc' ~text ty;
           unreachable)
   | Br_on_cast (idx, ty1, ty2) ->
       let src_ty1 = Ast.Text.Ref ty1 and src_ty2 = Ast.Text.Ref ty2 in
@@ -1912,8 +1912,8 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
             Error.expected_number_or_vec ctx.modul.diagnostics ~location:loc
               ~text:text2 ty2;
           if ty1 <> ty2 then
-            Error.select_type_mismatch ctx.modul.diagnostics ~location:loc ty1
-              ty2;
+            Error.select_type_mismatch ctx.modul.diagnostics ~location:loc
+              ~text1 ~text2 ty1 ty2;
           push (Some loc) ty1
       | Some (ty, text), None | None, Some (ty, text) ->
           if not (number_or_vec ty) then
@@ -2231,9 +2231,9 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       match ty with
       | None -> return ()
       | Some (Ref _, _) -> push (Some loc) I32
-      | Some (ty, _) ->
+      | Some (ty, text) ->
           Error.expected_ref_type ctx.modul.diagnostics ~location:loc
-            ~src_loc:loc' ty;
+            ~src_loc:loc' ~text ty;
           unreachable)
   | RefAsNonNull -> (
       let* ty, loc' = pop_any ctx loc in
@@ -2242,9 +2242,9 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       | Some (Ref ty, text) ->
           push ?text:(non_null_text text) (Some loc)
             (Ref { ty with nullable = false })
-      | Some (ty, _) ->
+      | Some (ty, text) ->
           Error.expected_ref_type ctx.modul.diagnostics ~location:loc
-            ~src_loc:loc' ty;
+            ~src_loc:loc' ~text ty;
           unreachable)
   | RefEq ->
       let* () = pop ctx loc (Ref { nullable = true; typ = Eq }) in
