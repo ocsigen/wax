@@ -65,6 +65,17 @@ an otherwise-unconstrained integer literal then defaults to `i32` and a float to
 let count: i64 = 0;
 ```
 
+A `let` can bind several names at once from an initializer that produces
+multiple values — a call to a [multi-result function](#functions),
+for instance. The names are written as a parenthesised list and each takes the
+corresponding value, left to right. As with a single binding, each name may be
+annotated or left to be inferred, and `_` discards its value:
+
+```wax
+let (q, r) = divmod(17, 5);     // q and r inferred from the results
+let (n: i64, _) = stats();      // n annotated, the second result dropped
+```
+
 ### Assignment
 
 Use `=` for assignment (like `local.set`):

@@ -1044,11 +1044,34 @@ let rec instruction ret ctx i : location Text.instr list =
       in
       List.iter binding (List.rev decls);
       []
+  | Let ([ (id, ty) ], Some body) -> (
+      (* Single binding: fold the initializer into the [local.set]. *)
+      match id with
+      | Some name ->
+          let ty = match ty with Some ty -> ty | None -> expr_valtype body in
+          let wasm_name = Namespace.add ctx.namespace name.desc in
+          ctx.locals <- StringMap.add name.desc wasm_name ctx.locals;
+          ctx.allocated_locals :=
+            (Some { name with desc = wasm_name }, valtype ty)
+            :: !(ctx.allocated_locals);
+          folded loc
+            (Text.LocalSet (with_loc name.info (Text.Id wasm_name)))
+            (instruction ret ctx body)
+      | None -> folded loc Text.Drop (instruction ret ctx body))
   | Let (decls, Some body) ->
-      let binding (id, ty) e =
+      (* Multi-value initializer: evaluate it once, leaving one value per name
+         on the stack, then store each into its local. The last value is on top,
+         so the stores run in reverse declaration order. *)
+      let code = instruction ret ctx body in
+      let result_types = fst body.info in
+      let store idx (id, ty) =
         match id with
         | Some name ->
-            let ty = match ty with Some ty -> ty | None -> expr_valtype e in
+            let ty =
+              match ty with
+              | Some ty -> ty
+              | None -> unpack_type (Option.get result_types.(idx))
+            in
             let wasm_name = Namespace.add ctx.namespace name.desc in
             ctx.locals <- StringMap.add name.desc wasm_name ctx.locals;
             ctx.allocated_locals :=
@@ -1056,10 +1079,10 @@ let rec instruction ret ctx i : location Text.instr list =
               :: !(ctx.allocated_locals);
             folded loc
               (Text.LocalSet (with_loc name.info (Text.Id wasm_name)))
-              (instruction ret ctx e)
-        | None -> folded loc Text.Drop (instruction ret ctx e)
+              []
+        | None -> folded loc Text.Drop []
       in
-      List.concat (List.map2 binding decls [ body ])
+      code @ List.concat (List.rev (List.mapi store decls))
   | Br (l, None) ->
       (*ZZZ label should be located*)
       folded loc (Br (label ret l)) []

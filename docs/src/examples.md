@@ -359,3 +359,47 @@ fn blend(x: i32, y: i32) -> i32 {
   i32.mul
   i32.add)
 ```
+
+## Multiple Return Values
+
+A function may return several values, and a `let` can bind them all at once
+from a parenthesised list of names. The call runs once and its results are
+stored into the locals. See [Local Variables](language.md#local-variables).
+
+### Wax
+
+```wax
+fn divmod(a: i32, b: i32) -> (i32, i32) {
+    a /s b;
+    a %s b;
+}
+
+#[export = "checksum"]
+fn checksum(a: i32, b: i32) -> i32 {
+    let (q, r) = divmod(a, b);
+    q + r;
+}
+```
+
+### Equivalent WAT
+
+```wat
+(func $divmod (param $a i32) (param $b i32) (result i32 i32)
+  local.get $a
+  local.get $b
+  i32.div_s
+  local.get $a
+  local.get $b
+  i32.rem_s)
+
+(func $checksum (export "checksum") (param $a i32) (param $b i32) (result i32)
+  (local $q i32) (local $r i32)
+  local.get $a
+  local.get $b
+  call $divmod
+  local.set $r
+  local.set $q
+  local.get $q
+  local.get $r
+  i32.add)
+```

@@ -1147,6 +1147,38 @@ let valtype_equal ctx (a : inferred_valtype) (b : inferred_valtype) =
   Wasm.Types.val_subtype ctx.subtyping_info a.internal b.internal
   && Wasm.Types.val_subtype ctx.subtyping_info b.internal a.internal
 
+(* Type-check one [let] binding against [result_ty] — the value it takes off the
+   stack — and record the local. Returns the binding to emit: an annotation that
+   [simplify] finds redundant (it equals what the value would infer to on its
+   own) is dropped, so Wax printed back from Wasm omits it. Used for both the
+   single-value form and each name of a multi-value [let]. *)
+let bind_let_value ctx ~location result_ty (name, typ) =
+  match typ with
+  | Some typ ->
+      (* The type the value would take on its own, captured before
+         [check_subtype] constrains it. *)
+      let standalone = standalone_valtype ctx result_ty in
+      let drop =
+        Option.value ~default:false
+          (let+@ ity = internalize_valtype ctx typ in
+           check_subtype ctx ~location result_ty (UnionFind.make (Valtype ity));
+           Option.iter
+             (fun name -> ctx.locals <- StringMap.add name.desc ity ctx.locals)
+             name;
+           ctx.simplify
+           && Option.fold ~none:false
+                ~some:(fun v -> valtype_equal ctx v ity)
+                standalone)
+      in
+      (name, if drop then None else Some typ)
+  | None ->
+      Option.iter
+        (fun name ->
+          let>@ ity = resolve_omitted_valtype ctx result_ty in
+          ctx.locals <- StringMap.add name.desc ity ctx.locals)
+        name;
+      (name, None)
+
 (* Check a list of typed operands against an array of expected types. *)
 let check_operands ctx l expected =
   if Array.length expected = List.length l then
@@ -2838,40 +2870,48 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                 typ)
       in
       return_expression i (UnOp (op, i')) ty
-  | Let ([ (Some name, Some typ) ], None) as desc ->
-      (let>@ typ = internalize_valtype ctx typ in
-       ctx.locals <- StringMap.add name.desc typ ctx.locals);
-      return_statement i desc [||]
-  | Let ([ (Some name, Some typ) ], Some i') ->
+  | Let (bindings, Some i') ->
       let* i' = instruction ctx i' in
-      (* The type the initializer would take on its own, captured before
-         [check_type] constrains it; if it already equals the annotation, the
-         annotation is redundant and dropped (only when converting from Wasm). *)
-      let standalone = standalone_valtype ctx (expression_type ctx i') in
-      let drop_annotation =
-        Option.value ~default:false
-          (let+@ ity = internalize_valtype ctx typ in
-           check_type ctx i' (UnionFind.make (Valtype ity));
-           ctx.locals <- StringMap.add name.desc ity ctx.locals;
-           ctx.simplify
-           && Option.fold ~none:false
-                ~some:(fun v -> valtype_equal ctx v ity)
-                standalone)
-      in
       let bindings =
-        if drop_annotation then [ (Some name, None) ]
-        else [ (Some name, Some typ) ]
+        match bindings with
+        | [ binding ] ->
+            (* Single binding: the initializer must be a one-value expression;
+               [expression_type] reports it if it is not. *)
+            [
+              bind_let_value ctx ~location:(snd i'.info)
+                (expression_type ctx i') binding;
+            ]
+        | _ ->
+            (* Each name takes one value off a multi-value initializer, left to
+               right (the names match the values in order). *)
+            let result_types = fst i'.info in
+            let n = List.length bindings in
+            if Array.length result_types <> n then
+              Error.value_count_mismatch ctx.diagnostics ~location:i.info
+                ~expected:n
+                ~provided:(Array.length result_types);
+            List.mapi
+              (fun idx binding ->
+                let result_ty =
+                  if idx < Array.length result_types then result_types.(idx)
+                  else UnionFind.make Unknown
+                in
+                bind_let_value ctx ~location:i.info result_ty binding)
+              bindings
       in
       return_statement i (Let (bindings, Some i')) [||]
-  | Let ([ (Some name, None) ], Some i') ->
-      let* i' = instruction ctx i' in
-      (* No annotation: the local takes the initializer's type. *)
-      (let>@ ity = resolve_omitted_valtype ctx (expression_type ctx i') in
-       ctx.locals <- StringMap.add name.desc ity ctx.locals);
-      return_statement i (Let ([ (Some name, None) ], Some i')) [||]
-  | Let ([ (None, None) ], Some i') ->
-      let* i' = instruction ctx i' in
-      return_statement i (Let ([ (None, None) ], Some i')) [||]
+  | Let (bindings, None) ->
+      (* No initializer: each annotated name declares a local at its zero
+         value; an unannotated name has no type to take and is left out. *)
+      List.iter
+        (fun (name, typ) ->
+          match (name, typ) with
+          | Some name, Some typ ->
+              let>@ ity = internalize_valtype ctx typ in
+              ctx.locals <- StringMap.add name.desc ity ctx.locals
+          | _ -> ())
+        bindings;
+      return_statement i (Let (bindings, None)) [||]
   | Br (label, i') ->
       (* Sequence of instructions *)
       let params = branch_target ctx label in
@@ -3235,9 +3275,6 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
             None
       in
       return_expression i (Select (i1', i2', i3')) ty
-  | Let (([] | _ :: _), _) ->
-      Format.eprintf "%a@." Output.instr i;
-      assert false
 
 and instructions ctx l : _ -> _ * _ list =
   match l with

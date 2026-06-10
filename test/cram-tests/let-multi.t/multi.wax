@@ -1,0 +1,19 @@
+fn divmod(a: i32, b: i32) -> (i32, i32) {
+    a /s b;
+    a %s b;
+}
+
+fn inferred() -> i32 {
+    let (q, r) = divmod(17, 5);
+    q + r;
+}
+
+fn annotated() -> i32 {
+    let (q: i32, r: i32) = divmod(17, 5);
+    q;
+}
+
+fn discard() -> i32 {
+    let (q, _) = divmod(17, 5);
+    q;
+}
