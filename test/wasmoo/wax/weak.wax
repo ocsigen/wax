@@ -59,7 +59,7 @@ fn caml_ephe_get_data(vx: &eq) -> &eq {
         'released: do {
             br_if 'no_data d == caml_ephe_none;
             let i = caml_ephe_key_offset;
-            let len = x.length;
+            let len = x.length();
             let m = unwrap(d)!;
             'loop: loop {
                 if i <u len {
@@ -97,7 +97,7 @@ fn caml_ephe_get_data_copy(x: &eq) -> &eq {
 #[export = "caml_ephe_set_data"]
 fn caml_ephe_set_data(vx: &eq, data: &eq) -> &eq {
     let x = vx as &block;
-    let i = x.length;
+    let i = x.length();
     let m: &any = data;
     'loop: loop {
         i = i - 1;

@@ -24,7 +24,7 @@ type string = [mut i8];
 fn get(a: &eq, i: i32) -> i32 {
     let s = a as &string;
     i = i + i;
-    (s[i] as i32_u | s[i + 1] as i32_u << 8).extend16_s;
+    (s[i] as i32_u | s[i + 1] as i32_u << 8).extend16_s();
 }
 
 const lex_buffer = 2;

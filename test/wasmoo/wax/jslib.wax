@@ -241,7 +241,7 @@ fn caml_ojs_iterate_properties(o: &eq, f: &eq) -> &eq {
 #[export = "caml_js_object"]
 fn caml_js_object(x: &eq) -> &eq {
     let a = x as &block;
-    let l = a.length;
+    let l = a.length();
     let i = 1;
     let o = new_obj();
     'loop: loop {
@@ -264,7 +264,7 @@ fn caml_js_from_array(va: &eq) -> &eq {
     _ =
         'not_array: do &eq {
             a = br_on_cast_fail 'not_array &block va;
-            l = a.length - 1;
+            l = a.length() - 1;
             a' = new_array(l);
             i = 0;
             'loop: loop {
@@ -278,7 +278,7 @@ fn caml_js_from_array(va: &eq) -> &eq {
         } // 'not_array
     ;
     let fa = va as &float_array;
-    l = fa.length;
+    l = fa.length();
     a' = new_array(l);
     i = 0;
     'loop: loop {
@@ -421,7 +421,7 @@ fn caml_jsstring_of_string(x: &eq) -> &eq {
 #[export = "caml_jsbytes_of_string"]
 fn caml_jsbytes_of_string(x: &eq) -> &eq {
     let s = x as &string;
-    let l = s.length;
+    let l = s.length();
     let i = 0;
     let n = 0;
     'count: loop {
@@ -464,7 +464,7 @@ fn caml_string_of_jsstring(s: &eq) -> &eq {
 #[export = "caml_string_of_jsbytes"]
 fn caml_string_of_jsbytes(s: &eq) -> &eq {
     let s' = string_of_jsstring((s as &js).f);
-    let l = s'.length;
+    let l = s'.length();
     let i = 0;
     let n = 0;
     'count: loop {

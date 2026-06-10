@@ -179,25 +179,24 @@ x <=u y     // Less or equal unsigned
 
 ### Method-Style Operations
 
-Some operations use method syntax:
+Some operations use method syntax. These are calls, so they take parentheses
+even when they have no argument:
 
 ```wax
-x.abs       // Absolute value
-x.neg       // Negate
-x.sqrt      // Square root
-x.floor     // Floor
-x.ceil      // Ceiling
-x.trunc     // Truncate
-x.nearest   // Round to nearest
-x.clz       // Count leading zeros
-x.ctz       // Count trailing zeros
-x.popcnt    // Population count
-x.extend8_s   // Sign-extend the low 8 bits
-x.extend16_s  // Sign-extend the low 16 bits
+x.abs()       // Absolute value
+x.sqrt()      // Square root
+x.floor()     // Floor
+x.ceil()      // Ceiling
+x.trunc()     // Truncate
+x.nearest()   // Round to nearest
+x.clz()       // Count leading zeros
+x.ctz()       // Count trailing zeros
+x.popcnt()    // Population count
+x.extend8_s()   // Sign-extend the low 8 bits
+x.extend16_s()  // Sign-extend the low 16 bits
 ```
 
-Two-argument operations also use method syntax, with the second operand
-passed as an argument:
+Two-argument operations pass the second operand as the argument:
 
 ```wax
 x.min(y)
@@ -219,8 +218,8 @@ x as f32        // Demote f64 to f32
 x as f64        // Promote f32 to f64
 x as i32_s      // Truncate float to signed int
 x as f32_s      // Convert signed int to float
-x.to_bits       // Reinterpret float as int
-x.from_bits     // Reinterpret int as float
+x.to_bits()     // Reinterpret float as int
+x.from_bits()   // Reinterpret int as float
 ```
 
 ### Conditional Expression
@@ -520,7 +519,7 @@ The last form is `array.new_data`: it initializes the array from the named [data
 ```wax
 arr[i]                      // Get element
 arr[i] = val;               // Set element (if mutable)
-arr.length                  // Array length
+arr.length()                // Array length
 ```
 
 ## Memories

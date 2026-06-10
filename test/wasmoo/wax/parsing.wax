@@ -39,7 +39,7 @@ type string = [mut i8];
 fn get(a: &eq, i: i32) -> i32 {
     let s = a as &string;
     i = i + i;
-    (s[i] as i32_u | s[i + 1] as i32_u << 8).extend16_s;
+    (s[i] as i32_u | s[i + 1] as i32_u << 8).extend16_s();
 }
 
 let caml_parser_trace = 0;
@@ -123,7 +123,7 @@ fn token_name(vnames: &eq, number: i32) -> &eq {
 
 fn output(x: &eq) {
     let s = x as &string;
-    _ = caml_ml_output(caml_stderr, s, 0 as &i31, s.length as &i31);
+    _ = caml_ml_output(caml_stderr, s, 0 as &i31, s.length() as &i31);
 }
 
 fn output_nl() {

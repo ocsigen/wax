@@ -59,6 +59,15 @@ let unpack_type f = match f with Value v -> v | Packed _ -> I32
 let is_mgmt_method m =
   match m with "size" | "grow" | "fill" | "copy" | "init" -> true | _ -> false
 
+(* No-argument unary instruction methods written as [x.sqrt()] etc. (not
+   [length], which becomes [array.len]). *)
+let is_unary_op_method m =
+  match m with
+  | "clz" | "ctz" | "popcnt" | "extend8_s" | "extend16_s" | "abs" | "ceil"
+  | "floor" | "trunc" | "nearest" | "sqrt" | "to_bits" | "from_bits" ->
+      true
+  | _ -> false
+
 let functype typ : Text.functype =
   let params = Array.map (fun (id, t) -> (id, valtype t)) typ.params in
   let results = Array.map valtype typ.results in
@@ -204,11 +213,6 @@ let expr_type_name i =
       print_valtype (Ref (expr_reftype i));
       print_instr i;
       assert false
-
-let expr_type_kind ctx i =
-  match expr_reftype i with
-  | { typ = Array; _ } -> `Array
-  | _ -> Hashtbl.find ctx.type_kinds (expr_type_name i).desc
 
 let label ret (lab : ident) =
   match ret with
@@ -513,6 +517,43 @@ let rec instruction ret ctx i : location Text.instr list =
           match expr_valtype i with
           | F32 -> folded loc (BinOp (F32 CopySign)) (obj_code @ arg_code)
           | F64 -> folded loc (BinOp (F64 CopySign)) (obj_code @ arg_code)
+          | _ -> assert false)
+      (* No-argument instruction methods written with dot notation:
+         [arr.length()], and the unary operators / reinterpret casts below. *)
+      | StructGet (obj, { desc = "length"; _ }) ->
+          folded loc ArrayLen (instruction ret ctx obj)
+      | StructGet (obj, meth) when is_unary_op_method meth.desc -> (
+          let obj_code = instruction ret ctx obj in
+          match (meth.desc, expr_valtype obj) with
+          (* Int Unary *)
+          | "clz", I32 -> folded loc (UnOp (I32 Clz)) obj_code
+          | "ctz", I32 -> folded loc (UnOp (I32 Ctz)) obj_code
+          | "popcnt", I32 -> folded loc (UnOp (I32 Popcnt)) obj_code
+          | "clz", I64 -> folded loc (UnOp (I64 Clz)) obj_code
+          | "ctz", I64 -> folded loc (UnOp (I64 Ctz)) obj_code
+          | "popcnt", I64 -> folded loc (UnOp (I64 Popcnt)) obj_code
+          | "extend8_s", I32 -> folded loc (UnOp (I32 (ExtendS `_8))) obj_code
+          | "extend16_s", I32 -> folded loc (UnOp (I32 (ExtendS `_16))) obj_code
+          | "extend8_s", I64 -> folded loc (UnOp (I64 (ExtendS `_8))) obj_code
+          | "extend16_s", I64 -> folded loc (UnOp (I64 (ExtendS `_16))) obj_code
+          (* Float Unary *)
+          | "abs", F32 -> folded loc (UnOp (F32 Abs)) obj_code
+          | "ceil", F32 -> folded loc (UnOp (F32 Ceil)) obj_code
+          | "floor", F32 -> folded loc (UnOp (F32 Floor)) obj_code
+          | "trunc", F32 -> folded loc (UnOp (F32 Trunc)) obj_code
+          | "nearest", F32 -> folded loc (UnOp (F32 Nearest)) obj_code
+          | "sqrt", F32 -> folded loc (UnOp (F32 Sqrt)) obj_code
+          | "abs", F64 -> folded loc (UnOp (F64 Abs)) obj_code
+          | "ceil", F64 -> folded loc (UnOp (F64 Ceil)) obj_code
+          | "floor", F64 -> folded loc (UnOp (F64 Floor)) obj_code
+          | "trunc", F64 -> folded loc (UnOp (F64 Trunc)) obj_code
+          | "nearest", F64 -> folded loc (UnOp (F64 Nearest)) obj_code
+          | "sqrt", F64 -> folded loc (UnOp (F64 Sqrt)) obj_code
+          (* Reinterpret *)
+          | "to_bits", F32 -> folded loc (UnOp (I32 Reinterpret)) obj_code
+          | "from_bits", I32 -> folded loc (UnOp (F32 Reinterpret)) obj_code
+          | "to_bits", F64 -> folded loc (UnOp (I64 Reinterpret)) obj_code
+          | "from_bits", I64 -> folded loc (UnOp (F64 Reinterpret)) obj_code
           | _ -> assert false)
       (* SIMD vector op written as a method intrinsic, [recv.add_i32x4(b)]. The
          lane shape comes from the method name; arguments are the lane immediates
@@ -861,80 +902,12 @@ let rec instruction ret ctx i : location Text.instr list =
   | StructDefault opt_idx ->
       let idx = Option.value ~default:(expr_type_name i) opt_idx in
       folded loc (StructNewDefault (index idx)) []
-  | StructGet (instr_val, field) -> (
-      if field.desc = "length" then
-        match expr_type_kind ctx instr_val with
-        | `Array -> folded loc ArrayLen (instruction ret ctx instr_val)
-        | _ ->
-            folded loc
-              (StructGet (None, index (expr_type_name instr_val), index field))
-              (instruction ret ctx instr_val)
-      else
-        match (field.desc, expr_valtype instr_val) with
-        (* Int Unary *)
-        | "clz", I32 ->
-            folded loc (UnOp (I32 Clz)) (instruction ret ctx instr_val)
-        | "ctz", I32 ->
-            folded loc (UnOp (I32 Ctz)) (instruction ret ctx instr_val)
-        | "popcnt", I32 ->
-            folded loc (UnOp (I32 Popcnt)) (instruction ret ctx instr_val)
-        | "clz", I64 ->
-            folded loc (UnOp (I64 Clz)) (instruction ret ctx instr_val)
-        | "ctz", I64 ->
-            folded loc (UnOp (I64 Ctz)) (instruction ret ctx instr_val)
-        | "popcnt", I64 ->
-            folded loc (UnOp (I64 Popcnt)) (instruction ret ctx instr_val)
-        | "extend8_s", I32 ->
-            folded loc (UnOp (I32 (ExtendS `_8)))
-              (instruction ret ctx instr_val)
-        | "extend16_s", I32 ->
-            folded loc (UnOp (I32 (ExtendS `_16)))
-              (instruction ret ctx instr_val)
-        | "extend8_s", I64 ->
-            folded loc (UnOp (I64 (ExtendS `_8)))
-              (instruction ret ctx instr_val)
-        | "extend16_s", I64 ->
-            folded loc (UnOp (I64 (ExtendS `_16)))
-              (instruction ret ctx instr_val)
-        (* Float Unary *)
-        | "abs", F32 ->
-            folded loc (UnOp (F32 Abs)) (instruction ret ctx instr_val)
-        | "ceil", F32 ->
-            folded loc (UnOp (F32 Ceil)) (instruction ret ctx instr_val)
-        | "floor", F32 ->
-            folded loc (UnOp (F32 Floor)) (instruction ret ctx instr_val)
-        | "trunc", F32 ->
-            folded loc (UnOp (F32 Trunc)) (instruction ret ctx instr_val)
-        | "nearest", F32 ->
-            folded loc (UnOp (F32 Nearest)) (instruction ret ctx instr_val)
-        | "sqrt", F32 ->
-            folded loc (UnOp (F32 Sqrt)) (instruction ret ctx instr_val)
-        | "abs", F64 ->
-            folded loc (UnOp (F64 Abs)) (instruction ret ctx instr_val)
-        | "ceil", F64 ->
-            folded loc (UnOp (F64 Ceil)) (instruction ret ctx instr_val)
-        | "floor", F64 ->
-            folded loc (UnOp (F64 Floor)) (instruction ret ctx instr_val)
-        | "trunc", F64 ->
-            folded loc (UnOp (F64 Trunc)) (instruction ret ctx instr_val)
-        | "nearest", F64 ->
-            folded loc (UnOp (F64 Nearest)) (instruction ret ctx instr_val)
-        | "sqrt", F64 ->
-            folded loc (UnOp (F64 Sqrt)) (instruction ret ctx instr_val)
-        (* Reinterpret *)
-        | "to_bits", F32 ->
-            folded loc (UnOp (I32 Reinterpret)) (instruction ret ctx instr_val)
-        | "from_bits", I32 ->
-            folded loc (UnOp (F32 Reinterpret)) (instruction ret ctx instr_val)
-        | "to_bits", F64 ->
-            folded loc (UnOp (I64 Reinterpret)) (instruction ret ctx instr_val)
-        | "from_bits", I64 ->
-            folded loc (UnOp (F64 Reinterpret)) (instruction ret ctx instr_val)
-        | _ ->
-            (* Signed accesses are under a cast *)
-            folded loc
-              (StructGet (None, index (expr_type_name instr_val), index field))
-              (instruction ret ctx instr_val))
+  | StructGet (instr_val, field) ->
+      (* Plain struct field access; the instruction methods that used to share
+         this syntax now take parentheses and are handled in the [Call] case. *)
+      folded loc
+        (StructGet (None, index (expr_type_name instr_val), index field))
+        (instruction ret ctx instr_val)
   | StructSet (instr_val, field_idx, new_val) ->
       let code_val = instruction ret ctx instr_val in
       let code_new = instruction ret ctx new_val in

@@ -30,7 +30,7 @@ fn caml_format_int(x: &eq, x_2: &eq) -> &eq {
 #[export = "parse_sign_and_base"]
 fn parse_sign_and_base(s: &string) -> (i32, i32, i32, i32) {
     let i = 0;
-    let len = s.length;
+    let len = s.length();
     let signedness = 1;
     let sign = 1;
     let base = 10;
@@ -83,7 +83,7 @@ fn parse_digit(c: i32) -> i32 {
 #[export = "parse_int"]
 fn parse_int(v: &eq, nbits: i32, errmsg: &string) -> i32 {
     let s = v as &string;
-    let len = s.length;
+    let len = s.length();
     if !len { caml_failwith(errmsg); }
     parse_sign_and_base(s);
     let base = _;
@@ -165,7 +165,7 @@ data format_error = "format_int: bad format";
 
 #[export = "parse_int_format"]
 fn parse_int_format(s: &string) -> (i32, i32, i32, i32, i32) {
-    let len = s.length;
+    let len = s.length();
     let i = 1;
     let sign_style: i32;
     let alternate: i32;
@@ -260,7 +260,7 @@ fn parse_int_format(s: &string) -> (i32, i32, i32, i32, i32) {
 #[export = "format_int"]
 fn format_int(x: &eq, d: i32, small: i32) -> &eq {
     let s = x as &string;
-    if s.length == 2 {
+    if s.length() == 2 {
         if
             s[1] as i32_u == 100 // 'd'
         {

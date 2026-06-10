@@ -51,7 +51,7 @@ fn Double_val(x: &eq) -> f64 { (x as &float).f; }
 fn caml_hexstring_of_float(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
     let prec = x_2 as &i31 as i32_s;
     let style = x_3 as &i31 as i32_s;
-    let b = (x as &float).f.to_bits;
+    let b = (x as &float).f.to_bits();
     let sign = (b >>u 63) as i32;
     let exp = (b >>u 52) as i32 & 0x7FF;
     let m = b & (1 << 52) - 1;
@@ -72,7 +72,7 @@ fn caml_hexstring_of_float(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
         'sign: do &string {
             if exp == 0x7FF {
                 txt = if !m => &chars { infinity; } else { nan_2; };
-                len = txt.length;
+                len = txt.length();
                 s = [string|0; i + len];
                 s.copy(i, txt, 0, len);
                 br 'sign s;
@@ -150,7 +150,7 @@ fn caml_hexstring_of_float(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
 data format_error = "format_float: bad format";
 
 fn parse_format(s: &string) -> (i32, i32, i32, i32) {
-    let len = s.length;
+    let len = s.length();
     let i = 1;
     let sign_style: i32;
     let precision: i32;
@@ -210,7 +210,7 @@ const inf_2 = chars#"inf";
 #[export = "caml_format_float"]
 fn caml_format_float(x: &eq, x_2: &eq) -> &eq {
     let f = (x_2 as &float).f;
-    let b = f.to_bits;
+    let b = f.to_bits();
     parse_format(x as &string);
     let uppercase = _;
     let conversion = _;
@@ -233,12 +233,12 @@ fn caml_format_float(x: &eq, x_2: &eq) -> &eq {
                     if !m => &chars {
                         inf_2;
                     } else { negative = 0; i = sign_style != 0; nan_2; };
-                len = txt.length;
+                len = txt.length();
                 s = [string|0; i + len];
                 s.copy(i, txt, 0, len);
                 br 'sign s;
             }
-            num = format_float(precision, conversion, i, f.abs);
+            num = format_float(precision, conversion, i, f.abs());
             s = string_of_jsstring(num);
             br 'sign s;
         } // 'sign
@@ -256,7 +256,7 @@ fn caml_format_float(x: &eq, x_2: &eq) -> &eq {
     } // ' '
     if uppercase {
         i = 0;
-        len = s.length;
+        len = s.length();
         'uppercase: loop {
             let c = s[i] as i32_u;
             if
@@ -277,7 +277,7 @@ fn caml_format_float(x: &eq, x_2: &eq) -> &eq {
 data float_of_string = "float_of_string";
 
 fn caml_float_of_hex(s: &string, i: i32) -> f64 {
-    let len = s.length;
+    let len = s.length();
     let dec_point = -1;
     'error: do {
         let m: i64;
@@ -389,7 +389,7 @@ fn on_whitespace(s: &string, i: i32) -> i32 {
 #[export = "caml_float_of_string"]
 fn caml_float_of_string(x: &eq) -> &eq {
     let s = x as &string;
-    let len = s.length;
+    let len = s.length();
     let i: i32;
     let j: i32;
     'count: loop {
@@ -422,7 +422,7 @@ fn caml_float_of_string(x: &eq) -> &eq {
                 br 'copy;
             }
         } // 'copy
-        len = s'.length;
+        len = s'.length();
         s = s';
     }
     i = 0;
@@ -567,16 +567,16 @@ fn caml_nextafter_float(x: f64, y: f64) -> f64 {
     if x == 0 => f64 {
         if y >= 0 => f64 { return 0x1p-1074; } else { return -0x1p-1074; }
     } else {
-        let i = x.to_bits;
-        let j = y.to_bits;
+        let i = x.to_bits();
+        let j = y.to_bits();
         if (i <s j) & (i <u j) { i = i + 1; } else { i = i - 1; }
-        return i.from_bits;
+        return i.from_bits();
     }
 }
 
 #[export = "caml_classify_float"]
 fn caml_classify_float(x: f64) -> &eq {
-    let a = x.abs;
+    let a = x.abs();
     (if a >= 0x1p-1022 => i32 {
          if a < inf => i32 {
              0 // normal
@@ -597,14 +597,14 @@ fn caml_classify_float(x: f64) -> &eq {
 #[export = "caml_modf_float"]
 fn caml_modf_float(x: &eq) -> &eq {
     let x_2 = (x as &float).f;
-    let a = x_2.abs;
+    let a = x_2.abs();
     let i: f64;
     let f: f64;
     if a >= 0 {
         if
             a < inf // normal
         {
-            i = a.floor;
+            i = a.floor();
             f = a - i;
             i = i.copysign(x_2);
             f =
@@ -637,14 +637,14 @@ fn ldexp(x: f64, n: i32) -> f64 {
             }
         }
     }
-    x * (n as i64_s + 0x3ff << 52).from_bits;
+    x * (n as i64_s + 0x3ff << 52).from_bits();
 }
 
 #[export = "caml_ldexp_float"]
 fn caml_ldexp_float(x: f64, i: &eq) -> f64 { ldexp(x, i as &i31 as i32_s); }
 
 fn frexp(x: f64) -> (f64, i32) {
-    let y = x.to_bits;
+    let y = x.to_bits();
     let e = 0x7ff & (y >>u 52) as i32;
     if !e {
         if x != 0 {
@@ -654,7 +654,7 @@ fn frexp(x: f64) -> (f64, i32) {
             return (m, e - 64);
         } else { return (x, 0); }
     } else { if e == 0x7ff { return (x, 0); } }
-    (y & 0x800fffffffffffff | 0x3fe0000000000000).from_bits;
+    (y & 0x800fffffffffffff | 0x3fe0000000000000).from_bits();
     e - 0x3fe;
 }
 
@@ -667,7 +667,7 @@ fn caml_frexp_float(x: &eq) -> &eq {
 }
 
 #[export = "caml_signbit_float"]
-fn caml_signbit_float(x: f64) -> &eq { (x.to_bits >>u 63) as i32 as &i31; }
+fn caml_signbit_float(x: f64) -> &eq { (x.to_bits() >>u 63) as i32 as &i31; }
 
 #[export = "caml_erf_float"]
 fn erf(x: f64) -> f64 {
@@ -677,7 +677,7 @@ fn erf(x: f64) -> f64 {
     let a4 = -1.453152027;
     let a5 = 1.061405429;
     let p = 0.3275911;
-    let t = 1 / (1 + p * x.abs);
+    let t = 1 / (1 + p * x.abs());
     let y =
         1 -
             ((((a5 * t + a4) * t + a3) * t + a2) * t + a1) *
@@ -698,9 +698,9 @@ fn caml_fma_float(vx: &eq, vy: &eq, vz: &eq) -> &eq {
     let x_4: i64;
     let x_5: i64;
     let x_6 =
-        (x_3 := (x_2 := y.to_bits) >>u 52 & 2047) +
-            (x_5 := (x_4 := x.to_bits) >>u 52 & 2047);
-    let x_7 = z.to_bits;
+        (x_3 := (x_2 := y.to_bits()) >>u 52 & 2047) +
+            (x_5 := (x_4 := x.to_bits()) >>u 52 & 2047);
+    let x_7 = z.to_bits();
     let x_8: i32;
     let x_9: i32;
     'l_2: do {
@@ -835,8 +835,8 @@ fn caml_fma_float(vx: &eq, vy: &eq, vz: &eq) -> &eq {
                                    (y - (x - x_12)))
                               - (y := x_10 + y)))
                     == 0;
-            br_if 'cont (x_3 := y.to_bits) as i32 & 1;
-            y = (((y < 0) ^ (z > 0)?1:-1) + x_3).from_bits;
+            br_if 'cont (x_3 := y.to_bits()) as i32 & 1;
+            y = (((y < 0) ^ (z > 0)?1:-1) + x_3).from_bits();
         }
         y = x + y;
         'cont: do { br_if 'cont !x_8; return {float| f: y * 0x1p53 }; }
@@ -854,7 +854,7 @@ fn caml_float_compare(x: f64, y: f64) -> &eq {
 fn caml_round(x: f64) -> f64 {
     let y: f64;
     if x >= 0 => f64 {
-        y = x.floor;
+        y = x.floor();
         if x - y >= 0.5 => f64 { y + 1; } else { y; }
-    } else { y = x.ceil; if y - x >= 0.5 => f64 { y - 1; } else { y; } }
+    } else { y = x.ceil(); if y - x >= 0.5 => f64 { y - 1; } else { y; } }
 }

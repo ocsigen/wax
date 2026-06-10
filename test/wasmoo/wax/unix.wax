@@ -67,7 +67,7 @@ fn unix_localtime(x: &eq) -> &eq { localtime((x as &float).f); }
     =
 
     "caml_unix_time"]
-fn unix_time(x: &eq) -> &eq { {float| f: gettimeofday().floor }; }
+fn unix_time(x: &eq) -> &eq { {float| f: gettimeofday().floor() }; }
 #[export = "unix_mktime"]
 #[export
     =

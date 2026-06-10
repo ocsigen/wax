@@ -103,7 +103,7 @@ fn jsstring_of_substring(s: &string, pos: i32, len: i32) -> &?any {
 
 #[export = "jsstring_of_string"]
 fn jsstring_of_string(s: &string) -> &?any {
-    become jsstring_of_substring(s, 0, s.length);
+    become jsstring_of_substring(s, 0, s.length());
 }
 
 #[export = "string_of_jsstring"]
@@ -179,7 +179,7 @@ fn string_of_jsstring_fallback(s: &?any) -> &string {
     'done: do {
         item = br_on_null 'done stack;
         'loop: loop {
-            ofs = ofs + item.s.length;
+            ofs = ofs + item.s.length();
             item = br_on_null 'done item.next;
             br 'loop;
         }
@@ -191,7 +191,7 @@ fn string_of_jsstring_fallback(s: &?any) -> &string {
         stack = null as &?stack;
         'loop: loop {
             let s'' = item.s;
-            len = s''.length;
+            len = s''.length();
             ofs = ofs - len;
             s'.copy(ofs, s'', 0, len);
             item = br_on_null 'done item.next;

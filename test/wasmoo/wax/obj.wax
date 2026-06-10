@@ -122,14 +122,14 @@ fn caml_update_dummy(dummy: &eq, newval: &eq) -> &eq {
         'not_block: do &eq {
             dst = br_on_cast_fail 'not_block &block dummy;
             src = newval as &block;
-            dst.copy(0, src, 0, dst.length);
+            dst.copy(0, src, 0, dst.length());
             return 0 as &i31;
         };
     let fdst: &float_array;
     _ =
         'not_float_array: do &eq {
             fdst = br_on_cast_fail 'not_float_array &float_array dummy;
-            fdst.copy(0, newval as &float_array, 0, fdst.length);
+            fdst.copy(0, newval as &float_array, 0, fdst.length());
             return 0 as &i31;
         };
     _ =
@@ -173,7 +173,7 @@ fn caml_obj_dup(x: &eq) -> &eq {
     _ =
         'not_block: do &eq {
             orig = br_on_cast_fail 'not_block &block x;
-            len = orig.length;
+            len = orig.length();
             res = [block|orig[0]; len];
             res.copy(1, orig, 1, len - 1);
             return res;
@@ -184,7 +184,7 @@ fn caml_obj_dup(x: &eq) -> &eq {
     _ =
         'not_float_array: do &eq {
             forig = br_on_cast_fail 'not_float_array &float_array x;
-            len = forig.length;
+            len = forig.length();
             fres = [float_array|0; len];
             fres.copy(0, forig, 0, len);
             return fres;
@@ -195,7 +195,7 @@ fn caml_obj_dup(x: &eq) -> &eq {
     _ =
         'not_string: do &eq {
             s = br_on_cast_fail 'not_string &string x;
-            len = s.length;
+            len = s.length();
             s' = [string|0; len];
             s'.copy(0, s, 0, len);
             return s';
@@ -319,11 +319,11 @@ fn caml_get_public_method(obj: &eq, x: &eq, x_2: &eq) -> &eq {
     let meths = (obj as &block)[1] as &block;
     let tag_2 = x as &i31 as i32_s;
     let cacheid = x_2 as &i31 as i32_u;
-    let len = method_cache.length;
+    let len = method_cache.length();
     if cacheid >=s len {
         'size: loop { len = len << 1; br_if 'size cacheid >=s len; }
         let a = [int_array|0; len];
-        a.copy(0, method_cache, 0, method_cache.length);
+        a.copy(0, method_cache, 0, method_cache.length());
         method_cache = a;
     }
     let ofs = method_cache[cacheid];

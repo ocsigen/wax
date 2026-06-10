@@ -1,0 +1,15 @@
+type vec = [mut i32];
+
+fn floats(x: f64) -> f64 {
+    let a = x.sqrt();
+    let b = x.abs();
+    let d = x.to_bits();
+    let e = d.from_bits();
+    a + b + e;
+}
+
+fn ints(y: i32, v: &vec) -> i32 {
+    let c = y.clz();
+    let n = v.length();
+    c + n;
+}

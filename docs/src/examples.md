@@ -96,7 +96,7 @@ type ints = [i32];
 fn find_first_zero(arr: &ints) -> i32 {
     let i: i32;
     let len: i32;
-    len = arr.length;
+    len = arr.length();
     i = 0;
     'search: loop {
         if i >=s len {
@@ -206,7 +206,7 @@ fn sum_bytes(arr: &bytes) -> i32 {
     let len: i32;
     sum = 0;
     i = 0;
-    len = arr.length;
+    len = arr.length();
     'loop: loop {
         if i >=s len {
             return sum;
@@ -223,7 +223,7 @@ fn fill_bytes(arr: &bytes, val: i32) {
     let i: i32;
     let len: i32;
     i = 0;
-    len = arr.length;
+    len = arr.length();
     'loop: loop {
         if i >=s len {
             return;

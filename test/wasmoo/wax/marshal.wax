@@ -60,7 +60,7 @@ fn caml_input_value_from_bytes(vstr: &eq, vofs: &eq) -> &eq {
     let ofs = vofs as &i31 as i32_u;
     let s = get_intern_state(str, ofs);
     let h = parse_header(s, input_val_from_string);
-    if ofs + (h.data_len + 20) >s str.length {
+    if ofs + (h.data_len + 20) >s str.length() {
         bad_length(input_val_from_string);
     }
     become intern_rec(s, h);
@@ -198,7 +198,7 @@ fn read32(s: &intern_state) -> i32 {
 }
 
 fn readblock(s: &intern_state, str: &string) {
-    let len = str.length;
+    let len = str.length();
     let pos = s.pos;
     str.copy(0, s.src, pos, len);
     s.pos = pos + len;
@@ -236,7 +236,7 @@ fn readfloat(s: &intern_state, code: i32) -> f64 {
             br_if 'loop i <u 8;
         }
     }
-    d.from_bits;
+    d.from_bits();
 }
 
 fn readfloats(s: &intern_state, code: i32, len: i32) -> &eq {
@@ -347,7 +347,7 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
             let pos = item.pos;
             let pos' = pos + 1;
             item.pos = pos';
-            if pos' == dest.length { sp = item.next; }
+            if pos' == dest.length() { sp = item.next; }
             'done: do {
                 let tag_2: i32;
                 'read_block: do {
@@ -699,7 +699,7 @@ fn reserve_extern_output(s: &extern_state, required: i32) -> i32 {
     s.output_last = blk;
     s.buf = buf;
     s.pos = required;
-    s.limit = buf.length;
+    s.limit = buf.length();
     0;
 }
 
@@ -747,7 +747,7 @@ fn writecode32(s: &extern_state, c: i32, v: i32) {
 }
 
 fn writeblock(s: &extern_state, str: &string) {
-    let len = str.length;
+    let len = str.length();
     let pos = reserve_extern_output(s, len);
     s.buf.copy(pos, str, 0, len);
 }
@@ -755,7 +755,7 @@ fn writeblock(s: &extern_state, str: &string) {
 fn writefloat(s: &extern_state, f: f64) {
     let pos = reserve_extern_output(s, 8);
     let buf = s.buf;
-    let d = f.to_bits;
+    let d = f.to_bits();
     'loop: loop {
         let i: i32;
         buf[pos + i] = (d >>u (i << 3) as i64_u) as i32;
@@ -765,13 +765,13 @@ fn writefloat(s: &extern_state, f: f64) {
 }
 
 fn writefloats(s: &extern_state, b: &float_array) {
-    let sz = b.length;
+    let sz = b.length();
     let pos = reserve_extern_output(s, sz << 3);
     let buf = s.buf;
     let j = 0;
     'loop2: loop {
         if j <u sz {
-            let d = b[j].to_bits;
+            let d = b[j].to_bits();
             let i = 0;
             'loop: loop {
                 buf[pos + i] = (d >>u (i << 3) as i64_u) as i32;
@@ -836,7 +836,7 @@ fn extern_header(s: &extern_state, sz: i32, tag_2: i32) {
 }
 
 fn extern_string(s: &extern_state, v: &string) {
-    let len = v.length;
+    let len = v.length();
     if len <u 0x20 {
         write(s, PREFIX_SMALL_STRING + len);
     } else {
@@ -853,7 +853,7 @@ fn extern_float(s: &extern_state, v: f64) {
 }
 
 fn extern_float_array(s: &extern_state, v: &float_array) {
-    let nfloats = v.length;
+    let nfloats = v.length();
     if nfloats <u 0x100 {
         writecode8(s, CODE_DOUBLE_ARRAY8_LITTLE, nfloats);
     } else { writecode32(s, CODE_DOUBLE_ARRAY32_LITTLE, nfloats); }
@@ -927,7 +927,7 @@ fn extern_rec(s: &extern_state, v: &eq) {
                 'not_block: do &eq {
                     b = br_on_cast_fail 'not_block &block v;
                     tag_2 = b[0] as &i31 as i32_u;
-                    sz = b.length - 1;
+                    sz = b.length() - 1;
                     if !sz { extern_header(s, 0, tag_2); br 'next_item; }
                     pos = extern_lookup_position(s, v);
                     if pos >=s 0 {
@@ -955,7 +955,7 @@ fn extern_rec(s: &extern_state, v: &eq) {
                 'not_string: do &eq {
                     str = br_on_cast_fail 'not_string &string v;
                     extern_string(s, str);
-                    sz = str.length;
+                    sz = str.length();
                     extern_size(s, 1 + (sz >>u 2), 1 + (sz >>u 3));
                     br 'next_item;
                 } // 'not_string
@@ -970,7 +970,7 @@ fn extern_rec(s: &extern_state, v: &eq) {
             _ =
                 'not_float_array: do &eq {
                     fa = br_on_cast_fail 'not_float_array &float_array v;
-                    sz = fa.length;
+                    sz = fa.length();
                     extern_float_array(s, fa);
                     extern_size(s, sz * 2, sz);
                     br 'next_item;
@@ -1004,7 +1004,7 @@ fn extern_rec(s: &extern_state, v: &eq) {
             v = b[pos];
             pos = pos + 1;
             item.pos = pos;
-            if pos == b.length { sp = item.next; }
+            if pos == b.length() { sp = item.next; }
             br 'loop;
         } // 'done
     } // 'loop

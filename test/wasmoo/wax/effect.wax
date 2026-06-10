@@ -373,8 +373,8 @@ fn trampoline_iterator(f: &eq, venv: &eq) -> &eq {
     let args = env.args;
     env.i = i + 1;
     become (f as &cps_closure).f
-        (args[i], if i + 1 == args.length => &eq { identity; } else { env; },
-         f);
+        (args[i],
+         if i + 1 == args.length() => &eq { identity; } else { env; }, f);
 }
 
 fn apply_iterator(f: &eq, venv: &eq) -> &eq {
@@ -384,7 +384,7 @@ fn apply_iterator(f: &eq, venv: &eq) -> &eq {
     env.i = i + 1;
     become (f as &cps_closure).f
         (args[i],
-         if i + 2 == args.length => &eq { args[i + 1]; } else { env; }, f);
+         if i + 2 == args.length() => &eq { args[i + 1]; } else { env; }, f);
 }
 
 #[export = "caml_apply_continuation"]
@@ -425,12 +425,12 @@ fn caml_trampoline(f: &eq, vargs: &eq) -> &eq {
     let exn =
         try &eq {
             res =
-                if args.length == 1 => &eq {
+                if args.length() == 1 => &eq {
                     (f as &cps_closure_0).f(identity, f);
                 } else {
                     (f as &cps_closure).f
                         (args[1],
-                         if 2 == args.length => &eq {
+                         if 2 == args.length() => &eq {
                              identity;
                          } else {
                              {iterator|

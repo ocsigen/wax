@@ -625,6 +625,10 @@ let floattype ty : Ast.valtype =
 
 let int_un_op i0 sz (op : Src.int_un_op) =
   let with_loc (i : _ Ast.instr_desc) = { i0 with Ast.desc = i } in
+  (* A no-argument instruction method [recv.meth()]. *)
+  let method_call recv meth =
+    with_loc (Call (with_loc (StructGet (recv, Ast.no_loc meth)), []))
+  in
   let* e' = Stack.try_pop in
   let e ty =
     match e' with
@@ -633,9 +637,9 @@ let int_un_op i0 sz (op : Src.int_un_op) =
   in
   Stack.push 1
     (match op with
-    | Clz -> with_loc (StructGet (e (inttype sz), Ast.no_loc "clz"))
-    | Ctz -> with_loc (StructGet (e (inttype sz), Ast.no_loc "ctz"))
-    | Popcnt -> with_loc (StructGet (e (inttype sz), Ast.no_loc "popcnt"))
+    | Clz -> method_call (e (inttype sz)) "clz"
+    | Ctz -> method_call (e (inttype sz)) "ctz"
+    | Popcnt -> method_call (e (inttype sz)) "popcnt"
     | Eqz -> with_loc (UnOp (Not, e (inttype sz)))
     | Trunc (_, signage) ->
         with_loc
@@ -646,12 +650,11 @@ let int_un_op i0 sz (op : Src.int_un_op) =
           (Cast
              (e (floattype sz), Signedtype { typ = sz; signage; strict = false }))
     | Reinterpret ->
-        with_loc
-          (StructGet
-             ( (let e = e (floattype sz) in
-                if e' = None then e
-                else { e with desc = Ast.Cast (e, Valtype (floattype sz)) }),
-               Ast.no_loc "to_bits" ))
+        method_call
+          (let e = e (floattype sz) in
+           if e' = None then e
+           else { e with desc = Ast.Cast (e, Valtype (floattype sz)) })
+          "to_bits"
     | ExtendS `_32 ->
         (* i64.extend32_s *)
         with_loc
@@ -660,10 +663,8 @@ let int_un_op i0 sz (op : Src.int_un_op) =
                 if e' = None then e
                 else { e with desc = Ast.Cast (e, Valtype (inttype `I32)) }),
                Signedtype { typ = sz; signage = Signed; strict = false } ))
-    | ExtendS `_8 ->
-        with_loc (StructGet (e (inttype sz), Ast.no_loc "extend8_s"))
-    | ExtendS `_16 ->
-        with_loc (StructGet (e (inttype sz), Ast.no_loc "extend16_s")))
+    | ExtendS `_8 -> method_call (e (inttype sz)) "extend8_s"
+    | ExtendS `_16 -> method_call (e (inttype sz)) "extend16_s")
 
 let int_bin_op i0 (op : Src.int_bin_op) =
   let with_loc (i : _ Ast.instr_desc) = { i0 with Ast.desc = i } in
@@ -702,6 +703,10 @@ let int_bin_op i0 (op : Src.int_bin_op) =
 
 let float_un_op i0 sz (op : Src.float_un_op) =
   let with_loc (i : _ Ast.instr_desc) = { i0 with Ast.desc = i } in
+  (* A no-argument instruction method [recv.meth()]. *)
+  let method_call recv meth =
+    with_loc (Call (with_loc (StructGet (recv, Ast.no_loc meth)), []))
+  in
   let* e' = Stack.try_pop in
   let e ty =
     match e' with
@@ -711,24 +716,23 @@ let float_un_op i0 sz (op : Src.float_un_op) =
   Stack.push 1
     (match op with
     | Neg -> with_loc (UnOp (Neg, e (floattype sz)))
-    | Abs -> with_loc (StructGet (e (floattype sz), Ast.no_loc "abs"))
-    | Ceil -> with_loc (StructGet (e (floattype sz), Ast.no_loc "ceil"))
-    | Floor -> with_loc (StructGet (e (floattype sz), Ast.no_loc "floor"))
-    | Trunc -> with_loc (StructGet (e (floattype sz), Ast.no_loc "trunc"))
-    | Nearest -> with_loc (StructGet (e (floattype sz), Ast.no_loc "nearest"))
-    | Sqrt -> with_loc (StructGet (e (floattype sz), Ast.no_loc "sqrt"))
+    | Abs -> method_call (e (floattype sz)) "abs"
+    | Ceil -> method_call (e (floattype sz)) "ceil"
+    | Floor -> method_call (e (floattype sz)) "floor"
+    | Trunc -> method_call (e (floattype sz)) "trunc"
+    | Nearest -> method_call (e (floattype sz)) "nearest"
+    | Sqrt -> method_call (e (floattype sz)) "sqrt"
     | Convert (sz', signage) ->
         with_loc
           (Cast
              ( e (inttype (sz' :> [ `I32 | `I64 | `F32 | `F64 ])),
                Signedtype { typ = sz; signage; strict = false } ))
     | Reinterpret ->
-        with_loc
-          (StructGet
-             ( (let e = e (inttype sz) in
-                if e' = None then e
-                else { e with desc = Ast.Cast (e, Valtype (inttype sz)) }),
-               Ast.no_loc "from_bits" )))
+        method_call
+          (let e = e (inttype sz) in
+           if e' = None then e
+           else { e with desc = Ast.Cast (e, Valtype (inttype sz)) })
+          "from_bits")
 
 let float_bin_op i0 (op : Src.float_bin_op) =
   let with_loc (i : _ Ast.instr_desc) = { i0 with Ast.desc = i } in
@@ -1241,7 +1245,8 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       Stack.push_poly (with_loc (TailCall (f, args)))
   | ArrayLen ->
       let* e = Stack.pop in
-      Stack.push 1 (with_loc (StructGet (e, Ast.no_loc "length")))
+      Stack.push 1
+        (with_loc (Call (with_loc (StructGet (e, Ast.no_loc "length")), [])))
   | RefCast t ->
       let* e = Stack.pop in
       Stack.push 1 (with_loc (Cast (e, Valtype (Ref (reftype ctx t)))))

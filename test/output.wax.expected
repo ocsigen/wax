@@ -456,7 +456,7 @@ fn bigarray_serialize(s: &eq, v: &eq) -> (i32, i32) {
             'loop: loop {
                 if i <u len {
                     caml_serialize_int_4
-                        (s, (ta_get_f32(data, i) as f32).to_bits);
+                        (s, (ta_get_f32(data, i) as f32).to_bits());
                     i = i + 1;
                     br 'loop;
                 }
@@ -466,7 +466,7 @@ fn bigarray_serialize(s: &eq, v: &eq) -> (i32, i32) {
         // float64
         'loop: loop {
             if i <u len {
-                caml_serialize_int_8(s, ta_get_f64(data, i).to_bits);
+                caml_serialize_int_8(s, ta_get_f64(data, i).to_bits());
                 i = i + 1;
                 br 'loop;
             }
@@ -611,7 +611,8 @@ fn bigarray_deserialize(s: &eq) -> (&eq, i32) {
             'loop: loop {
                 if i <u len {
                     ta_set_f32
-                        (data, i, caml_deserialize_int_4(s).from_bits as f64);
+                        (data, i,
+                         caml_deserialize_int_4(s).from_bits() as f64);
                     i = i + 1;
                     br 'loop;
                 }
@@ -621,7 +622,7 @@ fn bigarray_deserialize(s: &eq) -> (&eq, i32) {
         // float64
         'loop: loop {
             if i <u len {
-                ta_set_f64(data, i, caml_deserialize_int_8(s).from_bits);
+                ta_set_f64(data, i, caml_deserialize_int_8(s).from_bits());
                 i = i + 1;
                 br 'loop;
             }
@@ -632,7 +633,7 @@ fn bigarray_deserialize(s: &eq) -> (&eq, i32) {
 }
 
 fn caml_ba_get_size(dim: &int_array) -> i32 {
-    let n = dim.length;
+    let n = dim.length();
     let i = 0;
     let sz: i64 = 1;
     'loop: loop {
@@ -666,7 +667,7 @@ data ba_create_negative_dim = "Bigarray.create: negative dimension";
 fn caml_ba_create(vkind: &eq, layout: &eq, d: &eq) -> &eq {
     let kind = vkind as &i31 as i32_s;
     let vdim = d as &block;
-    let num_dims = vdim.length - 1;
+    let num_dims = vdim.length() - 1;
     if num_dims >u CAML_BA_MAX_NUM_DIMS {
         caml_invalid_argument([string|ba_create_bad_dims @ 0; 41]);
     }
@@ -892,7 +893,7 @@ data Bigarray_dim = "Bigarray.dim";
 fn caml_ba_dim(x: &eq, x_2: &eq) -> &eq {
     let dim = (x as &bigarray).ba_dim;
     let i = x_2 as &i31 as i32_s;
-    if i >=u dim.length {
+    if i >=u dim.length() {
         caml_invalid_argument([string|Bigarray_dim @ 0; 12]);
     }
     dim[i] as &i31;
@@ -1088,7 +1089,7 @@ fn caml_ba_slice(vb: &eq, vind: &eq) -> &eq {
     let idx: i32;
     let b = vb as &bigarray;
     let ind = vind as &block;
-    let num_inds = ind.length - 1;
+    let num_inds = ind.length() - 1;
     let num_dims = b.ba_num_dims as i32_u;
     if num_inds >u b.ba_num_dims as i32_u {
         caml_invalid_argument([string|too_many_indices @ 0; 32]);
@@ -1128,7 +1129,7 @@ fn caml_ba_slice(vb: &eq, vind: &eq) -> &eq {
         f: bigarray_ops,
         ba_data: sub_data,
         ba_dim: sub_dim,
-        ba_num_dims: sub_dim.length,
+        ba_num_dims: sub_dim.length(),
         ba_kind: b.ba_kind as i32_u,
         ba_layout: b.ba_layout as i32_u
     };
@@ -1290,7 +1291,7 @@ data size_mismatch = "Bigarray.reshape: size mismatch";
 #[export = "caml_ba_reshape"]
 fn caml_ba_reshape(vb: &eq, vd: &eq) -> &eq {
     let vdim = vd as &block;
-    let num_dims = vdim.length - 1;
+    let num_dims = vdim.length() - 1;
     let b = vb as &bigarray;
     if num_dims >u CAML_BA_MAX_NUM_DIMS {
         caml_invalid_argument([string|bad_number_dim @ 0; 42]);
@@ -1616,7 +1617,7 @@ fn caml_string_of_array(x: &eq) -> &eq {
 fn caml_uint8_array_of_string(x: &eq) -> &eq {
     // Convert a string to a typed array
     let s = x as &string;
-    let len = s.length;
+    let len = s.length();
     let ta =
         ta_create
             (3, // Uint8Array

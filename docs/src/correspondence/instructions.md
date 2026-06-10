@@ -31,15 +31,15 @@ Binary and unary operations use standard mathematical operators. Signedness is o
 | `f32.sub` / `f64.sub` | `-` |
 | `f32.mul` / `f64.mul` | `*` |
 | `f32.div` / `f64.div` | `/` |
-| `f32.abs` ... `f64.sqrt` | `val.abs`, `val.neg`, `val.ceil`, `val.floor`, `val.trunc`, `val.nearest`, `val.sqrt` |
+| `f32.abs` ... `f64.sqrt` | `val.abs()`, `val.ceil()`, `val.floor()`, `val.trunc()`, `val.nearest()`, `val.sqrt()` |
 | `f32.min` ... `f64.copysign` | `v1.min(v2)`, `v1.max(v2)`, `v1.copysign(v2)` |
 
 ### Advanced Integer Operations
 
 | Wasm | Wax |
 |---|---|
-| `i32.clz` ... `i64.popcnt` | `val.clz`, `val.ctz`, `val.popcnt` |
-| `i32.extend8_s` ... `i64.extend16_s` | `val.extend8_s`, `val.extend16_s` |
+| `i32.clz` ... `i64.popcnt` | `val.clz()`, `val.ctz()`, `val.popcnt()` |
+| `i32.extend8_s` ... `i64.extend16_s` | `val.extend8_s()`, `val.extend16_s()` |
 | `i32.rotl` ... `i64.rotr` | `v1.rotl(v2)`, `v1.rotr(v2)` |
 
 
@@ -55,8 +55,8 @@ Binary and unary operations use standard mathematical operators. Signedness is o
 | `f32.convert_i32_s` | `val as f32_s` |
 | `f32.demote_f64` | `val as f32` |
 | `f64.promote_f32` | `val as f64` |
-| `i32.reinterpret_f32` | `val.to_bits` |
-| `f32.reinterpret_i32` | `val.from_bits` |
+| `i32.reinterpret_f32` | `val.to_bits()` |
+| `f32.reinterpret_i32` | `val.from_bits()` |
 
 ## Comparison
 
@@ -159,7 +159,7 @@ if cond => (i32) -> i32 { ... } else { ... }
 | `array.get_s $t` | `arr[idx] as i32_s` |
 | `array.get_u $t` | `arr[idx] as i32_u` |
 | `array.set $t` | `arr[idx] = val` |
-| `array.len` | `arr.length` |
+| `array.len` | `arr.length()` |
 
 ## Memory Access
 

@@ -32,15 +32,15 @@ type buffer = { f: mut i32, f_2: &string };
 fn add_char(buf: &buffer, c: i32) {
     let pos = buf.f;
     let data = buf.f_2;
-    if pos <u data.length { data[pos] = c; buf.f = pos + 1; }
+    if pos <u data.length() { data[pos] = c; buf.f = pos + 1; }
 }
 
 fn add_string(buf: &buffer, v: &eq) {
     let pos = buf.f;
     let data = buf.f_2;
     let s = v as &string;
-    let len = s.length;
-    if pos + len >u data.length { len = data.length - pos; }
+    let len = s.length();
+    if pos + len >u data.length() { len = data.length() - pos; }
     data.copy(pos, s, 0, len);
     buf.f = pos + len;
 }
@@ -57,7 +57,7 @@ fn caml_format_exception(x: &eq) -> &eq {
         bucket =
             'continue: do &block {
                 'default: do {
-                    br_if 'default exn.length != 3;
+                    br_if 'default exn.length() != 3;
                     br_if 'default !caml_is_special_exception(exn[1]);
                     v = exn[2];
                     br_if 'default !(v is &block);
@@ -70,7 +70,7 @@ fn caml_format_exception(x: &eq) -> &eq {
                 exn;
             } // 'continue
         ;
-        let len = bucket.length;
+        let len = bucket.length();
         if i <u len {
             add_char
                 (buf, 40 // '\('

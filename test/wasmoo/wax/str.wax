@@ -79,7 +79,7 @@ fn in_bitset(s: &string, c: i32) -> i32 {
 
 fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq
 {
-    let len = s.length;
+    let len = s.length();
     let re = vre as &block;
     let prog = re[1] as &block;
     let cpool = re[2] as &block;
@@ -213,7 +213,8 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq
                                                                     &string;
                                                                     i = 0;
                                                                     l =
-                                                                    s'.length;
+                                                                    s'.length
+                                                                    ();
                                                                     'loop:
                                                                     loop {
                                                                     if 
@@ -249,7 +250,8 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq
                                                                     &string;
                                                                     i = 0;
                                                                     l =
-                                                                    s'.length;
+                                                                    s'.length
+                                                                    ();
                                                                     'loop:
                                                                     loop {
                                                                     if 
@@ -555,7 +557,7 @@ fn re_search_forward(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     // ZZZ startchars
     let s = vs as &string;
     let pos = vpos as &i31 as i32_s;
-    let len = s.length;
+    let len = s.length();
     if pos >u len { caml_invalid_argument([string|search_forward @ 0; 18]); }
     'loop: loop {
         let res = re_match(re, s, pos, 0);
@@ -573,7 +575,7 @@ fn re_search_backward(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     // ZZZ startchars
     let s = vs as &string;
     let pos = vpos as &i31 as i32_s;
-    let len = s.length;
+    let len = s.length();
     if pos >u len {
         caml_invalid_argument([string|search_backward @ 0; 19]);
     }
@@ -593,7 +595,7 @@ fn re_string_match(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     // ZZZ startchars
     let s = vs as &string;
     let pos = vpos as &i31 as i32_s;
-    let len = s.length;
+    let len = s.length();
     if pos >u len { caml_invalid_argument([string|string_match @ 0; 16]); }
     let res = re_match(re, s, pos, 0);
     if res is &block { return res; }
@@ -607,7 +609,7 @@ fn re_partial_match(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     // ZZZ startchars
     let s = vs as &string;
     let pos = vpos as &i31 as i32_s;
-    let len = s.length;
+    let len = s.length();
     if pos >u len {
         caml_invalid_argument([string|string_partial_match @ 0; 24]);
     }
@@ -622,7 +624,7 @@ data unmatched_group = "Str.replace: reference to unmatched group";
 #[export = "re_replacement_text"]
 fn re_replacement_text(vrepl: &eq, vgroups: &eq, vorig: &eq) -> &eq {
     let repl = vrepl as &string;
-    let l = repl.length;
+    let l = repl.length();
     let groups = vgroups as &block;
     let orig = vorig as &string;
     let i: i32;
@@ -653,7 +655,7 @@ fn re_replacement_text(vrepl: &eq, vgroups: &eq, vorig: &eq) -> &eq {
             ;
             if c >u 9 { len = len + 2; br 'loop; }
             c = c << 1;
-            if c + 1 >u groups.length {
+            if c + 1 >u groups.length() {
                 caml_failwith([string|unmatched_group @ 0; 41]);
             }
             start = groups[c + 1] as &i31 as i32_s;
@@ -697,7 +699,7 @@ fn re_replacement_text(vrepl: &eq, vgroups: &eq, vorig: &eq) -> &eq {
                 br 'loop;
             }
             c = c << 1;
-            if c + 1 >u groups.length {
+            if c + 1 >u groups.length() {
                 caml_failwith([string|unmatched_group @ 0; 41]);
             }
             start = groups[c + 1] as &i31 as i32_s;

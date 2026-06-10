@@ -91,7 +91,7 @@ fn pop_compare_stack(stack: &compare_stack) -> (&eq, &eq) {
     stack.f_4[i] = p';
     let v1 = stack.f_2[i];
     let v2 = stack.f_3[i];
-    if p' == v1.length {
+    if p' == v1.length() {
         stack.f_2[i] = dummy_block;
         stack.f_3[i] = dummy_block;
         stack.f = i - 1;
@@ -103,7 +103,7 @@ fn pop_compare_stack(stack: &compare_stack) -> (&eq, &eq) {
 fn push_compare_stack(stack: &compare_stack, v1: &block, v2: &block, p: i32)
 -> &compare_stack {
     let i = stack.f + 1;
-    let len = stack.f_2.length;
+    let len = stack.f_2.length();
     if i >=u len {
         let len' = len << 1;
         let stack' =
@@ -130,8 +130,8 @@ const unordered = 0x80000000;
 
 fn compare_strings(s1: &string, s2: &string) -> i32 {
     if s1 == s2 { return 0; }
-    let l1 = s1.length;
-    let l2 = s2.length;
+    let l1 = s1.length();
+    let l2 = s2.length();
     let len = l1 <=u l2?l1:l2;
     let i = 0;
     'loop: loop {
@@ -279,8 +279,8 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
                                 return
                                     v1 as &i31 as i32_s - v2 as &i31 as i32_s;
                             }
-                            s1 = b1.length;
-                            s2 = b2.length;
+                            s1 = b1.length();
+                            s2 = b2.length();
                             // compare size first
                             if s1 != s2 { return s1 - s2; }
                             br_if 'next_item s1 == 1;
@@ -323,8 +323,8 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
                             fa2 =
                                 br_on_cast_fail 'heterogeneous &float_array
                                     v2;
-                            s1 = fa1.length;
-                            s2 = fa2.length;
+                            s1 = fa1.length();
+                            s2 = fa2.length();
                             if s1 != s2 { return s1 - s2; }
                             i = 0;
                             'float_array: loop {

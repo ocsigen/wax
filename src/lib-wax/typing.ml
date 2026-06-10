@@ -1483,6 +1483,18 @@ let is_mem_method meth = mem_load_result meth <> None || mem_store_method meth
 let is_mgmt_method m =
   match m with "size" | "grow" | "fill" | "copy" | "init" -> true | _ -> false
 
+(* No-argument instruction methods written as a call on a value, [x.sqrt()]:
+   the integer and float unary operators, the [to_bits]/[from_bits] reinterpret
+   casts, and [arr.length()]. They are parsed as [Call (StructGet …, [])] and
+   kept in that form so they print back with their parentheses. *)
+let is_unary_method m =
+  match m with
+  | "clz" | "ctz" | "popcnt" | "extend8_s" | "extend16_s" | "abs" | "ceil"
+  | "floor" | "trunc" | "nearest" | "sqrt" | "to_bits" | "from_bits" | "length"
+    ->
+      true
+  | _ -> false
+
 (* Mint (or reuse) an anonymous function type for an inline [as &fn(..) -> ..]
    cast target. The name encodes the signature so identical casts share one
    type, and to_wasm materialises it through the [<..>] synthetic-type path. *)
@@ -2179,6 +2191,46 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
              },
              [ i2' ] ))
         ty
+  (* No-argument instruction methods on a value: [x.sqrt()], [x.clz()],
+     [x.to_bits()], [arr.length()]. Kept in call form so they print back with
+     their parentheses; the result type is read from the receiver. *)
+  | Call (({ desc = StructGet (recv, meth); _ } as func), [])
+    when is_unary_method meth.desc ->
+      let* recv' = instruction ctx recv in
+      let*! ty =
+        let ty = expression_type ctx recv' in
+        match (UnionFind.find ty, meth.desc) with
+        | Valtype { typ = Ref { typ = Type t; _ }; _ }, "length" -> (
+            let*@ _, def = Tbl.find_opt ctx.type_context.types t in
+            match def.typ with
+            | Array _ ->
+                Some (UnionFind.make (Valtype { typ = I32; internal = I32 }))
+            | Struct _ | Func _ | Cont _ ->
+                Error.expected_array_type ctx.diagnostics ~location:i.info;
+                None)
+        | (Null | Valtype { typ = Ref { typ = Array; _ }; _ }), "length" ->
+            Some (UnionFind.make (Valtype { typ = I32; internal = I32 }))
+        | Valtype { typ = I32; _ }, "from_bits" ->
+            Some (UnionFind.make (Valtype { typ = F32; internal = F32 }))
+        | Valtype { typ = I64; _ }, "from_bits" ->
+            Some (UnionFind.make (Valtype { typ = F64; internal = F64 }))
+        | Valtype { typ = F32; _ }, "to_bits" ->
+            Some (UnionFind.make (Valtype { typ = I32; internal = I32 }))
+        | Valtype { typ = F64; _ }, "to_bits" ->
+            Some (UnionFind.make (Valtype { typ = I64; internal = I64 }))
+        | ( ((Number | Int | Valtype { typ = I32 | I64; _ }) as ty'),
+            ("clz" | "ctz" | "popcnt" | "extend8_s" | "extend16_s") ) ->
+            if ty' = Number then UnionFind.set ty Int;
+            Some ty
+        | ( ((Number | Float | Valtype { typ = F32 | F64; _ }) as ty'),
+            ("abs" | "ceil" | "floor" | "trunc" | "nearest" | "sqrt") ) ->
+            if ty' = Number then UnionFind.set ty Float;
+            Some ty
+        | _ -> None
+      in
+      return_expression i
+        (Call ({ desc = StructGet (recv', meth); info = ([||], func.info) }, []))
+        ty
   (* SIMD vector op written as a method intrinsic, [recv.add_i32x4(b)]. The lane
      shape is read from the method name (the receiver is always v128, or a scalar
      for splat); arguments are the lane immediates (if any) followed by the
@@ -2444,34 +2496,18 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                     fields
                 in
                 fieldtype ctx typ
-            | Array _ when field.desc = "length" ->
-                Some (UnionFind.make (Valtype { typ = I32; internal = I32 }))
             | Func _ | Array _ | Cont _ ->
                 (*ZZZ Fix location*)
-                if field.desc = "length" then
-                  Error.expected_array_type ctx.diagnostics ~location:ty.info
-                else
-                  Error.expected_struct_type ctx.diagnostics ~location:ty.info;
+                Error.expected_struct_type ctx.diagnostics ~location:ty.info;
                 None)
-        | (Null | Valtype { typ = Ref { typ = Array; _ }; _ }), "length" ->
-            Some (UnionFind.make (Valtype { typ = I32; internal = I32 }))
-        | Valtype { typ = I32; _ }, "from_bits" ->
-            Some (UnionFind.make (Valtype { typ = F32; internal = F32 }))
-        | Valtype { typ = I64; _ }, "from_bits" ->
-            Some (UnionFind.make (Valtype { typ = F64; internal = F64 }))
-        | Valtype { typ = F32; _ }, "to_bits" ->
-            Some (UnionFind.make (Valtype { typ = I32; internal = I32 }))
-        | Valtype { typ = F64; _ }, "to_bits" ->
-            Some (UnionFind.make (Valtype { typ = I64; internal = I64 }))
-        | ( ((Number | Int | Valtype { typ = I32 | I64; _ }) as ty'),
-            ("clz" | "ctz" | "popcnt" | "extend8_s" | "extend16_s") ) ->
-            if ty' = Number then UnionFind.set ty Int;
-            Some ty
-        | ( ((Number | Float | Valtype { typ = F32 | F64; _ }) as ty'),
-            ("abs" | "ceil" | "floor" | "trunc" | "nearest" | "sqrt") ) ->
-            if ty' = Number then UnionFind.set ty Float;
-            Some ty
-        | _ -> None
+        (* Leave an unresolved receiver alone (its own error, if any, is
+           reported elsewhere); any other concrete type has no fields. The
+           instruction methods that once lived here now require parentheses
+           ([x.sqrt()]) and are handled in the [Call] case. *)
+        | Unknown, _ -> None
+        | _ ->
+            Error.expected_struct_type ctx.diagnostics ~location:(snd i'.info);
+            None
       in
       return_expression i (StructGet (i', field)) ty
   | StructSet (i1, field, i2) -> (
