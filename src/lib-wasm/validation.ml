@@ -547,9 +547,11 @@ type type_context = {
   mutable last_index : int;
   index_mapping : (Uint32.t, int * (string * int) list) Hashtbl.t;
   label_mapping : (string, int * (string * int) list) Hashtbl.t;
-  (* Source location of each type definition, keyed by its (text-level) type
-     index, so that checks on the type itself can be reported precisely. *)
-  type_locations : (int, Ast.location) Hashtbl.t;
+  (* Source index node of each type definition (its name when it has one, else
+     its text-level numeric index, carrying the definition's location), keyed by
+     the resolved global type index. Lets checks on a type be reported at its
+     definition and name it as it appears in the source. *)
+  type_defs : (int, Ast.Text.idx) Hashtbl.t;
 }
 
 let get_type_info d ctx (idx : Ast.Text.idx) =
@@ -2296,7 +2298,15 @@ let add_type d ctx ty =
           Hashtbl.replace ctx.index_mapping
             (Uint32.of_int (ctx.last_index + i))
             (i' + i, fields);
-          Hashtbl.replace ctx.type_locations (ctx.last_index + i) e.Ast.info;
+          let def_idx =
+            let desc =
+              match label with
+              | Some l -> Ast.Text.Id l.Ast.desc
+              | None -> Ast.Text.Num (Uint32.of_int (ctx.last_index + i))
+            in
+            { Ast.desc; info = e.Ast.info }
+          in
+          Hashtbl.replace ctx.type_defs (i' + i) def_idx;
           Option.iter
             (fun label ->
               Hashtbl.replace ctx.label_mapping label.Ast.desc (i' + i, fields))
@@ -2488,15 +2498,17 @@ let build_initial_env ctx fields =
     fields
 
 let check_type_definitions ctx =
+  let type_index gidx =
+    Option.value
+      ~default:(Ast.no_loc (Ast.Text.Num (Uint32.of_int gidx)))
+      (Hashtbl.find_opt ctx.types.type_defs gidx)
+  in
   for i = 0 to ctx.types.last_index - 1 do
-    let location =
-      Option.value ~default:(Ast.no_loc ()).info
-        (Hashtbl.find_opt ctx.types.type_locations i)
-    in
     let>@ i, _ =
       get_type_info ctx.diagnostics ctx.types
         (Ast.no_loc (Ast.Text.Num (Uint32.of_int i)))
     in
+    let location = (type_index i).Ast.info in
     let ty = Types.get_subtype ctx.subtyping_info i in
     (* A continuation type must wrap a function type. *)
     (match ty.typ with
@@ -2504,8 +2516,7 @@ let check_type_definitions ctx =
         match (Types.get_subtype ctx.subtyping_info ft).typ with
         | Func _ -> ()
         | Struct _ | Array _ | Cont _ ->
-            Error.expected_func_type ctx.diagnostics ~location
-              (Ast.no_loc (Ast.Text.Num (Uint32.of_int ft))))
+            Error.expected_func_type ctx.diagnostics ~location (type_index ft))
     | Func _ | Struct _ | Array _ -> ());
     let*? j = ty.supertype in
     let ty' = Types.get_subtype ctx.subtyping_info j in
@@ -2743,7 +2754,7 @@ let validate_configuration diagnostics (_, fields) =
       last_index = 0;
       index_mapping = Hashtbl.create 16;
       label_mapping = Hashtbl.create 16;
-      type_locations = Hashtbl.create 16;
+      type_defs = Hashtbl.create 16;
     }
   in
   List.iter
@@ -2997,7 +3008,7 @@ let check_syntax diagnostics (_, lst) =
       last_index = 0;
       index_mapping = Hashtbl.create 16;
       label_mapping = Hashtbl.create 16;
-      type_locations = Hashtbl.create 16;
+      type_defs = Hashtbl.create 16;
     }
   in
   (* Pass 1: Build Type Mappings (Explicit) *)

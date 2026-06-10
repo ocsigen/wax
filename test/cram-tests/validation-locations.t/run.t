@@ -27,7 +27,7 @@ A continuation type that does not wrap a function type points at the type
 definition:
 
   $ wax --validate cont_not_func.wat -o out.wat
-  Error: Type 0 should be a function type.
+  Error: Type $s should be a function type.
    ──➤  cont_not_func.wat:3:4
   1 │ (module
   2 │   (type $s (struct))
