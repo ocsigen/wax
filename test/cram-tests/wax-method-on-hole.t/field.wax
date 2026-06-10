@@ -1,0 +1,2 @@
+type s = { x: i32 };
+fn f() -> i32 { unreachable; _ = _.x; }

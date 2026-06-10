@@ -2667,9 +2667,11 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
             if ty' = Number then UnionFind.set ty Float;
             Some ty
         (* A receiver still unconstrained (e.g. after [unreachable]) may take any
-           method; a concretely-typed one that reached here does not match the
+           method; keep the call (with its result type unknown) rather than
+           giving up, which would drop a hole receiver and desync hole counting.
+           A concretely-typed receiver that reached here does not match the
            method and is rejected. *)
-        | Unknown, _ -> None
+        | Unknown, _ -> Some (UnionFind.make Unknown)
         | _ ->
             Error.invalid_method_receiver ctx.diagnostics
               ~location:(snd recv'.info) ty;
@@ -2974,10 +2976,12 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                     ~location:(snd i'.info);
                 None)
         (* Leave an unresolved receiver alone (its own error, if any, is
-           reported elsewhere). A name that is an instruction method was likely
-           meant as the parenthesised call [x.sqrt()]; any other field access on
-           a non-struct type has no fields to find. *)
-        | Unknown, _ -> None
+           reported elsewhere): keep the access with an unknown result type
+           rather than giving up, which would drop a hole receiver and desync
+           hole counting. A name that is an instruction method was likely meant
+           as the parenthesised call [x.sqrt()]; any other field access on a
+           non-struct type has no fields to find. *)
+        | Unknown, _ -> Some (UnionFind.make Unknown)
         | _ when is_unary_method field.desc ->
             Error.method_needs_parentheses ctx.diagnostics ~location:field.info
               field.desc;
