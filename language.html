@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-eac159a0.js";
+            window.path_to_searchindex_js = "searchindex-c12fc29b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -362,6 +362,15 @@ block that leaves a value, or a <code>do i32</code> block that leaves two, is an
     // the i32 operand below the block is available here
 }
 </code></pre>
+<p>Parameters only work when the block stands on its own as a statement, where
+those values come from the operand stack. A block used <em>inside</em> an expression
+has no enclosing stack to draw from, so it cannot take parameters. To combine a
+parameterized block’s result with other operands, keep the block at statement
+level and pick up its result with a <a href="#holes">hole</a>:</p>
+<pre><code class="language-wax">x;                        // leaves an i32 on the stack
+do (i32) -&gt; i32 { … };    // a statement: consumes that i32, leaves an i32
+_ + 1;                    // the hole plugs in the block's result
+</code></pre>
 <p>Blocks can be labelled and used as branch targets; see
 <a href="#labels-and-branches">Labels and Branches</a>.</p>
 <h3 id="if-expressions"><a class="header" href="#if-expressions">If Expressions</a></h3>
@@ -453,6 +462,17 @@ leaves them all on the stack, in order:</p>
     a %s b;
 }
 </code></pre>
+<h3 id="start-function"><a class="header" href="#start-function">Start Function</a></h3>
+<p>A function marked with the <code>#[start]</code> attribute runs automatically when the
+module is instantiated. It must take no parameters and return nothing, and a
+module may have at most one:</p>
+<pre><code class="language-wax">#[start]
+fn init() {
+    // initialization code
+}
+</code></pre>
+<p>(This maps to the WebAssembly <code>start</code> field; see
+<a href="./correspondence/module_fields.html#start-attribute">Module Fields</a>.)</p>
 <h3 id="function-types"><a class="header" href="#function-types">Function Types</a></h3>
 <p>Function types use <code>fn</code>:</p>
 <pre><code class="language-wax">type binary_op = fn(i32, i32) -&gt; i32;

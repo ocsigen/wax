@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-eac159a0.js";
+            window.path_to_searchindex_js = "../searchindex-c12fc29b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f031991a.js"></script>
@@ -261,7 +261,7 @@ tag multi_arg(a: i32, b: &amp;string);
 tag js_error(&amp;?extern);
 </code></pre>
 <h2 id="attributes"><a class="header" href="#attributes">Attributes</a></h2>
-<p>Attributes modify module fields. They use the syntax <code>#[name = value]</code> and appear before the field they modify.</p>
+<p>Attributes modify module fields. They use the syntax <code>#[name = value]</code>, or <code>#[name]</code> when no value is needed, and appear before the field they modify.</p>
 <h3 id="export-attribute"><a class="header" href="#export-attribute">Export Attribute</a></h3>
 <p>Export a field with a given name:</p>
 <pre><code class="language-wax">#[export = "add"]
@@ -277,6 +277,15 @@ tag my_error(code: i32);
 <pre><code class="language-wax">#[export = "add"]
 #[export = "plus"]
 fn add(x: i32, y: i32) -&gt; i32 { x + y; }
+</code></pre>
+<h3 id="start-attribute"><a class="header" href="#start-attribute">Start Attribute</a></h3>
+<p>Mark a function to run at module instantiation. It takes no value and the
+function must have no parameters and no results (it maps to the Wasm <code>start</code>
+field):</p>
+<pre><code class="language-wax">#[start]
+fn init() {
+    // initialization code
+}
 </code></pre>
 <h3 id="import-attribute"><a class="header" href="#import-attribute">Import Attribute</a></h3>
 <p>Import a field from a module. Takes a tuple of <code>("module", "name")</code>:</p>
