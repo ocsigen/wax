@@ -679,8 +679,7 @@
           (then
             (local.set $len (i32.add (local.get $len) (i32.const 1)))
             (br $loop)))
-        (local.set $c (i32.sub (local.get $c) (i32.const 48)) ;; '0'
-        )
+        (local.set $c (i32.sub (local.get $c) (i32.const 48))) ;; '0'
         (if (i32.gt_u (local.get $c) (i32.const 9))
           (then
             (local.set $len (i32.add (local.get $len) (i32.const 2)))
@@ -731,8 +730,7 @@
             (array.set $string (local.get $res) (local.get $j) (local.get $c))
             (local.set $j (i32.add (local.get $j) (i32.const 1)))
             (br $loop)))
-        (local.set $c (i32.sub (local.get $c) (i32.const 48)) ;; '0'
-        )
+        (local.set $c (i32.sub (local.get $c) (i32.const 48))) ;; '0'
         (if (i32.gt_u (local.get $c) (i32.const 9))
           (then
             (array.set $string (local.get $res) (local.get $j) (i32.const 92))

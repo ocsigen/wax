@@ -395,8 +395,7 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
                             ([string|continuation_value @ 0; 27]);
                     }
                     0 as &i31;
-                } // fall through
-            ;
+                }; // fall through
             // heterogeneous comparison
             t1 = caml_obj_tag(v1) as &i31 as i32_u;
             t2 = caml_obj_tag(v2) as &i31 as i32_u;

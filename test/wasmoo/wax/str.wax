@@ -650,8 +650,7 @@ fn re_replacement_text(vrepl: &eq, vgroups: &eq, vorig: &eq) -> &eq {
                 len = len + 1;
                 br 'loop;
             }
-            c = c - 48 // '0'
-            ;
+            c = c - 48; // '0'
             if c >u 9 { len = len + 2; br 'loop; }
             c = c << 1;
             if c + 1 >u groups.length() {
@@ -689,8 +688,7 @@ fn re_replacement_text(vrepl: &eq, vgroups: &eq, vorig: &eq) -> &eq {
                 j = j + 1;
                 br 'loop;
             }
-            c = c - 48 // '0'
-            ;
+            c = c - 48; // '0'
             if c >u 9 {
                 res[j] = 92;
                 res[j + 1] = c + 48;

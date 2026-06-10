@@ -519,8 +519,7 @@
               (call $caml_invalid_argument
                 (array.new_data $string $continuation_value (i32.const 0)
                   (i32.const 27)))))
-          (ref.i31 (i32.const 0))) ;; fall through
-      )
+          (ref.i31 (i32.const 0)))) ;; fall through
       ;; heterogeneous comparison
       (local.set $t1
         (i31.get_u (ref.cast (ref i31) (call $caml_obj_tag (local.get $v1)))))

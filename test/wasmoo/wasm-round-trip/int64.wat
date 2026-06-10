@@ -167,8 +167,7 @@
     (if (i32.lt_s (local.get $i) (local.get $len))
       (then
         (local.set $c (array.get_u $string (local.get $s) (local.get $i)))
-        (br_if $loop (i32.eq (local.get $c) (i32.const 95)) ;; '_'
-        )
+        (br_if $loop (i32.eq (local.get $c) (i32.const 95))) ;; '_'
         (local.set $d (call $parse_digit (local.get $c)))
         (if (i32.ge_u (local.get $d) (local.get $base))
           (then (call $caml_failwith (local.get $errmsg))))
@@ -312,7 +311,7 @@
           (if (i64.eq (local.get $base) (i64.const 16))
             (then
               (array.set $string (local.get $s) (i32.const 1)
-                (select (i32.const 88) (i32.const 120) (local.get $uppercase)) ;; 'X' 'x'
-              )))))))
+                (select (i32.const 88) (i32.const 120) (local.get $uppercase)))) ;; 'X' 'x'
+          )))))
   (local.get $s)
 )

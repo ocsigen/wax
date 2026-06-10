@@ -99,8 +99,7 @@ fn parse_int(v: &eq, nbits: i32, errmsg: &string) -> i32 {
         i = i + 1;
         if i <s len {
             let c = s[i] as i32_u;
-            br_if 'loop c == 95 // '_'
-            ;
+            br_if 'loop c == 95; // '_'
             d = parse_digit(c);
             if d >=u base { caml_failwith(errmsg); }
             if res >u threshold { caml_failwith(errmsg); }
@@ -175,8 +174,7 @@ fn parse_int_format(s: &string) -> (i32, i32, i32, i32, i32) {
     'return: do {
         'bad_format: do {
             br_if 'bad_format len <u 2;
-            br_if 'bad_format s[0] as i32_u != 37 // '%'
-            ;
+            br_if 'bad_format s[0] as i32_u != 37; // '%'
             let c = s[1] as i32_u;
             if
                 c == 43 // '+'
@@ -306,11 +304,9 @@ fn format_int(x: &eq, d: i32, small: i32) -> &eq {
     } // ' '
     if alternate {
         if i {
-            s[0] = 48 // '0'
-            ;
+            s[0] = 48; // '0'
             if base == 16 {
-                s[1] = uppercase?88:120 // 'X' 'x'
-                ;
+                s[1] = uppercase?88:120; // 'X' 'x'
             }
         }
     }

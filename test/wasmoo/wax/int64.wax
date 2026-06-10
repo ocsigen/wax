@@ -132,8 +132,7 @@ fn caml_i64_of_digits
         i = i + 1;
         if i <s len {
             let c = s[i] as i32_u;
-            br_if 'loop c == 95 // '_'
-            ;
+            br_if 'loop c == 95; // '_'
             d = parse_digit(c);
             if d >=u base { caml_failwith(errmsg); }
             if res >u threshold { caml_failwith(errmsg); }
@@ -232,11 +231,9 @@ fn caml_int64_format(x: &eq, x_2: &eq) -> &eq {
     } // ' '
     if alternate {
         if i {
-            s[0] = 48 // '0'
-            ;
+            s[0] = 48; // '0'
             if base == 16 {
-                s[1] = uppercase?88:120 // 'X' 'x'
-                ;
+                s[1] = uppercase?88:120; // 'X' 'x'
             }
         }
     }

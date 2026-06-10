@@ -985,7 +985,10 @@ and deliminated_instr pp (i : _ instr) =
   if is_block i then instr Instruction pp i
   else (
     instr (if starts_with_block i then Atom else Instruction) pp i;
-    punctuation pp ";")
+    (* Hold any deferred trailing comment so the [;] prints on the statement's
+       line, ahead of the comment ([expr; // c] rather than [expr // c] then a
+       lone [;] on the next line). *)
+    Utils.Printer.with_held_eol pp.base.printer (fun () -> punctuation pp ";"))
 
 and block_contents pp (l : _ instr list) =
   if l <> [] then (

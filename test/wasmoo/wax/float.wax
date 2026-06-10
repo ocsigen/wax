@@ -110,16 +110,12 @@ fn caml_hexstring_of_float(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
                 br_if 'write d;
             }
             s[len - 1] = exp >=s 0?43:45;
-            s[i] = 48 // '0'
-            ;
-            s[i + 1] = 120 // 'x'
-            ;
-            s[i + 2] = (m >>u 52) as i32 + 48 // '0'
-            ;
+            s[i] = 48; // '0'
+            s[i + 1] = 120; // 'x'
+            s[i + 2] = (m >>u 52) as i32 + 48; // '0'
             i = i + 3;
             if prec >s 0 {
-                s[i] = 46 // '.'
-                ;
+                s[i] = 46; // '.'
                 i = i + 1;
                 frac = m << 12;
                 'write: loop {
@@ -157,8 +153,7 @@ fn parse_format(s: &string) -> (i32, i32, i32, i32) {
     'return: do {
         'bad_format: do {
             br_if 'bad_format len <u 2;
-            br_if 'bad_format s[0] as i32_u != 37 // '%'
-            ;
+            br_if 'bad_format s[0] as i32_u != 37; // '%'
             let c = s[1] as i32_u;
             if
                 c == 43 // '+'
@@ -173,8 +168,7 @@ fn parse_format(s: &string) -> (i32, i32, i32, i32) {
                 i = i + 1;
             }
             br_if 'bad_format i == len;
-            br_if 'bad_format s[i] as i32_u != 46 // '.'
-            ;
+            br_if 'bad_format s[i] as i32_u != 46; // '.'
             'precision: loop {
                 i = i + 1;
                 br_if 'bad_format i == len;
@@ -191,8 +185,7 @@ fn parse_format(s: &string) -> (i32, i32, i32, i32) {
             }
             br_if 'bad_format i + 1 != len;
             uppercase = c <s 96;
-            conversion = (c & 0xdf) - 69 // 'E'
-            ;
+            conversion = (c & 0xdf) - 69; // 'E'
             br_if 'return conversion <=u 2;
         }
         caml_invalid_argument([string|format_error @ 0; 22]);

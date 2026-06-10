@@ -159,8 +159,7 @@
       (array.set $string (local.get $s)
         (i32.add (local.get $i) (i32.const 2))
         (i32.add (i32.wrap_i64 (i64.shr_u (local.get $m) (i64.const 52)))
-          (i32.const 48)) ;; '0'
-      )
+          (i32.const 48))) ;; '0'
       (local.set $i (i32.add (local.get $i) (i32.const 3)))
       (if (i32.gt_s (local.get $prec) (i32.const 0))
         (then
@@ -199,8 +198,7 @@
       (br_if $bad_format (i32.lt_u (local.get $len) (i32.const 2)))
       (br_if $bad_format
         (i32.ne (array.get_u $string (local.get $s) (i32.const 0))
-          (i32.const 37)) ;; '%'
-      )
+          (i32.const 37))) ;; '%'
       (local.set $c (array.get_u $string (local.get $s) (i32.const 1)))
       (if (i32.eq (local.get $c) (i32.const 43)) ;; '+'
         (then
@@ -213,8 +211,7 @@
       (br_if $bad_format (i32.eq (local.get $i) (local.get $len)))
       (br_if $bad_format
         (i32.ne (array.get_u $string (local.get $s) (local.get $i))
-          (i32.const 46)) ;; '.'
-      )
+          (i32.const 46))) ;; '.'
       (loop $precision
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
         (br_if $bad_format (i32.eq (local.get $i) (local.get $len)))
@@ -233,8 +230,7 @@
         (i32.ne (i32.add (local.get $i) (i32.const 1)) (local.get $len)))
       (local.set $uppercase (i32.lt_s (local.get $c) (i32.const 96)))
       (local.set $conversion
-        (i32.sub (i32.and (local.get $c) (i32.const 0xdf)) (i32.const 69)) ;; 'E'
-      )
+        (i32.sub (i32.and (local.get $c) (i32.const 0xdf)) (i32.const 69))) ;; 'E'
       (br_if $return (i32.le_u (local.get $conversion) (i32.const 2))))
     (call $caml_invalid_argument
       (array.new_data $string $format_error (i32.const 0) (i32.const 22))))
