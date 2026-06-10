@@ -148,7 +148,7 @@ type 'info instr_desc =
 
 and 'info instr = ('info instr_desc, 'info) annotated
 
-type attributes = (string * location instr) list
+type attributes = (string * location instr option) list
 
 type 'info memdata = {
   data_name : ident option;

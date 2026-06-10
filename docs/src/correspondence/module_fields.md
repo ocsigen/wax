@@ -140,7 +140,7 @@ tag js_error(&?extern);
 
 ## Attributes
 
-Attributes modify module fields. They use the syntax `#[name = value]` and appear before the field they modify.
+Attributes modify module fields. They use the syntax `#[name = value]`, or `#[name]` when no value is needed, and appear before the field they modify.
 
 ### Export Attribute
 
@@ -163,6 +163,19 @@ Multiple exports can share the same function:
 #[export = "add"]
 #[export = "plus"]
 fn add(x: i32, y: i32) -> i32 { x + y; }
+```
+
+### Start Attribute
+
+Mark a function to run at module instantiation. It takes no value and the
+function must have no parameters and no results (it maps to the Wasm `start`
+field):
+
+```wax
+#[start]
+fn init() {
+    // initialization code
+}
 ```
 
 ### Import Attribute

@@ -1,0 +1,4 @@
+#[start]
+fn init() {
+    nop;
+}

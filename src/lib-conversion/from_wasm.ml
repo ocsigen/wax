@@ -231,6 +231,9 @@ type ctx = {
          annotations, where numeric references are forbidden anyway. *)
   function_types : Src.typeuse CondTbl.t;
   exports : (Src.exportable * string, Src.name list) Hashtbl.t;
+  mutable start : string option;
+      (* Wax name of the start function, if any; rendered as a [#[start]]
+         attribute on that function rather than a separate field. *)
   locals : Sequence.t;
   labels : LabelStack.t;
   tag_types : Src.typeuse CondTbl.t;
@@ -1714,13 +1717,19 @@ and collect_elem_refs_instrs ctx acc l = List.iter (collect_elem_refs ctx acc) l
 
 let exports ctx kind name e =
   List.map
-    (fun nm -> ("export", string_of_name nm))
+    (fun nm -> ("export", Some (string_of_name nm)))
     (e
     @ try Hashtbl.find ctx.exports (kind, name.Ast.desc) with Not_found -> [])
 
 let import module_ name =
   ( "import",
-    Ast.no_loc (Ast.Sequence [ string_of_name module_; string_of_name name ]) )
+    Some
+      (Ast.no_loc
+         (Ast.Sequence [ string_of_name module_; string_of_name name ])) )
+
+(* The [#[start]] attribute, if function [name] is the module's start. *)
+let start_attribute ctx name =
+  if ctx.start = Some name.Ast.desc then [ ("start", None) ] else []
 
 let single_expression ctx ~location l =
   match l with
@@ -1823,7 +1832,7 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
                typ;
                sign = Some sign;
                body = (label (), locals @ Stack.run (instructions ctx instrs));
-               attributes = exports ctx Func name e;
+               attributes = start_attribute ctx name @ exports ctx Func name e;
              })
     | Import { module_; name = nm; desc; exports = e; _ } -> (
         match desc with
@@ -2332,6 +2341,7 @@ let module_ ?(strict_constants = false) diagnostics (_, fields) =
         function_types = CondTbl.make ();
         tag_types = CondTbl.make ();
         exports = Hashtbl.create 16;
+        start = None;
         locals = Sequence.make common_namespace "x";
         labels = LabelStack.make ();
         label_arities = [];
@@ -2344,6 +2354,14 @@ let module_ ?(strict_constants = false) diagnostics (_, fields) =
     in
     let export_tbl, export_lst = collect_exports fields in
     register_names ctx export_tbl fields;
+    (* Resolve the start function (if any) to its Wax name; it is rendered as a
+       [#[start]] attribute on that function. *)
+    List.iter
+      (fun f ->
+        match f.Ast.desc with
+        | Src.Start i -> ctx.start <- Some (idx ctx `Func i).Ast.desc
+        | _ -> ())
+      fields;
     if not forbid_numeric then elaborate_implicit_types ctx fields;
     List.iter
       (fun (kind, index, name) ->

@@ -1028,10 +1028,13 @@ let print_attribute pp (name, i) =
   box pp ~indent:indent_level (fun () ->
       attribute pp "#[";
       attribute pp name;
-      space pp ();
-      attribute pp "=";
-      space pp ();
-      with_style pp Attribute (fun () -> instr Instruction pp i);
+      (match i with
+      | None -> ()
+      | Some i ->
+          space pp ();
+          attribute pp "=";
+          space pp ();
+          with_style pp Attribute (fun () -> instr Instruction pp i));
       attribute pp "]";
       space pp ())
 

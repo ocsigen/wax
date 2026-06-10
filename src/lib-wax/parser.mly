@@ -360,7 +360,8 @@ rectype:
 attribute_expression: e = expression { e }
 
 attribute:
-| "#" "[" name = IDENT "=" i = attribute_expression "]" { (name, i) }
+| "#" "[" name = IDENT "=" i = attribute_expression "]" { (name, Some i) }
+| "#" "[" name = IDENT "]" { (name, None) }
 
 simple_pattern:
 | x = ident { Some x }

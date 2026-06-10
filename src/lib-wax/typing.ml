@@ -257,6 +257,19 @@ module Error = struct
           "A table with a non-nullable element type must have an initializer.")
       ()
 
+  let start_function_signature context ~location =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f
+          "The start function must have no parameters and no results.")
+      ()
+
+  let multiple_start context ~location =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f "A module can have at most one start function.")
+      ()
+
   let final_supertype context ~location name =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
@@ -4323,6 +4336,14 @@ let rec functions ctx fields =
                 Error.expected_func_type ctx.diagnostics ~location:name.info;
                 None
           in
+          (* A [#[start]] function must have no parameters and no results. *)
+          if
+            List.exists (fun (k, _) -> k = "start") attributes
+            && not
+                 (Array.length func_typ.params = 0
+                 && Array.length func_typ.results = 0)
+          then
+            Error.start_function_signature ctx.diagnostics ~location:name.info;
           let*@ return_types =
             array_map_opt (fun typ -> internalize ctx typ) func_typ.results
           in
@@ -4557,15 +4578,22 @@ let type_configuration ~simplify diagnostics fields =
      conditionals per branch, so exports in mutually exclusive branches do not
      clash. *)
   let exports = Hashtbl.create 16 in
+  let start_seen = ref false in
   walk_fields
     (fun field ->
       List.iter
-        (fun (key, (v : _ instr)) ->
-          match (key, v.desc) with
-          | "export", String (_, name) ->
+        (fun (key, v) ->
+          match (key, Option.map (fun (v : _ instr) -> v.desc) v) with
+          | "export", Some (String (_, name)) ->
               if Hashtbl.mem exports name then
-                Error.duplicated_export diagnostics ~location:v.info name
+                Error.duplicated_export diagnostics
+                  ~location:(Option.get v).info name
               else Hashtbl.add exports name ()
+          | "start", _ ->
+              (* A module may name at most one start function. *)
+              if !start_seen then
+                Error.multiple_start diagnostics ~location:field.info
+              else start_seen := true
           | _ -> ())
         (field_attributes field.desc))
     fields;

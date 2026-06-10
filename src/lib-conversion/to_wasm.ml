@@ -1160,13 +1160,14 @@ let rec instruction ret ctx i : location Text.instr list =
 let import attributes =
   List.find_map
     (fun (k, v) ->
-      match (k, v.desc) with
+      match (k, Option.map (fun v -> v.desc) v) with
       | ( "import",
-          Sequence
-            [
-              { desc = String (_, m); info = l };
-              { desc = String (_, n); info = l' };
-            ] ) ->
+          Some
+            (Sequence
+               [
+                 { desc = String (_, m); info = l };
+                 { desc = String (_, n); info = l' };
+               ]) ) ->
           Some ({ desc = m; info = l }, { desc = n; info = l' })
       | _ -> None)
     attributes
@@ -1174,11 +1175,13 @@ let import attributes =
 let exports attributes =
   List.filter_map
     (fun (k, v) ->
-      match (k, v.desc) with
-      | "export", String (_, n) -> Some { v with desc = n }
+      match (k, v) with
+      | "export", Some ({ desc = String (_, n); _ } as v) ->
+          Some { v with desc = n }
       | _ -> None)
     attributes
 
+let has_start attributes = List.exists (fun (k, _) -> k = "start") attributes
 let globaltype mut t : Text.globaltype = { mut; typ = valtype t }
 
 (* Smallest memory size (in 64KiB pages) that holds the declared active data
@@ -1449,7 +1452,7 @@ let module_ diagnostics types fields =
                     };
               };
             ]
-        | _ ->
+        | _ -> (
             let desc =
               match field.desc with
               | Type rectype ->
@@ -1562,7 +1565,12 @@ let module_ diagnostics types fields =
                 ->
                   assert false
             in
-            [ { field with desc } ])
+            let field' = { field with desc } in
+            (* A [#[start]] function also emits a [(start $f)] field. *)
+            match field.desc with
+            | Func { name; attributes; _ } when has_start attributes ->
+                [ field'; { field with desc = Text.Start (index name) } ]
+            | _ -> [ field' ]))
       fields
   in
   let wasm_fields = convert_fields fields in
