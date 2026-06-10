@@ -1,0 +1,5 @@
+fn f(p: &extern) {
+    let x: &extern;
+    if 0 as i32 { x = p; } else { x = p; }
+    _ = x;
+}

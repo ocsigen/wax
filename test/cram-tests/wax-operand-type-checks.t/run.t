@@ -70,6 +70,11 @@ An 'if' that produces a result must have an 'else' branch:
   2 │ 
   [123]
 
+But an 'if' whose parameters already match its results may omit the else (the
+empty else forwards them):
+
+  $ wax check if-params-no-else.wax
+
 Matching element types and correct receivers pass:
 
   $ wax check ok.wax

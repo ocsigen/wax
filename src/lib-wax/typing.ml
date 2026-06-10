@@ -243,6 +243,13 @@ module Error = struct
           "This 'if' must produce a value and so requires an 'else' branch.")
       ()
 
+  let uninitialized_local context ~location name =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f "The local variable %a has not been initialized."
+          print_name name)
+      ()
+
   let final_supertype context ~location name =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
@@ -729,6 +736,11 @@ type module_context = {
   tables : ([ `I32 | `I64 ] * reftype) Tbl.t;
   elems : reftype Tbl.t;
   mutable locals : inferred_valtype StringMap.t;
+  mutable initialized_locals : StringSet.t;
+      (* Locals known to hold a value at the current point. A non-defaultable
+         (non-nullable reference) local starts uninitialized and must be
+         assigned before it is read. The set is captured by [{ ctx with ... }]
+         on block entry, so an assignment inside a block does not escape it. *)
   control_types : (string option * inferred_type UnionFind.t array) list;
   return_types : inferred_type UnionFind.t array;
   cond : Cond.t ref;
@@ -1317,6 +1329,14 @@ let valtype_equal ctx (a : inferred_valtype) (b : inferred_valtype) =
    [simplify] finds redundant (it equals what the value would infer to on its
    own) is dropped, so Wax printed back from Wasm omits it. Used for both the
    single-value form and each name of a multi-value [let]. *)
+(* A value type is defaultable unless it is a non-nullable reference: such a
+   local has no zero value and must be assigned before use. *)
+let is_defaultable (ty : valtype) =
+  match ty with Ref { nullable; _ } -> nullable | _ -> true
+
+let mark_initialized ctx name =
+  ctx.initialized_locals <- StringSet.add name ctx.initialized_locals
+
 let bind_let_value ctx ~location result_ty (name, typ) =
   match typ with
   | Some typ ->
@@ -1328,7 +1348,9 @@ let bind_let_value ctx ~location result_ty (name, typ) =
           (let+@ ity = internalize_valtype ctx typ in
            check_subtype ctx ~location result_ty (UnionFind.make (Valtype ity));
            Option.iter
-             (fun name -> ctx.locals <- StringMap.add name.desc ity ctx.locals)
+             (fun name ->
+               ctx.locals <- StringMap.add name.desc ity ctx.locals;
+               mark_initialized ctx name.desc)
              name;
            ctx.simplify
            && Option.fold ~none:false
@@ -1340,7 +1362,8 @@ let bind_let_value ctx ~location result_ty (name, typ) =
       Option.iter
         (fun name ->
           let>@ ity = resolve_omitted_valtype ctx result_ty in
-          ctx.locals <- StringMap.add name.desc ity ctx.locals)
+          ctx.locals <- StringMap.add name.desc ity ctx.locals;
+          mark_initialized ctx name.desc)
         name;
       (name, None)
 
@@ -1348,6 +1371,13 @@ let bind_let_value ctx ~location result_ty (name, typ) =
 let check_operands ctx l expected =
   if Array.length expected = List.length l then
     List.iter2 (fun i ty -> check_type ctx i ty) l (Array.to_list expected)
+
+(* A missing else branch behaves like an empty one: it leaves the block
+   parameters on the stack, so it is valid only when those already match the
+   results (in particular, an if that produces a value needs an explicit else). *)
+let missing_else_ok ctx params results =
+  Array.length params = Array.length results
+  && Array.for_all2 (fun p r -> subtype ctx p r) params results
 
 (* The function type wrapped by a continuation type, given its (canonical) heap
    type. Mirrors [Validation.cont_functype_of_heaptype]. *)
@@ -1927,9 +1957,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                 desc = block ctx i.info label [||] results results b.desc;
               }
         | None ->
-            (* A missing else acts as an empty one, producing no value, so an if
-               that must produce a result needs an explicit else. *)
-            if Array.length results > 0 then
+            if not (missing_else_ok ctx [||] results) then
               Error.if_without_else ctx.diagnostics ~location:i.info;
             None
       in
@@ -2045,7 +2073,10 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
   | Get idx as desc ->
       let ty =
         match StringMap.find_opt idx.desc ctx.locals with
-        | Some ty -> UnionFind.make (Valtype ty)
+        | Some ty ->
+            if not (StringSet.mem idx.desc ctx.initialized_locals) then
+              Error.uninitialized_local ctx.diagnostics ~location:idx.info idx;
+            UnionFind.make (Valtype ty)
         | None -> (
             match Tbl.find_opt ctx.globals idx with
             | Some (_, ty) -> UnionFind.make (Valtype ty)
@@ -2073,7 +2104,9 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
   | Set (Some idx, i') ->
       let* i' = instruction ctx i' in
       (match StringMap.find_opt idx.desc ctx.locals with
-      | Some ty -> check_type ctx i' (UnionFind.make (Valtype ty))
+      | Some ty ->
+          check_type ctx i' (UnionFind.make (Valtype ty));
+          mark_initialized ctx idx.desc
       | None -> (
           match Tbl.find_opt ctx.globals idx with
           | Some (mut, ty) ->
@@ -2094,7 +2127,9 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       (*ZZZ local *)
       let ty =
         match StringMap.find_opt idx.desc ctx.locals with
-        | Some ty -> UnionFind.make (Valtype ty)
+        | Some ty ->
+            mark_initialized ctx idx.desc;
+            UnionFind.make (Valtype ty)
         | None ->
             (match Tbl.find_opt ctx.globals idx with
             | Some _ ->
@@ -3357,7 +3392,10 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
           match (name, typ) with
           | Some name, Some typ ->
               let>@ ity = internalize_valtype ctx typ in
-              ctx.locals <- StringMap.add name.desc ity ctx.locals
+              ctx.locals <- StringMap.add name.desc ity ctx.locals;
+              (* A defaultable local holds its zero value; a non-defaultable one
+                 stays uninitialized until assigned. *)
+              if is_defaultable typ then mark_initialized ctx name.desc
           | _ -> ())
         bindings;
       return_statement i (Let (bindings, None)) [||]
@@ -3807,9 +3845,7 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
                 desc = block ctx i.info label params results results b.desc;
               }
         | None ->
-            (* A missing else acts as an empty one, producing no value, so an if
-               that must produce a result needs an explicit else. *)
-            if Array.length results > 0 then
+            if not (missing_else_ok ctx params results) then
               Error.if_without_else ctx.diagnostics ~location:i.info;
             None
       in
@@ -4296,6 +4332,11 @@ let rec functions ctx fields =
             {
               ctx with
               locals = !locals;
+              (* Parameters are always initialized. *)
+              initialized_locals =
+                StringMap.fold
+                  (fun k _ s -> StringSet.add k s)
+                  !locals StringSet.empty;
               control_types =
                 [ (Option.map (fun l -> l.desc) label, return_types) ];
               return_types;
@@ -4447,6 +4488,7 @@ let type_configuration ~simplify diagnostics fields =
       elems = Tbl.make (Namespace.make cond) "element segment";
       tags = Tbl.make (Namespace.make cond) "tag";
       locals = StringMap.empty;
+      initialized_locals = StringSet.empty;
       control_types = [];
       return_types = [||];
       cond;
