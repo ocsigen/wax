@@ -45,6 +45,13 @@ let print_valtype f ty =
         Format.fprintf f "@[<1>(ref@ null@ %a)@]" print_heaptype typ
       else Format.fprintf f "@[<1>(ref@ %a)@]" print_heaptype typ
 
+let print_valtypes f tys =
+  Format.fprintf f "@[<1>[%a]@]"
+    (Format.pp_print_list
+       ~pp_sep:(fun f () -> Format.pp_print_space f ())
+       print_valtype)
+    (Array.to_list tys)
+
 let print_string f s =
   let s = s.Ast.desc in
   let len, s = Output.escape_string s in
@@ -214,6 +221,24 @@ module Error = struct
       ~message:(fun f () ->
         Format.fprintf f "Type mismatch: unexpected values left on the stack:%a"
           output_stack ())
+      ()
+
+  let argument_count_mismatch context ~location ~descr provided expected =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f
+          "Type mismatch: %s provides type@ @[<2>%a@]@ but type@ @[<2>%a@]@ \
+           was expected."
+          descr print_valtypes provided print_valtypes expected)
+      ()
+
+  let argument_type_mismatch context ~location ~descr provided expected =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f
+          "Type mismatch: %s provides type@ @[<2>%a@]@ but type@ @[<2>%a@]@ \
+           was expected."
+          descr print_valtype provided print_valtype expected)
       ()
 
   let branch_parameter_count_mismatch context ~location label len label' len' =
@@ -1007,6 +1032,23 @@ let with_empty_stack ctx location f =
           Format.fprintf f "@[%a@]" (output_stack ~full:false) st)
   | Empty | Unreachable -> ()
 
+(* Check that a list of [provided] argument types matches a list of [expected]
+   parameter types: same length, and each argument a subtype of the
+   corresponding parameter. [descr] names the construct supplying the
+   arguments. Reporting the two lists directly gives a far clearer message than
+   simulating the comparison on the value stack. *)
+let compare_types ctx ~location ~descr ~provided ~expected =
+  if Array.length provided <> Array.length expected then
+    Error.argument_count_mismatch ctx.diagnostics ~location ~descr provided
+      expected
+  else
+    Array.iteri
+      (fun i p ->
+        let e = expected.(i) in
+        if not (Types.val_subtype ctx.subtyping_info p e) then
+          Error.argument_type_mismatch ctx.diagnostics ~location ~descr p e)
+      provided
+
 let branch_target ctx (idx : Ast.Text.idx) =
   match idx.desc with
   | Num i -> (
@@ -1222,30 +1264,30 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           | Catch (tag, label) ->
               let*? args = lookup_tag_type ctx tag in
               let*? params = branch_target ctx label in
-              with_empty_stack ctx.modul loc (*ZZZ*)
-                (let* () = push_results args in
-                 pop_args ctx loc params)
+              compare_types ctx.modul ~location:loc
+                ~descr:"this exception handler" ~provided:args ~expected:params
           | CatchRef (tag, label) ->
               let*? args = lookup_tag_type ctx tag in
               let*? params = branch_target ctx label in
-              with_empty_stack ctx.modul loc (*ZZZ*)
-                (let* () = push_results args in
-                 let* () = push None (Ref { nullable = false; typ = Exn }) in
-                 pop_args ctx loc params)
+              let provided =
+                Array.append args [| Ref { nullable = false; typ = Exn } |]
+              in
+              compare_types ctx.modul ~location:loc
+                ~descr:"this exception handler" ~provided ~expected:params
           | CatchAll label ->
               Option.iter
                 (fun params ->
-                  with_empty_stack ctx.modul loc
-                    (*ZZZ*) (pop_args ctx loc params))
+                  compare_types ctx.modul ~location:loc
+                    ~descr:"this exception handler" ~provided:[||]
+                    ~expected:params)
                 (branch_target ctx label)
           | CatchAllRef label ->
               Option.iter
                 (fun params ->
-                  with_empty_stack ctx.modul loc (*ZZZ*)
-                    (let* () =
-                       push None (Ref { nullable = false; typ = Exn })
-                     in
-                     pop_args ctx loc params))
+                  compare_types ctx.modul ~location:loc
+                    ~descr:"this exception handler"
+                    ~provided:[| Ref { nullable = false; typ = Exn } |]
+                    ~expected:params)
                 (branch_target ctx label))
         catches;
       push_results results
@@ -1497,17 +1539,15 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           unreachable
       | Func { params; results } ->
           let* () = pop_args ctx loc params in
-          with_empty_stack ctx.modul loc (*ZZZ*)
-            (let* () = push_results results in
-             pop_args ctx loc ctx.return_types);
+          compare_types ctx.modul ~location:loc ~descr:"this tail call"
+            ~provided:results ~expected:ctx.return_types;
           unreachable)
   | ReturnCallRef idx ->
       let*! type_idx, { params; results } = lookup_func_type ctx idx in
       let* () = pop ctx loc (Ref { nullable = true; typ = Type type_idx }) in
       let* () = pop_args ctx loc params in
-      with_empty_stack ctx.modul loc (*ZZZ*)
-        (let* () = push_results results in
-         pop_args ctx loc ctx.return_types);
+      compare_types ctx.modul ~location:loc ~descr:"this tail call"
+        ~provided:results ~expected:ctx.return_types;
       unreachable
   | ReturnCallIndirect (idx, tu) -> (
       let*! typ = Sequence.get ctx.modul.diagnostics ctx.modul.tables idx in
@@ -1528,9 +1568,8 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
             pop ctx loc (address_type_to_valtype typ.limits.address_type)
           in
           let* () = pop_args ctx loc params in
-          with_empty_stack ctx.modul loc (*ZZZ*)
-            (let* () = push_results results in
-             pop_args ctx loc ctx.return_types);
+          compare_types ctx.modul ~location:loc ~descr:"this tail call"
+            ~provided:results ~expected:ctx.return_types;
           unreachable)
   | Drop ->
       let* _ = pop_any ctx loc in
