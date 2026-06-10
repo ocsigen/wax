@@ -1085,7 +1085,11 @@ let check_elem_subtype ctx ~location ~src ~dst =
           (UnionFind.make (Valtype d))
   | _ -> ()
 
-let fieldtype ctx (f : fieldtype) =
+(* The inferred type of a value read from a field: a packed [i8]/[i16] field
+   reads back as the unpacked [Int8]/[Int16] cell, any other as its value type.
+   (Distinct from the [fieldtype] type converter above, which maps a source
+   field type to its [Internal] form.) *)
+let field_read_type ctx (f : fieldtype) =
   match f.typ with
   | Value typ -> internalize ctx typ
   | Packed I8 -> Some (UnionFind.make Int8)
@@ -1155,6 +1159,9 @@ let resolve_variable ctx idx =
           | Some (ty, ty') -> Func_ref (ty, ty')
           | None -> Unbound))
 
+(* Check the operands of an integer (resp. float) binary operator and return
+   the unified result-type cell — the two operand cells are merged on success,
+   so the caller takes [typ1] as the operator's result type. *)
 let check_int_bin_op ctx ~location typ1 typ2 =
   (match (UnionFind.find typ1, UnionFind.find typ2) with
   | Valtype { internal = I32; _ }, Valtype { internal = I32; _ }
@@ -1626,6 +1633,9 @@ let _print_arg_stack f l =
     ~pp_sep:(fun f () -> Format.fprintf f "@ ")
     output_inferred_type f l
 
+(* Split [i]'s inferred result types into (last type, preceding types). Only
+   called on an instruction known to produce at least one value, so the array
+   is non-empty. *)
 let split_on_last_type i =
   let a = fst i.info in
   let len = Array.length a in
@@ -2289,7 +2299,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                       if nm.desc = field.desc then Some typ else None)
                     fields
                 in
-                fieldtype ctx typ
+                field_read_type ctx typ
             | Func _ | Array _ | Cont _ ->
                 if is_unary_method field.desc then
                   Error.method_needs_parentheses ctx.diagnostics
@@ -2429,7 +2439,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       match UnionFind.find (expression_type ctx i1') with
       | Valtype { typ = Ref { typ = Type ty; _ }; _ } ->
           let*! typ = lookup_array_type ~location:i1.info ctx ty in
-          let*! ty = fieldtype ctx typ in
+          let*! ty = field_read_type ctx typ in
           return_expression i (ArrayGet (i1', i2')) ty
       | _ ->
           Error.expected_array_type ctx.diagnostics ~location:i1.info;
