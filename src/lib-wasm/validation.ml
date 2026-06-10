@@ -154,21 +154,24 @@ module Error = struct
           "This instruction is only valid for packed fields. Use struct.get.")
       ()
 
-  (* Print the value found on the stack as the source wrote it when that text
-     form is known, otherwise fall back to the interned type. *)
-  let print_provided ?provided_text f ty' =
-    match provided_text with
+  (* Print a type as the source wrote it when its text form is known, otherwise
+     fall back to the interned type. Used for both the expected type and the
+     value found on the stack. *)
+  let print_ty ?text f ty =
+    match text with
     | Some text -> print_text_valtype f text
-    | None -> print_valtype f ty'
+    | None -> print_valtype f ty
 
-  let instruction_type_mismatch context ~location ?provided_text ty' ty =
+  let instruction_type_mismatch context ~location ?provided_text ?expected_text
+      ty' ty =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "Type mismatch: this instruction expects type@ @[<2>%a@]@ but the \
            stack has type@ @[<2>%a@]"
-          print_valtype ty
-          (print_provided ?provided_text)
+          (print_ty ?text:expected_text)
+          ty
+          (print_ty ?text:provided_text)
           ty')
       ()
 
@@ -213,13 +216,14 @@ module Error = struct
         Format.fprintf f "The local $%s is already defined." name)
       ()
 
-  let type_mismatch context ~location ?provided_text ty' ty =
+  let type_mismatch context ~location ?provided_text ?expected_text ty' ty =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "Type mismatch: expecting type@ @[<2>%a@]@ but got type@ @[<2>%a@]."
-          print_valtype ty
-          (print_provided ?provided_text)
+          (print_ty ?text:expected_text)
+          ty
+          (print_ty ?text:provided_text)
           ty')
       ()
 
@@ -926,7 +930,7 @@ let pop_any ctx loc st =
       Error.empty_stack ctx.modul.diagnostics ~location:loc;
       (st, (None, None))
 
-let pop ctx loc ty st =
+let pop ctx loc ?expected_text ty st =
   match st with
   | Unreachable -> (Unreachable, ())
   | Cons (_, None, _, r) -> (r, ())
@@ -936,10 +940,10 @@ let pop ctx loc ty st =
          match location with
          | Some location ->
              Error.instruction_type_mismatch ctx.modul.diagnostics ~location
-               ?provided_text:text ty' ty
+               ?provided_text:text ?expected_text ty' ty
          | None ->
              Error.type_mismatch ctx.modul.diagnostics ~location:loc
-               ?provided_text:text ty' ty);
+               ?provided_text:text ?expected_text ty' ty);
       (r, ())
   | Empty ->
       Error.empty_stack ctx.modul.diagnostics ~location:loc;
@@ -948,9 +952,14 @@ let pop ctx loc ty st =
 let push_poly loc ty st = (Cons (Some loc, ty, None, st), ())
 let push ?text loc ty st = (Cons (loc, Some ty, text, st), ())
 
-(* The source rendering of a non-null reference to the named type [idx], used as
-   the [text] form of a value an instruction pushes for that type. *)
+(* The source rendering of a reference to the named type [idx], used as the
+   [text] form of a value an instruction pushes ([ref_text], non-null) or
+   expects ([ref_null_text], the nullable form pop accepts). *)
 let ref_text idx : Ast.Text.valtype = Ref { nullable = false; typ = Type idx }
+
+let ref_null_text idx : Ast.Text.valtype =
+  Ref { nullable = true; typ = Type idx }
+
 let unreachable _ = (Unreachable, ())
 let return v st = (st, v)
 
@@ -1579,7 +1588,10 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           push_results results)
   | CallRef idx ->
       let*! type_idx, { params; results } = lookup_func_type ctx idx in
-      let* () = pop ctx loc (Ref { nullable = true; typ = Type type_idx }) in
+      let* () =
+        pop ctx loc ~expected_text:(ref_null_text idx)
+          (Ref { nullable = true; typ = Type type_idx })
+      in
       let* () = pop_args ctx loc params in
       push_results results
   | CallIndirect (idx, tu) -> (
@@ -1615,7 +1627,10 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           unreachable)
   | ReturnCallRef idx ->
       let*! type_idx, { params; results } = lookup_func_type ctx idx in
-      let* () = pop ctx loc (Ref { nullable = true; typ = Type type_idx }) in
+      let* () =
+        pop ctx loc ~expected_text:(ref_null_text idx)
+          (Ref { nullable = true; typ = Type type_idx })
+      in
       let* () = pop_args ctx loc params in
       compare_types ctx.modul ~location:loc ~descr:"this tail call"
         ~provided:results ~expected:ctx.return_types;
@@ -2017,7 +2032,10 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
         (Ref { nullable = false; typ = Type ty })
   | StructGet (signage, idx, idx') ->
       let*! ty, field_map, fields = lookup_struct_type ctx idx in
-      let* () = pop ctx loc (Ref { nullable = true; typ = Type ty }) in
+      let* () =
+        pop ctx loc ~expected_text:(ref_null_text idx)
+          (Ref { nullable = true; typ = Type ty })
+      in
       let*! n = struct_field_index ctx idx' field_map fields in
       (match fields.(n).typ with
       | Packed _ ->
@@ -2035,7 +2053,8 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       if not fields.(n).mut then
         Error.immutable ctx.modul.diagnostics ~location:i.info "field";
       let* () = pop ctx loc (unpack_type fields.(n)) in
-      pop ctx loc (Ref { nullable = true; typ = Type ty })
+      pop ctx loc ~expected_text:(ref_null_text idx)
+        (Ref { nullable = true; typ = Type ty })
   | ArrayNew idx ->
       let*! ty, field = lookup_array_type ctx idx in
       let* () = pop ctx loc I32 in
@@ -2088,7 +2107,10 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           if signage <> None then
             Error.unpacked_array_access ctx.modul.diagnostics ~location:i.info);
       let* () = pop ctx loc I32 in
-      let* () = pop ctx loc (Ref { nullable = true; typ = Type ty }) in
+      let* () =
+        pop ctx loc ~expected_text:(ref_null_text idx)
+          (Ref { nullable = true; typ = Type ty })
+      in
       push (Some loc) (unpack_type field)
   | ArraySet idx ->
       let*! ty, field = lookup_array_type ctx idx in
@@ -2096,7 +2118,8 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
         Error.immutable ctx.modul.diagnostics ~location:i.info "array";
       let* () = pop ctx loc (unpack_type field) in
       let* () = pop ctx loc I32 in
-      pop ctx loc (Ref { nullable = true; typ = Type ty })
+      pop ctx loc ~expected_text:(ref_null_text idx)
+        (Ref { nullable = true; typ = Type ty })
   | ArrayLen ->
       let* () = pop ctx loc (Ref { nullable = true; typ = Array }) in
       push (Some loc) I32
@@ -2107,7 +2130,8 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let* () = pop ctx loc I32 in
       let* () = pop ctx loc (unpack_type field) in
       let* () = pop ctx loc I32 in
-      pop ctx loc (Ref { nullable = true; typ = Type ty })
+      pop ctx loc ~expected_text:(ref_null_text idx)
+        (Ref { nullable = true; typ = Type ty })
   | ArrayCopy (idx1, idx2) ->
       let*! ty1, field1 = lookup_array_type ctx idx1 in
       let*! ty2, field2 = lookup_array_type ctx idx2 in
@@ -2118,9 +2142,13 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
         Error.incompatible_array_element ctx.modul.diagnostics ~location:i.info;
       let* () = pop ctx loc I32 in
       let* () = pop ctx loc I32 in
-      let* () = pop ctx loc (Ref { nullable = true; typ = Type ty2 }) in
+      let* () =
+        pop ctx loc ~expected_text:(ref_null_text idx2)
+          (Ref { nullable = true; typ = Type ty2 })
+      in
       let* () = pop ctx loc I32 in
-      pop ctx loc (Ref { nullable = true; typ = Type ty1 })
+      pop ctx loc ~expected_text:(ref_null_text idx1)
+        (Ref { nullable = true; typ = Type ty1 })
   | ArrayInitData (idx, idx') ->
       let*! ty, field = lookup_array_type ctx idx in
       ignore (Sequence.get ctx.modul.diagnostics ctx.modul.data idx');
@@ -2133,7 +2161,8 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let* () = pop ctx loc I32 in
       let* () = pop ctx loc I32 in
       let* () = pop ctx loc I32 in
-      pop ctx loc (Ref { nullable = true; typ = Type ty })
+      pop ctx loc ~expected_text:(ref_null_text idx)
+        (Ref { nullable = true; typ = Type ty })
   | ArrayInitElem (idx, idx') ->
       let*! ty, field = lookup_array_type ctx idx in
       let*! ty' = Sequence.get ctx.modul.diagnostics ctx.modul.elem idx' in
@@ -2148,7 +2177,8 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let* () = pop ctx loc I32 in
       let* () = pop ctx loc I32 in
       let* () = pop ctx loc I32 in
-      pop ctx loc (Ref { nullable = true; typ = Type ty })
+      pop ctx loc ~expected_text:(ref_null_text idx)
+        (Ref { nullable = true; typ = Type ty })
   | RefI31 ->
       let* () = pop ctx loc I32 in
       push (Some loc) (Ref { nullable = false; typ = I31 })
