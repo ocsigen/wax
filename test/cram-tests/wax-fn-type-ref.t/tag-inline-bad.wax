@@ -1,0 +1,2 @@
+type ft = fn(i32) -> i32;
+tag t: ft (f64);

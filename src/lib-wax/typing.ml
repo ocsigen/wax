@@ -170,6 +170,10 @@ module Error = struct
   let expected_func_type context ~location =
     report context ~location "Expected function type."
 
+  let inline_function_type_mismatch context ~location =
+    report context ~location
+      "The inline function type does not match the type definition."
+
   let expected_struct_type context ~location =
     report context ~location "Expected struct type."
 
@@ -4361,15 +4365,32 @@ let funsig ctx sign =
   check_unique_param_names ctx.diagnostics sign.params;
   sign
 
+(* A function or tag may give both a type reference and an inline signature
+   (e.g. [fn f: T (i32) -> i32]); the inline signature must then match the
+   referenced function type [referenced]. The two are compared in canonical
+   [Internal] form. Mirrors [Validation.check_inline_type]. *)
+let check_inline_type ctx ~location referenced sign =
+  match sign with
+  | None -> ()
+  | Some sign -> (
+      match (internal_functype ctx referenced, internal_functype ctx sign) with
+      | Some f, Some f' ->
+          if f <> f' then
+            Error.inline_function_type_mismatch ctx.diagnostics ~location
+      | _ -> ())
+
 let fundecl ctx name typ sign =
   if Tbl.exists ctx.diagnostics ctx.functions name then None
   else
     match typ with
     | Some typ -> (
         let*@ info = Tbl.find ctx.diagnostics ctx.types typ in
-        (* The referenced type must be a function type (as for tags below). *)
+        (* The referenced type must be a function type (as for tags below); if
+           an inline signature is also given, it must match. *)
         match snd info with
-        | { typ = Func _; _ } -> Some (fst info, typ.desc)
+        | { typ = Func ft; _ } ->
+            check_inline_type ctx ~location:typ.info ft sign;
+            Some (fst info, typ.desc)
         | _ ->
             Error.expected_func_type ctx.diagnostics ~location:typ.info;
             None)
@@ -4556,7 +4577,9 @@ let type_configuration ~simplify diagnostics fields =
             | Some typ, _ -> (
                 let*@ info = Tbl.find ctx.diagnostics ctx.types typ in
                 match snd info with
-                | { typ = Func ft; _ } -> Some ft
+                | { typ = Func ft; _ } ->
+                    check_inline_type ctx ~location:typ.info ft sign;
+                    Some ft
                 | _ ->
                     Error.expected_func_type ctx.diagnostics ~location:typ.info;
                     None)
