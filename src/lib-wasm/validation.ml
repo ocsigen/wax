@@ -217,21 +217,24 @@ module Error = struct
               print_valtype ty)
           ()
 
-  let table_type_mismatch context ~location idx ty =
+  let table_type_mismatch context ~location ?text idx ty =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f "Type mismatch: the table %a@ %a@ @[%a@]." print_index
           idx print_text "should contain functions but its elements have type"
-          print_valtype ty)
+          (print_ty ?text) ty)
       ()
 
-  let elem_segment_type_mismatch context ~location elem_ty table_ty =
+  let elem_segment_type_mismatch context ~location ?elem_text ?table_text
+      elem_ty table_ty =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "Type mismatch: the element segment has type@ @[<2>%a@],@ which is \
            not a subtype of the table element type@ @[<2>%a@]."
-          print_valtype elem_ty print_valtype table_ty)
+          (print_ty ?text:elem_text) elem_ty
+          (print_ty ?text:table_text)
+          table_ty)
       ()
 
   let duplicate_local context ~location name =
@@ -496,13 +499,13 @@ module Error = struct
           "Continuation types cannot be used in a cast instruction.")
       ()
 
-  let expected_number_or_vec context ~location ty =
+  let expected_number_or_vec context ~location ?text ty =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f
           "Type mismatch: expecting a numeric or vector type but got type@ \
            @[<2>%a@]."
-          print_valtype ty)
+          (print_ty ?text) ty)
       ()
 
   let immutable context ~location what =
@@ -1817,15 +1820,17 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let* () = pop_args ctx loc ?text:ptext params in
       push_results ?text:rtext results
   | CallIndirect (idx, tu) -> (
-      let*! typ, _ = Sequence.get ctx.modul.diagnostics ctx.modul.tables idx in
+      let*! typ, table_text =
+        Sequence.get ctx.modul.diagnostics ctx.modul.tables idx
+      in
       let*! ty = typeuse' ctx.modul.diagnostics ctx.modul.types tu in
       if
         not
           (Types.val_subtype ctx.modul.subtyping_info (Ref typ.reftype)
              (Ref { nullable = true; typ = Func }))
       then
-        Error.table_type_mismatch ctx.modul.diagnostics ~location:loc idx
-          (Ref typ.reftype);
+        Error.table_type_mismatch ctx.modul.diagnostics ~location:loc
+          ?text:table_text idx (Ref typ.reftype);
       match (Types.get_subtype ctx.modul.subtyping_info ty).typ with
       | Struct _ | Array _ | Cont _ ->
           Error.expected_func_type ctx.modul.diagnostics ~location:loc idx;
@@ -1865,15 +1870,17 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
         ~expected:ctx.return_types ();
       unreachable
   | ReturnCallIndirect (idx, tu) -> (
-      let*! typ, _ = Sequence.get ctx.modul.diagnostics ctx.modul.tables idx in
+      let*! typ, table_text =
+        Sequence.get ctx.modul.diagnostics ctx.modul.tables idx
+      in
       let*! ty = typeuse' ctx.modul.diagnostics ctx.modul.types tu in
       if
         not
           (Types.val_subtype ctx.modul.subtyping_info (Ref typ.reftype)
              (Ref { nullable = true; typ = Func }))
       then
-        Error.table_type_mismatch ctx.modul.diagnostics ~location:loc idx
-          (Ref typ.reftype);
+        Error.table_type_mismatch ctx.modul.diagnostics ~location:loc
+          ?text:table_text idx (Ref typ.reftype);
       match (Types.get_subtype ctx.modul.subtyping_info ty).typ with
       | Struct _ | Array _ | Cont _ ->
           Error.expected_func_type ctx.modul.diagnostics ~location:loc idx;
@@ -1897,18 +1904,21 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let* ty2, _ = pop_any ctx loc in
       match (ty1, ty2) with
       | None, None -> push_poly loc None
-      | Some (ty1, _), Some (ty2, _) ->
+      | Some (ty1, text1), Some (ty2, text2) ->
           if not (number_or_vec ty1) then
-            Error.expected_number_or_vec ctx.modul.diagnostics ~location:loc ty1;
+            Error.expected_number_or_vec ctx.modul.diagnostics ~location:loc
+              ~text:text1 ty1;
           if not (number_or_vec ty2) then
-            Error.expected_number_or_vec ctx.modul.diagnostics ~location:loc ty2;
+            Error.expected_number_or_vec ctx.modul.diagnostics ~location:loc
+              ~text:text2 ty2;
           if ty1 <> ty2 then
             Error.select_type_mismatch ctx.modul.diagnostics ~location:loc ty1
               ty2;
           push (Some loc) ty1
-      | Some (ty, _), None | None, Some (ty, _) ->
+      | Some (ty, text), None | None, Some (ty, text) ->
           if not (number_or_vec ty) then
-            Error.expected_number_or_vec ctx.modul.diagnostics ~location:loc ty;
+            Error.expected_number_or_vec ctx.modul.diagnostics ~location:loc
+              ~text ty;
           push (Some loc) ty)
   | Select (Some lst) -> (
       match lst with
@@ -3023,18 +3033,22 @@ let segments ctx fields =
                 lst;
               Sequence.register ctx.elem None typ)
       | Elem { id; typ; init; mode } ->
+          let elem_text = Ast.Text.Ref typ in
           let>@ typ = reftype ctx.diagnostics ctx.types typ in
           (match mode with
           | Passive | Declare -> ()
           | Active (i, e) ->
-              let*? tabletype, _ = Sequence.get ctx.diagnostics ctx.tables i in
+              let*? tabletype, table_text =
+                Sequence.get ctx.diagnostics ctx.tables i
+              in
               if
                 not
                   (Types.val_subtype ctx.subtyping_info (Ref typ)
                      (Ref tabletype.reftype))
               then
                 Error.elem_segment_type_mismatch ctx.diagnostics
-                  ~location:field.info (Ref typ) (Ref tabletype.reftype);
+                  ~location:field.info ~elem_text ?table_text (Ref typ)
+                  (Ref tabletype.reftype);
               constant_expression ctx ~location:field.info
                 (address_type_to_valtype tabletype.limits.address_type)
                 e);

@@ -320,3 +320,29 @@ An exception handler names the tag's payload from its declared type:
   7 │       (return))
   8 │     (drop)))
   [128]
+
+A call_indirect on a non-function table names the table's declared element type:
+
+  $ wax --validate table_element.wat -o out.wat
+  Error: Type mismatch: the table $tb should contain functions but its elements
+    have type (ref null $t).
+   ──➤  table_element.wat:6:6
+  4 │   (table $tb 1 (ref null $t))
+  5 │   (func
+  6 │     (call_indirect $tb (type $ft) (i32.const 0))))
+    ·      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  7 │ 
+  [128]
+
+An element segment whose type is not a subtype of the table's names both:
+
+  $ wax --validate elem_segment.wat -o out.wat
+  Error: Type mismatch: the element segment has type (ref null $t),
+    which is not a subtype of the table element type (ref null func).
+   ──➤  elem_segment.wat:4:4
+  2 │   (type $t (struct))
+  3 │   (table $tb 1 funcref)
+  4 │   (elem (table $tb) (i32.const 0) (ref null $t)))
+    ·    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  5 │ 
+  [128]
