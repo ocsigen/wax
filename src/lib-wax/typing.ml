@@ -301,6 +301,12 @@ module Error = struct
           "This declaration has no definition; it needs an import annotation.")
       ()
 
+  let multiple_import context ~location =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f "A field can have at most one import annotation.")
+      ()
+
   let final_supertype context ~location name =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
@@ -4567,12 +4573,16 @@ let check_attributes diagnostics field =
             Error.annotation_not_allowed diagnostics ~location "start"
       | _ -> Error.unknown_annotation diagnostics ~location name)
     (field_attributes field.desc);
+  let imports =
+    List.filter (fun (n, _) -> n = "import") (field_attributes field.desc)
+  in
+  (match imports with
+  | _ :: (_, value) :: _ ->
+      let location = match value with Some v -> v.info | None -> field.info in
+      Error.multiple_import diagnostics ~location
+  | _ -> ());
   match field.desc with
-  | (Fundecl _ | GlobalDecl _)
-    when not
-           (List.exists
-              (fun (n, _) -> n = "import")
-              (field_attributes field.desc)) ->
+  | (Fundecl _ | GlobalDecl _) when imports = [] ->
       Error.declaration_without_import diagnostics ~location:field.info
   | _ -> ()
 

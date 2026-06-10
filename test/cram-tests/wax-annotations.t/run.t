@@ -40,6 +40,16 @@ import is for declarations, not definitions:
   2 │ 
   [123]
 
+A field can have at most one import:
+
+  $ wax check two-imports.wax
+  Error: A field can have at most one import annotation.
+   ──➤  two-imports.wax:1:35
+  1 │ #[import = ("a", "b")] #[import = ("c", "d")] fn f();
+    ·                                   ^^^^^^^^^^
+  2 │ 
+  [123]
+
 A function (or global) declaration with no body needs an import:
 
   $ wax check decl-no-import.wax
