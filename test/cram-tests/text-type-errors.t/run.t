@@ -359,3 +359,17 @@ A table.copy between tables with mismatched element types names both:
     ·      ^^^^^^^^^^^^^^^^^^
   8 │ 
   [128]
+
+A parameter declared only through a referenced function type still names its
+source type, taken from that type's definition:
+
+  $ wax --validate param_from_type.wat -o out.wat
+  Error: Type mismatch: this instruction expects type i32
+    but the stack has type (ref $t)
+   ──➤  param_from_type.wat:5:21
+  3 │   (type $ft (func (param (ref $t))))
+  4 │   (func (type $ft)
+  5 │     (drop (i32.add (local.get 0) (i32.const 1)))))
+    ·                     ^^^^^^^^^^^
+  6 │ 
+  [128]

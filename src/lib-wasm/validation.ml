@@ -3070,11 +3070,18 @@ let functions ctx fields =
                     | Some typ' -> (typ', Some typ)))
                 params
           | _ ->
-              Array.iter
-                (fun typ ->
+              (* No inline parameter list: take the parameters' source types
+                 from the referenced function type's definition. *)
+              let param_text =
+                match fst (arg_text (typeuse_functype ctx.types typ)) with
+                | Some t -> t
+                | None -> Array.make (Array.length func_typ.params) None
+              in
+              Array.iteri
+                (fun j typ ->
                   initialized_locals := IntSet.add !i !initialized_locals;
                   incr i;
-                  Sequence.register locals None (typ, None))
+                  Sequence.register locals None (typ, param_text.(j)))
                 func_typ.params);
           List.iter
             (fun e ->
