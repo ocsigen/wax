@@ -165,3 +165,18 @@ A call result that does not match what the caller declares:
     · ^^^^^^^^^^^^^^
   6 │ 
   [128]
+
+The argument type comes from the called function's own declaration, so a call
+names it correctly even when another structurally-identical type ($b here)
+shares its canonical index — $f1 is named with $a, not $b:
+
+  $ wax --validate call_shared_index.wat -o out.wat
+  Error: Type mismatch: this instruction expects type (ref $a)
+    but the stack has type i32
+   ──➤  call_shared_index.wat:7:16
+  5 │   (func $f2 (param (ref $b)))
+  6 │   (func
+  7 │     (call $f1 (i32.const 0))))
+    ·                ^^^^^^^^^^^
+  8 │ 
+  [128]

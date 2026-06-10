@@ -779,7 +779,11 @@ type module_context = {
   diagnostics : Utils.Diagnostic.context;
   types : type_context;
   subtyping_info : Types.subtyping_info;
-  functions : int Sequence.t;
+  (* Each function carries its type's global index and, when it was declared
+     with an inline signature, that source signature — so a call names argument
+     and result types from the function's own declaration rather than a shared
+     (deduplicated) type index that another structurally-equal type may own. *)
+  functions : (int * Ast.Text.functype option) Sequence.t;
   memories : limits Sequence.t;
   tables : (Ast.Binary.tabletype * Ast.Text.valtype option) Sequence.t;
   globals : (globaltype * Ast.Text.valtype option) Sequence.t;
@@ -937,16 +941,28 @@ let source_element_valtype ctx gidx : Ast.Text.valtype option =
       match ft.typ with Value v -> Some v | Packed _ -> None)
   | _ -> None
 
-(* Per-element source types for the params and results of the function type
-   with global index [gidx], from its stored source definition; each is [None]
-   when the definition is unknown, so callers can pass them straight to
-   [pop_args]/[push_results]'s [?text]. *)
+(* Per-element source types for a source function type's params and results, to
+   pass straight to [pop_args]/[push_results]'s [?text]. *)
+let functype_arg_text ({ params; results } : Ast.Text.functype) =
+  ( Some (Array.map (fun (_, v) -> Some v) params),
+    Some (Array.map (fun v -> Some v) results) )
+
+(* Same, for the function type with global index [gidx], from its stored source
+   definition; both [None] when the definition is unknown. Prefer a source
+   signature held directly (e.g. a function's own declaration) where available,
+   since a global index can be shared by several structurally-equal types. *)
 let source_arg_text ctx gidx =
   match Hashtbl.find_opt ctx.modul.types.source_defs gidx with
-  | Some (Func { params; results }) ->
-      ( Some (Array.map (fun (_, v) -> Some v) params),
-        Some (Array.map (fun v -> Some v) results) )
+  | Some (Func ft) -> functype_arg_text ft
   | _ -> (None, None)
+
+(* Argument/result source types for a call: prefer a source signature held
+   directly (the called function's, or an instruction's inline type), falling
+   back to the function type's stored definition for a plain type reference. *)
+let arg_text ctx ty sign =
+  match sign with
+  | Some ft -> functype_arg_text ft
+  | None -> source_arg_text ctx ty
 
 (* Each stack entry carries the interned type used for subtype checking and,
    when known, the source type the value was written as ([text]). Errors print
@@ -1626,13 +1642,15 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let* () = pop_args ctx loc ctx.return_types in
       unreachable
   | Call idx -> (
-      let*! ty = Sequence.get ctx.modul.diagnostics ctx.modul.functions idx in
+      let*! ty, sign =
+        Sequence.get ctx.modul.diagnostics ctx.modul.functions idx
+      in
       match (Types.get_subtype ctx.modul.subtyping_info ty).typ with
       | Struct _ | Array _ | Cont _ ->
           Error.expected_func_type ctx.modul.diagnostics ~location:loc idx;
           unreachable
       | Func { params; results } ->
-          let ptext, rtext = source_arg_text ctx ty in
+          let ptext, rtext = arg_text ctx ty sign in
           let* () = pop_args ctx loc ?text:ptext params in
           push_results ?text:rtext results)
   | CallRef idx ->
@@ -1659,20 +1677,22 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           Error.expected_func_type ctx.modul.diagnostics ~location:loc idx;
           unreachable
       | Func { params; results } ->
-          let ptext, rtext = source_arg_text ctx ty in
+          let ptext, rtext = arg_text ctx ty (snd tu) in
           let* () =
             pop ctx loc (address_type_to_valtype typ.limits.address_type)
           in
           let* () = pop_args ctx loc ?text:ptext params in
           push_results ?text:rtext results)
   | ReturnCall idx -> (
-      let*! ty = Sequence.get ctx.modul.diagnostics ctx.modul.functions idx in
+      let*! ty, sign =
+        Sequence.get ctx.modul.diagnostics ctx.modul.functions idx
+      in
       match (Types.get_subtype ctx.modul.subtyping_info ty).typ with
       | Struct _ | Array _ | Cont _ ->
           Error.expected_func_type ctx.modul.diagnostics ~location:loc idx;
           unreachable
       | Func { params; results } ->
-          let ptext, _ = source_arg_text ctx ty in
+          let ptext, _ = arg_text ctx ty sign in
           let* () = pop_args ctx loc ?text:ptext params in
           compare_types ctx.modul ~location:loc ~descr:"this tail call"
             ~provided:results ~expected:ctx.return_types;
@@ -1703,7 +1723,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           Error.expected_func_type ctx.modul.diagnostics ~location:loc idx;
           unreachable
       | Func { params; results } ->
-          let ptext, _ = source_arg_text ctx ty in
+          let ptext, _ = arg_text ctx ty (snd tu) in
           let* () =
             pop ctx loc (address_type_to_valtype typ.limits.address_type)
           in
@@ -2035,7 +2055,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let*! typ = heaptype ctx.modul.diagnostics ctx.modul.types typ in
       push ~text (Some loc) (Ref { nullable = true; typ })
   | RefFunc idx ->
-      let*! i = Sequence.get ctx.modul.diagnostics ctx.modul.functions idx in
+      let*! i, _ = Sequence.get ctx.modul.diagnostics ctx.modul.functions idx in
       if not ((not !validate_refs) || Hashtbl.mem ctx.modul.refs i) then
         Error.ref_func_inaccessible ctx.modul.diagnostics ~location:loc idx;
       push (Some loc) (Ref { nullable = false; typ = Type i })
@@ -2381,7 +2401,7 @@ let rec check_constant_instruction ctx (i : _ Ast.Text.instr) =
       if ty.mut then
         Error.non_constant_global ctx.diagnostics ~location:idx.info idx
   | RefFunc i ->
-      let*? ty = Sequence.get ctx.diagnostics ctx.functions i in
+      let*? ty, _ = Sequence.get ctx.diagnostics ctx.functions i in
       Hashtbl.replace ctx.refs ty ()
   | RefNull _ | StructNew _ | StructNewDefault _ | ArrayNew _
   | ArrayNewDefault _ | ArrayNewFixed _ | RefI31 | Const _
@@ -2594,7 +2614,6 @@ let collect_implicit_types d ctx fields =
       Types.add_rectype ctx.types
         [| { typ = Func ft; supertype = None; final = true } |]
     in
-    Hashtbl.replace ctx.source_defs idx (Func sign);
     if Types.last_index ctx.types > before then (
       Hashtbl.replace ctx.index_mapping (Uint32.of_int ctx.last_index) (idx, []);
       ctx.last_index <- ctx.last_index + 1)
@@ -2652,7 +2671,7 @@ let build_initial_env ctx fields =
           | Func tu ->
               ignore
                 (let+@ ty = typeuse ctx.diagnostics ctx.types tu in
-                 Sequence.register ctx.functions id ty)
+                 Sequence.register ctx.functions id (ty, snd tu))
           | Memory lim ->
               limits ctx "memory" lim max_memory_size;
               Sequence.register ctx.memories id lim.desc
@@ -2674,8 +2693,9 @@ let build_initial_env ctx fields =
 *)
               Sequence.register ctx.tags id ty)
       | Func { id; typ; instrs; _ } ->
-          let>@ typ = typeuse ctx.diagnostics ctx.types typ in
-          Sequence.register ctx.functions id typ;
+          let sign = snd typ in
+          let>@ ty = typeuse ctx.diagnostics ctx.types typ in
+          Sequence.register ctx.functions id (ty, sign);
           register_typeuses ctx.diagnostics ctx.types instrs
       | Tag { id; typ; exports } ->
           let>@ ty = typeuse ctx.diagnostics ctx.types typ in
@@ -2939,7 +2959,7 @@ let start ctx fields =
     (fun (field : (_ Ast.Text.modulefield, _) Ast.annotated) ->
       match field.desc with
       | Start idx -> (
-          let*? ty = Sequence.get ctx.diagnostics ctx.functions idx in
+          let*? ty, _ = Sequence.get ctx.diagnostics ctx.functions idx in
           match (Types.get_subtype ctx.subtyping_info ty).typ with
           | Struct _ | Array _ | Cont _ ->
               Error.not_function_type ctx.diagnostics ~location:idx.info
