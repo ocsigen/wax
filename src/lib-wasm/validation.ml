@@ -666,6 +666,12 @@ let functype_arg_text ({ params; results } : Ast.Text.functype) =
 let arg_text sign =
   match sign with Some ft -> functype_arg_text ft | None -> (None, None)
 
+(* The source function type that the continuation type named by [idx] wraps. *)
+let cont_source_functype tc idx =
+  match reference_comptype tc idx with
+  | Some (Cont r) -> reference_functype tc r
+  | _ -> None
+
 let get_type_info d ctx (idx : Ast.Text.idx) =
   try
     match idx.desc with
@@ -940,12 +946,12 @@ let lookup_tag_type ctx tag =
    results may be non-empty (unlike exception tags). *)
 let lookup_tag_signature ctx tag =
   let ctx = ctx.modul in
-  let+@ ty, _ = Sequence.get ctx.diagnostics ctx.tags tag in
+  let+@ ty, sign = Sequence.get ctx.diagnostics ctx.tags tag in
   match (Types.get_subtype ctx.subtyping_info ty).typ with
-  | Func ft -> ft
+  | Func ft -> (ft, sign)
   | Struct _ | Array _ | Cont _ ->
       Error.not_function_type ctx.diagnostics ~location:tag.info;
-      { params = [||]; results = [||] }
+      ({ params = [||]; results = [||] }, None)
 
 (* Resolve a continuation type index to its own index and the function type it
    wraps. Emits an error if the type is not a continuation type. *)
@@ -1066,6 +1072,22 @@ let ref_text idx : Ast.Text.valtype = Ref { nullable = false; typ = Type idx }
 
 let ref_null_text idx : Ast.Text.valtype =
   Ref { nullable = true; typ = Type idx }
+
+(* Source-type array for popping [n] arguments (left unnamed) followed by a
+   continuation of the type named by [x]. *)
+let cont_operand_text n x =
+  Array.append (Array.make n None) [| Some (ref_null_text x) |]
+
+(* Same, but naming the [n] arguments from the source function type the
+   continuation [x] wraps (they are exactly that type's parameters). *)
+let resume_operand_text ctx x n =
+  let ptext =
+    match cont_source_functype ctx.modul.types x with
+    | Some ft when Array.length ft.params = n ->
+        Array.map (fun (_, v) -> Some v) ft.params
+    | _ -> Array.make n None
+  in
+  Array.append ptext [| Some (ref_null_text x) |]
 
 let unreachable _ = (Unreachable, ())
 let return v st = (st, v)
@@ -1370,7 +1392,7 @@ let check_resume_table ctx loc ts2 clauses =
       | OnLabel (tag, label) -> (
           match lookup_tag_signature ctx tag with
           | None -> ()
-          | Some { params = ts3; results = ts4 } -> (
+          | Some ({ params = ts3; results = ts4 }, _) -> (
               match branch_target ctx label with
               | None -> ()
               | Some ts' ->
@@ -1407,7 +1429,7 @@ let check_resume_table ctx loc ts2 clauses =
       | OnSwitch tag -> (
           match lookup_tag_signature ctx tag with
           | None -> ()
-          | Some { params = ts3; _ } ->
+          | Some ({ params = ts3; _ }, _) ->
               if Array.length ts3 <> 0 then
                 Error.stack_switching_type_mismatch ctx.modul.diagnostics
                   ~location:loc
@@ -1497,7 +1519,15 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       unreachable
   | ContNew x ->
       let*! ty, ft, _ = lookup_cont_type ctx x in
-      let* () = pop ctx loc (Ref { nullable = true; typ = Type ft }) in
+      let func_text =
+        match reference_comptype ctx.modul.types x with
+        | Some (Cont r) -> Some (ref_null_text r)
+        | _ -> None
+      in
+      let* () =
+        pop ctx loc ?expected_text:func_text
+          (Ref { nullable = true; typ = Type ft })
+      in
       push ~text:(ref_text x) (Some loc)
         (Ref { nullable = false; typ = Type ty })
   | ContBind (x, y) ->
@@ -1527,44 +1557,54 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
                continuation types";
         let* () =
           pop_args ctx loc
+            ~text:(cont_operand_text (Array.length ts11) x)
             (Array.append ts11 [| Ref { nullable = true; typ = Type xty } |])
         in
         push ~text:(ref_text y) (Some loc)
           (Ref { nullable = false; typ = Type yty })
       end
   | Suspend x ->
-      let*! { params = ts1; results = ts2 } = lookup_tag_signature ctx x in
-      let* () = pop_args ctx loc ts1 in
-      push_results ts2
+      let*! { params = ts1; results = ts2 }, sign =
+        lookup_tag_signature ctx x
+      in
+      let ptext, rtext = arg_text sign in
+      let* () = pop_args ctx loc ?text:ptext ts1 in
+      push_results ?text:rtext ts2
   | Resume (x, clauses) ->
       let*! xty, _, ftx = lookup_cont_type ctx x in
       check_resume_table ctx loc ftx.results clauses;
+      let _, rtext = arg_text (cont_source_functype ctx.modul.types x) in
       let* () =
         pop_args ctx loc
+          ~text:(resume_operand_text ctx x (Array.length ftx.params))
           (Array.append ftx.params
              [| Ref { nullable = true; typ = Type xty } |])
       in
-      push_results ftx.results
+      push_results ?text:rtext ftx.results
   | ResumeThrow (x, y, clauses) ->
       let*! xty, _, ftx = lookup_cont_type ctx x in
-      let*! { params = ts0; _ } = lookup_tag_signature ctx y in
+      let*! { params = ts0; _ }, _ = lookup_tag_signature ctx y in
       check_resume_table ctx loc ftx.results clauses;
+      let _, rtext = arg_text (cont_source_functype ctx.modul.types x) in
       let* () =
         pop_args ctx loc
+          ~text:(cont_operand_text (Array.length ts0) x)
           (Array.append ts0 [| Ref { nullable = true; typ = Type xty } |])
       in
-      push_results ftx.results
+      push_results ?text:rtext ftx.results
   | ResumeThrowRef (x, clauses) ->
       let*! xty, _, ftx = lookup_cont_type ctx x in
       check_resume_table ctx loc ftx.results clauses;
+      let _, rtext = arg_text (cont_source_functype ctx.modul.types x) in
       let* () =
         pop_args ctx loc
+          ~text:[| None; Some (ref_null_text x) |]
           [|
             Ref { nullable = true; typ = Exn };
             Ref { nullable = true; typ = Type xty };
           |]
       in
-      push_results ftx.results
+      push_results ?text:rtext ftx.results
   | Switch (x, y) ->
       let*! xty, _, ftx = lookup_cont_type ctx x in
       let ts11 = ftx.params in
@@ -1584,7 +1624,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       | Some inner_ft -> (
           match lookup_tag_signature ctx y with
           | None -> ()
-          | Some { params = ts31; results = t } ->
+          | Some ({ params = ts31; results = t }, _) ->
               let info = ctx.modul.subtyping_info in
               if
                 Array.length ts31 <> 0
@@ -1600,6 +1640,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let ts11' = if n = 0 then [||] else Array.sub ts11 0 (n - 1) in
       let* () =
         pop_args ctx loc
+          ~text:(cont_operand_text (Array.length ts11') x)
           (Array.append ts11' [| Ref { nullable = true; typ = Type xty } |])
       in
       push_results ts21

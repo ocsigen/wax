@@ -223,3 +223,30 @@ A thrown exception payload is named from the tag's declared parameter type:
     ·                ^^^^^^^^^^^
   6 │ 
   [128]
+
+Stack-switching instructions name their continuation operand. A resume with a
+non-continuation operand:
+
+  $ wax --validate resume_cont.wat -o out.wat
+  Error: Type mismatch: this instruction expects type (ref null $ct)
+    but the stack has type i32
+   ──➤  resume_cont.wat:4:32
+  2 │   (rec (type $ft (func (param i32) (result i32))) (type $ct (cont $ft)))
+  3 │   (func (result i32)
+  4 │     (resume $ct (i32.const 0) (i32.const 1))))
+    ·                                ^^^^^^^^^^^
+  5 │ 
+  [128]
+
+And a suspend names the tag's declared payload type:
+
+  $ wax --validate suspend_payload.wat -o out.wat
+  Error: Type mismatch: this instruction expects type (ref $t)
+    but the stack has type i32
+   ──➤  suspend_payload.wat:5:18
+  3 │   (tag $e (param (ref $t)) (result i32))
+  4 │   (func (result i32)
+  5 │     (suspend $e (i32.const 0))))
+    ·                  ^^^^^^^^^^^
+  6 │ 
+  [128]
