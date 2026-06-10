@@ -547,6 +547,9 @@ type type_context = {
   mutable last_index : int;
   index_mapping : (Uint32.t, int * (string * int) list) Hashtbl.t;
   label_mapping : (string, int * (string * int) list) Hashtbl.t;
+  (* Source location of each type definition, keyed by its (text-level) type
+     index, so that checks on the type itself can be reported precisely. *)
+  type_locations : (int, Ast.location) Hashtbl.t;
 }
 
 let get_type_info d ctx (idx : Ast.Text.idx) =
@@ -2236,9 +2239,9 @@ let rec check_constant_instruction ctx (i : _ Ast.Text.instr) =
 and check_constant_instructions ctx l =
   List.iter (fun i -> check_constant_instruction ctx i) l
 
-let constant_expression ctx ty expr =
+let constant_expression ctx ~location ty expr =
   check_constant_instructions ctx expr;
-  with_empty_stack ctx (Ast.no_loc ()).info (*ZZZ*)
+  with_empty_stack ctx location
     (let ctx =
        {
          locals = Sequence.make "local";
@@ -2249,7 +2252,7 @@ let constant_expression ctx ty expr =
        }
      in
      let* () = instructions ctx expr in
-     pop ctx (Ast.no_loc ()).info (*ZZZ*) ty)
+     pop ctx location ty)
 
 let add_type d ctx ty =
   Array.iteri
@@ -2293,6 +2296,7 @@ let add_type d ctx ty =
           Hashtbl.replace ctx.index_mapping
             (Uint32.of_int (ctx.last_index + i))
             (i' + i, fields);
+          Hashtbl.replace ctx.type_locations (ctx.last_index + i) e.Ast.info;
           Option.iter
             (fun label ->
               Hashtbl.replace ctx.label_mapping label.Ast.desc (i' + i, fields))
@@ -2485,6 +2489,10 @@ let build_initial_env ctx fields =
 
 let check_type_definitions ctx =
   for i = 0 to ctx.types.last_index - 1 do
+    let location =
+      Option.value ~default:(Ast.no_loc ()).info
+        (Hashtbl.find_opt ctx.types.type_locations i)
+    in
     let>@ i, _ =
       get_type_info ctx.diagnostics ctx.types
         (Ast.no_loc (Ast.Text.Num (Uint32.of_int i)))
@@ -2496,16 +2504,11 @@ let check_type_definitions ctx =
         match (Types.get_subtype ctx.subtyping_info ft).typ with
         | Func _ -> ()
         | Struct _ | Array _ | Cont _ ->
-            Error.expected_func_type ctx.diagnostics
-              ~location:(Ast.no_loc ()).info (*ZZZ*)
+            Error.expected_func_type ctx.diagnostics ~location
               (Ast.no_loc (Ast.Text.Num (Uint32.of_int ft))))
     | Func _ | Struct _ | Array _ -> ());
     let*? j = ty.supertype in
     let ty' = Types.get_subtype ctx.subtyping_info j in
-    let location =
-      (Ast.no_loc ()).info
-      (*ZZZ*)
-    in
     let invalid () = Error.invalid_subtype ctx.diagnostics ~location in
     if ty'.final then invalid ()
     else
@@ -2560,7 +2563,8 @@ let tables_and_memories ctx fields =
               if not typ.reftype.nullable then
                 Error.non_nullable_table_type ctx.diagnostics
                   ~location:field.info (*ZZZ*)
-          | Init_expr e -> constant_expression ctx (Ref typ.reftype) e
+          | Init_expr e ->
+              constant_expression ctx ~location:field.info (Ref typ.reftype) e
           | Init_segment _ -> ());
           Sequence.register ctx.tables id typ;
           register_exports ctx exports
@@ -2573,7 +2577,7 @@ let globals ctx fields =
       match field.desc with
       | Global { id; typ; init; exports } ->
           let>@ typ = globaltype ctx.diagnostics ctx.types typ in
-          constant_expression ctx typ.typ init;
+          constant_expression ctx ~location:field.info typ.typ init;
           Sequence.register ctx.globals id typ;
           register_exports ctx exports
       | String_global { id; _ } ->
@@ -2599,7 +2603,7 @@ let segments ctx fields =
           | Passive -> ()
           | Active (i, e) ->
               let*? limits = Sequence.get ctx.diagnostics ctx.memories i in
-              constant_expression ctx
+              constant_expression ctx ~location:field.info
                 (address_type_to_valtype limits.address_type)
                 e);
           Sequence.register ctx.data id ()
@@ -2608,7 +2612,10 @@ let segments ctx fields =
           | Init_default | Init_expr _ -> ()
           | Init_segment lst ->
               let>@ typ = reftype ctx.diagnostics ctx.types typ.reftype in
-              List.iter (fun e -> constant_expression ctx (Ref typ) e) lst;
+              List.iter
+                (fun e ->
+                  constant_expression ctx ~location:field.info (Ref typ) e)
+                lst;
               Sequence.register ctx.elem None typ)
       | Elem { id; typ; init; mode } ->
           let>@ typ = reftype ctx.diagnostics ctx.types typ in
@@ -2623,10 +2630,12 @@ let segments ctx fields =
               then
                 Error.elem_segment_type_mismatch ctx.diagnostics
                   ~location:field.info (Ref typ) (Ref tabletype.reftype);
-              constant_expression ctx
+              constant_expression ctx ~location:field.info
                 (address_type_to_valtype tabletype.limits.address_type)
                 e);
-          List.iter (fun e -> constant_expression ctx (Ref typ) e) init;
+          List.iter
+            (fun e -> constant_expression ctx ~location:field.info (Ref typ) e)
+            init;
           Sequence.register ctx.elem id typ
       | _ -> ())
     fields
@@ -2734,6 +2743,7 @@ let validate_configuration diagnostics (_, fields) =
       last_index = 0;
       index_mapping = Hashtbl.create 16;
       label_mapping = Hashtbl.create 16;
+      type_locations = Hashtbl.create 16;
     }
   in
   List.iter
@@ -2987,6 +2997,7 @@ let check_syntax diagnostics (_, lst) =
       last_index = 0;
       index_mapping = Hashtbl.create 16;
       label_mapping = Hashtbl.create 16;
+      type_locations = Hashtbl.create 16;
     }
   in
   (* Pass 1: Build Type Mappings (Explicit) *)
