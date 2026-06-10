@@ -325,8 +325,8 @@ let long_block l =
       | { desc = If { cond = l1; if_block = l2; else_block = l3; _ }; _ } :: rem
         ->
           let n = loop [ l1 ] (n - 2) in
-          let n = loop l2 n in
-          let n = match l3 with None -> n | Some l2 -> loop l2 (n - 1) in
+          let n = loop l2.desc n in
+          let n = match l3 with None -> n | Some l2 -> loop l2.desc (n - 1) in
           loop rem n
       | { desc = Try { block = l; catches; catch_all; _ }; _ } :: rem ->
           let n = loop l (n - 2) in
@@ -609,7 +609,7 @@ let rec instr prec pp (i : _ instr) =
                         blocktype pp typ)));
               space pp ();
               punctuation pp "{");
-          block_contents pp if_block;
+          located_block_contents pp if_block;
           match else_block with
           | Some else_block ->
               hvbox pp (fun () ->
@@ -619,7 +619,7 @@ let rec instr prec pp (i : _ instr) =
                       keyword pp "else";
                       space pp ();
                       punctuation pp "{");
-                  block_contents pp else_block;
+                  located_block_contents pp else_block;
                   punctuation pp "}")
           | None -> punctuation pp "}")
   | Try { label; typ; block = l; catches; catch_all } ->
@@ -1056,6 +1056,13 @@ and block_contents pp (l : _ instr list) =
             deliminated_instr pp i)
           l);
     space pp ())
+
+(* Print the contents of a brace-delimited block, looking the block's own
+   location up so any comment opening the clause (e.g. a [(then ...)]/[(else
+   ...)] clause comment carried over from Wasm) attaches here rather than to the
+   condition or the previous clause. *)
+and located_block_contents pp (b : (_ instr list, location) annotated) =
+  atomic_node pp (Some b.info) (fun () -> block_contents pp b.desc)
 
 let fundecl ~tag pp (name, typ, sign) =
   keyword pp (if tag then "tag" else "fn");

@@ -13,8 +13,12 @@ let rec map_instr f instr =
             label;
             typ;
             cond = map_instr f cond;
-            if_block = List.map (map_instr f) if_block;
-            else_block = Option.map (List.map (map_instr f)) else_block;
+            if_block =
+              { if_block with desc = List.map (map_instr f) if_block.desc };
+            else_block =
+              Option.map
+                (fun b -> { b with desc = List.map (map_instr f) b.desc })
+                else_block;
           }
     | TryTable { label; typ; block; catches } ->
         TryTable { label; typ; block = List.map (map_instr f) block; catches }

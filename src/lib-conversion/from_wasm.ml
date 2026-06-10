@@ -909,10 +909,20 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
         (with_loc (Loop { label = label (); typ = blocktype ctx typ; block }))
   | If { label; typ; if_block; else_block } ->
       let label, ctx = push_label ctx ~loop:false label typ in
-      let if_block = Stack.run (instructions ctx if_block.desc) in
+      (* Keep the (then ...)/(else ...) clause locations on the Wax blocks so a
+         comment opening a clause attaches to the block rather than the
+         condition or the previous clause's last instruction. *)
+      let if_block =
+        { if_block with Ast.desc = Stack.run (instructions ctx if_block.desc) }
+      in
       let else_block =
         if else_block.desc = [] then None
-        else Some (Stack.run (instructions ctx else_block.desc))
+        else
+          Some
+            {
+              else_block with
+              Ast.desc = Stack.run (instructions ctx else_block.desc);
+            }
       in
       let inputs, outputs = blocktype_arity ctx typ in
       let* cond = Stack.pop in

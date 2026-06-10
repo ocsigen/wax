@@ -309,23 +309,27 @@ let rec instruction ret ctx i : location Text.instr list =
       let cond_code = instruction ret ctx cond in
       let then_ctx = { ctx with locals = ctx.locals } in
       let if_block =
-        List.concat_map (instruction (push ret label) then_ctx) if_block
+        {
+          if_block with
+          Ast.desc =
+            List.concat_map
+              (instruction (push ret label) then_ctx)
+              if_block.desc;
+        }
       in
       let else_block =
         match else_block with
         | Some e ->
             let else_ctx = { ctx with locals = ctx.locals } in
-            List.concat_map (instruction (push ret label) else_ctx) e
-        | None -> []
+            {
+              e with
+              Ast.desc =
+                List.concat_map (instruction (push ret label) else_ctx) e.desc;
+            }
+        | None -> Ast.no_loc []
       in
       folded loc
-        (If
-           {
-             label;
-             typ = blocktype typ;
-             if_block = Ast.no_loc if_block;
-             else_block = Ast.no_loc else_block;
-           })
+        (If { label; typ = blocktype typ; if_block; else_block })
         cond_code
   | TryTable { label = labl; typ; block; catches } ->
       let inner_ctx = { ctx with locals = ctx.locals } in

@@ -89,9 +89,7 @@ fn caml_format_exception(x: &eq) -> &eq {
                             (buf, 34 // '\"'
                             );
                         add_string(buf, v);
-                        add_char
-                            (buf, 34 // '\"'
-                            );
+                        add_char(buf, 34); // '\"'
                     } else { add_char(buf, 95); }
                 } // '_'
                 i = i + 1;

@@ -296,13 +296,11 @@ fn format_int(x: &eq, d: i32, small: i32) -> &eq {
         br_if 'write d;
     }
     if negative {
-        s[0] = 45 // '-'
-        ;
+        s[0] = 45; // '-'
     } else {
         if sign_style {
             if sign_style == 1 {
-                s[0] = 43 // '+'
-                ;
+                s[0] = 43; // '+'
             } else { s[0] = 32; }
         }
     } // ' '

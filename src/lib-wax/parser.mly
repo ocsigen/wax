@@ -454,8 +454,8 @@ blockinstr:
   { with_loc $sloc (Loop{label; typ = blocktype bt; block = l}) }
 | label = block_label IF e = condition_expression
   bt = option("=>" bt = block_type { bt })
-  "{" l1 = statement_list "}"
-  l2 = ioption(ELSE  "{" l = statement_list "}" { l })
+  l1 = braced_block
+  l2 = ioption(ELSE l = braced_block { l })
   { with_loc $sloc (If{label; typ = blocktype bt; cond = e; if_block = l1; else_block = l2}) }
 | label = block_label TRY bt = option(block_type) "{" l = statement_list "}"
   CATCH "[" catches = separated_list(",", catch) "]"
@@ -465,6 +465,17 @@ blockinstr:
   "{" catches = list(legacy_catch); catch_all = option(legacy_catch_all) "}"
   { with_loc $sloc
       (Try {label; typ = blocktype bt; block = l; catches; catch_all}) }
+
+(* A brace-delimited statement list carrying a location, so a comment opening
+   the block attaches to it rather than leaking onto the preceding condition
+   (see the (then ...)/(else ...) clauses of a folded Wasm if). The location
+   starts at the opening brace but stops at the statement list, excluding the
+   closing brace: the enclosing [if] reaches the [}], so it stays strictly
+   larger than the block and a comment trailing the [}] attaches to the [if]
+   rather than to the block (as a folded Wasm if owns the comment after its
+   outer paren). *)
+braced_block:
+| "{" l = statement_list "}" { with_loc ($startpos, $endpos(l)) l }
 
 parenthesized_expression: e = expression { e }
 index_expression: e = expression { e }

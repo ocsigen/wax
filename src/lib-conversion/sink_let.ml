@@ -17,8 +17,8 @@ let rec occurs name i =
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
       in_list block
   | If { cond; if_block; else_block; _ } -> (
-      occurs name cond || in_list if_block
-      || match else_block with Some b -> in_list b | None -> false)
+      occurs name cond || in_list if_block.desc
+      || match else_block with Some b -> in_list b.desc | None -> false)
   | Try { block; catches; catch_all; _ } -> (
       in_list block
       || List.exists (fun (_, b) -> in_list b) catches
@@ -115,19 +115,36 @@ let rec sink_into ((name, _) as decl) s =
          be covered by a single declaration. *)
       if occurs name.desc r.cond then None
       else
-        let in_then = list_occurs name.desc r.if_block in
+        let in_then = list_occurs name.desc r.if_block.desc in
         let in_else =
           match r.else_block with
-          | Some b -> list_occurs name.desc b
+          | Some b -> list_occurs name.desc b.desc
           | None -> false
         in
         if in_then && not in_else then
-          Some { s with desc = If { r with if_block = bl r.if_block } }
+          Some
+            {
+              s with
+              desc =
+                If
+                  {
+                    r with
+                    if_block = { r.if_block with desc = bl r.if_block.desc };
+                  };
+            }
         else if in_else && not in_then then
           Some
             {
               s with
-              desc = If { r with else_block = Option.map bl r.else_block };
+              desc =
+                If
+                  {
+                    r with
+                    else_block =
+                      Option.map
+                        (fun b -> { b with desc = bl b.desc })
+                        r.else_block;
+                  };
             }
         else None
   | Try r ->

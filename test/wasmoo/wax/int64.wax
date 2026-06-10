@@ -222,13 +222,11 @@ fn caml_int64_format(x: &eq, x_2: &eq) -> &eq {
         br_if 'write d != 0;
     }
     if negative {
-        s[0] = 45 // '-'
-        ;
+        s[0] = 45; // '-'
     } else {
         if sign_style {
             if sign_style == 1 {
-                s[0] = 43 // '+'
-                ;
+                s[0] = 43; // '+'
             } else { s[0] = 32; }
         }
     } // ' '

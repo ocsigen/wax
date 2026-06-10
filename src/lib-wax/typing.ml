@@ -1586,10 +1586,16 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       assert (typ.params = [||]);
       (*ZZZ*)
       let*! results = array_map_opt (internalize ctx) typ.results in
-      let if_block' = block ctx i.info label [||] results results if_block in
+      let if_block' =
+        {
+          if_block with
+          desc = block ctx i.info label [||] results results if_block.desc;
+        }
+      in
       let else_block' =
         Option.map
-          (fun b -> block ctx i.info label [||] results results b)
+          (fun b ->
+            { b with desc = block ctx i.info label [||] results results b.desc })
           else_block
       in
       return_statement i
@@ -3369,10 +3375,19 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
       in
       let*! results = array_map_opt (internalize ctx) typ.results in
       let* () = pop_args ctx params in
-      let if_block = block ctx i.info label params results results if_block in
+      let if_block =
+        {
+          if_block with
+          desc = block ctx i.info label params results results if_block.desc;
+        }
+      in
       let else_block =
         Option.map
-          (fun b -> block ctx i.info label params results results b)
+          (fun b ->
+            {
+              b with
+              desc = block ctx i.info label params results results b.desc;
+            })
           else_block
       in
       return_statement i (If { label; typ; cond; if_block; else_block }) results
@@ -4080,8 +4095,8 @@ let rec instr_has_conditional (i : (_ instr_desc, _) annotated) =
   | If_annotation _ -> true
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } -> any block
   | If { cond; if_block; else_block; _ } ->
-      instr_has_conditional cond || any if_block
-      || Option.fold ~none:false ~some:any else_block
+      instr_has_conditional cond || any if_block.desc
+      || Option.fold ~none:false ~some:(fun b -> any b.desc) else_block
   | Try { block; catches; catch_all; _ } ->
       any block
       || List.exists (fun (_, l) -> any l) catches
@@ -4194,8 +4209,11 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
             label;
             typ;
             cond = sone asm cond;
-            if_block = sinstrs asm if_block;
-            else_block = Option.map (sinstrs asm) else_block;
+            if_block = { if_block with desc = sinstrs asm if_block.desc };
+            else_block =
+              Option.map
+                (fun b -> { b with desc = sinstrs asm b.desc })
+                else_block;
           }
     | TryTable { label; typ; catches; block } ->
         TryTable { label; typ; catches; block = sinstrs asm block }
@@ -4285,7 +4303,8 @@ let sub_instrs (i : (_ instr_desc, _) annotated) =
   match i.desc with
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } -> block
   | If { cond; if_block; else_block; _ } ->
-      (cond :: if_block) @ Option.value ~default:[] else_block
+      (cond :: if_block.desc)
+      @ Option.fold ~none:[] ~some:(fun b -> b.desc) else_block
   | Try { block; catches; catch_all; _ } ->
       block @ List.concat_map snd catches @ Option.value ~default:[] catch_all
   | If_annotation { then_body; else_body; _ } ->

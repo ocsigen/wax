@@ -79,8 +79,8 @@ type 'info instr_desc =
       label : label option;
       typ : functype;
       cond : 'info instr;
-      if_block : 'info instr list;
-      else_block : 'info instr list option;
+      if_block : ('info instr list, location) annotated;
+      else_block : ('info instr list, location) annotated option;
     }
   | TryTable of {
       label : label option;

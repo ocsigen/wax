@@ -72,8 +72,9 @@ let module_ ctx env (fields : location Ast.module_) :
             label;
             typ;
             cond = sone cond;
-            if_block = sinstrs if_block;
-            else_block = Option.map sinstrs else_block;
+            if_block = { if_block with desc = sinstrs if_block.desc };
+            else_block =
+              Option.map (fun b -> { b with desc = sinstrs b.desc }) else_block;
           }
     | TryTable { label; typ; catches; block } ->
         TryTable { label; typ; catches; block = sinstrs block }
