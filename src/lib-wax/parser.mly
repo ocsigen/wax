@@ -179,6 +179,17 @@ let attributed loc attributes d =
 
 let blocktype bt = Option.value ~default:{params = [||]; results = [||]} bt
 
+(* A function or tag is declared with either a type reference ([: name]) or a
+   parenthesized signature; one is required. A bare [tag stop;] or [fn f { ... }]
+   is rejected — write [()] for an empty signature. With a type reference, the
+   signature comes from it, so [sign] stays [None]. *)
+let decl_sign loc t sign =
+  match (t, sign) with
+  | None, None ->
+      raise (Wasm.Parsing.Syntax_error
+               (loc, "A parameter list is required; write '()' for none.\n"))
+  | _ -> sign
+
 (* Parse an integer literal (decimal, hex, with [_] separators) to a [Uint64].
    Used for memory/table limits; a table64 bound may exceed [Int64.max_int],
    so parse across the full unsigned range. *)
@@ -376,7 +387,7 @@ optional_function_type: sign = option (function_type) { sign }
 | FN name = function_name
   t = ioption(":" t = type_name { t } )
   sign = optional_function_type
-  { (name, t, sign) }
+  { (name, t, decl_sign $sloc t sign) }
 
 func:
 | f = fundecl body = block
@@ -391,7 +402,7 @@ tag:
 | TAG name = tag_name
   t = ioption(":" t = type_name { t } )
   sign = optional_function_type ";"
-  { (name, t, sign) }
+  { (name, t, decl_sign $sloc t sign) }
 
 %inline block_label: l = ioption(l = label ":" { l }) { l }
 

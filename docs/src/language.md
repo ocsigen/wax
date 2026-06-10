@@ -574,9 +574,11 @@ A passive element segment initializes a GC array of references with the same `[t
 
 ### Tags
 
-A tag declares an exception. It carries a payload — one value or several:
+A tag declares an exception, optionally carrying a payload. The parameter list
+is required — write `()` for no payload:
 
 ```wax
+tag stop();                 // no payload
 tag overflow(i32);          // carries an i32
 tag pair(i32, f64);         // carries several values
 ```
