@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-49f89d18.js";
+            window.path_to_searchindex_js = "searchindex-eac159a0.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -252,7 +252,7 @@ fn factorial_helper(n: i32, acc: i32) -&gt; i32 {
 fn find_first_zero(arr: &amp;ints) -&gt; i32 {
     let i: i32;
     let len: i32;
-    len = arr.length;
+    len = arr.length();
     i = 0;
     'search: loop {
         if i &gt;=s len {
@@ -347,7 +347,7 @@ fn sum_bytes(arr: &amp;bytes) -&gt; i32 {
     let len: i32;
     sum = 0;
     i = 0;
-    len = arr.length;
+    len = arr.length();
     'loop: loop {
         if i &gt;=s len {
             return sum;
@@ -364,7 +364,7 @@ fn fill_bytes(arr: &amp;bytes, val: i32) {
     let i: i32;
     let len: i32;
     i = 0;
-    len = arr.length;
+    len = arr.length();
     'loop: loop {
         if i &gt;=s len {
             return;
@@ -473,6 +473,42 @@ fn blend(x: i32, y: i32) -&gt; i32 {
   local.get $y
   i32.const 3
   i32.mul
+  i32.add)
+</code></pre>
+<h2 id="multiple-return-values"><a class="header" href="#multiple-return-values">Multiple Return Values</a></h2>
+<p>A function may return several values, and a <code>let</code> can bind them all at once
+from a parenthesised list of names. The call runs once and its results are
+stored into the locals. See <a href="language.html#local-variables">Local Variables</a>.</p>
+<h3 id="wax-12"><a class="header" href="#wax-12">Wax</a></h3>
+<pre><code class="language-wax">fn divmod(a: i32, b: i32) -&gt; (i32, i32) {
+    a /s b;
+    a %s b;
+}
+
+#[export = "checksum"]
+fn checksum(a: i32, b: i32) -&gt; i32 {
+    let (q, r) = divmod(a, b);
+    q + r;
+}
+</code></pre>
+<h3 id="equivalent-wat-4"><a class="header" href="#equivalent-wat-4">Equivalent WAT</a></h3>
+<pre><code class="language-wat">(func $divmod (param $a i32) (param $b i32) (result i32 i32)
+  local.get $a
+  local.get $b
+  i32.div_s
+  local.get $a
+  local.get $b
+  i32.rem_s)
+
+(func $checksum (export "checksum") (param $a i32) (param $b i32) (result i32)
+  (local $q i32) (local $r i32)
+  local.get $a
+  local.get $b
+  call $divmod
+  local.set $r
+  local.set $q
+  local.get $q
+  local.get $r
   i32.add)
 </code></pre>
 

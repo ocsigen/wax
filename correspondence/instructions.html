@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-49f89d18.js";
+            window.path_to_searchindex_js = "../searchindex-eac159a0.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f031991a.js"></script>
@@ -215,7 +215,7 @@
 <tr><td><code>f32.sub</code> / <code>f64.sub</code></td><td><code>-</code></td></tr>
 <tr><td><code>f32.mul</code> / <code>f64.mul</code></td><td><code>*</code></td></tr>
 <tr><td><code>f32.div</code> / <code>f64.div</code></td><td><code>/</code></td></tr>
-<tr><td><code>f32.abs</code> … <code>f64.sqrt</code></td><td><code>val.abs</code>, <code>val.neg</code>, <code>val.ceil</code>, <code>val.floor</code>, <code>val.trunc</code>, <code>val.nearest</code>, <code>val.sqrt</code></td></tr>
+<tr><td><code>f32.abs</code> … <code>f64.sqrt</code></td><td><code>val.abs()</code>, <code>val.ceil()</code>, <code>val.floor()</code>, <code>val.trunc()</code>, <code>val.nearest()</code>, <code>val.sqrt()</code></td></tr>
 <tr><td><code>f32.min</code> … <code>f64.copysign</code></td><td><code>v1.min(v2)</code>, <code>v1.max(v2)</code>, <code>v1.copysign(v2)</code></td></tr>
 </tbody>
 </table>
@@ -227,8 +227,8 @@
 <tr><th>Wasm</th><th>Wax</th></tr>
 </thead>
 <tbody>
-<tr><td><code>i32.clz</code> … <code>i64.popcnt</code></td><td><code>val.clz</code>, <code>val.ctz</code>, <code>val.popcnt</code></td></tr>
-<tr><td><code>i32.extend8_s</code> … <code>i64.extend16_s</code></td><td><code>val.extend8_s</code>, <code>val.extend16_s</code></td></tr>
+<tr><td><code>i32.clz</code> … <code>i64.popcnt</code></td><td><code>val.clz()</code>, <code>val.ctz()</code>, <code>val.popcnt()</code></td></tr>
+<tr><td><code>i32.extend8_s</code> … <code>i64.extend16_s</code></td><td><code>val.extend8_s()</code>, <code>val.extend16_s()</code></td></tr>
 <tr><td><code>i32.rotl</code> … <code>i64.rotr</code></td><td><code>v1.rotl(v2)</code>, <code>v1.rotr(v2)</code></td></tr>
 </tbody>
 </table>
@@ -247,8 +247,8 @@
 <tr><td><code>f32.convert_i32_s</code></td><td><code>val as f32_s</code></td></tr>
 <tr><td><code>f32.demote_f64</code></td><td><code>val as f32</code></td></tr>
 <tr><td><code>f64.promote_f32</code></td><td><code>val as f64</code></td></tr>
-<tr><td><code>i32.reinterpret_f32</code></td><td><code>val.to_bits</code></td></tr>
-<tr><td><code>f32.reinterpret_i32</code></td><td><code>val.from_bits</code></td></tr>
+<tr><td><code>i32.reinterpret_f32</code></td><td><code>val.to_bits()</code></td></tr>
+<tr><td><code>f32.reinterpret_i32</code></td><td><code>val.from_bits()</code></td></tr>
 </tbody>
 </table>
 </div>
@@ -369,7 +369,7 @@ if cond =&gt; (i32) -&gt; i32 { ... } else { ... }
 <tr><td><code>array.get_s $t</code></td><td><code>arr[idx] as i32_s</code></td></tr>
 <tr><td><code>array.get_u $t</code></td><td><code>arr[idx] as i32_u</code></td></tr>
 <tr><td><code>array.set $t</code></td><td><code>arr[idx] = val</code></td></tr>
-<tr><td><code>array.len</code></td><td><code>arr.length</code></td></tr>
+<tr><td><code>array.len</code></td><td><code>arr.length()</code></td></tr>
 </tbody>
 </table>
 </div>

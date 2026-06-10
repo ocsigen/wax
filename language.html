@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-49f89d18.js";
+            window.path_to_searchindex_js = "searchindex-eac159a0.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -205,17 +205,28 @@ nan         // Not a number
 </code></pre>
 <h2 id="variables"><a class="header" href="#variables">Variables</a></h2>
 <h3 id="local-variables"><a class="header" href="#local-variables">Local Variables</a></h3>
-<p>Declare local variables with <code>let</code>. Variables must be typed:</p>
+<p>Declare local variables with <code>let</code>. Each variable gets a type, either from an
+explicit annotation or from an initializer:</p>
 <pre><code class="language-wax">fn example() -&gt; i32 {
-    let x: i32;
-    let y: i32;
+    let x: i32;        // annotated, no initializer
+    let y = 20;        // type inferred from the initializer (i32)
     x = 10;
-    y = 20;
     x + y;
 }
 </code></pre>
-<p>You can declare multiple variables:</p>
-<pre><code class="language-wax">let x: i32, y: i32, z: f64;
+<p>A local declared without an initializer starts at its type’s zero value (<code>0</code>,
+<code>0.0</code>, or <code>null</code>). When the type is omitted, it is taken from the initializer;
+an otherwise-unconstrained integer literal then defaults to <code>i32</code> and a float to
+<code>f64</code>. An annotation and an initializer can be combined, and must agree:</p>
+<pre><code class="language-wax">let count: i64 = 0;
+</code></pre>
+<p>A <code>let</code> can bind several names at once from an initializer that produces
+multiple values — a call to a <a href="#functions">multi-result function</a>,
+for instance. The names are written as a parenthesised list and each takes the
+corresponding value, left to right. As with a single binding, each name may be
+annotated or left to be inferred, and <code>_</code> discards its value:</p>
+<pre><code class="language-wax">let (q, r) = divmod(17, 5);     // q and r inferred from the results
+let (n: i64, _) = stats();      // n annotated, the second result dropped
 </code></pre>
 <h3 id="assignment"><a class="header" href="#assignment">Assignment</a></h3>
 <p>Use <code>=</code> for assignment (like <code>local.set</code>):</p>
@@ -227,12 +238,30 @@ nan         // Not a number
 <p><code>:=</code> works on local variables only — WebAssembly has no <code>global.tee</code>, so applying
 it to a global is an error.</p>
 <h3 id="global-variables"><a class="header" href="#global-variables">Global Variables</a></h3>
-<p>Globals are declared at module level:</p>
-<pre><code class="language-wax">const PI: f64 = 3.14159;        // Immutable global
-let counter: i32 = 0;           // Mutable global
+<p>Globals are declared at module level. <code>const</code> is immutable; <code>let</code> is mutable:</p>
+<pre><code class="language-wax">const PI: f64 = 3.14159;        // immutable global
+let counter: i32 = 0;           // mutable global
 </code></pre>
+<p>As with locals, an initialized global may omit its type and take it from the
+initializer (an unconstrained integer literal defaults to <code>i32</code>):</p>
+<pre><code class="language-wax">const answer = 42;              // i32
+</code></pre>
+<p>A global’s initializer must be a constant expression (a literal, another
+global, or a simple reference-building expression).</p>
 <h2 id="expressions"><a class="header" href="#expressions">Expressions</a></h2>
-<p>Wax is expression-oriented. Most constructs produce values.</p>
+<p>Wax is a readable layer over WebAssembly, and it keeps WebAssembly’s execution
+model: the <strong>operand stack</strong>. A function or block body is a sequence of
+statements, each ended with <code>;</code>. Evaluating a statement may push values onto the
+stack and pop values off it, and whatever remains on the stack when the body
+ends is its result — which must match the declared result type. A
+value-returning function therefore ends with a statement that leaves that value:</p>
+<pre><code class="language-wax">fn double(x: i32) -&gt; i32 {
+    x * 2;
+}
+</code></pre>
+<p>Most expressions produce a value. This same stack model underlies
+<a href="#blocks">blocks</a>, <a href="#holes">holes</a>, and functions or blocks with more than one
+result.</p>
 <h3 id="arithmetic"><a class="header" href="#arithmetic">Arithmetic</a></h3>
 <pre><code class="language-wax">x + y       // Add
 x - y       // Subtract
@@ -268,22 +297,21 @@ x &lt;=u y     // Less or equal unsigned
 !x          // Logical not / is_null for references
 </code></pre>
 <h3 id="method-style-operations"><a class="header" href="#method-style-operations">Method-Style Operations</a></h3>
-<p>Some operations use method syntax:</p>
-<pre><code class="language-wax">x.abs       // Absolute value
-x.neg       // Negate
-x.sqrt      // Square root
-x.floor     // Floor
-x.ceil      // Ceiling
-x.trunc     // Truncate
-x.nearest   // Round to nearest
-x.clz       // Count leading zeros
-x.ctz       // Count trailing zeros
-x.popcnt    // Population count
-x.extend8_s   // Sign-extend the low 8 bits
-x.extend16_s  // Sign-extend the low 16 bits
+<p>Some operations use method syntax. These are calls, so they take parentheses
+even when they have no argument:</p>
+<pre><code class="language-wax">x.abs()       // Absolute value
+x.sqrt()      // Square root
+x.floor()     // Floor
+x.ceil()      // Ceiling
+x.trunc()     // Truncate
+x.nearest()   // Round to nearest
+x.clz()       // Count leading zeros
+x.ctz()       // Count trailing zeros
+x.popcnt()    // Population count
+x.extend8_s()   // Sign-extend the low 8 bits
+x.extend16_s()  // Sign-extend the low 16 bits
 </code></pre>
-<p>Two-argument operations also use method syntax, with the second operand
-passed as an argument:</p>
+<p>Two-argument operations pass the second operand as the argument:</p>
 <pre><code class="language-wax">x.min(y)
 x.max(y)
 x.copysign(y)
@@ -299,8 +327,8 @@ x as f32        // Demote f64 to f32
 x as f64        // Promote f32 to f64
 x as i32_s      // Truncate float to signed int
 x as f32_s      // Convert signed int to float
-x.to_bits       // Reinterpret float as int
-x.from_bits     // Reinterpret int as float
+x.to_bits()     // Reinterpret float as int
+x.from_bits()   // Reinterpret int as float
 </code></pre>
 <h3 id="conditional-expression"><a class="header" href="#conditional-expression">Conditional Expression</a></h3>
 <pre><code class="language-wax">cond ? val_true : val_false
@@ -337,13 +365,15 @@ block that leaves a value, or a <code>do i32</code> block that leaves two, is an
 <p>Blocks can be labelled and used as branch targets; see
 <a href="#labels-and-branches">Labels and Branches</a>.</p>
 <h3 id="if-expressions"><a class="header" href="#if-expressions">If Expressions</a></h3>
+<p><code>if</code> tests a condition — any <code>i32</code>, where non-zero means true — and runs the
+matching branch. Like a block it is <strong>void</strong> by default (the branches leave no
+value), and the <code>else</code> is optional:</p>
 <pre><code class="language-wax">if condition {
     then_branch;
-} else {
-    else_branch;
 }
 </code></pre>
-<p>With a result type:</p>
+<p>To make <code>if</code> produce a value, give it a result type with <code>=&gt; &lt;type&gt;</code>. Both
+branches must then leave a value of that type, so the <code>else</code> becomes required:</p>
 <pre><code class="language-wax">if condition =&gt; i32 {
     1;
 } else {
@@ -351,33 +381,47 @@ block that leaves a value, or a <code>do i32</code> block that leaves two, is an
 }
 </code></pre>
 <h3 id="loops"><a class="header" href="#loops">Loops</a></h3>
-<p>Loops repeat until explicitly broken out of:</p>
-<pre><code class="language-wax">loop {
-    // body
-    br 'loop;   // Continue looping
+<p>A <code>loop</code> runs its body once and then falls through to whatever follows — it does
+<em>not</em> repeat on its own. What makes it a loop is its label: branching to a
+loop’s label jumps back to the <strong>start</strong> of its body. So a loop iterates by
+branching to itself, and stops once control reaches the end of the body without
+branching back.</p>
+<pre><code class="language-wax">'next: loop {
+    total = total + i;
+    i = i + 1;
+    br_if 'next i &lt;s n;   // jump back to the start while i &lt; n
 }
 </code></pre>
-<p>With a label:</p>
+<p>This is the opposite of a <code>do</code> block, whose label branches <em>past</em> the block (see
+<a href="#labels-and-branches">Labels and Branches</a>). To leave a loop early, branch to
+an enclosing block’s label.</p>
+<p>Loops nest, and a branch may target any enclosing label:</p>
 <pre><code class="language-wax">'outer: loop {
     'inner: loop {
-        br 'outer;  // Break to outer
+        br 'outer;   // jump back to the start of the outer loop
     }
 }
 </code></pre>
 <h3 id="labels-and-branches"><a class="header" href="#labels-and-branches">Labels and Branches</a></h3>
-<p>Labels start with <code>'</code> and are used with branch instructions:</p>
-<pre><code class="language-wax">'my_block: do {
+<p>Labels start with <code>'</code> and prefix a block, loop, <code>if</code>, or <code>try</code>. A branch targets
+a label; <strong>where</strong> it lands depends on the labelled construct: branching to a
+block, <code>if</code>, or <code>try</code> jumps <em>past</em> it (an exit), while branching to a <code>loop</code>
+jumps to its <em>start</em> (an iteration — see <a href="#loops">Loops</a>).</p>
+<pre><code class="language-wax">'done: do {
     if condition {
-        br 'my_block;   // Exit the block
+        br 'done;   // jump past the block — exits it
     }
     // ...
 }
 </code></pre>
 <p>Branch instructions:</p>
-<pre><code class="language-wax">br 'label;              // Unconditional branch
-br_if 'label cond;      // Branch if condition is true
-br_table ['a, 'b else 'default] index;  // Branch table
+<pre><code class="language-wax">br 'label;                          // unconditional branch
+br_if 'label cond;                  // branch if cond (an i32) is non-zero
+br_table ['a 'b else 'default] i;   // branch to the i-th label, else 'default
 </code></pre>
+<p>The labels in a <code>br_table</code> are separated by spaces, and <code>else</code> gives the
+fallback for an out-of-range index. A branch also carries any values its target
+expects — a <code>do i32</code> target receives an <code>i32</code>, and so on.</p>
 <h3 id="return"><a class="header" href="#return">Return</a></h3>
 <pre><code class="language-wax">return value;
 </code></pre>
@@ -400,6 +444,13 @@ br_table ['a, 'b else 'default] index;  // Branch table
 <p>Functions without a return type return nothing:</p>
 <pre><code class="language-wax">fn log_value(x: i32) {
     // side effects only
+}
+</code></pre>
+<p>A function may return several values, written as a parenthesized list; the body
+leaves them all on the stack, in order:</p>
+<pre><code class="language-wax">fn divmod(a: i32, b: i32) -&gt; (i32, i32) {
+    a /s b;
+    a %s b;
 }
 </code></pre>
 <h3 id="function-types"><a class="header" href="#function-types">Function Types</a></h3>
@@ -432,18 +483,26 @@ ref!            // Assert non-null (trap if null)
 <pre><code class="language-wax">val is &amp;type    // Test if val is of type (returns i32)
 val as &amp;type    // Cast val to type (trap on failure)
 </code></pre>
+<p>Structs and arrays are WebAssembly GC heap types: a value of such a type is
+always held through a reference (<code>&amp;point</code>, <code>&amp;bytes</code>, …), not inline.</p>
 <h2 id="structs"><a class="header" href="#structs">Structs</a></h2>
 <h3 id="definition-1"><a class="header" href="#definition-1">Definition</a></h3>
+<p>A struct is a named record. Mark a field <code>mut</code> to allow assignment after
+creation; a plain field is set only at creation time. A value of <code>type point</code>
+is held as <code>&amp;point</code>.</p>
 <pre><code class="language-wax">type point = { x: i32, y: i32 };
 type mutable_point = { x: mut i32, y: mut i32 };
 </code></pre>
 <h3 id="creation"><a class="header" href="#creation">Creation</a></h3>
-<pre><code class="language-wax">{point| x: 10, y: 20}       // New struct with explicit type
-{point| ..}                 // New struct with default values
+<p><code>{T| …}</code> allocates a new struct of type <code>T</code> and yields a <code>&amp;T</code>. Give every field
+a value, or use <code>..</code> to default them all (each field type must have a zero/null
+default):</p>
+<pre><code class="language-wax">{point| x: 10, y: 20}       // all fields given
+{point| ..}                 // every field defaulted
 </code></pre>
 <h3 id="field-access"><a class="header" href="#field-access">Field Access</a></h3>
-<pre><code class="language-wax">p.x                         // Get field
-p.x = 42;                   // Set field (if mutable)
+<pre><code class="language-wax">p.x                         // read a field
+p.x = 42;                   // write a field (only if it is `mut`)
 </code></pre>
 <h2 id="arrays"><a class="header" href="#arrays">Arrays</a></h2>
 <h3 id="definition-2"><a class="header" href="#definition-2">Definition</a></h3>
@@ -456,11 +515,11 @@ type mutable_ints = [mut i32];
 [bytes| 1, 2, 3, 4]         // New array with specific values
 [bytes| seg @ 0; 100]       // New array from a data segment (offset, count)
 </code></pre>
-<p>The last form is <code>array.new_data</code>: it initializes the array from the named <a href="module_fields.html#data-segments">data segment</a> <code>seg</code>, reading <code>count</code> elements starting at byte <code>offset</code>.</p>
+<p>The last form is <code>array.new_data</code>: it initializes the array from the named <a href="#data-segments">data segment</a> <code>seg</code>, reading <code>count</code> elements starting at byte <code>offset</code>.</p>
 <h3 id="element-access"><a class="header" href="#element-access">Element Access</a></h3>
 <pre><code class="language-wax">arr[i]                      // Get element
 arr[i] = val;               // Set element (if mutable)
-arr.length                  // Array length
+arr.length()                // Array length
 </code></pre>
 <h2 id="memories"><a class="header" href="#memories">Memories</a></h2>
 <h3 id="declaration"><a class="header" href="#declaration">Declaration</a></h3>
@@ -504,37 +563,41 @@ funcs[i] = g;                         // table.set
 </code></pre>
 <h2 id="exceptions"><a class="header" href="#exceptions">Exceptions</a></h2>
 <h3 id="tags"><a class="header" href="#tags">Tags</a></h3>
-<p>Define exception tags:</p>
-<pre><code class="language-wax">tag my_error(code: i32);
+<p>A tag declares an exception, optionally carrying a payload. The parameter list
+is required — write <code>()</code> for no payload:</p>
+<pre><code class="language-wax">tag stop();                 // no payload
+tag overflow(i32);          // carries an i32
+tag pair(i32, f64);         // carries several values
 </code></pre>
 <h3 id="throw"><a class="header" href="#throw">Throw</a></h3>
-<pre><code class="language-wax">throw my_error 42;
+<p><code>throw</code> raises a tag together with its payload:</p>
+<pre><code class="language-wax">throw overflow 42;
 </code></pre>
-<h3 id="trycatch-try_table-style"><a class="header" href="#trycatch-try_table-style">Try/Catch (try_table style)</a></h3>
-<pre><code class="language-wax">'handler: do {
-    try {
-        might_throw();
-    } catch [my_error -&gt; 'handler]
+<h3 id="try--catch"><a class="header" href="#try--catch">Try / Catch</a></h3>
+<p>A <code>try</code> runs its body and routes a matching thrown tag to a handler. Like a
+block it may carry a result type (<code>try i32 { … }</code>) that the body and every
+handler produce. A caught tag’s payload is left on the operand stack for the
+handler to pick up with a <a href="#holes">hole</a> <code>_</code>:</p>
+<pre><code class="language-wax">fn lookup(k: i32) -&gt; i32 {
+    try i32 {
+        find(k);             // may throw `overflow`
+    } catch {
+        overflow =&gt; { _; }   // `_` is the thrown i32 payload
+        _ =&gt; { 0; }          // catch-all
+    }
 }
 </code></pre>
-<p>With reference to exception:</p>
-<pre><code class="language-wax">try {
-    might_throw();
-} catch [my_error &amp; -&gt; 'handler]    // &amp; captures the exnref
+<p>Each <code>tag =&gt; { … }</code> handler matches one tag; a bare <code>_ =&gt; { … }</code> matches any
+exception. Leave the catch-all out to let unmatched exceptions propagate.</p>
+<h3 id="branching-handlers-try_table"><a class="header" href="#branching-handlers-try_table">Branching handlers (try_table)</a></h3>
+<p>A lower-level form branches to a label instead of running an inline handler,
+mapping directly to WebAssembly’s <code>try_table</code>:</p>
+<pre><code class="language-wax">try { might_throw(); } catch [overflow -&gt; 'h]    // on `overflow`, branch to 'h
+try { might_throw(); } catch [overflow &amp; -&gt; 'h]  // also deliver the exnref
+try { might_throw(); } catch [_ -&gt; 'h]           // catch any exception
 </code></pre>
-<p>Catch all:</p>
-<pre><code class="language-wax">try {
-    might_throw();
-} catch [_ -&gt; 'handler]             // Catch any exception
-</code></pre>
-<h3 id="trycatch-legacy-style"><a class="header" href="#trycatch-legacy-style">Try/Catch (legacy style)</a></h3>
-<pre><code class="language-wax">try {
-    might_throw();
-} catch {
-    my_error =&gt; { handle_error(); }
-    _ =&gt; { handle_any(); }
-}
-</code></pre>
+<p>The target label receives the payload (and, with <code>&amp;</code>, the <code>exnref</code>), so the
+labelled block’s type must match what it is handed.</p>
 <h2 id="holes"><a class="header" href="#holes">Holes</a></h2>
 <p>A hole (<code>_</code>) is a placeholder for a value that an <strong>earlier statement in the
 same sequence</strong> has left on WebAssembly’s implicit operand stack. It is the
