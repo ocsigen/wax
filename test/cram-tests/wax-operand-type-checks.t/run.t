@@ -1,4 +1,5 @@
-Wax type-checking verifies operand types that the Wasm validator also checks.
+Wax type-checking verifies operand and result types that the Wasm validator
+also checks.
 
 A float-only method requires a floating-point receiver:
 
@@ -57,6 +58,16 @@ array.init_elem requires the element segment's type to fit the array:
   3 │ fn f(x: &a) { x.init(e, 0 as i32, 0 as i32, 0 as i32); }
     ·               ^
   4 │ 
+  [123]
+
+An 'if' that produces a result must have an 'else' branch:
+
+  $ wax check if-no-else.wax
+  Error: This 'if' must produce a value and so requires an 'else' branch.
+   ──➤  if-no-else.wax:1:17
+  1 │ fn f() -> i32 { if 1 as i32 => i32 { 0 as i32; } }
+    ·                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  2 │ 
   [123]
 
 Matching element types and correct receivers pass:

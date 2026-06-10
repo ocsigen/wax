@@ -236,6 +236,13 @@ module Error = struct
           output_inferred_type ty)
       ()
 
+  let if_without_else context ~location =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f
+          "This 'if' must produce a value and so requires an 'else' branch.")
+      ()
+
   let final_supertype context ~location name =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
@@ -1912,10 +1919,19 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
         }
       in
       let else_block' =
-        Option.map
-          (fun b ->
-            { b with desc = block ctx i.info label [||] results results b.desc })
-          else_block
+        match else_block with
+        | Some b ->
+            Some
+              {
+                b with
+                desc = block ctx i.info label [||] results results b.desc;
+              }
+        | None ->
+            (* A missing else acts as an empty one, producing no value, so an if
+               that must produce a result needs an explicit else. *)
+            if Array.length results > 0 then
+              Error.if_without_else ctx.diagnostics ~location:i.info;
+            None
       in
       return_statement i
         (If
@@ -3783,13 +3799,19 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
         }
       in
       let else_block =
-        Option.map
-          (fun b ->
-            {
-              b with
-              desc = block ctx i.info label params results results b.desc;
-            })
-          else_block
+        match else_block with
+        | Some b ->
+            Some
+              {
+                b with
+                desc = block ctx i.info label params results results b.desc;
+              }
+        | None ->
+            (* A missing else acts as an empty one, producing no value, so an if
+               that must produce a result needs an explicit else. *)
+            if Array.length results > 0 then
+              Error.if_without_else ctx.diagnostics ~location:i.info;
+            None
       in
       return_statement i (If { label; typ; cond; if_block; else_block }) results
   | TryTable { label; typ; block = body; catches } ->
