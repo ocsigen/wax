@@ -219,6 +219,11 @@ type ctx = {
   tag_types : Src.typeuse CondTbl.t;
   label_arities : (string option * int) list;
   return_arity : int;
+  strict_constants : bool;
+      (* When set, every numeric constant is wrapped in a cast to its concrete
+         type ([0 as i32], [0.0 as f64], ...). This keeps Wax type inference
+         from re-typing an otherwise polymorphic literal, so a type mismatch in
+         the source survives the round-trip. *)
   diagnostics : Utils.Diagnostic.context;
   cond_env : Cond.env;
   cond_diag : Utils.Diagnostic.context;
@@ -1185,8 +1190,16 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   | Return ->
       let* args = Stack.grab ctx.return_arity in
       Stack.push_poly (with_loc (Return (sequence_opt args)))
-  | Const (I32 n) | Const (I64 n) -> Stack.push 1 (integer i n)
-  | Const (F32 f) | Const (F64 f) -> Stack.push 1 (float i f)
+  | Const c ->
+      let lit, ty =
+        match c with
+        | I32 n -> (integer i n, Ast.I32)
+        | I64 n -> (integer i n, Ast.I64)
+        | F32 f -> (float i f, Ast.F32)
+        | F64 f -> (float i f, Ast.F64)
+      in
+      Stack.push 1
+        (if ctx.strict_constants then with_loc (Cast (lit, Valtype ty)) else lit)
   | RefI31 ->
       let* e = Stack.pop in
       Stack.push 1
@@ -2265,7 +2278,7 @@ let rec count_memories fields =
       | _ -> n)
     0 fields
 
-let module_ diagnostics (_, fields) =
+let module_ ?(strict_constants = false) diagnostics (_, fields) =
   try
     let forbid_numeric = module_has_conditional fields in
     (* Loads/stores reference the memory implicitly by index 0. When the module
@@ -2300,6 +2313,7 @@ let module_ diagnostics (_, fields) =
         labels = LabelStack.make ();
         label_arities = [];
         return_arity = 0;
+        strict_constants;
         cond_env = Cond.create ();
         cond_diag = Utils.Diagnostic.collector ();
         cond_asm = Cond.true_;

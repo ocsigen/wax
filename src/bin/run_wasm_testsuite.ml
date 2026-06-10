@@ -398,14 +398,22 @@ let runtest filename _ =
         Wax.Output.module_ ~color p ~trivia:(Hashtbl.create 0) m)
   in
   List.iter
-    (fun (status, m, source) ->
+    (fun (status, wasm_m, source) ->
       if not !wasm_only then
+        (* For an invalid module, cast every numeric constant to its concrete
+           type so a source-level type mismatch is not hidden by Wax inference
+           re-typing an otherwise polymorphic literal. *)
+        let strict_constants =
+          match status with `Invalid _ -> true | `Valid -> false
+        in
         match
-          Conversion.From_wasm.module_ (Utils.Diagnostic.collector ()) m
+          Conversion.From_wasm.module_ ~strict_constants
+            (Utils.Diagnostic.collector ())
+            wasm_m
         with
         | exception e ->
             prerr_endline (Printexc.to_string e);
-            if false then Format.eprintf "@[%a@]@." (print_module ~color) m
+            if false then Format.eprintf "@[%a@]@." (print_module ~color) wasm_m
         | m -> (
             match status with
             | `Invalid reason ->
@@ -424,8 +432,9 @@ let runtest filename _ =
                 in
                 if ok then
                   Format.eprintf
-                    "@[<2>Wax type-checking should have failed (%s):@ %a@]@."
-                    reason (print_wax ~color) m
+                    "@[<2>Wax type-checking should have failed (%s):@ %a@]@,\
+                     @[<2>from wasm:@ %a@]@."
+                    reason (print_wax ~color) m (print_module ~color) wasm_m
             | `Valid ->
                 let ok =
                   in_child_process (fun () ->
