@@ -2064,7 +2064,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
         | `I64, `I64 -> `I64
       in
       let addr_ty = address_type_to_valtype limits.address_type in
-      let addr_ty' = address_type_to_valtype limits.address_type in
+      let addr_ty' = address_type_to_valtype limits'.address_type in
       let addr_ty'' = address_type_to_valtype address_type in
       let* () = pop_known ctx loc addr_ty'' in
       let* () = pop_known ctx loc addr_ty' in
