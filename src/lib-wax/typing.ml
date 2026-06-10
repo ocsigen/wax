@@ -228,6 +228,14 @@ module Error = struct
           provided expected)
       ()
 
+  let invalid_method_receiver context ~location ty =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f
+          "This operation cannot be applied to a value of type@ @[<2>%a@]."
+          output_inferred_type ty)
+      ()
+
   let final_supertype context ~location name =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
@@ -1105,6 +1113,21 @@ let internalize_valtype ctx typ =
 let internalize ctx typ =
   let+@ internal = valtype ctx.diagnostics ctx.type_context typ in
   UnionFind.make (Valtype { typ; internal })
+
+(* Check that a source element reference type can be stored where [dst] elements
+   are expected (table.copy / table.init / array.init_elem): [src] must be a
+   subtype of [dst]. *)
+let check_elem_subtype ctx ~location ~src ~dst =
+  match
+    (internalize_valtype ctx (Ref src), internalize_valtype ctx (Ref dst))
+  with
+  | Some s, Some d ->
+      if not (Wasm.Types.val_subtype ctx.subtyping_info s.internal d.internal)
+      then
+        Error.instruction_type_mismatch ctx.diagnostics ~location
+          (UnionFind.make (Valtype s))
+          (UnionFind.make (Valtype d))
+  | _ -> ()
 
 let fieldtype ctx (f : fieldtype) =
   match f.typ with
@@ -2345,7 +2368,10 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
         when Tbl.find_opt ctx.tables src <> None ->
           let src_at =
             match Tbl.find_opt ctx.tables src with
-            | Some (a, _) -> a
+            | Some (a, src_rt) ->
+                (* The source table's elements must fit the destination's. *)
+                check_elem_subtype ctx ~location:i.info ~src:src_rt ~dst:rt;
+                a
             | None -> at
           in
           let addr_of a = UnionFind.make (Valtype (address_valtype a)) in
@@ -2364,7 +2390,9 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
           | _ -> ());
           return_statement i (mk (src' :: rest')) [||]
       | "init", { desc = Get seg; info = sinfo } :: ([ _; _; _ ] as rest) ->
-          ignore (Tbl.find ctx.diagnostics ctx.elems seg : reftype option);
+          (let>@ src_rt = Tbl.find ctx.diagnostics ctx.elems seg in
+           (* The element segment's type must fit the table's. *)
+           check_elem_subtype ctx ~location:i.info ~src:src_rt ~dst:rt);
           let seg' = { desc = Get seg; info = ([||], sinfo) } in
           let* rest' = instructions ctx rest in
           (match rest' with
@@ -2472,8 +2500,10 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
           if not field.mut then
             Error.immutable ctx.diagnostics ~location:a.info "array";
           match field.typ with
-          | Value (Ref _) ->
-              ignore (Tbl.find ctx.diagnostics ctx.elems seg : reftype option)
+          | Value (Ref dst) ->
+              let>@ src = Tbl.find ctx.diagnostics ctx.elems seg in
+              (* The element segment's type must fit the array's. *)
+              check_elem_subtype ctx ~location:a.info ~src ~dst
           | _ -> ignore (Tbl.find ctx.diagnostics ctx.datas seg : unit option))
       | _ -> Error.expected_array_type ctx.diagnostics ~location:a.info);
       let seg' = { desc = Get seg; info = ([||], sinfo) } in
@@ -2556,7 +2586,14 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
             ("abs" | "ceil" | "floor" | "trunc" | "nearest" | "sqrt") ) ->
             if ty' = Number then UnionFind.set ty Float;
             Some ty
-        | _ -> None
+        (* A receiver still unconstrained (e.g. after [unreachable]) may take any
+           method; a concretely-typed one that reached here does not match the
+           method and is rejected. *)
+        | Unknown, _ -> None
+        | _ ->
+            Error.invalid_method_receiver ctx.diagnostics
+              ~location:(snd recv'.info) ty;
+            None
       in
       return_expression i
         (Call ({ desc = StructGet (recv', meth); info = ([||], func.info) }, []))

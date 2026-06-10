@@ -1,0 +1,3 @@
+table t: &?func [10];
+elem el: &?extern = [];
+fn f() { t.init(el, 0 as i32, 1 as i32, 2 as i32); }

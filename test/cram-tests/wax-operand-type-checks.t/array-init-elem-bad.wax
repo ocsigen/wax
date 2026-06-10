@@ -1,0 +1,3 @@
+type a = [mut &?func];
+elem e: &?extern = [];
+fn f(x: &a) { x.init(e, 0 as i32, 0 as i32, 0 as i32); }

@@ -1,0 +1,4 @@
+fn f() -> f64 { (0.0 as f64).sqrt(); }
+table t1: &?func [10];
+table t2: &?func [10];
+fn g() { t1.copy(t2, 0 as i32, 1 as i32, 2 as i32); }
