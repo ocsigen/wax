@@ -250,3 +250,17 @@ And a suspend names the tag's declared payload type:
     ·                  ^^^^^^^^^^^
   6 │ 
   [128]
+
+A value popped and re-pushed keeps its source type: ref.as_non_null on a
+nullable reference yields the non-null form named as the source wrote it:
+
+  $ wax --validate ref_as_non_null.wat -o out.wat
+  Error: Type mismatch: this instruction expects type i32
+    but the stack has type (ref $t)
+   ──➤  ref_as_non_null.wat:4:6
+  2 │   (type $t (struct))
+  3 │   (func (param (ref null $t)) (result i32)
+  4 │     (ref.as_non_null (local.get 0))))
+    ·      ^^^^^^^^^^^^^^^
+  5 │ 
+  [128]

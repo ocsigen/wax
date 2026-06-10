@@ -1033,11 +1033,18 @@ type stack =
 
 let pop_any ctx loc st =
   match st with
-  | Unreachable -> (Unreachable, (None, None))
-  | Cons (loc, ty, r) -> (r, (Option.map fst ty, loc))
+  | Unreachable -> (Unreachable, (None, None, None))
+  | Cons (loc, ty, r) -> (r, (Option.map fst ty, Option.map snd ty, loc))
   | Empty ->
       Error.empty_stack ctx.modul.diagnostics ~location:loc;
-      (st, (None, None))
+      (st, (None, None, None))
+
+(* The non-null version of a popped reference's source type, for an instruction
+   that re-pushes the value with the null case removed. *)
+let non_null_text text =
+  match text with
+  | Some (Ast.Text.Ref r) -> Some (Ast.Text.Ref { r with nullable = false })
+  | _ -> None
 
 let pop ctx loc ?expected_text ty st =
   match st with
@@ -1671,24 +1678,27 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       in
       unreachable
   | Br_on_null idx -> (
-      let* ty, loc' = pop_any ctx loc in
+      let* ty, text, loc' = pop_any ctx loc in
       match ty with
       | None -> return ()
       | Some (Ref { nullable = _; typ }) ->
           let*! params = branch_target ctx idx in
           let* () = pop_args ctx loc params in
           let* () = push_results params in
-          push (Some loc) (Ref { nullable = false; typ })
+          push ?text:(non_null_text text) (Some loc)
+            (Ref { nullable = false; typ })
       | Some ty ->
           Error.expected_ref_type ctx.modul.diagnostics ~location:loc
             ~src_loc:loc' ty;
           unreachable)
   | Br_on_non_null idx -> (
-      let* ty, loc' = pop_any ctx loc in
+      let* ty, text, loc' = pop_any ctx loc in
       match ty with
       | None -> return ()
       | Some (Ref { nullable = _; typ }) ->
-          let* () = push None (Ref { nullable = false; typ }) in
+          let* () =
+            push ?text:(non_null_text text) None (Ref { nullable = false; typ })
+          in
           let*! params = branch_target ctx idx in
           let* () = pop_args ctx loc params in
           let* () = push_results params in
@@ -1843,8 +1853,8 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       return ()
   | Select None -> (
       let* () = pop ctx loc I32 in
-      let* ty1, _ = pop_any ctx loc in
-      let* ty2, _ = pop_any ctx loc in
+      let* ty1, _, _ = pop_any ctx loc in
+      let* ty2, _, _ = pop_any ctx loc in
       match (ty1, ty2) with
       | None, None -> push_poly loc None
       | Some ty1, Some ty2 ->
@@ -2167,7 +2177,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
         Error.ref_func_inaccessible ctx.modul.diagnostics ~location:loc idx;
       push (Some loc) (Ref { nullable = false; typ = Type i })
   | RefIsNull -> (
-      let* ty, loc' = pop_any ctx loc in
+      let* ty, _, loc' = pop_any ctx loc in
       match ty with
       | None -> return ()
       | Some (Ref _) -> push (Some loc) I32
@@ -2176,10 +2186,12 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
             ~src_loc:loc' ty;
           unreachable)
   | RefAsNonNull -> (
-      let* ty, loc' = pop_any ctx loc in
+      let* ty, text, loc' = pop_any ctx loc in
       match ty with
       | None -> return ()
-      | Some (Ref ty) -> push (Some loc) (Ref { ty with nullable = false })
+      | Some (Ref ty) ->
+          push ?text:(non_null_text text) (Some loc)
+            (Ref { ty with nullable = false })
       | Some ty ->
           Error.expected_ref_type ctx.modul.diagnostics ~location:loc
             ~src_loc:loc' ty;
@@ -2439,7 +2451,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let* () = pop ctx loc F32 in
       push (Some loc) F64
   | ExternConvertAny ->
-      let* ty, _ = pop_any ctx loc in
+      let* ty, _, _ = pop_any ctx loc in
       Option.iter
         (fun ty ->
           let expected = Ref { nullable = true; typ = Any } in
@@ -2448,7 +2460,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
         ty;
       push (Some loc) (Ref { nullable = is_nullable ty; typ = Extern })
   | AnyConvertExtern ->
-      let* ty, _ = pop_any ctx loc in
+      let* ty, _, _ = pop_any ctx loc in
       Option.iter
         (fun ty ->
           let expected = Ref { nullable = true; typ = Extern } in
