@@ -1071,23 +1071,22 @@ fn caml_output_value_to_string(v: &eq, flags: &eq) -> &eq {
 #[export = "caml_output_value_to_buffer"]
 fn caml_output_value_to_buffer
 (vbuf: &eq, vpos: &eq, vlen: &eq, v: &eq, flags: &eq) -> &eq {
-    let buf: &string;
     let sz: i32;
     let st: &extern_state;
-    let buf_2 = vbuf as &string;
+    let buf = vbuf as &string;
     let pos = vpos as &i31 as i32_u;
     let len = vlen as &i31 as i32_u;
     let blk =
         {output_block|
             next: null as &?output_block,
             end: pos + len,
-            data: buf_2
+            data: buf
         };
     extern_value(flags, blk, pos + 20, 1, v);
     _ = _;
-    buf_2 = _;
+    buf = _;
     _ = _;
-    buf_2.copy(pos, buf_2, 0, 20);
+    buf.copy(pos, buf, 0, 20);
     0 as &i31;
 }
 

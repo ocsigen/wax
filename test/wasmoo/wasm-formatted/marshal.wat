@@ -1362,7 +1362,7 @@
   (param $vbuf (ref eq)) (param $vpos (ref eq)) (param $vlen (ref eq))
   (param $v (ref eq)) (param $flags (ref eq)) (result (ref eq))
   (local $buf (ref $string)) (local $pos i32) (local $len i32)
-  (local $sz i32) (local $buf (ref $string)) (local $st (ref $extern_state))
+  (local $sz i32) (local $st (ref $extern_state))
   (local $blk (ref $output_block))
   (local.set $buf (ref.cast (ref $string) (local.get $vbuf)))
   (local.set $pos (i31.get_u (ref.cast (ref i31) (local.get $vpos))))

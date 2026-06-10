@@ -278,7 +278,6 @@ let runtest filename _ =
                     ModuleParser.parse_from_string ~color ~filename txt
                   in
                   Utils.Diagnostic.run ~color ~source:(Some txt) (fun d ->
-                      Wasm.Validation.check_syntax d ast;
                       Wasm.Validation.f d ast);
                   if false then
                     Format.printf "@[<2>Result:@ %a@]@." (print_module ~color)
@@ -304,7 +303,6 @@ let runtest filename _ =
                 let ok =
                   in_child_process ~quiet (fun () ->
                       Utils.Diagnostic.run ~color ~source:(Some txt) (fun d ->
-                          Wasm.Validation.check_syntax d ast;
                           Wasm.Validation.f d ast);
                       if false then
                         Format.printf "@[<2>Result:@ %a@]@."

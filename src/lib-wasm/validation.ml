@@ -2762,6 +2762,153 @@ let start ctx fields =
       | _ -> ())
     fields
 
+(* Syntactic well-formedness checks that the stack-based validation does not
+   cover: duplicate identifiers in each namespace, an inline type annotation
+   that disagrees with the type it names, duplicate parameter/local names, and a
+   second start function. Type references are resolved through [ctx], the type
+   context the rest of validation has already built, which handles recursive and
+   forward references correctly. *)
+let check_syntax ctx lst =
+  let types = Hashtbl.create 16 in
+  let functions = Hashtbl.create 16 in
+  let memories = Hashtbl.create 16 in
+  let tables = Hashtbl.create 16 in
+  let globals = Hashtbl.create 16 in
+  let tags = Hashtbl.create 16 in
+  let elems = Hashtbl.create 16 in
+  let datas = Hashtbl.create 16 in
+  let check_unbound tbl kind id =
+    let>@ id : Ast.Text.name = id in
+    if Hashtbl.mem tbl id.desc then
+      Error.index_already_bound ctx.diagnostics ~location:id.info kind id
+    else Hashtbl.add tbl id.desc ()
+  in
+  let rec iter_instrs f instrs =
+    List.iter
+      (fun i ->
+        f i.Ast.desc;
+        match i.Ast.desc with
+        | Ast.Text.Block { block; _ }
+        | Ast.Text.Loop { block; _ }
+        | Ast.Text.TryTable { block; _ } ->
+            iter_instrs f block
+        | Ast.Text.If { if_block; else_block; _ } ->
+            iter_instrs f if_block.desc;
+            iter_instrs f else_block.desc
+        | Ast.Text.Try { block; catches; catch_all; _ } ->
+            iter_instrs f block;
+            List.iter (fun (_, c) -> iter_instrs f c) catches;
+            Option.iter (iter_instrs f) catch_all
+        | Ast.Text.Folded (instr, instrs') -> iter_instrs f (instr :: instrs')
+        | _ -> ())
+      instrs
+  in
+  (* An inline type annotation [(type idx) (param ...) (result ...)] must name a
+     function type whose signature equals the inline one. *)
+  let check_inline_type idx target =
+    let>@ gidx = resolve_type_index ctx.diagnostics ctx.types idx in
+    match (Types.get_subtype ctx.subtyping_info gidx).typ with
+    | Func f -> (
+        match functype ctx.diagnostics ctx.types target with
+        | Some f' ->
+            if f <> f' then
+              Error.inline_function_type_mismatch ctx.diagnostics
+                ~location:idx.Ast.info f
+        | None -> ())
+    | Struct _ | Array _ | Cont _ ->
+        Error.expected_func_type ctx.diagnostics ~location:idx.Ast.info idx
+  in
+  let check_instr_inline desc =
+    let check_typeuse = function
+      | Ast.Text.Typeuse (Some idx, Some ft) -> check_inline_type idx ft
+      | _ -> ()
+    in
+    match desc with
+    | Ast.Text.Block { typ = Some t; _ }
+    | Ast.Text.Loop { typ = Some t; _ }
+    | Ast.Text.If { typ = Some t; _ }
+    | Ast.Text.Try { typ = Some t; _ }
+    | Ast.Text.TryTable { typ = Some t; _ } ->
+        check_typeuse t
+    | CallIndirect (_, (Some idx, Some ft)) -> check_inline_type idx ft
+    | ReturnCallIndirect (_, (Some idx, Some ft)) -> check_inline_type idx ft
+    | _ -> ()
+  in
+  let check_duplicate_locals typ locals =
+    let param_ids =
+      match snd typ with
+      | Some { Ast.Text.params; _ } -> Array.to_list (Array.map fst params)
+      | None -> []
+    in
+    let local_ids = List.map (fun e -> fst e.Ast.desc) locals in
+    let seen = Hashtbl.create 16 in
+    List.iter
+      (fun id ->
+        let*? id : Ast.Text.name = id in
+        if Hashtbl.mem seen id.desc then
+          Error.duplicate_local ctx.diagnostics ~location:id.Ast.info id.desc
+        else Hashtbl.add seen id.desc ())
+      (param_ids @ local_ids)
+  in
+  List.iter
+    (fun (field : (_ Ast.Text.modulefield, _) Ast.annotated) ->
+      match field.desc with
+      | Types lst ->
+          Array.iter
+            (fun e ->
+              check_unbound types "type" (fst e.Ast.desc);
+              match (snd e.Ast.desc).Ast.Text.typ with
+              | Ast.Text.Types.Func _ | Array _ | Cont _ -> ()
+              | Struct lst ->
+                  let fields = Hashtbl.create 16 in
+                  Array.iter
+                    (fun e -> check_unbound fields "field" (fst e.Ast.desc))
+                    lst)
+            lst
+      | Import { id; desc; _ } -> (
+          let tbl, kind =
+            match desc with
+            | Func _ -> (functions, "function")
+            | Memory _ -> (memories, "memory")
+            | Table _ -> (tables, "table")
+            | Global _ -> (globals, "global")
+            | Tag _ -> (tags, "tag")
+          in
+          check_unbound tbl kind id;
+          match desc with
+          | Func (Some idx, Some sign) -> check_inline_type idx sign
+          | Tag (Some idx, Some sign) -> check_inline_type idx sign
+          | _ -> ())
+      | Func { id; typ; locals; instrs; _ } ->
+          check_unbound functions "function" id;
+          (match typ with
+          | Some idx, Some sign -> check_inline_type idx sign
+          | _ -> ());
+          check_duplicate_locals typ locals;
+          iter_instrs check_instr_inline instrs
+      | Memory { id; _ } -> check_unbound memories "memory" id
+      | Table { id; _ } -> check_unbound tables "table" id
+      | Tag { id; typ = Some idx, Some sign; _ } ->
+          check_unbound tags "tag" id;
+          check_inline_type idx sign
+      | Tag { id; _ } -> check_unbound tags "tag" id
+      | Global { id; _ } -> check_unbound globals "global" id
+      | Export _ | Start _ -> ()
+      | Elem { id; _ } -> check_unbound elems "elem" id
+      | Data { id; _ } -> check_unbound datas "data" id
+      | String_global { id; _ } -> check_unbound globals "global" (Some id)
+      | Module_if_annotation _ -> ())
+    lst;
+  match
+    List.filter
+      (fun field ->
+        match field.Ast.desc with Ast.Text.Start _ -> true | _ -> false)
+      lst
+  with
+  | _ :: second :: _ ->
+      Error.multiple_start ctx.diagnostics ~location:second.Ast.info
+  | _ -> ()
+
 let validate_configuration diagnostics (_, fields) =
   let type_context =
     {
@@ -2800,6 +2947,7 @@ let validate_configuration diagnostics (_, fields) =
   let ctx =
     { ctx with subtyping_info = Types.subtyping_info type_context.types }
   in
+  check_syntax ctx fields;
   tables_and_memories ctx fields;
   globals ctx fields;
   segments ctx fields;
@@ -2995,289 +3143,3 @@ let f diagnostics ((name, fields) as modul) =
       ~specialize:(fun env asm ~enqueue ~record ->
         (name, specialize env diagnostics ~enqueue ~record asm fields))
       ~check:validate_configuration ()
-
-let eq_heaptype h1 h2 =
-  let open Ast.Text in
-  match (h1, h2) with
-  | Type i1, Type i2 -> (
-      match (i1.Ast.desc, i2.Ast.desc) with
-      | Ast.Text.Num n1, Ast.Text.Num n2 -> n1 = n2
-      | Ast.Text.Id s1, Ast.Text.Id s2 -> s1 = s2
-      | _ -> false)
-  | _, _ -> h1 = h2
-
-let eq_reftype r1 r2 =
-  r1.Ast.Text.nullable = r2.Ast.Text.nullable
-  && eq_heaptype r1.Ast.Text.typ r2.Ast.Text.typ
-
-let eq_valtype v1 v2 =
-  let open Ast.Text in
-  match (v1, v2) with
-  | Ast.Text.Types.I32, Ast.Text.Types.I32
-  | Ast.Text.Types.I64, Ast.Text.Types.I64
-  | Ast.Text.Types.F32, Ast.Text.Types.F32
-  | Ast.Text.Types.F64, Ast.Text.Types.F64
-  | Ast.Text.Types.V128, Ast.Text.Types.V128 ->
-      true
-  | Ref r1, Ref r2 -> eq_reftype r1 r2
-  | _ -> false
-
-let eq_functype (f1 : Ast.Text.functype) (f2 : Ast.Text.functype) =
-  let p1 = Array.map snd f1.params in
-  let p2 = Array.map snd f2.params in
-  Array.length p1 = Array.length p2
-  && Array.for_all2 eq_valtype p1 p2
-  && Array.length f1.results = Array.length f2.results
-  && Array.for_all2 eq_valtype f1.results f2.results
-
-let check_syntax diagnostics (_, lst) =
-  let types = Hashtbl.create 16 in
-  let functions = Hashtbl.create 16 in
-  let memories = Hashtbl.create 16 in
-  let tables = Hashtbl.create 16 in
-  let globals = Hashtbl.create 16 in
-  let tags = Hashtbl.create 16 in
-  let elems = Hashtbl.create 16 in
-  let datas = Hashtbl.create 16 in
-  let check_unbound tbl kind id =
-    let>@ id : Ast.Text.name = id in
-    if Hashtbl.mem tbl id.desc then
-      Error.index_already_bound diagnostics ~location:id.info kind id
-    else Hashtbl.add tbl id.desc ()
-  in
-  let types_ctx =
-    {
-      types = Types.create ();
-      (* unused *)
-      last_index = 0;
-      index_mapping = Hashtbl.create 16;
-      label_mapping = Hashtbl.create 16;
-      type_defs = Hashtbl.create 16;
-    }
-  in
-  (* Pass 1: Build Type Mappings (Explicit) *)
-  let type_defs = Hashtbl.create 16 in
-  let type_defs_text = Hashtbl.create 16 in
-  List.iter
-    (fun field ->
-      match field.Ast.desc with
-      | Ast.Text.Types lst ->
-          Array.iter
-            (fun e ->
-              let id, subtype = e.Ast.desc in
-              let idx = types_ctx.last_index in
-              let>@ def = comptype diagnostics types_ctx subtype.Ast.Text.typ in
-              let mapping = (idx, []) in
-              Hashtbl.add types_ctx.index_mapping (Uint32.of_int idx) mapping;
-              Option.iter
-                (fun id ->
-                  check_unbound types "type" (Some id);
-                  Hashtbl.replace types_ctx.label_mapping id.desc mapping)
-                id;
-              (Hashtbl.add type_defs idx def;
-               match subtype.Ast.Text.typ with
-               | Ast.Text.Types.Func f ->
-                   Hashtbl.add type_defs_text idx (Ast.Text.Types.Func f)
-               | _ -> ());
-              types_ctx.last_index <- idx + 1)
-            lst
-      | _ -> ())
-    lst;
-
-  (* Helper to find reusable type *)
-  let find_existing_type sign =
-    (* Helper: check if comptype matches signature *)
-    let sig_matches t s =
-      match t with
-      | Ast.Binary.Types.Func { params; results } ->
-          let { Ast.Binary.Types.params = p; results = r } = s in
-          p = params && r = results
-      | _ -> false
-    in
-    let*@ target = signature diagnostics types_ctx sign in
-    (*ZZZ Slow*)
-    let rec loop i =
-      if i >= types_ctx.last_index then None
-      else
-        match Hashtbl.find_opt type_defs i with
-        | Some t -> if sig_matches t target then Some i else loop (i + 1)
-        | None -> loop (i + 1)
-    in
-    loop 0
-  in
-
-  (* Helper to add implicit type *)
-
-  (* Pass 2: Collect Implicit Types *)
-  let add_implicit_type ft =
-    let params = Array.map (fun (_, t) -> (None, t)) ft.Ast.Text.params in
-    let results = ft.Ast.Text.results in
-    let sign = { Ast.Text.params; results } in
-    match find_existing_type sign with
-    | Some _ -> () (* Reuse *)
-    | None ->
-        let idx = types_ctx.last_index in
-        let>@ ty = signature diagnostics types_ctx sign in
-        let def = Ast.Binary.Types.Func ty in
-        Hashtbl.add type_defs idx def;
-        Hashtbl.add type_defs_text idx (Ast.Text.Types.Func sign);
-        Hashtbl.add types_ctx.index_mapping (Uint32.of_int idx) (idx, []);
-        types_ctx.last_index <- idx + 1
-  in
-
-  let rec iter_instrs f instrs =
-    List.iter
-      (fun i ->
-        f i.Ast.desc;
-        match i.Ast.desc with
-        | Ast.Text.Block { block; _ }
-        | Ast.Text.Loop { block; _ }
-        | Ast.Text.TryTable { block; _ } ->
-            iter_instrs f block
-        | Ast.Text.If { if_block; else_block; _ } ->
-            iter_instrs f if_block.desc;
-            iter_instrs f else_block.desc
-        | Ast.Text.Try { block; catches; catch_all; _ } ->
-            iter_instrs f block;
-            List.iter (fun (_, c) -> iter_instrs f c) catches;
-            Option.iter (iter_instrs f) catch_all
-        | Ast.Text.Folded (instr, instrs') -> iter_instrs f (instr :: instrs')
-        | _ -> ())
-      instrs
-  in
-
-  List.iter
-    (fun field ->
-      (match field.Ast.desc with
-      | Ast.Text.Import { desc; _ } -> (
-          match desc with
-          | Func (None, Some sign) -> add_implicit_type sign
-          | Tag (None, Some sign) -> add_implicit_type sign
-          | _ -> ())
-      | Func { typ = None, Some sign; _ } -> add_implicit_type sign
-      | Tag { typ = None, Some sign; _ } -> add_implicit_type sign
-      | _ -> ());
-      match field.Ast.desc with
-      | Ast.Text.Func { instrs; _ } ->
-          iter_instrs
-            (fun desc ->
-              match desc with
-              | Ast.Text.Block { typ = Some (Ast.Text.Typeuse (_, Some ft)); _ }
-                ->
-                  add_implicit_type ft
-              | Loop { typ = Some (Ast.Text.Typeuse (_, Some ft)); _ } ->
-                  add_implicit_type ft
-              | If { typ = Some (Ast.Text.Typeuse (_, Some ft)); _ } ->
-                  add_implicit_type ft
-              | Try { typ = Some (Ast.Text.Typeuse (_, Some ft)); _ } ->
-                  add_implicit_type ft
-              | TryTable { typ = Some (Ast.Text.Typeuse (_, Some ft)); _ } ->
-                  add_implicit_type ft
-              | CallIndirect (_, (_, Some ft)) -> add_implicit_type ft
-              | ReturnCallIndirect (_, (_, Some ft)) -> add_implicit_type ft
-              | _ -> ())
-            instrs
-      | _ -> ())
-    lst;
-
-  (* Pass 4: Validation *)
-  let check_inline_type idx target =
-    let>@ idx' = resolve_type_index diagnostics types_ctx idx in
-    match Hashtbl.find_opt type_defs_text idx' with
-    | Some (Ast.Text.Types.Func f) ->
-        if not (eq_functype f target) then
-          Error.inline_function_type_mismatch diagnostics ~location:idx.Ast.info
-            f
-    | _ -> Error.expected_func_type diagnostics ~location:idx.Ast.info idx
-  in
-  let check_instr_inline desc =
-    let check_typeuse = function
-      | Ast.Text.Typeuse (Some idx, Some ft) -> check_inline_type idx ft
-      | _ -> ()
-    in
-    match desc with
-    | Ast.Text.Block { typ = Some t; _ } -> check_typeuse t
-    | Ast.Text.Loop { typ = Some t; _ }
-    | Ast.Text.If { typ = Some t; _ }
-    | Ast.Text.Try { typ = Some t; _ }
-    | Ast.Text.TryTable { typ = Some t; _ } ->
-        check_typeuse t
-    | CallIndirect (_, (Some idx, Some ft)) -> check_inline_type idx ft
-    | ReturnCallIndirect (_, (Some idx, Some ft)) -> check_inline_type idx ft
-    | _ -> ()
-  in
-  let check_duplicate_locals typ locals =
-    let param_ids =
-      match snd typ with
-      | Some { Ast.Text.params; _ } -> Array.to_list (Array.map fst params)
-      | None -> []
-    in
-    let local_ids = List.map (fun e -> fst e.Ast.desc) locals in
-    let seen = Hashtbl.create 16 in
-    List.iter
-      (fun id ->
-        let*? id : Ast.Text.name = id in
-        if Hashtbl.mem seen id.desc then
-          Error.duplicate_local diagnostics ~location:id.Ast.info id.desc
-        else Hashtbl.add seen id.desc ())
-      (param_ids @ local_ids)
-  in
-  List.iter
-    (fun (field : (_ Ast.Text.modulefield, _) Ast.annotated) ->
-      match field.desc with
-      | Types lst ->
-          Array.iter
-            (fun e ->
-              match (snd e.Ast.desc).Ast.Text.typ with
-              | Ast.Text.Types.Func _ | Array _ | Cont _ -> ()
-              | Struct lst ->
-                  let fields = Hashtbl.create 16 in
-                  Array.iter
-                    (fun e -> check_unbound fields "field" (fst e.Ast.desc))
-                    lst)
-            lst
-      | Import { id; desc; _ } -> (
-          let tbl, kind =
-            match desc with
-            | Func _ -> (functions, "function")
-            | Memory _ -> (memories, "memory")
-            | Table _ -> (tables, "table")
-            | Global _ -> (globals, "global")
-            | Tag _ -> (tags, "tag")
-          in
-          check_unbound tbl kind id;
-          match desc with
-          | Func (Some idx, Some sign) -> check_inline_type idx sign
-          | Tag (Some idx, Some sign) -> check_inline_type idx sign
-          | _ -> ())
-      | Func { id; typ; locals; instrs; _ } ->
-          check_unbound functions "function" id;
-          (match typ with
-          | Some idx, Some sign -> check_inline_type idx sign
-          | _ -> ());
-          check_duplicate_locals typ locals;
-          iter_instrs check_instr_inline instrs
-      | Memory { id; _ } -> check_unbound memories "memory" id
-      | Table { id; _ } -> check_unbound tables "table" id
-      | Tag { id; typ = Some idx, Some sign; _ } ->
-          check_unbound tags "tag" id;
-          check_inline_type idx sign
-      | Tag { id; _ } -> check_unbound tags "tag" id
-      | Global { id; _ } -> check_unbound globals "global" id
-      | Export _ | Start _ -> ()
-      | Elem { id; _ } -> check_unbound elems "elem" id
-      | Data { id; _ } -> check_unbound datas "data" id
-      | String_global { id; _ } -> check_unbound globals "global" (Some id)
-      | Module_if_annotation _ -> ())
-    lst;
-  (* Import ordering is enforced by {!check_import_order}, which runs as part
-     of {!f}. *)
-  match
-    List.filter
-      (fun field ->
-        match field.Ast.desc with Ast.Text.Start _ -> true | _ -> false)
-      lst
-  with
-  | _ :: second :: _ ->
-      Error.multiple_start diagnostics ~location:second.Ast.info
-  | _ -> ()

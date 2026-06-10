@@ -5,10 +5,5 @@ val validate_refs : bool ref
     occur in the module. Default is true. *)
 
 val f : Utils.Diagnostic.context -> Ast.location Ast.Text.module_ -> unit
-(** [f modul] validates the given Wasm Text module. Raises exceptions on
-    validation errors. *)
-
-val check_syntax :
-  Utils.Diagnostic.context -> Ast.location Ast.Text.module_ -> unit
-(** [check_syntax context modul] performs additional syntactic checks on the
-    module. *)
+(** [f modul] validates the given Wasm Text module, including syntactic
+    well-formedness checks. Raises exceptions on validation errors. *)
