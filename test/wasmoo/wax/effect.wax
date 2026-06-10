@@ -168,8 +168,8 @@ data already_resumed = "Effect.Continuation_already_resumed";
 
 #[export = "%resume"]
 fn f(stack: &eq, f: &eq, v: &eq) -> &eq {
-    let pair: &pair;
     let k: &cont_2;
+    let pair: &pair;
     if stack == 0 as &i31 {
         caml_raise_constant
             (caml_named_value([string|already_resumed @ 0; 35])!);

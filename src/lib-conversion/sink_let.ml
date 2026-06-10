@@ -202,7 +202,16 @@ let rec extract_leading_decls acc instrs =
 
 let process_body instrs =
   let decls, rest = extract_leading_decls [] instrs in
-  List.fold_left (fun acc decl -> sink_decl decl acc) rest decls
+  (* An unused declaration has no sink target, so [sink_decl] just prepends it.
+     Folding such declarations would reverse their order on each pass (and
+     [Sink_let] runs on every conversion to Wax), so the round-trip would never
+     settle. Place the used ones via the fold, then prepend the unused ones in
+     their original order so the output is a fixpoint. *)
+  let used, unused =
+    List.partition (fun (name, _) -> list_occurs name.desc rest) decls
+  in
+  let body = List.fold_left (fun acc decl -> sink_decl decl acc) rest used in
+  List.fold_right (fun decl acc -> bare_let decl :: acc) unused body
 
 let rec field_desc (f : location modulefield) =
   let map_fields = List.map (fun a -> { a with desc = field_desc a.desc }) in

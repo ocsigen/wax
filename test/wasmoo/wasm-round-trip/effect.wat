@@ -222,7 +222,7 @@
 (func $f (export "%resume")
   (param $stack (ref eq)) (param $f (ref eq)) (param $v (ref eq))
   (result (ref eq))
-  (local $pair (ref $pair)) (local $k (ref $cont_2))
+  (local $k (ref $cont_2)) (local $pair (ref $pair))
   (if (ref.eq (local.get $stack) (ref.i31 (i32.const 0)))
     (then
       (call $caml_raise_constant

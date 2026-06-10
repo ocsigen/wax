@@ -293,7 +293,7 @@
 
 (func $readfloat
   (param $s (ref $intern_state)) (param $code i32) (result f64)
-  (local $v (ref eq)) (local $res i32) (local $src (ref $string))
+  (local $res i32) (local $v (ref eq)) (local $src (ref $string))
   (local $pos i32) (local $d i64) (local $i i32)
   (local.set $src (struct.get $intern_state $src (local.get $s)))
   (local.set $pos (struct.get $intern_state $pos (local.get $s)))
@@ -1357,7 +1357,7 @@
 (func $caml_output_value_to_buffer (export "caml_output_value_to_buffer")
   (param $vbuf (ref eq)) (param $vpos (ref eq)) (param $vlen (ref eq))
   (param $v (ref eq)) (param $flags (ref eq)) (result (ref eq))
-  (local $st (ref $extern_state)) (local $sz i32) (local $buf (ref $string))
+  (local $buf (ref $string)) (local $sz i32) (local $st (ref $extern_state))
   (local $buf_2 (ref $string)) (local $pos i32) (local $len i32)
   (local $blk (ref $output_block))
   (local.set $buf_2 (ref.cast (ref $string) (local.get $vbuf)))

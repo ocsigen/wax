@@ -216,8 +216,8 @@ fn readstr(s: &intern_state) -> &string {
 }
 
 fn readfloat(s: &intern_state, code: i32) -> f64 {
-    let v: &eq;
     let res: i32;
+    let v: &eq;
     let src = s.src;
     let pos = s.pos;
     s.pos = pos + 8;
@@ -1071,9 +1071,9 @@ fn caml_output_value_to_string(v: &eq, flags: &eq) -> &eq {
 #[export = "caml_output_value_to_buffer"]
 fn caml_output_value_to_buffer
 (vbuf: &eq, vpos: &eq, vlen: &eq, v: &eq, flags: &eq) -> &eq {
-    let st: &extern_state;
-    let sz: i32;
     let buf: &string;
+    let sz: i32;
+    let st: &extern_state;
     let buf_2 = vbuf as &string;
     let pos = vpos as &i31 as i32_u;
     let len = vlen as &i31 as i32_u;
