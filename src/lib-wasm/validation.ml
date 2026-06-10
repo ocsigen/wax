@@ -14,36 +14,6 @@ let ( let*@ ) = Option.bind
 let ( let+@ ) o f = Option.map f o
 let ( let>@ ) o f = Option.iter f o
 
-let print_heaptype f (ty : heaptype) =
-  match ty with
-  | Func -> Format.fprintf f "func"
-  | NoFunc -> Format.fprintf f "nofunc"
-  | Exn -> Format.fprintf f "exn"
-  | NoExn -> Format.fprintf f "noexn"
-  | Cont -> Format.fprintf f "cont"
-  | NoCont -> Format.fprintf f "nocont"
-  | Extern -> Format.fprintf f "extern"
-  | NoExtern -> Format.fprintf f "noextern"
-  | Any -> Format.fprintf f "any"
-  | Eq -> Format.fprintf f "eq"
-  | I31 -> Format.fprintf f "i31"
-  | Struct -> Format.fprintf f "struct"
-  | Array -> Format.fprintf f "array"
-  | None_ -> Format.fprintf f "none"
-  | Type id -> Format.fprintf f "%d" id
-
-let print_valtype f ty =
-  match ty with
-  | I32 -> Format.fprintf f "i32"
-  | I64 -> Format.fprintf f "i64"
-  | F32 -> Format.fprintf f "f32"
-  | F64 -> Format.fprintf f "f64"
-  | V128 -> Format.fprintf f "v128"
-  | Ref { nullable; typ } ->
-      if nullable then
-        Format.fprintf f "@[<1>(ref@ null@ %a)@]" print_heaptype typ
-      else Format.fprintf f "@[<1>(ref@ %a)@]" print_heaptype typ
-
 let print_string f s =
   let s = s.Ast.desc in
   let len, s = Output.escape_string s in
@@ -66,8 +36,7 @@ let print_text f s =
     (String.split_on_char ' ' s)
 
 (* Render a type as the source wrote it, naming an indexed type by its source
-   reference ($foo or a number) instead of the interned canonical index that
-   [print_valtype] would show. *)
+   reference ($foo or a number) rather than an interned canonical index. *)
 let print_text_heaptype f (ty : Ast.Text.heaptype) =
   match Ast.Text.heaptype_keyword ty with
   | Some kw -> Format.pp_print_string f kw
@@ -178,13 +147,14 @@ module Error = struct
           "This instruction is only valid for packed fields. Use struct.get.")
       ()
 
-  (* Print a type as the source wrote it when its text form is known, otherwise
-     fall back to the interned type. Used for both the expected type and the
-     value found on the stack. *)
+  (* Print a type as the source wrote it. When no source form is supplied (an
+     expected type the caller did not name), reconstruct one from the interned
+     type, naming an indexed type by its canonical index. Used for both the
+     expected type and the value found on the stack. *)
   let print_ty ?text f ty =
     match text with
     | Some text -> print_text_valtype f text
-    | None -> print_valtype f ty
+    | None -> print_text_valtype f (text_of_valtype ty)
 
   let instruction_type_mismatch context ~location ?provided_text ?expected_text
       ty' ty =
@@ -2178,15 +2148,20 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let* () = pop ctx loc ?expected_text:text (Ref typ.reftype) in
       pop ctx loc addr_ty
   | TableCopy (idx, idx') ->
-      let*! ty, _ = Sequence.get ctx.modul.diagnostics ctx.modul.tables idx in
-      let*! ty', _ = Sequence.get ctx.modul.diagnostics ctx.modul.tables idx' in
+      let*! ty, dst_text =
+        Sequence.get ctx.modul.diagnostics ctx.modul.tables idx
+      in
+      let*! ty', src_text =
+        Sequence.get ctx.modul.diagnostics ctx.modul.tables idx'
+      in
       if
         not
           (Types.val_subtype ctx.modul.subtyping_info (Ref ty'.reftype)
              (Ref ty.reftype))
       then
         Error.type_mismatch ctx.modul.diagnostics ~location:loc
-          (Ref ty'.reftype) (Ref ty.reftype);
+          ?provided_text:src_text ?expected_text:dst_text (Ref ty'.reftype)
+          (Ref ty.reftype);
       let address_type =
         match (ty.limits.address_type, ty'.limits.address_type) with
         | `I32, _ | _, `I32 -> `I32

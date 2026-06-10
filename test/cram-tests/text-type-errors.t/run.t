@@ -346,3 +346,16 @@ An element segment whose type is not a subtype of the table's names both:
     ·    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   5 │ 
   [128]
+
+A table.copy between tables with mismatched element types names both:
+
+  $ wax --validate table_copy.wat -o out.wat
+  Error: Type mismatch: expecting type (ref null $a) but got type
+    (ref null $b).
+   ──➤  table_copy.wat:7:6
+  5 │   (table $tb 1 (ref null $b))
+  6 │   (func
+  7 │     (table.copy $ta $tb (i32.const 0) (i32.const 0) (i32.const 0))))
+    ·      ^^^^^^^^^^^^^^^^^^
+  8 │ 
+  [128]
