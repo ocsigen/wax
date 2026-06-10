@@ -26,6 +26,7 @@ call_indirect against an implicit type renders the cast inline as &fn(..):
   type t = fn(i32);
   fn f() -> f64 { 0; } // mints the implicit type at index 1
   table t: &?func [1, 1];
+  elem e: &?func @ t [0] = [f];
   // call_indirect referencing the implicit type by its numeric index
   #[export = "run"]
   fn run() -> f64 { (t[0] as &?fn() -> f64)(); }

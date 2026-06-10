@@ -110,6 +110,9 @@ module Sequence = struct
     seq.current_index <- i + 1;
     Ast.no_loc (Hashtbl.find seq.index_mapping (Uint32.of_int i))
 
+  (* A fresh, unique name in this sequence's namespace, for an entity not in the
+     source (e.g. an element segment synthesised from an inline table init). *)
+  let fresh_name seq = Ast.no_loc (Namespace.add seq.namespace seq.default)
   let consume_currents seq = seq.current_index <- seq.last_index
 end
 
@@ -1744,6 +1747,9 @@ let single_expression ctx ~location l =
           Format.fprintf f "A constant expression must produce a single value.")
 
 let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
+  (* Sibling fields synthesised alongside [f] (e.g. an element segment for an
+     inline table initializer), emitted right after it. *)
+  let extra = ref [] in
   let desc : _ Ast.modulefield option =
     match f.desc with
     | Types t -> Some (Type (rectype ctx t))
@@ -1966,7 +1972,29 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
               Some
                 (single_expression ctx ~location:f.info
                    (Stack.run (instructions ctx ex)))
-          | Init_segment _ -> None (* per-element init not represented *)
+          | Init_segment segs ->
+              (* A per-element initializer is not expressible on the table
+                 itself; desugar it into a separate active element segment
+                 filling the table from offset 0. *)
+              let elem_init =
+                List.map
+                  (fun ex ->
+                    single_expression ctx ~location:f.info
+                      (Stack.run (instructions ctx ex)))
+                  segs
+              in
+              let elem : _ Ast.modulefield =
+                Elem
+                  {
+                    name = Sequence.fresh_name ctx.elems;
+                    reftype = reftype ctx tt.Src.reftype;
+                    mode = EActive (name, Ast.no_loc (Ast.Int "0"));
+                    init = elem_init;
+                    attributes = [];
+                  }
+              in
+              extra := [ { f with desc = elem } ];
+              None
         in
         Some
           (Table
@@ -2057,18 +2085,18 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
            in the branch's bodies. *)
         let then_fields =
           with_cond ctx ~location:f.info cond true (fun () ->
-              List.filter_map (modulefield ctx export_tbl) then_fields)
+              List.concat_map (modulefield ctx export_tbl) then_fields)
         in
         let else_fields =
           Option.map
             (fun e ->
               with_cond ctx ~location:f.info cond false (fun () ->
-                  List.filter_map (modulefield ctx export_tbl) e))
+                  List.concat_map (modulefield ctx export_tbl) e))
             else_fields
         in
         Some (Conditional { cond; then_fields; else_fields })
   in
-  Option.map (fun desc -> { f with desc }) desc
+  Option.to_list (Option.map (fun desc -> { f with desc }) desc) @ !extra
 
 (* Structural equality on function types, ignoring parameter names and source
    locations. Used to replicate the WAT type-use abbreviation, where an inline
@@ -2405,7 +2433,7 @@ let module_ ?(strict_constants = false) diagnostics (_, fields) =
     in
     List.iter collect_field fields;
     Sink_let.module_
-      (List.filter_map (fun f -> modulefield ctx export_tbl f) fields)
+      (List.concat_map (fun f -> modulefield ctx export_tbl f) fields)
   with Numeric_ref_in_conditional location ->
     Utils.Diagnostic.report diagnostics ~location ~severity:Error
       ~message:(fun f () ->
