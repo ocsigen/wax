@@ -400,3 +400,17 @@ with the structurally-identical $a, yet the reference is still named $b:
     ·      ^^^^^^^^^^^
   7 │ 
   [128]
+
+When the function's type has no source name (an implicit type), the reference
+shows that type's signature inline rather than a meaningless index:
+
+  $ wax --validate ref_func_signature.wat -o out.wat
+  Error: Type mismatch: this instruction expects type f64
+    but the stack has type (ref (func (param i32) (result i32)))
+   ──➤  ref_func_signature.wat:4:6
+  2 │   (func $f (param i32) (result i32) (local.get 0))
+  3 │   (func (result f64)
+  4 │     (ref.func $f)))
+    ·      ^^^^^^^^^^^
+  5 │ 
+  [128]

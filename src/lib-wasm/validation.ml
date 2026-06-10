@@ -48,6 +48,55 @@ let print_text_valtype f (ty : Ast.Text.valtype) =
         Format.fprintf f "@[<1>(ref@ null@ %a)@]" print_text_heaptype typ
       else Format.fprintf f "@[<1>(ref@ %a)@]" print_text_heaptype typ
 
+let print_text_storagetype f (ty : Ast.Text.storagetype) =
+  match ty with
+  | Value v -> print_text_valtype f v
+  | Packed I8 -> Format.pp_print_string f "i8"
+  | Packed I16 -> Format.pp_print_string f "i16"
+
+let print_text_fieldtype f ({ mut; typ } : Ast.Text.fieldtype) =
+  if mut then Format.fprintf f "@[<1>(mut@ %a)@]" print_text_storagetype typ
+  else print_text_storagetype f typ
+
+let print_text_functype f ({ params; results } : Ast.Text.functype) =
+  Array.iter
+    (fun (_, t) -> Format.fprintf f "@ @[<1>(param@ %a)@]" print_text_valtype t)
+    params;
+  Array.iter
+    (fun t -> Format.fprintf f "@ @[<1>(result@ %a)@]" print_text_valtype t)
+    results
+
+(* Render a composite type as its source signature, for a reference to a type
+   the user did not name (an implicit [ref.func] type, the internal string
+   type). *)
+let print_text_comptype f (ty : Ast.Text.comptype) =
+  match ty with
+  | Func ft -> Format.fprintf f "@[<1>(func%a)@]" print_text_functype ft
+  | Array ft -> Format.fprintf f "@[<1>(array@ %a)@]" print_text_fieldtype ft
+  | Struct fields ->
+      Format.fprintf f "@[<1>(struct";
+      Array.iter
+        (fun e ->
+          let _, ft = e.Ast.desc in
+          Format.fprintf f "@ @[<1>(field@ %a)@]" print_text_fieldtype ft)
+        fields;
+      Format.fprintf f ")@]"
+  | Cont idx -> Format.fprintf f "@[<1>(cont@ %a)@]" print_index idx
+
+(* The source rendering of a stack value: either a value type the user wrote
+   (or that names a type the user declared), or — for a reference whose type has
+   no source name — that referenced type's signature, shown inline. *)
+type source_type =
+  | Plain of Ast.Text.valtype
+  | Ref_sig of { nullable : bool; comptype : Ast.Text.comptype }
+
+let print_source_type f = function
+  | Plain v -> print_text_valtype f v
+  | Ref_sig { nullable; comptype } ->
+      if nullable then
+        Format.fprintf f "@[<1>(ref@ null@ %a)@]" print_text_comptype comptype
+      else Format.fprintf f "@[<1>(ref@ %a)@]" print_text_comptype comptype
+
 (* Reconstruct a source type from an interned one, naming an indexed type by its
    canonical index. Used as the source type of a pushed value when no truer
    reference is available, so every concrete stack value carries a source type
@@ -70,14 +119,15 @@ let text_of_heaptype (h : heaptype) : Ast.Text.heaptype =
   | None_ -> None_
   | Type i -> Type (Ast.no_loc (Ast.Text.Num (Uint32.of_int i)))
 
-let text_of_valtype (ty : valtype) : Ast.Text.valtype =
-  match ty with
-  | I32 -> I32
-  | I64 -> I64
-  | F32 -> F32
-  | F64 -> F64
-  | V128 -> V128
-  | Ref { nullable; typ } -> Ref { nullable; typ = text_of_heaptype typ }
+let text_of_valtype (ty : valtype) : source_type =
+  Plain
+    (match ty with
+    | I32 -> I32
+    | I64 -> I64
+    | F32 -> F32
+    | F64 -> F64
+    | V128 -> V128
+    | Ref { nullable; typ } -> Ref { nullable; typ = text_of_heaptype typ })
 
 module Error = struct
   open Utils
@@ -148,7 +198,7 @@ module Error = struct
         Format.fprintf f
           "Type mismatch: this instruction expects type@ @[<2>%a@]@ but the \
            stack has type@ @[<2>%a@]"
-          print_text_valtype expected_text print_text_valtype provided_text)
+          print_source_type expected_text print_source_type provided_text)
       ()
 
   let expected_ref_type context ~location ~src_loc ~text =
@@ -158,7 +208,7 @@ module Error = struct
           ~message:(fun f () ->
             Format.fprintf f
               "Type mismatch: expected reference type but got type@ @[<2>%a@]."
-              print_text_valtype text)
+              print_source_type text)
           ()
     | Some location ->
         Diagnostic.report context ~location ~severity:Error
@@ -166,7 +216,7 @@ module Error = struct
             Format.fprintf f
               "Type mismatch: this instruction should return a reference type \
                but has type@ @[<2>%a@]."
-              print_text_valtype text)
+              print_source_type text)
           ()
 
   let table_type_mismatch context ~location ~text idx =
@@ -174,7 +224,7 @@ module Error = struct
       ~message:(fun f () ->
         Format.fprintf f "Type mismatch: the table %a@ %a@ @[%a@]." print_index
           idx print_text "should contain functions but its elements have type"
-          print_text_valtype text)
+          print_source_type text)
       ()
 
   let elem_segment_type_mismatch context ~location ~elem_text ~table_text =
@@ -183,7 +233,7 @@ module Error = struct
         Format.fprintf f
           "Type mismatch: the element segment has type@ @[<2>%a@],@ which is \
            not a subtype of the table element type@ @[<2>%a@]."
-          print_text_valtype elem_text print_text_valtype table_text)
+          print_source_type elem_text print_source_type table_text)
       ()
 
   let duplicate_local context ~location name =
@@ -197,7 +247,7 @@ module Error = struct
       ~message:(fun f () ->
         Format.fprintf f
           "Type mismatch: expecting type@ @[<2>%a@]@ but got type@ @[<2>%a@]."
-          print_text_valtype expected_text print_text_valtype provided_text)
+          print_source_type expected_text print_source_type provided_text)
       ()
 
   let br_cast_type_mismatch context ~location =
@@ -213,7 +263,7 @@ module Error = struct
         Format.fprintf f
           "Type mismatch: both branches of a select should have the same \
            type.@ Here, they have type@ @[<2>%a@]@ and@ @[<2>%a@]."
-          print_text_valtype text1 print_text_valtype text2)
+          print_source_type text1 print_source_type text2)
       ()
 
   let empty_stack context ~location =
@@ -235,7 +285,7 @@ module Error = struct
     Format.fprintf f "@[<1>[%a]@]"
       (Format.pp_print_list
          ~pp_sep:(fun f () -> Format.pp_print_space f ())
-         print_text_valtype)
+         print_source_type)
       (Array.to_list text)
 
   let argument_count_mismatch context ~location ~descr ~provided_text
@@ -256,8 +306,7 @@ module Error = struct
         Format.fprintf f
           "Type mismatch: %s provides type@ @[<2>%a@]@ but type@ @[<2>%a@]@ \
            was expected."
-          descr print_text_valtype provided_text print_text_valtype
-          expected_text)
+          descr print_source_type provided_text print_source_type expected_text)
       ()
 
   let branch_parameter_count_mismatch context ~location label len label' len' =
@@ -442,7 +491,7 @@ module Error = struct
         Format.fprintf f
           "Type mismatch: expecting a numeric or vector type but got type@ \
            @[<2>%a@]."
-          print_text_valtype text)
+          print_source_type text)
       ()
 
   let immutable context ~location what =
@@ -614,13 +663,22 @@ let source_idx_of_canonical tc i : Ast.Text.idx option =
    types carry no index and reconstruct directly. The numeric fallback for an
    untranslatable index is reached only for synthesized types with no source
    form. *)
-let source_valtype tc (ty : valtype) : Ast.Text.valtype =
+let source_valtype tc (ty : valtype) : source_type =
   match ty with
   | Ref { nullable; typ = Type i } -> (
       match source_idx_of_canonical tc i with
-      | Some idx -> Ref { nullable; typ = Type idx }
+      | Some idx -> Plain (Ref { nullable; typ = Type idx })
       | None -> text_of_valtype ty)
   | _ -> text_of_valtype ty
+
+(* Source rendering of a reference to the interned type [i] whose source
+   composite type is [comptype]: name the type if the user declared it with a
+   name, otherwise show its signature inline (the index would be meaningless, as
+   for an implicit [ref.func] type or the internal string type). *)
+let ref_source tc ~nullable i comptype : source_type =
+  match source_idx_of_canonical tc i with
+  | Some ({ desc = Id _; _ } as idx) -> Plain (Ref { nullable; typ = Type idx })
+  | _ -> Ref_sig { nullable; comptype }
 
 (* The source composite type a reference resolves to, named as the source wrote
    it (injective), or [None] for an unbound or sourceless reference. Does not
@@ -650,7 +708,8 @@ let typeuse_functype tc (tu_idx, tu_sign) =
 (* Per-element source types for a source function type's params and results, to
    pass straight to [pop_args]/[push_results]'s [~text]. *)
 let functype_arg_text ({ params; results } : Ast.Text.functype) =
-  (Array.map snd params, results)
+  ( Array.map (fun (_, v) -> Plain v) params,
+    Array.map (fun v -> Plain v) results )
 
 (* Argument/result source types for a call from the callee's source signature
    ([None] when unknown). *)
@@ -849,8 +908,8 @@ type module_context = {
      (deduplicated) type index that another structurally-equal type may own. *)
   functions : (int * Ast.Text.functype) Sequence.t;
   memories : limits Sequence.t;
-  tables : (Ast.Binary.tabletype * Ast.Text.valtype) Sequence.t;
-  globals : (globaltype * Ast.Text.valtype) Sequence.t;
+  tables : (Ast.Binary.tabletype * source_type) Sequence.t;
+  globals : (globaltype * source_type) Sequence.t;
   (* Each tag carries its type's global index and its source signature, to name
      a thrown payload's types. *)
   tags : (int * Ast.Text.functype) Sequence.t;
@@ -865,12 +924,12 @@ module IntSet = Set.Make (Int)
 type ctx = {
   (* Each local carries the interned type and the source type for error
      messages (reconstructed from the interned type if no source is known). *)
-  locals : (valtype * Ast.Text.valtype) Sequence.t;
+  locals : (valtype * source_type) Sequence.t;
   (* Each entry is a branch target: its optional label, the interned types a
      branch carries to it, and their source types for error messages. *)
-  control_types : (string option * valtype array * Ast.Text.valtype array) list;
+  control_types : (string option * valtype array * source_type array) list;
   return_types : valtype array;
-  return_text : Ast.Text.valtype array;
+  return_text : source_type array;
   modul : module_context;
   mutable initialized_locals : IntSet.t;
 }
@@ -933,7 +992,7 @@ let lookup_tag_type ctx tag =
   | Func { params; results } ->
       if results <> [||] then
         Error.exception_tag_with_results ctx.diagnostics ~location:tag.info;
-      (params, Array.map snd sign.params)
+      (params, Array.map (fun (_, v) -> Plain v) sign.params)
 
 (* Full function type of a tag, used for stack-switching suspension tags whose
    results may be non-empty (unlike exception tags). *)
@@ -999,18 +1058,18 @@ let result_subtype info (ts : valtype array) (ts' : valtype array) =
    the field has a (non-packed) value type. Packed fields surface as i32, so
    they get no name. Resolving through the reference (not the deduplicated
    global index) names the field as written at this very type. *)
-let source_field_valtype ctx idx n : Ast.Text.valtype =
+let source_field_valtype ctx idx n : source_type =
   match reference_comptype ctx.modul.types idx with
   | Struct fields -> (
       let _, (ft : Ast.Text.fieldtype) = fields.(n).Ast.desc in
-      match ft.typ with Value v -> v | Packed _ -> I32)
+      match ft.typ with Value v -> Plain v | Packed _ -> Plain I32)
   | _ -> assert false
 
 (* Source type of the element of the array type that reference [idx] names. *)
-let source_element_valtype ctx idx : Ast.Text.valtype =
+let source_element_valtype ctx idx : source_type =
   match reference_comptype ctx.modul.types idx with
   | Array (ft : Ast.Text.fieldtype) -> (
-      match ft.typ with Value v -> v | Packed _ -> I32)
+      match ft.typ with Value v -> Plain v | Packed _ -> Plain I32)
   | _ -> assert false
 
 (* Each concrete stack entry pairs the interned type used for subtype checking
@@ -1022,7 +1081,7 @@ let source_element_valtype ctx idx : Ast.Text.valtype =
 type stack =
   | Unreachable
   | Empty
-  | Cons of Ast.location option * (valtype * Ast.Text.valtype) option * stack
+  | Cons of Ast.location option * (valtype * source_type) option * stack
 
 (* Returns the popped value as the interned/source type pair it was pushed as
    ([None] on an unreachable or empty stack), along with its push location. *)
@@ -1036,9 +1095,10 @@ let pop_any ctx loc st =
 
 (* The non-null version of a popped reference's source type, for an instruction
    that re-pushes the value with the null case removed. *)
-let non_null_text text =
+let non_null_text (text : source_type) : source_type =
   match text with
-  | Ast.Text.Ref r -> Ast.Text.Ref { r with nullable = false }
+  | Plain (Ref r) -> Plain (Ref { r with nullable = false })
+  | Ref_sig s -> Ref_sig { s with nullable = false }
   | _ -> assert false
 
 let pop ctx loc ~expected_text ty st =
@@ -1073,10 +1133,11 @@ let push_known loc ty = push ~text:(text_of_valtype ty) loc ty
 (* The source rendering of a reference to the named type [idx], used as the
    [text] form of a value an instruction pushes ([ref_text], non-null) or
    expects ([ref_null_text], the nullable form pop accepts). *)
-let ref_text idx : Ast.Text.valtype = Ref { nullable = false; typ = Type idx }
+let ref_text idx : source_type =
+  Plain (Ref { nullable = false; typ = Type idx })
 
-let ref_null_text idx : Ast.Text.valtype =
-  Ref { nullable = true; typ = Type idx }
+let ref_null_text idx : source_type =
+  Plain (Ref { nullable = true; typ = Type idx })
 
 (* Source-type array for popping the prefix arguments [ptext] followed by a
    continuation operand of the type named by [x]. *)
@@ -1085,7 +1146,9 @@ let cont_operand_text ptext x = Array.append ptext [| ref_null_text x |]
 (* Source params of the function type the continuation type [x] wraps; they are
    exactly that function type's parameters. *)
 let cont_param_text ctx x =
-  Array.map snd (cont_source_functype ctx.modul.types x).params
+  Array.map
+    (fun (_, v) -> Plain v)
+    (cont_source_functype ctx.modul.types x).params
 
 let unreachable _ = (Unreachable, ())
 let return v st = (st, v)
@@ -1180,7 +1243,7 @@ let blocktype ctx (ty : Ast.Text.blocktype option) =
   | Some (Typeuse (None, None)) -> assert false (* Should not happen *)
   | Some (Valtype ty) ->
       let+@ t = valtype ctx.modul.diagnostics ctx.modul.types ty in
-      ([||], [| t |], [||], [| ty |])
+      ([||], [| t |], [||], [| Plain ty |])
 
 let pop_args ctx loc ~text args =
   let rec loop i =
@@ -1206,7 +1269,7 @@ let rec output_stack ~full f st =
   | Unreachable -> if full then Format.fprintf f "@ unreachable"
   | Cons (_, ty, st) ->
       (match ty with
-      | Some (_, text) -> Format.fprintf f "@ %a" print_text_valtype text
+      | Some (_, text) -> Format.fprintf f "@ %a" print_source_type text
       | None -> Format.fprintf f "@ bot");
       output_stack ~full f st
 
@@ -1477,7 +1540,8 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
                 Array.append args [| Ref { nullable = false; typ = Exn } |]
               in
               let provided_text =
-                Array.append atext [| Ref { nullable = false; typ = Exn } |]
+                Array.append atext
+                  [| Plain (Ref { nullable = false; typ = Exn }) |]
               in
               compare_types ctx.modul ~location:loc
                 ~descr:"this exception handler" ~provided_text
@@ -1494,7 +1558,8 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
                 (fun (params, ptext) ->
                   compare_types ctx.modul ~location:loc
                     ~descr:"this exception handler"
-                    ~provided_text:[| Ref { nullable = false; typ = Exn } |]
+                    ~provided_text:
+                      [| Plain (Ref { nullable = false; typ = Exn }) |]
                     ~expected_text:ptext
                     ~provided:[| Ref { nullable = false; typ = Exn } |]
                     ~expected:params ())
@@ -1610,7 +1675,8 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let _, rtext = arg_text (cont_source_functype ctx.modul.types x) in
       let* () =
         pop_args ctx loc
-          ~text:[| Ref { nullable = true; typ = Exn }; ref_null_text x |]
+          ~text:
+            [| Plain (Ref { nullable = true; typ = Exn }); ref_null_text x |]
           [|
             Ref { nullable = true; typ = Exn };
             Ref { nullable = true; typ = Type xty };
@@ -1656,7 +1722,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
         | None -> [||]
         | Some _ -> (
             match (cont_param_text ctx x).(n - 1) with
-            | Ref { typ = Type idx; _ } -> cont_param_text ctx idx
+            | Plain (Ref { typ = Type idx; _ }) -> cont_param_text ctx idx
             | _ -> Array.map (source_valtype ctx.modul.types) ts21)
       in
       let ts11' = if n = 0 then [||] else Array.sub ts11 0 (n - 1) in
@@ -1727,12 +1793,14 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
             ~src_loc:loc' ~text;
           unreachable)
   | Br_on_cast (idx, ty1, ty2) ->
-      let src_ty1 = Ast.Text.Ref ty1 and src_ty2 = Ast.Text.Ref ty2 in
+      let src_ty1 = Plain (Ast.Text.Ref ty1)
+      and src_ty2 = Plain (Ast.Text.Ref ty2) in
       (* The value that falls through has [ty1]'s heap type, non-null once a
          nullable [ty2] has consumed the null case. *)
       let src_diff =
-        Ast.Text.Ref
-          { nullable = ty1.nullable && not ty2.nullable; typ = ty1.typ }
+        Plain
+          (Ast.Text.Ref
+             { nullable = ty1.nullable && not ty2.nullable; typ = ty1.typ })
       in
       let*! ty1 = reftype ctx.modul.diagnostics ctx.modul.types ty1 in
       let*! ty2 = reftype ctx.modul.diagnostics ctx.modul.types ty2 in
@@ -1751,12 +1819,14 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let* _ = pop_any ctx loc in
       push ~text:src_diff (Some loc) (Ref (diff_ref_type ty1 ty2))
   | Br_on_cast_fail (idx, ty1, ty2) ->
-      let src_ty1 = Ast.Text.Ref ty1 and src_ty2 = Ast.Text.Ref ty2 in
+      let src_ty1 = Plain (Ast.Text.Ref ty1)
+      and src_ty2 = Plain (Ast.Text.Ref ty2) in
       (* The value sent to the branch has [ty1]'s heap type, non-null once a
          nullable [ty2] has consumed the null case. *)
       let src_diff =
-        Ast.Text.Ref
-          { nullable = ty1.nullable && not ty2.nullable; typ = ty1.typ }
+        Plain
+          (Ast.Text.Ref
+             { nullable = ty1.nullable && not ty2.nullable; typ = ty1.typ })
       in
       let*! ty1 = reftype ctx.modul.diagnostics ctx.modul.types ty1 in
       let*! ty2 = reftype ctx.modul.diagnostics ctx.modul.types ty2 in
@@ -1901,7 +1971,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
   | Select (Some lst) -> (
       match lst with
       | [ typ ] ->
-          let src_typ = typ in
+          let src_typ = Plain typ in
           let*! typ = valtype ctx.modul.diagnostics ctx.modul.types typ in
           let* () = pop_known ctx loc I32 in
           let* () = pop ctx loc ~expected_text:src_typ typ in
@@ -2219,15 +2289,17 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let*! _ = Sequence.get ctx.modul.diagnostics ctx.modul.elem idx in
       return ()
   | RefNull typ ->
-      let text = Ast.Text.(Ref { nullable = true; typ }) in
+      let text = Plain Ast.Text.(Ref { nullable = true; typ }) in
       let*! typ = heaptype ctx.modul.diagnostics ctx.modul.types typ in
       push ~text (Some loc) (Ref { nullable = true; typ })
   | RefFunc idx ->
-      let*! i, _ = Sequence.get ctx.modul.diagnostics ctx.modul.functions idx in
+      let*! i, sign =
+        Sequence.get ctx.modul.diagnostics ctx.modul.functions idx
+      in
       if not ((not !validate_refs) || Hashtbl.mem ctx.modul.refs i) then
         Error.ref_func_inaccessible ctx.modul.diagnostics ~location:loc idx;
-      let ty = Ref { nullable = false; typ = Type i } in
-      push ~text:(source_valtype ctx.modul.types ty) (Some loc) ty
+      let text = ref_source ctx.modul.types ~nullable:false i (Func sign) in
+      push ~text (Some loc) (Ref { nullable = false; typ = Type i })
   | RefIsNull -> (
       let* ty, loc' = pop_any ctx loc in
       match ty with
@@ -2263,7 +2335,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       in
       push_known (Some loc) I32
   | RefCast ty ->
-      let text = Ast.Text.(Ref ty) in
+      let text = Plain Ast.Text.(Ref ty) in
       let*! ty = reftype ctx.modul.diagnostics ctx.modul.types ty in
       (match top_heap_type ctx ty.typ with
       | Cont -> Error.invalid_cast_type ctx.modul.diagnostics ~location:loc
@@ -2545,7 +2617,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let* () = instructions ctx l in
       instruction ctx i
   | Pop ty ->
-      let src_ty = ty in
+      let src_ty = Plain ty in
       let*! ty = valtype ctx.modul.diagnostics ctx.modul.types ty in
       let* () = pop ctx loc ~expected_text:src_ty ty in
       push ~text:src_ty (Some loc) ty
@@ -2558,8 +2630,12 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       push ~text:(ref_text idx) (Some loc)
         (Ref { nullable = false; typ = Type ty })
   | String (None, _) ->
-      let ty = Ref { nullable = false; typ = Type (string ctx.modul.types) } in
-      push ~text:(source_valtype ctx.modul.types ty) (Some loc) ty
+      let i = string ctx.modul.types in
+      let comptype = Ast.Text.Array { mut = true; typ = Packed I8 } in
+      push
+        ~text:(ref_source ctx.modul.types ~nullable:false i comptype)
+        (Some loc)
+        (Ref { nullable = false; typ = Type i })
   | Char _ -> push_known (Some loc) I32
   (* Conditional annotations are spliced out by [specialize] before a
      configuration is validated, so none can remain at this point. *)
@@ -2877,11 +2953,11 @@ let build_initial_env ctx fields =
               Sequence.register ctx.memories id lim.desc
           | Table typ ->
               limits ctx "table" typ.limits max_table_size;
-              let src = Ast.Text.Ref typ.reftype in
+              let src = Plain (Ast.Text.Ref typ.reftype) in
               let>@ typ = tabletype ctx.diagnostics ctx.types typ in
               Sequence.register ctx.tables id (typ, src)
           | Global ty ->
-              let src = ty.typ in
+              let src = Plain ty.typ in
               let>@ ty = globaltype ctx.diagnostics ctx.types ty in
               Sequence.register ctx.globals id (ty, src)
           | Tag tu ->
@@ -2990,7 +3066,7 @@ let tables_and_memories ctx fields =
           register_exports ctx exports
       | Table { id; typ; init; exports } ->
           limits ctx "table" typ.limits max_table_size;
-          let src = Ast.Text.Ref typ.reftype in
+          let src = Plain (Ast.Text.Ref typ.reftype) in
           let>@ typ = tabletype ctx.diagnostics ctx.types typ in
           (match init with
           | Init_default ->
@@ -3011,21 +3087,20 @@ let globals ctx fields =
     (fun (field : (_ Ast.Text.modulefield, _) Ast.annotated) ->
       match field.desc with
       | Global { id; typ; init; exports } ->
-          let src = typ.typ in
+          let src = Plain typ.typ in
           let>@ typ = globaltype ctx.diagnostics ctx.types typ in
           constant_expression ctx ~location:field.info ~expected_text:src
             typ.typ init;
           Sequence.register ctx.globals id (typ, src);
           register_exports ctx exports
       | String_global { id; _ } ->
+          let i = string ctx.types in
           let typ =
-            {
-              mut = false;
-              typ = Ref { nullable = false; typ = Type (string ctx.types) };
-            }
+            { mut = false; typ = Ref { nullable = false; typ = Type i } }
           in
+          let comptype = Ast.Text.Array { mut = true; typ = Packed I8 } in
           Sequence.register ctx.globals (Some id)
-            (typ, source_valtype ctx.types typ.typ)
+            (typ, ref_source ctx.types ~nullable:false i comptype)
       | _ -> ())
     fields
 
@@ -3049,7 +3124,7 @@ let segments ctx fields =
           match init with
           | Init_default | Init_expr _ -> ()
           | Init_segment lst ->
-              let src = Ast.Text.Ref typ.reftype in
+              let src = Plain (Ast.Text.Ref typ.reftype) in
               let>@ typ = reftype ctx.diagnostics ctx.types typ.reftype in
               List.iter
                 (fun e ->
@@ -3058,7 +3133,7 @@ let segments ctx fields =
                 lst;
               Sequence.register ctx.elem None typ)
       | Elem { id; typ; init; mode } ->
-          let elem_text = Ast.Text.Ref typ in
+          let elem_text = Plain (Ast.Text.Ref typ) in
           let>@ typ = reftype ctx.diagnostics ctx.types typ in
           (match mode with
           | Passive | Declare -> ()
@@ -3115,7 +3190,7 @@ let functions ctx fields =
                         (* Dummy value *) Ref { nullable = false; typ = None_ }
                     | Some typ' -> typ'
                   in
-                  Sequence.register locals id (interned, typ))
+                  Sequence.register locals id (interned, Plain typ))
                 params
           | _ ->
               (* No inline parameter list: take the parameters' source types
@@ -3141,7 +3216,7 @@ let functions ctx fields =
               if is_defaultable typ' then
                 initialized_locals := IntSet.add !i !initialized_locals;
               incr i;
-              Sequence.register locals id (typ', typ))
+              Sequence.register locals id (typ', Plain typ))
             locs;
           with_empty_stack ctx field.info (*ZZZ*)
             (let ctx =
