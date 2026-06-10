@@ -76,8 +76,8 @@
               (struct.get $assoc $f (local.get $a)))))
         (then (return (local.get $a))))
       (local.set $l (struct.get $assoc $f_3 (local.get $a)))
-      (br $loop)) ;; 'loop
-    (unreachable)) ;; 'tail
+      (br $loop))
+    (unreachable))
 )
 
 (func $caml_named_value (export "caml_named_value")
@@ -156,8 +156,7 @@
             (struct.get $assoc $f_3 (local.get $a)))
           (br $done)))
       (local.set $r (struct.get $assoc $f_3 (local.get $a)))
-      (br $loop)) ;; 'loop
-  ) ;; 'done
+      (br $loop)))
   (ref.i31 (i32.const 0))
 )
 
@@ -234,7 +233,6 @@
                   (i32.const 23))
                 (call $caml_string_concat
                   (call $caml_format_exception (local.get $exn))
-                  (@string $string "\n" ))))))) ;; 'exit
-      ;; `\n`
+                  (@string $string "\n" ))))))) ;; `\n`
       (call $exit (i32.const 2))))
 ) (elem declare func $reraise_exception)

@@ -140,7 +140,7 @@
                     (i32.add (local.get $i) (i32.const 3)))
                   (i32.const 24))))))
         (local.set $i (i32.add (local.get $i) (i32.const 4)))
-        (br $loop)))) ;; 'loop
+        (br $loop))))
   (local.set $w (i32.const 0))
   (block $l_2
     (block $l_3
@@ -158,11 +158,11 @@
           (i32.shl
             (array.get_u $string (local.get $s)
               (i32.add (local.get $i) (i32.const 1)))
-            (i32.const 8))))) ;; 'l_3
+            (i32.const 8)))))
     (local.set $w
       (i32.or (local.get $w)
         (array.get_u $string (local.get $s) (local.get $i))))
-    (local.set $h (call $caml_hash_mix_int (local.get $h) (local.get $w)))) ;; 'l_2
+    (local.set $h (call $caml_hash_mix_int (local.get $h) (local.get $w))))
   (i32.xor (local.get $h) (local.get $len))
 )
 
@@ -247,8 +247,7 @@
                         (br_if $loop
                           (i32.eq (local.get $i)
                             (global.get $MAX_FORWARD_DEREFERENCE)))
-                        (br $forward)) ;; 'not_block'
-                    )
+                        (br $forward)))
                     (br $again))))
               (if (i32.eq (local.get $tag_2) (global.get $object_tag))
                 (then
@@ -274,9 +273,7 @@
                   (array.get $block (local.get $b) (local.get $i)))
                 (local.set $wr (i32.add (local.get $wr) (i32.const 1)))
                 (local.set $i (i32.add (local.get $i) (i32.const 1)))
-                (br $block_iter)) ;; 'block_iter
-            ) ;; 'not_block
-          )
+                (br $block_iter))))
           (drop
             (block $not_float (result (ref eq))
               (local.set $h
@@ -311,8 +308,7 @@
                 (call $jsstring_hash (local.get $h) (local.get $str)))
               (ref.i31 (i32.const 0))))
           ;; closures and continuations and other js values are ignored
-          (br $loop)) ;; 'again
-      ))) ;; 'loop
+          (br $loop)))))
   ;; clear the queue to avoid a memory leak
   (array.fill $block (global.get $caml_hash_queue) (i32.const 0)
     (ref.i31 (i32.const 0)) (local.get $wr))

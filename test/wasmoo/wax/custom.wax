@@ -96,8 +96,8 @@ fn caml_find_custom_operations(id: &string) -> &?custom_operations {
             }
             l = br_on_null 'not_found l.next;
             br 'loop;
-        } // 'loop
-    } // 'not_found
+        }
+    }
     null as &?custom_operations;
 }
 

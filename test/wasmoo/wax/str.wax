@@ -180,7 +180,7 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq
                                                                     pos + 1;
                                                                     br
                                                                     'continue;
-                                                                    } // 'CHARNORM
+                                                                    }
                                                                     // CHARNORM
                                                                     br_if
                                                                     'prefix_match
@@ -201,7 +201,7 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq
                                                                     pos + 1;
                                                                     br
                                                                     'continue;
-                                                                    } // 'STRING
+                                                                    }
                                                                     // STRING
                                                                     arg =
                                                                     instr >>u
@@ -235,10 +235,10 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq
                                                                     i = i + 1;
                                                                     br 'loop;
                                                                     }
-                                                                    } // 'loop
+                                                                    }
                                                                     br
                                                                     'continue;
-                                                                    } // 'STRINGNORM
+                                                                    }
                                                                     // STRINGNORM
                                                                     arg =
                                                                     instr >>u
@@ -275,10 +275,10 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq
                                                                     i = i + 1;
                                                                     br 'loop;
                                                                     }
-                                                                    } // 'loop
+                                                                    }
                                                                     br
                                                                     'continue;
-                                                                    } // 'CHARCLASS
+                                                                    }
                                                                     // CHARCLASS
                                                                     br_if
                                                                     'prefix_match
@@ -300,7 +300,7 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq
                                                                     pos + 1;
                                                                     br
                                                                     'continue;
-                                                                    } // 'BOL
+                                                                    }
                                                                     // BOL
                                                                     br_if
                                                                     'continue
@@ -314,7 +314,7 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq
                                                                     as i32_u;
                                                                     br
                                                                     'backtrack;
-                                                                    } // 'EOL
+                                                                    }
                                                                     // EOL
                                                                     br_if
                                                                     'continue
@@ -328,7 +328,7 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq
                                                                     as i32_u;
                                                                     br
                                                                     'backtrack;
-                                                                } // 'WORDBOUNDARY
+                                                                }
                                                                 // WORDBOUNDARY
                                                                 if !pos {
                                                                     br_if
@@ -369,7 +369,7 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq
                                                                     'backtrack;
                                                                     }
                                                                 }
-                                                            } // 'BEGGROUP
+                                                            }
                                                             // BEGGROUP
                                                             arg = instr >>u 8;
                                                             stack =
@@ -386,7 +386,7 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq
                                                             group_start
                                                                 [arg] = pos;
                                                             br 'continue;
-                                                        } // 'ENDGROUP
+                                                        }
                                                         // ENDGROUP
                                                         arg = instr >>u 8;
                                                         stack =
@@ -402,7 +402,7 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq
                                                             };
                                                         group_end[arg] = pos;
                                                         br 'continue;
-                                                    } // 'REFGROUP
+                                                    }
                                                     // REFGROUP
                                                     arg = instr >>u 8;
                                                     i = group_start[arg];
@@ -423,9 +423,9 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq
                                                             i = i + 1;
                                                             br 'loop;
                                                         }
-                                                    } // 'loop
+                                                    }
                                                     br 'continue;
-                                                } // 'SIMPLEOPT
+                                                }
                                                 // SIMPLEOPT
                                                 arg = instr >>u 8;
                                                 if pos <u len {
@@ -439,7 +439,7 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq
                                                     }
                                                 }
                                                 br 'continue;
-                                            } // 'SIMPLESTAR
+                                            }
                                             // SIMPLESTAR
                                             arg = instr >>u 8;
                                             set = cpool[arg + 1] as &string;
@@ -454,9 +454,9 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq
                                                         br 'loop;
                                                     }
                                                 }
-                                            } // 'loop
+                                            }
                                             br 'continue;
-                                        } // 'SIMPLEPLUS
+                                        }
                                         // SIMPLEPLUS
                                         br_if 'prefix_match pos == len;
                                         arg = instr >>u 8;
@@ -470,13 +470,13 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq
                                                     in_bitset
                                                         (set, s[pos] as i32_u);
                                             }
-                                        } // 'loop
+                                        }
                                         br 'continue;
-                                    } // 'GOTO
+                                    }
                                     // GOTO
                                     pc = pc + (instr >>s 8);
                                     br 'continue;
-                                } // 'PUSHBACK
+                                }
                                 // PUSHBACK
                                 stack =
                                     {pos|
@@ -485,7 +485,7 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq
                                         pos: pos
                                     };
                                 br 'continue;
-                            } // 'SETMARK
+                            }
                             // SETMARK
                             arg = instr >>u 8;
                             stack =
@@ -497,15 +497,15 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq
                                 };
                             re_register[arg] = pos;
                             br 'continue;
-                        } // 'CHECKPROGRESS
+                        }
                         // CHECKPROGRESS
                         arg = instr >>u 8;
                         br_if 'backtrack pos == re_register[arg];
                         br 'continue;
-                    } // 'prefix_match
+                    }
                     // prefix_match
                     br_if 'ACCEPT accept_partial_match;
-                } // 'backtrack
+                }
                 // backtrack
                 'loop: loop {
                     let p: &pos;
@@ -518,14 +518,13 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq
                             pos = p.pos;
                             stack = p.pos_previous;
                             br 'continue;
-                        } // 'undo
-                            as &undo;
+                        } as &undo;
                     u.tbl[u.idx] = u.val;
                     stack = u.undo_previous;
                     br 'loop;
-                } // 'loop
-            } // 'continue
-        } // 'ACCEPT
+                }
+            }
+        }
         // ACCEPT
         group_end[0] = pos;
         let res = [block|0 as &i31; (numgroups << 1) + 1];
@@ -543,9 +542,9 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq
                 i = i + 1;
                 br 'loop;
             }
-        } // 'loop
+        }
         return res;
-    } // 'reject
+    }
     // reject
     0 as &i31;
 }
@@ -564,7 +563,7 @@ fn re_search_forward(re: &eq, vs: &eq, vpos: &eq) -> &eq {
         if res is &block { return res; }
         pos = pos + 1;
         br_if 'loop pos <=u len;
-    } // 'loop
+    }
     [block|0 as &i31];
 }
 
@@ -584,7 +583,7 @@ fn re_search_backward(re: &eq, vs: &eq, vpos: &eq) -> &eq {
         if res is &block { return res; }
         pos = pos - 1;
         br_if 'loop pos >=s 0;
-    } // 'loop
+    }
     [block|0 as &i31];
 }
 
@@ -666,7 +665,7 @@ fn re_replacement_text(vrepl: &eq, vgroups: &eq, vorig: &eq) -> &eq {
             len = len + (end - start);
             br 'loop;
         }
-    } // 'loop
+    }
     let res = [string|0; len];
     i = 0;
     'loop: loop {
@@ -709,6 +708,6 @@ fn re_replacement_text(vrepl: &eq, vgroups: &eq, vorig: &eq) -> &eq {
             j = j + len;
             br 'loop;
         }
-    } // 'loop
+    }
     res;
 }

@@ -116,7 +116,7 @@ fn caml_sys_random_seed(x: &eq) -> &eq {
             i = i + 1;
             br 'loop;
         }
-    } // 'loop
+    }
     a;
 }
 

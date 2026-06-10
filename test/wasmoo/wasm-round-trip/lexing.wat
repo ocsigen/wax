@@ -165,7 +165,7 @@
       (then
         (array.set $block (local.get $lexbuf) (global.get $lex_eof_reached)
           (ref.i31 (i32.const 0)))))
-    (br $loop)) ;; 'loop
+    (br $loop))
   (unreachable)
 )
 
@@ -190,7 +190,7 @@
         (else
           (array.get $block (local.get $mem)
             (i32.add (local.get $src) (i32.const 1))))))
-    (br $loop)) ;; 'loop
+    (br $loop))
 )
 
 (func $run_tag
@@ -356,6 +356,6 @@
       (then
         (array.set $block (local.get $lexbuf) (global.get $lex_eof_reached)
           (ref.i31 (i32.const 0)))))
-    (br $loop)) ;; 'loop
+    (br $loop))
   (unreachable)
 )

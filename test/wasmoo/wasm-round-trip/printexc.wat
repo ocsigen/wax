@@ -96,10 +96,9 @@
                 (ref.eq (array.get $block (local.get $bucket) (i32.const 0))
                   (ref.i31 (i32.const 0)))))
             (local.set $i (i32.const 1))
-            (br $continue (local.get $bucket))) ;; 'default
+            (br $continue (local.get $bucket)))
           (local.set $i (i32.const 2))
-          (local.get $exn)) ;; 'continue
-      )
+          (local.get $exn)))
       (local.set $len (array.len (local.get $bucket)))
       (if (i32.lt_u (local.get $i) (local.get $len))
         (then
@@ -129,7 +128,7 @@
                 )
                 (call $add_char (local.get $buf) (i32.const 32) ;; ' '
                 )
-                (br $loop)))) ;; 'loop
+                (br $loop))))
           (call $add_char (local.get $buf) (i32.const 41)))) ;; '\)'
       (local.set $s
         (array.new $string (i32.const 0)

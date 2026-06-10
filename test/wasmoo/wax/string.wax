@@ -39,7 +39,7 @@ fn caml_string_equal(p1: &eq, p2: &eq) -> &eq {
             i = i + 1;
             br 'loop;
         }
-    } // 'loop
+    }
     1 as &i31;
 }
 #[export = "caml_string_notequal"]
@@ -68,7 +68,7 @@ fn string_compare(p1: &eq, p2: &eq) -> i32 {
             i = i + 1;
             br 'loop;
         }
-    } // 'loop
+    }
     if l1 <u l2 { return -1; }
     if l1 >u l2 { return 1; }
     0;

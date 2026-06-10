@@ -142,7 +142,7 @@ fn compare_strings(s1: &string, s2: &string) -> i32 {
             i = i + 1;
             br 'loop;
         }
-    } // 'loop
+    }
     l1 - l2;
 }
 
@@ -199,8 +199,7 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
                             t2 = b2[0] as &i31 as i32_u;
                             if t2 == forward_tag { v2 = b2[1]; br 'loop; }
                             1 as &i31;
-                        } // 'v2_not_forward
-                    ;
+                        };
                     'v2_not_comparable: do {
                         _ =
                             'v2_not_custom: do &eq {
@@ -216,8 +215,7 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
                     }
                     // v1 long < v2 block
                     return -1;
-                } // 'v1_is_not_int
-            ;
+                };
             let b1: &block;
             let t1: i32;
             let c1: &custom;
@@ -229,8 +227,7 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
                         t1 = b1[0] as &i31 as i32_u;
                         if t1 == forward_tag { v1 = b1[1]; br 'loop; }
                         1 as &i31;
-                    } // 'v1_not_forward
-                ;
+                    };
                 'v1_not_comparable: do {
                     _ =
                         'v1_not_custom: do &eq {
@@ -290,8 +287,7 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
                             v1 = b1[1];
                             v2 = b2[1];
                             br 'loop;
-                        } // 'v1_not_block
-                    ;
+                        };
                     _ =
                         'v1_not_float: do &eq {
                             f1 = (br_on_cast_fail 'v1_not_float &float v1).f;
@@ -304,8 +300,7 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
                                 if f2 == f2 { return -1; }
                             }
                             br 'next_item;
-                        } // 'v1_not_float
-                    ;
+                        };
                     _ =
                         'v1_not_string: do &eq {
                             str1 = br_on_cast_fail 'v1_not_string &string v1;
@@ -313,8 +308,7 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
                             res = compare_strings(str1, str2);
                             br_if 'next_item !res;
                             return res;
-                        } // 'v1_not_string
-                    ;
+                        };
                     _ =
                         'v1_not_float_array: do &eq {
                             fa1 =
@@ -341,10 +335,9 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
                                     i = i + 1;
                                     br 'float_array;
                                 }
-                            } // 'float_array
+                            }
                             br 'next_item;
-                        } // 'v1_not_float_array
-                    ;
+                        };
                     _ =
                         'v1_not_custom: do &eq {
                             c1 = br_on_cast_fail 'v1_not_custom &custom v1;
@@ -365,8 +358,7 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
                             caml_invalid_argument
                                 ([string|abstract_value @ 0; 23]);
                             0 as &i31;
-                        } // 'v1_not_custom
-                    ;
+                        };
                     _ =
                         'v1_not_js: do &eq {
                             js1 = (br_on_cast_fail 'v1_not_js &js v1).f;
@@ -377,7 +369,7 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
                                 res = jsstring_compare(js1, js2);
                                 br_if 'next_item !res;
                                 return res;
-                            } // 'not_jsstring
+                            }
                             // We cannot order two JavaScript objects,
                             // but we can tell whether they are equal or not
                             if !total {
@@ -385,8 +377,7 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
                                 return unordered;
                             }
                             br 'heterogeneous 0 as &i31;
-                        } // 'v1_not_js
-                    ;
+                        };
                     if caml_is_closure(v1) {
                         _ =
                             br_if 'heterogeneous
@@ -404,8 +395,7 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
                             ([string|continuation_value @ 0; 27]);
                     }
                     0 as &i31;
-                } // 'heterogeneous
-                 // fall through
+                } // fall through
             ;
             // heterogeneous comparison
             t1 = caml_obj_tag(v1) as &i31 as i32_u;
@@ -418,14 +408,14 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
                 caml_invalid_argument([string|abstract_value @ 0; 23]);
             }
             return res;
-        } // 'next_item
+        }
         if compare_stack_is_not_empty(stack) {
             pop_compare_stack(stack);
             v2 = _;
             v1 = _;
             br 'loop;
         }
-    } // 'loop
+    }
     0;
 }
 

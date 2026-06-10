@@ -65,11 +65,10 @@ fn caml_format_exception(x: &eq) -> &eq {
                     br_if 'default !(bucket[0] == 0 as &i31);
                     i = 1;
                     br 'continue bucket;
-                } // 'default
+                }
                 i = 2;
                 exn;
-            } // 'continue
-        ;
+            };
         let len = bucket.length();
         if i <u len {
             add_char
@@ -102,7 +101,7 @@ fn caml_format_exception(x: &eq) -> &eq {
                         );
                     br 'loop;
                 }
-            } // 'loop
+            }
             add_char(buf, 41);
         } // '\)'
         let s = [string|0; buf.f];

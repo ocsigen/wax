@@ -58,8 +58,7 @@
           (then
             (call $MD5Update (local.get $ctx) (local.get $buf) (i32.const 0)
               (local.get $read))
-            (br $loop)))) ;; 'loop
-    )
+            (br $loop)))))
     (else
       (loop $loop
         (if (local.get $len)
@@ -74,8 +73,7 @@
             (call $MD5Update (local.get $ctx) (local.get $buf) (i32.const 0)
               (local.get $read))
             (local.set $len (i32.sub (local.get $len) (local.get $read)))
-            (br $loop)))) ;; 'loop
-    ))
+            (br $loop))))))
   (return_call $MD5Final (local.get $ctx))
 )
 
@@ -427,7 +425,7 @@
       (local.get $c)))
   (array.set $int_array (local.get $w) (i32.const 3)
     (i32.add (array.get $int_array (local.get $w) (i32.const 3))
-      (local.get $d))) ;; 'loop
+      (local.get $d)))
 )
 
 (func $MD5Init (result (ref $context))
@@ -474,7 +472,7 @@
           (local.get $input_pos))
         (local.set $input_pos (i32.add (local.get $input_pos) (i32.const 64)))
         (local.set $input_len (i32.sub (local.get $input_len) (i32.const 64)))
-        (br $loop)))) ;; 'loop
+        (br $loop))))
   (if (local.get $input_len)
     (then
       (array.copy $string $string (struct.get $context $f_4 (local.get $ctx))
@@ -500,7 +498,7 @@
             (array.set $string (local.get $buffer) (local.get $i)
               (i32.const 0))
             (local.set $i (i32.add (local.get $i) (i32.const 1)))
-            (br $loop)))) ;; 'loop
+            (br $loop))))
       (call $MD5Transform (struct.get $context $f (local.get $ctx))
         (struct.get $context $f_3 (local.get $ctx)) (local.get $buffer)
         (i32.const 0))

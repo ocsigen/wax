@@ -126,7 +126,7 @@
             (array.set $wstring (global.get $buffer) (local.get $i)
               (local.get $c))
             (local.set $i (i32.add (local.get $i) (i32.const 1)))
-            (br $loop)))) ;; 'loop
+            (br $loop))))
       (return
         (any.convert_extern
           (call $fromCharCodeArray (global.get $buffer) (i32.const 0)
@@ -166,7 +166,7 @@
           (array.get_u $string (local.get $s)
             (i32.add (local.get $pos) (local.get $i))))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $loop)))) ;; 'loop
+        (br $loop))))
 )
 
 (func $jsstring_of_substring_fallback
@@ -194,7 +194,7 @@
           (select (global.get $buffer_size) (local.get $len)
             (local.get $continued))
           (local.get $continued))))
-    (br_if $loop (local.get $continued))) ;; 'loop
+    (br_if $loop (local.get $continued)))
   (local.get $s')
 )
 
@@ -208,7 +208,7 @@
           (i32.add (local.get $pos) (local.get $i))
           (i32.load8_u $caml_buffer (local.get $i)))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $loop)))) ;; 'loop
+        (br $loop))))
 )
 
 (type $stack
@@ -233,7 +233,7 @@
           (array.len (struct.get $stack $s (local.get $item)))))
       (local.set $item
         (br_on_null $done (struct.get $stack $next (local.get $item))))
-      (br $loop))) ;; 'done
+      (br $loop)))
   (local.set $s'
     (array.new $string (i32.const 0)
       (i32.add (local.get $len) (local.get $ofs))))
@@ -249,8 +249,7 @@
         (local.get $s'') (i32.const 0) (local.get $len))
       (local.set $item
         (br_on_null $done (struct.get $stack $next (local.get $item))))
-      (br $loop)) ;; 'loop
-  ) ;; 'done
+      (br $loop)))
   (local.get $s')
 )
 

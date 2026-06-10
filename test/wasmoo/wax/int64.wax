@@ -141,7 +141,7 @@ fn caml_i64_of_digits
             if res <u d as i64_u { caml_failwith(errmsg); }
             br 'loop;
         }
-    } // 'loop
+    }
     if signedness {
         if sign >s 0 {
             if res >=u 1 << 63 { caml_failwith(errmsg); }

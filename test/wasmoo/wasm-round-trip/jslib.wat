@@ -313,7 +313,7 @@
               (array.get $block (local.get $p) (i32.const 1))))
           (call $unwrap (array.get $block (local.get $p) (i32.const 2))))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $loop)))) ;; 'loop
+        (br $loop))))
   (struct.new $js (local.get $o))
 )
 
@@ -336,9 +336,8 @@
                 (array.get $block (local.get $a)
                   (i32.add (local.get $i) (i32.const 1)))))
             (local.set $i (i32.add (local.get $i) (i32.const 1)))
-            (br $loop)))) ;; 'loop
-      (return (struct.new $js (any.convert_extern (local.get $a'))))) ;; 'not_array
-  )
+            (br $loop))))
+      (return (struct.new $js (any.convert_extern (local.get $a'))))))
   (local.set $fa (ref.cast (ref $float_array) (local.get $va)))
   (local.set $l (array.len (local.get $fa)))
   (local.set $a' (call $new_array (local.get $l)))
@@ -350,7 +349,7 @@
           (struct.new $float
             (array.get $float_array (local.get $fa) (local.get $i))))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $loop)))) ;; 'loop
+        (br $loop))))
   (struct.new $js (any.convert_extern (local.get $a')))
 )
 
@@ -377,7 +376,7 @@
                     (ref.cast (ref $float)
                       (call $array_get (local.get $a) (local.get $i)))))
                 (local.set $i (i32.add (local.get $i) (i32.const 1)))
-                (br $loop)))) ;; 'loop
+                (br $loop))))
           (return (local.get $fa))))))
   (local.set $a'
     (array.new $block (ref.i31 (i32.const 0))
@@ -390,7 +389,7 @@
           (i32.add (local.get $i) (i32.const 1))
           (call $wrap (call $array_get (local.get $a) (local.get $i))))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $loop)))) ;; 'loop
+        (br $loop))))
   (local.get $a')
 )
 
@@ -410,7 +409,7 @@
           (call $caml_string_of_jsstring
             (call $wrap (call $array_get (local.get $a) (local.get $i)))))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $loop)))) ;; 'loop
+        (br $loop))))
   (local.get $a')
 )
 
@@ -499,8 +498,7 @@
                   (call $wrap
                     (call $get (local.get $args) (ref.i31 (local.get $i))))))
               (local.set $i (i32.add (local.get $i) (i32.const 1)))
-              (br $loop)))) ;; 'loop
-      ) ;; 'done
+              (br $loop)))))
       (if (local.get $kind)
         (then
           (if (call $caml_is_closure (local.get $acc))
@@ -534,7 +532,7 @@
             (i32.const 128))
           (then (local.set $n (i32.add (local.get $n) (i32.const 1)))))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $count)))) ;; 'count
+        (br $count))))
   (if (i32.eqz (local.get $n))
     (then (return (struct.new $js (call $jsstring_of_string (local.get $s))))))
   (local.set $s'
@@ -559,7 +557,7 @@
                 (i32.and (local.get $c) (i32.const 0x3F))))
             (local.set $n (i32.add (local.get $n) (i32.const 2)))))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $fill)))) ;; 'fill
+        (br $fill))))
   (return (struct.new $js (call $jsstring_of_string (local.get $s'))))
 )
 (func $caml_string_of_jsstring (export "caml_string_of_jsstring")
@@ -589,7 +587,7 @@
             (i32.const 0xC0))
           (then (local.set $n (i32.add (local.get $n) (i32.const 1)))))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $count)))) ;; 'count
+        (br $count))))
   (if (i32.eqz (local.get $n)) (then (return (local.get $s'))))
   (local.set $s''
     (array.new $string (i32.const 0) (i32.sub (local.get $i) (local.get $n))))
@@ -612,7 +610,7 @@
                 (i32.const 0x3080)))
             (local.set $i (i32.add (local.get $i) (i32.const 2)))))
         (local.set $n (i32.add (local.get $n) (i32.const 1)))
-        (br $fill)))) ;; 'fill
+        (br $fill))))
   (local.get $s'')
 )
 
@@ -630,8 +628,7 @@
             (br_on_cast_fail $done (ref eq) (ref $block) (local.get $l))
             (i32.const 2)))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $compute_length))) ;; 'done
-  )
+        (br $compute_length))))
   (local.set $a (call $new_array (local.get $i)))
   (local.set $i (i32.const 0))
   (local.set $l (local.get $x))
@@ -644,9 +641,7 @@
           (call $unwrap (array.get $block (local.get $b) (i32.const 1))))
         (local.set $l (array.get $block (local.get $b) (i32.const 2)))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $loop)) ;; 'loop
-    ) ;; 'exit
-  )
+        (br $loop))))
   (struct.new $js (any.convert_extern (local.get $a)))
 )
 
@@ -666,7 +661,7 @@
             (call $wrap (call $array_get (local.get $a) (local.get $i)))
             (local.get $l)))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $loop)))) ;; 'loop
+        (br $loop))))
   (local.get $l)
 )
 

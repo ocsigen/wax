@@ -251,7 +251,7 @@ fn caml_js_object(x: &eq) -> &eq {
             i = i + 1;
             br 'loop;
         }
-    } // 'loop
+    }
     {js| f: o };
 }
 
@@ -273,10 +273,9 @@ fn caml_js_from_array(va: &eq) -> &eq {
                     i = i + 1;
                     br 'loop;
                 }
-            } // 'loop
+            }
             return {js| f: a' as &any };
-        } // 'not_array
-    ;
+        };
     let fa = va as &float_array;
     l = fa.length();
     a' = new_array(l);
@@ -287,7 +286,7 @@ fn caml_js_from_array(va: &eq) -> &eq {
             i = i + 1;
             br 'loop;
         }
-    } // 'loop
+    }
     {js| f: a' as &any };
 }
 
@@ -306,7 +305,7 @@ fn caml_js_to_array(x: &eq) -> &eq {
                     i = i + 1;
                     br 'loop;
                 }
-            } // 'loop
+            }
             return fa;
         }
     }
@@ -314,7 +313,7 @@ fn caml_js_to_array(x: &eq) -> &eq {
     i = 0;
     'loop: loop {
         if i <u l { a'[i + 1] = wrap(array_get(a, i)); i = i + 1; br 'loop; }
-    } // 'loop
+    }
     a';
 }
 
@@ -329,7 +328,7 @@ fn caml_js_to_string_array(a: &extern) -> &eq {
             i = i + 1;
             br 'loop;
         }
-    } // 'loop
+    }
     a';
 }
 
@@ -400,8 +399,8 @@ fn caml_callback
                     i = i + 1;
                     br 'loop;
                 }
-            } // 'loop
-        } // 'done
+            }
+        }
         if kind {
             if caml_is_closure(acc) { acc = caml_js_wrap_callback(acc); }
         }
@@ -430,7 +429,7 @@ fn caml_jsbytes_of_string(x: &eq) -> &eq {
             i = i + 1;
             br 'count;
         }
-    } // 'count
+    }
     if !n { return {js| f: jsstring_of_string(s) }; }
     let s' = [string|0; i + n];
     i = 0;
@@ -449,7 +448,7 @@ fn caml_jsbytes_of_string(x: &eq) -> &eq {
             i = i + 1;
             br 'fill;
         }
-    } // 'fill
+    }
     return {js| f: jsstring_of_string(s') };
 }
 #[export = "caml_string_of_jsstring"]
@@ -473,7 +472,7 @@ fn caml_string_of_jsbytes(s: &eq) -> &eq {
             i = i + 1;
             br 'count;
         }
-    } // 'count
+    }
     if !n { return s'; }
     let s'' = [string|0; i - n];
     i = 0;
@@ -491,7 +490,7 @@ fn caml_string_of_jsbytes(s: &eq) -> &eq {
             n = n + 1;
             br 'fill;
         }
-    } // 'fill
+    }
     s'';
 }
 
@@ -506,8 +505,7 @@ fn caml_list_to_js_array(x: &eq) -> &eq {
                 i = i + 1;
                 br 'compute_length;
             }
-        } // 'done
-    ;
+        };
     let a = new_array(i);
     i = 0;
     l = x;
@@ -520,9 +518,8 @@ fn caml_list_to_js_array(x: &eq) -> &eq {
                 l = b[2];
                 i = i + 1;
                 br 'loop;
-            } // 'loop
-        } // 'exit
-    ;
+            }
+        };
     {js| f: a as &any };
 }
 
@@ -538,7 +535,7 @@ fn caml_list_of_js_array(x: &eq) -> &eq {
             i = i + 1;
             br 'loop;
         }
-    } // 'loop
+    }
     l;
 }
 

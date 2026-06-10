@@ -328,7 +328,7 @@ fn caml_really_getblock(ch: &eq, s: &string, pos: i32, len: i32) -> i32 {
             n = n - read;
             br 'loop;
         }
-    } // 'loop
+    }
     len;
 }
 
@@ -476,7 +476,7 @@ fn caml_ml_input_scan_line(vch: &eq) -> &eq {
         }
         p = p + 1;
         br 'loop;
-    } // 'loop
+    }
     unreachable;
 }
 
@@ -539,7 +539,7 @@ fn caml_really_putblock(ch: &eq, s: &string, pos: i32, len: i32) {
             len = len - written;
             br 'loop;
         }
-    } // 'loop
+    }
 }
 #[export = "caml_ml_output"]
 #[export
@@ -557,7 +557,7 @@ fn caml_ml_output(ch: &eq, s: &eq, vpos: &eq, vlen: &eq) -> &eq {
             len = len - written;
             br 'loop;
         }
-    } // 'loop
+    }
     caml_flush_if_unbuffered(ch);
     0 as &i31;
 }

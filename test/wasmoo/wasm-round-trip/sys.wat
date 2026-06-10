@@ -129,7 +129,7 @@
           (i32.add (local.get $i) (i32.const 1))
           (ref.i31 (call $ta_get_i32 (local.get $r) (local.get $i))))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $loop)))) ;; 'loop
+        (br $loop))))
   (local.get $a)
 )
 

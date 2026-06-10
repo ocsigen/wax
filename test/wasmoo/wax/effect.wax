@@ -150,7 +150,7 @@ fn push_stack(stack_2: &fiber, k: &cont_2) -> &cont_2 {
             stack_2 = br_on_null 'done stack_2.next;
             br 'loop;
         }
-    } // 'done
+    }
     k;
 }
 
@@ -464,8 +464,8 @@ fn caml_trampoline(f: &eq, vargs: &eq) -> &eq {
                     br 'loop;
                 }
             }
-        } // 'empty
-    } // 'loop
+        }
+    }
     exn_stack = saved_exn_stack;
     cps_fiber_stack = saved_fiber_stack;
     throw ocaml_exception exn;
@@ -500,11 +500,10 @@ fn caml_resume_stack(vstack: &eq, k: &eq) -> &eq {
                     exn_stack = stack.exn_stack;
                     stack = br_on_null 'done stack.next;
                     br 'loop;
-                } // 'loop
-            } // 'done
+                }
+            }
             return k;
-        } // 'already_resumed
-    ;
+        };
     caml_raise_constant(caml_named_value([string|already_resumed @ 0; 35])!);
     0 as &i31;
 }

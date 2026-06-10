@@ -50,7 +50,6 @@ let identifier pp s =
 let constant pp s = print_styled pp Constant s
 let keyword pp s = print_styled pp Keyword s
 let type_ pp s = print_styled pp Type s
-let comment pp s = print_styled pp Comment s
 let string pp ?len s = print_styled pp String ?len s
 let attribute pp s = print_styled pp Attribute s
 
@@ -314,29 +313,6 @@ let prec_op op =
   | Shl | Shr _ -> (Shift, Shift, Addition)
   | Gt _ | Lt _ | Ge _ | Le _ | Eq | Ne -> (Comparison, LogicalOr, LogicalOr)
 
-let long_block l =
-  let rec loop (l : _ instr list) n =
-    if n <= 0 then 0
-    else
-      match l with
-      | [] -> n
-      | { desc = Block { block = l; _ }; _ } :: rem -> loop rem (loop l (n - 2))
-      | { desc = Loop { block = l; _ }; _ } :: rem -> loop rem (loop l (n - 2))
-      | { desc = If { cond = l1; if_block = l2; else_block = l3; _ }; _ } :: rem
-        ->
-          let n = loop [ l1 ] (n - 2) in
-          let n = loop l2.desc n in
-          let n = match l3 with None -> n | Some l2 -> loop l2.desc (n - 1) in
-          loop rem n
-      | { desc = Try { block = l; catches; catch_all; _ }; _ } :: rem ->
-          let n = loop l (n - 2) in
-          let n = List.fold_left (fun n (_, l) -> loop l (n - 1)) n catches in
-          let n = match catch_all with None -> n | Some l -> loop l (n - 1) in
-          loop rem n
-      | _ :: rem -> loop rem (n - 1)
-  in
-  loop l 5 <= 0
-
 let block_label pp label =
   Option.iter
     (fun label ->
@@ -345,39 +321,6 @@ let block_label pp label =
       punctuation pp ":";
       space pp ())
     label
-
-(* Does the block (at [loc]) already carry its [// 'label] hint as a source
-   comment — e.g. one emitted on a previous pass and round-tripped back? A raw
-   lookup (no dedup) so it does not disturb the node's own trivia emission. *)
-let block_has_label_comment pp loc label =
-  match loc with
-  | None -> false
-  | Some loc -> (
-      match Hashtbl.find_opt pp.base.trivia loc with
-      | None -> false
-      | Some { Utils.Trivia.within; after; _ } ->
-          let target = "// '" ^ label.desc in
-          List.exists
-            (fun (e : Utils.Trivia.entry) ->
-              match e.trivia with
-              | Item { kind = Line_comment; content; _ } ->
-                  String.trim content = target
-              | _ -> false)
-            (within @ after))
-
-(* The closing brace of a long block is followed by a [// 'label] hint recalling
-   which block it ends. It is emitted through the generic trailing-comment
-   mechanism, and skipped when the source already carries it, so a round-tripped
-   hint is not duplicated. *)
-let label_comment pp ~loc (l, label) =
-  if long_block l then
-    Option.iter
-      (fun label ->
-        if not (block_has_label_comment pp loc label) then
-          Utils.Printer.defer_eol pp.base.printer (fun () ->
-              Utils.Printer.string pp.base.printer " ";
-              comment pp ("// '" ^ label.desc)))
-      label
 
 let need_blocktype bt = bt.params <> [||] || bt.results <> [||]
 
@@ -572,7 +515,7 @@ let rec instr prec pp (i : _ instr) =
   parentheses prec (get_prec i) pp @@ fun () ->
   match i.desc with
   | Block { label; typ; block = l } ->
-      block pp ~loc:(pp.locate i.info) label
+      block pp label
         (if true || need_blocktype typ then Some "do" else None)
         typ l
   | If_annotation { cond; then_body; else_body } ->
@@ -591,8 +534,7 @@ let rec instr prec pp (i : _ instr) =
               attribute pp "#[else]";
               branch b)
             else_body)
-  | Loop { label; typ; block = l } ->
-      block pp ~loc:(pp.locate i.info) label (Some "loop") typ l
+  | Loop { label; typ; block = l } -> block pp label (Some "loop") typ l
   | If { label; typ; cond; if_block; else_block } ->
       hvbox pp (fun () ->
           box pp (fun () ->
@@ -1023,7 +965,7 @@ and field_receiver pp i =
           punctuation pp ")")
   | _ -> instr CallAndFieldAccess pp i
 
-and block pp ~loc label kind bt (l : _ instr list) =
+and block pp label kind bt (l : _ instr list) =
   hvbox pp (fun () ->
       box pp (fun () ->
           block_label pp label;
@@ -1037,9 +979,7 @@ and block pp ~loc label kind bt (l : _ instr list) =
             space pp ());
           punctuation pp "{");
       block_contents pp l;
-      box pp (fun () ->
-          punctuation pp "}";
-          label_comment pp ~loc (l, label)))
+      punctuation pp "}")
 
 and deliminated_instr pp (i : _ instr) =
   if is_block i then instr Instruction pp i

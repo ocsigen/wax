@@ -219,8 +219,7 @@
       (array.copy $block $block (local.get $res) (i32.const 1)
         (local.get $orig) (i32.const 1)
         (i32.sub (local.get $len) (i32.const 1)))
-      (return (local.get $res))) ;; 'not_block
-  )
+      (return (local.get $res))))
   (drop
     (block $not_float_array (result (ref eq))
       (local.set $forig
@@ -231,8 +230,7 @@
         (array.new $float_array (f64.const 0) (local.get $len)))
       (array.copy $float_array $float_array (local.get $fres) (i32.const 0)
         (local.get $forig) (i32.const 0) (local.get $len))
-      (return (local.get $fres))) ;; 'not_float_array
-  )
+      (return (local.get $fres))))
   (drop
     (block $not_string (result (ref eq))
       (local.set $s
@@ -241,8 +239,7 @@
       (local.set $s' (array.new $string (i32.const 0) (local.get $len)))
       (array.copy $string $string (local.get $s') (i32.const 0)
         (local.get $s) (i32.const 0) (local.get $len))
-      (return (local.get $s'))) ;; 'not_string
-  )
+      (return (local.get $s'))))
   (drop
     (block $not_float (result (ref eq))
       (return
@@ -471,7 +468,7 @@
                   (i32.add (local.get $mi) (i32.const 1))))))
           (then (local.set $hi (i32.sub (local.get $mi) (i32.const 2))))
           (else (local.set $li (local.get $mi))))
-        (br $loop)))) ;; 'loop
+        (br $loop))))
   (array.set $int_array (global.get $method_cache) (local.get $cacheid)
     (i32.add (local.get $li) (i32.const 1)))
   (if (result (ref eq))

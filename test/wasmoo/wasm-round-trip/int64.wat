@@ -180,7 +180,7 @@
             (i64.extend_i32_u (local.get $d))))
         (if (i64.lt_u (local.get $res) (i64.extend_i32_u (local.get $d)))
           (then (call $caml_failwith (local.get $errmsg))))
-        (br $loop)))) ;; 'loop
+        (br $loop))))
   (if (local.get $signedness)
     (then
       (if (i32.gt_s (local.get $sign) (i32.const 0))

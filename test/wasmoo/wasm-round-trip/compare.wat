@@ -185,7 +185,7 @@
               (then (return (i32.const -1)))
               (else (return (i32.const 1))))))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $loop)))) ;; 'loop
+        (br $loop))))
   (i32.sub (local.get $l1) (local.get $l2))
 )
 
@@ -265,8 +265,7 @@
                   (local.set $v2
                     (array.get $block (local.get $b2) (i32.const 1)))
                   (br $loop)))
-              (ref.i31 (i32.const 1))) ;; 'v2_not_forward
-          )
+              (ref.i31 (i32.const 1))))
           (block $v2_not_comparable
             (drop
               (block $v2_not_custom (result (ref eq))
@@ -282,8 +281,7 @@
                 (br_if $next_item (i32.eqz (local.get $res)))
                 (return (local.get $res)))))
           ;; v1 long < v2 block
-          (return (i32.const -1))) ;; 'v1_is_not_int
-      )
+          (return (i32.const -1))))
       (if (ref.test (ref i31) (local.get $v2))
         (then
           ;; check for forward tag
@@ -301,8 +299,7 @@
                   (local.set $v1
                     (array.get $block (local.get $b1) (i32.const 1)))
                   (br $loop)))
-              (ref.i31 (i32.const 1))) ;; 'v1_not_forward
-          )
+              (ref.i31 (i32.const 1))))
           (block $v1_not_comparable
             (drop
               (block $v1_not_custom (result (ref eq))
@@ -371,8 +368,7 @@
                       (local.get $b1) (local.get $b2) (i32.const 2)))))
               (local.set $v1 (array.get $block (local.get $b1) (i32.const 1)))
               (local.set $v2 (array.get $block (local.get $b2) (i32.const 1)))
-              (br $loop)) ;; 'v1_not_block
-          )
+              (br $loop)))
           (drop
             (block $v1_not_float (result (ref eq))
               (local.set $f1
@@ -395,8 +391,7 @@
                     (then (return (i32.const 1))))
                   (if (f64.eq (local.get $f2) (local.get $f2))
                     (then (return (i32.const -1))))))
-              (br $next_item)) ;; 'v1_not_float
-          )
+              (br $next_item)))
           (drop
             (block $v1_not_string (result (ref eq))
               (local.set $str1
@@ -408,8 +403,7 @@
               (local.set $res
                 (call $compare_strings (local.get $str1) (local.get $str2)))
               (br_if $next_item (i32.eqz (local.get $res)))
-              (return (local.get $res))) ;; 'v1_not_string
-          )
+              (return (local.get $res))))
           (drop
             (block $v1_not_float_array (result (ref eq))
               (local.set $fa1
@@ -443,9 +437,8 @@
                         (if (f64.eq (local.get $f2) (local.get $f2))
                           (then (return (i32.const -1))))))
                     (local.set $i (i32.add (local.get $i) (i32.const 1)))
-                    (br $float_array)))) ;; 'float_array
-              (br $next_item)) ;; 'v1_not_float_array
-          )
+                    (br $float_array))))
+              (br $next_item)))
           (drop
             (block $v1_not_custom (result (ref eq))
               (local.set $c1
@@ -480,8 +473,7 @@
               (call $caml_invalid_argument
                 (array.new_data $string $abstract_value (i32.const 0)
                   (i32.const 23)))
-              (ref.i31 (i32.const 0))) ;; 'v1_not_custom
-          )
+              (ref.i31 (i32.const 0))))
           (drop
             (block $v1_not_js (result (ref eq))
               (local.set $js1
@@ -500,7 +492,7 @@
                 (local.set $res
                   (call $jsstring_compare (local.get $js1) (local.get $js2)))
                 (br_if $next_item (i32.eqz (local.get $res)))
-                (return (local.get $res))) ;; 'not_jsstring
+                (return (local.get $res)))
               ;; We cannot order two JavaScript objects,
               ;; but we can tell whether they are equal or not
               (if (i32.eqz (local.get $total))
@@ -508,8 +500,7 @@
                   (br_if $next_item
                     (call $equals (local.get $js1) (local.get $js2)))
                   (return (global.get $unordered))))
-              (br $heterogeneous (ref.i31 (i32.const 0)))) ;; 'v1_not_js
-          )
+              (br $heterogeneous (ref.i31 (i32.const 0)))))
           (if (call $caml_is_closure (local.get $v1))
             (then
               (drop
@@ -528,9 +519,8 @@
               (call $caml_invalid_argument
                 (array.new_data $string $continuation_value (i32.const 0)
                   (i32.const 27)))))
-          (ref.i31 (i32.const 0))) ;; 'heterogeneous
+          (ref.i31 (i32.const 0))) ;; fall through
       )
-      ;; fall through
       ;; heterogeneous comparison
       (local.set $t1
         (i31.get_u (ref.cast (ref i31) (call $caml_obj_tag (local.get $v1)))))
@@ -555,14 +545,14 @@
           (call $caml_invalid_argument
             (array.new_data $string $abstract_value (i32.const 0)
               (i32.const 23)))))
-      (return (local.get $res))) ;; 'next_item
+      (return (local.get $res)))
     (if (call $compare_stack_is_not_empty (local.get $stack))
       (then
         (call $pop_compare_stack (local.get $stack))
         (local.set $v2)
         (local.set $v1)
         (br $loop))))
-  (i32.const 0) ;; 'loop
+  (i32.const 0)
 )
 
 (func $caml_compare (export "caml_compare")

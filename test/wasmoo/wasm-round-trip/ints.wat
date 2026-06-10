@@ -147,7 +147,7 @@
             (local.get $d)))
         (if (i32.lt_u (local.get $res) (local.get $d))
           (then (call $caml_failwith (local.get $errmsg))))
-        (br $loop)))) ;; 'loop
+        (br $loop))))
   (if (local.get $signedness)
     (then
       (local.set $threshold
@@ -292,9 +292,9 @@
                       (if (i32.eq (local.get $c) (i32.const 111)) ;; 'o'
                         (then (local.set $base (i32.const 8)))
                         (else (br $bad_format)))))))))))
-      (br $return)) ;; 'bad_format
+      (br $return))
     (call $caml_invalid_argument
-      (array.new_data $string $format_error (i32.const 0) (i32.const 22)))) ;; 'return
+      (array.new_data $string $format_error (i32.const 0) (i32.const 22))))
   (local.get $sign_style)
   (local.get $alternate)
   (local.get $signed)
