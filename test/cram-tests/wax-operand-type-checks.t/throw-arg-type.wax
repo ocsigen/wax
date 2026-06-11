@@ -1,0 +1,1 @@
+tag t(i32); fn f() { throw t 5 as i64; }

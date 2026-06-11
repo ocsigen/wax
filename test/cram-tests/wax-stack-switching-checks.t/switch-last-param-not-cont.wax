@@ -1,0 +1,4 @@
+type ft1 = fn(i32);
+type ct1 = cont ft1;
+tag e();
+fn sw(k: &?ct1) { switch ct1 e(k); }

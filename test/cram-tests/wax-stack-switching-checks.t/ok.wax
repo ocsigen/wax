@@ -1,3 +1,12 @@
 type ft = fn();
 type ct = cont ft;
 fn f(c: &?ct) { _ = c; let d: &?ct = null as &?ct; _ = d; }
+
+rec {
+    type ft1 = fn(&?ct2) -> i32;
+    type ct1 = cont ft1;
+    type ft2 = fn(i32) -> i32;
+    type ct2 = cont ft2;
+}
+tag se() -> i32;
+fn sw(k: &?ct1) -> i32 { switch ct1 se(k); }

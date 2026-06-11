@@ -1,0 +1,2 @@
+fn g() { }
+fn f() { 'count: loop { br_if 'count g(); } }

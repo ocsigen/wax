@@ -367,6 +367,12 @@ module Error = struct
   let tag_with_results context ~location =
     report context ~location "An exception tag cannot have result values."
 
+  let catch_target_mismatch context ~location provided expected =
+    report context ~location
+      "Catching this exception provides a value of type@ @[<2>%a@]@ but the \
+       handler's branch target expects@ @[<2>%a@]."
+      output_inferred_type provided output_inferred_type expected
+
   let not_defaultable context ~location =
     report context ~location
       "This type has no default value for all its fields."
@@ -374,6 +380,12 @@ module Error = struct
   let incompatible_array_elements context ~location =
     report context ~location
       "The source and destination array element types are incompatible."
+
+  let incompatible_element_type context ~location provided expected =
+    report context ~location
+      "The element type@ @[<2>%a@]@ is not compatible with the expected \
+       element type@ @[<2>%a@]."
+      output_inferred_type provided output_inferred_type expected
 
   let expected_ref context ~location =
     report context ~location "A reference type is expected here."
@@ -1064,7 +1076,13 @@ let with_empty_stack ctx ~kind:_ ~location f =
   let st, res = f Empty in
   if false then prerr_endline "DONE";
   (match st with
-  | Cons _ ->
+  | Cons (loc, _, _) ->
+      (* Point at the leftover value itself rather than the enclosing
+         construct. Fall back to the construct's location only if the value
+         carries no real source location (an error-recovery placeholder). *)
+      let location =
+        if loc.loc_start.Lexing.pos_cnum < 0 then location else loc
+      in
       Error.non_empty_stack ctx.diagnostics ~location (fun f () ->
           Format.fprintf f "@[%a@]" output_stack st)
   | Empty | Unreachable -> ());
@@ -1088,7 +1106,7 @@ let check_elem_subtype ctx ~location ~src ~dst =
   | Some s, Some d ->
       if not (Wasm.Types.val_subtype ctx.subtyping_info s.internal d.internal)
       then
-        Error.instruction_type_mismatch ctx.diagnostics ~location
+        Error.incompatible_element_type ctx.diagnostics ~location
           (UnionFind.make (Valtype s))
           (UnionFind.make (Valtype d))
   | _ -> ()
@@ -1644,11 +1662,18 @@ let _print_arg_stack f l =
 (* Split [i]'s inferred result types into (last type, preceding types). Only
    called on an instruction known to produce at least one value, so the array
    is non-empty. *)
-let split_on_last_type i =
+(* Peel the condition / reference operand off the last slot of a branch
+   instruction's operand types, returning it together with the remaining branch
+   parameters. The operand is an arbitrary expression, which may type to no
+   value at all (e.g. a call to a function with no results); rather than assert,
+   report the missing operand and recover with an unknown value. *)
+let split_on_last_type ctx ~location i =
   let a = fst i.info in
   let len = Array.length a in
-  assert (len > 0);
-  (a.(len - 1), Array.sub a 0 (len - 1))
+  if len = 0 then (
+    Error.value_count_mismatch ctx.diagnostics ~location ~expected:1 ~provided:0;
+    (UnionFind.make Unknown, [||]))
+  else (a.(len - 1), Array.sub a 0 (len - 1))
 
 let immediate_supertype s : Ast.heaptype =
   match (s.supertype, s.typ) with
@@ -1922,6 +1947,8 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       return_statement i (Loop { label; typ; block = instrs' }) results
   | If { label; typ; cond; if_block; else_block } ->
       let* cond' = instruction ctx cond in
+      check_type ctx cond'
+        (UnionFind.make (Valtype { typ = I32; internal = I32 }));
       if Array.length typ.params > 0 then
         Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
       let*! results = array_map_opt (internalize ctx) typ.results in
@@ -1977,9 +2004,22 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
         Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
       let*! results = array_map_opt (internalize ctx) typ.results in
       let body' = block ctx i.info label [||] results results body in
+      (* Catching an exception passes the tag's values (and, for the [_ref]
+         variants, the exception reference) to the handler's branch target, so
+         they must match that target. Report at the target label rather than at
+         the whole [try], and frame it as a handler/target mismatch. *)
       let check_catch types label =
         let params = branch_target ctx label in
-        check_subtypes ctx ~location:i.info types params
+        if Array.length types <> Array.length params then
+          Error.value_count_mismatch ctx.diagnostics ~location:label.info
+            ~expected:(Array.length params) ~provided:(Array.length types)
+        else
+          Array.iter2
+            (fun provided expected ->
+              if not (subtype ctx provided expected) then
+                Error.catch_target_mismatch ctx.diagnostics ~location:label.info
+                  provided expected)
+            types params
       in
       List.iter
         (fun catch ->
@@ -2044,13 +2084,14 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       return_statement i
         (Try { label; typ; block = body'; catches; catch_all })
         results
-  | Unreachable ->
-      (* TODO: these are only meaningful in statement (top-level) position;
-         reject them in expression position. *)
-      return_statement i Unreachable [||]
-  | Nop ->
-      (* TODO: only meaningful in statement (top-level) position. *)
-      return_statement i Nop [||]
+  | (Unreachable | Nop) as desc ->
+      (* [unreachable] and [nop] are statements that yield no value; they are
+         only meaningful in statement (top-level) position, where
+         [toplevel_instruction] handles them. Reaching here means one was used
+         where a value is expected, so report it and recover with an unknown
+         value. *)
+      Error.not_an_expression ctx.diagnostics ~location:i.info 0;
+      return_expression i desc (UnionFind.make Unknown)
   | Hole ->
       let* ty = pop_parameter in
       return_expression i Hole ty
@@ -2299,15 +2340,19 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
         | Valtype { typ = Ref { typ = Type ty; _ }; _ }, _ -> (
             let*@ _, def = Tbl.find_opt ctx.type_context.types ty in
             match def.typ with
-            | Struct fields ->
-                let*@ typ =
+            | Struct fields -> (
+                match
                   Array.find_map
                     (fun f ->
                       let nm, typ = f.desc in
                       if nm.desc = field.desc then Some typ else None)
                     fields
-                in
-                field_read_type ctx typ
+                with
+                | Some typ -> field_read_type ctx typ
+                | None ->
+                    Error.missing_field ctx.diagnostics ~location:field.info
+                      field;
+                    None)
             | Func _ | Array _ | Cont _ ->
                 if is_unary_method field.desc then
                   Error.method_needs_parentheses ctx.diagnostics
@@ -2422,8 +2467,9 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
              (a data segment). *)
           (let>@ field = lookup_array_type ctx ty in
            match field.typ with
-           | Value (Ref _) ->
-               ignore (Tbl.find ctx.diagnostics ctx.elems seg : reftype option)
+           | Value (Ref dst) ->
+               let>@ src = Tbl.find ctx.diagnostics ctx.elems seg in
+               check_elem_subtype ctx ~location:i.info ~src ~dst
            | _ -> ignore (Tbl.find ctx.diagnostics ctx.datas seg : unit option));
           let*! typ =
             internalize ctx (Ref { nullable = false; typ = Type ty })
@@ -2772,7 +2818,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
         match i' with
         | Some i' ->
             let* i' = instruction ctx i' in
-            check_subtypes ctx ~location:i.info (fst i'.info) params;
+            check_subtypes ctx ~location:(snd i'.info) (fst i'.info) params;
             return (Some i')
         | None ->
             if params <> [||] then
@@ -2783,16 +2829,18 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       return_statement i (Br (label, i')) [||]
   | Br_if (label, i') ->
       let* i' = instruction ctx i' in
-      let ty, types = split_on_last_type i' in
-      check_subtype ctx ~location:i.info ty
+      let loc = snd i'.info in
+      let ty, types = split_on_last_type ctx ~location:loc i' in
+      check_subtype ctx ~location:loc ty
         (UnionFind.make (Valtype { typ = I32; internal = I32 }));
       let params = branch_target ctx label in
-      check_subtypes ctx ~location:i.info types params;
+      check_subtypes ctx ~location:loc types params;
       return_statement i (Br_if (label, i')) params
   | Br_table (labels, i') ->
       let* i' = instruction ctx i' in
-      let ty, types = split_on_last_type i' in
-      check_subtype ctx ~location:i.info ty
+      let loc = snd i'.info in
+      let ty, types = split_on_last_type ctx ~location:loc i' in
+      check_subtype ctx ~location:loc ty
         (UnionFind.make (Valtype { typ = I32; internal = I32 }));
       let len = Array.length (branch_target ctx (List.hd labels)) in
       List.iter
@@ -2801,12 +2849,12 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
           if Array.length params <> len then
             Error.value_count_mismatch ctx.diagnostics ~location:i.info
               ~expected:len ~provided:(Array.length params);
-          check_subtypes ctx ~location:i.info types params)
+          check_subtypes ctx ~location:loc types params)
         labels;
       return_statement i (Br_table (labels, i')) [||]
   | Br_on_null (idx, i') ->
       let* i' = instruction ctx i' in
-      let typ, types = split_on_last_type i' in
+      let typ, types = split_on_last_type ctx ~location:(snd i'.info) i' in
       let typ = UnionFind.find typ in
       let typ' =
         match typ with
@@ -2827,12 +2875,12 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
             UnionFind.make Unknown
       in
       let params = branch_target ctx idx in
-      check_subtypes ctx ~location:i.info types params;
+      check_subtypes ctx ~location:(snd i'.info) types params;
       return_statement i (Br_on_null (idx, i')) (Array.append params [| typ' |])
   | Br_on_non_null (idx, i') ->
       let* i' = instruction ctx i' in
       let params = branch_target ctx idx in
-      let typ, types = split_on_last_type i' in
+      let typ, types = split_on_last_type ctx ~location:(snd i'.info) i' in
       let typ = UnionFind.find typ in
       (match typ with
       | Unknown -> ()
@@ -2841,7 +2889,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
             typ = Ref { nullable = _; typ; _ };
             internal = Ref { nullable = _; typ = ityp; _ };
           } ->
-          check_subtypes ctx ~location:i.info
+          check_subtypes ctx ~location:(snd i'.info)
             (Array.append types
                [|
                  UnionFind.make
@@ -2860,13 +2908,15 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       let* i' = instruction ctx i' in
       if is_cont_heaptype ctx ty.typ then
         Error.invalid_cast_type ctx.diagnostics ~location:i.info;
-      let typ', types = split_on_last_type i' in
+      let typ', types = split_on_last_type ctx ~location:(snd i'.info) i' in
       let params = branch_target ctx label in
       (let>@ ityp = reftype ctx.diagnostics ctx.type_context ty in
        let typ =
          UnionFind.make (Valtype { typ = Ref ty; internal = Ref ityp })
        in
-       check_subtypes ctx ~location:i.info (Array.append types [| typ |]) params);
+       check_subtypes ctx ~location:(snd i'.info)
+         (Array.append types [| typ |])
+         params);
       let*! typ1, typ2 =
         match UnionFind.find typ' with
         | Valtype { typ = Ref ty'; _ } ->
@@ -2889,7 +2939,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       let* i' = instruction ctx i' in
       if is_cont_heaptype ctx ty.typ then
         Error.invalid_cast_type ctx.diagnostics ~location:i.info;
-      let typ', types = split_on_last_type i' in
+      let typ', types = split_on_last_type ctx ~location:(snd i'.info) i' in
       let*! ityp = reftype ctx.diagnostics ctx.type_context ty in
       let*! typ1, typ2 =
         match UnionFind.find typ' with
@@ -2904,7 +2954,9 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
             None
       in
       let params = branch_target ctx label in
-      check_subtypes ctx ~location:i.info (Array.append types [| typ2 |]) params;
+      check_subtypes ctx ~location:(snd i'.info)
+        (Array.append types [| typ2 |])
+        params;
       let typ =
         UnionFind.make (Valtype { typ = Ref ty; internal = Ref ityp })
       in
@@ -2929,7 +2981,8 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
          array_map_opt (fun (_, typ) -> internalize ctx typ) params
        in
        match i' with
-       | Some i' -> check_subtypes ctx ~location:i.info (fst i'.info) types
+       | Some i' ->
+           check_subtypes ctx ~location:(snd i'.info) (fst i'.info) types
        | None ->
            if types <> [||] then
              Error.value_count_mismatch ctx.diagnostics ~location:i.info
@@ -3038,7 +3091,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       let* l' = instructions ctx l in
       let*! inner = lookup_cont_inner ctx ct in
       let*! sg = lookup_func_type ctx inner in
-      ignore (Tbl.find ctx.diagnostics ctx.tags tag : functype option);
+      let tag_sig = Tbl.find ctx.diagnostics ctx.tags tag in
       let np = Array.length sg.params in
       (if np >= 1 then
          let>@ lead =
@@ -3050,18 +3103,58 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
            internalize ctx (Ref { nullable = true; typ = Type ct })
          in
          check_operands ctx l' (Array.append lead [| cref |]));
-      (* The result is the parameter types of the continuation referenced by the
-         last parameter of [ct]'s function type. *)
-      let result_params =
+      (* The last parameter of [ct]'s function type must itself be a
+         continuation type; the result is that inner continuation's parameter
+         types. *)
+      let inner_sg =
         match if np = 0 then None else Some (snd sg.params.(np - 1)) with
-        | Some (Ref { typ = Type ct2; _ }) -> (
-            match lookup_cont_inner ctx ct2 with
-            | Some inner2 -> (
-                match lookup_func_type ctx inner2 with
-                | Some s2 -> s2.params
-                | None -> [||])
-            | None -> [||])
-        | _ -> [||]
+        | Some (Ref { typ = Type ct2; _ }) ->
+            let*@ inner2 = lookup_cont_inner ctx ct2 in
+            lookup_func_type ctx inner2
+        | _ -> None
+      in
+      (* The 'switch' tag must take no parameters and its results must match
+         both continuation types. Mirrors [Validation]'s [Switch] check. *)
+      let to_internal arr =
+        array_map_opt
+          (fun typ ->
+            let+@ iv = internalize_valtype ctx typ in
+            iv.internal)
+          arr
+      in
+      let result_subtype a b =
+        match (to_internal a, to_internal b) with
+        | Some a, Some b ->
+            Array.length a = Array.length b
+            && Array.for_all Fun.id
+                 (Array.mapi
+                    (fun i t ->
+                      Wasm.Types.val_subtype ctx.subtyping_info t b.(i))
+                    a)
+        | _ -> true
+      in
+      (match inner_sg with
+      | None ->
+          Error.stack_switching_type_mismatch ctx.diagnostics ~location:i.info
+            ~descr:
+              "the continuation's last parameter must itself be a continuation \
+               type"
+      | Some inner_sg -> (
+          match tag_sig with
+          | None -> ()
+          | Some { params = tparams; results = tresults } ->
+              if
+                Array.length tparams <> 0
+                || (not (result_subtype sg.results tresults))
+                || not (result_subtype tresults inner_sg.results)
+              then
+                Error.stack_switching_type_mismatch ctx.diagnostics
+                  ~location:i.info
+                  ~descr:
+                    "the 'switch' tag must take no parameters and its results \
+                     must match the two continuation types"));
+      let result_params =
+        match inner_sg with Some s2 -> s2.params | None -> [||]
       in
       let*! rtypes =
         array_map_opt (fun (_, typ) -> internalize ctx typ) result_params
@@ -3092,7 +3185,8 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
         match i' with
         | Some i' ->
             let* i' = instruction ctx i' in
-            check_subtypes ctx ~location:i.info (fst i'.info) ctx.return_types;
+            check_subtypes ctx ~location:(snd i'.info) (fst i'.info)
+              ctx.return_types;
             return (Some i')
         | None ->
             if ctx.return_types <> [||] then
@@ -3499,10 +3593,10 @@ and type_binary_intrinsic_call ctx i func i1 meth op i2 =
   let ty =
     match op with
     | "rotl" | "rotr" ->
-        check_int_bin_op ctx ~location:i.info (expression_type ctx i1')
+        check_int_bin_op ctx ~location:meth.info (expression_type ctx i1')
           (expression_type ctx i2')
     | _ ->
-        check_float_bin_op ctx ~location:i.info (expression_type ctx i1')
+        check_float_bin_op ctx ~location:meth.info (expression_type ctx i1')
           (expression_type ctx i2')
   in
   return_expression i
@@ -3542,8 +3636,7 @@ and type_unary_intrinsic_call ctx i func recv meth =
         Some ty
     | Unknown, _ -> Some (UnionFind.make Unknown)
     | _ ->
-        Error.invalid_method_receiver ctx.diagnostics ~location:(snd recv'.info)
-          ty;
+        Error.invalid_method_receiver ctx.diagnostics ~location:meth.info ty;
         None
   in
   return_expression i
@@ -3771,6 +3864,8 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
       return_statement i (Loop { label; typ; block = instrs' }) results
   | If { label; typ; cond; if_block; else_block } ->
       let* cond = toplevel_instruction ctx cond in
+      check_type ctx cond
+        (UnionFind.make (Valtype { typ = I32; internal = I32 }));
       let*! params =
         array_map_opt (fun (_, typ) -> internalize ctx typ) typ.params
       in
@@ -3803,9 +3898,22 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
       let*! results = array_map_opt (internalize ctx) typ.results in
       let* () = pop_args ctx ~location:i.info params in
       let body' = block ctx i.info label params results results body in
+      (* Catching an exception passes the tag's values (and, for the [_ref]
+         variants, the exception reference) to the handler's branch target, so
+         they must match that target. Report at the target label rather than at
+         the whole [try], and frame it as a handler/target mismatch. *)
       let check_catch types label =
         let params = branch_target ctx label in
-        check_subtypes ctx ~location:i.info types params
+        if Array.length types <> Array.length params then
+          Error.value_count_mismatch ctx.diagnostics ~location:label.info
+            ~expected:(Array.length params) ~provided:(Array.length types)
+        else
+          Array.iter2
+            (fun provided expected ->
+              if not (subtype ctx provided expected) then
+                Error.catch_target_mismatch ctx.diagnostics ~location:label.info
+                  provided expected)
+            types params
       in
       List.iter
         (fun catch ->
@@ -3873,8 +3981,9 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
       return_statement i
         (Try { label; typ; block = body'; catches; catch_all })
         results
-  | Unreachable | TailCall _ | Br _ | Br_table _ | Throw _ | ThrowRef _
-  | Return _ ->
+  | Nop -> return_statement i Nop [||]
+  | Unreachable -> return_statement i Unreachable [||] |> unreachable
+  | TailCall _ | Br _ | Br_table _ | Throw _ | ThrowRef _ | Return _ ->
       let count = count_holes i in
       let* args = pop_many ctx i count [] in
       let args, res = instruction ctx i args in

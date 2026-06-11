@@ -1,0 +1,2 @@
+type s = { x: i32 };
+fn f(p: &s) -> i32 { p.y; }

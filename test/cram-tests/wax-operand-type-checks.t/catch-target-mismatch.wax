@@ -1,0 +1,3 @@
+type t = fn();
+tag e(&?t);
+fn f() -> &t { 'l: do &t { try {} catch [ e -> 'l] unreachable; } }

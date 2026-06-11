@@ -67,7 +67,36 @@ parameters bound away:
   6 │ 
   [123]
 
+A switch's continuation must have a continuation type as its last parameter (it
+names the continuation being switched to):
+
+  $ wax check switch-last-param-not-cont.wax
+  Error: Type mismatch in this stack switching instruction:
+    the continuation's last parameter must itself be a continuation type.
+   ──➤  switch-last-param-not-cont.wax:4:19
+  2 │ type ct1 = cont ft1;
+  3 │ tag e();
+  4 │ fn sw(k: &?ct1) { switch ct1 e(k); }
+    ·                   ^^^^^^^^^^^^^^^
+  5 │ 
+  [123]
+
+A switch tag must take no parameters and its results must match both
+continuation types:
+
+  $ wax check switch-tag-has-param.wax
+  Error: Type mismatch in this stack switching instruction:
+    the 'switch' tag must take no parameters and its results must match the two continuation types.
+   ──➤  switch-tag-has-param.wax:8:26
+  6 │ }
+  7 │ tag e(i32) -> i32;
+  8 │ fn sw(k: &?ct1) -> i32 { switch ct1 e(k); }
+    ·                          ^^^^^^^^^^^^^^^
+  9 │ 
+  [123]
+
 Well-formed stack-switching code passes (a null cast to a nullable continuation
-reference lowers to ref.null, so it is allowed):
+reference lowers to ref.null, so it is allowed; a switch whose continuation's
+last parameter is itself a continuation type validates):
 
   $ wax check ok.wax
