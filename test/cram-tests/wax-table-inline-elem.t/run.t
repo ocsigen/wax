@@ -9,5 +9,7 @@ It is desugared into the table plus a separate active element segment:
 Compiling that Wax back to Wasm gives an equivalent table and element segment:
 
   $ wax -i wax -f wat out.wax
-  (func $a) (func $b) (table $t 2 2 funcref)
+  (func $a)
+  (func $b)
+  (table $t 2 2 funcref)
   (elem $e (table $t) (i32.const 0) funcref (ref.func $a) (ref.func $b))

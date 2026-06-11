@@ -28,7 +28,8 @@
 )
 (import "bindings" "is_directory"
   (func $is_directory (param anyref) (result (ref eq)))
-) (import "bindings" "rename" (func $rename (param anyref anyref)))
+)
+(import "bindings" "rename" (func $rename (param anyref anyref)))
 (import "jslib" "wrap" (func $wrap (param anyref) (result (ref eq))))
 (import "jslib" "unwrap" (func $unwrap (param (ref eq)) (result anyref)))
 (import "jslib" "caml_string_of_jsstring"
@@ -85,7 +86,8 @@
       (return
         (call $caml_js_to_string_array
           (call $readdir
-            (call $unwrap (call $caml_jsstring_of_string (local.get $name)))))))
+            (call $unwrap
+              (call $caml_jsstring_of_string (local.get $name)))))))
     (catch $javascript_exception
       (call $caml_handle_sys_error (pop externref))
       (return (ref.i31 (i32.const 0)))))
@@ -113,8 +115,7 @@
   (ref.i31 (i32.const 0))
 )
 
-(func (export "caml_sys_file_exists")
-  (param $name (ref eq)) (result (ref eq))
+(func (export "caml_sys_file_exists") (param $name (ref eq)) (result (ref eq))
   (return_call $file_exists
     (call $unwrap (call $caml_jsstring_of_string (local.get $name))))
 )
@@ -128,8 +129,8 @@
   (local.set $msg
     (array.new $string (i32.const 0)
       (i32.add (local.get $len) (i32.const 27))))
-  (array.copy $string $string (local.get $msg) (i32.const 0)
-    (local.get $name) (i32.const 0) (local.get $len))
+  (array.copy $string $string (local.get $msg) (i32.const 0) (local.get $name)
+    (i32.const 0) (local.get $len))
   (array.init_data $string $no_such_file (local.get $msg) (local.get $len)
     (i32.const 0) (i32.const 27))
   (call $caml_raise_sys_error (local.get $msg))

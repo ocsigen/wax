@@ -2,7 +2,8 @@ A function marked #[start] runs at module instantiation. It compiles to a
 Wasm (start ...) field:
 
   $ wax -i wax -f wat start.wax
-  (func $init (nop)) (start $init)
+  (func $init (nop))
+  (start $init)
 
 Conversely, a Wasm start function becomes a #[start] attribute:
 

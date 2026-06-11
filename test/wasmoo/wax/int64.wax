@@ -101,7 +101,8 @@ fn Int64_val(x: &eq) -> i64 { (x as &int64).f_2; }
 #[export = "caml_int64_bswap"]
 fn caml_int64_bswap(i: i64) -> i64 {
     (i & 0x000000FF000000FF).rotr(8) | (i & 0x0000FF000000FF00).rotr(24) |
-        ((i & 0x00FF000000FF0000).rotl(24) | (i & 0xFF000000FF000000).rotl(8));
+        ((i & 0x00FF000000FF0000).rotl(24) |
+             (i & 0xFF000000FF000000).rotl(8));
 }
 
 #[export = "caml_int64_compare"]
@@ -109,8 +110,7 @@ fn caml_int64_compare(i1: i64, i2: i64) -> &eq {
     ((i1 >s i2) - (i1 <s i2)) as &i31;
 }
 
-const INT64_ERRMSG =
-    string#"Int64.of_string" // "Int64.of_string"
+const INT64_ERRMSG = string#"Int64.of_string" // "Int64.of_string"
     ;
 
 // Parse a sequence of digits into an i64 as dicted by $base,
@@ -188,8 +188,7 @@ fn caml_int64_format(x: &eq, x_2: &eq) -> &eq {
     let s = x as &string;
     let d = (x_2 as &int64).f_2;
     if s.length() == 2 {
-        if
-            s[1] as i32_u == 100 // 'd'
+        if s[1] as i32_u == 100 // 'd'
         {
             become format_int64_default(d);
         }
@@ -207,10 +206,7 @@ fn caml_int64_format(x: &eq, x_2: &eq) -> &eq {
     'count: loop { i = i + 1; n = n /u base; br_if 'count n != 0; }
     if negative | sign_style { i = i + 1; }
     if alternate {
-        if d != 0 {
-            if base == 16 { i = i + 2; }
-            if base == 8 { i = i + 1; }
-        }
+        if d != 0 { if base == 16 { i = i + 2; } if base == 8 { i = i + 1; } }
     }
     let chars = uppercase?uppercase_hex_table:lowercase_hex_table;
     s = [string|0; i];

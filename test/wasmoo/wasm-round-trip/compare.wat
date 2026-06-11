@@ -15,9 +15,8 @@
 ;; along with this program; if not, write to the Free Software
 ;; Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
-(import "bindings" "equals"
-  (func $equals (param anyref anyref) (result i32))
-) (import "obj" "forward_tag" (global $forward_tag i32))
+(import "bindings" "equals" (func $equals (param anyref anyref) (result i32)))
+(import "obj" "forward_tag" (global $forward_tag i32))
 (import "obj" "object_tag" (global $object_tag i32))
 (import "obj" "double_array_tag" (global $double_array_tag i32))
 (import "obj" "caml_obj_tag"
@@ -42,8 +41,10 @@
   (func $jsstring_compare (param anyref anyref) (result i32))
 )
 
-(type $block (array (mut (ref eq)))) (type $string (array (mut i8)))
-(type $float (struct (field $f f64))) (type $float_array (array (mut f64)))
+(type $block (array (mut (ref eq))))
+(type $string (array (mut i8)))
+(type $float (struct (field $f f64)))
+(type $float_array (array (mut f64)))
 (type $js (struct (field $f anyref)))
 
 (type $int_array (array (mut i32)))
@@ -421,9 +422,11 @@
                 (if (i32.lt_s (local.get $i) (local.get $s1))
                   (then
                     (local.set $f1
-                      (array.get $float_array (local.get $fa1) (local.get $i)))
+                      (array.get $float_array (local.get $fa1)
+                        (local.get $i)))
                     (local.set $f2
-                      (array.get $float_array (local.get $fa2) (local.get $i)))
+                      (array.get $float_array (local.get $fa2)
+                        (local.get $i)))
                     (if (f64.lt (local.get $f1) (local.get $f2))
                       (then (return (i32.const -1))))
                     (if (f64.gt (local.get $f1) (local.get $f2))

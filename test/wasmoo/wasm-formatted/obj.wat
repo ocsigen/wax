@@ -29,16 +29,17 @@
   (global $caml_trampoline_ref (mut (ref null $function_1)))
 )
 
-(type $block (array (mut (ref eq)))) (type $string (array (mut i8)))
-(type $float (struct (field f64))) (type $float_array (array (mut f64)))
+(type $block (array (mut (ref eq))))
+(type $string (array (mut i8)))
+(type $float (struct (field f64)))
+(type $float_array (array (mut f64)))
 (type $function_1 (func (param (ref eq) (ref eq)) (result (ref eq))))
 (type $closure (;(field i32);) (sub (struct (field (ref $function_1)))))
 (type $closure_last_arg
   (sub $closure (;(field i32);) (struct (field (ref $function_1))))
 )
-(type $function_2
-  (func (param (ref eq) (ref eq) (ref eq)) (result (ref eq)))
-) (type $cps_closure (sub (struct (field (ref $function_2)))))
+(type $function_2 (func (param (ref eq) (ref eq) (ref eq)) (result (ref eq))))
+(type $cps_closure (sub (struct (field (ref $function_2)))))
 (type $cps_closure_last_arg
   (sub $cps_closure (struct (field (ref $function_2))))
 )
@@ -126,7 +127,8 @@
 
 (func (export "caml_alloc_dummy") (param $size (ref eq)) (result (ref eq))
   (array.new $block (ref.i31 (i32.const 0))
-    (i32.add (i31.get_u (ref.cast (ref i31) (local.get $size))) (i32.const 1)))
+    (i32.add (i31.get_u (ref.cast (ref i31) (local.get $size)))
+      (i32.const 1)))
 )
 
 (func (export "caml_alloc_dummy_float")
@@ -160,29 +162,25 @@
     (block $not_closure_1 (result (ref eq))
       (struct.set $dummy_closure_1 1
         (br_on_cast_fail $not_closure_1 (ref eq) (ref $dummy_closure_1)
-          (local.get $dummy))
-        (ref.cast (ref $closure) (local.get $newval)))
+          (local.get $dummy)) (ref.cast (ref $closure) (local.get $newval)))
       (return (ref.i31 (i32.const 0)))))
   (drop
     (block $not_closure_2 (result (ref eq))
       (struct.set $dummy_closure_2 2
         (br_on_cast_fail $not_closure_2 (ref eq) (ref $dummy_closure_2)
-          (local.get $dummy))
-        (ref.cast (ref $closure_2) (local.get $newval)))
+          (local.get $dummy)) (ref.cast (ref $closure_2) (local.get $newval)))
       (return (ref.i31 (i32.const 0)))))
   (drop
     (block $not_closure_3 (result (ref eq))
       (struct.set $dummy_closure_3 2
         (br_on_cast_fail $not_closure_3 (ref eq) (ref $dummy_closure_3)
-          (local.get $dummy))
-        (ref.cast (ref $closure_3) (local.get $newval)))
+          (local.get $dummy)) (ref.cast (ref $closure_3) (local.get $newval)))
       (return (ref.i31 (i32.const 0)))))
   (drop
     (block $not_closure_4 (result (ref eq))
       (struct.set $dummy_closure_4 2
         (br_on_cast_fail $not_closure_4 (ref eq) (ref $dummy_closure_4)
-          (local.get $dummy))
-        (ref.cast (ref $closure_4) (local.get $newval)))
+          (local.get $dummy)) (ref.cast (ref $closure_4) (local.get $newval)))
       (return (ref.i31 (i32.const 0)))))
   (drop
     (block $not_cps_closure (result (ref eq))
@@ -194,8 +192,7 @@
   (unreachable)
 )
 
-(func $caml_obj_dup (export "caml_obj_dup")
-  (param (ref eq)) (result (ref eq))
+(func $caml_obj_dup (export "caml_obj_dup") (param (ref eq)) (result (ref eq))
   (local $orig (ref $block)) (local $res (ref $block))
   (local $forig (ref $float_array)) (local $fres (ref $float_array))
   (local $s (ref $string)) (local $s' (ref $string)) (local $len i32)
@@ -228,15 +225,16 @@
         (br_on_cast_fail $not_string (ref eq) (ref $string) (local.get 0)))
       (local.set $len (array.len (local.get $s)))
       (local.set $s' (array.new $string (i32.const 0) (local.get $len)))
-      (array.copy $string $string (local.get $s') (i32.const 0)
-        (local.get $s) (i32.const 0) (local.get $len))
+      (array.copy $string $string (local.get $s') (i32.const 0) (local.get $s)
+        (i32.const 0) (local.get $len))
       (return (local.get $s'))))
   (drop
     (block $not_float (result (ref eq))
       (return
         (struct.new $float
           (struct.get $float 0
-            (br_on_cast_fail $not_float (ref eq) (ref $float) (local.get 0)))))))
+            (br_on_cast_fail $not_float (ref eq) (ref $float)
+              (local.get 0)))))))
   (call $caml_dup_custom (local.get 0))
 )
 
@@ -383,8 +381,7 @@
 
 (data $truncate_not_implemented "Obj.truncate is not supported")
 
-(func (export "caml_obj_truncate")
-  (param (ref eq) (ref eq)) (result (ref eq))
+(func (export "caml_obj_truncate") (param (ref eq) (ref eq)) (result (ref eq))
   (call $caml_failwith
     (array.new_data $string $truncate_not_implemented (i32.const 0)
       (i32.const 29)))
@@ -435,16 +432,14 @@
         (i31.get_u
           (ref.cast (ref i31)
             (array.get $block (local.get $meths) (i32.const 1))))
-        (i32.const 1))
-      (i32.const 1)))
+        (i32.const 1)) (i32.const 1)))
   (loop $loop
     (if (i32.lt_u (local.get $li) (local.get $hi))
       (then
         (local.set $mi
           (i32.or
             (i32.shr_u (i32.add (local.get $li) (local.get $hi))
-              (i32.const 1))
-            (i32.const 1)))
+              (i32.const 1)) (i32.const 1)))
         (if
           (i32.lt_s (local.get $tag)
             (i31.get_s

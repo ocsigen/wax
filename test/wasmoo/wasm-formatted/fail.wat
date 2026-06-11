@@ -50,8 +50,7 @@
 (func (export "caml_raise_sys_error") (param $msg (ref eq))
   (return_call $caml_raise_with_arg
     (array.get $block (global.get $caml_global_data)
-      (global.get $SYS_ERROR_EXN))
-    (local.get $msg))
+      (global.get $SYS_ERROR_EXN)) (local.get $msg))
 )
 
 (global $FAILURE_EXN i32 (i32.const 2))
@@ -63,8 +62,7 @@
 (func (export "caml_failwith") (param $arg (ref eq))
   (return_call $caml_raise_with_arg
     (array.get $block (global.get $caml_global_data)
-      (global.get $FAILURE_EXN))
-    (local.get 0))
+      (global.get $FAILURE_EXN)) (local.get 0))
 )
 
 (global $INVALID_EXN i32 (i32.const 3))
@@ -73,15 +71,15 @@
   (param $arg (ref eq))
   (return_call $caml_raise_with_arg
     (array.get $block (global.get $caml_global_data)
-      (global.get $INVALID_EXN))
-    (local.get 0))
+      (global.get $INVALID_EXN)) (local.get 0))
 )
 
 (data $index_out_of_bounds "index out of bounds")
 
 (func (export "caml_bound_error")
   (return_call $caml_invalid_argument
-    (array.new_data $string $index_out_of_bounds (i32.const 0) (i32.const 19)))
+    (array.new_data $string $index_out_of_bounds (i32.const 0)
+      (i32.const 19)))
 )
 
 (global $END_OF_FILE_EXN i32 (i32.const 4))

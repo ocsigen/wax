@@ -1361,7 +1361,8 @@ let module_ ?(color = Auto) ?out_channel ?(tail = []) ?collect printer ~trivia
     }
   in
   let sexp =
-    if id = None then block ~transparent:true (List.map modulefield fields)
+    (* Top-level fields are laid out strictly one per line. *)
+    if id = None then Vertical_block (None, List.map modulefield fields)
     else
       list
         (block ~transparent:true (keyword "module" :: opt_id id)

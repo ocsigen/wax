@@ -41,7 +41,8 @@
     (field $serialize (ref null $serialize))
     (field $deserialize (ref null $deserialize))
     (field $dup (ref null $dup)))
-) (type $custom (sub (struct (field (ref $custom_operations)))))
+)
+(type $custom (sub (struct (field (ref $custom_operations)))))
 (type $custom_with_id
   (sub $custom (struct (field (ref $custom_operations)) (field $id i64)))
 )
@@ -50,10 +51,9 @@
   (struct.new $custom_operations
     (array.new_fixed $string 6 ;; "_mutex"
       (i32.const 95) (i32.const 109) (i32.const 117) (i32.const 116)
-      (i32.const 101) (i32.const 120))
-    (ref.func $custom_compare_id) (ref.null $compare)
-    (ref.func $custom_hash_id) (ref.null $fixed_length) (ref.null $serialize)
-    (ref.null $deserialize) (ref.null $dup))
+      (i32.const 101) (i32.const 120)) (ref.func $custom_compare_id)
+    (ref.null $compare) (ref.func $custom_hash_id) (ref.null $fixed_length)
+    (ref.null $serialize) (ref.null $deserialize) (ref.null $dup))
 )
 
 (type $mutex

@@ -49,8 +49,8 @@
   (call $gmtime (struct.get $float $f (ref.cast (ref $float) (local.get $x))))
 )
 
-(func $unix_localtime (export "unix_localtime")
-  (export "caml_unix_localtime") (param $x (ref eq)) (result (ref eq))
+(func $unix_localtime (export "unix_localtime") (export "caml_unix_localtime")
+  (param $x (ref eq)) (result (ref eq))
   (call $localtime
     (struct.get $float $f (ref.cast (ref $float) (local.get $x))))
 )

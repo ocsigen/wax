@@ -19,8 +19,7 @@
 fn compare_strings(&?extern, &?extern) -> i32;
 #[import = ("wasm:js-string", "test")]
 fn is_string(&?extern) -> i32;
-#[import = ("wasm:js-string", "hash")]
-#[export = "jsstring_hash"]
+#[import = ("wasm:js-string", "hash")] #[export = "jsstring_hash"]
 fn hash_string(i32, &?any) -> i32;
 #[import = ("wasm:js-string", "fromCharCodeArray")]
 fn fromCharCodeArray(&?wstring, i32, i32) -> &extern;
@@ -144,7 +143,8 @@ fn jsstring_of_substring_fallback(s: &string, pos: i32, len: i32) -> &?any {
         write_to_buffer(s, pos, continued?buffer_size:len);
         s' =
             append_string
-                (s', read_string_stream(continued?buffer_size:len, continued));
+                (s',
+                 read_string_stream(continued?buffer_size:len, continued));
         br_if 'loop continued;
     }
     s';

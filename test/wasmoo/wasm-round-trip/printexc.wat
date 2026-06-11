@@ -77,8 +77,7 @@
       (call $add_string (local.get $buf)
         (array.get $block
           (ref.cast (ref $block)
-            (array.get $block (local.get $exn) (i32.const 1)))
-          (i32.const 1)))
+            (array.get $block (local.get $exn) (i32.const 1))) (i32.const 1)))
       (local.set $bucket
         (block $continue (result (ref $block))
           (block $default
@@ -110,8 +109,7 @@
             (if (ref.test (ref i31) (local.get $v))
               (then
                 (call $add_string (local.get $buf)
-                  (call $caml_format_int
-                    (@string $string "%d" ) ;; %d
+                  (call $caml_format_int (@string $string "%d" ) ;; %d
                     (ref.cast (ref i31) (local.get $v)))))
               (else
                 (if (ref.test (ref $string) (local.get $v))
@@ -120,7 +118,9 @@
                     )
                     (call $add_string (local.get $buf) (local.get $v))
                     (call $add_char (local.get $buf) (i32.const 34))) ;; '\"'
-                  (else (call $add_char (local.get $buf) (i32.const 95)))))) ;; '_'
+                  (else
+                    (call $add_char (local.get $buf)
+                      (i32.const 95)))))) ;; '_'
             (local.set $i (i32.add (local.get $i) (i32.const 1)))
             (if (i32.lt_u (local.get $i) (local.get $len))
               (then

@@ -42,8 +42,7 @@
 )
 
 (export "caml_gc_quick_stat" (func $caml_gc_stat))
-(func $caml_gc_stat (export "caml_gc_stat")
-  (param (ref eq)) (result (ref eq))
+(func $caml_gc_stat (export "caml_gc_stat") (param (ref eq)) (result (ref eq))
   (local $f (ref eq))
   (local.set $f (struct.new $float (f64.const 0)))
   (array.new_fixed $block 18 (ref.i31 (i32.const 0)) (local.get $f)

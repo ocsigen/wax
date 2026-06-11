@@ -12,4 +12,3 @@ its leading comment must still be emitted exactly once, not once per node.
   // a global
   const answer = 42;
   // End of file
-  

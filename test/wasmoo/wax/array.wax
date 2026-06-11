@@ -27,8 +27,7 @@ data Array_make = "Array.make";
 
 const empty_array: &eq = [block|0 as &i31];
 
-#[export = "caml_make_vect"]
-#[export = "caml_array_make"]
+#[export = "caml_make_vect"] #[export = "caml_array_make"]
 fn caml_make_vect(n: &eq, v: &eq) -> &eq {
     let sz = n as &i31 as i32_s;
     if sz <s 0 { caml_invalid_argument([string|Array_make @ 0; 10]); }
@@ -54,8 +53,8 @@ fn caml_floatarray_make(n: &eq, v: &eq) -> &eq {
 }
 
 #[export = "caml_make_float_vect"]
-#[export = "caml_floatarray_create"]
-#[export = "caml_array_create_float"]
+    #[export = "caml_floatarray_create"]
+        #[export = "caml_array_create_float"]
 fn caml_floatarray_create(n: &eq) -> &eq {
     let sz = n as &i31 as i32_s;
     if sz <s 0 { caml_invalid_argument([string|Array_make @ 0; 10]); }
@@ -206,8 +205,8 @@ fn caml_array_concat(x: &eq) -> &eq {
                         'not_block: do &eq {
                             len =
                                 len +
-                                    ((br_on_cast_fail 'not_block &block v).length
-                                         () - 1);
+                                    ((br_on_cast_fail 'not_block &block
+                                          v).length() - 1);
                             br 'continue;
                         };
                     len = len + (v as &float_array).length();

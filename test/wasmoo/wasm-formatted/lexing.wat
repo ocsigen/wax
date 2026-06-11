@@ -28,8 +28,7 @@
     (i32.or (array.get_u $string (local.get $s) (local.get $i))
       (i32.shl
         (array.get_u $string (local.get $s)
-          (i32.add (local.get $i) (i32.const 1)))
-        (i32.const 8))))
+          (i32.add (local.get $i) (i32.const 1))) (i32.const 8))))
 )
 
 (global $lex_buffer i32 (i32.const 2))
@@ -39,9 +38,11 @@
 (global $lex_last_pos i32 (i32.const 7))
 (global $lex_last_action i32 (i32.const 8))
 (global $lex_eof_reached i32 (i32.const 9))
-(global $lex_mem i32 (i32.const 10)) (global $lex_base i32 (i32.const 1))
+(global $lex_mem i32 (i32.const 10))
+(global $lex_base i32 (i32.const 1))
 (global $lex_backtrk i32 (i32.const 2))
-(global $lex_default i32 (i32.const 3)) (global $lex_trans i32 (i32.const 4))
+(global $lex_default i32 (i32.const 3))
+(global $lex_trans i32 (i32.const 4))
 (global $lex_check i32 (i32.const 5))
 (global $lex_base_code i32 (i32.const 6))
 (global $lex_backtrk_code i32 (i32.const 7))
@@ -113,7 +114,8 @@
       (i32.ge_s
         (i31.get_s
           (ref.cast (ref i31)
-            (array.get $block (local.get $lexbuf) (global.get $lex_curr_pos))))
+            (array.get $block (local.get $lexbuf)
+              (global.get $lex_curr_pos))))
         (i31.get_s
           (ref.cast (ref i31)
             (array.get $block (local.get $lexbuf)
@@ -122,8 +124,7 @@
         (if
           (ref.eq
             (array.get $block (local.get $lexbuf)
-              (global.get $lex_eof_reached))
-            (ref.i31 (i32.const 0)))
+              (global.get $lex_eof_reached)) (ref.i31 (i32.const 0)))
           (then
             (return (ref.i31 (i32.sub (i32.const -1) (local.get $state)))))
           (else (local.set $c (i32.const 256)))))
@@ -140,8 +141,7 @@
     (if
       (i32.eq
         (call $get (local.get $lex_check)
-          (i32.add (local.get $base) (local.get $c)))
-        (local.get $state))
+          (i32.add (local.get $base) (local.get $c))) (local.get $state))
       (then
         (local.set $state
           (call $get (local.get $lex_trans)
@@ -154,7 +154,8 @@
         (array.set $block (local.get $lexbuf) (global.get $lex_curr_pos)
           (array.get $block (local.get $lexbuf) (global.get $lex_last_pos)))
         (local.set $action
-          (array.get $block (local.get $lexbuf) (global.get $lex_last_action)))
+          (array.get $block (local.get $lexbuf)
+            (global.get $lex_last_action)))
         (if (ref.eq (local.get $action) (ref.i31 (i32.const -1)))
           (then
             (call $caml_failwith
@@ -287,7 +288,8 @@
       (i32.ge_s
         (i31.get_s
           (ref.cast (ref i31)
-            (array.get $block (local.get $lexbuf) (global.get $lex_curr_pos))))
+            (array.get $block (local.get $lexbuf)
+              (global.get $lex_curr_pos))))
         (i31.get_s
           (ref.cast (ref i31)
             (array.get $block (local.get $lexbuf)
@@ -296,8 +298,7 @@
         (if
           (ref.eq
             (array.get $block (local.get $lexbuf)
-              (global.get $lex_eof_reached))
-            (ref.i31 (i32.const 0)))
+              (global.get $lex_eof_reached)) (ref.i31 (i32.const 0)))
           (then
             (return (ref.i31 (i32.sub (i32.const -1) (local.get $state)))))
           (else (local.set $c (i32.const 256)))))
@@ -315,8 +316,7 @@
     (if
       (i32.eq
         (call $get (local.get $lex_check)
-          (i32.add (local.get $base) (local.get $c)))
-        (local.get $state))
+          (i32.add (local.get $base) (local.get $c))) (local.get $state))
       (then
         (local.set $state
           (call $get (local.get $lex_trans)
@@ -329,7 +329,8 @@
         (array.set $block (local.get $lexbuf) (global.get $lex_curr_pos)
           (array.get $block (local.get $lexbuf) (global.get $lex_last_pos)))
         (local.set $action
-          (array.get $block (local.get $lexbuf) (global.get $lex_last_action)))
+          (array.get $block (local.get $lexbuf)
+            (global.get $lex_last_action)))
         (if (ref.eq (local.get $action) (ref.i31 (i32.const -1)))
           (then
             (call $caml_failwith

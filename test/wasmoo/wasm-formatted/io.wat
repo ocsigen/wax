@@ -23,7 +23,8 @@
 )
 (import "jslib" "caml_list_of_js_array"
   (func $caml_list_of_js_array (param (ref eq)) (result (ref eq)))
-) (import "bindings" "open" (func $open (param anyref i32 i32) (result i32)))
+)
+(import "bindings" "open" (func $open (param anyref i32 i32) (result i32)))
 (import "bindings" "close" (func $close (param i32)))
 (import "bindings" "write"
   (func $write (param i32 (ref extern) i32 i32 i64) (result i32))
@@ -36,17 +37,17 @@
 )
 (import "bindings" "read"
   (func $read' (param i32 (ref extern) i32 i32 nullexternref) (result i32))
-) (import "bindings" "file_size" (func $file_size (param i32) (result i64)))
+)
+(import "bindings" "file_size" (func $file_size (param i32) (result i64)))
 (import "bindings" "register_channel"
   (func $register_channel (param (ref eq)))
 )
 (import "bindings" "unregister_channel"
   (func $unregister_channel (param (ref eq)))
-) (import "bindings" "channel_list" (func $channel_list (result anyref)))
-(import "bindings" "ta_new" (func $ta_new (param i32) (result (ref extern))))
-(import "bindings" "ta_copy"
-  (func $ta_copy (param (ref extern) i32 i32 i32))
 )
+(import "bindings" "channel_list" (func $channel_list (result anyref)))
+(import "bindings" "ta_new" (func $ta_new (param i32) (result (ref extern))))
+(import "bindings" "ta_copy" (func $ta_copy (param (ref extern) i32 i32 i32)))
 (import "bindings" "ta_set_ui8"
   (func $ta_set_ui8 (param (ref extern) i32 i32))
 ) ;; ZZZ ??
@@ -64,7 +65,8 @@
 )
 (import "custom" "custom_hash_id"
   (func $custom_hash_id (param (ref eq)) (result i32))
-) (import "custom" "custom_next_id" (func $custom_next_id (result i64)))
+)
+(import "custom" "custom_next_id" (func $custom_next_id (result i64)))
 (import "int64" "caml_copy_int64"
   (func $caml_copy_int64 (param i64) (result (ref eq)))
 )
@@ -85,7 +87,8 @@
 )
 (import "bindings" "map_delete" (func $map_delete (param (ref extern) i32)))
 
-(type $block (array (mut (ref eq)))) (type $string (array (mut i8)))
+(type $block (array (mut (ref eq))))
+(type $string (array (mut i8)))
 (type $offset_array (array (mut i64)))
 
 (type $compare (func (param (ref eq) (ref eq) i32) (result i32)))
@@ -104,7 +107,8 @@
     (field $serialize (ref null $serialize))
     (field $deserialize (ref null $deserialize))
     (field $dup (ref null $dup)))
-) (type $custom (sub (struct (field (ref $custom_operations)))))
+)
+(type $custom (sub (struct (field (ref $custom_operations)))))
 (type $custom_with_id
   (sub $custom (struct (field (ref $custom_operations)) (field $id i64)))
 )
@@ -113,8 +117,7 @@
   (struct.new $custom_operations
     (array.new_fixed $string 5 ;; "_chan"
       (i32.const 95) (i32.const 99) (i32.const 104) (i32.const 97)
-      (i32.const 110))
-    (ref.func $custom_compare_id) (ref.null $compare)
+      (i32.const 110)) (ref.func $custom_compare_id) (ref.null $compare)
     (ref.func $custom_hash_id) (ref.null $fixed_length) (ref.null $serialize)
     (ref.null $deserialize) (ref.null $dup))
 )
@@ -132,9 +135,7 @@
       (field $unbuffered (mut i32))))
 )
 
-(type $fd_offset
-  (struct (field $offset (mut i64)) (field $seeked (mut i32)))
-)
+(type $fd_offset (struct (field $offset (mut i64)) (field $seeked (mut i32))))
 
 (global $fd_offsets (mut externref) (ref.null extern))
 
@@ -258,8 +259,8 @@
   (local.set $res
     (struct.new $channel (global.get $channel_ops) (call $custom_next_id)
       (i31.get_u (ref.cast (ref i31) (local.get $fd)))
-      (call $ta_new (global.get $IO_BUFFER_SIZE)) (i32.const 0)
-      (i32.const -1) (global.get $IO_BUFFER_SIZE) (i32.const 0)))
+      (call $ta_new (global.get $IO_BUFFER_SIZE)) (i32.const 0) (i32.const -1)
+      (global.get $IO_BUFFER_SIZE) (i32.const 0)))
   (call $register_channel (local.get $res))
   (if (ref.eq (local.get $fd) (ref.i31 (i32.const 2)))
     (then (global.set $caml_stderr (local.get $res))))
@@ -342,7 +343,8 @@
         (struct.get $channel $curr (local.get $ch)) (local.get $s)
         (local.get $pos) (local.get $len))
       (struct.set $channel $curr (local.get $ch)
-        (i32.add (struct.get $channel $curr (local.get $ch)) (local.get $len)))
+        (i32.add (struct.get $channel $curr (local.get $ch))
+          (local.get $len)))
       (return (local.get $len))))
   (local.set $nread
     (call $caml_do_read (local.get $ch) (i32.const 0)
@@ -365,8 +367,8 @@
     (if (local.get $n)
       (then
         (local.set $read
-          (call $caml_getblock (local.get $ch) (local.get $s)
-            (local.get $pos) (local.get $n)))
+          (call $caml_getblock (local.get $ch) (local.get $s) (local.get $pos)
+            (local.get $n)))
         (if (i32.eqz (local.get $read))
           (then (return (i32.sub (local.get $len) (local.get $n)))))
         (local.set $pos (i32.add (local.get $pos) (local.get $read)))
@@ -587,10 +589,10 @@
                 (i32.sub (struct.get $channel $curr (local.get $ch))
                   (struct.get $channel $max (local.get $ch)))))))
         (struct.set $channel $max (local.get $ch)
-          (i32.add (struct.get $channel $max (local.get $ch)) (local.get $n)))))
+          (i32.add (struct.get $channel $max (local.get $ch))
+            (local.get $n)))))
     (if
-      (i32.eq
-        (i32.const 10) ;; '\n'
+      (i32.eq (i32.const 10) ;; '\n'
         (call $ta_get_ui8 (struct.get $channel $buffer (local.get $ch))
           (local.get $p)))
       (then

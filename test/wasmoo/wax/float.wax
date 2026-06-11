@@ -132,8 +132,7 @@ fn caml_hexstring_of_float(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
     if sign {
         s[0] = 45; // '-'
     } else {
-        if
-            style != 45 // '-'
+        if style != 45 // '-'
         {
             s[0] = style;
         }
@@ -155,14 +154,12 @@ fn parse_format(s: &string) -> (i32, i32, i32, i32) {
             br_if 'bad_format len <u 2;
             br_if 'bad_format s[0] as i32_u != 37; // '%'
             let c = s[1] as i32_u;
-            if
-                c == 43 // '+'
+            if c == 43 // '+'
             {
                 sign_style = 1;
                 i = i + 1;
             }
-            if
-                c == 32 // ' '
+            if c == 32 // ' '
             {
                 sign_style = 2;
                 i = i + 1;
@@ -177,8 +174,7 @@ fn parse_format(s: &string) -> (i32, i32, i32, i32) {
                     (c >=u 48 // '0'
                      ) &
                         (c <=u 57 // '9'
-                         )
-                {
+                         ) {
                     precision = precision * 10 + (c - 48);
                     br 'precision;
                 }
@@ -251,8 +247,7 @@ fn caml_format_float(x: &eq, x_2: &eq) -> &eq {
                 (c >=u 97 // 'a'
                  ) &
                     (c <=u 122 // 'z'
-                     )
-            {
+                     ) {
                 s[i] = c - 32;
             }
             i = i + 1;
@@ -276,8 +271,7 @@ fn caml_float_of_hex(s: &string, i: i32) -> f64 {
             if i <u len {
                 let c = s[i] as i32_u;
                 i = i + 1;
-                if
-                    c == 46 // '.'
+                if c == 46 // '.'
                 {
                     br_if 'error dec_point >=s 0;
                     dec_point = n_bits;
@@ -288,22 +282,19 @@ fn caml_float_of_hex(s: &string, i: i32) -> f64 {
                     (c == 80 // 'P'
                      ) |
                         (c == 112 // 'p'
-                         )
-                {
+                         ) {
                     br_if 'error i == len;
                     c = s[i] as i32_u;
                     i = i + 1;
                     let negative: i32;
-                    if
-                        c == 45 // '-'
+                    if c == 45 // '-'
                     {
                         negative = 1;
                         br_if 'error i == len;
                         c = s[i] as i32_u;
                         i = i + 1;
                     }
-                    if
-                        c == 43 // '+'
+                    if c == 43 // '+'
                     {
                         br_if 'error i == len;
                         c = s[i] as i32_u;
@@ -384,8 +375,7 @@ fn caml_float_of_string(x: &eq) -> &eq {
         if i <u len {
             if
                 95 // '_'
-                    == s[i] as i32_u
-            {
+                    == s[i] as i32_u {
                 j = j + 1;
             }
             i = i + 1;
@@ -401,8 +391,7 @@ fn caml_float_of_string(x: &eq) -> &eq {
             if i <u len {
                 c = s[i] as i32_u;
                 i = i + 1;
-                if
-                    c != 95 // '_'
+                if c != 95 // '_'
                 {
                     s'[j] = c;
                     j = j + 1;
@@ -415,33 +404,27 @@ fn caml_float_of_string(x: &eq) -> &eq {
     }
     i = 0;
     'skip_spaces: loop {
-        if i <u len {
-            if on_whitespace(s, i) { i = i + 1; br 'skip_spaces; }
-        }
+        if i <u len { if on_whitespace(s, i) { i = i + 1; br 'skip_spaces; } }
     }
     'error: do {
         br_if 'error i == len;
         br_if 'error on_whitespace(s, len - 1);
         c = s[0] as i32_u;
         let negative: i32;
-        if
-            c == 45 // '-'
+        if c == 45 // '-'
         {
             negative = 1;
             i = 1;
         }
-        if
-            c == 43 // '+'
+        if c == 43 // '+'
         {
             i = 1;
         }
         let f: f64;
         if i + 2 <u len {
-            if
-                s[i] as i32_u == 48 // '0'
+            if s[i] as i32_u == 48 // '0'
             {
-                if
-                    s[i + 1] as i32_u & 0xdf == 88 // 'X'
+                if s[i + 1] as i32_u & 0xdf == 88 // 'X'
                 {
                     f = caml_float_of_hex(s, i + 2);
                     if negative { f = -f; }
@@ -457,8 +440,7 @@ fn caml_float_of_string(x: &eq) -> &eq {
                 if c & 0xdf == 65 { // 'A'
                     i = i + 1;
                     c = s[i] as i32_u;
-                    if
-                        c & 0xdf == 78 // 'N'
+                    if c & 0xdf == 78 // 'N'
                     {
                         return {float| f: nan };
                     }
@@ -470,8 +452,7 @@ fn caml_float_of_string(x: &eq) -> &eq {
                 if c & 0xdf == 78 { // 'N'
                     i = i + 1;
                     c = s[i] as i32_u;
-                    if
-                        c & 0xdf == 70 // 'F'
+                    if c & 0xdf == 70 // 'F'
                     {
                         return {float| f: negative?-inf:inf };
                     }
@@ -787,16 +768,11 @@ fn caml_fma_float(vx: &eq, vy: &eq, vz: &eq) -> &eq {
                                    (z :=
                                         (x_10 :=
                                              x_14 - (x_10 := y - z) +
-                                                 (z - (y - x_10)))
-                                            + x)
-                                       - x_10)
-                              + (x_10 - (z - x_12)))
-                         +
+                                                 (z - (y - x_10))) + x) -
+                                       x_10) + (x_10 - (z - x_12))) +
                          ((y :=
                                z - (x_12 := (x := y + z) - y) +
-                                   (y - (x - x_12)))
-                              - (y := x_10 + y)))
-                    == 0;
+                                   (y - (x - x_12))) - (y := x_10 + y))) == 0;
             br_if 'cont (x_3 := y.to_bits()) as i32 & 1;
             y = (((y < 0) ^ (z > 0)?1:-1) + x_3).from_bits();
         }

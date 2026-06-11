@@ -12,5 +12,4 @@ instruction into several WebAssembly instructions.
   ;; A comment between definitions
   (global $answer i32 (i32.const 42))
   ;; A trailing comment at the end of the file
-  
 

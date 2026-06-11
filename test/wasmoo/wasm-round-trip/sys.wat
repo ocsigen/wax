@@ -20,7 +20,8 @@
 )
 (import "bindings" "ta_get_i32"
   (func $ta_get_i32 (param (ref extern) i32) (result i32))
-) (import "bindings" "random_seed" (func $random_seed (result (ref extern))))
+)
+(import "bindings" "random_seed" (func $random_seed (result (ref extern))))
 (import "jslib" "unwrap" (func $unwrap (param (ref eq)) (result anyref)))
 (import "jslib" "wrap" (func $wrap (param anyref) (result (ref eq))))
 (import "jslib" "caml_jsstring_of_string"
@@ -38,7 +39,8 @@
 )
 (import "fail" "caml_raise_sys_error"
   (func $caml_raise_sys_error (param (ref eq)))
-) (import "fail" "caml_raise_not_found" (func $caml_raise_not_found))
+)
+(import "fail" "caml_raise_not_found" (func $caml_raise_not_found))
 (import "bindings" "argv" (func $argv (result (ref extern))))
 (import "bindings" "system" (func $system (param anyref) (result (ref eq))))
 (import "bindings" "getenv" (func $getenv (param anyref) (result anyref)))
@@ -56,7 +58,8 @@
   (func $jsstring_test (param anyref) (result i32))
 )
 
-(type $block (array (mut (ref eq)))) (type $string (array (mut i8)))
+(type $block (array (mut (ref eq))))
+(type $string (array (mut i8)))
 (type $float (struct (field $f f64)))
 
 (tag $ocaml_exit (export "ocaml_exit") (param i32))

@@ -142,8 +142,7 @@ fn caml_hash(count: &eq, limit: &eq, seed: &eq, obj: &eq) -> &eq {
                             caml_hash_mix_int
                                 (h,
                                  ((br_on_cast_fail 'not_int &i31 v) as i32_s
-                                      << 1)
-                                     + 1);
+                                      << 1) + 1);
                         num = num - 1;
                         br 'loop;
                     };
@@ -170,8 +169,8 @@ fn caml_hash(count: &eq, limit: &eq, seed: &eq, obj: &eq) -> &eq {
                                 _ =
                                     'not_block': do &eq {
                                         b =
-                                            br_on_cast_fail 'not_block'
-                                                &block v;
+                                            br_on_cast_fail 'not_block' &block
+                                                v;
                                         br_if 'again
                                             !(b[0] == forward_tag as &i31);
                                         i = i + 1;
@@ -212,8 +211,8 @@ fn caml_hash(count: &eq, limit: &eq, seed: &eq, obj: &eq) -> &eq {
                             caml_hash_mix_int
                                 (h,
                                  (br_on_null 'loop
-                                      (br_on_cast_fail 'not_custom &custom v).f.hash)
-                                     (v));
+                                      (br_on_cast_fail 'not_custom &custom
+                                           v).f.hash)(v));
                         num = num - 1;
                         br 'loop;
                     };
@@ -242,6 +241,5 @@ fn caml_string_hash(x: &eq, x_2: &eq) -> &eq {
     let h: i32;
     (caml_hash_mix_final
          (caml_hash_mix_string(x as &i31 as i32_s, x_2 as &string)) &
-         0x3FFFFFFF)
-        as &i31;
+         0x3FFFFFFF) as &i31;
 }

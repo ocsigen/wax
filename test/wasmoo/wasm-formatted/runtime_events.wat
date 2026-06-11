@@ -42,8 +42,7 @@
   (ref.i31 (i32.const 0))
 )
 
-(func (export "caml_runtime_events_resume")
-  (param (ref eq)) (result (ref eq))
+(func (export "caml_runtime_events_resume") (param (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
 

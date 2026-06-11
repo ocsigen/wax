@@ -104,10 +104,12 @@ Instruction-level conditionals are specialized too.
 The WAT path works the same way on (@if ...) annotations.
 
   $ wax -i wat -f wat -D ocaml_version=5.1.0 cond.wat
-  (global $size i32 (i32.const 16)) (func $get (result i32) (global.get $size))
+  (global $size i32 (i32.const 16))
+  (func $get (result i32) (global.get $size))
 
   $ wax -i wat -f wat -D ocaml_version=4.14.0 cond.wat
-  (global $size i32 (i32.const 20)) (func $get (result i32) (global.get $size))
+  (global $size i32 (i32.const 20))
+  (func $get (result i32) (global.get $size))
 
 A bare name sets a boolean to true.
 

@@ -84,10 +84,7 @@ fn caml_ml_mutex_try_lock(x: &eq) -> &eq {
 }
 
 #[export = "caml_ml_mutex_unlock"]
-fn caml_ml_mutex_unlock(x: &eq) -> &eq {
-    (x as &mutex).state = 0;
-    0 as &i31;
-}
+fn caml_ml_mutex_unlock(x: &eq) -> &eq { (x as &mutex).state = 0; 0 as &i31; }
 
 #[export = "caml_ml_condition_new"]
 fn caml_ml_condition_new(x: &eq) -> &eq { 0 as &i31; }

@@ -188,8 +188,7 @@ fn caml_sys_open(path: &eq, vflags: &eq, perm: &eq) -> &eq {
             open_2
                 (unwrap(caml_jsstring_of_string(path)), flags,
                  perm as &i31 as i32_u);
-        if
-            flags & 4 // O_APPEND
+        if flags & 4 // O_APPEND
         {
             offset = file_size(fd);
         }
@@ -269,7 +268,7 @@ fn caml_ml_close_channel(x: &eq) -> &eq {
                 // ignore exception
                 _ = _;
             }
-        }
+            }
     }
     0 as &i31;
 }
@@ -470,8 +469,7 @@ fn caml_ml_input_scan_line(vch: &eq) -> &eq {
         }
         if
             10 // '\n'
-                == ta_get_ui8(ch.buffer, p)
-        {
+                == ta_get_ui8(ch.buffer, p) {
             return (1 + (p - ch.curr)) as &i31;
         }
         p = p + 1;
@@ -542,8 +540,7 @@ fn caml_really_putblock(ch: &eq, s: &string, pos: i32, len: i32) {
     }
 }
 
-#[export = "caml_ml_output"]
-#[export = "caml_ml_output_bytes"]
+#[export = "caml_ml_output"] #[export = "caml_ml_output_bytes"]
 fn caml_ml_output(ch: &eq, s: &eq, vpos: &eq, vlen: &eq) -> &eq {
     let pos = vpos as &i31 as i32_u;
     let len = vlen as &i31 as i32_u;

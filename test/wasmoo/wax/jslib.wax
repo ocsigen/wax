@@ -408,8 +408,7 @@ fn caml_callback
     become unwrap(acc);
 }
 
-#[export = "caml_jsstring_of_string"]
-#[export = "caml_js_from_string"]
+#[export = "caml_jsstring_of_string"] #[export = "caml_js_from_string"]
 fn caml_jsstring_of_string(x: &eq) -> &eq {
     let s = x as &string;
     return {js| f: jsstring_of_string(s) };
@@ -450,8 +449,7 @@ fn caml_jsbytes_of_string(x: &eq) -> &eq {
     return {js| f: jsstring_of_string(s') };
 }
 
-#[export = "caml_string_of_jsstring"]
-#[export = "caml_js_to_string"]
+#[export = "caml_string_of_jsstring"] #[export = "caml_js_to_string"]
 fn caml_string_of_jsstring(s: &eq) -> &eq {
     become string_of_jsstring((s as &js).f);
 }
@@ -535,8 +533,7 @@ fn caml_list_of_js_array(x: &eq) -> &eq {
     l;
 }
 
-const jsError =
-    string#"jsError" // 'jsError'
+const jsError = string#"jsError" // 'jsError'
     ;
 
 data toString = "toString";
@@ -560,7 +557,8 @@ fn caml_wrap_exception(x: &?extern) -> &eq {
                  (meth_call
                       (exn,
                        unwrap
-                           (caml_jsstring_of_string([string|toString @ 0; 8])),
+                           (caml_jsstring_of_string
+                                ([string|toString @ 0; 8])),
                        new_array(0) as &any)))];
 }
 

@@ -20,7 +20,8 @@
 )
 (import "ints" "format_int"
   (func $format_int (param (ref eq) i32 i32) (result (ref eq)))
-) (import "fail" "caml_failwith" (func $caml_failwith (param (ref eq))))
+)
+(import "fail" "caml_failwith" (func $caml_failwith (param (ref eq))))
 (import "marshal" "caml_serialize_int_1"
   (func $caml_serialize_int_1 (param (ref eq) i32))
 )
@@ -131,7 +132,8 @@
 
 (func (export "caml_int32_of_string") (param $v (ref eq)) (result (ref eq))
   (return_call $caml_copy_int32
-    (call $parse_int (local.get $v) (i32.const 32) (global.get $INT32_ERRMSG)))
+    (call $parse_int (local.get $v) (i32.const 32)
+      (global.get $INT32_ERRMSG)))
 )
 
 (export "caml_nativeint_compare" (func $caml_int32_compare))

@@ -24,14 +24,14 @@
 (import "bindings" "from_bool" (func $from_bool (param i32) (result anyref)))
 (import "bindings" "get"
   (func $get (param (ref extern) anyref) (result anyref))
-) (import "bindings" "set" (func $set (param anyref anyref anyref)))
+)
+(import "bindings" "set" (func $set (param anyref anyref anyref)))
 (import "bindings" "delete" (func $delete (param anyref anyref)))
 (import "bindings" "instanceof"
   (func $instanceof (param anyref anyref) (result i32))
-) (import "bindings" "typeof" (func $typeof (param anyref) (result anyref)))
-(import "bindings" "equals"
-  (func $equals (param anyref anyref) (result i32))
 )
+(import "bindings" "typeof" (func $typeof (param anyref) (result anyref)))
+(import "bindings" "equals" (func $equals (param anyref anyref) (result i32)))
 (import "bindings" "strict_equals"
   (func $strict_equals (param anyref anyref) (result i32))
 )
@@ -40,11 +40,13 @@
 )
 (import "bindings" "meth_call"
   (func $meth_call (param anyref anyref anyref) (result anyref))
-) (import "bindings" "new" (func $new (param anyref anyref) (result anyref)))
+)
+(import "bindings" "new" (func $new (param anyref anyref) (result anyref)))
 (import "bindings" "new_obj" (func $new_obj (result anyref)))
 (import "bindings" "new_array"
   (func $new_array (param i32) (result (ref extern)))
-) (import "bindings" "global_this" (global $global_this anyref))
+)
+(import "bindings" "global_this" (global $global_this anyref))
 (import "bindings" "iter_props" (func $iter_props (param anyref anyref)))
 (import "bindings" "array_length"
   (func $array_length (param (ref extern)) (result i32))
@@ -114,14 +116,14 @@
   (func $Nativeint_val (param (ref eq)) (result i32))
 )
 
-(type $block (array (mut (ref eq)))) (type $float (struct (field $f f64)))
-(type $float_array (array (mut f64))) (type $string (array (mut i8)))
+(type $block (array (mut (ref eq))))
+(type $float (struct (field $f f64)))
+(type $float_array (array (mut f64)))
+(type $string (array (mut i8)))
 (type $js (struct (field $f anyref)))
 (type $function_1 (func (param (ref eq) (ref eq)) (result (ref eq))))
 (type $closure (;(field i32);) (sub (struct (field $f (ref $function_1)))))
-(type $function_2
-  (func (param (ref eq) (ref eq) (ref eq)) (result (ref eq)))
-)
+(type $function_2 (func (param (ref eq) (ref eq) (ref eq)) (result (ref eq))))
 (type $cps_closure (sub (struct (field $f (ref $function_2)))))
 
 (func $wrap (export "wrap") (param $x anyref) (result (ref eq))
@@ -283,7 +285,8 @@
 (func $caml_ojs_new_arr (export "caml_ojs_new_arr")
   (param $c (ref eq)) (param $args (ref eq)) (result (ref eq))
   (return_call $wrap
-    (call $new (call $unwrap (local.get $c)) (call $unwrap (local.get $args))))
+    (call $new (call $unwrap (local.get $c))
+      (call $unwrap (local.get $args))))
 )
 
 (func $caml_ojs_iterate_properties (export "caml_ojs_iterate_properties")
@@ -472,8 +475,7 @@
   (param $f (ref eq)) (param $count i32) (param $args (ref extern))
   (param
     $kind ;; 0 ==> strict / 2 ==> unsafe
-    i32)
-  (result anyref)
+    i32) (result anyref)
   (local $arg (ref eq)) (local $acc (ref eq)) (local $i i32)
   (local.set $acc (local.get $f))
   (if (i32.eq (local.get $kind) (i32.const 2))
@@ -503,7 +505,8 @@
         (then
           (if (call $caml_is_closure (local.get $acc))
             (then
-              (local.set $acc (call $caml_js_wrap_callback (local.get $acc)))))))))
+              (local.set $acc
+                (call $caml_js_wrap_callback (local.get $acc)))))))))
   (return_call $unwrap (local.get $acc))
 )
 
@@ -532,7 +535,8 @@
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
         (br $count))))
   (if (i32.eqz (local.get $n))
-    (then (return (struct.new $js (call $jsstring_of_string (local.get $s))))))
+    (then
+      (return (struct.new $js (call $jsstring_of_string (local.get $s))))))
   (local.set $s'
     (array.new $string (i32.const 0) (i32.add (local.get $i) (local.get $n))))
   (local.set $i (i32.const 0))

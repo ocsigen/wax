@@ -27,15 +27,18 @@
 )
 (import "bindings" "weak_deref"
   (func $weak_deref (param anyref) (result eqref))
-) (import "bindings" "weak_map_new" (func $weak_map_new (result (ref any))))
+)
+(import "bindings" "weak_map_new" (func $weak_map_new (result (ref any))))
 (import "bindings" "map_get"
   (func $map_get (param (ref any) (ref eq)) (result anyref))
 )
 (import "bindings" "map_set"
   (func $map_set (param (ref any) (ref eq) (ref any)))
-) (import "jslib" "unwrap" (func $unwrap (param (ref eq)) (result anyref)))
+)
+(import "jslib" "unwrap" (func $unwrap (param (ref eq)) (result anyref)))
 (import "jslib" "wrap" (func $wrap (param anyref) (result (ref eq))))
-(type $block (array (mut (ref eq)))) (type $string (array (mut i8)))
+(type $block (array (mut (ref eq))))
+(type $string (array (mut i8)))
 (type $js (struct (field anyref)))
 
 ;; A weak array is a an abstract value composed of possibly some
@@ -87,8 +90,7 @@
   (ref.i31 (i32.const 0))
 )
 
-(func (export "caml_ephe_get_data_copy")
-  (param $x (ref eq)) (result (ref eq))
+(func (export "caml_ephe_get_data_copy") (param $x (ref eq)) (result (ref eq))
   (local $r (ref eq))
   (local.set $r (call $caml_ephe_get_data (local.get $x)))
   (drop
@@ -99,8 +101,7 @@
             (br_on_cast_fail $no_copy (ref eq) (ref $block)
               (array.get $block
                 (br_on_cast_fail $no_copy (ref eq) (ref $block)
-                  (local.get $r))
-                (i32.const 1))))))))
+                  (local.get $r)) (i32.const 1))))))))
   (local.get $r)
 )
 
@@ -155,8 +156,7 @@
       (call $caml_ephe_set_data (local.get $x)
         (array.get $block
           (br_on_cast_fail $no_data (ref eq) (ref $block)
-            (local.get $opt_data))
-          (i32.const 1)))))
+            (local.get $opt_data)) (i32.const 1)))))
 )
 
 (export "caml_weak_get" (func $caml_ephe_get_key))
@@ -198,8 +198,7 @@
             (br_on_cast_fail $no_copy (ref eq) (ref $block)
               (array.get $block
                 (br_on_cast_fail $no_copy (ref eq) (ref $block)
-                  (local.get $r))
-                (i32.const 1))))))))
+                  (local.get $r)) (i32.const 1))))))))
   (local.get $r)
 )
 

@@ -19,7 +19,8 @@
   (func $caml_invalid_argument (param (ref eq)))
 )
 
-(type $block (array (mut (ref eq)))) (type $string (array (mut i8)))
+(type $block (array (mut (ref eq))))
+(type $string (array (mut i8)))
 (type $float (struct (field $f f64)))
 (type $float_array (array (mut f64)))
 
@@ -78,8 +79,8 @@
 
 (func $caml_array_of_uniform_array (export "caml_array_of_uniform_array")
   (param $vinit (ref eq)) (result (ref eq))
-  (local $init (ref $block)) (local $size i32)
-  (local $res (ref $float_array)) (local $i i32)
+  (local $init (ref $block)) (local $size i32) (local $res (ref $float_array))
+  (local $i i32)
   (local.set $init (ref.cast (ref $block) (local.get $vinit)))
   (local.set $size (array.len (local.get $init)))
   (if (i32.ne (local.get $size) (i32.const 1))
@@ -137,8 +138,7 @@
         (array.get $block (local.get $a1) (i32.const 0)))
       (array.copy $block $block (local.get $a2) (i32.const 1) (local.get $a1)
         (i32.add (i31.get_u (ref.cast (ref i31) (local.get $i)))
-          (i32.const 1))
-        (local.get $len))
+          (i32.const 1)) (local.get $len))
       (return (local.get $a2))))
   (local.set $fa1 (ref.cast (ref $float_array) (local.get $a)))
   (local.set $fa2 (array.new $float_array (f64.const 0) (local.get $len)))
@@ -180,7 +180,8 @@
   (drop
     (block $a1_not_block (result (ref eq))
       (local.set $a1
-        (br_on_cast_fail $a1_not_block (ref eq) (ref $block) (local.get $va1)))
+        (br_on_cast_fail $a1_not_block (ref eq) (ref $block)
+          (local.get $va1)))
       (drop
         (block $a2_not_block (result (ref eq))
           (local.set $a2
@@ -265,8 +266,7 @@
                   (i32.sub
                     (array.len
                       (br_on_cast_fail $not_block (ref eq) (ref $block)
-                        (local.get $v)))
-                    (i32.const 1))))
+                        (local.get $v))) (i32.const 1))))
               (br $continue)))
           (local.set $len
             (i32.add (local.get $len)
@@ -351,11 +351,9 @@
         (else
           (array.copy $block $block (ref.cast (ref $block) (local.get $a2))
             (i32.add (i31.get_s (ref.cast (ref i31) (local.get $i2)))
-              (i32.const 1))
-            (ref.cast (ref $block) (local.get $a1))
+              (i32.const 1)) (ref.cast (ref $block) (local.get $a1))
             (i32.add (i31.get_s (ref.cast (ref i31) (local.get $i1)))
-              (i32.const 1))
-            (local.get $len))))))
+              (i32.const 1)) (local.get $len))))))
   (ref.i31 (i32.const 0))
 )
 
@@ -371,8 +369,7 @@
           (array.fill $block
             (br_on_cast_fail $not_block (ref eq) (ref $block) (local.get $a))
             (i32.add (i31.get_u (ref.cast (ref i31) (local.get $i)))
-              (i32.const 1))
-            (local.get $v) (local.get $len))
+              (i32.const 1)) (local.get $v) (local.get $len))
           (br $done)))
       (array.fill $float_array (ref.cast (ref $float_array) (local.get $a))
         (i31.get_u (ref.cast (ref i31) (local.get $i)))

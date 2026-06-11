@@ -3,8 +3,10 @@ suspend, resume, resume_throw, resume_throw_ref and switch instructions) are
 exposed in Wax and compile to WebAssembly, with validation.
 
   $ wax gen.wax --validate -f wat
-  (type $ft0 (func (result i32))) (type $k0 (cont $ft0))
-  (type $ft1 (func (param i32) (result i32))) (type $k1 (cont $ft1))
+  (type $ft0 (func (result i32)))
+  (type $k0 (cont $ft0))
+  (type $ft1 (func (param i32) (result i32)))
+  (type $k1 (cont $ft1))
   (tag $yield (param i32) (result i32))
   (tag $myexn (param i32))
   
@@ -14,9 +16,7 @@ exposed in Wax and compile to WebAssembly, with validation.
   (func $t_bind (param $c (ref $k1)) (result (ref $k0))
     (cont.bind $k1 $k0 (i32.const 7) (local.get $c))
   )
-  (func $t_resume (param $c (ref $k0)) (result i32)
-    (resume $k0 (local.get $c))
-  )
+  (func $t_resume (param $c (ref $k0)) (result i32) (resume $k0 (local.get $c)))
   (func $t_resume_throw (param $c (ref $k0)) (result i32)
     (resume_throw $k0 $myexn (i32.const 8) (local.get $c))
   )
@@ -29,7 +29,8 @@ exposed in Wax and compile to WebAssembly, with validation.
   (func $abstract_refs
     (param $a (ref null cont)) (param $b (ref nocont)) (result i32)
     (i32.const 0)
-  ) (elem declare func $g1)
+  )
+  (elem declare func $g1)
 
 A WebAssembly module using resume handlers (both `on $tag -> 'label` and
 `on $tag -> switch`) and the switch instruction decompiles to Wax:

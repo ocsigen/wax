@@ -28,7 +28,8 @@
 )
 (import "jslib" "caml_js_from_array"
   (func $caml_js_from_array (param (ref eq)) (result (ref eq)))
-) (import "js" "caml_js_on_ie" (func $caml_js_on_ie (result i32)))
+)
+(import "js" "caml_js_on_ie" (func $caml_js_on_ie (result i32)))
 (import "js" "caml_js_html_escape"
   (func $caml_js_html_escape (param anyref) (result anyref))
 )
@@ -61,8 +62,7 @@
 
 (data $XMLHttpRequest "XMLHttpRequest")
 
-(func (export "caml_xmlhttprequest_create")
-  (param (ref eq)) (result (ref eq))
+(func (export "caml_xmlhttprequest_create") (param (ref eq)) (result (ref eq))
   (return_call $caml_js_new
     (call $caml_js_get (call $caml_js_global (ref.i31 (i32.const 0)))
       (array.new_data $string $XMLHttpRequest (i32.const 0) (i32.const 14)))

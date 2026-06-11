@@ -78,8 +78,7 @@ fn caml_lex_engine(vtbl: &eq, start_state: &eq, vlexbuf: &eq) -> &eq {
         let c: i32;
         if
             lexbuf[lex_curr_pos] as &i31 as i32_s >=s
-                lexbuf[lex_buffer_len] as &i31 as i32_s
-        {
+                lexbuf[lex_buffer_len] as &i31 as i32_s {
             if lexbuf[lex_eof_reached] == 0 as &i31 {
                 return (-1 - state) as &i31;
             } else { c = 256; }
@@ -163,8 +162,7 @@ fn caml_new_lex_engine(vtbl: &eq, start_state: &eq, vlexbuf: &eq) -> &eq {
         let c: i32;
         if
             lexbuf[lex_curr_pos] as &i31 as i32_s >=s
-                lexbuf[lex_buffer_len] as &i31 as i32_s
-        {
+                lexbuf[lex_buffer_len] as &i31 as i32_s {
             if lexbuf[lex_eof_reached] == 0 as &i31 {
                 return (-1 - state) as &i31;
             } else { c = 256; }

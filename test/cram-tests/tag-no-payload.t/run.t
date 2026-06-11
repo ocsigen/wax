@@ -15,7 +15,8 @@ type-checks, round-trips, and lowers to WAT and to the binary format.
   fn f() { try { m(); } catch { stop => { nop; } } }
 
   $ wax -f wat --validate stop.wax
-  (tag $stop) (func $m (throw $stop))
+  (tag $stop)
+  (func $m (throw $stop))
   (func $f (try (do (call $m)) (catch $stop (nop))))
 
   $ wax -f wasm stop.wax -o stop.wasm && wc -c < stop.wasm

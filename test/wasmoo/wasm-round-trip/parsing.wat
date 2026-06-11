@@ -18,7 +18,8 @@
 (import "jslib" "wrap" (func $wrap (param anyref) (result (ref eq))))
 (import "jslib" "caml_string_of_jsstring"
   (func $caml_string_of_jsstring (param (ref eq)) (result (ref eq)))
-) (import "io" "caml_stderr" (global $caml_stderr (mut (ref eq))))
+)
+(import "io" "caml_stderr" (global $caml_stderr (mut (ref eq))))
 (import "io" "caml_ml_open_descriptor_out"
   (func $caml_ml_open_descriptor_out (param (ref eq)) (result (ref eq)))
 )
@@ -36,7 +37,8 @@
   (func $caml_format_float (param (ref eq) (ref eq)) (result (ref eq)))
 )
 
-(type $float (struct (field $f f64))) (type $block (array (mut (ref eq))))
+(type $float (struct (field $f f64)))
+(type $block (array (mut (ref eq))))
 (type $string (array (mut i8)))
 
 (func $get (param $a (ref eq)) (param $i i32) (result i32)
@@ -47,20 +49,22 @@
     (i32.or (array.get_u $string (local.get $s) (local.get $i))
       (i32.shl
         (array.get_u $string (local.get $s)
-          (i32.add (local.get $i) (i32.const 1)))
-        (i32.const 8))))
+          (i32.add (local.get $i) (i32.const 1))) (i32.const 8))))
 )
 
 (global $caml_parser_trace (mut i32) (i32.const 0))
 
 (global $ERRCODE i32 (i32.const 256))
 
-(global $START i32 (i32.const 0)) (global $TOKEN_READ i32 (i32.const 1))
+(global $START i32 (i32.const 0))
+(global $TOKEN_READ i32 (i32.const 1))
 (global $STACKS_GROWN_1 i32 (i32.const 2))
 (global $STACKS_GROWN_2 i32 (i32.const 3))
 (global $SEMANTIC_ACTION_COMPUTED i32 (i32.const 4))
-(global $ERROR_DETECTED i32 (i32.const 5)) (global $loop_2 i32 (i32.const 6))
-(global $testshift i32 (i32.const 7)) (global $shift i32 (i32.const 8))
+(global $ERROR_DETECTED i32 (i32.const 5))
+(global $loop_2 i32 (i32.const 6))
+(global $testshift i32 (i32.const 7))
+(global $shift i32 (i32.const 8))
 (global $shift_recover i32 (i32.const 9))
 (global $reduce i32 (i32.const 10))
 
@@ -84,17 +88,22 @@
 (global $env_asp i32 (i32.const 11))
 (global $env_rule_len i32 (i32.const 12))
 (global $env_rule_number i32 (i32.const 13))
-(global $env_sp i32 (i32.const 14)) (global $env_state i32 (i32.const 15))
+(global $env_sp i32 (i32.const 14))
+(global $env_state i32 (i32.const 15))
 (global $env_errflag i32 (i32.const 16))
 
 (global $tbl_transl_const i32 (i32.const 2))
 (global $tbl_transl_block i32 (i32.const 3))
-(global $tbl_lhs i32 (i32.const 4)) (global $tbl_len i32 (i32.const 5))
-(global $tbl_defred i32 (i32.const 6)) (global $tbl_dgoto i32 (i32.const 7))
-(global $tbl_sindex i32 (i32.const 8)) (global $tbl_rindex i32 (i32.const 9))
+(global $tbl_lhs i32 (i32.const 4))
+(global $tbl_len i32 (i32.const 5))
+(global $tbl_defred i32 (i32.const 6))
+(global $tbl_dgoto i32 (i32.const 7))
+(global $tbl_sindex i32 (i32.const 8))
+(global $tbl_rindex i32 (i32.const 9))
 (global $tbl_gindex i32 (i32.const 10))
 (global $tbl_tablesize i32 (i32.const 11))
-(global $tbl_table i32 (i32.const 12)) (global $tbl_check i32 (i32.const 13))
+(global $tbl_table i32 (i32.const 12))
+(global $tbl_check i32 (i32.const 13))
 (global $tbl_names_const i32 (i32.const 15))
 (global $tbl_names_block i32 (i32.const 16))
 
@@ -105,7 +114,9 @@
     (if
       (i32.ne (array.get_u $string (local.get $s) (local.get $i))
         (i32.const 0))
-      (then (local.set $i (i32.add (local.get $i) (i32.const 1))) (br $loop))))
+      (then
+        (local.set $i (i32.add (local.get $i) (i32.const 1)))
+        (br $loop))))
   (i32.sub (local.get $i) (local.get $p))
 )
 
@@ -119,7 +130,8 @@
     (if (i32.eqz (array.get_u $string (local.get $names) (local.get $i)))
       (then
         (return
-          (array.new_data $string $unknown_token (i32.const 0) (i32.const 15)))))
+          (array.new_data $string $unknown_token (i32.const 0)
+            (i32.const 15)))))
     (if (i32.ne (local.get $number) (i32.const 0))
       (then
         (local.set $i
@@ -328,8 +340,7 @@
                                     (i31.get_u
                                       (ref.cast (ref i31)
                                         (array.get $block (local.get $arg)
-                                          (i32.const 0))))
-                                    (i32.const 1))))
+                                          (i32.const 0)))) (i32.const 1))))
                               (array.set $block (local.get $env)
                                 (global.get $env_lval)
                                 (array.get $block (local.get $arg)
@@ -486,8 +497,8 @@
                                 (then
                                   (call $output
                                     (array.new_data $string
-                                      $no_more_states_to_discard
-                                      (i32.const 0) (i32.const 25)))
+                                      $no_more_states_to_discard (i32.const 0)
+                                      (i32.const 25)))
                                   (call $output_nl)))
                               (return
                                 (ref.i31 (global.get $RAISE_PARSE_ERROR)))))
@@ -501,7 +512,8 @@
                               (global.get $env_curr_char))
                             (ref.i31 (i32.const 0)))
                           (then
-                            (return (ref.i31 (global.get $RAISE_PARSE_ERROR)))))
+                            (return
+                              (ref.i31 (global.get $RAISE_PARSE_ERROR)))))
                         (if (global.get $caml_parser_trace)
                           (then
                             (call $output
@@ -573,7 +585,8 @@
                   (array.get $block (local.get $env)
                     (global.get $env_symb_end_stack)))
                 (i32.add (local.get $sp) (i32.const 1))
-                (array.get $block (local.get $env) (global.get $env_symb_end)))
+                (array.get $block (local.get $env)
+                  (global.get $env_symb_end)))
               (local.set $cmd (global.get $loop_2))
               (br $next))
             ;; reduce:
@@ -595,7 +608,8 @@
             (array.set $block (local.get $env) (global.get $env_rule_len)
               (ref.i31 (local.get $m)))
             (local.set $sp
-              (i32.add (local.get $sp) (i32.sub (i32.const 1) (local.get $m))))
+              (i32.add (local.get $sp)
+                (i32.sub (i32.const 1) (local.get $m))))
             (local.set $m (call $get (local.get $tbl_lhs_2) (local.get $n)))
             (local.set $state1
               (i31.get_s
@@ -603,8 +617,7 @@
                   (array.get $block
                     (ref.cast (ref $block)
                       (array.get $block (local.get $env)
-                        (global.get $env_s_stack)))
-                    (local.get $sp)))))
+                        (global.get $env_s_stack))) (local.get $sp)))))
             (local.set $n1
               (call $get (local.get $tbl_gindex_2) (local.get $m)))
             (local.set $n2 (i32.add (local.get $n1) (local.get $state1)))

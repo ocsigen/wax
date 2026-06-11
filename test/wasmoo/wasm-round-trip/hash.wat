@@ -24,7 +24,8 @@
   (func $jsstring_hash (param i32 anyref) (result i32))
 )
 
-(type $block (array (mut (ref eq)))) (type $string (array (mut i8)))
+(type $block (array (mut (ref eq))))
+(type $string (array (mut i8)))
 (type $float (struct (field $f f64)))
 (type $js (struct (field $f anyref)))
 
@@ -55,12 +56,8 @@
         (i32.xor
           (i32.mul
             (i32.rotl (i32.mul (local.get $d) (i32.const 0xcc9e2d51))
-              (i32.const 15))
-            (i32.const 0x1b873593))
-          (local.get $h))
-        (i32.const 13))
-      (i32.const 5))
-    (i32.const 0xe6546b64))
+              (i32.const 15)) (i32.const 0x1b873593)) (local.get $h))
+        (i32.const 13)) (i32.const 5)) (i32.const 0xe6546b64))
 )
 
 (func $caml_hash_mix_final (export "caml_hash_mix_final")
@@ -106,8 +103,7 @@
     (i32.eq (i32.and (local.get $i) (i32.const 0x7F800000))
       (i32.const 0x7F800000))
     (then
-      (if
-        (i32.ne (i32.and (local.get $i) (i32.const 0x7FFFFF)) (i32.const 0))
+      (if (i32.ne (i32.and (local.get $i) (i32.const 0x7FFFFF)) (i32.const 0))
         (then (local.set $i (i32.const 0x7F800001))))))
   (if (i32.eq (local.get $i) (i32.const 0x80000000))
     (then (local.set $i (i32.const 0))))
@@ -128,13 +124,11 @@
               (i32.or (array.get_u $string (local.get $s) (local.get $i))
                 (i32.shl
                   (array.get_u $string (local.get $s)
-                    (i32.add (local.get $i) (i32.const 1)))
-                  (i32.const 8)))
+                    (i32.add (local.get $i) (i32.const 1))) (i32.const 8)))
               (i32.or
                 (i32.shl
                   (array.get_u $string (local.get $s)
-                    (i32.add (local.get $i) (i32.const 2)))
-                  (i32.const 16))
+                    (i32.add (local.get $i) (i32.const 2))) (i32.const 16))
                 (i32.shl
                   (array.get_u $string (local.get $s)
                     (i32.add (local.get $i) (i32.const 3)))
@@ -151,14 +145,12 @@
         (local.set $w
           (i32.shl
             (array.get_u $string (local.get $s)
-              (i32.add (local.get $i) (i32.const 2)))
-            (i32.const 16))))
+              (i32.add (local.get $i) (i32.const 2))) (i32.const 16))))
       (local.set $w
         (i32.or (local.get $w)
           (i32.shl
             (array.get_u $string (local.get $s)
-              (i32.add (local.get $i) (i32.const 1)))
-            (i32.const 8)))))
+              (i32.add (local.get $i) (i32.const 1))) (i32.const 8)))))
     (local.set $w
       (i32.or (local.get $w)
         (array.get_u $string (local.get $s) (local.get $i))))
@@ -205,9 +197,7 @@
                     (i32.shl
                       (i31.get_s
                         (br_on_cast_fail $not_int (ref eq) (ref i31)
-                          (local.get $v)))
-                      (i32.const 1))
-                    (i32.const 1))))
+                          (local.get $v))) (i32.const 1)) (i32.const 1))))
               (local.set $num (i32.sub (local.get $num) (i32.const 1)))
               (br $loop)))
           (drop
@@ -262,8 +252,7 @@
                 (call $caml_hash_mix_int (local.get $h)
                   (i32.or
                     (i32.shl (i32.sub (local.get $len) (i32.const 1))
-                      (i32.const 10))
-                    (local.get $tag_2))))
+                      (i32.const 10)) (local.get $tag_2))))
               (local.set $i (i32.const 1))
               (loop $block_iter (result (ref eq))
                 (br_if $loop (i32.ge_u (local.get $i) (local.get $len)))
@@ -325,6 +314,5 @@
       (call $caml_hash_mix_final
         (call $caml_hash_mix_string
           (i31.get_s (ref.cast (ref i31) (local.get $x)))
-          (ref.cast (ref $string) (local.get $x_2))))
-      (i32.const 0x3FFFFFFF)))
+          (ref.cast (ref $string) (local.get $x_2)))) (i32.const 0x3FFFFFFF)))
 )

@@ -410,7 +410,11 @@ module Doc = struct
               | (Cut | Space), Flat -> flat_sep str
               | (Cut | Space), Brkm -> break_line i false
               | (Cut | Space), Fill ->
-                  if fits (width - eff_col ()) rest then flat_sep str
+                  (* If kept flat this separator itself occupies a column, so
+                     the following content starts one column further right;
+                     account for it or a unit that just fits would overflow. *)
+                  let sep = match str with Space -> 1 | _ -> 0 in
+                  if fits (width - eff_col () - sep) rest then flat_sep str
                   else break_line i false);
               go rest)
     in
@@ -496,11 +500,11 @@ let vbox t ?(skip_space = false) ?(indent = 0) f =
 
 let run ?(width = 78) fmt f =
   match Sys.getenv_opt "WAX_PRINTER" with
-  | Some "doc" ->
-      let c = Doc.create fmt ~width in
-      f (Doc_engine c);
-      Doc.finish c
-  | _ ->
+  | Some "format" ->
       let c = Fmt.create fmt in
       f (Fmt_engine c);
       Fmt.finish c
+  | _ ->
+      let c = Doc.create fmt ~width in
+      f (Doc_engine c);
+      Doc.finish c

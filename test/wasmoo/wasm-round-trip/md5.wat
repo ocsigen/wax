@@ -83,8 +83,7 @@
   (i32.add
     (i32.rotl
       (i32.add (i32.add (local.get $a) (local.get $q))
-        (i32.add (local.get $x) (local.get $t)))
-      (local.get $s))
+        (i32.add (local.get $x) (local.get $t))) (local.get $s))
     (local.get $b))
 )
 
@@ -131,17 +130,14 @@
     (i32.or (array.get_u $string (local.get $s) (local.get $p))
       (i32.shl
         (array.get_u $string (local.get $s)
-          (i32.add (local.get $p) (i32.const 1)))
-        (i32.const 8)))
+          (i32.add (local.get $p) (i32.const 1))) (i32.const 8)))
     (i32.or
       (i32.shl
         (array.get_u $string (local.get $s)
-          (i32.add (local.get $p) (i32.const 2)))
-        (i32.const 16))
+          (i32.add (local.get $p) (i32.const 2))) (i32.const 16))
       (i32.shl
         (array.get_u $string (local.get $s)
-          (i32.add (local.get $p) (i32.const 3)))
-        (i32.const 24))))
+          (i32.add (local.get $p) (i32.const 3))) (i32.const 24))))
 )
 
 (func $MD5Transform
@@ -200,28 +196,28 @@
       (i32.const 0x8B44F7AF)))
   (local.set $c
     (call $ff (local.get $c) (local.get $d) (local.get $a) (local.get $b)
-      (array.get $int_array (local.get $buffer) (i32.const 10))
-      (i32.const 17) (i32.const 0xFFFF5BB1)))
+      (array.get $int_array (local.get $buffer) (i32.const 10)) (i32.const 17)
+      (i32.const 0xFFFF5BB1)))
   (local.set $b
     (call $ff (local.get $b) (local.get $c) (local.get $d) (local.get $a)
-      (array.get $int_array (local.get $buffer) (i32.const 11))
-      (i32.const 22) (i32.const 0x895CD7BE)))
+      (array.get $int_array (local.get $buffer) (i32.const 11)) (i32.const 22)
+      (i32.const 0x895CD7BE)))
   (local.set $a
     (call $ff (local.get $a) (local.get $b) (local.get $c) (local.get $d)
       (array.get $int_array (local.get $buffer) (i32.const 12)) (i32.const 7)
       (i32.const 0x6B901122)))
   (local.set $d
     (call $ff (local.get $d) (local.get $a) (local.get $b) (local.get $c)
-      (array.get $int_array (local.get $buffer) (i32.const 13))
-      (i32.const 12) (i32.const 0xFD987193)))
+      (array.get $int_array (local.get $buffer) (i32.const 13)) (i32.const 12)
+      (i32.const 0xFD987193)))
   (local.set $c
     (call $ff (local.get $c) (local.get $d) (local.get $a) (local.get $b)
-      (array.get $int_array (local.get $buffer) (i32.const 14))
-      (i32.const 17) (i32.const 0xA679438E)))
+      (array.get $int_array (local.get $buffer) (i32.const 14)) (i32.const 17)
+      (i32.const 0xA679438E)))
   (local.set $b
     (call $ff (local.get $b) (local.get $c) (local.get $d) (local.get $a)
-      (array.get $int_array (local.get $buffer) (i32.const 15))
-      (i32.const 22) (i32.const 0x49B40821)))
+      (array.get $int_array (local.get $buffer) (i32.const 15)) (i32.const 22)
+      (i32.const 0x49B40821)))
   (local.set $a
     (call $gg (local.get $a) (local.get $b) (local.get $c) (local.get $d)
       (array.get $int_array (local.get $buffer) (i32.const 1)) (i32.const 5)
@@ -232,8 +228,8 @@
       (i32.const 0xC040B340)))
   (local.set $c
     (call $gg (local.get $c) (local.get $d) (local.get $a) (local.get $b)
-      (array.get $int_array (local.get $buffer) (i32.const 11))
-      (i32.const 14) (i32.const 0x265E5A51)))
+      (array.get $int_array (local.get $buffer) (i32.const 11)) (i32.const 14)
+      (i32.const 0x265E5A51)))
   (local.set $b
     (call $gg (local.get $b) (local.get $c) (local.get $d) (local.get $a)
       (array.get $int_array (local.get $buffer) (i32.const 0)) (i32.const 20)
@@ -248,8 +244,8 @@
       (i32.const 0x02441453)))
   (local.set $c
     (call $gg (local.get $c) (local.get $d) (local.get $a) (local.get $b)
-      (array.get $int_array (local.get $buffer) (i32.const 15))
-      (i32.const 14) (i32.const 0xD8A1E681)))
+      (array.get $int_array (local.get $buffer) (i32.const 15)) (i32.const 14)
+      (i32.const 0xD8A1E681)))
   (local.set $b
     (call $gg (local.get $b) (local.get $c) (local.get $d) (local.get $a)
       (array.get $int_array (local.get $buffer) (i32.const 4)) (i32.const 20)
@@ -284,8 +280,8 @@
       (i32.const 0x676F02D9)))
   (local.set $b
     (call $gg (local.get $b) (local.get $c) (local.get $d) (local.get $a)
-      (array.get $int_array (local.get $buffer) (i32.const 12))
-      (i32.const 20) (i32.const 0x8D2A4C8A)))
+      (array.get $int_array (local.get $buffer) (i32.const 12)) (i32.const 20)
+      (i32.const 0x8D2A4C8A)))
   (local.set $a
     (call $hh (local.get $a) (local.get $b) (local.get $c) (local.get $d)
       (array.get $int_array (local.get $buffer) (i32.const 5)) (i32.const 4)
@@ -296,12 +292,12 @@
       (i32.const 0x8771F681)))
   (local.set $c
     (call $hh (local.get $c) (local.get $d) (local.get $a) (local.get $b)
-      (array.get $int_array (local.get $buffer) (i32.const 11))
-      (i32.const 16) (i32.const 0x6D9D6122)))
+      (array.get $int_array (local.get $buffer) (i32.const 11)) (i32.const 16)
+      (i32.const 0x6D9D6122)))
   (local.set $b
     (call $hh (local.get $b) (local.get $c) (local.get $d) (local.get $a)
-      (array.get $int_array (local.get $buffer) (i32.const 14))
-      (i32.const 23) (i32.const 0xFDE5380C)))
+      (array.get $int_array (local.get $buffer) (i32.const 14)) (i32.const 23)
+      (i32.const 0xFDE5380C)))
   (local.set $a
     (call $hh (local.get $a) (local.get $b) (local.get $c) (local.get $d)
       (array.get $int_array (local.get $buffer) (i32.const 1)) (i32.const 4)
@@ -316,8 +312,8 @@
       (i32.const 0xF6BB4B60)))
   (local.set $b
     (call $hh (local.get $b) (local.get $c) (local.get $d) (local.get $a)
-      (array.get $int_array (local.get $buffer) (i32.const 10))
-      (i32.const 23) (i32.const 0xBEBFBC70)))
+      (array.get $int_array (local.get $buffer) (i32.const 10)) (i32.const 23)
+      (i32.const 0xBEBFBC70)))
   (local.set $a
     (call $hh (local.get $a) (local.get $b) (local.get $c) (local.get $d)
       (array.get $int_array (local.get $buffer) (i32.const 13)) (i32.const 4)
@@ -340,12 +336,12 @@
       (i32.const 0xD9D4D039)))
   (local.set $d
     (call $hh (local.get $d) (local.get $a) (local.get $b) (local.get $c)
-      (array.get $int_array (local.get $buffer) (i32.const 12))
-      (i32.const 11) (i32.const 0xE6DB99E5)))
+      (array.get $int_array (local.get $buffer) (i32.const 12)) (i32.const 11)
+      (i32.const 0xE6DB99E5)))
   (local.set $c
     (call $hh (local.get $c) (local.get $d) (local.get $a) (local.get $b)
-      (array.get $int_array (local.get $buffer) (i32.const 15))
-      (i32.const 16) (i32.const 0x1FA27CF8)))
+      (array.get $int_array (local.get $buffer) (i32.const 15)) (i32.const 16)
+      (i32.const 0x1FA27CF8)))
   (local.set $b
     (call $hh (local.get $b) (local.get $c) (local.get $d) (local.get $a)
       (array.get $int_array (local.get $buffer) (i32.const 2)) (i32.const 23)
@@ -360,8 +356,8 @@
       (i32.const 0x432AFF97)))
   (local.set $c
     (call $ii (local.get $c) (local.get $d) (local.get $a) (local.get $b)
-      (array.get $int_array (local.get $buffer) (i32.const 14))
-      (i32.const 15) (i32.const 0xAB9423A7)))
+      (array.get $int_array (local.get $buffer) (i32.const 14)) (i32.const 15)
+      (i32.const 0xAB9423A7)))
   (local.set $b
     (call $ii (local.get $b) (local.get $c) (local.get $d) (local.get $a)
       (array.get $int_array (local.get $buffer) (i32.const 5)) (i32.const 21)
@@ -376,8 +372,8 @@
       (i32.const 0x8F0CCC92)))
   (local.set $c
     (call $ii (local.get $c) (local.get $d) (local.get $a) (local.get $b)
-      (array.get $int_array (local.get $buffer) (i32.const 10))
-      (i32.const 15) (i32.const 0xFFEFF47D)))
+      (array.get $int_array (local.get $buffer) (i32.const 10)) (i32.const 15)
+      (i32.const 0xFFEFF47D)))
   (local.set $b
     (call $ii (local.get $b) (local.get $c) (local.get $d) (local.get $a)
       (array.get $int_array (local.get $buffer) (i32.const 1)) (i32.const 21)
@@ -388,24 +384,24 @@
       (i32.const 0x6FA87E4F)))
   (local.set $d
     (call $ii (local.get $d) (local.get $a) (local.get $b) (local.get $c)
-      (array.get $int_array (local.get $buffer) (i32.const 15))
-      (i32.const 10) (i32.const 0xFE2CE6E0)))
+      (array.get $int_array (local.get $buffer) (i32.const 15)) (i32.const 10)
+      (i32.const 0xFE2CE6E0)))
   (local.set $c
     (call $ii (local.get $c) (local.get $d) (local.get $a) (local.get $b)
       (array.get $int_array (local.get $buffer) (i32.const 6)) (i32.const 15)
       (i32.const 0xA3014314)))
   (local.set $b
     (call $ii (local.get $b) (local.get $c) (local.get $d) (local.get $a)
-      (array.get $int_array (local.get $buffer) (i32.const 13))
-      (i32.const 21) (i32.const 0x4E0811A1)))
+      (array.get $int_array (local.get $buffer) (i32.const 13)) (i32.const 21)
+      (i32.const 0x4E0811A1)))
   (local.set $a
     (call $ii (local.get $a) (local.get $b) (local.get $c) (local.get $d)
       (array.get $int_array (local.get $buffer) (i32.const 4)) (i32.const 6)
       (i32.const 0xF7537E82)))
   (local.set $d
     (call $ii (local.get $d) (local.get $a) (local.get $b) (local.get $c)
-      (array.get $int_array (local.get $buffer) (i32.const 11))
-      (i32.const 10) (i32.const 0xBD3AF235)))
+      (array.get $int_array (local.get $buffer) (i32.const 11)) (i32.const 10)
+      (i32.const 0xBD3AF235)))
   (local.set $c
     (call $ii (local.get $c) (local.get $d) (local.get $a) (local.get $b)
       (array.get $int_array (local.get $buffer) (i32.const 2)) (i32.const 15)

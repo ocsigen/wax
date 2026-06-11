@@ -71,8 +71,7 @@ fn caml_format_exception(x: &eq) -> &eq {
             };
         let len = bucket.length();
         if i <u len {
-            add_char
-                (buf, 40 // '\('
+            add_char(buf, 40 // '\('
                 );
             'loop: loop {
                 v = bucket[i];
@@ -84,8 +83,7 @@ fn caml_format_exception(x: &eq) -> &eq {
                               v as &i31));
                 } else {
                     if v is &string {
-                        add_char
-                            (buf, 34 // '\"'
+                        add_char(buf, 34 // '\"'
                             );
                         add_string(buf, v);
                         add_char(buf, 34); // '\"'
@@ -93,11 +91,9 @@ fn caml_format_exception(x: &eq) -> &eq {
                 } // '_'
                 i = i + 1;
                 if i <u len {
-                    add_char
-                        (buf, 44 // ','
+                    add_char(buf, 44 // ','
                         );
-                    add_char
-                        (buf, 32 // ' '
+                    add_char(buf, 32 // ' '
                         );
                     br 'loop;
                 }

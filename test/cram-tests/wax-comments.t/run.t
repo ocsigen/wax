@@ -13,7 +13,6 @@ lines between definitions, and end-of-file comments all survive a round-trip.
   // A comment between definitions
   const answer: i32 = 42;
   // A trailing comment at the end of the file
-  
 
 
 The output round-trips to itself.

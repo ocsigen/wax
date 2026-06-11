@@ -182,8 +182,7 @@
     (i32.or (array.get_u $string (local.get $s) (local.get $p))
       (i32.shl
         (array.get_u $string (local.get $s)
-          (i32.add (local.get $p) (i32.const 1)))
-        (i32.const 8))))
+          (i32.add (local.get $p) (i32.const 1))) (i32.const 8))))
 )
 
 (export "caml_string_get32" (func $caml_bytes_get32))
@@ -201,17 +200,14 @@
     (i32.or (array.get_u $string (local.get $s) (local.get $p))
       (i32.shl
         (array.get_u $string (local.get $s)
-          (i32.add (local.get $p) (i32.const 1)))
-        (i32.const 8)))
+          (i32.add (local.get $p) (i32.const 1))) (i32.const 8)))
     (i32.or
       (i32.shl
         (array.get_u $string (local.get $s)
-          (i32.add (local.get $p) (i32.const 2)))
-        (i32.const 16))
+          (i32.add (local.get $p) (i32.const 2))) (i32.const 16))
       (i32.shl
         (array.get_u $string (local.get $s)
-          (i32.add (local.get $p) (i32.const 3)))
-        (i32.const 24))))
+          (i32.add (local.get $p) (i32.const 3))) (i32.const 24))))
 )
 
 (export "caml_string_get64" (func $caml_bytes_get64))
@@ -232,42 +228,35 @@
         (i64.shl
           (i64.extend_i32_u
             (array.get_u $string (local.get $s)
-              (i32.add (local.get $p) (i32.const 1))))
-          (i64.const 8)))
+              (i32.add (local.get $p) (i32.const 1)))) (i64.const 8)))
       (i64.or
         (i64.shl
           (i64.extend_i32_u
             (array.get_u $string (local.get $s)
-              (i32.add (local.get $p) (i32.const 2))))
-          (i64.const 16))
+              (i32.add (local.get $p) (i32.const 2)))) (i64.const 16))
         (i64.shl
           (i64.extend_i32_u
             (array.get_u $string (local.get $s)
-              (i32.add (local.get $p) (i32.const 3))))
-          (i64.const 24))))
+              (i32.add (local.get $p) (i32.const 3)))) (i64.const 24))))
     (i64.or
       (i64.or
         (i64.shl
           (i64.extend_i32_u
             (array.get_u $string (local.get $s)
-              (i32.add (local.get $p) (i32.const 4))))
-          (i64.const 32))
+              (i32.add (local.get $p) (i32.const 4)))) (i64.const 32))
         (i64.shl
           (i64.extend_i32_u
             (array.get_u $string (local.get $s)
-              (i32.add (local.get $p) (i32.const 5))))
-          (i64.const 40)))
+              (i32.add (local.get $p) (i32.const 5)))) (i64.const 40)))
       (i64.or
         (i64.shl
           (i64.extend_i32_u
             (array.get_u $string (local.get $s)
-              (i32.add (local.get $p) (i32.const 6))))
-          (i64.const 48))
+              (i32.add (local.get $p) (i32.const 6)))) (i64.const 48))
         (i64.shl
           (i64.extend_i32_u
             (array.get_u $string (local.get $s)
-              (i32.add (local.get $p) (i32.const 7))))
-          (i64.const 56)))))
+              (i32.add (local.get $p) (i32.const 7)))) (i64.const 56)))))
 )
 
 (func (export "caml_bytes_set16")
@@ -338,8 +327,8 @@
 
 (func (export "caml_string_concat")
   (param $vs1 (ref eq)) (param $vs2 (ref eq)) (result (ref eq))
-  (local $s1 (ref $string)) (local $s2 (ref $string))
-  (local $s (ref $string)) (local $l1 i32) (local $l2 i32)
+  (local $s1 (ref $string)) (local $s2 (ref $string)) (local $s (ref $string))
+  (local $l1 i32) (local $l2 i32)
   (local.set $s1 (ref.cast (ref $string) (local.get $vs1)))
   (local.set $s2 (ref.cast (ref $string) (local.get $vs2)))
   (local.set $l1 (array.len (local.get $s1)))

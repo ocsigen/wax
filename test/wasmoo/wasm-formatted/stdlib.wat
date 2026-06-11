@@ -26,20 +26,23 @@
 )
 (import "jslib" "caml_jsstring_of_string"
   (func $caml_jsstring_of_string (param (ref eq)) (result (ref eq)))
-) (import "jslib" "wrap" (func $wrap (param anyref) (result (ref eq))))
+)
+(import "jslib" "wrap" (func $wrap (param anyref) (result (ref eq))))
 (import "jslib" "unwrap" (func $unwrap (param (ref eq)) (result anyref)))
 (import "obj" "caml_callback_1"
   (func $caml_callback_1 (param (ref eq) (ref eq)) (result (ref eq)))
 )
 (import "obj" "caml_callback_2"
   (func $caml_callback_2 (param (ref eq) (ref eq) (ref eq)) (result (ref eq)))
-) (import "bindings" "write" (func $write (param i32 anyref)))
+)
+(import "bindings" "write" (func $write (param i32 anyref)))
 (import "string" "caml_string_concat"
   (func $caml_string_concat (param (ref eq) (ref eq)) (result (ref eq)))
 )
 (import "printexc" "caml_format_exception"
   (func $caml_format_exception (param (ref eq)) (result (ref eq)))
-) (import "sys" "ocaml_exit" (tag $ocaml_exit (param i32)))
+)
+(import "sys" "ocaml_exit" (tag $ocaml_exit (param i32)))
 (import "fail" "ocaml_exception" (tag $ocaml_exception (param (ref eq))))
 (import "bindings" "exit" (func $exit (param i32)))
 (import "bindings" "throw" (func $throw (param externref)))
@@ -92,8 +95,7 @@
                 (i31.get_s
                   (ref.cast (ref i31)
                     (call $caml_string_hash (ref.i31 (i32.const 0))
-                      (local.get $s))))
-                (global.get $Named_value_size))))))))
+                      (local.get $s)))) (global.get $Named_value_size))))))))
   (return (ref.null eq))
 )
 
@@ -111,8 +113,7 @@
   (block $not_found
     (struct.set $assoc 1
       (br_on_null $not_found
-        (call $find_named_value (local.get 0) (local.get $r)))
-      (local.get 1))
+        (call $find_named_value (local.get 0) (local.get $r))) (local.get 1))
     (return (ref.i31 (i32.const 0))))
   (array.set $assoc_array (global.get $named_value_table) (local.get $h)
     (struct.new $assoc (ref.cast (ref $string) (local.get 0)) (local.get 1)
@@ -141,8 +142,8 @@
           (call $caml_string_equal (local.get $name)
             (struct.get $assoc 0 (local.get $a)))))
       (then
-        (array.set $assoc_array (global.get $named_value_table)
-          (local.get $h) (local.get $r))
+        (array.set $assoc_array (global.get $named_value_table) (local.get $h)
+          (local.get $r))
         (br $done)))
     (loop $loop
       (local.set $a (br_on_null $done (local.get $r)))
@@ -211,8 +212,8 @@
               (br_on_null $not_registered
                 (call $caml_named_value
                   (array.new_data $string $handle_uncaught_exception
-                    (i32.const 0) (i32.const 34))))
-              (local.get $exn) (ref.i31 (i32.const 0))))
+                    (i32.const 0) (i32.const 34)))) (local.get $exn)
+              (ref.i31 (i32.const 0))))
           (br $exit))
         (block $null
           (drop
@@ -220,8 +221,7 @@
               (br_on_null $null
                 (call $caml_named_value
                   (array.new_data $string $do_at_exit (i32.const 0)
-                    (i32.const 21))))
-              (ref.i31 (i32.const 0)))))
+                    (i32.const 21)))) (ref.i31 (i32.const 0)))))
         (call $write (i32.const 2)
           (call $unwrap
             (call $caml_jsstring_of_string

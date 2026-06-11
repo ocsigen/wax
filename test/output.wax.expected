@@ -191,8 +191,7 @@ fn bigarray_hash(x: &eq) -> i32 {
                                         [ 'float32 'float64 'int8 'uint8
                                             'int16 'uint16 'int32 'int64
                                             'int32 'int32 'float32 'float64
-                                            else 'uint8 ]
-                                        b.ba_kind as i32_u;
+                                            else 'uint8 ] b.ba_kind as i32_u;
                                 }
                                 // int64
                                 if len >u 32 { len = 32; }
@@ -546,7 +545,11 @@ fn bigarray_deserialize(s: &eq) -> (&eq, i32) {
                                     // int
                                     if caml_deserialize_uint_1(s) {
                                         caml_failwith
-                                            ([string|intern_overflow @ 0; 56]);
+                                            ([string|
+                                                 intern_overflow
+                                                 @
+                                                 0;
+                                                 56]);
                                     }
                                 }
                                 // int32
@@ -705,8 +708,7 @@ fn caml_ba_from_typed_array(x: &eq) -> &eq {
     if kind <s 0 {
         caml_invalid_argument([string|ta_unsupported_kind @ 0; 41]);
     }
-    if
-        kind == 13 // Uint8ClampedArray
+    if kind == 13 // Uint8ClampedArray
     {
         kind = 3;
     }
@@ -745,8 +747,8 @@ fn caml_ba_get_at_offset(ba: &bigarray, i: i32) -> &eq {
                                                         [ 'float32 'float64
                                                             'int8 'uint8
                                                             'int16 'uint16
-                                                            'int32 'int64
-                                                            'int 'nativeint
+                                                            'int32 'int64 'int
+                                                            'nativeint
                                                             'complex32
                                                             'complex64
                                                             else 'uint8 ]
@@ -822,8 +824,8 @@ fn caml_ba_set_at_offset(ba: &bigarray, i: i32, v: &eq) {
                                                         [ 'float32 'float64
                                                             'int8 'uint8
                                                             'int16 'uint16
-                                                            'int32 'int64
-                                                            'int 'nativeint
+                                                            'int32 'int64 'int
+                                                            'nativeint
                                                             'complex32
                                                             'complex64
                                                             else 'uint8 ]
@@ -1197,8 +1199,7 @@ fn caml_ba_fill(vba: &eq, v: &eq) -> &eq {
                             br_table
                                 [ 'float 'float 'int 'int 'int 'int 'int32
                                     'int64 'int 'int32 'complex32 'complex64
-                                    else 'int ]
-                                ba.ba_kind as i32_u;
+                                    else 'int ] ba.ba_kind as i32_u;
                         }
                         // complex64
                         len = ta_length(data);
@@ -1410,8 +1411,7 @@ fn caml_ba_compare(v1: &eq, v2: &eq, total: i32) -> i32 {
                                         [ 'float32 'float64 'int8 'uint8
                                             'int16 'uint16 'int32 'int64
                                             'int32 'int32 'float32 'float64
-                                            else 'uint8 ]
-                                        b1.ba_kind as i32_u;
+                                            else 'uint8 ] b1.ba_kind as i32_u;
                                 }
                                 // int64
                                 'loop: loop {
@@ -1597,8 +1597,7 @@ fn caml_ba_uint8_set64(vba: &eq, i: &eq, d: i64) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_string_of_array"]
-#[export = "caml_bytes_of_array"]
+#[export = "caml_string_of_array"] #[export = "caml_bytes_of_array"]
 fn caml_string_of_array(x: &eq) -> &eq {
     // used to convert a typed array to a string
     let a = (unwrap(x) as &?extern)!;
@@ -1609,7 +1608,7 @@ fn caml_string_of_array(x: &eq) -> &eq {
 }
 
 #[export = "caml_uint8_array_of_string"]
-#[export = "caml_uint8_array_of_bytes"]
+    #[export = "caml_uint8_array_of_bytes"]
 fn caml_uint8_array_of_string(x: &eq) -> &eq {
     // Convert a string to a typed array
     let s = x as &string;
@@ -1639,8 +1638,8 @@ fn caml_ba_get_dim(x: &eq) -> &int_array { (x as &bigarray).ba_dim; }
 
 #[export = "caml_ba_alloc"]
 fn caml_ba_alloc
-(kind: i32, layout: i32, num_dims: i32, data: &extern, dim: &int_array) ->
-&eq {
+(kind: i32, layout: i32, num_dims: i32, data: &extern, dim: &int_array) -> &eq
+{
     {bigarray|
         f: bigarray_ops,
         ba_data: data,

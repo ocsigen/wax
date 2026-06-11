@@ -120,14 +120,11 @@ fn parse_int(v: &eq, nbits: i32, errmsg: &string) -> i32 {
     res;
 }
 
-const INT_ERRMSG =
-    string#"int_of_string" // "int.of_string"
+const INT_ERRMSG = string#"int_of_string" // "int.of_string"
     ;
 
 #[export = "caml_int_of_string"]
-fn caml_int_of_string(v: &eq) -> &eq {
-    parse_int(v, 31, INT_ERRMSG) as &i31;
-}
+fn caml_int_of_string(v: &eq) -> &eq { parse_int(v, 31, INT_ERRMSG) as &i31; }
 
 #[export = "caml_bswap16"]
 fn caml_bswap16(x: &eq) -> &eq {
@@ -176,20 +173,17 @@ fn parse_int_format(s: &string) -> (i32, i32, i32, i32, i32) {
             br_if 'bad_format len <u 2;
             br_if 'bad_format s[0] as i32_u != 37; // '%'
             let c = s[1] as i32_u;
-            if
-                c == 43 // '+'
+            if c == 43 // '+'
             {
                 sign_style = 1;
                 i = i + 1;
             }
-            if
-                c == 32 // ' '
+            if c == 32 // ' '
             {
                 sign_style = 2;
                 i = i + 1;
             }
-            if
-                c == 35 // '#'
+            if c == 35 // '#'
             {
                 alternate = 1;
                 i = i + 1;
@@ -200,11 +194,9 @@ fn parse_int_format(s: &string) -> (i32, i32, i32, i32, i32) {
                 (c == 76 // 'L'
                  ) |
                     (c == 108 // 'l'
-                     )
-                    |
+                     ) |
                     (c == 110 // 'n'
-                     )
-            {
+                     ) {
                 i = i + 1;
                 br_if 'bad_format i == len;
                 c = s[i] as i32_u;
@@ -214,29 +206,24 @@ fn parse_int_format(s: &string) -> (i32, i32, i32, i32, i32) {
                 (c == 100 // 'd'
                  ) |
                     (c == 105 // 'i'
-                     )
-            {
+                     ) {
                 base = 10;
                 signed = 1;
             } else {
-                if
-                    c == 117 // 'u'
+                if c == 117 // 'u'
                 {
                     base = 10;
                 } else {
-                    if
-                        c == 120 // 'x'
+                    if c == 120 // 'x'
                     {
                         base = 16;
                     } else {
-                        if
-                            c == 88 // 'X'
+                        if c == 88 // 'X'
                         {
                             base = 16;
                             uppercase = 1;
                         } else {
-                            if
-                                c == 111 // 'o'
+                            if c == 111 // 'o'
                             {
                                 base = 8;
                             } else { br 'bad_format; }
@@ -259,8 +246,7 @@ fn parse_int_format(s: &string) -> (i32, i32, i32, i32, i32) {
 fn format_int(x: &eq, d: i32, small: i32) -> &eq {
     let s = x as &string;
     if s.length() == 2 {
-        if
-            s[1] as i32_u == 100 // 'd'
+        if s[1] as i32_u == 100 // 'd'
         {
             become format_int_default(d);
         }

@@ -85,7 +85,8 @@
       (if (global.get $string_builtins_available)
         (then
           (global.set $buffer
-            (array.new $wstring (i32.const 0) (global.get $utf16_buffer_size)))))))
+            (array.new $wstring (i32.const 0)
+              (global.get $utf16_buffer_size)))))))
 )
 (start $init)
 
@@ -128,8 +129,8 @@
         (any.convert_extern
           (call $fromCharCodeArray (global.get $buffer) (i32.const 0)
             (local.get $len))))))
-  (return_call $jsstring_of_substring_fallback (local.get $s)
-    (local.get $pos) (local.get $len))
+  (return_call $jsstring_of_substring_fallback (local.get $s) (local.get $pos)
+    (local.get $len))
 )
 
 (func $jsstring_of_string (export "jsstring_of_string")
@@ -189,8 +190,7 @@
       (call $append_string (local.get $s')
         (call $read_string_stream
           (select (global.get $buffer_size) (local.get $len)
-            (local.get $continued))
-          (local.get $continued))))
+            (local.get $continued)) (local.get $continued))))
     (br_if $loop (local.get $continued)))
   (local.get $s')
 )

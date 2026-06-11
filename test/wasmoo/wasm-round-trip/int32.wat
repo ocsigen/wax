@@ -20,7 +20,8 @@
 )
 (import "ints" "format_int"
   (func $format_int (param (ref eq) i32 i32) (result (ref eq)))
-) (import "fail" "caml_failwith" (func $caml_failwith (param (ref eq))))
+)
+(import "fail" "caml_failwith" (func $caml_failwith (param (ref eq))))
 (import "marshal" "caml_serialize_int_1"
   (func $caml_serialize_int_1 (param (ref eq) i32))
 )
@@ -55,8 +56,7 @@
 (type $custom (sub (struct (field $f (ref $custom_operations)))))
 
 (global $int32_ops (export "int32_ops") (ref $custom_operations)
-  (struct.new $custom_operations
-    (@string $string "_i" ) ;; "_i"
+  (struct.new $custom_operations (@string $string "_i" ) ;; "_i"
     (ref.func $int32_cmp) (ref.null $compare) (ref.func $int32_hash)
     (struct.new $fixed_length (i32.const 4) (i32.const 4))
     (ref.func $int32_serialize) (ref.func $int32_deserialize)
@@ -128,7 +128,8 @@
 (func $caml_int32_of_string (export "caml_int32_of_string")
   (param $v (ref eq)) (result (ref eq))
   (return_call $caml_copy_int32
-    (call $parse_int (local.get $v) (i32.const 32) (global.get $INT32_ERRMSG)))
+    (call $parse_int (local.get $v) (i32.const 32)
+      (global.get $INT32_ERRMSG)))
 )
 
 (func $caml_int32_compare (export "caml_int32_compare")
@@ -140,8 +141,7 @@
 )
 
 (global $nativeint_ops (export "nativeint_ops") (ref $custom_operations)
-  (struct.new $custom_operations
-    (@string $string "_n" ) ;; "_n"
+  (struct.new $custom_operations (@string $string "_n" ) ;; "_n"
     (ref.func $int32_cmp) (ref.null $compare) (ref.func $int32_hash)
     (struct.new $fixed_length (i32.const 4) (i32.const 8))
     (ref.func $nativeint_serialize) (ref.func $nativeint_deserialize)

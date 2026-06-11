@@ -52,8 +52,10 @@ fn caml_is_custom(x: &eq) -> i32 { x is &custom; }
 
 #[export = "caml_dup_custom"]
 fn caml_dup_custom(v: &eq) -> &eq {
-    ('custom: do &custom { _ = br_on_cast 'custom &custom v; unreachable; }.f.dup!)
-        (v);
+    ('custom: do &custom {
+         _ = br_on_cast 'custom &custom v;
+         unreachable;
+     }.f.dup!)(v);
 }
 
 #[export = "custom_compare_id"]

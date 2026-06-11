@@ -28,8 +28,7 @@
 
 (global $re_word_letters (ref $char_table)
   (array.new_fixed $char_table 32 (i32.const 0x00) (i32.const 0x00)
-    (i32.const 0x00)
-    (i32.const 0x00) ;; 0x00-0x1F: none
+    (i32.const 0x00) (i32.const 0x00) ;; 0x00-0x1F: none
     (i32.const 0x00) (i32.const 0x00) (i32.const 0xFF)
     (i32.const 0x03) ;; 0x20-0x3F: digits 0-9
     (i32.const 0xFE) (i32.const 0xFF) (i32.const 0xFF)
@@ -40,12 +39,9 @@
     (i32.const 0x00) ;; 0x80-0x9F: none
     (i32.const 0x00) (i32.const 0x00) (i32.const 0x00)
     (i32.const 0x00) ;; 0xA0-0xBF: none
-    (i32.const 0xFF)
-    (i32.const 0xFF) ;; 0xC0-0xDF:
-    (i32.const 0x7F)
-    (i32.const 0xFF) ;; Latin-1 accented uppercase
-    (i32.const 0xFF)
-    (i32.const 0xFF) ;; 0xE0-0xFF:
+    (i32.const 0xFF) (i32.const 0xFF) ;; 0xC0-0xDF:
+    (i32.const 0x7F) (i32.const 0xFF) ;; Latin-1 accented uppercase
+    (i32.const 0xFF) (i32.const 0xFF) ;; 0xE0-0xFF:
     (i32.const 0x7F) (i32.const 0xFF))
 ) ;; Latin-1 accented lowercase
 (type $stack (sub (struct (field (ref null $stack)))))
@@ -285,7 +281,8 @@
                                                 (i32.add (local.get $arg)
                                                   (i32.const 1))))
                                             (array.get_u $string
-                                              (local.get $s) (local.get $pos)))))
+                                              (local.get $s)
+                                              (local.get $pos)))))
                                       (local.set $pos
                                         (i32.add (local.get $pos)
                                           (i32.const 1)))
@@ -294,18 +291,17 @@
                                     (br_if $continue
                                       (i32.eqz (local.get $pos)))
                                     (br_if $continue
-                                      (i32.eq
-                                        (i32.const 10) ;; '\n'
+                                      (i32.eq (i32.const 10) ;; '\n'
                                         (array.get_u $string (local.get $s)
                                           (i32.sub (local.get $pos)
                                             (i32.const 1)))))
                                     (br $backtrack))
                                   ;; EOL
                                   (br_if $continue
-                                    (i32.eq (local.get $pos) (local.get $len)))
+                                    (i32.eq (local.get $pos)
+                                      (local.get $len)))
                                   (br_if $continue
-                                    (i32.eq
-                                      (i32.const 10) ;; '\n'
+                                    (i32.eq (i32.const 10) ;; '\n'
                                       (array.get_u $string (local.get $s)
                                         (local.get $pos))))
                                   (br $backtrack))
@@ -352,7 +348,8 @@
                                 (struct.new $undo (local.get $stack)
                                   (local.get $group_start) (local.get $arg)
                                   (array.get $int_array
-                                    (local.get $group_start) (local.get $arg))))
+                                    (local.get $group_start)
+                                    (local.get $arg))))
                               (array.set $int_array (local.get $group_start)
                                 (local.get $arg) (local.get $pos))
                               (br $continue))
@@ -410,7 +407,8 @@
                                   (local.get $pos)))
                               (then
                                 (local.set $pos
-                                  (i32.add (local.get $pos) (i32.const 1)))))))
+                                  (i32.add (local.get $pos)
+                                    (i32.const 1)))))))
                         (br $continue))
                       ;; SIMPLESTAR
                       (local.set $arg
@@ -509,7 +507,8 @@
       (local.get $pos))
     (local.set $res
       (array.new $block (ref.i31 (i32.const 0))
-        (i32.add (i32.shl (local.get $numgroups) (i32.const 1)) (i32.const 1))))
+        (i32.add (i32.shl (local.get $numgroups) (i32.const 1))
+          (i32.const 1))))
     (local.set $i (i32.const 0))
     (loop $loop
       (if (i32.lt_u (local.get $i) (local.get $numgroups))
@@ -539,7 +538,8 @@
               (array.set $block (local.get $res)
                 (i32.add (local.get $j) (i32.const 2))
                 (ref.i31
-                  (array.get $int_array (local.get $group_end) (local.get $i))))))
+                  (array.get $int_array (local.get $group_end)
+                    (local.get $i))))))
           (local.set $i (i32.add (local.get $i) (i32.const 1)))
           (br $loop))))
     (return (local.get $res)))
@@ -561,7 +561,8 @@
   (if (i32.gt_u (local.get $pos) (local.get $len))
     (then
       (call $caml_invalid_argument
-        (array.new_data $string $search_forward (i32.const 0) (i32.const 18)))))
+        (array.new_data $string $search_forward (i32.const 0)
+          (i32.const 18)))))
   (loop $loop
     (local.set $res
       (call $re_match (local.get $re) (local.get $s) (local.get $pos)
@@ -587,7 +588,8 @@
   (if (i32.gt_u (local.get $pos) (local.get $len))
     (then
       (call $caml_invalid_argument
-        (array.new_data $string $search_backward (i32.const 0) (i32.const 19)))))
+        (array.new_data $string $search_backward (i32.const 0)
+          (i32.const 19)))))
   (loop $loop
     (local.set $res
       (call $re_match (local.get $re) (local.get $s) (local.get $pos)

@@ -57,9 +57,7 @@
 (import "bindings" "ta_length"
   (func $ta_length (param (ref extern)) (result i32))
 )
-(import "bindings" "ta_bytes"
-  (func $ta_bytes (param anyref) (result anyref))
-)
+(import "bindings" "ta_bytes" (func $ta_bytes (param anyref) (result anyref)))
 (import "bindings" "ta_blit_from_string"
   (func $ta_blit_from_string (param (ref $string) i32 (ref extern) i32 i32))
 )
@@ -95,14 +93,12 @@
         (local.set $w
           (i32.shl
             (call $ta_get_ui8 (local.get $data)
-              (i32.add (local.get $i) (i32.const 2)))
-            (i32.const 16))))
+              (i32.add (local.get $i) (i32.const 2))) (i32.const 16))))
       (local.set $w
         (i32.or (local.get $w)
           (i32.shl
             (call $ta_get_ui8 (local.get $data)
-              (i32.add (local.get $i) (i32.const 1)))
-            (i32.const 8)))))
+              (i32.add (local.get $i) (i32.const 1))) (i32.const 8)))))
     (local.set $w
       (i32.or (local.get $w)
         (call $ta_get_ui8 (local.get $data) (local.get $i))))
@@ -230,8 +226,8 @@
   (local.set $d2 (call $caml_ba_get_data (local.get $ba2)))
   (local.set $pos2 (i31.get_s (ref.cast (ref i31) (local.get $vpos2))))
   (local.set $len (i31.get_s (ref.cast (ref i31) (local.get $vlen))))
-  (call $ta_blit_from_string (local.get $s1) (local.get $pos1)
-    (local.get $d2) (local.get $pos2) (local.get $len))
+  (call $ta_blit_from_string (local.get $s1) (local.get $pos1) (local.get $d2)
+    (local.get $pos2) (local.get $len))
   (ref.i31 (i32.const 0))
 )
 
@@ -263,7 +259,6 @@
   (local.set $len (i31.get_s (ref.cast (ref i31) (local.get $vlen))))
   (call $ta_set (local.get $d2)
     (call $ta_subarray (local.get $d1) (local.get $pos1)
-      (i32.add (local.get $pos1) (local.get $len)))
-    (local.get $pos2))
+      (i32.add (local.get $pos1) (local.get $len))) (local.get $pos2))
   (ref.i31 (i32.const 0))
 )

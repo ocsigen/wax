@@ -64,8 +64,7 @@ tag ocaml_exit(i32);
 #[export = "caml_sys_exit"]
 fn caml_sys_exit(x: &eq) -> &eq { throw ocaml_exit x as &i31 as i32_s; }
 
-#[export = "caml_sys_getenv"]
-#[export = "caml_sys_unsafe_getenv"]
+#[export = "caml_sys_getenv"] #[export = "caml_sys_unsafe_getenv"]
 fn caml_sys_getenv(x: &eq) -> &eq {
     let res = getenv(unwrap(caml_jsstring_of_string(x)));
     if !jsstring_test(res) { caml_raise_not_found(); }
@@ -83,8 +82,7 @@ fn caml_sys_executable_name(x: &eq) -> &eq {
     (caml_js_to_string_array(argv()) as &block)[1];
 }
 
-#[export = "caml_sys_time"]
-#[export = "caml_sys_time_include_children"]
+#[export = "caml_sys_time"] #[export = "caml_sys_time_include_children"]
 fn caml_sys_time(x: &eq) -> &eq { {float| f: time() * 0.001 }; }
 
 #[export = "caml_sys_system_command"]
@@ -97,7 +95,7 @@ fn caml_sys_system_command(x: &eq) -> &eq {
             caml_handle_sys_error(_);
             return 0 as &i31;
         }
-    }
+        }
 }
 
 #[export = "caml_sys_random_seed"]

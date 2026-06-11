@@ -31,8 +31,7 @@
   (ref.i31 (i32.const 0))
 )
 
-(func (export "caml_convert_raw_backtrace")
-  (param (ref eq)) (result (ref eq))
+(func (export "caml_convert_raw_backtrace") (param (ref eq)) (result (ref eq))
   (array.new_fixed $block 1 (ref.i31 (i32.const 0)))
 )
 
@@ -63,8 +62,7 @@
   (ref.i31 (i32.const 0))
 )
 
-(func (export "caml_get_current_callstack")
-  (param (ref eq)) (result (ref eq))
+(func (export "caml_get_current_callstack") (param (ref eq)) (result (ref eq))
   (array.new_fixed $block 1 (ref.i31 (i32.const 0)))
 )
 
