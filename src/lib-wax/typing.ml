@@ -109,10 +109,10 @@ module Error = struct
   (* All errors share the same envelope: severity [Error], a formatted message,
      and an optional hint. [report] captures that boilerplate so each error
      below is just its message (and, where relevant, a hint). *)
-  let report ?hint context ~location fmt =
+  let report ?hint ?related context ~location fmt =
     Format.kdprintf
       (fun msg ->
-        Diagnostic.report context ~location ~severity:Error ?hint
+        Diagnostic.report context ~location ~severity:Error ?hint ?related
           ~message:(fun f () -> msg f)
           ())
       fmt
@@ -128,6 +128,13 @@ module Error = struct
   let non_empty_stack context ~location output_stack =
     report context ~location "Some values remain on the stack:%a" output_stack
       ()
+
+  (* Report the values still on the stack by pointing a caret at each of them.
+     [location] carries the topmost value; [related] the others. *)
+  let leftover_values context ~location ~related =
+    report context ~location ~related
+      (if related = [] then "This value remains on the stack."
+       else "These values remain on the stack.")
 
   let expected_func_type context ~location =
     report context ~location "Expected function type."
@@ -1033,21 +1040,35 @@ let rec push_results results =
 type empty_stack_context = Expression | Block | Function
 
 let with_empty_stack ctx ~kind:_ ~location f =
-  (*ZZZ*)
-  if false then prerr_endline "START";
   let st, res = f Empty in
-  if false then prerr_endline "DONE";
+  (* The source locations of the values still on the stack, topmost first.
+     Values left behind by error recovery carry a placeholder location and are
+     dropped. *)
+  let rec locations = function
+    | Cons (loc, _, st) ->
+        let rest = locations st in
+        if loc.loc_start.Lexing.pos_cnum >= 0 then loc :: rest else rest
+    | Empty | Unreachable -> []
+  in
   (match st with
-  | Cons (loc, _, _) ->
-      (* Point at the leftover value itself rather than the enclosing
-         construct. Fall back to the construct's location only if the value
-         carries no real source location (an error-recovery placeholder). *)
-      let location =
-        if loc.loc_start.Lexing.pos_cnum < 0 then location else loc
-      in
-      Error.non_empty_stack ctx.diagnostics ~location (fun f () ->
-          Format.fprintf f "@[%a@]" output_stack st)
-  | Empty | Unreachable -> ());
+  | Empty | Unreachable -> ()
+  | Cons _ -> (
+      match locations st with
+      | location :: rest ->
+          (* Point a caret right at each leftover value rather than at the
+             (potentially large) enclosing construct. *)
+          let related =
+            List.map
+              (fun location ->
+                { Utils.Diagnostic.location; message = (fun _ () -> ()) })
+              rest
+          in
+          Error.leftover_values ctx.diagnostics ~location ~related
+      | [] ->
+          (* No value carries a usable location (only error-recovery
+             placeholders): point at the construct and list what remains. *)
+          Error.non_empty_stack ctx.diagnostics ~location (fun f () ->
+              Format.fprintf f "@[%a@]" output_stack st)));
   res
 
 let internalize_valtype ctx typ =

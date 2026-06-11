@@ -1,14 +1,26 @@
 Validation errors that previously carried a dummy location now point at the
-offending construct.
+offending construct or value.
 
-A constant expression leaving extra values on the stack points at the global:
+A constant expression leaving an extra value on the stack points at that value:
 
   $ wax --validate global_extra.wat -o out.wat
-  Error: Type mismatch: unexpected values left on the stack: i32
-   ──➤  global_extra.wat:2:4
+  Error: Type mismatch: this value is left on the stack.
+   ──➤  global_extra.wat:2:19
   1 │ (module
   2 │   (global $g i32 (i32.const 1) (i32.const 2)))
-    ·    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ·                   ^^^^^^^^^^^
+  3 │ 
+  [128]
+
+When several values are left, a caret lands on each of them:
+
+  $ wax --validate global_extra_multi.wat -o out.wat
+  Error: Type mismatch: these values are left on the stack.
+   ──➤  global_extra_multi.wat:2:33
+  1 │ (module
+  2 │   (global $g i32 (i32.const 1) (i32.const 2) (i32.const 3)))
+    ·                                 ^^^^^^^^^^^
+    ·                   ^^^^^^^^^^^ 
   3 │ 
   [128]
 

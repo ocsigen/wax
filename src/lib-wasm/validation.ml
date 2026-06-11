@@ -285,6 +285,17 @@ module Error = struct
           output_stack ())
       ()
 
+  (* Report the values still on the stack by pointing a caret at each of them.
+     [location] carries the topmost value; [related] the others. *)
+  let leftover_values context ~location ~related =
+    Diagnostic.report context ~location ~severity:Error ~related
+      ~message:(fun f () ->
+        Format.pp_print_string f
+          (if related = [] then
+             "Type mismatch: this value is left on the stack."
+           else "Type mismatch: these values are left on the stack."))
+      ()
+
   (* Print a list of source types. *)
   let print_sources f source =
     Format.fprintf f "@[<1>[%a]@]"
@@ -1281,11 +1292,35 @@ let _ = print_stack
 
 let with_empty_stack ctx location f =
   let st, () = f Empty in
+  (* The source locations of the values still on the stack, topmost first.
+     Values without a usable location (a block parameter/result, or an
+     error-recovery placeholder) are dropped. *)
+  let rec locations = function
+    | Cons (Some loc, _, st) when loc.Ast.loc_start.Lexing.pos_cnum >= 0 ->
+        loc :: locations st
+    | Cons (_, _, st) -> locations st
+    | Empty | Unreachable -> []
+  in
   match st with
-  | Cons _ ->
-      Error.non_empty_stack ctx.diagnostics ~location (fun f () ->
-          Format.fprintf f "@[%a@]" (output_stack ~full:false) st)
   | Empty | Unreachable -> ()
+  | Cons _ -> (
+      match locations st with
+      | location :: rest ->
+          (* Point a caret right at each leftover value rather than at the
+             (potentially large) enclosing construct. *)
+          let related =
+            List.map
+              (fun location ->
+                { Utils.Diagnostic.location; message = (fun _ () -> ()) })
+              rest
+          in
+          Error.leftover_values ctx.diagnostics ~location ~related
+      | [] ->
+          (* No value carries a usable location: point at the construct and
+             list the values that remain, since the location alone does not
+             show them. *)
+          Error.non_empty_stack ctx.diagnostics ~location (fun f () ->
+              Format.fprintf f "@[%a@]" (output_stack ~full:false) st))
 
 (* Check that a list of [provided] argument types matches a list of [expected]
    parameter types: same length, and each argument a subtype of the
@@ -2640,7 +2675,7 @@ and instructions ctx l =
 
 and block ctx loc label ~param_source ~result_source ~br_source ~params ~results
     ~br_params block =
-  with_empty_stack ctx.modul loc (*ZZZ*)
+  with_empty_stack ctx.modul loc
     (let* () = push_results ~source:param_source params in
      let* () =
        instructions
@@ -3211,7 +3246,7 @@ let functions ctx fields =
               incr i;
               Sequence.register locals id (typ', Plain typ))
             locs;
-          with_empty_stack ctx field.info (*ZZZ*)
+          with_empty_stack ctx field.info
             (let ctx =
                {
                  locals;
