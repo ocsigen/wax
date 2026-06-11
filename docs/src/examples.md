@@ -209,10 +209,10 @@ fn countdown(n: i32) -> i32 {
 #[export = "rgb_channel"]
 fn rgb_channel(color: i32, value: i32) -> i32 {
     dispatch color ['red 'green 'blue else 'bad] {
-        'red:   { return (value & 255) << 16; }
-        'green: { return (value & 255) << 8; }
-        'blue:  { return value & 255; }
         'bad:   { return -1; }
+        'blue:  { return value & 255; }
+        'green: { return (value & 255) << 8; }
+        'red:   { return (value & 255) << 16; }
     }
 }
 ```

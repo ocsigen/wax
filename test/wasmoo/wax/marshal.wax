@@ -376,77 +376,9 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                                             'CODEPOINTER 'CODEPOINTER 'CUSTOM 'default 'default
                                             'default 'default 'default 'CUSTOM 'CUSTOM else 'default
                                         ] {
-                                            'INT8: {
-                                                // INT8
-                                                v = read8s(s) as &i31;
-                                                br 'done;
-                                            }
-                                            'INT16: {
-                                                // INT16
-                                                v = read16s(s) as &i31;
-                                                br 'done;
-                                            }
-                                            'INT32: {
-                                                // INT32
-                                                v = read32(s) as &i31;
-                                                br 'done;
-                                            }
-                                            'INT64: {
-                                                // INT64
-                                                caml_failwith([string|integer_too_large @ 0; 30]);
-                                                br 'done;
-                                            }
-                                            'SHARED8: {
-                                                // SHARED8
-                                                ofs = read8u(s);
-                                                br 'read_shared;
-                                            }
-                                            'SHARED16: {
-                                                // SHARED16
-                                                ofs = read16u(s);
-                                                br 'read_shared;
-                                            }
-                                            'SHARED32: {
-                                                // SHARED32
-                                                ofs = read32(s);
-                                                br 'read_shared;
-                                            }
-                                            'BLOCK32: {
-                                                // BLOCK32
-                                                header = read32(s);
-                                                tag_2 = header & 0xFF;
-                                                size = header >>u 10;
-                                                br 'read_block;
-                                            }
-                                            'STRING8: {
-                                                // STRING8
-                                                len = read8u(s);
-                                                br 'read_string;
-                                            }
-                                            'STRING32: {
-                                                // STRING32
-                                                len = read32(s);
-                                                br 'read_string;
-                                            }
-                                            'DOUBLE: {
-                                                // DOUBLE
-                                                v = {float| f: readfloat(s, code) };
-                                                register_object(s, v);
-                                                br 'done;
-                                            }
-                                            'DOUBLE_ARRAY8: {
-                                                // DOUBLE_ARRAY8
-                                                len = read8u(s);
-                                                br 'read_double_array;
-                                            }
-                                            'DOUBLE_ARRAY32: {
-                                                // DOUBLE_ARRAY32
-                                                len = read32(s);
-                                                br 'read_double_array;
-                                            }
-                                            'CODEPOINTER: {
-                                                // CODEPOINTER
-                                                caml_failwith([string|code_pointer @ 0; 25]);
+                                            'default: {
+                                                // default
+                                                caml_failwith([string|ill_formed @ 0; 31]);
                                                 br 'done;
                                             }
                                             'CUSTOM: {
@@ -455,9 +387,77 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                                                 register_object(s, v);
                                                 br 'done;
                                             }
-                                            'default: {
-                                                // default
-                                                caml_failwith([string|ill_formed @ 0; 31]);
+                                            'CODEPOINTER: {
+                                                // CODEPOINTER
+                                                caml_failwith([string|code_pointer @ 0; 25]);
+                                                br 'done;
+                                            }
+                                            'DOUBLE_ARRAY32: {
+                                                // DOUBLE_ARRAY32
+                                                len = read32(s);
+                                                br 'read_double_array;
+                                            }
+                                            'DOUBLE_ARRAY8: {
+                                                // DOUBLE_ARRAY8
+                                                len = read8u(s);
+                                                br 'read_double_array;
+                                            }
+                                            'DOUBLE: {
+                                                // DOUBLE
+                                                v = {float| f: readfloat(s, code) };
+                                                register_object(s, v);
+                                                br 'done;
+                                            }
+                                            'STRING32: {
+                                                // STRING32
+                                                len = read32(s);
+                                                br 'read_string;
+                                            }
+                                            'STRING8: {
+                                                // STRING8
+                                                len = read8u(s);
+                                                br 'read_string;
+                                            }
+                                            'BLOCK32: {
+                                                // BLOCK32
+                                                header = read32(s);
+                                                tag_2 = header & 0xFF;
+                                                size = header >>u 10;
+                                                br 'read_block;
+                                            }
+                                            'SHARED32: {
+                                                // SHARED32
+                                                ofs = read32(s);
+                                                br 'read_shared;
+                                            }
+                                            'SHARED16: {
+                                                // SHARED16
+                                                ofs = read16u(s);
+                                                br 'read_shared;
+                                            }
+                                            'SHARED8: {
+                                                // SHARED8
+                                                ofs = read8u(s);
+                                                br 'read_shared;
+                                            }
+                                            'INT64: {
+                                                // INT64
+                                                caml_failwith([string|integer_too_large @ 0; 30]);
+                                                br 'done;
+                                            }
+                                            'INT32: {
+                                                // INT32
+                                                v = read32(s) as &i31;
+                                                br 'done;
+                                            }
+                                            'INT16: {
+                                                // INT16
+                                                v = read16s(s) as &i31;
+                                                br 'done;
+                                            }
+                                            'INT8: {
+                                                // INT8
+                                                v = read8s(s) as &i31;
                                                 br 'done;
                                             }
                                         }

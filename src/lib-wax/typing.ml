@@ -1939,16 +1939,20 @@ let extract_dispatch wrapper k =
   peel (body_of wrapper) k
 
 (* Rebuild a typed [dispatch] from the type-checked lowering [typed_list] (the
-   outermost case block followed by the first arm's trailing body) and the
-   original [arms] (for the labels). Returns the typed index and arms. *)
+   outermost case block followed by its trailing body) and the original [arms]
+   (for the labels). Arms are in fall-through order, the reverse of the block
+   nesting (see [Ast_utils.lower_dispatch]), so we peel against the reversed arm
+   list — outermost first — and reverse the result back. Returns the typed index
+   and arms. *)
 let rebuild_dispatch typed_list arms =
-  match (arms, typed_list) with
+  match (List.rev arms, typed_list) with
   | [], [ { desc = Ast.Br_table (_, idx); _ } ] -> (idx, [])
-  | (first_label, _) :: rest_arms, outer :: first_body ->
+  | (outer_label, _) :: rest_arms, outer :: outer_body ->
       let idx, rest_bodies = extract_dispatch outer (List.length rest_arms) in
       ( idx,
-        (first_label, first_body)
-        :: List.map2 (fun (l, _) b -> (l, b)) rest_arms rest_bodies )
+        List.rev
+          ((outer_label, outer_body)
+          :: List.map2 (fun (l, _) b -> (l, b)) rest_arms rest_bodies) )
   | _ -> assert false
 
 (* Peel a type-checked [while] lowering (see [Ast_utils.lower_while]) back to the

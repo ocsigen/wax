@@ -8,10 +8,13 @@ open Ast
    so recovery folds the block together with the statements after it:
 
      'c_0: { 'c_1: { … 'c_k: { br_table […] idx } b_k } … b_1 }  b_0   (b_0 = following stmts)
-     ⇒ dispatch idx [ … ] { 'c_0: { b_0 } 'c_1: { b_1 } … 'c_k: { b_k } }
+     ⇒ dispatch idx [ … ] { 'c_k: { b_k } … 'c_1: { b_1 } 'c_0: { b_0 } }
 
-   So decompiled WAT/WASM jump tables (and round-tripped Wax dispatches) read as
-   the high-level form, every case an arm, rather than a pile of blocks.
+   Arms come out in fall-through order — innermost case first — which is the
+   reverse of the block nesting, so a case's body falls through into the *next*
+   arm listed, not the previous one. So decompiled WAT/WASM jump tables (and
+   round-tripped Wax dispatches) read as the high-level form, every case an arm,
+   rather than a pile of blocks.
 
    Folding is the exact inverse of the lowering — re-lowering reproduces the
    original blocks byte-for-byte — so it always preserves runtime semantics; the
@@ -60,7 +63,9 @@ and try_fold (i : location instr) (trailing : location instr list) :
           match List.rev br_labels with
           | default :: rev_cases ->
               let cases = List.rev rev_cases in
-              let arms = (c0, trailing) :: inner_arms in
+              (* Arms in fall-through order: innermost case first, the outermost
+                 block [c0] (whose body is the trailing code) last. *)
+              let arms = List.rev ((c0, trailing) :: inner_arms) in
               let arm_names = List.map (fun ((l : label), _) -> l.desc) arms in
               let br_names = List.map (fun (l : label) -> l.desc) br_labels in
               (* Case labels become distinct, name-keyed arms; and the outermost

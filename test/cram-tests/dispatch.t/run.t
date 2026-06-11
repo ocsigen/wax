@@ -1,9 +1,10 @@
 A 'dispatch' is a multi-way branch — the readable form of a 'br_table' jump
 table. The bracket maps an index to a case (with 'else' the default), and each
-arm gives that case's body. It lowers to one nested block per case (the first
-arm outermost), with the 'br_table' in the innermost block and each case body
-just after its block, so reaching a case runs its body (and falls through into
-the cases listed before it, unless it branches away — here each case returns):
+arm gives that case's body. It lowers to one nested block per case, with the
+'br_table' in the innermost block and each case body just after its block, so
+reaching a case runs its body (and falls through into the next arm listed,
+unless it branches away — here each case returns). Arms are written in that
+fall-through order, the reverse of the bracket's index order:
 
   $ wax classify.wax -f wat -v
   (func $classify (param $x i32) (result i32)
@@ -22,17 +23,17 @@ The 'dispatch' keyword is preserved when formatting Wax:
   $ wax classify.wax -f wax
   fn classify(x: i32) -> i32 {
       dispatch x [ 'zero 'one 'two else 'big ] {
-          'zero: {
-              return 10;
-          }
-          'one: {
-              return 20;
+          'big: {
+              return 99;
           }
           'two: {
               return 30;
           }
-          'big: {
-              return 99;
+          'one: {
+              return 20;
+          }
+          'zero: {
+              return 10;
           }
       }
   }
@@ -43,17 +44,17 @@ so it survives a round trip through WAT:
   $ wax classify.wax -f wat | wax -i wat -f wax
   fn classify(x: i32) -> i32 {
       dispatch x [ 'zero 'one 'two else 'big ] {
-          'zero: {
-              return 10;
-          }
-          'one: {
-              return 20;
+          'big: {
+              return 99;
           }
           'two: {
               return 30;
           }
-          'big: {
-              return 99;
+          'one: {
+              return 20;
+          }
+          'zero: {
+              return 10;
           }
       }
   }

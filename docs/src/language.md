@@ -438,35 +438,36 @@ out-of-range index), and each arm gives that case's body:
 ```wax
 fn classify(x: i32) -> i32 {
     dispatch x ['zero 'one 'two else 'big] {
-        'zero: { return 10; }
-        'one:  { return 20; }
-        'two:  { return 30; }
         'big:  { return 99; }
+        'two:  { return 30; }
+        'one:  { return 20; }
+        'zero: { return 10; }
     }
 }
 ```
 
-The bracket is exactly the underlying `br_table`: index `0` jumps to the first
-listed label, `1` to the second, and so on, and an out-of-range index jumps to
+The bracket is exactly the underlying `br_table`: index `0` jumps to the label
+named first, `1` to the second, and so on, and an out-of-range index jumps to
 the `else` label. A label may be listed more than once (several indices sharing
 a case), and every listed label (and `else`) must name an arm. The index must be
 an `i32`, and the labels are 0-ary branch targets. Case (arm) labels must be
 distinct.
 
-`dispatch` lowers to one nested block per case — the first arm outermost, the
-`br_table` in the innermost block — with each case body just after its block.
-As in a C `switch`, cases **fall through**, but *outward*: reaching a case runs
-its body and then the bodies of the cases enclosing it (the ones listed before
-it), unless it branches away first. So the example above gives each case its own
-result via `return`; to break out instead, branch to an enclosing label:
+`dispatch` lowers to one nested block per case, with the `br_table` in the
+innermost block and each case body just after its block. As in a C `switch`,
+cases **fall through**: reaching a case runs its body and then falls into the
+*next* arm listed, unless it branches away first. So the arms are written in
+fall-through order, which is the reverse of the bracket's index order — the
+last arm is the one index `0` reaches. The example above gives each case its
+own result via `return`; to break out instead, branch to an enclosing label:
 
 ```wax
 let r: i32;
 'done: do {
     dispatch x ['zero 'one else 'two] {
-        'zero: { r = 10; br 'done; }
-        'one:  { r = 20; br 'done; }
         'two:  { r = 30; }
+        'one:  { r = 20; br 'done; }
+        'zero: { r = 10; br 'done; }
     }
 }
 ```

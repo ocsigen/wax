@@ -217,97 +217,73 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                 'START 'TOKEN_READ 'STACKS_GROWN_1 'STACKS_GROWN_2 'SEMANTIC_ACTION_COMPUTED
                 'ERROR_DETECTED 'loop 'testshift 'shift 'shift_recover 'reduce else 'default
             ] {
-                'default: {
-                    // default:
-                    return RAISE_PARSE_ERROR as &i31;
+                'START: {
+                    // START:
+                    state = 0;
+                    errflag = 0;
                 }
-                'SEMANTIC_ACTION_COMPUTED: {
-                    // SEMANTIC_ACTION_COMPUTED:
-                    (env[env_s_stack] as &block)[sp + 1] = state as &i31;
-                    (env[env_v_stack] as &block)[sp + 1] = varg;
-                    asp = env[env_asp] as &i31 as i32_s;
-                    (env[env_symb_end_stack] as &block)[sp + 1] =
-                        (env[env_symb_end_stack] as &block)[asp + 1];
-                    if sp >s asp {
-                        // This is an epsilon production. Take symb_start equal to symb_end.
-                        (env[env_symb_start_stack] as &block)[sp + 1] =
-                            (env[env_symb_end_stack] as &block)[asp + 1];
-                    }
-                    cmd = loop_2;
-                    br 'next;
-                }
-                'STACKS_GROWN_2: {
+                'loop: {
                     // Fall through
-                    // STACKS_GROWN_2:
-                    res = COMPUTE_SEMANTIC_ACTION;
+                    // loop:
+                    n = get(tbl_defred_2, state);
+                    if n != 0 {
+                        cmd = reduce;
+                        br 'next;
+                    }
+                    if env[env_curr_char] as &i31 as i32_s >=s 0 {
+                        cmd = testshift;
+                        br 'next;
+                    }
+                    res = READ_TOKEN;
                     br 'exit;
                 }
-                'reduce: {
-                    // reduce:
-                    if caml_parser_trace {
-                        output([string|State @ 0; 6]);
-                        output_int(state);
-                        output([string|reduce_by_rule @ 0; 17]);
-                        output_int(n);
-                        output_nl();
-                    }
-                    m = get(tbl_len_2, n);
-                    env[env_asp] = sp as &i31;
-                    env[env_rule_number] = n as &i31;
-                    env[env_rule_len] = m as &i31;
-                    sp = sp + (1 - m);
-                    m = get(tbl_lhs_2, n);
-                    state1 = (env[env_s_stack] as &block)[sp] as &i31 as i32_s;
-                    n1 = get(tbl_gindex_2, m);
-                    n2 = n1 + state1;
+                'TOKEN_READ: {
+                    // TOKEN_READ:
                     'cont: do {
-                        if (n1 != 0) & (n2 >=s 0) {
-                            if n2 <=s tables[tbl_tablesize] as &i31 as i32_s {
-                                if get(tbl_check_2, n2) == state1 {
-                                    state = get(tbl_table_2, n2);
-                                    br 'cont;
-                                }
+                        _ =
+                            'not_block: do &eq {
+                                arg = br_on_cast_fail 'not_block &block varg;
+                                env[env_curr_char] =
+                                    (tables[tbl_transl_block] as &block)
+                                        [arg[0] as &i31 as i32_u + 1];
+                                env[env_lval] = arg[1];
+                                br 'cont;
+                            };
+                        env[env_curr_char] =
+                            (tables[tbl_transl_const] as &block)[varg as &i31 as i32_u + 1];
+                        env[env_lval] = 0 as &i31;
+                    }
+                    if caml_parser_trace {
+                        print_token(tables, state, varg);
+                    }
+                }
+                'testshift: {
+                    // Fall through
+                    // testshift:
+                    n1 = get(tbl_sindex_2, state);
+                    n2 = n1 + env[env_curr_char] as &i31 as i32_s;
+                    if (n1 != 0) & (n2 >=s 0) {
+                        if n2 <=s tables[tbl_tablesize] as &i31 as i32_s {
+                            if get(tbl_check_2, n2) as &i31 == env[env_curr_char] {
+                                cmd = shift;
+                                br 'next;
                             }
                         }
-                        state = get(tbl_dgoto_2, m);
                     }
-                    if sp >=s env[env_stacksize] as &i31 as i32_s {
-                        res = GROW_STACKS_2;
+                    n1 = get(tbl_rindex_2, state);
+                    n2 = n1 + env[env_curr_char] as &i31 as i32_s;
+                    if (n1 != 0) & (n2 >=s 0) {
+                        if n2 <=s tables[tbl_tablesize] as &i31 as i32_s {
+                            if get(tbl_check_2, n2) as &i31 == env[env_curr_char] {
+                                n = get(tbl_table_2, n2);
+                                cmd = reduce;
+                                br 'next;
+                            }
+                        }
+                    }
+                    if errflag <=s 0 {
+                        res = CALL_ERROR_FUNCTION;
                         br 'exit;
-                    }
-                }
-                'STACKS_GROWN_1: {
-                    // Fall through
-                    // STACKS_GROWN_1:
-                    (env[env_s_stack] as &block)[sp + 1] = state as &i31;
-                    (env[env_v_stack] as &block)[sp + 1] = env[env_lval];
-                    (env[env_symb_start_stack] as &block)[sp + 1] = env[env_symb_start];
-                    (env[env_symb_end_stack] as &block)[sp + 1] = env[env_symb_end];
-                    cmd = loop_2;
-                    br 'next;
-                }
-                'shift_recover: {
-                    // Fall through
-                    // shift_recover:
-                    if caml_parser_trace {
-                        output([string|State @ 0; 6]);
-                        output_int(state);
-                        output([string|shift_to_state @ 0; 17]);
-                        output_int(get(tbl_table_2, n2));
-                        output_nl();
-                    }
-                    state = get(tbl_table_2, n2);
-                    sp = sp + 1;
-                    if sp >=s env[env_stacksize] as &i31 as i32_s {
-                        res = GROW_STACKS_1;
-                        br 'exit;
-                    }
-                }
-                'shift: {
-                    // shift:
-                    env[env_curr_char] = -1 as &i31;
-                    if errflag >s 0 {
-                        errflag = errflag - 1;
                     }
                 }
                 'ERROR_DETECTED: {
@@ -360,74 +336,98 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                         br 'next;
                     }
                 }
-                'testshift: {
+                'shift: {
+                    // shift:
+                    env[env_curr_char] = -1 as &i31;
+                    if errflag >s 0 {
+                        errflag = errflag - 1;
+                    }
+                }
+                'shift_recover: {
                     // Fall through
-                    // testshift:
-                    n1 = get(tbl_sindex_2, state);
-                    n2 = n1 + env[env_curr_char] as &i31 as i32_s;
-                    if (n1 != 0) & (n2 >=s 0) {
-                        if n2 <=s tables[tbl_tablesize] as &i31 as i32_s {
-                            if get(tbl_check_2, n2) as &i31 == env[env_curr_char] {
-                                cmd = shift;
-                                br 'next;
-                            }
-                        }
+                    // shift_recover:
+                    if caml_parser_trace {
+                        output([string|State @ 0; 6]);
+                        output_int(state);
+                        output([string|shift_to_state @ 0; 17]);
+                        output_int(get(tbl_table_2, n2));
+                        output_nl();
                     }
-                    n1 = get(tbl_rindex_2, state);
-                    n2 = n1 + env[env_curr_char] as &i31 as i32_s;
-                    if (n1 != 0) & (n2 >=s 0) {
-                        if n2 <=s tables[tbl_tablesize] as &i31 as i32_s {
-                            if get(tbl_check_2, n2) as &i31 == env[env_curr_char] {
-                                n = get(tbl_table_2, n2);
-                                cmd = reduce;
-                                br 'next;
-                            }
-                        }
-                    }
-                    if errflag <=s 0 {
-                        res = CALL_ERROR_FUNCTION;
+                    state = get(tbl_table_2, n2);
+                    sp = sp + 1;
+                    if sp >=s env[env_stacksize] as &i31 as i32_s {
+                        res = GROW_STACKS_1;
                         br 'exit;
                     }
                 }
-                'TOKEN_READ: {
-                    // TOKEN_READ:
-                    'cont: do {
-                        _ =
-                            'not_block: do &eq {
-                                arg = br_on_cast_fail 'not_block &block varg;
-                                env[env_curr_char] =
-                                    (tables[tbl_transl_block] as &block)
-                                        [arg[0] as &i31 as i32_u + 1];
-                                env[env_lval] = arg[1];
-                                br 'cont;
-                            };
-                        env[env_curr_char] =
-                            (tables[tbl_transl_const] as &block)[varg as &i31 as i32_u + 1];
-                        env[env_lval] = 0 as &i31;
-                    }
+                'STACKS_GROWN_1: {
+                    // Fall through
+                    // STACKS_GROWN_1:
+                    (env[env_s_stack] as &block)[sp + 1] = state as &i31;
+                    (env[env_v_stack] as &block)[sp + 1] = env[env_lval];
+                    (env[env_symb_start_stack] as &block)[sp + 1] = env[env_symb_start];
+                    (env[env_symb_end_stack] as &block)[sp + 1] = env[env_symb_end];
+                    cmd = loop_2;
+                    br 'next;
+                }
+                'reduce: {
+                    // reduce:
                     if caml_parser_trace {
-                        print_token(tables, state, varg);
+                        output([string|State @ 0; 6]);
+                        output_int(state);
+                        output([string|reduce_by_rule @ 0; 17]);
+                        output_int(n);
+                        output_nl();
+                    }
+                    m = get(tbl_len_2, n);
+                    env[env_asp] = sp as &i31;
+                    env[env_rule_number] = n as &i31;
+                    env[env_rule_len] = m as &i31;
+                    sp = sp + (1 - m);
+                    m = get(tbl_lhs_2, n);
+                    state1 = (env[env_s_stack] as &block)[sp] as &i31 as i32_s;
+                    n1 = get(tbl_gindex_2, m);
+                    n2 = n1 + state1;
+                    'cont: do {
+                        if (n1 != 0) & (n2 >=s 0) {
+                            if n2 <=s tables[tbl_tablesize] as &i31 as i32_s {
+                                if get(tbl_check_2, n2) == state1 {
+                                    state = get(tbl_table_2, n2);
+                                    br 'cont;
+                                }
+                            }
+                        }
+                        state = get(tbl_dgoto_2, m);
+                    }
+                    if sp >=s env[env_stacksize] as &i31 as i32_s {
+                        res = GROW_STACKS_2;
+                        br 'exit;
                     }
                 }
-                'loop: {
+                'STACKS_GROWN_2: {
                     // Fall through
-                    // loop:
-                    n = get(tbl_defred_2, state);
-                    if n != 0 {
-                        cmd = reduce;
-                        br 'next;
-                    }
-                    if env[env_curr_char] as &i31 as i32_s >=s 0 {
-                        cmd = testshift;
-                        br 'next;
-                    }
-                    res = READ_TOKEN;
+                    // STACKS_GROWN_2:
+                    res = COMPUTE_SEMANTIC_ACTION;
                     br 'exit;
                 }
-                'START: {
-                    // START:
-                    state = 0;
-                    errflag = 0;
+                'SEMANTIC_ACTION_COMPUTED: {
+                    // SEMANTIC_ACTION_COMPUTED:
+                    (env[env_s_stack] as &block)[sp + 1] = state as &i31;
+                    (env[env_v_stack] as &block)[sp + 1] = varg;
+                    asp = env[env_asp] as &i31 as i32_s;
+                    (env[env_symb_end_stack] as &block)[sp + 1] =
+                        (env[env_symb_end_stack] as &block)[asp + 1];
+                    if sp >s asp {
+                        // This is an epsilon production. Take symb_start equal to symb_end.
+                        (env[env_symb_start_stack] as &block)[sp + 1] =
+                            (env[env_symb_end_stack] as &block)[asp + 1];
+                    }
+                    cmd = loop_2;
+                    br 'next;
+                }
+                'default: {
+                    // default:
+                    return RAISE_PARSE_ERROR as &i31;
                 }
             }
         }

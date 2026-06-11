@@ -119,12 +119,15 @@ let rec map_instr f instr =
   { desc; info = f instr.info }
 
 (* Lower a [dispatch] to the conventional dense-switch shape: one nested void
-   block per case (in arm order, the first arm outermost), the [br_table] in the
-   innermost block, and each case body placed just after its block. Branching to
-   case [cᵢ] exits its block and runs [cᵢ]'s body (then falls through into the
-   enclosing cases). So [cᵢ]'s body sits in [cᵢ₋₁]'s block — and the first
-   (outermost) arm's body trails the whole structure, hence the result is an
-   instruction *list*: the outermost block followed by that trailing body.
+   block per case, the [br_table] in the innermost block, and each case body
+   placed just after its block. Branching to case [cᵢ] exits its block and runs
+   [cᵢ]'s body, then falls through into the enclosing cases.
+
+   Arms are listed in fall-through order — the first arm innermost, falling
+   through into the next, and so on — which is the reverse of the block nesting:
+   the *last* arm is outermost and its body trails the whole structure (hence
+   the result is an instruction *list*: the outermost block followed by that
+   trailing body). So we build from the reversed arm list, outermost first.
 
    This is the exact inverse of {!Recover_dispatch}, so a recovered dispatch
    re-lowers to the original blocks byte-for-byte. Every synthesised block and
@@ -142,9 +145,9 @@ let lower_dispatch ~block_info ~index ~cases ~default ~arms =
           (Block { label = Some c; typ = void; block = build rest :: next_body })
     | [] -> br
   in
-  match arms with
+  match List.rev arms with
   | [] -> [ br ]
-  | (_, first_body) :: _ -> build arms :: first_body
+  | (_, outer_body) :: _ as rev_arms -> build rev_arms :: outer_body
 
 (* Label of the [loop] a label-less [while]/[do]-[while] lowers to during type
    checking. The [#] is not a Wax identifier character, so it can never clash
