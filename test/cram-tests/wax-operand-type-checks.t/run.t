@@ -171,6 +171,27 @@ name):
   2 │ 
   [123]
 
+In infix form the same error underlines the operator token itself:
+
+  $ wax check binop-infix-operands.wax
+  Error: This operator cannot be applied to operands of types i64 and f64.
+   ──➤  binop-infix-operands.wax:1:25
+  1 │ fn f() { _ = (0 as i64) + (0 as f64); }
+    ·                         ^
+  2 │ 
+  [123]
+
+A unary operator applied to an operand of the wrong type underlines the
+operator:
+
+  $ wax check unop-operand.wax
+  Error: This instruction has type &eq but is expected to have type number.
+   ──➤  unop-operand.wax:1:20
+  1 │ fn f(x: &eq) { _ = -x; }
+    ·                    ^
+  2 │ 
+  [123]
+
 A try_table catch routes the tag's values to a branch target; when they do not
 match, the error names the tag/target mismatch and points at the target label:
 

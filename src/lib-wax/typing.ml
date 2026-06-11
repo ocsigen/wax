@@ -2507,7 +2507,8 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
         let ty1 = expression_type ctx i1' in
         let ty2 = expression_type ctx i2' in
         let mismatch () =
-          Error.binop_type_mismatch ctx.diagnostics ~location:i.info ty1 ty2
+          (* Point at the operator itself, not the whole expression. *)
+          Error.binop_type_mismatch ctx.diagnostics ~location:op.info ty1 ty2
         in
         match (UnionFind.find ty1, UnionFind.find ty2) with
         | Unknown, Unknown -> (
@@ -2564,8 +2565,8 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                 | _ -> mismatch ());
                 ty1
             | Div (Some _) | Rem _ | And | Or | Xor | Shl | Shr _ ->
-                check_int_bin_op ctx ~location:i.info ty1 ty2
-            | Div None -> check_float_bin_op ctx ~location:i.info ty1 ty2
+                check_int_bin_op ctx ~location:op.info ty1 ty2
+            | Div None -> check_float_bin_op ctx ~location:op.info ty1 ty2
             | Lt (Some _) | Gt (Some _) | Le (Some _) | Ge (Some _) ->
                 (match typ with
                 | Valtype { internal = I32; _ }
@@ -2654,8 +2655,8 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                 | _ -> mismatch ());
                 ty1
             | Div (Some _) | Rem _ | And | Or | Xor | Shl | Shr _ ->
-                check_int_bin_op ctx ~location:i.info ty1 ty2
-            | Div None -> check_float_bin_op ctx ~location:i.info ty1 ty2
+                check_int_bin_op ctx ~location:op.info ty1 ty2
+            | Div None -> check_float_bin_op ctx ~location:op.info ty1 ty2
             | Lt (Some _) | Gt (Some _) | Le (Some _) | Ge (Some _) ->
                 (match (UnionFind.find ty1, UnionFind.find ty2) with
                 | Valtype { internal = I32; _ }, Valtype { internal = I32; _ }
@@ -2715,7 +2716,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                 | Number -> UnionFind.set typ Int
                 | _ ->
                     Error.instruction_type_mismatch ctx.diagnostics
-                      ~location:i.info typ (UnionFind.make Int));
+                      ~location:op.info typ (UnionFind.make Int));
                 UnionFind.make (Valtype { typ = I32; internal = I32 })
             | Neg | Pos ->
                 (match UnionFind.find typ with
@@ -2724,7 +2725,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                     ()
                 | _ ->
                     Error.instruction_type_mismatch ctx.diagnostics
-                      ~location:i.info typ (UnionFind.make Number));
+                      ~location:op.info typ (UnionFind.make Number));
                 typ)
       in
       return_expression i (UnOp (op, i')) ty
