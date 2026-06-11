@@ -24,12 +24,11 @@
   (func $mktime (param i32 i32 i32 i32 i32 i32) (result f64))
 )
 
-(type $block (array (mut (ref eq)))) (type $float (struct (field $f f64)))
-(func $unix_gettimeofday (export "unix_gettimeofday")
-  (export
+(type $block (array (mut (ref eq))))
+(type $float (struct (field $f f64)))
 
-    "caml_unix_gettimeofday")
-  (param $x (ref eq)) (result (ref eq))
+(func $unix_gettimeofday (export "unix_gettimeofday")
+  (export "caml_unix_gettimeofday") (param $x (ref eq)) (result (ref eq))
   (struct.new $float (call $gettimeofday))
 )
 
@@ -44,32 +43,24 @@
     (ref.i31 (local.get $wday)) (ref.i31 (local.get $yday))
     (ref.i31 (local.get $isdst)))
 )
-(func $unix_gmtime (export "unix_gmtime")
-  (export
 
-    "caml_unix_gmtime")
+(func $unix_gmtime (export "unix_gmtime") (export "caml_unix_gmtime")
   (param $x (ref eq)) (result (ref eq))
   (call $gmtime (struct.get $float $f (ref.cast (ref $float) (local.get $x))))
 )
-(func $unix_localtime (export "unix_localtime")
-  (export
 
-    "caml_unix_localtime")
-  (param $x (ref eq)) (result (ref eq))
+(func $unix_localtime (export "unix_localtime")
+  (export "caml_unix_localtime") (param $x (ref eq)) (result (ref eq))
   (call $localtime
     (struct.get $float $f (ref.cast (ref $float) (local.get $x))))
 )
-(func $unix_time (export "unix_time")
-  (export
 
-    "caml_unix_time")
+(func $unix_time (export "unix_time") (export "caml_unix_time")
   (param $x (ref eq)) (result (ref eq))
   (struct.new $float (f64.floor (call $gettimeofday)))
 )
-(func $unix_mktime (export "unix_mktime")
-  (export
 
-    "caml_unix_mktime")
+(func $unix_mktime (export "unix_mktime") (export "caml_unix_mktime")
   (param $x (ref eq)) (result (ref eq))
   (local $tm (ref $block)) (local $t f64)
   (local.set $tm (ref.cast (ref $block) (local.get $x)))
@@ -100,10 +91,9 @@
   (array.new_fixed $block 3 (ref.i31 (i32.const 0))
     (struct.new $float (local.get $t)) (call $localtime (local.get $t)))
 )
-(func $unix_inet_addr_of_string (export "unix_inet_addr_of_string")
-  (export
 
-    "caml_unix_inet_addr_of_string")
+(func $unix_inet_addr_of_string (export "unix_inet_addr_of_string")
+  (export "caml_unix_inet_addr_of_string")
   (param $x (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )

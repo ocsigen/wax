@@ -1977,11 +1977,9 @@
     (i32.wrap_i64 (i64.shr_u (local.get $d) (i64.const 32))))
   (ref.i31 (i32.const 0))
 )
-(func $caml_string_of_array (export "caml_string_of_array")
-  (export
 
-    "caml_bytes_of_array")
-  (param $x (ref eq)) (result (ref eq))
+(func $caml_string_of_array (export "caml_string_of_array")
+  (export "caml_bytes_of_array") (param $x (ref eq)) (result (ref eq))
   (local $a (ref extern)) (local $len i32) (local $s (ref $string))
   ;; used to convert a typed array to a string
   (local.set $a
@@ -1992,11 +1990,9 @@
     (i32.const 0) (local.get $len))
   (local.get $s)
 )
-(func $caml_uint8_array_of_string (export "caml_uint8_array_of_string")
-  (export
 
-    "caml_uint8_array_of_bytes")
-  (param $x (ref eq)) (result (ref eq))
+(func $caml_uint8_array_of_string (export "caml_uint8_array_of_string")
+  (export "caml_uint8_array_of_bytes") (param $x (ref eq)) (result (ref eq))
   (local $s (ref $string)) (local $len i32) (local $ta (ref extern))
   ;; Convert a string to a typed array
   (local.set $s (ref.cast (ref $string) (local.get $x)))

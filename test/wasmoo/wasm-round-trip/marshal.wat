@@ -60,10 +60,9 @@
 (global $input_val_from_string (ref $string)
   (@string $string "input_val_from_string" )
 )
-(func $caml_input_value_from_bytes (export "caml_input_value_from_bytes")
-  (export
 
-    "caml_input_value_from_string")
+(func $caml_input_value_from_bytes (export "caml_input_value_from_bytes")
+  (export "caml_input_value_from_string")
   (param $vstr (ref eq)) (param $vofs (ref eq)) (result (ref eq))
   (local $str (ref $string)) (local $ofs i32) (local $s (ref $intern_state))
   (local $h (ref $marshal_header))

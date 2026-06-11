@@ -108,18 +108,14 @@
   (param $i i32) (result (ref eq))
   (struct.new $int32 (global.get $int32_ops) (local.get $i))
 )
-(func $Int32_val (export "Int32_val")
-  (export
 
-    "Nativeint_val")
+(func $Int32_val (export "Int32_val") (export "Nativeint_val")
   (param $x (ref eq)) (result i32)
   (struct.get $int32 $f_2 (ref.cast (ref $int32) (local.get $x)))
 )
-(func $caml_int32_bswap (export "caml_int32_bswap")
-  (export
 
-    "caml_nativeint_bswap")
-  (param $i i32) (result i32)
+(func $caml_int32_bswap (export "caml_int32_bswap")
+  (export "caml_nativeint_bswap") (param $i i32) (result i32)
   (i32.or
     (i32.rotr (i32.and (local.get $i) (i32.const 0x00FF00FF)) (i32.const 8))
     (i32.rotl (i32.and (local.get $i) (i32.const 0xFF00FF00)) (i32.const 8)))
@@ -134,10 +130,9 @@
   (return_call $caml_copy_int32
     (call $parse_int (local.get $v) (i32.const 32) (global.get $INT32_ERRMSG)))
 )
-(func $caml_int32_compare (export "caml_int32_compare")
-  (export
 
-    "caml_nativeint_compare")
+(func $caml_int32_compare (export "caml_int32_compare")
+  (export "caml_nativeint_compare")
   (param $i1 i32) (param $i2 i32) (result (ref eq))
   (ref.i31
     (i32.sub (i32.gt_s (local.get $i1) (local.get $i2))
@@ -190,10 +185,9 @@
     (call $parse_int (local.get $v) (i32.const 32)
       (global.get $NATIVEINT_ERRMSG)))
 )
-(func $caml_int32_format (export "caml_int32_format")
-  (export
 
-    "caml_nativeint_format")
+(func $caml_int32_format (export "caml_int32_format")
+  (export "caml_nativeint_format")
   (param $x (ref eq)) (param $x_2 (ref eq)) (result (ref eq))
   (return_call $format_int (local.get $x)
     (struct.get $int32 $f_2 (ref.cast (ref $int32) (local.get $x_2)))

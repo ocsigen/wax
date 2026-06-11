@@ -506,11 +506,9 @@
               (local.set $acc (call $caml_js_wrap_callback (local.get $acc)))))))))
   (return_call $unwrap (local.get $acc))
 )
-(func $caml_jsstring_of_string (export "caml_jsstring_of_string")
-  (export
 
-    "caml_js_from_string")
-  (param $x (ref eq)) (result (ref eq))
+(func $caml_jsstring_of_string (export "caml_jsstring_of_string")
+  (export "caml_js_from_string") (param $x (ref eq)) (result (ref eq))
   (local $s (ref $string))
   (local.set $s (ref.cast (ref $string) (local.get $x)))
   (return (struct.new $js (call $jsstring_of_string (local.get $s))))
@@ -560,11 +558,9 @@
         (br $fill))))
   (return (struct.new $js (call $jsstring_of_string (local.get $s'))))
 )
-(func $caml_string_of_jsstring (export "caml_string_of_jsstring")
-  (export
 
-    "caml_js_to_string")
-  (param $s (ref eq)) (result (ref eq))
+(func $caml_string_of_jsstring (export "caml_string_of_jsstring")
+  (export "caml_js_to_string") (param $s (ref eq)) (result (ref eq))
   (return_call $string_of_jsstring
     (struct.get $js $f (ref.cast (ref $js) (local.get $s))))
 )

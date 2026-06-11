@@ -21,11 +21,7 @@
 (import "wasm:js-string" "test"
   (func $is_string (param externref) (result i32))
 )
-(func $hash_string
-  (export
-
-    "jsstring_hash")
-  (import "wasm:js-string" "hash")
+(func $hash_string (export "jsstring_hash") (import "wasm:js-string" "hash")
   (param i32 anyref) (result i32)
 )
 (import "wasm:js-string" "fromCharCodeArray"

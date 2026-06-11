@@ -541,11 +541,9 @@ fn caml_really_putblock(ch: &eq, s: &string, pos: i32, len: i32) {
         }
     }
 }
-#[export = "caml_ml_output"]
-#[export
-    =
 
-    "caml_ml_output_bytes"]
+#[export = "caml_ml_output"]
+#[export = "caml_ml_output_bytes"]
 fn caml_ml_output(ch: &eq, s: &eq, vpos: &eq, vlen: &eq) -> &eq {
     let pos = vpos as &i31 as i32_u;
     let len = vlen as &i31 as i32_u;

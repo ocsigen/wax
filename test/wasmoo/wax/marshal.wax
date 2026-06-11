@@ -50,11 +50,9 @@ fn caml_find_custom_operations(&string) -> &?custom_operations;
 const caml_marshal_header_size: i32;
 
 const input_val_from_string = string#"input_val_from_string";
-#[export = "caml_input_value_from_bytes"]
-#[export
-    =
 
-    "caml_input_value_from_string"]
+#[export = "caml_input_value_from_bytes"]
+#[export = "caml_input_value_from_string"]
 fn caml_input_value_from_bytes(vstr: &eq, vofs: &eq) -> &eq {
     let str = vstr as &string;
     let ofs = vofs as &i31 as i32_u;

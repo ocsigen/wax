@@ -2308,7 +2308,8 @@ let collect_exports fields =
       (fun (field : (_ Src.modulefield, _) Ast.annotated) ->
         match field.desc with
         | Export { name; kind; index } ->
-            lst := (kind, index, name) :: !lst;
+            (* Don't keep a meaningless location *)
+            lst := (kind, index, Ast.no_loc name.desc) :: !lst;
             let k = (kind, index.Ast.desc) in
             Hashtbl.replace tbl k
               (name :: (try Hashtbl.find tbl k with Not_found -> []))
