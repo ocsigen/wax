@@ -1675,29 +1675,37 @@ let typeuse ctx ((typ, sign) : Src.typeuse) =
 let string_of_name (nm : Src.name) =
   { nm with desc = Ast.String (None, nm.desc) }
 
-let rec reserve_globals_in_instr ctx ns (i : _ Src.instr) =
+(* Reserve, in a function's fresh local namespace, the Wax names of the
+   module-level entities its body references by a bare identifier: globals (via
+   [global.get]/[global.set]) and functions (via [call]/[return_call]/
+   [ref.func], all of which lower to [Get name]). Without this an auto-named
+   local could be assigned a colliding name and shadow the reference, since Wax
+   resolves a bare name to a local before a global or function. *)
+let rec reserve_module_names_in_instr ctx ns (i : _ Src.instr) =
   match i.desc with
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
-      reserve_globals_in_instrs ctx ns block
+      reserve_module_names_in_instrs ctx ns block
   | If { if_block; else_block; _ } ->
-      reserve_globals_in_instrs ctx ns if_block.desc;
-      reserve_globals_in_instrs ctx ns else_block.desc
+      reserve_module_names_in_instrs ctx ns if_block.desc;
+      reserve_module_names_in_instrs ctx ns else_block.desc
   | Try { block; catches; catch_all; _ } ->
-      reserve_globals_in_instrs ctx ns block;
+      reserve_module_names_in_instrs ctx ns block;
       List.iter
-        (fun (_, block) -> reserve_globals_in_instrs ctx ns block)
+        (fun (_, block) -> reserve_module_names_in_instrs ctx ns block)
         catches;
       Option.iter
-        (fun block -> reserve_globals_in_instrs ctx ns block)
+        (fun block -> reserve_module_names_in_instrs ctx ns block)
         catch_all
   | Folded (i, l) ->
-      reserve_globals_in_instrs ctx ns l;
-      reserve_globals_in_instr ctx ns i
+      reserve_module_names_in_instrs ctx ns l;
+      reserve_module_names_in_instr ctx ns i
   | GlobalGet x | GlobalSet x -> Namespace.reserve ns (idx ctx `Global x).desc
+  | Call f | ReturnCall f | RefFunc f ->
+      Namespace.reserve ns (idx ctx `Func f).desc
   | _ -> ()
 
-and reserve_globals_in_instrs ctx ns l =
-  List.iter (reserve_globals_in_instr ctx ns) l
+and reserve_module_names_in_instrs ctx ns l =
+  List.iter (reserve_module_names_in_instr ctx ns) l
 
 (* Collect the Wax names of element segments referenced by table.init /
    elem.drop / array.new_elem / array.init_elem, so a declarative segment used
@@ -1759,7 +1767,7 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
           let return_arity = snd (typeuse_arity ctx typ) in
           let local_namespace =
             let ns = Namespace.make () in
-            reserve_globals_in_instrs ctx ns instrs;
+            reserve_module_names_in_instrs ctx ns instrs;
             ns
           in
           {
