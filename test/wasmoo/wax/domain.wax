@@ -78,7 +78,8 @@ let caml_domain_id = 0;
 #[export = "caml_domain_latest_id"]
 let caml_domain_latest_id = 1;
 
-#[export = "caml_ml_domain_id"] #[export = "caml_ml_domain_index"]
+#[export = "caml_ml_domain_id"]
+#[export = "caml_ml_domain_index"]
 fn caml_ml_domain_id(x: &eq) -> &eq { caml_domain_id as &i31; }
 
 #[export = "caml_ml_domain_cpu_relax"]

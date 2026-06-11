@@ -1072,10 +1072,18 @@ let print_attribute pp (name, i) =
           attribute pp "=";
           space pp ();
           with_style pp Attribute (fun () -> instr Instruction pp i));
-      attribute pp "]";
-      space pp ())
+      attribute pp "]")
 
-let print_attributes pp attributes = List.iter (print_attribute pp) attributes
+(* Separate attributes at this (enclosing) level rather than with a trailing
+   space inside each attribute's box: a break between them then lands at the
+   enclosing box's indentation, so stacked attributes stay aligned instead of
+   each indenting relative to the previous one's box. *)
+let print_attributes pp attributes =
+  List.iteri
+    (fun i a ->
+      if i > 0 then space pp ();
+      print_attribute pp a)
+    attributes
 
 let print_attr_prefix pp attributes_list content_fn =
   hvbox pp (fun () ->

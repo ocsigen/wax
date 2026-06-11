@@ -17,7 +17,8 @@
 
 #[import = ("stdlib", "caml_global_data")]
 let caml_global_data: &block;
-#[import = ("bindings", "jstag")] #[export = "javascript_exception"]
+#[import = ("bindings", "jstag")]
+#[export = "javascript_exception"]
 tag javascript_exception(&?extern);
 
 type block = [mut &eq];

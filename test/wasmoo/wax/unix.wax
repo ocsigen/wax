@@ -27,7 +27,8 @@ fn mktime(i32, i32, i32, i32, i32, i32) -> f64;
 type block = [mut &eq];
 type float = { f: f64 };
 
-#[export = "unix_gettimeofday"] #[export = "caml_unix_gettimeofday"]
+#[export = "unix_gettimeofday"]
+#[export = "caml_unix_gettimeofday"]
 fn unix_gettimeofday(x: &eq) -> &eq { {float| f: gettimeofday() }; }
 
 #[export = "caml_alloc_tm"]
@@ -47,16 +48,20 @@ fn caml_alloc_tm
         isdst as &i31];
 }
 
-#[export = "unix_gmtime"] #[export = "caml_unix_gmtime"]
+#[export = "unix_gmtime"]
+#[export = "caml_unix_gmtime"]
 fn unix_gmtime(x: &eq) -> &eq { gmtime((x as &float).f); }
 
-#[export = "unix_localtime"] #[export = "caml_unix_localtime"]
+#[export = "unix_localtime"]
+#[export = "caml_unix_localtime"]
 fn unix_localtime(x: &eq) -> &eq { localtime((x as &float).f); }
 
-#[export = "unix_time"] #[export = "caml_unix_time"]
+#[export = "unix_time"]
+#[export = "caml_unix_time"]
 fn unix_time(x: &eq) -> &eq { {float| f: gettimeofday().floor() }; }
 
-#[export = "unix_mktime"] #[export = "caml_unix_mktime"]
+#[export = "unix_mktime"]
+#[export = "caml_unix_mktime"]
 fn unix_mktime(x: &eq) -> &eq {
     let tm = x as &block;
     let t =
@@ -68,5 +73,5 @@ fn unix_mktime(x: &eq) -> &eq {
 }
 
 #[export = "unix_inet_addr_of_string"]
-    #[export = "caml_unix_inet_addr_of_string"]
+#[export = "caml_unix_inet_addr_of_string"]
 fn unix_inet_addr_of_string(x: &eq) -> &eq { 0 as &i31; }

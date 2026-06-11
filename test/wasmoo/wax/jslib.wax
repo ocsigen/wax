@@ -408,7 +408,8 @@ fn caml_callback
     become unwrap(acc);
 }
 
-#[export = "caml_jsstring_of_string"] #[export = "caml_js_from_string"]
+#[export = "caml_jsstring_of_string"]
+#[export = "caml_js_from_string"]
 fn caml_jsstring_of_string(x: &eq) -> &eq {
     let s = x as &string;
     return {js| f: jsstring_of_string(s) };
@@ -449,7 +450,8 @@ fn caml_jsbytes_of_string(x: &eq) -> &eq {
     return {js| f: jsstring_of_string(s') };
 }
 
-#[export = "caml_string_of_jsstring"] #[export = "caml_js_to_string"]
+#[export = "caml_string_of_jsstring"]
+#[export = "caml_js_to_string"]
 fn caml_string_of_jsstring(s: &eq) -> &eq {
     become string_of_jsstring((s as &js).f);
 }

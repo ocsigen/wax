@@ -22,7 +22,7 @@ fn unwrap(&eq) -> &?any;
 #[import = ("jslib", "caml_js_get")]
 fn caml_js_get(&eq, &eq) -> &eq;
 #[import = ("bigarray", "caml_ba_to_typed_array")]
-    #[export = "bigstring_to_typed_array"]
+#[export = "bigstring_to_typed_array"]
 fn caml_ba_to_typed_array(&eq) -> &eq;
 #[import = ("bigarray", "caml_ba_from_typed_array")]
 fn caml_ba_from_typed_array(&eq) -> &eq;
@@ -166,7 +166,7 @@ fn caml_bigstring_memchr(s: &eq, vc: &eq, vpos: &eq, vlen: &eq) -> &eq {
 }
 
 #[export = "caml_bigstring_blit_bytes_to_ba"]
-    #[export = "caml_bigstring_blit_string_to_ba"]
+#[export = "caml_bigstring_blit_string_to_ba"]
 fn caml_bigstring_blit_bytes_to_ba
 (str1: &eq, vpos1: &eq, ba2: &eq, vpos2: &eq, vlen: &eq) -> &eq {
     let s1 = str1 as &string;

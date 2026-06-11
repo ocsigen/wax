@@ -29,7 +29,8 @@ type context = {
     f_3: &int_array, // buffer
     f_4: &string
 }; // intermediate buffer
-#[export = "caml_md5_string"] #[export = "caml_md5_bytes"]
+#[export = "caml_md5_string"]
+#[export = "caml_md5_bytes"]
 fn caml_md5_string(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
     let ctx = MD5Init();
     MD5Update(ctx, x as &string, x_2 as &i31 as i32_u, x_3 as &i31 as i32_u);

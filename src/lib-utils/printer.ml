@@ -427,7 +427,20 @@ module Doc = struct
       List.fold_left (fun acc d -> Cat (d, acc)) Empty (top st).items
     in
     let s = render ~width:st.width body in
-    Format.pp_print_string st.fmt s
+    (* Emit line by line through the formatter's own newline, so that when [run]
+       is called inside an enclosing Format box (e.g. an [@[<2>…@]] wrapping the
+       snippet), every line — not just the first — picks up that box's
+       indentation. A bare [pp_print_string] of the multi-line string would
+       leave the embedded newlines at column 0. *)
+    match String.split_on_char '\n' s with
+    | [] -> ()
+    | first :: rest ->
+        Format.pp_print_string st.fmt first;
+        List.iter
+          (fun line ->
+            Format.pp_force_newline st.fmt ();
+            Format.pp_print_string st.fmt line)
+          rest
 end
 
 (* ===================================================================== *)
