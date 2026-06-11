@@ -494,7 +494,7 @@ blockinstr:
   END label2 = label
    { check_labels label label2;
      with_loc $sloc (TryTable {label; typ; catches; block}) }
-| TRY label = label typ = block_type block = instructions c = legacy_catches END label2 = label
+| TRY label = label typ = block_type block = instructions c = legacy_catches label2 = label
   { check_labels label label2;
     let (catches, catch_all) = c in
     with_loc $sloc (Try {label; typ; block; catches; catch_all}) }
