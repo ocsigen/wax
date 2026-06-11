@@ -491,8 +491,7 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                                                                     'read_string;
                                                                     }
                                                                     // BLOCK32
-                                                                    let
-                                                                    header =
+                                                                    let header =
                                                                     read32(s);
                                                                     tag_2 =
                                                                     header &

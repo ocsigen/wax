@@ -54,6 +54,11 @@ val hvbox : t -> ?skip_space:bool -> ?indent:int -> (unit -> unit) -> unit
     lines broken within the box. If [?skip_space] is true, no space will be
     added before the box. *)
 
+val hbox : t -> ?skip_space:bool -> (unit -> unit) -> unit
+(** [hbox pp ?skip_space f] creates a "horizontal" box: breaks within never
+    wrap, so the content always stays on one line. If [?skip_space] is true, no
+    space is added before the box. *)
+
 val hovbox : t -> ?skip_space:bool -> ?indent:int -> (unit -> unit) -> unit
 (** [hovbox pp ?skip_space ?indent f] creates a "packing" box: as much content
     as fits is placed on each line, wrapping greedily, breaking only where

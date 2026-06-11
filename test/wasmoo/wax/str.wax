@@ -120,11 +120,10 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq
                                                                     {
                                                                     'CHARCLASS:
                                                                     do {
-                                                                    let
-                                                                    s':
+                                                                    let s':
                                                                     &string;
-                                                                    let
-                                                                    l: i32;
+                                                                    let l:
+                                                                    i32;
                                                                     'STRINGNORM:
                                                                     do {
                                                                     'STRING:

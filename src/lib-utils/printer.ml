@@ -133,6 +133,11 @@ let box ctx ?(skip_space = false) ?(indent = 0) f =
 let hvbox ctx ?(skip_space = false) ?(indent = 0) f =
   generic_box ~name:"HVBOX" Format.pp_open_hvbox ctx skip_space indent f
 
+let hbox ctx ?(skip_space = false) f =
+  generic_box ~name:"HBOX"
+    (fun fmt _ -> Format.pp_open_hbox fmt ())
+    ctx skip_space 0 f
+
 let hovbox ctx ?(skip_space = false) ?(indent = 0) f =
   generic_box ~name:"HOVBOX" Format.pp_open_hovbox ctx skip_space indent f
 
