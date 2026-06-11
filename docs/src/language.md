@@ -13,6 +13,20 @@ Wax supports C-style comments:
    comment */
 ```
 
+## Trailing Commas
+
+A trailing comma is allowed after the last element of any comma-separated
+list — function parameters, call arguments, struct fields, result types, and
+so on:
+
+```wax
+type point = { x: i32, y: i32, };
+
+fn add(a: i32, b: i32,) -> i32 {
+    a + b;
+}
+```
+
 ## Literals
 
 ### Integers

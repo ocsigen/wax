@@ -77,7 +77,7 @@
 %token DISPATCH
 %token MEMORY DATA TABLE ELEM
 
-%on_error_reduce statement plaininstr separated_nonempty_list(",",structure_type_field) list(module_field) separated_nonempty_list(",",value_type) block_type separated_nonempty_list(",",function_parameter) list(label) list(attribute) list(typedef) list(legacy_catch) separated_nonempty_list(",",catch) separated_nonempty_list(",",let_pattern) blockinstr statement_list loption(separated_nonempty_list(",",catch)) separated_nonempty_list(",",expression) let_pattern structure_field separated_nonempty_list(",",structure_field) constant_expression attribute_expression parenthesized_expression index_expression then_branch condition_expression length_expression optional_function_type structure_type result_type_ expression_list structure
+%on_error_reduce statement plaininstr separated_nonempty_list_trailing(",",structure_type_field) list(module_field) separated_nonempty_list_trailing(",",value_type) block_type separated_nonempty_list_trailing(",",function_parameter) list(label) list(attribute) list(typedef) list(legacy_catch) separated_nonempty_list_trailing(",",catch) separated_nonempty_list_trailing(",",let_pattern) blockinstr statement_list loption(separated_nonempty_list_trailing(",",catch)) separated_nonempty_list_trailing(",",expression) let_pattern structure_field separated_nonempty_list_trailing(",",structure_field) constant_expression attribute_expression parenthesized_expression index_expression then_branch condition_expression length_expression optional_function_type structure_type result_type_ expression_list structure
 
 
 (* Dangling [#[else]]: an [#[else]] binds to the nearest [#[if]], i.e. shifting
@@ -210,6 +210,14 @@ let u64_of_int_literal n = Utils.Uint64.of_string n
 
 %%
 
+%inline separated_list_trailing(sep, X):
+  | xs = loption(separated_nonempty_list_trailing(sep, X)) { xs }
+
+separated_nonempty_list_trailing(sep, X):
+  | x = X { [x] }
+  | x = X; sep { [x] }
+  | x = X; sep; xs = separated_nonempty_list_trailing(sep, X) { x :: xs }
+
 dummy_ctx: EOF { assert false }
 
 %inline ident:
@@ -301,7 +309,7 @@ cast_type:
 *)
 
 result_type_:
-| l = separated_nonempty_list(",", value_type) { l }
+| l = separated_nonempty_list_trailing(",", value_type) { l }
 
 result_type:
 | "(" ")" { [||] }
@@ -328,7 +336,7 @@ structure_type_field:
 | x = field_name ":" t = field_type { with_loc $sloc (x, t) }
 
 structure_type:
-| l = separated_list(",", structure_type_field) { l }
+| l = separated_list_trailing(",", structure_type_field) { l }
 
 structtype:
 | "{" l = structure_type "}" { Array.of_list l }
@@ -379,7 +387,7 @@ function_parameter:
 | t = value_type { None, t }
 
 parameter_list:
-| l = separated_list(",", function_parameter)
+| l = separated_list_trailing(",", function_parameter)
   { Array.of_list l }
 
 function_type:
@@ -415,7 +423,7 @@ tag:
 %inline block_label: l = ioption(l = label ":" { l }) { l }
 
 parameter_types:
-| l = separated_list(",", value_type) { l }
+| l = separated_list_trailing(",", value_type) { l }
 
 block_type:
 | "(" params = parameter_types ")"
@@ -435,7 +443,7 @@ on_clause:
 | t = ident "->" SWITCH { OnSwitch t }
 
 on_clauses:
-| "[" l = separated_list(",", on_clause) "]" { l }
+| "[" l = separated_list_trailing(",", on_clause) "]" { l }
 
 legacy_catch:
 | t = ident "=>" "{" l = statement_list "}" { (t, l) }
@@ -450,7 +458,7 @@ structure_field:
 | y = field_name ":" i = expression { (y, i) }
 
 structure:
-| l = separated_list(",", structure_field) { l }
+| l = separated_list_trailing(",", structure_field) { l }
 
 blockinstr:
 | b = block
@@ -466,7 +474,7 @@ blockinstr:
   l2 = ioption(ELSE l = braced_block { l })
   { with_loc $sloc (If{label; typ = blocktype bt; cond = e; if_block = l1; else_block = l2}) }
 | label = block_label TRY bt = option(block_type) "{" l = statement_list "}"
-  CATCH "[" catches = separated_list(",", catch) "]"
+  CATCH "[" catches = separated_list_trailing(",", catch) "]"
   { with_loc $sloc (TryTable {label; typ = blocktype bt; catches; block = l}) }
 | label = block_label TRY bt = option(block_type) "{" l = statement_list "}"
   CATCH
@@ -492,7 +500,7 @@ condition_expression: e = expression { e }
 length_expression: e = expression { e }
 
 expression_list:
-| l = separated_list(",", expression) { l }
+| l = separated_list_trailing(",", expression) { l }
 
 plaininstr:
 | NULL { with_loc $sloc Null }
@@ -611,7 +619,7 @@ let_pattern:
 | p = simple_pattern t = ioption(":" t = value_type {t}) { (p, t) }
 
 let_pattern_:
-| p = separated_list(",", let_pattern) { p }
+| p = separated_list_trailing(",", let_pattern) { p }
 
 statement:
 | i = plaininstr { i }
@@ -781,7 +789,7 @@ condition:
 | name = ident { Wasm.Ast.Cond_var name }
 | name = ident op = condition_relop rhs = condition_literal
   { Wasm.Ast.Cond_cmp (op, Wasm.Ast.Cond_var name, rhs) }
-| name = ident "(" l = separated_list(",", condition) ")"
+| name = ident "(" l = separated_list_trailing(",", condition) ")"
   { match name.desc, l with
     | "all", _ -> Wasm.Ast.Cond_and l
     | "any", _ -> Wasm.Ast.Cond_or l
