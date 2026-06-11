@@ -83,12 +83,11 @@ fn caml_array_of_uniform_array(vinit: &eq) -> &eq {
         if init[1] is &float {
             size = size - 1;
             let res = [float_array|0; size];
-            'loop: loop {
-                let i: i32;
+            let i: i32;
+            do {
                 res[i] = (init[i + 1] as &float).f;
                 i = i + 1;
-                br_if 'loop i <u size;
-            }
+            } while i <u size;
             return res;
         }
     }

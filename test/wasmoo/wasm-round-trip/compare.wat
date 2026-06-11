@@ -418,7 +418,7 @@
               (if (i32.ne (local.get $s1) (local.get $s2))
                 (then (return (i32.sub (local.get $s1) (local.get $s2)))))
               (local.set $i (i32.const 0))
-              (loop $float_array
+              (loop $loop2
                 (if (i32.lt_s (local.get $i) (local.get $s1))
                   (then
                     (local.set $f1
@@ -440,7 +440,7 @@
                         (if (f64.eq (local.get $f2) (local.get $f2))
                           (then (return (i32.const -1))))))
                     (local.set $i (i32.add (local.get $i) (i32.const 1)))
-                    (br $float_array))))
+                    (br $loop2))))
               (br $next_item)))
           (drop
             (block $v1_not_custom (result (ref eq))

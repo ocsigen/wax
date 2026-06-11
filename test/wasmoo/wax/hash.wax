@@ -98,17 +98,14 @@ fn caml_hash_mix_float(h: i32, d: f32) -> i32 {
 fn caml_hash_mix_string(h: i32, s: &string) -> i32 {
     let len = s.length();
     let i = 0;
-    'loop: loop {
-        if i + 4 <=u len {
-            h =
-                caml_hash_mix_int(
-                    h,
-                    s[i] as i32_u | s[i + 1] as i32_u << 8
-                        | (s[i + 2] as i32_u << 16 | s[i + 3] as i32_u << 24),
-                );
-            i = i + 4;
-            br 'loop;
-        }
+    while i + 4 <=u len {
+        h =
+            caml_hash_mix_int(
+                h,
+                s[i] as i32_u | s[i + 1] as i32_u << 8
+                    | (s[i + 2] as i32_u << 16 | s[i + 3] as i32_u << 24),
+            );
+        i = i + 4;
     }
     let w = 0;
     dispatch (len & 3) [ 'l_2 'l_3 'l_4 else 'l_5 ] {

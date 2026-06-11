@@ -50,6 +50,7 @@ let reserved =
         "try";
         "type";
         "unreachable";
+        "while";
       ])
 
 let reserved_heap_types =

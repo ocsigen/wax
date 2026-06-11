@@ -1,0 +1,12 @@
+fn f(n: i32) -> i32 {
+    let i: i32 = 0;
+    'loop: do {
+        while i <s n {
+            do {
+                i = i + 1;
+            } while i <s 3;
+            br 'loop;
+        }
+    }
+    i;
+}

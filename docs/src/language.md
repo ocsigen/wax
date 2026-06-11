@@ -353,6 +353,54 @@ Loops nest, and a branch may target any enclosing label:
 }
 ```
 
+### While and Do-While Loops
+
+The two common loop shapes have readable sugar over the `loop`-and-back-branch
+idiom above. A `while` tests *before* each iteration:
+
+```wax
+while i <s n {
+    total = total + i;
+    i = i + 1;
+}
+```
+
+which is exactly:
+
+```wax
+'next: loop {
+    if i <s n {
+        total = total + i;
+        i = i + 1;
+        br 'next;
+    }
+}
+```
+
+A `do { … } while C;` tests *after* the body, so the body always runs at least
+once:
+
+```wax
+do {
+    total = total - 1;
+} while total >s 0;
+```
+
+which is:
+
+```wax
+'next: loop {
+    total = total - 1;
+    br_if 'next total >s 0;
+}
+```
+
+Both are void, and the test must be an `i32`. They may carry a label
+(`'l: while …`), which names the loop, so a `br 'l` from inside the body is a
+*continue* — it jumps back to re-test. Decompiling recovers a `while` or
+`do`-`while` from these shapes, so a loop written either way survives a round
+trip through WAT or WASM.
+
 ### Labels and Branches
 
 Labels start with `'` and prefix a block, loop, `if`, or `try`. A branch targets

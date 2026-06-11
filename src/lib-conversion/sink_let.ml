@@ -16,6 +16,8 @@ let rec occurs name i =
       || occurs name e
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
       in_list block
+  | While { cond; block; _ } | DoWhile { block; cond; _ } ->
+      occurs name cond || in_list block
   | If { cond; if_block; else_block; _ } -> (
       occurs name cond || in_list if_block.desc
       || match else_block with Some b -> in_list b.desc | None -> false)
@@ -111,6 +113,14 @@ let rec sink_into ((name, _) as decl) s =
   | Block r -> Some { s with desc = Block { r with block = bl r.block } }
   | Loop r -> Some { s with desc = Loop { r with block = bl r.block } }
   | TryTable r -> Some { s with desc = TryTable { r with block = bl r.block } }
+  | While r ->
+      (* The test is evaluated in the enclosing scope (re-checked each
+         iteration), so a use there pins the declaration outside the loop. *)
+      if occurs name.desc r.cond then None
+      else Some { s with desc = While { r with block = bl r.block } }
+  | DoWhile r ->
+      if occurs name.desc r.cond then None
+      else Some { s with desc = DoWhile { r with block = bl r.block } }
   | If r ->
       (* The condition is evaluated in the enclosing scope, so a use there
          pins the declaration outside the [If]; a use in both branches cannot

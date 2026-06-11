@@ -66,6 +66,10 @@ let module_ ctx env (fields : location Ast.module_) :
     match desc with
     | Block { label; typ; block } -> Block { label; typ; block = sinstrs block }
     | Loop { label; typ; block } -> Loop { label; typ; block = sinstrs block }
+    | While { label; cond; block } ->
+        While { label; cond = sone cond; block = sinstrs block }
+    | DoWhile { label; block; cond } ->
+        DoWhile { label; block = sinstrs block; cond = sone cond }
     | If { label; typ; cond; if_block; else_block } ->
         If
           {

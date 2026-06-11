@@ -88,15 +88,12 @@ fn jsstring_of_substring(s: &string, pos: i32, len: i32) -> &?any {
         return decodeStringFromUTF8Array(s, pos, pos + len) as &any;
     }
     'continue: if string_builtins_available & (len <=u utf16_buffer_size) {
-        'loop: loop {
-            let i: i32;
-            if i <u len {
-                let c = s[pos + i] as i32_u;
-                br_if 'continue c >=u 128;
-                buffer[i] = c;
-                i = i + 1;
-                br 'loop;
-            }
+        let i: i32;
+        while i <u len {
+            let c = s[pos + i] as i32_u;
+            br_if 'continue c >=u 128;
+            buffer[i] = c;
+            i = i + 1;
         }
         return fromCharCodeArray(buffer, 0, len) as &any;
     }
@@ -124,13 +121,10 @@ memory caml_buffer: i32 [1];
 const buffer_size = 65536;
 
 fn write_to_buffer(s: &string, pos: i32, len: i32) {
-    'loop: loop {
-        let i: i32;
-        if i <u len {
-            caml_buffer.store8(i, s[pos + i] as i32_u);
-            i = i + 1;
-            br 'loop;
-        }
+    let i: i32;
+    while i <u len {
+        caml_buffer.store8(i, s[pos + i] as i32_u);
+        i = i + 1;
     }
 }
 
@@ -141,25 +135,22 @@ fn jsstring_of_substring_fallback(s: &string, pos: i32, len: i32) -> &?any {
     }
     write_to_buffer(s, pos, buffer_size);
     let s' = read_string_stream(buffer_size, 1);
-    'loop: loop {
+    let continued: i32;
+    do {
         len = len - buffer_size;
         pos = pos + buffer_size;
-        let continued = len >u buffer_size;
+        continued = len >u buffer_size;
         write_to_buffer(s, pos, continued?buffer_size:len);
         s' = append_string(s', read_string_stream(continued?buffer_size:len, continued));
-        br_if 'loop continued;
-    }
+    } while continued;
     s';
 }
 
 fn read_from_buffer(s: &string, pos: i32, len: i32) {
-    'loop: loop {
-        let i: i32;
-        if i <u len {
-            s[pos + i] = caml_buffer.load8(i) as i32_u;
-            i = i + 1;
-            br 'loop;
-        }
+    let i: i32;
+    while i <u len {
+        s[pos + i] = caml_buffer.load8(i) as i32_u;
+        i = i + 1;
     }
 }
 

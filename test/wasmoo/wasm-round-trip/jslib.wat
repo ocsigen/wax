@@ -525,7 +525,7 @@
   (local.set $l (array.len (local.get $s)))
   (local.set $i (i32.const 0))
   (local.set $n (i32.const 0))
-  (loop $count
+  (loop $loop
     (if (i32.lt_u (local.get $i) (local.get $l))
       (then
         (if
@@ -533,7 +533,7 @@
             (i32.const 128))
           (then (local.set $n (i32.add (local.get $n) (i32.const 1)))))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $count))))
+        (br $loop))))
   (if (i32.eqz (local.get $n))
     (then
       (return (struct.new $js (call $jsstring_of_string (local.get $s))))))
@@ -541,7 +541,7 @@
     (array.new $string (i32.const 0) (i32.add (local.get $i) (local.get $n))))
   (local.set $i (i32.const 0))
   (local.set $n (i32.const 0))
-  (loop $fill
+  (loop $loop
     (if (i32.lt_u (local.get $i) (local.get $l))
       (then
         (local.set $c (array.get_u $string (local.get $s) (local.get $i)))
@@ -559,7 +559,7 @@
                 (i32.and (local.get $c) (i32.const 0x3F))))
             (local.set $n (i32.add (local.get $n) (i32.const 2)))))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $fill))))
+        (br $loop))))
   (return (struct.new $js (call $jsstring_of_string (local.get $s'))))
 )
 
@@ -579,7 +579,7 @@
   (local.set $l (array.len (local.get $s')))
   (local.set $i (i32.const 0))
   (local.set $n (i32.const 0))
-  (loop $count
+  (loop $loop
     (if (i32.lt_u (local.get $i) (local.get $l))
       (then
         (if
@@ -587,13 +587,13 @@
             (i32.const 0xC0))
           (then (local.set $n (i32.add (local.get $n) (i32.const 1)))))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $count))))
+        (br $loop))))
   (if (i32.eqz (local.get $n)) (then (return (local.get $s'))))
   (local.set $s''
     (array.new $string (i32.const 0) (i32.sub (local.get $i) (local.get $n))))
   (local.set $i (i32.const 0))
   (local.set $n (i32.const 0))
-  (loop $fill
+  (loop $loop
     (if (i32.lt_u (local.get $i) (local.get $l))
       (then
         (local.set $c (array.get_u $string (local.get $s') (local.get $i)))
@@ -610,7 +610,7 @@
                 (i32.const 0x3080)))
             (local.set $i (i32.add (local.get $i) (i32.const 2)))))
         (local.set $n (i32.add (local.get $n) (i32.const 1)))
-        (br $fill))))
+        (br $loop))))
   (local.get $s'')
 )
 

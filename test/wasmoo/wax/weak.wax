@@ -61,16 +61,13 @@ fn caml_ephe_get_data(vx: &eq) -> &eq {
             let i = caml_ephe_key_offset;
             let len = x.length();
             let m = unwrap(d)!;
-            'loop: loop {
-                if i <u len {
-                    let v = x[i];
-                    i = i + 1;
-                    br_if 'loop v == caml_ephe_none;
-                    br_if 'loop v is &i31;
-                    v = br_on_null 'released weak_deref(unwrap(v));
-                    m = br_on_null 'released map_get(m, v);
-                    br 'loop;
-                }
+            'loop: while i <u len {
+                let v = x[i];
+                i = i + 1;
+                br_if 'loop v == caml_ephe_none;
+                br_if 'loop v is &i31;
+                v = br_on_null 'released weak_deref(unwrap(v));
+                m = br_on_null 'released map_get(m, v);
             }
             return [block|0 as &i31, m as &eq];
         }

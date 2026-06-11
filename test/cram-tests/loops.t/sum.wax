@@ -1,0 +1,12 @@
+fn sum(n: i32) -> i32 {
+    let i: i32 = 0;
+    let total: i32 = 0;
+    while i <s n {
+        total = total + i;
+        i = i + 1;
+    }
+    do {
+        total = total - 1;
+    } while total >s 0;
+    total;
+}

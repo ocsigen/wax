@@ -1,0 +1,9 @@
+fn f(n: i32) -> i32 {
+    let i: i32 = 0;
+    'top: while i <s n {
+        i = i + 1;
+        if i == 3 { br 'top; }
+        n = n - 1;
+    }
+    n;
+}

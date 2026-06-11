@@ -207,6 +207,7 @@ let rec token_rec ctx lexbuf =
   | "nop" -> NOP
   | "unreachable" -> UNREACHABLE
   | "do" -> DO
+  | "while" -> WHILE
   | "loop" -> LOOP
   | "if" -> IF
   | "else" -> ELSE

@@ -99,11 +99,8 @@ const tbl_names_block = 16;
 
 fn strlen(s: &string, p: i32) -> i32 {
     let i = p;
-    'loop: loop {
-        if s[i] as i32_u != 0 {
-            i = i + 1;
-            br 'loop;
-        }
+    while s[i] as i32_u != 0 {
+        i = i + 1;
     }
     i - p;
 }

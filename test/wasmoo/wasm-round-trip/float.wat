@@ -118,22 +118,22 @@
               (local.set $m (i64.add (local.get $m) (local.get $unit)))))))
       (local.set $frac (i64.shl (local.get $m) (i64.const 12)))
       (local.set $j (i32.const 0))
-      (loop $prec
+      (loop $loop
         (if (i64.ne (local.get $frac) (i64.const 0))
           (then
             (local.set $j (i32.add (local.get $j) (i32.const 1)))
             (local.set $frac (i64.shl (local.get $frac) (i64.const 4)))
-            (br $prec))))
+            (br $loop))))
       (if (i32.lt_s (local.get $prec) (local.get $j))
         (then (local.set $prec (local.get $j))))
       (if (i32.ge_s (local.get $exp) (i32.const 0))
         (then (local.set $d (local.get $exp)))
         (else (local.set $d (i32.sub (i32.const 0) (local.get $exp)))))
       (local.set $j (i32.const 0))
-      (loop $count
+      (loop $loop
         (local.set $j (i32.add (local.get $j) (i32.const 1)))
         (local.set $d (i32.div_u (local.get $d) (i32.const 10)))
-        (br_if $count (local.get $d)))
+        (br_if $loop (local.get $d)))
       (local.set $len
         (i32.add (i32.add (local.get $i) (local.get $prec))
           (i32.add (i32.const 6) (local.get $j))))
@@ -143,12 +143,12 @@
       (if (i32.ge_s (local.get $exp) (i32.const 0))
         (then (local.set $d (local.get $exp)))
         (else (local.set $d (i32.sub (i32.const 0) (local.get $exp)))))
-      (loop $write
+      (loop $loop
         (local.set $len (i32.sub (local.get $len) (i32.const 1)))
         (array.set $string (local.get $s) (local.get $len)
           (i32.add (i32.const 48) (i32.rem_u (local.get $d) (i32.const 10))))
         (local.set $d (i32.div_u (local.get $d) (i32.const 10)))
-        (br_if $write (local.get $d)))
+        (br_if $loop (local.get $d)))
       (array.set $string (local.get $s)
         (i32.sub (local.get $len) (i32.const 1))
         (select (i32.const 43) (i32.const 45)
@@ -166,14 +166,14 @@
             (i32.const 46)) ;; '.'
           (local.set $i (i32.add (local.get $i) (i32.const 1)))
           (local.set $frac (i64.shl (local.get $m) (i64.const 12)))
-          (loop $write
+          (loop $loop
             (array.set $string (local.get $s) (local.get $i)
               (array.get_u $chars (global.get $lowercase_hex_table)
                 (i32.wrap_i64 (i64.shr_u (local.get $frac) (i64.const 60)))))
             (local.set $frac (i64.shl (local.get $frac) (i64.const 4)))
             (local.set $prec (i32.sub (local.get $prec) (i32.const 1)))
             (local.set $i (i32.add (local.get $i) (i32.const 1)))
-            (br_if $write (i32.gt_s (local.get $prec) (i32.const 0))))))
+            (br_if $loop (i32.gt_s (local.get $prec) (i32.const 0))))))
       (array.set $string (local.get $s) (local.get $i) (i32.const 112))
       (local.get $s)))
   (if (local.get $sign)
@@ -307,7 +307,7 @@
     (then
       (local.set $i (i32.const 0))
       (local.set $len (array.len (local.get $s)))
-      (loop $uppercase
+      (loop $loop
         (local.set $c (array.get_u $string (local.get $s) (local.get $i)))
         (if
           (i32.and (i32.ge_u (local.get $c) (i32.const 97)) ;; 'a'
@@ -316,7 +316,7 @@
             (array.set $string (local.get $s) (local.get $i)
               (i32.sub (local.get $c) (i32.const 32)))))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br_if $uppercase (i32.lt_u (local.get $i) (local.get $len))))))
+        (br_if $loop (i32.lt_u (local.get $i) (local.get $len))))))
   (local.get $s)
 )
 
@@ -460,7 +460,7 @@
   (local $f f64)
   (local.set $s (ref.cast (ref $string) (local.get $x)))
   (local.set $len (array.len (local.get $s)))
-  (loop $count
+  (loop $loop
     (if (i32.lt_u (local.get $i) (local.get $len))
       (then
         (if
@@ -468,7 +468,7 @@
             (array.get_u $string (local.get $s) (local.get $i)))
           (then (local.set $j (i32.add (local.get $j) (i32.const 1)))))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $count))))
+        (br $loop))))
   (if (local.get $j)
     (then
       (local.set $s'
@@ -476,7 +476,7 @@
           (i32.sub (local.get $len) (local.get $j))))
       (local.set $i (i32.const 0))
       (local.set $j (i32.const 0))
-      (loop $copy
+      (loop $loop
         (if (i32.lt_u (local.get $i) (local.get $len))
           (then
             (local.set $c (array.get_u $string (local.get $s) (local.get $i)))
@@ -486,7 +486,7 @@
                 (array.set $string (local.get $s') (local.get $j)
                   (local.get $c))
                 (local.set $j (i32.add (local.get $j) (i32.const 1)))))
-            (br $copy))))
+            (br $loop))))
       (local.set $len (array.len (local.get $s')))
       (local.set $s (local.get $s'))))
   (local.set $i (i32.const 0))

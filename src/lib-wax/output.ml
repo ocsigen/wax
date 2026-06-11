@@ -473,8 +473,8 @@ let array_instr pp nm f =
 
 let get_prec (i : _ Ast.instr) =
   match i.desc with
-  | Block _ | Loop _ | If _ | Try _ | TryTable _ | If_annotation _ | Dispatch _
-    ->
+  | Block _ | Loop _ | While _ | DoWhile _ | If _ | Try _ | TryTable _
+  | If_annotation _ | Dispatch _ ->
       Atom
   | Unreachable | Nop | Hole | Null | Get _ | Char _ | String _ | Int _
   | Float _ | Struct _ | StructDefault _ | Array _ | ArrayDefault _
@@ -500,8 +500,8 @@ let get_prec (i : _ Ast.instr) =
 
 let is_block (i : _ Ast.instr) =
   match i.desc with
-  | Block _ | Loop _ | If _ | Try _ | TryTable _ | If_annotation _ | Dispatch _
-    ->
+  | Block _ | Loop _ | While _ | DoWhile _ | If _ | Try _ | TryTable _
+  | If_annotation _ | Dispatch _ ->
       true
   | Call _ | Unreachable | Nop | Hole | Null | Get _ | Set _ | Tee _
   | TailCall _ | Char _ | String _ | Int _ | Float _ | Cast _ | Test _
@@ -518,8 +518,8 @@ let rec starts_with_block_prec prec (i : 'a Ast.instr) =
   if prec > actual then false
   else
     match i.desc with
-    | Block _ | Loop _ | If _ | Try _ | TryTable _ | If_annotation _
-    | Dispatch _ ->
+    | Block _ | Loop _ | While _ | DoWhile _ | If _ | Try _ | TryTable _
+    | If_annotation _ | Dispatch _ ->
         true
     | Call (i, _) | ArrayGet (i, _) | ArraySet (i, _, _) ->
         starts_with_block_prec CallAndFieldAccess i
@@ -640,6 +640,34 @@ let rec instr prec pp (i : _ instr) =
               branch b)
             else_body)
   | Loop { label; typ; block = l } -> block pp label (Some "loop") typ l
+  | While { label; cond; block = l } ->
+      hvbox pp (fun () ->
+          box pp (fun () ->
+              block_label pp label;
+              keyword pp "while";
+              indent pp indent_level (fun () ->
+                  space pp ();
+                  instr Instruction pp cond);
+              space pp ();
+              punctuation pp "{");
+          block_contents pp l;
+          punctuation pp "}")
+  | DoWhile { label; block = l; cond } ->
+      hvbox pp (fun () ->
+          box pp (fun () ->
+              block_label pp label;
+              keyword pp "do";
+              space pp ();
+              punctuation pp "{");
+          block_contents pp l;
+          box pp (fun () ->
+              punctuation pp "}";
+              space pp ();
+              keyword pp "while";
+              indent pp indent_level (fun () ->
+                  space pp ();
+                  instr Instruction pp cond);
+              punctuation pp ";"))
   | If { label; typ; cond; if_block; else_block } ->
       hvbox pp (fun () ->
           box pp (fun () ->

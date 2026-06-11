@@ -1519,11 +1519,12 @@ let rec count_holes i =
   | Switch (_, _, l) ->
       List.fold_left (fun acc i -> acc + count_holes i) 0 l
   | Select (c, t, e) -> count_holes c + count_holes t + count_holes e
-  (* [dispatch] is block-like: its index and case bodies are checked inside the
-     blocks it desugars to, so no hole at this level draws from the stack. *)
-  | Block _ | Loop _ | TryTable _ | Try _ | If_annotation _ | Dispatch _
-  | StructDefault _ | Char _ | String _ | Int _ | Float _ | Get _ | Null
-  | Unreachable | Nop
+  (* [dispatch], [while] and [do]-[while] are block-like: their operands and
+     bodies are checked inside the blocks they desugar to, so no hole at this
+     level draws from the stack. *)
+  | Block _ | Loop _ | While _ | DoWhile _ | TryTable _ | Try _
+  | If_annotation _ | Dispatch _ | StructDefault _ | Char _ | String _ | Int _
+  | Float _ | Get _ | Null | Unreachable | Nop
   | Let (_, None)
   | Br (_, None)
   | Throw (_, None)
@@ -1541,9 +1542,9 @@ let rec check_hole_order_rec ctx i n =
   | _ ->
       let n =
         match i.desc with
-        | Block _ | Loop _ | TryTable _ | Try _ | If_annotation _ | Dispatch _
-        | StructDefault _ | Char _ | String _ | Int _ | Float _ | Get _ | Null
-        | Unreachable | Nop
+        | Block _ | Loop _ | While _ | DoWhile _ | TryTable _ | Try _
+        | If_annotation _ | Dispatch _ | StructDefault _ | Char _ | String _
+        | Int _ | Float _ | Get _ | Null | Unreachable | Nop
         | Let (_, None)
         | Br (_, None)
         | Throw (_, None)
@@ -1950,6 +1951,33 @@ let rebuild_dispatch typed_list arms =
         :: List.map2 (fun (l, _) b -> (l, b)) rest_arms rest_bodies )
   | _ -> assert false
 
+(* Peel a type-checked [while] lowering (see [Ast_utils.lower_while]) back to the
+   typed condition and body, dropping the synthesised loop, [if] and back-edge.
+   Deterministic — the lowering we just type-checked guarantees the shape. *)
+let rebuild_while typed_list =
+  match typed_list with
+  | [
+   {
+     desc = Ast.Loop { block = [ { desc = If { cond; if_block; _ }; _ } ]; _ };
+     _;
+   };
+  ] -> (
+      match List.rev if_block.desc with
+      | { desc = Ast.Br _; _ } :: rev_body -> (cond, List.rev rev_body)
+      | _ -> assert false)
+  | _ -> assert false
+
+(* Likewise for a [do]-[while] lowering (see [Ast_utils.lower_dowhile]): drop the
+   synthesised loop and the trailing [br_if] back-edge. *)
+let rebuild_dowhile typed_list =
+  match typed_list with
+  | [ { desc = Ast.Loop { block; _ }; _ } ] -> (
+      match List.rev block with
+      | { desc = Ast.Br_if (_, cond); _ } :: rev_body ->
+          (cond, List.rev rev_body)
+      | _ -> assert false)
+  | _ -> assert false
+
 (* Set to [true] to trace each instruction as it is type-checked. *)
 let debug = false
 
@@ -1998,6 +2026,27 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       let*! results = array_map_opt (internalize ctx) typ.results in
       let instrs' = block ctx i.info label [||] results [||] instrs in
       return_statement i (Loop { label; typ; block = instrs' }) results
+  | While { label; cond; block = instrs } ->
+      (* Type-check the equivalent loop (see [Ast_utils.lower_while]): this
+         validates that [cond] is an [i32] and the body is well-typed, with the
+         loop label in scope so a [br] to it (continue) resolves. Then rebuild a
+         typed [While], keeping the high-level form for the formatter and for the
+         identical re-lowering in [To_wasm]. *)
+      let lowered =
+        Ast_utils.lower_while ~block_info:i.info ~label ~cond ~block:instrs
+      in
+      let typed = block ctx i.info None [||] [||] [||] lowered in
+      let cond', instrs' = rebuild_while typed in
+      return_statement i (While { label; cond = cond'; block = instrs' }) [||]
+  | DoWhile { label; block = instrs; cond } ->
+      (* Likewise via [Ast_utils.lower_dowhile]: validate the body and the
+         trailing [br_if] condition, then rebuild a typed [DoWhile]. *)
+      let lowered =
+        Ast_utils.lower_dowhile ~block_info:i.info ~label ~cond ~block:instrs
+      in
+      let typed = block ctx i.info None [||] [||] [||] lowered in
+      let cond', instrs' = rebuild_dowhile typed in
+      return_statement i (DoWhile { label; block = instrs'; cond = cond' }) [||]
   | If { label; typ; cond; if_block; else_block } ->
       let* cond' = instruction ctx cond in
       check_type ctx cond'
@@ -4236,10 +4285,10 @@ let rec check_constant_instruction ctx i =
         },
         _,
         _ )
-  | Block _ | Loop _ | If _ | TryTable _ | Try _ | Dispatch _ | Unreachable
-  | Nop | Hole | Set _ | Tee _ | Call _ | TailCall _ | Cast _ | Test _
-  | NonNull _ | StructGet _ | StructSet _ | ArraySegment _ | ArrayGet _
-  | ArraySet _ | Let _ | Br _ | Br_if _ | Br_table _ | Br_on_null _
+  | Block _ | Loop _ | While _ | DoWhile _ | If _ | TryTable _ | Try _
+  | Dispatch _ | Unreachable | Nop | Hole | Set _ | Tee _ | Call _ | TailCall _
+  | Cast _ | Test _ | NonNull _ | StructGet _ | StructSet _ | ArraySegment _
+  | ArrayGet _ | ArraySet _ | Let _ | Br _ | Br_if _ | Br_table _ | Br_on_null _
   | Br_on_non_null _ | Br_on_cast _ | Br_on_cast_fail _ | Throw _ | ThrowRef _
   | ContNew _ | ContBind _ | Suspend _ | Resume _ | ResumeThrow _
   | ResumeThrowRef _ | Switch _ | Return _ | Sequence _ | Select _
@@ -4854,6 +4903,8 @@ let rec instr_has_conditional (i : (_ instr_desc, _) annotated) =
   match i.desc with
   | If_annotation _ -> true
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } -> any block
+  | While { cond; block; _ } -> instr_has_conditional cond || any block
+  | DoWhile { block; cond; _ } -> any block || instr_has_conditional cond
   | If { cond; if_block; else_block; _ } ->
       instr_has_conditional cond || any if_block.desc
       || Option.fold ~none:false ~some:(fun b -> any b.desc) else_block
@@ -4966,6 +5017,10 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
         Block { label; typ; block = sinstrs asm block }
     | Loop { label; typ; block } ->
         Loop { label; typ; block = sinstrs asm block }
+    | While { label; cond; block } ->
+        While { label; cond = sone asm cond; block = sinstrs asm block }
+    | DoWhile { label; block; cond } ->
+        DoWhile { label; block = sinstrs asm block; cond = sone asm cond }
     | If { label; typ; cond; if_block; else_block } ->
         If
           {
@@ -5073,6 +5128,7 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
 let sub_instrs (i : (_ instr_desc, _) annotated) =
   match i.desc with
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } -> block
+  | While { cond; block; _ } | DoWhile { block; cond; _ } -> cond :: block
   | If { cond; if_block; else_block; _ } ->
       (cond :: if_block.desc)
       @ Option.fold ~none:[] ~some:(fun b -> b.desc) else_block

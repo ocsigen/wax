@@ -101,12 +101,9 @@ fn caml_hexstring_of_float(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
             }
             frac = m << 12;
             j = 0;
-            'prec: loop {
-                if frac != 0 {
-                    j = j + 1;
-                    frac = frac << 4;
-                    br 'prec;
-                }
+            while frac != 0 {
+                j = j + 1;
+                frac = frac << 4;
             }
             if prec <s j {
                 prec = j;
@@ -117,11 +114,10 @@ fn caml_hexstring_of_float(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
                 d = 0 - exp;
             }
             j = 0;
-            'count: loop {
+            do {
                 j = j + 1;
                 d = d /u 10;
-                br_if 'count d;
-            }
+            } while d;
             len = i + prec + (6 + j);
             if !prec {
                 len = len - 1;
@@ -132,12 +128,11 @@ fn caml_hexstring_of_float(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
             } else {
                 d = 0 - exp;
             }
-            'write: loop {
+            do {
                 len = len - 1;
                 s[len] = 48 + d %u 10;
                 d = d /u 10;
-                br_if 'write d;
-            }
+            } while d;
             s[len - 1] = exp >=s 0?43:45;
             s[i] = 48; // '0'
             s[i + 1] = 120; // 'x'
@@ -147,13 +142,12 @@ fn caml_hexstring_of_float(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
                 s[i] = 46; // '.'
                 i = i + 1;
                 frac = m << 12;
-                'write: loop {
+                do {
                     s[i] = lowercase_hex_table[(frac >>u 60) as i32] as i32_u;
                     frac = frac << 4;
                     prec = prec - 1;
                     i = i + 1;
-                    br_if 'write prec >s 0;
-                }
+                } while prec >s 0;
             }
             s[i] = 112;
             s;
@@ -275,7 +269,7 @@ fn caml_format_float(x: &eq, x_2: &eq) -> &eq {
     if uppercase {
         i = 0;
         len = s.length();
-        'uppercase: loop {
+        do {
             let c = s[i] as i32_u;
             if
                 (c >=u 97) // 'a'
@@ -284,8 +278,7 @@ fn caml_format_float(x: &eq, x_2: &eq) -> &eq {
                 s[i] = c - 32;
             }
             i = i + 1;
-            br_if 'uppercase i <u len;
-        }
+        } while i <u len;
     }
     s;
 }
@@ -300,90 +293,87 @@ fn caml_float_of_hex(s: &string, i: i32) -> f64 {
         let exp: i32;
         let n_bits: i32;
         let x_bits: i32;
-        'parse: loop {
-            if i <u len {
-                let c = s[i] as i32_u;
+        'parse: while i <u len {
+            let c = s[i] as i32_u;
+            i = i + 1;
+            if c == 46 // '.'
+            {
+                br_if 'error dec_point >=s 0;
+                dec_point = n_bits;
+                br 'parse;
+            }
+            let d: i32;
+            if
+                (c == 80) // 'P'
+                    | (c == 112) // 'p'
+            {
+                br_if 'error i == len;
+                c = s[i] as i32_u;
                 i = i + 1;
-                if c == 46 // '.'
+                let negative: i32;
+                if c == 45 // '-'
                 {
-                    br_if 'error dec_point >=s 0;
-                    dec_point = n_bits;
-                    br 'parse;
+                    negative = 1;
+                    br_if 'error i == len;
+                    c = s[i] as i32_u;
+                    i = i + 1;
                 }
-                let d: i32;
-                if
-                    (c == 80) // 'P'
-                        | (c == 112) // 'p'
+                if c == 43 // '+'
                 {
                     br_if 'error i == len;
                     c = s[i] as i32_u;
                     i = i + 1;
-                    let negative: i32;
-                    if c == 45 // '-'
-                    {
-                        negative = 1;
-                        br_if 'error i == len;
-                        c = s[i] as i32_u;
-                        i = i + 1;
-                    }
-                    if c == 43 // '+'
-                    {
-                        br_if 'error i == len;
-                        c = s[i] as i32_u;
-                        i = i + 1;
-                    }
-                    'overflow: do {
-                        'parse_exponent: loop {
-                            br_if 'error (c <u 48) | (c >u 57);
-                            d = c - 48;
-                            exp = exp * 10 + d;
-                            br_if 'overflow exp <u d;
-                            if i != len {
-                                c = s[i] as i32_u;
-                                i = i + 1;
-                                br 'parse_exponent;
-                            }
+                }
+                'overflow: do {
+                    'parse_exponent: loop {
+                        br_if 'error (c <u 48) | (c >u 57);
+                        d = c - 48;
+                        exp = exp * 10 + d;
+                        br_if 'overflow exp <u d;
+                        if i != len {
+                            c = s[i] as i32_u;
+                            i = i + 1;
+                            br 'parse_exponent;
                         }
-                        if negative {
-                            br_if 'overflow exp >u 0x80000000;
-                            exp = 0 - exp;
-                        } else {
-                            br_if 'overflow exp >=u 0x80000000;
-                        }
-                        br 'parse;
                     }
-                    if negative | !m {
-                        return 0;
+                    if negative {
+                        br_if 'overflow exp >u 0x80000000;
+                        exp = 0 - exp;
                     } else {
-                        return inf;
+                        br_if 'overflow exp >=u 0x80000000;
                     }
+                    br 'parse;
                 }
-                if (c >=u 48) & (c <=u 57) {
-                    d = c - 48;
+                if negative | !m {
+                    return 0;
                 } else {
-                    if (c >=u 97) & (c <=u 102) {
-                        d = c - 87;
+                    return inf;
+                }
+            }
+            if (c >=u 48) & (c <=u 57) {
+                d = c - 48;
+            } else {
+                if (c >=u 97) & (c <=u 102) {
+                    d = c - 87;
+                } else {
+                    if (c >=u 65) & (c <=u 70) {
+                        d = c - 55;
                     } else {
-                        if (c >=u 65) & (c <=u 70) {
-                            d = c - 55;
-                        } else {
-                            br 'error;
-                        }
+                        br 'error;
                     }
                 }
-                n_bits = n_bits + 4;
-                br_if 'parse !d & !m;
-                let m_bits: i32;
-                if m_bits <u 60 {
-                    m = (m << 4) + d as i64_u;
-                    m_bits = m_bits + 4;
-                } else {
-                    if d {
-                        m = m | 1;
-                    }
-                    x_bits = x_bits + 4;
+            }
+            n_bits = n_bits + 4;
+            br_if 'parse !d & !m;
+            let m_bits: i32;
+            if m_bits <u 60 {
+                m = (m << 4) + d as i64_u;
+                m_bits = m_bits + 4;
+            } else {
+                if d {
+                    m = m | 1;
                 }
-                br 'parse;
+                x_bits = x_bits + 4;
             }
         }
         br_if 'error !n_bits;
@@ -422,32 +412,26 @@ fn caml_float_of_string(x: &eq) -> &eq {
     let len = s.length();
     let i: i32;
     let j: i32;
-    'count: loop {
-        if i <u len {
-            if
-                95 // '_'
-                    == s[i] as i32_u {
-                j = j + 1;
-            }
-            i = i + 1;
-            br 'count;
+    while i <u len {
+        if
+            95 // '_'
+                == s[i] as i32_u {
+            j = j + 1;
         }
+        i = i + 1;
     }
     let c: i32;
     if j {
         let s' = [string|0; len - j];
         i = 0;
         j = 0;
-        'copy: loop {
-            if i <u len {
-                c = s[i] as i32_u;
-                i = i + 1;
-                if c != 95 // '_'
-                {
-                    s'[j] = c;
-                    j = j + 1;
-                }
-                br 'copy;
+        while i <u len {
+            c = s[i] as i32_u;
+            i = i + 1;
+            if c != 95 // '_'
+            {
+                s'[j] = c;
+                j = j + 1;
             }
         }
         len = s'.length();

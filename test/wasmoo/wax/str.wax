@@ -179,14 +179,11 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq {
                                 i = group_start[arg];
                                 j = group_end[arg];
                                 br_if 'backtrack (i <s 0) | (j <s 0);
-                                'loop: loop {
-                                    if i <u j {
-                                        br_if 'prefix_match pos == len;
-                                        br_if 'backtrack s[i] as i32_u != s[pos] as i32_u;
-                                        pos = pos + 1;
-                                        i = i + 1;
-                                        br 'loop;
-                                    }
+                                while i <u j {
+                                    br_if 'prefix_match pos == len;
+                                    br_if 'backtrack s[i] as i32_u != s[pos] as i32_u;
+                                    pos = pos + 1;
+                                    i = i + 1;
                                 }
                                 br 'continue;
                             }
@@ -265,15 +262,12 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq {
                                 s' = cpool[arg + 1] as &string;
                                 i = 0;
                                 l = s'.length();
-                                'loop: loop {
-                                    if i <u l {
-                                        br_if 'prefix_match pos == len;
-                                        br_if 'backtrack
-                                            s'[i] as i32_u != normtable[s[pos] as i32_u] as i32_u;
-                                        pos = pos + 1;
-                                        i = i + 1;
-                                        br 'loop;
-                                    }
+                                while i <u l {
+                                    br_if 'prefix_match pos == len;
+                                    br_if 'backtrack
+                                        s'[i] as i32_u != normtable[s[pos] as i32_u] as i32_u;
+                                    pos = pos + 1;
+                                    i = i + 1;
                                 }
                                 br 'continue;
                             }
@@ -283,14 +277,11 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq {
                                 s' = cpool[arg + 1] as &string;
                                 i = 0;
                                 l = s'.length();
-                                'loop: loop {
-                                    if i <u l {
-                                        br_if 'prefix_match pos == len;
-                                        br_if 'backtrack s'[i] as i32_u != s[pos] as i32_u;
-                                        pos = pos + 1;
-                                        i = i + 1;
-                                        br 'loop;
-                                    }
+                                while i <u l {
+                                    br_if 'prefix_match pos == len;
+                                    br_if 'backtrack s'[i] as i32_u != s[pos] as i32_u;
+                                    pos = pos + 1;
+                                    i = i + 1;
                                 }
                                 br 'continue;
                             }
@@ -336,19 +327,16 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq {
         group_end[0] = pos;
         let res = [block|0 as &i31; (numgroups << 1) + 1];
         i = 0;
-        'loop: loop {
-            if i <u numgroups {
-                j = i << 1;
-                if (group_start[i] <s 0) | (group_end[i] <s 0) {
-                    res[j + 1] = -1 as &i31;
-                    res[j + 2] = -1 as &i31;
-                } else {
-                    res[j + 1] = group_start[i] as &i31;
-                    res[j + 2] = group_end[i] as &i31;
-                }
-                i = i + 1;
-                br 'loop;
+        while i <u numgroups {
+            j = i << 1;
+            if (group_start[i] <s 0) | (group_end[i] <s 0) {
+                res[j + 1] = -1 as &i31;
+                res[j + 2] = -1 as &i31;
+            } else {
+                res[j + 1] = group_start[i] as &i31;
+                res[j + 2] = group_end[i] as &i31;
             }
+            i = i + 1;
         }
         return res;
     }
@@ -367,14 +355,13 @@ fn re_search_forward(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     if pos >u len {
         caml_invalid_argument([string|search_forward @ 0; 18]);
     }
-    'loop: loop {
+    do {
         let res = re_match(re, s, pos, 0);
         if res is &block {
             return res;
         }
         pos = pos + 1;
-        br_if 'loop pos <=u len;
-    }
+    } while pos <=u len;
     [block|0 as &i31];
 }
 
@@ -389,14 +376,13 @@ fn re_search_backward(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     if pos >u len {
         caml_invalid_argument([string|search_backward @ 0; 19]);
     }
-    'loop: loop {
+    do {
         let res = re_match(re, s, pos, 0);
         if res is &block {
             return res;
         }
         pos = pos - 1;
-        br_if 'loop pos >=s 0;
-    }
+    } while pos >=s 0;
     [block|0 as &i31];
 }
 
@@ -450,82 +436,76 @@ fn re_replacement_text(vrepl: &eq, vgroups: &eq, vorig: &eq) -> &eq {
     let c: i32;
     let start: i32;
     let end: i32;
-    'loop: loop {
-        if i <u l {
-            c = repl[i] as i32_u;
-            i = i + 1;
-            if c != 92 // '\\'
-            {
-                len = len + 1;
-                br 'loop;
-            }
-            if i == l {
-                caml_failwith([string|illegal_backslash @ 0; 39]);
-            }
-            c = repl[i] as i32_u;
-            i = i + 1;
-            if c == 92 // '\\'
-            {
-                len = len + 1;
-                br 'loop;
-            }
-            c = c - 48; // '0'
-            if c >u 9 {
-                len = len + 2;
-                br 'loop;
-            }
-            c = c << 1;
-            if c + 1 >u groups.length() {
-                caml_failwith([string|unmatched_group @ 0; 41]);
-            }
-            start = groups[c + 1] as &i31 as i32_s;
-            end = groups[c + 2] as &i31 as i32_s;
-            if start == -1 {
-                caml_failwith([string|unmatched_group @ 0; 41]);
-            }
-            len = len + (end - start);
+    'loop: while i <u l {
+        c = repl[i] as i32_u;
+        i = i + 1;
+        if c != 92 // '\\'
+        {
+            len = len + 1;
             br 'loop;
         }
+        if i == l {
+            caml_failwith([string|illegal_backslash @ 0; 39]);
+        }
+        c = repl[i] as i32_u;
+        i = i + 1;
+        if c == 92 // '\\'
+        {
+            len = len + 1;
+            br 'loop;
+        }
+        c = c - 48; // '0'
+        if c >u 9 {
+            len = len + 2;
+            br 'loop;
+        }
+        c = c << 1;
+        if c + 1 >u groups.length() {
+            caml_failwith([string|unmatched_group @ 0; 41]);
+        }
+        start = groups[c + 1] as &i31 as i32_s;
+        end = groups[c + 2] as &i31 as i32_s;
+        if start == -1 {
+            caml_failwith([string|unmatched_group @ 0; 41]);
+        }
+        len = len + (end - start);
     }
     let res = [string|0; len];
     i = 0;
-    'loop: loop {
-        if i <u l {
-            c = repl[i] as i32_u;
-            i = i + 1;
-            let j: i32;
-            if c != 92 // '\\'
-            {
-                res[j] = c;
-                j = j + 1;
-                br 'loop;
-            }
-            c = repl[i] as i32_u;
-            i = i + 1;
-            if c == 92 // '\\'
-            {
-                res[j] = c;
-                j = j + 1;
-                br 'loop;
-            }
-            c = c - 48; // '0'
-            if c >u 9 {
-                res[j] = 92;
-                res[j + 1] = c + 48;
-                j = j + 2;
-                br 'loop;
-            }
-            c = c << 1;
-            if c + 1 >u groups.length() {
-                caml_failwith([string|unmatched_group @ 0; 41]);
-            }
-            start = groups[c + 1] as &i31 as i32_s;
-            end = groups[c + 2] as &i31 as i32_s;
-            len = end - start;
-            res.copy(j, orig, start, len);
-            j = j + len;
+    'loop: while i <u l {
+        c = repl[i] as i32_u;
+        i = i + 1;
+        let j: i32;
+        if c != 92 // '\\'
+        {
+            res[j] = c;
+            j = j + 1;
             br 'loop;
         }
+        c = repl[i] as i32_u;
+        i = i + 1;
+        if c == 92 // '\\'
+        {
+            res[j] = c;
+            j = j + 1;
+            br 'loop;
+        }
+        c = c - 48; // '0'
+        if c >u 9 {
+            res[j] = 92;
+            res[j + 1] = c + 48;
+            j = j + 2;
+            br 'loop;
+        }
+        c = c << 1;
+        if c + 1 >u groups.length() {
+            caml_failwith([string|unmatched_group @ 0; 41]);
+        }
+        start = groups[c + 1] as &i31 as i32_s;
+        end = groups[c + 2] as &i31 as i32_s;
+        len = end - start;
+        res.copy(j, orig, start, len);
+        j = j + len;
     }
     res;
 }

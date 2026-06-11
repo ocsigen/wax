@@ -214,8 +214,16 @@ let expr_type_name i =
       print_instr i;
       assert false
 
+(* The branch context threaded down a function body. [return] is the function's
+   result label with its current de Bruijn depth, so a branch to it is emitted
+   numerically; [labels] is every enclosing label name (innermost first),
+   used to pick a fresh readable label for a label-less [while]/[do]-[while]. *)
+type ret = { return : (string * int) option; labels : string list }
+
+let no_ret = { return = None; labels = [] }
+
 let label ret (lab : ident) =
-  match ret with
+  match ret.return with
   | Some (lab', depth) when lab.desc = lab' ->
       { lab with desc = Text.Num (Uint32.of_int depth) }
   | _ -> { lab with desc = Text.Id lab.desc }
@@ -226,10 +234,26 @@ let on_clause ret (c : on_clause) : Text.on_clause =
   | OnSwitch tag -> OnSwitch (index tag)
 
 let push ret label =
-  match (ret, label) with
-  | Some (label, _), Some label' when label = label'.desc -> None
-  | Some (label, i), _ -> Some (label, i + 1)
-  | None, _ -> None
+  let return =
+    match (ret.return, label) with
+    | Some (l, _), Some l' when l = l'.desc -> None
+    | Some (l, i), _ -> Some (l, i + 1)
+    | None, _ -> None
+  in
+  let labels =
+    match label with Some l -> l.desc :: ret.labels | None -> ret.labels
+  in
+  { return; labels }
+
+(* A readable label for the [loop] a label-less [while]/[do]-[while] lowers to:
+   [loop], or [loop2], [loop3], … when an enclosing label already takes the
+   name (the function's result label included — see {!push}). *)
+let fresh_loop_label ret =
+  let rec pick i =
+    let n = if i = 1 then "loop" else "loop" ^ string_of_int i in
+    if List.mem n ret.labels then pick (i + 1) else n
+  in
+  pick 1
 
 let ensure_type_is_defined ctx typ =
   match typ with
@@ -1084,6 +1108,22 @@ let rec instruction ret ctx i : location Text.instr list =
       List.concat_map (instruction ret ctx)
         (Wax.Ast_utils.lower_dispatch ~block_info:i.info ~index ~cases ~default
            ~arms)
+  | While { label; cond; block } ->
+      (* Lower to the equivalent ['L: loop { if C { B; br 'L; } }] and convert;
+         a label-less loop gets a fresh readable [loop]/[loopN] (the loop label
+         threads into [ret] via the recursive calls). *)
+      let label =
+        Some (Option.value label ~default:(Ast.no_loc (fresh_loop_label ret)))
+      in
+      List.concat_map (instruction ret ctx)
+        (Wax.Ast_utils.lower_while ~block_info:i.info ~label ~cond ~block)
+  | DoWhile { label; block; cond } ->
+      (* Likewise to ['L: loop { B; br_if 'L C; }]. *)
+      let label =
+        Some (Option.value label ~default:(Ast.no_loc (fresh_loop_label ret)))
+      in
+      List.concat_map (instruction ret ctx)
+        (Wax.Ast_utils.lower_dowhile ~block_info:i.info ~label ~cond ~block)
   | Br_on_null (l, expr) ->
       folded loc (Br_on_null (label ret l)) (instruction ret ctx expr)
   | Br_on_non_null (l, expr) ->
@@ -1362,7 +1402,7 @@ let module_ diagnostics types fields =
                           id = d.data_name;
                           init = [ { desc = d.init; info = field.info } ];
                           mode =
-                            Active (index name, instruction None ictx d.offset);
+                            Active (index name, instruction no_ret ictx d.offset);
                         };
                   })
                 data
@@ -1376,7 +1416,7 @@ let module_ diagnostics types fields =
                   let ictx =
                     { ctx with referenced_functions = func_refs_outside_func }
                   in
-                  Active (index mem, instruction None ictx off)
+                  Active (index mem, instruction no_ret ictx off)
             in
             [
               {
@@ -1411,7 +1451,7 @@ let module_ diagnostics types fields =
                   let ictx =
                     { ctx with referenced_functions = func_refs_outside_func }
                   in
-                  Init_expr (instruction None ictx e)
+                  Init_expr (instruction no_ret ictx e)
             in
             let table_field =
               match import attributes with
@@ -1436,9 +1476,9 @@ let module_ diagnostics types fields =
               match mode with
               | EPassive -> Passive
               | EActive (tab, off) ->
-                  Active (index tab, instruction None ictx off)
+                  Active (index tab, instruction no_ret ictx off)
             in
-            let init = List.map (fun e -> instruction None ictx e) init in
+            let init = List.map (fun e -> instruction no_ret ictx e) init in
             [
               {
                 field with
@@ -1483,7 +1523,7 @@ let module_ diagnostics types fields =
                     let ctx =
                       { ctx with referenced_functions = func_refs_outside_func }
                     in
-                    instruction None ctx def
+                    instruction no_ret ctx def
                   in
                   Text.Global
                     {
@@ -1555,7 +1595,13 @@ let module_ diagnostics types fields =
                   let instrs =
                     List.concat_map
                       (instruction
-                         (Option.map (fun label -> (label.desc, 0)) label)
+                         {
+                           return = Option.map (fun l -> (l.desc, 0)) label;
+                           labels =
+                             (match label with
+                             | Some l -> [ l.desc ]
+                             | None -> []);
+                         }
                          ctx)
                       instrs
                   in

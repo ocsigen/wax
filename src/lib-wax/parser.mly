@@ -65,7 +65,7 @@
 %token REC
 %token OPEN
 %token NOP UNREACHABLE NULL
-%token DO LOOP IF ELSE
+%token DO WHILE LOOP IF ELSE
 %token CONST LET AS IS
 %token BECOME
 %token BR BR_IF BR_TABLE RETURN THROW THROW_REF
@@ -84,6 +84,12 @@
    is preferred over reducing the empty [else_clause]. *)
 %nonassoc prec_no_else
 %nonassoc "#[else]"
+
+(* A [while] right after a [do { … }] block continues it into a [do]-[while]
+   loop rather than starting a fresh [while] loop: shifting [while] (the
+   trailing test) is preferred over reducing the empty [do_tail]. *)
+%nonassoc prec_no_while
+%nonassoc WHILE
 
 %nonassoc prec_ident (* {a|...} *) prec_block
 %right prec_branch
@@ -241,6 +247,7 @@ ident_or_keyword:
 | UNREACHABLE { "unreachable" }
 | NULL { "null" }
 | DO { "do" }
+| WHILE { "while" }
 | LOOP { "loop" }
 | IF { "if" }
 | ELSE { "else" }
@@ -474,7 +481,21 @@ blockinstr:
   "{" arms = list(dispatch_arm) "}"
   { with_loc $sloc (Dispatch {index; cases; default; arms}) }
 | label = block_label DO bt = option(block_type) "{" l = statement_list "}"
-  { with_loc $sloc (Block{label; typ = blocktype bt; block = l}) }
+  w = do_tail
+  { match w with
+    | None -> with_loc $sloc (Block{label; typ = blocktype bt; block = l})
+    | Some cond ->
+        (* [do { … } while C;]: a void trailing-test loop, so a block type is
+           meaningless here. *)
+        (match bt with
+         | Some _ ->
+             raise (Wasm.Parsing.Syntax_error
+                      ($sloc, "A do-while loop cannot have a block type.\n"))
+         | None -> ());
+        with_loc $sloc (DoWhile{label; block = l; cond}) }
+| label = block_label WHILE cond = condition_expression
+  "{" l = statement_list "}"
+  { with_loc $sloc (While{label; cond; block = l}) }
 | label = block_label LOOP bt = option(block_type)
   "{" l = statement_list "}"
   { with_loc $sloc (Loop{label; typ = blocktype bt; block = l}) }
@@ -491,6 +512,14 @@ blockinstr:
   "{" catches = list(legacy_catch); catch_all = option(legacy_catch_all) "}"
   { with_loc $sloc
       (Try {label; typ = blocktype bt; block = l; catches; catch_all}) }
+
+(* The optional trailing test of a [do { … }] block: absent it stays a plain
+   block, present it makes a [do]-[while] loop. The empty case is marked
+   [prec_no_while] so a following [while] shifts into this tail (see the
+   precedence declarations). *)
+do_tail:
+| %prec prec_no_while { None }
+| WHILE cond = condition_expression ";" { Some cond }
 
 (* A brace-delimited statement list carrying a location, so a comment opening
    the block attaches to it rather than leaking onto the preceding condition

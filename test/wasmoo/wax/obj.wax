@@ -328,10 +328,9 @@ fn caml_get_public_method(obj: &eq, x: &eq, x_2: &eq) -> &eq {
     let cacheid = x_2 as &i31 as i32_u;
     let len = method_cache.length();
     if cacheid >=s len {
-        'size: loop {
+        do {
             len = len << 1;
-            br_if 'size cacheid >=s len;
-        }
+        } while cacheid >=s len;
         let a = [int_array|0; len];
         a.copy(0, method_cache, 0, method_cache.length());
         method_cache = a;
@@ -342,15 +341,12 @@ fn caml_get_public_method(obj: &eq, x: &eq, x_2: &eq) -> &eq {
     }
     let li = 3;
     let hi = (meths[1] as &i31 as i32_u << 1) + 1;
-    'loop: loop {
-        if li <u hi {
-            let mi = li + hi >>u 1 | 1;
-            if tag_2 <s meths[mi + 1] as &i31 as i32_s {
-                hi = mi - 2;
-            } else {
-                li = mi;
-            }
-            br 'loop;
+    while li <u hi {
+        let mi = li + hi >>u 1 | 1;
+        if tag_2 <s meths[mi + 1] as &i31 as i32_s {
+            hi = mi - 2;
+        } else {
+            li = mi;
         }
     }
     method_cache[cacheid] = li + 1;

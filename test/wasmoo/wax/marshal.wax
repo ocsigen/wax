@@ -200,11 +200,8 @@ fn readstr(s: &intern_state) -> &string {
     let src = s.src;
     let pos = s.pos;
     let len: i32;
-    'loop: loop {
-        if src[pos + len] as i32_u {
-            len = len + 1;
-            br 'loop;
-        }
+    while src[pos + len] as i32_u {
+        len = len + 1;
     }
     let res = [string|0; len];
     res.copy(0, src, pos, len);
@@ -221,17 +218,15 @@ fn readfloat(s: &intern_state, code: i32) -> f64 {
     let d: i64;
     let i: i32;
     if code == CODE_DOUBLE_BIG {
-        'loop: loop {
+        do {
             d = d << 8 | src[pos + i] as i32_u as i64_u;
             i = i + 1;
-            br_if 'loop i <u 8;
-        }
+        } while i <u 8;
     } else {
-        'loop: loop {
+        do {
             d = (d | src[pos + i] as i32_u as i64_u).rotr(8);
             i = i + 1;
-            br_if 'loop i <u 8;
-        }
+        } while i <u 8;
     }
     d.from_bits();
 }
@@ -241,13 +236,10 @@ fn readfloats(s: &intern_state, code: i32, len: i32) -> &eq {
         (code == CODE_DOUBLE_ARRAY8_BIG) | (code == CODE_DOUBLE_ARRAY32_BIG)?CODE_DOUBLE_BIG
             :CODE_DOUBLE_LITTLE;
     let dest = [float_array|0; len];
-    'loop: loop {
-        let i: i32;
-        if i <u len {
-            dest[i] = readfloat(s, code);
-            i = i + 1;
-            br 'loop;
-        }
+    let i: i32;
+    while i <u len {
+        dest[i] = readfloat(s, code);
+        i = i + 1;
     }
     dest;
 }
@@ -694,12 +686,11 @@ fn writefloat(s: &extern_state, f: f64) {
     let pos = reserve_extern_output(s, 8);
     let buf = s.buf;
     let d = f.to_bits();
-    'loop: loop {
-        let i: i32;
+    let i: i32;
+    do {
         buf[pos + i] = (d >>u (i << 3) as i64_u) as i32;
         i = i + 1;
-        br_if 'loop i <u 8;
-    }
+    } while i <u 8;
 }
 
 fn writefloats(s: &extern_state, b: &float_array) {
@@ -707,19 +698,15 @@ fn writefloats(s: &extern_state, b: &float_array) {
     let pos = reserve_extern_output(s, sz << 3);
     let buf = s.buf;
     let j = 0;
-    'loop2: loop {
-        if j <u sz {
-            let d = b[j].to_bits();
-            let i = 0;
-            'loop: loop {
-                buf[pos + i] = (d >>u (i << 3) as i64_u) as i32;
-                i = i + 1;
-                br_if 'loop i <u 8;
-            }
-            pos = pos + 8;
-            j = j + 1;
-            br 'loop2;
-        }
+    while j <u sz {
+        let d = b[j].to_bits();
+        let i = 0;
+        do {
+            buf[pos + i] = (d >>u (i << 3) as i64_u) as i32;
+            i = i + 1;
+        } while i <u 8;
+        pos = pos + 8;
+        j = j + 1;
     }
 }
 

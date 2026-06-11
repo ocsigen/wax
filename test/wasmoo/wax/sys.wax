@@ -112,12 +112,9 @@ fn caml_sys_random_seed(x: &eq) -> &eq {
     let n = ta_length(r);
     let a = [block|0 as &i31; n + 1];
     let i = 0;
-    'loop: loop {
-        if i <u n {
-            a[i + 1] = ta_get_i32(r, i) as &i31;
-            i = i + 1;
-            br 'loop;
-        }
+    while i <u n {
+        a[i + 1] = ta_get_i32(r, i) as &i31;
+        i = i + 1;
     }
     a;
 }

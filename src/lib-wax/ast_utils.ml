@@ -7,6 +7,20 @@ let rec map_instr f instr =
         Block { label; typ; block = List.map (map_instr f) instrs }
     | Loop { label; typ; block = instrs } ->
         Loop { label; typ; block = List.map (map_instr f) instrs }
+    | While { label; cond; block = instrs } ->
+        While
+          {
+            label;
+            cond = map_instr f cond;
+            block = List.map (map_instr f) instrs;
+          }
+    | DoWhile { label; block = instrs; cond } ->
+        DoWhile
+          {
+            label;
+            block = List.map (map_instr f) instrs;
+            cond = map_instr f cond;
+          }
     | If { label; typ; cond; if_block; else_block } ->
         If
           {
@@ -131,6 +145,54 @@ let lower_dispatch ~block_info ~index ~cases ~default ~arms =
   match arms with
   | [] -> [ br ]
   | (_, first_body) :: _ -> build arms :: first_body
+
+(* Label of the [loop] a label-less [while]/[do]-[while] lowers to during type
+   checking. The [#] is not a Wax identifier character, so it can never clash
+   with a source label nor be the target of a user [br], keeping the body's
+   branches well resolved. (Wasm conversion instead resolves the label to a
+   readable [loop]/[loopN] before lowering — that name is what reaches emitted
+   Wat — so this synthetic one only ever labels the discarded type-check
+   lowering; see [To_wasm].) *)
+let synthetic_loop_label = "#loop"
+let loop_label = function Some l -> l | None -> no_loc synthetic_loop_label
+
+(* Lower a leading-test [while C { B }] to ['L: loop { if C { B; br 'L; } }]:
+   each iteration re-tests [C] and, while it holds, runs the body and branches
+   back; a false test falls out of the loop. Exact inverse of the [while] case
+   of {!Recover_loops}. *)
+let lower_while ~block_info ~label ~cond ~block =
+  let mk desc = { desc; info = block_info } in
+  let void = { params = [||]; results = [||] } in
+  let l = loop_label label in
+  let if_ =
+    mk
+      (If
+         {
+           label = None;
+           typ = void;
+           cond;
+           if_block = no_loc (block @ [ mk (Br (l, None)) ]);
+           else_block = None;
+         })
+  in
+  [ mk (Loop { label = Some l; typ = void; block = [ if_ ] }) ]
+
+(* Lower a trailing-test [do { B } while C;] to ['L: loop { B; br_if 'L C; }]:
+   the body runs once, then branches back as long as [C] holds. Exact inverse of
+   the [do]-[while] case of {!Recover_loops}. *)
+let lower_dowhile ~block_info ~label ~cond ~block =
+  let mk desc = { desc; info = block_info } in
+  let void = { params = [||]; results = [||] } in
+  let l = loop_label label in
+  [
+    mk
+      (Loop
+         {
+           label = Some l;
+           typ = void;
+           block = block @ [ mk (Br_if (l, cond)) ];
+         });
+  ]
 
 let rec map_modulefield f field =
   match field with

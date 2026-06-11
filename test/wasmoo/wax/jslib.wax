@@ -264,13 +264,10 @@ fn caml_js_object(x: &eq) -> &eq {
     let l = a.length();
     let i = 1;
     let o = new_obj();
-    'loop: loop {
-        if i <u l {
-            let p = a[i] as &block;
-            set(o, unwrap(caml_jsstring_of_string(p[1])), unwrap(p[2]));
-            i = i + 1;
-            br 'loop;
-        }
+    while i <u l {
+        let p = a[i] as &block;
+        set(o, unwrap(caml_jsstring_of_string(p[1])), unwrap(p[2]));
+        i = i + 1;
     }
     {js| f: o };
 }
@@ -287,12 +284,9 @@ fn caml_js_from_array(va: &eq) -> &eq {
             l = a.length() - 1;
             a' = new_array(l);
             i = 0;
-            'loop: loop {
-                if i <u l {
-                    array_set(a', i, unwrap(a[i + 1]));
-                    i = i + 1;
-                    br 'loop;
-                }
+            while i <u l {
+                array_set(a', i, unwrap(a[i + 1]));
+                i = i + 1;
             }
             return {js| f: a' as &any };
         };
@@ -300,12 +294,9 @@ fn caml_js_from_array(va: &eq) -> &eq {
     l = fa.length();
     a' = new_array(l);
     i = 0;
-    'loop: loop {
-        if i <u l {
-            array_set(a', i, {float| f: fa[i] });
-            i = i + 1;
-            br 'loop;
-        }
+    while i <u l {
+        array_set(a', i, {float| f: fa[i] });
+        i = i + 1;
     }
     {js| f: a' as &any };
 }
@@ -319,24 +310,18 @@ fn caml_js_to_array(x: &eq) -> &eq {
         if array_get(a, 0) is &float {
             let fa = [float_array|0; l];
             i = 0;
-            'loop: loop {
-                if i <u l {
-                    fa[i] = (array_get(a, i) as &float).f;
-                    i = i + 1;
-                    br 'loop;
-                }
+            while i <u l {
+                fa[i] = (array_get(a, i) as &float).f;
+                i = i + 1;
             }
             return fa;
         }
     }
     let a' = [block|0 as &i31; l + 1];
     i = 0;
-    'loop: loop {
-        if i <u l {
-            a'[i + 1] = wrap(array_get(a, i));
-            i = i + 1;
-            br 'loop;
-        }
+    while i <u l {
+        a'[i + 1] = wrap(array_get(a, i));
+        i = i + 1;
     }
     a';
 }
@@ -346,12 +331,9 @@ fn caml_js_to_string_array(a: &extern) -> &eq {
     let l = array_length(a);
     let a' = [block|0 as &i31; l + 1];
     let i = 0;
-    'loop: loop {
-        if i <u l {
-            a'[i + 1] = caml_string_of_jsstring(wrap(array_get(a, i)));
-            i = i + 1;
-            br 'loop;
-        }
+    while i <u l {
+        a'[i + 1] = caml_string_of_jsstring(wrap(array_get(a, i)));
+        i = i + 1;
     }
     a';
 }
@@ -412,22 +394,18 @@ fn caml_callback(
     let acc = f;
     let i: i32;
     if kind == 2 {
-        'loop: loop {
+        do {
             f = acc;
             acc = caml_callback_1(acc, wrap(get(args, i as &i31)));
             i = i + 1;
-            br_if 'loop !caml_is_last_arg(f);
-        }
+        } while !caml_is_last_arg(f);
     } else {
         i = 0;
         'done: do {
-            'loop: loop {
-                if i <u count {
-                    br_if 'done !caml_is_closure(acc);
-                    acc = caml_callback_1(acc, wrap(get(args, i as &i31)));
-                    i = i + 1;
-                    br 'loop;
-                }
+            while i <u count {
+                br_if 'done !caml_is_closure(acc);
+                acc = caml_callback_1(acc, wrap(get(args, i as &i31)));
+                i = i + 1;
             }
         }
         if kind {
@@ -452,14 +430,11 @@ fn caml_jsbytes_of_string(x: &eq) -> &eq {
     let l = s.length();
     let i = 0;
     let n = 0;
-    'count: loop {
-        if i <u l {
-            if s[i] as i32_u >=u 128 {
-                n = n + 1;
-            }
-            i = i + 1;
-            br 'count;
+    while i <u l {
+        if s[i] as i32_u >=u 128 {
+            n = n + 1;
         }
+        i = i + 1;
     }
     if !n {
         return {js| f: jsstring_of_string(s) };
@@ -467,20 +442,17 @@ fn caml_jsbytes_of_string(x: &eq) -> &eq {
     let s' = [string|0; i + n];
     i = 0;
     n = 0;
-    'fill: loop {
-        if i <u l {
-            let c = s[i] as i32_u;
-            if c <u 128 {
-                s'[n] = c;
-                n = n + 1;
-            } else {
-                s'[n] = c >>u 6 | 0xC0;
-                s'[n + 1] = 0x80 | c & 0x3F;
-                n = n + 2;
-            }
-            i = i + 1;
-            br 'fill;
+    while i <u l {
+        let c = s[i] as i32_u;
+        if c <u 128 {
+            s'[n] = c;
+            n = n + 1;
+        } else {
+            s'[n] = c >>u 6 | 0xC0;
+            s'[n + 1] = 0x80 | c & 0x3F;
+            n = n + 2;
         }
+        i = i + 1;
     }
     return {js| f: jsstring_of_string(s') };
 }
@@ -497,14 +469,11 @@ fn caml_string_of_jsbytes(s: &eq) -> &eq {
     let l = s'.length();
     let i = 0;
     let n = 0;
-    'count: loop {
-        if i <u l {
-            if s'[i] as i32_u >=u 0xC0 {
-                n = n + 1;
-            }
-            i = i + 1;
-            br 'count;
+    while i <u l {
+        if s'[i] as i32_u >=u 0xC0 {
+            n = n + 1;
         }
+        i = i + 1;
     }
     if !n {
         return s';
@@ -512,19 +481,16 @@ fn caml_string_of_jsbytes(s: &eq) -> &eq {
     let s'' = [string|0; i - n];
     i = 0;
     n = 0;
-    'fill: loop {
-        if i <u l {
-            let c = s'[i] as i32_u;
-            if c <u 0xC0 {
-                s''[n] = c;
-                i = i + 1;
-            } else {
-                s''[n] = (c << 6) + s'[i + 1] as i32_u - 0x3080;
-                i = i + 2;
-            }
-            n = n + 1;
-            br 'fill;
+    while i <u l {
+        let c = s'[i] as i32_u;
+        if c <u 0xC0 {
+            s''[n] = c;
+            i = i + 1;
+        } else {
+            s''[n] = (c << 6) + s'[i + 1] as i32_u - 0x3080;
+            i = i + 2;
         }
+        n = n + 1;
     }
     s'';
 }
@@ -564,12 +530,9 @@ fn caml_list_of_js_array(x: &eq) -> &eq {
     let len = array_length(a);
     let i = 0;
     let l: &eq = 0 as &i31;
-    'loop: loop {
-        if i <u len {
-            l = [block|0 as &i31, wrap(array_get(a, i)), l];
-            i = i + 1;
-            br 'loop;
-        }
+    while i <u len {
+        l = [block|0 as &i31, wrap(array_get(a, i)), l];
+        i = i + 1;
     }
     l;
 }

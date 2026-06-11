@@ -345,16 +345,13 @@ fn caml_getblock(vch: &eq, s: &string, pos: i32, len: i32) -> i32 {
 #[export = "caml_really_getblock"]
 fn caml_really_getblock(ch: &eq, s: &string, pos: i32, len: i32) -> i32 {
     let n = len;
-    'loop: loop {
-        if n {
-            let read = caml_getblock(ch, s, pos, n);
-            if !read {
-                return len - n;
-            }
-            pos = pos + read;
-            n = n - read;
-            br 'loop;
+    while n {
+        let read = caml_getblock(ch, s, pos, n);
+        if !read {
+            return len - n;
         }
+        pos = pos + read;
+        n = n - read;
     }
     len;
 }
@@ -516,9 +513,7 @@ fn caml_ml_input_scan_line(vch: &eq) -> &eq {
 }
 
 fn caml_flush(ch: &channel) {
-    'loop: loop {
-        br_if 'loop !caml_flush_partial(ch);
-    }
+    do {} while !caml_flush_partial(ch);
 }
 
 #[export = "caml_flush_if_unbuffered"]
@@ -585,13 +580,10 @@ fn caml_putblock(ch: &channel, s: &string, pos: i32, len: i32) -> i32 {
 
 #[export = "caml_really_putblock"]
 fn caml_really_putblock(ch: &eq, s: &string, pos: i32, len: i32) {
-    'loop: loop {
-        if len {
-            let written = caml_putblock(ch as &channel, s, pos, len);
-            pos = pos + written;
-            len = len - written;
-            br 'loop;
-        }
+    while len {
+        let written = caml_putblock(ch as &channel, s, pos, len);
+        pos = pos + written;
+        len = len - written;
     }
 }
 
@@ -600,13 +592,10 @@ fn caml_really_putblock(ch: &eq, s: &string, pos: i32, len: i32) {
 fn caml_ml_output(ch: &eq, s: &eq, vpos: &eq, vlen: &eq) -> &eq {
     let pos = vpos as &i31 as i32_u;
     let len = vlen as &i31 as i32_u;
-    'loop: loop {
-        if len >u 0 {
-            let written = caml_putblock(ch as &channel, s as &string, pos, len);
-            pos = pos + written;
-            len = len - written;
-            br 'loop;
-        }
+    while len >u 0 {
+        let written = caml_putblock(ch as &channel, s as &string, pos, len);
+        pos = pos + written;
+        len = len - written;
     }
     caml_flush_if_unbuffered(ch);
     0 as &i31;

@@ -147,6 +147,60 @@ fn find_first_zero(arr: &ints) -> i32 {
     br $search))
 ```
 
+## While and Do-While Loops
+
+### Wax
+
+```wax
+#[export = "triangle"]
+fn triangle(n: i32) -> i32 {
+    let i: i32 = 0;
+    let total: i32 = 0;
+    while i <s n {
+        i = i + 1;
+        total = total + i;
+    }
+    total;
+}
+
+#[export = "countdown"]
+fn countdown(n: i32) -> i32 {
+    let steps: i32 = 0;
+    do {
+        n = n - 1;
+        steps = steps + 1;
+    } while n >s 0;
+    steps;
+}
+```
+
+### Equivalent WAT
+
+```wat
+(func $triangle (export "triangle") (param $n i32) (result i32)
+  (local $i i32) (local $total i32)
+  (local.set $i (i32.const 0))
+  (local.set $total (i32.const 0))
+  (loop $loop
+    (if (i32.lt_s (local.get $i) (local.get $n))
+      (then
+        (local.set $i (i32.add (local.get $i) (i32.const 1)))
+        (local.set $total (i32.add (local.get $total) (local.get $i)))
+        (br $loop))))
+  (local.get $total)
+)
+
+(func $countdown (export "countdown") (param $n i32) (result i32)
+  (local $steps i32)
+  (local.set $steps (i32.const 0))
+  (loop $loop
+    (local.set $n (i32.sub (local.get $n) (i32.const 1)))
+    (local.set $steps (i32.add (local.get $steps) (i32.const 1)))
+    (br_if $loop (i32.gt_s (local.get $n) (i32.const 0))))
+  (local.get $steps)
+)
+```
+
 ## Dispatch (Jump Table)
 
 ### Wax

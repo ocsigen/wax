@@ -90,6 +90,8 @@ Binary and unary operations use standard mathematical operators. Signedness is o
 |------|-----|
 | `block` | `do { ... }` or `{ ... }` |
 | `loop` | `loop { ... }` |
+| `loop` + leading back-`br` idiom | `while cond { ... }` |
+| `loop` + trailing back-`br_if` idiom | `do { ... } while cond;` |
 | `if ... else ...` | `if cond { ... } else { ... }` |
 | `br $l` | `br 'l` |
 | `br_if $l` | `br_if 'l cond` |
