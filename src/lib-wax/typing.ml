@@ -4652,10 +4652,21 @@ let type_configuration ~simplify diagnostics fields =
         (fun (key, v) ->
           match (key, Option.map (fun (v : _ instr) -> v.desc) v) with
           | "export", Some (String (_, name)) ->
-              if Hashtbl.mem exports name then
+              (* Two exports of the same name clash only when the conditional
+                 branches guarding them can hold at once; the same name in
+                 mutually exclusive branches is fine. Each remembered guard is
+                 the path condition ([!cond]) under which an export was seen. *)
+              let guards =
+                Option.value ~default:[] (Hashtbl.find_opt exports name)
+              in
+              if
+                List.exists
+                  (fun g -> Cond.is_satisfiable (Cond.and_ g !cond))
+                  guards
+              then
                 Error.duplicated_export diagnostics
-                  ~location:(Option.get v).info name
-              else Hashtbl.add exports name ()
+                  ~location:(Option.get v).info name;
+              Hashtbl.replace exports name (!cond :: guards)
           | "start", _ ->
               (* A module may name at most one start function. *)
               if !start_seen then

@@ -233,7 +233,12 @@ type ctx = {
          never as a named Wax type. Empty for modules with conditional
          annotations, where numeric references are forbidden anyway. *)
   function_types : Src.typeuse CondTbl.t;
-  exports : (Src.exportable * string, Src.name list) Hashtbl.t;
+  exports : (Src.exportable * string, (Cond.t * Src.name) list) Hashtbl.t;
+      (* Standalone [(export …)] fields, keyed by the Wax name of their target,
+         attached to that target as [#[export]] attributes. Each is paired with
+         the conditional-branch assumption under which it appears, so a target
+         that exists in several mutually exclusive branches receives only the
+         exports of its own branch (and not the same export once per branch). *)
   mutable start : string option;
       (* Wax name of the start function, if any; rendered as a [#[start]]
          attribute on that function rather than a separate field. *)
@@ -1732,10 +1737,20 @@ let rec collect_elem_refs ctx acc (i : _ Src.instr) =
 and collect_elem_refs_instrs ctx acc l = List.iter (collect_elem_refs ctx acc) l
 
 let exports ctx kind name e =
-  List.map
-    (fun nm -> ("export", Some (string_of_name nm)))
-    (e
-    @ try Hashtbl.find ctx.exports (kind, name.Ast.desc) with Not_found -> [])
+  (* [e] are the inline exports declared on this field (already in the right
+     branch); the table holds the standalone exports, kept only when their
+     branch is reachable under the current assumption. *)
+  let standalone =
+    match Hashtbl.find_opt ctx.exports (kind, name.Ast.desc) with
+    | None -> []
+    | Some entries ->
+        List.filter_map
+          (fun (c, nm) ->
+            if Cond.is_satisfiable (Cond.and_ ctx.cond_asm c) then Some nm
+            else None)
+          entries
+  in
+  List.map (fun nm -> ("export", Some (string_of_name nm))) (e @ standalone)
 
 let import module_ name =
   ( "import",
@@ -2308,26 +2323,31 @@ let register_names ctx export_tbl fields =
   pass1 fields;
   pass2 fields
 
-let collect_exports fields =
+let collect_exports cond_env diagnostics fields =
   let tbl = Hashtbl.create 16 in
   let lst = ref [] in
-  let rec go fields =
+  (* [asm] is the branch assumption under which the fields being walked appear,
+     so each standalone export is recorded with the condition that guards it. *)
+  let rec go asm fields =
     List.iter
       (fun (field : (_ Src.modulefield, _) Ast.annotated) ->
         match field.desc with
         | Export { name; kind; index } ->
             (* Don't keep a meaningless location *)
-            lst := (kind, index, Ast.no_loc name.desc) :: !lst;
+            lst := (kind, index, Ast.no_loc name.desc, asm) :: !lst;
             let k = (kind, index.Ast.desc) in
             Hashtbl.replace tbl k
               (name :: (try Hashtbl.find tbl k with Not_found -> []))
-        | Module_if_annotation { then_fields; else_fields; _ } ->
-            go then_fields;
-            Option.iter go else_fields
+        | Module_if_annotation { cond; then_fields; else_fields } ->
+            let c =
+              Cond.of_cond cond_env diagnostics ~location:field.info cond
+            in
+            go (Cond.and_ asm c) then_fields;
+            Option.iter (go (Cond.and_ asm (Cond.not_ c))) else_fields
         | _ -> ())
       fields
   in
-  go fields;
+  go Cond.true_ fields;
   (tbl, !lst)
 
 let rec module_has_conditional fields =
@@ -2394,7 +2414,9 @@ let module_ ?(strict_constants = false) diagnostics (_, fields) =
         cond_asm = Cond.true_;
       }
     in
-    let export_tbl, export_lst = collect_exports fields in
+    let export_tbl, export_lst =
+      collect_exports ctx.cond_env ctx.cond_diag fields
+    in
     register_names ctx export_tbl fields;
     (* Resolve the start function (if any) to its Wax name; it is rendered as a
        [#[start]] attribute on that function. *)
@@ -2406,7 +2428,7 @@ let module_ ?(strict_constants = false) diagnostics (_, fields) =
       fields;
     if not forbid_numeric then elaborate_implicit_types ctx fields;
     List.iter
-      (fun (kind, index, name) ->
+      (fun (kind, index, name, asm) ->
         let k =
           ( kind,
             (idx ctx
@@ -2420,7 +2442,7 @@ let module_ ?(strict_constants = false) diagnostics (_, fields) =
               .desc )
         in
         let l =
-          name
+          (asm, name)
           ::
           (match Hashtbl.find_opt ctx.exports k with
           | None -> []
