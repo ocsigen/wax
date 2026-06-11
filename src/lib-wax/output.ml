@@ -573,6 +573,48 @@ let rec cond_to_string (c : Wasm.Ast.cond) =
 
 and cond_list l = String.concat ", " (List.map cond_to_string l)
 
+(* The space-separated case labels of a [br_table]/[dispatch] bracket, ending in
+   [else <default>]; printed inside a fill box so they pack and wrap. *)
+let label_seq pp cases default =
+  (match cases with
+  | [] -> ()
+  | first :: rest ->
+      identifier pp "'";
+      identifier pp first.desc;
+      List.iter
+        (fun l ->
+          space pp ();
+          identifier pp "'";
+          identifier pp l.desc)
+        rest;
+      space pp ());
+  keyword pp "else";
+  space pp ();
+  identifier pp "'";
+  identifier pp default.desc
+
+(* Print [<before>[ <labels> else <default> ]<after>], shared by [br_table] and
+   [dispatch]. On one line when it fits; otherwise [<before>[] stays on the line,
+   the labels are filled and indented, and []<after>] is dedented to the box's
+   column:
+     <before>[
+         <labels …>
+         … else <default>
+     ]<after>
+   [after] (e.g. the [dispatch] body's [{]) is glued to the []]. *)
+let bracketed_labels pp ~before ?(after = fun () -> ()) cases default =
+  hvbox pp ~indent:0 (fun () ->
+      hbox pp (fun () ->
+          before ();
+          punctuation pp "[");
+      indent pp indent_level (fun () ->
+          space pp ();
+          box pp (fun () -> label_seq pp cases default));
+      space pp ();
+      hbox pp (fun () ->
+          punctuation pp "]";
+          after ()))
+
 let rec instr prec pp (i : _ instr) =
   atomic_node pp (pp.locate i.info) @@ fun () ->
   parentheses prec (get_prec i) pp @@ fun () ->
@@ -739,6 +781,9 @@ let rec instr prec pp (i : _ instr) =
                               identifier pp label.desc;
                               if i < last then punctuation pp ","))
                     catches);
+              (* Break before the closing [\]] so a wrapped handler list dedents
+                 it to the [try]'s column rather than hugging the last handler. *)
+              cut pp ();
               punctuation pp "]"))
   | Unreachable -> keyword pp "unreachable"
   | Nop -> operator pp "nop"
@@ -910,72 +955,40 @@ let rec instr prec pp (i : _ instr) =
   | Br_on_cast_fail (label, ty, i) ->
       branch_ref_instr instr pp "br_on_cast_fail" label ty i
   | Br_table (labels, i) ->
-      let labels = List.rev labels in
+      let default, cases =
+        match List.rev labels with
+        | default :: rev_cases -> (default, List.rev rev_cases)
+        | [] -> assert false
+      in
       box pp ~indent:indent_level (fun () ->
-          keyword pp "br_table";
-          space pp ();
-          box pp ~indent:indent_level (fun () ->
-              punctuation pp "[";
-              list
-                ~sep:(fun _ () -> ())
-                (fun pp label ->
-                  space pp ();
-                  identifier pp "'";
-                  identifier pp label.desc)
-                pp
-                (List.rev (List.tl labels));
-              space pp ();
-              box pp (fun () ->
-                  keyword pp "else";
-                  space pp ();
-                  identifier pp "'";
-                  identifier pp (List.hd labels).desc);
-              space pp ();
-              punctuation pp "]");
+          bracketed_labels pp
+            ~before:(fun () ->
+              keyword pp "br_table";
+              space pp ())
+            cases default;
           space pp ();
           instr Branch pp i)
   | Dispatch { index; cases; default; arms } ->
       hvbox pp (fun () ->
-          (* Head: [dispatch <index> [ <labels> else <default> ] {]. The inner
-             hvbox keeps it on one line if it fits; otherwise it breaks as
+          (* Head: [dispatch <index> [ <labels> else <default> ] {], laid out on
+             one line or, when too wide, as
                  dispatch <index> [
                      <labels, filled and indented>
                  ] {
-             with the [']'] dedented to the [dispatch] column. *)
-          hvbox pp ~indent:0 (fun () ->
-              hbox pp (fun () ->
-                  keyword pp "dispatch";
-                  space pp ();
-                  (* Parenthesise a non-atomic index: the following '[' would
-                     otherwise bind to the index's last atom as an array
-                     access. *)
-                  instr Atom pp index;
-                  space pp ();
-                  punctuation pp "[");
-              indent pp indent_level (fun () ->
-                  space pp ();
-                  box pp (fun () ->
-                      (match cases with
-                      | [] -> ()
-                      | first :: rest ->
-                          identifier pp "'";
-                          identifier pp first.desc;
-                          List.iter
-                            (fun l ->
-                              space pp ();
-                              identifier pp "'";
-                              identifier pp l.desc)
-                            rest;
-                          space pp ());
-                      keyword pp "else";
-                      space pp ();
-                      identifier pp "'";
-                      identifier pp default.desc));
+             with the [']'] dedented to the [dispatch] column (see
+             [bracketed_labels]). *)
+          bracketed_labels pp
+            ~before:(fun () ->
+              keyword pp "dispatch";
               space pp ();
-              hbox pp (fun () ->
-                  punctuation pp "]";
-                  space pp ();
-                  punctuation pp "{"));
+              (* Parenthesise a non-atomic index: the following '[' would
+                 otherwise bind to the index's last atom as an array access. *)
+              instr Atom pp index;
+              space pp ())
+            ~after:(fun () ->
+              space pp ();
+              punctuation pp "{")
+            cases default;
           if arms <> [] then (
             indent pp indent_level (fun () ->
                 List.iter
