@@ -99,6 +99,19 @@ let list_commasep f pp l =
       space pp ())
     f pp l
 
+(* A trailing comma after the last element of [l], emitted only when the
+   enclosing box wraps across lines (rustfmt style). Skipped when the last
+   element carries a trailing comment: a comma there would push the comment off
+   the element and change where it re-attaches on a reparse (breaking
+   idempotence), so the comment-less last element keeps its layout. *)
+let trailing_comma pp l =
+  if l <> [] && not (Utils.Printer.has_pending_eol pp.base.printer) then
+    Utils.Printer.if_broken pp.base.printer (fun () -> punctuation pp ",")
+
+let list_commasep_trailing f pp l =
+  list_commasep f pp l;
+  trailing_comma pp l
+
 let print_paren_list f pp l =
   punctuation pp "(";
   box pp (fun () -> list_commasep f pp l);
@@ -116,7 +129,7 @@ let print_arg_list f pp l =
   | _ ->
       indent pp indent_level (fun () ->
           cut pp ();
-          list_commasep f pp l);
+          list_commasep_trailing f pp l);
       cut pp ());
   punctuation pp ")"
 
@@ -448,10 +461,15 @@ let struct_instr pp nm f =
       space pp ())
 
 let array_instr pp nm f =
-  print_container pp ~opening:"[" ~closing:"]" ~indent:indent_level nm
-    (fun () ->
-      cut pp ();
-      f ())
+  (* Indent the elements one level and break before the closing [\]] at the
+     array's own column (like [struct_instr]), so a wrapped array reads
+     [\[t|]/elem,/.../elem,/]\]] with [\]] dedented — not hugging the last
+     element as [elem,\]]. *)
+  print_container pp ~opening:"[" ~closing:"]" ~indent:0 nm (fun () ->
+      indent pp indent_level (fun () ->
+          cut pp ();
+          f ());
+      cut pp ())
 
 let get_prec (i : _ Ast.instr) =
   match i.desc with
@@ -776,7 +794,7 @@ let rec instr prec pp (i : _ instr) =
               reftype pp t))
   | Struct (nm, l) ->
       struct_instr pp nm (fun () ->
-          list_commasep
+          list_commasep_trailing
             (fun pp (nm, i) -> print_key_value pp nm.desc (instr Instruction) i)
             pp l)
   | StructDefault nm -> struct_instr pp nm (fun () -> punctuation pp "..")
@@ -806,7 +824,7 @@ let rec instr prec pp (i : _ instr) =
           instr Instruction pp n)
   | ArrayFixed (nm, l) ->
       array_instr pp nm (fun () ->
-          list_commasep
+          list_commasep_trailing
             (fun ctx (first, i) ->
               instr (array_element_precedence nm first i) ctx i)
             pp

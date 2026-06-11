@@ -58,7 +58,7 @@ fn caml_dup_custom(v: &eq) -> &eq {
          _ = br_on_cast 'custom &custom v;
          unreachable;
      }.f.dup!)(
-        v
+        v,
     );
 }
 

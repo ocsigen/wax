@@ -59,7 +59,8 @@ const re_word_letters =
         0xFF,
         0xFF, // 0xE0-0xFF:
         0x7F,
-        0xFF]; // Latin-1 accented lowercase
+        0xFF,
+    ]; // Latin-1 accented lowercase
 type stack = open { f: &?stack };
 type pos: stack = { pos_previous: &?stack, pc: i32, pos: i32 };
 type undo: stack = { undo_previous: &?stack, tbl: &int_array, idx: i32, val: i32 };
@@ -253,7 +254,7 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq {
                                                                                 !in_bitset(
                                                                                      cpool[arg + 1]
                                                                                          as &string,
-                                                                                     s[pos] as i32_u
+                                                                                     s[pos] as i32_u,
                                                                                  );
                                                                             pos = pos + 1;
                                                                             br 'continue;
@@ -278,24 +279,24 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq {
                                                                     br_if 'prefix_match pos == len;
                                                                     br_if 'continue
                                                                         is_word_letter(
-                                                                            s[pos] as i32_u
+                                                                            s[pos] as i32_u,
                                                                         );
                                                                     br 'backtrack;
                                                                 } else {
                                                                     if pos == len {
                                                                         br_if 'continue
                                                                             is_word_letter(
-                                                                                s[pos - 1] as i32_u
+                                                                                s[pos - 1] as i32_u,
                                                                             );
                                                                         br 'backtrack;
                                                                     } else {
                                                                         br_if 'continue
                                                                             is_word_letter(
-                                                                                s[pos - 1] as i32_u
+                                                                                s[pos - 1] as i32_u,
                                                                             )
                                                                                 != is_word_letter(
                                                                                        s[pos]
-                                                                                          as i32_u
+                                                                                          as i32_u,
                                                                                    );
                                                                         br 'backtrack;
                                                                     }
@@ -308,7 +309,7 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq {
                                                                     undo_previous: stack,
                                                                     tbl: group_start,
                                                                     idx: arg,
-                                                                    val: group_start[arg]
+                                                                    val: group_start[arg],
                                                                 };
                                                             group_start[arg] = pos;
                                                             br 'continue;
@@ -320,7 +321,7 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq {
                                                                 undo_previous: stack,
                                                                 tbl: group_end,
                                                                 idx: arg,
-                                                                val: group_end[arg]
+                                                                val: group_end[arg],
                                                             };
                                                         group_end[arg] = pos;
                                                         br 'continue;
@@ -348,7 +349,7 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq {
                                                     if
                                                         in_bitset(
                                                             cpool[arg + 1] as &string,
-                                                            s[pos] as i32_u
+                                                            s[pos] as i32_u,
                                                         ) {
                                                         pos = pos + 1;
                                                     }
@@ -397,7 +398,7 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq {
                                     undo_previous: stack,
                                     tbl: re_register,
                                     idx: arg,
-                                    val: re_register[arg]
+                                    val: re_register[arg],
                                 };
                             re_register[arg] = pos;
                             br 'continue;

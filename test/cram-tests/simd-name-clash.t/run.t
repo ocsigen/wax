@@ -11,7 +11,7 @@ the user function. The call site is rewritten to the renamed function.
       v128_bitselect(
           v128_const_i32x4(0, 0, 0, 0),
           v128_const_i32x4(1, 1, 1, 1),
-          v128_const_i32x4(2, 2, 2, 2)
+          v128_const_i32x4(2, 2, 2, 2),
       );
   }
   fn also() -> i32 {

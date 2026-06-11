@@ -208,7 +208,7 @@ data toString = "toString";
 fn caml_handle_sys_error(exn: &?extern) {
     caml_raise_sys_error(
         caml_string_of_jsstring(
-            caml_js_meth_call(wrap(exn as &?any), [string|toString @ 0; 8], [block|0 as &i31])
-        )
+            caml_js_meth_call(wrap(exn as &?any), [string|toString @ 0; 8], [block|0 as &i31]),
+        ),
     );
 }

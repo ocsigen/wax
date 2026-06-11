@@ -43,7 +43,7 @@ fn caml_alloc_tm(
     year: i32,
     wday: i32,
     yday: i32,
-    isdst: i32
+    isdst: i32,
 ) -> &eq {
     [block|
         0 as &i31,
@@ -55,7 +55,8 @@ fn caml_alloc_tm(
         year as &i31,
         wday as &i31,
         yday as &i31,
-        isdst as &i31];
+        isdst as &i31,
+    ];
 }
 
 #[export = "unix_gmtime"]
@@ -87,7 +88,7 @@ fn unix_mktime(x: &eq) -> &eq {
             tm[4] as &i31 as i32_s,
             tm[3] as &i31 as i32_s,
             tm[2] as &i31 as i32_s,
-            tm[1] as &i31 as i32_s
+            tm[1] as &i31 as i32_s,
         ) / 1000;
     [block|0 as &i31, {float| f: t }, localtime(t)];
 }

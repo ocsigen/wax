@@ -28,6 +28,10 @@ module Doc = struct
     | Cat of doc * doc
     | Nest of int * doc
     | Group of gkind * doc
+    | If_broken of doc
+  (* Emit [doc] only when the enclosing group is laid out broken (not flat): a
+     trailing comma after the last element of a list that wraps. It never counts
+     toward the fit decision (a flat list has no trailing comma). *)
 
   type frame = { wrap : doc -> doc; mutable items : doc list (* reversed *) }
 
@@ -99,6 +103,8 @@ module Doc = struct
     f ();
     st.holding_eol <- prev
 
+  let has_pending_eol st = st.pending_eol <> None
+
   let text st len s =
     if not st.holding_eol then force_eol st;
     st.has_emitted <- true;
@@ -113,6 +119,11 @@ module Doc = struct
 
   let indent st n f =
     push st (fun d -> Nest (n, d));
+    f ();
+    pop st
+
+  let if_broken st f =
+    push st (fun d -> If_broken d);
     f ();
     pop st
 
@@ -160,6 +171,10 @@ module Doc = struct
           | Cat (a, b) -> fits avail ((i, m, a) :: (i, m, b) :: rest)
           | Nest (n, d) -> fits avail ((i + n, m, d) :: rest)
           | Group (_, d) -> fits avail ((i, Flat, d) :: rest)
+          | If_broken _ -> fits avail rest
+          (* A trailing comma never counts toward the fit: a flat list omits it
+             outright, and when measured inside an already-broken list a break
+             has ended the line before reaching it. *)
           | Brk b -> (
               match m with
               | Brkm | Fill -> true
@@ -249,6 +264,11 @@ module Doc = struct
                 | GBox | GHov -> Fill
               in
               go ((base, m', d) :: rest)
+          | If_broken d ->
+              (* Shown only when the surrounding all-or-nothing box broke
+                 ([Brkm]); a one-line ([Flat]) or greedily-packed ([Fill]) list
+                 has no trailing comma. *)
+              go (match m with Brkm -> (i, m, d) :: rest | _ -> rest)
           | Brk str ->
               (match (str, m) with
               | Newline, _ -> break_line i false
@@ -304,6 +324,8 @@ let newline t () = Doc.newline t
 let blank_line t () = Doc.blank_line t
 let defer_eol = Doc.defer_eol
 let with_held_eol = Doc.with_held_eol
+let has_pending_eol = Doc.has_pending_eol
+let if_broken = Doc.if_broken
 
 let box t ?(skip_space = false) ?(indent = 0) f =
   Doc.box t ~skip_space ~indent f

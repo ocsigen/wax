@@ -282,7 +282,7 @@ fn caml_floatarray_blit(a1: &eq, i1: &eq, a2: &eq, i2: &eq, vlen: &eq) -> &eq {
             i2 as &i31 as i32_s,
             a1 as &float_array,
             i1 as &i31 as i32_s,
-            len
+            len,
         );
     }
     0 as &i31;
@@ -299,7 +299,7 @@ fn caml_array_blit(a1: &eq, i1: &eq, a2: &eq, i2: &eq, vlen: &eq) -> &eq {
                 i2 as &i31 as i32_s + 1,
                 a1 as &block,
                 i1 as &i31 as i32_s + 1,
-                len
+                len,
             );
         }
     }

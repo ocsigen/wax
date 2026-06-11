@@ -53,7 +53,7 @@ const mutex_ops =
         fixed_length: null as &?fixed_length,
         serialize: null as &?serialize,
         deserialize: null as &?deserialize,
-        dup: null as &?dup
+        dup: null as &?dup,
     };
 
 type mutex: custom_with_id = { f: &custom_operations, f_2: i64, state: mut i32 };

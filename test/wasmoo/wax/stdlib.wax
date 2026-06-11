@@ -79,7 +79,7 @@ fn caml_named_value(s: &string) -> &?eq {
                  find_named_value(
                      s,
                      named_value_table
-                         [caml_string_hash(0 as &i31, s) as &i31 as i32_s %u Named_value_size]
+                         [caml_string_hash(0 as &i31, s) as &i31 as i32_s %u Named_value_size],
                  )).f_2;
     }
     return null as &?eq;
@@ -175,7 +175,7 @@ fn caml_main(start: &func) {
                             br_on_null 'not_registered
                                 caml_named_value([string|handle_uncaught_exception @ 0; 34]),
                             exn,
-                            0 as &i31
+                            0 as &i31,
                         );
                     br 'exit;
                 }
@@ -183,7 +183,7 @@ fn caml_main(start: &func) {
                     _ =
                         caml_callback_1(
                             br_on_null 'null caml_named_value([string|do_at_exit @ 0; 21]),
-                            0 as &i31
+                            0 as &i31,
                         );
                 }
                 write(
@@ -192,10 +192,10 @@ fn caml_main(start: &func) {
                         caml_jsstring_of_string(
                             caml_string_concat(
                                 [string|fatal_error @ 0; 23],
-                                caml_string_concat(caml_format_exception(exn), string#"\n")
-                            )
-                        )
-                    )
+                                caml_string_concat(caml_format_exception(exn), string#"\n"),
+                            ),
+                        ),
+                    ),
                 );
             } // `\n`
             exit(2);

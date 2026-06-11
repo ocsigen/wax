@@ -87,8 +87,8 @@ fn caml_format_exception(x: &eq) -> &eq {
                         buf,
                         caml_format_int(
                             string#"%d", // %d
-                            v as &i31
-                        )
+                            v as &i31,
+                        ),
                     );
                 } else {
                     if v is &string {

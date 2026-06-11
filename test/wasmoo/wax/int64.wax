@@ -61,7 +61,7 @@ const int64_ops =
         fixed_length: {fixed_length| bsize_32: 8, bsize_64: 8 },
         serialize: int64_serialize,
         deserialize: int64_deserialize,
-        dup: int64_dup
+        dup: int64_dup,
     };
 
 type int64: custom = { f: &custom_operations, f_2: i64 };
@@ -126,7 +126,7 @@ fn caml_i64_of_digits(
     sign: i32,
     s: &string,
     i: i32,
-    errmsg: &string
+    errmsg: &string,
 ) -> i64 {
     let len = s.length();
     if !len {

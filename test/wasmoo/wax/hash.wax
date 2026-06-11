@@ -104,7 +104,7 @@ fn caml_hash_mix_string(h: i32, s: &string) -> i32 {
                 caml_hash_mix_int(
                     h,
                     s[i] as i32_u | s[i + 1] as i32_u << 8
-                        | (s[i + 2] as i32_u << 16 | s[i + 3] as i32_u << 24)
+                        | (s[i + 2] as i32_u << 16 | s[i + 3] as i32_u << 24),
                 );
             i = i + 4;
             br 'loop;
@@ -153,7 +153,7 @@ fn caml_hash(count: &eq, limit: &eq, seed: &eq, obj: &eq) -> &eq {
                         h =
                             caml_hash_mix_int(
                                 h,
-                                ((br_on_cast_fail 'not_int &i31 v) as i32_s << 1) + 1
+                                ((br_on_cast_fail 'not_int &i31 v) as i32_s << 1) + 1,
                             );
                         num = num - 1;
                         br 'loop;
@@ -214,7 +214,7 @@ fn caml_hash(count: &eq, limit: &eq, seed: &eq, obj: &eq) -> &eq {
                         h =
                             caml_hash_mix_int(
                                 h,
-                                (br_on_null 'loop (br_on_cast_fail 'not_custom &custom v).f.hash)(v)
+                                (br_on_null 'loop (br_on_cast_fail 'not_custom &custom v).f.hash)(v),
                             );
                         num = num - 1;
                         br 'loop;

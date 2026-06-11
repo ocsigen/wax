@@ -59,7 +59,7 @@ const int32_ops =
         fixed_length: {fixed_length| bsize_32: 4, bsize_64: 4 },
         serialize: int32_serialize,
         deserialize: int32_deserialize,
-        dup: int32_dup
+        dup: int32_dup,
     };
 
 type int32: custom = { f: &custom_operations, f_2: i32 };
@@ -129,7 +129,7 @@ const nativeint_ops =
         fixed_length: {fixed_length| bsize_32: 4, bsize_64: 8 },
         serialize: nativeint_serialize,
         deserialize: nativeint_deserialize,
-        dup: int32_dup
+        dup: int32_dup,
     };
 
 fn nativeint_serialize(s: &eq, v: &eq) -> (i32, i32) {

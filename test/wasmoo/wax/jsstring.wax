@@ -56,13 +56,13 @@ fn init() {
         0
             != compare_strings(
                    decodeStringFromUTF8Array([string|0], 0, 1),
-                   decodeStringFromUTF8Array([string|1], 0, 1)
+                   decodeStringFromUTF8Array([string|1], 0, 1),
                );
     string_builtins_available =
         0
             != compare_strings(
                    fromCharCodeArray([wstring|0], 0, 1),
-                   fromCharCodeArray([wstring|1], 0, 1)
+                   fromCharCodeArray([wstring|1], 0, 1),
                );
     if !text_converters_available {
         if string_builtins_available {

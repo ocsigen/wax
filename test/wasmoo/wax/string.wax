@@ -140,7 +140,7 @@ fn caml_blit_string(v1: &eq, i1: &eq, v2: &eq, i2: &eq, n: &eq) -> &eq {
         i2 as &i31 as i32_s,
         v1 as &string,
         i1 as &i31 as i32_s,
-        n as &i31 as i32_s
+        n as &i31 as i32_s,
     );
     0 as &i31;
 }

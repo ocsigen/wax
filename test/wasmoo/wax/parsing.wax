@@ -326,7 +326,8 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                                                                         recovering_in_state
                                                                         @
                                                                         0;
-                                                                        20]
+                                                                        20
+                                                                    ],
                                                                 );
                                                                 output_int(state1);
                                                                 output_nl();
@@ -348,7 +349,8 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                                                                 no_more_states_to_discard
                                                                 @
                                                                 0;
-                                                                25]
+                                                                25
+                                                            ],
                                                         );
                                                         output_nl();
                                                     }
@@ -366,7 +368,8 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                                                             discarding_last_token_read
                                                             @
                                                             0;
-                                                            26]);
+                                                            26
+                                                        ]);
                                                 output_nl();
                                             }
                                             env[env_curr_char] = -1 as &i31;

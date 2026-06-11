@@ -113,7 +113,7 @@ const channel_ops =
         fixed_length: null as &?fixed_length,
         serialize: null as &?serialize,
         deserialize: null as &?deserialize,
-        dup: null as &?dup
+        dup: null as &?dup,
     };
 
 type channel: custom_with_id = {
@@ -235,7 +235,7 @@ fn caml_ml_open_descriptor_in(fd: &eq) -> &eq {
         curr: 0,
         max: 0,
         size: IO_BUFFER_SIZE,
-        unbuffered: 0
+        unbuffered: 0,
     };
 }
 
@@ -253,7 +253,7 @@ fn caml_ml_open_descriptor_out(fd: &eq) -> &eq {
             curr: 0,
             max: -1,
             size: IO_BUFFER_SIZE,
-            unbuffered: 0
+            unbuffered: 0,
         };
     register_channel(res);
     if fd == 2 as &i31 {

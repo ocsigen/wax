@@ -434,7 +434,8 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                                                                                           ill_formed
                                                                                           @
                                                                                           0;
-                                                                                          31]
+                                                                                          31
+                                                                                          ],
                                                                                           );
                                                                                           br 'done;
                                                                                           }
@@ -442,11 +443,11 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                                                                                           v =
                                                                                           intern_custom(
                                                                                           s,
-                                                                                          code
+                                                                                          code,
                                                                                           );
                                                                                           register_object(
                                                                                           s,
-                                                                                          v
+                                                                                          v,
                                                                                           );
                                                                                           br 'done;
                                                                                           }
@@ -456,7 +457,8 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                                                                                           code_pointer
                                                                                           @
                                                                                           0;
-                                                                                          25]
+                                                                                          25
+                                                                                          ],
                                                                                           );
                                                                                           br 'done;
                                                                                         }
@@ -477,12 +479,12 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                                                                                         f:
                                                                                           readfloat(
                                                                                           s,
-                                                                                          code
-                                                                                          )
+                                                                                          code,
+                                                                                          ),
                                                                                     };
                                                                                 register_object(
                                                                                     s,
-                                                                                    v
+                                                                                    v,
                                                                                 );
                                                                                 br 'done;
                                                                             }
@@ -514,7 +516,7 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                                                     }
                                                     // INT64
                                                     caml_failwith(
-                                                        [string|integer_too_large @ 0; 30]
+                                                        [string|integer_too_large @ 0; 30],
                                                     );
                                                     br 'done;
                                                 }
@@ -642,7 +644,7 @@ fn init_extern_state(
     flags: &eq,
     output: &output_block,
     pos: i32,
-    user_provided_output: i32
+    user_provided_output: i32,
 ) -> &extern_state {
     let no_sharing: i32;
     'parse_flags: loop {
@@ -668,7 +670,7 @@ fn init_extern_state(
         pos: pos,
         limit: output.end,
         output_first: output,
-        output_last: output
+        output_last: output,
     };
 }
 
@@ -1041,7 +1043,7 @@ fn extern_value(
     output: &output_block,
     pos: i32,
     user_provided_output: i32,
-    v: &eq
+    v: &eq,
 ) -> (i32, &string, &extern_state) {
     let s = init_extern_state(flags, output, pos, user_provided_output);
     extern_rec(s, v);
@@ -1063,7 +1065,7 @@ fn caml_output_value_to_string(v: &eq, flags: &eq) -> &eq {
         {output_block|
             next: null as &?output_block,
             end: SIZE_EXTERN_OUTPUT_BLOCK,
-            data: [string|0; SIZE_EXTERN_OUTPUT_BLOCK]
+            data: [string|0; SIZE_EXTERN_OUTPUT_BLOCK],
         };
     extern_value(flags, blk, 0, 0, v);
     let st = _;
@@ -1108,7 +1110,7 @@ fn caml_output_value(ch: &eq, v: &eq, flags: &eq) -> &eq {
         {output_block|
             next: null as &?output_block,
             end: SIZE_EXTERN_OUTPUT_BLOCK,
-            data: [string|0; SIZE_EXTERN_OUTPUT_BLOCK]
+            data: [string|0; SIZE_EXTERN_OUTPUT_BLOCK],
         };
     extern_value(flags, blk, 0, 0, v);
     let st = _;
