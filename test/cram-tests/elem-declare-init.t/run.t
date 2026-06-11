@@ -9,7 +9,9 @@ a dropped passive one (`table.init` of a non-zero length traps either way).
   elem e: &func = [];
   fn f() {}
   #[export = "init"]
-  fn init() { t.init(e, 0, 0, 1); }
+  fn init() {
+      t.init(e, 0, 0, 1);
+  }
 
 The result is valid (the reference resolves and the module type-checks):
 

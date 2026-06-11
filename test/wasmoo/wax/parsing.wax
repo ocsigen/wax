@@ -99,7 +99,12 @@ const tbl_names_block = 16;
 
 fn strlen(s: &string, p: i32) -> i32 {
     let i = p;
-    'loop: loop { if s[i] as i32_u != 0 { i = i + 1; br 'loop; } }
+    'loop: loop {
+        if s[i] as i32_u != 0 {
+            i = i + 1;
+            br 'loop;
+        }
+    }
     i - p;
 }
 
@@ -108,7 +113,9 @@ fn token_name(vnames: &eq, number: i32) -> &eq {
     let names = vnames as &string;
     let i: i32;
     'loop: loop {
-        if !(names[i] as i32_u) { return [string|unknown_token @ 0; 15]; }
+        if !(names[i] as i32_u) {
+            return [string|unknown_token @ 0; 15];
+        }
         if number != 0 {
             i = i + (strlen(names, i) + 1);
             number = number - 1;
@@ -131,7 +138,9 @@ fn output_nl() {
     _ = caml_ml_flush(caml_stderr);
 }
 
-fn output_int(x: i32) { output(caml_format_int(string#"%d", x as &i31)); }
+fn output_int(x: i32) {
+    output(caml_format_int(string#"%d", x as &i31));
+}
 
 data State = "State ";
 data read_token = ": read token ";
@@ -149,8 +158,9 @@ fn print_token(tables: &block, state: i32, tok: &eq) {
         output([string|read_token @ 0; 13]);
         let b = tok as &block;
         output(token_name(tables[tbl_names_block], b[0] as &i31 as i32_u));
-        output(string#"(" // "("
-            );
+        output(
+            string#"(" // "("
+        );
         let v = b[1];
         if v is &i31 {
             output_int(v as &i31 as i32_s);
@@ -160,11 +170,14 @@ fn print_token(tables: &block, state: i32, tok: &eq) {
             } else {
                 if v is &float {
                     output(caml_format_float(string#"%g", v));
-                } else { output(string#"_"); }
+                } else {
+                    output(string#"_");
+                }
             }
         } // '_'
-        output(string#")" // ")"
-            );
+        output(
+            string#")" // ")"
+        );
         output_nl();
     }
 }
@@ -213,20 +226,12 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                                                     'loop: do {
                                                         'START: do {
                                                             br_table
-                                                                [ 'START
-                                                                    'TOKEN_READ
-                                                                    'STACKS_GROWN_1
+                                                                [ 'START 'TOKEN_READ 'STACKS_GROWN_1
                                                                     'STACKS_GROWN_2
                                                                     'SEMANTIC_ACTION_COMPUTED
-                                                                    'ERROR_DETECTED
-                                                                    'loop
-                                                                    'testshift
-                                                                    'shift
-                                                                    'shift_recover
-                                                                    'reduce
-                                                                    else
-                                                                    'default ]
-                                                                cmd;
+                                                                    'ERROR_DETECTED 'loop 'testshift
+                                                                    'shift 'shift_recover 'reduce
+                                                                    else 'default ] cmd;
                                                         }
                                                         // START:
                                                         state = 0;
@@ -234,18 +239,12 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                                                     }
                                                     // Fall through
                                                     // loop:
-                                                    n =
-                                                        get
-                                                            (tbl_defred_2,
-                                                             state);
+                                                    n = get(tbl_defred_2, state);
                                                     if n != 0 {
                                                         cmd = reduce;
                                                         br 'next;
                                                     }
-                                                    if
-                                                        env[env_curr_char]
-                                                            as &i31 as i32_s
-                                                            >=s 0 {
+                                                    if env[env_curr_char] as &i31 as i32_s >=s 0 {
                                                         cmd = testshift;
                                                         br 'next;
                                                     }
@@ -258,78 +257,45 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                                                     _ =
                                                         'not_block: do &eq {
                                                             arg =
-                                                                br_on_cast_fail
-                                                                    'not_block
-                                                                    &block
+                                                                br_on_cast_fail 'not_block &block
                                                                     varg;
-                                                            env[env_curr_char]
-                                                                =
-                                                                (tables
-                                                                    [tbl_transl_block]
-                                                                    as &block)
-                                                                    [arg[0]
-                                                                    as &i31
-                                                                    as i32_u +
-                                                                    1];
-                                                            env[env_lval] =
-                                                                arg[1];
+                                                            env[env_curr_char] =
+                                                                (tables[tbl_transl_block] as &block)
+                                                                    [arg[0] as &i31 as i32_u + 1];
+                                                            env[env_lval] = arg[1];
                                                             br 'cont;
                                                         };
                                                     env[env_curr_char] =
-                                                        (tables
-                                                             [tbl_transl_const]
-                                                             as &block)
-                                                            [varg as &i31
-                                                                 as i32_u +
-                                                                 1];
+                                                        (tables[tbl_transl_const] as &block)
+                                                            [varg as &i31 as i32_u + 1];
                                                     env[env_lval] = 0 as &i31;
                                                 }
                                                 if caml_parser_trace {
-                                                    print_token
-                                                        (tables, state, varg);
+                                                    print_token(tables, state, varg);
                                                 }
                                             }
                                             // Fall through
                                             // testshift:
                                             n1 = get(tbl_sindex_2, state);
-                                            n2 =
-                                                n1 +
-                                                    env[env_curr_char] as &i31
-                                                        as i32_s;
+                                            n2 = n1 + env[env_curr_char] as &i31 as i32_s;
                                             if (n1 != 0) & (n2 >=s 0) {
-                                                if
-                                                    n2 <=s
-                                                        tables[tbl_tablesize]
-                                                            as &i31 as i32_s {
+                                                if n2 <=s tables[tbl_tablesize] as &i31 as i32_s {
                                                     if
-                                                        get(tbl_check_2, n2)
-                                                            as &i31 ==
-                                                            env[env_curr_char]
-                                                    {
+                                                        get(tbl_check_2, n2) as &i31 ==
+                                                            env[env_curr_char] {
                                                         cmd = shift;
                                                         br 'next;
                                                     }
                                                 }
                                             }
                                             n1 = get(tbl_rindex_2, state);
-                                            n2 =
-                                                n1 +
-                                                    env[env_curr_char] as &i31
-                                                        as i32_s;
+                                            n2 = n1 + env[env_curr_char] as &i31 as i32_s;
                                             if (n1 != 0) & (n2 >=s 0) {
-                                                if
-                                                    n2 <=s
-                                                        tables[tbl_tablesize]
-                                                            as &i31 as i32_s {
+                                                if n2 <=s tables[tbl_tablesize] as &i31 as i32_s {
                                                     if
-                                                        get(tbl_check_2, n2)
-                                                            as &i31 ==
-                                                            env[env_curr_char]
-                                                    {
-                                                        n =
-                                                            get
-                                                                (tbl_table_2,
-                                                                 n2);
+                                                        get(tbl_check_2, n2) as &i31 ==
+                                                            env[env_curr_char] {
+                                                        n = get(tbl_table_2, n2);
                                                         cmd = reduce;
                                                         br 'next;
                                                     }
@@ -346,86 +312,61 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                                             errflag = 3;
                                             'loop2: loop {
                                                 state1 =
-                                                    (env[env_s_stack]
-                                                         as &block)[sp + 1]
-                                                        as &i31 as i32_s;
-                                                n1 =
-                                                    get(tbl_sindex_2, state1);
+                                                    (env[env_s_stack] as &block)[sp + 1] as &i31
+                                                        as i32_s;
+                                                n1 = get(tbl_sindex_2, state1);
                                                 n2 = n1 + ERRCODE;
                                                 if (n1 != 0) & (n2 >=s 0) {
-                                                    if
-                                                        n2 <=s
-                                                            tables
-                                                                [tbl_tablesize]
-                                                                as &i31
-                                                                as i32_s {
-                                                        if
-                                                            get
-                                                                (tbl_check_2,
-                                                                 n2) ==
-                                                                ERRCODE {
-                                                            if
-                                                                caml_parser_trace
-                                                            {
-                                                                output
-                                                                    ([string|
-                                                                    recovering_in_state
-                                                                    @
-                                                                    0;
-                                                                    20]);
-                                                                output_int
-                                                                    (state1);
+                                                    if n2 <=s tables[tbl_tablesize] as &i31 as i32_s
+                                                    {
+                                                        if get(tbl_check_2, n2) == ERRCODE {
+                                                            if caml_parser_trace {
+                                                                output(
+                                                                    [string|
+                                                                        recovering_in_state
+                                                                        @
+                                                                        0;
+                                                                        20]
+                                                                );
+                                                                output_int(state1);
                                                                 output_nl();
                                                             }
-                                                            cmd =
-                                                                shift_recover;
+                                                            cmd = shift_recover;
                                                             br 'next;
                                                         }
                                                     }
                                                 }
                                                 if caml_parser_trace {
-                                                    output
-                                                        ([string|
-                                                             discarding_state
-                                                             @
-                                                             0;
-                                                             17]);
+                                                    output([string|discarding_state @ 0; 17]);
                                                     output_int(state1);
                                                     output_nl();
                                                 }
-                                                if
-                                                    sp <=s
-                                                        env[env_stackbase]
-                                                            as &i31 as i32_s {
+                                                if sp <=s env[env_stackbase] as &i31 as i32_s {
                                                     if caml_parser_trace {
-                                                        output
-                                                            ([string|
-                                                                 no_more_states_to_discard
-                                                                 @
-                                                                 0;
-                                                                 25]);
+                                                        output(
+                                                            [string|
+                                                                no_more_states_to_discard
+                                                                @
+                                                                0;
+                                                                25]
+                                                        );
                                                         output_nl();
                                                     }
-                                                    return
-                                                        RAISE_PARSE_ERROR
-                                                            as &i31;
+                                                    return RAISE_PARSE_ERROR as &i31;
                                                 }
                                                 sp = sp - 1;
                                                 br 'loop2;
                                             }
                                         } else {
-                                            if env[env_curr_char] == 0 as &i31
-                                            {
-                                                return
-                                                    RAISE_PARSE_ERROR as &i31;
+                                            if env[env_curr_char] == 0 as &i31 {
+                                                return RAISE_PARSE_ERROR as &i31;
                                             }
                                             if caml_parser_trace {
-                                                output
-                                                    ([string|
-                                                         discarding_last_token_read
-                                                         @
-                                                         0;
-                                                         26]);
+                                                output([string|
+                                                            discarding_last_token_read
+                                                            @
+                                                            0;
+                                                            26]);
                                                 output_nl();
                                             }
                                             env[env_curr_char] = -1 as &i31;
@@ -435,7 +376,9 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                                     }
                                     // shift:
                                     env[env_curr_char] = -1 as &i31;
-                                    if errflag >s 0 { errflag = errflag - 1; }
+                                    if errflag >s 0 {
+                                        errflag = errflag - 1;
+                                    }
                                 }
                                 // Fall through
                                 // shift_recover:
@@ -448,22 +391,17 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                                 }
                                 state = get(tbl_table_2, n2);
                                 sp = sp + 1;
-                                if sp >=s env[env_stacksize] as &i31 as i32_s
-                                {
+                                if sp >=s env[env_stacksize] as &i31 as i32_s {
                                     res = GROW_STACKS_1;
                                     br 'exit;
                                 }
                             }
                             // Fall through
                             // STACKS_GROWN_1:
-                            (env[env_s_stack] as &block)[sp + 1] =
-                                state as &i31;
-                            (env[env_v_stack] as &block)[sp + 1] =
-                                env[env_lval];
-                            (env[env_symb_start_stack] as &block)[sp + 1] =
-                                env[env_symb_start];
-                            (env[env_symb_end_stack] as &block)[sp + 1] =
-                                env[env_symb_end];
+                            (env[env_s_stack] as &block)[sp + 1] = state as &i31;
+                            (env[env_v_stack] as &block)[sp + 1] = env[env_lval];
+                            (env[env_symb_start_stack] as &block)[sp + 1] = env[env_symb_start];
+                            (env[env_symb_end_stack] as &block)[sp + 1] = env[env_symb_end];
                             cmd = loop_2;
                             br 'next;
                         }
@@ -481,16 +419,12 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                         env[env_rule_len] = m as &i31;
                         sp = sp + (1 - m);
                         m = get(tbl_lhs_2, n);
-                        state1 =
-                            (env[env_s_stack] as &block)[sp] as &i31 as i32_s;
+                        state1 = (env[env_s_stack] as &block)[sp] as &i31 as i32_s;
                         n1 = get(tbl_gindex_2, m);
                         n2 = n1 + state1;
                         'cont: do {
                             if (n1 != 0) & (n2 >=s 0) {
-                                if
-                                    n2 <=s
-                                        tables[tbl_tablesize] as &i31 as i32_s
-                                {
+                                if n2 <=s tables[tbl_tablesize] as &i31 as i32_s {
                                     if get(tbl_check_2, n2) == state1 {
                                         state = get(tbl_table_2, n2);
                                         br 'cont;

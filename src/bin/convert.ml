@@ -23,7 +23,7 @@ let convert ~filename =
   in
   let ast3 = Wax.Typing.erase_types ast3 in
   let print_wax f m =
-    Utils.Printer.run f (fun p ->
+    Utils.Printer.run ~width:Wax.Output.width f (fun p ->
         Wax.Output.module_ ~out_channel:stdout p ~trivia:(Hashtbl.create 0) m)
   in
   Format.eprintf "%s==== %s ====%s@.@.%a@.@." Utils.Colors.Ansi.grey filename

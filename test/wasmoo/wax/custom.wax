@@ -48,14 +48,18 @@ type custom = open { f: &custom_operations };
 type custom_with_id: custom = open { f: &custom_operations, id: i64 };
 
 #[export = "caml_is_custom"]
-fn caml_is_custom(x: &eq) -> i32 { x is &custom; }
+fn caml_is_custom(x: &eq) -> i32 {
+    x is &custom;
+}
 
 #[export = "caml_dup_custom"]
 fn caml_dup_custom(v: &eq) -> &eq {
     ('custom: do &custom {
          _ = br_on_cast 'custom &custom v;
          unreachable;
-     }.f.dup!)(v);
+     }.f.dup!)(
+        v
+    );
 }
 
 #[export = "custom_compare_id"]
@@ -66,32 +70,32 @@ fn custom_compare_id(x: &eq, x_2: &eq, x_3: i32) -> i32 {
 }
 
 #[export = "custom_hash_id"]
-fn custom_hash_id(x: &eq) -> i32 { (x as &custom_with_id).id as i32; }
+fn custom_hash_id(x: &eq) -> i32 {
+    (x as &custom_with_id).id as i32;
+}
 
 let next_id: i64 = 0;
 
 #[export = "custom_next_id"]
-fn custom_next_id() -> i64 { let id = next_id; next_id = id + 1; id; }
+fn custom_next_id() -> i64 {
+    let id = next_id;
+    next_id = id + 1;
+    id;
+}
 
-type custom_operations_list = {
-    ops: &custom_operations,
-    next: &?custom_operations_list
-};
+type custom_operations_list = { ops: &custom_operations, next: &?custom_operations_list };
 
-let custom_operations: &?custom_operations_list =
-    null as &?custom_operations_list;
+let custom_operations: &?custom_operations_list = null as &?custom_operations_list;
 
 #[export = "caml_register_custom_operations"]
 fn caml_register_custom_operations(ops: &custom_operations) {
-    custom_operations =
-        {custom_operations_list| ops: ops, next: custom_operations };
+    custom_operations = {custom_operations_list| ops: ops, next: custom_operations };
 }
 
 #[export = "caml_find_custom_operations"]
 fn caml_find_custom_operations(id: &string) -> &?custom_operations {
     'not_found: do {
-        let l: &?custom_operations_list =
-            br_on_null 'not_found custom_operations;
+        let l: &?custom_operations_list = br_on_null 'not_found custom_operations;
         'loop: loop {
             if caml_string_equal(id, l.ops.id) as &i31 as i32_u {
                 return l.ops;
@@ -107,7 +111,9 @@ let initialized = 0;
 
 #[export = "caml_init_custom_operations"]
 fn caml_init_custom_operations() {
-    if initialized { return; }
+    if initialized {
+        return;
+    }
     caml_register_custom_operations(int32_ops);
     caml_register_custom_operations(nativeint_ops);
     caml_register_custom_operations(int64_ops);
@@ -116,4 +122,6 @@ fn caml_init_custom_operations() {
 }
 
 #[export = "caml_custom_identifier"]
-fn caml_custom_identifier(v: &eq) -> &eq { (v as &custom).f.id; }
+fn caml_custom_identifier(v: &eq) -> &eq {
+    (v as &custom).f.id;
+}

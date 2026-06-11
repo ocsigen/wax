@@ -62,13 +62,17 @@ type float = { f: f64 };
 tag ocaml_exit(i32);
 
 #[export = "caml_sys_exit"]
-fn caml_sys_exit(x: &eq) -> &eq { throw ocaml_exit x as &i31 as i32_s; }
+fn caml_sys_exit(x: &eq) -> &eq {
+    throw ocaml_exit x as &i31 as i32_s;
+}
 
 #[export = "caml_sys_getenv"]
 #[export = "caml_sys_unsafe_getenv"]
 fn caml_sys_getenv(x: &eq) -> &eq {
     let res = getenv(unwrap(caml_jsstring_of_string(x)));
-    if !jsstring_test(res) { caml_raise_not_found(); }
+    if !jsstring_test(res) {
+        caml_raise_not_found();
+    }
     become caml_string_of_jsstring(wrap(res));
 }
 
@@ -85,7 +89,9 @@ fn caml_sys_executable_name(x: &eq) -> &eq {
 
 #[export = "caml_sys_time"]
 #[export = "caml_sys_time_include_children"]
-fn caml_sys_time(x: &eq) -> &eq { {float| f: time() * 0.001 }; }
+fn caml_sys_time(x: &eq) -> &eq {
+    {float| f: time() * 0.001 };
+}
 
 #[export = "caml_sys_system_command"]
 fn caml_sys_system_command(x: &eq) -> &eq {
@@ -117,16 +123,24 @@ fn caml_sys_random_seed(x: &eq) -> &eq {
 }
 
 #[export = "caml_sys_const_bigendian"]
-fn caml_sys_const_bigendian(x: &eq) -> &eq { 0 as &i31; }
+fn caml_sys_const_bigendian(x: &eq) -> &eq {
+    0 as &i31;
+}
 
 #[export = "caml_sys_const_word_size"]
-fn caml_sys_const_word_size(x: &eq) -> &eq { 32 as &i31; }
+fn caml_sys_const_word_size(x: &eq) -> &eq {
+    32 as &i31;
+}
 
 #[export = "caml_sys_const_int_size"]
-fn caml_sys_const_int_size(x: &eq) -> &eq { 31 as &i31; }
+fn caml_sys_const_int_size(x: &eq) -> &eq {
+    31 as &i31;
+}
 
 #[export = "caml_sys_const_max_wosize"]
-fn caml_sys_const_max_wosize(x: &eq) -> &eq { 0xfffffff as &i31; }
+fn caml_sys_const_max_wosize(x: &eq) -> &eq {
+    0xfffffff as &i31;
+}
 
 #[export = "caml_sys_const_ostype_unix"]
 fn caml_sys_const_ostype_unix(x: &eq) -> &eq {
@@ -156,16 +170,24 @@ fn caml_sys_get_config(x: &eq) -> &eq {
 }
 
 #[export = "caml_sys_isatty"]
-fn caml_sys_isatty(x: &eq) -> &eq { 0 as &i31; }
+fn caml_sys_isatty(x: &eq) -> &eq {
+    0 as &i31;
+}
 
 #[export = "caml_runtime_variant"]
-fn caml_runtime_variant(x: &eq) -> &eq { [string|]; }
+fn caml_runtime_variant(x: &eq) -> &eq {
+    [string|];
+}
 
 #[export = "caml_runtime_parameters"]
-fn caml_runtime_parameters(x: &eq) -> &eq { [string|]; }
+fn caml_runtime_parameters(x: &eq) -> &eq {
+    [string|];
+}
 
 #[export = "caml_install_signal_handler"]
-fn caml_install_signal_handler(x: &eq, x_2: &eq) -> &eq { 0 as &i31; }
+fn caml_install_signal_handler(x: &eq, x_2: &eq) -> &eq {
+    0 as &i31;
+}
 
 let caml_runtime_warnings = 0;
 
@@ -184,9 +206,9 @@ data toString = "toString";
 
 #[export = "caml_handle_sys_error"]
 fn caml_handle_sys_error(exn: &?extern) {
-    caml_raise_sys_error
-        (caml_string_of_jsstring
-             (caml_js_meth_call
-                  (wrap(exn as &?any), [string|toString @ 0; 8],
-                   [block|0 as &i31])));
+    caml_raise_sys_error(
+        caml_string_of_jsstring(
+            caml_js_meth_call(wrap(exn as &?any), [string|toString @ 0; 8], [block|0 as &i31])
+        )
+    );
 }

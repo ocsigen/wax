@@ -61,7 +61,9 @@ fn find_named_value(s: &eq, l: &?assoc) -> &?assoc {
     'tail: do &?assoc {
         'loop: loop {
             let a = br_on_cast_fail 'tail &assoc l;
-            if caml_string_equal(s, a.f) as &i31 as i32_u { return a; }
+            if caml_string_equal(s, a.f) as &i31 as i32_u {
+                return a;
+            }
             l = a.f_3;
             br 'loop;
         }
@@ -74,19 +76,18 @@ fn caml_named_value(s: &string) -> &?eq {
     'not_found: do {
         return
             (br_on_null 'not_found
-                 find_named_value
-                     (s,
-                      named_value_table
-                          [caml_string_hash(0 as &i31, s) as &i31 as i32_s %u
-                               Named_value_size])).f_2;
+                 find_named_value(
+                     s,
+                     named_value_table
+                         [caml_string_hash(0 as &i31, s) as &i31 as i32_s %u Named_value_size]
+                 )).f_2;
     }
     return null as &?eq;
 }
 
 #[export = "caml_register_named_value"]
 fn caml_register_named_value(x: &eq, x_2: &eq) -> &eq {
-    let h =
-        caml_string_hash(0 as &i31, x) as &i31 as i32_s %u Named_value_size;
+    let h = caml_string_hash(0 as &i31, x) as &i31 as i32_s %u Named_value_size;
     let r = named_value_table[h];
     'not_found: do {
         (br_on_null 'not_found find_named_value(x, r)).f_2 = x_2;
@@ -99,9 +100,7 @@ fn caml_register_named_value(x: &eq, x_2: &eq) -> &eq {
 // Used only for testing (tests-jsoo/bin), but inconvenient to pull out
 #[export = "caml_unregister_named_value"]
 fn caml_unregister_named_value(name: &eq) -> &eq {
-    let h =
-        caml_string_hash(0 as &i31, name) as &i31 as i32_s %u
-            Named_value_size;
+    let h = caml_string_hash(0 as &i31, name) as &i31 as i32_s %u Named_value_size;
     let r = named_value_table[h];
     'done: do {
         let a = br_on_null 'done r;
@@ -129,12 +128,16 @@ let caml_global_data = [block|0 as &i31; 12];
 #[export = "caml_register_global"]
 fn caml_register_global(x: &eq, v: &eq, x_2: &eq) -> &eq {
     let i = x as &i31 as i32_u;
-    if i <u caml_global_data.length() { caml_global_data[i] = v; }
+    if i <u caml_global_data.length() {
+        caml_global_data[i] = v;
+    }
     0 as &i31;
 }
 
 #[export = "caml_get_global_data"]
-fn caml_get_global_data(x: &eq) -> &eq { caml_global_data; }
+fn caml_get_global_data(x: &eq) -> &eq {
+    caml_global_data;
+}
 
 type func_2 = fn() -> &eq;
 
@@ -144,7 +147,10 @@ data do_at_exit = "Pervasives.do_at_exit";
 
 let uncaught_exception: &?extern = null;
 
-fn reraise_exception() -> &eq { throw_2(uncaught_exception); 0 as &i31; }
+fn reraise_exception() -> &eq {
+    throw_2(uncaught_exception);
+    0 as &i31;
+}
 
 #[export = "caml_handle_uncaught_exception"]
 fn caml_handle_uncaught_exception(exn: &?extern) {
@@ -157,39 +163,40 @@ fn caml_main(start: &func) {
     try {
         _ = (start as &func_2)();
     } catch {
-        ocaml_exit => { exit(_); }
+        ocaml_exit => {
+            exit(_);
+        }
         ocaml_exception => {
             let exn = _;
             'exit: do {
                 'not_registered: do {
                     _ =
-                        caml_callback_2
-                            (br_on_null 'not_registered
-                                 caml_named_value
-                                     ([string|
-                                          handle_uncaught_exception
-                                          @
-                                          0;
-                                          34]), exn, 0 as &i31);
+                        caml_callback_2(
+                            br_on_null 'not_registered
+                                caml_named_value([string|handle_uncaught_exception @ 0; 34]),
+                            exn,
+                            0 as &i31
+                        );
                     br 'exit;
                 }
                 'null: do {
                     _ =
-                        caml_callback_1
-                            (br_on_null 'null
-                                 caml_named_value
-                                     ([string|do_at_exit @ 0; 21]),
-                             0 as &i31);
+                        caml_callback_1(
+                            br_on_null 'null caml_named_value([string|do_at_exit @ 0; 21]),
+                            0 as &i31
+                        );
                 }
-                write
-                    (2,
-                     unwrap
-                         (caml_jsstring_of_string
-                              (caml_string_concat
-                                   ([string|fatal_error @ 0; 23],
-                                    caml_string_concat
-                                        (caml_format_exception(exn),
-                                         string#"\n")))));
+                write(
+                    2,
+                    unwrap(
+                        caml_jsstring_of_string(
+                            caml_string_concat(
+                                [string|fatal_error @ 0; 23],
+                                caml_string_concat(caml_format_exception(exn), string#"\n")
+                            )
+                        )
+                    )
+                );
             } // `\n`
             exit(2);
         }

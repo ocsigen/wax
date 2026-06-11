@@ -22,11 +22,18 @@ type closure = open { /*(field i32)*/ f: &function_1 };
 #[export = "caml_atomic_cas"]
 fn caml_atomic_cas(ref: &eq, o: &eq, n: &eq) -> &eq {
     let b = ref as &block;
-    if b[1] == o => &eq { b[1] = n; 1 as &i31; } else { 0 as &i31; }
+    if b[1] == o => &eq {
+        b[1] = n;
+        1 as &i31;
+    } else {
+        0 as &i31;
+    }
 }
 
 #[export = "caml_atomic_load"]
-fn caml_atomic_load(x: &eq) -> &eq { (x as &block)[1]; }
+fn caml_atomic_load(x: &eq) -> &eq {
+    (x as &block)[1];
+}
 
 #[export = "caml_atomic_fetch_add"]
 fn caml_atomic_fetch_add(ref: &eq, i: &eq) -> &eq {
@@ -47,18 +54,25 @@ fn caml_atomic_exchange(ref: &eq, v: &eq) -> &eq {
 let caml_domain_dls: &eq = [block|0 as &i31];
 
 #[export = "caml_domain_dls_set"]
-fn caml_domain_dls_set(a: &eq) -> &eq { caml_domain_dls = a; 0 as &i31; }
+fn caml_domain_dls_set(a: &eq) -> &eq {
+    caml_domain_dls = a;
+    0 as &i31;
+}
 
 #[export = "caml_domain_dls_compare_and_set"]
 fn caml_domain_dls_compare_and_set(old: &eq, new: &eq) -> &eq {
     if caml_domain_dls == old => &eq {
         caml_domain_dls = new;
         1 as &i31;
-    } else { 0 as &i31; }
+    } else {
+        0 as &i31;
+    }
 }
 
 #[export = "caml_domain_dls_get"]
-fn caml_domain_dls_get(x: &eq) -> &eq { caml_domain_dls; }
+fn caml_domain_dls_get(x: &eq) -> &eq {
+    caml_domain_dls;
+}
 
 const caml_ml_domain_unique_token: &eq = [block|0 as &i31];
 
@@ -68,10 +82,14 @@ fn caml_ml_domain_unique_token_2(x: &eq) -> &eq {
 }
 
 #[export = "caml_ml_domain_set_name"]
-fn caml_ml_domain_set_name(x: &eq) -> &eq { 0 as &i31; }
+fn caml_ml_domain_set_name(x: &eq) -> &eq {
+    0 as &i31;
+}
 
 #[export = "caml_recommended_domain_count"]
-fn caml_recommended_domain_count(x: &eq) -> &eq { 1 as &i31; }
+fn caml_recommended_domain_count(x: &eq) -> &eq {
+    1 as &i31;
+}
 
 #[export = "caml_domain_id"]
 let caml_domain_id = 0;
@@ -80,7 +98,11 @@ let caml_domain_latest_id = 1;
 
 #[export = "caml_ml_domain_id"]
 #[export = "caml_ml_domain_index"]
-fn caml_ml_domain_id(x: &eq) -> &eq { caml_domain_id as &i31; }
+fn caml_ml_domain_id(x: &eq) -> &eq {
+    caml_domain_id as &i31;
+}
 
 #[export = "caml_ml_domain_cpu_relax"]
-fn caml_ml_domain_cpu_relax(x: &eq) -> &eq { 0 as &i31; }
+fn caml_ml_domain_cpu_relax(x: &eq) -> &eq {
+    0 as &i31;
+}

@@ -70,7 +70,9 @@ fn int32_cmp(v1: &eq, v2: &eq, x: i32) -> i32 {
     (i1 >s i2) - (i1 <s i2);
 }
 
-fn int32_hash(v: &eq) -> i32 { (v as &int32).f_2; }
+fn int32_hash(v: &eq) -> i32 {
+    (v as &int32).f_2;
+}
 
 fn int32_serialize(s: &eq, v: &eq) -> (i32, i32) {
     caml_serialize_int_4(s, (v as &int32).f_2);
@@ -89,11 +91,15 @@ fn int32_dup(v: &eq) -> &eq {
 }
 
 #[export = "caml_copy_int32"]
-fn caml_copy_int32(i: i32) -> &eq { {int32| f: int32_ops, f_2: i }; }
+fn caml_copy_int32(i: i32) -> &eq {
+    {int32| f: int32_ops, f_2: i };
+}
 
 #[export = "Int32_val"]
 #[export = "Nativeint_val"]
-fn Int32_val(x: &eq) -> i32 { (x as &int32).f_2; }
+fn Int32_val(x: &eq) -> i32 {
+    (x as &int32).f_2;
+}
 
 #[export = "caml_int32_bswap"]
 #[export = "caml_nativeint_bswap"]
@@ -144,7 +150,9 @@ fn nativeint_deserialize(s: &eq) -> (&eq, i32) {
 }
 
 #[export = "caml_copy_nativeint"]
-fn caml_copy_nativeint(i: i32) -> &eq { {int32| f: nativeint_ops, f_2: i }; }
+fn caml_copy_nativeint(i: i32) -> &eq {
+    {int32| f: nativeint_ops, f_2: i };
+}
 
 const NATIVEINT_ERRMSG = string#"Native.of_string"; // "Nativeint.of_string"
 #[export = "caml_nativeint_of_string"]

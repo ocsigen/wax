@@ -56,11 +56,7 @@ const mutex_ops =
         dup: null as &?dup
     };
 
-type mutex: custom_with_id = {
-    f: &custom_operations,
-    f_2: i64,
-    state: mut i32
-};
+type mutex: custom_with_id = { f: &custom_operations, f_2: i64, state: mut i32 };
 
 #[export = "caml_ml_mutex_new"]
 fn caml_ml_mutex_new(x: &eq) -> &eq {
@@ -72,7 +68,9 @@ data lock_failure = "Mutex.lock: mutex already locked. Cannot wait.";
 #[export = "caml_ml_mutex_lock"]
 fn caml_ml_mutex_lock(x: &eq) -> &eq {
     let t = x as &mutex;
-    if t.state { caml_failwith([string|lock_failure @ 0; 46]); }
+    if t.state {
+        caml_failwith([string|lock_failure @ 0; 46]);
+    }
     t.state = 1;
     0 as &i31;
 }
@@ -80,14 +78,24 @@ fn caml_ml_mutex_lock(x: &eq) -> &eq {
 #[export = "caml_ml_mutex_try_lock"]
 fn caml_ml_mutex_try_lock(x: &eq) -> &eq {
     let t = x as &mutex;
-    if t.state => &eq { 0 as &i31; } else { t.state = 1; 1 as &i31; }
+    if t.state => &eq {
+        0 as &i31;
+    } else {
+        t.state = 1;
+        1 as &i31;
+    }
 }
 
 #[export = "caml_ml_mutex_unlock"]
-fn caml_ml_mutex_unlock(x: &eq) -> &eq { (x as &mutex).state = 0; 0 as &i31; }
+fn caml_ml_mutex_unlock(x: &eq) -> &eq {
+    (x as &mutex).state = 0;
+    0 as &i31;
+}
 
 #[export = "caml_ml_condition_new"]
-fn caml_ml_condition_new(x: &eq) -> &eq { 0 as &i31; }
+fn caml_ml_condition_new(x: &eq) -> &eq {
+    0 as &i31;
+}
 
 data condition_failure = "Condition.wait: cannot wait";
 
@@ -98,7 +106,11 @@ fn caml_ml_condition_wait(x: &eq, x_2: &eq) -> &eq {
 }
 
 #[export = "caml_ml_condition_signal"]
-fn caml_ml_condition_signal(x: &eq) -> &eq { 0 as &i31; }
+fn caml_ml_condition_signal(x: &eq) -> &eq {
+    0 as &i31;
+}
 
 #[export = "caml_ml_condition_broadcast"]
-fn caml_ml_condition_broadcast(x: &eq) -> &eq { 0 as &i31; }
+fn caml_ml_condition_broadcast(x: &eq) -> &eq {
+    0 as &i31;
+}

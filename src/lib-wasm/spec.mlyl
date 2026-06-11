@@ -1,0 +1,2 @@
+rule error_message = parse
+    | LPAREN { "Expected assignment" }

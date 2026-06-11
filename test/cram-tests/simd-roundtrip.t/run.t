@@ -9,9 +9,7 @@ lowering back (wax -> wat); the binary is byte-identical modulo debug names.
   fn f(a: v128, b: v128) -> v128 {
       _ = v128_const_i32x4(1, 2, 3, 4);
       _ = v128_const_f32x4(1.5, 2.5, 3.5, 4.5);
-      _ =
-          v128_const_i8x16
-              (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
+      _ = v128_const_i8x16(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
       _ = (5).splat_i32x4();
       _ = (1.5).splat_f64x2();
       _ = a.add_i32x4(b);
@@ -34,9 +32,7 @@ lowering back (wax -> wat); the binary is byte-identical modulo debug names.
       _ = a.extract_lane_u_i8x16(3);
       _ = a.extract_lane_i32x4(1);
       _ = a.replace_lane_i32x4(1, 9);
-      _ =
-          a.shuffle_i8x16
-              (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, b);
+      _ = a.shuffle_i8x16(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, b);
       _ = a.shl_i16x8(2);
       _ = a.shr_s_i32x4(1);
       _ = a.any_true_v128();

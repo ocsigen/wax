@@ -46,13 +46,18 @@ fn caml_md5_chan(ch: &eq, vlen: &eq) -> &eq {
     if len <s 0 {
         'loop: loop {
             read = caml_getblock(ch, buf, 0, 4096);
-            if read { MD5Update(ctx, buf, 0, read); br 'loop; }
+            if read {
+                MD5Update(ctx, buf, 0, read);
+                br 'loop;
+            }
         }
     } else {
         'loop: loop {
             if len {
                 read = caml_getblock(ch, buf, 0, len <=u 4096?len:4096);
-                if !read { caml_raise_end_of_file(); }
+                if !read {
+                    caml_raise_end_of_file();
+                }
                 MD5Update(ctx, buf, 0, read);
                 len = len - read;
                 br 'loop;
@@ -83,8 +88,7 @@ fn ii(a: i32, b: i32, c: i32, d: i32, x: i32, s: i32, t: i32) -> i32 {
 }
 
 fn get_32(s: &string, p: i32) -> i32 {
-    s[p] as i32_u | s[p + 1] as i32_u << 8 |
-        (s[p + 2] as i32_u << 16 | s[p + 3] as i32_u << 24);
+    s[p] as i32_u | s[p + 1] as i32_u << 8 | (s[p + 2] as i32_u << 16 | s[p + 3] as i32_u << 24);
 }
 
 fn MD5Transform(w: &int_array, buffer: &int_array, buffer': &string, p: i32) {
@@ -201,7 +205,9 @@ fn MD5Update(ctx: &context, input: &string, input_pos: i32, input_len: i32) {
             br 'loop;
         }
     }
-    if input_len { ctx.f_4.copy(0, input, input_pos, input_len); }
+    if input_len {
+        ctx.f_4.copy(0, input, input_pos, input_len);
+    }
 }
 
 fn MD5Final(ctx: &context) -> &string {
@@ -213,12 +219,22 @@ fn MD5Final(ctx: &context) -> &string {
     let i: i32;
     if in_buf >u 56 {
         i = in_buf;
-        'loop: loop { if i <u 64 { buffer[i] = 0; i = i + 1; br 'loop; } }
+        'loop: loop {
+            if i <u 64 {
+                buffer[i] = 0;
+                i = i + 1;
+                br 'loop;
+            }
+        }
         MD5Transform(ctx.f, ctx.f_3, buffer, 0);
         in_buf = 0;
     }
     i = in_buf;
-    'loop: loop { buffer[i] = 0; i = i + 1; br_if 'loop i <u 56; }
+    'loop: loop {
+        buffer[i] = 0;
+        i = i + 1;
+        br_if 'loop i <u 56;
+    }
     len = len << 3;
     buffer[56] = len as i32;
     buffer[57] = (len >>u 8) as i32;

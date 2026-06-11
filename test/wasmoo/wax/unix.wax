@@ -29,12 +29,22 @@ type float = { f: f64 };
 
 #[export = "unix_gettimeofday"]
 #[export = "caml_unix_gettimeofday"]
-fn unix_gettimeofday(x: &eq) -> &eq { {float| f: gettimeofday() }; }
+fn unix_gettimeofday(x: &eq) -> &eq {
+    {float| f: gettimeofday() };
+}
 
 #[export = "caml_alloc_tm"]
-fn caml_alloc_tm
-(sec: i32, min: i32, hour: i32, mday: i32, mon: i32, year: i32, wday: i32,
- yday: i32, isdst: i32) -> &eq {
+fn caml_alloc_tm(
+    sec: i32,
+    min: i32,
+    hour: i32,
+    mday: i32,
+    mon: i32,
+    year: i32,
+    wday: i32,
+    yday: i32,
+    isdst: i32
+) -> &eq {
     [block|
         0 as &i31,
         sec as &i31,
@@ -50,28 +60,40 @@ fn caml_alloc_tm
 
 #[export = "unix_gmtime"]
 #[export = "caml_unix_gmtime"]
-fn unix_gmtime(x: &eq) -> &eq { gmtime((x as &float).f); }
+fn unix_gmtime(x: &eq) -> &eq {
+    gmtime((x as &float).f);
+}
 
 #[export = "unix_localtime"]
 #[export = "caml_unix_localtime"]
-fn unix_localtime(x: &eq) -> &eq { localtime((x as &float).f); }
+fn unix_localtime(x: &eq) -> &eq {
+    localtime((x as &float).f);
+}
 
 #[export = "unix_time"]
 #[export = "caml_unix_time"]
-fn unix_time(x: &eq) -> &eq { {float| f: gettimeofday().floor() }; }
+fn unix_time(x: &eq) -> &eq {
+    {float| f: gettimeofday().floor() };
+}
 
 #[export = "unix_mktime"]
 #[export = "caml_unix_mktime"]
 fn unix_mktime(x: &eq) -> &eq {
     let tm = x as &block;
     let t =
-        mktime
-            (tm[6] as &i31 as i32_s + 1900, tm[5] as &i31 as i32_s,
-             tm[4] as &i31 as i32_s, tm[3] as &i31 as i32_s,
-             tm[2] as &i31 as i32_s, tm[1] as &i31 as i32_s) / 1000;
+        mktime(
+            tm[6] as &i31 as i32_s + 1900,
+            tm[5] as &i31 as i32_s,
+            tm[4] as &i31 as i32_s,
+            tm[3] as &i31 as i32_s,
+            tm[2] as &i31 as i32_s,
+            tm[1] as &i31 as i32_s
+        ) / 1000;
     [block|0 as &i31, {float| f: t }, localtime(t)];
 }
 
 #[export = "unix_inet_addr_of_string"]
 #[export = "caml_unix_inet_addr_of_string"]
-fn unix_inet_addr_of_string(x: &eq) -> &eq { 0 as &i31; }
+fn unix_inet_addr_of_string(x: &eq) -> &eq {
+    0 as &i31;
+}

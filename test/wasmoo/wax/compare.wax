@@ -80,7 +80,9 @@ const default_compare_stack =
         f_4: [int_array|0; 8]
     };
 
-fn compare_stack_is_not_empty(stack: &compare_stack) -> i32 { stack.f >=s 0; }
+fn compare_stack_is_not_empty(stack: &compare_stack) -> i32 {
+    stack.f >=s 0;
+}
 
 fn pop_compare_stack(stack: &compare_stack) -> (&eq, &eq) {
     let i = stack.f;
@@ -98,8 +100,7 @@ fn pop_compare_stack(stack: &compare_stack) -> (&eq, &eq) {
     v2[p];
 }
 
-fn push_compare_stack(stack: &compare_stack, v1: &block, v2: &block, p: i32)
--> &compare_stack {
+fn push_compare_stack(stack: &compare_stack, v1: &block, v2: &block, p: i32) -> &compare_stack {
     let i = stack.f + 1;
     let len = stack.f_2.length();
     if i >=u len {
@@ -127,7 +128,9 @@ fn push_compare_stack(stack: &compare_stack, v1: &block, v2: &block, p: i32)
 const unordered = 0x80000000;
 
 fn compare_strings(s1: &string, s2: &string) -> i32 {
-    if s1 == s2 { return 0; }
+    if s1 == s2 {
+        return 0;
+    }
     let l1 = s1.length();
     let l2 = s2.length();
     let len = l1 <=u l2?l1:l2;
@@ -136,7 +139,13 @@ fn compare_strings(s1: &string, s2: &string) -> i32 {
         if i <s len {
             let c1 = s1[i] as i32_u;
             let c2 = s2[i] as i32_u;
-            if c1 != c2 { if c1 <=u c2 { return -1; } else { return 1; } }
+            if c1 != c2 {
+                if c1 <=u c2 {
+                    return -1;
+                } else {
+                    return 1;
+                }
+            }
             i = i + 1;
             br 'loop;
         }
@@ -169,11 +178,12 @@ data abstract_value = "compare: abstract value";
 data functional_value = "compare: functional value";
 data continuation_value = "compare: continuation value";
 
-fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
-{
+fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32 {
     'loop: loop {
         'next_item: do {
-            if total { br_if 'next_item v1 == v2; }
+            if total {
+                br_if 'next_item v1 == v2;
+            }
             let i1: &i31;
             let i2: &i31;
             let b2: &block;
@@ -195,17 +205,18 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
                         'v2_not_forward: do &eq {
                             b2 = br_on_cast_fail 'v2_not_forward &block v2;
                             t2 = b2[0] as &i31 as i32_u;
-                            if t2 == forward_tag { v2 = b2[1]; br 'loop; }
+                            if t2 == forward_tag {
+                                v2 = b2[1];
+                                br 'loop;
+                            }
                             1 as &i31;
                         };
                     'v2_not_comparable: do {
                         _ =
                             'v2_not_custom: do &eq {
-                                c2 =
-                                    br_on_cast_fail 'v2_not_custom &custom v2;
+                                c2 = br_on_cast_fail 'v2_not_custom &custom v2;
                                 res =
-                                    (br_on_null 'v2_not_comparable
-                                         c2.f.compare_ext)(v1, v2, total);
+                                    (br_on_null 'v2_not_comparable c2.f.compare_ext)(v1, v2, total);
                                 br_if 'next_item !res;
                                 return res;
                             };
@@ -222,16 +233,17 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
                     'v1_not_forward: do &eq {
                         b1 = br_on_cast_fail 'v1_not_forward &block v1;
                         t1 = b1[0] as &i31 as i32_u;
-                        if t1 == forward_tag { v1 = b1[1]; br 'loop; }
+                        if t1 == forward_tag {
+                            v1 = b1[1];
+                            br 'loop;
+                        }
                         1 as &i31;
                     };
                 'v1_not_comparable: do {
                     _ =
                         'v1_not_custom: do &eq {
                             c1 = br_on_cast_fail 'v1_not_custom &custom v1;
-                            res =
-                                (br_on_null 'v1_not_comparable
-                                     c1.f.compare_ext)(v1, v2, total);
+                            res = (br_on_null 'v1_not_comparable c1.f.compare_ext)(v1, v2, total);
                             br_if 'next_item !res;
                             return res;
                         };
@@ -269,13 +281,14 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
                                 v1 = b1[2];
                                 v2 = b2[2];
                                 br_if 'next_item v1 == v2;
-                                return
-                                    v1 as &i31 as i32_s - v2 as &i31 as i32_s;
+                                return v1 as &i31 as i32_s - v2 as &i31 as i32_s;
                             }
                             s1 = b1.length();
                             s2 = b2.length();
                             // compare size first
-                            if s1 != s2 { return s1 - s2; }
+                            if s1 != s2 {
+                                return s1 - s2;
+                            }
                             br_if 'next_item s1 == 1;
                             if s1 >u 2 {
                                 stack = push_compare_stack(stack, b1, b2, 2);
@@ -288,12 +301,22 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
                         'v1_not_float: do &eq {
                             f1 = (br_on_cast_fail 'v1_not_float &float v1).f;
                             f2 = (br_on_cast_fail 'heterogeneous &float v2).f;
-                            if f1 < f2 { return -1; }
-                            if f1 > f2 { return 1; }
+                            if f1 < f2 {
+                                return -1;
+                            }
+                            if f1 > f2 {
+                                return 1;
+                            }
                             if f1 != f2 {
-                                if !total { return unordered; }
-                                if f1 == f1 { return 1; }
-                                if f2 == f2 { return -1; }
+                                if !total {
+                                    return unordered;
+                                }
+                                if f1 == f1 {
+                                    return 1;
+                                }
+                                if f2 == f2 {
+                                    return -1;
+                                }
                             }
                             br 'next_item;
                         };
@@ -307,26 +330,34 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
                         };
                     _ =
                         'v1_not_float_array: do &eq {
-                            fa1 =
-                                br_on_cast_fail 'v1_not_float_array
-                                    &float_array v1;
-                            fa2 =
-                                br_on_cast_fail 'heterogeneous &float_array
-                                    v2;
+                            fa1 = br_on_cast_fail 'v1_not_float_array &float_array v1;
+                            fa2 = br_on_cast_fail 'heterogeneous &float_array v2;
                             s1 = fa1.length();
                             s2 = fa2.length();
-                            if s1 != s2 { return s1 - s2; }
+                            if s1 != s2 {
+                                return s1 - s2;
+                            }
                             i = 0;
                             'float_array: loop {
                                 if i <s s1 {
                                     f1 = fa1[i];
                                     f2 = fa2[i];
-                                    if f1 < f2 { return -1; }
-                                    if f1 > f2 { return 1; }
+                                    if f1 < f2 {
+                                        return -1;
+                                    }
+                                    if f1 > f2 {
+                                        return 1;
+                                    }
                                     if f1 != f2 {
-                                        if !total { return unordered; }
-                                        if f1 == f1 { return 1; }
-                                        if f2 == f2 { return -1; }
+                                        if !total {
+                                            return unordered;
+                                        }
+                                        if f1 == f1 {
+                                            return 1;
+                                        }
+                                        if f2 == f2 {
+                                            return -1;
+                                        }
                                     }
                                     i = i + 1;
                                     br 'float_array;
@@ -339,20 +370,15 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
                             c1 = br_on_cast_fail 'v1_not_custom &custom v1;
                             c2 = br_on_cast_fail 'heterogeneous &custom v2;
                             if !(c1.f == c2.f) {
-                                return
-                                    caml_string_compare(c1.f.id, c2.f.id)
-                                        as &i31 as i32_s;
+                                return caml_string_compare(c1.f.id, c2.f.id) as &i31 as i32_s;
                             }
                             'not_comparable: do {
-                                res =
-                                    (br_on_null 'not_comparable c1.f.compare)
-                                        (v1, v2, total);
+                                res = (br_on_null 'not_comparable c1.f.compare)(v1, v2, total);
                                 br_if 'next_item !res;
                                 return res;
                             }
                             clear_compare_stack();
-                            caml_invalid_argument
-                                ([string|abstract_value @ 0; 23]);
+                            caml_invalid_argument([string|abstract_value @ 0; 23]);
                             0 as &i31;
                         };
                     _ =
@@ -375,28 +401,28 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
                             br 'heterogeneous 0 as &i31;
                         };
                     if caml_is_closure(v1) {
-                        _ =
-                            br_if 'heterogeneous
-                                (0 as &i31, !caml_is_closure(v2));
+                        _ = br_if 'heterogeneous (0 as &i31, !caml_is_closure(v2));
                         clear_compare_stack();
-                        caml_invalid_argument
-                            ([string|functional_value @ 0; 25]);
+                        caml_invalid_argument([string|functional_value @ 0; 25]);
                     }
                     if caml_is_continuation(v1) {
-                        _ =
-                            br_if 'heterogeneous
-                                (0 as &i31, !caml_is_continuation(v2));
+                        _ = br_if 'heterogeneous (0 as &i31, !caml_is_continuation(v2));
                         clear_compare_stack();
-                        caml_invalid_argument
-                            ([string|continuation_value @ 0; 27]);
+                        caml_invalid_argument([string|continuation_value @ 0; 27]);
                     }
                     0 as &i31;
                 }; // fall through
             // heterogeneous comparison
             t1 = caml_obj_tag(v1) as &i31 as i32_u;
             t2 = caml_obj_tag(v2) as &i31 as i32_u;
-            if t1 == forward_tag { v1 = (v1 as &block)[1]; br 'loop; }
-            if t2 == forward_tag { v2 = (v2 as &block)[1]; br 'loop; }
+            if t1 == forward_tag {
+                v1 = (v1 as &block)[1];
+                br 'loop;
+            }
+            if t2 == forward_tag {
+                v2 = (v2 as &block)[1];
+                br 'loop;
+            }
             res = t1 - t2;
             if !res {
                 clear_compare_stack();
@@ -417,13 +443,19 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32
 #[export = "caml_compare"]
 fn caml_compare(v1: &eq, v2: &eq) -> &eq {
     let res = compare_val(v1, v2, 1);
-    if res <s 0 { return -1 as &i31; }
-    if res >s 0 { return 1 as &i31; }
+    if res <s 0 {
+        return -1 as &i31;
+    }
+    if res >s 0 {
+        return 1 as &i31;
+    }
     0 as &i31;
 }
 
 #[export = "caml_equal"]
-fn caml_equal(v1: &eq, v2: &eq) -> &eq { !compare_val(v1, v2, 0) as &i31; }
+fn caml_equal(v1: &eq, v2: &eq) -> &eq {
+    !compare_val(v1, v2, 0) as &i31;
+}
 
 #[export = "caml_notequal"]
 fn caml_notequal(v1: &eq, v2: &eq) -> &eq {

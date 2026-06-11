@@ -24,7 +24,9 @@ writable names first, as the test inputs are read-only):
   $ cat x.wat
   (func $f (result i32) (i32.const 1))
   $ cat y.wax
-  fn g(x: i32) -> i32 { x; }
+  fn g(x: i32) -> i32 {
+      x;
+  }
 
 Formatting is idempotent:
 
@@ -32,7 +34,9 @@ Formatting is idempotent:
   $ cat x.wat
   (func $f (result i32) (i32.const 1))
   $ cat y.wax
-  fn g(x: i32) -> i32 { x; }
+  fn g(x: i32) -> i32 {
+      x;
+  }
 
 --check writes nothing and lists files that are not already formatted, taking
 several files and exiting non-zero when any differ:

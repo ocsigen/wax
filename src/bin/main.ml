@@ -121,6 +121,8 @@ let wat_trivia ?retarget ~fold_mode ctx ast =
 
 let wax_trivia ?retarget ctx ast =
   let used = Hashtbl.create 256 in
+  (* Width is irrelevant to the dry pass: it only records which locations the
+     printer looks up, and the traversal is the same at any width. *)
   Utils.Printer.run (null_formatter ()) (fun p ->
       Wax.Output.module_ p ~trivia:(Hashtbl.create 0) ~collect:used ast);
   let trivia, tail = Utils.Trivia.associate ~only:used ctx in
@@ -178,7 +180,7 @@ let wat_to_wax ~input_file ~output_file ~validate ~color ~output_color
   in
   with_open_out output_file (fun oc ->
       let print_wax f m =
-        Utils.Printer.run f (fun p ->
+        Utils.Printer.run ~width:Wax.Output.width f (fun p ->
             Wax.Output.module_ p ~color:output_color ~out_channel:oc ~trivia
               ~tail m)
       in
@@ -235,7 +237,7 @@ let wax_to_wax ~input_file ~output_file ~validate ~color ~output_color
   let trivia, tail = wax_trivia ctx ast in
   with_open_out output_file (fun oc ->
       let print_wax f m =
-        Utils.Printer.run f (fun p ->
+        Utils.Printer.run ~width:Wax.Output.width f (fun p ->
             Wax.Output.module_ p ~color:output_color ~out_channel:oc ~trivia
               ~tail m)
       in
@@ -334,7 +336,7 @@ let wasm_to_wax ~input_file ~output_file ~validate ~color ~output_color
   in
   with_open_out output_file (fun oc ->
       let print_wax f m =
-        Utils.Printer.run f (fun p ->
+        Utils.Printer.run ~width:Wax.Output.width f (fun p ->
             Wax.Output.module_ p ~color:output_color ~out_channel:oc
               ~trivia:(Hashtbl.create 0) m)
       in

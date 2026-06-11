@@ -62,12 +62,7 @@ const re_word_letters =
         0xFF]; // Latin-1 accented lowercase
 type stack = open { f: &?stack };
 type pos: stack = { pos_previous: &?stack, pc: i32, pos: i32 };
-type undo: stack = {
-    undo_previous: &?stack,
-    tbl: &int_array,
-    idx: i32,
-    val: i32
-};
+type undo: stack = { undo_previous: &?stack, tbl: &int_array, idx: i32, val: i32 };
 
 fn is_word_letter(c: i32) -> i32 {
     1 & re_word_letters[c >>u 3] as i32_u >>u (c & 7);
@@ -77,8 +72,7 @@ fn in_bitset(s: &string, c: i32) -> i32 {
     1 & s[c >>u 3] as i32_u >>u (c & 7);
 }
 
-fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq
-{
+fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq {
     let len = s.length();
     let re = vre as &block;
     let prog = re[1] as &block;
@@ -112,255 +106,199 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq
                                                     'REFGROUP: do {
                                                         'ENDGROUP: do {
                                                             'BEGGROUP: do {
-                                                                'WORDBOUNDARY:
-                                                                do {
+                                                                'WORDBOUNDARY: do {
                                                                     'EOL: do {
-                                                                    'BOL: do {
-                                                                    'CHARCLASS:
-                                                                    do {
-                                                                    let s':
-                                                                    &string;
-                                                                    let l:
-                                                                    i32;
-                                                                    'STRINGNORM:
-                                                                    do {
-                                                                    'STRING:
-                                                                    do {
-                                                                    'CHARNORM:
-                                                                    do {
-                                                                    'CHAR: do
-                                                                    {
-                                                                    instr =
-                                                                    prog[pc]
-                                                                    as &i31
-                                                                    as i32_s;
-                                                                    pc =
-                                                                    pc + 1;
-                                                                    br_table
-                                                                    [ 'CHAR
-                                                                    'CHARNORM
-                                                                    'STRING
-                                                                    'STRINGNORM
-                                                                    'CHARCLASS
-                                                                    'BOL 'EOL
-                                                                    'WORDBOUNDARY
-                                                                    'BEGGROUP
-                                                                    'ENDGROUP
-                                                                    'REFGROUP
-                                                                    'ACCEPT
-                                                                    'SIMPLEOPT
-                                                                    'SIMPLESTAR
-                                                                    'SIMPLEPLUS
-                                                                    'GOTO
-                                                                    'PUSHBACK
-                                                                    'SETMARK
-                                                                    else
-                                                                    'CHECKPROGRESS
-                                                                    ]
-                                                                    instr &
-                                                                    0xff;
-                                                                    }
-                                                                    // CHAR
-                                                                    br_if
-                                                                    'prefix_match
-                                                                    pos ==
-                                                                    len;
-                                                                    arg =
-                                                                    instr >>u
-                                                                    8;
-                                                                    br_if
-                                                                    'backtrack
-                                                                    arg !=
-                                                                    s[pos]
-                                                                    as i32_u;
-                                                                    pos =
-                                                                    pos + 1;
-                                                                    br
-                                                                    'continue;
-                                                                    }
-                                                                    // CHARNORM
-                                                                    br_if
-                                                                    'prefix_match
-                                                                    pos ==
-                                                                    len;
-                                                                    arg =
-                                                                    instr >>u
-                                                                    8;
-                                                                    br_if
-                                                                    'backtrack
-                                                                    arg !=
-                                                                    normtable
-                                                                    [s[pos]
-                                                                    as i32_u]
-                                                                    as i32_u;
-                                                                    pos =
-                                                                    pos + 1;
-                                                                    br
-                                                                    'continue;
-                                                                    }
-                                                                    // STRING
-                                                                    arg =
-                                                                    instr >>u
-                                                                    8;
-                                                                    s' =
-                                                                    cpool
-                                                                    [arg + 1]
-                                                                    as
-                                                                    &string;
-                                                                    i = 0;
-                                                                    l =
-                                                                    s'.length
-                                                                    ();
-                                                                    'loop:
-                                                                    loop {
-                                                                    if i <u l
-                                                                    {
-                                                                    br_if
-                                                                    'prefix_match
-                                                                    pos ==
-                                                                    len;
-                                                                    br_if
-                                                                    'backtrack
-                                                                    s'[i]
-                                                                    as i32_u
-                                                                    !=
-                                                                    s[pos]
-                                                                    as i32_u;
-                                                                    pos =
-                                                                    pos + 1;
-                                                                    i = i + 1;
-                                                                    br 'loop;
-                                                                    }
-                                                                    }
-                                                                    br
-                                                                    'continue;
-                                                                    }
-                                                                    // STRINGNORM
-                                                                    arg =
-                                                                    instr >>u
-                                                                    8;
-                                                                    s' =
-                                                                    cpool
-                                                                    [arg + 1]
-                                                                    as
-                                                                    &string;
-                                                                    i = 0;
-                                                                    l =
-                                                                    s'.length
-                                                                    ();
-                                                                    'loop:
-                                                                    loop {
-                                                                    if i <u l
-                                                                    {
-                                                                    br_if
-                                                                    'prefix_match
-                                                                    pos ==
-                                                                    len;
-                                                                    br_if
-                                                                    'backtrack
-                                                                    s'[i]
-                                                                    as i32_u
-                                                                    !=
-                                                                    normtable
-                                                                    [s[pos]
-                                                                    as i32_u]
-                                                                    as i32_u;
-                                                                    pos =
-                                                                    pos + 1;
-                                                                    i = i + 1;
-                                                                    br 'loop;
-                                                                    }
-                                                                    }
-                                                                    br
-                                                                    'continue;
-                                                                    }
-                                                                    // CHARCLASS
-                                                                    br_if
-                                                                    'prefix_match
-                                                                    pos ==
-                                                                    len;
-                                                                    arg =
-                                                                    instr >>u
-                                                                    8;
-                                                                    br_if
-                                                                    'backtrack
-                                                                    !in_bitset
-                                                                    (cpool
-                                                                    [arg + 1]
-                                                                    as
-                                                                    &string,
-                                                                    s[pos]
-                                                                    as i32_u);
-                                                                    pos =
-                                                                    pos + 1;
-                                                                    br
-                                                                    'continue;
-                                                                    }
-                                                                    // BOL
-                                                                    br_if
-                                                                    'continue
-                                                                    !pos;
-                                                                    br_if
-                                                                    'continue
-                                                                    10 // '\n'
-                                                                    ==
-                                                                    s[pos - 1]
-                                                                    as i32_u;
-                                                                    br
-                                                                    'backtrack;
+                                                                        'BOL: do {
+                                                                            'CHARCLASS: do {
+                                                                                let s': &string;
+                                                                                let l: i32;
+                                                                                'STRINGNORM: do {
+                                                                                    'STRING: do {
+                                                                                        'CHARNORM:
+                                                                                        do {
+                                                                                          'CHAR: do
+                                                                                          {
+                                                                                          instr =
+                                                                                          prog[pc]
+                                                                                          as &i31
+                                                                                          as i32_s;
+                                                                                          pc =
+                                                                                          pc + 1;
+                                                                                          br_table
+                                                                                          [ 'CHAR
+                                                                                          'CHARNORM
+                                                                                          'STRING
+                                                                                          'STRINGNORM
+                                                                                          'CHARCLASS
+                                                                                          'BOL 'EOL
+                                                                                          'WORDBOUNDARY
+                                                                                          'BEGGROUP
+                                                                                          'ENDGROUP
+                                                                                          'REFGROUP
+                                                                                          'ACCEPT
+                                                                                          'SIMPLEOPT
+                                                                                          'SIMPLESTAR
+                                                                                          'SIMPLEPLUS
+                                                                                          'GOTO
+                                                                                          'PUSHBACK
+                                                                                          'SETMARK
+                                                                                          else
+                                                                                          'CHECKPROGRESS
+                                                                                          ]
+                                                                                          instr &
+                                                                                          0xff;
+                                                                                          }
+                                                                                          // CHAR
+                                                                                          br_if
+                                                                                          'prefix_match
+                                                                                          pos ==
+                                                                                          len;
+                                                                                          arg =
+                                                                                          instr >>u
+                                                                                          8;
+                                                                                          br_if
+                                                                                          'backtrack
+                                                                                          arg !=
+                                                                                          s[pos]
+                                                                                          as i32_u;
+                                                                                          pos =
+                                                                                          pos + 1;
+                                                                                          br
+                                                                                          'continue;
+                                                                                        }
+                                                                                        // CHARNORM
+                                                                                        br_if
+                                                                                          'prefix_match
+                                                                                          pos ==
+                                                                                          len;
+                                                                                        arg =
+                                                                                          instr >>u
+                                                                                          8;
+                                                                                        br_if
+                                                                                          'backtrack
+                                                                                          arg !=
+                                                                                          normtable
+                                                                                          [s[pos]
+                                                                                          as i32_u]
+                                                                                          as i32_u;
+                                                                                        pos =
+                                                                                          pos + 1;
+                                                                                        br
+                                                                                          'continue;
+                                                                                    }
+                                                                                    // STRING
+                                                                                    arg =
+                                                                                        instr >>u 8;
+                                                                                    s' =
+                                                                                        cpool
+                                                                                          [arg + 1]
+                                                                                          as
+                                                                                          &string;
+                                                                                    i = 0;
+                                                                                    l = s'.length();
+                                                                                    'loop: loop {
+                                                                                        if i <u l {
+                                                                                          br_if
+                                                                                          'prefix_match
+                                                                                          pos ==
+                                                                                          len;
+                                                                                          br_if
+                                                                                          'backtrack
+                                                                                          s'[i]
+                                                                                          as i32_u
+                                                                                          !=
+                                                                                          s[pos]
+                                                                                          as i32_u;
+                                                                                          pos =
+                                                                                          pos + 1;
+                                                                                          i = i + 1;
+                                                                                          br 'loop;
+                                                                                        }
+                                                                                    }
+                                                                                    br 'continue;
+                                                                                }
+                                                                                // STRINGNORM
+                                                                                arg = instr >>u 8;
+                                                                                s' =
+                                                                                    cpool[arg + 1]
+                                                                                        as &string;
+                                                                                i = 0;
+                                                                                l = s'.length();
+                                                                                'loop: loop {
+                                                                                    if i <u l {
+                                                                                        br_if
+                                                                                          'prefix_match
+                                                                                          pos ==
+                                                                                          len;
+                                                                                        br_if
+                                                                                          'backtrack
+                                                                                          s'[i]
+                                                                                          as i32_u
+                                                                                          !=
+                                                                                          normtable
+                                                                                          [s[pos]
+                                                                                          as i32_u]
+                                                                                          as i32_u;
+                                                                                        pos =
+                                                                                          pos + 1;
+                                                                                        i = i + 1;
+                                                                                        br 'loop;
+                                                                                    }
+                                                                                }
+                                                                                br 'continue;
+                                                                            }
+                                                                            // CHARCLASS
+                                                                            br_if 'prefix_match
+                                                                                pos == len;
+                                                                            arg = instr >>u 8;
+                                                                            br_if 'backtrack
+                                                                                !in_bitset(
+                                                                                     cpool[arg + 1]
+                                                                                         as &string,
+                                                                                     s[pos] as i32_u
+                                                                                 );
+                                                                            pos = pos + 1;
+                                                                            br 'continue;
+                                                                        }
+                                                                        // BOL
+                                                                        br_if 'continue !pos;
+                                                                        br_if 'continue
+                                                                            10 // '\n'
+                                                                                ==
+                                                                                s[pos - 1] as i32_u;
+                                                                        br 'backtrack;
                                                                     }
                                                                     // EOL
-                                                                    br_if
-                                                                    'continue
-                                                                    pos ==
-                                                                    len;
-                                                                    br_if
-                                                                    'continue
-                                                                    10 // '\n'
-                                                                    ==
-                                                                    s[pos]
-                                                                    as i32_u;
-                                                                    br
-                                                                    'backtrack;
+                                                                    br_if 'continue pos == len;
+                                                                    br_if 'continue
+                                                                        10 // '\n'
+                                                                            == s[pos] as i32_u;
+                                                                    br 'backtrack;
                                                                 }
                                                                 // WORDBOUNDARY
                                                                 if !pos {
-                                                                    br_if
-                                                                    'prefix_match
-                                                                    pos ==
-                                                                    len;
-                                                                    br_if
-                                                                    'continue
-                                                                    is_word_letter
-                                                                    (s[pos]
-                                                                    as i32_u);
-                                                                    br
-                                                                    'backtrack;
+                                                                    br_if 'prefix_match pos == len;
+                                                                    br_if 'continue
+                                                                        is_word_letter(
+                                                                            s[pos] as i32_u
+                                                                        );
+                                                                    br 'backtrack;
                                                                 } else {
-                                                                    if
-                                                                    pos == len
-                                                                    {
-                                                                    br_if
-                                                                    'continue
-                                                                    is_word_letter
-                                                                    (s
-                                                                    [pos - 1]
-                                                                    as i32_u);
-                                                                    br
-                                                                    'backtrack;
+                                                                    if pos == len {
+                                                                        br_if 'continue
+                                                                            is_word_letter(
+                                                                                s[pos - 1] as i32_u
+                                                                            );
+                                                                        br 'backtrack;
                                                                     } else {
-                                                                    br_if
-                                                                    'continue
-                                                                    is_word_letter
-                                                                    (s
-                                                                    [pos - 1]
-                                                                    as i32_u)
-                                                                    !=
-                                                                    is_word_letter
-                                                                    (s[pos]
-                                                                    as i32_u);
-                                                                    br
-                                                                    'backtrack;
+                                                                        br_if 'continue
+                                                                            is_word_letter(
+                                                                                s[pos - 1] as i32_u
+                                                                            ) !=
+                                                                                is_word_letter(
+                                                                                    s[pos] as i32_u
+                                                                                );
+                                                                        br 'backtrack;
                                                                     }
                                                                 }
                                                             }
@@ -368,31 +306,22 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq
                                                             arg = instr >>u 8;
                                                             stack =
                                                                 {undo|
-                                                                    undo_previous:
-                                                                    stack,
-                                                                    tbl:
-                                                                    group_start,
+                                                                    undo_previous: stack,
+                                                                    tbl: group_start,
                                                                     idx: arg,
-                                                                    val:
-                                                                    group_start
-                                                                    [arg]
+                                                                    val: group_start[arg]
                                                                 };
-                                                            group_start[arg] =
-                                                                pos;
+                                                            group_start[arg] = pos;
                                                             br 'continue;
                                                         }
                                                         // ENDGROUP
                                                         arg = instr >>u 8;
                                                         stack =
                                                             {undo|
-                                                                undo_previous:
-                                                                    stack,
-                                                                tbl:
-                                                                    group_end,
+                                                                undo_previous: stack,
+                                                                tbl: group_end,
                                                                 idx: arg,
-                                                                val:
-                                                                    group_end
-                                                                    [arg]
+                                                                val: group_end[arg]
                                                             };
                                                         group_end[arg] = pos;
                                                         br 'continue;
@@ -401,18 +330,12 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq
                                                     arg = instr >>u 8;
                                                     i = group_start[arg];
                                                     j = group_end[arg];
-                                                    br_if 'backtrack
-                                                        (i <s 0) | (j <s 0);
+                                                    br_if 'backtrack (i <s 0) | (j <s 0);
                                                     'loop: loop {
                                                         if i <u j {
-                                                            br_if
-                                                                'prefix_match
-                                                                pos == len;
+                                                            br_if 'prefix_match pos == len;
                                                             br_if 'backtrack
-                                                                s[i] as i32_u
-                                                                    !=
-                                                                    s[pos]
-                                                                    as i32_u;
+                                                                s[i] as i32_u != s[pos] as i32_u;
                                                             pos = pos + 1;
                                                             i = i + 1;
                                                             br 'loop;
@@ -424,11 +347,10 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq
                                                 arg = instr >>u 8;
                                                 if pos <u len {
                                                     if
-                                                        in_bitset
-                                                            (cpool[arg + 1]
-                                                                 as &string,
-                                                             s[pos] as i32_u)
-                                                    {
+                                                        in_bitset(
+                                                            cpool[arg + 1] as &string,
+                                                            s[pos] as i32_u
+                                                        ) {
                                                         pos = pos + 1;
                                                     }
                                                 }
@@ -439,11 +361,7 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq
                                             set = cpool[arg + 1] as &string;
                                             'loop: loop {
                                                 if pos <u len {
-                                                    if
-                                                        in_bitset
-                                                            (set,
-                                                             s[pos] as i32_u)
-                                                    {
+                                                    if in_bitset(set, s[pos] as i32_u) {
                                                         pos = pos + 1;
                                                         br 'loop;
                                                     }
@@ -455,15 +373,11 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq
                                         br_if 'prefix_match pos == len;
                                         arg = instr >>u 8;
                                         set = cpool[arg + 1] as &string;
-                                        br_if 'backtrack
-                                            !in_bitset(set, s[pos] as i32_u);
+                                        br_if 'backtrack !in_bitset(set, s[pos] as i32_u);
                                         'loop: loop {
                                             pos = pos + 1;
                                             if pos <u len {
-                                                br_if 'loop
-                                                    in_bitset
-                                                        (set,
-                                                         s[pos] as i32_u);
+                                                br_if 'loop in_bitset(set, s[pos] as i32_u);
                                             }
                                         }
                                         br 'continue;
@@ -474,11 +388,7 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq
                                 }
                                 // PUSHBACK
                                 stack =
-                                    {pos|
-                                        pos_previous: stack,
-                                        pc: pc + (instr >>s 8),
-                                        pos: pos
-                                    };
+                                    {pos| pos_previous: stack, pc: pc + (instr >>s 8), pos: pos };
                                 br 'continue;
                             }
                             // SETMARK
@@ -506,9 +416,7 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq
                     let p: &pos;
                     let u =
                         'undo: do &stack {
-                            p =
-                                br_on_cast_fail 'undo &pos
-                                    br_on_null 'reject stack;
+                            p = br_on_cast_fail 'undo &pos br_on_null 'reject stack;
                             pc = p.pc;
                             pos = p.pos;
                             stack = p.pos_previous;
@@ -552,10 +460,14 @@ fn re_search_forward(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     let s = vs as &string;
     let pos = vpos as &i31 as i32_s;
     let len = s.length();
-    if pos >u len { caml_invalid_argument([string|search_forward @ 0; 18]); }
+    if pos >u len {
+        caml_invalid_argument([string|search_forward @ 0; 18]);
+    }
     'loop: loop {
         let res = re_match(re, s, pos, 0);
-        if res is &block { return res; }
+        if res is &block {
+            return res;
+        }
         pos = pos + 1;
         br_if 'loop pos <=u len;
     }
@@ -570,10 +482,14 @@ fn re_search_backward(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     let s = vs as &string;
     let pos = vpos as &i31 as i32_s;
     let len = s.length();
-    if pos >u len { caml_invalid_argument([string|search_backward @ 0; 19]); }
+    if pos >u len {
+        caml_invalid_argument([string|search_backward @ 0; 19]);
+    }
     'loop: loop {
         let res = re_match(re, s, pos, 0);
-        if res is &block { return res; }
+        if res is &block {
+            return res;
+        }
         pos = pos - 1;
         br_if 'loop pos >=s 0;
     }
@@ -588,9 +504,13 @@ fn re_string_match(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     let s = vs as &string;
     let pos = vpos as &i31 as i32_s;
     let len = s.length();
-    if pos >u len { caml_invalid_argument([string|string_match @ 0; 16]); }
+    if pos >u len {
+        caml_invalid_argument([string|string_match @ 0; 16]);
+    }
     let res = re_match(re, s, pos, 0);
-    if res is &block { return res; }
+    if res is &block {
+        return res;
+    }
     [block|0 as &i31];
 }
 
@@ -606,7 +526,9 @@ fn re_partial_match(re: &eq, vs: &eq, vpos: &eq) -> &eq {
         caml_invalid_argument([string|string_partial_match @ 0; 24]);
     }
     let res = re_match(re, s, pos, 1);
-    if res is &block { return res; }
+    if res is &block {
+        return res;
+    }
     [block|0 as &i31];
 }
 
@@ -633,7 +555,9 @@ fn re_replacement_text(vrepl: &eq, vgroups: &eq, vorig: &eq) -> &eq {
                 len = len + 1;
                 br 'loop;
             }
-            if i == l { caml_failwith([string|illegal_backslash @ 0; 39]); }
+            if i == l {
+                caml_failwith([string|illegal_backslash @ 0; 39]);
+            }
             c = repl[i] as i32_u;
             i = i + 1;
             if c == 92 // '\\'
@@ -642,7 +566,10 @@ fn re_replacement_text(vrepl: &eq, vgroups: &eq, vorig: &eq) -> &eq {
                 br 'loop;
             }
             c = c - 48; // '0'
-            if c >u 9 { len = len + 2; br 'loop; }
+            if c >u 9 {
+                len = len + 2;
+                br 'loop;
+            }
             c = c << 1;
             if c + 1 >u groups.length() {
                 caml_failwith([string|unmatched_group @ 0; 41]);

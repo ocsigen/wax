@@ -28,7 +28,9 @@ type string = [mut i8];
 tag ocaml_exception(&eq);
 
 #[export = "caml_raise_constant"]
-fn caml_raise_constant(x: &eq) { throw ocaml_exception x; }
+fn caml_raise_constant(x: &eq) {
+    throw ocaml_exception x;
+}
 
 #[export = "caml_raise_with_arg"]
 fn caml_raise_with_arg(tag_2: &eq, arg: &eq) {
@@ -52,7 +54,9 @@ fn caml_raise_sys_error(msg: &eq) {
 const FAILURE_EXN = 2;
 
 #[export = "caml_failwith_tag"]
-fn caml_failwith_tag() -> &eq { caml_global_data[FAILURE_EXN]; }
+fn caml_failwith_tag() -> &eq {
+    caml_global_data[FAILURE_EXN];
+}
 
 #[export = "caml_failwith"]
 fn caml_failwith(arg: &eq) {

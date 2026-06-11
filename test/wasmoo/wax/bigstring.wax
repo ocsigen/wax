@@ -73,7 +73,9 @@ fn caml_hash_mix_bigstring(h: i32, b: &eq) -> i32 {
     'l_2: do {
         'l_3: do {
             'l_4: do {
-                'l_5: do { br_table [ 'l_2 'l_3 'l_4 else 'l_5 ] len & 3; }
+                'l_5: do {
+                    br_table [ 'l_2 'l_3 'l_4 else 'l_5 ] len & 3;
+                }
                 w = ta_get_ui8(data, i + 2) << 16;
             }
             w = w | ta_get_ui8(data, i + 1) << 8;
@@ -107,8 +109,7 @@ fn caml_bigstring_memset(s: &eq, pos: &eq, len: &eq, v: &eq) -> &eq {
 }
 
 #[export = "caml_bigstring_memcmp"]
-fn caml_bigstring_memcmp(s1: &eq, vpos1: &eq, s2: &eq, vpos2: &eq, vlen: &eq)
--> &eq {
+fn caml_bigstring_memcmp(s1: &eq, vpos1: &eq, s2: &eq, vpos2: &eq, vlen: &eq) -> &eq {
     let d1 = caml_ba_get_data(s1);
     let pos1 = vpos1 as &i31 as i32_s;
     let d2 = caml_ba_get_data(s2);
@@ -128,8 +129,7 @@ fn caml_bigstring_memcmp(s1: &eq, vpos1: &eq, s2: &eq, vpos2: &eq, vlen: &eq)
 }
 
 #[export = "caml_bigstring_memcmp_string"]
-fn caml_bigstring_memcmp_string
-(s1: &eq, vpos1: &eq, vs2: &eq, vpos2: &eq, vlen: &eq) -> &eq {
+fn caml_bigstring_memcmp_string(s1: &eq, vpos1: &eq, vs2: &eq, vpos2: &eq, vlen: &eq) -> &eq {
     let d1 = caml_ba_get_data(s1);
     let pos1 = vpos1 as &i31 as i32_s;
     let s2 = vs2 as &string;
@@ -156,7 +156,9 @@ fn caml_bigstring_memchr(s: &eq, vc: &eq, vpos: &eq, vlen: &eq) -> &eq {
     let d = caml_ba_get_data(s);
     'loop: loop {
         if len >s 0 {
-            if c == ta_get_ui8(d, pos) { return pos as &i31; }
+            if c == ta_get_ui8(d, pos) {
+                return pos as &i31;
+            }
             len = len - 1;
             pos = pos + 1;
             br 'loop;
@@ -167,8 +169,7 @@ fn caml_bigstring_memchr(s: &eq, vc: &eq, vpos: &eq, vlen: &eq) -> &eq {
 
 #[export = "caml_bigstring_blit_bytes_to_ba"]
 #[export = "caml_bigstring_blit_string_to_ba"]
-fn caml_bigstring_blit_bytes_to_ba
-(str1: &eq, vpos1: &eq, ba2: &eq, vpos2: &eq, vlen: &eq) -> &eq {
+fn caml_bigstring_blit_bytes_to_ba(str1: &eq, vpos1: &eq, ba2: &eq, vpos2: &eq, vlen: &eq) -> &eq {
     let s1 = str1 as &string;
     let pos1 = vpos1 as &i31 as i32_s;
     let d2 = caml_ba_get_data(ba2);
@@ -179,8 +180,7 @@ fn caml_bigstring_blit_bytes_to_ba
 }
 
 #[export = "caml_bigstring_blit_ba_to_bytes"]
-fn caml_bigstring_blit_ba_to_bytes
-(ba1: &eq, vpos1: &eq, str2: &eq, vpos2: &eq, vlen: &eq) -> &eq {
+fn caml_bigstring_blit_ba_to_bytes(ba1: &eq, vpos1: &eq, str2: &eq, vpos2: &eq, vlen: &eq) -> &eq {
     let d1 = caml_ba_get_data(ba1);
     let pos1 = vpos1 as &i31 as i32_s;
     let s2 = str2 as &string;
@@ -191,8 +191,7 @@ fn caml_bigstring_blit_ba_to_bytes
 }
 
 #[export = "caml_bigstring_blit_ba_to_ba"]
-fn caml_bigstring_blit_ba_to_ba
-(ba1: &eq, vpos1: &eq, ba2: &eq, vpos2: &eq, vlen: &eq) -> &eq {
+fn caml_bigstring_blit_ba_to_ba(ba1: &eq, vpos1: &eq, ba2: &eq, vpos2: &eq, vlen: &eq) -> &eq {
     let d1 = caml_ba_get_data(ba1);
     let pos1 = vpos1 as &i31 as i32_s;
     let d2 = caml_ba_get_data(ba2);

@@ -61,7 +61,11 @@ fn caml_sys_getcwd(x: &eq) -> &eq {
 fn caml_sys_chdir(name: &eq) -> &eq {
     try {
         chdir(unwrap(caml_jsstring_of_string(name)));
-    } catch { javascript_exception => { caml_handle_sys_error(_); } }
+    } catch {
+        javascript_exception => {
+            caml_handle_sys_error(_);
+        }
+    }
     0 as &i31;
 }
 
@@ -69,16 +73,18 @@ fn caml_sys_chdir(name: &eq) -> &eq {
 fn caml_sys_mkdir(name: &eq, perm: &eq) -> &eq {
     try {
         mkdir(unwrap(caml_jsstring_of_string(name)), perm as &i31 as i32_u);
-    } catch { javascript_exception => { caml_handle_sys_error(_); } }
+    } catch {
+        javascript_exception => {
+            caml_handle_sys_error(_);
+        }
+    }
     0 as &i31;
 }
 
 #[export = "caml_sys_read_directory"]
 fn caml_sys_read_directory(name: &eq) -> &eq {
     try &eq {
-        return
-            caml_js_to_string_array
-                (readdir(unwrap(caml_jsstring_of_string(name))));
+        return caml_js_to_string_array(readdir(unwrap(caml_jsstring_of_string(name))));
     } catch {
         javascript_exception => {
             caml_handle_sys_error(_);
@@ -91,17 +97,23 @@ fn caml_sys_read_directory(name: &eq) -> &eq {
 fn caml_sys_remove(name: &eq) -> &eq {
     try {
         unlink(unwrap(caml_jsstring_of_string(name)));
-    } catch { javascript_exception => { caml_handle_sys_error(_); } }
+    } catch {
+        javascript_exception => {
+            caml_handle_sys_error(_);
+        }
+    }
     0 as &i31;
 }
 
 #[export = "caml_sys_rename"]
 fn caml_sys_rename(o: &eq, n: &eq) -> &eq {
     try {
-        rename
-            (unwrap(caml_jsstring_of_string(o)),
-             unwrap(caml_jsstring_of_string(n)));
-    } catch { javascript_exception => { caml_handle_sys_error(_); } }
+        rename(unwrap(caml_jsstring_of_string(o)), unwrap(caml_jsstring_of_string(n)));
+    } catch {
+        javascript_exception => {
+            caml_handle_sys_error(_);
+        }
+    }
     0 as &i31;
 }
 
@@ -130,7 +142,9 @@ fn caml_read_file_content(x: &eq) -> &eq {
 }
 
 #[export = "caml_fs_init"]
-fn caml_fs_init() -> &eq { 0 as &i31; }
+fn caml_fs_init() -> &eq {
+    0 as &i31;
+}
 
 data caml_sys_is_directory = "caml_sys_is_directory";
 

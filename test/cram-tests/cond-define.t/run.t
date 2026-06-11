@@ -99,7 +99,11 @@ Instruction-level conditionals are specialized too.
   }
 
   $ wax -f wax -D debug=false instr.wax
-  fn f() -> i32 { let x: i32; x = 2; x; }
+  fn f() -> i32 {
+      let x: i32;
+      x = 2;
+      x;
+  }
 
 The WAT path works the same way on (@if ...) annotations.
 

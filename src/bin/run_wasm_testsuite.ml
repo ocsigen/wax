@@ -394,7 +394,7 @@ let runtest filename _ =
   in
   (* Translation to new syntax *)
   let print_wax ~color f m =
-    Utils.Printer.run f (fun p ->
+    Utils.Printer.run ~width:Wax.Output.width f (fun p ->
         Wax.Output.module_ ~color p ~trivia:(Hashtbl.create 0) m)
   in
   List.iter

@@ -7,6 +7,12 @@ open Ast
 
 let indent_level = 4
 
+(* Target line width for Wax output, matching the Rust Style Guide's default
+   ([max_width = 100]); WebAssembly text output keeps the printer's own default.
+   Passed at every [Printer.run] that renders a Wax module to a real
+   formatter. *)
+let width = 100
+
 let get_theme use_color =
   if use_color then
     {
@@ -98,6 +104,22 @@ let print_paren_list f pp l =
   box pp (fun () -> list_commasep f pp l);
   punctuation pp ")"
 
+(* A Rust-style parenthesised list: it stays on one line if it fits, otherwise
+   [(] keeps the preceding token company and the elements break one per line,
+   indented one level, with the closing [)] back at the opening column — never
+   the Lisp-like [(] on its own line. The caller's enclosing [hvbox] makes the
+   choice all-or-nothing. *)
+let print_arg_list f pp l =
+  punctuation pp "(";
+  (match l with
+  | [] -> ()
+  | _ ->
+      indent pp indent_level (fun () ->
+          cut pp ();
+          list_commasep f pp l);
+      cut pp ());
+  punctuation pp ")"
+
 let heaptype pp (t : heaptype) =
   match heaptype_keyword t with
   | Some kw -> type_ pp kw
@@ -142,7 +164,7 @@ let print_typed_pat pp (pat, opt_typ) =
         opt_typ)
 
 let raw_functype pp { params; results } =
-  print_paren_list
+  print_arg_list
     (fun pp (id, t) ->
       match id with
       | None -> valtype pp t
@@ -152,11 +174,14 @@ let raw_functype pp { params; results } =
           atomic_node pp (Some name.info) (fun () ->
               print_typed_pat pp (id, Some t)))
     pp (Array.to_list params);
-  if results <> [||] then (
-    space pp ();
-    operator pp "->";
-    space pp ();
-    tuple false pp (Array.to_list results))
+  if results <> [||] then
+    (* Keep [-> Ret] glued to the closing [)] so the parameter list, not the
+       arrow, is what breaks when the signature overflows. *)
+    hbox pp (fun () ->
+        space pp ();
+        operator pp "->";
+        space pp ();
+        tuple false pp (Array.to_list results))
 
 let functype pp ty =
   box pp ~indent:indent_level (fun () ->
@@ -365,15 +390,17 @@ let branch_ref_instr instr pp name label ty i =
       instr Branch pp i)
 
 let call_instr instr pp ?prefix i l =
-  box pp ~indent:indent_level (fun () ->
-      Option.iter
-        (fun s ->
-          keyword pp s;
-          space pp ())
-        prefix;
-      instr CallAndFieldAccess pp i;
-      cut pp ();
-      print_paren_list (instr Instruction) pp l)
+  hvbox pp (fun () ->
+      (* Keep an optional prefix ([become]/[return]) and the callee glued to the
+         opening [(]: only the argument list may break. *)
+      hbox pp (fun () ->
+          Option.iter
+            (fun s ->
+              keyword pp s;
+              space pp ())
+            prefix;
+          instr CallAndFieldAccess pp i);
+      print_arg_list (instr Instruction) pp l)
 
 let print_on_clauses pp handlers =
   punctuation pp "[";
@@ -1007,14 +1034,18 @@ and deliminated_instr pp (i : _ instr) =
     Utils.Printer.with_held_eol pp.base.printer (fun () -> punctuation pp ";"))
 
 and block_contents pp (l : _ instr list) =
+  (* A non-empty block always breaks across lines (rustfmt never keeps a block
+     body on one line), so every separator here is a hard [newline]; the
+     enclosing box then lays the body out vertically. An empty block stays
+     [{}]. *)
   if l <> [] then (
     indent pp indent_level (fun () ->
         List.iter
           (fun i ->
-            space pp ();
+            newline pp ();
             deliminated_instr pp i)
           l);
-    space pp ())
+    newline pp ())
 
 (* Print the contents of a brace-delimited block, looking the block's own
    location up so any comment opening the clause (e.g. a [(then ...)]/[(else
@@ -1024,21 +1055,23 @@ and located_block_contents pp (b : (_ instr list, location) annotated) =
   atomic_node pp (Some b.info) (fun () -> block_contents pp b.desc)
 
 let fundecl ~tag pp (name, typ, sign) =
-  keyword pp (if tag then "tag" else "fn");
-  space pp ();
-  identifier pp name.desc;
-  Option.iter
-    (fun typ ->
-      punctuation pp ":";
-      space pp ();
-      identifier pp typ.desc;
-      space pp ())
-    typ;
-  Option.iter
-    (fun ty ->
-      cut pp ();
-      raw_functype pp ty)
-    sign
+  (* The whole signature is one all-or-nothing group anchored at the [fn]
+     column: [fn name] stays glued (its own [hbox]) and so does [-> Ret], so the
+     only thing that can break — when [fn name(params) -> Ret] overflows — is
+     the parameter list, which then lays out one parameter per line. *)
+  hvbox pp (fun () ->
+      hbox pp (fun () ->
+          keyword pp (if tag then "tag" else "fn");
+          space pp ();
+          identifier pp name.desc;
+          Option.iter
+            (fun typ ->
+              punctuation pp ":";
+              space pp ();
+              identifier pp typ.desc;
+              space pp ())
+            typ);
+      Option.iter (fun ty -> raw_functype pp ty) sign)
 
 let print_attribute pp (name, i) =
   box pp ~indent:indent_level (fun () ->
@@ -1107,9 +1140,14 @@ let rec modulefield pp field =
           hvbox pp (fun () ->
               box pp (fun () ->
                   fundecl ~tag:false pp (name, typ, sign);
-                  space pp ();
-                  block_label pp label;
-                  punctuation pp "{");
+                  (* Glue the opening [{] to the signature so [fundecl] counts
+                     it when deciding whether to break the parameter list;
+                     otherwise a signature one or two columns too long leaves
+                     [{] stranded on its own line instead. *)
+                  hbox pp (fun () ->
+                      space pp ();
+                      block_label pp label;
+                      punctuation pp "{"));
               block_contents pp body;
               punctuation pp "}"))
   | Global { name; mut; typ; def; attributes = a } ->

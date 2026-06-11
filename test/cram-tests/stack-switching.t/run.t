@@ -41,7 +41,9 @@ A WebAssembly module using resume handlers (both `on $tag -> 'label` and
   type ct = cont ft;
   tag yield(i32) -> i32;
   fn handle(k0: &?ct) -> i32 {
-      'h: do () -> (i32, &ct) { return resume ct [yield -> 'h](1, k0); }
+      'h: do () -> (i32, &ct) {
+          return resume ct [yield -> 'h](1, k0);
+      }
       _ = _;
       return _;
   }
@@ -53,12 +55,18 @@ A WebAssembly module using resume handlers (both `on $tag -> 'label` and
       type ct2 = cont ft2;
   }
   tag e() -> i32;
-  fn sw(k: &?ct1) -> i32 { switch ct1 e(k); }
+  fn sw(k: &?ct1) -> i32 {
+      switch ct1 e(k);
+  }
   // resume with an on-switch handler
   rec { type sft = fn(&?sct) -> i32; type sct = cont sft; }
   tag swap() -> i32;
-  fn f: sft (x: &?sct) -> i32 { 0; }
-  fn onsw(k: &?sct) -> i32 { resume sct [swap -> switch](k, cont_new sct(f)); }
+  fn f: sft (x: &?sct) -> i32 {
+      0;
+  }
+  fn onsw(k: &?sct) -> i32 {
+      resume sct [swap -> switch](k, cont_new sct(f));
+  }
 
 The decompiled Wax recompiles and validates, so both directions round-trip.
 
@@ -70,5 +78,7 @@ Identifiers that collide with the new instruction keywords (`resume`, `switch`,
   $ wax names.wat -f wax -o names.wax && cat names.wax
   type resume_2 = { f: &eq };
   type switch_2 = fn(&resume_2) -> &eq;
-  fn suspend_2: switch_2 (x: &resume_2) -> &eq { x.f; }
+  fn suspend_2: switch_2 (x: &resume_2) -> &eq {
+      x.f;
+  }
   $ wax names.wax --validate -o names.wasm

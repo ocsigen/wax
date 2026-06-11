@@ -45,7 +45,9 @@ const infinity = chars#"infinity";
 const nan_2 = chars#"nan";
 
 #[export = "Double_val"]
-fn Double_val(x: &eq) -> f64 { (x as &float).f; }
+fn Double_val(x: &eq) -> f64 {
+    (x as &float).f;
+}
 
 #[export = "caml_hexstring_of_float"]
 fn caml_hexstring_of_float(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
@@ -71,15 +73,25 @@ fn caml_hexstring_of_float(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
     s =
         'sign: do &string {
             if exp == 0x7FF {
-                txt = if !m => &chars { infinity; } else { nan_2; };
+                txt =
+                    if !m => &chars {
+                        infinity;
+                    } else {
+                        nan_2;
+                    };
                 len = txt.length();
                 s = [string|0; i + len];
                 s.copy(i, txt, 0, len);
                 br 'sign s;
             }
             if !exp {
-                if m != 0 { exp = -1022; }
-            } else { exp = exp - 1023; m = m | 1 << 52; }
+                if m != 0 {
+                    exp = -1022;
+                }
+            } else {
+                exp = exp - 1023;
+                m = m | 1 << 52;
+            }
             if (prec >=s 0) & (prec <s 13) {
                 unit = 1 << (52 - (prec << 2)) as i64_s;
                 half = unit >>u 1;
@@ -93,16 +105,36 @@ fn caml_hexstring_of_float(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
             frac = m << 12;
             j = 0;
             'prec: loop {
-                if frac != 0 { j = j + 1; frac = frac << 4; br 'prec; }
+                if frac != 0 {
+                    j = j + 1;
+                    frac = frac << 4;
+                    br 'prec;
+                }
             }
-            if prec <s j { prec = j; }
-            if exp >=s 0 { d = exp; } else { d = 0 - exp; }
+            if prec <s j {
+                prec = j;
+            }
+            if exp >=s 0 {
+                d = exp;
+            } else {
+                d = 0 - exp;
+            }
             j = 0;
-            'count: loop { j = j + 1; d = d /u 10; br_if 'count d; }
+            'count: loop {
+                j = j + 1;
+                d = d /u 10;
+                br_if 'count d;
+            }
             len = i + prec + (6 + j);
-            if !prec { len = len - 1; }
+            if !prec {
+                len = len - 1;
+            }
             s = [string|0; len];
-            if exp >=s 0 { d = exp; } else { d = 0 - exp; }
+            if exp >=s 0 {
+                d = exp;
+            } else {
+                d = 0 - exp;
+            }
             'write: loop {
                 len = len - 1;
                 s[len] = 48 + d %u 10;
@@ -219,7 +251,11 @@ fn caml_format_float(x: &eq, x_2: &eq) -> &eq {
                 txt =
                     if !m => &chars {
                         inf_2;
-                    } else { negative = 0; i = sign_style != 0; nan_2; };
+                    } else {
+                        negative = 0;
+                        i = sign_style != 0;
+                        nan_2;
+                    };
                 len = txt.length();
                 s = [string|0; i + len];
                 s.copy(i, txt, 0, len);
@@ -235,7 +271,9 @@ fn caml_format_float(x: &eq, x_2: &eq) -> &eq {
         if sign_style {
             if sign_style == 1 {
                 s[0] = 43; // '+'
-            } else { s[0] = 32; }
+            } else {
+                s[0] = 32;
+            }
         }
     } // ' '
     if uppercase {
@@ -315,10 +353,16 @@ fn caml_float_of_hex(s: &string, i: i32) -> f64 {
                         if negative {
                             br_if 'overflow exp >u 0x80000000;
                             exp = 0 - exp;
-                        } else { br_if 'overflow exp >=u 0x80000000; }
+                        } else {
+                            br_if 'overflow exp >=u 0x80000000;
+                        }
                         br 'parse;
                     }
-                    if negative | !m { return 0; } else { return inf; }
+                    if negative | !m {
+                        return 0;
+                    } else {
+                        return inf;
+                    }
                 }
                 if (c >=u 48) & (c <=u 57) {
                     d = c - 48;
@@ -328,7 +372,9 @@ fn caml_float_of_hex(s: &string, i: i32) -> f64 {
                     } else {
                         if (c >=u 65) & (c <=u 70) {
                             d = c - 55;
-                        } else { br 'error; }
+                        } else {
+                            br 'error;
+                        }
                     }
                 }
                 n_bits = n_bits + 4;
@@ -337,22 +383,33 @@ fn caml_float_of_hex(s: &string, i: i32) -> f64 {
                 if m_bits <u 60 {
                     m = (m << 4) + d as i64_u;
                     m_bits = m_bits + 4;
-                } else { if d { m = m | 1; } x_bits = x_bits + 4; }
+                } else {
+                    if d {
+                        m = m | 1;
+                    }
+                    x_bits = x_bits + 4;
+                }
                 br 'parse;
             }
         }
         br_if 'error !n_bits;
         let f = m as f64_s;
         let adj = x_bits;
-        if dec_point >=s 0 { adj = adj + (dec_point - n_bits); }
+        if dec_point >=s 0 {
+            adj = adj + (dec_point - n_bits);
+        }
         if (adj >s 0) & (exp >s 0x7fffffff) {
             exp = 0x7fffffff;
         } else {
             if (adj <s 0) & (exp <s 0x80000000) {
                 exp = 0x80000000;
-            } else { exp = exp + adj; }
+            } else {
+                exp = exp + adj;
+            }
         }
-        if exp { f = ldexp(f, exp); }
+        if exp {
+            f = ldexp(f, exp);
+        }
         return f;
     }
     caml_failwith([string|float_of_string @ 0; 15]);
@@ -404,7 +461,12 @@ fn caml_float_of_string(x: &eq) -> &eq {
     }
     i = 0;
     'skip_spaces: loop {
-        if i <u len { if on_whitespace(s, i) { i = i + 1; br 'skip_spaces; } }
+        if i <u len {
+            if on_whitespace(s, i) {
+                i = i + 1;
+                br 'skip_spaces;
+            }
+        }
     }
     'error: do {
         br_if 'error i == len;
@@ -427,7 +489,9 @@ fn caml_float_of_string(x: &eq) -> &eq {
                 if s[i + 1] as i32_u & 0xdf == 88 // 'X'
                 {
                     f = caml_float_of_hex(s, i + 2);
-                    if negative { f = -f; }
+                    if negative {
+                        f = -f;
+                    }
                     return {float| f: f };
                 }
             }
@@ -483,10 +547,7 @@ fn caml_float_of_string(x: &eq) -> &eq {
                                         i = i + 1;
                                         c = s[i] as i32_u;
                                         if c & 0xdf == 89 { // 'Y'
-                                            return
-                                                {float|
-                                                    f: negative?-inf:inf
-                                                };
+                                            return {float| f: negative?-inf:inf };
                                         }
                                     }
                                 }
@@ -506,15 +567,29 @@ fn caml_float_of_string(x: &eq) -> &eq {
 
 #[export = "caml_nextafter_float"]
 fn caml_nextafter_float(x: f64, y: f64) -> f64 {
-    if x != x { return x; }
-    if y != y { return y; }
-    if x == y { return y; }
+    if x != x {
+        return x;
+    }
+    if y != y {
+        return y;
+    }
+    if x == y {
+        return y;
+    }
     if x == 0 => f64 {
-        if y >= 0 => f64 { return 0x1p-1074; } else { return -0x1p-1074; }
+        if y >= 0 => f64 {
+            return 0x1p-1074;
+        } else {
+            return -0x1p-1074;
+        }
     } else {
         let i = x.to_bits();
         let j = y.to_bits();
-        if (i <s j) & (i <u j) { i = i + 1; } else { i = i - 1; }
+        if (i <s j) & (i <u j) {
+            i = i + 1;
+        } else {
+            i = i - 1;
+        }
         return i.from_bits();
     }
 }
@@ -525,14 +600,18 @@ fn caml_classify_float(x: f64) -> &eq {
     (if a >= 0x1p-1022 => i32 {
          if a < inf => i32 {
              0; // normal
-         } else { 3; } // infinity
+         } else {
+             3;
+         } // infinity
      } else {
          if a == 0 => i32 {
              2; // zero
          } else {
              if a == a => i32 {
                  1; // subnormal
-             } else { 4; }
+             } else {
+                 4;
+             }
          }
      } as &i31);
 } // nan
@@ -567,7 +646,9 @@ fn ldexp(x: f64, n: i32) -> f64 {
             // subnormal
             x = x * 0x1p1023;
             n = n - 1023;
-            if n >s 1023 { n = 1023; }
+            if n >s 1023 {
+                n = 1023;
+            }
         }
     } else {
         if n <s -1022 {
@@ -576,7 +657,9 @@ fn ldexp(x: f64, n: i32) -> f64 {
             if n <s -1022 {
                 x = x * 0x1p-969;
                 n = n + 969;
-                if n <s -1022 { n = -1022; }
+                if n <s -1022 {
+                    n = -1022;
+                }
             }
         }
     }
@@ -584,7 +667,9 @@ fn ldexp(x: f64, n: i32) -> f64 {
 }
 
 #[export = "caml_ldexp_float"]
-fn caml_ldexp_float(x: f64, i: &eq) -> f64 { ldexp(x, i as &i31 as i32_s); }
+fn caml_ldexp_float(x: f64, i: &eq) -> f64 {
+    ldexp(x, i as &i31 as i32_s);
+}
 
 fn frexp(x: f64) -> (f64, i32) {
     let y = x.to_bits();
@@ -595,8 +680,14 @@ fn frexp(x: f64) -> (f64, i32) {
             e = _;
             let m = _;
             return (m, e - 64);
-        } else { return (x, 0); }
-    } else { if e == 0x7ff { return (x, 0); } }
+        } else {
+            return (x, 0);
+        }
+    } else {
+        if e == 0x7ff {
+            return (x, 0);
+        }
+    }
     (y & 0x800fffffffffffff | 0x3fe0000000000000).from_bits();
     e - 0x3fe;
 }
@@ -610,7 +701,9 @@ fn caml_frexp_float(x: &eq) -> &eq {
 }
 
 #[export = "caml_signbit_float"]
-fn caml_signbit_float(x: f64) -> &eq { (x.to_bits() >>u 63) as i32 as &i31; }
+fn caml_signbit_float(x: f64) -> &eq {
+    (x.to_bits() >>u 63) as i32 as &i31;
+}
 
 #[export = "caml_erf_float"]
 fn erf(x: f64) -> f64 {
@@ -621,15 +714,14 @@ fn erf(x: f64) -> f64 {
     let a5 = 1.061405429;
     let p = 0.3275911;
     let t = 1 / (1 + p * x.abs());
-    let y =
-        1 -
-            ((((a5 * t + a4) * t + a3) * t + a2) * t + a1) *
-                (t * exp(-(x * x)));
+    let y = 1 - ((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * (t * exp(-(x * x)));
     y.copysign(x);
 }
 
 #[export = "caml_erfc_float"]
-fn caml_erfc_float(x: f64) -> f64 { 1 - erf(x); }
+fn caml_erfc_float(x: f64) -> f64 {
+    1 - erf(x);
+}
 
 #[export = "caml_fma_float"]
 fn caml_fma_float(vx: &eq, vy: &eq, vz: &eq) -> &eq {
@@ -641,8 +733,7 @@ fn caml_fma_float(vx: &eq, vy: &eq, vz: &eq) -> &eq {
     let x_4: i64;
     let x_5: i64;
     let x_6 =
-        (x_3 := (x_2 := y.to_bits()) >>u 52 & 2047) +
-            (x_5 := (x_4 := x.to_bits()) >>u 52 & 2047);
+        (x_3 := (x_2 := y.to_bits()) >>u 52 & 2047) + (x_5 := (x_4 := x.to_bits()) >>u 52 & 2047);
     let x_7 = z.to_bits();
     let x_8: i32;
     let x_9: i32;
@@ -680,11 +771,17 @@ fn caml_fma_float(vx: &eq, vy: &eq, vz: &eq) -> &eq {
             }
             return {float| f: x * y + z };
         }
-        'cont: do { br_if 'cont x_6 <u 3071; return {float| f: x * y }; }
+        'cont: do {
+            br_if 'cont x_6 <u 3071;
+            return {float| f: x * y };
+        }
         'cont: do {
             br_if 'cont x_6 >u 967;
             y = x_2 ^ x_4 >s -1?0x1p-1074:-0x1p-1074;
-            'cont2: do { br_if 'cont2 x_7 <u 3; return {float| f: y + z }; }
+            'cont2: do {
+                br_if 'cont2 x_7 <u 3;
+                return {float| f: y + z };
+            }
             return {float| f: (z * 0x1p54 + y) * 0x1p-54 };
         }
         'l_3: do {
@@ -758,26 +855,28 @@ fn caml_fma_float(vx: &eq, vy: &eq, vz: &eq) -> &eq {
             (x_13 := y - (x_12 := (x_12 := y * 0x8000001) - (x_12 - y))) -
             ((x_14 := y * x) - x_10 * x_12 - x_11 * x_12 - x_10 * x_13);
     'l_2: do {
-        'l_3: do { br_if 'l_3 (y := z + x_14) != 0; br_if 'l_2 x == 0; }
+        'l_3: do {
+            br_if 'l_3 (y := z + x_14) != 0;
+            br_if 'l_2 x == 0;
+        }
         'cont: do {
             br_if 'cont
                 (z :=
                      (x_10 :=
                           x -
                               (x_12 :=
-                                   (z :=
-                                        (x_10 :=
-                                             x_14 - (x_10 := y - z) +
-                                                 (z - (y - x_10))) + x) -
+                                   (z := (x_10 := x_14 - (x_10 := y - z) + (z - (y - x_10))) + x) -
                                        x_10) + (x_10 - (z - x_12))) +
-                         ((y :=
-                               z - (x_12 := (x := y + z) - y) +
-                                   (y - (x - x_12))) - (y := x_10 + y))) == 0;
+                         ((y := z - (x_12 := (x := y + z) - y) + (y - (x - x_12))) -
+                              (y := x_10 + y))) == 0;
             br_if 'cont (x_3 := y.to_bits()) as i32 & 1;
             y = (((y < 0) ^ (z > 0)?1:-1) + x_3).from_bits();
         }
         y = x + y;
-        'cont: do { br_if 'cont !x_8; return {float| f: y * 0x1p53 }; }
+        'cont: do {
+            br_if 'cont !x_8;
+            return {float| f: y * 0x1p53 };
+        }
         y = x_9?y * 0x1p-108:y;
     }
     {float| f: y };
@@ -793,6 +892,17 @@ fn caml_round(x: f64) -> f64 {
     let y: f64;
     if x >= 0 => f64 {
         y = x.floor();
-        if x - y >= 0.5 => f64 { y + 1; } else { y; }
-    } else { y = x.ceil(); if y - x >= 0.5 => f64 { y - 1; } else { y; } }
+        if x - y >= 0.5 => f64 {
+            y + 1;
+        } else {
+            y;
+        }
+    } else {
+        y = x.ceil();
+        if y - x >= 0.5 => f64 {
+            y - 1;
+        } else {
+            y;
+        }
+    }
 }

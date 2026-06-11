@@ -20,8 +20,7 @@ type block = [mut &eq];
 let caml_custom_event_index = 0;
 
 #[export = "caml_runtime_events_user_register"]
-fn caml_runtime_events_user_register(evname: &eq, evtag: &eq, evtype: &eq) ->
-&eq {
+fn caml_runtime_events_user_register(evname: &eq, evtag: &eq, evtype: &eq) -> &eq {
     caml_custom_event_index = caml_custom_event_index + 1;
     [block|0 as &i31, caml_custom_event_index as &i31, evname, evtag, evtype];
 }
@@ -32,16 +31,24 @@ fn caml_runtime_events_user_resolve(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
 }
 
 #[export = "caml_runtime_events_start"]
-fn caml_runtime_events_start(x: &eq) -> &eq { 0 as &i31; }
+fn caml_runtime_events_start(x: &eq) -> &eq {
+    0 as &i31;
+}
 
 #[export = "caml_runtime_events_pause"]
-fn caml_runtime_events_pause(x: &eq) -> &eq { 0 as &i31; }
+fn caml_runtime_events_pause(x: &eq) -> &eq {
+    0 as &i31;
+}
 
 #[export = "caml_runtime_events_resume"]
-fn caml_runtime_events_resume(x: &eq) -> &eq { 0 as &i31; }
+fn caml_runtime_events_resume(x: &eq) -> &eq {
+    0 as &i31;
+}
 
 #[export = "caml_ml_runtime_events_are_active"]
-fn caml_ml_runtime_events_are_active(x: &eq) -> &eq { 0 as &i31; }
+fn caml_ml_runtime_events_are_active(x: &eq) -> &eq {
+    0 as &i31;
+}
 
 // TODO: use Javascript function
 //(func (export "caml_runtime_events_create_cursor")
@@ -49,7 +56,9 @@ fn caml_ml_runtime_events_are_active(x: &eq) -> &eq { 0 as &i31; }
 //   (ref.i31 (i32.const 0)))
 
 #[export = "caml_runtime_events_free_cursor"]
-fn caml_runtime_events_free_cursor(x: &eq) -> &eq { 0 as &i31; }
+fn caml_runtime_events_free_cursor(x: &eq) -> &eq {
+    0 as &i31;
+}
 
 #[export = "caml_runtime_events_read_poll"]
 fn caml_runtime_events_read_poll(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
@@ -57,4 +66,6 @@ fn caml_runtime_events_read_poll(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
 }
 
 #[export = "caml_ml_runtime_events_path"]
-fn caml_ml_runtime_events_path(x: &eq) -> &eq { 0 as &i31; }
+fn caml_ml_runtime_events_path(x: &eq) -> &eq {
+    0 as &i31;
+}

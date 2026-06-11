@@ -7,13 +7,20 @@ The implicit type at index 1 (() -> f64) is referenced by $void->f64 (type 1)
 and rendered inline; $i32->void (type 0) keeps the explicit name $t:
 
   $ wax func.wat -f wax
-  fn f() -> f64 { 0; } // adds implicit type definition
+  fn f() -> f64 {
+      0;
+  } // adds implicit type definition
   fn g(x: i32) {} // reuses explicit type definition
   type t = fn(i32);
   
   fn f_2: t (x: i32) {} // references the explicit type $t
-  fn f_3() -> f64 { 0; } // references the implicit type
-  fn check() { f_2(0); _ = f_3(); }
+  fn f_3() -> f64 {
+      0;
+  } // references the implicit type
+  fn check() {
+      f_2(0);
+      _ = f_3();
+  }
 
 It round-trips back to valid WebAssembly:
 
@@ -24,12 +31,16 @@ call_indirect against an implicit type renders the cast inline as &fn(..):
 
   $ wax call-indirect.wat -f wax
   type t = fn(i32);
-  fn f() -> f64 { 0; } // mints the implicit type at index 1
+  fn f() -> f64 {
+      0;
+  } // mints the implicit type at index 1
   table t: &?func [1, 1];
   elem e: &?func @ t [0] = [f];
   // call_indirect referencing the implicit type by its numeric index
   #[export = "run"]
-  fn run() -> f64 { (t[0] as &?fn() -> f64)(); }
+  fn run() -> f64 {
+      (t[0] as &?fn() -> f64)();
+  }
 
   $ wax call-indirect.wat -f wax | wax -i wax -f wasm -v -o /dev/null && echo OK
   OK

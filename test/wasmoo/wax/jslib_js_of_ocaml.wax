@@ -38,7 +38,9 @@ type block = [mut &eq];
 type string = [mut i8];
 
 #[export = "caml_js_on_ie"]
-fn caml_js_on_ie_2(x: &eq) -> &eq { caml_js_on_ie() as &i31; }
+fn caml_js_on_ie_2(x: &eq) -> &eq {
+    caml_js_on_ie() as &i31;
+}
 
 #[export = "caml_js_html_escape"]
 fn caml_js_html_escape_2(x: &eq) -> &eq {
@@ -61,8 +63,8 @@ data XMLHttpRequest = "XMLHttpRequest";
 
 #[export = "caml_xmlhttprequest_create"]
 fn caml_xmlhttprequest_create(x: &eq) -> &eq {
-    become caml_js_new
-        (caml_js_get
-             (caml_js_global(0 as &i31), [string|XMLHttpRequest @ 0; 14]),
-         [block|0 as &i31]);
+    become caml_js_new(
+        caml_js_get(caml_js_global(0 as &i31), [string|XMLHttpRequest @ 0; 14]),
+        [block|0 as &i31]
+    );
 }

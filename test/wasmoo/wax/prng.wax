@@ -27,10 +27,8 @@ fn caml_lxm_next(v: &eq) -> i64 {
     let data = caml_ba_get_data(v);
     let a = ta_get_i32(data, 0) as i64_u | ta_get_i32(data, 1) as i64_u << 32;
     let s = ta_get_i32(data, 2) as i64_u | ta_get_i32(data, 3) as i64_u << 32;
-    let q0 =
-        ta_get_i32(data, 4) as i64_u | ta_get_i32(data, 5) as i64_u << 32;
-    let q1 =
-        ta_get_i32(data, 6) as i64_u | ta_get_i32(data, 7) as i64_u << 32;
+    let q0 = ta_get_i32(data, 4) as i64_u | ta_get_i32(data, 5) as i64_u << 32;
+    let q1 = ta_get_i32(data, 6) as i64_u | ta_get_i32(data, 7) as i64_u << 32;
     let z = s + q0;
     z = (z ^ z >>u 32) * 0xdaba0b6eb09322e3;
     z = (z ^ z >>u 32) * 0xdaba0b6eb09322e3;

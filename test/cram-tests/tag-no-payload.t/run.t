@@ -11,8 +11,18 @@ type-checks, round-trips, and lowers to WAT and to the binary format.
 
   $ wax -f wax --validate stop.wax
   tag stop();
-  fn m() { throw stop; }
-  fn f() { try { m(); } catch { stop => { nop; } } }
+  fn m() {
+      throw stop;
+  }
+  fn f() {
+      try {
+          m();
+      } catch {
+          stop => {
+              nop;
+          }
+      }
+  }
 
   $ wax -f wat --validate stop.wax
   (tag $stop)

@@ -39,43 +39,25 @@ type cps_closure_last_arg: cps_closure = open { f: &function_2 };
 
 type int_array = [mut i32];
 
-type dummy_closure_1: closure_last_arg = {
-    f: &function_1,
-    f_2: mut &?closure
-};
+type dummy_closure_1: closure_last_arg = { f: &function_1, f_2: mut &?closure };
 
 type closure_2: closure = open { f: &function_1, f_2: &function_2 };
 
-type dummy_closure_2: closure_2 = {
-    f: &function_1,
-    f_2: &function_2,
-    f_3: mut &?closure_2
-};
+type dummy_closure_2: closure_2 = { f: &function_1, f_2: &function_2, f_3: mut &?closure_2 };
 
 type function_3 = fn(&eq, &eq, &eq, &eq) -> &eq;
 
 type closure_3: closure = open { f: &function_1, f_2: &function_3 };
 
-type dummy_closure_3: closure_3 = {
-    f: &function_1,
-    f_2: &function_3,
-    f_3: mut &?closure_3
-};
+type dummy_closure_3: closure_3 = { f: &function_1, f_2: &function_3, f_3: mut &?closure_3 };
 
 type function_4 = fn(&eq, &eq, &eq, &eq, &eq) -> &eq;
 
 type closure_4: closure = open { f: &function_1, f_2: &function_4 };
 
-type dummy_closure_4: closure_4 = {
-    f: &function_1,
-    f_2: &function_4,
-    f_3: mut &?closure_4
-};
+type dummy_closure_4: closure_4 = { f: &function_1, f_2: &function_4, f_3: mut &?closure_4 };
 
-type cps_dummy_closure: cps_closure_last_arg = {
-    f: &function_2,
-    f_2: mut &?cps_closure
-};
+type cps_dummy_closure: cps_closure_last_arg = { f: &function_2, f_2: mut &?cps_closure };
 
 const forcing_tag = 244;
 #[export = "cont_tag"]
@@ -96,7 +78,9 @@ const double_array_tag = 254;
 const custom_tag = 255;
 
 #[export = "caml_is_closure"]
-fn caml_is_closure(v: &eq) -> i32 { v is &closure | v is &cps_closure; }
+fn caml_is_closure(v: &eq) -> i32 {
+    v is &closure | v is &cps_closure;
+}
 
 #[export = "caml_is_last_arg"]
 fn caml_is_last_arg(v: &eq) -> i32 {
@@ -134,26 +118,22 @@ fn caml_update_dummy(dummy: &eq, newval: &eq) -> &eq {
         };
     _ =
         'not_closure_1: do &eq {
-            (br_on_cast_fail 'not_closure_1 &dummy_closure_1 dummy).f_2 =
-                newval as &closure;
+            (br_on_cast_fail 'not_closure_1 &dummy_closure_1 dummy).f_2 = newval as &closure;
             return 0 as &i31;
         };
     _ =
         'not_closure_2: do &eq {
-            (br_on_cast_fail 'not_closure_2 &dummy_closure_2 dummy).f_3 =
-                newval as &closure_2;
+            (br_on_cast_fail 'not_closure_2 &dummy_closure_2 dummy).f_3 = newval as &closure_2;
             return 0 as &i31;
         };
     _ =
         'not_closure_3: do &eq {
-            (br_on_cast_fail 'not_closure_3 &dummy_closure_3 dummy).f_3 =
-                newval as &closure_3;
+            (br_on_cast_fail 'not_closure_3 &dummy_closure_3 dummy).f_3 = newval as &closure_3;
             return 0 as &i31;
         };
     _ =
         'not_closure_4: do &eq {
-            (br_on_cast_fail 'not_closure_4 &dummy_closure_4 dummy).f_3 =
-                newval as &closure_4;
+            (br_on_cast_fail 'not_closure_4 &dummy_closure_4 dummy).f_3 = newval as &closure_4;
             return 0 as &i31;
         };
     _ =
@@ -222,17 +202,31 @@ fn caml_obj_block(tag_2: &eq, size: &eq) -> &eq {
 
 #[export = "caml_obj_tag"]
 fn caml_obj_tag(v: &eq) -> &eq {
-    if v is &i31 { return 1000 as &i31; }
+    if v is &i31 {
+        return 1000 as &i31;
+    }
     _ =
         'not_block: do &eq {
             return (br_on_cast_fail 'not_block &block v)[0];
         };
-    if v is &string { return string_tag as &i31; }
-    if v is &float { return float_tag as &i31; }
-    if v is &float_array { return double_array_tag as &i31; }
-    if caml_is_custom(v) { return custom_tag as &i31; }
-    if caml_is_closure(v) { return closure_tag as &i31; }
-    if caml_is_continuation(v) { return cont_tag as &i31; }
+    if v is &string {
+        return string_tag as &i31;
+    }
+    if v is &float {
+        return float_tag as &i31;
+    }
+    if v is &float_array {
+        return double_array_tag as &i31;
+    }
+    if caml_is_custom(v) {
+        return custom_tag as &i31;
+    }
+    if caml_is_closure(v) {
+        return closure_tag as &i31;
+    }
+    if caml_is_continuation(v) {
+        return cont_tag as &i31;
+    }
     abstract_tag as &i31;
 }
 
@@ -245,11 +239,18 @@ fn caml_obj_make_forward(b: &eq, v: &eq) -> &eq {
 }
 
 #[export = "caml_lazy_make_forward"]
-fn caml_lazy_make_forward(x: &eq) -> &eq { [block|forward_tag as &i31, x]; }
+fn caml_lazy_make_forward(x: &eq) -> &eq {
+    [block|forward_tag as &i31, x];
+}
 
 fn obj_update_tag(x: &eq, o: i32, n: i32) -> i32 {
     let b = x as &block;
-    if b[0] == o as &i31 => i32 { b[0] = n as &i31; 1; } else { 0; }
+    if b[0] == o as &i31 => i32 {
+        b[0] = n as &i31;
+        1;
+    } else {
+        0;
+    }
 }
 
 #[export = "caml_lazy_reset_to_lazy"]
@@ -267,7 +268,9 @@ fn caml_lazy_update_to_forward(x: &eq) -> &eq {
 #[export = "caml_lazy_update_to_forcing"]
 fn caml_lazy_update_to_forcing(x: &eq) -> &eq {
     if x is &block {
-        if obj_update_tag(x, lazy_tag, forcing_tag) { return 0 as &i31; }
+        if obj_update_tag(x, lazy_tag, forcing_tag) {
+            return 0 as &i31;
+        }
     }
     1 as &i31;
 }
@@ -276,11 +279,18 @@ fn caml_lazy_update_to_forcing(x: &eq) -> &eq {
 fn caml_obj_compare_and_swap(x: &eq, x_2: &eq, old: &eq, new: &eq) -> &eq {
     let b = x as &block;
     let i = x_2 as &i31 as i32_u + 1;
-    if b[i] == old => &eq { b[i] = new; 1 as &i31; } else { 0 as &i31; }
+    if b[i] == old => &eq {
+        b[i] = new;
+        1 as &i31;
+    } else {
+        0 as &i31;
+    }
 }
 
 #[export = "caml_obj_is_shared"]
-fn caml_obj_is_shared(x: &eq) -> &eq { 1 as &i31; }
+fn caml_obj_is_shared(x: &eq) -> &eq {
+    1 as &i31;
+}
 
 #[export = "caml_obj_raw_field"]
 fn caml_obj_raw_field(o: &eq, i: &eq) -> &eq {
@@ -318,13 +328,18 @@ fn caml_get_public_method(obj: &eq, x: &eq, x_2: &eq) -> &eq {
     let cacheid = x_2 as &i31 as i32_u;
     let len = method_cache.length();
     if cacheid >=s len {
-        'size: loop { len = len << 1; br_if 'size cacheid >=s len; }
+        'size: loop {
+            len = len << 1;
+            br_if 'size cacheid >=s len;
+        }
         let a = [int_array|0; len];
         a.copy(0, method_cache, 0, method_cache.length());
         method_cache = a;
     }
     let ofs = method_cache[cacheid];
-    if tag_2 == meths[ofs] as &i31 as i32_s { return meths[ofs - 1]; }
+    if tag_2 == meths[ofs] as &i31 as i32_s {
+        return meths[ofs - 1];
+    }
     let li = 3;
     let hi = (meths[1] as &i31 as i32_u << 1) + 1;
     'loop: loop {
@@ -332,14 +347,18 @@ fn caml_get_public_method(obj: &eq, x: &eq, x_2: &eq) -> &eq {
             let mi = li + hi >>u 1 | 1;
             if tag_2 <s meths[mi + 1] as &i31 as i32_s {
                 hi = mi - 2;
-            } else { li = mi; }
+            } else {
+                li = mi;
+            }
             br 'loop;
         }
     }
     method_cache[cacheid] = li + 1;
     if tag_2 == meths[li + 1] as &i31 as i32_s => &eq {
         meths[li];
-    } else { 0 as &i31; }
+    } else {
+        0 as &i31;
+    }
 }
 
 let caml_oo_last_id = 0;
@@ -360,11 +379,16 @@ fn caml_fresh_oo_id(x: &eq) -> &eq {
 }
 
 #[export = "caml_obj_reachable_words"]
-fn caml_obj_reachable_words(x: &eq) -> &eq { 0 as &i31; }
+fn caml_obj_reachable_words(x: &eq) -> &eq {
+    0 as &i31;
+}
 
 #[export = "caml_callback_1"]
 fn caml_callback_1(f: &eq, x: &eq) -> &eq {
-    _ = 'cps: do &eq { become (br_on_cast_fail 'cps &closure f).f(x, f); };
+    _ =
+        'cps: do &eq {
+            become (br_on_cast_fail 'cps &closure f).f(x, f);
+        };
     become (caml_trampoline_ref!)(f, [block|0 as &i31, x]);
 }
 
@@ -376,5 +400,7 @@ fn caml_callback_2(f: &eq, x: &eq, y: &eq) -> &eq {
         };
     if f is &closure => &eq {
         become caml_callback_1(caml_callback_1(f, x), y);
-    } else { become (caml_trampoline_ref!)(f, [block|0 as &i31, x, y]); }
+    } else {
+        become (caml_trampoline_ref!)(f, [block|0 as &i31, x, y]);
+    }
 }

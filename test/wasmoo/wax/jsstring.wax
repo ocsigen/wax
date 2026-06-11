@@ -54,14 +54,16 @@ fn init() {
     // the empty string.
     text_converters_available =
         0 !=
-            compare_strings
-                (decodeStringFromUTF8Array([string|0], 0, 1),
-                 decodeStringFromUTF8Array([string|1], 0, 1));
+            compare_strings(
+                decodeStringFromUTF8Array([string|0], 0, 1),
+                decodeStringFromUTF8Array([string|1], 0, 1)
+            );
     string_builtins_available =
         0 !=
-            compare_strings
-                (fromCharCodeArray([wstring|0], 0, 1),
-                 fromCharCodeArray([wstring|1], 0, 1));
+            compare_strings(
+                fromCharCodeArray([wstring|0], 0, 1),
+                fromCharCodeArray([wstring|1], 0, 1)
+            );
     if !text_converters_available {
         if string_builtins_available {
             buffer = [wstring|0; utf16_buffer_size];
@@ -75,7 +77,9 @@ fn jsstring_compare(s: &?any, s': &?any) -> i32 {
 }
 
 #[export = "jsstring_test"]
-fn jsstring_test(s: &?any) -> i32 { become is_string(s as &?extern); }
+fn jsstring_test(s: &?any) -> i32 {
+    become is_string(s as &?extern);
+}
 
 // Used by package zarith_stubs_js
 #[export = "jsstring_of_substring"]
@@ -142,10 +146,7 @@ fn jsstring_of_substring_fallback(s: &string, pos: i32, len: i32) -> &?any {
         pos = pos + buffer_size;
         let continued = len >u buffer_size;
         write_to_buffer(s, pos, continued?buffer_size:len);
-        s' =
-            append_string
-                (s',
-                 read_string_stream(continued?buffer_size:len, continued));
+        s' = append_string(s', read_string_stream(continued?buffer_size:len, continued));
         br_if 'loop continued;
     }
     s';

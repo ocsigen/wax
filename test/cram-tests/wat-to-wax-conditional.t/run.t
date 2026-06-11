@@ -7,7 +7,9 @@ references stay coherent.
   const size = 16;
   #[else]
   const size = 20;
-  fn get() -> i32 { size; }
+  fn get() -> i32 {
+      size;
+  }
 
 The produced Wax type-checks (the shared name is not a duplicate-definition
 error, because the branches are mutually exclusive):
@@ -43,8 +45,12 @@ not produce an infeasible configuration, so the result type-checks.
   // only when (not $wasi); the explorer must not build the infeasible
   // $wasi & (not $wasi) configuration where $h would be used but undefined.
   #[if(not(wasi))]
-  fn h() -> i32 { g(); }
-  fn f() -> i32 { g(); }
+  fn h() -> i32 {
+      g();
+  }
+  fn f() -> i32 {
+      g();
+  }
   $ wax --validate deps.wat -o checked_deps.wax
 
 Numeric references to module fields are refused when the module has a
