@@ -31,6 +31,28 @@
   (action
    (diff array.wat array.wat.gen))))
 
+(subdir wat-idempotent
+ (rule
+  (target array.wat.gen)
+  (deps ../wasm-formatted/array.wat.gen)
+ (action
+  (run wax --validate --input-format wat --format wat -o %{target} ../wasm-formatted/array.wat.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wasm-formatted/array.wat.gen array.wat.gen))))
+
+(subdir wax-idempotent
+ (rule
+  (target array.wax.gen)
+  (deps ../wax/array.wax.gen)
+ (action
+  (run wax --validate --input-format wax --format wax -o %{target} ../wax/array.wax.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/array.wax.gen array.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target backtrace.wat.gen)
@@ -63,6 +85,28 @@
   (alias runtest)
   (action
    (diff backtrace.wat backtrace.wat.gen))))
+
+(subdir wat-idempotent
+ (rule
+  (target backtrace.wat.gen)
+  (deps ../wasm-formatted/backtrace.wat.gen)
+ (action
+  (run wax --validate --input-format wat --format wat -o %{target} ../wasm-formatted/backtrace.wat.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wasm-formatted/backtrace.wat.gen backtrace.wat.gen))))
+
+(subdir wax-idempotent
+ (rule
+  (target backtrace.wax.gen)
+  (deps ../wax/backtrace.wax.gen)
+ (action
+  (run wax --validate --input-format wax --format wax -o %{target} ../wax/backtrace.wax.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/backtrace.wax.gen backtrace.wax.gen))))
 
 (subdir wasm-formatted
  (rule
@@ -97,6 +141,28 @@
   (action
    (diff bigarray.wat bigarray.wat.gen))))
 
+(subdir wat-idempotent
+ (rule
+  (target bigarray.wat.gen)
+  (deps ../wasm-formatted/bigarray.wat.gen)
+ (action
+  (run wax --validate --input-format wat --format wat -o %{target} ../wasm-formatted/bigarray.wat.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wasm-formatted/bigarray.wat.gen bigarray.wat.gen))))
+
+(subdir wax-idempotent
+ (rule
+  (target bigarray.wax.gen)
+  (deps ../wax/bigarray.wax.gen)
+ (action
+  (run wax --validate --input-format wax --format wax -o %{target} ../wax/bigarray.wax.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/bigarray.wax.gen bigarray.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target bigstring.wat.gen)
@@ -129,6 +195,28 @@
   (alias runtest)
   (action
    (diff bigstring.wat bigstring.wat.gen))))
+
+(subdir wat-idempotent
+ (rule
+  (target bigstring.wat.gen)
+  (deps ../wasm-formatted/bigstring.wat.gen)
+ (action
+  (run wax --validate --input-format wat --format wat -o %{target} ../wasm-formatted/bigstring.wat.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wasm-formatted/bigstring.wat.gen bigstring.wat.gen))))
+
+(subdir wax-idempotent
+ (rule
+  (target bigstring.wax.gen)
+  (deps ../wax/bigstring.wax.gen)
+ (action
+  (run wax --validate --input-format wax --format wax -o %{target} ../wax/bigstring.wax.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/bigstring.wax.gen bigstring.wax.gen))))
 
 (subdir wasm-formatted
  (rule
@@ -163,6 +251,28 @@
   (action
    (diff compare.wat compare.wat.gen))))
 
+(subdir wat-idempotent
+ (rule
+  (target compare.wat.gen)
+  (deps ../wasm-formatted/compare.wat.gen)
+ (action
+  (run wax --validate --input-format wat --format wat -o %{target} ../wasm-formatted/compare.wat.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wasm-formatted/compare.wat.gen compare.wat.gen))))
+
+(subdir wax-idempotent
+ (rule
+  (target compare.wax.gen)
+  (deps ../wax/compare.wax.gen)
+ (action
+  (run wax --validate --input-format wax --format wax -o %{target} ../wax/compare.wax.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/compare.wax.gen compare.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target custom.wat.gen)
@@ -195,6 +305,28 @@
   (alias runtest)
   (action
    (diff custom.wat custom.wat.gen))))
+
+(subdir wat-idempotent
+ (rule
+  (target custom.wat.gen)
+  (deps ../wasm-formatted/custom.wat.gen)
+ (action
+  (run wax --validate --input-format wat --format wat -o %{target} ../wasm-formatted/custom.wat.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wasm-formatted/custom.wat.gen custom.wat.gen))))
+
+(subdir wax-idempotent
+ (rule
+  (target custom.wax.gen)
+  (deps ../wax/custom.wax.gen)
+ (action
+  (run wax --validate --input-format wax --format wax -o %{target} ../wax/custom.wax.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/custom.wax.gen custom.wax.gen))))
 
 (subdir wasm-formatted
  (rule
@@ -229,6 +361,28 @@
   (action
    (diff domain.wat domain.wat.gen))))
 
+(subdir wat-idempotent
+ (rule
+  (target domain.wat.gen)
+  (deps ../wasm-formatted/domain.wat.gen)
+ (action
+  (run wax --validate --input-format wat --format wat -o %{target} ../wasm-formatted/domain.wat.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wasm-formatted/domain.wat.gen domain.wat.gen))))
+
+(subdir wax-idempotent
+ (rule
+  (target domain.wax.gen)
+  (deps ../wax/domain.wax.gen)
+ (action
+  (run wax --validate --input-format wax --format wax -o %{target} ../wax/domain.wax.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/domain.wax.gen domain.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target dynlink.wat.gen)
@@ -261,6 +415,28 @@
   (alias runtest)
   (action
    (diff dynlink.wat dynlink.wat.gen))))
+
+(subdir wat-idempotent
+ (rule
+  (target dynlink.wat.gen)
+  (deps ../wasm-formatted/dynlink.wat.gen)
+ (action
+  (run wax --validate --input-format wat --format wat -o %{target} ../wasm-formatted/dynlink.wat.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wasm-formatted/dynlink.wat.gen dynlink.wat.gen))))
+
+(subdir wax-idempotent
+ (rule
+  (target dynlink.wax.gen)
+  (deps ../wax/dynlink.wax.gen)
+ (action
+  (run wax --validate --input-format wax --format wax -o %{target} ../wax/dynlink.wax.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/dynlink.wax.gen dynlink.wax.gen))))
 
 (subdir wasm-formatted
  (rule
@@ -295,6 +471,28 @@
   (action
    (diff effect.wat effect.wat.gen))))
 
+(subdir wat-idempotent
+ (rule
+  (target effect.wat.gen)
+  (deps ../wasm-formatted/effect.wat.gen)
+ (action
+  (run wax --validate --input-format wat --format wat -o %{target} ../wasm-formatted/effect.wat.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wasm-formatted/effect.wat.gen effect.wat.gen))))
+
+(subdir wax-idempotent
+ (rule
+  (target effect.wax.gen)
+  (deps ../wax/effect.wax.gen)
+ (action
+  (run wax --validate --input-format wax --format wax -o %{target} ../wax/effect.wax.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/effect.wax.gen effect.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target fail.wat.gen)
@@ -327,6 +525,28 @@
   (alias runtest)
   (action
    (diff fail.wat fail.wat.gen))))
+
+(subdir wat-idempotent
+ (rule
+  (target fail.wat.gen)
+  (deps ../wasm-formatted/fail.wat.gen)
+ (action
+  (run wax --validate --input-format wat --format wat -o %{target} ../wasm-formatted/fail.wat.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wasm-formatted/fail.wat.gen fail.wat.gen))))
+
+(subdir wax-idempotent
+ (rule
+  (target fail.wax.gen)
+  (deps ../wax/fail.wax.gen)
+ (action
+  (run wax --validate --input-format wax --format wax -o %{target} ../wax/fail.wax.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/fail.wax.gen fail.wax.gen))))
 
 (subdir wasm-formatted
  (rule
@@ -361,6 +581,28 @@
   (action
    (diff float.wat float.wat.gen))))
 
+(subdir wat-idempotent
+ (rule
+  (target float.wat.gen)
+  (deps ../wasm-formatted/float.wat.gen)
+ (action
+  (run wax --validate --input-format wat --format wat -o %{target} ../wasm-formatted/float.wat.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wasm-formatted/float.wat.gen float.wat.gen))))
+
+(subdir wax-idempotent
+ (rule
+  (target float.wax.gen)
+  (deps ../wax/float.wax.gen)
+ (action
+  (run wax --validate --input-format wax --format wax -o %{target} ../wax/float.wax.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/float.wax.gen float.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target fs.wat.gen)
@@ -393,6 +635,28 @@
   (alias runtest)
   (action
    (diff fs.wat fs.wat.gen))))
+
+(subdir wat-idempotent
+ (rule
+  (target fs.wat.gen)
+  (deps ../wasm-formatted/fs.wat.gen)
+ (action
+  (run wax --validate --input-format wat --format wat -o %{target} ../wasm-formatted/fs.wat.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wasm-formatted/fs.wat.gen fs.wat.gen))))
+
+(subdir wax-idempotent
+ (rule
+  (target fs.wax.gen)
+  (deps ../wax/fs.wax.gen)
+ (action
+  (run wax --validate --input-format wax --format wax -o %{target} ../wax/fs.wax.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/fs.wax.gen fs.wax.gen))))
 
 (subdir wasm-formatted
  (rule
@@ -427,6 +691,28 @@
   (action
    (diff gc.wat gc.wat.gen))))
 
+(subdir wat-idempotent
+ (rule
+  (target gc.wat.gen)
+  (deps ../wasm-formatted/gc.wat.gen)
+ (action
+  (run wax --validate --input-format wat --format wat -o %{target} ../wasm-formatted/gc.wat.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wasm-formatted/gc.wat.gen gc.wat.gen))))
+
+(subdir wax-idempotent
+ (rule
+  (target gc.wax.gen)
+  (deps ../wax/gc.wax.gen)
+ (action
+  (run wax --validate --input-format wax --format wax -o %{target} ../wax/gc.wax.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/gc.wax.gen gc.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target hash.wat.gen)
@@ -459,6 +745,28 @@
   (alias runtest)
   (action
    (diff hash.wat hash.wat.gen))))
+
+(subdir wat-idempotent
+ (rule
+  (target hash.wat.gen)
+  (deps ../wasm-formatted/hash.wat.gen)
+ (action
+  (run wax --validate --input-format wat --format wat -o %{target} ../wasm-formatted/hash.wat.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wasm-formatted/hash.wat.gen hash.wat.gen))))
+
+(subdir wax-idempotent
+ (rule
+  (target hash.wax.gen)
+  (deps ../wax/hash.wax.gen)
+ (action
+  (run wax --validate --input-format wax --format wax -o %{target} ../wax/hash.wax.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/hash.wax.gen hash.wax.gen))))
 
 (subdir wasm-formatted
  (rule
@@ -493,6 +801,28 @@
   (action
    (diff int32.wat int32.wat.gen))))
 
+(subdir wat-idempotent
+ (rule
+  (target int32.wat.gen)
+  (deps ../wasm-formatted/int32.wat.gen)
+ (action
+  (run wax --validate --input-format wat --format wat -o %{target} ../wasm-formatted/int32.wat.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wasm-formatted/int32.wat.gen int32.wat.gen))))
+
+(subdir wax-idempotent
+ (rule
+  (target int32.wax.gen)
+  (deps ../wax/int32.wax.gen)
+ (action
+  (run wax --validate --input-format wax --format wax -o %{target} ../wax/int32.wax.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/int32.wax.gen int32.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target int64.wat.gen)
@@ -525,6 +855,28 @@
   (alias runtest)
   (action
    (diff int64.wat int64.wat.gen))))
+
+(subdir wat-idempotent
+ (rule
+  (target int64.wat.gen)
+  (deps ../wasm-formatted/int64.wat.gen)
+ (action
+  (run wax --validate --input-format wat --format wat -o %{target} ../wasm-formatted/int64.wat.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wasm-formatted/int64.wat.gen int64.wat.gen))))
+
+(subdir wax-idempotent
+ (rule
+  (target int64.wax.gen)
+  (deps ../wax/int64.wax.gen)
+ (action
+  (run wax --validate --input-format wax --format wax -o %{target} ../wax/int64.wax.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/int64.wax.gen int64.wax.gen))))
 
 (subdir wasm-formatted
  (rule
@@ -559,6 +911,28 @@
   (action
    (diff ints.wat ints.wat.gen))))
 
+(subdir wat-idempotent
+ (rule
+  (target ints.wat.gen)
+  (deps ../wasm-formatted/ints.wat.gen)
+ (action
+  (run wax --validate --input-format wat --format wat -o %{target} ../wasm-formatted/ints.wat.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wasm-formatted/ints.wat.gen ints.wat.gen))))
+
+(subdir wax-idempotent
+ (rule
+  (target ints.wax.gen)
+  (deps ../wax/ints.wax.gen)
+ (action
+  (run wax --validate --input-format wax --format wax -o %{target} ../wax/ints.wax.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/ints.wax.gen ints.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target io.wat.gen)
@@ -591,6 +965,28 @@
   (alias runtest)
   (action
    (diff io.wat io.wat.gen))))
+
+(subdir wat-idempotent
+ (rule
+  (target io.wat.gen)
+  (deps ../wasm-formatted/io.wat.gen)
+ (action
+  (run wax --validate --input-format wat --format wat -o %{target} ../wasm-formatted/io.wat.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wasm-formatted/io.wat.gen io.wat.gen))))
+
+(subdir wax-idempotent
+ (rule
+  (target io.wax.gen)
+  (deps ../wax/io.wax.gen)
+ (action
+  (run wax --validate --input-format wax --format wax -o %{target} ../wax/io.wax.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/io.wax.gen io.wax.gen))))
 
 (subdir wasm-formatted
  (rule
@@ -625,6 +1021,28 @@
   (action
    (diff jslib.wat jslib.wat.gen))))
 
+(subdir wat-idempotent
+ (rule
+  (target jslib.wat.gen)
+  (deps ../wasm-formatted/jslib.wat.gen)
+ (action
+  (run wax --validate --input-format wat --format wat -o %{target} ../wasm-formatted/jslib.wat.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wasm-formatted/jslib.wat.gen jslib.wat.gen))))
+
+(subdir wax-idempotent
+ (rule
+  (target jslib.wax.gen)
+  (deps ../wax/jslib.wax.gen)
+ (action
+  (run wax --validate --input-format wax --format wax -o %{target} ../wax/jslib.wax.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/jslib.wax.gen jslib.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target jslib_js_of_ocaml.wat.gen)
@@ -657,6 +1075,28 @@
   (alias runtest)
   (action
    (diff jslib_js_of_ocaml.wat jslib_js_of_ocaml.wat.gen))))
+
+(subdir wat-idempotent
+ (rule
+  (target jslib_js_of_ocaml.wat.gen)
+  (deps ../wasm-formatted/jslib_js_of_ocaml.wat.gen)
+ (action
+  (run wax --validate --input-format wat --format wat -o %{target} ../wasm-formatted/jslib_js_of_ocaml.wat.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wasm-formatted/jslib_js_of_ocaml.wat.gen jslib_js_of_ocaml.wat.gen))))
+
+(subdir wax-idempotent
+ (rule
+  (target jslib_js_of_ocaml.wax.gen)
+  (deps ../wax/jslib_js_of_ocaml.wax.gen)
+ (action
+  (run wax --validate --input-format wax --format wax -o %{target} ../wax/jslib_js_of_ocaml.wax.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/jslib_js_of_ocaml.wax.gen jslib_js_of_ocaml.wax.gen))))
 
 (subdir wasm-formatted
  (rule
@@ -691,6 +1131,28 @@
   (action
    (diff jsstring.wat jsstring.wat.gen))))
 
+(subdir wat-idempotent
+ (rule
+  (target jsstring.wat.gen)
+  (deps ../wasm-formatted/jsstring.wat.gen)
+ (action
+  (run wax --validate --input-format wat --format wat -o %{target} ../wasm-formatted/jsstring.wat.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wasm-formatted/jsstring.wat.gen jsstring.wat.gen))))
+
+(subdir wax-idempotent
+ (rule
+  (target jsstring.wax.gen)
+  (deps ../wax/jsstring.wax.gen)
+ (action
+  (run wax --validate --input-format wax --format wax -o %{target} ../wax/jsstring.wax.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/jsstring.wax.gen jsstring.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target lexing.wat.gen)
@@ -723,6 +1185,28 @@
   (alias runtest)
   (action
    (diff lexing.wat lexing.wat.gen))))
+
+(subdir wat-idempotent
+ (rule
+  (target lexing.wat.gen)
+  (deps ../wasm-formatted/lexing.wat.gen)
+ (action
+  (run wax --validate --input-format wat --format wat -o %{target} ../wasm-formatted/lexing.wat.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wasm-formatted/lexing.wat.gen lexing.wat.gen))))
+
+(subdir wax-idempotent
+ (rule
+  (target lexing.wax.gen)
+  (deps ../wax/lexing.wax.gen)
+ (action
+  (run wax --validate --input-format wax --format wax -o %{target} ../wax/lexing.wax.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/lexing.wax.gen lexing.wax.gen))))
 
 (subdir wasm-formatted
  (rule
@@ -757,6 +1241,28 @@
   (action
    (diff marshal.wat marshal.wat.gen))))
 
+(subdir wat-idempotent
+ (rule
+  (target marshal.wat.gen)
+  (deps ../wasm-formatted/marshal.wat.gen)
+ (action
+  (run wax --validate --input-format wat --format wat -o %{target} ../wasm-formatted/marshal.wat.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wasm-formatted/marshal.wat.gen marshal.wat.gen))))
+
+(subdir wax-idempotent
+ (rule
+  (target marshal.wax.gen)
+  (deps ../wax/marshal.wax.gen)
+ (action
+  (run wax --validate --input-format wax --format wax -o %{target} ../wax/marshal.wax.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/marshal.wax.gen marshal.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target md5.wat.gen)
@@ -789,6 +1295,28 @@
   (alias runtest)
   (action
    (diff md5.wat md5.wat.gen))))
+
+(subdir wat-idempotent
+ (rule
+  (target md5.wat.gen)
+  (deps ../wasm-formatted/md5.wat.gen)
+ (action
+  (run wax --validate --input-format wat --format wat -o %{target} ../wasm-formatted/md5.wat.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wasm-formatted/md5.wat.gen md5.wat.gen))))
+
+(subdir wax-idempotent
+ (rule
+  (target md5.wax.gen)
+  (deps ../wax/md5.wax.gen)
+ (action
+  (run wax --validate --input-format wax --format wax -o %{target} ../wax/md5.wax.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/md5.wax.gen md5.wax.gen))))
 
 (subdir wasm-formatted
  (rule
@@ -823,6 +1351,28 @@
   (action
    (diff nat.wat nat.wat.gen))))
 
+(subdir wat-idempotent
+ (rule
+  (target nat.wat.gen)
+  (deps ../wasm-formatted/nat.wat.gen)
+ (action
+  (run wax --validate --input-format wat --format wat -o %{target} ../wasm-formatted/nat.wat.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wasm-formatted/nat.wat.gen nat.wat.gen))))
+
+(subdir wax-idempotent
+ (rule
+  (target nat.wax.gen)
+  (deps ../wax/nat.wax.gen)
+ (action
+  (run wax --validate --input-format wax --format wax -o %{target} ../wax/nat.wax.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/nat.wax.gen nat.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target obj.wat.gen)
@@ -855,6 +1405,28 @@
   (alias runtest)
   (action
    (diff obj.wat obj.wat.gen))))
+
+(subdir wat-idempotent
+ (rule
+  (target obj.wat.gen)
+  (deps ../wasm-formatted/obj.wat.gen)
+ (action
+  (run wax --validate --input-format wat --format wat -o %{target} ../wasm-formatted/obj.wat.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wasm-formatted/obj.wat.gen obj.wat.gen))))
+
+(subdir wax-idempotent
+ (rule
+  (target obj.wax.gen)
+  (deps ../wax/obj.wax.gen)
+ (action
+  (run wax --validate --input-format wax --format wax -o %{target} ../wax/obj.wax.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/obj.wax.gen obj.wax.gen))))
 
 (subdir wasm-formatted
  (rule
@@ -889,6 +1461,28 @@
   (action
    (diff parsing.wat parsing.wat.gen))))
 
+(subdir wat-idempotent
+ (rule
+  (target parsing.wat.gen)
+  (deps ../wasm-formatted/parsing.wat.gen)
+ (action
+  (run wax --validate --input-format wat --format wat -o %{target} ../wasm-formatted/parsing.wat.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wasm-formatted/parsing.wat.gen parsing.wat.gen))))
+
+(subdir wax-idempotent
+ (rule
+  (target parsing.wax.gen)
+  (deps ../wax/parsing.wax.gen)
+ (action
+  (run wax --validate --input-format wax --format wax -o %{target} ../wax/parsing.wax.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/parsing.wax.gen parsing.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target printexc.wat.gen)
@@ -921,6 +1515,28 @@
   (alias runtest)
   (action
    (diff printexc.wat printexc.wat.gen))))
+
+(subdir wat-idempotent
+ (rule
+  (target printexc.wat.gen)
+  (deps ../wasm-formatted/printexc.wat.gen)
+ (action
+  (run wax --validate --input-format wat --format wat -o %{target} ../wasm-formatted/printexc.wat.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wasm-formatted/printexc.wat.gen printexc.wat.gen))))
+
+(subdir wax-idempotent
+ (rule
+  (target printexc.wax.gen)
+  (deps ../wax/printexc.wax.gen)
+ (action
+  (run wax --validate --input-format wax --format wax -o %{target} ../wax/printexc.wax.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/printexc.wax.gen printexc.wax.gen))))
 
 (subdir wasm-formatted
  (rule
@@ -955,6 +1571,28 @@
   (action
    (diff prng.wat prng.wat.gen))))
 
+(subdir wat-idempotent
+ (rule
+  (target prng.wat.gen)
+  (deps ../wasm-formatted/prng.wat.gen)
+ (action
+  (run wax --validate --input-format wat --format wat -o %{target} ../wasm-formatted/prng.wat.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wasm-formatted/prng.wat.gen prng.wat.gen))))
+
+(subdir wax-idempotent
+ (rule
+  (target prng.wax.gen)
+  (deps ../wax/prng.wax.gen)
+ (action
+  (run wax --validate --input-format wax --format wax -o %{target} ../wax/prng.wax.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/prng.wax.gen prng.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target runtime_events.wat.gen)
@@ -987,6 +1625,28 @@
   (alias runtest)
   (action
    (diff runtime_events.wat runtime_events.wat.gen))))
+
+(subdir wat-idempotent
+ (rule
+  (target runtime_events.wat.gen)
+  (deps ../wasm-formatted/runtime_events.wat.gen)
+ (action
+  (run wax --validate --input-format wat --format wat -o %{target} ../wasm-formatted/runtime_events.wat.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wasm-formatted/runtime_events.wat.gen runtime_events.wat.gen))))
+
+(subdir wax-idempotent
+ (rule
+  (target runtime_events.wax.gen)
+  (deps ../wax/runtime_events.wax.gen)
+ (action
+  (run wax --validate --input-format wax --format wax -o %{target} ../wax/runtime_events.wax.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/runtime_events.wax.gen runtime_events.wax.gen))))
 
 (subdir wasm-formatted
  (rule
@@ -1021,6 +1681,28 @@
   (action
    (diff stdlib.wat stdlib.wat.gen))))
 
+(subdir wat-idempotent
+ (rule
+  (target stdlib.wat.gen)
+  (deps ../wasm-formatted/stdlib.wat.gen)
+ (action
+  (run wax --validate --input-format wat --format wat -o %{target} ../wasm-formatted/stdlib.wat.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wasm-formatted/stdlib.wat.gen stdlib.wat.gen))))
+
+(subdir wax-idempotent
+ (rule
+  (target stdlib.wax.gen)
+  (deps ../wax/stdlib.wax.gen)
+ (action
+  (run wax --validate --input-format wax --format wax -o %{target} ../wax/stdlib.wax.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/stdlib.wax.gen stdlib.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target str.wat.gen)
@@ -1053,6 +1735,28 @@
   (alias runtest)
   (action
    (diff str.wat str.wat.gen))))
+
+(subdir wat-idempotent
+ (rule
+  (target str.wat.gen)
+  (deps ../wasm-formatted/str.wat.gen)
+ (action
+  (run wax --validate --input-format wat --format wat -o %{target} ../wasm-formatted/str.wat.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wasm-formatted/str.wat.gen str.wat.gen))))
+
+(subdir wax-idempotent
+ (rule
+  (target str.wax.gen)
+  (deps ../wax/str.wax.gen)
+ (action
+  (run wax --validate --input-format wax --format wax -o %{target} ../wax/str.wax.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/str.wax.gen str.wax.gen))))
 
 (subdir wasm-formatted
  (rule
@@ -1087,6 +1791,28 @@
   (action
    (diff string.wat string.wat.gen))))
 
+(subdir wat-idempotent
+ (rule
+  (target string.wat.gen)
+  (deps ../wasm-formatted/string.wat.gen)
+ (action
+  (run wax --validate --input-format wat --format wat -o %{target} ../wasm-formatted/string.wat.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wasm-formatted/string.wat.gen string.wat.gen))))
+
+(subdir wax-idempotent
+ (rule
+  (target string.wax.gen)
+  (deps ../wax/string.wax.gen)
+ (action
+  (run wax --validate --input-format wax --format wax -o %{target} ../wax/string.wax.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/string.wax.gen string.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target sync.wat.gen)
@@ -1119,6 +1845,28 @@
   (alias runtest)
   (action
    (diff sync.wat sync.wat.gen))))
+
+(subdir wat-idempotent
+ (rule
+  (target sync.wat.gen)
+  (deps ../wasm-formatted/sync.wat.gen)
+ (action
+  (run wax --validate --input-format wat --format wat -o %{target} ../wasm-formatted/sync.wat.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wasm-formatted/sync.wat.gen sync.wat.gen))))
+
+(subdir wax-idempotent
+ (rule
+  (target sync.wax.gen)
+  (deps ../wax/sync.wax.gen)
+ (action
+  (run wax --validate --input-format wax --format wax -o %{target} ../wax/sync.wax.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/sync.wax.gen sync.wax.gen))))
 
 (subdir wasm-formatted
  (rule
@@ -1153,6 +1901,28 @@
   (action
    (diff sys.wat sys.wat.gen))))
 
+(subdir wat-idempotent
+ (rule
+  (target sys.wat.gen)
+  (deps ../wasm-formatted/sys.wat.gen)
+ (action
+  (run wax --validate --input-format wat --format wat -o %{target} ../wasm-formatted/sys.wat.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wasm-formatted/sys.wat.gen sys.wat.gen))))
+
+(subdir wax-idempotent
+ (rule
+  (target sys.wax.gen)
+  (deps ../wax/sys.wax.gen)
+ (action
+  (run wax --validate --input-format wax --format wax -o %{target} ../wax/sys.wax.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/sys.wax.gen sys.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target toplevel.wat.gen)
@@ -1185,6 +1955,28 @@
   (alias runtest)
   (action
    (diff toplevel.wat toplevel.wat.gen))))
+
+(subdir wat-idempotent
+ (rule
+  (target toplevel.wat.gen)
+  (deps ../wasm-formatted/toplevel.wat.gen)
+ (action
+  (run wax --validate --input-format wat --format wat -o %{target} ../wasm-formatted/toplevel.wat.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wasm-formatted/toplevel.wat.gen toplevel.wat.gen))))
+
+(subdir wax-idempotent
+ (rule
+  (target toplevel.wax.gen)
+  (deps ../wax/toplevel.wax.gen)
+ (action
+  (run wax --validate --input-format wax --format wax -o %{target} ../wax/toplevel.wax.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/toplevel.wax.gen toplevel.wax.gen))))
 
 (subdir wasm-formatted
  (rule
@@ -1219,6 +2011,28 @@
   (action
    (diff unix.wat unix.wat.gen))))
 
+(subdir wat-idempotent
+ (rule
+  (target unix.wat.gen)
+  (deps ../wasm-formatted/unix.wat.gen)
+ (action
+  (run wax --validate --input-format wat --format wat -o %{target} ../wasm-formatted/unix.wat.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wasm-formatted/unix.wat.gen unix.wat.gen))))
+
+(subdir wax-idempotent
+ (rule
+  (target unix.wax.gen)
+  (deps ../wax/unix.wax.gen)
+ (action
+  (run wax --validate --input-format wax --format wax -o %{target} ../wax/unix.wax.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/unix.wax.gen unix.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target weak.wat.gen)
@@ -1252,6 +2066,28 @@
   (action
    (diff weak.wat weak.wat.gen))))
 
+(subdir wat-idempotent
+ (rule
+  (target weak.wat.gen)
+  (deps ../wasm-formatted/weak.wat.gen)
+ (action
+  (run wax --validate --input-format wat --format wat -o %{target} ../wasm-formatted/weak.wat.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wasm-formatted/weak.wat.gen weak.wat.gen))))
+
+(subdir wax-idempotent
+ (rule
+  (target weak.wax.gen)
+  (deps ../wax/weak.wax.gen)
+ (action
+  (run wax --validate --input-format wax --format wax -o %{target} ../wax/weak.wax.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/weak.wax.gen weak.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target zstd.wat.gen)
@@ -1284,4 +2120,26 @@
   (alias runtest)
   (action
    (diff zstd.wat zstd.wat.gen))))
+
+(subdir wat-idempotent
+ (rule
+  (target zstd.wat.gen)
+  (deps ../wasm-formatted/zstd.wat.gen)
+ (action
+  (run wax --validate --input-format wat --format wat -o %{target} ../wasm-formatted/zstd.wat.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wasm-formatted/zstd.wat.gen zstd.wat.gen))))
+
+(subdir wax-idempotent
+ (rule
+  (target zstd.wax.gen)
+  (deps ../wax/zstd.wax.gen)
+ (action
+  (run wax --validate --input-format wax --format wax -o %{target} ../wax/zstd.wax.gen)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/zstd.wax.gen zstd.wax.gen))))
 
