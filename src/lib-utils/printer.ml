@@ -1,172 +1,14 @@
-(* The pretty-printer has two interchangeable engines behind one API:
+(* A document-IR pretty-printer. The imperative builder API (string, space,
+   box, …) records a tree of text and breaks; [run] then renders it with our
+   own layout algorithm, which gives genuine hard breaks, column awareness and
+   break coalescing we control — unlike a thin layer over OCaml's [Format]. *)
 
-   - [Fmt]: the original engine built on OCaml's [Format]. Kept verbatim.
-   - [Doc]: a self-contained document-IR engine. It builds a tree of text and
-     breaks via the same imperative API, then renders it with its own layout
-     algorithm — giving genuine hard breaks (no [pp_print_break 1000] hack),
-     column awareness, and break coalescing we control.
+type break_strength = Cut | Space | Newline | Blank_line
 
-   The engine is chosen once per [run] from the [WAX_PRINTER] environment
-   variable (default: the Format engine). Call sites are unaware of the choice. *)
-
-type break_strength = No_break | Cut | Space | Newline | Blank_line
-
-let strength = function
-  | No_break -> 0
-  | Cut -> 1
-  | Space -> 2
-  | Newline -> 3
-  | Blank_line -> 4
-
-let debug = false
+let strength = function Cut -> 0 | Space -> 1 | Newline -> 2 | Blank_line -> 3
 
 (* ===================================================================== *)
-(* Format engine (original implementation, unchanged behaviour)          *)
-(* ===================================================================== *)
-
-module Fmt = struct
-  type state = {
-    fmt : Format.formatter;
-    mutable started : bool;
-    mutable pending_break : break_strength;
-    mutable has_emitted : bool;
-        (* Any output has been generated on the current line *)
-    mutable indent : int; (* Current indentation level (for breaks) *)
-    mutable indent_stack : int list;
-    mutable pending_eol : (unit -> unit) option;
-        (* A trailing line comment to emit at the end of the current line,
-           after any list separator that follows it (see [defer_eol]). *)
-    mutable holding_eol : bool;
-        (* While set, a pending end-of-line comment is not flushed before the
-           next token, so a list separator can be printed on the comment's
-           line. *)
-  }
-
-  let create fmt =
-    {
-      fmt;
-      started = false;
-      pending_break = No_break;
-      has_emitted = false;
-      indent = 0;
-      indent_stack = [];
-      pending_eol = None;
-      holding_eol = false;
-    }
-
-  let indent ctx indent f =
-    let prev_indent = ctx.indent in
-    ctx.indent <- indent;
-    f ();
-    ctx.indent <- prev_indent
-
-  let flush ?(skip_space = false) ctx =
-    (match ctx.pending_break with
-    | No_break -> ()
-    | Cut ->
-        if not skip_space then (
-          if debug then prerr_endline "CUT";
-          Format.pp_print_cut ctx.fmt ())
-    | Space ->
-        if not skip_space then (
-          if debug then prerr_endline "SPACE";
-          Format.pp_print_break ctx.fmt 1 ctx.indent)
-    | Newline ->
-        if debug then prerr_endline "NEWLINE";
-        if ctx.started then Format.pp_print_break ctx.fmt 1000 ctx.indent
-    | Blank_line ->
-        if debug then prerr_endline "BLANK LINE";
-        if ctx.started then Format.pp_print_as ctx.fmt 0 "\n";
-        Format.pp_print_break ctx.fmt 1000 ctx.indent);
-    ctx.pending_break <- No_break
-
-  let force_eol ctx =
-    match ctx.pending_eol with
-    | None -> ()
-    | Some emit ->
-        ctx.pending_eol <- None;
-        ctx.pending_break <- No_break;
-        emit ();
-        if ctx.started then Format.pp_print_break ctx.fmt 1000 ctx.indent;
-        ctx.pending_break <- No_break;
-        ctx.has_emitted <- false
-
-  let defer_eol ctx emit =
-    force_eol ctx;
-    ctx.pending_eol <- Some emit
-
-  let string ctx s =
-    if not ctx.holding_eol then force_eol ctx;
-    flush ctx;
-    if debug then Format.eprintf "STRING %s@." s;
-    ctx.started <- true;
-    ctx.has_emitted <- true;
-    Format.pp_print_string ctx.fmt s
-
-  let string_as ctx len s =
-    if not ctx.holding_eol then force_eol ctx;
-    flush ctx;
-    if debug then Format.eprintf "STRING %s@." s;
-    ctx.started <- true;
-    ctx.has_emitted <- true;
-    Format.pp_print_as ctx.fmt len s
-
-  let with_held_eol ctx f =
-    let prev = ctx.holding_eol in
-    ctx.holding_eol <- true;
-    f ();
-    ctx.holding_eol <- prev
-
-  let register_break ctx s =
-    if strength s > strength ctx.pending_break then ctx.pending_break <- s
-
-  let space ctx = if ctx.has_emitted then register_break ctx Space
-  let newline ctx = register_break ctx Newline
-  let blank_line ctx = register_break ctx Blank_line
-  let cut ctx = register_break ctx Cut
-
-  let generic_box ~name pp_open_box ctx skip_space indent f =
-    if not ctx.holding_eol then force_eol ctx;
-    flush ~skip_space ctx;
-    if debug then Format.eprintf "OPEN %s@." name;
-    pp_open_box ctx.fmt indent;
-    ctx.indent_stack <- ctx.indent :: ctx.indent_stack;
-    ctx.indent <- 0;
-    f ();
-    (* We don't flush spaces/newlines here, so that they are moved
-         outside of the box *)
-    if debug then prerr_endline "CLOSE";
-    Format.pp_close_box ctx.fmt ();
-    match ctx.indent_stack with
-    | [] -> assert false (* Should not happen if boxes are balanced *)
-    | h :: t ->
-        ctx.indent <- h;
-        ctx.indent_stack <- t
-
-  let box ctx ~skip_space ~indent f =
-    generic_box ~name:"BOX" Format.pp_open_box ctx skip_space indent f
-
-  let hvbox ctx ~skip_space ~indent f =
-    generic_box ~name:"HVBOX" Format.pp_open_hvbox ctx skip_space indent f
-
-  let hbox ctx ~skip_space f =
-    generic_box ~name:"HBOX"
-      (fun fmt _ -> Format.pp_open_hbox fmt ())
-      ctx skip_space 0 f
-
-  let hovbox ctx ~skip_space ~indent f =
-    generic_box ~name:"HOVBOX" Format.pp_open_hovbox ctx skip_space indent f
-
-  let vbox ctx ~skip_space ~indent f =
-    generic_box ~name:"VBOX" Format.pp_open_vbox ctx skip_space indent f
-
-  let finish ctx =
-    force_eol ctx;
-    flush ctx
-end
-
-(* ===================================================================== *)
-(* Doc engine (document IR + imperative builder + renderer)              *)
+(* Document IR + imperative builder + renderer                           *)
 (* ===================================================================== *)
 
 module Doc = struct
@@ -177,8 +19,8 @@ module Doc = struct
     | GV (* every soft break wraps *)
     | GH (* soft breaks never wrap (hard/blank still break) *)
 
-  (* A break carries one [break_strength] (No_break unused). Cut/Space are soft
-     (flatten in a fitting group); Newline/Blank_line always break. *)
+  (* A break carries one [break_strength]: Cut/Space are soft (flatten in a
+     fitting group); Newline/Blank_line always break. *)
   type doc =
     | Empty
     | Text of int * string (* display width, payload *)
@@ -231,8 +73,8 @@ module Doc = struct
         append st (fr.wrap body)
     | [] -> assert false
 
-  (* Drop a trailing soft/hard break at this frame's head: the analogue of
-     [pending_break <- No_break] when draining a deferred end-of-line comment. *)
+  (* Drop a trailing break at this frame's head, so a deferred end-of-line
+     comment hugs the preceding token instead of being pushed past a break. *)
   let drop_trailing_break st =
     let fr = top st in
     match fr.items with Brk _ :: tl -> fr.items <- tl | _ -> ()
@@ -325,7 +167,7 @@ module Doc = struct
                   match b with
                   | Newline | Blank_line -> false
                   | Space -> fits (avail - 1) rest
-                  | No_break | Cut -> fits avail rest)))
+                  | Cut -> fits avail rest)))
 
   let render ~width doc =
     let b = Buffer.create 4096 in
@@ -409,7 +251,6 @@ module Doc = struct
               go ((base, m', d) :: rest)
           | Brk str ->
               (match (str, m) with
-              | No_break, _ -> ()
               | Newline, _ -> break_line i false
               | Blank_line, _ -> break_line i true
               | (Cut | Space), Flat -> flat_sep str
@@ -449,80 +290,36 @@ module Doc = struct
 end
 
 (* ===================================================================== *)
-(* Public API: dispatch on the selected engine                          *)
+(* Public API                                                            *)
 (* ===================================================================== *)
 
-type t = Fmt_engine of Fmt.state | Doc_engine of Doc.state
+type t = Doc.state
 
-let indent t n f =
-  match t with
-  | Fmt_engine s -> Fmt.indent s n f
-  | Doc_engine s -> Doc.indent s n f
-
-let string t s =
-  match t with Fmt_engine c -> Fmt.string c s | Doc_engine c -> Doc.string c s
-
-let string_as t len s =
-  match t with
-  | Fmt_engine c -> Fmt.string_as c len s
-  | Doc_engine c -> Doc.string_as c len s
-
-let space t () =
-  match t with Fmt_engine c -> Fmt.space c | Doc_engine c -> Doc.space c
-
-let cut t () =
-  match t with Fmt_engine c -> Fmt.cut c | Doc_engine c -> Doc.cut c
-
-let newline t () =
-  match t with Fmt_engine c -> Fmt.newline c | Doc_engine c -> Doc.newline c
-
-let blank_line t () =
-  match t with
-  | Fmt_engine c -> Fmt.blank_line c
-  | Doc_engine c -> Doc.blank_line c
-
-let defer_eol t emit =
-  match t with
-  | Fmt_engine c -> Fmt.defer_eol c emit
-  | Doc_engine c -> Doc.defer_eol c emit
-
-let with_held_eol t f =
-  match t with
-  | Fmt_engine c -> Fmt.with_held_eol c f
-  | Doc_engine c -> Doc.with_held_eol c f
+let indent = Doc.indent
+let string = Doc.string
+let string_as = Doc.string_as
+let space t () = Doc.space t
+let cut t () = Doc.cut t
+let newline t () = Doc.newline t
+let blank_line t () = Doc.blank_line t
+let defer_eol = Doc.defer_eol
+let with_held_eol = Doc.with_held_eol
 
 let box t ?(skip_space = false) ?(indent = 0) f =
-  match t with
-  | Fmt_engine c -> Fmt.box c ~skip_space ~indent f
-  | Doc_engine c -> Doc.box c ~skip_space ~indent f
+  Doc.box t ~skip_space ~indent f
 
 let hvbox t ?(skip_space = false) ?(indent = 0) f =
-  match t with
-  | Fmt_engine c -> Fmt.hvbox c ~skip_space ~indent f
-  | Doc_engine c -> Doc.hvbox c ~skip_space ~indent f
+  Doc.hvbox t ~skip_space ~indent f
 
-let hbox t ?(skip_space = false) f =
-  match t with
-  | Fmt_engine c -> Fmt.hbox c ~skip_space f
-  | Doc_engine c -> Doc.hbox c ~skip_space f
+let hbox t ?(skip_space = false) f = Doc.hbox t ~skip_space f
 
 let hovbox t ?(skip_space = false) ?(indent = 0) f =
-  match t with
-  | Fmt_engine c -> Fmt.hovbox c ~skip_space ~indent f
-  | Doc_engine c -> Doc.hovbox c ~skip_space ~indent f
+  Doc.hovbox t ~skip_space ~indent f
 
 let vbox t ?(skip_space = false) ?(indent = 0) f =
-  match t with
-  | Fmt_engine c -> Fmt.vbox c ~skip_space ~indent f
-  | Doc_engine c -> Doc.vbox c ~skip_space ~indent f
+  Doc.vbox t ~skip_space ~indent f
 
 let run ?(width = 78) fmt f =
-  match Sys.getenv_opt "WAX_PRINTER" with
-  | Some "format" ->
-      let c = Fmt.create fmt in
-      f (Fmt_engine c);
-      Fmt.finish c
-  | _ ->
-      let c = Doc.create fmt ~width in
-      f (Doc_engine c);
-      Doc.finish c
+  let c = Doc.create fmt ~width in
+  f c;
+  Doc.finish c

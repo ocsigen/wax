@@ -72,8 +72,5 @@ val vbox : t -> ?skip_space:bool -> ?indent:int -> (unit -> unit) -> unit
     before the box. *)
 
 val run : ?width:int -> Format.formatter -> (t -> unit) -> unit
-(** [run ?width fmt f] creates a new printer on the given formatter and runs
-    [f]. The engine is selected from the [WAX_PRINTER] environment variable
-    ([doc] for the document-IR engine, anything else for the Format engine).
-    [width] is the target line width for the document engine (the Format engine
-    uses the formatter's own margin). *)
+(** [run ?width fmt f] creates a new printer on the given formatter, runs [f],
+    and renders the result. [width] is the target line width (default 78). *)
