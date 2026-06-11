@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-80ba25f7.js";
+            window.path_to_searchindex_js = "searchindex-69066062.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -514,6 +514,40 @@ an enclosing block’s label.</p>
     }
 }
 </code></pre>
+<h3 id="while-and-do-while-loops"><a class="header" href="#while-and-do-while-loops">While and Do-While Loops</a></h3>
+<p>The two common loop shapes have readable sugar over the <code>loop</code>-and-back-branch
+idiom above. A <code>while</code> tests <em>before</em> each iteration:</p>
+<pre><code class="language-wax">while i &lt;s n {
+    total = total + i;
+    i = i + 1;
+}
+</code></pre>
+<p>which is exactly:</p>
+<pre><code class="language-wax">'next: loop {
+    if i &lt;s n {
+        total = total + i;
+        i = i + 1;
+        br 'next;
+    }
+}
+</code></pre>
+<p>A <code>do { … } while C;</code> tests <em>after</em> the body, so the body always runs at least
+once:</p>
+<pre><code class="language-wax">do {
+    total = total - 1;
+} while total &gt;s 0;
+</code></pre>
+<p>which is:</p>
+<pre><code class="language-wax">'next: loop {
+    total = total - 1;
+    br_if 'next total &gt;s 0;
+}
+</code></pre>
+<p>Both are void, and the test must be an <code>i32</code>. They may carry a label
+(<code>'l: while …</code>), which names the loop, so a <code>br 'l</code> from inside the body is a
+<em>continue</em> — it jumps back to re-test. Decompiling recovers a <code>while</code> or
+<code>do</code>-<code>while</code> from these shapes, so a loop written either way survives a round
+trip through WAT or WASM.</p>
 <h3 id="labels-and-branches"><a class="header" href="#labels-and-branches">Labels and Branches</a></h3>
 <p>Labels start with <code>'</code> and prefix a block, loop, <code>if</code>, or <code>try</code>. A branch targets
 a label; <strong>where</strong> it lands depends on the labelled construct: branching to a
@@ -965,8 +999,55 @@ fn find_first_zero(arr: &amp;ints) -&gt; i32 {
     local.set $i
     br $search))
 </code></pre>
-<h2 id="dispatch-jump-table"><a class="header" href="#dispatch-jump-table">Dispatch (Jump Table)</a></h2>
+<h2 id="while-and-do-while-loops-1"><a class="header" href="#while-and-do-while-loops-1">While and Do-While Loops</a></h2>
 <h3 id="wax-4"><a class="header" href="#wax-4">Wax</a></h3>
+<pre><code class="language-wax">#[export = "triangle"]
+fn triangle(n: i32) -&gt; i32 {
+    let i: i32 = 0;
+    let total: i32 = 0;
+    while i &lt;s n {
+        i = i + 1;
+        total = total + i;
+    }
+    total;
+}
+
+#[export = "countdown"]
+fn countdown(n: i32) -&gt; i32 {
+    let steps: i32 = 0;
+    do {
+        n = n - 1;
+        steps = steps + 1;
+    } while n &gt;s 0;
+    steps;
+}
+</code></pre>
+<h3 id="equivalent-wat-3"><a class="header" href="#equivalent-wat-3">Equivalent WAT</a></h3>
+<pre><code class="language-wat">(func $triangle (export "triangle") (param $n i32) (result i32)
+  (local $i i32) (local $total i32)
+  (local.set $i (i32.const 0))
+  (local.set $total (i32.const 0))
+  (loop $loop
+    (if (i32.lt_s (local.get $i) (local.get $n))
+      (then
+        (local.set $i (i32.add (local.get $i) (i32.const 1)))
+        (local.set $total (i32.add (local.get $total) (local.get $i)))
+        (br $loop))))
+  (local.get $total)
+)
+
+(func $countdown (export "countdown") (param $n i32) (result i32)
+  (local $steps i32)
+  (local.set $steps (i32.const 0))
+  (loop $loop
+    (local.set $n (i32.sub (local.get $n) (i32.const 1)))
+    (local.set $steps (i32.add (local.get $steps) (i32.const 1)))
+    (br_if $loop (i32.gt_s (local.get $n) (i32.const 0))))
+  (local.get $steps)
+)
+</code></pre>
+<h2 id="dispatch-jump-table"><a class="header" href="#dispatch-jump-table">Dispatch (Jump Table)</a></h2>
+<h3 id="wax-5"><a class="header" href="#wax-5">Wax</a></h3>
 <pre><code class="language-wax">#[export = "rgb_channel"]
 fn rgb_channel(color: i32, value: i32) -&gt; i32 {
     dispatch color ['red 'green 'blue else 'bad] {
@@ -977,7 +1058,7 @@ fn rgb_channel(color: i32, value: i32) -&gt; i32 {
     }
 }
 </code></pre>
-<h3 id="equivalent-wat-3"><a class="header" href="#equivalent-wat-3">Equivalent WAT</a></h3>
+<h3 id="equivalent-wat-4"><a class="header" href="#equivalent-wat-4">Equivalent WAT</a></h3>
 <pre><code class="language-wat">(func $rgb_channel (export "rgb_channel")
   (param $color i32) (param $value i32) (result i32)
   (block $red
@@ -992,7 +1073,7 @@ fn rgb_channel(color: i32, value: i32) -&gt; i32 {
     (i32.shl (i32.and (local.get $value) (i32.const 255)) (i32.const 16))))
 </code></pre>
 <h2 id="structs-and-methods"><a class="header" href="#structs-and-methods">Structs and Methods</a></h2>
-<h3 id="wax-5"><a class="header" href="#wax-5">Wax</a></h3>
+<h3 id="wax-6"><a class="header" href="#wax-6">Wax</a></h3>
 <pre><code class="language-wax">type point = { x: i32, y: i32 };
 
 #[export = "make_point"]
@@ -1010,7 +1091,7 @@ fn distance_squared(p1: &amp;point, p2: &amp;point) -&gt; i32 {
 }
 </code></pre>
 <h2 id="mutable-structs"><a class="header" href="#mutable-structs">Mutable Structs</a></h2>
-<h3 id="wax-6"><a class="header" href="#wax-6">Wax</a></h3>
+<h3 id="wax-7"><a class="header" href="#wax-7">Wax</a></h3>
 <pre><code class="language-wax">type counter = { value: mut i32 };
 
 #[export = "new_counter"]
@@ -1029,7 +1110,7 @@ fn get_value(c: &amp;counter) -&gt; i32 {
 }
 </code></pre>
 <h2 id="arrays-1"><a class="header" href="#arrays-1">Arrays</a></h2>
-<h3 id="wax-7"><a class="header" href="#wax-7">Wax</a></h3>
+<h3 id="wax-8"><a class="header" href="#wax-8">Wax</a></h3>
 <pre><code class="language-wax">type bytes = [mut i8];
 
 #[export = "sum_bytes"]
@@ -1068,7 +1149,7 @@ fn fill_bytes(arr: &amp;bytes, val: i32) {
 }
 </code></pre>
 <h2 id="exception-handling"><a class="header" href="#exception-handling">Exception Handling</a></h2>
-<h3 id="wax-8"><a class="header" href="#wax-8">Wax</a></h3>
+<h3 id="wax-9"><a class="header" href="#wax-9">Wax</a></h3>
 <pre><code class="language-wax">tag divide_by_zero();
 tag overflow();
 
@@ -1091,7 +1172,7 @@ fn try_divide(a: i32, b: i32) -&gt; i32 {
 }
 </code></pre>
 <h2 id="recursive-types-linked-list"><a class="header" href="#recursive-types-linked-list">Recursive Types (Linked List)</a></h2>
-<h3 id="wax-9"><a class="header" href="#wax-9">Wax</a></h3>
+<h3 id="wax-10"><a class="header" href="#wax-10">Wax</a></h3>
 <pre><code class="language-wax">type list = { value: i32, next: &amp;?list };
 
 #[export = "make_node"]
@@ -1110,7 +1191,7 @@ fn sum_list(head: &amp;?list) -&gt; i32 {
 }
 </code></pre>
 <h2 id="imports-and-exports"><a class="header" href="#imports-and-exports">Imports and Exports</a></h2>
-<h3 id="wax-10"><a class="header" href="#wax-10">Wax</a></h3>
+<h3 id="wax-11"><a class="header" href="#wax-11">Wax</a></h3>
 <pre><code class="language-wax">// Import a function from the host environment
 #[import = ("env", "log")]
 fn log(value: i32);
@@ -1130,7 +1211,7 @@ fn compute_and_log(x: i32) -&gt; i32 {
 </code></pre>
 <h2 id="hash-function"><a class="header" href="#hash-function">Hash Function</a></h2>
 <p>A more complex example showing bitwise operations:</p>
-<h3 id="wax-11"><a class="header" href="#wax-11">Wax</a></h3>
+<h3 id="wax-12"><a class="header" href="#wax-12">Wax</a></h3>
 <pre><code class="language-wax">#[export = "hash_mix_int"]
 fn hash_mix_int(h: i32, d: i32) -&gt; i32 {
     ((d * 0xcc9e2d51).rotl(15) * 0x1b873593 ^ h).rotl(13) * 5 + 0xe6546b64;
@@ -1149,7 +1230,7 @@ fn hash_finalize(h: i32) -&gt; i32 {
 <p>Holes (<code>_</code>) plug in values that earlier statements leave on the operand stack.
 The two holes in <code>_ + _</code> consume <code>x * 2</code> and <code>y * 3</code>, left-to-right in the order
 they were produced. See <a href="#holes">Holes</a> for the full rules.</p>
-<h3 id="wax-12"><a class="header" href="#wax-12">Wax</a></h3>
+<h3 id="wax-13"><a class="header" href="#wax-13">Wax</a></h3>
 <pre><code class="language-wax">#[export = "blend"]
 fn blend(x: i32, y: i32) -&gt; i32 {
     x * 2;
@@ -1157,7 +1238,7 @@ fn blend(x: i32, y: i32) -&gt; i32 {
     _ + _;
 }
 </code></pre>
-<h3 id="equivalent-wat-4"><a class="header" href="#equivalent-wat-4">Equivalent WAT</a></h3>
+<h3 id="equivalent-wat-5"><a class="header" href="#equivalent-wat-5">Equivalent WAT</a></h3>
 <pre><code class="language-wat">(func $blend (export "blend") (param $x i32) (param $y i32) (result i32)
   local.get $x
   i32.const 2
@@ -1171,7 +1252,7 @@ fn blend(x: i32, y: i32) -&gt; i32 {
 <p>A function may return several values, and a <code>let</code> can bind them all at once
 from a parenthesised list of names. The call runs once and its results are
 stored into the locals. See <a href="#local-variables">Local Variables</a>.</p>
-<h3 id="wax-13"><a class="header" href="#wax-13">Wax</a></h3>
+<h3 id="wax-14"><a class="header" href="#wax-14">Wax</a></h3>
 <pre><code class="language-wax">fn divmod(a: i32, b: i32) -&gt; (i32, i32) {
     a /s b;
     a %s b;
@@ -1183,7 +1264,7 @@ fn checksum(a: i32, b: i32) -&gt; i32 {
     q + r;
 }
 </code></pre>
-<h3 id="equivalent-wat-5"><a class="header" href="#equivalent-wat-5">Equivalent WAT</a></h3>
+<h3 id="equivalent-wat-6"><a class="header" href="#equivalent-wat-6">Equivalent WAT</a></h3>
 <pre><code class="language-wat">(func $divmod (param $a i32) (param $b i32) (result i32 i32)
   local.get $a
   local.get $b
@@ -1432,6 +1513,8 @@ type sub_point : open_point = { x: i32, y: i32 }; // extends open_point
 <tbody>
 <tr><td><code>block</code></td><td><code>do { ... }</code> or <code>{ ... }</code></td></tr>
 <tr><td><code>loop</code></td><td><code>loop { ... }</code></td></tr>
+<tr><td><code>loop</code> + leading back-<code>br</code> idiom</td><td><code>while cond { ... }</code></td></tr>
+<tr><td><code>loop</code> + trailing back-<code>br_if</code> idiom</td><td><code>do { ... } while cond;</code></td></tr>
 <tr><td><code>if ... else ...</code></td><td><code>if cond { ... } else { ... }</code></td></tr>
 <tr><td><code>br $l</code></td><td><code>br 'l</code></td></tr>
 <tr><td><code>br_if $l</code></td><td><code>br_if 'l cond</code></td></tr>
