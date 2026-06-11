@@ -190,10 +190,10 @@ fn caml_bytes_get64(v: &eq, i: &eq) -> i64 {
     if p + 7 >=u s.length() {
         caml_bound_error();
     }
-    s[p] as i32_u as i64_u | s[p + 1] as i32_u as i64_u << 8 |
-        (s[p + 2] as i32_u as i64_u << 16 | s[p + 3] as i32_u as i64_u << 24) |
-        (s[p + 4] as i32_u as i64_u << 32 | s[p + 5] as i32_u as i64_u << 40 |
-             (s[p + 6] as i32_u as i64_u << 48 | s[p + 7] as i32_u as i64_u << 56));
+    s[p] as i32_u as i64_u | s[p + 1] as i32_u as i64_u << 8
+        | (s[p + 2] as i32_u as i64_u << 16 | s[p + 3] as i32_u as i64_u << 24)
+        | (s[p + 4] as i32_u as i64_u << 32 | s[p + 5] as i32_u as i64_u << 40
+               | (s[p + 6] as i32_u as i64_u << 48 | s[p + 7] as i32_u as i64_u << 56));
 }
 
 #[export = "caml_bytes_set16"]

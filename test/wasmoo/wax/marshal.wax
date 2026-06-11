@@ -183,8 +183,8 @@ fn read32(s: &intern_state) -> i32 {
     let src = s.src;
     let pos = s.pos;
     let res =
-        src[pos] as i32_u << 24 | src[pos + 1] as i32_u << 16 |
-            (src[pos + 2] as i32_u << 8 | src[pos + 3] as i32_u);
+        src[pos] as i32_u << 24 | src[pos + 1] as i32_u << 16
+            | (src[pos + 2] as i32_u << 8 | src[pos + 3] as i32_u);
     s.pos = pos + 4;
     res;
 }

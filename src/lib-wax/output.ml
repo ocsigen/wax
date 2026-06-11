@@ -841,9 +841,12 @@ let rec instr prec pp (i : _ instr) =
       let _, left, right = prec_op op in
       box pp ~indent:indent_level (fun () ->
           instr left pp i;
+          (* Break *before* the operator (rustfmt style: a wrapped operator
+             leads its continuation line), so only the space ahead of it may
+             break; the space after it is a plain, non-breaking blank. *)
           space pp ();
           operator pp (binop op);
-          space pp ();
+          Utils.Printer.string pp.base.printer " ";
           instr right pp i')
   | UnOp (op, i) ->
       operator pp (unop op);

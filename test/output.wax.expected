@@ -201,8 +201,8 @@ fn bigarray_hash(x: &eq) -> i32 {
                                         h =
                                             caml_hash_mix_int64(
                                                 h,
-                                                ta_get_i32(data, i) as i64_u |
-                                                    ta_get_i32(data, i + 1) as i64_u << 32
+                                                ta_get_i32(data, i) as i64_u
+                                                    | ta_get_i32(data, i + 1) as i64_u << 32
                                             );
                                         i = i + 2;
                                         br 'loop;
@@ -299,8 +299,8 @@ fn bigarray_hash(x: &eq) -> i32 {
                     h =
                         caml_hash_mix_int(
                             h,
-                            ta_get_i8(data, i) | ta_get_i8(data, i + 1) << 8 |
-                                (ta_get_i8(data, i + 2) << 16 | ta_get_i8(data, i + 3) << 24)
+                            ta_get_i8(data, i) | ta_get_i8(data, i + 1) << 8
+                                | (ta_get_i8(data, i + 2) << 16 | ta_get_i8(data, i + 3) << 24)
                         );
                     i = i + 4;
                     br 'loop;
@@ -393,8 +393,8 @@ fn bigarray_serialize(s: &eq, v: &eq) -> (i32, i32) {
                                             if i <u len {
                                                 caml_serialize_int_8(
                                                     s,
-                                                    ta_get_i32(data, i) as i64_u |
-                                                        ta_get_i32(data, i + 1) as i64_u << 32
+                                                    ta_get_i32(data, i) as i64_u
+                                                        | ta_get_i32(data, i + 1) as i64_u << 32
                                                 );
                                                 i = i + 2;
                                                 br 'loop;
@@ -758,8 +758,8 @@ fn caml_ba_get_at_offset(ba: &bigarray, i: i32) -> &eq {
                                 // int64
                                 i = i << 1;
                                 become caml_copy_int64(
-                                    ta_get_i32(data, i) as i64_u |
-                                        ta_get_i32(data, i + 1) as i64_u << 32
+                                    ta_get_i32(data, i) as i64_u
+                                        | ta_get_i32(data, i + 1) as i64_u << 32
                                 );
                             }
                             // int32

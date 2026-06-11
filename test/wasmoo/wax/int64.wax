@@ -104,8 +104,8 @@ fn Int64_val(x: &eq) -> i64 {
 
 #[export = "caml_int64_bswap"]
 fn caml_int64_bswap(i: i64) -> i64 {
-    (i & 0x000000FF000000FF).rotr(8) | (i & 0x0000FF000000FF00).rotr(24) |
-        ((i & 0x00FF000000FF0000).rotl(24) | (i & 0xFF000000FF000000).rotl(8));
+    (i & 0x000000FF000000FF).rotr(8) | (i & 0x0000FF000000FF00).rotr(24)
+        | ((i & 0x00FF000000FF0000).rotl(24) | (i & 0xFF000000FF000000).rotl(8));
 }
 
 #[export = "caml_int64_compare"]

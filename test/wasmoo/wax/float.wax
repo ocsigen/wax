@@ -58,9 +58,9 @@ fn caml_hexstring_of_float(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
     let exp = (b >>u 52) as i32 & 0x7FF;
     let m = b & (1 << 52) - 1;
     let i =
-        sign |
-            (style != 45 // '-'
-             );
+        sign
+            | (style != 45 // '-'
+               );
     let j: i32;
     let d: i32;
     let txt: &chars;
@@ -204,9 +204,9 @@ fn parse_format(s: &string) -> (i32, i32, i32, i32) {
                 c = s[i] as i32_u;
                 if
                     (c >=u 48 // '0'
-                     ) &
-                        (c <=u 57 // '9'
-                         ) {
+                     )
+                        & (c <=u 57 // '9'
+                           ) {
                     precision = precision * 10 + (c - 48);
                     br 'precision;
                 }
@@ -283,9 +283,9 @@ fn caml_format_float(x: &eq, x_2: &eq) -> &eq {
             let c = s[i] as i32_u;
             if
                 (c >=u 97 // 'a'
-                 ) &
-                    (c <=u 122 // 'z'
-                     ) {
+                 )
+                    & (c <=u 122 // 'z'
+                       ) {
                 s[i] = c - 32;
             }
             i = i + 1;
@@ -318,9 +318,9 @@ fn caml_float_of_hex(s: &string, i: i32) -> f64 {
                 let d: i32;
                 if
                     (c == 80 // 'P'
-                     ) |
-                        (c == 112 // 'p'
-                         ) {
+                     )
+                        | (c == 112 // 'p'
+                           ) {
                     br_if 'error i == len;
                     c = s[i] as i32_u;
                     i = i + 1;
@@ -851,9 +851,9 @@ fn caml_fma_float(vx: &eq, vy: &eq, vz: &eq) -> &eq {
     let x_13: f64;
     let x_14: f64;
     x =
-        (x_11 := x - (x_10 := (x_10 := x * 0x8000001) - (x_10 - x))) *
-            (x_13 := y - (x_12 := (x_12 := y * 0x8000001) - (x_12 - y))) -
-            ((x_14 := y * x) - x_10 * x_12 - x_11 * x_12 - x_10 * x_13);
+        (x_11 := x - (x_10 := (x_10 := x * 0x8000001) - (x_10 - x)))
+            * (x_13 := y - (x_12 := (x_12 := y * 0x8000001) - (x_12 - y)))
+            - ((x_14 := y * x) - x_10 * x_12 - x_11 * x_12 - x_10 * x_13);
     'l_2: do {
         'l_3: do {
             br_if 'l_3 (y := z + x_14) != 0;
@@ -863,12 +863,12 @@ fn caml_fma_float(vx: &eq, vy: &eq, vz: &eq) -> &eq {
             br_if 'cont
                 (z :=
                      (x_10 :=
-                          x -
-                              (x_12 :=
-                                   (z := (x_10 := x_14 - (x_10 := y - z) + (z - (y - x_10))) + x) -
-                                       x_10) + (x_10 - (z - x_12))) +
-                         ((y := z - (x_12 := (x := y + z) - y) + (y - (x - x_12))) -
-                              (y := x_10 + y))) == 0;
+                          x
+                              - (x_12 :=
+                                     (z := (x_10 := x_14 - (x_10 := y - z) + (z - (y - x_10))) + x)
+                                         - x_10) + (x_10 - (z - x_12)))
+                         + ((y := z - (x_12 := (x := y + z) - y) + (y - (x - x_12)))
+                                - (y := x_10 + y))) == 0;
             br_if 'cont (x_3 := y.to_bits()) as i32 & 1;
             y = (((y < 0) ^ (z > 0)?1:-1) + x_3).from_bits();
         }

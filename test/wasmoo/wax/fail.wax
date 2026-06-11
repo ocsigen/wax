@@ -104,7 +104,7 @@ const UNDEFINED_RECURSIVE_MODULE_EXN = 11;
 
 #[export = "caml_is_special_exception"]
 fn caml_is_special_exception(x: &eq) -> i32 {
-    (x == caml_global_data[MATCH_FAILURE_EXN]) |
-        ((x == caml_global_data[ASSERT_FAILURE_EXN]) |
-             (x == caml_global_data[UNDEFINED_RECURSIVE_MODULE_EXN]));
+    (x == caml_global_data[MATCH_FAILURE_EXN])
+        | ((x == caml_global_data[ASSERT_FAILURE_EXN])
+               | (x == caml_global_data[UNDEFINED_RECURSIVE_MODULE_EXN]));
 }

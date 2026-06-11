@@ -103,8 +103,8 @@ fn caml_hash_mix_string(h: i32, s: &string) -> i32 {
             h =
                 caml_hash_mix_int(
                     h,
-                    s[i] as i32_u | s[i + 1] as i32_u << 8 |
-                        (s[i + 2] as i32_u << 16 | s[i + 3] as i32_u << 24)
+                    s[i] as i32_u | s[i + 1] as i32_u << 8
+                        | (s[i + 2] as i32_u << 16 | s[i + 3] as i32_u << 24)
                 );
             i = i + 4;
             br 'loop;

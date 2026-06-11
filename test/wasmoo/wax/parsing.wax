@@ -281,8 +281,8 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                                             if (n1 != 0) & (n2 >=s 0) {
                                                 if n2 <=s tables[tbl_tablesize] as &i31 as i32_s {
                                                     if
-                                                        get(tbl_check_2, n2) as &i31 ==
-                                                            env[env_curr_char] {
+                                                        get(tbl_check_2, n2) as &i31
+                                                            == env[env_curr_char] {
                                                         cmd = shift;
                                                         br 'next;
                                                     }
@@ -293,8 +293,8 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                                             if (n1 != 0) & (n2 >=s 0) {
                                                 if n2 <=s tables[tbl_tablesize] as &i31 as i32_s {
                                                     if
-                                                        get(tbl_check_2, n2) as &i31 ==
-                                                            env[env_curr_char] {
+                                                        get(tbl_check_2, n2) as &i31
+                                                            == env[env_curr_char] {
                                                         n = get(tbl_table_2, n2);
                                                         cmd = reduce;
                                                         br 'next;
