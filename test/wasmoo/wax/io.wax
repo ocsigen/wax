@@ -268,7 +268,7 @@ fn caml_ml_close_channel(x: &eq) -> &eq {
                 // ignore exception
                 _ = _;
             }
-            }
+        }
     }
     0 as &i31;
 }

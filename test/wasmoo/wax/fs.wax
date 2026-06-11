@@ -84,7 +84,7 @@ fn caml_sys_read_directory(name: &eq) -> &eq {
             caml_handle_sys_error(_);
             return 0 as &i31;
         }
-        }
+    }
 }
 
 #[export = "caml_sys_remove"]
@@ -143,5 +143,5 @@ fn caml_sys_is_directory(name: &eq) -> &eq {
             caml_handle_sys_error(_);
             return 0 as &i31;
         }
-        }
+    }
 }

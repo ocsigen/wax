@@ -253,13 +253,13 @@ fn caml_start_fiber(p: &?eq) {
                 javascript_exception => {
                     throw ocaml_exception caml_wrap_exception(_);
                 }
-                }
+            }
         } catch {
             ocaml_exception => {
                 exn = _;
                 become call_handler(stack.handlers.exn, exn);
             }
-            };
+        };
     become call_handler(stack.handlers.value, res);
 }
 
@@ -446,7 +446,7 @@ fn caml_trampoline(f: &eq, vargs: &eq) -> &eq {
         } catch {
             ocaml_exception => { _; }
             javascript_exception => { caml_wrap_exception(_); }
-            };
+        };
     'loop: loop {
         'empty: do {
             let top = br_on_null 'empty exn_stack;
@@ -463,7 +463,7 @@ fn caml_trampoline(f: &eq, vargs: &eq) -> &eq {
                     exn = caml_wrap_exception(_);
                     br 'loop;
                 }
-                }
+            }
         }
     }
     exn_stack = saved_exn_stack;

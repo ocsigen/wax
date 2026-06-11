@@ -120,9 +120,7 @@ fn parse_int(v: &eq, nbits: i32, errmsg: &string) -> i32 {
     res;
 }
 
-const INT_ERRMSG = string#"int_of_string" // "int.of_string"
-    ;
-
+const INT_ERRMSG = string#"int_of_string"; // "int.of_string"
 #[export = "caml_int_of_string"]
 fn caml_int_of_string(v: &eq) -> &eq { parse_int(v, 31, INT_ERRMSG) as &i31; }
 

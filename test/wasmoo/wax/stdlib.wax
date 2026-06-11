@@ -193,5 +193,5 @@ fn caml_main(start: &func) {
             } // `\n`
             exit(2);
         }
-        }
+    }
 }

@@ -97,7 +97,7 @@ fn caml_sys_system_command(x: &eq) -> &eq {
             caml_handle_sys_error(_);
             return 0 as &i31;
         }
-        }
+    }
 }
 
 #[export = "caml_sys_random_seed"]

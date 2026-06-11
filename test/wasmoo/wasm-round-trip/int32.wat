@@ -122,9 +122,8 @@
 )
 
 (global $INT32_ERRMSG (ref $string)
-  (@string $string "Int32.of_string" ) ;; "Int32.of_string"
-)
-
+  (@string $string "Int32.of_string" )
+) ;; "Int32.of_string"
 (func $caml_int32_of_string (export "caml_int32_of_string")
   (param $v (ref eq)) (result (ref eq))
   (return_call $caml_copy_int32
@@ -176,9 +175,8 @@
 )
 
 (global $NATIVEINT_ERRMSG (ref $string)
-  (@string $string "Native.of_string" ) ;; "Nativeint.of_string"
-)
-
+  (@string $string "Native.of_string" )
+) ;; "Nativeint.of_string"
 (func $caml_nativeint_of_string (export "caml_nativeint_of_string")
   (param $v (ref eq)) (result (ref eq))
   (return_call $caml_copy_nativeint

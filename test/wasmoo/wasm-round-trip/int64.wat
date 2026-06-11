@@ -139,9 +139,8 @@
 )
 
 (global $INT64_ERRMSG (ref $string)
-  (@string $string "Int64.of_string" ) ;; "Int64.of_string"
-)
-
+  (@string $string "Int64.of_string" )
+) ;; "Int64.of_string"
 ;; Parse a sequence of digits into an i64 as dicted by $base,
 ;; $signedness and $sign. The sequence is read in $s starting from $i.
 ;; In case of failure raise [Failure $errmsg].

@@ -535,9 +535,7 @@ fn caml_list_of_js_array(x: &eq) -> &eq {
     l;
 }
 
-const jsError = string#"jsError" // 'jsError'
-    ;
-
+const jsError = string#"jsError"; // 'jsError'
 data toString = "toString";
 
 #[export = "caml_wrap_exception"]

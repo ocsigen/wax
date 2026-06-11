@@ -101,9 +101,7 @@ fn caml_int32_bswap(i: i32) -> i32 {
     (i & 0x00FF00FF).rotr(8) | (i & 0xFF00FF00).rotl(8);
 }
 
-const INT32_ERRMSG = string#"Int32.of_string" // "Int32.of_string"
-    ;
-
+const INT32_ERRMSG = string#"Int32.of_string"; // "Int32.of_string"
 #[export = "caml_int32_of_string"]
 fn caml_int32_of_string(v: &eq) -> &eq {
     become caml_copy_int32(parse_int(v, 32, INT32_ERRMSG));
@@ -148,9 +146,7 @@ fn nativeint_deserialize(s: &eq) -> (&eq, i32) {
 #[export = "caml_copy_nativeint"]
 fn caml_copy_nativeint(i: i32) -> &eq { {int32| f: nativeint_ops, f_2: i }; }
 
-const NATIVEINT_ERRMSG = string#"Native.of_string" // "Nativeint.of_string"
-    ;
-
+const NATIVEINT_ERRMSG = string#"Native.of_string"; // "Nativeint.of_string"
 #[export = "caml_nativeint_of_string"]
 fn caml_nativeint_of_string(v: &eq) -> &eq {
     become caml_copy_nativeint(parse_int(v, 32, NATIVEINT_ERRMSG));

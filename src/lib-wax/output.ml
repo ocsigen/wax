@@ -45,6 +45,13 @@ let newline pp () = Utils.Printer.newline pp.base.printer ()
 let punctuation pp s = print_styled pp Punctuation s
 let operator pp s = print_styled pp Operator s
 
+(* A declaration terminator [;], held past a deferred trailing comment so it
+   sits before the comment ([const x = v; // c]) rather than dangling on its own
+   line after it — as the block-statement [;] and list [,] separators already
+   do. *)
+let semicolon pp =
+  Utils.Printer.with_held_eol pp.base.printer (fun () -> punctuation pp ";")
+
 let identifier pp s =
   print_styled pp Identifier ~len:(Some (Utils.Unicode.terminal_width s)) s
 
@@ -640,8 +647,11 @@ let rec instr prec pp (i : _ instr) =
                               punctuation pp "{");
                           block_contents pp block;
                           punctuation pp "}"))
-                    catch_all;
-                  space pp ());
+                    catch_all);
+              (* The break before the closing [}] must sit outside the [indent]
+                 above so it lands at the catch block's own column, not the
+                 handlers' deeper indent. *)
+              space pp ();
               punctuation pp "}"))
   | TryTable { label; typ = bt; block = l; catches } ->
       hvbox pp (fun () ->
@@ -1149,17 +1159,17 @@ let rec modulefield pp field =
               punctuation pp "=";
               space pp ();
               instr Instruction pp def;
-              punctuation pp ";"))
+              semicolon pp))
   | Fundecl { name; typ; sign; attributes = a } ->
       print_attr_prefix pp a (fun () ->
           box pp (fun () ->
               fundecl ~tag:false pp (name, typ, sign);
-              punctuation pp ";"))
+              semicolon pp))
   | Tag { name; typ; sign; attributes = a } ->
       print_attr_prefix pp a (fun () ->
           box pp (fun () ->
               fundecl ~tag:true pp (name, typ, sign);
-              punctuation pp ";"))
+              semicolon pp))
   | GlobalDecl { name; mut; typ; attributes = a } ->
       print_attr_prefix pp a (fun () ->
           box pp ~indent:indent_level (fun () ->
@@ -1169,7 +1179,7 @@ let rec modulefield pp field =
               punctuation pp ":";
               space pp ();
               valtype pp typ;
-              punctuation pp ";"))
+              semicolon pp))
   | Memory { name; address_type; limits; data; attributes = a } ->
       print_attr_prefix pp a (fun () ->
           hvbox pp (fun () ->
@@ -1195,7 +1205,7 @@ let rec modulefield pp field =
                       punctuation pp "]")
                     limits);
               match data with
-              | [] -> punctuation pp ";"
+              | [] -> semicolon pp
               | _ ->
                   space pp ();
                   punctuation pp "{";
@@ -1228,7 +1238,7 @@ let rec modulefield pp field =
               punctuation pp "=";
               space pp ();
               print_data_bytes pp init;
-              punctuation pp ";"))
+              semicolon pp))
   | Table { name; address_type; reftype = rt; limits; init; attributes = a } ->
       print_attr_prefix pp a (fun () ->
           box pp (fun () ->
@@ -1263,7 +1273,7 @@ let rec modulefield pp field =
                   space pp ();
                   instr Instruction pp e)
                 init;
-              punctuation pp ";"))
+              semicolon pp))
   | Elem { name; reftype = rt; mode; init; attributes = a } ->
       print_attr_prefix pp a (fun () ->
           box pp (fun () ->
@@ -1291,7 +1301,7 @@ let rec modulefield pp field =
               box pp (fun () ->
                   list_commasep (fun pp i -> instr Instruction pp i) pp init);
               punctuation pp "]";
-              punctuation pp ";"))
+              semicolon pp))
   | Group { attributes; fields } ->
       print_attr_prefix pp attributes (fun () ->
           hvbox pp (fun () ->
