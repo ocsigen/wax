@@ -307,9 +307,7 @@ fn intern_custom(s: &intern_state, code: i32) -> &eq {
                     s.pos = s.pos + 8;
                 }
             }
-            ops.deserialize(s);
-            let sz = _;
-            let res = _;
+            let (res, sz) = ops.deserialize(s);
             if (sz != expected_size) & (code != CODE_CUSTOM) {
                 caml_failwith([string|incorrect_size @ 0; 56]);
             }
@@ -992,10 +990,7 @@ fn caml_output_value_to_string(v: &eq, flags: &eq) -> &eq {
             end: SIZE_EXTERN_OUTPUT_BLOCK,
             data: [string|0; SIZE_EXTERN_OUTPUT_BLOCK],
         };
-    extern_value(flags, blk, 0, 0, v);
-    let st = _;
-    let buf = _;
-    let sz = _;
+    let (sz, buf, st) = extern_value(flags, blk, 0, 0, v);
     let res = [string|0; sz + 20];
     res.copy(0, buf, 0, 20);
     let pos = 20;
@@ -1037,10 +1032,7 @@ fn caml_output_value(ch: &eq, v: &eq, flags: &eq) -> &eq {
             end: SIZE_EXTERN_OUTPUT_BLOCK,
             data: [string|0; SIZE_EXTERN_OUTPUT_BLOCK],
         };
-    extern_value(flags, blk, 0, 0, v);
-    let st = _;
-    let buf = _;
-    let sz = _;
+    let (sz, buf, st) = extern_value(flags, blk, 0, 0, v);
     caml_really_putblock(ch, buf, 0, 20);
     'loop: loop {
         'done: do {

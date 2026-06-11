@@ -1062,10 +1062,12 @@ let rec instruction ret ctx i : location Text.instr list =
   | Let (decls, Some body) ->
       (* Multi-value initializer: evaluate it once, leaving one value per name
          on the stack, then store each into its local. The last value is on top,
-         so the stores run in reverse declaration order. *)
+         so the stores run in reverse declaration order. Allocate the locals in
+         that same order, so a tuple [let] recovered from Wasm reproduces the
+         original local declaration order on the way back. *)
       let code = instruction ret ctx body in
       let result_types = fst body.info in
-      let store idx (id, ty) =
+      let store (idx, (id, ty)) =
         match id with
         | Some name ->
             let ty =
@@ -1083,7 +1085,9 @@ let rec instruction ret ctx i : location Text.instr list =
               []
         | None -> folded loc Text.Drop []
       in
-      code @ List.concat (List.rev (List.mapi store decls))
+      code
+      @ List.concat_map store
+          (List.rev (List.mapi (fun idx decl -> (idx, decl)) decls))
   | Br (l, None) ->
       (*ZZZ label should be located*)
       folded loc (Br (label ret l)) []

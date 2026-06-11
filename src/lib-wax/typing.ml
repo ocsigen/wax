@@ -1372,6 +1372,41 @@ let bind_let_value ctx ~location result_ty (name, typ) =
         name;
       (name, None)
 
+(* When converting from Wasm, an expression producing several values (typically
+   a call) is emitted as a bare statement, and the values it leaves on the stack
+   are peeled off by a following run of [let x = _] declarations (and [_ = _]
+   drops for results that are discarded). [merge_let_tuple] folds that run back
+   into a single multi-binding [let (..) = expr] — the exact inverse of how such
+   a [let] lowers, so the rewrite preserves semantics.
+
+   The run consumed is exactly [head]'s result arity, read from the typed info,
+   so we never absorb a [let x = _] that draws from a value sitting below
+   [head]. Each bound name takes one value left to right, whereas the lowering
+   stores the topmost value first, so the bindings are the run in reverse. Only
+   done while simplifying, i.e. on the Wasm-to-Wax path. *)
+let merge_let_tuple ctx head rest =
+  let is_hole i = match i.desc with Hole -> true | _ -> false in
+  let arity = Array.length (fst head.info) in
+  let rec take n acc l =
+    if n = 0 then Some (List.rev acc, l)
+    else
+      match l with
+      | { desc = Let ([ ((Some _, _) as b) ], Some v); _ } :: r when is_hole v
+        ->
+          take (n - 1) (b :: acc) r
+      | { desc = Set (None, v); _ } :: r when is_hole v ->
+          take (n - 1) ((None, None) :: acc) r
+      | _ -> None
+  in
+  if (not ctx.simplify) || arity < 2 then head :: rest
+  else
+    match take arity [] rest with
+    | Some (bindings, rest')
+      when List.exists (fun (name, _) -> Option.is_some name) bindings ->
+        let info = ([||], snd head.info) in
+        { desc = Let (List.rev bindings, Some head); info } :: rest'
+    | _ -> head :: rest
+
 (* Check a list of typed operands against an array of expected types. *)
 let check_operands ctx l expected =
   if Array.length expected = List.length l then
@@ -4171,7 +4206,7 @@ and block_contents ctx l =
           (Array.to_list (Array.map (fun ty -> (i.info, ty)) (fst i'.info)))
       in
       let* r' = block_contents ctx r in
-      return (i' :: r')
+      return (merge_let_tuple ctx i' r')
 
 and block ctx loc label params results br_params block =
   with_empty_stack ctx ~location:loc ~kind:Block

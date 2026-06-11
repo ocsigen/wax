@@ -220,11 +220,7 @@ const inf_2 = chars#"inf";
 fn caml_format_float(x: &eq, x_2: &eq) -> &eq {
     let f = (x_2 as &float).f;
     let b = f.to_bits();
-    parse_format(x as &string);
-    let uppercase = _;
-    let conversion = _;
-    let precision = _;
-    let sign_style = _;
+    let (sign_style, precision, conversion, uppercase) = parse_format(x as &string);
     let negative = (b >>u 63) as i32;
     let i = negative | (sign_style != 0);
     let exp: i32;
@@ -672,9 +668,7 @@ fn frexp(x: f64) -> (f64, i32) {
 
 #[export = "caml_frexp_float"]
 fn caml_frexp_float(x: &eq) -> &eq {
-    frexp((x as &float).f);
-    let e = _;
-    let m = _;
+    let (m, e) = frexp((x as &float).f);
     [block|0 as &i31, {float| f: m }, e as &i31];
 }
 

@@ -100,11 +100,7 @@ fn parse_int(v: &eq, nbits: i32, errmsg: &string) -> i32 {
     if !len {
         caml_failwith(errmsg);
     }
-    parse_sign_and_base(s);
-    let base = _;
-    let sign = _;
-    let signedness = _;
-    let i = _;
+    let (i, signedness, sign, base) = parse_sign_and_base(s);
     let threshold = -1 /u base;
     if i >=s len {
         caml_failwith(errmsg);
@@ -293,12 +289,7 @@ fn format_int(x: &eq, d: i32, small: i32) -> &eq {
             become format_int_default(d);
         }
     }
-    parse_int_format(s);
-    let uppercase = _;
-    let base = _;
-    let signed = _;
-    let alternate = _;
-    let sign_style = _;
+    let (sign_style, alternate, signed, base, uppercase) = parse_int_format(s);
     let negative: i32;
     if d <s 0 {
         if signed {

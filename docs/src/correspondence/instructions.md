@@ -84,6 +84,21 @@ Binary and unary operations use standard mathematical operators. Signedness is o
 | `global.set $g` | `g = val` |
 | `(local $x t)` | `let x : t` |
 
+When an expression leaves several values on the stack (typically a call to a
+[multi-result function](../language.md#variables)) and a run of `local.set`
+instructions immediately stores them into locals, the two collapse into a single
+multi-binding `let`. A `drop` of one of the results becomes a `_` binding:
+
+```
+(call $divmod ...)      let (q, r) = divmod(...);
+(local.set $r)
+(local.set $q)
+```
+
+The number of stores folded is exactly the producer's result arity, so a
+`local.set` that consumes a value already on the stack below the call is left as
+its own assignment.
+
 ## Control Instructions
 
 | Wasm | Wax |

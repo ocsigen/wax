@@ -1,8 +1,10 @@
 A `let` may bind several names at once from a multi-value initializer, written
 as a parenthesised list. Each name takes the corresponding value; the
 initializer is evaluated once and its results are stored into the locals in
-reverse order (the last value is on top of the stack). Names may be annotated,
-inferred, or discarded with `_`.
+reverse order (the last value is on top of the stack); the locals are declared
+in that same order, so a tuple `let` recovered from Wasm round-trips back to the
+original local declaration order. Names may be annotated, inferred, or discarded
+with `_`.
 
   $ wax --validate multi.wax -f wat
   (func $divmod (param $a i32) (param $b i32) (result i32 i32)
@@ -11,7 +13,7 @@ inferred, or discarded with `_`.
   )
   
   (func $inferred (result i32)
-    (local $q i32) (local $r i32)
+    (local $r i32) (local $q i32)
     (call $divmod (i32.const 17) (i32.const 5))
     (local.set $r)
     (local.set $q)
@@ -19,7 +21,7 @@ inferred, or discarded with `_`.
   )
   
   (func $annotated (result i32)
-    (local $q i32) (local $r i32)
+    (local $r i32) (local $q i32)
     (call $divmod (i32.const 17) (i32.const 5))
     (local.set $r)
     (local.set $q)

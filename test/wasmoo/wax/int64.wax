@@ -177,11 +177,7 @@ fn caml_i64_of_digits(
 #[export = "caml_int64_of_string"]
 fn caml_int64_of_string(v: &eq) -> &eq {
     let s = v as &string;
-    parse_sign_and_base(s);
-    let base = _;
-    let sign = _;
-    let signedness = _;
-    let i = _;
+    let (i, signedness, sign, base) = parse_sign_and_base(s);
     become caml_copy_int64(caml_i64_of_digits(base, signedness, sign, s, i, INT64_ERRMSG));
 }
 
