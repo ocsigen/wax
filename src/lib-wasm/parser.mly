@@ -166,7 +166,6 @@ ZZZ
 %token <string> MEM_ALIGN
 %token <string> MEM_OFFSET
 (* Binaryen extensions *)
-%token POP
 %token STRING_ANNOT CHAR_ANNOT
 %token IF_ANNOT THEN_ANNOT ELSE_ANNOT
 %token AND OR NOT
@@ -568,7 +567,6 @@ plain_instruction:
 | CALL_REF i = index { with_loc $sloc (CallRef i) }
 | RETURN_CALL i = index { with_loc $sloc (ReturnCall i) }
 | RETURN_CALL_REF i = index { with_loc $sloc (ReturnCallRef i) }
-| POP t = value_type { with_loc $sloc (Pop t) }
 | LOCAL_GET i = index { with_loc $sloc (LocalGet i) }
 | LOCAL_SET i = index { with_loc $sloc (LocalSet i) }
 | LOCAL_TEE i = index { with_loc $sloc (LocalTee i) }

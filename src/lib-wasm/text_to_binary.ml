@@ -394,7 +394,6 @@ let rec instr ~resolve_string_type ~resolve_func_type ctx (i : 'info T.instr) =
     | F64PromoteF32 -> F64PromoteF32
     | ExternConvertAny -> ExternConvertAny
     | AnyConvertExtern -> AnyConvertExtern
-    | Pop i -> Pop (valtype ctx i)
     | VecLoad (o, op, m) -> VecLoad (resolve_idx ctx.memories o, op, m)
     | VecStore (o, m) -> VecStore (resolve_idx ctx.memories o, m)
     | VecLoadLane (o, op, m, lane) ->

@@ -62,8 +62,7 @@
     (do
       (call $chdir
         (call $unwrap (call $caml_jsstring_of_string (local.get $name)))))
-    (catch $javascript_exception
-      (call $caml_handle_sys_error (pop externref))))
+    (catch $javascript_exception (call $caml_handle_sys_error)))
   (ref.i31 (i32.const 0))
 )
 
@@ -74,8 +73,7 @@
       (call $mkdir
         (call $unwrap (call $caml_jsstring_of_string (local.get $name)))
         (i31.get_u (ref.cast (ref i31) (local.get $perm)))))
-    (catch $javascript_exception
-      (call $caml_handle_sys_error (pop externref))))
+    (catch $javascript_exception (call $caml_handle_sys_error)))
   (ref.i31 (i32.const 0))
 )
 
@@ -89,7 +87,7 @@
             (call $unwrap
               (call $caml_jsstring_of_string (local.get $name)))))))
     (catch $javascript_exception
-      (call $caml_handle_sys_error (pop externref))
+      (call $caml_handle_sys_error)
       (return (ref.i31 (i32.const 0)))))
 )
 
@@ -98,8 +96,7 @@
     (do
       (call $unlink
         (call $unwrap (call $caml_jsstring_of_string (local.get $name)))))
-    (catch $javascript_exception
-      (call $caml_handle_sys_error (pop externref))))
+    (catch $javascript_exception (call $caml_handle_sys_error)))
   (ref.i31 (i32.const 0))
 )
 
@@ -110,8 +107,7 @@
       (call $rename
         (call $unwrap (call $caml_jsstring_of_string (local.get $o)))
         (call $unwrap (call $caml_jsstring_of_string (local.get $n)))))
-    (catch $javascript_exception
-      (call $caml_handle_sys_error (pop externref))))
+    (catch $javascript_exception (call $caml_handle_sys_error)))
   (ref.i31 (i32.const 0))
 )
 
@@ -155,6 +151,6 @@
         (call $is_directory
           (call $unwrap (call $caml_jsstring_of_string (local.get $name))))))
     (catch $javascript_exception
-      (call $caml_handle_sys_error (pop externref))
+      (call $caml_handle_sys_error)
       (return (ref.i31 (i32.const 0)))))
 )

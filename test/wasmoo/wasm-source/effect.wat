@@ -330,9 +330,9 @@
                      (call $apply_pair (ref.cast (ref $pair) (local.get $p))))
                   (catch $javascript_exception
                      (throw $ocaml_exception
-                        (call $caml_wrap_exception (pop externref))))))
+                        (call $caml_wrap_exception)))))
             (catch $ocaml_exception
-               (local.set $exn (pop (ref eq)))
+               (local.set $exn)
                (return_call $call_handler
                   (struct.get $handlers $exn
                      (struct.get $fiber $handlers (global.get $stack)))
@@ -569,10 +569,9 @@
                (global.set $exn_stack (local.get $saved_exn_stack))
                (global.set $cps_fiber_stack (local.get $saved_fiber_stack))
                (return (local.get $res)))
-            (catch $ocaml_exception
-               (pop (ref eq)))
+            (catch $ocaml_exception)
             (catch $javascript_exception
-               (call $caml_wrap_exception (pop externref)))))
+               (call $caml_wrap_exception))))
       (loop $loop
          (block $empty
             (local.set $top
@@ -592,10 +591,10 @@
                   (global.set $cps_fiber_stack (local.get $saved_fiber_stack))
                   (return (local.get $res)))
                (catch $ocaml_exception
-                  (local.set $exn (pop (ref eq)))
+                  (local.set $exn)
                   (br $loop))
                (catch $javascript_exception
-                  (local.set $exn (call $caml_wrap_exception (pop externref)))
+                  (local.set $exn (call $caml_wrap_exception))
                   (br $loop)))))
       (global.set $exn_stack (local.get $saved_exn_stack))
       (global.set $cps_fiber_stack (local.get $saved_fiber_stack))

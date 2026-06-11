@@ -363,7 +363,6 @@ let rec instr (names : B.names) local_names label_names label_counter stack
     | VecSplat op -> VecSplat op
     | VecShuffle v -> VecShuffle v
     | VecTernOp op -> VecTernOp op
-    | Pop v -> Pop (valtype names.types v)
     | String _ | Char _ | If_annotation _ -> (*ZZZZ *) assert false
   in
   { desc; info = i.info }

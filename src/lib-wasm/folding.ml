@@ -451,8 +451,6 @@ let arity env i =
   | VecSplat _ -> (1, 1)
   | VecShuffle _ -> (2, 1)
   | Folded _ -> assert false
-  (* Binaryen extensions *)
-  | Pop _ -> (0, 1)
   | VecTernOp _ -> (3, 1)
   | String _ | Char _ -> (0, 1)
   (* A conditional annotation is treated as a statement boundary: its branches

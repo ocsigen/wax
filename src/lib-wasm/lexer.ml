@@ -336,7 +336,6 @@ let rec token_rec ctx lexbuf =
   | "return_call_ref" -> RETURN_CALL_REF
   | "return_call_indirect" -> RETURN_CALL_INDIRECT
   | "drop" -> INSTR Drop
-  | "pop" -> POP
   | "select" -> SELECT
   | "local.get" -> LOCAL_GET
   | "local.set" -> LOCAL_SET

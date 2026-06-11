@@ -736,7 +736,6 @@ module Encoder = struct
     | I31Get Unsigned ->
         byte b 0xFB;
         byte b 0x1E
-    | Pop _ -> ()
     | VecLoad (idx, op, m) ->
         byte b 0xFD;
         uint b

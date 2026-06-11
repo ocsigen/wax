@@ -205,9 +205,9 @@
          (do
             (drop (call_ref $func (ref.cast (ref $func) (local.get $start)))))
          (catch $ocaml_exit
-            (call $exit (pop i32)))
+            (call $exit))
          (catch $ocaml_exception
-            (local.set $exn (pop (ref eq)))
+            (local.set $exn)
             (block $exit
                (block $not_registered
                   (drop

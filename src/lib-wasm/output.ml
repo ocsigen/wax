@@ -845,7 +845,6 @@ let rec instr i =
   | Select t ->
       block ~loc
         (instruction "select" :: option (fun t -> valtype_list "result" t) t)
-  | Pop ty -> block ~loc [ instruction "pop"; valtype ty ]
   | RefFunc i -> block ~loc [ instruction "ref.func"; index i ]
   | RefIsNull -> block ~loc [ instruction "ref.is_null" ]
   | RefAsNonNull -> block ~loc [ instruction "ref.as_non_null" ]

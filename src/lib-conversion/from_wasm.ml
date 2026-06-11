@@ -1031,9 +1031,6 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
               }))
   | Unreachable -> Stack.push_poly (with_loc Unreachable)
   | Nop -> Stack.push 0 (with_loc Nop)
-  | Pop _ ->
-      let* () = Stack.consume 1 in
-      Stack.push 1 (with_loc Hole)
   | Drop ->
       let* e = Stack.pop in
       Stack.push 0 (with_loc (Set (None, e)))

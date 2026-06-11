@@ -56,7 +56,7 @@
             (call $chdir
                (call $unwrap (call $caml_jsstring_of_string (local.get $name)))))
          (catch $javascript_exception
-            (call $caml_handle_sys_error (pop externref))))
+            (call $caml_handle_sys_error)))
       (ref.i31 (i32.const 0)))
 
    (func (export "caml_sys_mkdir")
@@ -67,7 +67,7 @@
                (call $unwrap (call $caml_jsstring_of_string (local.get $name)))
                (i31.get_u (ref.cast (ref i31) (local.get $perm)))))
          (catch $javascript_exception
-            (call $caml_handle_sys_error (pop externref))))
+            (call $caml_handle_sys_error)))
       (ref.i31 (i32.const 0)))
 
    (func (export "caml_sys_read_directory")
@@ -80,7 +80,7 @@
                      (call $unwrap
                         (call $caml_jsstring_of_string (local.get $name)))))))
          (catch $javascript_exception
-            (call $caml_handle_sys_error (pop externref))
+            (call $caml_handle_sys_error)
             (return (ref.i31 (i32.const 0))))))
 
    (func (export "caml_sys_remove")
@@ -90,7 +90,7 @@
             (call $unlink
                (call $unwrap (call $caml_jsstring_of_string (local.get $name)))))
          (catch $javascript_exception
-            (call $caml_handle_sys_error (pop externref))))
+            (call $caml_handle_sys_error)))
       (ref.i31 (i32.const 0)))
 
    (func (export "caml_sys_rename")
@@ -101,7 +101,7 @@
                (call $unwrap (call $caml_jsstring_of_string (local.get $o)))
                (call $unwrap (call $caml_jsstring_of_string (local.get $n)))))
          (catch $javascript_exception
-            (call $caml_handle_sys_error (pop externref))))
+            (call $caml_handle_sys_error)))
       (ref.i31 (i32.const 0)))
 
    (func (export "caml_sys_file_exists")
@@ -148,6 +148,6 @@
                   (call $unwrap
                      (call $caml_jsstring_of_string (local.get $name))))))
          (catch $javascript_exception
-            (call $caml_handle_sys_error (pop externref))
+            (call $caml_handle_sys_error)
             (return (ref.i31 (i32.const 0))))))
 )

@@ -445,9 +445,7 @@ fn caml_trampoline(f: &eq, vargs: &eq) -> &eq {
             cps_fiber_stack = saved_fiber_stack;
             return res;
         } catch {
-            ocaml_exception => {
-                _;
-            }
+            ocaml_exception => {}
             javascript_exception => {
                 caml_wrap_exception(_);
             }

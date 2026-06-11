@@ -578,8 +578,6 @@ struct
     | ExternConvertAny
     | AnyConvertExtern
     | Folded of 'info instr * 'info instr list
-    (* Binaryen extensions *)
-    | Pop of X.valtype
     (* Our extensions *)
     | String of X.idx option * (string, location) annotated list
     | Char of Uchar.t
