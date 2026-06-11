@@ -382,154 +382,125 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                                                                 {
                                                                     'BLOCK32:
                                                                     do {
-                                                                        'STRING8:
-                                                                        do {
-                                                                            'STRING32:
-                                                                            do
-                                                                            {
-                                                                                'DOUBLE:
-                                                                                do
-                                                                                {
-                                                                                    'DOUBLE_ARRAY8:
-                                                                                    do
-                                                                                    {
-                                                                                        'DOUBLE_ARRAY32:
-                                                                                        do
-                                                                                        {
-                                                                                            'CODEPOINTER:
-                                                                                            do
-                                                                                            {
-                                                                                                'CUSTOM:
-                                                                                                do
-                                                                                                {
-                                                                                                    'default:
-                                                                                                    do
-                                                                                                    {
-                                                                                                        br_table
-                                                                                                            [
-                                                                                                                'INT8
-                                                                                                                'INT16
-                                                                                                                'INT32
-                                                                                                                'INT64
-                                                                                                                'SHARED8
-                                                                                                                'SHARED16
-                                                                                                                'SHARED32
-                                                                                                                'DOUBLE_ARRAY32
-                                                                                                                'BLOCK32
-                                                                                                                'STRING8
-                                                                                                                'STRING32
-                                                                                                                'DOUBLE
-                                                                                                                'DOUBLE
-                                                                                                                'DOUBLE_ARRAY8
-                                                                                                                'DOUBLE_ARRAY8
-                                                                                                                'DOUBLE_ARRAY32
-                                                                                                                'CODEPOINTER
-                                                                                                                'CODEPOINTER
-                                                                                                                'CUSTOM
-                                                                                                                'default
-                                                                                                                'default
-                                                                                                                'default
-                                                                                                                'default
-                                                                                                                'default
-                                                                                                                'CUSTOM
-                                                                                                                'CUSTOM
-                                                                                                                else
-                                                                                                                'default
-                                                                                                                ]
-                                                                                                            code;
-                                                                                                    }
-                                                                                                    // default
-                                                                                                    caml_failwith
-                                                                                                        ([string|
-                                                                                                             ill_formed
-                                                                                                             @
-                                                                                                             0;
-                                                                                                             31]);
-                                                                                                    br
-                                                                                                        'done;
-                                                                                                }
-                                                                                                // CUSTOM
-                                                                                                v
-                                                                                                    =
-                                                                                                    intern_custom
-                                                                                                        (s,
-                                                                                                         code);
-                                                                                                register_object
-                                                                                                    (s,
-                                                                                                     v);
-                                                                                                br
-                                                                                                    'done;
-                                                                                            }
-                                                                                            // CODEPOINTER
-                                                                                            caml_failwith
-                                                                                                ([string|
-                                                                                                     code_pointer
-                                                                                                     @
-                                                                                                     0;
-                                                                                                     25]);
-                                                                                            br
-                                                                                                'done;
-                                                                                        }
-                                                                                        // DOUBLE_ARRAY32
-                                                                                        len
-                                                                                            =
-                                                                                            read32
-                                                                                                (s);
-                                                                                        br
-                                                                                            'read_double_array;
-                                                                                    }
-                                                                                    // DOUBLE_ARRAY8
-                                                                                    len
-                                                                                        =
-                                                                                        read8u
-                                                                                            (s);
-                                                                                    br
-                                                                                        'read_double_array;
-                                                                                }
-                                                                                // DOUBLE
-                                                                                v
-                                                                                    =
-                                                                                    {float|
-                                                                                        f:
-                                                                                            readfloat
-                                                                                                (s,
-                                                                                                 code)
-                                                                                    };
-                                                                                register_object
-                                                                                    (s,
-                                                                                     v);
-                                                                                br
-                                                                                    'done;
-                                                                            }
-                                                                            // STRING32
-                                                                            len
-                                                                                =
-                                                                                read32
-                                                                                    (s);
-                                                                            br
-                                                                                'read_string;
-                                                                        }
-                                                                        // STRING8
-                                                                        len =
-                                                                            read8u
-                                                                                (s);
-                                                                        br
-                                                                            'read_string;
+                                                                    'STRING8:
+                                                                    do {
+                                                                    'STRING32:
+                                                                    do {
+                                                                    'DOUBLE:
+                                                                    do {
+                                                                    'DOUBLE_ARRAY8:
+                                                                    do {
+                                                                    'DOUBLE_ARRAY32:
+                                                                    do {
+                                                                    'CODEPOINTER:
+                                                                    do {
+                                                                    'CUSTOM:
+                                                                    do {
+                                                                    'default:
+                                                                    do {
+                                                                    br_table
+                                                                    [ 'INT8
+                                                                    'INT16
+                                                                    'INT32
+                                                                    'INT64
+                                                                    'SHARED8
+                                                                    'SHARED16
+                                                                    'SHARED32
+                                                                    'DOUBLE_ARRAY32
+                                                                    'BLOCK32
+                                                                    'STRING8
+                                                                    'STRING32
+                                                                    'DOUBLE
+                                                                    'DOUBLE
+                                                                    'DOUBLE_ARRAY8
+                                                                    'DOUBLE_ARRAY8
+                                                                    'DOUBLE_ARRAY32
+                                                                    'CODEPOINTER
+                                                                    'CODEPOINTER
+                                                                    'CUSTOM
+                                                                    'default
+                                                                    'default
+                                                                    'default
+                                                                    'default
+                                                                    'default
+                                                                    'CUSTOM
+                                                                    'CUSTOM
+                                                                    else
+                                                                    'default ]
+                                                                    code;
+                                                                    }
+                                                                    // default
+                                                                    caml_failwith
+                                                                    ([string|
+                                                                    ill_formed
+                                                                    @
+                                                                    0;
+                                                                    31]);
+                                                                    br 'done;
+                                                                    }
+                                                                    // CUSTOM
+                                                                    v =
+                                                                    intern_custom
+                                                                    (s, code);
+                                                                    register_object
+                                                                    (s, v);
+                                                                    br 'done;
+                                                                    }
+                                                                    // CODEPOINTER
+                                                                    caml_failwith
+                                                                    ([string|
+                                                                    code_pointer
+                                                                    @
+                                                                    0;
+                                                                    25]);
+                                                                    br 'done;
+                                                                    }
+                                                                    // DOUBLE_ARRAY32
+                                                                    len =
+                                                                    read32(s);
+                                                                    br
+                                                                    'read_double_array;
+                                                                    }
+                                                                    // DOUBLE_ARRAY8
+                                                                    len =
+                                                                    read8u(s);
+                                                                    br
+                                                                    'read_double_array;
+                                                                    }
+                                                                    // DOUBLE
+                                                                    v =
+                                                                    {float|
+                                                                    f:
+                                                                    readfloat
+                                                                    (s, code)
+                                                                    };
+                                                                    register_object
+                                                                    (s, v);
+                                                                    br 'done;
+                                                                    }
+                                                                    // STRING32
+                                                                    len =
+                                                                    read32(s);
+                                                                    br
+                                                                    'read_string;
+                                                                    }
+                                                                    // STRING8
+                                                                    len =
+                                                                    read8u(s);
+                                                                    br
+                                                                    'read_string;
                                                                     }
                                                                     // BLOCK32
                                                                     let header =
-                                                                        read32
-                                                                            (s);
+                                                                    read32(s);
                                                                     tag_2 =
-                                                                        header
-                                                                            &
-                                                                            0xFF;
+                                                                    header &
+                                                                    0xFF;
                                                                     size =
-                                                                        header
-                                                                            >>u
-                                                                            10;
+                                                                    header >>u
+                                                                    10;
                                                                     br
-                                                                        'read_block;
+                                                                    'read_block;
                                                                 }
                                                                 // SHARED32
                                                                 ofs =

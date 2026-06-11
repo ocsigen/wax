@@ -265,15 +265,12 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                                                             env[env_curr_char]
                                                                 =
                                                                 (tables
-                                                                     [tbl_transl_block]
-                                                                     as
-                                                                     &block)
+                                                                    [tbl_transl_block]
+                                                                    as &block)
                                                                     [arg[0]
-                                                                         as
-                                                                         &i31
-                                                                         as
-                                                                         i32_u
-                                                                         + 1];
+                                                                    as &i31
+                                                                    as i32_u +
+                                                                    1];
                                                             env[env_lval] =
                                                                 arg[1];
                                                             br 'cont;
@@ -372,10 +369,10 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                                                             {
                                                                 output
                                                                     ([string|
-                                                                         recovering_in_state
-                                                                         @
-                                                                         0;
-                                                                         20]);
+                                                                    recovering_in_state
+                                                                    @
+                                                                    0;
+                                                                    20]);
                                                                 output_int
                                                                     (state1);
                                                                 output_nl();

@@ -331,6 +331,10 @@ module Doc = struct
     let b = Buffer.create 4096 in
     let col = ref 0 in
     let emitted = ref false in
+    (* Cap how far breaks indent, so deeply nested code does not march off to
+       the right margin (the analogue of Format's [max_indent]); deeper levels
+       then pile up at the cap rather than each pushing further right. *)
+    let max_indent = max 0 (width - 10) in
     (* A pending line break (indent + blank?) and/or a pending flat separator.
        Deferred until the next text and coalesced — across group boundaries —
        by max strength; a line break supersedes a flat separator. *)
@@ -355,6 +359,7 @@ module Doc = struct
       pend_flat := None
     in
     let break_line ind blank =
+      let ind = min ind max_indent in
       (match !pend_line with
       | Some (_, b0) -> pend_line := Some (ind, b0 || blank)
       | None -> pend_line := Some (ind, blank));
