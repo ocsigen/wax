@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-2f9db816.js";
+            window.path_to_searchindex_js = "searchindex-da4d98e8.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -225,6 +225,7 @@ files (see <a href="#formatting">Formatting</a>) and <code>check</code> validate
 <li>Perform validation during conversion.</li>
 <li>For Wax: Runs type checking.</li>
 <li>For Wasm Text: Runs well-formedness checks.</li>
+<li>Reports a warning for any local that is declared but never read — a Wax <code>let</code> binding, or a Wasm Text <code>(local …)</code>. Prefix the name with <code>_</code> (e.g. <code>let _x = …</code>, <code>(local $_x i32)</code>) to mark it intentionally unused and silence the warning; function parameters are never reported.</li>
 <li>For input containing conditional annotations (<code>#[if]</code> / <code>(@if ...)</code>), every reachable combination of conditions is checked independently, and each error is reported with the assumption (<code>reachable when ...</code>) under which it occurs.</li>
 <li>Disabled by default.</li>
 </ul>
@@ -343,7 +344,9 @@ the detection from each file’s extension.</li>
 <h2 id="checking"><a class="header" href="#checking">Checking</a></h2>
 <p>The <code>check</code> subcommand validates files (type-checking for Wax, well-formedness
 for Wasm) without producing any output, reporting diagnostics and exiting with a
-non-zero status if any file fails. It takes one or more files.</p>
+non-zero status if any file fails. It takes one or more files. Unused-local
+warnings (see <a href="#options"><code>--validate</code></a>) are reported too, but do not by
+themselves cause a non-zero exit.</p>
 <pre><code class="language-sh">wax check [OPTIONS] FILE…
 </code></pre>
 <h3 id="options-2"><a class="header" href="#options-2">Options</a></h3>

@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-2f9db816.js";
+            window.path_to_searchindex_js = "../searchindex-da4d98e8.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f031991a.js"></script>
@@ -288,6 +288,17 @@
 </tbody>
 </table>
 </div>
+<p>When an expression leaves several values on the stack (typically a call to a
+<a href="../language.html#variables">multi-result function</a>) and a run of <code>local.set</code>
+instructions immediately stores them into locals, the two collapse into a single
+multi-binding <code>let</code>. A <code>drop</code> of one of the results becomes a <code>_</code> binding:</p>
+<pre><code>(call $divmod ...)      let (q, r) = divmod(...);
+(local.set $r)
+(local.set $q)
+</code></pre>
+<p>The number of stores folded is exactly the producer’s result arity, so a
+<code>local.set</code> that consumes a value already on the stack below the call is left as
+its own assignment.</p>
 <h2 id="control-instructions"><a class="header" href="#control-instructions">Control Instructions</a></h2>
 <div class="table-wrapper">
 <table>
