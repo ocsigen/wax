@@ -70,8 +70,7 @@
       (i64.sub (i64.shl (i64.const 1) (i64.const 52)) (i64.const 1))))
   (local.set $i
     (i32.or (local.get $sign)
-      (i32.ne (local.get $style) (i32.const 45)) ;; '-'
-    ))
+      (i32.ne (local.get $style) (i32.const 45)))) ;; '-'
   (local.set $s
     (block $sign (result (ref $string))
       (if (i32.eq (local.get $exp) (i32.const 0x7FF))
@@ -221,8 +220,7 @@
         (local.set $c (array.get_u $string (local.get $s) (local.get $i)))
         (if
           (i32.and (i32.ge_u (local.get $c) (i32.const 48)) ;; '0'
-            (i32.le_u (local.get $c) (i32.const 57)) ;; '9'
-          )
+            (i32.le_u (local.get $c) (i32.const 57))) ;; '9'
           (then
             (local.set $precision
               (i32.add (i32.mul (local.get $precision) (i32.const 10))
@@ -313,8 +311,7 @@
         (local.set $c (array.get_u $string (local.get $s) (local.get $i)))
         (if
           (i32.and (i32.ge_u (local.get $c) (i32.const 97)) ;; 'a'
-            (i32.le_u (local.get $c) (i32.const 122)) ;; 'z'
-          )
+            (i32.le_u (local.get $c) (i32.const 122))) ;; 'z'
           (then
             (array.set $string (local.get $s) (local.get $i)
               (i32.sub (local.get $c) (i32.const 32)))))
@@ -344,8 +341,7 @@
               (br $parse)))
           (if
             (i32.or (i32.eq (local.get $c) (i32.const 80)) ;; 'P'
-              (i32.eq (local.get $c) (i32.const 112)) ;; 'p'
-            )
+              (i32.eq (local.get $c) (i32.const 112))) ;; 'p'
             (then
               (br_if $error (i32.eq (local.get $i) (local.get $len)))
               (local.set $c

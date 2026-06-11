@@ -283,7 +283,7 @@ let mem_memarg meth nstack args : Ast.memarg =
 let rec literal_string a =
   match a.desc with
   | Int s | Float s -> s
-  | UnOp (Neg, b) -> "-" ^ literal_string b
+  | UnOp ({ desc = Neg; _ }, b) -> "-" ^ literal_string b
   | _ -> assert false
 
 (* Read a constant integer immediate (lane index). *)
@@ -962,7 +962,7 @@ let rec instruction ret ctx i : location Text.instr list =
         (instruction ret ctx arr_instr
         @ instruction ret ctx idx_instr
         @ instruction ret ctx val_instr)
-  | BinOp (op, a, b) -> (
+  | BinOp ({ desc = op; _ }, a, b) -> (
       let code_a = instruction ret ctx a in
       let code_b = instruction ret ctx b in
       let operand_type = expr_valtype a in
@@ -975,7 +975,7 @@ let rec instruction ret ctx i : location Text.instr list =
       | _ ->
           let opcode = binop i op operand_type in
           folded loc opcode (code_a @ code_b))
-  | UnOp (Neg, ({ desc = Int n | Float n; _ } as a)) ->
+  | UnOp ({ desc = Neg; _ }, ({ desc = Int n | Float n; _ } as a)) ->
       let n = "-" ^ n in
       folded loc
         (Const
@@ -986,7 +986,7 @@ let rec instruction ret ctx i : location Text.instr list =
            | Some F64 -> F64 n
            | _ -> assert false))
         []
-  | UnOp (op, a) -> (
+  | UnOp ({ desc = op; _ }, a) -> (
       let operand_type = expr_opt_valtype a in
       match (op, operand_type) with
       | Neg, (Some I32 | None) ->

@@ -332,7 +332,11 @@ let parentheses expected actual pp g =
     punctuation pp "(";
     box pp (fun () ->
         g ();
-        punctuation pp ")"))
+        (* Hold the closing [)] past a trailing comment on the last inner token,
+           so it hugs the expression ([(c == 108) // 'l']) instead of being
+           pushed onto its own line after the comment — as [;] and [,] do. *)
+        Utils.Printer.with_held_eol pp.base.printer (fun () ->
+            punctuation pp ")")))
   else g ()
 
 let prec_op op =
@@ -466,7 +470,7 @@ let get_prec (i : _ Ast.instr) =
   | UnOp _ -> UnaryPrefix
   | StructGet _ | StructSet _ -> CallAndFieldAccess
   | BinOp (op, _, _) ->
-      let out, _, _ = prec_op op in
+      let out, _, _ = prec_op op.desc in
       out
   | Let _ -> Instruction
   | Br _ | Br_if _ | Br_table _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
@@ -501,7 +505,7 @@ let rec starts_with_block_prec prec (i : 'a Ast.instr) =
     | StructGet (i, _) | StructSet (i, _, _) ->
         starts_with_block_prec CallAndFieldAccess i
     | BinOp (op, i, _) ->
-        let _, left, _ = prec_op op in
+        let _, left, _ = prec_op op.desc in
         starts_with_block_prec left i
     | Select (i, _, _) -> starts_with_block_prec Select i
     | Unreachable | Nop | Hole | Null | Get _ | Set _ | Tee _ | TailCall _
@@ -518,7 +522,7 @@ let starts_with_block i = starts_with_block_prec Instruction i
 let array_element_precedence nm first i =
   if nm = None && first then
     match i.desc with
-    | BinOp (Or, { desc = Get _; _ }, _) -> Atom
+    | BinOp ({ desc = Or; _ }, { desc = Get _; _ }, _) -> Atom
     | _ -> Instruction
   else Instruction
 
@@ -838,18 +842,20 @@ let rec instr prec pp (i : _ instr) =
           space pp ();
           instr Instruction pp i3)
   | BinOp (op, i, i') ->
-      let _, left, right = prec_op op in
+      let _, left, right = prec_op op.desc in
       box pp ~indent:indent_level (fun () ->
           instr left pp i;
           (* Break *before* the operator (rustfmt style: a wrapped operator
              leads its continuation line), so only the space ahead of it may
-             break; the space after it is a plain, non-breaking blank. *)
+             break; the space after it is a plain, non-breaking blank. The
+             operator carries its own location, so a comment between the left
+             operand and it attaches to the operand, ahead of the break. *)
           space pp ();
-          operator pp (binop op);
+          atomic_node pp (Some op.info) (fun () -> operator pp (binop op.desc));
           Utils.Printer.string pp.base.printer " ";
           instr right pp i')
   | UnOp (op, i) ->
-      operator pp (unop op);
+      atomic_node pp (Some op.info) (fun () -> operator pp (unop op.desc));
       instr UnaryPrefix pp i
   | Let (l, i) ->
       box pp ~indent:indent_level (fun () ->

@@ -57,10 +57,7 @@ fn caml_hexstring_of_float(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
     let sign = (b >>u 63) as i32;
     let exp = (b >>u 52) as i32 & 0x7FF;
     let m = b & (1 << 52) - 1;
-    let i =
-        sign
-            | (style != 45 // '-'
-               );
+    let i = sign | (style != 45); // '-'
     let j: i32;
     let d: i32;
     let txt: &chars;
@@ -203,10 +200,9 @@ fn parse_format(s: &string) -> (i32, i32, i32, i32) {
                 br_if 'bad_format i == len;
                 c = s[i] as i32_u;
                 if
-                    (c >=u 48 // '0'
-                     )
-                        & (c <=u 57 // '9'
-                           ) {
+                    (c >=u 48) // '0'
+                        & (c <=u 57) // '9'
+                {
                     precision = precision * 10 + (c - 48);
                     br 'precision;
                 }
@@ -282,10 +278,9 @@ fn caml_format_float(x: &eq, x_2: &eq) -> &eq {
         'uppercase: loop {
             let c = s[i] as i32_u;
             if
-                (c >=u 97 // 'a'
-                 )
-                    & (c <=u 122 // 'z'
-                       ) {
+                (c >=u 97) // 'a'
+                    & (c <=u 122) // 'z'
+            {
                 s[i] = c - 32;
             }
             i = i + 1;
@@ -317,10 +312,9 @@ fn caml_float_of_hex(s: &string, i: i32) -> f64 {
                 }
                 let d: i32;
                 if
-                    (c == 80 // 'P'
-                     )
-                        | (c == 112 // 'p'
-                           ) {
+                    (c == 80) // 'P'
+                        | (c == 112) // 'p'
+                {
                     br_if 'error i == len;
                     c = s[i] as i32_u;
                     i = i + 1;
@@ -418,8 +412,8 @@ fn caml_float_of_hex(s: &string, i: i32) -> f64 {
 
 fn on_whitespace(s: &string, i: i32) -> i32 {
     let c = s[i] as i32_u;
-    (c == 32 // ' '
-     ) | (c - 9 <=u 4);
+    (c == 32) // ' '
+        | (c - 9 <=u 4);
 }
 
 #[export = "caml_float_of_string"]

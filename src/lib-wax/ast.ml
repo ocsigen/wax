@@ -121,8 +121,8 @@ type 'info instr_desc =
   | ArraySegment of ident option * ident * 'info instr * 'info instr
   | ArrayGet of 'info instr * 'info instr
   | ArraySet of 'info instr * 'info instr * 'info instr
-  | BinOp of binop * 'info instr * 'info instr
-  | UnOp of unop * 'info instr
+  | BinOp of (binop, location) annotated * 'info instr * 'info instr
+  | UnOp of (unop, location) annotated * 'info instr
   | Let of (ident option * valtype option) list * 'info instr option
   | Br of label * 'info instr option
   | Br_if of label * 'info instr

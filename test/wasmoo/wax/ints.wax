@@ -236,22 +236,19 @@ fn parse_int_format(s: &string) -> (i32, i32, i32, i32, i32) {
             br_if 'bad_format i == len;
             c = s[i] as i32_u;
             if
-                (c == 76 // 'L'
-                 )
-                    | (c == 108 // 'l'
-                       )
-                    | (c == 110 // 'n'
-                       ) {
+                (c == 76) // 'L'
+                    | (c == 108) // 'l'
+                    | (c == 110) // 'n'
+            {
                 i = i + 1;
                 br_if 'bad_format i == len;
                 c = s[i] as i32_u;
             }
             br_if 'bad_format i + 1 != len;
             if
-                (c == 100 // 'd'
-                 )
-                    | (c == 105 // 'i'
-                       ) {
+                (c == 100) // 'd'
+                    | (c == 105) // 'i'
+            {
                 base = 10;
                 signed = 1;
             } else {

@@ -596,15 +596,22 @@ let is_negative n = n.[0] = '-'
 let remove_sign n =
   if n.[0] = '-' || n.[0] = '+' then String.sub n 1 (String.length n - 1) else n
 
+(* A Wax operator carries its own source location; reuse the (source or target)
+   instruction's, which is the best approximation we have when reconstructing
+   from Wasm. Polymorphic in the carried [desc] so it works for either AST. *)
+let op_loc (i : (_, Ast.location) Ast.annotated) op :
+    (_, Ast.location) Ast.annotated =
+  { i with Ast.desc = op }
+
 let integer i n : _ Ast.instr =
   let e : _ Ast.instr = { i with desc = Int (remove_sign n) } in
-  if is_negative n then { i with desc = UnOp (Neg, e) } else e
+  if is_negative n then { i with desc = UnOp (op_loc i Ast.Neg, e) } else e
 
 let float i n =
   if is_integer n then integer i n
   else
     let e : _ Ast.instr = { i with desc = Float (remove_sign n) } in
-    if is_negative n then { i with desc = UnOp (Neg, e) } else e
+    if is_negative n then { i with desc = UnOp (op_loc i Ast.Neg, e) } else e
 
 let sequence_opt l =
   match l with
@@ -679,7 +686,7 @@ let int_un_op i0 sz (op : Src.int_un_op) =
     | Clz -> method_call (e (inttype sz)) "clz"
     | Ctz -> method_call (e (inttype sz)) "ctz"
     | Popcnt -> method_call (e (inttype sz)) "popcnt"
-    | Eqz -> with_loc (UnOp (Not, e (inttype sz)))
+    | Eqz -> with_loc (UnOp (op_loc i0 Ast.Not, e (inttype sz)))
     | Trunc (_, signage) ->
         with_loc
           (Cast
@@ -710,7 +717,7 @@ let int_bin_op i0 (op : Src.int_bin_op) =
   let symbol op =
     let* e2 = Stack.pop in
     let* e1 = Stack.pop in
-    Stack.push 1 (with_loc (BinOp (op, e1, e2)))
+    Stack.push 1 (with_loc (BinOp (op_loc i0 op, e1, e2)))
   in
   match op with
   | Add -> symbol Add
@@ -754,7 +761,7 @@ let float_un_op i0 sz (op : Src.float_un_op) =
   in
   Stack.push 1
     (match op with
-    | Neg -> with_loc (UnOp (Neg, e (floattype sz)))
+    | Neg -> with_loc (UnOp (op_loc i0 Ast.Neg, e (floattype sz)))
     | Abs -> method_call (e (floattype sz)) "abs"
     | Ceil -> method_call (e (floattype sz)) "ceil"
     | Floor -> method_call (e (floattype sz)) "floor"
@@ -778,7 +785,7 @@ let float_bin_op i0 (op : Src.float_bin_op) =
   let symbol op =
     let* e2 = Stack.pop in
     let* e1 = Stack.pop in
-    Stack.push 1 (with_loc (BinOp (op, e1, e2)))
+    Stack.push 1 (with_loc (BinOp (op_loc i0 op, e1, e2)))
   in
   match op with
   | Add -> symbol Add
@@ -1313,7 +1320,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   | RefEq ->
       let* e2 = Stack.pop in
       let* e1 = Stack.pop in
-      Stack.push 1 (with_loc (BinOp (Eq, e1, e2)))
+      Stack.push 1 (with_loc (BinOp (op_loc i Ast.Eq, e1, e2)))
   | RefFunc f -> Stack.push 1 (with_loc (Get (idx ctx `Func f)))
   | RefNull typ ->
       Stack.push 1
@@ -1323,7 +1330,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
                 Valtype (Ref { nullable = true; typ = heaptype ctx typ }) )))
   | RefIsNull ->
       let* e = Stack.pop in
-      Stack.push 1 (with_loc (UnOp (Not, e)))
+      Stack.push 1 (with_loc (UnOp (op_loc i Ast.Not, e)))
   | Select tys ->
       (* The Wax [?:] carries no result type, but resolve the annotation (if
          any) so an out-of-range type reference is still caught. *)

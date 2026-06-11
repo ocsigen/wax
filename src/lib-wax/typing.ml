@@ -2511,7 +2511,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
         in
         match (UnionFind.find ty1, UnionFind.find ty2) with
         | Unknown, Unknown -> (
-            match op with
+            match op.desc with
             | Add | Sub | Mul ->
                 UnionFind.merge ty1 ty2 Number;
                 ty1
@@ -2529,7 +2529,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                 UnionFind.make (Valtype { typ = I32; internal = I32 }))
         | typ, Unknown | Unknown, typ -> (
             UnionFind.merge ty1 ty2 typ;
-            match op with
+            match op.desc with
             | Eq ->
                 (match typ with
                 | Valtype { internal = Ref _ as ty; _ } ->
@@ -2595,7 +2595,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                 | _ -> mismatch ());
                 UnionFind.make (Valtype { typ = I32; internal = I32 }))
         | _ -> (
-            match op with
+            match op.desc with
             | Eq ->
                 (match (UnionFind.find ty1, UnionFind.find ty2) with
                 | ( Valtype { internal = Ref _ as ty1; _ },
@@ -2704,11 +2704,11 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       let ty =
         match UnionFind.find typ with
         | Unknown -> (
-            match op with
+            match op.desc with
             | Not -> UnionFind.make (Valtype { typ = I32; internal = I32 })
             | Neg | Pos -> UnionFind.make Number)
         | _ -> (
-            match op with
+            match op.desc with
             | Not ->
                 (match UnionFind.find typ with
                 | Valtype { internal = I32 | I64 | Ref _; _ } | Null | Int -> ()
@@ -3657,7 +3657,9 @@ and type_simd_free_intrinsic_call ctx i func name args =
         (fun a ->
           match a.desc with
           | Ast.Int _ | Ast.Float _ -> ()
-          | Ast.UnOp (Neg, { desc = Ast.Int _ | Ast.Float _; _ }) -> ()
+          | Ast.UnOp ({ desc = Neg; _ }, { desc = Ast.Int _ | Ast.Float _; _ })
+            ->
+              ()
           | _ ->
               Error.constant_expression_required ctx.diagnostics
                 ~location:(snd a.info))
@@ -4067,7 +4069,7 @@ let rec check_constant_instruction ctx i =
   | Array (_, i1, i2) ->
       check_constant_instruction ctx i1;
       check_constant_instruction ctx i2
-  | BinOp ((Add | Sub | Mul), i1, i2) -> (
+  | BinOp ({ desc = Add | Sub | Mul; _ }, i1, i2) -> (
       check_constant_instruction ctx i1;
       check_constant_instruction ctx i2;
       match UnionFind.find (expression_type ctx i) with
@@ -4104,17 +4106,21 @@ let rec check_constant_instruction ctx i =
                  (Ref { nullable; typ = Extern }))
         | _ -> true
       then Error.constant_expression_required ctx.diagnostics ~location
-  | UnOp (Pos, i') -> check_constant_instruction ctx i'
-  | UnOp (Neg, { desc = Float _ | Int _; _ }) -> ()
+  | UnOp ({ desc = Pos; _ }, i') -> check_constant_instruction ctx i'
+  | UnOp ({ desc = Neg; _ }, { desc = Float _ | Int _; _ }) -> ()
   (* [v128.const] is a constant expression; its lanes are literals. Other SIMD
      ops are not constant. *)
   | Call ({ desc = Get name; _ }, args)
     when Simd.const_shape_of_name name.desc <> None ->
       List.iter (check_constant_instruction ctx) args
-  | UnOp ((Neg | Not), _)
+  | UnOp ({ desc = Neg | Not; _ }, _)
   | BinOp
-      ( ( Div _ | Rem _ | And | Or | Xor | Shl | Shr _ | Eq | Ne | Lt _ | Gt _
-        | Le _ | Ge _ ),
+      ( {
+          desc =
+            ( Div _ | Rem _ | And | Or | Xor | Shl | Shr _ | Eq | Ne | Lt _
+            | Gt _ | Le _ | Ge _ );
+          _;
+        },
         _,
         _ )
   | Block _ | Loop _ | If _ | TryTable _ | Try _ | Unreachable | Nop | Hole

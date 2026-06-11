@@ -257,9 +257,8 @@
       (if
         (i32.or
           (i32.or (i32.eq (local.get $c) (i32.const 76)) ;; 'L'
-            (i32.eq (local.get $c) (i32.const 108)) ;; 'l'
-          ) (i32.eq (local.get $c) (i32.const 110)) ;; 'n'
-        )
+            (i32.eq (local.get $c) (i32.const 108))) ;; 'l'
+          (i32.eq (local.get $c) (i32.const 110))) ;; 'n'
         (then
           (local.set $i (i32.add (local.get $i) (i32.const 1)))
           (br_if $bad_format (i32.eq (local.get $i) (local.get $len)))
@@ -268,8 +267,7 @@
         (i32.ne (i32.add (local.get $i) (i32.const 1)) (local.get $len)))
       (if
         (i32.or (i32.eq (local.get $c) (i32.const 100)) ;; 'd'
-          (i32.eq (local.get $c) (i32.const 105)) ;; 'i'
-        )
+          (i32.eq (local.get $c) (i32.const 105))) ;; 'i'
         (then
           (local.set $base (i32.const 10))
           (local.set $signed (i32.const 1)))

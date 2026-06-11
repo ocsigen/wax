@@ -169,6 +169,13 @@ let storagetype_tbl =
 let with_loc loc desc =
    Utils.Trivia.with_pos Context.context {loc_start = fst loc; loc_end = snd loc} desc
 
+(* Build a binary/unary operator node, giving the operator itself a source
+   location (its token span [oploc]) so a comment sitting between an operand and
+   the operator attaches to the right place. [_tok] is the operator token's
+   (unit) value, taken only so its [o = "..."] binder counts as used. *)
+let binop sloc _tok oploc op i j = with_loc sloc (BinOp (with_loc oploc op, i, j))
+let unop sloc _tok oploc op i = with_loc sloc (UnOp (with_loc oploc op, i))
+
 (* Apply a module field's leading attributes. When there are attributes, widen
    the field location (built by [d] from the definition alone) to span them, so
    comments and blank lines preceding the attributes attach to the field rather
@@ -533,34 +540,34 @@ plaininstr:
 | i = expression IS t = reference_type { with_loc $sloc (Test(i, t)) }
 | i = expression "." x = ident { with_loc $sloc (StructGet(i, x)) }
 | i = expression "." x = ident "=" j = expression { with_loc $sloc (StructSet(i, x, j)) }
-| i = expression "+" j = expression { with_loc $sloc (BinOp(Add, i, j)) }
-| i = expression "-" j = expression { with_loc $sloc (BinOp(Sub, i, j)) }
-| i = expression "*" j = expression { with_loc $sloc (BinOp(Mul, i, j)) }
-| i = expression "/" j = expression { with_loc $sloc (BinOp(Div None, i, j)) }
-| i = expression "/s" j = expression { with_loc $sloc (BinOp(Div (Some Signed), i, j)) }
-| i = expression "/u" j = expression { with_loc $sloc (BinOp(Div (Some Unsigned), i, j)) }
-| i = expression "%s" j = expression { with_loc $sloc (BinOp(Rem Signed, i, j)) }
-| i = expression "%u" j = expression { with_loc $sloc (BinOp(Rem Unsigned, i, j)) }
-| i = expression "&" j = expression { with_loc $sloc (BinOp(And, i, j)) }
-| i = expression "^" j = expression { with_loc $sloc (BinOp(Xor, i, j)) }
-| i = expression "|" j = expression { with_loc $sloc (BinOp(Or, i, j)) }
-| i = expression "<<" j = expression { with_loc $sloc (BinOp(Shl, i, j)) }
-| i = expression ">>s" j = expression { with_loc $sloc (BinOp(Shr Signed, i, j)) }
-| i = expression ">>u" j = expression { with_loc $sloc (BinOp(Shr Unsigned, i, j)) }
-| i = expression "==" j = expression { with_loc $sloc (BinOp(Eq, i, j)) }
-| i = expression "!=" j = expression { with_loc $sloc (BinOp(Ne, i, j)) }
-| i = expression ">" j = expression { with_loc $sloc (BinOp(Gt None, i, j)) }
-| i = expression ">s" j = expression { with_loc $sloc (BinOp(Gt (Some Signed), i, j)) }
-| i = expression ">u" j = expression { with_loc $sloc (BinOp(Gt (Some Unsigned), i, j)) }
-| i = expression "<" j = expression { with_loc $sloc (BinOp(Lt None, i, j)) }
-| i = expression "<s" j = expression { with_loc $sloc (BinOp(Lt (Some Signed), i, j)) }
-| i = expression "<u" j = expression { with_loc $sloc (BinOp(Lt (Some Unsigned), i, j)) }
-| i = expression ">=" j = expression { with_loc $sloc (BinOp(Ge None, i, j)) }
-| i = expression ">=s" j = expression { with_loc $sloc (BinOp(Ge (Some Signed), i, j)) }
-| i = expression ">=u" j = expression { with_loc $sloc (BinOp(Ge (Some Unsigned), i, j)) }
-| i = expression "<=" j = expression { with_loc $sloc (BinOp(Le None, i, j)) }
-| i = expression "<=s" j = expression { with_loc $sloc (BinOp(Le (Some Signed), i, j)) }
-| i = expression "<=u" j = expression { with_loc $sloc (BinOp(Le (Some Unsigned), i, j)) }
+| i = expression o = "+" j = expression { binop $sloc o $loc(o) Add i j }
+| i = expression o = "-" j = expression { binop $sloc o $loc(o) Sub i j }
+| i = expression o = "*" j = expression { binop $sloc o $loc(o) Mul i j }
+| i = expression o = "/" j = expression { binop $sloc o $loc(o) (Div None) i j }
+| i = expression o = "/s" j = expression { binop $sloc o $loc(o) (Div (Some Signed)) i j }
+| i = expression o = "/u" j = expression { binop $sloc o $loc(o) (Div (Some Unsigned)) i j }
+| i = expression o = "%s" j = expression { binop $sloc o $loc(o) (Rem Signed) i j }
+| i = expression o = "%u" j = expression { binop $sloc o $loc(o) (Rem Unsigned) i j }
+| i = expression o = "&" j = expression { binop $sloc o $loc(o) And i j }
+| i = expression o = "^" j = expression { binop $sloc o $loc(o) Xor i j }
+| i = expression o = "|" j = expression { binop $sloc o $loc(o) Or i j }
+| i = expression o = "<<" j = expression { binop $sloc o $loc(o) Shl i j }
+| i = expression o = ">>s" j = expression { binop $sloc o $loc(o) (Shr Signed) i j }
+| i = expression o = ">>u" j = expression { binop $sloc o $loc(o) (Shr Unsigned) i j }
+| i = expression o = "==" j = expression { binop $sloc o $loc(o) Eq i j }
+| i = expression o = "!=" j = expression { binop $sloc o $loc(o) Ne i j }
+| i = expression o = ">" j = expression { binop $sloc o $loc(o) (Gt None) i j }
+| i = expression o = ">s" j = expression { binop $sloc o $loc(o) (Gt (Some Signed)) i j }
+| i = expression o = ">u" j = expression { binop $sloc o $loc(o) (Gt (Some Unsigned)) i j }
+| i = expression o = "<" j = expression { binop $sloc o $loc(o) (Lt None) i j }
+| i = expression o = "<s" j = expression { binop $sloc o $loc(o) (Lt (Some Signed)) i j }
+| i = expression o = "<u" j = expression { binop $sloc o $loc(o) (Lt (Some Unsigned)) i j }
+| i = expression o = ">=" j = expression { binop $sloc o $loc(o) (Ge None) i j }
+| i = expression o = ">=s" j = expression { binop $sloc o $loc(o) (Ge (Some Signed)) i j }
+| i = expression o = ">=u" j = expression { binop $sloc o $loc(o) (Ge (Some Unsigned)) i j }
+| i = expression o = "<=" j = expression { binop $sloc o $loc(o) (Le None) i j }
+| i = expression o = "<=s" j = expression { binop $sloc o $loc(o) (Le (Some Signed)) i j }
+| i = expression o = "<=u" j = expression { binop $sloc o $loc(o) (Le (Some Unsigned)) i j }
 | BR_IF l = label i = expression %prec prec_branch
   { with_loc $sloc (Br_if (l, i))} 
 (*
@@ -591,9 +598,9 @@ plaininstr:
   { with_loc $sloc (ArrayGet (i1, i2)) }
 | i1 = expression "?" i2 = then_branch ":" i3 = expression
   { with_loc $sloc (Select (i1, i2, i3)) }
-| "!" i = expression { with_loc $sloc (UnOp (Not, i)) } %prec prec_unary
-| "+" i = expression { with_loc $sloc (UnOp (Pos, i)) } %prec prec_unary
-| "-" i = expression { with_loc $sloc (UnOp (Neg, i)) } %prec prec_unary
+| o = "!" i = expression { unop $sloc o $loc(o) Not i } %prec prec_unary
+| o = "+" i = expression { unop $sloc o $loc(o) Pos i } %prec prec_unary
+| o = "-" i = expression { unop $sloc o $loc(o) Neg i } %prec prec_unary
 | i = expression "!" { with_loc $sloc (NonNull i) }
 
 expression:
