@@ -127,6 +127,12 @@ type 'info instr_desc =
   | Br of label * 'info instr option
   | Br_if of label * 'info instr
   | Br_table of label list * 'info instr
+  | Dispatch of {
+      index : 'info instr;
+      cases : label list;
+      default : label;
+      arms : (label * 'info instr list) list;
+    }
   | Br_on_null of label * 'info instr
   | Br_on_non_null of label * 'info instr
   | Br_on_cast of label * reftype * 'info instr

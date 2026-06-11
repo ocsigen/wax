@@ -23,6 +23,7 @@ let reserved =
         "const";
         "cont_bind";
         "cont_new";
+        "dispatch";
         "do";
         "else";
         "fn";

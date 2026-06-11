@@ -147,6 +147,39 @@ fn find_first_zero(arr: &ints) -> i32 {
     br $search))
 ```
 
+## Dispatch (Jump Table)
+
+### Wax
+
+```wax
+#[export = "rgb_channel"]
+fn rgb_channel(color: i32, value: i32) -> i32 {
+    dispatch color ['red 'green 'blue else 'bad] {
+        'red:   { return (value & 255) << 16; }
+        'green: { return (value & 255) << 8; }
+        'blue:  { return value & 255; }
+        'bad:   { return -1; }
+    }
+}
+```
+
+### Equivalent WAT
+
+```wat
+(func $rgb_channel (export "rgb_channel")
+  (param $color i32) (param $value i32) (result i32)
+  (block $red
+    (block $green
+      (block $blue
+        (block $bad (br_table $red $green $blue $bad (local.get $color)))
+        (return (i32.const -1)))
+      (return (i32.and (local.get $value) (i32.const 255))))
+    (return
+      (i32.shl (i32.and (local.get $value) (i32.const 255)) (i32.const 8))))
+  (return
+    (i32.shl (i32.and (local.get $value) (i32.const 255)) (i32.const 16))))
+```
+
 ## Structs and Methods
 
 ### Wax

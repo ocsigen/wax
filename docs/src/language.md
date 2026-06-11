@@ -381,6 +381,52 @@ The labels in a `br_table` are separated by spaces, and `else` gives the
 fallback for an out-of-range index. A branch also carries any values its target
 expects — a `do i32` target receives an `i32`, and so on.
 
+### Dispatch
+
+A `dispatch` is a multi-way branch — the readable form of a `br_table` jump
+table. A bracket maps an index to a case label (with an `else` default for an
+out-of-range index), and each arm gives that case's body:
+
+```wax
+fn classify(x: i32) -> i32 {
+    dispatch x ['zero 'one 'two else 'big] {
+        'zero: { return 10; }
+        'one:  { return 20; }
+        'two:  { return 30; }
+        'big:  { return 99; }
+    }
+}
+```
+
+The bracket is exactly the underlying `br_table`: index `0` jumps to the first
+listed label, `1` to the second, and so on, and an out-of-range index jumps to
+the `else` label. A label may be listed more than once (several indices sharing
+a case), and every listed label (and `else`) must name an arm. The index must be
+an `i32`, and the labels are 0-ary branch targets. Case (arm) labels must be
+distinct.
+
+`dispatch` lowers to one nested block per case — the first arm outermost, the
+`br_table` in the innermost block — with each case body just after its block.
+As in a C `switch`, cases **fall through**, but *outward*: reaching a case runs
+its body and then the bodies of the cases enclosing it (the ones listed before
+it), unless it branches away first. So the example above gives each case its own
+result via `return`; to break out instead, branch to an enclosing label:
+
+```wax
+let r: i32;
+'done: do {
+    dispatch x ['zero 'one else 'two] {
+        'zero: { r = 10; br 'done; }
+        'one:  { r = 20; br 'done; }
+        'two:  { r = 30; }
+    }
+}
+```
+
+This is the shape compilers emit for a dense switch, so decompiling WAT/WASM to
+Wax recovers `dispatch` from it (and a Wax `dispatch` round-trips through the
+binary).
+
 ### Return
 
 ```wax

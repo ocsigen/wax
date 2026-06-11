@@ -57,6 +57,8 @@ let rec occurs name i =
   | Switch (_, _, l)
   | Sequence l ->
       in_list l
+  | Dispatch { index; arms; _ } ->
+      occurs name index || List.exists (fun (_, b) -> in_list b) arms
   | Let (_, body) -> in_opt body
   | Br (_, o) | Throw (_, o) | Return o -> in_opt o
   | If_annotation { then_body; else_body; _ } -> (

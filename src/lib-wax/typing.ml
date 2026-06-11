@@ -358,6 +358,10 @@ module Error = struct
 
   let expected_ref context ~location =
     report context ~location "A reference type is expected here."
+
+  let dispatch_duplicate_arm context ~location x =
+    report context ~location "This dispatch has several cases named %a."
+      print_name x
 end
 
 module StringSet = Set.Make (String)
@@ -1515,8 +1519,11 @@ let rec count_holes i =
   | Switch (_, _, l) ->
       List.fold_left (fun acc i -> acc + count_holes i) 0 l
   | Select (c, t, e) -> count_holes c + count_holes t + count_holes e
-  | Block _ | Loop _ | TryTable _ | Try _ | If_annotation _ | StructDefault _
-  | Char _ | String _ | Int _ | Float _ | Get _ | Null | Unreachable | Nop
+  (* [dispatch] is block-like: its index and case bodies are checked inside the
+     blocks it desugars to, so no hole at this level draws from the stack. *)
+  | Block _ | Loop _ | TryTable _ | Try _ | If_annotation _ | Dispatch _
+  | StructDefault _ | Char _ | String _ | Int _ | Float _ | Get _ | Null
+  | Unreachable | Nop
   | Let (_, None)
   | Br (_, None)
   | Throw (_, None)
@@ -1534,7 +1541,7 @@ let rec check_hole_order_rec ctx i n =
   | _ ->
       let n =
         match i.desc with
-        | Block _ | Loop _ | TryTable _ | Try _ | If_annotation _
+        | Block _ | Loop _ | TryTable _ | Try _ | If_annotation _ | Dispatch _
         | StructDefault _ | Char _ | String _ | Int _ | Float _ | Get _ | Null
         | Unreachable | Nop
         | Let (_, None)
@@ -1908,6 +1915,41 @@ let anon_function_type ctx (sign : functype) =
         : int option);
   name
 
+(* Peel a type-checked [dispatch] lowering (see [Ast_utils.lower_dispatch]) back
+   apart: descend [k] case blocks, collecting each case body, and return the
+   [br_table] index together with the bodies in arm order. Deterministic — the
+   lowering we just type-checked guarantees the shape. *)
+let extract_dispatch wrapper k =
+  let body_of w =
+    match w.desc with Ast.Block { block; _ } -> block | _ -> assert false
+  in
+  let rec peel block n =
+    if n = 0 then
+      match block with
+      | [ { desc = Ast.Br_table (_, idx); _ } ] -> (idx, [])
+      | _ -> assert false
+    else
+      match block with
+      | head :: tail ->
+          let idx, bodies = peel (body_of head) (n - 1) in
+          (idx, tail :: bodies)
+      | [] -> assert false
+  in
+  peel (body_of wrapper) k
+
+(* Rebuild a typed [dispatch] from the type-checked lowering [typed_list] (the
+   outermost case block followed by the first arm's trailing body) and the
+   original [arms] (for the labels). Returns the typed index and arms. *)
+let rebuild_dispatch typed_list arms =
+  match (arms, typed_list) with
+  | [], [ { desc = Ast.Br_table (_, idx); _ } ] -> (idx, [])
+  | (first_label, _) :: rest_arms, outer :: first_body ->
+      let idx, rest_bodies = extract_dispatch outer (List.length rest_arms) in
+      ( idx,
+        (first_label, first_body)
+        :: List.map2 (fun (l, _) b -> (l, b)) rest_arms rest_bodies )
+  | _ -> assert false
+
 (* Set to [true] to trace each instruction as it is type-checked. *)
 let debug = false
 
@@ -1922,6 +1964,34 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       let*! results = array_map_opt (internalize ctx) typ.results in
       let instrs' = block ctx i.info label [||] results results instrs in
       return_statement i (Block { label; typ; block = instrs' }) results
+  | Dispatch { index; cases; default; arms } ->
+      (* The case (arm) labels become distinct block labels in the lowering and
+         key the arm bodies, so they must be distinct. *)
+      let rec check_dups seen = function
+        | [] -> ()
+        | (l, _) :: r ->
+            if List.exists (fun s -> s = l.desc) seen then
+              Error.dispatch_duplicate_arm ctx.diagnostics ~location:l.info l;
+            check_dups (l.desc :: seen) r
+      in
+      check_dups [] arms;
+      (* Type-check against the equivalent blocks (see [Ast_utils.lower_dispatch])
+         as a void block body — the outermost case block followed by the first
+         arm's trailing body. This validates the index is an [i32], every
+         [br_table] target resolves to a 0-ary label, and each case body is
+         well-typed. Then rebuild a typed [Dispatch], preserving the high-level
+         form for the formatter and for the identical re-lowering in [To_wasm]. *)
+      let lowered =
+        Ast_utils.lower_dispatch ~block_info:i.info ~index ~cases ~default ~arms
+      in
+      (* In expression position the dispatch is checked in isolation (a void
+         block body); a divergence in the trailing case body is propagated only
+         in statement position — see [toplevel_instruction]. *)
+      let typed = block ctx i.info None [||] [||] [||] lowered in
+      let index', arms' = rebuild_dispatch typed arms in
+      return_statement i
+        (Dispatch { index = index'; cases; default; arms = arms' })
+        [||]
   | Loop { label; typ; block = instrs } ->
       if Array.length typ.params > 0 then
         Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
@@ -3968,6 +4038,27 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
         results
   | Nop -> return_statement i Nop [||]
   | Unreachable -> return_statement i Unreachable [||] |> unreachable
+  | Dispatch { index; cases; default; arms } ->
+      (* As a statement, type-check the lowering (see [Ast_utils.lower_dispatch])
+         as a sequence in the current stack — so a divergence in the trailing
+         case body (e.g. every case ends in [return]) propagates, as it would for
+         the equivalent blocks. *)
+      let rec check_dups seen = function
+        | [] -> ()
+        | (l, _) :: r ->
+            if List.exists (fun s -> s = l.desc) seen then
+              Error.dispatch_duplicate_arm ctx.diagnostics ~location:l.info l;
+            check_dups (l.desc :: seen) r
+      in
+      check_dups [] arms;
+      let lowered =
+        Ast_utils.lower_dispatch ~block_info:i.info ~index ~cases ~default ~arms
+      in
+      let* typed = block_contents ctx lowered in
+      let index', arms' = rebuild_dispatch typed arms in
+      return_statement i
+        (Dispatch { index = index'; cases; default; arms = arms' })
+        [||]
   | TailCall _ | Br _ | Br_table _ | Throw _ | ThrowRef _ | Return _ ->
       let count = count_holes i in
       let* args = pop_many ctx i count [] in
@@ -4145,13 +4236,14 @@ let rec check_constant_instruction ctx i =
         },
         _,
         _ )
-  | Block _ | Loop _ | If _ | TryTable _ | Try _ | Unreachable | Nop | Hole
-  | Set _ | Tee _ | Call _ | TailCall _ | Cast _ | Test _ | NonNull _
-  | StructGet _ | StructSet _ | ArraySegment _ | ArrayGet _ | ArraySet _ | Let _
-  | Br _ | Br_if _ | Br_table _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
-  | Br_on_cast_fail _ | Throw _ | ThrowRef _ | ContNew _ | ContBind _
-  | Suspend _ | Resume _ | ResumeThrow _ | ResumeThrowRef _ | Switch _
-  | Return _ | Sequence _ | Select _ | If_annotation _ ->
+  | Block _ | Loop _ | If _ | TryTable _ | Try _ | Dispatch _ | Unreachable
+  | Nop | Hole | Set _ | Tee _ | Call _ | TailCall _ | Cast _ | Test _
+  | NonNull _ | StructGet _ | StructSet _ | ArraySegment _ | ArrayGet _
+  | ArraySet _ | Let _ | Br _ | Br_if _ | Br_table _ | Br_on_null _
+  | Br_on_non_null _ | Br_on_cast _ | Br_on_cast_fail _ | Throw _ | ThrowRef _
+  | ContNew _ | ContBind _ | Suspend _ | Resume _ | ResumeThrow _
+  | ResumeThrowRef _ | Switch _ | Return _ | Sequence _ | Select _
+  | If_annotation _ ->
       Error.constant_expression_required ctx.diagnostics ~location
 
 type ('before, 'after) phased =
@@ -4771,6 +4863,9 @@ let rec instr_has_conditional (i : (_ instr_desc, _) annotated) =
       || Option.fold ~none:false ~some:any catch_all
   | Sequence l -> any l
   | ArrayFixed (_, l) -> any l
+  | Dispatch { index; arms; _ } ->
+      instr_has_conditional index
+      || List.exists (fun (_, body) -> any body) arms
   | ContBind (_, _, l)
   | Suspend (_, l)
   | Resume (_, _, l)
@@ -4918,6 +5013,14 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
     | Br (l, v) -> Br (l, Option.map (sone asm) v)
     | Br_if (l, v) -> Br_if (l, sone asm v)
     | Br_table (ls, v) -> Br_table (ls, sone asm v)
+    | Dispatch { index; cases; default; arms } ->
+        Dispatch
+          {
+            index = sone asm index;
+            cases;
+            default;
+            arms = List.map (fun (l, body) -> (l, sinstrs asm body)) arms;
+          }
     | Br_on_null (l, v) -> Br_on_null (l, sone asm v)
     | Br_on_non_null (l, v) -> Br_on_non_null (l, sone asm v)
     | Br_on_cast (l, t, v) -> Br_on_cast (l, t, sone asm v)
@@ -4978,6 +5081,7 @@ let sub_instrs (i : (_ instr_desc, _) annotated) =
   | If_annotation { then_body; else_body; _ } ->
       then_body @ Option.value ~default:[] else_body
   | Sequence l | ArrayFixed (_, l) -> l
+  | Dispatch { index; arms; _ } -> index :: List.concat_map snd arms
   | ContBind (_, _, l)
   | Suspend (_, l)
   | Resume (_, _, l)

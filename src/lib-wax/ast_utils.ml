@@ -64,6 +64,15 @@ let rec map_instr f instr =
     | Br (label, v) -> Br (label, Option.map (map_instr f) v)
     | Br_if (label, v) -> Br_if (label, map_instr f v)
     | Br_table (labels, v) -> Br_table (labels, map_instr f v)
+    | Dispatch { index; cases; default; arms } ->
+        Dispatch
+          {
+            index = map_instr f index;
+            cases;
+            default;
+            arms =
+              List.map (fun (l, body) -> (l, List.map (map_instr f) body)) arms;
+          }
     | Br_on_null (label, v) -> Br_on_null (label, map_instr f v)
     | Br_on_non_null (label, v) -> Br_on_non_null (label, map_instr f v)
     | Br_on_cast (label, t, v) -> Br_on_cast (label, t, map_instr f v)
@@ -94,6 +103,34 @@ let rec map_instr f instr =
           }
   in
   { desc; info = f instr.info }
+
+(* Lower a [dispatch] to the conventional dense-switch shape: one nested void
+   block per case (in arm order, the first arm outermost), the [br_table] in the
+   innermost block, and each case body placed just after its block. Branching to
+   case [cᵢ] exits its block and runs [cᵢ]'s body (then falls through into the
+   enclosing cases). So [cᵢ]'s body sits in [cᵢ₋₁]'s block — and the first
+   (outermost) arm's body trails the whole structure, hence the result is an
+   instruction *list*: the outermost block followed by that trailing body.
+
+   This is the exact inverse of {!Recover_dispatch}, so a recovered dispatch
+   re-lowers to the original blocks byte-for-byte. Every synthesised block and
+   the [br_table] carry [block_info]; the index and case bodies keep their own. *)
+let lower_dispatch ~block_info ~index ~cases ~default ~arms =
+  let mk desc = { desc; info = block_info } in
+  let void = { params = [||]; results = [||] } in
+  let br = mk (Br_table (cases @ [ default ], index)) in
+  let rec build = function
+    | [ (c, _) ] ->
+        (* innermost case block holds just the [br_table] *)
+        mk (Block { label = Some c; typ = void; block = [ br ] })
+    | (c, _) :: ((_, next_body) :: _ as rest) ->
+        mk
+          (Block { label = Some c; typ = void; block = build rest :: next_body })
+    | [] -> br
+  in
+  match arms with
+  | [] -> [ br ]
+  | (_, first_body) :: _ -> build arms :: first_body
 
 let rec map_modulefield f field =
   match field with

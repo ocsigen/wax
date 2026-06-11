@@ -460,9 +460,19 @@ structure_field:
 structure:
 | l = separated_list_trailing(",", structure_field) { l }
 
+(* A [dispatch] case: a labelled, brace-delimited statement list. The label
+   names the case (matched to one of the bracket labels); the body runs when the
+   index selects it (and falls through into the following cases). *)
+dispatch_arm:
+| l = label ":" "{" body = statement_list "}" { (l, body) }
+
 blockinstr:
 | b = block
   { let (label, l) = b in with_loc $sloc (Block{label; typ = blocktype None; block = l}) }
+| DISPATCH index = expression
+  "[" cases = list(label) ELSE default = label "]"
+  "{" arms = list(dispatch_arm) "}"
+  { with_loc $sloc (Dispatch {index; cases; default; arms}) }
 | label = block_label DO bt = option(block_type) "{" l = statement_list "}"
   { with_loc $sloc (Block{label; typ = blocktype bt; block = l}) }
 | label = block_label LOOP bt = option(block_type)
@@ -582,8 +592,6 @@ plaininstr:
 | BR l = label IF i = expression
   { with_loc $sloc (Br_if (l, i)) } %prec prec_branch
 *)
-| DISPATCH expression "["   list(label) ELSE label "]" "{" expression "}"
- { with_loc $sloc Nop }
 | BR_ON_NULL l = label i = expression { with_loc $sloc (Br_on_null (l, i)) } %prec prec_branch
 | BR_ON_NON_NULL l = label i = expression { with_loc $sloc (Br_on_non_null (l, i)) }  %prec prec_branch
 | BR_ON_CAST l = label t = reference_type i = expression { with_loc $sloc (Br_on_cast (l, t, i)) } %prec prec_branch

@@ -1077,6 +1077,13 @@ let rec instruction ret ctx i : location Text.instr list =
           in
           folded loc (Br_table (other_idx, default_idx)) code
       | _ -> assert false)
+  | Dispatch { index; cases; default; arms } ->
+      (* Lower to the conventional nested-block switch (a list: the outermost
+         block then the first arm's trailing body) and convert each; the
+         synthesised labels thread into [ret] via the recursive calls. *)
+      List.concat_map (instruction ret ctx)
+        (Wax.Ast_utils.lower_dispatch ~block_info:i.info ~index ~cases ~default
+           ~arms)
   | Br_on_null (l, expr) ->
       folded loc (Br_on_null (label ret l)) (instruction ret ctx expr)
   | Br_on_non_null (l, expr) ->

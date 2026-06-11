@@ -218,6 +218,7 @@ let rec token_rec ctx lexbuf =
   | "br" -> BR
   | "br_if" -> BR_IF
   | "br_table" -> BR_TABLE
+  | "dispatch" -> DISPATCH
   | "br_on_null" -> BR_ON_NULL
   | "br_on_non_null" -> BR_ON_NON_NULL
   | "br_on_cast" -> BR_ON_CAST

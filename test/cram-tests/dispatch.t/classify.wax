@@ -1,0 +1,8 @@
+fn classify(x: i32) -> i32 {
+    dispatch x ['zero 'one 'two else 'big] {
+        'zero: { return 10; }
+        'one: { return 20; }
+        'two: { return 30; }
+        'big: { return 99; }
+    }
+}

@@ -86,7 +86,7 @@
   (local $group_start (ref $int_array)) (local $group_end (ref $int_array))
   (local $re_register (ref $int_array)) (local $pc i32) (local $i i32)
   (local $j i32) (local $stack (ref null $stack)) (local $instr i32)
-  (local $arg i32) (local $set (ref $string)) (local $s' (ref $string))
+  (local $s' (ref $string)) (local $set (ref $string)) (local $arg i32)
   (local $l i32) (local $p (ref $pos)) (local $u (ref $undo))
   (local $res (ref $block))
   (local.set $len (array.len (local.get $s)))
@@ -117,6 +117,11 @@
       (loop $continue
         (block $backtrack
           (block $prefix_match
+            (local.set $instr
+              (i31.get_s
+                (ref.cast (ref i31)
+                  (array.get $block (local.get $prog) (local.get $pc)))))
+            (local.set $pc (i32.add (local.get $pc) (i32.const 1)))
             (block $CHECKPROGRESS
               (block $SETMARK
                 (block $PUSHBACK
@@ -135,15 +140,6 @@
                                           (block $STRING
                                             (block $CHARNORM
                                               (block $CHAR
-                                                (local.set $instr
-                                                  (i31.get_s
-                                                    (ref.cast (ref i31)
-                                                      (array.get $block
-                                                        (local.get $prog)
-                                                        (local.get $pc)))))
-                                                (local.set $pc
-                                                  (i32.add (local.get $pc)
-                                                    (i32.const 1)))
                                                 (br_table $CHAR $CHARNORM
                                                   $STRING $STRINGNORM
                                                   $CHARCLASS $BOL $EOL

@@ -111,20 +111,21 @@ fn caml_hash_mix_string(h: i32, s: &string) -> i32 {
         }
     }
     let w = 0;
-    'l_2: do {
-        'l_3: do {
-            'l_4: do {
-                'l_5: do {
-                    br_table [ 'l_2 'l_3 'l_4 else 'l_5 ] len & 3;
-                }
-                w = s[i + 2] as i32_u << 16;
-            }
+    dispatch (len & 3) [ 'l_2 'l_3 'l_4 else 'l_5 ] {
+        'l_2: {
+            h ^ len;
+        }
+        'l_3: {
+            w = w | s[i] as i32_u;
+            h = caml_hash_mix_int(h, w);
+        }
+        'l_4: {
             w = w | s[i + 1] as i32_u << 8;
         }
-        w = w | s[i] as i32_u;
-        h = caml_hash_mix_int(h, w);
+        'l_5: {
+            w = s[i + 2] as i32_u << 16;
+        }
     }
-    h ^ len;
 }
 
 const HASH_QUEUE_SIZE = 256;

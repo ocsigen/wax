@@ -110,6 +110,14 @@ let module_ ctx env (fields : location Ast.module_) :
     | Br (l, v) -> Br (l, Option.map sone v)
     | Br_if (l, v) -> Br_if (l, sone v)
     | Br_table (ls, v) -> Br_table (ls, sone v)
+    | Dispatch { index; cases; default; arms } ->
+        Dispatch
+          {
+            index = sone index;
+            cases;
+            default;
+            arms = List.map (fun (l, body) -> (l, sinstrs body)) arms;
+          }
     | Br_on_null (l, v) -> Br_on_null (l, sone v)
     | Br_on_non_null (l, v) -> Br_on_non_null (l, sone v)
     | Br_on_cast (l, t, v) -> Br_on_cast (l, t, sone v)

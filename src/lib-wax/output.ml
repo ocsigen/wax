@@ -473,7 +473,9 @@ let array_instr pp nm f =
 
 let get_prec (i : _ Ast.instr) =
   match i.desc with
-  | Block _ | Loop _ | If _ | Try _ | TryTable _ | If_annotation _ -> Atom
+  | Block _ | Loop _ | If _ | Try _ | TryTable _ | If_annotation _ | Dispatch _
+    ->
+      Atom
   | Unreachable | Nop | Hole | Null | Get _ | Char _ | String _ | Int _
   | Float _ | Struct _ | StructDefault _ | Array _ | ArrayDefault _
   | ArrayFixed _ | ArraySegment _ | ArrayGet _ | ArraySet _ | Sequence _ ->
@@ -498,7 +500,9 @@ let get_prec (i : _ Ast.instr) =
 
 let is_block (i : _ Ast.instr) =
   match i.desc with
-  | Block _ | Loop _ | If _ | Try _ | TryTable _ | If_annotation _ -> true
+  | Block _ | Loop _ | If _ | Try _ | TryTable _ | If_annotation _ | Dispatch _
+    ->
+      true
   | Call _ | Unreachable | Nop | Hole | Null | Get _ | Set _ | Tee _
   | TailCall _ | Char _ | String _ | Int _ | Float _ | Cast _ | Test _
   | NonNull _ | Struct _ | StructDefault _ | StructGet _ | StructSet _ | Array _
@@ -514,7 +518,9 @@ let rec starts_with_block_prec prec (i : 'a Ast.instr) =
   if prec > actual then false
   else
     match i.desc with
-    | Block _ | Loop _ | If _ | Try _ | TryTable _ | If_annotation _ -> true
+    | Block _ | Loop _ | If _ | Try _ | TryTable _ | If_annotation _
+    | Dispatch _ ->
+        true
     | Call (i, _) | ArrayGet (i, _) | ArraySet (i, _, _) ->
         starts_with_block_prec CallAndFieldAccess i
     | Cast (i, _) | Test (i, _) -> starts_with_block_prec Cast i
@@ -928,6 +934,59 @@ let rec instr prec pp (i : _ instr) =
               punctuation pp "]");
           space pp ();
           instr Branch pp i)
+  | Dispatch { index; cases; default; arms } ->
+      hvbox pp (fun () ->
+          (* Head: [dispatch <index> [ <labels> else <default> ] {]. The inner
+             hvbox keeps it on one line if it fits; otherwise it breaks as
+                 dispatch <index> [
+                     <labels, filled and indented>
+                 ] {
+             with the [']'] dedented to the [dispatch] column. *)
+          hvbox pp ~indent:0 (fun () ->
+              hbox pp (fun () ->
+                  keyword pp "dispatch";
+                  space pp ();
+                  (* Parenthesise a non-atomic index: the following '[' would
+                     otherwise bind to the index's last atom as an array
+                     access. *)
+                  instr Atom pp index;
+                  space pp ();
+                  punctuation pp "[");
+              indent pp indent_level (fun () ->
+                  space pp ();
+                  box pp (fun () ->
+                      (match cases with
+                      | [] -> ()
+                      | first :: rest ->
+                          identifier pp "'";
+                          identifier pp first.desc;
+                          List.iter
+                            (fun l ->
+                              space pp ();
+                              identifier pp "'";
+                              identifier pp l.desc)
+                            rest;
+                          space pp ());
+                      keyword pp "else";
+                      space pp ();
+                      identifier pp "'";
+                      identifier pp default.desc));
+              space pp ();
+              hbox pp (fun () ->
+                  punctuation pp "]";
+                  space pp ();
+                  punctuation pp "{"));
+          if arms <> [] then (
+            indent pp indent_level (fun () ->
+                List.iter
+                  (fun (l, body) ->
+                    newline pp ();
+                    block pp (Some l) None
+                      { params = [||]; results = [||] }
+                      body)
+                  arms);
+            newline pp ());
+          punctuation pp "}")
   | Return i ->
       box pp ~indent:indent_level (fun () ->
           keyword pp "return";
