@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-69066062.js";
+            window.path_to_searchindex_js = "searchindex-2f9db816.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -481,31 +481,32 @@ table. A bracket maps an index to a case label (with an <code>else</code> defaul
 out-of-range index), and each arm gives that case’s body:</p>
 <pre><code class="language-wax">fn classify(x: i32) -&gt; i32 {
     dispatch x ['zero 'one 'two else 'big] {
-        'zero: { return 10; }
-        'one:  { return 20; }
-        'two:  { return 30; }
         'big:  { return 99; }
+        'two:  { return 30; }
+        'one:  { return 20; }
+        'zero: { return 10; }
     }
 }
 </code></pre>
-<p>The bracket is exactly the underlying <code>br_table</code>: index <code>0</code> jumps to the first
-listed label, <code>1</code> to the second, and so on, and an out-of-range index jumps to
+<p>The bracket is exactly the underlying <code>br_table</code>: index <code>0</code> jumps to the label
+named first, <code>1</code> to the second, and so on, and an out-of-range index jumps to
 the <code>else</code> label. A label may be listed more than once (several indices sharing
 a case), and every listed label (and <code>else</code>) must name an arm. The index must be
 an <code>i32</code>, and the labels are 0-ary branch targets. Case (arm) labels must be
 distinct.</p>
-<p><code>dispatch</code> lowers to one nested block per case — the first arm outermost, the
-<code>br_table</code> in the innermost block — with each case body just after its block.
-As in a C <code>switch</code>, cases <strong>fall through</strong>, but <em>outward</em>: reaching a case runs
-its body and then the bodies of the cases enclosing it (the ones listed before
-it), unless it branches away first. So the example above gives each case its own
-result via <code>return</code>; to break out instead, branch to an enclosing label:</p>
+<p><code>dispatch</code> lowers to one nested block per case, with the <code>br_table</code> in the
+innermost block and each case body just after its block. As in a C <code>switch</code>,
+cases <strong>fall through</strong>: reaching a case runs its body and then falls into the
+<em>next</em> arm listed, unless it branches away first. So the arms are written in
+fall-through order, which is the reverse of the bracket’s index order — the
+last arm is the one index <code>0</code> reaches. The example above gives each case its
+own result via <code>return</code>; to break out instead, branch to an enclosing label:</p>
 <pre><code class="language-wax">let r: i32;
 'done: do {
     dispatch x ['zero 'one else 'two] {
-        'zero: { r = 10; br 'done; }
-        'one:  { r = 20; br 'done; }
         'two:  { r = 30; }
+        'one:  { r = 20; br 'done; }
+        'zero: { r = 10; br 'done; }
     }
 }
 </code></pre>

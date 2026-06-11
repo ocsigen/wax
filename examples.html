@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-69066062.js";
+            window.path_to_searchindex_js = "searchindex-2f9db816.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -351,10 +351,10 @@ fn countdown(n: i32) -&gt; i32 {
 <pre><code class="language-wax">#[export = "rgb_channel"]
 fn rgb_channel(color: i32, value: i32) -&gt; i32 {
     dispatch color ['red 'green 'blue else 'bad] {
-        'red:   { return (value &amp; 255) &lt;&lt; 16; }
-        'green: { return (value &amp; 255) &lt;&lt; 8; }
-        'blue:  { return value &amp; 255; }
         'bad:   { return -1; }
+        'blue:  { return value &amp; 255; }
+        'green: { return (value &amp; 255) &lt;&lt; 8; }
+        'red:   { return (value &amp; 255) &lt;&lt; 16; }
     }
 }
 </code></pre>
