@@ -1,8 +1,5 @@
 (*
 TODO:
-- Check that import correspond to a declaration
-- fix typeuse validation (add a type if not already present)
-  + typeuse when converting to binary
 - error messages
 - locations on the heap when push several values?
 - try to use declared types instead of adding <string>
@@ -10,32 +7,13 @@ TODO:
 - desugar by default
 - handle double casts: i31 then i32_s
 - utf-16 string / js strings
-- suggestion for unknown keywords 
 
 Optimizations
-- move lets at more appropriate places
 - remove redundant type annotations/casts
-- option to tighten casts to any/extern / eliminate redundant casts
-  and type annotations
-
-Comments
-- process the flow of tokens
-  => keep track of the line of the previous token
-  => comment/newline ==>
-     register in a side table the blank lines and comments,
-     and do not propagate
-- emission:
-  before: grab all the comment/newline before the current location /
-          output comments
-  after: grab all the comment/newline after the current location and
-     before the next sibling (and in the parent); split a last newline;
-     push back the comments after last newline;
-     output comments
 
 Syntax changes:
 - names in result type (symmetry with params)
 - no need to have func type for tags (declaration tag : ty)
-- we may not need Sequence (change branch expressions instead)
 
 Syntax ideas:
 - dispatch foo ['a 'b ... else 'c] { 'a { } 'b { } ... }
@@ -51,22 +29,6 @@ Explicit types?
 ==> for function types
 ==> for call_indirect
 (But we don't have a cast to a typeuse in WAT)
-
-Typing with conditionals:
-- when a conditional is encountered, refine the assumptions to take
-  the first branch (if possible) and register that the other branch
-  needs to be visited.
-  A --> A /\ B
-        A /\ not B
-- store somehow a mapping conditional branch ==> code
-- to transform the code, we need to cover all the branches; to type,
-  we need to test all combinations
-==> take a branch which is not covered. find a condition so that it is
-    covered and run the typer again with this assumption
-vs
-==> stack of possible conditions; when we encounter a branch, we split
-    the current condition in two, push one one the stack, and continue
-    with the other
 *)
 
 open Ast
@@ -3180,7 +3142,6 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
           Error.expected_ref ctx.diagnostics ~location:(snd i'.info);
           return_expression i (NonNull i') (UnionFind.make Unknown))
   | Return i' ->
-      (*ZZZ List of instructions? *)
       let* i' =
         match i' with
         | Some i' ->
@@ -4032,21 +3993,6 @@ and block ctx loc label params results br_params block =
      let* () = pop_args ctx ~location:loc results in
      return block')
 
-(*ZZZ
-let fundecl ctx typ sign =
-  match (typ, sign) with
-  | Some idx, _ ->
-      (*ZZZ Validate signature *)
-      resolve_type_name ctx idx
-  | _, Some sign ->
-      (* The type of function [name] *)
-      Wasm.Types.add_rectype ctx.internal_types
-        [|
-          { typ = Func (signature ctx sign); supertype = None; final = true };
-        |]
-  | None, None -> assert false (*ZZZ*)
-*)
-
 let check_type_definitions ctx =
   (*ZZZ In-order check? *)
   Tbl.iter ctx.types (fun _ (i, (st : subtype)) ->
@@ -4508,7 +4454,7 @@ let fundecl ctx name typ sign =
                 |]
             in
             (i, name.desc)
-        | None -> assert false (*ZZZ*))
+        | None -> assert false)
 
 let field_attributes (field : _ modulefield) =
   match field with
@@ -4683,7 +4629,7 @@ let type_configuration ~simplify diagnostics fields =
                     Error.expected_func_type ctx.diagnostics ~location:typ.info;
                     None)
             | None, Some sign -> Some (funsig ctx sign)
-            | None, None -> assert false (*ZZZ*)
+            | None, None -> assert false
           in
           Tbl.add diagnostics ctx.tags name typ
       | Data { name; _ } ->
