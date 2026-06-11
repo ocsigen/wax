@@ -4,6 +4,6 @@ fn divmod(a: i32, b: i32) -> (i32, i32) {
 }
 
 fn f() -> i64 {
-    let (x: i64, y) = divmod(1, 2);
+    let (x: i64, _y) = divmod(1, 2);
     x;
 }

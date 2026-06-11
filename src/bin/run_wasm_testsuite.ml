@@ -278,7 +278,7 @@ let runtest filename _ =
                     ModuleParser.parse_from_string ~color ~filename txt
                   in
                   Utils.Diagnostic.run ~color ~source:(Some txt) (fun d ->
-                      Wasm.Validation.f d ast);
+                      Wasm.Validation.f ~warn_unused:false d ast);
                   if false then
                     Format.printf "@[<2>Result:@ %a@]@." (print_module ~color)
                       ast)
@@ -303,7 +303,7 @@ let runtest filename _ =
                 let ok =
                   in_child_process ~quiet (fun () ->
                       Utils.Diagnostic.run ~color ~source:(Some txt) (fun d ->
-                          Wasm.Validation.f d ast);
+                          Wasm.Validation.f ~warn_unused:false d ast);
                       if false then
                         Format.printf "@[<2>Result:@ %a@]@."
                           (print_module ~color) ast)
@@ -367,7 +367,8 @@ let runtest filename _ =
       match (status, m) with
       | `Valid, m ->
           if false then Format.eprintf "@[%a@]@." (print_module ~color) m;
-          Utils.Diagnostic.run ~color ~source (fun d -> Wasm.Validation.f d m)
+          Utils.Diagnostic.run ~color ~source (fun d ->
+              Wasm.Validation.f ~warn_unused:false d m)
       | `Invalid reason, m ->
           let ok =
             in_child_process ~quiet (fun () ->
@@ -378,7 +379,7 @@ let runtest filename _ =
                    binaries). *)
                 if not quiet then Format.eprintf "Expected reason: %s@." reason;
                 Utils.Diagnostic.run ~color ~source (fun d ->
-                    Wasm.Validation.f d m);
+                    Wasm.Validation.f ~warn_unused:false d m);
                 if false then
                   Format.printf "@[<2>Result:@ %a@]@." (print_module ~color) m)
           in
@@ -463,7 +464,7 @@ let runtest filename _ =
                       let ok =
                         in_child_process (fun () ->
                             Utils.Diagnostic.run ~color ~source (fun d ->
-                                Wasm.Validation.f d m'))
+                                Wasm.Validation.f ~warn_unused:false d m'))
                       in
                       if not ok then (
                         Format.eprintf "@[%a@]@." (print_module ~color) m';

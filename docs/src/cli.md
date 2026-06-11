@@ -38,6 +38,7 @@ files (see [Formatting](#formatting)) and `check` validates them (see
     - Perform validation during conversion.
     - For Wax: Runs type checking.
     - For Wasm Text: Runs well-formedness checks.
+    - Reports a warning for any local that is declared but never read — a Wax `let` binding, or a Wasm Text `(local …)`. Prefix the name with `_` (e.g. `let _x = …`, `(local $_x i32)`) to mark it intentionally unused and silence the warning; function parameters are never reported.
     - For input containing conditional annotations (`#[if]` / `(@if ...)`), every reachable combination of conditions is checked independently, and each error is reported with the assumption (`reachable when ...`) under which it occurs.
     - Disabled by default.
 
@@ -148,7 +149,9 @@ wax format --check src/*.wax
 
 The `check` subcommand validates files (type-checking for Wax, well-formedness
 for Wasm) without producing any output, reporting diagnostics and exiting with a
-non-zero status if any file fails. It takes one or more files.
+non-zero status if any file fails. It takes one or more files. Unused-local
+warnings (see [`--validate`](#options)) are reported too, but do not by
+themselves cause a non-zero exit.
 
 ```sh
 wax check [OPTIONS] FILE…

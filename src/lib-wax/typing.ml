@@ -117,6 +117,22 @@ module Error = struct
           ())
       fmt
 
+  (* Warnings share the same envelope as [report] but with severity [Warning],
+     so they are printed without aborting the pass. *)
+  let warn ?hint ?related context ~location fmt =
+    Format.kdprintf
+      (fun msg ->
+        Diagnostic.report context ~location ~severity:Warning ?hint ?related
+          ~message:(fun f () -> msg f)
+          ())
+      fmt
+
+  (* A local declared by a [let] but never read. Prefix its name with [_] to
+     silence the warning. *)
+  let unused_local context ~location name =
+    warn context ~location "The local variable %a is never used." print_name
+      name
+
   let empty_stack context ~location =
     report context ~location "The stack is empty."
 
@@ -659,6 +675,16 @@ type module_context = {
   tables : ([ `I32 | `I64 ] * reftype) Tbl.t;
   elems : reftype Tbl.t;
   mutable locals : inferred_valtype StringMap.t;
+  warn_unused : bool;
+      (* Whether to report locals declared by a [let] but never read. Enabled
+         only when validation is requested. *)
+  read_locals : StringSet.t ref;
+      (* Names of locals read so far in the current function. A [ref] (rather
+         than a snapshot field) so reads inside a block propagate to the
+         function level. Reset per function. *)
+  local_decls : ident list ref;
+      (* The [let]-bound locals declared in the current function, in declaration
+         order, so an unread one can be reported as unused. Reset per function. *)
   mutable initialized_locals : StringSet.t;
       (* Locals known to hold a value at the current point. A non-defaultable
          (non-nullable reference) local starts uninitialized and must be
@@ -1327,6 +1353,7 @@ let bind_let_value ctx ~location result_ty (name, typ) =
            Option.iter
              (fun name ->
                ctx.locals <- StringMap.add name.desc ity ctx.locals;
+               ctx.local_decls := name :: !(ctx.local_decls);
                mark_initialized ctx name.desc)
              name;
            ctx.simplify
@@ -1340,6 +1367,7 @@ let bind_let_value ctx ~location result_ty (name, typ) =
         (fun name ->
           let>@ ity = resolve_omitted_valtype ctx result_ty in
           ctx.locals <- StringMap.add name.desc ity ctx.locals;
+          ctx.local_decls := name :: !(ctx.local_decls);
           mark_initialized ctx name.desc)
         name;
       (name, None)
@@ -2206,6 +2234,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       let ty =
         match resolve_variable ctx idx with
         | Local ty ->
+            ctx.read_locals := StringSet.add idx.desc !(ctx.read_locals);
             if not (StringSet.mem idx.desc ctx.initialized_locals) then
               Error.uninitialized_local ctx.diagnostics ~location:idx.info idx;
             UnionFind.make (Valtype ty)
@@ -2912,6 +2941,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
           | Some name, Some typ ->
               let>@ ity = internalize_valtype ctx typ in
               ctx.locals <- StringMap.add name.desc ity ctx.locals;
+              ctx.local_decls := name :: !(ctx.local_decls);
               (* A defaultable local holds its zero value; a non-defaultable one
                  stays uninitialized until assigned. *)
               if is_defaultable typ then mark_initialized ctx name.desc
@@ -4525,6 +4555,9 @@ let rec functions ctx fields =
                 StringMap.fold
                   (fun k _ s -> StringSet.add k s)
                   !locals StringSet.empty;
+              (* Fresh per-function tracking of declared and read locals. *)
+              read_locals = ref StringSet.empty;
+              local_decls = ref [];
               control_types =
                 [ (Option.map (fun l -> l.desc) label, return_types) ];
               return_types;
@@ -4536,6 +4569,16 @@ let rec functions ctx fields =
                let* () = pop_args ctx ~location return_types in
                return body)
           in
+          (* A local whose name starts with [_] is intentionally unused. *)
+          if ctx.warn_unused then
+            List.iter
+              (fun name ->
+                let n = name.desc in
+                if
+                  (not (StringSet.mem n !(ctx.read_locals)))
+                  && not (String.length n > 0 && n.[0] = '_')
+                then Error.unused_local ctx.diagnostics ~location:name.info name)
+              (List.rev !(ctx.local_decls));
           Some
             {
               f with
@@ -4705,7 +4748,7 @@ let check_attributes diagnostics field =
       Error.declaration_without_import diagnostics ~location:field.info
   | _ -> ()
 
-let type_configuration ~simplify diagnostics fields =
+let type_configuration ?(warn_unused = false) ~simplify diagnostics fields =
   let cond = ref Cond.true_ in
   let cond_env = Cond.create () in
   let type_context =
@@ -4757,6 +4800,9 @@ let type_configuration ~simplify diagnostics fields =
       elems = Tbl.make (Namespace.make cond) "element segment";
       tags = Tbl.make (Namespace.make cond) "tag";
       locals = StringMap.empty;
+      warn_unused;
+      read_locals = ref StringSet.empty;
+      local_decls = ref [];
       initialized_locals = StringSet.empty;
       control_types = [];
       return_types = [||];
@@ -5198,7 +5244,7 @@ let rec check_let_in_conditionals diagnostics (i : (_ instr_desc, _) annotated)
   | _ -> ());
   List.iter (check_let_in_conditionals diagnostics) (sub_instrs i)
 
-let f ?(simplify = false) diagnostics fields =
+let f ?(simplify = false) ?(warn_unused = false) diagnostics fields =
   Ast_utils.iter_fields
     (fun (field : (_ modulefield, _) annotated) ->
       match field.desc with
@@ -5208,7 +5254,7 @@ let f ?(simplify = false) diagnostics fields =
       | _ -> ())
     fields;
   if not (List.exists field_has_conditional fields) then
-    type_configuration ~simplify diagnostics fields
+    type_configuration ~warn_unused ~simplify diagnostics fields
   else begin
     (* Check every reachable configuration: each is specialized to be
        conditional-free and typed independently, so a diagnostic is reported

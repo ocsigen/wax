@@ -5,6 +5,7 @@ type types
 
 val f :
   ?simplify:bool ->
+  ?warn_unused:bool ->
   Utils.Diagnostic.context ->
   Ast.location Ast.module_ ->
   types * typed_module_annotation Ast.module_
@@ -15,7 +16,11 @@ val f :
     casts the inferred types make redundant are dropped, and [&?extern]/[&?any]
     casts of non-nullable arguments are tightened to [&extern]/[&any]. This is
     intended for the Wasm-to-Wax conversion, where casts are inserted to pin
-    types; hand-written Wax is left untouched. *)
+    types; hand-written Wax is left untouched.
+
+    When [warn_unused] is set (default [false]), a [let]-bound local that is
+    never read is reported as a warning (unless its name starts with [_]). Only
+    honored for conditional-free modules. *)
 
 val erase_types :
   typed_module_annotation Ast.module_ -> Ast.location Ast.module_

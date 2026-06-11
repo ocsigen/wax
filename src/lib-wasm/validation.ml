@@ -455,6 +455,18 @@ module Error = struct
           print_index idx)
       ()
 
+  (* A local that is declared but never read. Prefix its name with [_] to
+     silence the warning. *)
+  let unused_local context ~location name =
+    Diagnostic.report context ~location ~severity:Warning
+      ~message:(fun f () ->
+        match name with
+        | Some id ->
+            Format.fprintf f "The local variable %a is never used." print_ident
+              id
+        | None -> Format.fprintf f "This local is never used.")
+      ()
+
   let index_already_bound context ~location kind index =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
@@ -932,6 +944,11 @@ type ctx = {
   return_source : source_type array;
   modul : module_context;
   mutable initialized_locals : IntSet.t;
+  (* Indices of locals read by a [local.get]. A local that is never read is
+     reported as unused once the function body has been validated. A [ref]
+     (rather than a snapshot field like [initialized_locals]) so a read inside a
+     block propagates up to the function level. *)
+  used_locals : IntSet.t ref;
 }
 
 let lookup_func_type ctx idx =
@@ -1174,8 +1191,11 @@ let get_local ctx ?(initialize = false) i =
   let idx = Sequence.get_index ctx.locals i in
   if initialize then
     ctx.initialized_locals <- IntSet.add idx ctx.initialized_locals
-  else if not (IntSet.mem idx ctx.initialized_locals) then
-    Error.uninitialized_local ctx.modul.diagnostics ~location:i.info i;
+  else begin
+    ctx.used_locals := IntSet.add idx !(ctx.used_locals);
+    if not (IntSet.mem idx ctx.initialized_locals) then
+      Error.uninitialized_local ctx.modul.diagnostics ~location:i.info i
+  end;
   l
 
 let is_nullable ty =
@@ -2745,6 +2765,7 @@ let constant_expression ctx ~location ~expected_source ty expr =
          return_source = [||];
          modul = ctx;
          initialized_locals = IntSet.empty;
+         used_locals = ref IntSet.empty;
        }
      in
      let* () = instructions ctx expr in
@@ -3180,7 +3201,7 @@ let segments ctx fields =
       | _ -> ())
     fields
 
-let functions ctx fields =
+let functions ?(warn_unused = true) ctx fields =
   List.iter
     (fun (field : (_ Ast.Text.modulefield, _) Ast.annotated) ->
       match field.desc with
@@ -3227,6 +3248,10 @@ let functions ctx fields =
                   let source = param_source.(j) in
                   Sequence.register locals None (typ, source))
                 func_typ.params);
+          (* The locals declared by the function (not its parameters), recorded
+             as (index, optional name, declaration location) so an unread one
+             can be reported as unused after the body is validated. *)
+          let declared_locals = ref [] in
           List.iter
             (fun e ->
               let id, typ = e.Ast.desc in
@@ -3237,23 +3262,45 @@ let functions ctx fields =
               in
               if is_defaultable typ' then
                 initialized_locals := IntSet.add !i !initialized_locals;
+              (* Point a named local's warning at its name; an unnamed one at
+                 the whole declaration. *)
+              let location =
+                match id with Some id -> id.Ast.info | None -> e.Ast.info
+              in
+              declared_locals :=
+                (!i, Option.map (fun id -> id.Ast.desc) id, location)
+                :: !declared_locals;
               incr i;
               Sequence.register locals id (typ', Plain typ))
             locs;
-          with_empty_stack ctx field.info
-            (let ctx =
-               {
-                 locals;
-                 control_types = [ (None, return_types, return_source) ];
-                 return_types;
-                 return_source;
-                 modul = ctx;
-                 initialized_locals = !initialized_locals;
-               }
-             in
-             let* () = instructions ctx instrs in
+          let ctx =
+            {
+              locals;
+              control_types = [ (None, return_types, return_source) ];
+              return_types;
+              return_source;
+              modul = ctx;
+              initialized_locals = !initialized_locals;
+              used_locals = ref IntSet.empty;
+            }
+          in
+          with_empty_stack ctx.modul field.info
+            (let* () = instructions ctx instrs in
              pop_args ctx field.info (*ZZZ*) ~source:return_source return_types);
-          register_exports ctx exports
+          (* A named local whose name starts with [_] is intentionally unused;
+             unnamed locals are always reported. *)
+          if warn_unused then
+            List.iter
+              (fun (idx, name, location) ->
+                if
+                  (not (IntSet.mem idx !(ctx.used_locals)))
+                  && not
+                       (match name with
+                       | Some n -> String.length n > 0 && n.[0] = '_'
+                       | None -> false)
+                then Error.unused_local ctx.modul.diagnostics ~location name)
+              (List.rev !declared_locals);
+          register_exports ctx.modul exports
       | _ -> ())
     fields
 
@@ -3435,7 +3482,7 @@ let check_syntax ctx lst =
       Error.multiple_start ctx.diagnostics ~location:second.Ast.info
   | _ -> ()
 
-let validate_configuration diagnostics (_, fields) =
+let validate_configuration ?(warn_unused = true) diagnostics (_, fields) =
   let type_context =
     {
       types = Types.create ();
@@ -3477,7 +3524,7 @@ let validate_configuration diagnostics (_, fields) =
   tables_and_memories ctx fields;
   globals ctx fields;
   segments ctx fields;
-  functions ctx fields;
+  functions ~warn_unused ctx fields;
   exports ctx fields;
   start ctx fields
 
@@ -3658,14 +3705,15 @@ let check_import_order diagnostics fields =
              can_import)
        None fields)
 
-let f diagnostics ((name, fields) as modul) =
+let f ?(warn_unused = true) diagnostics ((name, fields) as modul) =
   check_import_order diagnostics fields;
   if not (List.exists field_has_conditional fields) then
-    validate_configuration diagnostics modul
+    validate_configuration ~warn_unused diagnostics modul
   else
     Cond_explore.check_all diagnostics
       ?truncation_location:
         (match fields with f :: _ -> Some f.Ast.info | [] -> None)
       ~specialize:(fun env asm ~enqueue ~record ->
         (name, specialize env diagnostics ~enqueue ~record asm fields))
-      ~check:validate_configuration ()
+      ~check:(validate_configuration ~warn_unused)
+      ()

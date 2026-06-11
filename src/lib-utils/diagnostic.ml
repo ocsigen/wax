@@ -310,10 +310,14 @@ type context = {
   related : label list;
   exit_on_error : bool;
   output : Format.formatter;
+  collecting : bool;
+      (* A collecting context buffers warnings in its queue (like errors)
+         instead of printing them immediately, so they can be inspected with
+         [collected] and re-reported. *)
 }
 
 let make ?color ~source ?(related = []) ?(exit_on_error = true) ?(max = 1)
-    ?(output = Format.err_formatter) () =
+    ?(output = Format.err_formatter) ?(collecting = false) () =
   let theme = get_theme ?color () in
   {
     max;
@@ -323,6 +327,7 @@ let make ?color ~source ?(related = []) ?(exit_on_error = true) ?(max = 1)
     related;
     exit_on_error;
     output;
+    collecting;
   }
 
 (* A formatter that discards everything, used by collecting contexts. *)
@@ -332,7 +337,8 @@ let null_formatter = Format.make_formatter (fun _ _ _ -> ()) (fun () -> ())
    exiting, so they can be inspected with [collected]. Output parameters
    ([source], [color], …) are irrelevant since nothing is rendered. *)
 let collector () =
-  make ~source:None ~exit_on_error:false ~max:max_int ~output:null_formatter ()
+  make ~source:None ~exit_on_error:false ~max:max_int ~output:null_formatter
+    ~collecting:true ()
 
 type entry = t
 
@@ -359,6 +365,12 @@ let output_errors ?exit_on_error context =
 let report context ~location ~severity ?hint ?(related = []) ~message () =
   let all_related = context.related @ related in
   match severity with
+  | Warning when context.collecting ->
+      (* Buffer the warning so [collected] can surface it; never triggers the
+         early flush or the exit-on-error path. *)
+      Queue.push
+        { location; severity; message; hint; related = all_related }
+        context.queue
   | Warning ->
       output_error ~output:context.output ~theme:context.theme
         ~source:context.source ~location ~severity ?hint ~related:all_related

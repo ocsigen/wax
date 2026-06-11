@@ -10,7 +10,7 @@ fn inferred() -> i32 {
 
 fn annotated() -> i32 {
     let (q: i32, r: i32) = divmod(17, 5);
-    q;
+    q + r;
 }
 
 fn discard() -> i32 {

@@ -23,7 +23,7 @@ inferred, or discarded with `_`.
     (call $divmod (i32.const 17) (i32.const 5))
     (local.set $r)
     (local.set $q)
-    (local.get $q)
+    (i32.add (local.get $q) (local.get $r))
   )
   
   (func $discard (result i32)
@@ -44,8 +44,8 @@ The number of names must match the number of values the initializer provides.
    ──➤  bad-count.wax:7:5
   5 │ 
   6 │ fn f() -> i32 {
-  7 │     let (x, y, z) = divmod(1, 2);
-    ·     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  7 │     let (x, _y, _z) = divmod(1, 2);
+    ·     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   8 │     x;
   9 │ }
   [123]
@@ -57,8 +57,8 @@ An annotation is checked against the value bound to that name.
    ──➤  bad-type.wax:7:5
   5 │ 
   6 │ fn f() -> i64 {
-  7 │     let (x: i64, y) = divmod(1, 2);
-    ·     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  7 │     let (x: i64, _y) = divmod(1, 2);
+    ·     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   8 │     x;
   9 │ }
   [123]

@@ -200,7 +200,7 @@ let wax_to_wat ~input_file ~output_file ~validate ~color ~output_color
   let ast = specialize_wax ~ctx ~color ~text defines ast in
   let types, ast =
     Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
-        Wax.Typing.f d ast)
+        Wax.Typing.f ~warn_unused:validate d ast)
   in
   let wasm_ast =
     Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
@@ -208,7 +208,9 @@ let wax_to_wat ~input_file ~output_file ~validate ~color ~output_color
   in
   if validate then
     Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
-        Wasm.Validation.f d wasm_ast);
+        (* Unused locals are reported against the Wax source by [Wax.Typing.f]
+           above; do not repeat them against the compiled Wasm. *)
+        Wasm.Validation.f ~warn_unused:false d wasm_ast);
   (* Typing and conversion preserve the source Wax locations, so the source
      trivia (keyed by those locations) maps onto the converted Wasm nodes;
      rewrite the comment delimiters from Wax to Wat syntax. *)
@@ -233,7 +235,7 @@ let wax_to_wax ~input_file ~output_file ~validate ~color ~output_color
   if validate then
     ignore
       (Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
-           Wax.Typing.f d ast));
+           Wax.Typing.f ~warn_unused:true d ast));
   let trivia, tail = wax_trivia ctx ast in
   with_open_out output_file (fun oc ->
       let print_wax f m =
@@ -256,7 +258,7 @@ let wax_to_wasm ~input_file ~output_file ~validate ~color ~output_color:_
   let ast = specialize_wax ~color ~text defines ast in
   let types, ast =
     Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
-        Wax.Typing.f d ast)
+        Wax.Typing.f ~warn_unused:validate d ast)
   in
   let wasm_ast_text =
     Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
@@ -264,7 +266,9 @@ let wax_to_wasm ~input_file ~output_file ~validate ~color ~output_color:_
   in
   if validate then
     Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
-        Wasm.Validation.f d wasm_ast_text);
+        (* Unused locals are reported against the Wax source by [Wax.Typing.f]
+           above; do not repeat them against the compiled Wasm. *)
+        Wasm.Validation.f ~warn_unused:false d wasm_ast_text);
   let wasm_ast_binary = to_binary ~color ~source:(Some text) wasm_ast_text in
   with_open_out output_file (fun oc ->
       Wasm.Wasm_output.module_ ~out_channel:oc ?opt_source_map_file
@@ -504,7 +508,7 @@ let check format_opt strict color files =
                let ast, _ =
                  Wax_parser.parse_from_string ~color ~filename:file text
                in
-               ignore (Wax.Typing.f d ast : _ * _)
+               ignore (Wax.Typing.f ~warn_unused:true d ast : _ * _)
            | Wat ->
                let ast, _ =
                  Wat_parser.parse_from_string ~color ~filename:file text
@@ -529,7 +533,13 @@ let check format_opt strict color files =
                          ~message:(Utils.Diagnostic.entry_message e)
                          ())
                      entries));
-            false)
+            (* Warnings (e.g. unused locals) are reported but do not fail the
+               check; only errors do. *)
+            not
+              (List.exists
+                 (fun e ->
+                   Utils.Diagnostic.entry_severity e = Utils.Diagnostic.Error)
+                 entries))
   in
   if not (List.fold_left (fun ok file -> check_one file && ok) true files) then
     exit 123

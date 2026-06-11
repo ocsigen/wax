@@ -1,0 +1,6 @@
+fn f(n: i32) -> i32 {
+    let used = n;
+    let dead = 5;
+    let _ignored = 9;
+    used;
+}

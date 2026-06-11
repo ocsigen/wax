@@ -11,8 +11,8 @@ unconstrained literal the way the type checker does (int -> i32, float -> f64).
   )
   
   (func $inferred (result f64)
-    (local $n i32) (local $f f64)
-    (local.set $n (i32.const 1))
+    (local $_n i32) (local $f f64)
+    (local.set $_n (i32.const 1))
     (local.set $f (f64.const 2.5))
     (local.get $f)
   )

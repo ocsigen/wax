@@ -4,7 +4,7 @@ fn typed() -> i64 {
 }
 
 fn inferred() -> f64 {
-    let n = 1;
+    let _n = 1;
     let f = 2.5;
     f;
 }
