@@ -26,7 +26,7 @@ let print_index f (idx : Ast.Text.idx) =
   | Num n -> Format.fprintf f "%s" (Uint32.to_string n)
   | Id id -> print_ident f id
 
-let print_text f s =
+let print_wrapped f s =
   Format.fprintf f "%a"
     (Format.pp_print_list
        ~pp_sep:(fun f () -> Format.pp_print_space f ())
@@ -227,7 +227,8 @@ module Error = struct
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f "Type mismatch: the table %a@ %a@ @[%a@]." print_index
-          idx print_text "should contain functions but its elements have type"
+          idx print_wrapped
+          "should contain functions but its elements have type"
           print_source_type source)
       ()
 
@@ -711,7 +712,7 @@ let typeuse_functype tc (tu_idx, tu_sign) =
 
 (* Per-element source types for a source function type's params and results, to
    pass straight to [pop_args]/[push_results]'s [~source]. *)
-let functype_arg_source ({ params; results } : Ast.Text.functype) =
+let functype_sources ({ params; results } : Ast.Text.functype) =
   ( Array.map (fun (_, v) -> Plain v) params,
     Array.map (fun v -> Plain v) results )
 
@@ -874,7 +875,9 @@ let typeuse d ctx (idx, sign) =
         [| { typ = Func ty; supertype = None; final = true } |]
   | None, None -> assert false (* Should not happen *)
 
-let string ctx =
+(* Intern the internal representation type of Wax strings — a mutable array of
+   [i8] — and return its global index. *)
+let string_type ctx =
   Types.add_rectype ctx.types
     [|
       {
@@ -1229,12 +1232,12 @@ let blocktype ctx (ty : Ast.Text.blocktype option) =
       let+@ iresults =
         array_map_opt (valtype ctx.modul.diagnostics ctx.modul.types) results
       in
-      let param_source, result_source = functype_arg_source ft in
+      let param_source, result_source = functype_sources ft in
       (iparams, iresults, param_source, result_source)
   | Some (Typeuse (Some idx, None)) ->
       let+@ _, { params; results } = lookup_func_type ctx idx in
       let param_source, result_source =
-        functype_arg_source (reference_functype ctx.modul.types idx)
+        functype_sources (reference_functype ctx.modul.types idx)
       in
       (params, results, param_source, result_source)
   | Some (Typeuse (None, None)) -> assert false (* Should not happen *)
@@ -1334,6 +1337,10 @@ let branch_target ctx (idx : Ast.Text.idx) =
       in
       find ctx.control_types id
 
+(* The top of the heap-type hierarchy that [t] belongs to (one of [any], [func],
+   [exn], [cont], [extern]). A cast or test pops a reference to this top type —
+   the most general operand the instruction accepts — before checking against
+   the precise target. *)
 let top_heap_type ctx (t : heaptype) : heaptype =
   match t with
   | Any | Eq | I31 | Struct | Array | None_ -> Any
@@ -1362,9 +1369,16 @@ let field_subtype info (ty : fieldtype) (ty' : fieldtype) =
   && storage_subtype info ty.typ ty'.typ
   && ((not ty.mut) || storage_subtype info ty'.typ ty.typ)
 
+(* The reference type difference [t1 \ t2] from the spec: [t1]'s heap type, made
+   non-nullable once a nullable [t2] has consumed the null case. This is the type
+   that falls through a [br_on_cast] (or is sent on by [br_on_cast_fail]); the
+   inline [src_diff] in those arms is the same operation on source types. *)
 let diff_ref_type t1 t2 =
   { nullable = t1.nullable && not t2.nullable; typ = t1.typ }
 
+(* Run [f] on the current stack and return its result as the monad value while
+   leaving the stack untouched — a peek. [Br_table] uses it to validate every
+   branch target against the same incoming stack. *)
 let with_current_stack f st = (st, f st)
 
 let unpack_type (f : fieldtype) =
@@ -1661,14 +1675,14 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let*! { params = ts1; results = ts2 }, sign =
         lookup_tag_signature ctx x
       in
-      let param_source, result_source = functype_arg_source sign in
+      let param_source, result_source = functype_sources sign in
       let* () = pop_args ctx loc ~source:param_source ts1 in
       push_results ~source:result_source ts2
   | Resume (x, clauses) ->
       let*! xty, _, ftx = lookup_cont_type ctx x in
       check_resume_table ctx loc ftx.results clauses;
       let _, result_source =
-        functype_arg_source (cont_source_functype ctx.modul.types x)
+        functype_sources (cont_source_functype ctx.modul.types x)
       in
       let* () =
         pop_args ctx loc
@@ -1682,11 +1696,11 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let*! { params = ts0; _ }, sign = lookup_tag_signature ctx y in
       check_resume_table ctx loc ftx.results clauses;
       let _, result_source =
-        functype_arg_source (cont_source_functype ctx.modul.types x)
+        functype_sources (cont_source_functype ctx.modul.types x)
       in
       let* () =
         pop_args ctx loc
-          ~source:(cont_operand_source (fst (functype_arg_source sign)) x)
+          ~source:(cont_operand_source (fst (functype_sources sign)) x)
           (Array.append ts0 [| Ref { nullable = true; typ = Type xty } |])
       in
       push_results ~source:result_source ftx.results
@@ -1694,7 +1708,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let*! xty, _, ftx = lookup_cont_type ctx x in
       check_resume_table ctx loc ftx.results clauses;
       let _, result_source =
-        functype_arg_source (cont_source_functype ctx.modul.types x)
+        functype_sources (cont_source_functype ctx.modul.types x)
       in
       let* () =
         pop_args ctx loc
@@ -1880,13 +1894,13 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           Error.expected_func_type ctx.modul.diagnostics ~location:loc idx;
           unreachable
       | Func { params; results } ->
-          let param_source, result_source = functype_arg_source sign in
+          let param_source, result_source = functype_sources sign in
           let* () = pop_args ctx loc ~source:param_source params in
           push_results ~source:result_source results)
   | CallRef idx ->
       let*! type_idx, { params; results } = lookup_func_type ctx idx in
       let param_source, result_source =
-        functype_arg_source (reference_functype ctx.modul.types idx)
+        functype_sources (reference_functype ctx.modul.types idx)
       in
       let* () =
         pop ctx loc
@@ -1911,7 +1925,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           unreachable
       | Func { params; results } ->
           let param_source, result_source =
-            functype_arg_source (typeuse_functype ctx.modul.types tu)
+            functype_sources (typeuse_functype ctx.modul.types tu)
           in
           let* () = pop_address ctx loc typ.limits in
           let* () = pop_args ctx loc ~source:param_source params in
@@ -1923,7 +1937,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           Error.expected_func_type ctx.modul.diagnostics ~location:loc idx;
           unreachable
       | Func { params; results } ->
-          let param_source, result_source = functype_arg_source sign in
+          let param_source, result_source = functype_sources sign in
           let* () = pop_args ctx loc ~source:param_source params in
           compare_types ctx.modul ~location:loc ~descr:"this tail call"
             ~provided_source:result_source ~expected_source:ctx.return_source
@@ -1932,7 +1946,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
   | ReturnCallRef idx ->
       let*! type_idx, { params; results } = lookup_func_type ctx idx in
       let param_source, result_source =
-        functype_arg_source (reference_functype ctx.modul.types idx)
+        functype_sources (reference_functype ctx.modul.types idx)
       in
       let* () =
         pop ctx loc
@@ -1960,7 +1974,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           unreachable
       | Func { params; results } ->
           let param_source, result_source =
-            functype_arg_source (typeuse_functype ctx.modul.types tu)
+            functype_sources (typeuse_functype ctx.modul.types tu)
           in
           let* () = pop_address ctx loc typ.limits in
           let* () = pop_args ctx loc ~source:param_source params in
@@ -2070,6 +2084,8 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
   | MemoryCopy (idx, idx') ->
       let*! limits = get_memory ctx idx in
       let*! limits' = get_memory ctx idx' in
+      (* The length operand uses the smaller of the two address types: i32 if
+         either memory is 32-bit, i64 only if both are 64-bit. *)
       let address_type =
         match (limits.address_type, limits'.address_type) with
         | `I32, _ | _, `I32 -> `I32
@@ -2220,6 +2236,8 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       then
         Error.type_mismatch ctx.modul.diagnostics ~location:loc
           ~provided_source:src_source ~expected_source:dst_source;
+      (* The length operand uses the smaller of the two address types: i32 if
+         either table is 32-bit, i64 only if both are 64-bit. *)
       let address_type =
         match (ty.limits.address_type, ty'.limits.address_type) with
         | `I32, _ | _, `I32 -> `I32
@@ -2602,7 +2620,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       push ~source:(named_ref_source idx) (Some loc)
         (Ref { nullable = false; typ = Type ty })
   | String (None, _) ->
-      let i = string ctx.modul.types in
+      let i = string_type ctx.modul.types in
       let comptype = Ast.Text.Array { mut = true; typ = Packed I8 } in
       push
         ~source:(ref_source ctx.modul.types ~nullable:false i comptype)
@@ -2800,9 +2818,9 @@ let max_table_size = function
   | `I64 -> Uint64.of_string "0xffff_ffff_ffff_ffff"
 
 let rec register_typeuses d ctx l =
-  List.iter (fun i -> register_typeuses' d ctx i) l
+  List.iter (fun i -> register_typeuses_instr d ctx i) l
 
-and register_typeuses' d ctx (i : _ Ast.Text.instr) =
+and register_typeuses_instr d ctx (i : _ Ast.Text.instr) =
   match i.desc with
   | Block { typ; _ }
   | Loop { typ; _ }
@@ -2814,12 +2832,12 @@ and register_typeuses' d ctx (i : _ Ast.Text.instr) =
       | Some (Valtype _) | None -> ())
   | CallIndirect (_, use) | ReturnCallIndirect (_, use) ->
       ignore (typeuse d ctx use)
-  | String _ -> ignore (string ctx)
+  | String _ -> ignore (string_type ctx)
   | If_annotation _ ->
       (* Spliced out by [specialize] before validation; cannot occur here. *)
       assert false
   | Folded (i, l) ->
-      register_typeuses' d ctx i;
+      register_typeuses_instr d ctx i;
       register_typeuses d ctx l
   | Unreachable | Nop | Throw _ | ThrowRef | ContNew _ | ContBind _ | Suspend _
   | Resume _ | ResumeThrow _ | ResumeThrowRef _ | Switch _ | Br _ | Br_if _
@@ -3067,7 +3085,7 @@ let globals ctx fields =
           Sequence.register ctx.globals id (typ, src);
           register_exports ctx exports
       | String_global { id; _ } ->
-          let i = string ctx.types in
+          let i = string_type ctx.types in
           let typ =
             { mut = false; typ = Ref { nullable = false; typ = Type i } }
           in
@@ -3148,7 +3166,7 @@ let functions ctx fields =
           in
           let return_types = func_typ.results in
           let return_source =
-            snd (functype_arg_source (typeuse_functype ctx.types typ))
+            snd (functype_sources (typeuse_functype ctx.types typ))
           in
           let locals = Sequence.make "local" in
           let initialized_locals = ref IntSet.empty in
@@ -3171,7 +3189,7 @@ let functions ctx fields =
               (* No inline parameter list: take the parameters' source types
                  from the referenced function type's definition. *)
               let param_source =
-                fst (functype_arg_source (typeuse_functype ctx.types typ))
+                fst (functype_sources (typeuse_functype ctx.types typ))
               in
               Array.iteri
                 (fun j typ ->
