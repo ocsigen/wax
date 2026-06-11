@@ -1077,26 +1077,8 @@ let rec instr i =
   | Folded (i, l) ->
       list ~loc [ block ~transparent:true (instr i :: List.map instr l) ]
 
-let strip_loc = function
-  | Atom a -> Atom { a with loc = None }
-  | List (_, l) -> List (None, l)
-  | Block b -> Block { b with loc = None }
-  | Vertical_block (_, l) -> Vertical_block (None, l)
-  | Structured_block (_, l) -> Structured_block (None, l)
-
 let instrs l =
-  match l with
-  | [] -> []
-  | first :: _ ->
-      (* Carry the first instruction's location on the block so a comment
-         leading the body is printed above the (vertical) block rather than
-         wedged inside it after the line break. *)
-      let sexps =
-        match List.map instr l with
-        | s :: rest -> strip_loc s :: rest
-        | [] -> []
-      in
-      [ Vertical_block (Some first.Ast.info, sexps) ]
+  match l with [] -> [] | _ -> [ Vertical_block (None, List.map instr l) ]
 
 let subtype ?loc t =
   let id, { typ; supertype; final } = t.Ast.desc in
@@ -1170,21 +1152,16 @@ let rec modulefield f =
   | Types [| t |] -> subtype ~loc t
   | Types l -> list ~loc (keyword "rec" :: List.map subtype (Array.to_list l))
   | Func { id; typ; locals; instrs = i; exports = e } ->
-      let local_sexp idx e =
+      let local_sexp e =
         let nm, t = e.Ast.desc in
-        (* The first local's location is carried by the group (below) so a
-           comment leading the locals merges with the line break before the
-           group instead of leaving a blank line; the others keep theirs, and
-           the hovbox lets a comment before any of them break correctly while
-           the locals stay packed. *)
-        let loc = if idx = 0 then None else Some e.Ast.info in
-        list ?loc (keyword "local" :: (opt_id nm @ [ valtype t ]))
+        (* The hovbox lets a comment before any local break correctly while the
+           locals stay packed. *)
+        list ~loc:e.Ast.info (keyword "local" :: (opt_id nm @ [ valtype t ]))
       in
       let locals_block =
         match locals with
         | [] -> []
-        | first :: _ ->
-            [ block ~loc:first.Ast.info ~bk:`Hov (List.mapi local_sexp locals) ]
+        | _ -> [ block ~bk:`Hov (List.map local_sexp locals) ]
       in
       list ~loc
         (block (keyword "func" :: (opt_id id @ exports e @ fundecl typ))

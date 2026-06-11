@@ -13,9 +13,6 @@ type t = {
           [None] by printers that do not need it. *)
   trivia : Trivia.t;
   seen : (Ast.location, unit) Hashtbl.t;
-  hoisted : (Ast.location, unit) Hashtbl.t;
-      (** Locations whose leading ([before]) trivia was already emitted by
-          {!hoist_before}; {!atomic_node} skips their [before] pass. *)
   collect : (Ast.location, unit) Hashtbl.t option;
 }
 
@@ -43,15 +40,8 @@ val get_trivia : t -> Ast.location option -> Trivia.associated
 (** Look up (and mark as seen) the trivia associated with a location. *)
 
 val atomic_node : t -> Ast.location option -> (unit -> unit) -> unit
-(** Emit a node's [before] trivia (unless already emitted via {!hoist_before}),
-    run the body, then its [within]/[after] trivia. *)
-
-val hoist_before : t -> Ast.location option -> unit
-(** Emit the leading ([before]) trivia of a location at the current position,
-    ahead of the node itself, and mark it so {!atomic_node} won't re-emit it.
-    Lifts a leading comment out of an expression's packing boxes — where a
-    forced break leaks as spaces — to an enclosing position that breaks cleanly.
-*)
+(** Emit a node's [before] trivia, run the body, then its [within]/[after]
+    trivia. *)
 
 val with_style : t -> Colors.style -> (unit -> unit) -> unit
 (** Run the body with {!style_override} set to the given style; a no-op on the

@@ -518,38 +518,7 @@ let rec cond_to_string (c : Wasm.Ast.cond) =
 
 and cond_list l = String.concat ", " (List.map cond_to_string l)
 
-let hoist_before pp loc = Utils.Styled_printer.hoist_before pp.base loc
-
-(* The sub-instruction printed first (leftmost) in [i], when [i] leads with it
-   rather than with a keyword/operator. Following this spine reaches the
-   leftmost token of an expression, where a leading comment sits. *)
-let leftmost_child (i : _ instr) =
-  match i.desc with
-  | Call (i, _)
-  | StructGet (i, _)
-  | StructSet (i, _, _)
-  | ArrayGet (i, _)
-  | ArraySet (i, _, _)
-  | Cast (i, _)
-  | Test (i, _)
-  | NonNull i
-  | BinOp (_, i, _) ->
-      Some i
-  | _ -> None
-
-(* Lift the leading comments along [i]'s leftmost spine up to the current
-   position. That position breaks cleanly, unlike the packing boxes the spine
-   descends into (where a forced break leaks as spaces); and with the comments
-   out of the way the expression itself stays flat. *)
-let rec hoist_leftmost pp i =
-  match leftmost_child i with
-  | Some c ->
-      hoist_before pp (pp.locate c.info);
-      hoist_leftmost pp c
-  | None -> ()
-
 let rec instr prec pp (i : _ instr) =
-  hoist_leftmost pp i;
   atomic_node pp (pp.locate i.info) @@ fun () ->
   parentheses prec (get_prec i) pp @@ fun () ->
   match i.desc with
@@ -854,9 +823,9 @@ let rec instr prec pp (i : _ instr) =
       instr UnaryPrefix pp i
   | Let (l, i) ->
       box pp ~indent:indent_level (fun () ->
-          (* Keep [let pat =] together as one unit: a leading comment hoisted
-             onto the value breaks the line after [=], and without this box the
-             outer box would also split [let]/[pat]/[=] across lines. *)
+          (* Keep [let pat =] together as one unit: when the value breaks the
+             line after [=], without this box the outer box would also split
+             [let]/[pat]/[=] across lines. *)
           hbox pp (fun () ->
               keyword pp "let";
               space pp ();
