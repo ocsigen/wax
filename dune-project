@@ -14,6 +14,7 @@
   (description "A compiler toolchain for Wax, a Rust-like syntax for WebAssembly. Capabilities: Formatting, Type Checking, Syntax Conversion (Wax <-> Wasm Text <-> Wasm Binary).")
   (depends
     sedlex
+    (menhir :build)
     menhirLib
     (uucp :with-dev-setup)
     re
