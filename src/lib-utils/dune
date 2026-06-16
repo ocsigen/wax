@@ -4,7 +4,7 @@
  (libraries unix))
 
 (rule
- (mode promote)
+ (mode fallback)
  (action
   (with-stdout-to
    unicode_widths.ml
