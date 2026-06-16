@@ -1,3 +1,9 @@
-(executables
- (names build_unicode_width_table generate_error_messages)
- (libraries uucp str))
+(executable
+ (name build_unicode_width_table)
+ (modules build_unicode_width_table)
+ (libraries uucp))
+
+(executable
+ (name generate_error_messages)
+ (modules generate_error_messages parse_messages)
+ (libraries str))
