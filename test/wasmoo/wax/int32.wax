@@ -50,13 +50,13 @@ type custom_operations = {
 type custom = open { f: &custom_operations };
 
 #[export = "int32_ops"]
-const int32_ops =
-    {custom_operations|
+const int32_ops: &custom_operations =
+    {
         id: string#"_i", // "_i"
         compare: int32_cmp,
         compare_ext: null as &?compare,
         hash: int32_hash,
-        fixed_length: {fixed_length| bsize_32: 4, bsize_64: 4 },
+        fixed_length: { bsize_32: 4, bsize_64: 4 },
         serialize: int32_serialize,
         deserialize: int32_deserialize,
         dup: int32_dup,
@@ -120,13 +120,13 @@ fn caml_int32_compare(i1: i32, i2: i32) -> &eq {
 }
 
 #[export = "nativeint_ops"]
-const nativeint_ops =
-    {custom_operations|
+const nativeint_ops: &custom_operations =
+    {
         id: string#"_n", // "_n"
         compare: int32_cmp,
         compare_ext: null as &?compare,
         hash: int32_hash,
-        fixed_length: {fixed_length| bsize_32: 4, bsize_64: 8 },
+        fixed_length: { bsize_32: 4, bsize_64: 8 },
         serialize: nativeint_serialize,
         deserialize: nativeint_deserialize,
         dup: int32_dup,

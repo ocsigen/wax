@@ -1,0 +1,6 @@
+type point = {x: i32, y: i32};
+
+fn f() -> &point {
+    let p = {x: 1, y: 2,};
+    return p;
+}

@@ -418,7 +418,7 @@ fn caml_float_of_string(x: &eq) -> &eq {
     }
     let c: i32;
     if j {
-        let s' = [string|0; len - j];
+        let s': &string = [0; len - j];
         i = 0;
         j = 0;
         while i <u len {

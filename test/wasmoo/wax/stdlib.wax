@@ -55,7 +55,7 @@ type assoc_array = [mut &?assoc];
 
 const Named_value_size = 13;
 
-const named_value_table = [assoc_array|null as &?assoc; Named_value_size];
+const named_value_table: &assoc_array = [null as &?assoc; Named_value_size];
 
 fn find_named_value(s: &eq, l: &?assoc) -> &?assoc {
     'tail: do &?assoc {
@@ -123,7 +123,7 @@ fn caml_unregister_named_value(name: &eq) -> &eq {
 }
 
 #[export = "caml_global_data"]
-let caml_global_data = [block|0 as &i31; 12];
+let caml_global_data: &block = [0 as &i31; 12];
 
 #[export = "caml_register_global"]
 fn caml_register_global(x: &eq, v: &eq, x_2: &eq) -> &eq {
@@ -173,7 +173,7 @@ fn caml_main(start: &func) {
                     _ =
                         caml_callback_2(
                             br_on_null 'not_registered
-                                caml_named_value([string|handle_uncaught_exception @ 0; 34]),
+                                caml_named_value([handle_uncaught_exception @ 0; 34]),
                             exn,
                             0 as &i31,
                         );
@@ -182,7 +182,7 @@ fn caml_main(start: &func) {
                 'null: do {
                     _ =
                         caml_callback_1(
-                            br_on_null 'null caml_named_value([string|do_at_exit @ 0; 21]),
+                            br_on_null 'null caml_named_value([do_at_exit @ 0; 21]),
                             0 as &i31,
                         );
                 }

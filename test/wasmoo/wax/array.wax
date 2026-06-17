@@ -43,7 +43,7 @@ fn caml_make_vect(n: &eq, v: &eq) -> &eq {
             f = (br_on_cast_fail 'not_float &float v).f;
             return [float_array|f; sz];
         };
-    let b = [block|v; sz + 1];
+    let b: &block = [v; sz + 1];
     b[0] = 0 as &i31;
     b;
 }
@@ -82,7 +82,7 @@ fn caml_array_of_uniform_array(vinit: &eq) -> &eq {
     if size != 1 {
         if init[1] is &float {
             size = size - 1;
-            let res = [float_array|0; size];
+            let res: &float_array = [0; size];
             let i: i32;
             do {
                 res[i] = (init[i + 1] as &float).f;
@@ -122,7 +122,7 @@ fn caml_array_sub(a: &eq, i: &eq, vlen: &eq) -> &eq {
             return a2;
         };
     let fa1 = a as &float_array;
-    let fa2 = [float_array|0; len];
+    let fa2: &float_array = [0; len];
     fa2.copy(0, fa1, i as &i31 as i32_u, len);
     fa2;
 }
@@ -134,14 +134,14 @@ fn caml_floatarray_sub(a: &eq, i: &eq, vlen: &eq) -> &eq {
         return empty_array;
     }
     let fa1 = a as &float_array;
-    let fa2 = [float_array|0; len];
+    let fa2: &float_array = [0; len];
     fa2.copy(0, fa1, i as &i31 as i32_u, len);
     fa2;
 }
 
 fn caml_floatarray_dup(a: &float_array) -> &eq {
     let len = a.length();
-    let a' = [float_array|0; len];
+    let a': &float_array = [0; len];
     a'.copy(0, a, 0, len);
     a';
 }
@@ -231,7 +231,7 @@ fn caml_array_concat(x: &eq) -> &eq {
     }
     let i: i32;
     if isfloat => &eq {
-        let fa = [float_array|0; len];
+        let fa: &float_array = [0; len];
         l = x;
         i = 0;
         'fill: loop {
@@ -253,7 +253,7 @@ fn caml_array_concat(x: &eq) -> &eq {
         }
         fa;
     } else {
-        let a = [block|0 as &i31; len + 1];
+        let a: &block = [0 as &i31; len + 1];
         l = x;
         i = 1;
         'fill: loop {

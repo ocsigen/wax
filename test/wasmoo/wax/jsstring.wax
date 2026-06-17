@@ -46,7 +46,7 @@ let text_converters_available = 0;
 let string_builtins_available = 0;
 
 const utf16_buffer_size = 32768;
-let buffer = [wstring|0; 0];
+let buffer: &wstring = [0; 0];
 
 #[start]
 fn init() {
@@ -55,15 +55,11 @@ fn init() {
     text_converters_available =
         0
             != compare_strings(
-                   decodeStringFromUTF8Array([string|0], 0, 1),
-                   decodeStringFromUTF8Array([string|1], 0, 1),
+                   decodeStringFromUTF8Array([0], 0, 1),
+                   decodeStringFromUTF8Array([1], 0, 1),
                );
     string_builtins_available =
-        0
-            != compare_strings(
-                   fromCharCodeArray([wstring|0], 0, 1),
-                   fromCharCodeArray([wstring|1], 0, 1),
-               );
+        0 != compare_strings(fromCharCodeArray([0], 0, 1), fromCharCodeArray([1], 0, 1));
     if !text_converters_available {
         if string_builtins_available {
             buffer = [wstring|0; utf16_buffer_size];
@@ -194,7 +190,7 @@ fn string_of_jsstring_fallback(s: &?any) -> &string {
 
 #[export = "caml_extract_string"]
 fn caml_extract_string(len: i32) {
-    let s = [string|0; len];
+    let s: &string = [0; len];
     read_from_buffer(s, 0, len);
     stack = {stack| s: s, next: stack };
 }

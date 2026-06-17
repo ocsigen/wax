@@ -54,7 +54,7 @@ fn add_string(buf: &buffer, v: &eq) {
 fn caml_format_exception(x: &eq) -> &eq {
     let exn = x as &block;
     if exn[0] == 0 as &i31 => &eq {
-        let buf = {buffer| f: 0, f_2: [string|0; 256] };
+        let buf: &buffer = { f: 0, f_2: [0; 256] };
         add_string(buf, (exn[1] as &block)[1]);
         let v: &eq;
         let bucket: &block;
@@ -117,7 +117,7 @@ fn caml_format_exception(x: &eq) -> &eq {
             }
             add_char(buf, 41);
         } // '\)'
-        let s = [string|0; buf.f];
+        let s: &string = [0; buf.f];
         s.copy(0, buf.f_2, 0, buf.f);
         s;
     } else {

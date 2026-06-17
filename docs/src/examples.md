@@ -279,6 +279,29 @@ fn get_value(c: &counter) -> i32 {
 }
 ```
 
+## Inferring Struct and Array Types
+
+### Wax
+
+```wax
+type point = { x: i32, y: i32 };
+type ints = [mut i32];
+
+// Where an expected type fixes the result — here a `let` annotation — the
+// struct or array type name may be omitted.
+#[export = "origin"]
+fn origin() -> &point {
+    let p: &point = {x: 0, y: 0};
+    p;
+}
+
+#[export = "zeros"]
+fn zeros() -> &ints {
+    let a: &ints = [0; 16];
+    a;
+}
+```
+
 ## Arrays
 
 ### Wax

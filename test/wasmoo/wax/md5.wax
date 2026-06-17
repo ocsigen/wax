@@ -40,7 +40,7 @@ fn caml_md5_string(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
 #[export = "caml_md5_chan"]
 fn caml_md5_chan(ch: &eq, vlen: &eq) -> &eq {
     let len = vlen as &i31 as i32_s;
-    let buf = [string|0; 4096];
+    let buf: &string = [0; 4096];
     let ctx = MD5Init();
     let read: i32;
     if len <s 0 {
@@ -171,10 +171,10 @@ fn MD5Transform(w: &int_array, buffer: &int_array, buffer': &string, p: i32) {
 
 fn MD5Init() -> &context {
     {context|
-        f: [int_array|0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476],
+        f: [0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476],
         f_2: 0,
-        f_3: [int_array|0; 16],
-        f_4: [string|0; 64],
+        f_3: [0; 16],
+        f_4: [0; 64],
     };
 }
 
@@ -234,7 +234,7 @@ fn MD5Final(ctx: &context) -> &string {
     buffer[62] = (len >>u 48) as i32;
     buffer[63] = (len >>u 56) as i32;
     MD5Transform(ctx.f, ctx.f_3, buffer, 0);
-    let res = [string|0; 16];
+    let res: &string = [0; 16];
     i = 0;
     let w = ctx.f;
     do {

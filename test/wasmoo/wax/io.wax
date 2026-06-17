@@ -104,8 +104,8 @@ type custom_operations = {
 type custom = open { f: &custom_operations };
 type custom_with_id: custom = open { f: &custom_operations, id: i64 };
 
-const channel_ops =
-    {custom_operations|
+const channel_ops: &custom_operations =
+    {
         id: string#"_chan", // "_chan"
         compare: custom_compare_id,
         compare_ext: null as &?compare,
@@ -134,16 +134,16 @@ let fd_offsets: &?extern = null;
 fn get_fd_offsets() -> &extern {
     if !fd_offsets {
         let m = map_new();
-        map_set(m, 0, {fd_offset| offset: 0, seeked: 0 });
-        map_set(m, 1, {fd_offset| offset: 0, seeked: 0 });
-        map_set(m, 2, {fd_offset| offset: 0, seeked: 0 });
+        map_set(m, 0, { offset: 0, seeked: 0 });
+        map_set(m, 1, { offset: 0, seeked: 0 });
+        map_set(m, 2, { offset: 0, seeked: 0 });
         fd_offsets = m;
     }
     fd_offsets!;
 }
 
 fn initialize_fd_offset(fd: i32, offset: i64) {
-    map_set(get_fd_offsets(), fd, {fd_offset| offset: offset, seeked: 0 });
+    map_set(get_fd_offsets(), fd, { offset: offset, seeked: 0 });
 }
 
 fn release_fd_offset(fd: i32) {
@@ -164,7 +164,7 @@ type open_flags = [i8];
 // 16 O_TRUNC
 // 32 O_EXCL
 // 64 O_NONBLOCK
-const sys_open_flags = [open_flags|1, 2, 6, 8, 16, 32, 0, 0, 64];
+const sys_open_flags: &open_flags = [1, 2, 6, 8, 16, 32, 0, 0, 64];
 
 fn convert_flag_list(vflags: &eq) -> i32 {
     let flags: i32;

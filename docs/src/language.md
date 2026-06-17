@@ -624,6 +624,11 @@ default):
 {point| ..}                 // every field defaulted
 ```
 
+The type name may be omitted when an expected type supplies it — for example a
+`let`/`const` annotation, a function parameter, a struct field, or an array
+element. `let p: &point = {x: 10, y: 20};` is equivalent to writing `{point| …}`.
+Without such a context the type cannot be inferred and must be given.
+
 ### Field Access
 
 ```wax
@@ -650,6 +655,9 @@ type mutable_ints = [mut i32];
 ```
 
 The last form is `array.new_data`: it initializes the array from the named [data segment](#data-segments) `seg`, reading `count` elements starting at byte `offset`.
+
+As with structs, the type name may be omitted when an expected type supplies it,
+e.g. `let xs: &bytes = [0; 100];`.
 
 ### Element Access
 

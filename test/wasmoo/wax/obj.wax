@@ -195,7 +195,7 @@ fn caml_obj_with_tag(tag_2: &eq, x: &eq) -> &eq {
 #[export = "caml_obj_block"]
 fn caml_obj_block(tag_2: &eq, size: &eq) -> &eq {
     // ZZZ float array / specific types?
-    let res = [block|0 as &i31; size as &i31 as i32_s + 1];
+    let res: &block = [0 as &i31; size as &i31 as i32_s + 1];
     res[0] = tag_2;
     res;
 }
@@ -319,7 +319,7 @@ fn caml_obj_truncate(x: &eq, x_2: &eq) -> &eq {
     0 as &i31;
 }
 
-let method_cache = [int_array|0; 8];
+let method_cache: &int_array = [0; 8];
 
 #[export = "caml_get_public_method"]
 fn caml_get_public_method(obj: &eq, x: &eq, x_2: &eq) -> &eq {
@@ -331,7 +331,7 @@ fn caml_get_public_method(obj: &eq, x: &eq, x_2: &eq) -> &eq {
         do {
             len = len << 1;
         } while cacheid >=s len;
-        let a = [int_array|0; len];
+        let a: &int_array = [0; len];
         a.copy(0, method_cache, 0, method_cache.length());
         method_cache = a;
     }

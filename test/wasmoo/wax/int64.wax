@@ -52,13 +52,13 @@ type custom_operations = {
 type custom = open { f: &custom_operations };
 
 #[export = "int64_ops"]
-const int64_ops =
-    {custom_operations|
+const int64_ops: &custom_operations =
+    {
         id: string#"_j", // "_j"
         compare: int64_cmp,
         compare_ext: null as &?compare,
         hash: int64_hash,
-        fixed_length: {fixed_length| bsize_32: 8, bsize_64: 8 },
+        fixed_length: { bsize_32: 8, bsize_64: 8 },
         serialize: int64_serialize,
         deserialize: int64_deserialize,
         dup: int64_dup,
@@ -196,7 +196,7 @@ fn format_int64_default(d: i64) -> &eq {
         i = i + 1;
         n = n /u 10;
     } while n != 0;
-    let s = [string|0; i];
+    let s: &string = [0; i];
     do {
         i = i - 1;
         s[i] = 48 + (d %u 10) as i32;

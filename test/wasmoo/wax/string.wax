@@ -250,7 +250,7 @@ fn caml_string_concat(vs1: &eq, vs2: &eq) -> &eq {
     let s2 = vs2 as &string;
     let l1 = s1.length();
     let l2 = s2.length();
-    let s = [string|0; l1 + l2];
+    let s: &string = [0; l1 + l2];
     s.copy(0, s1, 0, l1);
     s.copy(l1, s2, 0, l2);
     s;

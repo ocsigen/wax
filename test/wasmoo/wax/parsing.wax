@@ -120,7 +120,7 @@ fn token_name(vnames: &eq, number: i32) -> &eq {
         }
     }
     let len = strlen(names, i);
-    let name = [string|0; len];
+    let name: &string = [0; len];
     name.copy(0, names, i, len);
     name;
 }

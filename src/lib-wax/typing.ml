@@ -165,6 +165,17 @@ module Error = struct
   let expected_array_type context ~location =
     report context ~location "Expected array type."
 
+  (* A struct literal omitted its type name in a position where the expected
+     type does not pin an exact struct type, so the type cannot be inferred. *)
+  let cannot_infer_struct_type context ~location =
+    report context ~location
+      "Cannot infer the struct type here; add an explicit type, as in '{T| \
+       ..}'."
+
+  let cannot_infer_array_type context ~location =
+    report context ~location
+      "Cannot infer the array type here; add an explicit type, as in '[T| ..]'."
+
   let method_needs_parentheses context ~location name =
     report context ~location
       "'%s' is an instruction method and must be called with parentheses, as \
@@ -1327,6 +1338,35 @@ let valtype_equal ctx (a : inferred_valtype) (b : inferred_valtype) =
   Wasm.Types.val_subtype ctx.subtyping_info a.internal b.internal
   && Wasm.Types.val_subtype ctx.subtyping_info b.internal a.internal
 
+(* Bidirectional checking helpers (see [check] below).
+
+   The keep-bool for a non-construction value: the contextual annotation is
+   load-bearing unless the value's own standalone-resolved type ([standalone],
+   captured BEFORE [check_type] mutates the cell) already equals it. This
+   mirrors exactly the drop test [bind_let_value]/globals applied via
+   [standalone_valtype], so routing those sites through [check] preserves their
+   behaviour — e.g. [let x: i32 = 1] still drops to [let x = 1] (a floating
+   number resolves to [i32]), while [let x: i64 = 1] keeps its annotation. *)
+let annotation_needed ctx (standalone : inferred_valtype option) expected =
+  match (standalone, UnionFind.find expected) with
+  | Some v, Valtype b -> not (valtype_equal ctx v b)
+  | _ -> true
+
+(* Whether [expected] carries a real type expectation (vs. the [Unknown]
+   sentinel used when [check] is entered from synthesis with no context).
+   [subtype] asserts on an [Unknown] right-hand side, so callers guard with
+   this before checking against [expected]. *)
+let has_expectation expected = UnionFind.find expected <> Unknown
+
+(* The exact user heap-type name [expected] pins, if any — usable to supply an
+   omitted struct/array type name. A supertype top ([any]/[eq]/[struct]/[array]/
+   …) or a floating/non-ref cell returns [None]: construction needs the exact
+   type, never a supertype. *)
+let exact_named_type expected =
+  match UnionFind.find expected with
+  | Valtype { typ = Ref { typ = Type ident; _ }; _ } -> Some ident
+  | _ -> None
+
 (* A value type is defaultable unless it is a non-nullable reference: such a
    local has no zero value and must be assigned before use. *)
 let is_defaultable (ty : valtype) =
@@ -2331,7 +2371,8 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       return_expression i (Tee (idx, i')) ty
   | Call _ -> call_instruction ctx i
   | TailCall (i', l) -> (
-      let* l' = instructions ctx l in
+      let param_types = peek_call_params ctx i' in
+      let* l' = typed_call_args ctx l param_types in
       let* i' = instruction ctx i' in
       match UnionFind.find (expression_type ctx i') with
       | Valtype { typ = Ref { typ = Type ty; _ }; _ } ->
@@ -2455,53 +2496,14 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       return_expression i
         (Test (i', ty))
         (UnionFind.make (Valtype { typ = I32; internal = I32 }))
-  | Struct (ty, fields) -> (
-      match ty with
-      | None -> assert false (*ZZZ*)
-      | Some typ ->
-          let*! field_types = lookup_struct_type ctx typ in
-          (* ZZZ We should check the evaluation order*)
-          if List.length fields <> Array.length field_types then
-            Error.field_count_mismatch ctx.diagnostics ~location:i.info
-              ~expected:(Array.length field_types)
-              ~provided:(List.length fields);
-          let* fields' =
-            Array.fold_left
-              (fun prev field ->
-                let name, (f : fieldtype) = field.desc in
-                match
-                  List.find_opt (fun (idx, _) -> name.desc = idx.desc) fields
-                with
-                | None ->
-                    Error.missing_field ctx.diagnostics ~location:i.info name;
-                    prev
-                | Some (name, i') ->
-                    let* l = prev in
-                    let* i' = instruction ctx i' in
-                    (let>@ typ = internalize ctx (unpack_type f) in
-                     check_type ctx i' typ);
-                    return ((name, i') :: l))
-              (return []) field_types
-          in
-          let*! typ =
-            internalize ctx (Ref { nullable = false; typ = Type typ })
-          in
-          return_expression i (Struct (ty, List.rev fields')) typ)
-  | StructDefault ty as desc -> (
-      match ty with
-      | None -> assert false (*ZZZ*)
-      | Some ty ->
-          let*! fields = lookup_struct_type ctx ty in
-          if
-            not
-              (Array.for_all
-                 (fun field -> field_has_default (snd field.desc))
-                 fields)
-          then Error.not_defaultable ctx.diagnostics ~location:i.info;
-          let*! typ =
-            internalize ctx (Ref { nullable = false; typ = Type ty })
-          in
-          return_expression i desc typ)
+  (* Construction literals carry an optional type name that can be inferred from
+     an expected type. Their typing lives in [check]; in synthesis position
+     there is no expectation, so [check] against the [Unknown] sentinel keeps a
+     present name and reports [cannot_infer_*] when one is omitted. *)
+  | Struct _ | StructDefault _ | Array _ | ArrayDefault _ | ArrayFixed _
+  | ArraySegment _ ->
+      let* i', _ = check ctx (UnionFind.make Unknown) i in
+      return i'
   | StructGet (i', field) ->
       let* i' = instruction ctx i' in
       let*! ty =
@@ -2573,78 +2575,6 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       | _ ->
           Error.expected_struct_type ctx.diagnostics ~location:i1.info;
           return_statement i (StructSet (i1', field, i2')) [||])
-  | Array (ty, i1, i2) -> (
-      let* i1' = instruction ctx i1 in
-      let* i2' = instruction ctx i2 in
-      check_type ctx i2'
-        (UnionFind.make (Valtype { typ = I32; internal = I32 }));
-      match ty with
-      | None -> assert false (*ZZZ*)
-      | Some ty ->
-          (let>@ field' = lookup_array_type ctx ty in
-           let>@ typ = internalize ctx (unpack_type field') in
-           check_type ctx i1' typ);
-          let*! typ =
-            internalize ctx (Ref { nullable = false; typ = Type ty })
-          in
-          return_expression i (Array (Some ty, i1', i2')) typ)
-  | ArrayDefault (ty, i) -> (
-      let* i' = instruction ctx i in
-      match ty with
-      | None -> assert false (*ZZZ*)
-      | Some ty ->
-          check_type ctx i'
-            (UnionFind.make (Valtype { typ = I32; internal = I32 }));
-          (let>@ field = lookup_array_type ctx ty in
-           if not (field_has_default field) then
-             Error.not_defaultable ctx.diagnostics ~location:ty.info);
-          let*! typ =
-            internalize ctx (Ref { nullable = false; typ = Type ty })
-          in
-          return_expression i (ArrayDefault (Some ty, i')) typ)
-  | ArrayFixed (ty, instrs) -> (
-      match ty with
-      | None -> assert false (*ZZZ*)
-      | Some ty ->
-          let*! field' = lookup_array_type ctx ty in
-          let typ = internalize ctx (unpack_type field') in
-          let* instrs' =
-            List.fold_left
-              (fun prev i' ->
-                let* l = prev in
-                let* i' = instruction ctx i' in
-                (let>@ typ = typ in
-                 check_type ctx i' typ);
-                return (i' :: l))
-              (return []) instrs
-          in
-          let*! typ =
-            internalize ctx (Ref { nullable = false; typ = Type ty })
-          in
-          return_expression i (ArrayFixed (Some ty, List.rev instrs')) typ)
-  | ArraySegment (ty, seg, off, len) -> (
-      let* off' = instruction ctx off in
-      let* len' = instruction ctx len in
-      check_type ctx off'
-        (UnionFind.make (Valtype { typ = I32; internal = I32 }));
-      check_type ctx len'
-        (UnionFind.make (Valtype { typ = I32; internal = I32 }));
-      match ty with
-      | None -> assert false (*ZZZ*)
-      | Some ty ->
-          (* A reference element means [array.new_elem] (the segment is an
-             element segment); a numeric/packed element means [array.new_data]
-             (a data segment). *)
-          (let>@ field = lookup_array_type ctx ty in
-           match field.typ with
-           | Value (Ref dst) ->
-               let>@ src = Tbl.find ctx.diagnostics ctx.elems seg in
-               check_elem_subtype ctx ~location:i.info ~src ~dst
-           | _ -> ignore (Tbl.find ctx.diagnostics ctx.datas seg : unit option));
-          let*! typ =
-            internalize ctx (Ref { nullable = false; typ = Type ty })
-          in
-          return_expression i (ArraySegment (Some ty, seg, off', len')) typ)
   (* [tab[i]] on a table name is [table.get]; the receiver is not a value. *)
   | ArrayGet (({ desc = Get tabname; _ } as recv), i2)
     when Tbl.find_opt ctx.tables tabname <> None ->
@@ -2937,6 +2867,28 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                 typ)
       in
       return_expression i (UnOp (op, i')) ty
+  | Let ([ (name_opt, Some annot) ], Some i') -> (
+      (* Bidirectional single annotated binding: type the initializer in
+         checking mode against the annotation, so an omitted struct/array name
+         is inferred from it; the keep-bool then says whether the annotation is
+         load-bearing. Dropping a present annotation stays gated on [simplify]
+         (Wasm->Wax), so hand-written Wax is never rewritten. *)
+      match internalize_valtype ctx annot with
+      | None ->
+          let* i' = instruction ctx i' in
+          return_statement i (Let ([ (name_opt, Some annot) ], Some i')) [||]
+      | Some ity ->
+          let* i', needed = check ctx (UnionFind.make (Valtype ity)) i' in
+          Option.iter
+            (fun name ->
+              ctx.locals <- StringMap.add name.desc ity ctx.locals;
+              ctx.local_decls := name :: !(ctx.local_decls);
+              mark_initialized ctx name.desc)
+            name_opt;
+          let drop = ctx.simplify && not needed in
+          return_statement i
+            (Let ([ (name_opt, if drop then None else Some annot) ], Some i'))
+            [||])
   | Let (bindings, Some i') ->
       let* i' = instruction ctx i' in
       let bindings =
@@ -3879,8 +3831,330 @@ and type_simd_free_intrinsic_call ctx i func name args =
     (Call ({ desc = Get name; info = ([||], func.info) }, args'))
     (simd_cell TV128)
 
+(* Bidirectional checking mode: type [i] against an [expected] type and report
+   whether the contextual annotation is load-bearing (the keep-bool). A
+   construction literal can fill an omitted type name from [expected] and shed a
+   redundant one; every other expression delegates to [instruction] and reports
+   whether it determined its own type. [expected] is the [Unknown] sentinel when
+   [check] is entered from [instruction] with no context (synthesis). *)
+and check ctx expected (i : location instr) =
+  let i32_cell () = UnionFind.make (Valtype { typ = I32; internal = I32 }) in
+  (* The construction's type name: explicit, or inferred from an exact expected
+     type; [missing] reports a [cannot_infer_*] error and yields [None]. *)
+  let resolve_name ty ~missing =
+    match ty with
+    | Some _ -> ty
+    | None -> (
+        match exact_named_type expected with
+        | Some name -> Some name
+        | None ->
+            missing ();
+            None)
+  in
+  (* The name is redundant precisely when [expected] pins the identical heap
+     type, so it can be dropped (and is, on output). *)
+  let name_redundant name =
+    match exact_named_type expected with
+    | Some n -> n.desc = name.desc
+    | None -> false
+  in
+  (* The type name to emit for a construction whose source name was [original]
+     and whose resolved name is [typ]. A name omitted in the source stays
+     omitted. A present name is dropped only when converting from Wasm
+     ([simplify], so hand-written Wax is never rewritten), the expected type
+     makes it redundant, and the name-less surface form re-parses ([parseable] —
+     false only for a field-less struct, whose name-less form [{}] has no
+     syntax). *)
+  let emitted_name original typ ~parseable =
+    match original with
+    | None -> None
+    | Some _ ->
+        if ctx.simplify && parseable && name_redundant typ then None
+        else Some typ
+  in
+  (* The result reference type of a construction of [name]; validates it against
+     [expected] when there is one. *)
+  let construction_result name =
+    let result = internalize ctx (Ref { nullable = false; typ = Type name }) in
+    Option.iter
+      (fun result ->
+        if has_expectation expected then
+          check_subtype ctx ~location:i.info result expected)
+      result;
+    result
+  in
+  match i.desc with
+  | Struct (ty, fields) ->
+      let* node =
+        match
+          resolve_name ty ~missing:(fun () ->
+              Error.cannot_infer_struct_type ctx.diagnostics ~location:i.info)
+        with
+        | None ->
+            (* Unresolved: still type the field values for error recovery (and
+               so they consume their stack slots / holes), then recover with an
+               [Unknown] result. *)
+            let* fields' =
+              List.fold_left
+                (fun prev (name, fi) ->
+                  let* l = prev in
+                  let* fi' = instruction ctx fi in
+                  return ((name, fi') :: l))
+                (return []) fields
+            in
+            return_expression i
+              (Struct (None, List.rev fields'))
+              (UnionFind.make Unknown)
+        | Some typ ->
+            let*! field_types = lookup_struct_type ctx typ in
+            (* ZZZ We should check the evaluation order*)
+            if List.length fields <> Array.length field_types then
+              Error.field_count_mismatch ctx.diagnostics ~location:i.info
+                ~expected:(Array.length field_types)
+                ~provided:(List.length fields);
+            let* fields' =
+              Array.fold_left
+                (fun prev field ->
+                  let name, (f : fieldtype) = field.desc in
+                  match
+                    List.find_opt (fun (idx, _) -> name.desc = idx.desc) fields
+                  with
+                  | None ->
+                      Error.missing_field ctx.diagnostics ~location:i.info name;
+                      prev
+                  | Some (name, i') ->
+                      let* l = prev in
+                      (* Check the field value against its declared type, so a
+                         nested struct/array literal can drop its own name. *)
+                      let* i' =
+                        match internalize ctx (unpack_type f) with
+                        | Some cell ->
+                            let* i', _ = check ctx cell i' in
+                            return i'
+                        | None -> instruction ctx i'
+                      in
+                      return ((name, i') :: l))
+                (return []) field_types
+            in
+            let emitted = emitted_name ty typ ~parseable:(fields <> []) in
+            let*! result = construction_result typ in
+            return_expression i (Struct (emitted, List.rev fields')) result
+      in
+      return (node, true)
+  | StructDefault ty ->
+      let* node =
+        match
+          resolve_name ty ~missing:(fun () ->
+              Error.cannot_infer_struct_type ctx.diagnostics ~location:i.info)
+        with
+        | None ->
+            return_expression i (StructDefault None) (UnionFind.make Unknown)
+        | Some typ ->
+            let*! fields = lookup_struct_type ctx typ in
+            if
+              not
+                (Array.for_all
+                   (fun field -> field_has_default (snd field.desc))
+                   fields)
+            then Error.not_defaultable ctx.diagnostics ~location:i.info;
+            let emitted = emitted_name ty typ ~parseable:true in
+            let*! result = construction_result typ in
+            return_expression i (StructDefault emitted) result
+      in
+      return (node, true)
+  | Array (ty, i1, i2) ->
+      let* node =
+        match
+          resolve_name ty ~missing:(fun () ->
+              Error.cannot_infer_array_type ctx.diagnostics ~location:i.info)
+        with
+        | None ->
+            let* i1' = instruction ctx i1 in
+            let* i2' = instruction ctx i2 in
+            check_type ctx i2' (i32_cell ());
+            return_expression i
+              (Array (None, i1', i2'))
+              (UnionFind.make Unknown)
+        | Some typ ->
+            let* i1' = instruction ctx i1 in
+            let* i2' = instruction ctx i2 in
+            check_type ctx i2' (i32_cell ());
+            (let>@ field' = lookup_array_type ctx typ in
+             let>@ elt = internalize ctx (unpack_type field') in
+             check_type ctx i1' elt);
+            let emitted = emitted_name ty typ ~parseable:true in
+            let*! result = construction_result typ in
+            return_expression i (Array (emitted, i1', i2')) result
+      in
+      return (node, true)
+  | ArrayDefault (ty, n) ->
+      let* node =
+        match
+          resolve_name ty ~missing:(fun () ->
+              Error.cannot_infer_array_type ctx.diagnostics ~location:i.info)
+        with
+        | None ->
+            let* n' = instruction ctx n in
+            check_type ctx n' (i32_cell ());
+            return_expression i
+              (ArrayDefault (None, n'))
+              (UnionFind.make Unknown)
+        | Some typ ->
+            let* n' = instruction ctx n in
+            check_type ctx n' (i32_cell ());
+            (let>@ field = lookup_array_type ctx typ in
+             if not (field_has_default field) then
+               Error.not_defaultable ctx.diagnostics ~location:typ.info);
+            let emitted = emitted_name ty typ ~parseable:true in
+            let*! result = construction_result typ in
+            return_expression i (ArrayDefault (emitted, n')) result
+      in
+      return (node, true)
+  | ArrayFixed (ty, instrs) ->
+      let* node =
+        match
+          resolve_name ty ~missing:(fun () ->
+              Error.cannot_infer_array_type ctx.diagnostics ~location:i.info)
+        with
+        | None ->
+            let* instrs' =
+              List.fold_left
+                (fun prev i' ->
+                  let* l = prev in
+                  let* i' = instruction ctx i' in
+                  return (i' :: l))
+                (return []) instrs
+            in
+            return_expression i
+              (ArrayFixed (None, List.rev instrs'))
+              (UnionFind.make Unknown)
+        | Some typ ->
+            let*! field' = lookup_array_type ctx typ in
+            let elt = internalize ctx (unpack_type field') in
+            let* instrs' =
+              List.fold_left
+                (fun prev i' ->
+                  let* l = prev in
+                  (* Check each element against the element type, so a nested
+                     struct/array literal can drop its own name. *)
+                  let* i' =
+                    match elt with
+                    | Some cell ->
+                        let* i', _ = check ctx cell i' in
+                        return i'
+                    | None -> instruction ctx i'
+                  in
+                  return (i' :: l))
+                (return []) instrs
+            in
+            let emitted = emitted_name ty typ ~parseable:(instrs <> []) in
+            let*! result = construction_result typ in
+            return_expression i (ArrayFixed (emitted, List.rev instrs')) result
+      in
+      return (node, true)
+  | ArraySegment (ty, seg, off, len) ->
+      let* node =
+        match
+          resolve_name ty ~missing:(fun () ->
+              Error.cannot_infer_array_type ctx.diagnostics ~location:i.info)
+        with
+        | None ->
+            let* off' = instruction ctx off in
+            let* len' = instruction ctx len in
+            check_type ctx off' (i32_cell ());
+            check_type ctx len' (i32_cell ());
+            return_expression i
+              (ArraySegment (None, seg, off', len'))
+              (UnionFind.make Unknown)
+        | Some typ ->
+            let* off' = instruction ctx off in
+            let* len' = instruction ctx len in
+            check_type ctx off' (i32_cell ());
+            check_type ctx len' (i32_cell ());
+            (* A reference element means [array.new_elem] (the segment is an
+               element segment); a numeric/packed element means [array.new_data]
+               (a data segment). *)
+            (let>@ field = lookup_array_type ctx typ in
+             match field.typ with
+             | Value (Ref dst) ->
+                 let>@ src = Tbl.find ctx.diagnostics ctx.elems seg in
+                 check_elem_subtype ctx ~location:i.info ~src ~dst
+             | _ ->
+                 ignore (Tbl.find ctx.diagnostics ctx.datas seg : unit option));
+            let emitted = emitted_name ty typ ~parseable:true in
+            let*! result = construction_result typ in
+            return_expression i (ArraySegment (emitted, seg, off', len')) result
+      in
+      return (node, true)
+  | _ ->
+      fun st ->
+        let st, i' = instruction ctx i st in
+        (* Capture the value's own standalone-resolved type BEFORE [check_type]
+           mutates the cell, then decide whether the annotation is load-bearing
+           (see [annotation_needed]). *)
+        let standalone = standalone_valtype ctx (expression_type ctx i') in
+        let needed = annotation_needed ctx standalone expected in
+        if has_expectation expected then check_type ctx i' expected;
+        (st, (i', needed))
+
+(* Run [check] in statement (empty-stack) position, mirroring the expression
+   bridge in [toplevel_instruction]'s default arm: pop the hole operands off the
+   stack into the parameter list, run [check] on them, and surface its keep-bool.
+   Used for an annotated global initializer (a constant expression). *)
+and check_toplevel ctx expected i =
+  let count = count_holes i in
+  let* args = pop_many ctx i count [] in
+  let args, (i', needed) = check ctx expected i args in
+  assert (args = []);
+  if not (check_hole_order ctx i' count) then assert false;
+  return (i', needed)
+
+(* Peek the parameter types of a call's callee syntactically, when it is a name
+   referring to a function or a funcref-typed variable. This reads no stack and
+   reports nothing, so the evaluation order (arguments, then callee) and hole
+   binding are unchanged; the callee is still typed normally afterwards. The
+   result is used only to check each argument against its parameter. *)
+and peek_call_params ctx callee =
+  let name_opt =
+    match callee.desc with
+    | Get name -> (
+        match resolve_variable ctx name with
+        | Func_ref (_, ty') -> Some (Ast.no_loc ty')
+        | Local { typ = Ref { typ = Type t; _ }; _ }
+        | Global (_, { typ = Ref { typ = Type t; _ }; _ }) ->
+            Some t
+        | Local _ | Global _ | Unbound -> None)
+    | _ -> None
+  in
+  match name_opt with
+  | None -> None
+  | Some t -> (
+      match Tbl.find_opt ctx.type_context.types t with
+      | Some (_, { typ = Func ft; _ }) ->
+          array_map_opt (fun (_, vt) -> internalize ctx vt) ft.params
+      | _ -> None)
+
+(* Type call arguments. When the callee's parameter types are known and the
+   arity matches, check each argument against its parameter (so a struct/array
+   literal argument can be inferred and have its name dropped); otherwise
+   synthesize them. Either way arguments are processed left-to-right, so hole
+   consumption matches [instructions]. *)
+and typed_call_args ctx l param_types =
+  match param_types with
+  | Some params when Array.length params = List.length l ->
+      let rec go k = function
+        | [] -> return []
+        | a :: r ->
+            let* a', _ = check ctx params.(k) a in
+            let* r' = go (k + 1) r in
+            return (a' :: r')
+      in
+      go 0 l
+  | _ -> instructions ctx l
+
 and type_indirect_call ctx i i' l =
-  let* l' = instructions ctx l in
+  let param_types = peek_call_params ctx i' in
+  let* l' = typed_call_args ctx l param_types in
   let* i' = instruction ctx i' in
   match UnionFind.find (expression_type ctx i') with
   | Valtype { typ = Ref { typ = Type ty; _ }; _ } ->
@@ -4479,40 +4753,48 @@ let rec globals ctx fields =
           in
           After { field with desc = Table { t with init } }
       | Global ({ name; mut; typ; def; _ } as g) ->
-          let def' =
-            with_empty_stack ctx ~location:def.info ~kind:Expression
-              (toplevel_instruction ctx def)
-          in
-          let typ =
+          let typ, def' =
             match typ with
-            | Some annot ->
-                (* The type the initializer would take on its own, captured
-                   before [check_type] constrains it; when it already equals the
-                   annotation, the annotation is redundant and dropped (only when
-                   converting from Wasm), mirroring a [let] binding. *)
-                let standalone =
-                  standalone_valtype ctx (expression_type ctx def')
-                in
-                let drop_annotation =
-                  Option.value ~default:false
-                    (let+@ ity = internalize_valtype ctx annot in
-                     Tbl.add ctx.diagnostics ctx.globals name (mut, ity);
-                     check_type ctx def' (UnionFind.make (Valtype ity));
-                     ctx.simplify
-                     && (not (is_null_initializer def'))
-                     && Option.fold ~none:false
-                          ~some:(fun v -> valtype_equal ctx v ity)
-                          standalone)
-                in
-                if drop_annotation then None else Some annot
+            | Some annot -> (
+                (* Type the initializer in checking mode against the annotation,
+                   mirroring a [let] binding: an omitted struct/array name is
+                   inferred from it, and the keep-bool decides whether the
+                   annotation is redundant (dropped only when converting from
+                   Wasm, and never for a [null] whose bare form would re-infer a
+                   floating type — see [is_null_initializer]). *)
+                match internalize_valtype ctx annot with
+                | None ->
+                    let def' =
+                      with_empty_stack ctx ~location:def.info ~kind:Expression
+                        (toplevel_instruction ctx def)
+                    in
+                    (Some annot, def')
+                | Some ity ->
+                    (* Type the initializer before registering the global, so a
+                       self-reference (an initializer mentioning this global) is
+                       still reported as an unknown name. *)
+                    let def', needed =
+                      with_empty_stack ctx ~location:def.info ~kind:Expression
+                        (check_toplevel ctx (UnionFind.make (Valtype ity)) def)
+                    in
+                    Tbl.add ctx.diagnostics ctx.globals name (mut, ity);
+                    let drop =
+                      ctx.simplify && (not needed)
+                      && not (is_null_initializer def')
+                    in
+                    ((if drop then None else Some annot), def'))
             | None ->
                 (* No annotation: the global takes the initializer's type, the
                    way a [let] binding without an annotation does. *)
+                let def' =
+                  with_empty_stack ctx ~location:def.info ~kind:Expression
+                    (toplevel_instruction ctx def)
+                in
                 (let>@ ity =
                    resolve_omitted_valtype ctx (expression_type ctx def')
                  in
                  Tbl.add ctx.diagnostics ctx.globals name (mut, ity));
-                None
+                (None, def')
           in
           check_constant_instruction ctx def';
           After { field with desc = Global { g with typ; def = def' } }

@@ -1,0 +1,6 @@
+type ints = [i32];
+
+fn f() -> &ints {
+    let a = [0; 8];
+    return a;
+}

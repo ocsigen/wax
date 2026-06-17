@@ -564,6 +564,8 @@ plaininstr:
   { with_loc $sloc (Struct (Some x, l)) }
 | "{" f = structure_field "," l = structure "}"
   { with_loc $sloc (Struct (None, f :: l)) }
+| "{" f = structure_field "}"
+  { with_loc $sloc (Struct (None, [f])) }
 | "{" x = ident "|" ".." "}"
   { with_loc $sloc (StructDefault (Some x)) }
 | "{" ".." "}"
@@ -574,6 +576,8 @@ plaininstr:
   { with_loc $sloc (Array (None, i1, i2)) }
 | "[" ".." ";" i = length_expression "]"
   { with_loc $sloc (ArrayDefault (None, i)) }
+| "[" d = ident "@" off = expression ";" len = length_expression "]"
+  { with_loc $sloc (ArraySegment (None, d, off, len)) }
 | "[" t = ident "|" l = expression_list "]"
   { with_loc $sloc (ArrayFixed (Some t, l)) }
 | "[" t = ident "|" i1 = expression ";" i2 = length_expression "]"

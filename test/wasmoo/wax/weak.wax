@@ -235,7 +235,7 @@ fn caml_ephe_create(vlen: &eq) -> &eq {
     if len <s 0 {
         caml_invalid_argument([string|Weak_create @ 0; 11]);
     }
-    let res = [block|caml_ephe_none; len + caml_ephe_key_offset];
+    let res: &block = [caml_ephe_none; len + caml_ephe_key_offset];
     res[0] = abstract_tag as &i31;
     res;
 }

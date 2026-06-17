@@ -1,0 +1,24 @@
+type point = {x: i32, y: i32};
+type box = {v: i32};
+type ints = [i32];
+
+// The struct/array type name may be omitted when an expected type supplies it.
+
+fn from_let() -> &point {
+    let p: &point = {x: 1, y: 2,};
+    return p;
+}
+
+// A single-field struct may also be written name-less.
+fn from_let_box() -> &box {
+    let b: &box = {v: 42};
+    return b;
+}
+
+fn from_let_array() -> &ints {
+    let a: &ints = [0; 8];
+    return a;
+}
+
+const origin: &point = {x: 0, y: 0,};
+const zeros: &ints = [0; 4];

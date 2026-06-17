@@ -308,7 +308,7 @@ fn caml_js_to_array(x: &eq) -> &eq {
     let i: i32;
     if l {
         if array_get(a, 0) is &float {
-            let fa = [float_array|0; l];
+            let fa: &float_array = [0; l];
             i = 0;
             while i <u l {
                 fa[i] = (array_get(a, i) as &float).f;
@@ -317,7 +317,7 @@ fn caml_js_to_array(x: &eq) -> &eq {
             return fa;
         }
     }
-    let a' = [block|0 as &i31; l + 1];
+    let a': &block = [0 as &i31; l + 1];
     i = 0;
     while i <u l {
         a'[i + 1] = wrap(array_get(a, i));
@@ -329,7 +329,7 @@ fn caml_js_to_array(x: &eq) -> &eq {
 #[export = "caml_js_to_string_array"]
 fn caml_js_to_string_array(a: &extern) -> &eq {
     let l = array_length(a);
-    let a' = [block|0 as &i31; l + 1];
+    let a': &block = [0 as &i31; l + 1];
     let i = 0;
     while i <u l {
         a'[i + 1] = caml_string_of_jsstring(wrap(array_get(a, i)));
@@ -439,7 +439,7 @@ fn caml_jsbytes_of_string(x: &eq) -> &eq {
     if !n {
         return {js| f: jsstring_of_string(s) };
     }
-    let s' = [string|0; i + n];
+    let s': &string = [0; i + n];
     i = 0;
     n = 0;
     while i <u l {
@@ -478,7 +478,7 @@ fn caml_string_of_jsbytes(s: &eq) -> &eq {
     if !n {
         return s';
     }
-    let s'' = [string|0; i - n];
+    let s'': &string = [0; i - n];
     i = 0;
     n = 0;
     while i <u l {

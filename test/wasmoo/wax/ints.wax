@@ -184,7 +184,7 @@ fn format_int_default(d: i32) -> &eq {
         i = i + 1;
         n = n /u 10;
     } while n;
-    let s = [string|0; i];
+    let s: &string = [0; i];
     do {
         i = i - 1;
         s[i] = 48 + d %u 10;

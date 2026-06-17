@@ -70,15 +70,10 @@ type custom_operations = {
 };
 type custom = open { f: &custom_operations };
 
-const dummy_block = [block|0 as &i31; 0];
+const dummy_block: &block = [0 as &i31; 0];
 
-const default_compare_stack =
-    {compare_stack|
-        f: -1,
-        f_2: [block_array|dummy_block; 8],
-        f_3: [block_array|dummy_block; 8],
-        f_4: [int_array|0; 8],
-    };
+const default_compare_stack: &compare_stack =
+    { f: -1, f_2: [dummy_block; 8], f_3: [dummy_block; 8], f_4: [0; 8] };
 
 fn compare_stack_is_not_empty(stack: &compare_stack) -> i32 {
     stack.f >=s 0;
@@ -105,13 +100,8 @@ fn push_compare_stack(stack: &compare_stack, v1: &block, v2: &block, p: i32) -> 
     let len = stack.f_2.length();
     if i >=u len {
         let len' = len << 1;
-        let stack' =
-            {compare_stack|
-                f: i,
-                f_2: [block_array|dummy_block; len'],
-                f_3: [block_array|dummy_block; len'],
-                f_4: [int_array|0; len'],
-            };
+        let stack': &compare_stack =
+            { f: i, f_2: [dummy_block; len'], f_3: [dummy_block; len'], f_4: [0; len'] };
         stack'.f_2.copy(0, stack.f_2, 0, len);
         stack'.f_3.copy(0, stack.f_3, 0, len);
         stack'.f_4.copy(0, stack.f_4, 0, len);

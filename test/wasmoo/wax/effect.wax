@@ -91,7 +91,7 @@ type fiber: generic_fiber = { handlers: mut &handlers, cont: &cont_2, next: &?fi
 data effect_unhandled = "Effect.Unhandled";
 
 fn raise_unhandled(eff: &eq, x: &eq) -> &eq {
-    let effect_unhandled = [string|effect_unhandled @ 0; 16];
+    let effect_unhandled: &string = [effect_unhandled @ 0; 16];
     'null: do {
         caml_raise_with_arg(br_on_null 'null caml_named_value(effect_unhandled), eff);
     }
@@ -114,14 +114,14 @@ fn default_continuation(p: &pair, x: &eq) {
 }
 
 let stack: &?fiber =
-    {fiber|
+    {
         handlers:
-            {handlers|
+            {
                 value: 0 as &i31,
                 exn: 0 as &i31,
                 effect: {closure_3| f: dummy_fun, f_2: uncaught_effect_handler },
             },
-        cont: {cont_2| cont_func: default_continuation },
+        cont: { cont_func: default_continuation },
         next: null as &?fiber,
     };
 
@@ -163,7 +163,7 @@ fn f(stack: &eq, f: &eq, v: &eq) -> &eq {
     let k: &cont_2;
     let pair: &pair;
     if stack == 0 as &i31 {
-        caml_raise_constant(caml_named_value([string|already_resumed @ 0; 35])!);
+        caml_raise_constant(caml_named_value([already_resumed @ 0; 35])!);
     }
     become capture_continuation(do_resume, {pair| fst: stack, snd: {pair| fst: f, snd: v } });
 }
@@ -253,8 +253,8 @@ fn initial_cont(p: &pair, x: &eq) {
 #[export = "caml_alloc_stack"]
 fn caml_alloc_stack(hv: &eq, hx: &eq, hf: &eq) -> &eq {
     {fiber|
-        handlers: {handlers| value: hv, exn: hx, effect: hf },
-        cont: {cont_2| cont_func: initial_cont },
+        handlers: { value: hv, exn: hx, effect: hf },
+        cont: { cont_func: initial_cont },
         next: null as &?fiber,
     };
 }
@@ -358,7 +358,7 @@ fn identity_2(x: &eq, x_2: &eq) -> &eq {
     x;
 }
 
-const identity = {closure| f: identity_2 };
+const identity: &closure = { f: identity_2 };
 
 fn trampoline_iterator(f: &eq, venv: &eq) -> &eq {
     let env = venv as &iterator;
@@ -404,9 +404,9 @@ fn dummy_cps_fun(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
 let cps_fiber_stack: &?cps_fiber = null as &?cps_fiber;
 
 const default_fiber_stack: &?cps_fiber =
-    {cps_fiber|
+    {
         handlers:
-            {handlers|
+            {
                 value: 0 as &i31,
                 exn: 0 as &i31,
                 effect: {cps_closure_3| f: dummy_cps_fun, f_2: cps_uncaught_effect_handler },
@@ -510,7 +510,7 @@ fn caml_resume_stack(vstack: &eq, k: &eq) -> &eq {
             }
             return k;
         };
-    caml_raise_constant(caml_named_value([string|already_resumed @ 0; 35])!);
+    caml_raise_constant(caml_named_value([already_resumed @ 0; 35])!);
     0 as &i31;
 }
 
@@ -548,20 +548,20 @@ fn value_handler_2(x: &eq, x_2: &eq) -> &eq {
     become cps_call_handler((cps_fiber_stack!).handlers.value, x);
 }
 
-const value_handler = {closure| f: value_handler_2 };
+const value_handler: &closure = { f: value_handler_2 };
 
 fn exn_handler_2(x: &eq, x_2: &eq) -> &eq {
     become cps_call_handler((cps_fiber_stack!).handlers.exn, x);
 }
 
-const exn_handler = {closure| f: exn_handler_2 };
+const exn_handler: &closure = { f: exn_handler_2 };
 
 #[export = "caml_cps_alloc_stack"]
 fn caml_cps_alloc_stack(hv: &eq, hx: &eq, hf: &eq) -> &eq {
     {cps_fiber|
-        handlers: {handlers| value: hv, exn: hx, effect: hf },
+        handlers: { value: hv, exn: hx, effect: hf },
         cont: value_handler,
-        exn_stack: {exn_stack| h: exn_handler, next: null as &?exn_stack },
+        exn_stack: { h: exn_handler, next: null as &?exn_stack },
         next: null as &?cps_fiber,
     };
 }

@@ -150,8 +150,8 @@ type custom_operations = {
 type custom = open { f: &custom_operations };
 
 #[export = "bigarray_ops"]
-const bigarray_ops =
-    {custom_operations|
+const bigarray_ops: &custom_operations =
+    {
         id: string#"_bigarr02", // "_bigarr02"
         compare: caml_ba_compare,
         compare_ext: null as &?compare,
@@ -427,7 +427,7 @@ fn bigarray_deserialize(s: &eq) -> (&eq, i32) {
     let num_dims = caml_deserialize_int_4(s);
     let flags = caml_deserialize_int_4(s);
     let kind = flags & 0xff;
-    let dim = [int_array|0; num_dims];
+    let dim: &int_array = [0; num_dims];
     let i: i32;
     let len: i32;
     while i <u num_dims {
@@ -439,8 +439,8 @@ fn bigarray_deserialize(s: &eq) -> (&eq, i32) {
         dim[i] = len;
         i = i + 1;
     }
-    let b =
-        {bigarray|
+    let b: &bigarray =
+        {
             f: bigarray_ops,
             ba_data: caml_ba_create_buffer(kind, caml_ba_get_size(dim)),
             ba_dim: dim,
@@ -574,7 +574,7 @@ fn caml_ba_create(vkind: &eq, layout: &eq, d: &eq) -> &eq {
     if num_dims >u CAML_BA_MAX_NUM_DIMS {
         caml_invalid_argument([string|ba_create_bad_dims @ 0; 41]);
     }
-    let dim = [int_array|0; num_dims];
+    let dim: &int_array = [0; num_dims];
     let i = 0;
     while i <u num_dims {
         let n = vdim[i + 1] as &i31 as i32_s;
@@ -615,7 +615,7 @@ fn caml_ba_from_typed_array(x: &eq) -> &eq {
     {bigarray|
         f: bigarray_ops,
         ba_data: data,
-        ba_dim: [int_array|len],
+        ba_dim: [len],
         ba_num_dims: 1,
         ba_kind: kind,
         ba_layout: 0,
@@ -998,7 +998,7 @@ fn caml_ba_slice(vb: &eq, vind: &eq) -> &eq {
     if num_inds >u b.ba_num_dims as i32_u {
         caml_invalid_argument([string|too_many_indices @ 0; 32]);
     }
-    let sub_dim = [int_array|0; num_dims - num_inds];
+    let sub_dim: &int_array = [0; num_dims - num_inds];
     let index: &int_array;
     let i: i32;
     let offset: i32;
@@ -1063,7 +1063,7 @@ fn caml_ba_sub(vba: &eq, vofs: &eq, vlen: &eq) -> &eq {
     if (ofs <s 0) | (len <s 0) | (ofs + len >s dim[changed_dim]) {
         caml_invalid_argument([string|bad_subarray @ 0; 27]);
     }
-    let new_dim = [int_array|0; num_dims];
+    let new_dim: &int_array = [0; num_dims];
     new_dim.copy(0, dim, 0, num_dims);
     new_dim[changed_dim] = len;
     mul = mul * caml_ba_size_per_element(ba.ba_kind as i32_u);
@@ -1186,7 +1186,7 @@ fn caml_ba_reshape(vb: &eq, vd: &eq) -> &eq {
         caml_invalid_argument([string|bad_number_dim @ 0; 42]);
     }
     let num_elts: i64 = 1;
-    let dim = [int_array|0; num_dims];
+    let dim: &int_array = [0; num_dims];
     let i: i32;
     while i <u num_dims {
         let d = vdim[i + 1] as &i31 as i32_s;
@@ -1220,7 +1220,7 @@ fn caml_ba_change_layout(vb: &eq, vlayout: &eq) -> &eq {
     if b.ba_layout as i32_u != layout => &eq {
         let num_dims = b.ba_num_dims as i32_u;
         let dim = b.ba_dim;
-        let new_dim = [int_array|0; num_dims];
+        let new_dim: &int_array = [0; num_dims];
         let i: i32;
         while i <u num_dims {
             new_dim[i] = dim[num_dims - i - 1];
@@ -1536,7 +1536,7 @@ fn caml_string_of_array(x: &eq) -> &eq {
     // used to convert a typed array to a string
     let a = (unwrap(x) as &?extern)!;
     let len = ta_length(a);
-    let s = [string|0; len];
+    let s: &string = [0; len];
     ta_blit_to_string(a, 0, s, 0, len);
     s;
 }
