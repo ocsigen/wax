@@ -1003,7 +1003,7 @@ fn caml_ba_slice(vb: &eq, vind: &eq) -> &eq {
     let i: i32;
     let offset: i32;
     if b.ba_layout as i32_u {
-        index = [int_array|1; num_dims];
+        index = [1; num_dims];
         while i <u num_inds {
             index[num_dims + i - num_inds] = ind[i + 1] as &i31 as i32_u;
             i = i + 1;
@@ -1011,7 +1011,7 @@ fn caml_ba_slice(vb: &eq, vind: &eq) -> &eq {
         offset = caml_ba_offset(b, index);
         sub_dim.copy(0, b.ba_dim, 0, num_dims - num_inds);
     } else {
-        index = [int_array|0; num_dims];
+        index = [0; num_dims];
         while i <u num_inds {
             index[i] = ind[i + 1] as &i31 as i32_u;
             i = i + 1;

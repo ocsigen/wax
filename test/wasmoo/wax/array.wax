@@ -116,7 +116,7 @@ fn caml_array_sub(a: &eq, i: &eq, vlen: &eq) -> &eq {
     _ =
         'not_block: do &eq {
             a1 = br_on_cast_fail 'not_block &block a;
-            a2 = [block|0 as &i31; len + 1];
+            a2 = [0 as &i31; len + 1];
             a2[0] = a1[0];
             a2.copy(1, a1, i as &i31 as i32_u + 1, len);
             return a2;
@@ -161,7 +161,7 @@ fn caml_array_append(va1: &eq, va2: &eq) -> &eq {
                     a2 = br_on_cast_fail 'a2_not_block &block va2;
                     l1 = a1.length();
                     l2 = a2.length();
-                    a = [block|0 as &i31; l1 + l2 - 1];
+                    a = [0 as &i31; l1 + l2 - 1];
                     a.copy(1, a1, 1, l1 - 1);
                     a.copy(l1, a2, 1, l2 - 1);
                     return a;
@@ -176,7 +176,7 @@ fn caml_array_append(va1: &eq, va2: &eq) -> &eq {
             fa2 = br_on_cast_fail 'a2_not_float_array &float_array va2;
             l1 = fa1.length();
             l2 = fa2.length();
-            fa = [float_array|0; l1 + l2];
+            fa = [0; l1 + l2];
             fa.copy(0, fa1, 0, l1);
             fa.copy(l1, fa2, 0, l2);
             return fa;
@@ -196,7 +196,7 @@ fn caml_floatarray_append(va1: &eq, va2: &eq) -> &eq {
             fa2 = br_on_cast_fail 'a2_not_float_array &float_array va2;
             l1 = fa1.length();
             l2 = fa2.length();
-            fa = [float_array|0; l1 + l2];
+            fa = [0; l1 + l2];
             fa.copy(0, fa1, 0, l1);
             fa.copy(l1, fa2, 0, l2);
             return fa;

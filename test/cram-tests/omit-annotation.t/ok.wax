@@ -15,6 +15,13 @@ fn from_let_box() -> &box {
     return b;
 }
 
+// An assignment target's type works as a context too.
+fn from_set() -> &point {
+    let p: &point;
+    p = {x: 5, y: 6,};
+    return p;
+}
+
 fn from_let_array() -> &ints {
     let a: &ints = [0; 8];
     return a;

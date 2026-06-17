@@ -137,7 +137,7 @@ fn pop_fiber() -> &cont_2 {
 fn push_stack(stack_2: &fiber, k: &cont_2) -> &cont_2 {
     'done: do {
         'loop: loop {
-            stack = {fiber| handlers: stack_2.handlers, cont: k, next: stack };
+            stack = { handlers: stack_2.handlers, cont: k, next: stack };
             k = stack_2.cont;
             stack_2 = br_on_null 'done stack_2.next;
             br 'loop;
@@ -329,7 +329,7 @@ let exn_stack: &?exn_stack = null as &?exn_stack;
 
 #[export = "caml_push_trap"]
 fn caml_push_trap(h: &eq) -> &eq {
-    exn_stack = {exn_stack| h: h, next: exn_stack };
+    exn_stack = { h: h, next: exn_stack };
     0 as &i31;
 }
 
@@ -496,7 +496,7 @@ fn caml_resume_stack(vstack: &eq, k: &eq) -> &eq {
             'done: do {
                 'loop: loop {
                     cps_fiber_stack =
-                        {cps_fiber|
+                        {
                             handlers: stack.handlers,
                             cont: k,
                             exn_stack: exn_stack,

@@ -251,7 +251,7 @@ fn caml_int64_format(x: &eq, x_2: &eq) -> &eq {
         }
     }
     let chars = uppercase?uppercase_hex_table:lowercase_hex_table;
-    s = [string|0; i];
+    s = [0; i];
     do {
         i = i - 1;
         s[i] = chars[(d %u base) as i32] as i32_u;

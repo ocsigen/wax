@@ -154,7 +154,7 @@ fn caml_obj_dup(x: &eq) -> &eq {
         'not_block: do &eq {
             orig = br_on_cast_fail 'not_block &block x;
             len = orig.length();
-            res = [block|orig[0]; len];
+            res = [orig[0]; len];
             res.copy(1, orig, 1, len - 1);
             return res;
         };
@@ -164,7 +164,7 @@ fn caml_obj_dup(x: &eq) -> &eq {
         'not_float_array: do &eq {
             forig = br_on_cast_fail 'not_float_array &float_array x;
             len = forig.length();
-            fres = [float_array|0; len];
+            fres = [0; len];
             fres.copy(0, forig, 0, len);
             return fres;
         };
@@ -174,7 +174,7 @@ fn caml_obj_dup(x: &eq) -> &eq {
         'not_string: do &eq {
             s = br_on_cast_fail 'not_string &string x;
             len = s.length();
-            s' = [string|0; len];
+            s' = [0; len];
             s'.copy(0, s, 0, len);
             return s';
         };

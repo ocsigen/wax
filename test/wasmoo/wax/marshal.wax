@@ -484,7 +484,7 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                 b[0] = tag_2 as &i31;
                 if size {
                     register_object(s, b);
-                    sp = {stack_item| blk: b, pos: 1, next: sp };
+                    sp = { blk: b, pos: 1, next: sp };
                 }
                 v = b;
                 br 'done;
@@ -871,7 +871,7 @@ fn extern_rec(s: &extern_state, v: &eq) {
                     extern_header(s, sz, tag_2);
                     extern_size(s, sz, sz);
                     if sz >u 1 {
-                        sp = {stack_item| blk: b, pos: 2, next: sp };
+                        sp = { blk: b, pos: 2, next: sp };
                     }
                     v = b[1];
                     br 'loop;
