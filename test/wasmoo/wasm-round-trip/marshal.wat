@@ -1140,9 +1140,9 @@
 
 (func $extern_rec (param $s (ref $extern_state)) (param $v (ref eq))
   (local $hd i32) (local $sp (ref null $stack_item)) (local $b (ref $block))
-  (local $pos i32) (local $tag_2 i32) (local $sz i32)
-  (local $str (ref $string)) (local $fa (ref $float_array)) (local $sz32 i32)
-  (local $sz64 i32) (local $item (ref $stack_item))
+  (local $pos i32) (local $sz i32) (local $tag_2 i32)
+  (local $str (ref $string)) (local $fa (ref $float_array)) (local $sz64 i32)
+  (local $sz32 i32) (local $item (ref $stack_item))
   (loop $loop
     (block $next_item
       (drop

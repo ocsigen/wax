@@ -274,13 +274,12 @@ fn caml_js_object(x: &eq) -> &eq {
 
 #[export = "caml_js_from_array"]
 fn caml_js_from_array(va: &eq) -> &eq {
-    let a: &block;
     let a': &extern;
     let i: i32;
     let l: i32;
     _ =
         'not_array: do &eq {
-            a = br_on_cast_fail 'not_array &block va;
+            let a = br_on_cast_fail 'not_array &block va;
             l = a.length() - 1;
             a' = new_array(l);
             i = 0;
@@ -510,11 +509,10 @@ fn caml_list_to_js_array(x: &eq) -> &eq {
     let a = new_array(i);
     i = 0;
     l = x;
-    let b: &block;
     _ =
         'exit: do &eq {
             'loop: loop &eq {
-                b = br_on_cast_fail 'exit &block l;
+                let b = br_on_cast_fail 'exit &block l;
                 array_set(a, i, unwrap(b[1]));
                 l = b[2];
                 i = i + 1;

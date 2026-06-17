@@ -226,7 +226,6 @@ fn call_handler(f: &eq, x: &eq) {
 
 #[export = "caml_start_fiber"]
 fn caml_start_fiber(p: &?eq) {
-    let exn: &eq;
     // Start executing some code in a new fiber
     let res =
         try &eq {
@@ -239,7 +238,7 @@ fn caml_start_fiber(p: &?eq) {
             }
         } catch {
             ocaml_exception => {
-                exn = _;
+                let exn = _;
                 become call_handler(stack.handlers.exn, exn);
             }
         };
@@ -263,12 +262,10 @@ fn caml_alloc_stack(hv: &eq, hx: &eq, hf: &eq) -> &eq {
 
 #[export = "caml_continuation_use_noexc"]
 fn caml_continuation_use_noexc(x: &eq) -> &eq {
-    let cont: &block;
-    let stack: &eq;
     _ =
         'used: do &eq {
-            cont = x as &block;
-            stack = br_on_cast_fail 'used &generic_fiber cont[1];
+            let cont = x as &block;
+            let stack: &eq = br_on_cast_fail 'used &generic_fiber cont[1];
             cont[1] = 0 as &i31;
             return stack;
         };
@@ -489,10 +486,9 @@ fn caml_pop_fiber() -> &eq {
 
 #[export = "caml_resume_stack"]
 fn caml_resume_stack(vstack: &eq, k: &eq) -> &eq {
-    let stack: &cps_fiber;
     _ =
         'already_resumed: do &eq {
-            stack = br_on_cast_fail 'already_resumed &cps_fiber vstack;
+            let stack = br_on_cast_fail 'already_resumed &cps_fiber vstack;
             'done: do {
                 'loop: loop {
                     cps_fiber_stack =

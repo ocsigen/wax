@@ -311,7 +311,7 @@
 )
 
 (func $caml_start_fiber (export "caml_start_fiber") (param $p eqref)
-  (local $exn (ref eq)) (local $res (ref eq))
+  (local $res (ref eq)) (local $exn (ref eq))
   ;; Start executing some code in a new fiber
   (local.set $res
     (try (result (ref eq))

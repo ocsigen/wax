@@ -576,10 +576,9 @@ fn init_extern_state(
 ) -> &extern_state {
     let no_sharing: i32;
     'parse_flags: loop {
-        let b: &block;
         _ =
             'done: do &eq {
-                b = br_on_cast_fail 'done &block flags;
+                let b = br_on_cast_fail 'done &block flags;
                 if b[1] == 0 as &i31 {
                     no_sharing = 1;
                 }
@@ -851,12 +850,11 @@ fn extern_rec(s: &extern_state, v: &eq) {
                     extern_int(s, (br_on_cast_fail 'not_int &i31 v) as i32_s);
                     br 'next_item;
                 };
-            let tag_2: i32;
             let sz: i32;
             _ =
                 'not_block: do &eq {
                     b = br_on_cast_fail 'not_block &block v;
-                    tag_2 = b[0] as &i31 as i32_u;
+                    let tag_2 = b[0] as &i31 as i32_u;
                     sz = b.length() - 1;
                     if !sz {
                         extern_header(s, 0, tag_2);
@@ -882,10 +880,9 @@ fn extern_rec(s: &extern_state, v: &eq) {
                 br 'next_item;
             }
             extern_record_location(s, v);
-            let str: &string;
             _ =
                 'not_string: do &eq {
-                    str = br_on_cast_fail 'not_string &string v;
+                    let str = br_on_cast_fail 'not_string &string v;
                     extern_string(s, str);
                     sz = str.length();
                     extern_size(s, 1 + (sz >>u 2), 1 + (sz >>u 3));
@@ -897,22 +894,17 @@ fn extern_rec(s: &extern_state, v: &eq) {
                     extern_size(s, 2, 1);
                     br 'next_item;
                 };
-            let fa: &float_array;
             _ =
                 'not_float_array: do &eq {
-                    fa = br_on_cast_fail 'not_float_array &float_array v;
+                    let fa = br_on_cast_fail 'not_float_array &float_array v;
                     sz = fa.length();
                     extern_float_array(s, fa);
                     extern_size(s, sz * 2, sz);
                     br 'next_item;
                 };
-            let sz32: i32;
-            let sz64: i32;
             _ =
                 'not_custom: do &eq {
-                    extern_custom(s, br_on_cast_fail 'not_custom &custom v);
-                    sz64 = _;
-                    sz32 = _;
+                    let (sz32, sz64) = extern_custom(s, br_on_cast_fail 'not_custom &custom v);
                     extern_size(s, sz32 + 7 >>u 2, sz64 + 15 >>u 3);
                     br 'next_item;
                 };

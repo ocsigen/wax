@@ -187,6 +187,16 @@ let rec sink_into ((name, _) as decl) s =
             r.catches
         in
         Some { s with desc = Try { r with catches } }
+  | Set (id, e)
+    when match id with
+         | Some n -> not (String.equal n.desc name.desc)
+         | None -> true ->
+      (* A discarded or assigned block expression — e.g. [_ = do {..}] or
+         [x = do {..}] — holds all uses in its body; sink into it. We exclude
+         [name = e]: there [e] is this local's own initializer (the non-reading
+         case is already fused by [sink_decl]), and sinking the declaration into
+         [e] would shadow it. *)
+      Option.map (fun e' -> { s with desc = Set (id, e') }) (sink_into decl e)
   | _ -> None
 
 (* Place a single declaration into [l]. Precondition: every use of the local

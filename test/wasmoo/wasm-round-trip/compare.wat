@@ -225,13 +225,13 @@
 (func $do_compare_val
   (param $stack (ref $compare_stack)) (param $v1 (ref eq))
   (param $v2 (ref eq)) (param $total i32) (result i32)
-  (local $i1 (ref i31)) (local $i2 (ref i31)) (local $b2 (ref $block))
-  (local $t2 i32) (local $c2 (ref $custom)) (local $res i32)
+  (local $b2 (ref $block)) (local $t2 i32) (local $c2 (ref $custom))
+  (local $res i32) (local $i1 (ref i31)) (local $i2 (ref i31))
   (local $b1 (ref $block)) (local $t1 i32) (local $c1 (ref $custom))
-  (local $i i32) (local $s1 i32) (local $s2 i32) (local $f1 f64)
-  (local $f2 f64) (local $fa1 (ref $float_array))
-  (local $fa2 (ref $float_array)) (local $str1 (ref $string))
-  (local $str2 (ref $string)) (local $js1 anyref) (local $js2 anyref)
+  (local $s1 i32) (local $s2 i32) (local $f1 f64) (local $f2 f64)
+  (local $str1 (ref $string)) (local $str2 (ref $string))
+  (local $fa1 (ref $float_array)) (local $fa2 (ref $float_array))
+  (local $i i32) (local $js1 anyref) (local $js2 anyref)
   (loop $loop
     (block $next_item
       (if (local.get $total)

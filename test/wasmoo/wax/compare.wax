@@ -171,19 +171,17 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32 {
             if total {
                 br_if 'next_item v1 == v2;
             }
-            let i1: &i31;
-            let i2: &i31;
             let b2: &block;
             let t2: i32;
             let c2: &custom;
             let res: i32;
             _ =
                 'v1_is_not_int: do &eq {
-                    i1 = br_on_cast_fail 'v1_is_not_int &i31 v1;
+                    let i1 = br_on_cast_fail 'v1_is_not_int &i31 v1;
                     br_if 'next_item v1 == v2;
                     _ =
                         'v2_is_not_int: do &eq {
-                            i2 = br_on_cast_fail 'v2_is_not_int &i31 v2;
+                            let i2 = br_on_cast_fail 'v2_is_not_int &i31 v2;
                             // v1 and v2 are both integers
                             return i1 as i32_s - i2 as i32_s;
                         };
@@ -238,19 +236,10 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32 {
                 // v1 block > v1 long
                 return 1;
             }
-            let i: i32;
-            let s1: i32;
-            let s2: i32;
-            let f1: f64;
-            let f2: f64;
-            let fa1: &float_array;
-            let fa2: &float_array;
-            let str1: &string;
-            let str2: &string;
-            let js1: &?any;
-            let js2: &?any;
             _ =
                 'heterogeneous: do &eq {
+                    let s1: i32;
+                    let s2: i32;
                     _ =
                         'v1_not_block: do &eq {
                             b1 = br_on_cast_fail 'v1_not_block &block v1;
@@ -284,6 +273,8 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32 {
                             v2 = b2[1];
                             br 'loop;
                         };
+                    let f1: f64;
+                    let f2: f64;
                     _ =
                         'v1_not_float: do &eq {
                             f1 = (br_on_cast_fail 'v1_not_float &float v1).f;
@@ -309,22 +300,22 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32 {
                         };
                     _ =
                         'v1_not_string: do &eq {
-                            str1 = br_on_cast_fail 'v1_not_string &string v1;
-                            str2 = br_on_cast_fail 'heterogeneous &string v2;
+                            let str1 = br_on_cast_fail 'v1_not_string &string v1;
+                            let str2 = br_on_cast_fail 'heterogeneous &string v2;
                             res = compare_strings(str1, str2);
                             br_if 'next_item !res;
                             return res;
                         };
                     _ =
                         'v1_not_float_array: do &eq {
-                            fa1 = br_on_cast_fail 'v1_not_float_array &float_array v1;
-                            fa2 = br_on_cast_fail 'heterogeneous &float_array v2;
+                            let fa1 = br_on_cast_fail 'v1_not_float_array &float_array v1;
+                            let fa2 = br_on_cast_fail 'heterogeneous &float_array v2;
                             s1 = fa1.length();
                             s2 = fa2.length();
                             if s1 != s2 {
                                 return s1 - s2;
                             }
-                            i = 0;
+                            let i = 0;
                             while i <s s1 {
                                 f1 = fa1[i];
                                 f2 = fa2[i];
@@ -367,8 +358,8 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32 {
                         };
                     _ =
                         'v1_not_js: do &eq {
-                            js1 = (br_on_cast_fail 'v1_not_js &js v1).f;
-                            js2 = (br_on_cast_fail 'heterogeneous &js v2).f;
+                            let js1 = (br_on_cast_fail 'v1_not_js &js v1).f;
+                            let js2 = (br_on_cast_fail 'heterogeneous &js v2).f;
                             'not_jsstring: do {
                                 br_if 'not_jsstring !jsstring_test(js1);
                                 br_if 'not_jsstring !jsstring_test(js2);

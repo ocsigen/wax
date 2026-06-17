@@ -174,9 +174,10 @@
 
 (func $caml_array_append (export "caml_array_append")
   (param $va1 (ref eq)) (param $va2 (ref eq)) (result (ref eq))
-  (local $a1 (ref $block)) (local $a2 (ref $block)) (local $a (ref $block))
-  (local $l1 i32) (local $l2 i32) (local $fa1 (ref $float_array))
-  (local $fa2 (ref $float_array)) (local $fa (ref $float_array))
+  (local $l1 i32) (local $l2 i32) (local $a1 (ref $block))
+  (local $a2 (ref $block)) (local $a (ref $block))
+  (local $fa1 (ref $float_array)) (local $fa2 (ref $float_array))
+  (local $fa (ref $float_array))
   (drop
     (block $a1_not_block (result (ref eq))
       (local.set $a1
@@ -224,7 +225,7 @@
 (func $caml_floatarray_append (export "caml_floatarray_append")
   (param $va1 (ref eq)) (param $va2 (ref eq)) (result (ref eq))
   (local $fa1 (ref $float_array)) (local $fa2 (ref $float_array))
-  (local $fa (ref $float_array)) (local $l1 i32) (local $l2 i32)
+  (local $l1 i32) (local $l2 i32) (local $fa (ref $float_array))
   (local.set $fa1 (ref.cast (ref $float_array) (local.get $va1)))
   (drop
     (block $a2_not_float_array (result (ref eq))

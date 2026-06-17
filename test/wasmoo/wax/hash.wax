@@ -162,14 +162,11 @@ fn caml_hash(count: &eq, limit: &eq, seed: &eq, obj: &eq) -> &eq {
                         num = num - 1;
                         br 'loop;
                     };
-                let b: &block;
-                let i: i32;
-                let len: i32;
-                let tag_2: i32;
                 _ =
                     'not_block: do &eq {
-                        b = br_on_cast_fail 'not_block &block v;
-                        tag_2 = b[0] as &i31 as i32_u;
+                        let b = br_on_cast_fail 'not_block &block v;
+                        let tag_2 = b[0] as &i31 as i32_u;
+                        let i: i32;
                         if tag_2 == forward_tag {
                             i = 0;
                             'forward: loop {
@@ -189,7 +186,7 @@ fn caml_hash(count: &eq, limit: &eq, seed: &eq, obj: &eq) -> &eq {
                             h = caml_hash_mix_int(h, b[2] as &i31 as i32_s);
                             br 'loop;
                         }
-                        len = b.length();
+                        let len = b.length();
                         h = caml_hash_mix_int(h, len - 1 << 10 | tag_2);
                         i = 1;
                         'block_iter: loop &eq {
@@ -217,10 +214,9 @@ fn caml_hash(count: &eq, limit: &eq, seed: &eq, obj: &eq) -> &eq {
                         num = num - 1;
                         br 'loop;
                     };
-                let str: &?any;
                 _ =
                     'not_jsstring: do &?any {
-                        str = (br_on_cast_fail 'not_jsstring &js v).f;
+                        let str = (br_on_cast_fail 'not_jsstring &js v).f;
                         _ = br_if 'not_jsstring (0 as &i31, !jsstring_test(str));
                         h = jsstring_hash(h, str);
                         0 as &i31;

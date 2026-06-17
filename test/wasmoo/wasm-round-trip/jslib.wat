@@ -322,8 +322,8 @@
 
 (func $caml_js_from_array (export "caml_js_from_array")
   (param $va (ref eq)) (result (ref eq))
-  (local $a (ref $block)) (local $a' (ref extern)) (local $i i32)
-  (local $l i32) (local $fa (ref $float_array))
+  (local $a' (ref extern)) (local $i i32) (local $l i32)
+  (local $a (ref $block)) (local $fa (ref $float_array))
   (drop
     (block $not_array (result (ref eq))
       (local.set $a

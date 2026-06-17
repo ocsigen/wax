@@ -100,19 +100,16 @@ fn caml_alloc_dummy_float(size: &eq) -> &eq {
 #[export = "caml_update_dummy"]
 fn caml_update_dummy(dummy: &eq, newval: &eq) -> &eq {
     let i: i32;
-    let dst: &block;
-    let src: &block;
     _ =
         'not_block: do &eq {
-            dst = br_on_cast_fail 'not_block &block dummy;
-            src = newval as &block;
+            let dst = br_on_cast_fail 'not_block &block dummy;
+            let src = newval as &block;
             dst.copy(0, src, 0, dst.length());
             return 0 as &i31;
         };
-    let fdst: &float_array;
     _ =
         'not_float_array: do &eq {
-            fdst = br_on_cast_fail 'not_float_array &float_array dummy;
+            let fdst = br_on_cast_fail 'not_float_array &float_array dummy;
             fdst.copy(0, newval as &float_array, 0, fdst.length());
             return 0 as &i31;
         };
@@ -147,34 +144,28 @@ fn caml_update_dummy(dummy: &eq, newval: &eq) -> &eq {
 
 #[export = "caml_obj_dup"]
 fn caml_obj_dup(x: &eq) -> &eq {
-    let orig: &block;
-    let res: &block;
     let len: i32;
     _ =
         'not_block: do &eq {
-            orig = br_on_cast_fail 'not_block &block x;
+            let orig = br_on_cast_fail 'not_block &block x;
             len = orig.length();
-            res = [orig[0]; len];
+            let res: &block = [orig[0]; len];
             res.copy(1, orig, 1, len - 1);
             return res;
         };
-    let forig: &float_array;
-    let fres: &float_array;
     _ =
         'not_float_array: do &eq {
-            forig = br_on_cast_fail 'not_float_array &float_array x;
+            let forig = br_on_cast_fail 'not_float_array &float_array x;
             len = forig.length();
-            fres = [0; len];
+            let fres: &float_array = [0; len];
             fres.copy(0, forig, 0, len);
             return fres;
         };
-    let s: &string;
-    let s': &string;
     _ =
         'not_string: do &eq {
-            s = br_on_cast_fail 'not_string &string x;
+            let s = br_on_cast_fail 'not_string &string x;
             len = s.length();
-            s' = [0; len];
+            let s': &string = [0; len];
             s'.copy(0, s, 0, len);
             return s';
         };

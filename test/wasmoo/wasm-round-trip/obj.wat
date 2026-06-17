@@ -203,7 +203,7 @@
 
 (func $caml_obj_dup (export "caml_obj_dup")
   (param $x (ref eq)) (result (ref eq))
-  (local $orig (ref $block)) (local $res (ref $block)) (local $len i32)
+  (local $len i32) (local $orig (ref $block)) (local $res (ref $block))
   (local $forig (ref $float_array)) (local $fres (ref $float_array))
   (local $s (ref $string)) (local $s' (ref $string))
   (drop

@@ -58,19 +58,12 @@ fn caml_hexstring_of_float(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
     let exp = (b >>u 52) as i32 & 0x7FF;
     let m = b & (1 << 52) - 1;
     let i = sign | (style != 45); // '-'
-    let j: i32;
-    let d: i32;
-    let txt: &chars;
-    let len: i32;
     let s: &string;
-    let unit: i64;
-    let half: i64;
-    let mask: i64;
-    let frac: i64;
     s =
         'sign: do &string {
+            let len: i32;
             if exp == 0x7FF {
-                txt =
+                let txt =
                     if !m => &chars {
                         infinity;
                     } else {
@@ -89,10 +82,11 @@ fn caml_hexstring_of_float(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
                 exp = exp - 1023;
                 m = m | 1 << 52;
             }
+            let frac: i64;
             if (prec >=s 0) & (prec <s 13) {
-                unit = 1 << (52 - (prec << 2)) as i64_s;
-                half = unit >>u 1;
-                mask = unit - 1;
+                let unit = 1 << (52 - (prec << 2)) as i64_s;
+                let half = unit >>u 1;
+                let mask = unit - 1;
                 frac = m & mask;
                 m = m & (-1 ^ mask);
                 if (frac >u half) | (frac == half) & (m & unit != 0) {
@@ -100,7 +94,7 @@ fn caml_hexstring_of_float(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
                 }
             }
             frac = m << 12;
-            j = 0;
+            let j = 0;
             while frac != 0 {
                 j = j + 1;
                 frac = frac << 4;
@@ -108,6 +102,7 @@ fn caml_hexstring_of_float(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
             if prec <s j {
                 prec = j;
             }
+            let d: i32;
             if exp >=s 0 {
                 d = exp;
             } else {
@@ -223,18 +218,14 @@ fn caml_format_float(x: &eq, x_2: &eq) -> &eq {
     let (sign_style, precision, conversion, uppercase) = parse_format(x as &string);
     let negative = (b >>u 63) as i32;
     let i = negative | (sign_style != 0);
-    let exp: i32;
-    let m: i64;
     let len: i32;
     let s: &string;
-    let txt: &chars;
-    let num: &?any;
     s =
         'sign: do &string {
-            exp = (b >>u 52) as i32 & 0x7FF;
+            let exp = (b >>u 52) as i32 & 0x7FF;
             if exp == 0x7FF {
-                m = b << 12;
-                txt =
+                let m = b << 12;
+                let txt =
                     if !m => &chars {
                         inf_2;
                     } else {
@@ -247,7 +238,7 @@ fn caml_format_float(x: &eq, x_2: &eq) -> &eq {
                 s.copy(i, txt, 0, len);
                 br 'sign s;
             }
-            num = format_float(precision, conversion, i, f.abs());
+            let num = format_float(precision, conversion, i, f.abs());
             s = string_of_jsstring(num);
             br 'sign s;
         };
