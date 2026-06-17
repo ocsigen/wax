@@ -2977,8 +2977,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       let* i' =
         match i' with
         | Some i' ->
-            let* i' = instruction ctx i' in
-            check_subtypes ctx ~location:(snd i'.info) (fst i'.info) params;
+            let* i' = check_against ctx params i' in
             return (Some i')
         | None ->
             if params <> [||] then
@@ -3343,9 +3342,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       let* i' =
         match i' with
         | Some i' ->
-            let* i' = instruction ctx i' in
-            check_subtypes ctx ~location:(snd i'.info) (fst i'.info)
-              ctx.return_types;
+            let* i' = check_against ctx ctx.return_types i' in
             return (Some i')
         | None ->
             if ctx.return_types <> [||] then
@@ -4211,6 +4208,20 @@ and typed_call_args ctx l param_types =
       in
       go 0 l
   | _ -> instructions ctx l
+
+(* Type a value carried to a known result/branch type (a [return], [br], …).
+   When exactly one value is expected, check the operand against it so a
+   struct/array literal can be inferred and drop its name; otherwise synthesize
+   and check the whole tuple, as before. *)
+and check_against ctx expected i =
+  match expected with
+  | [| ty |] ->
+      let* i', _ = check ctx ty i in
+      return i'
+  | _ ->
+      let* i' = instruction ctx i in
+      check_subtypes ctx ~location:(snd i'.info) (fst i'.info) expected;
+      return i'
 
 and type_indirect_call ctx i i' l =
   let param_types = peek_call_params ctx i' in

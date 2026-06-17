@@ -38,6 +38,14 @@ fn from_field_set(h: &holder) {
     h.p = {x: 3, y: 4,};
 }
 
+// A returned value takes its context from the result type.
+fn from_return(b: i32) -> &point {
+    if b == 0 {
+        return {x: 0, y: 0,};
+    }
+    return {x: 1, y: 1,};
+}
+
 fn from_let_array() -> &ints {
     let a: &ints = [0; 8];
     return a;
