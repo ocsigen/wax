@@ -22,6 +22,22 @@ fn from_set() -> &point {
     return p;
 }
 
+type holder = { p: mut &point };
+
+fn take(p: &point) -> i32 {
+    return p.x;
+}
+
+// A call argument takes its context from the parameter type.
+fn from_arg() -> i32 {
+    return take({x: 1, y: 2,});
+}
+
+// A struct field assignment takes its context from the field type.
+fn from_field_set(h: &holder) {
+    h.p = {x: 3, y: 4,};
+}
+
 fn from_let_array() -> &ints {
     let a: &ints = [0; 8];
     return a;

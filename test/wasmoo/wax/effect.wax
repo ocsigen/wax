@@ -101,7 +101,7 @@ fn raise_unhandled(eff: &eq, x: &eq) -> &eq {
 
 fn uncaught_effect_handler(eff: &eq, cont: &eq, k: &eq, x: &eq) -> &eq {
     let k' = push_stack((cont as &block)[1] as &fiber, k as &cont_2);
-    k'.cont_func({pair| fst: {closure| f: raise_unhandled }, snd: eff }, k');
+    k'.cont_func({ fst: {closure| f: raise_unhandled }, snd: eff }, k');
     0 as &i31;
 }
 
@@ -197,7 +197,7 @@ fn do_perform(k0: &cont_2, vp: &eq) {
         };
     let k1 = pop_fiber();
     become k1.cont_func(
-        {pair|
+        {
             fst:
                 {call_handler_env| f: call_effect_handler, handler: handler, eff: eff, cont: cont },
             snd: k1,
@@ -221,7 +221,7 @@ fn f_2(eff: &eq) -> &eq {
 fn call_handler(f: &eq, x: &eq) {
     let cont: &cont_2;
     // Propagate a value or an exception to the parent fiber
-    become cont.cont_func({pair| fst: f, snd: x }, cont := pop_fiber());
+    become cont.cont_func({ fst: f, snd: x }, cont := pop_fiber());
 }
 
 #[export = "caml_start_fiber"]
@@ -283,7 +283,7 @@ fn caml_continuation_use_and_update_handler_noexc(
     _ =
         'used: do &eq {
             (br_on_cast_fail 'used &generic_fiber stack).handlers =
-                {handlers| value: hval, exn: hexn, effect: heff };
+                { value: hval, exn: hexn, effect: heff };
             0 as &i31;
         };
     stack;

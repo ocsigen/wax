@@ -2559,32 +2559,46 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
             None
       in
       return_expression i (StructGet (i', field)) ty
-  | StructSet (i1, field, i2) -> (
+  | StructSet (i1, field, i2) ->
       let* i1' = instruction ctx i1 in
-      let* i2' = instruction ctx i2 in
-      let ty1 = expression_type ctx i1' in
-      match UnionFind.find ty1 with
-      | Valtype { typ = Ref { typ = Type ty; _ }; _ } -> (
-          let*! typ = lookup_struct_type ctx ty in
-          match
-            Array.find_map
-              (fun f ->
-                let nm, typ = f.desc in
-                if nm.desc = field.desc then Some typ else None)
-              typ
-          with
-          | None ->
-              Error.missing_field ctx.diagnostics ~location:field.info field;
-              return_statement i (StructSet (i1', field, i2')) [||]
-          | Some typ ->
-              if not typ.mut then
-                Error.immutable ctx.diagnostics ~location:field.info "field";
-              (let>@ ty = internalize ctx (unpack_type typ) in
-               check_type ctx i2' ty);
-              return_statement i (StructSet (i1', field, i2')) [||])
-      | _ ->
-          Error.expected_struct_type ctx.diagnostics ~location:i1.info;
-          return_statement i (StructSet (i1', field, i2')) [||])
+      (* Resolve the field's declared type (pure, reporting any field error)
+         before typing the value, so the value can be checked against it and a
+         struct/array literal can drop its name. The value is then typed on
+         every path, so its holes are always consumed. *)
+      let expected =
+        match UnionFind.find (expression_type ctx i1') with
+        | Valtype { typ = Ref { typ = Type ty; _ }; _ } -> (
+            match lookup_struct_type ctx ty with
+            | None -> None
+            | Some fields -> (
+                match
+                  Array.find_map
+                    (fun f ->
+                      let nm, ftyp = f.desc in
+                      if nm.desc = field.desc then Some ftyp else None)
+                    fields
+                with
+                | None ->
+                    Error.missing_field ctx.diagnostics ~location:field.info
+                      field;
+                    None
+                | Some ftyp ->
+                    if not ftyp.mut then
+                      Error.immutable ctx.diagnostics ~location:field.info
+                        "field";
+                    internalize ctx (unpack_type ftyp)))
+        | _ ->
+            Error.expected_struct_type ctx.diagnostics ~location:i1.info;
+            None
+      in
+      let* i2' =
+        match expected with
+        | Some cell ->
+            let* i2', _ = check ctx cell i2 in
+            return i2'
+        | None -> instruction ctx i2
+      in
+      return_statement i (StructSet (i1', field, i2')) [||]
   (* [tab[i]] on a table name is [table.get]; the receiver is not a value. *)
   | ArrayGet (({ desc = Get tabname; _ } as recv), i2)
     when Tbl.find_opt ctx.tables tabname <> None ->
@@ -2613,39 +2627,51 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
     when Tbl.find_opt ctx.tables tabname <> None ->
       let at, rt = Option.get (Tbl.find_opt ctx.tables tabname) in
       let* i2' = instruction ctx i2 in
-      let* i3' = instruction ctx i3 in
       check_type ctx i2' (UnionFind.make (Valtype (address_valtype at)));
-      (let>@ ty = internalize ctx (Ref rt) in
-       let ty' = expression_type ctx i3' in
-       if not (subtype ctx ty' ty) then
-         Error.instruction_type_mismatch ctx.diagnostics
-           ~location:(snd i3'.info) ty' ty);
+      (* Check the stored value against the table's element type, so a
+         struct/array literal can drop its name. *)
+      let* i3' =
+        match internalize ctx (Ref rt) with
+        | Some cell ->
+            let* i3', _ = check ctx cell i3 in
+            return i3'
+        | None -> instruction ctx i3
+      in
       return_statement i
         (ArraySet ({ desc = Get tabname; info = ([||], recv.info) }, i2', i3'))
         [||]
   | ArraySet (i1, i2, i3) -> (
       let* i1' = instruction ctx i1 in
       let* i2' = instruction ctx i2 in
-      let* i3' = instruction ctx i3 in
       check_type ctx i2'
         (UnionFind.make (Valtype { typ = I32; internal = I32 }));
       match UnionFind.find (expression_type ctx i1') with
       | Valtype { typ = Ref { typ = Type ty; _ }; _ } ->
-          (let>@ typ = lookup_array_type ~location:i1.info ctx ty in
-           if not typ.mut then
-             Error.immutable ctx.diagnostics ~location:i1.info "array";
-           let>@ ty = internalize ctx (unpack_type typ) in
-           let ty' = expression_type ctx i3' in
-           if not (subtype ctx ty' ty) then
-             Error.instruction_type_mismatch ctx.diagnostics
-               ~location:(snd i3'.info) ty' ty);
+          (* Resolve the element type (pure) before typing the value, so a
+             struct/array literal value can drop its name. *)
+          let expected =
+            match lookup_array_type ~location:i1.info ctx ty with
+            | None -> None
+            | Some typ ->
+                if not typ.mut then
+                  Error.immutable ctx.diagnostics ~location:i1.info "array";
+                internalize ctx (unpack_type typ)
+          in
+          let* i3' =
+            match expected with
+            | Some cell ->
+                let* i3', _ = check ctx cell i3 in
+                return i3'
+            | None -> instruction ctx i3
+          in
           return_statement i (ArraySet (i1', i2', i3')) [||]
       | Unknown ->
           (* ZZZ Array type inference is incomplete here. *)
+          let* _ = instruction ctx i3 in
           Format.eprintf "@[%a@]@." Output.instr i;
-          (*return_statement i (ArraySet (i1', i2', i3')) [||]*)
           assert false
       | _ ->
+          let* i3' = instruction ctx i3 in
           Error.expected_array_type ctx.diagnostics ~location:i1.info;
           return_statement i (ArraySet (i1', i2', i3')) [||])
   | BinOp (op, i1, i2) ->
@@ -4125,8 +4151,12 @@ and check_toplevel ctx expected i =
    binding are unchanged; the callee is still typed normally afterwards. The
    result is used only to check each argument against its parameter. *)
 and peek_call_params ctx callee =
-  let name_opt =
-    match callee.desc with
+  (* The user heap-type name a hole-free callee resolves to, computed purely (no
+     typing, no stack effect): a function name, a funcref-typed variable, or a
+     chain of struct-field reads ending in a funcref field — e.g.
+     [cont.cont_func]. [None] for anything else. *)
+  let rec callee_heaptype c =
+    match c.desc with
     | Get name -> (
         match resolve_variable ctx name with
         | Func_ref (_, ty') -> Some (Ast.no_loc ty')
@@ -4134,9 +4164,29 @@ and peek_call_params ctx callee =
         | Global (_, { typ = Ref { typ = Type t; _ }; _ }) ->
             Some t
         | Local _ | Global _ | Unbound -> None)
+    (* A cast target names the value's type directly; [from_wasm] inserts these
+       on a receiver before a field access (e.g. [(k as &cont_2).cont_func]). *)
+    | Cast (_, Valtype (Ref { typ = Type t; _ })) -> Some t
+    | NonNull e -> callee_heaptype e
+    | StructGet (recv, field) -> (
+        match callee_heaptype recv with
+        | None -> None
+        | Some struct_name -> (
+            match Tbl.find_opt ctx.type_context.types struct_name with
+            | Some (_, { typ = Struct fields; _ }) ->
+                Array.find_map
+                  (fun f ->
+                    let nm, (ftyp : fieldtype) = f.desc in
+                    if nm.desc = field.desc then
+                      match ftyp.typ with
+                      | Value (Ref { typ = Type t; _ }) -> Some t
+                      | Value _ | Packed _ -> None
+                    else None)
+                  fields
+            | _ -> None))
     | _ -> None
   in
-  match name_opt with
+  match callee_heaptype callee with
   | None -> None
   | Some t -> (
       match Tbl.find_opt ctx.type_context.types t with

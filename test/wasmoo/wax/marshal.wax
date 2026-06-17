@@ -325,7 +325,7 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
     let sp: &?stack_item = { blk: res, pos: 0, next: null as &?stack_item };
     let size = h.num_objects;
     if size {
-        s.obj_table = [block|0 as &i31; size];
+        s.obj_table = [0 as &i31; size];
     }
     let v: &eq =
         0 // keep validator happy

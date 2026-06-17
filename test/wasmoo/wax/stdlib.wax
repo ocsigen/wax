@@ -93,7 +93,7 @@ fn caml_register_named_value(x: &eq, x_2: &eq) -> &eq {
         (br_on_null 'not_found find_named_value(x, r)).f_2 = x_2;
         return 0 as &i31;
     }
-    named_value_table[h] = {assoc| f: x as &string, f_2: x_2, f_3: r };
+    named_value_table[h] = { f: x as &string, f_2: x_2, f_3: r };
     0 as &i31;
 }
 
