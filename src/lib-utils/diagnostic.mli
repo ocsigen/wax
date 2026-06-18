@@ -21,13 +21,20 @@ val report :
   context ->
   location:Ast.location ->
   severity:severity ->
+  ?universal:bool ->
   ?hint:(Format.formatter -> unit -> unit) ->
   ?related:label list ->
   message:(Format.formatter -> unit -> unit) ->
   unit ->
   unit
-(** [report context ~location ~severity ?hint ?related ~message ()] reports a
-    diagnostic. *)
+(** [report context ~location ~severity ?universal ?hint ?related ~message ()]
+    reports a diagnostic. [universal] (default [false]) marks a diagnostic that
+    is meaningful only when it holds in {e every} reachable configuration;
+    during path-sensitive exploration (see {!Cond_explore.check_all}) such a
+    diagnostic is reported only if it arises under all assumptions, not just
+    some. The unused-local warning is universal: a local used in one conditional
+    branch is not "unused" merely because another configuration prunes that
+    branch. *)
 
 exception Aborted
 (** Raised by {!abort} to unwind a pass that cannot meaningfully continue after
@@ -59,6 +66,7 @@ val collected : context -> entry list
 
 val entry_location : entry -> Ast.location
 val entry_severity : entry -> severity
+val entry_universal : entry -> bool
 val entry_message : entry -> Format.formatter -> unit -> unit
 val entry_hint : entry -> (Format.formatter -> unit -> unit) option
 val entry_related : entry -> label list

@@ -56,6 +56,53 @@ are reported; a name starting with `_` is intentionally unused:
     (local.get $used)
   )
 
+Under conditional annotations the check is path-sensitive: a local is reported
+only when it is unused in *every* reachable configuration. `$used_when_wasi` is
+read in the `$wasi` branch, so it is never flagged even though the `(not $wasi)`
+configuration leaves it unread; `$never_used` is read in no branch, so it is
+reported (with no "reachable when" qualifier, as it holds unconditionally):
+
+  $ wax --validate cond.wat -f wat
+  Warning: The local variable $never_used is never used.
+   ──➤  cond.wat:3:40
+  1 │ (module
+  2 │   (func $f (param $n i32) (result i32)
+  3 │     (local $used_when_wasi i32) (local $never_used i32)
+    ·                                        ^^^^^^^^^^^
+  4 │     (local.set $used_when_wasi (local.get $n))
+  5 │     (@if $wasi
+  (func $f (param $n i32) (result i32)
+    (local $used_when_wasi i32) (local $never_used i32)
+    (local.set $used_when_wasi (local.get $n))
+    (@if $wasi (@then (local.get $used_when_wasi) ) (@else (i32.const 0) ) )
+  )
+
+The same path-sensitivity applies to Wax `#[if]`/`#[else]`: `used_when_wasi` is
+read only in the `wasi` branch but is still not flagged, while `never_used` is
+reported once, unconditionally.
+
+  $ wax --validate cond.wax -f wax
+  Warning: The local variable 'never_used' is never used.
+   ──➤  cond.wax:3:9
+  1 │ fn f(n: i32) -> i32 {
+  2 │     let used_when_wasi: i32 = n;
+  3 │     let never_used: i32 = 5;
+    ·         ^^^^^^^^^^
+  4 │     #[if(wasi)]
+  5 │     {
+  fn f(n: i32) -> i32 {
+      let used_when_wasi: i32 = n;
+      let never_used: i32 = 5;
+      #[if(wasi)]
+      {
+          used_when_wasi;
+      }
+      #[else]
+      {
+          0;
+      }
+  }
+
 The `check` subcommand reports the warning too, but an unused local alone does
 not make it fail (exit status stays 0):
 

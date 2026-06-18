@@ -23,6 +23,11 @@ let check_all diagnostics ?truncation_location
   in
   let count = ref 0 in
   let truncated = ref false in
+  (* The union of every reachable configuration's assumption: the whole feasible
+     space. A [universal] diagnostic (e.g. an unused local) is only reported if
+     it arises across all of it — being unused in some branches but used in
+     others is not "unused". *)
+  let feasible = ref Cond_solver.false_ in
   while (not (Queue.is_empty queue)) && not !truncated do
     let asm = Queue.pop queue in
     if Bdd_tbl.mem processed asm || not (Cond_solver.is_satisfiable asm) then ()
@@ -40,7 +45,8 @@ let check_all diagnostics ?truncation_location
          configuration's full assumption is normally satisfiable. This guards
          against any residual incompleteness by discarding errors should an
          infeasible configuration slip through. *)
-      if Cond_solver.is_satisfiable !a_full then
+      if Cond_solver.is_satisfiable !a_full then begin
+        feasible := Cond_solver.or_ !feasible !a_full;
         List.iter
           (fun e ->
             let loc = Diagnostic.entry_location e in
@@ -58,9 +64,20 @@ let check_all diagnostics ?truncation_location
             in
             Hashtbl.replace errors key (e, reach))
           (Diagnostic.collected cctx)
+      end
     end
   done;
   let entries = Hashtbl.fold (fun _ v acc -> v :: acc) errors [] in
+  (* Drop a [universal] diagnostic unless it arose in every reachable
+     configuration, i.e. its accumulated reachability covers the whole feasible
+     space. *)
+  let entries =
+    List.filter
+      (fun (e, reach) ->
+        (not (Diagnostic.entry_universal e))
+        || Cond_solver.logical_implies !feasible reach)
+      entries
+  in
   let entries =
     List.sort
       (fun (e1, _) (e2, _) ->
@@ -75,7 +92,11 @@ let check_all diagnostics ?truncation_location
     (fun (e, reach) ->
       let base_hint = Diagnostic.entry_hint e in
       let hint =
-        match explain env reach with
+        (* A [universal] diagnostic holds across the whole feasible space, so it
+           carries no "reachable when" qualifier. *)
+        match
+          if Diagnostic.entry_universal e then None else explain env reach
+        with
         | None -> base_hint
         | Some s ->
             Some

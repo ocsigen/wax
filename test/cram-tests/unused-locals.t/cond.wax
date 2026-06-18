@@ -1,0 +1,12 @@
+fn f(n: i32) -> i32 {
+    let used_when_wasi: i32 = n;
+    let never_used: i32 = 5;
+    #[if(wasi)]
+    {
+        used_when_wasi;
+    }
+    #[else]
+    {
+        0;
+    }
+}

@@ -119,10 +119,11 @@ module Error = struct
 
   (* Warnings share the same envelope as [report] but with severity [Warning],
      so they are printed without aborting the pass. *)
-  let warn ?hint ?related context ~location fmt =
+  let warn ?universal ?hint ?related context ~location fmt =
     Format.kdprintf
       (fun msg ->
-        Diagnostic.report context ~location ~severity:Warning ?hint ?related
+        Diagnostic.report context ~location ~severity:Warning ?universal ?hint
+          ?related
           ~message:(fun f () -> msg f)
           ())
       fmt
@@ -130,8 +131,8 @@ module Error = struct
   (* A local declared by a [let] but never read. Prefix its name with [_] to
      silence the warning. *)
   let unused_local context ~location name =
-    warn context ~location "The local variable %a is never used." print_name
-      name
+    warn ~universal:true context ~location
+      "The local variable %a is never used." print_name name
 
   let empty_stack context ~location =
     report context ~location "The stack is empty."
@@ -5850,7 +5851,8 @@ let f ?(simplify = false) ?(warn_unused = false) diagnostics fields =
       ~explain:(fun env c -> Wasm.Cond_solver.explain env ~style:`Wax c)
       ~specialize:(fun env asm ~enqueue ~record ->
         specialize_fields env diagnostics ~enqueue ~record asm fields)
-      ~check:(fun ctx m -> ignore (type_configuration ~simplify ctx m))
+      ~check:(fun ctx m ->
+        ignore (type_configuration ~warn_unused ~simplify ctx m))
       ();
     (* Build the typed module (consumed only by the deferred WAT conversion;
        wax -> wax ignores it) by typing the module with conditionals preserved.

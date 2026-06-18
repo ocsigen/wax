@@ -50,6 +50,9 @@ type t = {
   message : Format.formatter -> unit -> unit;
   hint : (Format.formatter -> unit -> unit) option;
   related : label list;
+  universal : bool;
+      (* Reported during path-sensitive exploration only if it holds in every
+         reachable configuration (see [report]'s [universal] parameter). *)
 }
 
 let print_hint ?(output = Format.err_formatter) ~theme hint =
@@ -345,6 +348,7 @@ type entry = t
 let collected context = List.of_seq (Queue.to_seq context.queue)
 let entry_location (e : entry) = e.location
 let entry_severity (e : entry) = e.severity
+let entry_universal (e : entry) = e.universal
 let entry_message (e : entry) = e.message
 let entry_hint (e : entry) = e.hint
 let entry_related (e : entry) = e.related
@@ -355,21 +359,23 @@ let output_errors ?exit_on_error context =
   in
   if not (Queue.is_empty context.queue) then (
     Queue.iter
-      (fun ({ location; severity; hint; message; related } : t) ->
+      (fun ({ location; severity; hint; message; related; universal = _ } : t)
+         ->
         output_error ~output:context.output ~theme:context.theme
           ~source:context.source ~location ~severity ?hint ~related message)
       context.queue;
     Queue.clear context.queue;
     if exit_on_error then exit 128)
 
-let report context ~location ~severity ?hint ?(related = []) ~message () =
+let report context ~location ~severity ?(universal = false) ?hint
+    ?(related = []) ~message () =
   let all_related = context.related @ related in
   match severity with
   | Warning when context.collecting ->
       (* Buffer the warning so [collected] can surface it; never triggers the
          early flush or the exit-on-error path. *)
       Queue.push
-        { location; severity; message; hint; related = all_related }
+        { location; severity; message; hint; related = all_related; universal }
         context.queue
   | Warning ->
       output_error ~output:context.output ~theme:context.theme
@@ -377,7 +383,7 @@ let report context ~location ~severity ?hint ?(related = []) ~message () =
         message
   | Error ->
       Queue.push
-        { location; severity; message; hint; related = all_related }
+        { location; severity; message; hint; related = all_related; universal }
         context.queue;
       if Queue.length context.queue = context.max then output_errors context
 
