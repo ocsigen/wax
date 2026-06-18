@@ -2646,6 +2646,10 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                       Error.immutable ctx.diagnostics ~location:field.info
                         "field";
                     internalize ctx (unpack_type ftyp)))
+        | Unknown ->
+            (* Receiver already failed to type; recover without a spurious
+               "expected struct type". *)
+            None
         | _ ->
             Error.expected_struct_type ctx.diagnostics ~location:i1.info;
             None
@@ -2678,6 +2682,9 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
           let*! typ = lookup_array_type ~location:i1.info ctx ty in
           let*! ty = field_read_type ctx typ in
           return_expression i (ArrayGet (i1', i2')) ty
+      | Unknown ->
+          (* Receiver already failed to type; recover silently. *)
+          return_expression i (ArrayGet (i1', i2')) (UnionFind.make Unknown)
       | _ ->
           Error.expected_array_type ctx.diagnostics ~location:i1.info;
           return_expression i (ArrayGet (i1', i2')) (UnionFind.make Unknown))
@@ -2725,10 +2732,10 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
           in
           return_statement i (ArraySet (i1', i2', i3')) [||]
       | Unknown ->
-          (* ZZZ Array type inference is incomplete here. *)
-          let* _ = instruction ctx i3 in
-          Format.eprintf "@[%a@]@." Output.instr i;
-          assert false
+          (* Receiver already failed to type; recover silently (still type the
+             value so its holes are consumed). *)
+          let* i3' = instruction ctx i3 in
+          return_statement i (ArraySet (i1', i2', i3')) [||]
       | _ ->
           let* i3' = instruction ctx i3 in
           Error.expected_array_type ctx.diagnostics ~location:i1.info;
@@ -3740,6 +3747,7 @@ and type_array_fill_call ctx i func a meth j v n =
       if not (subtype ctx ty' ty) then
         Error.instruction_type_mismatch ctx.diagnostics ~location:(snd v'.info)
           ty' ty
+  | Unknown -> (* receiver already failed to type; recover silently *) ()
   | _ -> Error.expected_array_type ctx.diagnostics ~location:a.info);
   return_statement i
     (Call
@@ -3795,6 +3803,7 @@ and type_array_init_call ctx i func a meth seg sinfo rest =
           let>@ src = Tbl.find ctx.diagnostics ctx.elems seg in
           check_elem_subtype ctx ~location:a.info ~src ~dst
       | _ -> ignore (Tbl.find ctx.diagnostics ctx.datas seg : unit option))
+  | Unknown -> (* receiver already failed to type; recover silently *) ()
   | _ -> Error.expected_array_type ctx.diagnostics ~location:a.info);
   let seg' = { desc = Get seg; info = ([||], sinfo) } in
   return_statement i
