@@ -206,6 +206,26 @@ let loop_carried name l = first_access_list name l = Some `Read
    [If_annotation] branch, so those are never entered. *)
 let rec sink_into ((name, _) as decl) s =
   let bl block = sink_decl decl block in
+  let occ e = occurs name.desc e in
+  (* Recurse into the unique sub-expression of [s] holding every use of the
+     local and rebuild [s] around the result. With all uses in one operand no
+     sibling reads the local, so their evaluation order is irrelevant; uses
+     split across operands, or an operand with no inner block to take the let,
+     yield [None] and leave a bare declaration before [s]. *)
+  let pick children =
+    match List.filter (fun (e, _) -> occ e) children with
+    | [ (e, mk) ] ->
+        Option.map (fun e' -> { s with desc = mk e' }) (sink_into decl e)
+    | _ -> None
+  in
+  (* The [pick] children for an operand list: each element paired with the
+     rebuild that reinstalls it. *)
+  let in_list l mk =
+    List.mapi
+      (fun i e ->
+        (e, fun e' -> mk (List.mapi (fun j x -> if i = j then e' else x) l)))
+      l
+  in
   match s.desc with
   | Block r -> Some { s with desc = Block { r with block = bl r.block } }
   | Loop r ->
@@ -289,6 +309,24 @@ let rec sink_into ((name, _) as decl) s =
             r.catches
         in
         Some { s with desc = Try { r with catches } }
+  | Dispatch r ->
+      (* The index is evaluated in the enclosing scope, so a use there pins the
+         declaration outside; the arms are mutually exclusive, so a single
+         declaration can cover at most one. *)
+      if occ r.index then None
+      else if
+        List.length (List.filter (fun (_, b) -> list_occurs name.desc b) r.arms)
+        <> 1
+      then None
+      else
+        let arms =
+          List.map
+            (fun (l, b) ->
+              if list_occurs name.desc b then (l, bl b) else (l, b))
+            r.arms
+        in
+        Some { s with desc = Dispatch { r with arms } }
+  (* Expression carriers: descend through an operand toward a nested block. *)
   | Set (id, e)
     when match id with
          | Some n -> not (String.equal n.desc name.desc)
@@ -298,7 +336,91 @@ let rec sink_into ((name, _) as decl) s =
          [name = e]: there [e] is this local's own initializer (the non-reading
          case is already fused by [sink_decl]), and sinking the declaration into
          [e] would shadow it. *)
-      Option.map (fun e' -> { s with desc = Set (id, e') }) (sink_into decl e)
+      pick [ (e, fun e' -> Set (id, e')) ]
+  | Tee (n, e) when not (String.equal n.desc name.desc) ->
+      pick [ (e, fun e' -> Tee (n, e')) ]
+  | Call (t, args) ->
+      pick
+        ((t, fun t' -> Call (t', args))
+        :: in_list args (fun args' -> Call (t, args')))
+  | TailCall (t, args) ->
+      pick
+        ((t, fun t' -> TailCall (t', args))
+        :: in_list args (fun args' -> TailCall (t, args')))
+  | BinOp (op, a, b) ->
+      pick
+        [ (a, fun a' -> BinOp (op, a', b)); (b, fun b' -> BinOp (op, a, b')) ]
+  | ArrayGet (a, b) ->
+      pick [ (a, fun a' -> ArrayGet (a', b)); (b, fun b' -> ArrayGet (a, b')) ]
+  | Array (idx, a, b) ->
+      pick
+        [ (a, fun a' -> Array (idx, a', b)); (b, fun b' -> Array (idx, a, b')) ]
+  | ArraySegment (idx, d, a, b) ->
+      pick
+        [
+          (a, fun a' -> ArraySegment (idx, d, a', b));
+          (b, fun b' -> ArraySegment (idx, d, a, b'));
+        ]
+  | StructSet (a, f, b) ->
+      pick
+        [
+          (a, fun a' -> StructSet (a', f, b));
+          (b, fun b' -> StructSet (a, f, b'));
+        ]
+  | ArraySet (a, b, c) ->
+      pick
+        [
+          (a, fun a' -> ArraySet (a', b, c));
+          (b, fun b' -> ArraySet (a, b', c));
+          (c, fun c' -> ArraySet (a, b, c'));
+        ]
+  | Select (a, b, c) ->
+      pick
+        [
+          (a, fun a' -> Select (a', b, c));
+          (b, fun b' -> Select (a, b', c));
+          (c, fun c' -> Select (a, b, c'));
+        ]
+  | Struct (idx, fields) ->
+      pick
+        (List.mapi
+           (fun i (_, e) ->
+             ( e,
+               fun e' ->
+                 Struct
+                   ( idx,
+                     List.mapi
+                       (fun j (fn, x) -> (fn, if i = j then e' else x))
+                       fields ) ))
+           fields)
+  | Cast (e, t) -> pick [ (e, fun e' -> Cast (e', t)) ]
+  | Test (e, t) -> pick [ (e, fun e' -> Test (e', t)) ]
+  | NonNull e -> pick [ (e, fun e' -> NonNull e') ]
+  | StructGet (e, f) -> pick [ (e, fun e' -> StructGet (e', f)) ]
+  | UnOp (op, e) -> pick [ (e, fun e' -> UnOp (op, e')) ]
+  | ThrowRef e -> pick [ (e, fun e' -> ThrowRef e') ]
+  | ArrayDefault (idx, e) -> pick [ (e, fun e' -> ArrayDefault (idx, e')) ]
+  | ContNew (ct, e) -> pick [ (e, fun e' -> ContNew (ct, e')) ]
+  | Br_if (l, e) -> pick [ (e, fun e' -> Br_if (l, e')) ]
+  | Br_table (ls, e) -> pick [ (e, fun e' -> Br_table (ls, e')) ]
+  | Br_on_null (l, e) -> pick [ (e, fun e' -> Br_on_null (l, e')) ]
+  | Br_on_non_null (l, e) -> pick [ (e, fun e' -> Br_on_non_null (l, e')) ]
+  | Br_on_cast (l, t, e) -> pick [ (e, fun e' -> Br_on_cast (l, t, e')) ]
+  | Br_on_cast_fail (l, t, e) ->
+      pick [ (e, fun e' -> Br_on_cast_fail (l, t, e')) ]
+  | Br (l, Some e) -> pick [ (e, fun e' -> Br (l, Some e')) ]
+  | Return (Some e) -> pick [ (e, fun e' -> Return (Some e')) ]
+  | Throw (idx, Some e) -> pick [ (e, fun e' -> Throw (idx, Some e')) ]
+  | ArrayFixed (idx, l) -> pick (in_list l (fun l' -> ArrayFixed (idx, l')))
+  | ContBind (a, b, l) -> pick (in_list l (fun l' -> ContBind (a, b, l')))
+  | Suspend (tag, l) -> pick (in_list l (fun l' -> Suspend (tag, l')))
+  | Resume (ct, h, l) -> pick (in_list l (fun l' -> Resume (ct, h, l')))
+  | ResumeThrow (ct, tag, h, l) ->
+      pick (in_list l (fun l' -> ResumeThrow (ct, tag, h, l')))
+  | ResumeThrowRef (ct, h, l) ->
+      pick (in_list l (fun l' -> ResumeThrowRef (ct, h, l')))
+  | Switch (ct, tag, l) -> pick (in_list l (fun l' -> Switch (ct, tag, l')))
+  | Sequence l -> pick (in_list l (fun l' -> Sequence l'))
   | _ -> None
 
 (* Place a single declaration into [l]. Precondition: every use of the local

@@ -366,7 +366,6 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                                         len = code & 0x1F;
                                         br 'read_string;
                                     } else {
-                                        let header: i32;
                                         dispatch code [
                                             'INT8 'INT16 'INT32 'INT64 'SHARED8 'SHARED16 'SHARED32
                                             'DOUBLE_ARRAY32 'BLOCK32 'STRING8 'STRING32 'DOUBLE
@@ -418,7 +417,7 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                                             }
                                             'BLOCK32: {
                                                 // BLOCK32
-                                                header = read32(s);
+                                                let header = read32(s);
                                                 tag_2 = header & 0xFF;
                                                 size = header >>u 10;
                                                 br 'read_block;

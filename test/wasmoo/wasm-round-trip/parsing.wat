@@ -236,8 +236,8 @@
   (local $tbl_gindex_2 (ref $string)) (local $tbl_dgoto_2 (ref $string))
   (local $env (ref $block)) (local $cmd i32) (local $sp i32)
   (local $state i32) (local $errflag i32) (local $res i32) (local $n i32)
-  (local $n1 i32) (local $n2 i32) (local $m i32) (local $state1 i32)
-  (local $asp i32) (local $arg (ref $block))
+  (local $n1 i32) (local $n2 i32) (local $state1 i32)
+  (local $arg (ref $block)) (local $m i32) (local $asp i32)
   (local.set $tables (ref.cast (ref $block) (local.get $vtables)))
   (local.set $tbl_defred_2
     (ref.cast (ref $string)

@@ -1454,9 +1454,9 @@
 
 (func $caml_ba_fill (export "caml_ba_fill")
   (param $vba (ref eq)) (param $v (ref eq)) (result (ref eq))
-  (local $ba (ref $bigarray)) (local $data (ref extern)) (local $l i64)
-  (local $i i32) (local $len i32) (local $i1 i32) (local $i2 i32)
-  (local $f1 f64) (local $f2 f64) (local $b (ref $float_array))
+  (local $ba (ref $bigarray)) (local $data (ref extern)) (local $i i32)
+  (local $len i32) (local $f1 f64) (local $f2 f64)
+  (local $b (ref $float_array)) (local $l i64) (local $i1 i32) (local $i2 i32)
   (local.set $ba (ref.cast (ref $bigarray) (local.get $vba)))
   (local.set $data (struct.get $bigarray $ba_data (local.get $ba)))
   (block $float

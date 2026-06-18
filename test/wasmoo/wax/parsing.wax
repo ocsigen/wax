@@ -209,10 +209,7 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
             let n: i32;
             let n1: i32;
             let n2: i32;
-            let m: i32;
             let state1: i32;
-            let asp: i32;
-            let arg: &block;
             dispatch cmd [
                 'START 'TOKEN_READ 'STACKS_GROWN_1 'STACKS_GROWN_2 'SEMANTIC_ACTION_COMPUTED
                 'ERROR_DETECTED 'loop 'testshift 'shift 'shift_recover 'reduce else 'default
@@ -242,7 +239,7 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                     'cont: do {
                         _ =
                             'not_block: do &eq {
-                                arg = br_on_cast_fail 'not_block &block varg;
+                                let arg = br_on_cast_fail 'not_block &block varg;
                                 env[env_curr_char] =
                                     (tables[tbl_transl_block] as &block)
                                         [arg[0] as &i31 as i32_u + 1];
@@ -379,7 +376,7 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                         output_int(n);
                         output_nl();
                     }
-                    m = get(tbl_len_2, n);
+                    let m = get(tbl_len_2, n);
                     env[env_asp] = sp as &i31;
                     env[env_rule_number] = n as &i31;
                     env[env_rule_len] = m as &i31;
@@ -414,7 +411,7 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                     // SEMANTIC_ACTION_COMPUTED:
                     (env[env_s_stack] as &block)[sp + 1] = state as &i31;
                     (env[env_v_stack] as &block)[sp + 1] = varg;
-                    asp = env[env_asp] as &i31 as i32_s;
+                    let asp = env[env_asp] as &i31 as i32_s;
                     (env[env_symb_end_stack] as &block)[sp + 1] =
                         (env[env_symb_end_stack] as &block)[asp + 1];
                     if sp >s asp {
