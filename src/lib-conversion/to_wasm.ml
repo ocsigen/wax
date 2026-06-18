@@ -182,9 +182,17 @@ let typeuse typ sign =
   in
   (idx, type_info)
 
+(* Raised when an instruction's type is unknown ([None]). After type-checking
+   succeeds this only happens in unreachable (dead) code — a value taken off the
+   polymorphic stack. The instruction cannot be translated (e.g. [array.get]
+   needs a concrete type) but is never executed, so [instruction] catches this
+   and emits [unreachable] in its place. *)
+exception Dead_code
+
 let expr_type i =
   match i.info with
   | [| Some t |], _ -> t
+  | [| None |], _ -> raise Dead_code
   | _ ->
       print_instr i;
       assert false
@@ -315,6 +323,13 @@ let lane_imm a =
   match a.desc with Int s -> int_of_string s | _ -> assert false
 
 let rec instruction ret ctx i : location Text.instr list =
+  let _, loc = i.info in
+  (* An instruction whose translation needs a type we don't have ([Dead_code])
+     can only be unreachable code (type-checking has already succeeded); emit
+     [unreachable] for it, which is valid and never executed. *)
+  try instruction_desc ret ctx i with Dead_code -> folded loc Unreachable []
+
+and instruction_desc ret ctx i : location Text.instr list =
   let _, loc = i.info in
   match i.desc with
   | Block { label; typ; block = body } ->

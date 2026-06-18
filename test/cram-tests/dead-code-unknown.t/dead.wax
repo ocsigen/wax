@@ -1,0 +1,7 @@
+// An array access on a hole in unreachable code has an unknown receiver type.
+// It type-checks (dead code is permissive) and must compile without crashing:
+// the untranslatable, never-executed op becomes `unreachable`.
+fn f() -> i32 {
+    unreachable;
+    _[0];
+}
