@@ -276,9 +276,11 @@ fn caml_float_of_hex(s: &string, i: i32) -> f64 {
     let len = s.length();
     let dec_point = -1;
     'error: do {
+        let d: i32;
         let m: i64;
         let exp: i32;
         let n_bits: i32;
+        let m_bits: i32;
         let x_bits: i32;
         'parse: while i <u len {
             let c = s[i] as i32_u;
@@ -289,7 +291,6 @@ fn caml_float_of_hex(s: &string, i: i32) -> f64 {
                 dec_point = n_bits;
                 br 'parse;
             }
-            let d: i32;
             if
                 (c == 80) // 'P'
                     | (c == 112) // 'p'
@@ -352,7 +353,6 @@ fn caml_float_of_hex(s: &string, i: i32) -> f64 {
             }
             n_bits = n_bits + 4;
             br_if 'parse !d & !m;
-            let m_bits: i32;
             if m_bits <u 60 {
                 m = (m << 4) + d as i64_u;
                 m_bits = m_bits + 4;

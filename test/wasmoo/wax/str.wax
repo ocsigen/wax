@@ -90,8 +90,8 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq {
         let i: i32;
         let j: i32;
         'ACCEPT: do {
+            let stack: &?stack;
             'continue: loop {
-                let stack: &?stack;
                 'backtrack: do {
                     'prefix_match: do {
                         let instr = prog[pc] as &i31 as i32_s;
@@ -471,10 +471,10 @@ fn re_replacement_text(vrepl: &eq, vgroups: &eq, vorig: &eq) -> &eq {
     }
     let res: &string = [0; len];
     i = 0;
+    let j: i32;
     'loop: while i <u l {
         c = repl[i] as i32_u;
         i = i + 1;
-        let j: i32;
         if c != 92 // '\\'
         {
             res[j] = c;

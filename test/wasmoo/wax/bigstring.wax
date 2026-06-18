@@ -113,8 +113,8 @@ fn caml_bigstring_memcmp(s1: &eq, vpos1: &eq, s2: &eq, vpos2: &eq, vlen: &eq) ->
     let d2 = caml_ba_get_data(s2);
     let pos2 = vpos2 as &i31 as i32_s;
     let len = vlen as &i31 as i32_s;
+    let i: i32;
     'loop: loop {
-        let i: i32;
         if i <u len {
             let c1 = ta_get_ui8(d1, pos1 + i);
             let c2 = ta_get_ui8(d2, pos2 + i);
@@ -133,8 +133,8 @@ fn caml_bigstring_memcmp_string(s1: &eq, vpos1: &eq, vs2: &eq, vpos2: &eq, vlen:
     let s2 = vs2 as &string;
     let pos2 = vpos2 as &i31 as i32_s;
     let len = vlen as &i31 as i32_s;
+    let i: i32;
     'loop: loop {
-        let i: i32;
         if i <u len {
             let c1 = ta_get_ui8(d1, pos1 + i);
             let c2 = s2[pos2 + i] as i32_u;

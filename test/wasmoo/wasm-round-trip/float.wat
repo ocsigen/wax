@@ -323,9 +323,9 @@
 (data $float_of_string "float_of_string")
 
 (func $caml_float_of_hex (param $s (ref $string)) (param $i i32) (result f64)
-  (local $len i32) (local $dec_point i32) (local $m i64) (local $exp i32)
-  (local $n_bits i32) (local $x_bits i32) (local $c i32) (local $d i32)
-  (local $negative i32) (local $m_bits i32) (local $f f64) (local $adj i32)
+  (local $len i32) (local $dec_point i32) (local $d i32) (local $m i64)
+  (local $exp i32) (local $n_bits i32) (local $m_bits i32) (local $x_bits i32)
+  (local $c i32) (local $negative i32) (local $f f64) (local $adj i32)
   (local.set $len (array.len (local.get $s)))
   (local.set $dec_point (i32.const -1))
   (block $error

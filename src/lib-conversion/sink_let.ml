@@ -103,6 +103,103 @@ let first_use_index name l =
   in
   aux 0 l
 
+(* The kind of the first access to [name] within [i], in execution order:
+   [`Read] if the local is read before any assignment to it, [`Write] if it is
+   assigned first, [None] if [i] does not touch it. For [Set]/[Tee] the value is
+   evaluated before the binding, so a self-reference there is a read seen first.
+   Conditional sub-scopes (the branches of an [If]/[If_annotation], catch
+   handlers, dispatch arms) are runtime-dependent: we commit to a kind only when
+   the alternatives agree, otherwise report [None] so a later instruction — or,
+   failing that, "not read first" — decides. *)
+let rec first_access name i =
+  let fst2 a b = match a with Some _ -> a | None -> b in
+  let fl l = first_access_list name l in
+  let fo = function Some e -> first_access name e | None -> None in
+  let agree a b =
+    match (a, b) with Some x, Some y when x = y -> Some x | _ -> None
+  in
+  match i.desc with
+  | Get id -> if String.equal id.desc name then Some `Read else None
+  | Tee (id, e) ->
+      fst2 (first_access name e)
+        (if String.equal id.desc name then Some `Write else None)
+  | Set (id, e) ->
+      fst2 (first_access name e)
+        (match id with
+        | Some id when String.equal id.desc name -> Some `Write
+        | _ -> None)
+  | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } -> fl block
+  | While { cond; block; _ } -> fst2 (first_access name cond) (fl block)
+  | DoWhile { block; cond; _ } -> fst2 (fl block) (first_access name cond)
+  | If { cond; if_block; else_block; _ } ->
+      fst2 (first_access name cond)
+        (agree (fl if_block.desc)
+           (match else_block with Some b -> fl b.desc | None -> None))
+  | Try { block; catches; catch_all; _ } ->
+      fst2 (fl block)
+        (List.fold_left
+           (fun acc (_, b) -> agree acc (fl b))
+           (match catch_all with Some b -> fl b | None -> None)
+           catches)
+  | Call (t, args) | TailCall (t, args) -> fst2 (fl args) (first_access name t)
+  | Cast (e, _)
+  | Test (e, _)
+  | NonNull e
+  | StructGet (e, _)
+  | UnOp (_, e)
+  | Br_if (_, e)
+  | Br_table (_, e)
+  | Br_on_null (_, e)
+  | Br_on_non_null (_, e)
+  | Br_on_cast (_, _, e)
+  | Br_on_cast_fail (_, _, e)
+  | ThrowRef e
+  | ArrayDefault (_, e)
+  | ContNew (_, e) ->
+      first_access name e
+  | Struct (_, fields) -> fl (List.map snd fields)
+  | StructSet (e1, _, e2)
+  | Array (_, e1, e2)
+  | ArraySegment (_, _, e1, e2)
+  | ArrayGet (e1, e2)
+  | BinOp (_, e1, e2) ->
+      fst2 (first_access name e1) (first_access name e2)
+  | ArraySet (e1, e2, e3) | Select (e1, e2, e3) ->
+      fst2 (first_access name e1)
+        (fst2 (first_access name e2) (first_access name e3))
+  | ArrayFixed (_, l)
+  | ContBind (_, _, l)
+  | Suspend (_, l)
+  | Resume (_, _, l)
+  | ResumeThrow (_, _, _, l)
+  | ResumeThrowRef (_, _, l)
+  | Switch (_, _, l)
+  | Sequence l ->
+      fl l
+  | Dispatch { index; arms; _ } ->
+      fst2 (first_access name index)
+        (List.fold_left (fun acc (_, b) -> agree acc (fl b)) None arms)
+  | Let (_, body) -> fo body
+  | Br (_, o) | Throw (_, o) | Return o -> fo o
+  | If_annotation { then_body; else_body; _ } ->
+      agree (fl then_body)
+        (match else_body with Some b -> fl b | None -> None)
+  | Unreachable | Nop | Hole | Null | Char _ | String _ | Int _ | Float _
+  | StructDefault _ ->
+      None
+
+and first_access_list name l =
+  List.fold_left
+    (fun acc i -> match acc with Some _ -> acc | None -> first_access name i)
+    None l
+
+(* A loop / while / do-while body runs many times, so a local the body reads
+   before assigning carries its value across iterations and belongs in the
+   enclosing scope, not the body. A local written before it is ever read is a
+   fresh per-iteration temporary and is left to sink in (and fuse with its
+   initializer). *)
+let loop_carried name l = first_access_list name l = Some `Read
+
 (* Try to push [decl] into a sub-scope of the single instruction [s] that holds
    all of its uses. Returns [None] when no inward move is possible (the caller
    then places a bare declaration before [s]). A [let] is forbidden inside an
@@ -111,15 +208,20 @@ let rec sink_into ((name, _) as decl) s =
   let bl block = sink_decl decl block in
   match s.desc with
   | Block r -> Some { s with desc = Block { r with block = bl r.block } }
-  | Loop r -> Some { s with desc = Loop { r with block = bl r.block } }
+  | Loop r ->
+      (* A loop re-enters its body, so a value carried across iterations pins
+         the declaration outside it (see [loop_carried]). *)
+      if loop_carried name.desc r.block then None
+      else Some { s with desc = Loop { r with block = bl r.block } }
   | TryTable r -> Some { s with desc = TryTable { r with block = bl r.block } }
   | While r ->
       (* The test is evaluated in the enclosing scope (re-checked each
-         iteration), so a use there pins the declaration outside the loop. *)
-      if occurs name.desc r.cond then None
+         iteration), so a use there pins the declaration outside the loop; so
+         does a value the body carries across iterations. *)
+      if occurs name.desc r.cond || loop_carried name.desc r.block then None
       else Some { s with desc = While { r with block = bl r.block } }
   | DoWhile r ->
-      if occurs name.desc r.cond then None
+      if occurs name.desc r.cond || loop_carried name.desc r.block then None
       else Some { s with desc = DoWhile { r with block = bl r.block } }
   | If r ->
       (* The condition is evaluated in the enclosing scope, so a use there

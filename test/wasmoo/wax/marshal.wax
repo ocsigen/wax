@@ -331,6 +331,9 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
         0 // keep validator happy
             as &i31;
     'exit: do {
+        let tag_2: i32;
+        let len: i32;
+        let ofs: i32;
         'loop: loop {
             let item = br_on_null 'exit sp;
             let dest = item.blk;
@@ -341,13 +344,10 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                 sp = item.next;
             }
             'done: do {
-                let tag_2: i32;
                 'read_block: do {
-                    let len: i32;
                     'read_string: do {
                         let code: i32;
                         'read_double_array: do {
-                            let ofs: i32;
                             'read_shared: do {
                                 code = read8u(s);
                                 if code >=u PREFIX_SMALL_INT {
@@ -840,8 +840,8 @@ data cust_value = "output_value: abstract value (Custom)";
 
 fn extern_rec(s: &extern_state, v: &eq) {
     let hd: i32;
+    let sp: &?stack_item;
     'loop: loop {
-        let sp: &?stack_item;
         let b: &block;
         let pos: i32;
         'next_item: do {
