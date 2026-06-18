@@ -55,6 +55,20 @@ Function arguments are before the function itself
   9 │ 
   [128]
 
+The same misplaced hole under `check` (which reports all errors instead of
+stopping at the first) is reported, not a crash:
+
+  $ wax check bad4.wax
+  Error: This expression occurs before a hole '_'.
+   ──➤  bad4.wax:7:8
+  5 │ 
+  6 │ fn j () -> i32 {
+  7 │   f; _(1);
+    ·        ^
+  8 │ }
+  9 │ 
+  [123]
+
 Select condition is considered after the two branches
 
   $ wax bad5.wax -o /dev/null

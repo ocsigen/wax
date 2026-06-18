@@ -4284,7 +4284,10 @@ and check_toplevel ctx expected i =
   let* args = pop_many ctx i count [] in
   let args, (i', needed) = check ctx expected i args in
   assert (args = []);
-  if not (check_hole_order ctx i' count) then assert false;
+  (* A misplaced hole ([_] after a value) is reported by [check_hole_order];
+     it returns [false] only after reporting that error, so recover rather than
+     asserting. *)
+  ignore (check_hole_order ctx i' count : bool);
   return (i', needed)
 
 (* Peek the parameter types of a call's callee syntactically, when it is a name
@@ -4677,7 +4680,9 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
       let args, res = instruction ctx i args in
       (* Should not fail *)
       assert (args = []);
-      if not (check_hole_order ctx res count) then assert false;
+      (* [check_hole_order] reports a misplaced hole and returns [false]; recover
+         rather than asserting. *)
+      ignore (check_hole_order ctx res count : bool);
       return res |> unreachable
   | _ ->
       let count = count_holes i in
@@ -4685,9 +4690,7 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
       let args, res = instruction ctx i args in
       (* Should not fail *)
       assert (args = []);
-      if not (check_hole_order ctx res count) then (
-        Format.eprintf "%d %a@." count Output.instr i;
-        assert false);
+      ignore (check_hole_order ctx res count : bool);
       return res
 
 and block_contents ctx results l =
