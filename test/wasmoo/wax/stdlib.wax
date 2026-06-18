@@ -82,7 +82,7 @@ fn caml_named_value(s: &string) -> &?eq {
                          [caml_string_hash(0 as &i31, s) as &i31 as i32_s %u Named_value_size],
                  )).f_2;
     }
-    return null as &?eq;
+    return null;
 }
 
 #[export = "caml_register_named_value"]

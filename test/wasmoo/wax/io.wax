@@ -108,12 +108,12 @@ const channel_ops: &custom_operations =
     {
         id: string#"_chan", // "_chan"
         compare: custom_compare_id,
-        compare_ext: null as &?compare,
+        compare_ext: null,
         hash: custom_hash_id,
-        fixed_length: null as &?fixed_length,
-        serialize: null as &?serialize,
-        deserialize: null as &?deserialize,
-        dup: null as &?dup,
+        fixed_length: null,
+        serialize: null,
+        deserialize: null,
+        dup: null,
     };
 
 type channel: custom_with_id = {
@@ -294,7 +294,7 @@ fn caml_do_read(ch: &channel, pos: i32, len: i32) -> i32 {
             if fd_offset.seeked => i32 {
                 read(fd, ch.buffer, pos, len, offset);
             } else {
-                read'(fd, ch.buffer, pos, len, null as &?noextern);
+                read'(fd, ch.buffer, pos, len, null);
             };
     } catch {
         javascript_exception => {
@@ -545,7 +545,7 @@ fn caml_flush_partial(ch: &channel) -> i32 {
                 if fd_offset.seeked => i32 {
                     write(fd, buf, 0, towrite, offset);
                 } else {
-                    write'(fd, buf, 0, towrite, null as &?noextern);
+                    write'(fd, buf, 0, towrite, null);
                 };
         } catch {
             javascript_exception => {

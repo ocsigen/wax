@@ -51,6 +51,13 @@ fn from_trailing() -> &point {
     {x: 7, y: 8,};
 }
 
+// A bare 'null' is typed from a nullable-reference context (here a field).
+type node = { v: i32, next: &?node };
+
+fn singleton(x: i32) -> &node {
+    return {v: x, next: null};
+}
+
 fn from_let_array() -> &ints {
     let a: &ints = [0; 8];
     return a;

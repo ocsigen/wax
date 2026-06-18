@@ -54,7 +54,7 @@ const int32_ops: &custom_operations =
     {
         id: string#"_i", // "_i"
         compare: int32_cmp,
-        compare_ext: null as &?compare,
+        compare_ext: null,
         hash: int32_hash,
         fixed_length: { bsize_32: 4, bsize_64: 4 },
         serialize: int32_serialize,
@@ -124,7 +124,7 @@ const nativeint_ops: &custom_operations =
     {
         id: string#"_n", // "_n"
         compare: int32_cmp,
-        compare_ext: null as &?compare,
+        compare_ext: null,
         hash: int32_hash,
         fixed_length: { bsize_32: 4, bsize_64: 8 },
         serialize: nativeint_serialize,

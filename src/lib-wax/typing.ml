@@ -4119,6 +4119,33 @@ and check ctx expected (i : location instr) =
             return_expression i (ArraySegment (emitted, seg, off', len')) result
       in
       return (node, true)
+  | Cast (e, typ) when is_null_initializer e ->
+      fun st ->
+        let st, i' = instruction ctx i st in
+        (* A cast of [null] is redundant when the checking context already
+           provides the very type it pins: drop it to bare [null], which
+           re-checks to the same type (the context re-supplies it) and lowers to
+           the same [ref.null]. Gated on [simplify] so hand-written casts are
+           kept; matched exactly so the lowered [ref.null] is unchanged. *)
+        let i' =
+          if
+            ctx.simplify
+            &&
+            match (typ, UnionFind.find expected) with
+            | Ast.Valtype vt, Valtype b -> (
+                match internalize_valtype ctx vt with
+                | Some a -> valtype_equal ctx a b
+                | None -> false)
+            | _ -> false
+          then
+            match i'.desc with
+            | Cast (inner, _) ->
+                { inner with info = (fst i'.info, snd inner.info) }
+            | _ -> i'
+          else i'
+        in
+        if has_expectation expected then check_type ctx i' expected;
+        (st, (i', true))
   | _ ->
       fun st ->
         let st, i' = instruction ctx i st in

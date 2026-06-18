@@ -122,7 +122,7 @@ let stack: &?fiber =
                 effect: {closure_3| f: dummy_fun, f_2: uncaught_effect_handler },
             },
         cont: { cont_func: default_continuation },
-        next: null as &?fiber,
+        next: null,
     };
 
 // Utility functions moving fibers between a continuation and the
@@ -254,7 +254,7 @@ fn caml_alloc_stack(hv: &eq, hx: &eq, hf: &eq) -> &eq {
     {fiber|
         handlers: { value: hv, exn: hx, effect: hf },
         cont: { cont_func: initial_cont },
-        next: null as &?fiber,
+        next: null,
     };
 }
 
@@ -322,7 +322,7 @@ type cps_fiber: generic_fiber = {
     next: &?cps_fiber
 };
 
-let exn_stack: &?exn_stack = null as &?exn_stack;
+let exn_stack: &?exn_stack = null;
 
 #[export = "caml_push_trap"]
 fn caml_push_trap(h: &eq) -> &eq {
@@ -398,7 +398,7 @@ fn dummy_cps_fun(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
     unreachable;
 }
 
-let cps_fiber_stack: &?cps_fiber = null as &?cps_fiber;
+let cps_fiber_stack: &?cps_fiber = null;
 
 const default_fiber_stack: &?cps_fiber =
     {
@@ -409,8 +409,8 @@ const default_fiber_stack: &?cps_fiber =
                 effect: {cps_closure_3| f: dummy_cps_fun, f_2: cps_uncaught_effect_handler },
             },
         cont: 0 as &i31,
-        exn_stack: null as &?exn_stack,
-        next: null as &?cps_fiber,
+        exn_stack: null,
+        next: null,
     };
 
 #[export = "caml_trampoline"]
@@ -418,7 +418,7 @@ fn caml_trampoline(f: &eq, vargs: &eq) -> &eq {
     let i: i32;
     let saved_exn_stack = exn_stack;
     let saved_fiber_stack = cps_fiber_stack;
-    exn_stack = null as &?exn_stack;
+    exn_stack = null;
     cps_fiber_stack = default_fiber_stack;
     let args = vargs as &block;
     let res: &eq;
@@ -475,7 +475,7 @@ fn caml_trampoline(f: &eq, vargs: &eq) -> &eq {
 }
 
 #[export = "caml_trampoline_ref"]
-let caml_trampoline_ref: &?function_1 = null as &?function_1;
+let caml_trampoline_ref: &?function_1 = null;
 
 fn caml_pop_fiber() -> &eq {
     let top = cps_fiber_stack!;
@@ -557,8 +557,8 @@ fn caml_cps_alloc_stack(hv: &eq, hx: &eq, hf: &eq) -> &eq {
     {cps_fiber|
         handlers: { value: hv, exn: hx, effect: hf },
         cont: value_handler,
-        exn_stack: { h: exn_handler, next: null as &?exn_stack },
-        next: null as &?cps_fiber,
+        exn_stack: { h: exn_handler, next: null },
+        next: null,
     };
 }
 

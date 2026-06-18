@@ -85,7 +85,7 @@ fn custom_next_id() -> i64 {
 
 type custom_operations_list = { ops: &custom_operations, next: &?custom_operations_list };
 
-let custom_operations: &?custom_operations_list = null as &?custom_operations_list;
+let custom_operations: &?custom_operations_list = null;
 
 #[export = "caml_register_custom_operations"]
 fn caml_register_custom_operations(ops: &custom_operations) {

@@ -48,12 +48,12 @@ const mutex_ops: &custom_operations =
     {
         id: string#"_mutex", // "_mutex"
         compare: custom_compare_id,
-        compare_ext: null as &?compare,
+        compare_ext: null,
         hash: custom_hash_id,
-        fixed_length: null as &?fixed_length,
-        serialize: null as &?serialize,
-        deserialize: null as &?deserialize,
-        dup: null as &?dup,
+        fixed_length: null,
+        serialize: null,
+        deserialize: null,
+        dup: null,
     };
 
 type mutex: custom_with_id = { f: &custom_operations, f_2: i64, state: mut i32 };
