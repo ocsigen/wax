@@ -17,14 +17,6 @@ the type cannot be inferred:
     ·             ^^^^^^^^^^^^^
   7 │     return p;
   8 │ }
-  Error: This instruction has type i32 but is expected to have type &point.
-   ──➤  ambiguous-struct.wax:7:12
-  5 │ fn f() -> &point {
-  6 │     let p = {x: 1, y: 2,};
-  7 │     return p;
-    ·            ^
-  8 │ }
-  9 │ 
   [123]
 
 An array literal has no field-based inference, so with no expected type its
@@ -40,12 +32,4 @@ element type cannot be inferred either:
     ·             ^^^^^^
   5 │     return a;
   6 │ }
-  Error: This instruction has type i32 but is expected to have type &ints.
-   ──➤  no-array-context.wax:5:12
-  3 │ fn f() -> &ints {
-  4 │     let a = [0; 8];
-  5 │     return a;
-    ·            ^
-  6 │ }
-  7 │ 
   [123]

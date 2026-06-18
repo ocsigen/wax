@@ -685,7 +685,10 @@ type module_context = {
   datas : unit Tbl.t;
   tables : ([ `I32 | `I64 ] * reftype) Tbl.t;
   elems : reftype Tbl.t;
-  mutable locals : inferred_valtype StringMap.t;
+  mutable locals : inferred_valtype option StringMap.t;
+      (* The local's type, or [None] when it could not be determined because its
+         initializer failed to type — an error-recovery "poison" local, read as
+         the [Unknown] type so its uses don't cascade into further errors. *)
   warn_unused : bool;
       (* Whether to report locals declared by a [let] but never read. Enabled
          only when validation is requested. *)
@@ -1212,7 +1215,7 @@ let local_suggestions ctx name =
    a function (as a non-null reference); [Get]/[Set]/[Tee] share this ladder and
    only differ in what they do with each outcome. *)
 type resolved_var =
-  | Local of inferred_valtype
+  | Local of inferred_valtype option
   | Global of bool (* mutable *) * inferred_valtype
   | Func_ref of int * string
   | Unbound
@@ -1411,7 +1414,7 @@ let bind_let_value ctx ~location result_ty (name, typ) =
            check_subtype ctx ~location result_ty (UnionFind.make (Valtype ity));
            Option.iter
              (fun name ->
-               ctx.locals <- StringMap.add name.desc ity ctx.locals;
+               ctx.locals <- StringMap.add name.desc (Some ity) ctx.locals;
                ctx.local_decls := name :: !(ctx.local_decls);
                mark_initialized ctx name.desc)
              name;
@@ -1424,7 +1427,13 @@ let bind_let_value ctx ~location result_ty (name, typ) =
   | None ->
       Option.iter
         (fun name ->
-          let>@ ity = resolve_omitted_valtype ctx result_ty in
+          (* An [Unknown] initializer means its typing already failed; record
+             the local as poison ([None]) rather than defaulting it to [i32], so
+             later uses do not cascade into spurious mismatches. *)
+          let ity =
+            if UnionFind.find result_ty = Unknown then None
+            else resolve_omitted_valtype ctx result_ty
+          in
           ctx.locals <- StringMap.add name.desc ity ctx.locals;
           ctx.local_decls := name :: !(ctx.local_decls);
           mark_initialized ctx name.desc)
@@ -2331,7 +2340,10 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
             ctx.read_locals := StringSet.add idx.desc !(ctx.read_locals);
             if not (StringSet.mem idx.desc ctx.initialized_locals) then
               Error.uninitialized_local ctx.diagnostics ~location:idx.info idx;
-            UnionFind.make (Valtype ty)
+            (* A poison local ([None]) reads as [Unknown] so its uses don't
+               cascade. *)
+            UnionFind.make
+              (match ty with Some ity -> Valtype ity | None -> Unknown)
         | Global (_, ty) -> UnionFind.make (Valtype ty)
         | Func_ref (ty, ty') ->
             UnionFind.make
@@ -2359,10 +2371,10 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       let resolved = resolve_variable ctx idx in
       let* i' =
         match resolved with
-        | Local ty | Global (_, ty) ->
-            let* i', _ = check ctx (UnionFind.make (Valtype ty)) i' in
+        | Local (Some ity) | Global (_, ity) ->
+            let* i', _ = check ctx (UnionFind.make (Valtype ity)) i' in
             return i'
-        | Func_ref _ | Unbound -> instruction ctx i'
+        | Local None | Func_ref _ | Unbound -> instruction ctx i'
       in
       (match resolved with
       | Local _ -> mark_initialized ctx idx.desc
@@ -2383,11 +2395,16 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
          operand's own type rather than [Unknown], which [check_type] cannot
          match against. *)
       match resolve_variable ctx idx with
-      | Local ty ->
-          let typ = UnionFind.make (Valtype ty) in
+      | Local (Some ity) ->
+          let typ = UnionFind.make (Valtype ity) in
           let* i', _ = check ctx typ i' in
           mark_initialized ctx idx.desc;
           return_expression i (Tee (idx, i')) typ
+      | Local None ->
+          (* Poison local: recover with the operand's own type, no check. *)
+          let* i' = instruction ctx i' in
+          mark_initialized ctx idx.desc;
+          return_expression i (Tee (idx, i')) (expression_type ctx i')
       | Global _ | Func_ref _ ->
           let* i' = instruction ctx i' in
           Error.not_assignable ctx.diagnostics ~location:idx.info idx;
@@ -2936,7 +2953,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
           let* i', needed = check ctx (UnionFind.make (Valtype ity)) i' in
           Option.iter
             (fun name ->
-              ctx.locals <- StringMap.add name.desc ity ctx.locals;
+              ctx.locals <- StringMap.add name.desc (Some ity) ctx.locals;
               ctx.local_decls := name :: !(ctx.local_decls);
               mark_initialized ctx name.desc)
             name_opt;
@@ -2982,7 +2999,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
           match (name, typ) with
           | Some name, Some typ ->
               let>@ ity = internalize_valtype ctx typ in
-              ctx.locals <- StringMap.add name.desc ity ctx.locals;
+              ctx.locals <- StringMap.add name.desc (Some ity) ctx.locals;
               ctx.local_decls := name :: !(ctx.local_decls);
               (* A defaultable local holds its zero value; a non-defaultable one
                  stays uninitialized until assigned. *)
@@ -4253,7 +4270,7 @@ and peek_call_params ctx callee =
     | Get name -> (
         match resolve_variable ctx name with
         | Func_ref (_, ty') -> Some (Ast.no_loc ty')
-        | Local { typ = Ref { typ = Type t; _ }; _ }
+        | Local (Some { typ = Ref { typ = Type t; _ }; _ })
         | Global (_, { typ = Ref { typ = Type t; _ }; _ }) ->
             Some t
         | Local _ | Global _ | Unbound -> None)
@@ -5045,7 +5062,7 @@ let rec functions ctx fields =
                   match id with
                   | Some id ->
                       let>@ typ = internalize_valtype ctx typ in
-                      locals := StringMap.add id.desc typ !locals
+                      locals := StringMap.add id.desc (Some typ) !locals
                   | None -> ())
                 params
           | _ -> ());
