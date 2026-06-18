@@ -1064,7 +1064,17 @@ and instruction_desc ret ctx i : location Text.instr list =
       (* Single binding: fold the initializer into the [local.set]. *)
       match id with
       | Some name ->
-          let ty = match ty with Some ty -> ty | None -> expr_valtype body in
+          (* Derive the local's type from the initializer when unannotated. In
+             unreachable code the initializer's type is unknown; the local is
+             then dead, so its declared type is irrelevant — fall back to [i32]
+             (without raising) so the local is still registered and later reads
+             of it resolve. *)
+          let ty =
+            match ty with
+            | Some ty -> ty
+            | None -> (
+                match expr_opt_valtype body with Some t -> t | None -> I32)
+          in
           let wasm_name = Namespace.add ctx.namespace name.desc in
           ctx.locals <- StringMap.add name.desc wasm_name ctx.locals;
           ctx.allocated_locals :=
@@ -1088,7 +1098,12 @@ and instruction_desc ret ctx i : location Text.instr list =
             let ty =
               match ty with
               | Some ty -> ty
-              | None -> unpack_type (Option.get result_types.(idx))
+              | None -> (
+                  (* Unknown in unreachable code; the local is dead, so [i32]
+                     keeps it valid (see the single-binding case). *)
+                  match result_types.(idx) with
+                  | Some t -> unpack_type t
+                  | None -> I32)
             in
             let wasm_name = Namespace.add ctx.namespace name.desc in
             ctx.locals <- StringMap.add name.desc wasm_name ctx.locals;

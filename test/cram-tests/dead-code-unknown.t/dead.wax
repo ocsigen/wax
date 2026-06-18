@@ -5,3 +5,13 @@ fn f() -> i32 {
     unreachable;
     _[0];
 }
+
+// A `let` whose initializer is an unknown-typed (dead) value: the local is
+// still declared (type irrelevant) so later references resolve.
+type box = { v: i32 };
+
+fn g() {
+    unreachable;
+    let b = _.v;
+    let _ = b;
+}
