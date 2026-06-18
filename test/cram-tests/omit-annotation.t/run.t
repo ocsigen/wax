@@ -19,6 +19,20 @@ the type cannot be inferred:
   8 │ }
   [123]
 
+The same holds for a global, and its use does not cascade into a second error:
+
+  $ wax check ambiguous-global.wax
+  Error:
+    Cannot infer the struct type here; add an explicit type, as in '{T| ..}'.
+   ──➤  ambiguous-global.wax:6:11
+  4 │ // As for a local, an ambiguous global initializer is reported once: the global
+  5 │ // becomes poison, so its use does not cascade into a second error.
+  6 │ const g = {x: 1, y: 2,};
+    ·           ^^^^^^^^^^^^^
+  7 │ 
+  8 │ fn use_g() -> &point {
+  [123]
+
 An array literal has no field-based inference, so with no expected type its
 element type cannot be inferred either:
 

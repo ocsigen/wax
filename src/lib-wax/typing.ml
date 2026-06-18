@@ -674,8 +674,10 @@ type module_context = {
   subtyping_info : Wasm.Types.subtyping_info;
   types : (int * subtype) Tbl.t;
   functions : (int * string) Tbl.t;
-  globals : (*mutable:*) (bool * inferred_valtype) Tbl.t;
-  import_globals : (bool * inferred_valtype) Tbl.t;
+  globals : (*mutable:*) (bool * inferred_valtype option) Tbl.t;
+      (* As for [locals], the type is [None] for a global whose initializer
+         failed to type — a poison global read as [Unknown] to avoid cascades. *)
+  import_globals : (bool * inferred_valtype option) Tbl.t;
       (* The globals in scope for a table initializer: only the imported ones.
          A table is typed before the module's own globals are registered, so its
          initializer can reference only imports (unlike a global initializer,
@@ -1216,7 +1218,7 @@ let local_suggestions ctx name =
    only differ in what they do with each outcome. *)
 type resolved_var =
   | Local of inferred_valtype option
-  | Global of bool (* mutable *) * inferred_valtype
+  | Global of bool (* mutable *) * inferred_valtype option
   | Func_ref of int * string
   | Unbound
 
@@ -2358,7 +2360,9 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                cascade. *)
             UnionFind.make
               (match ty with Some ity -> Valtype ity | None -> Unknown)
-        | Global (_, ty) -> UnionFind.make (Valtype ty)
+        | Global (_, ty) ->
+            UnionFind.make
+              (match ty with Some ity -> Valtype ity | None -> Unknown)
         | Func_ref (ty, ty') ->
             UnionFind.make
               (Valtype
@@ -2385,10 +2389,11 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       let resolved = resolve_variable ctx idx in
       let* i' =
         match resolved with
-        | Local (Some ity) | Global (_, ity) ->
+        | Local (Some ity) | Global (_, Some ity) ->
             let* i', _ = check ctx (UnionFind.make (Valtype ity)) i' in
             return i'
-        | Local None | Func_ref _ | Unbound -> instruction ctx i'
+        | Local None | Global (_, None) | Func_ref _ | Unbound ->
+            instruction ctx i'
       in
       (match resolved with
       | Local _ -> mark_initialized ctx idx.desc
@@ -4289,7 +4294,7 @@ and peek_call_params ctx callee =
         match resolve_variable ctx name with
         | Func_ref (_, ty') -> Some (Ast.no_loc ty')
         | Local (Some { typ = Ref { typ = Type t; _ }; _ })
-        | Global (_, { typ = Ref { typ = Type t; _ }; _ }) ->
+        | Global (_, Some { typ = Ref { typ = Type t; _ }; _ }) ->
             Some t
         | Local _ | Global _ | Unbound -> None)
     (* A cast target names the value's type directly; [from_wasm] inserts these
@@ -5003,7 +5008,7 @@ let rec globals ctx fields =
                       with_empty_stack ctx ~location:def.info ~kind:Expression
                         (check_toplevel ctx (UnionFind.make (Valtype ity)) def)
                     in
-                    Tbl.add ctx.diagnostics ctx.globals name (mut, ity);
+                    Tbl.add ctx.diagnostics ctx.globals name (mut, Some ity);
                     let drop =
                       ctx.simplify && (not needed)
                       && not (is_null_initializer def')
@@ -5011,15 +5016,20 @@ let rec globals ctx fields =
                     ((if drop then None else Some annot), def'))
             | None ->
                 (* No annotation: the global takes the initializer's type, the
-                   way a [let] binding without an annotation does. *)
+                   way a [let] binding without an annotation does. An [Unknown]
+                   initializer (its typing failed) makes the global poison
+                   ([None]) rather than defaulting to [i32], so its uses do not
+                   cascade. *)
                 let def' =
                   with_empty_stack ctx ~location:def.info ~kind:Expression
                     (toplevel_instruction ctx def)
                 in
-                (let>@ ity =
-                   resolve_omitted_valtype ctx (expression_type ctx def')
-                 in
-                 Tbl.add ctx.diagnostics ctx.globals name (mut, ity));
+                let ity =
+                  if UnionFind.find (expression_type ctx def') = Unknown then
+                    None
+                  else resolve_omitted_valtype ctx (expression_type ctx def')
+                in
+                Tbl.add ctx.diagnostics ctx.globals name (mut, ity);
                 (None, def')
           in
           check_constant_instruction ctx def';
@@ -5393,7 +5403,7 @@ let type_configuration ?(warn_unused = false) ~simplify diagnostics fields =
           Tbl.add diagnostics ctx.functions name decl
       | GlobalDecl { name; mut; typ; _ } ->
           let>@ typ = internalize_valtype ctx typ in
-          Tbl.add diagnostics ctx.globals name (mut, typ)
+          Tbl.add diagnostics ctx.globals name (mut, Some typ)
       | Func { name; typ; sign; _ } ->
           let>@ decl = fundecl ctx name typ sign in
           Tbl.add diagnostics ctx.functions name decl
