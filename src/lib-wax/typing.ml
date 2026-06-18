@@ -4517,7 +4517,7 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
       let lowered =
         Ast_utils.lower_dispatch ~block_info:i.info ~index ~cases ~default ~arms
       in
-      let* typed = block_contents ctx lowered in
+      let* typed = block_contents ctx [||] lowered in
       let index', arms' = rebuild_dispatch typed arms in
       return_statement i
         (Dispatch { index = index'; cases; default; arms = arms' })
@@ -4541,16 +4541,35 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
         assert false);
       return res
 
-and block_contents ctx l =
+and block_contents ctx results l =
   match l with
   | [] -> return []
+  | [ i ]
+    when Array.length results = 1
+         &&
+         match i.desc with
+         | Struct _ | StructDefault _ | Array _ | ArrayDefault _ | ArrayFixed _
+         | ArraySegment _ ->
+             true
+         | _ -> false ->
+      (* The block's value is a trailing construction literal; check it against
+         the single result type so it can be inferred / drop its name, just like
+         a [return]. Only construction literals are routed this way: they always
+         produce exactly one value, so this never disturbs a divergent or void
+         trailing statement. *)
+      let* i', _ = check_toplevel ctx results.(0) i in
+      let* () =
+        push_results
+          (Array.to_list (Array.map (fun ty -> (i.info, ty)) (fst i'.info)))
+      in
+      return [ i' ]
   | i :: r ->
       let* i' = toplevel_instruction ctx i in
       let* () =
         push_results
           (Array.to_list (Array.map (fun ty -> (i.info, ty)) (fst i'.info)))
       in
-      let* r' = block_contents ctx r in
+      let* r' = block_contents ctx results r in
       return (merge_let_tuple ctx i' r')
 
 and block ctx loc label params results br_params block =
@@ -4566,7 +4585,7 @@ and block ctx loc label params results br_params block =
              (Option.map (fun l -> l.desc) label, br_params)
              :: ctx.control_types;
          }
-         block
+         results block
      in
      let* () = pop_args ctx ~location:loc results in
      return block')
@@ -4953,7 +4972,7 @@ let rec functions ctx fields =
           in
           let body =
             with_empty_stack ctx ~location ~kind:Function
-              (let* body = block_contents ctx body in
+              (let* body = block_contents ctx return_types body in
                let* () = pop_args ctx ~location return_types in
                return body)
           in

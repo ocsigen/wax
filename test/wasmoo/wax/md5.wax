@@ -170,12 +170,7 @@ fn MD5Transform(w: &int_array, buffer: &int_array, buffer': &string, p: i32) {
 }
 
 fn MD5Init() -> &context {
-    {context|
-        f: [0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476],
-        f_2: 0,
-        f_3: [0; 16],
-        f_4: [0; 64],
-    };
+    { f: [0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476], f_2: 0, f_3: [0; 16], f_4: [0; 64] };
 }
 
 fn MD5Update(ctx: &context, input: &string, input_pos: i32, input_len: i32) {

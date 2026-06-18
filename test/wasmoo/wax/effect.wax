@@ -515,7 +515,7 @@ fn caml_perform_effect(eff: &eq, vcont: &eq, k0: &eq) -> &eq {
     let cont =
         'reperform: do &block {
             _ = br_on_cast 'reperform &block vcont;
-            [block|cont_tag as &i31, 0 as &i31, 0 as &i31];
+            [cont_tag as &i31, 0 as &i31, 0 as &i31];
         };
     let handlers = (cps_fiber_stack!).handlers;
     let handler = handlers.effect;

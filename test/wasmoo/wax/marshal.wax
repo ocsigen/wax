@@ -146,7 +146,7 @@ const CODE_CUSTOM_FIXED = 0x19;
 type intern_state = { src: &string, pos: mut i32, obj_table: mut &?block, obj_counter: mut i32 };
 
 fn get_intern_state(src: &string, pos: i32) -> &intern_state {
-    {intern_state| src: src, pos: pos, obj_table: null as &?block, obj_counter: 0 };
+    { src: src, pos: pos, obj_table: null as &?block, obj_counter: 0 };
 }
 
 fn read8u(s: &intern_state) -> i32 {
@@ -530,7 +530,7 @@ fn parse_header(s: &intern_state, prim: &string) -> &marshal_header {
     let num_objects = read32(s);
     _ = read32(s);
     _ = read32(s);
-    {marshal_header| data_len: data_len, num_objects: num_objects };
+    { data_len: data_len, num_objects: num_objects };
 }
 
 data marshal_data_size = "Marshal.data_size";
@@ -586,7 +586,7 @@ fn init_extern_state(
                 br 'parse_flags;
             };
     }
-    {extern_state|
+    {
         no_sharing: no_sharing,
         user_provided_output: user_provided_output,
         obj_counter: 0,

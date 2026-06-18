@@ -46,6 +46,11 @@ fn from_return(b: i32) -> &point {
     return {x: 1, y: 1,};
 }
 
+// A trailing result expression does too, even without 'return'.
+fn from_trailing() -> &point {
+    {x: 7, y: 8,};
+}
+
 fn from_let_array() -> &ints {
     let a: &ints = [0; 8];
     return a;
