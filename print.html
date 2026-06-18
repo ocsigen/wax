@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ca7bcf4b.js";
+            window.path_to_searchindex_js = "searchindex-ace0051f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -2194,6 +2194,22 @@ sets a boolean; <code>NAME=N.N.N</code> (three integers) sets a version; any oth
 <li>Generate a source map file.</li>
 </ul>
 </li>
+<li>
+<p><strong><code>--debug</code></strong> <em>CATEGORY</em></p>
+<ul>
+<li>Enable developer debug output for a category. Repeatable, and a single
+value may list several categories separated by commas
+(<code>--debug timing,…</code>).</li>
+<li>Categories:
+<ul>
+<li><code>timing</code> — log the wall-clock running time of each compiler pass
+(parse, specialize, validate, type-check, convert, output) to stderr,
+one line per pass as it finishes. The normal output on stdout is
+unchanged.</li>
+</ul>
+</li>
+</ul>
+</li>
 </ul>
 <h2 id="examples-1"><a class="header" href="#examples-1">Examples</a></h2>
 <p><strong>Convert a Wax file to Wasm binary:</strong></p>
@@ -2245,6 +2261,7 @@ the detection from each file’s extension.</li>
 </li>
 <li><strong><code>--color</code></strong> <em>WHEN</em> — as above (ignored when writing back in place).</li>
 <li><strong><code>--fold</code></strong> / <strong><code>--unfold</code></strong> — as above.</li>
+<li><strong><code>--debug</code></strong> <em>CATEGORY</em> — as above.</li>
 </ul>
 <h3 id="examples-1-1"><a class="header" href="#examples-1-1">Examples</a></h3>
 <p><strong>Format a single file to stdout:</strong></p>
@@ -2271,6 +2288,7 @@ all files, overriding extension detection.</li>
 <li><strong><code>-s</code></strong>, <strong><code>--strict-validate</code></strong> — strict reference validation (for Wasm
 Text), as above.</li>
 <li><strong><code>--color</code></strong> <em>WHEN</em> — as above.</li>
+<li><strong><code>--debug</code></strong> <em>CATEGORY</em> — as above.</li>
 </ul>
 <h3 id="example"><a class="header" href="#example">Example</a></h3>
 <p><strong>Type-check several Wax files (e.g. in CI):</strong></p>
