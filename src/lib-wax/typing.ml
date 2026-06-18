@@ -4009,12 +4009,24 @@ and check ctx expected (i : location instr) =
               (Array (None, i1', i2'))
               (UnionFind.make Unknown)
         | Some typ ->
-            let* i1' = instruction ctx i1 in
+            (* Resolve the element type (pure) before typing the element value,
+               so a struct/array literal or null cast there can be inferred /
+               drop its name. The value is still typed first (then the count),
+               preserving the source order and hole consumption. *)
+            let elt =
+              match lookup_array_type ctx typ with
+              | Some field' -> internalize ctx (unpack_type field')
+              | None -> None
+            in
+            let* i1' =
+              match elt with
+              | Some cell ->
+                  let* i1', _ = check ctx cell i1 in
+                  return i1'
+              | None -> instruction ctx i1
+            in
             let* i2' = instruction ctx i2 in
             check_type ctx i2' (i32_cell ());
-            (let>@ field' = lookup_array_type ctx typ in
-             let>@ elt = internalize ctx (unpack_type field') in
-             check_type ctx i1' elt);
             let emitted = emitted_name ty typ ~parseable:true in
             let*! result = construction_result typ in
             return_expression i (Array (emitted, i1', i2')) result

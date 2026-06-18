@@ -55,7 +55,7 @@ type assoc_array = [mut &?assoc];
 
 const Named_value_size = 13;
 
-const named_value_table: &assoc_array = [null as &?assoc; Named_value_size];
+const named_value_table: &assoc_array = [null; Named_value_size];
 
 fn find_named_value(s: &eq, l: &?assoc) -> &?assoc {
     'tail: do &?assoc {
