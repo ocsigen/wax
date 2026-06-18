@@ -192,7 +192,7 @@ fn do_perform(k0: &cont_2, vp: &eq) {
                 if next_fiber is &fiber => &?fiber {
                     next_fiber as &fiber;
                 } else {
-                    null as &?fiber;
+                    null;
                 },
         };
     let k1 = pop_fiber();
@@ -529,7 +529,7 @@ fn caml_perform_effect(eff: &eq, vcont: &eq, k0: &eq) -> &eq {
                 if next_fiber is &cps_fiber => &?cps_fiber {
                     next_fiber as &cps_fiber;
                 } else {
-                    null as &?cps_fiber;
+                    null;
                 },
         };
     let k1 = caml_pop_fiber();

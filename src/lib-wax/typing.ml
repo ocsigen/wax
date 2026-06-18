@@ -4578,12 +4578,13 @@ and block_contents ctx results l =
          | Struct _ | StructDefault _ | Array _ | ArrayDefault _ | ArrayFixed _
          | ArraySegment _ ->
              true
+         | Cast (e, _) -> is_null_initializer e
          | _ -> false ->
-      (* The block's value is a trailing construction literal; check it against
-         the single result type so it can be inferred / drop its name, just like
-         a [return]. Only construction literals are routed this way: they always
-         produce exactly one value, so this never disturbs a divergent or void
-         trailing statement. *)
+      (* The block's value is a trailing construction literal or null cast;
+         check it against the single result type so it can be inferred / drop
+         its name or redundant cast, just like a [return]. Only these
+         single-value forms are routed this way, so a divergent or void trailing
+         statement is never disturbed. *)
       let* i', _ = check_toplevel ctx results.(0) i in
       let* () =
         push_results
