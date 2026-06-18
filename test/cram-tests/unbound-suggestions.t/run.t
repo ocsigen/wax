@@ -14,14 +14,6 @@ A misspelled function call suggests the function:
   5 │ }
   6 │ 
   Hint: Did you mean helper?
-  Error: Expected function type.
-   ──➤  func.wax:4:5
-  2 │ 
-  3 │ fn f() {
-  4 │     helpr();
-    ·     ^^^^^^^
-  5 │ }
-  6 │ 
   [123]
 
 A misspelled type suggests the type:

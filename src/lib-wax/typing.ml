@@ -2121,11 +2121,16 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
   match i.desc with
   | Block { label; typ; block = instrs } ->
       (* An expression-position block draws nothing from a stack, so a parameter
-         type has no source; report it and proceed as if there were none. *)
+         type has no source; report it, then recover by supplying the declared
+         parameters anyway so the body does not underflow into spurious "stack
+         empty" errors. (With no parameters this is the empty stack, unchanged.) *)
       if Array.length typ.params > 0 then
         Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
+      let*! params =
+        array_map_opt (fun (_, typ) -> internalize ctx typ) typ.params
+      in
       let*! results = array_map_opt (internalize ctx) typ.results in
-      let instrs' = block ctx i.info label [||] results results instrs in
+      let instrs' = block ctx i.info label params results results instrs in
       return_statement i (Block { label; typ; block = instrs' }) results
   | Dispatch { index; cases; default; arms } ->
       (* The case (arm) labels become distinct block labels in the lowering and
@@ -2158,8 +2163,11 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
   | Loop { label; typ; block = instrs } ->
       if Array.length typ.params > 0 then
         Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
+      let*! params =
+        array_map_opt (fun (_, typ) -> internalize ctx typ) typ.params
+      in
       let*! results = array_map_opt (internalize ctx) typ.results in
-      let instrs' = block ctx i.info label [||] results [||] instrs in
+      let instrs' = block ctx i.info label params results params instrs in
       return_statement i (Loop { label; typ; block = instrs' }) results
   | While { label; cond; block = instrs } ->
       (* Type-check the equivalent loop (see [Ast_utils.lower_while]): this
@@ -2188,11 +2196,14 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
         (UnionFind.make (Valtype { typ = I32; internal = I32 }));
       if Array.length typ.params > 0 then
         Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
+      let*! params =
+        array_map_opt (fun (_, typ) -> internalize ctx typ) typ.params
+      in
       let*! results = array_map_opt (internalize ctx) typ.results in
       let if_block' =
         {
           if_block with
-          desc = block ctx i.info label [||] results results if_block.desc;
+          desc = block ctx i.info label params results results if_block.desc;
         }
       in
       let else_block' =
@@ -2201,10 +2212,10 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
             Some
               {
                 b with
-                desc = block ctx i.info label [||] results results b.desc;
+                desc = block ctx i.info label params results results b.desc;
               }
         | None ->
-            if not (missing_else_ok ctx [||] results) then
+            if not (missing_else_ok ctx params results) then
               Error.if_without_else ctx.diagnostics ~location:i.info;
             None
       in
@@ -2239,8 +2250,11 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
   | TryTable { label; typ; block = body; catches } ->
       if Array.length typ.params > 0 then
         Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
+      let*! params =
+        array_map_opt (fun (_, typ) -> internalize ctx typ) typ.params
+      in
       let*! results = array_map_opt (internalize ctx) typ.results in
-      let body' = block ctx i.info label [||] results results body in
+      let body' = block ctx i.info label params results results body in
       (* Catching an exception passes the tag's values (and, for the [_ref]
          variants, the exception reference) to the handler's branch target, so
          they must match that target. Report at the target label rather than at
@@ -2435,6 +2449,10 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                (Array.of_list l') param_types);
           (let>@ returned_types = array_map_opt (internalize ctx) typ.results in
            check_subtypes ctx ~location:i.info returned_types ctx.return_types);
+          return_statement i (TailCall (i', l')) [||]
+      | Unknown ->
+          (* The callee already failed to type; recover without a spurious
+             "expected function type". *)
           return_statement i (TailCall (i', l')) [||]
       | _ ->
           Error.expected_func_type ctx.diagnostics ~location:i.info;
@@ -4355,6 +4373,10 @@ and type_indirect_call ctx i i' l =
            (Array.of_list l') param_types);
       let*! returned_types = array_map_opt (internalize ctx) typ.results in
       return_statement i (Call (i', l')) returned_types
+  | Unknown ->
+      (* The callee already failed to type (e.g. an unbound name); recover
+         silently rather than adding a spurious "expected function type". *)
+      return_statement i (Call (i', l')) [||]
   | _ ->
       Error.expected_func_type ctx.diagnostics ~location:i.info;
       return_statement i (Call (i', l')) [||]
