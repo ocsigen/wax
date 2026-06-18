@@ -124,7 +124,7 @@
   (sub final $custom_with_id
     (struct
       (field $f (ref $custom_operations))
-      (field $f_2 i64)
+      (field $id i64)
       (field $fd (mut i32))
       (field $buffer (mut (ref extern)))
       (field $curr (mut i32))

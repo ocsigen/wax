@@ -118,7 +118,7 @@ const channel_ops: &custom_operations =
 
 type channel: custom_with_id = {
     f: &custom_operations,
-    f_2: i64,
+    id: i64,
     fd: mut i32,
     buffer: mut &extern,
     curr: mut i32,
@@ -228,7 +228,7 @@ fn caml_ml_out_channels_list(x: &eq) -> &eq {
 fn caml_ml_open_descriptor_in(fd: &eq) -> &eq {
     {
         f: channel_ops,
-        f_2: custom_next_id(),
+        id: custom_next_id(),
         fd: fd as &i31 as i32_u,
         buffer: ta_new(IO_BUFFER_SIZE),
         curr: 0,
@@ -246,7 +246,7 @@ fn caml_ml_open_descriptor_out(fd: &eq) -> &eq {
     let res: &eq =
         {
             f: channel_ops,
-            f_2: custom_next_id(),
+            id: custom_next_id(),
             fd: fd as &i31 as i32_u,
             buffer: ta_new(IO_BUFFER_SIZE),
             curr: 0,

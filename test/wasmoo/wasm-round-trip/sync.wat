@@ -58,7 +58,7 @@
   (sub final $custom_with_id
     (struct
       (field $f (ref $custom_operations))
-      (field $f_2 i64)
+      (field $id i64)
       (field $state (mut i32))))
 )
 

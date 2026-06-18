@@ -42,7 +42,7 @@ module Sequence = struct
       forbid_numeric;
     }
 
-  let register' seq export_tbl (kind : Src.exportable option)
+  let register' ?hint seq export_tbl (kind : Src.exportable option)
       (id : Src.name option) exports =
     let idx = Uint32.of_int seq.last_index in
     match id with
@@ -68,7 +68,7 @@ module Sequence = struct
                 nm.Ast.desc
             | _ -> (
                 match kind with
-                | None -> seq.default
+                | None -> Option.value hint ~default:seq.default
                 | Some kind -> (
                     match Hashtbl.find_opt export_tbl (kind, Src.Num idx) with
                     | Some (nm :: _) when Lexer.is_valid_identifier nm.Ast.desc
@@ -2267,11 +2267,35 @@ let register_names ctx export_tbl fields =
                 | Func _ | Array _ | Cont _ -> ()
                 | Struct l ->
                     let seq = Sequence.make (Namespace.make ()) "f" in
+                    (* A struct subtype inherits its supertype's fields by
+                       position, so an unnamed field can borrow the name the
+                       parent gave that slot rather than the generic "f". *)
+                    let parent_fields =
+                      match ty.supertype with
+                      | None -> [||]
+                      | Some sup -> (
+                          match Sequence.get ctx.types sup with
+                          | exception
+                              ( Unresolved_reference
+                              | Numeric_ref_in_conditional _ ) ->
+                              [||]
+                          | { desc = parent; _ } -> (
+                              match
+                                Hashtbl.find_opt ctx.struct_fields parent
+                              with
+                              | Some (_, names) -> Array.of_list names
+                              | None -> [||]))
+                    in
                     let fields =
-                      Array.map
-                        (fun t ->
-                          Sequence.register' seq export_tbl None (get_annot t)
-                            [])
+                      Array.mapi
+                        (fun i t ->
+                          let hint =
+                            if i < Array.length parent_fields then
+                              Some parent_fields.(i)
+                            else None
+                          in
+                          Sequence.register' ?hint seq export_tbl None
+                            (get_annot t) [])
                         l
                     in
                     Hashtbl.replace ctx.struct_fields name
