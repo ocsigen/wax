@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-da4d98e8.js";
+            window.path_to_searchindex_js = "searchindex-ca7bcf4b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -602,6 +602,10 @@ default):</p>
 <pre><code class="language-wax">{point| x: 10, y: 20}       // all fields given
 {point| ..}                 // every field defaulted
 </code></pre>
+<p>The type name may be omitted when an expected type supplies it — for example a
+<code>let</code>/<code>const</code> annotation, a function parameter, a struct field, or an array
+element. <code>let p: &amp;point = {x: 10, y: 20};</code> is equivalent to writing <code>{point| …}</code>.
+Without such a context the type cannot be inferred and must be given.</p>
 <h3 id="field-access"><a class="header" href="#field-access">Field Access</a></h3>
 <pre><code class="language-wax">p.x                         // read a field
 p.x = 42;                   // write a field (only if it is `mut`)
@@ -618,6 +622,8 @@ type mutable_ints = [mut i32];
 [bytes| seg @ 0; 100]       // New array from a data segment (offset, count)
 </code></pre>
 <p>The last form is <code>array.new_data</code>: it initializes the array from the named <a href="#data-segments">data segment</a> <code>seg</code>, reading <code>count</code> elements starting at byte <code>offset</code>.</p>
+<p>As with structs, the type name may be omitted when an expected type supplies it,
+e.g. <code>let xs: &amp;bytes = [0; 100];</code>.</p>
 <h3 id="element-access"><a class="header" href="#element-access">Element Access</a></h3>
 <pre><code class="language-wax">arr[i]                      // Get element
 arr[i] = val;               // Set element (if mutable)
