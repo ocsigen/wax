@@ -81,18 +81,18 @@ fn int32_serialize(s: &eq, v: &eq) -> (i32, i32) {
 }
 
 fn int32_deserialize(s: &eq) -> (&eq, i32) {
-    {int32| f: int32_ops, f_2: caml_deserialize_int_4(s) };
+    { f: int32_ops, f_2: caml_deserialize_int_4(s) };
     4;
 }
 
 fn int32_dup(v: &eq) -> &eq {
     let d = v as &int32;
-    {int32| f: d.f, f_2: d.f_2 };
+    { f: d.f, f_2: d.f_2 };
 }
 
 #[export = "caml_copy_int32"]
 fn caml_copy_int32(i: i32) -> &eq {
-    {int32| f: int32_ops, f_2: i };
+    { f: int32_ops, f_2: i };
 }
 
 #[export = "Int32_val"]
@@ -145,13 +145,13 @@ fn nativeint_deserialize(s: &eq) -> (&eq, i32) {
     if caml_deserialize_uint_1(s) != 1 {
         caml_failwith([string|integer_too_large @ 0; 43]);
     }
-    {int32| f: nativeint_ops, f_2: caml_deserialize_int_4(s) };
+    { f: nativeint_ops, f_2: caml_deserialize_int_4(s) };
     4;
 }
 
 #[export = "caml_copy_nativeint"]
 fn caml_copy_nativeint(i: i32) -> &eq {
-    {int32| f: nativeint_ops, f_2: i };
+    { f: nativeint_ops, f_2: i };
 }
 
 const NATIVEINT_ERRMSG = string#"Native.of_string"; // "Nativeint.of_string"

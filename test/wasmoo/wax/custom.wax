@@ -104,7 +104,7 @@ fn caml_find_custom_operations(id: &string) -> &?custom_operations {
             br 'loop;
         }
     }
-    null as &?custom_operations;
+    null;
 }
 
 let initialized = 0;

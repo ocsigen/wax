@@ -90,7 +90,7 @@ fn caml_sys_executable_name(x: &eq) -> &eq {
 #[export = "caml_sys_time"]
 #[export = "caml_sys_time_include_children"]
 fn caml_sys_time(x: &eq) -> &eq {
-    {float| f: time() * 0.001 };
+    { f: time() * 0.001 };
 }
 
 #[export = "caml_sys_system_command"]

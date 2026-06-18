@@ -1,5 +1,7 @@
 type point = {x: i32, y: i32};
+type vec = {x: i32, y: i32};
 
+// {x, y} matches two struct types, so the literal is ambiguous.
 fn f() -> &point {
     let p = {x: 1, y: 2,};
     return p;

@@ -60,7 +60,7 @@ type mutex: custom_with_id = { f: &custom_operations, f_2: i64, state: mut i32 }
 
 #[export = "caml_ml_mutex_new"]
 fn caml_ml_mutex_new(x: &eq) -> &eq {
-    {mutex| f: mutex_ops, f_2: custom_next_id(), state: 0 };
+    { f: mutex_ops, f_2: custom_next_id(), state: 0 };
 }
 
 data lock_failure = "Mutex.lock: mutex already locked. Cannot wait.";

@@ -1,29 +1,34 @@
-A struct or array literal may omit its type name when an expected type (here a
-let or const annotation) supplies it; the file type-checks cleanly:
+A struct or array literal may omit its type name when the type is supplied by an
+expected type (a let/const annotation, parameter, field, …) or — for a struct —
+inferred from its set of fields when exactly one type matches:
 
   $ wax check ok.wax
 
-With no expected type the name cannot be inferred, and it is reported:
+When the field set matches several struct types, the literal is ambiguous and
+the type cannot be inferred:
 
-  $ wax check no-struct-context.wax
+  $ wax check ambiguous-struct.wax
   Error:
     Cannot infer the struct type here; add an explicit type, as in '{T| ..}'.
-   ──➤  no-struct-context.wax:4:13
-  2 │ 
-  3 │ fn f() -> &point {
-  4 │     let p = {x: 1, y: 2,};
+   ──➤  ambiguous-struct.wax:6:13
+  4 │ // {x, y} matches two struct types, so the literal is ambiguous.
+  5 │ fn f() -> &point {
+  6 │     let p = {x: 1, y: 2,};
     ·             ^^^^^^^^^^^^^
-  5 │     return p;
-  6 │ }
+  7 │     return p;
+  8 │ }
   Error: This instruction has type i32 but is expected to have type &point.
-   ──➤  no-struct-context.wax:5:12
-  3 │ fn f() -> &point {
-  4 │     let p = {x: 1, y: 2,};
-  5 │     return p;
+   ──➤  ambiguous-struct.wax:7:12
+  5 │ fn f() -> &point {
+  6 │     let p = {x: 1, y: 2,};
+  7 │     return p;
     ·            ^
-  6 │ }
-  7 │ 
+  8 │ }
+  9 │ 
   [123]
+
+An array literal has no field-based inference, so with no expected type its
+element type cannot be inferred either:
 
   $ wax check no-array-context.wax
   Error:

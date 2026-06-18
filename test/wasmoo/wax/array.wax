@@ -95,7 +95,7 @@ fn caml_array_of_uniform_array(vinit: &eq) -> &eq {
 
 #[export = "caml_floatarray_unsafe_get"]
 fn caml_floatarray_unsafe_get(a: &eq, i: &eq) -> &eq {
-    {float| f: (a as &float_array)[i as &i31 as i32_s] };
+    { f: (a as &float_array)[i as &i31 as i32_s] };
 }
 
 #[export = "caml_floatarray_unsafe_set"]

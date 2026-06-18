@@ -73,7 +73,7 @@ fn invoke_promise_resolver(p: &pair, x: &eq) {
 
 fn apply_continuation(resolver: &extern, v: &eq) {
     let t = v as &thunk;
-    become t.f({cont_resume| cont_func: invoke_promise_resolver, cont_resolver: resolver }, t.f_2);
+    become t.f({ cont_func: invoke_promise_resolver, cont_resolver: resolver }, t.f_2);
 }
 
 fn capture_continuation(f: &called_with_continuation, v: &eq) -> &eq {
@@ -165,7 +165,7 @@ fn f(stack: &eq, f: &eq, v: &eq) -> &eq {
     if stack == 0 as &i31 {
         caml_raise_constant(caml_named_value([already_resumed @ 0; 35])!);
     }
-    become capture_continuation(do_resume, {pair| fst: stack, snd: {pair| fst: f, snd: v } });
+    become capture_continuation(do_resume, { fst: stack, snd: { fst: f, snd: v } });
 }
 
 // Perform
@@ -185,7 +185,7 @@ fn do_perform(k0: &cont_2, vp: &eq) {
     let handler = stack.handlers.effect;
     let next_fiber = cont[1];
     cont[1] =
-        {fiber|
+        {
             handlers: stack.handlers,
             cont: k0,
             next:
@@ -197,18 +197,14 @@ fn do_perform(k0: &cont_2, vp: &eq) {
         };
     let k1 = pop_fiber();
     become k1.cont_func(
-        {
-            fst:
-                {call_handler_env| f: call_effect_handler, handler: handler, eff: eff, cont: cont },
-            snd: k1,
-        },
+        { fst: { f: call_effect_handler, handler: handler, eff: eff, cont: cont }, snd: k1 },
         k1,
     );
 }
 
 #[export = "%reperform"]
 fn reperform(eff: &eq, cont: &eq) -> &eq {
-    become capture_continuation(do_perform, {pair| fst: eff, snd: cont });
+    become capture_continuation(do_perform, { fst: eff, snd: cont });
 }
 
 #[export = "%perform"]
@@ -251,11 +247,7 @@ fn initial_cont(p: &pair, x: &eq) {
 
 #[export = "caml_alloc_stack"]
 fn caml_alloc_stack(hv: &eq, hx: &eq, hf: &eq) -> &eq {
-    {fiber|
-        handlers: { value: hv, exn: hx, effect: hf },
-        cont: { cont_func: initial_cont },
-        next: null,
-    };
+    { handlers: { value: hv, exn: hx, effect: hf }, cont: { cont_func: initial_cont }, next: null };
 }
 
 // Other functions
@@ -391,7 +383,7 @@ fn apply_iterator(f: &eq, venv: &eq) -> &eq {
 
 #[export = "caml_apply_continuation"]
 fn caml_apply_continuation(args: &eq) -> &eq {
-    {iterator| f: apply_iterator, i: 1, args: args as &block };
+    { f: apply_iterator, i: 1, args: args as &block };
 }
 
 fn dummy_cps_fun(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
@@ -433,7 +425,7 @@ fn caml_trampoline(f: &eq, vargs: &eq) -> &eq {
                         if 2 == args.length() => &eq {
                             identity;
                         } else {
-                            {iterator| f: trampoline_iterator, i: 2, args: args };
+                            { f: trampoline_iterator, i: 2, args: args };
                         },
                         f,
                     );
@@ -521,7 +513,7 @@ fn caml_perform_effect(eff: &eq, vcont: &eq, k0: &eq) -> &eq {
     let handler = handlers.effect;
     let next_fiber = cont[1];
     cont[1] =
-        {cps_fiber|
+        {
             handlers: handlers,
             cont: k0,
             exn_stack: exn_stack,
@@ -554,7 +546,7 @@ const exn_handler: &closure = { f: exn_handler_2 };
 
 #[export = "caml_cps_alloc_stack"]
 fn caml_cps_alloc_stack(hv: &eq, hx: &eq, hf: &eq) -> &eq {
-    {cps_fiber|
+    {
         handlers: { value: hv, exn: hx, effect: hf },
         cont: value_handler,
         exn_stack: { h: exn_handler, next: null },

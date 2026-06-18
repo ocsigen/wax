@@ -713,6 +713,12 @@ type module_context = {
          [&extern]/[&any]. Enabled only when converting from Wasm; for
          hand-written Wax (formatting, or compiling to Wasm) casts are kept as
          written. *)
+  structs_by_fields : (string, ident option) Hashtbl.t;
+      (* Maps a struct's canonical field-set key (see [field_set_key]) to the
+         unique struct type with that field set, or [None] when several share
+         it. Lets a struct literal whose name is omitted resolve from its fields
+         alone (and the name be dropped when the fields make it unambiguous).
+         Built once at module-context creation. *)
 }
 
 (* Type [f] under the assumption of a conditional branch ([positive] for
@@ -743,6 +749,19 @@ let lookup_struct_type ?location ctx name =
       Error.expected_struct_type ctx.diagnostics
         ~location:(Option.value ~default:name.info location);
       None
+
+(* A canonical key for a set of field names, so two structs with the same fields
+   (in any order) get the same key. Identifiers never contain a comma. *)
+let field_set_key names = String.concat "," (List.sort_uniq compare names)
+
+(* The unique struct type whose field-set matches the literal's [fields], or
+   [None] when none or several do (then the type is ambiguous and must be
+   named). O(#fields) given the precomputed [ctx.structs_by_fields] map. *)
+let infer_struct_by_fields ctx fields =
+  let key = field_set_key (List.map (fun (idx, _) -> idx.desc) fields) in
+  match Hashtbl.find_opt ctx.structs_by_fields key with
+  | Some (Some name) -> Some name
+  | Some None | None -> None
 
 let lookup_array_type ?location ctx name =
   let*@ ty = Tbl.find_opt ctx.type_context.types name in
@@ -3898,11 +3917,12 @@ and check ctx expected (i : location instr) =
      makes it redundant, and the name-less surface form re-parses ([parseable] —
      false only for a field-less struct, whose name-less form [{}] has no
      syntax). *)
-  let emitted_name original typ ~parseable =
+  let emitted_name original typ ~parseable ~field_unique =
     match original with
     | None -> None
     | Some _ ->
-        if ctx.simplify && parseable && name_redundant typ then None
+        if ctx.simplify && parseable && (name_redundant typ || field_unique)
+        then None
         else Some typ
   in
   (* The result reference type of a construction of [name]; validates it against
@@ -3918,10 +3938,27 @@ and check ctx expected (i : location instr) =
   in
   match i.desc with
   | Struct (ty, fields) ->
+      (* The unique struct type these fields name, if any: used to resolve an
+         omitted name and to drop a present one that the fields already pin. *)
+      let field_match = infer_struct_by_fields ctx fields in
       let* node =
         match
-          resolve_name ty ~missing:(fun () ->
-              Error.cannot_infer_struct_type ctx.diagnostics ~location:i.info)
+          match ty with
+          | Some _ -> ty
+          | None -> (
+              (* Field inference takes precedence over the expected type: the
+                 fields name the exact struct constructed, whereas [expected]
+                 may be a supertype. Fall back to [expected] only when the
+                 fields are ambiguous. *)
+              match field_match with
+              | Some name -> Some name
+              | None -> (
+                  match exact_named_type expected with
+                  | Some name -> Some name
+                  | None ->
+                      Error.cannot_infer_struct_type ctx.diagnostics
+                        ~location:i.info;
+                      None))
         with
         | None ->
             (* Unresolved: still type the field values for error recovery (and
@@ -3969,7 +4006,17 @@ and check ctx expected (i : location instr) =
                       return ((name, i') :: l))
                 (return []) field_types
             in
-            let emitted = emitted_name ty typ ~parseable:(fields <> []) in
+            (* The fields alone pin this type (re-parse re-resolves to it via
+               field inference, which now takes precedence), so a present name
+               is redundant. *)
+            let field_unique =
+              match field_match with
+              | Some n -> n.desc = typ.desc
+              | None -> false
+            in
+            let emitted =
+              emitted_name ty typ ~parseable:(fields <> []) ~field_unique
+            in
             let*! result = construction_result typ in
             return_expression i (Struct (emitted, List.rev fields')) result
       in
@@ -3990,7 +4037,9 @@ and check ctx expected (i : location instr) =
                    (fun field -> field_has_default (snd field.desc))
                    fields)
             then Error.not_defaultable ctx.diagnostics ~location:i.info;
-            let emitted = emitted_name ty typ ~parseable:true in
+            let emitted =
+              emitted_name ty typ ~parseable:true ~field_unique:false
+            in
             let*! result = construction_result typ in
             return_expression i (StructDefault emitted) result
       in
@@ -4027,7 +4076,9 @@ and check ctx expected (i : location instr) =
             in
             let* i2' = instruction ctx i2 in
             check_type ctx i2' (i32_cell ());
-            let emitted = emitted_name ty typ ~parseable:true in
+            let emitted =
+              emitted_name ty typ ~parseable:true ~field_unique:false
+            in
             let*! result = construction_result typ in
             return_expression i (Array (emitted, i1', i2')) result
       in
@@ -4050,7 +4101,9 @@ and check ctx expected (i : location instr) =
             (let>@ field = lookup_array_type ctx typ in
              if not (field_has_default field) then
                Error.not_defaultable ctx.diagnostics ~location:typ.info);
-            let emitted = emitted_name ty typ ~parseable:true in
+            let emitted =
+              emitted_name ty typ ~parseable:true ~field_unique:false
+            in
             let*! result = construction_result typ in
             return_expression i (ArrayDefault (emitted, n')) result
       in
@@ -4092,7 +4145,9 @@ and check ctx expected (i : location instr) =
                   return (i' :: l))
                 (return []) instrs
             in
-            let emitted = emitted_name ty typ ~parseable:(instrs <> []) in
+            let emitted =
+              emitted_name ty typ ~parseable:(instrs <> []) ~field_unique:false
+            in
             let*! result = construction_result typ in
             return_expression i (ArrayFixed (emitted, List.rev instrs')) result
       in
@@ -4126,7 +4181,9 @@ and check ctx expected (i : location instr) =
                  check_elem_subtype ctx ~location:i.info ~src ~dst
              | _ ->
                  ignore (Tbl.find ctx.diagnostics ctx.datas seg : unit option));
-            let emitted = emitted_name ty typ ~parseable:true in
+            let emitted =
+              emitted_name ty typ ~parseable:true ~field_unique:false
+            in
             let*! result = construction_result typ in
             return_expression i (ArraySegment (emitted, seg, off', len')) result
       in
@@ -5231,6 +5288,24 @@ let type_configuration ?(warn_unused = false) ~simplify diagnostics fields =
           ()
       | _ -> ())
     fields;
+  (* Index the struct types by their field set, so a literal whose name is
+     omitted can be resolved from its fields. All types are registered above, so
+     this is complete; a later distinct name for the same key marks it ambiguous
+     ([None]), while a conditional variant of the same name does not. *)
+  let structs_by_fields = Hashtbl.create 16 in
+  Tbl.iter type_context.types (fun name (_, (st : subtype)) ->
+      match st.typ with
+      | Struct sfields -> (
+          let key =
+            field_set_key
+              (Array.to_list (Array.map (fun f -> (fst f.desc).desc) sfields))
+          in
+          match Hashtbl.find_opt structs_by_fields key with
+          | None ->
+              Hashtbl.replace structs_by_fields key (Some (Ast.no_loc name))
+          | Some (Some n) when n.desc = name -> ()
+          | Some _ -> Hashtbl.replace structs_by_fields key None)
+      | Func _ | Array _ | Cont _ -> ());
   let ctx =
     let namespace = Namespace.make cond in
     {
@@ -5238,6 +5313,7 @@ let type_configuration ?(warn_unused = false) ~simplify diagnostics fields =
       type_context;
       subtyping_info = Wasm.Types.subtyping_info type_context.internal_types;
       types = type_context.types;
+      structs_by_fields;
       functions = Tbl.make namespace "function";
       globals = Tbl.make namespace "global";
       import_globals = Tbl.make namespace "global";

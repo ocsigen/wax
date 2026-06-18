@@ -457,7 +457,7 @@ fn caml_float_of_string(x: &eq) -> &eq {
                     if negative {
                         f = -f;
                     }
-                    return {float| f: f };
+                    return { f: f };
                 }
             }
         }
@@ -471,7 +471,7 @@ fn caml_float_of_string(x: &eq) -> &eq {
                     c = s[i] as i32_u;
                     if c & 0xdf == 78 // 'N'
                     {
-                        return {float| f: nan };
+                        return { f: nan };
                     }
                 }
             }
@@ -483,7 +483,7 @@ fn caml_float_of_string(x: &eq) -> &eq {
                     c = s[i] as i32_u;
                     if c & 0xdf == 70 // 'F'
                     {
-                        return {float| f: negative?-inf:inf };
+                        return { f: negative?-inf:inf };
                     }
                 }
             }
@@ -512,7 +512,7 @@ fn caml_float_of_string(x: &eq) -> &eq {
                                         i = i + 1;
                                         c = s[i] as i32_u;
                                         if c & 0xdf == 89 { // 'Y'
-                                            return {float| f: negative?-inf:inf };
+                                            return { f: negative?-inf:inf };
                                         }
                                     }
                                 }
@@ -524,7 +524,7 @@ fn caml_float_of_string(x: &eq) -> &eq {
         }
         f = parse_float(jsstring_of_string(s));
         br_if 'error f != f;
-        return {float| f: f };
+        return { f: f };
     }
     caml_failwith([string|float_of_string @ 0; 15]);
     return 0 as &i31;
@@ -600,7 +600,7 @@ fn caml_modf_float(x: &eq) -> &eq {
         i = x_2;
         f = x_2;
     }
-    [block|0 as &i31, {float| f: f }, {float| f: i }];
+    [block|0 as &i31, { f: f }, { f: i }];
 }
 
 fn ldexp(x: f64, n: i32) -> f64 {
@@ -660,7 +660,7 @@ fn frexp(x: f64) -> (f64, i32) {
 #[export = "caml_frexp_float"]
 fn caml_frexp_float(x: &eq) -> &eq {
     let (m, e) = frexp((x as &float).f);
-    [block|0 as &i31, {float| f: m }, e as &i31];
+    [block|0 as &i31, { f: m }, e as &i31];
 }
 
 #[export = "caml_signbit_float"]
@@ -716,13 +716,13 @@ fn caml_fma_float(vx: &eq, vy: &eq, vz: &eq) -> &eq {
             br_if 'cont x_3 == 2047;
             br_if 'cont x_5 == 2047;
             br_if 'cont x_7 != 2047;
-            return {float| f: x + z + y };
+            return { f: x + z + y };
         }
         'cont: do {
             br_if 'cont y == 0;
             br_if 'cont x == 0;
             br_if 'cont z != 0;
-            return {float| f: x * y };
+            return { f: x * y };
         }
         'cont: do {
             'then: do {
@@ -732,20 +732,20 @@ fn caml_fma_float(vx: &eq, vy: &eq, vz: &eq) -> &eq {
                 br_if 'then x == 0;
                 br_if 'cont x_7 != 2047;
             }
-            return {float| f: x * y + z };
+            return { f: x * y + z };
         }
         'cont: do {
             br_if 'cont x_6 <u 3071;
-            return {float| f: x * y };
+            return { f: x * y };
         }
         'cont: do {
             br_if 'cont x_6 >u 967;
             y = x_2 ^ x_4 >s -1?0x1p-1074:-0x1p-1074;
             'cont2: do {
                 br_if 'cont2 x_7 <u 3;
-                return {float| f: y + z };
+                return { f: y + z };
             }
-            return {float| f: (z * 0x1p54 + y) * 0x1p-54 };
+            return { f: (z * 0x1p54 + y) * 0x1p-54 };
         }
         'l_3: do {
             'l_4: do {
@@ -806,7 +806,7 @@ fn caml_fma_float(vx: &eq, vy: &eq, vz: &eq) -> &eq {
     'cont: do {
         br_if 'cont z != 0;
         br_if 'cont !((y == 0) | (x == 0));
-        return {float| f: x * y + z };
+        return { f: x * y + z };
     }
     let x_10: f64;
     let x_11: f64;
@@ -838,11 +838,11 @@ fn caml_fma_float(vx: &eq, vy: &eq, vz: &eq) -> &eq {
         y = x + y;
         'cont: do {
             br_if 'cont !x_8;
-            return {float| f: y * 0x1p53 };
+            return { f: y * 0x1p53 };
         }
         y = x_9?y * 0x1p-108:y;
     }
-    {float| f: y };
+    { f: y };
 }
 
 #[export = "caml_float_compare"]

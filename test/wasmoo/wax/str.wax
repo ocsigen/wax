@@ -197,7 +197,7 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq {
                                 // BEGGROUP
                                 arg = instr >>u 8;
                                 stack =
-                                    {undo|
+                                    {
                                         undo_previous: stack,
                                         tbl: group_start,
                                         idx: arg,
@@ -210,7 +210,7 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq {
                                 // ENDGROUP
                                 arg = instr >>u 8;
                                 stack =
-                                    {undo|
+                                    {
                                         undo_previous: stack,
                                         tbl: group_end,
                                         idx: arg,
@@ -278,15 +278,14 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq {
                             }
                             'PUSHBACK: {
                                 // PUSHBACK
-                                stack =
-                                    {pos| pos_previous: stack, pc: pc + (instr >>s 8), pos: pos };
+                                stack = { pos_previous: stack, pc: pc + (instr >>s 8), pos: pos };
                                 br 'continue;
                             }
                             'SETMARK: {
                                 // SETMARK
                                 arg = instr >>u 8;
                                 stack =
-                                    {undo|
+                                    {
                                         undo_previous: stack,
                                         tbl: re_register,
                                         idx: arg,

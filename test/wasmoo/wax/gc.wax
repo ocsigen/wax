@@ -40,14 +40,14 @@ fn caml_gc_compaction(x: &eq) -> &eq {
 
 #[export = "caml_gc_counters"]
 fn caml_gc_counters(x: &eq) -> &eq {
-    let f: &eq = {float| f: 0 };
+    let f: &eq = { f: 0 };
     [block|0 as &i31, f, f, f];
 }
 
 #[export = "caml_gc_stat"]
 #[export = "caml_gc_quick_stat"]
 fn caml_gc_stat(x: &eq) -> &eq {
-    let f: &eq = {float| f: 0 };
+    let f: &eq = { f: 0 };
     [block|
         0 as &i31,
         f,
@@ -120,7 +120,7 @@ fn caml_gc_minor_free(x: &eq) -> &eq {
 
 #[export = "caml_gc_minor_words"]
 fn caml_gc_minor_words(x: &eq) -> &eq {
-    {float| f: 0 };
+    { f: 0 };
 }
 
 #[export = "caml_final_register"]

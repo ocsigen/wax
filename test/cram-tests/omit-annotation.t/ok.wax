@@ -58,6 +58,13 @@ fn singleton(x: i32) -> &node {
     return {v: x, next: null};
 }
 
+// With a unique field set, the type is inferred from the fields alone — no
+// annotation and no contextual type needed.
+fn infer_from_fields() {
+    let n = {v: 5, next: null};
+    let _ = n;
+}
+
 fn from_let_array() -> &ints {
     let a: &ints = [0; 8];
     return a;

@@ -30,7 +30,7 @@ type float = { f: f64 };
 #[export = "unix_gettimeofday"]
 #[export = "caml_unix_gettimeofday"]
 fn unix_gettimeofday(x: &eq) -> &eq {
-    {float| f: gettimeofday() };
+    { f: gettimeofday() };
 }
 
 #[export = "caml_alloc_tm"]
@@ -74,7 +74,7 @@ fn unix_localtime(x: &eq) -> &eq {
 #[export = "unix_time"]
 #[export = "caml_unix_time"]
 fn unix_time(x: &eq) -> &eq {
-    {float| f: gettimeofday().floor() };
+    { f: gettimeofday().floor() };
 }
 
 #[export = "unix_mktime"]
@@ -90,7 +90,7 @@ fn unix_mktime(x: &eq) -> &eq {
             tm[2] as &i31 as i32_s,
             tm[1] as &i31 as i32_s,
         ) / 1000;
-    [block|0 as &i31, {float| f: t }, localtime(t)];
+    [block|0 as &i31, { f: t }, localtime(t)];
 }
 
 #[export = "unix_inet_addr_of_string"]

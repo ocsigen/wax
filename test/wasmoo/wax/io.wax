@@ -226,7 +226,7 @@ fn caml_ml_out_channels_list(x: &eq) -> &eq {
 
 #[export = "caml_ml_open_descriptor_in"]
 fn caml_ml_open_descriptor_in(fd: &eq) -> &eq {
-    {channel|
+    {
         f: channel_ops,
         f_2: custom_next_id(),
         fd: fd as &i31 as i32_u,
@@ -244,7 +244,7 @@ let caml_stderr: &eq = 0 as &i31;
 #[export = "caml_ml_open_descriptor_out"]
 fn caml_ml_open_descriptor_out(fd: &eq) -> &eq {
     let res: &eq =
-        {channel|
+        {
             f: channel_ops,
             f_2: custom_next_id(),
             fd: fd as &i31 as i32_u,

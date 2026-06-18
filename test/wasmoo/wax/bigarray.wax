@@ -584,7 +584,7 @@ fn caml_ba_create(vkind: &eq, layout: &eq, d: &eq) -> &eq {
         dim[i] = n;
         i = i + 1;
     }
-    {bigarray|
+    {
         f: bigarray_ops,
         ba_data: caml_ba_create_buffer(kind, caml_ba_get_size(dim)),
         ba_dim: dim,
@@ -612,14 +612,7 @@ fn caml_ba_from_typed_array(x: &eq) -> &eq {
     if len <s 0 {
         caml_invalid_argument([string|ta_too_large @ 0; 34]);
     }
-    {bigarray|
-        f: bigarray_ops,
-        ba_data: data,
-        ba_dim: [len],
-        ba_num_dims: 1,
-        ba_kind: kind,
-        ba_layout: 0,
-    };
+    { f: bigarray_ops, ba_data: data, ba_dim: [len], ba_num_dims: 1, ba_kind: kind, ba_layout: 0 };
 }
 
 #[export = "caml_ba_to_typed_array"]
@@ -1022,7 +1015,7 @@ fn caml_ba_slice(vb: &eq, vind: &eq) -> &eq {
     let mul = caml_ba_size_per_element(b.ba_kind as i32_u);
     let size = caml_ba_get_size(sub_dim);
     let sub_data = ta_subarray(b.ba_data, offset * mul, (offset + size) * mul);
-    {bigarray|
+    {
         f: bigarray_ops,
         ba_data: sub_data,
         ba_dim: sub_dim,
@@ -1068,7 +1061,7 @@ fn caml_ba_sub(vba: &eq, vofs: &eq, vlen: &eq) -> &eq {
     new_dim[changed_dim] = len;
     mul = mul * caml_ba_size_per_element(ba.ba_kind as i32_u);
     let new_data = ta_subarray(ba.ba_data, ofs * mul, (ofs + len) * mul);
-    {bigarray|
+    {
         f: bigarray_ops,
         ba_data: new_data,
         ba_dim: new_dim,
@@ -1203,7 +1196,7 @@ fn caml_ba_reshape(vb: &eq, vd: &eq) -> &eq {
     if num_elts as i32 != caml_ba_get_size(b.ba_dim) {
         caml_invalid_argument([string|size_mismatch @ 0; 31]);
     }
-    {bigarray|
+    {
         f: bigarray_ops,
         ba_data: b.ba_data,
         ba_dim: dim,
@@ -1226,7 +1219,7 @@ fn caml_ba_change_layout(vb: &eq, vlayout: &eq) -> &eq {
             new_dim[i] = dim[num_dims - i - 1];
             i = i + 1;
         }
-        {bigarray|
+        {
             f: bigarray_ops,
             ba_data: b.ba_data,
             ba_dim: new_dim,
@@ -1583,7 +1576,7 @@ fn caml_ba_get_dim(x: &eq) -> &int_array {
 
 #[export = "caml_ba_alloc"]
 fn caml_ba_alloc(kind: i32, layout: i32, num_dims: i32, data: &extern, dim: &int_array) -> &eq {
-    {bigarray|
+    {
         f: bigarray_ops,
         ba_data: data,
         ba_dim: dim,
