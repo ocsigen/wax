@@ -1092,6 +1092,7 @@ let output_section ch id encoder data =
   Buffer.output_buffer ch b
 
 let module_ ~out_channel ?opt_source_map_file (m : Ast.location module_) =
+  Utils.Debug.timed "output" @@ fun () ->
   Out_channel.output_string out_channel "\x00\x61\x73\x6D\x01\x00\x00\x00";
 
   let source_map_t = Utils.Source_map.create () in

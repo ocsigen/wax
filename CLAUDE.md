@@ -53,6 +53,7 @@ bare `wax <file>` form working — edit that heuristic if adding subcommands.
 |      | `--fold` / `--unfold` | Force folded / unfolded instruction form (default: auto) |
 |      | `--color` | Color output: `auto`/`always`/`never` |
 |      | `--source-map-file` | Emit a source map to the given file |
+|      | `--debug` | Enable developer debug output for a category (repeatable, comma-separated). Categories: `timing` (log each pass's wall-clock time to stderr) |
 
 Binary output to a terminal is blocked; use `-o` to write WASM to a file.
 
@@ -64,7 +65,7 @@ Binary output to a terminal is blocked; use `-o` to write WASM to a file.
 | `-c` | `--check` | Write nothing; list unformatted files, exit non-zero if any (mutually exclusive with `--inplace`) |
 | `-f` | `--format` / `--input-format` | Force the format of all files (overrides extension detection) |
 | `-v` | `--validate` | Also type-check / well-formedness-check while formatting |
-|      | `--color` / `--fold` / `--unfold` | As for convert |
+|      | `--color` / `--fold` / `--unfold` / `--debug` | As for convert |
 
 **check** — `dune exec wax -- check [options] FILE…`. Validates each file (type-check Wax / well-formedness Wasm), no output, exits non-zero on failure.
 
@@ -72,7 +73,7 @@ Binary output to a terminal is blocked; use `-o` to write WASM to a file.
 |------|------|-------------|
 | `-f` | `--format` / `--input-format` | Force the format of all files (overrides extension detection) |
 | `-s` | `--strict-validate` | Strict reference validation (Wasm Text) |
-|      | `--color` | As for convert |
+|      | `--color` / `--debug` | As for convert |
 
 ## Non-Negotiable Rules
 

@@ -1352,6 +1352,7 @@ let indirect_name_map ch =
     ch
 
 let module_ diagnostics ?filename buf =
+  Utils.Debug.timed "parse" @@ fun () ->
   let ch =
     {
       filename;

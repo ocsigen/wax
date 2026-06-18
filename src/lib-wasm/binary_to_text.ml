@@ -414,6 +414,7 @@ let make_names_unique (names : B.names) =
   }
 
 let module_ (m : _ B.module_) : _ T.module_ =
+  Utils.Debug.timed "to-text" @@ fun () ->
   let m = { m with names = make_names_unique m.names } in
   let all_subtypes =
     Array.concat

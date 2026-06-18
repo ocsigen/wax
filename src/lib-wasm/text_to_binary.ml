@@ -459,6 +459,7 @@ let invert_map map =
   StringMap.fold (fun k v acc -> B.IntMap.add v k acc) map B.IntMap.empty
 
 let module_ (m : 'info T.module_) : 'info B.module_ =
+  Utils.Debug.timed "to-binary" @@ fun () ->
   let module_name, fields = m in
 
   (* Pass 1: Build Context *)

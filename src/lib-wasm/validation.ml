@@ -3706,6 +3706,7 @@ let check_import_order diagnostics fields =
        None fields)
 
 let f ?(warn_unused = true) diagnostics ((name, fields) as modul) =
+  Utils.Debug.timed "validate" @@ fun () ->
   check_import_order diagnostics fields;
   if not (List.exists field_has_conditional fields) then
     validate_configuration ~warn_unused diagnostics modul

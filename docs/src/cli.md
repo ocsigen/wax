@@ -74,6 +74,16 @@ files (see [Formatting](#formatting)) and `check` validates them (see
 - **`--source-map-file`** *FILE*
     - Generate a source map file.
 
+- **`--debug`** *CATEGORY*
+    - Enable developer debug output for a category. Repeatable, and a single
+      value may list several categories separated by commas
+      (`--debug timing,…`).
+    - Categories:
+        - `timing` — log the wall-clock running time of each compiler pass
+          (parse, specialize, validate, type-check, convert, output) to stderr,
+          one line per pass as it finishes. The normal output on stdout is
+          unchanged.
+
 ## Examples
 
 **Convert a Wax file to Wasm binary:**
@@ -127,6 +137,7 @@ wax format [OPTIONS] FILE…
     - Also type-check (Wax) / well-formedness-check (Wasm) while formatting.
 - **`--color`** *WHEN* — as above (ignored when writing back in place).
 - **`--fold`** / **`--unfold`** — as above.
+- **`--debug`** *CATEGORY* — as above.
 
 ### Examples
 
@@ -164,6 +175,7 @@ wax check [OPTIONS] FILE…
 - **`-s`**, **`--strict-validate`** — strict reference validation (for Wasm
   Text), as above.
 - **`--color`** *WHEN* — as above.
+- **`--debug`** *CATEGORY* — as above.
 
 ### Example
 

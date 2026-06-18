@@ -10,6 +10,7 @@ open Ast
    [#[else]]), avoiding any need for the [#[else]] token's own position. *)
 let module_ ctx env (fields : location Ast.module_) :
     location Ast.module_ * (int * int) list =
+  Utils.Debug.timed "specialize" @@ fun () ->
   let eval cond = CS.eval ctx env cond in
   let ranges = ref [] in
   let start_of (l : location) = l.loc_start.Lexing.pos_cnum in

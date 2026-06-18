@@ -208,6 +208,7 @@ let branch_end ~default nodes =
    simplified) rather than explored. *)
 let module_ ctx env ((name, fields) : Ast.location Ast.Text.module_) :
     Ast.location Ast.Text.module_ * (int * int) list =
+  Utils.Debug.timed "specialize" @@ fun () ->
   let open Ast.Text in
   let ranges = ref [] in
   (* The boundary between the two branches. With no else the conditional ends at

@@ -1327,6 +1327,9 @@ let rec modulefield f =
 
 let module_ ?(color = Auto) ?out_channel ?(tail = []) ?collect printer ~trivia
     (id, fields) =
+  (* [collect] marks the dry trivia-collection traversal; time the real emit
+     only, so a single "output" timing is reported. *)
+  Utils.Debug.timed_if (collect = None) "output" @@ fun () ->
   let use_color = should_use_color ~color ~out_channel in
   let theme = get_theme use_color in
   let ctx =

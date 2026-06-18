@@ -1336,6 +1336,7 @@ let reorder_imports lst =
   traverse [] lst
 
 let module_ diagnostics types fields =
+  Utils.Debug.timed "convert" @@ fun () ->
   let func_refs_in_func = Hashtbl.create 16 in
   let func_refs_outside_func = Hashtbl.create 16 in
   let ctx =

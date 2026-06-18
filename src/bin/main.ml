@@ -381,8 +381,9 @@ let resolve_format file_opt format_opt ~default =
   | None, None -> default
 
 let convert input_file output_file input_format_opt output_format_opt validate
-    strict_validate color opt_source_map_file fold_mode defines =
+    strict_validate color opt_source_map_file fold_mode defines debug =
   Wasm.Validation.validate_refs := strict_validate;
+  Utils.Debug.enable debug;
   let defines = Wasm.Cond_specialize.of_list defines in
   let std file = Option.bind file (fun f -> if f = "-" then None else Some f) in
   let input_file = std input_file in
@@ -424,7 +425,8 @@ let convert input_file output_file input_format_opt output_format_opt validate
    is written and files that are not already formatted are listed (a non-zero
    exit status reports this); otherwise exactly one file is formatted to stdout.
    [validate] additionally type-checks (Wax) / well-formedness-checks (Wasm). *)
-let format inplace check format_opt validate color fold_mode files =
+let format inplace check format_opt validate color fold_mode debug files =
+  Utils.Debug.enable debug;
   if inplace && check then (
     Printf.eprintf "--inplace and --check cannot be combined.\n";
     exit 123);
@@ -486,8 +488,9 @@ let format inplace check format_opt validate color fold_mode files =
    without producing any output, reporting diagnostics and exiting with a
    non-zero status if any file fails. [format_opt] forces the format; otherwise
    it is detected from the extension. *)
-let check format_opt strict color files =
+let check format_opt strict color debug files =
   Wasm.Validation.validate_refs := strict;
+  Utils.Debug.enable debug;
   let check_one file =
     match
       match format_opt with Some _ -> format_opt | None -> detect_format file
@@ -662,6 +665,28 @@ let fold_mode_option =
   let unfold = (Unfold, Arg.info [ "unfold" ] ~doc) in
   Arg.(value & vflag Auto [ fold; unfold ])
 
+(* Define the --debug option (enable developer debug output by category) *)
+let debug_option =
+  let doc =
+    "Enable debug output for $(i,CATEGORY) (repeatable, comma-separated). \
+     Categories: timing (log the wall-clock running time of each compiler \
+     pass)."
+  in
+  let category_conv =
+    let parse s =
+      match Utils.Debug.parse s with Ok c -> Ok c | Error e -> Error (`Msg e)
+    in
+    let print ppf c =
+      Format.pp_print_string ppf
+        (match (c : Utils.Debug.category) with Timing -> "timing")
+    in
+    Arg.conv (parse, print)
+  in
+  Arg.(
+    value
+    & opt_all (list category_conv) []
+    & info [ "debug" ] ~docv:"CATEGORY" ~doc)
+
 (* Define the --inplace/-i flag (format command) *)
 let inplace_flag =
   let doc = "Write the formatted output back to each input file." in
@@ -713,9 +738,10 @@ let convert_term =
   and+ color = color_option
   and+ source_map_file = source_map_file_option
   and+ fold_mode = fold_mode_option
-  and+ defines = define_option in
+  and+ defines = define_option
+  and+ debug = debug_option in
   convert input output in_fmt out_fmt validate strict_validate color
-    source_map_file fold_mode defines
+    source_map_file fold_mode defines (List.concat debug)
 
 let format_term =
   let+ inplace = inplace_flag
@@ -724,8 +750,10 @@ let format_term =
   and+ validate = validate_flag
   and+ color = color_option
   and+ fold_mode = fold_mode_option
+  and+ debug = debug_option
   and+ files = format_files in
-  format inplace check format_opt validate color fold_mode files
+  format inplace check format_opt validate color fold_mode (List.concat debug)
+    files
 
 let format_cmd =
   let doc = "Format WebAssembly source files (.wat, .wasm, .wax)" in
@@ -759,8 +787,9 @@ let check_term =
   let+ format_opt = format_input
   and+ strict = strict_validate_flag
   and+ color = color_option
+  and+ debug = debug_option
   and+ files = check_files in
-  check format_opt strict color files
+  check format_opt strict color (List.concat debug) files
 
 let check_cmd =
   let doc = "Validate WebAssembly files without producing output" in

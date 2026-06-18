@@ -5829,6 +5829,7 @@ let rec check_let_in_conditionals diagnostics (i : (_ instr_desc, _) annotated)
   List.iter (check_let_in_conditionals diagnostics) (sub_instrs i)
 
 let f ?(simplify = false) ?(warn_unused = false) diagnostics fields =
+  Utils.Debug.timed "type-check" @@ fun () ->
   Ast_utils.iter_fields
     (fun (field : (_ modulefield, _) annotated) ->
       match field.desc with

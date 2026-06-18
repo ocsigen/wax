@@ -2377,6 +2377,7 @@ let rec count_memories fields =
     0 fields
 
 let module_ ?(strict_constants = false) diagnostics (_, fields) =
+  Utils.Debug.timed "convert" @@ fun () ->
   try
     let forbid_numeric = module_has_conditional fields in
     (* Loads/stores reference the memory implicitly by index 0. When the module

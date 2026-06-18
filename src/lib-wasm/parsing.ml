@@ -183,6 +183,7 @@ struct
   end
 
   let parse_from_string ?color ~filename text =
+    Utils.Debug.timed "parse" @@ fun () ->
     let ctx = Utils.Trivia.make () in
     let module Context = struct
       type t = Utils.Trivia.context
