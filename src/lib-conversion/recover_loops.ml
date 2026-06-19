@@ -42,6 +42,10 @@ let rec refs_instr name (i : location instr) : bool =
   | Dispatch { index; cases; default; arms } ->
       lab default || List.exists lab cases || refs_instr name index
       || List.exists (fun (_, b) -> any b) arms
+  | Match { scrutinee; arms; default } ->
+      refs_instr name scrutinee
+      || List.exists (fun (_, b) -> any b) arms
+      || any default
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } -> any block
   | While { cond; block; _ } | DoWhile { block; cond; _ } ->
       refs_instr name cond || any block
@@ -174,6 +178,13 @@ and rewrite_desc (desc : location instr_desc) : location instr_desc =
           cases;
           default;
           arms = List.map (fun (l, b) -> (l, rewrite_list b)) arms;
+        }
+  | Match { scrutinee; arms; default } ->
+      Match
+        {
+          scrutinee = rewrite_instr scrutinee;
+          arms = List.map (fun (p, b) -> (p, rewrite_list b)) arms;
+          default = rewrite_list default;
         }
   | If_annotation { cond; then_body; else_body } ->
       If_annotation

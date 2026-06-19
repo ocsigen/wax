@@ -75,6 +75,7 @@
 %token CONT_NEW CONT_BIND
 %token SUSPEND RESUME RESUME_THROW RESUME_THROW_REF SWITCH
 %token DISPATCH
+%token MATCH
 %token MEMORY DATA TABLE ELEM
 
 %on_error_reduce statement plaininstr separated_nonempty_list_trailing(",",structure_type_field) list(module_field) separated_nonempty_list_trailing(",",value_type) block_type separated_nonempty_list_trailing(",",function_parameter) list(label) list(attribute) list(typedef) list(legacy_catch) separated_nonempty_list_trailing(",",catch) separated_nonempty_list_trailing(",",let_pattern) blockinstr statement_list loption(separated_nonempty_list_trailing(",",catch)) separated_nonempty_list_trailing(",",expression) let_pattern structure_field separated_nonempty_list_trailing(",",structure_field) constant_expression attribute_expression parenthesized_expression index_expression then_branch condition_expression length_expression optional_function_type structure_type result_type_ expression_list structure
@@ -280,6 +281,7 @@ ident_or_keyword:
 | TABLE { "table" }
 | ELEM { "elem" }
 | DISPATCH { "dispatch" }
+| MATCH { "match" }
 | INF { "inf" }
 | NAN { "nan" }
 
@@ -473,6 +475,22 @@ structure:
 dispatch_arm:
 | l = label ":" "{" body = statement_list "}" { (l, body) }
 
+(* A [match] arm: a reference-type test (optionally binding the narrowed value)
+   or a [null] test, then a brace-delimited body that must leave the [match]
+   (the body diverges); see {!Ast_utils.lower_match}. *)
+match_pattern:
+| x = ident ":" t = reference_type { MatchCast (Some x, t) }
+| t = reference_type { MatchCast (None, t) }
+| NULL { MatchNull }
+
+match_arm:
+| p = match_pattern "=>" "{" body = statement_list "}" { (p, body) }
+
+(* The default arm is required (like a [dispatch]'s [else]): no-match always has
+   a written destination. *)
+match_default:
+| "_" "=>" "{" body = statement_list "}" { body }
+
 blockinstr:
 | b = block
   { let (label, l) = b in with_loc $sloc (Block{label; typ = blocktype None; block = l}) }
@@ -480,6 +498,9 @@ blockinstr:
   "[" cases = list(label) ELSE default = label "]"
   "{" arms = list(dispatch_arm) "}"
   { with_loc $sloc (Dispatch {index; cases; default; arms}) }
+| MATCH scrutinee = expression
+  "{" arms = list(match_arm) default = match_default "}"
+  { with_loc $sloc (Match {scrutinee; arms; default}) }
 | label = block_label DO bt = option(block_type) "{" l = statement_list "}"
   w = do_tail
   { match w with

@@ -474,7 +474,7 @@ let array_instr pp nm f =
 let get_prec (i : _ Ast.instr) =
   match i.desc with
   | Block _ | Loop _ | While _ | DoWhile _ | If _ | Try _ | TryTable _
-  | If_annotation _ | Dispatch _ ->
+  | If_annotation _ | Dispatch _ | Match _ ->
       Atom
   | Unreachable | Nop | Hole | Null | Get _ | Char _ | String _ | Int _
   | Float _ | Struct _ | StructDefault _ | Array _ | ArrayDefault _
@@ -501,7 +501,7 @@ let get_prec (i : _ Ast.instr) =
 let is_block (i : _ Ast.instr) =
   match i.desc with
   | Block _ | Loop _ | While _ | DoWhile _ | If _ | Try _ | TryTable _
-  | If_annotation _ | Dispatch _ ->
+  | If_annotation _ | Dispatch _ | Match _ ->
       true
   | Call _ | Unreachable | Nop | Hole | Null | Get _ | Set _ | Tee _
   | TailCall _ | Char _ | String _ | Int _ | Float _ | Cast _ | Test _
@@ -519,7 +519,7 @@ let rec starts_with_block_prec prec (i : 'a Ast.instr) =
   else
     match i.desc with
     | Block _ | Loop _ | While _ | DoWhile _ | If _ | Try _ | TryTable _
-    | If_annotation _ | Dispatch _ ->
+    | If_annotation _ | Dispatch _ | Match _ ->
         true
     | Call (i, _) | ArrayGet (i, _) | ArraySet (i, _, _) ->
         starts_with_block_prec CallAndFieldAccess i
@@ -614,6 +614,18 @@ let bracketed_labels pp ~before ?(after = fun () -> ()) cases default =
       hbox pp (fun () ->
           punctuation pp "]";
           after ()))
+
+let match_pattern pp (pat : Ast.match_pattern) =
+  match pat with
+  | MatchCast (bind, rt) ->
+      Option.iter
+        (fun x ->
+          identifier pp x.desc;
+          punctuation pp ":";
+          space pp ())
+        bind;
+      reftype pp rt
+  | MatchNull -> keyword pp "null"
 
 let rec instr prec pp (i : _ instr) =
   atomic_node pp (pp.locate i.info) @@ fun () ->
@@ -1027,6 +1039,36 @@ let rec instr prec pp (i : _ instr) =
                       body)
                   arms);
             newline pp ());
+          punctuation pp "}")
+  | Match { scrutinee; arms; default } ->
+      let arm pat_printer body =
+        newline pp ();
+        hvbox pp (fun () ->
+            box pp (fun () ->
+                pat_printer ();
+                space pp ();
+                punctuation pp "=>";
+                space pp ();
+                punctuation pp "{");
+            block_contents pp body;
+            punctuation pp "}")
+      in
+      hvbox pp (fun () ->
+          box pp (fun () ->
+              keyword pp "match";
+              space pp ();
+              (* Parenthesise a non-atomic scrutinee: the following '{' would
+                 otherwise read as a struct/block continuation. *)
+              instr Atom pp scrutinee;
+              space pp ();
+              punctuation pp "{");
+          indent pp indent_level (fun () ->
+              List.iter
+                (fun (pat, body) -> arm (fun () -> match_pattern pp pat) body)
+                arms;
+              (* The default arm is compulsory, so always print it. *)
+              arm (fun () -> operator pp "_") default);
+          newline pp ();
           punctuation pp "}")
   | Return i ->
       box pp ~indent:indent_level (fun () ->

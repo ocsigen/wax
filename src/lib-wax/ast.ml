@@ -72,6 +72,10 @@ type catch =
 
 type on_clause = OnLabel of ident * label | OnSwitch of ident
 
+(* A [match] arm pattern: a (optionally bound) reference-type test, or a null
+   test. See the [Match] node and {!Ast_utils.lower_match}. *)
+type match_pattern = MatchCast of ident option * reftype | MatchNull
+
 type 'info instr_desc =
   | Block of { label : label option; typ : functype; block : 'info instr list }
   | Loop of { label : label option; typ : functype; block : 'info instr list }
@@ -142,6 +146,11 @@ type 'info instr_desc =
       cases : label list;
       default : label;
       arms : (label * 'info instr list) list;
+    }
+  | Match of {
+      scrutinee : 'info instr;
+      arms : (match_pattern * 'info instr list) list;
+      default : 'info instr list;
     }
   | Br_on_null of label * 'info instr
   | Br_on_non_null of label * 'info instr

@@ -1,0 +1,10 @@
+type pair = { a: i32, b: i32 };
+
+fn get() -> &?eq { 0 as &i31; }
+
+fn f() -> i32 {
+    match get() {
+        p: &pair => { return p.a; }
+        _ => { return 0; }
+    }
+}

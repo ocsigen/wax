@@ -263,6 +263,30 @@ let fresh_loop_label ret =
   in
   pick 1
 
+(* Readable labels for a [match] lowering (see [Ast_utils.lower_match]): one
+   [arm]/[arm_1]/[arm_2]/… per arm, in order, then [default] for the escape
+   block. Each is bumped with a numeric suffix when an enclosing label (or an
+   already-chosen match label) takes the name, so an arm body's branch to an
+   outer label is never captured. *)
+let fresh_match_labels ret n =
+  let fresh used base =
+    let rec pick i =
+      let name = if i = 0 then base else base ^ string_of_int i in
+      if List.mem name used then pick (i + 1) else name
+    in
+    pick 0
+  in
+  let rec arms used i =
+    if i >= n then ([], used)
+    else
+      let base = if i = 0 then "arm" else Printf.sprintf "arm_%d" i in
+      let name = fresh used base in
+      let rest, used = arms (name :: used) (i + 1) in
+      (name :: rest, used)
+  in
+  let arm_names, used = arms ret.labels 0 in
+  arm_names @ [ fresh used "default" ]
+
 let ensure_type_is_defined ctx typ =
   match typ with
   | Ref { typ = Type nm; _ } when nm.desc.[0] = '<' ->
@@ -1158,6 +1182,25 @@ and instruction_desc ret ctx i : location Text.instr list =
       in
       List.concat_map (instruction ret ctx)
         (Wax.Ast_utils.lower_dowhile ~block_info:i.info ~label ~cond ~block)
+  | Match { scrutinee; arms; default } ->
+      (* Lower to the nested type-test ladder (see [Ast_utils.lower_match]) and
+         convert each statement. Readable [arm]/[default] labels (one per arm,
+         then the outer escape block) are picked fresh against the enclosing
+         labels — see {!fresh_match_labels}.
+
+         The synthesised wrapper instructions carry [block_info] holding the
+         scrutinee's type: each threaded [br_on_cast] derives its source type
+         from its operand's annotation, and every fall-through value in the chain
+         stays a subtype of the scrutinee, so the scrutinee type is a valid
+         source for them all. *)
+      let block_info = ([| Some (expr_type scrutinee) |], loc) in
+      let labels =
+        List.map
+          (fun name -> { desc = name; info = loc })
+          (fresh_match_labels ret (List.length arms))
+      in
+      List.concat_map (instruction ret ctx)
+        (Wax.Ast_utils.lower_match ~block_info ~labels ~scrutinee ~arms ~default)
   | Br_on_null (l, expr) ->
       folded loc (Br_on_null (label ret l)) (instruction ret ctx expr)
   | Br_on_non_null (l, expr) ->

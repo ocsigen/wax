@@ -37,6 +37,22 @@ val lower_dowhile :
     Inverse of the [do]-[while] case of {!Recover_loops}; used by both type
     checking and Wax-to-Wasm conversion. *)
 
+val lower_match :
+  block_info:'info ->
+  labels:Ast.label list ->
+  scrutinee:'info Ast.instr ->
+  arms:(Ast.match_pattern * 'info Ast.instr list) list ->
+  default:'info Ast.instr list ->
+  'info Ast.instr list
+(** [lower_match] desugars a [match] to a nested type-test ladder: the scrutinee
+    is evaluated once and threaded through a [br_on_cast]/[br_on_null] chain in
+    the innermost block, each test branching out to its arm's block (carrying
+    the narrowed value), with the arm body just after that block and an outer
+    void [escape] block past all the bodies. [labels] supplies [n+1] fresh block
+    labels — one per arm in order, then the escape label. It is the inverse of
+    {!Recover_match} and is used by both type checking and Wax-to-Wasm
+    conversion. *)
+
 val map_modulefield : ('a -> 'b) -> 'a Ast.modulefield -> 'b Ast.modulefield
 (** [map_modulefield f modulefield] applies the function [f] to the info field
     of instructions within [modulefield] and returns a new [modulefield]. *)

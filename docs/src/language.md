@@ -476,6 +476,55 @@ This is the shape compilers emit for a dense switch, so decompiling WAT/WASM to
 Wax recovers `dispatch` from it (and a Wax `dispatch` round-trips through the
 binary).
 
+### Match
+
+A `match` is a multi-way *type* test — the readable form of the nested type-test
+ladder that hand-written GC code uses to take apart a value of some general
+reference type. Each arm tests the scrutinee against a reference type, optionally
+binding the narrowed value, and runs its body when the test succeeds:
+
+```wax
+fn classify(v: &?eq) -> i32 {
+    match v {
+        p: &point => { return p.x + p.y; }   // v is a &point, bound to p
+        a: &bytes => { return a.length(); }  // else if v is a &bytes
+        null      => { return -1; }           // else if v is null
+        _         => { return 0; }            // otherwise (the default)
+    }
+}
+```
+
+A `x: &T` arm binds the narrowed value to `x` for its body; drop the `x:` to
+test without binding. A `null` arm matches a null reference, and the required
+`_` arm (as with a `dispatch`'s `else`) is the default. The scrutinee must be a
+reference type; it is evaluated once.
+
+`match` lowers to a nested ladder of blocks — one per arm plus an outer *escape*
+block. The scrutinee is threaded through a `br_on_cast` (or `br_on_null` for a
+`null` arm) chain in the innermost block; each test, on success, branches *out*
+to its arm's block carrying the narrowed value, and the arm body follows that
+block. As with `dispatch`, an arm's body must leave the `match` (here each
+`return`s); to continue past it, branch to an enclosing label. When no test
+matches, the chain falls through to a `br` past all the arm bodies, and the
+default follows the escape block as trailing code — so reaching it falls through
+to whatever comes after, including the rest of the enclosing block:
+
+```wax
+let r: i32;
+'done: do {
+    match v {
+        p: &point => { r = p.x; br 'done; }
+        a: &bytes => { r = a.length(); br 'done; }
+        _ => { r = 0; }   // also reached by a non-point, non-bytes v
+    }
+}
+```
+
+This is the shape hand-written GC code uses, so decompiling WAT/WASM to Wax
+recovers `match` from such a ladder — even a single type test that branches out
+and then falls through to a default (and a Wax `match` round-trips through the
+binary).
+
 ### Return
 
 ```wax

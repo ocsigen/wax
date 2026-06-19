@@ -1654,12 +1654,12 @@ let rec count_holes i =
   | Switch (_, _, l) ->
       List.fold_left (fun acc i -> acc + count_holes i) 0 l
   | Select (c, t, e) -> count_holes c + count_holes t + count_holes e
-  (* [dispatch], [while] and [do]-[while] are block-like: their operands and
-     bodies are checked inside the blocks they desugar to, so no hole at this
-     level draws from the stack. *)
+  (* [dispatch]/[match], [while] and [do]-[while] are block-like: their
+     operands/scrutinee and bodies are checked inside the blocks they desugar
+     to, so no hole at this level draws from the stack. *)
   | Block _ | Loop _ | While _ | DoWhile _ | TryTable _ | Try _
-  | If_annotation _ | Dispatch _ | StructDefault _ | Char _ | String _ | Int _
-  | Float _ | Get _ | Null | Unreachable | Nop
+  | If_annotation _ | Dispatch _ | Match _ | StructDefault _ | Char _ | String _
+  | Int _ | Float _ | Get _ | Null | Unreachable | Nop
   | Let (_, None)
   | Br (_, None)
   | Throw (_, None)
@@ -1678,8 +1678,8 @@ let rec check_hole_order_rec ctx i n =
       let n =
         match i.desc with
         | Block _ | Loop _ | While _ | DoWhile _ | TryTable _ | Try _
-        | If_annotation _ | Dispatch _ | StructDefault _ | Char _ | String _
-        | Int _ | Float _ | Get _ | Null | Unreachable | Nop
+        | If_annotation _ | Dispatch _ | Match _ | StructDefault _ | Char _
+        | String _ | Int _ | Float _ | Get _ | Null | Unreachable | Nop
         | Let (_, None)
         | Br (_, None)
         | Throw (_, None)
@@ -2117,6 +2117,64 @@ let rebuild_dowhile typed_list =
       | _ -> assert false)
   | _ -> assert false
 
+(* Peel a type-checked [match] lowering (see [Ast_utils.lower_match]) apart. The
+   lowering nests one block per arm inside an outer void [escape] block, each
+   wrapping the previous block (its result consumed for the previous arm) then
+   that arm's body; the innermost block holds the threaded test chain and the
+   [escape] branch, and the [default] follows the [escape] block as trailing
+   code. Descending from the [escape] block consumes the arms in reverse source
+   order. Returns the typed arm bodies (paired with the original patterns) and
+   the typed default. *)
+let rebuild_match typed_list arms =
+  match arms with
+  | [] -> ([], typed_list)
+  | _ ->
+      let block_body blk =
+        match blk.desc with
+        | Ast.Block { block; _ } -> block
+        | _ -> assert false
+      in
+      (* Strip a wrapper block's leading consume of its inner block, returning
+         that inner block and the arm body following it. *)
+      let unwrap pat stmts =
+        match (pat, stmts) with
+        | ( Ast.MatchCast (Some _, _),
+            { desc = Ast.Let (_, Some inner); _ } :: body ) ->
+            (inner, body)
+        | Ast.MatchCast (None, _), { desc = Ast.Set (None, inner); _ } :: body
+          ->
+            (inner, body)
+        | Ast.MatchNull, inner :: body -> (inner, body)
+        | _ -> assert false
+      in
+      let escape, default =
+        match typed_list with x :: r -> (x, r) | [] -> assert false
+      in
+      let rec peel blk = function
+        | [] -> [] (* [blk] is the innermost block (test chain + escape). *)
+        | (pat, _) :: rest_rev ->
+            let inner, arm_body = unwrap pat (block_body blk) in
+            (pat, arm_body) :: peel inner rest_rev
+      in
+      let arms_rev = peel escape (List.rev arms) in
+      (List.rev arms_rev, default)
+
+(* Synthesise the block labels for a [match] lowering: one per arm, then the
+   outer [escape] label ([n+1] in all). The [<…>] form is outside the source
+   identifier grammar, so it cannot capture a user branch. *)
+let match_labels info arms =
+  List.init
+    (List.length arms + 1)
+    (fun k -> { desc = Printf.sprintf "<match%d>" k; info })
+
+(* The scrutinee's external reference type, used as the arm blocks' result type
+   (a failed test forwards the scrutinee there). [None] if it is not a single
+   reference value. *)
+let match_scrut_reftype ctx scrut' =
+  match standalone_valtype ctx (expression_type ctx scrut') with
+  | Some { typ = Ref _ as typ; _ } -> Some typ
+  | _ -> None
+
 (* Set to [true] to trace each instruction as it is type-checked. *)
 let debug = false
 
@@ -2163,6 +2221,30 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       let index', arms' = rebuild_dispatch typed arms in
       return_statement i
         (Dispatch { index = index'; cases; default; arms = arms' })
+        [||]
+  | Match { scrutinee; arms; default } ->
+      (* Type-check against the nested type-test ladder (see
+         [Ast_utils.lower_match]): the scrutinee is threaded once through a
+         [br_on_cast]/[br_on_null] chain whose tests branch out to the arm
+         blocks. The arm bodies must diverge (a block's result is supplied only
+         on the matching-branch path); the lowered block check enforces this.
+         Rebuild a typed [Match] for the formatter and the identical re-lowering
+         in [To_wasm]. *)
+      let* scrut' = instruction ctx scrutinee in
+      (* The chain's casts require a reference scrutinee; flag a non-reference
+         here (the failed cast in the lowered form reports at the same spot). *)
+      (match match_scrut_reftype ctx scrut' with
+      | Some _ -> ()
+      | None -> Error.expected_ref ctx.diagnostics ~location:(snd scrut'.info));
+      let labels = match_labels i.info arms in
+      let lowered =
+        Ast_utils.lower_match ~block_info:i.info ~labels ~scrutinee ~arms
+          ~default
+      in
+      let typed = block ctx i.info None [||] [||] [||] lowered in
+      let arms', default' = rebuild_match typed arms in
+      return_statement i
+        (Match { scrutinee = scrut'; arms = arms'; default = default' })
         [||]
   | Loop { label; typ; block = instrs } ->
       if Array.length typ.params > 0 then
@@ -4676,6 +4758,25 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
       return_statement i
         (Dispatch { index = index'; cases; default; arms = arms' })
         [||]
+  | Match { scrutinee; arms; default } ->
+      (* As a statement, type-check the lowering (see [Ast_utils.lower_match]) in
+         the current stack, so the void escape block's fall-through (the no-match
+         path through the default) propagates. The scrutinee is block-like (no
+         outer holes), so it is type-checked on its own to flag a non-reference. *)
+      let _, scrut' = instruction ctx scrutinee [] in
+      (match match_scrut_reftype ctx scrut' with
+      | Some _ -> ()
+      | None -> Error.expected_ref ctx.diagnostics ~location:(snd scrut'.info));
+      let labels = match_labels i.info arms in
+      let lowered =
+        Ast_utils.lower_match ~block_info:i.info ~labels ~scrutinee ~arms
+          ~default
+      in
+      let* typed = block_contents ctx [||] lowered in
+      let arms', default' = rebuild_match typed arms in
+      return_statement i
+        (Match { scrutinee = scrut'; arms = arms'; default = default' })
+        [||]
   | TailCall _ | Br _ | Br_table _ | Throw _ | ThrowRef _ | Return _ ->
       let count = count_holes i in
       let* args = pop_many ctx i count [] in
@@ -4874,13 +4975,13 @@ let rec check_constant_instruction ctx i =
         _,
         _ )
   | Block _ | Loop _ | While _ | DoWhile _ | If _ | TryTable _ | Try _
-  | Dispatch _ | Unreachable | Nop | Hole | Set _ | Tee _ | Call _ | TailCall _
-  | Cast _ | Test _ | NonNull _ | StructGet _ | StructSet _ | ArraySegment _
-  | ArrayGet _ | ArraySet _ | Let _ | Br _ | Br_if _ | Br_table _ | Br_on_null _
-  | Br_on_non_null _ | Br_on_cast _ | Br_on_cast_fail _ | Throw _ | ThrowRef _
-  | ContNew _ | ContBind _ | Suspend _ | Resume _ | ResumeThrow _
-  | ResumeThrowRef _ | Switch _ | Return _ | Sequence _ | Select _
-  | If_annotation _ ->
+  | Dispatch _ | Match _ | Unreachable | Nop | Hole | Set _ | Tee _ | Call _
+  | TailCall _ | Cast _ | Test _ | NonNull _ | StructGet _ | StructSet _
+  | ArraySegment _ | ArrayGet _ | ArraySet _ | Let _ | Br _ | Br_if _
+  | Br_table _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
+  | Br_on_cast_fail _ | Throw _ | ThrowRef _ | ContNew _ | ContBind _
+  | Suspend _ | Resume _ | ResumeThrow _ | ResumeThrowRef _ | Switch _
+  | Return _ | Sequence _ | Select _ | If_annotation _ ->
       Error.constant_expression_required ctx.diagnostics ~location
 
 type ('before, 'after) phased =
@@ -5553,6 +5654,10 @@ let rec instr_has_conditional (i : (_ instr_desc, _) annotated) =
   | Dispatch { index; arms; _ } ->
       instr_has_conditional index
       || List.exists (fun (_, body) -> any body) arms
+  | Match { scrutinee; arms; default } ->
+      instr_has_conditional scrutinee
+      || List.exists (fun (_, body) -> any body) arms
+      || any default
   | ContBind (_, _, l)
   | Suspend (_, l)
   | Resume (_, _, l)
@@ -5712,6 +5817,13 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
             default;
             arms = List.map (fun (l, body) -> (l, sinstrs asm body)) arms;
           }
+    | Match { scrutinee; arms; default } ->
+        Match
+          {
+            scrutinee = sone asm scrutinee;
+            arms = List.map (fun (pat, body) -> (pat, sinstrs asm body)) arms;
+            default = sinstrs asm default;
+          }
     | Br_on_null (l, v) -> Br_on_null (l, sone asm v)
     | Br_on_non_null (l, v) -> Br_on_non_null (l, sone asm v)
     | Br_on_cast (l, t, v) -> Br_on_cast (l, t, sone asm v)
@@ -5774,6 +5886,8 @@ let sub_instrs (i : (_ instr_desc, _) annotated) =
       then_body @ Option.value ~default:[] else_body
   | Sequence l | ArrayFixed (_, l) -> l
   | Dispatch { index; arms; _ } -> index :: List.concat_map snd arms
+  | Match { scrutinee; arms; default } ->
+      (scrutinee :: List.concat_map snd arms) @ default
   | ContBind (_, _, l)
   | Suspend (_, l)
   | Resume (_, _, l)

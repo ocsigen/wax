@@ -123,6 +123,13 @@ let module_ ctx env (fields : location Ast.module_) :
             default;
             arms = List.map (fun (l, body) -> (l, sinstrs body)) arms;
           }
+    | Match { scrutinee; arms; default } ->
+        Match
+          {
+            scrutinee = sone scrutinee;
+            arms = List.map (fun (pat, body) -> (pat, sinstrs body)) arms;
+            default = sinstrs default;
+          }
     | Br_on_null (l, v) -> Br_on_null (l, sone v)
     | Br_on_non_null (l, v) -> Br_on_non_null (l, sone v)
     | Br_on_cast (l, t, v) -> Br_on_cast (l, t, sone v)

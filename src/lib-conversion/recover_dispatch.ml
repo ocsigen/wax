@@ -137,6 +137,13 @@ and rewrite_desc (desc : location instr_desc) : location instr_desc =
           default;
           arms = List.map (fun (l, b) -> (l, rewrite_list b)) arms;
         }
+  | Match { scrutinee; arms; default } ->
+      Match
+        {
+          scrutinee = rewrite_instr scrutinee;
+          arms = List.map (fun (p, b) -> (p, rewrite_list b)) arms;
+          default = rewrite_list default;
+        }
   | If_annotation { cond; then_body; else_body } ->
       If_annotation
         {

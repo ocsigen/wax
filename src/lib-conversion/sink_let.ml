@@ -61,6 +61,10 @@ let rec occurs name i =
       in_list l
   | Dispatch { index; arms; _ } ->
       occurs name index || List.exists (fun (_, b) -> in_list b) arms
+  | Match { scrutinee; arms; default } ->
+      occurs name scrutinee
+      || List.exists (fun (_, b) -> in_list b) arms
+      || in_list default
   | Let (_, body) -> in_opt body
   | Br (_, o) | Throw (_, o) | Return o -> in_opt o
   | If_annotation { then_body; else_body; _ } -> (
@@ -179,6 +183,13 @@ let rec first_access name i =
   | Dispatch { index; arms; _ } ->
       fst2 (first_access name index)
         (List.fold_left (fun acc (_, b) -> agree acc (fl b)) None arms)
+  | Match { scrutinee; arms; default } ->
+      (* The scrutinee is evaluated first; the arms and default are the
+         (mutually exclusive) runtime-dependent alternatives, so commit only
+         when they agree. *)
+      fst2
+        (first_access name scrutinee)
+        (List.fold_left (fun acc (_, b) -> agree acc (fl b)) (fl default) arms)
   | Let (_, body) -> fo body
   | Br (_, o) | Throw (_, o) | Return o -> fo o
   | If_annotation { then_body; else_body; _ } ->

@@ -1,0 +1,11 @@
+type pair = { a: i32, b: i32 };
+type ints = [mut i32];
+
+fn classify(v: &?eq) -> i32 {
+    match v {
+        p: &pair => { return p.a + p.b; }
+        a: &ints => { return a.length(); }
+        null => { return -1; }
+        _ => { return 0; }
+    }
+}

@@ -234,6 +234,52 @@ fn rgb_channel(color: i32, value: i32) -> i32 {
     (i32.shl (i32.and (local.get $value) (i32.const 255)) (i32.const 16))))
 ```
 
+## Type Match
+
+### Wax
+
+```wax
+type cell = { value: i32 };
+type cons = { head: &eq, tail: &?eq };
+
+#[export = "sum_list"]
+fn sum_list(v: &?eq) -> i32 {
+    match v {
+        c: &cons => { return (c.head as &cell).value + sum_list(c.tail); }
+        x: &cell => { return x.value; }
+        _ => { return 0; }
+    }
+}
+```
+
+### Equivalent WAT
+
+The scrutinee is evaluated once and threaded through a `br_on_cast` chain in the
+innermost block; each test branches out to its arm's block (named by a readable
+`$arm`/`$default` label, picked fresh so it cannot capture a user branch)
+carrying the narrowed value, and the default trails the outer escape block:
+
+```wat
+(func $sum_list (export "sum_list") (param $v eqref) (result i32)
+  (local $x (ref $cell)) (local $c (ref $cons))
+  (block $default
+    (local.set $x
+      (block $arm_1 (result (ref $cell))
+        (local.set $c
+          (block $arm (result (ref $cons))
+            (drop
+              (br_on_cast $arm_1 eqref (ref $cell)
+                (br_on_cast $arm eqref (ref $cons) (local.get $v))))
+            (br $default)))
+        (return
+          (i32.add
+            (struct.get $cell $value
+              (ref.cast (ref $cell) (struct.get $cons $head (local.get $c))))
+            (call $sum_list (struct.get $cons $tail (local.get $c)))))))
+    (return (struct.get $cell $value (local.get $x))))
+  (return (i32.const 0)))
+```
+
 ## Structs and Methods
 
 ### Wax

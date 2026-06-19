@@ -87,6 +87,16 @@ let rec map_instr f instr =
             arms =
               List.map (fun (l, body) -> (l, List.map (map_instr f) body)) arms;
           }
+    | Match { scrutinee; arms; default } ->
+        Match
+          {
+            scrutinee = map_instr f scrutinee;
+            arms =
+              List.map
+                (fun (pat, body) -> (pat, List.map (map_instr f) body))
+                arms;
+            default = List.map (map_instr f) default;
+          }
     | Br_on_null (label, v) -> Br_on_null (label, map_instr f v)
     | Br_on_non_null (label, v) -> Br_on_non_null (label, map_instr f v)
     | Br_on_cast (label, t, v) -> Br_on_cast (label, t, map_instr f v)
@@ -196,6 +206,102 @@ let lower_dowhile ~block_info ~label ~cond ~block =
            block = block @ [ mk (Br_if (l, cond)) ];
          });
   ]
+
+(* Lower a [match] to the conventional nested type-test ladder that compilers
+   emit (and that hand-written GC code uses): one nested block per arm, plus an
+   outer void [escape] block. The scrutinee is evaluated *once* and threaded
+   through a chain of [br_on_cast] (or [br_on_null] for a [null] arm) sitting in
+   the innermost block — each test, on success, branches *out* to its arm's block
+   carrying the narrowed value, and on failure leaves the (progressively
+   narrowed) value for the next test. The first arm is innermost: branching to it
+   exits one block and runs its body (placed just after the block), so arm [i]'s
+   body sits in arm [i+1]'s block — and the last arm's body sits in the [escape]
+   block.
+
+   A bound cast arm binds its block's result ([let x = …]); an unbound cast arm
+   drops it; a [null] arm's block is void. After every test fails the innermost
+   block drops the final value and [br escape]s past all the arm bodies; the
+   [default] then follows the (void) [escape] block as trailing code. So, as
+   before, each arm body must leave the [match] (diverge) while the default /
+   no-match path falls through after the [match] — and its stack effect (in
+   particular, divergence) propagates, exactly as the trailing first-arm body
+   does for {!lower_dispatch}.
+
+   [labels] supplies [n+1] fresh block labels: one per arm (in order) then the
+   [escape] label. This is the exact inverse of {!Recover_match}: a recovered
+   match re-lowers to the original blocks. *)
+let lower_match ~block_info ~labels ~scrutinee ~arms ~default =
+  let mk desc = { desc; info = block_info } in
+  let void = { params = [||]; results = [||] } in
+  let res = function
+    | MatchCast (_, rt) -> { params = [||]; results = [| Ref rt |] }
+    | MatchNull -> void
+  in
+  (* Consume a wrapped block's result for arm [pat], then run [body]. *)
+  let consume blk pat body =
+    match pat with
+    | MatchCast ((Some _ as bind), rt) ->
+        mk (Let ([ (bind, Some (Ref rt)) ], Some blk)) :: body
+    | MatchCast (None, _) -> mk (Set (None, blk)) :: body
+    | MatchNull -> blk :: body
+  in
+  match arms with
+  | [] -> default
+  | (p0, b0) :: rest_arms ->
+      let rec unsnoc = function
+        | [ x ] -> ([], x)
+        | x :: r ->
+            let init, last = unsnoc r in
+            (x :: init, last)
+        | [] -> assert false
+      in
+      let arm_labels, escape = unsnoc labels in
+      let l0, rest_labels =
+        match arm_labels with x :: r -> (x, r) | [] -> assert false
+      in
+      (* Threaded test chain (innermost operand the scrutinee, first test
+         innermost): [br_on_cast L0; br_on_cast L1; …]. *)
+      let chain =
+        List.fold_left2
+          (fun operand lbl (pat, _) ->
+            match pat with
+            | MatchCast (_, rt) -> mk (Br_on_cast (lbl, rt, operand))
+            | MatchNull -> mk (Br_on_null (lbl, operand)))
+          scrutinee arm_labels arms
+      in
+      (* Innermost block drops the final fall-through value then escapes; the
+         default follows the [escape] block as trailing code. *)
+      let inner = [ mk (Set (None, chain)); mk (Br (escape, None)) ] in
+      let block_l0 =
+        mk (Block { label = Some l0; typ = res p0; block = inner })
+      in
+      (* Wrap outward: each block holds the previous block (its result consumed
+         for the previous arm) followed by that arm's body. *)
+      let rec wrap prev_block prev_pat prev_body labels arms =
+        match (labels, arms) with
+        | [], [] ->
+            mk
+              (Block
+                 {
+                   label = Some escape;
+                   typ = void;
+                   block = consume prev_block prev_pat prev_body;
+                 })
+            :: default
+        | lbl :: labels', (pat, body) :: arms' ->
+            let blk =
+              mk
+                (Block
+                   {
+                     label = Some lbl;
+                     typ = res pat;
+                     block = consume prev_block prev_pat prev_body;
+                   })
+            in
+            wrap blk pat body labels' arms'
+        | _ -> assert false
+      in
+      wrap block_l0 p0 b0 rest_labels rest_arms
 
 let rec map_modulefield f field =
   match field with

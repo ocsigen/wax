@@ -1,0 +1,7 @@
+fn g(x: i32) {
+    match x {
+        &eq => { return; }
+        null => { return; }
+        _ => { return; }
+    }
+}

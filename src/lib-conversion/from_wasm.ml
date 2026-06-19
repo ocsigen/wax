@@ -2607,10 +2607,11 @@ let module_ ?(strict_constants = false) diagnostics (_, fields) =
       | _ -> ()
     in
     List.iter collect_field fields;
-    Sink_let.module_
-      (Recover_loops.module_
-         (Recover_dispatch.module_
-            (List.concat_map (fun f -> modulefield ctx export_tbl f) fields)))
+    Recover_match.module_
+      (Sink_let.module_
+         (Recover_loops.module_
+            (Recover_dispatch.module_
+               (List.concat_map (fun f -> modulefield ctx export_tbl f) fields))))
   with Numeric_ref_in_conditional location ->
     Utils.Diagnostic.report diagnostics ~location ~severity:Error
       ~message:(fun f () ->

@@ -1,0 +1,5 @@
+fn g(v: &?eq) {
+    match v {
+        &eq => { return; }
+    }
+}
