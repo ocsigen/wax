@@ -591,22 +591,8 @@ plaininstr:
   { with_loc $sloc (StructDefault (Some x)) }
 | "{" ".." "}"
   { with_loc $sloc (StructDefault (None)) }
-| "[" l = expression_list "]"
-  { with_loc $sloc (ArrayFixed (None, l)) }
-| "[" i1 = expression ";" i2 = length_expression "]"
-  { with_loc $sloc (Array (None, i1, i2)) }
-| "[" ".." ";" i = length_expression "]"
-  { with_loc $sloc (ArrayDefault (None, i)) }
-| "[" d = ident "@" off = expression ";" len = length_expression "]"
-  { with_loc $sloc (ArraySegment (None, d, off, len)) }
-| "[" t = ident "|" l = expression_list "]"
-  { with_loc $sloc (ArrayFixed (Some t, l)) }
-| "[" t = ident "|" i1 = expression ";" i2 = length_expression "]"
-  { with_loc $sloc (Array (Some t, i1, i2)) }
-| "[" t = ident "|" ".." ";" i = length_expression "]"
-  { with_loc $sloc (ArrayDefault (Some t, i)) }
-| "[" t = ident "|" d = ident "@" off = expression ";" len = length_expression "]"
-  { with_loc $sloc (ArraySegment (Some t, d, off, len)) }
+| "[" b = array_body "]" { with_loc $sloc (b None) }
+| "[" t = ident "|" b = array_body "]" { with_loc $sloc (b (Some t)) }
 | x = ident ":=" i = expression { with_loc $sloc (Tee (x, i)) }
 | i = expression AS t = cast_type { with_loc $sloc (Cast(i, t)) }
 | i = expression IS t = reference_type { with_loc $sloc (Test(i, t)) }
@@ -672,6 +658,13 @@ plaininstr:
 | o = "+" i = expression { unop $sloc o $loc(o) Pos i } %prec prec_unary
 | o = "-" i = expression { unop $sloc o $loc(o) Neg i } %prec prec_unary
 | i = expression "!" { with_loc $sloc (NonNull i) }
+
+array_body:
+| l = expression_list { fun t -> ArrayFixed (t, l) }
+| i1 = expression ";" i2 = length_expression { fun t -> Array (t, i1, i2) }
+| ".." ";" i = length_expression { fun t -> ArrayDefault (t, i) }
+| d = ident "@" off = expression ";" len = length_expression
+  { fun t -> ArraySegment (t, d, off, len) }
 
 expression:
 | i = blockinstr %prec prec_block { i }
