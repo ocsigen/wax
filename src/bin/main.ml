@@ -380,9 +380,20 @@ let resolve_format file_opt format_opt ~default =
       match detect_format file with Some fmt -> fmt | None -> default)
   | None, None -> default
 
+(* Build a warning policy from the [-W] specs, applied left to right (the names
+   are already validated by [warn_option]'s converter). *)
+let build_policy specs =
+  List.fold_left
+    (fun policy (name, level) ->
+      match Utils.Warning.set policy name level with
+      | Ok policy -> policy
+      | Error _ -> policy)
+    Utils.Warning.default_policy specs
+
 let convert input_file output_file input_format_opt output_format_opt validate
-    strict_validate color opt_source_map_file fold_mode defines debug =
+    strict_validate color opt_source_map_file fold_mode defines warnings debug =
   Wasm.Validation.validate_refs := strict_validate;
+  Utils.Diagnostic.set_policy (build_policy warnings);
   Utils.Debug.enable debug;
   let defines = Wasm.Cond_specialize.of_list defines in
   let std file = Option.bind file (fun f -> if f = "-" then None else Some f) in
@@ -425,7 +436,9 @@ let convert input_file output_file input_format_opt output_format_opt validate
    is written and files that are not already formatted are listed (a non-zero
    exit status reports this); otherwise exactly one file is formatted to stdout.
    [validate] additionally type-checks (Wax) / well-formedness-checks (Wasm). *)
-let format inplace check format_opt validate color fold_mode debug files =
+let format inplace check format_opt validate color fold_mode warnings debug
+    files =
+  Utils.Diagnostic.set_policy (build_policy warnings);
   Utils.Debug.enable debug;
   if inplace && check then (
     Printf.eprintf "--inplace and --check cannot be combined.\n";
@@ -488,8 +501,10 @@ let format inplace check format_opt validate color fold_mode debug files =
    without producing any output, reporting diagnostics and exiting with a
    non-zero status if any file fails. [format_opt] forces the format; otherwise
    it is detected from the extension. *)
-let check format_opt strict color debug files =
+let check format_opt strict color warnings debug files =
   Wasm.Validation.validate_refs := strict;
+  let policy = build_policy warnings in
+  Utils.Diagnostic.set_policy policy;
   Utils.Debug.enable debug;
   let check_one file =
     match
@@ -531,18 +546,25 @@ let check format_opt strict color debug files =
                        Utils.Diagnostic.report d
                          ~location:(Utils.Diagnostic.entry_location e)
                          ~severity:(Utils.Diagnostic.entry_severity e)
+                         ?warning:(Utils.Diagnostic.entry_warning e)
                          ?hint:(Utils.Diagnostic.entry_hint e)
                          ~related:(Utils.Diagnostic.entry_related e)
                          ~message:(Utils.Diagnostic.entry_message e)
                          ())
                      entries));
             (* Warnings (e.g. unused locals) are reported but do not fail the
-               check; only errors do. *)
-            not
-              (List.exists
-                 (fun e ->
-                   Utils.Diagnostic.entry_severity e = Utils.Diagnostic.Error)
-                 entries))
+               check; only errors do — including a warning promoted to an error
+               by the policy (e.g. -W unused-local=error). *)
+            let is_error e =
+              match Utils.Diagnostic.entry_severity e with
+              | Utils.Diagnostic.Error -> true
+              | Utils.Diagnostic.Warning -> (
+                  match Utils.Diagnostic.entry_warning e with
+                  | Some w ->
+                      Utils.Warning.resolve policy w = Utils.Warning.Error
+                  | None -> false)
+            in
+            not (List.exists is_error entries))
   in
   if not (List.fold_left (fun ok file -> check_one file && ok) true files) then
     exit 123
@@ -687,6 +709,41 @@ let debug_option =
     & opt_all (list category_conv) []
     & info [ "debug" ] ~docv:"CATEGORY" ~doc)
 
+(* Define the --warn/-W option (set the level of a named warning or group) *)
+let warn_option =
+  let doc =
+    "Set the reporting level of a warning, specializing how diagnostics are \
+     handled. $(i,NAME) is a warning name (e.g. unused-local), a group (e.g. \
+     unused), or $(b,all); $(i,LEVEL) is $(b,hidden), $(b,warning), or \
+     $(b,error). Later settings override earlier ones, so $(b,-W all=error -W \
+     unused-local=warning) makes every warning fatal except unused locals. \
+     Repeatable."
+  in
+  let warn_conv =
+    let parse s =
+      match Utils.Warning.parse_spec s with
+      | Error e -> Error (`Msg e)
+      | Ok (name, level) -> (
+          (* Reject an unknown name now (rather than when building the policy)
+             so the error is reported like any other argument error. *)
+          match Utils.Warning.set Utils.Warning.default_policy name level with
+          | Ok _ -> Ok (name, level)
+          | Error e -> Error (`Msg e))
+    in
+    let print ppf ((name, level) : string * Utils.Warning.level) =
+      let level =
+        match level with
+        | Hidden -> "hidden"
+        | Displayed -> "warning"
+        | Error -> "error"
+      in
+      Format.fprintf ppf "%s=%s" name level
+    in
+    Arg.conv (parse, print)
+  in
+  Arg.(
+    value & opt_all warn_conv [] & info [ "W"; "warn" ] ~docv:"NAME=LEVEL" ~doc)
+
 (* Define the --inplace/-i flag (format command) *)
 let inplace_flag =
   let doc = "Write the formatted output back to each input file." in
@@ -739,9 +796,10 @@ let convert_term =
   and+ source_map_file = source_map_file_option
   and+ fold_mode = fold_mode_option
   and+ defines = define_option
+  and+ warnings = warn_option
   and+ debug = debug_option in
   convert input output in_fmt out_fmt validate strict_validate color
-    source_map_file fold_mode defines (List.concat debug)
+    source_map_file fold_mode defines warnings (List.concat debug)
 
 let format_term =
   let+ inplace = inplace_flag
@@ -750,10 +808,11 @@ let format_term =
   and+ validate = validate_flag
   and+ color = color_option
   and+ fold_mode = fold_mode_option
+  and+ warnings = warn_option
   and+ debug = debug_option
   and+ files = format_files in
-  format inplace check format_opt validate color fold_mode (List.concat debug)
-    files
+  format inplace check format_opt validate color fold_mode warnings
+    (List.concat debug) files
 
 let format_cmd =
   let doc = "Format WebAssembly source files (.wat, .wasm, .wax)" in
@@ -787,9 +846,10 @@ let check_term =
   let+ format_opt = format_input
   and+ strict = strict_validate_flag
   and+ color = color_option
+  and+ warnings = warn_option
   and+ debug = debug_option
   and+ files = check_files in
-  check format_opt strict color (List.concat debug) files
+  check format_opt strict color warnings (List.concat debug) files
 
 let check_cmd =
   let doc = "Validate WebAssembly files without producing output" in

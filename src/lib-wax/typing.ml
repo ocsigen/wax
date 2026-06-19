@@ -118,12 +118,13 @@ module Error = struct
       fmt
 
   (* Warnings share the same envelope as [report] but with severity [Warning],
-     so they are printed without aborting the pass. *)
-  let warn ?universal ?hint ?related context ~location fmt =
+     so they are printed without aborting the pass. [warning] names the warning
+     so its level can be configured (see {!Utils.Warning}). *)
+  let warn ?warning ?universal ?hint ?related context ~location fmt =
     Format.kdprintf
       (fun msg ->
-        Diagnostic.report context ~location ~severity:Warning ?universal ?hint
-          ?related
+        Diagnostic.report context ~location ~severity:Warning ?warning
+          ?universal ?hint ?related
           ~message:(fun f () -> msg f)
           ())
       fmt
@@ -131,7 +132,7 @@ module Error = struct
   (* A local declared by a [let] but never read. Prefix its name with [_] to
      silence the warning. *)
   let unused_local context ~location name =
-    warn ~universal:true context ~location
+    warn ~warning:Utils.Warning.Unused_local ~universal:true context ~location
       "The local variable %a is never used." print_name name
 
   let empty_stack context ~location =

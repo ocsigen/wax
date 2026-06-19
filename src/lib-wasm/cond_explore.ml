@@ -111,6 +111,7 @@ let check_all diagnostics ?truncation_location
       Diagnostic.report diagnostics
         ~location:(Diagnostic.entry_location e)
         ~severity:(Diagnostic.entry_severity e)
+        ?warning:(Diagnostic.entry_warning e)
         ?hint
         ~related:(Diagnostic.entry_related e)
         ~message:(Diagnostic.entry_message e)
@@ -120,6 +121,7 @@ let check_all diagnostics ?truncation_location
     match truncation_location with
     | Some location ->
         Diagnostic.report diagnostics ~location ~severity:Warning
+          ~warning:Utils.Warning.Truncated_coverage
           ~message:(fun fmt () ->
             Format.fprintf fmt
               "Too many conditional configurations (over %d); coverage was \

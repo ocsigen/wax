@@ -1,0 +1,53 @@
+(** Named, groupable warnings whose reporting level is configurable.
+
+    Each diagnostic warning has a stable {e name} (e.g. [unused-local]) and may
+    belong to one or more {e groups} (e.g. [unused]). A {!policy} maps each
+    warning to a {!level} — hidden, displayed, or promoted to an error — so the
+    same warning can be silenced, shown, or made fatal depending on the
+    invocation (see the [-W] command-line option). *)
+
+type t =
+  | Unused_local  (** A local that is declared but never read. *)
+  | Truncated_coverage
+      (** Path-sensitive validation gave up after too many conditional
+          configurations. *)
+
+val all : t list
+(** Every named warning. *)
+
+val name : t -> string
+(** The stable, hyphenated name of a warning (e.g. ["unused-local"]). *)
+
+val description : t -> string
+(** A one-line human-readable description, used in help text. *)
+
+(** {1 Levels and policies} *)
+
+type level =
+  | Hidden  (** Suppress the warning entirely. *)
+  | Displayed  (** Report it as a warning (the default). *)
+  | Error  (** Promote it to an error (fails the run). *)
+
+type policy
+(** A mapping from each warning to its {!level}. *)
+
+val default_policy : policy
+(** The policy in which every warning is {!Displayed}. *)
+
+val resolve : policy -> t -> level
+(** [resolve policy w] is the level configured for [w]. *)
+
+val set : policy -> string -> level -> (policy, string) result
+(** [set policy name level] returns [policy] updated so that the warning named
+    [name] (or every warning in the group named [name], including the special
+    group ["all"]) has level [level]. Returns [Error msg] if [name] matches no
+    known warning or group. Later calls override earlier ones. *)
+
+val parse_spec : string -> (string * level, string) result
+(** [parse_spec s] parses a [-W] argument of the form [NAME=LEVEL] into its
+    warning/group name and level. [LEVEL] is one of [hidden], [warning], or
+    [error]. Returns [Error msg] on a malformed spec or unknown level. *)
+
+val groups : string list
+(** The names of the warning groups (excluding the special ["all"]), for help
+    text. *)

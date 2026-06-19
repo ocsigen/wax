@@ -38,7 +38,7 @@ files (see [Formatting](#formatting)) and `check` validates them (see
     - Perform validation during conversion.
     - For Wax: Runs type checking.
     - For Wasm Text: Runs well-formedness checks.
-    - Reports a warning for any local that is declared but never read — a Wax `let` binding, or a Wasm Text `(local …)`. Prefix the name with `_` (e.g. `let _x = …`, `(local $_x i32)`) to mark it intentionally unused and silence the warning; function parameters are never reported.
+    - Reports a warning for any local that is declared but never read — a Wax `let` binding, or a Wasm Text `(local …)`. Prefix the name with `_` (e.g. `let _x = …`, `(local $_x i32)`) to mark it intentionally unused and silence the warning; function parameters are never reported. This `unused-local` warning can be silenced, kept, or promoted to an error with [`-W`](#options) (e.g. `-W unused-local=error`).
     - For input containing conditional annotations (`#[if]` / `(@if ...)`), every reachable combination of conditions is checked independently, and each error is reported with the assumption (`reachable when ...`) under which it occurs.
     - Disabled by default.
 
@@ -56,6 +56,23 @@ files (see [Formatting](#formatting)) and `check` validates them (see
       `NAME=VALUE` sets a string.
     - Repeatable, to set several variables. Has no effect on Wasm binary input
       (which carries no conditionals).
+
+- **`-W`** *NAME=LEVEL*, **`--warn`** *NAME=LEVEL*
+    - Set the reporting level of a warning produced during validation.
+    - *NAME* is a single warning, a group, or `all`:
+        - `unused-local` (group `unused`) — a local that is declared but never
+          read.
+        - `truncated-coverage` — path-sensitive validation gave up after too
+          many conditional configurations.
+    - *LEVEL* is one of:
+        - `hidden` — suppress the warning entirely.
+        - `warning` — report it as a warning (the default).
+        - `error` — promote it to an error, so the run fails.
+    - Repeatable; later settings override earlier ones. For example,
+      `-W all=error -W unused-local=warning` makes every warning fatal except
+      unused locals.
+    - Warnings are produced only while validating, so `-W` takes effect together
+      with `--validate` (for `convert` / `format`) and always for `check`.
 
 - **`--color`** *WHEN*
     - Colorize output.
@@ -135,6 +152,8 @@ wax format [OPTIONS] FILE…
       the detection from each file's extension.
 - **`-v`**, **`--validate`**
     - Also type-check (Wax) / well-formedness-check (Wasm) while formatting.
+- **`-W`** *NAME=LEVEL*, **`--warn`** *NAME=LEVEL* — set a warning's level, as
+  above (takes effect together with `--validate`).
 - **`--color`** *WHEN* — as above (ignored when writing back in place).
 - **`--fold`** / **`--unfold`** — as above.
 - **`--debug`** *CATEGORY* — as above.
@@ -162,7 +181,8 @@ The `check` subcommand validates files (type-checking for Wax, well-formedness
 for Wasm) without producing any output, reporting diagnostics and exiting with a
 non-zero status if any file fails. It takes one or more files. Unused-local
 warnings (see [`--validate`](#options)) are reported too, but do not by
-themselves cause a non-zero exit.
+themselves cause a non-zero exit — unless promoted to an error with
+[`-W`](#options) (e.g. `wax check -W unused-local=error src/*.wax`).
 
 ```sh
 wax check [OPTIONS] FILE…
@@ -174,6 +194,8 @@ wax check [OPTIONS] FILE…
   all files, overriding extension detection.
 - **`-s`**, **`--strict-validate`** — strict reference validation (for Wasm
   Text), as above.
+- **`-W`** *NAME=LEVEL*, **`--warn`** *NAME=LEVEL* — set a warning's level, as
+  above.
 - **`--color`** *WHEN* — as above.
 - **`--debug`** *CATEGORY* — as above.
 

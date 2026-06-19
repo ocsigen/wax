@@ -458,7 +458,8 @@ module Error = struct
   (* A local that is declared but never read. Prefix its name with [_] to
      silence the warning. *)
   let unused_local context ~location name =
-    Diagnostic.report context ~location ~severity:Warning ~universal:true
+    Diagnostic.report context ~location ~severity:Warning
+      ~warning:Warning.Unused_local ~universal:true
       ~message:(fun f () ->
         match name with
         | Some id ->

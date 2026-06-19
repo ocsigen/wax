@@ -12,29 +12,41 @@ val run :
   ?related:label list ->
   ?exit:bool ->
   ?output:Format.formatter ->
+  ?policy:Warning.policy ->
   (context -> 'a) ->
   'a
-(** [run ?color ~source ?related ?exit ?output f] runs the diagnostic context
-    [f]. [source] is the source code for the diagnostics (if available). *)
+(** [run ?color ~source ?related ?exit ?output ?policy f] runs the diagnostic
+    context [f]. [source] is the source code for the diagnostics (if available).
+    [policy] sets the level — hidden, displayed, or promoted to an error — of
+    each {e named} warning reported with [report]'s [warning] argument; it
+    defaults to the policy installed by {!set_policy}. *)
+
+val set_policy : Warning.policy -> unit
+(** [set_policy policy] installs [policy] as the default for every context
+    created afterwards (those that do not pass an explicit [?policy]). Intended
+    to be called once, from the command line. *)
 
 val report :
   context ->
   location:Ast.location ->
   severity:severity ->
+  ?warning:Warning.t ->
   ?universal:bool ->
   ?hint:(Format.formatter -> unit -> unit) ->
   ?related:label list ->
   message:(Format.formatter -> unit -> unit) ->
   unit ->
   unit
-(** [report context ~location ~severity ?universal ?hint ?related ~message ()]
-    reports a diagnostic. [universal] (default [false]) marks a diagnostic that
-    is meaningful only when it holds in {e every} reachable configuration;
-    during path-sensitive exploration (see {!Cond_explore.check_all}) such a
-    diagnostic is reported only if it arises under all assumptions, not just
-    some. The unused-local warning is universal: a local used in one conditional
-    branch is not "unused" merely because another configuration prunes that
-    branch. *)
+(** [report context ~location ~severity ?warning ?universal ?hint ?related
+     ~message ()] reports a diagnostic. [warning] names the warning so the
+    context's policy can decide its level (hide it, display it, or promote it to
+    an error); it is meaningful only with [~severity:Warning] and is ignored for
+    errors. [universal] (default [false]) marks a diagnostic that is meaningful
+    only when it holds in {e every} reachable configuration; during
+    path-sensitive exploration (see {!Cond_explore.check_all}) such a diagnostic
+    is reported only if it arises under all assumptions, not just some. The
+    unused-local warning is universal: a local used in one conditional branch is
+    not "unused" merely because another configuration prunes that branch. *)
 
 exception Aborted
 (** Raised by {!abort} to unwind a pass that cannot meaningfully continue after
@@ -66,6 +78,7 @@ val collected : context -> entry list
 
 val entry_location : entry -> Ast.location
 val entry_severity : entry -> severity
+val entry_warning : entry -> Warning.t option
 val entry_universal : entry -> bool
 val entry_message : entry -> Format.formatter -> unit -> unit
 val entry_hint : entry -> (Format.formatter -> unit -> unit) option

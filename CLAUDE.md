@@ -50,6 +50,7 @@ bare `wax <file>` form working — edit that heuristic if adding subcommands.
 | `-v` | `--validate` | Enable type checking (disabled by default) |
 | `-s` | `--strict-validate` | Stricter validation |
 | `-D` | `--define` | Set a conditional-compilation variable (`NAME`, `NAME=true/false`, `NAME=N.N.N`, `NAME=STR`); specializes `#[if]`/`(@if)` annotations. Repeatable |
+| `-W` | `--warn` | Set a warning's level: `NAME=LEVEL` where `NAME` is a warning (`unused-local`, `truncated-coverage`), a group (`unused`), or `all`, and `LEVEL` is `hidden`/`warning`/`error`. Later settings override earlier; repeatable |
 |      | `--fold` / `--unfold` | Force folded / unfolded instruction form (default: auto) |
 |      | `--color` | Color output: `auto`/`always`/`never` |
 |      | `--source-map-file` | Emit a source map to the given file |
@@ -65,6 +66,7 @@ Binary output to a terminal is blocked; use `-o` to write WASM to a file.
 | `-c` | `--check` | Write nothing; list unformatted files, exit non-zero if any (mutually exclusive with `--inplace`) |
 | `-f` | `--format` / `--input-format` | Force the format of all files (overrides extension detection) |
 | `-v` | `--validate` | Also type-check / well-formedness-check while formatting |
+| `-W` | `--warn` | Set a warning's level (as for convert) |
 |      | `--color` / `--fold` / `--unfold` / `--debug` | As for convert |
 
 **check** — `dune exec wax -- check [options] FILE…`. Validates each file (type-check Wax / well-formedness Wasm), no output, exits non-zero on failure.
@@ -73,6 +75,7 @@ Binary output to a terminal is blocked; use `-o` to write WASM to a file.
 |------|------|-------------|
 | `-f` | `--format` / `--input-format` | Force the format of all files (overrides extension detection) |
 | `-s` | `--strict-validate` | Strict reference validation (Wasm Text) |
+| `-W` | `--warn` | Set a warning's level (as for convert) |
 |      | `--color` / `--debug` | As for convert |
 
 ## Non-Negotiable Rules
