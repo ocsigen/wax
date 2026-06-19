@@ -26,27 +26,27 @@ fn caml_runtime_events_user_register(evname: &eq, evtag: &eq, evtype: &eq) -> &e
 }
 
 #[export = "caml_runtime_events_user_resolve"]
-fn caml_runtime_events_user_resolve(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
+fn caml_runtime_events_user_resolve(&eq, &eq, &eq) -> &eq {
     0 as &i31;
 }
 
 #[export = "caml_runtime_events_start"]
-fn caml_runtime_events_start(x: &eq) -> &eq {
+fn caml_runtime_events_start(&eq) -> &eq {
     0 as &i31;
 }
 
 #[export = "caml_runtime_events_pause"]
-fn caml_runtime_events_pause(x: &eq) -> &eq {
+fn caml_runtime_events_pause(&eq) -> &eq {
     0 as &i31;
 }
 
 #[export = "caml_runtime_events_resume"]
-fn caml_runtime_events_resume(x: &eq) -> &eq {
+fn caml_runtime_events_resume(&eq) -> &eq {
     0 as &i31;
 }
 
 #[export = "caml_ml_runtime_events_are_active"]
-fn caml_ml_runtime_events_are_active(x: &eq) -> &eq {
+fn caml_ml_runtime_events_are_active(&eq) -> &eq {
     0 as &i31;
 }
 
@@ -56,16 +56,16 @@ fn caml_ml_runtime_events_are_active(x: &eq) -> &eq {
 //   (ref.i31 (i32.const 0)))
 
 #[export = "caml_runtime_events_free_cursor"]
-fn caml_runtime_events_free_cursor(x: &eq) -> &eq {
+fn caml_runtime_events_free_cursor(&eq) -> &eq {
     0 as &i31;
 }
 
 #[export = "caml_runtime_events_read_poll"]
-fn caml_runtime_events_read_poll(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
+fn caml_runtime_events_read_poll(&eq, &eq, &eq) -> &eq {
     0 as &i31;
 }
 
 #[export = "caml_ml_runtime_events_path"]
-fn caml_ml_runtime_events_path(x: &eq) -> &eq {
+fn caml_ml_runtime_events_path(&eq) -> &eq {
     0 as &i31;
 }

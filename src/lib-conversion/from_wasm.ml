@@ -127,6 +127,10 @@ module Sequence = struct
      source (e.g. an element segment synthesised from an inline table init). *)
   let fresh_name seq = Ast.no_loc (Namespace.add seq.namespace seq.default)
   let consume_currents seq = seq.current_index <- seq.last_index
+
+  (* Consume an index slot without binding a name, for an entity rendered
+     anonymously (a [_] parameter). Later positional references stay aligned. *)
+  let skip seq = seq.last_index <- seq.last_index + 1
 end
 
 module LabelStack = struct
@@ -1753,6 +1757,30 @@ let rec collect_elem_refs ctx acc (i : _ Src.instr) =
 
 and collect_elem_refs_instrs ctx acc l = List.iter (collect_elem_refs ctx acc) l
 
+(* Collect the wasm indices of locals referenced by a function body. A parameter
+   that is both unnamed in the source and absent here needs no Wax name: it can
+   be rendered anonymously instead of inventing one. Only numeric references
+   matter, since an unnamed parameter has no [$id] to be referenced by. *)
+let rec collect_local_refs acc (i : _ Src.instr) =
+  match i.desc with
+  | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
+      collect_local_refs_instrs acc block
+  | If { if_block; else_block; _ } ->
+      collect_local_refs_instrs acc if_block.desc;
+      collect_local_refs_instrs acc else_block.desc
+  | Try { block; catches; catch_all; _ } ->
+      collect_local_refs_instrs acc block;
+      List.iter (fun (_, b) -> collect_local_refs_instrs acc b) catches;
+      Option.iter (collect_local_refs_instrs acc) catch_all
+  | Folded (i, l) ->
+      collect_local_refs_instrs acc l;
+      collect_local_refs acc i
+  | LocalGet x | LocalSet x | LocalTee x -> (
+      match x.Ast.desc with Num n -> Hashtbl.replace acc n () | Id _ -> ())
+  | _ -> ()
+
+and collect_local_refs_instrs acc l = List.iter (collect_local_refs acc) l
+
 let exports ctx kind name e =
   (* [e] are the inline exports declared on this field (already in the right
      branch); the table holds the standalone exports, kept only when their
@@ -1810,22 +1838,41 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
             return_arity;
           }
         in
+        let used_locals =
+          let acc = Hashtbl.create 16 in
+          collect_local_refs_instrs acc instrs;
+          acc
+        in
+        (* Name a parameter, unless it is unnamed in the source and never
+           referenced by the body, in which case it is rendered anonymously. Its
+           index slot is still consumed so later locals stay correctly aligned.
+           [i] is the parameter's position, i.e. its wasm local index. *)
+        let convert_params params =
+          Array.mapi
+            (fun i (id, t) ->
+              let pat =
+                if
+                  Option.is_none id
+                  && not (Hashtbl.mem used_locals (Uint32.of_int i))
+                then (
+                  Sequence.skip ctx.locals;
+                  None)
+                else
+                  let name =
+                    Sequence.register' ctx.locals export_tbl None id []
+                  in
+                  Some
+                    (match id with
+                    | None -> Ast.no_loc name
+                    | Some id -> { id with Ast.desc = name })
+              in
+              (pat, valtype ctx t))
+            params
+        in
         let sign =
           match typ with
           | _, Some { params; results } ->
-              let params =
-                Array.map
-                  (fun (id, t) ->
-                    let name =
-                      Sequence.register' ctx.locals export_tbl None id []
-                    in
-                    ( Some
-                        (match id with
-                        | None -> Ast.no_loc name
-                        | Some id -> { id with Ast.desc = name }),
-                      valtype ctx t ))
-                  params
-              in
+              let params = convert_params params in
               Sequence.consume_currents ctx.locals;
               {
                 Ast.params;
@@ -1842,19 +1889,7 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
               in
               match functype with
               | Some { params; results } ->
-                  let params =
-                    Array.map
-                      (fun (id, t) ->
-                        let name =
-                          Sequence.register' ctx.locals export_tbl None id []
-                        in
-                        ( Some
-                            (match id with
-                            | None -> Ast.no_loc name
-                            | Some id -> { id with Ast.desc = name }),
-                          valtype ctx t ))
-                      params
-                  in
+                  let params = convert_params params in
                   Sequence.consume_currents ctx.locals;
                   {
                     Ast.params;

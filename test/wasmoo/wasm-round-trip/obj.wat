@@ -366,7 +366,7 @@
 )
 
 (func $caml_obj_is_shared (export "caml_obj_is_shared")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 1))
 )
 
@@ -388,7 +388,7 @@
 (data $not_implemented "Obj.add_offset is not supported")
 
 (func $caml_obj_add_offset (export "caml_obj_add_offset")
-  (param $x (ref eq)) (param $x_2 (ref eq)) (result (ref eq))
+  (param (ref eq) (ref eq)) (result (ref eq))
   (call $caml_failwith
     (array.new_data $string $not_implemented (i32.const 0) (i32.const 31)))
   (ref.i31 (i32.const 0))
@@ -397,7 +397,7 @@
 (data $truncate_not_implemented "Obj.truncate is not supported")
 
 (func $caml_obj_truncate (export "caml_obj_truncate")
-  (param $x (ref eq)) (param $x_2 (ref eq)) (result (ref eq))
+  (param (ref eq) (ref eq)) (result (ref eq))
   (call $caml_failwith
     (array.new_data $string $truncate_not_implemented (i32.const 0)
       (i32.const 29)))
@@ -491,7 +491,7 @@
 )
 
 (func $caml_fresh_oo_id (export "caml_fresh_oo_id")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   (local $id i32)
   (local.set $id (global.get $caml_oo_last_id))
   (global.set $caml_oo_last_id (i32.add (local.get $id) (i32.const 1)))
@@ -499,7 +499,7 @@
 )
 
 (func $caml_obj_reachable_words (export "caml_obj_reachable_words")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
 

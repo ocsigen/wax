@@ -77,19 +77,19 @@ fn caml_sys_getenv(x: &eq) -> &eq {
 }
 
 #[export = "caml_sys_argv"]
-fn caml_sys_argv(x: &eq) -> &eq {
+fn caml_sys_argv(&eq) -> &eq {
     // ZZZ
     caml_js_to_string_array(argv());
 }
 
 #[export = "caml_sys_executable_name"]
-fn caml_sys_executable_name(x: &eq) -> &eq {
+fn caml_sys_executable_name(&eq) -> &eq {
     (caml_js_to_string_array(argv()) as &block)[1];
 }
 
 #[export = "caml_sys_time"]
 #[export = "caml_sys_time_include_children"]
-fn caml_sys_time(x: &eq) -> &eq {
+fn caml_sys_time(&eq) -> &eq {
     { f: time() * 0.001 };
 }
 
@@ -107,7 +107,7 @@ fn caml_sys_system_command(x: &eq) -> &eq {
 }
 
 #[export = "caml_sys_random_seed"]
-fn caml_sys_random_seed(x: &eq) -> &eq {
+fn caml_sys_random_seed(&eq) -> &eq {
     let r = random_seed();
     let n = ta_length(r);
     let a: &block = [0 as &i31; n + 1];
@@ -120,39 +120,39 @@ fn caml_sys_random_seed(x: &eq) -> &eq {
 }
 
 #[export = "caml_sys_const_bigendian"]
-fn caml_sys_const_bigendian(x: &eq) -> &eq {
+fn caml_sys_const_bigendian(&eq) -> &eq {
     0 as &i31;
 }
 
 #[export = "caml_sys_const_word_size"]
-fn caml_sys_const_word_size(x: &eq) -> &eq {
+fn caml_sys_const_word_size(&eq) -> &eq {
     32 as &i31;
 }
 
 #[export = "caml_sys_const_int_size"]
-fn caml_sys_const_int_size(x: &eq) -> &eq {
+fn caml_sys_const_int_size(&eq) -> &eq {
     31 as &i31;
 }
 
 #[export = "caml_sys_const_max_wosize"]
-fn caml_sys_const_max_wosize(x: &eq) -> &eq {
+fn caml_sys_const_max_wosize(&eq) -> &eq {
     0xfffffff as &i31;
 }
 
 #[export = "caml_sys_const_ostype_unix"]
-fn caml_sys_const_ostype_unix(x: &eq) -> &eq {
+fn caml_sys_const_ostype_unix(&eq) -> &eq {
     // ZZZ
     1 as &i31;
 }
 
 #[export = "caml_sys_const_ostype_win32"]
-fn caml_sys_const_ostype_win32(x: &eq) -> &eq {
+fn caml_sys_const_ostype_win32(&eq) -> &eq {
     // ZZZ
     0 as &i31;
 }
 
 #[export = "caml_sys_const_ostype_cygwin"]
-fn caml_sys_const_ostype_cygwin(x: &eq) -> &eq {
+fn caml_sys_const_ostype_cygwin(&eq) -> &eq {
     // ZZZ
     0 as &i31;
 }
@@ -160,29 +160,29 @@ fn caml_sys_const_ostype_cygwin(x: &eq) -> &eq {
 data Unix = "Unix";
 
 #[export = "caml_sys_get_config"]
-fn caml_sys_get_config(x: &eq) -> &eq {
+fn caml_sys_get_config(&eq) -> &eq {
     // ZZZ
     // (call $log_js (string.const "caml_sys_get_config"))
     [block|0 as &i31, [string|Unix @ 0; 4], 32 as &i31, 0 as &i31];
 }
 
 #[export = "caml_sys_isatty"]
-fn caml_sys_isatty(x: &eq) -> &eq {
+fn caml_sys_isatty(&eq) -> &eq {
     0 as &i31;
 }
 
 #[export = "caml_runtime_variant"]
-fn caml_runtime_variant(x: &eq) -> &eq {
+fn caml_runtime_variant(&eq) -> &eq {
     [string|];
 }
 
 #[export = "caml_runtime_parameters"]
-fn caml_runtime_parameters(x: &eq) -> &eq {
+fn caml_runtime_parameters(&eq) -> &eq {
     [string|];
 }
 
 #[export = "caml_install_signal_handler"]
-fn caml_install_signal_handler(x: &eq, x_2: &eq) -> &eq {
+fn caml_install_signal_handler(&eq, &eq) -> &eq {
     0 as &i31;
 }
 
@@ -195,7 +195,7 @@ fn caml_ml_enable_runtime_warnings(x: &eq) -> &eq {
 }
 
 #[export = "caml_ml_runtime_warnings_enabled"]
-fn caml_ml_runtime_warnings_enabled(x: &eq) -> &eq {
+fn caml_ml_runtime_warnings_enabled(&eq) -> &eq {
     caml_runtime_warnings as &i31;
 }
 

@@ -139,7 +139,7 @@ fn caml_js_strict_equals(x: &eq, x_2: &eq) -> &eq {
 }
 
 #[export = "caml_js_global"]
-fn caml_js_global(x: &eq) -> &eq {
+fn caml_js_global(&eq) -> &eq {
     wrap(global_this);
 }
 

@@ -16,28 +16,25 @@
 ;; Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
 (func $initialize_nat (export "initialize_nat")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
 
-(func $create_nat (export "create_nat") (param $x (ref eq)) (result (ref eq))
+(func $create_nat (export "create_nat") (param (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
 
 (func $set_to_zero_nat (export "set_to_zero_nat")
-  (param $x (ref eq)) (param $x_2 (ref eq)) (param $x_3 (ref eq))
-  (result (ref eq))
+  (param (ref eq) (ref eq) (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
 
 (func $set_digit_nat (export "set_digit_nat")
-  (param $x (ref eq)) (param $x_2 (ref eq)) (param $x_3 (ref eq))
-  (result (ref eq))
+  (param (ref eq) (ref eq) (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
 
 (func $incr_nat (export "incr_nat")
-  (param $x (ref eq)) (param $x_2 (ref eq)) (param $x_3 (ref eq))
-  (param $x_4 (ref eq)) (result (ref eq))
+  (param (ref eq) (ref eq) (ref eq) (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )

@@ -90,7 +90,7 @@ type fiber: generic_fiber = { handlers: mut &handlers, cont: &cont_2, next: &?fi
 
 data effect_unhandled = "Effect.Unhandled";
 
-fn raise_unhandled(eff: &eq, x: &eq) -> &eq {
+fn raise_unhandled(eff: &eq, &eq) -> &eq {
     let effect_unhandled: &string = [effect_unhandled @ 0; 16];
     'null: do {
         caml_raise_with_arg(br_on_null 'null caml_named_value(effect_unhandled), eff);
@@ -99,17 +99,17 @@ fn raise_unhandled(eff: &eq, x: &eq) -> &eq {
     0 as &i31;
 }
 
-fn uncaught_effect_handler(eff: &eq, cont: &eq, k: &eq, x: &eq) -> &eq {
+fn uncaught_effect_handler(eff: &eq, cont: &eq, k: &eq, &eq) -> &eq {
     let k' = push_stack((cont as &block)[1] as &fiber, k as &cont_2);
     k'.cont_func({ fst: {closure| f: raise_unhandled }, snd: eff }, k');
     0 as &i31;
 }
 
-fn dummy_fun(x: &eq, x_2: &eq) -> &eq {
+fn dummy_fun(&eq, &eq) -> &eq {
     unreachable;
 }
 
-fn default_continuation(p: &pair, x: &eq) {
+fn default_continuation(p: &pair, &eq) {
     _ = apply_pair(p);
 }
 
@@ -241,7 +241,7 @@ fn caml_start_fiber(p: &?eq) {
     become call_handler(stack.handlers.value, res);
 }
 
-fn initial_cont(p: &pair, x: &eq) {
+fn initial_cont(p: &pair, &eq) {
     become start_fiber(p);
 }
 
@@ -282,7 +282,7 @@ fn caml_continuation_use_and_update_handler_noexc(
 }
 
 #[export = "caml_get_continuation_callstack"]
-fn caml_get_continuation_callstack(x: &eq, x_2: &eq) -> &eq {
+fn caml_get_continuation_callstack(&eq, &eq) -> &eq {
     [block|0 as &i31];
 }
 
@@ -322,7 +322,7 @@ fn caml_push_trap(h: &eq) -> &eq {
     0 as &i31;
 }
 
-fn raise_exception_2(exn: &eq, x: &eq) -> &eq {
+fn raise_exception_2(exn: &eq, &eq) -> &eq {
     throw ocaml_exception exn;
 }
 
@@ -339,11 +339,11 @@ fn caml_pop_trap() -> &eq {
 }
 
 #[export = "caml_maybe_attach_backtrace"]
-fn caml_maybe_attach_backtrace(exn: &eq, x: &eq) -> &eq {
+fn caml_maybe_attach_backtrace(exn: &eq, &eq) -> &eq {
     exn;
 }
 
-fn identity_2(x: &eq, x_2: &eq) -> &eq {
+fn identity_2(x: &eq, &eq) -> &eq {
     x;
 }
 
@@ -386,7 +386,7 @@ fn caml_apply_continuation(args: &eq) -> &eq {
     { f: apply_iterator, i: 1, args: args as &block };
 }
 
-fn dummy_cps_fun(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
+fn dummy_cps_fun(&eq, &eq, &eq) -> &eq {
     unreachable;
 }
 
@@ -532,13 +532,13 @@ fn cps_call_handler(handler: &eq, x: &eq) -> &eq {
     become (handler as &cps_closure).f(x, caml_pop_fiber(), handler);
 }
 
-fn value_handler_2(x: &eq, x_2: &eq) -> &eq {
+fn value_handler_2(x: &eq, &eq) -> &eq {
     become cps_call_handler((cps_fiber_stack!).handlers.value, x);
 }
 
 const value_handler: &closure = { f: value_handler_2 };
 
-fn exn_handler_2(x: &eq, x_2: &eq) -> &eq {
+fn exn_handler_2(x: &eq, &eq) -> &eq {
     become cps_call_handler((cps_fiber_stack!).handlers.exn, x);
 }
 
@@ -554,7 +554,7 @@ fn caml_cps_alloc_stack(hv: &eq, hx: &eq, hf: &eq) -> &eq {
     };
 }
 
-fn cps_uncaught_effect_handler(eff: &eq, k: &eq, ms: &eq, x: &eq, x_2: &eq) -> &eq {
+fn cps_uncaught_effect_handler(eff: &eq, k: &eq, ms: &eq, &eq, &eq) -> &eq {
     _ = caml_resume_stack((k as &block)[1], ms);
     raise_unhandled(eff, 0 as &i31);
 }

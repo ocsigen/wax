@@ -24,22 +24,22 @@
 
 (func $caml_get_exception_raw_backtrace
   (export "caml_get_exception_raw_backtrace")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   (array.new_fixed $block 1 (ref.i31 (i32.const 0)))
 )
 
 (func $caml_backtrace_status (export "caml_backtrace_status")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
 
 (func $caml_convert_raw_backtrace (export "caml_convert_raw_backtrace")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   (array.new_fixed $block 1 (ref.i31 (i32.const 0)))
 )
 
 (func $caml_raw_backtrace_next_slot (export "caml_raw_backtrace_next_slot")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
 
@@ -48,7 +48,7 @@
 )
 
 (func $caml_raw_backtrace_slot (export "caml_raw_backtrace_slot")
-  (param $x (ref eq)) (param $x_2 (ref eq)) (result (ref eq))
+  (param (ref eq) (ref eq)) (result (ref eq))
   (call $caml_invalid_argument
     (array.new_data $string $raw_backtrace_slot_err (i32.const 0)
       (i32.const 52)))
@@ -57,26 +57,26 @@
 
 (func $caml_convert_raw_backtrace_slot
   (export "caml_convert_raw_backtrace_slot")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
 
 (func $caml_restore_raw_backtrace (export "caml_restore_raw_backtrace")
-  (param $x (ref eq)) (param $x_2 (ref eq)) (result (ref eq))
+  (param (ref eq) (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
 
 (func $caml_get_current_callstack (export "caml_get_current_callstack")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   (array.new_fixed $block 1 (ref.i31 (i32.const 0)))
 )
 
 (func $caml_ml_debug_info_status (export "caml_ml_debug_info_status")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
 
 (func $caml_record_backtrace (export "caml_record_backtrace")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )

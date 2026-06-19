@@ -70,7 +70,7 @@
 )
 
 (func $int64_cmp
-  (param $v1 (ref eq)) (param $v2 (ref eq)) (param $x i32) (result i32)
+  (param $v1 (ref eq)) (param $v2 (ref eq)) (param i32) (result i32)
   (local $i1 i64) (local $i2 i64)
   (local.set $i1
     (struct.get $int64 $f_2 (ref.cast (ref $int64) (local.get $v1))))

@@ -10,10 +10,10 @@ and rendered inline; $i32->void (type 0) keeps the explicit name $t:
   fn f() -> f64 {
       0;
   } // adds implicit type definition
-  fn g(x: i32) {} // reuses explicit type definition
+  fn g(i32) {} // reuses explicit type definition
   type t = fn(i32);
   
-  fn f_2: t (x: i32) {} // references the explicit type $t
+  fn f_2: t (i32) {} // references the explicit type $t
   fn f_3() -> f64 {
       0;
   } // references the implicit type

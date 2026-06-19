@@ -59,7 +59,7 @@ const mutex_ops: &custom_operations =
 type mutex: custom_with_id = { f: &custom_operations, id: i64, state: mut i32 };
 
 #[export = "caml_ml_mutex_new"]
-fn caml_ml_mutex_new(x: &eq) -> &eq {
+fn caml_ml_mutex_new(&eq) -> &eq {
     { f: mutex_ops, id: custom_next_id(), state: 0 };
 }
 
@@ -93,24 +93,24 @@ fn caml_ml_mutex_unlock(x: &eq) -> &eq {
 }
 
 #[export = "caml_ml_condition_new"]
-fn caml_ml_condition_new(x: &eq) -> &eq {
+fn caml_ml_condition_new(&eq) -> &eq {
     0 as &i31;
 }
 
 data condition_failure = "Condition.wait: cannot wait";
 
 #[export = "caml_ml_condition_wait"]
-fn caml_ml_condition_wait(x: &eq, x_2: &eq) -> &eq {
+fn caml_ml_condition_wait(&eq, &eq) -> &eq {
     caml_failwith([string|condition_failure @ 0; 27]);
     0 as &i31;
 }
 
 #[export = "caml_ml_condition_signal"]
-fn caml_ml_condition_signal(x: &eq) -> &eq {
+fn caml_ml_condition_signal(&eq) -> &eq {
     0 as &i31;
 }
 
 #[export = "caml_ml_condition_broadcast"]
-fn caml_ml_condition_broadcast(x: &eq) -> &eq {
+fn caml_ml_condition_broadcast(&eq) -> &eq {
     0 as &i31;
 }

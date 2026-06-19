@@ -68,7 +68,7 @@
 )
 
 (func $custom_compare_id (export "custom_compare_id")
-  (param $x (ref eq)) (param $x_2 (ref eq)) (param $x_3 i32) (result i32)
+  (param $x (ref eq)) (param $x_2 (ref eq)) (param i32) (result i32)
   (local $i1 i64) (local $i2 i64)
   (local.set $i1
     (struct.get $custom_with_id $id

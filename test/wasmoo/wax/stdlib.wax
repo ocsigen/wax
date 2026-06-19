@@ -126,7 +126,7 @@ fn caml_unregister_named_value(name: &eq) -> &eq {
 let caml_global_data: &block = [0 as &i31; 12];
 
 #[export = "caml_register_global"]
-fn caml_register_global(x: &eq, v: &eq, x_2: &eq) -> &eq {
+fn caml_register_global(x: &eq, v: &eq, &eq) -> &eq {
     let i = x as &i31 as i32_u;
     if i <u caml_global_data.length() {
         caml_global_data[i] = v;
@@ -135,7 +135,7 @@ fn caml_register_global(x: &eq, v: &eq, x_2: &eq) -> &eq {
 }
 
 #[export = "caml_get_global_data"]
-fn caml_get_global_data(x: &eq) -> &eq {
+fn caml_get_global_data(&eq) -> &eq {
     caml_global_data;
 }
 

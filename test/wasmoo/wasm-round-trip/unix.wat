@@ -28,7 +28,7 @@
 (type $float (struct (field $f f64)))
 
 (func $unix_gettimeofday (export "unix_gettimeofday")
-  (export "caml_unix_gettimeofday") (param $x (ref eq)) (result (ref eq))
+  (export "caml_unix_gettimeofday") (param (ref eq)) (result (ref eq))
   (struct.new $float (call $gettimeofday))
 )
 
@@ -56,7 +56,7 @@
 )
 
 (func $unix_time (export "unix_time") (export "caml_unix_time")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   (struct.new $float (f64.floor (call $gettimeofday)))
 )
 
@@ -93,7 +93,6 @@
 )
 
 (func $unix_inet_addr_of_string (export "unix_inet_addr_of_string")
-  (export "caml_unix_inet_addr_of_string")
-  (param $x (ref eq)) (result (ref eq))
+  (export "caml_unix_inet_addr_of_string") (param (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )

@@ -230,12 +230,12 @@
 )
 
 (func $caml_ml_set_channel_name (export "caml_ml_set_channel_name")
-  (param $x (ref eq)) (param $x_2 (ref eq)) (result (ref eq))
+  (param (ref eq) (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
 
 (func $caml_ml_out_channels_list (export "caml_ml_out_channels_list")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   (return_call $caml_list_of_js_array (call $wrap (call $channel_list)))
 )
 

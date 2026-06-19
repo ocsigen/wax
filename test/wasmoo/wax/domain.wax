@@ -70,24 +70,24 @@ fn caml_domain_dls_compare_and_set(old: &eq, new: &eq) -> &eq {
 }
 
 #[export = "caml_domain_dls_get"]
-fn caml_domain_dls_get(x: &eq) -> &eq {
+fn caml_domain_dls_get(&eq) -> &eq {
     caml_domain_dls;
 }
 
 const caml_ml_domain_unique_token: &eq = [block|0 as &i31];
 
 #[export = "caml_ml_domain_unique_token"]
-fn caml_ml_domain_unique_token_2(x: &eq) -> &eq {
+fn caml_ml_domain_unique_token_2(&eq) -> &eq {
     caml_ml_domain_unique_token;
 }
 
 #[export = "caml_ml_domain_set_name"]
-fn caml_ml_domain_set_name(x: &eq) -> &eq {
+fn caml_ml_domain_set_name(&eq) -> &eq {
     0 as &i31;
 }
 
 #[export = "caml_recommended_domain_count"]
-fn caml_recommended_domain_count(x: &eq) -> &eq {
+fn caml_recommended_domain_count(&eq) -> &eq {
     1 as &i31;
 }
 
@@ -98,11 +98,11 @@ let caml_domain_latest_id = 1;
 
 #[export = "caml_ml_domain_id"]
 #[export = "caml_ml_domain_index"]
-fn caml_ml_domain_id(x: &eq) -> &eq {
+fn caml_ml_domain_id(&eq) -> &eq {
     caml_domain_id as &i31;
 }
 
 #[export = "caml_ml_domain_cpu_relax"]
-fn caml_ml_domain_cpu_relax(x: &eq) -> &eq {
+fn caml_ml_domain_cpu_relax(&eq) -> &eq {
     0 as &i31;
 }

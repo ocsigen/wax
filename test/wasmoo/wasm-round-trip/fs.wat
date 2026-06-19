@@ -54,7 +54,7 @@
 (type $string (array (mut i8)))
 
 (func $caml_sys_getcwd (export "caml_sys_getcwd")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   (return_call $caml_string_of_jsstring (call $wrap (call $getcwd)))
 )
 

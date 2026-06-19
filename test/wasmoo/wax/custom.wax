@@ -63,7 +63,7 @@ fn caml_dup_custom(v: &eq) -> &eq {
 }
 
 #[export = "custom_compare_id"]
-fn custom_compare_id(x: &eq, x_2: &eq, x_3: i32) -> i32 {
+fn custom_compare_id(x: &eq, x_2: &eq, i32) -> i32 {
     let i1 = (x as &custom_with_id).id;
     let i2 = (x_2 as &custom_with_id).id;
     (i1 >s i2) - (i1 <s i2);

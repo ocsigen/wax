@@ -66,7 +66,7 @@ const int64_ops: &custom_operations =
 
 type int64: custom = { f: &custom_operations, f_2: i64 };
 
-fn int64_cmp(v1: &eq, v2: &eq, x: i32) -> i32 {
+fn int64_cmp(v1: &eq, v2: &eq, i32) -> i32 {
     let i1 = (v1 as &int64).f_2;
     let i2 = (v2 as &int64).f_2;
     (i1 >s i2) - (i1 <s i2);

@@ -69,7 +69,7 @@
 )
 
 (func $int32_cmp
-  (param $v1 (ref eq)) (param $v2 (ref eq)) (param $x i32) (result i32)
+  (param $v1 (ref eq)) (param $v2 (ref eq)) (param i32) (result i32)
   (local $i1 i32) (local $i2 i32)
   (local.set $i1
     (struct.get $int32 $f_2 (ref.cast (ref $int32) (local.get $v1))))

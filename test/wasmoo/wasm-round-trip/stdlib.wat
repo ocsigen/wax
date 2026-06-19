@@ -167,8 +167,7 @@
 )
 
 (func $caml_register_global (export "caml_register_global")
-  (param $x (ref eq)) (param $v (ref eq)) (param $x_2 (ref eq))
-  (result (ref eq))
+  (param $x (ref eq)) (param $v (ref eq)) (param (ref eq)) (result (ref eq))
   (local $i i32)
   (local.set $i (i31.get_u (ref.cast (ref i31) (local.get $x))))
   (if (i32.lt_u (local.get $i) (array.len (global.get $caml_global_data)))
@@ -179,7 +178,7 @@
 )
 
 (func $caml_get_global_data (export "caml_get_global_data")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   (global.get $caml_global_data)
 )
 

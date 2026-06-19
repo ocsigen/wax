@@ -22,54 +22,54 @@ type block = [mut &eq];
 type string = [mut i8];
 
 #[export = "caml_get_exception_raw_backtrace"]
-fn caml_get_exception_raw_backtrace(x: &eq) -> &eq {
+fn caml_get_exception_raw_backtrace(&eq) -> &eq {
     [block|0 as &i31];
 }
 
 #[export = "caml_backtrace_status"]
-fn caml_backtrace_status(x: &eq) -> &eq {
+fn caml_backtrace_status(&eq) -> &eq {
     0 as &i31;
 }
 
 #[export = "caml_convert_raw_backtrace"]
-fn caml_convert_raw_backtrace(x: &eq) -> &eq {
+fn caml_convert_raw_backtrace(&eq) -> &eq {
     [block|0 as &i31];
 }
 
 #[export = "caml_raw_backtrace_next_slot"]
-fn caml_raw_backtrace_next_slot(x: &eq) -> &eq {
+fn caml_raw_backtrace_next_slot(&eq) -> &eq {
     0 as &i31;
 }
 
 data raw_backtrace_slot_err = "Printexc.get_raw_backtrace_slot: index out of bounds";
 
 #[export = "caml_raw_backtrace_slot"]
-fn caml_raw_backtrace_slot(x: &eq, x_2: &eq) -> &eq {
+fn caml_raw_backtrace_slot(&eq, &eq) -> &eq {
     caml_invalid_argument([string|raw_backtrace_slot_err @ 0; 52]);
     0 as &i31;
 }
 
 #[export = "caml_convert_raw_backtrace_slot"]
-fn caml_convert_raw_backtrace_slot(x: &eq) -> &eq {
+fn caml_convert_raw_backtrace_slot(&eq) -> &eq {
     0 as &i31;
 }
 
 #[export = "caml_restore_raw_backtrace"]
-fn caml_restore_raw_backtrace(x: &eq, x_2: &eq) -> &eq {
+fn caml_restore_raw_backtrace(&eq, &eq) -> &eq {
     0 as &i31;
 }
 
 #[export = "caml_get_current_callstack"]
-fn caml_get_current_callstack(x: &eq) -> &eq {
+fn caml_get_current_callstack(&eq) -> &eq {
     [block|0 as &i31];
 }
 
 #[export = "caml_ml_debug_info_status"]
-fn caml_ml_debug_info_status(x: &eq) -> &eq {
+fn caml_ml_debug_info_status(&eq) -> &eq {
     0 as &i31;
 }
 
 #[export = "caml_record_backtrace"]
-fn caml_record_backtrace(x: &eq) -> &eq {
+fn caml_record_backtrace(&eq) -> &eq {
     0 as &i31;
 }

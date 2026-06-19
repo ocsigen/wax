@@ -16,26 +16,26 @@
 // Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
 #[export = "initialize_nat"]
-fn initialize_nat(x: &eq) -> &eq {
+fn initialize_nat(&eq) -> &eq {
     0 as &i31;
 }
 
 #[export = "create_nat"]
-fn create_nat(x: &eq) -> &eq {
+fn create_nat(&eq) -> &eq {
     0 as &i31;
 }
 
 #[export = "set_to_zero_nat"]
-fn set_to_zero_nat(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
+fn set_to_zero_nat(&eq, &eq, &eq) -> &eq {
     0 as &i31;
 }
 
 #[export = "set_digit_nat"]
-fn set_digit_nat(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
+fn set_digit_nat(&eq, &eq, &eq) -> &eq {
     0 as &i31;
 }
 
 #[export = "incr_nat"]
-fn incr_nat(x: &eq, x_2: &eq, x_3: &eq, x_4: &eq) -> &eq {
+fn incr_nat(&eq, &eq, &eq, &eq) -> &eq {
     0 as &i31;
 }

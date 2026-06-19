@@ -41,7 +41,7 @@
 (type $string (array (mut i8)))
 
 (func $caml_js_on_ie_2 (export "caml_js_on_ie")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   (ref.i31 (call $caml_js_on_ie))
 )
 
@@ -60,7 +60,7 @@
 (data $console "console")
 
 (func $caml_js_get_console (export "caml_js_get_console")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   (return_call $caml_js_get (call $caml_js_global (ref.i31 (i32.const 0)))
     (array.new_data $string $console (i32.const 0) (i32.const 7)))
 )
@@ -68,7 +68,7 @@
 (data $XMLHttpRequest "XMLHttpRequest")
 
 (func $caml_xmlhttprequest_create (export "caml_xmlhttprequest_create")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   (return_call $caml_js_new
     (call $caml_js_get (call $caml_js_global (ref.i31 (i32.const 0)))
       (array.new_data $string $XMLHttpRequest (i32.const 0) (i32.const 14)))

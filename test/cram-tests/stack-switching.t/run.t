@@ -61,7 +61,7 @@ A WebAssembly module using resume handlers (both `on $tag -> 'label` and
   // resume with an on-switch handler
   rec { type sft = fn(&?sct) -> i32; type sct = cont sft; }
   tag swap() -> i32;
-  fn f: sft (x: &?sct) -> i32 {
+  fn f: sft (&?sct) -> i32 {
       0;
   }
   fn onsw(k: &?sct) -> i32 {

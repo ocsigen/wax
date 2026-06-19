@@ -81,21 +81,20 @@
 )
 
 (func $caml_sys_argv (export "caml_sys_argv")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   ;; ZZZ
   (call $caml_js_to_string_array (call $argv))
 )
 
 (func $caml_sys_executable_name (export "caml_sys_executable_name")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   (array.get $block
     (ref.cast (ref $block) (call $caml_js_to_string_array (call $argv)))
     (i32.const 1))
 )
 
 (func $caml_sys_time (export "caml_sys_time")
-  (export "caml_sys_time_include_children")
-  (param $x (ref eq)) (result (ref eq))
+  (export "caml_sys_time_include_children") (param (ref eq)) (result (ref eq))
   (struct.new $float (f64.mul (call $time) (f64.const 0.001)))
 )
 
@@ -113,7 +112,7 @@
 )
 
 (func $caml_sys_random_seed (export "caml_sys_random_seed")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   (local $r (ref extern)) (local $n i32) (local $a (ref $block))
   (local $i i32)
   (local.set $r (call $random_seed))
@@ -134,39 +133,39 @@
 )
 
 (func $caml_sys_const_bigendian (export "caml_sys_const_bigendian")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
 
 (func $caml_sys_const_word_size (export "caml_sys_const_word_size")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 32))
 )
 
 (func $caml_sys_const_int_size (export "caml_sys_const_int_size")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 31))
 )
 
 (func $caml_sys_const_max_wosize (export "caml_sys_const_max_wosize")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0xfffffff))
 )
 
 (func $caml_sys_const_ostype_unix (export "caml_sys_const_ostype_unix")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   ;; ZZZ
   (ref.i31 (i32.const 1))
 )
 
 (func $caml_sys_const_ostype_win32 (export "caml_sys_const_ostype_win32")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   ;; ZZZ
   (ref.i31 (i32.const 0))
 )
 
 (func $caml_sys_const_ostype_cygwin (export "caml_sys_const_ostype_cygwin")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   ;; ZZZ
   (ref.i31 (i32.const 0))
 )
@@ -174,7 +173,7 @@
 (data $Unix "Unix")
 
 (func $caml_sys_get_config (export "caml_sys_get_config")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   ;; ZZZ
   ;; (call $log_js (string.const "caml_sys_get_config"))
   (array.new_fixed $block 4 (ref.i31 (i32.const 0))
@@ -183,22 +182,22 @@
 )
 
 (func $caml_sys_isatty (export "caml_sys_isatty")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
 
 (func $caml_runtime_variant (export "caml_runtime_variant")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   (array.new_fixed $string 0)
 )
 
 (func $caml_runtime_parameters (export "caml_runtime_parameters")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   (array.new_fixed $string 0)
 )
 
 (func $caml_install_signal_handler (export "caml_install_signal_handler")
-  (param $x (ref eq)) (param $x_2 (ref eq)) (result (ref eq))
+  (param (ref eq) (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
 
@@ -214,7 +213,7 @@
 
 (func $caml_ml_runtime_warnings_enabled
   (export "caml_ml_runtime_warnings_enabled")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   (ref.i31 (global.get $caml_runtime_warnings))
 )
 

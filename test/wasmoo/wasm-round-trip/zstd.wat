@@ -16,6 +16,6 @@
 ;; Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
 (func $caml_zstd_initialize (export "caml_zstd_initialize")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )

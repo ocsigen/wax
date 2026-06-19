@@ -215,12 +215,12 @@ fn caml_sys_close(x: &eq) -> &eq {
 }
 
 #[export = "caml_ml_set_channel_name"]
-fn caml_ml_set_channel_name(x: &eq, x_2: &eq) -> &eq {
+fn caml_ml_set_channel_name(&eq, &eq) -> &eq {
     0 as &i31;
 }
 
 #[export = "caml_ml_out_channels_list"]
-fn caml_ml_out_channels_list(x: &eq) -> &eq {
+fn caml_ml_out_channels_list(&eq) -> &eq {
     become caml_list_of_js_array(wrap(channel_list()));
 }
 

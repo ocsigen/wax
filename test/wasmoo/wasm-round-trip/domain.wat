@@ -80,7 +80,7 @@
 )
 
 (func $caml_domain_dls_get (export "caml_domain_dls_get")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   (global.get $caml_domain_dls)
 )
 
@@ -89,17 +89,17 @@
 )
 
 (func $caml_ml_domain_unique_token_2 (export "caml_ml_domain_unique_token")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   (global.get $caml_ml_domain_unique_token)
 )
 
 (func $caml_ml_domain_set_name (export "caml_ml_domain_set_name")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
 
 (func $caml_recommended_domain_count (export "caml_recommended_domain_count")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 1))
 )
 
@@ -109,11 +109,11 @@
 )
 
 (func $caml_ml_domain_id (export "caml_ml_domain_id")
-  (export "caml_ml_domain_index") (param $x (ref eq)) (result (ref eq))
+  (export "caml_ml_domain_index") (param (ref eq)) (result (ref eq))
   (ref.i31 (global.get $caml_domain_id))
 )
 
 (func $caml_ml_domain_cpu_relax (export "caml_ml_domain_cpu_relax")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )

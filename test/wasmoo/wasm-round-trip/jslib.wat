@@ -154,7 +154,7 @@
 )
 
 (func $caml_js_global (export "caml_js_global")
-  (param $x (ref eq)) (result (ref eq))
+  (param (ref eq)) (result (ref eq))
   (call $wrap (global.get $global_this))
 )
 

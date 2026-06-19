@@ -53,7 +53,7 @@ fn caml_handle_sys_error(&?extern);
 type string = [mut i8];
 
 #[export = "caml_sys_getcwd"]
-fn caml_sys_getcwd(x: &eq) -> &eq {
+fn caml_sys_getcwd(&eq) -> &eq {
     become caml_string_of_jsstring(wrap(getcwd()));
 }
 
