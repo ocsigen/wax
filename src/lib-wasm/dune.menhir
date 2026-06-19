@@ -2,10 +2,23 @@
  (modules parser)
  (flags --table --dump --external-tokens Tokens))
 
+; fast_parser is the runtime hot-path parser. Menhir's default (code)
+; back-end is fast at run time but pathologically slow to *generate* on this
+; large grammar (minutes for the ~1500-state automaton), which dominates the
+; edit-rebuild loop. So in the dev profile we build it with the table back-end
+; instead: ~150x faster to generate, slightly slower at run time. The release
+; profile keeps the code back-end for maximum run-time speed.
+(menhir
+ (modules fast_parser)
+ (flags --external-tokens Tokens --table)
+ (explain false)
+ (enabled_if (not (= %{profile} release))))
+
 (menhir
  (modules fast_parser)
  (flags --external-tokens Tokens)
- (explain false))
+ (explain false)
+ (enabled_if (= %{profile} release)))
 
 (rule
  (copy parser.mly fast_parser.mly))
