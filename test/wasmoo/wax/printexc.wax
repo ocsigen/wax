@@ -31,22 +31,22 @@ type buffer = { f: mut i32, f_2: &string };
 
 fn add_char(buf: &buffer, c: i32) {
     let pos = buf.f;
-    let data = buf.f_2;
-    if pos <u data.length() {
-        data[pos] = c;
+    let data_2 = buf.f_2;
+    if pos <u data_2.length() {
+        data_2[pos] = c;
         buf.f = pos + 1;
     }
 }
 
 fn add_string(buf: &buffer, v: &eq) {
     let pos = buf.f;
-    let data = buf.f_2;
+    let data_2 = buf.f_2;
     let s = v as &string;
     let len = s.length();
-    if pos + len >u data.length() {
-        len = data.length() - pos;
+    if pos + len >u data_2.length() {
+        len = data_2.length() - pos;
     }
-    data.copy(pos, s, 0, len);
+    data_2.copy(pos, s, 0, len);
     buf.f = pos + len;
 }
 

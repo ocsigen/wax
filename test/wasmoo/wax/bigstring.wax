@@ -59,23 +59,23 @@ type string = [mut i8];
 
 #[export = "caml_hash_mix_bigstring"]
 fn caml_hash_mix_bigstring(h: i32, b: &eq) -> i32 {
-    let data = caml_ba_get_data(b);
-    let len = ta_length(data);
+    let data_2 = caml_ba_get_data(b);
+    let len = ta_length(data_2);
     let i: i32;
     while i + 4 <=u len {
-        h = caml_hash_mix_int(h, ta_get32_ui8(data, i));
+        h = caml_hash_mix_int(h, ta_get32_ui8(data_2, i));
         i = i + 4;
     }
     let w = 0;
     dispatch (len & 3) [ 'l_2 'l_3 'l_4 else 'l_5 ] {
         'l_5: {
-            w = ta_get_ui8(data, i + 2) << 16;
+            w = ta_get_ui8(data_2, i + 2) << 16;
         }
         'l_4: {
-            w = w | ta_get_ui8(data, i + 1) << 8;
+            w = w | ta_get_ui8(data_2, i + 1) << 8;
         }
         'l_3: {
-            w = w | ta_get_ui8(data, i);
+            w = w | ta_get_ui8(data_2, i);
             h = caml_hash_mix_int(h, w);
         }
         'l_2: {

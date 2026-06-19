@@ -744,7 +744,7 @@
   (struct
     (field $next (mut (ref null $output_block)))
     (field $end (mut i32))
-    (field $data (ref $string)))
+    (field $data_2 (ref $string)))
 )
 
 (type $extern_state
@@ -784,7 +784,7 @@
   (struct.new $extern_state (local.get $no_sharing)
     (local.get $user_provided_output) (i32.const 0) (i32.const 0)
     (i32.const 0) (call $map_new)
-    (struct.get $output_block $data (local.get $output)) (local.get $pos)
+    (struct.get $output_block $data_2 (local.get $output)) (local.get $pos)
     (struct.get $output_block $end (local.get $output)) (local.get $output)
     (local.get $output))
 )
@@ -1346,7 +1346,7 @@
     (block $done
       (local.set $len (struct.get $output_block $end (local.get $blk)))
       (array.copy $string $string (local.get $res) (local.get $pos)
-        (struct.get $output_block $data (local.get $blk)) (i32.const 0)
+        (struct.get $output_block $data_2 (local.get $blk)) (i32.const 0)
         (local.get $len))
       (local.set $pos (i32.add (local.get $pos) (local.get $len)))
       (local.set $blk
@@ -1399,7 +1399,7 @@
     (block $done
       (local.set $len (struct.get $output_block $end (local.get $blk)))
       (call $caml_really_putblock (local.get $ch)
-        (struct.get $output_block $data (local.get $blk)) (i32.const 0)
+        (struct.get $output_block $data_2 (local.get $blk)) (i32.const 0)
         (struct.get $output_block $end (local.get $blk)))
       (local.set $blk
         (br_on_null $done (struct.get $output_block $next (local.get $blk))))

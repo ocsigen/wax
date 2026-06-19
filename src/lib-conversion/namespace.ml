@@ -31,8 +31,10 @@ let reserved =
         "const";
         "cont_bind";
         "cont_new";
+        "data";
         "dispatch";
         "do";
+        "elem";
         "else";
         "fn";
         "inf";
@@ -40,6 +42,7 @@ let reserved =
         "is";
         "let";
         "loop";
+        "memory";
         "mut";
         "nan";
         "nop";
@@ -52,6 +55,7 @@ let reserved =
         "return";
         "suspend";
         "switch";
+        "table";
         "tag";
         "throw";
         "throw_ref";

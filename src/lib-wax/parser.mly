@@ -229,12 +229,6 @@ dummy_ctx: EOF { assert false }
 
 %inline ident:
 | t = IDENT { with_loc $sloc t }
-(* [memory] and [data] are soft keywords: they lead memory/data declarations but
-   remain usable as ordinary identifiers. *)
-| MEMORY { with_loc $sloc "memory" }
-| DATA { with_loc $sloc "data" }
-| TABLE { with_loc $sloc "table" }
-| ELEM { with_loc $sloc "elem" }
 
 ident_or_keyword:
 | t = IDENT { t }

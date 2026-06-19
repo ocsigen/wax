@@ -107,12 +107,12 @@
 )
 
 (func $caml_ephe_set_data (export "caml_ephe_set_data")
-  (param $vx (ref eq)) (param $data (ref eq)) (result (ref eq))
+  (param $vx (ref eq)) (param $data_2 (ref eq)) (result (ref eq))
   (local $x (ref $block)) (local $i i32) (local $m (ref any))
   (local $v (ref eq)) (local $m' (ref any))
   (local.set $x (ref.cast (ref $block) (local.get $vx)))
   (local.set $i (array.len (local.get $x)))
-  (local.set $m (local.get $data))
+  (local.set $m (local.get $data_2))
   (loop $loop
     (local.set $i (i32.sub (local.get $i) (i32.const 1)))
     (if (i32.ge_u (local.get $i) (global.get $caml_ephe_key_offset))

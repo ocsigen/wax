@@ -72,15 +72,15 @@
 
 (func $caml_hash_mix_bigstring (export "caml_hash_mix_bigstring")
   (param $h i32) (param $b (ref eq)) (result i32)
-  (local $data (ref extern)) (local $len i32) (local $i i32) (local $w i32)
-  (local.set $data (call $caml_ba_get_data (local.get $b)))
-  (local.set $len (call $ta_length (local.get $data)))
+  (local $data_2 (ref extern)) (local $len i32) (local $i i32) (local $w i32)
+  (local.set $data_2 (call $caml_ba_get_data (local.get $b)))
+  (local.set $len (call $ta_length (local.get $data_2)))
   (loop $loop
     (if (i32.le_u (i32.add (local.get $i) (i32.const 4)) (local.get $len))
       (then
         (local.set $h
           (call $caml_hash_mix_int (local.get $h)
-            (call $ta_get32_ui8 (local.get $data) (local.get $i))))
+            (call $ta_get32_ui8 (local.get $data_2) (local.get $i))))
         (local.set $i (i32.add (local.get $i) (i32.const 4)))
         (br $loop))))
   (local.set $w (i32.const 0))
@@ -92,16 +92,16 @@
             (i32.and (local.get $len) (i32.const 3))))
         (local.set $w
           (i32.shl
-            (call $ta_get_ui8 (local.get $data)
+            (call $ta_get_ui8 (local.get $data_2)
               (i32.add (local.get $i) (i32.const 2))) (i32.const 16))))
       (local.set $w
         (i32.or (local.get $w)
           (i32.shl
-            (call $ta_get_ui8 (local.get $data)
+            (call $ta_get_ui8 (local.get $data_2)
               (i32.add (local.get $i) (i32.const 1))) (i32.const 8)))))
     (local.set $w
       (i32.or (local.get $w)
-        (call $ta_get_ui8 (local.get $data) (local.get $i))))
+        (call $ta_get_ui8 (local.get $data_2) (local.get $i))))
     (local.set $h (call $caml_hash_mix_int (local.get $h) (local.get $w))))
   (i32.xor (local.get $h) (local.get $len))
 )

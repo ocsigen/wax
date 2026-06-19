@@ -93,10 +93,10 @@ fn caml_ephe_get_data_copy(x: &eq) -> &eq {
 }
 
 #[export = "caml_ephe_set_data"]
-fn caml_ephe_set_data(vx: &eq, data: &eq) -> &eq {
+fn caml_ephe_set_data(vx: &eq, data_2: &eq) -> &eq {
     let x = vx as &block;
     let i = x.length();
-    let m: &any = data;
+    let m: &any = data_2;
     'loop: loop {
         i = i - 1;
         if i >=u caml_ephe_key_offset {

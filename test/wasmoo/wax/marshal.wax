@@ -547,7 +547,7 @@ fn caml_marshal_data_size(buf: &eq, ofs: &eq) -> &eq {
     (20 - caml_marshal_header_size + read32(s)) as &i31;
 }
 
-type output_block = { next: mut &?output_block, end: mut i32, data: &string };
+type output_block = { next: mut &?output_block, end: mut i32, data_2: &string };
 
 type extern_state = {
     // Flags
@@ -592,7 +592,7 @@ fn init_extern_state(
         size_32: 0,
         size_64: 0,
         pos_table: map_new(),
-        buf: output.data,
+        buf: output.data_2,
         pos: pos,
         limit: output.end,
         output_first: output,
@@ -620,7 +620,7 @@ fn reserve_extern_output(s: &extern_state, required: i32) -> i32 {
         extra = required;
     }
     let buf: &string = [0; SIZE_EXTERN_OUTPUT_BLOCK + extra];
-    let blk: &output_block = { next: null, end: 0, data: buf };
+    let blk: &output_block = { next: null, end: 0, data_2: buf };
     last.next = blk;
     s.output_last = blk;
     s.buf = buf;
@@ -976,7 +976,7 @@ fn extern_value(
 #[export = "caml_output_value_to_string"]
 fn caml_output_value_to_string(v: &eq, flags: &eq) -> &eq {
     let blk: &output_block =
-        { next: null, end: SIZE_EXTERN_OUTPUT_BLOCK, data: [0; SIZE_EXTERN_OUTPUT_BLOCK] };
+        { next: null, end: SIZE_EXTERN_OUTPUT_BLOCK, data_2: [0; SIZE_EXTERN_OUTPUT_BLOCK] };
     let (sz, buf, st) = extern_value(flags, blk, 0, 0, v);
     let res: &string = [0; sz + 20];
     res.copy(0, buf, 0, 20);
@@ -984,7 +984,7 @@ fn caml_output_value_to_string(v: &eq, flags: &eq) -> &eq {
     'loop: loop {
         'done: do {
             let len = blk.end;
-            res.copy(pos, blk.data, 0, len);
+            res.copy(pos, blk.data_2, 0, len);
             pos = pos + len;
             blk = br_on_null 'done blk.next;
             br 'loop;
@@ -1000,7 +1000,7 @@ fn caml_output_value_to_buffer(vbuf: &eq, vpos: &eq, vlen: &eq, v: &eq, flags: &
     let buf = vbuf as &string;
     let pos = vpos as &i31 as i32_u;
     let len = vlen as &i31 as i32_u;
-    let blk: &output_block = { next: null, end: pos + len, data: buf };
+    let blk: &output_block = { next: null, end: pos + len, data_2: buf };
     extern_value(flags, blk, pos + 20, 1, v);
     _ = _;
     buf = _;
@@ -1014,13 +1014,13 @@ fn caml_output_value(ch: &eq, v: &eq, flags: &eq) -> &eq {
     let res: &string;
     // ZZZ check if binary channel?
     let blk: &output_block =
-        { next: null, end: SIZE_EXTERN_OUTPUT_BLOCK, data: [0; SIZE_EXTERN_OUTPUT_BLOCK] };
+        { next: null, end: SIZE_EXTERN_OUTPUT_BLOCK, data_2: [0; SIZE_EXTERN_OUTPUT_BLOCK] };
     let (sz, buf, st) = extern_value(flags, blk, 0, 0, v);
     caml_really_putblock(ch, buf, 0, 20);
     'loop: loop {
         'done: do {
             let len = blk.end;
-            caml_really_putblock(ch, blk.data, 0, blk.end);
+            caml_really_putblock(ch, blk.data_2, 0, blk.end);
             blk = br_on_null 'done blk.next;
             br 'loop;
         }
