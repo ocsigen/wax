@@ -21,6 +21,7 @@ module Sequence = struct
   type t = {
     index_mapping : (Uint32.t, string) Hashtbl.t;
     label_mapping : (string, string) Hashtbl.t;
+    export_mapping : (string, string) Hashtbl.t;
     mutable last_index : int;
     mutable current_index : int;
     namespace : Namespace.t;
@@ -35,6 +36,7 @@ module Sequence = struct
     {
       index_mapping = Hashtbl.create 16;
       label_mapping = Hashtbl.create 16;
+      export_mapping = Hashtbl.create 16;
       last_index = 0;
       current_index = 0;
       namespace;
@@ -45,22 +47,30 @@ module Sequence = struct
   let register' ?hint seq export_tbl (kind : Src.exportable option)
       (id : Src.name option) exports =
     let idx = Uint32.of_int seq.last_index in
-    match id with
-    | Some nm
-      when seq.forbid_numeric && Hashtbl.mem seq.label_mapping nm.Ast.desc ->
-        (* The same [$id] was already registered (it appears in another branch
-           of a conditional). Reuse its Wax name so references stay coherent,
-           but still consume an index slot so positional naming via
-           [get_current] stays aligned with the conversion order. This only
-           applies to module-level sequences of a conditional module
-           ([forbid_numeric]); locals reuse a single sequence across functions,
-           where a repeated [$id] is a distinct variable, not the same entity. *)
-        let name = Hashtbl.find seq.label_mapping nm.Ast.desc in
-        seq.last_index <- seq.last_index + 1;
-        Hashtbl.add seq.index_mapping idx name;
-        name
-    | _ ->
-        let name =
+    (* The same entity may already have been registered in another branch of a
+       conditional. Its identity is the [$id] or, lacking one, a shared export
+       name (export names are unique per resolved module, so a collision can
+       only mean mutually-exclusive branches). Reuse the Wax name so references
+       stay coherent, but still consume an index slot below so positional naming
+       via [get_current] stays aligned with the conversion order. This only
+       applies to module-level sequences of a conditional module
+       ([forbid_numeric]); locals reuse a single sequence across functions,
+       where a repeated [$id] is a distinct variable, not the same entity. *)
+    let reused =
+      if seq.forbid_numeric then
+        match id with
+        | Some nm when Hashtbl.mem seq.label_mapping nm.Ast.desc ->
+            Some (Hashtbl.find seq.label_mapping nm.Ast.desc)
+        | _ ->
+            List.find_map
+              (fun nm -> Hashtbl.find_opt seq.export_mapping nm.Ast.desc)
+              exports
+      else None
+    in
+    let name =
+      match reused with
+      | Some name -> name
+      | None ->
           let name =
             match (id, exports) with
             | (Some nm, _ | None, nm :: _)
@@ -77,13 +87,16 @@ module Sequence = struct
                     | _ -> seq.default))
           in
           Namespace.add seq.namespace name
-        in
-        seq.last_index <- seq.last_index + 1;
-        Hashtbl.add seq.index_mapping idx name;
-        Option.iter
-          (fun id -> Hashtbl.add seq.label_mapping id.Ast.desc name)
-          id;
-        name
+    in
+    seq.last_index <- seq.last_index + 1;
+    Hashtbl.add seq.index_mapping idx name;
+    Option.iter
+      (fun id -> Hashtbl.replace seq.label_mapping id.Ast.desc name)
+      id;
+    List.iter
+      (fun nm -> Hashtbl.replace seq.export_mapping nm.Ast.desc name)
+      exports;
+    name
 
   let register seq export_tbl kind id exports =
     ignore (register' seq export_tbl kind id exports)

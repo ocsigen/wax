@@ -16,6 +16,22 @@ error, because the branches are mutually exclusive):
 
   $ wax --validate cond.wat -o checked.wax
 
+A field with no `$id` is identified by its export name: the same export in both
+branches reuses one Wax name rather than being disambiguated with a `_2` suffix.
+
+  $ wax export-name.wat -o export-name.wax && cat export-name.wax
+  #[if(wasi)]
+  #[export = "init"]
+  fn init(x: &eq) -> &eq {
+      x;
+  }
+  #[else]
+  #[export = "init"]
+  fn init(x: &eq) -> &eq {
+      x;
+  }
+  $ wax --validate export-name.wat -o checked-export-name.wax
+
 Branches with different import sets (and a shared `$id`) keep each Wax name
 attached to its own import; a sibling conditional on the negated condition does
 not produce an infeasible configuration, so the result type-checks.
