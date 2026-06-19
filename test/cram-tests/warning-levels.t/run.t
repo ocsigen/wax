@@ -104,7 +104,8 @@ An unknown warning or group name is rejected:
   $ wax --validate -W bogus=error unused.wax -f wat
   Usage: wax [--help] [COMMAND] …
   wax: option -W: Unknown warning or group 'bogus'. Known names: unused-local,
-       truncated-coverage, unused, all.
+       truncated-coverage, naming-conflict, reserved-word-rename, unused,
+       naming, all.
   [124]
 
 An unknown level is rejected:
@@ -114,3 +115,58 @@ An unknown level is rejected:
   wax: option -W: Unknown warning level 'loud'; expected hidden, warning, or
        error.
   [124]
+
+Converting from Wasm, a source name may have to be renamed — because it
+collides with another (`naming-conflict`) or is a Wax reserved word
+(`reserved-word-rename`). Both are hidden by default, so the conversion is
+quiet:
+
+  $ wax -i wat -f wax rename.wat
+  const foo = 1;
+  fn foo_2() -> i32 {
+      0;
+  }
+  fn if_2() -> i32 {
+      2;
+  }
+
+The `naming` group enables both, each pointing at the renamed identifier and
+showing the name before and after:
+
+  $ wax -i wat -f wax -W naming=warning rename.wat
+  Warning:
+    The name 'foo' is already in use; renaming this occurrence to 'foo_2'.
+   ──➤  rename.wat:3:9
+  1 │ (module
+  2 │   (global $foo i32 (i32.const 1))
+    ·           ^^^^ 'foo' first claimed here
+  3 │   (func $foo (result i32) (i32.const 0))
+    ·         ^^^^
+  4 │   (func $if (result i32) (i32.const 2)))
+  5 │ 
+  Warning: 'if' is a reserved word; renaming this identifier to 'if_2'.
+   ──➤  rename.wat:4:9
+  2 │   (global $foo i32 (i32.const 1))
+  3 │   (func $foo (result i32) (i32.const 0))
+  4 │   (func $if (result i32) (i32.const 2)))
+    ·         ^^^
+  5 │ 
+  const foo = 1;
+  fn foo_2() -> i32 {
+      0;
+  }
+  fn if_2() -> i32 {
+      2;
+  }
+
+They can be enabled individually, and promoted to an error like any warning:
+
+  $ wax -i wat -f wax -W reserved-word-rename=error rename.wat
+  Error: 'if' is a reserved word; renaming this identifier to 'if_2'.
+   ──➤  rename.wat:4:9
+  2 │   (global $foo i32 (i32.const 1))
+  3 │   (func $foo (result i32) (i32.const 0))
+  4 │   (func $if (result i32) (i32.const 2)))
+    ·         ^^^
+  5 │ 
+  [128]

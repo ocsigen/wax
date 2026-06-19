@@ -11,6 +11,12 @@ type t =
   | Truncated_coverage
       (** Path-sensitive validation gave up after too many conditional
           configurations. *)
+  | Naming_conflict
+      (** Converting from Wasm, a source name collided with another and was
+          renamed to a fresh one. *)
+  | Reserved_word_rename
+      (** Converting from Wasm, a source name is a Wax reserved word and was
+          renamed to a fresh one. *)
 
 val all : t list
 (** Every named warning. *)
@@ -32,7 +38,9 @@ type policy
 (** A mapping from each warning to its {!level}. *)
 
 val default_policy : policy
-(** The policy in which every warning is {!Displayed}. *)
+(** The policy giving each warning its default level. Most warnings default to
+    {!Displayed}; the From_wasm renaming warnings ([naming-conflict],
+    [reserved-word-rename]) default to {!Hidden}. *)
 
 val resolve : policy -> t -> level
 (** [resolve policy w] is the level configured for [w]. *)

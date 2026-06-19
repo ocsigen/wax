@@ -61,18 +61,26 @@ files (see [Formatting](#formatting)) and `check` validates them (see
     - Set the reporting level of a warning produced during validation.
     - *NAME* is a single warning, a group, or `all`:
         - `unused-local` (group `unused`) — a local that is declared but never
-          read.
+          read. Produced while validating; shown by default.
         - `truncated-coverage` — path-sensitive validation gave up after too
-          many conditional configurations.
+          many conditional configurations. Shown by default.
+        - `naming-conflict` (group `naming`) — converting from Wasm, a source
+          name collided with another and was renamed (e.g. `foo` → `foo_2`).
+          Hidden by default.
+        - `reserved-word-rename` (group `naming`) — converting from Wasm, a
+          source name is a Wax reserved word and was renamed (e.g. `if` →
+          `if_2`). Hidden by default.
     - *LEVEL* is one of:
         - `hidden` — suppress the warning entirely.
-        - `warning` — report it as a warning (the default).
+        - `warning` — report it as a warning.
         - `error` — promote it to an error, so the run fails.
     - Repeatable; later settings override earlier ones. For example,
       `-W all=error -W unused-local=warning` makes every warning fatal except
       unused locals.
-    - Warnings are produced only while validating, so `-W` takes effect together
-      with `--validate` (for `convert` / `format`) and always for `check`.
+    - The validation warnings (`unused-local`, `truncated-coverage`) are
+      produced only while validating, so `-W` takes effect together with
+      `--validate` (for `convert` / `format`) and always for `check`. The
+      `naming` warnings are produced when converting a Wasm module to Wax.
 
 - **`--color`** *WHEN*
     - Colorize output.

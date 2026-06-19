@@ -30,9 +30,13 @@ module Sequence = struct
         (* When set (module-level sequences of a module containing conditional
            annotations), numeric references are refused: a field's index depends
            on which branch is taken, so it cannot be resolved to one name. *)
+    diagnostics : Utils.Diagnostic.context option;
+        (* Where to report a [naming-conflict] / [reserved-word-rename] warning
+           when a source name has to be renamed; [None] silences them (for
+           internal namespaces without a source identifier to point at). *)
   }
 
-  let make ?(forbid_numeric = false) namespace default =
+  let make ?(forbid_numeric = false) ?diagnostics namespace default =
     {
       index_mapping = Hashtbl.create 16;
       label_mapping = Hashtbl.create 16;
@@ -42,7 +46,45 @@ module Sequence = struct
       namespace;
       default;
       forbid_numeric;
+      diagnostics;
     }
+
+  (* Report that the source name [original] had to be renamed to [renamed]
+     (because it is a reserved word, or collides with another name), pointing at
+     the source identifier. For a collision, [previous] (when known) points the
+     related label at the occurrence that first claimed the name. *)
+  let report_rename diagnostics ~location ~previous ~reserved ~original ~renamed
+      =
+    let warning, message =
+      if reserved then
+        ( Utils.Warning.Reserved_word_rename,
+          fun f () ->
+            Format.fprintf f
+              "'%s' is a reserved word; renaming this identifier to '%s'."
+              original renamed )
+      else
+        ( Utils.Warning.Naming_conflict,
+          fun f () ->
+            Format.fprintf f
+              "The name '%s' is already in use; renaming this occurrence to \
+               '%s'."
+              original renamed )
+    in
+    let related =
+      match previous with
+      | Some location ->
+          [
+            {
+              Utils.Diagnostic.location;
+              message =
+                (fun f () ->
+                  Format.fprintf f "'%s' first claimed here" original);
+            };
+          ]
+      | None -> []
+    in
+    Utils.Diagnostic.report diagnostics ~location ~severity:Warning ~warning
+      ~related ~message ()
 
   let register' ?hint seq export_tbl (kind : Src.exportable option)
       (id : Src.name option) exports =
@@ -71,22 +113,36 @@ module Sequence = struct
       match reused with
       | Some name -> name
       | None ->
-          let name =
+          (* [src] is the source identifier the name was taken from (with its
+             location), or [None] for a synthesized default; only a renamed
+             source identifier is worth a warning. *)
+          let candidate, src =
             match (id, exports) with
             | (Some nm, _ | None, nm :: _)
               when Lexer.is_valid_identifier nm.Ast.desc ->
-                nm.Ast.desc
+                (nm.Ast.desc, Some nm)
             | _ -> (
                 match kind with
-                | None -> Option.value hint ~default:seq.default
+                | None -> (Option.value hint ~default:seq.default, None)
                 | Some kind -> (
                     match Hashtbl.find_opt export_tbl (kind, Src.Num idx) with
                     | Some (nm :: _) when Lexer.is_valid_identifier nm.Ast.desc
                       ->
-                        nm.Ast.desc
-                    | _ -> seq.default))
+                        (nm.Ast.desc, Some nm)
+                    | _ -> (seq.default, None)))
           in
-          Namespace.add seq.namespace name
+          let name, outcome =
+            match src with
+            | Some nm -> Namespace.add' ~loc:nm.Ast.info seq.namespace candidate
+            | None -> Namespace.add' seq.namespace candidate
+          in
+          (match (src, outcome, seq.diagnostics) with
+          | Some nm, Namespace.Renamed { reserved; previous }, Some diagnostics
+            ->
+              report_rename diagnostics ~location:nm.Ast.info ~previous
+                ~reserved ~original:candidate ~renamed:name
+          | _ -> ());
+          name
     in
     seq.last_index <- seq.last_index + 1;
     Hashtbl.add seq.index_mapping idx name;
@@ -1832,7 +1888,8 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
           in
           {
             ctx with
-            locals = Sequence.make local_namespace "x";
+            locals =
+              Sequence.make ~diagnostics:ctx.diagnostics local_namespace "x";
             labels;
             label_arities = [ (None, return_arity) ];
             return_arity;
@@ -2314,7 +2371,10 @@ let register_names ctx export_tbl fields =
                 match (ty : Src.subtype).typ with
                 | Func _ | Array _ | Cont _ -> ()
                 | Struct l ->
-                    let seq = Sequence.make (Namespace.make ()) "f" in
+                    let seq =
+                      Sequence.make ~diagnostics:ctx.diagnostics
+                        (Namespace.make ()) "f"
+                    in
                     (* A struct subtype inherits its supertype's fields by
                        position, so an unnamed field can borrow the name the
                        parent gave that slot rather than the generic "f". *)
@@ -2463,17 +2523,24 @@ let module_ ?(strict_constants = false) diagnostics (_, fields) =
       {
         diagnostics;
         types =
-          Sequence.make ~forbid_numeric (Namespace.make ~kind:`Type ()) "t";
+          Sequence.make ~forbid_numeric ~diagnostics
+            (Namespace.make ~kind:`Type ())
+            "t";
         struct_fields = Hashtbl.create 16;
-        globals = Sequence.make ~forbid_numeric common_namespace "g";
-        functions = Sequence.make ~forbid_numeric common_namespace "f";
+        globals =
+          Sequence.make ~forbid_numeric ~diagnostics common_namespace "g";
+        functions =
+          Sequence.make ~forbid_numeric ~diagnostics common_namespace "f";
         memories =
-          Sequence.make ~forbid_numeric:forbid_numeric_memory common_namespace
-            "m";
-        tables = Sequence.make ~forbid_numeric common_namespace "t";
-        tags = Sequence.make ~forbid_numeric (Namespace.make ()) "t";
-        datas = Sequence.make ~forbid_numeric (Namespace.make ()) "d";
-        elems = Sequence.make ~forbid_numeric (Namespace.make ()) "e";
+          Sequence.make ~forbid_numeric:forbid_numeric_memory ~diagnostics
+            common_namespace "m";
+        tables = Sequence.make ~forbid_numeric ~diagnostics common_namespace "t";
+        tags =
+          Sequence.make ~forbid_numeric ~diagnostics (Namespace.make ()) "t";
+        datas =
+          Sequence.make ~forbid_numeric ~diagnostics (Namespace.make ()) "d";
+        elems =
+          Sequence.make ~forbid_numeric ~diagnostics (Namespace.make ()) "e";
         referenced_elems = Hashtbl.create 16;
         type_defs = CondTbl.make ();
         implicit_types = Hashtbl.create 16;
@@ -2481,7 +2548,7 @@ let module_ ?(strict_constants = false) diagnostics (_, fields) =
         tag_types = CondTbl.make ();
         exports = Hashtbl.create 16;
         start = None;
-        locals = Sequence.make common_namespace "x";
+        locals = Sequence.make ~diagnostics common_namespace "x";
         labels = LabelStack.make ();
         label_arities = [];
         return_arity = 0;

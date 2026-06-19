@@ -1,6 +1,14 @@
 module StringMap = Map.Make (String)
 
-type t = { mutable existing_names : int StringMap.t }
+type t = {
+  mutable existing_names : int StringMap.t;
+  reserved : int StringMap.t;
+      (* The reserved words seeded at creation, kept separately so [add'] can
+         tell a reserved-word collision from a collision with another name. *)
+  mutable locations : Utils.Ast.location StringMap.t;
+      (* The source location each name was claimed from (when one was given), so
+         [add'] can point a conflict at the previous occurrence. *)
+}
 
 let build l = StringMap.of_list (List.map (fun s -> (s, 1)) l)
 
@@ -83,24 +91,41 @@ let rec add_indexed ns x i =
       ns.existing_names |> StringMap.add y 1 |> StringMap.add x i;
     y)
 
-let add ns x =
+type outcome =
+  | Available
+  | Renamed of { reserved : bool; previous : Utils.Ast.location option }
+
+let record_location ns ?loc name =
+  match loc with
+  | Some loc -> ns.locations <- ns.locations |> StringMap.add name loc
+  | None -> ()
+
+let add' ?loc ns x =
   match StringMap.find_opt x ns.existing_names with
-  | Some i -> add_indexed ns x (i + 1)
+  | Some i ->
+      let y = add_indexed ns x (i + 1) in
+      let previous = StringMap.find_opt x ns.locations in
+      record_location ns ?loc y;
+      (y, Renamed { reserved = StringMap.mem x ns.reserved; previous })
   | None ->
       ns.existing_names <- ns.existing_names |> StringMap.add x 1;
-      x
+      record_location ns ?loc x;
+      (x, Available)
+
+let add ns x = fst (add' ns x)
 
 let reserve ns x =
   if not (StringMap.mem x ns.existing_names) then
     ns.existing_names <- ns.existing_names |> StringMap.add x 1
 
-let dup { existing_names } = { existing_names }
+let dup { existing_names; reserved; locations } =
+  { existing_names; reserved; locations }
 
 let make ?(kind = `Regular) () =
-  {
-    existing_names =
-      (match kind with
-      | `Regular -> reserved
-      | `Label -> StringMap.empty
-      | `Type -> reserved_heap_types);
-  }
+  let reserved =
+    match kind with
+    | `Regular -> reserved
+    | `Label -> StringMap.empty
+    | `Type -> reserved_heap_types
+  in
+  { existing_names = reserved; reserved; locations = StringMap.empty }

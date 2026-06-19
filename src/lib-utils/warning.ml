@@ -1,19 +1,33 @@
-type t = Unused_local | Truncated_coverage
+type t =
+  | Unused_local
+  | Truncated_coverage
+  | Naming_conflict
+  | Reserved_word_rename
 
-let all = [ Unused_local; Truncated_coverage ]
+let all =
+  [ Unused_local; Truncated_coverage; Naming_conflict; Reserved_word_rename ]
 
 let name = function
   | Unused_local -> "unused-local"
   | Truncated_coverage -> "truncated-coverage"
+  | Naming_conflict -> "naming-conflict"
+  | Reserved_word_rename -> "reserved-word-rename"
 
 let description = function
   | Unused_local -> "A local that is declared but never read."
   | Truncated_coverage ->
       "Path-sensitive validation gave up after too many configurations."
+  | Naming_conflict -> "A Wasm name collided with another and was renamed."
+  | Reserved_word_rename -> "A Wasm name is a reserved word and was renamed."
 
 (* Group name -> members. The special group "all" is handled separately by
    [set] so it need not be listed here. *)
-let group_table = [ ("unused", [ Unused_local ]) ]
+let group_table =
+  [
+    ("unused", [ Unused_local ]);
+    ("naming", [ Naming_conflict; Reserved_word_rename ]);
+  ]
+
 let groups = List.map fst group_table
 
 type level = Hidden | Displayed | Error
@@ -22,7 +36,12 @@ type level = Hidden | Displayed | Error
    function, so later assignments naturally override earlier ones. *)
 type policy = t -> level
 
-let default_policy _ = Displayed
+(* The From_wasm renaming warnings are noisy round-trip notices, so they are
+   hidden unless explicitly enabled with [-W]; everything else is shown. *)
+let default_policy = function
+  | Naming_conflict | Reserved_word_rename -> Hidden
+  | Unused_local | Truncated_coverage -> Displayed
+
 let resolve (policy : policy) w = policy w
 
 (* The set of warnings a name refers to: the special group "all", a single

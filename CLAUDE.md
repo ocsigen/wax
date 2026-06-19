@@ -50,7 +50,7 @@ bare `wax <file>` form working — edit that heuristic if adding subcommands.
 | `-v` | `--validate` | Enable type checking (disabled by default) |
 | `-s` | `--strict-validate` | Stricter validation |
 | `-D` | `--define` | Set a conditional-compilation variable (`NAME`, `NAME=true/false`, `NAME=N.N.N`, `NAME=STR`); specializes `#[if]`/`(@if)` annotations. Repeatable |
-| `-W` | `--warn` | Set a warning's level: `NAME=LEVEL` where `NAME` is a warning (`unused-local`, `truncated-coverage`), a group (`unused`), or `all`, and `LEVEL` is `hidden`/`warning`/`error`. Later settings override earlier; repeatable |
+| `-W` | `--warn` | Set a warning's level: `NAME=LEVEL` where `NAME` is a warning (`unused-local`, `truncated-coverage`, `naming-conflict`, `reserved-word-rename`), a group (`unused`, `naming`), or `all`, and `LEVEL` is `hidden`/`warning`/`error`. The `naming` warnings (Wasm→Wax renames) are hidden by default. Later settings override earlier; repeatable |
 |      | `--fold` / `--unfold` | Force folded / unfolded instruction form (default: auto) |
 |      | `--color` | Color output: `auto`/`always`/`never` |
 |      | `--source-map-file` | Emit a source map to the given file |
