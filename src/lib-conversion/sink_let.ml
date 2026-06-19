@@ -339,6 +339,19 @@ let rec sink_into ((name, _) as decl) s =
       pick [ (e, fun e' -> Set (id, e')) ]
   | Tee (n, e) when not (String.equal n.desc name.desc) ->
       pick [ (e, fun e' -> Tee (n, e')) ]
+  | Let (bindings, Some e)
+    when not
+           (List.exists
+              (fun (id, _) ->
+                match id with
+                | Some n -> String.equal n.desc name.desc
+                | None -> false)
+              bindings) ->
+      (* [let y = <block>] (binding some other local) holds every use of [name]
+         in its initializer; descend into it, as for [Set]. The initializer is
+         evaluated before [y] enters scope, so placing the declaration inside it
+         does not shadow [name]. *)
+      pick [ (e, fun e' -> Let (bindings, Some e')) ]
   | Call (t, args) ->
       pick
         ((t, fun t' -> Call (t', args))

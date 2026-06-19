@@ -87,7 +87,7 @@
   (local $re_register (ref $int_array)) (local $pc i32) (local $i i32)
   (local $j i32) (local $stack (ref null $stack)) (local $instr i32)
   (local $s' (ref $string)) (local $set (ref $string)) (local $arg i32)
-  (local $l i32) (local $p (ref $pos)) (local $u (ref $undo))
+  (local $l i32) (local $u (ref $undo)) (local $p (ref $pos))
   (local $res (ref $block))
   (local.set $len (array.len (local.get $s)))
   (local.set $re (ref.cast (ref $block) (local.get $vre)))
