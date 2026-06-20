@@ -1140,11 +1140,11 @@
 (data $cust_value "output_value: abstract value (Custom)")
 
 (func $extern_rec (param $s (ref $extern_state)) (param $v (ref eq))
-  (local $hd i32) (local $sp (ref null $stack_item)) (local $b (ref $block))
-  (local $pos i32) (local $iv (ref i31)) (local $sz i32) (local $tag_2 i32)
-  (local $c (ref $custom)) (local $fa (ref $float_array))
+  (local $hd i32) (local $sp (ref null $stack_item)) (local $pos i32)
+  (local $iv (ref i31)) (local $sz i32) (local $blk (ref $block))
+  (local $tag_2 i32) (local $c (ref $custom)) (local $fa (ref $float_array))
   (local $flv (ref $float)) (local $str (ref $string)) (local $sz64 i32)
-  (local $sz32 i32) (local $item (ref $stack_item))
+  (local $sz32 i32) (local $item (ref $stack_item)) (local $b (ref $block))
   (loop $loop
     (block $next_item
       (block $default
@@ -1154,40 +1154,40 @@
             (br $default)))
         (call $extern_int (local.get $s) (i31.get_s (local.get $iv)))
         (br $next_item))
-      (drop
-        (block $not_block (result (ref eq))
-          (local.set $b
-            (br_on_cast_fail $not_block (ref eq) (ref $block) (local.get $v)))
-          (local.set $tag_2
-            (i31.get_u
-              (ref.cast (ref i31)
-                (array.get $block (local.get $b) (i32.const 0)))))
-          (local.set $sz (i32.sub (array.len (local.get $b)) (i32.const 1)))
-          (if (i32.eqz (local.get $sz))
-            (then
-              (call $extern_header (local.get $s) (i32.const 0)
-                (local.get $tag_2))
-              (br $next_item)))
-          (local.set $pos
-            (call $extern_lookup_position (local.get $s) (local.get $v)))
-          (if (i32.ge_s (local.get $pos) (i32.const 0))
-            (then
-              (call $extern_shared_reference (local.get $s)
-                (i32.sub
-                  (struct.get $extern_state $obj_counter (local.get $s))
-                  (local.get $pos)))
-              (br $next_item)))
-          (call $extern_record_location (local.get $s) (local.get $v))
-          (call $extern_header (local.get $s) (local.get $sz)
-            (local.get $tag_2))
-          (call $extern_size (local.get $s) (local.get $sz) (local.get $sz))
-          (if (i32.gt_u (local.get $sz) (i32.const 1))
-            (then
-              (local.set $sp
-                (struct.new $stack_item (local.get $b) (i32.const 2)
-                  (local.get $sp)))))
-          (local.set $v (array.get $block (local.get $b) (i32.const 1)))
-          (br $loop)))
+      (block $default
+        (local.set $blk
+          (block $arm (result (ref $block))
+            (drop (br_on_cast $arm (ref eq) (ref $block) (local.get $v)))
+            (br $default)))
+        (local.set $tag_2
+          (i31.get_u
+            (ref.cast (ref i31)
+              (array.get $block (local.get $blk) (i32.const 0)))))
+        (local.set $sz (i32.sub (array.len (local.get $blk)) (i32.const 1)))
+        (if (i32.eqz (local.get $sz))
+          (then
+            (call $extern_header (local.get $s) (i32.const 0)
+              (local.get $tag_2))
+            (br $next_item)))
+        (local.set $pos
+          (call $extern_lookup_position (local.get $s) (local.get $v)))
+        (if (i32.ge_s (local.get $pos) (i32.const 0))
+          (then
+            (call $extern_shared_reference (local.get $s)
+              (i32.sub (struct.get $extern_state $obj_counter (local.get $s))
+                (local.get $pos)))
+            (br $next_item)))
+        (call $extern_record_location (local.get $s) (local.get $v))
+        (call $extern_header (local.get $s) (local.get $sz)
+          (local.get $tag_2))
+        (call $extern_size (local.get $s) (local.get $sz) (local.get $sz))
+        (if (i32.gt_u (local.get $sz) (i32.const 1))
+          (then
+            (local.set $sp
+              (struct.new $stack_item (local.get $blk) (i32.const 2)
+                (local.get $sp)))))
+        (local.set $v (array.get $block (local.get $blk) (i32.const 1)))
+        (br $loop))
       (local.set $pos
         (call $extern_lookup_position (local.get $s) (local.get $v)))
       (if (i32.ge_s (local.get $pos) (i32.const 0))

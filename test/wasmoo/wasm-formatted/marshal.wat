@@ -1148,6 +1148,7 @@
   (local $fa (ref $float_array)) (local $hd i32) (local $tag i32)
   (local $sz i32) (local $pos i32) (local $sz32 i32) (local $sz64 i32)
   (local $c (ref $custom)) (local $iv (ref i31)) (local $flv (ref $float))
+  (local $blk (ref $block))
   (loop $loop
     (block $next_item
       (drop
@@ -1158,13 +1159,13 @@
           (br $next_item)))
       (drop
         (block $not_block (result (ref eq))
-          (local.set $b
+          (local.set $blk
             (br_on_cast_fail $not_block (ref eq) (ref $block) (local.get $v)))
           (local.set $tag
             (i31.get_u
               (ref.cast (ref i31)
-                (array.get $block (local.get $b) (i32.const 0)))))
-          (local.set $sz (i32.sub (array.len (local.get $b)) (i32.const 1)))
+                (array.get $block (local.get $blk) (i32.const 0)))))
+          (local.set $sz (i32.sub (array.len (local.get $blk)) (i32.const 1)))
           (if (i32.eqz (local.get $sz))
             (then
               (call $extern_header (local.get $s) (i32.const 0)
@@ -1186,9 +1187,9 @@
           (if (i32.gt_u (local.get $sz) (i32.const 1))
             (then
               (local.set $sp
-                (struct.new $stack_item (local.get $b) (i32.const 2)
+                (struct.new $stack_item (local.get $blk) (i32.const 2)
                   (local.get $sp)))))
-          (local.set $v (array.get $block (local.get $b) (i32.const 1)))
+          (local.set $v (array.get $block (local.get $blk) (i32.const 1)))
           (br $loop)))
       (local.set $pos
         (call $extern_lookup_position (local.get $s) (local.get $v)))

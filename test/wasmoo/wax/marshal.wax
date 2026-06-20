@@ -842,7 +842,6 @@ fn extern_rec(s: &extern_state, v: &eq) {
     let hd: i32;
     let sp: &?stack_item;
     'loop: loop {
-        let b: &block;
         let pos: i32;
         'next_item: do {
             match v {
@@ -852,11 +851,10 @@ fn extern_rec(s: &extern_state, v: &eq) {
                 }
                 _ => {
                     let sz: i32;
-                    _ =
-                        'not_block: do &eq {
-                            b = br_on_cast_fail 'not_block &block v;
-                            let tag_2 = b[0] as &i31 as i32_u;
-                            sz = b.length() - 1;
+                    match v {
+                        blk: &block => {
+                            let tag_2 = blk[0] as &i31 as i32_u;
+                            sz = blk.length() - 1;
                             if !sz {
                                 extern_header(s, 0, tag_2);
                                 br 'next_item;
@@ -870,51 +868,54 @@ fn extern_rec(s: &extern_state, v: &eq) {
                             extern_header(s, sz, tag_2);
                             extern_size(s, sz, sz);
                             if sz >u 1 {
-                                sp = { blk: b, pos: 2, next: sp };
+                                sp = { blk: blk, pos: 2, next: sp };
                             }
-                            v = b[1];
+                            v = blk[1];
                             br 'loop;
-                        };
-                    pos = extern_lookup_position(s, v);
-                    if pos >=s 0 {
-                        extern_shared_reference(s, s.obj_counter - pos);
-                        br 'next_item;
-                    }
-                    extern_record_location(s, v);
-                    match v {
-                        str: &string => {
-                            extern_string(s, str);
-                            sz = str.length();
-                            extern_size(s, 1 + (sz >>u 2), 1 + (sz >>u 3));
-                            br 'next_item;
-                        }
-                        flv: &float => {
-                            extern_float(s, flv.f);
-                            extern_size(s, 2, 1);
-                            br 'next_item;
-                        }
-                        fa: &float_array => {
-                            sz = fa.length();
-                            extern_float_array(s, fa);
-                            extern_size(s, sz * 2, sz);
-                            br 'next_item;
-                        }
-                        c: &custom => {
-                            let (sz32, sz64) = extern_custom(s, c);
-                            extern_size(s, sz32 + 7 >>u 2, sz64 + 15 >>u 3);
-                            br 'next_item;
                         }
                         _ => {
-                            if caml_is_closure(v) {
-                                caml_invalid_argument([string|func_value @ 0; 30]);
+                            pos = extern_lookup_position(s, v);
+                            if pos >=s 0 {
+                                extern_shared_reference(s, s.obj_counter - pos);
+                                br 'next_item;
                             }
-                            if caml_is_continuation(v) {
-                                caml_invalid_argument([string|cont_value @ 0; 32]);
+                            extern_record_location(s, v);
+                            match v {
+                                str: &string => {
+                                    extern_string(s, str);
+                                    sz = str.length();
+                                    extern_size(s, 1 + (sz >>u 2), 1 + (sz >>u 3));
+                                    br 'next_item;
+                                }
+                                flv: &float => {
+                                    extern_float(s, flv.f);
+                                    extern_size(s, 2, 1);
+                                    br 'next_item;
+                                }
+                                fa: &float_array => {
+                                    sz = fa.length();
+                                    extern_float_array(s, fa);
+                                    extern_size(s, sz * 2, sz);
+                                    br 'next_item;
+                                }
+                                c: &custom => {
+                                    let (sz32, sz64) = extern_custom(s, c);
+                                    extern_size(s, sz32 + 7 >>u 2, sz64 + 15 >>u 3);
+                                    br 'next_item;
+                                }
+                                _ => {
+                                    if caml_is_closure(v) {
+                                        caml_invalid_argument([string|func_value @ 0; 30]);
+                                    }
+                                    if caml_is_continuation(v) {
+                                        caml_invalid_argument([string|cont_value @ 0; 32]);
+                                    }
+                                    if v is &js {
+                                        caml_invalid_argument([string|js_value @ 0; 47]);
+                                    }
+                                    caml_invalid_argument([string|abstract_value @ 0; 28]);
+                                }
                             }
-                            if v is &js {
-                                caml_invalid_argument([string|js_value @ 0; 47]);
-                            }
-                            caml_invalid_argument([string|abstract_value @ 0; 28]);
                         }
                     }
                 }
@@ -923,7 +924,7 @@ fn extern_rec(s: &extern_state, v: &eq) {
         // next_item
         'done: do {
             let item = br_on_null 'done sp;
-            b = item.blk;
+            let b = item.blk;
             pos = item.pos;
             v = b[pos];
             pos = pos + 1;
