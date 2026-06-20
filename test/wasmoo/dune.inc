@@ -53,6 +53,17 @@
   (action
    (diff ../wax/array.wax.gen array.wax.gen))))
 
+(subdir wax-round-trip
+ (rule
+  (target array.wax.gen)
+  (deps ../wasm-round-trip/array.wat)
+ (action
+  (run wax --validate -W unused-local=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/array.wat)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/array.wax array.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target backtrace.wat.gen)
@@ -107,6 +118,17 @@
   (alias runtest)
   (action
    (diff ../wax/backtrace.wax.gen backtrace.wax.gen))))
+
+(subdir wax-round-trip
+ (rule
+  (target backtrace.wax.gen)
+  (deps ../wasm-round-trip/backtrace.wat)
+ (action
+  (run wax --validate -W unused-local=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/backtrace.wat)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/backtrace.wax backtrace.wax.gen))))
 
 (subdir wasm-formatted
  (rule
@@ -163,6 +185,17 @@
   (action
    (diff ../wax/bigarray.wax.gen bigarray.wax.gen))))
 
+(subdir wax-round-trip
+ (rule
+  (target bigarray.wax.gen)
+  (deps ../wasm-round-trip/bigarray.wat)
+ (action
+  (run wax --validate -W unused-local=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/bigarray.wat)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/bigarray.wax bigarray.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target bigstring.wat.gen)
@@ -217,6 +250,17 @@
   (alias runtest)
   (action
    (diff ../wax/bigstring.wax.gen bigstring.wax.gen))))
+
+(subdir wax-round-trip
+ (rule
+  (target bigstring.wax.gen)
+  (deps ../wasm-round-trip/bigstring.wat)
+ (action
+  (run wax --validate -W unused-local=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/bigstring.wat)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/bigstring.wax bigstring.wax.gen))))
 
 (subdir wasm-formatted
  (rule
@@ -273,6 +317,17 @@
   (action
    (diff ../wax/compare.wax.gen compare.wax.gen))))
 
+(subdir wax-round-trip
+ (rule
+  (target compare.wax.gen)
+  (deps ../wasm-round-trip/compare.wat)
+ (action
+  (run wax --validate -W unused-local=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/compare.wat)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/compare.wax compare.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target custom.wat.gen)
@@ -327,6 +382,17 @@
   (alias runtest)
   (action
    (diff ../wax/custom.wax.gen custom.wax.gen))))
+
+(subdir wax-round-trip
+ (rule
+  (target custom.wax.gen)
+  (deps ../wasm-round-trip/custom.wat)
+ (action
+  (run wax --validate -W unused-local=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/custom.wat)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/custom.wax custom.wax.gen))))
 
 (subdir wasm-formatted
  (rule
@@ -383,6 +449,17 @@
   (action
    (diff ../wax/domain.wax.gen domain.wax.gen))))
 
+(subdir wax-round-trip
+ (rule
+  (target domain.wax.gen)
+  (deps ../wasm-round-trip/domain.wat)
+ (action
+  (run wax --validate -W unused-local=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/domain.wat)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/domain.wax domain.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target dynlink.wat.gen)
@@ -437,6 +514,17 @@
   (alias runtest)
   (action
    (diff ../wax/dynlink.wax.gen dynlink.wax.gen))))
+
+(subdir wax-round-trip
+ (rule
+  (target dynlink.wax.gen)
+  (deps ../wasm-round-trip/dynlink.wat)
+ (action
+  (run wax --validate -W unused-local=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/dynlink.wat)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/dynlink.wax dynlink.wax.gen))))
 
 (subdir wasm-formatted
  (rule
@@ -493,6 +581,17 @@
   (action
    (diff ../wax/effect.wax.gen effect.wax.gen))))
 
+(subdir wax-round-trip
+ (rule
+  (target effect.wax.gen)
+  (deps ../wasm-round-trip/effect.wat)
+ (action
+  (run wax --validate -W unused-local=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/effect.wat)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/effect.wax effect.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target fail.wat.gen)
@@ -547,6 +646,17 @@
   (alias runtest)
   (action
    (diff ../wax/fail.wax.gen fail.wax.gen))))
+
+(subdir wax-round-trip
+ (rule
+  (target fail.wax.gen)
+  (deps ../wasm-round-trip/fail.wat)
+ (action
+  (run wax --validate -W unused-local=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/fail.wat)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/fail.wax fail.wax.gen))))
 
 (subdir wasm-formatted
  (rule
@@ -603,6 +713,17 @@
   (action
    (diff ../wax/float.wax.gen float.wax.gen))))
 
+(subdir wax-round-trip
+ (rule
+  (target float.wax.gen)
+  (deps ../wasm-round-trip/float.wat)
+ (action
+  (run wax --validate -W unused-local=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/float.wat)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/float.wax float.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target fs.wat.gen)
@@ -657,6 +778,17 @@
   (alias runtest)
   (action
    (diff ../wax/fs.wax.gen fs.wax.gen))))
+
+(subdir wax-round-trip
+ (rule
+  (target fs.wax.gen)
+  (deps ../wasm-round-trip/fs.wat)
+ (action
+  (run wax --validate -W unused-local=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/fs.wat)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/fs.wax fs.wax.gen))))
 
 (subdir wasm-formatted
  (rule
@@ -713,6 +845,17 @@
   (action
    (diff ../wax/gc.wax.gen gc.wax.gen))))
 
+(subdir wax-round-trip
+ (rule
+  (target gc.wax.gen)
+  (deps ../wasm-round-trip/gc.wat)
+ (action
+  (run wax --validate -W unused-local=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/gc.wat)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/gc.wax gc.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target hash.wat.gen)
@@ -767,6 +910,17 @@
   (alias runtest)
   (action
    (diff ../wax/hash.wax.gen hash.wax.gen))))
+
+(subdir wax-round-trip
+ (rule
+  (target hash.wax.gen)
+  (deps ../wasm-round-trip/hash.wat)
+ (action
+  (run wax --validate -W unused-local=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/hash.wat)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/hash.wax hash.wax.gen))))
 
 (subdir wasm-formatted
  (rule
@@ -823,6 +977,17 @@
   (action
    (diff ../wax/int32.wax.gen int32.wax.gen))))
 
+(subdir wax-round-trip
+ (rule
+  (target int32.wax.gen)
+  (deps ../wasm-round-trip/int32.wat)
+ (action
+  (run wax --validate -W unused-local=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/int32.wat)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/int32.wax int32.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target int64.wat.gen)
@@ -877,6 +1042,17 @@
   (alias runtest)
   (action
    (diff ../wax/int64.wax.gen int64.wax.gen))))
+
+(subdir wax-round-trip
+ (rule
+  (target int64.wax.gen)
+  (deps ../wasm-round-trip/int64.wat)
+ (action
+  (run wax --validate -W unused-local=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/int64.wat)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/int64.wax int64.wax.gen))))
 
 (subdir wasm-formatted
  (rule
@@ -933,6 +1109,17 @@
   (action
    (diff ../wax/ints.wax.gen ints.wax.gen))))
 
+(subdir wax-round-trip
+ (rule
+  (target ints.wax.gen)
+  (deps ../wasm-round-trip/ints.wat)
+ (action
+  (run wax --validate -W unused-local=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/ints.wat)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/ints.wax ints.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target io.wat.gen)
@@ -987,6 +1174,17 @@
   (alias runtest)
   (action
    (diff ../wax/io.wax.gen io.wax.gen))))
+
+(subdir wax-round-trip
+ (rule
+  (target io.wax.gen)
+  (deps ../wasm-round-trip/io.wat)
+ (action
+  (run wax --validate -W unused-local=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/io.wat)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/io.wax io.wax.gen))))
 
 (subdir wasm-formatted
  (rule
@@ -1043,6 +1241,17 @@
   (action
    (diff ../wax/jslib.wax.gen jslib.wax.gen))))
 
+(subdir wax-round-trip
+ (rule
+  (target jslib.wax.gen)
+  (deps ../wasm-round-trip/jslib.wat)
+ (action
+  (run wax --validate -W unused-local=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/jslib.wat)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/jslib.wax jslib.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target jslib_js_of_ocaml.wat.gen)
@@ -1097,6 +1306,17 @@
   (alias runtest)
   (action
    (diff ../wax/jslib_js_of_ocaml.wax.gen jslib_js_of_ocaml.wax.gen))))
+
+(subdir wax-round-trip
+ (rule
+  (target jslib_js_of_ocaml.wax.gen)
+  (deps ../wasm-round-trip/jslib_js_of_ocaml.wat)
+ (action
+  (run wax --validate -W unused-local=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/jslib_js_of_ocaml.wat)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/jslib_js_of_ocaml.wax jslib_js_of_ocaml.wax.gen))))
 
 (subdir wasm-formatted
  (rule
@@ -1153,6 +1373,17 @@
   (action
    (diff ../wax/jsstring.wax.gen jsstring.wax.gen))))
 
+(subdir wax-round-trip
+ (rule
+  (target jsstring.wax.gen)
+  (deps ../wasm-round-trip/jsstring.wat)
+ (action
+  (run wax --validate -W unused-local=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/jsstring.wat)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/jsstring.wax jsstring.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target lexing.wat.gen)
@@ -1207,6 +1438,17 @@
   (alias runtest)
   (action
    (diff ../wax/lexing.wax.gen lexing.wax.gen))))
+
+(subdir wax-round-trip
+ (rule
+  (target lexing.wax.gen)
+  (deps ../wasm-round-trip/lexing.wat)
+ (action
+  (run wax --validate -W unused-local=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/lexing.wat)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/lexing.wax lexing.wax.gen))))
 
 (subdir wasm-formatted
  (rule
@@ -1263,6 +1505,17 @@
   (action
    (diff ../wax/marshal.wax.gen marshal.wax.gen))))
 
+(subdir wax-round-trip
+ (rule
+  (target marshal.wax.gen)
+  (deps ../wasm-round-trip/marshal.wat)
+ (action
+  (run wax --validate -W unused-local=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/marshal.wat)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/marshal.wax marshal.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target md5.wat.gen)
@@ -1317,6 +1570,17 @@
   (alias runtest)
   (action
    (diff ../wax/md5.wax.gen md5.wax.gen))))
+
+(subdir wax-round-trip
+ (rule
+  (target md5.wax.gen)
+  (deps ../wasm-round-trip/md5.wat)
+ (action
+  (run wax --validate -W unused-local=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/md5.wat)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/md5.wax md5.wax.gen))))
 
 (subdir wasm-formatted
  (rule
@@ -1373,6 +1637,17 @@
   (action
    (diff ../wax/nat.wax.gen nat.wax.gen))))
 
+(subdir wax-round-trip
+ (rule
+  (target nat.wax.gen)
+  (deps ../wasm-round-trip/nat.wat)
+ (action
+  (run wax --validate -W unused-local=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/nat.wat)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/nat.wax nat.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target obj.wat.gen)
@@ -1427,6 +1702,17 @@
   (alias runtest)
   (action
    (diff ../wax/obj.wax.gen obj.wax.gen))))
+
+(subdir wax-round-trip
+ (rule
+  (target obj.wax.gen)
+  (deps ../wasm-round-trip/obj.wat)
+ (action
+  (run wax --validate -W unused-local=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/obj.wat)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/obj.wax obj.wax.gen))))
 
 (subdir wasm-formatted
  (rule
@@ -1483,6 +1769,17 @@
   (action
    (diff ../wax/parsing.wax.gen parsing.wax.gen))))
 
+(subdir wax-round-trip
+ (rule
+  (target parsing.wax.gen)
+  (deps ../wasm-round-trip/parsing.wat)
+ (action
+  (run wax --validate -W unused-local=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/parsing.wat)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/parsing.wax parsing.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target printexc.wat.gen)
@@ -1537,6 +1834,17 @@
   (alias runtest)
   (action
    (diff ../wax/printexc.wax.gen printexc.wax.gen))))
+
+(subdir wax-round-trip
+ (rule
+  (target printexc.wax.gen)
+  (deps ../wasm-round-trip/printexc.wat)
+ (action
+  (run wax --validate -W unused-local=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/printexc.wat)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/printexc.wax printexc.wax.gen))))
 
 (subdir wasm-formatted
  (rule
@@ -1593,6 +1901,17 @@
   (action
    (diff ../wax/prng.wax.gen prng.wax.gen))))
 
+(subdir wax-round-trip
+ (rule
+  (target prng.wax.gen)
+  (deps ../wasm-round-trip/prng.wat)
+ (action
+  (run wax --validate -W unused-local=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/prng.wat)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/prng.wax prng.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target runtime_events.wat.gen)
@@ -1647,6 +1966,17 @@
   (alias runtest)
   (action
    (diff ../wax/runtime_events.wax.gen runtime_events.wax.gen))))
+
+(subdir wax-round-trip
+ (rule
+  (target runtime_events.wax.gen)
+  (deps ../wasm-round-trip/runtime_events.wat)
+ (action
+  (run wax --validate -W unused-local=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/runtime_events.wat)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/runtime_events.wax runtime_events.wax.gen))))
 
 (subdir wasm-formatted
  (rule
@@ -1703,6 +2033,17 @@
   (action
    (diff ../wax/stdlib.wax.gen stdlib.wax.gen))))
 
+(subdir wax-round-trip
+ (rule
+  (target stdlib.wax.gen)
+  (deps ../wasm-round-trip/stdlib.wat)
+ (action
+  (run wax --validate -W unused-local=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/stdlib.wat)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/stdlib.wax stdlib.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target str.wat.gen)
@@ -1757,6 +2098,17 @@
   (alias runtest)
   (action
    (diff ../wax/str.wax.gen str.wax.gen))))
+
+(subdir wax-round-trip
+ (rule
+  (target str.wax.gen)
+  (deps ../wasm-round-trip/str.wat)
+ (action
+  (run wax --validate -W unused-local=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/str.wat)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/str.wax str.wax.gen))))
 
 (subdir wasm-formatted
  (rule
@@ -1813,6 +2165,17 @@
   (action
    (diff ../wax/string.wax.gen string.wax.gen))))
 
+(subdir wax-round-trip
+ (rule
+  (target string.wax.gen)
+  (deps ../wasm-round-trip/string.wat)
+ (action
+  (run wax --validate -W unused-local=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/string.wat)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/string.wax string.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target sync.wat.gen)
@@ -1867,6 +2230,17 @@
   (alias runtest)
   (action
    (diff ../wax/sync.wax.gen sync.wax.gen))))
+
+(subdir wax-round-trip
+ (rule
+  (target sync.wax.gen)
+  (deps ../wasm-round-trip/sync.wat)
+ (action
+  (run wax --validate -W unused-local=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/sync.wat)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/sync.wax sync.wax.gen))))
 
 (subdir wasm-formatted
  (rule
@@ -1923,6 +2297,17 @@
   (action
    (diff ../wax/sys.wax.gen sys.wax.gen))))
 
+(subdir wax-round-trip
+ (rule
+  (target sys.wax.gen)
+  (deps ../wasm-round-trip/sys.wat)
+ (action
+  (run wax --validate -W unused-local=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/sys.wat)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/sys.wax sys.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target toplevel.wat.gen)
@@ -1977,6 +2362,17 @@
   (alias runtest)
   (action
    (diff ../wax/toplevel.wax.gen toplevel.wax.gen))))
+
+(subdir wax-round-trip
+ (rule
+  (target toplevel.wax.gen)
+  (deps ../wasm-round-trip/toplevel.wat)
+ (action
+  (run wax --validate -W unused-local=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/toplevel.wat)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/toplevel.wax toplevel.wax.gen))))
 
 (subdir wasm-formatted
  (rule
@@ -2033,6 +2429,17 @@
   (action
    (diff ../wax/unix.wax.gen unix.wax.gen))))
 
+(subdir wax-round-trip
+ (rule
+  (target unix.wax.gen)
+  (deps ../wasm-round-trip/unix.wat)
+ (action
+  (run wax --validate -W unused-local=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/unix.wat)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/unix.wax unix.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target weak.wat.gen)
@@ -2088,6 +2495,17 @@
   (action
    (diff ../wax/weak.wax.gen weak.wax.gen))))
 
+(subdir wax-round-trip
+ (rule
+  (target weak.wax.gen)
+  (deps ../wasm-round-trip/weak.wat)
+ (action
+  (run wax --validate -W unused-local=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/weak.wat)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/weak.wax weak.wax.gen))))
+
 (subdir wasm-formatted
  (rule
   (target zstd.wat.gen)
@@ -2142,4 +2560,15 @@
   (alias runtest)
   (action
    (diff ../wax/zstd.wax.gen zstd.wax.gen))))
+
+(subdir wax-round-trip
+ (rule
+  (target zstd.wax.gen)
+  (deps ../wasm-round-trip/zstd.wat)
+ (action
+  (run wax --validate -W unused-local=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/zstd.wat)))
+ (rule
+  (alias runtest)
+  (action
+   (diff ../wax/zstd.wax zstd.wax.gen))))
 

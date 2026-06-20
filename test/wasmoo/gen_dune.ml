@@ -89,5 +89,22 @@ let () =
         printf "  (alias runtest)\n";
         printf "  (action\n";
         printf "   (diff ../wax/%s.wax.gen %s.wax.gen))))\n" base base;
+        printf "\n";
+
+        (* 6. Round-trip back: the round-trip wat decompiled to wax must
+           reproduce the wax it was lowered from. *)
+        printf "(subdir wax-round-trip\n";
+        printf " (rule\n";
+        printf "  (target %s.wax.gen)\n" base;
+        printf "  (deps ../wasm-round-trip/%s)\n" file;
+        printf " (action\n";
+        printf
+          "  (run wax --validate -W unused-local=hidden --input-format wat \
+           --format wax -o %%{target} ../wasm-round-trip/%s)))\n"
+          file;
+        printf " (rule\n";
+        printf "  (alias runtest)\n";
+        printf "  (action\n";
+        printf "   (diff ../wax/%s.wax %s.wax.gen))))\n" base base;
         printf "\n"))
     files
