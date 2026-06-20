@@ -146,83 +146,79 @@ fn caml_hash(count: &eq, limit: &eq, seed: &eq, obj: &eq) -> &eq {
             let v = caml_hash_queue[rd];
             rd = rd + 1;
             'again: do {
-                _ =
-                    'not_int: do &eq {
-                        h =
-                            caml_hash_mix_int(
-                                h,
-                                ((br_on_cast_fail 'not_int &i31 v) as i32_s << 1) + 1,
-                            );
+                match v {
+                    iv: &i31 => {
+                        h = caml_hash_mix_int(h, (iv as i32_s << 1) + 1);
                         num = num - 1;
                         br 'loop;
-                    };
-                _ =
-                    'not_string: do &eq {
-                        h = caml_hash_mix_string(h, br_on_cast_fail 'not_string &string v);
+                    }
+                    sv: &string => {
+                        h = caml_hash_mix_string(h, sv);
                         num = num - 1;
                         br 'loop;
-                    };
-                _ =
-                    'not_block: do &eq {
-                        let b = br_on_cast_fail 'not_block &block v;
-                        let tag_2 = b[0] as &i31 as i32_u;
-                        let i: i32;
-                        if tag_2 == forward_tag {
-                            i = 0;
-                            'forward: loop {
-                                v = b[1];
+                    }
+                    _ => {
+                        _ =
+                            'not_block: do &eq {
+                                let b = br_on_cast_fail 'not_block &block v;
+                                let tag_2 = b[0] as &i31 as i32_u;
+                                let i: i32;
+                                if tag_2 == forward_tag {
+                                    i = 0;
+                                    'forward: loop {
+                                        v = b[1];
+                                        _ =
+                                            'not_block': do &eq {
+                                                b = br_on_cast_fail 'not_block' &block v;
+                                                br_if 'again !(b[0] == forward_tag as &i31);
+                                                i = i + 1;
+                                                br_if 'loop i == MAX_FORWARD_DEREFERENCE;
+                                                br 'forward;
+                                            };
+                                        br 'again;
+                                    }
+                                }
+                                if tag_2 == object_tag {
+                                    h = caml_hash_mix_int(h, b[2] as &i31 as i32_s);
+                                    br 'loop;
+                                }
+                                let len = b.length();
+                                h = caml_hash_mix_int(h, len - 1 << 10 | tag_2);
+                                i = 1;
+                                'block_iter: loop &eq {
+                                    br_if 'loop i >=u len;
+                                    br_if 'loop wr >=u sz;
+                                    caml_hash_queue[wr] = b[i];
+                                    wr = wr + 1;
+                                    i = i + 1;
+                                    br 'block_iter;
+                                }
+                            };
+                        match v {
+                            flv: &float => {
+                                h = caml_hash_mix_double(h, flv.f);
+                                num = num - 1;
+                                br 'loop;
+                            }
+                            cv: &custom => {
+                                h = caml_hash_mix_int(h, (br_on_null 'loop cv.f.hash)(v));
+                                num = num - 1;
+                                br 'loop;
+                            }
+                            _ => {
                                 _ =
-                                    'not_block': do &eq {
-                                        b = br_on_cast_fail 'not_block' &block v;
-                                        br_if 'again !(b[0] == forward_tag as &i31);
-                                        i = i + 1;
-                                        br_if 'loop i == MAX_FORWARD_DEREFERENCE;
-                                        br 'forward;
+                                    'not_jsstring: do &?any {
+                                        let str = (br_on_cast_fail 'not_jsstring &js v).f;
+                                        _ = br_if 'not_jsstring (0 as &i31, !jsstring_test(str));
+                                        h = jsstring_hash(h, str);
+                                        0 as &i31;
                                     };
-                                br 'again;
+                                // closures and continuations and other js values are ignored
+                                br 'loop;
                             }
                         }
-                        if tag_2 == object_tag {
-                            h = caml_hash_mix_int(h, b[2] as &i31 as i32_s);
-                            br 'loop;
-                        }
-                        let len = b.length();
-                        h = caml_hash_mix_int(h, len - 1 << 10 | tag_2);
-                        i = 1;
-                        'block_iter: loop &eq {
-                            br_if 'loop i >=u len;
-                            br_if 'loop wr >=u sz;
-                            caml_hash_queue[wr] = b[i];
-                            wr = wr + 1;
-                            i = i + 1;
-                            br 'block_iter;
-                        }
-                    };
-                _ =
-                    'not_float: do &eq {
-                        h = caml_hash_mix_double(h, (br_on_cast_fail 'not_float &float v).f);
-                        num = num - 1;
-                        br 'loop;
-                    };
-                _ =
-                    'not_custom: do &eq {
-                        h =
-                            caml_hash_mix_int(
-                                h,
-                                (br_on_null 'loop (br_on_cast_fail 'not_custom &custom v).f.hash)(v),
-                            );
-                        num = num - 1;
-                        br 'loop;
-                    };
-                _ =
-                    'not_jsstring: do &?any {
-                        let str = (br_on_cast_fail 'not_jsstring &js v).f;
-                        _ = br_if 'not_jsstring (0 as &i31, !jsstring_test(str));
-                        h = jsstring_hash(h, str);
-                        0 as &i31;
-                    };
-                // closures and continuations and other js values are ignored
-                br 'loop;
+                    }
+                }
             }
         }
     }
