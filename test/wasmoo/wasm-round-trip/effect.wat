@@ -383,14 +383,15 @@
 
 (func $caml_is_continuation (export "caml_is_continuation")
   (param $x (ref eq)) (result i32)
-  (drop
-    (block $not_continuation (result (ref eq))
-      (return
-        (ref.eq
-          (array.get $block
-            (br_on_cast_fail $not_continuation (ref eq) (ref $block)
-              (local.get $x)) (i32.const 0))
-          (ref.i31 (global.get $cont_tag))))))
+  (local $blk (ref $block))
+  (block $default
+    (local.set $blk
+      (block $arm (result (ref $block))
+        (drop (br_on_cast $arm (ref eq) (ref $block) (local.get $x)))
+        (br $default)))
+    (return
+      (ref.eq (array.get $block (local.get $blk) (i32.const 0))
+        (ref.i31 (global.get $cont_tag)))))
   (i32.const 0)
 )
 

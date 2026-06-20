@@ -288,11 +288,14 @@ fn caml_get_continuation_callstack(&eq, &eq) -> &eq {
 
 #[export = "caml_is_continuation"]
 fn caml_is_continuation(x: &eq) -> i32 {
-    _ =
-        'not_continuation: do &eq {
-            return (br_on_cast_fail 'not_continuation &block x)[0] == cont_tag as &i31;
-        };
-    0;
+    match x {
+        blk: &block => {
+            return blk[0] == cont_tag as &i31;
+        }
+        _ => {
+            0;
+        }
+    }
 }
 
 // Effects through CPS transformation
