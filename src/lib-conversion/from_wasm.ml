@@ -416,8 +416,10 @@ let valtype st (t : Src.valtype) : Ast.valtype =
 let functype_params ctx params =
   let ns = Namespace.make () in
   Array.map
-    (fun (id, t) ->
-      ( Option.map
+    (fun p ->
+      let id, t = p.Ast.desc in
+      let id =
+        Option.map
           (fun id ->
             let name, outcome =
               Namespace.add' ~loc:id.Ast.info ns id.Ast.desc
@@ -428,8 +430,10 @@ let functype_params ctx params =
                   ~previous ~reserved ~original:id.Ast.desc ~renamed:name
             | Namespace.Available -> ());
             { id with Ast.desc = name })
-          id,
-        valtype ctx t ))
+          id
+      in
+      (* Keep the parameter's source location on the Wax side too. *)
+      annotated p.Ast.info id (valtype ctx t))
     params
 
 let functype st (t : Src.functype) : Ast.functype =
@@ -626,7 +630,7 @@ let switch_output ctx ct =
   | Cont ft -> (
       match (lookup_type ctx Type ft).typ with
       | Func { params; _ } when Array.length params > 0 -> (
-          match snd params.(Array.length params - 1) with
+          match snd params.(Array.length params - 1).Ast.desc with
           | Ref { typ = Type ct2; _ } -> fst (cont_arity ctx ct2)
           | _ -> 0)
       | Func _ | Struct _ | Array _ | Cont _ -> 0)
@@ -950,7 +954,10 @@ let blocktype ctx (typ : Src.blocktype option) =
         | None, None -> assert false
       in
       {
-        Ast.params = Array.map (fun (_, t) -> (None, valtype ctx t)) params;
+        Ast.params =
+          Array.map
+            (fun p -> annotated p.Ast.info None (valtype ctx (snd p.Ast.desc)))
+            params;
         results = Array.map (fun t -> valtype ctx t) results;
       }
 
@@ -1946,7 +1953,8 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
            [i] is the parameter's position, i.e. its wasm local index. *)
         let convert_params params =
           Array.mapi
-            (fun i (id, t) ->
+            (fun i p ->
+              let id, t = p.Ast.desc in
               let pat =
                 if
                   Option.is_none id
@@ -1963,10 +1971,9 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
                     | None ->
                         (* Unnamed in the source but referenced by the body, so
                            it cannot be rendered anonymously: warn that a name
-                           was invented. There is no location for an unnamed
-                           parameter, so point at the function. *)
-                        Utils.Diagnostic.report ctx.diagnostics ~location:f.info
-                          ~severity:Warning
+                           was invented, pointing at the parameter. *)
+                        Utils.Diagnostic.report ctx.diagnostics
+                          ~location:p.Ast.info ~severity:Warning
                           ~warning:Utils.Warning.Generated_name
                           ~message:(fun fmt () ->
                             Format.fprintf fmt
@@ -1977,7 +1984,7 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
                         Ast.no_loc name
                     | Some id -> { id with Ast.desc = name })
               in
-              (pat, valtype ctx t))
+              annotated p.Ast.info pat (valtype ctx t))
             params
         in
         let sign =
@@ -2303,7 +2310,7 @@ and heaptype_eq (a : Src.heaptype) (b : Src.heaptype) =
   | _ -> a = b
 
 let functype_eq (a : Src.functype) (b : Src.functype) =
-  let valtypes a = List.map snd (Array.to_list a) in
+  let valtypes a = List.map (fun p -> snd p.Ast.desc) (Array.to_list a) in
   Array.length a.params = Array.length b.params
   && Array.length a.results = Array.length b.results
   && List.for_all2 valtype_eq (valtypes a.params) (valtypes b.params)

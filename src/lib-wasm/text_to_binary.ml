@@ -110,7 +110,7 @@ let field_type ctx f = mut_type storage_type ctx f
 
 let func_type ctx (f : T.functype) : B.functype =
   {
-    params = Array.map (fun (_, t) -> valtype ctx t) f.params;
+    params = Array.map (fun p -> valtype ctx (snd p.Ast.desc)) f.params;
     results = Array.map (valtype ctx) f.results;
   }
 
@@ -733,7 +733,8 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
             in
             let all_ids =
               (match typ with
-                | _, Some { params; _ } -> Array.to_list (Array.map fst params)
+                | _, Some { params; _ } ->
+                    Array.to_list (Array.map (fun p -> fst p.Ast.desc) params)
                 | _, None -> [])
               @ List.map (fun e -> fst e.Ast.desc) locals
             in

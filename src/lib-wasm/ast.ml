@@ -604,7 +604,7 @@ module Text = struct
   module X = struct
     type nonrec idx = idx
     type 'a annotated_array = (name option * 'a, location) annotated array
-    type 'a opt_annotated_array = (name option * 'a) array
+    type 'a opt_annotated_array = (name option * 'a, location) annotated array
     type label = name option
   end
 

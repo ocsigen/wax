@@ -69,7 +69,11 @@ let is_unary_op_method m =
   | _ -> false
 
 let functype typ : Text.functype =
-  let params = Array.map (fun (id, t) -> (id, valtype t)) typ.params in
+  let params =
+    Array.map
+      (fun p -> with_loc p.info (fst p.desc, valtype (snd p.desc)))
+      typ.params
+  in
   let results = Array.map valtype typ.results in
   { params; results }
 
@@ -175,7 +179,11 @@ let typeuse typ sign =
   let type_info =
     Option.map
       (fun s ->
-        let params = Array.map (fun (id, t) -> (id, valtype t)) s.params in
+        let params =
+          Array.map
+            (fun p -> with_loc p.info (fst p.desc, valtype (snd p.desc)))
+            s.params
+        in
         let results = Array.map valtype s.results in
         { Text.params; results })
       sign
@@ -1650,8 +1658,8 @@ let module_ diagnostics types fields =
                   let allocated_locals = ref [] in
                   let locals =
                     Array.fold_left
-                      (fun locals (id, _) ->
-                        match id with
+                      (fun locals p ->
+                        match fst p.desc with
                         | Some id ->
                             let wasm_name = Namespace.add namespace id.desc in
                             StringMap.add id.desc wasm_name locals

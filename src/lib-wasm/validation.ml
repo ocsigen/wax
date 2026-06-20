@@ -64,7 +64,9 @@ let print_text_fieldtype f ({ mut; typ } : Ast.Text.fieldtype) =
 
 let print_text_functype f ({ params; results } : Ast.Text.functype) =
   Array.iter
-    (fun (_, t) -> Format.fprintf f "@ @[<1>(param@ %a)@]" print_text_valtype t)
+    (fun p ->
+      Format.fprintf f "@ @[<1>(param@ %a)@]" print_text_valtype
+        (snd p.Ast.desc))
     params;
   Array.iter
     (fun t -> Format.fprintf f "@ @[<1>(result@ %a)@]" print_text_valtype t)
@@ -737,7 +739,7 @@ let typeuse_functype tc (tu_idx, tu_sign) =
 (* Per-element source types for a source function type's params and results, to
    pass straight to [pop_args]/[push_results]'s [~source]. *)
 let functype_sources ({ params; results } : Ast.Text.functype) =
-  ( Array.map (fun (_, v) -> Plain v) params,
+  ( Array.map (fun p -> Plain (snd p.Ast.desc)) params,
     Array.map (fun v -> Plain v) results )
 
 (* The source function type that the continuation type named by [idx] wraps. *)
@@ -823,7 +825,9 @@ let array_mapi_opt f arr =
   with Short_circuit -> None
 
 let functype d ctx { Ast.Text.params; results } =
-  let*@ params = array_map_opt (fun (_, ty) -> valtype d ctx ty) params in
+  let*@ params =
+    array_map_opt (fun p -> valtype d ctx (snd p.Ast.desc)) params
+  in
   let+@ results = array_map_opt (fun ty -> valtype d ctx ty) results in
   { params; results }
 
@@ -1010,7 +1014,7 @@ let lookup_tag_type ctx tag =
   | Func { params; results } ->
       if results <> [||] then
         Error.exception_tag_with_results ctx.diagnostics ~location:tag.info;
-      (params, Array.map (fun (_, v) -> Plain v) sign.params)
+      (params, Array.map (fun p -> Plain (snd p.Ast.desc)) sign.params)
 
 (* Full function type of a tag, used for stack-switching suspension tags whose
    results may be non-empty (unlike exception tags). *)
@@ -1168,7 +1172,7 @@ let cont_operand_source param_source x =
    exactly that function type's parameters. *)
 let cont_param_source ctx x =
   Array.map
-    (fun (_, v) -> Plain v)
+    (fun p -> Plain (snd p.Ast.desc))
     (cont_source_functype ctx.modul.types x).params
 
 let unreachable _ = (Unreachable, ())
@@ -1258,7 +1262,8 @@ let blocktype ctx (ty : Ast.Text.blocktype option) =
   | Some (Typeuse (_, Some ({ params; results } as ft))) ->
       let*@ iparams =
         array_map_opt
-          (fun (_, ty) -> valtype ctx.modul.diagnostics ctx.modul.types ty)
+          (fun p ->
+            valtype ctx.modul.diagnostics ctx.modul.types (snd p.Ast.desc))
           params
       in
       let+@ iresults =
@@ -3225,7 +3230,8 @@ let functions ?(warn_unused = true) ctx fields =
           (match typ with
           | _, Some { params; _ } ->
               Array.iter
-                (fun (id, typ) ->
+                (fun p ->
+                  let id, typ = p.Ast.desc in
                   initialized_locals := IntSet.add !i !initialized_locals;
                   incr i;
                   let interned =
@@ -3411,7 +3417,8 @@ let check_syntax ctx lst =
   let check_duplicate_locals typ locals =
     let param_ids =
       match snd typ with
-      | Some { Ast.Text.params; _ } -> Array.to_list (Array.map fst params)
+      | Some { Ast.Text.params; _ } ->
+          Array.to_list (Array.map (fun p -> fst p.Ast.desc) params)
       | None -> []
     in
     let local_ids = List.map (fun e -> fst e.Ast.desc) locals in

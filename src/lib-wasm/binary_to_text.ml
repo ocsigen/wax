@@ -48,7 +48,7 @@ let fieldtype type_names f = muttype (storagetype type_names) f
 
 let functype type_names (f : B.functype) : T.functype =
   {
-    params = Array.map (fun t -> (None, valtype type_names t)) f.params;
+    params = Array.map (fun t -> no_loc (None, valtype type_names t)) f.params;
     results = Array.map (valtype type_names) f.results;
   }
 
@@ -436,7 +436,7 @@ let module_ (m : _ B.module_) : _ T.module_ =
           Array.mapi
             (fun i t ->
               let name = B.IntMap.find_opt i local_names in
-              (Option.map Ast.no_loc name, valtype m.names.types t))
+              Ast.no_loc (Option.map Ast.no_loc name, valtype m.names.types t))
             ft.params
         in
         let results = Array.map (valtype m.names.types) ft.results in

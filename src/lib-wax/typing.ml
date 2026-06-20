@@ -576,8 +576,8 @@ let array_mapi_opt f arr =
 let check_unique_param_names d params =
   ignore
     (Array.fold_left
-       (fun s (name_opt, _) ->
-         match name_opt with
+       (fun s p ->
+         match fst p.desc with
          | None -> s
          | Some name ->
              if StringSet.mem name.desc s then
@@ -588,7 +588,7 @@ let check_unique_param_names d params =
 
 let functype d ctx { params; results } =
   check_unique_param_names d params;
-  let*@ params = array_map_opt (fun (_, ty) -> valtype d ctx ty) params in
+  let*@ params = array_map_opt (fun p -> valtype d ctx (snd p.desc)) params in
   let+@ results = array_map_opt (fun ty -> valtype d ctx ty) results in
   { Internal.params; results }
 
@@ -1523,8 +1523,8 @@ let functype_matches info (ft : Internal.functype) (ft' : Internal.functype) =
 let internal_functype ctx (ft : functype) : Internal.functype option =
   let*@ params =
     array_map_opt
-      (fun (_, t) ->
-        let+@ iv = internalize_valtype ctx t in
+      (fun p ->
+        let+@ iv = internalize_valtype ctx (snd p.desc) in
         iv.internal)
       ft.params
   in
@@ -1575,7 +1575,8 @@ let check_resume_handlers ctx ~result_types handlers =
               if n <> Array.length ts3 + 1 then mismatch ()
               else begin
                 Array.iteri
-                  (fun i (_, t) ->
+                  (fun i p ->
+                    let _, t = p.desc in
                     match
                       (internalize_valtype ctx t, internal_of_inferred ts'.(i))
                     with
@@ -2028,8 +2029,8 @@ let anon_function_type ctx (sign : functype) =
   in
   Buffer.add_string buf "<fn:";
   Array.iter
-    (fun (_, t) ->
-      vt t;
+    (fun p ->
+      vt (snd p.desc);
       Buffer.add_char buf ';')
     sign.params;
   Buffer.add_string buf "->";
@@ -2189,7 +2190,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       if Array.length typ.params > 0 then
         Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
       let*! params =
-        array_map_opt (fun (_, typ) -> internalize ctx typ) typ.params
+        array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
       in
       let*! results = array_map_opt (internalize ctx) typ.results in
       let instrs' = block ctx i.info label params results results instrs in
@@ -2250,7 +2251,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       if Array.length typ.params > 0 then
         Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
       let*! params =
-        array_map_opt (fun (_, typ) -> internalize ctx typ) typ.params
+        array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
       in
       let*! results = array_map_opt (internalize ctx) typ.results in
       let instrs' = block ctx i.info label params results params instrs in
@@ -2283,7 +2284,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       if Array.length typ.params > 0 then
         Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
       let*! params =
-        array_map_opt (fun (_, typ) -> internalize ctx typ) typ.params
+        array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
       in
       let*! results = array_map_opt (internalize ctx) typ.results in
       let if_block' =
@@ -2337,7 +2338,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       if Array.length typ.params > 0 then
         Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
       let*! params =
-        array_map_opt (fun (_, typ) -> internalize ctx typ) typ.params
+        array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
       in
       let*! results = array_map_opt (internalize ctx) typ.results in
       let body' = block ctx i.info label params results results body in
@@ -2368,7 +2369,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
               if r <> [||] then
                 Error.tag_with_results ctx.diagnostics ~location:tag.info;
               let>@ params =
-                array_map_opt (fun (_, typ) -> internalize ctx typ) params
+                array_map_opt (fun p -> internalize ctx (snd p.desc)) params
               in
               check_catch params label
           | CatchRef (tag, label) ->
@@ -2378,7 +2379,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
               if r <> [||] then
                 Error.tag_with_results ctx.diagnostics ~location:tag.info;
               let>@ params =
-                array_map_opt (fun (_, typ) -> internalize ctx typ) params
+                array_map_opt (fun p -> internalize ctx (snd p.desc)) params
               in
               let>@ ref_exn =
                 internalize ctx (Ref { nullable = false; typ = Exn })
@@ -2407,7 +2408,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
             if r <> [||] then
               Error.tag_with_results ctx.diagnostics ~location:tag.info;
             let+@ params =
-              array_map_opt (fun (_, typ) -> internalize ctx typ) params
+              array_map_opt (fun p -> internalize ctx (snd p.desc)) params
             in
             let body' = block ctx i.info label params results results body in
             (tag, body'))
@@ -2527,7 +2528,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       | Valtype { typ = Ref { typ = Type ty; _ }; _ } ->
           let*! typ = lookup_func_type ctx ty in
           (let>@ param_types =
-             array_map_opt (fun (_, typ) -> internalize ctx typ) typ.params
+             array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
            in
            if Array.length param_types <> List.length l' then
              Error.value_count_mismatch ctx.diagnostics ~location:i.info
@@ -3287,7 +3288,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
        if results <> [||] then
          Error.tag_with_results ctx.diagnostics ~location:tag.info;
        let>@ types =
-         array_map_opt (fun (_, typ) -> internalize ctx typ) params
+         array_map_opt (fun p -> internalize ctx (snd p.desc)) params
        in
        match i' with
        | Some i' ->
@@ -3341,7 +3342,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       (let n = max 0 np in
        let>@ bound =
          array_map_opt
-           (fun (_, typ) -> internalize ctx typ)
+           (fun p -> internalize ctx (snd p.desc))
            (Array.sub src_sig.params 0 n)
        in
        let>@ srcref =
@@ -3356,7 +3357,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       let* l' = instructions ctx l in
       let*! { params; results } = Tbl.find ctx.diagnostics ctx.tags tag in
       (let>@ ptypes =
-         array_map_opt (fun (_, typ) -> internalize ctx typ) params
+         array_map_opt (fun p -> internalize ctx (snd p.desc)) params
        in
        check_operands ctx l' ptypes);
       let*! rtypes = array_map_opt (internalize ctx) results in
@@ -3366,7 +3367,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       let*! inner = lookup_cont_inner ctx ct in
       let*! sg = lookup_func_type ctx inner in
       (let>@ ptypes =
-         array_map_opt (fun (_, typ) -> internalize ctx typ) sg.params
+         array_map_opt (fun p -> internalize ctx (snd p.desc)) sg.params
        in
        let>@ cref = internalize ctx (Ref { nullable = true; typ = Type ct }) in
        check_operands ctx l' (Array.append ptypes [| cref |]));
@@ -3379,7 +3380,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       let*! sg = lookup_func_type ctx inner in
       let*! { params = tparams; _ } = Tbl.find ctx.diagnostics ctx.tags tag in
       (let>@ ptypes =
-         array_map_opt (fun (_, typ) -> internalize ctx typ) tparams
+         array_map_opt (fun p -> internalize ctx (snd p.desc)) tparams
        in
        let>@ cref = internalize ctx (Ref { nullable = true; typ = Type ct }) in
        check_operands ctx l' (Array.append ptypes [| cref |]));
@@ -3405,7 +3406,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       (if np >= 1 then
          let>@ lead =
            array_map_opt
-             (fun (_, typ) -> internalize ctx typ)
+             (fun p -> internalize ctx (snd p.desc))
              (Array.sub sg.params 0 (np - 1))
          in
          let>@ cref =
@@ -3416,7 +3417,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
          continuation type; the result is that inner continuation's parameter
          types. *)
       let inner_sg =
-        match if np = 0 then None else Some (snd sg.params.(np - 1)) with
+        match if np = 0 then None else Some (snd sg.params.(np - 1).desc) with
         | Some (Ref { typ = Type ct2; _ }) ->
             let*@ inner2 = lookup_cont_inner ctx ct2 in
             lookup_func_type ctx inner2
@@ -3466,7 +3467,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
         match inner_sg with Some s2 -> s2.params | None -> [||]
       in
       let*! rtypes =
-        array_map_opt (fun (_, typ) -> internalize ctx typ) result_params
+        array_map_opt (fun p -> internalize ctx (snd p.desc)) result_params
       in
       return_statement i (Switch (ct, tag, l')) rtypes
   | NonNull i' -> (
@@ -4420,7 +4421,7 @@ and peek_call_params ctx callee =
   | Some t -> (
       match Tbl.find_opt ctx.type_context.types t with
       | Some (_, { typ = Func ft; _ }) ->
-          array_map_opt (fun (_, vt) -> internalize ctx vt) ft.params
+          array_map_opt (fun p -> internalize ctx (snd p.desc)) ft.params
       | _ -> None)
 
 (* Type call arguments. When the callee's parameter types are known and the
@@ -4463,7 +4464,7 @@ and type_indirect_call ctx i i' l =
   | Valtype { typ = Ref { typ = Type ty; _ }; _ } ->
       let*! typ = lookup_func_type ctx ty in
       (let>@ param_types =
-         array_map_opt (fun (_, typ) -> internalize ctx typ) typ.params
+         array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
        in
        if Array.length param_types <> List.length l' then
          Error.value_count_mismatch ctx.diagnostics ~location:i.info
@@ -4602,7 +4603,7 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
       (*ZZZ Grab the arguments from the stack before internalizing the types;
        push the right number of values in case of failure *)
       let*! params =
-        array_map_opt (fun (_, typ) -> internalize ctx typ) typ.params
+        array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
       in
       let*! results = array_map_opt (internalize ctx) typ.results in
       let* () = pop_args ctx ~location:i.info params in
@@ -4610,7 +4611,7 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
       return_statement i (Block { label; typ; block = instrs' }) results
   | Loop { label; typ; block = instrs } ->
       let*! params =
-        array_map_opt (fun (_, typ) -> internalize ctx typ) typ.params
+        array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
       in
       let*! results = array_map_opt (internalize ctx) typ.results in
       let* () = pop_args ctx ~location:i.info params in
@@ -4621,7 +4622,7 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
       check_type ctx cond
         (UnionFind.make (Valtype { typ = I32; internal = I32 }));
       let*! params =
-        array_map_opt (fun (_, typ) -> internalize ctx typ) typ.params
+        array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
       in
       let*! results = array_map_opt (internalize ctx) typ.results in
       let* () = pop_args ctx ~location:i.info params in
@@ -4647,7 +4648,7 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
       return_statement i (If { label; typ; cond; if_block; else_block }) results
   | TryTable { label; typ; block = body; catches } ->
       let*! params =
-        array_map_opt (fun (_, typ) -> internalize ctx typ) typ.params
+        array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
       in
       let*! results = array_map_opt (internalize ctx) typ.results in
       let* () = pop_args ctx ~location:i.info params in
@@ -4679,7 +4680,7 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
               if r <> [||] then
                 Error.tag_with_results ctx.diagnostics ~location:tag.info;
               let>@ params =
-                array_map_opt (fun (_, typ) -> internalize ctx typ) params
+                array_map_opt (fun p -> internalize ctx (snd p.desc)) params
               in
               check_catch params label
           | CatchRef (tag, label) ->
@@ -4689,7 +4690,7 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
               if r <> [||] then
                 Error.tag_with_results ctx.diagnostics ~location:tag.info;
               let>@ params =
-                array_map_opt (fun (_, typ) -> internalize ctx typ) params
+                array_map_opt (fun p -> internalize ctx (snd p.desc)) params
               in
               let>@ ref_exn =
                 internalize ctx (Ref { nullable = false; typ = Exn })
@@ -4707,7 +4708,7 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
         results
   | Try { label; typ; block = body; catches; catch_all } ->
       let*! params =
-        array_map_opt (fun (_, typ) -> internalize ctx typ) typ.params
+        array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
       in
       let*! results = array_map_opt (internalize ctx) typ.results in
       let* () = pop_args ctx ~location:i.info params in
@@ -4721,7 +4722,7 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
             if r <> [||] then
               Error.tag_with_results ctx.diagnostics ~location:tag.info;
             let+@ params =
-              array_map_opt (fun (_, typ) -> internalize ctx typ) params
+              array_map_opt (fun p -> internalize ctx (snd p.desc)) params
             in
             let body' = block ctx i.info label params results results body in
             (tag, body'))
@@ -5205,7 +5206,8 @@ let rec functions ctx fields =
           (match sign with
           | Some { params; _ } ->
               Array.iter
-                (fun (id, typ) ->
+                (fun p ->
+                  let id, typ = p.desc in
                   match id with
                   | Some id ->
                       let>@ typ = internalize_valtype ctx typ in

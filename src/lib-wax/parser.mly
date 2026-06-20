@@ -386,8 +386,8 @@ simple_pattern:
 | "_" { None }
 
 function_parameter:
-| x = simple_pattern ":" t = value_type { x, t }
-| t = value_type { None, t }
+| x = simple_pattern ":" t = value_type { with_loc $sloc (x, t) }
+| t = value_type { with_loc $sloc (None, t) }
 
 parameter_list:
 | l = separated_list_trailing(",", function_parameter)
@@ -425,13 +425,18 @@ tag:
 
 %inline block_label: l = ioption(l = label ":" { l }) { l }
 
+(* An anonymous block parameter, located at its value type so a trailing
+   comment attaches to it. *)
+block_param_type:
+| t = value_type { with_loc $sloc (None, t) }
+
 parameter_types:
-| l = separated_list_trailing(",", value_type) { l }
+| l = separated_list_trailing(",", block_param_type) { l }
 
 block_type:
 | "(" params = parameter_types ")"
   results = ioption("->" results = result_type {results})
-  { {params = Array.of_list (List.map (fun t -> (None, t)) params);
+  { {params = Array.of_list params;
      results = Option.value ~default:[||] results} }
 | t = value_type { {params = [||]; results = [|t|] } }
 

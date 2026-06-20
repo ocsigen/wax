@@ -173,7 +173,7 @@ They can be enabled individually, and promoted to an error like any warning:
 
 An unnamed parameter that is referenced cannot be rendered anonymously, so a
 name is generated for it. The `generated-name` warning (also in the `naming`
-group, hidden by default) reports this, pointing at the function:
+group, hidden by default) reports this, pointing at the parameter:
 
   $ wax -i wat -f wax genname.wat
   fn f(x: i32) -> i32 {
@@ -182,12 +182,11 @@ group, hidden by default) reports this, pointing at the function:
 
   $ wax -i wat -f wax -W generated-name=warning genname.wat
   Warning: An unnamed parameter is used; generating the name 'x' for it.
-   ──➤  genname.wat:2:4
+   ──➤  genname.wat:2:16
   1 │ (module
   2 │   (func (param i32) (result i32)
-    ·    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ·                ^^^
   3 │     (local.get 0)))
-    · ^^^^^^^^^^^^^^^^^^
   4 │ 
   fn f(x: i32) -> i32 {
       x;

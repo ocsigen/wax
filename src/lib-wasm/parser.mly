@@ -383,16 +383,22 @@ value_type:
 functype:
 | "(" FUNC r = parameters_and_results ")"{ r }
 
+(* A single unnamed parameter, located at its value type, so an anonymous
+   [(param t1 t2 …)] yields one located entry per type (distinct spans, unlike
+   the [field] case which shares one span and must fall back to no location). *)
+unnamed_param:
+| t = value_type { with_loc $sloc (None, t) }
+
 parameters:
 | { [] }
 | LPAREN_PARAM i = ID t = value_type ")" rem = parameters
-  { (Some i, t) :: rem }
-| LPAREN_PARAM l = value_type * ")" rem = parameters
-  { List.map (fun t -> (None, t)) l @ rem }
+  { with_loc $sloc (Some i, t) :: rem }
+| LPAREN_PARAM l = unnamed_param * ")" rem = parameters
+  { l @ rem }
 
 parameters_without_bindings:
 | { [] }
-| LPAREN_PARAM l = value_type * ")" rem = parameters_without_bindings
+| LPAREN_PARAM l = unnamed_param * ")" rem = parameters_without_bindings
   { l @ rem }
 
 results:
@@ -406,7 +412,7 @@ parameters_and_results:
 
 parameters_and_results_without_bindings:
 | p = parameters_without_bindings r = results
-  { {params = Array.of_list (List.map (fun t -> (None, t)) p);
+  { {params = Array.of_list p;
      results = Array.of_list r } }
 
 field:

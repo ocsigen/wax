@@ -19,7 +19,7 @@ include Wasm.Ast.Make_types (struct
      struct field [name: type]), so a trailing comment can attach to it even
      when the name is absent or synthesized. *)
   type 'a annotated_array = (ident * 'a, location) annotated array
-  type 'a opt_annotated_array = (ident option * 'a) array
+  type 'a opt_annotated_array = (ident option * 'a, location) annotated array
 end)
 
 type signage = Wasm.Ast.signage = Signed | Unsigned

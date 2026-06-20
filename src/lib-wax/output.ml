@@ -178,14 +178,19 @@ let print_typed_pat pp (pat, opt_typ) =
 
 let raw_functype pp { params; results } =
   print_arg_list
-    (fun pp (id, t) ->
+    (fun pp p ->
+      let id, t = p.desc in
       match id with
-      | None -> valtype pp t
       | Some name ->
-          (* Look the parameter's trivia up by its name location, so a comment
-             trailing it attaches here rather than bubbling to a sibling. *)
+          (* A comment trails the name, so anchor there (the name's span ends
+             right before it); the whole-parameter span would end past the type
+             and the comment would bubble to the previous parameter. *)
           atomic_node pp (Some name.info) (fun () ->
-              print_typed_pat pp (id, Some t)))
+              print_typed_pat pp (id, Some t))
+      | None ->
+          (* An unnamed parameter has no name to anchor on; use the parameter's
+             own location so a trailing comment still attaches to it. *)
+          atomic_node pp (Some p.info) (fun () -> valtype pp t))
     pp (Array.to_list params);
   if results <> [||] then
     (* Keep [-> Ret] glued to the closing [)] so the parameter list, not the

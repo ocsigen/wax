@@ -223,7 +223,9 @@ let locals env typ l =
       | None, None -> assert false
     in
     Array.fold_left
-      (fun tbl (id, typ) -> Tbl.add id typ tbl)
+      (fun tbl p ->
+        let id, typ = p.Ast.desc in
+        Tbl.add id typ tbl)
       (Tbl.empty env.cctx) ty.params
   in
   List.fold_left
@@ -371,7 +373,7 @@ let arity env i =
         match ft.params with
         | [||] -> 0
         | params -> (
-            match snd params.(Array.length params - 1) with
+            match snd params.(Array.length params - 1).Ast.desc with
             | Ref { typ = Type ct2; _ } ->
                 Array.length (cont_functype env ct2).params
             | _ -> 0)
