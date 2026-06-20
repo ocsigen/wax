@@ -149,9 +149,15 @@ module Sequence = struct
     Option.iter
       (fun id -> Hashtbl.replace seq.label_mapping id.Ast.desc name)
       id;
-    List.iter
-      (fun nm -> Hashtbl.replace seq.export_mapping nm.Ast.desc name)
-      exports;
+    (* Record only the head export as this entity's cross-branch identity, not
+       every export: a single multi-export function in one branch may correspond
+       to several distinct single-export functions in another (e.g. one wasi
+       function exporting [unix_getuid]/[unix_geteuid]/… versus one function per
+       id elsewhere). Recording all of them would let each sibling match and
+       reuse this one name, binding the same Wax name twice in that branch. *)
+    (match exports with
+    | nm :: _ -> Hashtbl.replace seq.export_mapping nm.Ast.desc name
+    | [] -> ());
     name
 
   let register seq export_tbl kind id exports =
