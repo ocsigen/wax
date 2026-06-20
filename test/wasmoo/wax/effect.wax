@@ -478,9 +478,8 @@ fn caml_pop_fiber() -> &eq {
 
 #[export = "caml_resume_stack"]
 fn caml_resume_stack(vstack: &eq, k: &eq) -> &eq {
-    _ =
-        'already_resumed: do &eq {
-            let stack = br_on_cast_fail 'already_resumed &cps_fiber vstack;
+    match vstack {
+        stack: &cps_fiber => {
             'done: do {
                 'loop: loop {
                     cps_fiber_stack =
@@ -497,9 +496,12 @@ fn caml_resume_stack(vstack: &eq, k: &eq) -> &eq {
                 }
             }
             return k;
-        };
-    caml_raise_constant(caml_named_value([already_resumed @ 0; 35])!);
-    0 as &i31;
+        }
+        _ => {
+            caml_raise_constant(caml_named_value([already_resumed @ 0; 35])!);
+            0 as &i31;
+        }
+    }
 }
 
 #[export = "caml_perform_effect"]

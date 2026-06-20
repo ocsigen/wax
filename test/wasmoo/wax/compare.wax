@@ -175,235 +175,265 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32 {
             let t2: i32;
             let c2: &custom;
             let res: i32;
-            _ =
-                'v1_is_not_int: do &eq {
-                    let i1 = br_on_cast_fail 'v1_is_not_int &i31 v1;
+            match v1 {
+                i1: &i31 => {
                     br_if 'next_item v1 == v2;
-                    _ =
-                        'v2_is_not_int: do &eq {
-                            let i2 = br_on_cast_fail 'v2_is_not_int &i31 v2;
+                    match v2 {
+                        i2: &i31 => {
                             // v1 and v2 are both integers
                             return i1 as i32_s - i2 as i32_s;
-                        };
-                    // check for forward tag
-                    _ =
-                        'v2_not_forward: do &eq {
-                            b2 = br_on_cast_fail 'v2_not_forward &block v2;
-                            t2 = b2[0] as &i31 as i32_u;
-                            if t2 == forward_tag {
-                                v2 = b2[1];
-                                br 'loop;
-                            }
-                            1 as &i31;
-                        };
-                    'v2_not_comparable: do {
-                        _ =
-                            'v2_not_custom: do &eq {
-                                c2 = br_on_cast_fail 'v2_not_custom &custom v2;
-                                res =
-                                    (br_on_null 'v2_not_comparable c2.f.compare_ext)(v1, v2, total);
-                                br_if 'next_item !res;
-                                return res;
-                            };
-                    }
-                    // v1 long < v2 block
-                    return -1;
-                };
-            let b1: &block;
-            let t1: i32;
-            let c1: &custom;
-            if v2 is &i31 {
-                // check for forward tag
-                _ =
-                    'v1_not_forward: do &eq {
-                        b1 = br_on_cast_fail 'v1_not_forward &block v1;
-                        t1 = b1[0] as &i31 as i32_u;
-                        if t1 == forward_tag {
-                            v1 = b1[1];
-                            br 'loop;
                         }
-                        1 as &i31;
-                    };
-                'v1_not_comparable: do {
-                    _ =
-                        'v1_not_custom: do &eq {
-                            c1 = br_on_cast_fail 'v1_not_custom &custom v1;
-                            res = (br_on_null 'v1_not_comparable c1.f.compare_ext)(v1, v2, total);
-                            br_if 'next_item !res;
-                            return res;
-                        };
+                        _ => {
+                            // check for forward tag
+                            _ =
+                                'v2_not_forward: do &eq {
+                                    b2 = br_on_cast_fail 'v2_not_forward &block v2;
+                                    t2 = b2[0] as &i31 as i32_u;
+                                    if t2 == forward_tag {
+                                        v2 = b2[1];
+                                        br 'loop;
+                                    }
+                                    1 as &i31;
+                                };
+                            'v2_not_comparable: do {
+                                _ =
+                                    'v2_not_custom: do &eq {
+                                        c2 = br_on_cast_fail 'v2_not_custom &custom v2;
+                                        res =
+                                            (br_on_null 'v2_not_comparable c2.f.compare_ext)(
+                                                v1,
+                                                v2,
+                                                total,
+                                            );
+                                        br_if 'next_item !res;
+                                        return res;
+                                    };
+                            }
+                            // v1 long < v2 block
+                            return -1;
+                        }
+                    }
                 }
-                // v1 block > v1 long
-                return 1;
-            }
-            _ =
-                'heterogeneous: do &eq {
-                    let s1: i32;
-                    let s2: i32;
+                _ => {
+                    let b1: &block;
+                    let t1: i32;
+                    let c1: &custom;
+                    if v2 is &i31 {
+                        // check for forward tag
+                        _ =
+                            'v1_not_forward: do &eq {
+                                b1 = br_on_cast_fail 'v1_not_forward &block v1;
+                                t1 = b1[0] as &i31 as i32_u;
+                                if t1 == forward_tag {
+                                    v1 = b1[1];
+                                    br 'loop;
+                                }
+                                1 as &i31;
+                            };
+                        'v1_not_comparable: do {
+                            _ =
+                                'v1_not_custom: do &eq {
+                                    c1 = br_on_cast_fail 'v1_not_custom &custom v1;
+                                    res =
+                                        (br_on_null 'v1_not_comparable c1.f.compare_ext)(
+                                            v1,
+                                            v2,
+                                            total,
+                                        );
+                                    br_if 'next_item !res;
+                                    return res;
+                                };
+                        }
+                        // v1 block > v1 long
+                        return 1;
+                    }
                     _ =
-                        'v1_not_block: do &eq {
-                            b1 = br_on_cast_fail 'v1_not_block &block v1;
-                            t1 = b1[0] as &i31 as i32_u;
-                            b2 = br_on_cast_fail 'heterogeneous &block v2;
-                            t2 = b2[0] as &i31 as i32_u;
-                            _ = br_if 'heterogeneous (0 as &i31, t1 != t2);
-                            // forward tag
-                            if t1 == forward_tag {
-                                v1 = b1[1];
-                                v2 = b2[1];
-                                br 'loop;
-                            }
-                            if t1 == object_tag {
-                                v1 = b1[2];
-                                v2 = b2[2];
-                                br_if 'next_item v1 == v2;
-                                return v1 as &i31 as i32_s - v2 as &i31 as i32_s;
-                            }
-                            s1 = b1.length();
-                            s2 = b2.length();
-                            // compare size first
-                            if s1 != s2 {
-                                return s1 - s2;
-                            }
-                            br_if 'next_item s1 == 1;
-                            if s1 >u 2 {
-                                stack = push_compare_stack(stack, b1, b2, 2);
-                            }
-                            v1 = b1[1];
-                            v2 = b2[1];
-                            br 'loop;
-                        };
-                    let f1: f64;
-                    let f2: f64;
-                    _ =
-                        'v1_not_float: do &eq {
-                            f1 = (br_on_cast_fail 'v1_not_float &float v1).f;
-                            f2 = (br_on_cast_fail 'heterogeneous &float v2).f;
-                            if f1 < f2 {
-                                return -1;
-                            }
-                            if f1 > f2 {
-                                return 1;
-                            }
-                            if f1 != f2 {
-                                if !total {
-                                    return unordered;
-                                }
-                                if f1 == f1 {
-                                    return 1;
-                                }
-                                if f2 == f2 {
-                                    return -1;
-                                }
-                            }
-                            br 'next_item;
-                        };
-                    _ =
-                        'v1_not_string: do &eq {
-                            let str1 = br_on_cast_fail 'v1_not_string &string v1;
-                            let str2 = br_on_cast_fail 'heterogeneous &string v2;
-                            res = compare_strings(str1, str2);
-                            br_if 'next_item !res;
-                            return res;
-                        };
-                    _ =
-                        'v1_not_float_array: do &eq {
-                            let fa1 = br_on_cast_fail 'v1_not_float_array &float_array v1;
-                            let fa2 = br_on_cast_fail 'heterogeneous &float_array v2;
-                            s1 = fa1.length();
-                            s2 = fa2.length();
-                            if s1 != s2 {
-                                return s1 - s2;
-                            }
-                            let i = 0;
-                            while i <s s1 {
-                                f1 = fa1[i];
-                                f2 = fa2[i];
-                                if f1 < f2 {
-                                    return -1;
-                                }
-                                if f1 > f2 {
-                                    return 1;
-                                }
-                                if f1 != f2 {
-                                    if !total {
-                                        return unordered;
+                        'heterogeneous: do &eq {
+                            let s1: i32;
+                            let s2: i32;
+                            _ =
+                                'v1_not_block: do &eq {
+                                    b1 = br_on_cast_fail 'v1_not_block &block v1;
+                                    t1 = b1[0] as &i31 as i32_u;
+                                    b2 = br_on_cast_fail 'heterogeneous &block v2;
+                                    t2 = b2[0] as &i31 as i32_u;
+                                    _ = br_if 'heterogeneous (0 as &i31, t1 != t2);
+                                    // forward tag
+                                    if t1 == forward_tag {
+                                        v1 = b1[1];
+                                        v2 = b2[1];
+                                        br 'loop;
                                     }
-                                    if f1 == f1 {
-                                        return 1;
+                                    if t1 == object_tag {
+                                        v1 = b1[2];
+                                        v2 = b2[2];
+                                        br_if 'next_item v1 == v2;
+                                        return v1 as &i31 as i32_s - v2 as &i31 as i32_s;
                                     }
-                                    if f2 == f2 {
+                                    s1 = b1.length();
+                                    s2 = b2.length();
+                                    // compare size first
+                                    if s1 != s2 {
+                                        return s1 - s2;
+                                    }
+                                    br_if 'next_item s1 == 1;
+                                    if s1 >u 2 {
+                                        stack = push_compare_stack(stack, b1, b2, 2);
+                                    }
+                                    v1 = b1[1];
+                                    v2 = b2[1];
+                                    br 'loop;
+                                };
+                            let f1: f64;
+                            let f2: f64;
+                            match v1 {
+                                fl1: &float => {
+                                    f1 = fl1.f;
+                                    f2 = (br_on_cast_fail 'heterogeneous &float v2).f;
+                                    if f1 < f2 {
                                         return -1;
                                     }
+                                    if f1 > f2 {
+                                        return 1;
+                                    }
+                                    if f1 != f2 {
+                                        if !total {
+                                            return unordered;
+                                        }
+                                        if f1 == f1 {
+                                            return 1;
+                                        }
+                                        if f2 == f2 {
+                                            return -1;
+                                        }
+                                    }
+                                    br 'next_item;
                                 }
-                                i = i + 1;
+                                str1: &string => {
+                                    let str2 = br_on_cast_fail 'heterogeneous &string v2;
+                                    res = compare_strings(str1, str2);
+                                    br_if 'next_item !res;
+                                    return res;
+                                }
+                                fa1: &float_array => {
+                                    let fa2 = br_on_cast_fail 'heterogeneous &float_array v2;
+                                    s1 = fa1.length();
+                                    s2 = fa2.length();
+                                    if s1 != s2 {
+                                        return s1 - s2;
+                                    }
+                                    let i = 0;
+                                    while i <s s1 {
+                                        f1 = fa1[i];
+                                        f2 = fa2[i];
+                                        if f1 < f2 {
+                                            return -1;
+                                        }
+                                        if f1 > f2 {
+                                            return 1;
+                                        }
+                                        if f1 != f2 {
+                                            if !total {
+                                                return unordered;
+                                            }
+                                            if f1 == f1 {
+                                                return 1;
+                                            }
+                                            if f2 == f2 {
+                                                return -1;
+                                            }
+                                        }
+                                        i = i + 1;
+                                    }
+                                    br 'next_item;
+                                }
+                                _ => {
+                                    _ =
+                                        'v1_not_custom: do &eq {
+                                            c1 = br_on_cast_fail 'v1_not_custom &custom v1;
+                                            c2 = br_on_cast_fail 'heterogeneous &custom v2;
+                                            if !(c1.f == c2.f) {
+                                                return
+                                                    caml_string_compare(c1.f.id, c2.f.id) as &i31
+                                                        as i32_s;
+                                            }
+                                            'not_comparable: do {
+                                                res =
+                                                    (br_on_null 'not_comparable c1.f.compare)(
+                                                        v1,
+                                                        v2,
+                                                        total,
+                                                    );
+                                                br_if 'next_item !res;
+                                                return res;
+                                            }
+                                            clear_compare_stack();
+                                            caml_invalid_argument([string|abstract_value @ 0; 23]);
+                                            0 as &i31;
+                                        };
+                                    match v1 {
+                                        js: &js => {
+                                            let js1 = js.f;
+                                            let js2 = (br_on_cast_fail 'heterogeneous &js v2).f;
+                                            'not_jsstring: do {
+                                                br_if 'not_jsstring !jsstring_test(js1);
+                                                br_if 'not_jsstring !jsstring_test(js2);
+                                                res = jsstring_compare(js1, js2);
+                                                br_if 'next_item !res;
+                                                return res;
+                                            }
+                                            // We cannot order two JavaScript objects,
+                                            // but we can tell whether they are equal or not
+                                            if !total {
+                                                br_if 'next_item equals(js1, js2);
+                                                return unordered;
+                                            }
+                                            br 'heterogeneous 0 as &i31;
+                                        }
+                                        _ => {
+                                            if caml_is_closure(v1) {
+                                                _ =
+                                                    br_if 'heterogeneous
+                                                        (0 as &i31, !caml_is_closure(v2));
+                                                clear_compare_stack();
+                                                caml_invalid_argument(
+                                                    [string|functional_value @ 0; 25],
+                                                );
+                                            }
+                                            if caml_is_continuation(v1) {
+                                                _ =
+                                                    br_if 'heterogeneous
+                                                        (0 as &i31, !caml_is_continuation(v2));
+                                                clear_compare_stack();
+                                                caml_invalid_argument(
+                                                    [string|continuation_value @ 0; 27],
+                                                );
+                                            }
+                                            0 as &i31;
+                                        }
+                                    }
+                                }
                             }
-                            br 'next_item;
-                        };
-                    _ =
-                        'v1_not_custom: do &eq {
-                            c1 = br_on_cast_fail 'v1_not_custom &custom v1;
-                            c2 = br_on_cast_fail 'heterogeneous &custom v2;
-                            if !(c1.f == c2.f) {
-                                return caml_string_compare(c1.f.id, c2.f.id) as &i31 as i32_s;
-                            }
-                            'not_comparable: do {
-                                res = (br_on_null 'not_comparable c1.f.compare)(v1, v2, total);
-                                br_if 'next_item !res;
-                                return res;
-                            }
-                            clear_compare_stack();
-                            caml_invalid_argument([string|abstract_value @ 0; 23]);
-                            0 as &i31;
-                        };
-                    _ =
-                        'v1_not_js: do &eq {
-                            let js1 = (br_on_cast_fail 'v1_not_js &js v1).f;
-                            let js2 = (br_on_cast_fail 'heterogeneous &js v2).f;
-                            'not_jsstring: do {
-                                br_if 'not_jsstring !jsstring_test(js1);
-                                br_if 'not_jsstring !jsstring_test(js2);
-                                res = jsstring_compare(js1, js2);
-                                br_if 'next_item !res;
-                                return res;
-                            }
-                            // We cannot order two JavaScript objects,
-                            // but we can tell whether they are equal or not
-                            if !total {
-                                br_if 'next_item equals(js1, js2);
-                                return unordered;
-                            }
-                            br 'heterogeneous 0 as &i31;
-                        };
-                    if caml_is_closure(v1) {
-                        _ = br_if 'heterogeneous (0 as &i31, !caml_is_closure(v2));
-                        clear_compare_stack();
-                        caml_invalid_argument([string|functional_value @ 0; 25]);
+                        }; // fall through
+                    // heterogeneous comparison
+                    t1 = caml_obj_tag(v1) as &i31 as i32_u;
+                    t2 = caml_obj_tag(v2) as &i31 as i32_u;
+                    if t1 == forward_tag {
+                        v1 = (v1 as &block)[1];
+                        br 'loop;
                     }
-                    if caml_is_continuation(v1) {
-                        _ = br_if 'heterogeneous (0 as &i31, !caml_is_continuation(v2));
-                        clear_compare_stack();
-                        caml_invalid_argument([string|continuation_value @ 0; 27]);
+                    if t2 == forward_tag {
+                        v2 = (v2 as &block)[1];
+                        br 'loop;
                     }
-                    0 as &i31;
-                }; // fall through
-            // heterogeneous comparison
-            t1 = caml_obj_tag(v1) as &i31 as i32_u;
-            t2 = caml_obj_tag(v2) as &i31 as i32_u;
-            if t1 == forward_tag {
-                v1 = (v1 as &block)[1];
-                br 'loop;
+                    res = t1 - t2;
+                    if !res {
+                        clear_compare_stack();
+                        caml_invalid_argument([string|abstract_value @ 0; 23]);
+                    }
+                    return res;
+                }
             }
-            if t2 == forward_tag {
-                v2 = (v2 as &block)[1];
-                br 'loop;
-            }
-            res = t1 - t2;
-            if !res {
-                clear_compare_stack();
-                caml_invalid_argument([string|abstract_value @ 0; 23]);
-            }
-            return res;
         }
         if compare_stack_is_not_empty(stack) {
             pop_compare_stack(stack);

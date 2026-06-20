@@ -601,26 +601,25 @@
 (func $caml_resume_stack (export "caml_resume_stack")
   (param $vstack (ref eq)) (param $k (ref eq)) (result (ref eq))
   (local $stack (ref $cps_fiber))
-  (drop
-    (block $already_resumed (result (ref eq))
-      (local.set $stack
-        (br_on_cast_fail $already_resumed (ref eq) (ref $cps_fiber)
-          (local.get $vstack)))
-      (block $done
-        (loop $loop
-          (global.set $cps_fiber_stack
-            (struct.new $cps_fiber
-              (struct.get $cps_fiber $handlers (local.get $stack))
-              (local.get $k) (global.get $exn_stack)
-              (global.get $cps_fiber_stack)))
-          (local.set $k (struct.get $cps_fiber $cont (local.get $stack)))
-          (global.set $exn_stack
-            (struct.get $cps_fiber $exn_stack (local.get $stack)))
-          (local.set $stack
-            (br_on_null $done
-              (struct.get $cps_fiber $next (local.get $stack))))
-          (br $loop)))
-      (return (local.get $k))))
+  (block $default
+    (local.set $stack
+      (block $arm (result (ref $cps_fiber))
+        (drop (br_on_cast $arm (ref eq) (ref $cps_fiber) (local.get $vstack)))
+        (br $default)))
+    (block $done
+      (loop $loop
+        (global.set $cps_fiber_stack
+          (struct.new $cps_fiber
+            (struct.get $cps_fiber $handlers (local.get $stack))
+            (local.get $k) (global.get $exn_stack)
+            (global.get $cps_fiber_stack)))
+        (local.set $k (struct.get $cps_fiber $cont (local.get $stack)))
+        (global.set $exn_stack
+          (struct.get $cps_fiber $exn_stack (local.get $stack)))
+        (local.set $stack
+          (br_on_null $done (struct.get $cps_fiber $next (local.get $stack))))
+        (br $loop)))
+    (return (local.get $k)))
   (call $caml_raise_constant
     (ref.as_non_null
       (call $caml_named_value

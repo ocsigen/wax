@@ -771,16 +771,17 @@
   (param $user_provided_output i32) (result (ref $extern_state))
   (local $no_sharing i32) (local $b (ref $block))
   (loop $parse_flags
-    (drop
-      (block $done (result (ref eq))
-        (local.set $b
-          (br_on_cast_fail $done (ref eq) (ref $block) (local.get $flags)))
-        (if
-          (ref.eq (array.get $block (local.get $b) (i32.const 1))
-            (ref.i31 (i32.const 0)))
-          (then (local.set $no_sharing (i32.const 1))))
-        (local.set $flags (array.get $block (local.get $b) (i32.const 2)))
-        (br $parse_flags))))
+    (block $default
+      (local.set $b
+        (block $arm (result (ref $block))
+          (drop (br_on_cast $arm (ref eq) (ref $block) (local.get $flags)))
+          (br $default)))
+      (if
+        (ref.eq (array.get $block (local.get $b) (i32.const 1))
+          (ref.i31 (i32.const 0)))
+        (then (local.set $no_sharing (i32.const 1))))
+      (local.set $flags (array.get $block (local.get $b) (i32.const 2)))
+      (br $parse_flags)))
   (struct.new $extern_state (local.get $no_sharing)
     (local.get $user_provided_output) (i32.const 0) (i32.const 0)
     (i32.const 0) (call $map_new)
@@ -1140,17 +1141,19 @@
 
 (func $extern_rec (param $s (ref $extern_state)) (param $v (ref eq))
   (local $hd i32) (local $sp (ref null $stack_item)) (local $b (ref $block))
-  (local $pos i32) (local $sz i32) (local $tag_2 i32)
-  (local $str (ref $string)) (local $fa (ref $float_array)) (local $sz64 i32)
+  (local $pos i32) (local $iv (ref i31)) (local $sz i32) (local $tag_2 i32)
+  (local $c (ref $custom)) (local $fa (ref $float_array))
+  (local $flv (ref $float)) (local $str (ref $string)) (local $sz64 i32)
   (local $sz32 i32) (local $item (ref $stack_item))
   (loop $loop
     (block $next_item
-      (drop
-        (block $not_int (result (ref eq))
-          (call $extern_int (local.get $s)
-            (i31.get_s
-              (br_on_cast_fail $not_int (ref eq) (ref i31) (local.get $v))))
-          (br $next_item)))
+      (block $default
+        (local.set $iv
+          (block $arm (result (ref i31))
+            (drop (br_on_cast $arm (ref eq) (ref i31) (local.get $v)))
+            (br $default)))
+        (call $extern_int (local.get $s) (i31.get_s (local.get $iv)))
+        (br $next_item))
       (drop
         (block $not_block (result (ref eq))
           (local.set $b
@@ -1194,48 +1197,47 @@
               (local.get $pos)))
           (br $next_item)))
       (call $extern_record_location (local.get $s) (local.get $v))
-      (drop
-        (block $not_string (result (ref eq))
-          (local.set $str
-            (br_on_cast_fail $not_string (ref eq) (ref $string)
-              (local.get $v)))
-          (call $extern_string (local.get $s) (local.get $str))
-          (local.set $sz (array.len (local.get $str)))
-          (call $extern_size (local.get $s)
-            (i32.add (i32.const 1) (i32.shr_u (local.get $sz) (i32.const 2)))
-            (i32.add (i32.const 1) (i32.shr_u (local.get $sz) (i32.const 3))))
-          (br $next_item)))
-      (drop
-        (block $not_float (result (ref eq))
-          (call $extern_float (local.get $s)
-            (struct.get $float $f
-              (br_on_cast_fail $not_float (ref eq) (ref $float)
-                (local.get $v))))
-          (call $extern_size (local.get $s) (i32.const 2) (i32.const 1))
-          (br $next_item)))
-      (drop
-        (block $not_float_array (result (ref eq))
-          (local.set $fa
-            (br_on_cast_fail $not_float_array (ref eq) (ref $float_array)
-              (local.get $v)))
-          (local.set $sz (array.len (local.get $fa)))
-          (call $extern_float_array (local.get $s) (local.get $fa))
-          (call $extern_size (local.get $s)
-            (i32.mul (local.get $sz) (i32.const 2)) (local.get $sz))
-          (br $next_item)))
-      (drop
-        (block $not_custom (result (ref eq))
-          (call $extern_custom (local.get $s)
-            (br_on_cast_fail $not_custom (ref eq) (ref $custom)
-              (local.get $v)))
-          (local.set $sz64)
-          (local.set $sz32)
-          (call $extern_size (local.get $s)
-            (i32.shr_u (i32.add (local.get $sz32) (i32.const 7))
-              (i32.const 2))
-            (i32.shr_u (i32.add (local.get $sz64) (i32.const 15))
-              (i32.const 3)))
-          (br $next_item)))
+      (block $default
+        (local.set $c
+          (block $arm_3 (result (ref $custom))
+            (local.set $fa
+              (block $arm_2 (result (ref $float_array))
+                (local.set $flv
+                  (block $arm_1 (result (ref $float))
+                    (local.set $str
+                      (block $arm (result (ref $string))
+                        (drop
+                          (br_on_cast $arm_3 (ref eq) (ref $custom)
+                            (br_on_cast $arm_2 (ref eq) (ref $float_array)
+                              (br_on_cast $arm_1 (ref eq) (ref $float)
+                                (br_on_cast $arm (ref eq) (ref $string)
+                                  (local.get $v))))))
+                        (br $default)))
+                    (call $extern_string (local.get $s) (local.get $str))
+                    (local.set $sz (array.len (local.get $str)))
+                    (call $extern_size (local.get $s)
+                      (i32.add (i32.const 1)
+                        (i32.shr_u (local.get $sz) (i32.const 2)))
+                      (i32.add (i32.const 1)
+                        (i32.shr_u (local.get $sz) (i32.const 3))))
+                    (br $next_item)))
+                (call $extern_float (local.get $s)
+                  (struct.get $float $f (local.get $flv)))
+                (call $extern_size (local.get $s) (i32.const 2) (i32.const 1))
+                (br $next_item)))
+            (local.set $sz (array.len (local.get $fa)))
+            (call $extern_float_array (local.get $s) (local.get $fa))
+            (call $extern_size (local.get $s)
+              (i32.mul (local.get $sz) (i32.const 2)) (local.get $sz))
+            (br $next_item)))
+        (call $extern_custom (local.get $s) (local.get $c))
+        (local.set $sz64)
+        (local.set $sz32)
+        (call $extern_size (local.get $s)
+          (i32.shr_u (i32.add (local.get $sz32) (i32.const 7)) (i32.const 2))
+          (i32.shr_u (i32.add (local.get $sz64) (i32.const 15))
+            (i32.const 3)))
+        (br $next_item))
       (if (call $caml_is_closure (local.get $v))
         (then
           (call $caml_invalid_argument

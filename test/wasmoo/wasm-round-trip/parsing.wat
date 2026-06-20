@@ -325,27 +325,29 @@
                           (br $exit))
                         ;; TOKEN_READ:
                         (block $cont
-                          (drop
-                            (block $not_block (result (ref eq))
-                              (local.set $arg
-                                (br_on_cast_fail $not_block (ref eq)
-                                  (ref $block) (local.get $varg)))
-                              (array.set $block (local.get $env)
-                                (global.get $env_curr_char)
-                                (array.get $block
-                                  (ref.cast (ref $block)
-                                    (array.get $block (local.get $tables)
-                                      (global.get $tbl_transl_block)))
-                                  (i32.add
-                                    (i31.get_u
-                                      (ref.cast (ref i31)
-                                        (array.get $block (local.get $arg)
-                                          (i32.const 0)))) (i32.const 1))))
-                              (array.set $block (local.get $env)
-                                (global.get $env_lval)
-                                (array.get $block (local.get $arg)
-                                  (i32.const 1)))
-                              (br $cont)))
+                          (block $default1
+                            (local.set $arg
+                              (block $arm (result (ref $block))
+                                (drop
+                                  (br_on_cast $arm (ref eq) (ref $block)
+                                    (local.get $varg)))
+                                (br $default1)))
+                            (array.set $block (local.get $env)
+                              (global.get $env_curr_char)
+                              (array.get $block
+                                (ref.cast (ref $block)
+                                  (array.get $block (local.get $tables)
+                                    (global.get $tbl_transl_block)))
+                                (i32.add
+                                  (i31.get_u
+                                    (ref.cast (ref i31)
+                                      (array.get $block (local.get $arg)
+                                        (i32.const 0)))) (i32.const 1))))
+                            (array.set $block (local.get $env)
+                              (global.get $env_lval)
+                              (array.get $block (local.get $arg)
+                                (i32.const 1)))
+                            (br $cont))
                           (array.set $block (local.get $env)
                             (global.get $env_curr_char)
                             (array.get $block

@@ -237,18 +237,20 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                 'TOKEN_READ: {
                     // TOKEN_READ:
                     'cont: do {
-                        _ =
-                            'not_block: do &eq {
-                                let arg = br_on_cast_fail 'not_block &block varg;
+                        match varg {
+                            arg: &block => {
                                 env[env_curr_char] =
                                     (tables[tbl_transl_block] as &block)
                                         [arg[0] as &i31 as i32_u + 1];
                                 env[env_lval] = arg[1];
                                 br 'cont;
-                            };
-                        env[env_curr_char] =
-                            (tables[tbl_transl_const] as &block)[varg as &i31 as i32_u + 1];
-                        env[env_lval] = 0 as &i31;
+                            }
+                            _ => {
+                                env[env_curr_char] =
+                                    (tables[tbl_transl_const] as &block)[varg as &i31 as i32_u + 1];
+                                env[env_lval] = 0 as &i31;
+                            }
+                        }
                     }
                     if caml_parser_trace {
                         print_token(tables, state, varg);

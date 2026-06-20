@@ -148,25 +148,25 @@
 
 (func $caml_update_dummy (export "caml_update_dummy")
   (param $dummy (ref eq)) (param $newval (ref eq)) (result (ref eq))
-  (local $i i32) (local $dst (ref $block)) (local $src (ref $block))
-  (local $fdst (ref $float_array))
-  (drop
-    (block $not_block (result (ref eq))
-      (local.set $dst
-        (br_on_cast_fail $not_block (ref eq) (ref $block) (local.get $dummy)))
-      (local.set $src (ref.cast (ref $block) (local.get $newval)))
-      (array.copy $block $block (local.get $dst) (i32.const 0)
-        (local.get $src) (i32.const 0) (array.len (local.get $dst)))
-      (return (ref.i31 (i32.const 0)))))
-  (drop
-    (block $not_float_array (result (ref eq))
-      (local.set $fdst
-        (br_on_cast_fail $not_float_array (ref eq) (ref $float_array)
-          (local.get $dummy)))
-      (array.copy $float_array $float_array (local.get $fdst) (i32.const 0)
-        (ref.cast (ref $float_array) (local.get $newval)) (i32.const 0)
-        (array.len (local.get $fdst)))
-      (return (ref.i31 (i32.const 0)))))
+  (local $i i32) (local $fdst (ref $float_array)) (local $dst (ref $block))
+  (local $src (ref $block))
+  (block $default
+    (local.set $fdst
+      (block $arm_1 (result (ref $float_array))
+        (local.set $dst
+          (block $arm (result (ref $block))
+            (drop
+              (br_on_cast $arm_1 (ref eq) (ref $float_array)
+                (br_on_cast $arm (ref eq) (ref $block) (local.get $dummy))))
+            (br $default)))
+        (local.set $src (ref.cast (ref $block) (local.get $newval)))
+        (array.copy $block $block (local.get $dst) (i32.const 0)
+          (local.get $src) (i32.const 0) (array.len (local.get $dst)))
+        (return (ref.i31 (i32.const 0)))))
+    (array.copy $float_array $float_array (local.get $fdst) (i32.const 0)
+      (ref.cast (ref $float_array) (local.get $newval)) (i32.const 0)
+      (array.len (local.get $fdst)))
+    (return (ref.i31 (i32.const 0))))
   (drop
     (block $not_closure_1 (result (ref eq))
       (struct.set $dummy_closure_1 $f_2
@@ -203,41 +203,42 @@
 
 (func $caml_obj_dup (export "caml_obj_dup")
   (param $x (ref eq)) (result (ref eq))
-  (local $len i32) (local $orig (ref $block)) (local $res (ref $block))
-  (local $forig (ref $float_array)) (local $fres (ref $float_array))
-  (local $s (ref $string)) (local $s' (ref $string))
-  (drop
-    (block $not_block (result (ref eq))
-      (local.set $orig
-        (br_on_cast_fail $not_block (ref eq) (ref $block) (local.get $x)))
-      (local.set $len (array.len (local.get $orig)))
-      (local.set $res
-        (array.new $block (array.get $block (local.get $orig) (i32.const 0))
-          (local.get $len)))
-      (array.copy $block $block (local.get $res) (i32.const 1)
-        (local.get $orig) (i32.const 1)
-        (i32.sub (local.get $len) (i32.const 1)))
-      (return (local.get $res))))
-  (drop
-    (block $not_float_array (result (ref eq))
-      (local.set $forig
-        (br_on_cast_fail $not_float_array (ref eq) (ref $float_array)
-          (local.get $x)))
-      (local.set $len (array.len (local.get $forig)))
-      (local.set $fres
-        (array.new $float_array (f64.const 0) (local.get $len)))
-      (array.copy $float_array $float_array (local.get $fres) (i32.const 0)
-        (local.get $forig) (i32.const 0) (local.get $len))
-      (return (local.get $fres))))
-  (drop
-    (block $not_string (result (ref eq))
-      (local.set $s
-        (br_on_cast_fail $not_string (ref eq) (ref $string) (local.get $x)))
-      (local.set $len (array.len (local.get $s)))
-      (local.set $s' (array.new $string (i32.const 0) (local.get $len)))
-      (array.copy $string $string (local.get $s') (i32.const 0) (local.get $s)
-        (i32.const 0) (local.get $len))
-      (return (local.get $s'))))
+  (local $len i32) (local $s (ref $string)) (local $forig (ref $float_array))
+  (local $orig (ref $block)) (local $res (ref $block))
+  (local $fres (ref $float_array)) (local $s' (ref $string))
+  (block $default
+    (local.set $s
+      (block $arm_2 (result (ref $string))
+        (local.set $forig
+          (block $arm_1 (result (ref $float_array))
+            (local.set $orig
+              (block $arm (result (ref $block))
+                (drop
+                  (br_on_cast $arm_2 (ref eq) (ref $string)
+                    (br_on_cast $arm_1 (ref eq) (ref $float_array)
+                      (br_on_cast $arm (ref eq) (ref $block)
+                        (local.get $x)))))
+                (br $default)))
+            (local.set $len (array.len (local.get $orig)))
+            (local.set $res
+              (array.new $block
+                (array.get $block (local.get $orig) (i32.const 0))
+                (local.get $len)))
+            (array.copy $block $block (local.get $res) (i32.const 1)
+              (local.get $orig) (i32.const 1)
+              (i32.sub (local.get $len) (i32.const 1)))
+            (return (local.get $res))))
+        (local.set $len (array.len (local.get $forig)))
+        (local.set $fres
+          (array.new $float_array (f64.const 0) (local.get $len)))
+        (array.copy $float_array $float_array (local.get $fres) (i32.const 0)
+          (local.get $forig) (i32.const 0) (local.get $len))
+        (return (local.get $fres))))
+    (local.set $len (array.len (local.get $s)))
+    (local.set $s' (array.new $string (i32.const 0) (local.get $len)))
+    (array.copy $string $string (local.get $s') (i32.const 0) (local.get $s)
+      (i32.const 0) (local.get $len))
+    (return (local.get $s')))
   (drop
     (block $not_float (result (ref eq))
       (return

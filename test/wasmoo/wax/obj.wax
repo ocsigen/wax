@@ -100,80 +100,82 @@ fn caml_alloc_dummy_float(size: &eq) -> &eq {
 #[export = "caml_update_dummy"]
 fn caml_update_dummy(dummy: &eq, newval: &eq) -> &eq {
     let i: i32;
-    _ =
-        'not_block: do &eq {
-            let dst = br_on_cast_fail 'not_block &block dummy;
+    match dummy {
+        dst: &block => {
             let src = newval as &block;
             dst.copy(0, src, 0, dst.length());
             return 0 as &i31;
-        };
-    _ =
-        'not_float_array: do &eq {
-            let fdst = br_on_cast_fail 'not_float_array &float_array dummy;
+        }
+        fdst: &float_array => {
             fdst.copy(0, newval as &float_array, 0, fdst.length());
             return 0 as &i31;
-        };
-    _ =
-        'not_closure_1: do &eq {
-            (br_on_cast_fail 'not_closure_1 &dummy_closure_1 dummy).f_2 = newval as &closure;
-            return 0 as &i31;
-        };
-    _ =
-        'not_closure_2: do &eq {
-            (br_on_cast_fail 'not_closure_2 &dummy_closure_2 dummy).f_3 = newval as &closure_2;
-            return 0 as &i31;
-        };
-    _ =
-        'not_closure_3: do &eq {
-            (br_on_cast_fail 'not_closure_3 &dummy_closure_3 dummy).f_3 = newval as &closure_3;
-            return 0 as &i31;
-        };
-    _ =
-        'not_closure_4: do &eq {
-            (br_on_cast_fail 'not_closure_4 &dummy_closure_4 dummy).f_3 = newval as &closure_4;
-            return 0 as &i31;
-        };
-    _ =
-        'not_cps_closure: do &eq {
-            (br_on_cast_fail 'not_cps_closure &cps_dummy_closure dummy).f_2 =
-                newval as &cps_closure;
-            return 0 as &i31;
-        };
-    unreachable;
+        }
+        _ => {
+            _ =
+                'not_closure_1: do &eq {
+                    (br_on_cast_fail 'not_closure_1 &dummy_closure_1 dummy).f_2 =
+                        newval as &closure;
+                    return 0 as &i31;
+                };
+            _ =
+                'not_closure_2: do &eq {
+                    (br_on_cast_fail 'not_closure_2 &dummy_closure_2 dummy).f_3 =
+                        newval as &closure_2;
+                    return 0 as &i31;
+                };
+            _ =
+                'not_closure_3: do &eq {
+                    (br_on_cast_fail 'not_closure_3 &dummy_closure_3 dummy).f_3 =
+                        newval as &closure_3;
+                    return 0 as &i31;
+                };
+            _ =
+                'not_closure_4: do &eq {
+                    (br_on_cast_fail 'not_closure_4 &dummy_closure_4 dummy).f_3 =
+                        newval as &closure_4;
+                    return 0 as &i31;
+                };
+            _ =
+                'not_cps_closure: do &eq {
+                    (br_on_cast_fail 'not_cps_closure &cps_dummy_closure dummy).f_2 =
+                        newval as &cps_closure;
+                    return 0 as &i31;
+                };
+            unreachable;
+        }
+    }
 }
 
 #[export = "caml_obj_dup"]
 fn caml_obj_dup(x: &eq) -> &eq {
     let len: i32;
-    _ =
-        'not_block: do &eq {
-            let orig = br_on_cast_fail 'not_block &block x;
+    match x {
+        orig: &block => {
             len = orig.length();
             let res: &block = [orig[0]; len];
             res.copy(1, orig, 1, len - 1);
             return res;
-        };
-    _ =
-        'not_float_array: do &eq {
-            let forig = br_on_cast_fail 'not_float_array &float_array x;
+        }
+        forig: &float_array => {
             len = forig.length();
             let fres: &float_array = [0; len];
             fres.copy(0, forig, 0, len);
             return fres;
-        };
-    _ =
-        'not_string: do &eq {
-            let s = br_on_cast_fail 'not_string &string x;
+        }
+        s: &string => {
             len = s.length();
             let s': &string = [0; len];
             s'.copy(0, s, 0, len);
             return s';
-        };
-    _ =
-        'not_float: do &eq {
-            return {float| f: (br_on_cast_fail 'not_float &float x).f };
-        };
-    caml_dup_custom(x);
+        }
+        _ => {
+            _ =
+                'not_float: do &eq {
+                    return {float| f: (br_on_cast_fail 'not_float &float x).f };
+                };
+            caml_dup_custom(x);
+        }
+    }
 }
 
 #[export = "caml_obj_with_tag"]

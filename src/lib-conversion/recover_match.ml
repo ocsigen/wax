@@ -22,7 +22,12 @@ open Ast
    skips leading bare declarations (the fold discards them — re-lowering
    reintroduces each binding). Folding is the exact inverse of the lowering, so a
    Wax [match] round-trips through the binary. Meant to run on {!Sink_let.module_}
-   output. *)
+   output.
+
+   We also recover a [match] from the *flat* [br_on_cast_fail] chain that
+   hand-written GC code more often uses — one discarded block per arm rather than
+   the nested ladder; see {!collect_arms}. That round trip is not byte-for-byte
+   (re-lowering emits the ladder), only semantically faithful. *)
 
 let is_block i = match i.desc with Block _ -> true | _ -> false
 
@@ -90,6 +95,109 @@ let rec descend blk =
           | None -> None))
   | _ -> None
 
+(* --- Flat [br_on_cast_fail] chain --------------------------------------- *)
+
+(* Hand-written GC code (and pre-ladder Wax output) takes a value apart with a
+   flat run of discarded blocks rather than the nested ladder {!descend} folds:
+
+     _ = 'L: do S { let x = br_on_cast_fail 'L &T v; body }   (a bound cast arm)
+     _ = 'L: do S { _ = br_on_cast_fail 'L &T v; body }       (an unbound cast arm)
+     _ = 'L: do S { br_on_non_null 'L v; body }               (a null arm)
+
+   Each block re-reads the same scrutinee [v] and, on a failed test, branches to
+   its own label (forwarding [v], type [S]) and is dropped, falling through to
+   the next block; on success the (optionally bound) narrowed value falls into
+   [body], which diverges. So such a run is a [match] on [v], the trailing
+   statements its default. Re-lowering a recovered match emits the nested ladder,
+   not this flat chain, so the round trip is not byte-for-byte — but it is
+   semantically equivalent (the scrutinee is side-effect-free, see
+   {!same_scrut}). *)
+
+(* Structural equality of scrutinee expressions, ignoring source locations: the
+   side-effect-free forms a re-read scrutinee may take. Anything else compares
+   unequal, so the run simply does not fold. *)
+let rec same_scrut a b =
+  match (a.desc, b.desc) with
+  | Get x, Get y -> x.desc = y.desc
+  | Null, Null -> true
+  | Int s, Int t -> s = t
+  | NonNull e, NonNull f -> same_scrut e f
+  | Cast (e, s), Cast (f, t) -> s = t && same_scrut e f
+  | Test (e, s), Test (f, t) -> s = t && same_scrut e f
+  | StructGet (e, x), StructGet (f, y) -> x.desc = y.desc && same_scrut e f
+  | ArrayGet (e, i), ArrayGet (f, j) -> same_scrut e f && same_scrut i j
+  | _ -> false
+
+(* Whether control cannot fall off the end of [body] — a conservative,
+   syntactic check (the last statement is a clear terminator, or an [if]/[match]
+   whose every branch diverges). A flat-chain arm is a genuine [match] arm only
+   when its success path leaves the [match]; folding a non-diverging body (the
+   block's [do S] result is produced and dropped instead) would be wrong. *)
+let rec diverges_instr i =
+  match i.desc with
+  | Return _ | Br _ | Br_table _ | Unreachable | Throw _ | ThrowRef _
+  | TailCall _ ->
+      true
+  | If { if_block; else_block = Some else_block; _ } ->
+      diverges_list if_block.desc && diverges_list else_block.desc
+  | Match { arms; default; _ } ->
+      List.for_all (fun (_, b) -> diverges_list b) arms && diverges_list default
+  | _ -> false
+
+and diverges_list l =
+  match List.rev l with [] -> false | last :: _ -> diverges_instr last
+
+(* Recognise one flat-chain arm block. Returns its pattern, scrutinee, body, and
+   whether a bound cast carries its binding itself (a fused [let x = …],
+   [`Fused]) or names a local declared just before the block ([`Decl x], which
+   the fold drops). The body must diverge (leave the [match]). *)
+let arm_block stmt =
+  match stmt.desc with
+  | Set
+      ( None,
+        { desc = Block { label = Some self; typ; block = test :: body }; _ } )
+    when typ.params = [||] && Array.length typ.results = 1 && diverges_list body
+    -> (
+      match test.desc with
+      | Let ([ (Some x, _) ], Some { desc = Br_on_cast_fail (l, rt, scrut); _ })
+        when l.desc = self.desc ->
+          Some (MatchCast (Some x, rt), scrut, body, `Fused)
+      | Set (Some x, { desc = Br_on_cast_fail (l, rt, scrut); _ })
+        when l.desc = self.desc ->
+          Some (MatchCast (Some x, rt), scrut, body, `Decl x)
+      | Set (None, { desc = Br_on_cast_fail (l, rt, scrut); _ })
+        when l.desc = self.desc ->
+          Some (MatchCast (None, rt), scrut, body, `Fused)
+      | Br_on_non_null (l, scrut) when l.desc = self.desc ->
+          Some (MatchNull, scrut, body, `Fused)
+      | _ -> None)
+  | _ -> None
+
+let compat scrut s =
+  match scrut with None -> true | Some s0 -> same_scrut s0 s
+
+(* Collect a maximal run of flat-chain arms from the front of [stmts], threading
+   the shared scrutinee. A [`Decl]-bound arm must be immediately preceded by its
+   bare local declaration [let x;] (the fold drops it). Returns the arms, the
+   shared scrutinee, and the remaining (default) statements. *)
+let rec collect_arms scrut stmts =
+  let take pat body s rest =
+    let scrut = match scrut with None -> Some s | some -> some in
+    let arms, scrut, rest = collect_arms scrut rest in
+    ((pat, body) :: arms, scrut, rest)
+  in
+  match stmts with
+  | { desc = Let ([ (Some x, _) ], None); _ } :: blk :: rest -> (
+      match arm_block blk with
+      | Some (pat, s, body, `Decl y) when y.desc = x.desc && compat scrut s ->
+          take pat body s rest
+      | _ -> ([], scrut, stmts))
+  | blk :: rest -> (
+      match arm_block blk with
+      | Some (pat, s, body, `Fused) when compat scrut s -> take pat body s rest
+      | _ -> ([], scrut, stmts))
+  | [] -> ([], scrut, stmts)
+
 let rec rewrite_instr (i : location instr) : location instr =
   { i with desc = rewrite_desc i.desc }
 
@@ -156,9 +264,27 @@ and rewrite_list stmts =
   match stmts with
   | [] -> []
   | i :: rest -> (
+      (* First the nested ladder (the shape {!Ast_utils.lower_match} emits),
+         then a flat [br_on_cast_fail] chain — folded even for a single arm (a
+         lone downcast-or-branch reads as a one-arm [match]). *)
       match try_fold i rest with
       | Some m -> [ m ]
-      | None -> rewrite_instr i :: rewrite_list rest)
+      | None -> (
+          match collect_arms None stmts with
+          | (_ :: _ as arms), Some scrut, trailing ->
+              [
+                {
+                  i with
+                  desc =
+                    Match
+                      {
+                        scrutinee = rewrite_instr scrut;
+                        arms = List.map (fun (p, b) -> (p, rewrite_list b)) arms;
+                        default = rewrite_list trailing;
+                      };
+                };
+              ]
+          | _ -> rewrite_instr i :: rewrite_list rest))
 
 and rewrite_desc (desc : location instr_desc) : location instr_desc =
   match desc with

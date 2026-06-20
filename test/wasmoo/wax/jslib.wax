@@ -277,9 +277,8 @@ fn caml_js_from_array(va: &eq) -> &eq {
     let a': &extern;
     let i: i32;
     let l: i32;
-    _ =
-        'not_array: do &eq {
-            let a = br_on_cast_fail 'not_array &block va;
+    match va {
+        a: &block => {
             l = a.length() - 1;
             a' = new_array(l);
             i = 0;
@@ -288,16 +287,19 @@ fn caml_js_from_array(va: &eq) -> &eq {
                 i = i + 1;
             }
             return {js| f: a' as &any };
-        };
-    let fa = va as &float_array;
-    l = fa.length();
-    a' = new_array(l);
-    i = 0;
-    while i <u l {
-        array_set(a', i, {float| f: fa[i] });
-        i = i + 1;
+        }
+        _ => {
+            let fa = va as &float_array;
+            l = fa.length();
+            a' = new_array(l);
+            i = 0;
+            while i <u l {
+                array_set(a', i, {float| f: fa[i] });
+                i = i + 1;
+            }
+            {js| f: a' as &any };
+        }
     }
-    {js| f: a' as &any };
 }
 
 #[export = "caml_js_to_array"]

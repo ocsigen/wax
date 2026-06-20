@@ -229,60 +229,61 @@
   (local $res i32) (local $i1 (ref i31)) (local $i2 (ref i31))
   (local $b1 (ref $block)) (local $t1 i32) (local $c1 (ref $custom))
   (local $s1 i32) (local $s2 i32) (local $f1 f64) (local $f2 f64)
-  (local $str1 (ref $string)) (local $str2 (ref $string))
-  (local $fa1 (ref $float_array)) (local $fa2 (ref $float_array))
-  (local $i i32) (local $js1 anyref) (local $js2 anyref)
+  (local $fa1 (ref $float_array)) (local $str1 (ref $string))
+  (local $fl1 (ref $float)) (local $str2 (ref $string))
+  (local $fa2 (ref $float_array)) (local $i i32) (local $js (ref $js))
+  (local $js1 anyref) (local $js2 anyref)
   (loop $loop
     (block $next_item
       (if (local.get $total)
         (then (br_if $next_item (ref.eq (local.get $v1) (local.get $v2)))))
-      (drop
-        (block $v1_is_not_int (result (ref eq))
-          (local.set $i1
-            (br_on_cast_fail $v1_is_not_int (ref eq) (ref i31)
-              (local.get $v1)))
-          (br_if $next_item (ref.eq (local.get $v1) (local.get $v2)))
+      (block $default
+        (local.set $i1
+          (block $arm (result (ref i31))
+            (drop (br_on_cast $arm (ref eq) (ref i31) (local.get $v1)))
+            (br $default)))
+        (br_if $next_item (ref.eq (local.get $v1) (local.get $v2)))
+        (block $default1
+          (local.set $i2
+            (block $arm (result (ref i31))
+              (drop (br_on_cast $arm (ref eq) (ref i31) (local.get $v2)))
+              (br $default1)))
+          ;; v1 and v2 are both integers
+          (return
+            (i32.sub (i31.get_s (local.get $i1))
+              (i31.get_s (local.get $i2)))))
+        ;; check for forward tag
+        (drop
+          (block $v2_not_forward (result (ref eq))
+            (local.set $b2
+              (br_on_cast_fail $v2_not_forward (ref eq) (ref $block)
+                (local.get $v2)))
+            (local.set $t2
+              (i31.get_u
+                (ref.cast (ref i31)
+                  (array.get $block (local.get $b2) (i32.const 0)))))
+            (if (i32.eq (local.get $t2) (global.get $forward_tag))
+              (then
+                (local.set $v2
+                  (array.get $block (local.get $b2) (i32.const 1)))
+                (br $loop)))
+            (ref.i31 (i32.const 1))))
+        (block $v2_not_comparable
           (drop
-            (block $v2_is_not_int (result (ref eq))
-              (local.set $i2
-                (br_on_cast_fail $v2_is_not_int (ref eq) (ref i31)
+            (block $v2_not_custom (result (ref eq))
+              (local.set $c2
+                (br_on_cast_fail $v2_not_custom (ref eq) (ref $custom)
                   (local.get $v2)))
-              ;; v1 and v2 are both integers
-              (return
-                (i32.sub (i31.get_s (local.get $i1))
-                  (i31.get_s (local.get $i2))))))
-          ;; check for forward tag
-          (drop
-            (block $v2_not_forward (result (ref eq))
-              (local.set $b2
-                (br_on_cast_fail $v2_not_forward (ref eq) (ref $block)
-                  (local.get $v2)))
-              (local.set $t2
-                (i31.get_u
-                  (ref.cast (ref i31)
-                    (array.get $block (local.get $b2) (i32.const 0)))))
-              (if (i32.eq (local.get $t2) (global.get $forward_tag))
-                (then
-                  (local.set $v2
-                    (array.get $block (local.get $b2) (i32.const 1)))
-                  (br $loop)))
-              (ref.i31 (i32.const 1))))
-          (block $v2_not_comparable
-            (drop
-              (block $v2_not_custom (result (ref eq))
-                (local.set $c2
-                  (br_on_cast_fail $v2_not_custom (ref eq) (ref $custom)
-                    (local.get $v2)))
-                (local.set $res
-                  (call_ref $compare (local.get $v1) (local.get $v2)
-                    (local.get $total)
-                    (br_on_null $v2_not_comparable
-                      (struct.get $custom_operations $compare_ext
-                        (struct.get $custom $f (local.get $c2))))))
-                (br_if $next_item (i32.eqz (local.get $res)))
-                (return (local.get $res)))))
-          ;; v1 long < v2 block
-          (return (i32.const -1))))
+              (local.set $res
+                (call_ref $compare (local.get $v1) (local.get $v2)
+                  (local.get $total)
+                  (br_on_null $v2_not_comparable
+                    (struct.get $custom_operations $compare_ext
+                      (struct.get $custom $f (local.get $c2))))))
+              (br_if $next_item (i32.eqz (local.get $res)))
+              (return (local.get $res)))))
+        ;; v1 long < v2 block
+        (return (i32.const -1)))
       (if (ref.test (ref i31) (local.get $v2))
         (then
           ;; check for forward tag
@@ -370,63 +371,24 @@
               (local.set $v1 (array.get $block (local.get $b1) (i32.const 1)))
               (local.set $v2 (array.get $block (local.get $b2) (i32.const 1)))
               (br $loop)))
-          (drop
-            (block $v1_not_float (result (ref eq))
-              (local.set $f1
-                (struct.get $float $f
-                  (br_on_cast_fail $v1_not_float (ref eq) (ref $float)
-                    (local.get $v1))))
-              (local.set $f2
-                (struct.get $float $f
-                  (br_on_cast_fail $heterogeneous (ref eq) (ref $float)
-                    (local.get $v2))))
-              (if (f64.lt (local.get $f1) (local.get $f2))
-                (then (return (i32.const -1))))
-              (if (f64.gt (local.get $f1) (local.get $f2))
-                (then (return (i32.const 1))))
-              (if (f64.ne (local.get $f1) (local.get $f2))
-                (then
-                  (if (i32.eqz (local.get $total))
-                    (then (return (global.get $unordered))))
-                  (if (f64.eq (local.get $f1) (local.get $f1))
-                    (then (return (i32.const 1))))
-                  (if (f64.eq (local.get $f2) (local.get $f2))
-                    (then (return (i32.const -1))))))
-              (br $next_item)))
-          (drop
-            (block $v1_not_string (result (ref eq))
-              (local.set $str1
-                (br_on_cast_fail $v1_not_string (ref eq) (ref $string)
-                  (local.get $v1)))
-              (local.set $str2
-                (br_on_cast_fail $heterogeneous (ref eq) (ref $string)
-                  (local.get $v2)))
-              (local.set $res
-                (call $compare_strings (local.get $str1) (local.get $str2)))
-              (br_if $next_item (i32.eqz (local.get $res)))
-              (return (local.get $res))))
-          (drop
-            (block $v1_not_float_array (result (ref eq))
-              (local.set $fa1
-                (br_on_cast_fail $v1_not_float_array (ref eq)
-                  (ref $float_array) (local.get $v1)))
-              (local.set $fa2
-                (br_on_cast_fail $heterogeneous (ref eq) (ref $float_array)
-                  (local.get $v2)))
-              (local.set $s1 (array.len (local.get $fa1)))
-              (local.set $s2 (array.len (local.get $fa2)))
-              (if (i32.ne (local.get $s1) (local.get $s2))
-                (then (return (i32.sub (local.get $s1) (local.get $s2)))))
-              (local.set $i (i32.const 0))
-              (loop $loop2
-                (if (i32.lt_s (local.get $i) (local.get $s1))
-                  (then
-                    (local.set $f1
-                      (array.get $float_array (local.get $fa1)
-                        (local.get $i)))
+          (block $default
+            (local.set $fa1
+              (block $arm_2 (result (ref $float_array))
+                (local.set $str1
+                  (block $arm_1 (result (ref $string))
+                    (local.set $fl1
+                      (block $arm (result (ref $float))
+                        (drop
+                          (br_on_cast $arm_2 (ref eq) (ref $float_array)
+                            (br_on_cast $arm_1 (ref eq) (ref $string)
+                              (br_on_cast $arm (ref eq) (ref $float)
+                                (local.get $v1)))))
+                        (br $default)))
+                    (local.set $f1 (struct.get $float $f (local.get $fl1)))
                     (local.set $f2
-                      (array.get $float_array (local.get $fa2)
-                        (local.get $i)))
+                      (struct.get $float $f
+                        (br_on_cast_fail $heterogeneous (ref eq) (ref $float)
+                          (local.get $v2))))
                     (if (f64.lt (local.get $f1) (local.get $f2))
                       (then (return (i32.const -1))))
                     (if (f64.gt (local.get $f1) (local.get $f2))
@@ -439,9 +401,44 @@
                           (then (return (i32.const 1))))
                         (if (f64.eq (local.get $f2) (local.get $f2))
                           (then (return (i32.const -1))))))
-                    (local.set $i (i32.add (local.get $i) (i32.const 1)))
-                    (br $loop2))))
-              (br $next_item)))
+                    (br $next_item)))
+                (local.set $str2
+                  (br_on_cast_fail $heterogeneous (ref eq) (ref $string)
+                    (local.get $v2)))
+                (local.set $res
+                  (call $compare_strings (local.get $str1) (local.get $str2)))
+                (br_if $next_item (i32.eqz (local.get $res)))
+                (return (local.get $res))))
+            (local.set $fa2
+              (br_on_cast_fail $heterogeneous (ref eq) (ref $float_array)
+                (local.get $v2)))
+            (local.set $s1 (array.len (local.get $fa1)))
+            (local.set $s2 (array.len (local.get $fa2)))
+            (if (i32.ne (local.get $s1) (local.get $s2))
+              (then (return (i32.sub (local.get $s1) (local.get $s2)))))
+            (local.set $i (i32.const 0))
+            (loop $loop2
+              (if (i32.lt_s (local.get $i) (local.get $s1))
+                (then
+                  (local.set $f1
+                    (array.get $float_array (local.get $fa1) (local.get $i)))
+                  (local.set $f2
+                    (array.get $float_array (local.get $fa2) (local.get $i)))
+                  (if (f64.lt (local.get $f1) (local.get $f2))
+                    (then (return (i32.const -1))))
+                  (if (f64.gt (local.get $f1) (local.get $f2))
+                    (then (return (i32.const 1))))
+                  (if (f64.ne (local.get $f1) (local.get $f2))
+                    (then
+                      (if (i32.eqz (local.get $total))
+                        (then (return (global.get $unordered))))
+                      (if (f64.eq (local.get $f1) (local.get $f1))
+                        (then (return (i32.const 1))))
+                      (if (f64.eq (local.get $f2) (local.get $f2))
+                        (then (return (i32.const -1))))))
+                  (local.set $i (i32.add (local.get $i) (i32.const 1)))
+                  (br $loop2))))
+            (br $next_item))
           (drop
             (block $v1_not_custom (result (ref eq))
               (local.set $c1
@@ -477,33 +474,33 @@
                 (array.new_data $string $abstract_value (i32.const 0)
                   (i32.const 23)))
               (ref.i31 (i32.const 0))))
-          (drop
-            (block $v1_not_js (result (ref eq))
-              (local.set $js1
-                (struct.get $js $f
-                  (br_on_cast_fail $v1_not_js (ref eq) (ref $js)
-                    (local.get $v1))))
-              (local.set $js2
-                (struct.get $js $f
-                  (br_on_cast_fail $heterogeneous (ref eq) (ref $js)
-                    (local.get $v2))))
-              (block $not_jsstring
-                (br_if $not_jsstring
-                  (i32.eqz (call $jsstring_test (local.get $js1))))
-                (br_if $not_jsstring
-                  (i32.eqz (call $jsstring_test (local.get $js2))))
-                (local.set $res
-                  (call $jsstring_compare (local.get $js1) (local.get $js2)))
-                (br_if $next_item (i32.eqz (local.get $res)))
-                (return (local.get $res)))
-              ;; We cannot order two JavaScript objects,
-              ;; but we can tell whether they are equal or not
-              (if (i32.eqz (local.get $total))
-                (then
-                  (br_if $next_item
-                    (call $equals (local.get $js1) (local.get $js2)))
-                  (return (global.get $unordered))))
-              (br $heterogeneous (ref.i31 (i32.const 0)))))
+          (block $default
+            (local.set $js
+              (block $arm (result (ref $js))
+                (drop (br_on_cast $arm (ref eq) (ref $js) (local.get $v1)))
+                (br $default)))
+            (local.set $js1 (struct.get $js $f (local.get $js)))
+            (local.set $js2
+              (struct.get $js $f
+                (br_on_cast_fail $heterogeneous (ref eq) (ref $js)
+                  (local.get $v2))))
+            (block $not_jsstring
+              (br_if $not_jsstring
+                (i32.eqz (call $jsstring_test (local.get $js1))))
+              (br_if $not_jsstring
+                (i32.eqz (call $jsstring_test (local.get $js2))))
+              (local.set $res
+                (call $jsstring_compare (local.get $js1) (local.get $js2)))
+              (br_if $next_item (i32.eqz (local.get $res)))
+              (return (local.get $res)))
+            ;; We cannot order two JavaScript objects,
+            ;; but we can tell whether they are equal or not
+            (if (i32.eqz (local.get $total))
+              (then
+                (br_if $next_item
+                  (call $equals (local.get $js1) (local.get $js2)))
+                (return (global.get $unordered))))
+            (br $heterogeneous (ref.i31 (i32.const 0))))
           (if (call $caml_is_closure (local.get $v1))
             (then
               (drop

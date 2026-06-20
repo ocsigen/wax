@@ -33,6 +33,7 @@
 (func $caml_make_vect (export "caml_make_vect") (export "caml_array_make")
   (param $n (ref eq)) (param $v (ref eq)) (result (ref eq))
   (local $sz i32) (local $b (ref $block)) (local $f f64)
+  (local $fv (ref $float))
   (local.set $sz (i31.get_s (ref.cast (ref i31) (local.get $n))))
   (if (i32.lt_s (local.get $sz) (i32.const 0))
     (then
@@ -41,9 +42,9 @@
   (if (i32.eqz (local.get $sz)) (then (return (global.get $empty_array))))
   (drop
     (block $not_float (result (ref eq))
-      (local.set $f
-        (struct.get $float $f
-          (br_on_cast_fail $not_float (ref eq) (ref $float) (local.get $v))))
+      (local.set $fv
+        (br_on_cast_fail $not_float (ref eq) (ref $float) (local.get $v)))
+      (local.set $f (struct.get $float $f (local.get $fv)))
       (return (array.new $float_array (local.get $f) (local.get $sz)))))
   (local.set $b
     (array.new $block (local.get $v) (i32.add (local.get $sz) (i32.const 1))))

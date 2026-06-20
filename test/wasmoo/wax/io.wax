@@ -169,13 +169,14 @@ const sys_open_flags: &open_flags = [1, 2, 6, 8, 16, 32, 0, 0, 64];
 fn convert_flag_list(vflags: &eq) -> i32 {
     let flags: i32;
     'loop: loop {
-        _ =
-            'done: do &eq {
-                let cons = br_on_cast_fail 'done &block vflags;
+        match vflags {
+            cons: &block => {
                 flags = flags | sys_open_flags[cons[1] as &i31 as i32_u] as i32_u;
                 vflags = cons[2];
                 br 'loop;
-            };
+            }
+            _ => {}
+        }
     }
     flags;
 }

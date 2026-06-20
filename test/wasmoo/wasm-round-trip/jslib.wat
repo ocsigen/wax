@@ -324,23 +324,24 @@
   (param $va (ref eq)) (result (ref eq))
   (local $a' (ref extern)) (local $i i32) (local $l i32)
   (local $a (ref $block)) (local $fa (ref $float_array))
-  (drop
-    (block $not_array (result (ref eq))
-      (local.set $a
-        (br_on_cast_fail $not_array (ref eq) (ref $block) (local.get $va)))
-      (local.set $l (i32.sub (array.len (local.get $a)) (i32.const 1)))
-      (local.set $a' (call $new_array (local.get $l)))
-      (local.set $i (i32.const 0))
-      (loop $loop
-        (if (i32.lt_u (local.get $i) (local.get $l))
-          (then
-            (call $array_set (local.get $a') (local.get $i)
-              (call $unwrap
-                (array.get $block (local.get $a)
-                  (i32.add (local.get $i) (i32.const 1)))))
-            (local.set $i (i32.add (local.get $i) (i32.const 1)))
-            (br $loop))))
-      (return (struct.new $js (any.convert_extern (local.get $a'))))))
+  (block $default
+    (local.set $a
+      (block $arm (result (ref $block))
+        (drop (br_on_cast $arm (ref eq) (ref $block) (local.get $va)))
+        (br $default)))
+    (local.set $l (i32.sub (array.len (local.get $a)) (i32.const 1)))
+    (local.set $a' (call $new_array (local.get $l)))
+    (local.set $i (i32.const 0))
+    (loop $loop
+      (if (i32.lt_u (local.get $i) (local.get $l))
+        (then
+          (call $array_set (local.get $a') (local.get $i)
+            (call $unwrap
+              (array.get $block (local.get $a)
+                (i32.add (local.get $i) (i32.const 1)))))
+          (local.set $i (i32.add (local.get $i) (i32.const 1)))
+          (br $loop))))
+    (return (struct.new $js (any.convert_extern (local.get $a')))))
   (local.set $fa (ref.cast (ref $float_array) (local.get $va)))
   (local.set $l (array.len (local.get $fa)))
   (local.set $a' (call $new_array (local.get $l)))

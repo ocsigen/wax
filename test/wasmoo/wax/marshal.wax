@@ -575,15 +575,16 @@ fn init_extern_state(
 ) -> &extern_state {
     let no_sharing: i32;
     'parse_flags: loop {
-        _ =
-            'done: do &eq {
-                let b = br_on_cast_fail 'done &block flags;
+        match flags {
+            b: &block => {
                 if b[1] == 0 as &i31 {
                     no_sharing = 1;
                 }
                 flags = b[2];
                 br 'parse_flags;
-            };
+            }
+            _ => {}
+        }
     }
     {
         no_sharing: no_sharing,
@@ -844,79 +845,80 @@ fn extern_rec(s: &extern_state, v: &eq) {
         let b: &block;
         let pos: i32;
         'next_item: do {
-            _ =
-                'not_int: do &eq {
-                    extern_int(s, (br_on_cast_fail 'not_int &i31 v) as i32_s);
+            match v {
+                iv: &i31 => {
+                    extern_int(s, iv as i32_s);
                     br 'next_item;
-                };
-            let sz: i32;
-            _ =
-                'not_block: do &eq {
-                    b = br_on_cast_fail 'not_block &block v;
-                    let tag_2 = b[0] as &i31 as i32_u;
-                    sz = b.length() - 1;
-                    if !sz {
-                        extern_header(s, 0, tag_2);
-                        br 'next_item;
-                    }
+                }
+                _ => {
+                    let sz: i32;
+                    _ =
+                        'not_block: do &eq {
+                            b = br_on_cast_fail 'not_block &block v;
+                            let tag_2 = b[0] as &i31 as i32_u;
+                            sz = b.length() - 1;
+                            if !sz {
+                                extern_header(s, 0, tag_2);
+                                br 'next_item;
+                            }
+                            pos = extern_lookup_position(s, v);
+                            if pos >=s 0 {
+                                extern_shared_reference(s, s.obj_counter - pos);
+                                br 'next_item;
+                            }
+                            extern_record_location(s, v);
+                            extern_header(s, sz, tag_2);
+                            extern_size(s, sz, sz);
+                            if sz >u 1 {
+                                sp = { blk: b, pos: 2, next: sp };
+                            }
+                            v = b[1];
+                            br 'loop;
+                        };
                     pos = extern_lookup_position(s, v);
                     if pos >=s 0 {
                         extern_shared_reference(s, s.obj_counter - pos);
                         br 'next_item;
                     }
                     extern_record_location(s, v);
-                    extern_header(s, sz, tag_2);
-                    extern_size(s, sz, sz);
-                    if sz >u 1 {
-                        sp = { blk: b, pos: 2, next: sp };
+                    match v {
+                        str: &string => {
+                            extern_string(s, str);
+                            sz = str.length();
+                            extern_size(s, 1 + (sz >>u 2), 1 + (sz >>u 3));
+                            br 'next_item;
+                        }
+                        flv: &float => {
+                            extern_float(s, flv.f);
+                            extern_size(s, 2, 1);
+                            br 'next_item;
+                        }
+                        fa: &float_array => {
+                            sz = fa.length();
+                            extern_float_array(s, fa);
+                            extern_size(s, sz * 2, sz);
+                            br 'next_item;
+                        }
+                        c: &custom => {
+                            let (sz32, sz64) = extern_custom(s, c);
+                            extern_size(s, sz32 + 7 >>u 2, sz64 + 15 >>u 3);
+                            br 'next_item;
+                        }
+                        _ => {
+                            if caml_is_closure(v) {
+                                caml_invalid_argument([string|func_value @ 0; 30]);
+                            }
+                            if caml_is_continuation(v) {
+                                caml_invalid_argument([string|cont_value @ 0; 32]);
+                            }
+                            if v is &js {
+                                caml_invalid_argument([string|js_value @ 0; 47]);
+                            }
+                            caml_invalid_argument([string|abstract_value @ 0; 28]);
+                        }
                     }
-                    v = b[1];
-                    br 'loop;
-                };
-            pos = extern_lookup_position(s, v);
-            if pos >=s 0 {
-                extern_shared_reference(s, s.obj_counter - pos);
-                br 'next_item;
+                }
             }
-            extern_record_location(s, v);
-            _ =
-                'not_string: do &eq {
-                    let str = br_on_cast_fail 'not_string &string v;
-                    extern_string(s, str);
-                    sz = str.length();
-                    extern_size(s, 1 + (sz >>u 2), 1 + (sz >>u 3));
-                    br 'next_item;
-                };
-            _ =
-                'not_float: do &eq {
-                    extern_float(s, (br_on_cast_fail 'not_float &float v).f);
-                    extern_size(s, 2, 1);
-                    br 'next_item;
-                };
-            _ =
-                'not_float_array: do &eq {
-                    let fa = br_on_cast_fail 'not_float_array &float_array v;
-                    sz = fa.length();
-                    extern_float_array(s, fa);
-                    extern_size(s, sz * 2, sz);
-                    br 'next_item;
-                };
-            _ =
-                'not_custom: do &eq {
-                    let (sz32, sz64) = extern_custom(s, br_on_cast_fail 'not_custom &custom v);
-                    extern_size(s, sz32 + 7 >>u 2, sz64 + 15 >>u 3);
-                    br 'next_item;
-                };
-            if caml_is_closure(v) {
-                caml_invalid_argument([string|func_value @ 0; 30]);
-            }
-            if caml_is_continuation(v) {
-                caml_invalid_argument([string|cont_value @ 0; 32]);
-            }
-            if v is &js {
-                caml_invalid_argument([string|js_value @ 0; 47]);
-            }
-            caml_invalid_argument([string|abstract_value @ 0; 28]);
         }
         // next_item
         'done: do {

@@ -184,18 +184,19 @@
 (func $convert_flag_list (param $vflags (ref eq)) (result i32)
   (local $flags i32) (local $cons (ref $block))
   (loop $loop
-    (drop
-      (block $done (result (ref eq))
-        (local.set $cons
-          (br_on_cast_fail $done (ref eq) (ref $block) (local.get $vflags)))
-        (local.set $flags
-          (i32.or (local.get $flags)
-            (array.get_u $open_flags (global.get $sys_open_flags)
-              (i31.get_u
-                (ref.cast (ref i31)
-                  (array.get $block (local.get $cons) (i32.const 1)))))))
-        (local.set $vflags (array.get $block (local.get $cons) (i32.const 2)))
-        (br $loop))))
+    (block $default
+      (local.set $cons
+        (block $arm (result (ref $block))
+          (drop (br_on_cast $arm (ref eq) (ref $block) (local.get $vflags)))
+          (br $default)))
+      (local.set $flags
+        (i32.or (local.get $flags)
+          (array.get_u $open_flags (global.get $sys_open_flags)
+            (i31.get_u
+              (ref.cast (ref i31)
+                (array.get $block (local.get $cons) (i32.const 1)))))))
+      (local.set $vflags (array.get $block (local.get $cons) (i32.const 2)))
+      (br $loop)))
   (local.get $flags)
 )
 
