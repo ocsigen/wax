@@ -17,12 +17,12 @@ open Ast
    Because every arm body leaves the [match] (diverges), absorbing the trailing
    statements into the default preserves semantics — they only run on the
    no-match (fall-through) path. Bound cast arms surface their binding as a
-   [local.set] ([Set] / a fused [let]); {!Sink_let} may float the bare local
-   declaration of an inner arm out to an enclosing ladder block, so the descent
-   skips leading bare declarations (the fold discards them — re-lowering
-   reintroduces each binding). Folding is the exact inverse of the lowering, so a
-   Wax [match] round-trips through the binary. Meant to run on {!Sink_let.module_}
-   output.
+   [local.set] ([Set] / a fused [let]); {!Sink_let} sinks a local used across
+   several arms to their common-ancestor ladder block, where it surfaces as a
+   leading declaration. The fold hoists those out before the [match] (a
+   declaration an arm rebinds is dropped instead, since re-lowering reintroduces
+   it). A Wax [match] thus round-trips through the binary. Meant to run on
+   {!Sink_let.module_} output.
 
    We also recover a [match] from the *flat* [br_on_cast_fail] chain that
    hand-written GC code more often uses — one discarded block per arm rather than
@@ -48,49 +48,59 @@ let rec chain_tests e =
       (tests @ [ (l, `Null) ], scrut)
   | _ -> ([], e)
 
-(* Skip leading bare local declarations [let x;]: bindings for inner arms that
-   {!Sink_let} floated out to this ladder block. The fold discards them. *)
-let rec skip_decls stmts =
-  match stmts with
-  | { desc = Let ([ (Some _, _) ], None); _ } :: rest -> skip_decls rest
-  | _ -> stmts
+(* Split off leading bare local declarations [let x;]. {!Sink_let} sinks a local
+   used across several arms to their common-ancestor ladder block, where it shows
+   up here as a leading declaration; the fold hoists those out before the match
+   (they are *not* arm bindings — those are fused into the consume — so dropping
+   them would unbind the local). Returns the declarations and the rest. *)
+let split_decls stmts =
+  let rec aux acc = function
+    | ({ desc = Let ([ (Some _, _) ], None); _ } as d) :: rest ->
+        aux (d :: acc) rest
+    | rest -> (List.rev acc, rest)
+  in
+  aux [] stmts
 
-(* Strip a ladder block's consume of its inner block, returning the binding
-   ([Some x] for a bound cast arm), that inner block, and the trailing arm body.
-   A [null] arm consumes nothing (a bare block), an unbound cast drops the
-   block ([Set None]), a bound cast binds it ([Set Some] / a fused [let]). *)
+(* Strip a ladder block's consume of its inner block, returning any leading
+   declarations to hoist, the binding ([Some x] for a bound cast arm), that inner
+   block, and the trailing arm body. A [null] arm consumes nothing (a bare
+   block), an unbound cast drops the block ([Set None]), a bound cast binds it
+   ([Set Some] / a fused [let]). *)
 let consume_step stmts =
-  match skip_decls stmts with
+  let decls, stmts = split_decls stmts in
+  match stmts with
   | { desc = Let ([ (Some x, _) ], Some inner); _ } :: body when is_block inner
     ->
-      Some (Some x, inner, body)
+      Some (decls, Some x, inner, body)
   | { desc = Set (Some x, inner); _ } :: body when is_block inner ->
-      Some (Some x, inner, body)
+      Some (decls, Some x, inner, body)
   | { desc = Set (None, inner); _ } :: body when is_block inner ->
-      Some (None, inner, body)
-  | ({ desc = Block _; _ } as inner) :: body -> Some (None, inner, body)
+      Some (decls, None, inner, body)
+  | ({ desc = Block _; _ } as inner) :: body -> Some (decls, None, inner, body)
   | _ -> None
 
 (* Descend the ladder from block [blk]. Returns the wrapper levels (outer→inner,
-   one per arm: the block label, the arm's binding, and its body), then the
-   innermost block's label, the chain, and the escape label. *)
+   one per arm: the block label, the arm's binding, and its body), the innermost
+   block's label, the chain, the escape label, and the declarations to hoist. *)
 let rec descend blk =
   match blk.desc with
   | Block { label = Some lbl; block = body; _ } -> (
+      let decls0, body = split_decls body in
       match body with
       | [ { desc = Set (None, chain); _ }; { desc = Br (escape, None); _ } ]
         when is_chain chain ->
-          Some ([], lbl, chain, escape)
+          Some ([], lbl, chain, escape, decls0)
       | _ -> (
           match consume_step body with
-          | Some (binding, inner, arm_body) -> (
+          | Some (decls1, binding, inner, arm_body) -> (
               match descend inner with
-              | Some (levels, inner_lbl, chain, escape) ->
+              | Some (levels, inner_lbl, chain, escape, decls) ->
                   Some
                     ( (lbl, binding, arm_body) :: levels,
                       inner_lbl,
                       chain,
-                      escape )
+                      escape,
+                      decls0 @ decls1 @ decls )
               | None -> None)
           | None -> None))
   | _ -> None
@@ -221,10 +231,10 @@ let rec rewrite_instr (i : location instr) : location instr =
 (* Fold the [escape] block [i] (and the trailing statements after it, which
    become the default) into a [match]. *)
 and try_fold (i : location instr) (trailing : location instr list) :
-    location instr option =
+    (location instr list * location instr) option =
   match descend i with
   | None -> None
-  | Some (levels, inner_lbl, chain, escape) ->
+  | Some (levels, inner_lbl, chain, escape, decls) ->
       let tests, scrut = chain_tests chain in
       let n = List.length tests in
       (* Each test branches to its arm's block; descending nests them
@@ -265,17 +275,35 @@ and try_fold (i : location instr) (trailing : location instr list) :
         let arms = List.map2 arm tests (List.rev levels) in
         if List.exists Option.is_none arms then None
         else
+          let arms = List.filter_map Fun.id arms in
+          (* A declaration whose name an arm rebinds is redundant (re-lowering
+             reintroduces it); the rest are genuine locals to hoist. *)
+          let bound =
+            List.filter_map
+              (fun (p, _) ->
+                match p with MatchCast (Some x, _) -> Some x.desc | _ -> None)
+              arms
+          in
+          let hoisted =
+            List.filter
+              (fun d ->
+                match d.desc with
+                | Let ([ (Some x, _) ], None) -> not (List.mem x.desc bound)
+                | _ -> true)
+              decls
+          in
           Some
-            {
-              i with
-              desc =
-                Match
-                  {
-                    scrutinee = rewrite_instr scrut;
-                    arms = List.filter_map Fun.id arms;
-                    default = rewrite_list trailing;
-                  };
-            }
+            ( hoisted,
+              {
+                i with
+                desc =
+                  Match
+                    {
+                      scrutinee = rewrite_instr scrut;
+                      arms;
+                      default = rewrite_list trailing;
+                    };
+              } )
 
 and rewrite_list stmts =
   match stmts with
@@ -285,7 +313,7 @@ and rewrite_list stmts =
          then a flat [br_on_cast_fail] chain — folded even for a single arm (a
          lone downcast-or-branch reads as a one-arm [match]). *)
       match try_fold i rest with
-      | Some m -> [ m ]
+      | Some (hoisted, m) -> List.map rewrite_instr hoisted @ [ m ]
       | None -> (
           match collect_arms None stmts with
           | (_ :: _ as arms), Some scrut, hoisted, trailing ->
