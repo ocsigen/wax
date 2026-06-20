@@ -201,21 +201,38 @@ module LabelStack = struct
     stack : (string option * (string * bool ref)) list;
   }
 
-  let push st (label : Src.name option) =
+  let push ?diagnostics st (label : Src.name option) =
     let ns = Namespace.dup st.ns in
     let used = ref false in
-    let name =
-      Namespace.add ns
-        (match label with
-        | Some label when Lexer.is_valid_identifier label.desc -> label.desc
-        | _ -> "l")
+    (* The source label name, when present and usable; an absent or invalid one
+       falls back to the generated "l" and is never worth a rename warning. *)
+    let src =
+      match label with
+      | Some label when Lexer.is_valid_identifier label.desc -> Some label
+      | _ -> None
+    in
+    let candidate = match src with Some l -> l.Ast.desc | None -> "l" in
+    let name, outcome =
+      match src with
+      | Some l -> Namespace.add' ~loc:l.Ast.info ns candidate
+      | None -> Namespace.add' ns candidate
     in
     ( (fun () ->
-        if !used then
+        if !used then (
+          (* Warn only now that the label is rendered: an unused label is
+             dropped, so its rename never reaches the output. A label namespace
+             reserves no words, so a rename is always a collision with an
+             enclosing label of the same name. *)
+          (match (src, outcome, diagnostics) with
+          | Some l, Namespace.Renamed { reserved; previous }, Some diagnostics
+            ->
+              Sequence.report_rename diagnostics ~location:l.Ast.info ~previous
+                ~reserved ~original:candidate ~renamed:name
+          | _ -> ());
           Some
             (match label with
             | Some label -> { label with desc = name }
-            | None -> Ast.no_loc name)
+            | None -> Ast.no_loc name))
         else None),
       {
         ns;
@@ -392,9 +409,32 @@ let valtype st (t : Src.valtype) : Ast.valtype =
   | V128 -> V128
   | Ref t -> Ref (reftype st t)
 
+(* Render a function type's parameters into a fresh namespace, renaming a named
+   parameter that is a reserved word or collides with an earlier one (and
+   warning about it, as for any other declared name). Unnamed parameters stay
+   anonymous. Shared by function-type definitions and inline signatures. *)
+let functype_params ctx params =
+  let ns = Namespace.make () in
+  Array.map
+    (fun (id, t) ->
+      ( Option.map
+          (fun id ->
+            let name, outcome =
+              Namespace.add' ~loc:id.Ast.info ns id.Ast.desc
+            in
+            (match outcome with
+            | Namespace.Renamed { reserved; previous } ->
+                Sequence.report_rename ctx.diagnostics ~location:id.Ast.info
+                  ~previous ~reserved ~original:id.Ast.desc ~renamed:name
+            | Namespace.Available -> ());
+            { id with Ast.desc = name })
+          id,
+        valtype ctx t ))
+    params
+
 let functype st (t : Src.functype) : Ast.functype =
   {
-    params = Array.map (fun (id, t) -> (id, valtype st t)) t.params;
+    params = functype_params st t.params;
     results = Array.map (fun t -> valtype st t) t.results;
   }
 
@@ -920,7 +960,9 @@ let push_label ctx ~loop label typ =
   let label_arities =
     (Option.map (fun l -> l.Ast.desc) label, i) :: ctx.label_arities
   in
-  let label, labels = LabelStack.push ctx.labels label in
+  let label, labels =
+    LabelStack.push ~diagnostics:ctx.diagnostics ctx.labels label
+  in
   (label, { ctx with labels; label_arities })
 
 (*
@@ -957,7 +999,7 @@ let indirect_callee ctx with_loc tab ((tyidx, sign) : Src.typeuse) index =
   let inline_functype (s : Src.functype) : Ast.casttype =
     let sign : Ast.functype =
       {
-        params = Array.map (fun (_, t) -> (None, valtype ctx t)) s.params;
+        params = functype_params ctx s.params;
         results = Array.map (fun t -> valtype ctx t) s.results;
       }
     in
@@ -1738,17 +1780,9 @@ let bind_locals st l =
     l
 
 let typeuse ctx ((typ, sign) : Src.typeuse) =
-  let ns = Namespace.make () in
   let signature ({ params; results } : Src.functype) : Ast.functype =
     {
-      params =
-        Array.map
-          (fun (id, t) ->
-            ( Option.map
-                (fun id -> { id with Ast.desc = Namespace.add ns id.Ast.desc })
-                id,
-              valtype ctx t ))
-          params;
+      params = functype_params ctx params;
       results = Array.map (fun t -> valtype ctx t) results;
     }
   in

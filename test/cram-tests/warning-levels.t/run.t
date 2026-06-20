@@ -192,3 +192,46 @@ group, hidden by default) reports this, pointing at the function:
   fn f(x: i32) -> i32 {
       x;
   }
+
+The same renaming applies to parameter names in a function-type signature: a
+reserved word or a duplicate is disambiguated, so the type still re-parses,
+and the `naming` warnings report it:
+
+  $ wax -i wat -f wax -W naming=warning sigparam.wat
+  Warning: 'if' is a reserved word; renaming this identifier to 'if_2'.
+   ──➤  sigparam.wat:3:18
+  1 │ (module
+  2 │   (type $t
+  3 │     (func (param $if i32) (param $x i32) (param $x i32) (result i32))))
+    ·                  ^^^
+  4 │ 
+  Warning: The name 'x' is already in use; renaming this occurrence to 'x_2'.
+   ──➤  sigparam.wat:3:49
+  1 │ (module
+  2 │   (type $t
+  3 │     (func (param $if i32) (param $x i32) (param $x i32) (result i32))))
+    ·                                                 ^^
+    ·                                  ^^ 'x' first claimed here
+  4 │ 
+  type t = fn(if_2: i32, x: i32, x_2: i32) -> i32;
+
+Labels are renamed when one shadows an enclosing label of the same name, but
+only when the inner label is actually referenced (an unused label is dropped):
+
+  $ wax -i wat -f wax -W naming=warning label.wat
+  Warning: The name 'x' is already in use; renaming this occurrence to 'x_2'.
+   ──➤  label.wat:4:14
+  1 │ (module
+  2 │   (func $f (result i32)
+  3 │     (block $x (result i32)
+    ·            ^^ 'x' first claimed here
+  4 │       (block $x (result i32) (br $x (i32.const 1))))))
+    ·              ^^
+  5 │ 
+  fn f() -> i32 {
+      do i32 {
+          'x_2: do i32 {
+              br 'x_2 1;
+          }
+      }
+  }
