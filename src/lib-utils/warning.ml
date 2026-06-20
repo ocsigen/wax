@@ -3,15 +3,23 @@ type t =
   | Truncated_coverage
   | Naming_conflict
   | Reserved_word_rename
+  | Generated_name
 
 let all =
-  [ Unused_local; Truncated_coverage; Naming_conflict; Reserved_word_rename ]
+  [
+    Unused_local;
+    Truncated_coverage;
+    Naming_conflict;
+    Reserved_word_rename;
+    Generated_name;
+  ]
 
 let name = function
   | Unused_local -> "unused-local"
   | Truncated_coverage -> "truncated-coverage"
   | Naming_conflict -> "naming-conflict"
   | Reserved_word_rename -> "reserved-word-rename"
+  | Generated_name -> "generated-name"
 
 let description = function
   | Unused_local -> "A local that is declared but never read."
@@ -19,13 +27,15 @@ let description = function
       "Path-sensitive validation gave up after too many configurations."
   | Naming_conflict -> "A Wasm name collided with another and was renamed."
   | Reserved_word_rename -> "A Wasm name is a reserved word and was renamed."
+  | Generated_name ->
+      "An unnamed but used parameter was given a generated name."
 
 (* Group name -> members. The special group "all" is handled separately by
    [set] so it need not be listed here. *)
 let group_table =
   [
     ("unused", [ Unused_local ]);
-    ("naming", [ Naming_conflict; Reserved_word_rename ]);
+    ("naming", [ Naming_conflict; Reserved_word_rename; Generated_name ]);
   ]
 
 let groups = List.map fst group_table
@@ -39,7 +49,7 @@ type policy = t -> level
 (* The From_wasm renaming warnings are noisy round-trip notices, so they are
    hidden unless explicitly enabled with [-W]; everything else is shown. *)
 let default_policy = function
-  | Naming_conflict | Reserved_word_rename -> Hidden
+  | Naming_conflict | Reserved_word_rename | Generated_name -> Hidden
   | Unused_local | Truncated_coverage -> Displayed
 
 let resolve (policy : policy) w = policy w

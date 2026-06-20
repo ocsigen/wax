@@ -17,6 +17,9 @@ type t =
   | Reserved_word_rename
       (** Converting from Wasm, a source name is a Wax reserved word and was
           renamed to a fresh one. *)
+  | Generated_name
+      (** Converting from Wasm, an unnamed but referenced parameter was given a
+          generated name (it cannot be rendered anonymously). *)
 
 val all : t list
 (** Every named warning. *)

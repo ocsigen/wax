@@ -104,8 +104,8 @@ An unknown warning or group name is rejected:
   $ wax --validate -W bogus=error unused.wax -f wat
   Usage: wax [--help] [COMMAND] …
   wax: option -W: Unknown warning or group 'bogus'. Known names: unused-local,
-       truncated-coverage, naming-conflict, reserved-word-rename, unused,
-       naming, all.
+       truncated-coverage, naming-conflict, reserved-word-rename,
+       generated-name, unused, naming, all.
   [124]
 
 An unknown level is rejected:
@@ -170,3 +170,25 @@ They can be enabled individually, and promoted to an error like any warning:
     ·         ^^^
   5 │ 
   [128]
+
+An unnamed parameter that is referenced cannot be rendered anonymously, so a
+name is generated for it. The `generated-name` warning (also in the `naming`
+group, hidden by default) reports this, pointing at the function:
+
+  $ wax -i wat -f wax genname.wat
+  fn f(x: i32) -> i32 {
+      x;
+  }
+
+  $ wax -i wat -f wax -W generated-name=warning genname.wat
+  Warning: An unnamed parameter is used; generating the name 'x' for it.
+   ──➤  genname.wat:2:4
+  1 │ (module
+  2 │   (func (param i32) (result i32)
+    ·    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  3 │     (local.get 0)))
+    · ^^^^^^^^^^^^^^^^^^
+  4 │ 
+  fn f(x: i32) -> i32 {
+      x;
+  }

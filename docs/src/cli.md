@@ -70,6 +70,9 @@ files (see [Formatting](#formatting)) and `check` validates them (see
         - `reserved-word-rename` (group `naming`) — converting from Wasm, a
           source name is a Wax reserved word and was renamed (e.g. `if` →
           `if_2`). Hidden by default.
+        - `generated-name` (group `naming`) — converting from Wasm, an unnamed
+          but referenced parameter was given a generated name (e.g. `x`), since
+          it cannot be rendered anonymously. Hidden by default.
     - *LEVEL* is one of:
         - `hidden` — suppress the warning entirely.
         - `warning` — report it as a warning.

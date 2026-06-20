@@ -1926,7 +1926,21 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
                   in
                   Some
                     (match id with
-                    | None -> Ast.no_loc name
+                    | None ->
+                        (* Unnamed in the source but referenced by the body, so
+                           it cannot be rendered anonymously: warn that a name
+                           was invented. There is no location for an unnamed
+                           parameter, so point at the function. *)
+                        Utils.Diagnostic.report ctx.diagnostics ~location:f.info
+                          ~severity:Warning
+                          ~warning:Utils.Warning.Generated_name
+                          ~message:(fun fmt () ->
+                            Format.fprintf fmt
+                              "An unnamed parameter is used; generating the \
+                               name '%s' for it."
+                              name)
+                          ();
+                        Ast.no_loc name
                     | Some id -> { id with Ast.desc = name })
               in
               (pat, valtype ctx t))
