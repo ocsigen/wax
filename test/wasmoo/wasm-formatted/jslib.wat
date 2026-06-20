@@ -449,9 +449,8 @@
 
 (func (export "caml_callback")
   (param $f (ref eq)) (param $count i32) (param $args (ref extern))
-  (param
-    $kind ;; 0 ==> strict / 2 ==> unsafe
-    i32) (result anyref)
+  (param $kind i32) ;; 0 ==> strict / 2 ==> unsafe
+  (result anyref)
   (local $acc (ref eq)) (local $i i32) (local $arg (ref eq))
   (local.set $acc (local.get $f))
   (if (i32.eq (local.get $kind) (i32.const 2))

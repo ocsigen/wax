@@ -231,13 +231,18 @@ let valtype_list name tl =
   make_list ~kind:keyword name (fun tl -> List.map valtype tl) tl
 
 let functype { params; results } =
-  let params = List.map (fun p -> p.Ast.desc) (Array.to_list params) in
+  let params = Array.to_list params in
   let params_sexp =
-    if List.for_all (fun (i, _) -> i = None) params then
-      valtype_list "param" (List.map snd params)
+    if List.for_all (fun p -> fst p.Ast.desc = None) params then
+      valtype_list "param" (List.map (fun p -> snd p.Ast.desc) params)
     else
+      (* Anchor each [(param …)] at the parameter's own location (the name is
+         anchored separately via [opt_id]), so a trailing comment attaches to
+         the parameter. *)
       List.map
-        (fun (i, t) -> list (keyword "param" :: (opt_id i @ [ valtype t ])))
+        (fun p ->
+          let i, t = p.Ast.desc in
+          list ~loc:p.Ast.info (keyword "param" :: (opt_id i @ [ valtype t ])))
         params
   in
   params_sexp @ valtype_list "result" (Array.to_list results)
@@ -1118,7 +1123,8 @@ let fundecl (idx, typ) =
                     (Array.map
                        (fun p ->
                          let i, t = p.Ast.desc in
-                         list (keyword "param" :: (opt_id i @ [ valtype t ])))
+                         list ~loc:p.Ast.info
+                           (keyword "param" :: (opt_id i @ [ valtype t ])))
                        params))
               @ valtype_list "result" (Array.to_list results));
           ])

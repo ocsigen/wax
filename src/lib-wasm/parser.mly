@@ -389,12 +389,17 @@ functype:
 unnamed_param:
 | t = value_type { with_loc $sloc (None, t) }
 
+(* A single [(param …)] group. Kept non-recursive so its [$sloc] spans just the
+   group: folding the list tail in here (as a recursive [parameters] rule would)
+   makes [$sloc] reach to the end of the whole list, so each parameter's
+   location would overlap every following one. *)
+param_group:
+| LPAREN_PARAM i = ID t = value_type ")" { [ with_loc $sloc (Some i, t) ] }
+| LPAREN_PARAM l = unnamed_param * ")" { l }
+
 parameters:
 | { [] }
-| LPAREN_PARAM i = ID t = value_type ")" rem = parameters
-  { with_loc $sloc (Some i, t) :: rem }
-| LPAREN_PARAM l = unnamed_param * ")" rem = parameters
-  { l @ rem }
+| g = param_group rem = parameters { g @ rem }
 
 parameters_without_bindings:
 | { [] }
