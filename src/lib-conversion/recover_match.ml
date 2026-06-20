@@ -177,26 +177,43 @@ let compat scrut s =
   match scrut with None -> true | Some s0 -> same_scrut s0 s
 
 (* Collect a maximal run of flat-chain arms from the front of [stmts], threading
-   the shared scrutinee. A [`Decl]-bound arm must be immediately preceded by its
-   bare local declaration [let x;] (the fold drops it). Returns the arms, the
-   shared scrutinee, and the remaining (default) statements. *)
+   the shared scrutinee. Returns the arms, the shared scrutinee, bare local
+   declarations to hoist before the match, and the remaining (default)
+   statements.
+
+   A bare local declaration [let x;] between arms is either the binding for the
+   next [`Decl]-form arm (dropped — the recovered arm re-declares it) or an
+   unrelated local that {!Sink_let} floated into the run (hoisted before the
+   match, where it stays in scope for every arm; this only fires when more arms
+   follow, so a trailing declaration stays in the default). *)
 let rec collect_arms scrut stmts =
   let take pat body s rest =
     let scrut = match scrut with None -> Some s | some -> some in
-    let arms, scrut, rest = collect_arms scrut rest in
-    ((pat, body) :: arms, scrut, rest)
+    let arms, scrut, hoisted, rest = collect_arms scrut rest in
+    ((pat, body) :: arms, scrut, hoisted, rest)
   in
   match stmts with
-  | { desc = Let ([ (Some x, _) ], None); _ } :: blk :: rest -> (
-      match arm_block blk with
-      | Some (pat, s, body, `Decl y) when y.desc = x.desc && compat scrut s ->
-          take pat body s rest
-      | _ -> ([], scrut, stmts))
+  | ({ desc = Let ([ (Some x, _) ], None); _ } as decl) :: rest -> (
+      match rest with
+      | blk :: rest'
+        when match arm_block blk with
+             | Some (_, s, _, `Decl y) -> y.desc = x.desc && compat scrut s
+             | _ -> false ->
+          let pat, s, body =
+            match arm_block blk with
+            | Some (pat, s, body, _) -> (pat, s, body)
+            | None -> assert false
+          in
+          take pat body s rest'
+      | _ ->
+          let arms, scrut, hoisted, trailing = collect_arms scrut rest in
+          if arms = [] then ([], scrut, [], stmts)
+          else (arms, scrut, decl :: hoisted, trailing))
   | blk :: rest -> (
       match arm_block blk with
       | Some (pat, s, body, `Fused) when compat scrut s -> take pat body s rest
-      | _ -> ([], scrut, stmts))
-  | [] -> ([], scrut, stmts)
+      | _ -> ([], scrut, [], stmts))
+  | [] -> ([], scrut, [], stmts)
 
 let rec rewrite_instr (i : location instr) : location instr =
   { i with desc = rewrite_desc i.desc }
@@ -271,19 +288,21 @@ and rewrite_list stmts =
       | Some m -> [ m ]
       | None -> (
           match collect_arms None stmts with
-          | (_ :: _ as arms), Some scrut, trailing ->
-              [
-                {
-                  i with
-                  desc =
-                    Match
-                      {
-                        scrutinee = rewrite_instr scrut;
-                        arms = List.map (fun (p, b) -> (p, rewrite_list b)) arms;
-                        default = rewrite_list trailing;
-                      };
-                };
-              ]
+          | (_ :: _ as arms), Some scrut, hoisted, trailing ->
+              List.map rewrite_instr hoisted
+              @ [
+                  {
+                    i with
+                    desc =
+                      Match
+                        {
+                          scrutinee = rewrite_instr scrut;
+                          arms =
+                            List.map (fun (p, b) -> (p, rewrite_list b)) arms;
+                          default = rewrite_list trailing;
+                        };
+                  };
+                ]
           | _ -> rewrite_instr i :: rewrite_list rest))
 
 and rewrite_desc (desc : location instr_desc) : location instr_desc =

@@ -1141,24 +1141,23 @@
 
 (func $extern_rec (param $s (ref $extern_state)) (param $v (ref eq))
   (local $hd i32) (local $sp (ref null $stack_item)) (local $pos i32)
-  (local $iv (ref i31)) (local $sz i32) (local $blk (ref $block))
+  (local $sz i32) (local $blk (ref $block)) (local $iv (ref i31))
   (local $tag_2 i32) (local $c (ref $custom)) (local $fa (ref $float_array))
   (local $flv (ref $float)) (local $str (ref $string)) (local $sz64 i32)
   (local $sz32 i32) (local $item (ref $stack_item)) (local $b (ref $block))
   (loop $loop
     (block $next_item
       (block $default
-        (local.set $iv
-          (block $arm (result (ref i31))
-            (drop (br_on_cast $arm (ref eq) (ref i31) (local.get $v)))
-            (br $default)))
-        (call $extern_int (local.get $s) (i31.get_s (local.get $iv)))
-        (br $next_item))
-      (block $default
         (local.set $blk
-          (block $arm (result (ref $block))
-            (drop (br_on_cast $arm (ref eq) (ref $block) (local.get $v)))
-            (br $default)))
+          (block $arm_1 (result (ref $block))
+            (local.set $iv
+              (block $arm (result (ref i31))
+                (drop
+                  (br_on_cast $arm_1 (ref eq) (ref $block)
+                    (br_on_cast $arm (ref eq) (ref i31) (local.get $v))))
+                (br $default)))
+            (call $extern_int (local.get $s) (i31.get_s (local.get $iv)))
+            (br $next_item)))
         (local.set $tag_2
           (i31.get_u
             (ref.cast (ref i31)
