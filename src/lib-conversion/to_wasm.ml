@@ -1360,22 +1360,23 @@ let subtype s : Text.subtype =
   { typ; supertype = Option.map index s.supertype; final = s.final }
 
 let reorder_imports lst =
+  (* Whether a field introduces an index-consuming definition that imports must
+     precede. Types, exports, [start] and elem/data segments do not, and a
+     conditional counts only when one of its branches does — so an import-only
+     [#[if]] block is not an import boundary and imports around it stay put. *)
+  let rec defines (f : (_ Ast.Text.modulefield, _) Ast.annotated) =
+    match f.desc with
+    | Func _ | Memory _ | Table _ | Tag _ | Global _ | String_global _ -> true
+    | Module_if_annotation { then_fields; else_fields; _ } ->
+        List.exists defines then_fields
+        || Option.fold ~none:false ~some:(List.exists defines) else_fields
+    | Import _ | Types _ | Export _ | Start _ | Elem _ | Data _ -> false
+  in
   let rec traverse acc (cur : (_ Ast.Text.modulefield, _) Ast.annotated list) =
     match cur with
     | [] -> lst (* Nothing to do *)
-    | ({
-         Ast.desc = Import _ | Types _ | Export _ | Start _ | Elem _ | Data _;
-         _;
-       } as f)
-      :: rem ->
-        traverse (f :: acc) rem
-    | {
-        desc =
-          ( Func _ | Memory _ | Table _ | Tag _ | Global _ | String_global _
-          | Module_if_annotation _ );
-        _;
-      }
-      :: _ ->
+    | f :: rem when not (defines f) -> traverse (f :: acc) rem
+    | _ :: _ ->
         let imports, others =
           List.partition
             (fun f ->
