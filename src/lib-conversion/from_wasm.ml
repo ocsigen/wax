@@ -101,9 +101,15 @@ module Sequence = struct
     let reused =
       if seq.forbid_numeric then
         match id with
-        | Some nm when Hashtbl.mem seq.label_mapping nm.Ast.desc ->
-            Some (Hashtbl.find seq.label_mapping nm.Ast.desc)
-        | _ ->
+        | Some nm ->
+            (* An explicit [$id] is authoritative: it is reused only when the
+               same id was already bound in another branch. Do not fall back to
+               export-name matching, which would conflate this entity with a
+               different one that merely shares an export name in a
+               mutually-exclusive branch (e.g. [$unix_isatty] versus the
+               imported [$isatty], both exporting [unix_isatty]). *)
+            Hashtbl.find_opt seq.label_mapping nm.Ast.desc
+        | None ->
             List.find_map
               (fun nm -> Hashtbl.find_opt seq.export_mapping nm.Ast.desc)
               exports
