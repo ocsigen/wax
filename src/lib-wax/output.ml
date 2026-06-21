@@ -1214,11 +1214,26 @@ and block_contents pp (l : _ instr list) =
      [{}]. *)
   if l <> [] then (
     indent pp indent_level (fun () ->
-        List.iter
-          (fun i ->
-            newline pp ();
-            deliminated_instr pp i)
-          l);
+        let rec loop = function
+          | [] -> ()
+          | i :: rest ->
+              newline pp ();
+              (match (i.desc, rest) with
+              | Block { label; typ; block = body }, next :: _
+                when (match next.desc with While _ -> true | _ -> false)
+                     && not (need_blocktype typ) ->
+                  (* A [do { … }] block directly followed by a [while] loop would
+                     reparse as a [do { } while C;] do-while loop (the grammar
+                     folds a trailing [while] into the preceding [do] block). Emit
+                     it in the bare-brace form [{ … }] instead — equivalent, but
+                     the parser cannot fold it into a trailing test. *)
+                  atomic_node pp (pp.locate i.info) (fun () ->
+                      parentheses Instruction (get_prec i) pp (fun () ->
+                          block pp label None typ body))
+              | _ -> deliminated_instr pp i);
+              loop rest
+        in
+        loop l);
     newline pp ())
 
 (* Print the contents of a brace-delimited block, looking the block's own

@@ -1719,6 +1719,22 @@ let module_ diagnostics types fields =
         Ast.no_loc (Text.Types [| Ast.no_loc (Some idx, subtype s) |]) :: rem)
       ctx.extra_types []
   in
+  (* The declarative element segment that makes funcrefs valid is emitted once,
+     unconditionally, at module level. When the module has [#[if]] fields a
+     referenced function may itself be conditionally defined, so the segment
+     would reference an index that is absent under some configuration. Until the
+     segment can be gated per condition, skip it entirely for conditional
+     modules. *)
+  let has_conditional =
+    let exception Found in
+    try
+      Wax.Ast_utils.iter_fields
+        (fun field ->
+          match field.desc with Conditional _ -> raise Found | _ -> ())
+        fields;
+      false
+    with Found -> true
+  in
   let elem_declare : (_ Text.modulefield, _) Ast.annotated list =
     let funcs =
       Hashtbl.fold
@@ -1726,7 +1742,7 @@ let module_ diagnostics types fields =
           if Hashtbl.mem func_refs_outside_func k then acc else k :: acc)
         func_refs_in_func []
     in
-    if funcs = [] then []
+    if has_conditional || funcs = [] then []
     else
       let init =
         List.map
