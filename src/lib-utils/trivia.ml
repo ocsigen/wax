@@ -107,6 +107,26 @@ let associate ?only ctx =
         else compare b.Ast.loc_end.Lexing.pos_cnum a.Ast.loc_end.Lexing.pos_cnum)
       locations
   in
+  (* Collapse identical spans: a single source range is often recorded by more
+     than one node (e.g. a [Get] instruction and the identifier it wraps both
+     span the same name), and the printer looks each up but, via [seen], only
+     the first carries the trivia. Two same-range entries would otherwise make
+     [process] treat one as the other's child, and the "steal the last child's
+     trailing comments" path then hands the parent the child's (empty) [after]
+     instead of computing the gap up to the next sibling — silently dropping a
+     trailing comment anchored just past the span. *)
+  let locs =
+    let same a b =
+      a.Ast.loc_start.Lexing.pos_cnum = b.Ast.loc_start.Lexing.pos_cnum
+      && a.Ast.loc_end.Lexing.pos_cnum = b.Ast.loc_end.Lexing.pos_cnum
+    in
+    let rec dedup = function
+      | a :: (b :: _ as rest) when same a b -> dedup rest
+      | a :: rest -> a :: dedup rest
+      | [] -> []
+    in
+    dedup locs
+  in
   let pos_of_entry e = e.anchor in
   let split_before threshold comments =
     let rec aux acc = function
