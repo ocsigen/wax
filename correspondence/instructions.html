@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-7525376d.js";
+            window.path_to_searchindex_js = "../searchindex-07bf1630.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f031991a.js"></script>
@@ -309,7 +309,7 @@ its own assignment.</p>
 <tr><td><code>block</code></td><td><code>do { ... }</code> or <code>{ ... }</code></td></tr>
 <tr><td><code>loop</code></td><td><code>loop { ... }</code></td></tr>
 <tr><td><code>loop</code> + leading back-<code>br</code> idiom</td><td><code>while cond { ... }</code></td></tr>
-<tr><td><code>loop</code> + trailing back-<code>br_if</code> idiom</td><td><code>do { ... } while cond;</code></td></tr>
+<tr><td><code>loop</code> + trailing back-<code>br_if</code> idiom</td><td><code>loop { ... br_if 'l cond; }</code> (kept as a plain loop)</td></tr>
 <tr><td><code>if ... else ...</code></td><td><code>if cond { ... } else { ... }</code></td></tr>
 <tr><td><code>br $l</code></td><td><code>br 'l</code></td></tr>
 <tr><td><code>br_if $l</code></td><td><code>br_if 'l cond</code></td></tr>

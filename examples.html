@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-7525376d.js";
+            window.path_to_searchindex_js = "searchindex-07bf1630.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -299,7 +299,7 @@ fn find_first_zero(arr: &amp;ints) -&gt; i32 {
     local.set $i
     br $search))
 </code></pre>
-<h2 id="while-and-do-while-loops"><a class="header" href="#while-and-do-while-loops">While and Do-While Loops</a></h2>
+<h2 id="while-loops"><a class="header" href="#while-loops">While Loops</a></h2>
 <h3 id="wax-4"><a class="header" href="#wax-4">Wax</a></h3>
 <pre><code class="language-wax">#[export = "triangle"]
 fn triangle(n: i32) -&gt; i32 {
@@ -315,10 +315,11 @@ fn triangle(n: i32) -&gt; i32 {
 #[export = "countdown"]
 fn countdown(n: i32) -&gt; i32 {
     let steps: i32 = 0;
-    do {
+    'loop: loop {
         n = n - 1;
         steps = steps + 1;
-    } while n &gt;s 0;
+        br_if 'loop n &gt;s 0;
+    }
     steps;
 }
 </code></pre>

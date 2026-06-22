@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-7525376d.js";
+            window.path_to_searchindex_js = "searchindex-07bf1630.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -421,9 +421,9 @@ an enclosing block’s label.</p>
     }
 }
 </code></pre>
-<h3 id="while-and-do-while-loops"><a class="header" href="#while-and-do-while-loops">While and Do-While Loops</a></h3>
-<p>The two common loop shapes have readable sugar over the <code>loop</code>-and-back-branch
-idiom above. A <code>while</code> tests <em>before</em> each iteration:</p>
+<h3 id="while-loops"><a class="header" href="#while-loops">While Loops</a></h3>
+<p>A <code>while</code> is readable sugar over the <code>loop</code>-and-back-branch idiom above; it
+tests <em>before</em> each iteration:</p>
 <pre><code class="language-wax">while i &lt;s n {
     total = total + i;
     i = i + 1;
@@ -438,23 +438,17 @@ idiom above. A <code>while</code> tests <em>before</em> each iteration:</p>
     }
 }
 </code></pre>
-<p>A <code>do { … } while C;</code> tests <em>after</em> the body, so the body always runs at least
-once:</p>
-<pre><code class="language-wax">do {
-    total = total - 1;
-} while total &gt;s 0;
-</code></pre>
-<p>which is:</p>
+<p>It is void, and the test must be an <code>i32</code>. It may carry a label
+(<code>'l: while …</code>), which names the loop, so a <code>br 'l</code> from inside the body is a
+<em>continue</em> — it jumps back to re-test. Decompiling recovers a <code>while</code> from this
+shape, so a loop written this way survives a round trip through WAT or WASM.</p>
+<p>A <em>trailing</em>-test loop, where the body always runs at least once, has no
+leading-<code>while</code> form. Write it directly as a <code>loop</code> with a back-<code>br_if</code>:</p>
 <pre><code class="language-wax">'next: loop {
     total = total - 1;
     br_if 'next total &gt;s 0;
 }
 </code></pre>
-<p>Both are void, and the test must be an <code>i32</code>. They may carry a label
-(<code>'l: while …</code>), which names the loop, so a <code>br 'l</code> from inside the body is a
-<em>continue</em> — it jumps back to re-test. Decompiling recovers a <code>while</code> or
-<code>do</code>-<code>while</code> from these shapes, so a loop written either way survives a round
-trip through WAT or WASM.</p>
 <h3 id="labels-and-branches"><a class="header" href="#labels-and-branches">Labels and Branches</a></h3>
 <p>Labels start with <code>'</code> and prefix a block, loop, <code>if</code>, or <code>try</code>. A branch targets
 a label; <strong>where</strong> it lands depends on the labelled construct: branching to a
