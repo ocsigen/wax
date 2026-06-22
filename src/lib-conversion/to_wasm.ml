@@ -1122,7 +1122,16 @@ and instruction_desc ret ctx i : location Text.instr list =
          so the stores run in reverse declaration order. Allocate the locals in
          that same order, so a tuple [let] recovered from Wasm reproduces the
          original local declaration order on the way back. *)
-      let code = instruction ret ctx body in
+      (* Anchor the [Let]'s location (and any leading comment) on the
+         initializer, which is the first instruction emitted, rather than on the
+         stores that follow it. Recovery ([merge_let_tuple]) rebuilds the tuple
+         [let] at the initializer's location, so keeping the comment there makes
+         it round-trip in place instead of drifting past the initializer. *)
+      let code =
+        match instruction ret ctx body with
+        | head :: rest -> { head with info = loc } :: rest
+        | [] -> []
+      in
       let result_types = fst body.info in
       let store (idx, (id, ty)) =
         match id with
@@ -1142,7 +1151,7 @@ and instruction_desc ret ctx i : location Text.instr list =
             ctx.allocated_locals :=
               (Some { name with desc = wasm_name }, valtype ty)
               :: !(ctx.allocated_locals);
-            folded loc
+            folded name.info
               (Text.LocalSet (with_loc name.info (Text.Id wasm_name)))
               []
         | None -> folded loc Text.Drop []
