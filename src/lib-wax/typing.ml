@@ -384,6 +384,11 @@ module Error = struct
        element type@ @[<2>%a@]."
       output_inferred_type provided output_inferred_type expected
 
+  let invalid_string_element_type context ~location =
+    report context ~location
+      "A string literal can only build an array with numeric or packed \
+       elements."
+
   let expected_ref context ~location =
     report context ~location "A reference type is expected here."
 
@@ -2549,19 +2554,6 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
   | Char _ as desc ->
       return_expression i desc
         (UnionFind.make (Valtype { typ = I32; internal = I32 }))
-  | String (ty, _) as desc ->
-      let ty =
-        match ty with
-        | None -> { i with desc = "<string>" }
-        | Some ty ->
-            (let>@ field = lookup_array_type ctx ty in
-             match field.typ with
-             | Value (I32 | I64 | F32 | F64) | Packed _ -> ()
-             | Value (Ref _ | V128) -> assert false (*ZZZ*));
-            ty
-      in
-      let*! typ = internalize ctx (Ref { nullable = false; typ = Type ty }) in
-      return_expression i desc typ
   | Int _ as desc -> return_expression i desc (UnionFind.make Number)
   | Float _ as desc -> return_expression i desc (UnionFind.make Float)
   | Cast (i', typ) ->
@@ -2654,7 +2646,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
      there is no expectation, so [check] against the [Unknown] sentinel keeps a
      present name and reports [cannot_infer_*] when one is omitted. *)
   | Struct _ | StructDefault _ | Array _ | ArrayDefault _ | ArrayFixed _
-  | ArraySegment _ ->
+  | ArraySegment _ | String _ ->
       let* i', _ = check ctx (UnionFind.make Unknown) i in
       return i'
   | StructGet (i', field) ->
@@ -4321,6 +4313,48 @@ and check ctx expected (i : location instr) =
             return_expression i (ArraySegment (emitted, seg, off', len')) result
       in
       return (node, true)
+  | String (ty, s) ->
+      (* A string builds a byte array. Its natural type is the built-in
+         [<string>] ([mut i8]); it adopts a different array type only when the
+         context demands one — an explicit name, or one inferred from an exact
+         expected type — that is not structurally that default (e.g. an immutable
+         [chars]). As for the array literals a redundant name is dropped (on
+         conversion from Wasm); the annotation is kept only when a bare string
+         would not already take the expected type. *)
+      let string_typ = { i with desc = "<string>" } in
+      let string_valtype =
+        internalize_valtype ctx
+          (Ref { nullable = false; typ = Type string_typ })
+      in
+      let is_default name =
+        match
+          ( internalize_valtype ctx (Ref { nullable = false; typ = Type name }),
+            string_valtype )
+        with
+        | Some a, Some b -> valtype_equal ctx a b
+        | _ -> false
+      in
+      let typ =
+        match
+          match ty with Some _ -> ty | None -> exact_named_type expected
+        with
+        | Some name when not (is_default name) -> name
+        | _ -> string_typ
+      in
+      (let>@ field = lookup_array_type ctx typ in
+       match field.typ with
+       | Value (I32 | I64 | F32 | F64) | Packed _ -> ()
+       | Value (Ref _ | V128) ->
+           Error.invalid_string_element_type ctx.diagnostics ~location:i.info);
+      let emitted =
+        if typ.desc = string_typ.desc then None
+        else emitted_name ty typ ~parseable:true ~field_unique:false
+      in
+      let* node =
+        let*! result = construction_result typ in
+        return_expression i (String (emitted, s)) result
+      in
+      return (node, annotation_needed ctx string_valtype expected)
   | Cast (e, typ) when is_null_initializer e ->
       fun st ->
         let st, i' = instruction ctx i st in

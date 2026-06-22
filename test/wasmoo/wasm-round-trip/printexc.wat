@@ -109,7 +109,7 @@
             (if (ref.test (ref i31) (local.get $v))
               (then
                 (call $add_string (local.get $buf)
-                  (call $caml_format_int (@string $string "%d" ) ;; %d
+                  (call $caml_format_int (@string "%d" ) ;; %d
                     (ref.cast (ref i31) (local.get $v)))))
               (else
                 (if (ref.test (ref $string) (local.get $v))

@@ -759,23 +759,22 @@ let reasonable_string =
 let string_args n args =
   if n = Uint32.zero then None
   else
+    let byte_of_arg arg =
+      match arg.Ast.desc with
+      | Ast.Int c ->
+          let c = int_of_string c in
+          if c >= 0 && c < 256 then Some c else None
+      | Ast.Char c when Uchar.to_int c < 128 -> Some (Uchar.to_int c)
+      | _ -> None
+    in
     try
       if Uint32.of_int (List.length args) <> n then raise Exit;
-      List.iter
-        (fun arg ->
-          match arg.Ast.desc with
-          | Ast.Int c
-            when let c = int_of_string c in
-                 c >= 0 && c < 256 ->
-              ()
-          | _ -> raise Exit)
-        args;
       let b = Bytes.create (Uint32.to_int n) in
       List.iteri
         (fun i arg ->
-          match arg.Ast.desc with
-          | Ast.Int c -> Bytes.set b i (Char.chr (int_of_string c))
-          | _ -> assert false)
+          match byte_of_arg arg with
+          | Some c -> Bytes.set b i (Char.chr c)
+          | None -> raise Exit)
         args;
       let s = Bytes.to_string b in
       if String.is_valid_utf_8 s && Re.execp reasonable_string s then Some s

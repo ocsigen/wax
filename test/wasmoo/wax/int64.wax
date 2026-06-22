@@ -54,7 +54,7 @@ type custom = open { f: &custom_operations };
 #[export = "int64_ops"]
 const int64_ops: &custom_operations =
     {
-        id: string#"_j", // "_j"
+        id: "_j", // "_j"
         compare: int64_cmp,
         compare_ext: null,
         hash: int64_hash,
@@ -113,7 +113,7 @@ fn caml_int64_compare(i1: i64, i2: i64) -> &eq {
     ((i1 >s i2) - (i1 <s i2)) as &i31;
 }
 
-const INT64_ERRMSG = string#"Int64.of_string"; // "Int64.of_string"
+const INT64_ERRMSG = "Int64.of_string"; // "Int64.of_string"
 // Parse a sequence of digits into an i64 as dicted by $base,
 // $signedness and $sign. The sequence is read in $s starting from $i.
 // In case of failure raise [Failure $errmsg].

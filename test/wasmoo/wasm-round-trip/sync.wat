@@ -48,7 +48,7 @@
 )
 
 (global $mutex_ops (ref $custom_operations)
-  (struct.new $custom_operations (@string $string "_mutex" ) ;; "_mutex"
+  (struct.new $custom_operations (@string "_mutex" ) ;; "_mutex"
     (ref.func $custom_compare_id) (ref.null $compare)
     (ref.func $custom_hash_id) (ref.null $fixed_length) (ref.null $serialize)
     (ref.null $deserialize) (ref.null $dup))

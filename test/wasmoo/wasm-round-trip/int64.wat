@@ -57,7 +57,7 @@
 (type $custom (sub (struct (field $f (ref $custom_operations)))))
 
 (global $int64_ops (export "int64_ops") (ref $custom_operations)
-  (struct.new $custom_operations (@string $string "_j" ) ;; "_j"
+  (struct.new $custom_operations (@string "_j" ) ;; "_j"
     (ref.func $int64_cmp) (ref.null $compare) (ref.func $int64_hash)
     (struct.new $fixed_length (i32.const 8) (i32.const 8))
     (ref.func $int64_serialize) (ref.func $int64_deserialize)
@@ -139,7 +139,7 @@
 )
 
 (global $INT64_ERRMSG (ref $string)
-  (@string $string "Int64.of_string" )
+  (@string "Int64.of_string" )
 ) ;; "Int64.of_string"
 ;; Parse a sequence of digits into an i64 as dicted by $base,
 ;; $signedness and $sign. The sequence is read in $s starting from $i.

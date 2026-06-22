@@ -46,7 +46,7 @@ type custom_with_id: custom = open { f: &custom_operations, id: i64 };
 
 const mutex_ops: &custom_operations =
     {
-        id: string#"_mutex", // "_mutex"
+        id: "_mutex", // "_mutex"
         compare: custom_compare_id,
         compare_ext: null,
         hash: custom_hash_id,

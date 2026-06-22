@@ -665,7 +665,7 @@
   (local.get $l)
 )
 
-(global $jsError (ref $string) (@string $string "jsError" )) ;; 'jsError'
+(global $jsError (ref $string) (@string "jsError" )) ;; 'jsError'
 (data $toString "toString")
 
 (func $caml_wrap_exception (export "caml_wrap_exception")

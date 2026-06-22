@@ -131,12 +131,12 @@ fn output(x: &eq) {
 }
 
 fn output_nl() {
-    _ = caml_ml_output(caml_stderr, string#"\n", 0 as &i31, 1 as &i31);
+    _ = caml_ml_output(caml_stderr, "\n", 0 as &i31, 1 as &i31);
     _ = caml_ml_flush(caml_stderr);
 }
 
 fn output_int(x: i32) {
-    output(caml_format_int(string#"%d", x as &i31));
+    output(caml_format_int("%d", x as &i31));
 }
 
 data State = "State ";
@@ -156,7 +156,7 @@ fn print_token(tables: &block, state: i32, tok: &eq) {
         let b = tok as &block;
         output(token_name(tables[tbl_names_block], b[0] as &i31 as i32_u));
         output(
-            string#"(" // "("
+            "(" // "("
         );
         let v = b[1];
         if v is &i31 {
@@ -166,14 +166,14 @@ fn print_token(tables: &block, state: i32, tok: &eq) {
                 output(v);
             } else {
                 if v is &float {
-                    output(caml_format_float(string#"%g", v));
+                    output(caml_format_float("%g", v));
                 } else {
-                    output(string#"_");
+                    output("_");
                 }
             }
         } // '_'
         output(
-            string#")" // ")"
+            ")" // ")"
         );
         output_nl();
     }

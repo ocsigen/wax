@@ -152,7 +152,7 @@ type custom = open { f: &custom_operations };
 #[export = "bigarray_ops"]
 const bigarray_ops: &custom_operations =
     {
-        id: string#"_bigarr02", // "_bigarr02"
+        id: "_bigarr02", // "_bigarr02"
         compare: caml_ba_compare,
         compare_ext: null,
         hash: bigarray_hash,

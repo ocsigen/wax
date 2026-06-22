@@ -184,7 +184,7 @@
 (type $custom (sub (struct (field $f (ref $custom_operations)))))
 
 (global $bigarray_ops (export "bigarray_ops") (ref $custom_operations)
-  (struct.new $custom_operations (@string $string "_bigarr02" ) ;; "_bigarr02"
+  (struct.new $custom_operations (@string "_bigarr02" ) ;; "_bigarr02"
     (ref.func $caml_ba_compare) (ref.null $compare) (ref.func $bigarray_hash)
     (ref.null $fixed_length) (ref.func $bigarray_serialize)
     (ref.func $bigarray_deserialize) (ref.null $dup))

@@ -1309,7 +1309,18 @@ and instruction_desc ret ctx i : location Text.instr list =
       folded loc (Select typ) (code_then @ code_else @ code_cond)
   | Char c -> folded loc (Char c) []
   | String (ty, s) ->
-      folded loc (String (Option.map index ty, [ { desc = s; info = loc } ])) []
+      (* When the type name was inferred from the context (so [ty] is omitted),
+         recover it from the expression's type. A synthesized [<string>] type is
+         the [mut i8] default that a bare [(@string "..")] already lowers to, so
+         it stays omitted; a concrete inferred type (e.g. an immutable [chars])
+         is pinned explicitly. *)
+      let idx = Option.value ~default:(expr_type_name i) ty in
+      let idx =
+        if idx.desc <> "" && idx.desc.[0] = '<' then None else Some idx
+      in
+      folded loc
+        (String (Option.map index idx, [ { desc = s; info = loc } ]))
+        []
   | If_annotation { cond; then_body; else_body } ->
       let conv body = List.concat_map (instruction ret ctx) body in
       [

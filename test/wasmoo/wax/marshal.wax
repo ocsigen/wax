@@ -49,7 +49,7 @@ fn caml_find_custom_operations(&string) -> &?custom_operations;
 #[import = ("version-dependent", "caml_marshal_header_size")]
 const caml_marshal_header_size: i32;
 
-const input_val_from_string = string#"input_val_from_string";
+const input_val_from_string = "input_val_from_string";
 
 #[export = "caml_input_value_from_bytes"]
 #[export = "caml_input_value_from_string"]
@@ -66,7 +66,7 @@ fn caml_input_value_from_bytes(vstr: &eq, vofs: &eq) -> &eq {
 
 data truncated_obj = "input_value: truncated object";
 
-const input_value = string#"input_value";
+const input_value = "input_value";
 
 #[export = "caml_input_value"]
 fn caml_input_value(ch: &eq) -> &eq {

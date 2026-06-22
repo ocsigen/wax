@@ -171,7 +171,7 @@
 )
 
 (global $INT_ERRMSG (ref $string)
-  (@string $string "int_of_string" )
+  (@string "int_of_string" )
 ) ;; "int.of_string"
 (func $caml_int_of_string (export "caml_int_of_string")
   (param $v (ref eq)) (result (ref eq))

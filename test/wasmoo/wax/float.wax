@@ -40,9 +40,9 @@ type block = [mut &eq];
 
 type chars = [i8];
 
-const infinity = chars#"infinity";
+const infinity: &chars = "infinity";
 
-const nan_2 = chars#"nan";
+const nan_2: &chars = "nan";
 
 #[export = "Double_val"]
 fn Double_val(x: &eq) -> f64 {
@@ -209,7 +209,7 @@ fn parse_format(s: &string) -> (i32, i32, i32, i32) {
     uppercase;
 }
 
-const inf_2 = chars#"inf";
+const inf_2: &chars = "inf";
 
 #[export = "caml_format_float"]
 fn caml_format_float(x: &eq, x_2: &eq) -> &eq {

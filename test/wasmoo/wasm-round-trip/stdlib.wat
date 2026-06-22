@@ -233,7 +233,7 @@
                   (i32.const 23))
                 (call $caml_string_concat
                   (call $caml_format_exception (local.get $exn))
-                  (@string $string "\n" ))))))) ;; `\n`
+                  (@string "\n" ))))))) ;; `\n`
       (call $exit (i32.const 2))))
 )
 (elem declare func $reraise_exception)

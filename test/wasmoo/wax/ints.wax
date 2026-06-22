@@ -151,7 +151,7 @@ fn parse_int(v: &eq, nbits: i32, errmsg: &string) -> i32 {
     res;
 }
 
-const INT_ERRMSG = string#"int_of_string"; // "int.of_string"
+const INT_ERRMSG = "int_of_string"; // "int.of_string"
 #[export = "caml_int_of_string"]
 fn caml_int_of_string(v: &eq) -> &eq {
     parse_int(v, 31, INT_ERRMSG) as &i31;
@@ -166,10 +166,10 @@ fn caml_bswap16(x: &eq) -> &eq {
 type chars = [i8];
 
 #[export = "lowercase_hex_table"]
-const lowercase_hex_table = chars#"0123456789abcdef";
+const lowercase_hex_table: &chars = "0123456789abcdef";
 
 #[export = "uppercase_hex_table"]
-const uppercase_hex_table = chars#"0123456789ABCDEF";
+const uppercase_hex_table: &chars = "0123456789ABCDEF";
 
 fn format_int_default(d: i32) -> &eq {
     let negative: i32;

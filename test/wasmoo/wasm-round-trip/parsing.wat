@@ -157,14 +157,14 @@
 
 (func $output_nl
   (drop
-    (call $caml_ml_output (global.get $caml_stderr) (@string $string "\n" )
+    (call $caml_ml_output (global.get $caml_stderr) (@string "\n" )
       (ref.i31 (i32.const 0)) (ref.i31 (i32.const 1))))
   (drop (call $caml_ml_flush (global.get $caml_stderr)))
 )
 
 (func $output_int (param $x i32)
   (call $output
-    (call $caml_format_int (@string $string "%d" ) (ref.i31 (local.get $x))))
+    (call $caml_format_int (@string "%d" ) (ref.i31 (local.get $x))))
 )
 
 (data $State "State ")
@@ -198,7 +198,7 @@
           (i31.get_u
             (ref.cast (ref i31)
               (array.get $block (local.get $b) (i32.const 0))))))
-      (call $output (@string $string "(" ) ;; "("
+      (call $output (@string "(" ) ;; "("
       )
       (local.set $v (array.get $block (local.get $b) (i32.const 1)))
       (if (ref.test (ref i31) (local.get $v))
@@ -211,10 +211,9 @@
               (if (ref.test (ref $float) (local.get $v))
                 (then
                   (call $output
-                    (call $caml_format_float (@string $string "%g" )
-                      (local.get $v))))
-                (else (call $output (@string $string "_" )))))))) ;; '_'
-      (call $output (@string $string ")" ) ;; ")"
+                    (call $caml_format_float (@string "%g" ) (local.get $v))))
+                (else (call $output (@string "_" )))))))) ;; '_'
+      (call $output (@string ")" ) ;; ")"
       )
       (call $output_nl)))
 )

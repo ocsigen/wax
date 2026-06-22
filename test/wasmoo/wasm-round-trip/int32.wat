@@ -56,7 +56,7 @@
 (type $custom (sub (struct (field $f (ref $custom_operations)))))
 
 (global $int32_ops (export "int32_ops") (ref $custom_operations)
-  (struct.new $custom_operations (@string $string "_i" ) ;; "_i"
+  (struct.new $custom_operations (@string "_i" ) ;; "_i"
     (ref.func $int32_cmp) (ref.null $compare) (ref.func $int32_hash)
     (struct.new $fixed_length (i32.const 4) (i32.const 4))
     (ref.func $int32_serialize) (ref.func $int32_deserialize)
@@ -122,7 +122,7 @@
 )
 
 (global $INT32_ERRMSG (ref $string)
-  (@string $string "Int32.of_string" )
+  (@string "Int32.of_string" )
 ) ;; "Int32.of_string"
 (func $caml_int32_of_string (export "caml_int32_of_string")
   (param $v (ref eq)) (result (ref eq))
@@ -140,7 +140,7 @@
 )
 
 (global $nativeint_ops (export "nativeint_ops") (ref $custom_operations)
-  (struct.new $custom_operations (@string $string "_n" ) ;; "_n"
+  (struct.new $custom_operations (@string "_n" ) ;; "_n"
     (ref.func $int32_cmp) (ref.null $compare) (ref.func $int32_hash)
     (struct.new $fixed_length (i32.const 4) (i32.const 8))
     (ref.func $nativeint_serialize) (ref.func $nativeint_deserialize)
@@ -175,7 +175,7 @@
 )
 
 (global $NATIVEINT_ERRMSG (ref $string)
-  (@string $string "Native.of_string" )
+  (@string "Native.of_string" )
 ) ;; "Nativeint.of_string"
 (func $caml_nativeint_of_string (export "caml_nativeint_of_string")
   (param $v (ref eq)) (result (ref eq))

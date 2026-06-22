@@ -86,7 +86,7 @@ fn caml_format_exception(x: &eq) -> &eq {
                     add_string(
                         buf,
                         caml_format_int(
-                            string#"%d", // %d
+                            "%d", // %d
                             v as &i31,
                         ),
                     );

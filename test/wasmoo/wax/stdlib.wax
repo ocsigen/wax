@@ -192,7 +192,7 @@ fn caml_main(start: &func) {
                         caml_jsstring_of_string(
                             caml_string_concat(
                                 [string|fatal_error @ 0; 23],
-                                caml_string_concat(caml_format_exception(exn), string#"\n"),
+                                caml_string_concat(caml_format_exception(exn), "\n"),
                             ),
                         ),
                     ),

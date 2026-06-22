@@ -60,7 +60,7 @@
 )
 
 (global $input_val_from_string (ref $string)
-  (@string $string "input_val_from_string" )
+  (@string "input_val_from_string" )
 )
 
 (func $caml_input_value_from_bytes (export "caml_input_value_from_bytes")
@@ -84,7 +84,7 @@
 
 (data $truncated_obj "input_value: truncated object")
 
-(global $input_value (ref $string) (@string $string "input_value" ))
+(global $input_value (ref $string) (@string "input_value" ))
 
 (func $caml_input_value (export "caml_input_value")
   (param $ch (ref eq)) (result (ref eq))
