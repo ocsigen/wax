@@ -15,6 +15,9 @@
 ;; along with this program; if not, write to the Free Software
 ;; Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
+(import "float32" "float32_ops"
+  (global $float32_ops (ref $custom_operations))
+)
 (import "int32" "int32_ops" (global $int32_ops (ref $custom_operations)))
 (import "int32" "nativeint_ops"
   (global $nativeint_ops (ref $custom_operations))
@@ -23,11 +26,12 @@
 (import "bigarray" "bigarray_ops"
   (global $bigarray_ops (ref $custom_operations))
 )
-(import "string" "caml_string_equal"
-  (func $caml_string_equal (param (ref eq) (ref eq)) (result (ref eq)))
+(import "nat" "nat_ops" (global $nat_ops (ref $custom_operations)))
+(import "string" "caml_bytes_equal"
+  (func $caml_bytes_equal (param (ref eq) (ref eq)) (result (ref eq)))
 )
 
-(type $string (array (mut i8)))
+(type $bytes (array (mut i8)))
 (type $compare (func (param (ref eq) (ref eq) i32) (result i32)))
 (type $hash (func (param (ref eq)) (result i32)))
 (type $fixed_length (struct (field $bsize_32 i32) (field $bsize_64 i32)))
@@ -36,7 +40,7 @@
 (type $dup (func (param (ref eq)) (result (ref eq))))
 (type $custom_operations
   (struct
-    (field $id (ref $string))
+    (field $id (ref $bytes))
     (field $compare (ref null $compare))
     (field $compare_ext (ref null $compare))
     (field $hash (ref null $hash))
@@ -45,15 +49,15 @@
     (field $deserialize (ref null $deserialize))
     (field $dup (ref null $dup)))
 )
-(type $custom (sub (struct (field $f (ref $custom_operations)))))
+(type $custom (sub (struct (field $ops (ref $custom_operations)))))
 
 (type $custom_with_id
-  (sub $custom (struct (field $f (ref $custom_operations)) (field $id i64)))
+  (sub $custom (struct (field $ops (ref $custom_operations)) (field $id i64)))
 )
 
 (func $caml_is_custom (export "caml_is_custom")
-  (param $x (ref eq)) (result i32)
-  (ref.test (ref $custom) (local.get $x))
+  (param $v (ref eq)) (result i32)
+  (ref.test (ref $custom) (local.get $v))
 )
 
 (func $caml_dup_custom (export "caml_dup_custom")
@@ -61,30 +65,30 @@
   (call_ref $dup (local.get $v)
     (ref.as_non_null
       (struct.get $custom_operations $dup
-        (struct.get $custom $f
+        (struct.get $custom $ops
           (block $custom (result (ref $custom))
             (drop (br_on_cast $custom (ref eq) (ref $custom) (local.get $v)))
             (unreachable))))))
 )
 
 (func $custom_compare_id (export "custom_compare_id")
-  (param $x (ref eq)) (param $x_2 (ref eq)) (param i32) (result i32)
+  (param $v1 (ref eq)) (param $v2 (ref eq)) (param i32) (result i32)
   (local $i1 i64) (local $i2 i64)
   (local.set $i1
     (struct.get $custom_with_id $id
-      (ref.cast (ref $custom_with_id) (local.get $x))))
+      (ref.cast (ref $custom_with_id) (local.get $v1))))
   (local.set $i2
     (struct.get $custom_with_id $id
-      (ref.cast (ref $custom_with_id) (local.get $x_2))))
+      (ref.cast (ref $custom_with_id) (local.get $v2))))
   (i32.sub (i64.gt_s (local.get $i1) (local.get $i2))
     (i64.lt_s (local.get $i1) (local.get $i2)))
 )
 
 (func $custom_hash_id (export "custom_hash_id")
-  (param $x (ref eq)) (result i32)
+  (param $v (ref eq)) (result i32)
   (i32.wrap_i64
     (struct.get $custom_with_id $id
-      (ref.cast (ref $custom_with_id) (local.get $x))))
+      (ref.cast (ref $custom_with_id) (local.get $v))))
 )
 
 (global $next_id (mut i64) (i64.const 0))
@@ -115,15 +119,15 @@
 )
 
 (func $caml_find_custom_operations (export "caml_find_custom_operations")
-  (param $id (ref $string)) (result (ref null $custom_operations))
-  (local $l (ref null $custom_operations_list))
+  (param $id (ref $bytes)) (result (ref null $custom_operations))
+  (local $l (ref $custom_operations_list))
   (block $not_found
     (local.set $l (br_on_null $not_found (global.get $custom_operations)))
     (loop $loop
       (if
         (i31.get_u
           (ref.cast (ref i31)
-            (call $caml_string_equal (local.get $id)
+            (call $caml_bytes_equal (local.get $id)
               (struct.get $custom_operations $id
                 (struct.get $custom_operations_list $ops (local.get $l))))))
         (then
@@ -143,11 +147,21 @@
   (call $caml_register_custom_operations (global.get $nativeint_ops))
   (call $caml_register_custom_operations (global.get $int64_ops))
   (call $caml_register_custom_operations (global.get $bigarray_ops))
+  (call $caml_register_custom_operations (global.get $float32_ops))
+  (call $caml_register_custom_operations (global.get $nat_ops))
   (global.set $initialized (i32.const 1))
 )
 
+(global $empty_custom (ref $bytes) (@string "" ))
+
 (func $caml_custom_identifier (export "caml_custom_identifier")
   (param $v (ref eq)) (result (ref eq))
-  (struct.get $custom_operations $id
-    (struct.get $custom $f (ref.cast (ref $custom) (local.get $v))))
+  (drop
+    (block $not_custom (result anyref)
+      (return
+        (struct.get $custom_operations $id
+          (struct.get $custom $ops
+            (br_on_cast_fail $not_custom (ref eq) (ref $custom)
+              (local.get $v)))))))
+  (return (global.get $empty_custom))
 )

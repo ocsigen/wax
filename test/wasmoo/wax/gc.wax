@@ -15,8 +15,14 @@
 // along with this program; if not, write to the Free Software
 // Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
+#[import = ("obj", "caml_callback_1")]
+fn caml_callback_1(&eq, &eq) -> &eq;
+#[import = ("fail", "caml_invalid_argument")]
+fn caml_invalid_argument(&eq);
+
 type float = { f: f64 };
 type block = [mut &eq];
+type bytes = [mut i8];
 
 #[export = "caml_gc_minor"]
 fn caml_gc_minor(&eq) -> &eq {
@@ -44,6 +50,34 @@ fn caml_gc_counters(&eq) -> &eq {
     [block|0 as &i31, f, f, f];
 }
 
+#[if(ocaml_version >= (5, 5, 0))]
+#[export = "caml_gc_stat"]
+#[export = "caml_gc_quick_stat"]
+fn caml_gc_stat(&eq) -> &eq {
+    let f: &eq = { f: 0 };
+    [block|
+        0 as &i31,
+        f,
+        f,
+        f,
+        0 as &i31,
+        0 as &i31,
+        0 as &i31,
+        0 as &i31,
+        0 as &i31,
+        0 as &i31,
+        0 as &i31,
+        0 as &i31,
+        0 as &i31,
+        0 as &i31,
+        0 as &i31,
+        0 as &i31,
+        0 as &i31,
+        0 as &i31,
+        0 as &i31,
+    ];
+}
+#[else]
 #[export = "caml_gc_stat"]
 #[export = "caml_gc_quick_stat"]
 fn caml_gc_stat(&eq) -> &eq {
@@ -154,6 +188,16 @@ fn caml_memprof_stop(&eq) -> &eq {
     0 as &i31;
 }
 
+#[export = "caml_memprof_discard"]
+fn caml_memprof_discard(&eq) -> &eq {
+    0 as &i31;
+}
+
+#[export = "caml_memprof_participate"]
+fn caml_memprof_participate(&eq) -> &eq {
+    0 as &i31;
+}
+
 #[export = "caml_eventlog_pause"]
 fn caml_eventlog_pause(&eq) -> &eq {
     0 as &i31;
@@ -161,5 +205,39 @@ fn caml_eventlog_pause(&eq) -> &eq {
 
 #[export = "caml_eventlog_resume"]
 fn caml_eventlog_resume(&eq) -> &eq {
+    0 as &i31;
+}
+
+#[export = "caml_ml_gc_ramp_up"]
+fn caml_ml_gc_ramp_up(f: &eq) -> &eq {
+    [block|0 as &i31, caml_callback_1(f, 0 as &i31), 0 as &i31];
+}
+
+#[export = "caml_ml_gc_ramp_down"]
+fn caml_ml_gc_ramp_down(&eq) -> &eq {
+    0 as &i31;
+}
+
+#[export = "caml_memprof_is_sampling"]
+fn caml_memprof_is_sampling(&eq) -> &eq {
+    0 as &i31;
+}
+
+const gc_tweak_error = "Gc.Tweak: parameter not found";
+
+#[export = "caml_gc_tweak_get"]
+fn caml_gc_tweak_get(&eq) -> &eq {
+    caml_invalid_argument(gc_tweak_error);
+    0 as &i31;
+}
+
+#[export = "caml_gc_tweak_set"]
+fn caml_gc_tweak_set(&eq, &eq) -> &eq {
+    caml_invalid_argument(gc_tweak_error);
+    0 as &i31;
+}
+
+#[export = "caml_gc_tweak_list_active"]
+fn caml_gc_tweak_list_active(&eq) -> &eq {
     0 as &i31;
 }

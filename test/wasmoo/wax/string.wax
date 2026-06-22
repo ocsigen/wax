@@ -20,7 +20,7 @@ fn caml_bound_error();
 #[import = ("fail", "caml_invalid_argument")]
 fn caml_invalid_argument(arg: &eq);
 
-type string = [mut i8];
+type bytes = [mut i8];
 
 #[export = "caml_string_equal"]
 #[export = "caml_bytes_equal"]
@@ -28,8 +28,8 @@ fn caml_string_equal(p1: &eq, p2: &eq) -> &eq {
     if p1 == p2 {
         return 1 as &i31;
     }
-    let s1 = p1 as &string;
-    let s2 = p2 as &string;
+    let s1 = p1 as &bytes;
+    let s2 = p2 as &bytes;
     let len = s1.length();
     if len != s2.length() {
         return 0 as &i31;
@@ -54,8 +54,8 @@ fn string_compare(p1: &eq, p2: &eq) -> i32 {
     if p1 == p2 {
         return 0;
     }
-    let s1 = p1 as &string;
-    let s2 = p2 as &string;
+    let s1 = p1 as &bytes;
+    let s2 = p2 as &bytes;
     let l1 = s1.length();
     let l2 = s2.length();
     let len = l1 <=u l2?l1:l2;
@@ -82,32 +82,32 @@ fn string_compare(p1: &eq, p2: &eq) -> i32 {
 
 #[export = "caml_string_compare"]
 #[export = "caml_bytes_compare"]
-fn caml_string_compare(x: &eq, x_2: &eq) -> &eq {
-    string_compare(x, x_2) as &i31;
+fn caml_string_compare(v1: &eq, v2: &eq) -> &eq {
+    string_compare(v1, v2) as &i31;
 }
 
 #[export = "caml_string_lessequal"]
 #[export = "caml_bytes_lessequal"]
-fn caml_string_lessequal(x: &eq, x_2: &eq) -> &eq {
-    (string_compare(x, x_2) <=s 0) as &i31;
+fn caml_string_lessequal(v1: &eq, v2: &eq) -> &eq {
+    (string_compare(v1, v2) <=s 0) as &i31;
 }
 
 #[export = "caml_string_lessthan"]
 #[export = "caml_bytes_lessthan"]
-fn caml_string_lessthan(x: &eq, x_2: &eq) -> &eq {
-    (string_compare(x, x_2) <s 0) as &i31;
+fn caml_string_lessthan(v1: &eq, v2: &eq) -> &eq {
+    (string_compare(v1, v2) <s 0) as &i31;
 }
 
 #[export = "caml_string_greaterequal"]
 #[export = "caml_bytes_greaterequal"]
-fn caml_string_greaterequal(x: &eq, x_2: &eq) -> &eq {
-    (string_compare(x, x_2) >=s 0) as &i31;
+fn caml_string_greaterequal(v1: &eq, v2: &eq) -> &eq {
+    (string_compare(v1, v2) >=s 0) as &i31;
 }
 
 #[export = "caml_string_greaterthan"]
 #[export = "caml_bytes_greaterthan"]
-fn caml_string_greaterthan(x: &eq, x_2: &eq) -> &eq {
-    (string_compare(x, x_2) >s 0) as &i31;
+fn caml_string_greaterthan(v1: &eq, v2: &eq) -> &eq {
+    (string_compare(v1, v2) >s 0) as &i31;
 }
 
 #[export = "caml_string_of_bytes"]
@@ -116,54 +116,48 @@ fn caml_string_of_bytes(v: &eq) -> &eq {
     v;
 }
 
-data Bytes_create = "Bytes.create";
+const Bytes_create = "Bytes.create";
 
 #[export = "caml_create_bytes"]
+#[export = "caml_create_local_bytes"]
 fn caml_create_bytes(len: &eq) -> &eq {
     let l = len as &i31 as i32_s;
     if l <s 0 {
-        caml_invalid_argument([string|Bytes_create @ 0; 12]);
+        caml_invalid_argument(Bytes_create);
     }
-    [string|0; l];
+    [bytes|0; l];
 }
 
 #[export = "caml_blit_string"]
 #[export = "caml_blit_bytes"]
 fn caml_blit_string(v1: &eq, i1: &eq, v2: &eq, i2: &eq, n: &eq) -> &eq {
-    (v2 as &string).copy(
-        i2 as &i31 as i32_s,
-        v1 as &string,
-        i1 as &i31 as i32_s,
-        n as &i31 as i32_s,
-    );
+    (v2 as &bytes).copy(i2 as &i31 as i32_s, v1 as &bytes, i1 as &i31 as i32_s, n as &i31 as i32_s);
     0 as &i31;
 }
 
 #[export = "caml_fill_bytes"]
 fn caml_fill_bytes(v: &eq, offset: &eq, len: &eq, init: &eq) -> &eq {
-    (v as &string).fill(offset as &i31 as i32_u, init as &i31 as i32_u, len as &i31 as i32_u);
+    (v as &bytes).fill(offset as &i31 as i32_u, init as &i31 as i32_u, len as &i31 as i32_u);
     0 as &i31;
 }
 
 #[export = "caml_bytes_get16"]
 #[export = "caml_string_get16"]
-fn caml_bytes_get16(v: &eq, i: &eq) -> &eq {
-    let s = v as &string;
-    let p = i as &i31 as i32_s;
+fn caml_bytes_get16(v: &eq, p: i32) -> i32 {
+    let s = v as &bytes;
     if p <s 0 {
         caml_bound_error();
     }
     if p + 1 >=u s.length() {
         caml_bound_error();
     }
-    (s[p] as i32_u | s[p + 1] as i32_u << 8) as &i31;
+    s[p] as i32_u | s[p + 1] as i32_u << 8;
 }
 
 #[export = "caml_bytes_get32"]
 #[export = "caml_string_get32"]
-fn caml_bytes_get32(v: &eq, i: &eq) -> i32 {
-    let s = v as &string;
-    let p = i as &i31 as i32_s;
+fn caml_bytes_get32(v: &eq, p: i32) -> i32 {
+    let s = v as &bytes;
     if p <s 0 {
         caml_bound_error();
     }
@@ -175,9 +169,8 @@ fn caml_bytes_get32(v: &eq, i: &eq) -> i32 {
 
 #[export = "caml_bytes_get64"]
 #[export = "caml_string_get64"]
-fn caml_bytes_get64(v: &eq, i: &eq) -> i64 {
-    let s = v as &string;
-    let p = i as &i31 as i32_s;
+fn caml_bytes_get64(v: &eq, p: i32) -> i64 {
+    let s = v as &bytes;
     if p <s 0 {
         caml_bound_error();
     }
@@ -191,10 +184,8 @@ fn caml_bytes_get64(v: &eq, i: &eq) -> i64 {
 }
 
 #[export = "caml_bytes_set16"]
-fn caml_bytes_set16(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
-    let s = x as &string;
-    let p = x_2 as &i31 as i32_s;
-    let v = x_3 as &i31 as i32_s;
+fn caml_bytes_set16(vs: &eq, p: i32, v: i32) -> &eq {
+    let s = vs as &bytes;
     if p <s 0 {
         caml_bound_error();
     }
@@ -207,9 +198,8 @@ fn caml_bytes_set16(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
 }
 
 #[export = "caml_bytes_set32"]
-fn caml_bytes_set32(x: &eq, x_2: &eq, v: i32) -> &eq {
-    let s = x as &string;
-    let p = x_2 as &i31 as i32_s;
+fn caml_bytes_set32(vs: &eq, p: i32, v: i32) -> &eq {
+    let s = vs as &bytes;
     if p <s 0 {
         caml_bound_error();
     }
@@ -224,9 +214,8 @@ fn caml_bytes_set32(x: &eq, x_2: &eq, v: i32) -> &eq {
 }
 
 #[export = "caml_bytes_set64"]
-fn caml_bytes_set64(x: &eq, x_2: &eq, v: i64) -> &eq {
-    let s = x as &string;
-    let p = x_2 as &i31 as i32_s;
+fn caml_bytes_set64(vs: &eq, p: i32, v: i64) -> &eq {
+    let s = vs as &bytes;
     if p <s 0 {
         caml_bound_error();
     }
@@ -246,11 +235,11 @@ fn caml_bytes_set64(x: &eq, x_2: &eq, v: i64) -> &eq {
 
 #[export = "caml_string_concat"]
 fn caml_string_concat(vs1: &eq, vs2: &eq) -> &eq {
-    let s1 = vs1 as &string;
-    let s2 = vs2 as &string;
+    let s1 = vs1 as &bytes;
+    let s2 = vs2 as &bytes;
     let l1 = s1.length();
     let l2 = s2.length();
-    let s: &string = [0; l1 + l2];
+    let s: &bytes = [0; l1 + l2];
     s.copy(0, s1, 0, l1);
     s.copy(l1, s2, 0, l2);
     s;

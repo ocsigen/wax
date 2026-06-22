@@ -19,11 +19,11 @@
 fn caml_invalid_argument(&eq);
 
 type block = [mut &eq];
-type string = [mut i8];
+type bytes = [mut i8];
 type float = { f: f64 };
 type float_array = [mut f64];
 
-data Array_make = "Array.make";
+const Array_make = "Array.make";
 
 const empty_array: &eq = [block|0 as &i31];
 
@@ -31,30 +31,33 @@ const empty_array: &eq = [block|0 as &i31];
 #[export = "caml_array_make"]
 fn caml_make_vect(n: &eq, v: &eq) -> &eq {
     let sz = n as &i31 as i32_s;
-    if sz <s 0 {
-        caml_invalid_argument([string|Array_make @ 0; 10]);
+    if sz >=u 0xfffffff {
+        caml_invalid_argument(Array_make);
     }
     if !sz {
         return empty_array;
     }
-    match v {
-        fv: &float => {
-            let f = fv.f;
+    _ =
+        'not_float: do &eq {
+            let f = (br_on_cast_fail 'not_float &float v).f;
+            // A float init builds an unboxed float array, which has the tighter
+            // size limit of the dedicated floatarray primitives, not the generic
+            // one checked above.
+            if sz >=u 0x7ffffff {
+                caml_invalid_argument(Array_make);
+            }
             return [float_array|f; sz];
-        }
-        _ => {
-            let b: &block = [v; sz + 1];
-            b[0] = 0 as &i31;
-            b;
-        }
-    }
+        };
+    let b: &block = [v; sz + 1];
+    b[0] = 0 as &i31;
+    b;
 }
 
 #[export = "caml_floatarray_make"]
 fn caml_floatarray_make(n: &eq, v: &eq) -> &eq {
     let sz = n as &i31 as i32_s;
-    if sz <s 0 {
-        caml_invalid_argument([string|Array_make @ 0; 10]);
+    if sz >=u 0x7ffffff {
+        caml_invalid_argument(Array_make);
     }
     if !sz {
         return empty_array;
@@ -66,10 +69,11 @@ fn caml_floatarray_make(n: &eq, v: &eq) -> &eq {
 #[export = "caml_make_float_vect"]
 #[export = "caml_floatarray_create"]
 #[export = "caml_array_create_float"]
+#[export = "caml_floatarray_create_local"]
 fn caml_floatarray_create(n: &eq) -> &eq {
     let sz = n as &i31 as i32_s;
-    if sz <s 0 {
-        caml_invalid_argument([string|Array_make @ 0; 10]);
+    if sz >=u 0x7ffffff {
+        caml_invalid_argument(Array_make);
     }
     if !sz {
         return empty_array;
@@ -78,6 +82,7 @@ fn caml_floatarray_create(n: &eq) -> &eq {
 }
 
 #[export = "caml_array_of_uniform_array"]
+#[export = "caml_make_array"]
 fn caml_array_of_uniform_array(vinit: &eq) -> &eq {
     let init = vinit as &block;
     let size = init.length();
@@ -108,6 +113,7 @@ fn caml_floatarray_unsafe_set(a: &eq, i: &eq, v: &eq) -> &eq {
 }
 
 #[export = "caml_array_sub"]
+#[export = "caml_array_sub_local"]
 fn caml_array_sub(a: &eq, i: &eq, vlen: &eq) -> &eq {
     let len = vlen as &i31 as i32_u;
     if !len {
@@ -149,6 +155,7 @@ fn caml_floatarray_dup(a: &float_array) -> &eq {
 }
 
 #[export = "caml_array_append"]
+#[export = "caml_array_append_local"]
 fn caml_array_append(va1: &eq, va2: &eq) -> &eq {
     let l1: i32;
     let l2: i32;
@@ -206,8 +213,9 @@ fn caml_floatarray_append(va1: &eq, va2: &eq) -> &eq {
 }
 
 #[export = "caml_array_concat"]
-fn caml_array_concat(x: &eq) -> &eq {
-    let l = x;
+#[export = "caml_array_concat_local"]
+fn caml_array_concat(vl: &eq) -> &eq {
+    let l = vl;
     let len = 0;
     let isfloat: i32;
     let b: &block;
@@ -232,7 +240,7 @@ fn caml_array_concat(x: &eq) -> &eq {
     let i: i32;
     if isfloat => &eq {
         let fa: &float_array = [0; len];
-        l = x;
+        l = vl;
         i = 0;
         'fill: loop {
             _ =
@@ -255,7 +263,7 @@ fn caml_array_concat(x: &eq) -> &eq {
         fa;
     } else {
         let a: &block = [0 as &i31; len + 1];
-        l = x;
+        l = vl;
         i = 1;
         'fill: loop {
             _ =
@@ -271,6 +279,80 @@ fn caml_array_concat(x: &eq) -> &eq {
         }
         a;
     }
+}
+
+#[export = "caml_floatarray_concat"]
+fn caml_floatarray_concat(vl: &eq) -> &eq {
+    let l = vl;
+    let len = 0;
+    let b: &block;
+    'compute_length: loop {
+        _ =
+            'exit: do &eq {
+                b = br_on_cast_fail 'exit &block l;
+                let v = b[1];
+                if v is &float_array {
+                    len = len + (v as &float_array).length();
+                }
+                l = b[2];
+                br 'compute_length;
+            };
+    }
+    let fa: &float_array = [0; len];
+    l = vl;
+    let i = 0;
+    'fill: loop {
+        _ =
+            'exit: do &eq {
+                b = br_on_cast_fail 'exit &block l;
+                l = b[2];
+                match b[1] {
+                    fa': &float_array => {
+                        len = fa'.length();
+                        fa.copy(i, fa', 0, len);
+                        i = i + len;
+                        br 'fill;
+                    }
+                    _ => {
+                        br 'fill;
+                    }
+                }
+            };
+    }
+    fa;
+}
+
+#[export = "caml_uniform_array_concat"]
+fn caml_uniform_array_concat(vl: &eq) -> &eq {
+    let l = vl;
+    let len = 0;
+    let b: &block;
+    'compute_length: loop {
+        _ =
+            'exit: do &eq {
+                b = br_on_cast_fail 'exit &block l;
+                let v = b[1];
+                len = len + ((v as &block).length() - 1);
+                l = b[2];
+                br 'compute_length;
+            };
+    }
+    let a: &block = [0 as &i31; len + 1];
+    l = vl;
+    let i = 1;
+    'fill: loop {
+        _ =
+            'exit: do &eq {
+                b = br_on_cast_fail 'exit &block l;
+                let a' = b[1] as &block;
+                len = a'.length() - 1;
+                a.copy(i, a', 1, len);
+                i = i + len;
+                l = b[2];
+                br 'fill;
+            };
+    }
+    a;
 }
 
 #[export = "caml_floatarray_blit"]

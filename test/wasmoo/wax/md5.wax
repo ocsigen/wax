@@ -16,31 +16,31 @@
 // Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
 #[import = ("io", "caml_getblock")]
-fn caml_getblock(&eq, &string, i32, i32) -> i32;
+fn caml_getblock(&eq, &bytes, i32, i32) -> i32;
 #[import = ("fail", "caml_raise_end_of_file")]
 fn caml_raise_end_of_file();
 
-type string = [mut i8];
+type bytes = [mut i8];
 type int_array = [mut i32];
 
 type context = {
-    f: &int_array, // w
-    f_2: mut i64, // len
-    f_3: &int_array, // buffer
-    f_4: &string
+    w: &int_array, // w
+    len: mut i64, // len
+    buffer: &int_array, // buffer
+    intermediate: &bytes
 }; // intermediate buffer
 #[export = "caml_md5_string"]
 #[export = "caml_md5_bytes"]
-fn caml_md5_string(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
+fn caml_md5_string(vs: &eq, vofs: &eq, vlen: &eq) -> &eq {
     let ctx = MD5Init();
-    MD5Update(ctx, x as &string, x_2 as &i31 as i32_u, x_3 as &i31 as i32_u);
+    MD5Update(ctx, vs as &bytes, vofs as &i31 as i32_u, vlen as &i31 as i32_u);
     become MD5Final(ctx);
 }
 
 #[export = "caml_md5_chan"]
 fn caml_md5_chan(ch: &eq, vlen: &eq) -> &eq {
     let len = vlen as &i31 as i32_s;
-    let buf: &string = [0; 4096];
+    let buf: &bytes = [0; 4096];
     let ctx = MD5Init();
     let read: i32;
     if len <s 0 {
@@ -84,11 +84,11 @@ fn ii(a: i32, b: i32, c: i32, d: i32, x: i32, s: i32, t: i32) -> i32 {
     xx(c ^ (b | d ^ -1), a, b, x, s, t);
 }
 
-fn get_32(s: &string, p: i32) -> i32 {
+fn get_32(s: &bytes, p: i32) -> i32 {
     s[p] as i32_u | s[p + 1] as i32_u << 8 | (s[p + 2] as i32_u << 16 | s[p + 3] as i32_u << 24);
 }
 
-fn MD5Transform(w: &int_array, buffer: &int_array, buffer': &string, p: i32) {
+fn MD5Transform(w: &int_array, buffer: &int_array, buffer': &bytes, p: i32) {
     let i: i32;
     do {
         buffer[i] = get_32(buffer', p);
@@ -170,38 +170,43 @@ fn MD5Transform(w: &int_array, buffer: &int_array, buffer': &string, p: i32) {
 }
 
 fn MD5Init() -> &context {
-    { f: [0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476], f_2: 0, f_3: [0; 16], f_4: [0; 64] };
+    {
+        w: [0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476],
+        len: 0,
+        buffer: [0; 16],
+        intermediate: [0; 64],
+    };
 }
 
-fn MD5Update(ctx: &context, input: &string, input_pos: i32, input_len: i32) {
-    let len = ctx.f_2;
+fn MD5Update(ctx: &context, input: &bytes, input_pos: i32, input_len: i32) {
+    let len = ctx.len;
     let in_buf = len as i32 & 0x3f;
-    ctx.f_2 = len + input_len as i64_u;
+    ctx.len = len + input_len as i64_u;
     if in_buf {
         let missing = 64 - in_buf;
         if input_len <u missing {
-            ctx.f_4.copy(missing, input, input_pos, input_len);
+            ctx.intermediate.copy(in_buf, input, input_pos, input_len);
             return;
         }
-        ctx.f_4.copy(missing, input, input_pos, missing);
-        MD5Transform(ctx.f, ctx.f_3, ctx.f_4, 0);
+        ctx.intermediate.copy(in_buf, input, input_pos, missing);
+        MD5Transform(ctx.w, ctx.buffer, ctx.intermediate, 0);
         input_pos = input_pos + missing;
         input_len = input_len - missing;
     }
     while input_len >=u 64 {
-        MD5Transform(ctx.f, ctx.f_3, input, input_pos);
+        MD5Transform(ctx.w, ctx.buffer, input, input_pos);
         input_pos = input_pos + 64;
         input_len = input_len - 64;
     }
     if input_len {
-        ctx.f_4.copy(0, input, input_pos, input_len);
+        ctx.intermediate.copy(0, input, input_pos, input_len);
     }
 }
 
-fn MD5Final(ctx: &context) -> &string {
-    let len = ctx.f_2;
+fn MD5Final(ctx: &context) -> &bytes {
+    let len = ctx.len;
     let in_buf = len as i32 & 0x3f;
-    let buffer = ctx.f_4;
+    let buffer = ctx.intermediate;
     buffer[in_buf] = 0x80;
     in_buf = in_buf + 1;
     let i: i32;
@@ -211,7 +216,7 @@ fn MD5Final(ctx: &context) -> &string {
             buffer[i] = 0;
             i = i + 1;
         }
-        MD5Transform(ctx.f, ctx.f_3, buffer, 0);
+        MD5Transform(ctx.w, ctx.buffer, buffer, 0);
         in_buf = 0;
     }
     i = in_buf;
@@ -228,10 +233,10 @@ fn MD5Final(ctx: &context) -> &string {
     buffer[61] = (len >>u 40) as i32;
     buffer[62] = (len >>u 48) as i32;
     buffer[63] = (len >>u 56) as i32;
-    MD5Transform(ctx.f, ctx.f_3, buffer, 0);
-    let res: &string = [0; 16];
+    MD5Transform(ctx.w, ctx.buffer, buffer, 0);
+    let res: &bytes = [0; 16];
     i = 0;
-    let w = ctx.f;
+    let w = ctx.w;
     do {
         res[i] = w[i >>u 2] >>u (i << 3);
         i = i + 1;

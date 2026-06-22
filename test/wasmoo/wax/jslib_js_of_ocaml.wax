@@ -15,56 +15,45 @@
 // along with this program; if not, write to the Free Software
 // Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
-#[import = ("jslib", "wrap")]
-fn wrap(&?any) -> &eq;
-#[import = ("jslib", "unwrap")]
-fn unwrap(&eq) -> &?any;
-#[import = ("jslib", "caml_js_global")]
-fn caml_js_global(&eq) -> &eq;
-#[import = ("jslib", "caml_js_get")]
-fn caml_js_get(&eq, &eq) -> &eq;
-#[import = ("jslib", "caml_js_new")]
-fn caml_js_new(&eq, &eq) -> &eq;
-#[import = ("jslib", "caml_js_from_array")]
-fn caml_js_from_array(&eq) -> &eq;
-#[import = ("js", "caml_js_on_ie")]
-fn caml_js_on_ie() -> i32;
-#[import = ("js", "caml_js_html_escape")]
-fn caml_js_html_escape(&?any) -> &?any;
-#[import = ("js", "caml_js_html_entities")]
-fn caml_js_html_entities(&?any) -> &?any;
+#[if(not(wasi))]
+{
+    #[import = ("jslib", "wrap")]
+    fn wrap(&?any) -> &eq;
+    #[import = ("jslib", "unwrap")]
+    fn unwrap(&eq) -> &?any;
+    #[import = ("jslib", "caml_js_global")]
+    fn caml_js_global(&eq) -> &eq;
+    #[import = ("jslib", "caml_js_get")]
+    fn caml_js_get(&eq, &eq) -> &eq;
+    #[import = ("jslib", "caml_js_new")]
+    fn caml_js_new(&eq, &eq) -> &eq;
+    #[import = ("jslib", "caml_js_from_array")]
+    fn caml_js_from_array(&eq) -> &eq;
+    #[import = ("js", "caml_js_html_entities")]
+    fn caml_js_html_entities_js(&?any) -> &?any;
 
-type block = [mut &eq];
-type string = [mut i8];
+    type block = [mut &eq];
+    type bytes = [mut i8];
 
-#[export = "caml_js_on_ie"]
-fn caml_js_on_ie_2(&eq) -> &eq {
-    caml_js_on_ie() as &i31;
-}
+    #[export = "caml_js_html_entities"]
+    fn caml_js_html_entities(v: &eq) -> &eq {
+        become wrap(caml_js_html_entities_js(unwrap(v)));
+    }
 
-#[export = "caml_js_html_escape"]
-fn caml_js_html_escape_2(x: &eq) -> &eq {
-    become wrap(caml_js_html_escape(unwrap(x)));
-}
+    const console = "console";
 
-#[export = "caml_js_html_entities"]
-fn caml_js_html_entities_2(x: &eq) -> &eq {
-    become wrap(caml_js_html_entities(unwrap(x)));
-}
+    #[export = "caml_js_get_console"]
+    fn caml_js_get_console(&eq) -> &eq {
+        become caml_js_get(caml_js_global(0 as &i31), console);
+    }
 
-data console = "console";
+    const XMLHttpRequest = "XMLHttpRequest";
 
-#[export = "caml_js_get_console"]
-fn caml_js_get_console(&eq) -> &eq {
-    become caml_js_get(caml_js_global(0 as &i31), [string|console @ 0; 7]);
-}
-
-data XMLHttpRequest = "XMLHttpRequest";
-
-#[export = "caml_xmlhttprequest_create"]
-fn caml_xmlhttprequest_create(&eq) -> &eq {
-    become caml_js_new(
-        caml_js_get(caml_js_global(0 as &i31), [string|XMLHttpRequest @ 0; 14]),
-        [block|0 as &i31],
-    );
+    #[export = "caml_xmlhttprequest_create"]
+    fn caml_xmlhttprequest_create(&eq) -> &eq {
+        become caml_js_new(
+            caml_js_get(caml_js_global(0 as &i31), XMLHttpRequest),
+            [block|0 as &i31],
+        );
+    }
 }

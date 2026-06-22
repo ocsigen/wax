@@ -22,7 +22,19 @@ let caml_custom_event_index = 0;
 #[export = "caml_runtime_events_user_register"]
 fn caml_runtime_events_user_register(evname: &eq, evtag: &eq, evtype: &eq) -> &eq {
     caml_custom_event_index = caml_custom_event_index + 1;
-    [block|0 as &i31, caml_custom_event_index as &i31, evname, evtag, evtype];
+    // The record is { id; name; typ; tag } -- typ comes before tag.
+    [block|0 as &i31, caml_custom_event_index as &i31, evname, evtype, evtag];
+}
+
+#[if(ocaml_version >= (5, 2, 0))]
+#[export = "caml_runtime_events_user_write"]
+fn caml_runtime_events_user_write(&eq, &eq, &eq) -> &eq {
+    0 as &i31;
+}
+#[else]
+#[export = "caml_runtime_events_user_write"]
+fn caml_runtime_events_user_write(&eq, &eq) -> &eq {
+    0 as &i31;
 }
 
 #[export = "caml_runtime_events_user_resolve"]
@@ -30,18 +42,18 @@ fn caml_runtime_events_user_resolve(&eq, &eq, &eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_runtime_events_start"]
-fn caml_runtime_events_start(&eq) -> &eq {
+#[export = "caml_ml_runtime_events_start"]
+fn caml_ml_runtime_events_start(&eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_runtime_events_pause"]
-fn caml_runtime_events_pause(&eq) -> &eq {
+#[export = "caml_ml_runtime_events_pause"]
+fn caml_ml_runtime_events_pause(&eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_runtime_events_resume"]
-fn caml_runtime_events_resume(&eq) -> &eq {
+#[export = "caml_ml_runtime_events_resume"]
+fn caml_ml_runtime_events_resume(&eq) -> &eq {
     0 as &i31;
 }
 
@@ -50,18 +62,18 @@ fn caml_ml_runtime_events_are_active(&eq) -> &eq {
     0 as &i31;
 }
 
-// TODO: use Javascript function
-//(func (export "caml_runtime_events_create_cursor")
-//   (param (ref eq)) (result (ref eq))
-//   (ref.i31 (i32.const 0)))
-
-#[export = "caml_runtime_events_free_cursor"]
-fn caml_runtime_events_free_cursor(&eq) -> &eq {
+#[export = "caml_ml_runtime_events_create_cursor"]
+fn caml_ml_runtime_events_create_cursor(&eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_runtime_events_read_poll"]
-fn caml_runtime_events_read_poll(&eq, &eq, &eq) -> &eq {
+#[export = "caml_ml_runtime_events_free_cursor"]
+fn caml_ml_runtime_events_free_cursor(&eq) -> &eq {
+    0 as &i31;
+}
+
+#[export = "caml_ml_runtime_events_read_poll"]
+fn caml_ml_runtime_events_read_poll(&eq, &eq, &eq) -> &eq {
     0 as &i31;
 }
 

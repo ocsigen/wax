@@ -16,36 +16,37 @@
 ;; Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
 (import "io" "caml_getblock"
-  (func $caml_getblock (param (ref eq) (ref $string) i32 i32) (result i32))
+  (func $caml_getblock (param (ref eq) (ref $bytes) i32 i32) (result i32))
 )
 (import "fail" "caml_raise_end_of_file" (func $caml_raise_end_of_file))
 
-(type $string (array (mut i8)))
+(type $bytes (array (mut i8)))
 (type $int_array (array (mut i32)))
 
 (type $context
   (struct
-    (field (ref $int_array)) ;; w
-    (field (mut i64)) ;; len
-    (field (ref $int_array)) ;; buffer
-    (field (ref $string)))
+    (field $w (ref $int_array)) ;; w
+    (field $len (mut i64)) ;; len
+    (field $buffer (ref $int_array)) ;; buffer
+    (field $intermediate (ref $bytes)))
 ) ;; intermediate buffer
 (func (export "caml_md5_string") (export "caml_md5_bytes")
-  (param (ref eq) (ref eq) (ref eq)) (result (ref eq))
+  (param $vs (ref eq)) (param $vofs (ref eq)) (param $vlen (ref eq))
+  (result (ref eq))
   (local $ctx (ref $context))
   (local.set $ctx (call $MD5Init))
-  (call $MD5Update (local.get $ctx) (ref.cast (ref $string) (local.get 0))
-    (i31.get_u (ref.cast (ref i31) (local.get 1)))
-    (i31.get_u (ref.cast (ref i31) (local.get 2))))
+  (call $MD5Update (local.get $ctx) (ref.cast (ref $bytes) (local.get $vs))
+    (i31.get_u (ref.cast (ref i31) (local.get $vofs)))
+    (i31.get_u (ref.cast (ref i31) (local.get $vlen))))
   (return_call $MD5Final (local.get $ctx))
 )
 
 (func (export "caml_md5_chan")
   (param $ch (ref eq)) (param $vlen (ref eq)) (result (ref eq))
-  (local $len i32) (local $read i32) (local $buf (ref $string))
+  (local $len i32) (local $read i32) (local $buf (ref $bytes))
   (local $ctx (ref $context))
   (local.set $len (i31.get_s (ref.cast (ref i31) (local.get $vlen))))
-  (local.set $buf (array.new $string (i32.const 0) (i32.const 4096)))
+  (local.set $buf (array.new $bytes (i32.const 0) (i32.const 4096)))
   (local.set $ctx (call $MD5Init))
   (if (i32.lt_s (local.get $len) (i32.const 0))
     (then
@@ -124,24 +125,24 @@
     (local.get $t))
 )
 
-(func $get_32 (param $s (ref $string)) (param $p i32) (result i32)
+(func $get_32 (param $s (ref $bytes)) (param $p i32) (result i32)
   (i32.or
-    (i32.or (array.get_u $string (local.get $s) (local.get $p))
+    (i32.or (array.get_u $bytes (local.get $s) (local.get $p))
       (i32.shl
-        (array.get_u $string (local.get $s)
+        (array.get_u $bytes (local.get $s)
           (i32.add (local.get $p) (i32.const 1))) (i32.const 8)))
     (i32.or
       (i32.shl
-        (array.get_u $string (local.get $s)
+        (array.get_u $bytes (local.get $s)
           (i32.add (local.get $p) (i32.const 2))) (i32.const 16))
       (i32.shl
-        (array.get_u $string (local.get $s)
+        (array.get_u $bytes (local.get $s)
           (i32.add (local.get $p) (i32.const 3))) (i32.const 24))))
 )
 
 (func $MD5Transform
   (param $w (ref $int_array)) (param $buffer (ref $int_array))
-  (param $buffer' (ref $string)) (param $p i32)
+  (param $buffer' (ref $bytes)) (param $p i32)
   (local $i i32) (local $a i32) (local $b i32) (local $c i32) (local $d i32)
   (loop $loop
     (array.set $int_array (local.get $buffer) (local.get $i)
@@ -428,11 +429,11 @@
     (array.new_fixed $int_array 4 (i32.const 0x67452301)
       (i32.const 0xEFCDAB89) (i32.const 0x98BADCFE) (i32.const 0x10325476))
     (i64.const 0) (array.new $int_array (i32.const 0) (i32.const 16))
-    (array.new $string (i32.const 0) (i32.const 64)))
+    (array.new $bytes (i32.const 0) (i32.const 64)))
 )
 
 (func $MD5Update
-  (param $ctx (ref $context)) (param $input (ref $string))
+  (param $ctx (ref $context)) (param $input (ref $bytes))
   (param $input_pos i32) (param $input_len i32)
   (local $in_buf i32) (local $len i64) (local $missing i32)
   (local.set $len (struct.get $context 1 (local.get $ctx)))
@@ -445,12 +446,12 @@
       (local.set $missing (i32.sub (i32.const 64) (local.get $in_buf)))
       (if (i32.lt_u (local.get $input_len) (local.get $missing))
         (then
-          (array.copy $string $string (struct.get $context 3 (local.get $ctx))
-            (local.get $missing) (local.get $input) (local.get $input_pos)
+          (array.copy $bytes $bytes (struct.get $context 3 (local.get $ctx))
+            (local.get $in_buf) (local.get $input) (local.get $input_pos)
             (local.get $input_len))
           (return)))
-      (array.copy $string $string (struct.get $context 3 (local.get $ctx))
-        (local.get $missing) (local.get $input) (local.get $input_pos)
+      (array.copy $bytes $bytes (struct.get $context 3 (local.get $ctx))
+        (local.get $in_buf) (local.get $input) (local.get $input_pos)
         (local.get $missing))
       (call $MD5Transform (struct.get $context 0 (local.get $ctx))
         (struct.get $context 2 (local.get $ctx))
@@ -470,20 +471,20 @@
         (br $loop))))
   (if (local.get $input_len)
     (then
-      (array.copy $string $string (struct.get $context 3 (local.get $ctx))
+      (array.copy $bytes $bytes (struct.get $context 3 (local.get $ctx))
         (i32.const 0) (local.get $input) (local.get $input_pos)
         (local.get $input_len))))
 )
 
-(func $MD5Final (param $ctx (ref $context)) (result (ref $string))
+(func $MD5Final (param $ctx (ref $context)) (result (ref $bytes))
   (local $in_buf i32) (local $i i32) (local $len i64)
-  (local $w (ref $int_array)) (local $buffer (ref $string))
-  (local $res (ref $string))
+  (local $w (ref $int_array)) (local $buffer (ref $bytes))
+  (local $res (ref $bytes))
   (local.set $len (struct.get $context 1 (local.get $ctx)))
   (local.set $in_buf
     (i32.and (i32.wrap_i64 (local.get $len)) (i32.const 0x3f)))
   (local.set $buffer (struct.get $context 3 (local.get $ctx)))
-  (array.set $string (local.get $buffer) (local.get $in_buf) (i32.const 0x80))
+  (array.set $bytes (local.get $buffer) (local.get $in_buf) (i32.const 0x80))
   (local.set $in_buf (i32.add (local.get $in_buf) (i32.const 1)))
   (if (i32.gt_u (local.get $in_buf) (i32.const 56))
     (then
@@ -491,7 +492,7 @@
       (loop $loop
         (if (i32.lt_u (local.get $i) (i32.const 64))
           (then
-            (array.set $string (local.get $buffer) (local.get $i)
+            (array.set $bytes (local.get $buffer) (local.get $i)
               (i32.const 0))
             (local.set $i (i32.add (local.get $i) (i32.const 1)))
             (br $loop))))
@@ -501,34 +502,34 @@
       (local.set $in_buf (i32.const 0))))
   (local.set $i (local.get $in_buf))
   (loop $loop
-    (array.set $string (local.get $buffer) (local.get $i) (i32.const 0))
+    (array.set $bytes (local.get $buffer) (local.get $i) (i32.const 0))
     (local.set $i (i32.add (local.get $i) (i32.const 1)))
     (br_if $loop (i32.lt_u (local.get $i) (i32.const 56))))
   (local.set $len (i64.shl (local.get $len) (i64.const 3)))
-  (array.set $string (local.get $buffer) (i32.const 56)
+  (array.set $bytes (local.get $buffer) (i32.const 56)
     (i32.wrap_i64 (local.get $len)))
-  (array.set $string (local.get $buffer) (i32.const 57)
+  (array.set $bytes (local.get $buffer) (i32.const 57)
     (i32.wrap_i64 (i64.shr_u (local.get $len) (i64.const 8))))
-  (array.set $string (local.get $buffer) (i32.const 58)
+  (array.set $bytes (local.get $buffer) (i32.const 58)
     (i32.wrap_i64 (i64.shr_u (local.get $len) (i64.const 16))))
-  (array.set $string (local.get $buffer) (i32.const 59)
+  (array.set $bytes (local.get $buffer) (i32.const 59)
     (i32.wrap_i64 (i64.shr_u (local.get $len) (i64.const 24))))
-  (array.set $string (local.get $buffer) (i32.const 60)
+  (array.set $bytes (local.get $buffer) (i32.const 60)
     (i32.wrap_i64 (i64.shr_u (local.get $len) (i64.const 32))))
-  (array.set $string (local.get $buffer) (i32.const 61)
+  (array.set $bytes (local.get $buffer) (i32.const 61)
     (i32.wrap_i64 (i64.shr_u (local.get $len) (i64.const 40))))
-  (array.set $string (local.get $buffer) (i32.const 62)
+  (array.set $bytes (local.get $buffer) (i32.const 62)
     (i32.wrap_i64 (i64.shr_u (local.get $len) (i64.const 48))))
-  (array.set $string (local.get $buffer) (i32.const 63)
+  (array.set $bytes (local.get $buffer) (i32.const 63)
     (i32.wrap_i64 (i64.shr_u (local.get $len) (i64.const 56))))
   (call $MD5Transform (struct.get $context 0 (local.get $ctx))
     (struct.get $context 2 (local.get $ctx)) (local.get $buffer)
     (i32.const 0))
-  (local.set $res (array.new $string (i32.const 0) (i32.const 16)))
+  (local.set $res (array.new $bytes (i32.const 0) (i32.const 16)))
   (local.set $i (i32.const 0))
   (local.set $w (struct.get $context 0 (local.get $ctx)))
   (loop $loop
-    (array.set $string (local.get $res) (local.get $i)
+    (array.set $bytes (local.get $res) (local.get $i)
       (i32.shr_u
         (array.get $int_array (local.get $w)
           (i32.shr_u (local.get $i) (i32.const 2)))

@@ -15,182 +15,205 @@
 // along with this program; if not, write to the Free Software
 // Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
-#[import = ("wasm:js-string", "compare")]
-fn compare_strings(&?extern, &?extern) -> i32;
-#[import = ("wasm:js-string", "test")]
-fn is_string(&?extern) -> i32;
-#[import = ("wasm:js-string", "hash")]
-#[export = "jsstring_hash"]
-fn hash_string(i32, &?any) -> i32;
-#[import = ("wasm:js-string", "fromCharCodeArray")]
-fn fromCharCodeArray(&?wstring, i32, i32) -> &extern;
+#[if(not(wasi))]
+{
+    #[import = ("wasm:js-string", "compare")]
+    fn compare_strings(&?extern, &?extern) -> i32;
+    #[import = ("wasm:js-string", "test")]
+    fn is_string(&?extern) -> i32;
+    #[import = ("wasm:js-string", "length")]
+    fn string_length(&?extern) -> i32;
+    #[import = ("wasm:js-string", "fromCharCodeArray")]
+    fn fromCharCodeArray(&?wstring, i32, i32) -> &extern;
+    #[import = ("wasm:js-string", "intoCharCodeArray")]
+    fn intoCharCodeArray(&?extern, &?wstring, i32) -> i32;
 
-#[import = ("wasm:text-decoder", "decodeStringFromUTF8Array")]
-fn decodeStringFromUTF8Array(&?string, i32, i32) -> &extern;
-#[import = ("wasm:text-encoder", "encodeStringToUTF8Array")]
-fn encodeStringToUTF8Array(&?extern) -> &string;
+    #[import = ("wasm:text-decoder", "decodeStringFromUTF8Array")]
+    fn decodeStringFromUTF8Array(&?bytes, i32, i32) -> &extern;
+    #[import = ("wasm:text-encoder", "encodeStringToUTF8Array")]
+    fn encodeStringToUTF8Array(&?extern) -> &bytes;
 
-#[import = ("bindings", "read_string")]
-fn read_string(i32) -> &?any;
-#[import = ("bindings", "read_string_stream")]
-fn read_string_stream(i32, i32) -> &?any;
-#[import = ("bindings", "write_string")]
-fn write_string(&?any) -> i32;
-#[import = ("bindings", "append_string")]
-fn append_string(&?any, &?any) -> &?any;
+    #[import = ("bindings", "hash_string")]
+    #[export = "jsstring_hash"]
+    fn hash_string(i32, &?any) -> i32;
+    #[import = ("bindings", "read_string")]
+    fn read_string(i32) -> &?any;
+    #[import = ("bindings", "read_string_stream")]
+    fn read_string_stream(i32, i32) -> &?any;
+    #[import = ("bindings", "write_string")]
+    fn write_string(&?any) -> i32;
+    #[import = ("bindings", "append_string")]
+    fn append_string(&?any, &?any) -> &?any;
 
-type string = [mut i8];
-type wstring = [mut i16];
+    type bytes = [mut i8];
+    type wstring = [mut i16];
 
-let text_converters_available = 0;
-let string_builtins_available = 0;
+    let text_converters_available = 0;
+    let string_builtins_available = 0;
 
-const utf16_buffer_size = 32768;
-let buffer: &wstring = [0; 0];
+    const utf16_buffer_size = 1024;
+    let buffer: &wstring = [0; 0];
 
-#[start]
-fn init() {
-    // Our dummy implementation of string conversion always returns
-    // the empty string.
-    text_converters_available =
-        0
-            != compare_strings(
-                   decodeStringFromUTF8Array([0], 0, 1),
-                   decodeStringFromUTF8Array([1], 0, 1),
-               );
-    string_builtins_available =
-        0 != compare_strings(fromCharCodeArray([0], 0, 1), fromCharCodeArray([1], 0, 1));
-    if !text_converters_available {
-        if string_builtins_available {
-            buffer = [0; utf16_buffer_size];
+    fn init() {
+        // Our dummy implementation of string conversion always returns
+        // the empty string.
+        text_converters_available =
+            0
+                != compare_strings(
+                       decodeStringFromUTF8Array([0], 0, 1),
+                       decodeStringFromUTF8Array([1], 0, 1),
+                   );
+        string_builtins_available =
+            0 != compare_strings(fromCharCodeArray([0], 0, 1), fromCharCodeArray([1], 0, 1));
+        if !text_converters_available {
+            if string_builtins_available {
+                buffer = [0; utf16_buffer_size];
+            }
         }
     }
-}
 
-#[export = "jsstring_compare"]
-fn jsstring_compare(s: &?any, s': &?any) -> i32 {
-    become compare_strings(s as &?extern, s' as &?extern);
-}
-
-#[export = "jsstring_test"]
-fn jsstring_test(s: &?any) -> i32 {
-    become is_string(s as &?extern);
-}
-
-// Used by package zarith_stubs_js
-#[export = "jsstring_of_substring"]
-fn jsstring_of_substring(s: &string, pos: i32, len: i32) -> &?any {
-    if text_converters_available {
-        return decodeStringFromUTF8Array(s, pos, pos + len) as &any;
+    #[export = "jsstring_compare"]
+    fn jsstring_compare(s: &?any, s': &?any) -> i32 {
+        become compare_strings(s as &?extern, s' as &?extern);
     }
-    'continue: if string_builtins_available & (len <=u utf16_buffer_size) {
+
+    #[export = "jsstring_test"]
+    fn jsstring_test(s: &?any) -> i32 {
+        become is_string(s as &?extern);
+    }
+
+    #[export = "jsstring_of_subbytes"]
+    #[export = "jsstring_of_substring" // compatibility with zarith stubs
+        ]
+    fn jsstring_of_subbytes(s: &bytes, pos: i32, len: i32) -> &?any {
+        if text_converters_available {
+            return decodeStringFromUTF8Array(s, pos, pos + len) as &any;
+        }
+        'continue: if string_builtins_available & (len <=u utf16_buffer_size) {
+            let i: i32;
+            while i <u len {
+                let c = s[pos + i] as i32_u;
+                br_if 'continue c >=u 128;
+                buffer[i] = c;
+                i = i + 1;
+            }
+            return fromCharCodeArray(buffer, 0, len) as &any;
+        }
+        become jsstring_of_subbytes_fallback(s, pos, len);
+    }
+
+    #[export = "jsstring_of_bytes"]
+    fn jsstring_of_bytes(s: &bytes) -> &?any {
+        become jsstring_of_subbytes(s, 0, s.length());
+    }
+
+    #[export = "bytes_of_jsstring"]
+    fn bytes_of_jsstring(s: &?any) -> &bytes {
+        if text_converters_available {
+            become encodeStringToUTF8Array(s as &?extern);
+        }
+        let s': &?extern;
+        let len: i32;
+        'continue: if
+            string_builtins_available
+                & ((len := string_length(s' := s as &?extern)) <=u utf16_buffer_size) {
+            _ = intoCharCodeArray(s', buffer, 0);
+            let b: &bytes = [..; len];
+            let i: i32;
+            while i <u len {
+                let c = buffer[i] as i32_u;
+                br_if 'continue c >=u 128;
+                b[i] = c;
+                i = i + 1;
+            }
+            return b;
+        }
+        become string_of_jsstring_fallback(s);
+    }
+
+    // Fallback implementation of string conversion functions
+
+    #[export = "caml_buffer"]
+    memory caml_buffer: i32 [1];
+
+    const buffer_size = 65536;
+
+    fn write_to_buffer(s: &bytes, pos: i32, len: i32) {
         let i: i32;
         while i <u len {
-            let c = s[pos + i] as i32_u;
-            br_if 'continue c >=u 128;
-            buffer[i] = c;
+            caml_buffer.store8(i, s[pos + i] as i32_u);
             i = i + 1;
         }
-        return fromCharCodeArray(buffer, 0, len) as &any;
     }
-    become jsstring_of_substring_fallback(s, pos, len);
-}
 
-#[export = "jsstring_of_string"]
-fn jsstring_of_string(s: &string) -> &?any {
-    become jsstring_of_substring(s, 0, s.length());
-}
-
-#[export = "string_of_jsstring"]
-fn string_of_jsstring(s: &?any) -> &string {
-    if text_converters_available {
-        become encodeStringToUTF8Array(s as &?extern);
+    fn jsstring_of_subbytes_fallback(s: &bytes, pos: i32, len: i32) -> &?any {
+        if len <=u buffer_size {
+            write_to_buffer(s, pos, len);
+            become read_string(len);
+        }
+        write_to_buffer(s, pos, buffer_size);
+        let s' = read_string_stream(buffer_size, 1);
+        let continued: i32;
+        do {
+            len = len - buffer_size;
+            pos = pos + buffer_size;
+            continued = len >u buffer_size;
+            write_to_buffer(s, pos, continued?buffer_size:len);
+            s' = append_string(s', read_string_stream(continued?buffer_size:len, continued));
+        } while continued;
+        s';
     }
-    become string_of_jsstring_fallback(s);
-}
 
-// Fallback implementation of string conversion functions
-
-#[export = "caml_buffer"]
-memory caml_buffer: i32 [1];
-
-const buffer_size = 65536;
-
-fn write_to_buffer(s: &string, pos: i32, len: i32) {
-    let i: i32;
-    while i <u len {
-        caml_buffer.store8(i, s[pos + i] as i32_u);
-        i = i + 1;
-    }
-}
-
-fn jsstring_of_substring_fallback(s: &string, pos: i32, len: i32) -> &?any {
-    if len <=u buffer_size {
-        write_to_buffer(s, pos, len);
-        become read_string(len);
-    }
-    write_to_buffer(s, pos, buffer_size);
-    let s' = read_string_stream(buffer_size, 1);
-    let continued: i32;
-    do {
-        len = len - buffer_size;
-        pos = pos + buffer_size;
-        continued = len >u buffer_size;
-        write_to_buffer(s, pos, continued?buffer_size:len);
-        s' = append_string(s', read_string_stream(continued?buffer_size:len, continued));
-    } while continued;
-    s';
-}
-
-fn read_from_buffer(s: &string, pos: i32, len: i32) {
-    let i: i32;
-    while i <u len {
-        s[pos + i] = caml_buffer.load8(i) as i32_u;
-        i = i + 1;
-    }
-}
-
-type stack = { s: &string, next: &?stack };
-let stack: &?stack = null;
-
-fn string_of_jsstring_fallback(s: &?any) -> &string {
-    let len = write_string(s);
-    let s': &string;
-    if !stack {
-        s' = [0; len];
-        read_from_buffer(s', 0, len);
-        return s';
-    }
-    let ofs: i32;
-    let item: &stack;
-    'done: do {
-        item = br_on_null 'done stack;
-        'loop: loop {
-            ofs = ofs + item.s.length();
-            item = br_on_null 'done item.next;
-            br 'loop;
+    fn read_from_buffer(s: &bytes, pos: i32, len: i32) {
+        let i: i32;
+        while i <u len {
+            s[pos + i] = caml_buffer.load8(i) as i32_u;
+            i = i + 1;
         }
     }
-    s' = [0; len + ofs];
-    read_from_buffer(s', ofs, len);
-    'done: do {
-        item = br_on_null 'done stack;
-        stack = null;
-        'loop: loop {
-            let s'' = item.s;
-            len = s''.length();
-            ofs = ofs - len;
-            s'.copy(ofs, s'', 0, len);
-            item = br_on_null 'done item.next;
-            br 'loop;
-        }
-    }
-    s';
-}
 
-#[export = "caml_extract_string"]
-fn caml_extract_string(len: i32) {
-    let s: &string = [0; len];
-    read_from_buffer(s, 0, len);
-    stack = { s: s, next: stack };
+    type stack = { s: &bytes, next: &?stack };
+    let stack: &?stack = null;
+
+    fn string_of_jsstring_fallback(s: &?any) -> &bytes {
+        let len = write_string(s);
+        let s': &bytes;
+        if !stack {
+            s' = [0; len];
+            read_from_buffer(s', 0, len);
+            return s';
+        }
+        let ofs: i32;
+        let item: &stack;
+        'done: do {
+            item = br_on_null 'done stack;
+            'loop: loop {
+                ofs = ofs + item.s.length();
+                item = br_on_null 'done item.next;
+                br 'loop;
+            }
+        }
+        s' = [0; len + ofs];
+        read_from_buffer(s', ofs, len);
+        'done: do {
+            item = br_on_null 'done stack;
+            stack = null;
+            'loop: loop {
+                let s'' = item.s;
+                len = s''.length();
+                ofs = ofs - len;
+                s'.copy(ofs, s'', 0, len);
+                item = br_on_null 'done item.next;
+                br 'loop;
+            }
+        }
+        s';
+    }
+
+    #[export = "caml_extract_bytes"]
+    fn caml_extract_bytes(len: i32) {
+        let s: &bytes = [0; len];
+        read_from_buffer(s, 0, len);
+        stack = { s: s, next: stack };
+    }
 }

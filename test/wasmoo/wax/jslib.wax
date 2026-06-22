@@ -15,576 +15,614 @@
 // along with this program; if not, write to the Free Software
 // Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
-#[import = ("bindings", "log")]
-fn log_js(&?any);
-#[import = ("bindings", "identity")]
-fn to_float(&?any) -> f64;
-#[import = ("bindings", "identity")]
-fn from_float(f64) -> &?any;
-#[import = ("bindings", "identity")]
-fn to_bool(&?any) -> i32;
-#[import = ("bindings", "identity")]
-fn to_int32(&?any) -> i32;
-#[import = ("bindings", "identity")]
-fn from_int32(i32) -> &?any;
-#[import = ("bindings", "from_bool")]
-fn from_bool(i32) -> &?any;
-#[import = ("bindings", "get")]
-fn get(&extern, &?any) -> &?any;
-#[import = ("bindings", "set")]
-fn set(&?any, &?any, &?any);
-#[import = ("bindings", "delete")]
-fn delete(&?any, &?any);
-#[import = ("bindings", "instanceof")]
-fn instanceof(&?any, &?any) -> i32;
-#[import = ("bindings", "typeof")]
-fn typeof(&?any) -> &?any;
-#[import = ("bindings", "equals")]
-fn equals(&?any, &?any) -> i32;
-#[import = ("bindings", "strict_equals")]
-fn strict_equals(&?any, &?any) -> i32;
-#[import = ("bindings", "fun_call")]
-fn fun_call(&?any, &?any, &?any) -> &?any;
-#[import = ("bindings", "meth_call")]
-fn meth_call(&?any, &?any, &?any) -> &?any;
-#[import = ("bindings", "new")]
-fn new(&?any, &?any) -> &?any;
-#[import = ("bindings", "new_obj")]
-fn new_obj() -> &?any;
-#[import = ("bindings", "new_array")]
-fn new_array(i32) -> &extern;
-#[import = ("bindings", "global_this")]
-const global_this: &?any;
-#[import = ("bindings", "iter_props")]
-fn iter_props(&?any, &?any);
-#[import = ("bindings", "array_length")]
-fn array_length(&extern) -> i32;
-#[import = ("bindings", "array_get")]
-fn array_get(&extern, i32) -> &?any;
-#[import = ("bindings", "array_set")]
-fn array_set(&extern, i32, &?any);
-#[import = ("bindings", "wrap_callback")]
-fn wrap_callback(&eq) -> &?any;
-#[import = ("bindings", "wrap_callback_args")]
-fn wrap_callback_args(&eq) -> &?any;
-#[import = ("bindings", "wrap_callback_strict")]
-fn wrap_callback_strict(i32, &eq) -> &?any;
-#[import = ("bindings", "wrap_callback_unsafe")]
-fn wrap_callback_unsafe(&eq) -> &?any;
-#[import = ("bindings", "wrap_meth_callback")]
-fn wrap_meth_callback(&eq) -> &?any;
-#[import = ("bindings", "wrap_meth_callback_args")]
-fn wrap_meth_callback_args(&eq) -> &?any;
-#[import = ("bindings", "wrap_meth_callback_strict")]
-fn wrap_meth_callback_strict(i32, &eq) -> &?any;
-#[import = ("bindings", "wrap_meth_callback_unsafe")]
-fn wrap_meth_callback_unsafe(&eq) -> &?any;
-#[import = ("bindings", "wrap_fun_arguments")]
-fn wrap_fun_arguments(&?any) -> &?any;
-#[import = ("fail", "caml_failwith_tag")]
-fn caml_failwith_tag() -> &eq;
-#[import = ("stdlib", "caml_named_value")]
-fn caml_named_value(&string) -> &?eq;
-#[import = ("obj", "caml_callback_1")]
-fn caml_callback_1(&eq, &eq) -> &eq;
-#[import = ("obj", "caml_is_closure")]
-fn caml_is_closure(&eq) -> i32;
-#[import = ("obj", "caml_is_last_arg")]
-fn caml_is_last_arg(&eq) -> i32;
-#[import = ("jsstring", "jsstring_of_string")]
-fn jsstring_of_string(&string) -> &?any;
-#[import = ("jsstring", "string_of_jsstring")]
-fn string_of_jsstring(&?any) -> &string;
-#[import = ("int32", "caml_copy_int32")]
-fn caml_copy_int32(i32) -> &eq;
-#[import = ("int32", "Int32_val")]
-fn Int32_val(&eq) -> i32;
-#[import = ("int32", "caml_copy_nativeint")]
-fn caml_copy_nativeint(i32) -> &eq;
-#[import = ("int32", "Nativeint_val")]
-fn Nativeint_val(&eq) -> i32;
+type bytes = [mut i8];
 
-type block = [mut &eq];
-type float = { f: f64 };
-type float_array = [mut f64];
-type string = [mut i8];
-type js = { f: &?any };
-type function_1 = fn(&eq, &eq) -> &eq;
-type closure = open { /*(field i32)*/ f: &function_1 };
-type function_2 = fn(&eq, &eq, &eq) -> &eq;
-type cps_closure = open { f: &function_2 };
+#[if(not(wasi))]
+{
+    #[import = ("bindings", "identity")]
+    fn to_float(&?any) -> f64;
+    #[import = ("bindings", "identity")]
+    fn from_float(f64) -> &?any;
+    #[import = ("bindings", "identity")]
+    fn to_bool(&?any) -> i32;
+    #[import = ("bindings", "identity")]
+    fn to_int32(&?any) -> i32;
+    #[import = ("bindings", "identity")]
+    fn from_int32(i32) -> &?any;
+    #[import = ("bindings", "from_bool")]
+    fn from_bool(i32) -> &?any;
+    #[import = ("bindings", "get")]
+    fn get(&extern, &?any) -> &?any;
+    #[import = ("bindings", "set")]
+    fn set(&?any, &?any, &?any);
+    #[import = ("bindings", "delete")]
+    fn delete(&?any, &?any);
+    #[import = ("bindings", "instanceof")]
+    fn instanceof(&?any, &?any) -> i32;
+    #[import = ("bindings", "is_js_error")]
+    fn is_js_error(&?any) -> i32;
+    #[import = ("bindings", "to_js_string")]
+    fn to_js_string(&?any) -> &?any;
+    #[import = ("bindings", "typeof")]
+    fn typeof(&?any) -> &?any;
+    #[import = ("bindings", "equals")]
+    fn equals(&?any, &?any) -> i32;
+    #[import = ("bindings", "strict_equals")]
+    fn strict_equals(&?any, &?any) -> i32;
+    #[import = ("bindings", "fun_call")]
+    fn fun_call(&?any, &?any, &?any) -> &?any;
+    #[import = ("bindings", "meth_call")]
+    fn meth_call(&?any, &?any, &?any) -> &?any;
+    #[import = ("bindings", "new")]
+    fn new(&?any, &?any) -> &?any;
+    #[import = ("bindings", "new_obj")]
+    fn new_obj() -> &?any;
+    #[import = ("bindings", "new_array")]
+    fn new_array(i32) -> &extern;
+    #[import = ("bindings", "global_this")]
+    const global_this: &?any;
+    #[import = ("bindings", "iter_props")]
+    fn iter_props(&?any, &?any);
+    #[import = ("bindings", "array_length")]
+    fn array_length(&extern) -> i32;
+    #[import = ("bindings", "array_get")]
+    fn array_get(&extern, i32) -> &?any;
+    #[import = ("bindings", "array_set")]
+    fn array_set(&extern, i32, &?any);
+    #[import = ("bindings", "wrap_callback")]
+    fn wrap_callback(&eq) -> &?any;
+    #[import = ("bindings", "wrap_callback_args")]
+    fn wrap_callback_args(&eq) -> &?any;
+    #[import = ("bindings", "wrap_callback_strict")]
+    fn wrap_callback_strict(i32, &eq) -> &?any;
+    #[import = ("bindings", "wrap_callback_unsafe")]
+    fn wrap_callback_unsafe(&eq) -> &?any;
+    #[import = ("bindings", "wrap_meth_callback")]
+    fn wrap_meth_callback(&eq) -> &?any;
+    #[import = ("bindings", "wrap_meth_callback_args")]
+    fn wrap_meth_callback_args(&eq) -> &?any;
+    #[import = ("bindings", "wrap_meth_callback_strict")]
+    fn wrap_meth_callback_strict(i32, &eq) -> &?any;
+    #[import = ("bindings", "wrap_meth_callback_unsafe")]
+    fn wrap_meth_callback_unsafe(&eq) -> &?any;
+    #[import = ("bindings", "wrap_fun_arguments")]
+    fn wrap_fun_arguments(&?any) -> &?any;
+    #[import = ("fail", "caml_failwith_tag")]
+    fn caml_failwith_tag() -> &eq;
+    #[import = ("fail", "javascript_exception")]
+    tag javascript_exception(&?extern);
+    #[import = ("stdlib", "caml_named_value")]
+    fn caml_named_value(&eq) -> &?eq;
+    #[import = ("obj", "caml_callback_1")]
+    fn caml_callback_1(&eq, &eq) -> &eq;
+    #[import = ("obj", "caml_is_closure")]
+    fn caml_is_closure(&eq) -> i32;
+    #[import = ("obj", "caml_is_last_arg")]
+    fn caml_is_last_arg(&eq) -> i32;
+    #[import = ("jsstring", "jsstring_of_bytes")]
+    fn jsstring_of_bytes(&bytes) -> &?any;
+    #[import = ("jsstring", "bytes_of_jsstring")]
+    fn bytes_of_jsstring(&?any) -> &bytes;
+    #[import = ("jsstring", "jsstring_of_subbytes")]
+    fn jsstring_of_subbytes(&bytes, i32, i32) -> &?any;
+    #[import = ("int32", "caml_copy_int32")]
+    fn caml_copy_int32(i32) -> &eq;
+    #[import = ("int32", "Int32_val")]
+    fn Int32_val(&eq) -> i32;
+    #[import = ("int32", "caml_copy_nativeint")]
+    fn caml_copy_nativeint(i32) -> &eq;
+    #[import = ("int32", "Nativeint_val")]
+    fn Nativeint_val(&eq) -> i32;
 
-#[export = "wrap"]
-fn wrap(x: &?any) -> &eq {
-    'is_eq: do &eq {
-        return {js| f: br_on_cast 'is_eq &eq x };
-    }
-}
+    type block = [mut &eq];
+    type float = { f: f64 };
+    type float_array = [mut f64];
+    type js = { js: &?any };
 
-#[export = "unwrap"]
-fn unwrap(x: &eq) -> &?any {
-    'not_js: do &?any {
-        return (br_on_cast_fail 'not_js &js x).f;
-    }
-}
-
-#[export = "caml_js_equals"]
-fn caml_js_equals(x: &eq, x_2: &eq) -> &eq {
-    equals(unwrap(x), unwrap(x_2)) as &i31;
-}
-
-#[export = "caml_js_strict_equals"]
-fn caml_js_strict_equals(x: &eq, x_2: &eq) -> &eq {
-    strict_equals(unwrap(x), unwrap(x_2)) as &i31;
-}
-
-#[export = "caml_js_global"]
-fn caml_js_global(&eq) -> &eq {
-    wrap(global_this);
-}
-
-#[export = "caml_js_to_float"]
-fn caml_js_to_float(x: &eq) -> &eq {
-    {float| f: to_float(unwrap(x)) };
-}
-
-#[export = "caml_js_from_float"]
-fn caml_js_from_float(x: &eq) -> &eq {
-    become wrap(from_float((x as &float).f));
-}
-
-#[export = "caml_js_to_bool"]
-fn caml_js_to_bool(x: &eq) -> &eq {
-    to_bool(unwrap(x)) as &i31;
-}
-
-#[export = "caml_js_from_bool"]
-fn caml_js_from_bool(x: &eq) -> &eq {
-    {js| f: from_bool(x as &i31 as i32_s) };
-}
-
-#[export = "caml_js_to_int32"]
-fn caml_js_to_int32(x: &eq) -> &eq {
-    become caml_copy_int32(to_int32(unwrap(x)));
-}
-
-#[export = "caml_js_from_int32"]
-fn caml_js_from_int32(x: &eq) -> &eq {
-    become wrap(from_int32(Int32_val(x)));
-}
-
-#[export = "caml_js_to_nativeint"]
-fn caml_js_to_nativeint(x: &eq) -> &eq {
-    become caml_copy_nativeint(to_int32(unwrap(x)));
-}
-
-#[export = "caml_js_from_nativeint"]
-fn caml_js_from_nativeint(x: &eq) -> &eq {
-    become wrap(from_int32(Nativeint_val(x)));
-}
-
-#[export = "caml_js_pure_expr"]
-fn caml_js_pure_expr(f: &eq) -> &eq {
-    become caml_callback_1(f, 0 as &i31);
-}
-
-#[export = "caml_js_fun_call"]
-fn caml_js_fun_call(f: &eq, args: &eq) -> &eq {
-    become wrap(fun_call(unwrap(f), null, unwrap(caml_js_from_array(args))));
-}
-
-#[export = "caml_js_call"]
-fn caml_js_call(f: &eq, o: &eq, args: &eq) -> &eq {
-    become wrap(fun_call(unwrap(f), unwrap(o), unwrap(caml_js_from_array(args))));
-}
-
-#[export = "caml_js_meth_call"]
-fn caml_js_meth_call(o: &eq, f: &eq, args: &eq) -> &eq {
-    if f is &string {
-        f = caml_jsbytes_of_string(f);
-    }
-    become wrap(meth_call(unwrap(o), unwrap(f), unwrap(caml_js_from_array(args))));
-}
-
-#[export = "caml_js_get"]
-fn caml_js_get(x: &eq, x_2: &eq) -> &eq {
-    if x_2 is &string {
-        x_2 = caml_jsbytes_of_string(x_2);
-    }
-    become wrap(get((unwrap(x) as &?extern)!, unwrap(x_2)));
-}
-
-#[export = "caml_js_set"]
-fn caml_js_set(x: &eq, x_2: &eq, x_3: &eq) -> &eq {
-    if x_2 is &string {
-        x_2 = caml_jsbytes_of_string(x_2);
-    }
-    set(unwrap(x), unwrap(x_2), unwrap(x_3));
-    0 as &i31;
-}
-
-#[export = "caml_js_delete"]
-fn caml_js_delete(x: &eq, x_2: &eq) -> &eq {
-    if x_2 is &string {
-        x_2 = caml_jsbytes_of_string(x_2);
-    }
-    delete(unwrap(x), unwrap(x_2));
-    0 as &i31;
-}
-
-#[export = "caml_js_instanceof"]
-fn caml_js_instanceof(x: &eq, x_2: &eq) -> &eq {
-    instanceof(unwrap(x), unwrap(x_2)) as &i31;
-}
-
-#[export = "caml_js_typeof"]
-fn caml_js_typeof(x: &eq) -> &eq {
-    {js| f: typeof(unwrap(x)) };
-}
-
-#[export = "caml_js_new"]
-fn caml_js_new(c: &eq, args: &eq) -> &eq {
-    become wrap(new(unwrap(c), unwrap(caml_js_from_array(args))));
-}
-
-#[export = "caml_ojs_new_arr"]
-fn caml_ojs_new_arr(c: &eq, args: &eq) -> &eq {
-    become wrap(new(unwrap(c), unwrap(args)));
-}
-
-#[export = "caml_ojs_iterate_properties"]
-fn caml_ojs_iterate_properties(o: &eq, f: &eq) -> &eq {
-    iter_props(unwrap(o), unwrap(f));
-    0 as &i31;
-}
-
-#[export = "caml_js_object"]
-fn caml_js_object(x: &eq) -> &eq {
-    let a = x as &block;
-    let l = a.length();
-    let i = 1;
-    let o = new_obj();
-    while i <u l {
-        let p = a[i] as &block;
-        set(o, unwrap(caml_jsstring_of_string(p[1])), unwrap(p[2]));
-        i = i + 1;
-    }
-    {js| f: o };
-}
-
-#[export = "caml_js_from_array"]
-fn caml_js_from_array(va: &eq) -> &eq {
-    let a': &extern;
-    let i: i32;
-    let l: i32;
-    match va {
-        a: &block => {
-            l = a.length() - 1;
-            a' = new_array(l);
-            i = 0;
-            while i <u l {
-                array_set(a', i, unwrap(a[i + 1]));
-                i = i + 1;
-            }
-            return {js| f: a' as &any };
-        }
-        _ => {
-            let fa = va as &float_array;
-            l = fa.length();
-            a' = new_array(l);
-            i = 0;
-            while i <u l {
-                array_set(a', i, {float| f: fa[i] });
-                i = i + 1;
-            }
-            {js| f: a' as &any };
+    #[export = "wrap"]
+    fn wrap(v: &?any) -> &eq {
+        'is_eq: do &eq {
+            return { js: br_on_cast 'is_eq &eq v };
         }
     }
-}
 
-#[export = "caml_js_to_array"]
-fn caml_js_to_array(x: &eq) -> &eq {
-    let a = (unwrap(x) as &?extern)!;
-    let l = array_length(a);
-    let i: i32;
-    if l {
-        if array_get(a, 0) is &float {
-            let fa: &float_array = [0; l];
-            i = 0;
-            while i <u l {
-                fa[i] = (array_get(a, i) as &float).f;
-                i = i + 1;
-            }
-            return fa;
+    #[export = "unwrap"]
+    fn unwrap(v: &eq) -> &?any {
+        'not_js: do &?any {
+            return (br_on_cast_fail 'not_js &js v).js;
         }
     }
-    let a': &block = [0 as &i31; l + 1];
-    i = 0;
-    while i <u l {
-        a'[i + 1] = wrap(array_get(a, i));
-        i = i + 1;
+
+    #[export = "caml_js_equals"]
+    fn caml_js_equals(v1: &eq, v2: &eq) -> &eq {
+        equals(unwrap(v1), unwrap(v2)) as &i31;
     }
-    a';
-}
 
-#[export = "caml_js_to_string_array"]
-fn caml_js_to_string_array(a: &extern) -> &eq {
-    let l = array_length(a);
-    let a': &block = [0 as &i31; l + 1];
-    let i = 0;
-    while i <u l {
-        a'[i + 1] = caml_string_of_jsstring(wrap(array_get(a, i)));
-        i = i + 1;
+    #[export = "caml_js_strict_equals"]
+    fn caml_js_strict_equals(v1: &eq, v2: &eq) -> &eq {
+        strict_equals(unwrap(v1), unwrap(v2)) as &i31;
     }
-    a';
-}
 
-#[export = "caml_js_wrap_callback"]
-fn caml_js_wrap_callback(x: &eq) -> &eq {
-    become wrap(wrap_callback(x));
-}
+    #[export = "caml_js_global"]
+    fn caml_js_global(&eq) -> &eq {
+        wrap(global_this);
+    }
 
-#[export = "caml_js_wrap_callback_arguments"]
-fn caml_js_wrap_callback_arguments(x: &eq) -> &eq {
-    become wrap(wrap_callback_args(x));
-}
+    #[export = "caml_js_to_float"]
+    fn caml_js_to_float(v: &eq) -> &eq {
+        { f: to_float(unwrap(v)) };
+    }
 
-#[export = "caml_js_wrap_callback_strict"]
-fn caml_js_wrap_callback_strict(x: &eq, x_2: &eq) -> &eq {
-    become wrap(wrap_callback_strict(x as &i31 as i32_u, x_2));
-}
+    #[export = "caml_js_from_float"]
+    fn caml_js_from_float(v: &eq) -> &eq {
+        become wrap(from_float((v as &float).f));
+    }
 
-#[export = "caml_js_wrap_callback_unsafe"]
-fn caml_js_wrap_callback_unsafe(x: &eq) -> &eq {
-    become wrap(wrap_callback_unsafe(x));
-}
+    #[export = "caml_js_to_bool"]
+    fn caml_js_to_bool(v: &eq) -> &eq {
+        to_bool(unwrap(v)) as &i31;
+    }
 
-#[export = "caml_js_wrap_meth_callback"]
-fn caml_js_wrap_meth_callback(x: &eq) -> &eq {
-    become wrap(wrap_meth_callback(x));
-}
+    #[export = "caml_js_from_bool"]
+    fn caml_js_from_bool(v: &eq) -> &eq {
+        { js: from_bool(v as &i31 as i32_s) };
+    }
 
-#[export = "caml_js_wrap_meth_callback_arguments"]
-fn caml_js_wrap_meth_callback_arguments(x: &eq) -> &eq {
-    become wrap(wrap_meth_callback_args(x));
-}
+    #[export = "caml_js_to_int32"]
+    fn caml_js_to_int32(v: &eq) -> &eq {
+        become caml_copy_int32(to_int32(unwrap(v)));
+    }
 
-#[export = "caml_js_wrap_meth_callback_strict"]
-fn caml_js_wrap_meth_callback_strict(x: &eq, x_2: &eq) -> &eq {
-    become wrap(wrap_meth_callback_strict(x as &i31 as i32_u, x_2));
-}
+    #[export = "caml_js_from_int32"]
+    fn caml_js_from_int32(v: &eq) -> &eq {
+        become wrap(from_int32(Int32_val(v)));
+    }
 
-#[export = "caml_js_wrap_meth_callback_unsafe"]
-fn caml_js_wrap_meth_callback_unsafe(x: &eq) -> &eq {
-    become wrap(wrap_meth_callback_unsafe(x));
-}
+    #[export = "caml_js_to_nativeint"]
+    fn caml_js_to_nativeint(v: &eq) -> &eq {
+        become caml_copy_nativeint(to_int32(unwrap(v)));
+    }
 
-#[export = "caml_ojs_wrap_fun_arguments"]
-fn caml_ojs_wrap_fun_arguments(x: &eq) -> &eq {
-    become wrap(wrap_fun_arguments(wrap_callback_strict(1, x)));
-}
+    #[export = "caml_js_from_nativeint"]
+    fn caml_js_from_nativeint(v: &eq) -> &eq {
+        become wrap(from_int32(Nativeint_val(v)));
+    }
 
-#[export = "caml_callback"]
-fn caml_callback(
-    f: &eq,
-    count: i32,
-    args: &extern,
-    kind: i32 // 0 ==> strict / 2 ==> unsafe
-) -> &?any {
-    let arg: &eq;
-    let acc = f;
-    let i: i32;
-    if kind == 2 {
-        do {
-            f = acc;
-            acc = caml_callback_1(acc, wrap(get(args, i as &i31)));
+    #[export = "caml_js_pure_expr"]
+    fn caml_js_pure_expr(f: &eq) -> &eq {
+        become caml_callback_1(f, 0 as &i31);
+    }
+
+    #[export = "caml_js_fun_call"]
+    fn caml_js_fun_call(f: &eq, args: &eq) -> &eq {
+        become wrap(fun_call(unwrap(f), null, unwrap(caml_js_from_array(args))));
+    }
+
+    #[export = "caml_js_call"]
+    fn caml_js_call(f: &eq, o: &eq, args: &eq) -> &eq {
+        become wrap(fun_call(unwrap(f), unwrap(o), unwrap(caml_js_from_array(args))));
+    }
+
+    #[export = "caml_js_meth_call"]
+    fn caml_js_meth_call(o: &eq, f: &eq, args: &eq) -> &eq {
+        // Decode the method name as UTF-8, like the JS runtime
+        // (caml_js_meth_call uses caml_jsstring_of_string); a non-ASCII method
+        // name otherwise resolved differently than on the JS backend.
+        if f is &bytes {
+            f = caml_jsstring_of_bytes(f);
+        }
+        become wrap(meth_call(unwrap(o), unwrap(f), unwrap(caml_js_from_array(args))));
+    }
+
+    #[export = "caml_js_get"]
+    fn caml_js_get(o: &eq, f: &eq) -> &eq {
+        if f is &bytes {
+            f = caml_jsbytes_of_bytes(f);
+        }
+        become wrap(get((unwrap(o) as &?extern)!, unwrap(f)));
+    }
+
+    #[export = "caml_js_set"]
+    fn caml_js_set(o: &eq, f: &eq, v: &eq) -> &eq {
+        if f is &bytes {
+            f = caml_jsbytes_of_bytes(f);
+        }
+        set(unwrap(o), unwrap(f), unwrap(v));
+        0 as &i31;
+    }
+
+    #[export = "caml_js_delete"]
+    fn caml_js_delete(o: &eq, f: &eq) -> &eq {
+        if f is &bytes {
+            f = caml_jsbytes_of_bytes(f);
+        }
+        delete(unwrap(o), unwrap(f));
+        0 as &i31;
+    }
+
+    #[export = "caml_js_instanceof"]
+    fn caml_js_instanceof(v1: &eq, v2: &eq) -> &eq {
+        instanceof(unwrap(v1), unwrap(v2)) as &i31;
+    }
+
+    #[export = "caml_js_typeof"]
+    fn caml_js_typeof(v: &eq) -> &eq {
+        { js: typeof(unwrap(v)) };
+    }
+
+    #[export = "caml_js_new"]
+    fn caml_js_new(c: &eq, args: &eq) -> &eq {
+        become wrap(new(unwrap(c), unwrap(caml_js_from_array(args))));
+    }
+
+    #[export = "caml_ojs_new_arr"]
+    fn caml_ojs_new_arr(c: &eq, args: &eq) -> &eq {
+        become wrap(new(unwrap(c), unwrap(args)));
+    }
+
+    #[export = "caml_ojs_iterate_properties"]
+    fn caml_ojs_iterate_properties(o: &eq, f: &eq) -> &eq {
+        iter_props(unwrap(o), unwrap(f));
+        0 as &i31;
+    }
+
+    #[export = "caml_js_object"]
+    fn caml_js_object(va: &eq) -> &eq {
+        let a = va as &block;
+        let l = a.length();
+        let i = 1;
+        let o = new_obj();
+        while i <u l {
+            let p = a[i] as &block;
+            set(o, unwrap(caml_jsstring_of_bytes(p[1])), unwrap(p[2]));
             i = i + 1;
-        } while !caml_is_last_arg(f);
-    } else {
+        }
+        { js: o };
+    }
+
+    #[export = "caml_js_from_array"]
+    fn caml_js_from_array(va: &eq) -> &eq {
+        let a': &extern;
+        let i: i32;
+        let l: i32;
+        match va {
+            a: &block => {
+                l = a.length() - 1;
+                a' = new_array(l);
+                i = 0;
+                while i <u l {
+                    array_set(a', i, unwrap(a[i + 1]));
+                    i = i + 1;
+                }
+                return { js: a' as &any };
+            }
+            _ => {
+                let fa = va as &float_array;
+                l = fa.length();
+                a' = new_array(l);
+                i = 0;
+                while i <u l {
+                    array_set(a', i, { f: fa[i] });
+                    i = i + 1;
+                }
+                { js: a' as &any };
+            }
+        }
+    }
+
+    #[export = "caml_js_to_array"]
+    fn caml_js_to_array(v: &eq) -> &eq {
+        let a = (unwrap(v) as &?extern)!;
+        let l = array_length(a);
+        let i: i32;
+        if l {
+            if array_get(a, 0) is &float {
+                let fa: &float_array = [0; l];
+                i = 0;
+                while i <u l {
+                    fa[i] = (array_get(a, i) as &float).f;
+                    i = i + 1;
+                }
+                return fa;
+            }
+        }
+        let a': &block = [0 as &i31; l + 1];
         i = 0;
-        'done: do {
-            while i <u count {
-                br_if 'done !caml_is_closure(acc);
+        while i <u l {
+            a'[i + 1] = wrap(array_get(a, i));
+            i = i + 1;
+        }
+        a';
+    }
+
+    #[export = "caml_js_to_string_array"]
+    fn caml_js_to_string_array(a: &extern) -> &eq {
+        let l = array_length(a);
+        let a': &block = [0 as &i31; l + 1];
+        let i = 0;
+        while i <u l {
+            a'[i + 1] = caml_string_of_jsstring(wrap(array_get(a, i)));
+            i = i + 1;
+        }
+        a';
+    }
+
+    #[export = "caml_js_wrap_callback"]
+    fn caml_js_wrap_callback(f: &eq) -> &eq {
+        become wrap(wrap_callback(f));
+    }
+
+    #[export = "caml_js_wrap_callback_arguments"]
+    fn caml_js_wrap_callback_arguments(f: &eq) -> &eq {
+        become wrap(wrap_callback_args(f));
+    }
+
+    #[export = "caml_js_wrap_callback_strict"]
+    fn caml_js_wrap_callback_strict(n: &eq, f: &eq) -> &eq {
+        become wrap(wrap_callback_strict(n as &i31 as i32_u, f));
+    }
+
+    #[export = "caml_js_wrap_callback_unsafe"]
+    fn caml_js_wrap_callback_unsafe(f: &eq) -> &eq {
+        become wrap(wrap_callback_unsafe(f));
+    }
+
+    #[export = "caml_js_wrap_meth_callback"]
+    fn caml_js_wrap_meth_callback(f: &eq) -> &eq {
+        become wrap(wrap_meth_callback(f));
+    }
+
+    #[export = "caml_js_wrap_meth_callback_arguments"]
+    fn caml_js_wrap_meth_callback_arguments(f: &eq) -> &eq {
+        become wrap(wrap_meth_callback_args(f));
+    }
+
+    #[export = "caml_js_wrap_meth_callback_strict"]
+    fn caml_js_wrap_meth_callback_strict(n: &eq, f: &eq) -> &eq {
+        become wrap(wrap_meth_callback_strict(n as &i31 as i32_u, f));
+    }
+
+    #[export = "caml_js_wrap_meth_callback_unsafe"]
+    fn caml_js_wrap_meth_callback_unsafe(f: &eq) -> &eq {
+        become wrap(wrap_meth_callback_unsafe(f));
+    }
+
+    #[export = "caml_ojs_wrap_fun_arguments"]
+    fn caml_ojs_wrap_fun_arguments(f: &eq) -> &eq {
+        become wrap(wrap_fun_arguments(wrap_callback_strict(1, f)));
+    }
+
+    #[export = "caml_callback"]
+    fn caml_callback(
+        f: &eq,
+        count: i32,
+        args: &extern,
+        kind: i32 // 0 ==> strict / 2 ==> unsafe
+    ) -> &?any {
+        let acc = f;
+        let i: i32;
+        if kind == 2 {
+            do {
+                f = acc;
                 acc = caml_callback_1(acc, wrap(get(args, i as &i31)));
                 i = i + 1;
-            }
-        }
-        if kind {
-            if caml_is_closure(acc) {
-                acc = caml_js_wrap_callback(acc);
-            }
-        }
-    }
-    become unwrap(acc);
-}
-
-#[export = "caml_jsstring_of_string"]
-#[export = "caml_js_from_string"]
-fn caml_jsstring_of_string(x: &eq) -> &eq {
-    let s = x as &string;
-    return {js| f: jsstring_of_string(s) };
-}
-
-#[export = "caml_jsbytes_of_string"]
-fn caml_jsbytes_of_string(x: &eq) -> &eq {
-    let s = x as &string;
-    let l = s.length();
-    let i = 0;
-    let n = 0;
-    while i <u l {
-        if s[i] as i32_u >=u 128 {
-            n = n + 1;
-        }
-        i = i + 1;
-    }
-    if !n {
-        return {js| f: jsstring_of_string(s) };
-    }
-    let s': &string = [0; i + n];
-    i = 0;
-    n = 0;
-    while i <u l {
-        let c = s[i] as i32_u;
-        if c <u 128 {
-            s'[n] = c;
-            n = n + 1;
+            } while !caml_is_last_arg(f);
         } else {
-            s'[n] = c >>u 6 | 0xC0;
-            s'[n + 1] = 0x80 | c & 0x3F;
-            n = n + 2;
+            i = 0;
+            'done: do {
+                while i <u count {
+                    br_if 'done !caml_is_closure(acc);
+                    acc = caml_callback_1(acc, wrap(get(args, i as &i31)));
+                    i = i + 1;
+                }
+            }
+            if kind {
+                if caml_is_closure(acc) {
+                    acc = caml_js_wrap_callback(acc);
+                }
+            }
         }
-        i = i + 1;
+        become unwrap(acc);
     }
-    return {js| f: jsstring_of_string(s') };
-}
 
-#[export = "caml_string_of_jsstring"]
-#[export = "caml_js_to_string"]
-fn caml_string_of_jsstring(s: &eq) -> &eq {
-    become string_of_jsstring((s as &js).f);
-}
+    #[export = "caml_jsstring_of_string"]
+    #[export = "caml_js_from_string"]
+    fn caml_jsstring_of_bytes(vs: &eq) -> &eq {
+        let s = vs as &bytes;
+        return { js: jsstring_of_bytes(s) };
+    }
 
-#[export = "caml_string_of_jsbytes"]
-fn caml_string_of_jsbytes(s: &eq) -> &eq {
-    let s' = string_of_jsstring((s as &js).f);
-    let l = s'.length();
-    let i = 0;
-    let n = 0;
-    while i <u l {
-        if s'[i] as i32_u >=u 0xC0 {
-            n = n + 1;
-        }
-        i = i + 1;
+    #[export = "caml_jsstring_of_substring"]
+    fn caml_jsstring_of_substring(s: &eq, i: &eq, l: &eq) -> &eq {
+        return { js: jsstring_of_subbytes(s as &bytes, i as &i31 as i32_u, l as &i31 as i32_u) };
     }
-    if !n {
-        return s';
-    }
-    let s'': &string = [0; i - n];
-    i = 0;
-    n = 0;
-    while i <u l {
-        let c = s'[i] as i32_u;
-        if c <u 0xC0 {
-            s''[n] = c;
+
+    #[export = "caml_jsbytes_of_string"]
+    fn caml_jsbytes_of_bytes(vs: &eq) -> &eq {
+        let s = vs as &bytes;
+        let l = s.length();
+        let i = 0;
+        let n = 0;
+        while i <u l {
+            if s[i] as i32_u >=u 128 {
+                n = n + 1;
+            }
             i = i + 1;
-        } else {
-            s''[n] = (c << 6) + s'[i + 1] as i32_u - 0x3080;
-            i = i + 2;
         }
-        n = n + 1;
-    }
-    s'';
-}
-
-#[export = "caml_list_to_js_array"]
-fn caml_list_to_js_array(x: &eq) -> &eq {
-    let i = 0;
-    let l = x;
-    _ =
-        'done: do &eq {
-            'compute_length: loop &eq {
-                l = (br_on_cast_fail 'done &block l)[2];
-                i = i + 1;
-                br 'compute_length;
-            }
-        };
-    let a = new_array(i);
-    i = 0;
-    l = x;
-    _ =
-        'exit: do &eq {
-            'loop: loop &eq {
-                let b = br_on_cast_fail 'exit &block l;
-                array_set(a, i, unwrap(b[1]));
-                l = b[2];
-                i = i + 1;
-                br 'loop;
-            }
-        };
-    {js| f: a as &any };
-}
-
-#[export = "caml_list_of_js_array"]
-fn caml_list_of_js_array(x: &eq) -> &eq {
-    let a = (unwrap(x) as &?extern)!;
-    let len = array_length(a);
-    let i = 0;
-    let l: &eq = 0 as &i31;
-    while i <u len {
-        l = [block|0 as &i31, wrap(array_get(a, i)), l];
-        i = i + 1;
-    }
-    l;
-}
-
-const jsError = "jsError"; // 'jsError'
-data toString = "toString";
-
-#[export = "caml_wrap_exception"]
-fn caml_wrap_exception(x: &?extern) -> &eq {
-    let exn = x as &?any;
-    // ZZZ special case for stack overflows?
-    'undef: do {
-        return [block|0 as &i31, br_on_null 'undef caml_named_value(jsError), wrap(exn)];
-    }
-    [block|
-        0 as &i31,
-        caml_failwith_tag(),
-        caml_string_of_jsstring(
-            wrap(
-                meth_call(
-                    exn,
-                    unwrap(caml_jsstring_of_string([string|toString @ 0; 8])),
-                    new_array(0) as &any,
-                ),
-            ),
-        ),
-    ];
-}
-
-#[export = "caml_js_error_option_of_exception"]
-fn caml_js_error_option_of_exception(x: &eq) -> &eq {
-    let exn = x as &block;
-    if exn[0] == 0 as &i31 {
-        if exn[1] == caml_named_value(jsError) {
-            return [block|0 as &i31, exn[2]];
+        if !n {
+            return { js: jsstring_of_bytes(s) };
         }
+        let s': &bytes = [0; i + n];
+        i = 0;
+        n = 0;
+        while i <u l {
+            let c = s[i] as i32_u;
+            if c <u 128 {
+                s'[n] = c;
+                n = n + 1;
+            } else {
+                s'[n] = c >>u 6 | 0xC0;
+                s'[n + 1] = 0x80 | c & 0x3F;
+                n = n + 2;
+            }
+            i = i + 1;
+        }
+        return { js: jsstring_of_bytes(s') };
     }
+
+    #[export = "caml_string_of_jsstring"]
+    #[export = "caml_js_to_string"]
+    fn caml_string_of_jsstring(s: &eq) -> &eq {
+        become bytes_of_jsstring((s as &js).js);
+    }
+
+    #[export = "caml_string_of_jsbytes"]
+    fn caml_string_of_jsbytes(s: &eq) -> &eq {
+        let s' = bytes_of_jsstring((s as &js).js);
+        let l = s'.length();
+        let i = 0;
+        let n = 0;
+        while i <u l {
+            if s'[i] as i32_u >=u 0xC0 {
+                n = n + 1;
+            }
+            i = i + 1;
+        }
+        if !n {
+            return s';
+        }
+        let s'': &bytes = [0; i - n];
+        i = 0;
+        n = 0;
+        while i <u l {
+            let c = s'[i] as i32_u;
+            if c <u 0xC0 {
+                s''[n] = c;
+                i = i + 1;
+            } else {
+                s''[n] = (c << 6) + s'[i + 1] as i32_u - 0x3080;
+                i = i + 2;
+            }
+            n = n + 1;
+        }
+        s'';
+    }
+
+    #[export = "caml_list_to_js_array"]
+    fn caml_list_to_js_array(v: &eq) -> &eq {
+        let i = 0;
+        let l = v;
+        _ =
+            'done: do &eq {
+                'compute_length: loop {
+                    l = (br_on_cast_fail 'done &block l)[2];
+                    i = i + 1;
+                    br 'compute_length;
+                }
+                unreachable;
+            };
+        let a = new_array(i);
+        i = 0;
+        l = v;
+        _ =
+            'exit: do &eq {
+                'loop: loop {
+                    let b = br_on_cast_fail 'exit &block l;
+                    array_set(a, i, unwrap(b[1]));
+                    l = b[2];
+                    i = i + 1;
+                    br 'loop;
+                }
+                unreachable;
+            };
+        { js: a as &any };
+    }
+
+    #[export = "caml_list_of_js_array"]
+    fn caml_list_of_js_array(v: &eq) -> &eq {
+        let a = (unwrap(v) as &?extern)!;
+        let len = array_length(a);
+        let i = len;
+        let l: &eq = 0 as &i31;
+        while i {
+            i = i - 1;
+            l = [block|0 as &i31, wrap(array_get(a, i)), l];
+        }
+        l;
+    }
+
+    const jsError = "jsError";
+
+    const toString = "toString";
+
+    #[export = "caml_wrap_exception"]
+    fn caml_wrap_exception(vexn: &?extern) -> &eq {
+        let exn = vexn as &?any;
+        // ZZZ special case for stack overflows?
+        // Wrap in Js.Error only an actual JS Error, like the JS runtime; other
+        // thrown values fall through to Failure below.
+        'fallback: do {
+            br_if 'fallback !is_js_error(exn);
+            return [block|0 as &i31, br_on_null 'fallback caml_named_value(jsError), wrap(exn)];
+        }
+        // Failure(String(exn)). String() is null/undefined-safe, unlike calling
+        // exn.toString() which throws on a thrown null/undefined.
+        [block|0 as &i31, caml_failwith_tag(), caml_string_of_jsstring(wrap(to_js_string(exn)))];
+    }
+
+    #[export = "caml_js_error_option_of_exception"]
+    fn caml_js_error_option_of_exception(vexn: &eq) -> &eq {
+        let exn = vexn as &block;
+        if exn[0] == 0 as &i31 {
+            if exn[1] == caml_named_value(jsError) {
+                return [block|0 as &i31, exn[2]];
+            }
+        }
+        0 as &i31;
+    }
+
+    #[export = "caml_throw_js_exception"]
+    fn caml_throw_js_exception(exn: &eq) -> &eq {
+        throw javascript_exception unwrap(exn) as &?extern;
+    }
+
+    #[export = "caml_js_error_of_exception"]
+    fn caml_js_error_of_exception(vexn: &eq) -> &eq {
+        let exn = vexn as &block;
+        if exn[0] == 0 as &i31 {
+            if exn[1] == caml_named_value(jsError) {
+                return exn[2];
+            }
+        }
+        wrap(null);
+    }
+}
+
+#[export = "caml_exn_with_js_backtrace"]
+fn caml_exn_with_js_backtrace(exn: &eq, &eq) -> &eq {
+    exn;
+}
+
+#[export = "caml_jsoo_flags_use_js_string"]
+fn caml_jsoo_flags_use_js_string(&eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_js_error_of_exception"]
-fn caml_js_error_of_exception(x: &eq) -> &eq {
-    let exn = x as &block;
-    if exn[0] == 0 as &i31 {
-        if exn[1] == caml_named_value(jsError) {
-            return exn[2];
+#[export = "caml_jsoo_flags_effects"]
+fn caml_jsoo_flags_effects(&eq) -> &eq {
+    #[if(effects = "cps")]
+    {
+        "cps";
+    }
+    #[else]
+    {
+        #[if(effects = "jspi")]
+        {
+            "jspi";
+        }
+        #[else]
+        {
+            "disabled";
         }
     }
-    wrap(null);
-}
-
-#[export = "log_str"]
-fn log_str(s: &string) {
-    log_js(unwrap(caml_jsstring_of_string(s)));
 }

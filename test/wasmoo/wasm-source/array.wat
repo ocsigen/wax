@@ -20,11 +20,11 @@
       (func $caml_invalid_argument (param (ref eq))))
 
    (type $block (array (mut (ref eq))))
-   (type $string (array (mut i8)))
+   (type $bytes (array (mut i8)))
    (type $float (struct (field $f f64)))
    (type $float_array (array (mut f64)))
 
-   (data $Array_make "Array.make")
+   (@string $Array_make "Array.make")
 
    (global $empty_array (ref eq)
       (array.new_fixed $block 1 (ref.i31 (i32.const 0))))
@@ -32,19 +32,20 @@
    (func $caml_make_vect (export "caml_make_vect") (export "caml_array_make")
       (param $n (ref eq)) (param $v (ref eq)) (result (ref eq))
       (local $sz i32) (local $b (ref $block)) (local $f f64)
-      (local $fv (ref $float))
       (local.set $sz (i31.get_s (ref.cast (ref i31) (local.get $n))))
-      (if (i32.lt_s (local.get $sz) (i32.const 0))
-         (then
-            (call $caml_invalid_argument
-               (array.new_data $string $Array_make
-                               (i32.const 0) (i32.const 10)))))
+      (if (i32.ge_u (local.get $sz) (i32.const 0xfffffff))
+         (then (call $caml_invalid_argument (global.get $Array_make))))
       (if (i32.eqz (local.get $sz)) (then (return (global.get $empty_array))))
       (drop (block $not_float (result (ref eq))
-         (local.set $fv
-            (br_on_cast_fail $not_float (ref eq) (ref $float)
-               (local.get $v)))
-         (local.set $f (struct.get $float $f (local.get $fv)))
+         (local.set $f
+            (struct.get $float 0
+               (br_on_cast_fail $not_float (ref eq) (ref $float)
+                  (local.get $v))))
+         ;; A float init builds an unboxed float array, which has the tighter
+         ;; size limit of the dedicated floatarray primitives, not the generic
+         ;; one checked above.
+         (if (i32.ge_u (local.get $sz) (i32.const 0x7ffffff))
+            (then (call $caml_invalid_argument (global.get $Array_make))))
          (return (array.new $float_array (local.get $f) (local.get $sz)))))
       (local.set $b
          (array.new $block (local.get $v)
@@ -56,32 +57,26 @@
       (param $n (ref eq)) (param $v (ref eq)) (result (ref eq))
       (local $sz i32) (local $f f64)
       (local.set $sz (i31.get_s (ref.cast (ref i31) (local.get $n))))
-      (if (i32.lt_s (local.get $sz) (i32.const 0))
-         (then
-            (call $caml_invalid_argument
-               (array.new_data $string $Array_make
-                               (i32.const 0) (i32.const 10)))))
+      (if (i32.ge_u (local.get $sz) (i32.const 0x7ffffff))
+         (then (call $caml_invalid_argument (global.get $Array_make))))
       (if (i32.eqz (local.get $sz)) (then (return (global.get $empty_array))))
       (local.set $f
-         (struct.get $float $f
+         (struct.get $float 0
             (ref.cast (ref $float) (local.get $v))))
       (array.new $float_array (local.get $f) (local.get $sz)))
 
    (func $caml_floatarray_create
       (export "caml_make_float_vect") (export "caml_floatarray_create")
-      (export "caml_array_create_float")
+      (export "caml_array_create_float") (export "caml_floatarray_create_local")
       (param $n (ref eq)) (result (ref eq))
       (local $sz i32)
       (local.set $sz (i31.get_s (ref.cast (ref i31) (local.get $n))))
-      (if (i32.lt_s (local.get $sz) (i32.const 0))
-         (then
-            (call $caml_invalid_argument
-               (array.new_data $string $Array_make
-                               (i32.const 0) (i32.const 10)))))
+      (if (i32.ge_u (local.get $sz) (i32.const 0x7ffffff))
+         (then (call $caml_invalid_argument (global.get $Array_make))))
       (if (i32.eqz (local.get $sz)) (then (return (global.get $empty_array))))
       (array.new $float_array (f64.const 0) (local.get $sz)))
 
-   (func (export "caml_array_of_uniform_array")
+   (func (export "caml_array_of_uniform_array") (export "caml_make_array")
       (param $vinit (ref eq)) (result (ref eq))
       (local $init (ref $block)) (local $res (ref $float_array))
       (local $size i32) (local $i i32)
@@ -97,7 +92,7 @@
                      (array.new $float_array (f64.const 0) (local.get $size)))
                   (loop $loop
                      (array.set $float_array (local.get $res) (local.get $i)
-                        (struct.get $float $f
+                        (struct.get $float 0
                            (ref.cast (ref $float)
                               (array.get $block (local.get $init)
                                  (i32.add (local.get $i) (i32.const 1))))))
@@ -117,10 +112,10 @@
       (result (ref eq))
       (array.set $float_array (ref.cast (ref $float_array) (local.get $a))
          (i31.get_s (ref.cast (ref i31) (local.get $i)))
-         (struct.get $float $f (ref.cast (ref $float) (local.get $v))))
+         (struct.get $float 0 (ref.cast (ref $float) (local.get $v))))
       (ref.i31 (i32.const 0)))
 
-   (func (export "caml_array_sub")
+   (func (export "caml_array_sub") (export "caml_array_sub_local")
       (param $a (ref eq)) (param $i (ref eq)) (param $vlen (ref eq))
       (result (ref eq))
       (local $a1 (ref $block)) (local $a2 (ref $block)) (local $len i32)
@@ -173,7 +168,7 @@
          (local.get $len))
       (local.get $a'))
 
-   (func (export "caml_array_append")
+   (func (export "caml_array_append") (export "caml_array_append_local")
       (param $va1 (ref eq)) (param $va2 (ref eq)) (result (ref eq))
       (local $a1 (ref $block)) (local $a2 (ref $block)) (local $a (ref $block))
       (local $fa1 (ref $float_array)) (local $fa2 (ref $float_array))
@@ -245,14 +240,15 @@
          (return (local.get $fa))))
       (return_call $caml_floatarray_dup (local.get $fa1)))
 
-   (func (export "caml_array_concat") (param (ref eq)) (result (ref eq))
+   (func (export "caml_array_concat") (export "caml_array_concat_local")
+      (param $vl (ref eq)) (result (ref eq))
       (local $i i32) (local $len i32)
       (local $l (ref eq)) (local $v (ref eq))
       (local $isfloat i32)
       (local $b (ref $block))
       (local $a (ref $block)) (local $a' (ref $block))
       (local $fa (ref $float_array)) (local $fa' (ref $float_array))
-      (local.set $l (local.get 0))
+      (local.set $l (local.get $vl))
       (local.set $len (i32.const 0))
       (loop $compute_length
          (drop (block $exit (result (ref eq))
@@ -279,7 +275,7 @@
          (then
             (local.set $fa
                (array.new $float_array (f64.const 0) (local.get $len)))
-            (local.set $l (local.get 0))
+            (local.set $l (local.get $vl))
             (local.set $i (i32.const 0))
             (loop $fill
                (drop (block $exit (result (ref eq))
@@ -304,7 +300,7 @@
             (local.set $a
                (array.new $block (ref.i31 (i32.const 0))
                   (i32.add (local.get $len) (i32.const 1))))
-            (local.set $l (local.get 0))
+            (local.set $l (local.get $vl))
             (local.set $i (i32.const 1))
             (loop $fill
                (drop (block $exit (result (ref eq))
@@ -324,6 +320,93 @@
                    (local.set $l (array.get $block (local.get $b) (i32.const 2)))
                    (br $fill))))
             (local.get $a))))
+
+   (func (export "caml_floatarray_concat") (param $vl (ref eq)) (result (ref eq))
+      (local $i i32) (local $len i32)
+      (local $l (ref eq)) (local $v (ref eq))
+      (local $b (ref $block))
+      (local $fa (ref $float_array)) (local $fa' (ref $float_array))
+      (local.set $l (local.get $vl))
+      (local.set $len (i32.const 0))
+      (loop $compute_length
+         (drop (block $exit (result (ref eq))
+            (local.set $b
+               (br_on_cast_fail $exit (ref eq) (ref $block) (local.get $l)))
+            (local.set $v (array.get $block (local.get $b) (i32.const 1)))
+            (if (ref.test (ref $float_array) (local.get $v))
+               (then
+                  (local.set $len
+                     (i32.add (local.get $len)
+                        (array.len
+                           (ref.cast (ref $float_array) (local.get $v)))))))
+            (local.set $l (array.get $block (local.get $b) (i32.const 2)))
+            (br $compute_length))))
+      (local.set $fa
+         (array.new $float_array (f64.const 0) (local.get $len)))
+      (local.set $l (local.get $vl))
+      (local.set $i (i32.const 0))
+      (loop $fill
+         (drop (block $exit (result (ref eq))
+             (local.set $b
+                (br_on_cast_fail $exit (ref eq) (ref $block)
+                   (local.get $l)))
+             (local.set $l (array.get $block (local.get $b) (i32.const 2)))
+             (drop (block $not_float (result (ref eq))
+                (local.set $fa'
+                   (br_on_cast_fail $not_float (ref eq) (ref $float_array)
+                      (array.get $block (local.get $b) (i32.const 1))))
+                (local.set $len (array.len (local.get $fa')))
+                (array.copy $float_array $float_array
+                   (local.get $fa) (local.get $i)
+                   (local.get $fa') (i32.const 0)
+                   (local.get $len))
+                (local.set $i (i32.add (local.get $i) (local.get $len)))
+                (br $fill)))
+             (br $fill))))
+      (local.get $fa))
+
+   (func (export "caml_uniform_array_concat") (param $vl (ref eq)) (result (ref eq))
+      (local $i i32) (local $len i32)
+      (local $l (ref eq)) (local $v (ref eq))
+      (local $b (ref $block))
+      (local $a (ref $block)) (local $a' (ref $block))
+      (local.set $l (local.get $vl))
+      (local.set $len (i32.const 0))
+      (loop $compute_length
+         (drop (block $exit (result (ref eq))
+            (local.set $b
+               (br_on_cast_fail $exit (ref eq) (ref $block) (local.get $l)))
+            (local.set $v (array.get $block (local.get $b) (i32.const 1)))
+            (local.set $len
+               (i32.add (local.get $len)
+                  (i32.sub
+                     (array.len (ref.cast (ref $block) (local.get $v)))
+                     (i32.const 1))))
+            (local.set $l (array.get $block (local.get $b) (i32.const 2)))
+            (br $compute_length))))
+      (local.set $a
+         (array.new $block (ref.i31 (i32.const 0))
+            (i32.add (local.get $len) (i32.const 1))))
+      (local.set $l (local.get $vl))
+      (local.set $i (i32.const 1))
+      (loop $fill
+         (drop (block $exit (result (ref eq))
+             (local.set $b
+                (br_on_cast_fail $exit (ref eq) (ref $block)
+                   (local.get $l)))
+             (local.set $a'
+                (ref.cast (ref $block)
+                   (array.get $block (local.get $b) (i32.const 1))))
+             (local.set $len
+                (i32.sub (array.len (local.get $a')) (i32.const 1)))
+             (array.copy $block $block
+                (local.get $a) (local.get $i)
+                (local.get $a') (i32.const 1)
+                (local.get $len))
+             (local.set $i (i32.add (local.get $i) (local.get $len)))
+             (local.set $l (array.get $block (local.get $b) (i32.const 2)))
+             (br $fill))))
+      (local.get $a))
 
    (func $caml_floatarray_blit (export "caml_floatarray_blit")
       (param $a1 (ref eq)) (param $i1 (ref eq))
@@ -388,7 +471,7 @@
             (array.fill $float_array
                (ref.cast (ref $float_array) (local.get $a))
                (i31.get_u (ref.cast (ref i31) (local.get $i)))
-               (struct.get $float $f (ref.cast (ref $float) (local.get $v)))
+               (struct.get $float 0 (ref.cast (ref $float) (local.get $v)))
                (local.get $len))))
       (ref.i31 (i32.const 0)))
 
@@ -402,7 +485,7 @@
             (array.fill $float_array
                (ref.cast (ref $float_array) (local.get $a))
                (i31.get_u (ref.cast (ref i31) (local.get $i)))
-               (struct.get $float $f (ref.cast (ref $float) (local.get $v)))
+               (struct.get $float 0 (ref.cast (ref $float) (local.get $v)))
                (local.get $len))))
       (ref.i31 (i32.const 0)))
 )

@@ -26,56 +26,76 @@ fn caml_js_get(&eq, &eq) -> &eq;
 fn caml_ba_to_typed_array(&eq) -> &eq;
 #[import = ("bigarray", "caml_ba_from_typed_array")]
 fn caml_ba_from_typed_array(&eq) -> &eq;
+#[import = ("bigarray", "caml_ba_char_of_typed_array")]
+fn caml_ba_char_of_typed_array(&eq) -> &eq;
 #[import = ("bigarray", "caml_ba_sub")]
 fn caml_ba_sub(&eq, &eq, &eq) -> &eq;
 #[import = ("bigarray", "caml_ba_fill")]
 fn caml_ba_fill(&eq, &eq) -> &eq;
 #[import = ("bigarray", "caml_ba_get_data")]
 fn caml_ba_get_data(&eq) -> &extern;
-#[import = ("bindings", "ta_create")]
-fn ta_create(i32, &?any) -> &?any;
-#[import = ("bindings", "ta_get_ui8")]
-fn ta_get_ui8(&extern, i32) -> i32;
-#[import = ("bindings", "ta_get32_ui8")]
-fn ta_get32_ui8(&extern, i32) -> i32;
-#[import = ("bindings", "ta_set_ui8")]
-fn ta_set_ui8(&extern, i32, &i31);
-#[import = ("bindings", "ta_subarray")]
-fn ta_subarray(&extern, i32, i32) -> &extern;
-#[import = ("bindings", "ta_set")]
-fn ta_set(&extern, &extern, i32);
-#[import = ("bindings", "ta_length")]
-fn ta_length(&extern) -> i32;
-#[import = ("bindings", "ta_bytes")]
-fn ta_bytes(&?any) -> &?any;
-#[import = ("bindings", "ta_blit_from_string")]
-fn ta_blit_from_string(&string, i32, &extern, i32, i32);
-#[import = ("bindings", "ta_blit_to_string")]
-fn ta_blit_to_string(&extern, i32, &string, i32, i32);
+#[import = ("bigarray", "caml_ba_get_view")]
+fn caml_ba_get_view(&eq) -> &extern;
+#[import = ("bigarray", "caml_ba_num_elts")]
+fn caml_ba_num_elts(&eq) -> i32;
+#[import = ("bigarray", "caml_blit_dataview_to_bytes")]
+fn caml_blit_dataview_to_bytes(&extern, i32, &bytes, i32, i32);
+#[import = ("bigarray", "caml_blit_bytes_to_dataview")]
+fn caml_blit_bytes_to_dataview(&bytes, i32, &extern, i32, i32);
+#[if(wasi)]
+{
+    #[import = ("bigarray", "ta_subarray")]
+    fn ta_subarray(&extern, i32, i32) -> &extern;
+    #[import = ("bigarray", "ta_set")]
+    fn ta_set(&extern, &extern, i32);
+    #[import = ("bigarray", "dv_get_i32_unaligned")]
+    fn dv_get_i32_unaligned(&extern, i32, i32) -> i32;
+    #[import = ("bigarray", "dv_get_ui8")]
+    fn dv_get_ui8(&extern, i32) -> i32;
+    #[import = ("bigarray", "dv_set_i8")]
+    fn dv_set_i8(&extern, i32, i32);
+}
+#[else]
+{
+    #[import = ("bindings", "ta_create")]
+    fn ta_create(i32, &?any) -> &?any;
+    #[import = ("bindings", "dv_get_i32")]
+    fn dv_get_i32_unaligned(&?extern, i32, i32) -> i32;
+    #[import = ("bindings", "dv_get_ui8")]
+    fn dv_get_ui8(&?extern, i32) -> i32;
+    #[import = ("bindings", "dv_set_i8")]
+    fn dv_set_i8(&?extern, i32, i32);
+    #[import = ("bindings", "ta_subarray")]
+    fn ta_subarray(&extern, i32, i32) -> &extern;
+    #[import = ("bindings", "ta_set")]
+    fn ta_set(&extern, &extern, i32);
+    #[import = ("bindings", "ta_bytes")]
+    fn ta_bytes(&?any) -> &?any;
+}
 #[import = ("hash", "caml_hash_mix_int")]
 fn caml_hash_mix_int(i32, i32) -> i32;
 
-type string = [mut i8];
+type bytes = [mut i8];
 
 #[export = "caml_hash_mix_bigstring"]
 fn caml_hash_mix_bigstring(h: i32, b: &eq) -> i32 {
-    let data_2 = caml_ba_get_data(b);
-    let len = ta_length(data_2);
+    let view = caml_ba_get_view(b);
+    let len = caml_ba_num_elts(b);
     let i: i32;
     while i + 4 <=u len {
-        h = caml_hash_mix_int(h, ta_get32_ui8(data_2, i));
+        h = caml_hash_mix_int(h, dv_get_i32_unaligned(view, i, 1));
         i = i + 4;
     }
     let w = 0;
     dispatch (len & 3) [ 'l_2 'l_3 'l_4 else 'l_5 ] {
         'l_5: {
-            w = ta_get_ui8(data_2, i + 2) << 16;
+            w = dv_get_ui8(view, i + 2) << 16;
         }
         'l_4: {
-            w = w | ta_get_ui8(data_2, i + 1) << 8;
+            w = w | dv_get_ui8(view, i + 1) << 8;
         }
         'l_3: {
-            w = w | ta_get_ui8(data_2, i);
+            w = w | dv_get_ui8(view, i);
             h = caml_hash_mix_int(h, w);
         }
         'l_2: {
@@ -84,21 +104,24 @@ fn caml_hash_mix_bigstring(h: i32, b: &eq) -> i32 {
     }
 }
 
-data buffer = "buffer";
+#[if(not(wasi))]
+{
+    const buffer = "buffer";
 
-#[export = "bigstring_to_array_buffer"]
-fn bigstring_to_array_buffer(bs: &eq) -> &eq {
-    become caml_js_get(caml_ba_to_typed_array(bs), [string|buffer @ 0; 6]);
-}
+    #[export = "bigstring_to_array_buffer"]
+    fn bigstring_to_array_buffer(bs: &eq) -> &eq {
+        become caml_js_get(caml_ba_to_typed_array(bs), buffer);
+    }
 
-#[export = "bigstring_of_array_buffer"]
-fn bigstring_of_array_buffer(x: &eq) -> &eq {
-    become caml_ba_from_typed_array(wrap(ta_create(12, unwrap(x))));
-}
+    #[export = "bigstring_of_array_buffer"]
+    fn bigstring_of_array_buffer(v: &eq) -> &eq {
+        become caml_ba_char_of_typed_array(wrap(ta_create(12, unwrap(v))));
+    }
 
-#[export = "bigstring_of_typed_array"]
-fn bigstring_of_typed_array(x: &eq) -> &eq {
-    become caml_ba_from_typed_array(wrap(ta_bytes(unwrap(x))));
+    #[export = "bigstring_of_typed_array"]
+    fn bigstring_of_typed_array(v: &eq) -> &eq {
+        become caml_ba_char_of_typed_array(wrap(ta_bytes(unwrap(v))));
+    }
 }
 
 #[export = "caml_bigstring_memset"]
@@ -108,16 +131,52 @@ fn caml_bigstring_memset(s: &eq, pos: &eq, len: &eq, v: &eq) -> &eq {
 
 #[export = "caml_bigstring_memcmp"]
 fn caml_bigstring_memcmp(s1: &eq, vpos1: &eq, s2: &eq, vpos2: &eq, vlen: &eq) -> &eq {
-    let d1 = caml_ba_get_data(s1);
+    let v1 = caml_ba_get_view(s1);
     let pos1 = vpos1 as &i31 as i32_s;
-    let d2 = caml_ba_get_data(s2);
+    let v2 = caml_ba_get_view(s2);
     let pos2 = vpos2 as &i31 as i32_s;
     let len = vlen as &i31 as i32_s;
     let i: i32;
+    let c1: i32;
+    let c2: i32;
+    // Main loop: compare 4 bytes at a time
+    'done: do {
+        'loop: loop {
+            br_if 'done i + 4 >u len;
+            let w1 = dv_get_i32_unaligned(v1, pos1 + i, 1);
+            let w2 = dv_get_i32_unaligned(v2, pos2 + i, 1);
+            if w1 == w2 {
+                i = i + 4;
+                br 'loop;
+            }
+            // Words differ, find first differing byte (little-endian)
+            let xored = w1 ^ w2;
+            if xored & 0xFF {
+                c1 = w1 & 0xFF;
+                c2 = w2 & 0xFF;
+                return c1 <u c2?-1 as &i31:1 as &i31;
+            }
+            if xored & 0xFF00 {
+                c1 = w1 >>u 8 & 0xFF;
+                c2 = w2 >>u 8 & 0xFF;
+                return c1 <u c2?-1 as &i31:1 as &i31;
+            }
+            if xored & 0xFF0000 {
+                c1 = w1 >>u 16 & 0xFF;
+                c2 = w2 >>u 16 & 0xFF;
+                return c1 <u c2?-1 as &i31:1 as &i31;
+            }
+            // Must be byte 3
+            c1 = w1 >>u 24;
+            c2 = w2 >>u 24;
+            return c1 <u c2?-1 as &i31:1 as &i31;
+        }
+    }
+    // Handle remaining 0-3 bytes
     'loop: loop {
         if i <u len {
-            let c1 = ta_get_ui8(d1, pos1 + i);
-            let c2 = ta_get_ui8(d2, pos2 + i);
+            c1 = dv_get_ui8(v1, pos1 + i);
+            c2 = dv_get_ui8(v2, pos2 + i);
             i = i + 1;
             br_if 'loop c1 == c2;
             return c1 <u c2?-1 as &i31:1 as &i31;
@@ -128,16 +187,56 @@ fn caml_bigstring_memcmp(s1: &eq, vpos1: &eq, s2: &eq, vpos2: &eq, vlen: &eq) ->
 
 #[export = "caml_bigstring_memcmp_string"]
 fn caml_bigstring_memcmp_string(s1: &eq, vpos1: &eq, vs2: &eq, vpos2: &eq, vlen: &eq) -> &eq {
-    let d1 = caml_ba_get_data(s1);
+    let v1 = caml_ba_get_view(s1);
     let pos1 = vpos1 as &i31 as i32_s;
-    let s2 = vs2 as &string;
+    let s2 = vs2 as &bytes;
     let pos2 = vpos2 as &i31 as i32_s;
     let len = vlen as &i31 as i32_s;
     let i: i32;
+    let c1: i32;
+    let c2: i32;
+    // Main loop: compare 4 bytes at a time
+    'done: do {
+        'loop: loop {
+            br_if 'done i + 4 >u len;
+            let w1 = dv_get_i32_unaligned(v1, pos1 + i, 1);
+            // Build w2 from 4 bytes of the $bytes array (little-endian)
+            let j = pos2 + i;
+            let w2 =
+                s2[j] as i32_u | s2[j + 1] as i32_u << 8
+                    | (s2[j + 2] as i32_u << 16 | s2[j + 3] as i32_u << 24);
+            if w1 == w2 {
+                i = i + 4;
+                br 'loop;
+            }
+            // Words differ, find first differing byte (little-endian)
+            let xored = w1 ^ w2;
+            if xored & 0xFF {
+                c1 = w1 & 0xFF;
+                c2 = w2 & 0xFF;
+                return c1 <u c2?-1 as &i31:1 as &i31;
+            }
+            if xored & 0xFF00 {
+                c1 = w1 >>u 8 & 0xFF;
+                c2 = w2 >>u 8 & 0xFF;
+                return c1 <u c2?-1 as &i31:1 as &i31;
+            }
+            if xored & 0xFF0000 {
+                c1 = w1 >>u 16 & 0xFF;
+                c2 = w2 >>u 16 & 0xFF;
+                return c1 <u c2?-1 as &i31:1 as &i31;
+            }
+            // Must be byte 3
+            c1 = w1 >>u 24;
+            c2 = w2 >>u 24;
+            return c1 <u c2?-1 as &i31:1 as &i31;
+        }
+    }
+    // Handle remaining 0-3 bytes
     'loop: loop {
         if i <u len {
-            let c1 = ta_get_ui8(d1, pos1 + i);
-            let c2 = s2[pos2 + i] as i32_u;
+            c1 = dv_get_ui8(v1, pos1 + i);
+            c2 = s2[pos2 + i] as i32_u;
             i = i + 1;
             br_if 'loop c1 == c2;
             return c1 <u c2?-1 as &i31:1 as &i31;
@@ -151,9 +250,37 @@ fn caml_bigstring_memchr(s: &eq, vc: &eq, vpos: &eq, vlen: &eq) -> &eq {
     let c = vc as &i31 as i32_s;
     let pos = vpos as &i31 as i32_s;
     let len = vlen as &i31 as i32_s;
-    let d = caml_ba_get_data(s);
+    let v = caml_ba_get_view(s);
+    // Create mask: c | (c<<8) | (c<<16) | (c<<24)
+    let mask = c * 0x01010101;
+    // Main loop: process 4 bytes at a time
+    'done: {
+        'loop: loop {
+            br_if 'done len <s 4;
+            let word = dv_get_i32_unaligned(v, pos, 1);
+            let xored = word ^ mask;
+            // SWAR: check for zero byte using ((x - 0x01010101) & ~x & 0x80808080)
+            if xored - 0x01010101 & (xored ^ -1) & 0x80808080 {
+                // Found a match in this word, find exact position (little-endian)
+                if !(xored & 0xFF) {
+                    return pos as &i31;
+                }
+                if !(xored & 0xFF00) {
+                    return (pos + 1) as &i31;
+                }
+                if !(xored & 0xFF0000) {
+                    return (pos + 2) as &i31;
+                }
+                return (pos + 3) as &i31;
+            }
+            pos = pos + 4;
+            len = len - 4;
+            br 'loop;
+        }
+    }
+    // Handle remaining 0-3 bytes
     while len >s 0 {
-        if c == ta_get_ui8(d, pos) {
+        if c == dv_get_ui8(v, pos) {
             return pos as &i31;
         }
         len = len - 1;
@@ -162,26 +289,161 @@ fn caml_bigstring_memchr(s: &eq, vc: &eq, vpos: &eq, vlen: &eq) -> &eq {
     -1 as &i31;
 }
 
+#[export = "caml_bigstring_memrchr"]
+fn caml_bigstring_memrchr(s: &eq, vc: &eq, vpos: &eq, vlen: &eq) -> &eq {
+    let c = vc as &i31 as i32_s;
+    let pos = vpos as &i31 as i32_s;
+    let len = vlen as &i31 as i32_s;
+    let v = caml_ba_get_view(s);
+    // cur points to last byte to check
+    let cur = pos + len - 1;
+    // Create mask: c | (c<<8) | (c<<16) | (c<<24)
+    let mask = c * 0x01010101;
+    // Main loop: process 4 bytes at a time, backwards
+    while cur - pos >=s 3 {
+        // Read 4 bytes ending at cur (so from cur-3 to cur)
+        let word = dv_get_i32_unaligned(v, cur - 3, 1);
+        let xored = word ^ mask;
+        // SWAR: check for zero byte
+        if xored - 0x01010101 & (xored ^ -1) & 0x80808080 {
+            // Found match, check from highest byte (cur) to lowest (cur-3)
+            if !(xored & 0xFF000000) {
+                return cur as &i31;
+            }
+            if !(xored & 0xFF0000) {
+                return (cur - 1) as &i31;
+            }
+            if !(xored & 0xFF00) {
+                return (cur - 2) as &i31;
+            }
+            return (cur - 3) as &i31;
+        }
+        cur = cur - 4;
+    }
+    // Handle remaining 0-3 bytes at the beginning
+    while cur >=s pos {
+        if c == dv_get_ui8(v, cur) {
+            return cur as &i31;
+        }
+        cur = cur - 1;
+    }
+    -1 as &i31;
+}
+
+#[export = "caml_bigstring_strncmp"]
+fn caml_bigstring_strncmp(vs1: &eq, vpos1: &eq, vs2: &eq, vpos2: &eq, vlen: &eq) -> &eq {
+
+    let v1 = caml_ba_get_view(vs1);
+    let v2 = caml_ba_get_view(vs2);
+    let pos1 = vpos1 as &i31 as i32_s;
+    let pos2 = vpos2 as &i31 as i32_s;
+    let len = vlen as &i31 as i32_s;
+    let i: i32;
+    let c1: i32;
+    let c2: i32;
+    // Main loop: compare 4 bytes at a time
+    'done: {
+        'loop: loop {
+            br_if 'done i + 4 >u len;
+            let w1 = dv_get_i32_unaligned(v1, pos1 + i, 1);
+            let w2 = dv_get_i32_unaligned(v2, pos2 + i, 1);
+            if w1 == w2 {
+                // Words equal - check for null byte using SWAR
+                if w1 - 0x01010101 & (w1 ^ -1) & 0x80808080 {
+                    // Contains null, strings equal up to null
+                    return 0 as &i31;
+                }
+                i = i + 4;
+                br 'loop;
+            }
+            // Words differ - find first differing byte, checking for nulls
+            let xored = w1 ^ w2;
+            // Check byte 0
+            c1 = w1 & 0xFF;
+            c2 = w2 & 0xFF;
+            if xored & 0xFF | !c1 {
+                if c1 <u c2 {
+                    return -1 as &i31;
+                }
+                if c1 >u c2 {
+                    return 1 as &i31;
+                }
+                return 0 as &i31;
+            }
+            // Check byte 1
+            c1 = w1 >>u 8 & 0xFF;
+            c2 = w2 >>u 8 & 0xFF;
+            if xored & 0xFF00 | !c1 {
+                if c1 <u c2 {
+                    return -1 as &i31;
+                }
+                if c1 >u c2 {
+                    return 1 as &i31;
+                }
+                return 0 as &i31;
+            }
+            // Check byte 2
+            c1 = w1 >>u 16 & 0xFF;
+            c2 = w2 >>u 16 & 0xFF;
+            if xored & 0xFF0000 | !c1 {
+                if c1 <u c2 {
+                    return -1 as &i31;
+                }
+                if c1 >u c2 {
+                    return 1 as &i31;
+                }
+                return 0 as &i31;
+            }
+            // Byte 3 must differ (or be null)
+            c1 = w1 >>u 24;
+            c2 = w2 >>u 24;
+            if c1 <u c2 {
+                return -1 as &i31;
+            }
+            if c1 >u c2 {
+                return 1 as &i31;
+            }
+            return 0 as &i31;
+        }
+    }
+    // Handle remaining 0-3 bytes
+    while i <u len {
+        c1 = dv_get_ui8(v1, pos1 + i);
+        c2 = dv_get_ui8(v2, pos2 + i);
+        i = i + 1;
+        if c1 <u c2 {
+            return -1 as &i31;
+        }
+        if c1 >u c2 {
+            return 1 as &i31;
+        }
+        if c1 == 0 {
+            return 0 as &i31;
+        }
+    }
+    0 as &i31;
+}
+
 #[export = "caml_bigstring_blit_bytes_to_ba"]
 #[export = "caml_bigstring_blit_string_to_ba"]
 fn caml_bigstring_blit_bytes_to_ba(str1: &eq, vpos1: &eq, ba2: &eq, vpos2: &eq, vlen: &eq) -> &eq {
-    let s1 = str1 as &string;
+    let s1 = str1 as &bytes;
     let pos1 = vpos1 as &i31 as i32_s;
-    let d2 = caml_ba_get_data(ba2);
+    let d2 = caml_ba_get_view(ba2);
     let pos2 = vpos2 as &i31 as i32_s;
     let len = vlen as &i31 as i32_s;
-    ta_blit_from_string(s1, pos1, d2, pos2, len);
+    caml_blit_bytes_to_dataview(s1, pos1, d2, pos2, len);
     0 as &i31;
 }
 
 #[export = "caml_bigstring_blit_ba_to_bytes"]
 fn caml_bigstring_blit_ba_to_bytes(ba1: &eq, vpos1: &eq, str2: &eq, vpos2: &eq, vlen: &eq) -> &eq {
-    let d1 = caml_ba_get_data(ba1);
+    let d1 = caml_ba_get_view(ba1);
     let pos1 = vpos1 as &i31 as i32_s;
-    let s2 = str2 as &string;
+    let s2 = str2 as &bytes;
     let pos2 = vpos2 as &i31 as i32_s;
     let len = vlen as &i31 as i32_s;
-    ta_blit_to_string(d1, pos1, s2, pos2, len);
+    caml_blit_dataview_to_bytes(d1, pos1, s2, pos2, len);
     0 as &i31;
 }
 

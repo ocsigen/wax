@@ -21,80 +21,148 @@ fn caml_failwith(&eq);
 fn caml_invalid_argument(&eq);
 #[import = ("fail", "caml_raise_end_of_file")]
 fn caml_raise_end_of_file();
-#[import = ("obj", "double_array_tag")]
-const double_array_tag: i32;
+#[import = ("obj", "object_tag")]
+const object_tag: i32;
+#[import = ("obj", "null")]
+const null_value: &eq;
+#[import = ("obj", "caml_set_oo_id")]
+fn caml_set_oo_id(&eq) -> &eq;
 #[import = ("string", "caml_string_concat")]
 fn caml_string_concat(&eq, &eq) -> &eq;
 #[import = ("obj", "caml_is_closure")]
 fn caml_is_closure(&eq) -> i32;
 #[import = ("effect", "caml_is_continuation")]
 fn caml_is_continuation(&eq) -> i32;
-#[import = ("bindings", "map_new")]
-fn map_new() -> &any;
-#[import = ("bindings", "map_get")]
-fn map_get(&any, &eq) -> &?i31;
-#[import = ("bindings", "map_set")]
-fn map_set(&any, &eq, &i31);
 #[import = ("io", "caml_really_putblock")]
-fn caml_really_putblock(&eq, &string, i32, i32);
+fn caml_really_putblock(&eq, &bytes, i32, i32);
 #[import = ("io", "caml_really_getblock")]
-fn caml_really_getblock(&eq, &string, i32, i32) -> i32;
+fn caml_really_getblock(&eq, &bytes, i32, i32) -> i32;
 #[import = ("io", "caml_flush_if_unbuffered")]
 fn caml_flush_if_unbuffered(&eq);
 #[import = ("custom", "caml_init_custom_operations")]
 fn caml_init_custom_operations();
 #[import = ("custom", "caml_find_custom_operations")]
-fn caml_find_custom_operations(&string) -> &?custom_operations;
+fn caml_find_custom_operations(&bytes) -> &?custom_operations;
+type block = [mut &eq];
+#[if(wasi)]
+{
+    type map = { size: mut i32, keys: mut &block, values: mut &block };
+    fn map_new() -> &any {
+        { size: 0, keys: [0 as &i31; 2], values: [0 as &i31; 2] };
+    }
+    fn map_get(map: &any, k: &eq) -> &?i31 {
+        let m = map as &map;
+        let size = m.size;
+        let keys = m.keys;
+        let i: i32;
+        while i <u size {
+            if keys[i] == k {
+                return m.values[i] as &i31;
+            }
+            i = i + 1;
+        }
+        null;
+    }
+    fn map_set(map: &any, k: &eq, v: &i31) {
+        let m = map as &map;
+        let i = m.size;
+        let keys = m.keys;
+        if i == keys.length() {
+            let size = i << 1;
+            let a: &block = [0 as &i31; size];
+            a.copy(0, keys, 0, i);
+            m.keys = a;
+            keys = a;
+            a = [0 as &i31; size];
+            a.copy(0, m.values, 0, i);
+            m.values = a;
+        }
+        keys[i] = k;
+        m.values[i] = v;
+        m.size = i + 1;
+    }
+}
+#[else]
+{
+    #[import = ("bindings", "map_new")]
+    fn map_new() -> &any;
+    #[import = ("bindings", "map_get")]
+    fn map_get(&any, &eq) -> &?i31;
+    #[import = ("bindings", "map_set")]
+    fn map_set(&any, &eq, &i31);
+}
 
-#[import = ("version-dependent", "caml_marshal_header_size")]
-const caml_marshal_header_size: i32;
-
-const input_val_from_string = "input_val_from_string";
+const input_val_from_string = "input_value_from_string";
 
 #[export = "caml_input_value_from_bytes"]
 #[export = "caml_input_value_from_string"]
 fn caml_input_value_from_bytes(vstr: &eq, vofs: &eq) -> &eq {
-    let str = vstr as &string;
+    let str = vstr as &bytes;
     let ofs = vofs as &i31 as i32_u;
     let s = get_intern_state(str, ofs);
     let h = parse_header(s, input_val_from_string);
-    if ofs + (h.data_len + 20) >s str.length() {
-        bad_length(input_val_from_string);
+    if ofs + (h.header_len + h.data_len) >u str.length() {
+        fail_bad_length(input_val_from_string);
     }
+    decompress_input(s, h, input_val_from_string);
     become intern_rec(s, h);
 }
 
-data truncated_obj = "input_value: truncated object";
+const truncated_obj = "input_value: truncated object";
 
 const input_value = "input_value";
 
 #[export = "caml_input_value"]
 fn caml_input_value(ch: &eq) -> &eq {
     // ZZZ check binary channel?
-    let header: &string = [0; 20];
-    let r = caml_really_getblock(ch, header, 0, 20);
+    let header: &bytes = [0; 64];
+    let r = caml_really_getblock(ch, header, 0, 5);
     if !r {
         caml_raise_end_of_file();
     }
-    if r <u 20 {
-        caml_failwith([string|truncated_obj @ 0; 29]);
+    if r <u 5 {
+        caml_failwith(truncated_obj);
     }
     let s = get_intern_state(header, 0);
+    let magic = read32(s);
+    if magic == Intext_magic_number_big {
+        fail_too_large(input_value);
+    }
+    let len: i32;
+    if magic == Intext_magic_number_small {
+        len = 15;
+    }
+    if magic == Intext_magic_number_compressed {
+        len = read8u(s) & 0x3F;
+        if len <u 5 {
+            fail_bad_object(input_value);
+        }
+        len = len - 5;
+    }
+    if !len {
+        fail_bad_object(input_value);
+    }
+    if caml_really_getblock(ch, header, 5, len) <u len {
+        caml_failwith(truncated_obj);
+    }
+    s = get_intern_state(header, 0);
     let h = parse_header(s, input_value);
-    let len = h.data_len;
-    let buf: &string = [0; len];
+    len = h.data_len;
+    let buf: &bytes = [0; len];
     if caml_really_getblock(ch, buf, 0, len) <u len {
-        caml_failwith([string|truncated_obj @ 0; 29]);
+        caml_failwith(truncated_obj);
     }
     s = get_intern_state(buf, 0);
+    decompress_input(s, h, input_value);
     become intern_rec(s, h);
 }
 
-type block = [mut &eq];
-type string = [mut i8];
+type bytes = [mut i8];
 type float = { f: f64 };
 type float_array = [mut f64];
-type js = { f: &?any };
+type js = { js: &?any };
+
+type decompress = fn(&bytes, i32, i32, i32) -> &bytes;
 
 type compare = fn(&eq, &eq, i32) -> i32;
 type hash = fn(&eq) -> i32;
@@ -103,7 +171,7 @@ type serialize = fn(&eq, &eq) -> (i32, i32);
 type deserialize = fn(&eq) -> (&eq, i32);
 type dup = fn(&eq) -> &eq;
 type custom_operations = {
-    id: &string,
+    id: &bytes,
     compare: &?compare,
     compare_ext: &?compare,
     hash: &?hash,
@@ -112,10 +180,11 @@ type custom_operations = {
     deserialize: &?deserialize,
     dup: &?dup
 };
-type custom = open { f: &custom_operations };
+type custom = open { ops: &custom_operations };
 
 const Intext_magic_number_small = 0x8495A6BE;
 const Intext_magic_number_big = 0x8495A6BF;
+const Intext_magic_number_compressed = 0x8495A6BD;
 
 const PREFIX_SMALL_BLOCK = 0x80;
 const PREFIX_SMALL_INT = 0x40;
@@ -142,11 +211,18 @@ const CODE_INFIXPOINTER = 0x11;
 const CODE_CUSTOM = 0x12;
 const CODE_CUSTOM_LEN = 0x18;
 const CODE_CUSTOM_FIXED = 0x19;
+const CODE_NULL = 0x1F;
 
-type intern_state = { src: &string, pos: mut i32, obj_table: mut &?block, obj_counter: mut i32 };
+type intern_state = {
+    src: mut &bytes,
+    pos: mut i32,
+    obj_table: mut &?block,
+    obj_counter: mut i32,
+    overflow: mut i32
+};
 
-fn get_intern_state(src: &string, pos: i32) -> &intern_state {
-    { src: src, pos: pos, obj_table: null, obj_counter: 0 };
+fn get_intern_state(src: &bytes, pos: i32) -> &intern_state {
+    { src: src, pos: pos, obj_table: null, obj_counter: 0, overflow: 0 };
 }
 
 fn read8u(s: &intern_state) -> i32 {
@@ -189,29 +265,27 @@ fn read32(s: &intern_state) -> i32 {
     res;
 }
 
-fn readblock(s: &intern_state, str: &string) {
+fn readblock(s: &intern_state, str: &bytes) {
     let len = str.length();
     let pos = s.pos;
     str.copy(0, s.src, pos, len);
     s.pos = pos + len;
 }
 
-fn readstr(s: &intern_state) -> &string {
+fn readstr(s: &intern_state) -> &bytes {
     let src = s.src;
     let pos = s.pos;
     let len: i32;
     while src[pos + len] as i32_u {
         len = len + 1;
     }
-    let res: &string = [0; len];
+    let res: &bytes = [0; len];
     res.copy(0, src, pos, len);
     s.pos = pos + (len + 1);
     res;
 }
 
 fn readfloat(s: &intern_state, code: i32) -> f64 {
-    let res: i32;
-    let v: &eq;
     let src = s.src;
     let pos = s.pos;
     s.pos = pos + 8;
@@ -286,13 +360,13 @@ fn register_object(s: &intern_state, v: &eq) {
 
 type stack_item = { blk: &block, pos: mut i32, next: &?stack_item };
 
-data integer_too_large = "input_value: integer too large";
-data code_pointer = "input_value: code pointer";
-data ill_formed = "input_value: ill-formed message";
+const integer_too_large = "input_value: integer too large";
+const code_pointer = "input_value: code pointer";
+const ill_formed = "input_value: ill-formed message";
 
-data unknown_custom = "input_value: unknown custom block identifier";
-data expected_size = "input_value: expected a fixed-size custom block";
-data incorrect_size = "input_value: incorrect length of serialized custom block";
+const unknown_custom = "input_value: unknown custom block identifier";
+const err_expected_size = "input_value: expected a fixed-size custom block";
+const incorrect_size = "input_value: incorrect length of serialized custom block";
 
 fn intern_custom(s: &intern_state, code: i32) -> &eq {
     'unknown: do {
@@ -307,16 +381,37 @@ fn intern_custom(s: &intern_state, code: i32) -> &eq {
                     s.pos = s.pos + 8;
                 }
             }
-            let (res, sz) = ops.deserialize(s);
-            if (sz != expected_size) & (code != CODE_CUSTOM) {
-                caml_failwith([string|incorrect_size @ 0; 56]);
+            let (r_0, r_1) = ops.deserialize(s);
+            if (r_1 != expected_size) & (code != CODE_CUSTOM) {
+                caml_failwith(incorrect_size);
             }
-            return res;
+            return r_0;
         }
-        caml_failwith([string|expected_size @ 0; 47]);
+        caml_failwith(err_expected_size);
     }
-    caml_failwith([string|unknown_custom @ 0; 44]);
+    caml_failwith(unknown_custom);
     0 as &i31;
+}
+
+#[export = "caml_intern_decompress_input"]
+let caml_intern_decompress_input: &?decompress = null;
+
+fn decompress_input(s: &intern_state, h: &marshal_header, prim: &eq) {
+    if !h.compressed {
+        return;
+    }
+    'cannot_decompress: do {
+        s.src =
+            (br_on_null 'cannot_decompress caml_intern_decompress_input)(
+                s.src,
+                s.pos,
+                h.data_len,
+                h.uncompressed_data_len,
+            );
+        s.pos = 0;
+        return;
+    }
+    caml_failwith(caml_string_concat(prim, ": compressed object, cannot decompress"));
 }
 
 fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
@@ -331,7 +426,7 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
         0 // keep validator happy
             as &i31;
     'exit: do {
-        let tag_2: i32;
+        let tg: i32;
         let len: i32;
         let ofs: i32;
         'loop: loop {
@@ -353,7 +448,7 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                                 if code >=u PREFIX_SMALL_INT {
                                     if code >=u PREFIX_SMALL_BLOCK {
                                         // Small block
-                                        tag_2 = code & 0xF;
+                                        tg = code & 0xF;
                                         size = code >>u 4 & 0x7;
                                         br 'read_block;
                                     } else {
@@ -371,11 +466,17 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                                             'DOUBLE_ARRAY32 'BLOCK32 'STRING8 'STRING32 'DOUBLE
                                             'DOUBLE 'DOUBLE_ARRAY8 'DOUBLE_ARRAY8 'DOUBLE_ARRAY32
                                             'CODEPOINTER 'CODEPOINTER 'CUSTOM 'default 'default
-                                            'default 'default 'default 'CUSTOM 'CUSTOM else 'default
+                                            'default 'default 'default 'CUSTOM 'CUSTOM 'default
+                                            'default 'default 'default 'default 'NULL else 'default
                                         ] {
                                             'default: {
                                                 // default
-                                                caml_failwith([string|ill_formed @ 0; 31]);
+                                                caml_failwith(ill_formed);
+                                                br 'done;
+                                            }
+                                            'NULL: {
+                                                // NULL
+                                                v = null_value;
                                                 br 'done;
                                             }
                                             'CUSTOM: {
@@ -386,7 +487,7 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                                             }
                                             'CODEPOINTER: {
                                                 // CODEPOINTER
-                                                caml_failwith([string|code_pointer @ 0; 25]);
+                                                caml_failwith(code_pointer);
                                                 br 'done;
                                             }
                                             'DOUBLE_ARRAY32: {
@@ -401,7 +502,7 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                                             }
                                             'DOUBLE: {
                                                 // DOUBLE
-                                                v = {float| f: readfloat(s, code) };
+                                                v = { f: readfloat(s, code) };
                                                 register_object(s, v);
                                                 br 'done;
                                             }
@@ -418,7 +519,7 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                                             'BLOCK32: {
                                                 // BLOCK32
                                                 let header = read32(s);
-                                                tag_2 = header & 0xFF;
+                                                tg = header & 0xFF;
                                                 size = header >>u 10;
                                                 br 'read_block;
                                             }
@@ -439,7 +540,7 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                                             }
                                             'INT64: {
                                                 // INT64
-                                                caml_failwith([string|integer_too_large @ 0; 30]);
+                                                caml_failwith(integer_too_large);
                                                 br 'done;
                                             }
                                             'INT32: {
@@ -462,7 +563,9 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                                 }
                             }
                             // read_shared
-                            ofs = s.obj_counter - ofs;
+                            if !h.compressed {
+                                ofs = s.obj_counter - ofs;
+                            }
                             v = (s.obj_table!)[ofs];
                             br 'done;
                         }
@@ -472,7 +575,7 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                         br 'done;
                     }
                     // read_string
-                    let str: &string = [0; len];
+                    let str: &bytes = [0; len];
                     readblock(s, str);
                     v = str;
                     register_object(s, v);
@@ -480,7 +583,7 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                 }
                 // read_block
                 let b: &block = [0 as &i31; size + 1];
-                b[0] = tag_2 as &i31;
+                b[0] = tg as &i31;
                 if size {
                     register_object(s, b);
                     sp = { blk: b, pos: 1, next: sp };
@@ -490,64 +593,139 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
             }
             // done
             dest[pos] = v;
+            if
+                // If this is an object, refresh its ID
+                (pos == 2) & (dest[0] == object_tag as &i31) {
+                // Predefined exception slots have a negative ID
+                // and should not be refreshed
+                if 0 <=s dest[2] as &i31 as i32_s {
+                    _ = caml_set_oo_id(dest);
+                }
+            }
             br 'loop;
         }
     }
     res[0];
 }
 
-data too_large = ": object too large to be read back on a 32-bit platform";
+const too_large = ": object too large to be read back on a 32-bit platform";
 
-fn too_large(prim: &string) {
-    caml_failwith(caml_string_concat(prim, [string|too_large @ 0; 55]));
+fn fail_too_large(prim: &eq) {
+    caml_failwith(caml_string_concat(prim, too_large));
 }
 
-data bad_object = ": bad object";
+const bad_object = ": bad object";
 
-fn bad_object(prim: &string) {
-    caml_failwith(caml_string_concat(prim, [string|bad_object @ 0; 12]));
+fn fail_bad_object(prim: &eq) {
+    caml_failwith(caml_string_concat(prim, bad_object));
 }
 
-data bad_length = ": bad length";
+const bad_length = ": bad length";
 
-fn bad_length(prim: &string) {
-    caml_failwith(caml_string_concat(prim, [string|bad_length @ 0; 12]));
+fn fail_bad_length(prim: &eq) {
+    caml_failwith(caml_string_concat(prim, bad_length));
 }
 
-type marshal_header = { data_len: i32, num_objects: i32 };
+type marshal_header = {
+    header_len: i32,
+    data_len: i32,
+    uncompressed_data_len: i32,
+    num_objects: i32,
+    compressed: i32
+};
 
-fn parse_header(s: &intern_state, prim: &string) -> &marshal_header {
-    let whsize: i32;
+fn readvlq(s: &intern_state) -> i32 {
+    let c = read8u(s);
+    let n = c & 0x7F;
+    while c & 0x80 {
+        c = read8u(s);
+        let n7 = n << 7;
+        if n != n7 >>u 7 {
+            s.overflow = 1;
+        }
+        n = n7 | c & 0x7f;
+    }
+    n;
+}
+
+fn parse_header(s: &intern_state, prim: &eq) -> &marshal_header {
     let magic = read32(s);
     if magic == Intext_magic_number_big {
-        too_large(prim);
+        fail_too_large(prim);
     }
-    if magic != Intext_magic_number_small {
-        bad_object(prim);
+    let header_len: i32;
+    let data_len: i32;
+    let uncompressed_data_len: i32;
+    let num_objects: i32;
+    let compressed: i32;
+    if magic == Intext_magic_number_small {
+        header_len = 20;
+        data_len = read32(s);
+        uncompressed_data_len = data_len;
+        num_objects = read32(s);
+        _ = read32(s);
+        _ = read32(s);
+    } else {
+        if magic == Intext_magic_number_compressed {
+            header_len = read8u(s) & 0x3F;
+            data_len = readvlq(s);
+            uncompressed_data_len = readvlq(s);
+            num_objects = readvlq(s);
+            _ = readvlq(s);
+            if s.overflow {
+                fail_too_large(prim);
+            }
+            _ = readvlq(s);
+            compressed = 1;
+        } else {
+            fail_bad_object(prim);
+        }
     }
-    let data_len = read32(s);
-    let num_objects = read32(s);
-    _ = read32(s);
-    _ = read32(s);
-    { data_len: data_len, num_objects: num_objects };
+    {
+        header_len: header_len,
+        data_len: data_len,
+        uncompressed_data_len: uncompressed_data_len,
+        num_objects: num_objects,
+        compressed: compressed,
+    };
 }
 
-data marshal_data_size = "Marshal.data_size";
+const marshal_data_size = "Marshal.data_size";
+
+#[if(ocaml_version >= (5, 1, 0))]
+#[export = "caml_marshal_header_size"]
+const caml_marshal_header_size = 16;
+#[else]
+#[export = "caml_marshal_header_size"]
+const caml_marshal_header_size = 20;
 
 #[export = "caml_marshal_data_size"]
 fn caml_marshal_data_size(buf: &eq, ofs: &eq) -> &eq {
-    let s = get_intern_state(buf as &string, ofs as &i31 as i32_u);
+    let s = get_intern_state(buf as &bytes, ofs as &i31 as i32_u);
     let magic = read32(s);
     if magic == Intext_magic_number_big {
-        too_large([marshal_data_size @ 0; 17]);
+        fail_too_large(marshal_data_size);
     }
-    if magic != Intext_magic_number_small {
-        bad_object([marshal_data_size @ 0; 17]);
+    let header_len: i32;
+    let data_len: i32;
+    if magic == Intext_magic_number_small {
+        header_len = 20;
+        data_len = read32(s);
+    } else {
+        if magic == Intext_magic_number_compressed {
+            header_len = read8u(s) & 0x3F;
+            data_len = readvlq(s);
+            if s.overflow {
+                fail_too_large(marshal_data_size);
+            }
+        } else {
+            fail_bad_object(marshal_data_size);
+        }
     }
-    (20 - caml_marshal_header_size + read32(s)) as &i31;
+    (header_len - caml_marshal_header_size + data_len) as &i31;
 }
 
-type output_block = { next: mut &?output_block, end: mut i32, data_2: &string };
+type output_block = { next: mut &?output_block, end: mut i32, dat: &bytes };
 
 type extern_state = {
     // Flags
@@ -560,7 +738,7 @@ type extern_state = {
     // Position of already marshalled objects
     pos_table: &any,
     // Buffers
-    buf: mut &string,
+    buf: mut &bytes,
     pos: mut i32,
     limit: mut i32,
     output_first: &output_block,
@@ -593,7 +771,7 @@ fn init_extern_state(
         size_32: 0,
         size_64: 0,
         pos_table: map_new(),
-        buf: output.data_2,
+        buf: output.dat,
         pos: pos,
         limit: output.end,
         output_first: output,
@@ -601,7 +779,7 @@ fn init_extern_state(
     };
 }
 
-data buffer_overflow = "Marshal.to_buffer: buffer overflow";
+const buffer_overflow = "Marshal.to_buffer: buffer overflow";
 
 const SIZE_EXTERN_OUTPUT_BLOCK = 8100;
 
@@ -612,7 +790,7 @@ fn reserve_extern_output(s: &extern_state, required: i32) -> i32 {
         return pos;
     }
     if s.user_provided_output {
-        caml_failwith([string|buffer_overflow @ 0; 34]);
+        caml_failwith(buffer_overflow);
     }
     let last = s.output_last;
     last.end = s.pos;
@@ -620,8 +798,8 @@ fn reserve_extern_output(s: &extern_state, required: i32) -> i32 {
     if required >s SIZE_EXTERN_OUTPUT_BLOCK >>u 1 {
         extra = required;
     }
-    let buf: &string = [0; SIZE_EXTERN_OUTPUT_BLOCK + extra];
-    let blk: &output_block = { next: null, end: 0, data_2: buf };
+    let buf: &bytes = [0; SIZE_EXTERN_OUTPUT_BLOCK + extra];
+    let blk: &output_block = { next: null, end: 0, dat: buf };
     last.next = blk;
     s.output_last = blk;
     s.buf = buf;
@@ -630,19 +808,19 @@ fn reserve_extern_output(s: &extern_state, required: i32) -> i32 {
     0;
 }
 
-fn store16(s: &string, pos: i32, n: i32) {
+fn store16(s: &bytes, pos: i32, n: i32) {
     s[pos] = n >>u 8;
     s[pos + 1] = n;
 }
 
-fn store32(s: &string, pos: i32, n: i32) {
+fn store32(s: &bytes, pos: i32, n: i32) {
     s[pos] = n >>u 24;
     s[pos + 1] = n >>u 16;
     s[pos + 2] = n >>u 8;
     s[pos + 3] = n;
 }
 
-fn store64(s: &string, pos: i32, n: i64) {
+fn store64(s: &bytes, pos: i32, n: i64) {
     store32(s, pos, (n >>u 32) as i32);
     store32(s, pos + 4, n as i32);
 }
@@ -673,7 +851,7 @@ fn writecode32(s: &extern_state, c: i32, v: i32) {
     store32(buf, pos + 1, v);
 }
 
-fn writeblock(s: &extern_state, str: &string) {
+fn writeblock(s: &extern_state, str: &bytes) {
     let len = str.length();
     let pos = reserve_extern_output(s, len);
     s.buf.copy(pos, str, 0, len);
@@ -757,15 +935,18 @@ fn extern_shared_reference(s: &extern_state, d: i32) {
     }
 }
 
-fn extern_header(s: &extern_state, sz: i32, tag_2: i32) {
-    if (tag_2 <u 16) & (sz <u 8) {
-        write(s, PREFIX_SMALL_BLOCK + (tag_2 | sz << 4));
+fn extern_header(s: &extern_state, sz: i32, tg: i32) {
+    if (tg <u 16) & (sz <u 8) {
+        write(s, PREFIX_SMALL_BLOCK + (tg | sz << 4));
     } else {
-        writecode32(s, CODE_BLOCK32, tag_2 | sz << 10);
+        if sz >=u 0x400000 {
+            caml_failwith(array_too_large);
+        }
+        writecode32(s, CODE_BLOCK32, tg | sz << 10);
     }
 }
 
-fn extern_string(s: &extern_state, v: &string) {
+fn extern_string(s: &extern_state, v: &bytes) {
     let len = v.length();
     if len <u 0x20 {
         write(s, PREFIX_SMALL_STRING + len);
@@ -794,26 +975,26 @@ fn extern_float_array(s: &extern_state, v: &float_array) {
     writefloats(s, v);
 }
 
-data incorrect_sizes = "output_value: incorrect fixed sizes specified by ";
+const incorrect_sizes = "output_value: incorrect fixed sizes specified by ";
 
 fn extern_custom(s: &extern_state, v: &custom) -> (i32, i32) {
-    let ops = v.f;
+    let ops = v.ops;
     'abstract: do {
         let serialize = br_on_null 'abstract ops.serialize;
-        let sz32: i32;
-        let sz64: i32;
+        let r_0: i32;
+        let r_1: i32;
         'variable_length: do {
             let fixed_length = br_on_null 'variable_length ops.fixed_length;
             write(s, CODE_CUSTOM_FIXED);
             writeblock(s, ops.id);
             write(s, 0);
             serialize(s, v);
-            sz64 = _;
-            sz32 = _;
-            if (sz32 != fixed_length.bsize_32) | (sz64 != fixed_length.bsize_64) {
-                caml_failwith(caml_string_concat([string|incorrect_sizes @ 0; 49], ops.id));
+            r_1 = _;
+            r_0 = _;
+            if (r_0 != fixed_length.bsize_32) | (r_1 != fixed_length.bsize_64) {
+                caml_failwith(caml_string_concat(incorrect_sizes, ops.id));
             }
-            return (sz32, sz64);
+            return (r_0, r_1);
         }
         // variable length
         write(s, CODE_CUSTOM_LEN);
@@ -822,39 +1003,42 @@ fn extern_custom(s: &extern_state, v: &custom) -> (i32, i32) {
         let pos = reserve_extern_output(s, 12);
         let buf = s.buf;
         serialize(s, v);
-        sz64 = _;
-        sz32 = _;
-        store32(buf, pos, sz32);
-        store32(buf, pos + 8, sz64);
-        return (sz32, sz64);
+        r_1 = _;
+        r_0 = _;
+        store32(buf, pos, r_0);
+        store64(buf, pos + 4, r_1 as i64_u);
+        return (r_0, r_1);
     }
-    caml_invalid_argument([string|cust_value @ 0; 37]);
+    caml_invalid_argument(cust_value);
     return (0, 0);
 }
 
-data func_value = "output_value: functional value";
-data cont_value = "output_value: continuation value";
-data js_value = "output_value: abstract value (JavaScript value)";
-data abstract_value = "output_value: abstract value";
-data cust_value = "output_value: abstract value (Custom)";
+const array_too_large = "output_value: array cannot be read back on 32-bit platform";
+const func_value = "output_value: functional value";
+const cont_value = "output_value: continuation value";
+const js_value = "output_value: abstract value (JavaScript value)";
+const abstract_value = "output_value: abstract value";
+const cust_value = "output_value: abstract value (Custom)";
 
 fn extern_rec(s: &extern_state, v: &eq) {
-    let hd: i32;
     let sp: &?stack_item;
     'loop: loop {
+        let b: &block;
         let pos: i32;
         'next_item: do {
-            let sz: i32;
-            match v {
-                iv: &i31 => {
-                    extern_int(s, iv as i32_s);
+            _ =
+                'not_int: do &eq {
+                    extern_int(s, (br_on_cast_fail 'not_int &i31 v) as i32_s);
                     br 'next_item;
-                }
-                blk: &block => {
-                    let tag_2 = blk[0] as &i31 as i32_u;
-                    sz = blk.length() - 1;
+                };
+            let sz: i32;
+            _ =
+                'not_block: do &eq {
+                    b = br_on_cast_fail 'not_block &block v;
+                    let tg = b[0] as &i31 as i32_u;
+                    sz = b.length() - 1;
                     if !sz {
-                        extern_header(s, 0, tag_2);
+                        extern_header(s, 0, tg);
                         br 'next_item;
                     }
                     pos = extern_lookup_position(s, v);
@@ -863,55 +1047,63 @@ fn extern_rec(s: &extern_state, v: &eq) {
                         br 'next_item;
                     }
                     extern_record_location(s, v);
-                    extern_header(s, sz, tag_2);
+                    extern_header(s, sz, tg);
                     extern_size(s, sz, sz);
                     if sz >u 1 {
-                        sp = { blk: blk, pos: 2, next: sp };
+                        sp = { blk: b, pos: 2, next: sp };
                     }
-                    v = blk[1];
+                    v = b[1];
                     br 'loop;
+                };
+            if v == null_value {
+                write(s, CODE_NULL);
+                br 'next_item;
+            }
+            pos = extern_lookup_position(s, v);
+            if pos >=s 0 {
+                extern_shared_reference(s, s.obj_counter - pos);
+                br 'next_item;
+            }
+            extern_record_location(s, v);
+            match v {
+                str: &bytes => {
+                    extern_string(s, str);
+                    sz = str.length();
+                    extern_size(s, 1 + (sz >>u 2), 1 + (sz >>u 3));
+                    br 'next_item;
                 }
                 _ => {
-                    pos = extern_lookup_position(s, v);
-                    if pos >=s 0 {
-                        extern_shared_reference(s, s.obj_counter - pos);
-                        br 'next_item;
-                    }
-                    extern_record_location(s, v);
-                    match v {
-                        str: &string => {
-                            extern_string(s, str);
-                            sz = str.length();
-                            extern_size(s, 1 + (sz >>u 2), 1 + (sz >>u 3));
-                            br 'next_item;
-                        }
-                        flv: &float => {
-                            extern_float(s, flv.f);
+                    _ =
+                        'not_float: do &eq {
+                            extern_float(s, (br_on_cast_fail 'not_float &float v).f);
                             extern_size(s, 2, 1);
                             br 'next_item;
-                        }
+                        };
+                    match v {
                         fa: &float_array => {
                             sz = fa.length();
                             extern_float_array(s, fa);
                             extern_size(s, sz * 2, sz);
                             br 'next_item;
                         }
-                        c: &custom => {
-                            let (sz32, sz64) = extern_custom(s, c);
-                            extern_size(s, sz32 + 7 >>u 2, sz64 + 15 >>u 3);
-                            br 'next_item;
-                        }
                         _ => {
+                            _ =
+                                'not_custom: do &eq {
+                                    let (r_0, r_1) =
+                                        extern_custom(s, br_on_cast_fail 'not_custom &custom v);
+                                    extern_size(s, r_0 + 7 >>u 2, r_1 + 15 >>u 3);
+                                    br 'next_item;
+                                };
                             if caml_is_closure(v) {
-                                caml_invalid_argument([string|func_value @ 0; 30]);
+                                caml_invalid_argument(func_value);
                             }
                             if caml_is_continuation(v) {
-                                caml_invalid_argument([string|cont_value @ 0; 32]);
+                                caml_invalid_argument(cont_value);
                             }
                             if v is &js {
-                                caml_invalid_argument([string|js_value @ 0; 47]);
+                                caml_invalid_argument(js_value);
                             }
-                            caml_invalid_argument([string|abstract_value @ 0; 28]);
+                            caml_invalid_argument(abstract_value);
                         }
                     }
                 }
@@ -920,7 +1112,7 @@ fn extern_rec(s: &extern_state, v: &eq) {
         // next_item
         'done: do {
             let item = br_on_null 'done sp;
-            let b = item.blk;
+            b = item.blk;
             pos = item.pos;
             v = b[pos];
             pos = pos + 1;
@@ -935,7 +1127,7 @@ fn extern_rec(s: &extern_state, v: &eq) {
 
 fn extern_output_length(s: &extern_state, pos: i32) -> i32 {
     if s.user_provided_output => i32 {
-        return s.pos - pos;
+        s.pos - pos;
     } else {
         s.output_last.end = s.pos;
         let output_block = s.output_first;
@@ -947,7 +1139,7 @@ fn extern_output_length(s: &extern_state, pos: i32) -> i32 {
                 br 'loop;
             }
         }
-        return len;
+        len;
     }
 }
 
@@ -957,11 +1149,11 @@ fn extern_value(
     pos: i32,
     user_provided_output: i32,
     v: &eq,
-) -> (i32, &string, &extern_state) {
+) -> (i32, &bytes, &extern_state) {
     let s = init_extern_state(flags, output, pos, user_provided_output);
     extern_rec(s, v);
     let len = extern_output_length(s, pos);
-    let header: &string = [0; 20];
+    let header: &bytes = [0; 20];
     store32(header, 0, Intext_magic_number_small);
     store32(header, 4, len);
     store32(header, 8, s.obj_counter);
@@ -973,17 +1165,18 @@ fn extern_value(
 }
 
 #[export = "caml_output_value_to_string"]
+#[export = "caml_output_value_to_bytes"]
 fn caml_output_value_to_string(v: &eq, flags: &eq) -> &eq {
     let blk: &output_block =
-        { next: null, end: SIZE_EXTERN_OUTPUT_BLOCK, data_2: [0; SIZE_EXTERN_OUTPUT_BLOCK] };
-    let (sz, buf, st) = extern_value(flags, blk, 0, 0, v);
-    let res: &string = [0; sz + 20];
-    res.copy(0, buf, 0, 20);
+        { next: null, end: SIZE_EXTERN_OUTPUT_BLOCK, dat: [0; SIZE_EXTERN_OUTPUT_BLOCK] };
+    let (r_0, r_1, _) = extern_value(flags, blk, 0, 0, v);
+    let res: &bytes = [0; r_0 + 20];
+    res.copy(0, r_1, 0, 20);
     let pos = 20;
     'loop: loop {
         'done: do {
             let len = blk.end;
-            res.copy(pos, blk.data_2, 0, len);
+            res.copy(pos, blk.dat, 0, len);
             pos = pos + len;
             blk = br_on_null 'done blk.next;
             br 'loop;
@@ -994,32 +1187,26 @@ fn caml_output_value_to_string(v: &eq, flags: &eq) -> &eq {
 
 #[export = "caml_output_value_to_buffer"]
 fn caml_output_value_to_buffer(vbuf: &eq, vpos: &eq, vlen: &eq, v: &eq, flags: &eq) -> &eq {
-    let sz: i32;
-    let st: &extern_state;
-    let buf = vbuf as &string;
+    let buf = vbuf as &bytes;
     let pos = vpos as &i31 as i32_u;
     let len = vlen as &i31 as i32_u;
-    let blk: &output_block = { next: null, end: pos + len, data_2: buf };
-    extern_value(flags, blk, pos + 20, 1, v);
-    _ = _;
-    buf = _;
-    _ = _;
-    buf.copy(pos, buf, 0, 20);
-    0 as &i31;
+    let blk: &output_block = { next: null, end: pos + len, dat: buf };
+    let (r_0, r_1, _) = extern_value(flags, blk, pos + 20, 1, v);
+    buf.copy(pos, r_1, 0, 20);
+    // Return the number of bytes written: 20-byte header + data.
+    (r_0 + 20) as &i31;
 }
 
 #[export = "caml_output_value"]
 fn caml_output_value(ch: &eq, v: &eq, flags: &eq) -> &eq {
-    let res: &string;
     // ZZZ check if binary channel?
     let blk: &output_block =
-        { next: null, end: SIZE_EXTERN_OUTPUT_BLOCK, data_2: [0; SIZE_EXTERN_OUTPUT_BLOCK] };
-    let (sz, buf, st) = extern_value(flags, blk, 0, 0, v);
-    caml_really_putblock(ch, buf, 0, 20);
+        { next: null, end: SIZE_EXTERN_OUTPUT_BLOCK, dat: [0; SIZE_EXTERN_OUTPUT_BLOCK] };
+    let (_, r_1, _) = extern_value(flags, blk, 0, 0, v);
+    caml_really_putblock(ch, r_1, 0, 20);
     'loop: loop {
         'done: do {
-            let len = blk.end;
-            caml_really_putblock(ch, blk.data_2, 0, blk.end);
+            caml_really_putblock(ch, blk.dat, 0, blk.end);
             blk = br_on_null 'done blk.next;
             br 'loop;
         }

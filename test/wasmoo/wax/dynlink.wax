@@ -14,3 +14,94 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with this program; if not, write to the Free Software
 // Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
+#[import = ("bigarray", "caml_uint8_array_of_string")]
+fn caml_uint8_array_of_string(&eq) -> &eq;
+#[import = ("jslib", "unwrap")]
+fn unwrap(&eq) -> &?any;
+#[import = ("jslib", "wrap")]
+fn wrap(&?any) -> &eq;
+#[import = ("jslib", "caml_jsstring_of_string")]
+fn caml_jsstring_of_string(&eq) -> &eq;
+#[import = ("bindings", "load_module")]
+fn load_module(&?any) -> &?any;
+#[import = ("bindings", "load_wasmo")]
+fn load_wasmo(&?any);
+#[import = ("bindings", "register_fragments")]
+fn register_fragments(&?any, &?any);
+#[import = ("fail", "caml_failwith")]
+fn caml_failwith(&eq);
+#[import = ("fail", "javascript_exception")]
+tag javascript_exception(&?extern);
+#[import = ("stdlib", "link_info")]
+let link_info: &block;
+
+type block = [mut &eq];
+type bytes = [mut i8];
+
+#[if(not(wasi))]
+{
+    #[export = "caml_wasm_load_module"]
+    fn caml_wasm_load_module(str: &eq) -> &eq {
+        wrap(load_module(unwrap(caml_uint8_array_of_string(str))));
+    }
+
+    #[export = "caml_wasm_load_wasmo"]
+    fn caml_wasm_load_wasmo(str: &eq) -> &eq {
+        load_wasmo(unwrap(caml_uint8_array_of_string(str)));
+        0 as &i31;
+    }
+
+    #[export = "caml_wasm_register_fragments"]
+    fn caml_wasm_register_fragments(unit_name: &eq, source: &eq) -> &eq {
+        register_fragments(
+            unwrap(caml_jsstring_of_string(unit_name)),
+            unwrap(caml_jsstring_of_string(source)),
+        );
+        0 as &i31;
+    }
+}
+
+// Field index for prim_count in link_info (must match stdlib.wat)
+const LINK_INFO_PRIM_COUNT = 3;
+
+// Standard OCaml dynlink primitives
+
+#[if(all(ocaml_version >= (5, 1, 0), not(oxcaml)))]
+#[export = "caml_dynlink_open_lib"]
+fn caml_dynlink_open_lib(&eq) -> &eq {
+    0 as &i31;
+}
+#[else]
+#[export = "caml_dynlink_open_lib"]
+fn caml_dynlink_open_lib(&eq, &eq) -> &eq {
+    0 as &i31;
+}
+
+#[export = "caml_dynlink_close_lib"]
+fn caml_dynlink_close_lib(&eq) -> &eq {
+    0 as &i31;
+}
+
+#[export = "caml_dynlink_lookup_symbol"]
+fn caml_dynlink_lookup_symbol(&eq, &eq) -> &eq {
+    0 as &i31;
+}
+
+#[export = "caml_dynlink_add_primitive"]
+fn caml_dynlink_add_primitive(&eq) -> &eq {
+    let idx = link_info[LINK_INFO_PRIM_COUNT] as &i31 as i32_u;
+    link_info[LINK_INFO_PRIM_COUNT] = (idx + 1) as &i31;
+    idx as &i31;
+}
+
+#[export = "caml_dynlink_get_current_libs"]
+fn caml_dynlink_get_current_libs(&eq) -> &eq {
+    [block|0 as &i31];
+}
+
+#[if(ocaml_version >= (5, 5, 0))]
+#[export = "caml_dynlink_parse_ld_conf"]
+fn caml_dynlink_parse_ld_conf(&eq) -> &eq {
+    0 as &i31;
+}

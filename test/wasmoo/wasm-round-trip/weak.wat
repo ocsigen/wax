@@ -22,24 +22,31 @@
 (import "fail" "caml_invalid_argument"
   (func $caml_invalid_argument (param $arg (ref eq)))
 )
+
+(@if $wasi
+(@then (func $wrap (param $v (ref eq)) (result (ref eq)) (local.get $v))
+(func $unwrap (param $v (ref eq)) (result (ref eq)) (local.get $v))
+(func $weak_new (param $v (ref eq)) (result (ref eq)) (local.get $v))
+(func $weak_deref (param $r (ref eq)) (result (ref eq)) (local.get $r)) )
+(@else
 (import "bindings" "weak_new"
   (func $weak_new (param (ref eq)) (result anyref))
 )
 (import "bindings" "weak_deref"
   (func $weak_deref (param anyref) (result eqref))
-)
-(import "bindings" "weak_map_new" (func $weak_map_new (result (ref any))))
+) (import "bindings" "weak_map_new" (func $weak_map_new (result (ref any))))
 (import "bindings" "map_get"
   (func $map_get (param (ref any) (ref eq)) (result anyref))
 )
 (import "bindings" "map_set"
   (func $map_set (param (ref any) (ref eq) (ref any)))
-)
-(import "jslib" "unwrap" (func $unwrap (param (ref eq)) (result anyref)))
-(import "jslib" "wrap" (func $wrap (param anyref) (result (ref eq))))
+) (import "jslib" "unwrap" (func $unwrap (param (ref eq)) (result anyref)))
+(import "jslib" "wrap" (func $wrap (param anyref) (result (ref eq)))) ) )
+
 (type $block (array (mut (ref eq))))
-(type $string (array (mut i8)))
-(type $js (struct (field $f anyref)))
+(type $bytes (array (mut i8)))
+(type $float_array (array (mut f64)))
+(type $js (struct (field $js anyref)))
 
 ;; A weak array is a an abstract value composed of possibly some
 ;; data and an array of keys.
@@ -57,17 +64,17 @@
 
 (func $caml_ephe_get_data (export "caml_ephe_get_data")
   (param $vx (ref eq)) (result (ref eq))
-  (local $x (ref $block)) (local $d (ref eq)) (local $i i32) (local $len i32)
-  (local $m (ref any)) (local $v (ref eq))
+  (local $x (ref $block)) (local $d (ref eq)) (local $v (ref eq))
+  (local $m anyref) (local $i i32) (local $len i32) (local $traversed i32)
   (local.set $x (ref.cast (ref $block) (local.get $vx)))
   (local.set $d
     (array.get $block (local.get $x) (global.get $caml_ephe_data_offset)))
   (block $no_data
     (block $released
       (br_if $no_data (ref.eq (local.get $d) (global.get $caml_ephe_none)))
-      (local.set $i (global.get $caml_ephe_key_offset))
+      (@if (not $wasi)
+      (@then (local.set $i (global.get $caml_ephe_key_offset))
       (local.set $len (array.len (local.get $x)))
-      (local.set $m (ref.as_non_null (call $unwrap (local.get $d))))
       (loop $loop
         (if (i32.lt_u (local.get $i) (local.get $len))
           (then
@@ -78,13 +85,25 @@
             (local.set $v
               (br_on_null $released
                 (call $weak_deref (call $unwrap (local.get $v)))))
+            ;; The data is wrapped in weak maps only when a live
+            ;; key threads it; unwrap lazily so that JS-valued
+            ;; data with no such key (e.g. a string with an int
+            ;; key) is returned as is rather than unwrapped and
+            ;; recast -- which traps.
+            (if (i32.eqz (local.get $traversed))
+              (then
+                (local.set $traversed (i32.const 1))
+                (local.set $m
+                  (ref.as_non_null (call $unwrap (local.get $d))))))
             (local.set $m
               (br_on_null $released
-                (call $map_get (local.get $m) (local.get $v))))
+                (call $map_get (ref.as_non_null (local.get $m))
+                  (local.get $v))))
             (br $loop))))
+      (if (local.get $traversed)
+        (then (local.set $d (ref.cast (ref eq) (local.get $m))))) ) )
       (return
-        (array.new_fixed $block 2 (ref.i31 (i32.const 0))
-          (ref.cast (ref eq) (local.get $m)))))
+        (array.new_fixed $block 2 (ref.i31 (i32.const 0)) (local.get $d))))
     (array.set $block (local.get $x) (global.get $caml_ephe_data_offset)
       (global.get $caml_ephe_none)))
   (ref.i31 (i32.const 0))
@@ -92,27 +111,39 @@
 
 (func $caml_ephe_get_data_copy (export "caml_ephe_get_data_copy")
   (param $x (ref eq)) (result (ref eq))
-  (local $r (ref eq))
+  (local $r (ref eq)) (local $v (ref eq))
   (local.set $r (call $caml_ephe_get_data (local.get $x)))
   (drop
     (block $no_copy (result (ref eq))
-      (return
-        (array.new_fixed $block 2 (ref.i31 (i32.const 0))
-          (call $caml_obj_dup
-            (br_on_cast_fail $no_copy (ref eq) (ref $block)
-              (array.get $block
-                (br_on_cast_fail $no_copy (ref eq) (ref $block)
-                  (local.get $r)) (i32.const 1))))))))
+      (local.set $v
+        (array.get $block
+          (br_on_cast_fail $no_copy (ref eq) (ref $block) (local.get $r))
+          (i32.const 1)))
+      ;; Copy the mutable heap blocks that can alias the original:
+      ;; ordinary blocks, bytes and float arrays. Float arrays are
+      ;; their own Wasm type, so they need an explicit test. Custom
+      ;; blocks are returned as is, like the native runtime.
+      (if
+        (i32.or
+          (i32.or (ref.test (ref $block) (local.get $v))
+            (ref.test (ref $bytes) (local.get $v)))
+          (ref.test (ref $float_array) (local.get $v)))
+        (then
+          (return
+            (array.new_fixed $block 2 (ref.i31 (i32.const 0))
+              (call $caml_obj_dup (local.get $v))))))
+      (ref.i31 (i32.const 0))))
   (local.get $r)
 )
 
 (func $caml_ephe_set_data (export "caml_ephe_set_data")
-  (param $vx (ref eq)) (param $data_2 (ref eq)) (result (ref eq))
-  (local $x (ref $block)) (local $i i32) (local $m (ref any))
-  (local $v (ref eq)) (local $m' (ref any))
+  (param $vx (ref eq)) (param $dat (ref eq)) (result (ref eq))
+  (local $x (ref $block)) (local $v (ref eq)) (local $m (ref any))
+  (local $m' (ref any)) (local $i i32)
   (local.set $x (ref.cast (ref $block) (local.get $vx)))
-  (local.set $i (array.len (local.get $x)))
-  (local.set $m (local.get $data_2))
+  (@if (not $wasi)
+  (@then (local.set $i (array.len (local.get $x)))
+  (local.set $m (local.get $dat))
   (loop $loop
     (local.set $i (i32.sub (local.get $i) (i32.const 1)))
     (if (i32.ge_u (local.get $i) (global.get $caml_ephe_key_offset))
@@ -130,9 +161,9 @@
           (br $loop))
         (array.set $block (local.get $x) (local.get $i)
           (global.get $caml_ephe_none))
-        (br $loop))))
+        (br $loop)))) (local.set $dat (call $wrap (local.get $m))) ) )
   (array.set $block (local.get $x) (global.get $caml_ephe_data_offset)
-    (call $wrap (local.get $m)))
+    (local.get $dat))
   (ref.i31 (i32.const 0))
 )
 
@@ -190,17 +221,28 @@
 (func $caml_ephe_get_key_copy (export "caml_ephe_get_key_copy")
   (export "caml_weak_get_copy")
   (param $x (ref eq)) (param $i (ref eq)) (result (ref eq))
-  (local $r (ref eq))
+  (local $r (ref eq)) (local $v (ref eq))
   (local.set $r (call $caml_ephe_get_key (local.get $x) (local.get $i)))
   (drop
     (block $no_copy (result (ref eq))
-      (return
-        (array.new_fixed $block 2 (ref.i31 (i32.const 0))
-          (call $caml_obj_dup
-            (br_on_cast_fail $no_copy (ref eq) (ref $block)
-              (array.get $block
-                (br_on_cast_fail $no_copy (ref eq) (ref $block)
-                  (local.get $r)) (i32.const 1))))))))
+      (local.set $v
+        (array.get $block
+          (br_on_cast_fail $no_copy (ref eq) (ref $block) (local.get $r))
+          (i32.const 1)))
+      ;; Copy the mutable heap blocks that can alias the original:
+      ;; ordinary blocks, bytes and float arrays. Float arrays are
+      ;; their own Wasm type, so they need an explicit test. Custom
+      ;; blocks are returned as is, like the native runtime.
+      (if
+        (i32.or
+          (i32.or (ref.test (ref $block) (local.get $v))
+            (ref.test (ref $bytes) (local.get $v)))
+          (ref.test (ref $float_array) (local.get $v)))
+        (then
+          (return
+            (array.new_fixed $block 2 (ref.i31 (i32.const 0))
+              (call $caml_obj_dup (local.get $v))))))
+      (ref.i31 (i32.const 0))))
   (local.get $r)
 )
 
@@ -267,16 +309,14 @@
   (ref.i31 (i32.const 0))
 )
 
-(data $Weak_create "Weak.create")
+(global $Weak_create (ref $bytes) (@string "Weak.create" ))
 
 (func $caml_ephe_create (export "caml_ephe_create")
   (export "caml_weak_create") (param $vlen (ref eq)) (result (ref eq))
   (local $len i32) (local $res (ref $block))
   (local.set $len (i31.get_s (ref.cast (ref i31) (local.get $vlen))))
   (if (i32.lt_s (local.get $len) (i32.const 0))
-    (then
-      (call $caml_invalid_argument
-        (array.new_data $string $Weak_create (i32.const 0) (i32.const 11)))))
+    (then (call $caml_invalid_argument (global.get $Weak_create))))
   (local.set $res
     (array.new $block (global.get $caml_ephe_none)
       (i32.add (local.get $len) (global.get $caml_ephe_key_offset))))
@@ -287,8 +327,14 @@
 
 (func $caml_ephe_blit_data (export "caml_ephe_blit_data")
   (param $x (ref eq)) (param $y (ref eq)) (result (ref eq))
-  (call $caml_ephe_set_data_opt (local.get $y)
-    (call $caml_ephe_get_data (local.get $x)))
+  (local $d (ref eq))
+  (local.set $d (call $caml_ephe_get_data (local.get $x)))
+  ;; [get_data] returns [Some data] (a block) or [None] (an int).
+  ;; An empty source must clear the destination, not leave its old
+  ;; data in place.
+  (if (ref.test (ref $block) (local.get $d))
+    (then (call $caml_ephe_set_data_opt (local.get $y) (local.get $d)))
+    (else (drop (call $caml_ephe_unset_data (local.get $y)))))
   (ref.i31 (i32.const 0))
 )
 

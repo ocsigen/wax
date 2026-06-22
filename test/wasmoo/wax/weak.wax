@@ -21,23 +21,44 @@ const abstract_tag: i32;
 fn caml_obj_dup(&eq) -> &eq;
 #[import = ("fail", "caml_invalid_argument")]
 fn caml_invalid_argument(arg: &eq);
-#[import = ("bindings", "weak_new")]
-fn weak_new(&eq) -> &?any;
-#[import = ("bindings", "weak_deref")]
-fn weak_deref(&?any) -> &?eq;
-#[import = ("bindings", "weak_map_new")]
-fn weak_map_new() -> &any;
-#[import = ("bindings", "map_get")]
-fn map_get(&any, &eq) -> &?any;
-#[import = ("bindings", "map_set")]
-fn map_set(&any, &eq, &any);
-#[import = ("jslib", "unwrap")]
-fn unwrap(&eq) -> &?any;
-#[import = ("jslib", "wrap")]
-fn wrap(&?any) -> &eq;
+
+#[if(wasi)]
+{
+    fn wrap(v: &eq) -> &eq {
+        v;
+    }
+    fn unwrap(v: &eq) -> &eq {
+        v;
+    }
+    fn weak_new(v: &eq) -> &eq {
+        v;
+    }
+    fn weak_deref(r: &eq) -> &eq {
+        r;
+    }
+}
+#[else]
+{
+    #[import = ("bindings", "weak_new")]
+    fn weak_new(&eq) -> &?any;
+    #[import = ("bindings", "weak_deref")]
+    fn weak_deref(&?any) -> &?eq;
+    #[import = ("bindings", "weak_map_new")]
+    fn weak_map_new() -> &any;
+    #[import = ("bindings", "map_get")]
+    fn map_get(&any, &eq) -> &?any;
+    #[import = ("bindings", "map_set")]
+    fn map_set(&any, &eq, &any);
+    #[import = ("jslib", "unwrap")]
+    fn unwrap(&eq) -> &?any;
+    #[import = ("jslib", "wrap")]
+    fn wrap(&?any) -> &eq;
+}
+
 type block = [mut &eq];
-type string = [mut i8];
-type js = { f: &?any };
+type bytes = [mut i8];
+type float_array = [mut f64];
+type js = { js: &?any };
 
 // A weak array is a an abstract value composed of possibly some
 // data and an array of keys.
@@ -58,18 +79,37 @@ fn caml_ephe_get_data(vx: &eq) -> &eq {
     'no_data: do {
         'released: do {
             br_if 'no_data d == caml_ephe_none;
-            let i = caml_ephe_key_offset;
-            let len = x.length();
-            let m = unwrap(d)!;
-            'loop: while i <u len {
-                let v = x[i];
-                i = i + 1;
-                br_if 'loop v == caml_ephe_none;
-                br_if 'loop v is &i31;
-                v = br_on_null 'released weak_deref(unwrap(v));
-                m = br_on_null 'released map_get(m, v);
+            let v: &eq;
+            let m: &?any;
+            let i: i32;
+            let len: i32;
+            let traversed: i32;
+            #[if(not(wasi))]
+            {
+                i = caml_ephe_key_offset;
+                len = x.length();
+                'loop: while i <u len {
+                    v = x[i];
+                    i = i + 1;
+                    br_if 'loop v == caml_ephe_none;
+                    br_if 'loop v is &i31;
+                    v = br_on_null 'released weak_deref(unwrap(v));
+                    // The data is wrapped in weak maps only when a live
+                    // key threads it; unwrap lazily so that JS-valued
+                    // data with no such key (e.g. a string with an int
+                    // key) is returned as is rather than unwrapped and
+                    // recast -- which traps.
+                    if !traversed {
+                        traversed = 1;
+                        m = unwrap(d)!;
+                    }
+                    m = br_on_null 'released map_get(m!, v);
+                }
+                if traversed {
+                    d = m as &eq;
+                }
             }
-            return [block|0 as &i31, m as &eq];
+            return [block|0 as &i31, d];
         }
         x[caml_ephe_data_offset] = caml_ephe_none;
     }
@@ -81,40 +121,50 @@ fn caml_ephe_get_data_copy(x: &eq) -> &eq {
     let r = caml_ephe_get_data(x);
     _ =
         'no_copy: do &eq {
-            return
-                [block|
-                    0 as &i31,
-                    caml_obj_dup(
-                        br_on_cast_fail 'no_copy &block (br_on_cast_fail 'no_copy &block r)[1],
-                    ),
-                ];
+            let v = (br_on_cast_fail 'no_copy &block r)[1];
+            // Copy the mutable heap blocks that can alias the original:
+            // ordinary blocks, bytes and float arrays. Float arrays are
+            // their own Wasm type, so they need an explicit test. Custom
+            // blocks are returned as is, like the native runtime.
+            if v is &block | v is &bytes | v is &float_array {
+                return [block|0 as &i31, caml_obj_dup(v)];
+            }
+            0 as &i31;
         };
     r;
 }
 
 #[export = "caml_ephe_set_data"]
-fn caml_ephe_set_data(vx: &eq, data_2: &eq) -> &eq {
+fn caml_ephe_set_data(vx: &eq, dat: &eq) -> &eq {
     let x = vx as &block;
-    let i = x.length();
-    let m: &any = data_2;
-    'loop: loop {
-        i = i - 1;
-        if i >=u caml_ephe_key_offset {
-            let v = x[i];
-            br_if 'loop v == caml_ephe_none;
-            br_if 'loop v is &i31;
-            'released: do {
-                v = br_on_null 'released weak_deref(unwrap(v));
-                let m' = weak_map_new();
-                map_set(m', v, m);
-                m = m';
+    let v: &eq;
+    let m: &any;
+    let m': &any;
+    let i: i32;
+    #[if(not(wasi))]
+    {
+        i = x.length();
+        m = dat;
+        'loop: loop {
+            i = i - 1;
+            if i >=u caml_ephe_key_offset {
+                v = x[i];
+                br_if 'loop v == caml_ephe_none;
+                br_if 'loop v is &i31;
+                'released: do {
+                    v = br_on_null 'released weak_deref(unwrap(v));
+                    m' = weak_map_new();
+                    map_set(m', v, m);
+                    m = m';
+                    br 'loop;
+                }
+                x[i] = caml_ephe_none;
                 br 'loop;
             }
-            x[i] = caml_ephe_none;
-            br 'loop;
         }
+        dat = wrap(m);
     }
-    x[caml_ephe_data_offset] = wrap(m);
+    x[caml_ephe_data_offset] = dat;
     0 as &i31;
 }
 
@@ -165,13 +215,15 @@ fn caml_ephe_get_key_copy(x: &eq, i: &eq) -> &eq {
     let r = caml_ephe_get_key(x, i);
     _ =
         'no_copy: do &eq {
-            return
-                [block|
-                    0 as &i31,
-                    caml_obj_dup(
-                        br_on_cast_fail 'no_copy &block (br_on_cast_fail 'no_copy &block r)[1],
-                    ),
-                ];
+            let v = (br_on_cast_fail 'no_copy &block r)[1];
+            // Copy the mutable heap blocks that can alias the original:
+            // ordinary blocks, bytes and float arrays. Float arrays are
+            // their own Wasm type, so they need an explicit test. Custom
+            // blocks are returned as is, like the native runtime.
+            if v is &block | v is &bytes | v is &float_array {
+                return [block|0 as &i31, caml_obj_dup(v)];
+            }
+            0 as &i31;
         };
     r;
 }
@@ -226,14 +278,14 @@ fn caml_ephe_unset_key(vx: &eq, vi: &eq) -> &eq {
     0 as &i31;
 }
 
-data Weak_create = "Weak.create";
+const Weak_create = "Weak.create";
 
 #[export = "caml_ephe_create"]
 #[export = "caml_weak_create"]
 fn caml_ephe_create(vlen: &eq) -> &eq {
     let len = vlen as &i31 as i32_s;
     if len <s 0 {
-        caml_invalid_argument([string|Weak_create @ 0; 11]);
+        caml_invalid_argument(Weak_create);
     }
     let res: &block = [caml_ephe_none; len + caml_ephe_key_offset];
     res[0] = abstract_tag as &i31;
@@ -242,7 +294,15 @@ fn caml_ephe_create(vlen: &eq) -> &eq {
 
 #[export = "caml_ephe_blit_data"]
 fn caml_ephe_blit_data(x: &eq, y: &eq) -> &eq {
-    caml_ephe_set_data_opt(y, caml_ephe_get_data(x));
+    let d = caml_ephe_get_data(x);
+    // [get_data] returns [Some data] (a block) or [None] (an int).
+    // An empty source must clear the destination, not leave its old
+    // data in place.
+    if d is &block {
+        caml_ephe_set_data_opt(y, d);
+    } else {
+        _ = caml_ephe_unset_data(y);
+    }
     0 as &i31;
 }
 

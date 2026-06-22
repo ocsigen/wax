@@ -16,11 +16,11 @@
 // Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
 #[import = ("ints", "parse_sign_and_base")]
-fn parse_sign_and_base(&string) -> (i32, i32, i32, i32);
+fn parse_sign_and_base(&bytes) -> (i32, i32, i32, i32);
 #[import = ("ints", "parse_digit")]
 fn parse_digit(i32) -> i32;
 #[import = ("ints", "parse_int_format")]
-fn parse_int_format(&string) -> (i32, i32, i32, i32, i32);
+fn parse_int_format(&bytes) -> (i32, i32, i32, i32, i32);
 #[import = ("fail", "caml_failwith")]
 fn caml_failwith(&eq);
 #[import = ("marshal", "caml_serialize_int_8")]
@@ -32,7 +32,7 @@ const lowercase_hex_table: &chars;
 #[import = ("ints", "uppercase_hex_table")]
 const uppercase_hex_table: &chars;
 
-type string = [mut i8];
+type bytes = [mut i8];
 type compare = fn(&eq, &eq, i32) -> i32;
 type hash = fn(&eq) -> i32;
 type fixed_length = { bsize_32: i32, bsize_64: i32 };
@@ -40,7 +40,7 @@ type serialize = fn(&eq, &eq) -> (i32, i32);
 type deserialize = fn(&eq) -> (&eq, i32);
 type dup = fn(&eq) -> &eq;
 type custom_operations = {
-    id: &string,
+    id: &bytes,
     compare: &?compare,
     compare_ext: &?compare,
     hash: &?hash,
@@ -49,12 +49,12 @@ type custom_operations = {
     deserialize: &?deserialize,
     dup: &?dup
 };
-type custom = open { f: &custom_operations };
+type custom = open { ops: &custom_operations };
 
 #[export = "int64_ops"]
 const int64_ops: &custom_operations =
     {
-        id: "_j", // "_j"
+        id: "_j",
         compare: int64_cmp,
         compare_ext: null,
         hash: int64_hash,
@@ -64,42 +64,42 @@ const int64_ops: &custom_operations =
         dup: int64_dup,
     };
 
-type int64: custom = { f: &custom_operations, f_2: i64 };
+type int64: custom = { ops: &custom_operations, i64: i64 };
 
 fn int64_cmp(v1: &eq, v2: &eq, i32) -> i32 {
-    let i1 = (v1 as &int64).f_2;
-    let i2 = (v2 as &int64).f_2;
+    let i1 = (v1 as &int64).i64;
+    let i2 = (v2 as &int64).i64;
     (i1 >s i2) - (i1 <s i2);
 }
 
 fn int64_hash(v: &eq) -> i32 {
-    let i = (v as &int64).f_2;
+    let i = (v as &int64).i64;
     i as i32 ^ (i >>u 32) as i32;
 }
 
 fn int64_serialize(s: &eq, v: &eq) -> (i32, i32) {
-    caml_serialize_int_8(s, (v as &int64).f_2);
+    caml_serialize_int_8(s, (v as &int64).i64);
     8;
     8;
 }
 
 fn int64_deserialize(s: &eq) -> (&eq, i32) {
-    { f: int64_ops, f_2: caml_deserialize_int_8(s) };
+    { ops: int64_ops, i64: caml_deserialize_int_8(s) };
     8;
 }
 
 fn int64_dup(v: &eq) -> &eq {
-    { f: int64_ops, f_2: (v as &int64).f_2 };
+    { ops: int64_ops, i64: (v as &int64).i64 };
 }
 
 #[export = "caml_copy_int64"]
 fn caml_copy_int64(i: i64) -> &eq {
-    { f: int64_ops, f_2: i };
+    { ops: int64_ops, i64: i };
 }
 
 #[export = "Int64_val"]
-fn Int64_val(x: &eq) -> i64 {
-    (x as &int64).f_2;
+fn Int64_val(v: &eq) -> i64 {
+    (v as &int64).i64;
 }
 
 #[export = "caml_int64_bswap"]
@@ -109,11 +109,12 @@ fn caml_int64_bswap(i: i64) -> i64 {
 }
 
 #[export = "caml_int64_compare"]
-fn caml_int64_compare(i1: i64, i2: i64) -> &eq {
-    ((i1 >s i2) - (i1 <s i2)) as &i31;
+fn caml_int64_compare(i1: i64, i2: i64) -> i32 {
+    (i1 >s i2) - (i1 <s i2);
 }
 
-const INT64_ERRMSG = "Int64.of_string"; // "Int64.of_string"
+const INT64_ERRMSG = "Int64.of_string";
+
 // Parse a sequence of digits into an i64 as dicted by $base,
 // $signedness and $sign. The sequence is read in $s starting from $i.
 // In case of failure raise [Failure $errmsg].
@@ -124,12 +125,12 @@ fn caml_i64_of_digits(
     base: i32,
     signedness: i32,
     sign: i32,
-    s: &string,
+    s: &bytes,
     i: i32,
-    errmsg: &string,
+    errmsg: &eq,
 ) -> i64 {
     let len = s.length();
-    if !len {
+    if i >=s len {
         caml_failwith(errmsg);
     }
     let threshold = -1 /u base as i64_u;
@@ -142,7 +143,7 @@ fn caml_i64_of_digits(
         i = i + 1;
         if i <s len {
             let c = s[i] as i32_u;
-            br_if 'loop c == 95; // '_'
+            br_if 'loop c == '_';
             d = parse_digit(c);
             if d >=u base {
                 caml_failwith(errmsg);
@@ -176,12 +177,10 @@ fn caml_i64_of_digits(
 
 #[export = "caml_int64_of_string"]
 fn caml_int64_of_string(v: &eq) -> &eq {
-    let s = v as &string;
+    let s = v as &bytes;
     let (i, signedness, sign, base) = parse_sign_and_base(s);
     become caml_copy_int64(caml_i64_of_digits(base, signedness, sign, s, i, INT64_ERRMSG));
 }
-
-data caml_int64_create_lo_mi_hi = "caml_int64_create_lo_mi_hi";
 
 fn format_int64_default(d: i64) -> &eq {
     let negative: i32;
@@ -196,36 +195,31 @@ fn format_int64_default(d: i64) -> &eq {
         i = i + 1;
         n = n /u 10;
     } while n != 0;
-    let s: &string = [0; i];
+    let s: &bytes = [0; i];
     do {
         i = i - 1;
-        s[i] = 48 + (d %u 10) as i32;
+        s[i] = '0' + (d %u 10) as i32;
         d = d /u 10;
     } while d != 0;
     if negative {
-        s[0] = 45;
-    } // '-'
+        s[0] = '-';
+    }
     s;
 }
 
 type chars = [i8];
 
 #[export = "caml_int64_format"]
-fn caml_int64_format(x: &eq, x_2: &eq) -> &eq {
-    let s = x as &string;
-    let d = (x_2 as &int64).f_2;
+fn caml_int64_format(vs: &eq, vd: &eq) -> &eq {
+    let s = vs as &bytes;
+    let d = (vd as &int64).i64;
     if s.length() == 2 {
-        if s[1] as i32_u == 100 // 'd'
-        {
+        if s[1] as i32_u == 'd' {
             become format_int64_default(d);
         }
     }
-    parse_int_format(s);
-    let uppercase = _;
-    let base = _ as i64_u;
-    let signed = _;
-    let alternate = _;
-    let sign_style = _;
+    let (sign_style, alternate, signed, format_3, uppercase) = parse_int_format(s);
+    let base = format_3 as i64_u;
     let negative: i32;
     if signed & (d <s 0) {
         negative = 1;
@@ -258,23 +252,35 @@ fn caml_int64_format(x: &eq, x_2: &eq) -> &eq {
         d = d /u base;
     } while d != 0;
     if negative {
-        s[0] = 45; // '-'
+        s[0] = '-';
     } else {
         if sign_style {
             if sign_style == 1 {
-                s[0] = 43; // '+'
+                s[0] = '+';
             } else {
-                s[0] = 32;
+                s[0] = ' ';
             }
         }
-    } // ' '
-    if alternate {
+    }
+    // The "#" flag only prefixes octal/hex; for base 10 it is ignored (as
+    // in C). Guarding on base here also stops the "0" from overwriting the
+    // sign, since the digit-count phase above only reserves prefix room for
+    // base 8/16.
+    if alternate & (base != 10) {
         if i {
-            s[0] = 48; // '0'
+            s[0] = '0';
             if base == 16 {
-                s[1] = uppercase?88:120; // 'X' 'x'
+                s[1] = uppercase?'X':'x';
             }
         }
     }
     s;
+}
+
+const unsupported = "caml_reinterpret_unboxed_int64_as_tagged_int63 is not supported in wasm.";
+
+#[export = "caml_reinterpret_unboxed_int64_as_tagged_int63"]
+fn caml_reinterpret_unboxed_int64_as_tagged_int63(&eq) -> &eq {
+    caml_failwith(unsupported);
+    0 as &i31;
 }

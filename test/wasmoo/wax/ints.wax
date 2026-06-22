@@ -20,15 +20,15 @@ fn caml_failwith(&eq);
 #[import = ("fail", "caml_invalid_argument")]
 fn caml_invalid_argument(&eq);
 
-type string = [mut i8];
+type bytes = [mut i8];
 
 #[export = "caml_format_int"]
-fn caml_format_int(x: &eq, x_2: &eq) -> &eq {
-    become format_int(x, x_2 as &i31 as i32_s, 1);
+fn caml_format_int(v: &eq, n: &eq) -> &eq {
+    become format_int(v, n as &i31 as i32_s, 1);
 }
 
 #[export = "parse_sign_and_base"]
-fn parse_sign_and_base(s: &string) -> (i32, i32, i32, i32) {
+fn parse_sign_and_base(s: &bytes) -> (i32, i32, i32, i32) {
     let i = 0;
     let len = s.length();
     let signedness = 1;
@@ -37,11 +37,11 @@ fn parse_sign_and_base(s: &string) -> (i32, i32, i32, i32) {
     let c: i32;
     if len != 0 {
         c = s[0] as i32_u;
-        if c == 45 {
+        if c == '-' {
             sign = -1;
             i = 1;
         } else {
-            if c == 43 {
+            if c == '+' {
                 i = 1;
             }
         }
@@ -49,22 +49,22 @@ fn parse_sign_and_base(s: &string) -> (i32, i32, i32, i32) {
     if i + 1 <s len {
         if s[i] as i32_u == 48 {
             c = s[i + 1] as i32_u;
-            if (c == 88) | (c == 120) {
+            if (c == 'X') | (c == 'x') {
                 base = 16;
                 signedness = 0;
                 i = i + 2;
             } else {
-                if (c == 79) | (c == 111) {
+                if (c == 'O') | (c == 'o') {
                     base = 8;
                     signedness = 0;
                     i = i + 2;
                 } else {
-                    if (c == 66) | (c == 98) {
+                    if (c == 'B') | (c == 'b') {
                         base = 2;
                         signedness = 0;
                         i = i + 2;
                     } else {
-                        if (c == 85) | (c == 117) {
+                        if (c == 'U') | (c == 'u') {
                             signedness = 0;
                             i = i + 2;
                         }
@@ -81,21 +81,21 @@ fn parse_sign_and_base(s: &string) -> (i32, i32, i32, i32) {
 
 #[export = "parse_digit"]
 fn parse_digit(c: i32) -> i32 {
-    if (c >=u 48) & (c <=u 57) {
-        return c - 48;
+    if (c >=u '0') & (c <=u '9') {
+        return c - '0';
     }
-    if (c >=u 65) & (c <=u 90) {
+    if (c >=u 'A') & (c <=u 'Z') {
         return c - 55;
     }
-    if (c >=u 97) & (c <=u 122) {
+    if (c >=u 'a') & (c <=u 'z') {
         return c - 87;
     }
     return -1;
 }
 
 #[export = "parse_int"]
-fn parse_int(v: &eq, nbits: i32, errmsg: &string) -> i32 {
-    let s = v as &string;
+fn parse_int(v: &eq, nbits: i32, errmsg: &eq) -> i32 {
+    let s = v as &bytes;
     let len = s.length();
     if !len {
         caml_failwith(errmsg);
@@ -114,7 +114,7 @@ fn parse_int(v: &eq, nbits: i32, errmsg: &string) -> i32 {
         i = i + 1;
         if i <s len {
             let c = s[i] as i32_u;
-            br_if 'loop c == 95; // '_'
+            br_if 'loop c == '_';
             d = parse_digit(c);
             if d >=u base {
                 caml_failwith(errmsg);
@@ -151,16 +151,31 @@ fn parse_int(v: &eq, nbits: i32, errmsg: &string) -> i32 {
     res;
 }
 
-const INT_ERRMSG = "int_of_string"; // "int.of_string"
+const INT_ERRMSG = "int_of_string";
+
 #[export = "caml_int_of_string"]
 fn caml_int_of_string(v: &eq) -> &eq {
     parse_int(v, 31, INT_ERRMSG) as &i31;
 }
 
+const INT8_ERRMSG = "Int8.of_string";
+
+#[export = "caml_int8_of_string"]
+fn caml_int8_of_string(v: &eq) -> &eq {
+    parse_int(v, 8, INT8_ERRMSG).extend8_s() as &i31;
+}
+
+const INT16_ERRMSG = "Int16.of_string";
+
+#[export = "caml_int16_of_string"]
+fn caml_int16_of_string(v: &eq) -> &eq {
+    parse_int(v, 16, INT16_ERRMSG).extend16_s() as &i31;
+}
+
 #[export = "caml_bswap16"]
-fn caml_bswap16(x: &eq) -> &eq {
-    let x_2 = x as &i31 as i32_s;
-    ((x_2 & 0xFF) << 8 | x_2 >>u 8 & 0xFF) as &i31;
+fn caml_bswap16(vx: &eq) -> &eq {
+    let x = vx as &i31 as i32_s;
+    ((x & 0xFF) << 8 | x >>u 8 & 0xFF) as &i31;
 }
 
 type chars = [i8];
@@ -184,22 +199,22 @@ fn format_int_default(d: i32) -> &eq {
         i = i + 1;
         n = n /u 10;
     } while n;
-    let s: &string = [0; i];
+    let s: &bytes = [0; i];
     do {
         i = i - 1;
-        s[i] = 48 + d %u 10;
+        s[i] = '0' + d %u 10;
         d = d /u 10;
     } while d;
     if negative {
-        s[0] = 45;
-    } // '-'
+        s[0] = '-';
+    }
     s;
 }
 
-data format_error = "format_int: bad format";
+const format_error = "format_int: bad format";
 
 #[export = "parse_int_format"]
-fn parse_int_format(s: &string) -> (i32, i32, i32, i32, i32) {
+fn parse_int_format(s: &bytes) -> (i32, i32, i32, i32, i32) {
     let len = s.length();
     let i = 1;
     let sign_style: i32;
@@ -210,57 +225,43 @@ fn parse_int_format(s: &string) -> (i32, i32, i32, i32, i32) {
     'return: do {
         'bad_format: do {
             br_if 'bad_format len <u 2;
-            br_if 'bad_format s[0] as i32_u != 37; // '%'
+            br_if 'bad_format s[0] as i32_u != '%';
             let c = s[1] as i32_u;
-            if c == 43 // '+'
-            {
+            if c == '+' {
                 sign_style = 1;
                 i = i + 1;
             }
-            if c == 32 // ' '
-            {
+            if c == ' ' {
                 sign_style = 2;
                 i = i + 1;
             }
-            if c == 35 // '#'
-            {
+            if c == '#' {
                 alternate = 1;
                 i = i + 1;
             }
             br_if 'bad_format i == len;
             c = s[i] as i32_u;
-            if
-                (c == 76) // 'L'
-                    | (c == 108) // 'l'
-                    | (c == 110) // 'n'
-            {
+            if (c == 'L') | (c == 'l') | (c == 'n') {
                 i = i + 1;
                 br_if 'bad_format i == len;
                 c = s[i] as i32_u;
             }
             br_if 'bad_format i + 1 != len;
-            if
-                (c == 100) // 'd'
-                    | (c == 105) // 'i'
-            {
+            if (c == 'd') | (c == 'i') {
                 base = 10;
                 signed = 1;
             } else {
-                if c == 117 // 'u'
-                {
+                if c == 'u' {
                     base = 10;
                 } else {
-                    if c == 120 // 'x'
-                    {
+                    if c == 'x' {
                         base = 16;
                     } else {
-                        if c == 88 // 'X'
-                        {
+                        if c == 'X' {
                             base = 16;
                             uppercase = 1;
                         } else {
-                            if c == 111 // 'o'
-                            {
+                            if c == 'o' {
                                 base = 8;
                             } else {
                                 br 'bad_format;
@@ -271,7 +272,7 @@ fn parse_int_format(s: &string) -> (i32, i32, i32, i32, i32) {
             }
             br 'return;
         }
-        caml_invalid_argument([string|format_error @ 0; 22]);
+        caml_invalid_argument(format_error);
     }
     sign_style;
     alternate;
@@ -281,11 +282,10 @@ fn parse_int_format(s: &string) -> (i32, i32, i32, i32, i32) {
 }
 
 #[export = "format_int"]
-fn format_int(x: &eq, d: i32, small: i32) -> &eq {
-    let s = x as &string;
+fn format_int(vs: &eq, d: i32, small: i32) -> &eq {
+    let s = vs as &bytes;
     if s.length() == 2 {
-        if s[1] as i32_u == 100 // 'd'
-        {
+        if s[1] as i32_u == 'd' {
             become format_int_default(d);
         }
     }
@@ -328,21 +328,25 @@ fn format_int(x: &eq, d: i32, small: i32) -> &eq {
         d = d /u base;
     } while d;
     if negative {
-        s[0] = 45; // '-'
+        s[0] = '-';
     } else {
         if sign_style {
             if sign_style == 1 {
-                s[0] = 43; // '+'
+                s[0] = '+';
             } else {
-                s[0] = 32;
+                s[0] = ' ';
             }
         }
-    } // ' '
-    if alternate {
+    }
+    // The "#" flag only prefixes octal/hex; for base 10 it is ignored (as
+    // in C). Guarding on base here also stops the "0" from overwriting the
+    // sign, since the digit-count phase above only reserves prefix room for
+    // base 8/16.
+    if alternate & (base != 10) {
         if i {
-            s[0] = 48; // '0'
+            s[0] = '0';
             if base == 16 {
-                s[1] = uppercase?88:120; // 'X' 'x'
+                s[1] = uppercase?'X':'x';
             }
         }
     }

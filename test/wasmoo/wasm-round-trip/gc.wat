@@ -15,8 +15,16 @@
 ;; along with this program; if not, write to the Free Software
 ;; Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
+(import "obj" "caml_callback_1"
+  (func $caml_callback_1 (param (ref eq) (ref eq)) (result (ref eq)))
+)
+(import "fail" "caml_invalid_argument"
+  (func $caml_invalid_argument (param (ref eq)))
+)
+
 (type $float (struct (field $f f64)))
 (type $block (array (mut (ref eq))))
+(type $bytes (array (mut i8)))
 
 (func $caml_gc_minor (export "caml_gc_minor")
   (param (ref eq)) (result (ref eq))
@@ -46,6 +54,21 @@
     (local.get $f) (local.get $f))
 )
 
+(@if (>= $ocaml_version (5 5 0))
+(@then
+(func $caml_gc_stat (export "caml_gc_stat") (export "caml_gc_quick_stat")
+  (param (ref eq)) (result (ref eq))
+  (local $f (ref eq))
+  (local.set $f (struct.new $float (f64.const 0)))
+  (array.new_fixed $block 19 (ref.i31 (i32.const 0)) (local.get $f)
+    (local.get $f) (local.get $f) (ref.i31 (i32.const 0))
+    (ref.i31 (i32.const 0)) (ref.i31 (i32.const 0)) (ref.i31 (i32.const 0))
+    (ref.i31 (i32.const 0)) (ref.i31 (i32.const 0)) (ref.i31 (i32.const 0))
+    (ref.i31 (i32.const 0)) (ref.i31 (i32.const 0)) (ref.i31 (i32.const 0))
+    (ref.i31 (i32.const 0)) (ref.i31 (i32.const 0)) (ref.i31 (i32.const 0))
+    (ref.i31 (i32.const 0)) (ref.i31 (i32.const 0)))
+) )
+(@else
 (func $caml_gc_stat (export "caml_gc_stat") (export "caml_gc_quick_stat")
   (param (ref eq)) (result (ref eq))
   (local $f (ref eq))
@@ -57,7 +80,7 @@
     (ref.i31 (i32.const 0)) (ref.i31 (i32.const 0)) (ref.i31 (i32.const 0))
     (ref.i31 (i32.const 0)) (ref.i31 (i32.const 0)) (ref.i31 (i32.const 0))
     (ref.i31 (i32.const 0)))
-)
+) ) )
 
 (func $caml_gc_set (export "caml_gc_set") (param (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
@@ -133,12 +156,60 @@
   (ref.i31 (i32.const 0))
 )
 
+(func $caml_memprof_discard (export "caml_memprof_discard")
+  (param (ref eq)) (result (ref eq))
+  (ref.i31 (i32.const 0))
+)
+
+(func $caml_memprof_participate (export "caml_memprof_participate")
+  (param (ref eq)) (result (ref eq))
+  (ref.i31 (i32.const 0))
+)
+
 (func $caml_eventlog_pause (export "caml_eventlog_pause")
   (param (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )
 
 (func $caml_eventlog_resume (export "caml_eventlog_resume")
+  (param (ref eq)) (result (ref eq))
+  (ref.i31 (i32.const 0))
+)
+
+(func $caml_ml_gc_ramp_up (export "caml_ml_gc_ramp_up")
+  (param $f (ref eq)) (result (ref eq))
+  (array.new_fixed $block 3 (ref.i31 (i32.const 0))
+    (call $caml_callback_1 (local.get $f) (ref.i31 (i32.const 0)))
+    (ref.i31 (i32.const 0)))
+)
+
+(func $caml_ml_gc_ramp_down (export "caml_ml_gc_ramp_down")
+  (param (ref eq)) (result (ref eq))
+  (ref.i31 (i32.const 0))
+)
+
+(func $caml_memprof_is_sampling (export "caml_memprof_is_sampling")
+  (param (ref eq)) (result (ref eq))
+  (ref.i31 (i32.const 0))
+)
+
+(global $gc_tweak_error (ref $bytes)
+  (@string "Gc.Tweak: parameter not found" )
+)
+
+(func $caml_gc_tweak_get (export "caml_gc_tweak_get")
+  (param (ref eq)) (result (ref eq))
+  (call $caml_invalid_argument (global.get $gc_tweak_error))
+  (ref.i31 (i32.const 0))
+)
+
+(func $caml_gc_tweak_set (export "caml_gc_tweak_set")
+  (param (ref eq) (ref eq)) (result (ref eq))
+  (call $caml_invalid_argument (global.get $gc_tweak_error))
+  (ref.i31 (i32.const 0))
+)
+
+(func $caml_gc_tweak_list_active (export "caml_gc_tweak_list_active")
   (param (ref eq)) (result (ref eq))
   (ref.i31 (i32.const 0))
 )

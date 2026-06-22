@@ -26,40 +26,55 @@
       (result (ref eq))
       (global.set $caml_custom_event_index
          (i32.add (global.get $caml_custom_event_index) (i32.const 1)))
+      ;; The record is { id; name; typ; tag } -- typ comes before tag.
       (array.new_fixed $block 5
          (ref.i31 (i32.const 0))
          (ref.i31 (global.get $caml_custom_event_index))
          (local.get $evname)
-         (local.get $evtag)
-         (local.get $evtype)))
+         (local.get $evtype)
+         (local.get $evtag)))
+
+(@if (>= $ocaml_version (5 2 0))
+(@then
+   (func (export "caml_runtime_events_user_write")
+      (param (ref eq)) (param (ref eq)) (param (ref eq)) (result (ref eq))
+      (ref.i31 (i32.const 0)))
+)
+(@else
+   (func (export "caml_runtime_events_user_write")
+      (param (ref eq)) (param (ref eq)) (result (ref eq))
+      (ref.i31 (i32.const 0)))
+))
 
    (func (export "caml_runtime_events_user_resolve")
       (param (ref eq)) (param (ref eq)) (param (ref eq)) (result (ref eq))
       (ref.i31 (i32.const 0)))
 
-   (func (export "caml_runtime_events_start") (param (ref eq)) (result (ref eq))
+   (func (export "caml_ml_runtime_events_start")
+      (param (ref eq)) (result (ref eq))
       (ref.i31 (i32.const 0)))
 
-   (func (export "caml_runtime_events_pause") (param (ref eq)) (result (ref eq))
+   (func (export "caml_ml_runtime_events_pause")
+      (param (ref eq)) (result (ref eq))
       (ref.i31 (i32.const 0)))
 
-   (func (export "caml_runtime_events_resume") (param (ref eq)) (result (ref eq))
+   (func (export "caml_ml_runtime_events_resume")
+      (param (ref eq)) (result (ref eq))
       (ref.i31 (i32.const 0)))
 
    (func (export "caml_ml_runtime_events_are_active")
       (param (ref eq)) (result (ref eq))
       (ref.i31 (i32.const 0)))
 
-   ;; TODO: use Javascript function
-   ;;(func (export "caml_runtime_events_create_cursor")
-   ;;   (param (ref eq)) (result (ref eq))
-   ;;   (ref.i31 (i32.const 0)))
-
-   (func (export "caml_runtime_events_free_cursor")
+   (func (export "caml_ml_runtime_events_create_cursor")
       (param (ref eq)) (result (ref eq))
       (ref.i31 (i32.const 0)))
 
-   (func (export "caml_runtime_events_read_poll")
+   (func (export "caml_ml_runtime_events_free_cursor")
+      (param (ref eq)) (result (ref eq))
+      (ref.i31 (i32.const 0)))
+
+   (func (export "caml_ml_runtime_events_read_poll")
       (param (ref eq)) (param (ref eq)) (param (ref eq)) (result (ref eq))
       (ref.i31 (i32.const 0)))
 

@@ -15,46 +15,56 @@
 // along with this program; if not, write to the Free Software
 // Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
-#[import = ("jslib", "unwrap")]
-fn unwrap(&eq) -> &?any;
-#[import = ("jslib", "caml_jsstring_of_string")]
-fn caml_jsstring_of_string(&eq) -> &eq;
 #[import = ("fail", "caml_is_special_exception")]
 fn caml_is_special_exception(&eq) -> i32;
 #[import = ("ints", "caml_format_int")]
 fn caml_format_int(&eq, &eq) -> &eq;
 
 type block = [mut &eq];
-type string = [mut i8];
+type bytes = [mut i8];
 
-type buffer = { f: mut i32, f_2: &string };
+type buffer = { pos: mut i32, dat: mut &bytes };
+
+// Ensure the buffer has room for [$extra] more bytes, growing (and
+// copying) its backing array if needed -- so the formatted message is not
+// truncated at a fixed size, matching the unbounded JS runtime.
+fn ensure_capacity(buf: &buffer, extra: i32) {
+    let pos = buf.pos;
+    let dat = buf.dat;
+    let cap = dat.length();
+    let need = pos + extra;
+    if need >u cap {
+        let newcap = cap << 1;
+        if newcap <u need {
+            newcap = need;
+        }
+        let new: &bytes = [0; newcap];
+        new.copy(0, dat, 0, pos);
+        buf.dat = new;
+    }
+}
 
 fn add_char(buf: &buffer, c: i32) {
-    let pos = buf.f;
-    let data_2 = buf.f_2;
-    if pos <u data_2.length() {
-        data_2[pos] = c;
-        buf.f = pos + 1;
-    }
+    ensure_capacity(buf, 1);
+    let pos = buf.pos;
+    buf.dat[pos] = c;
+    buf.pos = pos + 1;
 }
 
 fn add_string(buf: &buffer, v: &eq) {
-    let pos = buf.f;
-    let data_2 = buf.f_2;
-    let s = v as &string;
+    let s = v as &bytes;
     let len = s.length();
-    if pos + len >u data_2.length() {
-        len = data_2.length() - pos;
-    }
-    data_2.copy(pos, s, 0, len);
-    buf.f = pos + len;
+    ensure_capacity(buf, len);
+    let pos = buf.pos;
+    buf.dat.copy(pos, s, 0, len);
+    buf.pos = pos + len;
 }
 
 #[export = "caml_format_exception"]
-fn caml_format_exception(x: &eq) -> &eq {
-    let exn = x as &block;
+fn caml_format_exception(vexn: &eq) -> &eq {
+    let exn = vexn as &block;
     if exn[0] == 0 as &i31 => &eq {
-        let buf: &buffer = { f: 0, f_2: [0; 256] };
+        let buf: &buffer = { pos: 0, dat: [0; 256] };
         add_string(buf, (exn[1] as &block)[1]);
         let v: &eq;
         let bucket: &block;
@@ -76,49 +86,31 @@ fn caml_format_exception(x: &eq) -> &eq {
             };
         let len = bucket.length();
         if i <u len {
-            add_char(
-                buf,
-                40 // '\('
-            );
+            add_char(buf, '(');
             'loop: loop {
                 v = bucket[i];
                 if v is &i31 {
-                    add_string(
-                        buf,
-                        caml_format_int(
-                            "%d", // %d
-                            v as &i31,
-                        ),
-                    );
+                    add_string(buf, caml_format_int("%d", v as &i31));
                 } else {
-                    if v is &string {
-                        add_char(
-                            buf,
-                            34 // '\"'
-                        );
+                    if v is &bytes {
+                        add_char(buf, '\"');
                         add_string(buf, v);
-                        add_char(buf, 34); // '\"'
+                        add_char(buf, '\"');
                     } else {
-                        add_char(buf, 95);
+                        add_char(buf, '_');
                     }
-                } // '_'
+                }
                 i = i + 1;
                 if i <u len {
-                    add_char(
-                        buf,
-                        44 // ','
-                    );
-                    add_char(
-                        buf,
-                        32 // ' '
-                    );
+                    add_char(buf, ',');
+                    add_char(buf, ' ');
                     br 'loop;
                 }
             }
-            add_char(buf, 41);
-        } // '\)'
-        let s: &string = [0; buf.f];
-        s.copy(0, buf.f_2, 0, buf.f);
+            add_char(buf, ')');
+        }
+        let s: &bytes = [0; buf.pos];
+        s.copy(0, buf.dat, 0, buf.pos);
         s;
     } else {
         exn[1];

@@ -19,37 +19,44 @@
 fn caml_string_hash(&eq, &eq) -> &eq;
 #[import = ("string", "caml_string_equal")]
 fn caml_string_equal(&eq, &eq) -> &eq;
-#[import = ("jslib", "caml_string_of_jsstring")]
-fn caml_string_of_jsstring(&eq) -> &eq;
+
 #[import = ("jslib", "caml_jsstring_of_string")]
 fn caml_jsstring_of_string(&eq) -> &eq;
-#[import = ("jslib", "wrap")]
-fn wrap(&?any) -> &eq;
 #[import = ("jslib", "unwrap")]
 fn unwrap(&eq) -> &?any;
 #[import = ("obj", "caml_callback_1")]
 fn caml_callback_1(&eq, &eq) -> &eq;
 #[import = ("obj", "caml_callback_2")]
 fn caml_callback_2(&eq, &eq, &eq) -> &eq;
-#[import = ("bindings", "write")]
-fn write(i32, &?any);
 #[import = ("string", "caml_string_concat")]
 fn caml_string_concat(&eq, &eq) -> &eq;
 #[import = ("printexc", "caml_format_exception")]
 fn caml_format_exception(&eq) -> &eq;
 #[import = ("sys", "ocaml_exit")]
-tag ocaml_exit(i32);
+tag ocaml_exit();
 #[import = ("fail", "ocaml_exception")]
 tag ocaml_exception(&eq);
-#[import = ("bindings", "exit")]
-fn exit(i32);
-#[import = ("bindings", "throw")]
-fn throw_2(&?extern);
+#[if(wasi)]
+{
+    #[import = ("wasi_snapshot_preview1", "proc_exit")]
+    fn exit(i32);
+    #[import = ("io", "write_all_to_fd")]
+    fn write_all_to_fd(i32, &eq);
+}
+#[else]
+{
+    #[import = ("fail", "javascript_exception")]
+    tag javascript_exception(&?extern);
+    #[import = ("bindings", "write")]
+    fn write(i32, &?any);
+    #[import = ("bindings", "exit")]
+    fn exit(i32);
+}
 
 type block = [mut &eq];
-type string = [mut i8];
+type bytes = [mut i8];
 
-type assoc = { f: &string, f_2: mut &eq, f_3: mut &?assoc };
+type assoc = { name: &bytes, value: mut &eq, next: mut &?assoc };
 
 type assoc_array = [mut &?assoc];
 
@@ -57,14 +64,32 @@ const Named_value_size = 13;
 
 const named_value_table: &assoc_array = [null; Named_value_size];
 
-fn find_named_value(s: &eq, l: &?assoc) -> &?assoc {
+let symbol_table: &assoc_array = [null; 1];
+
+const predef_prefix = "predef:";
+
+// Build a symbol key: for predefs, prepend "predef:" to the name.
+// For compunits (is_predef=0), return name unchanged.
+fn make_symbol_key(is_predef: i32, name: &bytes) -> &bytes {
+    if !is_predef {
+        return name;
+    }
+    let len = name.length();
+    let key: &bytes = [0; len + 7];
+    key.copy(0, predef_prefix, 0, 7);
+    key.copy(7, name, 0, len);
+    key;
+}
+let symbol_table_size = 1;
+
+fn assoc_find(s: &eq, l: &?assoc) -> &?assoc {
     'tail: do &?assoc {
         'loop: loop {
             let a = br_on_cast_fail 'tail &assoc l;
-            if caml_string_equal(s, a.f) as &i31 as i32_u {
+            if caml_string_equal(s, a.name) as &i31 as i32_u {
                 return a;
             }
-            l = a.f_3;
+            l = a.next;
             br 'loop;
         }
         unreachable;
@@ -72,28 +97,28 @@ fn find_named_value(s: &eq, l: &?assoc) -> &?assoc {
 }
 
 #[export = "caml_named_value"]
-fn caml_named_value(s: &string) -> &?eq {
+fn caml_named_value(s: &eq) -> &?eq {
     'not_found: do {
         return
             (br_on_null 'not_found
-                 find_named_value(
+                 assoc_find(
                      s,
                      named_value_table
                          [caml_string_hash(0 as &i31, s) as &i31 as i32_s %u Named_value_size],
-                 )).f_2;
+                 )).value;
     }
     return null;
 }
 
 #[export = "caml_register_named_value"]
-fn caml_register_named_value(x: &eq, x_2: &eq) -> &eq {
-    let h = caml_string_hash(0 as &i31, x) as &i31 as i32_s %u Named_value_size;
+fn caml_register_named_value(name: &eq, v: &eq) -> &eq {
+    let h = caml_string_hash(0 as &i31, name) as &i31 as i32_s %u Named_value_size;
     let r = named_value_table[h];
     'not_found: do {
-        (br_on_null 'not_found find_named_value(x, r)).f_2 = x_2;
+        (br_on_null 'not_found assoc_find(name, r)).value = v;
         return 0 as &i31;
     }
-    named_value_table[h] = { f: x as &string, f_2: x_2, f_3: r };
+    named_value_table[h] = { name: name as &bytes, value: v, next: r };
     0 as &i31;
 }
 
@@ -104,18 +129,20 @@ fn caml_unregister_named_value(name: &eq) -> &eq {
     let r = named_value_table[h];
     'done: do {
         let a = br_on_null 'done r;
-        r = a.f_3;
-        if caml_string_equal(name, a.f) as &i31 as i32_u {
-            named_value_table[h] = r;
+        // Head of the bucket matches: drop it.
+        if caml_string_equal(name, a.name) as &i31 as i32_u {
+            named_value_table[h] = a.next;
             br 'done;
         }
+        // $a is the previous (kept) node; scan its successors so the
+        // unlink can update the predecessor's next pointer.
         'loop: loop {
-            a = br_on_null 'done r;
-            if caml_string_equal(name, a.f) as &i31 as i32_u {
-                r.f_3 = a.f_3;
+            let cur = br_on_null 'done a.next;
+            if caml_string_equal(name, cur.name) as &i31 as i32_u {
+                a.next = cur.next;
                 br 'done;
             }
-            r = a.f_3;
+            a = cur;
             br 'loop;
         }
     }
@@ -123,15 +150,171 @@ fn caml_unregister_named_value(name: &eq) -> &eq {
 }
 
 #[export = "caml_global_data"]
-let caml_global_data: &block = [0 as &i31; 12];
+let caml_global_data: &block = [0 as &i31; 13];
 
-#[export = "caml_register_global"]
-fn caml_register_global(x: &eq, v: &eq, &eq) -> &eq {
-    let i = x as &i31 as i32_u;
-    if i <u caml_global_data.length() {
-        caml_global_data[i] = v;
+// Grow caml_global_data so that index $min_idx is valid.
+fn grow_global_data(min_idx: i32) {
+    let old = caml_global_data;
+    // new length = min_idx + 1, but at least double the old size
+    let new_len = min_idx + 1;
+    if new_len <u old.length() << 1 {
+        new_len = old.length() << 1;
+    }
+    caml_global_data = [0 as &i31; new_len];
+    caml_global_data.copy(0, old, 0, old.length());
+}
+
+// Link info: a single mutable block holding all linker-provided data.
+// Layout (OCaml block, field 0 = tag):
+//   field 1: sections  — bytesections record { symb; crcs; prim; dlpt }
+//   field 2: symbols   — array of (string * int) pairs for name→index mapping
+//   field 3: prim_count — int (number of registered primitives)
+//   field 4: aliases    — (string * string) list of primitive aliases
+// All fields default to 0 (unit/empty).
+#[export = "link_info"]
+let link_info: &block = [0 as &i31, 0 as &i31, 0 as &i31, 0 as &i31, 0 as &i31];
+
+// Field indices for $link_info (after tag at 0)
+const LINK_INFO_SECTIONS = 1;
+const LINK_INFO_SYMBOLS = 2;
+const LINK_INFO_PRIM_COUNT = 3;
+const LINK_INFO_ALIASES = 4;
+
+// Next available index for dynamically loaded modules not in the
+// static symbols table. Initialized when symbols are set.
+let next_idx = 0;
+
+#[export = "caml_set_link_info"]
+fn caml_set_link_info(info: &eq) -> &eq {
+    link_info = info as &block;
+    // Compute next_idx from symbols field
+    if link_info[LINK_INFO_SYMBOLS] is &block {
+        let arr = link_info[LINK_INFO_SYMBOLS] as &block;
+        let max = -1;
+        // n = number of symbol entries (array.len - 1 to skip tag)
+        let n = arr.length() - 1;
+        // Create hash table of size max(n, 1)
+        if n >u 0 {
+            symbol_table_size = n;
+            symbol_table = [null; n];
+        }
+        let j = 1;
+        'done: do {
+            'loop: loop {
+                br_if 'done j >=u arr.length();
+                // pair = [tag, global_name, index]
+                // global_name = [is_predef, name]
+                let pair = arr[j] as &block;
+                let idx = pair[2] as &i31 as i32_u;
+                if idx >s max {
+                    max = idx;
+                }
+                // Build key from global_name
+                let key =
+                    make_symbol_key(
+                        // is_predef = tag of global_name block
+                        (pair[1] as &block)[0] as &i31 as i32_u,
+                        (pair[1] as &block)[1] as &bytes,
+                    );
+                // Insert into symbol hash table
+                let h = caml_string_hash(0 as &i31, key) as &i31 as i32_s %u symbol_table_size;
+                symbol_table[h] = { name: key, value: pair[2], next: symbol_table[h] };
+                j = j + 1;
+                br 'loop;
+            }
+        }
+        next_idx = max + 1;
     }
     0 as &i31;
+}
+
+// Relocation callback: set by wasm_of_ocaml_compiler_dynlink when
+// the toplevel is active. Maps a name (string) to its symtable index.
+// Similar to jsoo_toplevel_reloc in the JS runtime.
+#[export = "toplevel_reloc"]
+let toplevel_reloc: &eq = 0 as &i31;
+
+#[export = "wasm_toplevel_init_reloc"]
+fn wasm_toplevel_init_reloc(f: &eq) -> &eq {
+    toplevel_reloc = f;
+    0 as &i31;
+}
+
+// Look up a name in the symbol hash table and return the symtable index.
+// Returns -1 if not found or if symbols is not set.
+fn lookup_symbol(name: &eq, kind: i32) -> i32 {
+    if link_info[LINK_INFO_SYMBOLS] is &i31 {
+        return -1;
+    }
+    let key = make_symbol_key(kind, name as &bytes);
+    'not_found: do {
+        return
+            (br_on_null 'not_found
+                 assoc_find(
+                     key,
+                     symbol_table
+                         [caml_string_hash(0 as &i31, key) as &i31 as i32_s %u symbol_table_size],
+                 )).value as &i31 as i32_u;
+    }
+    -1;
+}
+
+let caml_register_global_idx = 0;
+
+#[export = "caml_register_global_by_index"]
+fn caml_register_global_by_index(v: &eq, idx: &eq) -> &eq {
+    // caml_global_data is a $block: index 0 is the tag, data starts at 1
+    let i = idx as &i31 as i32_u + 1;
+    if i >=u caml_global_data.length() {
+        grow_global_data(i);
+    }
+    caml_global_data[i] = v;
+    0 as &i31;
+}
+
+fn do_register_global(v: &eq, name: &eq, is_predef: i32) -> &eq {
+    let i: i32;
+    // Try to resolve the name to a symtable index.
+    // 1. toplevel_reloc callback (set by wasm_of_ocaml_compiler_dynlink)
+    if !(toplevel_reloc is &i31) {
+        i =
+            caml_callback_1(
+                toplevel_reloc,
+                // Construct global_name: [tag, name]
+                [block|is_predef as &i31, name],
+            ) as &i31 as i32_u + 1;
+    } else {
+        // 2. static symbols array (set by linker in link_info)
+        if !(link_info[LINK_INFO_SYMBOLS] is &i31) {
+            let idx = lookup_symbol(name, is_predef);
+            if idx >=s 0 {
+                i = idx + 1;
+            } else {
+                // Not found in symbols: assign a new index
+                i = next_idx + 1;
+                next_idx = next_idx + 1;
+            }
+        } else {
+            // 3. No relocation info: nothing to do.
+            // caml_global_data is populated by caml_register_global_by_index.
+            return 0 as &i31;
+        }
+    }
+    if i >=u caml_global_data.length() {
+        grow_global_data(i);
+    }
+    caml_global_data[i] = v;
+    0 as &i31;
+}
+
+#[export = "caml_register_global"]
+fn caml_register_global(v: &eq, name: &eq) -> &eq {
+    do_register_global(v, name, 0);
+}
+
+#[export = "caml_register_global_predef"]
+fn caml_register_global_predef(v: &eq, name: &eq) -> &eq {
+    do_register_global(v, name, 1);
 }
 
 #[export = "caml_get_global_data"]
@@ -139,66 +322,84 @@ fn caml_get_global_data(&eq) -> &eq {
     caml_global_data;
 }
 
-type func_2 = fn() -> &eq;
+type thunk = fn() -> &eq;
 
-data fatal_error = "Fatal error: exception ";
-data handle_uncaught_exception = "Printexc.handle_uncaught_exception";
-data do_at_exit = "Pervasives.do_at_exit";
+const fatal_error = "Fatal error: exception ";
+const handle_uncaught_exception = "Printexc.handle_uncaught_exception";
+const do_at_exit = "Pervasives.do_at_exit";
 
 let uncaught_exception: &?extern = null;
 
-fn reraise_exception() -> &eq {
-    throw_2(uncaught_exception);
-    0 as &i31;
+#[if(not(wasi))]
+{
+    fn reraise_exception() -> &eq {
+        throw javascript_exception uncaught_exception;
+        0 as &i31;
+    }
+
+    #[export = "caml_handle_uncaught_exception"]
+    fn caml_handle_uncaught_exception(exn: &?extern) {
+        uncaught_exception = exn;
+        caml_main(reraise_exception);
+    }
 }
 
-#[export = "caml_handle_uncaught_exception"]
-fn caml_handle_uncaught_exception(exn: &?extern) {
-    uncaught_exception = exn;
-    caml_main(reraise_exception);
-}
+type wrapper_func = fn(&thunk);
+#[export = "caml_main_wrapper"]
+let caml_main_wrapper: &?wrapper_func = null;
 
 #[export = "caml_main"]
 fn caml_main(start: &func) {
     try {
-        _ = (start as &func_2)();
-    } catch {
-        ocaml_exit => {
-            exit(_);
+        'fallback: do {
+            (br_on_null 'fallback caml_main_wrapper)(start as &thunk);
+            return;
         }
+        _ = (start as &thunk)();
+    } catch {
+        ocaml_exit => {}
         ocaml_exception => {
             let exn = _;
             'exit: do {
                 'not_registered: do {
-                    _ =
-                        caml_callback_2(
-                            br_on_null 'not_registered
-                                caml_named_value([handle_uncaught_exception @ 0; 34]),
-                            exn,
-                            0 as &i31,
-                        );
+                    try {
+                        _ =
+                            caml_callback_2(
+                                br_on_null 'not_registered
+                                    caml_named_value(handle_uncaught_exception),
+                                exn,
+                                0 as &i31,
+                            );
+                    } catch {
+                        ocaml_exit => {
+                            return;
+                        }
+                    }
                     br 'exit;
                 }
                 'null: do {
-                    _ =
-                        caml_callback_1(
-                            br_on_null 'null caml_named_value([do_at_exit @ 0; 21]),
-                            0 as &i31,
-                        );
+                    _ = caml_callback_1(br_on_null 'null caml_named_value(do_at_exit), 0 as &i31);
                 }
-                write(
-                    2,
-                    unwrap(
-                        caml_jsstring_of_string(
-                            caml_string_concat(
-                                [string|fatal_error @ 0; 23],
-                                caml_string_concat(caml_format_exception(exn), "\n"),
-                            ),
-                        ),
-                    ),
-                );
-            } // `\n`
+                let msg =
+                    caml_string_concat(
+                        fatal_error,
+                        caml_string_concat(caml_format_exception(exn), "\n"),
+                    );
+                #[if(wasi)]
+                {
+                    write_all_to_fd(2, msg);
+                }
+                #[else]
+                {
+                    write(2, unwrap(caml_jsstring_of_string(msg)));
+                }
+            }
             exit(2);
         }
     }
+}
+
+#[export = "caml_with_async_exns"]
+fn caml_with_async_exns(f: &eq) -> &eq {
+    become caml_callback_1(f, 0 as &i31);
 }

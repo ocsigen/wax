@@ -20,7 +20,7 @@ fn caml_invalid_argument(&eq);
 #[import = ("fail", "caml_failwith")]
 fn caml_failwith(&eq);
 
-type string = [mut i8];
+type bytes = [mut i8];
 type block = [mut &eq];
 
 type char_table = [i8];
@@ -61,7 +61,7 @@ const re_word_letters: &char_table =
         0x7F,
         0xFF,
     ]; // Latin-1 accented lowercase
-type stack = open { f: &?stack };
+type stack = open { next: &?stack };
 type pos: stack = { pos_previous: &?stack, pc: i32, pos: i32 };
 type undo: stack = { undo_previous: &?stack, tbl: &int_array, idx: i32, val: i32 };
 
@@ -69,16 +69,16 @@ fn is_word_letter(c: i32) -> i32 {
     1 & re_word_letters[c >>u 3] as i32_u >>u (c & 7);
 }
 
-fn in_bitset(s: &string, c: i32) -> i32 {
+fn in_bitset(s: &bytes, c: i32) -> i32 {
     1 & s[c >>u 3] as i32_u >>u (c & 7);
 }
 
-fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq {
+fn re_match(vre: &eq, s: &bytes, pos: i32, accept_partial_match: i32) -> &eq {
     let len = s.length();
     let re = vre as &block;
     let prog = re[1] as &block;
     let cpool = re[2] as &block;
-    let normtable = re[3] as &string;
+    let normtable = re[3] as &bytes;
     let numgroups = re[4] as &i31 as i32_s;
     let numregisters = re[5] as &i31 as i32_s;
     let group_start: &int_array = [-1; numgroups];
@@ -96,8 +96,8 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq {
                     'prefix_match: do {
                         let instr = prog[pc] as &i31 as i32_s;
                         pc = pc + 1;
-                        let s': &string;
-                        let set: &string;
+                        let s': &bytes;
+                        let set: &bytes;
                         let arg: i32;
                         let l: i32;
                         dispatch (instr & 0xff) [
@@ -124,7 +124,7 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq {
                             'STRING: {
                                 // STRING
                                 arg = instr >>u 8;
-                                s' = cpool[arg + 1] as &string;
+                                s' = cpool[arg + 1] as &bytes;
                                 i = 0;
                                 l = s'.length();
                                 while i <u l {
@@ -138,7 +138,7 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq {
                             'STRINGNORM: {
                                 // STRINGNORM
                                 arg = instr >>u 8;
-                                s' = cpool[arg + 1] as &string;
+                                s' = cpool[arg + 1] as &bytes;
                                 i = 0;
                                 l = s'.length();
                                 while i <u l {
@@ -155,24 +155,20 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq {
                                 br_if 'prefix_match pos == len;
                                 arg = instr >>u 8;
                                 br_if 'backtrack
-                                    !in_bitset(cpool[arg + 1] as &string, s[pos] as i32_u);
+                                    !in_bitset(cpool[arg + 1] as &bytes, s[pos] as i32_u);
                                 pos = pos + 1;
                                 br 'continue;
                             }
                             'BOL: {
                                 // BOL
                                 br_if 'continue !pos;
-                                br_if 'continue
-                                    10 // '\n'
-                                        == s[pos - 1] as i32_u;
+                                br_if 'continue '\n' == s[pos - 1] as i32_u;
                                 br 'backtrack;
                             }
                             'EOL: {
                                 // EOL
                                 br_if 'continue pos == len;
-                                br_if 'continue
-                                    10 // '\n'
-                                        == s[pos] as i32_u;
+                                br_if 'continue '\n' == s[pos] as i32_u;
                                 br 'backtrack;
                             }
                             'WORDBOUNDARY: {
@@ -237,7 +233,7 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq {
                                 // SIMPLEOPT
                                 arg = instr >>u 8;
                                 if pos <u len {
-                                    if in_bitset(cpool[arg + 1] as &string, s[pos] as i32_u) {
+                                    if in_bitset(cpool[arg + 1] as &bytes, s[pos] as i32_u) {
                                         pos = pos + 1;
                                     }
                                 }
@@ -246,7 +242,7 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq {
                             'SIMPLESTAR: {
                                 // SIMPLESTAR
                                 arg = instr >>u 8;
-                                set = cpool[arg + 1] as &string;
+                                set = cpool[arg + 1] as &bytes;
                                 'loop: loop {
                                     if pos <u len {
                                         if in_bitset(set, s[pos] as i32_u) {
@@ -261,7 +257,7 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq {
                                 // SIMPLEPLUS
                                 br_if 'prefix_match pos == len;
                                 arg = instr >>u 8;
-                                set = cpool[arg + 1] as &string;
+                                set = cpool[arg + 1] as &bytes;
                                 br_if 'backtrack !in_bitset(set, s[pos] as i32_u);
                                 'loop: loop {
                                     pos = pos + 1;
@@ -342,16 +338,16 @@ fn re_match(vre: &eq, s: &string, pos: i32, accept_partial_match: i32) -> &eq {
     0 as &i31;
 }
 
-data search_forward = "Str.search_forward";
+const search_forward = "Str.search_forward";
 
 #[export = "re_search_forward"]
 fn re_search_forward(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     // ZZZ startchars
-    let s = vs as &string;
+    let s = vs as &bytes;
     let pos = vpos as &i31 as i32_s;
     let len = s.length();
     if pos >u len {
-        caml_invalid_argument([string|search_forward @ 0; 18]);
+        caml_invalid_argument(search_forward);
     }
     do {
         let res = re_match(re, s, pos, 0);
@@ -363,16 +359,16 @@ fn re_search_forward(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     [block|0 as &i31];
 }
 
-data search_backward = "Str.search_backward";
+const search_backward = "Str.search_backward";
 
 #[export = "re_search_backward"]
 fn re_search_backward(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     // ZZZ startchars
-    let s = vs as &string;
+    let s = vs as &bytes;
     let pos = vpos as &i31 as i32_s;
     let len = s.length();
     if pos >u len {
-        caml_invalid_argument([string|search_backward @ 0; 19]);
+        caml_invalid_argument(search_backward);
     }
     do {
         let res = re_match(re, s, pos, 0);
@@ -384,16 +380,16 @@ fn re_search_backward(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     [block|0 as &i31];
 }
 
-data string_match = "Str.string_match";
+const string_match = "Str.string_match";
 
 #[export = "re_string_match"]
 fn re_string_match(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     // ZZZ startchars
-    let s = vs as &string;
+    let s = vs as &bytes;
     let pos = vpos as &i31 as i32_s;
     let len = s.length();
     if pos >u len {
-        caml_invalid_argument([string|string_match @ 0; 16]);
+        caml_invalid_argument(string_match);
     }
     let res = re_match(re, s, pos, 0);
     if res is &block {
@@ -402,16 +398,16 @@ fn re_string_match(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     [block|0 as &i31];
 }
 
-data string_partial_match = "Str.string_partial_match";
+const string_partial_match = "Str.string_partial_match";
 
 #[export = "re_partial_match"]
 fn re_partial_match(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     // ZZZ startchars
-    let s = vs as &string;
+    let s = vs as &bytes;
     let pos = vpos as &i31 as i32_s;
     let len = s.length();
     if pos >u len {
-        caml_invalid_argument([string|string_partial_match @ 0; 24]);
+        caml_invalid_argument(string_partial_match);
     }
     let res = re_match(re, s, pos, 1);
     if res is &block {
@@ -420,15 +416,15 @@ fn re_partial_match(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     [block|0 as &i31];
 }
 
-data illegal_backslash = "Str.replace: illegal backslash sequence";
-data unmatched_group = "Str.replace: reference to unmatched group";
+const illegal_backslash = "Str.replace: illegal backslash sequence";
+const unmatched_group = "Str.replace: reference to unmatched group";
 
 #[export = "re_replacement_text"]
 fn re_replacement_text(vrepl: &eq, vgroups: &eq, vorig: &eq) -> &eq {
-    let repl = vrepl as &string;
+    let repl = vrepl as &bytes;
     let l = repl.length();
     let groups = vgroups as &block;
-    let orig = vorig as &string;
+    let orig = vorig as &bytes;
     let i: i32;
     let len: i32;
     let c: i32;
@@ -437,67 +433,63 @@ fn re_replacement_text(vrepl: &eq, vgroups: &eq, vorig: &eq) -> &eq {
     'loop: while i <u l {
         c = repl[i] as i32_u;
         i = i + 1;
-        if c != 92 // '\\'
-        {
+        if c != '\\' {
             len = len + 1;
             br 'loop;
         }
         if i == l {
-            caml_failwith([string|illegal_backslash @ 0; 39]);
+            caml_failwith(illegal_backslash);
         }
         c = repl[i] as i32_u;
         i = i + 1;
-        if c == 92 // '\\'
-        {
+        if c == '\\' {
             len = len + 1;
             br 'loop;
         }
-        c = c - 48; // '0'
+        c = c - '0';
         if c >u 9 {
             len = len + 2;
             br 'loop;
         }
         c = c << 1;
-        if c + 1 >u groups.length() {
-            caml_failwith([string|unmatched_group @ 0; 41]);
+        if c + 1 >=u groups.length() {
+            caml_failwith(unmatched_group);
         }
         start = groups[c + 1] as &i31 as i32_s;
         end = groups[c + 2] as &i31 as i32_s;
         if start == -1 {
-            caml_failwith([string|unmatched_group @ 0; 41]);
+            caml_failwith(unmatched_group);
         }
         len = len + (end - start);
     }
-    let res: &string = [0; len];
+    let res: &bytes = [0; len];
     i = 0;
     let j: i32;
     'loop: while i <u l {
         c = repl[i] as i32_u;
         i = i + 1;
-        if c != 92 // '\\'
-        {
+        if c != '\\' {
             res[j] = c;
             j = j + 1;
             br 'loop;
         }
         c = repl[i] as i32_u;
         i = i + 1;
-        if c == 92 // '\\'
-        {
+        if c == '\\' {
             res[j] = c;
             j = j + 1;
             br 'loop;
         }
-        c = c - 48; // '0'
+        c = c - '0';
         if c >u 9 {
-            res[j] = 92;
-            res[j + 1] = c + 48;
+            res[j] = '\\';
+            res[j + 1] = c + '0';
             j = j + 2;
             br 'loop;
         }
         c = c << 1;
-        if c + 1 >u groups.length() {
-            caml_failwith([string|unmatched_group @ 0; 41]);
+        if c + 1 >=u groups.length() {
+            caml_failwith(unmatched_group);
         }
         start = groups[c + 1] as &i31 as i32_s;
         end = groups[c + 2] as &i31 as i32_s;

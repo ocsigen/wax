@@ -17,6 +17,8 @@
 
 #[import = ("fail", "caml_raise_end_of_file")]
 fn caml_raise_end_of_file();
+#[import = ("fail", "caml_raise_sys_error")]
+fn caml_raise_sys_error(&eq);
 #[import = ("jslib", "wrap")]
 fn wrap(&?any) -> &eq;
 #[import = ("jslib", "unwrap")]
@@ -25,38 +27,90 @@ fn unwrap(&eq) -> &?any;
 fn caml_jsstring_of_string(&eq) -> &eq;
 #[import = ("jslib", "caml_list_of_js_array")]
 fn caml_list_of_js_array(&eq) -> &eq;
-#[import = ("bindings", "open")]
-fn open_2(&?any, i32, i32) -> i32;
-#[import = ("bindings", "close")]
-fn close(i32);
-#[import = ("bindings", "write")]
-fn write(i32, &extern, i32, i32, i64) -> i32;
-#[import = ("bindings", "write")]
-fn write'(i32, &extern, i32, i32, &?noextern) -> i32;
-#[import = ("bindings", "read")]
-fn read(i32, &extern, i32, i32, i64) -> i32;
-#[import = ("bindings", "read")]
-fn read'(i32, &extern, i32, i32, &?noextern) -> i32;
-#[import = ("bindings", "file_size")]
-fn file_size(i32) -> i64;
-#[import = ("bindings", "register_channel")]
-fn register_channel(&eq);
-#[import = ("bindings", "unregister_channel")]
-fn unregister_channel(&eq);
-#[import = ("bindings", "channel_list")]
-fn channel_list() -> &?any;
-#[import = ("bindings", "ta_new")]
-fn ta_new(i32) -> &extern;
-#[import = ("bindings", "ta_copy")]
-fn ta_copy(&extern, i32, i32, i32);
-#[import = ("bindings", "ta_set_ui8")]
-fn ta_set_ui8(&extern, i32, i32); // ZZZ ??
-#[import = ("bindings", "ta_get_ui8")]
-fn ta_get_ui8(&extern, i32) -> i32;
-#[import = ("bindings", "ta_blit_from_string")]
-fn ta_blit_from_string(&string, i32, &extern, i32, i32);
-#[import = ("bindings", "ta_blit_to_string")]
-fn ta_blit_to_string(&extern, i32, &string, i32, i32);
+#[if(wasi)]
+{
+    #[import = ("wasi_snapshot_preview1", "fd_close")]
+    fn fd_close(i32) -> i32;
+    #[import = ("wasi_snapshot_preview1", "fd_write")]
+    fn fd_write(i32, i32, i32, i32) -> i32;
+    #[import = ("wasi_snapshot_preview1", "fd_read")]
+    fn fd_read(i32, i32, i32, i32) -> i32;
+    #[import = ("wasi_snapshot_preview1", "fd_seek")]
+    fn fd_seek(i32, i64, i32, i32) -> i32;
+    #[import = ("wasi_snapshot_preview1", "path_open")]
+    fn path_open(i32, i32, i32, i32, i32, i64, i64, i32, i32) -> i32;
+    #[import = ("libc", "memory")]
+    memory m: i32 [2];
+    #[import = ("libc", "free")]
+    fn free(i32);
+    #[import = ("wasi_memory", "get_buffer")]
+    fn get_buffer() -> i32;
+    #[import = ("wasi_memory", "blit_memory_to_substring")]
+    fn blit_memory_to_substring(i32, &bytes, i32, i32);
+    #[import = ("wasi_memory", "blit_substring_to_memory")]
+    fn blit_substring_to_memory(i32, &bytes, i32, i32);
+    #[import = ("wasi_memory", "write_string_to_memory")]
+    fn write_string_to_memory(i32, i32, &eq) -> i32;
+    #[import = ("wasi_memory", "release_memory")]
+    fn release_memory(i32, i32);
+    #[import = ("sys", "caml_handle_sys_error")]
+    fn caml_handle_sys_error(&eq, i32);
+    #[import = ("sys", "caml_handle_sys_error_if")]
+    fn caml_handle_sys_error_if(&eq, i32);
+    #[import = ("fail", "caml_invalid_argument")]
+    fn caml_invalid_argument(&eq);
+    #[import = ("fs", "caml_sys_resolve_path")]
+    fn caml_sys_resolve_path(&eq) -> (i32, i32, i32);
+}
+#[else]
+{
+    #[import = ("bindings", "open")]
+    fn open_fn(&?any, i32, i32) -> i32;
+    #[import = ("bindings", "close")]
+    fn close(i32);
+    #[import = ("bindings", "write")]
+    fn write(i32, &extern, i32, i32, i64) -> i32;
+    #[import = ("bindings", "write")]
+    fn write'(i32, &extern, i32, i32, &?noextern) -> i32;
+    #[import = ("bindings", "read")]
+    fn read(i32, &extern, i32, i32, i64) -> i32;
+    #[import = ("bindings", "read")]
+    fn read'(i32, &extern, i32, i32, &?noextern) -> i32;
+    #[import = ("bindings", "file_size")]
+    fn file_size(i32) -> i64;
+    #[import = ("bindings", "register_channel")]
+    fn register_channel(&eq);
+    #[import = ("bindings", "unregister_channel")]
+    fn unregister_channel(&eq);
+    #[import = ("bindings", "channel_list")]
+    fn channel_list() -> &?any;
+    #[import = ("jslib", "caml_js_fun_call")]
+    fn caml_js_fun_call(&eq, &eq) -> &eq;
+    #[import = ("jslib", "caml_jsbytes_of_string")]
+    fn caml_jsbytes_of_string(&eq) -> &eq;
+    #[import = ("bindings", "ta_new")]
+    fn ta_new(i32) -> &extern;
+    #[import = ("bindings", "ta_copy")]
+    fn ta_copy(&extern, i32, i32, i32);
+    #[import = ("bindings", "ta_subarray")]
+    fn ta_subarray(&extern, i32, i32) -> &extern;
+    #[import = ("bindings", "ta_set")]
+    fn ta_set(&extern, &extern, i32);
+    #[import = ("bindings", "dv_make")]
+    fn dv_make(&extern) -> &extern;
+    #[import = ("bindings", "dv_get_ui8")]
+    fn dv_get_ui8(&?extern, i32) -> i32;
+    #[import = ("bindings", "dv_set_i8")]
+    fn dv_set_i8(&?extern, i32, i32);
+    #[import = ("sys", "caml_handle_sys_error")]
+    fn caml_handle_sys_error(&?extern);
+    #[import = ("fail", "javascript_exception")]
+    tag javascript_exception(&?extern);
+    #[import = ("bigarray", "caml_blit_dataview_to_bytes")]
+    fn caml_blit_dataview_to_bytes(&extern, i32, &bytes, i32, i32);
+    #[import = ("bigarray", "caml_blit_bytes_to_dataview")]
+    fn caml_blit_bytes_to_dataview(&bytes, i32, &extern, i32, i32);
+}
 #[import = ("custom", "custom_compare_id")]
 fn custom_compare_id(&eq, &eq, i32) -> i32;
 #[import = ("custom", "custom_hash_id")]
@@ -67,22 +121,133 @@ fn custom_next_id() -> i64;
 fn caml_copy_int64(i64) -> &eq;
 #[import = ("int64", "Int64_val")]
 fn Int64_val(&eq) -> i64;
-#[import = ("fail", "javascript_exception")]
-tag javascript_exception(&?extern);
-#[import = ("sys", "caml_handle_sys_error")]
-fn caml_handle_sys_error(&?extern);
+#[import = ("bigarray", "caml_ba_get_data")]
+fn caml_ba_get_data(&eq) -> &extern;
 
-#[import = ("bindings", "map_new")]
-fn map_new() -> &extern;
-#[import = ("bindings", "map_get")]
-fn map_get(&extern, i32) -> &fd_offset;
-#[import = ("bindings", "map_set")]
-fn map_set(&extern, i32, &fd_offset);
-#[import = ("bindings", "map_delete")]
-fn map_delete(&extern, i32);
+#[if(wasi)]
+{
+    fn ta_new(sz: i32) -> &extern {
+        [bytes|0; sz] as &extern;
+    }
+
+    fn ta_copy(buf: &extern, dst: i32, src: i32, end: i32) {
+        let b = buf as &any as &bytes;
+        b.copy(dst, b, src, end - src);
+    }
+
+    fn caml_blit_bytes_to_dataview(s: &bytes, i: i32, buf: &extern, j: i32, l: i32) {
+        (buf as &any as &bytes).copy(j, s, i, l);
+    }
+
+    fn caml_blit_dataview_to_bytes(buf: &extern, i: i32, s: &bytes, j: i32, l: i32) {
+        s.copy(j, buf as &any as &bytes, i, l);
+    }
+
+    fn dv_make(b: &extern) -> &extern {
+        b;
+    }
+
+    fn dv_get_ui8(a: &extern, i: i32) -> i32 {
+        (a as &any as &bytes)[i] as i32_u;
+    }
+
+    fn dv_set_i8(a: &extern, i: i32, v: i32) {
+        (a as &any as &bytes)[i] = v;
+    }
+
+    type dat = { array: &array, offset: i32, len: i32 };
+
+    fn ta_blit_from_buffer(buf: &extern, i: i32, ta: &extern, j: i32, len: i32) {
+        let dat = ta as &any as &dat;
+        caml_blit_dataview_to_bytes(buf, i, dat.array as &bytes, dat.offset + j, len);
+    }
+
+    fn ta_blit_to_buffer(ta: &extern, i: i32, buf: &extern, j: i32, len: i32) {
+        let dat = ta as &any as &dat;
+        caml_blit_bytes_to_dataview(dat.array as &bytes, dat.offset + i, buf, j, len);
+    }
+
+    let caml_stdout: &eq = 0 as &i31;
+
+    // List of all open output channels, like the C runtime's
+    // caml_all_opened_channels, so flush_all / at-exit reaches every channel
+    // (the registry hooks are invoked from open_descriptor_out / close_channel).
+    // Kept functional (cons cells are never mutated) so a list previously
+    // returned by caml_ml_out_channels_list stays valid across register/close.
+    let out_channels: &eq = 0 as &i31;
+
+    fn register_channel(ch: &eq) {
+        if (ch as &channel).fd == 1 {
+            caml_stdout = ch;
+        }
+        out_channels = [block|0 as &i31, ch, out_channels];
+    }
+
+    fn unregister_channel(ch: &eq) {
+        let cur = out_channels;
+        let new: &eq = 0 as &i31;
+        'done: do {
+            'loop: loop {
+                br_if 'done cur is &i31;
+                let cell = cur as &block;
+                if !(cell[1] == ch) {
+                    new = [block|0 as &i31, cell[1], new];
+                }
+                cur = cell[2];
+                br 'loop;
+            }
+        }
+        out_channels = new;
+    }
+    fn map_new() -> &extern {
+        0 as &i31 as &extern;
+    }
+    fn map_get(&extern, i32) -> &fd_offset {
+        { offset: 0, seeked: 0, append: 0 };
+    }
+    fn map_set(&extern, i32, &fd_offset) {}
+    fn map_delete(&extern, i32) {}
+
+    fn file_size(fd: i32) -> i64 {
+        let buffer = get_buffer();
+        let res: i32;
+        'error: do {
+            res = fd_seek(fd, 0, 1, buffer);
+            br_if 'error res;
+            let cur = m.load64(buffer);
+            res = fd_seek(fd, 0, 2, buffer);
+            br_if 'error res;
+            let end = m.load64(buffer);
+            res = fd_seek(fd, cur, 0, buffer);
+            br_if 'error res;
+            return end;
+        }
+        caml_handle_sys_error(0 as &i31, res);
+        0;
+    }
+}
+#[else]
+{
+    #[import = ("bindings", "map_new")]
+    fn map_new() -> &extern;
+    #[import = ("bindings", "map_get")]
+    fn map_get(&extern, i32) -> &?fd_offset;
+    #[import = ("bindings", "map_set")]
+    fn map_set(&extern, i32, &fd_offset);
+    #[import = ("bindings", "map_delete")]
+    fn map_delete(&extern, i32);
+
+    fn ta_blit_from_buffer(buf: &extern, i: i32, ta: &extern, j: i32, len: i32) {
+        ta_set(ta, ta_subarray(buf, i, i + len), j);
+    }
+
+    fn ta_blit_to_buffer(ta: &extern, i: i32, buf: &extern, j: i32, len: i32) {
+        ta_set(buf, ta_subarray(ta, i, i + len), j);
+    }
+}
 
 type block = [mut &eq];
-type string = [mut i8];
+type bytes = [mut i8];
 type offset_array = [mut i64];
 
 type compare = fn(&eq, &eq, i32) -> i32;
@@ -92,7 +257,7 @@ type serialize = fn(&eq, &eq) -> (i32, i32);
 type deserialize = fn(&eq) -> (&eq, i32);
 type dup = fn(&eq) -> &eq;
 type custom_operations = {
-    id: &string,
+    id: &bytes,
     compare: &?compare,
     compare_ext: &?compare,
     hash: &?hash,
@@ -101,12 +266,12 @@ type custom_operations = {
     deserialize: &?deserialize,
     dup: &?dup
 };
-type custom = open { f: &custom_operations };
-type custom_with_id: custom = open { f: &custom_operations, id: i64 };
+type custom = open { ops: &custom_operations };
+type custom_with_id: custom = open { ops: &custom_operations, id: i64 };
 
 const channel_ops: &custom_operations =
     {
-        id: "_chan", // "_chan"
+        id: "_chan",
         compare: custom_compare_id,
         compare_ext: null,
         hash: custom_hash_id,
@@ -117,61 +282,91 @@ const channel_ops: &custom_operations =
     };
 
 type channel: custom_with_id = {
-    f: &custom_operations,
+    ops: &custom_operations,
     id: i64,
     fd: mut i32,
     buffer: mut &extern,
+    buffer_view: mut &extern,
     curr: mut i32,
     max: mut i32,
     size: mut i32,
-    unbuffered: mut i32
+    unbuffered: mut i32,
+    output: mut &?eq,
+    refill: mut &?eq
 };
 
-type fd_offset = { offset: mut i64, seeked: mut i32 };
+type fd_offset = { offset: mut i64, seeked: mut i32, append: mut i32 };
 
 let fd_offsets: &?extern = null;
 
 fn get_fd_offsets() -> &extern {
     if !fd_offsets {
         let m = map_new();
-        map_set(m, 0, { offset: 0, seeked: 0 });
-        map_set(m, 1, { offset: 0, seeked: 0 });
-        map_set(m, 2, { offset: 0, seeked: 0 });
+        map_set(m, 0, { offset: 0, seeked: 0, append: 0 });
+        map_set(m, 1, { offset: 0, seeked: 0, append: 0 });
+        map_set(m, 2, { offset: 0, seeked: 0, append: 0 });
         fd_offsets = m;
     }
     fd_offsets!;
 }
 
-fn initialize_fd_offset(fd: i32, offset: i64) {
-    map_set(get_fd_offsets(), fd, { offset: offset, seeked: 0 });
+#[export = "initialize_fd_offset"]
+fn initialize_fd_offset(fd: i32, offset: i64, append: i32) {
+    map_set(get_fd_offsets(), fd, { offset: offset, seeked: 0, append: append });
 }
 
+#[export = "release_fd_offset"]
 fn release_fd_offset(fd: i32) {
     map_delete(get_fd_offsets(), fd);
 }
 
-fn get_fd_offset(fd: i32) -> &fd_offset {
-    map_get(get_fd_offsets(), fd);
+const bad_file_descriptor = "Bad file descriptor";
+
+#[export = "get_fd_offset_unchecked"]
+fn get_fd_offset_unchecked(fd: i32) -> &?fd_offset {
+    become map_get(get_fd_offsets(), fd);
 }
 
+fn get_fd_offset(fd: i32) -> &fd_offset {
+    let res = get_fd_offset_unchecked(fd);
+    if !res {
+        caml_raise_sys_error(bad_file_descriptor);
+    }
+    res!;
+}
+
+#[export = "IO_BUFFER_SIZE"]
 const IO_BUFFER_SIZE = 65536;
 
-type open_flags = [i8];
-//  1 O_RDONLY
-//  2 O_WRONLY
-//  4 O_APPEND
-//  8 O_CREAT
-// 16 O_TRUNC
-// 32 O_EXCL
-// 64 O_NONBLOCK
-const sys_open_flags: &open_flags = [1, 2, 6, 8, 16, 32, 0, 0, 64];
+type open_flags = [i16];
 
-fn convert_flag_list(vflags: &eq) -> i32 {
+#[if(wasi)]
+//      1 O_RDONLY
+//      2 O_WRONLY
+//   0x10 O_CREAT
+//   0x40 O_EXCL
+//   0x80 O_TRUNC
+//  0x100 O_APPEND
+//  0x400 O_NONBLOCK
+const sys_open_flags: &open_flags = [1, 2, 0x102, 0x10, 0x80, 0x40, 0, 0, 0x400];
+#[else]
+//   1 O_RDONLY
+//   2 O_WRONLY
+//   4 O_RDWR
+//   8 O_APPEND
+//  16 O_CREAT
+//  32 O_TRUNC
+//  64 O_EXCL
+// 128 O_NONBLOCK
+const sys_open_flags: &open_flags = [1, 2, 10, 16, 32, 64, 0, 0, 128];
+
+#[export = "convert_flag_list"]
+fn convert_flag_list(tbl: &open_flags, vflags: &eq) -> i32 {
     let flags: i32;
     'loop: loop {
         match vflags {
             cons: &block => {
-                flags = flags | sys_open_flags[cons[1] as &i31 as i32_u] as i32_u;
+                flags = flags | tbl[cons[1] as &i31 as i32_u] as i32_u;
                 vflags = cons[2];
                 br 'loop;
             }
@@ -181,29 +376,75 @@ fn convert_flag_list(vflags: &eq) -> i32 {
     flags;
 }
 
+#[if(wasi)]
+#[export = "caml_sys_open"]
+fn caml_sys_open(vpath: &eq, vflags: &eq, perm: &eq) -> &eq {
+    let (path_0, path_1, path_2) = caml_sys_resolve_path(vpath);
+    let buffer = get_buffer();
+    let flags = convert_flag_list(sys_open_flags, vflags);
+    let res =
+        path_open(
+            path_0,
+            1, // symlink_follow
+            path_1,
+            path_2,
+            flags >>u 4 & 0xF,
+            flags & 2?0x860007c:0x820003e,
+            0,
+            flags >>u 8,
+            buffer,
+        );
+    free(path_1);
+    caml_handle_sys_error_if(vpath, res);
+    let fd = m.load32(buffer);
+    let offset: i64;
+    // Like native [O_APPEND], the fd position starts at 0 (WASI's O_APPEND
+    // fdflag makes each write go to EOF regardless), so [pos_out] reports 0
+    // right after opening, matching native.
+    initialize_fd_offset(
+        fd,
+        offset,
+        flags & 0x100 // O_APPEND
+    );
+    fd as &i31;
+}
+#[else]
 #[export = "caml_sys_open"]
 fn caml_sys_open(path: &eq, vflags: &eq, perm: &eq) -> &eq {
-    let flags = convert_flag_list(vflags);
+    let flags = convert_flag_list(sys_open_flags, vflags);
     let fd: i32;
-    let offset: i64;
     try {
-        fd = open_2(unwrap(caml_jsstring_of_string(path)), flags, perm as &i31 as i32_u);
-        if flags & 4 // O_APPEND
-        {
-            offset = file_size(fd);
-        }
+        fd = open_fn(unwrap(caml_jsstring_of_string(path)), flags, perm as &i31 as i32_u);
     } catch {
         javascript_exception => {
             caml_handle_sys_error(_);
         }
     }
-    initialize_fd_offset(fd, offset);
+    let offset: i64;
+    // Like native [O_APPEND], the offset starts at 0; writes reposition to
+    // EOF (see [caml_flush_partial]).
+    initialize_fd_offset(
+        fd,
+        offset,
+        flags & 8 // O_APPEND
+    );
     fd as &i31;
 }
 
+#[if(wasi)]
 #[export = "caml_sys_close"]
-fn caml_sys_close(x: &eq) -> &eq {
-    let fd = x as &i31 as i32_u;
+fn caml_sys_close(vfd: &eq) -> &eq {
+    let fd = vfd as &i31 as i32_u;
+    release_fd_offset(fd);
+    let res = fd_close(fd);
+    caml_handle_sys_error_if(0 as &i31, res);
+    0 as &i31;
+}
+#[else]
+#[export = "caml_sys_close"]
+fn caml_sys_close(vfd: &eq) -> &eq {
+    let res: i32;
+    let fd = vfd as &i31 as i32_u;
     release_fd_offset(fd);
     try {
         close(fd);
@@ -215,11 +456,66 @@ fn caml_sys_close(x: &eq) -> &eq {
     0 as &i31;
 }
 
+#[export = "caml_sys_io_buffer_size"]
+fn caml_sys_io_buffer_size(&eq) -> &eq {
+    IO_BUFFER_SIZE as &i31;
+}
+
 #[export = "caml_ml_set_channel_name"]
 fn caml_ml_set_channel_name(&eq, &eq) -> &eq {
     0 as &i31;
 }
 
+#[if(wasi)]
+{
+    // Channel output/refill hooks redirect I/O to a JavaScript callback.
+    // The WASI runtime reads and writes through real file descriptors and
+    // ignores these hooks, so the setters raise rather than silently doing
+    // nothing.
+    #[export = "caml_ml_set_channel_output"]
+    fn caml_ml_set_channel_output(ch: &eq, f: &eq) -> &eq {
+        caml_invalid_argument("caml_ml_set_channel_output not supported with WASI");
+        0 as &i31;
+    }
+
+    #[export = "caml_ml_set_channel_refill"]
+    fn caml_ml_set_channel_refill(ch: &eq, f: &eq) -> &eq {
+        caml_invalid_argument("caml_ml_set_channel_refill not supported with WASI");
+        0 as &i31;
+    }
+}
+#[else]
+{
+    #[export = "caml_ml_set_channel_output"]
+    fn caml_ml_set_channel_output(ch: &eq, f: &eq) -> &eq {
+        (ch as &channel).output = f;
+        0 as &i31;
+    }
+
+    #[export = "caml_ml_set_channel_refill"]
+    fn caml_ml_set_channel_refill(ch: &eq, f: &eq) -> &eq {
+        (ch as &channel).refill = f;
+        0 as &i31;
+    }
+}
+
+#[if(wasi)]
+fn push_channel(l: &eq, ch: &eq) -> &eq {
+    'continue: do {
+        br_if 'continue !(ch is &channel);
+        let c = ch as &channel;
+        br_if 'continue c.fd == -1;
+        l = [block|0 as &i31, ch, l];
+    }
+    l;
+}
+
+#[if(wasi)]
+#[export = "caml_ml_out_channels_list"]
+fn caml_ml_out_channels_list(&eq) -> &eq {
+    out_channels;
+}
+#[else]
 #[export = "caml_ml_out_channels_list"]
 fn caml_ml_out_channels_list(&eq) -> &eq {
     become caml_list_of_js_array(wrap(channel_list()));
@@ -227,15 +523,19 @@ fn caml_ml_out_channels_list(&eq) -> &eq {
 
 #[export = "caml_ml_open_descriptor_in"]
 fn caml_ml_open_descriptor_in(fd: &eq) -> &eq {
+    let buffer = ta_new(IO_BUFFER_SIZE);
     {
-        f: channel_ops,
+        ops: channel_ops,
         id: custom_next_id(),
         fd: fd as &i31 as i32_u,
-        buffer: ta_new(IO_BUFFER_SIZE),
+        buffer: buffer,
+        buffer_view: dv_make(buffer),
         curr: 0,
         max: 0,
         size: IO_BUFFER_SIZE,
         unbuffered: 0,
+        output: null,
+        refill: null,
     };
 }
 
@@ -244,16 +544,20 @@ let caml_stderr: &eq = 0 as &i31;
 
 #[export = "caml_ml_open_descriptor_out"]
 fn caml_ml_open_descriptor_out(fd: &eq) -> &eq {
+    let buffer = ta_new(IO_BUFFER_SIZE);
     let res: &eq =
         {
-            f: channel_ops,
+            ops: channel_ops,
             id: custom_next_id(),
             fd: fd as &i31 as i32_u,
-            buffer: ta_new(IO_BUFFER_SIZE),
+            buffer: buffer,
+            buffer_view: dv_make(buffer),
             curr: 0,
             max: -1,
             size: IO_BUFFER_SIZE,
             unbuffered: 0,
+            output: null,
+            refill: null,
         };
     register_channel(res);
     if fd == 2 as &i31 {
@@ -262,63 +566,157 @@ fn caml_ml_open_descriptor_out(fd: &eq) -> &eq {
     res;
 }
 
+#[export = "caml_ml_set_binary_mode"]
+fn caml_ml_set_binary_mode(&eq, &eq) -> &eq {
+    0 as &i31;
+}
+
+#[export = "caml_ml_is_binary_mode"]
+fn caml_ml_is_binary_mode(&eq) -> &eq {
+    1 as &i31;
+}
+
+#[export = "caml_channel_descriptor"]
+fn caml_channel_descriptor(ch: &eq) -> &eq {
+    let fd = (ch as &channel).fd;
+    if fd == -1 {
+        caml_raise_sys_error("bad file descriptor");
+    }
+    fd as &i31;
+}
+
 #[export = "caml_ml_close_channel"]
-fn caml_ml_close_channel(x: &eq) -> &eq {
-    let ch = x as &channel;
-    ch.curr = 0;
-    ch.max = 0;
-    ch.size = 0;
+fn caml_ml_close_channel(vch: &eq) -> &eq {
+    let ch = vch as &channel;
+    // output channels: any output will trigger a flush since the
+    // buffer is non-empty (curr > 0) and full (curr = size)
+    // input channels: any input will trigger a read since the buffer
+    // is empty (curr = max)
+    ch.curr = 1;
+    ch.max = 1;
+    ch.size = 1;
     let fd = ch.fd;
     if fd != -1 {
         ch.fd = -1;
         unregister_channel(ch);
         release_fd_offset(fd);
-        try {
-            close(fd);
-        } catch {
-            javascript_exception => {
-                // ignore exception
-                _ = _;
+        let res: i32;
+        #[if(wasi)]
+        {
+            res = fd_close(fd);
+            caml_handle_sys_error_if(0 as &i31, res);
+        }
+        #[else]
+        {
+            try {
+                close(fd);
+            } catch {
+                javascript_exception => {
+                    // ignore exception
+                    _ = _;
+                }
             }
         }
     }
     0 as &i31;
 }
 
-fn caml_do_read(ch: &channel, pos: i32, len: i32) -> i32 {
-    let fd = ch.fd;
-    let fd_offset = get_fd_offset(fd);
-    let offset = fd_offset.offset;
-    let n: i32;
-    try {
-        n =
-            if fd_offset.seeked => i32 {
-                read(fd, ch.buffer, pos, len, offset);
-            } else {
-                read'(fd, ch.buffer, pos, len, null);
-            };
-    } catch {
-        javascript_exception => {
-            caml_handle_sys_error(_);
-        }
-    }
-    fd_offset.offset = offset + n as i64_u;
+#[if(wasi)]
+fn read(fd: i32, buf: &extern, pos: i32, n: i32) -> i32 {
+    let buffer = get_buffer();
+    let nread = buffer;
+    let iovs = buffer + 4;
+    buffer = buffer + 12;
+    m.store32(iovs, buffer);
+    m.store32(iovs, n, 4, 4);
+    let iovs_len = 1;
+    let res = fd_read(fd, iovs, iovs_len, nread);
+    caml_handle_sys_error_if(0 as &i31, res);
+    n = m.load32(nread);
+    let s = buf as &any as &bytes;
+    blit_memory_to_substring(buffer, s, pos, n);
     n;
 }
 
+fn caml_do_read(ch: &channel, pos: i32, len: i32) -> i32 {
+    let fd = ch.fd;
+    let fd_offset: &fd_offset;
+    let offset: i64;
+    let n: i32;
+    #[if(wasi)]
+    {
+        n = read(fd, ch.buffer, pos, len);
+    }
+    #[else]
+    {
+        fd_offset = get_fd_offset(fd);
+        offset = fd_offset.offset;
+        try {
+            n =
+                if fd_offset.seeked => i32 {
+                    read(fd, ch.buffer, pos, len, offset);
+                } else {
+                    read'(fd, ch.buffer, pos, len, null);
+                };
+        } catch {
+            javascript_exception => {
+                caml_handle_sys_error(_);
+            }
+        }
+        fd_offset.offset = offset + n as i64_u;
+    }
+    n;
+}
+
+#[if(wasi)]
+// The refill hook is not supported with WASI (see
+// caml_ml_set_channel_refill), so this always reads from the fd.
+fn caml_do_read_or_refill(ch: &channel, pos: i32, len: i32) -> i32 {
+    become caml_do_read(ch, pos, len);
+}
+#[else]
+fn caml_do_read_or_refill(ch: &channel, pos: i32, len: i32) -> i32 {
+    let f = ch.refill;
+    if !f {
+        return caml_do_read(ch, pos, len);
+    }
+    let str = caml_js_fun_call(f!, [block|0 as &i31]) as &bytes;
+    let str_len = str.length();
+    if !str_len {
+        ch.refill = null;
+        return 0;
+    }
+    // Grow the channel buffer if the refilled data does not fit, so that
+    // no bytes are dropped (the JS runtime does the same), preserving the
+    // bytes already buffered before $pos.
+    if pos + str_len >u ch.size {
+        let new_size = pos + str_len;
+        let new_buffer = ta_new(new_size);
+        ta_set(new_buffer, ch.buffer, 0);
+        ch.buffer = new_buffer;
+        ch.buffer_view = dv_make(new_buffer);
+        ch.size = new_size;
+    }
+    caml_blit_bytes_to_dataview(str, 0, ch.buffer_view, pos, str_len);
+    // Advance the channel offset so that pos_in/pos_out stay consistent.
+    let fd_offset = get_fd_offset(ch.fd);
+    fd_offset.offset = fd_offset.offset + str_len as i64_u;
+    str_len;
+}
+
 fn caml_refill(ch: &channel) -> i32 {
-    let buf = ch.buffer;
-    let n = caml_do_read(ch, 0, ch.size);
+    let view = ch.buffer_view;
+    let n = caml_do_read_or_refill(ch, 0, ch.size);
     if !n {
         caml_raise_end_of_file();
     }
     ch.max = n;
     ch.curr = 1;
-    return ta_get_ui8(buf, 0);
+    return dv_get_ui8(view, 0);
 }
 
 #[export = "caml_getblock"]
-fn caml_getblock(vch: &eq, s: &string, pos: i32, len: i32) -> i32 {
+fn caml_getblock(vch: &eq, s: &bytes, pos: i32, len: i32) -> i32 {
     if !len {
         return 0;
     }
@@ -328,22 +726,46 @@ fn caml_getblock(vch: &eq, s: &string, pos: i32, len: i32) -> i32 {
         if len >u avail {
             len = avail;
         }
-        ta_blit_to_string(ch.buffer, ch.curr, s, pos, len);
+        caml_blit_dataview_to_bytes(ch.buffer_view, ch.curr, s, pos, len);
         ch.curr = ch.curr + len;
         return len;
     }
-    let nread = caml_do_read(ch, 0, ch.size);
+    let nread = caml_do_read_or_refill(ch, 0, ch.size);
     ch.max = nread;
     if len >u nread {
         len = nread;
     }
-    ta_blit_to_string(ch.buffer, 0, s, pos, len);
+    caml_blit_dataview_to_bytes(ch.buffer_view, 0, s, pos, len);
+    ch.curr = len;
+    len;
+}
+
+fn caml_getblock_typed_array(vch: &eq, d: &extern, pos: i32, len: i32) -> i32 {
+    if !len {
+        return 0;
+    }
+    let ch = vch as &channel;
+    let avail = ch.max - ch.curr;
+    if avail {
+        if len >u avail {
+            len = avail;
+        }
+        ta_blit_from_buffer(ch.buffer, ch.curr, d, pos, len);
+        ch.curr = ch.curr + len;
+        return len;
+    }
+    let nread = caml_do_read_or_refill(ch, 0, ch.size);
+    ch.max = nread;
+    if len >u nread {
+        len = nread;
+    }
+    ta_blit_from_buffer(ch.buffer, 0, d, pos, len);
     ch.curr = len;
     len;
 }
 
 #[export = "caml_really_getblock"]
-fn caml_really_getblock(ch: &eq, s: &string, pos: i32, len: i32) -> i32 {
+fn caml_really_getblock(ch: &eq, s: &bytes, pos: i32, len: i32) -> i32 {
     let n = len;
     while n {
         let read = caml_getblock(ch, s, pos, n);
@@ -358,19 +780,18 @@ fn caml_really_getblock(ch: &eq, s: &string, pos: i32, len: i32) -> i32 {
 
 #[export = "caml_ml_input"]
 fn caml_ml_input(vch: &eq, vs: &eq, vpos: &eq, vlen: &eq) -> &eq {
-    let i: i32;
     let ch = vch as &channel;
-    let s = vs as &string;
+    let s = vs as &bytes;
     let pos = vpos as &i31 as i32_u;
     let len = vlen as &i31 as i32_u;
-    let buf = ch.buffer;
+    let buf = ch.buffer_view;
     let curr = ch.curr;
     let avail = ch.max - curr;
     if len >u avail {
         if avail >u 0 {
             len = avail;
         } else {
-            let nread = caml_do_read(ch, 0, ch.size);
+            let nread = caml_do_read_or_refill(ch, 0, ch.size);
             ch.max = nread;
             curr = 0;
             if len >u nread {
@@ -378,7 +799,9 @@ fn caml_ml_input(vch: &eq, vs: &eq, vpos: &eq, vlen: &eq) -> &eq {
             }
         }
     }
-    ta_blit_to_string(buf, curr, s, pos, len);
+    // Re-read the buffer view: a refill may have grown (reallocated) it.
+    buf = ch.buffer_view;
+    caml_blit_dataview_to_bytes(buf, curr, s, pos, len);
     ch.curr = curr + len;
     len as &i31;
 }
@@ -389,7 +812,7 @@ fn caml_getch(ch: &channel) -> i32 {
         become caml_refill(ch);
     }
     ch.curr = curr + 1;
-    become ta_get_ui8(ch.buffer, curr);
+    become dv_get_ui8(ch.buffer_view, curr);
 }
 
 #[export = "caml_ml_input_char"]
@@ -409,27 +832,39 @@ fn caml_ml_input_int(vch: &eq) -> &eq {
 #[export = "caml_ml_pos_in"]
 fn caml_ml_pos_in(vch: &eq) -> &eq {
     let ch = vch as &channel;
-    (get_fd_offset(ch.fd).offset as i32 - (ch.max - ch.curr)) as &i31;
+    (caml_ml_get_channel_offset(ch) as i32 - (ch.max - ch.curr)) as &i31;
 }
 
 #[export = "caml_ml_pos_in_64"]
 fn caml_ml_pos_in_64(vch: &eq) -> &eq {
     let ch = vch as &channel;
-    caml_copy_int64(get_fd_offset(ch.fd).offset - (ch.max - ch.curr) as i64_s);
+    caml_copy_int64(caml_ml_get_channel_offset(ch) - (ch.max - ch.curr) as i64_s);
 }
 
 #[export = "caml_ml_pos_out"]
 fn caml_ml_pos_out(vch: &eq) -> &eq {
     let ch = vch as &channel;
-    (get_fd_offset(ch.fd).offset as i32 + ch.curr) as &i31;
+    (caml_ml_get_channel_offset(ch) as i32 + ch.curr) as &i31;
 }
 
 #[export = "caml_ml_pos_out_64"]
 fn caml_ml_pos_out_64(vch: &eq) -> &eq {
     let ch = vch as &channel;
-    caml_copy_int64(get_fd_offset(ch.fd).offset + ch.curr as i64_s);
+    caml_copy_int64(caml_ml_get_channel_offset(ch) + ch.curr as i64_s);
 }
 
+#[if(wasi)]
+fn caml_seek_in(ch: &channel, dest: i64) -> &eq {
+    let fd = ch.fd;
+    let buffer = get_buffer();
+    // ZZZ store current offset in channel do avoid some syscalls?
+    let res = fd_seek(fd, dest, 0, buffer);
+    caml_handle_sys_error_if(0 as &i31, res);
+    ch.curr = 0;
+    ch.max = 0;
+    0 as &i31;
+}
+#[else]
 fn caml_seek_in(ch: &channel, dest: i64) -> &eq {
     let fd = ch.fd;
     let fd_offset = get_fd_offset(fd);
@@ -437,7 +872,9 @@ fn caml_seek_in(ch: &channel, dest: i64) -> &eq {
     if (dest >=s offset - ch.max as i64_s) & (dest <=s offset) {
         ch.curr = ch.max - (offset - dest) as i32;
     } else {
-        // ZZZ Check for error
+        if dest <s 0 {
+            caml_raise_sys_error("Invalid argument");
+        }
         fd_offset.offset = dest;
         fd_offset.seeked = 1;
         ch.curr = 0;
@@ -460,10 +897,27 @@ fn caml_ml_seek_in_64(ch: &eq, dest: &eq) -> &eq {
 fn caml_ml_seek_out(vch: &eq, voffset: &eq) -> &eq {
     let ch = vch as &channel;
     caml_flush(ch);
-    // ZZZ Check for error
-    let fd_offset = get_fd_offset(ch.fd);
-    fd_offset.offset = voffset as &i31 as i32_s as i64_s;
-    fd_offset.seeked = 1;
+    let fd_offset: &fd_offset;
+    let offset: i64;
+    let buffer: i32;
+    let res: i32;
+    #[if(wasi)]
+    {
+        buffer = get_buffer();
+        res = fd_seek(ch.fd, voffset as &i31 as i32_s as i64_s, 0, buffer);
+        caml_handle_sys_error_if(0 as &i31, res);
+    }
+    #[else]
+    {
+        // ZZZ Check for error
+        fd_offset = get_fd_offset(ch.fd);
+        offset = voffset as &i31 as i32_s as i64_s;
+        if offset <s 0 {
+            caml_raise_sys_error("Invalid argument");
+        }
+        fd_offset.offset = offset;
+        fd_offset.seeked = 1;
+    }
     0 as &i31;
 }
 
@@ -471,10 +925,27 @@ fn caml_ml_seek_out(vch: &eq, voffset: &eq) -> &eq {
 fn caml_ml_seek_out_64(vch: &eq, voffset: &eq) -> &eq {
     let ch = vch as &channel;
     caml_flush(ch);
-    // ZZZ Check for error
-    let fd_offset = get_fd_offset(ch.fd);
-    fd_offset.offset = Int64_val(voffset);
-    fd_offset.seeked = 1;
+    let fd_offset: &fd_offset;
+    let offset: i64;
+    let buffer: i32;
+    let res: i32;
+    #[if(wasi)]
+    {
+        buffer = get_buffer();
+        res = fd_seek(ch.fd, Int64_val(voffset), 0, buffer);
+        caml_handle_sys_error_if(0 as &i31, res);
+    }
+    #[else]
+    {
+        // ZZZ Check for error
+        fd_offset = get_fd_offset(ch.fd);
+        offset = Int64_val(voffset);
+        if offset <s 0 {
+            caml_raise_sys_error("Invalid argument");
+        }
+        fd_offset.offset = offset;
+        fd_offset.seeked = 1;
+    }
     0 as &i31;
 }
 
@@ -487,7 +958,7 @@ fn caml_ml_input_scan_line(vch: &eq) -> &eq {
             let n: i32;
             if ch.curr {
                 n = ch.curr;
-                ta_copy(ch.buffer, 0, n, ch.max - ch.curr);
+                ta_copy(ch.buffer, 0, n, ch.max);
                 ch.curr = 0;
                 ch.max = ch.max - n;
                 p = p - n;
@@ -495,7 +966,7 @@ fn caml_ml_input_scan_line(vch: &eq) -> &eq {
             if ch.max >=u ch.size {
                 return (ch.curr - ch.size) as &i31;
             }
-            n = caml_do_read(ch, ch.max, ch.size - ch.max);
+            n = caml_do_read_or_refill(ch, ch.max, ch.size - ch.max);
             if !n {
                 return (ch.curr - ch.max) as &i31;
             }
@@ -503,7 +974,7 @@ fn caml_ml_input_scan_line(vch: &eq) -> &eq {
         }
         if
             10 // '\n'
-                == ta_get_ui8(ch.buffer, p) {
+                == dv_get_ui8(ch.buffer_view, p) {
             return (1 + (p - ch.curr)) as &i31;
         }
         p = p + 1;
@@ -533,44 +1004,134 @@ fn caml_ml_flush(vch: &eq) -> &eq {
     0 as &i31;
 }
 
+#[if(wasi)]
+fn write(fd: i32, buf: &extern, pos: i32, n: i32) -> i32 {
+    let buffer = get_buffer();
+    let nwritten = buffer;
+    let iovs = buffer + 4;
+    buffer = buffer + 12;
+    m.store32(iovs, buffer);
+    m.store32(iovs, n, 4, 4);
+    let iovs_len = 1;
+    let s = buf as &any as &bytes;
+    blit_substring_to_memory(buffer, s, pos, n);
+    let res = fd_write(fd, iovs, iovs_len, nwritten);
+    caml_handle_sys_error_if(0 as &i31, res);
+    m.load32(nwritten);
+}
+
+#[if(wasi)]
+{
+    #[export = "write_all_to_fd"]
+    fn write_all_to_fd(fd: i32, v: &eq) {
+        let len = (v as &bytes).length();
+        let buffer = get_buffer();
+        let nwritten = buffer;
+        let iovs = buffer + 4;
+        buffer = buffer + 12;
+        let buf = write_string_to_memory(buffer, IO_BUFFER_SIZE, v);
+        let remaining = buf;
+        'write: loop {
+            m.store32(iovs, remaining);
+            m.store32(iovs, len, 4, 4);
+            let res = fd_write(fd, iovs, 1, nwritten);
+            if !res {
+                len = len - m.load32(nwritten);
+                remaining = remaining + m.load32(nwritten);
+                br_if 'write len;
+            }
+        }
+        release_memory(buffer, buf);
+    }
+
+    fn caml_flush_partial(ch: &channel) -> i32 {
+        let fd_offset: &fd_offset;
+        let offset: i64;
+        let tmp: &bytes;
+        let towrite = ch.curr;
+        if towrite >u 0 {
+            let buf = ch.buffer;
+            let fd = ch.fd;
+            let written = write(fd, buf, 0, towrite);
+            if towrite >u written {
+                ta_copy(buf, 0, written, towrite);
+            }
+            towrite = towrite - written;
+            ch.curr = towrite;
+        }
+        !towrite;
+    }
+}
+#[else]
 fn caml_flush_partial(ch: &channel) -> i32 {
     let towrite = ch.curr;
     if towrite >u 0 {
         let buf = ch.buffer;
-        let fd = ch.fd;
-        let fd_offset = get_fd_offset(fd);
-        let offset = fd_offset.offset;
-        let written: i32;
-        try {
-            written =
-                if fd_offset.seeked => i32 {
-                    write(fd, buf, 0, towrite, offset);
-                } else {
-                    write'(fd, buf, 0, towrite, null);
-                };
-        } catch {
-            javascript_exception => {
-                caml_handle_sys_error(_);
+        if !ch.output {
+            let fd = ch.fd;
+            let fd_offset = get_fd_offset(fd);
+            let offset = fd_offset.offset;
+            // [O_APPEND]: every write goes to the end of the file,
+            // regardless of the current offset (which [seek] may have
+            // moved). Reposition to EOF before writing, like fs_node.js:
+            // the OS append flag alone is not portable for a positioned
+            // write (it appends on Linux but not macOS).
+            if fd_offset.append {
+                offset = file_size(fd);
             }
+            let written: i32;
+            try {
+                written =
+                    if fd_offset.seeked => i32 {
+                        write(fd, buf, 0, towrite, offset);
+                    } else {
+                        write'(fd, buf, 0, towrite, null);
+                    };
+            } catch {
+                javascript_exception => {
+                    caml_handle_sys_error(_);
+                }
+            }
+            fd_offset.offset = offset + written as i64_u;
+            if towrite >u written {
+                ta_copy(buf, 0, written, towrite);
+            }
+            towrite = towrite - written;
+            ch.curr = towrite;
+        } else {
+            let tmp: &bytes = [0; towrite];
+            caml_blit_dataview_to_bytes(ch.buffer_view, 0, tmp, 0, towrite);
+            _ = caml_js_fun_call(ch.output!, [block|0 as &i31, caml_jsbytes_of_string(tmp)]);
+            ch.curr = 0;
+            towrite = 0;
         }
-        fd_offset.offset = offset + written as i64_u;
-        towrite = towrite - written;
-        if towrite >u 0 {
-            ta_copy(buf, 0, written, towrite);
-        }
-        ch.curr = towrite;
     }
     !towrite;
 }
 
-fn caml_putblock(ch: &channel, s: &string, pos: i32, len: i32) -> i32 {
+fn caml_putblock(ch: &channel, s: &bytes, pos: i32, len: i32) -> i32 {
+    let curr = ch.curr;
+    let free = ch.size - curr;
+    if len >=u free {
+        len = free;
+    }
+    let buf = ch.buffer_view;
+    caml_blit_bytes_to_dataview(s, pos, buf, curr, len);
+    ch.curr = curr + len;
+    if len >=u free {
+        _ = caml_flush_partial(ch);
+    }
+    len;
+}
+
+fn caml_putblock_typed_array(ch: &channel, d: &extern, pos: i32, len: i32) -> i32 {
     let curr = ch.curr;
     let free = ch.size - curr;
     if len >=u free {
         len = free;
     }
     let buf = ch.buffer;
-    ta_blit_from_string(s, pos, buf, curr, len);
+    ta_blit_to_buffer(d, pos, buf, curr, len);
     ch.curr = curr + len;
     if len >=u free {
         _ = caml_flush_partial(ch);
@@ -579,9 +1140,17 @@ fn caml_putblock(ch: &channel, s: &string, pos: i32, len: i32) -> i32 {
 }
 
 #[export = "caml_really_putblock"]
-fn caml_really_putblock(ch: &eq, s: &string, pos: i32, len: i32) {
+fn caml_really_putblock(ch: &eq, s: &bytes, pos: i32, len: i32) {
     while len {
         let written = caml_putblock(ch as &channel, s, pos, len);
+        pos = pos + written;
+        len = len - written;
+    }
+}
+
+fn caml_really_putblock_typed_array(ch: &eq, d: &extern, pos: i32, len: i32) {
+    while len {
+        let written = caml_putblock_typed_array(ch as &channel, d, pos, len);
         pos = pos + written;
         len = len - written;
     }
@@ -593,7 +1162,7 @@ fn caml_ml_output(ch: &eq, s: &eq, vpos: &eq, vlen: &eq) -> &eq {
     let pos = vpos as &i31 as i32_u;
     let len = vlen as &i31 as i32_u;
     while len >u 0 {
-        let written = caml_putblock(ch as &channel, s as &string, pos, len);
+        let written = caml_putblock(ch as &channel, s as &bytes, pos, len);
         pos = pos + written;
         len = len - written;
     }
@@ -606,7 +1175,7 @@ fn caml_putch(ch: &channel, c: i32) {
         _ = caml_flush_partial(ch);
     }
     let curr = ch.curr;
-    ta_set_ui8(ch.buffer, curr, c);
+    dv_set_i8(ch.buffer_view, curr, c);
     ch.curr = curr + 1;
 }
 
@@ -649,27 +1218,54 @@ fn caml_ml_set_buffered(vch: &eq, mode: &eq) -> &eq {
 }
 
 #[export = "caml_ml_channel_size"]
-fn caml_ml_channel_size(x: &eq) -> &eq {
+fn caml_ml_channel_size(vch: &eq) -> &eq {
     // ZZZ check for overflow
-    file_size(caml_ml_get_channel_fd(x)) as i32 as &i31;
+    file_size(caml_ml_get_channel_fd(vch)) as i32 as &i31;
 }
 
 #[export = "caml_ml_channel_size_64"]
-fn caml_ml_channel_size_64(x: &eq) -> &eq {
-    caml_copy_int64(file_size(caml_ml_get_channel_fd(x)));
+fn caml_ml_channel_size_64(vch: &eq) -> &eq {
+    caml_copy_int64(file_size(caml_ml_get_channel_fd(vch)));
 }
 
 #[export = "caml_ml_get_channel_fd"]
-fn caml_ml_get_channel_fd(x: &eq) -> i32 {
-    (x as &channel).fd;
+fn caml_ml_get_channel_fd(vch: &eq) -> i32 {
+    (vch as &channel).fd;
 }
 
 #[export = "caml_ml_set_channel_fd"]
-fn caml_ml_set_channel_fd(x: &eq, x_2: i32) {
-    (x as &channel).fd = x_2;
+fn caml_ml_set_channel_fd(vch: &eq, fd: i32) {
+    (vch as &channel).fd = fd;
 }
 
+#[if(wasi)]
+#[export = "caml_ml_get_channel_offset"]
+fn caml_ml_get_channel_offset(ch: &eq) -> i64 {
+    let fd = (ch as &channel).fd;
+    let buffer = get_buffer();
+    let res = fd_seek(fd, 0, 1, buffer);
+    caml_handle_sys_error_if(0 as &i31, res);
+    m.load64(buffer);
+}
+#[else]
 #[export = "caml_ml_get_channel_offset"]
 fn caml_ml_get_channel_offset(ch: &eq) -> i64 {
     get_fd_offset((ch as &channel).fd).offset;
+}
+
+#[export = "caml_ml_output_bigarray"]
+fn caml_ml_output_bigarray(ch: &eq, a: &eq, vpos: &eq, vlen: &eq) -> &eq {
+    let d = caml_ba_get_data(a);
+    let pos = vpos as &i31 as i32_u;
+    let len = vlen as &i31 as i32_u;
+    caml_really_putblock_typed_array(ch, d, pos, len);
+    0 as &i31;
+}
+
+#[export = "caml_ml_input_bigarray"]
+fn caml_ml_input_bigarray(ch: &eq, a: &eq, vpos: &eq, vlen: &eq) -> &eq {
+    let d = caml_ba_get_data(a);
+    let pos = vpos as &i31 as i32_u;
+    let len = vlen as &i31 as i32_u;
+    caml_getblock_typed_array(ch, d, pos, len) as &i31;
 }

@@ -15,12 +15,33 @@
 ;; along with this program; if not, write to the Free Software
 ;; Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
-(import "jslib" "unwrap" (func $unwrap (param (ref eq)) (result anyref)))
+(@if $wasi
+(@then (import "io" "IO_BUFFER_SIZE" (global $IO_BUFFER_SIZE i32))
+(import "libc" "memory" (memory $m 2))
+(import "libc" "free" (func $free (param i32)))
+(import "libc" "format_float"
+  (func $format_float (param i32 i32 i32 f64) (result i32))
+) (import "libc" "strtod" (func $strtod (param i32 i32) (result f64)))
+(import "libc" "exp" (func $exp (param f64) (result f64)))
+(import "wasi_memory" "checked_malloc"
+  (func $checked_malloc (param i32) (result i32))
+) (import "wasi_memory" "get_buffer" (func $get_buffer (result i32)))
+(import "wasi_memory" "write_string_to_memory"
+  (func $write_string_to_memory (param i32 i32 (ref eq)) (result i32))
+)
+(import "wasi_memory" "release_memory" (func $release_memory (param i32 i32)))
+(import "wasi_memory" "blit_string_to_memory"
+  (func $blit_string_to_memory (param i32 (ref $bytes)))
+)
+(import "wasi_memory" "blit_memory_to_string"
+  (func $blit_memory_to_string (param i32 i32) (result (ref $bytes)))
+) )
+(@else
 (import "bindings" "format_float"
   (func $format_float (param i32 i32 i32 f64) (result anyref))
 )
 (import "bindings" "identity" (func $parse_float (param anyref) (result f64)))
-(import "Math" "exp" (func $exp (param f64) (result f64)))
+(import "Math" "exp" (func $exp (param f64) (result f64))) ) )
 (import "fail" "caml_failwith" (func $caml_failwith (param (ref eq))))
 (import "fail" "caml_invalid_argument"
   (func $caml_invalid_argument (param (ref eq)))
@@ -28,40 +49,40 @@
 (import "ints" "lowercase_hex_table"
   (global $lowercase_hex_table (ref $chars))
 )
-(import "jsstring" "jsstring_of_string"
-  (func $jsstring_of_string (param (ref $string)) (result anyref))
+(import "jsstring" "jsstring_of_bytes"
+  (func $jsstring_of_bytes (param (ref $bytes)) (result anyref))
 )
-(import "jsstring" "string_of_jsstring"
-  (func $string_of_jsstring (param anyref) (result (ref $string)))
+(import "jsstring" "bytes_of_jsstring"
+  (func $bytes_of_jsstring (param anyref) (result (ref $bytes)))
 )
 
 (type $float (struct (field $f f64)))
-(type $string (array (mut i8)))
+(type $bytes (array (mut i8)))
 (type $block (array (mut (ref eq))))
 
 (type $chars (array i8))
 
 (global $infinity (ref $chars) (@string $chars "infinity" ))
 
-(global $nan_2 (ref $chars) (@string $chars "nan" ))
+(global $nan_chars (ref $chars) (@string $chars "nan" ))
 
-(func $Double_val (export "Double_val") (param $x (ref eq)) (result f64)
-  (struct.get $float $f (ref.cast (ref $float) (local.get $x)))
+(func $Double_val (export "Double_val") (param $v (ref eq)) (result f64)
+  (struct.get $float $f (ref.cast (ref $float) (local.get $v)))
 )
 
 (func $caml_hexstring_of_float (export "caml_hexstring_of_float")
-  (param $x (ref eq)) (param $x_2 (ref eq)) (param $x_3 (ref eq))
+  (param $v (ref eq)) (param $vprec (ref eq)) (param $vstyle (ref eq))
   (result (ref eq))
   (local $prec i32) (local $style i32) (local $b i64) (local $sign i32)
-  (local $exp i32) (local $m i64) (local $i i32) (local $s (ref $string))
+  (local $exp i32) (local $m i64) (local $i i32) (local $s (ref $bytes))
   (local $len i32) (local $txt (ref $chars)) (local $frac i64)
   (local $unit i64) (local $half i64) (local $mask i64) (local $j i32)
   (local $d i32)
-  (local.set $prec (i31.get_s (ref.cast (ref i31) (local.get $x_2))))
-  (local.set $style (i31.get_s (ref.cast (ref i31) (local.get $x_3))))
+  (local.set $prec (i31.get_s (ref.cast (ref i31) (local.get $vprec))))
+  (local.set $style (i31.get_s (ref.cast (ref i31) (local.get $vstyle))))
   (local.set $b
     (i64.reinterpret_f64
-      (struct.get $float $f (ref.cast (ref $float) (local.get $x)))))
+      (struct.get $float $f (ref.cast (ref $float) (local.get $v)))))
   (local.set $sign (i32.wrap_i64 (i64.shr_u (local.get $b) (i64.const 63))))
   (local.set $exp
     (i32.and (i32.wrap_i64 (i64.shr_u (local.get $b) (i64.const 52)))
@@ -70,21 +91,20 @@
     (i64.and (local.get $b)
       (i64.sub (i64.shl (i64.const 1) (i64.const 52)) (i64.const 1))))
   (local.set $i
-    (i32.or (local.get $sign)
-      (i32.ne (local.get $style) (i32.const 45)))) ;; '-'
+    (i32.or (local.get $sign) (i32.ne (local.get $style) (@char "-" ))))
   (local.set $s
-    (block $sign (result (ref $string))
+    (block $sign (result (ref $bytes))
       (if (i32.eq (local.get $exp) (i32.const 0x7FF))
         (then
           (local.set $txt
             (if (result (ref $chars)) (i64.eqz (local.get $m))
               (then (global.get $infinity))
-              (else (global.get $nan_2))))
+              (else (global.get $nan_chars))))
           (local.set $len (array.len (local.get $txt)))
           (local.set $s
-            (array.new $string (i32.const 0)
+            (array.new $bytes (i32.const 0)
               (i32.add (local.get $i) (local.get $len))))
-          (array.copy $string $chars (local.get $s) (local.get $i)
+          (array.copy $bytes $chars (local.get $s) (local.get $i)
             (local.get $txt) (i32.const 0) (local.get $len))
           (br $sign (local.get $s))))
       (if (i32.eqz (local.get $exp))
@@ -140,57 +160,55 @@
           (i32.add (i32.const 6) (local.get $j))))
       (if (i32.eqz (local.get $prec))
         (then (local.set $len (i32.sub (local.get $len) (i32.const 1)))))
-      (local.set $s (array.new $string (i32.const 0) (local.get $len)))
+      (local.set $s (array.new $bytes (i32.const 0) (local.get $len)))
       (if (i32.ge_s (local.get $exp) (i32.const 0))
         (then (local.set $d (local.get $exp)))
         (else (local.set $d (i32.sub (i32.const 0) (local.get $exp)))))
       (loop $loop
         (local.set $len (i32.sub (local.get $len) (i32.const 1)))
-        (array.set $string (local.get $s) (local.get $len)
-          (i32.add (i32.const 48) (i32.rem_u (local.get $d) (i32.const 10))))
+        (array.set $bytes (local.get $s) (local.get $len)
+          (i32.add (@char "0" ) (i32.rem_u (local.get $d) (i32.const 10))))
         (local.set $d (i32.div_u (local.get $d) (i32.const 10)))
         (br_if $loop (local.get $d)))
-      (array.set $string (local.get $s)
+      (array.set $bytes (local.get $s)
         (i32.sub (local.get $len) (i32.const 1))
-        (select (i32.const 43) (i32.const 45)
+        (select (@char "+" ) (@char "-" )
           (i32.ge_s (local.get $exp) (i32.const 0))))
-      (array.set $string (local.get $s) (local.get $i) (i32.const 48)) ;; '0'
-      (array.set $string (local.get $s) (i32.add (local.get $i) (i32.const 1))
-        (i32.const 120)) ;; 'x'
-      (array.set $string (local.get $s) (i32.add (local.get $i) (i32.const 2))
+      (array.set $bytes (local.get $s) (local.get $i) (@char "0" ))
+      (array.set $bytes (local.get $s) (i32.add (local.get $i) (i32.const 1))
+        (@char "x" ))
+      (array.set $bytes (local.get $s) (i32.add (local.get $i) (i32.const 2))
         (i32.add (i32.wrap_i64 (i64.shr_u (local.get $m) (i64.const 52)))
-          (i32.const 48))) ;; '0'
+          (@char "0" )))
       (local.set $i (i32.add (local.get $i) (i32.const 3)))
       (if (i32.gt_s (local.get $prec) (i32.const 0))
         (then
-          (array.set $string (local.get $s) (local.get $i)
-            (i32.const 46)) ;; '.'
+          (array.set $bytes (local.get $s) (local.get $i) (@char "." ))
           (local.set $i (i32.add (local.get $i) (i32.const 1)))
           (local.set $frac (i64.shl (local.get $m) (i64.const 12)))
           (loop $loop
-            (array.set $string (local.get $s) (local.get $i)
+            (array.set $bytes (local.get $s) (local.get $i)
               (array.get_u $chars (global.get $lowercase_hex_table)
                 (i32.wrap_i64 (i64.shr_u (local.get $frac) (i64.const 60)))))
             (local.set $frac (i64.shl (local.get $frac) (i64.const 4)))
             (local.set $prec (i32.sub (local.get $prec) (i32.const 1)))
             (local.set $i (i32.add (local.get $i) (i32.const 1)))
             (br_if $loop (i32.gt_s (local.get $prec) (i32.const 0))))))
-      (array.set $string (local.get $s) (local.get $i) (i32.const 112))
+      (array.set $bytes (local.get $s) (local.get $i) (@char "p" ))
       (local.get $s)))
   (if (local.get $sign)
-    (then
-      (array.set $string (local.get $s) (i32.const 0) (i32.const 45))) ;; '-'
+    (then (array.set $bytes (local.get $s) (i32.const 0) (@char "-" )))
     (else
-      (if (i32.ne (local.get $style) (i32.const 45)) ;; '-'
+      (if (i32.ne (local.get $style) (@char "-" ))
         (then
-          (array.set $string (local.get $s) (i32.const 0)
+          (array.set $bytes (local.get $s) (i32.const 0)
             (local.get $style))))))
   (local.get $s)
 )
 
-(data $format_error "format_float: bad format")
+(global $format_error (ref $bytes) (@string "format_float: bad format" ))
 
-(func $parse_format (param $s (ref $string)) (result i32 i32 i32 i32)
+(func $parse_format (param $s (ref $bytes)) (result i32 i32 i32 i32)
   (local $len i32) (local $i i32) (local $sign_style i32)
   (local $precision i32) (local $conversion i32) (local $uppercase i32)
   (local $c i32)
@@ -200,60 +218,104 @@
     (block $bad_format
       (br_if $bad_format (i32.lt_u (local.get $len) (i32.const 2)))
       (br_if $bad_format
-        (i32.ne (array.get_u $string (local.get $s) (i32.const 0))
-          (i32.const 37))) ;; '%'
-      (local.set $c (array.get_u $string (local.get $s) (i32.const 1)))
-      (if (i32.eq (local.get $c) (i32.const 43)) ;; '+'
+        (i32.ne (array.get_u $bytes (local.get $s) (i32.const 0))
+          (@char "%" )))
+      (local.set $c (array.get_u $bytes (local.get $s) (i32.const 1)))
+      (if (i32.eq (local.get $c) (@char "+" ))
         (then
           (local.set $sign_style (i32.const 1))
           (local.set $i (i32.add (local.get $i) (i32.const 1)))))
-      (if (i32.eq (local.get $c) (i32.const 32)) ;; ' '
+      (if (i32.eq (local.get $c) (@char " " ))
         (then
           (local.set $sign_style (i32.const 2))
           (local.set $i (i32.add (local.get $i) (i32.const 1)))))
       (br_if $bad_format (i32.eq (local.get $i) (local.get $len)))
-      (br_if $bad_format
-        (i32.ne (array.get_u $string (local.get $s) (local.get $i))
-          (i32.const 46))) ;; '.'
-      (loop $precision
-        (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br_if $bad_format (i32.eq (local.get $i) (local.get $len)))
-        (local.set $c (array.get_u $string (local.get $s) (local.get $i)))
-        (if
-          (i32.and (i32.ge_u (local.get $c) (i32.const 48)) ;; '0'
-            (i32.le_u (local.get $c) (i32.const 57))) ;; '9'
-          (then
-            (local.set $precision
-              (i32.add (i32.mul (local.get $precision) (i32.const 10))
-                (i32.sub (local.get $c) (i32.const 48))))
-            (br $precision))))
+      (if
+        (i32.eq (array.get_u $bytes (local.get $s) (local.get $i))
+          (@char "." ))
+        (then
+          (loop $precision
+            (local.set $i (i32.add (local.get $i) (i32.const 1)))
+            (br_if $bad_format (i32.eq (local.get $i) (local.get $len)))
+            (local.set $c (array.get_u $bytes (local.get $s) (local.get $i)))
+            (if
+              (i32.and (i32.ge_u (local.get $c) (@char "0" ))
+                (i32.le_u (local.get $c) (@char "9" )))
+              (then
+                (local.set $precision
+                  (i32.add (i32.mul (local.get $precision) (i32.const 10))
+                    (i32.sub (local.get $c) (@char "0" ))))
+                (br $precision)))))
+        (else
+          ;; No precision: [$c] still holds the char read for the "."
+          ;; test (a sign flag like "+"/" " when one was consumed), not
+          ;; the conversion letter. Load it so the checks below see the
+          ;; real conversion, otherwise "%+f"/"% f" wrongly raise.
+          (local.set $c (array.get_u $bytes (local.get $s) (local.get $i)))
+          (local.set $precision (i32.const 6))))
       (br_if $bad_format
         (i32.ne (i32.add (local.get $i) (i32.const 1)) (local.get $len)))
-      (local.set $uppercase (i32.lt_s (local.get $c) (i32.const 96)))
+      (local.set $uppercase (i32.lt_s (local.get $c) (@char "a" )))
       (local.set $conversion
-        (i32.sub (i32.and (local.get $c) (i32.const 0xdf))
-          (i32.const 69))) ;; 'E'
+        (i32.sub (i32.and (local.get $c) (i32.const 0xdf)) (@char "E" )))
       (br_if $return (i32.le_u (local.get $conversion) (i32.const 2))))
-    (call $caml_invalid_argument
-      (array.new_data $string $format_error (i32.const 0) (i32.const 22))))
+    (call $caml_invalid_argument (global.get $format_error)))
   (local.get $sign_style)
   (local.get $precision)
   (local.get $conversion)
   (local.get $uppercase)
 )
 
-(global $inf_2 (ref $chars) (@string $chars "inf" ))
+(global $inf_chars (ref $chars) (@string $chars "inf" ))
 
+(@if $wasi
+(@then
 (func $caml_format_float (export "caml_format_float")
-  (param $x (ref eq)) (param $x_2 (ref eq)) (result (ref eq))
+  (param $vfmt (ref eq)) (param $arg (ref eq)) (result (ref eq))
+  (local $fmt (ref $bytes)) (local $d f64) (local $buffer i32)
+  (local $fmt_len i32) (local $out_buffer i32) (local $avail i32)
+  (local $len i32) (local $res (ref $bytes))
+  (local.set $fmt (ref.cast (ref $bytes) (local.get $vfmt)))
+  (local.set $d
+    (struct.get $float $f (ref.cast (ref $float) (local.get $arg))))
+  (local.set $buffer (call $get_buffer))
+  (local.set $fmt_len (array.len (local.get $fmt)))
+  (call $blit_string_to_memory (local.get $buffer) (local.get $fmt))
+  (i32.store8 $m (i32.add (local.get $buffer) (local.get $fmt_len))
+    (i32.const 0))
+  (local.set $out_buffer
+    (i32.add (local.get $buffer)
+      (i32.add (local.get $fmt_len) (i32.const 1))))
+  (local.set $avail
+    (i32.sub (global.get $IO_BUFFER_SIZE) (local.get $fmt_len)))
+  (local.set $len
+    (call $format_float (local.get $out_buffer) (local.get $avail)
+      (local.get $buffer) (local.get $d)))
+  (if (i32.ge_u (local.get $len) (local.get $avail))
+    (then
+      (local.set $out_buffer
+        (call $checked_malloc (i32.add (local.get $len) (i32.const 1))))
+      (drop
+        (call $format_float (local.get $out_buffer)
+          (i32.add (local.get $len) (i32.const 1)) (local.get $buffer)
+          (local.get $d)))))
+  (local.set $res
+    (call $blit_memory_to_string (local.get $out_buffer) (local.get $len)))
+  (if (i32.ge_u (local.get $len) (local.get $avail))
+    (then (call $free (local.get $out_buffer))))
+  (local.get $res)
+) )
+(@else
+(func $caml_format_float (export "caml_format_float")
+  (param $vfmt (ref eq)) (param $arg (ref eq)) (result (ref eq))
   (local $f f64) (local $b i64) (local $uppercase i32) (local $conversion i32)
   (local $precision i32) (local $sign_style i32) (local $negative i32)
-  (local $i i32) (local $len i32) (local $s (ref $string)) (local $exp i32)
+  (local $i i32) (local $len i32) (local $s (ref $bytes)) (local $exp i32)
   (local $m i64) (local $txt (ref $chars)) (local $num anyref) (local $c i32)
   (local.set $f
-    (struct.get $float $f (ref.cast (ref $float) (local.get $x_2))))
+    (struct.get $float $f (ref.cast (ref $float) (local.get $arg))))
   (local.set $b (i64.reinterpret_f64 (local.get $f)))
-  (call $parse_format (ref.cast (ref $string) (local.get $x)))
+  (call $parse_format (ref.cast (ref $bytes) (local.get $vfmt)))
   (local.set $uppercase)
   (local.set $conversion)
   (local.set $precision)
@@ -264,7 +326,7 @@
     (i32.or (local.get $negative)
       (i32.ne (local.get $sign_style) (i32.const 0))))
   (local.set $s
-    (block $sign (result (ref $string))
+    (block $sign (result (ref $bytes))
       (local.set $exp
         (i32.and (i32.wrap_i64 (i64.shr_u (local.get $b) (i64.const 52)))
           (i32.const 0x7FF)))
@@ -273,56 +335,54 @@
           (local.set $m (i64.shl (local.get $b) (i64.const 12)))
           (local.set $txt
             (if (result (ref $chars)) (i64.eqz (local.get $m))
-              (then (global.get $inf_2))
+              (then (global.get $inf_chars))
               (else
                 (local.set $negative (i32.const 0))
                 (local.set $i (i32.ne (local.get $sign_style) (i32.const 0)))
-                (global.get $nan_2))))
+                (global.get $nan_chars))))
           (local.set $len (array.len (local.get $txt)))
           (local.set $s
-            (array.new $string (i32.const 0)
+            (array.new $bytes (i32.const 0)
               (i32.add (local.get $i) (local.get $len))))
-          (array.copy $string $chars (local.get $s) (local.get $i)
+          (array.copy $bytes $chars (local.get $s) (local.get $i)
             (local.get $txt) (i32.const 0) (local.get $len))
           (br $sign (local.get $s))))
       (local.set $num
         (call $format_float (local.get $precision) (local.get $conversion)
           (local.get $i) (f64.abs (local.get $f))))
-      (local.set $s (call $string_of_jsstring (local.get $num)))
+      (local.set $s (call $bytes_of_jsstring (local.get $num)))
       (br $sign (local.get $s))))
   (if (local.get $negative)
-    (then
-      (array.set $string (local.get $s) (i32.const 0) (i32.const 45))) ;; '-'
+    (then (array.set $bytes (local.get $s) (i32.const 0) (@char "-" )))
     (else
       (if (local.get $sign_style)
         (then
           (if (i32.eq (local.get $sign_style) (i32.const 1))
             (then
-              (array.set $string (local.get $s) (i32.const 0)
-                (i32.const 43))) ;; '+'
+              (array.set $bytes (local.get $s) (i32.const 0) (@char "+" )))
             (else
-              (array.set $string (local.get $s) (i32.const 0)
-                (i32.const 32)))))))) ;; ' '
+              (array.set $bytes (local.get $s) (i32.const 0)
+                (@char " " ))))))))
   (if (local.get $uppercase)
     (then
       (local.set $i (i32.const 0))
       (local.set $len (array.len (local.get $s)))
       (loop $loop
-        (local.set $c (array.get_u $string (local.get $s) (local.get $i)))
+        (local.set $c (array.get_u $bytes (local.get $s) (local.get $i)))
         (if
-          (i32.and (i32.ge_u (local.get $c) (i32.const 97)) ;; 'a'
-            (i32.le_u (local.get $c) (i32.const 122))) ;; 'z'
+          (i32.and (i32.ge_u (local.get $c) (@char "a" ))
+            (i32.le_u (local.get $c) (@char "z" )))
           (then
-            (array.set $string (local.get $s) (local.get $i)
+            (array.set $bytes (local.get $s) (local.get $i)
               (i32.sub (local.get $c) (i32.const 32)))))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
         (br_if $loop (i32.lt_u (local.get $i) (local.get $len))))))
   (local.get $s)
-)
+) ) )
 
-(data $float_of_string "float_of_string")
-
-(func $caml_float_of_hex (param $s (ref $string)) (param $i i32) (result f64)
+(func $caml_float_of_hex
+  (param $err_msg (ref eq)) (param $s (ref $bytes)) (param $i i32)
+  (result f64)
   (local $len i32) (local $dec_point i32) (local $d i32) (local $m i64)
   (local $exp i32) (local $n_bits i32) (local $m_bits i32) (local $x_bits i32)
   (local $c i32) (local $negative i32) (local $f f64) (local $adj i32)
@@ -332,54 +392,59 @@
     (loop $parse
       (if (i32.lt_u (local.get $i) (local.get $len))
         (then
-          (local.set $c (array.get_u $string (local.get $s) (local.get $i)))
+          (local.set $c (array.get_u $bytes (local.get $s) (local.get $i)))
           (local.set $i (i32.add (local.get $i) (i32.const 1)))
-          (if (i32.eq (local.get $c) (i32.const 46)) ;; '.'
+          (if (i32.eq (local.get $c) (@char "." ))
             (then
               (br_if $error (i32.ge_s (local.get $dec_point) (i32.const 0)))
               (local.set $dec_point (local.get $n_bits))
               (br $parse)))
           (if
-            (i32.or (i32.eq (local.get $c) (i32.const 80)) ;; 'P'
-              (i32.eq (local.get $c) (i32.const 112))) ;; 'p'
+            (i32.or (i32.eq (local.get $c) (@char "p" ))
+              (i32.eq (local.get $c) (@char "P" )))
             (then
               (br_if $error (i32.eq (local.get $i) (local.get $len)))
               (local.set $c
-                (array.get_u $string (local.get $s) (local.get $i)))
+                (array.get_u $bytes (local.get $s) (local.get $i)))
               (local.set $i (i32.add (local.get $i) (i32.const 1)))
-              (if (i32.eq (local.get $c) (i32.const 45)) ;; '-'
+              (if (i32.eq (local.get $c) (@char "-" ))
                 (then
                   (local.set $negative (i32.const 1))
                   (br_if $error (i32.eq (local.get $i) (local.get $len)))
                   (local.set $c
-                    (array.get_u $string (local.get $s) (local.get $i)))
+                    (array.get_u $bytes (local.get $s) (local.get $i)))
                   (local.set $i (i32.add (local.get $i) (i32.const 1)))))
-              (if (i32.eq (local.get $c) (i32.const 43)) ;; '+'
+              (if (i32.eq (local.get $c) (@char "+" ))
                 (then
                   (br_if $error (i32.eq (local.get $i) (local.get $len)))
                   (local.set $c
-                    (array.get_u $string (local.get $s) (local.get $i)))
+                    (array.get_u $bytes (local.get $s) (local.get $i)))
                   (local.set $i (i32.add (local.get $i) (i32.const 1)))))
               (block $overflow
                 (loop $parse_exponent
                   (br_if $error
-                    (i32.or (i32.lt_u (local.get $c) (i32.const 48))
-                      (i32.gt_u (local.get $c) (i32.const 57))))
-                  (local.set $d (i32.sub (local.get $c) (i32.const 48)))
+                    (i32.or (i32.lt_u (local.get $c) (@char "0" ))
+                      (i32.gt_u (local.get $c) (@char "9" ))))
+                  (local.set $d (i32.sub (local.get $c) (@char "0" )))
                   (local.set $exp
                     (i32.add (i32.mul (local.get $exp) (i32.const 10))
                       (local.get $d)))
                   (br_if $overflow (i32.lt_u (local.get $exp) (local.get $d)))
+                  ;; Any exponent this large saturates the double
+                  ;; to inf/0; stop accumulating before [exp * 10]
+                  ;; can wrap around 2^32 and slip back into range.
+                  (br_if $overflow
+                    (i32.ge_u (local.get $exp) (i32.const 0x10000000)))
                   (if (i32.ne (local.get $i) (local.get $len))
                     (then
                       (local.set $c
-                        (array.get_u $string (local.get $s) (local.get $i)))
+                        (array.get_u $bytes (local.get $s) (local.get $i)))
                       (local.set $i (i32.add (local.get $i) (i32.const 1)))
                       (br $parse_exponent))))
                 (if (local.get $negative)
                   (then
                     (br_if $overflow
-                      (i32.gt_u (local.get $exp) (i32.const 0x80000000)))
+                      (i32.ge_u (local.get $exp) (i32.const 0x80000000)))
                     (local.set $exp (i32.sub (i32.const 0) (local.get $exp))))
                   (else
                     (br_if $overflow
@@ -389,18 +454,18 @@
                 (then (return (f64.const 0)))
                 (else (return (f64.const inf))))))
           (if
-            (i32.and (i32.ge_u (local.get $c) (i32.const 48))
-              (i32.le_u (local.get $c) (i32.const 57)))
-            (then (local.set $d (i32.sub (local.get $c) (i32.const 48))))
+            (i32.and (i32.ge_u (local.get $c) (@char "0" ))
+              (i32.le_u (local.get $c) (@char "9" )))
+            (then (local.set $d (i32.sub (local.get $c) (@char "0" ))))
             (else
               (if
-                (i32.and (i32.ge_u (local.get $c) (i32.const 97))
-                  (i32.le_u (local.get $c) (i32.const 102)))
+                (i32.and (i32.ge_u (local.get $c) (@char "a" ))
+                  (i32.le_u (local.get $c) (@char "f" )))
                 (then (local.set $d (i32.sub (local.get $c) (i32.const 87))))
                 (else
                   (if
-                    (i32.and (i32.ge_u (local.get $c) (i32.const 65))
-                      (i32.le_u (local.get $c) (i32.const 70)))
+                    (i32.and (i32.ge_u (local.get $c) (@char "A" ))
+                      (i32.le_u (local.get $c) (@char "F" )))
                     (then
                       (local.set $d (i32.sub (local.get $c) (i32.const 55))))
                     (else (br $error)))))))
@@ -429,61 +494,62 @@
             (i32.sub (local.get $dec_point) (local.get $n_bits))))))
     (if
       (i32.and (i32.gt_s (local.get $adj) (i32.const 0))
-        (i32.gt_s (local.get $exp) (i32.const 0x7fffffff)))
+        (i32.gt_s (local.get $exp)
+          (i32.sub (i32.const 0x7fffffff) (local.get $adj))))
       (then (local.set $exp (i32.const 0x7fffffff)))
       (else
         (if
           (i32.and (i32.lt_s (local.get $adj) (i32.const 0))
-            (i32.lt_s (local.get $exp) (i32.const 0x80000000)))
+            (i32.lt_s (local.get $exp)
+              (i32.sub (i32.const 0x80000000) (local.get $adj))))
           (then (local.set $exp (i32.const 0x80000000)))
           (else
             (local.set $exp (i32.add (local.get $exp) (local.get $adj)))))))
     (if (local.get $exp)
       (then (local.set $f (call $ldexp (local.get $f) (local.get $exp)))))
     (return (local.get $f)))
-  (call $caml_failwith
-    (array.new_data $string $float_of_string (i32.const 0) (i32.const 15)))
+  (call $caml_failwith (local.get $err_msg))
   (f64.const 0)
 )
 
-(func $on_whitespace (param $s (ref $string)) (param $i i32) (result i32)
+(func $on_whitespace (param $s (ref $bytes)) (param $i i32) (result i32)
   (local $c i32)
-  (local.set $c (array.get_u $string (local.get $s) (local.get $i)))
-  (i32.or (i32.eq (local.get $c) (i32.const 32)) ;; ' '
+  (local.set $c (array.get_u $bytes (local.get $s) (local.get $i)))
+  (i32.or (i32.eq (local.get $c) (@char " " ))
     (i32.le_u (i32.sub (local.get $c) (i32.const 9)) (i32.const 4)))
 )
 
-(func $caml_float_of_string (export "caml_float_of_string")
-  (param $x (ref eq)) (result (ref eq))
-  (local $s (ref $string)) (local $len i32) (local $i i32) (local $j i32)
-  (local $c i32) (local $s' (ref $string)) (local $negative i32)
-  (local $f f64)
-  (local.set $s (ref.cast (ref $string) (local.get $x)))
+(func $caml_parse_float (export "caml_parse_float")
+  (param $err_msg (ref eq)) (param $v (ref eq)) (result (ref eq))
+  (local $s (ref $bytes)) (local $len i32) (local $i i32) (local $j i32)
+  (local $c i32) (local $s' (ref $bytes)) (local $start i32)
+  (local $negative i32) (local $f f64) (local $buffer i32) (local $buf i32)
+  (local.set $s (ref.cast (ref $bytes) (local.get $v)))
   (local.set $len (array.len (local.get $s)))
   (loop $loop
     (if (i32.lt_u (local.get $i) (local.get $len))
       (then
         (if
-          (i32.eq (i32.const 95) ;; '_'
-            (array.get_u $string (local.get $s) (local.get $i)))
+          (i32.eq (@char "_" )
+            (array.get_u $bytes (local.get $s) (local.get $i)))
           (then (local.set $j (i32.add (local.get $j) (i32.const 1)))))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
         (br $loop))))
   (if (local.get $j)
     (then
       (local.set $s'
-        (array.new $string (i32.const 0)
+        (array.new $bytes (i32.const 0)
           (i32.sub (local.get $len) (local.get $j))))
       (local.set $i (i32.const 0))
       (local.set $j (i32.const 0))
       (loop $loop
         (if (i32.lt_u (local.get $i) (local.get $len))
           (then
-            (local.set $c (array.get_u $string (local.get $s) (local.get $i)))
+            (local.set $c (array.get_u $bytes (local.get $s) (local.get $i)))
             (local.set $i (i32.add (local.get $i) (i32.const 1)))
-            (if (i32.ne (local.get $c) (i32.const 95)) ;; '_'
+            (if (i32.ne (local.get $c) (@char "_" ))
               (then
-                (array.set $string (local.get $s') (local.get $j)
+                (array.set $bytes (local.get $s') (local.get $j)
                   (local.get $c))
                 (local.set $j (i32.add (local.get $j) (i32.const 1)))))
             (br $loop))))
@@ -497,147 +563,193 @@
           (then
             (local.set $i (i32.add (local.get $i) (i32.const 1)))
             (br $skip_spaces))))))
+  (local.set $start (local.get $i))
   (block $error
     (br_if $error (i32.eq (local.get $i) (local.get $len)))
     (br_if $error
       (call $on_whitespace (local.get $s)
         (i32.sub (local.get $len) (i32.const 1))))
-    (local.set $c (array.get_u $string (local.get $s) (i32.const 0)))
-    (if (i32.eq (local.get $c) (i32.const 45)) ;; '-'
-      (then (local.set $negative (i32.const 1)) (local.set $i (i32.const 1))))
-    (if (i32.eq (local.get $c) (i32.const 43)) ;; '+'
-      (then (local.set $i (i32.const 1))))
+    (local.set $c (array.get_u $bytes (local.get $s) (local.get $i)))
+    (if (i32.eq (local.get $c) (@char "-" ))
+      (then
+        (local.set $negative (i32.const 1))
+        (local.set $i (i32.add (local.get $i) (i32.const 1)))))
+    (if (i32.eq (local.get $c) (@char "+" ))
+      (then (local.set $i (i32.add (local.get $i) (i32.const 1)))))
     (if (i32.lt_u (i32.add (local.get $i) (i32.const 2)) (local.get $len))
       (then
         (if
-          (i32.eq (array.get_u $string (local.get $s) (local.get $i))
-            (i32.const 48)) ;; '0'
+          (i32.eq (array.get_u $bytes (local.get $s) (local.get $i))
+            (@char "0" ))
           (then
             (if
               (i32.eq
                 (i32.and
-                  (array.get_u $string (local.get $s)
+                  (array.get_u $bytes (local.get $s)
                     (i32.add (local.get $i) (i32.const 1))) (i32.const 0xdf))
-                (i32.const 88)) ;; 'X'
+                (@char "X" ))
               (then
                 (local.set $f
-                  (call $caml_float_of_hex (local.get $s)
+                  (call $caml_float_of_hex (local.get $err_msg) (local.get $s)
                     (i32.add (local.get $i) (i32.const 2))))
                 (if (local.get $negative)
                   (then (local.set $f (f64.neg (local.get $f)))))
                 (return (struct.new $float (local.get $f)))))))))
     (if (i32.eq (i32.add (local.get $i) (i32.const 3)) (local.get $len))
       (then
-        (local.set $c (array.get_u $string (local.get $s) (local.get $i)))
-        (if (i32.eq (i32.and (local.get $c) (i32.const 0xdf)) (i32.const 78))
-          (then ;; 'N'
+        (local.set $c (array.get_u $bytes (local.get $s) (local.get $i)))
+        (if (i32.eq (i32.and (local.get $c) (i32.const 0xdf)) (@char "N" ))
+          (then
             (local.set $i (i32.add (local.get $i) (i32.const 1)))
-            (local.set $c (array.get_u $string (local.get $s) (local.get $i)))
+            (local.set $c (array.get_u $bytes (local.get $s) (local.get $i)))
             (if
-              (i32.eq (i32.and (local.get $c) (i32.const 0xdf))
-                (i32.const 65))
-              (then ;; 'A'
+              (i32.eq (i32.and (local.get $c) (i32.const 0xdf)) (@char "A" ))
+              (then
                 (local.set $i (i32.add (local.get $i) (i32.const 1)))
                 (local.set $c
-                  (array.get_u $string (local.get $s) (local.get $i)))
+                  (array.get_u $bytes (local.get $s) (local.get $i)))
                 (if
                   (i32.eq (i32.and (local.get $c) (i32.const 0xdf))
-                    (i32.const 78)) ;; 'N'
-                  (then (return (struct.new $float (f64.const nan)))))))))
-        (if (i32.eq (i32.and (local.get $c) (i32.const 0xdf)) (i32.const 73))
-          (then ;; 'I'
-            (local.set $i (i32.add (local.get $i) (i32.const 1)))
-            (local.set $c (array.get_u $string (local.get $s) (local.get $i)))
+                    (@char "N" ))
+                  (then (return (struct.new $float (f64.const nan))))))))
+          (else
             (if
-              (i32.eq (i32.and (local.get $c) (i32.const 0xdf))
-                (i32.const 78))
-              (then ;; 'N'
+              (i32.eq (i32.and (local.get $c) (i32.const 0xdf)) (@char "I" ))
+              (then
                 (local.set $i (i32.add (local.get $i) (i32.const 1)))
                 (local.set $c
-                  (array.get_u $string (local.get $s) (local.get $i)))
+                  (array.get_u $bytes (local.get $s) (local.get $i)))
                 (if
                   (i32.eq (i32.and (local.get $c) (i32.const 0xdf))
-                    (i32.const 70)) ;; 'F'
+                    (@char "N" ))
                   (then
-                    (return
-                      (struct.new $float
-                        (select (f64.const -inf) (f64.const inf)
-                          (local.get $negative))))))))))))
-    (if (i32.eq (i32.add (local.get $i) (i32.const 8)) (local.get $len))
-      (then
-        (local.set $c (array.get_u $string (local.get $s) (local.get $i)))
-        (if (i32.eq (i32.and (local.get $c) (i32.const 0xdf)) (i32.const 73))
-          (then ;; 'I'
-            (local.set $i (i32.add (local.get $i) (i32.const 1)))
-            (local.set $c (array.get_u $string (local.get $s) (local.get $i)))
-            (if
-              (i32.eq (i32.and (local.get $c) (i32.const 0xdf))
-                (i32.const 78))
-              (then ;; 'N'
-                (local.set $i (i32.add (local.get $i) (i32.const 1)))
-                (local.set $c
-                  (array.get_u $string (local.get $s) (local.get $i)))
-                (if
-                  (i32.eq (i32.and (local.get $c) (i32.const 0xdf))
-                    (i32.const 70))
-                  (then ;; 'F'
                     (local.set $i (i32.add (local.get $i) (i32.const 1)))
                     (local.set $c
-                      (array.get_u $string (local.get $s) (local.get $i)))
+                      (array.get_u $bytes (local.get $s) (local.get $i)))
                     (if
                       (i32.eq (i32.and (local.get $c) (i32.const 0xdf))
-                        (i32.const 73))
-                      (then ;; 'I'
+                        (@char "F" ))
+                      (then
+                        (return
+                          (struct.new $float
+                            (select (f64.const -inf) (f64.const inf)
+                              (local.get $negative))))))))))))))
+    (if (i32.eq (i32.add (local.get $i) (i32.const 8)) (local.get $len))
+      (then
+        (local.set $c (array.get_u $bytes (local.get $s) (local.get $i)))
+        (if (i32.eq (i32.and (local.get $c) (i32.const 0xdf)) (@char "I" ))
+          (then
+            (local.set $i (i32.add (local.get $i) (i32.const 1)))
+            (local.set $c (array.get_u $bytes (local.get $s) (local.get $i)))
+            (if
+              (i32.eq (i32.and (local.get $c) (i32.const 0xdf)) (@char "N" ))
+              (then
+                (local.set $i (i32.add (local.get $i) (i32.const 1)))
+                (local.set $c
+                  (array.get_u $bytes (local.get $s) (local.get $i)))
+                (if
+                  (i32.eq (i32.and (local.get $c) (i32.const 0xdf))
+                    (@char "F" ))
+                  (then
+                    (local.set $i (i32.add (local.get $i) (i32.const 1)))
+                    (local.set $c
+                      (array.get_u $bytes (local.get $s) (local.get $i)))
+                    (if
+                      (i32.eq (i32.and (local.get $c) (i32.const 0xdf))
+                        (@char "I" ))
+                      (then
                         (local.set $i (i32.add (local.get $i) (i32.const 1)))
                         (local.set $c
-                          (array.get_u $string (local.get $s) (local.get $i)))
+                          (array.get_u $bytes (local.get $s) (local.get $i)))
                         (if
                           (i32.eq (i32.and (local.get $c) (i32.const 0xdf))
-                            (i32.const 78))
-                          (then ;; 'N'
+                            (@char "N" ))
+                          (then
                             (local.set $i
                               (i32.add (local.get $i) (i32.const 1)))
                             (local.set $c
-                              (array.get_u $string (local.get $s)
+                              (array.get_u $bytes (local.get $s)
                                 (local.get $i)))
                             (if
                               (i32.eq
                                 (i32.and (local.get $c) (i32.const 0xdf))
-                                (i32.const 73))
-                              (then ;; 'I'
+                                (@char "I" ))
+                              (then
                                 (local.set $i
                                   (i32.add (local.get $i) (i32.const 1)))
                                 (local.set $c
-                                  (array.get_u $string (local.get $s)
+                                  (array.get_u $bytes (local.get $s)
                                     (local.get $i)))
                                 (if
                                   (i32.eq
                                     (i32.and (local.get $c) (i32.const 0xdf))
-                                    (i32.const 84))
-                                  (then ;; 'T'
+                                    (@char "T" ))
+                                  (then
                                     (local.set $i
                                       (i32.add (local.get $i) (i32.const 1)))
                                     (local.set $c
-                                      (array.get_u $string (local.get $s)
+                                      (array.get_u $bytes (local.get $s)
                                         (local.get $i)))
                                     (if
                                       (i32.eq
                                         (i32.and (local.get $c)
-                                          (i32.const 0xdf)) (i32.const 89))
-                                      (then ;; 'Y'
+                                          (i32.const 0xdf)) (@char "Y" ))
+                                      (then
                                         (return
                                           (struct.new $float
                                             (select (f64.const -inf)
                                               (f64.const inf)
                                               (local.get
                                                 $negative))))))))))))))))))))))
+    (@if $wasi
+    (@then (local.set $buffer (call $get_buffer))
+    (local.set $buf
+      (call $write_string_to_memory
+        (i32.add (local.get $buffer) (i32.const 4))
+        (global.get $IO_BUFFER_SIZE) (local.get $s)))
+    (local.set $f (call $strtod (local.get $buf) (local.get $buffer)))
+    (call $release_memory (i32.add (local.get $buffer) (i32.const 4))
+      (local.get $buf))
+    (br_if $error
+      (i32.ne (i32.load $m (local.get $buffer))
+        (i32.add (local.get $buf) (local.get $len)))) )
+    (@else
+    ;; The JS number coercion below accepts things OCaml does not,
+    ;; e.g. binary/octal literals ("0b101", "0o17"); only a plain
+    ;; decimal float can reach this point, so reject any character
+    ;; that cannot appear in one. Start after the leading spaces already
+    ;; skipped above.
+    (local.set $i (local.get $start))
+    (loop $loop
+      (if (i32.lt_u (local.get $i) (local.get $len))
+        (then
+          (local.set $c (array.get_u $bytes (local.get $s) (local.get $i)))
+          (br_if $error
+            (i32.eqz
+              (i32.or
+                (i32.and (i32.ge_u (local.get $c) (@char "0" ))
+                  (i32.le_u (local.get $c) (@char "9" )))
+                (i32.or (i32.eq (local.get $c) (@char "." ))
+                  (i32.or
+                    (i32.eq (i32.and (local.get $c) (i32.const 0xdf))
+                      (@char "E" ))
+                    (i32.or (i32.eq (local.get $c) (@char "+" ))
+                      (i32.eq (local.get $c) (@char "-" ))))))))
+          (local.set $i (i32.add (local.get $i) (i32.const 1)))
+          (br $loop))))
     (local.set $f
-      (call $parse_float (call $jsstring_of_string (local.get $s))))
-    (br_if $error (f64.ne (local.get $f) (local.get $f)))
+      (call $parse_float (call $jsstring_of_bytes (local.get $s))))
+    (br_if $error (f64.ne (local.get $f) (local.get $f))) ) )
     (return (struct.new $float (local.get $f))))
-  (call $caml_failwith
-    (array.new_data $string $float_of_string (i32.const 0) (i32.const 15)))
+  (call $caml_failwith (local.get $err_msg))
   (return (ref.i31 (i32.const 0)))
+)
+
+(global $float_of_string (ref $bytes) (@string "float_of_string" ))
+
+(func $caml_float_of_string (export "caml_float_of_string")
+  (param $s (ref eq)) (result (ref eq))
+  (return_call $caml_parse_float (global.get $float_of_string) (local.get $s))
 )
 
 (func $caml_nextafter_float (export "caml_nextafter_float")
@@ -663,49 +775,48 @@
 )
 
 (func $caml_classify_float (export "caml_classify_float")
-  (param $x f64) (result (ref eq))
+  (param $x f64) (result i32)
   (local $a f64)
   (local.set $a (f64.abs (local.get $x)))
-  (ref.i31
-    (if (result i32) (f64.ge (local.get $a) (f64.const 0x1p-1022))
-      (then
-        (if (result i32) (f64.lt (local.get $a) (f64.const inf))
-          (then (i32.const 0)) ;; normal
-          (else (i32.const 3))) ;; infinity
-      )
-      (else
-        (if (result i32) (f64.eq (local.get $a) (f64.const 0))
-          (then (i32.const 2)) ;; zero
-          (else
-            (if (result i32) (f64.eq (local.get $a) (local.get $a))
-              (then (i32.const 1)) ;; subnormal
-              (else (i32.const 4))))))))
+  (if (result i32) (f64.ge (local.get $a) (f64.const 0x1p-1022))
+    (then
+      (if (result i32) (f64.lt (local.get $a) (f64.const inf))
+        (then (i32.const 0)) ;; normal
+        (else (i32.const 3))) ;; infinity
+    )
+    (else
+      (if (result i32) (f64.eq (local.get $a) (f64.const 0))
+        (then (i32.const 2)) ;; zero
+        (else
+          (if (result i32) (f64.eq (local.get $a) (local.get $a))
+            (then (i32.const 1)) ;; subnormal
+            (else (i32.const 4)))))))
 ) ;; nan
 (func $caml_modf_float (export "caml_modf_float")
-  (param $x (ref eq)) (result (ref eq))
-  (local $x_2 f64) (local $a f64) (local $i f64) (local $f f64)
-  (local.set $x_2
-    (struct.get $float $f (ref.cast (ref $float) (local.get $x))))
-  (local.set $a (f64.abs (local.get $x_2)))
+  (param $v (ref eq)) (result (ref eq))
+  (local $x f64) (local $a f64) (local $i f64) (local $f f64)
+  (local.set $x (struct.get $float $f (ref.cast (ref $float) (local.get $v))))
+  (local.set $a (f64.abs (local.get $x)))
   (if (f64.ge (local.get $a) (f64.const 0))
     (then
       (if (f64.lt (local.get $a) (f64.const inf))
         (then ;; normal
           (local.set $i (f64.floor (local.get $a)))
           (local.set $f (f64.sub (local.get $a) (local.get $i)))
-          (local.set $i (f64.copysign (local.get $i) (local.get $x_2)))
-          (local.set $f (f64.copysign (local.get $f) (local.get $x_2))))
+          (local.set $i (f64.copysign (local.get $i) (local.get $x)))
+          (local.set $f (f64.copysign (local.get $f) (local.get $x))))
         (else ;; infinity
-          (local.set $i (local.get $x_2))
-          (local.set $f (f64.copysign (f64.const 0) (local.get $x_2))))))
+          (local.set $i (local.get $x))
+          (local.set $f (f64.copysign (f64.const 0) (local.get $x))))))
     (else ;; zero or nan
-      (local.set $i (local.get $x_2))
-      (local.set $f (local.get $x_2))))
+      (local.set $i (local.get $x))
+      (local.set $f (local.get $x))))
   (array.new_fixed $block 3 (ref.i31 (i32.const 0))
     (struct.new $float (local.get $f)) (struct.new $float (local.get $i)))
 )
 
-(func $ldexp (param $x f64) (param $n i32) (result f64)
+(func $ldexp (export "caml_ldexp_float")
+  (param $x f64) (param $n i32) (result f64)
   (if (i32.gt_s (local.get $n) (i32.const 1023))
     (then
       (local.set $x (f64.mul (local.get $x) (f64.const 0x1p1023)))
@@ -734,13 +845,8 @@
         (i64.const 52))))
 )
 
-(func $caml_ldexp_float (export "caml_ldexp_float")
-  (param $x f64) (param $i (ref eq)) (result f64)
-  (call $ldexp (local.get $x) (i31.get_s (ref.cast (ref i31) (local.get $i))))
-)
-
 (func $frexp (param $x f64) (result f64 i32)
-  (local $y i64) (local $e i32) (local $m f64)
+  (local $y i64) (local $e i32) (local $r_1 i32) (local $r_0 f64)
   (local.set $y (i64.reinterpret_f64 (local.get $x)))
   (local.set $e
     (i32.and (i32.const 0x7ff)
@@ -750,9 +856,9 @@
       (if (f64.ne (local.get $x) (f64.const 0))
         (then
           (call $frexp (f64.mul (local.get $x) (f64.const 0x1p64)))
-          (local.set $e)
-          (local.set $m)
-          (return (local.get $m) (i32.sub (local.get $e) (i32.const 64))))
+          (local.set $r_1)
+          (local.set $r_0)
+          (return (local.get $r_0) (i32.sub (local.get $r_1) (i32.const 64))))
         (else (return (local.get $x) (i32.const 0)))))
     (else
       (if (i32.eq (local.get $e) (i32.const 0x7ff))
@@ -764,20 +870,13 @@
 )
 
 (func $caml_frexp_float (export "caml_frexp_float")
-  (param $x (ref eq)) (result (ref eq))
-  (local $e i32) (local $m f64)
-  (call $frexp (struct.get $float $f (ref.cast (ref $float) (local.get $x))))
-  (local.set $e)
-  (local.set $m)
+  (param $v (ref eq)) (result (ref eq))
+  (local $r_1 i32) (local $r_0 f64)
+  (call $frexp (struct.get $float $f (ref.cast (ref $float) (local.get $v))))
+  (local.set $r_1)
+  (local.set $r_0)
   (array.new_fixed $block 3 (ref.i31 (i32.const 0))
-    (struct.new $float (local.get $m)) (ref.i31 (local.get $e)))
-)
-
-(func $caml_signbit_float (export "caml_signbit_float")
-  (param $x f64) (result (ref eq))
-  (ref.i31
-    (i32.wrap_i64
-      (i64.shr_u (i64.reinterpret_f64 (local.get $x)) (i64.const 63))))
+    (struct.new $float (local.get $r_0)) (ref.i31 (local.get $r_1)))
 )
 
 (func $erf (export "caml_erf_float") (param $x f64) (result f64)
@@ -1050,16 +1149,16 @@
 )
 
 (func $caml_float_compare (export "caml_float_compare")
-  (param $x f64) (param $y f64) (result (ref eq))
-  (ref.i31
-    (i32.add
-      (i32.sub (f64.gt (local.get $x) (local.get $y))
-        (f64.lt (local.get $x) (local.get $y)))
-      (i32.sub (f64.eq (local.get $x) (local.get $x))
-        (f64.eq (local.get $y) (local.get $y)))))
+  (param $x f64) (param $y f64) (result i32)
+  (i32.add
+    (i32.sub (f64.gt (local.get $x) (local.get $y))
+      (f64.lt (local.get $x) (local.get $y)))
+    (i32.sub (f64.eq (local.get $x) (local.get $x))
+      (f64.eq (local.get $y) (local.get $y))))
 )
 
-(func $caml_round (export "caml_round") (param $x f64) (result f64)
+(func $caml_round_float (export "caml_round_float")
+  (param $x f64) (result f64)
   (local $y f64)
   (if (result f64) (f64.ge (local.get $x) (f64.const 0))
     (then
