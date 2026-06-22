@@ -1,15 +1,16 @@
 open Wax
 open Ast
 
-(* Recover the high-level [while] and [do]-[while] loops from the [loop] shapes
-   that [Ast_utils.lower_while] / [lower_dowhile] produce (and that compilers
-   emit for the corresponding source):
+(* Recover the high-level [while] loop from the [loop] shape that
+   [Ast_utils.lower_while] produces (and that compilers emit for the
+   corresponding source):
 
      'L: loop { if C { B; br 'L; } }     ⇒  'L?: while C { B }      (leading test)
-     'L: loop { B; br_if 'L C; }         ⇒  'L?: do { B } while C;  (trailing test)
 
    so decompiled WAT/WASM (and round-tripped Wax loops) read as the high-level
-   form rather than a bare [loop] with an explicit back-edge.
+   form rather than a bare [loop] with an explicit back-edge. A trailing-test
+   [loop { B; br_if 'L C; }] has no leading-test [while] equivalent, so it is
+   left as a bare [loop].
 
    The synthesised loop label is kept on the recovered loop only when the body
    still branches to it after the back-edge is removed (a "continue"); otherwise
@@ -47,8 +48,7 @@ let rec refs_instr name (i : location instr) : bool =
       || List.exists (fun (_, b) -> any b) arms
       || any default
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } -> any block
-  | While { cond; block; _ } | DoWhile { block; cond; _ } ->
-      refs_instr name cond || any block
+  | While { cond; block; _ } -> refs_instr name cond || any block
   | If { cond; if_block; else_block; _ } -> (
       refs_instr name cond || any if_block.desc
       || match else_block with Some b -> any b.desc | None -> false)
@@ -100,19 +100,9 @@ let refs_list name l = List.exists (refs_instr name) l
 let keep_label l cond body =
   if refs_list l.desc body || refs_instr l.desc cond then Some l else None
 
-(* Fold an already-rewritten void [loop] labelled [l] into a [while] or
-   [do]-[while] when its body has the expected back-edge, else leave it a
-   [loop]. *)
+(* Fold an already-rewritten void [loop] labelled [l] into a [while] when its
+   body is the leading-test shape, else leave it a [loop]. *)
 let fold_loop l typ block =
-  let dowhile () =
-    (* Trailing test: the body's last instruction is the conditional back-edge. *)
-    match List.rev block with
-    | { desc = Br_if (bl, cond); _ } :: rev_body
-      when String.equal bl.desc l.desc ->
-        let body = List.rev rev_body in
-        DoWhile { label = keep_label l cond body; block = body; cond }
-    | _ -> Loop { label = Some l; typ; block }
-  in
   match block with
   (* Leading test: the body is a single label-less void [if] with no else whose
      own body ends in the back-edge. *)
@@ -128,8 +118,8 @@ let fold_loop l typ block =
         ->
           let body = List.rev rev_body in
           While { label = keep_label l cond body; cond; block = body }
-      | _ -> dowhile ())
-  | _ -> dowhile ()
+      | _ -> Loop { label = Some l; typ; block })
+  | _ -> Loop { label = Some l; typ; block }
 
 let rec rewrite_instr (i : location instr) : location instr =
   { i with desc = rewrite_desc i.desc }
@@ -146,8 +136,6 @@ and rewrite_desc (desc : location instr_desc) : location instr_desc =
       Block { label; typ; block = rewrite_list block }
   | While { label; cond; block } ->
       While { label; cond = rewrite_instr cond; block = rewrite_list block }
-  | DoWhile { label; block; cond } ->
-      DoWhile { label; block = rewrite_list block; cond = rewrite_instr cond }
   | If { label; typ; cond; if_block; else_block } ->
       If
         {

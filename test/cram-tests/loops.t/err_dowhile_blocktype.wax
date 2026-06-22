@@ -1,5 +1,0 @@
-fn g() {
-    do (i32) {
-        nop;
-    } while 1;
-}

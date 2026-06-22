@@ -81,11 +81,6 @@ type 'info instr_desc =
       cond : 'info instr;
       block : 'info instr list;
     }
-  | DoWhile of {
-      label : label option;
-      block : 'info instr list;
-      cond : 'info instr;
-    }
   | If of {
       label : label option;
       typ : functype;

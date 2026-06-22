@@ -153,14 +153,14 @@
         }
         write_to_buffer(s, pos, buffer_size);
         let s' = read_string_stream(buffer_size, 1);
-        let continued: i32;
-        do {
+        'loop: loop {
             len = len - buffer_size;
             pos = pos + buffer_size;
-            continued = len >u buffer_size;
+            let continued = len >u buffer_size;
             write_to_buffer(s, pos, continued?buffer_size:len);
             s' = append_string(s', read_string_stream(continued?buffer_size:len, continued));
-        } while continued;
+            br_if 'loop continued;
+        }
         s';
     }
 

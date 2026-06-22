@@ -1,9 +1,8 @@
-A 'while' is a leading-test loop and 'do { … } while C;' a trailing-test one —
-the readable forms of a 'loop' with an explicit back-edge. A 'while' lowers to
-a 'loop' whose body is an 'if' on the test, with the body and a back-'br' in the
-'then'; a 'do'-'while' lowers to a 'loop' with the body and a back-'br_if' on the
-test. A label-less loop gets a fresh readable label ('loop', then 'loop2', … if
-that name is taken by an enclosing label):
+A 'while' is a leading-test loop — the readable form of a 'loop' whose body is
+an 'if' on the test, with the body and a back-'br' in the 'then'. A trailing-test
+loop (the body, then a back-'br_if' on the test) has no leading-'while' form, so
+it is written and kept as a plain 'loop'. A label-less loop gets a fresh readable
+label ('loop', then 'loop2', … if that name is taken by an enclosing label):
 
   $ wax sum.wax -f wat -v
   (func $sum (param $n i32) (result i32)
@@ -22,7 +21,8 @@ that name is taken by an enclosing label):
     (local.get $total)
   )
 
-The 'while' and 'do'-'while' keywords are preserved when formatting Wax:
+The 'while' keyword is preserved when formatting Wax; the trailing-test loop
+stays a plain 'loop':
 
   $ wax sum.wax -f wax
   fn sum(n: i32) -> i32 {
@@ -32,14 +32,16 @@ The 'while' and 'do'-'while' keywords are preserved when formatting Wax:
           total = total + i;
           i = i + 1;
       }
-      do {
+      'loop: loop {
           total = total - 1;
-      } while total >s 0;
+          br_if 'loop total >s 0;
+      }
       total;
   }
 
-Decompiling recovers the loops from that shape, so they survive a round trip
-through WAT:
+Decompiling recovers the 'while' from that shape, so it survives a round trip
+through WAT; the trailing-test loop round-trips as the plain 'loop' it already
+is:
 
   $ wax sum.wax -f wat | wax -i wat -f wax
   fn sum(n: i32) -> i32 {
@@ -49,9 +51,10 @@ through WAT:
           total = total + i;
           i = i + 1;
       }
-      do {
+      'loop: loop {
           total = total - 1;
-      } while total >s 0;
+          br_if 'loop total >s 0;
+      }
       total;
   }
 
@@ -73,9 +76,9 @@ label-less:
   }
 
 The synthetic label avoids every enclosing label, so a 'br' to an enclosing
-loop or block keeps targeting it: the outer 'do' block is '$loop', so the two
-label-less inner loops become '$loop2' and '$loop3' and the body's 'br 'loop'
-still exits the outer block:
+loop or block keeps targeting it: the outer 'do' block is '$loop' and the inner
+trailing-test loop keeps its '$inner' label, so the label-less 'while' becomes
+'$loop2' and the body's 'br 'loop' still exits the outer block:
 
   $ wax nested.wax -f wat
   (func $f (param $n i32) (result i32)
@@ -85,40 +88,10 @@ still exits the outer block:
       (loop $loop2
         (if (i32.lt_s (local.get $i) (local.get $n))
           (then
-            (loop $loop3
+            (loop $inner
               (local.set $i (i32.add (local.get $i) (i32.const 1)))
-              (br_if $loop3 (i32.lt_s (local.get $i) (i32.const 3))))
+              (br_if $inner (i32.lt_s (local.get $i) (i32.const 3))))
             (br $loop)
             (br $loop2)))))
     (local.get $i)
   )
-
-A 'do'-'while' test must be an 'i32':
-
-  $ wax err_dowhile_type.wax -f wat -v
-  Error: This instruction has type f64 but is expected to have type i32.
-   ──➤  err_dowhile_type.wax:4:13
-  2 │     do {
-  3 │         nop;
-  4 │     } while x;
-    ·             ^
-  5 │ }
-  6 │ 
-  [128]
-
-A 'do'-'while' loop is void, so it cannot carry a block type:
-
-  $ wax err_dowhile_blocktype.wax -f wat -v
-  Error: A do-while loop cannot have a block type.
-  
-   ──➤  err_dowhile_blocktype.wax:2:5
-  1 │ fn g() {
-  2 │     do (i32) {
-    ·     ^^^^^^^^^^^
-  3 │         nop;
-    · ^^^^^^^^^^^^^
-  4 │     } while 1;
-    · ^^^^^^^^^^^^^^
-  5 │ }
-  6 │ 
-  [123]

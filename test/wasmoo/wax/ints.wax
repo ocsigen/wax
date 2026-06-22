@@ -195,16 +195,18 @@ fn format_int_default(d: i32) -> &eq {
         d = 0 - d;
     }
     let n = d;
-    do {
+    'count: loop {
         i = i + 1;
         n = n /u 10;
-    } while n;
+        br_if 'count n;
+    }
     let s: &bytes = [0; i];
-    do {
+    'write: loop {
         i = i - 1;
         s[i] = '0' + d %u 10;
         d = d /u 10;
-    } while d;
+        br_if 'write d;
+    }
     if negative {
         s[0] = '-';
     }
@@ -303,10 +305,11 @@ fn format_int(vs: &eq, d: i32, small: i32) -> &eq {
     }
     let n = d;
     let i: i32;
-    do {
+    'count: loop {
         i = i + 1;
         n = n /u base;
-    } while n;
+        br_if 'count n;
+    }
     if negative | sign_style {
         i = i + 1;
     }
@@ -322,11 +325,12 @@ fn format_int(vs: &eq, d: i32, small: i32) -> &eq {
     }
     let chars = uppercase?uppercase_hex_table:lowercase_hex_table;
     s = [0; i];
-    do {
+    'write: loop {
         i = i - 1;
         s[i] = chars[d %u base] as i32_u;
         d = d /u base;
-    } while d;
+        br_if 'write d;
+    }
     if negative {
         s[0] = '-';
     } else {

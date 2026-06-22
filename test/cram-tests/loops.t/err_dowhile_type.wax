@@ -1,5 +1,0 @@
-fn g(x: f64) {
-    do {
-        nop;
-    } while x;
-}

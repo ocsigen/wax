@@ -217,18 +217,18 @@
       (local.set $i (i32.const 1))
       (local.set $d (i64.sub (i64.const 0) (local.get $d)))))
   (local.set $n (local.get $d))
-  (loop $loop
+  (loop $count
     (local.set $i (i32.add (local.get $i) (i32.const 1)))
     (local.set $n (i64.div_u (local.get $n) (i64.const 10)))
-    (br_if $loop (i64.ne (local.get $n) (i64.const 0))))
+    (br_if $count (i64.ne (local.get $n) (i64.const 0))))
   (local.set $s (array.new $bytes (i32.const 0) (local.get $i)))
-  (loop $loop
+  (loop $write
     (local.set $i (i32.sub (local.get $i) (i32.const 1)))
     (array.set $bytes (local.get $s) (local.get $i)
       (i32.add (@char "0" )
         (i32.wrap_i64 (i64.rem_u (local.get $d) (i64.const 10)))))
     (local.set $d (i64.div_u (local.get $d) (i64.const 10)))
-    (br_if $loop (i64.ne (local.get $d) (i64.const 0))))
+    (br_if $write (i64.ne (local.get $d) (i64.const 0))))
   (if (local.get $negative)
     (then (array.set $bytes (local.get $s) (i32.const 0) (@char "-" ))))
   (local.get $s)
@@ -263,10 +263,10 @@
       (local.set $negative (i32.const 1))
       (local.set $d (i64.sub (i64.const 0) (local.get $d)))))
   (local.set $n (local.get $d))
-  (loop $loop
+  (loop $count
     (local.set $i (i32.add (local.get $i) (i32.const 1)))
     (local.set $n (i64.div_u (local.get $n) (local.get $base)))
-    (br_if $loop (i64.ne (local.get $n) (i64.const 0))))
+    (br_if $count (i64.ne (local.get $n) (i64.const 0))))
   (if (i32.or (local.get $negative) (local.get $sign_style))
     (then (local.set $i (i32.add (local.get $i) (i32.const 1)))))
   (if (local.get $alternate)
@@ -281,13 +281,13 @@
     (select (result (ref $chars)) (global.get $uppercase_hex_table)
       (global.get $lowercase_hex_table) (local.get $uppercase)))
   (local.set $s (array.new $bytes (i32.const 0) (local.get $i)))
-  (loop $loop
+  (loop $write
     (local.set $i (i32.sub (local.get $i) (i32.const 1)))
     (array.set $bytes (local.get $s) (local.get $i)
       (array.get_u $chars (local.get $chars)
         (i32.wrap_i64 (i64.rem_u (local.get $d) (local.get $base)))))
     (local.set $d (i64.div_u (local.get $d) (local.get $base)))
-    (br_if $loop (i64.ne (local.get $d) (i64.const 0))))
+    (br_if $write (i64.ne (local.get $d) (i64.const 0))))
   (if (local.get $negative)
     (then (array.set $bytes (local.get $s) (i32.const 0) (@char "-" )))
     (else

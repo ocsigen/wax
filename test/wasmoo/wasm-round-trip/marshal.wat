@@ -1131,24 +1131,24 @@
       (i32.shl (local.get $sz) (i32.const 3))))
   (local.set $buf (struct.get $extern_state $buf (local.get $s)))
   (local.set $j (i32.const 0))
-  (loop $loop
+  (loop $loop2
     (if (i32.lt_u (local.get $j) (local.get $sz))
       (then
         (local.set $d
           (i64.reinterpret_f64
             (array.get $float_array (local.get $b) (local.get $j))))
         (local.set $i (i32.const 0))
-        (loop $loop2
+        (loop $loop
           (array.set $bytes (local.get $buf)
             (i32.add (local.get $pos) (local.get $i))
             (i32.wrap_i64
               (i64.shr_u (local.get $d)
                 (i64.extend_i32_u (i32.shl (local.get $i) (i32.const 3))))))
           (local.set $i (i32.add (local.get $i) (i32.const 1)))
-          (br_if $loop2 (i32.lt_u (local.get $i) (i32.const 8))))
+          (br_if $loop (i32.lt_u (local.get $i) (i32.const 8))))
         (local.set $pos (i32.add (local.get $pos) (i32.const 8)))
         (local.set $j (i32.add (local.get $j) (i32.const 1)))
-        (br $loop))))
+        (br $loop2))))
 )
 
 (func $extern_lookup_position

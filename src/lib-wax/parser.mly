@@ -86,12 +86,6 @@
 %nonassoc prec_no_else
 %nonassoc "#[else]"
 
-(* A [while] right after a [do { … }] block continues it into a [do]-[while]
-   loop rather than starting a fresh [while] loop: shifting [while] (the
-   trailing test) is preferred over reducing the empty [do_tail]. *)
-%nonassoc prec_no_while
-%nonassoc WHILE
-
 %nonassoc prec_ident (* {a|...} *) prec_block
 %right prec_branch
 %right ":=" "="
@@ -501,18 +495,7 @@ blockinstr:
   "{" arms = list(match_arm) default = match_default "}"
   { with_loc $sloc (Match {scrutinee; arms; default}) }
 | label = block_label DO bt = option(block_type) "{" l = statement_list "}"
-  w = do_tail
-  { match w with
-    | None -> with_loc $sloc (Block{label; typ = blocktype bt; block = l})
-    | Some cond ->
-        (* [do { … } while C;]: a void trailing-test loop, so a block type is
-           meaningless here. *)
-        (match bt with
-         | Some _ ->
-             raise (Wasm.Parsing.Syntax_error
-                      ($sloc, "A do-while loop cannot have a block type.\n"))
-         | None -> ());
-        with_loc $sloc (DoWhile{label; block = l; cond}) }
+  { with_loc $sloc (Block{label; typ = blocktype bt; block = l}) }
 | label = block_label WHILE cond = condition_expression
   "{" l = statement_list "}"
   { with_loc $sloc (While{label; cond; block = l}) }
@@ -532,14 +515,6 @@ blockinstr:
   "{" catches = list(legacy_catch); catch_all = option(legacy_catch_all) "}"
   { with_loc $sloc
       (Try {label; typ = blocktype bt; block = l; catches; catch_all}) }
-
-(* The optional trailing test of a [do { … }] block: absent it stays a plain
-   block, present it makes a [do]-[while] loop. The empty case is marked
-   [prec_no_while] so a following [while] shifts into this tail (see the
-   precedence declarations). *)
-do_tail:
-| %prec prec_no_while { None }
-| WHILE cond = condition_expression ";" { Some cond }
 
 (* A brace-delimited statement list carrying a location, so a comment opening
    the block attaches to it rather than leaking onto the preceding condition

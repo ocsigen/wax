@@ -254,7 +254,7 @@ fn caml_bigstring_memchr(s: &eq, vc: &eq, vpos: &eq, vlen: &eq) -> &eq {
     // Create mask: c | (c<<8) | (c<<16) | (c<<24)
     let mask = c * 0x01010101;
     // Main loop: process 4 bytes at a time
-    'done: {
+    'done: do {
         'loop: loop {
             br_if 'done len <s 4;
             let word = dv_get_i32_unaligned(v, pos, 1);
@@ -342,7 +342,7 @@ fn caml_bigstring_strncmp(vs1: &eq, vpos1: &eq, vs2: &eq, vpos2: &eq, vlen: &eq)
     let c1: i32;
     let c2: i32;
     // Main loop: compare 4 bytes at a time
-    'done: {
+    'done: do {
         'loop: loop {
             br_if 'done i + 4 >u len;
             let w1 = dv_get_i32_unaligned(v1, pos1 + i, 1);

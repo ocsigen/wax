@@ -2,9 +2,10 @@ fn f(n: i32) -> i32 {
     let i: i32 = 0;
     'loop: do {
         while i <s n {
-            do {
+            'inner: loop {
                 i = i + 1;
-            } while i <s 3;
+                br_if 'inner i <s 3;
+            }
             br 'loop;
         }
     }

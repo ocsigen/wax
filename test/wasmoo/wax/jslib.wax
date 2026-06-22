@@ -402,11 +402,12 @@ type bytes = [mut i8];
         let acc = f;
         let i: i32;
         if kind == 2 {
-            do {
+            'loop: loop {
                 f = acc;
                 acc = caml_callback_1(acc, wrap(get(args, i as &i31)));
                 i = i + 1;
-            } while !caml_is_last_arg(f);
+                br_if 'loop !caml_is_last_arg(f);
+            }
         } else {
             i = 0;
             'done: do {

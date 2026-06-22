@@ -14,13 +14,6 @@ let rec map_instr f instr =
             cond = map_instr f cond;
             block = List.map (map_instr f) instrs;
           }
-    | DoWhile { label; block = instrs; cond } ->
-        DoWhile
-          {
-            label;
-            block = List.map (map_instr f) instrs;
-            cond = map_instr f cond;
-          }
     | If { label; typ; cond; if_block; else_block } ->
         If
           {
@@ -189,23 +182,6 @@ let lower_while ~block_info ~label ~cond ~block =
          })
   in
   [ mk (Loop { label = Some l; typ = void; block = [ if_ ] }) ]
-
-(* Lower a trailing-test [do { B } while C;] to ['L: loop { B; br_if 'L C; }]:
-   the body runs once, then branches back as long as [C] holds. Exact inverse of
-   the [do]-[while] case of {!Recover_loops}. *)
-let lower_dowhile ~block_info ~label ~cond ~block =
-  let mk desc = { desc; info = block_info } in
-  let void = { params = [||]; results = [||] } in
-  let l = loop_label label in
-  [
-    mk
-      (Loop
-         {
-           label = Some l;
-           typ = void;
-           block = block @ [ mk (Br_if (l, cond)) ];
-         });
-  ]
 
 (* Lower a [match] to the conventional nested type-test ladder that compilers
    emit (and that hand-written GC code uses): one nested block per arm, plus an

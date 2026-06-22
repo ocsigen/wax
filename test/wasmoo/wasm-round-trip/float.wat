@@ -151,10 +151,10 @@
         (then (local.set $d (local.get $exp)))
         (else (local.set $d (i32.sub (i32.const 0) (local.get $exp)))))
       (local.set $j (i32.const 0))
-      (loop $loop
+      (loop $count
         (local.set $j (i32.add (local.get $j) (i32.const 1)))
         (local.set $d (i32.div_u (local.get $d) (i32.const 10)))
-        (br_if $loop (local.get $d)))
+        (br_if $count (local.get $d)))
       (local.set $len
         (i32.add (i32.add (local.get $i) (local.get $prec))
           (i32.add (i32.const 6) (local.get $j))))
@@ -164,12 +164,12 @@
       (if (i32.ge_s (local.get $exp) (i32.const 0))
         (then (local.set $d (local.get $exp)))
         (else (local.set $d (i32.sub (i32.const 0) (local.get $exp)))))
-      (loop $loop
+      (loop $write
         (local.set $len (i32.sub (local.get $len) (i32.const 1)))
         (array.set $bytes (local.get $s) (local.get $len)
           (i32.add (@char "0" ) (i32.rem_u (local.get $d) (i32.const 10))))
         (local.set $d (i32.div_u (local.get $d) (i32.const 10)))
-        (br_if $loop (local.get $d)))
+        (br_if $write (local.get $d)))
       (array.set $bytes (local.get $s)
         (i32.sub (local.get $len) (i32.const 1))
         (select (@char "+" ) (@char "-" )
@@ -186,14 +186,14 @@
           (array.set $bytes (local.get $s) (local.get $i) (@char "." ))
           (local.set $i (i32.add (local.get $i) (i32.const 1)))
           (local.set $frac (i64.shl (local.get $m) (i64.const 12)))
-          (loop $loop
+          (loop $write
             (array.set $bytes (local.get $s) (local.get $i)
               (array.get_u $chars (global.get $lowercase_hex_table)
                 (i32.wrap_i64 (i64.shr_u (local.get $frac) (i64.const 60)))))
             (local.set $frac (i64.shl (local.get $frac) (i64.const 4)))
             (local.set $prec (i32.sub (local.get $prec) (i32.const 1)))
             (local.set $i (i32.add (local.get $i) (i32.const 1)))
-            (br_if $loop (i32.gt_s (local.get $prec) (i32.const 0))))))
+            (br_if $write (i32.gt_s (local.get $prec) (i32.const 0))))))
       (array.set $bytes (local.get $s) (local.get $i) (@char "p" ))
       (local.get $s)))
   (if (local.get $sign)
@@ -367,7 +367,7 @@
     (then
       (local.set $i (i32.const 0))
       (local.set $len (array.len (local.get $s)))
-      (loop $loop
+      (loop $uppercase
         (local.set $c (array.get_u $bytes (local.get $s) (local.get $i)))
         (if
           (i32.and (i32.ge_u (local.get $c) (@char "a" ))
@@ -376,7 +376,7 @@
             (array.set $bytes (local.get $s) (local.get $i)
               (i32.sub (local.get $c) (i32.const 32)))))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br_if $loop (i32.lt_u (local.get $i) (local.get $len))))))
+        (br_if $uppercase (i32.lt_u (local.get $i) (local.get $len))))))
   (local.get $s)
 ) ) )
 

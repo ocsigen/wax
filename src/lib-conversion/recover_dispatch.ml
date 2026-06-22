@@ -104,8 +104,6 @@ and rewrite_desc (desc : location instr_desc) : location instr_desc =
       Loop { label; typ; block = rewrite_list block }
   | While { label; cond; block } ->
       While { label; cond = rewrite_instr cond; block = rewrite_list block }
-  | DoWhile { label; block; cond } ->
-      DoWhile { label; block = rewrite_list block; cond = rewrite_instr cond }
   | If { label; typ; cond; if_block; else_block } ->
       If
         {

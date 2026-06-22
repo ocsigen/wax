@@ -91,10 +91,11 @@ fn caml_array_of_uniform_array(vinit: &eq) -> &eq {
             size = size - 1;
             let res: &float_array = [0; size];
             let i: i32;
-            do {
+            'loop: loop {
                 res[i] = (init[i + 1] as &float).f;
                 i = i + 1;
-            } while i <u size;
+                br_if 'loop i <u size;
+            }
             return res;
         }
     }

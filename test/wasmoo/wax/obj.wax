@@ -399,9 +399,10 @@ fn caml_oo_cache_id() -> &eq {
     caml_oo_cache_id_last = cacheid + 1;
     let len = method_cache.length();
     if cacheid >=s len {
-        do {
+        'size: loop {
             len = len << 1;
-        } while cacheid >=s len;
+            br_if 'size cacheid >=s len;
+        }
         let a: &int_array = [4; len];
         a.copy(0, method_cache, 0, method_cache.length());
         method_cache = a;

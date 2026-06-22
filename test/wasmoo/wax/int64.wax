@@ -191,16 +191,18 @@ fn format_int64_default(d: i64) -> &eq {
         d = 0 - d;
     }
     let n = d;
-    do {
+    'count: loop {
         i = i + 1;
         n = n /u 10;
-    } while n != 0;
+        br_if 'count n != 0;
+    }
     let s: &bytes = [0; i];
-    do {
+    'write: loop {
         i = i - 1;
         s[i] = '0' + (d %u 10) as i32;
         d = d /u 10;
-    } while d != 0;
+        br_if 'write d != 0;
+    }
     if negative {
         s[0] = '-';
     }
@@ -227,10 +229,11 @@ fn caml_int64_format(vs: &eq, vd: &eq) -> &eq {
     }
     let n = d;
     let i: i32;
-    do {
+    'count: loop {
         i = i + 1;
         n = n /u base;
-    } while n != 0;
+        br_if 'count n != 0;
+    }
     if negative | sign_style {
         i = i + 1;
     }
@@ -246,11 +249,12 @@ fn caml_int64_format(vs: &eq, vd: &eq) -> &eq {
     }
     let chars = uppercase?uppercase_hex_table:lowercase_hex_table;
     s = [0; i];
-    do {
+    'write: loop {
         i = i - 1;
         s[i] = chars[(d %u base) as i32] as i32_u;
         d = d /u base;
-    } while d != 0;
+        br_if 'write d != 0;
+    }
     if negative {
         s[0] = '-';
     } else {

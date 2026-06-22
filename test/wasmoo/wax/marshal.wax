@@ -292,15 +292,17 @@ fn readfloat(s: &intern_state, code: i32) -> f64 {
     let d: i64;
     let i: i32;
     if code == CODE_DOUBLE_BIG {
-        do {
+        'loop: loop {
             d = d << 8 | src[pos + i] as i32_u as i64_u;
             i = i + 1;
-        } while i <u 8;
+            br_if 'loop i <u 8;
+        }
     } else {
-        do {
+        'loop: loop {
             d = (d | src[pos + i] as i32_u as i64_u).rotr(8);
             i = i + 1;
-        } while i <u 8;
+            br_if 'loop i <u 8;
+        }
     }
     d.from_bits();
 }
@@ -862,10 +864,11 @@ fn writefloat(s: &extern_state, f: f64) {
     let buf = s.buf;
     let d = f.to_bits();
     let i: i32;
-    do {
+    'loop: loop {
         buf[pos + i] = (d >>u (i << 3) as i64_u) as i32;
         i = i + 1;
-    } while i <u 8;
+        br_if 'loop i <u 8;
+    }
 }
 
 fn writefloats(s: &extern_state, b: &float_array) {
@@ -876,10 +879,11 @@ fn writefloats(s: &extern_state, b: &float_array) {
     while j <u sz {
         let d = b[j].to_bits();
         let i = 0;
-        do {
+        'loop: loop {
             buf[pos + i] = (d >>u (i << 3) as i64_u) as i32;
             i = i + 1;
-        } while i <u 8;
+            br_if 'loop i <u 8;
+        }
         pos = pos + 8;
         j = j + 1;
     }

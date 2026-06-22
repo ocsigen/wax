@@ -16,8 +16,7 @@ let rec occurs name i =
       || occurs name e
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
       in_list block
-  | While { cond; block; _ } | DoWhile { block; cond; _ } ->
-      occurs name cond || in_list block
+  | While { cond; block; _ } -> occurs name cond || in_list block
   | If { cond; if_block; else_block; _ } -> (
       occurs name cond || in_list if_block.desc
       || match else_block with Some b -> in_list b.desc | None -> false)
@@ -134,7 +133,6 @@ let rec first_access name i =
         | _ -> None)
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } -> fl block
   | While { cond; block; _ } -> fst2 (first_access name cond) (fl block)
-  | DoWhile { block; cond; _ } -> fst2 (fl block) (first_access name cond)
   | If { cond; if_block; else_block; _ } ->
       fst2 (first_access name cond)
         (agree (fl if_block.desc)
@@ -204,7 +202,7 @@ and first_access_list name l =
     (fun acc i -> match acc with Some _ -> acc | None -> first_access name i)
     None l
 
-(* A loop / while / do-while body runs many times, so a local the body reads
+(* A loop / while body runs many times, so a local the body reads
    before assigning carries its value across iterations and belongs in the
    enclosing scope, not the body. A local written before it is ever read is a
    fresh per-iteration temporary and is left to sink in (and fuse with its
@@ -251,9 +249,6 @@ let rec sink_into ((name, _) as decl) s =
          does a value the body carries across iterations. *)
       if occurs name.desc r.cond || loop_carried name.desc r.block then None
       else Some { s with desc = While { r with block = bl r.block } }
-  | DoWhile r ->
-      if occurs name.desc r.cond || loop_carried name.desc r.block then None
-      else Some { s with desc = DoWhile { r with block = bl r.block } }
   | If r ->
       (* The condition is evaluated in the enclosing scope, so a use there
          pins the declaration outside the [If]; a use in both branches cannot

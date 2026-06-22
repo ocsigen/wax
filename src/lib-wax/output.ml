@@ -478,8 +478,8 @@ let array_instr pp nm f =
 
 let get_prec (i : _ Ast.instr) =
   match i.desc with
-  | Block _ | Loop _ | While _ | DoWhile _ | If _ | Try _ | TryTable _
-  | If_annotation _ | Dispatch _ | Match _ ->
+  | Block _ | Loop _ | While _ | If _ | Try _ | TryTable _ | If_annotation _
+  | Dispatch _ | Match _ ->
       Atom
   | Unreachable | Nop | Hole | Null | Get _ | Char _ | String _ | Int _
   | Float _ | Struct _ | StructDefault _ | Array _ | ArrayDefault _
@@ -505,8 +505,8 @@ let get_prec (i : _ Ast.instr) =
 
 let is_block (i : _ Ast.instr) =
   match i.desc with
-  | Block _ | Loop _ | While _ | DoWhile _ | If _ | Try _ | TryTable _
-  | If_annotation _ | Dispatch _ | Match _ ->
+  | Block _ | Loop _ | While _ | If _ | Try _ | TryTable _ | If_annotation _
+  | Dispatch _ | Match _ ->
       true
   | Call _ | Unreachable | Nop | Hole | Null | Get _ | Set _ | Tee _
   | TailCall _ | Char _ | String _ | Int _ | Float _ | Cast _ | Test _
@@ -523,8 +523,8 @@ let rec starts_with_block_prec prec (i : 'a Ast.instr) =
   if prec > actual then false
   else
     match i.desc with
-    | Block _ | Loop _ | While _ | DoWhile _ | If _ | Try _ | TryTable _
-    | If_annotation _ | Dispatch _ | Match _ ->
+    | Block _ | Loop _ | While _ | If _ | Try _ | TryTable _ | If_annotation _
+    | Dispatch _ | Match _ ->
         true
     | Call (i, _) | ArrayGet (i, _) | ArraySet (i, _, _) ->
         starts_with_block_prec CallAndFieldAccess i
@@ -669,22 +669,6 @@ let rec instr prec pp (i : _ instr) =
               punctuation pp "{");
           block_contents pp l;
           punctuation pp "}")
-  | DoWhile { label; block = l; cond } ->
-      hvbox pp (fun () ->
-          box pp (fun () ->
-              block_label pp label;
-              keyword pp "do";
-              space pp ();
-              punctuation pp "{");
-          block_contents pp l;
-          box pp (fun () ->
-              punctuation pp "}";
-              space pp ();
-              keyword pp "while";
-              indent pp indent_level (fun () ->
-                  space pp ();
-                  instr Instruction pp cond);
-              punctuation pp ";"))
   | If { label; typ; cond; if_block; else_block } ->
       hvbox pp (fun () ->
           box pp (fun () ->
@@ -1214,26 +1198,11 @@ and block_contents pp (l : _ instr list) =
      [{}]. *)
   if l <> [] then (
     indent pp indent_level (fun () ->
-        let rec loop = function
-          | [] -> ()
-          | i :: rest ->
-              newline pp ();
-              (match (i.desc, rest) with
-              | Block { label; typ; block = body }, next :: _
-                when (match next.desc with While _ -> true | _ -> false)
-                     && not (need_blocktype typ) ->
-                  (* A [do { … }] block directly followed by a [while] loop would
-                     reparse as a [do { } while C;] do-while loop (the grammar
-                     folds a trailing [while] into the preceding [do] block). Emit
-                     it in the bare-brace form [{ … }] instead — equivalent, but
-                     the parser cannot fold it into a trailing test. *)
-                  atomic_node pp (pp.locate i.info) (fun () ->
-                      parentheses Instruction (get_prec i) pp (fun () ->
-                          block pp label None typ body))
-              | _ -> deliminated_instr pp i);
-              loop rest
-        in
-        loop l);
+        List.iter
+          (fun i ->
+            newline pp ();
+            deliminated_instr pp i)
+          l);
     newline pp ())
 
 (* Print the contents of a brace-delimited block, looking the block's own

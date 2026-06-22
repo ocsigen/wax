@@ -1662,9 +1662,9 @@ let rec count_holes i =
   (* [dispatch]/[match], [while] and [do]-[while] are block-like: their
      operands/scrutinee and bodies are checked inside the blocks they desugar
      to, so no hole at this level draws from the stack. *)
-  | Block _ | Loop _ | While _ | DoWhile _ | TryTable _ | Try _
-  | If_annotation _ | Dispatch _ | Match _ | StructDefault _ | Char _ | String _
-  | Int _ | Float _ | Get _ | Null | Unreachable | Nop
+  | Block _ | Loop _ | While _ | TryTable _ | Try _ | If_annotation _
+  | Dispatch _ | Match _ | StructDefault _ | Char _ | String _ | Int _ | Float _
+  | Get _ | Null | Unreachable | Nop
   | Let (_, None)
   | Br (_, None)
   | Throw (_, None)
@@ -1682,9 +1682,9 @@ let rec check_hole_order_rec ctx i n =
   | _ ->
       let n =
         match i.desc with
-        | Block _ | Loop _ | While _ | DoWhile _ | TryTable _ | Try _
-        | If_annotation _ | Dispatch _ | Match _ | StructDefault _ | Char _
-        | String _ | Int _ | Float _ | Get _ | Null | Unreachable | Nop
+        | Block _ | Loop _ | While _ | TryTable _ | Try _ | If_annotation _
+        | Dispatch _ | Match _ | StructDefault _ | Char _ | String _ | Int _
+        | Float _ | Get _ | Null | Unreachable | Nop
         | Let (_, None)
         | Br (_, None)
         | Throw (_, None)
@@ -2111,17 +2111,6 @@ let rebuild_while typed_list =
       | _ -> assert false)
   | _ -> assert false
 
-(* Likewise for a [do]-[while] lowering (see [Ast_utils.lower_dowhile]): drop the
-   synthesised loop and the trailing [br_if] back-edge. *)
-let rebuild_dowhile typed_list =
-  match typed_list with
-  | [ { desc = Ast.Loop { block; _ }; _ } ] -> (
-      match List.rev block with
-      | { desc = Ast.Br_if (_, cond); _ } :: rev_body ->
-          (cond, List.rev rev_body)
-      | _ -> assert false)
-  | _ -> assert false
-
 (* Peel a type-checked [match] lowering (see [Ast_utils.lower_match]) apart. The
    lowering nests one block per arm inside an outer void [escape] block, each
    wrapping the previous block (its result consumed for the previous arm) then
@@ -2272,15 +2261,6 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       let typed = block ctx i.info None [||] [||] [||] lowered in
       let cond', instrs' = rebuild_while typed in
       return_statement i (While { label; cond = cond'; block = instrs' }) [||]
-  | DoWhile { label; block = instrs; cond } ->
-      (* Likewise via [Ast_utils.lower_dowhile]: validate the body and the
-         trailing [br_if] condition, then rebuild a typed [DoWhile]. *)
-      let lowered =
-        Ast_utils.lower_dowhile ~block_info:i.info ~label ~cond ~block:instrs
-      in
-      let typed = block ctx i.info None [||] [||] [||] lowered in
-      let cond', instrs' = rebuild_dowhile typed in
-      return_statement i (DoWhile { label; block = instrs'; cond = cond' }) [||]
   | If { label; typ; cond; if_block; else_block } ->
       let* cond' = instruction ctx cond in
       check_type ctx cond'
@@ -5008,14 +4988,14 @@ let rec check_constant_instruction ctx i =
         },
         _,
         _ )
-  | Block _ | Loop _ | While _ | DoWhile _ | If _ | TryTable _ | Try _
-  | Dispatch _ | Match _ | Unreachable | Nop | Hole | Set _ | Tee _ | Call _
-  | TailCall _ | Cast _ | Test _ | NonNull _ | StructGet _ | StructSet _
-  | ArraySegment _ | ArrayGet _ | ArraySet _ | Let _ | Br _ | Br_if _
-  | Br_table _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
-  | Br_on_cast_fail _ | Throw _ | ThrowRef _ | ContNew _ | ContBind _
-  | Suspend _ | Resume _ | ResumeThrow _ | ResumeThrowRef _ | Switch _
-  | Return _ | Sequence _ | Select _ | If_annotation _ ->
+  | Block _ | Loop _ | While _ | If _ | TryTable _ | Try _ | Dispatch _
+  | Match _ | Unreachable | Nop | Hole | Set _ | Tee _ | Call _ | TailCall _
+  | Cast _ | Test _ | NonNull _ | StructGet _ | StructSet _ | ArraySegment _
+  | ArrayGet _ | ArraySet _ | Let _ | Br _ | Br_if _ | Br_table _ | Br_on_null _
+  | Br_on_non_null _ | Br_on_cast _ | Br_on_cast_fail _ | Throw _ | ThrowRef _
+  | ContNew _ | ContBind _ | Suspend _ | Resume _ | ResumeThrow _
+  | ResumeThrowRef _ | Switch _ | Return _ | Sequence _ | Select _
+  | If_annotation _ ->
       Error.constant_expression_required ctx.diagnostics ~location
 
 type ('before, 'after) phased =
@@ -5676,7 +5656,6 @@ let rec instr_has_conditional (i : (_ instr_desc, _) annotated) =
   | If_annotation _ -> true
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } -> any block
   | While { cond; block; _ } -> instr_has_conditional cond || any block
-  | DoWhile { block; cond; _ } -> any block || instr_has_conditional cond
   | If { cond; if_block; else_block; _ } ->
       instr_has_conditional cond || any if_block.desc
       || Option.fold ~none:false ~some:(fun b -> any b.desc) else_block
@@ -5795,8 +5774,6 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
         Loop { label; typ; block = sinstrs asm block }
     | While { label; cond; block } ->
         While { label; cond = sone asm cond; block = sinstrs asm block }
-    | DoWhile { label; block; cond } ->
-        DoWhile { label; block = sinstrs asm block; cond = sone asm cond }
     | If { label; typ; cond; if_block; else_block } ->
         If
           {
@@ -5911,7 +5888,7 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
 let sub_instrs (i : (_ instr_desc, _) annotated) =
   match i.desc with
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } -> block
-  | While { cond; block; _ } | DoWhile { block; cond; _ } -> cond :: block
+  | While { cond; block; _ } -> cond :: block
   | If { cond; if_block; else_block; _ } ->
       (cond :: if_block.desc)
       @ Option.fold ~none:[] ~some:(fun b -> b.desc) else_block

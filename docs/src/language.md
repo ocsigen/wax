@@ -353,10 +353,10 @@ Loops nest, and a branch may target any enclosing label:
 }
 ```
 
-### While and Do-While Loops
+### While Loops
 
-The two common loop shapes have readable sugar over the `loop`-and-back-branch
-idiom above. A `while` tests *before* each iteration:
+A `while` is readable sugar over the `loop`-and-back-branch idiom above; it
+tests *before* each iteration:
 
 ```wax
 while i <s n {
@@ -377,16 +377,13 @@ which is exactly:
 }
 ```
 
-A `do { … } while C;` tests *after* the body, so the body always runs at least
-once:
+It is void, and the test must be an `i32`. It may carry a label
+(`'l: while …`), which names the loop, so a `br 'l` from inside the body is a
+*continue* — it jumps back to re-test. Decompiling recovers a `while` from this
+shape, so a loop written this way survives a round trip through WAT or WASM.
 
-```wax
-do {
-    total = total - 1;
-} while total >s 0;
-```
-
-which is:
+A *trailing*-test loop, where the body always runs at least once, has no
+leading-`while` form. Write it directly as a `loop` with a back-`br_if`:
 
 ```wax
 'next: loop {
@@ -394,12 +391,6 @@ which is:
     br_if 'next total >s 0;
 }
 ```
-
-Both are void, and the test must be an `i32`. They may carry a label
-(`'l: while …`), which names the loop, so a `br 'l` from inside the body is a
-*continue* — it jumps back to re-test. Decompiling recovers a `while` or
-`do`-`while` from these shapes, so a loop written either way survives a round
-trip through WAT or WASM.
 
 ### Labels and Branches
 

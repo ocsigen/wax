@@ -498,9 +498,9 @@
   (local.set $len (array.len (global.get $method_cache)))
   (if (i32.ge_s (local.get $cacheid) (local.get $len))
     (then
-      (loop $loop
+      (loop $size
         (local.set $len (i32.shl (local.get $len) (i32.const 1)))
-        (br_if $loop (i32.ge_s (local.get $cacheid) (local.get $len))))
+        (br_if $size (i32.ge_s (local.get $cacheid) (local.get $len))))
       (local.set $a (array.new $int_array (i32.const 4) (local.get $len)))
       (array.copy $int_array $int_array (local.get $a) (i32.const 0)
         (global.get $method_cache) (i32.const 0)

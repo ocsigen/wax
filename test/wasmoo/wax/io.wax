@@ -984,7 +984,9 @@ fn caml_ml_input_scan_line(vch: &eq) -> &eq {
 }
 
 fn caml_flush(ch: &channel) {
-    do {} while !caml_flush_partial(ch);
+    'loop: loop {
+        br_if 'loop !caml_flush_partial(ch);
+    }
 }
 
 #[export = "caml_flush_if_unbuffered"]

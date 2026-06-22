@@ -224,17 +224,17 @@
       (local.set $i (i32.const 1))
       (local.set $d (i32.sub (i32.const 0) (local.get $d)))))
   (local.set $n (local.get $d))
-  (loop $loop
+  (loop $count
     (local.set $i (i32.add (local.get $i) (i32.const 1)))
     (local.set $n (i32.div_u (local.get $n) (i32.const 10)))
-    (br_if $loop (local.get $n)))
+    (br_if $count (local.get $n)))
   (local.set $s (array.new $bytes (i32.const 0) (local.get $i)))
-  (loop $loop
+  (loop $write
     (local.set $i (i32.sub (local.get $i) (i32.const 1)))
     (array.set $bytes (local.get $s) (local.get $i)
       (i32.add (@char "0" ) (i32.rem_u (local.get $d) (i32.const 10))))
     (local.set $d (i32.div_u (local.get $d) (i32.const 10)))
-    (br_if $loop (local.get $d)))
+    (br_if $write (local.get $d)))
   (if (local.get $negative)
     (then (array.set $bytes (local.get $s) (i32.const 0) (@char "-" ))))
   (local.get $s)
@@ -342,10 +342,10 @@
               (local.set $d
                 (i32.and (local.get $d) (i32.const 0x7fffffff)))))))))
   (local.set $n (local.get $d))
-  (loop $loop
+  (loop $count
     (local.set $i (i32.add (local.get $i) (i32.const 1)))
     (local.set $n (i32.div_u (local.get $n) (local.get $base)))
-    (br_if $loop (local.get $n)))
+    (br_if $count (local.get $n)))
   (if (i32.or (local.get $negative) (local.get $sign_style))
     (then (local.set $i (i32.add (local.get $i) (i32.const 1)))))
   (if (local.get $alternate)
@@ -360,13 +360,13 @@
     (select (result (ref $chars)) (global.get $uppercase_hex_table)
       (global.get $lowercase_hex_table) (local.get $uppercase)))
   (local.set $s (array.new $bytes (i32.const 0) (local.get $i)))
-  (loop $loop
+  (loop $write
     (local.set $i (i32.sub (local.get $i) (i32.const 1)))
     (array.set $bytes (local.get $s) (local.get $i)
       (array.get_u $chars (local.get $chars)
         (i32.rem_u (local.get $d) (local.get $base))))
     (local.set $d (i32.div_u (local.get $d) (local.get $base)))
-    (br_if $loop (local.get $d)))
+    (br_if $write (local.get $d)))
   (if (local.get $negative)
     (then (array.set $bytes (local.get $s) (i32.const 0) (@char "-" )))
     (else

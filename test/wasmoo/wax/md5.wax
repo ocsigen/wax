@@ -90,11 +90,12 @@ fn get_32(s: &bytes, p: i32) -> i32 {
 
 fn MD5Transform(w: &int_array, buffer: &int_array, buffer': &bytes, p: i32) {
     let i: i32;
-    do {
+    'loop: loop {
         buffer[i] = get_32(buffer', p);
         i = i + 1;
         p = p + 4;
-    } while i <u 16;
+        br_if 'loop i <u 16;
+    }
     let a = w[0];
     let b = w[1];
     let c = w[2];
@@ -220,10 +221,11 @@ fn MD5Final(ctx: &context) -> &bytes {
         in_buf = 0;
     }
     i = in_buf;
-    do {
+    'loop: loop {
         buffer[i] = 0;
         i = i + 1;
-    } while i <u 56;
+        br_if 'loop i <u 56;
+    }
     len = len << 3;
     buffer[56] = len as i32;
     buffer[57] = (len >>u 8) as i32;
@@ -237,9 +239,10 @@ fn MD5Final(ctx: &context) -> &bytes {
     let res: &bytes = [0; 16];
     i = 0;
     let w = ctx.w;
-    do {
+    'loop: loop {
         res[i] = w[i >>u 2] >>u (i << 3);
         i = i + 1;
-    } while i <u 16;
+        br_if 'loop i <u 16;
+    }
     res;
 }

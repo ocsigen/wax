@@ -147,7 +147,7 @@ fn find_first_zero(arr: &ints) -> i32 {
     br $search))
 ```
 
-## While and Do-While Loops
+## While Loops
 
 ### Wax
 
@@ -166,10 +166,11 @@ fn triangle(n: i32) -> i32 {
 #[export = "countdown"]
 fn countdown(n: i32) -> i32 {
     let steps: i32 = 0;
-    do {
+    'loop: loop {
         n = n - 1;
         steps = steps + 1;
-    } while n >s 0;
+        br_if 'loop n >s 0;
+    }
     steps;
 }
 ```

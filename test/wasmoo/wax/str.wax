@@ -349,13 +349,14 @@ fn re_search_forward(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     if pos >u len {
         caml_invalid_argument(search_forward);
     }
-    do {
+    'loop: loop {
         let res = re_match(re, s, pos, 0);
         if res is &block {
             return res;
         }
         pos = pos + 1;
-    } while pos <=u len;
+        br_if 'loop pos <=u len;
+    }
     [block|0 as &i31];
 }
 
@@ -370,13 +371,14 @@ fn re_search_backward(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     if pos >u len {
         caml_invalid_argument(search_backward);
     }
-    do {
+    'loop: loop {
         let res = re_match(re, s, pos, 0);
         if res is &block {
             return res;
         }
         pos = pos - 1;
-    } while pos >=s 0;
+        br_if 'loop pos >=s 0;
+    }
     [block|0 as &i31];
 }
 

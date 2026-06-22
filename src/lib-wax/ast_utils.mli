@@ -26,17 +26,6 @@ val lower_while :
     [None]). Inverse of the [while] case of {!Recover_loops}; used by both type
     checking and Wax-to-Wasm conversion. *)
 
-val lower_dowhile :
-  block_info:'info ->
-  label:Ast.label option ->
-  cond:'info Ast.instr ->
-  block:'info Ast.instr list ->
-  'info Ast.instr list
-(** [lower_dowhile] desugars a trailing-test [do { B } while C;] to
-    ['L: loop { B; br_if 'L C; }] (synthesising ['L] when [label] is [None]).
-    Inverse of the [do]-[while] case of {!Recover_loops}; used by both type
-    checking and Wax-to-Wasm conversion. *)
-
 val lower_match :
   block_info:'info ->
   labels:Ast.label list ->

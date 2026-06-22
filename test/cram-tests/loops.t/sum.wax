@@ -5,8 +5,9 @@ fn sum(n: i32) -> i32 {
         total = total + i;
         i = i + 1;
     }
-    do {
+    'loop: loop {
         total = total - 1;
-    } while total >s 0;
+        br_if 'loop total >s 0;
+    }
     total;
 }

@@ -273,13 +273,108 @@ let push ret label =
   in
   { return; labels }
 
-(* A readable label for the [loop] a label-less [while]/[do]-[while] lowers to:
-   [loop], or [loop2], [loop3], … when an enclosing label already takes the
-   name (the function's result label included — see {!push}). *)
-let fresh_loop_label ret =
+(* Every block label defined anywhere within [l]. A synthesised loop label must
+   avoid these as well as the enclosing labels, so a label-less [while] lowered
+   to a [loop] does not shadow a labelled construct nested in its body — e.g. a
+   recovered trailing-test [loop] that kept its name (see {!fresh_loop_label}). *)
+let labels_in_list l =
+  let acc = ref [] in
+  let add = function
+    | Some (lb : label) -> acc := lb.desc :: !acc
+    | None -> ()
+  in
+  let rec instr (i : _ instr) =
+    let opt = Option.iter instr in
+    let lst = List.iter instr in
+    match i.desc with
+    | Block { label; block; _ } | Loop { label; block; _ } ->
+        add label;
+        lst block
+    | While { label; cond; block } ->
+        add label;
+        instr cond;
+        lst block
+    | If { label; cond; if_block; else_block; _ } ->
+        add label;
+        instr cond;
+        lst if_block.desc;
+        Option.iter (fun b -> lst b.desc) else_block
+    | TryTable { label; block; _ } ->
+        add label;
+        lst block
+    | Try { label; block; catches; catch_all; _ } ->
+        add label;
+        lst block;
+        List.iter (fun (_, b) -> lst b) catches;
+        Option.iter lst catch_all
+    | Dispatch { index; arms; _ } ->
+        instr index;
+        List.iter (fun (_, b) -> lst b) arms
+    | Match { scrutinee; arms; default } ->
+        instr scrutinee;
+        List.iter (fun (_, b) -> lst b) arms;
+        lst default
+    | If_annotation { then_body; else_body; _ } ->
+        lst then_body;
+        Option.iter lst else_body
+    | Call (a, l) | TailCall (a, l) ->
+        instr a;
+        lst l
+    | Struct (_, fs) -> List.iter (fun (_, e) -> instr e) fs
+    | Set (_, e)
+    | Tee (_, e)
+    | Cast (e, _)
+    | Test (e, _)
+    | NonNull e
+    | StructGet (e, _)
+    | ArrayDefault (_, e)
+    | UnOp (_, e)
+    | ThrowRef e
+    | ContNew (_, e) ->
+        instr e
+    | StructSet (a, _, b)
+    | Array (_, a, b)
+    | ArraySegment (_, _, a, b)
+    | ArrayGet (a, b)
+    | BinOp (_, a, b) ->
+        instr a;
+        instr b
+    | ArraySet (a, b, c) | Select (a, b, c) ->
+        instr a;
+        instr b;
+        instr c
+    | ArrayFixed (_, l)
+    | ContBind (_, _, l)
+    | Suspend (_, l)
+    | Resume (_, _, l)
+    | ResumeThrow (_, _, _, l)
+    | ResumeThrowRef (_, _, l)
+    | Switch (_, _, l)
+    | Sequence l ->
+        lst l
+    | Let (_, e) | Throw (_, e) | Return e | Br (_, e) -> opt e
+    | Br_if (_, e)
+    | Br_table (_, e)
+    | Br_on_null (_, e)
+    | Br_on_non_null (_, e)
+    | Br_on_cast (_, _, e)
+    | Br_on_cast_fail (_, _, e) ->
+        instr e
+    | Unreachable | Nop | Hole | Null | Get _ | Char _ | String _ | Int _
+    | Float _ | StructDefault _ ->
+        ()
+  in
+  List.iter instr l;
+  !acc
+
+(* A readable label for the [loop] a label-less [while] lowers to: [loop], or
+   [loop2], [loop3], … when an enclosing label ([avoid] / the function's result
+   label included — see {!push}) or a label nested in the body already takes the
+   name. *)
+let fresh_loop_label ret avoid =
   let rec pick i =
     let n = if i = 1 then "loop" else "loop" ^ string_of_int i in
-    if List.mem n ret.labels then pick (i + 1) else n
+    if List.mem n ret.labels || List.mem n avoid then pick (i + 1) else n
   in
   pick 1
 
@@ -1211,20 +1306,18 @@ and instruction_desc ret ctx i : location Text.instr list =
            ~arms)
   | While { label; cond; block } ->
       (* Lower to the equivalent ['L: loop { if C { B; br 'L; } }] and convert;
-         a label-less loop gets a fresh readable [loop]/[loopN] (the loop label
-         threads into [ret] via the recursive calls). *)
+         a label-less loop gets a fresh readable [loop]/[loopN] that avoids both
+         the enclosing labels (threaded into [ret]) and any label nested in the
+         body — e.g. a recovered trailing-test [loop] that kept its name. *)
       let label =
-        Some (Option.value label ~default:(Ast.no_loc (fresh_loop_label ret)))
+        Some
+          (Option.value label
+             ~default:
+               (Ast.no_loc
+                  (fresh_loop_label ret (labels_in_list (cond :: block)))))
       in
       List.concat_map (instruction ret ctx)
         (Wax.Ast_utils.lower_while ~block_info:i.info ~label ~cond ~block)
-  | DoWhile { label; block; cond } ->
-      (* Likewise to ['L: loop { B; br_if 'L C; }]. *)
-      let label =
-        Some (Option.value label ~default:(Ast.no_loc (fresh_loop_label ret)))
-      in
-      List.concat_map (instruction ret ctx)
-        (Wax.Ast_utils.lower_dowhile ~block_info:i.info ~label ~cond ~block)
   | Match { scrutinee; arms; default } ->
       (* Lower to the nested type-test ladder (see [Ast_utils.lower_match]) and
          convert each statement. Readable [arm]/[default] labels (one per arm,
