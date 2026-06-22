@@ -2,7 +2,6 @@
 TODO:
 - error messages
 - locations on the heap when push several values?
-- try to use declared types instead of adding <string>
 - floating type String? (with default to array<i8>)
 - desugar by default
 - handle double casts: i31 then i32_s

@@ -19,12 +19,24 @@ type ctx = {
   struct_fields : (string, string list) Hashtbl.t;
   referenced_functions : (string, unit) Hashtbl.t;
   extra_types : (string, Text.name * subtype) Hashtbl.t;
+  (* Structurally equal module types, keyed by definition, so an internal
+     synthesized type (e.g. [<string>]) can reuse an existing declared one
+     (e.g. [bytes = [mut i8]]) instead of being materialized afresh. *)
+  reuse_types : (subtype, string) Hashtbl.t;
   types : Wax.Typing.types;
   diagnostics : Utils.Diagnostic.context;
 }
 
 let with_loc loc desc = { desc; info = loc }
-let index wax_idx : Text.idx = with_loc wax_idx.info (Text.Id wax_idx.desc)
+
+(* Rewrites references to internal synthesized types (names starting with ['<'])
+   so they reuse a structurally equal declared type; installed per module by
+   [module_]. Other names pass through unchanged. *)
+let type_remap : (Text.name -> Text.name) ref = ref Fun.id
+
+let index wax_idx : Text.idx =
+  let wax_idx = !type_remap wax_idx in
+  with_loc wax_idx.info (Text.Id wax_idx.desc)
 
 let rec heaptype (h : heaptype) : Text.heaptype =
   match h with
@@ -295,14 +307,30 @@ let fresh_match_labels ret n =
   let arm_names, used = arms ret.labels 0 in
   arm_names @ [ fresh used "default" ]
 
-let ensure_type_is_defined ctx typ =
-  match typ with
-  | Ref { typ = Type nm; _ } when nm.desc.[0] = '<' ->
-      if not (Hashtbl.mem ctx.extra_types nm.desc) then
-        Option.iter
-          (fun subtype -> Hashtbl.add ctx.extra_types nm.desc (nm, subtype))
-          (Wax.Typing.get_type_definition ctx.diagnostics ctx.types nm)
-  | _ -> ()
+(* The per-module [type_remap] (see [index]). A reference to an internal,
+   synthesized type (its name starts with ['<']) is rewritten to a structurally
+   equal declared type if one is in scope, so a redundant type is not emitted —
+   e.g. [<string>] reuses an existing [bytes = [mut i8]]. Otherwise the
+   synthesized type is materialized as an extra definition. The synthesized name
+   is kept through typing (for error messages) and only switched here.
+
+   [ctx.reuse_types] is scoped — a conditional branch pushes its declared types
+   while it is being converted (see [convert_fields]) — so the decision is taken
+   afresh at each reference rather than cached: the same synthesized type may
+   reuse a conditional type where it is in scope and be materialized elsewhere. *)
+let make_type_remap ctx : Text.name -> Text.name =
+ fun nm ->
+  if nm.desc = "" || nm.desc.[0] <> '<' then nm
+  else
+    match Wax.Typing.get_type_definition ctx.diagnostics ctx.types nm with
+    | None -> nm
+    | Some subtype -> (
+        match Hashtbl.find_opt ctx.reuse_types subtype with
+        | Some existing -> { nm with desc = existing }
+        | None ->
+            if not (Hashtbl.mem ctx.extra_types nm.desc) then
+              Hashtbl.add ctx.extra_types nm.desc (nm, subtype);
+            nm)
 
 let mem_store_method = function
   | "store8" | "store16" | "store32" | "store64" | "storef32" | "storef64" ->
@@ -880,9 +908,7 @@ and instruction_desc ret ctx i : location Text.instr list =
                   Nop
               (* Cast to an inline function type: ref.cast to the anonymous
                  function type minted for the cast's result. *)
-              | _, Functype _ ->
-                  ensure_type_is_defined ctx (Ref (expr_reftype i));
-                  RefCast (reftype (expr_reftype i))
+              | _, Functype _ -> RefCast (reftype (expr_reftype i))
               | _ ->
                   print_valtype in_ty;
                   print_instr i;
@@ -1278,9 +1304,7 @@ and instruction_desc ret ctx i : location Text.instr list =
       let typ =
         match expr_opt_valtype i with
         | None | Some (I32 | I64 | F32 | F64 | V128) -> None
-        | Some typ ->
-            ensure_type_is_defined ctx typ;
-            Some [ valtype typ ]
+        | Some typ -> Some [ valtype typ ]
       in
       folded loc (Select typ) (code_then @ code_else @ code_cond)
   | Char c -> folded loc (Char c) []
@@ -1414,6 +1438,7 @@ let module_ diagnostics types fields =
       struct_fields = Hashtbl.create 16;
       referenced_functions = Hashtbl.create 16;
       extra_types = Hashtbl.create 16;
+      reuse_types = Hashtbl.create 16;
       types;
       diagnostics;
     }
@@ -1452,6 +1477,49 @@ let module_ diagnostics types fields =
       | Elem { name; _ } -> Hashtbl.replace ctx.elems name.desc ()
       | Tag _ | Data _ | Group _ | Conditional _ -> ())
     fields;
+  (* Record unconditionally-declared types as reuse targets for synthesized
+     types. Descend into [Group] (always present) but not [Conditional]: a type
+     guarded by [#[if]] is not available everywhere a synthesized type like
+     [<string>] is referenced, so reusing it could leave a dangling reference. *)
+  let collect_reuse_types fields =
+    let rec aux acc fields =
+      List.fold_left
+        (fun acc field ->
+          match field.desc with
+          | Type rectype ->
+              Array.fold_left
+                (fun acc rt ->
+                  let idx, subtype = rt.desc in
+                  if idx.desc <> "" && idx.desc.[0] <> '<' then
+                    (subtype, idx.desc) :: acc
+                  else acc)
+                acc rectype
+          | Group { fields; _ } -> aux acc fields
+          | _ -> acc)
+        acc fields
+    in
+    aux [] fields
+  in
+  (* Top-level types are available everywhere, so record them once and keep the
+     first declaration of each shape. *)
+  List.iter
+    (fun (subtype, name) ->
+      if not (Hashtbl.mem ctx.reuse_types subtype) then
+        Hashtbl.add ctx.reuse_types subtype name)
+    (collect_reuse_types fields);
+  (* Convert [flds] with that scope's declared types added as reuse targets
+     (innermost wins via [Hashtbl.add]/[remove]), then restore the scope. *)
+  let scoped flds f =
+    let entries = collect_reuse_types flds in
+    List.iter (fun (s, n) -> Hashtbl.add ctx.reuse_types s n) entries;
+    Fun.protect
+      ~finally:(fun () ->
+        List.iter (fun (s, _) -> Hashtbl.remove ctx.reuse_types s) entries)
+      f
+  in
+  (* Now that the top-level types are recorded, install the synthesized-type
+     remapping used by [index] while converting. *)
+  type_remap := make_type_remap ctx;
   let rec convert_fields fields =
     List.concat_map
       (fun field ->
@@ -1583,6 +1651,12 @@ let module_ diagnostics types fields =
               };
             ]
         | Conditional { cond; then_fields; else_fields } ->
+            (* A branch's declared types are in scope only within it, so add
+               them while converting it (see [scoped]); a synthesized type
+               referenced there can then reuse a conditionally-declared one. *)
+            let conv_branch flds =
+              scoped flds (fun () -> convert_fields flds)
+            in
             [
               {
                 field with
@@ -1590,8 +1664,8 @@ let module_ diagnostics types fields =
                   Text.Module_if_annotation
                     {
                       cond;
-                      then_fields = convert_fields then_fields;
-                      else_fields = Option.map convert_fields else_fields;
+                      then_fields = conv_branch then_fields;
+                      else_fields = Option.map conv_branch else_fields;
                     };
               };
             ]
@@ -1611,9 +1685,7 @@ let module_ diagnostics types fields =
                     | Some typ -> typ
                     | None ->
                         (*ZZZ *)
-                        let typ = expr_valtype def in
-                        ensure_type_is_defined ctx typ;
-                        typ
+                        expr_valtype def
                   in
                   let init =
                     let ctx =
