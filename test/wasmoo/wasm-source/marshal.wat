@@ -1305,6 +1305,7 @@
       (local $sp (ref null $stack_item))
       (local $item (ref $stack_item))
       (local $b (ref $block)) (local $str (ref $bytes))
+      (local $iv (ref i31)) (local $flv (ref $float))
       (local $fa (ref $float_array))
       (local $tg i32) (local $sz i32)
       (local $pos i32)
@@ -1313,10 +1314,9 @@
       (loop $loop
          (block $next_item
             (drop (block $not_int (result (ref eq))
-               (call $extern_int (local.get $s)
-                  (i31.get_s
-                     (br_on_cast_fail $not_int (ref eq) (ref i31)
-                        (local.get $v))))
+               (local.set $iv
+                  (br_on_cast_fail $not_int (ref eq) (ref i31) (local.get $v)))
+               (call $extern_int (local.get $s) (i31.get_s (local.get $iv)))
                (br $next_item)))
             (drop (block $not_block (result (ref eq))
                (local.set $b
@@ -1382,10 +1382,11 @@
                      (i32.shr_u (local.get $sz) (i32.const 3))))
                (br $next_item)))
             (drop (block $not_float (result (ref eq))
+               (local.set $flv
+                  (br_on_cast_fail $not_float (ref eq) (ref $float)
+                     (local.get $v)))
                (call $extern_float (local.get $s)
-                  (struct.get $float 0
-                     (br_on_cast_fail $not_float (ref eq) (ref $float)
-                        (local.get $v))))
+                  (struct.get $float 0 (local.get $flv)))
                (call $extern_size (local.get $s) (i32.const 2) (i32.const 1))
                (br $next_item)))
             (drop (block $not_float_array (result (ref eq))

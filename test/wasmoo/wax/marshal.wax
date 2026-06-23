@@ -1030,19 +1030,38 @@ fn extern_rec(s: &extern_state, v: &eq) {
         let b: &block;
         let pos: i32;
         'next_item: do {
-            _ =
-                'not_int: do &eq {
-                    extern_int(s, (br_on_cast_fail 'not_int &i31 v) as i32_s);
+            match v {
+                iv: &i31 => {
+                    extern_int(s, iv as i32_s);
                     br 'next_item;
-                };
-            let sz: i32;
-            _ =
-                'not_block: do &eq {
-                    b = br_on_cast_fail 'not_block &block v;
-                    let tg = b[0] as &i31 as i32_u;
-                    sz = b.length() - 1;
-                    if !sz {
-                        extern_header(s, 0, tg);
+                }
+                _ => {
+                    let sz: i32;
+                    _ =
+                        'not_block: do &eq {
+                            b = br_on_cast_fail 'not_block &block v;
+                            let tg = b[0] as &i31 as i32_u;
+                            sz = b.length() - 1;
+                            if !sz {
+                                extern_header(s, 0, tg);
+                                br 'next_item;
+                            }
+                            pos = extern_lookup_position(s, v);
+                            if pos >=s 0 {
+                                extern_shared_reference(s, s.obj_counter - pos);
+                                br 'next_item;
+                            }
+                            extern_record_location(s, v);
+                            extern_header(s, sz, tg);
+                            extern_size(s, sz, sz);
+                            if sz >u 1 {
+                                sp = { blk: b, pos: 2, next: sp };
+                            }
+                            v = b[1];
+                            br 'loop;
+                        };
+                    if v == null_value {
+                        write(s, CODE_NULL);
                         br 'next_item;
                     }
                     pos = extern_lookup_position(s, v);
@@ -1051,39 +1070,18 @@ fn extern_rec(s: &extern_state, v: &eq) {
                         br 'next_item;
                     }
                     extern_record_location(s, v);
-                    extern_header(s, sz, tg);
-                    extern_size(s, sz, sz);
-                    if sz >u 1 {
-                        sp = { blk: b, pos: 2, next: sp };
-                    }
-                    v = b[1];
-                    br 'loop;
-                };
-            if v == null_value {
-                write(s, CODE_NULL);
-                br 'next_item;
-            }
-            pos = extern_lookup_position(s, v);
-            if pos >=s 0 {
-                extern_shared_reference(s, s.obj_counter - pos);
-                br 'next_item;
-            }
-            extern_record_location(s, v);
-            match v {
-                str: &bytes => {
-                    extern_string(s, str);
-                    sz = str.length();
-                    extern_size(s, 1 + (sz >>u 2), 1 + (sz >>u 3));
-                    br 'next_item;
-                }
-                _ => {
-                    _ =
-                        'not_float: do &eq {
-                            extern_float(s, (br_on_cast_fail 'not_float &float v).f);
+                    match v {
+                        str: &bytes => {
+                            extern_string(s, str);
+                            sz = str.length();
+                            extern_size(s, 1 + (sz >>u 2), 1 + (sz >>u 3));
+                            br 'next_item;
+                        }
+                        flv: &float => {
+                            extern_float(s, flv.f);
                             extern_size(s, 2, 1);
                             br 'next_item;
-                        };
-                    match v {
+                        }
                         fa: &float_array => {
                             sz = fa.length();
                             extern_float_array(s, fa);
