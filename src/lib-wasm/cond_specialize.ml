@@ -1,4 +1,4 @@
-module Diagnostic = Utils.Diagnostic
+module Diagnostic = Wax_utils.Diagnostic
 
 type value = Bool of bool | Version of int * int * int | String of string
 
@@ -191,7 +191,7 @@ and cmp_string ctx env whole v op s =
 
 (* The boundary byte offsets of a conditional and its then-branch. A removed
    branch's source span is recorded so its comments can be dropped (see
-   {!Utils.Trivia.drop_in_ranges}) instead of re-attaching to a surviving node.
+   {!Wax_utils.Trivia.drop_in_ranges}) instead of re-attaching to a surviving node.
    The split between the two branches is the end of the then-branch (the point
    just before [@else]), which avoids needing the position of the [@else] token
    itself. *)
@@ -208,7 +208,7 @@ let branch_end ~default nodes =
    simplified) rather than explored. *)
 let module_ ctx env ((name, fields) : Ast.location Ast.Text.module_) :
     Ast.location Ast.Text.module_ * (int * int) list =
-  Utils.Debug.timed "specialize" @@ fun () ->
+  Wax_utils.Debug.timed "specialize" @@ fun () ->
   let open Ast.Text in
   let ranges = ref [] in
   (* The boundary between the two branches. With no else the conditional ends at

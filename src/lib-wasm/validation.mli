@@ -6,7 +6,7 @@ val validate_refs : bool ref
 
 val f :
   ?warn_unused:bool ->
-  Utils.Diagnostic.context ->
+  Wax_utils.Diagnostic.context ->
   Ast.location Ast.Text.module_ ->
   unit
 (** [f modul] validates the given Wasm Text module, including syntactic

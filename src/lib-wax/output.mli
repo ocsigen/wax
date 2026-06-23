@@ -5,19 +5,19 @@ val width : int
     Pass it as [Printer.run]'s [?width] at every Wax module render to a real
     formatter. *)
 
-val instr : Utils.Printer.t -> _ Ast.instr -> unit
-val valtype : Utils.Printer.t -> Ast.valtype -> unit
-val storagetype : Utils.Printer.t -> Ast.storagetype -> unit
+val instr : Wax_utils.Printer.t -> _ Ast.instr -> unit
+val valtype : Wax_utils.Printer.t -> Ast.valtype -> unit
+val storagetype : Wax_utils.Printer.t -> Ast.storagetype -> unit
 
 val module_ :
-  ?color:Utils.Colors.flag ->
+  ?color:Wax_utils.Colors.flag ->
   ?out_channel:out_channel ->
-  ?tail:Utils.Trivia.entry list ->
+  ?tail:Wax_utils.Trivia.entry list ->
   ?collect:(Ast.location, unit) Hashtbl.t ->
-  Utils.Printer.t ->
-  trivia:Utils.Trivia.t ->
+  Wax_utils.Printer.t ->
+  trivia:Wax_utils.Trivia.t ->
   Ast.location Ast.module_ ->
   unit
 (** [collect], when given, runs as a dry pass that records every looked-up
     location into the table (pass an empty [trivia]); use it to drive
-    {!Utils.Trivia.associate}'s [only] argument. *)
+    {!Wax_utils.Trivia.associate}'s [only] argument. *)

@@ -1,3 +1,11 @@
 (test
  (name test_diagnostic)
- (libraries utils wasm wax conversion menhirLib re unix cmdliner))
+ (libraries
+  wax_utils
+  wax_wasm
+  wax_lang
+  wax_conversion
+  menhirLib
+  re
+  unix
+  cmdliner))

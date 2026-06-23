@@ -1,4 +1,4 @@
-open Wax
+open Wax_lang
 open Ast
 
 (* Recover a [match] from the nested type-test ladder that

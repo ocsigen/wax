@@ -7,7 +7,7 @@
 *)
 
 let wasm_only = ref false
-let color = ref Utils.Colors.Always
+let color = ref Wax_utils.Colors.Always
 let all_errors = ref false
 
 let () =
@@ -139,21 +139,21 @@ let iter_files dirs skip suffix ~output f =
 
 type script =
   ([ `Valid | `Invalid of string | `Malformed of string ]
-  * [ `Parsed of Wasm.Ast.location Wasm.Ast.Text.module_
+  * [ `Parsed of Wax_wasm.Ast.location Wax_wasm.Ast.Text.module_
     | `Text of string
     | `Binary of string ])
   list
 
 module Script_parser = struct
   module Make (Context : sig
-    type t = Utils.Trivia.context
+    type t = Wax_utils.Trivia.context
 
     val context : t
   end) =
   struct
-    module P = Wasm.Parser.Make (Context)
+    module P = Wax_wasm.Parser.Make (Context)
 
-    type token = Wasm.Tokens.token
+    type token = Wax_wasm.Tokens.token
 
     module MenhirInterpreter = P.MenhirInterpreter
 
@@ -165,14 +165,14 @@ end
 
 module Fast_script_parser = struct
   module Make (Context : sig
-    type t = Utils.Trivia.context
+    type t = Wax_utils.Trivia.context
 
     val context : t
   end) =
   struct
-    module F = Wasm.Fast_parser.Make (Context)
+    module F = Wax_wasm.Fast_parser.Make (Context)
 
-    type token = Wasm.Tokens.token
+    type token = Wax_wasm.Tokens.token
 
     exception Error = F.Error
 
@@ -181,41 +181,41 @@ module Fast_script_parser = struct
 end
 
 module ModuleParser =
-  Wasm.Parsing.Make_parser
+  Wax_wasm.Parsing.Make_parser
     (struct
-      type t = Wasm.Ast.location Wasm.Ast.Text.module_
+      type t = Wax_wasm.Ast.location Wax_wasm.Ast.Text.module_
     end)
-    (Wasm.Tokens)
-    (Wasm.Parser)
-    (Wasm.Fast_parser)
-    (Wasm.Parser_messages)
-    (Wasm.Lexer)
+    (Wax_wasm.Tokens)
+    (Wax_wasm.Parser)
+    (Wax_wasm.Fast_parser)
+    (Wax_wasm.Parser_messages)
+    (Wax_wasm.Lexer)
 
 module ScriptParser =
-  Wasm.Parsing.Make_parser
+  Wax_wasm.Parsing.Make_parser
     (struct
       type t = script
     end)
-    (Wasm.Tokens)
+    (Wax_wasm.Tokens)
     (Script_parser)
     (Fast_script_parser)
-    (Wasm.Parser_messages)
-    (Wasm.Lexer)
+    (Wax_wasm.Parser_messages)
+    (Wax_wasm.Lexer)
 
 module WaxParser =
-  Wasm.Parsing.Make_parser
+  Wax_wasm.Parsing.Make_parser
     (struct
-      type t = Wax.Ast.location Wax.Ast.module_
+      type t = Wax_lang.Ast.location Wax_lang.Ast.module_
     end)
-    (Wax.Tokens)
-    (Wax.Parser)
-    (Wax.Fast_parser)
-    (Wax.Parser_messages)
-    (Wax.Lexer)
+    (Wax_lang.Tokens)
+    (Wax_lang.Parser)
+    (Wax_lang.Fast_parser)
+    (Wax_lang.Parser_messages)
+    (Wax_lang.Lexer)
 
 let print_module ~color f m =
   let trivia = Hashtbl.create 0 in
-  Utils.Printer.run f (fun p -> Wasm.Output.module_ p ~color ~trivia m)
+  Wax_utils.Printer.run f (fun p -> Wax_wasm.Output.module_ p ~color ~trivia m)
 
 let contains_substring s sub =
   let n = String.length s and m = String.length sub in
@@ -232,11 +232,11 @@ let parse_binary ~color ?filename txt =
   let buf = Buffer.create 256 in
   let output = Format.formatter_of_buffer buf in
   match
-    Utils.Diagnostic.run ~color ~source:None ~exit:false ~output (fun d ->
-        Wasm.Wasm_parser.module_ d ?filename txt)
+    Wax_utils.Diagnostic.run ~color ~source:None ~exit:false ~output (fun d ->
+        Wax_wasm.Wasm_parser.module_ d ?filename txt)
   with
   | m -> Ok m
-  | exception Utils.Diagnostic.Aborted ->
+  | exception Wax_utils.Diagnostic.Aborted ->
       Format.pp_print_flush output ();
       Error (Buffer.contents buf)
 
@@ -265,7 +265,7 @@ let runtest filename _ =
                   (String.escaped txt) rendered;
                 None
             | Ok binary_ast ->
-                let m = Wasm.Binary_to_text.module_ binary_ast in
+                let m = Wax_wasm.Binary_to_text.module_ binary_ast in
                 (*
             Format.eprintf "%a@." (print_module ~color:!color) m;
 *)
@@ -277,8 +277,8 @@ let runtest filename _ =
                   let ast, _ctx =
                     ModuleParser.parse_from_string ~color ~filename txt
                   in
-                  Utils.Diagnostic.run ~color ~source:(Some txt) (fun d ->
-                      Wasm.Validation.f ~warn_unused:false d ast);
+                  Wax_utils.Diagnostic.run ~color ~source:(Some txt) (fun d ->
+                      Wax_wasm.Validation.f ~warn_unused:false d ast);
                   if false then
                     Format.printf "@[<2>Result:@ %a@]@." (print_module ~color)
                       ast)
@@ -299,11 +299,12 @@ let runtest filename _ =
                       "  message diverges from expected reason: %s@." reason);
                 None
             | Ok binary_ast ->
-                let ast = Wasm.Binary_to_text.module_ binary_ast in
+                let ast = Wax_wasm.Binary_to_text.module_ binary_ast in
                 let ok =
                   in_child_process ~quiet (fun () ->
-                      Utils.Diagnostic.run ~color ~source:(Some txt) (fun d ->
-                          Wasm.Validation.f ~warn_unused:false d ast);
+                      Wax_utils.Diagnostic.run ~color ~source:(Some txt)
+                        (fun d ->
+                          Wax_wasm.Validation.f ~warn_unused:false d ast);
                       if false then
                         Format.printf "@[<2>Result:@ %a@]@."
                           (print_module ~color) ast)
@@ -341,8 +342,8 @@ let runtest filename _ =
               let temp, out_channel =
                 Filename.open_temp_file ~mode:[ Open_binary ] "temp" ".wasm"
               in
-              Wasm.Wasm_output.module_ ~out_channel
-                (Wasm.Text_to_binary.module_ m);
+              Wax_wasm.Wasm_output.module_ ~out_channel
+                (Wax_wasm.Text_to_binary.module_ m);
               close_out out_channel;
               let text = read_file temp in
               Sys.remove temp;
@@ -352,7 +353,7 @@ let runtest filename _ =
                     rendered;
                   None
               | Ok binary_ast ->
-                  let m = Wasm.Binary_to_text.module_ binary_ast in
+                  let m = Wax_wasm.Binary_to_text.module_ binary_ast in
                   if false then (
                     prerr_endline "AFTER ";
                     Format.eprintf "@[%a@]@." (print_module ~color) m);
@@ -367,8 +368,8 @@ let runtest filename _ =
       match (status, m) with
       | `Valid, m ->
           if false then Format.eprintf "@[%a@]@." (print_module ~color) m;
-          Utils.Diagnostic.run ~color ~source (fun d ->
-              Wasm.Validation.f ~warn_unused:false d m)
+          Wax_utils.Diagnostic.run ~color ~source (fun d ->
+              Wax_wasm.Validation.f ~warn_unused:false d m)
       | `Invalid reason, m ->
           let ok =
             in_child_process ~quiet (fun () ->
@@ -378,8 +379,8 @@ let runtest filename _ =
                    capture and check it in the parent the way we do for malformed
                    binaries). *)
                 if not quiet then Format.eprintf "Expected reason: %s@." reason;
-                Utils.Diagnostic.run ~color ~source (fun d ->
-                    Wasm.Validation.f ~warn_unused:false d m);
+                Wax_utils.Diagnostic.run ~color ~source (fun d ->
+                    Wax_wasm.Validation.f ~warn_unused:false d m);
                 if false then
                   Format.printf "@[<2>Result:@ %a@]@." (print_module ~color) m)
           in
@@ -395,8 +396,8 @@ let runtest filename _ =
   in
   (* Translation to new syntax *)
   let print_wax ~color f m =
-    Utils.Printer.run ~width:Wax.Output.width f (fun p ->
-        Wax.Output.module_ ~color p ~trivia:(Hashtbl.create 0) m)
+    Wax_utils.Printer.run ~width:Wax_lang.Output.width f (fun p ->
+        Wax_lang.Output.module_ ~color p ~trivia:(Hashtbl.create 0) m)
   in
   List.iter
     (fun (status, wasm_m, source) ->
@@ -408,13 +409,13 @@ let runtest filename _ =
           match status with `Invalid _ -> true | `Valid -> false
         in
         match
-          Conversion.From_wasm.module_ ~strict_constants
-            (Utils.Diagnostic.collector ())
+          Wax_conversion.From_wasm.module_ ~strict_constants
+            (Wax_utils.Diagnostic.collector ())
             wasm_m
         with
         | exception
-            (( Conversion.From_wasm.Unresolved_reference
-             | Utils.Diagnostic.Aborted ) as e) -> (
+            (( Wax_conversion.From_wasm.Unresolved_reference
+             | Wax_utils.Diagnostic.Aborted ) as e) -> (
             (* On an invalid module, conversion legitimately gives up: an
                out-of-range / undeclared reference, or a type-invalid construct
                it cannot represent (which it reports and aborts on). Surface it
@@ -438,8 +439,8 @@ let runtest filename _ =
                         WaxParser.parse_from_string ~color ~filename text
                       in
                       ignore
-                        (Utils.Diagnostic.run ~color ~source:(Some text)
-                           (fun d -> Wax.Typing.f d m')))
+                        (Wax_utils.Diagnostic.run ~color ~source:(Some text)
+                           (fun d -> Wax_lang.Typing.f d m')))
                 in
                 if ok then
                   Format.eprintf
@@ -450,26 +451,26 @@ let runtest filename _ =
                 let ok =
                   in_child_process (fun () ->
                       let _, m =
-                        Utils.Diagnostic.run ~color ~source (fun d ->
-                            Wax.Typing.f d m)
+                        Wax_utils.Diagnostic.run ~color ~source (fun d ->
+                            Wax_lang.Typing.f d m)
                       in
                       let types, m =
-                        Utils.Diagnostic.run ~color ~source (fun d ->
-                            Wax.Typing.f d (Wax.Typing.erase_types m))
+                        Wax_utils.Diagnostic.run ~color ~source (fun d ->
+                            Wax_lang.Typing.f d (Wax_lang.Typing.erase_types m))
                       in
                       let m' =
-                        Utils.Diagnostic.run ~color ~source (fun d ->
-                            Conversion.To_wasm.module_ d types m)
+                        Wax_utils.Diagnostic.run ~color ~source (fun d ->
+                            Wax_conversion.To_wasm.module_ d types m)
                       in
                       let ok =
                         in_child_process (fun () ->
-                            Utils.Diagnostic.run ~color ~source (fun d ->
-                                Wasm.Validation.f ~warn_unused:false d m'))
+                            Wax_utils.Diagnostic.run ~color ~source (fun d ->
+                                Wax_wasm.Validation.f ~warn_unused:false d m'))
                       in
                       if not ok then (
                         Format.eprintf "@[%a@]@." (print_module ~color) m';
                         Format.eprintf "@[%a@]@." (print_wax ~color)
-                          (Wax.Typing.erase_types m)))
+                          (Wax_lang.Typing.erase_types m)))
                 in
                 if not ok then Format.eprintf "@[%a@]@." (print_wax ~color) m;
                 let text = Format.asprintf "%a@." (print_wax ~color:Never) m in
@@ -482,8 +483,9 @@ let runtest filename _ =
                         let ok =
                           in_child_process (fun () ->
                               ignore
-                                (Utils.Diagnostic.run ~color ~source:(Some text)
-                                   (fun d -> Wax.Typing.f d m')))
+                                (Wax_utils.Diagnostic.run ~color
+                                   ~source:(Some text) (fun d ->
+                                     Wax_lang.Typing.f d m')))
                         in
                         if not ok then
                           if false then prerr_endline "(after parsing)"
@@ -500,9 +502,9 @@ let runtest filename _ =
 let output path s =
   if s <> "" then (
     Format.printf "%s==== %s ====%s@."
-      (match !color with Always -> Utils.Colors.Ansi.grey | _ -> "")
+      (match !color with Always -> Wax_utils.Colors.Ansi.grey | _ -> "")
       path
-      (match !color with Always -> Utils.Colors.Ansi.reset | _ -> "");
+      (match !color with Always -> Wax_utils.Colors.Ansi.reset | _ -> "");
     print_flushed s)
 
 let dirs = [ "wasm-test-suite"; "additional-tests" ]

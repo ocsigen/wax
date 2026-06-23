@@ -1,8 +1,8 @@
 (library
- (name wax)
+ (name wax_lang)
  (public_name wax.wax)
  (preprocess
   (pps sedlex.ppx))
- (libraries wasm sedlex menhirLib))
+ (libraries wax_wasm sedlex menhirLib))
 
 (include ../lib-wasm/dune.menhir)

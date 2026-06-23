@@ -8,7 +8,7 @@ type ch = {
   mutable pos : int;
   limit : int;
   mutable has_data_count : bool;
-  diagnostics : Utils.Diagnostic.context;
+  diagnostics : Wax_utils.Diagnostic.context;
 }
 
 let position ch pos =
@@ -28,11 +28,11 @@ let error ?pos ch fmt =
   let loc_end = position ch (max ch.pos start) in
   Format.kasprintf
     (fun msg ->
-      Utils.Diagnostic.report ch.diagnostics
+      Wax_utils.Diagnostic.report ch.diagnostics
         ~location:{ Ast.loc_start; loc_end } ~severity:Error
         ~message:(fun f () -> Format.pp_print_string f msg)
         ();
-      Utils.Diagnostic.abort ())
+      Wax_utils.Diagnostic.abort ())
     fmt
 
 (* Follow the reference decoder's read order so the diagnostic matches the spec:
@@ -89,7 +89,7 @@ let rec uint64_rec ?(n = 10) ch =
       (Int64.sub (Int64.of_int i) 128L)
       (Int64.shift_left (uint64_rec ~n:(n - 1) ch) 7)
 
-let uint64 ch = Utils.Uint64.of_int64 (uint64_rec ch)
+let uint64 ch = Wax_utils.Uint64.of_int64 (uint64_rec ch)
 
 let rec sint ?(n = 5) ch =
   let i = input_byte ch in
@@ -376,7 +376,7 @@ let memarg ch =
   let o = uint64 ch in
   let m, a = if a land 0x40 <> 0 then (uint ch, a lxor 0x40) else (0, a) in
   if a >= 64 then error ch "malformed memop flags";
-  (m, { align = Utils.Uint64.of_int (1 lsl a); offset = o })
+  (m, { align = Wax_utils.Uint64.of_int (1 lsl a); offset = o })
 
 let with_loc ch pos desc =
   {
@@ -771,7 +771,7 @@ and instruction ch =
         | 7 -> ArrayNewDefault (uint ch)
         | 8 ->
             let i = uint ch in
-            ArrayNewFixed (i, Utils.Uint32.of_int (uint ch))
+            ArrayNewFixed (i, Wax_utils.Uint32.of_int (uint ch))
         | 9 ->
             let i = uint ch in
             ArrayNewData (i, uint ch)
@@ -1352,7 +1352,7 @@ let indirect_name_map ch =
     ch
 
 let module_ diagnostics ?filename buf =
-  Utils.Debug.timed "parse" @@ fun () ->
+  Wax_utils.Debug.timed "parse" @@ fun () ->
   let ch =
     {
       filename;

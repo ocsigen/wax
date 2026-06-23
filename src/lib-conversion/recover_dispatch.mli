@@ -1,5 +1,6 @@
 val module_ :
-  Wax.Ast.location Wax.Ast.module_ -> Wax.Ast.location Wax.Ast.module_
+  Wax_lang.Ast.location Wax_lang.Ast.module_ ->
+  Wax_lang.Ast.location Wax_lang.Ast.module_
 (** [module_ m] rewrites each function body, folding the conventional
     dense-switch shape — a stack of void blocks with a [br_table] in the
     innermost and a case body after each block — into a high-level [dispatch]

@@ -6,7 +6,7 @@ end) (Tokens : sig
   type token
 end) (Parser : sig
   module Make (_ : sig
-    type t = Utils.Trivia.context
+    type t = Wax_utils.Trivia.context
 
     val context : t
   end) : sig
@@ -21,7 +21,7 @@ end) (Parser : sig
   end
 end) (Fast_parser : sig
   module Make (_ : sig
-    type t = Utils.Trivia.context
+    type t = Wax_utils.Trivia.context
 
     val context : t
   end) : sig
@@ -34,7 +34,7 @@ end) (Fast_parser : sig
 end) (Parser_messages : sig
   val message : int -> string
 end) (Lexer : sig
-  val token : Utils.Trivia.context -> Sedlexing.lexbuf -> Tokens.token
+  val token : Wax_utils.Trivia.context -> Sedlexing.lexbuf -> Tokens.token
 end) =
 struct
   module E = MenhirLib.ErrorReports
@@ -48,8 +48,8 @@ struct
 
   let report_syntax_error ?(related = []) ~color source (loc_start, loc_end) msg
       =
-    let theme = Utils.Diagnostic.get_theme ?color () in
-    Utils.Diagnostic.output_error_with_source ~theme ~source ~severity:Error
+    let theme = Wax_utils.Diagnostic.get_theme ?color () in
+    Wax_utils.Diagnostic.output_error_with_source ~theme ~source ~severity:Error
       ~location:{ loc_start; loc_end } ~related (fun f () ->
         Format.fprintf f "%s" msg);
     exit 123
@@ -67,7 +67,7 @@ struct
     (token, startp, endp)
 
   module Inner (Context : sig
-    type t = Utils.Trivia.context
+    type t = Wax_utils.Trivia.context
 
     val context : t
   end) =
@@ -131,10 +131,12 @@ struct
               let msg = String.trim (String.sub line (i + 1) (len - i - 1)) in
               match P.MenhirInterpreter.get (depth - 1) env with
               | Some (Element (_, _, pos1, pos2)) ->
-                  let loc = { Utils.Ast.loc_start = pos1; loc_end = pos2 } in
+                  let loc =
+                    { Wax_utils.Ast.loc_start = pos1; loc_end = pos2 }
+                  in
                   related :=
                     {
-                      Utils.Diagnostic.location = loc;
+                      Wax_utils.Diagnostic.location = loc;
                       message = (fun f () -> Format.fprintf f "%s" msg);
                     }
                     :: !related
@@ -183,10 +185,10 @@ struct
   end
 
   let parse_from_string ?color ~filename text =
-    Utils.Debug.timed "parse" @@ fun () ->
-    let ctx = Utils.Trivia.make () in
+    Wax_utils.Debug.timed "parse" @@ fun () ->
+    let ctx = Wax_utils.Trivia.make () in
     let module Context = struct
-      type t = Utils.Trivia.context
+      type t = Wax_utils.Trivia.context
 
       let context = ctx
     end in

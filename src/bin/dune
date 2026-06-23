@@ -2,8 +2,8 @@
  (name main)
  (modes exe wasm)
  (public_name wax)
- (libraries wasm wax conversion cmdliner unix))
+ (libraries wax_wasm wax_lang wax_conversion cmdliner unix))
 
 (executables
  (names test_wasm convert pretty_print run_wasm_testsuite)
- (libraries wasm wax conversion menhirLib re unix cmdliner))
+ (libraries wax_wasm wax_lang wax_conversion menhirLib re unix cmdliner))

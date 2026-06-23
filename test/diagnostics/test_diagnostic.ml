@@ -1,4 +1,4 @@
-open Utils
+open Wax_utils
 
 let loc start_line start_col end_line end_col =
   let pos_start =

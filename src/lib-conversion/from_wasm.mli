@@ -6,9 +6,9 @@ exception Unresolved_reference
 
 val module_ :
   ?strict_constants:bool ->
-  Utils.Diagnostic.context ->
-  Wasm.Ast.location Wasm.Ast.Text.module_ ->
-  Wax.Ast.location Wax.Ast.module_
+  Wax_utils.Diagnostic.context ->
+  Wax_wasm.Ast.location Wax_wasm.Ast.Text.module_ ->
+  Wax_lang.Ast.location Wax_lang.Ast.module_
 (** [module_ diagnostics m] converts a WAT module to Wax, reporting to
     [diagnostics] the references it cannot faithfully convert.
 

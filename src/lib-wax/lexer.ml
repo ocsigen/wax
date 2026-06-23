@@ -46,7 +46,7 @@ let rec comment_rec lexbuf =
       comment_rec lexbuf
   | _ ->
       raise
-        (Wasm.Parsing.Syntax_error
+        (Wax_wasm.Parsing.Syntax_error
            ( Sedlexing.lexing_bytes_positions lexbuf,
              Printf.sprintf "Malformed comment.\n" ))
 
@@ -65,13 +65,13 @@ let unicode_escape lexbuf s =
   done;
   if len - !i > 0 then
     raise
-      (Wasm.Parsing.Syntax_error
+      (Wax_wasm.Parsing.Syntax_error
          ( Sedlexing.lexing_bytes_positions lexbuf,
            Printf.sprintf "Malformed Unicode escape.\n" ));
   let n = int_of_string ("0x" ^ String.sub s !i (len + 6)) in
   if not (Uchar.is_valid n) then
     raise
-      (Wasm.Parsing.Syntax_error
+      (Wax_wasm.Parsing.Syntax_error
          ( Sedlexing.lexing_bytes_positions lexbuf,
            Printf.sprintf "Malformed Unicode escape.\n" ));
   Uchar.unsafe_of_int n
@@ -115,7 +115,7 @@ let rec string lexbuf =
       string lexbuf
   | _ ->
       raise
-        (Wasm.Parsing.Syntax_error
+        (Wax_wasm.Parsing.Syntax_error
            ( Sedlexing.lexing_bytes_positions lexbuf,
              Printf.sprintf "Malformed string.\n" ))
 
@@ -134,15 +134,15 @@ let rec token_rec ctx lexbuf =
   match%sedlex lexbuf with
   | white -> token_rec ctx lexbuf
   | newline ->
-      Utils.Trivia.report_newline ctx;
+      Wax_utils.Trivia.report_newline ctx;
       token_rec ctx lexbuf
   | linecomment ->
       let content = Sedlexing.Utf8.lexeme lexbuf in
-      Utils.Trivia.report_item ctx Line_comment content;
+      Wax_utils.Trivia.report_item ctx Line_comment content;
       token_rec ctx lexbuf
   | "/*" ->
       let s = comment lexbuf in
-      Utils.Trivia.report_item ctx Block_comment s;
+      Wax_utils.Trivia.report_item ctx Block_comment s;
       token_rec ctx lexbuf
   | ';' -> SEMI
   | "#[if(" -> HASH_IF
@@ -265,27 +265,27 @@ let rec token_rec ctx lexbuf =
       let n = int_of_string ("0x" ^ s) in
       if n > 127 then
         raise
-          (Wasm.Parsing.Syntax_error
+          (Wax_wasm.Parsing.Syntax_error
              ( Sedlexing.lexing_bytes_positions lexbuf,
                Printf.sprintf "Invalid Unicode character.\n" ));
       CHAR (Uchar.of_int n)
   | eof -> EOF
   | Compl 'x' ->
       raise
-        (Wasm.Parsing.Syntax_error
+        (Wax_wasm.Parsing.Syntax_error
            ( Sedlexing.lexing_bytes_positions lexbuf,
              Printf.sprintf "Unexpected character '%s'.\n"
                (Sedlexing.Utf8.lexeme lexbuf) ))
   | _ ->
       raise
-        (Wasm.Parsing.Syntax_error
+        (Wax_wasm.Parsing.Syntax_error
            ( Sedlexing.lexing_bytes_positions lexbuf,
              Printf.sprintf "Syntax error.\n" ))
 
 let token ctx lexbuf =
   let t = token_rec ctx lexbuf in
   let end_ = Sedlexing.lexing_bytes_position_curr lexbuf in
-  Utils.Trivia.report_token ctx end_.pos_cnum;
+  Wax_utils.Trivia.report_token ctx end_.pos_cnum;
   t
 
 let is_valid_identifier s =

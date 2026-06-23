@@ -1,4 +1,4 @@
-module Diagnostic = Utils.Diagnostic
+module Diagnostic = Wax_utils.Diagnostic
 
 (* Theory atoms. *)
 

@@ -1,7 +1,7 @@
 (* Shared registry mapping wax SIMD intrinsic names to WebAssembly [Vec*]
    instructions and back. This is the single source of truth consumed by
    [to_wasm] (forward lowering), [from_wasm] (reverse reconstruction) and
-   [Wax.Typing] (operand/result signatures).
+   [Wax_lang.Typing] (operand/result signatures).
 
    Surface convention: a vector op is written as a method intrinsic with the
    lane shape baked into the name, e.g. [a.add_i32x4(b)], [v.splat_i32x4()],
@@ -178,7 +178,7 @@ let test_name : Ast.vec_test_op -> string = function
 let bitmask_name : Ast.vec_bitmask_op -> string = function
   | Bitmask s -> "bitmask_" ^ shape_str s
 
-let v128_shape_str : Utils.V128.shape -> string = function
+let v128_shape_str : Wax_utils.V128.shape -> string = function
   | I8x16 -> "i8x16"
   | I16x8 -> "i16x8"
   | I32x4 -> "i32x4"
@@ -190,7 +190,7 @@ let splat_name s = "splat_" ^ shape_str s
 let replace_name s = "replace_lane_" ^ shape_str s
 let shuffle_name = "shuffle_i8x16"
 let bitselect_name = "v128_bitselect"
-let const_name (s : Utils.V128.shape) = "v128_const_" ^ v128_shape_str s
+let const_name (s : Wax_utils.V128.shape) = "v128_const_" ^ v128_shape_str s
 
 let extract_name s (sign : Ast.signage option) =
   "extract_lane"
@@ -466,7 +466,7 @@ let table : (string, intrinsic) Hashtbl.t =
 
 let classify name = Hashtbl.find_opt table name
 
-let const_shape_of_name name : Utils.V128.shape option =
+let const_shape_of_name name : Wax_utils.V128.shape option =
   let prefix = "v128_const_" in
   if
     String.length name > String.length prefix
@@ -490,13 +490,13 @@ let is_free_intrinsic name =
   name = bitselect_name || const_shape_of_name name <> None
 
 (* Number of lane literals in a [v128_const_<shape>] call. *)
-let const_arity : Utils.V128.shape -> int = function
+let const_arity : Wax_utils.V128.shape -> int = function
   | I8x16 -> 16
   | I16x8 -> 8
   | I32x4 | F32x4 -> 4
   | I64x2 | F64x2 -> 2
 
-let const_is_float : Utils.V128.shape -> bool = function
+let const_is_float : Wax_utils.V128.shape -> bool = function
   | F32x4 | F64x2 -> true
   | _ -> false
 
@@ -597,7 +597,7 @@ let all_names : string list =
   let methods = Hashtbl.fold (fun k _ acc -> k :: acc) table [] in
   let consts =
     List.map const_name
-      ([ I8x16; I16x8; I32x4; I64x2; F32x4; F64x2 ] : Utils.V128.shape list)
+      ([ I8x16; I16x8; I32x4; I64x2; F32x4; F64x2 ] : Wax_utils.V128.shape list)
   in
   let loads =
     List.map vec_load_name

@@ -2,26 +2,26 @@ open Cmdliner
 open Term.Syntax
 
 module Wat_parser =
-  Wasm.Parsing.Make_parser
+  Wax_wasm.Parsing.Make_parser
     (struct
-      type t = Wasm.Ast.location Wasm.Ast.Text.module_
+      type t = Wax_wasm.Ast.location Wax_wasm.Ast.Text.module_
     end)
-    (Wasm.Tokens)
-    (Wasm.Parser)
-    (Wasm.Fast_parser)
-    (Wasm.Parser_messages)
-    (Wasm.Lexer)
+    (Wax_wasm.Tokens)
+    (Wax_wasm.Parser)
+    (Wax_wasm.Fast_parser)
+    (Wax_wasm.Parser_messages)
+    (Wax_wasm.Lexer)
 
 module Wax_parser =
-  Wasm.Parsing.Make_parser
+  Wax_wasm.Parsing.Make_parser
     (struct
-      type t = Wax.Ast.location Wax.Ast.module_
+      type t = Wax_lang.Ast.location Wax_lang.Ast.module_
     end)
-    (Wax.Tokens)
-    (Wax.Parser)
-    (Wax.Fast_parser)
-    (Wax.Parser_messages)
-    (Wax.Lexer)
+    (Wax_lang.Tokens)
+    (Wax_lang.Parser)
+    (Wax_lang.Fast_parser)
+    (Wax_lang.Parser_messages)
+    (Wax_lang.Lexer)
 
 let with_open_in file f =
   match file with
@@ -41,33 +41,33 @@ let with_open_out file f =
    context [ctx] (when one is given — text output only), so they do not
    re-attach to a surviving node. *)
 let specialize_wax ?ctx ~color ~text defines ast =
-  if Wasm.Cond_specialize.is_empty defines then ast
+  if Wax_wasm.Cond_specialize.is_empty defines then ast
   else
     let ast, dropped =
-      Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
-          Wax.Cond_specialize.module_ d defines ast)
+      Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
+          Wax_lang.Cond_specialize.module_ d defines ast)
     in
-    Option.iter (fun ctx -> Utils.Trivia.drop_in_ranges ctx dropped) ctx;
+    Option.iter (fun ctx -> Wax_utils.Trivia.drop_in_ranges ctx dropped) ctx;
     ast
 
 let specialize_wat ?ctx ~color ~text defines ast =
-  if Wasm.Cond_specialize.is_empty defines then ast
+  if Wax_wasm.Cond_specialize.is_empty defines then ast
   else
     let ast, dropped =
-      Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
-          Wasm.Cond_specialize.module_ d defines ast)
+      Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
+          Wax_wasm.Cond_specialize.module_ d defines ast)
     in
-    Option.iter (fun ctx -> Utils.Trivia.drop_in_ranges ctx dropped) ctx;
+    Option.iter (fun ctx -> Wax_utils.Trivia.drop_in_ranges ctx dropped) ctx;
     ast
 
 (* Lower a text module to the binary format. A leftover conditional annotation
    cannot be represented in binary; report it as a located diagnostic (rather
    than an uncaught exception) and suggest resolving it. *)
 let to_binary ~color ~source ast =
-  Utils.Diagnostic.run ~color ~source (fun d ->
-      try Wasm.Text_to_binary.module_ ast
-      with Wasm.Text_to_binary.Conditional_in_binary location ->
-        Utils.Diagnostic.report d ~location ~severity:Error
+  Wax_utils.Diagnostic.run ~color ~source (fun d ->
+      try Wax_wasm.Text_to_binary.module_ ast
+      with Wax_wasm.Text_to_binary.Conditional_in_binary location ->
+        Wax_utils.Diagnostic.report d ~location ~severity:Error
           ~message:(fun f () ->
             Format.pp_print_string f
               "Conditional annotations cannot be emitted to the WebAssembly \
@@ -77,7 +77,7 @@ let to_binary ~color ~source ast =
               "Resolve the conditionals with -D/--define, or convert to a text \
                format (wat or wax).")
           ();
-        Utils.Diagnostic.abort ())
+        Wax_utils.Diagnostic.abort ())
 
 type fold_mode = Auto | Fold | Unfold
 
@@ -85,13 +85,13 @@ let output_wat ?(tail = []) ~fold_mode ~output_file ~color ~trivia ast =
   let ast =
     match fold_mode with
     | Auto -> ast
-    | Fold -> Wasm.Folding.fold ast
-    | Unfold -> Wasm.Folding.unfold ast
+    | Fold -> Wax_wasm.Folding.fold ast
+    | Unfold -> Wax_wasm.Folding.unfold ast
   in
   with_open_out output_file (fun oc ->
       let print_wat f m =
-        Utils.Printer.run f (fun p ->
-            Wasm.Output.module_ ~color ~out_channel:oc ~tail p ~trivia m)
+        Wax_utils.Printer.run f (fun p ->
+            Wax_wasm.Output.module_ ~color ~out_channel:oc ~tail p ~trivia m)
       in
       let fmt = Format.formatter_of_out_channel oc in
       Format.fprintf fmt "%a@." print_wat ast)
@@ -108,27 +108,27 @@ let wat_trivia ?retarget ~fold_mode ctx ast =
   let ast =
     match fold_mode with
     | Auto -> ast
-    | Fold -> Wasm.Folding.fold ast
-    | Unfold -> Wasm.Folding.unfold ast
+    | Fold -> Wax_wasm.Folding.fold ast
+    | Unfold -> Wax_wasm.Folding.unfold ast
   in
   let used = Hashtbl.create 256 in
-  Utils.Printer.run (null_formatter ()) (fun p ->
-      Wasm.Output.module_ p ~trivia:(Hashtbl.create 0) ~collect:used ast);
-  let trivia, tail = Utils.Trivia.associate ~only:used ctx in
+  Wax_utils.Printer.run (null_formatter ()) (fun p ->
+      Wax_wasm.Output.module_ p ~trivia:(Hashtbl.create 0) ~collect:used ast);
+  let trivia, tail = Wax_utils.Trivia.associate ~only:used ctx in
   match retarget with
   | None -> (trivia, tail)
-  | Some (src, dst) -> Utils.Trivia.retarget ~src ~dst trivia tail
+  | Some (src, dst) -> Wax_utils.Trivia.retarget ~src ~dst trivia tail
 
 let wax_trivia ?retarget ctx ast =
   let used = Hashtbl.create 256 in
   (* Width is irrelevant to the dry pass: it only records which locations the
      printer looks up, and the traversal is the same at any width. *)
-  Utils.Printer.run (null_formatter ()) (fun p ->
-      Wax.Output.module_ p ~trivia:(Hashtbl.create 0) ~collect:used ast);
-  let trivia, tail = Utils.Trivia.associate ~only:used ctx in
+  Wax_utils.Printer.run (null_formatter ()) (fun p ->
+      Wax_lang.Output.module_ p ~trivia:(Hashtbl.create 0) ~collect:used ast);
+  let trivia, tail = Wax_utils.Trivia.associate ~only:used ctx in
   match retarget with
   | None -> (trivia, tail)
-  | Some (src, dst) -> Utils.Trivia.retarget ~src ~dst trivia tail
+  | Some (src, dst) -> Wax_utils.Trivia.retarget ~src ~dst trivia tail
 
 let wat_to_wat ~input_file ~output_file ~validate ~color ~output_color
     ~fold_mode ~defines ~source_map_file:opt_source_map_file =
@@ -142,8 +142,8 @@ let wat_to_wat ~input_file ~output_file ~validate ~color ~output_color
   in
   let ast = specialize_wat ~ctx ~color ~text defines ast in
   if validate then
-    Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
-        Wasm.Validation.f d ast);
+    Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
+        Wax_wasm.Validation.f d ast);
   let trivia, tail = wat_trivia ~fold_mode ctx ast in
   output_wat ~fold_mode ~output_file ~color:output_color ~trivia ~tail ast
 
@@ -159,30 +159,30 @@ let wat_to_wax ~input_file ~output_file ~validate ~color ~output_color
   in
   let ast = specialize_wat ~ctx ~color ~text defines ast in
   if validate then
-    Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
-        Wasm.Validation.f d ast);
+    Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
+        Wax_wasm.Validation.f d ast);
   let wax_ast =
-    Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
-        Conversion.From_wasm.module_ d ast)
+    Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
+        Wax_conversion.From_wasm.module_ d ast)
   in
   let wax_ast =
-    Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
-        Wax.Typing.f ~simplify:true d wax_ast)
-    |> snd |> Wax.Typing.erase_types
+    Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
+        Wax_lang.Typing.f ~simplify:true d wax_ast)
+    |> snd |> Wax_lang.Typing.erase_types
   in
   (* The converted Wax nodes carry the source Wat locations, so the source
      trivia (keyed by those locations) maps onto them; rewrite the comment
      delimiters from Wat to Wax syntax. *)
   let trivia, tail =
     wax_trivia
-      ~retarget:(Utils.Trivia.wat_syntax, Utils.Trivia.wax_syntax)
+      ~retarget:(Wax_utils.Trivia.wat_syntax, Wax_utils.Trivia.wax_syntax)
       ctx wax_ast
   in
   with_open_out output_file (fun oc ->
       let print_wax f m =
-        Utils.Printer.run ~width:Wax.Output.width f (fun p ->
-            Wax.Output.module_ p ~color:output_color ~out_channel:oc ~trivia
-              ~tail m)
+        Wax_utils.Printer.run ~width:Wax_lang.Output.width f (fun p ->
+            Wax_lang.Output.module_ p ~color:output_color ~out_channel:oc
+              ~trivia ~tail m)
       in
       let fmt = Format.formatter_of_out_channel oc in
       Format.fprintf fmt "%a@." print_wax wax_ast)
@@ -199,24 +199,24 @@ let wax_to_wat ~input_file ~output_file ~validate ~color ~output_color
   in
   let ast = specialize_wax ~ctx ~color ~text defines ast in
   let types, ast =
-    Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
-        Wax.Typing.f ~warn_unused:validate d ast)
+    Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
+        Wax_lang.Typing.f ~warn_unused:validate d ast)
   in
   let wasm_ast =
-    Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
-        Conversion.To_wasm.module_ d types ast)
+    Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
+        Wax_conversion.To_wasm.module_ d types ast)
   in
   if validate then
-    Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
-        (* Unused locals are reported against the Wax source by [Wax.Typing.f]
+    Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
+        (* Unused locals are reported against the Wax source by [Wax_lang.Typing.f]
            above; do not repeat them against the compiled Wasm. *)
-        Wasm.Validation.f ~warn_unused:false d wasm_ast);
+        Wax_wasm.Validation.f ~warn_unused:false d wasm_ast);
   (* Typing and conversion preserve the source Wax locations, so the source
      trivia (keyed by those locations) maps onto the converted Wasm nodes;
      rewrite the comment delimiters from Wax to Wat syntax. *)
   let trivia, tail =
     wat_trivia
-      ~retarget:(Utils.Trivia.wax_syntax, Utils.Trivia.wat_syntax)
+      ~retarget:(Wax_utils.Trivia.wax_syntax, Wax_utils.Trivia.wat_syntax)
       ~fold_mode ctx wasm_ast
   in
   output_wat ~fold_mode ~output_file ~color:output_color ~trivia ~tail wasm_ast
@@ -234,14 +234,14 @@ let wax_to_wax ~input_file ~output_file ~validate ~color ~output_color
   let ast = specialize_wax ~ctx ~color ~text defines ast in
   if validate then
     ignore
-      (Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
-           Wax.Typing.f ~warn_unused:true d ast));
+      (Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
+           Wax_lang.Typing.f ~warn_unused:true d ast));
   let trivia, tail = wax_trivia ctx ast in
   with_open_out output_file (fun oc ->
       let print_wax f m =
-        Utils.Printer.run ~width:Wax.Output.width f (fun p ->
-            Wax.Output.module_ p ~color:output_color ~out_channel:oc ~trivia
-              ~tail m)
+        Wax_utils.Printer.run ~width:Wax_lang.Output.width f (fun p ->
+            Wax_lang.Output.module_ p ~color:output_color ~out_channel:oc
+              ~trivia ~tail m)
       in
       let fmt = Format.formatter_of_out_channel oc in
       Format.fprintf fmt "%a@." print_wax ast)
@@ -257,21 +257,21 @@ let wax_to_wasm ~input_file ~output_file ~validate ~color ~output_color:_
   in
   let ast = specialize_wax ~color ~text defines ast in
   let types, ast =
-    Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
-        Wax.Typing.f ~warn_unused:validate d ast)
+    Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
+        Wax_lang.Typing.f ~warn_unused:validate d ast)
   in
   let wasm_ast_text =
-    Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
-        Conversion.To_wasm.module_ d types ast)
+    Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
+        Wax_conversion.To_wasm.module_ d types ast)
   in
   if validate then
-    Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
-        (* Unused locals are reported against the Wax source by [Wax.Typing.f]
+    Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
+        (* Unused locals are reported against the Wax source by [Wax_lang.Typing.f]
            above; do not repeat them against the compiled Wasm. *)
-        Wasm.Validation.f ~warn_unused:false d wasm_ast_text);
+        Wax_wasm.Validation.f ~warn_unused:false d wasm_ast_text);
   let wasm_ast_binary = to_binary ~color ~source:(Some text) wasm_ast_text in
   with_open_out output_file (fun oc ->
-      Wasm.Wasm_output.module_ ~out_channel:oc ?opt_source_map_file
+      Wax_wasm.Wasm_output.module_ ~out_channel:oc ?opt_source_map_file
         wasm_ast_binary)
 
 let wat_to_wasm ~input_file ~output_file ~validate ~color ~output_color:_
@@ -284,37 +284,37 @@ let wat_to_wasm ~input_file ~output_file ~validate ~color ~output_color:_
   in
   let ast = specialize_wat ~color ~text defines ast in
   if validate then
-    Utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
-        Wasm.Validation.f d ast);
+    Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
+        Wax_wasm.Validation.f d ast);
   let wasm_ast_binary = to_binary ~color ~source:(Some text) ast in
   with_open_out output_file (fun oc ->
-      Wasm.Wasm_output.module_ ~out_channel:oc ?opt_source_map_file
+      Wax_wasm.Wasm_output.module_ ~out_channel:oc ?opt_source_map_file
         wasm_ast_binary)
 
 (* Parse a Wasm binary, reporting malformed input as a diagnostic (and exiting)
    through the standard diagnostics machinery. *)
 let parse_wasm ~color ?filename text =
-  Utils.Diagnostic.run ~color ~source:None (fun d ->
-      Wasm.Wasm_parser.module_ d ?filename text)
+  Wax_utils.Diagnostic.run ~color ~source:None (fun d ->
+      Wax_wasm.Wasm_parser.module_ d ?filename text)
 
 let wasm_to_wasm ~input_file ~output_file ~validate:_validate ~color
     ~output_color:_ ~fold_mode:_ ~defines:_ ~source_map_file:opt_source_map_file
     =
   let text = with_open_in input_file In_channel.input_all in
   let ast = parse_wasm ~color ?filename:input_file text in
-  (* if validate then Wasm.Validation.f ast; *)
+  (* if validate then Wax_wasm.Validation.f ast; *)
   with_open_out output_file (fun oc ->
-      Wasm.Wasm_output.module_ ~out_channel:oc ?opt_source_map_file ast)
+      Wax_wasm.Wasm_output.module_ ~out_channel:oc ?opt_source_map_file ast)
 
 let wasm_to_wat ~input_file ~output_file ~validate ~color ~output_color
     ~fold_mode ~defines:_ ~source_map_file:opt_source_map_file =
   let _ = opt_source_map_file in
   let text = with_open_in input_file In_channel.input_all in
   let binary_ast = parse_wasm ~color ?filename:input_file text in
-  let text_ast = Wasm.Binary_to_text.module_ binary_ast in
+  let text_ast = Wax_wasm.Binary_to_text.module_ binary_ast in
   if validate then
-    Utils.Diagnostic.run ~color ~source:None (fun d ->
-        Wasm.Validation.f d text_ast);
+    Wax_utils.Diagnostic.run ~color ~source:None (fun d ->
+        Wax_wasm.Validation.f d text_ast);
   let trivia = Hashtbl.create 0 in
   output_wat ~fold_mode ~output_file ~color:output_color ~trivia text_ast
 
@@ -323,25 +323,25 @@ let wasm_to_wax ~input_file ~output_file ~validate ~color ~output_color
   let _ = opt_source_map_file in
   let text = with_open_in input_file In_channel.input_all in
   let binary_ast = parse_wasm ~color ?filename:input_file text in
-  let text_ast = Wasm.Binary_to_text.module_ binary_ast in
+  let text_ast = Wax_wasm.Binary_to_text.module_ binary_ast in
   if validate then
-    Utils.Diagnostic.run ~color ~source:None (fun d ->
-        Wasm.Validation.f d text_ast);
+    Wax_utils.Diagnostic.run ~color ~source:None (fun d ->
+        Wax_wasm.Validation.f d text_ast);
   let wax_ast =
-    Utils.Diagnostic.run ~color ~source:None (fun d ->
-        Conversion.From_wasm.module_ d text_ast)
+    Wax_utils.Diagnostic.run ~color ~source:None (fun d ->
+        Wax_conversion.From_wasm.module_ d text_ast)
   in
   (* Type the converted module to drop casts the precise types make redundant
      and tighten [&?extern]/[&?any] casts, as the WAT-to-Wax path does. *)
   let wax_ast =
-    Utils.Diagnostic.run ~color ~source:None (fun d ->
-        Wax.Typing.f ~simplify:true d wax_ast)
-    |> snd |> Wax.Typing.erase_types
+    Wax_utils.Diagnostic.run ~color ~source:None (fun d ->
+        Wax_lang.Typing.f ~simplify:true d wax_ast)
+    |> snd |> Wax_lang.Typing.erase_types
   in
   with_open_out output_file (fun oc ->
       let print_wax f m =
-        Utils.Printer.run ~width:Wax.Output.width f (fun p ->
-            Wax.Output.module_ p ~color:output_color ~out_channel:oc
+        Wax_utils.Printer.run ~width:Wax_lang.Output.width f (fun p ->
+            Wax_lang.Output.module_ p ~color:output_color ~out_channel:oc
               ~trivia:(Hashtbl.create 0) m)
       in
       let fmt = Format.formatter_of_out_channel oc in
@@ -357,10 +357,10 @@ let format_of_string = function
   | "wax" -> Ok Wax
   | s -> Error (`Msg (Printf.sprintf "Unknown format: %s" s))
 
-let string_of_color (c : Utils.Colors.flag) =
+let string_of_color (c : Wax_utils.Colors.flag) =
   match c with Never -> "never" | Always -> "always" | Auto -> "auto"
 
-let color_of_string s : (Utils.Colors.flag, _) result =
+let color_of_string s : (Wax_utils.Colors.flag, _) result =
   match s with
   | "never" -> Ok Never
   | "always" -> Ok Always
@@ -385,17 +385,17 @@ let resolve_format file_opt format_opt ~default =
 let build_policy specs =
   List.fold_left
     (fun policy (name, level) ->
-      match Utils.Warning.set policy name level with
+      match Wax_utils.Warning.set policy name level with
       | Ok policy -> policy
       | Error _ -> policy)
-    Utils.Warning.default_policy specs
+    Wax_utils.Warning.default_policy specs
 
 let convert input_file output_file input_format_opt output_format_opt validate
     strict_validate color opt_source_map_file fold_mode defines warnings debug =
-  Wasm.Validation.validate_refs := strict_validate;
-  Utils.Diagnostic.set_policy (build_policy warnings);
-  Utils.Debug.enable debug;
-  let defines = Wasm.Cond_specialize.of_list defines in
+  Wax_wasm.Validation.validate_refs := strict_validate;
+  Wax_utils.Diagnostic.set_policy (build_policy warnings);
+  Wax_utils.Debug.enable debug;
+  let defines = Wax_wasm.Cond_specialize.of_list defines in
   let std file = Option.bind file (fun f -> if f = "-" then None else Some f) in
   let input_file = std input_file in
   let output_file = std output_file in
@@ -423,7 +423,7 @@ let convert input_file output_file input_format_opt output_format_opt validate
      [Diagnostic] resolves them against stderr. *)
   let output_color, with_pager =
     match output_file with
-    | None -> (Utils.Colors.update_flag ~color, Utils.Pager.use)
+    | None -> (Wax_utils.Colors.update_flag ~color, Wax_utils.Pager.use)
     | Some _ -> (color, fun f -> f ())
   in
   with_pager @@ fun () ->
@@ -438,8 +438,8 @@ let convert input_file output_file input_format_opt output_format_opt validate
    [validate] additionally type-checks (Wax) / well-formedness-checks (Wasm). *)
 let format inplace check format_opt validate color fold_mode warnings debug
     files =
-  Utils.Diagnostic.set_policy (build_policy warnings);
-  Utils.Debug.enable debug;
+  Wax_utils.Diagnostic.set_policy (build_policy warnings);
+  Wax_utils.Debug.enable debug;
   if inplace && check then (
     Printf.eprintf "--inplace and --check cannot be combined.\n";
     exit 123);
@@ -467,7 +467,7 @@ let format inplace check format_opt validate color fold_mode warnings debug
         let run ~output_file ~output_color =
           same_format ~input_file:(Some file) ~output_file ~validate ~color
             ~output_color ~source_map_file:None ~fold_mode
-            ~defines:(Wasm.Cond_specialize.of_list [])
+            ~defines:(Wax_wasm.Cond_specialize.of_list [])
         in
         if check then
           (* Format into a temporary file and compare with the original, so the
@@ -476,7 +476,7 @@ let format inplace check format_opt validate color fold_mode warnings debug
           Fun.protect
             ~finally:(fun () -> try Sys.remove tmp with Sys_error _ -> ())
             (fun () ->
-              run ~output_file:(Some tmp) ~output_color:Utils.Colors.Never;
+              run ~output_file:(Some tmp) ~output_color:Wax_utils.Colors.Never;
               String.equal (read file) (read tmp)
               ||
               (print_endline file;
@@ -488,8 +488,8 @@ let format inplace check format_opt validate color fold_mode warnings debug
           (* Writing back into a source file must never embed ANSI colors;
              when formatting to stdout, resolve color as usual. *)
           let output_color =
-            if inplace then Utils.Colors.Never
-            else Utils.Colors.update_flag ~color
+            if inplace then Wax_utils.Colors.Never
+            else Wax_utils.Colors.update_flag ~color
           in
           run ~output_file:(if inplace then Some file else None) ~output_color;
           true
@@ -502,10 +502,10 @@ let format inplace check format_opt validate color fold_mode warnings debug
    non-zero status if any file fails. [format_opt] forces the format; otherwise
    it is detected from the extension. *)
 let check format_opt strict color warnings debug files =
-  Wasm.Validation.validate_refs := strict;
+  Wax_wasm.Validation.validate_refs := strict;
   let policy = build_policy warnings in
-  Utils.Diagnostic.set_policy policy;
-  Utils.Debug.enable debug;
+  Wax_utils.Diagnostic.set_policy policy;
+  Wax_utils.Debug.enable debug;
   let check_one file =
     match
       match format_opt with Some _ -> format_opt | None -> detect_format file
@@ -519,49 +519,50 @@ let check format_opt strict color warnings debug files =
         let source = match fmt with Wasm -> None | Wat | Wax -> Some text in
         (* Collect errors without printing or exiting, so every file is checked
            and all its errors are reported, then re-report them below. *)
-        let d = Utils.Diagnostic.collector () in
+        let d = Wax_utils.Diagnostic.collector () in
         (try
            match fmt with
            | Wax ->
                let ast, _ =
                  Wax_parser.parse_from_string ~color ~filename:file text
                in
-               ignore (Wax.Typing.f ~warn_unused:true d ast : _ * _)
+               ignore (Wax_lang.Typing.f ~warn_unused:true d ast : _ * _)
            | Wat ->
                let ast, _ =
                  Wat_parser.parse_from_string ~color ~filename:file text
                in
-               Wasm.Validation.f d ast
+               Wax_wasm.Validation.f d ast
            | Wasm ->
                let binary = parse_wasm ~color ~filename:file text in
-               Wasm.Validation.f d (Wasm.Binary_to_text.module_ binary)
-         with Utils.Diagnostic.Aborted -> ());
-        match Utils.Diagnostic.collected d with
+               Wax_wasm.Validation.f d (Wax_wasm.Binary_to_text.module_ binary)
+         with Wax_utils.Diagnostic.Aborted -> ());
+        match Wax_utils.Diagnostic.collected d with
         | [] -> true
         | entries ->
             ignore
-              (Utils.Diagnostic.run ~color ~source ~exit:false (fun d ->
+              (Wax_utils.Diagnostic.run ~color ~source ~exit:false (fun d ->
                    List.iter
                      (fun e ->
-                       Utils.Diagnostic.report d
-                         ~location:(Utils.Diagnostic.entry_location e)
-                         ~severity:(Utils.Diagnostic.entry_severity e)
-                         ?warning:(Utils.Diagnostic.entry_warning e)
-                         ?hint:(Utils.Diagnostic.entry_hint e)
-                         ~related:(Utils.Diagnostic.entry_related e)
-                         ~message:(Utils.Diagnostic.entry_message e)
+                       Wax_utils.Diagnostic.report d
+                         ~location:(Wax_utils.Diagnostic.entry_location e)
+                         ~severity:(Wax_utils.Diagnostic.entry_severity e)
+                         ?warning:(Wax_utils.Diagnostic.entry_warning e)
+                         ?hint:(Wax_utils.Diagnostic.entry_hint e)
+                         ~related:(Wax_utils.Diagnostic.entry_related e)
+                         ~message:(Wax_utils.Diagnostic.entry_message e)
                          ())
                      entries));
             (* Warnings (e.g. unused locals) are reported but do not fail the
                check; only errors do — including a warning promoted to an error
                by the policy (e.g. -W unused-local=error). *)
             let is_error e =
-              match Utils.Diagnostic.entry_severity e with
-              | Utils.Diagnostic.Error -> true
-              | Utils.Diagnostic.Warning -> (
-                  match Utils.Diagnostic.entry_warning e with
+              match Wax_utils.Diagnostic.entry_severity e with
+              | Wax_utils.Diagnostic.Error -> true
+              | Wax_utils.Diagnostic.Warning -> (
+                  match Wax_utils.Diagnostic.entry_warning e with
                   | Some w ->
-                      Utils.Warning.resolve policy w = Utils.Warning.Error
+                      Wax_utils.Warning.resolve policy w
+                      = Wax_utils.Warning.Error
                   | None -> false)
             in
             not (List.exists is_error entries))
@@ -663,11 +664,11 @@ let define_option =
   in
   let define_conv =
     let parse s =
-      match Wasm.Cond_specialize.parse_define s with
+      match Wax_wasm.Cond_specialize.parse_define s with
       | Ok v -> Ok v
       | Error e -> Error (`Msg e)
     in
-    let print ppf ((name, v) : string * Wasm.Cond_specialize.value) =
+    let print ppf ((name, v) : string * Wax_wasm.Cond_specialize.value) =
       match v with
       | Bool b -> Format.fprintf ppf "%s=%b" name b
       | Version (a, b, c) -> Format.fprintf ppf "%s=%d.%d.%d" name a b c
@@ -696,11 +697,13 @@ let debug_option =
   in
   let category_conv =
     let parse s =
-      match Utils.Debug.parse s with Ok c -> Ok c | Error e -> Error (`Msg e)
+      match Wax_utils.Debug.parse s with
+      | Ok c -> Ok c
+      | Error e -> Error (`Msg e)
     in
     let print ppf c =
       Format.pp_print_string ppf
-        (match (c : Utils.Debug.category) with Timing -> "timing")
+        (match (c : Wax_utils.Debug.category) with Timing -> "timing")
     in
     Arg.conv (parse, print)
   in
@@ -721,16 +724,18 @@ let warn_option =
   in
   let warn_conv =
     let parse s =
-      match Utils.Warning.parse_spec s with
+      match Wax_utils.Warning.parse_spec s with
       | Error e -> Error (`Msg e)
       | Ok (name, level) -> (
           (* Reject an unknown name now (rather than when building the policy)
              so the error is reported like any other argument error. *)
-          match Utils.Warning.set Utils.Warning.default_policy name level with
+          match
+            Wax_utils.Warning.set Wax_utils.Warning.default_policy name level
+          with
           | Ok _ -> Ok (name, level)
           | Error e -> Error (`Msg e))
     in
-    let print ppf ((name, level) : string * Utils.Warning.level) =
+    let print ppf ((name, level) : string * Wax_utils.Warning.level) =
       let level =
         match level with
         | Hidden -> "hidden"

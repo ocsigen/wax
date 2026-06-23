@@ -36,7 +36,7 @@ type result =
       (** The outcome of partially evaluating a condition: a determined
           constant, or a residual condition still mentioning unset variables. *)
 
-val eval : Utils.Diagnostic.context -> bindings -> Ast.cond -> result
+val eval : Wax_utils.Diagnostic.context -> bindings -> Ast.cond -> result
 (** [eval ctx env c] partially evaluates [c] under [env]. Unbound variables are
     left in the residual; bound ones are substituted and the condition is
     constant-folded. Reports an error diagnostic (and leaves the offending
@@ -44,13 +44,13 @@ val eval : Utils.Diagnostic.context -> bindings -> Ast.cond -> result
     incompatible with how the condition uses it. *)
 
 val module_ :
-  Utils.Diagnostic.context ->
+  Wax_utils.Diagnostic.context ->
   bindings ->
   Ast.location Ast.Text.module_ ->
   Ast.location Ast.Text.module_ * (int * int) list
 (** Splice out and simplify every conditional annotation in a WAT module
     according to [eval]. Returns the specialized module and the half-open byte
     ranges of the branches that were removed, for dropping their comments (see
-    {!Utils.Trivia.drop_in_ranges}). With empty [bindings] this is the identity
-    (no conditional is determined, so all are kept unchanged) and no range is
-    produced. *)
+    {!Wax_utils.Trivia.drop_in_ranges}). With empty [bindings] this is the
+    identity (no conditional is determined, so all are kept unchanged) and no
+    range is produced. *)

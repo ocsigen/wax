@@ -164,7 +164,7 @@ module Encoder = struct
 
   let memarg b (m : memarg) idx =
     let align =
-      Int.of_float (Float.log2 (Float.of_int (Utils.Uint64.to_int m.align)))
+      Int.of_float (Float.log2 (Float.of_int (Wax_utils.Uint64.to_int m.align)))
     in
     if idx = 0 then (
       uint b align;
@@ -193,12 +193,12 @@ module Encoder = struct
   let rec instr ~source_map_t b (i : Ast.location instr) =
     (*ZZZ push absence of mapping *)
     (if
-       i.info.Utils.Ast.loc_start.Lexing.pos_fname <> ""
-       && i.info.Utils.Ast.loc_start.Lexing.pos_lnum <> -1
-       && i.info.Utils.Ast.loc_start.Lexing.pos_cnum <> -1
+       i.info.Wax_utils.Ast.loc_start.Lexing.pos_fname <> ""
+       && i.info.Wax_utils.Ast.loc_start.Lexing.pos_lnum <> -1
+       && i.info.Wax_utils.Ast.loc_start.Lexing.pos_cnum <> -1
      then
        let generated_offset = Buffer.length b in
-       Utils.Source_map.add_mapping source_map_t ~generated_offset
+       Wax_utils.Source_map.add_mapping source_map_t ~generated_offset
          ~original_location:i.info);
 
     match i.desc with
@@ -682,7 +682,7 @@ module Encoder = struct
         byte b 0xFB;
         byte b 0x08;
         uint b i;
-        uint b (Utils.Uint32.to_int len)
+        uint b (Wax_utils.Uint32.to_int len)
     | ArrayNewData (type_idx, data_idx) ->
         byte b 0xFB;
         byte b 0x09;
@@ -1092,10 +1092,10 @@ let output_section ch id encoder data =
   Buffer.output_buffer ch b
 
 let module_ ~out_channel ?opt_source_map_file (m : Ast.location module_) =
-  Utils.Debug.timed "output" @@ fun () ->
+  Wax_utils.Debug.timed "output" @@ fun () ->
   Out_channel.output_string out_channel "\x00\x61\x73\x6D\x01\x00\x00\x00";
 
-  let source_map_t = Utils.Source_map.create () in
+  let source_map_t = Wax_utils.Source_map.create () in
 
   (* 1. Type Section *)
   if m.types <> [] then
@@ -1386,7 +1386,7 @@ let module_ ~out_channel ?opt_source_map_file (m : Ast.location module_) =
   match opt_source_map_file with
   | Some map_file_name ->
       let json_content =
-        Utils.Source_map.to_json source_map_t ~file_name:map_file_name
+        Wax_utils.Source_map.to_json source_map_t ~file_name:map_file_name
       in
       Out_channel.with_open_text map_file_name (fun oc ->
           Out_channel.output_string oc json_content)

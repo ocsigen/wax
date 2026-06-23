@@ -1,44 +1,49 @@
 module P =
-  Wasm.Parsing.Make_parser
+  Wax_wasm.Parsing.Make_parser
     (struct
-      type t = Wasm.Ast.location Wasm.Ast.Text.module_
+      type t = Wax_wasm.Ast.location Wax_wasm.Ast.Text.module_
     end)
-    (Wasm.Tokens)
-    (Wasm.Parser)
-    (Wasm.Fast_parser)
-    (Wasm.Parser_messages)
-    (Wasm.Lexer)
+    (Wax_wasm.Tokens)
+    (Wax_wasm.Parser)
+    (Wax_wasm.Fast_parser)
+    (Wax_wasm.Parser_messages)
+    (Wax_wasm.Lexer)
 
 let convert ~filename =
   let source = In_channel.with_open_bin filename In_channel.input_all in
   let ast, _ctx = P.parse_from_string ~filename source in
-  Wasm.Validation.validate_refs := false;
-  Utils.Diagnostic.run ~source:(Some source) (fun d -> Wasm.Validation.f d ast);
+  Wax_wasm.Validation.validate_refs := false;
+  Wax_utils.Diagnostic.run ~source:(Some source) (fun d ->
+      Wax_wasm.Validation.f d ast);
   let ast' =
-    Utils.Diagnostic.run ~source:(Some source) (fun d ->
-        Conversion.From_wasm.module_ d ast)
+    Wax_utils.Diagnostic.run ~source:(Some source) (fun d ->
+        Wax_conversion.From_wasm.module_ d ast)
   in
   let _, ast3 =
-    Utils.Diagnostic.run ~source:(Some source) (fun d -> Wax.Typing.f d ast')
+    Wax_utils.Diagnostic.run ~source:(Some source) (fun d ->
+        Wax_lang.Typing.f d ast')
   in
-  let ast3 = Wax.Typing.erase_types ast3 in
+  let ast3 = Wax_lang.Typing.erase_types ast3 in
   let print_wax f m =
-    Utils.Printer.run ~width:Wax.Output.width f (fun p ->
-        Wax.Output.module_ ~out_channel:stdout p ~trivia:(Hashtbl.create 0) m)
+    Wax_utils.Printer.run ~width:Wax_lang.Output.width f (fun p ->
+        Wax_lang.Output.module_ ~out_channel:stdout p ~trivia:(Hashtbl.create 0)
+          m)
   in
-  Format.eprintf "%s==== %s ====%s@.@.%a@.@." Utils.Colors.Ansi.grey filename
-    Utils.Colors.Ansi.reset print_wax ast3;
+  Format.eprintf "%s==== %s ====%s@.@.%a@.@." Wax_utils.Colors.Ansi.grey
+    filename Wax_utils.Colors.Ansi.reset print_wax ast3;
   let ast5 =
-    Utils.Diagnostic.run ~source:(Some source) (fun d ->
-        let types, ast4 = Wax.Typing.f d ast3 in
-        Conversion.To_wasm.module_ d types ast4)
+    Wax_utils.Diagnostic.run ~source:(Some source) (fun d ->
+        let types, ast4 = Wax_lang.Typing.f d ast3 in
+        Wax_conversion.To_wasm.module_ d types ast4)
   in
   let print_wasm f m =
-    Utils.Printer.run f (fun p ->
-        Wasm.Output.module_ ~out_channel:stdout p ~trivia:(Hashtbl.create 0) m)
+    Wax_utils.Printer.run f (fun p ->
+        Wax_wasm.Output.module_ ~out_channel:stdout p ~trivia:(Hashtbl.create 0)
+          m)
   in
   if false then Format.eprintf "%a@." print_wasm ast5;
-  Utils.Diagnostic.run ~source:(Some source) (fun d -> Wasm.Validation.f d ast5)
+  Wax_utils.Diagnostic.run ~source:(Some source) (fun d ->
+      Wax_wasm.Validation.f d ast5)
 
 let _ =
   let p = "/home/jerome/wasm_of_ocaml/runtime/wasm" in

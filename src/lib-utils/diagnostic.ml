@@ -327,7 +327,7 @@ type context = {
 }
 
 (* The default warning policy, set once from the command line (mirroring
-   [Wasm.Validation.validate_refs]). [make]'s [policy] defaults to it, so every
+   [Wax_wasm.Validation.validate_refs]). [make]'s [policy] defaults to it, so every
    context picks it up without threading the policy through each call site; an
    explicit [?policy] still overrides it. *)
 let global_policy = ref Warning.default_policy

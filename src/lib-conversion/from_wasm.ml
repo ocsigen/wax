@@ -1,15 +1,15 @@
-open Wax
-module Src = Wasm.Ast.Text
-module Simd = Wasm.Simd
-module Uint32 = Utils.Uint32
-module Cond = Wasm.Cond_solver
+open Wax_lang
+module Src = Wax_wasm.Ast.Text
+module Simd = Wax_wasm.Simd
+module Uint32 = Wax_utils.Uint32
+module Cond = Wax_wasm.Cond_solver
 module StringMap = Map.Make (String)
 
 (* Raised by [Sequence.get] for a numeric field reference in a module with
    conditional annotations: the field's index depends on which branch is taken,
    so it cannot be resolved to a single Wax name. Caught in [module_] and
    reported as a located diagnostic. *)
-exception Numeric_ref_in_conditional of Wasm.Ast.location
+exception Numeric_ref_in_conditional of Wax_wasm.Ast.location
 
 (* Raised when an index or label reference resolves to nothing — it is out of
    range, or names an undeclared entity. This only happens on a module that
@@ -30,7 +30,7 @@ module Sequence = struct
         (* When set (module-level sequences of a module containing conditional
            annotations), numeric references are refused: a field's index depends
            on which branch is taken, so it cannot be resolved to one name. *)
-    diagnostics : Utils.Diagnostic.context option;
+    diagnostics : Wax_utils.Diagnostic.context option;
         (* Where to report a [naming-conflict] / [reserved-word-rename] warning
            when a source name has to be renamed; [None] silences them (for
            internal namespaces without a source identifier to point at). *)
@@ -57,13 +57,13 @@ module Sequence = struct
       =
     let warning, message =
       if reserved then
-        ( Utils.Warning.Reserved_word_rename,
+        ( Wax_utils.Warning.Reserved_word_rename,
           fun f () ->
             Format.fprintf f
               "'%s' is a reserved word; renaming this identifier to '%s'."
               original renamed )
       else
-        ( Utils.Warning.Naming_conflict,
+        ( Wax_utils.Warning.Naming_conflict,
           fun f () ->
             Format.fprintf f
               "The name '%s' is already in use; renaming this occurrence to \
@@ -75,7 +75,7 @@ module Sequence = struct
       | Some location ->
           [
             {
-              Utils.Diagnostic.location;
+              Wax_utils.Diagnostic.location;
               message =
                 (fun f () ->
                   Format.fprintf f "'%s' first claimed here" original);
@@ -83,7 +83,7 @@ module Sequence = struct
           ]
       | None -> []
     in
-    Utils.Diagnostic.report diagnostics ~location ~severity:Warning ~warning
+    Wax_utils.Diagnostic.report diagnostics ~location ~severity:Warning ~warning
       ~related ~message ()
 
   let register' ?hint seq export_tbl (kind : Src.exportable option)
@@ -354,9 +354,9 @@ type ctx = {
          type ([0 as i32], [0.0 as f64], ...). This keeps Wax type inference
          from re-typing an otherwise polymorphic literal, so a type mismatch in
          the source survives the round-trip. *)
-  diagnostics : Utils.Diagnostic.context;
+  diagnostics : Wax_utils.Diagnostic.context;
   cond_env : Cond.env;
-  cond_diag : Utils.Diagnostic.context;
+  cond_diag : Wax_utils.Diagnostic.context;
   mutable cond_asm : Cond.t;
       (* Assumption for the conditional branch currently being registered or
          converted; threaded through [Module_if_annotation]/[If_annotation] so
@@ -537,8 +537,9 @@ let register_type (type typ) ctx export_tbl (kind : typ kind) idx exports
    represent. Report such a case and abort the conversion rather than crashing
    on an [assert false]. *)
 let conversion_error ctx ~location message =
-  Utils.Diagnostic.report ctx.diagnostics ~location ~severity:Error ~message ();
-  Utils.Diagnostic.abort ()
+  Wax_utils.Diagnostic.report ctx.diagnostics ~location ~severity:Error ~message
+    ();
+  Wax_utils.Diagnostic.abort ()
 
 let functype_arity { Src.params; results } =
   (Array.length params, Array.length results)
@@ -586,7 +587,7 @@ let checked_arity ctx kind tbl what name_idx compatible =
   (match compatible ctx.cond_asm name with
   | _ :: _ :: _ as l when List.exists (fun t -> typeuse_arity ctx t <> arity) l
     ->
-      Utils.Diagnostic.report ctx.diagnostics ~location:name_idx.Ast.info
+      Wax_utils.Diagnostic.report ctx.diagnostics ~location:name_idx.Ast.info
         ~severity:Error
         ~message:(fun f () ->
           Format.fprintf f
@@ -993,11 +994,12 @@ let bottom_heap_type ctx (t : Src.heaptype) : Ast.heaptype =
    when it differs from the natural alignment, [offset] only when non-zero (and
    then [align] too, since they are positional). *)
 let mem_extra with_loc (memarg : Src.memarg) nat =
-  let lit v = with_loc (Ast.Int (Utils.Uint64.to_string v)) in
-  let nat = Utils.Uint64.of_int nat in
-  if Utils.Uint64.compare memarg.offset Utils.Uint64.zero <> 0 then
+  let lit v = with_loc (Ast.Int (Wax_utils.Uint64.to_string v)) in
+  let nat = Wax_utils.Uint64.of_int nat in
+  if Wax_utils.Uint64.compare memarg.offset Wax_utils.Uint64.zero <> 0 then
     [ lit memarg.align; lit memarg.offset ]
-  else if Utils.Uint64.compare memarg.align nat <> 0 then [ lit memarg.align ]
+  else if Wax_utils.Uint64.compare memarg.align nat <> 0 then
+    [ lit memarg.align ]
   else []
 
 (* The callee of an indirect call: [tab[index]] narrowed to the call's function
@@ -1731,7 +1733,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       Stack.push 1 (meth_call e1 Simd.shuffle_name (imms @ [ e2 ]))
   | VecConst v ->
       let lit =
-        match v.Utils.V128.shape with
+        match v.Wax_utils.V128.shape with
         | F32x4 | F64x2 -> float i
         | I8x16 | I16x8 | I32x4 | I64x2 -> integer i
       in
@@ -1977,9 +1979,9 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
                         (* Unnamed in the source but referenced by the body, so
                            it cannot be rendered anonymously: warn that a name
                            was invented, pointing at the parameter. *)
-                        Utils.Diagnostic.report ctx.diagnostics
+                        Wax_utils.Diagnostic.report ctx.diagnostics
                           ~location:p.Ast.info ~severity:Warning
-                          ~warning:Utils.Warning.Generated_name
+                          ~warning:Wax_utils.Warning.Generated_name
                           ~message:(fun fmt () ->
                             Format.fprintf fmt
                               "An unnamed parameter is used; generating the \
@@ -2575,7 +2577,7 @@ let rec count_memories fields =
     0 fields
 
 let module_ ?(strict_constants = false) diagnostics (_, fields) =
-  Utils.Debug.timed "convert" @@ fun () ->
+  Wax_utils.Debug.timed "convert" @@ fun () ->
   try
     let forbid_numeric = module_has_conditional fields in
     (* Loads/stores reference the memory implicitly by index 0. When the module
@@ -2620,7 +2622,7 @@ let module_ ?(strict_constants = false) diagnostics (_, fields) =
         return_arity = 0;
         strict_constants;
         cond_env = Cond.create ();
-        cond_diag = Utils.Diagnostic.collector ();
+        cond_diag = Wax_utils.Diagnostic.collector ();
         cond_asm = Cond.true_;
       }
     in
@@ -2679,10 +2681,10 @@ let module_ ?(strict_constants = false) diagnostics (_, fields) =
             (Recover_dispatch.module_
                (List.concat_map (fun f -> modulefield ctx export_tbl f) fields))))
   with Numeric_ref_in_conditional location ->
-    Utils.Diagnostic.report diagnostics ~location ~severity:Error
+    Wax_utils.Diagnostic.report diagnostics ~location ~severity:Error
       ~message:(fun f () ->
         Format.pp_print_string f
           "Numeric references to module fields are not supported in a module \
            with conditional annotations; use a symbolic $name.")
       ();
-    Utils.Diagnostic.abort ()
+    Wax_utils.Diagnostic.abort ()

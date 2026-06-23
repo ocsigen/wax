@@ -34,7 +34,7 @@ val create : unit -> env
 (** Create a fresh, empty solver state. *)
 
 val of_cond :
-  env -> Utils.Diagnostic.context -> location:Ast.location -> Ast.cond -> t
+  env -> Wax_utils.Diagnostic.context -> location:Ast.location -> Ast.cond -> t
 (** [of_cond env ctx ~location c] translates condition [c] into a formula,
     interning its variables in [env]. A diagnostic is reported (once per source
     location) for conditions that cannot be modeled; such conditions become a

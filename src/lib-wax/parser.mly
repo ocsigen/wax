@@ -111,7 +111,7 @@
                             (IDENT < PIPE)
 *)
 
-%parameter <Context : sig type t val context : Utils.Trivia.context end>
+%parameter <Context : sig type t val context : Wax_utils.Trivia.context end>
 
 %{
 open Ast
@@ -168,7 +168,7 @@ let storagetype_tbl =
      "v128", Value V128]
 
 let with_loc loc desc =
-   Utils.Trivia.with_pos Context.context {loc_start = fst loc; loc_end = snd loc} desc
+   Wax_utils.Trivia.with_pos Context.context {loc_start = fst loc; loc_end = snd loc} desc
 
 (* Build a binary/unary operator node, giving the operator itself a source
    location (its token span [oploc]) so a comment sitting between an operand and
@@ -194,14 +194,14 @@ let blocktype bt = Option.value ~default:{params = [||]; results = [||]} bt
 let decl_sign loc t sign =
   match (t, sign) with
   | None, None ->
-      raise (Wasm.Parsing.Syntax_error
+      raise (Wax_wasm.Parsing.Syntax_error
                (loc, "A parameter list is required; write '()' for none.\n"))
   | _ -> sign
 
 (* Parse an integer literal (decimal, hex, with [_] separators) to a [Uint64].
    Used for memory/table limits; a table64 bound may exceed [Int64.max_int],
    so parse across the full unsigned range. *)
-let u64_of_int_literal n = Utils.Uint64.of_string n
+let u64_of_int_literal n = Wax_utils.Uint64.of_string n
 %}
 
 %start <location module_> parse
@@ -289,14 +289,14 @@ reference_type:
 value_type:
 | t = IDENT
    { try Hashtbl.find valtype_tbl t with Not_found ->
-       raise (Wasm.Parsing.Syntax_error ($sloc, Printf.sprintf "Identifier '%s' is not a value type.\n" t )) }
+       raise (Wax_wasm.Parsing.Syntax_error ($sloc, Printf.sprintf "Identifier '%s' is not a value type.\n" t )) }
 | t = reference_type { Ref t }
 
 cast_type:
 | t = IDENT
    { try Valtype (Hashtbl.find valtype_tbl t) with Not_found ->
        try Hashtbl.find casttype_tbl t with Not_found ->
-         raise (Wasm.Parsing.Syntax_error
+         raise (Wax_wasm.Parsing.Syntax_error
                   ($sloc, Printf.sprintf "Identifier '%s' is not a cast type.\n" t )) }
 | t = reference_type { Valtype (Ref t) }
 | "&" nullable = boption("?") FN s = function_type
@@ -320,7 +320,7 @@ function_type_definition:
 storage_type:
 | t = IDENT
    { try Hashtbl.find storagetype_tbl t with Not_found ->
-       raise (Wasm.Parsing.Syntax_error ($sloc, Printf.sprintf "Identifier '%s' is not a storage type.\n" t )) }
+       raise (Wax_wasm.Parsing.Syntax_error ($sloc, Printf.sprintf "Identifier '%s' is not a storage type.\n" t )) }
 | t = reference_type { Value (Ref t) }
 
 field_type:
@@ -350,7 +350,7 @@ composite_type:
    matching the identifier [cont] followed by the function type name. *)
 | name = ident t = type_name
   { if name.desc <> "cont" then
-      raise (Wasm.Parsing.Syntax_error ($sloc,
+      raise (Wax_wasm.Parsing.Syntax_error ($sloc,
         Printf.sprintf "Expecting a composite type.\n"));
     Cont t }
 
@@ -741,7 +741,7 @@ address_type:
     | "i32" -> `I32
     | "i64" -> `I64
     | _ ->
-        raise (Wasm.Parsing.Syntax_error
+        raise (Wax_wasm.Parsing.Syntax_error
                  ($sloc, "Expected a memory address type 'i32' or 'i64'.\n")) }
 
 mem_limits:
@@ -812,30 +812,30 @@ else_clause:
 | %prec prec_no_else { None }
 | "#[else]" e = module_field { Some [e] }
 
-(* Conditions of conditional annotations. Reuse the WAT-level [Wasm.Ast.cond]
+(* Conditions of conditional annotations. Reuse the WAT-level [Wax_wasm.Ast.cond]
    (we do not evaluate them; they are preserved for the preprocessor). *)
 condition:
-| name = ident { Wasm.Ast.Cond_var name }
+| name = ident { Wax_wasm.Ast.Cond_var name }
 | name = ident op = condition_relop rhs = condition_literal
-  { Wasm.Ast.Cond_cmp (op, Wasm.Ast.Cond_var name, rhs) }
+  { Wax_wasm.Ast.Cond_cmp (op, Wax_wasm.Ast.Cond_var name, rhs) }
 | name = ident "(" l = separated_list_trailing(",", condition) ")"
   { match name.desc, l with
-    | "all", _ -> Wasm.Ast.Cond_and l
-    | "any", _ -> Wasm.Ast.Cond_or l
-    | "not", [c] -> Wasm.Ast.Cond_not c
+    | "all", _ -> Wax_wasm.Ast.Cond_and l
+    | "any", _ -> Wax_wasm.Ast.Cond_or l
+    | "not", [c] -> Wax_wasm.Ast.Cond_not c
     | _ ->
       raise
-        (Wasm.Parsing.Syntax_error
+        (Wax_wasm.Parsing.Syntax_error
            ($loc, "Expected 'all', 'any', or 'not(<cond>)' in a condition.")) }
 
 condition_literal:
 | "(" a = INT "," b = INT "," c = INT ")"
-  { Wasm.Ast.Cond_version (int_of_string a, int_of_string b, int_of_string c) }
-| s = STRING { Wasm.Ast.Cond_string s }
+  { Wax_wasm.Ast.Cond_version (int_of_string a, int_of_string b, int_of_string c) }
+| s = STRING { Wax_wasm.Ast.Cond_string s }
 
 condition_relop:
-| "=" { Wasm.Ast.Eq } | "!=" { Wasm.Ast.Ne } | "<" { Wasm.Ast.Lt }
-| ">" { Wasm.Ast.Gt } | "<=" { Wasm.Ast.Le } | ">=" { Wasm.Ast.Ge }
+| "=" { Wax_wasm.Ast.Eq } | "!=" { Wax_wasm.Ast.Ne } | "<" { Wax_wasm.Ast.Lt }
+| ">" { Wax_wasm.Ast.Gt } | "<=" { Wax_wasm.Ast.Le } | ">=" { Wax_wasm.Ast.Ge }
 
 parse: 
 | EOF { [] }

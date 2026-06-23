@@ -1,5 +1,6 @@
 val module_ :
-  Wax.Ast.location Wax.Ast.module_ -> Wax.Ast.location Wax.Ast.module_
+  Wax_lang.Ast.location Wax_lang.Ast.module_ ->
+  Wax_lang.Ast.location Wax_lang.Ast.module_
 (** [module_ m] rewrites each function body, folding the [loop] shape that
     {!Ast_utils.lower_while} produces — a void [loop] whose body is a single
     back-edged [if] (leading test) — into a high-level [while] loop. The

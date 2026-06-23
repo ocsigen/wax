@@ -1,5 +1,5 @@
 val module_ :
-  Utils.Diagnostic.context ->
-  Wax.Typing.types ->
-  Wax.Typing.typed_module_annotation Wax.Ast.module_ ->
-  Wasm.Ast.location Wasm.Ast.Text.module_
+  Wax_utils.Diagnostic.context ->
+  Wax_lang.Typing.types ->
+  Wax_lang.Typing.typed_module_annotation Wax_lang.Ast.module_ ->
+  Wax_wasm.Ast.location Wax_wasm.Ast.Text.module_

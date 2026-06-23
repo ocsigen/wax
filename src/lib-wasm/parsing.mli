@@ -11,7 +11,7 @@ end) (Tokens : sig
   type token
 end) (_ : sig
   module Make (_ : sig
-    type t = Utils.Trivia.context
+    type t = Wax_utils.Trivia.context
 
     val context : t
   end) : sig
@@ -26,7 +26,7 @@ end) (_ : sig
   end
 end) (_ : sig
   module Make (_ : sig
-    type t = Utils.Trivia.context
+    type t = Wax_utils.Trivia.context
 
     val context : t
   end) : sig
@@ -39,20 +39,20 @@ end) (_ : sig
 end) (_ : sig
   val message : int -> string
 end) (_ : sig
-  val token : Utils.Trivia.context -> Sedlexing.lexbuf -> Tokens.token
+  val token : Wax_utils.Trivia.context -> Sedlexing.lexbuf -> Tokens.token
 end) : sig
   val parse :
-    ?color:Utils.Colors.flag ->
+    ?color:Wax_utils.Colors.flag ->
     filename:string ->
     unit ->
-    Output.t * Utils.Trivia.context
+    Output.t * Wax_utils.Trivia.context
   (** Parse a file from a filename (reads from stdin if filename is empty or
       "-"). *)
 
   val parse_from_string :
-    ?color:Utils.Colors.flag ->
+    ?color:Wax_utils.Colors.flag ->
     filename:string ->
     string ->
-    Output.t * Utils.Trivia.context
+    Output.t * Wax_utils.Trivia.context
   (** Parse from a string. *)
 end

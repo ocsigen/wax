@@ -1,7 +1,7 @@
 let validate_refs = ref true
 
-module Uint32 = Utils.Uint32
-module Uint64 = Utils.Uint64
+module Uint32 = Wax_utils.Uint32
+module Uint64 = Wax_utils.Uint64
 open Ast.Binary.Types
 
 (* The [@]-suffixed operators sequence [option] computations, short-circuiting
@@ -136,7 +136,7 @@ let source_of_valtype (ty : valtype) : source_type =
     | Ref { nullable; typ } -> Ref { nullable; typ = source_of_heaptype typ })
 
 module Error = struct
-  open Utils
+  open Wax_utils
 
   let did_you_mean lst =
     match List.rev lst with
@@ -591,7 +591,7 @@ module Error = struct
       ()
 end
 
-let print_instr f i = Utils.Printer.run f (fun p -> Output.instr p i)
+let print_instr f i = Wax_utils.Printer.run f (fun p -> Output.instr p i)
 
 module Sequence = struct
   type 'a t = {
@@ -627,7 +627,7 @@ module Sequence = struct
         match idx.desc with
         | Num _ -> []
         | Id id ->
-            Utils.Spell_check.f
+            Wax_utils.Spell_check.f
               (fun f -> Hashtbl.iter (fun id' _ -> f id') seq.label_mapping)
               id
       in
@@ -758,7 +758,7 @@ let get_type_info d ctx (idx : Ast.Text.idx) =
       match idx.desc with
       | Num _ -> []
       | Id id ->
-          Utils.Spell_check.f
+          Wax_utils.Spell_check.f
             (fun f -> Hashtbl.iter (fun id' _ -> f id') ctx.label_mapping)
             id
     in
@@ -879,7 +879,7 @@ let subtype d ctx current { Ast.Text.typ; supertype; final } =
              match idx.desc with
              | Num _ -> []
              | Id id ->
-                 Utils.Spell_check.f
+                 Wax_utils.Spell_check.f
                    (fun f ->
                      Hashtbl.iter
                        (fun id' (i, _, _) -> if i > lnot current then f id')
@@ -916,7 +916,7 @@ let string_type ctx =
     |]
 
 type module_context = {
-  diagnostics : Utils.Diagnostic.context;
+  diagnostics : Wax_utils.Diagnostic.context;
   types : type_context;
   subtyping_info : Types.subtyping_info;
   (* Each function carries its type's global index and its source signature
@@ -1337,7 +1337,7 @@ let with_empty_stack ctx location f =
           let related =
             List.map
               (fun location ->
-                { Utils.Diagnostic.location; message = (fun _ () -> ()) })
+                { Wax_utils.Diagnostic.location; message = (fun _ () -> ()) })
               rest
           in
           Error.leftover_values ctx.diagnostics ~location ~related
@@ -1382,7 +1382,7 @@ let branch_target ctx (idx : Ast.Text.idx) =
         match l with
         | [] ->
             let lst =
-              Utils.Spell_check.f
+              Wax_utils.Spell_check.f
                 (fun f ->
                   List.iter
                     (fun (id_opt, _, _) ->
@@ -3714,7 +3714,7 @@ let check_import_order diagnostics fields =
        None fields)
 
 let f ?(warn_unused = true) diagnostics ((name, fields) as modul) =
-  Utils.Debug.timed "validate" @@ fun () ->
+  Wax_utils.Debug.timed "validate" @@ fun () ->
   check_import_order diagnostics fields;
   if not (List.exists field_has_conditional fields) then
     validate_configuration ~warn_unused diagnostics modul

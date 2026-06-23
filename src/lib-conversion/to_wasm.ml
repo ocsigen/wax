@@ -1,9 +1,9 @@
-module Uint32 = Utils.Uint32
-module Ast = Wasm.Ast
+module Uint32 = Wax_utils.Uint32
+module Ast = Wax_wasm.Ast
 module Binary = Ast.Binary
 module Text = Ast.Text
-module Simd = Wasm.Simd
-open Wax.Ast
+module Simd = Wax_wasm.Simd
+open Wax_lang.Ast
 module StringMap = Map.Make (String)
 
 type ctx = {
@@ -23,8 +23,8 @@ type ctx = {
      synthesized type (e.g. [<string>]) can reuse an existing declared one
      (e.g. [bytes = [mut i8]]) instead of being materialized afresh. *)
   reuse_types : (subtype, string) Hashtbl.t;
-  types : Wax.Typing.types;
-  diagnostics : Utils.Diagnostic.context;
+  types : Wax_lang.Typing.types;
+  diagnostics : Wax_utils.Diagnostic.context;
 }
 
 let with_loc loc desc = { desc; info = loc }
@@ -97,18 +97,19 @@ let blocktype typ : Text.blocktype option =
 
 let print_instr i =
   Format.eprintf "%a@."
-    (fun f i -> Utils.Printer.run f (fun pp -> Wax.Output.instr pp i))
+    (fun f i -> Wax_utils.Printer.run f (fun pp -> Wax_lang.Output.instr pp i))
     i
 
 (*
 let print_storagetype i =
   Format.eprintf "%a@."
-    (fun f i -> Utils.Printer.run f (fun pp -> Wax.Output.storagetype pp i))
+    (fun f i -> Wax_utils.Printer.run f (fun pp -> Wax_lang.Output.storagetype pp i))
     i
 *)
 let print_valtype i =
   Format.eprintf "%a@."
-    (fun f i -> Utils.Printer.run f (fun pp -> Wax.Output.valtype pp i))
+    (fun f i ->
+      Wax_utils.Printer.run f (fun pp -> Wax_lang.Output.valtype pp i))
     i
 
 let binop i op operand_type : _ Text.instr_desc =
@@ -417,7 +418,7 @@ let make_type_remap ctx : Text.name -> Text.name =
  fun nm ->
   if nm.desc = "" || nm.desc.[0] <> '<' then nm
   else
-    match Wax.Typing.get_type_definition ctx.diagnostics ctx.types nm with
+    match Wax_lang.Typing.get_type_definition ctx.diagnostics ctx.types nm with
     | None -> nm
     | Some subtype -> (
         match Hashtbl.find_opt ctx.reuse_types subtype with
@@ -451,22 +452,22 @@ let mem_memarg meth nstack args : Ast.memarg =
     match a.desc with
     (* [Uint64.of_string] handles the full unsigned 64-bit range; a memory64
        offset/align may exceed [Int64.max_int]. *)
-    | Int s -> Utils.Uint64.of_string s
+    | Int s -> Wax_utils.Uint64.of_string s
     | _ -> assert false
   in
   let extra = List.filteri (fun k _ -> k >= nstack) args in
   let align =
     match extra with
     | a :: _ -> int_lit a
-    | [] -> Utils.Uint64.of_int (mem_natural_align meth)
+    | [] -> Wax_utils.Uint64.of_int (mem_natural_align meth)
   in
   let offset =
-    match extra with _ :: o :: _ -> int_lit o | _ -> Utils.Uint64.zero
+    match extra with _ :: o :: _ -> int_lit o | _ -> Wax_utils.Uint64.zero
   in
   { offset; align }
 
 (* Literal value of a [v128_const_*] lane argument, as a string for
-   [Utils.V128.t]; a negative literal is [UnOp (Neg, _)]. *)
+   [Wax_utils.V128.t]; a negative literal is [UnOp (Neg, _)]. *)
 let rec literal_string a =
   match a.desc with
   | Int s | Float s -> s
@@ -603,7 +604,7 @@ and instruction_desc ret ctx i : location Text.instr list =
           match Simd.const_shape_of_name name.desc with
           | Some shape ->
               let components = List.map literal_string args in
-              folded loc (VecConst { Utils.V128.shape; components }) []
+              folded loc (VecConst { Wax_utils.V128.shape; components }) []
           | None -> folded loc VecBitselect arg_code)
       | Get idx ->
           if
@@ -668,16 +669,18 @@ and instruction_desc ret ctx i : location Text.instr list =
           let extra = List.filteri (fun k _ -> k >= nstack + nimm) args in
           let int_lit a =
             match a.desc with
-            | Int s -> Utils.Uint64.of_string s
+            | Int s -> Wax_utils.Uint64.of_string s
             | _ -> assert false
           in
           let align =
             match extra with
             | a :: _ -> int_lit a
-            | [] -> Utils.Uint64.of_int mop.m_nat_align
+            | [] -> Wax_utils.Uint64.of_int mop.m_nat_align
           in
           let offset =
-            match extra with _ :: o :: _ -> int_lit o | _ -> Utils.Uint64.zero
+            match extra with
+            | _ :: o :: _ -> int_lit o
+            | _ -> Wax_utils.Uint64.zero
           in
           let memarg : Ast.memarg = { offset; align } in
           let operand_code =
@@ -1302,8 +1305,8 @@ and instruction_desc ret ctx i : location Text.instr list =
          block then the first arm's trailing body) and convert each; the
          synthesised labels thread into [ret] via the recursive calls. *)
       List.concat_map (instruction ret ctx)
-        (Wax.Ast_utils.lower_dispatch ~block_info:i.info ~index ~cases ~default
-           ~arms)
+        (Wax_lang.Ast_utils.lower_dispatch ~block_info:i.info ~index ~cases
+           ~default ~arms)
   | While { label; cond; block } ->
       (* Lower to the equivalent ['L: loop { if C { B; br 'L; } }] and convert;
          a label-less loop gets a fresh readable [loop]/[loopN] that avoids both
@@ -1317,7 +1320,7 @@ and instruction_desc ret ctx i : location Text.instr list =
                   (fresh_loop_label ret (labels_in_list (cond :: block)))))
       in
       List.concat_map (instruction ret ctx)
-        (Wax.Ast_utils.lower_while ~block_info:i.info ~label ~cond ~block)
+        (Wax_lang.Ast_utils.lower_while ~block_info:i.info ~label ~cond ~block)
   | Match { scrutinee; arms; default } ->
       (* Lower to the nested type-test ladder (see [Ast_utils.lower_match]) and
          convert each statement. Readable [arm]/[default] labels (one per arm,
@@ -1336,7 +1339,8 @@ and instruction_desc ret ctx i : location Text.instr list =
           (fresh_match_labels ret (List.length arms))
       in
       List.concat_map (instruction ret ctx)
-        (Wax.Ast_utils.lower_match ~block_info ~labels ~scrutinee ~arms ~default)
+        (Wax_lang.Ast_utils.lower_match ~block_info ~labels ~scrutinee ~arms
+           ~default)
   | Br_on_null (l, expr) ->
       folded loc (Br_on_null (label ret l)) (instruction ret ctx expr)
   | Br_on_non_null (l, expr) ->
@@ -1456,12 +1460,12 @@ let globaltype mut t : Text.globaltype = { mut; typ = valtype t }
 (* Smallest memory size (in 64KiB pages) that holds the declared active data
    segments, used when a memory omits explicit limits. Only literal offsets
    contribute; others are ignored. *)
-let derive_min_pages (data : _ Wax.Ast.memdata list) =
+let derive_min_pages (data : _ Wax_lang.Ast.memdata list) =
   let extent =
     List.fold_left
-      (fun acc (d : _ Wax.Ast.memdata) ->
+      (fun acc (d : _ Wax_lang.Ast.memdata) ->
         match d.offset.desc with
-        | Wax.Ast.Int s -> (
+        | Wax_lang.Ast.Int s -> (
             try
               Int64.max acc
                 (Int64.add (Int64.of_string s)
@@ -1471,7 +1475,7 @@ let derive_min_pages (data : _ Wax.Ast.memdata list) =
       0L data
   in
   let pages = Int64.div (Int64.add extent 65535L) 65536L in
-  Utils.Uint64.of_int64 (if Int64.compare pages 1L < 0 then 1L else pages)
+  Wax_utils.Uint64.of_int64 (if Int64.compare pages 1L < 0 then 1L else pages)
 
 let storagetype typ : Text.storagetype =
   match typ with Value v -> Value (valtype v) | Packed p -> Packed p
@@ -1525,7 +1529,7 @@ let reorder_imports lst =
   traverse [] lst
 
 let module_ diagnostics types fields =
-  Utils.Debug.timed "convert" @@ fun () ->
+  Wax_utils.Debug.timed "convert" @@ fun () ->
   let func_refs_in_func = Hashtbl.create 16 in
   let func_refs_outside_func = Hashtbl.create 16 in
   let ctx =
@@ -1547,7 +1551,7 @@ let module_ diagnostics types fields =
       diagnostics;
     }
   in
-  Wax.Ast_utils.iter_fields
+  Wax_lang.Ast_utils.iter_fields
     (fun field ->
       match field.desc with
       | Type rectype ->
@@ -1661,7 +1665,7 @@ let module_ diagnostics types fields =
             in
             let data_fields =
               List.map
-                (fun (d : _ Wax.Ast.memdata) ->
+                (fun (d : _ Wax_lang.Ast.memdata) ->
                   {
                     field with
                     desc =
@@ -1704,7 +1708,7 @@ let module_ diagnostics types fields =
             let mi, ma =
               match limits with
               | Some (mi, ma) -> (mi, ma)
-              | None -> (Utils.Uint64.of_int 0, None)
+              | None -> (Wax_utils.Uint64.of_int 0, None)
             in
             let typ : Text.tabletype =
               {
@@ -1914,7 +1918,7 @@ let module_ diagnostics types fields =
   let has_conditional =
     let exception Found in
     try
-      Wax.Ast_utils.iter_fields
+      Wax_lang.Ast_utils.iter_fields
         (fun field ->
           match field.desc with Conditional _ -> raise Found | _ -> ())
         fields;

@@ -5,7 +5,7 @@ type t = {
   reserved : int StringMap.t;
       (* The reserved words seeded at creation, kept separately so [add'] can
          tell a reserved-word collision from a collision with another name. *)
-  mutable locations : Utils.Ast.location StringMap.t;
+  mutable locations : Wax_utils.Ast.location StringMap.t;
       (* The source location each name was claimed from (when one was given), so
          [add'] can point a conflict at the previous occurrence. *)
 }
@@ -16,7 +16,7 @@ let build l = StringMap.of_list (List.map (fun s -> (s, 1)) l)
    an intrinsic (which would silently mis-lower the corresponding instruction). *)
 let reserved =
   build
-    (Wasm.Simd.all_names
+    (Wax_wasm.Simd.all_names
     @ [
         "as";
         "become";
@@ -97,7 +97,7 @@ let rec add_indexed ns x i =
 
 type outcome =
   | Available
-  | Renamed of { reserved : bool; previous : Utils.Ast.location option }
+  | Renamed of { reserved : bool; previous : Wax_utils.Ast.location option }
 
 let record_location ns ?loc name =
   match loc with

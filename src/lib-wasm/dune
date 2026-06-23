@@ -1,9 +1,9 @@
 (library
- (name wasm)
+ (name wax_wasm)
  (public_name wax.wasm)
  (preprocess
   (pps sedlex.ppx))
  ; (modules :standard \ wasm_link)
- (libraries utils sedlex menhirLib unix theo))
+ (libraries wax_utils sedlex menhirLib unix theo))
 
 (include dune.menhir)

@@ -21,14 +21,14 @@ val add : t -> string -> string
 
 type outcome =
   | Available  (** [name] was free and registered as-is. *)
-  | Renamed of { reserved : bool; previous : Utils.Ast.location option }
+  | Renamed of { reserved : bool; previous : Wax_utils.Ast.location option }
       (** [name] was taken and a suffix was appended. [reserved] is true when
           the requested name is a reserved word, false when it collided with
           another registered name. [previous] is the location the colliding name
           was first claimed from, when one was recorded (always [None] for a
           reserved word). *)
 
-val add' : ?loc:Utils.Ast.location -> t -> string -> string * outcome
+val add' : ?loc:Wax_utils.Ast.location -> t -> string -> string * outcome
 (** Like {!add}, but also reports whether the name was renamed and, if so,
     whether the collision was with a reserved word and where the colliding name
     was previously claimed. [loc] records this name's source location, so a

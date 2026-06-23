@@ -1,5 +1,6 @@
 val module_ :
-  Wax.Ast.location Wax.Ast.module_ -> Wax.Ast.location Wax.Ast.module_
+  Wax_lang.Ast.location Wax_lang.Ast.module_ ->
+  Wax_lang.Ast.location Wax_lang.Ast.module_
 (** [module_ m] rewrites the local declarations of every function body to be
     more idiomatic. Each [let x : t;] declaration is pushed inward as far as
     possible: down to the first instruction that uses [x], and into the

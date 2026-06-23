@@ -351,7 +351,7 @@ let rec instr (names : B.names) local_names label_names label_counter stack
         VecStoreLane (index ~map:names.memories o, op, m, lane)
     | VecLoadSplat (o, op, m) ->
         VecLoadSplat (index ~map:names.memories o, op, m)
-    | VecConst v -> VecConst (Utils.V128.of_string v)
+    | VecConst v -> VecConst (Wax_utils.V128.of_string v)
     | VecUnOp op -> VecUnOp op
     | VecBinOp op -> VecBinOp op
     | VecTest op -> VecTest op
@@ -414,7 +414,7 @@ let make_names_unique (names : B.names) =
   }
 
 let module_ (m : _ B.module_) : _ T.module_ =
-  Utils.Debug.timed "to-text" @@ fun () ->
+  Wax_utils.Debug.timed "to-text" @@ fun () ->
   let m = { m with names = make_names_unique m.names } in
   let all_subtypes =
     Array.concat

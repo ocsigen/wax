@@ -1,6 +1,6 @@
 (** Shared registry mapping wax SIMD intrinsic names to WebAssembly [Vec*]
     instructions and back. Single source of truth for [to_wasm] (forward),
-    [from_wasm] (reverse) and [Wax.Typing] (signatures).
+    [from_wasm] (reverse) and [Wax_lang.Typing] (signatures).
 
     Surface convention: vector ops are method intrinsics with the lane shape in
     the name ([a.add_i32x4(b)], [v.extract_lane_s_i8x16(0)]); the wax name is
@@ -33,7 +33,7 @@ val extract_name : Ast.vec_shape -> Ast.signage option -> string
 val replace_name : Ast.vec_shape -> string
 val shuffle_name : string
 val bitselect_name : string
-val const_name : Utils.V128.shape -> string
+val const_name : Wax_utils.V128.shape -> string
 val vec_load_name : Ast.vec_load_op -> string
 val load_lane_name : [ `I8 | `I16 | `I32 | `I64 ] -> string
 val store_lane_name : [ `I8 | `I16 | `I32 | `I64 ] -> string
@@ -66,12 +66,12 @@ val is_free_intrinsic : string -> bool
 (** A reserved free-function name ([v128_const_*], [v128_bitselect]); these
     shadow a user function of the same name only when it is unbound. *)
 
-val const_shape_of_name : string -> Utils.V128.shape option
+val const_shape_of_name : string -> Wax_utils.V128.shape option
 
-val const_arity : Utils.V128.shape -> int
+val const_arity : Wax_utils.V128.shape -> int
 (** Number of lane literals in a [v128_const_<shape>] call. *)
 
-val const_is_float : Utils.V128.shape -> bool
+val const_is_float : Wax_utils.V128.shape -> bool
 
 (** {1 Memory loads/stores ([mem.v128_*])} *)
 

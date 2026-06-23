@@ -207,13 +207,17 @@ ZZZ
 
 %on_error_reduce plain_instruction list(STRING) list(value_type) list(field_type) list(field) limits list(folded_instruction) list(typedef) list(index) list(elemexpr) list(module_field) nonempty_list(f64) list(const) nonempty_list(float_or_nan) nonempty_list(result_pat) list(result_pat) list(cmd) nonempty_list(module_field) nonempty_list(index) string_list
 
-%parameter <Context : sig type t = Utils.Trivia.context val context : t end>
+%parameter <Context : sig type t = Wax_utils.Trivia.context val context : t end>
 
 %{
-module Uint32 = Utils.Uint32
-module Uint64 = Utils.Uint64
-module V128 = Utils.V128
-module Wasm = struct
+module Uint32 = Wax_utils.Uint32
+module Uint64 = Wax_utils.Uint64
+module V128 = Wax_utils.V128
+(* Empty module shadowing the library's wrapper module so menhir's [--infer]
+   type printer cannot qualify inferred types with it (which would make this
+   module depend on the wrapper — a cycle); it falls back to the bare [Ast]
+   alias instead. Must stay named after the library (see [name] in dune). *)
+module Wax_wasm = struct
 end
 open Ast.Text
 
@@ -242,7 +246,7 @@ let vec_load_width : vec_load_op -> Uint64.t = function
   | Load32Zero -> Uint64.of_int 4
 
 let with_loc loc desc =
-  Utils.Trivia.with_pos Context.context {loc_start = fst loc; loc_end = snd loc} desc
+  Wax_utils.Trivia.with_pos Context.context {loc_start = fst loc; loc_end = snd loc} desc
 
 let map_fst f (x, y) = (f x, y)
 

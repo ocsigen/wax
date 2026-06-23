@@ -1,4 +1,4 @@
-open Wax
+open Wax_lang
 open Ast
 
 (* The only ways an instruction references a local are [Get], [Set] and [Tee];

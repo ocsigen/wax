@@ -1,5 +1,5 @@
 (library
- (name utils)
+ (name wax_utils)
  (public_name wax.utils)
  (libraries unix))
 

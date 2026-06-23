@@ -1,4 +1,4 @@
-module Diagnostic = Utils.Diagnostic
+module Diagnostic = Wax_utils.Diagnostic
 
 module Bdd_tbl = Hashtbl.Make (struct
   type t = Cond_solver.t
@@ -121,7 +121,7 @@ let check_all diagnostics ?truncation_location
     match truncation_location with
     | Some location ->
         Diagnostic.report diagnostics ~location ~severity:Warning
-          ~warning:Utils.Warning.Truncated_coverage
+          ~warning:Wax_utils.Warning.Truncated_coverage
           ~message:(fun fmt () ->
             Format.fprintf fmt
               "Too many conditional configurations (over %d); coverage was \

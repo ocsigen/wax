@@ -1,16 +1,16 @@
-module CS = Wasm.Cond_specialize
+module CS = Wax_wasm.Cond_specialize
 open Ast
 
 (* Splice out / simplify every conditional in a Wax module, returning the byte
    ranges of removed branches so their comments can be dropped (see
-   {!Utils.Trivia.drop_in_ranges}). The set of nodes recursed through matches
+   {!Wax_utils.Trivia.drop_in_ranges}). The set of nodes recursed through matches
    [Typing.specialize_fields]; the difference is that an undetermined
    conditional is kept (with its condition simplified) rather than explored. The
    split between branches is the end of the then-branch (just before the
    [#[else]]), avoiding any need for the [#[else]] token's own position. *)
 let module_ ctx env (fields : location Ast.module_) :
     location Ast.module_ * (int * int) list =
-  Utils.Debug.timed "specialize" @@ fun () ->
+  Wax_utils.Debug.timed "specialize" @@ fun () ->
   let eval cond = CS.eval ctx env cond in
   let ranges = ref [] in
   let start_of (l : location) = l.loc_start.Lexing.pos_cnum in

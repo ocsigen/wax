@@ -173,7 +173,7 @@ let rec skip_annotation depth lexbuf =
 let with_loc ctx f lexbuf =
   let loc_start = Sedlexing.lexing_bytes_position_start lexbuf in
   let desc = f lexbuf in
-  Utils.Trivia.with_pos ctx
+  Wax_utils.Trivia.with_pos ctx
     { loc_start; loc_end = Sedlexing.lexing_bytes_position_curr lexbuf }
     desc
 
@@ -201,16 +201,16 @@ let rec token_rec ctx lexbuf =
                "An identifier cannot be the empty string" ));
       ID s
   | newline ->
-      Utils.Trivia.report_newline ctx;
+      Wax_utils.Trivia.report_newline ctx;
       token_rec ctx lexbuf (* Skip standalone newlines in Wat *)
   | linecomment ->
       let content = Sedlexing.Utf8.lexeme lexbuf in
-      Utils.Trivia.report_item ctx Line_comment content;
+      Wax_utils.Trivia.report_item ctx Line_comment content;
       token_rec ctx lexbuf
   | Plus (' ' | '\t') -> token_rec ctx lexbuf
   | "(;" ->
       let s = comment lexbuf in
-      Utils.Trivia.report_item ctx Block_comment s;
+      Wax_utils.Trivia.report_item ctx Block_comment s;
       token_rec ctx lexbuf
   | "(@string" -> STRING_ANNOT
   | "(@char" -> CHAR_ANNOT
@@ -219,7 +219,7 @@ let rec token_rec ctx lexbuf =
   | "(@else" -> ELSE_ANNOT
   | "(@", Plus idchar ->
       skip_annotation 1 lexbuf;
-      Utils.Trivia.report_item ctx Annotation "";
+      Wax_utils.Trivia.report_item ctx Annotation "";
       token_rec ctx lexbuf
   | "(@\"" ->
       let s = string lexbuf in
@@ -240,12 +240,12 @@ let rec token_rec ctx lexbuf =
                ( Sedlexing.lexing_bytes_positions lexbuf,
                  "An annotation id cannot be the empty string." ));
         skip_annotation 1 lexbuf;
-        Utils.Trivia.report_item ctx Annotation "";
+        Wax_utils.Trivia.report_item ctx Annotation "";
         token_rec ctx lexbuf)
   | id ->
       let loc_start, loc_end = Sedlexing.lexing_bytes_positions lexbuf in
       ID
-        (Utils.Trivia.with_pos ctx { Ast.loc_start; loc_end }
+        (Wax_utils.Trivia.with_pos ctx { Ast.loc_start; loc_end }
            (Sedlexing.Utf8.sub_lexeme lexbuf 1
               (Sedlexing.lexeme_length lexbuf - 1)))
   | eof -> EOF
@@ -938,7 +938,7 @@ let token ctx =
     let rec loop () =
       let t = token_rec ctx lexbuf in
       let end_ = Sedlexing.lexing_bytes_position_curr lexbuf in
-      Utils.Trivia.report_token ctx end_.pos_cnum;
+      Wax_utils.Trivia.report_token ctx end_.pos_cnum;
       match (!prev_token, t) with
       | ( None,
           ( LPAREN_CATCH_ALL_REF | LPAREN_CATCH_REF | LPAREN_EXPORT

@@ -1,4 +1,4 @@
-open Wax
+open Wax_lang
 open Ast
 
 (* Recover the high-level [while] loop from the [loop] shape that

@@ -162,4 +162,4 @@ let escape_string s =
   in
   loop b 0 (String.length s);
   let s' = Buffer.contents b in
-  (Utils.Unicode.terminal_width s', s')
+  (Wax_utils.Unicode.terminal_width s', s')

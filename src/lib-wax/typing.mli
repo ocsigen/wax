@@ -6,7 +6,7 @@ type types
 val f :
   ?simplify:bool ->
   ?warn_unused:bool ->
-  Utils.Diagnostic.context ->
+  Wax_utils.Diagnostic.context ->
   Ast.location Ast.module_ ->
   types * typed_module_annotation Ast.module_
 (** [f fields] performs type checking on the given list of Wax module fields. It
@@ -28,7 +28,7 @@ val erase_types :
     to its original location-only annotation state. *)
 
 val get_type_definition :
-  Utils.Diagnostic.context ->
+  Wax_utils.Diagnostic.context ->
   types ->
   (string, Ast.location) Ast.annotated ->
   Ast.subtype option

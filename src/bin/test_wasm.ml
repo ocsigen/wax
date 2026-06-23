@@ -1,4 +1,4 @@
-open Wasm
+open Wax_wasm
 
 module P =
   Parsing.Make_parser

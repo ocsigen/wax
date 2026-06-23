@@ -1,5 +1,6 @@
 val module_ :
-  Wax.Ast.location Wax.Ast.module_ -> Wax.Ast.location Wax.Ast.module_
+  Wax_lang.Ast.location Wax_lang.Ast.module_ ->
+  Wax_lang.Ast.location Wax_lang.Ast.module_
 (** [module_ m] rewrites each function body, folding the sequential type-test
     chain that {!Ast_utils.lower_match} emits — a run of discarded blocks, each
     testing the same scrutinee with [br_on_cast_fail]/[br_on_non_null] branching

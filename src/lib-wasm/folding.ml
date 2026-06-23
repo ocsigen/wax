@@ -1,4 +1,4 @@
-module Uint32 = Utils.Uint32
+module Uint32 = Wax_utils.Uint32
 open Ast.Text
 
 let map_instrs ?(enter = fun ~location:_ _cond _positive f -> f ()) func
@@ -59,14 +59,14 @@ module Cond = Cond_solver
 type cond_ctx = {
   cur : Cond.t ref;
   env : Cond.env;
-  diag : Utils.Diagnostic.context;
+  diag : Wax_utils.Diagnostic.context;
 }
 
 let make_cond_ctx () =
   {
     cur = ref Cond.true_;
     env = Cond.create ();
-    diag = Utils.Diagnostic.collector ();
+    diag = Wax_utils.Diagnostic.collector ();
   }
 
 (* Fold [f] under the assumption of a conditional branch, restoring after. *)

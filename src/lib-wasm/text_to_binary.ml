@@ -51,7 +51,7 @@ let empty_context =
 
 let resolve_idx space (idx : T.idx) : B.idx =
   match idx.desc with
-  | T.Num n -> Utils.Uint32.to_int n
+  | T.Num n -> Wax_utils.Uint32.to_int n
   | T.Id id -> (
       match StringMap.find_opt id space.map with
       | Some i -> i
@@ -59,7 +59,7 @@ let resolve_idx space (idx : T.idx) : B.idx =
 
 let resolve_label labels (idx : T.idx) : B.idx =
   match idx.desc with
-  | T.Num n -> Utils.Uint32.to_int n
+  | T.Num n -> Wax_utils.Uint32.to_int n
   | T.Id id ->
       let rec find_depth stack depth =
         match stack with
@@ -158,7 +158,7 @@ let on_clause ctx (c : T.on_clause) : B.on_clause =
 
 let resolve_field_idx ctx type_idx (field_idx_text : T.idx) : B.idx =
   match field_idx_text.desc with
-  | T.Num n -> Utils.Uint32.to_int n
+  | T.Num n -> Wax_utils.Uint32.to_int n
   | T.Id id -> (
       match B.IntMap.find_opt type_idx ctx.fields with
       | Some field_map -> (
@@ -287,10 +287,10 @@ let rec instr ~resolve_string_type ~resolve_func_type ctx (i : 'info T.instr) =
     | TableInit (i1, i2) ->
         TableInit (resolve_idx ctx.tables i1, resolve_idx ctx.elems i2)
     | ElemDrop i -> ElemDrop (resolve_idx ctx.elems i)
-    | Const (I32 x) -> Const (I32 (Utils.Number_parsing.int32 x))
-    | Const (I64 x) -> Const (I64 (Utils.Number_parsing.int64 x))
-    | Const (F32 x) -> Const (F32 (Utils.Number_parsing.float32 x))
-    | Const (F64 x) -> Const (F64 (Utils.Number_parsing.float64 x))
+    | Const (I32 x) -> Const (I32 (Wax_utils.Number_parsing.int32 x))
+    | Const (I64 x) -> Const (I64 (Wax_utils.Number_parsing.int64 x))
+    | Const (F32 x) -> Const (F32 (Wax_utils.Number_parsing.float32 x))
+    | Const (F64 x) -> Const (F64 (Wax_utils.Number_parsing.float64 x))
     | UnOp op -> UnOp op
     | BinOp op -> BinOp op
     | RefNull t -> RefNull (heaptype ctx t)
@@ -401,7 +401,7 @@ let rec instr ~resolve_string_type ~resolve_func_type ctx (i : 'info T.instr) =
     | VecStoreLane (o, op, m, lane) ->
         VecStoreLane (resolve_idx ctx.memories o, op, m, lane)
     | VecLoadSplat (o, op, m) -> VecLoadSplat (resolve_idx ctx.memories o, op, m)
-    | VecConst v -> VecConst (Utils.V128.to_string v)
+    | VecConst v -> VecConst (Wax_utils.V128.to_string v)
     | VecUnOp op -> VecUnOp op
     | VecBinOp op -> VecBinOp op
     | VecTest op -> VecTest op
@@ -459,7 +459,7 @@ let invert_map map =
   StringMap.fold (fun k v acc -> B.IntMap.add v k acc) map B.IntMap.empty
 
 let module_ (m : 'info T.module_) : 'info B.module_ =
-  Utils.Debug.timed "to-binary" @@ fun () ->
+  Wax_utils.Debug.timed "to-binary" @@ fun () ->
   let module_name, fields = m in
 
   (* Pass 1: Build Context *)

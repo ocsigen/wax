@@ -1,11 +1,11 @@
 (** Wax Abstract Syntax Tree. *)
 
-type ('desc, 'info) annotated = ('desc, 'info) Utils.Ast.annotated = {
+type ('desc, 'info) annotated = ('desc, 'info) Wax_utils.Ast.annotated = {
   desc : 'desc;
   info : 'info;
 }
 
-type location = Utils.Ast.location = {
+type location = Wax_utils.Ast.location = {
   loc_start : Lexing.position;
   loc_end : Lexing.position;
 }
@@ -15,14 +15,14 @@ val no_loc : 'desc -> ('desc, location) annotated
 type ident = (string, location) annotated
 (** An identifier with its source location. *)
 
-include module type of Wasm.Ast.Make_types (struct
+include module type of Wax_wasm.Ast.Make_types (struct
   type idx = ident
   type 'a annotated_array = (ident * 'a, location) annotated array
   type 'a opt_annotated_array = (ident option * 'a, location) annotated array
 end)
 
 (** Signage for integer operations. *)
-type signage = Wasm.Ast.signage = Signed | Unsigned
+type signage = Wax_wasm.Ast.signage = Signed | Unsigned
 
 (** Unary operators. *)
 type unop = Neg | Pos | Not
@@ -161,7 +161,7 @@ type 'info instr_desc =
   | Sequence of 'info instr list
   | Select of 'info instr * 'info instr * 'info instr
   | If_annotation of {
-      cond : Wasm.Ast.cond;
+      cond : Wax_wasm.Ast.cond;
       then_body : 'info instr list;
       else_body : 'info instr list option;
     }
@@ -216,7 +216,7 @@ type 'info modulefield =
   | Memory of {
       name : ident;
       address_type : [ `I32 | `I64 ];
-      limits : (Utils.Uint64.t * Utils.Uint64.t option) option;
+      limits : (Wax_utils.Uint64.t * Wax_utils.Uint64.t option) option;
       data : 'info memdata list;
       attributes : attributes;
     }
@@ -230,7 +230,7 @@ type 'info modulefield =
       name : ident;
       address_type : [ `I32 | `I64 ];
       reftype : reftype;
-      limits : (Utils.Uint64.t * Utils.Uint64.t option) option;
+      limits : (Wax_utils.Uint64.t * Wax_utils.Uint64.t option) option;
       init : 'info instr option;
       attributes : attributes;
     }
@@ -246,7 +246,7 @@ type 'info modulefield =
       fields : ('info modulefield, location) annotated list;
     }
   | Conditional of {
-      cond : Wasm.Ast.cond;
+      cond : Wax_wasm.Ast.cond;
       then_fields : ('info modulefield, location) annotated list;
       else_fields : ('info modulefield, location) annotated list option;
     }

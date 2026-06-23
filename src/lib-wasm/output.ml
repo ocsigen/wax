@@ -1,9 +1,9 @@
-open Utils.Colors
-module Printer = Utils.Printer
-module Trivia = Utils.Trivia
-module Styled = Utils.Styled_printer
-module Uint32 = Utils.Uint32
-module Uint64 = Utils.Uint64
+open Wax_utils.Colors
+module Printer = Wax_utils.Printer
+module Trivia = Wax_utils.Trivia
+module Styled = Wax_utils.Styled_printer
+module Uint32 = Wax_utils.Uint32
+module Uint64 = Wax_utils.Uint64
 open Ast.Text
 
 let get_theme use_color =
@@ -30,7 +30,7 @@ type ctx = { base : Styled.t; format : format; indent_level : int }
 let _ = (Compact, Hybrid, Adaptive)
 
 (* The styling and trivia plumbing is shared with the Wax printer in
-   [Utils.Styled_printer]; only [format]/[indent_level] are specific here. *)
+   [Wax_utils.Styled_printer]; only [format]/[indent_level] are specific here. *)
 let print_styled ctx style ?(len = None) text =
   Styled.print_styled ctx.base style ~len text
 
@@ -179,7 +179,7 @@ let id ?(style = Identifier) ?loc x =
       {
         loc;
         style;
-        len = Some (Utils.Unicode.terminal_width x + 1);
+        len = Some (Wax_utils.Unicode.terminal_width x + 1);
         s = "$" ^ x;
       }
   else
@@ -521,7 +521,7 @@ let vec_shift_op op =
 
 let vec_bitmask_op_shape = function Bitmask s -> s
 
-let vec_const { Utils.V128.shape; components } =
+let vec_const { Wax_utils.V128.shape; components } =
   keyword
     (match shape with
     | I8x16 -> "i8x16"
@@ -1068,16 +1068,12 @@ let rec instr i =
   | If_annotation { cond; then_body; else_body }
   | Folded ({ desc = If_annotation { cond; then_body; else_body }; _ }, []) ->
       let clause head body =
-        list
-          (( (atom ~style:Annotation ("@" ^ head)) :: List.map instr body)
-          )
+        list (atom ~style:Annotation ("@" ^ head) :: List.map instr body)
       in
       list ~loc
-        (block [atom ~style:Annotation "@if";
-                cond_doc cond]
-         ::  clause "then" then_body
-         :: option (fun e -> [ clause "else" e ]) else_body
-        )
+        (block [ atom ~style:Annotation "@if"; cond_doc cond ]
+        :: clause "then" then_body
+        :: option (fun e -> [ clause "else" e ]) else_body)
   | Folded (i, l) ->
       list ~loc [ block ~transparent:true (instr i :: List.map instr l) ]
 
@@ -1336,7 +1332,7 @@ let module_ ?(color = Auto) ?out_channel ?(tail = []) ?collect printer ~trivia
     (id, fields) =
   (* [collect] marks the dry trivia-collection traversal; time the real emit
      only, so a single "output" timing is reported. *)
-  Utils.Debug.timed_if (collect = None) "output" @@ fun () ->
+  Wax_utils.Debug.timed_if (collect = None) "output" @@ fun () ->
   let use_color = should_use_color ~color ~out_channel in
   let theme = get_theme use_color in
   let ctx =

@@ -1,12 +1,12 @@
 (** WebAssembly Abstract Syntax Tree. *)
 
-type ('desc, 'info) annotated = ('desc, 'info) Utils.Ast.annotated = {
+type ('desc, 'info) annotated = ('desc, 'info) Wax_utils.Ast.annotated = {
   desc : 'desc;
   info : 'info;
 }
 (** An annotated tree node. *)
 
-type location = Utils.Ast.location = {
+type location = Wax_utils.Ast.location = {
   loc_start : Lexing.position;
   loc_end : Lexing.position;
 }
@@ -15,8 +15,8 @@ type location = Utils.Ast.location = {
 val no_loc : 'desc -> ('desc, location) annotated
 (** [no_loc d] creates an annotated node with a dummy location. *)
 
-module Uint32 = Utils.Uint32
-module Uint64 = Utils.Uint64
+module Uint32 = Wax_utils.Uint32
+module Uint64 = Wax_utils.Uint64
 
 (* Types *)
 
@@ -617,7 +617,7 @@ module Text : sig
     type int32_t = string
     type int64_t = string
     type float_t = string
-    type v128_t = Utils.V128.t
+    type v128_t = Wax_utils.V128.t
   end)
 
   type datastring = (string, location) annotated list

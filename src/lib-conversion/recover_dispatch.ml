@@ -1,4 +1,4 @@
-open Wax
+open Wax_lang
 open Ast
 
 (* Recover a [dispatch] from the conventional dense-switch shape that compilers

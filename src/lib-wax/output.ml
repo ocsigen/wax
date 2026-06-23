@@ -2,7 +2,7 @@
 Should use string_as for comments
 *)
 
-open Utils.Colors
+open Wax_utils.Colors
 open Ast
 
 let indent_level = 4
@@ -32,22 +32,22 @@ let get_theme use_color =
   else no_color
 
 type 'info ctx = {
-  base : Utils.Styled_printer.t;
+  base : Wax_utils.Styled_printer.t;
   (* Extract a source location from a node's annotation, to look its trivia up.
      [fun _ -> None] when printing typed ASTs for diagnostics (no trivia). *)
   locate : 'info -> location option;
 }
 
 let print_styled pp style ?(len = None) text =
-  Utils.Styled_printer.print_styled pp.base style ~len text
+  Wax_utils.Styled_printer.print_styled pp.base style ~len text
 
-let box pp ?indent f = Utils.Printer.box pp.base.printer ?indent f
-let hvbox pp ?indent f = Utils.Printer.hvbox pp.base.printer ?indent f
-let hbox pp f = Utils.Printer.hbox pp.base.printer f
-let indent pp i f = Utils.Printer.indent pp.base.printer i f
-let space pp () = Utils.Printer.space pp.base.printer ()
-let cut pp () = Utils.Printer.cut pp.base.printer ()
-let newline pp () = Utils.Printer.newline pp.base.printer ()
+let box pp ?indent f = Wax_utils.Printer.box pp.base.printer ?indent f
+let hvbox pp ?indent f = Wax_utils.Printer.hvbox pp.base.printer ?indent f
+let hbox pp f = Wax_utils.Printer.hbox pp.base.printer f
+let indent pp i f = Wax_utils.Printer.indent pp.base.printer i f
+let space pp () = Wax_utils.Printer.space pp.base.printer ()
+let cut pp () = Wax_utils.Printer.cut pp.base.printer ()
+let newline pp () = Wax_utils.Printer.newline pp.base.printer ()
 let punctuation pp s = print_styled pp Punctuation s
 let operator pp s = print_styled pp Operator s
 
@@ -56,10 +56,10 @@ let operator pp s = print_styled pp Operator s
    line after it — as the block-statement [;] and list [,] separators already
    do. *)
 let semicolon pp =
-  Utils.Printer.with_held_eol pp.base.printer (fun () -> punctuation pp ";")
+  Wax_utils.Printer.with_held_eol pp.base.printer (fun () -> punctuation pp ";")
 
 let identifier pp s =
-  print_styled pp Identifier ~len:(Some (Utils.Unicode.terminal_width s)) s
+  print_styled pp Identifier ~len:(Some (Wax_utils.Unicode.terminal_width s)) s
 
 let constant pp s = print_styled pp Constant s
 let keyword pp s = print_styled pp Keyword s
@@ -69,14 +69,15 @@ let attribute pp s = print_styled pp Attribute s
 
 (* Comment preservation: emit the trivia (comments, blank lines) the lexer
    collected, looked up by AST-node location. The rendering logic is shared with
-   the WebAssembly printer in [Utils.Trivia]. *)
+   the WebAssembly printer in [Wax_utils.Trivia]. *)
 
-let print_trivia pp lst = Utils.Styled_printer.print_trivia pp.base lst
+let print_trivia pp lst = Wax_utils.Styled_printer.print_trivia pp.base lst
 
 let atomic_node pp (loc : location option) f =
-  Utils.Styled_printer.atomic_node pp.base loc f
+  Wax_utils.Styled_printer.atomic_node pp.base loc f
 
-let with_style ctx style f = Utils.Styled_printer.with_style ctx.base style f
+let with_style ctx style f =
+  Wax_utils.Styled_printer.with_style ctx.base style f
 
 let list ?(sep = space) f pp l =
   match l with
@@ -95,7 +96,8 @@ let list_commasep f pp l =
     ~sep:(fun pp () ->
       (* Hold any deferred trailing comment so the comma prints on the comment's
          line, ahead of it. *)
-      Utils.Printer.with_held_eol pp.base.printer (fun () -> punctuation pp ",");
+      Wax_utils.Printer.with_held_eol pp.base.printer (fun () ->
+          punctuation pp ",");
       space pp ())
     f pp l
 
@@ -105,8 +107,8 @@ let list_commasep f pp l =
    the element and change where it re-attaches on a reparse (breaking
    idempotence), so the comment-less last element keeps its layout. *)
 let trailing_comma pp l =
-  if l <> [] && not (Utils.Printer.has_pending_eol pp.base.printer) then
-    Utils.Printer.if_broken pp.base.printer (fun () -> punctuation pp ",")
+  if l <> [] && not (Wax_utils.Printer.has_pending_eol pp.base.printer) then
+    Wax_utils.Printer.if_broken pp.base.printer (fun () -> punctuation pp ",")
 
 let list_commasep_trailing f pp l =
   list_commasep f pp l;
@@ -353,7 +355,7 @@ let parentheses expected actual pp g =
         (* Hold the closing [)] past a trailing comment on the last inner token,
            so it hugs the expression ([(c == 108) // 'l']) instead of being
            pushed onto its own line after the comment — as [;] and [,] do. *)
-        Utils.Printer.with_held_eol pp.base.printer (fun () ->
+        Wax_utils.Printer.with_held_eol pp.base.printer (fun () ->
             punctuation pp ")")))
   else g ()
 
@@ -555,7 +557,7 @@ let array_element_precedence nm first i =
     | _ -> Instruction
   else Instruction
 
-let cond_op_string (op : Wasm.Ast.cmp_op) =
+let cond_op_string (op : Wax_wasm.Ast.cmp_op) =
   match op with
   | Eq -> "="
   | Ne -> "!="
@@ -564,7 +566,7 @@ let cond_op_string (op : Wasm.Ast.cmp_op) =
   | Le -> "<="
   | Ge -> ">="
 
-let rec cond_to_string (c : Wasm.Ast.cond) =
+let rec cond_to_string (c : Wax_wasm.Ast.cond) =
   match c with
   | Cond_var v -> v.desc
   | Cond_string s -> Printf.sprintf "%S" s.desc
@@ -838,7 +840,7 @@ let rec instr prec pp (i : _ instr) =
       let n = Uchar.utf_8_byte_length c in
       let b = Bytes.create n in
       ignore (Bytes.set_utf_8_uchar b 0 c);
-      let len, s = Wasm.Output.escape_string (Bytes.to_string b) in
+      let len, s = Wax_wasm.Output.escape_string (Bytes.to_string b) in
       string pp "\'";
       string pp ~len:(Some len) s;
       string pp "\'"
@@ -848,7 +850,7 @@ let rec instr prec pp (i : _ instr) =
           type_ pp t.desc;
           operator pp "#")
         t;
-      let len, s = Wasm.Output.escape_string s in
+      let len, s = Wax_wasm.Output.escape_string s in
       string pp "\"";
       string pp ~len:(Some len) s;
       string pp "\""
@@ -950,7 +952,7 @@ let rec instr prec pp (i : _ instr) =
              operand and it attaches to the operand, ahead of the break. *)
           space pp ();
           atomic_node pp (Some op.info) (fun () -> operator pp (binop op.desc));
-          Utils.Printer.string pp.base.printer " ";
+          Wax_utils.Printer.string pp.base.printer " ";
           instr right pp i')
   | UnOp (op, i) ->
       atomic_node pp (Some op.info) (fun () -> operator pp (unop op.desc));
@@ -1189,7 +1191,8 @@ and deliminated_instr pp (i : _ instr) =
     (* Hold any deferred trailing comment so the [;] prints on the statement's
        line, ahead of the comment ([expr; // c] rather than [expr // c] then a
        lone [;] on the next line). *)
-    Utils.Printer.with_held_eol pp.base.printer (fun () -> punctuation pp ";"))
+    Wax_utils.Printer.with_held_eol pp.base.printer (fun () ->
+        punctuation pp ";"))
 
 and block_contents pp (l : _ instr list) =
   (* A non-empty block always breaks across lines (rustfmt never keeps a block
@@ -1263,7 +1266,7 @@ let print_attr_prefix pp attributes_list content_fn =
       content_fn ())
 
 let print_data_bytes pp s =
-  let len, s = Wasm.Output.escape_string s in
+  let len, s = Wax_wasm.Output.escape_string s in
   string pp "\"";
   string pp ~len:(Some len) s;
   string pp "\""
@@ -1360,12 +1363,12 @@ let rec modulefield pp field =
                     (fun (mi, ma) ->
                       space pp ();
                       punctuation pp "[";
-                      constant pp (Utils.Uint64.to_string mi);
+                      constant pp (Wax_utils.Uint64.to_string mi);
                       Option.iter
                         (fun m ->
                           punctuation pp ",";
                           space pp ();
-                          constant pp (Utils.Uint64.to_string m))
+                          constant pp (Wax_utils.Uint64.to_string m))
                         ma;
                       punctuation pp "]")
                     limits);
@@ -1422,12 +1425,12 @@ let rec modulefield pp field =
                 (fun (mi, ma) ->
                   space pp ();
                   punctuation pp "[";
-                  constant pp (Utils.Uint64.to_string mi);
+                  constant pp (Wax_utils.Uint64.to_string mi);
                   Option.iter
                     (fun m ->
                       punctuation pp ",";
                       space pp ();
-                      constant pp (Utils.Uint64.to_string m))
+                      constant pp (Wax_utils.Uint64.to_string m))
                     ma;
                   punctuation pp "]")
                 limits;
@@ -1513,19 +1516,19 @@ let module_ ?(color = Auto) ?out_channel ?(tail = []) ?collect printer ~trivia
     (l : location module_) =
   (* [collect] marks the dry trivia-collection traversal; time the real emit
      only, so a single "output" timing is reported. *)
-  Utils.Debug.timed_if (collect = None) "output" @@ fun () ->
+  Wax_utils.Debug.timed_if (collect = None) "output" @@ fun () ->
   let use_color = should_use_color ~color ~out_channel in
   let theme = get_theme use_color in
   let pp =
     {
-      base = Utils.Styled_printer.create ~printer ~theme ?collect ~trivia ();
+      base = Wax_utils.Styled_printer.create ~printer ~theme ?collect ~trivia ();
       locate = (fun l -> Some l);
     }
   in
   hvbox pp (fun () -> list ~sep:space modulefield pp l);
   (* Trailing comments owned by no node. Drop trailing blank lines so the file
      does not end with spurious blank lines. *)
-  let tail = Utils.Trivia.drop_trailing_blank_lines tail in
+  let tail = Wax_utils.Trivia.drop_trailing_blank_lines tail in
   print_trivia pp tail
 
 (* Context for printing AST fragments in diagnostics: no trivia, no location
@@ -1535,7 +1538,8 @@ let diagnostic_ctx printer =
   let theme = get_theme use_color in
   {
     base =
-      Utils.Styled_printer.create ~printer ~theme ~trivia:(Hashtbl.create 0) ();
+      Wax_utils.Styled_printer.create ~printer ~theme ~trivia:(Hashtbl.create 0)
+        ();
     locate = (fun _ -> None);
   }
 

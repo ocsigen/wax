@@ -31,15 +31,15 @@ Explicit types?
 *)
 
 open Ast
-module Cond = Wasm.Cond_solver
+module Cond = Wax_wasm.Cond_solver
 
 type typed_module_annotation = Ast.storagetype option array * Ast.location
 
 module Output = struct
   include Output
 
-  let valtype f t = Utils.Printer.run f (fun pp -> Output.valtype pp t)
-  let instr f i = Utils.Printer.run f (fun pp -> Output.instr pp i)
+  let valtype f t = Wax_utils.Printer.run f (fun pp -> Output.valtype pp t)
+  let instr f i = Wax_utils.Printer.run f (fun pp -> Output.instr pp i)
 end
 
 module UnionFind = struct
@@ -74,8 +74,8 @@ module UnionFind = struct
     root.state <- Root new_val
 end
 
-module Internal = Wasm.Ast.Binary.Types
-module Simd = Wasm.Simd
+module Internal = Wax_wasm.Ast.Binary.Types
+module Simd = Wax_wasm.Simd
 
 type inferred_valtype = { typ : valtype; internal : Internal.valtype }
 
@@ -101,7 +101,7 @@ let output_inferred_type f ty =
   | Valtype ty -> Output.valtype f ty.typ
 
 module Error = struct
-  open Utils
+  open Wax_utils
 
   let print_name f x = Format.fprintf f "'%s'" x.desc
 
@@ -118,7 +118,7 @@ module Error = struct
 
   (* Warnings share the same envelope as [report] but with severity [Warning],
      so they are printed without aborting the pass. [warning] names the warning
-     so its level can be configured (see {!Utils.Warning}). *)
+     so its level can be configured (see {!Wax_utils.Warning}). *)
   let warn ?warning ?universal ?hint ?related context ~location fmt =
     Format.kdprintf
       (fun msg ->
@@ -131,8 +131,8 @@ module Error = struct
   (* A local declared by a [let] but never read. Prefix its name with [_] to
      silence the warning. *)
   let unused_local context ~location name =
-    warn ~warning:Utils.Warning.Unused_local ~universal:true context ~location
-      "The local variable %a is never used." print_name name
+    warn ~warning:Wax_utils.Warning.Unused_local ~universal:true context
+      ~location "The local variable %a is never used." print_name name
 
   let empty_stack context ~location =
     report context ~location "The stack is empty."
@@ -307,7 +307,7 @@ module Error = struct
 
   let memory_offset_too_large context ~location max_offset =
     report context ~location "The memory offset should be less than 0x%Lx."
-      (Utils.Uint64.to_int64 max_offset)
+      (Wax_utils.Uint64.to_int64 max_offset)
 
   let memory_align_too_large context ~location natural =
     report context ~location
@@ -322,7 +322,7 @@ module Error = struct
   let limit_too_large context ~location kind max =
     report context ~location
       "The %s size is too large. It should be less than 0x%Lx." kind
-      (Utils.Uint64.to_int64 max)
+      (Wax_utils.Uint64.to_int64 max)
 
   let limit_mismatch context ~location kind =
     report context ~location
@@ -486,7 +486,7 @@ module Tbl = struct
     | Some _ as r -> r
     | None ->
         let suggestions =
-          Utils.Spell_check.f
+          Wax_utils.Spell_check.f
             (fun f -> Hashtbl.iter (fun k _ -> f k) env.tbl)
             x.desc
         in
@@ -509,7 +509,7 @@ end
 type types = (int * subtype) Tbl.t
 
 type type_context = {
-  internal_types : Wasm.Types.t;
+  internal_types : Wax_wasm.Types.t;
   types : (int * subtype) Tbl.t;
 }
 
@@ -666,7 +666,7 @@ let add_type d ctx ty =
       Array.iter (fun elt -> Tbl.remove ctx.types (fst elt.desc)) ty;
       None
   | Some ity ->
-      let i' = Wasm.Types.add_rectype ctx.internal_types ity in
+      let i' = Wax_wasm.Types.add_rectype ctx.internal_types ity in
       Array.iteri
         (fun i elt ->
           let name, (typ : subtype) = elt.desc in
@@ -675,9 +675,9 @@ let add_type d ctx ty =
       Some i'
 
 type module_context = {
-  diagnostics : Utils.Diagnostic.context;
+  diagnostics : Wax_utils.Diagnostic.context;
   type_context : type_context;
-  subtyping_info : Wasm.Types.subtyping_info;
+  subtyping_info : Wax_wasm.Types.subtyping_info;
   types : (int * subtype) Tbl.t;
   functions : (int * string) Tbl.t;
   globals : (*mutable:*) (bool * inferred_valtype option) Tbl.t;
@@ -830,26 +830,26 @@ let storage_subtype ctx ty ty' =
       Option.value ~default:true (* Do not generate a spurious error *)
         (let*@ ty = valtype ctx.diagnostics ctx.type_context ty in
          let+@ ty' = valtype ctx.diagnostics ctx.type_context ty' in
-         Wasm.Types.val_subtype ctx.subtyping_info ty ty')
+         Wax_wasm.Types.val_subtype ctx.subtyping_info ty ty')
   | Packed I8, Packed I16
   | Packed I16, Packed I8
   | Packed _, Value _
   | Value _, Packed _ ->
       false
 
-let storage_subtype' ctx (ty : Wasm.Ast.Binary.storagetype)
-    (ty' : Wasm.Ast.Binary.storagetype) =
+let storage_subtype' ctx (ty : Wax_wasm.Ast.Binary.storagetype)
+    (ty' : Wax_wasm.Ast.Binary.storagetype) =
   match (ty, ty') with
   | Packed I8, Packed I8 | Packed I16, Packed I16 -> true
-  | Value ty, Value ty' -> Wasm.Types.val_subtype ctx.subtyping_info ty ty'
+  | Value ty, Value ty' -> Wax_wasm.Types.val_subtype ctx.subtyping_info ty ty'
   | Packed I8, Packed I16
   | Packed I16, Packed I8
   | Packed _, Value _
   | Value _, Packed _ ->
       false
 
-let field_subtype info (ty : Wasm.Ast.Binary.fieldtype)
-    (ty' : Wasm.Ast.Binary.fieldtype) =
+let field_subtype info (ty : Wax_wasm.Ast.Binary.fieldtype)
+    (ty' : Wax_wasm.Ast.Binary.fieldtype) =
   ty.mut = ty'.mut
   && storage_subtype' info ty.typ ty'.typ
   && ((not ty.mut) || storage_subtype' info ty'.typ ty.typ)
@@ -866,7 +866,7 @@ let subtype ctx ty ty' =
   let ity' = UnionFind.find ty' in
   match (ity, ity') with
   | Valtype ty, Valtype ty' ->
-      Wasm.Types.val_subtype ctx.subtyping_info ty.internal ty'.internal
+      Wax_wasm.Types.val_subtype ctx.subtyping_info ty.internal ty'.internal
   | Null, Null
   | Int, Int
   | Float, Float
@@ -938,15 +938,15 @@ let cast ctx ty ty' =
         (let*@ typ = top_heap_type ctx ty' in
          let ty' = Ref { nullable = true; typ } in
          let+@ ity' = valtype ctx.diagnostics ctx.type_context ty' in
-         Wasm.Types.val_subtype ctx.subtyping_info ity ity')
+         Wax_wasm.Types.val_subtype ctx.subtyping_info ity ity')
       ||
       (*ZZZ Replace nullable by non nullable if possible *)
       match ty' with
       | Extern ->
-          Wasm.Types.val_subtype ctx.subtyping_info ity
+          Wax_wasm.Types.val_subtype ctx.subtyping_info ity
             (Ref { nullable; typ = Any })
       | Any ->
-          Wasm.Types.val_subtype ctx.subtyping_info ity
+          Wax_wasm.Types.val_subtype ctx.subtyping_info ity
             (Ref { nullable; typ = Extern })
       | _ -> false)
   | ( (Number | Int | Float | Valtype { internal = I32 | F32 | I64 | F64; _ }),
@@ -974,7 +974,7 @@ let signed_cast ctx ty ty' =
   match (ity, ty') with
   | (Int8 | Int16), `I32 -> true
   | Valtype { internal = Ref _ as ity; _ }, `I32 ->
-      Wasm.Types.val_subtype ctx.subtyping_info ity
+      Wax_wasm.Types.val_subtype ctx.subtyping_info ity
         (Ref { nullable = true; typ = Any })
   | Null, `I32 ->
       UnionFind.set ty
@@ -1131,7 +1131,7 @@ let with_empty_stack ctx ~kind:_ ~location f =
           let related =
             List.map
               (fun location ->
-                { Utils.Diagnostic.location; message = (fun _ () -> ()) })
+                { Wax_utils.Diagnostic.location; message = (fun _ () -> ()) })
               rest
           in
           Error.leftover_values ctx.diagnostics ~location ~related
@@ -1158,7 +1158,9 @@ let check_elem_subtype ctx ~location ~src ~dst =
     (internalize_valtype ctx (Ref src), internalize_valtype ctx (Ref dst))
   with
   | Some s, Some d ->
-      if not (Wasm.Types.val_subtype ctx.subtyping_info s.internal d.internal)
+      if
+        not
+          (Wax_wasm.Types.val_subtype ctx.subtyping_info s.internal d.internal)
       then
         Error.incompatible_element_type ctx.diagnostics ~location
           (UnionFind.make (Valtype s))
@@ -1183,7 +1185,7 @@ let branch_target ctx label =
     match l with
     | [] ->
         let suggestions =
-          Utils.Spell_check.f
+          Wax_utils.Spell_check.f
             (fun f ->
               List.iter (fun (l, _) -> Option.iter f l) ctx.control_types)
             label.desc
@@ -1202,7 +1204,7 @@ let branch_target ctx label =
    - [Set] assigns, so a local or a mutable global;
    - [Tee] only ever targets a local. *)
 let get_suggestions ctx name =
-  Utils.Spell_check.f
+  Wax_utils.Spell_check.f
     (fun f ->
       StringMap.iter (fun k _ -> f k) ctx.locals;
       Tbl.iter ctx.globals (fun k _ -> f k);
@@ -1210,14 +1212,16 @@ let get_suggestions ctx name =
     name
 
 let set_suggestions ctx name =
-  Utils.Spell_check.f
+  Wax_utils.Spell_check.f
     (fun f ->
       StringMap.iter (fun k _ -> f k) ctx.locals;
       Tbl.iter ctx.globals (fun k (mut, _) -> if mut then f k))
     name
 
 let local_suggestions ctx name =
-  Utils.Spell_check.f (fun f -> StringMap.iter (fun k _ -> f k) ctx.locals) name
+  Wax_utils.Spell_check.f
+    (fun f -> StringMap.iter (fun k _ -> f k) ctx.locals)
+    name
 
 (* A name in value position resolves, in order, to a local, then a global, then
    a function (as a non-null reference); [Get]/[Set]/[Tee] share this ladder and
@@ -1365,8 +1369,8 @@ let rec is_null_initializer (i : _ instr) =
   | _ -> false
 
 let valtype_equal ctx (a : inferred_valtype) (b : inferred_valtype) =
-  Wasm.Types.val_subtype ctx.subtyping_info a.internal b.internal
-  && Wasm.Types.val_subtype ctx.subtyping_info b.internal a.internal
+  Wax_wasm.Types.val_subtype ctx.subtyping_info a.internal b.internal
+  && Wax_wasm.Types.val_subtype ctx.subtyping_info b.internal a.internal
 
 (* Bidirectional checking helpers (see [check] below).
 
@@ -1500,9 +1504,9 @@ let missing_else_ok ctx params results =
 let cont_functype ctx (h : Internal.heaptype) : Internal.functype option =
   match h with
   | Type ty -> (
-      match (Wasm.Types.get_subtype ctx.subtyping_info ty).typ with
+      match (Wax_wasm.Types.get_subtype ctx.subtyping_info ty).typ with
       | Cont ft -> (
-          match (Wasm.Types.get_subtype ctx.subtyping_info ft).typ with
+          match (Wax_wasm.Types.get_subtype ctx.subtyping_info ft).typ with
           | Func f -> Some f
           | Struct _ | Array _ | Cont _ -> None)
       | Func _ | Struct _ | Array _ -> None)
@@ -1515,11 +1519,11 @@ let functype_matches info (ft : Internal.functype) (ft' : Internal.functype) =
   && Array.length ft.results = Array.length ft'.results
   && Array.for_all Fun.id
        (Array.mapi
-          (fun i p -> Wasm.Types.val_subtype info ft'.params.(i) p)
+          (fun i p -> Wax_wasm.Types.val_subtype info ft'.params.(i) p)
           ft.params)
   && Array.for_all Fun.id
        (Array.mapi
-          (fun i r -> Wasm.Types.val_subtype info r ft'.results.(i))
+          (fun i r -> Wax_wasm.Types.val_subtype info r ft'.results.(i))
           ft.results)
 
 (* A source function type with its parameter and result types resolved to their
@@ -1585,7 +1589,7 @@ let check_resume_handlers ctx ~result_types handlers =
                       (internalize_valtype ctx t, internal_of_inferred ts'.(i))
                     with
                     | Some it, Some it' ->
-                        if not (Wasm.Types.val_subtype info it.internal it')
+                        if not (Wax_wasm.Types.val_subtype info it.internal it')
                         then mismatch ()
                     | _ -> ())
                   ts3;
@@ -1921,11 +1925,13 @@ let mem_natural_align meth =
 (* The unsigned integer denoted by a constant literal argument, if any. *)
 let int_literal a =
   match a.Ast.desc with
-  | Ast.Int s -> ( try Some (Utils.Uint64.of_string s) with _ -> None)
+  | Ast.Int s -> ( try Some (Wax_utils.Uint64.of_string s) with _ -> None)
   | _ -> None
 
-let max_offset_i32_exclusive = Utils.Uint64.of_string "0x1_0000_0000" (* 2^32 *)
-let max_align = Utils.Uint64.of_int 16
+let max_offset_i32_exclusive =
+  Wax_utils.Uint64.of_string "0x1_0000_0000" (* 2^32 *)
+
+let max_align = Wax_utils.Uint64.of_int 16
 
 (* Validate the trailing [align]/[offset] literals of a memory access against
    the access's natural alignment (in bytes) and the address type. Mirrors
@@ -1935,28 +1941,31 @@ let check_memarg ctx ~address_type ~natural ~align ~offset =
   (let>@ offset = offset in
    let>@ o = int_literal offset in
    if
-     address_type = `I32 && Utils.Uint64.compare o max_offset_i32_exclusive >= 0
+     address_type = `I32
+     && Wax_utils.Uint64.compare o max_offset_i32_exclusive >= 0
    then
      Error.memory_offset_too_large ctx.diagnostics ~location:(snd offset.info)
        max_offset_i32_exclusive);
   let>@ align = align in
   let>@ a = int_literal align in
-  if Utils.Uint64.compare a max_align > 0 || Utils.Uint64.to_int a > natural
+  if
+    Wax_utils.Uint64.compare a max_align > 0
+    || Wax_utils.Uint64.to_int a > natural
   then
     Error.memory_align_too_large ctx.diagnostics ~location:(snd align.info)
       natural
   else
-    match Utils.Uint64.to_int a with
+    match Wax_utils.Uint64.to_int a with
     | 1 | 2 | 4 | 8 | 16 -> ()
     | _ -> Error.bad_memory_align ctx.diagnostics ~location:(snd align.info)
 
 let max_memory_size = function
-  | `I32 -> Utils.Uint64.of_int 65536
-  | `I64 -> Utils.Uint64.of_string "0x1_0000_0000_0000"
+  | `I32 -> Wax_utils.Uint64.of_int 65536
+  | `I64 -> Wax_utils.Uint64.of_string "0x1_0000_0000_0000"
 
 let max_table_size = function
-  | `I32 -> Utils.Uint64.of_string "0xffff_ffff"
-  | `I64 -> Utils.Uint64.of_string "0xffff_ffff_ffff_ffff"
+  | `I32 -> Wax_utils.Uint64.of_string "0xffff_ffff"
+  | `I64 -> Wax_utils.Uint64.of_string "0xffff_ffff_ffff_ffff"
 
 (* Validate a memory/table size limit. Mirrors [Validation.limits]. *)
 let check_limits ctx ~location kind address_type limits max_fn =
@@ -1966,12 +1975,12 @@ let check_limits ctx ~location kind address_type limits max_fn =
       let max = max_fn address_type in
       match ma with
       | None ->
-          if Utils.Uint64.compare mi max > 0 then
+          if Wax_utils.Uint64.compare mi max > 0 then
             Error.limit_too_large ctx.diagnostics ~location kind max
       | Some ma ->
-          if Utils.Uint64.compare mi ma > 0 then
+          if Wax_utils.Uint64.compare mi ma > 0 then
             Error.limit_mismatch ctx.diagnostics ~location kind;
-          if Utils.Uint64.compare ma max > 0 then
+          if Wax_utils.Uint64.compare ma max > 0 then
             Error.limit_too_large ctx.diagnostics ~location kind max)
 
 (* Management methods shared by memories and tables, dispatched by the receiver
@@ -2832,7 +2841,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                 | Valtype { internal = Ref _ as ty; _ } ->
                     if
                       not
-                        (Wasm.Types.val_subtype ctx.subtyping_info ty
+                        (Wax_wasm.Types.val_subtype ctx.subtyping_info ty
                            (Ref { nullable = true; typ = Eq }))
                     then mismatch ()
                 | Null ->
@@ -2899,22 +2908,22 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                     Valtype { internal = Ref _ as ty2; _ } ) ->
                     if
                       not
-                        (Wasm.Types.val_subtype ctx.subtyping_info ty1
+                        (Wax_wasm.Types.val_subtype ctx.subtyping_info ty1
                            (Ref { nullable = true; typ = Eq })
-                        && Wasm.Types.val_subtype ctx.subtyping_info ty2
+                        && Wax_wasm.Types.val_subtype ctx.subtyping_info ty2
                              (Ref { nullable = true; typ = Eq }))
                     then mismatch ()
                 | Valtype { internal = Ref _ as typ1; _ }, Null ->
                     if
                       not
-                        (Wasm.Types.val_subtype ctx.subtyping_info typ1
+                        (Wax_wasm.Types.val_subtype ctx.subtyping_info typ1
                            (Ref { nullable = true; typ = Eq }))
                     then mismatch ();
                     UnionFind.merge ty1 ty2 (UnionFind.find ty2)
                 | Null, Valtype { internal = Ref _ as typ2; _ } ->
                     if
                       not
-                        (Wasm.Types.val_subtype ctx.subtyping_info typ2
+                        (Wax_wasm.Types.val_subtype ctx.subtyping_info typ2
                            (Ref { nullable = true; typ = Eq }))
                     then mismatch ();
                     UnionFind.merge ty1 ty2 (UnionFind.find ty2)
@@ -3410,7 +3419,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
             && Array.for_all Fun.id
                  (Array.mapi
                     (fun i t ->
-                      Wasm.Types.val_subtype ctx.subtyping_info t b.(i))
+                      Wax_wasm.Types.val_subtype ctx.subtyping_info t b.(i))
                     a)
         | _ -> true
       in
@@ -3622,7 +3631,7 @@ and type_simd_mem_method_call ctx i func recv memname meth args =
      let>@ lane = List.nth_opt args' nstack in
      let>@ l = int_literal lane in
      let max_lane = 16 / mop.m_nat_align in
-     if Utils.Uint64.to_int l >= max_lane then
+     if Wax_utils.Uint64.to_int l >= max_lane then
        Error.invalid_lane_index ctx.diagnostics ~location:(snd lane.info)
          max_lane);
   check_memarg ctx ~address_type ~natural:mop.m_nat_align
@@ -3950,7 +3959,7 @@ and type_simd_vector_op_call ctx i func recv meth args =
               ~location:(snd a.info));
         let>@ bound = lane_bound in
         let>@ l = int_literal a in
-        if Utils.Uint64.to_int l >= bound then
+        if Wax_utils.Uint64.to_int l >= bound then
           Error.invalid_lane_index ctx.diagnostics ~location:(snd a.info) bound)
       else
         let operand = 1 + (k - nimm) in
@@ -4863,12 +4872,12 @@ and block ctx loc label params results br_params block =
 let check_type_definitions ctx =
   (*ZZZ In-order check? *)
   Tbl.iter ctx.types (fun _ (i, (st : subtype)) ->
-      let ty = Wasm.Types.get_subtype ctx.subtyping_info i in
+      let ty = Wax_wasm.Types.get_subtype ctx.subtyping_info i in
       (* A continuation type must wrap a function type. Point at the wrapped
          type as the source wrote it. *)
       (match (ty.typ, st.typ) with
       | Cont ft, Cont src_ref -> (
-          match (Wasm.Types.get_subtype ctx.subtyping_info ft).typ with
+          match (Wax_wasm.Types.get_subtype ctx.subtyping_info ft).typ with
           | Func _ -> ()
           | Struct _ | Array _ | Cont _ ->
               Error.expected_func_type ctx.diagnostics ~location:src_ref.info)
@@ -4879,7 +4888,7 @@ let check_type_definitions ctx =
       | None, _ | _, None -> ()
       | Some j, Some sup ->
           let location = sup.info in
-          let ty' = Wasm.Types.get_subtype ctx.subtyping_info j in
+          let ty' = Wax_wasm.Types.get_subtype ctx.subtyping_info j in
           if ty'.final then Error.final_supertype ctx.diagnostics ~location sup
           else
             let valid_subtype =
@@ -4890,11 +4899,11 @@ let check_type_definitions ctx =
                   && Array.length results = Array.length results'
                   && Array.for_all2
                        (fun p p' ->
-                         Wasm.Types.val_subtype ctx.subtyping_info p' p)
+                         Wax_wasm.Types.val_subtype ctx.subtyping_info p' p)
                        params params'
                   && Array.for_all2
                        (fun r r' ->
-                         Wasm.Types.val_subtype ctx.subtyping_info r r')
+                         Wax_wasm.Types.val_subtype ctx.subtyping_info r r')
                        results results'
               | Struct fields, Struct fields' ->
                   Array.length fields' <= Array.length fields
@@ -4906,7 +4915,7 @@ let check_type_definitions ctx =
                   loop 0
               | Array field, Array field' -> field_subtype ctx field field'
               | Cont ft, Cont ft' ->
-                  Wasm.Types.heap_subtype ctx.subtyping_info (Type ft)
+                  Wax_wasm.Types.heap_subtype ctx.subtyping_info (Type ft)
                     (Type ft')
               | Func _, (Struct _ | Array _ | Cont _)
               | Struct _, (Func _ | Array _ | Cont _)
@@ -4956,7 +4965,7 @@ let rec check_constant_instruction ctx i =
         match (UnionFind.find (expression_type ctx i') : inferred_type) with
         | Valtype { internal; _ } ->
             not
-              (Wasm.Types.val_subtype ctx.subtyping_info internal
+              (Wax_wasm.Types.val_subtype ctx.subtyping_info internal
                  (Ref { nullable; typ = Any }))
         | _ -> true
       then Error.constant_expression_required ctx.diagnostics ~location
@@ -4967,7 +4976,7 @@ let rec check_constant_instruction ctx i =
         match (UnionFind.find (expression_type ctx i') : inferred_type) with
         | Valtype { internal; _ } ->
             not
-              (Wasm.Types.val_subtype ctx.subtyping_info internal
+              (Wax_wasm.Types.val_subtype ctx.subtyping_info internal
                  (Ref { nullable; typ = Extern }))
         | _ -> true
       then Error.constant_expression_required ctx.diagnostics ~location
@@ -5042,7 +5051,7 @@ let rec globals ctx fields =
                   | Some (_, at) -> at
                   | None ->
                       let suggestions =
-                        Utils.Spell_check.f
+                        Wax_utils.Spell_check.f
                           (fun f -> Tbl.iter ctx.memories (fun k _ -> f k))
                           mem.desc
                       in
@@ -5064,7 +5073,7 @@ let rec globals ctx fields =
                   | Some (at, _) -> at
                   | None ->
                       let suggestions =
-                        Utils.Spell_check.f
+                        Wax_utils.Spell_check.f
                           (fun f -> Tbl.iter ctx.tables (fun k _ -> f k))
                           tab.desc
                       in
@@ -5436,7 +5445,7 @@ let type_configuration ?(warn_unused = false) ~simplify diagnostics fields =
   let cond_env = Cond.create () in
   let type_context =
     {
-      internal_types = Wasm.Types.create ();
+      internal_types = Wax_wasm.Types.create ();
       types = Tbl.make (Namespace.make cond) "type";
     }
   in
@@ -5490,7 +5499,7 @@ let type_configuration ?(warn_unused = false) ~simplify diagnostics fields =
     {
       diagnostics;
       type_context;
-      subtyping_info = Wasm.Types.subtyping_info type_context.internal_types;
+      subtyping_info = Wax_wasm.Types.subtyping_info type_context.internal_types;
       types = type_context.types;
       structs_by_fields;
       functions = Tbl.make namespace "function";
@@ -5612,7 +5621,7 @@ let type_configuration ?(warn_unused = false) ~simplify diagnostics fields =
   let ctx =
     {
       ctx with
-      subtyping_info = Wasm.Types.subtyping_info type_context.internal_types;
+      subtyping_info = Wax_wasm.Types.subtyping_info type_context.internal_types;
       (* Only imports are registered at this point; snapshot them as the global
          scope visible to table initializers. *)
       import_globals = { ctx.globals with tbl = Hashtbl.copy ctx.globals.tbl };
@@ -5725,7 +5734,7 @@ let rec field_has_conditional (f : (_ modulefield, _) annotated) =
    into). For an undetermined conditional, select [then], [enqueue] the [else]
    configuration, and [record] the chosen literal. *)
 let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
-  let module S = Wasm.Cond_solver in
+  let module S = Wax_wasm.Cond_solver in
   (* Resolve one conditional and return both the specialized branch and the
      assumption that holds afterwards. Each branch is taken only if it is
      reachable under [asm] (its conjunction with the branch condition is
@@ -5957,7 +5966,7 @@ let rec check_let_in_conditionals diagnostics (i : (_ instr_desc, _) annotated)
   List.iter (check_let_in_conditionals diagnostics) (sub_instrs i)
 
 let f ?(simplify = false) ?(warn_unused = false) diagnostics fields =
-  Utils.Debug.timed "type-check" @@ fun () ->
+  Wax_utils.Debug.timed "type-check" @@ fun () ->
   Ast_utils.iter_fields
     (fun (field : (_ modulefield, _) annotated) ->
       match field.desc with
@@ -5972,10 +5981,10 @@ let f ?(simplify = false) ?(warn_unused = false) diagnostics fields =
     (* Check every reachable configuration: each is specialized to be
        conditional-free and typed independently, so a diagnostic is reported
        once with the assumption under which it is reachable. *)
-    Wasm.Cond_explore.check_all diagnostics
+    Wax_wasm.Cond_explore.check_all diagnostics
       ?truncation_location:
         (match fields with hd :: _ -> Some hd.info | [] -> None)
-      ~explain:(fun env c -> Wasm.Cond_solver.explain env ~style:`Wax c)
+      ~explain:(fun env c -> Wax_wasm.Cond_solver.explain env ~style:`Wax c)
       ~specialize:(fun env asm ~enqueue ~record ->
         specialize_fields env diagnostics ~enqueue ~record asm fields)
       ~check:(fun ctx m ->
@@ -5986,7 +5995,7 @@ let f ?(simplify = false) ?(warn_unused = false) diagnostics fields =
        [type_configuration] resolves names per branch (condition-aware tables),
        so each branch is typed under its own assumption. Diagnostics are
        discarded — the exploration above did the real checking. *)
-    type_configuration ~simplify (Utils.Diagnostic.collector ()) fields
+    type_configuration ~simplify (Wax_utils.Diagnostic.collector ()) fields
   end
 
 let erase_types m =

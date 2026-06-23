@@ -9,7 +9,7 @@
     Used by both the WAT validator and the Wax type-checker. *)
 
 val check_all :
-  Utils.Diagnostic.context ->
+  Wax_utils.Diagnostic.context ->
   ?truncation_location:Ast.location ->
   ?explain:(Cond_solver.env -> Cond_solver.t -> string option) ->
   specialize:
@@ -18,7 +18,7 @@ val check_all :
     enqueue:(Cond_solver.t -> unit) ->
     record:(Cond_solver.t -> unit) ->
     'cfg) ->
-  check:(Utils.Diagnostic.context -> 'cfg -> unit) ->
+  check:(Wax_utils.Diagnostic.context -> 'cfg -> unit) ->
   unit ->
   unit
 (** [check_all diagnostics ?truncation_location ~specialize ~check ()]:
