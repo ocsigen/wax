@@ -32,22 +32,24 @@
 
 (func $caml_make_vect (export "caml_make_vect") (export "caml_array_make")
   (param $n (ref eq)) (param $v (ref eq)) (result (ref eq))
-  (local $sz i32) (local $f f64) (local $b (ref $block))
+  (local $sz i32) (local $fv (ref $float)) (local $f f64)
+  (local $b (ref $block))
   (local.set $sz (i31.get_s (ref.cast (ref i31) (local.get $n))))
   (if (i32.ge_u (local.get $sz) (i32.const 0xfffffff))
     (then (call $caml_invalid_argument (global.get $Array_make))))
   (if (i32.eqz (local.get $sz)) (then (return (global.get $empty_array))))
-  (drop
-    (block $not_float (result (ref eq))
-      (local.set $f
-        (struct.get $float $f
-          (br_on_cast_fail $not_float (ref eq) (ref $float) (local.get $v))))
-      ;; A float init builds an unboxed float array, which has the tighter
-      ;; size limit of the dedicated floatarray primitives, not the generic
-      ;; one checked above.
-      (if (i32.ge_u (local.get $sz) (i32.const 0x7ffffff))
-        (then (call $caml_invalid_argument (global.get $Array_make))))
-      (return (array.new $float_array (local.get $f) (local.get $sz)))))
+  (block $default
+    (local.set $fv
+      (block $arm (result (ref $float))
+        (drop (br_on_cast $arm (ref eq) (ref $float) (local.get $v)))
+        (br $default)))
+    (local.set $f (struct.get $float $f (local.get $fv)))
+    ;; A float init builds an unboxed float array, which has the tighter
+    ;; size limit of the dedicated floatarray primitives, not the generic
+    ;; one checked above.
+    (if (i32.ge_u (local.get $sz) (i32.const 0x7ffffff))
+      (then (call $caml_invalid_argument (global.get $Array_make))))
+    (return (array.new $float_array (local.get $f) (local.get $sz))))
   (local.set $b
     (array.new $block (local.get $v) (i32.add (local.get $sz) (i32.const 1))))
   (array.set $block (local.get $b) (i32.const 0) (ref.i31 (i32.const 0)))

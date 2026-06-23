@@ -227,11 +227,11 @@
   (local $i i32) (local $i1 (ref i31)) (local $i2 (ref i31))
   (local $b1 (ref $block)) (local $b2 (ref $block)) (local $t1 i32)
   (local $t2 i32) (local $s1 i32) (local $s2 i32) (local $f1 f64)
-  (local $f2 f64) (local $fa1 (ref $float_array))
-  (local $fa2 (ref $float_array)) (local $str1 (ref $bytes))
-  (local $str2 (ref $bytes)) (local $c1 (ref $custom))
-  (local $c2 (ref $custom)) (local $js1 anyref) (local $js2 anyref)
-  (local $res i32)
+  (local $f2 f64) (local $fl1 (ref $float)) (local $jsv (ref $js))
+  (local $fa1 (ref $float_array)) (local $fa2 (ref $float_array))
+  (local $str1 (ref $bytes)) (local $str2 (ref $bytes))
+  (local $c1 (ref $custom)) (local $c2 (ref $custom)) (local $js1 anyref)
+  (local $js2 anyref) (local $res i32)
   (loop $loop
     (block $next_item
       (if (local.get $total)
@@ -379,10 +379,10 @@
               (br $loop)))
           (drop
             (block $v1_not_float (result (ref eq))
-              (local.set $f1
-                (struct.get $float 0
-                  (br_on_cast_fail $v1_not_float (ref eq) (ref $float)
-                    (local.get $v1))))
+              (local.set $fl1
+                (br_on_cast_fail $v1_not_float (ref eq) (ref $float)
+                  (local.get $v1)))
+              (local.set $f1 (struct.get $float 0 (local.get $fl1)))
               (local.set $f2
                 (struct.get $float 0
                   (br_on_cast_fail $heterogeneous (ref eq) (ref $float)
@@ -486,10 +486,10 @@
           (@then
           (drop
             (block $v1_not_js (result (ref eq))
-              (local.set $js1
-                (struct.get $js 0
-                  (br_on_cast_fail $v1_not_js (ref eq) (ref $js)
-                    (local.get $v1))))
+              (local.set $jsv
+                (br_on_cast_fail $v1_not_js (ref eq) (ref $js)
+                  (local.get $v1)))
+              (local.set $js1 (struct.get $js 0 (local.get $jsv)))
               (local.set $js2
                 (struct.get $js 0
                   (br_on_cast_fail $heterogeneous (ref eq) (ref $js)

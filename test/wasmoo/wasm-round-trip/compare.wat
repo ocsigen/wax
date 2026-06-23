@@ -234,7 +234,8 @@
   (local $b1 (ref $block)) (local $t1 i32) (local $c1 (ref $custom))
   (local $s1 i32) (local $s2 i32) (local $f1 f64) (local $f2 f64)
   (local $fa1 (ref $float_array)) (local $str1 (ref $bytes))
-  (local $str2 (ref $bytes)) (local $fa2 (ref $float_array)) (local $i i32)
+  (local $fl1 (ref $float)) (local $str2 (ref $bytes))
+  (local $fa2 (ref $float_array)) (local $i i32) (local $jsv (ref $js))
   (local $js1 anyref) (local $js2 anyref)
   (loop $loop
     (block $next_item
@@ -381,39 +382,37 @@
               (local.set $v1 (array.get $block (local.get $b1) (i32.const 1)))
               (local.set $v2 (array.get $block (local.get $b2) (i32.const 1)))
               (br $loop)))
-          (drop
-            (block $v1_not_float (result (ref eq))
-              (local.set $f1
-                (struct.get $float $f
-                  (br_on_cast_fail $v1_not_float (ref eq) (ref $float)
-                    (local.get $v1))))
-              (local.set $f2
-                (struct.get $float $f
-                  (br_on_cast_fail $heterogeneous (ref eq) (ref $float)
-                    (local.get $v2))))
-              (if (f64.lt (local.get $f1) (local.get $f2))
-                (then (return (i32.const -1))))
-              (if (f64.gt (local.get $f1) (local.get $f2))
-                (then (return (i32.const 1))))
-              (if (f64.ne (local.get $f1) (local.get $f2))
-                (then
-                  (if (i32.eqz (local.get $total))
-                    (then (return (global.get $unordered))))
-                  (if (f64.eq (local.get $f1) (local.get $f1))
-                    (then (return (i32.const 1))))
-                  (if (f64.eq (local.get $f2) (local.get $f2))
-                    (then (return (i32.const -1))))))
-              (br $next_item)))
           (block $default
             (local.set $fa1
-              (block $arm_1 (result (ref $float_array))
+              (block $arm_2 (result (ref $float_array))
                 (local.set $str1
-                  (block $arm (result (ref $bytes))
-                    (drop
-                      (br_on_cast $arm_1 (ref eq) (ref $float_array)
-                        (br_on_cast $arm (ref eq) (ref $bytes)
-                          (local.get $v1))))
-                    (br $default)))
+                  (block $arm_1 (result (ref $bytes))
+                    (local.set $fl1
+                      (block $arm (result (ref $float))
+                        (drop
+                          (br_on_cast $arm_2 (ref eq) (ref $float_array)
+                            (br_on_cast $arm_1 (ref eq) (ref $bytes)
+                              (br_on_cast $arm (ref eq) (ref $float)
+                                (local.get $v1)))))
+                        (br $default)))
+                    (local.set $f1 (struct.get $float $f (local.get $fl1)))
+                    (local.set $f2
+                      (struct.get $float $f
+                        (br_on_cast_fail $heterogeneous (ref eq) (ref $float)
+                          (local.get $v2))))
+                    (if (f64.lt (local.get $f1) (local.get $f2))
+                      (then (return (i32.const -1))))
+                    (if (f64.gt (local.get $f1) (local.get $f2))
+                      (then (return (i32.const 1))))
+                    (if (f64.ne (local.get $f1) (local.get $f2))
+                      (then
+                        (if (i32.eqz (local.get $total))
+                          (then (return (global.get $unordered))))
+                        (if (f64.eq (local.get $f1) (local.get $f1))
+                          (then (return (i32.const 1))))
+                        (if (f64.eq (local.get $f2) (local.get $f2))
+                          (then (return (i32.const -1))))))
+                    (br $next_item)))
                 (local.set $str2
                   (br_on_cast_fail $heterogeneous (ref eq) (ref $bytes)
                     (local.get $v2)))
@@ -488,10 +487,10 @@
           (@then
           (drop
             (block $v1_not_js (result (ref eq))
-              (local.set $js1
-                (struct.get $js $js
-                  (br_on_cast_fail $v1_not_js (ref eq) (ref $js)
-                    (local.get $v1))))
+              (local.set $jsv
+                (br_on_cast_fail $v1_not_js (ref eq) (ref $js)
+                  (local.get $v1)))
+              (local.set $js1 (struct.get $js $js (local.get $jsv)))
               (local.set $js2
                 (struct.get $js $js
                   (br_on_cast_fail $heterogeneous (ref eq) (ref $js)

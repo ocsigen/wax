@@ -37,9 +37,9 @@ fn caml_make_vect(n: &eq, v: &eq) -> &eq {
     if !sz {
         return empty_array;
     }
-    _ =
-        'not_float: do &eq {
-            let f = (br_on_cast_fail 'not_float &float v).f;
+    match v {
+        fv: &float => {
+            let f = fv.f;
             // A float init builds an unboxed float array, which has the tighter
             // size limit of the dedicated floatarray primitives, not the generic
             // one checked above.
@@ -47,10 +47,13 @@ fn caml_make_vect(n: &eq, v: &eq) -> &eq {
                 caml_invalid_argument(Array_make);
             }
             return [float_array|f; sz];
-        };
-    let b: &block = [v; sz + 1];
-    b[0] = 0 as &i31;
-    b;
+        }
+        _ => {
+            let b: &block = [v; sz + 1];
+            b[0] = 0 as &i31;
+            b;
+        }
+    }
 }
 
 #[export = "caml_floatarray_make"]

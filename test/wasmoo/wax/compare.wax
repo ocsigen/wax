@@ -296,9 +296,9 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32 {
                                 };
                             let f1: f64;
                             let f2: f64;
-                            _ =
-                                'v1_not_float: do &eq {
-                                    f1 = (br_on_cast_fail 'v1_not_float &float v1).f;
+                            match v1 {
+                                fl1: &float => {
+                                    f1 = fl1.f;
                                     f2 = (br_on_cast_fail 'heterogeneous &float v2).f;
                                     if f1 < f2 {
                                         return -1;
@@ -318,8 +318,7 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32 {
                                         }
                                     }
                                     br 'next_item;
-                                };
-                            match v1 {
+                                }
                                 str1: &bytes => {
                                     let str2 = br_on_cast_fail 'heterogeneous &bytes v2;
                                     res = compare_bytes(str1, str2);
@@ -382,13 +381,15 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32 {
                                             caml_invalid_argument(abstract_value);
                                             0 as &i31;
                                         };
+                                    let jsv: &js;
                                     let js1: &?any;
                                     let js2: &?any;
                                     #[if(not(wasi))]
                                     {
                                         _ =
                                             'v1_not_js: do &eq {
-                                                js1 = (br_on_cast_fail 'v1_not_js &js v1).js;
+                                                jsv = br_on_cast_fail 'v1_not_js &js v1;
+                                                js1 = jsv.js;
                                                 js2 = (br_on_cast_fail 'heterogeneous &js v2).js;
                                                 'not_jsstring: do {
                                                     br_if 'not_jsstring !jsstring_test(js1);
