@@ -164,25 +164,19 @@ fn caml_hash(count: &eq, limit: &eq, seed: &eq, obj: &eq) -> &eq {
             let v = caml_hash_queue[rd];
             rd = rd + 1;
             'again: do {
-                _ =
-                    'not_int: do &eq {
-                        h =
-                            caml_hash_mix_int(
-                                h,
-                                ((br_on_cast_fail 'not_int &i31 v) as i32_s << 1) + 1,
-                            );
-                        num = num - 1;
-                        br 'loop;
-                    };
-                _ =
-                    'not_string: do &eq {
-                        h = caml_hash_mix_string(h, br_on_cast_fail 'not_string &bytes v);
-                        num = num - 1;
-                        br 'loop;
-                    };
                 let i: i32;
                 let len: i32;
                 match v {
+                    iv: &i31 => {
+                        h = caml_hash_mix_int(h, (iv as i32_s << 1) + 1);
+                        num = num - 1;
+                        br 'loop;
+                    }
+                    sv: &bytes => {
+                        h = caml_hash_mix_string(h, sv);
+                        num = num - 1;
+                        br 'loop;
+                    }
                     b: &block => {
                         let tg = b[0] as &i31 as i32_u;
                         if tg == forward_tag {
@@ -219,67 +213,47 @@ fn caml_hash(count: &eq, limit: &eq, seed: &eq, obj: &eq) -> &eq {
                         }
                         unreachable;
                     }
-                    _ => {
-                        _ =
-                            'not_float: do &eq {
-                                h =
-                                    caml_hash_mix_double(
-                                        h,
-                                        (br_on_cast_fail 'not_float &float v).f,
-                                    );
+                    flv: &float => {
+                        h = caml_hash_mix_double(h, flv.f);
+                        num = num - 1;
+                        br 'loop;
+                    }
+                    fa: &float_array => {
+                        // mix the elements directly, no header
+                        len = fa.length();
+                        i = 0;
+                        'fa_iter: loop {
+                            if i <u len {
+                                h = caml_hash_mix_double(h, fa[i]);
                                 num = num - 1;
-                                br 'loop;
-                            };
-                        match v {
-                            fa: &float_array => {
-                                // mix the elements directly, no header
-                                len = fa.length();
-                                i = 0;
-                                'fa_iter: loop {
-                                    if i <u len {
-                                        h = caml_hash_mix_double(h, fa[i]);
-                                        num = num - 1;
-                                        i = i + 1;
-                                        br_if 'fa_iter num >s 0;
-                                    }
-                                }
-                                br 'loop;
-                            }
-                            _ => {
-                                _ =
-                                    'not_custom: do &eq {
-                                        h =
-                                            caml_hash_mix_int(
-                                                h,
-                                                (br_on_null 'loop
-                                                     (br_on_cast_fail 'not_custom &custom
-                                                          v).ops.hash)(
-                                                    v,
-                                                ),
-                                            );
-                                        num = num - 1;
-                                        br 'loop;
-                                    };
-                                let str: &?any;
-                                #[if(not(wasi))]
-                                {
-                                    _ =
-                                        'not_jsstring: do &?any {
-                                            str = (br_on_cast_fail 'not_jsstring &js v).js;
-                                            _ =
-                                                br_if 'not_jsstring
-                                                    (0 as &i31, !jsstring_test(str));
-                                            h = jsstring_hash(h, str);
-                                            // count the string against the budget, like every other
-                                            // hashed leaf (and like the JS runtime)
-                                            num = num - 1;
-                                            0 as &i31;
-                                        };
-                                }
-                                // closures and continuations and other js values are ignored
-                                br 'loop;
+                                i = i + 1;
+                                br_if 'fa_iter num >s 0;
                             }
                         }
+                        br 'loop;
+                    }
+                    cv: &custom => {
+                        h = caml_hash_mix_int(h, (br_on_null 'loop cv.ops.hash)(v));
+                        num = num - 1;
+                        br 'loop;
+                    }
+                    _ => {
+                        let str: &?any;
+                        #[if(not(wasi))]
+                        {
+                            _ =
+                                'not_jsstring: do &?any {
+                                    str = (br_on_cast_fail 'not_jsstring &js v).js;
+                                    _ = br_if 'not_jsstring (0 as &i31, !jsstring_test(str));
+                                    h = jsstring_hash(h, str);
+                                    // count the string against the budget, like every other
+                                    // hashed leaf (and like the JS runtime)
+                                    num = num - 1;
+                                    0 as &i31;
+                                };
+                        }
+                        // closures and continuations and other js values are ignored
+                        br 'loop;
                     }
                 }
             }

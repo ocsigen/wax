@@ -184,8 +184,9 @@
   (param $obj (ref eq)) (result (ref eq))
   (local $sz i32) (local $num i32) (local $h i32) (local $rd i32)
   (local $wr i32) (local $v (ref eq)) (local $i i32) (local $len i32)
-  (local $b (ref $block)) (local $tg i32) (local $fa (ref $float_array))
-  (local $str anyref)
+  (local $cv (ref $custom)) (local $fa (ref $float_array))
+  (local $flv (ref $float)) (local $b (ref $block)) (local $sv (ref $bytes))
+  (local $iv (ref i31)) (local $tg i32) (local $str anyref)
   (local.set $sz (i31.get_u (ref.cast (ref i31) (local.get $limit))))
   (if (i32.gt_u (local.get $sz) (global.get $HASH_QUEUE_SIZE))
     (then (local.set $sz (global.get $HASH_QUEUE_SIZE))))
@@ -204,125 +205,141 @@
           (array.get $block (global.get $caml_hash_queue) (local.get $rd)))
         (local.set $rd (i32.add (local.get $rd) (i32.const 1)))
         (block $again
-          (drop
-            (block $not_int (result (ref eq))
-              (local.set $h
-                (call $caml_hash_mix_int (local.get $h)
-                  (i32.add
-                    (i32.shl
-                      (i31.get_s
-                        (br_on_cast_fail $not_int (ref eq) (ref i31)
-                          (local.get $v))) (i32.const 1)) (i32.const 1))))
-              (local.set $num (i32.sub (local.get $num) (i32.const 1)))
-              (br $loop)))
-          (drop
-            (block $not_string (result (ref eq))
-              (local.set $h
-                (call $caml_hash_mix_string (local.get $h)
-                  (br_on_cast_fail $not_string (ref eq) (ref $bytes)
-                    (local.get $v))))
-              (local.set $num (i32.sub (local.get $num) (i32.const 1)))
-              (br $loop)))
           (block $default
-            (local.set $b
-              (block $arm (result (ref $block))
-                (drop (br_on_cast $arm (ref eq) (ref $block) (local.get $v)))
-                (br $default)))
-            (local.set $tg
-              (i31.get_u
-                (ref.cast (ref i31)
-                  (array.get $block (local.get $b) (i32.const 0)))))
-            (if (i32.eq (local.get $tg) (global.get $forward_tag))
-              (then
+            (local.set $cv
+              (block $arm_5 (result (ref $custom))
+                (local.set $fa
+                  (block $arm_4 (result (ref $float_array))
+                    (local.set $flv
+                      (block $arm_3 (result (ref $float))
+                        (local.set $b
+                          (block $arm_2 (result (ref $block))
+                            (local.set $sv
+                              (block $arm_1 (result (ref $bytes))
+                                (local.set $iv
+                                  (block $arm (result (ref i31))
+                                    (drop
+                                      (br_on_cast $arm_5 (ref eq)
+                                        (ref $custom)
+                                        (br_on_cast $arm_4 (ref eq)
+                                          (ref $float_array)
+                                          (br_on_cast $arm_3 (ref eq)
+                                            (ref $float)
+                                            (br_on_cast $arm_2 (ref eq)
+                                              (ref $block)
+                                              (br_on_cast $arm_1 (ref eq)
+                                                (ref $bytes)
+                                                (br_on_cast $arm (ref eq)
+                                                  (ref i31)
+                                                  (local.get $v))))))))
+                                    (br $default)))
+                                (local.set $h
+                                  (call $caml_hash_mix_int (local.get $h)
+                                    (i32.add
+                                      (i32.shl (i31.get_s (local.get $iv))
+                                        (i32.const 1)) (i32.const 1))))
+                                (local.set $num
+                                  (i32.sub (local.get $num) (i32.const 1)))
+                                (br $loop)))
+                            (local.set $h
+                              (call $caml_hash_mix_string (local.get $h)
+                                (local.get $sv)))
+                            (local.set $num
+                              (i32.sub (local.get $num) (i32.const 1)))
+                            (br $loop)))
+                        (local.set $tg
+                          (i31.get_u
+                            (ref.cast (ref i31)
+                              (array.get $block (local.get $b)
+                                (i32.const 0)))))
+                        (if (i32.eq (local.get $tg) (global.get $forward_tag))
+                          (then
+                            (local.set $i (i32.const 0))
+                            (loop $forward
+                              (local.set $v
+                                (array.get $block (local.get $b)
+                                  (i32.const 1)))
+                              (drop
+                                (block $not_block' (result (ref eq))
+                                  (local.set $b
+                                    (br_on_cast_fail $not_block' (ref eq)
+                                      (ref $block) (local.get $v)))
+                                  (br_if $again
+                                    (i32.eqz
+                                      (ref.eq
+                                        (array.get $block (local.get $b)
+                                          (i32.const 0))
+                                        (ref.i31 (global.get $forward_tag)))))
+                                  (local.set $i
+                                    (i32.add (local.get $i) (i32.const 1)))
+                                  (br_if $loop
+                                    (i32.eq (local.get $i)
+                                      (global.get $MAX_FORWARD_DEREFERENCE)))
+                                  (br $forward)))
+                              (br $again))))
+                        (if (i32.eq (local.get $tg) (global.get $object_tag))
+                          (then
+                            (local.set $h
+                              (call $caml_hash_mix_int (local.get $h)
+                                (i31.get_s
+                                  (ref.cast (ref i31)
+                                    (array.get $block (local.get $b)
+                                      (i32.const 2))))))
+                            (br $loop)))
+                        ;; abstract tag: block contents unknown, do nothing
+                        (br_if $loop
+                          (i32.eq (local.get $tg) (global.get $abstract_tag)))
+                        (local.set $len (array.len (local.get $b)))
+                        (local.set $h
+                          (call $caml_hash_mix_int (local.get $h)
+                            (i32.or
+                              (i32.shl
+                                (i32.sub (local.get $len) (i32.const 1))
+                                (i32.const 10)) (local.get $tg))))
+                        (local.set $i (i32.const 1))
+                        (loop $block_iter
+                          (br_if $loop
+                            (i32.ge_u (local.get $i) (local.get $len)))
+                          (br_if $loop
+                            (i32.ge_u (local.get $wr) (local.get $sz)))
+                          (array.set $block (global.get $caml_hash_queue)
+                            (local.get $wr)
+                            (array.get $block (local.get $b) (local.get $i)))
+                          (local.set $wr
+                            (i32.add (local.get $wr) (i32.const 1)))
+                          (local.set $i
+                            (i32.add (local.get $i) (i32.const 1)))
+                          (br $block_iter))
+                        (unreachable)))
+                    (local.set $h
+                      (call $caml_hash_mix_double (local.get $h)
+                        (struct.get $float $f (local.get $flv))))
+                    (local.set $num (i32.sub (local.get $num) (i32.const 1)))
+                    (br $loop)))
+                ;; mix the elements directly, no header
+                (local.set $len (array.len (local.get $fa)))
                 (local.set $i (i32.const 0))
-                (loop $forward
-                  (local.set $v
-                    (array.get $block (local.get $b) (i32.const 1)))
-                  (drop
-                    (block $not_block' (result (ref eq))
-                      (local.set $b
-                        (br_on_cast_fail $not_block' (ref eq) (ref $block)
-                          (local.get $v)))
-                      (br_if $again
-                        (i32.eqz
-                          (ref.eq
-                            (array.get $block (local.get $b) (i32.const 0))
-                            (ref.i31 (global.get $forward_tag)))))
+                (loop $fa_iter
+                  (if (i32.lt_u (local.get $i) (local.get $len))
+                    (then
+                      (local.set $h
+                        (call $caml_hash_mix_double (local.get $h)
+                          (array.get $float_array (local.get $fa)
+                            (local.get $i))))
+                      (local.set $num
+                        (i32.sub (local.get $num) (i32.const 1)))
                       (local.set $i (i32.add (local.get $i) (i32.const 1)))
-                      (br_if $loop
-                        (i32.eq (local.get $i)
-                          (global.get $MAX_FORWARD_DEREFERENCE)))
-                      (br $forward)))
-                  (br $again))))
-            (if (i32.eq (local.get $tg) (global.get $object_tag))
-              (then
-                (local.set $h
-                  (call $caml_hash_mix_int (local.get $h)
-                    (i31.get_s
-                      (ref.cast (ref i31)
-                        (array.get $block (local.get $b) (i32.const 2))))))
+                      (br_if $fa_iter
+                        (i32.gt_s (local.get $num) (i32.const 0))))))
                 (br $loop)))
-            ;; abstract tag: block contents unknown, do nothing
-            (br_if $loop (i32.eq (local.get $tg) (global.get $abstract_tag)))
-            (local.set $len (array.len (local.get $b)))
             (local.set $h
               (call $caml_hash_mix_int (local.get $h)
-                (i32.or
-                  (i32.shl (i32.sub (local.get $len) (i32.const 1))
-                    (i32.const 10)) (local.get $tg))))
-            (local.set $i (i32.const 1))
-            (loop $block_iter
-              (br_if $loop (i32.ge_u (local.get $i) (local.get $len)))
-              (br_if $loop (i32.ge_u (local.get $wr) (local.get $sz)))
-              (array.set $block (global.get $caml_hash_queue) (local.get $wr)
-                (array.get $block (local.get $b) (local.get $i)))
-              (local.set $wr (i32.add (local.get $wr) (i32.const 1)))
-              (local.set $i (i32.add (local.get $i) (i32.const 1)))
-              (br $block_iter))
-            (unreachable))
-          (drop
-            (block $not_float (result (ref eq))
-              (local.set $h
-                (call $caml_hash_mix_double (local.get $h)
-                  (struct.get $float $f
-                    (br_on_cast_fail $not_float (ref eq) (ref $float)
-                      (local.get $v)))))
-              (local.set $num (i32.sub (local.get $num) (i32.const 1)))
-              (br $loop)))
-          (block $default
-            (local.set $fa
-              (block $arm (result (ref $float_array))
-                (drop
-                  (br_on_cast $arm (ref eq) (ref $float_array)
-                    (local.get $v)))
-                (br $default)))
-            ;; mix the elements directly, no header
-            (local.set $len (array.len (local.get $fa)))
-            (local.set $i (i32.const 0))
-            (loop $fa_iter
-              (if (i32.lt_u (local.get $i) (local.get $len))
-                (then
-                  (local.set $h
-                    (call $caml_hash_mix_double (local.get $h)
-                      (array.get $float_array (local.get $fa)
-                        (local.get $i))))
-                  (local.set $num (i32.sub (local.get $num) (i32.const 1)))
-                  (local.set $i (i32.add (local.get $i) (i32.const 1)))
-                  (br_if $fa_iter
-                    (i32.gt_s (local.get $num) (i32.const 0))))))
+                (call_ref $hash (local.get $v)
+                  (br_on_null $loop
+                    (struct.get $custom_operations $hash
+                      (struct.get $custom $ops (local.get $cv)))))))
+            (local.set $num (i32.sub (local.get $num) (i32.const 1)))
             (br $loop))
-          (drop
-            (block $not_custom (result (ref eq))
-              (local.set $h
-                (call $caml_hash_mix_int (local.get $h)
-                  (call_ref $hash (local.get $v)
-                    (br_on_null $loop
-                      (struct.get $custom_operations $hash
-                        (struct.get $custom $ops
-                          (br_on_cast_fail $not_custom (ref eq) (ref $custom)
-                            (local.get $v))))))))
-              (local.set $num (i32.sub (local.get $num) (i32.const 1)))
-              (br $loop)))
           (@if (not $wasi)
           (@then
           (drop
