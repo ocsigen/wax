@@ -73,35 +73,38 @@
     (block $released
       (br_if $no_data (ref.eq (local.get $d) (global.get $caml_ephe_none)))
       (@if (not $wasi)
-      (@then (local.set $i (global.get $caml_ephe_key_offset))
-      (local.set $len (array.len (local.get $x)))
-      (loop $loop
-        (if (i32.lt_u (local.get $i) (local.get $len))
-          (then
-            (local.set $v (array.get $block (local.get $x) (local.get $i)))
-            (local.set $i (i32.add (local.get $i) (i32.const 1)))
-            (br_if $loop (ref.eq (local.get $v) (global.get $caml_ephe_none)))
-            (br_if $loop (ref.test (ref i31) (local.get $v)))
-            (local.set $v
-              (br_on_null $released
-                (call $weak_deref (call $unwrap (local.get $v)))))
-            ;; The data is wrapped in weak maps only when a live
-            ;; key threads it; unwrap lazily so that JS-valued
-            ;; data with no such key (e.g. a string with an int
-            ;; key) is returned as is rather than unwrapped and
-            ;; recast -- which traps.
-            (if (i32.eqz (local.get $traversed))
+        (@then
+          (local.set $i (global.get $caml_ephe_key_offset))
+          (local.set $len (array.len (local.get $x)))
+          (loop $loop
+            (if (i32.lt_u (local.get $i) (local.get $len))
               (then
-                (local.set $traversed (i32.const 1))
+                (local.set $v
+                  (array.get $block (local.get $x) (local.get $i)))
+                (local.set $i (i32.add (local.get $i) (i32.const 1)))
+                (br_if $loop
+                  (ref.eq (local.get $v) (global.get $caml_ephe_none)))
+                (br_if $loop (ref.test (ref i31) (local.get $v)))
+                (local.set $v
+                  (br_on_null $released
+                    (call $weak_deref (call $unwrap (local.get $v)))))
+                ;; The data is wrapped in weak maps only when a live
+                ;; key threads it; unwrap lazily so that JS-valued
+                ;; data with no such key (e.g. a string with an int
+                ;; key) is returned as is rather than unwrapped and
+                ;; recast -- which traps.
+                (if (i32.eqz (local.get $traversed))
+                  (then
+                    (local.set $traversed (i32.const 1))
+                    (local.set $m
+                      (ref.as_non_null (call $unwrap (local.get $d))))))
                 (local.set $m
-                  (ref.as_non_null (call $unwrap (local.get $d))))))
-            (local.set $m
-              (br_on_null $released
-                (call $map_get (ref.as_non_null (local.get $m))
-                  (local.get $v))))
-            (br $loop))))
-      (if (local.get $traversed)
-        (then (local.set $d (ref.cast (ref eq) (local.get $m))))) ) )
+                  (br_on_null $released
+                    (call $map_get (ref.as_non_null (local.get $m))
+                      (local.get $v))))
+                (br $loop))))
+          (if (local.get $traversed)
+            (then (local.set $d (ref.cast (ref eq) (local.get $m)))))))
       (return
         (array.new_fixed $block 2 (ref.i31 (i32.const 0)) (local.get $d))))
     (array.set $block (local.get $x) (global.get $caml_ephe_data_offset)
@@ -142,26 +145,28 @@
   (local $m' (ref any)) (local $i i32)
   (local.set $x (ref.cast (ref $block) (local.get $vx)))
   (@if (not $wasi)
-  (@then (local.set $i (array.len (local.get $x)))
-  (local.set $m (local.get $dat))
-  (loop $loop
-    (local.set $i (i32.sub (local.get $i) (i32.const 1)))
-    (if (i32.ge_u (local.get $i) (global.get $caml_ephe_key_offset))
-      (then
-        (local.set $v (array.get $block (local.get $x) (local.get $i)))
-        (br_if $loop (ref.eq (local.get $v) (global.get $caml_ephe_none)))
-        (br_if $loop (ref.test (ref i31) (local.get $v)))
-        (block $released
-          (local.set $v
-            (br_on_null $released
-              (call $weak_deref (call $unwrap (local.get $v)))))
-          (local.set $m' (call $weak_map_new))
-          (call $map_set (local.get $m') (local.get $v) (local.get $m))
-          (local.set $m (local.get $m'))
-          (br $loop))
-        (array.set $block (local.get $x) (local.get $i)
-          (global.get $caml_ephe_none))
-        (br $loop)))) (local.set $dat (call $wrap (local.get $m))) ) )
+    (@then
+      (local.set $i (array.len (local.get $x)))
+      (local.set $m (local.get $dat))
+      (loop $loop
+        (local.set $i (i32.sub (local.get $i) (i32.const 1)))
+        (if (i32.ge_u (local.get $i) (global.get $caml_ephe_key_offset))
+          (then
+            (local.set $v (array.get $block (local.get $x) (local.get $i)))
+            (br_if $loop (ref.eq (local.get $v) (global.get $caml_ephe_none)))
+            (br_if $loop (ref.test (ref i31) (local.get $v)))
+            (block $released
+              (local.set $v
+                (br_on_null $released
+                  (call $weak_deref (call $unwrap (local.get $v)))))
+              (local.set $m' (call $weak_map_new))
+              (call $map_set (local.get $m') (local.get $v) (local.get $m))
+              (local.set $m (local.get $m'))
+              (br $loop))
+            (array.set $block (local.get $x) (local.get $i)
+              (global.get $caml_ephe_none))
+            (br $loop))))
+      (local.set $dat (call $wrap (local.get $m)))))
   (array.set $block (local.get $x) (global.get $caml_ephe_data_offset)
     (local.get $dat))
   (ref.i31 (i32.const 0))

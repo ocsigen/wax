@@ -674,15 +674,16 @@
       (call $unregister_channel (local.get $ch))
       (call $release_fd_offset (local.get $fd))
       (@if $wasi
-      (@then (local.set $res (call $fd_close (local.get $fd)))
-      (call $caml_handle_sys_error_if (ref.i31 (i32.const 0))
-        (local.get $res)) )
-      (@else
-      (try
-        (do (call $close (local.get $fd)))
-        (catch $javascript_exception
-          ;; ignore exception
-          (drop))) ) )))
+        (@then
+          (local.set $res (call $fd_close (local.get $fd)))
+          (call $caml_handle_sys_error_if (ref.i31 (i32.const 0))
+            (local.get $res)))
+        (@else
+          (try
+            (do (call $close (local.get $fd)))
+            (catch $javascript_exception
+              ;; ignore exception
+              (drop)))))))
   (ref.i31 (i32.const 0))
 )
 
@@ -717,28 +718,31 @@
   (local $n i32)
   (local.set $fd (struct.get $channel $fd (local.get $ch)))
   (@if $wasi
-  (@then
-  (local.set $n
-    (call $read (local.get $fd) (struct.get $channel $buffer (local.get $ch))
-      (local.get $pos) (local.get $len))) )
-  (@else (local.set $fd_offset (call $get_fd_offset (local.get $fd)))
-  (local.set $offset (struct.get $fd_offset $offset (local.get $fd_offset)))
-  (try
-    (do
+    (@then
       (local.set $n
-        (if (result i32)
-          (struct.get $fd_offset $seeked (local.get $fd_offset))
-          (then
-            (call $read (local.get $fd)
-              (struct.get $channel $buffer (local.get $ch)) (local.get $pos)
-              (local.get $len) (local.get $offset)))
-          (else
-            (call $read' (local.get $fd)
-              (struct.get $channel $buffer (local.get $ch)) (local.get $pos)
-              (local.get $len) (ref.null noextern))))))
-    (catch $javascript_exception (call $caml_handle_sys_error)))
-  (struct.set $fd_offset $offset (local.get $fd_offset)
-    (i64.add (local.get $offset) (i64.extend_i32_u (local.get $n)))) ) )
+        (call $read (local.get $fd)
+          (struct.get $channel $buffer (local.get $ch)) (local.get $pos)
+          (local.get $len))))
+    (@else
+      (local.set $fd_offset (call $get_fd_offset (local.get $fd)))
+      (local.set $offset
+        (struct.get $fd_offset $offset (local.get $fd_offset)))
+      (try
+        (do
+          (local.set $n
+            (if (result i32)
+              (struct.get $fd_offset $seeked (local.get $fd_offset))
+              (then
+                (call $read (local.get $fd)
+                  (struct.get $channel $buffer (local.get $ch))
+                  (local.get $pos) (local.get $len) (local.get $offset)))
+              (else
+                (call $read' (local.get $fd)
+                  (struct.get $channel $buffer (local.get $ch))
+                  (local.get $pos) (local.get $len) (ref.null noextern))))))
+        (catch $javascript_exception (call $caml_handle_sys_error)))
+      (struct.set $fd_offset $offset (local.get $fd_offset)
+        (i64.add (local.get $offset) (i64.extend_i32_u (local.get $n))))))
   (local.get $n)
 )
 
@@ -1063,22 +1067,27 @@
   (local.set $ch (ref.cast (ref $channel) (local.get $vch)))
   (call $caml_flush (local.get $ch))
   (@if $wasi
-  (@then (local.set $buffer (call $get_buffer))
-  (local.set $res
-    (call $fd_seek (struct.get $channel $fd (local.get $ch))
-      (i64.extend_i32_s (i31.get_s (ref.cast (ref i31) (local.get $voffset))))
-      (i32.const 0) (local.get $buffer)))
-  (call $caml_handle_sys_error_if (ref.i31 (i32.const 0)) (local.get $res)) )
-  (@else
-  ;; ZZZ Check for error
-  (local.set $fd_offset
-    (call $get_fd_offset (struct.get $channel $fd (local.get $ch))))
-  (local.set $offset
-    (i64.extend_i32_s (i31.get_s (ref.cast (ref i31) (local.get $voffset)))))
-  (if (i64.lt_s (local.get $offset) (i64.const 0))
-    (then (call $caml_raise_sys_error (@string "Invalid argument" ))))
-  (struct.set $fd_offset $offset (local.get $fd_offset) (local.get $offset))
-  (struct.set $fd_offset $seeked (local.get $fd_offset) (i32.const 1)) ) )
+    (@then
+      (local.set $buffer (call $get_buffer))
+      (local.set $res
+        (call $fd_seek (struct.get $channel $fd (local.get $ch))
+          (i64.extend_i32_s
+            (i31.get_s (ref.cast (ref i31) (local.get $voffset))))
+          (i32.const 0) (local.get $buffer)))
+      (call $caml_handle_sys_error_if (ref.i31 (i32.const 0))
+        (local.get $res)))
+    (@else
+      ;; ZZZ Check for error
+      (local.set $fd_offset
+        (call $get_fd_offset (struct.get $channel $fd (local.get $ch))))
+      (local.set $offset
+        (i64.extend_i32_s
+          (i31.get_s (ref.cast (ref i31) (local.get $voffset)))))
+      (if (i64.lt_s (local.get $offset) (i64.const 0))
+        (then (call $caml_raise_sys_error (@string "Invalid argument" ))))
+      (struct.set $fd_offset $offset (local.get $fd_offset)
+        (local.get $offset))
+      (struct.set $fd_offset $seeked (local.get $fd_offset) (i32.const 1))))
   (ref.i31 (i32.const 0))
 )
 
@@ -1089,21 +1098,24 @@
   (local.set $ch (ref.cast (ref $channel) (local.get $vch)))
   (call $caml_flush (local.get $ch))
   (@if $wasi
-  (@then (local.set $buffer (call $get_buffer))
-  (local.set $res
-    (call $fd_seek (struct.get $channel $fd (local.get $ch))
-      (call $Int64_val (local.get $voffset)) (i32.const 0)
-      (local.get $buffer)))
-  (call $caml_handle_sys_error_if (ref.i31 (i32.const 0)) (local.get $res)) )
-  (@else
-  ;; ZZZ Check for error
-  (local.set $fd_offset
-    (call $get_fd_offset (struct.get $channel $fd (local.get $ch))))
-  (local.set $offset (call $Int64_val (local.get $voffset)))
-  (if (i64.lt_s (local.get $offset) (i64.const 0))
-    (then (call $caml_raise_sys_error (@string "Invalid argument" ))))
-  (struct.set $fd_offset $offset (local.get $fd_offset) (local.get $offset))
-  (struct.set $fd_offset $seeked (local.get $fd_offset) (i32.const 1)) ) )
+    (@then
+      (local.set $buffer (call $get_buffer))
+      (local.set $res
+        (call $fd_seek (struct.get $channel $fd (local.get $ch))
+          (call $Int64_val (local.get $voffset)) (i32.const 0)
+          (local.get $buffer)))
+      (call $caml_handle_sys_error_if (ref.i31 (i32.const 0))
+        (local.get $res)))
+    (@else
+      ;; ZZZ Check for error
+      (local.set $fd_offset
+        (call $get_fd_offset (struct.get $channel $fd (local.get $ch))))
+      (local.set $offset (call $Int64_val (local.get $voffset)))
+      (if (i64.lt_s (local.get $offset) (i64.const 0))
+        (then (call $caml_raise_sys_error (@string "Invalid argument" ))))
+      (struct.set $fd_offset $offset (local.get $fd_offset)
+        (local.get $offset))
+      (struct.set $fd_offset $seeked (local.get $fd_offset) (i32.const 1))))
   (ref.i31 (i32.const 0))
 )
 

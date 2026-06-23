@@ -483,11 +483,11 @@
               (call $caml_format_exception (local.get $exn))
               (@string "\n" ))))
         (@if $wasi
-        (@then (call $write_all_to_fd (i32.const 2) (local.get $msg)) )
-        (@else
-        (call $write (i32.const 2)
-          (call $unwrap (call $caml_jsstring_of_string (local.get $msg)))) )
-        ))
+          (@then (call $write_all_to_fd (i32.const 2) (local.get $msg)))
+          (@else
+            (call $write (i32.const 2)
+              (call $unwrap
+                (call $caml_jsstring_of_string (local.get $msg)))))))
       (call $exit (i32.const 2))))
 )
 

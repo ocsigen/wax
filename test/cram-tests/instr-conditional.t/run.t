@@ -46,8 +46,8 @@ Conversion to WAT produces an instruction-level `(@if …)`.
   (func $f (result i32)
     (local $x i32)
     (@if (and $debug (not (= $target "wasm32")))
-    (@then (local.set $x (i32.const 1)) ) (@else (local.set $x (i32.const 2)) )
-    )
+      (@then (local.set $x (i32.const 1)))
+      (@else (local.set $x (i32.const 2))))
     (local.get $x)
   )
 
@@ -75,8 +75,9 @@ assumption, so this is accepted and converts with the call preserved.
   (@if $wasi (@then (import "m" "g" (func $g (result i32))) ) )
   (func $h (result i32)
     (local $x i32)
-    (@if $wasi (@then (local.set $x (call $g)) )
-    (@else (local.set $x (i32.const 0)) ) )
+    (@if $wasi
+      (@then (local.set $x (call $g)))
+      (@else (local.set $x (i32.const 0))))
     (local.get $x)
   )
 

@@ -483,34 +483,35 @@
               (call $caml_invalid_argument (global.get $abstract_value))
               (ref.i31 (i32.const 0))))
           (@if (not $wasi)
-          (@then
-          (drop
-            (block $v1_not_js (result (ref eq))
-              (local.set $jsv
-                (br_on_cast_fail $v1_not_js (ref eq) (ref $js)
-                  (local.get $v1)))
-              (local.set $js1 (struct.get $js 0 (local.get $jsv)))
-              (local.set $js2
-                (struct.get $js 0
-                  (br_on_cast_fail $heterogeneous (ref eq) (ref $js)
-                    (local.get $v2))))
-              (block $not_jsstring
-                (br_if $not_jsstring
-                  (i32.eqz (call $jsstring_test (local.get $js1))))
-                (br_if $not_jsstring
-                  (i32.eqz (call $jsstring_test (local.get $js2))))
-                (local.set $res
-                  (call $jsstring_compare (local.get $js1) (local.get $js2)))
-                (br_if $next_item (i32.eqz (local.get $res)))
-                (return (local.get $res)))
-              ;; We cannot order two JavaScript objects,
-              ;; but we can tell whether they are equal or not
-              (if (i32.eqz (local.get $total))
-                (then
-                  (br_if $next_item
-                    (call $equals (local.get $js1) (local.get $js2)))
-                  (return (global.get $unordered))))
-              (br $heterogeneous (ref.i31 (i32.const 0))))) ) )
+            (@then
+              (drop
+                (block $v1_not_js (result (ref eq))
+                  (local.set $jsv
+                    (br_on_cast_fail $v1_not_js (ref eq) (ref $js)
+                      (local.get $v1)))
+                  (local.set $js1 (struct.get $js 0 (local.get $jsv)))
+                  (local.set $js2
+                    (struct.get $js 0
+                      (br_on_cast_fail $heterogeneous (ref eq) (ref $js)
+                        (local.get $v2))))
+                  (block $not_jsstring
+                    (br_if $not_jsstring
+                      (i32.eqz (call $jsstring_test (local.get $js1))))
+                    (br_if $not_jsstring
+                      (i32.eqz (call $jsstring_test (local.get $js2))))
+                    (local.set $res
+                      (call $jsstring_compare (local.get $js1)
+                        (local.get $js2)))
+                    (br_if $next_item (i32.eqz (local.get $res)))
+                    (return (local.get $res)))
+                  ;; We cannot order two JavaScript objects,
+                  ;; but we can tell whether they are equal or not
+                  (if (i32.eqz (local.get $total))
+                    (then
+                      (br_if $next_item
+                        (call $equals (local.get $js1) (local.get $js2)))
+                      (return (global.get $unordered))))
+                  (br $heterogeneous (ref.i31 (i32.const 0)))))))
           (if (call $caml_is_closure (local.get $v1))
             (then
               (drop

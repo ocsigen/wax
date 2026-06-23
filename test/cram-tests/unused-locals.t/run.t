@@ -74,7 +74,7 @@ reported (with no "reachable when" qualifier, as it holds unconditionally):
   (func $f (param $n i32) (result i32)
     (local $used_when_wasi i32) (local $never_used i32)
     (local.set $used_when_wasi (local.get $n))
-    (@if $wasi (@then (local.get $used_when_wasi) ) (@else (i32.const 0) ) )
+    (@if $wasi (@then (local.get $used_when_wasi)) (@else (i32.const 0)))
   )
 
 The same path-sensitivity applies to Wax `#[if]`/`#[else]`: `used_when_wasi` is

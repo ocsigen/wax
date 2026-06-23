@@ -286,10 +286,10 @@
       ;; state = Finished (Error exn) for OCaml < 5.5
       ;; state = Finished (Error (exn, backtrace)) for OCaml >= 5.5
       (@if (>= $ocaml_version (5 5 0))
-      (@then
-      (local.set $exn
-        (array.new_fixed $block 3 (ref.i31 (i32.const 0)) (local.get $exn)
-          (array.new_fixed $block 1 (ref.i31 (i32.const 0))))) ) )
+        (@then
+          (local.set $exn
+            (array.new_fixed $block 3 (ref.i31 (i32.const 0)) (local.get $exn)
+              (array.new_fixed $block 1 (ref.i31 (i32.const 0)))))))
       (local.set $result
         (array.new_fixed $block 2 (ref.i31 (i32.const 0))
           (array.new_fixed $block 2 (ref.i31 (i32.const 1))

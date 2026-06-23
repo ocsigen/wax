@@ -702,44 +702,46 @@
                                               (local.get
                                                 $negative))))))))))))))))))))))
     (@if $wasi
-    (@then (local.set $buffer (call $get_buffer))
-    (local.set $buf
-      (call $write_string_to_memory
-        (i32.add (local.get $buffer) (i32.const 4))
-        (global.get $IO_BUFFER_SIZE) (local.get $s)))
-    (local.set $f (call $strtod (local.get $buf) (local.get $buffer)))
-    (call $release_memory (i32.add (local.get $buffer) (i32.const 4))
-      (local.get $buf))
-    (br_if $error
-      (i32.ne (i32.load $m (local.get $buffer))
-        (i32.add (local.get $buf) (local.get $len)))) )
-    (@else
-    ;; The JS number coercion below accepts things OCaml does not,
-    ;; e.g. binary/octal literals ("0b101", "0o17"); only a plain
-    ;; decimal float can reach this point, so reject any character
-    ;; that cannot appear in one. Start after the leading spaces already
-    ;; skipped above.
-    (local.set $i (local.get $start))
-    (loop $loop
-      (if (i32.lt_u (local.get $i) (local.get $len))
-        (then
-          (local.set $c (array.get_u $bytes (local.get $s) (local.get $i)))
-          (br_if $error
-            (i32.eqz
-              (i32.or
-                (i32.and (i32.ge_u (local.get $c) (@char "0" ))
-                  (i32.le_u (local.get $c) (@char "9" )))
-                (i32.or (i32.eq (local.get $c) (@char "." ))
+      (@then
+        (local.set $buffer (call $get_buffer))
+        (local.set $buf
+          (call $write_string_to_memory
+            (i32.add (local.get $buffer) (i32.const 4))
+            (global.get $IO_BUFFER_SIZE) (local.get $s)))
+        (local.set $f (call $strtod (local.get $buf) (local.get $buffer)))
+        (call $release_memory (i32.add (local.get $buffer) (i32.const 4))
+          (local.get $buf))
+        (br_if $error
+          (i32.ne (i32.load $m (local.get $buffer))
+            (i32.add (local.get $buf) (local.get $len)))))
+      (@else
+        ;; The JS number coercion below accepts things OCaml does not,
+        ;; e.g. binary/octal literals ("0b101", "0o17"); only a plain
+        ;; decimal float can reach this point, so reject any character
+        ;; that cannot appear in one. Start after the leading spaces already
+        ;; skipped above.
+        (local.set $i (local.get $start))
+        (loop $loop
+          (if (i32.lt_u (local.get $i) (local.get $len))
+            (then
+              (local.set $c
+                (array.get_u $bytes (local.get $s) (local.get $i)))
+              (br_if $error
+                (i32.eqz
                   (i32.or
-                    (i32.eq (i32.and (local.get $c) (i32.const 0xdf))
-                      (@char "E" ))
-                    (i32.or (i32.eq (local.get $c) (@char "+" ))
-                      (i32.eq (local.get $c) (@char "-" ))))))))
-          (local.set $i (i32.add (local.get $i) (i32.const 1)))
-          (br $loop))))
-    (local.set $f
-      (call $parse_float (call $jsstring_of_bytes (local.get $s))))
-    (br_if $error (f64.ne (local.get $f) (local.get $f))) ) )
+                    (i32.and (i32.ge_u (local.get $c) (@char "0" ))
+                      (i32.le_u (local.get $c) (@char "9" )))
+                    (i32.or (i32.eq (local.get $c) (@char "." ))
+                      (i32.or
+                        (i32.eq (i32.and (local.get $c) (i32.const 0xdf))
+                          (@char "E" ))
+                        (i32.or (i32.eq (local.get $c) (@char "+" ))
+                          (i32.eq (local.get $c) (@char "-" ))))))))
+              (local.set $i (i32.add (local.get $i) (i32.const 1)))
+              (br $loop))))
+        (local.set $f
+          (call $parse_float (call $jsstring_of_bytes (local.get $s))))
+        (br_if $error (f64.ne (local.get $f) (local.get $f)))))
     (return (struct.new $float (local.get $f))))
   (call $caml_failwith (local.get $err_msg))
   (return (ref.i31 (i32.const 0)))

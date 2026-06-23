@@ -6,17 +6,17 @@ WAT round-trip, both at the instruction level and the module-field level.
   (@else (func $a (result i32) (i32.const 2)) ) )
   (func $f (result i32)
     (@if
-    (and
-      $oxcaml
-      (or
-        (= $ocaml_version (5 2 0))
-        (<> $flavour "default")
-        (< $a (1 0 0))
-        (> $b (2 0 0))
-        (<= $c (3 0 0))
-        (>= $d (4 0 0))))
-    (@then (@if (not $debug) (@then (nop) ) ) (i32.const 1) )
-    (@else (i32.const 2) ) )
+      (and
+        $oxcaml
+        (or
+          (= $ocaml_version (5 2 0))
+          (<> $flavour "default")
+          (< $a (1 0 0))
+          (> $b (2 0 0))
+          (<= $c (3 0 0))
+          (>= $d (4 0 0))))
+      (@then (@if (not $debug) (@then (nop))) (i32.const 1))
+      (@else (i32.const 2)))
   )
 
 The output round-trips to itself (it is idempotent).
@@ -55,6 +55,7 @@ branch's signature (two operands when `wasi`, one otherwise).
   (@if $wasi (@then (import "a" "g" (func $g (param i32 i32))) )
   (@else (import "b" "g" (func $g (param i32))) ) )
   (func $h
-    (@if $wasi (@then (call $g (i32.const 1) (i32.const 2)) )
-    (@else (call $g (i32.const 1)) ) )
+    (@if $wasi
+      (@then (call $g (i32.const 1) (i32.const 2)))
+      (@else (call $g (i32.const 1))))
   )

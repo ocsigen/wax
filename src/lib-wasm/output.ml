@@ -1068,16 +1068,16 @@ let rec instr i =
   | If_annotation { cond; then_body; else_body }
   | Folded ({ desc = If_annotation { cond; then_body; else_body }; _ }, []) ->
       let clause head body =
-        block
-          ((atom ~style:Annotation ("(@" ^ head) :: List.map instr body)
-          @ [ atom ~style:Annotation ")" ])
+        list
+          (( (atom ~style:Annotation ("@" ^ head)) :: List.map instr body)
+          )
       in
-      block ~loc
-        (atom ~style:Annotation "(@if"
-         :: cond_doc cond
-         :: [ clause "then" then_body ]
-        @ option (fun e -> [ clause "else" e ]) else_body
-        @ [ atom ~style:Annotation ")" ])
+      list ~loc
+        (block [atom ~style:Annotation "@if";
+                cond_doc cond]
+         ::  clause "then" then_body
+         :: option (fun e -> [ clause "else" e ]) else_body
+        )
   | Folded (i, l) ->
       list ~loc [ block ~transparent:true (instr i :: List.map instr l) ]
 
