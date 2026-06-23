@@ -145,37 +145,27 @@ fn caml_update_dummy(dummy: &eq, newval: &eq) -> &eq {
             fdst.copy(0, newval as &float_array, 0, fdst.length());
             return 0 as &i31;
         }
+        c1: &dummy_closure_1 => {
+            c1.closure = newval as &closure;
+            return 0 as &i31;
+        }
+        c2: &dummy_closure_2 => {
+            c2.closure = newval as &closure_2;
+            return 0 as &i31;
+        }
+        c3: &dummy_closure_3 => {
+            c3.closure = newval as &closure_3;
+            return 0 as &i31;
+        }
+        c4: &dummy_closure_4 => {
+            c4.closure = newval as &closure_4;
+            return 0 as &i31;
+        }
+        ccps: &cps_dummy_closure => {
+            ccps.closure = newval as &cps_closure;
+            return 0 as &i31;
+        }
         _ => {
-            _ =
-                'not_closure_1: do &eq {
-                    (br_on_cast_fail 'not_closure_1 &dummy_closure_1 dummy).closure =
-                        newval as &closure;
-                    return 0 as &i31;
-                };
-            _ =
-                'not_closure_2: do &eq {
-                    (br_on_cast_fail 'not_closure_2 &dummy_closure_2 dummy).closure =
-                        newval as &closure_2;
-                    return 0 as &i31;
-                };
-            _ =
-                'not_closure_3: do &eq {
-                    (br_on_cast_fail 'not_closure_3 &dummy_closure_3 dummy).closure =
-                        newval as &closure_3;
-                    return 0 as &i31;
-                };
-            _ =
-                'not_closure_4: do &eq {
-                    (br_on_cast_fail 'not_closure_4 &dummy_closure_4 dummy).closure =
-                        newval as &closure_4;
-                    return 0 as &i31;
-                };
-            _ =
-                'not_cps_closure: do &eq {
-                    (br_on_cast_fail 'not_cps_closure &cps_dummy_closure dummy).closure =
-                        newval as &cps_closure;
-                    return 0 as &i31;
-                };
             unreachable;
         }
     }

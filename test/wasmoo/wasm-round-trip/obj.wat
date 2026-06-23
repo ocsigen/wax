@@ -184,56 +184,68 @@
 
 (func $caml_update_dummy (export "caml_update_dummy")
   (param $dummy (ref eq)) (param $newval (ref eq)) (result (ref eq))
-  (local $fdst (ref $float_array)) (local $dst (ref $block))
-  (local $src (ref $block))
+  (local $ccps (ref $cps_dummy_closure)) (local $c4 (ref $dummy_closure_4))
+  (local $c3 (ref $dummy_closure_3)) (local $c2 (ref $dummy_closure_2))
+  (local $c1 (ref $dummy_closure_1)) (local $fdst (ref $float_array))
+  (local $dst (ref $block)) (local $src (ref $block))
   (block $default
-    (local.set $fdst
-      (block $arm_1 (result (ref $float_array))
-        (local.set $dst
-          (block $arm (result (ref $block))
-            (drop
-              (br_on_cast $arm_1 (ref eq) (ref $float_array)
-                (br_on_cast $arm (ref eq) (ref $block) (local.get $dummy))))
-            (br $default)))
-        (local.set $src (ref.cast (ref $block) (local.get $newval)))
-        (array.copy $block $block (local.get $dst) (i32.const 0)
-          (local.get $src) (i32.const 0) (array.len (local.get $dst)))
+    (local.set $ccps
+      (block $arm_6 (result (ref $cps_dummy_closure))
+        (local.set $c4
+          (block $arm_5 (result (ref $dummy_closure_4))
+            (local.set $c3
+              (block $arm_4 (result (ref $dummy_closure_3))
+                (local.set $c2
+                  (block $arm_3 (result (ref $dummy_closure_2))
+                    (local.set $c1
+                      (block $arm_2 (result (ref $dummy_closure_1))
+                        (local.set $fdst
+                          (block $arm_1 (result (ref $float_array))
+                            (local.set $dst
+                              (block $arm (result (ref $block))
+                                (drop
+                                  (br_on_cast $arm_6 (ref eq)
+                                    (ref $cps_dummy_closure)
+                                    (br_on_cast $arm_5 (ref eq)
+                                      (ref $dummy_closure_4)
+                                      (br_on_cast $arm_4 (ref eq)
+                                        (ref $dummy_closure_3)
+                                        (br_on_cast $arm_3 (ref eq)
+                                          (ref $dummy_closure_2)
+                                          (br_on_cast $arm_2 (ref eq)
+                                            (ref $dummy_closure_1)
+                                            (br_on_cast $arm_1 (ref eq)
+                                              (ref $float_array)
+                                              (br_on_cast $arm (ref eq)
+                                                (ref $block)
+                                                (local.get $dummy)))))))))
+                                (br $default)))
+                            (local.set $src
+                              (ref.cast (ref $block) (local.get $newval)))
+                            (array.copy $block $block (local.get $dst)
+                              (i32.const 0) (local.get $src) (i32.const 0)
+                              (array.len (local.get $dst)))
+                            (return (ref.i31 (i32.const 0)))))
+                        (array.copy $float_array $float_array
+                          (local.get $fdst) (i32.const 0)
+                          (ref.cast (ref $float_array) (local.get $newval))
+                          (i32.const 0) (array.len (local.get $fdst)))
+                        (return (ref.i31 (i32.const 0)))))
+                    (struct.set $dummy_closure_1 $closure (local.get $c1)
+                      (ref.cast (ref $closure) (local.get $newval)))
+                    (return (ref.i31 (i32.const 0)))))
+                (struct.set $dummy_closure_2 $closure (local.get $c2)
+                  (ref.cast (ref $closure_2) (local.get $newval)))
+                (return (ref.i31 (i32.const 0)))))
+            (struct.set $dummy_closure_3 $closure (local.get $c3)
+              (ref.cast (ref $closure_3) (local.get $newval)))
+            (return (ref.i31 (i32.const 0)))))
+        (struct.set $dummy_closure_4 $closure (local.get $c4)
+          (ref.cast (ref $closure_4) (local.get $newval)))
         (return (ref.i31 (i32.const 0)))))
-    (array.copy $float_array $float_array (local.get $fdst) (i32.const 0)
-      (ref.cast (ref $float_array) (local.get $newval)) (i32.const 0)
-      (array.len (local.get $fdst)))
+    (struct.set $cps_dummy_closure $closure (local.get $ccps)
+      (ref.cast (ref $cps_closure) (local.get $newval)))
     (return (ref.i31 (i32.const 0))))
-  (drop
-    (block $not_closure_1 (result (ref eq))
-      (struct.set $dummy_closure_1 $closure
-        (br_on_cast_fail $not_closure_1 (ref eq) (ref $dummy_closure_1)
-          (local.get $dummy)) (ref.cast (ref $closure) (local.get $newval)))
-      (return (ref.i31 (i32.const 0)))))
-  (drop
-    (block $not_closure_2 (result (ref eq))
-      (struct.set $dummy_closure_2 $closure
-        (br_on_cast_fail $not_closure_2 (ref eq) (ref $dummy_closure_2)
-          (local.get $dummy)) (ref.cast (ref $closure_2) (local.get $newval)))
-      (return (ref.i31 (i32.const 0)))))
-  (drop
-    (block $not_closure_3 (result (ref eq))
-      (struct.set $dummy_closure_3 $closure
-        (br_on_cast_fail $not_closure_3 (ref eq) (ref $dummy_closure_3)
-          (local.get $dummy)) (ref.cast (ref $closure_3) (local.get $newval)))
-      (return (ref.i31 (i32.const 0)))))
-  (drop
-    (block $not_closure_4 (result (ref eq))
-      (struct.set $dummy_closure_4 $closure
-        (br_on_cast_fail $not_closure_4 (ref eq) (ref $dummy_closure_4)
-          (local.get $dummy)) (ref.cast (ref $closure_4) (local.get $newval)))
-      (return (ref.i31 (i32.const 0)))))
-  (drop
-    (block $not_cps_closure (result (ref eq))
-      (struct.set $cps_dummy_closure $closure
-        (br_on_cast_fail $not_cps_closure (ref eq) (ref $cps_dummy_closure)
-          (local.get $dummy))
-        (ref.cast (ref $cps_closure) (local.get $newval)))
-      (return (ref.i31 (i32.const 0)))))
   (unreachable)
 )
 

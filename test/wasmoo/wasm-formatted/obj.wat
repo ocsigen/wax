@@ -180,7 +180,9 @@
 (func $caml_update_dummy (export "caml_update_dummy")
   (param $dummy (ref eq)) (param $newval (ref eq)) (result (ref eq))
   (local $dst (ref $block)) (local $fdst (ref $float_array))
-  (local $src (ref $block))
+  (local $src (ref $block)) (local $c1 (ref $dummy_closure_1))
+  (local $c2 (ref $dummy_closure_2)) (local $c3 (ref $dummy_closure_3))
+  (local $c4 (ref $dummy_closure_4)) (local $ccps (ref $cps_dummy_closure))
   (drop
     (block $not_block (result (ref eq))
       (local.set $dst
@@ -200,33 +202,42 @@
       (return (ref.i31 (i32.const 0)))))
   (drop
     (block $not_closure_1 (result (ref eq))
-      (struct.set $dummy_closure_1 1
+      (local.set $c1
         (br_on_cast_fail $not_closure_1 (ref eq) (ref $dummy_closure_1)
-          (local.get $dummy)) (ref.cast (ref $closure) (local.get $newval)))
+          (local.get $dummy)))
+      (struct.set $dummy_closure_1 1 (local.get $c1)
+        (ref.cast (ref $closure) (local.get $newval)))
       (return (ref.i31 (i32.const 0)))))
   (drop
     (block $not_closure_2 (result (ref eq))
-      (struct.set $dummy_closure_2 2
+      (local.set $c2
         (br_on_cast_fail $not_closure_2 (ref eq) (ref $dummy_closure_2)
-          (local.get $dummy)) (ref.cast (ref $closure_2) (local.get $newval)))
+          (local.get $dummy)))
+      (struct.set $dummy_closure_2 2 (local.get $c2)
+        (ref.cast (ref $closure_2) (local.get $newval)))
       (return (ref.i31 (i32.const 0)))))
   (drop
     (block $not_closure_3 (result (ref eq))
-      (struct.set $dummy_closure_3 2
+      (local.set $c3
         (br_on_cast_fail $not_closure_3 (ref eq) (ref $dummy_closure_3)
-          (local.get $dummy)) (ref.cast (ref $closure_3) (local.get $newval)))
+          (local.get $dummy)))
+      (struct.set $dummy_closure_3 2 (local.get $c3)
+        (ref.cast (ref $closure_3) (local.get $newval)))
       (return (ref.i31 (i32.const 0)))))
   (drop
     (block $not_closure_4 (result (ref eq))
-      (struct.set $dummy_closure_4 2
+      (local.set $c4
         (br_on_cast_fail $not_closure_4 (ref eq) (ref $dummy_closure_4)
-          (local.get $dummy)) (ref.cast (ref $closure_4) (local.get $newval)))
+          (local.get $dummy)))
+      (struct.set $dummy_closure_4 2 (local.get $c4)
+        (ref.cast (ref $closure_4) (local.get $newval)))
       (return (ref.i31 (i32.const 0)))))
   (drop
     (block $not_cps_closure (result (ref eq))
-      (struct.set $cps_dummy_closure 1
+      (local.set $ccps
         (br_on_cast_fail $not_cps_closure (ref eq) (ref $cps_dummy_closure)
-          (local.get $dummy))
+          (local.get $dummy)))
+      (struct.set $cps_dummy_closure 1 (local.get $ccps)
         (ref.cast (ref $cps_closure) (local.get $newval)))
       (return (ref.i31 (i32.const 0)))))
   (unreachable)
