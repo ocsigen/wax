@@ -1321,8 +1321,9 @@
 (func $extern_rec (param $s (ref $extern_state)) (param $v (ref eq))
   (local $sp (ref null $stack_item)) (local $item (ref $stack_item))
   (local $b (ref $block)) (local $str (ref $bytes)) (local $iv (ref i31))
-  (local $flv (ref $float)) (local $fa (ref $float_array)) (local $tg i32)
-  (local $sz i32) (local $pos i32) (local $r_0 i32) (local $r_1 i32)
+  (local $flv (ref $float)) (local $bv (ref $block))
+  (local $fa (ref $float_array)) (local $tg i32) (local $sz i32)
+  (local $pos i32) (local $r_0 i32) (local $r_1 i32)
   (loop $loop
     (block $next_item
       (drop
@@ -1333,13 +1334,13 @@
           (br $next_item)))
       (drop
         (block $not_block (result (ref eq))
-          (local.set $b
+          (local.set $bv
             (br_on_cast_fail $not_block (ref eq) (ref $block) (local.get $v)))
           (local.set $tg
             (i31.get_u
               (ref.cast (ref i31)
-                (array.get $block (local.get $b) (i32.const 0)))))
-          (local.set $sz (i32.sub (array.len (local.get $b)) (i32.const 1)))
+                (array.get $block (local.get $bv) (i32.const 0)))))
+          (local.set $sz (i32.sub (array.len (local.get $bv)) (i32.const 1)))
           (if (i32.eqz (local.get $sz))
             (then
               (call $extern_header (local.get $s) (i32.const 0)
@@ -1360,9 +1361,9 @@
           (if (i32.gt_u (local.get $sz) (i32.const 1))
             (then
               (local.set $sp
-                (struct.new $stack_item (local.get $b) (i32.const 2)
+                (struct.new $stack_item (local.get $bv) (i32.const 2)
                   (local.get $sp)))))
-          (local.set $v (array.get $block (local.get $b) (i32.const 1)))
+          (local.set $v (array.get $block (local.get $bv) (i32.const 1)))
           (br $loop)))
       (if (ref.eq (local.get $v) (global.get $null_value))
         (then

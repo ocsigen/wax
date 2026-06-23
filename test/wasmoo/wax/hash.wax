@@ -177,16 +177,16 @@ fn caml_hash(count: &eq, limit: &eq, seed: &eq, obj: &eq) -> &eq {
                         num = num - 1;
                         br 'loop;
                     }
-                    b: &block => {
-                        let tg = b[0] as &i31 as i32_u;
+                    bv: &block => {
+                        let tg = bv[0] as &i31 as i32_u;
                         if tg == forward_tag {
                             i = 0;
                             'forward: loop {
-                                v = b[1];
+                                v = bv[1];
                                 _ =
                                     'not_block': do &eq {
-                                        b = br_on_cast_fail 'not_block' &block v;
-                                        br_if 'again !(b[0] == forward_tag as &i31);
+                                        bv = br_on_cast_fail 'not_block' &block v;
+                                        br_if 'again !(bv[0] == forward_tag as &i31);
                                         i = i + 1;
                                         br_if 'loop i == MAX_FORWARD_DEREFERENCE;
                                         br 'forward;
@@ -195,18 +195,18 @@ fn caml_hash(count: &eq, limit: &eq, seed: &eq, obj: &eq) -> &eq {
                             }
                         }
                         if tg == object_tag {
-                            h = caml_hash_mix_int(h, b[2] as &i31 as i32_s);
+                            h = caml_hash_mix_int(h, bv[2] as &i31 as i32_s);
                             br 'loop;
                         }
                         // abstract tag: block contents unknown, do nothing
                         br_if 'loop tg == abstract_tag;
-                        len = b.length();
+                        len = bv.length();
                         h = caml_hash_mix_int(h, len - 1 << 10 | tg);
                         i = 1;
                         'block_iter: loop {
                             br_if 'loop i >=u len;
                             br_if 'loop wr >=u sz;
-                            caml_hash_queue[wr] = b[i];
+                            caml_hash_queue[wr] = bv[i];
                             wr = wr + 1;
                             i = i + 1;
                             br 'block_iter;

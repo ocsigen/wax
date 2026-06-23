@@ -1352,53 +1352,51 @@
 )
 
 (func $extern_rec (param $s (ref $extern_state)) (param $v (ref eq))
-  (local $sp (ref null $stack_item)) (local $b (ref $block)) (local $pos i32)
-  (local $iv (ref i31)) (local $sz i32) (local $tg i32)
+  (local $sp (ref null $stack_item)) (local $pos i32) (local $sz i32)
+  (local $bv (ref $block)) (local $iv (ref i31)) (local $tg i32)
   (local $fa (ref $float_array)) (local $flv (ref $float))
   (local $str (ref $bytes)) (local $r_1 i32) (local $r_0 i32)
-  (local $item (ref $stack_item))
+  (local $item (ref $stack_item)) (local $b (ref $block))
   (loop $loop
     (block $next_item
       (block $default
-        (local.set $iv
-          (block $arm (result (ref i31))
-            (drop (br_on_cast $arm (ref eq) (ref i31) (local.get $v)))
-            (br $default)))
-        (call $extern_int (local.get $s) (i31.get_s (local.get $iv)))
-        (br $next_item))
-      (drop
-        (block $not_block (result (ref eq))
-          (local.set $b
-            (br_on_cast_fail $not_block (ref eq) (ref $block) (local.get $v)))
-          (local.set $tg
-            (i31.get_u
-              (ref.cast (ref i31)
-                (array.get $block (local.get $b) (i32.const 0)))))
-          (local.set $sz (i32.sub (array.len (local.get $b)) (i32.const 1)))
-          (if (i32.eqz (local.get $sz))
-            (then
-              (call $extern_header (local.get $s) (i32.const 0)
-                (local.get $tg))
-              (br $next_item)))
-          (local.set $pos
-            (call $extern_lookup_position (local.get $s) (local.get $v)))
-          (if (i32.ge_s (local.get $pos) (i32.const 0))
-            (then
-              (call $extern_shared_reference (local.get $s)
-                (i32.sub
-                  (struct.get $extern_state $obj_counter (local.get $s))
-                  (local.get $pos)))
-              (br $next_item)))
-          (call $extern_record_location (local.get $s) (local.get $v))
-          (call $extern_header (local.get $s) (local.get $sz) (local.get $tg))
-          (call $extern_size (local.get $s) (local.get $sz) (local.get $sz))
-          (if (i32.gt_u (local.get $sz) (i32.const 1))
-            (then
-              (local.set $sp
-                (struct.new $stack_item (local.get $b) (i32.const 2)
-                  (local.get $sp)))))
-          (local.set $v (array.get $block (local.get $b) (i32.const 1)))
-          (br $loop)))
+        (local.set $bv
+          (block $arm_1 (result (ref $block))
+            (local.set $iv
+              (block $arm (result (ref i31))
+                (drop
+                  (br_on_cast $arm_1 (ref eq) (ref $block)
+                    (br_on_cast $arm (ref eq) (ref i31) (local.get $v))))
+                (br $default)))
+            (call $extern_int (local.get $s) (i31.get_s (local.get $iv)))
+            (br $next_item)))
+        (local.set $tg
+          (i31.get_u
+            (ref.cast (ref i31)
+              (array.get $block (local.get $bv) (i32.const 0)))))
+        (local.set $sz (i32.sub (array.len (local.get $bv)) (i32.const 1)))
+        (if (i32.eqz (local.get $sz))
+          (then
+            (call $extern_header (local.get $s) (i32.const 0) (local.get $tg))
+            (br $next_item)))
+        (local.set $pos
+          (call $extern_lookup_position (local.get $s) (local.get $v)))
+        (if (i32.ge_s (local.get $pos) (i32.const 0))
+          (then
+            (call $extern_shared_reference (local.get $s)
+              (i32.sub (struct.get $extern_state $obj_counter (local.get $s))
+                (local.get $pos)))
+            (br $next_item)))
+        (call $extern_record_location (local.get $s) (local.get $v))
+        (call $extern_header (local.get $s) (local.get $sz) (local.get $tg))
+        (call $extern_size (local.get $s) (local.get $sz) (local.get $sz))
+        (if (i32.gt_u (local.get $sz) (i32.const 1))
+          (then
+            (local.set $sp
+              (struct.new $stack_item (local.get $bv) (i32.const 2)
+                (local.get $sp)))))
+        (local.set $v (array.get $block (local.get $bv) (i32.const 1)))
+        (br $loop))
       (if (ref.eq (local.get $v) (global.get $null_value))
         (then
           (call $write (local.get $s) (global.get $CODE_NULL))

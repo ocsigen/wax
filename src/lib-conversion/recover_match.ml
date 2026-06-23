@@ -152,6 +152,10 @@ let rec diverges_instr i =
       diverges_list if_block.desc && diverges_list else_block.desc
   | Match { arms; default; _ } ->
       List.for_all (fun (_, b) -> diverges_list b) arms && diverges_list default
+  | Loop { block; _ } ->
+      (* A loop whose body always branches (back to the loop or out) never falls
+         through to the statement after it. *)
+      diverges_list block
   | _ -> false
 
 and diverges_list l =

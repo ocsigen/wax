@@ -1027,39 +1027,36 @@ const cust_value = "output_value: abstract value (Custom)";
 fn extern_rec(s: &extern_state, v: &eq) {
     let sp: &?stack_item;
     'loop: loop {
-        let b: &block;
         let pos: i32;
         'next_item: do {
+            let sz: i32;
             match v {
                 iv: &i31 => {
                     extern_int(s, iv as i32_s);
                     br 'next_item;
                 }
+                bv: &block => {
+                    let tg = bv[0] as &i31 as i32_u;
+                    sz = bv.length() - 1;
+                    if !sz {
+                        extern_header(s, 0, tg);
+                        br 'next_item;
+                    }
+                    pos = extern_lookup_position(s, v);
+                    if pos >=s 0 {
+                        extern_shared_reference(s, s.obj_counter - pos);
+                        br 'next_item;
+                    }
+                    extern_record_location(s, v);
+                    extern_header(s, sz, tg);
+                    extern_size(s, sz, sz);
+                    if sz >u 1 {
+                        sp = { blk: bv, pos: 2, next: sp };
+                    }
+                    v = bv[1];
+                    br 'loop;
+                }
                 _ => {
-                    let sz: i32;
-                    _ =
-                        'not_block: do &eq {
-                            b = br_on_cast_fail 'not_block &block v;
-                            let tg = b[0] as &i31 as i32_u;
-                            sz = b.length() - 1;
-                            if !sz {
-                                extern_header(s, 0, tg);
-                                br 'next_item;
-                            }
-                            pos = extern_lookup_position(s, v);
-                            if pos >=s 0 {
-                                extern_shared_reference(s, s.obj_counter - pos);
-                                br 'next_item;
-                            }
-                            extern_record_location(s, v);
-                            extern_header(s, sz, tg);
-                            extern_size(s, sz, sz);
-                            if sz >u 1 {
-                                sp = { blk: b, pos: 2, next: sp };
-                            }
-                            v = b[1];
-                            br 'loop;
-                        };
                     if v == null_value {
                         write(s, CODE_NULL);
                         br 'next_item;
@@ -1114,7 +1111,7 @@ fn extern_rec(s: &extern_state, v: &eq) {
         // next_item
         'done: do {
             let item = br_on_null 'done sp;
-            b = item.blk;
+            let b = item.blk;
             pos = item.pos;
             v = b[pos];
             pos = pos + 1;
