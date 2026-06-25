@@ -64,7 +64,7 @@ fn add_string(buf: &buffer, v: &eq) {
 fn caml_format_exception(vexn: &eq) -> &eq {
     let exn = vexn as &block;
     if exn[0] == 0 as &i31 => &eq {
-        let buf: &buffer = { pos: 0, dat: [0; 256] };
+        let buf = { pos: 0, dat: [0; 256] };
         add_string(buf, (exn[1] as &block)[1]);
         let v: &eq;
         let bucket: &block;

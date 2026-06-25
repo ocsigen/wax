@@ -50,7 +50,7 @@ type custom_operations = {
 type custom = open { ops: &custom_operations };
 
 #[export = "int32_ops"]
-const int32_ops: &custom_operations =
+const int32_ops =
     {
         id: "_i",
         compare: int32_cmp,
@@ -121,7 +121,7 @@ fn caml_int32_compare(i1: i32, i2: i32) -> i32 {
 }
 
 #[export = "nativeint_ops"]
-const nativeint_ops: &custom_operations =
+const nativeint_ops =
     {
         id: "_n",
         compare: int32_cmp,

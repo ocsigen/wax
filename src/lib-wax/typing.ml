@@ -4222,7 +4222,24 @@ and check ctx expected (i : location instr) =
             let*! result = construction_result typ in
             return_expression i (Struct (emitted, List.rev fields')) result
       in
-      return (node, true)
+      (* The outer binding annotation is redundant when the fields alone
+         re-infer this exact type — [field_match] names [node]'s own result heap
+         type, so the bare [{..}] re-resolves to it — and the annotation names
+         that identical type (so dropping it neither widens it nor changes its
+         nullability). Read back from [node] rather than the branch-local [typ],
+         so the keep-bool needs no mutable cell to escape the [let*!] arms.
+         Mirrors the scalar keep-bool [annotation_needed]; the drop itself stays
+         gated on [simplify] at the binding sites. *)
+      let standalone = standalone_valtype ctx (expression_type ctx node) in
+      let fields_pin_result =
+        match (field_match, standalone) with
+        | Some n, Some { typ = Ref { typ = Type t; _ }; _ } -> t.desc = n.desc
+        | _ -> false
+      in
+      return
+        ( node,
+          if fields_pin_result then annotation_needed ctx standalone expected
+          else true )
   | StructDefault ty ->
       let* node =
         match

@@ -269,7 +269,7 @@ type custom_operations = {
 type custom = open { ops: &custom_operations };
 type custom_with_id: custom = open { ops: &custom_operations, id: i64 };
 
-const channel_ops: &custom_operations =
+const channel_ops =
     {
         id: "_chan",
         compare: custom_compare_id,

@@ -55,7 +55,7 @@ type digits = [mut i32];
 type nat: custom = { f: &custom_operations, dat: &digits };
 
 #[export = "nat_ops"]
-const nat_ops: &custom_operations =
+const nat_ops =
     {
         id: "_nat",
         compare: null,

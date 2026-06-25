@@ -493,7 +493,7 @@ type custom_operations = {
 type custom = open { ops: &custom_operations };
 
 #[export = "bigarray_ops"]
-const bigarray_ops: &custom_operations =
+const bigarray_ops =
     {
         id: "_bigarr02",
         compare: caml_ba_compare,
@@ -821,7 +821,7 @@ fn bigarray_deserialize(s: &eq) -> (&eq, i32) {
     len = caml_ba_get_size(dim);
     let dat = caml_ba_create_buffer(kind, len);
     let view = dv_make(dat);
-    let b: &bigarray =
+    let b =
         {
             ops: bigarray_ops,
             ba_data: dat,

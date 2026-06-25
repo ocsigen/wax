@@ -801,7 +801,7 @@ fn reserve_extern_output(s: &extern_state, required: i32) -> i32 {
         extra = required;
     }
     let buf: &bytes = [0; SIZE_EXTERN_OUTPUT_BLOCK + extra];
-    let blk: &output_block = { next: null, end: 0, dat: buf };
+    let blk = { next: null, end: 0, dat: buf };
     last.next = blk;
     s.output_last = blk;
     s.buf = buf;
@@ -1166,8 +1166,7 @@ fn extern_value(
 #[export = "caml_output_value_to_string"]
 #[export = "caml_output_value_to_bytes"]
 fn caml_output_value_to_string(v: &eq, flags: &eq) -> &eq {
-    let blk: &output_block =
-        { next: null, end: SIZE_EXTERN_OUTPUT_BLOCK, dat: [0; SIZE_EXTERN_OUTPUT_BLOCK] };
+    let blk = { next: null, end: SIZE_EXTERN_OUTPUT_BLOCK, dat: [0; SIZE_EXTERN_OUTPUT_BLOCK] };
     let (r_0, r_1, _) = extern_value(flags, blk, 0, 0, v);
     let res: &bytes = [0; r_0 + 20];
     res.copy(0, r_1, 0, 20);
@@ -1189,7 +1188,7 @@ fn caml_output_value_to_buffer(vbuf: &eq, vpos: &eq, vlen: &eq, v: &eq, flags: &
     let buf = vbuf as &bytes;
     let pos = vpos as &i31 as i32_u;
     let len = vlen as &i31 as i32_u;
-    let blk: &output_block = { next: null, end: pos + len, dat: buf };
+    let blk = { next: null, end: pos + len, dat: buf };
     let (r_0, r_1, _) = extern_value(flags, blk, pos + 20, 1, v);
     buf.copy(pos, r_1, 0, 20);
     // Return the number of bytes written: 20-byte header + data.
@@ -1199,8 +1198,7 @@ fn caml_output_value_to_buffer(vbuf: &eq, vpos: &eq, vlen: &eq, v: &eq, flags: &
 #[export = "caml_output_value"]
 fn caml_output_value(ch: &eq, v: &eq, flags: &eq) -> &eq {
     // ZZZ check if binary channel?
-    let blk: &output_block =
-        { next: null, end: SIZE_EXTERN_OUTPUT_BLOCK, dat: [0; SIZE_EXTERN_OUTPUT_BLOCK] };
+    let blk = { next: null, end: SIZE_EXTERN_OUTPUT_BLOCK, dat: [0; SIZE_EXTERN_OUTPUT_BLOCK] };
     let (_, r_1, _) = extern_value(flags, blk, 0, 0, v);
     caml_really_putblock(ch, r_1, 0, 20);
     'loop: loop {

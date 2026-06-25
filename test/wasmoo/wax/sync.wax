@@ -44,7 +44,7 @@ type custom_operations = {
 type custom = open { ops: &custom_operations };
 type custom_with_id: custom = open { ops: &custom_operations, id: i64 };
 
-const mutex_ops: &custom_operations =
+const mutex_ops =
     {
         id: "_mutex",
         compare: custom_compare_id,
@@ -92,7 +92,7 @@ fn caml_ml_mutex_unlock(vt: &eq) -> &eq {
     0 as &i31;
 }
 
-const condition_ops: &custom_operations =
+const condition_ops =
     {
         id: "_condition",
         compare: custom_compare_id,

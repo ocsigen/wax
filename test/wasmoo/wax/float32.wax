@@ -62,7 +62,7 @@ type custom_operations = {
 type custom = open { ops: &custom_operations };
 
 #[export = "float32_ops"]
-const float32_ops: &custom_operations =
+const float32_ops =
     {
         id: "_f32",
         compare: float32_cmp,

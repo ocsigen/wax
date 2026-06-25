@@ -205,9 +205,9 @@ fn caml_is_continuation(v: &eq) -> i32 {
         become start_fiber(p);
     }
 
-    const initial_cont_closure: &continuation = { cont_func: initial_cont };
+    const initial_cont_closure = { cont_func: initial_cont };
 
-    let stack: &fiber =
+    let stack =
         {
             value: 0 as &i31,
             exn: 0 as &i31,
@@ -400,14 +400,14 @@ fn caml_is_continuation(v: &eq) -> i32 {
 
     #[export = "%with_stack"]
     fn f_2(hv: &eq, hx: &eq, hf: &eq, f: &eq, v: &eq) -> &eq {
-        let stack: &fiber =
+        let stack =
             { value: hv, exn: hx, effect: hf, continuation: initial_cont_closure, next: null };
         become capture_continuation(do_resume, { head: stack, tail: stack, dat: { f: f, v: v } });
     }
 
     #[export = "%with_stack_bind"]
     fn f_3(hv: &eq, hx: &eq, hf: &eq, dyn: &eq, bind: &eq, f: &eq, v: &eq) -> &eq {
-        let stack: &fiber =
+        let stack =
             { value: hv, exn: hx, effect: hf, continuation: initial_cont_closure, next: null };
         become capture_continuation(do_resume, { head: stack, tail: stack, dat: { f: f, v: v } });
     }
@@ -434,7 +434,7 @@ fn caml_is_continuation(v: &eq) -> i32 {
         next: mut &?cps_fiber
     };
 
-    let cps_fiber_stack: &cps_fiber =
+    let cps_fiber_stack =
         {
             value: 0 as &i31,
             exn: 0 as &i31,
