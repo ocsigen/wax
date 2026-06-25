@@ -86,7 +86,7 @@ fn assoc_find(s: &eq, l: &?assoc) -> &?assoc {
     'tail: do &?assoc {
         'loop: loop {
             let a = br_on_cast_fail 'tail &assoc l;
-            if caml_string_equal(s, a.name) as &i31 as i32_u {
+            if caml_string_equal(s, a.name) as i32_u {
                 return a;
             }
             l = a.next;
@@ -103,8 +103,7 @@ fn caml_named_value(s: &eq) -> &?eq {
             (br_on_null 'not_found
                  assoc_find(
                      s,
-                     named_value_table
-                         [caml_string_hash(0 as &i31, s) as &i31 as i32_s %u Named_value_size],
+                     named_value_table[caml_string_hash(0 as &i31, s) as i32_s %u Named_value_size],
                  )).value;
     }
     return null;
@@ -112,7 +111,7 @@ fn caml_named_value(s: &eq) -> &?eq {
 
 #[export = "caml_register_named_value"]
 fn caml_register_named_value(name: &eq, v: &eq) -> &eq {
-    let h = caml_string_hash(0 as &i31, name) as &i31 as i32_s %u Named_value_size;
+    let h = caml_string_hash(0 as &i31, name) as i32_s %u Named_value_size;
     let r = named_value_table[h];
     'not_found: do {
         (br_on_null 'not_found assoc_find(name, r)).value = v;
@@ -125,12 +124,12 @@ fn caml_register_named_value(name: &eq, v: &eq) -> &eq {
 // Used only for testing (tests-jsoo/bin), but inconvenient to pull out
 #[export = "caml_unregister_named_value"]
 fn caml_unregister_named_value(name: &eq) -> &eq {
-    let h = caml_string_hash(0 as &i31, name) as &i31 as i32_s %u Named_value_size;
+    let h = caml_string_hash(0 as &i31, name) as i32_s %u Named_value_size;
     let r = named_value_table[h];
     'done: do {
         let a = br_on_null 'done r;
         // Head of the bucket matches: drop it.
-        if caml_string_equal(name, a.name) as &i31 as i32_u {
+        if caml_string_equal(name, a.name) as i32_u {
             named_value_table[h] = a.next;
             br 'done;
         }
@@ -138,7 +137,7 @@ fn caml_unregister_named_value(name: &eq) -> &eq {
         // unlink can update the predecessor's next pointer.
         'loop: loop {
             let cur = br_on_null 'done a.next;
-            if caml_string_equal(name, cur.name) as &i31 as i32_u {
+            if caml_string_equal(name, cur.name) as i32_u {
                 a.next = cur.next;
                 br 'done;
             }
@@ -205,7 +204,7 @@ fn caml_set_link_info(info: &eq) -> &eq {
                 // pair = [tag, global_name, index]
                 // global_name = [is_predef, name]
                 let pair = arr[j] as &block;
-                let idx = pair[2] as &i31 as i32_u;
+                let idx = pair[2] as i32_u;
                 if idx >s max {
                     max = idx;
                 }
@@ -213,11 +212,11 @@ fn caml_set_link_info(info: &eq) -> &eq {
                 let key =
                     make_symbol_key(
                         // is_predef = tag of global_name block
-                        (pair[1] as &block)[0] as &i31 as i32_u,
+                        (pair[1] as &block)[0] as i32_u,
                         (pair[1] as &block)[1] as &bytes,
                     );
                 // Insert into symbol hash table
-                let h = caml_string_hash(0 as &i31, key) as &i31 as i32_s %u symbol_table_size;
+                let h = caml_string_hash(0 as &i31, key) as i32_s %u symbol_table_size;
                 symbol_table[h] = { name: key, value: pair[2], next: symbol_table[h] };
                 j = j + 1;
                 br 'loop;
@@ -252,9 +251,8 @@ fn lookup_symbol(name: &eq, kind: i32) -> i32 {
             (br_on_null 'not_found
                  assoc_find(
                      key,
-                     symbol_table
-                         [caml_string_hash(0 as &i31, key) as &i31 as i32_s %u symbol_table_size],
-                 )).value as &i31 as i32_u;
+                     symbol_table[caml_string_hash(0 as &i31, key) as i32_s %u symbol_table_size],
+                 )).value as i32_u;
     }
     -1;
 }
@@ -264,7 +262,7 @@ let caml_register_global_idx = 0;
 #[export = "caml_register_global_by_index"]
 fn caml_register_global_by_index(v: &eq, idx: &eq) -> &eq {
     // caml_global_data is a $block: index 0 is the tag, data starts at 1
-    let i = idx as &i31 as i32_u + 1;
+    let i = idx as i32_u + 1;
     if i >=u caml_global_data.length() {
         grow_global_data(i);
     }
@@ -282,7 +280,7 @@ fn do_register_global(v: &eq, name: &eq, is_predef: i32) -> &eq {
                 toplevel_reloc,
                 // Construct global_name: [tag, name]
                 [block|is_predef as &i31, name],
-            ) as &i31 as i32_u + 1;
+            ) as i32_u + 1;
     } else {
         // 2. static symbols array (set by linker in link_info)
         if !(link_info[LINK_INFO_SYMBOLS] is &i31) {

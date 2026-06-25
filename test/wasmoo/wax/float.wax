@@ -79,8 +79,8 @@ fn Double_val(v: &eq) -> f64 {
 
 #[export = "caml_hexstring_of_float"]
 fn caml_hexstring_of_float(v: &eq, vprec: &eq, vstyle: &eq) -> &eq {
-    let prec = vprec as &i31 as i32_s;
-    let style = vstyle as &i31 as i32_s;
+    let prec = vprec as i32_s;
+    let style = vstyle as i32_s;
     let b = (v as &float).f.to_bits();
     let sign = (b >>u 63) as i32;
     let exp = (b >>u 52) as i32 & 0x7FF;

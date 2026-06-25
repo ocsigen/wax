@@ -165,7 +165,7 @@ type bytes = [mut i8];
 
     #[export = "caml_js_from_bool"]
     fn caml_js_from_bool(v: &eq) -> &eq {
-        { js: from_bool(v as &i31 as i32_s) };
+        { js: from_bool(v as i32_s) };
     }
 
     #[export = "caml_js_to_int32"]
@@ -359,7 +359,7 @@ type bytes = [mut i8];
 
     #[export = "caml_js_wrap_callback_strict"]
     fn caml_js_wrap_callback_strict(n: &eq, f: &eq) -> &eq {
-        become wrap(wrap_callback_strict(n as &i31 as i32_u, f));
+        become wrap(wrap_callback_strict(n as i32_u, f));
     }
 
     #[export = "caml_js_wrap_callback_unsafe"]
@@ -379,7 +379,7 @@ type bytes = [mut i8];
 
     #[export = "caml_js_wrap_meth_callback_strict"]
     fn caml_js_wrap_meth_callback_strict(n: &eq, f: &eq) -> &eq {
-        become wrap(wrap_meth_callback_strict(n as &i31 as i32_u, f));
+        become wrap(wrap_meth_callback_strict(n as i32_u, f));
     }
 
     #[export = "caml_js_wrap_meth_callback_unsafe"]
@@ -435,7 +435,7 @@ type bytes = [mut i8];
 
     #[export = "caml_jsstring_of_substring"]
     fn caml_jsstring_of_substring(s: &eq, i: &eq, l: &eq) -> &eq {
-        return { js: jsstring_of_subbytes(s as &bytes, i as &i31 as i32_u, l as &i31 as i32_u) };
+        return { js: jsstring_of_subbytes(s as &bytes, i as i32_u, l as i32_u) };
     }
 
     #[export = "caml_jsbytes_of_string"]

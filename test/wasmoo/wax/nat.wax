@@ -74,7 +74,7 @@ fn get_data(v: &eq) -> &digits {
 }
 
 fn int(v: &eq) -> i32 {
-    v as &i31 as i32_s;
+    v as i32_s;
 }
 
 // A nat of [len] digits, all set to [fill].

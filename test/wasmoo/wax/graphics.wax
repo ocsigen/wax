@@ -200,100 +200,76 @@
     #[export = "caml_gr_set_color"]
     fn caml_gr_set_color(c: &eq) -> &eq {
         check_state();
-        gr_set_color(c as &i31 as i32_s);
+        gr_set_color(c as i32_s);
         0 as &i31;
     }
 
     #[export = "caml_gr_plot"]
     fn caml_gr_plot(x: &eq, y: &eq) -> &eq {
         check_state();
-        gr_plot(x as &i31 as i32_s, y as &i31 as i32_s);
+        gr_plot(x as i32_s, y as i32_s);
         0 as &i31;
     }
 
     #[export = "caml_gr_point_color"]
     fn caml_gr_point_color(x: &eq, y: &eq) -> &eq {
         check_state();
-        gr_point_color(x as &i31 as i32_s, y as &i31 as i32_s) as &i31;
+        gr_point_color(x as i32_s, y as i32_s) as &i31;
     }
 
     #[export = "caml_gr_moveto"]
     fn caml_gr_moveto(x: &eq, y: &eq) -> &eq {
         check_state();
-        gr_moveto(x as &i31 as i32_s, y as &i31 as i32_s);
+        gr_moveto(x as i32_s, y as i32_s);
         0 as &i31;
     }
 
     #[export = "caml_gr_lineto"]
     fn caml_gr_lineto(x: &eq, y: &eq) -> &eq {
         check_state();
-        gr_lineto(x as &i31 as i32_s, y as &i31 as i32_s);
+        gr_lineto(x as i32_s, y as i32_s);
         0 as &i31;
     }
 
     #[export = "caml_gr_draw_rect"]
     fn caml_gr_draw_rect(x: &eq, y: &eq, w: &eq, h: &eq) -> &eq {
         check_state();
-        gr_draw_rect(
-            x as &i31 as i32_s,
-            y as &i31 as i32_s,
-            w as &i31 as i32_s,
-            h as &i31 as i32_s,
-        );
+        gr_draw_rect(x as i32_s, y as i32_s, w as i32_s, h as i32_s);
         0 as &i31;
     }
 
     #[export = "caml_gr_fill_rect"]
     fn caml_gr_fill_rect(x: &eq, y: &eq, w: &eq, h: &eq) -> &eq {
         check_state();
-        gr_fill_rect(
-            x as &i31 as i32_s,
-            y as &i31 as i32_s,
-            w as &i31 as i32_s,
-            h as &i31 as i32_s,
-        );
+        gr_fill_rect(x as i32_s, y as i32_s, w as i32_s, h as i32_s);
         0 as &i31;
     }
 
     #[export = "caml_gr_draw_arc"]
     fn caml_gr_draw_arc(x: &eq, y: &eq, rx: &eq, ry: &eq, a1: &eq, a2: &eq) -> &eq {
         check_state();
-        gr_draw_arc(
-            x as &i31 as i32_s,
-            y as &i31 as i32_s,
-            rx as &i31 as i32_s,
-            ry as &i31 as i32_s,
-            a1 as &i31 as i32_s,
-            a2 as &i31 as i32_s,
-        );
+        gr_draw_arc(x as i32_s, y as i32_s, rx as i32_s, ry as i32_s, a1 as i32_s, a2 as i32_s);
         0 as &i31;
     }
 
     #[export = "caml_gr_fill_arc"]
     fn caml_gr_fill_arc(x: &eq, y: &eq, rx: &eq, ry: &eq, a1: &eq, a2: &eq) -> &eq {
         check_state();
-        gr_fill_arc(
-            x as &i31 as i32_s,
-            y as &i31 as i32_s,
-            rx as &i31 as i32_s,
-            ry as &i31 as i32_s,
-            a1 as &i31 as i32_s,
-            a2 as &i31 as i32_s,
-        );
+        gr_fill_arc(x as i32_s, y as i32_s, rx as i32_s, ry as i32_s, a1 as i32_s, a2 as i32_s);
         0 as &i31;
     }
 
     #[export = "caml_gr_set_line_width"]
     fn caml_gr_set_line_width(w: &eq) -> &eq {
         check_state();
-        gr_set_line_width(w as &i31 as i32_s);
+        gr_set_line_width(w as i32_s);
         0 as &i31;
     }
 
     #[export = "caml_gr_resize_window"]
     fn caml_gr_resize_window(w: &eq, h: &eq) -> &eq {
         check_state();
-        gr_resize_window(w as &i31 as i32_s, h as &i31 as i32_s);
+        gr_resize_window(w as i32_s, h as i32_s);
         0 as &i31;
     }
 
@@ -302,7 +278,7 @@
     #[export = "caml_gr_draw_char"]
     fn caml_gr_draw_char(c: &eq) -> &eq {
         check_state();
-        gr_draw_char(c as &i31 as i32_s);
+        gr_draw_char(c as i32_s);
         0 as &i31;
     }
 
@@ -323,7 +299,7 @@
     #[export = "caml_gr_set_text_size"]
     fn caml_gr_set_text_size(s: &eq) -> &eq {
         check_state();
-        gr_set_text_size(s as &i31 as i32_s);
+        gr_set_text_size(s as i32_s);
         0 as &i31;
     }
 
@@ -355,8 +331,8 @@
         let i = 0;
         while i <u n {
             let p = a[i + 1] as &block;
-            array_set(flat, i * 2, from_int32(p[1] as &i31 as i32_s));
-            array_set(flat, i * 2 + 1, from_int32(p[2] as &i31 as i32_s));
+            array_set(flat, i * 2, from_int32(p[1] as i32_s));
+            array_set(flat, i * 2 + 1, from_int32(p[2] as i32_s));
             i = i + 1;
         }
         gr_fill_poly(flat as &any, n);
@@ -368,20 +344,20 @@
     #[export = "caml_gr_create_image"]
     fn caml_gr_create_image(w: &eq, h: &eq) -> &eq {
         check_state();
-        { js: gr_create_image(w as &i31 as i32_s, h as &i31 as i32_s) };
+        { js: gr_create_image(w as i32_s, h as i32_s) };
     }
 
     #[export = "caml_gr_draw_image"]
     fn caml_gr_draw_image(im: &eq, x: &eq, y: &eq) -> &eq {
         check_state();
-        gr_draw_image(unwrap(im), x as &i31 as i32_s, y as &i31 as i32_s);
+        gr_draw_image(unwrap(im), x as i32_s, y as i32_s);
         0 as &i31;
     }
 
     #[export = "caml_gr_blit_image"]
     fn caml_gr_blit_image(im: &eq, x: &eq, y: &eq) -> &eq {
         check_state();
-        gr_blit_image(unwrap(im), x as &i31 as i32_s, y as &i31 as i32_s);
+        gr_blit_image(unwrap(im), x as i32_s, y as i32_s);
         0 as &i31;
     }
 
@@ -399,7 +375,7 @@
             row = a[i + 1] as &block;
             let j = 0;
             while j <u w {
-                array_set(flat, idx, from_int32(row[j + 1] as &i31 as i32_s));
+                array_set(flat, idx, from_int32(row[j + 1] as i32_s));
                 idx = idx + 1;
                 j = j + 1;
             }
@@ -444,7 +420,7 @@
 
     #[export = "caml_gr_state_create"]
     fn caml_gr_state_create(s: &eq, w: &eq, h: &eq) -> &eq {
-        wrap(gr_state_create(unwrap(s), w as &i31 as i32_s, h as &i31 as i32_s));
+        wrap(gr_state_create(unwrap(s), w as i32_s, h as i32_s));
     }
 
     #[export = "caml_gr_doc_of_state"]

@@ -101,7 +101,7 @@ fn caml_find_custom_operations(id: &bytes) -> &?custom_operations {
     'not_found: do {
         let l = br_on_null 'not_found custom_operations;
         'loop: loop {
-            if caml_bytes_equal(id, l.ops.id) as &i31 as i32_u {
+            if caml_bytes_equal(id, l.ops.id) as i32_u {
                 return l.ops;
             }
             l = br_on_null 'not_found l.next;

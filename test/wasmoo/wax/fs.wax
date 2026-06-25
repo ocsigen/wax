@@ -432,7 +432,7 @@ fn caml_sys_mkdir(name: &eq, perm: &eq) -> &eq {
 #[export = "caml_sys_mkdir"]
 fn caml_sys_mkdir(name: &eq, perm: &eq) -> &eq {
     try {
-        mkdir(unwrap(caml_jsstring_of_string(name)), perm as &i31 as i32_u);
+        mkdir(unwrap(caml_jsstring_of_string(name)), perm as i32_u);
     } catch {
         javascript_exception => {
             caml_handle_sys_error(_);

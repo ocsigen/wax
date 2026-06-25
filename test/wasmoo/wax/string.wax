@@ -47,7 +47,7 @@ fn caml_string_equal(p1: &eq, p2: &eq) -> &eq {
 #[export = "caml_string_notequal"]
 #[export = "caml_bytes_notequal"]
 fn caml_string_notequal(p1: &eq, p2: &eq) -> &eq {
-    return !(caml_string_equal(p1, p2) as &i31 as i32_u) as &i31;
+    return !(caml_string_equal(p1, p2) as i32_u) as &i31;
 }
 
 fn string_compare(p1: &eq, p2: &eq) -> i32 {
@@ -121,7 +121,7 @@ const Bytes_create = "Bytes.create";
 #[export = "caml_create_bytes"]
 #[export = "caml_create_local_bytes"]
 fn caml_create_bytes(len: &eq) -> &eq {
-    let l = len as &i31 as i32_s;
+    let l = len as i32_s;
     if l <s 0 {
         caml_invalid_argument(Bytes_create);
     }
@@ -131,13 +131,13 @@ fn caml_create_bytes(len: &eq) -> &eq {
 #[export = "caml_blit_string"]
 #[export = "caml_blit_bytes"]
 fn caml_blit_string(v1: &eq, i1: &eq, v2: &eq, i2: &eq, n: &eq) -> &eq {
-    (v2 as &bytes).copy(i2 as &i31 as i32_s, v1 as &bytes, i1 as &i31 as i32_s, n as &i31 as i32_s);
+    (v2 as &bytes).copy(i2 as i32_s, v1 as &bytes, i1 as i32_s, n as i32_s);
     0 as &i31;
 }
 
 #[export = "caml_fill_bytes"]
 fn caml_fill_bytes(v: &eq, offset: &eq, len: &eq, init: &eq) -> &eq {
-    (v as &bytes).fill(offset as &i31 as i32_u, init as &i31 as i32_u, len as &i31 as i32_u);
+    (v as &bytes).fill(offset as i32_u, init as i32_u, len as i32_u);
     0 as &i31;
 }
 

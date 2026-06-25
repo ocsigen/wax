@@ -150,12 +150,12 @@ type float_array = [mut f64];
 #[export = "caml_hash"]
 #[export = "caml_hash_exn"]
 fn caml_hash(count: &eq, limit: &eq, seed: &eq, obj: &eq) -> &eq {
-    let sz = limit as &i31 as i32_u;
+    let sz = limit as i32_u;
     if sz >u HASH_QUEUE_SIZE {
         sz = HASH_QUEUE_SIZE;
     }
-    let num = count as &i31 as i32_u;
-    let h = seed as &i31 as i32_s;
+    let num = count as i32_u;
+    let h = seed as i32_s;
     caml_hash_queue[0] = obj;
     let rd = 0;
     let wr = 1;
@@ -178,7 +178,7 @@ fn caml_hash(count: &eq, limit: &eq, seed: &eq, obj: &eq) -> &eq {
                         br 'loop;
                     }
                     bv: &block => {
-                        let tg = bv[0] as &i31 as i32_u;
+                        let tg = bv[0] as i32_u;
                         if tg == forward_tag {
                             i = 0;
                             'forward: loop {
@@ -195,7 +195,7 @@ fn caml_hash(count: &eq, limit: &eq, seed: &eq, obj: &eq) -> &eq {
                             }
                         }
                         if tg == object_tag {
-                            h = caml_hash_mix_int(h, bv[2] as &i31 as i32_s);
+                            h = caml_hash_mix_int(h, bv[2] as i32_s);
                             br 'loop;
                         }
                         // abstract tag: block contents unknown, do nothing
@@ -266,6 +266,5 @@ fn caml_hash(count: &eq, limit: &eq, seed: &eq, obj: &eq) -> &eq {
 
 #[export = "caml_string_hash"]
 fn caml_string_hash(vh: &eq, vs: &eq) -> &eq {
-    (caml_hash_mix_final(caml_hash_mix_string(vh as &i31 as i32_s, vs as &bytes)) & 0x3FFFFFFF)
-        as &i31;
+    (caml_hash_mix_final(caml_hash_mix_string(vh as i32_s, vs as &bytes)) & 0x3FFFFFFF) as &i31;
 }

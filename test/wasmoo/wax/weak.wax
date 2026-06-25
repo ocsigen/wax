@@ -191,7 +191,7 @@ fn caml_ephe_set_data_opt(x: &eq, opt_data: &eq) {
 #[export = "caml_weak_get"]
 fn caml_ephe_get_key(vx: &eq, vi: &eq) -> &eq {
     let x = vx as &block;
-    let i = caml_ephe_key_offset + vi as &i31 as i32_s;
+    let i = caml_ephe_key_offset + vi as i32_s;
     let v = x[i];
     'value: do {
         'no_value: do {
@@ -232,7 +232,7 @@ fn caml_ephe_get_key_copy(x: &eq, i: &eq) -> &eq {
 #[export = "caml_weak_check"]
 fn caml_ephe_check_key(vx: &eq, vi: &eq) -> &eq {
     let x = vx as &block;
-    let i = vi as &i31 as i32_s + caml_ephe_key_offset;
+    let i = vi as i32_s + caml_ephe_key_offset;
     let v = x[i];
     'value: do {
         'no_value: do {
@@ -250,7 +250,7 @@ fn caml_ephe_check_key(vx: &eq, vi: &eq) -> &eq {
 #[export = "caml_ephe_set_key"]
 fn caml_ephe_set_key(vx: &eq, vi: &eq, v: &eq) -> &eq {
     let x = vx as &block;
-    let i = vi as &i31 as i32_s + caml_ephe_key_offset;
+    let i = vi as i32_s + caml_ephe_key_offset;
     let d: &eq = 0 as &i31;
     if v is &i31 {
         if x[i] is &js {
@@ -268,7 +268,7 @@ fn caml_ephe_set_key(vx: &eq, vi: &eq, v: &eq) -> &eq {
 #[export = "caml_ephe_unset_key"]
 fn caml_ephe_unset_key(vx: &eq, vi: &eq) -> &eq {
     let x = vx as &block;
-    let i = vi as &i31 as i32_s + caml_ephe_key_offset;
+    let i = vi as i32_s + caml_ephe_key_offset;
     let d: &eq = 0 as &i31;
     if x[i] is &js {
         d = caml_ephe_get_data(vx);
@@ -283,7 +283,7 @@ const Weak_create = "Weak.create";
 #[export = "caml_ephe_create"]
 #[export = "caml_weak_create"]
 fn caml_ephe_create(vlen: &eq) -> &eq {
-    let len = vlen as &i31 as i32_s;
+    let len = vlen as i32_s;
     if len <s 0 {
         caml_invalid_argument(Weak_create);
     }
@@ -311,10 +311,10 @@ fn caml_ephe_blit_data(x: &eq, y: &eq) -> &eq {
 fn caml_ephe_blit_key(x: &eq, i: &eq, y: &eq, j: &eq, l: &eq) -> &eq {
     let d = caml_ephe_get_data(y);
     (y as &block).copy(
-        j as &i31 as i32_s + caml_ephe_key_offset,
+        j as i32_s + caml_ephe_key_offset,
         x as &block,
-        i as &i31 as i32_s + caml_ephe_key_offset,
-        l as &i31 as i32_s,
+        i as i32_s + caml_ephe_key_offset,
+        l as i32_s,
     );
     caml_ephe_set_data_opt(y, d);
     0 as &i31;

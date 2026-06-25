@@ -120,17 +120,17 @@ fn caml_is_last_arg(v: &eq) -> i32 {
 
 #[export = "caml_alloc_dummy"]
 fn caml_alloc_dummy(size: &eq) -> &eq {
-    [block|0 as &i31; size as &i31 as i32_u + 1];
+    [block|0 as &i31; size as i32_u + 1];
 }
 
 #[export = "caml_alloc_dummy_float"]
 fn caml_alloc_dummy_float(size: &eq) -> &eq {
-    [float_array|0; size as &i31 as i32_u];
+    [float_array|0; size as i32_u];
 }
 
 #[export = "caml_alloc_dummy_mixed"]
 fn caml_alloc_dummy_mixed(size: &eq, &eq) -> &eq {
-    [block|0 as &i31; size as &i31 as i32_u + 1];
+    [block|0 as &i31; size as i32_u + 1];
 }
 
 #[export = "caml_update_dummy"]
@@ -178,7 +178,7 @@ fn caml_alloc_dummy_lazy(&eq) -> &eq {
 
 #[export = "caml_update_dummy_lazy"]
 fn caml_update_dummy_lazy(dummy: &eq, newval: &eq) -> &eq {
-    let tg = caml_obj_tag(newval) as &i31 as i32_s;
+    let tg = caml_obj_tag(newval) as i32_s;
     'update: do {
         br_if 'update tg == lazy_tag;
         br_if 'update tg == forcing_tag;
@@ -241,10 +241,10 @@ fn caml_obj_with_tag(tg: &eq, v: &eq) -> &eq {
 #[export = "caml_obj_block"]
 fn caml_obj_block(tg: &eq, size: &eq) -> &eq {
     // TODO: fail for values that are not represented as an array
-    let n = size as &i31 as i32_s;
+    let n = size as i32_s;
     // Float arrays have a dedicated representation; a generic block
     // would trap on the first float-array primitive.
-    if tg as &i31 as i32_s == double_array_tag {
+    if tg as i32_s == double_array_tag {
         return [float_array|0; n];
     }
     let res: &block = [0 as &i31; n + 1];
@@ -333,7 +333,7 @@ fn caml_lazy_update_to_forcing(v: &eq) -> &eq {
 #[export = "caml_obj_compare_and_swap"]
 fn caml_obj_compare_and_swap(v: &eq, vi: &eq, old: &eq, new: &eq) -> &eq {
     let b = v as &block;
-    let i = vi as &i31 as i32_u + 1;
+    let i = vi as i32_u + 1;
     if b[i] == old => &eq {
         b[i] = new;
         1 as &i31;
@@ -350,7 +350,7 @@ fn caml_obj_is_shared(&eq) -> &eq {
 #[export = "caml_obj_raw_field"]
 fn caml_obj_raw_field(o: &eq, i: &eq) -> &eq {
     if o is &block {
-        return (o as &block)[i as &i31 as i32_u + 1];
+        return (o as &block)[i as i32_u + 1];
     }
     0 as &i31;
 }
@@ -358,7 +358,7 @@ fn caml_obj_raw_field(o: &eq, i: &eq) -> &eq {
 #[export = "caml_obj_set_raw_field"]
 fn caml_obj_set_raw_field(o: &eq, i: &eq, v: &eq) -> &eq {
     if o is &block {
-        (o as &block)[i as &i31 as i32_u + 1] = v;
+        (o as &block)[i as i32_u + 1] = v;
     }
     0 as &i31;
 }
@@ -403,19 +403,19 @@ fn caml_oo_cache_id() -> &eq {
 #[export = "caml_get_cached_method"]
 fn caml_get_cached_method(obj: &eq, vtag: &eq, vcacheid: &eq) -> &eq {
     let meths = (obj as &block)[1] as &block;
-    let cacheid = vcacheid as &i31 as i32_u;
+    let cacheid = vcacheid as i32_u;
     let ofs = method_cache[cacheid];
     if ofs <u meths.length() {
         if vtag == meths[ofs] {
             return meths[ofs - 1];
         }
     }
-    let tg = vtag as &i31 as i32_s;
+    let tg = vtag as i32_s;
     let li = 3;
-    let hi = (meths[1] as &i31 as i32_u << 1) + 1;
+    let hi = (meths[1] as i32_u << 1) + 1;
     while li <u hi {
         let mi = li + hi >>u 1 | 1;
-        if tg <s meths[mi + 1] as &i31 as i32_s {
+        if tg <s meths[mi + 1] as i32_s {
             hi = mi - 2;
         } else {
             li = mi;
@@ -428,12 +428,12 @@ fn caml_get_cached_method(obj: &eq, vtag: &eq, vcacheid: &eq) -> &eq {
 #[export = "caml_get_public_method"]
 fn caml_get_public_method(obj: &eq, vtag: &eq) -> &eq {
     let meths = (obj as &block)[1] as &block;
-    let tg = vtag as &i31 as i32_s;
+    let tg = vtag as i32_s;
     let li = 3;
-    let hi = (meths[1] as &i31 as i32_u << 1) + 1;
+    let hi = (meths[1] as i32_u << 1) + 1;
     while li <u hi {
         let mi = li + hi >>u 1 | 1;
-        if tg <s meths[mi + 1] as &i31 as i32_s {
+        if tg <s meths[mi + 1] as i32_s {
             hi = mi - 2;
         } else {
             li = mi;

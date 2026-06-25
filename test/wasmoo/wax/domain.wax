@@ -37,7 +37,7 @@ fn caml_atomic_cas(ref: &eq, o: &eq, n: &eq) -> &eq {
 
 #[export = "caml_atomic_cas_field"]
 fn caml_atomic_cas_field(ref: &eq, i: &eq, o: &eq, n: &eq) -> &eq {
-    let j = i as &i31 as i32_u + 1;
+    let j = i as i32_u + 1;
     let b = ref as &block;
     if b[j] == o => &eq {
         b[j] = n;
@@ -66,23 +66,23 @@ fn caml_atomic_load(b: &eq) -> &eq {
 
 #[export = "caml_atomic_load_field"]
 fn caml_atomic_load_field(b: &eq, i: &eq) -> &eq {
-    (b as &block)[i as &i31 as i32_u + 1];
+    (b as &block)[i as i32_u + 1];
 }
 
 #[export = "caml_atomic_fetch_add"]
 fn caml_atomic_fetch_add(ref: &eq, i: &eq) -> &eq {
     let b = ref as &block;
     let old = b[1];
-    b[1] = (old as &i31 as i32_s + i as &i31 as i32_s) as &i31;
+    b[1] = (old as i32_s + i as i32_s) as &i31;
     old;
 }
 
 #[export = "caml_atomic_fetch_add_field"]
 fn caml_atomic_fetch_add_field(ref: &eq, i: &eq, n: &eq) -> &eq {
-    let j = i as &i31 as i32_u + 1;
+    let j = i as i32_u + 1;
     let b = ref as &block;
     let old = b[j];
-    b[j] = (old as &i31 as i32_s + n as &i31 as i32_s) as &i31;
+    b[j] = (old as i32_s + n as i32_s) as &i31;
     old;
 }
 
@@ -90,7 +90,7 @@ fn caml_atomic_fetch_add_field(ref: &eq, i: &eq, n: &eq) -> &eq {
 fn caml_atomic_add(ref: &eq, i: &eq) -> &eq {
     let b = ref as &block;
     let old = b[1];
-    b[1] = (old as &i31 as i32_s + i as &i31 as i32_s) as &i31;
+    b[1] = (old as i32_s + i as i32_s) as &i31;
     0 as &i31;
 }
 
@@ -98,7 +98,7 @@ fn caml_atomic_add(ref: &eq, i: &eq) -> &eq {
 fn caml_atomic_sub(ref: &eq, i: &eq) -> &eq {
     let b = ref as &block;
     let old = b[1];
-    b[1] = (old as &i31 as i32_s - i as &i31 as i32_s) as &i31;
+    b[1] = (old as i32_s - i as i32_s) as &i31;
     0 as &i31;
 }
 
@@ -106,7 +106,7 @@ fn caml_atomic_sub(ref: &eq, i: &eq) -> &eq {
 fn caml_atomic_land(ref: &eq, i: &eq) -> &eq {
     let b = ref as &block;
     let old = b[1];
-    b[1] = (old as &i31 as i32_s & i as &i31 as i32_s) as &i31;
+    b[1] = (old as i32_s & i as i32_s) as &i31;
     0 as &i31;
 }
 
@@ -114,7 +114,7 @@ fn caml_atomic_land(ref: &eq, i: &eq) -> &eq {
 fn caml_atomic_lor(ref: &eq, i: &eq) -> &eq {
     let b = ref as &block;
     let old = b[1];
-    b[1] = (old as &i31 as i32_s | i as &i31 as i32_s) as &i31;
+    b[1] = (old as i32_s | i as i32_s) as &i31;
     0 as &i31;
 }
 
@@ -122,7 +122,7 @@ fn caml_atomic_lor(ref: &eq, i: &eq) -> &eq {
 fn caml_atomic_lxor(ref: &eq, i: &eq) -> &eq {
     let b = ref as &block;
     let old = b[1];
-    b[1] = (old as &i31 as i32_s ^ i as &i31 as i32_s) as &i31;
+    b[1] = (old as i32_s ^ i as i32_s) as &i31;
     0 as &i31;
 }
 
@@ -136,7 +136,7 @@ fn caml_atomic_exchange(ref: &eq, v: &eq) -> &eq {
 
 #[export = "caml_atomic_exchange_field"]
 fn caml_atomic_exchange_field(ref: &eq, i: &eq, v: &eq) -> &eq {
-    let j = i as &i31 as i32_u + 1;
+    let j = i as i32_u + 1;
     let b = ref as &block;
     let r = b[j];
     b[j] = v;
@@ -283,52 +283,52 @@ fn caml_domain_count(&eq) -> &eq {
 #[export = "caml_atomic_add_field"]
 fn caml_atomic_add_field(ref: &eq, field: &eq, i: &eq) -> &eq {
     let b = ref as &block;
-    let idx = field as &i31 as i32_s + 1;
+    let idx = field as i32_s + 1;
     let old = b[idx];
-    b[idx] = (old as &i31 as i32_s + i as &i31 as i32_s) as &i31;
+    b[idx] = (old as i32_s + i as i32_s) as &i31;
     0 as &i31;
 }
 
 #[export = "caml_atomic_sub_field"]
 fn caml_atomic_sub_field(ref: &eq, field: &eq, i: &eq) -> &eq {
     let b = ref as &block;
-    let idx = field as &i31 as i32_s + 1;
+    let idx = field as i32_s + 1;
     let old = b[idx];
-    b[idx] = (old as &i31 as i32_s - i as &i31 as i32_s) as &i31;
+    b[idx] = (old as i32_s - i as i32_s) as &i31;
     0 as &i31;
 }
 
 #[export = "caml_atomic_land_field"]
 fn caml_atomic_land_field(ref: &eq, field: &eq, i: &eq) -> &eq {
     let b = ref as &block;
-    let idx = field as &i31 as i32_s + 1;
+    let idx = field as i32_s + 1;
     let old = b[idx];
-    b[idx] = (old as &i31 as i32_s & i as &i31 as i32_s) as &i31;
+    b[idx] = (old as i32_s & i as i32_s) as &i31;
     0 as &i31;
 }
 
 #[export = "caml_atomic_lor_field"]
 fn caml_atomic_lor_field(ref: &eq, field: &eq, i: &eq) -> &eq {
     let b = ref as &block;
-    let idx = field as &i31 as i32_s + 1;
+    let idx = field as i32_s + 1;
     let old = b[idx];
-    b[idx] = (old as &i31 as i32_s | i as &i31 as i32_s) as &i31;
+    b[idx] = (old as i32_s | i as i32_s) as &i31;
     0 as &i31;
 }
 
 #[export = "caml_atomic_lxor_field"]
 fn caml_atomic_lxor_field(ref: &eq, field: &eq, i: &eq) -> &eq {
     let b = ref as &block;
-    let idx = field as &i31 as i32_s + 1;
+    let idx = field as i32_s + 1;
     let old = b[idx];
-    b[idx] = (old as &i31 as i32_s ^ i as &i31 as i32_s) as &i31;
+    b[idx] = (old as i32_s ^ i as i32_s) as &i31;
     0 as &i31;
 }
 
 #[export = "caml_atomic_compare_exchange_field"]
 fn caml_atomic_compare_exchange_field(ref: &eq, field: &eq, o: &eq, n: &eq) -> &eq {
     let b = ref as &block;
-    let idx = field as &i31 as i32_s + 1;
+    let idx = field as i32_s + 1;
     let old = b[idx];
     if old == o {
         b[idx] = n;
@@ -339,7 +339,7 @@ fn caml_atomic_compare_exchange_field(ref: &eq, field: &eq, o: &eq, n: &eq) -> &
 #[export = "caml_atomic_set_field"]
 fn caml_atomic_set_field(ref: &eq, field: &eq, v: &eq) -> &eq {
     let b = ref as &block;
-    let idx = field as &i31 as i32_s + 1;
+    let idx = field as i32_s + 1;
     b[idx] = v;
     0 as &i31;
 }

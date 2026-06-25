@@ -59,7 +59,7 @@
     // so the array length must be len + 2.
     #[export = "caml_realloc_global"]
     fn caml_realloc_global(len: &eq) -> &eq {
-        let new_len = len as &i31 as i32_u + 2;
+        let new_len = len as i32_u + 2;
         if new_len >u caml_global_data.length() {
             let old = caml_global_data;
             let new: &block = [0 as &i31; new_len];

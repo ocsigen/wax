@@ -24,7 +24,7 @@ type bytes = [mut i8];
 
 #[export = "caml_format_int"]
 fn caml_format_int(v: &eq, n: &eq) -> &eq {
-    become format_int(v, n as &i31 as i32_s, 1);
+    become format_int(v, n as i32_s, 1);
 }
 
 #[export = "parse_sign_and_base"]
@@ -174,7 +174,7 @@ fn caml_int16_of_string(v: &eq) -> &eq {
 
 #[export = "caml_bswap16"]
 fn caml_bswap16(vx: &eq) -> &eq {
-    let x = vx as &i31 as i32_s;
+    let x = vx as i32_s;
     ((x & 0xFF) << 8 | x >>u 8 & 0xFF) as &i31;
 }
 

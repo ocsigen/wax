@@ -953,6 +953,18 @@ and instruction_desc ret ctx i : location Text.instr list =
         match expr_opt_valtype expr with
         | None -> code
         | Some in_ty ->
+            (* [ref as i32_s/u] extracts an [i31]: when the reference is not
+               already [i31ref], cast it to [(ref i31)] first; the [i31.get]
+               itself is emitted by the match below. *)
+            let code =
+              match (in_ty, cast_ty) with
+              | Ref { typ = I31; _ }, Signedtype { typ = `I32; _ } -> code
+              | Ref _, Signedtype { typ = `I32; _ } ->
+                  folded loc
+                    (RefCast (reftype { nullable = false; typ = I31 }))
+                    code
+              | _ -> code
+            in
             let instr : _ Text.instr_desc =
               match (in_ty, cast_ty) with
               (* I31 *)

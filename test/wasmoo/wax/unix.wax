@@ -482,7 +482,7 @@ const no_arg = "";
         let errcode: i32;
         let n: i32;
         if err is &i31 {
-            n = err as &i31 as i32_u;
+            n = err as i32_u;
             'loop: loop {
                 if errcode <u error_codes.length() {
                     if n != error_codes[errcode] as i32_s {
@@ -494,7 +494,7 @@ const no_arg = "";
                 }
             }
         } else {
-            errcode = (err as &block)[1] as &i31 as i32_u;
+            errcode = (err as &block)[1] as i32_u;
         }
         if errcode >=u error_messages.length() {
             // A known variant with no WASI errno equivalent (EWOULDBLOCK, ...)
@@ -536,7 +536,7 @@ const no_arg = "";
             let errno = caml_js_get(exn, errno_str);
             errno =
                 if errno is &i31 => i32 {
-                    0 - errno as &i31 as i32_s;
+                    0 - errno as i32_s;
                 } else {
                     9999;
                 } as &i31;
@@ -561,9 +561,9 @@ const no_arg = "";
     fn unix_error_message(err: &eq) -> &eq {
         let errno =
             if err is &i31 => i32 {
-                err as &i31 as i32_u;
+                err as i32_u;
             } else {
-                0 - (err as &block)[1] as &i31 as i32_u;
+                0 - (err as &block)[1] as i32_u;
             };
         become caml_string_of_jsstring(wrap(caml_strerror(errno)));
     }
@@ -715,14 +715,14 @@ fn caml_unix_time(&eq) -> &eq {
 fn caml_unix_mktime(v: &eq) -> &eq {
     let t = v as &block;
     let tm = get_buffer();
-    m.store32(tm, t[1] as &i31 as i32_s);
-    m.store32(tm, t[2] as &i31 as i32_s, 4, 4);
-    m.store32(tm, t[3] as &i31 as i32_s, 4, 8);
-    m.store32(tm, t[4] as &i31 as i32_s, 4, 12);
-    m.store32(tm, t[5] as &i31 as i32_s, 4, 16);
-    m.store32(tm, t[6] as &i31 as i32_s, 4, 20);
-    m.store32(tm, t[7] as &i31 as i32_s, 4, 24);
-    m.store32(tm, t[8] as &i31 as i32_s, 4, 28);
+    m.store32(tm, t[1] as i32_s);
+    m.store32(tm, t[2] as i32_s, 4, 4);
+    m.store32(tm, t[3] as i32_s, 4, 8);
+    m.store32(tm, t[4] as i32_s, 4, 12);
+    m.store32(tm, t[5] as i32_s, 4, 16);
+    m.store32(tm, t[6] as i32_s, 4, 20);
+    m.store32(tm, t[7] as i32_s, 4, 24);
+    m.store32(tm, t[8] as i32_s, 4, 28);
     m.store32(tm, -1, 4, 32);
     let time = mktime(tm);
     if time == -1 {
@@ -737,12 +737,12 @@ fn caml_unix_mktime(v: &eq) -> &eq {
     let tm = v as &block;
     let t =
         mktime(
-            tm[6] as &i31 as i32_s + 1900,
-            tm[5] as &i31 as i32_s,
-            tm[4] as &i31 as i32_s,
-            tm[3] as &i31 as i32_s,
-            tm[2] as &i31 as i32_s,
-            tm[1] as &i31 as i32_s,
+            tm[6] as i32_s + 1900,
+            tm[5] as i32_s,
+            tm[4] as i32_s,
+            tm[3] as i32_s,
+            tm[2] as i32_s,
+            tm[1] as i32_s,
         ) / 1000;
     [block|0 as &i31, { f: t }, localtime(t)];
 }
@@ -911,7 +911,7 @@ fn caml_alloc_stat(
 
     fn fstat(fd: &eq, large: i32) -> &eq {
         let buffer = get_buffer();
-        let res = fd_filestat_get(fd as &i31 as i32_u, buffer);
+        let res = fd_filestat_get(fd as i32_u, buffer);
         caml_unix_error_if(res, "fstat", no_arg);
         become alloc_stat(large, buffer);
     }
@@ -1170,7 +1170,7 @@ fn unix_rename(o: &eq, n: &eq) -> &eq {
 #[export = "caml_unix_mkdir"]
 fn unix_mkdir(name: &eq, perm: &eq) -> &eq {
     try {
-        mkdir(unwrap(caml_jsstring_of_string(name)), perm as &i31 as i32_u);
+        mkdir(unwrap(caml_jsstring_of_string(name)), perm as i32_u);
     } catch {
         javascript_exception => {
             caml_unix_error(_, null);
@@ -1499,7 +1499,7 @@ fn unix_rmdir(p: &eq) -> &eq {
         let (np_fd, np_addr, np_len) = wasi_resolve_path(n);
         let flags: i32;
         if follow is &block {
-            flags = (follow as &block)[1] as &i31 as i32_u;
+            flags = (follow as &block)[1] as i32_u;
         }
         let arg = o;
         let res = 44; // ENOENT
@@ -1580,7 +1580,7 @@ fn unix_has_symlink(&eq) -> &eq {
 fn unix_symlink(to_dir: &eq, t: &eq, p: &eq) -> &eq {
     let kind: i32;
     if to_dir is &block {
-        kind = 1 + (to_dir as &block)[1] as &i31 as i32_s;
+        kind = 1 + (to_dir as &block)[1] as i32_s;
     }
     try {
         symlink(unwrap(caml_jsstring_of_string(t)), unwrap(caml_jsstring_of_string(p)), kind);
@@ -1662,7 +1662,7 @@ fn unix_readlink(path: &eq) -> &eq {
     #[export = "unix_truncate"]
     #[export = "caml_unix_truncate"]
     fn unix_truncate(path: &eq, len: &eq) -> &eq {
-        become truncate_impl(path, len as &i31 as i32_s as i64_s);
+        become truncate_impl(path, len as i32_s as i64_s);
     }
 
     #[export = "unix_truncate_64"]
@@ -1704,7 +1704,7 @@ fn unix_readlink(path: &eq) -> &eq {
 #[if(wasi)]
 {
     fn ftruncate(vfd: &eq, len: i64) -> &eq {
-        let fd = vfd as &i31 as i32_u;
+        let fd = vfd as i32_u;
         let res = fd_filestat_set_size(fd, len);
         caml_unix_error_if(res, "ftruncate", no_arg);
         0 as &i31;
@@ -1713,7 +1713,7 @@ fn unix_readlink(path: &eq) -> &eq {
     #[export = "unix_ftruncate"]
     #[export = "caml_unix_ftruncate"]
     fn unix_ftruncate(fd: &eq, len: &eq) -> &eq {
-        become ftruncate(fd, len as &i31 as i32_s as i64_s);
+        become ftruncate(fd, len as i32_s as i64_s);
     }
 
     #[export = "unix_ftruncate_64"]
@@ -1856,7 +1856,7 @@ type flags = [i16];
         let flags = convert_flag_list(unix_open_flags, vflags);
         let fd: i32;
         try {
-            fd = open_fn(unwrap(caml_jsstring_of_string(path)), flags, perm as &i31 as i32_u);
+            fd = open_fn(unwrap(caml_jsstring_of_string(path)), flags, perm as i32_u);
         } catch {
             javascript_exception => {
                 caml_unix_error(_, null);
@@ -1898,10 +1898,10 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
     #[export = "unix_write"]
     #[export = "caml_unix_write"]
     fn unix_write(vfd: &eq, vbuf: &eq, vpos: &eq, vlen: &eq) -> &eq {
-        let fd = vfd as &i31 as i32_u;
+        let fd = vfd as i32_u;
         let s = vbuf as &bytes;
-        let pos = vpos as &i31 as i32_u;
-        let len = vlen as &i31 as i32_u;
+        let pos = vpos as i32_u;
+        let len = vlen as i32_u;
         let buffer = get_buffer();
         let nwritten = buffer;
         let iovs = buffer + 4;
@@ -1928,10 +1928,10 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
     fn unix_single_write(vfd: &eq, vbuf: &eq, vpos: &eq, vlen: &eq) -> &eq {
         let written: i32;
         let n: i32;
-        let fd = vfd as &i31 as i32_u;
+        let fd = vfd as i32_u;
         let s = vbuf as &bytes;
-        let pos = vpos as &i31 as i32_u;
-        let len = vlen as &i31 as i32_u;
+        let pos = vpos as i32_u;
+        let len = vlen as i32_u;
         if !len {
             return 0 as &i31;
         }
@@ -1952,9 +1952,9 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
     #[export = "unix_read"]
     #[export = "caml_unix_read"]
     fn unix_read(vfd: &eq, vbuf: &eq, vpos: &eq, vlen: &eq) -> &eq {
-        let fd = vfd as &i31 as i32_u;
-        let pos = vpos as &i31 as i32_u;
-        let len = vlen as &i31 as i32_u;
+        let fd = vfd as i32_u;
+        let pos = vpos as i32_u;
+        let len = vlen as i32_u;
         if len >u IO_BUFFER_SIZE {
             len = IO_BUFFER_SIZE;
         }
@@ -1977,11 +1977,11 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
     #[export = "unix_write_bigarray"]
     #[export = "caml_unix_write_bigarray"]
     fn unix_write_bigarray(vfd: &eq, vbuf: &eq, vpos: &eq, vlen: &eq, vsingle: &eq) -> &eq {
-        let fd = vfd as &i31 as i32_u;
+        let fd = vfd as i32_u;
         let dat = caml_ba_get_data(vbuf) as &any as &dat;
         let buf = dat.array as &bytes;
-        let pos = vpos as &i31 as i32_u + dat.offset;
-        let len = vlen as &i31 as i32_u;
+        let pos = vpos as i32_u + dat.offset;
+        let len = vlen as i32_u;
         let buffer = get_buffer();
         let nwritten = buffer;
         let iovs = buffer + 4;
@@ -2009,11 +2009,11 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
     #[export = "unix_read_bigarray"]
     #[export = "caml_unix_read_bigarray"]
     fn unix_read_bigarray(vfd: &eq, vbuf: &eq, vpos: &eq, vlen: &eq) -> &eq {
-        let fd = vfd as &i31 as i32_u;
+        let fd = vfd as i32_u;
         let dat = caml_ba_get_data(vbuf) as &any as &dat;
         let buf = dat.array as &bytes;
-        let pos = vpos as &i31 as i32_u + dat.offset;
-        let len = vlen as &i31 as i32_u;
+        let pos = vpos as i32_u + dat.offset;
+        let len = vlen as i32_u;
         if len >u IO_BUFFER_SIZE {
             len = IO_BUFFER_SIZE;
         }
@@ -2036,10 +2036,10 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
     #[export = "unix_write"]
     #[export = "caml_unix_write"]
     fn unix_write(vfd: &eq, vbuf: &eq, vpos: &eq, vlen: &eq) -> &eq {
-        let fd = vfd as &i31 as i32_u;
+        let fd = vfd as i32_u;
         let s = vbuf as &bytes;
-        let pos = vpos as &i31 as i32_u;
-        let len = vlen as &i31 as i32_u;
+        let pos = vpos as i32_u;
+        let len = vlen as i32_u;
         let buf = get_io_buffer();
         let buf_view = io_buffer_view!;
         let fd_offset = get_fd_offset(fd);
@@ -2078,10 +2078,10 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
     #[export = "unix_single_write"]
     #[export = "caml_unix_single_write"]
     fn unix_single_write(vfd: &eq, vbuf: &eq, vpos: &eq, vlen: &eq) -> &eq {
-        let fd = vfd as &i31 as i32_u;
+        let fd = vfd as i32_u;
         let s = vbuf as &bytes;
-        let pos = vpos as &i31 as i32_u;
-        let len = vlen as &i31 as i32_u;
+        let pos = vpos as i32_u;
+        let len = vlen as i32_u;
         let buf = get_io_buffer();
         let buf_view = io_buffer_view!;
         let fd_offset = get_fd_offset(fd);
@@ -2116,9 +2116,9 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
     #[export = "unix_read"]
     #[export = "caml_unix_read"]
     fn unix_read(vfd: &eq, vbuf: &eq, vpos: &eq, vlen: &eq) -> &eq {
-        let fd = vfd as &i31 as i32_u;
-        let pos = vpos as &i31 as i32_u;
-        let len = vlen as &i31 as i32_u;
+        let fd = vfd as i32_u;
+        let pos = vpos as i32_u;
+        let len = vlen as i32_u;
         if len >u IO_BUFFER_SIZE {
             len = IO_BUFFER_SIZE;
         }
@@ -2148,10 +2148,10 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
     #[export = "unix_write_bigarray"]
     #[export = "caml_unix_write_bigarray"]
     fn unix_write_bigarray(vfd: &eq, vbuf: &eq, vpos: &eq, vlen: &eq, vsingle: &eq) -> &eq {
-        let fd = vfd as &i31 as i32_u;
+        let fd = vfd as i32_u;
         let buf = caml_ba_get_data(vbuf);
-        let pos = vpos as &i31 as i32_u;
-        let len = vlen as &i31 as i32_u;
+        let pos = vpos as i32_u;
+        let len = vlen as i32_u;
         let fd_offset = get_fd_offset(fd);
         let offset = fd_offset.offset;
         // [O_APPEND]: every write goes to the end of the file, regardless of the
@@ -2189,10 +2189,10 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
     #[export = "unix_read_bigarray"]
     #[export = "caml_unix_read_bigarray"]
     fn unix_read_bigarray(vfd: &eq, vbuf: &eq, vpos: &eq, vlen: &eq) -> &eq {
-        let fd = vfd as &i31 as i32_u;
+        let fd = vfd as i32_u;
         let buf = caml_ba_get_data(vbuf);
-        let pos = vpos as &i31 as i32_u;
-        let len = vlen as &i31 as i32_u;
+        let pos = vpos as i32_u;
+        let len = vlen as i32_u;
         let fd_offset = get_fd_offset(fd);
         let offset = fd_offset.offset;
         let n: i32;
@@ -2217,7 +2217,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
 #[if(wasi)]
 fn lseek(fd: &eq, offset: i64, cmd: &eq) -> i64 {
     let buffer = get_buffer();
-    let res = fd_seek(fd as &i31 as i32_u, offset, cmd as &i31 as i32_u, buffer);
+    let res = fd_seek(fd as i32_u, offset, cmd as i32_u, buffer);
     caml_unix_error_if(res, "lseek", no_arg);
     m.load64(buffer);
 }
@@ -2228,7 +2228,7 @@ fn lseek(fd: &eq, offset: i64, cmd: &eq) -> i64 {
     }
 
     fn lseek(vfd: &eq, offset: i64, cmd: &eq) -> i64 {
-        let fd = vfd as &i31 as i32_u;
+        let fd = vfd as i32_u;
         let fd_offset =
             'non_null: do &fd_offset {
                 br_on_non_null 'non_null get_fd_offset_unchecked(fd);
@@ -2253,7 +2253,7 @@ fn lseek(fd: &eq, offset: i64, cmd: &eq) -> i64 {
 #[export = "unix_lseek"]
 #[export = "caml_unix_lseek"]
 fn unix_lseek(fd: &eq, ofs: &eq, cmd: &eq) -> &eq {
-    lseek(fd, ofs as &i31 as i32_s as i64_s, cmd) as i32 as &i31;
+    lseek(fd, ofs as i32_s as i64_s, cmd) as i32 as &i31;
 }
 
 #[export = "unix_lseek_64"]
@@ -2266,7 +2266,7 @@ fn unix_lseek_64(fd: &eq, ofs: &eq, cmd: &eq) -> &eq {
 #[export = "unix_fsync"]
 #[export = "caml_unix_fsync"]
 fn unix_fsync(fd: &eq) -> &eq {
-    let res = fd_sync(fd as &i31 as i32_u);
+    let res = fd_sync(fd as i32_u);
     caml_unix_error_if(res, "fsync", no_arg);
     0 as &i31;
 }
@@ -2296,7 +2296,7 @@ fn caml_unix_check_stream_semantics(fd: &eq, out: i32) {
     let s: &block;
     let file_type: i32;
     let buffer = get_buffer();
-    let res = fd_filestat_get(fd as &i31 as i32_u, buffer);
+    let res = fd_filestat_get(fd as i32_u, buffer);
     caml_unix_error_if(res, channel_of_descr_name(out), no_arg);
     let kind = m.load8(buffer, 1, 16) as i32_u;
     dispatch kind [ 'ok 'bad 'ok 'bad 'ok 'bad 'ok else 'bad ] {
@@ -2317,7 +2317,7 @@ fn caml_unix_check_stream_semantics(fd: &eq, out: i32) {
                 0 as &i31;
             }
         } as &block;
-    let kind = s[3] as &i31 as i32_u;
+    let kind = s[3] as i32_u;
     dispatch kind [ 'ok 'bad 'ok 'bad 'bad else 'ok ] {
         'bad: {
             throw ocaml_exception
@@ -2354,7 +2354,7 @@ fn unix_outchannel_of_filedescr(fd: &eq) -> &eq {
 #[export = "unix_close"]
 #[export = "caml_unix_close"]
 fn unix_close(fd: &eq) -> &eq {
-    let res = fd_close(fd as &i31 as i32_u);
+    let res = fd_close(fd as i32_u);
     caml_unix_error_if(res, "close", no_arg);
     0 as &i31;
 }
@@ -2362,7 +2362,7 @@ fn unix_close(fd: &eq) -> &eq {
 #[export = "unix_close"]
 #[export = "caml_unix_close"]
 fn unix_close(fd: &eq) -> &eq {
-    release_fd_offset(fd as &i31 as i32_u);
+    release_fd_offset(fd as i32_u);
     try {
         close(fd);
     } catch {

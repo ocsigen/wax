@@ -79,8 +79,8 @@ fn re_match(vre: &eq, s: &bytes, pos: i32, accept_partial_match: i32) -> &eq {
     let prog = re[1] as &block;
     let cpool = re[2] as &block;
     let normtable = re[3] as &bytes;
-    let numgroups = re[4] as &i31 as i32_s;
-    let numregisters = re[5] as &i31 as i32_s;
+    let numgroups = re[4] as i32_s;
+    let numregisters = re[5] as i32_s;
     let group_start: &int_array = [-1; numgroups];
     let group_end: &int_array = [-1; numgroups];
     let re_register: &int_array = [-1; numregisters];
@@ -94,7 +94,7 @@ fn re_match(vre: &eq, s: &bytes, pos: i32, accept_partial_match: i32) -> &eq {
             'continue: loop {
                 'backtrack: do {
                     'prefix_match: do {
-                        let instr = prog[pc] as &i31 as i32_s;
+                        let instr = prog[pc] as i32_s;
                         pc = pc + 1;
                         let s': &bytes;
                         let set: &bytes;
@@ -344,7 +344,7 @@ const search_forward = "Str.search_forward";
 fn re_search_forward(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     // ZZZ startchars
     let s = vs as &bytes;
-    let pos = vpos as &i31 as i32_s;
+    let pos = vpos as i32_s;
     let len = s.length();
     if pos >u len {
         caml_invalid_argument(search_forward);
@@ -366,7 +366,7 @@ const search_backward = "Str.search_backward";
 fn re_search_backward(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     // ZZZ startchars
     let s = vs as &bytes;
-    let pos = vpos as &i31 as i32_s;
+    let pos = vpos as i32_s;
     let len = s.length();
     if pos >u len {
         caml_invalid_argument(search_backward);
@@ -388,7 +388,7 @@ const string_match = "Str.string_match";
 fn re_string_match(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     // ZZZ startchars
     let s = vs as &bytes;
-    let pos = vpos as &i31 as i32_s;
+    let pos = vpos as i32_s;
     let len = s.length();
     if pos >u len {
         caml_invalid_argument(string_match);
@@ -406,7 +406,7 @@ const string_partial_match = "Str.string_partial_match";
 fn re_partial_match(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     // ZZZ startchars
     let s = vs as &bytes;
-    let pos = vpos as &i31 as i32_s;
+    let pos = vpos as i32_s;
     let len = s.length();
     if pos >u len {
         caml_invalid_argument(string_partial_match);
@@ -457,8 +457,8 @@ fn re_replacement_text(vrepl: &eq, vgroups: &eq, vorig: &eq) -> &eq {
         if c + 1 >=u groups.length() {
             caml_failwith(unmatched_group);
         }
-        start = groups[c + 1] as &i31 as i32_s;
-        end = groups[c + 2] as &i31 as i32_s;
+        start = groups[c + 1] as i32_s;
+        end = groups[c + 2] as i32_s;
         if start == -1 {
             caml_failwith(unmatched_group);
         }
@@ -493,8 +493,8 @@ fn re_replacement_text(vrepl: &eq, vgroups: &eq, vorig: &eq) -> &eq {
         if c + 1 >=u groups.length() {
             caml_failwith(unmatched_group);
         }
-        start = groups[c + 1] as &i31 as i32_s;
-        end = groups[c + 2] as &i31 as i32_s;
+        start = groups[c + 1] as i32_s;
+        end = groups[c + 2] as i32_s;
         len = end - start;
         res.copy(j, orig, start, len);
         j = j + len;

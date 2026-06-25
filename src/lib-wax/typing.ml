@@ -2593,15 +2593,27 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
   | Float _ as desc -> return_expression i desc (UnionFind.make Float)
   | Cast (i', typ) ->
       let* i' = instruction ctx i' in
-      (* When converting from Wasm, fuse the widening of a packed read: an
-         [Int8]/[Int16] load reaches [i64] as [(e as i32_X) as i64_X] (a
-         [struct.get_s]/[array.get_s]/[load8_s] feeding [i64.extend_i32_X]).
-         Drop the intermediate [i32] cast so it prints as the single cast
-         [e as i64_X]. The [i31.get]-then-extend case has a reference inner
-         operand (not [Int8]/[Int16]), so it is left as a double cast. *)
+      (* When converting from Wasm, fuse two casts whose inserted intermediate
+         type is superfluous (only when [ctx.simplify]):
+         - a packed [Int8]/[Int16] read widened to [i64] arrives as
+           [(e as i32_X) as i64_X] (a [struct.get_s]/[array.get_s]/[load8_s]
+           feeding [i64.extend_i32_X]); drop the [i32] cast to print
+           [e as i64_X].
+         - an [i31] extracted from a non-[i31] reference arrives as
+           [(e as &i31) as i32_X] (a [ref.cast] feeding [i31.get]); drop the
+           [&i31] cast to print [e as i32_X], which [to_wasm] re-expands to the
+           [ref.cast]. A reference already typed [&i31]/[&?i31] never reaches
+           here (its [&i31] cast is dropped as redundant first), and an [i31]
+           built from an [i32] ([ref.i31]) is excluded by [is_widenable_ref]. *)
       let is_packed_read e =
         match UnionFind.find (expression_type ctx e) with
         | Int8 | Int16 -> true
+        | _ -> false
+      in
+      let is_widenable_ref e =
+        match UnionFind.find (expression_type ctx e) with
+        | Valtype { internal = Ref { typ = I31; _ }; _ } -> false
+        | Valtype { internal = Ref _; _ } -> true
         | _ -> false
       in
       let i' =
@@ -2609,6 +2621,10 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
         | ( Signedtype { typ = `I64; signage = s2; strict = false },
             Cast (e, Signedtype { typ = `I32; signage = s1; strict = false }) )
           when ctx.simplify && s1 = s2 && is_packed_read e ->
+            e
+        | ( Signedtype { typ = `I32; _ },
+            Cast (e, Valtype (Ref { typ = I31; nullable = false })) )
+          when ctx.simplify && is_widenable_ref e ->
             e
         | _ -> i'
       in

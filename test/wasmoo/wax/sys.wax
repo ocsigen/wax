@@ -109,7 +109,7 @@ tag ocaml_exit();
 #[export = "unix_exit"]
 #[export = "caml_unix_exit"]
 fn caml_sys_exit(code: &eq) -> &eq {
-    exit(code as &i31 as i32_s);
+    exit(code as i32_s);
     // Fallback: try to exit through an exception
     throw ocaml_exit;
 }
@@ -459,7 +459,7 @@ let caml_runtime_warnings = 0;
 
 #[export = "caml_ml_enable_runtime_warnings"]
 fn caml_ml_enable_runtime_warnings(v: &eq) -> &eq {
-    caml_runtime_warnings = v as &i31 as i32_u;
+    caml_runtime_warnings = v as i32_u;
     0 as &i31;
 }
 

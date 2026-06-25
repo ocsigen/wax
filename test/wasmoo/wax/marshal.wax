@@ -98,7 +98,7 @@ const input_val_from_string = "input_value_from_string";
 #[export = "caml_input_value_from_string"]
 fn caml_input_value_from_bytes(vstr: &eq, vofs: &eq) -> &eq {
     let str = vstr as &bytes;
-    let ofs = vofs as &i31 as i32_u;
+    let ofs = vofs as i32_u;
     let s = get_intern_state(str, ofs);
     let h = parse_header(s, input_val_from_string);
     if ofs + (h.header_len + h.data_len) >u str.length() {
@@ -600,7 +600,7 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                 (pos == 2) & (dest[0] == object_tag as &i31) {
                 // Predefined exception slots have a negative ID
                 // and should not be refreshed
-                if 0 <=s dest[2] as &i31 as i32_s {
+                if 0 <=s dest[2] as i32_s {
                     _ = caml_set_oo_id(dest);
                 }
             }
@@ -703,7 +703,7 @@ const caml_marshal_header_size = 20;
 
 #[export = "caml_marshal_data_size"]
 fn caml_marshal_data_size(buf: &eq, ofs: &eq) -> &eq {
-    let s = get_intern_state(buf as &bytes, ofs as &i31 as i32_u);
+    let s = get_intern_state(buf as &bytes, ofs as i32_u);
     let magic = read32(s);
     if magic == Intext_magic_number_big {
         fail_too_large(marshal_data_size);
@@ -1036,7 +1036,7 @@ fn extern_rec(s: &extern_state, v: &eq) {
                     br 'next_item;
                 }
                 bv: &block => {
-                    let tg = bv[0] as &i31 as i32_u;
+                    let tg = bv[0] as i32_u;
                     sz = bv.length() - 1;
                     if !sz {
                         extern_header(s, 0, tg);
@@ -1186,8 +1186,8 @@ fn caml_output_value_to_string(v: &eq, flags: &eq) -> &eq {
 #[export = "caml_output_value_to_buffer"]
 fn caml_output_value_to_buffer(vbuf: &eq, vpos: &eq, vlen: &eq, v: &eq, flags: &eq) -> &eq {
     let buf = vbuf as &bytes;
-    let pos = vpos as &i31 as i32_u;
-    let len = vlen as &i31 as i32_u;
+    let pos = vpos as i32_u;
+    let len = vlen as i32_u;
     let blk = { next: null, end: pos + len, dat: buf };
     let (r_0, r_1, _) = extern_value(flags, blk, pos + 20, 1, v);
     buf.copy(pos, r_1, 0, 20);

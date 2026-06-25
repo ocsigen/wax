@@ -132,10 +132,10 @@ fn caml_bigstring_memset(s: &eq, pos: &eq, len: &eq, v: &eq) -> &eq {
 #[export = "caml_bigstring_memcmp"]
 fn caml_bigstring_memcmp(s1: &eq, vpos1: &eq, s2: &eq, vpos2: &eq, vlen: &eq) -> &eq {
     let v1 = caml_ba_get_view(s1);
-    let pos1 = vpos1 as &i31 as i32_s;
+    let pos1 = vpos1 as i32_s;
     let v2 = caml_ba_get_view(s2);
-    let pos2 = vpos2 as &i31 as i32_s;
-    let len = vlen as &i31 as i32_s;
+    let pos2 = vpos2 as i32_s;
+    let len = vlen as i32_s;
     let i: i32;
     let c1: i32;
     let c2: i32;
@@ -188,10 +188,10 @@ fn caml_bigstring_memcmp(s1: &eq, vpos1: &eq, s2: &eq, vpos2: &eq, vlen: &eq) ->
 #[export = "caml_bigstring_memcmp_string"]
 fn caml_bigstring_memcmp_string(s1: &eq, vpos1: &eq, vs2: &eq, vpos2: &eq, vlen: &eq) -> &eq {
     let v1 = caml_ba_get_view(s1);
-    let pos1 = vpos1 as &i31 as i32_s;
+    let pos1 = vpos1 as i32_s;
     let s2 = vs2 as &bytes;
-    let pos2 = vpos2 as &i31 as i32_s;
-    let len = vlen as &i31 as i32_s;
+    let pos2 = vpos2 as i32_s;
+    let len = vlen as i32_s;
     let i: i32;
     let c1: i32;
     let c2: i32;
@@ -247,9 +247,9 @@ fn caml_bigstring_memcmp_string(s1: &eq, vpos1: &eq, vs2: &eq, vpos2: &eq, vlen:
 
 #[export = "caml_bigstring_memchr"]
 fn caml_bigstring_memchr(s: &eq, vc: &eq, vpos: &eq, vlen: &eq) -> &eq {
-    let c = vc as &i31 as i32_s;
-    let pos = vpos as &i31 as i32_s;
-    let len = vlen as &i31 as i32_s;
+    let c = vc as i32_s;
+    let pos = vpos as i32_s;
+    let len = vlen as i32_s;
     let v = caml_ba_get_view(s);
     // Create mask: c | (c<<8) | (c<<16) | (c<<24)
     let mask = c * 0x01010101;
@@ -291,9 +291,9 @@ fn caml_bigstring_memchr(s: &eq, vc: &eq, vpos: &eq, vlen: &eq) -> &eq {
 
 #[export = "caml_bigstring_memrchr"]
 fn caml_bigstring_memrchr(s: &eq, vc: &eq, vpos: &eq, vlen: &eq) -> &eq {
-    let c = vc as &i31 as i32_s;
-    let pos = vpos as &i31 as i32_s;
-    let len = vlen as &i31 as i32_s;
+    let c = vc as i32_s;
+    let pos = vpos as i32_s;
+    let len = vlen as i32_s;
     let v = caml_ba_get_view(s);
     // cur points to last byte to check
     let cur = pos + len - 1;
@@ -335,9 +335,9 @@ fn caml_bigstring_strncmp(vs1: &eq, vpos1: &eq, vs2: &eq, vpos2: &eq, vlen: &eq)
 
     let v1 = caml_ba_get_view(vs1);
     let v2 = caml_ba_get_view(vs2);
-    let pos1 = vpos1 as &i31 as i32_s;
-    let pos2 = vpos2 as &i31 as i32_s;
-    let len = vlen as &i31 as i32_s;
+    let pos1 = vpos1 as i32_s;
+    let pos2 = vpos2 as i32_s;
+    let len = vlen as i32_s;
     let i: i32;
     let c1: i32;
     let c2: i32;
@@ -428,10 +428,10 @@ fn caml_bigstring_strncmp(vs1: &eq, vpos1: &eq, vs2: &eq, vpos2: &eq, vlen: &eq)
 #[export = "caml_bigstring_blit_string_to_ba"]
 fn caml_bigstring_blit_bytes_to_ba(str1: &eq, vpos1: &eq, ba2: &eq, vpos2: &eq, vlen: &eq) -> &eq {
     let s1 = str1 as &bytes;
-    let pos1 = vpos1 as &i31 as i32_s;
+    let pos1 = vpos1 as i32_s;
     let d2 = caml_ba_get_view(ba2);
-    let pos2 = vpos2 as &i31 as i32_s;
-    let len = vlen as &i31 as i32_s;
+    let pos2 = vpos2 as i32_s;
+    let len = vlen as i32_s;
     caml_blit_bytes_to_dataview(s1, pos1, d2, pos2, len);
     0 as &i31;
 }
@@ -439,10 +439,10 @@ fn caml_bigstring_blit_bytes_to_ba(str1: &eq, vpos1: &eq, ba2: &eq, vpos2: &eq, 
 #[export = "caml_bigstring_blit_ba_to_bytes"]
 fn caml_bigstring_blit_ba_to_bytes(ba1: &eq, vpos1: &eq, str2: &eq, vpos2: &eq, vlen: &eq) -> &eq {
     let d1 = caml_ba_get_view(ba1);
-    let pos1 = vpos1 as &i31 as i32_s;
+    let pos1 = vpos1 as i32_s;
     let s2 = str2 as &bytes;
-    let pos2 = vpos2 as &i31 as i32_s;
-    let len = vlen as &i31 as i32_s;
+    let pos2 = vpos2 as i32_s;
+    let len = vlen as i32_s;
     caml_blit_dataview_to_bytes(d1, pos1, s2, pos2, len);
     0 as &i31;
 }
@@ -450,10 +450,10 @@ fn caml_bigstring_blit_ba_to_bytes(ba1: &eq, vpos1: &eq, str2: &eq, vpos2: &eq, 
 #[export = "caml_bigstring_blit_ba_to_ba"]
 fn caml_bigstring_blit_ba_to_ba(ba1: &eq, vpos1: &eq, ba2: &eq, vpos2: &eq, vlen: &eq) -> &eq {
     let d1 = caml_ba_get_data(ba1);
-    let pos1 = vpos1 as &i31 as i32_s;
+    let pos1 = vpos1 as i32_s;
     let d2 = caml_ba_get_data(ba2);
-    let pos2 = vpos2 as &i31 as i32_s;
-    let len = vlen as &i31 as i32_s;
+    let pos2 = vpos2 as i32_s;
+    let len = vlen as i32_s;
     ta_set(d2, ta_subarray(d1, pos1, pos1 + len), pos2);
     0 as &i31;
 }

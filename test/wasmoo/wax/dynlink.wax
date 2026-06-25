@@ -90,7 +90,7 @@ fn caml_dynlink_lookup_symbol(&eq, &eq) -> &eq {
 
 #[export = "caml_dynlink_add_primitive"]
 fn caml_dynlink_add_primitive(&eq) -> &eq {
-    let idx = link_info[LINK_INFO_PRIM_COUNT] as &i31 as i32_u;
+    let idx = link_info[LINK_INFO_PRIM_COUNT] as i32_u;
     link_info[LINK_INFO_PRIM_COUNT] = (idx + 1) as &i31;
     idx as &i31;
 }

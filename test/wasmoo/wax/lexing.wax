@@ -53,7 +53,7 @@ const lexing_empty_token = "lexing: empty token";
 fn caml_lex_engine(vtbl: &eq, start_state: &eq, vlexbuf: &eq) -> &eq {
     let tbl = vtbl as &block;
     let lexbuf = vlexbuf as &block;
-    let state = start_state as &i31 as i32_s;
+    let state = start_state as i32_s;
     let buffer = lexbuf[lex_buffer] as &bytes;
     if state >=s 0 {
         let vpos = lexbuf[lex_curr_pos];
@@ -79,14 +79,14 @@ fn caml_lex_engine(vtbl: &eq, start_state: &eq, vlexbuf: &eq) -> &eq {
             lexbuf[lex_last_pos] = lexbuf[lex_curr_pos];
             lexbuf[lex_last_action] = backtrk as &i31;
         }
-        if lexbuf[lex_curr_pos] as &i31 as i32_s >=s lexbuf[lex_buffer_len] as &i31 as i32_s {
+        if lexbuf[lex_curr_pos] as i32_s >=s lexbuf[lex_buffer_len] as i32_s {
             if lexbuf[lex_eof_reached] == 0 as &i31 {
                 return (-1 - state) as &i31;
             } else {
                 c = 256;
             }
         } else {
-            let pos = lexbuf[lex_curr_pos] as &i31 as i32_u;
+            let pos = lexbuf[lex_curr_pos] as i32_u;
             c = buffer[pos] as i32_u;
             lexbuf[lex_curr_pos] = (pos + 1) as &i31;
         }
@@ -139,7 +139,7 @@ fn run_tag(s: &bytes, i: i32, lexbuf: &block) {
 fn caml_new_lex_engine(vtbl: &eq, start_state: &eq, vlexbuf: &eq) -> &eq {
     let tbl = vtbl as &block;
     let lexbuf = vlexbuf as &block;
-    let state = start_state as &i31 as i32_s;
+    let state = start_state as i32_s;
     let buffer = lexbuf[lex_buffer] as &bytes;
     if state >=s 0 {
         let vpos = lexbuf[lex_curr_pos];
@@ -176,14 +176,14 @@ fn caml_new_lex_engine(vtbl: &eq, start_state: &eq, vlexbuf: &eq) -> &eq {
             lexbuf[lex_last_pos] = lexbuf[lex_curr_pos];
             lexbuf[lex_last_action] = backtrk as &i31;
         }
-        if lexbuf[lex_curr_pos] as &i31 as i32_s >=s lexbuf[lex_buffer_len] as &i31 as i32_s {
+        if lexbuf[lex_curr_pos] as i32_s >=s lexbuf[lex_buffer_len] as i32_s {
             if lexbuf[lex_eof_reached] == 0 as &i31 {
                 return (-1 - state) as &i31;
             } else {
                 c = 256;
             }
         } else {
-            let pos = lexbuf[lex_curr_pos] as &i31 as i32_u;
+            let pos = lexbuf[lex_curr_pos] as i32_u;
             c = buffer[pos] as i32_u;
             lexbuf[lex_curr_pos] = (pos + 1) as &i31;
         }

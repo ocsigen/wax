@@ -176,6 +176,8 @@ if cond => (i32) -> i32 { ... } else { ... }
 | `ref.cast` | `val as &type` |
 | `ref.test` | `val is &type` |
 
+When `val as i32_s`/`as i32_u` is applied to a reference that is not already `&i31` (e.g. an `&any` or `&eq`), a `ref.cast (ref i31)` is inserted before the `i31.get`, so `val as i32_s` covers both `i31.get_s` and `ref.cast (ref i31)` + `i31.get_s`.
+
 ## Aggregate Instructions
 
 | Wasm | Wax |

@@ -33,13 +33,13 @@ type context = {
 #[export = "caml_md5_bytes"]
 fn caml_md5_string(vs: &eq, vofs: &eq, vlen: &eq) -> &eq {
     let ctx = MD5Init();
-    MD5Update(ctx, vs as &bytes, vofs as &i31 as i32_u, vlen as &i31 as i32_u);
+    MD5Update(ctx, vs as &bytes, vofs as i32_u, vlen as i32_u);
     become MD5Final(ctx);
 }
 
 #[export = "caml_md5_chan"]
 fn caml_md5_chan(ch: &eq, vlen: &eq) -> &eq {
-    let len = vlen as &i31 as i32_s;
+    let len = vlen as i32_s;
     let buf: &bytes = [0; 4096];
     let ctx = MD5Init();
     let read: i32;
