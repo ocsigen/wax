@@ -200,7 +200,7 @@ fn caml_ba_get_data(&eq) -> &extern;
         out_channels = new;
     }
     fn map_new() -> &extern {
-        0 as &i31 as &extern;
+        0 as &extern;
     }
     fn map_get(&extern, i32) -> &fd_offset {
         { offset: 0, seeked: 0, append: 0 };

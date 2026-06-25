@@ -981,6 +981,10 @@ and instruction_desc ret ctx i : location Text.instr list =
               (* [i64 as &i31]: [ref.i31] takes an [i32], so wrap first. *)
               | I64, Valtype (Ref { typ = I31; _ }) ->
                   (folded loc I32WrapI64 code, I32)
+              (* [i32 as &extern]: box as [i31] first ([extern.convert_any]
+                 follows in the match below). *)
+              | I32, Valtype (Ref { typ = Extern; _ }) ->
+                  (folded loc RefI31 code, Ref { nullable = false; typ = I31 })
               (* [extern as &T] for an [any]-hierarchy [T]: convert to [any]
                  first, then the match below does the [ref.cast] to [T]. *)
               | ( Ref { typ = Extern | NoExtern; _ },

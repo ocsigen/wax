@@ -182,6 +182,7 @@ These casts can also chain through a forced intermediate, written as a single `a
 - **`&ref as i64_s`/`as i64_u`** widens that further: the `i31.get` (with the `ref.cast` above as needed) is followed by `i64.extend_i32_s`/`_u`.
 - **`i64 as &i31`** wraps to `i32` (`i32.wrap_i64`) before `ref.i31`.
 - **`extern_val as &T`** for an `any`-hierarchy `T` (e.g. a struct type) inserts `any.convert_extern` before the `ref.cast (ref T)`; likewise an `any`-hierarchy value `as &extern` uses `extern.convert_any`.
+- **`i32_val as &extern`** boxes the `i32` with `ref.i31` before `extern.convert_any`.
 
 ## Aggregate Instructions
 
