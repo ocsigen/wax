@@ -1,20 +1,25 @@
-A type-unknown operation in unreachable code compiles to `unreachable` rather
-than crashing the Wasm backend:
+A type-unknown operation in unreachable code is rejected: even though dead code
+type-checks permissively, an operation whose compilation needs the operand's
+concrete type (an array/struct access, a call, …) cannot be emitted when that
+type is unknown. The diagnostic points at the offending operand:
 
-  $ wax convert -f wat dead.wax
-  ;; An array access on a hole in unreachable code has an unknown receiver type.
-  ;; It type-checks (dead code is permissive) and must compile without crashing:
-  ;; the untranslatable, never-executed op becomes `unreachable`.
-  (func $f (result i32) (unreachable)
-                        (unreachable))
-  
-  ;; A `let` whose initializer is an unknown-typed (dead) value: the local is
-  ;; still declared (type irrelevant) so later references resolve.
-  (type $box (struct (field $v i32)))
-  
-  (func $g
-    (local $b i32)
-    (unreachable)
-    (local.set $b (unreachable))
-    (drop (local.get $b))
-  )
+  $ wax check dead.wax
+  Error:
+    Cannot determine the type of this expression, which is needed to compile this operation.
+   ──➤  dead.wax:7:5
+  5 │ fn f() -> i32 {
+  6 │     unreachable;
+  7 │     _[0];
+    ·     ^
+  8 │ }
+  9 │ 
+  Error:
+    Cannot determine the type of this expression, which is needed to compile this operation.
+    ──➤  dead.wax:16:13
+  14 │ fn g() {
+  15 │     unreachable;
+  16 │     let b = _.v;
+     ·             ^
+  17 │     let _ = b;
+  18 │ }
+  [123]

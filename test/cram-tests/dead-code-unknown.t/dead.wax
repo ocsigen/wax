@@ -1,13 +1,14 @@
 // An array access on a hole in unreachable code has an unknown receiver type.
-// It type-checks (dead code is permissive) and must compile without crashing:
-// the untranslatable, never-executed op becomes `unreachable`.
+// Dead code type-checks permissively, but the access still cannot be compiled
+// (the array type is unknown), so it is rejected with a diagnostic pointing at
+// the receiver rather than silently miscompiled.
 fn f() -> i32 {
     unreachable;
     _[0];
 }
 
-// A `let` whose initializer is an unknown-typed (dead) value: the local is
-// still declared (type irrelevant) so later references resolve.
+// Likewise a field access whose receiver type is unknown in dead code: the
+// struct type cannot be resolved, so the access is rejected.
 type box = { v: i32 };
 
 fn g() {

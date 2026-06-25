@@ -81,6 +81,16 @@ type inferred_valtype = { typ : valtype; internal : Internal.valtype }
 
 type inferred_type =
   | Unknown
+      (** The genuinely polymorphic type of a value taken off the stack of
+          unreachable or branch-terminated code. No error has been reported for
+          it: an instruction that needs its operand's concrete type to be
+          compiled (a call, a field/array access, …) reports one when it meets
+          an [Unknown] operand. *)
+  | Error
+      (** The recovery type of a value whose own typing already failed (a poison
+          local/global read, an out-of-range value, an unresolved construction,
+          …). An error has already been reported, so [Error] propagates silently
+          — instructions treat it like [Unknown] but raise no further error. *)
   | Null
   | Number
   | Int8
@@ -91,7 +101,7 @@ type inferred_type =
 
 let output_inferred_type f ty =
   match UnionFind.find ty with
-  | Unknown -> Format.fprintf f "any"
+  | Unknown | Error -> Format.fprintf f "any"
   | Null -> Format.fprintf f "null"
   | Number -> Format.fprintf f "number"
   | Int -> Format.fprintf f "int"
@@ -99,6 +109,14 @@ let output_inferred_type f ty =
   | Int8 -> Format.fprintf f "i8"
   | Float -> Format.fprintf f "float"
   | Valtype ty -> Output.valtype f ty.typ
+
+(* Both [Unknown] (unreachable/branch) and [Error] (recovery) stand for "no
+   concrete type known". They behave identically except that an [Unknown]
+   operand still triggers a fresh diagnostic at a compile-needs-the-type site,
+   whereas an [Error] operand stays silent. This predicate is for the many
+   places that need only the common "type unknown" test. *)
+let is_unknown_or_error ty =
+  match UnionFind.find ty with Unknown | Error -> true | _ -> false
 
 module Error = struct
   open Wax_utils
@@ -165,6 +183,16 @@ module Error = struct
 
   let expected_array_type context ~location =
     report context ~location "Expected array type."
+
+  (* An operation (a call, a field/array access, …) needs its operand's concrete
+     type to be compiled, but the operand's type is unknown: it was taken off the
+     polymorphic stack of unreachable or branch-terminated code. This is the
+     first error for the operand (an already-failed operand reads as the [Error]
+     type and stays silent), so it is reported here. *)
+  let unknown_operand_type context ~location =
+    report context ~location
+      "Cannot determine the type of this expression, which is needed to \
+       compile this operation."
 
   (* A struct literal omitted its type name in a position where the expected
      type does not pin an exact struct type, so the type cannot be inferred. *)
@@ -682,7 +710,7 @@ type module_context = {
   functions : (int * string) Tbl.t;
   globals : (*mutable:*) (bool * inferred_valtype option) Tbl.t;
       (* As for [locals], the type is [None] for a global whose initializer
-         failed to type — a poison global read as [Unknown] to avoid cascades. *)
+         failed to type — a poison global read as [Error] to avoid cascades. *)
   import_globals : (bool * inferred_valtype option) Tbl.t;
       (* The globals in scope for a table initializer: only the imported ones.
          A table is typed before the module's own globals are registered, so its
@@ -696,7 +724,7 @@ type module_context = {
   mutable locals : inferred_valtype option StringMap.t;
       (* The local's type, or [None] when it could not be determined because its
          initializer failed to type — an error-recovery "poison" local, read as
-         the [Unknown] type so its uses don't cascade into further errors. *)
+         the [Error] type so its uses don't cascade into further errors. *)
   warn_unused : bool;
       (* Whether to report locals declared by a [let] but never read. Enabled
          only when validation is requested. *)
@@ -857,8 +885,8 @@ let field_subtype info (ty : Wax_wasm.Ast.Binary.fieldtype)
 (* Whether the inferred type [ty] is a subtype of the expected type [ty'].
    Not a pure relation: when the two are compatible it *unifies* their
    union-find cells (so an as-yet-unconstrained literal like [Int]/[Number]
-   gets pinned to the concrete type it is checked against). [Unknown] on the
-   left (error-recovery / dead code) is a subtype of anything; [Unknown] never
+   gets pinned to the concrete type it is checked against). [Unknown] or [Error]
+   on the left (dead code / error recovery) is a subtype of anything; neither
    appears on the right because expected types always come from a real
    declaration, annotation or instruction signature — hence the [assert]. *)
 let subtype ctx ty ty' =
@@ -900,8 +928,8 @@ let subtype ctx ty ty' =
   | (Int8 | Int16), _
   | _, (Int8 | Int16) ->
       false
-  | Unknown, _ -> true
-  | _, Unknown -> assert false
+  | (Unknown | Error), _ -> true
+  | _, (Unknown | Error) -> assert false
 
 let cast ctx ty ty' =
   let ity = UnionFind.find ty in
@@ -967,7 +995,7 @@ let cast ctx ty ty' =
   | Valtype { internal = V128; _ }, (I64 | F32 | F64 | Ref _)
   | (Int8 | Int16), _ ->
       false
-  | Unknown, _ -> true
+  | (Unknown | Error), _ -> true
 
 let signed_cast ctx ty ty' =
   let ity = UnionFind.find ty in
@@ -1019,7 +1047,7 @@ let signed_cast ctx ty ty' =
           } ),
       _ ) ->
       false
-  | Unknown, _ -> true
+  | (Unknown | Error), _ -> true
 
 type stack =
   | Unreachable
@@ -1056,7 +1084,7 @@ let ( let*! ) e f =
       return
         {
           desc = Ast.Unreachable;
-          info = ([| UnionFind.make Unknown |], (Ast.no_loc ()).info);
+          info = ([| UnionFind.make Error |], (Ast.no_loc ()).info);
         }
 
 let pop_any ctx i st =
@@ -1065,7 +1093,7 @@ let pop_any ctx i st =
   | Cons (_, ty, r) -> (r, ty)
   | Empty ->
       Error.empty_stack ctx.diagnostics ~location:i.info;
-      (st, UnionFind.make Unknown)
+      (st, UnionFind.make Error)
 
 let rec pop_many ctx i n accu =
   if n = 0 then return accu
@@ -1291,7 +1319,7 @@ let expression_type ctx i =
   | [| ty |] -> ty
   | _ ->
       Error.not_an_expression ctx.diagnostics ~location (Array.length typ);
-      UnionFind.make Unknown
+      UnionFind.make Error
 
 let check_subtype ctx ~location ty' ty =
   if not (subtype ctx ty' ty) then
@@ -1321,7 +1349,7 @@ let standalone_valtype ctx ty =
   | Int | Number -> Some { typ = I32; internal = I32 }
   | Float -> Some { typ = F64; internal = F64 }
   | Null -> internalize_valtype ctx (Ref { nullable = true; typ = None_ })
-  | Int8 | Int16 | Unknown -> None
+  | Int8 | Int16 | Unknown | Error -> None
 
 (* Resolve the type that an omitted annotation takes from its initializer, as in
    [let x = e] or [const x = e]: an as-yet-unconstrained literal is pinned to a
@@ -1331,7 +1359,7 @@ let standalone_valtype ctx ty =
 let resolve_omitted_valtype ctx ty =
   match UnionFind.find ty with
   | Valtype v -> Some v
-  | Int | Number | Int8 | Int16 | Unknown ->
+  | Int | Number | Int8 | Int16 | Unknown | Error ->
       let v = { typ = I32; internal = I32 } in
       UnionFind.set ty (Valtype v);
       Some v
@@ -1345,6 +1373,20 @@ let resolve_omitted_valtype ctx ty =
       in
       UnionFind.set ty (Valtype v);
       v
+
+(* The type an unannotated [let]/global binding takes from its initializer,
+   recording a poison ([None]) type when the initializer has no concrete one. An
+   [Unknown] initializer (unreachable / branch code) reports an error here: a
+   binding needs a determinable type to be compiled, and silently demoting it to
+   the [Error] type would mask that. An [Error] initializer (already reported)
+   stays silent. *)
+let bound_value_type ctx ~location result_ty =
+  match UnionFind.find result_ty with
+  | Error -> None
+  | Unknown ->
+      Error.unknown_operand_type ctx.diagnostics ~location;
+      None
+  | _ -> resolve_omitted_valtype ctx result_ty
 
 (* Whether [i] is a (possibly cast-wrapped) [null].
 
@@ -1439,13 +1481,11 @@ let bind_let_value ctx ~location result_ty (name, typ) =
   | None ->
       Option.iter
         (fun name ->
-          (* An [Unknown] initializer means its typing already failed; record
-             the local as poison ([None]) rather than defaulting it to [i32], so
-             later uses do not cascade into spurious mismatches. *)
-          let ity =
-            if UnionFind.find result_ty = Unknown then None
-            else resolve_omitted_valtype ctx result_ty
-          in
+          (* The local takes its initializer's type; an [Unknown]/[Error]
+             initializer has no determinable one, so the local is recorded as
+             poison ([None]) rather than defaulting to [i32], and an [Unknown]
+             initializer is additionally reported (see [bound_value_type]). *)
+          let ity = bound_value_type ctx ~location result_ty in
           ctx.locals <- StringMap.add name.desc ity ctx.locals;
           ctx.local_decls := name :: !(ctx.local_decls);
           mark_initialized ctx name.desc)
@@ -1678,8 +1718,8 @@ let rec count_holes i =
 let rec check_hole_order_rec ctx i n =
   match i.desc with
   | Hole -> n - 1
-  | Cast (i, _) when UnionFind.find (expression_type ctx i) = Unknown ->
-      (* Casts in unreachable code should be ignored: they are here to
+  | Cast (i, _) when is_unknown_or_error (expression_type ctx i) ->
+      (* Casts in unreachable / failed code should be ignored: they are here to
          guide the translation but are not emitted. *)
       check_hole_order_rec ctx i n
   | _ when n <= 0 -> n
@@ -1807,7 +1847,7 @@ let split_on_last_type ctx ~location i =
   let len = Array.length a in
   if len = 0 then (
     Error.value_count_mismatch ctx.diagnostics ~location ~expected:1 ~provided:0;
-    (UnionFind.make Unknown, [||]))
+    (UnionFind.make Error, [||]))
   else (a.(len - 1), Array.sub a 0 (len - 1))
 
 let immediate_supertype s : Ast.heaptype =
@@ -2422,7 +2462,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
          where a value is expected, so report it and recover with an unknown
          value. *)
       Error.not_an_expression ctx.diagnostics ~location:i.info 0;
-      return_expression i desc (UnionFind.make Unknown)
+      return_expression i desc (UnionFind.make Error)
   | Hole ->
       let* ty = pop_parameter in
       return_expression i Hole ty
@@ -2434,13 +2474,13 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
             ctx.read_locals := StringSet.add idx.desc !(ctx.read_locals);
             if not (StringSet.mem idx.desc ctx.initialized_locals) then
               Error.uninitialized_local ctx.diagnostics ~location:idx.info idx;
-            (* A poison local ([None]) reads as [Unknown] so its uses don't
+            (* A poison local ([None]) reads as [Error] so its uses don't
                cascade. *)
             UnionFind.make
-              (match ty with Some ity -> Valtype ity | None -> Unknown)
+              (match ty with Some ity -> Valtype ity | None -> Error)
         | Global (_, ty) ->
             UnionFind.make
-              (match ty with Some ity -> Valtype ity | None -> Unknown)
+              (match ty with Some ity -> Valtype ity | None -> Error)
         | Func_ref (ty, ty') ->
             UnionFind.make
               (Valtype
@@ -2452,7 +2492,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
             Error.unbound_name ctx.diagnostics ~location:idx.info
               ~suggestions:(get_suggestions ctx idx.desc)
               "variable" idx;
-            UnionFind.make Unknown
+            UnionFind.make Error
       in
       return_expression i desc ty
   | Set (None, i') ->
@@ -2533,9 +2573,14 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
           (let>@ returned_types = array_map_opt (internalize ctx) typ.results in
            check_subtypes ctx ~location:i.info returned_types ctx.return_types);
           return_statement i (TailCall (i', l')) [||]
-      | Unknown ->
+      | Error ->
           (* The callee already failed to type; recover without a spurious
              "expected function type". *)
+          return_statement i (TailCall (i', l')) [||]
+      | Unknown ->
+          (* The callee's type is unknown (unreachable / branch code): the
+             function type cannot be resolved, so the call cannot be compiled. *)
+          Error.unknown_operand_type ctx.diagnostics ~location:(snd i'.info);
           return_statement i (TailCall (i', l')) [||]
       | _ ->
           Error.expected_func_type ctx.diagnostics ~location:i.info;
@@ -2616,7 +2661,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
          written.
          ZZZ Handle select instruction better *)
       let unnecessary_cast =
-        ctx.simplify && UnionFind.find ty' <> Unknown && subtype ctx ty' ty
+        ctx.simplify && (not (is_unknown_or_error ty')) && subtype ctx ty' ty
       in
       if unnecessary_cast then return { i' with info = ([| ty |], snd i'.info) }
       else return_expression i (Cast (i', typ)) ty
@@ -2667,13 +2712,19 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                   Error.expected_struct_type ctx.diagnostics
                     ~location:(snd i'.info);
                 None)
-        (* Leave an unresolved receiver alone (its own error, if any, is
-           reported elsewhere): keep the access with an unknown result type
-           rather than giving up, which would drop a hole receiver and desync
-           hole counting. A name that is an instruction method was likely meant
-           as the parenthesised call [x.sqrt()]; any other field access on a
-           non-struct type has no fields to find. *)
-        | Unknown, _ -> Some (UnionFind.make Unknown)
+        (* Leave a receiver that already failed to type alone (its error is
+           reported elsewhere): keep the access with an error result type rather
+           than giving up, which would drop a hole receiver and desync hole
+           counting. *)
+        | Error, _ -> Some (UnionFind.make Error)
+        (* The receiver's type is unknown (unreachable / branch code): the
+           struct type cannot be resolved, so the field cannot be read. *)
+        | Unknown, _ ->
+            Error.unknown_operand_type ctx.diagnostics ~location:(snd i'.info);
+            Some (UnionFind.make Error)
+        (* A name that is an instruction method was likely meant as the
+           parenthesised call [x.sqrt()]; any other field access on a non-struct
+           type has no fields to find. *)
         | _ when is_unary_method field.desc ->
             Error.method_needs_parentheses ctx.diagnostics ~location:field.info
               field.desc;
@@ -2711,9 +2762,14 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                       Error.immutable ctx.diagnostics ~location:field.info
                         "field";
                     internalize ctx (unpack_type ftyp)))
-        | Unknown ->
+        | Error ->
             (* Receiver already failed to type; recover without a spurious
                "expected struct type". *)
+            None
+        | Unknown ->
+            (* The receiver's type is unknown (unreachable / branch code): the
+               struct type cannot be resolved, so the field cannot be written. *)
+            Error.unknown_operand_type ctx.diagnostics ~location:i1.info;
             None
         | _ ->
             Error.expected_struct_type ctx.diagnostics ~location:i1.info;
@@ -2747,12 +2803,17 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
           let*! typ = lookup_array_type ~location:i1.info ctx ty in
           let*! ty = field_read_type ctx typ in
           return_expression i (ArrayGet (i1', i2')) ty
-      | Unknown ->
+      | Error ->
           (* Receiver already failed to type; recover silently. *)
-          return_expression i (ArrayGet (i1', i2')) (UnionFind.make Unknown)
+          return_expression i (ArrayGet (i1', i2')) (UnionFind.make Error)
+      | Unknown ->
+          (* The receiver's type is unknown (unreachable / branch code): the
+             array type cannot be resolved, so the element cannot be read. *)
+          Error.unknown_operand_type ctx.diagnostics ~location:i1.info;
+          return_expression i (ArrayGet (i1', i2')) (UnionFind.make Error)
       | _ ->
           Error.expected_array_type ctx.diagnostics ~location:i1.info;
-          return_expression i (ArrayGet (i1', i2')) (UnionFind.make Unknown))
+          return_expression i (ArrayGet (i1', i2')) (UnionFind.make Error))
   (* [tab[i] = v] on a table name is [table.set]; the receiver is not a value. *)
   | ArraySet (({ desc = Get tabname; _ } as recv), i2, i3)
     when Tbl.find_opt ctx.tables tabname <> None ->
@@ -2796,10 +2857,17 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
             | None -> instruction ctx i3
           in
           return_statement i (ArraySet (i1', i2', i3')) [||]
-      | Unknown ->
+      | Error ->
           (* Receiver already failed to type; recover silently (still type the
              value so its holes are consumed). *)
           let* i3' = instruction ctx i3 in
+          return_statement i (ArraySet (i1', i2', i3')) [||]
+      | Unknown ->
+          (* The receiver's type is unknown (unreachable / branch code): the
+             array type cannot be resolved, so the element cannot be written.
+             Still type the value so its holes are consumed. *)
+          let* i3' = instruction ctx i3 in
+          Error.unknown_operand_type ctx.diagnostics ~location:i1.info;
           return_statement i (ArraySet (i1', i2', i3')) [||]
       | _ ->
           let* i3' = instruction ctx i3 in
@@ -2816,7 +2884,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
           Error.binop_type_mismatch ctx.diagnostics ~location:op.info ty1 ty2
         in
         match (UnionFind.find ty1, UnionFind.find ty2) with
-        | Unknown, Unknown -> (
+        | (Unknown | Error), (Unknown | Error) -> (
             match op.desc with
             | Add | Sub | Mul ->
                 UnionFind.merge ty1 ty2 Number;
@@ -2833,7 +2901,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
             | Lt None | Gt None | Le None | Ge None ->
                 UnionFind.merge ty1 ty2 (Valtype { typ = F32; internal = F32 });
                 UnionFind.make (Valtype { typ = I32; internal = I32 }))
-        | typ, Unknown | Unknown, typ -> (
+        | typ, (Unknown | Error) | (Unknown | Error), typ -> (
             UnionFind.merge ty1 ty2 typ;
             match op.desc with
             | Eq ->
@@ -3009,7 +3077,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       let typ = expression_type ctx i' in
       let ty =
         match UnionFind.find typ with
-        | Unknown -> (
+        | Unknown | Error -> (
             match op.desc with
             | Not -> UnionFind.make (Valtype { typ = I32; internal = I32 })
             | Neg | Pos -> UnionFind.make Number)
@@ -3080,7 +3148,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
               (fun idx binding ->
                 let result_ty =
                   if idx < Array.length result_types then result_types.(idx)
-                  else UnionFind.make Unknown
+                  else UnionFind.make Error
                 in
                 bind_let_value ctx ~location:i.info result_ty binding)
               bindings
@@ -3159,10 +3227,10 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                    typ = Ref { nullable = false; typ };
                    internal = Ref { nullable = false; typ = ityp };
                  })
-        | Unknown -> UnionFind.make Unknown
+        | (Unknown | Error) as ity -> UnionFind.make ity
         | _ ->
             Error.expected_ref ctx.diagnostics ~location:(snd i'.info);
-            UnionFind.make Unknown
+            UnionFind.make Error
       in
       let params = branch_target ctx idx in
       check_subtypes ctx ~location:(snd i'.info) types params;
@@ -3173,7 +3241,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       let typ, types = split_on_last_type ctx ~location:(snd i'.info) i' in
       let typ = UnionFind.find typ in
       (match typ with
-      | Unknown -> ()
+      | Unknown | Error -> ()
       | Valtype
           {
             typ = Ref { nullable = _; typ; _ };
@@ -3214,7 +3282,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
             let*@ typ1 = internalize ctx ty1 in
             let+@ typ2 = internalize ctx (Ref (diff_ref_type ty' ty)) in
             (typ1, typ2)
-        | Unknown -> Some (typ', UnionFind.make Unknown)
+        | (Unknown | Error) as ity -> Some (typ', UnionFind.make ity)
         | _ ->
             Error.expected_ref ctx.diagnostics ~location:(snd i'.info);
             None
@@ -3238,7 +3306,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
             let*@ typ1 = internalize ctx ty1 in
             let+@ typ2 = internalize ctx (Ref (diff_ref_type ty' ty)) in
             (typ1, typ2)
-        | Unknown -> Some (typ', UnionFind.make Unknown)
+        | (Unknown | Error) as ity -> Some (typ', UnionFind.make ity)
         | _ ->
             Error.expected_ref ctx.diagnostics ~location:(snd i'.info);
             None
@@ -3465,10 +3533,11 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                     typ = Ref { nullable = false; typ };
                     internal = Ref { nullable = false; typ = ityp };
                   }))
-      | Unknown -> return_expression i (NonNull i') (expression_type ctx i')
+      | Unknown | Error ->
+          return_expression i (NonNull i') (expression_type ctx i')
       | _ ->
           Error.expected_ref ctx.diagnostics ~location:(snd i'.info);
-          return_expression i (NonNull i') (UnionFind.make Unknown))
+          return_expression i (NonNull i') (UnionFind.make Error))
   | Return i' ->
       let* i' =
         match i' with
@@ -3497,8 +3566,8 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
         let ty1 = expression_type ctx i2' in
         let ty2 = expression_type ctx i3' in
         match (UnionFind.find ty1, UnionFind.find ty2) with
-        | _, Unknown -> Some ty1
-        | Unknown, _ -> Some ty2
+        | _, (Unknown | Error) -> Some ty1
+        | (Unknown | Error), _ -> Some ty2
         | Valtype { internal = I32; _ }, Valtype { internal = I32; _ }
         | Valtype { internal = I64; _ }, Valtype { internal = I64; _ }
         | Valtype { internal = F32; _ }, Valtype { internal = F32; _ }
@@ -3566,8 +3635,8 @@ and type_mem_method_call ctx i func recv memname meth args =
                   (UnionFind.make (Valtype { typ = F64; internal = F64 }))
             | _ -> (
                 match UnionFind.find vty with
-                | Valtype { internal = I32 | I64; _ } | Int | Number | Unknown
-                  ->
+                | Valtype { internal = I32 | I64; _ }
+                | Int | Number | Unknown | Error ->
                     ()
                 | _ ->
                     Error.instruction_type_mismatch ctx.diagnostics
@@ -3812,7 +3881,11 @@ and type_array_fill_call ctx i func a meth j v n =
       if not (subtype ctx ty' ty) then
         Error.instruction_type_mismatch ctx.diagnostics ~location:(snd v'.info)
           ty' ty
-  | Unknown -> (* receiver already failed to type; recover silently *) ()
+  | Error -> (* receiver already failed to type; recover silently *) ()
+  | Unknown ->
+      (* The receiver's type is unknown (unreachable / branch code): the array
+         type cannot be resolved, so the operation cannot be compiled. *)
+      Error.unknown_operand_type ctx.diagnostics ~location:a.info
   | _ -> Error.expected_array_type ctx.diagnostics ~location:a.info);
   return_statement i
     (Call
@@ -3832,7 +3905,13 @@ and type_array_copy_call ctx i func a1 meth i1 a2 i2 n =
   check_type ctx i1' (UnionFind.make (Valtype { typ = I32; internal = I32 }));
   let ty = expression_type ctx a1' in
   (match (UnionFind.find ty, UnionFind.find ty') with
-  | Unknown, _ | _, Unknown -> ()
+  (* Either array already failed to type; recover silently. *)
+  | Error, _ | _, Error -> ()
+  (* An array's type is unknown (unreachable / branch code): its element type
+     cannot be resolved, so the copy cannot be compiled. Point at the offending
+     array. *)
+  | Unknown, _ -> Error.unknown_operand_type ctx.diagnostics ~location:a1.info
+  | _, Unknown -> Error.unknown_operand_type ctx.diagnostics ~location:a2.info
   | ( Valtype { typ = Ref { typ = Type ty; _ }; _ },
       Valtype { typ = Ref { typ = Type ty'; _ }; _ } ) ->
       let>@ typ = lookup_array_type ~location:a1.info ctx ty in
@@ -3868,7 +3947,11 @@ and type_array_init_call ctx i func a meth seg sinfo rest =
           let>@ src = Tbl.find ctx.diagnostics ctx.elems seg in
           check_elem_subtype ctx ~location:a.info ~src ~dst
       | _ -> ignore (Tbl.find ctx.diagnostics ctx.datas seg : unit option))
-  | Unknown -> (* receiver already failed to type; recover silently *) ()
+  | Error -> (* receiver already failed to type; recover silently *) ()
+  | Unknown ->
+      (* The receiver's type is unknown (unreachable / branch code): the array
+         type cannot be resolved, so the operation cannot be compiled. *)
+      Error.unknown_operand_type ctx.diagnostics ~location:a.info
   | _ -> Error.expected_array_type ctx.diagnostics ~location:a.info);
   let seg' = { desc = Get seg; info = ([||], sinfo) } in
   return_statement i
@@ -3923,7 +4006,12 @@ and type_unary_intrinsic_call ctx i func recv meth =
         ("abs" | "ceil" | "floor" | "trunc" | "nearest" | "sqrt") ) ->
         if ty' = Number then UnionFind.set ty Float;
         Some ty
-    | Unknown, _ -> Some (UnionFind.make Unknown)
+    | Error, _ -> Some (UnionFind.make Error)
+    | Unknown, _ ->
+        (* The receiver's type is unknown (unreachable / branch code): the
+           method cannot be resolved, so the call cannot be compiled. *)
+        Error.unknown_operand_type ctx.diagnostics ~location:(snd recv'.info);
+        Some (UnionFind.make Error)
     | _ ->
         Error.invalid_method_receiver ctx.diagnostics ~location:meth.info ty;
         None
@@ -4077,7 +4165,7 @@ and check ctx expected (i : location instr) =
         | None ->
             (* Unresolved: still type the field values for error recovery (and
                so they consume their stack slots / holes), then recover with an
-               [Unknown] result. *)
+               [Error] result. *)
             let* fields' =
               List.fold_left
                 (fun prev (name, fi) ->
@@ -4088,7 +4176,7 @@ and check ctx expected (i : location instr) =
             in
             return_expression i
               (Struct (None, List.rev fields'))
-              (UnionFind.make Unknown)
+              (UnionFind.make Error)
         | Some typ ->
             let*! field_types = lookup_struct_type ctx typ in
             (* ZZZ We should check the evaluation order*)
@@ -4142,7 +4230,7 @@ and check ctx expected (i : location instr) =
               Error.cannot_infer_struct_type ctx.diagnostics ~location:i.info)
         with
         | None ->
-            return_expression i (StructDefault None) (UnionFind.make Unknown)
+            return_expression i (StructDefault None) (UnionFind.make Error)
         | Some typ ->
             let*! fields = lookup_struct_type ctx typ in
             if
@@ -4168,9 +4256,7 @@ and check ctx expected (i : location instr) =
             let* i1' = instruction ctx i1 in
             let* i2' = instruction ctx i2 in
             check_type ctx i2' (i32_cell ());
-            return_expression i
-              (Array (None, i1', i2'))
-              (UnionFind.make Unknown)
+            return_expression i (Array (None, i1', i2')) (UnionFind.make Error)
         | Some typ ->
             (* Resolve the element type (pure) before typing the element value,
                so a struct/array literal or null cast there can be inferred /
@@ -4206,9 +4292,7 @@ and check ctx expected (i : location instr) =
         | None ->
             let* n' = instruction ctx n in
             check_type ctx n' (i32_cell ());
-            return_expression i
-              (ArrayDefault (None, n'))
-              (UnionFind.make Unknown)
+            return_expression i (ArrayDefault (None, n')) (UnionFind.make Error)
         | Some typ ->
             let* n' = instruction ctx n in
             check_type ctx n' (i32_cell ());
@@ -4239,7 +4323,7 @@ and check ctx expected (i : location instr) =
             in
             return_expression i
               (ArrayFixed (None, List.rev instrs'))
-              (UnionFind.make Unknown)
+              (UnionFind.make Error)
         | Some typ ->
             let*! field' = lookup_array_type ctx typ in
             let elt = internalize ctx (unpack_type field') in
@@ -4279,7 +4363,7 @@ and check ctx expected (i : location instr) =
             check_type ctx len' (i32_cell ());
             return_expression i
               (ArraySegment (None, seg, off', len'))
-              (UnionFind.make Unknown)
+              (UnionFind.make Error)
         | Some typ ->
             let* off' = instruction ctx off in
             let* len' = instruction ctx len in
@@ -4497,9 +4581,14 @@ and type_indirect_call ctx i i' l =
            (Array.of_list l') param_types);
       let*! returned_types = array_map_opt (internalize ctx) typ.results in
       return_statement i (Call (i', l')) returned_types
-  | Unknown ->
+  | Error ->
       (* The callee already failed to type (e.g. an unbound name); recover
          silently rather than adding a spurious "expected function type". *)
+      return_statement i (Call (i', l')) [||]
+  | Unknown ->
+      (* The callee's type is unknown (unreachable / branch code): the function
+         type cannot be resolved, so the call cannot be compiled. *)
+      Error.unknown_operand_type ctx.diagnostics ~location:(snd i'.info);
       return_statement i (Call (i', l')) [||]
   | _ ->
       Error.expected_func_type ctx.diagnostics ~location:i.info;
@@ -5154,18 +5243,18 @@ let rec globals ctx fields =
                     ((if drop then None else Some annot), def'))
             | None ->
                 (* No annotation: the global takes the initializer's type, the
-                   way a [let] binding without an annotation does. An [Unknown]
-                   initializer (its typing failed) makes the global poison
+                   way a [let] binding without an annotation does. An
+                   [Unknown]/[Error] initializer makes the global poison
                    ([None]) rather than defaulting to [i32], so its uses do not
-                   cascade. *)
+                   cascade; an [Unknown] one is additionally reported (see
+                   [bound_value_type]). *)
                 let def' =
                   with_empty_stack ctx ~location:def.info ~kind:Expression
                     (toplevel_instruction ctx def)
                 in
                 let ity =
-                  if UnionFind.find (expression_type ctx def') = Unknown then
-                    None
-                  else resolve_omitted_valtype ctx (expression_type ctx def')
+                  bound_value_type ctx ~location:def.info
+                    (expression_type ctx def')
                 in
                 Tbl.add ctx.diagnostics ctx.globals name (mut, ity);
                 (None, def')
@@ -5638,7 +5727,7 @@ let type_configuration ?(warn_unused = false) ~simplify diagnostics fields =
               ( Array.map
                   (fun ty ->
                     match UnionFind.find ty with
-                    | Unknown -> None
+                    | Unknown | Error -> None
                     | Null ->
                         Some (Value (Ref { nullable = true; typ = None_ }))
                     | Number -> Some (Value I32)
