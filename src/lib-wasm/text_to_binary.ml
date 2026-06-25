@@ -890,6 +890,10 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
             | T.Table _ -> (funcs, tables + 1, memories, globals, tags)
             | T.Memory _ -> (funcs, tables, memories + 1, globals, tags)
             | T.Global _ -> (funcs, tables, memories, globals + 1, tags)
+            (* [String_global] ([(@string ...)]) also occupies a global index,
+               so it must advance the global counter; otherwise an inline global
+               export following one resolves to too low an index. *)
+            | T.String_global _ -> (funcs, tables, memories, globals + 1, tags)
             | T.Tag _ -> (funcs, tables, memories, globals, tags + 1)
             | T.Import { desc; _ } -> (
                 match desc with
