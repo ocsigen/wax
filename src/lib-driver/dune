@@ -1,0 +1,4 @@
+(library
+ (name wax)
+ (public_name wax)
+ (libraries wax_wasm wax_conversion))
