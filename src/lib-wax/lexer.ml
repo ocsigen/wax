@@ -257,7 +257,7 @@ let rec token_rec ctx lexbuf =
            (match s.[2] with 't' -> '\t' | 'n' -> '\n' | 'r' -> '\r' | c -> c))
   | "'\\u{", hexnum, "}'" ->
       let n =
-        Sedlexing.Utf8.sub_lexeme lexbuf 4 (Sedlexing.lexeme_length lexbuf - 5)
+        Sedlexing.Utf8.sub_lexeme lexbuf 4 (Sedlexing.lexeme_length lexbuf - 6)
       in
       CHAR (unicode_escape lexbuf n)
   | "'\\", hexdigit, hexdigit, "'" ->

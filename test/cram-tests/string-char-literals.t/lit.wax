@@ -1,0 +1,37 @@
+type chars = [i8];
+
+#[export = "newline"]
+fn newline() -> i32 {
+    '\n';
+}
+
+#[export = "byte_escape"]
+fn byte_escape() -> i32 {
+    '\41';
+}
+
+#[export = "code_point"]
+fn code_point() -> i32 {
+    '\u{1F600}';
+}
+
+#[export = "default_string"]
+fn default_string() -> &eq {
+    "hi";
+}
+
+#[export = "named_string"]
+fn named_string() -> &chars {
+    chars # "hi\u{21}";
+}
+
+#[export = "from_context"]
+fn from_context() -> &chars {
+    let s: &chars = "yo";
+    s;
+}
+
+#[export = "binary_blob"]
+fn binary_blob() -> &chars {
+    chars # "a\01b";
+}
