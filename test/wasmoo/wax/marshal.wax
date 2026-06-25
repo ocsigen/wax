@@ -293,13 +293,13 @@ fn readfloat(s: &intern_state, code: i32) -> f64 {
     let i: i32;
     if code == CODE_DOUBLE_BIG {
         'loop: loop {
-            d = d << 8 | src[pos + i] as i32_u as i64_u;
+            d = d << 8 | src[pos + i] as i64_u;
             i = i + 1;
             br_if 'loop i <u 8;
         }
     } else {
         'loop: loop {
-            d = (d | src[pos + i] as i32_u as i64_u).rotr(8);
+            d = (d | src[pos + i] as i64_u).rotr(8);
             i = i + 1;
             br_if 'loop i <u 8;
         }

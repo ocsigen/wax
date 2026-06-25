@@ -2145,11 +2145,10 @@ fn caml_blit_bytes_to_dataview(s: &bytes, i: i32, dv: &extern, j: i32, len: i32)
             dv_set_i64_unaligned(
                 dv,
                 j + k,
-                s[i'] as i32_u as i64_u | s[i' + 1] as i32_u as i64_u << 8
-                    | (s[i' + 2] as i32_u as i64_u << 16 | s[i' + 3] as i32_u as i64_u << 24)
-                    | (s[i' + 4] as i32_u as i64_u << 32 | s[i' + 5] as i32_u as i64_u << 40
-                           | (s[i' + 6] as i32_u as i64_u << 48
-                                  | s[i' + 7] as i32_u as i64_u << 56)),
+                s[i'] as i64_u | s[i' + 1] as i64_u << 8
+                    | (s[i' + 2] as i64_u << 16 | s[i' + 3] as i64_u << 24)
+                    | (s[i' + 4] as i64_u << 32 | s[i' + 5] as i64_u << 40
+                           | (s[i' + 6] as i64_u << 48 | s[i' + 7] as i64_u << 56)),
                 1,
             );
             k = k';

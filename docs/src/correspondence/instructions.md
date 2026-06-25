@@ -197,6 +197,8 @@ if cond => (i32) -> i32 { ... } else { ... }
 | `array.set $t` | `arr[idx] = val` |
 | `array.len` | `arr.length()` |
 
+A packed (`i8`/`i16`) struct field or array element read sign- or zero-extends to `i32` via the `as i32_s`/`as i32_u` cast, as shown above (`struct.get_s`/`_u`, `array.get_s`/`_u`). Widening straight to `i64` — `val.field as i64_s` or `arr[idx] as i64_u` — emits the packed read followed by `i64.extend_i32_s`/`_u`.
+
 ## Memory Access
 
 Loads and stores are method calls on a [memory](module_fields.md#memories). The method name carries the access width; the value's signedness (for narrow loads) and its `i32`/`i64` type are expressed with the surrounding `as iN_s`/`as iN_u` cast, mirroring packed array access.
@@ -208,8 +210,9 @@ Loads and stores are method calls on a [memory](module_fields.md#memories). The 
 | `m.loadf32(p)` / `m.loadf64(p)` | `f32.load` / `f64.load` |
 | `m.load8(p) as i32_s` | `i32.load8_s` |
 | `m.load16(p) as i32_u` | `i32.load16_u` |
-| `m.load32(p) as i64_s` | `i32.load` + `i64.extend_i32_s` (≡ `i64.load32_s`) |
-| `m.load8(p) as i32_s as i64_s` | `i32.load8_s` + `i64.extend_i32_s` (≡ `i64.load8_s`) |
+| `m.load32(p) as i64_s` | `i64.load32_s` |
+| `m.load8(p) as i64_s` | `i64.load8_s` |
+| `m.load16(p) as i64_u` | `i64.load16_u` |
 | `m.store32(p, v)` | `i32.store` (`v: i32`) or `i64.store32` (`v: i64`) |
 | `m.store16(p, v)` | `i32.store16` or `i64.store16` (by `v`'s type) |
 | `m.store64(p, v)` / `m.storef64(p, v)` | `i64.store` / `f64.store` |

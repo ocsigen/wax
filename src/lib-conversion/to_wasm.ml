@@ -1056,6 +1056,10 @@ and instruction_desc ret ctx i : location Text.instr list =
               emit `I32 `I8 signage
           | "load16", Signedtype { typ = `I32; signage; _ } ->
               emit `I32 `I16 signage
+          | "load8", Signedtype { typ = `I64; signage; _ } ->
+              emit `I64 `I8 signage
+          | "load16", Signedtype { typ = `I64; signage; _ } ->
+              emit `I64 `I16 signage
           | "load32", Signedtype { typ = `I64; signage; _ } ->
               emit `I64 `I32 signage
           | _ -> default_cast ())
@@ -1066,6 +1070,14 @@ and instruction_desc ret ctx i : location Text.instr list =
               folded (snd expr.info)
                 (StructGet (Some signage, index type_name_idx, index field_idx))
                 (instruction ret ctx instr_val)
+          | Packed _, Signedtype { typ = `I64; signage; _ } ->
+              (* No packed [struct.get] yields [i64]; read as [i32] then widen. *)
+              let type_name_idx = expr_type_name instr_val in
+              folded loc (I64ExtendI32 signage)
+                (folded (snd expr.info)
+                   (StructGet
+                      (Some signage, index type_name_idx, index field_idx))
+                   (instruction ret ctx instr_val))
           | _ -> default_cast ())
       | ArrayGet (arr_instr, idx_instr) -> (
           match (expr_type expr, cast_ty) with
@@ -1074,6 +1086,14 @@ and instruction_desc ret ctx i : location Text.instr list =
               folded (snd expr.info)
                 (ArrayGet (Some signage, index type_name_idx))
                 (instruction ret ctx arr_instr @ instruction ret ctx idx_instr)
+          | Packed _, Signedtype { typ = `I64; signage; _ } ->
+              (* No packed [array.get] yields [i64]; read as [i32] then widen. *)
+              let type_name_idx = expr_type_name arr_instr in
+              folded loc (I64ExtendI32 signage)
+                (folded (snd expr.info)
+                   (ArrayGet (Some signage, index type_name_idx))
+                   (instruction ret ctx arr_instr
+                   @ instruction ret ctx idx_instr))
           | _ -> default_cast ())
       | Null -> (
           match cast_ty with

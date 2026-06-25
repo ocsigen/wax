@@ -1000,7 +1000,7 @@ let cast ctx ty ty' =
 let signed_cast ctx ty ty' =
   let ity = UnionFind.find ty in
   match (ity, ty') with
-  | (Int8 | Int16), `I32 -> true
+  | (Int8 | Int16), (`I32 | `I64) -> true
   | Valtype { internal = Ref _ as ity; _ }, `I32 ->
       Wax_wasm.Types.val_subtype ctx.subtyping_info ity
         (Ref { nullable = true; typ = Any })
@@ -1023,7 +1023,8 @@ let signed_cast ctx ty ty' =
   | Valtype { internal = I32; _ }, `I32
   | Valtype { internal = I64; _ }, (`I32 | `I64)
   | Valtype { internal = F32 | F64; _ }, (`F32 | `F64)
-  | ( ( Int8 | Int16 | Null
+  | (Int8 | Int16), (`F32 | `F64)
+  | ( ( Null
       | Valtype
           {
             internal =
@@ -2592,6 +2593,25 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
   | Float _ as desc -> return_expression i desc (UnionFind.make Float)
   | Cast (i', typ) ->
       let* i' = instruction ctx i' in
+      (* When converting from Wasm, fuse the widening of a packed read: an
+         [Int8]/[Int16] load reaches [i64] as [(e as i32_X) as i64_X] (a
+         [struct.get_s]/[array.get_s]/[load8_s] feeding [i64.extend_i32_X]).
+         Drop the intermediate [i32] cast so it prints as the single cast
+         [e as i64_X]. The [i31.get]-then-extend case has a reference inner
+         operand (not [Int8]/[Int16]), so it is left as a double cast. *)
+      let is_packed_read e =
+        match UnionFind.find (expression_type ctx e) with
+        | Int8 | Int16 -> true
+        | _ -> false
+      in
+      let i' =
+        match (typ, i'.desc) with
+        | ( Signedtype { typ = `I64; signage = s2; strict = false },
+            Cast (e, Signedtype { typ = `I32; signage = s1; strict = false }) )
+          when ctx.simplify && s1 = s2 && is_packed_read e ->
+            e
+        | _ -> i'
+      in
       let ty' = expression_type ctx i' in
       (* [extern.convert_any]/[any.convert_extern] preserve non-nullness, so a
          cast to [&?extern]/[&?any] of a non-nullable argument actually yields
