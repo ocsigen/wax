@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-07bf1630.js";
+            window.path_to_searchindex_js = "../searchindex-e7798003.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f031991a.js"></script>
@@ -179,6 +179,28 @@
                     <main>
                         <h1 id="instructions"><a class="header" href="#instructions">Instructions</a></h1>
 <p>Wax instructions are expression-oriented.</p>
+<h2 id="literals"><a class="header" href="#literals">Literals</a></h2>
+<p>A <a href="../language.html#characters">character literal</a> is an <code>i32</code> constant (its
+Unicode code point); a <a href="../language.html#strings">string literal</a> builds a byte
+array with <code>array.new_fixed</code>.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Wasm</th><th>Wax</th></tr>
+</thead>
+<tbody>
+<tr><td><code>i32.const &lt;code point&gt;</code></td><td><code>'c'</code></td></tr>
+<tr><td><code>array.new_fixed $t</code> (constant elements)</td><td><code>"..."</code> or <code>t # "..."</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>In WAT both forms are written with annotations — <code>(@char …)</code> and <code>(@string …)</code>
+— so they round-trip faithfully through WAT. A WASM binary keeps only the
+underlying <code>i32.const</code> / <code>array.new_fixed</code>: a character decompiles to a plain
+integer, and an <code>array.new_fixed</code> is recovered as a string only when its bytes
+look like a reasonable UTF-8 string (valid UTF-8, no control characters other
+than tab/newline/carriage return); otherwise it stays an
+<a href="#aggregate-instructions">array literal</a>.</p>
 <h2 id="numeric-instructions"><a class="header" href="#numeric-instructions">Numeric Instructions</a></h2>
 <p>Binary and unary operations use standard mathematical operators. Signedness is often explicit in the operator.</p>
 <div class="table-wrapper">

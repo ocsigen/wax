@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-07bf1630.js";
+            window.path_to_searchindex_js = "searchindex-e7798003.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -306,6 +306,21 @@ fn add(a: i32, b: i32,) -&gt; i32 {
 inf         // Infinity
 nan         // Not a number
 </code></pre>
+<h3 id="characters"><a class="header" href="#characters">Characters</a></h3>
+<p>A character literal is a single character in single quotes. It evaluates to that
+character’s Unicode code point as an <code>i32</code> — it is simply a readable spelling of
+an <code>i32.const</code>:</p>
+<pre><code class="language-wax">'A';            // 65
+'\n';           // 10
+'\41';          // 65, a byte written as two hex digits
+'\u{1F600}';    // 128512, a Unicode code point
+</code></pre>
+<p>The recognised escapes are <code>\t</code>, <code>\n</code>, <code>\r</code>, <code>\'</code>, <code>\"</code>, <code>\\</code>, <code>\NN</code> (exactly
+two hex digits, one byte), and <code>\u{...}</code> (a Unicode code point in hex). For
+text, see <a href="#strings">Strings</a>.</p>
+<p>A character literal round-trips through WAT, where it is written with a
+<code>(@char …)</code> annotation. A WASM binary keeps only the underlying <code>i32.const</code>,
+though, so decompiling from WASM yields the plain integer code point.</p>
 <h2 id="variables"><a class="header" href="#variables">Variables</a></h2>
 <h3 id="local-variables"><a class="header" href="#local-variables">Local Variables</a></h3>
 <p>Declare local variables with <code>let</code>. Each variable gets a type, either from an
@@ -729,10 +744,20 @@ default):</p>
 <pre><code class="language-wax">{point| x: 10, y: 20}       // all fields given
 {point| ..}                 // every field defaulted
 </code></pre>
-<p>The type name may be omitted when an expected type supplies it — for example a
-<code>let</code>/<code>const</code> annotation, a function parameter, a struct field, or an array
-element. <code>let p: &amp;point = {x: 10, y: 20};</code> is equivalent to writing <code>{point| …}</code>.
-Without such a context the type cannot be inferred and must be given.</p>
+<p>The type name may be omitted in two cases. The first is when an expected type
+supplies it — for example a <code>let</code>/<code>const</code> annotation, a function parameter, a
+struct field, or an array element: <code>let p: &amp;point = {x: 10, y: 20};</code> is
+equivalent to writing <code>{point| …}</code>. The second is when the <strong>field set</strong> names
+the type unambiguously — if exactly one struct type in the module has that exact
+set of field names, it is inferred even with no expected type:</p>
+<pre><code class="language-wax">fn origin() -&gt; &amp;eq {
+    {x: 0, y: 0};               // inferred as &amp;point from its fields
+}
+</code></pre>
+<p>Field inference takes precedence over the expected type, so when the fields name
+a subtype of the expected type, that subtype is used. The type must still be
+given when the field set is ambiguous (several types share it) or absent (a
+<code>{..}</code> default with no fields).</p>
 <h3 id="field-access"><a class="header" href="#field-access">Field Access</a></h3>
 <pre><code class="language-wax">p.x                         // read a field
 p.x = 42;                   // write a field (only if it is `mut`)
@@ -756,6 +781,33 @@ e.g. <code>let xs: &amp;bytes = [0; 100];</code>.</p>
 arr[i] = val;               // Set element (if mutable)
 arr.length()                // Array length
 </code></pre>
+<h2 id="strings"><a class="header" href="#strings">Strings</a></h2>
+<p>A string literal builds a new array, one element per byte of the (UTF-8) text.
+By default its type is <code>[mut i8]</code>, and it lowers to an <code>array.new_fixed</code>:</p>
+<pre><code class="language-wax">"hello";                    // a new [mut i8] holding the 5 bytes
+</code></pre>
+<p>As with <a href="#arrays">array</a> and <a href="#structs">struct</a> literals, a different array type
+can be selected — either by prefixing the string with the type name and <code>#</code>, or
+by an expected type from the context. The element type must be numeric or packed
+(<code>i8</code>, <code>i16</code>, <code>i32</code>, …):</p>
+<pre><code class="language-wax">type chars = [i8];
+
+chars # "hi";               // a &amp;chars (explicit type)
+let s: &amp;chars = "yo";       // type taken from the annotation
+</code></pre>
+<p>String literals recognise the same escapes as <a href="#characters">character literals</a>
+— <code>\t</code>, <code>\n</code>, <code>\r</code>, <code>\'</code>, <code>\"</code>, <code>\\</code>, <code>\NN</code> (two hex digits, one byte), and
+<code>\u{...}</code> (a Unicode code point, encoded as its UTF-8 bytes):</p>
+<pre><code class="language-wax">"tab\tend";
+"smile \u{1F600}";
+</code></pre>
+<p>A string also supplies the bytes of a <a href="#data-segments">data segment</a>.</p>
+<p>A string literal round-trips faithfully through WAT, where it is written with a
+<code>(@string …)</code> annotation. Through WASM it is best-effort: the binary keeps only
+the <code>array.new_fixed</code>, which is recovered as a string literal only when its
+bytes form a <em>reasonable</em> UTF-8 string — valid UTF-8 with no control characters
+other than tab, newline, and carriage return. Anything else (arbitrary binary
+data) decompiles as an ordinary <a href="#arrays">array literal</a> instead.</p>
 <h2 id="memories"><a class="header" href="#memories">Memories</a></h2>
 <h3 id="declaration"><a class="header" href="#declaration">Declaration</a></h3>
 <pre><code class="language-wax">memory mem0: i32 [1, 1000];     // address type i32, min 1 page, max 1000
@@ -1207,6 +1259,14 @@ fn zeros() -&gt; &amp;ints {
     let a: &amp;ints = [0; 16];
     a;
 }
+
+// A struct type can also be inferred from its field set alone, with no
+// expected type — only `point` has the fields {x, y}, so its name may be
+// dropped here too.
+#[export = "make_origin"]
+fn make_origin() -&gt; &amp;eq {
+    {x: 0, y: 0};
+}
 </code></pre>
 <h2 id="arrays-1"><a class="header" href="#arrays-1">Arrays</a></h2>
 <h3 id="wax-10"><a class="header" href="#wax-10">Wax</a></h3>
@@ -1325,11 +1385,40 @@ fn hash_finalize(h: i32) -&gt; i32 {
     h ^ h &gt;&gt;u 16;
 }
 </code></pre>
+<h2 id="strings-and-characters"><a class="header" href="#strings-and-characters">Strings and Characters</a></h2>
+<p>A character literal is an <code>i32</code> code point; a string literal builds a byte array
+(<code>[mut i8]</code> by default, or a named array type with the <code>T # "…"</code> prefix). See
+<a href="#strings">Strings</a>.</p>
+<h3 id="wax-15"><a class="header" href="#wax-15">Wax</a></h3>
+<pre><code class="language-wax">type chars = [i8];
+
+#[export = "newline"]
+fn newline() -&gt; i32 {
+    '\n';                       // 10
+}
+
+#[export = "greeting"]
+fn greeting() -&gt; &amp;chars {
+    chars # "hi\u{21}";         // the bytes 'h', 'i', '!'
+}
+</code></pre>
+<h3 id="equivalent-wat-6"><a class="header" href="#equivalent-wat-6">Equivalent WAT</a></h3>
+<p><code>wax -f wat</code> keeps the literals as <code>(@char …)</code> / <code>(@string …)</code> annotations, so
+they round-trip back to Wax unchanged:</p>
+<pre><code class="language-wat">(func $newline (export "newline") (result i32) (@char "\n"))
+
+(func $greeting (export "greeting") (result (ref $chars))
+  (@string $chars "hi!"))
+</code></pre>
+<p>In a WASM binary these lower to <code>i32.const 10</code> and an <code>array.new_fixed</code> of the
+three bytes <code>104, 105, 33</code> — from which the character comes back as the integer
+<code>10</code>, while the string is still recovered as <code>"hi!"</code> (its bytes are reasonable
+UTF-8).</p>
 <h2 id="holes-stack-values"><a class="header" href="#holes-stack-values">Holes (Stack Values)</a></h2>
 <p>Holes (<code>_</code>) plug in values that earlier statements leave on the operand stack.
 The two holes in <code>_ + _</code> consume <code>x * 2</code> and <code>y * 3</code>, left-to-right in the order
 they were produced. See <a href="#holes">Holes</a> for the full rules.</p>
-<h3 id="wax-15"><a class="header" href="#wax-15">Wax</a></h3>
+<h3 id="wax-16"><a class="header" href="#wax-16">Wax</a></h3>
 <pre><code class="language-wax">#[export = "blend"]
 fn blend(x: i32, y: i32) -&gt; i32 {
     x * 2;
@@ -1337,7 +1426,7 @@ fn blend(x: i32, y: i32) -&gt; i32 {
     _ + _;
 }
 </code></pre>
-<h3 id="equivalent-wat-6"><a class="header" href="#equivalent-wat-6">Equivalent WAT</a></h3>
+<h3 id="equivalent-wat-7"><a class="header" href="#equivalent-wat-7">Equivalent WAT</a></h3>
 <pre><code class="language-wat">(func $blend (export "blend") (param $x i32) (param $y i32) (result i32)
   local.get $x
   i32.const 2
@@ -1351,7 +1440,7 @@ fn blend(x: i32, y: i32) -&gt; i32 {
 <p>A function may return several values, and a <code>let</code> can bind them all at once
 from a parenthesised list of names. The call runs once and its results are
 stored into the locals. See <a href="#local-variables">Local Variables</a>.</p>
-<h3 id="wax-16"><a class="header" href="#wax-16">Wax</a></h3>
+<h3 id="wax-17"><a class="header" href="#wax-17">Wax</a></h3>
 <pre><code class="language-wax">fn divmod(a: i32, b: i32) -&gt; (i32, i32) {
     a /s b;
     a %s b;
@@ -1363,7 +1452,7 @@ fn checksum(a: i32, b: i32) -&gt; i32 {
     q + r;
 }
 </code></pre>
-<h3 id="equivalent-wat-7"><a class="header" href="#equivalent-wat-7">Equivalent WAT</a></h3>
+<h3 id="equivalent-wat-8"><a class="header" href="#equivalent-wat-8">Equivalent WAT</a></h3>
 <pre><code class="language-wat">(func $divmod (param $a i32) (param $b i32) (result i32 i32)
   local.get $a
   local.get $b
@@ -1494,6 +1583,28 @@ type sub_point : open_point = { x: i32, y: i32 }; // extends open_point
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="instructions"><a class="header" href="#instructions">Instructions</a></h1>
 <p>Wax instructions are expression-oriented.</p>
+<h2 id="literals-1"><a class="header" href="#literals-1">Literals</a></h2>
+<p>A <a href="#characters">character literal</a> is an <code>i32</code> constant (its
+Unicode code point); a <a href="#strings">string literal</a> builds a byte
+array with <code>array.new_fixed</code>.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Wasm</th><th>Wax</th></tr>
+</thead>
+<tbody>
+<tr><td><code>i32.const &lt;code point&gt;</code></td><td><code>'c'</code></td></tr>
+<tr><td><code>array.new_fixed $t</code> (constant elements)</td><td><code>"..."</code> or <code>t # "..."</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>In WAT both forms are written with annotations — <code>(@char …)</code> and <code>(@string …)</code>
+— so they round-trip faithfully through WAT. A WASM binary keeps only the
+underlying <code>i32.const</code> / <code>array.new_fixed</code>: a character decompiles to a plain
+integer, and an <code>array.new_fixed</code> is recovered as a string only when its bytes
+look like a reasonable UTF-8 string (valid UTF-8, no control characters other
+than tab/newline/carriage return); otherwise it stays an
+<a href="#aggregate-instructions">array literal</a>.</p>
 <h2 id="numeric-instructions"><a class="header" href="#numeric-instructions">Numeric Instructions</a></h2>
 <p>Binary and unary operations use standard mathematical operators. Signedness is often explicit in the operator.</p>
 <div class="table-wrapper">
@@ -2099,7 +2210,7 @@ mem0.store32(p, v, 1, 16);     // align=1, offset=16
 <pre><code class="language-wax">data seg = "raw\00bytes";
 data init @ mem0 [0] = "hello";
 </code></pre>
-<p>Data bytes are ordinary string literals; escapes such as <code>\xNN</code> and <code>\00</code> decode to raw bytes.</p>
+<p>Data bytes are ordinary <a href="#strings">string literals</a>; escapes such as <code>\41</code> and <code>\00</code> (two hex digits) decode to raw bytes.</p>
 <h2 id="tables"><a class="header" href="#tables">Tables</a></h2>
 <p>A table is declared with <code>table</code>, followed by its element <a href="#types">reference type</a> and, optionally, its limits as <code>[min]</code> or <code>[min, max]</code>:</p>
 <pre><code class="language-wax">table funcs: &amp;?func [1, 10];

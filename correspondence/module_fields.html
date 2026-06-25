@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-07bf1630.js";
+            window.path_to_searchindex_js = "../searchindex-e7798003.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f031991a.js"></script>
@@ -347,7 +347,7 @@ mem0.store32(p, v, 1, 16);     // align=1, offset=16
 <pre><code class="language-wax">data seg = "raw\00bytes";
 data init @ mem0 [0] = "hello";
 </code></pre>
-<p>Data bytes are ordinary string literals; escapes such as <code>\xNN</code> and <code>\00</code> decode to raw bytes.</p>
+<p>Data bytes are ordinary <a href="../language.html#strings">string literals</a>; escapes such as <code>\41</code> and <code>\00</code> (two hex digits) decode to raw bytes.</p>
 <h2 id="tables"><a class="header" href="#tables">Tables</a></h2>
 <p>A table is declared with <code>table</code>, followed by its element <a href="types.html">reference type</a> and, optionally, its limits as <code>[min]</code> or <code>[min, max]</code>:</p>
 <pre><code class="language-wax">table funcs: &amp;?func [1, 10];

@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-07bf1630.js";
+            window.path_to_searchindex_js = "searchindex-e7798003.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -213,6 +213,21 @@ fn add(a: i32, b: i32,) -&gt; i32 {
 inf         // Infinity
 nan         // Not a number
 </code></pre>
+<h3 id="characters"><a class="header" href="#characters">Characters</a></h3>
+<p>A character literal is a single character in single quotes. It evaluates to that
+character’s Unicode code point as an <code>i32</code> — it is simply a readable spelling of
+an <code>i32.const</code>:</p>
+<pre><code class="language-wax">'A';            // 65
+'\n';           // 10
+'\41';          // 65, a byte written as two hex digits
+'\u{1F600}';    // 128512, a Unicode code point
+</code></pre>
+<p>The recognised escapes are <code>\t</code>, <code>\n</code>, <code>\r</code>, <code>\'</code>, <code>\"</code>, <code>\\</code>, <code>\NN</code> (exactly
+two hex digits, one byte), and <code>\u{...}</code> (a Unicode code point in hex). For
+text, see <a href="#strings">Strings</a>.</p>
+<p>A character literal round-trips through WAT, where it is written with a
+<code>(@char …)</code> annotation. A WASM binary keeps only the underlying <code>i32.const</code>,
+though, so decompiling from WASM yields the plain integer code point.</p>
 <h2 id="variables"><a class="header" href="#variables">Variables</a></h2>
 <h3 id="local-variables"><a class="header" href="#local-variables">Local Variables</a></h3>
 <p>Declare local variables with <code>let</code>. Each variable gets a type, either from an
@@ -636,10 +651,20 @@ default):</p>
 <pre><code class="language-wax">{point| x: 10, y: 20}       // all fields given
 {point| ..}                 // every field defaulted
 </code></pre>
-<p>The type name may be omitted when an expected type supplies it — for example a
-<code>let</code>/<code>const</code> annotation, a function parameter, a struct field, or an array
-element. <code>let p: &amp;point = {x: 10, y: 20};</code> is equivalent to writing <code>{point| …}</code>.
-Without such a context the type cannot be inferred and must be given.</p>
+<p>The type name may be omitted in two cases. The first is when an expected type
+supplies it — for example a <code>let</code>/<code>const</code> annotation, a function parameter, a
+struct field, or an array element: <code>let p: &amp;point = {x: 10, y: 20};</code> is
+equivalent to writing <code>{point| …}</code>. The second is when the <strong>field set</strong> names
+the type unambiguously — if exactly one struct type in the module has that exact
+set of field names, it is inferred even with no expected type:</p>
+<pre><code class="language-wax">fn origin() -&gt; &amp;eq {
+    {x: 0, y: 0};               // inferred as &amp;point from its fields
+}
+</code></pre>
+<p>Field inference takes precedence over the expected type, so when the fields name
+a subtype of the expected type, that subtype is used. The type must still be
+given when the field set is ambiguous (several types share it) or absent (a
+<code>{..}</code> default with no fields).</p>
 <h3 id="field-access"><a class="header" href="#field-access">Field Access</a></h3>
 <pre><code class="language-wax">p.x                         // read a field
 p.x = 42;                   // write a field (only if it is `mut`)
@@ -663,6 +688,33 @@ e.g. <code>let xs: &amp;bytes = [0; 100];</code>.</p>
 arr[i] = val;               // Set element (if mutable)
 arr.length()                // Array length
 </code></pre>
+<h2 id="strings"><a class="header" href="#strings">Strings</a></h2>
+<p>A string literal builds a new array, one element per byte of the (UTF-8) text.
+By default its type is <code>[mut i8]</code>, and it lowers to an <code>array.new_fixed</code>:</p>
+<pre><code class="language-wax">"hello";                    // a new [mut i8] holding the 5 bytes
+</code></pre>
+<p>As with <a href="#arrays">array</a> and <a href="#structs">struct</a> literals, a different array type
+can be selected — either by prefixing the string with the type name and <code>#</code>, or
+by an expected type from the context. The element type must be numeric or packed
+(<code>i8</code>, <code>i16</code>, <code>i32</code>, …):</p>
+<pre><code class="language-wax">type chars = [i8];
+
+chars # "hi";               // a &amp;chars (explicit type)
+let s: &amp;chars = "yo";       // type taken from the annotation
+</code></pre>
+<p>String literals recognise the same escapes as <a href="#characters">character literals</a>
+— <code>\t</code>, <code>\n</code>, <code>\r</code>, <code>\'</code>, <code>\"</code>, <code>\\</code>, <code>\NN</code> (two hex digits, one byte), and
+<code>\u{...}</code> (a Unicode code point, encoded as its UTF-8 bytes):</p>
+<pre><code class="language-wax">"tab\tend";
+"smile \u{1F600}";
+</code></pre>
+<p>A string also supplies the bytes of a <a href="#data-segments">data segment</a>.</p>
+<p>A string literal round-trips faithfully through WAT, where it is written with a
+<code>(@string …)</code> annotation. Through WASM it is best-effort: the binary keeps only
+the <code>array.new_fixed</code>, which is recovered as a string literal only when its
+bytes form a <em>reasonable</em> UTF-8 string — valid UTF-8 with no control characters
+other than tab, newline, and carriage return. Anything else (arbitrary binary
+data) decompiles as an ordinary <a href="#arrays">array literal</a> instead.</p>
 <h2 id="memories"><a class="header" href="#memories">Memories</a></h2>
 <h3 id="declaration"><a class="header" href="#declaration">Declaration</a></h3>
 <pre><code class="language-wax">memory mem0: i32 [1, 1000];     // address type i32, min 1 page, max 1000

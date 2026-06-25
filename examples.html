@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-07bf1630.js";
+            window.path_to_searchindex_js = "searchindex-e7798003.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -466,6 +466,14 @@ fn zeros() -&gt; &amp;ints {
     let a: &amp;ints = [0; 16];
     a;
 }
+
+// A struct type can also be inferred from its field set alone, with no
+// expected type — only `point` has the fields {x, y}, so its name may be
+// dropped here too.
+#[export = "make_origin"]
+fn make_origin() -&gt; &amp;eq {
+    {x: 0, y: 0};
+}
 </code></pre>
 <h2 id="arrays"><a class="header" href="#arrays">Arrays</a></h2>
 <h3 id="wax-10"><a class="header" href="#wax-10">Wax</a></h3>
@@ -584,11 +592,40 @@ fn hash_finalize(h: i32) -&gt; i32 {
     h ^ h &gt;&gt;u 16;
 }
 </code></pre>
+<h2 id="strings-and-characters"><a class="header" href="#strings-and-characters">Strings and Characters</a></h2>
+<p>A character literal is an <code>i32</code> code point; a string literal builds a byte array
+(<code>[mut i8]</code> by default, or a named array type with the <code>T # "…"</code> prefix). See
+<a href="language.html#strings">Strings</a>.</p>
+<h3 id="wax-15"><a class="header" href="#wax-15">Wax</a></h3>
+<pre><code class="language-wax">type chars = [i8];
+
+#[export = "newline"]
+fn newline() -&gt; i32 {
+    '\n';                       // 10
+}
+
+#[export = "greeting"]
+fn greeting() -&gt; &amp;chars {
+    chars # "hi\u{21}";         // the bytes 'h', 'i', '!'
+}
+</code></pre>
+<h3 id="equivalent-wat-6"><a class="header" href="#equivalent-wat-6">Equivalent WAT</a></h3>
+<p><code>wax -f wat</code> keeps the literals as <code>(@char …)</code> / <code>(@string …)</code> annotations, so
+they round-trip back to Wax unchanged:</p>
+<pre><code class="language-wat">(func $newline (export "newline") (result i32) (@char "\n"))
+
+(func $greeting (export "greeting") (result (ref $chars))
+  (@string $chars "hi!"))
+</code></pre>
+<p>In a WASM binary these lower to <code>i32.const 10</code> and an <code>array.new_fixed</code> of the
+three bytes <code>104, 105, 33</code> — from which the character comes back as the integer
+<code>10</code>, while the string is still recovered as <code>"hi!"</code> (its bytes are reasonable
+UTF-8).</p>
 <h2 id="holes-stack-values"><a class="header" href="#holes-stack-values">Holes (Stack Values)</a></h2>
 <p>Holes (<code>_</code>) plug in values that earlier statements leave on the operand stack.
 The two holes in <code>_ + _</code> consume <code>x * 2</code> and <code>y * 3</code>, left-to-right in the order
 they were produced. See <a href="language.html#holes">Holes</a> for the full rules.</p>
-<h3 id="wax-15"><a class="header" href="#wax-15">Wax</a></h3>
+<h3 id="wax-16"><a class="header" href="#wax-16">Wax</a></h3>
 <pre><code class="language-wax">#[export = "blend"]
 fn blend(x: i32, y: i32) -&gt; i32 {
     x * 2;
@@ -596,7 +633,7 @@ fn blend(x: i32, y: i32) -&gt; i32 {
     _ + _;
 }
 </code></pre>
-<h3 id="equivalent-wat-6"><a class="header" href="#equivalent-wat-6">Equivalent WAT</a></h3>
+<h3 id="equivalent-wat-7"><a class="header" href="#equivalent-wat-7">Equivalent WAT</a></h3>
 <pre><code class="language-wat">(func $blend (export "blend") (param $x i32) (param $y i32) (result i32)
   local.get $x
   i32.const 2
@@ -610,7 +647,7 @@ fn blend(x: i32, y: i32) -&gt; i32 {
 <p>A function may return several values, and a <code>let</code> can bind them all at once
 from a parenthesised list of names. The call runs once and its results are
 stored into the locals. See <a href="language.html#local-variables">Local Variables</a>.</p>
-<h3 id="wax-16"><a class="header" href="#wax-16">Wax</a></h3>
+<h3 id="wax-17"><a class="header" href="#wax-17">Wax</a></h3>
 <pre><code class="language-wax">fn divmod(a: i32, b: i32) -&gt; (i32, i32) {
     a /s b;
     a %s b;
@@ -622,7 +659,7 @@ fn checksum(a: i32, b: i32) -&gt; i32 {
     q + r;
 }
 </code></pre>
-<h3 id="equivalent-wat-7"><a class="header" href="#equivalent-wat-7">Equivalent WAT</a></h3>
+<h3 id="equivalent-wat-8"><a class="header" href="#equivalent-wat-8">Equivalent WAT</a></h3>
 <pre><code class="language-wat">(func $divmod (param $a i32) (param $b i32) (result i32 i32)
   local.get $a
   local.get $b
