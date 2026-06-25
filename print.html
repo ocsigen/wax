@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-e7798003.js";
+            window.path_to_searchindex_js = "searchindex-379660a5.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -1786,6 +1786,14 @@ if cond =&gt; (i32) -&gt; i32 { ... } else { ... }
 </tbody>
 </table>
 </div>
+<p>These casts can also chain through a forced intermediate, written as a single <code>as</code>:</p>
+<ul>
+<li><strong><code>&amp;ref as i32_s</code>/<code>as i32_u</code></strong> on a reference that is not already <code>&amp;i31</code> (e.g. an <code>&amp;any</code> or <code>&amp;eq</code>) inserts a <code>ref.cast (ref i31)</code> before the <code>i31.get</code> — so it covers both <code>i31.get_s</code> and <code>ref.cast (ref i31)</code> + <code>i31.get_s</code>.</li>
+<li><strong><code>&amp;ref as i64_s</code>/<code>as i64_u</code></strong> widens that further: the <code>i31.get</code> (with the <code>ref.cast</code> above as needed) is followed by <code>i64.extend_i32_s</code>/<code>_u</code>.</li>
+<li><strong><code>i64 as &amp;i31</code></strong> wraps to <code>i32</code> (<code>i32.wrap_i64</code>) before <code>ref.i31</code>.</li>
+<li><strong><code>extern_val as &amp;T</code></strong> for an <code>any</code>-hierarchy <code>T</code> (e.g. a struct type) inserts <code>any.convert_extern</code> before the <code>ref.cast (ref T)</code>; likewise an <code>any</code>-hierarchy value <code>as &amp;extern</code> uses <code>extern.convert_any</code>.</li>
+<li><strong><code>i32_val as &amp;extern</code></strong> boxes the <code>i32</code> with <code>ref.i31</code> before <code>extern.convert_any</code>.</li>
+</ul>
 <h2 id="aggregate-instructions"><a class="header" href="#aggregate-instructions">Aggregate Instructions</a></h2>
 <div class="table-wrapper">
 <table>
@@ -1812,6 +1820,7 @@ if cond =&gt; (i32) -&gt; i32 { ... } else { ... }
 </tbody>
 </table>
 </div>
+<p>A packed (<code>i8</code>/<code>i16</code>) struct field or array element read sign- or zero-extends to <code>i32</code> via the <code>as i32_s</code>/<code>as i32_u</code> cast, as shown above (<code>struct.get_s</code>/<code>_u</code>, <code>array.get_s</code>/<code>_u</code>). Widening straight to <code>i64</code> — <code>val.field as i64_s</code> or <code>arr[idx] as i64_u</code> — emits the packed read followed by <code>i64.extend_i32_s</code>/<code>_u</code>.</p>
 <h2 id="memory-access"><a class="header" href="#memory-access">Memory Access</a></h2>
 <p>Loads and stores are method calls on a <a href="#memories-1">memory</a>. The method name carries the access width; the value’s signedness (for narrow loads) and its <code>i32</code>/<code>i64</code> type are expressed with the surrounding <code>as iN_s</code>/<code>as iN_u</code> cast, mirroring packed array access.</p>
 <div class="table-wrapper">
@@ -1825,8 +1834,9 @@ if cond =&gt; (i32) -&gt; i32 { ... } else { ... }
 <tr><td><code>m.loadf32(p)</code> / <code>m.loadf64(p)</code></td><td><code>f32.load</code> / <code>f64.load</code></td></tr>
 <tr><td><code>m.load8(p) as i32_s</code></td><td><code>i32.load8_s</code></td></tr>
 <tr><td><code>m.load16(p) as i32_u</code></td><td><code>i32.load16_u</code></td></tr>
-<tr><td><code>m.load32(p) as i64_s</code></td><td><code>i32.load</code> + <code>i64.extend_i32_s</code> (≡ <code>i64.load32_s</code>)</td></tr>
-<tr><td><code>m.load8(p) as i32_s as i64_s</code></td><td><code>i32.load8_s</code> + <code>i64.extend_i32_s</code> (≡ <code>i64.load8_s</code>)</td></tr>
+<tr><td><code>m.load32(p) as i64_s</code></td><td><code>i64.load32_s</code></td></tr>
+<tr><td><code>m.load8(p) as i64_s</code></td><td><code>i64.load8_s</code></td></tr>
+<tr><td><code>m.load16(p) as i64_u</code></td><td><code>i64.load16_u</code></td></tr>
 <tr><td><code>m.store32(p, v)</code></td><td><code>i32.store</code> (<code>v: i32</code>) or <code>i64.store32</code> (<code>v: i64</code>)</td></tr>
 <tr><td><code>m.store16(p, v)</code></td><td><code>i32.store16</code> or <code>i64.store16</code> (by <code>v</code>’s type)</td></tr>
 <tr><td><code>m.store64(p, v)</code> / <code>m.storef64(p, v)</code></td><td><code>i64.store</code> / <code>f64.store</code></td></tr>
