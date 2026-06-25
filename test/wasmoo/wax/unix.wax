@@ -806,18 +806,18 @@ fn unix_utimes(path: &eq, atime: &eq, mtime: &eq) -> &eq {
     fn alloc_stat(large: i32, p: i32) -> &eq {
         [block|
             0 as &i31,
-            m.load64(p) as i32 as &i31,
-            m.load64(p, 8, 8) as i32 as &i31,
+            m.load64(p) as &i31,
+            m.load64(p, 8, 8) as &i31,
             file_kinds[m.load8(p, 1, 16) as i32_u] as i32_s as &i31,
             384 /*0600*/ as &i31,
-            m.load64(p, 8, 24) as i32 as &i31,
+            m.load64(p, 8, 24) as &i31,
             1 as &i31,
             1 as &i31,
             0 as &i31,
             if large => &eq {
                 caml_copy_int64(m.load64(p, 8, 32));
             } else {
-                m.load64(p, 8, 32) as i32 as &i31;
+                m.load64(p, 8, 32) as &i31;
             },
             { f: 1e-9 * m.load64(p, 8, 40) as f64_s },
             { f: 1e-9 * m.load64(p, 8, 48) as f64_s },
@@ -855,7 +855,7 @@ fn caml_alloc_stat(
         if large => &eq {
             caml_copy_int64(size);
         } else {
-            size as i32 as &i31;
+            size as &i31;
         },
         { f: atime },
         { f: mtime },
@@ -1662,7 +1662,7 @@ fn unix_readlink(path: &eq) -> &eq {
     #[export = "unix_truncate"]
     #[export = "caml_unix_truncate"]
     fn unix_truncate(path: &eq, len: &eq) -> &eq {
-        become truncate_impl(path, len as i32_s as i64_s);
+        become truncate_impl(path, len as i64_s);
     }
 
     #[export = "unix_truncate_64"]
@@ -1713,7 +1713,7 @@ fn unix_readlink(path: &eq) -> &eq {
     #[export = "unix_ftruncate"]
     #[export = "caml_unix_ftruncate"]
     fn unix_ftruncate(fd: &eq, len: &eq) -> &eq {
-        become ftruncate(fd, len as i32_s as i64_s);
+        become ftruncate(fd, len as i64_s);
     }
 
     #[export = "unix_ftruncate_64"]
@@ -1978,7 +1978,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
     #[export = "caml_unix_write_bigarray"]
     fn unix_write_bigarray(vfd: &eq, vbuf: &eq, vpos: &eq, vlen: &eq, vsingle: &eq) -> &eq {
         let fd = vfd as i32_u;
-        let dat = caml_ba_get_data(vbuf) as &any as &dat;
+        let dat = caml_ba_get_data(vbuf) as &dat;
         let buf = dat.array as &bytes;
         let pos = vpos as i32_u + dat.offset;
         let len = vlen as i32_u;
@@ -2010,7 +2010,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
     #[export = "caml_unix_read_bigarray"]
     fn unix_read_bigarray(vfd: &eq, vbuf: &eq, vpos: &eq, vlen: &eq) -> &eq {
         let fd = vfd as i32_u;
-        let dat = caml_ba_get_data(vbuf) as &any as &dat;
+        let dat = caml_ba_get_data(vbuf) as &dat;
         let buf = dat.array as &bytes;
         let pos = vpos as i32_u + dat.offset;
         let len = vlen as i32_u;
@@ -2253,7 +2253,7 @@ fn lseek(fd: &eq, offset: i64, cmd: &eq) -> i64 {
 #[export = "unix_lseek"]
 #[export = "caml_unix_lseek"]
 fn unix_lseek(fd: &eq, ofs: &eq, cmd: &eq) -> &eq {
-    lseek(fd, ofs as i32_s as i64_s, cmd) as i32 as &i31;
+    lseek(fd, ofs as i64_s, cmd) as &i31;
 }
 
 #[export = "unix_lseek_64"]

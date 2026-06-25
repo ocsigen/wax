@@ -959,24 +959,31 @@ let cast ctx ty ty' =
   | Valtype { internal = I32 | I64; _ }, I32
   | Valtype { internal = I64; _ }, I64
   | Valtype { internal = V128; _ }, V128
-  | Valtype { internal = I32; _ }, Ref { typ = I31; _ } ->
+  (* [i32 as &i31] is [ref.i31]; [i64 as &i31] wraps to [i32] first. *)
+  | Valtype { internal = I32 | I64; _ }, Ref { typ = I31; _ } ->
       true
   | Valtype { internal = Ref _ as ity; _ }, Ref { typ = ty'; nullable } -> (
+      let sub a b = Wax_wasm.Types.val_subtype ctx.subtyping_info a b in
       Option.value ~default:true
         (let*@ typ = top_heap_type ctx ty' in
-         let ty' = Ref { nullable = true; typ } in
-         let+@ ity' = valtype ctx.diagnostics ctx.type_context ty' in
-         Wax_wasm.Types.val_subtype ctx.subtyping_info ity ity')
+         let+@ ity' =
+           valtype ctx.diagnostics ctx.type_context
+             (Ref { nullable = true; typ })
+         in
+         sub ity ity')
       ||
       (*ZZZ Replace nullable by non nullable if possible *)
       match ty' with
-      | Extern ->
-          Wax_wasm.Types.val_subtype ctx.subtyping_info ity
-            (Ref { nullable; typ = Any })
-      | Any ->
-          Wax_wasm.Types.val_subtype ctx.subtyping_info ity
-            (Ref { nullable; typ = Extern })
-      | _ -> false)
+      | Extern -> sub ity (Ref { nullable; typ = Any })
+      | Any -> sub ity (Ref { nullable; typ = Extern })
+      | _ ->
+          (* [extern] <-> [any] across hierarchies, then a [ref.cast] to the
+             concrete target. The [ref.cast] handles nullability, so only
+             hierarchy membership is checked here. *)
+          Option.value ~default:false
+            (let+@ top = top_heap_type ctx ty' in
+             (sub ity (Ref { nullable = true; typ = Extern }) && top = Any)
+             || (sub ity (Ref { nullable = true; typ = Any }) && top = Extern)))
   | ( (Number | Int | Float | Valtype { internal = I32 | F32 | I64 | F64; _ }),
       ( Ref
           {
@@ -989,7 +996,7 @@ let cast ctx ty ty' =
   | Valtype { internal = F32 | F64; _ }, (I32 | I64)
   | Valtype { internal = I32 | I64; _ }, (F32 | F64)
   | Valtype { internal = I32; _ }, I64
-  | ( (Float | Valtype { internal = I64 | F32 | F64 | V128; _ }),
+  | ( (Float | Valtype { internal = F32 | F64 | V128; _ }),
       (I32 | Ref { typ = I31; _ }) )
   | (Null | Valtype { internal = Ref _; _ }), (I32 | I64 | F32 | F64 | V128)
   | Valtype { internal = V128; _ }, (I64 | F32 | F64 | Ref _)
@@ -1001,7 +1008,8 @@ let signed_cast ctx ty ty' =
   let ity = UnionFind.find ty in
   match (ity, ty') with
   | (Int8 | Int16), (`I32 | `I64) -> true
-  | Valtype { internal = Ref _ as ity; _ }, `I32 ->
+  | Valtype { internal = Ref _ as ity; _ }, (`I32 | `I64) ->
+      (* [i31.get] extracts an [i32]; [&ref as i64_X] widens it further. *)
       Wax_wasm.Types.val_subtype ctx.subtyping_info ity
         (Ref { nullable = true; typ = Any })
   | Null, `I32 ->
@@ -2594,37 +2602,64 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
   | Cast (i', typ) ->
       let* i' = instruction ctx i' in
       (* When converting from Wasm, fuse two casts whose inserted intermediate
-         type is superfluous (only when [ctx.simplify]):
-         - a packed [Int8]/[Int16] read widened to [i64] arrives as
-           [(e as i32_X) as i64_X] (a [struct.get_s]/[array.get_s]/[load8_s]
-           feeding [i64.extend_i32_X]); drop the [i32] cast to print
-           [e as i64_X].
-         - an [i31] extracted from a non-[i31] reference arrives as
-           [(e as &i31) as i32_X] (a [ref.cast] feeding [i31.get]); drop the
-           [&i31] cast to print [e as i32_X], which [to_wasm] re-expands to the
-           [ref.cast]. A reference already typed [&i31]/[&?i31] never reaches
-           here (its [&i31] cast is dropped as redundant first), and an [i31]
-           built from an [i32] ([ref.i31]) is excluded by [is_widenable_ref]. *)
+         type is superfluous (only when [ctx.simplify]); [to_wasm] re-expands
+         each single cast to the same instructions:
+         - [(e as i32_X) as i64_X] -> [e as i64_X]: a narrow [i32]-producing
+           read widened to [i64]. [e] is a packed [Int8]/[Int16] read (the
+           [i32] is [i64.extend_i32_X]) or a reference (the [i32] is [i31.get],
+           the [i64] [i64.extend_i32_X]).
+         - [(e as &i31) as i32_X] -> [e as i32_X]: a [ref.cast] feeding
+           [i31.get]. A reference already typed [&i31]/[&?i31] never reaches
+           here (its [&i31] cast is dropped as redundant first); an [i31] built
+           from an [i32] ([ref.i31]) is excluded by the [is_*_ref] guard.
+         - [(e as i32) as &i31] -> [e as &i31]: an [i64] wrapped to [i32]
+           before [ref.i31] (which takes an [i32]).
+         - [(e as &any) as &T] -> [e as &T]: an [extern] converted to the
+           [any] hierarchy ([any.convert_extern]) before a [ref.cast] to a
+           concrete [any]-hierarchy type [T]. *)
       let is_packed_read e =
         match UnionFind.find (expression_type ctx e) with
         | Int8 | Int16 -> true
         | _ -> false
       in
-      let is_widenable_ref e =
+      let is_ref e =
+        match UnionFind.find (expression_type ctx e) with
+        | Valtype { internal = Ref _; _ } -> true
+        | _ -> false
+      in
+      let is_non_i31_ref e =
         match UnionFind.find (expression_type ctx e) with
         | Valtype { internal = Ref { typ = I31; _ }; _ } -> false
         | Valtype { internal = Ref _; _ } -> true
+        | _ -> false
+      in
+      let is_i64 e =
+        match UnionFind.find (expression_type ctx e) with
+        | Valtype { internal = I64; _ } -> true
+        | _ -> false
+      in
+      let is_extern e =
+        match UnionFind.find (expression_type ctx e) with
+        | Valtype { internal = Ref { typ = Extern | NoExtern; _ }; _ } -> true
         | _ -> false
       in
       let i' =
         match (typ, i'.desc) with
         | ( Signedtype { typ = `I64; signage = s2; strict = false },
             Cast (e, Signedtype { typ = `I32; signage = s1; strict = false }) )
-          when ctx.simplify && s1 = s2 && is_packed_read e ->
+          when ctx.simplify && s1 = s2 && (is_packed_read e || is_ref e) ->
             e
         | ( Signedtype { typ = `I32; _ },
             Cast (e, Valtype (Ref { typ = I31; nullable = false })) )
-          when ctx.simplify && is_widenable_ref e ->
+          when ctx.simplify && is_non_i31_ref e ->
+            e
+        | Valtype (Ref { typ = I31; nullable = false }), Cast (e, Valtype I32)
+          when ctx.simplify && is_i64 e ->
+            e
+        | ( Valtype
+              (Ref { typ = Any | Eq | I31 | Struct | Array | None_ | Type _; _ }),
+            Cast (e, Valtype (Ref { typ = Any; _ })) )
+          when ctx.simplify && is_extern e ->
             e
         | _ -> i'
       in

@@ -953,17 +953,43 @@ and instruction_desc ret ctx i : location Text.instr list =
         match expr_opt_valtype expr with
         | None -> code
         | Some in_ty ->
-            (* [ref as i32_s/u] extracts an [i31]: when the reference is not
-               already [i31ref], cast it to [(ref i31)] first; the [i31.get]
-               itself is emitted by the match below. *)
-            let code =
+            (* Several casts widen or convert through a forced intermediate
+               type; emit it here (and update [in_ty]) so the single Wax cast
+               lowers to the same instructions the double cast would. The
+               match below then finishes the cast on the intermediate value. *)
+            let code, in_ty =
               match (in_ty, cast_ty) with
-              | Ref { typ = I31; _ }, Signedtype { typ = `I32; _ } -> code
+              (* [ref as i32_s/u]: cast a non-[i31] reference to [(ref i31)]
+                 first; [i31.get] follows in the match below. *)
+              | Ref { typ = I31; _ }, Signedtype { typ = `I32; _ } ->
+                  (code, in_ty)
               | Ref _, Signedtype { typ = `I32; _ } ->
-                  folded loc
-                    (RefCast (reftype { nullable = false; typ = I31 }))
-                    code
-              | _ -> code
+                  ( folded loc
+                      (RefCast (reftype { nullable = false; typ = I31 }))
+                      code,
+                    in_ty )
+              (* [ref as i64_s/u]: [ref.cast]+[i31.get] as above, then the match
+                 below widens the [i32] with [i64.extend_i32_X]. *)
+              | Ref { typ = I31; _ }, Signedtype { typ = `I64; signage; _ } ->
+                  (folded loc (I31Get signage) code, I32)
+              | Ref _, Signedtype { typ = `I64; signage; _ } ->
+                  ( folded loc (I31Get signage)
+                      (folded loc
+                         (RefCast (reftype { nullable = false; typ = I31 }))
+                         code),
+                    I32 )
+              (* [i64 as &i31]: [ref.i31] takes an [i32], so wrap first. *)
+              | I64, Valtype (Ref { typ = I31; _ }) ->
+                  (folded loc I32WrapI64 code, I32)
+              (* [extern as &T] for an [any]-hierarchy [T]: convert to [any]
+                 first, then the match below does the [ref.cast] to [T]. *)
+              | ( Ref { typ = Extern | NoExtern; _ },
+                  Valtype
+                    (Ref { typ = Eq | I31 | Struct | Array | Type _ | None_; _ })
+                ) ->
+                  ( folded loc AnyConvertExtern code,
+                    Ref { nullable = true; typ = Any } )
+              | _ -> (code, in_ty)
             in
             let instr : _ Text.instr_desc =
               match (in_ty, cast_ty) with

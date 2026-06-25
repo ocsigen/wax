@@ -121,7 +121,7 @@ fn caml_deserialize_int_8(&eq) -> i64;
     }
 
     fn ta_fill_int(b: &extern, v: i32) {
-        let d = b as &any as &dat;
+        let d = b as &dat;
         let a = d.array;
         let ofs = d.offset;
         let len = d.len;
@@ -150,7 +150,7 @@ fn caml_deserialize_int_8(&eq) -> i64;
     }
 
     fn ta_fill_float(b: &extern, f: f64) {
-        let d = b as &any as &dat;
+        let d = b as &dat;
         let a = d.array;
         let ofs = d.offset;
         let len = d.len;
@@ -173,11 +173,11 @@ fn caml_deserialize_int_8(&eq) -> i64;
 
     #[export = "ta_set"]
     fn ta_set(d: &extern, s: &extern, doff: i32) {
-        let sd = s as &any as &dat;
+        let sd = s as &dat;
         let sa = sd.array;
         let so = sd.offset;
         let len = sd.len;
-        let dd = d as &any as &dat;
+        let dd = d as &dat;
         let da = dd.array;
         doff = dd.offset + doff;
         let i: i32;
@@ -237,7 +237,7 @@ fn caml_deserialize_int_8(&eq) -> i64;
 
     #[export = "ta_subarray"]
     fn ta_subarray(b: &extern, s: i32, e: i32) -> &extern {
-        let d = b as &any as &dat;
+        let d = b as &dat;
         let a = d.array;
         if a is &i64_array {
             s = s >>u 1;
@@ -248,7 +248,7 @@ fn caml_deserialize_int_8(&eq) -> i64;
 
     #[export = "ta_blit_from_bytes"]
     fn ta_blit_from_bytes(s: &bytes, so: i32, b: &extern, doff: i32, len: i32) {
-        let dat = b as &any as &dat;
+        let dat = b as &dat;
         let d = dat.array as &bytes;
         doff = doff + dat.offset;
         let i: i32;
@@ -260,7 +260,7 @@ fn caml_deserialize_int_8(&eq) -> i64;
 
     #[export = "ta_blit_to_bytes"]
     fn ta_blit_to_bytes(b: &extern, so: i32, d: &bytes, doff: i32, len: i32) {
-        let dat = b as &any as &dat;
+        let dat = b as &dat;
         let s = dat.array as &bytes;
         so = so + dat.offset;
         let i: i32;
@@ -276,90 +276,90 @@ fn caml_deserialize_int_8(&eq) -> i64;
 
     #[export = "dv_get_i8"]
     fn dv_get_i8(a: &extern, i: i32) -> i32 {
-        let d = a as &any as &dat;
+        let d = a as &dat;
         (d.array as &i8_array)[d.offset + i] as i32_s;
     }
 
     #[export = "dv_get_ui8"]
     fn dv_get_ui8(a: &extern, i: i32) -> i32 {
-        let d = a as &any as &dat;
+        let d = a as &dat;
         (d.array as &i8_array)[d.offset + i] as i32_u;
     }
 
     #[export = "dv_get_i16"]
     fn dv_get_i16(a: &extern, i: i32, i32) -> i32 {
-        let d = a as &any as &dat;
+        let d = a as &dat;
         (d.array as &i16_array)[d.offset + (i >>u 1)] as i32_s;
     }
 
     #[export = "dv_get_ui16"]
     fn dv_get_ui16(a: &extern, i: i32, i32) -> i32 {
-        let d = a as &any as &dat;
+        let d = a as &dat;
         (d.array as &i16_array)[d.offset + (i >>u 1)] as i32_u;
     }
 
     #[export = "dv_get_i32"]
     fn dv_get_i32(a: &extern, i: i32, i32) -> i32 {
-        let d = a as &any as &dat;
+        let d = a as &dat;
         (d.array as &i32_array)[d.offset + (i >>u 2)];
     }
 
     #[export = "dv_get_i64"]
     fn dv_get_i64(a: &extern, i: i32, i32) -> i64 {
-        let d = a as &any as &dat;
+        let d = a as &dat;
         (d.array as &i64_array)[d.offset + (i >>u 3)];
     }
 
     #[export = "dv_get_f32"]
     fn dv_get_f32(a: &extern, i: i32, i32) -> f32 {
-        let d = a as &any as &dat;
+        let d = a as &dat;
         (d.array as &f32_array)[d.offset + (i >>u 2)];
     }
 
     #[export = "dv_get_f64"]
     fn dv_get_f64(a: &extern, i: i32, i32) -> f64 {
-        let d = a as &any as &dat;
+        let d = a as &dat;
         (d.array as &f64_array)[d.offset + (i >>u 3)];
     }
 
     #[export = "dv_set_i8"]
     fn dv_set_i8(a: &extern, i: i32, v: i32) {
-        let d = a as &any as &dat;
+        let d = a as &dat;
         (d.array as &i8_array)[d.offset + i] = v;
     }
 
     #[export = "dv_set_i16"]
     fn dv_set_i16(a: &extern, i: i32, v: i32, i32) {
-        let d = a as &any as &dat;
+        let d = a as &dat;
         (d.array as &i16_array)[d.offset + (i >>u 1)] = v;
     }
 
     #[export = "dv_set_i32"]
     fn dv_set_i32(a: &extern, i: i32, v: i32, i32) {
-        let d = a as &any as &dat;
+        let d = a as &dat;
         (d.array as &i32_array)[d.offset + (i >>u 2)] = v;
     }
 
     #[export = "dv_set_i64"]
     fn dv_set_i64(a: &extern, i: i32, v: i64, i32) {
-        let d = a as &any as &dat;
+        let d = a as &dat;
         (d.array as &i64_array)[d.offset + (i >>u 3)] = v;
     }
 
     #[export = "dv_set_f32"]
     fn dv_set_f32(a: &extern, i: i32, v: f32, i32) {
-        let d = a as &any as &dat;
+        let d = a as &dat;
         (d.array as &f32_array)[d.offset + (i >>u 2)] = v;
     }
 
     #[export = "dv_set_f64"]
     fn dv_set_f64(a: &extern, i: i32, v: f64, i32) {
-        let d = a as &any as &dat;
+        let d = a as &dat;
         (d.array as &f64_array)[d.offset + (i >>u 3)] = v;
     }
 
     fn dv_get_ui16_unaligned(b: &extern, i: i32, i32) -> i32 {
-        let d = b as &any as &dat;
+        let d = b as &dat;
         let s = d.array as &bytes;
         i = d.offset + i;
         s[i] as i32_u | s[i + 1] as i32_u << 8;
@@ -367,7 +367,7 @@ fn caml_deserialize_int_8(&eq) -> i64;
 
     #[export = "dv_get_i32_unaligned"]
     fn dv_get_i32_unaligned(b: &extern, i: i32, i32) -> i32 {
-        let d = b as &any as &dat;
+        let d = b as &dat;
         let s = d.array as &bytes;
         i = d.offset + i;
         s[i] as i32_u | s[i + 1] as i32_u << 8
@@ -381,7 +381,7 @@ fn caml_deserialize_int_8(&eq) -> i64;
 
     fn dv_set_i16_unaligned(b: &extern, i: i32, v: i32, i32) {
         let j: i32;
-        let d = b as &any as &dat;
+        let d = b as &dat;
         let s = d.array as &bytes;
         i = d.offset + i;
         s[i] = v;
@@ -389,7 +389,7 @@ fn caml_deserialize_int_8(&eq) -> i64;
     }
 
     fn dv_set_i32_unaligned(b: &extern, i: i32, v: i32, i32) {
-        let d = b as &any as &dat;
+        let d = b as &dat;
         let s = d.array as &bytes;
         i = d.offset + i;
         s[i] = v;

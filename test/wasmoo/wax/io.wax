@@ -131,16 +131,16 @@ fn caml_ba_get_data(&eq) -> &extern;
     }
 
     fn ta_copy(buf: &extern, dst: i32, src: i32, end: i32) {
-        let b = buf as &any as &bytes;
+        let b = buf as &bytes;
         b.copy(dst, b, src, end - src);
     }
 
     fn caml_blit_bytes_to_dataview(s: &bytes, i: i32, buf: &extern, j: i32, l: i32) {
-        (buf as &any as &bytes).copy(j, s, i, l);
+        (buf as &bytes).copy(j, s, i, l);
     }
 
     fn caml_blit_dataview_to_bytes(buf: &extern, i: i32, s: &bytes, j: i32, l: i32) {
-        s.copy(j, buf as &any as &bytes, i, l);
+        s.copy(j, buf as &bytes, i, l);
     }
 
     fn dv_make(b: &extern) -> &extern {
@@ -148,22 +148,22 @@ fn caml_ba_get_data(&eq) -> &extern;
     }
 
     fn dv_get_ui8(a: &extern, i: i32) -> i32 {
-        (a as &any as &bytes)[i] as i32_u;
+        (a as &bytes)[i] as i32_u;
     }
 
     fn dv_set_i8(a: &extern, i: i32, v: i32) {
-        (a as &any as &bytes)[i] = v;
+        (a as &bytes)[i] = v;
     }
 
     type dat = { array: &array, offset: i32, len: i32 };
 
     fn ta_blit_from_buffer(buf: &extern, i: i32, ta: &extern, j: i32, len: i32) {
-        let dat = ta as &any as &dat;
+        let dat = ta as &dat;
         caml_blit_dataview_to_bytes(buf, i, dat.array as &bytes, dat.offset + j, len);
     }
 
     fn ta_blit_to_buffer(ta: &extern, i: i32, buf: &extern, j: i32, len: i32) {
-        let dat = ta as &any as &dat;
+        let dat = ta as &dat;
         caml_blit_bytes_to_dataview(dat.array as &bytes, dat.offset + i, buf, j, len);
     }
 
@@ -633,7 +633,7 @@ fn read(fd: i32, buf: &extern, pos: i32, n: i32) -> i32 {
     let res = fd_read(fd, iovs, iovs_len, nread);
     caml_handle_sys_error_if(0 as &i31, res);
     n = m.load32(nread);
-    let s = buf as &any as &bytes;
+    let s = buf as &bytes;
     blit_memory_to_substring(buffer, s, pos, n);
     n;
 }
@@ -885,7 +885,7 @@ fn caml_seek_in(ch: &channel, dest: i64) -> &eq {
 
 #[export = "caml_ml_seek_in"]
 fn caml_ml_seek_in(ch: &eq, dest: &eq) -> &eq {
-    become caml_seek_in(ch as &channel, dest as i32_s as i64_s);
+    become caml_seek_in(ch as &channel, dest as i64_s);
 }
 
 #[export = "caml_ml_seek_in_64"]
@@ -904,14 +904,14 @@ fn caml_ml_seek_out(vch: &eq, voffset: &eq) -> &eq {
     #[if(wasi)]
     {
         buffer = get_buffer();
-        res = fd_seek(ch.fd, voffset as i32_s as i64_s, 0, buffer);
+        res = fd_seek(ch.fd, voffset as i64_s, 0, buffer);
         caml_handle_sys_error_if(0 as &i31, res);
     }
     #[else]
     {
         // ZZZ Check for error
         fd_offset = get_fd_offset(ch.fd);
-        offset = voffset as i32_s as i64_s;
+        offset = voffset as i64_s;
         if offset <s 0 {
             caml_raise_sys_error("Invalid argument");
         }
@@ -1015,7 +1015,7 @@ fn write(fd: i32, buf: &extern, pos: i32, n: i32) -> i32 {
     m.store32(iovs, buffer);
     m.store32(iovs, n, 4, 4);
     let iovs_len = 1;
-    let s = buf as &any as &bytes;
+    let s = buf as &bytes;
     blit_substring_to_memory(buffer, s, pos, n);
     let res = fd_write(fd, iovs, iovs_len, nwritten);
     caml_handle_sys_error_if(0 as &i31, res);
@@ -1222,7 +1222,7 @@ fn caml_ml_set_buffered(vch: &eq, mode: &eq) -> &eq {
 #[export = "caml_ml_channel_size"]
 fn caml_ml_channel_size(vch: &eq) -> &eq {
     // ZZZ check for overflow
-    file_size(caml_ml_get_channel_fd(vch)) as i32 as &i31;
+    file_size(caml_ml_get_channel_fd(vch)) as &i31;
 }
 
 #[export = "caml_ml_channel_size_64"]

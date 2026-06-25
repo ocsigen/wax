@@ -1590,10 +1590,10 @@ fn caml_ba_alloc(kind: i32, layout: i32, num_dims: i32, data_2: &extern, dim: &i
 
 #[export = "string_set"]
 fn string_set(s: &?extern, i: i32, v: i32) {
-    (s as &?any as &?string)[i] = v;
+    (s as &?string)[i] = v;
 }
 
 #[export = "string_get"]
 fn string_get(s: &?extern, i: i32) -> i32 {
-    (s as &?any as &?string)[i] as i32_u;
+    (s as &?string)[i] as i32_u;
 }

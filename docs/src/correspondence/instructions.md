@@ -176,7 +176,12 @@ if cond => (i32) -> i32 { ... } else { ... }
 | `ref.cast` | `val as &type` |
 | `ref.test` | `val is &type` |
 
-When `val as i32_s`/`as i32_u` is applied to a reference that is not already `&i31` (e.g. an `&any` or `&eq`), a `ref.cast (ref i31)` is inserted before the `i31.get`, so `val as i32_s` covers both `i31.get_s` and `ref.cast (ref i31)` + `i31.get_s`.
+These casts can also chain through a forced intermediate, written as a single `as`:
+
+- **`&ref as i32_s`/`as i32_u`** on a reference that is not already `&i31` (e.g. an `&any` or `&eq`) inserts a `ref.cast (ref i31)` before the `i31.get` — so it covers both `i31.get_s` and `ref.cast (ref i31)` + `i31.get_s`.
+- **`&ref as i64_s`/`as i64_u`** widens that further: the `i31.get` (with the `ref.cast` above as needed) is followed by `i64.extend_i32_s`/`_u`.
+- **`i64 as &i31`** wraps to `i32` (`i32.wrap_i64`) before `ref.i31`.
+- **`extern_val as &T`** for an `any`-hierarchy `T` (e.g. a struct type) inserts `any.convert_extern` before the `ref.cast (ref T)`; likewise an `any`-hierarchy value `as &extern` uses `extern.convert_any`.
 
 ## Aggregate Instructions
 
