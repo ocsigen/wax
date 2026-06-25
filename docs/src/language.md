@@ -54,6 +54,27 @@ inf         // Infinity
 nan         // Not a number
 ```
 
+### Characters
+
+A character literal is a single character in single quotes. It evaluates to that
+character's Unicode code point as an `i32` — it is simply a readable spelling of
+an `i32.const`:
+
+```wax
+'A';            // 65
+'\n';           // 10
+'\41';          // 65, a byte written as two hex digits
+'\u{1F600}';    // 128512, a Unicode code point
+```
+
+The recognised escapes are `\t`, `\n`, `\r`, `\'`, `\"`, `\\`, `\NN` (exactly
+two hex digits, one byte), and `\u{...}` (a Unicode code point in hex). For
+text, see [Strings](#strings).
+
+A character literal round-trips through WAT, where it is written with a
+`(@char …)` annotation. A WASM binary keeps only the underlying `i32.const`,
+though, so decompiling from WASM yields the plain integer code point.
+
 ## Variables
 
 ### Local Variables
@@ -664,10 +685,23 @@ default):
 {point| ..}                 // every field defaulted
 ```
 
-The type name may be omitted when an expected type supplies it — for example a
-`let`/`const` annotation, a function parameter, a struct field, or an array
-element. `let p: &point = {x: 10, y: 20};` is equivalent to writing `{point| …}`.
-Without such a context the type cannot be inferred and must be given.
+The type name may be omitted in two cases. The first is when an expected type
+supplies it — for example a `let`/`const` annotation, a function parameter, a
+struct field, or an array element: `let p: &point = {x: 10, y: 20};` is
+equivalent to writing `{point| …}`. The second is when the **field set** names
+the type unambiguously — if exactly one struct type in the module has that exact
+set of field names, it is inferred even with no expected type:
+
+```wax
+fn origin() -> &eq {
+    {x: 0, y: 0};               // inferred as &point from its fields
+}
+```
+
+Field inference takes precedence over the expected type, so when the fields name
+a subtype of the expected type, that subtype is used. The type must still be
+given when the field set is ambiguous (several types share it) or absent (a
+`{..}` default with no fields).
 
 ### Field Access
 
@@ -706,6 +740,45 @@ arr[i]                      // Get element
 arr[i] = val;               // Set element (if mutable)
 arr.length()                // Array length
 ```
+
+## Strings
+
+A string literal builds a new array, one element per byte of the (UTF-8) text.
+By default its type is `[mut i8]`, and it lowers to an `array.new_fixed`:
+
+```wax
+"hello";                    // a new [mut i8] holding the 5 bytes
+```
+
+As with [array](#arrays) and [struct](#structs) literals, a different array type
+can be selected — either by prefixing the string with the type name and `#`, or
+by an expected type from the context. The element type must be numeric or packed
+(`i8`, `i16`, `i32`, …):
+
+```wax
+type chars = [i8];
+
+chars # "hi";               // a &chars (explicit type)
+let s: &chars = "yo";       // type taken from the annotation
+```
+
+String literals recognise the same escapes as [character literals](#characters)
+— `\t`, `\n`, `\r`, `\'`, `\"`, `\\`, `\NN` (two hex digits, one byte), and
+`\u{...}` (a Unicode code point, encoded as its UTF-8 bytes):
+
+```wax
+"tab\tend";
+"smile \u{1F600}";
+```
+
+A string also supplies the bytes of a [data segment](#data-segments).
+
+A string literal round-trips faithfully through WAT, where it is written with a
+`(@string …)` annotation. Through WASM it is best-effort: the binary keeps only
+the `array.new_fixed`, which is recovered as a string literal only when its
+bytes form a *reasonable* UTF-8 string — valid UTF-8 with no control characters
+other than tab, newline, and carriage return. Anything else (arbitrary binary
+data) decompiles as an ordinary [array literal](#arrays) instead.
 
 ## Memories
 

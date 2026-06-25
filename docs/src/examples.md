@@ -347,6 +347,14 @@ fn zeros() -> &ints {
     let a: &ints = [0; 16];
     a;
 }
+
+// A struct type can also be inferred from its field set alone, with no
+// expected type — only `point` has the fields {x, y}, so its name may be
+// dropped here too.
+#[export = "make_origin"]
+fn make_origin() -> &eq {
+    {x: 0, y: 0};
+}
 ```
 
 ## Arrays
@@ -486,6 +494,45 @@ fn hash_finalize(h: i32) -> i32 {
     h ^ h >>u 16;
 }
 ```
+
+## Strings and Characters
+
+A character literal is an `i32` code point; a string literal builds a byte array
+(`[mut i8]` by default, or a named array type with the `T # "…"` prefix). See
+[Strings](language.md#strings).
+
+### Wax
+
+```wax
+type chars = [i8];
+
+#[export = "newline"]
+fn newline() -> i32 {
+    '\n';                       // 10
+}
+
+#[export = "greeting"]
+fn greeting() -> &chars {
+    chars # "hi\u{21}";         // the bytes 'h', 'i', '!'
+}
+```
+
+### Equivalent WAT
+
+`wax -f wat` keeps the literals as `(@char …)` / `(@string …)` annotations, so
+they round-trip back to Wax unchanged:
+
+```wat
+(func $newline (export "newline") (result i32) (@char "\n"))
+
+(func $greeting (export "greeting") (result (ref $chars))
+  (@string $chars "hi!"))
+```
+
+In a WASM binary these lower to `i32.const 10` and an `array.new_fixed` of the
+three bytes `104, 105, 33` — from which the character comes back as the integer
+`10`, while the string is still recovered as `"hi!"` (its bytes are reasonable
+UTF-8).
 
 ## Holes (Stack Values)
 
