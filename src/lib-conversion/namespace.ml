@@ -10,7 +10,7 @@ type t = {
          [add'] can point a conflict at the previous occurrence. *)
 }
 
-let build l = StringMap.of_list (List.map (fun s -> (s, 1)) l)
+let build l = List.fold_left (fun m s -> StringMap.add s 1 m) StringMap.empty l
 
 (* SIMD intrinsic names are reserved so a generated entity name never shadows
    an intrinsic (which would silently mis-lower the corresponding instruction). *)
