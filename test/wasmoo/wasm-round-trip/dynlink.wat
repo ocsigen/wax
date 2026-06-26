@@ -40,28 +40,28 @@
 (type $bytes (array (mut i8)))
 
 (@if (not $wasi)
-(@then
-(func $caml_wasm_load_module (export "caml_wasm_load_module")
-  (param $str (ref eq)) (result (ref eq))
-  (call $wrap
-    (call $load_module
-      (call $unwrap (call $caml_uint8_array_of_string (local.get $str)))))
-)
+  (@then
+    (func $caml_wasm_load_module (export "caml_wasm_load_module")
+      (param $str (ref eq)) (result (ref eq))
+      (call $wrap
+        (call $load_module
+          (call $unwrap
+            (call $caml_uint8_array_of_string (local.get $str))))))
 
-(func $caml_wasm_load_wasmo (export "caml_wasm_load_wasmo")
-  (param $str (ref eq)) (result (ref eq))
-  (call $load_wasmo
-    (call $unwrap (call $caml_uint8_array_of_string (local.get $str))))
-  (ref.i31 (i32.const 0))
-)
+    (func $caml_wasm_load_wasmo (export "caml_wasm_load_wasmo")
+      (param $str (ref eq)) (result (ref eq))
+      (call $load_wasmo
+        (call $unwrap (call $caml_uint8_array_of_string (local.get $str))))
+      (ref.i31 (i32.const 0)))
 
-(func $caml_wasm_register_fragments (export "caml_wasm_register_fragments")
-  (param $unit_name (ref eq)) (param $source (ref eq)) (result (ref eq))
-  (call $register_fragments
-    (call $unwrap (call $caml_jsstring_of_string (local.get $unit_name)))
-    (call $unwrap (call $caml_jsstring_of_string (local.get $source))))
-  (ref.i31 (i32.const 0))
-) ) )
+    (func $caml_wasm_register_fragments
+      (export "caml_wasm_register_fragments")
+      (param $unit_name (ref eq)) (param $source (ref eq)) (result (ref eq))
+      (call $register_fragments
+        (call $unwrap (call $caml_jsstring_of_string (local.get $unit_name)))
+        (call $unwrap (call $caml_jsstring_of_string (local.get $source))))
+      (ref.i31 (i32.const 0))))
+)
 
 ;; Field index for prim_count in link_info (must match stdlib.wat)
 (global $LINK_INFO_PRIM_COUNT i32 (i32.const 3))
@@ -69,16 +69,15 @@
 ;; Standard OCaml dynlink primitives
 
 (@if (and (>= $ocaml_version (5 1 0)) (not $oxcaml))
-(@then
-(func $caml_dynlink_open_lib (export "caml_dynlink_open_lib")
-  (param (ref eq)) (result (ref eq))
-  (ref.i31 (i32.const 0))
-) )
-(@else
-(func $caml_dynlink_open_lib (export "caml_dynlink_open_lib")
-  (param (ref eq) (ref eq)) (result (ref eq))
-  (ref.i31 (i32.const 0))
-) ) )
+  (@then
+    (func $caml_dynlink_open_lib (export "caml_dynlink_open_lib")
+      (param (ref eq)) (result (ref eq))
+      (ref.i31 (i32.const 0))))
+  (@else
+    (func $caml_dynlink_open_lib (export "caml_dynlink_open_lib")
+      (param (ref eq) (ref eq)) (result (ref eq))
+      (ref.i31 (i32.const 0))))
+)
 
 (func $caml_dynlink_close_lib (export "caml_dynlink_close_lib")
   (param (ref eq)) (result (ref eq))
@@ -109,8 +108,8 @@
 )
 
 (@if (>= $ocaml_version (5 5 0))
-(@then
-(func $caml_dynlink_parse_ld_conf (export "caml_dynlink_parse_ld_conf")
-  (param (ref eq)) (result (ref eq))
-  (ref.i31 (i32.const 0))
-) ) )
+  (@then
+    (func $caml_dynlink_parse_ld_conf (export "caml_dynlink_parse_ld_conf")
+      (param (ref eq)) (result (ref eq))
+      (ref.i31 (i32.const 0))))
+)

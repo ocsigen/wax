@@ -19,20 +19,19 @@
   (func $caml_ba_get_view (param (ref eq)) (result (ref extern)))
 )
 (@if $wasi
-(@then
-(import "bigarray" "dv_get_i64"
-  (func $dv_get_i64 (param (ref extern) i32 i32) (result i64))
+  (@then
+    (import "bigarray" "dv_get_i64"
+      (func $dv_get_i64 (param (ref extern) i32 i32) (result i64)))
+    (import "bigarray" "dv_set_i64"
+      (func $dv_set_i64 (param (ref extern) i32 i64 i32)))
+    (global $littleEndian i32 (i32.const 1)))
+  (@else
+    (import "bindings" "dv_get_i64"
+      (func $dv_get_i64 (param externref i32 i32) (result i64)))
+    (import "bindings" "dv_set_i64"
+      (func $dv_set_i64 (param externref i32 i64 i32)))
+    (import "bindings" "littleEndian" (global $littleEndian i32)))
 )
-(import "bigarray" "dv_set_i64"
-  (func $dv_set_i64 (param (ref extern) i32 i64 i32))
-) (global $littleEndian i32 (i32.const 1)) )
-(@else
-(import "bindings" "dv_get_i64"
-  (func $dv_get_i64 (param externref i32 i32) (result i64))
-)
-(import "bindings" "dv_set_i64"
-  (func $dv_set_i64 (param externref i32 i64 i32))
-) (import "bindings" "littleEndian" (global $littleEndian i32)) ) )
 
 (func $caml_lxm_next (export "caml_lxm_next") (param $v (ref eq)) (result i64)
   (local $view (ref extern)) (local $a i64) (local $s i64) (local $q0 i64)

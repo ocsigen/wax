@@ -110,29 +110,29 @@
       (local.set $len (array.len (local.get $bucket)))
       (if (i32.lt_u (local.get $i) (local.get $len))
         (then
-          (call $add_char (local.get $buf) (@char "(" ))
+          (call $add_char (local.get $buf) (@char "("))
           (loop $loop
             (local.set $v
               (array.get $block (local.get $bucket) (local.get $i)))
             (if (ref.test (ref i31) (local.get $v))
               (then
                 (call $add_string (local.get $buf)
-                  (call $caml_format_int (@string "%d" )
+                  (call $caml_format_int (@string "%d")
                     (ref.cast (ref i31) (local.get $v)))))
               (else
                 (if (ref.test (ref $bytes) (local.get $v))
                   (then
-                    (call $add_char (local.get $buf) (@char "\"" ))
+                    (call $add_char (local.get $buf) (@char "\""))
                     (call $add_string (local.get $buf) (local.get $v))
-                    (call $add_char (local.get $buf) (@char "\"" )))
-                  (else (call $add_char (local.get $buf) (@char "_" ))))))
+                    (call $add_char (local.get $buf) (@char "\"")))
+                  (else (call $add_char (local.get $buf) (@char "_"))))))
             (local.set $i (i32.add (local.get $i) (i32.const 1)))
             (if (i32.lt_u (local.get $i) (local.get $len))
               (then
-                (call $add_char (local.get $buf) (@char "," ))
-                (call $add_char (local.get $buf) (@char " " ))
+                (call $add_char (local.get $buf) (@char ","))
+                (call $add_char (local.get $buf) (@char " "))
                 (br $loop))))
-          (call $add_char (local.get $buf) (@char ")" ))))
+          (call $add_char (local.get $buf) (@char ")"))))
       (local.set $s
         (array.new $bytes (i32.const 0)
           (struct.get $buffer $pos (local.get $buf))))

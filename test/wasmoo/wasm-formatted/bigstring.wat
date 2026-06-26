@@ -53,39 +53,33 @@
     (param (ref $bytes) i32 (ref extern) i32 i32))
 )
 (@if $wasi
-(@then
-(import "bigarray" "ta_subarray"
-  (func $ta_subarray (param (ref extern) i32 i32) (result (ref extern)))
+  (@then
+    (import "bigarray" "ta_subarray"
+      (func $ta_subarray (param (ref extern) i32 i32) (result (ref extern))))
+    (import "bigarray" "ta_set"
+      (func $ta_set (param (ref extern) (ref extern) i32)))
+    (import "bigarray" "dv_get_i32_unaligned"
+      (func $dv_get_i32_unaligned (param (ref extern) i32 i32) (result i32)))
+    (import "bigarray" "dv_get_ui8"
+      (func $dv_get_ui8 (param (ref extern) i32) (result i32)))
+    (import "bigarray" "dv_set_i8"
+      (func $dv_set_i8 (param (ref extern) i32 i32))))
+  (@else
+    (import "bindings" "ta_create"
+      (func $ta_create (param i32 anyref) (result anyref)))
+    (import "bindings" "dv_get_i32"
+      (func $dv_get_i32_unaligned (param externref i32 i32) (result i32)))
+    (import "bindings" "dv_get_ui8"
+      (func $dv_get_ui8 (param externref i32) (result i32)))
+    (import "bindings" "dv_set_i8"
+      (func $dv_set_i8 (param externref i32 i32)))
+    (import "bindings" "ta_subarray"
+      (func $ta_subarray (param (ref extern) i32 i32) (result (ref extern))))
+    (import "bindings" "ta_set"
+      (func $ta_set (param (ref extern) (ref extern) i32)))
+    (import "bindings" "ta_bytes"
+      (func $ta_bytes (param anyref) (result anyref))))
 )
-(import "bigarray" "ta_set"
-  (func $ta_set (param (ref extern) (ref extern) i32))
-)
-(import "bigarray" "dv_get_i32_unaligned"
-  (func $dv_get_i32_unaligned (param (ref extern) i32 i32) (result i32))
-)
-(import "bigarray" "dv_get_ui8"
-  (func $dv_get_ui8 (param (ref extern) i32) (result i32))
-)
-(import "bigarray" "dv_set_i8" (func $dv_set_i8 (param (ref extern) i32 i32)))
-)
-(@else
-(import "bindings" "ta_create"
-  (func $ta_create (param i32 anyref) (result anyref))
-)
-(import "bindings" "dv_get_i32"
-  (func $dv_get_i32_unaligned (param externref i32 i32) (result i32))
-)
-(import "bindings" "dv_get_ui8"
-  (func $dv_get_ui8 (param externref i32) (result i32))
-) (import "bindings" "dv_set_i8" (func $dv_set_i8 (param externref i32 i32)))
-(import "bindings" "ta_subarray"
-  (func $ta_subarray (param (ref extern) i32 i32) (result (ref extern)))
-)
-(import "bindings" "ta_set"
-  (func $ta_set (param (ref extern) (ref extern) i32))
-)
-(import "bindings" "ta_bytes" (func $ta_bytes (param anyref) (result anyref)))
-) )
 (import "hash" "caml_hash_mix_int"
   (func $caml_hash_mix_int (param i32 i32) (result i32))
 )
@@ -130,28 +124,27 @@
 )
 
 (@if (not $wasi)
-(@then (@string $buffer "buffer" )
+  (@then
+    (@string $buffer "buffer")
 
-(func (export "bigstring_to_array_buffer")
-  (param $bs (ref eq)) (result (ref eq))
-  (return_call $caml_js_get (call $caml_ba_to_typed_array (local.get $bs))
-    (global.get $buffer))
+    (func (export "bigstring_to_array_buffer")
+      (param $bs (ref eq)) (result (ref eq))
+      (return_call $caml_js_get (call $caml_ba_to_typed_array (local.get $bs))
+        (global.get $buffer)))
+
+    (export "bigstring_to_typed_array" (func $caml_ba_to_typed_array))
+
+    (func (export "bigstring_of_array_buffer")
+      (param $v (ref eq)) (result (ref eq))
+      (return_call $caml_ba_char_of_typed_array
+        (call $wrap
+          (call $ta_create (i32.const 12) (call $unwrap (local.get $v))))))
+
+    (func (export "bigstring_of_typed_array")
+      (param $v (ref eq)) (result (ref eq))
+      (return_call $caml_ba_char_of_typed_array
+        (call $wrap (call $ta_bytes (call $unwrap (local.get $v)))))))
 )
-
-(export "bigstring_to_typed_array" (func $caml_ba_to_typed_array))
-
-(func (export "bigstring_of_array_buffer")
-  (param $v (ref eq)) (result (ref eq))
-  (return_call $caml_ba_char_of_typed_array
-    (call $wrap
-      (call $ta_create (i32.const 12) (call $unwrap (local.get $v)))))
-)
-
-(func (export "bigstring_of_typed_array")
-  (param $v (ref eq)) (result (ref eq))
-  (return_call $caml_ba_char_of_typed_array
-    (call $wrap (call $ta_bytes (call $unwrap (local.get $v)))))
-) ) )
 
 (func (export "caml_bigstring_memset")
   (param $s (ref eq)) (param $pos (ref eq)) (param $len (ref eq))

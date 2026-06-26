@@ -113,7 +113,7 @@
   (i32.sub (local.get $i) (local.get $p))
 )
 
-(@string $unknown_token "<unknown token>" )
+(@string $unknown_token "<unknown token>")
 
 (func $token_name
   (param $vnames (ref eq)) (param $number i32) (result (ref eq))
@@ -148,18 +148,18 @@
 
 (func $output_nl
   (drop
-    (call $caml_ml_output (global.get $caml_stderr) (@string "\n" )
+    (call $caml_ml_output (global.get $caml_stderr) (@string "\n")
       (ref.i31 (i32.const 0)) (ref.i31 (i32.const 1))))
   (drop (call $caml_ml_flush (global.get $caml_stderr)))
 )
 
 (func $output_int (param $n i32)
   (call $output
-    (call $caml_format_int (@string "%d" ) (ref.i31 (local.get $n))))
+    (call $caml_format_int (@string "%d") (ref.i31 (local.get $n))))
 )
 
-(@string $State "State " )
-(@string $read_token ": read token " )
+(@string $State "State ")
+(@string $read_token ": read token ")
 
 (func $print_token
   (param $tables (ref $block)) (param $state i32) (param $tok (ref eq))
@@ -185,7 +185,7 @@
           (i31.get_u
             (ref.cast (ref i31)
               (array.get $block (local.get $b) (i32.const 0))))))
-      (call $output (@string "(" ))
+      (call $output (@string "("))
       (local.set $v (array.get $block (local.get $b) (i32.const 1)))
       (if (ref.test (ref i31) (local.get $v))
         (then
@@ -197,18 +197,18 @@
               (if (ref.test (ref $float) (local.get $v))
                 (then
                   (call $output
-                    (call $caml_format_float (@string "%g" ) (local.get $v))))
-                (else (call $output (@string "_" ))))))))
-      (call $output (@string ")" ))
+                    (call $caml_format_float (@string "%g") (local.get $v))))
+                (else (call $output (@string "_"))))))))
+      (call $output (@string ")"))
       (call $output_nl)))
 )
 
-(@string $recovering_in_state "Recovering in state " )
-(@string $discarding_state "Discarding state " )
-(@string $no_more_states_to_discard "No more states to discard" )
-(@string $discarding_last_token_read "Discarding last token read" )
-(@string $shift_to_state ": shift to state " )
-(@string $reduce_by_rule ": reduce by rule " )
+(@string $recovering_in_state "Recovering in state ")
+(@string $discarding_state "Discarding state ")
+(@string $no_more_states_to_discard "No more states to discard")
+(@string $discarding_last_token_read "Discarding last token read")
+(@string $shift_to_state ": shift to state ")
+(@string $reduce_by_rule ": reduce by rule ")
 
 (func (export "caml_parse_engine")
   (param $vtables (ref eq)) (param $venv (ref eq)) (param $vcmd (ref eq))

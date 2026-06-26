@@ -57,7 +57,7 @@
 (type $custom (sub (struct (field $ops (ref $custom_operations)))))
 
 (global $int64_ops (export "int64_ops") (ref $custom_operations)
-  (struct.new $custom_operations (@string "_j" ) (ref.func $int64_cmp)
+  (struct.new $custom_operations (@string "_j") (ref.func $int64_cmp)
     (ref.null $compare) (ref.func $int64_hash)
     (struct.new $fixed_length (i32.const 8) (i32.const 8))
     (ref.func $int64_serialize) (ref.func $int64_deserialize)
@@ -135,7 +135,7 @@
     (i64.lt_s (local.get $i1) (local.get $i2)))
 )
 
-(@string $INT64_ERRMSG "Int64.of_string" )
+(@string $INT64_ERRMSG "Int64.of_string")
 
 ;; Parse a sequence of digits into an i64 as dicted by $base,
 ;; $signedness and $sign. The sequence is read in $s starting from $i.
@@ -162,7 +162,7 @@
     (if (i32.lt_s (local.get $i) (local.get $len))
       (then
         (local.set $c (array.get_u $bytes (local.get $s) (local.get $i)))
-        (br_if $loop (i32.eq (local.get $c) (@char "_" )))
+        (br_if $loop (i32.eq (local.get $c) (@char "_")))
         (local.set $d (call $parse_digit (local.get $c)))
         (if (i32.ge_u (local.get $d) (local.get $base))
           (then (call $caml_failwith (local.get $errmsg))))
@@ -222,12 +222,12 @@
   (loop $write
     (local.set $i (i32.sub (local.get $i) (i32.const 1)))
     (array.set $bytes (local.get $s) (local.get $i)
-      (i32.add (@char "0" )
+      (i32.add (@char "0")
         (i32.wrap_i64 (i64.rem_u (local.get $d) (i64.const 10)))))
     (local.set $d (i64.div_u (local.get $d) (i64.const 10)))
     (br_if $write (i64.ne (local.get $d) (i64.const 0))))
   (if (local.get $negative)
-    (then (array.set $bytes (local.get $s) (i32.const 0) (@char "-" ))))
+    (then (array.set $bytes (local.get $s) (i32.const 0) (@char "-"))))
   (local.get $s)
 )
 
@@ -244,8 +244,7 @@
   (if (i32.eq (array.len (local.get $s)) (i32.const 2))
     (then
       (if
-        (i32.eq (array.get_u $bytes (local.get $s) (i32.const 1))
-          (@char "d" ))
+        (i32.eq (array.get_u $bytes (local.get $s) (i32.const 1)) (@char "d"))
         (then (return_call $format_int64_default (local.get $d))))))
   (call $parse_int_format (local.get $s))
   (local.set $uppercase)
@@ -285,16 +284,15 @@
     (local.set $d (i64.div_u (local.get $d) (local.get $base)))
     (br_if $write (i64.ne (local.get $d) (i64.const 0))))
   (if (local.get $negative)
-    (then (array.set $bytes (local.get $s) (i32.const 0) (@char "-" )))
+    (then (array.set $bytes (local.get $s) (i32.const 0) (@char "-")))
     (else
       (if (local.get $sign_style)
         (then
           (if (i32.eq (local.get $sign_style) (i32.const 1))
-            (then
-              (array.set $bytes (local.get $s) (i32.const 0) (@char "+" )))
+            (then (array.set $bytes (local.get $s) (i32.const 0) (@char "+")))
             (else
               (array.set $bytes (local.get $s) (i32.const 0)
-                (@char " " ))))))))
+                (@char " "))))))))
   ;; The "#" flag only prefixes octal/hex; for base 10 it is ignored (as
   ;; in C). Guarding on base here also stops the "0" from overwriting the
   ;; sign, since the digit-count phase above only reserves prefix room for
@@ -304,17 +302,17 @@
     (then
       (if (local.get $i)
         (then
-          (array.set $bytes (local.get $s) (i32.const 0) (@char "0" ))
+          (array.set $bytes (local.get $s) (i32.const 0) (@char "0"))
           (if (i64.eq (local.get $base) (i64.const 16))
             (then
               (array.set $bytes (local.get $s) (i32.const 1)
-                (select (@char "X" ) (@char "x" )
-                  (local.get $uppercase)))))))))
+                (select (@char "X") (@char "x") (local.get $uppercase)))))))))
   (local.get $s)
 )
 
 (@string $unsupported
-"caml_reinterpret_unboxed_int64_as_tagged_int63 is not supported in wasm." )
+  "caml_reinterpret_unboxed_int64_as_tagged_int63 is not supported in wasm."
+)
 
 (func (export "caml_reinterpret_unboxed_int64_as_tagged_int63")
   (param (ref eq)) (result (ref eq))

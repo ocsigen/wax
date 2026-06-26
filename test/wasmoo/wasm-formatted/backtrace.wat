@@ -19,18 +19,18 @@
   (func $caml_invalid_argument (param (ref eq)))
 )
 (@if $wasi
-(@then (global $backtrace_status (mut (ref eq)) (ref.i31 (i32.const 0)))
-(func $get_backtrace_status (result (ref eq)) (global.get $backtrace_status))
-(func $record_backtrace (param $b (ref eq))
-  (global.set $backtrace_status (local.get $b))
-) )
-(@else
-(import "bindings" "backtrace_status"
-  (func $get_backtrace_status (result (ref eq)))
+  (@then
+    (global $backtrace_status (mut (ref eq)) (ref.i31 (i32.const 0)))
+    (func $get_backtrace_status (result (ref eq))
+      (global.get $backtrace_status))
+    (func $record_backtrace (param $b (ref eq))
+      (global.set $backtrace_status (local.get $b))))
+  (@else
+    (import "bindings" "backtrace_status"
+      (func $get_backtrace_status (result (ref eq))))
+    (import "bindings" "record_backtrace"
+      (func $record_backtrace (param (ref eq)))))
 )
-(import "bindings" "record_backtrace"
-  (func $record_backtrace (param (ref eq)))
-) ) )
 
 (type $block (array (mut (ref eq))))
 (type $bytes (array (mut i8)))
@@ -54,7 +54,8 @@
 )
 
 (@string $raw_backtrace_slot_err
-"Printexc.get_raw_backtrace_slot: index out of bounds" )
+  "Printexc.get_raw_backtrace_slot: index out of bounds"
+)
 
 (func (export "caml_raw_backtrace_slot")
   (param (ref eq) (ref eq)) (result (ref eq))

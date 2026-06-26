@@ -40,10 +40,10 @@
   (if (i32.ne (local.get $len) (i32.const 0))
     (then
       (local.set $c (array.get_u $bytes (local.get $s) (i32.const 0)))
-      (if (i32.eq (local.get $c) (@char "-" ))
+      (if (i32.eq (local.get $c) (@char "-"))
         (then (local.set $sign (i32.const -1)) (local.set $i (i32.const 1)))
         (else
-          (if (i32.eq (local.get $c) (@char "+" ))
+          (if (i32.eq (local.get $c) (@char "+"))
             (then (local.set $i (i32.const 1))))))))
   (if (i32.lt_s (i32.add (local.get $i) (i32.const 1)) (local.get $len))
     (then
@@ -55,32 +55,32 @@
             (array.get_u $bytes (local.get $s)
               (i32.add (local.get $i) (i32.const 1))))
           (if
-            (i32.or (i32.eq (local.get $c) (@char "X" ))
-              (i32.eq (local.get $c) (@char "x" )))
+            (i32.or (i32.eq (local.get $c) (@char "X"))
+              (i32.eq (local.get $c) (@char "x")))
             (then
               (local.set $base (i32.const 16))
               (local.set $signedness (i32.const 0))
               (local.set $i (i32.add (local.get $i) (i32.const 2))))
             (else
               (if
-                (i32.or (i32.eq (local.get $c) (@char "O" ))
-                  (i32.eq (local.get $c) (@char "o" )))
+                (i32.or (i32.eq (local.get $c) (@char "O"))
+                  (i32.eq (local.get $c) (@char "o")))
                 (then
                   (local.set $base (i32.const 8))
                   (local.set $signedness (i32.const 0))
                   (local.set $i (i32.add (local.get $i) (i32.const 2))))
                 (else
                   (if
-                    (i32.or (i32.eq (local.get $c) (@char "B" ))
-                      (i32.eq (local.get $c) (@char "b" )))
+                    (i32.or (i32.eq (local.get $c) (@char "B"))
+                      (i32.eq (local.get $c) (@char "b")))
                     (then
                       (local.set $base (i32.const 2))
                       (local.set $signedness (i32.const 0))
                       (local.set $i (i32.add (local.get $i) (i32.const 2))))
                     (else
                       (if
-                        (i32.or (i32.eq (local.get $c) (@char "U" ))
-                          (i32.eq (local.get $c) (@char "u" )))
+                        (i32.or (i32.eq (local.get $c) (@char "U"))
+                          (i32.eq (local.get $c) (@char "u")))
                         (then
                           (local.set $signedness (i32.const 0))
                           (local.set $i
@@ -94,16 +94,16 @@
 
 (func $parse_digit (export "parse_digit") (param $c i32) (result i32)
   (if
-    (i32.and (i32.ge_u (local.get $c) (@char "0" ))
-      (i32.le_u (local.get $c) (@char "9" )))
-    (then (return (i32.sub (local.get $c) (@char "0" )))))
+    (i32.and (i32.ge_u (local.get $c) (@char "0"))
+      (i32.le_u (local.get $c) (@char "9")))
+    (then (return (i32.sub (local.get $c) (@char "0")))))
   (if
-    (i32.and (i32.ge_u (local.get $c) (@char "A" ))
-      (i32.le_u (local.get $c) (@char "Z" )))
+    (i32.and (i32.ge_u (local.get $c) (@char "A"))
+      (i32.le_u (local.get $c) (@char "Z")))
     (then (return (i32.sub (local.get $c) (i32.const 55)))))
   (if
-    (i32.and (i32.ge_u (local.get $c) (@char "a" ))
-      (i32.le_u (local.get $c) (@char "z" )))
+    (i32.and (i32.ge_u (local.get $c) (@char "a"))
+      (i32.le_u (local.get $c) (@char "z")))
     (then (return (i32.sub (local.get $c) (i32.const 87)))))
   (return (i32.const -1))
 )
@@ -135,7 +135,7 @@
     (if (i32.lt_s (local.get $i) (local.get $len))
       (then
         (local.set $c (array.get_u $bytes (local.get $s) (local.get $i)))
-        (br_if $loop (i32.eq (local.get $c) (@char "_" )))
+        (br_if $loop (i32.eq (local.get $c) (@char "_")))
         (local.set $d (call $parse_digit (local.get $c)))
         (if (i32.ge_u (local.get $d) (local.get $base))
           (then (call $caml_failwith (local.get $errmsg))))
@@ -169,7 +169,7 @@
   (local.get $res)
 )
 
-(global $INT_ERRMSG (ref $bytes) (@string "int_of_string" ))
+(global $INT_ERRMSG (ref $bytes) (@string "int_of_string"))
 
 (func $caml_int_of_string (export "caml_int_of_string")
   (param $v (ref eq)) (result (ref eq))
@@ -177,7 +177,7 @@
     (call $parse_int (local.get $v) (i32.const 31) (global.get $INT_ERRMSG)))
 )
 
-(global $INT8_ERRMSG (ref $bytes) (@string "Int8.of_string" ))
+(global $INT8_ERRMSG (ref $bytes) (@string "Int8.of_string"))
 
 (func $caml_int8_of_string (export "caml_int8_of_string")
   (param $v (ref eq)) (result (ref eq))
@@ -187,7 +187,7 @@
         (global.get $INT8_ERRMSG))))
 )
 
-(global $INT16_ERRMSG (ref $bytes) (@string "Int16.of_string" ))
+(global $INT16_ERRMSG (ref $bytes) (@string "Int16.of_string"))
 
 (func $caml_int16_of_string (export "caml_int16_of_string")
   (param $v (ref eq)) (result (ref eq))
@@ -209,11 +209,11 @@
 (type $chars (array i8))
 
 (global $lowercase_hex_table (export "lowercase_hex_table") (ref $chars)
-  (@string $chars "0123456789abcdef" )
+  (@string $chars "0123456789abcdef")
 )
 
 (global $uppercase_hex_table (export "uppercase_hex_table") (ref $chars)
-  (@string $chars "0123456789ABCDEF" )
+  (@string $chars "0123456789ABCDEF")
 )
 
 (func $format_int_default (param $d i32) (result (ref eq))
@@ -232,15 +232,15 @@
   (loop $write
     (local.set $i (i32.sub (local.get $i) (i32.const 1)))
     (array.set $bytes (local.get $s) (local.get $i)
-      (i32.add (@char "0" ) (i32.rem_u (local.get $d) (i32.const 10))))
+      (i32.add (@char "0") (i32.rem_u (local.get $d) (i32.const 10))))
     (local.set $d (i32.div_u (local.get $d) (i32.const 10)))
     (br_if $write (local.get $d)))
   (if (local.get $negative)
-    (then (array.set $bytes (local.get $s) (i32.const 0) (@char "-" ))))
+    (then (array.set $bytes (local.get $s) (i32.const 0) (@char "-"))))
   (local.get $s)
 )
 
-(global $format_error (ref $bytes) (@string "format_int: bad format" ))
+(global $format_error (ref $bytes) (@string "format_int: bad format"))
 
 (func $parse_int_format (export "parse_int_format")
   (param $s (ref $bytes)) (result i32 i32 i32 i32 i32)
@@ -254,17 +254,17 @@
       (br_if $bad_format (i32.lt_u (local.get $len) (i32.const 2)))
       (br_if $bad_format
         (i32.ne (array.get_u $bytes (local.get $s) (i32.const 0))
-          (@char "%" )))
+          (@char "%")))
       (local.set $c (array.get_u $bytes (local.get $s) (i32.const 1)))
-      (if (i32.eq (local.get $c) (@char "+" ))
+      (if (i32.eq (local.get $c) (@char "+"))
         (then
           (local.set $sign_style (i32.const 1))
           (local.set $i (i32.add (local.get $i) (i32.const 1)))))
-      (if (i32.eq (local.get $c) (@char " " ))
+      (if (i32.eq (local.get $c) (@char " "))
         (then
           (local.set $sign_style (i32.const 2))
           (local.set $i (i32.add (local.get $i) (i32.const 1)))))
-      (if (i32.eq (local.get $c) (@char "#" ))
+      (if (i32.eq (local.get $c) (@char "#"))
         (then
           (local.set $alternate (i32.const 1))
           (local.set $i (i32.add (local.get $i) (i32.const 1)))))
@@ -272,9 +272,9 @@
       (local.set $c (array.get_u $bytes (local.get $s) (local.get $i)))
       (if
         (i32.or
-          (i32.or (i32.eq (local.get $c) (@char "L" ))
-            (i32.eq (local.get $c) (@char "l" )))
-          (i32.eq (local.get $c) (@char "n" )))
+          (i32.or (i32.eq (local.get $c) (@char "L"))
+            (i32.eq (local.get $c) (@char "l")))
+          (i32.eq (local.get $c) (@char "n")))
         (then
           (local.set $i (i32.add (local.get $i) (i32.const 1)))
           (br_if $bad_format (i32.eq (local.get $i) (local.get $len)))
@@ -282,24 +282,24 @@
       (br_if $bad_format
         (i32.ne (i32.add (local.get $i) (i32.const 1)) (local.get $len)))
       (if
-        (i32.or (i32.eq (local.get $c) (@char "d" ))
-          (i32.eq (local.get $c) (@char "i" )))
+        (i32.or (i32.eq (local.get $c) (@char "d"))
+          (i32.eq (local.get $c) (@char "i")))
         (then
           (local.set $base (i32.const 10))
           (local.set $signed (i32.const 1)))
         (else
-          (if (i32.eq (local.get $c) (@char "u" ))
+          (if (i32.eq (local.get $c) (@char "u"))
             (then (local.set $base (i32.const 10)))
             (else
-              (if (i32.eq (local.get $c) (@char "x" ))
+              (if (i32.eq (local.get $c) (@char "x"))
                 (then (local.set $base (i32.const 16)))
                 (else
-                  (if (i32.eq (local.get $c) (@char "X" ))
+                  (if (i32.eq (local.get $c) (@char "X"))
                     (then
                       (local.set $base (i32.const 16))
                       (local.set $uppercase (i32.const 1)))
                     (else
-                      (if (i32.eq (local.get $c) (@char "o" ))
+                      (if (i32.eq (local.get $c) (@char "o"))
                         (then (local.set $base (i32.const 8)))
                         (else (br $bad_format)))))))))))
       (br $return))
@@ -321,8 +321,7 @@
   (if (i32.eq (array.len (local.get $s)) (i32.const 2))
     (then
       (if
-        (i32.eq (array.get_u $bytes (local.get $s) (i32.const 1))
-          (@char "d" ))
+        (i32.eq (array.get_u $bytes (local.get $s) (i32.const 1)) (@char "d"))
         (then (return_call $format_int_default (local.get $d))))))
   (call $parse_int_format (local.get $s))
   (local.set $uppercase)
@@ -368,16 +367,15 @@
     (local.set $d (i32.div_u (local.get $d) (local.get $base)))
     (br_if $write (local.get $d)))
   (if (local.get $negative)
-    (then (array.set $bytes (local.get $s) (i32.const 0) (@char "-" )))
+    (then (array.set $bytes (local.get $s) (i32.const 0) (@char "-")))
     (else
       (if (local.get $sign_style)
         (then
           (if (i32.eq (local.get $sign_style) (i32.const 1))
-            (then
-              (array.set $bytes (local.get $s) (i32.const 0) (@char "+" )))
+            (then (array.set $bytes (local.get $s) (i32.const 0) (@char "+")))
             (else
               (array.set $bytes (local.get $s) (i32.const 0)
-                (@char " " ))))))))
+                (@char " "))))))))
   ;; The "#" flag only prefixes octal/hex; for base 10 it is ignored (as
   ;; in C). Guarding on base here also stops the "0" from overwriting the
   ;; sign, since the digit-count phase above only reserves prefix room for
@@ -387,11 +385,10 @@
     (then
       (if (local.get $i)
         (then
-          (array.set $bytes (local.get $s) (i32.const 0) (@char "0" ))
+          (array.set $bytes (local.get $s) (i32.const 0) (@char "0"))
           (if (i32.eq (local.get $base) (i32.const 16))
             (then
               (array.set $bytes (local.get $s) (i32.const 1)
-                (select (@char "X" ) (@char "x" )
-                  (local.get $uppercase)))))))))
+                (select (@char "X") (@char "x") (local.get $uppercase)))))))))
   (local.get $s)
 )

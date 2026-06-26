@@ -2,8 +2,10 @@ Conditional annotations (@if/@then/@else) are parsed and preserved through a
 WAT round-trip, both at the instruction level and the module-field level.
 
   $ wax cond.wat -o out.wat && cat out.wat
-  (@if $oxcaml (@then (func $a (result i32) (i32.const 1)) )
-  (@else (func $a (result i32) (i32.const 2)) ) )
+  (@if $oxcaml
+    (@then (func $a (result i32) (i32.const 1)))
+    (@else (func $a (result i32) (i32.const 2)))
+  )
   (func $f (result i32)
     (@if
       (and
@@ -52,8 +54,10 @@ different arity in each branch, and the call in each branch folds against that
 branch's signature (two operands when `wasi`, one otherwise).
 
   $ wax arity.wat --fold -o arity_folded.wat && cat arity_folded.wat
-  (@if $wasi (@then (import "a" "g" (func $g (param i32 i32))) )
-  (@else (import "b" "g" (func $g (param i32))) ) )
+  (@if $wasi
+    (@then (import "a" "g" (func $g (param i32 i32))))
+    (@else (import "b" "g" (func $g (param i32))))
+  )
   (func $h
     (@if $wasi
       (@then (call $g (i32.const 1) (i32.const 2)))

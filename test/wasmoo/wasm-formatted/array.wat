@@ -24,7 +24,7 @@
 (type $float (struct (field $f f64)))
 (type $float_array (array (mut f64)))
 
-(@string $Array_make "Array.make" )
+(@string $Array_make "Array.make")
 
 (global $empty_array (ref eq)
   (array.new_fixed $block 1 (ref.i31 (i32.const 0)))

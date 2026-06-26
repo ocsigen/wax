@@ -20,22 +20,21 @@
 ;; (ref eq) representation and the JS [anyref] world.
 
 (@if (not $wasi)
-(@then (import "jslib" "wrap" (func $wrap (param anyref) (result (ref eq))))
-(import "jslib" "unwrap" (func $unwrap (param (ref eq)) (result anyref)))
-(import "js" "caml_jsoo_promise_wrap"
-  (func $caml_jsoo_promise_wrap_js (param anyref) (result anyref))
-)
-(import "js" "caml_jsoo_promise_unwrap"
-  (func $caml_jsoo_promise_unwrap_js (param anyref) (result anyref))
-)
+  (@then
+    (import "jslib" "wrap" (func $wrap (param anyref) (result (ref eq))))
+    (import "jslib" "unwrap" (func $unwrap (param (ref eq)) (result anyref)))
+    (import "js" "caml_jsoo_promise_wrap"
+      (func $caml_jsoo_promise_wrap_js (param anyref) (result anyref)))
+    (import "js" "caml_jsoo_promise_unwrap"
+      (func $caml_jsoo_promise_unwrap_js (param anyref) (result anyref)))
 
-(func (export "caml_jsoo_promise_wrap") (param $v (ref eq)) (result (ref eq))
-  (return_call $wrap
-    (call $caml_jsoo_promise_wrap_js (call $unwrap (local.get $v))))
-)
+    (func (export "caml_jsoo_promise_wrap")
+      (param $v (ref eq)) (result (ref eq))
+      (return_call $wrap
+        (call $caml_jsoo_promise_wrap_js (call $unwrap (local.get $v)))))
 
-(func (export "caml_jsoo_promise_unwrap")
-  (param $v (ref eq)) (result (ref eq))
-  (return_call $wrap
-    (call $caml_jsoo_promise_unwrap_js (call $unwrap (local.get $v))))
-) ) )
+    (func (export "caml_jsoo_promise_unwrap")
+      (param $v (ref eq)) (result (ref eq))
+      (return_call $wrap
+        (call $caml_jsoo_promise_unwrap_js (call $unwrap (local.get $v))))))
+)

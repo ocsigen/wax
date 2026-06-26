@@ -217,9 +217,9 @@
   (local.get $res)
 )
 
-(@string $abstract_value "compare: abstract value" )
-(@string $functional_value "compare: functional value" )
-(@string $continuation_value "compare: continuation value" )
+(@string $abstract_value "compare: abstract value")
+(@string $functional_value "compare: functional value")
+(@string $continuation_value "compare: continuation value")
 
 (func $do_compare_val
   (param $stack (ref $compare_stack)) (param $v1 (ref eq))

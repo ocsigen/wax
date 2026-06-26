@@ -72,7 +72,7 @@ assumption, so this is accepted and converts with the call preserved.
 
   $ wax --validate crossref.wax -o checked_crossref.wax
   $ wax crossref.wax -o crossref.wat && cat crossref.wat
-  (@if $wasi (@then (import "m" "g" (func $g (result i32))) ) )
+  (@if $wasi (@then (import "m" "g" (func $g (result i32)))))
   (func $h (result i32)
     (local $x i32)
     (@if $wasi

@@ -16,574 +16,517 @@
 ;; Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
 (@if (not $wasi)
-(@then
+  (@then
 
-;; Imports from other wasm modules
-(import "fail" "caml_failwith" (func $caml_failwith (param (ref eq))))
-(import "fail" "caml_raise_with_arg"
-  (func $caml_raise_with_arg (param (ref eq) (ref eq)))
-)
-(import "stdlib" "caml_named_value"
-  (func $caml_named_value (param (ref eq)) (result eqref))
-) (import "jslib" "wrap" (func $wrap (param anyref) (result (ref eq))))
-(import "jslib" "unwrap" (func $unwrap (param (ref eq)) (result anyref)))
-(import "jslib" "caml_jsstring_of_string"
-  (func $caml_jsstring_of_string (param (ref eq)) (result (ref eq)))
-)
-(import "bindings" "identity" (func $from_int32 (param i32) (result anyref)))
-(import "bindings" "new_array"
-  (func $new_array (param i32) (result (ref extern)))
-)
-(import "bindings" "array_set"
-  (func $array_set (param (ref extern) i32 anyref))
-)
+    ;; Imports from other wasm modules
+    (import "fail" "caml_failwith" (func $caml_failwith (param (ref eq))))
+    (import "fail" "caml_raise_with_arg"
+      (func $caml_raise_with_arg (param (ref eq) (ref eq))))
+    (import "stdlib" "caml_named_value"
+      (func $caml_named_value (param (ref eq)) (result eqref)))
+    (import "jslib" "wrap" (func $wrap (param anyref) (result (ref eq))))
+    (import "jslib" "unwrap" (func $unwrap (param (ref eq)) (result anyref)))
+    (import "jslib" "caml_jsstring_of_string"
+      (func $caml_jsstring_of_string (param (ref eq)) (result (ref eq))))
+    (import "bindings" "identity"
+      (func $from_int32 (param i32) (result anyref)))
+    (import "bindings" "new_array"
+      (func $new_array (param i32) (result (ref extern))))
+    (import "bindings" "array_set"
+      (func $array_set (param (ref extern) i32 anyref)))
 
-;; JS helper imports
-(import "js" "gr_state_for_wasm" (func $gr_state (result anyref)))
-(import "js" "gr_open_for_wasm" (func $gr_open (param anyref) (result i32)))
-(import "js" "gr_close_for_wasm" (func $gr_close))
-(import "js" "gr_clear_for_wasm" (func $gr_clear))
-(import "js" "gr_size_x_for_wasm" (func $gr_size_x (result i32)))
-(import "js" "gr_size_y_for_wasm" (func $gr_size_y (result i32)))
-(import "js" "gr_current_x_for_wasm" (func $gr_current_x (result i32)))
-(import "js" "gr_current_y_for_wasm" (func $gr_current_y (result i32)))
-(import "js" "gr_set_color_for_wasm" (func $gr_set_color (param i32)))
-(import "js" "gr_plot_for_wasm" (func $gr_plot (param i32 i32)))
-(import "js" "gr_point_color_for_wasm"
-  (func $gr_point_color (param i32 i32) (result i32))
-) (import "js" "gr_moveto_for_wasm" (func $gr_moveto (param i32 i32)))
-(import "js" "gr_lineto_for_wasm" (func $gr_lineto (param i32 i32)))
-(import "js" "gr_draw_rect_for_wasm"
-  (func $gr_draw_rect (param i32 i32 i32 i32))
-)
-(import "js" "gr_fill_rect_for_wasm"
-  (func $gr_fill_rect (param i32 i32 i32 i32))
-)
-(import "js" "gr_draw_arc_for_wasm"
-  (func $gr_draw_arc (param i32 i32 i32 i32 i32 i32))
-)
-(import "js" "gr_fill_arc_for_wasm"
-  (func $gr_fill_arc (param i32 i32 i32 i32 i32 i32))
-)
-(import "js" "gr_set_line_width_for_wasm"
-  (func $gr_set_line_width (param i32))
-)
-(import "js" "gr_resize_window_for_wasm"
-  (func $gr_resize_window (param i32 i32))
-) (import "js" "gr_draw_char_for_wasm" (func $gr_draw_char (param i32)))
-(import "js" "gr_draw_str_for_wasm" (func $gr_draw_str (param anyref)))
-(import "js" "gr_set_font_for_wasm" (func $gr_set_font (param anyref)))
-(import "js" "gr_set_text_size_for_wasm" (func $gr_set_text_size (param i32)))
-(import "js" "gr_set_window_title_for_wasm"
-  (func $gr_set_window_title (param anyref))
-)
-(import "js" "gr_text_size_w_for_wasm"
-  (func $gr_text_size_w (param anyref) (result i32))
-) (import "js" "gr_text_size_h_for_wasm" (func $gr_text_size_h (result i32)))
-(import "js" "gr_fill_poly_for_wasm" (func $gr_fill_poly (param anyref i32)))
-(import "js" "gr_create_image_for_wasm"
-  (func $gr_create_image (param i32 i32) (result anyref))
-)
-(import "js" "gr_draw_image_for_wasm"
-  (func $gr_draw_image (param anyref i32 i32))
-)
-(import "js" "gr_blit_image_for_wasm"
-  (func $gr_blit_image (param anyref i32 i32))
-)
-(import "js" "gr_make_image_for_wasm"
-  (func $gr_make_image (param anyref i32 i32) (result anyref))
-)
-(import "js" "gr_dump_image_width_for_wasm"
-  (func $gr_dump_image_width (param anyref) (result i32))
-)
-(import "js" "gr_dump_image_height_for_wasm"
-  (func $gr_dump_image_height (param anyref) (result i32))
-)
-(import "js" "gr_dump_image_pixel_for_wasm"
-  (func $gr_dump_image_pixel (param anyref i32 i32) (result i32))
-) (import "js" "gr_state_set_for_wasm" (func $gr_state_set (param anyref)))
-(import "js" "gr_state_create_for_wasm"
-  (func $gr_state_create (param anyref i32 i32) (result anyref))
-)
-(import "js" "gr_doc_of_state_for_wasm"
-  (func $gr_doc_of_state (param anyref) (result anyref))
-)
+    ;; JS helper imports
+    (import "js" "gr_state_for_wasm" (func $gr_state (result anyref)))
+    (import "js" "gr_open_for_wasm"
+      (func $gr_open (param anyref) (result i32)))
+    (import "js" "gr_close_for_wasm" (func $gr_close))
+    (import "js" "gr_clear_for_wasm" (func $gr_clear))
+    (import "js" "gr_size_x_for_wasm" (func $gr_size_x (result i32)))
+    (import "js" "gr_size_y_for_wasm" (func $gr_size_y (result i32)))
+    (import "js" "gr_current_x_for_wasm" (func $gr_current_x (result i32)))
+    (import "js" "gr_current_y_for_wasm" (func $gr_current_y (result i32)))
+    (import "js" "gr_set_color_for_wasm" (func $gr_set_color (param i32)))
+    (import "js" "gr_plot_for_wasm" (func $gr_plot (param i32 i32)))
+    (import "js" "gr_point_color_for_wasm"
+      (func $gr_point_color (param i32 i32) (result i32)))
+    (import "js" "gr_moveto_for_wasm" (func $gr_moveto (param i32 i32)))
+    (import "js" "gr_lineto_for_wasm" (func $gr_lineto (param i32 i32)))
+    (import "js" "gr_draw_rect_for_wasm"
+      (func $gr_draw_rect (param i32 i32 i32 i32)))
+    (import "js" "gr_fill_rect_for_wasm"
+      (func $gr_fill_rect (param i32 i32 i32 i32)))
+    (import "js" "gr_draw_arc_for_wasm"
+      (func $gr_draw_arc (param i32 i32 i32 i32 i32 i32)))
+    (import "js" "gr_fill_arc_for_wasm"
+      (func $gr_fill_arc (param i32 i32 i32 i32 i32 i32)))
+    (import "js" "gr_set_line_width_for_wasm"
+      (func $gr_set_line_width (param i32)))
+    (import "js" "gr_resize_window_for_wasm"
+      (func $gr_resize_window (param i32 i32)))
+    (import "js" "gr_draw_char_for_wasm" (func $gr_draw_char (param i32)))
+    (import "js" "gr_draw_str_for_wasm" (func $gr_draw_str (param anyref)))
+    (import "js" "gr_set_font_for_wasm" (func $gr_set_font (param anyref)))
+    (import "js" "gr_set_text_size_for_wasm"
+      (func $gr_set_text_size (param i32)))
+    (import "js" "gr_set_window_title_for_wasm"
+      (func $gr_set_window_title (param anyref)))
+    (import "js" "gr_text_size_w_for_wasm"
+      (func $gr_text_size_w (param anyref) (result i32)))
+    (import "js" "gr_text_size_h_for_wasm"
+      (func $gr_text_size_h (result i32)))
+    (import "js" "gr_fill_poly_for_wasm"
+      (func $gr_fill_poly (param anyref i32)))
+    (import "js" "gr_create_image_for_wasm"
+      (func $gr_create_image (param i32 i32) (result anyref)))
+    (import "js" "gr_draw_image_for_wasm"
+      (func $gr_draw_image (param anyref i32 i32)))
+    (import "js" "gr_blit_image_for_wasm"
+      (func $gr_blit_image (param anyref i32 i32)))
+    (import "js" "gr_make_image_for_wasm"
+      (func $gr_make_image (param anyref i32 i32) (result anyref)))
+    (import "js" "gr_dump_image_width_for_wasm"
+      (func $gr_dump_image_width (param anyref) (result i32)))
+    (import "js" "gr_dump_image_height_for_wasm"
+      (func $gr_dump_image_height (param anyref) (result i32)))
+    (import "js" "gr_dump_image_pixel_for_wasm"
+      (func $gr_dump_image_pixel (param anyref i32 i32) (result i32)))
+    (import "js" "gr_state_set_for_wasm" (func $gr_state_set (param anyref)))
+    (import "js" "gr_state_create_for_wasm"
+      (func $gr_state_create (param anyref i32 i32) (result anyref)))
+    (import "js" "gr_doc_of_state_for_wasm"
+      (func $gr_doc_of_state (param anyref) (result anyref)))
 
-;; Types
-(type $block (array (mut (ref eq)))) (type $bytes (array (mut i8)))
-(type $js (struct (field $js anyref)))
+    ;; Types
+    (type $block (array (mut (ref eq))))
+    (type $bytes (array (mut i8)))
+    (type $js (struct (field $js anyref)))
 
-;; String constants
-(global $graphic_failure (ref $bytes) (@string "Graphics.Graphic_failure" ))
-(global $not_initialized (ref $bytes) (@string "Not initialized" ))
-(global $open_failed (ref $bytes)
-  (@string "Graphics.open_graph: cannot open the window" )
+    ;; String constants
+    (global $graphic_failure (ref $bytes)
+      (@string "Graphics.Graphic_failure"))
+    (global $not_initialized (ref $bytes) (@string "Not initialized"))
+    (global $open_failed (ref $bytes)
+      (@string "Graphics.open_graph: cannot open the window"))
+    (global $wait_event (ref $bytes)
+      (@string "caml_gr_wait_event not Implemented: use Graphics_js instead"))
+    (global $synchronize (ref $bytes)
+      (@string "caml_gr_synchronize not Implemented"))
+    (global $remember_mode (ref $bytes)
+      (@string "caml_gr_remember_mode not Implemented"))
+    (global $display_mode (ref $bytes)
+      (@string "caml_gr_display_mode not Implemented"))
+    (global $window_id (ref $bytes)
+      (@string "caml_gr_window_id not Implemented"))
+    (global $open_subwindow (ref $bytes)
+      (@string "caml_gr_open_subwindow not Implemented"))
+    (global $close_subwindow (ref $bytes)
+      (@string "caml_gr_close_subwindow not Implemented"))
+
+    ;; State check helper: raises Graphics.Graphic_failure if not initialized
+    (func $check_state
+      (if (ref.is_null (call $gr_state))
+        (then
+          (block $no_named_value
+            (call $caml_raise_with_arg
+              (br_on_null $no_named_value
+                (call $caml_named_value (global.get $graphic_failure)))
+              (global.get $not_initialized))
+            (return))
+          (call $caml_failwith (global.get $not_initialized)))))
+
+    ;; --- Open / Close / Clear ---
+
+    (func $caml_gr_open_graph (export "caml_gr_open_graph")
+      (param $s (ref eq)) (result (ref eq))
+      (if
+        (call $gr_open
+          (call $unwrap (call $caml_jsstring_of_string (local.get $s))))
+        (then (call $caml_failwith (global.get $open_failed))))
+      (ref.i31 (i32.const 0)))
+
+    (func $caml_gr_close_graph (export "caml_gr_close_graph")
+      (param (ref eq)) (result (ref eq))
+      (call $check_state)
+      (call $gr_close)
+      (ref.i31 (i32.const 0)))
+
+    (func $caml_gr_clear_graph (export "caml_gr_clear_graph")
+      (param (ref eq)) (result (ref eq))
+      (call $check_state)
+      (call $gr_clear)
+      (ref.i31 (i32.const 0)))
+
+    ;; --- Size / Position getters ---
+
+    (func $caml_gr_size_x (export "caml_gr_size_x")
+      (param (ref eq)) (result (ref eq))
+      (call $check_state)
+      (ref.i31 (call $gr_size_x)))
+
+    (func $caml_gr_size_y (export "caml_gr_size_y")
+      (param (ref eq)) (result (ref eq))
+      (call $check_state)
+      (ref.i31 (call $gr_size_y)))
+
+    (func $caml_gr_current_x (export "caml_gr_current_x")
+      (param (ref eq)) (result (ref eq))
+      (call $check_state)
+      (ref.i31 (call $gr_current_x)))
+
+    (func $caml_gr_current_y (export "caml_gr_current_y")
+      (param (ref eq)) (result (ref eq))
+      (call $check_state)
+      (ref.i31 (call $gr_current_y)))
+
+    ;; --- Drawing with ints ---
+
+    (func $caml_gr_set_color (export "caml_gr_set_color")
+      (param $c (ref eq)) (result (ref eq))
+      (call $check_state)
+      (call $gr_set_color (i31.get_s (ref.cast (ref i31) (local.get $c))))
+      (ref.i31 (i32.const 0)))
+
+    (func $caml_gr_plot (export "caml_gr_plot")
+      (param $x (ref eq)) (param $y (ref eq)) (result (ref eq))
+      (call $check_state)
+      (call $gr_plot (i31.get_s (ref.cast (ref i31) (local.get $x)))
+        (i31.get_s (ref.cast (ref i31) (local.get $y))))
+      (ref.i31 (i32.const 0)))
+
+    (func $caml_gr_point_color (export "caml_gr_point_color")
+      (param $x (ref eq)) (param $y (ref eq)) (result (ref eq))
+      (call $check_state)
+      (ref.i31
+        (call $gr_point_color (i31.get_s (ref.cast (ref i31) (local.get $x)))
+          (i31.get_s (ref.cast (ref i31) (local.get $y))))))
+
+    (func $caml_gr_moveto (export "caml_gr_moveto")
+      (param $x (ref eq)) (param $y (ref eq)) (result (ref eq))
+      (call $check_state)
+      (call $gr_moveto (i31.get_s (ref.cast (ref i31) (local.get $x)))
+        (i31.get_s (ref.cast (ref i31) (local.get $y))))
+      (ref.i31 (i32.const 0)))
+
+    (func $caml_gr_lineto (export "caml_gr_lineto")
+      (param $x (ref eq)) (param $y (ref eq)) (result (ref eq))
+      (call $check_state)
+      (call $gr_lineto (i31.get_s (ref.cast (ref i31) (local.get $x)))
+        (i31.get_s (ref.cast (ref i31) (local.get $y))))
+      (ref.i31 (i32.const 0)))
+
+    (func $caml_gr_draw_rect (export "caml_gr_draw_rect")
+      (param $x (ref eq)) (param $y (ref eq)) (param $w (ref eq))
+      (param $h (ref eq)) (result (ref eq))
+      (call $check_state)
+      (call $gr_draw_rect (i31.get_s (ref.cast (ref i31) (local.get $x)))
+        (i31.get_s (ref.cast (ref i31) (local.get $y)))
+        (i31.get_s (ref.cast (ref i31) (local.get $w)))
+        (i31.get_s (ref.cast (ref i31) (local.get $h))))
+      (ref.i31 (i32.const 0)))
+
+    (func $caml_gr_fill_rect (export "caml_gr_fill_rect")
+      (param $x (ref eq)) (param $y (ref eq)) (param $w (ref eq))
+      (param $h (ref eq)) (result (ref eq))
+      (call $check_state)
+      (call $gr_fill_rect (i31.get_s (ref.cast (ref i31) (local.get $x)))
+        (i31.get_s (ref.cast (ref i31) (local.get $y)))
+        (i31.get_s (ref.cast (ref i31) (local.get $w)))
+        (i31.get_s (ref.cast (ref i31) (local.get $h))))
+      (ref.i31 (i32.const 0)))
+
+    (func $caml_gr_draw_arc (export "caml_gr_draw_arc")
+      (param $x (ref eq)) (param $y (ref eq)) (param $rx (ref eq))
+      (param $ry (ref eq)) (param $a1 (ref eq)) (param $a2 (ref eq))
+      (result (ref eq))
+      (call $check_state)
+      (call $gr_draw_arc (i31.get_s (ref.cast (ref i31) (local.get $x)))
+        (i31.get_s (ref.cast (ref i31) (local.get $y)))
+        (i31.get_s (ref.cast (ref i31) (local.get $rx)))
+        (i31.get_s (ref.cast (ref i31) (local.get $ry)))
+        (i31.get_s (ref.cast (ref i31) (local.get $a1)))
+        (i31.get_s (ref.cast (ref i31) (local.get $a2))))
+      (ref.i31 (i32.const 0)))
+
+    (func $caml_gr_fill_arc (export "caml_gr_fill_arc")
+      (param $x (ref eq)) (param $y (ref eq)) (param $rx (ref eq))
+      (param $ry (ref eq)) (param $a1 (ref eq)) (param $a2 (ref eq))
+      (result (ref eq))
+      (call $check_state)
+      (call $gr_fill_arc (i31.get_s (ref.cast (ref i31) (local.get $x)))
+        (i31.get_s (ref.cast (ref i31) (local.get $y)))
+        (i31.get_s (ref.cast (ref i31) (local.get $rx)))
+        (i31.get_s (ref.cast (ref i31) (local.get $ry)))
+        (i31.get_s (ref.cast (ref i31) (local.get $a1)))
+        (i31.get_s (ref.cast (ref i31) (local.get $a2))))
+      (ref.i31 (i32.const 0)))
+
+    (func $caml_gr_set_line_width (export "caml_gr_set_line_width")
+      (param $w (ref eq)) (result (ref eq))
+      (call $check_state)
+      (call $gr_set_line_width
+        (i31.get_s (ref.cast (ref i31) (local.get $w))))
+      (ref.i31 (i32.const 0)))
+
+    (func $caml_gr_resize_window (export "caml_gr_resize_window")
+      (param $w (ref eq)) (param $h (ref eq)) (result (ref eq))
+      (call $check_state)
+      (call $gr_resize_window (i31.get_s (ref.cast (ref i31) (local.get $w)))
+        (i31.get_s (ref.cast (ref i31) (local.get $h))))
+      (ref.i31 (i32.const 0)))
+
+    ;; --- Text / String operations ---
+
+    (func $caml_gr_draw_char (export "caml_gr_draw_char")
+      (param $c (ref eq)) (result (ref eq))
+      (call $check_state)
+      (call $gr_draw_char (i31.get_s (ref.cast (ref i31) (local.get $c))))
+      (ref.i31 (i32.const 0)))
+
+    (func $caml_gr_draw_string (export "caml_gr_draw_string")
+      (param $s (ref eq)) (result (ref eq))
+      (call $check_state)
+      (call $gr_draw_str
+        (call $unwrap (call $caml_jsstring_of_string (local.get $s))))
+      (ref.i31 (i32.const 0)))
+
+    (func $caml_gr_set_font (export "caml_gr_set_font")
+      (param $s (ref eq)) (result (ref eq))
+      (call $check_state)
+      (call $gr_set_font
+        (call $unwrap (call $caml_jsstring_of_string (local.get $s))))
+      (ref.i31 (i32.const 0)))
+
+    (func $caml_gr_set_text_size (export "caml_gr_set_text_size")
+      (param $s (ref eq)) (result (ref eq))
+      (call $check_state)
+      (call $gr_set_text_size (i31.get_s (ref.cast (ref i31) (local.get $s))))
+      (ref.i31 (i32.const 0)))
+
+    (func $caml_gr_set_window_title (export "caml_gr_set_window_title")
+      (param $s (ref eq)) (result (ref eq))
+      (call $check_state)
+      (call $gr_set_window_title
+        (call $unwrap (call $caml_jsstring_of_string (local.get $s))))
+      (ref.i31 (i32.const 0)))
+
+    (func $caml_gr_text_size (export "caml_gr_text_size")
+      (param $s (ref eq)) (result (ref eq))
+      (call $check_state)
+      (array.new_fixed $block 3 (ref.i31 (i32.const 0))
+        (ref.i31
+          (call $gr_text_size_w
+            (call $unwrap (call $caml_jsstring_of_string (local.get $s)))))
+        (ref.i31 (call $gr_text_size_h))))
+
+    ;; --- Polygon ---
+
+    (func $caml_gr_fill_poly (export "caml_gr_fill_poly")
+      (param $ar (ref eq)) (result (ref eq))
+      (local $a (ref $block)) (local $n i32) (local $flat (ref extern))
+      (local $i i32) (local $p (ref $block))
+      (call $check_state)
+      (local.set $a (ref.cast (ref $block) (local.get $ar)))
+      (local.set $n (i32.sub (array.len (local.get $a)) (i32.const 1)))
+      (local.set $flat
+        (call $new_array (i32.mul (local.get $n) (i32.const 2))))
+      (local.set $i (i32.const 0))
+      (loop $loop
+        (if (i32.lt_u (local.get $i) (local.get $n))
+          (then
+            (local.set $p
+              (ref.cast (ref $block)
+                (array.get $block (local.get $a)
+                  (i32.add (local.get $i) (i32.const 1)))))
+            (call $array_set (local.get $flat)
+              (i32.mul (local.get $i) (i32.const 2))
+              (call $from_int32
+                (i31.get_s
+                  (ref.cast (ref i31)
+                    (array.get $block (local.get $p) (i32.const 1))))))
+            (call $array_set (local.get $flat)
+              (i32.add (i32.mul (local.get $i) (i32.const 2)) (i32.const 1))
+              (call $from_int32
+                (i31.get_s
+                  (ref.cast (ref i31)
+                    (array.get $block (local.get $p) (i32.const 2))))))
+            (local.set $i (i32.add (local.get $i) (i32.const 1)))
+            (br $loop))))
+      (call $gr_fill_poly (any.convert_extern (local.get $flat))
+        (local.get $n))
+      (ref.i31 (i32.const 0)))
+
+    ;; --- Image operations ---
+
+    (func $caml_gr_create_image (export "caml_gr_create_image")
+      (param $w (ref eq)) (param $h (ref eq)) (result (ref eq))
+      (call $check_state)
+      (struct.new $js
+        (call $gr_create_image (i31.get_s (ref.cast (ref i31) (local.get $w)))
+          (i31.get_s (ref.cast (ref i31) (local.get $h))))))
+
+    (func $caml_gr_draw_image (export "caml_gr_draw_image")
+      (param $im (ref eq)) (param $x (ref eq)) (param $y (ref eq))
+      (result (ref eq))
+      (call $check_state)
+      (call $gr_draw_image (call $unwrap (local.get $im))
+        (i31.get_s (ref.cast (ref i31) (local.get $x)))
+        (i31.get_s (ref.cast (ref i31) (local.get $y))))
+      (ref.i31 (i32.const 0)))
+
+    (func $caml_gr_blit_image (export "caml_gr_blit_image")
+      (param $im (ref eq)) (param $x (ref eq)) (param $y (ref eq))
+      (result (ref eq))
+      (call $check_state)
+      (call $gr_blit_image (call $unwrap (local.get $im))
+        (i31.get_s (ref.cast (ref i31) (local.get $x)))
+        (i31.get_s (ref.cast (ref i31) (local.get $y))))
+      (ref.i31 (i32.const 0)))
+
+    (func $caml_gr_make_image (export "caml_gr_make_image")
+      (param $arr (ref eq)) (result (ref eq))
+      (local $a (ref $block)) (local $h i32) (local $row (ref $block))
+      (local $w i32) (local $flat (ref extern)) (local $idx i32)
+      (local $i i32) (local $j i32)
+      (call $check_state)
+      (local.set $a (ref.cast (ref $block) (local.get $arr)))
+      (local.set $h (i32.sub (array.len (local.get $a)) (i32.const 1)))
+      (local.set $row
+        (ref.cast (ref $block)
+          (array.get $block (local.get $a) (i32.const 1))))
+      (local.set $w (i32.sub (array.len (local.get $row)) (i32.const 1)))
+      (local.set $flat
+        (call $new_array (i32.mul (local.get $h) (local.get $w))))
+      (local.set $idx (i32.const 0))
+      (local.set $i (i32.const 0))
+      (loop $loop
+        (if (i32.lt_u (local.get $i) (local.get $h))
+          (then
+            (local.set $row
+              (ref.cast (ref $block)
+                (array.get $block (local.get $a)
+                  (i32.add (local.get $i) (i32.const 1)))))
+            (local.set $j (i32.const 0))
+            (loop $loop2
+              (if (i32.lt_u (local.get $j) (local.get $w))
+                (then
+                  (call $array_set (local.get $flat) (local.get $idx)
+                    (call $from_int32
+                      (i31.get_s
+                        (ref.cast (ref i31)
+                          (array.get $block (local.get $row)
+                            (i32.add (local.get $j) (i32.const 1)))))))
+                  (local.set $idx (i32.add (local.get $idx) (i32.const 1)))
+                  (local.set $j (i32.add (local.get $j) (i32.const 1)))
+                  (br $loop2))))
+            (local.set $i (i32.add (local.get $i) (i32.const 1)))
+            (br $loop))))
+      (struct.new $js
+        (call $gr_make_image (any.convert_extern (local.get $flat))
+          (local.get $w) (local.get $h))))
+
+    (func $caml_gr_dump_image (export "caml_gr_dump_image")
+      (param $im (ref eq)) (result (ref eq))
+      (local $js_im anyref) (local $w i32) (local $h i32)
+      (local $result (ref $block)) (local $i i32) (local $row (ref $block))
+      (local $j i32)
+      (local.set $js_im (call $unwrap (local.get $im)))
+      (local.set $w (call $gr_dump_image_width (local.get $js_im)))
+      (local.set $h (call $gr_dump_image_height (local.get $js_im)))
+      (local.set $result
+        (array.new $block (ref.i31 (i32.const 0))
+          (i32.add (local.get $h) (i32.const 1))))
+      (local.set $i (i32.const 0))
+      (loop $loop
+        (if (i32.lt_u (local.get $i) (local.get $h))
+          (then
+            (local.set $row
+              (array.new $block (ref.i31 (i32.const 0))
+                (i32.add (local.get $w) (i32.const 1))))
+            (local.set $j (i32.const 0))
+            (loop $loop2
+              (if (i32.lt_u (local.get $j) (local.get $w))
+                (then
+                  (array.set $block (local.get $row)
+                    (i32.add (local.get $j) (i32.const 1))
+                    (ref.i31
+                      (call $gr_dump_image_pixel (local.get $js_im)
+                        (local.get $i) (local.get $j))))
+                  (local.set $j (i32.add (local.get $j) (i32.const 1)))
+                  (br $loop2))))
+            (array.set $block (local.get $result)
+              (i32.add (local.get $i) (i32.const 1)) (local.get $row))
+            (local.set $i (i32.add (local.get $i) (i32.const 1)))
+            (br $loop))))
+      (local.get $result))
+
+    ;; --- Graphics_js state management ---
+
+    (func $caml_gr_state_get (export "caml_gr_state_get")
+      (param (ref eq)) (result (ref eq))
+      (call $check_state)
+      (call $wrap (call $gr_state)))
+
+    (func $caml_gr_state_set (export "caml_gr_state_set")
+      (param $s (ref eq)) (result (ref eq))
+      (call $gr_state_set (call $unwrap (local.get $s)))
+      (ref.i31 (i32.const 0)))
+
+    (func $caml_gr_state_create (export "caml_gr_state_create")
+      (param $s (ref eq)) (param $w (ref eq)) (param $h (ref eq))
+      (result (ref eq))
+      (call $wrap
+        (call $gr_state_create (call $unwrap (local.get $s))
+          (i31.get_s (ref.cast (ref i31) (local.get $w)))
+          (i31.get_s (ref.cast (ref i31) (local.get $h))))))
+
+    (func $caml_gr_doc_of_state (export "caml_gr_doc_of_state")
+      (param $s (ref eq)) (result (ref eq))
+      (call $wrap (call $gr_doc_of_state (call $unwrap (local.get $s)))))
+
+    ;; --- Stubs returning unit ---
+
+    (func $caml_gr_sigio_handler (export "caml_gr_sigio_handler")
+      (param (ref eq)) (result (ref eq))
+      (ref.i31 (i32.const 0)))
+
+    (func $caml_gr_sigio_signal (export "caml_gr_sigio_signal")
+      (param (ref eq)) (result (ref eq))
+      (ref.i31 (i32.const 0)))
+
+    ;; --- Stubs raising Failure ---
+
+    (func $caml_gr_wait_event (export "caml_gr_wait_event")
+      (param (ref eq)) (result (ref eq))
+      (call $caml_failwith (global.get $wait_event))
+      (ref.i31 (i32.const 0)))
+
+    (func $caml_gr_synchronize (export "caml_gr_synchronize")
+      (param (ref eq)) (result (ref eq))
+      (call $caml_failwith (global.get $synchronize))
+      (ref.i31 (i32.const 0)))
+
+    (func $caml_gr_remember_mode (export "caml_gr_remember_mode")
+      (param (ref eq)) (result (ref eq))
+      (call $caml_failwith (global.get $remember_mode))
+      (ref.i31 (i32.const 0)))
+
+    (func $caml_gr_display_mode (export "caml_gr_display_mode")
+      (param (ref eq)) (result (ref eq))
+      (call $caml_failwith (global.get $display_mode))
+      (ref.i31 (i32.const 0)))
+
+    (func $caml_gr_window_id (export "caml_gr_window_id")
+      (param (ref eq)) (result (ref eq))
+      (call $caml_failwith (global.get $window_id))
+      (ref.i31 (i32.const 0)))
+
+    (func $caml_gr_open_subwindow (export "caml_gr_open_subwindow")
+      (param (ref eq) (ref eq) (ref eq) (ref eq)) (result (ref eq))
+      (call $caml_failwith (global.get $open_subwindow))
+      (ref.i31 (i32.const 0)))
+
+    (func $caml_gr_close_subwindow (export "caml_gr_close_subwindow")
+      (param (ref eq)) (result (ref eq))
+      (call $caml_failwith (global.get $close_subwindow))
+      (ref.i31 (i32.const 0))))
 )
-(global $wait_event (ref $bytes)
-  (@string "caml_gr_wait_event not Implemented: use Graphics_js instead" )
-)
-(global $synchronize (ref $bytes)
-  (@string "caml_gr_synchronize not Implemented" )
-)
-(global $remember_mode (ref $bytes)
-  (@string "caml_gr_remember_mode not Implemented" )
-)
-(global $display_mode (ref $bytes)
-  (@string "caml_gr_display_mode not Implemented" )
-)
-(global $window_id (ref $bytes)
-  (@string "caml_gr_window_id not Implemented" )
-)
-(global $open_subwindow (ref $bytes)
-  (@string "caml_gr_open_subwindow not Implemented" )
-)
-(global $close_subwindow (ref $bytes)
-  (@string "caml_gr_close_subwindow not Implemented" )
-)
-
-;; State check helper: raises Graphics.Graphic_failure if not initialized
-(func $check_state
-  (if (ref.is_null (call $gr_state))
-    (then
-      (block $no_named_value
-        (call $caml_raise_with_arg
-          (br_on_null $no_named_value
-            (call $caml_named_value (global.get $graphic_failure)))
-          (global.get $not_initialized))
-        (return))
-      (call $caml_failwith (global.get $not_initialized))))
-)
-
-;; --- Open / Close / Clear ---
-
-(func $caml_gr_open_graph (export "caml_gr_open_graph")
-  (param $s (ref eq)) (result (ref eq))
-  (if
-    (call $gr_open
-      (call $unwrap (call $caml_jsstring_of_string (local.get $s))))
-    (then (call $caml_failwith (global.get $open_failed))))
-  (ref.i31 (i32.const 0))
-)
-
-(func $caml_gr_close_graph (export "caml_gr_close_graph")
-  (param (ref eq)) (result (ref eq))
-  (call $check_state)
-  (call $gr_close)
-  (ref.i31 (i32.const 0))
-)
-
-(func $caml_gr_clear_graph (export "caml_gr_clear_graph")
-  (param (ref eq)) (result (ref eq))
-  (call $check_state)
-  (call $gr_clear)
-  (ref.i31 (i32.const 0))
-)
-
-;; --- Size / Position getters ---
-
-(func $caml_gr_size_x (export "caml_gr_size_x")
-  (param (ref eq)) (result (ref eq))
-  (call $check_state)
-  (ref.i31 (call $gr_size_x))
-)
-
-(func $caml_gr_size_y (export "caml_gr_size_y")
-  (param (ref eq)) (result (ref eq))
-  (call $check_state)
-  (ref.i31 (call $gr_size_y))
-)
-
-(func $caml_gr_current_x (export "caml_gr_current_x")
-  (param (ref eq)) (result (ref eq))
-  (call $check_state)
-  (ref.i31 (call $gr_current_x))
-)
-
-(func $caml_gr_current_y (export "caml_gr_current_y")
-  (param (ref eq)) (result (ref eq))
-  (call $check_state)
-  (ref.i31 (call $gr_current_y))
-)
-
-;; --- Drawing with ints ---
-
-(func $caml_gr_set_color (export "caml_gr_set_color")
-  (param $c (ref eq)) (result (ref eq))
-  (call $check_state)
-  (call $gr_set_color (i31.get_s (ref.cast (ref i31) (local.get $c))))
-  (ref.i31 (i32.const 0))
-)
-
-(func $caml_gr_plot (export "caml_gr_plot")
-  (param $x (ref eq)) (param $y (ref eq)) (result (ref eq))
-  (call $check_state)
-  (call $gr_plot (i31.get_s (ref.cast (ref i31) (local.get $x)))
-    (i31.get_s (ref.cast (ref i31) (local.get $y))))
-  (ref.i31 (i32.const 0))
-)
-
-(func $caml_gr_point_color (export "caml_gr_point_color")
-  (param $x (ref eq)) (param $y (ref eq)) (result (ref eq))
-  (call $check_state)
-  (ref.i31
-    (call $gr_point_color (i31.get_s (ref.cast (ref i31) (local.get $x)))
-      (i31.get_s (ref.cast (ref i31) (local.get $y)))))
-)
-
-(func $caml_gr_moveto (export "caml_gr_moveto")
-  (param $x (ref eq)) (param $y (ref eq)) (result (ref eq))
-  (call $check_state)
-  (call $gr_moveto (i31.get_s (ref.cast (ref i31) (local.get $x)))
-    (i31.get_s (ref.cast (ref i31) (local.get $y))))
-  (ref.i31 (i32.const 0))
-)
-
-(func $caml_gr_lineto (export "caml_gr_lineto")
-  (param $x (ref eq)) (param $y (ref eq)) (result (ref eq))
-  (call $check_state)
-  (call $gr_lineto (i31.get_s (ref.cast (ref i31) (local.get $x)))
-    (i31.get_s (ref.cast (ref i31) (local.get $y))))
-  (ref.i31 (i32.const 0))
-)
-
-(func $caml_gr_draw_rect (export "caml_gr_draw_rect")
-  (param $x (ref eq)) (param $y (ref eq)) (param $w (ref eq))
-  (param $h (ref eq)) (result (ref eq))
-  (call $check_state)
-  (call $gr_draw_rect (i31.get_s (ref.cast (ref i31) (local.get $x)))
-    (i31.get_s (ref.cast (ref i31) (local.get $y)))
-    (i31.get_s (ref.cast (ref i31) (local.get $w)))
-    (i31.get_s (ref.cast (ref i31) (local.get $h))))
-  (ref.i31 (i32.const 0))
-)
-
-(func $caml_gr_fill_rect (export "caml_gr_fill_rect")
-  (param $x (ref eq)) (param $y (ref eq)) (param $w (ref eq))
-  (param $h (ref eq)) (result (ref eq))
-  (call $check_state)
-  (call $gr_fill_rect (i31.get_s (ref.cast (ref i31) (local.get $x)))
-    (i31.get_s (ref.cast (ref i31) (local.get $y)))
-    (i31.get_s (ref.cast (ref i31) (local.get $w)))
-    (i31.get_s (ref.cast (ref i31) (local.get $h))))
-  (ref.i31 (i32.const 0))
-)
-
-(func $caml_gr_draw_arc (export "caml_gr_draw_arc")
-  (param $x (ref eq)) (param $y (ref eq)) (param $rx (ref eq))
-  (param $ry (ref eq)) (param $a1 (ref eq)) (param $a2 (ref eq))
-  (result (ref eq))
-  (call $check_state)
-  (call $gr_draw_arc (i31.get_s (ref.cast (ref i31) (local.get $x)))
-    (i31.get_s (ref.cast (ref i31) (local.get $y)))
-    (i31.get_s (ref.cast (ref i31) (local.get $rx)))
-    (i31.get_s (ref.cast (ref i31) (local.get $ry)))
-    (i31.get_s (ref.cast (ref i31) (local.get $a1)))
-    (i31.get_s (ref.cast (ref i31) (local.get $a2))))
-  (ref.i31 (i32.const 0))
-)
-
-(func $caml_gr_fill_arc (export "caml_gr_fill_arc")
-  (param $x (ref eq)) (param $y (ref eq)) (param $rx (ref eq))
-  (param $ry (ref eq)) (param $a1 (ref eq)) (param $a2 (ref eq))
-  (result (ref eq))
-  (call $check_state)
-  (call $gr_fill_arc (i31.get_s (ref.cast (ref i31) (local.get $x)))
-    (i31.get_s (ref.cast (ref i31) (local.get $y)))
-    (i31.get_s (ref.cast (ref i31) (local.get $rx)))
-    (i31.get_s (ref.cast (ref i31) (local.get $ry)))
-    (i31.get_s (ref.cast (ref i31) (local.get $a1)))
-    (i31.get_s (ref.cast (ref i31) (local.get $a2))))
-  (ref.i31 (i32.const 0))
-)
-
-(func $caml_gr_set_line_width (export "caml_gr_set_line_width")
-  (param $w (ref eq)) (result (ref eq))
-  (call $check_state)
-  (call $gr_set_line_width (i31.get_s (ref.cast (ref i31) (local.get $w))))
-  (ref.i31 (i32.const 0))
-)
-
-(func $caml_gr_resize_window (export "caml_gr_resize_window")
-  (param $w (ref eq)) (param $h (ref eq)) (result (ref eq))
-  (call $check_state)
-  (call $gr_resize_window (i31.get_s (ref.cast (ref i31) (local.get $w)))
-    (i31.get_s (ref.cast (ref i31) (local.get $h))))
-  (ref.i31 (i32.const 0))
-)
-
-;; --- Text / String operations ---
-
-(func $caml_gr_draw_char (export "caml_gr_draw_char")
-  (param $c (ref eq)) (result (ref eq))
-  (call $check_state)
-  (call $gr_draw_char (i31.get_s (ref.cast (ref i31) (local.get $c))))
-  (ref.i31 (i32.const 0))
-)
-
-(func $caml_gr_draw_string (export "caml_gr_draw_string")
-  (param $s (ref eq)) (result (ref eq))
-  (call $check_state)
-  (call $gr_draw_str
-    (call $unwrap (call $caml_jsstring_of_string (local.get $s))))
-  (ref.i31 (i32.const 0))
-)
-
-(func $caml_gr_set_font (export "caml_gr_set_font")
-  (param $s (ref eq)) (result (ref eq))
-  (call $check_state)
-  (call $gr_set_font
-    (call $unwrap (call $caml_jsstring_of_string (local.get $s))))
-  (ref.i31 (i32.const 0))
-)
-
-(func $caml_gr_set_text_size (export "caml_gr_set_text_size")
-  (param $s (ref eq)) (result (ref eq))
-  (call $check_state)
-  (call $gr_set_text_size (i31.get_s (ref.cast (ref i31) (local.get $s))))
-  (ref.i31 (i32.const 0))
-)
-
-(func $caml_gr_set_window_title (export "caml_gr_set_window_title")
-  (param $s (ref eq)) (result (ref eq))
-  (call $check_state)
-  (call $gr_set_window_title
-    (call $unwrap (call $caml_jsstring_of_string (local.get $s))))
-  (ref.i31 (i32.const 0))
-)
-
-(func $caml_gr_text_size (export "caml_gr_text_size")
-  (param $s (ref eq)) (result (ref eq))
-  (call $check_state)
-  (array.new_fixed $block 3 (ref.i31 (i32.const 0))
-    (ref.i31
-      (call $gr_text_size_w
-        (call $unwrap (call $caml_jsstring_of_string (local.get $s)))))
-    (ref.i31 (call $gr_text_size_h)))
-)
-
-;; --- Polygon ---
-
-(func $caml_gr_fill_poly (export "caml_gr_fill_poly")
-  (param $ar (ref eq)) (result (ref eq))
-  (local $a (ref $block)) (local $n i32) (local $flat (ref extern))
-  (local $i i32) (local $p (ref $block))
-  (call $check_state)
-  (local.set $a (ref.cast (ref $block) (local.get $ar)))
-  (local.set $n (i32.sub (array.len (local.get $a)) (i32.const 1)))
-  (local.set $flat (call $new_array (i32.mul (local.get $n) (i32.const 2))))
-  (local.set $i (i32.const 0))
-  (loop $loop
-    (if (i32.lt_u (local.get $i) (local.get $n))
-      (then
-        (local.set $p
-          (ref.cast (ref $block)
-            (array.get $block (local.get $a)
-              (i32.add (local.get $i) (i32.const 1)))))
-        (call $array_set (local.get $flat)
-          (i32.mul (local.get $i) (i32.const 2))
-          (call $from_int32
-            (i31.get_s
-              (ref.cast (ref i31)
-                (array.get $block (local.get $p) (i32.const 1))))))
-        (call $array_set (local.get $flat)
-          (i32.add (i32.mul (local.get $i) (i32.const 2)) (i32.const 1))
-          (call $from_int32
-            (i31.get_s
-              (ref.cast (ref i31)
-                (array.get $block (local.get $p) (i32.const 2))))))
-        (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $loop))))
-  (call $gr_fill_poly (any.convert_extern (local.get $flat)) (local.get $n))
-  (ref.i31 (i32.const 0))
-)
-
-;; --- Image operations ---
-
-(func $caml_gr_create_image (export "caml_gr_create_image")
-  (param $w (ref eq)) (param $h (ref eq)) (result (ref eq))
-  (call $check_state)
-  (struct.new $js
-    (call $gr_create_image (i31.get_s (ref.cast (ref i31) (local.get $w)))
-      (i31.get_s (ref.cast (ref i31) (local.get $h)))))
-)
-
-(func $caml_gr_draw_image (export "caml_gr_draw_image")
-  (param $im (ref eq)) (param $x (ref eq)) (param $y (ref eq))
-  (result (ref eq))
-  (call $check_state)
-  (call $gr_draw_image (call $unwrap (local.get $im))
-    (i31.get_s (ref.cast (ref i31) (local.get $x)))
-    (i31.get_s (ref.cast (ref i31) (local.get $y))))
-  (ref.i31 (i32.const 0))
-)
-
-(func $caml_gr_blit_image (export "caml_gr_blit_image")
-  (param $im (ref eq)) (param $x (ref eq)) (param $y (ref eq))
-  (result (ref eq))
-  (call $check_state)
-  (call $gr_blit_image (call $unwrap (local.get $im))
-    (i31.get_s (ref.cast (ref i31) (local.get $x)))
-    (i31.get_s (ref.cast (ref i31) (local.get $y))))
-  (ref.i31 (i32.const 0))
-)
-
-(func $caml_gr_make_image (export "caml_gr_make_image")
-  (param $arr (ref eq)) (result (ref eq))
-  (local $a (ref $block)) (local $h i32) (local $row (ref $block))
-  (local $w i32) (local $flat (ref extern)) (local $idx i32) (local $i i32)
-  (local $j i32)
-  (call $check_state)
-  (local.set $a (ref.cast (ref $block) (local.get $arr)))
-  (local.set $h (i32.sub (array.len (local.get $a)) (i32.const 1)))
-  (local.set $row
-    (ref.cast (ref $block) (array.get $block (local.get $a) (i32.const 1))))
-  (local.set $w (i32.sub (array.len (local.get $row)) (i32.const 1)))
-  (local.set $flat (call $new_array (i32.mul (local.get $h) (local.get $w))))
-  (local.set $idx (i32.const 0))
-  (local.set $i (i32.const 0))
-  (loop $loop
-    (if (i32.lt_u (local.get $i) (local.get $h))
-      (then
-        (local.set $row
-          (ref.cast (ref $block)
-            (array.get $block (local.get $a)
-              (i32.add (local.get $i) (i32.const 1)))))
-        (local.set $j (i32.const 0))
-        (loop $loop2
-          (if (i32.lt_u (local.get $j) (local.get $w))
-            (then
-              (call $array_set (local.get $flat) (local.get $idx)
-                (call $from_int32
-                  (i31.get_s
-                    (ref.cast (ref i31)
-                      (array.get $block (local.get $row)
-                        (i32.add (local.get $j) (i32.const 1)))))))
-              (local.set $idx (i32.add (local.get $idx) (i32.const 1)))
-              (local.set $j (i32.add (local.get $j) (i32.const 1)))
-              (br $loop2))))
-        (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $loop))))
-  (struct.new $js
-    (call $gr_make_image (any.convert_extern (local.get $flat)) (local.get $w)
-      (local.get $h)))
-)
-
-(func $caml_gr_dump_image (export "caml_gr_dump_image")
-  (param $im (ref eq)) (result (ref eq))
-  (local $js_im anyref) (local $w i32) (local $h i32)
-  (local $result (ref $block)) (local $i i32) (local $row (ref $block))
-  (local $j i32)
-  (local.set $js_im (call $unwrap (local.get $im)))
-  (local.set $w (call $gr_dump_image_width (local.get $js_im)))
-  (local.set $h (call $gr_dump_image_height (local.get $js_im)))
-  (local.set $result
-    (array.new $block (ref.i31 (i32.const 0))
-      (i32.add (local.get $h) (i32.const 1))))
-  (local.set $i (i32.const 0))
-  (loop $loop
-    (if (i32.lt_u (local.get $i) (local.get $h))
-      (then
-        (local.set $row
-          (array.new $block (ref.i31 (i32.const 0))
-            (i32.add (local.get $w) (i32.const 1))))
-        (local.set $j (i32.const 0))
-        (loop $loop2
-          (if (i32.lt_u (local.get $j) (local.get $w))
-            (then
-              (array.set $block (local.get $row)
-                (i32.add (local.get $j) (i32.const 1))
-                (ref.i31
-                  (call $gr_dump_image_pixel (local.get $js_im) (local.get $i)
-                    (local.get $j))))
-              (local.set $j (i32.add (local.get $j) (i32.const 1)))
-              (br $loop2))))
-        (array.set $block (local.get $result)
-          (i32.add (local.get $i) (i32.const 1)) (local.get $row))
-        (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $loop))))
-  (local.get $result)
-)
-
-;; --- Graphics_js state management ---
-
-(func $caml_gr_state_get (export "caml_gr_state_get")
-  (param (ref eq)) (result (ref eq))
-  (call $check_state)
-  (call $wrap (call $gr_state))
-)
-
-(func $caml_gr_state_set (export "caml_gr_state_set")
-  (param $s (ref eq)) (result (ref eq))
-  (call $gr_state_set (call $unwrap (local.get $s)))
-  (ref.i31 (i32.const 0))
-)
-
-(func $caml_gr_state_create (export "caml_gr_state_create")
-  (param $s (ref eq)) (param $w (ref eq)) (param $h (ref eq))
-  (result (ref eq))
-  (call $wrap
-    (call $gr_state_create (call $unwrap (local.get $s))
-      (i31.get_s (ref.cast (ref i31) (local.get $w)))
-      (i31.get_s (ref.cast (ref i31) (local.get $h)))))
-)
-
-(func $caml_gr_doc_of_state (export "caml_gr_doc_of_state")
-  (param $s (ref eq)) (result (ref eq))
-  (call $wrap (call $gr_doc_of_state (call $unwrap (local.get $s))))
-)
-
-;; --- Stubs returning unit ---
-
-(func $caml_gr_sigio_handler (export "caml_gr_sigio_handler")
-  (param (ref eq)) (result (ref eq))
-  (ref.i31 (i32.const 0))
-)
-
-(func $caml_gr_sigio_signal (export "caml_gr_sigio_signal")
-  (param (ref eq)) (result (ref eq))
-  (ref.i31 (i32.const 0))
-)
-
-;; --- Stubs raising Failure ---
-
-(func $caml_gr_wait_event (export "caml_gr_wait_event")
-  (param (ref eq)) (result (ref eq))
-  (call $caml_failwith (global.get $wait_event))
-  (ref.i31 (i32.const 0))
-)
-
-(func $caml_gr_synchronize (export "caml_gr_synchronize")
-  (param (ref eq)) (result (ref eq))
-  (call $caml_failwith (global.get $synchronize))
-  (ref.i31 (i32.const 0))
-)
-
-(func $caml_gr_remember_mode (export "caml_gr_remember_mode")
-  (param (ref eq)) (result (ref eq))
-  (call $caml_failwith (global.get $remember_mode))
-  (ref.i31 (i32.const 0))
-)
-
-(func $caml_gr_display_mode (export "caml_gr_display_mode")
-  (param (ref eq)) (result (ref eq))
-  (call $caml_failwith (global.get $display_mode))
-  (ref.i31 (i32.const 0))
-)
-
-(func $caml_gr_window_id (export "caml_gr_window_id")
-  (param (ref eq)) (result (ref eq))
-  (call $caml_failwith (global.get $window_id))
-  (ref.i31 (i32.const 0))
-)
-
-(func $caml_gr_open_subwindow (export "caml_gr_open_subwindow")
-  (param (ref eq) (ref eq) (ref eq) (ref eq)) (result (ref eq))
-  (call $caml_failwith (global.get $open_subwindow))
-  (ref.i31 (i32.const 0))
-)
-
-(func $caml_gr_close_subwindow (export "caml_gr_close_subwindow")
-  (param (ref eq)) (result (ref eq))
-  (call $caml_failwith (global.get $close_subwindow))
-  (ref.i31 (i32.const 0))
-) ) )

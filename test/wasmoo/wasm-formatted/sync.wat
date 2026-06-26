@@ -48,7 +48,7 @@
 )
 
 (global $mutex_ops (ref $custom_operations)
-  (struct.new $custom_operations (@string "_mutex" )
+  (struct.new $custom_operations (@string "_mutex")
     (ref.func $custom_compare_id) (ref.null $compare)
     (ref.func $custom_hash_id) (ref.null $fixed_length) (ref.null $serialize)
     (ref.null $deserialize) (ref.null $dup))
@@ -67,7 +67,7 @@
     (i32.const 0))
 )
 
-(@string $lock_failure "Mutex.lock: mutex already locked. Cannot wait." )
+(@string $lock_failure "Mutex.lock: mutex already locked. Cannot wait.")
 
 (func (export "caml_ml_mutex_lock") (param $vt (ref eq)) (result (ref eq))
   (local $t (ref $mutex))
@@ -95,7 +95,7 @@
 )
 
 (global $condition_ops (ref $custom_operations)
-  (struct.new $custom_operations (@string "_condition" )
+  (struct.new $custom_operations (@string "_condition")
     (ref.func $custom_compare_id) (ref.null $compare)
     (ref.func $custom_hash_id) (ref.null $fixed_length) (ref.null $serialize)
     (ref.null $deserialize) (ref.null $dup))

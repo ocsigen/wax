@@ -77,7 +77,7 @@
 (type $custom (sub (struct (field $ops (ref $custom_operations)))))
 
 (global $float32_ops (export "float32_ops") (ref $custom_operations)
-  (struct.new $custom_operations (@string "_f32" ) (ref.func $float32_cmp)
+  (struct.new $custom_operations (@string "_f32") (ref.func $float32_cmp)
     (ref.null $compare) (ref.func $float32_hash)
     (struct.new $fixed_length (i32.const 4) (i32.const 4))
     (ref.func $float32_serialize) (ref.func $float32_deserialize)
@@ -172,7 +172,7 @@
         (else (local.get $y)))))
 )
 
-(global $float32_of_string (ref $bytes) (@string "float32_of_string" ))
+(global $float32_of_string (ref $bytes) (@string "float32_of_string"))
 
 (func $caml_float32_of_string (export "caml_float32_of_string")
   (param $s (ref eq)) (result (ref eq))

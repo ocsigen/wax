@@ -1032,29 +1032,29 @@ let rec instr i =
            | None -> []
            | Some l -> [ list (instruction "catch_all" :: List.map instr l) ]))
   | String (id, s) | Folded ({ desc = String (id, s); _ }, []) ->
-      block ~loc
-        (atom ~style:Annotation "(@string"
-        :: (option (fun id -> [ index ~style:Annotation id ]) id
-           @ List.map
-               (fun s ->
-                 let loc = Some s.Ast.info in
-                 let i, s = escape_string s.Ast.desc in
-                 Atom
-                   {
-                     loc;
-                     style = Annotation;
-                     len = Some (i + 2);
-                     s = "\"" ^ s ^ "\"";
-                   })
-               s
-           @ [ atom ~style:Annotation ")" ]))
+      list ~loc
+        (block
+           (atom ~style:Annotation "@string"
+           :: option (fun id -> [ index ~style:Annotation id ]) id)
+        :: List.map
+             (fun s ->
+               let loc = Some s.Ast.info in
+               let i, s = escape_string s.Ast.desc in
+               Atom
+                 {
+                   loc;
+                   style = Annotation;
+                   len = Some (i + 2);
+                   s = "\"" ^ s ^ "\"";
+                 })
+             s)
   | Char c | Folded ({ desc = Char c; _ }, []) ->
       let n = Uchar.utf_8_byte_length c in
       let b = Bytes.create n in
       ignore (Bytes.set_utf_8_uchar b 0 c);
-      block ~loc
+      list ~loc
         [
-          atom ~style:Annotation "(@char";
+          atom ~style:Annotation "@char";
           (let i, s = escape_string (Bytes.to_string b) in
            Atom
              {
@@ -1063,7 +1063,6 @@ let rec instr i =
                len = Some (i + 2);
                s = "\"" ^ s ^ "\"";
              });
-          atom ~style:Annotation ")";
         ]
   | If_annotation { cond; then_body; else_body }
   | Folded ({ desc = If_annotation { cond; then_body; else_body }; _ }, []) ->
@@ -1299,34 +1298,30 @@ let rec modulefield f =
             | _ -> List.map (fun e -> expr "item" e) init);
         ]
   | String_global { id = i; typ; init } ->
-      block ~loc
-        (atom ~style:Annotation "(@string"
-         :: id ~style:Annotation i.Ast.desc
-         :: option (fun id -> [ index ~style:Annotation id ]) typ
-        @ List.map
-            (fun s ->
-              let i, s = escape_string s.Ast.desc in
-              Atom
-                {
-                  loc = None;
-                  style = Annotation;
-                  len = Some (i + 2);
-                  s = "\"" ^ s ^ "\"";
-                })
-            init
-        @ [ atom ~style:Annotation ")" ])
+      list ~loc
+        (block
+           (atom ~style:Annotation "@string"
+           :: id ~style:Annotation i.Ast.desc
+           :: option (fun id -> [ index ~style:Annotation id ]) typ)
+        :: List.map
+             (fun s ->
+               let i, s = escape_string s.Ast.desc in
+               Atom
+                 {
+                   loc = None;
+                   style = Annotation;
+                   len = Some (i + 2);
+                   s = "\"" ^ s ^ "\"";
+                 })
+             init)
   | Module_if_annotation { cond; then_fields; else_fields } ->
       let clause head fields =
-        block
-          ((atom ~style:Annotation ("(@" ^ head) :: List.map modulefield fields)
-          @ [ atom ~style:Annotation ")" ])
+        list (atom ~style:Annotation ("@" ^ head) :: List.map modulefield fields)
       in
-      block ~loc
-        (atom ~style:Annotation "(@if"
-         :: cond_doc cond
-         :: [ clause "then" then_fields ]
-        @ option (fun e -> [ clause "else" e ]) else_fields
-        @ [ atom ~style:Annotation ")" ])
+      list ~loc
+        (block [ atom ~style:Annotation "@if"; cond_doc cond ]
+        :: clause "then" then_fields
+        :: option (fun e -> [ clause "else" e ]) else_fields)
 
 let module_ ?(color = Auto) ?out_channel ?(tail = []) ?collect printer ~trivia
     (id, fields) =

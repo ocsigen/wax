@@ -64,7 +64,7 @@
 )
 
 (global $nat_ops (export "nat_ops") (ref $custom_operations)
-  (struct.new $custom_operations (@string "_nat" ) (ref.null $compare)
+  (struct.new $custom_operations (@string "_nat") (ref.null $compare)
     (ref.null $compare) (ref.func $caml_hash_nat) (ref.null $fixed_length)
     (ref.func $serialize_nat) (ref.func $deserialize_nat) (ref.null $dup))
 )

@@ -7,28 +7,28 @@ literal builds a byte array via `array.new_fixed`, with its type taken from a
   $ wax lit.wax -f wat -v
   (type $chars (array i8))
   
-  (func $newline (export "newline") (result i32) (@char "\n" ))
+  (func $newline (export "newline") (result i32) (@char "\n"))
   
-  (func $byte_escape (export "byte_escape") (result i32) (@char "A" ))
+  (func $byte_escape (export "byte_escape") (result i32) (@char "A"))
   
-  (func $code_point (export "code_point") (result i32) (@char "😀" ))
+  (func $code_point (export "code_point") (result i32) (@char "😀"))
   
   (func $default_string (export "default_string") (result (ref eq))
-    (@string "hi" )
+    (@string "hi")
   )
   
   (func $named_string (export "named_string") (result (ref $chars))
-    (@string $chars "hi!" )
+    (@string $chars "hi!")
   )
   
   (func $from_context (export "from_context") (result (ref $chars))
     (local $s (ref $chars))
-    (local.set $s (@string $chars "yo" ))
+    (local.set $s (@string $chars "yo"))
     (local.get $s)
   )
   
   (func $binary_blob (export "binary_blob") (result (ref $chars))
-    (@string $chars "a\01b" )
+    (@string $chars "a\01b")
   )
 
 Through WAT the literals are kept as `(@char …)` / `(@string …)` annotations, so

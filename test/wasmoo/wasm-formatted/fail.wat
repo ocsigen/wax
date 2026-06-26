@@ -18,9 +18,11 @@
 (import "stdlib" "caml_global_data"
   (global $caml_global_data (mut (ref $block)))
 )
-(@if $wasi (@then (tag $javascript_exception (param externref)) )
-(@else
-(import "bindings" "jstag" (tag $javascript_exception (param externref))) ) )
+(@if $wasi
+  (@then (tag $javascript_exception (param externref)))
+  (@else
+    (import "bindings" "jstag" (tag $javascript_exception (param externref))))
+)
 
 (type $block (array (mut (ref eq))))
 (type $bytes (array (mut i8)))
@@ -77,7 +79,7 @@
       (global.get $INVALID_EXN)) (local.get $arg))
 )
 
-(@string $index_out_of_bounds "index out of bounds" )
+(@string $index_out_of_bounds "index out of bounds")
 
 (func (export "caml_bound_error")
   (return_call $caml_invalid_argument (global.get $index_out_of_bounds))
@@ -112,7 +114,8 @@
 (global $UNDEFINED_RECURSIVE_MODULE_EXN i32 (i32.const 12))
 
 (@string $no_bytecode_impl
-"No bytecode implementation provided for this external" )
+  "No bytecode implementation provided for this external"
+)
 
 (func (export "caml_no_bytecode_impl")
   (return_call $caml_failwith (global.get $no_bytecode_impl))

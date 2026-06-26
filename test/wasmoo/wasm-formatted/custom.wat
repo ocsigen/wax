@@ -149,7 +149,7 @@
   (global.set $initialized (i32.const 1))
 )
 
-(@string $empty_custom "" )
+(@string $empty_custom "")
 
 (func (export "caml_custom_identifier") (param $v (ref eq)) (result (ref eq))
   (drop

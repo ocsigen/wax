@@ -152,7 +152,7 @@
   (global.set $initialized (i32.const 1))
 )
 
-(global $empty_custom (ref $bytes) (@string "" ))
+(global $empty_custom (ref $bytes) (@string ""))
 
 (func $caml_custom_identifier (export "caml_custom_identifier")
   (param $v (ref eq)) (result (ref eq))

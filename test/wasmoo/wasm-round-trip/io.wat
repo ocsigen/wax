@@ -28,101 +28,86 @@
   (func $caml_list_of_js_array (param (ref eq)) (result (ref eq)))
 )
 (@if $wasi
-(@then
-(import "wasi_snapshot_preview1" "fd_close"
-  (func $fd_close (param i32) (result i32))
+  (@then
+    (import "wasi_snapshot_preview1" "fd_close"
+      (func $fd_close (param i32) (result i32)))
+    (import "wasi_snapshot_preview1" "fd_write"
+      (func $fd_write (param i32 i32 i32 i32) (result i32)))
+    (import "wasi_snapshot_preview1" "fd_read"
+      (func $fd_read (param i32 i32 i32 i32) (result i32)))
+    (import "wasi_snapshot_preview1" "fd_seek"
+      (func $fd_seek (param i32 i64 i32 i32) (result i32)))
+    (import "wasi_snapshot_preview1" "path_open"
+      (func $path_open
+        (param i32 i32 i32 i32 i32 i64 i64 i32 i32) (result i32)))
+    (import "libc" "memory" (memory $m 2))
+    (import "libc" "free" (func $free (param i32)))
+    (import "wasi_memory" "get_buffer" (func $get_buffer (result i32)))
+    (import "wasi_memory" "blit_memory_to_substring"
+      (func $blit_memory_to_substring (param i32 (ref $bytes) i32 i32)))
+    (import "wasi_memory" "blit_substring_to_memory"
+      (func $blit_substring_to_memory (param i32 (ref $bytes) i32 i32)))
+    (import "wasi_memory" "write_string_to_memory"
+      (func $write_string_to_memory (param i32 i32 (ref eq)) (result i32)))
+    (import "wasi_memory" "release_memory"
+      (func $release_memory (param i32 i32)))
+    (import "sys" "caml_handle_sys_error"
+      (func $caml_handle_sys_error (param (ref eq) i32)))
+    (import "sys" "caml_handle_sys_error_if"
+      (func $caml_handle_sys_error_if (param (ref eq) i32)))
+    (import "fail" "caml_invalid_argument"
+      (func $caml_invalid_argument (param (ref eq))))
+    (import "fs" "caml_sys_resolve_path"
+      (func $caml_sys_resolve_path (param (ref eq)) (result i32 i32 i32))))
+  (@else
+    (import "bindings" "open"
+      (func $open_fn (param anyref i32 i32) (result i32)))
+    (import "bindings" "close" (func $close (param i32)))
+    (import "bindings" "write"
+      (func $write (param i32 (ref extern) i32 i32 i64) (result i32)))
+    (import "bindings" "write"
+      (func $write'
+        (param i32 (ref extern) i32 i32 nullexternref) (result i32)))
+    (import "bindings" "read"
+      (func $read (param i32 (ref extern) i32 i32 i64) (result i32)))
+    (import "bindings" "read"
+      (func $read'
+        (param i32 (ref extern) i32 i32 nullexternref) (result i32)))
+    (import "bindings" "file_size" (func $file_size (param i32) (result i64)))
+    (import "bindings" "register_channel"
+      (func $register_channel (param (ref eq))))
+    (import "bindings" "unregister_channel"
+      (func $unregister_channel (param (ref eq))))
+    (import "bindings" "channel_list" (func $channel_list (result anyref)))
+    (import "jslib" "caml_js_fun_call"
+      (func $caml_js_fun_call (param (ref eq) (ref eq)) (result (ref eq))))
+    (import "jslib" "caml_jsbytes_of_string"
+      (func $caml_jsbytes_of_string (param (ref eq)) (result (ref eq))))
+    (import "bindings" "ta_new"
+      (func $ta_new (param i32) (result (ref extern))))
+    (import "bindings" "ta_copy"
+      (func $ta_copy (param (ref extern) i32 i32 i32)))
+    (import "bindings" "ta_subarray"
+      (func $ta_subarray (param (ref extern) i32 i32) (result (ref extern))))
+    (import "bindings" "ta_set"
+      (func $ta_set (param (ref extern) (ref extern) i32)))
+    (import "bindings" "dv_make"
+      (func $dv_make (param (ref extern)) (result (ref extern))))
+    (import "bindings" "dv_get_ui8"
+      (func $dv_get_ui8 (param externref i32) (result i32)))
+    (import "bindings" "dv_set_i8"
+      (func $dv_set_i8 (param externref i32 i32)))
+    (import "sys" "caml_handle_sys_error"
+      (func $caml_handle_sys_error (param externref)))
+    (import "fail" "javascript_exception"
+      (tag $javascript_exception (param externref)))
+    (import "bigarray" "caml_blit_dataview_to_bytes"
+      (func $caml_blit_dataview_to_bytes
+        (param (ref extern) i32 (ref $bytes) i32 i32)))
+    (import "bigarray" "caml_blit_bytes_to_dataview"
+      (func $caml_blit_bytes_to_dataview
+        (param (ref $bytes) i32 (ref extern) i32 i32))))
 )
-(import "wasi_snapshot_preview1" "fd_write"
-  (func $fd_write (param i32 i32 i32 i32) (result i32))
-)
-(import "wasi_snapshot_preview1" "fd_read"
-  (func $fd_read (param i32 i32 i32 i32) (result i32))
-)
-(import "wasi_snapshot_preview1" "fd_seek"
-  (func $fd_seek (param i32 i64 i32 i32) (result i32))
-)
-(import "wasi_snapshot_preview1" "path_open"
-  (func $path_open (param i32 i32 i32 i32 i32 i64 i64 i32 i32) (result i32))
-) (import "libc" "memory" (memory $m 2))
-(import "libc" "free" (func $free (param i32)))
-(import "wasi_memory" "get_buffer" (func $get_buffer (result i32)))
-(import "wasi_memory" "blit_memory_to_substring"
-  (func $blit_memory_to_substring (param i32 (ref $bytes) i32 i32))
-)
-(import "wasi_memory" "blit_substring_to_memory"
-  (func $blit_substring_to_memory (param i32 (ref $bytes) i32 i32))
-)
-(import "wasi_memory" "write_string_to_memory"
-  (func $write_string_to_memory (param i32 i32 (ref eq)) (result i32))
-)
-(import "wasi_memory" "release_memory" (func $release_memory (param i32 i32)))
-(import "sys" "caml_handle_sys_error"
-  (func $caml_handle_sys_error (param (ref eq) i32))
-)
-(import "sys" "caml_handle_sys_error_if"
-  (func $caml_handle_sys_error_if (param (ref eq) i32))
-)
-(import "fail" "caml_invalid_argument"
-  (func $caml_invalid_argument (param (ref eq)))
-)
-(import "fs" "caml_sys_resolve_path"
-  (func $caml_sys_resolve_path (param (ref eq)) (result i32 i32 i32))
-) )
-(@else
-(import "bindings" "open" (func $open_fn (param anyref i32 i32) (result i32)))
-(import "bindings" "close" (func $close (param i32)))
-(import "bindings" "write"
-  (func $write (param i32 (ref extern) i32 i32 i64) (result i32))
-)
-(import "bindings" "write"
-  (func $write' (param i32 (ref extern) i32 i32 nullexternref) (result i32))
-)
-(import "bindings" "read"
-  (func $read (param i32 (ref extern) i32 i32 i64) (result i32))
-)
-(import "bindings" "read"
-  (func $read' (param i32 (ref extern) i32 i32 nullexternref) (result i32))
-) (import "bindings" "file_size" (func $file_size (param i32) (result i64)))
-(import "bindings" "register_channel"
-  (func $register_channel (param (ref eq)))
-)
-(import "bindings" "unregister_channel"
-  (func $unregister_channel (param (ref eq)))
-) (import "bindings" "channel_list" (func $channel_list (result anyref)))
-(import "jslib" "caml_js_fun_call"
-  (func $caml_js_fun_call (param (ref eq) (ref eq)) (result (ref eq)))
-)
-(import "jslib" "caml_jsbytes_of_string"
-  (func $caml_jsbytes_of_string (param (ref eq)) (result (ref eq)))
-)
-(import "bindings" "ta_new" (func $ta_new (param i32) (result (ref extern))))
-(import "bindings" "ta_copy" (func $ta_copy (param (ref extern) i32 i32 i32)))
-(import "bindings" "ta_subarray"
-  (func $ta_subarray (param (ref extern) i32 i32) (result (ref extern)))
-)
-(import "bindings" "ta_set"
-  (func $ta_set (param (ref extern) (ref extern) i32))
-)
-(import "bindings" "dv_make"
-  (func $dv_make (param (ref extern)) (result (ref extern)))
-)
-(import "bindings" "dv_get_ui8"
-  (func $dv_get_ui8 (param externref i32) (result i32))
-) (import "bindings" "dv_set_i8" (func $dv_set_i8 (param externref i32 i32)))
-(import "sys" "caml_handle_sys_error"
-  (func $caml_handle_sys_error (param externref))
-)
-(import "fail" "javascript_exception"
-  (tag $javascript_exception (param externref))
-)
-(import "bigarray" "caml_blit_dataview_to_bytes"
-  (func $caml_blit_dataview_to_bytes
-    (param (ref extern) i32 (ref $bytes) i32 i32))
-)
-(import "bigarray" "caml_blit_bytes_to_dataview"
-  (func $caml_blit_bytes_to_dataview
-    (param (ref $bytes) i32 (ref extern) i32 i32))
-) ) )
 (import "custom" "custom_compare_id"
   (func $custom_compare_id (param (ref eq) (ref eq) i32) (result i32))
 )
@@ -139,169 +124,164 @@
 )
 
 (@if $wasi
-(@then
-(func $ta_new (param $sz i32) (result (ref extern))
-  (extern.convert_any (array.new $bytes (i32.const 0) (local.get $sz)))
-)
+  (@then
+    (func $ta_new (param $sz i32) (result (ref extern))
+      (extern.convert_any (array.new $bytes (i32.const 0) (local.get $sz))))
 
-(func $ta_copy
-  (param $buf (ref extern)) (param $dst i32) (param $src i32) (param $end i32)
-  (local $b (ref $bytes))
-  (local.set $b (ref.cast (ref $bytes) (any.convert_extern (local.get $buf))))
-  (array.copy $bytes $bytes (local.get $b) (local.get $dst) (local.get $b)
-    (local.get $src) (i32.sub (local.get $end) (local.get $src)))
-)
+    (func $ta_copy
+      (param $buf (ref extern)) (param $dst i32) (param $src i32)
+      (param $end i32)
+      (local $b (ref $bytes))
+      (local.set $b
+        (ref.cast (ref $bytes) (any.convert_extern (local.get $buf))))
+      (array.copy $bytes $bytes (local.get $b) (local.get $dst) (local.get $b)
+        (local.get $src) (i32.sub (local.get $end) (local.get $src))))
 
-(func $caml_blit_bytes_to_dataview
-  (param $s (ref $bytes)) (param $i i32) (param $buf (ref extern))
-  (param $j i32) (param $l i32)
-  (array.copy $bytes $bytes
-    (ref.cast (ref $bytes) (any.convert_extern (local.get $buf)))
-    (local.get $j) (local.get $s) (local.get $i) (local.get $l))
-)
+    (func $caml_blit_bytes_to_dataview
+      (param $s (ref $bytes)) (param $i i32) (param $buf (ref extern))
+      (param $j i32) (param $l i32)
+      (array.copy $bytes $bytes
+        (ref.cast (ref $bytes) (any.convert_extern (local.get $buf)))
+        (local.get $j) (local.get $s) (local.get $i) (local.get $l)))
 
-(func $caml_blit_dataview_to_bytes
-  (param $buf (ref extern)) (param $i i32) (param $s (ref $bytes))
-  (param $j i32) (param $l i32)
-  (array.copy $bytes $bytes (local.get $s) (local.get $j)
-    (ref.cast (ref $bytes) (any.convert_extern (local.get $buf)))
-    (local.get $i) (local.get $l))
-)
+    (func $caml_blit_dataview_to_bytes
+      (param $buf (ref extern)) (param $i i32) (param $s (ref $bytes))
+      (param $j i32) (param $l i32)
+      (array.copy $bytes $bytes (local.get $s) (local.get $j)
+        (ref.cast (ref $bytes) (any.convert_extern (local.get $buf)))
+        (local.get $i) (local.get $l)))
 
-(func $dv_make (param $b (ref extern)) (result (ref extern)) (local.get $b))
+    (func $dv_make (param $b (ref extern)) (result (ref extern))
+      (local.get $b))
 
-(func $dv_get_ui8 (param $a (ref extern)) (param $i i32) (result i32)
-  (array.get_u $bytes
-    (ref.cast (ref $bytes) (any.convert_extern (local.get $a)))
-    (local.get $i))
-)
+    (func $dv_get_ui8 (param $a (ref extern)) (param $i i32) (result i32)
+      (array.get_u $bytes
+        (ref.cast (ref $bytes) (any.convert_extern (local.get $a)))
+        (local.get $i)))
 
-(func $dv_set_i8 (param $a (ref extern)) (param $i i32) (param $v i32)
-  (array.set $bytes
-    (ref.cast (ref $bytes) (any.convert_extern (local.get $a))) (local.get $i)
-    (local.get $v))
-)
+    (func $dv_set_i8 (param $a (ref extern)) (param $i i32) (param $v i32)
+      (array.set $bytes
+        (ref.cast (ref $bytes) (any.convert_extern (local.get $a)))
+        (local.get $i) (local.get $v)))
 
-(type $dat
-  (struct (field $array (ref array)) (field $offset i32) (field $len i32))
-)
+    (type $dat
+      (struct
+        (field $array (ref array))
+        (field $offset i32)
+        (field $len i32)))
 
-(func $ta_blit_from_buffer
-  (param $buf (ref extern)) (param $i i32) (param $ta (ref extern))
-  (param $j i32) (param $len i32)
-  (local $dat (ref $dat))
-  (local.set $dat (ref.cast (ref $dat) (any.convert_extern (local.get $ta))))
-  (call $caml_blit_dataview_to_bytes (local.get $buf) (local.get $i)
-    (ref.cast (ref $bytes) (struct.get $dat $array (local.get $dat)))
-    (i32.add (struct.get $dat $offset (local.get $dat)) (local.get $j))
-    (local.get $len))
-)
+    (func $ta_blit_from_buffer
+      (param $buf (ref extern)) (param $i i32) (param $ta (ref extern))
+      (param $j i32) (param $len i32)
+      (local $dat (ref $dat))
+      (local.set $dat
+        (ref.cast (ref $dat) (any.convert_extern (local.get $ta))))
+      (call $caml_blit_dataview_to_bytes (local.get $buf) (local.get $i)
+        (ref.cast (ref $bytes) (struct.get $dat $array (local.get $dat)))
+        (i32.add (struct.get $dat $offset (local.get $dat)) (local.get $j))
+        (local.get $len)))
 
-(func $ta_blit_to_buffer
-  (param $ta (ref extern)) (param $i i32) (param $buf (ref extern))
-  (param $j i32) (param $len i32)
-  (local $dat (ref $dat))
-  (local.set $dat (ref.cast (ref $dat) (any.convert_extern (local.get $ta))))
-  (call $caml_blit_bytes_to_dataview
-    (ref.cast (ref $bytes) (struct.get $dat $array (local.get $dat)))
-    (i32.add (struct.get $dat $offset (local.get $dat)) (local.get $i))
-    (local.get $buf) (local.get $j) (local.get $len))
-)
+    (func $ta_blit_to_buffer
+      (param $ta (ref extern)) (param $i i32) (param $buf (ref extern))
+      (param $j i32) (param $len i32)
+      (local $dat (ref $dat))
+      (local.set $dat
+        (ref.cast (ref $dat) (any.convert_extern (local.get $ta))))
+      (call $caml_blit_bytes_to_dataview
+        (ref.cast (ref $bytes) (struct.get $dat $array (local.get $dat)))
+        (i32.add (struct.get $dat $offset (local.get $dat)) (local.get $i))
+        (local.get $buf) (local.get $j) (local.get $len)))
 
-(global $caml_stdout (mut (ref eq)) (ref.i31 (i32.const 0)))
+    (global $caml_stdout (mut (ref eq)) (ref.i31 (i32.const 0)))
 
-;; List of all open output channels, like the C runtime's
-;; caml_all_opened_channels, so flush_all / at-exit reaches every channel
-;; (the registry hooks are invoked from open_descriptor_out / close_channel).
-;; Kept functional (cons cells are never mutated) so a list previously
-;; returned by caml_ml_out_channels_list stays valid across register/close.
-(global $out_channels (mut (ref eq)) (ref.i31 (i32.const 0)))
+    ;; List of all open output channels, like the C runtime's
+    ;; caml_all_opened_channels, so flush_all / at-exit reaches every channel
+    ;; (the registry hooks are invoked from open_descriptor_out / close_channel).
+    ;; Kept functional (cons cells are never mutated) so a list previously
+    ;; returned by caml_ml_out_channels_list stays valid across register/close.
+    (global $out_channels (mut (ref eq)) (ref.i31 (i32.const 0)))
 
-(func $register_channel (param $ch (ref eq))
-  (if
-    (i32.eq
-      (struct.get $channel $fd (ref.cast (ref $channel) (local.get $ch)))
-      (i32.const 1))
-    (then (global.set $caml_stdout (local.get $ch))))
-  (global.set $out_channels
-    (array.new_fixed $block 3 (ref.i31 (i32.const 0)) (local.get $ch)
-      (global.get $out_channels)))
-)
-
-(func $unregister_channel (param $ch (ref eq))
-  (local $cur (ref eq)) (local $new (ref eq)) (local $cell (ref $block))
-  (local.set $cur (global.get $out_channels))
-  (local.set $new (ref.i31 (i32.const 0)))
-  (block $done
-    (loop $loop
-      (br_if $done (ref.test (ref i31) (local.get $cur)))
-      (local.set $cell (ref.cast (ref $block) (local.get $cur)))
+    (func $register_channel (param $ch (ref eq))
       (if
-        (i32.eqz
-          (ref.eq (array.get $block (local.get $cell) (i32.const 1))
-            (local.get $ch)))
-        (then
-          (local.set $new
-            (array.new_fixed $block 3 (ref.i31 (i32.const 0))
-              (array.get $block (local.get $cell) (i32.const 1))
-              (local.get $new)))))
-      (local.set $cur (array.get $block (local.get $cell) (i32.const 2)))
-      (br $loop)))
-  (global.set $out_channels (local.get $new))
-)
-(func $map_new (result (ref extern))
-  (extern.convert_any (ref.i31 (i32.const 0)))
-)
-(func $map_get (param (ref extern) i32) (result (ref $fd_offset))
-  (struct.new $fd_offset (i64.const 0) (i32.const 0) (i32.const 0))
-) (func $map_set (param (ref extern) i32 (ref $fd_offset)))
-(func $map_delete (param (ref extern) i32))
+        (i32.eq
+          (struct.get $channel $fd (ref.cast (ref $channel) (local.get $ch)))
+          (i32.const 1))
+        (then (global.set $caml_stdout (local.get $ch))))
+      (global.set $out_channels
+        (array.new_fixed $block 3 (ref.i31 (i32.const 0)) (local.get $ch)
+          (global.get $out_channels))))
 
-(func $file_size (param $fd i32) (result i64)
-  (local $buffer i32) (local $res i32) (local $cur i64) (local $end i64)
-  (local.set $buffer (call $get_buffer))
-  (block $error
-    (local.set $res
-      (call $fd_seek (local.get $fd) (i64.const 0) (i32.const 1)
-        (local.get $buffer)))
-    (br_if $error (local.get $res))
-    (local.set $cur (i64.load $m (local.get $buffer)))
-    (local.set $res
-      (call $fd_seek (local.get $fd) (i64.const 0) (i32.const 2)
-        (local.get $buffer)))
-    (br_if $error (local.get $res))
-    (local.set $end (i64.load $m (local.get $buffer)))
-    (local.set $res
-      (call $fd_seek (local.get $fd) (local.get $cur) (i32.const 0)
-        (local.get $buffer)))
-    (br_if $error (local.get $res))
-    (return (local.get $end)))
-  (call $caml_handle_sys_error (ref.i31 (i32.const 0)) (local.get $res))
-  (i64.const 0)
-) )
-(@else (import "bindings" "map_new" (func $map_new (result (ref extern))))
-(import "bindings" "map_get"
-  (func $map_get (param (ref extern) i32) (result (ref null $fd_offset)))
-)
-(import "bindings" "map_set"
-  (func $map_set (param (ref extern) i32 (ref $fd_offset)))
-) (import "bindings" "map_delete" (func $map_delete (param (ref extern) i32)))
+    (func $unregister_channel (param $ch (ref eq))
+      (local $cur (ref eq)) (local $new (ref eq)) (local $cell (ref $block))
+      (local.set $cur (global.get $out_channels))
+      (local.set $new (ref.i31 (i32.const 0)))
+      (block $done
+        (loop $loop
+          (br_if $done (ref.test (ref i31) (local.get $cur)))
+          (local.set $cell (ref.cast (ref $block) (local.get $cur)))
+          (if
+            (i32.eqz
+              (ref.eq (array.get $block (local.get $cell) (i32.const 1))
+                (local.get $ch)))
+            (then
+              (local.set $new
+                (array.new_fixed $block 3 (ref.i31 (i32.const 0))
+                  (array.get $block (local.get $cell) (i32.const 1))
+                  (local.get $new)))))
+          (local.set $cur (array.get $block (local.get $cell) (i32.const 2)))
+          (br $loop)))
+      (global.set $out_channels (local.get $new)))
+    (func $map_new (result (ref extern))
+      (extern.convert_any (ref.i31 (i32.const 0))))
+    (func $map_get (param (ref extern) i32) (result (ref $fd_offset))
+      (struct.new $fd_offset (i64.const 0) (i32.const 0) (i32.const 0)))
+    (func $map_set (param (ref extern) i32 (ref $fd_offset)))
+    (func $map_delete (param (ref extern) i32))
 
-(func $ta_blit_from_buffer
-  (param $buf (ref extern)) (param $i i32) (param $ta (ref extern))
-  (param $j i32) (param $len i32)
-  (call $ta_set (local.get $ta)
-    (call $ta_subarray (local.get $buf) (local.get $i)
-      (i32.add (local.get $i) (local.get $len))) (local.get $j))
-)
+    (func $file_size (param $fd i32) (result i64)
+      (local $buffer i32) (local $res i32) (local $cur i64) (local $end i64)
+      (local.set $buffer (call $get_buffer))
+      (block $error
+        (local.set $res
+          (call $fd_seek (local.get $fd) (i64.const 0) (i32.const 1)
+            (local.get $buffer)))
+        (br_if $error (local.get $res))
+        (local.set $cur (i64.load $m (local.get $buffer)))
+        (local.set $res
+          (call $fd_seek (local.get $fd) (i64.const 0) (i32.const 2)
+            (local.get $buffer)))
+        (br_if $error (local.get $res))
+        (local.set $end (i64.load $m (local.get $buffer)))
+        (local.set $res
+          (call $fd_seek (local.get $fd) (local.get $cur) (i32.const 0)
+            (local.get $buffer)))
+        (br_if $error (local.get $res))
+        (return (local.get $end)))
+      (call $caml_handle_sys_error (ref.i31 (i32.const 0)) (local.get $res))
+      (i64.const 0)))
+  (@else
+    (import "bindings" "map_new" (func $map_new (result (ref extern))))
+    (import "bindings" "map_get"
+      (func $map_get (param (ref extern) i32) (result (ref null $fd_offset))))
+    (import "bindings" "map_set"
+      (func $map_set (param (ref extern) i32 (ref $fd_offset))))
+    (import "bindings" "map_delete"
+      (func $map_delete (param (ref extern) i32)))
 
-(func $ta_blit_to_buffer
-  (param $ta (ref extern)) (param $i i32) (param $buf (ref extern))
-  (param $j i32) (param $len i32)
-  (call $ta_set (local.get $buf)
-    (call $ta_subarray (local.get $ta) (local.get $i)
-      (i32.add (local.get $i) (local.get $len))) (local.get $j))
-) ) )
+    (func $ta_blit_from_buffer
+      (param $buf (ref extern)) (param $i i32) (param $ta (ref extern))
+      (param $j i32) (param $len i32)
+      (call $ta_set (local.get $ta)
+        (call $ta_subarray (local.get $buf) (local.get $i)
+          (i32.add (local.get $i) (local.get $len))) (local.get $j)))
+
+    (func $ta_blit_to_buffer
+      (param $ta (ref extern)) (param $i i32) (param $buf (ref extern))
+      (param $j i32) (param $len i32)
+      (call $ta_set (local.get $buf)
+        (call $ta_subarray (local.get $ta) (local.get $i)
+          (i32.add (local.get $i) (local.get $len))) (local.get $j))))
+)
 
 (type $block (array (mut (ref eq))))
 (type $bytes (array (mut i8)))
@@ -330,7 +310,7 @@
 )
 
 (global $channel_ops (ref $custom_operations)
-  (struct.new $custom_operations (@string "_chan" )
+  (struct.new $custom_operations (@string "_chan")
     (ref.func $custom_compare_id) (ref.null $compare)
     (ref.func $custom_hash_id) (ref.null $fixed_length) (ref.null $serialize)
     (ref.null $deserialize) (ref.null $dup))
@@ -387,7 +367,7 @@
   (call $map_delete (call $get_fd_offsets) (local.get $fd))
 )
 
-(global $bad_file_descriptor (ref $bytes) (@string "Bad file descriptor" ))
+(global $bad_file_descriptor (ref $bytes) (@string "Bad file descriptor"))
 
 (func $get_fd_offset_unchecked (export "get_fd_offset_unchecked")
   (param $fd i32) (result (ref null $fd_offset))
@@ -407,33 +387,32 @@
 (type $open_flags (array i16))
 
 (@if $wasi
-(@then
-;;      1 O_RDONLY
-;;      2 O_WRONLY
-;;   0x10 O_CREAT
-;;   0x40 O_EXCL
-;;   0x80 O_TRUNC
-;;  0x100 O_APPEND
-;;  0x400 O_NONBLOCK
-(global $sys_open_flags (ref $open_flags)
-  (array.new_fixed $open_flags 9 (i32.const 1) (i32.const 2) (i32.const 0x102)
-    (i32.const 0x10) (i32.const 0x80) (i32.const 0x40) (i32.const 0)
-    (i32.const 0) (i32.const 0x400))
-) )
-(@else
-;;   1 O_RDONLY
-;;   2 O_WRONLY
-;;   4 O_RDWR
-;;   8 O_APPEND
-;;  16 O_CREAT
-;;  32 O_TRUNC
-;;  64 O_EXCL
-;; 128 O_NONBLOCK
-(global $sys_open_flags (ref $open_flags)
-  (array.new_fixed $open_flags 9 (i32.const 1) (i32.const 2) (i32.const 10)
-    (i32.const 16) (i32.const 32) (i32.const 64) (i32.const 0) (i32.const 0)
-    (i32.const 128))
-) ) )
+  (@then
+    ;;      1 O_RDONLY
+    ;;      2 O_WRONLY
+    ;;   0x10 O_CREAT
+    ;;   0x40 O_EXCL
+    ;;   0x80 O_TRUNC
+    ;;  0x100 O_APPEND
+    ;;  0x400 O_NONBLOCK
+    (global $sys_open_flags (ref $open_flags)
+      (array.new_fixed $open_flags 9 (i32.const 1) (i32.const 2)
+        (i32.const 0x102) (i32.const 0x10) (i32.const 0x80) (i32.const 0x40)
+        (i32.const 0) (i32.const 0) (i32.const 0x400))))
+  (@else
+    ;;   1 O_RDONLY
+    ;;   2 O_WRONLY
+    ;;   4 O_RDWR
+    ;;   8 O_APPEND
+    ;;  16 O_CREAT
+    ;;  32 O_TRUNC
+    ;;  64 O_EXCL
+    ;; 128 O_NONBLOCK
+    (global $sys_open_flags (ref $open_flags)
+      (array.new_fixed $open_flags 9 (i32.const 1) (i32.const 2)
+        (i32.const 10) (i32.const 16) (i32.const 32) (i32.const 64)
+        (i32.const 0) (i32.const 0) (i32.const 128))))
+)
 
 (func $convert_flag_list (export "convert_flag_list")
   (param $tbl (ref $open_flags)) (param $vflags (ref eq)) (result i32)
@@ -456,85 +435,85 @@
 )
 
 (@if $wasi
-(@then
-(func $caml_sys_open (export "caml_sys_open")
-  (param $vpath (ref eq)) (param $vflags (ref eq)) (param $perm (ref eq))
-  (result (ref eq))
-  (local $path_2 i32) (local $path_1 i32) (local $path_0 i32)
-  (local $buffer i32) (local $flags i32) (local $res i32) (local $fd i32)
-  (local $offset i64)
-  (call $caml_sys_resolve_path (local.get $vpath))
-  (local.set $path_2)
-  (local.set $path_1)
-  (local.set $path_0)
-  (local.set $buffer (call $get_buffer))
-  (local.set $flags
-    (call $convert_flag_list (global.get $sys_open_flags)
-      (local.get $vflags)))
-  (local.set $res
-    (call $path_open (local.get $path_0) (i32.const 1) ;; symlink_follow
-      (local.get $path_1) (local.get $path_2)
-      (i32.and (i32.shr_u (local.get $flags) (i32.const 4)) (i32.const 0xF))
-      (select (i64.const 0x860007c) (i64.const 0x820003e)
-        (i32.and (local.get $flags) (i32.const 2))) (i64.const 0)
-      (i32.shr_u (local.get $flags) (i32.const 8)) (local.get $buffer)))
-  (call $free (local.get $path_1))
-  (call $caml_handle_sys_error_if (local.get $vpath) (local.get $res))
-  (local.set $fd (i32.load $m (local.get $buffer)))
-  ;; Like native [O_APPEND], the fd position starts at 0 (WASI's O_APPEND
-  ;; fdflag makes each write go to EOF regardless), so [pos_out] reports 0
-  ;; right after opening, matching native.
-  (call $initialize_fd_offset (local.get $fd) (local.get $offset)
-    (i32.and (local.get $flags) (i32.const 0x100)) ;; O_APPEND
-  )
-  (ref.i31 (local.get $fd))
-) )
-(@else
-(func $caml_sys_open (export "caml_sys_open")
-  (param $path (ref eq)) (param $vflags (ref eq)) (param $perm (ref eq))
-  (result (ref eq))
-  (local $flags i32) (local $fd i32) (local $offset i64)
-  (local.set $flags
-    (call $convert_flag_list (global.get $sys_open_flags)
-      (local.get $vflags)))
-  (try
-    (do
-      (local.set $fd
-        (call $open_fn
-          (call $unwrap (call $caml_jsstring_of_string (local.get $path)))
-          (local.get $flags)
-          (i31.get_u (ref.cast (ref i31) (local.get $perm))))))
-    (catch $javascript_exception (call $caml_handle_sys_error)))
-  ;; Like native [O_APPEND], the offset starts at 0; writes reposition to
-  ;; EOF (see [caml_flush_partial]).
-  (call $initialize_fd_offset (local.get $fd) (local.get $offset)
-    (i32.and (local.get $flags) (i32.const 8)) ;; O_APPEND
-  )
-  (ref.i31 (local.get $fd))
-) ) )
+  (@then
+    (func $caml_sys_open (export "caml_sys_open")
+      (param $vpath (ref eq)) (param $vflags (ref eq)) (param $perm (ref eq))
+      (result (ref eq))
+      (local $path_2 i32) (local $path_1 i32) (local $path_0 i32)
+      (local $buffer i32) (local $flags i32) (local $res i32) (local $fd i32)
+      (local $offset i64)
+      (call $caml_sys_resolve_path (local.get $vpath))
+      (local.set $path_2)
+      (local.set $path_1)
+      (local.set $path_0)
+      (local.set $buffer (call $get_buffer))
+      (local.set $flags
+        (call $convert_flag_list (global.get $sys_open_flags)
+          (local.get $vflags)))
+      (local.set $res
+        (call $path_open (local.get $path_0) (i32.const 1) ;; symlink_follow
+          (local.get $path_1) (local.get $path_2)
+          (i32.and (i32.shr_u (local.get $flags) (i32.const 4))
+            (i32.const 0xF))
+          (select (i64.const 0x860007c) (i64.const 0x820003e)
+            (i32.and (local.get $flags) (i32.const 2))) (i64.const 0)
+          (i32.shr_u (local.get $flags) (i32.const 8)) (local.get $buffer)))
+      (call $free (local.get $path_1))
+      (call $caml_handle_sys_error_if (local.get $vpath) (local.get $res))
+      (local.set $fd (i32.load $m (local.get $buffer)))
+      ;; Like native [O_APPEND], the fd position starts at 0 (WASI's O_APPEND
+      ;; fdflag makes each write go to EOF regardless), so [pos_out] reports 0
+      ;; right after opening, matching native.
+      (call $initialize_fd_offset (local.get $fd) (local.get $offset)
+        (i32.and (local.get $flags) (i32.const 0x100)) ;; O_APPEND
+      )
+      (ref.i31 (local.get $fd))))
+  (@else
+    (func $caml_sys_open (export "caml_sys_open")
+      (param $path (ref eq)) (param $vflags (ref eq)) (param $perm (ref eq))
+      (result (ref eq))
+      (local $flags i32) (local $fd i32) (local $offset i64)
+      (local.set $flags
+        (call $convert_flag_list (global.get $sys_open_flags)
+          (local.get $vflags)))
+      (try
+        (do
+          (local.set $fd
+            (call $open_fn
+              (call $unwrap (call $caml_jsstring_of_string (local.get $path)))
+              (local.get $flags)
+              (i31.get_u (ref.cast (ref i31) (local.get $perm))))))
+        (catch $javascript_exception (call $caml_handle_sys_error)))
+      ;; Like native [O_APPEND], the offset starts at 0; writes reposition to
+      ;; EOF (see [caml_flush_partial]).
+      (call $initialize_fd_offset (local.get $fd) (local.get $offset)
+        (i32.and (local.get $flags) (i32.const 8)) ;; O_APPEND
+      )
+      (ref.i31 (local.get $fd))))
+)
 
 (@if $wasi
-(@then
-(func $caml_sys_close (export "caml_sys_close")
-  (param $vfd (ref eq)) (result (ref eq))
-  (local $fd i32) (local $res i32)
-  (local.set $fd (i31.get_u (ref.cast (ref i31) (local.get $vfd))))
-  (call $release_fd_offset (local.get $fd))
-  (local.set $res (call $fd_close (local.get $fd)))
-  (call $caml_handle_sys_error_if (ref.i31 (i32.const 0)) (local.get $res))
-  (ref.i31 (i32.const 0))
-) )
-(@else
-(func $caml_sys_close (export "caml_sys_close")
-  (param $vfd (ref eq)) (result (ref eq))
-  (local $res i32) (local $fd i32)
-  (local.set $fd (i31.get_u (ref.cast (ref i31) (local.get $vfd))))
-  (call $release_fd_offset (local.get $fd))
-  (try
-    (do (call $close (local.get $fd)))
-    (catch $javascript_exception (call $caml_handle_sys_error)))
-  (ref.i31 (i32.const 0))
-) ) )
+  (@then
+    (func $caml_sys_close (export "caml_sys_close")
+      (param $vfd (ref eq)) (result (ref eq))
+      (local $fd i32) (local $res i32)
+      (local.set $fd (i31.get_u (ref.cast (ref i31) (local.get $vfd))))
+      (call $release_fd_offset (local.get $fd))
+      (local.set $res (call $fd_close (local.get $fd)))
+      (call $caml_handle_sys_error_if (ref.i31 (i32.const 0))
+        (local.get $res))
+      (ref.i31 (i32.const 0))))
+  (@else
+    (func $caml_sys_close (export "caml_sys_close")
+      (param $vfd (ref eq)) (result (ref eq))
+      (local $res i32) (local $fd i32)
+      (local.set $fd (i31.get_u (ref.cast (ref i31) (local.get $vfd))))
+      (call $release_fd_offset (local.get $fd))
+      (try
+        (do (call $close (local.get $fd)))
+        (catch $javascript_exception (call $caml_handle_sys_error)))
+      (ref.i31 (i32.const 0))))
+)
 
 (func $caml_sys_io_buffer_size (export "caml_sys_io_buffer_size")
   (param (ref eq)) (result (ref eq))
@@ -547,65 +526,62 @@
 )
 
 (@if $wasi
-(@then
-;; Channel output/refill hooks redirect I/O to a JavaScript callback.
-;; The WASI runtime reads and writes through real file descriptors and
-;; ignores these hooks, so the setters raise rather than silently doing
-;; nothing.
-(func $caml_ml_set_channel_output (export "caml_ml_set_channel_output")
-  (param $ch (ref eq)) (param $f (ref eq)) (result (ref eq))
-  (call $caml_invalid_argument
-    (@string "caml_ml_set_channel_output not supported with WASI" ))
-  (ref.i31 (i32.const 0))
+  (@then
+    ;; Channel output/refill hooks redirect I/O to a JavaScript callback.
+    ;; The WASI runtime reads and writes through real file descriptors and
+    ;; ignores these hooks, so the setters raise rather than silently doing
+    ;; nothing.
+    (func $caml_ml_set_channel_output (export "caml_ml_set_channel_output")
+      (param $ch (ref eq)) (param $f (ref eq)) (result (ref eq))
+      (call $caml_invalid_argument
+        (@string "caml_ml_set_channel_output not supported with WASI"))
+      (ref.i31 (i32.const 0)))
+
+    (func $caml_ml_set_channel_refill (export "caml_ml_set_channel_refill")
+      (param $ch (ref eq)) (param $f (ref eq)) (result (ref eq))
+      (call $caml_invalid_argument
+        (@string "caml_ml_set_channel_refill not supported with WASI"))
+      (ref.i31 (i32.const 0))))
+  (@else
+    (func $caml_ml_set_channel_output (export "caml_ml_set_channel_output")
+      (param $ch (ref eq)) (param $f (ref eq)) (result (ref eq))
+      (struct.set $channel $output (ref.cast (ref $channel) (local.get $ch))
+        (local.get $f))
+      (ref.i31 (i32.const 0)))
+
+    (func $caml_ml_set_channel_refill (export "caml_ml_set_channel_refill")
+      (param $ch (ref eq)) (param $f (ref eq)) (result (ref eq))
+      (struct.set $channel $refill (ref.cast (ref $channel) (local.get $ch))
+        (local.get $f))
+      (ref.i31 (i32.const 0))))
 )
 
-(func $caml_ml_set_channel_refill (export "caml_ml_set_channel_refill")
-  (param $ch (ref eq)) (param $f (ref eq)) (result (ref eq))
-  (call $caml_invalid_argument
-    (@string "caml_ml_set_channel_refill not supported with WASI" ))
-  (ref.i31 (i32.const 0))
-) )
-(@else
-(func $caml_ml_set_channel_output (export "caml_ml_set_channel_output")
-  (param $ch (ref eq)) (param $f (ref eq)) (result (ref eq))
-  (struct.set $channel $output (ref.cast (ref $channel) (local.get $ch))
-    (local.get $f))
-  (ref.i31 (i32.const 0))
+(@if $wasi
+  (@then
+    (func $push_channel
+      (param $l (ref eq)) (param $ch (ref eq)) (result (ref eq))
+      (local $c (ref $channel))
+      (block $continue
+        (br_if $continue (i32.eqz (ref.test (ref $channel) (local.get $ch))))
+        (local.set $c (ref.cast (ref $channel) (local.get $ch)))
+        (br_if $continue
+          (i32.eq (struct.get $channel $fd (local.get $c)) (i32.const -1)))
+        (local.set $l
+          (array.new_fixed $block 3 (ref.i31 (i32.const 0)) (local.get $ch)
+            (local.get $l))))
+      (local.get $l)))
 )
 
-(func $caml_ml_set_channel_refill (export "caml_ml_set_channel_refill")
-  (param $ch (ref eq)) (param $f (ref eq)) (result (ref eq))
-  (struct.set $channel $refill (ref.cast (ref $channel) (local.get $ch))
-    (local.get $f))
-  (ref.i31 (i32.const 0))
-) ) )
-
 (@if $wasi
-(@then
-(func $push_channel (param $l (ref eq)) (param $ch (ref eq)) (result (ref eq))
-  (local $c (ref $channel))
-  (block $continue
-    (br_if $continue (i32.eqz (ref.test (ref $channel) (local.get $ch))))
-    (local.set $c (ref.cast (ref $channel) (local.get $ch)))
-    (br_if $continue
-      (i32.eq (struct.get $channel $fd (local.get $c)) (i32.const -1)))
-    (local.set $l
-      (array.new_fixed $block 3 (ref.i31 (i32.const 0)) (local.get $ch)
-        (local.get $l))))
-  (local.get $l)
-) ) )
-
-(@if $wasi
-(@then
-(func $caml_ml_out_channels_list (export "caml_ml_out_channels_list")
-  (param (ref eq)) (result (ref eq))
-  (global.get $out_channels)
-) )
-(@else
-(func $caml_ml_out_channels_list (export "caml_ml_out_channels_list")
-  (param (ref eq)) (result (ref eq))
-  (return_call $caml_list_of_js_array (call $wrap (call $channel_list)))
-) ) )
+  (@then
+    (func $caml_ml_out_channels_list (export "caml_ml_out_channels_list")
+      (param (ref eq)) (result (ref eq))
+      (global.get $out_channels)))
+  (@else
+    (func $caml_ml_out_channels_list (export "caml_ml_out_channels_list")
+      (param (ref eq)) (result (ref eq))
+      (return_call $caml_list_of_js_array (call $wrap (call $channel_list)))))
+)
 
 (func $caml_ml_open_descriptor_in (export "caml_ml_open_descriptor_in")
   (param $fd (ref eq)) (result (ref eq))
@@ -652,7 +628,7 @@
   (local.set $fd
     (struct.get $channel $fd (ref.cast (ref $channel) (local.get $ch))))
   (if (i32.eq (local.get $fd) (i32.const -1))
-    (then (call $caml_raise_sys_error (@string "bad file descriptor" ))))
+    (then (call $caml_raise_sys_error (@string "bad file descriptor"))))
   (ref.i31 (local.get $fd))
 )
 
@@ -688,29 +664,31 @@
 )
 
 (@if $wasi
-(@then
-(func $read
-  (param $fd i32) (param $buf (ref extern)) (param $pos i32) (param $n i32)
-  (result i32)
-  (local $buffer i32) (local $nread i32) (local $iovs i32)
-  (local $iovs_len i32) (local $res i32) (local $s (ref $bytes))
-  (local.set $buffer (call $get_buffer))
-  (local.set $nread (local.get $buffer))
-  (local.set $iovs (i32.add (local.get $buffer) (i32.const 4)))
-  (local.set $buffer (i32.add (local.get $buffer) (i32.const 12)))
-  (i32.store $m (local.get $iovs) (local.get $buffer))
-  (i32.store $m offset=4 (local.get $iovs) (local.get $n))
-  (local.set $iovs_len (i32.const 1))
-  (local.set $res
-    (call $fd_read (local.get $fd) (local.get $iovs) (local.get $iovs_len)
-      (local.get $nread)))
-  (call $caml_handle_sys_error_if (ref.i31 (i32.const 0)) (local.get $res))
-  (local.set $n (i32.load $m (local.get $nread)))
-  (local.set $s (ref.cast (ref $bytes) (any.convert_extern (local.get $buf))))
-  (call $blit_memory_to_substring (local.get $buffer) (local.get $s)
-    (local.get $pos) (local.get $n))
-  (local.get $n)
-) ) )
+  (@then
+    (func $read
+      (param $fd i32) (param $buf (ref extern)) (param $pos i32)
+      (param $n i32) (result i32)
+      (local $buffer i32) (local $nread i32) (local $iovs i32)
+      (local $iovs_len i32) (local $res i32) (local $s (ref $bytes))
+      (local.set $buffer (call $get_buffer))
+      (local.set $nread (local.get $buffer))
+      (local.set $iovs (i32.add (local.get $buffer) (i32.const 4)))
+      (local.set $buffer (i32.add (local.get $buffer) (i32.const 12)))
+      (i32.store $m (local.get $iovs) (local.get $buffer))
+      (i32.store $m offset=4 (local.get $iovs) (local.get $n))
+      (local.set $iovs_len (i32.const 1))
+      (local.set $res
+        (call $fd_read (local.get $fd) (local.get $iovs) (local.get $iovs_len)
+          (local.get $nread)))
+      (call $caml_handle_sys_error_if (ref.i31 (i32.const 0))
+        (local.get $res))
+      (local.set $n (i32.load $m (local.get $nread)))
+      (local.set $s
+        (ref.cast (ref $bytes) (any.convert_extern (local.get $buf))))
+      (call $blit_memory_to_substring (local.get $buffer) (local.get $s)
+        (local.get $pos) (local.get $n))
+      (local.get $n)))
+)
 
 (func $caml_do_read
   (param $ch (ref $channel)) (param $pos i32) (param $len i32) (result i32)
@@ -747,61 +725,64 @@
 )
 
 (@if $wasi
-(@then
-;; The refill hook is not supported with WASI (see
-;; caml_ml_set_channel_refill), so this always reads from the fd.
-(func $caml_do_read_or_refill
-  (param $ch (ref $channel)) (param $pos i32) (param $len i32) (result i32)
-  (return_call $caml_do_read (local.get $ch) (local.get $pos)
-    (local.get $len))
-) )
-(@else
-(func $caml_do_read_or_refill
-  (param $ch (ref $channel)) (param $pos i32) (param $len i32) (result i32)
-  (local $f eqref) (local $str (ref $bytes)) (local $str_len i32)
-  (local $new_size i32) (local $new_buffer (ref extern))
-  (local $fd_offset (ref $fd_offset))
-  (local.set $f (struct.get $channel $refill (local.get $ch)))
-  (if (ref.is_null (local.get $f))
-    (then
-      (return
-        (call $caml_do_read (local.get $ch) (local.get $pos)
-          (local.get $len)))))
-  (local.set $str
-    (ref.cast (ref $bytes)
-      (call $caml_js_fun_call (ref.as_non_null (local.get $f))
-        (array.new_fixed $block 1 (ref.i31 (i32.const 0))))))
-  (local.set $str_len (array.len (local.get $str)))
-  (if (i32.eqz (local.get $str_len))
-    (then
-      (struct.set $channel $refill (local.get $ch) (ref.null eq))
-      (return (i32.const 0))))
-  ;; Grow the channel buffer if the refilled data does not fit, so that
-  ;; no bytes are dropped (the JS runtime does the same), preserving the
-  ;; bytes already buffered before $pos.
-  (if
-    (i32.gt_u (i32.add (local.get $pos) (local.get $str_len))
-      (struct.get $channel $size (local.get $ch)))
-    (then
-      (local.set $new_size (i32.add (local.get $pos) (local.get $str_len)))
-      (local.set $new_buffer (call $ta_new (local.get $new_size)))
-      (call $ta_set (local.get $new_buffer)
-        (struct.get $channel $buffer (local.get $ch)) (i32.const 0))
-      (struct.set $channel $buffer (local.get $ch) (local.get $new_buffer))
-      (struct.set $channel $buffer_view (local.get $ch)
-        (call $dv_make (local.get $new_buffer)))
-      (struct.set $channel $size (local.get $ch) (local.get $new_size))))
-  (call $caml_blit_bytes_to_dataview (local.get $str) (i32.const 0)
-    (struct.get $channel $buffer_view (local.get $ch)) (local.get $pos)
-    (local.get $str_len))
-  ;; Advance the channel offset so that pos_in/pos_out stay consistent.
-  (local.set $fd_offset
-    (call $get_fd_offset (struct.get $channel $fd (local.get $ch))))
-  (struct.set $fd_offset $offset (local.get $fd_offset)
-    (i64.add (struct.get $fd_offset $offset (local.get $fd_offset))
-      (i64.extend_i32_u (local.get $str_len))))
-  (local.get $str_len)
-) ) )
+  (@then
+    ;; The refill hook is not supported with WASI (see
+    ;; caml_ml_set_channel_refill), so this always reads from the fd.
+    (func $caml_do_read_or_refill
+      (param $ch (ref $channel)) (param $pos i32) (param $len i32)
+      (result i32)
+      (return_call $caml_do_read (local.get $ch) (local.get $pos)
+        (local.get $len))))
+  (@else
+    (func $caml_do_read_or_refill
+      (param $ch (ref $channel)) (param $pos i32) (param $len i32)
+      (result i32)
+      (local $f eqref) (local $str (ref $bytes)) (local $str_len i32)
+      (local $new_size i32) (local $new_buffer (ref extern))
+      (local $fd_offset (ref $fd_offset))
+      (local.set $f (struct.get $channel $refill (local.get $ch)))
+      (if (ref.is_null (local.get $f))
+        (then
+          (return
+            (call $caml_do_read (local.get $ch) (local.get $pos)
+              (local.get $len)))))
+      (local.set $str
+        (ref.cast (ref $bytes)
+          (call $caml_js_fun_call (ref.as_non_null (local.get $f))
+            (array.new_fixed $block 1 (ref.i31 (i32.const 0))))))
+      (local.set $str_len (array.len (local.get $str)))
+      (if (i32.eqz (local.get $str_len))
+        (then
+          (struct.set $channel $refill (local.get $ch) (ref.null eq))
+          (return (i32.const 0))))
+      ;; Grow the channel buffer if the refilled data does not fit, so that
+      ;; no bytes are dropped (the JS runtime does the same), preserving the
+      ;; bytes already buffered before $pos.
+      (if
+        (i32.gt_u (i32.add (local.get $pos) (local.get $str_len))
+          (struct.get $channel $size (local.get $ch)))
+        (then
+          (local.set $new_size
+            (i32.add (local.get $pos) (local.get $str_len)))
+          (local.set $new_buffer (call $ta_new (local.get $new_size)))
+          (call $ta_set (local.get $new_buffer)
+            (struct.get $channel $buffer (local.get $ch)) (i32.const 0))
+          (struct.set $channel $buffer (local.get $ch)
+            (local.get $new_buffer))
+          (struct.set $channel $buffer_view (local.get $ch)
+            (call $dv_make (local.get $new_buffer)))
+          (struct.set $channel $size (local.get $ch) (local.get $new_size))))
+      (call $caml_blit_bytes_to_dataview (local.get $str) (i32.const 0)
+        (struct.get $channel $buffer_view (local.get $ch)) (local.get $pos)
+        (local.get $str_len))
+      ;; Advance the channel offset so that pos_in/pos_out stay consistent.
+      (local.set $fd_offset
+        (call $get_fd_offset (struct.get $channel $fd (local.get $ch))))
+      (struct.set $fd_offset $offset (local.get $fd_offset)
+        (i64.add (struct.get $fd_offset $offset (local.get $fd_offset))
+          (i64.extend_i32_u (local.get $str_len))))
+      (local.get $str_len)))
+)
 
 (func $caml_refill (param $ch (ref $channel)) (result i32)
   (local $view (ref extern)) (local $n i32)
@@ -1006,47 +987,50 @@
 )
 
 (@if $wasi
-(@then
-(func $caml_seek_in
-  (param $ch (ref $channel)) (param $dest i64) (result (ref eq))
-  (local $fd i32) (local $buffer i32) (local $res i32)
-  (local.set $fd (struct.get $channel $fd (local.get $ch)))
-  (local.set $buffer (call $get_buffer))
-  ;; ZZZ store current offset in channel do avoid some syscalls?
-  (local.set $res
-    (call $fd_seek (local.get $fd) (local.get $dest) (i32.const 0)
-      (local.get $buffer)))
-  (call $caml_handle_sys_error_if (ref.i31 (i32.const 0)) (local.get $res))
-  (struct.set $channel $curr (local.get $ch) (i32.const 0))
-  (struct.set $channel $max (local.get $ch) (i32.const 0))
-  (ref.i31 (i32.const 0))
-) )
-(@else
-(func $caml_seek_in
-  (param $ch (ref $channel)) (param $dest i64) (result (ref eq))
-  (local $fd i32) (local $fd_offset (ref $fd_offset)) (local $offset i64)
-  (local.set $fd (struct.get $channel $fd (local.get $ch)))
-  (local.set $fd_offset (call $get_fd_offset (local.get $fd)))
-  (local.set $offset (struct.get $fd_offset $offset (local.get $fd_offset)))
-  (if
-    (i32.and
-      (i64.ge_s (local.get $dest)
-        (i64.sub (local.get $offset)
-          (i64.extend_i32_s (struct.get $channel $max (local.get $ch)))))
-      (i64.le_s (local.get $dest) (local.get $offset)))
-    (then
-      (struct.set $channel $curr (local.get $ch)
-        (i32.sub (struct.get $channel $max (local.get $ch))
-          (i32.wrap_i64 (i64.sub (local.get $offset) (local.get $dest))))))
-    (else
-      (if (i64.lt_s (local.get $dest) (i64.const 0))
-        (then (call $caml_raise_sys_error (@string "Invalid argument" ))))
-      (struct.set $fd_offset $offset (local.get $fd_offset) (local.get $dest))
-      (struct.set $fd_offset $seeked (local.get $fd_offset) (i32.const 1))
+  (@then
+    (func $caml_seek_in
+      (param $ch (ref $channel)) (param $dest i64) (result (ref eq))
+      (local $fd i32) (local $buffer i32) (local $res i32)
+      (local.set $fd (struct.get $channel $fd (local.get $ch)))
+      (local.set $buffer (call $get_buffer))
+      ;; ZZZ store current offset in channel do avoid some syscalls?
+      (local.set $res
+        (call $fd_seek (local.get $fd) (local.get $dest) (i32.const 0)
+          (local.get $buffer)))
+      (call $caml_handle_sys_error_if (ref.i31 (i32.const 0))
+        (local.get $res))
       (struct.set $channel $curr (local.get $ch) (i32.const 0))
-      (struct.set $channel $max (local.get $ch) (i32.const 0))))
-  (ref.i31 (i32.const 0))
-) ) )
+      (struct.set $channel $max (local.get $ch) (i32.const 0))
+      (ref.i31 (i32.const 0))))
+  (@else
+    (func $caml_seek_in
+      (param $ch (ref $channel)) (param $dest i64) (result (ref eq))
+      (local $fd i32) (local $fd_offset (ref $fd_offset)) (local $offset i64)
+      (local.set $fd (struct.get $channel $fd (local.get $ch)))
+      (local.set $fd_offset (call $get_fd_offset (local.get $fd)))
+      (local.set $offset
+        (struct.get $fd_offset $offset (local.get $fd_offset)))
+      (if
+        (i32.and
+          (i64.ge_s (local.get $dest)
+            (i64.sub (local.get $offset)
+              (i64.extend_i32_s (struct.get $channel $max (local.get $ch)))))
+          (i64.le_s (local.get $dest) (local.get $offset)))
+        (then
+          (struct.set $channel $curr (local.get $ch)
+            (i32.sub (struct.get $channel $max (local.get $ch))
+              (i32.wrap_i64
+                (i64.sub (local.get $offset) (local.get $dest))))))
+        (else
+          (if (i64.lt_s (local.get $dest) (i64.const 0))
+            (then (call $caml_raise_sys_error (@string "Invalid argument"))))
+          (struct.set $fd_offset $offset (local.get $fd_offset)
+            (local.get $dest))
+          (struct.set $fd_offset $seeked (local.get $fd_offset) (i32.const 1))
+          (struct.set $channel $curr (local.get $ch) (i32.const 0))
+          (struct.set $channel $max (local.get $ch) (i32.const 0))))
+      (ref.i31 (i32.const 0))))
+)
 
 (func $caml_ml_seek_in (export "caml_ml_seek_in")
   (param $ch (ref eq)) (param $dest (ref eq)) (result (ref eq))
@@ -1084,7 +1068,7 @@
         (i64.extend_i32_s
           (i31.get_s (ref.cast (ref i31) (local.get $voffset)))))
       (if (i64.lt_s (local.get $offset) (i64.const 0))
-        (then (call $caml_raise_sys_error (@string "Invalid argument" ))))
+        (then (call $caml_raise_sys_error (@string "Invalid argument"))))
       (struct.set $fd_offset $offset (local.get $fd_offset)
         (local.get $offset))
       (struct.set $fd_offset $seeked (local.get $fd_offset) (i32.const 1))))
@@ -1112,7 +1096,7 @@
         (call $get_fd_offset (struct.get $channel $fd (local.get $ch))))
       (local.set $offset (call $Int64_val (local.get $voffset)))
       (if (i64.lt_s (local.get $offset) (i64.const 0))
-        (then (call $caml_raise_sys_error (@string "Invalid argument" ))))
+        (then (call $caml_raise_sys_error (@string "Invalid argument"))))
       (struct.set $fd_offset $offset (local.get $fd_offset)
         (local.get $offset))
       (struct.set $fd_offset $seeked (local.get $fd_offset) (i32.const 1))))
@@ -1198,141 +1182,147 @@
 )
 
 (@if $wasi
-(@then
-(func $write
-  (param $fd i32) (param $buf (ref extern)) (param $pos i32) (param $n i32)
-  (result i32)
-  (local $buffer i32) (local $nwritten i32) (local $iovs i32)
-  (local $iovs_len i32) (local $s (ref $bytes)) (local $res i32)
-  (local.set $buffer (call $get_buffer))
-  (local.set $nwritten (local.get $buffer))
-  (local.set $iovs (i32.add (local.get $buffer) (i32.const 4)))
-  (local.set $buffer (i32.add (local.get $buffer) (i32.const 12)))
-  (i32.store $m (local.get $iovs) (local.get $buffer))
-  (i32.store $m offset=4 (local.get $iovs) (local.get $n))
-  (local.set $iovs_len (i32.const 1))
-  (local.set $s (ref.cast (ref $bytes) (any.convert_extern (local.get $buf))))
-  (call $blit_substring_to_memory (local.get $buffer) (local.get $s)
-    (local.get $pos) (local.get $n))
-  (local.set $res
-    (call $fd_write (local.get $fd) (local.get $iovs) (local.get $iovs_len)
-      (local.get $nwritten)))
-  (call $caml_handle_sys_error_if (ref.i31 (i32.const 0)) (local.get $res))
-  (i32.load $m (local.get $nwritten))
-) ) )
-
-(@if $wasi
-(@then
-(func $write_all_to_fd (export "write_all_to_fd")
-  (param $fd i32) (param $v (ref eq))
-  (local $len i32) (local $buffer i32) (local $nwritten i32) (local $iovs i32)
-  (local $buf i32) (local $remaining i32) (local $res i32)
-  (local.set $len (array.len (ref.cast (ref $bytes) (local.get $v))))
-  (local.set $buffer (call $get_buffer))
-  (local.set $nwritten (local.get $buffer))
-  (local.set $iovs (i32.add (local.get $buffer) (i32.const 4)))
-  (local.set $buffer (i32.add (local.get $buffer) (i32.const 12)))
-  (local.set $buf
-    (call $write_string_to_memory (local.get $buffer)
-      (global.get $IO_BUFFER_SIZE) (local.get $v)))
-  (local.set $remaining (local.get $buf))
-  (loop $write
-    (i32.store $m (local.get $iovs) (local.get $remaining))
-    (i32.store $m offset=4 (local.get $iovs) (local.get $len))
-    (local.set $res
-      (call $fd_write (local.get $fd) (local.get $iovs) (i32.const 1)
-        (local.get $nwritten)))
-    (if (i32.eqz (local.get $res))
-      (then
-        (local.set $len
-          (i32.sub (local.get $len) (i32.load $m (local.get $nwritten))))
-        (local.set $remaining
-          (i32.add (local.get $remaining)
-            (i32.load $m (local.get $nwritten))))
-        (br_if $write (local.get $len)))))
-  (call $release_memory (local.get $buffer) (local.get $buf))
+  (@then
+    (func $write
+      (param $fd i32) (param $buf (ref extern)) (param $pos i32)
+      (param $n i32) (result i32)
+      (local $buffer i32) (local $nwritten i32) (local $iovs i32)
+      (local $iovs_len i32) (local $s (ref $bytes)) (local $res i32)
+      (local.set $buffer (call $get_buffer))
+      (local.set $nwritten (local.get $buffer))
+      (local.set $iovs (i32.add (local.get $buffer) (i32.const 4)))
+      (local.set $buffer (i32.add (local.get $buffer) (i32.const 12)))
+      (i32.store $m (local.get $iovs) (local.get $buffer))
+      (i32.store $m offset=4 (local.get $iovs) (local.get $n))
+      (local.set $iovs_len (i32.const 1))
+      (local.set $s
+        (ref.cast (ref $bytes) (any.convert_extern (local.get $buf))))
+      (call $blit_substring_to_memory (local.get $buffer) (local.get $s)
+        (local.get $pos) (local.get $n))
+      (local.set $res
+        (call $fd_write (local.get $fd) (local.get $iovs)
+          (local.get $iovs_len) (local.get $nwritten)))
+      (call $caml_handle_sys_error_if (ref.i31 (i32.const 0))
+        (local.get $res))
+      (i32.load $m (local.get $nwritten))))
 )
 
-(func $caml_flush_partial (param $ch (ref $channel)) (result i32)
-  (local $fd_offset (ref $fd_offset)) (local $offset i64)
-  (local $tmp (ref $bytes)) (local $towrite i32) (local $buf (ref extern))
-  (local $fd i32) (local $written i32)
-  (local.set $towrite (struct.get $channel $curr (local.get $ch)))
-  (if (i32.gt_u (local.get $towrite) (i32.const 0))
-    (then
-      (local.set $buf (struct.get $channel $buffer (local.get $ch)))
-      (local.set $fd (struct.get $channel $fd (local.get $ch)))
-      (local.set $written
-        (call $write (local.get $fd) (local.get $buf) (i32.const 0)
-          (local.get $towrite)))
-      (if (i32.gt_u (local.get $towrite) (local.get $written))
+(@if $wasi
+  (@then
+    (func $write_all_to_fd (export "write_all_to_fd")
+      (param $fd i32) (param $v (ref eq))
+      (local $len i32) (local $buffer i32) (local $nwritten i32)
+      (local $iovs i32) (local $buf i32) (local $remaining i32)
+      (local $res i32)
+      (local.set $len (array.len (ref.cast (ref $bytes) (local.get $v))))
+      (local.set $buffer (call $get_buffer))
+      (local.set $nwritten (local.get $buffer))
+      (local.set $iovs (i32.add (local.get $buffer) (i32.const 4)))
+      (local.set $buffer (i32.add (local.get $buffer) (i32.const 12)))
+      (local.set $buf
+        (call $write_string_to_memory (local.get $buffer)
+          (global.get $IO_BUFFER_SIZE) (local.get $v)))
+      (local.set $remaining (local.get $buf))
+      (loop $write
+        (i32.store $m (local.get $iovs) (local.get $remaining))
+        (i32.store $m offset=4 (local.get $iovs) (local.get $len))
+        (local.set $res
+          (call $fd_write (local.get $fd) (local.get $iovs) (i32.const 1)
+            (local.get $nwritten)))
+        (if (i32.eqz (local.get $res))
+          (then
+            (local.set $len
+              (i32.sub (local.get $len) (i32.load $m (local.get $nwritten))))
+            (local.set $remaining
+              (i32.add (local.get $remaining)
+                (i32.load $m (local.get $nwritten))))
+            (br_if $write (local.get $len)))))
+      (call $release_memory (local.get $buffer) (local.get $buf)))
+
+    (func $caml_flush_partial (param $ch (ref $channel)) (result i32)
+      (local $fd_offset (ref $fd_offset)) (local $offset i64)
+      (local $tmp (ref $bytes)) (local $towrite i32) (local $buf (ref extern))
+      (local $fd i32) (local $written i32)
+      (local.set $towrite (struct.get $channel $curr (local.get $ch)))
+      (if (i32.gt_u (local.get $towrite) (i32.const 0))
         (then
-          (call $ta_copy (local.get $buf) (i32.const 0) (local.get $written)
-            (local.get $towrite))))
-      (local.set $towrite (i32.sub (local.get $towrite) (local.get $written)))
-      (struct.set $channel $curr (local.get $ch) (local.get $towrite))))
-  (i32.eqz (local.get $towrite))
-) )
-(@else
-(func $caml_flush_partial (param $ch (ref $channel)) (result i32)
-  (local $towrite i32) (local $buf (ref extern)) (local $fd i32)
-  (local $fd_offset (ref $fd_offset)) (local $offset i64) (local $written i32)
-  (local $tmp (ref $bytes))
-  (local.set $towrite (struct.get $channel $curr (local.get $ch)))
-  (if (i32.gt_u (local.get $towrite) (i32.const 0))
-    (then
-      (local.set $buf (struct.get $channel $buffer (local.get $ch)))
-      (if (ref.is_null (struct.get $channel $output (local.get $ch)))
-        (then
+          (local.set $buf (struct.get $channel $buffer (local.get $ch)))
           (local.set $fd (struct.get $channel $fd (local.get $ch)))
-          (local.set $fd_offset (call $get_fd_offset (local.get $fd)))
-          (local.set $offset
-            (struct.get $fd_offset $offset (local.get $fd_offset)))
-          ;; [O_APPEND]: every write goes to the end of the file,
-          ;; regardless of the current offset (which [seek] may have
-          ;; moved). Reposition to EOF before writing, like fs_node.js:
-          ;; the OS append flag alone is not portable for a positioned
-          ;; write (it appends on Linux but not macOS).
-          (if (struct.get $fd_offset $append (local.get $fd_offset))
-            (then (local.set $offset (call $file_size (local.get $fd)))))
-          (try
-            (do
-              (local.set $written
-                (if (result i32)
-                  (struct.get $fd_offset $seeked (local.get $fd_offset))
-                  (then
-                    (call $write (local.get $fd) (local.get $buf)
-                      (i32.const 0) (local.get $towrite) (local.get $offset)))
-                  (else
-                    (call $write' (local.get $fd) (local.get $buf)
-                      (i32.const 0) (local.get $towrite)
-                      (ref.null noextern))))))
-            (catch $javascript_exception (call $caml_handle_sys_error)))
-          (struct.set $fd_offset $offset (local.get $fd_offset)
-            (i64.add (local.get $offset)
-              (i64.extend_i32_u (local.get $written))))
+          (local.set $written
+            (call $write (local.get $fd) (local.get $buf) (i32.const 0)
+              (local.get $towrite)))
           (if (i32.gt_u (local.get $towrite) (local.get $written))
             (then
               (call $ta_copy (local.get $buf) (i32.const 0)
                 (local.get $written) (local.get $towrite))))
           (local.set $towrite
             (i32.sub (local.get $towrite) (local.get $written)))
-          (struct.set $channel $curr (local.get $ch) (local.get $towrite)))
-        (else
-          (local.set $tmp
-            (array.new $bytes (i32.const 0) (local.get $towrite)))
-          (call $caml_blit_dataview_to_bytes
-            (struct.get $channel $buffer_view (local.get $ch)) (i32.const 0)
-            (local.get $tmp) (i32.const 0) (local.get $towrite))
-          (drop
-            (call $caml_js_fun_call
-              (ref.as_non_null (struct.get $channel $output (local.get $ch)))
-              (array.new_fixed $block 2 (ref.i31 (i32.const 0))
-                (call $caml_jsbytes_of_string (local.get $tmp)))))
-          (struct.set $channel $curr (local.get $ch) (i32.const 0))
-          (local.set $towrite (i32.const 0))))))
-  (i32.eqz (local.get $towrite))
-) ) )
+          (struct.set $channel $curr (local.get $ch) (local.get $towrite))))
+      (i32.eqz (local.get $towrite))))
+  (@else
+    (func $caml_flush_partial (param $ch (ref $channel)) (result i32)
+      (local $towrite i32) (local $buf (ref extern)) (local $fd i32)
+      (local $fd_offset (ref $fd_offset)) (local $offset i64)
+      (local $written i32) (local $tmp (ref $bytes))
+      (local.set $towrite (struct.get $channel $curr (local.get $ch)))
+      (if (i32.gt_u (local.get $towrite) (i32.const 0))
+        (then
+          (local.set $buf (struct.get $channel $buffer (local.get $ch)))
+          (if (ref.is_null (struct.get $channel $output (local.get $ch)))
+            (then
+              (local.set $fd (struct.get $channel $fd (local.get $ch)))
+              (local.set $fd_offset (call $get_fd_offset (local.get $fd)))
+              (local.set $offset
+                (struct.get $fd_offset $offset (local.get $fd_offset)))
+              ;; [O_APPEND]: every write goes to the end of the file,
+              ;; regardless of the current offset (which [seek] may have
+              ;; moved). Reposition to EOF before writing, like fs_node.js:
+              ;; the OS append flag alone is not portable for a positioned
+              ;; write (it appends on Linux but not macOS).
+              (if (struct.get $fd_offset $append (local.get $fd_offset))
+                (then (local.set $offset (call $file_size (local.get $fd)))))
+              (try
+                (do
+                  (local.set $written
+                    (if (result i32)
+                      (struct.get $fd_offset $seeked (local.get $fd_offset))
+                      (then
+                        (call $write (local.get $fd) (local.get $buf)
+                          (i32.const 0) (local.get $towrite)
+                          (local.get $offset)))
+                      (else
+                        (call $write' (local.get $fd) (local.get $buf)
+                          (i32.const 0) (local.get $towrite)
+                          (ref.null noextern))))))
+                (catch $javascript_exception (call $caml_handle_sys_error)))
+              (struct.set $fd_offset $offset (local.get $fd_offset)
+                (i64.add (local.get $offset)
+                  (i64.extend_i32_u (local.get $written))))
+              (if (i32.gt_u (local.get $towrite) (local.get $written))
+                (then
+                  (call $ta_copy (local.get $buf) (i32.const 0)
+                    (local.get $written) (local.get $towrite))))
+              (local.set $towrite
+                (i32.sub (local.get $towrite) (local.get $written)))
+              (struct.set $channel $curr (local.get $ch)
+                (local.get $towrite)))
+            (else
+              (local.set $tmp
+                (array.new $bytes (i32.const 0) (local.get $towrite)))
+              (call $caml_blit_dataview_to_bytes
+                (struct.get $channel $buffer_view (local.get $ch))
+                (i32.const 0) (local.get $tmp) (i32.const 0)
+                (local.get $towrite))
+              (drop
+                (call $caml_js_fun_call
+                  (ref.as_non_null
+                    (struct.get $channel $output (local.get $ch)))
+                  (array.new_fixed $block 2 (ref.i31 (i32.const 0))
+                    (call $caml_jsbytes_of_string (local.get $tmp)))))
+              (struct.set $channel $curr (local.get $ch) (i32.const 0))
+              (local.set $towrite (i32.const 0))))))
+      (i32.eqz (local.get $towrite))))
+)
 
 (func $caml_putblock
   (param $ch (ref $channel)) (param $s (ref $bytes)) (param $pos i32)
@@ -1505,26 +1495,27 @@
 )
 
 (@if $wasi
-(@then
-(func $caml_ml_get_channel_offset (export "caml_ml_get_channel_offset")
-  (param $ch (ref eq)) (result i64)
-  (local $fd i32) (local $buffer i32) (local $res i32)
-  (local.set $fd
-    (struct.get $channel $fd (ref.cast (ref $channel) (local.get $ch))))
-  (local.set $buffer (call $get_buffer))
-  (local.set $res
-    (call $fd_seek (local.get $fd) (i64.const 0) (i32.const 1)
-      (local.get $buffer)))
-  (call $caml_handle_sys_error_if (ref.i31 (i32.const 0)) (local.get $res))
-  (i64.load $m (local.get $buffer))
-) )
-(@else
-(func $caml_ml_get_channel_offset (export "caml_ml_get_channel_offset")
-  (param $ch (ref eq)) (result i64)
-  (struct.get $fd_offset $offset
-    (call $get_fd_offset
-      (struct.get $channel $fd (ref.cast (ref $channel) (local.get $ch)))))
-) ) )
+  (@then
+    (func $caml_ml_get_channel_offset (export "caml_ml_get_channel_offset")
+      (param $ch (ref eq)) (result i64)
+      (local $fd i32) (local $buffer i32) (local $res i32)
+      (local.set $fd
+        (struct.get $channel $fd (ref.cast (ref $channel) (local.get $ch))))
+      (local.set $buffer (call $get_buffer))
+      (local.set $res
+        (call $fd_seek (local.get $fd) (i64.const 0) (i32.const 1)
+          (local.get $buffer)))
+      (call $caml_handle_sys_error_if (ref.i31 (i32.const 0))
+        (local.get $res))
+      (i64.load $m (local.get $buffer))))
+  (@else
+    (func $caml_ml_get_channel_offset (export "caml_ml_get_channel_offset")
+      (param $ch (ref eq)) (result i64)
+      (struct.get $fd_offset $offset
+        (call $get_fd_offset
+          (struct.get $channel $fd
+            (ref.cast (ref $channel) (local.get $ch)))))))
+)
 
 (func $caml_ml_output_bigarray (export "caml_ml_output_bigarray")
   (param $ch (ref eq)) (param $a (ref eq)) (param $vpos (ref eq))

@@ -51,7 +51,7 @@
 (global $lex_check_code_field i32 (i32.const 10))
 (global $lex_code_field i32 (i32.const 11))
 
-(global $lexing_empty_token (ref $bytes) (@string "lexing: empty token" ))
+(global $lexing_empty_token (ref $bytes) (@string "lexing: empty token"))
 
 (func $caml_lex_engine (export "caml_lex_engine")
   (param $vtbl (ref eq)) (param $start_state (ref eq))

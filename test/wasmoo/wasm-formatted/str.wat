@@ -285,7 +285,7 @@
                                     (br_if $continue
                                       (i32.eqz (local.get $pos)))
                                     (br_if $continue
-                                      (i32.eq (@char "\n" )
+                                      (i32.eq (@char "\n")
                                         (array.get_u $bytes (local.get $s)
                                           (i32.sub (local.get $pos)
                                             (i32.const 1)))))
@@ -295,7 +295,7 @@
                                     (i32.eq (local.get $pos)
                                       (local.get $len)))
                                   (br_if $continue
-                                    (i32.eq (@char "\n" )
+                                    (i32.eq (@char "\n")
                                       (array.get_u $bytes (local.get $s)
                                         (local.get $pos))))
                                   (br $backtrack))
@@ -540,7 +540,7 @@
   (ref.i31 (i32.const 0))
 )
 
-(@string $search_forward "Str.search_forward" )
+(@string $search_forward "Str.search_forward")
 
 (func (export "re_search_forward")
   (param $re (ref eq)) (param $vs (ref eq)) (param $vpos (ref eq))
@@ -564,7 +564,7 @@
   (array.new_fixed $block 1 (ref.i31 (i32.const 0)))
 )
 
-(@string $search_backward "Str.search_backward" )
+(@string $search_backward "Str.search_backward")
 
 (func (export "re_search_backward")
   (param $re (ref eq)) (param $vs (ref eq)) (param $vpos (ref eq))
@@ -588,7 +588,7 @@
   (array.new_fixed $block 1 (ref.i31 (i32.const 0)))
 )
 
-(@string $string_match "Str.string_match" )
+(@string $string_match "Str.string_match")
 
 (func (export "re_string_match")
   (param $re (ref eq)) (param $vs (ref eq)) (param $vpos (ref eq))
@@ -609,7 +609,7 @@
   (array.new_fixed $block 1 (ref.i31 (i32.const 0)))
 )
 
-(@string $string_partial_match "Str.string_partial_match" )
+(@string $string_partial_match "Str.string_partial_match")
 
 (func (export "re_partial_match")
   (param $re (ref eq)) (param $vs (ref eq)) (param $vpos (ref eq))
@@ -630,8 +630,8 @@
   (array.new_fixed $block 1 (ref.i31 (i32.const 0)))
 )
 
-(@string $illegal_backslash "Str.replace: illegal backslash sequence" )
-(@string $unmatched_group "Str.replace: reference to unmatched group" )
+(@string $illegal_backslash "Str.replace: illegal backslash sequence")
+(@string $unmatched_group "Str.replace: reference to unmatched group")
 
 (func (export "re_replacement_text")
   (param $vrepl (ref eq)) (param $vgroups (ref eq)) (param $vorig (ref eq))
@@ -649,7 +649,7 @@
       (then
         (local.set $c (array.get_u $bytes (local.get $repl) (local.get $i)))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (if (i32.ne (local.get $c) (@char "\\" ))
+        (if (i32.ne (local.get $c) (@char "\\"))
           (then
             (local.set $len (i32.add (local.get $len) (i32.const 1)))
             (br $loop)))
@@ -657,11 +657,11 @@
           (then (call $caml_failwith (global.get $illegal_backslash))))
         (local.set $c (array.get_u $bytes (local.get $repl) (local.get $i)))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (if (i32.eq (local.get $c) (@char "\\" ))
+        (if (i32.eq (local.get $c) (@char "\\"))
           (then
             (local.set $len (i32.add (local.get $len) (i32.const 1)))
             (br $loop)))
-        (local.set $c (i32.sub (local.get $c) (@char "0" )))
+        (local.set $c (i32.sub (local.get $c) (@char "0")))
         (if (i32.gt_u (local.get $c) (i32.const 9))
           (then
             (local.set $len (i32.add (local.get $len) (i32.const 2)))
@@ -694,25 +694,25 @@
       (then
         (local.set $c (array.get_u $bytes (local.get $repl) (local.get $i)))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (if (i32.ne (local.get $c) (@char "\\" ))
+        (if (i32.ne (local.get $c) (@char "\\"))
           (then
             (array.set $bytes (local.get $res) (local.get $j) (local.get $c))
             (local.set $j (i32.add (local.get $j) (i32.const 1)))
             (br $loop)))
         (local.set $c (array.get_u $bytes (local.get $repl) (local.get $i)))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (if (i32.eq (local.get $c) (@char "\\" ))
+        (if (i32.eq (local.get $c) (@char "\\"))
           (then
             (array.set $bytes (local.get $res) (local.get $j) (local.get $c))
             (local.set $j (i32.add (local.get $j) (i32.const 1)))
             (br $loop)))
-        (local.set $c (i32.sub (local.get $c) (@char "0" )))
+        (local.set $c (i32.sub (local.get $c) (@char "0")))
         (if (i32.gt_u (local.get $c) (i32.const 9))
           (then
-            (array.set $bytes (local.get $res) (local.get $j) (@char "\\" ))
+            (array.set $bytes (local.get $res) (local.get $j) (@char "\\"))
             (array.set $bytes (local.get $res)
               (i32.add (local.get $j) (i32.const 1))
-              (i32.add (local.get $c) (@char "0" )))
+              (i32.add (local.get $c) (@char "0")))
             (local.set $j (i32.add (local.get $j) (i32.const 2)))
             (br $loop)))
         (local.set $c (i32.shl (local.get $c) (i32.const 1)))

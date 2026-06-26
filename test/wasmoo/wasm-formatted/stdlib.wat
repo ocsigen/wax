@@ -41,13 +41,16 @@
 (import "sys" "ocaml_exit" (tag $ocaml_exit))
 (import "fail" "ocaml_exception" (tag $ocaml_exception (param (ref eq))))
 (@if $wasi
-(@then (import "wasi_snapshot_preview1" "proc_exit" (func $exit (param i32)))
-(import "io" "write_all_to_fd" (func $write_all_to_fd (param i32 (ref eq)))) )
-(@else
-(import "fail" "javascript_exception"
-  (tag $javascript_exception (param externref))
-) (import "bindings" "write" (func $write (param i32 anyref)))
-(import "bindings" "exit" (func $exit (param i32))) ) )
+  (@then
+    (import "wasi_snapshot_preview1" "proc_exit" (func $exit (param i32)))
+    (import "io" "write_all_to_fd"
+      (func $write_all_to_fd (param i32 (ref eq)))))
+  (@else
+    (import "fail" "javascript_exception"
+      (tag $javascript_exception (param externref)))
+    (import "bindings" "write" (func $write (param i32 anyref)))
+    (import "bindings" "exit" (func $exit (param i32))))
+)
 
 (type $block (array (mut (ref eq))))
 (type $bytes (array (mut i8)))
@@ -71,7 +74,7 @@
   (array.new $assoc_array (ref.null $assoc) (i32.const 1))
 )
 
-(@string $predef_prefix "predef:" )
+(@string $predef_prefix "predef:")
 
 ;; Build a symbol key: for predefs, prepend "predef:" to the name.
 ;; For compunits (is_predef=0), return name unchanged.
@@ -423,23 +426,22 @@
 
 (type $thunk (func (result (ref eq))))
 
-(@string $fatal_error "Fatal error: exception " )
-(@string $handle_uncaught_exception "Printexc.handle_uncaught_exception" )
-(@string $do_at_exit "Pervasives.do_at_exit" )
+(@string $fatal_error "Fatal error: exception ")
+(@string $handle_uncaught_exception "Printexc.handle_uncaught_exception")
+(@string $do_at_exit "Pervasives.do_at_exit")
 
 (global $uncaught_exception (mut externref) (ref.null extern))
 
 (@if (not $wasi)
-(@then
-(func $reraise_exception (result (ref eq))
-  (throw $javascript_exception (global.get $uncaught_exception))
-  (ref.i31 (i32.const 0))
-)
+  (@then
+    (func $reraise_exception (result (ref eq))
+      (throw $javascript_exception (global.get $uncaught_exception))
+      (ref.i31 (i32.const 0)))
 
-(func (export "caml_handle_uncaught_exception") (param $exn externref)
-  (global.set $uncaught_exception (local.get $exn))
-  (call $caml_main (ref.func $reraise_exception))
-) ) )
+    (func (export "caml_handle_uncaught_exception") (param $exn externref)
+      (global.set $uncaught_exception (local.get $exn))
+      (call $caml_main (ref.func $reraise_exception))))
+)
 
 (type $wrapper_func (func (param (ref $thunk))))
 (global $caml_main_wrapper (export "caml_main_wrapper")
@@ -480,8 +482,7 @@
         (local.set $msg
           (call $caml_string_concat (global.get $fatal_error)
             (call $caml_string_concat
-              (call $caml_format_exception (local.get $exn))
-              (@string "\n" ))))
+              (call $caml_format_exception (local.get $exn)) (@string "\n"))))
         (@if $wasi
           (@then (call $write_all_to_fd (i32.const 2) (local.get $msg)))
           (@else

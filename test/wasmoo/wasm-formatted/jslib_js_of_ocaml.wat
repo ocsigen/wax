@@ -16,43 +16,40 @@
 ;; Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
 (@if (not $wasi)
-(@then (import "jslib" "wrap" (func $wrap (param anyref) (result (ref eq))))
-(import "jslib" "unwrap" (func $unwrap (param (ref eq)) (result anyref)))
-(import "jslib" "caml_js_global"
-  (func $caml_js_global (param (ref eq)) (result (ref eq)))
-)
-(import "jslib" "caml_js_get"
-  (func $caml_js_get (param (ref eq) (ref eq)) (result (ref eq)))
-)
-(import "jslib" "caml_js_new"
-  (func $caml_js_new (param (ref eq) (ref eq)) (result (ref eq)))
-)
-(import "jslib" "caml_js_from_array"
-  (func $caml_js_from_array (param (ref eq)) (result (ref eq)))
-)
-(import "js" "caml_js_html_entities"
-  (func $caml_js_html_entities_js (param anyref) (result anyref))
-)
+  (@then
+    (import "jslib" "wrap" (func $wrap (param anyref) (result (ref eq))))
+    (import "jslib" "unwrap" (func $unwrap (param (ref eq)) (result anyref)))
+    (import "jslib" "caml_js_global"
+      (func $caml_js_global (param (ref eq)) (result (ref eq))))
+    (import "jslib" "caml_js_get"
+      (func $caml_js_get (param (ref eq) (ref eq)) (result (ref eq))))
+    (import "jslib" "caml_js_new"
+      (func $caml_js_new (param (ref eq) (ref eq)) (result (ref eq))))
+    (import "jslib" "caml_js_from_array"
+      (func $caml_js_from_array (param (ref eq)) (result (ref eq))))
+    (import "js" "caml_js_html_entities"
+      (func $caml_js_html_entities_js (param anyref) (result anyref)))
 
-(type $block (array (mut (ref eq)))) (type $bytes (array (mut i8)))
+    (type $block (array (mut (ref eq))))
+    (type $bytes (array (mut i8)))
 
-(func (export "caml_js_html_entities") (param $v (ref eq)) (result (ref eq))
-  (return_call $wrap
-    (call $caml_js_html_entities_js (call $unwrap (local.get $v))))
+    (func (export "caml_js_html_entities")
+      (param $v (ref eq)) (result (ref eq))
+      (return_call $wrap
+        (call $caml_js_html_entities_js (call $unwrap (local.get $v)))))
+
+    (@string $console "console")
+
+    (func (export "caml_js_get_console") (param (ref eq)) (result (ref eq))
+      (return_call $caml_js_get (call $caml_js_global (ref.i31 (i32.const 0)))
+        (global.get $console)))
+
+    (@string $XMLHttpRequest "XMLHttpRequest")
+
+    (func (export "caml_xmlhttprequest_create")
+      (param (ref eq)) (result (ref eq))
+      (return_call $caml_js_new
+        (call $caml_js_get (call $caml_js_global (ref.i31 (i32.const 0)))
+          (global.get $XMLHttpRequest))
+        (array.new_fixed $block 1 (ref.i31 (i32.const 0))))))
 )
-
-(@string $console "console" )
-
-(func (export "caml_js_get_console") (param (ref eq)) (result (ref eq))
-  (return_call $caml_js_get (call $caml_js_global (ref.i31 (i32.const 0)))
-    (global.get $console))
-)
-
-(@string $XMLHttpRequest "XMLHttpRequest" )
-
-(func (export "caml_xmlhttprequest_create") (param (ref eq)) (result (ref eq))
-  (return_call $caml_js_new
-    (call $caml_js_get (call $caml_js_global (ref.i31 (i32.const 0)))
-      (global.get $XMLHttpRequest))
-    (array.new_fixed $block 1 (ref.i31 (i32.const 0))))
-) ) )

@@ -32,18 +32,17 @@
 )
 
 (@if (>= $ocaml_version (5 2 0))
-(@then
-(func $caml_runtime_events_user_write
-  (export "caml_runtime_events_user_write")
-  (param (ref eq) (ref eq) (ref eq)) (result (ref eq))
-  (ref.i31 (i32.const 0))
-) )
-(@else
-(func $caml_runtime_events_user_write
-  (export "caml_runtime_events_user_write")
-  (param (ref eq) (ref eq)) (result (ref eq))
-  (ref.i31 (i32.const 0))
-) ) )
+  (@then
+    (func $caml_runtime_events_user_write
+      (export "caml_runtime_events_user_write")
+      (param (ref eq) (ref eq) (ref eq)) (result (ref eq))
+      (ref.i31 (i32.const 0))))
+  (@else
+    (func $caml_runtime_events_user_write
+      (export "caml_runtime_events_user_write")
+      (param (ref eq) (ref eq)) (result (ref eq))
+      (ref.i31 (i32.const 0))))
+)
 
 (func $caml_runtime_events_user_resolve
   (export "caml_runtime_events_user_resolve")

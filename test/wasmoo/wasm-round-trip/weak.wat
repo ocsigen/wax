@@ -24,24 +24,24 @@
 )
 
 (@if $wasi
-(@then (func $wrap (param $v (ref eq)) (result (ref eq)) (local.get $v))
-(func $unwrap (param $v (ref eq)) (result (ref eq)) (local.get $v))
-(func $weak_new (param $v (ref eq)) (result (ref eq)) (local.get $v))
-(func $weak_deref (param $r (ref eq)) (result (ref eq)) (local.get $r)) )
-(@else
-(import "bindings" "weak_new"
-  (func $weak_new (param (ref eq)) (result anyref))
+  (@then
+    (func $wrap (param $v (ref eq)) (result (ref eq)) (local.get $v))
+    (func $unwrap (param $v (ref eq)) (result (ref eq)) (local.get $v))
+    (func $weak_new (param $v (ref eq)) (result (ref eq)) (local.get $v))
+    (func $weak_deref (param $r (ref eq)) (result (ref eq)) (local.get $r)))
+  (@else
+    (import "bindings" "weak_new"
+      (func $weak_new (param (ref eq)) (result anyref)))
+    (import "bindings" "weak_deref"
+      (func $weak_deref (param anyref) (result eqref)))
+    (import "bindings" "weak_map_new" (func $weak_map_new (result (ref any))))
+    (import "bindings" "map_get"
+      (func $map_get (param (ref any) (ref eq)) (result anyref)))
+    (import "bindings" "map_set"
+      (func $map_set (param (ref any) (ref eq) (ref any))))
+    (import "jslib" "unwrap" (func $unwrap (param (ref eq)) (result anyref)))
+    (import "jslib" "wrap" (func $wrap (param anyref) (result (ref eq)))))
 )
-(import "bindings" "weak_deref"
-  (func $weak_deref (param anyref) (result eqref))
-) (import "bindings" "weak_map_new" (func $weak_map_new (result (ref any))))
-(import "bindings" "map_get"
-  (func $map_get (param (ref any) (ref eq)) (result anyref))
-)
-(import "bindings" "map_set"
-  (func $map_set (param (ref any) (ref eq) (ref any)))
-) (import "jslib" "unwrap" (func $unwrap (param (ref eq)) (result anyref)))
-(import "jslib" "wrap" (func $wrap (param anyref) (result (ref eq)))) ) )
 
 (type $block (array (mut (ref eq))))
 (type $bytes (array (mut i8)))
@@ -314,7 +314,7 @@
   (ref.i31 (i32.const 0))
 )
 
-(global $Weak_create (ref $bytes) (@string "Weak.create" ))
+(global $Weak_create (ref $bytes) (@string "Weak.create"))
 
 (func $caml_ephe_create (export "caml_ephe_create")
   (export "caml_weak_create") (param $vlen (ref eq)) (result (ref eq))

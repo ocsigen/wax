@@ -133,7 +133,7 @@
   (local.get $v)
 )
 
-(@string $Bytes_create "Bytes.create" )
+(@string $Bytes_create "Bytes.create")
 
 (func (export "caml_create_bytes") (export "caml_create_local_bytes")
   (param $len (ref eq)) (result (ref eq))

@@ -56,7 +56,7 @@
 (type $custom (sub (struct (field $ops (ref $custom_operations)))))
 
 (global $int32_ops (export "int32_ops") (ref $custom_operations)
-  (struct.new $custom_operations (@string "_i" ) (ref.func $int32_cmp)
+  (struct.new $custom_operations (@string "_i") (ref.func $int32_cmp)
     (ref.null $compare) (ref.func $int32_hash)
     (struct.new $fixed_length (i32.const 4) (i32.const 4))
     (ref.func $int32_serialize) (ref.func $int32_deserialize)
@@ -121,7 +121,7 @@
     (i32.rotl (i32.and (local.get $i) (i32.const 0xFF00FF00)) (i32.const 8)))
 )
 
-(global $INT32_ERRMSG (ref $bytes) (@string "Int32.of_string" ))
+(global $INT32_ERRMSG (ref $bytes) (@string "Int32.of_string"))
 
 (func $caml_int32_of_string (export "caml_int32_of_string")
   (param $v (ref eq)) (result (ref eq))
@@ -138,7 +138,7 @@
 )
 
 (global $nativeint_ops (export "nativeint_ops") (ref $custom_operations)
-  (struct.new $custom_operations (@string "_n" ) (ref.func $int32_cmp)
+  (struct.new $custom_operations (@string "_n") (ref.func $int32_cmp)
     (ref.null $compare) (ref.func $int32_hash)
     (struct.new $fixed_length (i32.const 4) (i32.const 8))
     (ref.func $nativeint_serialize) (ref.func $nativeint_deserialize)
@@ -155,7 +155,7 @@
 )
 
 (global $integer_too_large (ref $bytes)
-  (@string "input_value: native integer value too large" )
+  (@string "input_value: native integer value too large")
 )
 
 (func $nativeint_deserialize (param $s (ref eq)) (result (ref eq) i32)
@@ -171,7 +171,7 @@
   (struct.new $int32 (global.get $nativeint_ops) (local.get $i))
 )
 
-(global $NATIVEINT_ERRMSG (ref $bytes) (@string "Nativeint.of_string" ))
+(global $NATIVEINT_ERRMSG (ref $bytes) (@string "Nativeint.of_string"))
 
 (func $caml_nativeint_of_string (export "caml_nativeint_of_string")
   (param $v (ref eq)) (result (ref eq))

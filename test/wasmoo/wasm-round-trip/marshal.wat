@@ -53,75 +53,73 @@
 )
 (type $block (array (mut (ref eq))))
 (@if $wasi
-(@then
-(type $map
-  (struct
-    (field $size (mut i32))
-    (field $keys (mut (ref $block)))
-    (field $values (mut (ref $block))))
-)
-(func $map_new (result (ref any))
-  (struct.new $map (i32.const 0)
-    (array.new $block (ref.i31 (i32.const 0)) (i32.const 2))
-    (array.new $block (ref.i31 (i32.const 0)) (i32.const 2)))
-)
-(func $map_get (param $map (ref any)) (param $k (ref eq)) (result i31ref)
-  (local $m (ref $map)) (local $size i32) (local $keys (ref $block))
-  (local $i i32)
-  (local.set $m (ref.cast (ref $map) (local.get $map)))
-  (local.set $size (struct.get $map $size (local.get $m)))
-  (local.set $keys (struct.get $map $keys (local.get $m)))
-  (loop $loop
-    (if (i32.lt_u (local.get $i) (local.get $size))
-      (then
-        (if
-          (ref.eq (array.get $block (local.get $keys) (local.get $i))
-            (local.get $k))
+  (@then
+    (type $map
+      (struct
+        (field $size (mut i32))
+        (field $keys (mut (ref $block)))
+        (field $values (mut (ref $block)))))
+    (func $map_new (result (ref any))
+      (struct.new $map (i32.const 0)
+        (array.new $block (ref.i31 (i32.const 0)) (i32.const 2))
+        (array.new $block (ref.i31 (i32.const 0)) (i32.const 2))))
+    (func $map_get (param $map (ref any)) (param $k (ref eq)) (result i31ref)
+      (local $m (ref $map)) (local $size i32) (local $keys (ref $block))
+      (local $i i32)
+      (local.set $m (ref.cast (ref $map) (local.get $map)))
+      (local.set $size (struct.get $map $size (local.get $m)))
+      (local.set $keys (struct.get $map $keys (local.get $m)))
+      (loop $loop
+        (if (i32.lt_u (local.get $i) (local.get $size))
           (then
-            (return
-              (ref.cast (ref i31)
-                (array.get $block (struct.get $map $values (local.get $m))
-                  (local.get $i))))))
-        (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $loop))))
-  (ref.null i31)
+            (if
+              (ref.eq (array.get $block (local.get $keys) (local.get $i))
+                (local.get $k))
+              (then
+                (return
+                  (ref.cast (ref i31)
+                    (array.get $block (struct.get $map $values (local.get $m))
+                      (local.get $i))))))
+            (local.set $i (i32.add (local.get $i) (i32.const 1)))
+            (br $loop))))
+      (ref.null i31))
+    (func $map_set
+      (param $map (ref any)) (param $k (ref eq)) (param $v (ref i31))
+      (local $m (ref $map)) (local $i i32) (local $keys (ref $block))
+      (local $size i32) (local $a (ref $block))
+      (local.set $m (ref.cast (ref $map) (local.get $map)))
+      (local.set $i (struct.get $map $size (local.get $m)))
+      (local.set $keys (struct.get $map $keys (local.get $m)))
+      (if (i32.eq (local.get $i) (array.len (local.get $keys)))
+        (then
+          (local.set $size (i32.shl (local.get $i) (i32.const 1)))
+          (local.set $a
+            (array.new $block (ref.i31 (i32.const 0)) (local.get $size)))
+          (array.copy $block $block (local.get $a) (i32.const 0)
+            (local.get $keys) (i32.const 0) (local.get $i))
+          (struct.set $map $keys (local.get $m) (local.get $a))
+          (local.set $keys (local.get $a))
+          (local.set $a
+            (array.new $block (ref.i31 (i32.const 0)) (local.get $size)))
+          (array.copy $block $block (local.get $a) (i32.const 0)
+            (struct.get $map $values (local.get $m)) (i32.const 0)
+            (local.get $i))
+          (struct.set $map $values (local.get $m) (local.get $a))))
+      (array.set $block (local.get $keys) (local.get $i) (local.get $k))
+      (array.set $block (struct.get $map $values (local.get $m))
+        (local.get $i) (local.get $v))
+      (struct.set $map $size (local.get $m)
+        (i32.add (local.get $i) (i32.const 1)))))
+  (@else
+    (import "bindings" "map_new" (func $map_new (result (ref any))))
+    (import "bindings" "map_get"
+      (func $map_get (param (ref any) (ref eq)) (result i31ref)))
+    (import "bindings" "map_set"
+      (func $map_set (param (ref any) (ref eq) (ref i31)))))
 )
-(func $map_set (param $map (ref any)) (param $k (ref eq)) (param $v (ref i31))
-  (local $m (ref $map)) (local $i i32) (local $keys (ref $block))
-  (local $size i32) (local $a (ref $block))
-  (local.set $m (ref.cast (ref $map) (local.get $map)))
-  (local.set $i (struct.get $map $size (local.get $m)))
-  (local.set $keys (struct.get $map $keys (local.get $m)))
-  (if (i32.eq (local.get $i) (array.len (local.get $keys)))
-    (then
-      (local.set $size (i32.shl (local.get $i) (i32.const 1)))
-      (local.set $a
-        (array.new $block (ref.i31 (i32.const 0)) (local.get $size)))
-      (array.copy $block $block (local.get $a) (i32.const 0) (local.get $keys)
-        (i32.const 0) (local.get $i))
-      (struct.set $map $keys (local.get $m) (local.get $a))
-      (local.set $keys (local.get $a))
-      (local.set $a
-        (array.new $block (ref.i31 (i32.const 0)) (local.get $size)))
-      (array.copy $block $block (local.get $a) (i32.const 0)
-        (struct.get $map $values (local.get $m)) (i32.const 0) (local.get $i))
-      (struct.set $map $values (local.get $m) (local.get $a))))
-  (array.set $block (local.get $keys) (local.get $i) (local.get $k))
-  (array.set $block (struct.get $map $values (local.get $m)) (local.get $i)
-    (local.get $v))
-  (struct.set $map $size (local.get $m)
-    (i32.add (local.get $i) (i32.const 1)))
-) )
-(@else (import "bindings" "map_new" (func $map_new (result (ref any))))
-(import "bindings" "map_get"
-  (func $map_get (param (ref any) (ref eq)) (result i31ref))
-)
-(import "bindings" "map_set"
-  (func $map_set (param (ref any) (ref eq) (ref i31)))
-) ) )
 
 (global $input_val_from_string (ref $bytes)
-  (@string "input_value_from_string" )
+  (@string "input_value_from_string")
 )
 
 (func $caml_input_value_from_bytes (export "caml_input_value_from_bytes")
@@ -146,11 +144,9 @@
   (return_call $intern_rec (local.get $s) (local.get $h))
 )
 
-(global $truncated_obj (ref $bytes)
-  (@string "input_value: truncated object" )
-)
+(global $truncated_obj (ref $bytes) (@string "input_value: truncated object"))
 
-(global $input_value (ref $bytes) (@string "input_value" ))
+(global $input_value (ref $bytes) (@string "input_value"))
 
 (func $caml_input_value (export "caml_input_value")
   (param $ch (ref eq)) (result (ref eq))
@@ -481,19 +477,19 @@
 )
 
 (global $integer_too_large (ref $bytes)
-  (@string "input_value: integer too large" )
+  (@string "input_value: integer too large")
 )
-(global $code_pointer (ref $bytes) (@string "input_value: code pointer" ))
-(global $ill_formed (ref $bytes) (@string "input_value: ill-formed message" ))
+(global $code_pointer (ref $bytes) (@string "input_value: code pointer"))
+(global $ill_formed (ref $bytes) (@string "input_value: ill-formed message"))
 
 (global $unknown_custom (ref $bytes)
-  (@string "input_value: unknown custom block identifier" )
+  (@string "input_value: unknown custom block identifier")
 )
 (global $err_expected_size (ref $bytes)
-  (@string "input_value: expected a fixed-size custom block" )
+  (@string "input_value: expected a fixed-size custom block")
 )
 (global $incorrect_size (ref $bytes)
-  (@string "input_value: incorrect length of serialized custom block" )
+  (@string "input_value: incorrect length of serialized custom block")
 )
 
 (func $intern_custom
@@ -555,7 +551,7 @@
     (return))
   (call $caml_failwith
     (call $caml_string_concat (local.get $prim)
-      (@string ": compressed object, cannot decompress" )))
+      (@string ": compressed object, cannot decompress")))
 )
 
 (func $intern_rec
@@ -813,7 +809,7 @@
 )
 
 (global $too_large (ref $bytes)
-  (@string ": object too large to be read back on a 32-bit platform" )
+  (@string ": object too large to be read back on a 32-bit platform")
 )
 
 (func $fail_too_large (param $prim (ref eq))
@@ -821,14 +817,14 @@
     (call $caml_string_concat (local.get $prim) (global.get $too_large)))
 )
 
-(global $bad_object (ref $bytes) (@string ": bad object" ))
+(global $bad_object (ref $bytes) (@string ": bad object"))
 
 (func $fail_bad_object (param $prim (ref eq))
   (call $caml_failwith
     (call $caml_string_concat (local.get $prim) (global.get $bad_object)))
 )
 
-(global $bad_length (ref $bytes) (@string ": bad length" ))
+(global $bad_length (ref $bytes) (@string ": bad length"))
 
 (func $fail_bad_length (param $prim (ref eq))
   (call $caml_failwith
@@ -901,17 +897,16 @@
     (local.get $compressed))
 )
 
-(global $marshal_data_size (ref $bytes) (@string "Marshal.data_size" ))
+(global $marshal_data_size (ref $bytes) (@string "Marshal.data_size"))
 
 (@if (>= $ocaml_version (5 1 0))
-(@then
-(global $caml_marshal_header_size (export "caml_marshal_header_size") i32
-  (i32.const 16)
-) )
-(@else
-(global $caml_marshal_header_size (export "caml_marshal_header_size") i32
-  (i32.const 20)
-) ) )
+  (@then
+    (global $caml_marshal_header_size (export "caml_marshal_header_size") i32
+      (i32.const 16)))
+  (@else
+    (global $caml_marshal_header_size (export "caml_marshal_header_size") i32
+      (i32.const 20)))
+)
 
 (func $caml_marshal_data_size (export "caml_marshal_data_size")
   (param $buf (ref eq)) (param $ofs (ref eq)) (result (ref eq))
@@ -995,7 +990,7 @@
 )
 
 (global $buffer_overflow (ref $bytes)
-  (@string "Marshal.to_buffer: buffer overflow" )
+  (@string "Marshal.to_buffer: buffer overflow")
 )
 
 (global $SIZE_EXTERN_OUTPUT_BLOCK i32 (i32.const 8100))
@@ -1279,7 +1274,7 @@
 )
 
 (global $incorrect_sizes (ref $bytes)
-  (@string "output_value: incorrect fixed sizes specified by " )
+  (@string "output_value: incorrect fixed sizes specified by ")
 )
 
 (func $extern_custom
@@ -1335,20 +1330,16 @@
 )
 
 (global $array_too_large (ref $bytes)
-  (@string "output_value: array cannot be read back on 32-bit platform" )
+  (@string "output_value: array cannot be read back on 32-bit platform")
 )
-(global $func_value (ref $bytes) (@string "output_value: functional value" ))
-(global $cont_value (ref $bytes)
-  (@string "output_value: continuation value" )
-)
+(global $func_value (ref $bytes) (@string "output_value: functional value"))
+(global $cont_value (ref $bytes) (@string "output_value: continuation value"))
 (global $js_value (ref $bytes)
-  (@string "output_value: abstract value (JavaScript value)" )
+  (@string "output_value: abstract value (JavaScript value)")
 )
-(global $abstract_value (ref $bytes)
-  (@string "output_value: abstract value" )
-)
+(global $abstract_value (ref $bytes) (@string "output_value: abstract value"))
 (global $cust_value (ref $bytes)
-  (@string "output_value: abstract value (Custom)" )
+  (@string "output_value: abstract value (Custom)")
 )
 
 (func $extern_rec (param $s (ref $extern_state)) (param $v (ref eq))

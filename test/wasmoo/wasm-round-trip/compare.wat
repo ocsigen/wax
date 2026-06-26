@@ -220,10 +220,10 @@
   (local.get $res)
 )
 
-(global $abstract_value (ref $bytes) (@string "compare: abstract value" ))
-(global $functional_value (ref $bytes) (@string "compare: functional value" ))
+(global $abstract_value (ref $bytes) (@string "compare: abstract value"))
+(global $functional_value (ref $bytes) (@string "compare: functional value"))
 (global $continuation_value (ref $bytes)
-  (@string "compare: continuation value" )
+  (@string "compare: continuation value")
 )
 
 (func $do_compare_val
