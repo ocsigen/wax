@@ -46,7 +46,7 @@ fuzz/smith.sh [count] [bytes]                 # generate valid modules + check t
 fuzz/triage.sh REPORT       # collapse a findings report into ranked bug signatures
 
 # Wax *source* side (compile direction: parser, type checker, to_wasm):
-fuzz/wax-corpus.sh          # decompile the valid wasm corpus to fuzz/corpus-wax/ (.wax seeds)
+fuzz/wax-corpus.sh [smith-count] [bytes]   # build .wax seeds: spec corpus + smith modules
 fuzz/mutate-wax.sh [count]  # AST-mutate the wax seeds + check them
 
 # Execution (behavioural-equivalence) oracles — run on spec .wast files:
@@ -76,18 +76,24 @@ Everything above starts from *wasm* and runs `wasm → wax → wasm`. That barel
 exercises the *compile* direction — the Wax parser, type checker and `to_wasm` —
 on anything the decompiler would not itself emit. Two scripts close that gap:
 
-* `wax-corpus.sh` decompiles the valid wasm corpus into `fuzz/corpus-wax/valid/`,
-  a corpus of valid, type-correct Wax (wax's own output). `run.sh
-  fuzz/corpus-wax` sweeps it, exercising the `wax → wat/wax/wasm` directions and
-  the wax round-trip (oracle 6).
+* `wax-corpus.sh` builds the `.wax` seed set in `fuzz/corpus-wax/valid/` by
+  decompiling, with wax itself, both the valid wasm corpus (small, curated
+  spec-suite modules) and a batch of `wasm-tools smith` modules (default 1000 at
+  8192 seed bytes — tens to hundreds of lines, far more intertwined, so the
+  mutator explores deep code rather than only tiny snippets). Every seed is
+  valid, type-correct Wax (wax's own output). `run.sh fuzz/corpus-wax` sweeps it,
+  exercising the `wax → wat/wax/wasm` directions and the wax round-trip (oracle 6).
 * `mutate-wax.sh` is the AST mutation fuzzer. The `fuzz_mutate` tool
-  (`src/bin/fuzz_mutate.ml`) parses a `.wax` seed, mutates one AST node — swap a
-  binary/unary operator, tweak a literal, reorder a block's first two statements
-  — and reprints it. Because the output is printed from a real AST it *always
-  re-parses*, so ~95% of mutants reach the type checker and `to_wasm` (a
-  token-level mutator mostly produces parse errors that never get that far).
-  Mutants have unknown validity, so the live oracles are crashes, emitter
-  soundness, and the wax round-trip.
+  (`src/bin/fuzz_mutate.ml`) parses a `.wax` seed and mutates one AST node —
+  graft another subexpression from the same program in its place, swap a
+  binary/unary operator or a binop's operands, retype a cast, substitute an
+  edge-value literal, or swap/delete/duplicate a statement — then reprints it.
+  Because the output is printed from a real AST it *always re-parses*, so ~57% of
+  mutants reach the type checker and `to_wasm` (the rest exercise its rejection
+  paths; a token-level mutator mostly produces parse errors that never get that
+  far). Mutants have unknown validity, so the live oracles are crashes, emitter
+  soundness, and the wax round-trip; each finding is re-verified to drop transient
+  load noise.
 
 There is no external reference for Wax (no `wasm-tools validate` equivalent), so
 a wax-side bug is: a crash; wax accepting a program whose emitted wasm the
