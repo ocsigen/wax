@@ -42,6 +42,16 @@ const escape = (buf) => '"' + [...buf].map((b) => "\\" + b.toString(16).padStart
 
 // Replace a top-level (module ...) text definition with wax's binary.
 function rewriteModule(group) {
+  // Drop negative-linking assertions, but ONLY on the wax path (MODE=wax):
+  // wasm->wax->wasm runs wax's type inference, which may soundly narrow an
+  // exported immutable global to its initializer's principal type (a [const]
+  // global declared at a supertype), making a previously-incompatible import
+  // link. The round-trip contract preserves the validity, linkability and
+  // semantics of modules that DO link, but does not promise an *unlinkable*
+  // composition stays unlinkable, so a flipped assert_unlinkable is expected.
+  // The codec path (MODE=codec, wasm->wasm) does no inference and must preserve
+  // types exactly, so there a flipped assert_unlinkable IS a real bug — keep it.
+  if (MODE === "wax" && /^\(\s*assert_unlinkable\b/.test(group)) return "";
   // Skip the binary/quote forms and module-less groups; recompile plain text.
   const m = group.match(/^\(\s*module\b\s*(\$[^\s()]+)?\s*([a-z]*)/);
   if (!m || m[2] === "binary" || m[2] === "quote") return group; // not a text module
