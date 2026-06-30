@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-379660a5.js";
+            window.path_to_searchindex_js = "searchindex-52464cd5.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -381,6 +381,18 @@ value:</p>
 <p>This is a stack discipline, not a “last expression” rule: the body must leave
 <em>exactly</em> the values the block’s type describes — no more, no less. A void
 block that leaves a value, or a <code>do i32</code> block that leaves two, is an error.</p>
+<p>The result type may be <strong>omitted</strong> and inferred — from the value the body leaves
+(including a value branched to the block’s own label), or from the surrounding
+context such as a function’s result type, a typed binding, or a call argument.
+It is needed only where neither determines it, for instance when two branches
+produce values with no common supertype. So the block above can drop its <code>i32</code>:</p>
+<pre><code class="language-wax">answer = do {
+    42;
+};
+</code></pre>
+<p><code>loop</code>, <code>try</code>, and <code>try_table</code> infer their result type the same way. Converting
+WebAssembly to Wax drops the annotation wherever it is redundant, and re-reading
+that Wax recovers the type by the same inference.</p>
 <p>A block type may also take parameters off the enclosing stack, using the full
 <code>(params) -&gt; results</code> form:</p>
 <pre><code class="language-wax">do (i32) -&gt; i32 {
@@ -413,6 +425,15 @@ branches must then leave a value of that type, so the <code>else</code> becomes 
 } else {
     0;
 }
+</code></pre>
+<p>Like a block’s result type, the <code>=&gt; &lt;type&gt;</code> may be <strong>omitted</strong> and inferred —
+from the branches (here both produce <code>i32</code>) or from the surrounding context. The
+<code>else</code> stays required, since a value-producing <code>if</code> needs both branches:</p>
+<pre><code class="language-wax">x = if condition {
+    1;
+} else {
+    0;
+};
 </code></pre>
 <h3 id="loops"><a class="header" href="#loops">Loops</a></h3>
 <p>A <code>loop</code> runs its body once and then falls through to whatever follows — it does

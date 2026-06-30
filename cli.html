@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-379660a5.js";
+            window.path_to_searchindex_js = "searchindex-52464cd5.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -233,7 +233,7 @@ files (see <a href="#formatting">Formatting</a>) and <code>check</code> validate
 <li>
 <p><strong><code>-s</code></strong>, <strong><code>--strict-validate</code></strong></p>
 <ul>
-<li>Perform strict reference validation (for Wasm Text). Overrides default relaxed validation.</li>
+<li>Perform strict reference validation for Wasm Text input (overrides the default relaxed validation). Wasm <em>binary</em> input is always validated strictly, regardless of this flag. When compiling Wax or Wasm Text to a binary, functions referenced by <code>ref.func</code> only inside a function body are automatically declared (via a declarative element segment), so the output passes strict validation.</li>
 </ul>
 </li>
 <li>
@@ -410,8 +410,8 @@ themselves cause a non-zero exit — unless promoted to an error with
 <ul>
 <li><strong><code>-f</code></strong>, <strong><code>--format</code></strong>, <strong><code>--input-format</code></strong> <em>FORMAT</em> — force the format of
 all files, overriding extension detection.</li>
-<li><strong><code>-s</code></strong>, <strong><code>--strict-validate</code></strong> — strict reference validation (for Wasm
-Text), as above.</li>
+<li><strong><code>-s</code></strong>, <strong><code>--strict-validate</code></strong> — strict reference validation for Wasm Text,
+as above (Wasm binary is always strict).</li>
 <li><strong><code>-W</code></strong> <em>NAME=LEVEL</em>, <strong><code>--warn</code></strong> <em>NAME=LEVEL</em> — set a warning’s level, as
 above.</li>
 <li><strong><code>--color</code></strong> <em>WHEN</em> — as above.</li>

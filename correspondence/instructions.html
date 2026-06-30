@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-379660a5.js";
+            window.path_to_searchindex_js = "../searchindex-52464cd5.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f031991a.js"></script>
@@ -364,6 +364,13 @@ do i32 { ... }
 { ... }                  ;; equivalent to do { ... }
 if cond =&gt; (i32) -&gt; i32 { ... } else { ... }
 </code></pre>
+<p>A single result type can be <strong>inferred</strong>, so converting from WebAssembly drops
+it wherever it is redundant: a <code>do i32 { ... }</code> becomes <code>do { ... }</code>, an
+<code>if cond =&gt; i32 { ... }</code> loses its <code>=&gt; i32</code>, and likewise for <code>loop</code>, <code>try</code>, and
+<code>try_table</code>. The type is recovered when reading the Wax back, from the values
+reaching the block’s exit or from the surrounding context (see
+<a href="../language.html#blocks">Type inference</a>). Parameterized and multi-result block
+types are always kept.</p>
 <h2 id="reference-instructions"><a class="header" href="#reference-instructions">Reference Instructions</a></h2>
 <div class="table-wrapper">
 <table>

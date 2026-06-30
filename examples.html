@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-379660a5.js";
+            window.path_to_searchindex_js = "searchindex-52464cd5.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -475,8 +475,32 @@ fn make_origin() -&gt; &amp;eq {
     {x: 0, y: 0};
 }
 </code></pre>
-<h2 id="arrays"><a class="header" href="#arrays">Arrays</a></h2>
+<h2 id="inferring-block-result-types"><a class="header" href="#inferring-block-result-types">Inferring Block Result Types</a></h2>
 <h3 id="wax-10"><a class="header" href="#wax-10">Wax</a></h3>
+<p>A block’s result type — <code>=&gt; T</code> on an <code>if</code>, or the type after <code>do</code> (and likewise
+<code>loop</code>, <code>try</code>, and <code>try_table</code>) — may be omitted where it is fixed by the values
+the block produces or by the surrounding context:</p>
+<pre><code class="language-wax">#[export = "max0"]
+fn max0(n: i32) -&gt; i32 {
+    // `=&gt; i32` omitted: inferred from the branches and the return type
+    if n &lt;s 0 {
+        0;
+    } else {
+        n;
+    }
+}
+
+#[export = "answer"]
+fn answer() -&gt; i32 {
+    // the `do` block's result type is inferred from the value it leaves
+    let x = do {
+        40 + 2;
+    };
+    x;
+}
+</code></pre>
+<h2 id="arrays"><a class="header" href="#arrays">Arrays</a></h2>
+<h3 id="wax-11"><a class="header" href="#wax-11">Wax</a></h3>
 <pre><code class="language-wax">type bytes = [mut i8];
 
 #[export = "sum_bytes"]
@@ -515,7 +539,7 @@ fn fill_bytes(arr: &amp;bytes, val: i32) {
 }
 </code></pre>
 <h2 id="exception-handling"><a class="header" href="#exception-handling">Exception Handling</a></h2>
-<h3 id="wax-11"><a class="header" href="#wax-11">Wax</a></h3>
+<h3 id="wax-12"><a class="header" href="#wax-12">Wax</a></h3>
 <pre><code class="language-wax">tag divide_by_zero();
 tag overflow();
 
@@ -538,7 +562,7 @@ fn try_divide(a: i32, b: i32) -&gt; i32 {
 }
 </code></pre>
 <h2 id="recursive-types-linked-list"><a class="header" href="#recursive-types-linked-list">Recursive Types (Linked List)</a></h2>
-<h3 id="wax-12"><a class="header" href="#wax-12">Wax</a></h3>
+<h3 id="wax-13"><a class="header" href="#wax-13">Wax</a></h3>
 <pre><code class="language-wax">type list = { value: i32, next: &amp;?list };
 
 #[export = "make_node"]
@@ -557,7 +581,7 @@ fn sum_list(head: &amp;?list) -&gt; i32 {
 }
 </code></pre>
 <h2 id="imports-and-exports"><a class="header" href="#imports-and-exports">Imports and Exports</a></h2>
-<h3 id="wax-13"><a class="header" href="#wax-13">Wax</a></h3>
+<h3 id="wax-14"><a class="header" href="#wax-14">Wax</a></h3>
 <pre><code class="language-wax">// Import a function from the host environment
 #[import = ("env", "log")]
 fn log(value: i32);
@@ -577,7 +601,7 @@ fn compute_and_log(x: i32) -&gt; i32 {
 </code></pre>
 <h2 id="hash-function"><a class="header" href="#hash-function">Hash Function</a></h2>
 <p>A more complex example showing bitwise operations:</p>
-<h3 id="wax-14"><a class="header" href="#wax-14">Wax</a></h3>
+<h3 id="wax-15"><a class="header" href="#wax-15">Wax</a></h3>
 <pre><code class="language-wax">#[export = "hash_mix_int"]
 fn hash_mix_int(h: i32, d: i32) -&gt; i32 {
     ((d * 0xcc9e2d51).rotl(15) * 0x1b873593 ^ h).rotl(13) * 5 + 0xe6546b64;
@@ -596,7 +620,7 @@ fn hash_finalize(h: i32) -&gt; i32 {
 <p>A character literal is an <code>i32</code> code point; a string literal builds a byte array
 (<code>[mut i8]</code> by default, or a named array type with the <code>T # "…"</code> prefix). See
 <a href="language.html#strings">Strings</a>.</p>
-<h3 id="wax-15"><a class="header" href="#wax-15">Wax</a></h3>
+<h3 id="wax-16"><a class="header" href="#wax-16">Wax</a></h3>
 <pre><code class="language-wax">type chars = [i8];
 
 #[export = "newline"]
@@ -625,7 +649,7 @@ UTF-8).</p>
 <p>Holes (<code>_</code>) plug in values that earlier statements leave on the operand stack.
 The two holes in <code>_ + _</code> consume <code>x * 2</code> and <code>y * 3</code>, left-to-right in the order
 they were produced. See <a href="language.html#holes">Holes</a> for the full rules.</p>
-<h3 id="wax-16"><a class="header" href="#wax-16">Wax</a></h3>
+<h3 id="wax-17"><a class="header" href="#wax-17">Wax</a></h3>
 <pre><code class="language-wax">#[export = "blend"]
 fn blend(x: i32, y: i32) -&gt; i32 {
     x * 2;
@@ -647,7 +671,7 @@ fn blend(x: i32, y: i32) -&gt; i32 {
 <p>A function may return several values, and a <code>let</code> can bind them all at once
 from a parenthesised list of names. The call runs once and its results are
 stored into the locals. See <a href="language.html#local-variables">Local Variables</a>.</p>
-<h3 id="wax-17"><a class="header" href="#wax-17">Wax</a></h3>
+<h3 id="wax-18"><a class="header" href="#wax-18">Wax</a></h3>
 <pre><code class="language-wax">fn divmod(a: i32, b: i32) -&gt; (i32, i32) {
     a /s b;
     a %s b;
