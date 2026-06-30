@@ -4447,7 +4447,10 @@ and type_simd_vector_op_call ctx i func recv meth args =
               ~location:(snd a.info));
         let>@ bound = lane_bound in
         let>@ l = int_literal a in
-        if Wax_utils.Uint64.to_int l >= bound then
+        (* Unsigned compare: a lane index too large even for an [int] must be
+           rejected, not crash [Uint64.to_int]'s assertion (as for the memory
+           lane index in [type_simd_mem_method_call]). *)
+        if Wax_utils.Uint64.compare l (Wax_utils.Uint64.of_int bound) >= 0 then
           Error.invalid_lane_index ctx.diagnostics ~location:(snd a.info) bound)
       else
         let operand = 1 + (k - nimm) in
