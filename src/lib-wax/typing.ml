@@ -1028,19 +1028,21 @@ let signed_cast ctx ty ty' =
              anon_comptype = None;
            });
       true
-  | (Number | Int), `I64 ->
+  | (Number | Int), (`I64 | `F32 | `F64) ->
+      (* [i64.extend_i32], [f*.convert_i32]: default the integer source to i32. *)
       Cell.set ty (Valtype i32_valtype);
       true
-  | LargeInt, `I64 ->
+  | LargeInt, (`I64 | `F32 | `F64) ->
+      (* [f*.convert_i64]: a [LargeInt] source defaults to i64. *)
       Cell.set ty (Valtype i64_valtype);
       true
   | LargeInt, _ ->
-      false (* never i32; a signed cast to a float is rejected too *)
+      false (* never i32; there is no integer-to-i32 signed conversion *)
   | Valtype { internal = I32; _ }, `I64
   | Valtype { internal = I32 | I64; _ }, (`F32 | `F64)
   | Valtype { internal = F32 | F64; _ }, (`I32 | `I64) ->
       true
-  | (Number | Int), (`I32 | `F32 | `F64) (* Floating types can make this fail *)
+  | (Number | Int), `I32 (* no integer-to-i32 signed conversion exists *)
   | Valtype { internal = I32; _ }, `I32
   | Valtype { internal = I64; _ }, (`I32 | `I64)
   | Valtype { internal = F32 | F64; _ }, (`F32 | `F64)
