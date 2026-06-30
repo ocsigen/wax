@@ -375,7 +375,7 @@ fn caml_is_continuation(v: &eq) -> i32 {
     #[export = "caml_start_fiber"]
     fn caml_start_fiber(p: &?eq) {
         // Start executing some code in a new fiber
-        let res: &eq =
+        let res =
             try {
                 try {
                     apply_pair(p as &pair);

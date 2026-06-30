@@ -5741,30 +5741,32 @@ and block ctx loc label params results br_params block =
    annotation is redundant. Read the fall-through's natural type off the stack,
    unconstrained, before [pop_args] coerces it to [result], and compare
    ([annotation_needed], as the leaf [check] arm does). Stay conservative
-   (needed) when the trailing instruction is itself a routable block/construction
-   — the routing already forced its type to [result], hiding its natural type —
-   or when the value reaches the exit only by a branch (a divergent or empty
-   fall-through), whose values are not on the stack to read. Returns the typed
-   body and that keep-bool. *)
+   (needed) only when the trailing instruction is a construction — routed through
+   [result] to resolve a context-pinned type name, which hides its natural type. A
+   trailing nested block is instead synthesized (routed through the inferring cell)
+   so its type joins like any other exit value. Returns the typed body and that
+   keep-bool. *)
 and block_keep_bool ctx loc label ~result ~br_params body =
-  (* A trailing construction / nested block is routed through [result] below (so
-     it resolves a name the context pins), which hides its natural type — keep the
-     surrounding annotation for it. Otherwise the keep-bool is decided from every
-     value reaching the exit: the fall-through, plus values branched to the label,
-     the latter collected at their natural types into [cs] (the branch-target [r]
-     is a [Collecting] cell). So a value delivered only by a branch — with a
-     divergent fall-through — still drops a redundant annotation. *)
-  let trailing_routable =
+  (* The keep-bool is decided from every value reaching the exit: the fall-through
+     plus values branched to the label, collected at their natural types into [cs]
+     (the branch-target [r] is a [Collecting] cell), then joined. Two trailing
+     forms need care. A trailing *construction* ([Struct]/[Array]/[String]/…) must
+     be routed through the concrete [result] so it resolves a context-pinned type
+     name — that hides its natural type, so keep the annotation for it. A trailing
+     *nested block* ([if]/[do]/[loop]/[try]/[try_table]) has no name to resolve, so
+     route it through [r] too: it synthesizes its own type, which then joins like
+     any other exit value and lets a redundant annotation drop. *)
+  let trailing_construction, trailing_nested_block =
     match List.rev body with
     | last :: _ -> (
         match last.desc with
         | Struct _ | StructDefault _ | Array _ | ArrayDefault _ | ArrayFixed _
-        | ArraySegment _ | String _ | If _ | Block _ | Loop _ | TryTable _
-        | Try _ ->
-            true
-        | Cast (e, _) -> is_null_initializer e
-        | _ -> false)
-    | [] -> false
+        | ArraySegment _ | String _ ->
+            (true, false)
+        | If _ | Block _ | Loop _ | TryTable _ | Try _ -> (false, true)
+        | Cast (e, _) -> (is_null_initializer e, false)
+        | _ -> (false, false))
+    | [] -> (false, false)
   in
   let cs = { collected = []; declared = Some result; needed = false } in
   let r = UnionFind.make (Collecting cs) in
@@ -5772,6 +5774,9 @@ and block_keep_bool ctx loc label ~result ~br_params body =
      mirror the caller's [br_params] arity with the [Collecting] cell so their
      values are recorded. *)
   let br = if Array.length br_params > 0 then [| r |] else [||] in
+  (* Route a trailing nested block through the inferring cell so it synthesizes;
+     a construction or leaf is checked against the concrete result. *)
+  let result_routing = if trailing_nested_block then r else result in
   with_empty_stack ctx ~location:loc ~kind:Block
     (let* block' =
        block_contents
@@ -5780,7 +5785,7 @@ and block_keep_bool ctx loc label ~result ~br_params body =
            control_types =
              (Option.map (fun l -> l.desc) label, br) :: ctx.control_types;
          }
-         [| result |] body
+         [| result_routing |] body
      in
      fun st ->
        (* Snapshot the fall-through's natural type before [pop_args] resolves it
@@ -5796,7 +5801,7 @@ and block_keep_bool ctx loc label ~result ~br_params body =
           were collected — so the join below only decides the keep-bool. *)
        let inferred = join_collected ctx ~location:loc cs.collected in
        let needed =
-         if trailing_routable then true
+         if trailing_construction then true
          else
            cs.needed
            ||

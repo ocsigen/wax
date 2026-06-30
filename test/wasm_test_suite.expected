@@ -221,68 +221,6 @@ from wasm:
   )
 Wax type-checking should have failed (type mismatch):
   fn f() -> i32 {
-      do {
-          do {
-              unreachable;
-          }
-      }
-  }
-from wasm:
-  (func $type-block-value-nested-unreachable-void-vs-num (result i32)
-    (block (block (unreachable)))
-  )
-Wax type-checking should have failed (type mismatch):
-  fn f() -> i32 {
-      'l_2: do i32 {
-          do {
-              br 'l_2 0 as i32;
-          }
-      }
-  }
-from wasm:
-  (func $type-block-value-nested-br-void-vs-num (result i32)
-    (block (result i32) (block (br 1 (i32.const 0))))
-  )
-Wax type-checking should have failed (type mismatch):
-  fn f() -> i32 {
-      'l_2: do i32 {
-          do {
-              do {
-                  br 'l_2 0 as i32;
-              }
-          }
-      }
-  }
-from wasm:
-  (func $type-block-value-nested2-br-void-vs-num (result i32)
-    (block (result i32) (block (block (br 2 (i32.const 0)))))
-  )
-Wax type-checking should have failed (type mismatch):
-  fn f() -> i32 {
-      do {
-          do {
-              return 0 as i32;
-          }
-      }
-  }
-from wasm:
-  (func $type-block-value-nested-return-void-vs-num (result i32)
-    (block (block (return (i32.const 0))))
-  )
-Wax type-checking should have failed (type mismatch):
-  fn f() -> i32 {
-      loop {
-          do {
-              unreachable;
-          }
-      }
-  }
-from wasm:
-  (func $type-loop-value-nested-unreachable-void-vs-num (result i32)
-    (loop (block (unreachable)))
-  )
-Wax type-checking should have failed (type mismatch):
-  fn f() -> i32 {
       'l_2: loop {
           nop;
           br 'l_2;
