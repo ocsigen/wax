@@ -41,11 +41,33 @@ A lane index near u64 max is rejected, not an assertion failure:
   4 │ }
   [128]
 
-In-range lanes (the signed and unsigned extremes of the width) are accepted:
+A float literal is not a valid integer lane (it would otherwise reach the
+encoder's int_of_string and crash):
+
+  $ cat > floatlane.wax <<'EOF'
+  > fn f() -> v128 {
+  >     v128_const_i8x16(0x1.0p+4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+  > }
+  > EOF
+  $ wax -i wax -f wasm floatlane.wax -o /dev/null
+  Error: The lane value does not fit in 8 bits.
+   ──➤  floatlane.wax:2:22
+  1 │ fn f() -> v128 {
+  2 │     v128_const_i8x16(0x1.0p+4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    ·                      ^^^^^^^^
+  3 │ }
+  4 │ 
+  [128]
+
+In-range lanes (the signed and unsigned extremes of the width) are accepted, and
+a float shape accepts integer lanes:
 
   $ cat > ok.wax <<'EOF'
   > fn f() -> v128 {
   >     v128_const_i8x16(255, -128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+  > }
+  > fn g() -> v128 {
+  >     v128_const_f32x4(1, 2, 3, 4);
   > }
   > EOF
   $ wax -i wax -f wasm ok.wax -o /dev/null --validate

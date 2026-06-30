@@ -399,6 +399,10 @@ module Error = struct
     report context ~location
       "The memory alignment is larger than the natural alignment %d." natural
 
+  let memory_immediate_too_large context ~location =
+    report context ~location
+      "This memory offset or alignment must fit a 64-bit unsigned integer."
+
   let bad_memory_align context ~location =
     report context ~location "The memory alignment should be a power of two."
 
@@ -2314,9 +2318,15 @@ let mem_natural_align meth =
   | _ -> 1
 
 (* The unsigned integer denoted by a constant literal argument, if any. *)
+(* The unsigned 64-bit value of an integer literal, or [None] if it is not an
+   integer literal or does not fit u64. Parsed quietly (a plain [of_string] would
+   print "Unsigned int overflow" before raising on an out-of-range value). *)
 let int_literal a =
   match a.Ast.desc with
-  | Ast.Int s -> ( try Some (Wax_utils.Uint64.of_string s) with _ -> None)
+  | Ast.Int s ->
+      (if String.starts_with ~prefix:"0x" s then Int64.of_string_opt s
+       else Int64.of_string_opt ("0u" ^ s))
+      |> Option.map Wax_utils.Uint64.of_int64
   | _ -> None
 
 let max_offset_i32_exclusive =
@@ -2330,25 +2340,35 @@ let max_align = Wax_utils.Uint64.of_int 16
    argument expressions, when present. *)
 let check_memarg ctx ~address_type ~natural ~align ~offset =
   (let>@ offset = offset in
-   let>@ o = int_literal offset in
-   if
-     address_type = `I32
-     && Wax_utils.Uint64.compare o max_offset_i32_exclusive >= 0
-   then
-     Error.memory_offset_too_large ctx.diagnostics ~location:(snd offset.info)
-       max_offset_i32_exclusive);
+   match int_literal offset with
+   | None ->
+       (* The literal does not fit u64, so it cannot be a memory offset. *)
+       Error.memory_immediate_too_large ctx.diagnostics
+         ~location:(snd offset.info)
+   | Some o ->
+       if
+         address_type = `I32
+         && Wax_utils.Uint64.compare o max_offset_i32_exclusive >= 0
+       then
+         Error.memory_offset_too_large ctx.diagnostics
+           ~location:(snd offset.info) max_offset_i32_exclusive);
   let>@ align = align in
-  let>@ a = int_literal align in
-  if
-    Wax_utils.Uint64.compare a max_align > 0
-    || Wax_utils.Uint64.to_int a > natural
-  then
-    Error.memory_align_too_large ctx.diagnostics ~location:(snd align.info)
-      natural
-  else
-    match Wax_utils.Uint64.to_int a with
-    | 1 | 2 | 4 | 8 | 16 -> ()
-    | _ -> Error.bad_memory_align ctx.diagnostics ~location:(snd align.info)
+  match int_literal align with
+  | None ->
+      Error.memory_immediate_too_large ctx.diagnostics
+        ~location:(snd align.info)
+  | Some a -> (
+      if
+        Wax_utils.Uint64.compare a max_align > 0
+        || Wax_utils.Uint64.to_int a > natural
+      then
+        Error.memory_align_too_large ctx.diagnostics ~location:(snd align.info)
+          natural
+      else
+        match Wax_utils.Uint64.to_int a with
+        | 1 | 2 | 4 | 8 | 16 -> ()
+        | _ -> Error.bad_memory_align ctx.diagnostics ~location:(snd align.info)
+      )
 
 let max_memory_size = function
   | `I32 -> Wax_utils.Uint64.of_int 65536
@@ -4638,41 +4658,45 @@ and type_simd_free_intrinsic_call ctx i func name args =
         | F32x4 | F64x2 -> None
       in
       List.iter
-        (fun a ->
-          let neg, lit =
-            match a.desc with
-            | Ast.UnOp ({ desc = Neg; _ }, ({ desc = Ast.Int _; _ } as l)) ->
-                (true, Some l)
-            | Ast.Int _ -> (false, Some a)
-            | Ast.Float _
-            | Ast.UnOp ({ desc = Neg; _ }, { desc = Ast.Float _; _ }) ->
-                (false, None)
-            | _ ->
-                Error.constant_expression_required ctx.diagnostics
-                  ~location:(snd a.info);
-                (false, None)
-          in
-          match (bits, lit) with
-          | Some b, Some l ->
-              let in_range =
-                match int_literal l with
-                | None -> false (* exceeds u64 *)
-                | Some v ->
-                    let v = Wax_utils.Uint64.to_int64 v in
-                    if neg then
-                      (* magnitude <= 2^(b-1) *)
-                      Int64.unsigned_compare v (Int64.shift_left 1L (b - 1))
-                      <= 0
-                    else if b = 64 then true
-                    else
-                      Int64.unsigned_compare v
-                        (Int64.sub (Int64.shift_left 1L b) 1L)
-                      <= 0
-              in
-              if not in_range then
-                Error.lane_value_out_of_range ctx.diagnostics
-                  ~location:(snd a.info) b
-          | _ -> ())
+        (let lane_in_range b neg l =
+           match int_literal l with
+           | None -> false (* exceeds u64 *)
+           | Some v ->
+               let v = Wax_utils.Uint64.to_int64 v in
+               if neg then
+                 (* magnitude <= 2^(b-1) *)
+                 Int64.unsigned_compare v (Int64.shift_left 1L (b - 1)) <= 0
+               else if b = 64 then true
+               else
+                 Int64.unsigned_compare v (Int64.sub (Int64.shift_left 1L b) 1L)
+                 <= 0
+         in
+         fun a ->
+           match (bits, a.desc) with
+           | Some b, Ast.Int _ ->
+               if not (lane_in_range b false a) then
+                 Error.lane_value_out_of_range ctx.diagnostics
+                   ~location:(snd a.info) b
+           | Some b, Ast.UnOp ({ desc = Neg; _ }, ({ desc = Ast.Int _; _ } as l))
+             ->
+               if not (lane_in_range b true l) then
+                 Error.lane_value_out_of_range ctx.diagnostics
+                   ~location:(snd a.info) b
+           | ( Some b,
+               ( Ast.Float _
+               | Ast.UnOp ({ desc = Neg; _ }, { desc = Ast.Float _; _ }) ) ) ->
+               (* a float literal is not a valid integer lane *)
+               Error.lane_value_out_of_range ctx.diagnostics
+                 ~location:(snd a.info) b
+           | ( None,
+               ( Ast.Int _ | Ast.Float _
+               | Ast.UnOp
+                   ({ desc = Neg; _ }, { desc = Ast.Int _ | Ast.Float _; _ }) )
+             ) ->
+               () (* a float shape accepts any numeric literal lane *)
+           | _ ->
+               Error.constant_expression_required ctx.diagnostics
+                 ~location:(snd a.info))
         args'
   | None -> List.iter (fun a -> check_type ctx a (simd_cell TV128)) args');
   return_expression i
