@@ -439,8 +439,11 @@ let module_ (m : _ B.module_) : _ T.module_ =
       | Some map -> map
       | None -> B.IntMap.empty
     in
-    match all_subtypes.(type_idx) with
-    | { typ = Func ft; supertype; final; _ }, recursive ->
+    match
+      if type_idx < 0 || type_idx >= Array.length all_subtypes then None
+      else Some all_subtypes.(type_idx)
+    with
+    | Some ({ typ = Func ft; supertype; final; _ }, recursive) ->
         let params =
           Array.mapi
             (fun i t ->
@@ -452,7 +455,12 @@ let module_ (m : _ B.module_) : _ T.module_ =
         ( (if supertype = None && final && not recursive then None
            else Some (index ~map:m.names.types type_idx)),
           { T.params; results } )
-    | _ -> assert false
+    | _ ->
+        (* An invalid module can give a function a type index that is out of
+           range or does not name a function type. Keep the reference
+           unexpanded (with an empty inline signature) rather than crashing;
+           validation then reports the bad type. *)
+        (Some (index ~map:m.names.types type_idx), { T.params = [||]; results = [||] })
   in
   let types, _ =
     List.fold_left
