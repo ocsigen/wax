@@ -1979,6 +1979,16 @@ let rec collect_assigned_locals acc i =
   | Float _ | StructDefault _ ->
       acc
 
+(* For a SIMD intrinsic written as a method (e.g. [v.extract_lane_s_i8x16(3)]),
+   the number of leading constant lane immediates in its argument list, or [None]
+   if [meth] is not such an intrinsic. The dispatch is by name only, mirroring
+   how the call itself is typed (see [type_simd_vector_op_call]). *)
+let simd_method_imms meth =
+  match Wax_wasm.Simd.classify meth with
+  | Some { free = false; imm; _ } -> (
+      match imm with No_imm -> Some 0 | Lane _ -> Some 1 | Shuffle -> Some 16)
+  | _ -> None
+
 let rec check_hole_order_rec ctx i n =
   match i.desc with
   | Hole -> n - 1
@@ -2015,6 +2025,18 @@ let rec check_hole_order_rec ctx i n =
         | ArraySet (t, i, v) ->
             n |> check_hole_order_rec ctx t |> check_hole_order_rec ctx i
             |> check_hole_order_rec ctx v
+        | Call ({ desc = StructGet (obj, meth); _ }, args)
+          when simd_method_imms meth.desc <> None ->
+            (* A SIMD intrinsic written as a method, [recv.op(imms.., operands..)].
+               [to_wasm] evaluates the receiver first, then the non-immediate
+               stack operands; the leading lane immediates ([Lane]/[Shuffle]) are
+               static and never reach the operand stack. Mirror that order so a
+               static lane index is not mistaken for a value before a hole. *)
+            let nimm = Option.get (simd_method_imms meth.desc) in
+            let operands = List.filteri (fun k _ -> k >= nimm) args in
+            n
+            |> check_hole_order_rec ctx obj
+            |> check_hole_order_in_list ctx operands
         | Call (f, args) | TailCall (f, args) ->
             n |> check_hole_order_in_list ctx args |> check_hole_order_rec ctx f
         | If { cond = i; _ }
