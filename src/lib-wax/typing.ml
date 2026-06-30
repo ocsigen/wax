@@ -364,6 +364,11 @@ end
 module StringSet = Set.Make (String)
 module StringMap = Map.Make (String)
 
+(* The option let-operators (the [@] suffix denotes "optional"): [let*@] binds
+   through [Some]/short-circuits on [None] (Option.bind), [let+@] maps the
+   payload (Option.map), and [let>@] runs an effect only when [Some]
+   (Option.iter). Distinct from the stack-threading [let*]/[let*!] defined with
+   the typing monad further down. *)
 let ( let*@ ) = Option.bind
 let ( let+@ ) o f = Option.map f o
 let ( let>@ ) o f = Option.iter f o
@@ -1090,6 +1095,20 @@ let print_stack st =
 
 let _ = print_stack
 
+(* The typing monad. A monadic action is a function [stack -> stack * 'a]: it
+   reads the operand stack, may push/pop, and returns the new stack alongside
+   its result. This threads the stack implicitly so the instruction cases read
+   top-to-bottom instead of passing [st] by hand. The operators:
+
+   - [return v]      lift a value, leaving the stack unchanged;
+   - [let* x = e]    bind: run [e], thread its stack into the continuation;
+   - [let*! x = e]   run [e : _ option], short-circuiting a [None] (a failed
+                     lookup) by returning an [unreachable] recovery instruction
+                     so typing continues without cascading errors;
+   - [unreachable e] run [e] but mark the resulting stack [Unreachable] (the
+                     polymorphic stack of code after a [br]/[return]/etc.).
+
+   Not to be confused with the pure-option [let*@]/[let+@]/[let>@] above. *)
 let unreachable e st =
   let _, v = e st in
   (Unreachable, v)
