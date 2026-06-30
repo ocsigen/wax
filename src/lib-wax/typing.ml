@@ -3561,172 +3561,9 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
           | _ -> ())
         bindings;
       return_statement i (Let (bindings, None)) [||]
-  | Br (label, i') ->
-      (* Sequence of instructions *)
-      let params = branch_target ctx label in
-      let* i' =
-        match i' with
-        | Some i' ->
-            let* i' = check_against ctx params i' in
-            return (Some i')
-        | None ->
-            if params <> [||] then
-              Error.value_count_mismatch ctx.diagnostics ~location:i.info
-                ~expected:(Array.length params) ~provided:0;
-            return None
-      in
-      return_statement i (Br (label, i')) [||]
-  | Br_if (label, i') ->
-      let* i' = instruction ctx i' in
-      let loc = snd i'.info in
-      let ty, types = split_on_last_type ctx ~location:loc i' in
-      check_subtype ctx ~location:loc ty
-        (UnionFind.make (Valtype { typ = I32; internal = I32; inline = None }));
-      let params = branch_target ctx label in
-      check_subtypes ctx ~location:loc types params;
-      (* On the fall-through the values stay on the stack; type them by what they
-         already are ([types], checked against the target just above) rather than
-         by [params]. For a concrete target the two coincide, but when the target
-         is a block result still being inferred ([params] is a [Collecting] cell),
-         returning [params] would leak that cell onto the stack as [any]. *)
-      let result = if Array.exists is_inferring params then types else params in
-      return_statement i (Br_if (label, i')) result
-  | Br_table (labels, i') ->
-      let* i' = instruction ctx i' in
-      let loc = snd i'.info in
-      let ty, types = split_on_last_type ctx ~location:loc i' in
-      check_subtype ctx ~location:loc ty
-        (UnionFind.make (Valtype { typ = I32; internal = I32; inline = None }));
-      let len = Array.length (branch_target ctx (List.hd labels)) in
-      List.iter
-        (fun label ->
-          let params = branch_target ctx label in
-          if Array.length params <> len then
-            Error.value_count_mismatch ctx.diagnostics ~location:i.info
-              ~expected:len ~provided:(Array.length params);
-          check_subtypes ctx ~location:loc types params)
-        labels;
-      return_statement i (Br_table (labels, i')) [||]
-  | Br_on_null (idx, i') ->
-      let* i' = instruction ctx i' in
-      let typ, types = split_on_last_type ctx ~location:(snd i'.info) i' in
-      let typ = UnionFind.find typ in
-      let typ' =
-        match typ with
-        | Valtype
-            {
-              typ = Ref { nullable = _; typ; _ };
-              internal = Ref { nullable = _; typ = ityp; _ };
-              inline;
-            } ->
-            UnionFind.make
-              (Valtype
-                 {
-                   typ = Ref { nullable = false; typ };
-                   internal = Ref { nullable = false; typ = ityp };
-                   inline;
-                 })
-        | (Unknown | Error) as ity -> UnionFind.make ity
-        | _ ->
-            Error.expected_ref ctx.diagnostics ~location:(snd i'.info);
-            UnionFind.make Error
-      in
-      let params = branch_target ctx idx in
-      check_subtypes ctx ~location:(snd i'.info) types params;
-      return_statement i (Br_on_null (idx, i')) (Array.append params [| typ' |])
-  | Br_on_non_null (idx, i') ->
-      let* i' = instruction ctx i' in
-      let params = branch_target ctx idx in
-      let typ, types = split_on_last_type ctx ~location:(snd i'.info) i' in
-      let typ = UnionFind.find typ in
-      (match typ with
-      | Unknown | Error -> ()
-      | Valtype
-          {
-            typ = Ref { nullable = _; typ; _ };
-            internal = Ref { nullable = _; typ = ityp; _ };
-            inline;
-          } ->
-          check_subtypes ctx ~location:(snd i'.info)
-            (Array.append types
-               [|
-                 UnionFind.make
-                   (Valtype
-                      {
-                        typ = Ref { nullable = false; typ };
-                        internal = Ref { nullable = false; typ = ityp };
-                        inline;
-                      });
-               |])
-            params
-      | _ -> Error.expected_ref ctx.diagnostics ~location:(snd i'.info));
-      return_statement i
-        (Br_on_non_null (idx, i'))
-        (Array.sub params 0 (Array.length params - 1))
-  | Br_on_cast (label, ty, i') ->
-      let* i' = instruction ctx i' in
-      if is_cont_heaptype ctx ty.typ then
-        Error.invalid_cast_type ctx.diagnostics ~location:i.info;
-      let typ', types = split_on_last_type ctx ~location:(snd i'.info) i' in
-      let params = branch_target ctx label in
-      (let>@ ityp = reftype ctx.diagnostics ctx.type_context ty in
-       let typ =
-         UnionFind.make
-           (Valtype { typ = Ref ty; internal = Ref ityp; inline = None })
-       in
-       check_subtypes ctx ~location:(snd i'.info)
-         (Array.append types [| typ |])
-         params);
-      let*! typ1, typ2 =
-        match UnionFind.find typ' with
-        | Valtype { typ = Ref ty'; _ } ->
-            let*@ ty1 = val_lub ctx (Ref ty) (Ref ty') in
-            let*@ typ1 = internalize ctx ty1 in
-            let+@ typ2 = internalize ctx (Ref (diff_ref_type ty' ty)) in
-            (typ1, typ2)
-        | (Unknown | Error) as ity -> Some (typ', UnionFind.make ity)
-        | _ ->
-            Error.expected_ref ctx.diagnostics ~location:(snd i'.info);
-            None
-      in
-      return_statement i
-        (Br_on_cast
-           ( label,
-             ty,
-             { i' with info = (Array.append types [| typ1 |], snd i'.info) } ))
-        (Array.append (Array.sub params 0 (Array.length params - 1)) [| typ2 |])
-  | Br_on_cast_fail (label, ty, i') ->
-      let* i' = instruction ctx i' in
-      if is_cont_heaptype ctx ty.typ then
-        Error.invalid_cast_type ctx.diagnostics ~location:i.info;
-      let typ', types = split_on_last_type ctx ~location:(snd i'.info) i' in
-      let*! ityp = reftype ctx.diagnostics ctx.type_context ty in
-      let*! typ1, typ2 =
-        match UnionFind.find typ' with
-        | Valtype { typ = Ref ty'; _ } ->
-            let*@ ty1 = val_lub ctx (Ref ty) (Ref ty') in
-            let*@ typ1 = internalize ctx ty1 in
-            let+@ typ2 = internalize ctx (Ref (diff_ref_type ty' ty)) in
-            (typ1, typ2)
-        | (Unknown | Error) as ity -> Some (typ', UnionFind.make ity)
-        | _ ->
-            Error.expected_ref ctx.diagnostics ~location:(snd i'.info);
-            None
-      in
-      let params = branch_target ctx label in
-      check_subtypes ctx ~location:(snd i'.info)
-        (Array.append types [| typ2 |])
-        params;
-      let typ =
-        UnionFind.make
-          (Valtype { typ = Ref ty; internal = Ref ityp; inline = None })
-      in
-      return_statement i
-        (Br_on_cast_fail
-           ( label,
-             ty,
-             { i' with info = (Array.append types [| typ1 |], snd i'.info) } ))
-        (Array.append (Array.sub params 0 (Array.length params - 1)) [| typ |])
+  | Br _ | Br_if _ | Br_table _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
+  | Br_on_cast_fail _ ->
+      type_branch ctx i
   | Throw (tag, i') ->
       let* i' =
         match i' with
@@ -4011,6 +3848,179 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
             None
       in
       return_expression i (Select (i1', i2', i3')) ty
+
+and type_branch ctx i =
+  (* The branch instructions: [br], [br_if], [br_table] and the [br_on_*]
+     family, each checking its operand(s) against the target label's
+     parameter types. *)
+  match i.desc with
+  | Br (label, i') ->
+      (* Sequence of instructions *)
+      let params = branch_target ctx label in
+      let* i' =
+        match i' with
+        | Some i' ->
+            let* i' = check_against ctx params i' in
+            return (Some i')
+        | None ->
+            if params <> [||] then
+              Error.value_count_mismatch ctx.diagnostics ~location:i.info
+                ~expected:(Array.length params) ~provided:0;
+            return None
+      in
+      return_statement i (Br (label, i')) [||]
+  | Br_if (label, i') ->
+      let* i' = instruction ctx i' in
+      let loc = snd i'.info in
+      let ty, types = split_on_last_type ctx ~location:loc i' in
+      check_subtype ctx ~location:loc ty
+        (UnionFind.make (Valtype { typ = I32; internal = I32; inline = None }));
+      let params = branch_target ctx label in
+      check_subtypes ctx ~location:loc types params;
+      (* On the fall-through the values stay on the stack; type them by what they
+         already are ([types], checked against the target just above) rather than
+         by [params]. For a concrete target the two coincide, but when the target
+         is a block result still being inferred ([params] is a [Collecting] cell),
+         returning [params] would leak that cell onto the stack as [any]. *)
+      let result = if Array.exists is_inferring params then types else params in
+      return_statement i (Br_if (label, i')) result
+  | Br_table (labels, i') ->
+      let* i' = instruction ctx i' in
+      let loc = snd i'.info in
+      let ty, types = split_on_last_type ctx ~location:loc i' in
+      check_subtype ctx ~location:loc ty
+        (UnionFind.make (Valtype { typ = I32; internal = I32; inline = None }));
+      let len = Array.length (branch_target ctx (List.hd labels)) in
+      List.iter
+        (fun label ->
+          let params = branch_target ctx label in
+          if Array.length params <> len then
+            Error.value_count_mismatch ctx.diagnostics ~location:i.info
+              ~expected:len ~provided:(Array.length params);
+          check_subtypes ctx ~location:loc types params)
+        labels;
+      return_statement i (Br_table (labels, i')) [||]
+  | Br_on_null (idx, i') ->
+      let* i' = instruction ctx i' in
+      let typ, types = split_on_last_type ctx ~location:(snd i'.info) i' in
+      let typ = UnionFind.find typ in
+      let typ' =
+        match typ with
+        | Valtype
+            {
+              typ = Ref { nullable = _; typ; _ };
+              internal = Ref { nullable = _; typ = ityp; _ };
+              inline;
+            } ->
+            UnionFind.make
+              (Valtype
+                 {
+                   typ = Ref { nullable = false; typ };
+                   internal = Ref { nullable = false; typ = ityp };
+                   inline;
+                 })
+        | (Unknown | Error) as ity -> UnionFind.make ity
+        | _ ->
+            Error.expected_ref ctx.diagnostics ~location:(snd i'.info);
+            UnionFind.make Error
+      in
+      let params = branch_target ctx idx in
+      check_subtypes ctx ~location:(snd i'.info) types params;
+      return_statement i (Br_on_null (idx, i')) (Array.append params [| typ' |])
+  | Br_on_non_null (idx, i') ->
+      let* i' = instruction ctx i' in
+      let params = branch_target ctx idx in
+      let typ, types = split_on_last_type ctx ~location:(snd i'.info) i' in
+      let typ = UnionFind.find typ in
+      (match typ with
+      | Unknown | Error -> ()
+      | Valtype
+          {
+            typ = Ref { nullable = _; typ; _ };
+            internal = Ref { nullable = _; typ = ityp; _ };
+            inline;
+          } ->
+          check_subtypes ctx ~location:(snd i'.info)
+            (Array.append types
+               [|
+                 UnionFind.make
+                   (Valtype
+                      {
+                        typ = Ref { nullable = false; typ };
+                        internal = Ref { nullable = false; typ = ityp };
+                        inline;
+                      });
+               |])
+            params
+      | _ -> Error.expected_ref ctx.diagnostics ~location:(snd i'.info));
+      return_statement i
+        (Br_on_non_null (idx, i'))
+        (Array.sub params 0 (Array.length params - 1))
+  | Br_on_cast (label, ty, i') ->
+      let* i' = instruction ctx i' in
+      if is_cont_heaptype ctx ty.typ then
+        Error.invalid_cast_type ctx.diagnostics ~location:i.info;
+      let typ', types = split_on_last_type ctx ~location:(snd i'.info) i' in
+      let params = branch_target ctx label in
+      (let>@ ityp = reftype ctx.diagnostics ctx.type_context ty in
+       let typ =
+         UnionFind.make
+           (Valtype { typ = Ref ty; internal = Ref ityp; inline = None })
+       in
+       check_subtypes ctx ~location:(snd i'.info)
+         (Array.append types [| typ |])
+         params);
+      let*! typ1, typ2 =
+        match UnionFind.find typ' with
+        | Valtype { typ = Ref ty'; _ } ->
+            let*@ ty1 = val_lub ctx (Ref ty) (Ref ty') in
+            let*@ typ1 = internalize ctx ty1 in
+            let+@ typ2 = internalize ctx (Ref (diff_ref_type ty' ty)) in
+            (typ1, typ2)
+        | (Unknown | Error) as ity -> Some (typ', UnionFind.make ity)
+        | _ ->
+            Error.expected_ref ctx.diagnostics ~location:(snd i'.info);
+            None
+      in
+      return_statement i
+        (Br_on_cast
+           ( label,
+             ty,
+             { i' with info = (Array.append types [| typ1 |], snd i'.info) } ))
+        (Array.append (Array.sub params 0 (Array.length params - 1)) [| typ2 |])
+  | Br_on_cast_fail (label, ty, i') ->
+      let* i' = instruction ctx i' in
+      if is_cont_heaptype ctx ty.typ then
+        Error.invalid_cast_type ctx.diagnostics ~location:i.info;
+      let typ', types = split_on_last_type ctx ~location:(snd i'.info) i' in
+      let*! ityp = reftype ctx.diagnostics ctx.type_context ty in
+      let*! typ1, typ2 =
+        match UnionFind.find typ' with
+        | Valtype { typ = Ref ty'; _ } ->
+            let*@ ty1 = val_lub ctx (Ref ty) (Ref ty') in
+            let*@ typ1 = internalize ctx ty1 in
+            let+@ typ2 = internalize ctx (Ref (diff_ref_type ty' ty)) in
+            (typ1, typ2)
+        | (Unknown | Error) as ity -> Some (typ', UnionFind.make ity)
+        | _ ->
+            Error.expected_ref ctx.diagnostics ~location:(snd i'.info);
+            None
+      in
+      let params = branch_target ctx label in
+      check_subtypes ctx ~location:(snd i'.info)
+        (Array.append types [| typ2 |])
+        params;
+      let typ =
+        UnionFind.make
+          (Valtype { typ = Ref ty; internal = Ref ityp; inline = None })
+      in
+      return_statement i
+        (Br_on_cast_fail
+           ( label,
+             ty,
+             { i' with info = (Array.append types [| typ1 |], snd i'.info) } ))
+        (Array.append (Array.sub params 0 (Array.length params - 1)) [| typ |])
+  | _ -> assert false (* only invoked on a branch instruction *)
 
 and type_mem_method_call ctx i func recv memname meth args =
   let _, address_type = Option.get (Tbl.find_opt ctx.memories memname) in
