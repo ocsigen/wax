@@ -283,6 +283,9 @@ let wat_to_wasm ~input_file ~output_file ~validate ~color ~output_color:_
       text
   in
   let ast = specialize_wat ~color ~text defines ast in
+  (* Declare any function referenced by ref.func only inside a body, so the
+     emitted binary passes strict reference validation. *)
+  let ast = Wax_wasm.Declare_refs.module_ ast in
   if validate then
     Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
         Wax_wasm.Validation.f d ast);
@@ -392,7 +395,6 @@ let build_policy specs =
 
 let convert input_file output_file input_format_opt output_format_opt validate
     strict_validate color opt_source_map_file fold_mode defines warnings debug =
-  Wax_wasm.Validation.validate_refs := strict_validate;
   Wax_utils.Diagnostic.set_policy (build_policy warnings);
   Wax_utils.Debug.enable debug;
   let defines = Wax_wasm.Cond_specialize.of_list defines in
@@ -400,6 +402,10 @@ let convert input_file output_file input_format_opt output_format_opt validate
   let input_file = std input_file in
   let output_file = std output_file in
   let input_format = resolve_format input_file input_format_opt ~default:Wax in
+  (* Reference validation is always strict for a Wasm binary input: a binary has
+     no way to leave a reference unresolved, so a relaxed check would only hide
+     real errors. Text inputs honour the [--strict-validate] flag. *)
+  Wax_wasm.Validation.validate_refs := strict_validate || input_format = Wasm;
   let output_format =
     resolve_format output_file output_format_opt ~default:Wasm
   in
@@ -515,6 +521,9 @@ let check format_opt strict color warnings debug files =
           "%s: cannot detect format (expected .wat, .wax or .wasm)\n" file;
         false
     | Some fmt -> (
+        (* A Wasm binary is always checked strictly (see [convert]); text inputs
+           honour [--strict-validate]. *)
+        Wax_wasm.Validation.validate_refs := strict || fmt = Wasm;
         let text = with_open_in (Some file) In_channel.input_all in
         let source = match fmt with Wasm -> None | Wat | Wax -> Some text in
         (* Collect errors without printing or exiting, so every file is checked

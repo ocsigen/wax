@@ -43,7 +43,7 @@ files (see [Formatting](#formatting)) and `check` validates them (see
     - Disabled by default.
 
 - **`-s`**, **`--strict-validate`**
-    - Perform strict reference validation (for Wasm Text). Overrides default relaxed validation.
+    - Perform strict reference validation for Wasm Text input (overrides the default relaxed validation). Wasm *binary* input is always validated strictly, regardless of this flag. When compiling Wax or Wasm Text to a binary, functions referenced by `ref.func` only inside a function body are automatically declared (via a declarative element segment), so the output passes strict validation.
 
 - **`-D`** *NAME[=VALUE]*, **`--define`** *NAME[=VALUE]*
     - Set a conditional-compilation variable, specializing `#[if(...)]` (Wax) and
@@ -203,8 +203,8 @@ wax check [OPTIONS] FILE…
 
 - **`-f`**, **`--format`**, **`--input-format`** *FORMAT* — force the format of
   all files, overriding extension detection.
-- **`-s`**, **`--strict-validate`** — strict reference validation (for Wasm
-  Text), as above.
+- **`-s`**, **`--strict-validate`** — strict reference validation for Wasm Text,
+  as above (Wasm binary is always strict).
 - **`-W`** *NAME=LEVEL*, **`--warn`** *NAME=LEVEL* — set a warning's level, as
   above.
 - **`--color`** *WHEN* — as above.

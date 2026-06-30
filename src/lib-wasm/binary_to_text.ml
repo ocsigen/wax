@@ -460,7 +460,8 @@ let module_ (m : _ B.module_) : _ T.module_ =
            range or does not name a function type. Keep the reference
            unexpanded (with an empty inline signature) rather than crashing;
            validation then reports the bad type. *)
-        (Some (index ~map:m.names.types type_idx), { T.params = [||]; results = [||] })
+        ( Some (index ~map:m.names.types type_idx),
+          { T.params = [||]; results = [||] } )
   in
   let types, _ =
     List.fold_left
