@@ -478,6 +478,20 @@ let rec literal_string a =
 let lane_imm a =
   match a.desc with Int s -> int_of_string s | _ -> assert false
 
+(* Whether negating the unsigned magnitude [s] yields a value representable as a
+   signed [bits]-bit constant, i.e. [s <= 2^(bits-1)]. When it does not (e.g.
+   [-18446744073709551615] as i64: the magnitude is a valid *unsigned* const but
+   its negation is below the signed minimum), folding [-s] into a single [Const]
+   would emit an out-of-range literal that crashes the encoder; the caller must
+   instead lower it as [0 - s]. *)
+let neg_int_const_fits bits s =
+  match
+    if String.starts_with ~prefix:"0x" s then Int64.of_string_opt s
+    else Int64.of_string_opt ("0u" ^ s)
+  with
+  | None -> false (* magnitude exceeds u64 *)
+  | Some v -> Int64.unsigned_compare v (Int64.shift_left 1L (bits - 1)) <= 0
+
 let rec instruction ret ctx i : location Text.instr list =
   let _, loc = i.info in
   (* An instruction whose translation needs a type we don't have ([Dead_code])
@@ -1232,7 +1246,15 @@ and instruction_desc ret ctx i : location Text.instr list =
       | _ ->
           let opcode = binop i op operand_type in
           folded loc opcode (code_a @ code_b))
-  | UnOp ({ desc = Neg; _ }, ({ desc = Int n | Float n; _ } as a)) ->
+  (* Fold [-literal] into a single signed constant, but only when the negation
+     is representable; an out-of-range magnitude (e.g. a u64-valued i64 literal)
+     falls through to the general [0 - a] lowering below. Floats never overflow
+     on negation. *)
+  | UnOp ({ desc = Neg; _ }, ({ desc = Int n | Float n; _ } as a))
+    when match expr_opt_valtype a with
+         | Some I32 | None -> neg_int_const_fits 32 n
+         | Some I64 -> neg_int_const_fits 64 n
+         | _ -> true ->
       let n = "-" ^ n in
       folded loc
         (Const
