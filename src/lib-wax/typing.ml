@@ -387,6 +387,9 @@ module Error = struct
   let invalid_lane_index context ~location max_lane =
     report context ~location "The lane index should be less than %d." max_lane
 
+  let lane_value_out_of_range context ~location bits =
+    report context ~location "The lane value does not fit in %d bits." bits
+
   let limit_too_large context ~location kind max =
     report context ~location
       "The %s size is too large. It should be less than 0x%Lx." kind
@@ -4047,7 +4050,10 @@ and type_simd_mem_method_call ctx i func recv memname meth args =
      let>@ lane = List.nth_opt args' nstack in
      let>@ l = int_literal lane in
      let max_lane = 16 / mop.m_nat_align in
-     if Wax_utils.Uint64.to_int l >= max_lane then
+     (* Compare unsigned: a lane index too large even for an [int] (e.g. a
+        literal near [u64] max) must still be rejected, not crash [Uint64.to_int]
+        with an assertion. *)
+     if Wax_utils.Uint64.compare l (Wax_utils.Uint64.of_int max_lane) >= 0 then
        Error.invalid_lane_index ctx.diagnostics ~location:(snd lane.info)
          max_lane);
   check_memarg ctx ~address_type ~natural:mop.m_nat_align
@@ -4459,16 +4465,55 @@ and type_simd_free_intrinsic_call ctx i func name args =
       if List.length args' <> arity then
         Error.value_count_mismatch ctx.diagnostics ~location:i.info
           ~expected:arity ~provided:(List.length args');
+      (* Each lane of an integer shape must fit its width, accepting both the
+         signed and unsigned range [-2^(b-1), 2^b-1] (so an i8 lane is
+         [-128, 255]). Beyond rejecting a malformed const, this stops an
+         out-of-[int]-range literal from later crashing [V128.to_string]'s
+         [int_of_string] in the binary encoder. *)
+      let bits =
+        match shape with
+        | I8x16 -> Some 8
+        | I16x8 -> Some 16
+        | I32x4 -> Some 32
+        | I64x2 -> Some 64
+        | F32x4 | F64x2 -> None
+      in
       List.iter
         (fun a ->
-          match a.desc with
-          | Ast.Int _ | Ast.Float _ -> ()
-          | Ast.UnOp ({ desc = Neg; _ }, { desc = Ast.Int _ | Ast.Float _; _ })
-            ->
-              ()
-          | _ ->
-              Error.constant_expression_required ctx.diagnostics
-                ~location:(snd a.info))
+          let neg, lit =
+            match a.desc with
+            | Ast.UnOp ({ desc = Neg; _ }, ({ desc = Ast.Int _; _ } as l)) ->
+                (true, Some l)
+            | Ast.Int _ -> (false, Some a)
+            | Ast.Float _
+            | Ast.UnOp ({ desc = Neg; _ }, { desc = Ast.Float _; _ }) ->
+                (false, None)
+            | _ ->
+                Error.constant_expression_required ctx.diagnostics
+                  ~location:(snd a.info);
+                (false, None)
+          in
+          match (bits, lit) with
+          | Some b, Some l ->
+              let in_range =
+                match int_literal l with
+                | None -> false (* exceeds u64 *)
+                | Some v ->
+                    let v = Wax_utils.Uint64.to_int64 v in
+                    if neg then
+                      (* magnitude <= 2^(b-1) *)
+                      Int64.unsigned_compare v (Int64.shift_left 1L (b - 1))
+                      <= 0
+                    else if b = 64 then true
+                    else
+                      Int64.unsigned_compare v
+                        (Int64.sub (Int64.shift_left 1L b) 1L)
+                      <= 0
+              in
+              if not in_range then
+                Error.lane_value_out_of_range ctx.diagnostics
+                  ~location:(snd a.info) b
+          | _ -> ())
         args'
   | None -> List.iter (fun a -> check_type ctx a (simd_cell TV128)) args');
   return_expression i
