@@ -845,6 +845,9 @@ let field_subtype info (ty : Wax_wasm.Ast.Binary.fieldtype)
   && storage_subtype' info ty.typ ty'.typ
   && ((not ty.mut) || storage_subtype' info ty'.typ ty.typ)
 
+(* Whether [ty] is the result cell of a block whose type is being inferred. *)
+let is_inferring ty = match Cell.get ty with Collecting _ -> true | _ -> false
+
 (* Whether the inferred type [ty] is a subtype of the expected type [ty'].
    Not a pure relation: when the two are compatible it *unifies* their
    union-find cells (so an as-yet-unconstrained literal like [Int]/[Number]
@@ -852,9 +855,6 @@ let field_subtype info (ty : Wax_wasm.Ast.Binary.fieldtype)
    on the left (dead code / error recovery) is a subtype of anything; neither
    appears on the right because expected types always come from a real
    declaration, annotation or instruction signature — hence the [assert]. *)
-(* Whether [ty] is the result cell of a block whose type is being inferred. *)
-let is_inferring ty = match Cell.get ty with Collecting _ -> true | _ -> false
-
 let rec subtype ?location ctx ty ty' =
   let ity = Cell.get ty in
   let ity' = Cell.get ty' in
@@ -1129,6 +1129,8 @@ let ( let*! ) e f =
           info = ([| Cell.make Error |], (Ast.no_loc ()).info);
         }
 
+(* Pop the top operand's type. An [Unreachable] (polymorphic) stack yields a
+   fresh [Unknown] and consumes nothing; [Empty] is a genuine stack underflow. *)
 let pop_any ctx i st =
   match st with
   | Unreachable -> (st, Cell.make Unknown)
@@ -2058,9 +2060,6 @@ let _print_arg_stack f l =
     ~pp_sep:(fun f () -> Format.fprintf f "@ ")
     output_inferred_type f l
 
-(* Split [i]'s inferred result types into (last type, preceding types). Only
-   called on an instruction known to produce at least one value, so the array
-   is non-empty. *)
 (* Peel the condition / reference operand off the last slot of a branch
    instruction's operand types, returning it together with the remaining branch
    parameters. The operand is an arbitrary expression, which may type to no
@@ -2231,7 +2230,6 @@ let mem_natural_align meth =
   | "load64" | "store64" | "loadf64" | "storef64" -> 8
   | _ -> 1
 
-(* The unsigned integer denoted by a constant literal argument, if any. *)
 (* The unsigned 64-bit value of an integer literal, or [None] if it is not an
    integer literal or does not fit u64. Parsed quietly (a plain [of_string] would
    print "Unsigned int overflow" before raising on an out-of-range value). *)
@@ -2325,14 +2323,12 @@ let is_unary_method m =
       true
   | _ -> false
 
-(* Mint (or reuse) an anonymous function type for an inline [as &fn(..) -> ..]
-   cast target. The name encodes the signature so identical casts share one
-   type, and to_wasm materialises it through the [<..>] synthetic-type path. *)
 (* Register (once) a type definition for an anonymous function signature and
    return the synthetic name standing for it — used when a cast or [call_ref]
    needs a named [func] type but the source wrote the signature inline. The name
    is a deterministic mangling of the signature, so identical signatures map to
-   the same definition. *)
+   the same definition; [to_wasm] materialises it through the [<..>]
+   synthetic-type path. *)
 let anon_function_type ctx (sign : functype) =
   let buf = Buffer.create 32 in
   let rec vt (t : valtype) =
@@ -2803,6 +2799,9 @@ and type_branch ctx i =
        check_subtypes ctx ~location:(snd i'.info)
          (Array.append types [| typ |])
          params);
+      (* On success the branch carries the cast target [ty] (via [params]); the
+         fall-through keeps the value at its residual type [typ2] ([ty'] minus
+         [ty]). [typ1] re-types the operand as the lub of its type and [ty]. *)
       let*! typ1, typ2 =
         match Cell.get typ' with
         | Valtype { typ = Ref ty'; _ } ->
@@ -2827,6 +2826,10 @@ and type_branch ctx i =
         Error.invalid_cast_type ctx.diagnostics ~location:i.info;
       let typ', types = split_on_last_type ctx ~location:(snd i'.info) i' in
       let*! ityp = reftype ctx.diagnostics ctx.type_context ty in
+      (* [br_on_cast_fail] branches when the cast fails, carrying the residual
+         type [typ2] ([ty'] minus [ty]) to the label; the fall-through (cast
+         succeeded) carries the cast target [ty]. [typ1] re-types the operand as
+         the lub of its type and [ty]. *)
       let*! typ1, typ2 =
         match Cell.get typ' with
         | Valtype { typ = Ref ty'; _ } ->
@@ -3042,6 +3045,11 @@ and type_arith ctx i =
           (* Point at the operator itself, not the whole expression. *)
           Error.binop_type_mismatch ctx.diagnostics ~location:op.info ty1 ty2
         in
+        (* Split on how many operands are still abstract ([Unknown]/[Error]).
+           Both abstract: unify the two cells to the operator's default type so a
+           result is still produced. One abstract: unify it onto the known
+           operand's type and validate that. Both concrete (the arms below):
+           just validate. The abstract arms unify operand cells in place. *)
         match (Cell.get ty1, Cell.get ty2) with
         | (Unknown | Error), (Unknown | Error) -> (
             match op.desc with
@@ -4244,6 +4252,8 @@ and type_mem_mgmt_call ctx i func recv name meth args =
         match Tbl.find_opt ctx.memories src with Some (_, a) -> a | None -> at
       in
       let addr_of a = address_cell a in
+      (* The length [n] indexes both the source and destination, so it is typed
+         at the narrower of the two address types ([I32] if either is 32-bit). *)
       let min_at =
         match (at, src_at) with `I32, _ | _, `I32 -> `I32 | `I64, `I64 -> `I64
       in
@@ -4321,6 +4331,8 @@ and type_table_mgmt_call ctx i func recv name meth args =
         | None -> at
       in
       let addr_of a = address_cell a in
+      (* The length [n] indexes both the source and destination, so it is typed
+         at the narrower of the two address types ([I32] if either is 32-bit). *)
       let min_at =
         match (at, src_at) with `I32, _ | _, `I32 -> `I32 | `I64, `I64 -> `I64
       in
@@ -4750,8 +4762,8 @@ and check_instruction ?(drop_supertype = false) ctx expected
                 (return []) field_types
             in
             (* The fields alone pin this type (re-parse re-resolves to it via
-               field inference, which now takes precedence), so a present name
-               is redundant. *)
+               field inference, which takes precedence over the expected type),
+               so a present name is redundant. *)
             let field_unique =
               match field_match with
               | Some n -> n.desc = typ.desc

@@ -1,7 +1,7 @@
-(* The inferred-type lattice used while type checking, the mutable cells
-   ([Cell]) that carry it, and the shared printers/type aliases built on top. Kept
-   in its own module so the checker ([Typing]) and its error messages share one
-   definition; see [infer.mli] for the documented interface. *)
+(* The inferred-type lattice used while type checking ([inferred_type]), the
+   mutable union-find cells that carry it ([Cell]), and the shared output
+   printers and type aliases built on top. [infer.mli] documents the interface
+   and keeps [Cell.t] abstract. *)
 
 open Ast
 
@@ -19,6 +19,8 @@ module Cell = struct
 
   let make v = { state = Root v }
 
+  (* The root of [node]'s class, compressing the path to it as a side effect:
+     every link followed is repointed straight at the root. *)
   let rec representative node =
     match node.state with
     | Root _ -> node
@@ -29,7 +31,10 @@ module Cell = struct
 
   let get node =
     let root = representative node in
-    match root.state with Root v -> v | Link _ -> assert false
+    (* [representative] returns a root, so the [Link] case cannot arise. *)
+    match root.state with
+    | Root v -> v
+    | Link _ -> assert false
 
   let merge t1 t2 new_val =
     let root1 = representative t1 in
