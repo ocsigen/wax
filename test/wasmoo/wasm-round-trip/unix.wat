@@ -408,7 +408,8 @@
               (ref.i31 (local.get $errcode))))))
       (array.get $block (global.get $error_messages) (local.get $errcode))))
   (@else
-    (global $unix_error (ref eq) (struct.new $js (global.get $unix_error_js)))
+    (global $unix_error (ref $js)
+      (struct.new $js (global.get $unix_error_js)))
 
     (func $ensure_string (param $s (ref eq)) (result (ref eq))
       (local $str anyref)

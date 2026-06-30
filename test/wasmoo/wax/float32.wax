@@ -269,7 +269,7 @@ fn caml_fma_float32_bytecode(x: &eq, y: &eq, z: &eq) -> &eq {
     );
 }
 
-const zero: &eq = { ops: float32_ops, f32: 0 };
+const zero = { ops: float32_ops, f32: 0 };
 
 #[export = "caml_ba_uint8_getf32"]
 fn caml_ba_uint8_getf32(a: &eq, i: i32) -> f32 {

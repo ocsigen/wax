@@ -674,7 +674,9 @@
 )
 
 (type $null_value (struct))
-(global $null_value (export "null") (ref eq) (struct.new $null_value))
+(global $null_value (export "null") (ref $null_value)
+  (struct.new $null_value)
+)
 
 (global $int_as_pointer_not_implemented (ref $bytes)
   (@string "caml_int_as_pointer is not supported")

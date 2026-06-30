@@ -295,7 +295,7 @@
       (call $caml_float_of_float32 (local.get $z))))
 )
 
-(global $zero (ref eq)
+(global $zero (ref $float32)
   (struct.new $float32 (global.get $float32_ops) (f32.const 0))
 )
 

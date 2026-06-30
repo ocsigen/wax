@@ -510,7 +510,7 @@ const no_arg = "";
 }
 #[else]
 {
-    const unix_error: &eq = { js: unix_error_js };
+    const unix_error = { js: unix_error_js };
 
     fn ensure_string(s: &eq) -> &eq {
         _ =

@@ -1574,10 +1574,22 @@ let valtype_equal ctx (a : inferred_valtype) (b : inferred_valtype) =
    mirrors exactly the drop test [bind_let_value]/globals applied via
    [standalone_valtype], so routing those sites through [check] preserves their
    behaviour — e.g. [let x: i32 = 1] still drops to [let x = 1] (a floating
-   number resolves to [i32]), while [let x: i64 = 1] keeps its annotation. *)
-let annotation_needed ctx (standalone : inferred_valtype option) expected =
+   number resolves to [i32]), while [let x: i64 = 1] keeps its annotation.
+
+   [drop_supertype] loosens the test for an immutable binding (a [const] global):
+   there the annotation is no more than a supertype of the value's own type, so
+   dropping it narrows the binding to that subtype — sound because nothing
+   reassigns it, and a narrower immutable global still satisfies every use (and
+   every import) expecting the wider type. The standalone value must therefore
+   only be a *subtype* of the annotation, not equal to it. *)
+let annotation_needed ?(drop_supertype = false) ctx
+    (standalone : inferred_valtype option) expected =
   match (standalone, UnionFind.find expected) with
-  | Some v, Valtype b -> not (valtype_equal ctx v b)
+  | Some v, Valtype b ->
+      if drop_supertype then
+        not
+          (Wax_wasm.Types.val_subtype ctx.subtyping_info v.internal b.internal)
+      else not (valtype_equal ctx v b)
   | _ -> true
 
 (* Whether [expected] carries a real type expectation (vs. the [Unknown]
@@ -4572,7 +4584,7 @@ and type_simd_free_intrinsic_call ctx i func name args =
    redundant one; every other expression delegates to [instruction] and reports
    whether it determined its own type. [expected] is the [Unknown] sentinel when
    [check] is entered from [instruction] with no context (synthesis). *)
-and check ctx expected (i : location instr) =
+and check ?(drop_supertype = false) ctx expected (i : location instr) =
   let i32_cell () =
     UnionFind.make (Valtype { typ = I32; internal = I32; inline = None })
   in
@@ -4724,7 +4736,8 @@ and check ctx expected (i : location instr) =
       in
       return
         ( node,
-          if fields_pin_result then annotation_needed ctx standalone expected
+          if fields_pin_result then
+            annotation_needed ~drop_supertype ctx standalone expected
           else true )
   | StructDefault ty ->
       let* node =
@@ -4930,7 +4943,8 @@ and check ctx expected (i : location instr) =
         let*! result = construction_result typ in
         return_expression i (String (emitted, s)) result
       in
-      return (node, annotation_needed ctx string_valtype expected)
+      return
+        (node, annotation_needed ~drop_supertype ctx string_valtype expected)
   | Cast (e, typ) when is_null_initializer e ->
       let* i' = instruction ctx i in
       (* A cast of [null] is redundant when the checking context already
@@ -5160,7 +5174,7 @@ and check ctx expected (i : location instr) =
            mutates the cell, then decide whether the annotation is load-bearing
            (see [annotation_needed]). *)
       let standalone = standalone_valtype ctx (expression_type ctx i') in
-      let needed = annotation_needed ctx standalone expected in
+      let needed = annotation_needed ~drop_supertype ctx standalone expected in
       if has_expectation expected then check_type ctx i' expected;
       return (i', needed)
 
@@ -5168,10 +5182,10 @@ and check ctx expected (i : location instr) =
    bridge in [toplevel_instruction]'s default arm: pop the hole operands off the
    stack into the parameter list, run [check] on them, and surface its keep-bool.
    Used for an annotated global initializer (a constant expression). *)
-and check_toplevel ctx expected i =
+and check_toplevel ?(drop_supertype = false) ctx expected i =
   let count = count_holes i in
   let* args = pop_many ctx i count [] in
-  let args, (i', needed) = check ctx expected i args in
+  let args, (i', needed) = check ~drop_supertype ctx expected i args in
   assert (args = []);
   (* A misplaced hole ([_] after a value) is reported by [check_hole_order];
      it returns [false] only after reporting that error, so recover rather than
@@ -6357,7 +6371,11 @@ let rec globals ctx fields =
                    inferred from it, and the keep-bool decides whether the
                    annotation is redundant (dropped only when converting from
                    Wasm, and never for a [null] whose bare form would re-infer a
-                   floating type — see [is_null_initializer]). *)
+                   floating type — see [is_null_initializer]). An immutable
+                   ([const]) global additionally drops an annotation that is a
+                   mere supertype of the initializer's type ([drop_supertype]),
+                   narrowing the global to that subtype — sound since nothing
+                   reassigns it (see [annotation_needed]). *)
                 match internalize_valtype ctx annot with
                 | None ->
                     let def' =
@@ -6371,7 +6389,9 @@ let rec globals ctx fields =
                        still reported as an unknown name. *)
                     let def', needed =
                       with_empty_stack ctx ~location:def.info ~kind:Expression
-                        (check_toplevel ctx (UnionFind.make (Valtype ity)) def)
+                        (check_toplevel ~drop_supertype:(not mut) ctx
+                           (UnionFind.make (Valtype ity))
+                           def)
                     in
                     Tbl.add ctx.diagnostics ctx.globals name (mut, Some ity);
                     let drop =
