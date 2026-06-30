@@ -83,13 +83,16 @@ let unicode_escape lexbuf s =
       (Parsing.Syntax_error
          ( Sedlexing.lexing_bytes_positions lexbuf,
            Printf.sprintf "Malformed Unicode escape.\n" ));
-  let n = int_of_string ("0x" ^ String.sub s !i (len + 6)) in
-  if not (Uchar.is_valid n) then
-    raise
-      (Parsing.Syntax_error
-         ( Sedlexing.lexing_bytes_positions lexbuf,
-           Printf.sprintf "Malformed Unicode escape.\n" ));
-  Uchar.unsafe_of_int n
+  (* Parse with [int_of_string_opt]: a hexnum too large for an [int] overflows,
+     and is in any case not a valid scalar value, so fold it into the same
+     "malformed" error rather than crashing. *)
+  match int_of_string_opt ("0x" ^ String.sub s !i (len + 6)) with
+  | Some n when Uchar.is_valid n -> Uchar.unsafe_of_int n
+  | _ ->
+      raise
+        (Parsing.Syntax_error
+           ( Sedlexing.lexing_bytes_positions lexbuf,
+             Printf.sprintf "Malformed Unicode escape.\n" ))
 
 let rec string lexbuf =
   match%sedlex lexbuf with
