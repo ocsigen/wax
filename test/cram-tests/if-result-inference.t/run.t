@@ -45,17 +45,20 @@ A value-producing `if` needs an `else`:
   4 │ 
   [123]
 
-With no context to draw on (here a method receiver, typed in synthesis), two
-branches with no common supertype are reported at the `if` itself:
+With no context to draw on (here a method receiver, typed in synthesis), the two
+branches have no common supertype, so a caret points at each branch's value and
+is labelled with its type (and, since the types are in incompatible hierarchies,
+no `=> T` annotation could reconcile them, so none is suggested):
 
   $ wax check mismatched-synth.wax
   Error:
-    The branches of this if produce values with no common supertype, so its result type cannot be inferred; their types are respectively
-    i64 and &any. Add an explicit => T result type.
+    The branches of this if produce values with no common supertype, so its result type cannot be inferred.
    ──➤  mismatched-synth.wax:2:6
   1 │ fn f(c: i32) -> i32 {
   2 │     (if c { 0 as i64; } else { null as &any; }).clz() as i32;
     ·      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ·             ^^^^^^^^ i64
+    ·                                ^^^^^^^^^^^^ &any
   3 │ }
   4 │ 
   [123]

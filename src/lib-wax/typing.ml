@@ -292,12 +292,22 @@ module Error = struct
        types are respectively@ @[<2>%a@]@ and@ @[<2>%a@]."
       output_inferred_type ty1 output_inferred_type ty2
 
-  let if_branch_type_mismatch context ~location ty1 ty2 =
+  let if_branch_type_mismatch context ~location ~loc1 ~loc2 ty1 ty2 =
+    (* Point a caret at each branch's offending value, labelled with its type.
+       The two are in incompatible type hierarchies, so — unlike a checked
+       position, which can name one expected type — there is no common
+       supertype and hence no [=> T] annotation that would reconcile them. *)
+    let branch_label location ty =
+      {
+        Wax_utils.Diagnostic.location;
+        message =
+          (fun f () -> Format.fprintf f "@[<2>%a@]" output_inferred_type ty);
+      }
+    in
     report context ~location
+      ~related:[ branch_label loc1 ty1; branch_label loc2 ty2 ]
       "The branches of this if produce values with no common supertype, so its \
-       result type cannot be inferred; their types are respectively@ \
-       @[<2>%a@]@ and@ @[<2>%a@].@ Add an explicit @[=> T@] result type."
-      output_inferred_type ty1 output_inferred_type ty2
+       result type cannot be inferred."
 
   let name_already_bound context ~location kind x =
     report context ~location "A %s named %a is already bound." kind print_name x
@@ -5327,8 +5337,9 @@ and block ctx loc label params results br_params block =
    the block's label (the caller checks via [Ast_utils.refs_label_list]), so the
    label is never used as a branch target and the value reaching the exit is
    exactly the trailing fall-through one. Returns the typed body and the inferred
-   result cell: [Some] for a single trailing value, [None] for a void or
-   divergent body (the caller then keeps the source annotation / treats it as
+   result cell, paired with the location where that value was pushed (for
+   diagnostics): [Some (loc, tv)] for a single trailing value, [None] for a void
+   or divergent body (the caller then keeps the source annotation / treats it as
    void). *)
 and block_infer ctx loc label body =
   with_empty_stack ctx ~location:loc ~kind:Block
@@ -5343,7 +5354,7 @@ and block_infer ctx loc label body =
      in
      fun st ->
        match st with
-       | Cons (_, tv, Empty) -> (Empty, (body', Some tv))
+       | Cons (loc, tv, Empty) -> (Empty, (body', Some (loc, tv)))
        | Empty -> (Empty, (body', None))
        | Unreachable -> (Unreachable, (body', None))
        | Cons _ -> (st, (body', None)))
@@ -5425,15 +5436,16 @@ and if_inference ctx i label typ ~cond ~if_block ~else_block =
     in
     let inferred =
       match (r1, r2) with
-      | Some a, Some b -> (
+      | Some (loc1, a), Some (loc2, b) -> (
           match join_value_types ctx a b with
           | Some _ as r -> r
           | None ->
-              Error.if_branch_type_mismatch ctx.diagnostics ~location:i.info a b;
+              Error.if_branch_type_mismatch ctx.diagnostics ~location:i.info
+                ~loc1 ~loc2 a b;
               (* Recover with one branch's type so the result is still a single
                  value (avoids a cascading empty-stack error downstream). *)
               Some a)
-      | (Some _ as r), None | None, (Some _ as r) -> r
+      | Some (_, a), None | None, Some (_, a) -> Some a
       | None, None -> None
     in
     let results, typ = finalize_inferred ctx typ ~inferred in
