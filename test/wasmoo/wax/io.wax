@@ -653,7 +653,7 @@ fn caml_do_read(ch: &channel, pos: i32, len: i32) -> i32 {
         offset = fd_offset.offset;
         try {
             n =
-                if fd_offset.seeked => i32 {
+                if fd_offset.seeked {
                     read(fd, ch.buffer, pos, len, offset);
                 } else {
                     read'(fd, ch.buffer, pos, len, null);
@@ -1084,7 +1084,7 @@ fn caml_flush_partial(ch: &channel) -> i32 {
             let written: i32;
             try {
                 written =
-                    if fd_offset.seeked => i32 {
+                    if fd_offset.seeked {
                         write(fd, buf, 0, towrite, offset);
                     } else {
                         write'(fd, buf, 0, towrite, null);

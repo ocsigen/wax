@@ -150,7 +150,7 @@
                 become (f as &closure_3).direct(
                     resume_res_0,
                     [block|cont_tag as &i31, fiber, fiber],
-                    if tail == 0 as &i31 => &eq {
+                    if tail == 0 as &i31 {
                         fiber;
                     } else {
                         tail;

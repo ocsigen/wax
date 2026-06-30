@@ -300,7 +300,7 @@ fn caml_lazy_make_forward(v: &eq) -> &eq {
 
 fn obj_update_tag(v: &eq, o: i32, n: i32) -> i32 {
     let b = v as &block;
-    if b[0] == o as &i31 => i32 {
+    if b[0] == o as &i31 {
         b[0] = n as &i31;
         1;
     } else {
@@ -439,7 +439,7 @@ fn caml_get_public_method(obj: &eq, vtag: &eq) -> &eq {
             li = mi;
         }
     }
-    if vtag == meths[li + 1] => &eq {
+    if vtag == meths[li + 1] {
         meths[li];
     } else {
         0 as &i31;

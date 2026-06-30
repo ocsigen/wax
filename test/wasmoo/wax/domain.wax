@@ -51,7 +51,7 @@ fn caml_atomic_cas_field(ref: &eq, i: &eq, o: &eq, n: &eq) -> &eq {
 fn caml_atomic_compare_exchange(ref: &eq, o: &eq, n: &eq) -> &eq {
     let b = ref as &block;
     let old = b[1];
-    if old == o => &eq {
+    if old == o {
         b[1] = n;
         old;
     } else {

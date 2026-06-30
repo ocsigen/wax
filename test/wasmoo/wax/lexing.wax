@@ -121,7 +121,7 @@ fn run_mem(s: &bytes, i: i32, lexbuf: &block, curr_pos: &eq) {
         let src = s[i + 1] as i32_u;
         i = i + 2;
         mem[dst + 1] =
-            if src == 0xff => &eq {
+            if src == 0xff {
                 curr_pos;
             } else {
                 mem[src + 1];
@@ -203,7 +203,7 @@ fn caml_new_lex_engine(vtbl: &eq, start_state: &eq, vlexbuf: &eq) -> &eq {
         }
         let base_code = get(lex_base_code, pstate);
         pc_off =
-            if get(lex_check_code, base_code + c) == pstate => i32 {
+            if get(lex_check_code, base_code + c) == pstate {
                 get(lex_trans_code, base_code + c);
             } else {
                 get(lex_default_code, pstate);

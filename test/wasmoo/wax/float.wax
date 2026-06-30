@@ -92,7 +92,7 @@ fn caml_hexstring_of_float(v: &eq, vprec: &eq, vstyle: &eq) -> &eq {
             let len: i32;
             if exp == 0x7FF {
                 let txt =
-                    if !m => &chars {
+                    if !m {
                         infinity;
                     } else {
                         nan_chars;
@@ -282,7 +282,7 @@ fn caml_format_float(vfmt: &eq, arg: &eq) -> &eq {
             if exp == 0x7FF {
                 let m = b << 12;
                 let txt =
-                    if !m => &chars {
+                    if !m {
                         inf_chars;
                     } else {
                         negative = 0;
@@ -616,7 +616,7 @@ fn caml_nextafter_float(x: f64, y: f64) -> f64 {
     if x == y {
         return y;
     }
-    if x == 0 => f64 {
+    if x == 0 {
         if y >= 0 => f64 {
             return 0x1p-1074;
         } else {
@@ -637,17 +637,17 @@ fn caml_nextafter_float(x: f64, y: f64) -> f64 {
 #[export = "caml_classify_float"]
 fn caml_classify_float(x: f64) -> i32 {
     let a = x.abs();
-    if a >= 0x1p-1022 => i32 {
-        if a < inf => i32 {
+    if a >= 0x1p-1022 {
+        if a < inf {
             0; // normal
         } else {
             3;
         } // infinity
     } else {
-        if a == 0 => i32 {
+        if a == 0 {
             2; // zero
         } else {
-            if a == a => i32 {
+            if a == a {
                 1; // subnormal
             } else {
                 4;
@@ -917,16 +917,16 @@ fn caml_float_compare(x: f64, y: f64) -> i32 {
 #[export = "caml_round_float"]
 fn caml_round_float(x: f64) -> f64 {
     let y: f64;
-    if x >= 0 => f64 {
+    if x >= 0 {
         y = x.floor();
-        if x - y >= 0.5 => f64 {
+        if x - y >= 0.5 {
             y + 1;
         } else {
             y;
         }
     } else {
         y = x.ceil();
-        if y - x >= 0.5 => f64 {
+        if y - x >= 0.5 {
             y - 1;
         } else {
             y;

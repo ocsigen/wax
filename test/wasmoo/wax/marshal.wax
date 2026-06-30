@@ -1125,7 +1125,7 @@ fn extern_rec(s: &extern_state, v: &eq) {
 }
 
 fn extern_output_length(s: &extern_state, pos: i32) -> i32 {
-    if s.user_provided_output => i32 {
+    if s.user_provided_output {
         s.pos - pos;
     } else {
         s.output_last.end = s.pos;

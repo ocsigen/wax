@@ -1937,6 +1937,67 @@ let val_lub ctx v1 v2 =
       Ref { nullable; typ = lub }
   | _ -> if v1 = v2 then Some v1 else None
 
+(* The least upper bound of two value type cells, or [None] when they have no
+   common type. Mirrors the [Select] (?:) reconciliation: it pins an
+   as-yet-unconstrained literal/[null] to the other side and lubs two reference
+   types via [val_lub]. Used to combine the values reaching a block's exit (the
+   branches of an [if], etc.) when inferring the block's result type. *)
+let join_value_types ctx ty1 ty2 =
+  match (UnionFind.find ty1, UnionFind.find ty2) with
+  | _, (Unknown | Error) -> Some ty1
+  | (Unknown | Error), _ -> Some ty2
+  | Null, Null -> Some ty1
+  | Valtype { internal = I32; _ }, Valtype { internal = I32; _ }
+  | Valtype { internal = I64; _ }, Valtype { internal = I64; _ }
+  | Valtype { internal = F32; _ }, Valtype { internal = F32; _ }
+  | Valtype { internal = F64; _ }, Valtype { internal = F64; _ } ->
+      Some ty2
+  | (Int | Number), (Int | Valtype { internal = I32 | I64; _ })
+  | (Float | Number), (Float | Valtype { internal = F32 | F64; _ })
+  | Number, Number ->
+      UnionFind.merge ty1 ty2 (UnionFind.find ty2);
+      Some ty2
+  | ( (Valtype { internal = I32; _ } | Valtype { internal = I64; _ }),
+      (Int | Number) )
+  | ( (Valtype { internal = F32; _ } | Valtype { internal = F64; _ }),
+      (Float | Number) )
+  | (Int | Float), Number ->
+      UnionFind.merge ty1 ty2 (UnionFind.find ty1);
+      Some ty1
+  | Valtype { typ = typ1; _ }, Valtype { typ = typ2; _ } -> (
+      match val_lub ctx typ1 typ2 with
+      | Some ty -> internalize ctx ty
+      | None -> None)
+  | Valtype { typ = Ref { typ; _ }; _ }, Null -> (
+      match internalize ctx (Ref { typ; nullable = true }) with
+      | Some ty ->
+          UnionFind.set ty2 (UnionFind.find ty);
+          Some ty
+      | None -> None)
+  | Null, Valtype { typ = Ref { typ; _ }; _ } -> (
+      match internalize ctx (Ref { typ; nullable = true }) with
+      | Some ty ->
+          UnionFind.set ty1 (UnionFind.find ty);
+          Some ty
+      | None -> None)
+  | _ -> None
+
+(* Whether a block body's trailing statement is a construction literal (or a
+   [null] cast) — the forms [block_contents] routes through [check] against the
+   block result. We keep the explicit [=> T] on such blocks rather than infer it,
+   so the construction's own name/cast dropping (which needs the result type) is
+   preserved. *)
+let trailing_is_construction (l : _ Ast.instr list) =
+  match List.rev l with
+  | last :: _ -> (
+      match last.Ast.desc with
+      | Struct _ | StructDefault _ | Array _ | ArrayDefault _ | ArrayFixed _
+      | ArraySegment _ | String _ ->
+          true
+      | Cast (e, _) -> is_null_initializer e
+      | _ -> false)
+  | [] -> false
+
 let address_valtype (at : [ `I32 | `I64 ]) : inferred_valtype =
   match at with
   | `I32 -> { typ = I32; internal = I32; inline = None }
@@ -2329,45 +2390,48 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       let typed = block ctx i.info None [||] [||] [||] lowered in
       let cond', instrs' = rebuild_while typed in
       return_statement i (While { label; cond = cond'; block = instrs' }) [||]
-  | If { label; typ; cond; if_block; else_block } ->
+  | If { label; typ; cond; if_block; else_block } -> (
       let* cond' = instruction ctx cond in
       check_type ctx cond'
         (UnionFind.make (Valtype { typ = I32; internal = I32; inline = None }));
       if Array.length typ.params > 0 then
         Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
-      let*! params =
-        array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
-      in
-      let*! results = array_map_opt (internalize ctx) typ.results in
-      let if_block' =
-        {
-          if_block with
-          desc = block ctx i.info label params results results if_block.desc;
-        }
-      in
-      let else_block' =
-        match else_block with
-        | Some b ->
-            Some
-              {
-                b with
-                desc = block ctx i.info label params results results b.desc;
-              }
-        | None ->
-            if not (missing_else_ok ctx params results) then
-              Error.if_without_else ctx.diagnostics ~location:i.info;
-            None
-      in
-      return_statement i
-        (If
-           {
-             label;
-             typ;
-             cond = cond';
-             if_block = if_block';
-             else_block = else_block';
-           })
-        results
+      match if_inference ctx i label typ ~cond:cond' ~if_block ~else_block with
+      | Some (desc, results) -> return_statement i desc results
+      | None ->
+          let*! params =
+            array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
+          in
+          let*! results = array_map_opt (internalize ctx) typ.results in
+          let if_block' =
+            {
+              if_block with
+              desc = block ctx i.info label params results results if_block.desc;
+            }
+          in
+          let else_block' =
+            match else_block with
+            | Some b ->
+                Some
+                  {
+                    b with
+                    desc = block ctx i.info label params results results b.desc;
+                  }
+            | None ->
+                if not (missing_else_ok ctx params results) then
+                  Error.if_without_else ctx.diagnostics ~location:i.info;
+                None
+          in
+          return_statement i
+            (If
+               {
+                 label;
+                 typ;
+                 cond = cond';
+                 if_block = if_block';
+                 else_block = else_block';
+               })
+            results)
   | If_annotation { cond; then_body; else_body } ->
       (* Type each branch as an isolated block, under the branch's assumption so
          names resolve per branch (a name may be declared only in, or with a
@@ -4900,35 +4964,40 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
       let* () = pop_args ctx ~location:i.info params in
       let instrs' = block ctx i.info label params results params instrs in
       return_statement i (Loop { label; typ; block = instrs' }) results
-  | If { label; typ; cond; if_block; else_block } ->
+  | If { label; typ; cond; if_block; else_block } -> (
       let* cond = toplevel_instruction ctx cond in
       check_type ctx cond
         (UnionFind.make (Valtype { typ = I32; internal = I32; inline = None }));
-      let*! params =
-        array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
-      in
-      let*! results = array_map_opt (internalize ctx) typ.results in
-      let* () = pop_args ctx ~location:i.info params in
-      let if_block =
-        {
-          if_block with
-          desc = block ctx i.info label params results results if_block.desc;
-        }
-      in
-      let else_block =
-        match else_block with
-        | Some b ->
-            Some
-              {
-                b with
-                desc = block ctx i.info label params results results b.desc;
-              }
-        | None ->
-            if not (missing_else_ok ctx params results) then
-              Error.if_without_else ctx.diagnostics ~location:i.info;
-            None
-      in
-      return_statement i (If { label; typ; cond; if_block; else_block }) results
+      match if_inference ctx i label typ ~cond ~if_block ~else_block with
+      | Some (desc, results) -> return_statement i desc results
+      | None ->
+          let*! params =
+            array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
+          in
+          let*! results = array_map_opt (internalize ctx) typ.results in
+          let* () = pop_args ctx ~location:i.info params in
+          let if_block =
+            {
+              if_block with
+              desc = block ctx i.info label params results results if_block.desc;
+            }
+          in
+          let else_block =
+            match else_block with
+            | Some b ->
+                Some
+                  {
+                    b with
+                    desc = block ctx i.info label params results results b.desc;
+                  }
+            | None ->
+                if not (missing_else_ok ctx params results) then
+                  Error.if_without_else ctx.diagnostics ~location:i.info;
+                None
+          in
+          return_statement i
+            (If { label; typ; cond; if_block; else_block })
+            results)
   | TryTable { label; typ; block = body; catches } ->
       let*! params =
         array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
@@ -5133,6 +5202,122 @@ and block ctx loc label params results br_params block =
      in
      let* () = pop_args ctx ~location:loc results in
      return block')
+
+(* Type a block body in synthesis (no expected result), inferring its single
+   fall-through value as the block's result. Only valid where no branch targets
+   the block's label (the caller checks via [Ast_utils.refs_label_list]), so the
+   label is never used as a branch target and the value reaching the exit is
+   exactly the trailing fall-through one. Returns the typed body and the inferred
+   result cell: [Some] for a single trailing value, [None] for a void or
+   divergent body (the caller then keeps the source annotation / treats it as
+   void). *)
+and block_infer ctx loc label body =
+  with_empty_stack ctx ~location:loc ~kind:Block
+    (let* body' =
+       block_contents
+         {
+           ctx with
+           control_types =
+             (Option.map (fun l -> l.desc) label, [||]) :: ctx.control_types;
+         }
+         [||] body
+     in
+     fun st ->
+       match st with
+       | Cons (_, tv, Empty) -> (Empty, (body', Some tv))
+       | Empty -> (Empty, (body', None))
+       | Unreachable -> (Unreachable, (body', None))
+       | Cons _ -> (st, (body', None)))
+
+(* From the [inferred] result of an inferring block (already joined across an
+   [if]'s branches) and the source [typ], produce the result-type cells for the
+   stack effect and the [typ] to store on the node. For an omitted annotation
+   ([typ.results = [||]]) the inferred type fills it in; for an explicit single
+   result the annotation is dropped (cleared) when [simplify] and the inferred
+   type equals it (so it re-infers identically), else kept. *)
+and finalize_inferred ctx typ ~inferred =
+  if typ.results = [||] then
+    match Option.bind inferred (resolve_omitted_valtype ctx) with
+    | Some iv ->
+        ([| UnionFind.make (Valtype iv) |], { typ with results = [| iv.typ |] })
+    | None -> ([||], typ)
+  else
+    let result_cells =
+      match array_map_opt (internalize ctx) typ.results with
+      | Some a -> a
+      | None -> [||]
+    in
+    let drop =
+      ctx.simplify
+      && Array.length result_cells = 1
+      &&
+      match
+        ( Option.bind inferred (standalone_valtype ctx),
+          standalone_valtype ctx result_cells.(0) )
+      with
+      | Some v, Some t -> valtype_equal ctx v t
+      | _ -> false
+    in
+    (result_cells, if drop then { typ with results = [||] } else typ)
+
+(* Try to infer (and, on [simplify], drop) an [if]'s result type from its two
+   branches' fall-through values, returning the typed node when it applies and
+   [None] to fall back to the annotated path. Shared by the expression-position
+   ([instruction]) and statement-position ([toplevel_instruction]) [If] cases;
+   [cond] is the already-typed condition. Applies only with an [else], no branch
+   to the [if]'s own label, at most one result, and either an omitted annotation
+   (re-parse, must re-infer) or — to keep the drop honest — [simplify] with
+   neither tail a construction (whose own name dropping needs the result type). *)
+and if_inference ctx i label typ ~cond ~if_block ~else_block =
+  let no_self_branch =
+    match label with
+    | None -> true
+    | Some l ->
+        not
+          (Ast_utils.refs_label_list l.desc if_block.desc
+          ||
+          match else_block with
+          | Some b -> Ast_utils.refs_label_list l.desc b.desc
+          | None -> false)
+  in
+  let omitted = typ.results = [||] in
+  let trailing_ok =
+    (not (trailing_is_construction if_block.desc))
+    &&
+    match else_block with
+    | Some b -> not (trailing_is_construction b.desc)
+    | None -> true
+  in
+  let use_infer =
+    Array.length typ.params = 0
+    && Option.is_some else_block && no_self_branch
+    && Array.length typ.results <= 1
+    && (omitted || (ctx.simplify && trailing_ok))
+  in
+  if not use_infer then None
+  else
+    let if_block', r1 = block_infer ctx i.info label if_block.desc in
+    let else_block', r2 =
+      block_infer ctx i.info label (Option.get else_block).desc
+    in
+    let inferred =
+      match (r1, r2) with
+      | Some a, Some b -> join_value_types ctx a b
+      | (Some _ as r), None | None, (Some _ as r) -> r
+      | None, None -> None
+    in
+    let results, typ = finalize_inferred ctx typ ~inferred in
+    Some
+      ( If
+          {
+            label;
+            typ;
+            cond;
+            if_block = { if_block with desc = if_block' };
+            else_block =
+              Some { (Option.get else_block) with desc = else_block' };
+          },
+        results )
 
 let check_type_definitions ctx =
   (*ZZZ In-order check? *)

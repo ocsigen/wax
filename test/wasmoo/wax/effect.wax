@@ -500,7 +500,7 @@ fn caml_is_continuation(v: &eq) -> i32 {
         env.i = i + 1;
         become (f as &cps_closure).func(
             args[i],
-            if i + 2 == args.length() => &eq {
+            if i + 2 == args.length() {
                 args[i + 1];
             } else {
                 env;
@@ -536,7 +536,7 @@ fn caml_is_continuation(v: &eq) -> i32 {
         let exn =
             try &eq {
                 res =
-                    if args.length() == 1 => &eq {
+                    if args.length() == 1 {
                         (f as &cps_closure_0).func(identity_closure, f);
                     } else {
                         (f as &cps_closure).func(

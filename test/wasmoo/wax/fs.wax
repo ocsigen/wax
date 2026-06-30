@@ -228,7 +228,7 @@ type block = [mut &eq];
             return current_dir;
         }
         let need_slash =
-            if current_dir.length() => i32 {
+            if current_dir.length() {
                 47 // '/'
                     != current_dir[current_dir.length() - 1] as i32_u;
             } else {

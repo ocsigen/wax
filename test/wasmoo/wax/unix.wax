@@ -535,7 +535,7 @@ const no_arg = "";
         if variant == -1 as &i31 {
             let errno = caml_js_get(exn, errno_str);
             errno =
-                if errno is &i31 => i32 {
+                if errno is &i31 {
                     0 - errno as i32_s;
                 } else {
                     9999;
@@ -547,7 +547,7 @@ const no_arg = "";
                 0 as &i31,
                 get_unix_error_exn(),
                 variant,
-                if !cmd => &eq {
+                if !cmd {
                     ensure_string(caml_js_get(exn, syscall));
                 } else {
                     cmd!;
@@ -560,7 +560,7 @@ const no_arg = "";
     #[export = "caml_unix_error_message"]
     fn unix_error_message(err: &eq) -> &eq {
         let errno =
-            if err is &i31 => i32 {
+            if err is &i31 {
                 err as i32_u;
             } else {
                 0 - (err as &block)[1] as i32_u;
@@ -814,7 +814,7 @@ fn unix_utimes(path: &eq, atime: &eq, mtime: &eq) -> &eq {
             1 as &i31,
             1 as &i31,
             0 as &i31,
-            if large => &eq {
+            if large {
                 caml_copy_int64(m.load64(p, 8, 32));
             } else {
                 m.load64(p, 8, 32) as &i31;
@@ -852,7 +852,7 @@ fn caml_alloc_stat(
         uid as &i31,
         gid as &i31,
         rdev as &i31,
-        if large => &eq {
+        if large {
             caml_copy_int64(size);
         } else {
             size as &i31;
@@ -2056,7 +2056,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
             let n: i32;
             try {
                 n =
-                    if fd_offset.seeked => i32 {
+                    if fd_offset.seeked {
                         write(fd, buf, 0, numbytes, offset);
                     } else {
                         write'(fd, buf, 0, numbytes, null);
@@ -2097,7 +2097,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
             caml_blit_bytes_to_dataview(s, pos, buf_view, 0, numbytes);
             try {
                 n =
-                    if fd_offset.seeked => i32 {
+                    if fd_offset.seeked {
                         write(fd, buf, 0, numbytes, offset);
                     } else {
                         write'(fd, buf, 0, numbytes, null);
@@ -2129,7 +2129,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
         let n: i32;
         try {
             n =
-                if fd_offset.seeked => i32 {
+                if fd_offset.seeked {
                     read(fd, buf, 0, len, offset);
                 } else {
                     read'(fd, buf, 0, len, null);
@@ -2165,7 +2165,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
                 let n: i32;
                 try {
                     n =
-                        if fd_offset.seeked => i32 {
+                        if fd_offset.seeked {
                             write(fd, buf, pos, len, offset);
                         } else {
                             write'(fd, buf, pos, len, null);
@@ -2198,7 +2198,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
         let n: i32;
         try {
             n =
-                if fd_offset.seeked => i32 {
+                if fd_offset.seeked {
                     read(fd, buf, pos, len, offset);
                 } else {
                     read'(fd, buf, pos, len, null);

@@ -165,7 +165,7 @@
         // The header peek reuses the streaming input chunk as scratch; both
         // decode paths overwrite or ignore it afterwards.
         bytes_to_mem(input, pos, in_buf(), hdr);
-        if out_len <=u window_size(in_buf(), hdr) => &bytes {
+        if out_len <=u window_size(in_buf(), hdr) {
             decompress_oneshot(input, pos, len, out_len);
         } else {
             decompress_stream(input, pos, len, out_len);

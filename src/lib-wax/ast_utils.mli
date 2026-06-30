@@ -2,6 +2,15 @@ val map_instr : ('a -> 'b) -> 'a Ast.instr -> 'b Ast.instr
 (** [map_instr f instr] applies the function [f] to the info field of [instr]
     and recursively applies it to all nested instructions. *)
 
+val refs_label : string -> 'info Ast.instr -> bool
+(** [refs_label name i] is whether any branch within [i] targets the label
+    [name]. A conservative over-approximation that ignores shadowing (a branch
+    to a nested block re-using [name] is still counted). *)
+
+val refs_label_list : string -> 'info Ast.instr list -> bool
+(** [refs_label_list name l] is [refs_label name] over a list of instructions.
+*)
+
 val lower_dispatch :
   block_info:'info ->
   index:'info Ast.instr ->

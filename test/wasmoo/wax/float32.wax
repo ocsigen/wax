@@ -132,16 +132,16 @@ fn caml_float32_of_float(f64: &eq) -> &eq {
 #[export = "caml_round_float32_bytecode"]
 fn caml_round_float32_bytecode(x: f32) -> f32 {
     let y: f32;
-    if x >= 0 => f32 {
+    if x >= 0 {
         y = x.floor();
-        if x - y >= 0.5 => f32 {
+        if x - y >= 0.5 {
             y + 1;
         } else {
             y;
         }
     } else {
         y = x.ceil();
-        if y - x >= 0.5 => f32 {
+        if y - x >= 0.5 {
             y - 1;
         } else {
             y;
@@ -200,7 +200,7 @@ fn caml_nextafter_float32_bytecode(x: f32, y: f32) -> f32 {
     if x == y {
         return y;
     }
-    if x == 0 => f32 {
+    if x == 0 {
         if y >= 0 => f32 {
             return 0x1p-149;
         } else {
@@ -221,17 +221,17 @@ fn caml_nextafter_float32_bytecode(x: f32, y: f32) -> f32 {
 #[export = "caml_classify_float32_bytecode"]
 fn caml_classify_float32_bytecode(a: f32) -> i32 {
     a = a.abs();
-    if a >= 0x1p-126 => i32 {
-        if a < inf => i32 {
+    if a >= 0x1p-126 {
+        if a < inf {
             0; // normal
         } else {
             3;
         } // infinity
     } else {
-        if a == 0 => i32 {
+        if a == 0 {
             2; // zero
         } else {
-            if a == a => i32 {
+            if a == a {
                 1; // subnormal
             } else {
                 4;
@@ -301,7 +301,7 @@ fn caml_bytes_setf32(a: &eq, i: i32, v: f32) -> &eq {
 // propagate NaN and canonicalise -0 vs +0.
 #[export = "caml_simd_float32_min_bytecode"]
 fn caml_simd_float32_min_bytecode(x: f32, y: f32) -> f32 {
-    if x < y => f32 {
+    if x < y {
         x;
     } else {
         y;
@@ -310,7 +310,7 @@ fn caml_simd_float32_min_bytecode(x: f32, y: f32) -> f32 {
 
 #[export = "caml_simd_float32_max_bytecode"]
 fn caml_simd_float32_max_bytecode(x: f32, y: f32) -> f32 {
-    if x > y => f32 {
+    if x > y {
         x;
     } else {
         y;
