@@ -92,12 +92,19 @@ let print_text_comptype f (ty : Ast.Text.comptype) =
 (* The source rendering of a stack value: either a value type the user wrote
    (or that names a type the user declared), or — for a reference whose type has
    no source name — that referenced type's signature, shown inline. *)
-type source_type = Plain of Ast.Text.valtype | Inline_ref of Ast.Text.comptype
+type source_type =
+  | Plain of Ast.Text.valtype
+  | Inline_ref of Ast.Text.comptype
+  (* The bottom reference type [(ref bot)]. It has no user-written form; it is
+     synthesized only to render a stack value of the bottom reference type in a
+     diagnostic (e.g. when such a value reaches a numeric context). *)
+  | Bottom_ref
 
 let print_source_type f = function
   | Plain v -> print_text_valtype f v
   | Inline_ref comptype ->
       Format.fprintf f "@[<1>(ref@ %a)@]" print_text_comptype comptype
+  | Bottom_ref -> Format.fprintf f "@[<1>(ref@ bot)@]"
 
 (* Reconstruct a source type from an interned one. Used as the source type of a
    pushed value when no truer reference is available, so every concrete stack
@@ -194,14 +201,38 @@ module Error = struct
           "This instruction is only valid for packed fields. Use struct.get.")
       ()
 
-  let instruction_type_mismatch context ~location ~provided_source
+  (* The caret points at the instruction that {e produced} the value still on
+     the stack, not at the one consuming it (whose location is [consumer]): the
+     wording makes that explicit, and a secondary caret marks the use site. *)
+  let instruction_type_mismatch context ~location ~consumer ~provided_source
       ~expected_source =
-    Diagnostic.report context ~location ~severity:Error
+    (* Mark the use site with a secondary caret, but only when it is a distinct
+       location that does not enclose the producer: an implicit function or
+       block result spans the whole construct, so a caret there would just be
+       noise around the precise one. *)
+    let encloses outer inner =
+      outer.Ast.loc_start.Lexing.pos_cnum <= inner.Ast.loc_start.Lexing.pos_cnum
+      && inner.Ast.loc_end.Lexing.pos_cnum <= outer.Ast.loc_end.Lexing.pos_cnum
+    in
+    let related =
+      match consumer with
+      | Some loc
+        when loc.Ast.loc_start.Lexing.pos_cnum >= 0
+             && not (encloses loc location) ->
+          [
+            {
+              Wax_utils.Diagnostic.location = loc;
+              message = (fun f () -> Format.pp_print_string f "expected here");
+            };
+          ]
+      | _ -> []
+    in
+    Diagnostic.report context ~location ~severity:Error ~related
       ~message:(fun f () ->
         Format.fprintf f
-          "Type mismatch: this instruction expects type@ @[<2>%a@]@ but the \
-           stack has type@ @[<2>%a@]"
-          print_source_type expected_source print_source_type provided_source)
+          "Type mismatch: this produces a value of type@ @[<2>%a@],@ but type@ \
+           @[<2>%a@]@ is expected."
+          print_source_type provided_source print_source_type expected_source)
       ()
 
   let expected_ref_type context ~location ~src_loc ~source =
@@ -1083,26 +1114,33 @@ let source_element_valtype ctx idx : source_type =
       match ft.typ with Value v -> Plain v | Packed _ -> Plain I32)
   | _ -> assert false
 
-(* Each concrete stack entry pairs the interned type used for subtype checking
-   with the source type the value was written as, mirroring the Wax side's
-   [inferred_valtype]. The source type is always present: a push that does not
-   supply one reconstructs it from the interned type (naming an indexed type by
-   its canonical index). The [valtype] is wrapped in [option] only to leave the
-   bottom (polymorphic) entry of an unreachable stack untyped. *)
+(* A stack entry is one of the two bottoms of the validation type lattice or a
+   concrete value. [Bot] is the unknown value of a polymorphic (unreachable)
+   stack: a subtype of every type. [Bot_ref] is the bottom reference type
+   [(ref bot)], produced when a reference-eliminating instruction consumes a
+   [Bot]: it is a subtype of every reference type but of no numeric or vector
+   type, which is what lets [ref.as_non_null] / [br_on_null] reject a numeric
+   use of their result on an otherwise polymorphic stack. [Val] pairs the
+   interned type used for subtype checking with the source type the value was
+   written as, mirroring the Wax side's [inferred_valtype]; the source type is
+   always present, a push that does not supply one reconstructing it from the
+   interned type (naming an indexed type by its canonical index). *)
+type stack_entry = Bot | Bot_ref | Val of valtype * source_type
+
 type stack =
   | Unreachable
   | Empty
-  | Cons of Ast.location option * (valtype * source_type) option * stack
+  | Cons of Ast.location option * stack_entry * stack
 
-(* Returns the popped value as the interned/source type pair it was pushed as
-   ([None] on an unreachable or empty stack), along with its push location. *)
+(* Returns the popped entry, along with its push location. A pop from an
+   unreachable or empty stack yields the unknown value [Bot]. *)
 let pop_any ctx loc st =
   match st with
-  | Unreachable -> (Unreachable, (None, None))
+  | Unreachable -> (Unreachable, (Bot, None))
   | Cons (loc, ty, r) -> (r, (ty, loc))
   | Empty ->
       Error.empty_stack ctx.modul.diagnostics ~location:loc;
-      (st, (None, None))
+      (st, (Bot, None))
 
 (* The non-null version of a popped reference's source type, for an instruction
    that re-pushes the value with the null case removed. *)
@@ -1113,19 +1151,26 @@ let non_null_source (source : source_type) : source_type =
   | _ -> assert false
 
 let pop ctx loc ~expected_source ty st =
+  let mismatch location source =
+    match location with
+    | Some location ->
+        Error.instruction_type_mismatch ctx.modul.diagnostics ~location
+          ~consumer:(Some loc) ~provided_source:source ~expected_source
+    | None ->
+        Error.type_mismatch ctx.modul.diagnostics ~location:loc
+          ~provided_source:source ~expected_source
+  in
   match st with
   | Unreachable -> (Unreachable, ())
-  | Cons (_, None, r) -> (r, ())
-  | Cons (location, Some (ty', source), r) ->
+  | Cons (_, Bot, r) -> (r, ())
+  | Cons (location, Bot_ref, r) ->
+      (* [(ref bot)] is a subtype of every reference type but of no numeric or
+         vector type. *)
+      (match ty with Ref _ -> () | _ -> mismatch location Bottom_ref);
+      (r, ())
+  | Cons (location, Val (ty', source), r) ->
       let ok = Types.val_subtype ctx.modul.subtyping_info ty' ty in
-      (if not ok then
-         match location with
-         | Some location ->
-             Error.instruction_type_mismatch ctx.modul.diagnostics ~location
-               ~provided_source:source ~expected_source
-         | None ->
-             Error.type_mismatch ctx.modul.diagnostics ~location:loc
-               ~provided_source:source ~expected_source);
+      if not ok then mismatch location source;
       (r, ())
   | Empty ->
       Error.empty_stack ctx.modul.diagnostics ~location:loc;
@@ -1136,8 +1181,9 @@ let pop ctx loc ~expected_source ty st =
 let pop_known ctx loc ty =
   pop ctx loc ~expected_source:(source_of_valtype ty) ty
 
-let push_poly loc st = (Cons (Some loc, None, st), ())
-let push ~source loc ty st = (Cons (loc, Some (ty, source), st), ())
+let push_poly loc st = (Cons (Some loc, Bot, st), ())
+let push_bot_ref loc st = (Cons (loc, Bot_ref, st), ())
+let push ~source loc ty st = (Cons (loc, Val (ty, source), st), ())
 
 (* Push a value whose type has no user-written source form, reconstructing its
    rendering from the type. *)
@@ -1192,13 +1238,22 @@ let get_local ctx ?(initialize = false) i =
   end;
   l
 
-let is_nullable ty =
-  match ty with
-  | None -> true
-  | Some (Ref { nullable; _ }) -> nullable
-  (* The caller has already reported a type mismatch on a non-reference
-     operand; treat it as nullable rather than crashing. *)
-  | _ -> true
+(* The result nullability of [extern.convert_any] / [any.convert_extern], which
+   propagate the operand's nullability. The operand must be a reference in the
+   [typ] hierarchy: a bottom reference satisfies it as known non-null, a
+   fully-unknown [Bot] is treated as nullable, and a non-reference operand (a
+   reported error) is treated as nullable rather than crashing. *)
+let convert_operand_nullable ctx loc entry ~typ =
+  match entry with
+  | Bot -> true
+  | Bot_ref -> false
+  | Val (ty, source) -> (
+      let expected = Ref { nullable = true; typ } in
+      if not (Types.val_subtype ctx.modul.subtyping_info ty expected) then
+        Error.type_mismatch ctx.modul.diagnostics ~location:loc
+          ~provided_source:source
+          ~expected_source:(source_of_valtype expected);
+      match ty with Ref { nullable; _ } -> nullable | _ -> true)
 
 let is_defaultable ty =
   match ty with
@@ -1295,8 +1350,9 @@ let rec output_stack ~full f st =
   | Unreachable -> if full then Format.fprintf f "@ unreachable"
   | Cons (_, ty, st) ->
       (match ty with
-      | Some (_, source) -> Format.fprintf f "@ %a" print_source_type source
-      | None -> Format.fprintf f "@ bot");
+      | Val (_, source) -> Format.fprintf f "@ %a" print_source_type source
+      | Bot -> Format.fprintf f "@ bot"
+      | Bot_ref -> Format.fprintf f "@ (ref bot)");
       output_stack ~full f st
 
 let print_stack st =
@@ -1856,33 +1912,44 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       unreachable
   | Br_on_null idx -> (
       let* ty, loc' = pop_any ctx loc in
+      (* The branch carries the label's parameters; the value falls through with
+         its null case removed ([(ref bot)] when the operand was a bottom). *)
+      let fallthrough push_top =
+        let*! params, param_source = branch_target ctx idx in
+        let* () = pop_args ctx loc ~source:param_source params in
+        let* () = push_results ~source:param_source params in
+        push_top
+      in
       match ty with
-      | None -> return ()
-      | Some (Ref { nullable = _; typ }, source) ->
-          let*! params, param_source = branch_target ctx idx in
-          let* () = pop_args ctx loc ~source:param_source params in
-          let* () = push_results ~source:param_source params in
-          push ~source:(non_null_source source) (Some loc)
-            (Ref { nullable = false; typ })
-      | Some (_, source) ->
+      | Bot | Bot_ref -> fallthrough (push_bot_ref (Some loc))
+      | Val (Ref { nullable = _; typ }, source) ->
+          fallthrough
+            (push ~source:(non_null_source source) (Some loc)
+               (Ref { nullable = false; typ }))
+      | Val (_, source) ->
           Error.expected_ref_type ctx.modul.diagnostics ~location:loc
             ~src_loc:loc' ~source;
           unreachable)
   | Br_on_non_null idx -> (
       let* ty, loc' = pop_any ctx loc in
+      (* The branch carries the label's parameters ending in the non-null
+         reference ([(ref bot)] for a bottom operand); the value is consumed on
+         fall-through. *)
+      let to_branch push_ref =
+        let* () = push_ref in
+        let*! params, param_source = branch_target ctx idx in
+        let* () = pop_args ctx loc ~source:param_source params in
+        let* () = push_results ~source:param_source params in
+        let* _ = pop_any ctx loc in
+        return ()
+      in
       match ty with
-      | None -> return ()
-      | Some (Ref { nullable = _; typ }, source) ->
-          let* () =
-            push ~source:(non_null_source source) None
-              (Ref { nullable = false; typ })
-          in
-          let*! params, param_source = branch_target ctx idx in
-          let* () = pop_args ctx loc ~source:param_source params in
-          let* () = push_results ~source:param_source params in
-          let* _ = pop_any ctx loc in
-          return ()
-      | Some (_, source) ->
+      | Bot | Bot_ref -> to_branch (push_bot_ref None)
+      | Val (Ref { nullable = _; typ }, source) ->
+          to_branch
+            (push ~source:(non_null_source source) None
+               (Ref { nullable = false; typ }))
+      | Val (_, source) ->
           Error.expected_ref_type ctx.modul.diagnostics ~location:loc
             ~src_loc:loc' ~source;
           unreachable)
@@ -2046,7 +2113,18 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let* () = pop_known ctx loc I32 in
       let* ty1, loc1 = pop_any ctx loc in
       let* ty2, loc2 = pop_any ctx loc in
-      match (ty1, ty2) with
+      (* A bare [select] forbids reference operands; the bottom reference, like
+         any reference, is rejected here. Each operand reduces to its value
+         ([None] when unknown), so the cases below mirror the operand stack. *)
+      let as_operand = function
+        | Bot -> None
+        | Bot_ref ->
+            Error.expected_number_or_vec ctx.modul.diagnostics ~location:loc
+              ~source:Bottom_ref;
+            None
+        | Val (ty, source) -> Some (ty, source)
+      in
+      match (as_operand ty1, as_operand ty2) with
       | None, None -> push_poly loc
       | Some (ty1, source1), Some (ty2, source2) ->
           if not (number_or_vec ty1) then
@@ -2343,20 +2421,19 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
   | RefIsNull -> (
       let* ty, loc' = pop_any ctx loc in
       match ty with
-      | None -> return ()
-      | Some (Ref _, _) -> push_known (Some loc) I32
-      | Some (_, source) ->
+      | Bot | Bot_ref | Val (Ref _, _) -> push_known (Some loc) I32
+      | Val (_, source) ->
           Error.expected_ref_type ctx.modul.diagnostics ~location:loc
             ~src_loc:loc' ~source;
           unreachable)
   | RefAsNonNull -> (
       let* ty, loc' = pop_any ctx loc in
       match ty with
-      | None -> return ()
-      | Some (Ref ty, source) ->
+      | Bot | Bot_ref -> push_bot_ref (Some loc)
+      | Val (Ref ty, source) ->
           push ~source:(non_null_source source) (Some loc)
             (Ref { ty with nullable = false })
-      | Some (_, source) ->
+      | Val (_, source) ->
           Error.expected_ref_type ctx.modul.diagnostics ~location:loc
             ~src_loc:loc' ~source;
           unreachable)
@@ -2644,28 +2721,12 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       push_known (Some loc) F64
   | ExternConvertAny ->
       let* tt, _ = pop_any ctx loc in
-      let ty = Option.map fst tt in
-      Option.iter
-        (fun (ty, source) ->
-          let expected = Ref { nullable = true; typ = Any } in
-          if not (Types.val_subtype ctx.modul.subtyping_info ty expected) then
-            Error.type_mismatch ctx.modul.diagnostics ~location:loc
-              ~provided_source:source
-              ~expected_source:(source_of_valtype expected))
-        tt;
-      push_known (Some loc) (Ref { nullable = is_nullable ty; typ = Extern })
+      let nullable = convert_operand_nullable ctx loc tt ~typ:Any in
+      push_known (Some loc) (Ref { nullable; typ = Extern })
   | AnyConvertExtern ->
       let* tt, _ = pop_any ctx loc in
-      let ty = Option.map fst tt in
-      Option.iter
-        (fun (ty, source) ->
-          let expected = Ref { nullable = true; typ = Extern } in
-          if not (Types.val_subtype ctx.modul.subtyping_info ty expected) then
-            Error.type_mismatch ctx.modul.diagnostics ~location:loc
-              ~provided_source:source
-              ~expected_source:(source_of_valtype expected))
-        tt;
-      push_known (Some loc) (Ref { nullable = is_nullable ty; typ = Any })
+      let nullable = convert_operand_nullable ctx loc tt ~typ:Extern in
+      push_known (Some loc) (Ref { nullable; typ = Any })
   | Folded (i, l) ->
       let* () = instructions ctx l in
       instruction ctx i

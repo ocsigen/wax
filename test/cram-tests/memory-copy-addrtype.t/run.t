@@ -12,12 +12,13 @@ Supplying the source address as i64 (the destination's type) is rejected — the
 source operand is checked against the source memory.
 
   $ wax check -f wat bad.wat
-  Error: Type mismatch: this instruction expects type i32
-    but the stack has type i64
+  Error: Type mismatch: this produces a value of type i64, but type i32
+    is expected.
    ──➤  bad.wat:4:47
   2 │   (memory $dst i64 1)
   3 │   (memory $src i32 1)
   4 │   (func (memory.copy $dst $src (i64.const 0) (i64.const 0) (i32.const 0))))
     ·                                               ^^^^^^^^^^^
+    ·          ^^^^^^^^^^^^^^^^^^^^^ expected here
   5 │ 
   [123]

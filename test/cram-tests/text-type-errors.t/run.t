@@ -7,8 +7,8 @@ share a canonical index.
 A ref.cast result feeding an instruction that wants an i32:
 
   $ wax --validate ref_cast.wat -o out.wat
-  Error: Type mismatch: this instruction expects type i32
-    but the stack has type (ref $point)
+  Error: Type mismatch: this produces a value of type (ref $point), but type
+    i32 is expected.
    ──➤  ref_cast.wat:4:6
   2 │   (type $point (struct (field i32)))
   3 │   (func (param (ref any)) (result i32)
@@ -20,8 +20,8 @@ A ref.cast result feeding an instruction that wants an i32:
 A struct.new_default whose result does not match the declared result type:
 
   $ wax --validate struct_new.wat -o out.wat
-  Error: Type mismatch: this instruction expects type (ref $other)
-    but the stack has type (ref $point)
+  Error: Type mismatch: this produces a value of type (ref $point), but type
+    (ref $other) is expected.
    ──➤  struct_new.wat:5:6
   3 │   (type $other (struct (field f64)))
   4 │   (func (result (ref $other))
@@ -33,8 +33,8 @@ A struct.new_default whose result does not match the declared result type:
 A cont.new result feeding an instruction that wants an i32:
 
   $ wax --validate cont_new.wat -o out.wat
-  Error: Type mismatch: this instruction expects type i32
-    but the stack has type (ref $ct)
+  Error: Type mismatch: this produces a value of type (ref $ct), but type 
+    i32 is expected.
    ──➤  cont_new.wat:6:6
   4 │     (type $ct (cont $ft)))
   5 │   (func (param (ref null $ft)) (result i32)
@@ -47,26 +47,28 @@ The expected type is named too, at the instructions that pop a reference to a
 type the user named. A struct.get whose operand is not a reference:
 
   $ wax --validate struct_get.wat -o out.wat
-  Error: Type mismatch: this instruction expects type (ref null $point)
-    but the stack has type i32
+  Error: Type mismatch: this produces a value of type i32, but type
+    (ref null $point) is expected.
    ──➤  struct_get.wat:4:27
   2 │   (type $point (struct (field i32)))
   3 │   (func (result i32)
   4 │     (struct.get $point 0 (i32.const 0))))
     ·                           ^^^^^^^^^^^
+    ·      ^^^^^^^^^^^^^^^^^^^ expected here
   5 │ 
   [128]
 
 A call_ref whose callee operand is not a reference:
 
   $ wax --validate call_ref.wat -o out.wat
-  Error: Type mismatch: this instruction expects type (ref null $ft)
-    but the stack has type i32
+  Error: Type mismatch: this produces a value of type i32, but type
+    (ref null $ft) is expected.
    ──➤  call_ref.wat:4:20
   2 │   (type $ft (func (result i32)))
   3 │   (func (result i32)
   4 │     (call_ref $ft (i32.const 0))))
     ·                    ^^^^^^^^^^^
+    ·      ^^^^^^^^^^^^ expected here
   5 │ 
   [128]
 
@@ -74,8 +76,8 @@ The type also rides on values read from declared locals, globals and tables. A
 local.get of a reference local:
 
   $ wax --validate local_get.wat -o out.wat
-  Error: Type mismatch: this instruction expects type i32
-    but the stack has type (ref $t)
+  Error: Type mismatch: this produces a value of type (ref $t), but type 
+    i32 is expected.
    ──➤  local_get.wat:4:6
   2 │   (type $t (struct))
   3 │   (func (param $p (ref $t)) (result i32)
@@ -87,26 +89,28 @@ local.get of a reference local:
 A global.set with the wrong value type names the global's declared type:
 
   $ wax --validate global_set.wat -o out.wat
-  Error: Type mismatch: this instruction expects type (ref null $t)
-    but the stack has type i32
+  Error: Type mismatch: this produces a value of type i32, but type
+    (ref null $t) is expected.
    ──➤  global_set.wat:5:21
   3 │   (global $g (mut (ref null $t)) (ref.null $t))
   4 │   (func
   5 │     (global.set $g (i32.const 0))))
     ·                     ^^^^^^^^^^^
+    ·      ^^^^^^^^^^^^^ expected here
   6 │ 
   [128]
 
 A br_on_cast whose operand is not a reference names the cast's source type:
 
   $ wax --validate br_on_cast.wat -o out.wat
-  Error: Type mismatch: this instruction expects type (ref $t)
-    but the stack has type i32
+  Error: Type mismatch: this produces a value of type i32, but type (ref $t)
+    is expected.
    ──➤  br_on_cast.wat:5:41
   3 │   (func (result i32)
   4 │     (block $b (result (ref $t))
   5 │       (br_on_cast $b (ref $t) (ref $t) (i32.const 0))
     ·                                         ^^^^^^^^^^^
+    ·        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected here
   6 │       (unreachable))
   7 │     (drop)
   [128]
@@ -115,8 +119,8 @@ The source type even reaches *components* of a named type: a struct.get names
 the field's declared type, recovered from the stored source definition:
 
   $ wax --validate struct_field.wat -o out.wat
-  Error: Type mismatch: this instruction expects type i32
-    but the stack has type (ref $inner)
+  Error: Type mismatch: this produces a value of type (ref $inner), but type
+    i32 is expected.
    ──➤  struct_field.wat:5:6
   3 │   (type $outer (struct (field (ref $inner))))
   4 │   (func (param (ref $outer)) (result i32)
@@ -128,13 +132,14 @@ the field's declared type, recovered from the stored source definition:
 An array.set names the element's declared type:
 
   $ wax --validate array_elem.wat -o out.wat
-  Error: Type mismatch: this instruction expects type (ref $elem)
-    but the stack has type i32
+  Error: Type mismatch: this produces a value of type i32, but type (ref $elem)
+    is expected.
    ──➤  array_elem.wat:5:50
   3 │   (type $arr (array (mut (ref $elem))))
   4 │   (func (param (ref $arr))
   5 │     (array.set $arr (local.get 0) (i32.const 0) (i32.const 1))))
     ·                                                  ^^^^^^^^^^^
+    ·      ^^^^^^^^^^^^^^ expected here
   6 │ 
   [128]
 
@@ -142,13 +147,14 @@ Function arguments and results carry their declared source types too — even
 for the inline (implicit) function type of a definition. A wrong call argument:
 
   $ wax --validate call_arg.wat -o out.wat
-  Error: Type mismatch: this instruction expects type (ref $t)
-    but the stack has type i32
+  Error: Type mismatch: this produces a value of type i32, but type (ref $t)
+    is expected.
    ──➤  call_arg.wat:5:15
   3 │   (func $g (param (ref $t)))
   4 │   (func
   5 │     (call $g (i32.const 0))))
     ·               ^^^^^^^^^^^
+    ·      ^^^^^^^ expected here
   6 │ 
   [128]
 
@@ -171,13 +177,14 @@ names it correctly even when another structurally-identical type ($b here)
 shares its canonical index — $f1 is named with $a, not $b:
 
   $ wax --validate call_shared_index.wat -o out.wat
-  Error: Type mismatch: this instruction expects type (ref $a)
-    but the stack has type i32
+  Error: Type mismatch: this produces a value of type i32, but type (ref $a)
+    is expected.
    ──➤  call_shared_index.wat:7:16
   5 │   (func $f2 (param (ref $b)))
   6 │   (func
   7 │     (call $f1 (i32.const 0))))
     ·                ^^^^^^^^^^^
+    ·      ^^^^^^^^ expected here
   8 │ 
   [128]
 
@@ -186,8 +193,8 @@ names its field's type ($x) even though the identical $b (whose field is the
 identical $y) shares both canonical indices:
 
   $ wax --validate struct_field_shared_index.wat -o out.wat
-  Error: Type mismatch: this instruction expects type i32
-    but the stack has type (ref $x)
+  Error: Type mismatch: this produces a value of type (ref $x), but type 
+    i32 is expected.
    ──➤  struct_field_shared_index.wat:7:6
   5 │   (type $b (struct (field (ref $y))))
   6 │   (func (param (ref $a)) (result i32)
@@ -200,8 +207,8 @@ A block result type is named from the block's declared type when the body
 leaves the wrong value:
 
   $ wax --validate block_result.wat -o out.wat
-  Error: Type mismatch: this instruction expects type (ref $t)
-    but the stack has type i32
+  Error: Type mismatch: this produces a value of type i32, but type (ref $t)
+    is expected.
    ──➤  block_result.wat:5:8
   3 │   (func
   4 │     (block (result (ref $t))
@@ -214,13 +221,14 @@ leaves the wrong value:
 A thrown exception payload is named from the tag's declared parameter type:
 
   $ wax --validate throw_payload.wat -o out.wat
-  Error: Type mismatch: this instruction expects type (ref $t)
-    but the stack has type i32
+  Error: Type mismatch: this produces a value of type i32, but type (ref $t)
+    is expected.
    ──➤  throw_payload.wat:5:16
   3 │   (tag $e (param (ref $t)))
   4 │   (func
   5 │     (throw $e (i32.const 0))))
     ·                ^^^^^^^^^^^
+    ·      ^^^^^^^^ expected here
   6 │ 
   [128]
 
@@ -228,26 +236,28 @@ Stack-switching instructions name their continuation operand. A resume with a
 non-continuation operand:
 
   $ wax --validate resume_cont.wat -o out.wat
-  Error: Type mismatch: this instruction expects type (ref null $ct)
-    but the stack has type i32
+  Error: Type mismatch: this produces a value of type i32, but type
+    (ref null $ct) is expected.
    ──➤  resume_cont.wat:4:32
   2 │   (rec (type $ft (func (param i32) (result i32))) (type $ct (cont $ft)))
   3 │   (func (result i32)
   4 │     (resume $ct (i32.const 0) (i32.const 1))))
     ·                                ^^^^^^^^^^^
+    ·      ^^^^^^^^^^ expected here
   5 │ 
   [128]
 
 And a suspend names the tag's declared payload type:
 
   $ wax --validate suspend_payload.wat -o out.wat
-  Error: Type mismatch: this instruction expects type (ref $t)
-    but the stack has type i32
+  Error: Type mismatch: this produces a value of type i32, but type (ref $t)
+    is expected.
    ──➤  suspend_payload.wat:5:18
   3 │   (tag $e (param (ref $t)) (result i32))
   4 │   (func (result i32)
   5 │     (suspend $e (i32.const 0))))
     ·                  ^^^^^^^^^^^
+    ·      ^^^^^^^^^^ expected here
   6 │ 
   [128]
 
@@ -255,8 +265,8 @@ A value popped and re-pushed keeps its source type: ref.as_non_null on a
 nullable reference yields the non-null form named as the source wrote it:
 
   $ wax --validate ref_as_non_null.wat -o out.wat
-  Error: Type mismatch: this instruction expects type i32
-    but the stack has type (ref $t)
+  Error: Type mismatch: this produces a value of type (ref $t), but type 
+    i32 is expected.
    ──➤  ref_as_non_null.wat:4:6
   2 │   (type $t (struct))
   3 │   (func (param (ref null $t)) (result i32)
@@ -269,13 +279,14 @@ A branch names its target's declared type. A br carrying the wrong value to a
 labelled block:
 
   $ wax --validate br_target.wat -o out.wat
-  Error: Type mismatch: this instruction expects type (ref $t)
-    but the stack has type i32
+  Error: Type mismatch: this produces a value of type i32, but type (ref $t)
+    is expected.
    ──➤  br_target.wat:5:15
   3 │   (func (result i32)
   4 │     (block $b (result (ref $t))
   5 │       (br $b (i32.const 0)))
     ·               ^^^^^^^^^^^
+    ·        ^^^^^ expected here
   6 │     (drop)
   7 │     (i32.const 0)))
   [128]
@@ -376,13 +387,14 @@ A parameter declared only through a referenced function type still names its
 source type, taken from that type's definition:
 
   $ wax --validate param_from_type.wat -o out.wat
-  Error: Type mismatch: this instruction expects type i32
-    but the stack has type (ref $t)
+  Error: Type mismatch: this produces a value of type (ref $t), but type 
+    i32 is expected.
    ──➤  param_from_type.wat:5:21
   3 │   (type $ft (func (param (ref $t))))
   4 │   (func (type $ft)
   5 │     (drop (i32.add (local.get 0) (i32.const 1)))))
     ·                     ^^^^^^^^^^^
+    ·            ^^^^^^^ expected here
   6 │ 
   [128]
 
@@ -391,8 +403,8 @@ deduplicated internal index: $f has type $b, which shares its canonical index
 with the structurally-identical $a, yet the reference is still named $b:
 
   $ wax --validate ref_func_dedup.wat -o out.wat
-  Error: Type mismatch: this instruction expects type i32
-    but the stack has type (ref $b)
+  Error: Type mismatch: this produces a value of type (ref $b), but type 
+    i32 is expected.
    ──➤  ref_func_dedup.wat:6:6
   4 │   (func $f (type $b))
   5 │   (func (result i32)
@@ -405,8 +417,8 @@ When the function's type has no source name (an implicit type), the reference
 shows that type's signature inline rather than a meaningless index:
 
   $ wax --validate ref_func_signature.wat -o out.wat
-  Error: Type mismatch: this instruction expects type f64
-    but the stack has type (ref (func (param i32) (result i32)))
+  Error: Type mismatch: this produces a value of type
+    (ref (func (param i32) (result i32))), but type f64 is expected.
    ──➤  ref_func_signature.wat:4:6
   2 │   (func $f (param i32) (result i32) (local.get 0))
   3 │   (func (result f64)
