@@ -5751,18 +5751,26 @@ and block ctx loc label params results br_params block =
 and block_keep_bool ctx loc label ~result ~br_params body =
   (* The keep-bool is decided from every value reaching the exit: the fall-through
      plus values branched to the label, collected at their natural types into [cs]
-     (the branch-target [r] is a [Collecting] cell), then joined. Two trailing
-     forms need care. A trailing *construction* ([Struct]/[Array]/[String]/…) must
-     be routed through the concrete [result] so it resolves a context-pinned type
-     name — that hides its natural type, so keep the annotation for it. A trailing
-     *nested block* ([if]/[do]/[loop]/[try]/[try_table]) has no name to resolve, so
-     route it through [r] too: it synthesizes its own type, which then joins like
-     any other exit value and lets a redundant annotation drop. *)
+     (the branch-target [r] is a [Collecting] cell), then joined. The trailing
+     instruction needs care: one that resolves its own type joins like any other
+     exit value (route it through [r] — it synthesizes), but one that needs the
+     context to pin its type must be routed through the concrete [result], which
+     hides its natural type, so keep the annotation for it. A nested block always
+     resolves itself; a struct does iff its fields name a unique type
+     ([infer_struct_by_fields]) — then it synthesizes the same with or without the
+     context, so route it through [r]; a field-ambiguous struct needs the context
+     to pin its type (a named one still relies on it to drop its redundant name),
+     so keep the annotation. (Only structs are field-checked here; other
+     constructions stay conservative.) *)
   let trailing_construction, trailing_nested_block =
     match List.rev body with
     | last :: _ -> (
         match last.desc with
-        | Struct _ | StructDefault _ | Array _ | ArrayDefault _ | ArrayFixed _
+        | Struct (_, fields) -> (
+            match infer_struct_by_fields ctx fields with
+            | Some _ -> (false, true)
+            | None -> (true, false))
+        | StructDefault _ | Array _ | ArrayDefault _ | ArrayFixed _
         | ArraySegment _ | String _ ->
             (true, false)
         | If _ | Block _ | Loop _ | TryTable _ | Try _ -> (false, true)
