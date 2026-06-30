@@ -1449,13 +1449,13 @@ let valtype_equal ctx (a : inferred_valtype) (b : inferred_valtype) =
   Wax_wasm.Types.val_subtype ctx.subtyping_info a.internal b.internal
   && Wax_wasm.Types.val_subtype ctx.subtyping_info b.internal a.internal
 
-(* Bidirectional checking helpers (see [check] below).
+(* Bidirectional checking helpers (see [check_instruction] below).
 
    The keep-bool for a non-construction value: the contextual annotation is
    load-bearing unless the value's own standalone-resolved type ([standalone],
    captured BEFORE [check_type] mutates the cell) already equals it. This
    mirrors exactly the drop test [bind_let_value]/globals applied via
-   [standalone_valtype], so routing those sites through [check] preserves their
+   [standalone_valtype], so routing those sites through [check_instruction] preserves their
    behaviour — e.g. [let x: i32 = 1] still drops to [let x = 1] (a floating
    number resolves to [i32]), while [let x: i64 = 1] keeps its annotation.
 
@@ -1476,7 +1476,7 @@ let annotation_needed ?(drop_supertype = false) ctx
   | _ -> true
 
 (* Whether [expected] carries a real type expectation (vs. the [Unknown]
-   sentinel used when [check] is entered from synthesis with no context).
+   sentinel used when [check_instruction] is entered from synthesis with no context).
    [subtype] asserts on an [Unknown] right-hand side, so callers guard with
    this before checking against [expected]. *)
 let has_expectation expected =
@@ -2710,7 +2710,9 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       let* i' =
         match resolved with
         | Local (Some ity) | Global (_, Some ity) ->
-            let* i', _ = check ctx (UnionFind.make (Valtype ity)) i' in
+            let* i', _ =
+              check_instruction ctx (UnionFind.make (Valtype ity)) i'
+            in
             return i'
         | Local None | Global (_, None) | Func_ref _ | Unbound ->
             instruction ctx i'
@@ -2736,7 +2738,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       match resolve_variable ctx idx with
       | Local (Some ity) ->
           let typ = UnionFind.make (Valtype ity) in
-          let* i', _ = check ctx typ i' in
+          let* i', _ = check_instruction ctx typ i' in
           mark_initialized ctx idx.desc;
           return_expression i (Tee (idx, i')) typ
       | Local None ->
@@ -3004,12 +3006,12 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
         (Test (i', ty))
         (UnionFind.make (Valtype { typ = I32; internal = I32; inline = None }))
   (* Construction literals carry an optional type name that can be inferred from
-     an expected type. Their typing lives in [check]; in synthesis position
-     there is no expectation, so [check] against the [Unknown] sentinel keeps a
+     an expected type. Their typing lives in [check_instruction]; in synthesis position
+     there is no expectation, so [check_instruction] against the [Unknown] sentinel keeps a
      present name and reports [cannot_infer_*] when one is omitted. *)
   | Struct _ | StructDefault _ | Array _ | ArrayDefault _ | ArrayFixed _
   | ArraySegment _ | String _ ->
-      let* i', _ = check ctx (UnionFind.make Unknown) i in
+      let* i', _ = check_instruction ctx (UnionFind.make Unknown) i in
       return i'
   | StructGet (i', field) ->
       let* i' = instruction ctx i' in
@@ -3106,7 +3108,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       let* i2' =
         match expected with
         | Some cell ->
-            let* i2', _ = check ctx cell i2 in
+            let* i2', _ = check_instruction ctx cell i2 in
             return i2'
         | None -> instruction ctx i2
       in
@@ -3153,7 +3155,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       let* i3' =
         match internalize ctx (Ref rt) with
         | Some cell ->
-            let* i3', _ = check ctx cell i3 in
+            let* i3', _ = check_instruction ctx cell i3 in
             return i3'
         | None -> instruction ctx i3
       in
@@ -3180,7 +3182,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
           let* i3' =
             match expected with
             | Some cell ->
-                let* i3', _ = check ctx cell i3 in
+                let* i3', _ = check_instruction ctx cell i3 in
                 return i3'
             | None -> instruction ctx i3
           in
@@ -3499,7 +3501,9 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
             | None -> true
           in
           let* i', needed =
-            check ~drop_supertype ctx (UnionFind.make (Valtype ity)) i'
+            check_instruction ~drop_supertype ctx
+              (UnionFind.make (Valtype ity))
+              i'
           in
           Option.iter
             (fun name ->
@@ -4587,8 +4591,9 @@ and type_simd_free_intrinsic_call ctx i func name args =
    construction literal can fill an omitted type name from [expected] and shed a
    redundant one; every other expression delegates to [instruction] and reports
    whether it determined its own type. [expected] is the [Unknown] sentinel when
-   [check] is entered from [instruction] with no context (synthesis). *)
-and check ?(drop_supertype = false) ctx expected (i : location instr) =
+   [check_instruction] is entered from [instruction] with no context (synthesis). *)
+and check_instruction ?(drop_supertype = false) ctx expected
+    (i : location instr) =
   let i32_cell () =
     UnionFind.make (Valtype { typ = I32; internal = I32; inline = None })
   in
@@ -4703,7 +4708,7 @@ and check ?(drop_supertype = false) ctx expected (i : location instr) =
                       let* i' =
                         match internalize ctx (unpack_type f) with
                         | Some cell ->
-                            let* i', _ = check ctx cell i' in
+                            let* i', _ = check_instruction ctx cell i' in
                             return i'
                         | None -> instruction ctx i'
                       in
@@ -4790,7 +4795,7 @@ and check ?(drop_supertype = false) ctx expected (i : location instr) =
             let* i1' =
               match elt with
               | Some cell ->
-                  let* i1', _ = check ctx cell i1 in
+                  let* i1', _ = check_instruction ctx cell i1 in
                   return i1'
               | None -> instruction ctx i1
             in
@@ -4856,7 +4861,7 @@ and check ?(drop_supertype = false) ctx expected (i : location instr) =
                   let* i' =
                     match elt with
                     | Some cell ->
-                        let* i', _ = check ctx cell i' in
+                        let* i', _ = check_instruction ctx cell i' in
                         return i'
                     | None -> instruction ctx i'
                   in
@@ -5182,14 +5187,16 @@ and check ?(drop_supertype = false) ctx expected (i : location instr) =
       if has_expectation expected then check_type ctx i' expected;
       return (i', needed)
 
-(* Run [check] in statement (empty-stack) position, mirroring the expression
+(* Run [check_instruction] in statement (empty-stack) position, mirroring the expression
    bridge in [toplevel_instruction]'s default arm: pop the hole operands off the
-   stack into the parameter list, run [check] on them, and surface its keep-bool.
+   stack into the parameter list, run [check_instruction] on them, and surface its keep-bool.
    Used for an annotated global initializer (a constant expression). *)
 and check_toplevel ?(drop_supertype = false) ctx expected i =
   let count = count_holes i in
   let* args = pop_many ctx i count [] in
-  let args, (i', needed) = check ~drop_supertype ctx expected i args in
+  let args, (i', needed) =
+    check_instruction ~drop_supertype ctx expected i args
+  in
   assert (args = []);
   (* A misplaced hole ([_] after a value) is reported by [check_hole_order];
      it returns [false] only after reporting that error, so recover rather than
@@ -5257,7 +5264,7 @@ and typed_call_args ctx l param_types =
       let rec go k = function
         | [] -> return []
         | a :: r ->
-            let* a', _ = check ctx params.(k) a in
+            let* a', _ = check_instruction ctx params.(k) a in
             let* r' = go (k + 1) r in
             return (a' :: r')
       in
@@ -5273,14 +5280,14 @@ and check_against ctx expected i =
   | [| ty |] when is_inferring ty ->
       (* The block's result type is being inferred: synthesize the branched
          value and record it instead of checking it against the not-yet-known
-         result (a plain [check] would discard it, as [has_expectation] is false
+         result (a plain [check_instruction] would discard it, as [has_expectation] is false
          for a [Collecting] cell). *)
       let* i' = instruction ctx i in
       ignore
         (subtype ~location:(snd i'.info) ctx (expression_type ctx i') ty : bool);
       return i'
   | [| ty |] ->
-      let* i', _ = check ctx ty i in
+      let* i', _ = check_instruction ctx ty i in
       return i'
   | _ ->
       let* i' = instruction ctx i in
@@ -5661,7 +5668,7 @@ and block_contents ctx results l =
          | ArraySegment _ | String _ ->
              true
          (* A trailing block (if / do / loop / try / try_table) is routed through
-            [check] too, so the outer block's result type flows into it
+            [check_instruction] too, so the outer block's result type flows into it
             (context-driven inference): the inner block's own result annotation
             then drops, and the type propagates further into a nested trailing
             block or construction. A parameterized block stays on the statement
@@ -5700,7 +5707,7 @@ and block_contents ctx results l =
                 cast, or a nested [if]/[do] block. Check it against the single
                 result type so it can be inferred / drop its name, redundant
                 cast, or its own result annotation, just like a [return].
-                [check] has already validated the value against [results.(0)]
+                [check_instruction] has already validated the value against [results.(0)]
                 (reporting any mismatch once), so push the result type itself
                 rather than the value's own type — that keeps the block's
                 [pop_args] from reporting the same mismatch a second time. *)
@@ -5714,7 +5721,7 @@ and block_contents ctx results l =
             (* The block's value is already on the stack, produced by an earlier
                 instruction (or the code is unreachable); this trailing one is a
                 statement, not the result-producer, so type it as such rather
-                than routing it through [check]. *)
+                than routing it through [check_instruction]. *)
             let* i' = toplevel_instruction ctx i in
             let* () =
               push_results
@@ -5760,7 +5767,7 @@ and block ctx loc label params results br_params block =
    [result] regardless of any value branched to the block's label — and the
    annotation is redundant. Read the fall-through's natural type off the stack,
    unconstrained, before [pop_args] coerces it to [result], and compare
-   ([annotation_needed], as the leaf [check] arm does). Stay conservative
+   ([annotation_needed], as the leaf [check_instruction] arm does). Stay conservative
    (needed) only when the trailing instruction is a construction — routed through
    [result] to resolve a context-pinned type name, which hides its natural type. A
    trailing nested block is instead synthesized (routed through the inferring cell)
@@ -5919,7 +5926,7 @@ and finalize_inferred ?(needed = false) ctx typ ~inferred =
    (re-parse, must re-infer) or [simplify]. The branches are typed in synthesis
    (via [block_infer]), so a trailing construction synthesizes its own type —
    keeping its type name only when the fields don't pin it — rather than taking
-   it from the result as the [check] path does; [finalize_inferred] then only
+   it from the result as the [check_instruction] path does; [finalize_inferred] then only
    drops [=> T] when that synthesized type is a subtype of it, so a tail that
    cannot synthesize on its own (a bare [null]) keeps it. *)
 and if_inference ctx i label typ ~cond ~if_block ~else_block =
