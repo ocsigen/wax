@@ -2663,99 +2663,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       let* ty = pop_parameter in
       return_expression i Hole ty
   | Null -> return_expression i Null (UnionFind.make Null)
-  | Get idx as desc ->
-      let ty =
-        match resolve_variable ctx idx with
-        | Local ty ->
-            ctx.read_locals := StringSet.add idx.desc !(ctx.read_locals);
-            if not (StringSet.mem idx.desc ctx.initialized_locals) then
-              Error.uninitialized_local ctx.diagnostics ~location:idx.info idx;
-            (* A poison local ([None]) reads as [Error] so its uses don't
-               cascade. *)
-            UnionFind.make
-              (match ty with Some ity -> Valtype ity | None -> Error)
-        | Global (_, ty) ->
-            UnionFind.make
-              (match ty with Some ity -> Valtype ity | None -> Error)
-        | Func_ref (ty, ty') ->
-            let name = Ast.no_loc ty' in
-            UnionFind.make
-              (Valtype
-                 {
-                   typ = Ref { nullable = false; typ = Type name };
-                   internal = Ref { nullable = false; typ = Type ty };
-                   inline = inline_comptype ctx name;
-                 })
-        | Unbound ->
-            Error.unbound_name ctx.diagnostics ~location:idx.info
-              ~suggestions:(get_suggestions ctx idx.desc)
-              "variable" idx;
-            UnionFind.make Error
-      in
-      return_expression i desc ty
-  | Set (None, i') ->
-      let* i' = instruction ctx i' in
-      (* [_ = e] drops one value, so [e] must produce exactly one; otherwise wax
-         emits a [drop] with nothing (or too much) on the stack. [expression_type]
-         reports [not_an_expression] when the arity is not 1. *)
-      ignore (expression_type ctx i' : inferred_type UnionFind.t);
-      return_statement i (Set (None, i')) [||]
-  | Set (Some idx, i') ->
-      (* Resolve the target first (a pure lookup) so the value can be checked
-         against its type, letting a struct/array literal drop its name. The
-         local is marked initialized only after the value is typed, so an
-         assignment reading the same local (e.g. [x = x + 1]) still sees its
-         pre-assignment state. *)
-      let resolved = resolve_variable ctx idx in
-      let* i' =
-        match resolved with
-        | Local (Some ity) | Global (_, Some ity) ->
-            let* i', _ =
-              check_instruction ctx (UnionFind.make (Valtype ity)) i'
-            in
-            return i'
-        | Local None | Global (_, None) | Func_ref _ | Unbound ->
-            instruction ctx i'
-      in
-      (match resolved with
-      | Local _ -> mark_initialized ctx idx.desc
-      | Global (mut, _) ->
-          if not mut then
-            Error.immutable ctx.diagnostics ~location:idx.info "global"
-      | Func_ref _ ->
-          Error.not_assignable ctx.diagnostics ~location:idx.info idx
-      | Unbound ->
-          Error.unbound_name ctx.diagnostics ~location:idx.info
-            ~suggestions:(set_suggestions ctx idx.desc)
-            "variable" idx);
-      return_statement i (Set (Some idx, i')) [||]
-  | Tee (idx, i') -> (
-      (* Only a local is assignable. Resolve it first so the value can be
-         checked against the local's type (letting a struct/array literal drop
-         its name); anything else is an error, after which we recover with the
-         operand's own type rather than [Unknown], which [check_type] cannot
-         match against. *)
-      match resolve_variable ctx idx with
-      | Local (Some ity) ->
-          let typ = UnionFind.make (Valtype ity) in
-          let* i', _ = check_instruction ctx typ i' in
-          mark_initialized ctx idx.desc;
-          return_expression i (Tee (idx, i')) typ
-      | Local None ->
-          (* Poison local: recover with the operand's own type, no check. *)
-          let* i' = instruction ctx i' in
-          mark_initialized ctx idx.desc;
-          return_expression i (Tee (idx, i')) (expression_type ctx i')
-      | Global _ | Func_ref _ ->
-          let* i' = instruction ctx i' in
-          Error.not_assignable ctx.diagnostics ~location:idx.info idx;
-          return_expression i (Tee (idx, i')) (expression_type ctx i')
-      | Unbound ->
-          let* i' = instruction ctx i' in
-          Error.unbound_name ctx.diagnostics ~location:idx.info
-            ~suggestions:(local_suggestions ctx idx.desc)
-            "variable" idx;
-          return_expression i (Tee (idx, i')) (expression_type ctx i'))
+  | Get _ | Set _ | Tee _ -> type_variable_access ctx i
   | Call _ -> call_instruction ctx i
   | TailCall (i', l) -> (
       let param_types = peek_call_params ctx i' in
@@ -4051,6 +3959,105 @@ and type_aggregate_access ctx i =
           Error.expected_array_type ctx.diagnostics ~location:i1.info;
           return_statement i (ArraySet (i1', i2', i3')) [||])
   | _ -> assert false (* only invoked on a struct/array access *)
+
+and type_variable_access ctx i =
+  (* Reading and assigning a local or global: [x] ([Get]), [x = v] ([Set]) and
+     the tee form [Tee] that also leaves the value on the stack. *)
+  match i.desc with
+  | Get idx as desc ->
+      let ty =
+        match resolve_variable ctx idx with
+        | Local ty ->
+            ctx.read_locals := StringSet.add idx.desc !(ctx.read_locals);
+            if not (StringSet.mem idx.desc ctx.initialized_locals) then
+              Error.uninitialized_local ctx.diagnostics ~location:idx.info idx;
+            (* A poison local ([None]) reads as [Error] so its uses don't
+               cascade. *)
+            UnionFind.make
+              (match ty with Some ity -> Valtype ity | None -> Error)
+        | Global (_, ty) ->
+            UnionFind.make
+              (match ty with Some ity -> Valtype ity | None -> Error)
+        | Func_ref (ty, ty') ->
+            let name = Ast.no_loc ty' in
+            UnionFind.make
+              (Valtype
+                 {
+                   typ = Ref { nullable = false; typ = Type name };
+                   internal = Ref { nullable = false; typ = Type ty };
+                   inline = inline_comptype ctx name;
+                 })
+        | Unbound ->
+            Error.unbound_name ctx.diagnostics ~location:idx.info
+              ~suggestions:(get_suggestions ctx idx.desc)
+              "variable" idx;
+            UnionFind.make Error
+      in
+      return_expression i desc ty
+  | Set (None, i') ->
+      let* i' = instruction ctx i' in
+      (* [_ = e] drops one value, so [e] must produce exactly one; otherwise wax
+         emits a [drop] with nothing (or too much) on the stack. [expression_type]
+         reports [not_an_expression] when the arity is not 1. *)
+      ignore (expression_type ctx i' : inferred_type UnionFind.t);
+      return_statement i (Set (None, i')) [||]
+  | Set (Some idx, i') ->
+      (* Resolve the target first (a pure lookup) so the value can be checked
+         against its type, letting a struct/array literal drop its name. The
+         local is marked initialized only after the value is typed, so an
+         assignment reading the same local (e.g. [x = x + 1]) still sees its
+         pre-assignment state. *)
+      let resolved = resolve_variable ctx idx in
+      let* i' =
+        match resolved with
+        | Local (Some ity) | Global (_, Some ity) ->
+            let* i', _ =
+              check_instruction ctx (UnionFind.make (Valtype ity)) i'
+            in
+            return i'
+        | Local None | Global (_, None) | Func_ref _ | Unbound ->
+            instruction ctx i'
+      in
+      (match resolved with
+      | Local _ -> mark_initialized ctx idx.desc
+      | Global (mut, _) ->
+          if not mut then
+            Error.immutable ctx.diagnostics ~location:idx.info "global"
+      | Func_ref _ ->
+          Error.not_assignable ctx.diagnostics ~location:idx.info idx
+      | Unbound ->
+          Error.unbound_name ctx.diagnostics ~location:idx.info
+            ~suggestions:(set_suggestions ctx idx.desc)
+            "variable" idx);
+      return_statement i (Set (Some idx, i')) [||]
+  | Tee (idx, i') -> (
+      (* Only a local is assignable. Resolve it first so the value can be
+         checked against the local's type (letting a struct/array literal drop
+         its name); anything else is an error, after which we recover with the
+         operand's own type rather than [Unknown], which [check_type] cannot
+         match against. *)
+      match resolve_variable ctx idx with
+      | Local (Some ity) ->
+          let typ = UnionFind.make (Valtype ity) in
+          let* i', _ = check_instruction ctx typ i' in
+          mark_initialized ctx idx.desc;
+          return_expression i (Tee (idx, i')) typ
+      | Local None ->
+          (* Poison local: recover with the operand's own type, no check. *)
+          let* i' = instruction ctx i' in
+          mark_initialized ctx idx.desc;
+          return_expression i (Tee (idx, i')) (expression_type ctx i')
+      | Global _ | Func_ref _ ->
+          let* i' = instruction ctx i' in
+          Error.not_assignable ctx.diagnostics ~location:idx.info idx;
+          return_expression i (Tee (idx, i')) (expression_type ctx i')
+      | Unbound ->
+          let* i' = instruction ctx i' in
+          Error.unbound_name ctx.diagnostics ~location:idx.info
+            ~suggestions:(local_suggestions ctx idx.desc)
+            "variable" idx;
+          return_expression i (Tee (idx, i')) (expression_type ctx i'))
+  | _ -> assert false (* only invoked on Get/Set/Tee *)
 
 and type_mem_method_call ctx i func recv memname meth args =
   let _, address_type = Option.get (Tbl.find_opt ctx.memories memname) in
