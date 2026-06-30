@@ -56,7 +56,10 @@ mutate_one() {
     n=$((n-1))
   done
   out="$(bash "$ORACLE" "$cur" unknown 2>/dev/null)"
-  if [ -n "$out" ]; then
+  # Re-verify before reporting: wax is deterministic, so a real finding
+  # reproduces, but a transient failure (a wax invocation killed/erroring under
+  # heavy parallel load) does not — this keeps the report free of load noise.
+  if [ -n "$out" ] && [ -n "$(bash "$ORACLE" "$cur" unknown 2>/dev/null)" ]; then
     local keep="$KEEP/mutant-$i.wax"
     cp "$cur" "$keep"
     echo "${out//$cur/$keep}" >"$RESULTS/$i"
