@@ -277,7 +277,7 @@
           (local.set $isfloat (i32.const 1)))
         (local.set $l (array.get $block (local.get $b) (i32.const 2)))
         (br $compute_length))))
-  (if (result (ref array)) (local.get $isfloat)
+  (if (result (ref eq)) (local.get $isfloat)
     (then
       (local.set $fa (array.new $float_array (f64.const 0) (local.get $len)))
       (local.set $l (local.get $vl))

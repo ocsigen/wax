@@ -86,7 +86,7 @@
   (param $vt (ref eq)) (result (ref eq))
   (local $t (ref $mutex))
   (local.set $t (ref.cast (ref $mutex) (local.get $vt)))
-  (if (result (ref i31)) (struct.get $mutex $state (local.get $t))
+  (if (result (ref eq)) (struct.get $mutex $state (local.get $t))
     (then (ref.i31 (i32.const 0)))
     (else
       (struct.set $mutex $state (local.get $t) (i32.const 1))

@@ -481,7 +481,7 @@ const toString = "toString";
     #[export = "caml_handle_sys_error"]
     fn caml_handle_sys_error(arg: &eq, errno: i32) {
         let msg =
-            if errno >=u error_messages.length() => &eq {
+            if errno >=u error_messages.length() {
                 "unknown system error";
             } else {
                 error_messages[errno];

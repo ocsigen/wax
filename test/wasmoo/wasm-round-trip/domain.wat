@@ -30,7 +30,7 @@
   (result (ref eq))
   (local $b (ref $block))
   (local.set $b (ref.cast (ref $block) (local.get $ref)))
-  (if (result (ref i31))
+  (if (result (ref eq))
     (ref.eq (array.get $block (local.get $b) (i32.const 1)) (local.get $o))
     (then
       (array.set $block (local.get $b) (i32.const 1) (local.get $n))
@@ -45,7 +45,7 @@
   (local.set $j
     (i32.add (i31.get_u (ref.cast (ref i31) (local.get $i))) (i32.const 1)))
   (local.set $b (ref.cast (ref $block) (local.get $ref)))
-  (if (result (ref i31))
+  (if (result (ref eq))
     (ref.eq (array.get $block (local.get $b) (local.get $j)) (local.get $o))
     (then
       (array.set $block (local.get $b) (local.get $j) (local.get $n))
@@ -211,7 +211,7 @@
 (func $caml_domain_dls_compare_and_set
   (export "caml_domain_dls_compare_and_set")
   (param $old (ref eq)) (param $new (ref eq)) (result (ref eq))
-  (if (result (ref i31))
+  (if (result (ref eq))
     (ref.eq (global.get $caml_domain_dls) (local.get $old))
     (then
       (global.set $caml_domain_dls (local.get $new))

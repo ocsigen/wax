@@ -4699,6 +4699,111 @@ and check ctx expected (i : location instr) =
       in
       if has_expectation expected then check_type ctx i' expected;
       return (i', true)
+  | If { label; typ; cond; if_block; else_block } when has_expectation expected
+    ->
+      (* The checking context supplies a result type. Drop a redundant [=> T]
+         (on [simplify]) when the context's [expected] is exactly the annotation
+         — then re-parse recovers it from the same source (a function's [-> T],
+         a typed binding, a call argument), so nothing is lost or loosened. On
+         re-parse the annotation is absent, so fill the result type back in from
+         [expected] for [to_wasm]. A [br] to the if's own label is fine: its
+         value is checked against the result like the branch tails. *)
+      let* cond' = instruction ctx cond in
+      check_type ctx cond' (i32_cell ());
+      if Array.length typ.params > 0 then
+        Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
+      let omitted = typ.results = [||] in
+      (* Type the branches against the if's own declared result when annotated,
+         else against the context (a re-parsed, dropped annotation). *)
+      let result_cell =
+        if omitted then expected
+        else
+          match array_map_opt (internalize ctx) typ.results with
+          | Some [| c |] -> c
+          | _ -> expected
+      in
+      let results = [| result_cell |] in
+      let if_block' =
+        {
+          if_block with
+          desc = block ctx i.info label [||] results results if_block.desc;
+        }
+      in
+      let else_block' =
+        match else_block with
+        | Some b ->
+            Some
+              {
+                b with
+                desc = block ctx i.info label [||] results results b.desc;
+              }
+        | None ->
+            if not (missing_else_ok ctx [||] results) then
+              Error.if_without_else ctx.diagnostics ~location:i.info;
+            None
+      in
+      (* The if's result (its annotation, or [expected] when omitted) must fit
+         the context — catches e.g. an [=> i64] if where [i32] is expected. *)
+      check_subtype ctx ~location:i.info result_cell expected;
+      let typ =
+        if omitted then
+          match standalone_valtype ctx expected with
+          | Some iv -> { typ with results = [| iv.typ |] }
+          | None -> typ
+        else if
+          ctx.simplify
+          &&
+          match
+            (standalone_valtype ctx expected, standalone_valtype ctx result_cell)
+          with
+          | Some a, Some b -> valtype_equal ctx a b
+          | _ -> false
+        then { typ with results = [||] }
+        else typ
+      in
+      (* The caller's binding annotation (e.g. [let x: T = ..]) is redundant iff
+         the branches alone infer exactly [expected] — i.e. an unannotated [let]
+         would re-infer it. Read each branch's fall-through type (its lub) and
+         compare; a branch that diverges contributes none. *)
+      let branch_last b =
+        match List.rev b with
+        | last :: _ -> (
+            match fst last.info with [| c |] -> Some c | _ -> None)
+        | [] -> None
+      in
+      let contents_lub =
+        match
+          ( branch_last if_block'.desc,
+            match else_block' with Some b -> branch_last b.desc | None -> None
+          )
+        with
+        | Some a, Some b -> join_value_types ctx a b
+        | (Some _ as r), None | None, (Some _ as r) -> r
+        | None, None -> None
+      in
+      let needed =
+        match contents_lub with
+        | Some v -> (
+            match
+              (standalone_valtype ctx v, standalone_valtype ctx expected)
+            with
+            | Some a, Some b -> not (valtype_equal ctx a b)
+            | _ -> true)
+        | None -> true
+      in
+      let* node =
+        return_statement i
+          (If
+             {
+               label;
+               typ;
+               cond = cond';
+               if_block = if_block';
+               else_block = else_block';
+             })
+          results
+      in
+      return (node, needed)
   | _ ->
       let* i' = instruction ctx i in
       (* Capture the value's own standalone-resolved type BEFORE [check_type]
@@ -5166,6 +5271,13 @@ and block_contents ctx results l =
          | Struct _ | StructDefault _ | Array _ | ArrayDefault _ | ArrayFixed _
          | ArraySegment _ | String _ ->
              true
+         (* A trailing [if] is routed through [check] too, so the block's result
+            type flows into its branches (context-driven inference): the [if]'s
+            own [=> T] then drops, and the type propagates further into a nested
+            trailing [if] or construction. A parameterized [if] stays on the
+            statement path, which pops its parameters off the stack (expression
+            position has no stack to take them from). *)
+         | If { typ; _ } -> Array.length typ.params = 0
          | Cast (e, _) -> is_null_initializer e
          | _ -> false ->
       (* The block's value is a trailing construction literal (incl. a string)

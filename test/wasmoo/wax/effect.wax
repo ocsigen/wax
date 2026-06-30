@@ -541,7 +541,7 @@ fn caml_is_continuation(v: &eq) -> i32 {
                     } else {
                         (f as &cps_closure).func(
                             args[1],
-                            if 2 == args.length() => &eq {
+                            if 2 == args.length() {
                                 identity_closure;
                             } else {
                                 { func: trampoline_iterator, i: 2, args: args };

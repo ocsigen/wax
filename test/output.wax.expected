@@ -1212,7 +1212,7 @@ fn caml_ba_reshape(vb: &eq, vd: &eq) -> &eq {
 fn caml_ba_change_layout(vb: &eq, vlayout: &eq) -> &eq {
     let b = vb as &bigarray;
     let layout = vlayout as i32_s;
-    if b.ba_layout as i32_u != layout => &eq {
+    if b.ba_layout as i32_u != layout {
         let num_dims = b.ba_num_dims as i32_u;
         let dim = b.ba_dim;
         let new_dim: &int_array = [0; num_dims];

@@ -1,3 +1,0 @@
-fn f(c: i32) -> i32 {
-    if c => i32 { return 1; } else { return 2; }
-}

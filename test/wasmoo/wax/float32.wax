@@ -201,7 +201,7 @@ fn caml_nextafter_float32_bytecode(x: f32, y: f32) -> f32 {
         return y;
     }
     if x == 0 {
-        if y >= 0 => f32 {
+        if y >= 0 {
             return 0x1p-149;
         } else {
             return -0x1p-149;
