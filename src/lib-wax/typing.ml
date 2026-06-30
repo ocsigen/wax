@@ -1,33 +1,17 @@
 (*
 TODO:
-- error messages
 - locations on the heap when push several values?
-- floating type String? (with default to array<i8>)
-- desugar by default
-- handle double casts: i31 then i32_s
+- desugar by default? (or option)
 - utf-16 string / js strings
-
-Optimizations
-- remove redundant type annotations/casts
 
 Syntax changes:
 - names in result type (symmetry with params)
 - no need to have func type for tags (declaration tag : ty)
 
-Syntax ideas:
-- dispatch foo ['a 'b ... else 'c] { 'a { } 'b { } ... }
-- br 'a (e1, ..., en) if cond   / if cond br 'a (e1, ..., en) / br_if 'a cond (...)
-
 Misc:
 - blocks in an expression context return one value;
   otherwise, no value by default
   (or infer return type when no type is given?)
-
-Explicit types?
-   fn(..)->(..)
-==> for function types
-==> for call_indirect
-(But we don't have a cast to a typeuse in WAT)
 *)
 
 open Ast
@@ -4619,42 +4603,40 @@ and check ctx expected (i : location instr) =
       in
       return (node, annotation_needed ctx string_valtype expected)
   | Cast (e, typ) when is_null_initializer e ->
-      fun st ->
-        let st, i' = instruction ctx i st in
-        (* A cast of [null] is redundant when the checking context already
+      let* i' = instruction ctx i in
+      (* A cast of [null] is redundant when the checking context already
            provides the very type it pins: drop it to bare [null], which
            re-checks to the same type (the context re-supplies it) and lowers to
            the same [ref.null]. Gated on [simplify] so hand-written casts are
            kept; matched exactly so the lowered [ref.null] is unchanged. *)
-        let i' =
-          if
-            ctx.simplify
-            &&
-            match (typ, UnionFind.find expected) with
-            | Ast.Valtype vt, Valtype b -> (
-                match internalize_valtype ctx vt with
-                | Some a -> valtype_equal ctx a b
-                | None -> false)
-            | _ -> false
-          then
-            match i'.desc with
-            | Cast (inner, _) ->
-                { inner with info = (fst i'.info, snd inner.info) }
-            | _ -> i'
-          else i'
-        in
-        if has_expectation expected then check_type ctx i' expected;
-        (st, (i', true))
+      let i' =
+        if
+          ctx.simplify
+          &&
+          match (typ, UnionFind.find expected) with
+          | Ast.Valtype vt, Valtype b -> (
+              match internalize_valtype ctx vt with
+              | Some a -> valtype_equal ctx a b
+              | None -> false)
+          | _ -> false
+        then
+          match i'.desc with
+          | Cast (inner, _) ->
+              { inner with info = (fst i'.info, snd inner.info) }
+          | _ -> i'
+        else i'
+      in
+      if has_expectation expected then check_type ctx i' expected;
+      return (i', true)
   | _ ->
-      fun st ->
-        let st, i' = instruction ctx i st in
-        (* Capture the value's own standalone-resolved type BEFORE [check_type]
+      let* i' = instruction ctx i in
+      (* Capture the value's own standalone-resolved type BEFORE [check_type]
            mutates the cell, then decide whether the annotation is load-bearing
            (see [annotation_needed]). *)
-        let standalone = standalone_valtype ctx (expression_type ctx i') in
-        let needed = annotation_needed ctx standalone expected in
-        if has_expectation expected then check_type ctx i' expected;
-        (st, (i', needed))
+      let standalone = standalone_valtype ctx (expression_type ctx i') in
+      let needed = annotation_needed ctx standalone expected in
+      if has_expectation expected then check_type ctx i' expected;
+      return (i', needed)
 
 (* Run [check] in statement (empty-stack) position, mirroring the expression
    bridge in [toplevel_instruction]'s default arm: pop the hole operands off the
