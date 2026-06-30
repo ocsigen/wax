@@ -157,7 +157,7 @@
 (func $caml_custom_identifier (export "caml_custom_identifier")
   (param $v (ref eq)) (result (ref eq))
   (drop
-    (block $not_custom (result anyref)
+    (block $not_custom (result (ref eq))
       (return
         (struct.get $custom_operations $id
           (struct.get $custom $ops

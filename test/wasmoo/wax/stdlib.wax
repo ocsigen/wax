@@ -83,7 +83,7 @@ fn make_symbol_key(is_predef: i32, name: &bytes) -> &bytes {
 let symbol_table_size = 1;
 
 fn assoc_find(s: &eq, l: &?assoc) -> &?assoc {
-    'tail: do &?assoc {
+    'tail: do {
         'loop: loop {
             let a = br_on_cast_fail 'tail &assoc l;
             if caml_string_equal(s, a.name) as i32_u {

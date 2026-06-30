@@ -514,7 +514,7 @@ const no_arg = "";
 
     fn ensure_string(s: &eq) -> &eq {
         _ =
-            'not_jsstring: do &?any {
+            'not_jsstring: do {
                 let str = (br_on_cast_fail 'not_jsstring &js s).js;
                 _ = br_if 'not_jsstring (0 as &i31, !jsstring_test(str));
                 return caml_string_of_jsstring(s);
@@ -1406,7 +1406,7 @@ fn unix_mkdir(name: &eq, perm: &eq) -> &eq {
 #[export = "unix_readdir"]
 #[export = "caml_unix_readdir"]
 fn unix_readdir(dir: &eq) -> &eq {
-    'return: do &eq {
+    'return: do {
         br_on_non_null 'return readdir_helper(dir);
         caml_raise_end_of_file();
         0 as &i31;
@@ -1420,7 +1420,7 @@ fn win_find_next(dir: &eq) -> &eq {
     // the end without closing the handle -- the caller closes it through
     // [findclose]. [readdir_helper] already raises End_of_file (it never
     // returns null), so the final raise here is just the type-level tail.
-    'return: do &eq {
+    'return: do {
         br_on_non_null 'return readdir_helper(dir);
         caml_raise_end_of_file();
         0 as &i31;
@@ -2229,7 +2229,7 @@ fn lseek(fd: &eq, offset: i64, cmd: &eq) -> i64 {
 
     fn lseek(vfd: &eq, offset: i64, cmd: &eq) -> i64 {
         let fd = vfd as i32_u;
-        let fd_offset =
+        let fd_offset: &fd_offset =
             'non_null: do {
                 br_on_non_null 'non_null get_fd_offset_unchecked(fd);
                 throw ocaml_exception lseek_exn(3);

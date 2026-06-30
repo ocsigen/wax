@@ -132,7 +132,7 @@ const empty_custom = "";
 #[export = "caml_custom_identifier"]
 fn caml_custom_identifier(v: &eq) -> &eq {
     _ =
-        'not_custom: do &?any {
+        'not_custom: do {
             return (br_on_cast_fail 'not_custom &custom v).ops.id;
         };
     return empty_custom;

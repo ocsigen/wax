@@ -228,8 +228,8 @@ only when the inner label is actually referenced (an unused label is dropped):
     ·              ^^
   5 │ 
   fn f() -> i32 {
-      do i32 {
-          'x_2: do i32 {
+      do {
+          'x_2: do {
               br 'x_2 1;
           }
       }

@@ -4831,6 +4831,52 @@ and check ctx expected (i : location instr) =
           results
       in
       return (node, needed)
+  | Block { label; typ; block = instrs } when has_expectation expected ->
+      (* The checking context supplies a result type, so a [do] block in value
+         position need not annotate its own: thread [expected] in as the result
+         (and branch-target) type so a redundant annotation drops (on [simplify])
+         and re-parse recovers it from the same context. Branches to the block's
+         own label are checked against [expected] like the fall-through value. *)
+      if Array.length typ.params > 0 then
+        Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
+      let omitted = typ.results = [||] in
+      let result_cell =
+        if omitted then expected
+        else
+          match array_map_opt (internalize ctx) typ.results with
+          | Some [| c |] -> c
+          | _ -> expected
+      in
+      let results = [| result_cell |] in
+      let instrs' = block ctx i.info label [||] results results instrs in
+      (* The block's result (its annotation, or [expected] when omitted) must fit
+         the context. *)
+      check_subtype ctx ~location:i.info result_cell expected;
+      let typ =
+        if omitted then
+          match standalone_valtype ctx expected with
+          | Some iv -> { typ with results = [| iv.typ |] }
+          | None -> typ
+        else if
+          ctx.simplify
+          &&
+          match
+            (standalone_valtype ctx expected, standalone_valtype ctx result_cell)
+          with
+          | Some a, Some b -> valtype_equal ctx a b
+          | _ -> false
+        then { typ with results = [||] }
+        else typ
+      in
+      let* node =
+        return_statement i (Block { label; typ; block = instrs' }) results
+      in
+      (* Conservative keep-bool: a surrounding binding annotation is reported as
+         still needed. Unlike an [if], the value may arrive via a branch rather
+         than the fall-through, so the cheap fall-through test the [if] arm uses
+         would not see it; leaving the binding annotated is safe at the cost of
+         an occasional redundant one. *)
+      return (node, true)
   | _ ->
       let* i' = instruction ctx i in
       (* Capture the value's own standalone-resolved type BEFORE [check_type]
@@ -5306,30 +5352,47 @@ and block_contents ctx results l =
          | Struct _ | StructDefault _ | Array _ | ArrayDefault _ | ArrayFixed _
          | ArraySegment _ | String _ ->
              true
-         (* A trailing [if] is routed through [check] too, so the block's result
-            type flows into its branches (context-driven inference): the [if]'s
-            own [=> T] then drops, and the type propagates further into a nested
-            trailing [if] or construction. A parameterized [if] stays on the
-            statement path, which pops its parameters off the stack (expression
-            position has no stack to take them from). *)
-         | If { typ; _ } -> Array.length typ.params = 0
+         (* A trailing [if]/[do] block is routed through [check] too, so the
+            outer block's result type flows into it (context-driven inference):
+            the inner block's own result annotation then drops, and the type
+            propagates further into a nested trailing block or construction. A
+            parameterized block stays on the statement path, which pops its
+            parameters off the stack (expression position has no stack to take
+            them from). *)
+         | If { typ; _ } | Block { typ; _ } -> Array.length typ.params = 0
          | Cast (e, _) -> is_null_initializer e
          | _ -> false ->
-      (* The block's value is a trailing construction literal (incl. a string)
-         or null cast; check it against the single result type so it can be
-         inferred / drop its name or redundant cast, just like a [return]. Only
-         these single-value forms are routed this way, so a divergent or void
-         trailing statement is never disturbed. [check] has already validated
-         the value against [results.(0)] (reporting any mismatch once), so push
-         the result type itself rather than the value's own type — that keeps
-         the block's [pop_args] from reporting the same mismatch a second
-         time. *)
-      let* i', _ = check_toplevel ctx results.(0) i in
-      let* () =
-        push_results
-          (Array.to_list (Array.map (fun ty -> (i.info, ty)) results))
-      in
-      return [ i' ]
+      fun st ->
+        (match st with
+        | Empty ->
+            (* The stack is empty, so this trailing instruction must produce the
+                block's value: a construction literal (incl. a string) or null
+                cast, or a nested [if]/[do] block. Check it against the single
+                result type so it can be inferred / drop its name, redundant
+                cast, or its own result annotation, just like a [return].
+                [check] has already validated the value against [results.(0)]
+                (reporting any mismatch once), so push the result type itself
+                rather than the value's own type — that keeps the block's
+                [pop_args] from reporting the same mismatch a second time. *)
+            let* i', _ = check_toplevel ctx results.(0) i in
+            let* () =
+              push_results
+                (Array.to_list (Array.map (fun ty -> (i.info, ty)) results))
+            in
+            return [ i' ]
+        | Cons _ | Unreachable ->
+            (* The block's value is already on the stack, produced by an earlier
+                instruction (or the code is unreachable); this trailing one is a
+                statement, not the result-producer, so type it as such rather
+                than routing it through [check]. *)
+            let* i' = toplevel_instruction ctx i in
+            let* () =
+              push_results
+                (Array.to_list
+                   (Array.map (fun ty -> (i.info, ty)) (fst i'.info)))
+            in
+            return [ i' ])
+          st
   | i :: r ->
       let* i' = toplevel_instruction ctx i in
       let* () =
@@ -5392,10 +5455,9 @@ and block_infer ctx loc label body =
    type is a subtype of it, else kept. (When it is a strict subtype the block
    re-infers to that subtype — a more precise but still valid result type that
    the surrounding context, which accepted the declared supertype, still
-   accepts.) With [~exact] the drop instead requires the inferred type to equal
-   the declared one: a branch-targeted block may be deliberately widened past the
-   join of its exit values, and narrowing it would change the round-trip. *)
-and finalize_inferred ?(exact = false) ctx typ ~inferred =
+   accepts; the round-trip is then more precise than the source rather than
+   byte-identical, as elsewhere.) *)
+and finalize_inferred ctx typ ~inferred =
   if typ.results = [||] then
     match Option.bind inferred (resolve_omitted_valtype ctx) with
     | Some iv ->
@@ -5416,8 +5478,7 @@ and finalize_inferred ?(exact = false) ctx typ ~inferred =
           standalone_valtype ctx result_cells.(0) )
       with
       | Some v, Some t ->
-          let sub = Wax_wasm.Types.val_subtype ctx.subtyping_info in
-          sub v.internal t.internal && ((not exact) || sub t.internal v.internal)
+          Wax_wasm.Types.val_subtype ctx.subtyping_info v.internal t.internal
       | _ -> false
     in
     (result_cells, if drop then { typ with results = [||] } else typ)
@@ -5551,7 +5612,7 @@ and block_inference ctx i label typ ~instrs =
   else
     let body', collected = block_infer_general ctx i.info label instrs in
     let inferred = join_collected ctx ~location:i.info collected in
-    let results, typ = finalize_inferred ~exact:true ctx typ ~inferred in
+    let results, typ = finalize_inferred ctx typ ~inferred in
     Some (Block { label; typ; block = body' }, results)
 
 let check_type_definitions ctx =

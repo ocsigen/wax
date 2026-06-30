@@ -121,14 +121,14 @@ type bytes = [mut i8];
 
     #[export = "wrap"]
     fn wrap(v: &?any) -> &eq {
-        'is_eq: do &eq {
+        'is_eq: do {
             return { js: br_on_cast 'is_eq &eq v };
         }
     }
 
     #[export = "unwrap"]
     fn unwrap(v: &eq) -> &?any {
-        'not_js: do &?any {
+        'not_js: do {
             return (br_on_cast_fail 'not_js &js v).js;
         }
     }
