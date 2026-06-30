@@ -98,18 +98,33 @@ type inferred_type =
          width instead of overflowing. *)
   | Float
   | Valtype of inferred_valtype
-  | Collecting of (Ast.location option * inferred_type UnionFind.t) list ref
+  | Collecting of collecting
       (** Transient state of a fresh cell used as the result / branch-target
           type of a block whose result is being inferred (see
           [block_infer_general]). A value checked against such a cell (a [br]
-          target value, or the fall-through) is recorded into the list rather
+          target value, or the fall-through) is recorded into [collected] rather
           than unified — [subtype] would otherwise assert on an unconstrained
-          right-hand side. Each value is paired with the location it was
-          produced at when the caller has one (a [br] site, the fall-through),
-          so a join failure can point at the offending exits; [None] otherwise.
-          After the body is typed the list is joined by [val_lub] to give the
-          result. The cell never escapes inference, so other uses treat it like
-          [Unknown]. *)
+          right-hand side. After the body is typed the list is joined by
+          [val_lub] to give the result. The cell never escapes inference, so
+          other uses treat it like [Unknown]. *)
+
+and collecting = {
+  mutable collected : (Ast.location option * inferred_type UnionFind.t) list;
+      (** Each value reaching the block's exit (a [br]/[br_on_*] target value or
+          the fall-through), paired with the location it was produced at when
+          the caller has one, so a join failure can point at the offending exits
+          ([None] otherwise). *)
+  declared : inferred_type UnionFind.t option;
+      (** The single result type the block already carries while it is being
+          inferred — a Wasm->Wax annotation under test, or [None] when omitted.
+          A consumer that needs a concrete type, rather than an ordinary exit
+          value (a [resume] handler reading its target label's type), resolves
+          to it. *)
+  mutable needed : bool;
+      (** Set when [declared] is relied upon in a way the join cannot re-derive
+          (e.g. read by a [resume] handler), forcing the annotation to be kept.
+      *)
+}
 
 let output_inferred_type f ty =
   match UnionFind.find ty with
@@ -956,8 +971,8 @@ let subtype ?location ctx ty ty' =
      type is joined later (see [block_infer_general]). A [Collecting] cell never
      appears as a real value type, so the left-hand cases below treat it like
      [Unknown]. *)
-  | _, Collecting collected ->
-      collected := (location, ty) :: !collected;
+  | _, Collecting st ->
+      st.collected <- (location, ty) :: st.collected;
       true
   | Collecting _, _ -> true
   | Valtype ty, Valtype ty' ->
@@ -1751,9 +1766,14 @@ let internal_functype ctx (ft : functype) : Internal.functype option =
    [Validation.check_resume_table]. *)
 let check_resume_handlers ctx ~result_types handlers =
   let info = ctx.subtyping_info in
-  let internal_of_inferred ty =
+  (* A block whose result is being inferred presents its label as a [Collecting]
+     cell. The handler reads the label's type to validate the contract, which the
+     join cannot re-derive, so resolve to the declared annotation under test and
+     mark it needed (kept). *)
+  let rec internal_of_inferred ty =
     match UnionFind.find ty with
     | Valtype { internal; _ } -> Some internal
+    | Collecting { declared = Some d; _ } -> internal_of_inferred d
     | _ -> None
   in
   let to_internal arr =
@@ -1771,55 +1791,56 @@ let check_resume_handlers ctx ~result_types handlers =
           | None -> ignore (branch_target ctx label)
           | Some { params = ts3; results = ts4 } ->
               let ts' = branch_target ctx label in
-              if Array.exists is_inferring ts' then
-                (* The block this handler targets is having its result type
-                   inferred (the Wasm->Wax [simplify] pass): its label is still an
-                   unresolved [Collecting] cell, the join not yet computed. A
-                   handler delivery is not an ordinary exit the inference reads, so
-                   nothing flows into that cell and the annotation is kept; the
-                   concrete re-type pass then validates the contract. Defer rather
-                   than read the empty cell as a type mismatch. *)
-                ()
-              else
-                let mismatch () =
-                  Error.stack_switching_type_mismatch ctx.diagnostics
-                    ~location:label.info
-                    ~descr:
-                      "this handler must take the tag's parameters followed by \
-                       a continuation of the remaining result type"
-                in
-                (* The handler label receives the tag's parameters followed by a
+              let mismatch () =
+                Error.stack_switching_type_mismatch ctx.diagnostics
+                  ~location:label.info
+                  ~descr:
+                    "this handler must take the tag's parameters followed by a \
+                     continuation of the remaining result type"
+              in
+              (* The handler label receives the tag's parameters followed by a
                  continuation of type [cont (ts4 -> result_types)]. *)
-                let n = Array.length ts' in
-                if n <> Array.length ts3 + 1 then mismatch ()
-                else begin
-                  Array.iteri
-                    (fun i p ->
-                      let _, t = p.desc in
-                      match
-                        (internalize_valtype ctx t, internal_of_inferred ts'.(i))
-                      with
-                      | Some it, Some it' ->
-                          if
-                            not
-                              (Wax_wasm.Types.val_subtype info it.internal it')
-                          then mismatch ()
-                      | _ -> ())
-                    ts3;
-                  match internal_of_inferred ts'.(n - 1) with
-                  | Some (Ref { typ = ht; _ }) -> (
-                      match cont_functype ctx ht with
-                      | Some ft' -> (
-                          match (to_internal ts4, to_internal result_types) with
-                          | Some params, Some results ->
-                              if
-                                not
-                                  (functype_matches info { params; results } ft')
-                              then mismatch ()
-                          | _ -> ())
-                      | None -> mismatch ())
-                  | _ -> mismatch ()
-                end)
+              let n = Array.length ts' in
+              if n <> Array.length ts3 + 1 then mismatch ()
+              else begin
+                (* The continuation slot may be a block result still being
+                   inferred (the Wasm->Wax [simplify] pass), presented as a
+                   [Collecting] cell. Reading it to validate the contract is a use
+                   the join cannot re-derive, so mark its annotation needed (kept);
+                   [internal_of_inferred] resolves the cell to that declared type
+                   below. Only this last slot can be under inference: a block being
+                   inferred has a single result, so a handler with tag parameters
+                   (n > 1) is never inferred and its slots are concrete. A cell
+                   inferring with no declared annotation resolves to [None] below
+                   and so fails the contract check, as it must. *)
+                (match UnionFind.find ts'.(n - 1) with
+                | Collecting cs -> cs.needed <- true
+                | _ -> ());
+                Array.iteri
+                  (fun i p ->
+                    let _, t = p.desc in
+                    match
+                      (internalize_valtype ctx t, internal_of_inferred ts'.(i))
+                    with
+                    | Some it, Some it' ->
+                        if not (Wax_wasm.Types.val_subtype info it.internal it')
+                        then mismatch ()
+                    | _ -> ())
+                  ts3;
+                match internal_of_inferred ts'.(n - 1) with
+                | Some (Ref { typ = ht; _ }) -> (
+                    match cont_functype ctx ht with
+                    | Some ft' -> (
+                        match (to_internal ts4, to_internal result_types) with
+                        | Some params, Some results ->
+                            if
+                              not
+                                (functype_matches info { params; results } ft')
+                            then mismatch ()
+                        | _ -> ())
+                    | None -> mismatch ())
+                | _ -> mismatch ()
+              end)
       | OnSwitch tag -> (
           match Tbl.find ctx.diagnostics ctx.tags tag with
           | None -> ()
@@ -5783,7 +5804,7 @@ and block_infer ctx loc label body =
    the surrounding context, which accepted the declared supertype, still
    accepts; the round-trip is then more precise than the source rather than
    byte-identical, as elsewhere.) *)
-and finalize_inferred ctx typ ~inferred =
+and finalize_inferred ?(needed = false) ctx typ ~inferred =
   if typ.results = [||] then
     match Option.bind inferred (resolve_omitted_valtype ctx) with
     | Some iv ->
@@ -5796,7 +5817,7 @@ and finalize_inferred ctx typ ~inferred =
       | None -> [||]
     in
     let drop =
-      ctx.simplify
+      ctx.simplify && (not needed)
       && Array.length result_cells = 1
       &&
       match
@@ -5880,9 +5901,9 @@ and if_inference ctx i label typ ~cond ~if_block ~else_block =
    cell ([Collecting]), so [br]/[br_on_*] to it record their value (via
    [subtype]) rather than unifying. Returns the typed body and the collected
    values reaching the exit. *)
-and block_infer_general ctx loc label instrs =
-  let collected = ref [] in
-  let r = UnionFind.make (Collecting collected) in
+and block_infer_general ctx loc label ~declared instrs =
+  let cs = { collected = []; declared; needed = false } in
+  let r = UnionFind.make (Collecting cs) in
   with_empty_stack ctx ~location:loc ~kind:Block
     (let* body' =
        block_contents
@@ -5906,14 +5927,14 @@ and block_infer_general ctx loc label instrs =
           [pop_args] would in check position, leaving the unreachable base. *)
        match st with
        | Cons (loc, tv, Empty) ->
-           collected := (Some loc, tv) :: !collected;
-           (Empty, (body', !collected))
+           cs.collected <- (Some loc, tv) :: cs.collected;
+           (Empty, (body', cs))
        | Cons (loc, tv, Unreachable) ->
-           collected := (Some loc, tv) :: !collected;
-           (Unreachable, (body', !collected))
-       | Empty -> (Empty, (body', !collected))
-       | Unreachable -> (Unreachable, (body', !collected))
-       | Cons _ -> (st, (body', !collected)))
+           cs.collected <- (Some loc, tv) :: cs.collected;
+           (Unreachable, (body', cs))
+       | Empty -> (Empty, (body', cs))
+       | Unreachable -> (Unreachable, (body', cs))
+       | Cons _ -> (st, (body', cs)))
 
 (* Join the values reaching a block's exit into its inferred result, or [None]
    when none do (a void or fully divergent body). Incompatible exit types are
@@ -5953,9 +5974,12 @@ and infer_block_applies ctx typ =
 and block_inference ctx i label typ ~instrs =
   if not (infer_block_applies ctx typ) then None
   else
-    let body', collected = block_infer_general ctx i.info label instrs in
-    let inferred = join_collected ctx ~location:i.info collected in
-    let results, typ = finalize_inferred ctx typ ~inferred in
+    let declared =
+      match typ.results with [| t |] -> internalize ctx t | _ -> None
+    in
+    let body', cs = block_infer_general ctx i.info label ~declared instrs in
+    let inferred = join_collected ctx ~location:i.info cs.collected in
+    let results, typ = finalize_inferred ~needed:cs.needed ctx typ ~inferred in
     Some (Block { label; typ; block = body' }, results)
 
 (* Expression-position synthesis inference for [loop]/[try]/[try_table], the
@@ -5968,35 +5992,44 @@ and block_inference ctx i label typ ~instrs =
 and loop_inference ctx i label typ ~instrs =
   if not (infer_block_applies ctx typ) then None
   else
-    let collected = ref [] in
-    let results = [| UnionFind.make (Collecting collected) |] in
+    let declared =
+      match typ.results with [| t |] -> internalize ctx t | _ -> None
+    in
+    let cs = { collected = []; declared; needed = false } in
+    let results = [| UnionFind.make (Collecting cs) |] in
     let instrs' = block ctx i.info label [||] results [||] instrs in
-    let inferred = join_collected ctx ~location:i.info !collected in
-    let results, typ = finalize_inferred ctx typ ~inferred in
+    let inferred = join_collected ctx ~location:i.info cs.collected in
+    let results, typ = finalize_inferred ~needed:cs.needed ctx typ ~inferred in
     Some (Loop { label; typ; block = instrs' }, results)
 
 and trytable_inference ctx i label typ ~body ~catches =
   if not (infer_block_applies ctx typ) then None
   else
-    let collected = ref [] in
-    let results = [| UnionFind.make (Collecting collected) |] in
+    let declared =
+      match typ.results with [| t |] -> internalize ctx t | _ -> None
+    in
+    let cs = { collected = []; declared; needed = false } in
+    let results = [| UnionFind.make (Collecting cs) |] in
     let body' = block ctx i.info label [||] results results body in
     check_trytable_catches ctx catches;
-    let inferred = join_collected ctx ~location:i.info !collected in
-    let results, typ = finalize_inferred ctx typ ~inferred in
+    let inferred = join_collected ctx ~location:i.info cs.collected in
+    let results, typ = finalize_inferred ~needed:cs.needed ctx typ ~inferred in
     Some (TryTable { label; typ; block = body'; catches }, results)
 
 and try_inference ctx i label typ ~body ~catches ~catch_all =
   if not (infer_block_applies ctx typ) then None
   else
-    let collected = ref [] in
-    let results = [| UnionFind.make (Collecting collected) |] in
+    let declared =
+      match typ.results with [| t |] -> internalize ctx t | _ -> None
+    in
+    let cs = { collected = []; declared; needed = false } in
+    let results = [| UnionFind.make (Collecting cs) |] in
     let body' = block ctx i.info label [||] results results body in
     let catches, catch_all =
       type_try_catches ctx i label ~results catches catch_all
     in
-    let inferred = join_collected ctx ~location:i.info !collected in
-    let results, typ = finalize_inferred ctx typ ~inferred in
+    let inferred = join_collected ctx ~location:i.info cs.collected in
+    let results, typ = finalize_inferred ~needed:cs.needed ctx typ ~inferred in
     Some (Try { label; typ; block = body'; catches; catch_all }, results)
 
 let check_type_definitions ctx =
