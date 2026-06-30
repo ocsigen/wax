@@ -22,6 +22,8 @@
 #   5. Round-trip — x -> wasm  and  x -> wax -> wasm  must be semantically equal
 #                   (canonicalised with `wasm-tools print`). Tests the whole
 #                   decompile+recompile path's fidelity.
+#   6. Wax round-trip — for a wax input, wax -> wasm -> wax -> wasm must still
+#                   validate (the dual of 5: tests both directions compose).
 
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
@@ -133,6 +135,34 @@ if [ "$FMT" != wax ]; then
       finding ROUNDTRIP HIGH "$IN" \
         "x->wax->wasm is rejected by wasm-tools: $(head -1 "$WORK/via.wasm.err")" \
         "$(repro "${wa[@]}") && $(repro "${rb[@]}") && wasm-tools validate --features all $WORK/via.wasm"
+    fi
+  fi
+fi
+
+# ---- 6. Wax round-trip stability: wax -> wasm -> wax -> wasm re-validates. ----
+# The dual of oracle 5 for a wax input (which 5 skips): compile, then decompile,
+# then recompile, and check the result still validates. A break here means the
+# two directions do not compose on this program. We start only from a wax->wasm
+# that already validates (an invalid emission is oracle 3's FALSE_ACCEPT, not a
+# round-trip bug) so the two oracles do not double-report the same root cause.
+if [ "$FMT" = wax ]; then
+  c1=(-i wax -f wasm "$IN" -o "$WORK/rt1.wasm")
+  if [ "$(classify_wax "${c1[@]}")" = ok ] && wt_validate "$WORK/rt1.wasm"; then
+    dc=(-i wasm -f wax "$WORK/rt1.wasm" -o "$WORK/rt.wax")
+    rdc="$(classify_wax "${dc[@]}")"
+    c2=(-i wax -f wasm "$WORK/rt.wax" -o "$WORK/rt2.wasm")
+    if [ "$rdc" != ok ]; then
+      finding ROUNDTRIP HIGH "$IN" \
+        "wax->wasm decompiles back but fails: $rdc" \
+        "$(repro "${c1[@]}") && $(repro "${dc[@]}")"
+    elif rc2="$(classify_wax "${c2[@]}")"; [ "$rc2" != ok ]; then
+      finding ROUNDTRIP HIGH "$IN" \
+        "wax->wasm->wax does not recompile: $rc2" \
+        "$(repro "${dc[@]}") && $(repro "${c2[@]}")"
+    elif ! wt_validate "$WORK/rt2.wasm"; then
+      finding ROUNDTRIP HIGH "$IN" \
+        "wax->wasm->wax->wasm is rejected by wasm-tools: $(head -1 "$WORK/rt2.wasm.err")" \
+        "$(repro "${c1[@]}") && $(repro "${dc[@]}") && $(repro "${c2[@]}") && wasm-tools validate --features all $WORK/rt2.wasm"
     fi
   fi
 fi

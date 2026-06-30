@@ -45,15 +45,20 @@ fuzz/oracle.sh FILE [valid|invalid|unknown]   # check one file (the fuzzing unit
 fuzz/smith.sh [count] [bytes]                 # generate valid modules + check them
 fuzz/triage.sh REPORT       # collapse a findings report into ranked bug signatures
 
+# Wax *source* side (compile direction: parser, type checker, to_wasm):
+fuzz/wax-corpus.sh          # decompile the valid wasm corpus to fuzz/corpus-wax/ (.wax seeds)
+fuzz/mutate-wax.sh [count]  # AST-mutate the wax seeds + check them
+
 # Execution (behavioural-equivalence) oracles — run on spec .wast files:
 fuzz/exec-ref.sh [wast…]    # via the reference interpreter (strongest; GC/SIMD/EH/multi-mem)
 fuzz/exec-interp.sh [wast…] # via wabt spectest-interp
 fuzz/exec.sh [wast…]        # via Node
 ```
 
-`run.sh` and `smith.sh` exit non-zero if any **HIGH**-severity finding appears,
-so either can gate CI; the execution oracles exit non-zero on any behavioural
-regression. `fuzz/corpus/` and `fuzz/smith-findings/` are gitignored.
+`run.sh`, `smith.sh` and `mutate-wax.sh` exit non-zero if any **HIGH**-severity
+finding appears, so any can gate CI; the execution oracles exit non-zero on any
+behavioural regression. `fuzz/corpus/`, `fuzz/corpus-wax/`,
+`fuzz/smith-findings/` and `fuzz/mutate-findings/` are gitignored.
 
 ## The corpus
 
@@ -65,6 +70,31 @@ regression. `fuzz/corpus/` and `fuzz/smith-findings/` are gitignored.
   each module `valid` (`module`) or `invalid` (`assert_invalid` /
   `assert_malformed`) — giving differential-validation ground truth on both sides.
 
+## The Wax source side
+
+Everything above starts from *wasm* and runs `wasm → wax → wasm`. That barely
+exercises the *compile* direction — the Wax parser, type checker and `to_wasm` —
+on anything the decompiler would not itself emit. Two scripts close that gap:
+
+* `wax-corpus.sh` decompiles the valid wasm corpus into `fuzz/corpus-wax/valid/`,
+  a corpus of valid, type-correct Wax (wax's own output). `run.sh
+  fuzz/corpus-wax` sweeps it, exercising the `wax → wat/wax/wasm` directions and
+  the wax round-trip (oracle 6).
+* `mutate-wax.sh` is the AST mutation fuzzer. The `fuzz_mutate` tool
+  (`src/bin/fuzz_mutate.ml`) parses a `.wax` seed, mutates one AST node — swap a
+  binary/unary operator, tweak a literal, reorder a block's first two statements
+  — and reprints it. Because the output is printed from a real AST it *always
+  re-parses*, so ~95% of mutants reach the type checker and `to_wasm` (a
+  token-level mutator mostly produces parse errors that never get that far).
+  Mutants have unknown validity, so the live oracles are crashes, emitter
+  soundness, and the wax round-trip.
+
+There is no external reference for Wax (no `wasm-tools validate` equivalent), so
+a wax-side bug is: a crash; wax accepting a program whose emitted wasm the
+reference rejects (`FALSE_ACCEPT`); or a broken `wax → wasm → wax → wasm`
+round-trip. A natural next step (not yet built) is a from-scratch grammar-based
+Wax generator for syntactic constructs the decompiler never emits.
+
 ## The oracles (`oracle.sh`)
 
 | Category        | Severity | What it asserts |
@@ -73,7 +103,7 @@ regression. `fuzz/corpus/` and `fuzz/smith-findings/` are gitignored.
 | `FALSE_REJECT`  | HIGH   | `wax check` accepts every module known valid. |
 | `FALSE_ACCEPT`  | HIGH   | `wax check` rejects every module known invalid; and a binary wax emits from an accepted module passes `wasm-tools validate` (emitter soundness). |
 | `VALIDATOR_DIFF`| REVIEW | For untagged input, `wax check`'s verdict matches `wasm-tools validate`. |
-| `ROUNDTRIP`     | HIGH   | `x → wax → wasm` recompiles and the result validates. |
+| `ROUNDTRIP`     | HIGH   | `x → wax → wasm` recompiles and validates; and for a wax input, `wax → wasm → wax → wasm` re-validates (the two directions compose). |
 | `IDEMPOTENCE`   | REVIEW | `format(format(x)) == format(x)` textually. |
 
 Each finding line is tab-separated: `FINDING  category  severity  input  detail

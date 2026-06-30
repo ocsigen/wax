@@ -5,5 +5,5 @@
  (libraries wax_wasm wax_lang wax_conversion cmdliner unix))
 
 (executables
- (names test_wasm convert pretty_print run_wasm_testsuite)
+ (names test_wasm convert pretty_print run_wasm_testsuite fuzz_mutate)
  (libraries wax_wasm wax_lang wax_conversion menhirLib re unix cmdliner))
