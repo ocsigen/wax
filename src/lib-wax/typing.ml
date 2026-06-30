@@ -2731,33 +2731,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
   | Br _ | Br_if _ | Br_table _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
   | Br_on_cast_fail _ ->
       type_branch ctx i
-  | Throw (tag, i') ->
-      let* i' =
-        match i' with
-        | Some i' ->
-            let* i' = instruction ctx i' in
-            return (Some i')
-        | None -> return None
-      in
-      (let>@ { params; results } = Tbl.find ctx.diagnostics ctx.tags tag in
-       if results <> [||] then
-         Error.tag_with_results ctx.diagnostics ~location:tag.info;
-       let>@ types =
-         array_map_opt (fun p -> internalize ctx (snd p.desc)) params
-       in
-       match i' with
-       | Some i' ->
-           check_subtypes ctx ~location:(snd i'.info) (fst i'.info) types
-       | None ->
-           if types <> [||] then
-             Error.value_count_mismatch ctx.diagnostics ~location:i.info
-               ~expected:(Array.length types) ~provided:0);
-      return_statement i (Throw (tag, i')) [||]
-  | ThrowRef i' ->
-      let* i' = instruction ctx i' in
-      (let>@ typ = internalize ctx (Ref { nullable = true; typ = Exn }) in
-       check_type ctx i' typ);
-      return_statement i (ThrowRef i') [||]
+  | Throw _ | ThrowRef _ -> type_exception ctx i
   | ContNew _ | ContBind _ | Suspend _ | Resume _ | ResumeThrow _
   | ResumeThrowRef _ | Switch _ ->
       type_stack_switching ctx i
@@ -4065,6 +4039,39 @@ and type_let ctx i =
         bindings;
       return_statement i (Let (bindings, None)) [||]
   | _ -> assert false (* only invoked on Let *)
+
+and type_exception ctx i =
+  (* Raising exceptions: [throw tag(..)] ([Throw]) and re-raising a caught
+     exnref ([ThrowRef]). *)
+  match i.desc with
+  | Throw (tag, i') ->
+      let* i' =
+        match i' with
+        | Some i' ->
+            let* i' = instruction ctx i' in
+            return (Some i')
+        | None -> return None
+      in
+      (let>@ { params; results } = Tbl.find ctx.diagnostics ctx.tags tag in
+       if results <> [||] then
+         Error.tag_with_results ctx.diagnostics ~location:tag.info;
+       let>@ types =
+         array_map_opt (fun p -> internalize ctx (snd p.desc)) params
+       in
+       match i' with
+       | Some i' ->
+           check_subtypes ctx ~location:(snd i'.info) (fst i'.info) types
+       | None ->
+           if types <> [||] then
+             Error.value_count_mismatch ctx.diagnostics ~location:i.info
+               ~expected:(Array.length types) ~provided:0);
+      return_statement i (Throw (tag, i')) [||]
+  | ThrowRef i' ->
+      let* i' = instruction ctx i' in
+      (let>@ typ = internalize ctx (Ref { nullable = true; typ = Exn }) in
+       check_type ctx i' typ);
+      return_statement i (ThrowRef i') [||]
+  | _ -> assert false (* only invoked on Throw/ThrowRef *)
 
 and type_mem_method_call ctx i func recv memname meth args =
   let _, address_type = Option.get (Tbl.find_opt ctx.memories memname) in
