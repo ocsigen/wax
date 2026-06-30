@@ -5,7 +5,7 @@ so `$inner` becomes `let inner = x + 1;` nested in the `do` block:
 
   $ wax init.wat -f wax
   fn f(x: i32) -> i32 {
-      let outer: i32 =
+      let outer =
           do {
               let inner = x + 1;
               inner * inner;

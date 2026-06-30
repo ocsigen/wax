@@ -683,7 +683,7 @@ fn caml_assume_no_perform(f: &eq) -> &eq {
     let saved_effect_allowed = effect_allowed;
     effect_allowed = 0;
     let exn: &eq;
-    let res: &eq =
+    let res =
         try {
             caml_callback_1(f, 0 as &i31);
         } catch {

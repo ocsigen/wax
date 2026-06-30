@@ -4831,62 +4831,83 @@ and check ctx expected (i : location instr) =
       if Array.length typ.params > 0 then
         Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
       let result_cell = context_result_cell ctx typ ~expected in
-      let results = [| result_cell |] in
-      let instrs' = block ctx i.info label [||] results results instrs in
+      let instrs', needed =
+        block_keep_bool ctx i.info label ~result:result_cell
+          ~br_params:[| result_cell |] instrs
+      in
       check_subtype ctx ~location:i.info result_cell expected;
       let typ = context_block_typ ctx typ ~expected ~result_cell in
       let* node =
-        return_statement i (Block { label; typ; block = instrs' }) results
+        return_statement i
+          (Block { label; typ; block = instrs' })
+          [| result_cell |]
       in
-      return (node, true)
+      return (node, needed)
   | Loop { label; typ; block = instrs } when has_expectation expected ->
       if Array.length typ.params > 0 then
         Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
       let result_cell = context_result_cell ctx typ ~expected in
-      let results = [| result_cell |] in
       (* A [br] to a loop re-enters at its top with the loop's parameters, so it
          carries no result; the loop's value is its fall-through. Hence the
-         branch-target type is the (empty) parameters, not [results]. *)
-      let instrs' = block ctx i.info label [||] results [||] instrs in
+         branch-target type is the (empty) parameters, not the result, and a
+         branch to the loop's label does not deliver the value. *)
+      let instrs', needed =
+        block_keep_bool ctx i.info label ~result:result_cell ~br_params:[||]
+          instrs
+      in
       check_subtype ctx ~location:i.info result_cell expected;
       let typ = context_block_typ ctx typ ~expected ~result_cell in
       let* node =
-        return_statement i (Loop { label; typ; block = instrs' }) results
+        return_statement i
+          (Loop { label; typ; block = instrs' })
+          [| result_cell |]
       in
-      return (node, true)
+      return (node, needed)
   | TryTable { label; typ; block = body; catches } when has_expectation expected
     ->
       if Array.length typ.params > 0 then
         Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
       let result_cell = context_result_cell ctx typ ~expected in
-      let results = [| result_cell |] in
-      let body' = block ctx i.info label [||] results results body in
+      (* A [try_table]'s catches branch to other targets, not its own label, so
+         its value is the body's (the fall-through, or a [br] to its label). *)
+      let body', needed =
+        block_keep_bool ctx i.info label ~result:result_cell
+          ~br_params:[| result_cell |] body
+      in
       check_trytable_catches ctx catches;
       check_subtype ctx ~location:i.info result_cell expected;
       let typ = context_block_typ ctx typ ~expected ~result_cell in
       let* node =
         return_statement i
           (TryTable { label; typ; block = body'; catches })
-          results
+          [| result_cell |]
       in
-      return (node, true)
+      return (node, needed)
   | Try { label; typ; block = body; catches; catch_all }
     when has_expectation expected ->
       assert (typ.params = [||]);
       let result_cell = context_result_cell ctx typ ~expected in
-      let results = [| result_cell |] in
-      let body' = block ctx i.info label [||] results results body in
+      (* A catch handler also produces the try's value, but — like a branch to
+         the block's label — it is checked to be a subtype of the result, so it
+         cannot raise the inferred join above the body's fall-through. So the
+         body's keep-bool decides; the handlers are typed against the result
+         afterwards. *)
+      let body', needed =
+        block_keep_bool ctx i.info label ~result:result_cell
+          ~br_params:[| result_cell |] body
+      in
       let catches, catch_all =
-        type_try_catches ctx i label ~results catches catch_all
+        type_try_catches ctx i label ~results:[| result_cell |] catches
+          catch_all
       in
       check_subtype ctx ~location:i.info result_cell expected;
       let typ = context_block_typ ctx typ ~expected ~result_cell in
       let* node =
         return_statement i
           (Try { label; typ; block = body'; catches; catch_all })
-          results
+          [| result_cell |]
       in
-      return (node, true)
+      return (node, needed)
   | _ ->
       let* i' = instruction ctx i in
       (* Capture the value's own standalone-resolved type BEFORE [check_type]
@@ -5464,6 +5485,58 @@ and block ctx loc label params results br_params block =
      in
      let* () = pop_args ctx ~location:loc results in
      return block')
+
+(* Like [block] for a paramless block checked against a single [result] type, but
+   also report whether the surrounding binding annotation is needed — i.e. would
+   [let x = <block>] (no annotation) re-infer a different type? It is *not* needed
+   exactly when the value the block produces already has type [result] on its
+   own, without the context forcing it. The block's value is the join of the
+   values reaching its exit, all of which are checked to be subtypes of [result];
+   so when the fall-through's own natural type is already [result], that join is
+   [result] regardless of any value branched to the block's label — and the
+   annotation is redundant. Read the fall-through's natural type off the stack,
+   unconstrained, before [pop_args] coerces it to [result], and compare
+   ([annotation_needed], as the leaf [check] arm does). Stay conservative
+   (needed) when the trailing instruction is itself a routable block/construction
+   — the routing already forced its type to [result], hiding its natural type —
+   or when the value reaches the exit only by a branch (a divergent or empty
+   fall-through), whose values are not on the stack to read. Returns the typed
+   body and that keep-bool. *)
+and block_keep_bool ctx loc label ~result ~br_params body =
+  let trailing_routable =
+    match List.rev body with
+    | last :: _ -> (
+        match last.desc with
+        | Struct _ | StructDefault _ | Array _ | ArrayDefault _ | ArrayFixed _
+        | ArraySegment _ | String _ | If _ | Block _ | Loop _ | TryTable _
+        | Try _ ->
+            true
+        | Cast (e, _) -> is_null_initializer e
+        | _ -> false)
+    | [] -> false
+  in
+  with_empty_stack ctx ~location:loc ~kind:Block
+    (let* block' =
+       block_contents
+         {
+           ctx with
+           control_types =
+             (Option.map (fun l -> l.desc) label, br_params)
+             :: ctx.control_types;
+         }
+         [| result |] body
+     in
+     fun st ->
+       let needed =
+         if trailing_routable then true
+         else
+           match st with
+           | Cons (_, tv, _) ->
+               annotation_needed ctx (standalone_valtype ctx tv) result
+           | Empty | Unreachable -> true
+       in
+       let st, () = pop_args ctx ~location:loc [| result |] st in
+       (st, (block', needed)))
 
 (* Type a block body in synthesis (no expected result), inferring its single
    fall-through value as the block's result. Only valid where no branch targets
