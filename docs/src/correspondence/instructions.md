@@ -163,6 +163,14 @@ do i32 { ... }
 if cond => (i32) -> i32 { ... } else { ... }
 ```
 
+A single result type can be **inferred**, so converting from WebAssembly drops
+it wherever it is redundant: a `do i32 { ... }` becomes `do { ... }`, an
+`if cond => i32 { ... }` loses its `=> i32`, and likewise for `loop`, `try`, and
+`try_table`. The type is recovered when reading the Wax back, from the values
+reaching the block's exit or from the surrounding context (see
+[Type inference](../language.md#blocks)). Parameterized and multi-result block
+types are always kept.
+
 ## Reference Instructions
 
 | Wasm | Wax |

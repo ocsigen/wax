@@ -297,6 +297,22 @@ This is a stack discipline, not a "last expression" rule: the body must leave
 *exactly* the values the block's type describes — no more, no less. A void
 block that leaves a value, or a `do i32` block that leaves two, is an error.
 
+The result type may be **omitted** and inferred — from the value the body leaves
+(including a value branched to the block's own label), or from the surrounding
+context such as a function's result type, a typed binding, or a call argument.
+It is needed only where neither determines it, for instance when two branches
+produce values with no common supertype. So the block above can drop its `i32`:
+
+```wax
+answer = do {
+    42;
+};
+```
+
+`loop`, `try`, and `try_table` infer their result type the same way. Converting
+WebAssembly to Wax drops the annotation wherever it is redundant, and re-reading
+that Wax recovers the type by the same inference.
+
 A block type may also take parameters off the enclosing stack, using the full
 `(params) -> results` form:
 
@@ -342,6 +358,18 @@ if condition => i32 {
 } else {
     0;
 }
+```
+
+Like a block's result type, the `=> <type>` may be **omitted** and inferred —
+from the branches (here both produce `i32`) or from the surrounding context. The
+`else` stays required, since a value-producing `if` needs both branches:
+
+```wax
+x = if condition {
+    1;
+} else {
+    0;
+};
 ```
 
 ### Loops

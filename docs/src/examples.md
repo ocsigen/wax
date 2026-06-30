@@ -357,6 +357,35 @@ fn make_origin() -> &eq {
 }
 ```
 
+## Inferring Block Result Types
+
+### Wax
+
+A block's result type — `=> T` on an `if`, or the type after `do` (and likewise
+`loop`, `try`, and `try_table`) — may be omitted where it is fixed by the values
+the block produces or by the surrounding context:
+
+```wax
+#[export = "max0"]
+fn max0(n: i32) -> i32 {
+    // `=> i32` omitted: inferred from the branches and the return type
+    if n <s 0 {
+        0;
+    } else {
+        n;
+    }
+}
+
+#[export = "answer"]
+fn answer() -> i32 {
+    // the `do` block's result type is inferred from the value it leaves
+    let x = do {
+        40 + 2;
+    };
+    x;
+}
+```
+
 ## Arrays
 
 ### Wax
