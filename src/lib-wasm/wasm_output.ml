@@ -38,8 +38,9 @@ module Encoder = struct
       byte b (128 + (Int64.to_int i land 127));
       sint64 b (Int64.shift_right i 7))
 
-  let f32 b f =
-    let i = Int32.bits_of_float f in
+  (* [i] is the raw 32-bit pattern of the f32 constant (kept exact, including a
+     signaling NaN's payload, by not routing it through an OCaml [float]). *)
+  let f32 b i =
     byte b (Int32.to_int i land 0xff);
     byte b (Int32.to_int (Int32.shift_right i 8) land 0xff);
     byte b (Int32.to_int (Int32.shift_right i 16) land 0xff);

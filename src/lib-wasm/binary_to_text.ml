@@ -336,7 +336,7 @@ let rec instr (names : B.names) local_names label_names label_counter stack
     | I31Get s -> I31Get s
     | Const (I32 x) -> Const (I32 (Int32.to_string x))
     | Const (I64 x) -> Const (I64 (Int64.to_string x))
-    | Const (F32 x) -> Const (F32 (string_of_float x))
+    | Const (F32 x) -> Const (F32 (string_of_float (Int32.float_of_bits x)))
     | Const (F64 x) -> Const (F64 (string_of_float x))
     | UnOp op -> UnOp op
     | BinOp op -> BinOp op

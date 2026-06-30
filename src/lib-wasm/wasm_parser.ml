@@ -129,7 +129,10 @@ let rec sint64 ?(n = 10) ch =
   else if Int64.compare i 128L < 0 then Int64.sub i 128L
   else Int64.add (Int64.sub i 128L) (Int64.shift_left (sint64 ~n:(n - 1) ch) 7)
 
-let float32 ch =
+(* The raw 32 bits of an f32 constant. We keep them as an [int32] rather than
+   decoding to an OCaml [float]: widening single->double would quiet a signaling
+   NaN, losing the exact value. *)
+let float32_bits ch =
   let b1 = input_byte ch in
   let b2 = input_byte ch in
   let b3 = input_byte ch in
@@ -137,8 +140,7 @@ let float32 ch =
   let i = Int32.of_int b1 in
   let i = Int32.logor i (Int32.shift_left (Int32.of_int b2) 8) in
   let i = Int32.logor i (Int32.shift_left (Int32.of_int b3) 16) in
-  let i = Int32.logor i (Int32.shift_left (Int32.of_int b4) 24) in
-  Int32.float_of_bits i
+  Int32.logor i (Int32.shift_left (Int32.of_int b4) 24)
 
 let float64 ch =
   let b1 = Int64.of_int (input_byte ch) in
@@ -620,7 +622,7 @@ and instruction ch =
     | 0x40 -> MemoryGrow (uint ch)
     | 0x41 -> Const (I32 (sint32 ch))
     | 0x42 -> Const (I64 (sint64 ch))
-    | 0x43 -> Const (F32 (float32 ch))
+    | 0x43 -> Const (F32 (float32_bits ch))
     | 0x44 -> Const (F64 (float64 ch))
     | 0x45 -> UnOp (I32 Eqz)
     | 0x46 -> BinOp (I32 Eq)

@@ -259,6 +259,7 @@ module Make_instructions (X : sig
   type valtype
   type int32_t
   type int64_t
+  type f32_t
   type float_t
   type v128_t
 end) : sig
@@ -537,7 +538,7 @@ end) : sig
     | ArrayInitElem of X.idx * X.idx
     | RefI31
     | I31Get of signage
-    | Const of (X.int32_t, X.int64_t, X.float_t, X.float_t) op
+    | Const of (X.int32_t, X.int64_t, X.f32_t, X.float_t) op
     | BinOp of (int_bin_op, int_bin_op, float_bin_op, float_bin_op) op
     | UnOp of (int_un_op, int_un_op, float_un_op, float_un_op) op
     | VecConst of X.v128_t
@@ -616,6 +617,7 @@ module Text : sig
     type nonrec typeuse = typeuse
     type int32_t = string
     type int64_t = string
+    type f32_t = string
     type float_t = string
     type v128_t = Wax_utils.V128.t
   end)
@@ -722,6 +724,7 @@ module Binary : sig
     type nonrec typeuse = typeuse
     type int32_t = Int32.t
     type int64_t = Int64.t
+    type f32_t = Int32.t
     type float_t = float
     type v128_t = string
   end)
