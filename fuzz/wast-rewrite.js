@@ -22,7 +22,7 @@ const MODE = process.env.MODE || "codec";
 const WT = process.env.WASM_TOOLS || "wasm-tools";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "wastrw-"));
-let recompiled = 0, kept = 0;
+let recompiled = 0, failed = 0;
 
 const run = (cmd, args) => {
   try { cp.execFileSync(cmd, args, { stdio: ["ignore", "ignore", "ignore"] }); return true; }
@@ -44,7 +44,7 @@ const escape = (buf) => '"' + [...buf].map((b) => "\\" + b.toString(16).padStart
 function rewriteModule(group) {
   // Skip the binary/quote forms and module-less groups; recompile plain text.
   const m = group.match(/^\(\s*module\b\s*(\$[^\s()]+)?\s*([a-z]*)/);
-  if (!m || m[2] === "binary" || m[2] === "quote") { kept++; return group; }
+  if (!m || m[2] === "binary" || m[2] === "quote") return group; // not a text module
   const name = m[1] ? " " + m[1] : "";
   const wat = path.join(tmp, "m.wat"), ref = path.join(tmp, "m.wasm"), out = path.join(tmp, "m.out.wasm");
   fs.writeFileSync(wat, group);
@@ -52,8 +52,8 @@ function rewriteModule(group) {
     recompiled++;
     return "(module" + name + " binary " + escape(fs.readFileSync(out)) + ")";
   }
-  kept++;
-  return group; // wax couldn't reproduce it: keep the original
+  failed++;
+  return group; // wax couldn't reproduce it: keep the original (NOT tested via wax)
 }
 
 // Walk the script; only ( ... ) groups need parsing (to find their extent,
@@ -88,5 +88,5 @@ while (i < n) {
 }
 
 fs.rmSync(tmp, { recursive: true, force: true });
-process.stderr.write(`recompiled=${recompiled} kept=${kept}\n`);
+process.stderr.write(`recompiled=${recompiled} failed=${failed}\n`);
 process.stdout.write(out);

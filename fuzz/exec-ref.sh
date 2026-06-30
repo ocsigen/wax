@@ -28,7 +28,7 @@ if [ ${#wasts[@]} -eq 0 ]; then
   mapfile -t wasts < <(find "$ROOT/test/wasm-test-suite/core" -name '*.wast' | sort)
 fi
 
-tested=0 skipped=0 regressions=0
+tested=0 skipped=0 regressions=0 norecompile=0
 report="$(mktemp)"
 
 for wast in "${wasts[@]}"; do
@@ -36,7 +36,10 @@ for wast in "${wasts[@]}"; do
   if ! "$REF" "$wast" >/dev/null 2>&1; then skipped=$((skipped+1)); continue; fi
   tested=$((tested+1))
   rw="$(mktemp --suffix=.wast)"
-  node "$REWRITE" "$wast" >"$rw" 2>/dev/null
+  # wast-rewrite reports "recompiled=N failed=M" on stderr; M modules wax could
+  # not recompile are kept as the original (so NOT tested via wax).
+  stats="$(node "$REWRITE" "$wast" 2>&1 >"$rw")"
+  norecompile=$((norecompile + $(echo "$stats" | sed -n 's/.*failed=\([0-9]*\).*/\1/p')))
   if ! err="$("$REF" "$rw" 2>&1)"; then
     regressions=$((regressions+1))
     { echo "### $(basename "$wast")"; echo "$err" | head -4; } >>"$report"
@@ -47,6 +50,7 @@ done
 echo "============= execution oracle via reference interpreter ($MODE) ============="
 echo "files tested:    $tested"
 echo "files skipped:   $skipped (reference interpreter cannot run the original — e.g. stack switching)"
+echo "modules wax could not recompile: $norecompile (kept as original — not tested via wax)"
 echo "wax regressions: $regressions (passed the baseline, failed after wax recompiled the modules)"
 if [ "$regressions" -gt 0 ]; then
   echo; echo "regressions:"; sed 's/^/  /' "$report" | head -80
