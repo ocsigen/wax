@@ -2446,15 +2446,18 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       return_statement i
         (Match { scrutinee = scrut'; arms = arms'; default = default' })
         [||]
-  | Loop { label; typ; block = instrs } ->
+  | Loop { label; typ; block = instrs } -> (
       if Array.length typ.params > 0 then
         Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
-      let*! params =
-        array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
-      in
-      let*! results = array_map_opt (internalize ctx) typ.results in
-      let instrs' = block ctx i.info label params results params instrs in
-      return_statement i (Loop { label; typ; block = instrs' }) results
+      match loop_inference ctx i label typ ~instrs with
+      | Some (desc, results) -> return_statement i desc results
+      | None ->
+          let*! params =
+            array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
+          in
+          let*! results = array_map_opt (internalize ctx) typ.results in
+          let instrs' = block ctx i.info label params results params instrs in
+          return_statement i (Loop { label; typ; block = instrs' }) results)
   | While { label; cond; block = instrs } ->
       (* Type-check the equivalent loop (see [Ast_utils.lower_while]): this
          validates that [cond] is an [i32] and the body is well-typed, with the
@@ -2527,28 +2530,34 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       return_statement i
         (If_annotation { cond; then_body = then_body'; else_body = else_body' })
         [||]
-  | TryTable { label; typ; block = body; catches } ->
+  | TryTable { label; typ; block = body; catches } -> (
       if Array.length typ.params > 0 then
         Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
-      let*! params =
-        array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
-      in
-      let*! results = array_map_opt (internalize ctx) typ.results in
-      let body' = block ctx i.info label params results results body in
-      check_trytable_catches ctx catches;
-      return_statement i
-        (TryTable { label; typ; block = body'; catches })
-        results
-  | Try { label; typ; block = body; catches; catch_all } ->
+      match trytable_inference ctx i label typ ~body ~catches with
+      | Some (desc, results) -> return_statement i desc results
+      | None ->
+          let*! params =
+            array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
+          in
+          let*! results = array_map_opt (internalize ctx) typ.results in
+          let body' = block ctx i.info label params results results body in
+          check_trytable_catches ctx catches;
+          return_statement i
+            (TryTable { label; typ; block = body'; catches })
+            results)
+  | Try { label; typ; block = body; catches; catch_all } -> (
       assert (typ.params = [||]);
-      let*! results = array_map_opt (internalize ctx) typ.results in
-      let body' = block ctx i.info label [||] results results body in
-      let catches, catch_all =
-        type_try_catches ctx i label ~results catches catch_all
-      in
-      return_statement i
-        (Try { label; typ; block = body'; catches; catch_all })
-        results
+      match try_inference ctx i label typ ~body ~catches ~catch_all with
+      | Some (desc, results) -> return_statement i desc results
+      | None ->
+          let*! results = array_map_opt (internalize ctx) typ.results in
+          let body' = block ctx i.info label [||] results results body in
+          let catches, catch_all =
+            type_try_catches ctx i label ~results catches catch_all
+          in
+          return_statement i
+            (Try { label; typ; block = body'; catches; catch_all })
+            results)
   | (Unreachable | Nop) as desc ->
       (* [unreachable] and [nop] are statements that yield no value; they are
          only meaningful in statement (top-level) position, where
@@ -5625,18 +5634,62 @@ and join_collected ctx ~location collected =
 (* Try to infer (and, on [simplify], drop) the result type of a [do]/labelled
    block from the values reaching its exit. Mirrors [if_inference] for the
    single-branch [Block] form, but admits branches to the block's own label. *)
+(* Whether to infer a block's result in expression (synthesis) position: only
+   for the single-result, parameterless forms, and only when the annotation is
+   omitted (a re-parse of a dropped one, which must be re-inferred) or [simplify]
+   is converting from Wasm (so a redundant annotation can be dropped). *)
+and infer_block_applies ctx typ =
+  Array.length typ.params = 0
+  && (typ.results = [||] || (ctx.simplify && Array.length typ.results = 1))
+
 and block_inference ctx i label typ ~instrs =
-  let omitted = typ.results = [||] in
-  let use_infer =
-    Array.length typ.params = 0
-    && (omitted || (ctx.simplify && Array.length typ.results = 1))
-  in
-  if not use_infer then None
+  if not (infer_block_applies ctx typ) then None
   else
     let body', collected = block_infer_general ctx i.info label instrs in
     let inferred = join_collected ctx ~location:i.info collected in
     let results, typ = finalize_inferred ctx typ ~inferred in
     Some (Block { label; typ; block = body' }, results)
+
+(* Expression-position synthesis inference for [loop]/[try]/[try_table], the
+   analogue of [block_inference] for [do]. Type the body (and, for [try], the
+   handlers) against a fresh [Collecting] result cell so every value reaching the
+   exit — the fall-through, and values branched to the block's label — is
+   recorded, then join them and (on [simplify]) drop a redundant annotation. A
+   [br] to a loop re-enters at its top (branch-target = the empty params), so a
+   loop's value is only its fall-through; the others deliver to their label. *)
+and loop_inference ctx i label typ ~instrs =
+  if not (infer_block_applies ctx typ) then None
+  else
+    let collected = ref [] in
+    let results = [| UnionFind.make (Collecting collected) |] in
+    let instrs' = block ctx i.info label [||] results [||] instrs in
+    let inferred = join_collected ctx ~location:i.info !collected in
+    let results, typ = finalize_inferred ctx typ ~inferred in
+    Some (Loop { label; typ; block = instrs' }, results)
+
+and trytable_inference ctx i label typ ~body ~catches =
+  if not (infer_block_applies ctx typ) then None
+  else
+    let collected = ref [] in
+    let results = [| UnionFind.make (Collecting collected) |] in
+    let body' = block ctx i.info label [||] results results body in
+    check_trytable_catches ctx catches;
+    let inferred = join_collected ctx ~location:i.info !collected in
+    let results, typ = finalize_inferred ctx typ ~inferred in
+    Some (TryTable { label; typ; block = body'; catches }, results)
+
+and try_inference ctx i label typ ~body ~catches ~catch_all =
+  if not (infer_block_applies ctx typ) then None
+  else
+    let collected = ref [] in
+    let results = [| UnionFind.make (Collecting collected) |] in
+    let body' = block ctx i.info label [||] results results body in
+    let catches, catch_all =
+      type_try_catches ctx i label ~results catches catch_all
+    in
+    let inferred = join_collected ctx ~location:i.info !collected in
+    let results, typ = finalize_inferred ctx typ ~inferred in
+    Some (Try { label; typ; block = body'; catches; catch_all }, results)
 
 let check_type_definitions ctx =
   (*ZZZ In-order check? *)

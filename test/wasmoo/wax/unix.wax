@@ -2309,7 +2309,7 @@ fn caml_unix_check_stream_semantics(fd: &eq, out: i32) {
 #[else]
 fn caml_unix_check_stream_semantics(fd: &eq, out: i32) {
     let s =
-        try &eq {
+        try {
             fstat(fd, 0);
         } catch {
             javascript_exception => {
