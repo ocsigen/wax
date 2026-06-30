@@ -639,7 +639,18 @@ let add_type d ctx ty =
       Some i'
 
 type module_context = {
+  (* --- Diagnostics and whole-run configuration --- *)
   diagnostics : Wax_utils.Diagnostic.context;
+  warn_unused : bool;
+      (* Whether to report locals declared by a [let] but never read. Enabled
+         only when validation is requested. *)
+  simplify : bool;
+  (* Whether to rewrite the AST while typing: drop casts the inferred types
+         make redundant and tighten [&?extern]/[&?any] casts to
+         [&extern]/[&any]. Enabled only when converting from Wasm; for
+         hand-written Wax (formatting, or compiling to Wasm) casts are kept as
+         written. *)
+  (* --- Module-wide type and name tables (built once, before any body) --- *)
   type_context : type_context;
   subtyping_info : Wax_wasm.Types.subtyping_info;
   types : (int * subtype) Tbl.t;
@@ -657,13 +668,22 @@ type module_context = {
   datas : unit Tbl.t;
   tables : ([ `I32 | `I64 ] * reftype) Tbl.t;
   elems : reftype Tbl.t;
+  structs_by_fields : (string, ident option) Hashtbl.t;
+  (* Maps a struct's canonical field-set key (see [field_set_key]) to the
+         unique struct type with that field set, or [None] when several share
+         it. Lets a struct literal whose name is omitted resolve from its fields
+         alone (and the name be dropped when the fields make it unambiguous).
+         Built once at module-context creation. *)
+  (* --- Per-function state (reset on entry to each function) --- *)
   mutable locals : inferred_valtype option StringMap.t;
       (* The local's type, or [None] when it could not be determined because its
          initializer failed to type — an error-recovery "poison" local, read as
          the [Error] type so its uses don't cascade into further errors. *)
-  warn_unused : bool;
-      (* Whether to report locals declared by a [let] but never read. Enabled
-         only when validation is requested. *)
+  mutable initialized_locals : StringSet.t;
+      (* Locals known to hold a value at the current point. A non-defaultable
+         (non-nullable reference) local starts uninitialized and must be
+         assigned before it is read. The set is captured by [{ ctx with ... }]
+         on block entry, so an assignment inside a block does not escape it. *)
   read_locals : StringSet.t ref;
       (* Names of locals read so far in the current function. A [ref] (rather
          than a snapshot field) so reads inside a block propagate to the
@@ -678,29 +698,13 @@ type module_context = {
          which may narrow to [e]'s subtype just like an immutable global — from
          one a later assignment still needs the wider [T] for. Reset per
          function. *)
-  mutable initialized_locals : StringSet.t;
-      (* Locals known to hold a value at the current point. A non-defaultable
-         (non-nullable reference) local starts uninitialized and must be
-         assigned before it is read. The set is captured by [{ ctx with ... }]
-         on block entry, so an assignment inside a block does not escape it. *)
   control_types : (string option * inferred_type UnionFind.t array) list;
   return_types : inferred_type UnionFind.t array;
+  (* --- Conditional-compilation branch assumption --- *)
   cond : Cond.t ref;
       (* Current branch assumption (shared with every namespace/table above);
          set while typing a conditional branch so names resolve per branch. *)
   cond_env : Cond.env;
-  simplify : bool;
-      (* Whether to rewrite the AST while typing: drop casts the inferred types
-         make redundant and tighten [&?extern]/[&?any] casts to
-         [&extern]/[&any]. Enabled only when converting from Wasm; for
-         hand-written Wax (formatting, or compiling to Wasm) casts are kept as
-         written. *)
-  structs_by_fields : (string, ident option) Hashtbl.t;
-      (* Maps a struct's canonical field-set key (see [field_set_key]) to the
-         unique struct type with that field set, or [None] when several share
-         it. Lets a struct literal whose name is omitted resolve from its fields
-         alone (and the name be dropped when the fields make it unambiguous).
-         Built once at module-context creation. *)
 }
 
 (* Type [f] under the assumption of a conditional branch ([positive] for
