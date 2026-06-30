@@ -2670,6 +2670,10 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       return_expression i desc ty
   | Set (None, i') ->
       let* i' = instruction ctx i' in
+      (* [_ = e] drops one value, so [e] must produce exactly one; otherwise wax
+         emits a [drop] with nothing (or too much) on the stack. [expression_type]
+         reports [not_an_expression] when the arity is not 1. *)
+      ignore (expression_type ctx i' : inferred_type UnionFind.t);
       return_statement i (Set (None, i')) [||]
   | Set (Some idx, i') ->
       (* Resolve the target first (a pure lookup) so the value can be checked
