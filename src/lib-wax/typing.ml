@@ -3591,173 +3591,9 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       (let>@ typ = internalize ctx (Ref { nullable = true; typ = Exn }) in
        check_type ctx i' typ);
       return_statement i (ThrowRef i') [||]
-  | ContNew (ct, f) ->
-      let* f' = instruction ctx f in
-      let*! ft = lookup_cont_inner ctx ct in
-      (let>@ fref = internalize ctx (Ref { nullable = true; typ = Type ft }) in
-       check_type ctx f' fref);
-      let*! cref = internalize ctx (Ref { nullable = false; typ = Type ct }) in
-      return_expression i (ContNew (ct, f')) cref
-  | ContBind (src, dst, l) ->
-      let* l' = instructions ctx l in
-      let*! src_inner = lookup_cont_inner ctx src in
-      let*! src_sig = lookup_func_type ctx src_inner in
-      let*! dst_inner = lookup_cont_inner ctx dst in
-      let*! dst_sig = lookup_func_type ctx dst_inner in
-      let np = Array.length src_sig.params - Array.length dst_sig.params in
-      (* The destination continuation must be [src] with its leading [np]
-         parameters bound away: the unbound tail and the results must match.
-         Mirrors [Validation]'s [ContBind] check. *)
-      (if np < 0 then
-         Error.stack_switching_type_mismatch ctx.diagnostics ~location:i.info
-           ~descr:
-             "the resulting continuation takes more parameters than the \
-              original one"
-       else
-         let>@ src_ft = internal_functype ctx src_sig in
-         let>@ dst_ft = internal_functype ctx dst_sig in
-         let ts12 = Array.sub src_ft.params np (Array.length dst_ft.params) in
-         if
-           not
-             (functype_matches ctx.subtyping_info
-                { params = ts12; results = src_ft.results }
-                dst_ft)
-         then
-           Error.stack_switching_type_mismatch ctx.diagnostics ~location:i.info
-             ~descr:
-               "the bound parameters and results do not match between the two \
-                continuation types");
-      (let n = max 0 np in
-       let>@ bound =
-         array_map_opt
-           (fun p -> internalize ctx (snd p.desc))
-           (Array.sub src_sig.params 0 n)
-       in
-       let>@ srcref =
-         internalize ctx (Ref { nullable = true; typ = Type src })
-       in
-       check_operands ctx l' (Array.append bound [| srcref |]));
-      let*! dstref =
-        internalize ctx (Ref { nullable = false; typ = Type dst })
-      in
-      return_expression i (ContBind (src, dst, l')) dstref
-  | Suspend (tag, l) ->
-      let* l' = instructions ctx l in
-      let*! { params; results } = Tbl.find ctx.diagnostics ctx.tags tag in
-      (let>@ ptypes =
-         array_map_opt (fun p -> internalize ctx (snd p.desc)) params
-       in
-       check_operands ctx l' ptypes);
-      let*! rtypes = array_map_opt (internalize ctx) results in
-      return_statement i (Suspend (tag, l')) rtypes
-  | Resume (ct, handlers, l) ->
-      let* l' = instructions ctx l in
-      let*! inner = lookup_cont_inner ctx ct in
-      let*! sg = lookup_func_type ctx inner in
-      (let>@ ptypes =
-         array_map_opt (fun p -> internalize ctx (snd p.desc)) sg.params
-       in
-       let>@ cref = internalize ctx (Ref { nullable = true; typ = Type ct }) in
-       check_operands ctx l' (Array.append ptypes [| cref |]));
-      check_resume_handlers ctx ~result_types:sg.results handlers;
-      let*! rtypes = array_map_opt (internalize ctx) sg.results in
-      return_statement i (Resume (ct, handlers, l')) rtypes
-  | ResumeThrow (ct, tag, handlers, l) ->
-      let* l' = instructions ctx l in
-      let*! inner = lookup_cont_inner ctx ct in
-      let*! sg = lookup_func_type ctx inner in
-      let*! { params = tparams; _ } = Tbl.find ctx.diagnostics ctx.tags tag in
-      (let>@ ptypes =
-         array_map_opt (fun p -> internalize ctx (snd p.desc)) tparams
-       in
-       let>@ cref = internalize ctx (Ref { nullable = true; typ = Type ct }) in
-       check_operands ctx l' (Array.append ptypes [| cref |]));
-      check_resume_handlers ctx ~result_types:sg.results handlers;
-      let*! rtypes = array_map_opt (internalize ctx) sg.results in
-      return_statement i (ResumeThrow (ct, tag, handlers, l')) rtypes
-  | ResumeThrowRef (ct, handlers, l) ->
-      let* l' = instructions ctx l in
-      let*! inner = lookup_cont_inner ctx ct in
-      let*! sg = lookup_func_type ctx inner in
-      (let>@ exnref = internalize ctx (Ref { nullable = true; typ = Exn }) in
-       let>@ cref = internalize ctx (Ref { nullable = true; typ = Type ct }) in
-       check_operands ctx l' [| exnref; cref |]);
-      check_resume_handlers ctx ~result_types:sg.results handlers;
-      let*! rtypes = array_map_opt (internalize ctx) sg.results in
-      return_statement i (ResumeThrowRef (ct, handlers, l')) rtypes
-  | Switch (ct, tag, l) ->
-      let* l' = instructions ctx l in
-      let*! inner = lookup_cont_inner ctx ct in
-      let*! sg = lookup_func_type ctx inner in
-      let tag_sig = Tbl.find ctx.diagnostics ctx.tags tag in
-      let np = Array.length sg.params in
-      (if np >= 1 then
-         let>@ lead =
-           array_map_opt
-             (fun p -> internalize ctx (snd p.desc))
-             (Array.sub sg.params 0 (np - 1))
-         in
-         let>@ cref =
-           internalize ctx (Ref { nullable = true; typ = Type ct })
-         in
-         check_operands ctx l' (Array.append lead [| cref |]));
-      (* The last parameter of [ct]'s function type must itself be a
-         continuation type; the result is that inner continuation's parameter
-         types. *)
-      let inner_sg =
-        match if np = 0 then None else Some (snd sg.params.(np - 1).desc) with
-        | Some (Ref { typ = Type ct2; _ }) ->
-            let*@ inner2 = lookup_cont_inner ctx ct2 in
-            lookup_func_type ctx inner2
-        | _ -> None
-      in
-      (* The 'switch' tag must take no parameters and its results must match
-         both continuation types. Mirrors [Validation]'s [Switch] check. *)
-      let to_internal arr =
-        array_map_opt
-          (fun typ ->
-            let+@ iv = internalize_valtype ctx typ in
-            iv.internal)
-          arr
-      in
-      let result_subtype a b =
-        match (to_internal a, to_internal b) with
-        | Some a, Some b ->
-            Array.length a = Array.length b
-            && Array.for_all Fun.id
-                 (Array.mapi
-                    (fun i t ->
-                      Wax_wasm.Types.val_subtype ctx.subtyping_info t b.(i))
-                    a)
-        | _ -> true
-      in
-      (match inner_sg with
-      | None ->
-          Error.stack_switching_type_mismatch ctx.diagnostics ~location:i.info
-            ~descr:
-              "the continuation's last parameter must itself be a continuation \
-               type"
-      | Some inner_sg -> (
-          match tag_sig with
-          | None -> ()
-          | Some { params = tparams; results = tresults } ->
-              if
-                Array.length tparams <> 0
-                || (not (result_subtype sg.results tresults))
-                || not (result_subtype tresults inner_sg.results)
-              then
-                Error.stack_switching_type_mismatch ctx.diagnostics
-                  ~location:i.info
-                  ~descr:
-                    "the 'switch' tag must take no parameters and its results \
-                     must match the two continuation types"));
-      let result_params =
-        match inner_sg with Some s2 -> s2.params | None -> [||]
-      in
-      let*! rtypes =
-        array_map_opt (fun p -> internalize ctx (snd p.desc)) result_params
-      in
-      return_statement i (Switch (ct, tag, l')) rtypes
+  | ContNew _ | ContBind _ | Suspend _ | Resume _ | ResumeThrow _
+  | ResumeThrowRef _ | Switch _ ->
+      type_stack_switching ctx i
   | NonNull i' -> (
       let* i' = instruction ctx i' in
       match UnionFind.find (expression_type ctx i') with
@@ -4021,6 +3857,179 @@ and type_branch ctx i =
              { i' with info = (Array.append types [| typ1 |], snd i'.info) } ))
         (Array.append (Array.sub params 0 (Array.length params - 1)) [| typ |])
   | _ -> assert false (* only invoked on a branch instruction *)
+
+and type_stack_switching ctx i =
+  (* The typed-continuation / stack-switching instructions: cont.new, cont.bind,
+     suspend, resume(.throw), and switch. *)
+  match i.desc with
+  | ContNew (ct, f) ->
+      let* f' = instruction ctx f in
+      let*! ft = lookup_cont_inner ctx ct in
+      (let>@ fref = internalize ctx (Ref { nullable = true; typ = Type ft }) in
+       check_type ctx f' fref);
+      let*! cref = internalize ctx (Ref { nullable = false; typ = Type ct }) in
+      return_expression i (ContNew (ct, f')) cref
+  | ContBind (src, dst, l) ->
+      let* l' = instructions ctx l in
+      let*! src_inner = lookup_cont_inner ctx src in
+      let*! src_sig = lookup_func_type ctx src_inner in
+      let*! dst_inner = lookup_cont_inner ctx dst in
+      let*! dst_sig = lookup_func_type ctx dst_inner in
+      let np = Array.length src_sig.params - Array.length dst_sig.params in
+      (* The destination continuation must be [src] with its leading [np]
+         parameters bound away: the unbound tail and the results must match.
+         Mirrors [Validation]'s [ContBind] check. *)
+      (if np < 0 then
+         Error.stack_switching_type_mismatch ctx.diagnostics ~location:i.info
+           ~descr:
+             "the resulting continuation takes more parameters than the \
+              original one"
+       else
+         let>@ src_ft = internal_functype ctx src_sig in
+         let>@ dst_ft = internal_functype ctx dst_sig in
+         let ts12 = Array.sub src_ft.params np (Array.length dst_ft.params) in
+         if
+           not
+             (functype_matches ctx.subtyping_info
+                { params = ts12; results = src_ft.results }
+                dst_ft)
+         then
+           Error.stack_switching_type_mismatch ctx.diagnostics ~location:i.info
+             ~descr:
+               "the bound parameters and results do not match between the two \
+                continuation types");
+      (let n = max 0 np in
+       let>@ bound =
+         array_map_opt
+           (fun p -> internalize ctx (snd p.desc))
+           (Array.sub src_sig.params 0 n)
+       in
+       let>@ srcref =
+         internalize ctx (Ref { nullable = true; typ = Type src })
+       in
+       check_operands ctx l' (Array.append bound [| srcref |]));
+      let*! dstref =
+        internalize ctx (Ref { nullable = false; typ = Type dst })
+      in
+      return_expression i (ContBind (src, dst, l')) dstref
+  | Suspend (tag, l) ->
+      let* l' = instructions ctx l in
+      let*! { params; results } = Tbl.find ctx.diagnostics ctx.tags tag in
+      (let>@ ptypes =
+         array_map_opt (fun p -> internalize ctx (snd p.desc)) params
+       in
+       check_operands ctx l' ptypes);
+      let*! rtypes = array_map_opt (internalize ctx) results in
+      return_statement i (Suspend (tag, l')) rtypes
+  | Resume (ct, handlers, l) ->
+      let* l' = instructions ctx l in
+      let*! inner = lookup_cont_inner ctx ct in
+      let*! sg = lookup_func_type ctx inner in
+      (let>@ ptypes =
+         array_map_opt (fun p -> internalize ctx (snd p.desc)) sg.params
+       in
+       let>@ cref = internalize ctx (Ref { nullable = true; typ = Type ct }) in
+       check_operands ctx l' (Array.append ptypes [| cref |]));
+      check_resume_handlers ctx ~result_types:sg.results handlers;
+      let*! rtypes = array_map_opt (internalize ctx) sg.results in
+      return_statement i (Resume (ct, handlers, l')) rtypes
+  | ResumeThrow (ct, tag, handlers, l) ->
+      let* l' = instructions ctx l in
+      let*! inner = lookup_cont_inner ctx ct in
+      let*! sg = lookup_func_type ctx inner in
+      let*! { params = tparams; _ } = Tbl.find ctx.diagnostics ctx.tags tag in
+      (let>@ ptypes =
+         array_map_opt (fun p -> internalize ctx (snd p.desc)) tparams
+       in
+       let>@ cref = internalize ctx (Ref { nullable = true; typ = Type ct }) in
+       check_operands ctx l' (Array.append ptypes [| cref |]));
+      check_resume_handlers ctx ~result_types:sg.results handlers;
+      let*! rtypes = array_map_opt (internalize ctx) sg.results in
+      return_statement i (ResumeThrow (ct, tag, handlers, l')) rtypes
+  | ResumeThrowRef (ct, handlers, l) ->
+      let* l' = instructions ctx l in
+      let*! inner = lookup_cont_inner ctx ct in
+      let*! sg = lookup_func_type ctx inner in
+      (let>@ exnref = internalize ctx (Ref { nullable = true; typ = Exn }) in
+       let>@ cref = internalize ctx (Ref { nullable = true; typ = Type ct }) in
+       check_operands ctx l' [| exnref; cref |]);
+      check_resume_handlers ctx ~result_types:sg.results handlers;
+      let*! rtypes = array_map_opt (internalize ctx) sg.results in
+      return_statement i (ResumeThrowRef (ct, handlers, l')) rtypes
+  | Switch (ct, tag, l) ->
+      let* l' = instructions ctx l in
+      let*! inner = lookup_cont_inner ctx ct in
+      let*! sg = lookup_func_type ctx inner in
+      let tag_sig = Tbl.find ctx.diagnostics ctx.tags tag in
+      let np = Array.length sg.params in
+      (if np >= 1 then
+         let>@ lead =
+           array_map_opt
+             (fun p -> internalize ctx (snd p.desc))
+             (Array.sub sg.params 0 (np - 1))
+         in
+         let>@ cref =
+           internalize ctx (Ref { nullable = true; typ = Type ct })
+         in
+         check_operands ctx l' (Array.append lead [| cref |]));
+      (* The last parameter of [ct]'s function type must itself be a
+         continuation type; the result is that inner continuation's parameter
+         types. *)
+      let inner_sg =
+        match if np = 0 then None else Some (snd sg.params.(np - 1).desc) with
+        | Some (Ref { typ = Type ct2; _ }) ->
+            let*@ inner2 = lookup_cont_inner ctx ct2 in
+            lookup_func_type ctx inner2
+        | _ -> None
+      in
+      (* The 'switch' tag must take no parameters and its results must match
+         both continuation types. Mirrors [Validation]'s [Switch] check. *)
+      let to_internal arr =
+        array_map_opt
+          (fun typ ->
+            let+@ iv = internalize_valtype ctx typ in
+            iv.internal)
+          arr
+      in
+      let result_subtype a b =
+        match (to_internal a, to_internal b) with
+        | Some a, Some b ->
+            Array.length a = Array.length b
+            && Array.for_all Fun.id
+                 (Array.mapi
+                    (fun i t ->
+                      Wax_wasm.Types.val_subtype ctx.subtyping_info t b.(i))
+                    a)
+        | _ -> true
+      in
+      (match inner_sg with
+      | None ->
+          Error.stack_switching_type_mismatch ctx.diagnostics ~location:i.info
+            ~descr:
+              "the continuation's last parameter must itself be a continuation \
+               type"
+      | Some inner_sg -> (
+          match tag_sig with
+          | None -> ()
+          | Some { params = tparams; results = tresults } ->
+              if
+                Array.length tparams <> 0
+                || (not (result_subtype sg.results tresults))
+                || not (result_subtype tresults inner_sg.results)
+              then
+                Error.stack_switching_type_mismatch ctx.diagnostics
+                  ~location:i.info
+                  ~descr:
+                    "the 'switch' tag must take no parameters and its results \
+                     must match the two continuation types"));
+      let result_params =
+        match inner_sg with Some s2 -> s2.params | None -> [||]
+      in
+      let*! rtypes =
+        array_map_opt (fun p -> internalize ctx (snd p.desc)) result_params
+      in
+      return_statement i (Switch (ct, tag, l')) rtypes
+  | _ -> assert false (* only invoked on a stack-switching instruction *)
 
 and type_mem_method_call ctx i func recv memname meth args =
   let _, address_type = Option.get (Tbl.find_opt ctx.memories memname) in
