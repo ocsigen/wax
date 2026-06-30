@@ -2,3 +2,6 @@ corpus/
 corpus-wax/
 smith-findings/
 mutate-findings/
+corpus-wat/
+mutate-wat-findings/
+mutate-wasm-findings/

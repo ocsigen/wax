@@ -49,6 +49,13 @@ fuzz/triage.sh REPORT       # collapse a findings report into ranked bug signatu
 fuzz/wax-corpus.sh [smith-count] [bytes]   # build .wax seeds: spec corpus + smith modules
 fuzz/mutate-wax.sh [count]  # AST-mutate the wax seeds + check them
 
+# WAT *input* side (the text lexer/parser):
+fuzz/wat-corpus.sh [smith-count] [bytes]   # build .wat seeds: spec corpus + smith modules
+fuzz/mutate-wat.sh [count]  # text-mutate the wat seeds (edge literals) + check them
+
+# wasm *binary* input side (the binary reader):
+fuzz/mutate-wasm.sh [count] # byte-mutate the valid wasm corpus + check them
+
 # Execution (behavioural-equivalence) oracles — run on spec .wast files:
 fuzz/exec-ref.sh [wast…]    # via the reference interpreter (strongest; GC/SIMD/EH/multi-mem)
 fuzz/exec-interp.sh [wast…] # via wabt spectest-interp
@@ -100,6 +107,22 @@ a wax-side bug is: a crash; wax accepting a program whose emitted wasm the
 reference rejects (`FALSE_ACCEPT`); or a broken `wax → wasm → wax → wasm`
 round-trip. A natural next step (not yet built) is a from-scratch grammar-based
 Wax generator for syntactic constructs the decompiler never emits.
+
+## The WAT input side
+
+The lexer and WAT parser are a blind spot for everything above: `mutate-wax.sh`
+only feeds *Wax*, and the corpus/smith oracles only feed *valid* wasm/wat, so an
+out-of-range or malformed *WAT* literal never reaches them (several such crashes
+were found only by hand-auditing the literal-parsing paths). `mutate-wat.sh`
+closes it. `wat-corpus.sh` builds `.wat` seeds (spec corpus + smith modules,
+converted with `wax -i wasm -f wat`); `mutate-wat.sh` applies text mutations from
+`mutate-wat.awk` — chiefly injecting out-of-range / edge-value numeric literals
+(e.g. `2^64`, huge hex) and over-long `\u{…}` escapes into the const, memarg,
+index, lane and string positions the lexer/parser convert — and runs the oracle.
+Text (not AST) mutation is the right tool here: the bugs are in the parser/lexer,
+so feeding it almost-valid-but-malformed text is the point. A mutant is almost
+always invalid, so a clean rejection (123/128) is expected, not a finding; the
+hunt is purely for crashes. Findings are re-verified to drop transient load noise.
 
 ## The oracles (`oracle.sh`)
 
