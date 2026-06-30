@@ -69,3 +69,30 @@ it:
           };
       x;
   }
+  // The trailing value is itself a nested block; it synthesizes its own type
+  // ($n, i64) rather than being forced to the context, so the annotation drops.
+  #[export = "nested_block_drops"]
+  fn nested_block_drops(n: i64) -> i64 {
+      let x =
+          do {
+              do {
+                  n;
+              }
+          };
+      x;
+  }
+  // The try's body diverges (it returns), so the value comes only from the catch
+  // handler; that handler's value ($n, already i64) is collected too, so the
+  // annotation drops.
+  #[export = "try_handler_drops"]
+  fn try_handler_drops(n: i64) -> i64 {
+      let x =
+          try {
+              return n;
+          } catch {
+              e => {
+                  n;
+              }
+          };
+      x;
+  }

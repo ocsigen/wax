@@ -41,4 +41,21 @@
     (local $x i64)
     (local.set $x
       (block $l (result i64) (br $l (local.get $n)) (unreachable)))
+    (local.get $x))
+  ;; The trailing value is itself a nested block; it synthesizes its own type
+  ;; ($n, i64) rather than being forced to the context, so the annotation drops.
+  (func $nested_block_drops (export "nested_block_drops") (param $n i64)
+    (result i64)
+    (local $x i64)
+    (local.set $x
+      (block (result i64) (block (result i64) (local.get $n))))
+    (local.get $x))
+  ;; The try's body diverges (it returns), so the value comes only from the catch
+  ;; handler; that handler's value ($n, already i64) is collected too, so the
+  ;; annotation drops.
+  (func $try_handler_drops (export "try_handler_drops") (param $n i64)
+    (result i64)
+    (local $x i64)
+    (local.set $x
+      (try (result i64) (do (return (local.get $n))) (catch $e (local.get $n))))
     (local.get $x)))

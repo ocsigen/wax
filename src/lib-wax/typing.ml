@@ -5772,10 +5772,7 @@ and block_keep_bool ctx loc label ~result ~br_params body =
   in
   (* A trailing construction is routed through [result], hiding its natural type,
      so its annotation is load-bearing — mark the cell needed up front. *)
-  let cs =
-    { collected = []; declared = Some result; needed = trailing_construction }
-  in
-  let r = UnionFind.make (Collecting cs) in
+  let cs, r = fresh_collecting ~needed:trailing_construction (Some result) in
   (* Branches deliver the result for every kind but [loop] (where they re-enter):
      mirror the caller's [br_params] arity with the [Collecting] cell so their
      values are recorded. *)
@@ -5951,6 +5948,18 @@ and if_inference ctx i label typ ~cond ~if_block ~else_block =
           },
         results )
 
+(* The block's declared single result internalized to a cell, or [None] when the
+   result is omitted. *)
+and declared_result ctx typ =
+  match typ.results with [| t |] -> internalize ctx t | _ -> None
+
+(* A fresh [Collecting] result cell and its backing record: [declared] is the
+   annotation under test (or [None]), [needed] preset when it is already known to
+   be load-bearing. *)
+and fresh_collecting ?(needed = false) declared =
+  let cs = { collected = []; declared; needed } in
+  (cs, UnionFind.make (Collecting cs))
+
 (* Type a (possibly branch-targeted) block body in synthesis, inferring its
    single result from every value that reaches its exit: the fall-through value
    plus each value branched to its label. Unlike [block_infer] (used for [if],
@@ -5959,8 +5968,7 @@ and if_inference ctx i label typ ~cond ~if_block ~else_block =
    [subtype]) rather than unifying. Returns the typed body and the collected
    values reaching the exit. *)
 and block_infer_general ctx loc label ~declared instrs =
-  let cs = { collected = []; declared; needed = false } in
-  let r = UnionFind.make (Collecting cs) in
+  let cs, r = fresh_collecting declared in
   with_empty_stack ctx ~location:loc ~kind:Block
     (let* body' =
        block_contents
@@ -6031,10 +6039,10 @@ and infer_block_applies ctx typ =
 and block_inference ctx i label typ ~instrs =
   if not (infer_block_applies ctx typ) then None
   else
-    let declared =
-      match typ.results with [| t |] -> internalize ctx t | _ -> None
+    let body', cs =
+      block_infer_general ctx i.info label ~declared:(declared_result ctx typ)
+        instrs
     in
-    let body', cs = block_infer_general ctx i.info label ~declared instrs in
     let inferred = join_collected ctx ~location:i.info cs.collected in
     let results, typ = finalize_inferred ~needed:cs.needed ctx typ ~inferred in
     Some (Block { label; typ; block = body' }, results)
@@ -6049,11 +6057,8 @@ and block_inference ctx i label typ ~instrs =
 and loop_inference ctx i label typ ~instrs =
   if not (infer_block_applies ctx typ) then None
   else
-    let declared =
-      match typ.results with [| t |] -> internalize ctx t | _ -> None
-    in
-    let cs = { collected = []; declared; needed = false } in
-    let results = [| UnionFind.make (Collecting cs) |] in
+    let cs, r = fresh_collecting (declared_result ctx typ) in
+    let results = [| r |] in
     let instrs' = block ctx i.info label [||] results [||] instrs in
     let inferred = join_collected ctx ~location:i.info cs.collected in
     let results, typ = finalize_inferred ~needed:cs.needed ctx typ ~inferred in
@@ -6062,11 +6067,8 @@ and loop_inference ctx i label typ ~instrs =
 and trytable_inference ctx i label typ ~body ~catches =
   if not (infer_block_applies ctx typ) then None
   else
-    let declared =
-      match typ.results with [| t |] -> internalize ctx t | _ -> None
-    in
-    let cs = { collected = []; declared; needed = false } in
-    let results = [| UnionFind.make (Collecting cs) |] in
+    let cs, r = fresh_collecting (declared_result ctx typ) in
+    let results = [| r |] in
     let body' = block ctx i.info label [||] results results body in
     check_trytable_catches ctx catches;
     let inferred = join_collected ctx ~location:i.info cs.collected in
@@ -6076,11 +6078,8 @@ and trytable_inference ctx i label typ ~body ~catches =
 and try_inference ctx i label typ ~body ~catches ~catch_all =
   if not (infer_block_applies ctx typ) then None
   else
-    let declared =
-      match typ.results with [| t |] -> internalize ctx t | _ -> None
-    in
-    let cs = { collected = []; declared; needed = false } in
-    let results = [| UnionFind.make (Collecting cs) |] in
+    let cs, r = fresh_collecting (declared_result ctx typ) in
+    let results = [| r |] in
     let body' = block ctx i.info label [||] results results body in
     let catches, catch_all =
       type_try_catches ctx i label ~results catches catch_all
