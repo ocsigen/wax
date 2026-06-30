@@ -92,21 +92,18 @@ let print_text_comptype f (ty : Ast.Text.comptype) =
 (* The source rendering of a stack value: either a value type the user wrote
    (or that names a type the user declared), or — for a reference whose type has
    no source name — that referenced type's signature, shown inline. *)
-type source_type =
-  | Plain of Ast.Text.valtype
-  | Ref_sig of { nullable : bool; comptype : Ast.Text.comptype }
+type source_type = Plain of Ast.Text.valtype | Inline_ref of Ast.Text.comptype
 
 let print_source_type f = function
   | Plain v -> print_text_valtype f v
-  | Ref_sig { nullable; comptype } ->
-      if nullable then
-        Format.fprintf f "@[<1>(ref@ null@ %a)@]" print_text_comptype comptype
-      else Format.fprintf f "@[<1>(ref@ %a)@]" print_text_comptype comptype
+  | Inline_ref comptype ->
+      Format.fprintf f "@[<1>(ref@ %a)@]" print_text_comptype comptype
 
-(* Reconstruct a source type from an interned one, naming an indexed type by its
-   canonical index. Used as the source type of a pushed value when no truer
-   reference is available, so every concrete stack value carries a source type
-   (as on the Wax side, where an inferred type bundles both forms). *)
+(* Reconstruct a source type from an interned one. Used as the source type of a
+   pushed value when no truer reference is available, so every concrete stack
+   value carries a source type (as on the Wax side, where an inferred type
+   bundles both forms). Only abstract heap types are reconstructed this way: a
+   concrete [Type] reference always carries a truer source from its declaration. *)
 let source_of_heaptype (h : heaptype) : Ast.Text.heaptype =
   match h with
   | Func -> Func
@@ -123,7 +120,7 @@ let source_of_heaptype (h : heaptype) : Ast.Text.heaptype =
   | Struct -> Struct
   | Array -> Array
   | None_ -> None_
-  | Type i -> Type (Ast.no_loc (Ast.Text.Num (Uint32.of_int i)))
+  | Type _ -> assert false
 
 let source_of_valtype (ty : valtype) : source_type =
   Plain
@@ -666,51 +663,6 @@ type type_context = {
   type_defs : (int, Ast.Text.idx * Ast.Text.idx option) Hashtbl.t;
 }
 
-(* Map an interned (canonical, deduplicated) type index back to a source
-   reference for diagnostics. The interned and source index spaces differ — the
-   former is deduplicated — so a numeric reconstruction would name an unrelated
-   type or be out of range. Several source types can share a canonical index;
-   any one of them is structurally the type at hand, and we prefer its declared
-   name via [type_defs]. Returns [None] for a synthesized type (e.g. the
-   internal string type) that has no source reference at all. *)
-let source_idx_of_canonical tc i : Ast.Text.idx option =
-  let src =
-    Hashtbl.fold
-      (fun s (canon, _, _) acc ->
-        match acc with
-        | Some _ -> acc
-        | None -> if canon = i then Some s else None)
-      tc.index_mapping None
-  in
-  match src with
-  | None -> None
-  | Some s -> (
-      match Hashtbl.find_opt tc.type_defs (Uint32.to_int s) with
-      | Some (def_idx, _) -> Some def_idx
-      | None -> Some (Ast.no_loc (Ast.Text.Num s)))
-
-(* Source rendering of a valtype: a named reference has its interned index
-   translated back to a source reference (see [source_idx_of_canonical]); other
-   types carry no index and reconstruct directly. The numeric fallback for an
-   untranslatable index is reached only for synthesized types with no source
-   form. *)
-let source_valtype tc (ty : valtype) : source_type =
-  match ty with
-  | Ref { nullable; typ = Type i } -> (
-      match source_idx_of_canonical tc i with
-      | Some idx -> Plain (Ref { nullable; typ = Type idx })
-      | None -> source_of_valtype ty)
-  | _ -> source_of_valtype ty
-
-(* Source rendering of a reference to the interned type [i] whose source
-   composite type is [comptype]: name the type if the user declared it with a
-   name, otherwise show its signature inline (the index would be meaningless, as
-   for an implicit [ref.func] type or the internal string type). *)
-let ref_source tc ~nullable i comptype : source_type =
-  match source_idx_of_canonical tc i with
-  | Some ({ desc = Id _; _ } as idx) -> Plain (Ref { nullable; typ = Type idx })
-  | _ -> Ref_sig { nullable; comptype }
-
 (* The source composite type a reference resolves to, named as the source wrote
    it (injective), or [None] for an unbound or sourceless reference. Does not
    report errors — callers that resolve the reference do. *)
@@ -724,9 +676,7 @@ let reference_comptype tc (idx : Ast.Text.idx) =
 
 (* The source function type a reference resolves to, when it names one. *)
 let reference_functype tc idx =
-  match reference_comptype tc idx with
-  | Func ft -> ft
-  | _ -> { params = [||]; results = [||] }
+  match reference_comptype tc idx with Func ft -> ft | _ -> assert false
 
 (* The source function type a [typeuse] denotes: its inline signature, or the
    one named by its type reference. *)
@@ -746,7 +696,7 @@ let functype_sources ({ params; results } : Ast.Text.functype) =
 let cont_source_functype tc idx =
   match reference_comptype tc idx with
   | Cont r -> reference_functype tc r
-  | _ -> { params = [||]; results = [||] }
+  | _ -> assert false
 
 let get_type_info d ctx (idx : Ast.Text.idx) =
   try
@@ -919,11 +869,13 @@ type module_context = {
   diagnostics : Wax_utils.Diagnostic.context;
   types : type_context;
   subtyping_info : Types.subtyping_info;
-  (* Each function carries its type's global index and its source signature
-     (from its declaration, or its referenced type) — so a call names argument
-     and result types from the function's own declaration rather than a shared
-     (deduplicated) type index that another structurally-equal type may own. *)
-  functions : (int * Ast.Text.functype) Sequence.t;
+  (* Each function carries its type's global index, the source type index it was
+     declared with (when it names one, for a [ref.func]'s rendering), and its
+     source signature (from its declaration, or its referenced type) — so a call
+     names argument and result types from the function's own declaration rather
+     than a shared (deduplicated) type index that another structurally-equal type
+     may own. *)
+  functions : (int * Ast.Text.idx option * Ast.Text.functype) Sequence.t;
   memories : limits Sequence.t;
   tables : (Ast.Binary.tabletype * source_type) Sequence.t;
   globals : (globaltype * source_type) Sequence.t;
@@ -931,7 +883,9 @@ type module_context = {
      a thrown payload's types. *)
   tags : (int * Ast.Text.functype) Sequence.t;
   data : unit Sequence.t;
-  elem : reftype Sequence.t;
+  (* Each element segment carries its interned reference type and the source
+     reference type from its declaration, to name a mismatched element type. *)
+  elem : (reftype * source_type) Sequence.t;
   exports : (string, unit) Hashtbl.t;
   refs : (int, unit) Hashtbl.t;
 }
@@ -1006,26 +960,26 @@ let lookup_array_type ctx idx =
    types for naming a thrown payload. *)
 let lookup_tag_type ctx tag =
   let ctx = ctx.modul in
-  let+@ ty, sign = Sequence.get ctx.diagnostics ctx.tags tag in
+  let*@ ty, sign = Sequence.get ctx.diagnostics ctx.tags tag in
   match (Types.get_subtype ctx.subtyping_info ty).typ with
   | Struct _ | Array _ | Cont _ ->
       Error.not_function_type ctx.diagnostics ~location:tag.info;
-      ([||], [||])
+      None
   | Func { params; results } ->
       if results <> [||] then
         Error.exception_tag_with_results ctx.diagnostics ~location:tag.info;
-      (params, Array.map (fun p -> Plain (snd p.Ast.desc)) sign.params)
+      Some (params, Array.map (fun p -> Plain (snd p.Ast.desc)) sign.params)
 
 (* Full function type of a tag, used for stack-switching suspension tags whose
    results may be non-empty (unlike exception tags). *)
 let lookup_tag_signature ctx tag =
   let ctx = ctx.modul in
-  let+@ ty, sign = Sequence.get ctx.diagnostics ctx.tags tag in
+  let*@ ty, sign = Sequence.get ctx.diagnostics ctx.tags tag in
   match (Types.get_subtype ctx.subtyping_info ty).typ with
-  | Func ft -> (ft, sign)
+  | Func ft -> Some (ft, sign)
   | Struct _ | Array _ | Cont _ ->
       Error.not_function_type ctx.diagnostics ~location:tag.info;
-      ({ params = [||]; results = [||] }, { params = [||]; results = [||] })
+      None
 
 (* Resolve a continuation type index to its own index and the function type it
    wraps. Emits an error if the type is not a continuation type. *)
@@ -1120,7 +1074,7 @@ let pop_any ctx loc st =
 let non_null_source (source : source_type) : source_type =
   match source with
   | Plain (Ref r) -> Plain (Ref { r with nullable = false })
-  | Ref_sig s -> Ref_sig { s with nullable = false }
+  | Inline_ref _ as source -> source
   | _ -> assert false
 
 let pop ctx loc ~expected_source ty st =
@@ -1715,22 +1669,25 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
             (functype_matches ctx.modul.subtyping_info
                { params = ts12; results = ftx.results }
                fty)
-        then
+        then (
           Error.stack_switching_type_mismatch ctx.modul.diagnostics
             ~location:loc
             ~descr:
               "the bound parameters and results do not match between the two \
                continuation types";
-        let* () =
-          pop_args ctx loc
-            ~source:
-              (cont_operand_source
-                 (Array.sub (cont_param_source ctx x) 0 (n1 - n1'))
-                 x)
-            (Array.append ts11 [| Ref { nullable = true; typ = Type xty } |])
-        in
-        push ~source:(named_ref_source y) (Some loc)
-          (Ref { nullable = false; typ = Type yty })
+          unreachable)
+        else begin
+          let* () =
+            pop_args ctx loc
+              ~source:
+                (cont_operand_source
+                   (Array.sub (cont_param_source ctx x) 0 (n1 - n1'))
+                   x)
+              (Array.append ts11 [| Ref { nullable = true; typ = Type xty } |])
+          in
+          push ~source:(named_ref_source y) (Some loc)
+            (Ref { nullable = false; typ = Type yty })
+        end
       end
   | Suspend x ->
       let*! { params = ts1; results = ts2 }, sign =
@@ -1793,49 +1750,49 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
         | Some (Ref { typ = ht; _ }) -> cont_functype_of_heaptype ctx ht
         | _ -> None
       in
-      (match inner with
-      | None ->
-          Error.stack_switching_type_mismatch ctx.modul.diagnostics
-            ~location:loc
-            ~descr:
-              "the continuation's last parameter must itself be a continuation \
-               type"
-      | Some inner_ft -> (
-          match lookup_tag_signature ctx y with
-          | None -> ()
-          | Some ({ params = ts31; results = t }, _) ->
-              let info = ctx.modul.subtyping_info in
-              if
-                Array.length ts31 <> 0
-                || (not (result_subtype info ftx.results t))
-                || not (result_subtype info t inner_ft.results)
-              then
-                Error.stack_switching_type_mismatch ctx.modul.diagnostics
-                  ~location:loc
-                  ~descr:
-                    "the 'switch' tag must take no parameters and its results \
-                     must match the two continuation types"));
-      let ts21 = match inner with Some ft -> ft.params | None -> [||] in
-      (* The inner continuation is named by [x]'s last parameter, so its
-         parameters' source types are that continuation's source params. *)
-      let ts21_text =
+      let*! inner_ft =
         match inner with
-        | None -> [||]
-        | Some _ -> (
-            match (cont_param_source ctx x).(n - 1) with
-            | Plain (Ref { typ = Type idx; _ }) -> cont_param_source ctx idx
-            | _ -> Array.map (source_valtype ctx.modul.types) ts21)
+        | Some _ -> inner
+        | None ->
+            Error.stack_switching_type_mismatch ctx.modul.diagnostics
+              ~location:loc
+              ~descr:
+                "the continuation's last parameter must itself be a \
+                 continuation type";
+            None
       in
-      let ts11' = if n = 0 then [||] else Array.sub ts11 0 (n - 1) in
-      let ts11'_text =
-        if n = 0 then [||] else Array.sub (cont_param_source ctx x) 0 (n - 1)
-      in
-      let* () =
-        pop_args ctx loc
-          ~source:(cont_operand_source ts11'_text x)
-          (Array.append ts11' [| Ref { nullable = true; typ = Type xty } |])
-      in
-      push_results ~source:ts21_text ts21
+      let*! { params = ts31; results = t }, _ = lookup_tag_signature ctx y in
+      let info = ctx.modul.subtyping_info in
+      if
+        Array.length ts31 <> 0
+        || (not (result_subtype info ftx.results t))
+        || not (result_subtype info t inner_ft.results)
+      then (
+        Error.stack_switching_type_mismatch ctx.modul.diagnostics ~location:loc
+          ~descr:
+            "the 'switch' tag must take no parameters and its results must \
+             match the two continuation types";
+        unreachable)
+      else begin
+        (* The inner continuation is named by [x]'s last parameter, so its
+           parameters' source types are that continuation's source params. *)
+        let ts21 = inner_ft.params in
+        let ts21_text =
+          (* [inner] is [Some] only when [x]'s last parameter is a concrete
+             continuation reference, so its source form is [(ref $idx)]. *)
+          match (cont_param_source ctx x).(n - 1) with
+          | Plain (Ref { typ = Type idx; _ }) -> cont_param_source ctx idx
+          | _ -> assert false
+        in
+        let ts11' = Array.sub ts11 0 (n - 1) in
+        let ts11'_text = Array.sub (cont_param_source ctx x) 0 (n - 1) in
+        let* () =
+          pop_args ctx loc
+            ~source:(cont_operand_source ts11'_text x)
+            (Array.append ts11' [| Ref { nullable = true; typ = Type xty } |])
+        in
+        push_results ~source:ts21_text ts21
+      end
   | Br idx ->
       let*! params, param_source = branch_target ctx idx in
       let* () = pop_args ctx loc ~source:param_source params in
@@ -1949,7 +1906,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let* () = pop_args ctx loc ~source:ctx.return_source ctx.return_types in
       unreachable
   | Call idx -> (
-      let*! ty, sign = get_function ctx idx in
+      let*! ty, _, sign = get_function ctx idx in
       match (Types.get_subtype ctx.modul.subtyping_info ty).typ with
       | Struct _ | Array _ | Cont _ ->
           Error.expected_func_type ctx.modul.diagnostics ~location:loc idx;
@@ -1977,22 +1934,24 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
         not
           (Types.val_subtype ctx.modul.subtyping_info (Ref typ.reftype)
              (Ref { nullable = true; typ = Func }))
-      then
+      then (
         Error.table_type_mismatch ctx.modul.diagnostics ~location:loc
           ~source:table_source idx;
-      match (Types.get_subtype ctx.modul.subtyping_info ty).typ with
-      | Struct _ | Array _ | Cont _ ->
-          Error.expected_func_type ctx.modul.diagnostics ~location:loc idx;
-          unreachable
-      | Func { params; results } ->
-          let param_source, result_source =
-            functype_sources (typeuse_functype ctx.modul.types tu)
-          in
-          let* () = pop_address ctx loc typ.limits in
-          let* () = pop_args ctx loc ~source:param_source params in
-          push_results ~source:result_source results)
+        unreachable)
+      else
+        match (Types.get_subtype ctx.modul.subtyping_info ty).typ with
+        | Struct _ | Array _ | Cont _ ->
+            Error.expected_func_type ctx.modul.diagnostics ~location:loc idx;
+            unreachable
+        | Func { params; results } ->
+            let param_source, result_source =
+              functype_sources (typeuse_functype ctx.modul.types tu)
+            in
+            let* () = pop_address ctx loc typ.limits in
+            let* () = pop_args ctx loc ~source:param_source params in
+            push_results ~source:result_source results)
   | ReturnCall idx -> (
-      let*! ty, sign = get_function ctx idx in
+      let*! ty, _, sign = get_function ctx idx in
       match (Types.get_subtype ctx.modul.subtyping_info ty).typ with
       | Struct _ | Array _ | Cont _ ->
           Error.expected_func_type ctx.modul.diagnostics ~location:loc idx;
@@ -2026,23 +1985,25 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
         not
           (Types.val_subtype ctx.modul.subtyping_info (Ref typ.reftype)
              (Ref { nullable = true; typ = Func }))
-      then
+      then (
         Error.table_type_mismatch ctx.modul.diagnostics ~location:loc
           ~source:table_source idx;
-      match (Types.get_subtype ctx.modul.subtyping_info ty).typ with
-      | Struct _ | Array _ | Cont _ ->
-          Error.expected_func_type ctx.modul.diagnostics ~location:loc idx;
-          unreachable
-      | Func { params; results } ->
-          let param_source, result_source =
-            functype_sources (typeuse_functype ctx.modul.types tu)
-          in
-          let* () = pop_address ctx loc typ.limits in
-          let* () = pop_args ctx loc ~source:param_source params in
-          compare_types ctx.modul ~location:loc ~descr:"this tail call"
-            ~provided_source:result_source ~expected_source:ctx.return_source
-            ~provided:results ~expected:ctx.return_types ();
-          unreachable)
+        unreachable)
+      else
+        match (Types.get_subtype ctx.modul.subtyping_info ty).typ with
+        | Struct _ | Array _ | Cont _ ->
+            Error.expected_func_type ctx.modul.diagnostics ~location:loc idx;
+            unreachable
+        | Func { params; results } ->
+            let param_source, result_source =
+              functype_sources (typeuse_functype ctx.modul.types tu)
+            in
+            let* () = pop_address ctx loc typ.limits in
+            let* () = pop_args ctx loc ~source:param_source params in
+            compare_types ctx.modul ~location:loc ~descr:"this tail call"
+              ~provided_source:result_source ~expected_source:ctx.return_source
+              ~provided:results ~expected:ctx.return_types ();
+            unreachable)
   | Drop ->
       let* _ = pop_any ctx loc in
       return ()
@@ -2312,15 +2273,14 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       pop_known ctx loc addr_ty
   | TableInit (idx, idx') ->
       let*! tabletype, table_source = get_table ctx idx in
-      let*! typ = get_elem ctx idx' in
+      let*! typ, elem_source = get_elem ctx idx' in
       if
         not
           (Types.val_subtype ctx.modul.subtyping_info (Ref typ)
              (Ref tabletype.reftype))
       then
         Error.type_mismatch ctx.modul.diagnostics ~location:loc
-          ~provided_source:(source_valtype ctx.modul.types (Ref typ))
-          ~expected_source:table_source;
+          ~provided_source:elem_source ~expected_source:table_source;
       let addr_ty = address_type_to_valtype tabletype.limits.address_type in
       let* () = pop_known ctx loc I32 in
       let* () = pop_known ctx loc I32 in
@@ -2333,10 +2293,17 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let*! typ = heaptype ctx.modul.diagnostics ctx.modul.types typ in
       push ~source (Some loc) (Ref { nullable = true; typ })
   | RefFunc idx ->
-      let*! i, sign = get_function ctx idx in
+      let*! i, type_idx, sign = get_function ctx idx in
       if not ((not !validate_refs) || Hashtbl.mem ctx.modul.refs i) then
         Error.ref_func_inaccessible ctx.modul.diagnostics ~location:loc idx;
-      let source = ref_source ctx.modul.types ~nullable:false i (Func sign) in
+      (* Name the function's type when it was declared with a named type,
+         otherwise show the signature inline (a numeric index would be
+         meaningless, as the interned index space is deduplicated). *)
+      let source =
+        match type_idx with
+        | Some ({ desc = Id _; _ } as idx) -> named_ref_source idx
+        | _ -> Inline_ref (Func sign)
+      in
       push ~source (Some loc) (Ref { nullable = false; typ = Type i })
   | RefIsNull -> (
       let* ty, loc' = pop_any ctx loc in
@@ -2476,7 +2443,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
         (Ref { nullable = false; typ = Type ty })
   | ArrayNewElem (idx, idx') ->
       let*! ty, field = lookup_array_type ctx idx in
-      let*! ty' = get_elem ctx idx' in
+      let*! ty', _ = get_elem ctx idx' in
       (match field.typ with
       | Value ty when Types.val_subtype ctx.modul.subtyping_info (Ref ty') ty ->
           ()
@@ -2571,7 +2538,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
         (Ref { nullable = true; typ = Type ty })
   | ArrayInitElem (idx, idx') ->
       let*! ty, field = lookup_array_type ctx idx in
-      let*! ty' = get_elem ctx idx' in
+      let*! ty', _ = get_elem ctx idx' in
       if not field.mut then
         Error.immutable ctx.modul.diagnostics ~location:i.info "array";
       (match field.typ with
@@ -2678,9 +2645,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
   | String (None, _) ->
       let i = string_type ctx.modul.types in
       let comptype = Ast.Text.Array { mut = true; typ = Packed I8 } in
-      push
-        ~source:(ref_source ctx.modul.types ~nullable:false i comptype)
-        (Some loc)
+      push ~source:(Inline_ref comptype) (Some loc)
         (Ref { nullable = false; typ = Type i })
   | Char _ -> push_known (Some loc) I32
   (* Conditional annotations are spliced out by [specialize] before a
@@ -2717,7 +2682,7 @@ let rec check_constant_instruction ctx (i : _ Ast.Text.instr) =
       if ty.mut then
         Error.non_constant_global ctx.diagnostics ~location:idx.info idx
   | RefFunc i ->
-      let*? ty, _ = Sequence.get ctx.diagnostics ctx.functions i in
+      let*? ty, _, _ = Sequence.get ctx.diagnostics ctx.functions i in
       Hashtbl.replace ctx.refs ty ()
   | RefNull _ | StructNew _ | StructNewDefault _ | ArrayNew _
   | ArrayNewDefault _ | ArrayNewFixed _ | RefI31 | Const _
@@ -2994,7 +2959,7 @@ let build_initial_env ctx fields =
               ignore
                 (let+@ ty = typeuse ctx.diagnostics ctx.types tu in
                  Sequence.register ctx.functions id
-                   (ty, typeuse_functype ctx.types tu))
+                   (ty, fst tu, typeuse_functype ctx.types tu))
           | Memory lim ->
               limits ctx "memory" lim max_memory_size;
               Sequence.register ctx.memories id lim.desc
@@ -3019,7 +2984,7 @@ let build_initial_env ctx fields =
       | Func { id; typ; instrs; _ } ->
           let>@ ty = typeuse ctx.diagnostics ctx.types typ in
           let sign = typeuse_functype ctx.types typ in
-          Sequence.register ctx.functions id (ty, sign);
+          Sequence.register ctx.functions id (ty, fst typ, sign);
           register_typeuses ctx.diagnostics ctx.types instrs
       | Tag { id; typ; exports } ->
           let>@ ty = typeuse ctx.diagnostics ctx.types typ in
@@ -3146,8 +3111,7 @@ let globals ctx fields =
             { mut = false; typ = Ref { nullable = false; typ = Type i } }
           in
           let comptype = Ast.Text.Array { mut = true; typ = Packed I8 } in
-          Sequence.register ctx.globals (Some id)
-            (typ, ref_source ctx.types ~nullable:false i comptype)
+          Sequence.register ctx.globals (Some id) (typ, Inline_ref comptype)
       | _ -> ())
     fields
 
@@ -3178,7 +3142,7 @@ let segments ctx fields =
                   constant_expression ctx ~location:field.info
                     ~expected_source:src (Ref typ) e)
                 lst;
-              Sequence.register ctx.elem None typ)
+              Sequence.register ctx.elem None (typ, src))
       | Elem { id; typ; init; mode } ->
           let elem_source = Plain (Ast.Text.Ref typ) in
           let>@ typ = reftype ctx.diagnostics ctx.types typ in
@@ -3203,7 +3167,7 @@ let segments ctx fields =
               constant_expression ctx ~location:field.info
                 ~expected_source:elem_source (Ref typ) e)
             init;
-          Sequence.register ctx.elem id typ
+          Sequence.register ctx.elem id (typ, elem_source)
       | _ -> ())
     fields
 
@@ -3331,7 +3295,7 @@ let start ctx fields =
     (fun (field : (_ Ast.Text.modulefield, _) Ast.annotated) ->
       match field.desc with
       | Start idx -> (
-          let*? ty, _ = Sequence.get ctx.diagnostics ctx.functions idx in
+          let*? ty, _, _ = Sequence.get ctx.diagnostics ctx.functions idx in
           match (Types.get_subtype ctx.subtyping_info ty).typ with
           | Struct _ | Array _ | Cont _ ->
               Error.not_function_type ctx.diagnostics ~location:idx.info
