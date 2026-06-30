@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-52464cd5.js";
+            window.path_to_searchindex_js = "searchindex-72f00c9f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -675,9 +675,12 @@ default):</p>
 <p>The type name may be omitted in two cases. The first is when an expected type
 supplies it — for example a <code>let</code>/<code>const</code> annotation, a function parameter, a
 struct field, or an array element: <code>let p: &amp;point = {x: 10, y: 20};</code> is
-equivalent to writing <code>{point| …}</code>. The second is when the <strong>field set</strong> names
-the type unambiguously — if exactly one struct type in the module has that exact
-set of field names, it is inferred even with no expected type:</p>
+equivalent to writing <code>{point| …}</code>. Such an expectation also reaches into both
+branches of a conditional <code>?:</code>, so a branch may omit the name (or default it
+with <code>{..}</code>): <code>let p: &amp;point = cond ? {x: 0, y: 0} : {..};</code>. The second is when
+the <strong>field set</strong> names the type unambiguously — if exactly one struct type in
+the module has that exact set of field names, it is inferred even with no
+expected type:</p>
 <pre><code class="language-wax">fn origin() -&gt; &amp;eq {
     {x: 0, y: 0};               // inferred as &amp;point from its fields
 }
