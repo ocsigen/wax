@@ -2872,6 +2872,23 @@ and type_branch ctx i =
                       });
                |])
             params
+      | Null ->
+          (* A bare [null] is always null, so the branch is never taken; the
+             popped value's non-null form is the [any]-hierarchy bottom [&none].
+             (A non-[any] null keeps its [as &?H] annotation in [type_cast], so
+             only [any]-hierarchy bare nulls reach here.) *)
+          check_subtypes ctx ~location:(snd i'.info)
+            (Array.append types
+               [|
+                 Cell.make
+                   (Valtype
+                      {
+                        typ = Ref { nullable = false; typ = None_ };
+                        internal = Ref { nullable = false; typ = None_ };
+                        anon_comptype = None;
+                      });
+               |])
+            params
       | _ -> Error.expected_ref ctx.diagnostics ~location:(snd i'.info));
       return_statement i
         (Br_on_non_null (idx, i'))
@@ -3568,6 +3585,18 @@ and type_cast ctx i =
         | Some d, Valtype { typ; _ } -> d <> typ
         | _ -> false
       in
+      (* A cast of a bare [null] to a non-[any]-hierarchy reference is also load
+         bearing: dropping it leaves a bare [null], whose non-null / branch
+         consumers ([null!], [br_on_*]) fall back to the [any]-hierarchy bottom
+         [&none] — not a subtype of a func/extern/exn/cont type — so the
+         reconstructed module no longer type-checks. (An [any]-hierarchy null is
+         safe to drop: [&none] satisfies every [any]-hierarchy consumer.) *)
+      let load_bearing_null =
+        match (ty'_natural, Cell.get ty) with
+        | Null, Valtype { typ = Ref { typ = ht; _ }; _ } ->
+            top_heap_type ctx ht <> Some Any
+        | _ -> false
+      in
       (* Drop a cast the inferred types already make redundant. This is only
          desirable when converting from Wasm ([ctx.simplify]): there casts are
          inserted to pin types and precise inference makes some unnecessary. For
@@ -3575,7 +3604,7 @@ and type_cast ctx i =
          written.
          ZZZ Handle select instruction better *)
       let unnecessary_cast =
-        ctx.simplify && (not load_bearing_literal)
+        ctx.simplify && (not load_bearing_literal) && (not load_bearing_null)
         && (not (is_unknown_or_error ty'))
         && subtype ctx ty' ty
       in
