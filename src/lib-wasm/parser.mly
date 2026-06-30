@@ -257,6 +257,13 @@ let check_constant f loc s =
          ( loc,
            Printf.sprintf "Constant %s is out of range.\n" s))
 
+(* Range-checked NAT conversions: a plain [Uint32/Uint64.of_string] raises (and
+   [Uint64.of_string] also prints) on an out-of-range literal, so guard with
+   [check_constant] first to report a clean "out of range" parse error instead of
+   crashing. [Misc.is_int32]/[is_int64] accept the full unsigned width for a NAT. *)
+let u32_of_string loc s = check_constant Misc.is_int32 loc s; Uint32.of_string s
+let u64_of_string loc s = check_constant Misc.is_int64 loc s; Uint64.of_string s
+
 let check_labels lab (lab' : Ast.Text.name option) =
   match lab' with
   | None -> ()
@@ -287,9 +294,9 @@ let check_labels lab (lab' : Ast.Text.name option) =
 
 dummy_ctx: EOF { assert false }
 
-u32: n = NAT { Uint32.of_string n }
+u32: n = NAT { u32_of_string $sloc n }
 
-u64: n = NAT { Uint64.of_string n }
+u64: n = NAT { u64_of_string $sloc n }
 
 u8: n = NAT { check_constant Misc.is_int8 $sloc n; n }
 
@@ -698,9 +705,10 @@ plain_instruction:
 
 %inline memarg:
 | o = ioption(MEM_OFFSET) a = ioption(MEM_ALIGN)
-  { fun width ->
-    {offset = Option.value ~default:Uint64.zero (Option.map Uint64.of_string o);
-     align = Option.value ~default:(width : Uint64.t) (Option.map Uint64.of_string a)} }
+  { let loc = $sloc in
+    fun width ->
+    {offset = Option.value ~default:Uint64.zero (Option.map (u64_of_string loc) o);
+     align = Option.value ~default:(width : Uint64.t) (Option.map (u64_of_string loc) a)} }
 
 callindirect:
 | CALL_INDIRECT i = index t = type_use_without_bindings
