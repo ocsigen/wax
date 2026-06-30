@@ -971,12 +971,13 @@ let cast ctx ty ty' =
   | (Number | Float), F64 | Float, I64 ->
       Cell.set ty (Valtype f64_valtype);
       true
-  (* As with Int, a cast to a float is allowed (it converts from the integer);
-     the literal is always i64 here since it is too big for i32. *)
-  | LargeInt, (I64 | F32 | F64) ->
+  (* The literal is always i64 here since it is too big for i32. A cast to a
+     float converts from that integer; a cast to [i32] wraps it (the low 32
+     bits), as produced when decompiling e.g. [i64.extend32_s] of a constant. *)
+  | LargeInt, (I32 | I64 | F32 | F64) ->
       Cell.set ty (Valtype i64_valtype);
       true
-  | LargeInt, _ -> false (* too big for i32; not v128 or a reference *)
+  | LargeInt, _ -> false (* not v128 or a reference *)
   | Null, Ref { typ = ty'; _ } ->
       (let>@ typ = top_heap_type ctx ty' in
        let ty' = Ref { nullable = true; typ } in
