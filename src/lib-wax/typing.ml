@@ -2513,6 +2513,38 @@ let match_scrut_reftype ctx scrut' =
   | Some { typ = Ref _ as typ; _ } -> Some typ
   | _ -> None
 
+(* Classify how a block's trailing instruction produces the block's value, as
+   [(needs_context, self_resolving)]. [needs_context] is a construction whose
+   type the surrounding context must pin (an ambiguous/named/default struct, an
+   array, a string, a [null] cast, or a [?:] with such a branch): it is checked
+   against the result, so a surrounding result annotation is load-bearing.
+   [self_resolving] resolves its own type (a nested block with no parameters, or
+   a struct named unambiguously by its fields). Anything else — a plain
+   statement, a parameterized block, a scalar [?:] — sets neither; a block then
+   types it on the statement path rather than against its result. *)
+let rec classify_trailing ctx desc =
+  match desc with
+  | Struct (_, fields) -> (
+      match infer_struct_by_fields ctx fields with
+      | Some _ -> (false, true)
+      | None -> (true, false))
+  | StructDefault _ | Array _ | ArrayDefault _ | ArrayFixed _ | ArraySegment _
+  | String _ ->
+      (true, false)
+  | If { typ; _ }
+  | Block { typ; _ }
+  | Loop { typ; _ }
+  | TryTable { typ; _ }
+  | Try { typ; _ } ->
+      if Array.length typ.params = 0 then (false, true) else (false, false)
+  | Cast (e, _) -> (is_null_initializer e, false)
+  | Select (_, a, b) ->
+      (* Needs the context iff a branch does; a select is not itself a
+         self-resolving nested block. *)
+      ( fst (classify_trailing ctx a.desc) || fst (classify_trailing ctx b.desc),
+        false )
+  | _ -> (false, false)
+
 (* Set to [true] to trace each instruction as it is type-checked. *)
 let debug = false
 
@@ -5773,28 +5805,20 @@ and type_try_catches ctx i label ~results catches catch_all =
 and block_contents ctx results l =
   match l with
   | [] -> return []
+  (* A trailing instruction that produces the block's single value is routed
+     through [check_instruction] (against the result type) rather than synthesized,
+     so the result type flows into it: a nested block's own result annotation then
+     drops, a construction drops its name, and a [?:] propagates the type into
+     both its branches. [classify_trailing] decides which forms qualify (a
+     parameterized block does not — it stays on the statement path, which pops its
+     parameters off the stack, as expression position has no stack to take them
+     from). *)
   | [ i ]
     when Array.length results = 1
          &&
-         match i.desc with
-         | Struct _ | StructDefault _ | Array _ | ArrayDefault _ | ArrayFixed _
-         | ArraySegment _ | String _ ->
-             true
-         (* A trailing block (if / do / loop / try / try_table) is routed through
-            [check_instruction] too, so the outer block's result type flows into it
-            (context-driven inference): the inner block's own result annotation
-            then drops, and the type propagates further into a nested trailing
-            block or construction. A parameterized block stays on the statement
-            path, which pops its parameters off the stack (expression position
-            has no stack to take them from). *)
-         | If { typ; _ }
-         | Block { typ; _ }
-         | Loop { typ; _ }
-         | TryTable { typ; _ }
-         | Try { typ; _ } ->
-             Array.length typ.params = 0
-         | Cast (e, _) -> is_null_initializer e
-         | _ -> false ->
+         match classify_trailing ctx i.desc with
+         | false, false -> false
+         | _ -> true ->
       fun st ->
         (match st with
         | Empty when is_inferring results.(0) ->
@@ -5902,18 +5926,7 @@ and block_keep_bool ctx loc label ~result ~br_params body =
      constructions stay conservative.) *)
   let trailing_construction, trailing_nested_block =
     match List.rev body with
-    | last :: _ -> (
-        match last.desc with
-        | Struct (_, fields) -> (
-            match infer_struct_by_fields ctx fields with
-            | Some _ -> (false, true)
-            | None -> (true, false))
-        | StructDefault _ | Array _ | ArrayDefault _ | ArrayFixed _
-        | ArraySegment _ | String _ ->
-            (true, false)
-        | If _ | Block _ | Loop _ | TryTable _ | Try _ -> (false, true)
-        | Cast (e, _) -> (is_null_initializer e, false)
-        | _ -> (false, false))
+    | last :: _ -> classify_trailing ctx last.desc
     | [] -> (false, false)
   in
   (* A trailing construction is routed through [result], hiding its natural type,

@@ -1,8 +1,9 @@
-When a select (`?:`) appears in a checking context — a call argument, or an
-annotated binding — the expected type is pushed into both value branches, so a
-construction there can drop its type name even when its field set is ambiguous
-(only the expected type can pin it). The bare branch literals re-resolve through
-the same select context on re-parse, so the conversion round-trips.
+When a select (`?:`) appears in a checking context — a call argument, an
+annotated binding, or a function body / block whose result type is fixed — the
+expected type is pushed into both value branches, so a construction there can
+drop its type name even when its field set is ambiguous (only the expected type
+can pin it). The bare branch literals re-resolve through the same select context
+on re-parse, so the conversion round-trips.
 
   $ wax -i wat -f wax select.wat
   type s = open { f: i32 };
@@ -16,6 +17,9 @@ the same select context on re-parse, so the conversion round-trips.
   fn bound(c: i32) -> &s {
       let x: &s = c?{ f: 3 }:{ f: 4 };
       x;
+  }
+  fn body(c: i32) -> &s {
+      c?{ f: 5 }:{ f: 6 };
   }
 
 The dropped names round-trip: re-reading the Wax above re-resolves each bare
@@ -36,4 +40,8 @@ branch literal to (ref $s) from the select's context.
       (select (result (ref $s)) (struct.new $s (i32.const 3))
         (struct.new $s (i32.const 4)) (local.get $c)))
     (local.get $x)
+  )
+  (func $body (param $c i32) (result (ref $s))
+    (select (result (ref $s)) (struct.new $s (i32.const 5))
+      (struct.new $s (i32.const 6)) (local.get $c))
   )
