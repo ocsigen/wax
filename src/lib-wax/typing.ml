@@ -933,24 +933,24 @@ let cast ctx ty ty' =
   let ity = Cell.get ty in
   match (ity, ty') with
   | (Number | Int), Ref { typ = I31 | Extern; _ } ->
-      Cell.set ty (Valtype { typ = I32; internal = I32; inline = None });
+      Cell.set ty (Valtype i32_valtype);
       true
   | (Number | Int), I32 | Int, F32 ->
-      Cell.set ty (Valtype { typ = I32; internal = I32; inline = None });
+      Cell.set ty (Valtype i32_valtype);
       true
   | (Number | Int), I64 | Int, F64 ->
-      Cell.set ty (Valtype { typ = I64; internal = I64; inline = None });
+      Cell.set ty (Valtype i64_valtype);
       true
   | (Number | Float), F32 | Float, I32 ->
-      Cell.set ty (Valtype { typ = F32; internal = F32; inline = None });
+      Cell.set ty (Valtype f32_valtype);
       true
   | (Number | Float), F64 | Float, I64 ->
-      Cell.set ty (Valtype { typ = F64; internal = F64; inline = None });
+      Cell.set ty (Valtype f64_valtype);
       true
   (* As with Int, a cast to a float is allowed (it converts from the integer);
      the literal is always i64 here since it is too big for i32. *)
   | LargeInt, (I64 | F32 | F64) ->
-      Cell.set ty (Valtype { typ = I64; internal = I64; inline = None });
+      Cell.set ty (Valtype i64_valtype);
       true
   | LargeInt, _ -> false (* too big for i32; not v128 or a reference *)
   | Null, Ref { typ = ty'; _ } ->
@@ -1028,10 +1028,10 @@ let signed_cast ctx ty ty' =
            });
       true
   | (Number | Int), `I64 ->
-      Cell.set ty (Valtype { typ = I32; internal = I32; inline = None });
+      Cell.set ty (Valtype i32_valtype);
       true
   | LargeInt, `I64 ->
-      Cell.set ty (Valtype { typ = I64; internal = I64; inline = None });
+      Cell.set ty (Valtype i64_valtype);
       true
   | LargeInt, _ ->
       false (* never i32; a signed cast to a float is rejected too *)
@@ -1072,7 +1072,7 @@ let signed_cast ctx ty ty' =
      it — e.g. [1.5 as i64_s_strict], the [i64.trunc_f64_s] a decompiled
      [f64.const] produces — type-checks instead of being rejected as float. *)
   | Float, (`I32 | `I64 | `F32 | `F64) ->
-      Cell.set ty (Valtype { typ = F64; internal = F64; inline = None });
+      Cell.set ty (Valtype f64_valtype);
       true
   | (Unknown | Error | Collecting _), _ -> true
 
@@ -1397,9 +1397,9 @@ let check_type ctx i ty =
 let standalone_valtype ctx ty =
   match Cell.get ty with
   | Valtype v -> Some v
-  | Int | Number -> Some { typ = I32; internal = I32; inline = None }
-  | LargeInt -> Some { typ = I64; internal = I64; inline = None }
-  | Float -> Some { typ = F64; internal = F64; inline = None }
+  | Int | Number -> Some i32_valtype
+  | LargeInt -> Some i64_valtype
+  | Float -> Some f64_valtype
   | Null -> internalize_valtype ctx (Ref { nullable = true; typ = None_ })
   | Int8 | Int16 | Unknown | Error | Collecting _ -> None
 
@@ -1412,15 +1412,15 @@ let resolve_omitted_valtype ctx ty =
   match Cell.get ty with
   | Valtype v -> Some v
   | LargeInt ->
-      let v = { typ = I64; internal = I64; inline = None } in
+      let v = i64_valtype in
       Cell.set ty (Valtype v);
       Some v
   | Int | Number | Int8 | Int16 | Unknown | Error | Collecting _ ->
-      let v = { typ = I32; internal = I32; inline = None } in
+      let v = i32_valtype in
       Cell.set ty (Valtype v);
       Some v
   | Float ->
-      let v = { typ = F64; internal = F64; inline = None } in
+      let v = f64_valtype in
       Cell.set ty (Valtype v);
       Some v
   | Null ->
@@ -2187,17 +2187,15 @@ let join_value_types ctx ty1 ty2 =
   | _ -> None
 
 let address_valtype (at : [ `I32 | `I64 ]) : inferred_valtype =
-  match at with
-  | `I32 -> { typ = I32; internal = I32; inline = None }
-  | `I64 -> { typ = I64; internal = I64; inline = None }
+  match at with `I32 -> i32_valtype | `I64 -> i64_valtype
 
 (* Expected operand/result type of a SIMD intrinsic, as a fresh type cell. *)
 let simd_valtype : Simd.ty -> inferred_valtype = function
   | TV128 -> { typ = V128; internal = V128; inline = None }
-  | TI32 -> { typ = I32; internal = I32; inline = None }
-  | TI64 -> { typ = I64; internal = I64; inline = None }
-  | TF32 -> { typ = F32; internal = F32; inline = None }
-  | TF64 -> { typ = F64; internal = F64; inline = None }
+  | TI32 -> i32_valtype
+  | TI64 -> i64_valtype
+  | TF32 -> f32_valtype
+  | TF64 -> f64_valtype
 
 let simd_cell t = Cell.make (Valtype (simd_valtype t))
 
@@ -2207,10 +2205,10 @@ let mem_load_result meth : inferred_type option =
   match meth with
   | "load8" -> Some Int8
   | "load16" -> Some Int16
-  | "load32" -> Some (Valtype { typ = I32; internal = I32; inline = None })
-  | "load64" -> Some (Valtype { typ = I64; internal = I64; inline = None })
-  | "loadf32" -> Some (Valtype { typ = F32; internal = F32; inline = None })
-  | "loadf64" -> Some (Valtype { typ = F64; internal = F64; inline = None })
+  | "load32" -> Some (Valtype i32_valtype)
+  | "load64" -> Some (Valtype i64_valtype)
+  | "loadf32" -> Some (Valtype f32_valtype)
+  | "loadf64" -> Some (Valtype f64_valtype)
   | _ -> None
 
 let mem_store_method meth =
@@ -2557,9 +2555,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       | _ ->
           Error.expected_func_type ctx.diagnostics ~location:i.info;
           return_statement i (TailCall (i', l')) [||])
-  | Char _ as desc ->
-      return_expression i desc
-        (Cell.make (Valtype { typ = I32; internal = I32; inline = None }))
+  | Char _ as desc -> return_expression i desc i32_cell
   | Int s as desc ->
       (* Pick the lattice type from the magnitude (the sign is a separate [Neg],
          so this is unsigned): a value over the 32-bit range cannot be i32, so it
@@ -2639,8 +2635,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       let* i2' = instruction ctx i2 in
       let* i3' = instruction ctx i3 in
       let* i1' = instruction ctx i1 in
-      check_type ctx i1'
-        (Cell.make (Valtype { typ = I32; internal = I32; inline = None }));
+      check_type ctx i1' i32_cell;
       let*! ty =
         let ty1 = expression_type ctx i2' in
         let ty2 = expression_type ctx i3' in
@@ -2710,8 +2705,7 @@ and type_branch ctx i =
       let* i' = instruction ctx i' in
       let loc = snd i'.info in
       let ty, types = split_on_last_type ctx ~location:loc i' in
-      check_subtype ctx ~location:loc ty
-        (Cell.make (Valtype { typ = I32; internal = I32; inline = None }));
+      check_subtype ctx ~location:loc ty i32_cell;
       let params = branch_target ctx label in
       check_subtypes ctx ~location:loc types params;
       (* On the fall-through the values stay on the stack; type them by what they
@@ -2725,8 +2719,7 @@ and type_branch ctx i =
       let* i' = instruction ctx i' in
       let loc = snd i'.info in
       let ty, types = split_on_last_type ctx ~location:loc i' in
-      check_subtype ctx ~location:loc ty
-        (Cell.make (Valtype { typ = I32; internal = I32; inline = None }));
+      check_subtype ctx ~location:loc ty i32_cell;
       let len = Array.length (branch_target ctx (List.hd labels)) in
       List.iter
         (fun label ->
@@ -3055,17 +3048,14 @@ and type_arith ctx i =
                 Cell.merge ty1 ty2 Int;
                 ty1
             | Lt (Some _) | Gt (Some _) | Le (Some _) | Ge (Some _) | Eq | Ne ->
-                Cell.merge ty1 ty2
-                  (Valtype { typ = I32; internal = I32; inline = None });
-                Cell.make (Valtype { typ = I32; internal = I32; inline = None })
+                Cell.merge ty1 ty2 (Valtype i32_valtype);
+                i32_cell
             | Div None ->
                 Cell.merge ty1 ty2 Float;
                 ty1
             | Lt None | Gt None | Le None | Ge None ->
-                Cell.merge ty1 ty2
-                  (Valtype { typ = F32; internal = F32; inline = None });
-                Cell.make (Valtype { typ = I32; internal = I32; inline = None })
-            )
+                Cell.merge ty1 ty2 (Valtype f32_valtype);
+                i32_cell)
         | typ, (Unknown | Error) | (Unknown | Error), typ -> (
             Cell.merge ty1 ty2 typ;
             match op.desc with
@@ -3092,7 +3082,7 @@ and type_arith ctx i =
                 | Number | Int | Float ->
                     ()
                 | _ -> mismatch ());
-                Cell.make (Valtype { typ = I32; internal = I32; inline = None })
+                i32_cell
             | Add | Sub | Mul ->
                 (match typ with
                 | Valtype { internal = I32; _ }
@@ -3114,7 +3104,7 @@ and type_arith ctx i =
                     ()
                 | Number -> Cell.set ty1 Int
                 | _ -> mismatch ());
-                Cell.make (Valtype { typ = I32; internal = I32; inline = None })
+                i32_cell
             | Lt None | Gt None | Le None | Ge None ->
                 (match typ with
                 | Valtype { internal = F32; _ }
@@ -3123,7 +3113,7 @@ and type_arith ctx i =
                     ()
                 | Number -> Cell.set ty1 Float
                 | _ -> mismatch ());
-                Cell.make (Valtype { typ = I32; internal = I32; inline = None })
+                i32_cell
             | Ne ->
                 (match typ with
                 | Valtype { internal = I32; _ }
@@ -3133,8 +3123,7 @@ and type_arith ctx i =
                 | Number | Int | Float ->
                     ()
                 | _ -> mismatch ());
-                Cell.make (Valtype { typ = I32; internal = I32; inline = None })
-            )
+                i32_cell)
         | _ -> (
             match op.desc with
             | Eq ->
@@ -3184,7 +3173,7 @@ and type_arith ctx i =
                 | (Number | Int), LargeInt ->
                     Cell.merge ty1 ty2 (Cell.get ty2)
                 | _ -> mismatch ());
-                Cell.make (Valtype { typ = I32; internal = I32; inline = None })
+                i32_cell
             | Add | Sub | Mul ->
                 (match (Cell.get ty1, Cell.get ty2) with
                 | Valtype { internal = I32; _ }, Valtype { internal = I32; _ }
@@ -3229,7 +3218,7 @@ and type_arith ctx i =
                 | (Number | Int), LargeInt ->
                     Cell.merge ty1 ty2 (Cell.get ty2)
                 | _ -> mismatch ());
-                Cell.make (Valtype { typ = I32; internal = I32; inline = None })
+                i32_cell
             | Lt None | Gt None | Le None | Ge None ->
                 (match (Cell.get ty1, Cell.get ty2) with
                 | Valtype { internal = F32; _ }, Valtype { internal = F32; _ }
@@ -3242,7 +3231,7 @@ and type_arith ctx i =
                     Cell.merge ty1 ty2 (Cell.get ty2)
                 | Number, Number -> Cell.merge ty1 ty2 Float
                 | _ -> mismatch ());
-                Cell.make (Valtype { typ = I32; internal = I32; inline = None })
+                i32_cell
             | Ne ->
                 (match (Cell.get ty1, Cell.get ty2) with
                 | Valtype { internal = I32; _ }, Valtype { internal = I32; _ }
@@ -3267,8 +3256,7 @@ and type_arith ctx i =
                 | (Number | Int), LargeInt ->
                     Cell.merge ty1 ty2 (Cell.get ty2)
                 | _ -> mismatch ());
-                Cell.make (Valtype { typ = I32; internal = I32; inline = None })
-            )
+                i32_cell)
       in
       return_expression i (BinOp (op, i1', i2')) ty
   | UnOp (op, i') ->
@@ -3277,10 +3265,7 @@ and type_arith ctx i =
       let ty =
         match Cell.get typ with
         | Unknown | Error -> (
-            match op.desc with
-            | Not ->
-                Cell.make (Valtype { typ = I32; internal = I32; inline = None })
-            | Neg | Pos -> Cell.make Number)
+            match op.desc with Not -> i32_cell | Neg | Pos -> Cell.make Number)
         | _ -> (
             match op.desc with
             | Not ->
@@ -3292,7 +3277,7 @@ and type_arith ctx i =
                 | _ ->
                     Error.instruction_type_mismatch ctx.diagnostics
                       ~location:op.info typ (Cell.make Int));
-                Cell.make (Valtype { typ = I32; internal = I32; inline = None })
+                i32_cell
             | Neg | Pos ->
                 (match Cell.get typ with
                 | Valtype { internal = I32 | I64 | F32 | F64; _ }
@@ -3500,9 +3485,7 @@ and type_cast ctx i =
       (let>@ typ = top_heap_type ctx ty.typ in
        let>@ typ = internalize ctx (Ref { nullable = true; typ }) in
        check_type ctx i' typ);
-      return_expression i
-        (Test (i', ty))
-        (Cell.make (Valtype { typ = I32; internal = I32; inline = None }))
+      return_expression i (Test (i', ty)) i32_cell
   (* Construction literals carry an optional type name that can be inferred from
      an expected type. Their typing lives in [check_instruction]; in synthesis position
      there is no expectation, so [check_instruction] against the [Unknown] sentinel keeps a
@@ -3626,8 +3609,7 @@ and type_aggregate_access ctx i =
   | ArrayGet (i1, i2) -> (
       let* i1' = instruction ctx i1 in
       let* i2' = instruction ctx i2 in
-      check_type ctx i2'
-        (Cell.make (Valtype { typ = I32; internal = I32; inline = None }));
+      check_type ctx i2' i32_cell;
       match Cell.get (expression_type ctx i1') with
       | Valtype { typ = Ref { typ = Type ty; _ }; _ } ->
           let*! typ = lookup_array_type ~location:i1.info ctx ty in
@@ -3665,8 +3647,7 @@ and type_aggregate_access ctx i =
   | ArraySet (i1, i2, i3) -> (
       let* i1' = instruction ctx i1 in
       let* i2' = instruction ctx i2 in
-      check_type ctx i2'
-        (Cell.make (Valtype { typ = I32; internal = I32; inline = None }));
+      check_type ctx i2' i32_cell;
       match Cell.get (expression_type ctx i1') with
       | Valtype { typ = Ref { typ = Type ty; _ }; _ } ->
           (* Resolve the element type (pure) before typing the value, so a
@@ -4020,8 +4001,7 @@ and type_block_construct ctx i =
       return_statement i (While { label; cond = cond'; block = instrs' }) [||]
   | If { label; typ; cond; if_block; else_block } -> (
       let* cond' = instruction ctx cond in
-      check_type ctx cond'
-        (Cell.make (Valtype { typ = I32; internal = I32; inline = None }));
+      check_type ctx cond' i32_cell;
       if Array.length typ.params > 0 then
         Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
       match if_inference ctx i label typ ~cond:cond' ~if_block ~else_block with
@@ -4126,18 +4106,9 @@ and type_mem_method_call ctx i func recv memname meth args =
         | value' :: _ -> (
             let vty = expression_type ctx value' in
             match meth.desc with
-            | "store64" ->
-                check_type ctx value'
-                  (Cell.make
-                     (Valtype { typ = I64; internal = I64; inline = None }))
-            | "storef32" ->
-                check_type ctx value'
-                  (Cell.make
-                     (Valtype { typ = F32; internal = F32; inline = None }))
-            | "storef64" ->
-                check_type ctx value'
-                  (Cell.make
-                     (Valtype { typ = F64; internal = F64; inline = None }))
+            | "store64" -> check_type ctx value' i64_cell
+            | "storef32" -> check_type ctx value' f32_cell
+            | "storef64" -> check_type ctx value' f64_cell
             | _ -> (
                 match Cell.get vty with
                 | Valtype { internal = I32 | I64; _ }
@@ -4230,9 +4201,7 @@ and type_simd_mem_method_call ctx i func recv memname meth args =
 and type_mem_mgmt_call ctx i func recv name meth args =
   let _, at = Option.get (Tbl.find_opt ctx.memories name) in
   let addr () = Cell.make (Valtype (address_valtype at)) in
-  let i32 () =
-    Cell.make (Valtype { typ = I32; internal = I32; inline = None })
-  in
+  let i32 () = i32_cell in
   let recv' = { desc = Get name; info = ([||], recv.info) } in
   let mk args' =
     Ast.Call
@@ -4299,9 +4268,7 @@ and type_mem_mgmt_call ctx i func recv name meth args =
 and type_table_mgmt_call ctx i func recv name meth args =
   let at, rt = Option.get (Tbl.find_opt ctx.tables name) in
   let addr () = Cell.make (Valtype (address_valtype at)) in
-  let i32 () =
-    Cell.make (Valtype { typ = I32; internal = I32; inline = None })
-  in
+  let i32 () = i32_cell in
   let check_elt e =
     let>@ t = internalize ctx (Ref rt) in
     check_type ctx e t
@@ -4381,10 +4348,8 @@ and type_array_fill_call ctx i func a meth j v n =
   let* j' = instruction ctx j in
   let* v' = instruction ctx v in
   let* n' = instruction ctx n in
-  check_type ctx n'
-    (Cell.make (Valtype { typ = I32; internal = I32; inline = None }));
-  check_type ctx j'
-    (Cell.make (Valtype { typ = I32; internal = I32; inline = None }));
+  check_type ctx n' i32_cell;
+  check_type ctx j' i32_cell;
   (match Cell.get (expression_type ctx a') with
   | Valtype { typ = Ref { typ = Type ty; _ }; _ } ->
       let>@ typ = lookup_array_type ctx ty in
@@ -4413,13 +4378,10 @@ and type_array_copy_call ctx i func a1 meth i1 a2 i2 n =
   let* a2' = instruction ctx a2 in
   let* i2' = instruction ctx i2 in
   let* n' = instruction ctx n in
-  check_type ctx n'
-    (Cell.make (Valtype { typ = I32; internal = I32; inline = None }));
-  check_type ctx i2'
-    (Cell.make (Valtype { typ = I32; internal = I32; inline = None }));
+  check_type ctx n' i32_cell;
+  check_type ctx i2' i32_cell;
   let ty' = expression_type ctx a2' in
-  check_type ctx i1'
-    (Cell.make (Valtype { typ = I32; internal = I32; inline = None }));
+  check_type ctx i1' i32_cell;
   let ty = expression_type ctx a1' in
   (match (Cell.get ty, Cell.get ty') with
   (* Either array already failed to type; recover silently. *)
@@ -4447,7 +4409,7 @@ and type_array_copy_call ctx i func a1 meth i1 a2 i2 n =
 and type_array_init_call ctx i func a meth seg sinfo rest =
   let* a' = instruction ctx a in
   let* rest' = instructions ctx rest in
-  let i32 = Cell.make (Valtype { typ = I32; internal = I32; inline = None }) in
+  let i32 = i32_cell in
   (match rest' with
   | [ d'; s'; n' ] ->
       check_type ctx d' i32;
@@ -4500,36 +4462,30 @@ and type_unary_intrinsic_call ctx i func recv meth =
     | Valtype { typ = Ref { typ = Type t; _ }; _ }, "length" -> (
         let*@ _, def = Tbl.find_opt ctx.type_context.types t in
         match def.typ with
-        | Array _ ->
-            Some
-              (Cell.make (Valtype { typ = I32; internal = I32; inline = None }))
+        | Array _ -> Some i32_cell
         | Struct _ | Func _ | Cont _ ->
             Error.expected_array_type ctx.diagnostics ~location:i.info;
             None)
     | (Null | Valtype { typ = Ref { typ = Array; _ }; _ }), "length" ->
-        Some (Cell.make (Valtype { typ = I32; internal = I32; inline = None }))
-    | Valtype { typ = I32; _ }, "from_bits" ->
-        Some (Cell.make (Valtype { typ = F32; internal = F32; inline = None }))
-    | Valtype { typ = I64; _ }, "from_bits" ->
-        Some (Cell.make (Valtype { typ = F64; internal = F64; inline = None }))
-    | Valtype { typ = F32; _ }, "to_bits" ->
-        Some (Cell.make (Valtype { typ = I32; internal = I32; inline = None }))
-    | Valtype { typ = F64; _ }, "to_bits" ->
-        Some (Cell.make (Valtype { typ = I64; internal = I64; inline = None }))
+        Some i32_cell
+    | Valtype { typ = I32; _ }, "from_bits" -> Some f32_cell
+    | Valtype { typ = I64; _ }, "from_bits" -> Some f64_cell
+    | Valtype { typ = F32; _ }, "to_bits" -> Some i32_cell
+    | Valtype { typ = F64; _ }, "to_bits" -> Some i64_cell
     (* An abstract numeric receiver (e.g. a bare float literal whose redundant
        cast [simplify] dropped) defaults like any other operation: [to_bits] on a
        [Float] is f64->i64, [from_bits] on an integer is i32->f32 (or i64->f64
        for a [LargeInt]). The non-default widths keep their cast (load-bearing),
        so they reach the concrete arms above. *)
     | Float, "to_bits" ->
-        Cell.set ty (Valtype { typ = F64; internal = F64; inline = None });
-        Some (Cell.make (Valtype { typ = I64; internal = I64; inline = None }))
+        Cell.set ty (Valtype f64_valtype);
+        Some i64_cell
     | (Number | Int), "from_bits" ->
-        Cell.set ty (Valtype { typ = I32; internal = I32; inline = None });
-        Some (Cell.make (Valtype { typ = F32; internal = F32; inline = None }))
+        Cell.set ty (Valtype i32_valtype);
+        Some f32_cell
     | LargeInt, "from_bits" ->
-        Cell.set ty (Valtype { typ = I64; internal = I64; inline = None });
-        Some (Cell.make (Valtype { typ = F64; internal = F64; inline = None }))
+        Cell.set ty (Valtype i64_valtype);
+        Some f64_cell
     | ( ((Number | Int | Valtype { typ = I32 | I64; _ }) as ty'),
         ("clz" | "ctz" | "popcnt" | "extend8_s" | "extend16_s") ) ->
         if ty' = Number then Cell.set ty Int;
@@ -4671,9 +4627,6 @@ and type_simd_free_intrinsic_call ctx i func name args =
    [check_instruction] is entered from [instruction] with no context (synthesis). *)
 and check_instruction ?(drop_supertype = false) ctx expected
     (i : location instr) =
-  let i32_cell () =
-    Cell.make (Valtype { typ = I32; internal = I32; inline = None })
-  in
   (* The construction's type name: explicit, or inferred from an exact expected
      type; [missing] reports a [cannot_infer_*] error and yields [None]. *)
   let resolve_name ty ~missing =
@@ -4856,7 +4809,7 @@ and check_instruction ?(drop_supertype = false) ctx expected
         | None ->
             let* i1' = instruction ctx i1 in
             let* i2' = instruction ctx i2 in
-            check_type ctx i2' (i32_cell ());
+            check_type ctx i2' i32_cell;
             return_expression i (Array (None, i1', i2')) (Cell.make Error)
         | Some typ ->
             (* Resolve the element type (pure) before typing the element value,
@@ -4876,7 +4829,7 @@ and check_instruction ?(drop_supertype = false) ctx expected
               | None -> instruction ctx i1
             in
             let* i2' = instruction ctx i2 in
-            check_type ctx i2' (i32_cell ());
+            check_type ctx i2' i32_cell;
             let emitted =
               emitted_name ty typ ~parseable:true ~field_unique:false
             in
@@ -4892,11 +4845,11 @@ and check_instruction ?(drop_supertype = false) ctx expected
         with
         | None ->
             let* n' = instruction ctx n in
-            check_type ctx n' (i32_cell ());
+            check_type ctx n' i32_cell;
             return_expression i (ArrayDefault (None, n')) (Cell.make Error)
         | Some typ ->
             let* n' = instruction ctx n in
-            check_type ctx n' (i32_cell ());
+            check_type ctx n' i32_cell;
             (let>@ field = lookup_array_type ctx typ in
              if not (field_has_default field) then
                Error.not_defaultable ctx.diagnostics ~location:typ.info);
@@ -4960,16 +4913,16 @@ and check_instruction ?(drop_supertype = false) ctx expected
         | None ->
             let* off' = instruction ctx off in
             let* len' = instruction ctx len in
-            check_type ctx off' (i32_cell ());
-            check_type ctx len' (i32_cell ());
+            check_type ctx off' i32_cell;
+            check_type ctx len' i32_cell;
             return_expression i
               (ArraySegment (None, seg, off', len'))
               (Cell.make Error)
         | Some typ ->
             let* off' = instruction ctx off in
             let* len' = instruction ctx len in
-            check_type ctx off' (i32_cell ());
-            check_type ctx len' (i32_cell ());
+            check_type ctx off' i32_cell;
+            check_type ctx len' i32_cell;
             (* A reference element means [array.new_elem] (the segment is an
                element segment); a numeric/packed element means [array.new_data]
                (a data segment). *)
@@ -5066,7 +5019,7 @@ and check_instruction ?(drop_supertype = false) ctx expected
          [expected] for [to_wasm]. A [br] to the if's own label is fine: its
          value is checked against the result like the branch tails. *)
       let* cond' = instruction ctx cond in
-      check_type ctx cond' (i32_cell ());
+      check_type ctx cond' i32_cell;
       if Array.length typ.params > 0 then
         Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
       let omitted = typ.results = [||] in
@@ -5538,8 +5491,7 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
       return_statement i (Loop { label; typ; block = instrs' }) results
   | If { label; typ; cond; if_block; else_block } -> (
       let* cond = toplevel_instruction ctx cond in
-      check_type ctx cond
-        (Cell.make (Valtype { typ = I32; internal = I32; inline = None }));
+      check_type ctx cond i32_cell;
       match if_inference ctx i label typ ~cond ~if_block ~else_block with
       | Some (desc, results) -> return_statement i desc results
       | None ->

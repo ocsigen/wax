@@ -135,3 +135,16 @@ let rec output_inferred_type f ty =
    places that need only the common "type unknown" test. *)
 let is_unknown_or_error ty =
   match Cell.get ty with Unknown | Error -> true | _ -> false
+
+(* The numeric value types, and shared cells holding them. A concrete base type
+   is never re-resolved during inference (only floating cells are unified into a
+   concrete type), so a base-type cell's value is invariant and one shared cell
+   per type is safe — no need to reallocate one on every use. *)
+let i32_valtype = { typ = I32; internal = I32; inline = None }
+let i64_valtype = { typ = I64; internal = I64; inline = None }
+let f32_valtype = { typ = F32; internal = F32; inline = None }
+let f64_valtype = { typ = F64; internal = F64; inline = None }
+let i32_cell = Cell.make (Valtype i32_valtype)
+let i64_cell = Cell.make (Valtype i64_valtype)
+let f32_cell = Cell.make (Valtype f32_valtype)
+let f64_cell = Cell.make (Valtype f64_valtype)

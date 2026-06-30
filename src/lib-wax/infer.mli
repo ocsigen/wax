@@ -86,3 +86,16 @@ val output_inferred_type : Format.formatter -> inferred_type Cell.t -> unit
 val is_unknown_or_error : inferred_type Cell.t -> bool
 (** Whether a cell resolves to [Unknown] or [Error] — the common "no concrete
     type known" test. *)
+
+(** The numeric value types, and shared cells holding them. A concrete base type
+    is never re-resolved during inference, so a base-type cell's value never
+    changes and a single shared cell per type can stand in for a fresh one. *)
+
+val i32_valtype : inferred_valtype
+val i64_valtype : inferred_valtype
+val f32_valtype : inferred_valtype
+val f64_valtype : inferred_valtype
+val i32_cell : inferred_type Cell.t
+val i64_cell : inferred_type Cell.t
+val f32_cell : inferred_type Cell.t
+val f64_cell : inferred_type Cell.t
