@@ -1446,6 +1446,28 @@ let bound_value_type ctx ~location result_ty =
       None
   | _ -> resolve_omitted_valtype ctx result_ty
 
+(* --- Annotation dropping (the "keep-bool" machinery) -----------------------
+
+   When converting from Wasm, the typed AST is rewritten ([ctx.simplify]) to
+   drop type annotations that the inferred types make redundant, so the printed
+   Wax is not littered with annotations a reader (or a re-parse) would recover
+   anyway. The decision is a "keep-bool": when [check_instruction] types a value
+   against an expected type (the annotation), it returns whether that annotation
+   is load-bearing — i.e. whether omitting it would change what the value
+   re-infers to. The binding/construct site then drops the annotation precisely
+   when [simplify] is on and the keep-bool says it is not needed.
+
+   The pieces, by where the annotation lives:
+   - a scalar value vs. its annotation: [annotation_needed] (the leaf keep-bool,
+     comparing the value's standalone type to the expected one);
+   - a block/loop/try result type: [block_keep_bool] / [block_keep_needed],
+     with [context_block_typ] / [finalize_inferred] filling an omitted result
+     from context or dropping a redundant declared one;
+   - [is_null_initializer] is the one exception to the "equal type ⇒ drop" rule
+     (a bare [null] re-infers a floating type), and [drop_supertype] the one
+     relaxation (an immutable binding may drop a mere-supertype annotation).
+   --------------------------------------------------------------------------- *)
+
 (* Whether [i] is a (possibly cast-wrapped) [null].
 
    This guards the dropping of a redundant type annotation on an initialized
