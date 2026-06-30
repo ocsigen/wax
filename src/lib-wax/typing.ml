@@ -3203,284 +3203,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
           let* i3' = instruction ctx i3 in
           Error.expected_array_type ctx.diagnostics ~location:i1.info;
           return_statement i (ArraySet (i1', i2', i3')) [||])
-  | BinOp (op, i1, i2) ->
-      let* i1' = instruction ctx i1 in
-      let* i2' = instruction ctx i2 in
-      let ty =
-        let ty1 = expression_type ctx i1' in
-        let ty2 = expression_type ctx i2' in
-        let mismatch () =
-          (* Point at the operator itself, not the whole expression. *)
-          Error.binop_type_mismatch ctx.diagnostics ~location:op.info ty1 ty2
-        in
-        match (UnionFind.find ty1, UnionFind.find ty2) with
-        | (Unknown | Error), (Unknown | Error) -> (
-            match op.desc with
-            | Add | Sub | Mul ->
-                UnionFind.merge ty1 ty2 Number;
-                ty1
-            | Div (Some _) | Rem _ | And | Or | Xor | Shl | Shr _ ->
-                UnionFind.merge ty1 ty2 Int;
-                ty1
-            | Lt (Some _) | Gt (Some _) | Le (Some _) | Ge (Some _) | Eq | Ne ->
-                UnionFind.merge ty1 ty2
-                  (Valtype { typ = I32; internal = I32; inline = None });
-                UnionFind.make
-                  (Valtype { typ = I32; internal = I32; inline = None })
-            | Div None ->
-                UnionFind.merge ty1 ty2 Float;
-                ty1
-            | Lt None | Gt None | Le None | Ge None ->
-                UnionFind.merge ty1 ty2
-                  (Valtype { typ = F32; internal = F32; inline = None });
-                UnionFind.make
-                  (Valtype { typ = I32; internal = I32; inline = None }))
-        | typ, (Unknown | Error) | (Unknown | Error), typ -> (
-            UnionFind.merge ty1 ty2 typ;
-            match op.desc with
-            | Eq ->
-                (match typ with
-                | Valtype { internal = Ref _ as ty; _ } ->
-                    if
-                      not
-                        (Wax_wasm.Types.val_subtype ctx.subtyping_info ty
-                           (Ref { nullable = true; typ = Eq }))
-                    then mismatch ()
-                | Null ->
-                    UnionFind.set ty1
-                      (Valtype
-                         {
-                           typ = Ref { nullable = true; typ = Eq };
-                           internal = Ref { nullable = true; typ = Eq };
-                           inline = None;
-                         })
-                | Valtype { internal = I32; _ }
-                | Valtype { internal = I64; _ }
-                | Valtype { internal = F32; _ }
-                | Valtype { internal = F64; _ }
-                | Number | Int | Float ->
-                    ()
-                | _ -> mismatch ());
-                UnionFind.make
-                  (Valtype { typ = I32; internal = I32; inline = None })
-            | Add | Sub | Mul ->
-                (match typ with
-                | Valtype { internal = I32; _ }
-                | Valtype { internal = I64; _ }
-                | Valtype { internal = F32; _ }
-                | Valtype { internal = F64; _ }
-                | Number | Int | Float ->
-                    ()
-                | _ -> mismatch ());
-                ty1
-            | Div (Some _) | Rem _ | And | Or | Xor | Shl | Shr _ ->
-                check_int_bin_op ctx ~location:op.info ty1 ty2
-            | Div None -> check_float_bin_op ctx ~location:op.info ty1 ty2
-            | Lt (Some _) | Gt (Some _) | Le (Some _) | Ge (Some _) ->
-                (match typ with
-                | Valtype { internal = I32; _ }
-                | Valtype { internal = I64; _ }
-                | Int ->
-                    ()
-                | Number -> UnionFind.set ty1 Int
-                | _ -> mismatch ());
-                UnionFind.make
-                  (Valtype { typ = I32; internal = I32; inline = None })
-            | Lt None | Gt None | Le None | Ge None ->
-                (match typ with
-                | Valtype { internal = F32; _ }
-                | Valtype { internal = F64; _ }
-                | Float ->
-                    ()
-                | Number -> UnionFind.set ty1 Float
-                | _ -> mismatch ());
-                UnionFind.make
-                  (Valtype { typ = I32; internal = I32; inline = None })
-            | Ne ->
-                (match typ with
-                | Valtype { internal = I32; _ }
-                | Valtype { internal = I64; _ }
-                | Valtype { internal = F32; _ }
-                | Valtype { internal = F64; _ }
-                | Number | Int | Float ->
-                    ()
-                | _ -> mismatch ());
-                UnionFind.make
-                  (Valtype { typ = I32; internal = I32; inline = None }))
-        | _ -> (
-            match op.desc with
-            | Eq ->
-                (match (UnionFind.find ty1, UnionFind.find ty2) with
-                | ( Valtype { internal = Ref _ as ty1; _ },
-                    Valtype { internal = Ref _ as ty2; _ } ) ->
-                    if
-                      not
-                        (Wax_wasm.Types.val_subtype ctx.subtyping_info ty1
-                           (Ref { nullable = true; typ = Eq })
-                        && Wax_wasm.Types.val_subtype ctx.subtyping_info ty2
-                             (Ref { nullable = true; typ = Eq }))
-                    then mismatch ()
-                | Valtype { internal = Ref _ as typ1; _ }, Null ->
-                    if
-                      not
-                        (Wax_wasm.Types.val_subtype ctx.subtyping_info typ1
-                           (Ref { nullable = true; typ = Eq }))
-                    then mismatch ();
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty2)
-                | Null, Valtype { internal = Ref _ as typ2; _ } ->
-                    if
-                      not
-                        (Wax_wasm.Types.val_subtype ctx.subtyping_info typ2
-                           (Ref { nullable = true; typ = Eq }))
-                    then mismatch ();
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty2)
-                | Valtype { internal = I32; _ }, Valtype { internal = I32; _ }
-                | Valtype { internal = I64; _ }, Valtype { internal = I64; _ }
-                | Valtype { internal = F32; _ }, Valtype { internal = F32; _ }
-                | Valtype { internal = F64; _ }, Valtype { internal = F64; _ }
-                  ->
-                    ()
-                | (Valtype { internal = I32 | I64; _ } | Int), (Number | Int)
-                | ( (Valtype { internal = F32 | F64; _ } | Float),
-                    (Number | Float | LargeInt) )
-                | Number, Number ->
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty1)
-                | (Number | Int), Valtype { internal = I32 | I64; _ }
-                | ( (Number | Float | LargeInt),
-                    Valtype { internal = F32 | F64; _ } ) ->
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty2)
-                | Valtype { internal = I64; _ }, LargeInt
-                | LargeInt, (LargeInt | Number | Int) ->
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty1)
-                | LargeInt, Valtype { internal = I64; _ }
-                | (Number | Int), LargeInt ->
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty2)
-                | _ -> mismatch ());
-                UnionFind.make
-                  (Valtype { typ = I32; internal = I32; inline = None })
-            | Add | Sub | Mul ->
-                (match (UnionFind.find ty1, UnionFind.find ty2) with
-                | Valtype { internal = I32; _ }, Valtype { internal = I32; _ }
-                | Valtype { internal = I64; _ }, Valtype { internal = I64; _ }
-                | Valtype { internal = F32; _ }, Valtype { internal = F32; _ }
-                | Valtype { internal = F64; _ }, Valtype { internal = F64; _ }
-                  ->
-                    ()
-                | (Valtype { internal = I32 | I64; _ } | Int), (Number | Int)
-                | ( (Valtype { internal = F32 | F64; _ } | Float),
-                    (Number | Float | LargeInt) )
-                | Number, Number ->
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty1)
-                | (Number | Int), Valtype { internal = I32 | I64; _ }
-                | ( (Number | Float | LargeInt),
-                    Valtype { internal = F32 | F64; _ } ) ->
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty2)
-                | Valtype { internal = I64; _ }, LargeInt
-                | LargeInt, (LargeInt | Number | Int) ->
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty1)
-                | LargeInt, Valtype { internal = I64; _ }
-                | (Number | Int), LargeInt ->
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty2)
-                | _ -> mismatch ());
-                ty1
-            | Div (Some _) | Rem _ | And | Or | Xor | Shl | Shr _ ->
-                check_int_bin_op ctx ~location:op.info ty1 ty2
-            | Div None -> check_float_bin_op ctx ~location:op.info ty1 ty2
-            | Lt (Some _) | Gt (Some _) | Le (Some _) | Ge (Some _) ->
-                (match (UnionFind.find ty1, UnionFind.find ty2) with
-                | Valtype { internal = I32; _ }, Valtype { internal = I32; _ }
-                | Valtype { internal = I64; _ }, Valtype { internal = I64; _ }
-                | (Valtype { internal = I32 | I64; _ } | Int), (Number | Int) ->
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty1)
-                | (Number | Int), Valtype { internal = I32 | I64; _ } ->
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty2)
-                | Number, Number -> UnionFind.merge ty1 ty2 Int
-                | Valtype { internal = I64; _ }, LargeInt
-                | LargeInt, (LargeInt | Number | Int) ->
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty1)
-                | LargeInt, Valtype { internal = I64; _ }
-                | (Number | Int), LargeInt ->
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty2)
-                | _ -> mismatch ());
-                UnionFind.make
-                  (Valtype { typ = I32; internal = I32; inline = None })
-            | Lt None | Gt None | Le None | Ge None ->
-                (match (UnionFind.find ty1, UnionFind.find ty2) with
-                | Valtype { internal = F32; _ }, Valtype { internal = F32; _ }
-                | Valtype { internal = F64; _ }, Valtype { internal = F64; _ }
-                | ( (Valtype { internal = F32 | F64; _ } | Float),
-                    (Number | Float | LargeInt) ) ->
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty1)
-                | ( (Number | Float | LargeInt),
-                    Valtype { internal = F32 | F64; _ } ) ->
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty2)
-                | Number, Number -> UnionFind.merge ty1 ty2 Float
-                | _ -> mismatch ());
-                UnionFind.make
-                  (Valtype { typ = I32; internal = I32; inline = None })
-            | Ne ->
-                (match (UnionFind.find ty1, UnionFind.find ty2) with
-                | Valtype { internal = I32; _ }, Valtype { internal = I32; _ }
-                | Valtype { internal = I64; _ }, Valtype { internal = I64; _ }
-                | Valtype { internal = F32; _ }, Valtype { internal = F32; _ }
-                | Valtype { internal = F64; _ }, Valtype { internal = F64; _ }
-                  ->
-                    ()
-                | (Valtype { internal = I32 | I64; _ } | Int), (Number | Int)
-                | ( (Valtype { internal = F32 | F64; _ } | Float),
-                    (Number | Float | LargeInt) )
-                | Number, Number ->
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty1)
-                | (Number | Int), Valtype { internal = I32 | I64; _ }
-                | ( (Number | Float | LargeInt),
-                    Valtype { internal = F32 | F64; _ } ) ->
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty2)
-                | Valtype { internal = I64; _ }, LargeInt
-                | LargeInt, (LargeInt | Number | Int) ->
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty1)
-                | LargeInt, Valtype { internal = I64; _ }
-                | (Number | Int), LargeInt ->
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty2)
-                | _ -> mismatch ());
-                UnionFind.make
-                  (Valtype { typ = I32; internal = I32; inline = None }))
-      in
-      return_expression i (BinOp (op, i1', i2')) ty
-  | UnOp (op, i') ->
-      let* i' = instruction ctx i' in
-      let typ = expression_type ctx i' in
-      let ty =
-        match UnionFind.find typ with
-        | Unknown | Error -> (
-            match op.desc with
-            | Not ->
-                UnionFind.make
-                  (Valtype { typ = I32; internal = I32; inline = None })
-            | Neg | Pos -> UnionFind.make Number)
-        | _ -> (
-            match op.desc with
-            | Not ->
-                (match UnionFind.find typ with
-                | Valtype { internal = I32 | I64 | Ref _; _ }
-                | Null | Int | LargeInt ->
-                    ()
-                | Number -> UnionFind.set typ Int
-                | _ ->
-                    Error.instruction_type_mismatch ctx.diagnostics
-                      ~location:op.info typ (UnionFind.make Int));
-                UnionFind.make
-                  (Valtype { typ = I32; internal = I32; inline = None })
-            | Neg | Pos ->
-                (match UnionFind.find typ with
-                | Valtype { internal = I32 | I64 | F32 | F64; _ }
-                | Int | LargeInt | Float | Number ->
-                    ()
-                | _ ->
-                    Error.instruction_type_mismatch ctx.diagnostics
-                      ~location:op.info typ (UnionFind.make Number));
-                typ)
-      in
-      return_expression i (UnOp (op, i')) ty
+  | BinOp _ | UnOp _ -> type_arith ctx i
   | Let ([ (name_opt, Some annot) ], Some i') -> (
       (* Bidirectional single annotated binding: type the initializer in
          checking mode against the annotation, so an omitted struct/array name
@@ -4030,6 +3753,290 @@ and type_stack_switching ctx i =
       in
       return_statement i (Switch (ct, tag, l')) rtypes
   | _ -> assert false (* only invoked on a stack-switching instruction *)
+
+and type_arith ctx i =
+  (* Arithmetic, comparison and conversion operators in binary ([a + b]) and
+     unary ([-a], [a as i64]) form. *)
+  match i.desc with
+  | BinOp (op, i1, i2) ->
+      let* i1' = instruction ctx i1 in
+      let* i2' = instruction ctx i2 in
+      let ty =
+        let ty1 = expression_type ctx i1' in
+        let ty2 = expression_type ctx i2' in
+        let mismatch () =
+          (* Point at the operator itself, not the whole expression. *)
+          Error.binop_type_mismatch ctx.diagnostics ~location:op.info ty1 ty2
+        in
+        match (UnionFind.find ty1, UnionFind.find ty2) with
+        | (Unknown | Error), (Unknown | Error) -> (
+            match op.desc with
+            | Add | Sub | Mul ->
+                UnionFind.merge ty1 ty2 Number;
+                ty1
+            | Div (Some _) | Rem _ | And | Or | Xor | Shl | Shr _ ->
+                UnionFind.merge ty1 ty2 Int;
+                ty1
+            | Lt (Some _) | Gt (Some _) | Le (Some _) | Ge (Some _) | Eq | Ne ->
+                UnionFind.merge ty1 ty2
+                  (Valtype { typ = I32; internal = I32; inline = None });
+                UnionFind.make
+                  (Valtype { typ = I32; internal = I32; inline = None })
+            | Div None ->
+                UnionFind.merge ty1 ty2 Float;
+                ty1
+            | Lt None | Gt None | Le None | Ge None ->
+                UnionFind.merge ty1 ty2
+                  (Valtype { typ = F32; internal = F32; inline = None });
+                UnionFind.make
+                  (Valtype { typ = I32; internal = I32; inline = None }))
+        | typ, (Unknown | Error) | (Unknown | Error), typ -> (
+            UnionFind.merge ty1 ty2 typ;
+            match op.desc with
+            | Eq ->
+                (match typ with
+                | Valtype { internal = Ref _ as ty; _ } ->
+                    if
+                      not
+                        (Wax_wasm.Types.val_subtype ctx.subtyping_info ty
+                           (Ref { nullable = true; typ = Eq }))
+                    then mismatch ()
+                | Null ->
+                    UnionFind.set ty1
+                      (Valtype
+                         {
+                           typ = Ref { nullable = true; typ = Eq };
+                           internal = Ref { nullable = true; typ = Eq };
+                           inline = None;
+                         })
+                | Valtype { internal = I32; _ }
+                | Valtype { internal = I64; _ }
+                | Valtype { internal = F32; _ }
+                | Valtype { internal = F64; _ }
+                | Number | Int | Float ->
+                    ()
+                | _ -> mismatch ());
+                UnionFind.make
+                  (Valtype { typ = I32; internal = I32; inline = None })
+            | Add | Sub | Mul ->
+                (match typ with
+                | Valtype { internal = I32; _ }
+                | Valtype { internal = I64; _ }
+                | Valtype { internal = F32; _ }
+                | Valtype { internal = F64; _ }
+                | Number | Int | Float ->
+                    ()
+                | _ -> mismatch ());
+                ty1
+            | Div (Some _) | Rem _ | And | Or | Xor | Shl | Shr _ ->
+                check_int_bin_op ctx ~location:op.info ty1 ty2
+            | Div None -> check_float_bin_op ctx ~location:op.info ty1 ty2
+            | Lt (Some _) | Gt (Some _) | Le (Some _) | Ge (Some _) ->
+                (match typ with
+                | Valtype { internal = I32; _ }
+                | Valtype { internal = I64; _ }
+                | Int ->
+                    ()
+                | Number -> UnionFind.set ty1 Int
+                | _ -> mismatch ());
+                UnionFind.make
+                  (Valtype { typ = I32; internal = I32; inline = None })
+            | Lt None | Gt None | Le None | Ge None ->
+                (match typ with
+                | Valtype { internal = F32; _ }
+                | Valtype { internal = F64; _ }
+                | Float ->
+                    ()
+                | Number -> UnionFind.set ty1 Float
+                | _ -> mismatch ());
+                UnionFind.make
+                  (Valtype { typ = I32; internal = I32; inline = None })
+            | Ne ->
+                (match typ with
+                | Valtype { internal = I32; _ }
+                | Valtype { internal = I64; _ }
+                | Valtype { internal = F32; _ }
+                | Valtype { internal = F64; _ }
+                | Number | Int | Float ->
+                    ()
+                | _ -> mismatch ());
+                UnionFind.make
+                  (Valtype { typ = I32; internal = I32; inline = None }))
+        | _ -> (
+            match op.desc with
+            | Eq ->
+                (match (UnionFind.find ty1, UnionFind.find ty2) with
+                | ( Valtype { internal = Ref _ as ty1; _ },
+                    Valtype { internal = Ref _ as ty2; _ } ) ->
+                    if
+                      not
+                        (Wax_wasm.Types.val_subtype ctx.subtyping_info ty1
+                           (Ref { nullable = true; typ = Eq })
+                        && Wax_wasm.Types.val_subtype ctx.subtyping_info ty2
+                             (Ref { nullable = true; typ = Eq }))
+                    then mismatch ()
+                | Valtype { internal = Ref _ as typ1; _ }, Null ->
+                    if
+                      not
+                        (Wax_wasm.Types.val_subtype ctx.subtyping_info typ1
+                           (Ref { nullable = true; typ = Eq }))
+                    then mismatch ();
+                    UnionFind.merge ty1 ty2 (UnionFind.find ty2)
+                | Null, Valtype { internal = Ref _ as typ2; _ } ->
+                    if
+                      not
+                        (Wax_wasm.Types.val_subtype ctx.subtyping_info typ2
+                           (Ref { nullable = true; typ = Eq }))
+                    then mismatch ();
+                    UnionFind.merge ty1 ty2 (UnionFind.find ty2)
+                | Valtype { internal = I32; _ }, Valtype { internal = I32; _ }
+                | Valtype { internal = I64; _ }, Valtype { internal = I64; _ }
+                | Valtype { internal = F32; _ }, Valtype { internal = F32; _ }
+                | Valtype { internal = F64; _ }, Valtype { internal = F64; _ }
+                  ->
+                    ()
+                | (Valtype { internal = I32 | I64; _ } | Int), (Number | Int)
+                | ( (Valtype { internal = F32 | F64; _ } | Float),
+                    (Number | Float | LargeInt) )
+                | Number, Number ->
+                    UnionFind.merge ty1 ty2 (UnionFind.find ty1)
+                | (Number | Int), Valtype { internal = I32 | I64; _ }
+                | ( (Number | Float | LargeInt),
+                    Valtype { internal = F32 | F64; _ } ) ->
+                    UnionFind.merge ty1 ty2 (UnionFind.find ty2)
+                | Valtype { internal = I64; _ }, LargeInt
+                | LargeInt, (LargeInt | Number | Int) ->
+                    UnionFind.merge ty1 ty2 (UnionFind.find ty1)
+                | LargeInt, Valtype { internal = I64; _ }
+                | (Number | Int), LargeInt ->
+                    UnionFind.merge ty1 ty2 (UnionFind.find ty2)
+                | _ -> mismatch ());
+                UnionFind.make
+                  (Valtype { typ = I32; internal = I32; inline = None })
+            | Add | Sub | Mul ->
+                (match (UnionFind.find ty1, UnionFind.find ty2) with
+                | Valtype { internal = I32; _ }, Valtype { internal = I32; _ }
+                | Valtype { internal = I64; _ }, Valtype { internal = I64; _ }
+                | Valtype { internal = F32; _ }, Valtype { internal = F32; _ }
+                | Valtype { internal = F64; _ }, Valtype { internal = F64; _ }
+                  ->
+                    ()
+                | (Valtype { internal = I32 | I64; _ } | Int), (Number | Int)
+                | ( (Valtype { internal = F32 | F64; _ } | Float),
+                    (Number | Float | LargeInt) )
+                | Number, Number ->
+                    UnionFind.merge ty1 ty2 (UnionFind.find ty1)
+                | (Number | Int), Valtype { internal = I32 | I64; _ }
+                | ( (Number | Float | LargeInt),
+                    Valtype { internal = F32 | F64; _ } ) ->
+                    UnionFind.merge ty1 ty2 (UnionFind.find ty2)
+                | Valtype { internal = I64; _ }, LargeInt
+                | LargeInt, (LargeInt | Number | Int) ->
+                    UnionFind.merge ty1 ty2 (UnionFind.find ty1)
+                | LargeInt, Valtype { internal = I64; _ }
+                | (Number | Int), LargeInt ->
+                    UnionFind.merge ty1 ty2 (UnionFind.find ty2)
+                | _ -> mismatch ());
+                ty1
+            | Div (Some _) | Rem _ | And | Or | Xor | Shl | Shr _ ->
+                check_int_bin_op ctx ~location:op.info ty1 ty2
+            | Div None -> check_float_bin_op ctx ~location:op.info ty1 ty2
+            | Lt (Some _) | Gt (Some _) | Le (Some _) | Ge (Some _) ->
+                (match (UnionFind.find ty1, UnionFind.find ty2) with
+                | Valtype { internal = I32; _ }, Valtype { internal = I32; _ }
+                | Valtype { internal = I64; _ }, Valtype { internal = I64; _ }
+                | (Valtype { internal = I32 | I64; _ } | Int), (Number | Int) ->
+                    UnionFind.merge ty1 ty2 (UnionFind.find ty1)
+                | (Number | Int), Valtype { internal = I32 | I64; _ } ->
+                    UnionFind.merge ty1 ty2 (UnionFind.find ty2)
+                | Number, Number -> UnionFind.merge ty1 ty2 Int
+                | Valtype { internal = I64; _ }, LargeInt
+                | LargeInt, (LargeInt | Number | Int) ->
+                    UnionFind.merge ty1 ty2 (UnionFind.find ty1)
+                | LargeInt, Valtype { internal = I64; _ }
+                | (Number | Int), LargeInt ->
+                    UnionFind.merge ty1 ty2 (UnionFind.find ty2)
+                | _ -> mismatch ());
+                UnionFind.make
+                  (Valtype { typ = I32; internal = I32; inline = None })
+            | Lt None | Gt None | Le None | Ge None ->
+                (match (UnionFind.find ty1, UnionFind.find ty2) with
+                | Valtype { internal = F32; _ }, Valtype { internal = F32; _ }
+                | Valtype { internal = F64; _ }, Valtype { internal = F64; _ }
+                | ( (Valtype { internal = F32 | F64; _ } | Float),
+                    (Number | Float | LargeInt) ) ->
+                    UnionFind.merge ty1 ty2 (UnionFind.find ty1)
+                | ( (Number | Float | LargeInt),
+                    Valtype { internal = F32 | F64; _ } ) ->
+                    UnionFind.merge ty1 ty2 (UnionFind.find ty2)
+                | Number, Number -> UnionFind.merge ty1 ty2 Float
+                | _ -> mismatch ());
+                UnionFind.make
+                  (Valtype { typ = I32; internal = I32; inline = None })
+            | Ne ->
+                (match (UnionFind.find ty1, UnionFind.find ty2) with
+                | Valtype { internal = I32; _ }, Valtype { internal = I32; _ }
+                | Valtype { internal = I64; _ }, Valtype { internal = I64; _ }
+                | Valtype { internal = F32; _ }, Valtype { internal = F32; _ }
+                | Valtype { internal = F64; _ }, Valtype { internal = F64; _ }
+                  ->
+                    ()
+                | (Valtype { internal = I32 | I64; _ } | Int), (Number | Int)
+                | ( (Valtype { internal = F32 | F64; _ } | Float),
+                    (Number | Float | LargeInt) )
+                | Number, Number ->
+                    UnionFind.merge ty1 ty2 (UnionFind.find ty1)
+                | (Number | Int), Valtype { internal = I32 | I64; _ }
+                | ( (Number | Float | LargeInt),
+                    Valtype { internal = F32 | F64; _ } ) ->
+                    UnionFind.merge ty1 ty2 (UnionFind.find ty2)
+                | Valtype { internal = I64; _ }, LargeInt
+                | LargeInt, (LargeInt | Number | Int) ->
+                    UnionFind.merge ty1 ty2 (UnionFind.find ty1)
+                | LargeInt, Valtype { internal = I64; _ }
+                | (Number | Int), LargeInt ->
+                    UnionFind.merge ty1 ty2 (UnionFind.find ty2)
+                | _ -> mismatch ());
+                UnionFind.make
+                  (Valtype { typ = I32; internal = I32; inline = None }))
+      in
+      return_expression i (BinOp (op, i1', i2')) ty
+  | UnOp (op, i') ->
+      let* i' = instruction ctx i' in
+      let typ = expression_type ctx i' in
+      let ty =
+        match UnionFind.find typ with
+        | Unknown | Error -> (
+            match op.desc with
+            | Not ->
+                UnionFind.make
+                  (Valtype { typ = I32; internal = I32; inline = None })
+            | Neg | Pos -> UnionFind.make Number)
+        | _ -> (
+            match op.desc with
+            | Not ->
+                (match UnionFind.find typ with
+                | Valtype { internal = I32 | I64 | Ref _; _ }
+                | Null | Int | LargeInt ->
+                    ()
+                | Number -> UnionFind.set typ Int
+                | _ ->
+                    Error.instruction_type_mismatch ctx.diagnostics
+                      ~location:op.info typ (UnionFind.make Int));
+                UnionFind.make
+                  (Valtype { typ = I32; internal = I32; inline = None })
+            | Neg | Pos ->
+                (match UnionFind.find typ with
+                | Valtype { internal = I32 | I64 | F32 | F64; _ }
+                | Int | LargeInt | Float | Number ->
+                    ()
+                | _ ->
+                    Error.instruction_type_mismatch ctx.diagnostics
+                      ~location:op.info typ (UnionFind.make Number));
+                typ)
+      in
+      return_expression i (UnOp (op, i')) ty
+  | _ -> assert false (* only invoked on BinOp/UnOp *)
 
 and type_mem_method_call ctx i func recv memname meth args =
   let _, address_type = Option.get (Tbl.find_opt ctx.memories memname) in
