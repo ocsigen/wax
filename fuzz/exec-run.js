@@ -22,6 +22,23 @@ const bitsToF64 = (b) => { f64i[0] = BigInt.asUintN(64, BigInt(b)); return f64a[
 const f32ToBits = (x) => { f32a[0] = x; return BigInt(f32i[0] >>> 0); };
 const f64ToBits = (x) => { f64a[0] = x; return f64i[0]; };
 
+// Host references (the spec's `ref.host`/`ref.extern N`) are opaque values; in
+// JS any value works. Intern one object per index, SHARED between the original
+// and wax worlds, so passing "the same host ref" to both — and recognising it
+// in a result — is stable. externref/anyref are the only ref types that carry a
+// numeric host index in the spec JSON; every other ref value is "null".
+const hostRefs = new Map();
+const hostId = new Map();
+function hostRef(n) {
+  if (!hostRefs.has(n)) {
+    const o = { host: n };
+    hostRefs.set(n, o);
+    hostId.set(o, n);
+  }
+  return hostRefs.get(n);
+}
+const isRefType = (t) => /ref/.test(t);
+
 function toArg(v) {
   const nan = typeof v.value === "string" && v.value.startsWith("nan");
   switch (v.type) {
@@ -29,12 +46,18 @@ function toArg(v) {
     case "i64": return { ok: true, val: BigInt.asIntN(64, BigInt(v.value)) };
     case "f32": return { ok: true, val: nan ? NaN : bitsToF32(v.value) };
     case "f64": return { ok: true, val: nan ? NaN : bitsToF64(v.value) };
-    default: return { ok: false };
+    default:
+      if (!isRefType(v.type)) return { ok: false };
+      if (v.value === "null") return { ok: true, val: null };
+      if ((v.type === "externref" || v.type === "anyref") && /^[0-9]+$/.test(v.value))
+        return { ok: true, val: hostRef(v.value) };
+      return { ok: false }; // a wasm-internal ref we cannot construct as an arg
   }
 }
 
 // A canonical, comparable encoding of one result value given its declared type.
-// Returns null for types we can't compare portably (v128, refs) so the caller
+// Returns null for values we cannot compare portably (v128, and wasm-internal
+// references whose identity differs between the two instances) so the caller
 // skips them.
 function encode(type, v) {
   switch (type) {
@@ -42,7 +65,11 @@ function encode(type, v) {
     case "i64": return "i64:" + BigInt.asIntN(64, BigInt(v)).toString();
     case "f32": return "f32:" + (Number.isNaN(v) ? "nan" : f32ToBits(v).toString());
     case "f64": return "f64:" + (Number.isNaN(v) ? "nan" : f64ToBits(v).toString());
-    default: return null;
+    default:
+      if (!isRefType(type)) return null;
+      if (v === null || v === undefined) return "ref:null";
+      if (hostId.has(v)) return "ref:host:" + hostId.get(v);
+      return null; // internal wasm ref (func/struct/i31/...): not comparable
   }
 }
 
