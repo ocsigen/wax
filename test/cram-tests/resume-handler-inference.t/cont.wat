@@ -1,0 +1,10 @@
+(module
+  (tag $e2)
+  (type $f1 (func))
+  (type $k1 (cont $f1))
+  (func $f1)
+  (func (export "u3")
+    (block $h (result (ref $k1))
+      (resume $k1 (on $e2 $h) (cont.new $k1 (ref.func $f1)))
+      (unreachable))
+    (drop)))

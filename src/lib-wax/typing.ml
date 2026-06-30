@@ -1715,43 +1715,55 @@ let check_resume_handlers ctx ~result_types handlers =
           | None -> ignore (branch_target ctx label)
           | Some { params = ts3; results = ts4 } ->
               let ts' = branch_target ctx label in
-              let mismatch () =
-                Error.stack_switching_type_mismatch ctx.diagnostics
-                  ~location:label.info
-                  ~descr:
-                    "this handler must take the tag's parameters followed by a \
-                     continuation of the remaining result type"
-              in
-              (* The handler label receives the tag's parameters followed by a
+              if Array.exists is_inferring ts' then
+                (* The block this handler targets is having its result type
+                   inferred (the Wasm->Wax [simplify] pass): its label is still an
+                   unresolved [Collecting] cell, the join not yet computed. A
+                   handler delivery is not an ordinary exit the inference reads, so
+                   nothing flows into that cell and the annotation is kept; the
+                   concrete re-type pass then validates the contract. Defer rather
+                   than read the empty cell as a type mismatch. *)
+                ()
+              else
+                let mismatch () =
+                  Error.stack_switching_type_mismatch ctx.diagnostics
+                    ~location:label.info
+                    ~descr:
+                      "this handler must take the tag's parameters followed by \
+                       a continuation of the remaining result type"
+                in
+                (* The handler label receives the tag's parameters followed by a
                  continuation of type [cont (ts4 -> result_types)]. *)
-              let n = Array.length ts' in
-              if n <> Array.length ts3 + 1 then mismatch ()
-              else begin
-                Array.iteri
-                  (fun i p ->
-                    let _, t = p.desc in
-                    match
-                      (internalize_valtype ctx t, internal_of_inferred ts'.(i))
-                    with
-                    | Some it, Some it' ->
-                        if not (Wax_wasm.Types.val_subtype info it.internal it')
-                        then mismatch ()
-                    | _ -> ())
-                  ts3;
-                match internal_of_inferred ts'.(n - 1) with
-                | Some (Ref { typ = ht; _ }) -> (
-                    match cont_functype ctx ht with
-                    | Some ft' -> (
-                        match (to_internal ts4, to_internal result_types) with
-                        | Some params, Some results ->
-                            if
-                              not
-                                (functype_matches info { params; results } ft')
-                            then mismatch ()
-                        | _ -> ())
-                    | None -> mismatch ())
-                | _ -> mismatch ()
-              end)
+                let n = Array.length ts' in
+                if n <> Array.length ts3 + 1 then mismatch ()
+                else begin
+                  Array.iteri
+                    (fun i p ->
+                      let _, t = p.desc in
+                      match
+                        (internalize_valtype ctx t, internal_of_inferred ts'.(i))
+                      with
+                      | Some it, Some it' ->
+                          if
+                            not
+                              (Wax_wasm.Types.val_subtype info it.internal it')
+                          then mismatch ()
+                      | _ -> ())
+                    ts3;
+                  match internal_of_inferred ts'.(n - 1) with
+                  | Some (Ref { typ = ht; _ }) -> (
+                      match cont_functype ctx ht with
+                      | Some ft' -> (
+                          match (to_internal ts4, to_internal result_types) with
+                          | Some params, Some results ->
+                              if
+                                not
+                                  (functype_matches info { params; results } ft')
+                              then mismatch ()
+                          | _ -> ())
+                      | None -> mismatch ())
+                  | _ -> mismatch ()
+                end)
       | OnSwitch tag -> (
           match Tbl.find ctx.diagnostics ctx.tags tag with
           | None -> ()
@@ -5693,11 +5705,16 @@ and block_infer_general ctx loc label instrs =
      fun st ->
        (* The fall-through value (if any) reaches the exit alongside the
           branched ones. A single leftover is consumed; anything else is left
-          for [with_empty_stack] to report. *)
+          for [with_empty_stack] to report. A value sitting on an [Unreachable]
+          base is a dead fall-through (e.g. after a [br]): consume it just as
+          [pop_args] would in check position, leaving the unreachable base. *)
        match st with
        | Cons (loc, tv, Empty) ->
            collected := (Some loc, tv) :: !collected;
            (Empty, (body', !collected))
+       | Cons (loc, tv, Unreachable) ->
+           collected := (Some loc, tv) :: !collected;
+           (Unreachable, (body', !collected))
        | Empty -> (Empty, (body', !collected))
        | Unreachable -> (Unreachable, (body', !collected))
        | Cons _ -> (st, (body', !collected)))
