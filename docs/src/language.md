@@ -716,9 +716,12 @@ default):
 The type name may be omitted in two cases. The first is when an expected type
 supplies it — for example a `let`/`const` annotation, a function parameter, a
 struct field, or an array element: `let p: &point = {x: 10, y: 20};` is
-equivalent to writing `{point| …}`. The second is when the **field set** names
-the type unambiguously — if exactly one struct type in the module has that exact
-set of field names, it is inferred even with no expected type:
+equivalent to writing `{point| …}`. Such an expectation also reaches into both
+branches of a conditional `?:`, so a branch may omit the name (or default it
+with `{..}`): `let p: &point = cond ? {x: 0, y: 0} : {..};`. The second is when
+the **field set** names the type unambiguously — if exactly one struct type in
+the module has that exact set of field names, it is inferred even with no
+expected type:
 
 ```wax
 fn origin() -> &eq {

@@ -355,6 +355,14 @@ fn zeros() -> &ints {
 fn make_origin() -> &eq {
     {x: 0, y: 0};
 }
+
+// The expected type also reaches into both branches of a conditional `?:`, so a
+// branch may omit the name — here the `{..}` default is resolved from the
+// `-> &point` result type flowing through the `?:`.
+#[export = "pick"]
+fn pick(c: i32) -> &point {
+    c ? {..} : {x: 1, y: 2};
+}
 ```
 
 ## Inferring Block Result Types
