@@ -2816,196 +2816,8 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
   | ArraySegment _ | String _ ->
       let* i', _ = check_instruction ctx (UnionFind.make Unknown) i in
       return i'
-  | StructGet (i', field) ->
-      let* i' = instruction ctx i' in
-      let*! ty =
-        let ty = expression_type ctx i' in
-        match (UnionFind.find ty, field.desc) with
-        | Valtype { typ = Ref { typ = Type ty; _ }; _ }, _ -> (
-            let*@ _, def = Tbl.find_opt ctx.type_context.types ty in
-            match def.typ with
-            | Struct fields -> (
-                match
-                  Array.find_map
-                    (fun f ->
-                      let nm, typ = f.desc in
-                      if nm.desc = field.desc then Some typ else None)
-                    fields
-                with
-                | Some typ -> field_read_type ctx typ
-                | None ->
-                    Error.missing_field ctx.diagnostics ~location:field.info
-                      field;
-                    None)
-            | Func _ | Array _ | Cont _ ->
-                if is_unary_method field.desc then
-                  Error.method_needs_parentheses ctx.diagnostics
-                    ~location:field.info field.desc
-                else
-                  Error.expected_struct_type ctx.diagnostics
-                    ~location:(snd i'.info);
-                None)
-        (* Leave a receiver that already failed to type alone (its error is
-           reported elsewhere): keep the access with an error result type rather
-           than giving up, which would drop a hole receiver and desync hole
-           counting. *)
-        | Error, _ -> Some (UnionFind.make Error)
-        (* The receiver's type is unknown (unreachable / branch code): the
-           struct type cannot be resolved, so the field cannot be read. *)
-        | Unknown, _ ->
-            Error.unknown_operand_type ctx.diagnostics ~location:(snd i'.info);
-            Some (UnionFind.make Error)
-        (* A name that is an instruction method was likely meant as the
-           parenthesised call [x.sqrt()]; any other field access on a non-struct
-           type has no fields to find. *)
-        | _ when is_unary_method field.desc ->
-            Error.method_needs_parentheses ctx.diagnostics ~location:field.info
-              field.desc;
-            None
-        | _ ->
-            Error.expected_struct_type ctx.diagnostics ~location:(snd i'.info);
-            None
-      in
-      return_expression i (StructGet (i', field)) ty
-  | StructSet (i1, field, i2) ->
-      let* i1' = instruction ctx i1 in
-      (* Resolve the field's declared type (pure, reporting any field error)
-         before typing the value, so the value can be checked against it and a
-         struct/array literal can drop its name. The value is then typed on
-         every path, so its holes are always consumed. *)
-      let expected =
-        match UnionFind.find (expression_type ctx i1') with
-        | Valtype { typ = Ref { typ = Type ty; _ }; _ } -> (
-            match lookup_struct_type ctx ty with
-            | None -> None
-            | Some fields -> (
-                match
-                  Array.find_map
-                    (fun f ->
-                      let nm, ftyp = f.desc in
-                      if nm.desc = field.desc then Some ftyp else None)
-                    fields
-                with
-                | None ->
-                    Error.missing_field ctx.diagnostics ~location:field.info
-                      field;
-                    None
-                | Some ftyp ->
-                    if not ftyp.mut then
-                      Error.immutable ctx.diagnostics ~location:field.info
-                        "field";
-                    internalize ctx (unpack_type ftyp)))
-        | Error ->
-            (* Receiver already failed to type; recover without a spurious
-               "expected struct type". *)
-            None
-        | Unknown ->
-            (* The receiver's type is unknown (unreachable / branch code): the
-               struct type cannot be resolved, so the field cannot be written. *)
-            Error.unknown_operand_type ctx.diagnostics ~location:i1.info;
-            None
-        | _ ->
-            Error.expected_struct_type ctx.diagnostics ~location:i1.info;
-            None
-      in
-      let* i2' =
-        match expected with
-        | Some cell ->
-            let* i2', _ = check_instruction ctx cell i2 in
-            return i2'
-        | None -> instruction ctx i2
-      in
-      return_statement i (StructSet (i1', field, i2')) [||]
-  (* [tab[i]] on a table name is [table.get]; the receiver is not a value. *)
-  | ArrayGet (({ desc = Get tabname; _ } as recv), i2)
-    when Tbl.find_opt ctx.tables tabname <> None ->
-      let at, rt = Option.get (Tbl.find_opt ctx.tables tabname) in
-      let* i2' = instruction ctx i2 in
-      check_type ctx i2' (UnionFind.make (Valtype (address_valtype at)));
-      let*! typ = internalize ctx (Ref rt) in
-      return_expression i
-        (ArrayGet ({ desc = Get tabname; info = ([||], recv.info) }, i2'))
-        typ
-  | ArrayGet (i1, i2) -> (
-      let* i1' = instruction ctx i1 in
-      let* i2' = instruction ctx i2 in
-      check_type ctx i2'
-        (UnionFind.make (Valtype { typ = I32; internal = I32; inline = None }));
-      match UnionFind.find (expression_type ctx i1') with
-      | Valtype { typ = Ref { typ = Type ty; _ }; _ } ->
-          let*! typ = lookup_array_type ~location:i1.info ctx ty in
-          let*! ty = field_read_type ctx typ in
-          return_expression i (ArrayGet (i1', i2')) ty
-      | Error ->
-          (* Receiver already failed to type; recover silently. *)
-          return_expression i (ArrayGet (i1', i2')) (UnionFind.make Error)
-      | Unknown ->
-          (* The receiver's type is unknown (unreachable / branch code): the
-             array type cannot be resolved, so the element cannot be read. *)
-          Error.unknown_operand_type ctx.diagnostics ~location:i1.info;
-          return_expression i (ArrayGet (i1', i2')) (UnionFind.make Error)
-      | _ ->
-          Error.expected_array_type ctx.diagnostics ~location:i1.info;
-          return_expression i (ArrayGet (i1', i2')) (UnionFind.make Error))
-  (* [tab[i] = v] on a table name is [table.set]; the receiver is not a value. *)
-  | ArraySet (({ desc = Get tabname; _ } as recv), i2, i3)
-    when Tbl.find_opt ctx.tables tabname <> None ->
-      let at, rt = Option.get (Tbl.find_opt ctx.tables tabname) in
-      let* i2' = instruction ctx i2 in
-      check_type ctx i2' (UnionFind.make (Valtype (address_valtype at)));
-      (* Check the stored value against the table's element type, so a
-         struct/array literal can drop its name. *)
-      let* i3' =
-        match internalize ctx (Ref rt) with
-        | Some cell ->
-            let* i3', _ = check_instruction ctx cell i3 in
-            return i3'
-        | None -> instruction ctx i3
-      in
-      return_statement i
-        (ArraySet ({ desc = Get tabname; info = ([||], recv.info) }, i2', i3'))
-        [||]
-  | ArraySet (i1, i2, i3) -> (
-      let* i1' = instruction ctx i1 in
-      let* i2' = instruction ctx i2 in
-      check_type ctx i2'
-        (UnionFind.make (Valtype { typ = I32; internal = I32; inline = None }));
-      match UnionFind.find (expression_type ctx i1') with
-      | Valtype { typ = Ref { typ = Type ty; _ }; _ } ->
-          (* Resolve the element type (pure) before typing the value, so a
-             struct/array literal value can drop its name. *)
-          let expected =
-            match lookup_array_type ~location:i1.info ctx ty with
-            | None -> None
-            | Some typ ->
-                if not typ.mut then
-                  Error.immutable ctx.diagnostics ~location:i1.info "array";
-                internalize ctx (unpack_type typ)
-          in
-          let* i3' =
-            match expected with
-            | Some cell ->
-                let* i3', _ = check_instruction ctx cell i3 in
-                return i3'
-            | None -> instruction ctx i3
-          in
-          return_statement i (ArraySet (i1', i2', i3')) [||]
-      | Error ->
-          (* Receiver already failed to type; recover silently (still type the
-             value so its holes are consumed). *)
-          let* i3' = instruction ctx i3 in
-          return_statement i (ArraySet (i1', i2', i3')) [||]
-      | Unknown ->
-          (* The receiver's type is unknown (unreachable / branch code): the
-             array type cannot be resolved, so the element cannot be written.
-             Still type the value so its holes are consumed. *)
-          let* i3' = instruction ctx i3 in
-          Error.unknown_operand_type ctx.diagnostics ~location:i1.info;
-          return_statement i (ArraySet (i1', i2', i3')) [||]
-      | _ ->
-          let* i3' = instruction ctx i3 in
-          Error.expected_array_type ctx.diagnostics ~location:i1.info;
-          return_statement i (ArraySet (i1', i2', i3')) [||])
+  | StructGet _ | StructSet _ | ArrayGet _ | ArraySet _ ->
+      type_aggregate_access ctx i
   | BinOp _ | UnOp _ -> type_arith ctx i
   | Let ([ (name_opt, Some annot) ], Some i') -> (
       (* Bidirectional single annotated binding: type the initializer in
@@ -4043,6 +3855,202 @@ and type_cast ctx i =
      there is no expectation, so [check_instruction] against the [Unknown] sentinel keeps a
      present name and reports [cannot_infer_*] when one is omitted. *)
   | _ -> assert false (* only invoked on Cast/Test *)
+
+and type_aggregate_access ctx i =
+  (* Field and element access: struct field reads/writes ([s.f], [s.f = v]) and
+     array or table indexing ([a[i]], [a[i] = v]). *)
+  match i.desc with
+  | StructGet (i', field) ->
+      let* i' = instruction ctx i' in
+      let*! ty =
+        let ty = expression_type ctx i' in
+        match (UnionFind.find ty, field.desc) with
+        | Valtype { typ = Ref { typ = Type ty; _ }; _ }, _ -> (
+            let*@ _, def = Tbl.find_opt ctx.type_context.types ty in
+            match def.typ with
+            | Struct fields -> (
+                match
+                  Array.find_map
+                    (fun f ->
+                      let nm, typ = f.desc in
+                      if nm.desc = field.desc then Some typ else None)
+                    fields
+                with
+                | Some typ -> field_read_type ctx typ
+                | None ->
+                    Error.missing_field ctx.diagnostics ~location:field.info
+                      field;
+                    None)
+            | Func _ | Array _ | Cont _ ->
+                if is_unary_method field.desc then
+                  Error.method_needs_parentheses ctx.diagnostics
+                    ~location:field.info field.desc
+                else
+                  Error.expected_struct_type ctx.diagnostics
+                    ~location:(snd i'.info);
+                None)
+        (* Leave a receiver that already failed to type alone (its error is
+           reported elsewhere): keep the access with an error result type rather
+           than giving up, which would drop a hole receiver and desync hole
+           counting. *)
+        | Error, _ -> Some (UnionFind.make Error)
+        (* The receiver's type is unknown (unreachable / branch code): the
+           struct type cannot be resolved, so the field cannot be read. *)
+        | Unknown, _ ->
+            Error.unknown_operand_type ctx.diagnostics ~location:(snd i'.info);
+            Some (UnionFind.make Error)
+        (* A name that is an instruction method was likely meant as the
+           parenthesised call [x.sqrt()]; any other field access on a non-struct
+           type has no fields to find. *)
+        | _ when is_unary_method field.desc ->
+            Error.method_needs_parentheses ctx.diagnostics ~location:field.info
+              field.desc;
+            None
+        | _ ->
+            Error.expected_struct_type ctx.diagnostics ~location:(snd i'.info);
+            None
+      in
+      return_expression i (StructGet (i', field)) ty
+  | StructSet (i1, field, i2) ->
+      let* i1' = instruction ctx i1 in
+      (* Resolve the field's declared type (pure, reporting any field error)
+         before typing the value, so the value can be checked against it and a
+         struct/array literal can drop its name. The value is then typed on
+         every path, so its holes are always consumed. *)
+      let expected =
+        match UnionFind.find (expression_type ctx i1') with
+        | Valtype { typ = Ref { typ = Type ty; _ }; _ } -> (
+            match lookup_struct_type ctx ty with
+            | None -> None
+            | Some fields -> (
+                match
+                  Array.find_map
+                    (fun f ->
+                      let nm, ftyp = f.desc in
+                      if nm.desc = field.desc then Some ftyp else None)
+                    fields
+                with
+                | None ->
+                    Error.missing_field ctx.diagnostics ~location:field.info
+                      field;
+                    None
+                | Some ftyp ->
+                    if not ftyp.mut then
+                      Error.immutable ctx.diagnostics ~location:field.info
+                        "field";
+                    internalize ctx (unpack_type ftyp)))
+        | Error ->
+            (* Receiver already failed to type; recover without a spurious
+               "expected struct type". *)
+            None
+        | Unknown ->
+            (* The receiver's type is unknown (unreachable / branch code): the
+               struct type cannot be resolved, so the field cannot be written. *)
+            Error.unknown_operand_type ctx.diagnostics ~location:i1.info;
+            None
+        | _ ->
+            Error.expected_struct_type ctx.diagnostics ~location:i1.info;
+            None
+      in
+      let* i2' =
+        match expected with
+        | Some cell ->
+            let* i2', _ = check_instruction ctx cell i2 in
+            return i2'
+        | None -> instruction ctx i2
+      in
+      return_statement i (StructSet (i1', field, i2')) [||]
+  (* [tab[i]] on a table name is [table.get]; the receiver is not a value. *)
+  | ArrayGet (({ desc = Get tabname; _ } as recv), i2)
+    when Tbl.find_opt ctx.tables tabname <> None ->
+      let at, rt = Option.get (Tbl.find_opt ctx.tables tabname) in
+      let* i2' = instruction ctx i2 in
+      check_type ctx i2' (UnionFind.make (Valtype (address_valtype at)));
+      let*! typ = internalize ctx (Ref rt) in
+      return_expression i
+        (ArrayGet ({ desc = Get tabname; info = ([||], recv.info) }, i2'))
+        typ
+  | ArrayGet (i1, i2) -> (
+      let* i1' = instruction ctx i1 in
+      let* i2' = instruction ctx i2 in
+      check_type ctx i2'
+        (UnionFind.make (Valtype { typ = I32; internal = I32; inline = None }));
+      match UnionFind.find (expression_type ctx i1') with
+      | Valtype { typ = Ref { typ = Type ty; _ }; _ } ->
+          let*! typ = lookup_array_type ~location:i1.info ctx ty in
+          let*! ty = field_read_type ctx typ in
+          return_expression i (ArrayGet (i1', i2')) ty
+      | Error ->
+          (* Receiver already failed to type; recover silently. *)
+          return_expression i (ArrayGet (i1', i2')) (UnionFind.make Error)
+      | Unknown ->
+          (* The receiver's type is unknown (unreachable / branch code): the
+             array type cannot be resolved, so the element cannot be read. *)
+          Error.unknown_operand_type ctx.diagnostics ~location:i1.info;
+          return_expression i (ArrayGet (i1', i2')) (UnionFind.make Error)
+      | _ ->
+          Error.expected_array_type ctx.diagnostics ~location:i1.info;
+          return_expression i (ArrayGet (i1', i2')) (UnionFind.make Error))
+  (* [tab[i] = v] on a table name is [table.set]; the receiver is not a value. *)
+  | ArraySet (({ desc = Get tabname; _ } as recv), i2, i3)
+    when Tbl.find_opt ctx.tables tabname <> None ->
+      let at, rt = Option.get (Tbl.find_opt ctx.tables tabname) in
+      let* i2' = instruction ctx i2 in
+      check_type ctx i2' (UnionFind.make (Valtype (address_valtype at)));
+      (* Check the stored value against the table's element type, so a
+         struct/array literal can drop its name. *)
+      let* i3' =
+        match internalize ctx (Ref rt) with
+        | Some cell ->
+            let* i3', _ = check_instruction ctx cell i3 in
+            return i3'
+        | None -> instruction ctx i3
+      in
+      return_statement i
+        (ArraySet ({ desc = Get tabname; info = ([||], recv.info) }, i2', i3'))
+        [||]
+  | ArraySet (i1, i2, i3) -> (
+      let* i1' = instruction ctx i1 in
+      let* i2' = instruction ctx i2 in
+      check_type ctx i2'
+        (UnionFind.make (Valtype { typ = I32; internal = I32; inline = None }));
+      match UnionFind.find (expression_type ctx i1') with
+      | Valtype { typ = Ref { typ = Type ty; _ }; _ } ->
+          (* Resolve the element type (pure) before typing the value, so a
+             struct/array literal value can drop its name. *)
+          let expected =
+            match lookup_array_type ~location:i1.info ctx ty with
+            | None -> None
+            | Some typ ->
+                if not typ.mut then
+                  Error.immutable ctx.diagnostics ~location:i1.info "array";
+                internalize ctx (unpack_type typ)
+          in
+          let* i3' =
+            match expected with
+            | Some cell ->
+                let* i3', _ = check_instruction ctx cell i3 in
+                return i3'
+            | None -> instruction ctx i3
+          in
+          return_statement i (ArraySet (i1', i2', i3')) [||]
+      | Error ->
+          (* Receiver already failed to type; recover silently (still type the
+             value so its holes are consumed). *)
+          let* i3' = instruction ctx i3 in
+          return_statement i (ArraySet (i1', i2', i3')) [||]
+      | Unknown ->
+          (* The receiver's type is unknown (unreachable / branch code): the
+             array type cannot be resolved, so the element cannot be written.
+             Still type the value so its holes are consumed. *)
+          let* i3' = instruction ctx i3 in
+          Error.unknown_operand_type ctx.diagnostics ~location:i1.info;
+          return_statement i (ArraySet (i1', i2', i3')) [||]
+      | _ ->
+          let* i3' = instruction ctx i3 in
+          Error.expected_array_type ctx.diagnostics ~location:i1.info;
+          return_statement i (ArraySet (i1', i2', i3')) [||])
+  | _ -> assert false (* only invoked on a struct/array access *)
 
 and type_mem_method_call ctx i func recv memname meth args =
   let _, address_type = Option.get (Tbl.find_opt ctx.memories memname) in
