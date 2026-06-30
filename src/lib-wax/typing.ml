@@ -2766,20 +2766,23 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       return_expression i desc
         (UnionFind.make (Valtype { typ = I32; internal = I32; inline = None }))
   | Int s as desc ->
-      (* A literal whose magnitude exceeds the 32-bit range cannot be i32, so
-         give it [LargeInt] (which defaults to i64) rather than the i32-defaulting
-         [Number]. The sign is a separate [Neg], so the magnitude is unsigned;
-         parse it quietly (a value that does not even fit i64 stays [Number]). *)
-      let large =
+      (* Pick the lattice type from the magnitude (the sign is a separate [Neg],
+         so this is unsigned): a value over the 32-bit range cannot be i32, so it
+         is [LargeInt] (which defaults to i64) rather than the i32-defaulting
+         [Number]; one that does not even fit u64 cannot be any integer type, so
+         it is [Float] (representable only by f32/f64) — using it as an integer is
+         then a clean type error rather than an [Int64.of_string] crash in the
+         encoder. *)
+      let lattice =
         match
           if String.starts_with ~prefix:"0x" s then Int64.of_string_opt s
           else Int64.of_string_opt ("0u" ^ s)
         with
-        | Some v -> Int64.unsigned_compare v 0xFFFFFFFFL > 0
-        | None -> false
+        | None -> Float
+        | Some v when Int64.unsigned_compare v 0xFFFFFFFFL > 0 -> LargeInt
+        | Some _ -> Number
       in
-      return_expression i desc
-        (UnionFind.make (if large then LargeInt else Number))
+      return_expression i desc (UnionFind.make lattice)
   | Float _ as desc -> return_expression i desc (UnionFind.make Float)
   | Cast (i', typ) ->
       let* i' = instruction ctx i' in
