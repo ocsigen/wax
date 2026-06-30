@@ -5,6 +5,15 @@ module T = Text
 let no_loc = Ast.no_loc
 let numeric_index i = no_loc (T.Num (Uint32.of_int i))
 
+(* Render a float constant as round-trippable text. A finite value uses the hex
+   float form ("%h"), which is exact — unlike [string_of_float] ("%.12g"), which
+   truncates (a double needs 17 significant digits). The non-finite values keep
+   their [string_of_float] spelling ("inf" / "-inf" / "nan"), which the lexers
+   accept; "%h" would print "infinity", which they do not. NaN payloads are not
+   preserved here (the binary codec preserves them, the text form does not yet). *)
+let float_text x =
+  if Float.is_finite x then Printf.sprintf "%h" x else string_of_float x
+
 let index ~map i =
   match B.IntMap.find_opt i map with
   | Some s -> no_loc (T.Id s)
@@ -336,8 +345,8 @@ let rec instr (names : B.names) local_names label_names label_counter stack
     | I31Get s -> I31Get s
     | Const (I32 x) -> Const (I32 (Int32.to_string x))
     | Const (I64 x) -> Const (I64 (Int64.to_string x))
-    | Const (F32 x) -> Const (F32 (string_of_float (Int32.float_of_bits x)))
-    | Const (F64 x) -> Const (F64 (string_of_float x))
+    | Const (F32 x) -> Const (F32 (float_text (Int32.float_of_bits x)))
+    | Const (F64 x) -> Const (F64 (float_text x))
     | UnOp op -> UnOp op
     | BinOp op -> BinOp op
     | I32WrapI64 -> I32WrapI64
