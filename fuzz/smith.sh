@@ -36,13 +36,9 @@ RESULTS="$(mktemp -d)"
 trap 'rm -rf "$RESULTS"' EXIT
 ORACLE="$(dirname "${BASH_SOURCE[0]}")/oracle.sh"
 
-# Enable the same bleeding-edge proposals wax targets, so smith generates the
-# full language (GC, exceptions, stack switching, ...) rather than just the MVP.
-# Threads/atomics (the 0xFE opcodes) are *not* implemented by wax, so leaving
-# them on just floods the report with one FALSE_REJECT signature ("illegal opcode
-# fe"); disable them to keep generation within wax's feature set. Passed to the
-# worker as a string (no flag value contains a space) so it survives `xargs`.
-SMITH_FLAGS="--ensure-termination --threads-enabled false --shared-everything-threads-enabled false"
+# SMITH_FLAGS (the smith proposal set, threads disabled) comes from lib.sh, shared
+# with wax-corpus.sh. Passed to the worker as a string (no flag value contains a
+# space) so it survives `xargs`.
 
 # Worker: generate module #i from fresh random bytes and run every oracle on it.
 # A finding is written to its own file under $RESULTS (no concurrent writes to a

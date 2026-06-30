@@ -12,6 +12,12 @@ TIMEOUT="${TIMEOUT:-30}"        # seconds per wax invocation; longer counts as a
 # proposal it has merely defaulted off.
 WT_FEATURES="${WT_FEATURES:-all}"
 
+# Flags for `wasm-tools smith` (shared by smith.sh and wax-corpus.sh). Enable the
+# bleeding-edge proposals wax targets (GC, exceptions, stack switching, ...) but
+# disable threads/atomics — the 0xFE opcodes are not implemented by wax, so they
+# only add one noisy "illegal opcode fe" signature.
+SMITH_FLAGS="${SMITH_FLAGS:---ensure-termination --threads-enabled false --shared-everything-threads-enabled false}"
+
 # Locate wasm-tools, falling back to the usual cargo location.
 if ! command -v "$WASM_TOOLS" >/dev/null 2>&1; then
   if [ -x "$HOME/.cargo/bin/wasm-tools" ]; then
