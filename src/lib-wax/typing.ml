@@ -4542,8 +4542,8 @@ and type_unary_intrinsic_call ctx i func recv meth =
         Some f64_cell
     | ( ((Number | Int | LargeInt | Valtype { typ = I32 | I64; _ }) as ty'),
         ("clz" | "ctz" | "popcnt" | "extend8_s" | "extend16_s") ) ->
-        (if ty' = Number then Cell.set ty Int
-         else if ty' = LargeInt then Cell.set ty (Valtype i64_valtype));
+        if ty' = Number then Cell.set ty Int
+        else if ty' = LargeInt then Cell.set ty (Valtype i64_valtype);
         Some ty
     | ( ((Number | Float | Valtype { typ = F32 | F64; _ }) as ty'),
         ("abs" | "ceil" | "floor" | "trunc" | "nearest" | "sqrt") ) ->
@@ -5266,6 +5266,31 @@ and check_instruction ?(drop_supertype = false) ctx expected
           [| result_cell |]
       in
       return (node, needed)
+  | Select (i1, i2, i3) when has_expectation expected ->
+      (* The expression form of an annotated [if]: push the context's [expected]
+         type into both value branches, so a construction there can drop its
+         type name (re-parse re-pushes it through this same arm); the condition
+         [i1] is an [i32]. The branches are evaluated before the condition, as in
+         synthesis. The keep-bool is the disjunction of the branches' — the
+         surrounding binding annotation is load-bearing iff a branch relied on it
+         (e.g. to drop a name, or because its own type differs from [expected]). *)
+      let* i2', needed2 = check_instruction ~drop_supertype ctx expected i2 in
+      let* i3', needed3 = check_instruction ~drop_supertype ctx expected i3 in
+      let* i1' = instruction ctx i1 in
+      check_type ctx i1' i32_cell;
+      (* The result is the branches' join, not [expected]: each branch is already
+         [<: expected], so this keeps the select's precise type (e.g. [&bytes]
+         rather than the [&eq] the context happened to ask for). *)
+      let ty =
+        match
+          join_value_types ctx (expression_type ctx i2')
+            (expression_type ctx i3')
+        with
+        | Some ty -> ty
+        | None -> expected
+      in
+      let* node = return_expression i (Select (i1', i2', i3')) ty in
+      return (node, needed2 || needed3)
   | _ ->
       let* i' = instruction ctx i in
       (* Capture the value's own standalone-resolved type BEFORE [check_type]
