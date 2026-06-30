@@ -5057,7 +5057,12 @@ and check_instruction ?(drop_supertype = false) ctx expected
           | _ -> false
         then
           match i'.desc with
-          | Cast (inner, _) ->
+          (* Only drop down to a *bare* null: it re-checks to [expected], which
+             the context re-supplies. A nested cast operand (e.g. [extern.convert_any]
+             over a typed [ref.null], decompiled as [(null as &?t) as &?extern])
+             pins a different type, so dropping the outer cast would change the
+             value's type — keep both casts. *)
+          | Cast (({ desc = Null; _ } as inner), _) ->
               { inner with info = (fst i'.info, snd inner.info) }
           | _ -> i'
         else i'
