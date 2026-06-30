@@ -869,10 +869,22 @@ let rec subtype ?location ctx ty ty' =
      A [Collecting] cell never appears as a real value type, so the left-hand
      cases below treat it like [Unknown]. *)
   | _, Collecting st -> (
-      st.collected <- (location, Cell.make ity) :: st.collected;
       match st.declared with
-      | Some d -> subtype ?location ctx ty d
-      | None -> true)
+      | Some d ->
+          (* An annotation is under test: the [subtype] check below may resolve
+             [ty], so record a snapshot of its natural type first — the keep-bool
+             decision compares that pre-validation type against the annotation. *)
+          st.collected <- (location, Cell.make ity) :: st.collected;
+          subtype ?location ctx ty d
+      | None ->
+          (* No annotation under test, so nothing here resolves [ty]: record the
+             live cell. When the join later settles the block's result to a
+             concrete width, that propagates back to a flexible numeric literal
+             reaching the exit (the only types [join_value_types] merges) — else
+             the literal keeps its default width and [To_wasm] emits, e.g., an f64
+             const as the fall-through of an f32-typed block (invalid). *)
+          st.collected <- (location, ty) :: st.collected;
+          true)
   | Collecting _, _ -> true
   | Valtype ty, Valtype ty' ->
       Wax_wasm.Types.val_subtype ctx.subtyping_info ty.internal ty'.internal
