@@ -2811,204 +2811,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       in
       return_expression i desc (UnionFind.make lattice)
   | Float _ as desc -> return_expression i desc (UnionFind.make Float)
-  | Cast (i', typ) ->
-      let* i' = instruction ctx i' in
-      (* When converting from Wasm, fuse two casts whose inserted intermediate
-         type is superfluous (only when [ctx.simplify]); [to_wasm] re-expands
-         each single cast to the same instructions:
-         - [(e as i32_X) as i64_X] -> [e as i64_X]: a narrow [i32]-producing
-           read widened to [i64]. [e] is a packed [Int8]/[Int16] read (the
-           [i32] is [i64.extend_i32_X]) or a reference (the [i32] is [i31.get],
-           the [i64] [i64.extend_i32_X]).
-         - [(e as &i31) as i32_X] -> [e as i32_X]: a [ref.cast] feeding
-           [i31.get]. A reference already typed [&i31]/[&?i31] never reaches
-           here (its [&i31] cast is dropped as redundant first); an [i31] built
-           from an [i32] ([ref.i31]) is excluded by the [is_*_ref] guard.
-         - [(e as i32) as &i31] -> [e as &i31]: an [i64] wrapped to [i32]
-           before [ref.i31] (which takes an [i32]).
-         - [(e as &any) as &T] -> [e as &T]: an [extern] converted to the
-           [any] hierarchy ([any.convert_extern]) before a [ref.cast] to a
-           concrete [any]-hierarchy type [T].
-         - [(e as &i31) as &extern] -> [e as &extern]: an [i32] boxed as an
-           [i31] ([ref.i31]) before [extern.convert_any]. *)
-      let is_packed_read e =
-        match UnionFind.find (expression_type ctx e) with
-        | Int8 | Int16 -> true
-        | _ -> false
-      in
-      let is_ref e =
-        match UnionFind.find (expression_type ctx e) with
-        | Valtype { internal = Ref _; _ } -> true
-        | _ -> false
-      in
-      let is_non_i31_ref e =
-        match UnionFind.find (expression_type ctx e) with
-        | Valtype { internal = Ref { typ = I31; _ }; _ } -> false
-        | Valtype { internal = Ref _; _ } -> true
-        | _ -> false
-      in
-      let is_i64 e =
-        match UnionFind.find (expression_type ctx e) with
-        | Valtype { internal = I64; _ } -> true
-        | _ -> false
-      in
-      let is_i32 e =
-        match UnionFind.find (expression_type ctx e) with
-        | Valtype { internal = I32; _ } -> true
-        | _ -> false
-      in
-      let is_extern e =
-        match UnionFind.find (expression_type ctx e) with
-        | Valtype { internal = Ref { typ = Extern | NoExtern; _ }; _ } -> true
-        | _ -> false
-      in
-      let i', typ =
-        match (typ, i'.desc) with
-        | ( Signedtype { typ = `I64; signage = s2; strict = false },
-            Cast (e, Signedtype { typ = `I32; signage = s1; strict = false }) )
-          when ctx.simplify && s1 = s2 && (is_packed_read e || is_ref e) ->
-            (e, typ)
-        | ( Signedtype { typ = `I32; _ },
-            Cast (e, Valtype (Ref { typ = I31; nullable = false })) )
-          when ctx.simplify && is_non_i31_ref e ->
-            (e, typ)
-        | Valtype (Ref { typ = I31; nullable = false }), Cast (e, Valtype I32)
-          when ctx.simplify && is_i64 e ->
-            (e, typ)
-        | ( Valtype (Ref ({ typ = Extern; _ } as r)),
-            Cast (e, Valtype (Ref { typ = I31; nullable = false })) )
-          when ctx.simplify && is_i32 e ->
-            (* [ref.i31] is non-null and [extern.convert_any] preserves that,
-               so the fused [i32 as &extern] is non-null. *)
-            (e, Valtype (Ref { r with nullable = false }))
-        | ( Valtype
-              (Ref { typ = Any | Eq | I31 | Struct | Array | None_ | Type _; _ }),
-            Cast (e, Valtype (Ref { typ = Any; _ })) )
-          when ctx.simplify && is_extern e ->
-            (e, typ)
-        | _ -> (i', typ)
-      in
-      let ty' = expression_type ctx i' in
-      (* Snapshot the inner type *before* [cast]/[signed_cast] below concretize it
-         to the cast target: this is the type the inner expression would settle on
-         if the cast were removed (see [load_bearing_literal]). *)
-      let ty'_natural = UnionFind.find ty' in
-      (* [extern.convert_any]/[any.convert_extern] preserve non-nullness, so a
-         cast to [&?extern]/[&?any] of a non-nullable argument actually yields
-         [&extern]/[&any]; refine the target accordingly. Like the
-         redundant-cast removal below, this only applies when converting from
-         Wasm ([ctx.simplify]); otherwise the cast is kept as written. *)
-      let arg_non_nullable =
-        match UnionFind.find ty' with
-        | Valtype { typ = Ref { nullable = false; _ }; _ } -> true
-        | _ -> false
-      in
-      let typ =
-        match typ with
-        | Valtype (Ref ({ typ = Extern | Any; nullable = true } as r))
-          when ctx.simplify && arg_non_nullable ->
-            Ast.Valtype (Ref { r with nullable = false })
-        | _ -> typ
-      in
-      (* The cast target as a valtype, resolving an inline function type
-         [&fn(..)] to a minted anonymous function type. The AST node keeps the
-         original [typ] (so an inline function-type cast prints and lowers
-         faithfully); only [ty]/validation use the resolved type. *)
-      let target_valtype =
-        match typ with
-        | Valtype t -> Some t
-        | Functype { nullable; sign } ->
-            Some (Ref { nullable; typ = Type (anon_function_type ctx sign) })
-        | Signedtype _ -> None
-      in
-      (* A continuation type cannot be the target of a cast instruction. A null
-         cast to a nullable reference lowers to [ref.null] (no cast) and is
-         allowed; every other form lowers to a [ref.cast]. *)
-      (match target_valtype with
-      | Some (Ref { typ; nullable })
-        when is_cont_heaptype ctx typ && not (nullable && is_null_initializer i')
-        ->
-          Error.invalid_cast_type ctx.diagnostics ~location:i.info
-      | _ -> ());
-      (* An inline function-type cast target [&fn(..)] is lowered through a
-         synthesized type (see [anon_function_type]); carry its signature so the
-         result renders as [&fn(..)] rather than that synthetic name. *)
-      let inline : comptype option =
-        match typ with Functype { sign; _ } -> Some (Func sign) | _ -> None
-      in
-      let*! ty =
-        internalize ?inline ctx
-          (match target_valtype with
-          | Some t -> t
-          | None -> (
-              match typ with
-              | Signedtype { typ = `I32; _ } -> I32
-              | Signedtype { typ = `I64; _ } -> I64
-              | Signedtype { typ = `F32; _ } -> F32
-              | Signedtype { typ = `F64; _ } -> F64
-              | Valtype _ | Functype _ -> assert false))
-      in
-      let () =
-        match target_valtype with
-        | Some t ->
-            if not (cast ctx ty' t) then
-              Error.invalid_cast ctx.diagnostics ~location:i.info ty'
-        | None -> (
-            match typ with
-            | Signedtype { typ; _ } ->
-                if not (signed_cast ctx ty' typ) then
-                  Error.invalid_cast ctx.diagnostics ~location:i.info ty'
-            | Valtype _ | Functype _ -> assert false)
-      in
-      (* A cast is load-bearing when its target differs from the type the inner
-         expression would settle on if the cast were removed — its natural
-         default, read from [ty'_natural] (the inner type *before* [cast] above
-         concretized it to the target). A still-abstract numeric value re-parses
-         at its default width (int -> i32, an out-of-i32-range int -> i64,
-         float -> f64), so a cast to any other width must be kept or the value
-         changes on the round-trip. This keeps e.g. [(nan as f32).to_bits()] /
-         [(5 as i64).from_bits()] from losing the operand's type. Only an abstract
-         numeric inner has such a default; a concrete inner (numeric or reference)
-         is already pinned, so [subtype] below is the right redundancy test. *)
-      let natural_typ =
-        match ty'_natural with
-        | Number | Int | Int8 | Int16 -> Some I32
-        | LargeInt -> Some I64
-        | Float -> Some F64
-        | Null | Valtype _ | Unknown | Error | Collecting _ -> None
-      in
-      let load_bearing_literal =
-        match (natural_typ, UnionFind.find ty) with
-        | Some d, Valtype { typ; _ } -> d <> typ
-        | _ -> false
-      in
-      (* Drop a cast the inferred types already make redundant. This is only
-         desirable when converting from Wasm ([ctx.simplify]): there casts are
-         inserted to pin types and precise inference makes some unnecessary. For
-         hand-written Wax (formatting, or compiling to Wasm) we keep casts as
-         written.
-         ZZZ Handle select instruction better *)
-      let unnecessary_cast =
-        ctx.simplify && (not load_bearing_literal)
-        && (not (is_unknown_or_error ty'))
-        && subtype ctx ty' ty
-      in
-      if unnecessary_cast then return { i' with info = ([| ty |], snd i'.info) }
-      else return_expression i (Cast (i', typ)) ty
-  | Test (i, ty) ->
-      let* i' = instruction ctx i in
-      if is_cont_heaptype ctx ty.typ then
-        Error.invalid_cast_type ctx.diagnostics ~location:i.info;
-      (let>@ typ = top_heap_type ctx ty.typ in
-       let>@ typ = internalize ctx (Ref { nullable = true; typ }) in
-       check_type ctx i' typ);
-      return_expression i
-        (Test (i', ty))
-        (UnionFind.make (Valtype { typ = I32; internal = I32; inline = None }))
-  (* Construction literals carry an optional type name that can be inferred from
-     an expected type. Their typing lives in [check_instruction]; in synthesis position
-     there is no expectation, so [check_instruction] against the [Unknown] sentinel keeps a
-     present name and reports [cannot_infer_*] when one is omitted. *)
+  | Cast _ | Test _ -> type_cast ctx i
   | Struct _ | StructDefault _ | Array _ | ArrayDefault _ | ArrayFixed _
   | ArraySegment _ | String _ ->
       let* i', _ = check_instruction ctx (UnionFind.make Unknown) i in
@@ -4037,6 +3840,209 @@ and type_arith ctx i =
       in
       return_expression i (UnOp (op, i')) ty
   | _ -> assert false (* only invoked on BinOp/UnOp *)
+
+and type_cast ctx i =
+  (* Type casts ([e as t]) and type tests ([e is t]). *)
+  match i.desc with
+  | Cast (i', typ) ->
+      let* i' = instruction ctx i' in
+      (* When converting from Wasm, fuse two casts whose inserted intermediate
+         type is superfluous (only when [ctx.simplify]); [to_wasm] re-expands
+         each single cast to the same instructions:
+         - [(e as i32_X) as i64_X] -> [e as i64_X]: a narrow [i32]-producing
+           read widened to [i64]. [e] is a packed [Int8]/[Int16] read (the
+           [i32] is [i64.extend_i32_X]) or a reference (the [i32] is [i31.get],
+           the [i64] [i64.extend_i32_X]).
+         - [(e as &i31) as i32_X] -> [e as i32_X]: a [ref.cast] feeding
+           [i31.get]. A reference already typed [&i31]/[&?i31] never reaches
+           here (its [&i31] cast is dropped as redundant first); an [i31] built
+           from an [i32] ([ref.i31]) is excluded by the [is_*_ref] guard.
+         - [(e as i32) as &i31] -> [e as &i31]: an [i64] wrapped to [i32]
+           before [ref.i31] (which takes an [i32]).
+         - [(e as &any) as &T] -> [e as &T]: an [extern] converted to the
+           [any] hierarchy ([any.convert_extern]) before a [ref.cast] to a
+           concrete [any]-hierarchy type [T].
+         - [(e as &i31) as &extern] -> [e as &extern]: an [i32] boxed as an
+           [i31] ([ref.i31]) before [extern.convert_any]. *)
+      let is_packed_read e =
+        match UnionFind.find (expression_type ctx e) with
+        | Int8 | Int16 -> true
+        | _ -> false
+      in
+      let is_ref e =
+        match UnionFind.find (expression_type ctx e) with
+        | Valtype { internal = Ref _; _ } -> true
+        | _ -> false
+      in
+      let is_non_i31_ref e =
+        match UnionFind.find (expression_type ctx e) with
+        | Valtype { internal = Ref { typ = I31; _ }; _ } -> false
+        | Valtype { internal = Ref _; _ } -> true
+        | _ -> false
+      in
+      let is_i64 e =
+        match UnionFind.find (expression_type ctx e) with
+        | Valtype { internal = I64; _ } -> true
+        | _ -> false
+      in
+      let is_i32 e =
+        match UnionFind.find (expression_type ctx e) with
+        | Valtype { internal = I32; _ } -> true
+        | _ -> false
+      in
+      let is_extern e =
+        match UnionFind.find (expression_type ctx e) with
+        | Valtype { internal = Ref { typ = Extern | NoExtern; _ }; _ } -> true
+        | _ -> false
+      in
+      let i', typ =
+        match (typ, i'.desc) with
+        | ( Signedtype { typ = `I64; signage = s2; strict = false },
+            Cast (e, Signedtype { typ = `I32; signage = s1; strict = false }) )
+          when ctx.simplify && s1 = s2 && (is_packed_read e || is_ref e) ->
+            (e, typ)
+        | ( Signedtype { typ = `I32; _ },
+            Cast (e, Valtype (Ref { typ = I31; nullable = false })) )
+          when ctx.simplify && is_non_i31_ref e ->
+            (e, typ)
+        | Valtype (Ref { typ = I31; nullable = false }), Cast (e, Valtype I32)
+          when ctx.simplify && is_i64 e ->
+            (e, typ)
+        | ( Valtype (Ref ({ typ = Extern; _ } as r)),
+            Cast (e, Valtype (Ref { typ = I31; nullable = false })) )
+          when ctx.simplify && is_i32 e ->
+            (* [ref.i31] is non-null and [extern.convert_any] preserves that,
+               so the fused [i32 as &extern] is non-null. *)
+            (e, Valtype (Ref { r with nullable = false }))
+        | ( Valtype
+              (Ref { typ = Any | Eq | I31 | Struct | Array | None_ | Type _; _ }),
+            Cast (e, Valtype (Ref { typ = Any; _ })) )
+          when ctx.simplify && is_extern e ->
+            (e, typ)
+        | _ -> (i', typ)
+      in
+      let ty' = expression_type ctx i' in
+      (* Snapshot the inner type *before* [cast]/[signed_cast] below concretize it
+         to the cast target: this is the type the inner expression would settle on
+         if the cast were removed (see [load_bearing_literal]). *)
+      let ty'_natural = UnionFind.find ty' in
+      (* [extern.convert_any]/[any.convert_extern] preserve non-nullness, so a
+         cast to [&?extern]/[&?any] of a non-nullable argument actually yields
+         [&extern]/[&any]; refine the target accordingly. Like the
+         redundant-cast removal below, this only applies when converting from
+         Wasm ([ctx.simplify]); otherwise the cast is kept as written. *)
+      let arg_non_nullable =
+        match UnionFind.find ty' with
+        | Valtype { typ = Ref { nullable = false; _ }; _ } -> true
+        | _ -> false
+      in
+      let typ =
+        match typ with
+        | Valtype (Ref ({ typ = Extern | Any; nullable = true } as r))
+          when ctx.simplify && arg_non_nullable ->
+            Ast.Valtype (Ref { r with nullable = false })
+        | _ -> typ
+      in
+      (* The cast target as a valtype, resolving an inline function type
+         [&fn(..)] to a minted anonymous function type. The AST node keeps the
+         original [typ] (so an inline function-type cast prints and lowers
+         faithfully); only [ty]/validation use the resolved type. *)
+      let target_valtype =
+        match typ with
+        | Valtype t -> Some t
+        | Functype { nullable; sign } ->
+            Some (Ref { nullable; typ = Type (anon_function_type ctx sign) })
+        | Signedtype _ -> None
+      in
+      (* A continuation type cannot be the target of a cast instruction. A null
+         cast to a nullable reference lowers to [ref.null] (no cast) and is
+         allowed; every other form lowers to a [ref.cast]. *)
+      (match target_valtype with
+      | Some (Ref { typ; nullable })
+        when is_cont_heaptype ctx typ && not (nullable && is_null_initializer i')
+        ->
+          Error.invalid_cast_type ctx.diagnostics ~location:i.info
+      | _ -> ());
+      (* An inline function-type cast target [&fn(..)] is lowered through a
+         synthesized type (see [anon_function_type]); carry its signature so the
+         result renders as [&fn(..)] rather than that synthetic name. *)
+      let inline : comptype option =
+        match typ with Functype { sign; _ } -> Some (Func sign) | _ -> None
+      in
+      let*! ty =
+        internalize ?inline ctx
+          (match target_valtype with
+          | Some t -> t
+          | None -> (
+              match typ with
+              | Signedtype { typ = `I32; _ } -> I32
+              | Signedtype { typ = `I64; _ } -> I64
+              | Signedtype { typ = `F32; _ } -> F32
+              | Signedtype { typ = `F64; _ } -> F64
+              | Valtype _ | Functype _ -> assert false))
+      in
+      let () =
+        match target_valtype with
+        | Some t ->
+            if not (cast ctx ty' t) then
+              Error.invalid_cast ctx.diagnostics ~location:i.info ty'
+        | None -> (
+            match typ with
+            | Signedtype { typ; _ } ->
+                if not (signed_cast ctx ty' typ) then
+                  Error.invalid_cast ctx.diagnostics ~location:i.info ty'
+            | Valtype _ | Functype _ -> assert false)
+      in
+      (* A cast is load-bearing when its target differs from the type the inner
+         expression would settle on if the cast were removed — its natural
+         default, read from [ty'_natural] (the inner type *before* [cast] above
+         concretized it to the target). A still-abstract numeric value re-parses
+         at its default width (int -> i32, an out-of-i32-range int -> i64,
+         float -> f64), so a cast to any other width must be kept or the value
+         changes on the round-trip. This keeps e.g. [(nan as f32).to_bits()] /
+         [(5 as i64).from_bits()] from losing the operand's type. Only an abstract
+         numeric inner has such a default; a concrete inner (numeric or reference)
+         is already pinned, so [subtype] below is the right redundancy test. *)
+      let natural_typ =
+        match ty'_natural with
+        | Number | Int | Int8 | Int16 -> Some I32
+        | LargeInt -> Some I64
+        | Float -> Some F64
+        | Null | Valtype _ | Unknown | Error | Collecting _ -> None
+      in
+      let load_bearing_literal =
+        match (natural_typ, UnionFind.find ty) with
+        | Some d, Valtype { typ; _ } -> d <> typ
+        | _ -> false
+      in
+      (* Drop a cast the inferred types already make redundant. This is only
+         desirable when converting from Wasm ([ctx.simplify]): there casts are
+         inserted to pin types and precise inference makes some unnecessary. For
+         hand-written Wax (formatting, or compiling to Wasm) we keep casts as
+         written.
+         ZZZ Handle select instruction better *)
+      let unnecessary_cast =
+        ctx.simplify && (not load_bearing_literal)
+        && (not (is_unknown_or_error ty'))
+        && subtype ctx ty' ty
+      in
+      if unnecessary_cast then return { i' with info = ([| ty |], snd i'.info) }
+      else return_expression i (Cast (i', typ)) ty
+  | Test (i, ty) ->
+      let* i' = instruction ctx i in
+      if is_cont_heaptype ctx ty.typ then
+        Error.invalid_cast_type ctx.diagnostics ~location:i.info;
+      (let>@ typ = top_heap_type ctx ty.typ in
+       let>@ typ = internalize ctx (Ref { nullable = true; typ }) in
+       check_type ctx i' typ);
+      return_expression i
+        (Test (i', ty))
+        (UnionFind.make (Valtype { typ = I32; internal = I32; inline = None }))
+  (* Construction literals carry an optional type name that can be inferred from
+     an expected type. Their typing lives in [check_instruction]; in synthesis position
+     there is no expectation, so [check_instruction] against the [Unknown] sentinel keeps a
+     present name and reports [cannot_infer_*] when one is omitted. *)
+  | _ -> assert false (* only invoked on Cast/Test *)
 
 and type_mem_method_call ctx i func recv memname meth args =
   let _, address_type = Option.get (Tbl.find_opt ctx.memories memname) in
