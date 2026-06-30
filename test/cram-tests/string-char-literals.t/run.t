@@ -32,7 +32,9 @@ literal builds a byte array via `array.new_fixed`, with its type taken from a
   )
 
 Through WAT the literals are kept as `(@char …)` / `(@string …)` annotations, so
-they round-trip back to Wax unchanged — characters included.
+they round-trip back to Wax — characters included. A string's `T #` type prefix
+is dropped when the context already pins that type (the `&chars` result here),
+as for a redundant name on any other construction literal.
 
   $ wax lit.wax -f wat -o lit.wat && wax lit.wat -f wax
   type chars = [i8];
@@ -59,7 +61,7 @@ they round-trip back to Wax unchanged — characters included.
   
   #[export = "named_string"]
   fn named_string() -> &chars {
-      chars#"hi!";
+      "hi!";
   }
   
   #[export = "from_context"]
@@ -70,7 +72,7 @@ they round-trip back to Wax unchanged — characters included.
   
   #[export = "binary_blob"]
   fn binary_blob() -> &chars {
-      chars#"a\01b";
+      "a\01b";
   }
 
 Through WASM the round-trip is best-effort. Character literals lowered to a
@@ -102,7 +104,7 @@ string; `binary_blob` (which holds a control byte) stays an array literal.
   }
   #[export = "named_string"]
   fn named_string() -> &chars {
-      chars#"hi!";
+      "hi!";
   }
   #[export = "from_context"]
   fn from_context() -> &chars {

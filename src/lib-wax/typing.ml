@@ -5088,19 +5088,23 @@ and block_contents ctx results l =
          &&
          match i.desc with
          | Struct _ | StructDefault _ | Array _ | ArrayDefault _ | ArrayFixed _
-         | ArraySegment _ ->
+         | ArraySegment _ | String _ ->
              true
          | Cast (e, _) -> is_null_initializer e
          | _ -> false ->
-      (* The block's value is a trailing construction literal or null cast;
-         check it against the single result type so it can be inferred / drop
-         its name or redundant cast, just like a [return]. Only these
-         single-value forms are routed this way, so a divergent or void trailing
-         statement is never disturbed. *)
+      (* The block's value is a trailing construction literal (incl. a string)
+         or null cast; check it against the single result type so it can be
+         inferred / drop its name or redundant cast, just like a [return]. Only
+         these single-value forms are routed this way, so a divergent or void
+         trailing statement is never disturbed. [check] has already validated
+         the value against [results.(0)] (reporting any mismatch once), so push
+         the result type itself rather than the value's own type — that keeps
+         the block's [pop_args] from reporting the same mismatch a second
+         time. *)
       let* i', _ = check_toplevel ctx results.(0) i in
       let* () =
         push_results
-          (Array.to_list (Array.map (fun ty -> (i.info, ty)) (fst i'.info)))
+          (Array.to_list (Array.map (fun ty -> (i.info, ty)) results))
       in
       return [ i' ]
   | i :: r ->

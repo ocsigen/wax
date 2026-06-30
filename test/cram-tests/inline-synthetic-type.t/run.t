@@ -6,7 +6,7 @@ inline ([mut i8] / fn(..) -> ..) rather than that synthetic name.
 A bare string is a [mut i8] byte array:
 
   $ wax check string.wax
-  Error: Expecting type i32 but got type [mut i8].
+  Error: This instruction has type [mut i8] but is expected to have type i32.
    ──➤  string.wax:2:5
   1 │ fn f() -> i32 {
   2 │     "hi";
