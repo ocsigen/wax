@@ -73,6 +73,38 @@ function encode(type, v) {
   }
 }
 
+// Does a result's bit pattern match a spec-expected float value, which may be a
+// concrete bit pattern or a NaN category (nan:canonical / nan:arithmetic)?
+function floatMatches(gotBits, expected, width) {
+  const mantBits = BigInt(width === 32 ? 23 : 52);
+  const expField = BigInt(width === 32 ? 8 : 11);
+  const exp = (gotBits >> mantBits) & ((1n << expField) - 1n);
+  const mant = gotBits & ((1n << mantBits) - 1n);
+  const isNaN = exp === (1n << expField) - 1n && mant !== 0n;
+  if (expected === "nan:canonical") return isNaN && mant === 1n << (mantBits - 1n);
+  if (expected === "nan:arithmetic") return isNaN && (mant & (1n << (mantBits - 1n))) !== 0n;
+  return BigInt.asUintN(width, gotBits) === BigInt.asUintN(width, BigInt(expected));
+}
+
+// Self-check: does an actual result match the spec's expected value? Returns
+// null for value types we can't verify (v128, internal refs).
+function matchesExpected(e, got) {
+  switch (e.type) {
+    case "i32": return BigInt.asIntN(32, BigInt(got)) === BigInt.asIntN(32, BigInt(e.value));
+    case "i64": return BigInt.asIntN(64, BigInt(got)) === BigInt.asIntN(64, BigInt(e.value));
+    case "f32": return floatMatches(f32ToBits(got), e.value, 32);
+    case "f64": return floatMatches(f64ToBits(got), e.value, 64);
+    default:
+      if (!isRefType(e.type)) return null;
+      if (e.value === "null") return got === null || got === undefined;
+      if (hostId.has(got)) return hostId.get(got) === e.value;
+      return null;
+  }
+}
+
+const isTrapAssert = (t) =>
+  t === "assert_trap" || t === "assert_exhaustion" || t === "assert_exception";
+
 function spectestImports() {
   const nop = () => {};
   return { spectest: {
@@ -86,6 +118,11 @@ function spectestImports() {
 
 let failures = 0, ranAsserts = 0, skippedAsserts = 0, waxUninstantiable = 0;
 const fail = (m) => { failures++; console.log("FAIL " + m); };
+
+// With two directories given we run differentially (original vs wax). With one,
+// we self-check: run the original and compare to the spec's expected values —
+// this validates the harness itself.
+const selfCheck = waxDir === undefined;
 
 // One world per side (original / wax): current instance + import registry.
 const mk = () => ({ current: null, registry: {} });
@@ -121,21 +158,45 @@ for (const cmd of spec.commands) {
     case "module":
       try { O.current = instantiate(origDir, cmd.filename, O.registry); }
       catch (e) { O.current = null; }
-      try { W.current = instantiate(waxDir, cmd.filename, W.registry); }
-      catch (e) { W.current = null; if (O.current) waxUninstantiable++; }
+      if (!selfCheck) {
+        try { W.current = instantiate(waxDir, cmd.filename, W.registry); }
+        catch (e) { W.current = null; if (O.current) waxUninstantiable++; }
+      }
       break;
     case "register":
       if (O.current) O.registry[cmd.as] = O.current;
-      if (W.current) W.registry[cmd.as] = W.current;
+      if (!selfCheck && W.current) W.registry[cmd.as] = W.current;
       break;
     case "action":
-      run(O, cmd.action); run(W, cmd.action); // side effects on both
+      run(O, cmd.action);
+      if (!selfCheck) run(W, cmd.action); // side effects on both
       break;
     case "assert_return":
     case "assert_trap":
     case "assert_exhaustion":
     case "assert_exception": {
       if (!cmd.action || !O.current) { skippedAsserts++; break; }
+      // A v128 result cannot cross the JS<->wasm boundary (the call throws), so
+      // such assertions can't be run here at all — skip them.
+      if ((cmd.expected || []).some((e) => e.type === "v128")) { skippedAsserts++; break; }
+      if (selfCheck) {
+        const ro = run(O, cmd.action);
+        if (!ro.ok) { skippedAsserts++; break; }
+        ranAsserts++;
+        const where = `line ${cmd.line}: ${cmd.action.field || cmd.action.type}`;
+        if (isTrapAssert(cmd.type)) {
+          if (!ro.trap) fail(`${where}: expected a trap, but it returned`);
+          break;
+        }
+        if (ro.trap) { fail(`${where}: trapped unexpectedly`); break; }
+        const expected = cmd.expected || [];
+        for (let i = 0; i < expected.length; i++) {
+          const m = matchesExpected(expected[i], ro.results[i]);
+          if (m === null) continue; // unverifiable value type
+          if (!m) { fail(`${where}: result ${i}: expected ${expected[i].type} ${expected[i].value}, got ${ro.results[i]}`); break; }
+        }
+        break;
+      }
       if (!W.current) { skippedAsserts++; break; } // wax couldn't build it
       const ro = run(O, cmd.action), rw = run(W, cmd.action);
       if (!ro.ok || !rw.ok) { skippedAsserts++; break; }

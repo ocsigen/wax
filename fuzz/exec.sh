@@ -14,9 +14,11 @@
 # wax cannot recompile, or that this Node build cannot instantiate (an
 # unsupported proposal), are skipped and counted, not failed.
 #
-# MODE selects the round-trip exercised (default wax):
+# MODE selects what to run (default wax):
 #   wax   = wasm -> wax -> wasm  (the full language conversion: from_wasm + to_wasm)
 #   codec = wasm -> wasm         (just the binary reader/writer)
+#   self  = run the originals against the spec's expected values (validates the
+#           harness itself; no wax involved)
 #
 # With no arguments, runs the whole core suite. Exits non-zero on any mismatch.
 
@@ -59,21 +61,27 @@ for wast in "${wasts[@]}"; do
     rm -rf "$work"; continue
   fi
   nfiles=$((nfiles+1))
-  # The original modules stay in [work]; wax's recompiled copies go in [work/wax]
-  # so the runner can compare the two behaviours.
-  mkdir -p "$work/wax"
-  cp "$work"/*.wasm "$work/wax/" 2>/dev/null
-  # Recompile only the modules an assertion can reach (the [module] commands);
-  # the .wasm files emitted for assert_invalid / assert_malformed carry no
-  # assertions, so they are left out of the count.
-  norec=0
-  while IFS= read -r f; do
-    [ -n "$f" ] && [ -e "$work/wax/$f" ] || continue
-    recompile "$work/wax/$f" || norec=$((norec+1))
-  done < <(jq -r '.commands[] | select(.type=="module") | .filename' "$work/test.json")
-  total_norecompile=$((total_norecompile+norec))
-  # Differentially execute: original vs wax's recompiled modules.
-  out="$("$NODE" "$RUNNER" "$work/test.json" "$work" "$work/wax" 2>&1)"
+  if [ "$MODE" = self ]; then
+    # Self-check: run the originals against the spec's expected values (validates
+    # the harness itself). No recompilation, one directory.
+    out="$("$NODE" "$RUNNER" "$work/test.json" "$work" 2>&1)"
+  else
+    # The original modules stay in [work]; wax's recompiled copies go in
+    # [work/wax] so the runner can compare the two behaviours.
+    mkdir -p "$work/wax"
+    cp "$work"/*.wasm "$work/wax/" 2>/dev/null
+    # Recompile only the modules an assertion can reach (the [module] commands);
+    # the .wasm files emitted for assert_invalid / assert_malformed carry no
+    # assertions, so they are left out of the count.
+    norec=0
+    while IFS= read -r f; do
+      [ -n "$f" ] && [ -e "$work/wax/$f" ] || continue
+      recompile "$work/wax/$f" || norec=$((norec+1))
+    done < <(jq -r '.commands[] | select(.type=="module") | .filename' "$work/test.json")
+    total_norecompile=$((total_norecompile+norec))
+    # Differentially execute: original vs wax's recompiled modules.
+    out="$("$NODE" "$RUNNER" "$work/test.json" "$work" "$work/wax" 2>&1)"
+  fi
   while IFS= read -r line; do
     case "$line" in
       FAIL*) echo "$(basename "$wast"): ${line#FAIL }" >>"$fail_report" ;;
