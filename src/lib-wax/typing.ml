@@ -703,8 +703,8 @@ type module_context = {
          which may narrow to [e]'s subtype just like an immutable global — from
          one a later assignment still needs the wider [T] for. Reset per
          function. *)
-  control_types : (string option * inferred_type UnionFind.t array) list;
-  return_types : inferred_type UnionFind.t array;
+  control_types : (string option * inferred_type Cell.t array) list;
+  return_types : inferred_type Cell.t array;
   (* --- Conditional-compilation branch assumption --- *)
   cond : Cond.t ref;
       (* Current branch assumption (shared with every namespace/table above);
@@ -853,12 +853,11 @@ let field_subtype info (ty : Wax_wasm.Ast.Binary.fieldtype)
    appears on the right because expected types always come from a real
    declaration, annotation or instruction signature — hence the [assert]. *)
 (* Whether [ty] is the result cell of a block whose type is being inferred. *)
-let is_inferring ty =
-  match UnionFind.find ty with Collecting _ -> true | _ -> false
+let is_inferring ty = match Cell.get ty with Collecting _ -> true | _ -> false
 
 let rec subtype ?location ctx ty ty' =
-  let ity = UnionFind.find ty in
-  let ity' = UnionFind.find ty' in
+  let ity = Cell.get ty in
+  let ity' = Cell.get ty' in
   match (ity, ity') with
   (* [ty'] is a block result being inferred. Record [ty]'s natural type — a
      snapshot taken before any validation below resolves it — as a value reaching
@@ -870,7 +869,7 @@ let rec subtype ?location ctx ty ty' =
      A [Collecting] cell never appears as a real value type, so the left-hand
      cases below treat it like [Unknown]. *)
   | _, Collecting st -> (
-      st.collected <- (location, UnionFind.make ity) :: st.collected;
+      st.collected <- (location, Cell.make ity) :: st.collected;
       match st.declared with
       | Some d -> subtype ?location ctx ty d
       | None -> true)
@@ -884,13 +883,13 @@ let rec subtype ?location ctx ty ty' =
   | (Int | Float | Valtype { internal = I32 | I64 | F32 | F64; _ }), Number
   | Valtype { internal = I32 | I64; _ }, Int
   | Valtype { internal = F32 | F64; _ }, Float ->
-      UnionFind.merge ty ty' ity;
+      Cell.merge ty ty' ity;
       true
   | Number, Valtype { internal = I32 | I64 | F32 | F64; _ }
   | Int, Valtype { internal = I32 | I64; _ }
   | Float, Valtype { internal = F32 | F64; _ }
   | Null, Valtype { internal = Ref { nullable = true; _ }; _ } ->
-      UnionFind.merge ty ty' ity';
+      Cell.merge ty ty' ity';
       true
   | ( Null,
       ( Number | Int | Float
@@ -914,16 +913,16 @@ let rec subtype ?location ctx ty ty' =
      LargeInt; with Float it narrows to Float; the concrete types it accepts are
      i64, f32 and f64. *)
   | LargeInt, (LargeInt | Number | Int) | (Number | Int), LargeInt ->
-      UnionFind.merge ty ty' LargeInt;
+      Cell.merge ty ty' LargeInt;
       true
   | LargeInt, Float | Float, LargeInt ->
-      UnionFind.merge ty ty' Float;
+      Cell.merge ty ty' Float;
       true
   | LargeInt, Valtype { internal = I64 | F32 | F64; _ } ->
-      UnionFind.merge ty ty' ity';
+      Cell.merge ty ty' ity';
       true
   | Valtype { internal = I64 | F32 | F64; _ }, LargeInt ->
-      UnionFind.merge ty ty' ity;
+      Cell.merge ty ty' ity;
       true
   | LargeInt, (Null | Valtype _) | (Null | Valtype _), LargeInt -> false
   | (Int8 | Int16), _ | _, (Int8 | Int16) -> false
@@ -931,34 +930,34 @@ let rec subtype ?location ctx ty ty' =
   | _, (Unknown | Error) -> assert false
 
 let cast ctx ty ty' =
-  let ity = UnionFind.find ty in
+  let ity = Cell.get ty in
   match (ity, ty') with
   | (Number | Int), Ref { typ = I31 | Extern; _ } ->
-      UnionFind.set ty (Valtype { typ = I32; internal = I32; inline = None });
+      Cell.set ty (Valtype { typ = I32; internal = I32; inline = None });
       true
   | (Number | Int), I32 | Int, F32 ->
-      UnionFind.set ty (Valtype { typ = I32; internal = I32; inline = None });
+      Cell.set ty (Valtype { typ = I32; internal = I32; inline = None });
       true
   | (Number | Int), I64 | Int, F64 ->
-      UnionFind.set ty (Valtype { typ = I64; internal = I64; inline = None });
+      Cell.set ty (Valtype { typ = I64; internal = I64; inline = None });
       true
   | (Number | Float), F32 | Float, I32 ->
-      UnionFind.set ty (Valtype { typ = F32; internal = F32; inline = None });
+      Cell.set ty (Valtype { typ = F32; internal = F32; inline = None });
       true
   | (Number | Float), F64 | Float, I64 ->
-      UnionFind.set ty (Valtype { typ = F64; internal = F64; inline = None });
+      Cell.set ty (Valtype { typ = F64; internal = F64; inline = None });
       true
   (* As with Int, a cast to a float is allowed (it converts from the integer);
      the literal is always i64 here since it is too big for i32. *)
   | LargeInt, (I64 | F32 | F64) ->
-      UnionFind.set ty (Valtype { typ = I64; internal = I64; inline = None });
+      Cell.set ty (Valtype { typ = I64; internal = I64; inline = None });
       true
   | LargeInt, _ -> false (* too big for i32; not v128 or a reference *)
   | Null, Ref { typ = ty'; _ } ->
       (let>@ typ = top_heap_type ctx ty' in
        let ty' = Ref { nullable = true; typ } in
        let>@ ity' = valtype ctx.diagnostics ctx.type_context ty' in
-       UnionFind.set ty (Valtype { typ = ty'; internal = ity'; inline = None }));
+       Cell.set ty (Valtype { typ = ty'; internal = ity'; inline = None }));
       true
   | Valtype { internal = F32 | F64; _ }, (F32 | F64)
   | Valtype { internal = I32 | I64; _ }, I32
@@ -1012,7 +1011,7 @@ let cast ctx ty ty' =
   | (Unknown | Error | Collecting _), _ -> true
 
 let signed_cast ctx ty ty' =
-  let ity = UnionFind.find ty in
+  let ity = Cell.get ty in
   match (ity, ty') with
   | (Int8 | Int16), (`I32 | `I64) -> true
   | Valtype { internal = Ref _ as ity; _ }, (`I32 | `I64) ->
@@ -1020,7 +1019,7 @@ let signed_cast ctx ty ty' =
       Wax_wasm.Types.val_subtype ctx.subtyping_info ity
         (Ref { nullable = true; typ = Any })
   | Null, `I32 ->
-      UnionFind.set ty
+      Cell.set ty
         (Valtype
            {
              typ = Ref { typ = Any; nullable = true };
@@ -1029,10 +1028,10 @@ let signed_cast ctx ty ty' =
            });
       true
   | (Number | Int), `I64 ->
-      UnionFind.set ty (Valtype { typ = I32; internal = I32; inline = None });
+      Cell.set ty (Valtype { typ = I32; internal = I32; inline = None });
       true
   | LargeInt, `I64 ->
-      UnionFind.set ty (Valtype { typ = I64; internal = I64; inline = None });
+      Cell.set ty (Valtype { typ = I64; internal = I64; inline = None });
       true
   | LargeInt, _ ->
       false (* never i32; a signed cast to a float is rejected too *)
@@ -1073,14 +1072,14 @@ let signed_cast ctx ty ty' =
      it — e.g. [1.5 as i64_s_strict], the [i64.trunc_f64_s] a decompiled
      [f64.const] produces — type-checks instead of being rejected as float. *)
   | Float, (`I32 | `I64 | `F32 | `F64) ->
-      UnionFind.set ty (Valtype { typ = F64; internal = F64; inline = None });
+      Cell.set ty (Valtype { typ = F64; internal = F64; inline = None });
       true
   | (Unknown | Error | Collecting _), _ -> true
 
 type stack =
   | Unreachable
   | Empty
-  | Cons of location * inferred_type UnionFind.t * stack
+  | Cons of location * inferred_type Cell.t * stack
 
 let rec output_stack f st =
   match st with
@@ -1126,16 +1125,16 @@ let ( let*! ) e f =
       return
         {
           desc = Ast.Unreachable;
-          info = ([| UnionFind.make Error |], (Ast.no_loc ()).info);
+          info = ([| Cell.make Error |], (Ast.no_loc ()).info);
         }
 
 let pop_any ctx i st =
   match st with
-  | Unreachable -> (st, UnionFind.make Unknown)
+  | Unreachable -> (st, Cell.make Unknown)
   | Cons (_, ty, r) -> (r, ty)
   | Empty ->
       Error.empty_stack ctx.diagnostics ~location:i.info;
-      (st, UnionFind.make Error)
+      (st, Cell.make Error)
 
 let rec pop_many ctx i n accu =
   if n = 0 then return accu
@@ -1218,7 +1217,7 @@ let internalize_valtype ctx typ =
 
 let internalize ?inline ctx typ =
   let+@ internal = valtype ctx.diagnostics ctx.type_context typ in
-  UnionFind.make (Valtype { typ; internal; inline })
+  Cell.make (Valtype { typ; internal; inline })
 
 (* Check that a source element reference type can be stored where [dst] elements
    are expected (table.copy / table.init / array.init_elem): [src] must be a
@@ -1233,8 +1232,7 @@ let check_elem_subtype ctx ~location ~src ~dst =
           (Wax_wasm.Types.val_subtype ctx.subtyping_info s.internal d.internal)
       then
         Error.incompatible_element_type ctx.diagnostics ~location
-          (UnionFind.make (Valtype s))
-          (UnionFind.make (Valtype d))
+          (Cell.make (Valtype s)) (Cell.make (Valtype d))
   | _ -> ()
 
 (* The inferred type of a value read from a field: a packed [i8]/[i16] field
@@ -1244,8 +1242,8 @@ let check_elem_subtype ctx ~location ~src ~dst =
 let field_read_type ctx (f : fieldtype) =
   match f.typ with
   | Value typ -> internalize ctx typ
-  | Packed I8 -> Some (UnionFind.make Int8)
-  | Packed I16 -> Some (UnionFind.make Int16)
+  | Packed I8 -> Some (Cell.make Int8)
+  | Packed I16 -> Some (Cell.make Int16)
 
 let unpack_type (f : fieldtype) =
   match f.typ with Value v -> v | Packed _ -> I32
@@ -1317,35 +1315,35 @@ let resolve_variable ctx idx =
    the unified result-type cell — the two operand cells are merged on success,
    so the caller takes [typ1] as the operator's result type. *)
 let check_int_bin_op ctx ~location typ1 typ2 =
-  (match (UnionFind.find typ1, UnionFind.find typ2) with
+  (match (Cell.get typ1, Cell.get typ2) with
   | Valtype { internal = I32; _ }, Valtype { internal = I32; _ }
   | Valtype { internal = I64; _ }, Valtype { internal = I64; _ }
   | (Valtype { internal = I32 | I64; _ } | Int), (Number | Int) ->
-      UnionFind.merge typ1 typ2 (UnionFind.find typ1)
+      Cell.merge typ1 typ2 (Cell.get typ1)
   | (Number | Int), Valtype { internal = I32 | I64; _ } ->
-      UnionFind.merge typ1 typ2 (UnionFind.find typ2)
-  | Number, Number -> UnionFind.merge typ1 typ2 Int
+      Cell.merge typ1 typ2 (Cell.get typ2)
+  | Number, Number -> Cell.merge typ1 typ2 Int
   (* A LargeInt operand forces i64: it pairs with i64 or another flexible integer
      (never i32). *)
   | Valtype { internal = I64; _ }, LargeInt ->
-      UnionFind.merge typ1 typ2 (UnionFind.find typ1)
+      Cell.merge typ1 typ2 (Cell.get typ1)
   | LargeInt, Valtype { internal = I64; _ } ->
-      UnionFind.merge typ1 typ2 (UnionFind.find typ2)
+      Cell.merge typ1 typ2 (Cell.get typ2)
   | LargeInt, (LargeInt | Number | Int) | (Number | Int), LargeInt ->
-      UnionFind.merge typ1 typ2 LargeInt
+      Cell.merge typ1 typ2 LargeInt
   | _ -> Error.binop_type_mismatch ctx.diagnostics ~location typ1 typ2);
   typ1
 
 let check_float_bin_op ctx ~location typ1 typ2 =
-  (match (UnionFind.find typ1, UnionFind.find typ2) with
+  (match (Cell.get typ1, Cell.get typ2) with
   | Valtype { internal = F32; _ }, Valtype { internal = F32; _ }
   | Valtype { internal = F64; _ }, Valtype { internal = F64; _ }
   | (Valtype { internal = F32 | F64; _ } | Float), (Number | Float | LargeInt)
     ->
-      UnionFind.merge typ1 typ2 (UnionFind.find typ1)
+      Cell.merge typ1 typ2 (Cell.get typ1)
   | (Number | Float | LargeInt), Valtype { internal = F32 | F64; _ } ->
-      UnionFind.merge typ1 typ2 (UnionFind.find typ2)
-  | Number, Number -> UnionFind.merge typ1 typ2 Float
+      Cell.merge typ1 typ2 (Cell.get typ2)
+  | Number, Number -> Cell.merge typ1 typ2 Float
   | _ -> Error.binop_type_mismatch ctx.diagnostics ~location typ1 typ2);
   typ1
 
@@ -1358,8 +1356,8 @@ let field_has_default (ty : fieldtype) =
       | Ref { nullable; _ } -> nullable)
 
 let return_statement (i : location instr)
-    (desc : (inferred_type UnionFind.t array * location) instr_desc)
-    (ty : _ array) st =
+    (desc : (inferred_type Cell.t array * location) instr_desc) (ty : _ array)
+    st =
   (st, { desc; info = ((ty : _ array), i.info) })
 
 let return_expression i desc ty = return_statement i desc [| ty |]
@@ -1370,7 +1368,7 @@ let expression_type ctx i =
   | [| ty |] -> ty
   | _ ->
       Error.not_an_expression ctx.diagnostics ~location (Array.length typ);
-      UnionFind.make Error
+      Cell.make Error
 
 let check_subtype ctx ~location ty' ty =
   (* Pass [location] so that, when [ty] is an inferring block result, the value
@@ -1397,7 +1395,7 @@ let check_type ctx i ty =
    want to drop an annotation for (packed or still unconstrained). Pure: it does
    not mutate [ty], so it can be read before [check_type] constrains it. *)
 let standalone_valtype ctx ty =
-  match UnionFind.find ty with
+  match Cell.get ty with
   | Valtype v -> Some v
   | Int | Number -> Some { typ = I32; internal = I32; inline = None }
   | LargeInt -> Some { typ = I64; internal = I64; inline = None }
@@ -1411,25 +1409,25 @@ let standalone_valtype ctx ty =
    float -> f64, null -> nullref), so the binding gets a definite type. Mutates
    [ty] so later uses observe the resolved type. *)
 let resolve_omitted_valtype ctx ty =
-  match UnionFind.find ty with
+  match Cell.get ty with
   | Valtype v -> Some v
   | LargeInt ->
       let v = { typ = I64; internal = I64; inline = None } in
-      UnionFind.set ty (Valtype v);
+      Cell.set ty (Valtype v);
       Some v
   | Int | Number | Int8 | Int16 | Unknown | Error | Collecting _ ->
       let v = { typ = I32; internal = I32; inline = None } in
-      UnionFind.set ty (Valtype v);
+      Cell.set ty (Valtype v);
       Some v
   | Float ->
       let v = { typ = F64; internal = F64; inline = None } in
-      UnionFind.set ty (Valtype v);
+      Cell.set ty (Valtype v);
       Some v
   | Null ->
       let+@ v =
         internalize_valtype ctx (Ref { nullable = true; typ = None_ })
       in
-      UnionFind.set ty (Valtype v);
+      Cell.set ty (Valtype v);
       v
 
 (* The type an unannotated [let]/global binding takes from its initializer,
@@ -1439,7 +1437,7 @@ let resolve_omitted_valtype ctx ty =
    the [Error] type would mask that. An [Error] initializer (already reported)
    stays silent. *)
 let bound_value_type ctx ~location result_ty =
-  match UnionFind.find result_ty with
+  match Cell.get result_ty with
   | Error -> None
   | Unknown ->
       Error.unknown_operand_type ctx.diagnostics ~location;
@@ -1512,7 +1510,7 @@ let valtype_equal ctx (a : inferred_valtype) (b : inferred_valtype) =
    only be a *subtype* of the annotation, not equal to it. *)
 let annotation_needed ?(drop_supertype = false) ctx
     (standalone : inferred_valtype option) expected =
-  match (standalone, UnionFind.find expected) with
+  match (standalone, Cell.get expected) with
   | Some v, Valtype b ->
       if drop_supertype then
         not
@@ -1525,9 +1523,7 @@ let annotation_needed ?(drop_supertype = false) ctx
    [subtype] asserts on an [Unknown] right-hand side, so callers guard with
    this before checking against [expected]. *)
 let has_expectation expected =
-  match UnionFind.find expected with
-  | Unknown | Collecting _ -> false
-  | _ -> true
+  match Cell.get expected with Unknown | Collecting _ -> false | _ -> true
 
 (* For a block-like construct (do/loop/try/try_table) checked against [expected]:
    the single cell to type its body and handlers against — its declared result,
@@ -1564,7 +1560,7 @@ let context_block_typ ctx typ ~expected ~result_cell =
    …) or a floating/non-ref cell returns [None]: construction needs the exact
    type, never a supertype. *)
 let exact_named_type expected =
-  match UnionFind.find expected with
+  match Cell.get expected with
   | Valtype { typ = Ref { typ = Type ident; _ }; _ } -> Some ident
   | _ -> None
 
@@ -1590,7 +1586,7 @@ let bind_let_value ctx ~location result_ty (name, typ) =
       let drop =
         Option.value ~default:false
           (let+@ ity = internalize_valtype ctx typ in
-           check_subtype ctx ~location result_ty (UnionFind.make (Valtype ity));
+           check_subtype ctx ~location result_ty (Cell.make (Valtype ity));
            Option.iter
              (fun name ->
                ctx.locals <- StringMap.add name.desc (Some ity) ctx.locals;
@@ -1720,7 +1716,7 @@ let check_resume_handlers ctx ~result_types handlers =
      join cannot re-derive, so resolve to the declared annotation under test and
      mark it needed (kept). *)
   let rec internal_of_inferred ty =
-    match UnionFind.find ty with
+    match Cell.get ty with
     | Valtype { internal; _ } -> Some internal
     | Collecting { declared = Some d; _ } -> internal_of_inferred d
     | _ -> None
@@ -1762,7 +1758,7 @@ let check_resume_handlers ctx ~result_types handlers =
                    (n > 1) is never inferred and its slots are concrete. A cell
                    inferring with no declared annotation resolves to [None] below
                    and so fails the contract check, as it must. *)
-                (match UnionFind.find ts'.(n - 1) with
+                (match Cell.get ts'.(n - 1) with
                 | Collecting cs -> cs.needed <- true
                 | _ -> ());
                 Array.iteri
@@ -2015,7 +2011,7 @@ let rec check_hole_order_rec ctx i n =
             check_hole_order_in_list ctx l n
         | Struct (_, l) ->
             let fields =
-              match UnionFind.find (expression_type ctx i) with
+              match Cell.get (expression_type ctx i) with
               | Valtype { typ = Ref { typ = Type t; _ }; _ } -> (
                   match lookup_struct_type ctx t with
                   | Some fields ->
@@ -2074,7 +2070,7 @@ let split_on_last_type ctx ~location i =
   let len = Array.length a in
   if len = 0 then (
     Error.value_count_mismatch ctx.diagnostics ~location ~expected:1 ~provided:0;
-    (UnionFind.make Error, [||]))
+    (Cell.make Error, [||]))
   else (a.(len - 1), Array.sub a 0 (len - 1))
 
 let immediate_supertype s : Ast.heaptype =
@@ -2151,7 +2147,7 @@ let val_lub ctx v1 v2 =
    types via [val_lub]. Used to combine the values reaching a block's exit (the
    branches of an [if], etc.) when inferring the block's result type. *)
 let join_value_types ctx ty1 ty2 =
-  match (UnionFind.find ty1, UnionFind.find ty2) with
+  match (Cell.get ty1, Cell.get ty2) with
   | _, (Unknown | Error) -> Some ty1
   | (Unknown | Error), _ -> Some ty2
   | Null, Null -> Some ty1
@@ -2163,14 +2159,14 @@ let join_value_types ctx ty1 ty2 =
   | (Int | Number), (Int | Valtype { internal = I32 | I64; _ })
   | (Float | Number), (Float | Valtype { internal = F32 | F64; _ })
   | Number, Number ->
-      UnionFind.merge ty1 ty2 (UnionFind.find ty2);
+      Cell.merge ty1 ty2 (Cell.get ty2);
       Some ty2
   | ( (Valtype { internal = I32; _ } | Valtype { internal = I64; _ }),
       (Int | Number) )
   | ( (Valtype { internal = F32; _ } | Valtype { internal = F64; _ }),
       (Float | Number) )
   | (Int | Float), Number ->
-      UnionFind.merge ty1 ty2 (UnionFind.find ty1);
+      Cell.merge ty1 ty2 (Cell.get ty1);
       Some ty1
   | Valtype { typ = typ1; _ }, Valtype { typ = typ2; _ } -> (
       match val_lub ctx typ1 typ2 with
@@ -2179,13 +2175,13 @@ let join_value_types ctx ty1 ty2 =
   | Valtype { typ = Ref { typ; _ }; _ }, Null -> (
       match internalize ctx (Ref { typ; nullable = true }) with
       | Some ty ->
-          UnionFind.set ty2 (UnionFind.find ty);
+          Cell.set ty2 (Cell.get ty);
           Some ty
       | None -> None)
   | Null, Valtype { typ = Ref { typ; _ }; _ } -> (
       match internalize ctx (Ref { typ; nullable = true }) with
       | Some ty ->
-          UnionFind.set ty1 (UnionFind.find ty);
+          Cell.set ty1 (Cell.get ty);
           Some ty
       | None -> None)
   | _ -> None
@@ -2203,7 +2199,7 @@ let simd_valtype : Simd.ty -> inferred_valtype = function
   | TF32 -> { typ = F32; internal = F32; inline = None }
   | TF64 -> { typ = F64; internal = F64; inline = None }
 
-let simd_cell t = UnionFind.make (Valtype (simd_valtype t))
+let simd_cell t = Cell.make (Valtype (simd_valtype t))
 
 (* Memory access method names. The value width is in the name; signedness and the
    i32/i64 result come from a surrounding [as iN_s/u] cast (see [to_wasm]). *)
@@ -2522,18 +2518,18 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
          where a value is expected, so report it and recover with an unknown
          value. *)
       Error.not_an_expression ctx.diagnostics ~location:i.info 0;
-      return_expression i desc (UnionFind.make Error)
+      return_expression i desc (Cell.make Error)
   | Hole ->
       let* ty = pop_parameter in
       return_expression i Hole ty
-  | Null -> return_expression i Null (UnionFind.make Null)
+  | Null -> return_expression i Null (Cell.make Null)
   | Get _ | Set _ | Tee _ -> type_variable_access ctx i
   | Call _ -> call_instruction ctx i
   | TailCall (i', l) -> (
       let param_types = peek_call_params ctx i' in
       let* l' = typed_call_args ctx l param_types in
       let* i' = instruction ctx i' in
-      match UnionFind.find (expression_type ctx i') with
+      match Cell.get (expression_type ctx i') with
       | Valtype { typ = Ref { typ = Type ty; _ }; _ } ->
           let*! typ = lookup_func_type ctx ty in
           (let>@ param_types =
@@ -2563,7 +2559,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
           return_statement i (TailCall (i', l')) [||])
   | Char _ as desc ->
       return_expression i desc
-        (UnionFind.make (Valtype { typ = I32; internal = I32; inline = None }))
+        (Cell.make (Valtype { typ = I32; internal = I32; inline = None }))
   | Int s as desc ->
       (* Pick the lattice type from the magnitude (the sign is a separate [Neg],
          so this is unsigned): a value over the 32-bit range cannot be i32, so it
@@ -2581,12 +2577,12 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
         | Some v when Int64.unsigned_compare v 0xFFFFFFFFL > 0 -> LargeInt
         | Some _ -> Number
       in
-      return_expression i desc (UnionFind.make lattice)
-  | Float _ as desc -> return_expression i desc (UnionFind.make Float)
+      return_expression i desc (Cell.make lattice)
+  | Float _ as desc -> return_expression i desc (Cell.make Float)
   | Cast _ | Test _ -> type_cast ctx i
   | Struct _ | StructDefault _ | Array _ | ArrayDefault _ | ArrayFixed _
   | ArraySegment _ | String _ ->
-      let* i', _ = check_instruction ctx (UnionFind.make Unknown) i in
+      let* i', _ = check_instruction ctx (Cell.make Unknown) i in
       return i'
   | StructGet _ | StructSet _ | ArrayGet _ | ArraySet _ ->
       type_aggregate_access ctx i
@@ -2601,7 +2597,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       type_stack_switching ctx i
   | NonNull i' -> (
       let* i' = instruction ctx i' in
-      match UnionFind.find (expression_type ctx i') with
+      match Cell.get (expression_type ctx i') with
       | Valtype
           {
             typ = Ref { nullable = _; typ; _ };
@@ -2609,7 +2605,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
             inline;
           } ->
           return_expression i (NonNull i')
-            (UnionFind.make
+            (Cell.make
                (Valtype
                   {
                     typ = Ref { nullable = false; typ };
@@ -2620,7 +2616,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
           return_expression i (NonNull i') (expression_type ctx i')
       | _ ->
           Error.expected_ref ctx.diagnostics ~location:(snd i'.info);
-          return_expression i (NonNull i') (UnionFind.make Error))
+          return_expression i (NonNull i') (Cell.make Error))
   | Return i' ->
       let* i' =
         match i' with
@@ -2644,11 +2640,11 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       let* i3' = instruction ctx i3 in
       let* i1' = instruction ctx i1 in
       check_type ctx i1'
-        (UnionFind.make (Valtype { typ = I32; internal = I32; inline = None }));
+        (Cell.make (Valtype { typ = I32; internal = I32; inline = None }));
       let*! ty =
         let ty1 = expression_type ctx i2' in
         let ty2 = expression_type ctx i3' in
-        match (UnionFind.find ty1, UnionFind.find ty2) with
+        match (Cell.get ty1, Cell.get ty2) with
         | _, (Unknown | Error) -> Some ty1
         | (Unknown | Error), _ -> Some ty2
         | Valtype { internal = I32; _ }, Valtype { internal = I32; _ }
@@ -2659,14 +2655,14 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
         | (Int | Number), (Int | Valtype { internal = I32 | I64; _ })
         | (Float | Number), (Float | Valtype { internal = F32 | F64; _ })
         | Number, Number ->
-            UnionFind.merge ty1 ty2 (UnionFind.find ty2);
+            Cell.merge ty1 ty2 (Cell.get ty2);
             Some ty2
         | ( (Valtype { internal = I32; _ } | Valtype { internal = I64; _ }),
             (Int | Number) )
         | ( (Valtype { internal = F32; _ } | Valtype { internal = F64; _ }),
             (Float | Number) )
         | (Int | Float), Number ->
-            UnionFind.merge ty1 ty2 (UnionFind.find ty1);
+            Cell.merge ty1 ty2 (Cell.get ty1);
             Some ty1
         | Valtype { typ = typ1; _ }, Valtype { typ = typ2; _ } -> (
             match val_lub ctx typ1 typ2 with
@@ -2677,11 +2673,11 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                 None)
         | Valtype { typ = Ref { typ; _ }; _ }, Null ->
             let*@ ty = internalize ctx (Ref { typ; nullable = true }) in
-            UnionFind.set ty2 (UnionFind.find ty);
+            Cell.set ty2 (Cell.get ty);
             Some ty
         | Null, Valtype { typ = Ref { typ; _ }; _ } ->
             let*@ ty = internalize ctx (Ref { typ; nullable = true }) in
-            UnionFind.set ty1 (UnionFind.find ty);
+            Cell.set ty1 (Cell.get ty);
             Some ty
         | _ ->
             Error.select_type_mismatch ctx.diagnostics ~location:i.info
@@ -2715,7 +2711,7 @@ and type_branch ctx i =
       let loc = snd i'.info in
       let ty, types = split_on_last_type ctx ~location:loc i' in
       check_subtype ctx ~location:loc ty
-        (UnionFind.make (Valtype { typ = I32; internal = I32; inline = None }));
+        (Cell.make (Valtype { typ = I32; internal = I32; inline = None }));
       let params = branch_target ctx label in
       check_subtypes ctx ~location:loc types params;
       (* On the fall-through the values stay on the stack; type them by what they
@@ -2730,7 +2726,7 @@ and type_branch ctx i =
       let loc = snd i'.info in
       let ty, types = split_on_last_type ctx ~location:loc i' in
       check_subtype ctx ~location:loc ty
-        (UnionFind.make (Valtype { typ = I32; internal = I32; inline = None }));
+        (Cell.make (Valtype { typ = I32; internal = I32; inline = None }));
       let len = Array.length (branch_target ctx (List.hd labels)) in
       List.iter
         (fun label ->
@@ -2744,7 +2740,7 @@ and type_branch ctx i =
   | Br_on_null (idx, i') ->
       let* i' = instruction ctx i' in
       let typ, types = split_on_last_type ctx ~location:(snd i'.info) i' in
-      let typ = UnionFind.find typ in
+      let typ = Cell.get typ in
       let typ' =
         match typ with
         | Valtype
@@ -2753,17 +2749,17 @@ and type_branch ctx i =
               internal = Ref { nullable = _; typ = ityp; _ };
               inline;
             } ->
-            UnionFind.make
+            Cell.make
               (Valtype
                  {
                    typ = Ref { nullable = false; typ };
                    internal = Ref { nullable = false; typ = ityp };
                    inline;
                  })
-        | (Unknown | Error) as ity -> UnionFind.make ity
+        | (Unknown | Error) as ity -> Cell.make ity
         | _ ->
             Error.expected_ref ctx.diagnostics ~location:(snd i'.info);
-            UnionFind.make Error
+            Cell.make Error
       in
       let params = branch_target ctx idx in
       check_subtypes ctx ~location:(snd i'.info) types params;
@@ -2772,7 +2768,7 @@ and type_branch ctx i =
       let* i' = instruction ctx i' in
       let params = branch_target ctx idx in
       let typ, types = split_on_last_type ctx ~location:(snd i'.info) i' in
-      let typ = UnionFind.find typ in
+      let typ = Cell.get typ in
       (match typ with
       | Unknown | Error -> ()
       | Valtype
@@ -2784,7 +2780,7 @@ and type_branch ctx i =
           check_subtypes ctx ~location:(snd i'.info)
             (Array.append types
                [|
-                 UnionFind.make
+                 Cell.make
                    (Valtype
                       {
                         typ = Ref { nullable = false; typ };
@@ -2805,20 +2801,20 @@ and type_branch ctx i =
       let params = branch_target ctx label in
       (let>@ ityp = reftype ctx.diagnostics ctx.type_context ty in
        let typ =
-         UnionFind.make
+         Cell.make
            (Valtype { typ = Ref ty; internal = Ref ityp; inline = None })
        in
        check_subtypes ctx ~location:(snd i'.info)
          (Array.append types [| typ |])
          params);
       let*! typ1, typ2 =
-        match UnionFind.find typ' with
+        match Cell.get typ' with
         | Valtype { typ = Ref ty'; _ } ->
             let*@ ty1 = val_lub ctx (Ref ty) (Ref ty') in
             let*@ typ1 = internalize ctx ty1 in
             let+@ typ2 = internalize ctx (Ref (diff_ref_type ty' ty)) in
             (typ1, typ2)
-        | (Unknown | Error) as ity -> Some (typ', UnionFind.make ity)
+        | (Unknown | Error) as ity -> Some (typ', Cell.make ity)
         | _ ->
             Error.expected_ref ctx.diagnostics ~location:(snd i'.info);
             None
@@ -2836,13 +2832,13 @@ and type_branch ctx i =
       let typ', types = split_on_last_type ctx ~location:(snd i'.info) i' in
       let*! ityp = reftype ctx.diagnostics ctx.type_context ty in
       let*! typ1, typ2 =
-        match UnionFind.find typ' with
+        match Cell.get typ' with
         | Valtype { typ = Ref ty'; _ } ->
             let*@ ty1 = val_lub ctx (Ref ty) (Ref ty') in
             let*@ typ1 = internalize ctx ty1 in
             let+@ typ2 = internalize ctx (Ref (diff_ref_type ty' ty)) in
             (typ1, typ2)
-        | (Unknown | Error) as ity -> Some (typ', UnionFind.make ity)
+        | (Unknown | Error) as ity -> Some (typ', Cell.make ity)
         | _ ->
             Error.expected_ref ctx.diagnostics ~location:(snd i'.info);
             None
@@ -2852,8 +2848,7 @@ and type_branch ctx i =
         (Array.append types [| typ2 |])
         params;
       let typ =
-        UnionFind.make
-          (Valtype { typ = Ref ty; internal = Ref ityp; inline = None })
+        Cell.make (Valtype { typ = Ref ty; internal = Ref ityp; inline = None })
       in
       return_statement i
         (Br_on_cast_fail
@@ -3050,30 +3045,29 @@ and type_arith ctx i =
           (* Point at the operator itself, not the whole expression. *)
           Error.binop_type_mismatch ctx.diagnostics ~location:op.info ty1 ty2
         in
-        match (UnionFind.find ty1, UnionFind.find ty2) with
+        match (Cell.get ty1, Cell.get ty2) with
         | (Unknown | Error), (Unknown | Error) -> (
             match op.desc with
             | Add | Sub | Mul ->
-                UnionFind.merge ty1 ty2 Number;
+                Cell.merge ty1 ty2 Number;
                 ty1
             | Div (Some _) | Rem _ | And | Or | Xor | Shl | Shr _ ->
-                UnionFind.merge ty1 ty2 Int;
+                Cell.merge ty1 ty2 Int;
                 ty1
             | Lt (Some _) | Gt (Some _) | Le (Some _) | Ge (Some _) | Eq | Ne ->
-                UnionFind.merge ty1 ty2
+                Cell.merge ty1 ty2
                   (Valtype { typ = I32; internal = I32; inline = None });
-                UnionFind.make
-                  (Valtype { typ = I32; internal = I32; inline = None })
+                Cell.make (Valtype { typ = I32; internal = I32; inline = None })
             | Div None ->
-                UnionFind.merge ty1 ty2 Float;
+                Cell.merge ty1 ty2 Float;
                 ty1
             | Lt None | Gt None | Le None | Ge None ->
-                UnionFind.merge ty1 ty2
+                Cell.merge ty1 ty2
                   (Valtype { typ = F32; internal = F32; inline = None });
-                UnionFind.make
-                  (Valtype { typ = I32; internal = I32; inline = None }))
+                Cell.make (Valtype { typ = I32; internal = I32; inline = None })
+            )
         | typ, (Unknown | Error) | (Unknown | Error), typ -> (
-            UnionFind.merge ty1 ty2 typ;
+            Cell.merge ty1 ty2 typ;
             match op.desc with
             | Eq ->
                 (match typ with
@@ -3084,7 +3078,7 @@ and type_arith ctx i =
                            (Ref { nullable = true; typ = Eq }))
                     then mismatch ()
                 | Null ->
-                    UnionFind.set ty1
+                    Cell.set ty1
                       (Valtype
                          {
                            typ = Ref { nullable = true; typ = Eq };
@@ -3098,8 +3092,7 @@ and type_arith ctx i =
                 | Number | Int | Float ->
                     ()
                 | _ -> mismatch ());
-                UnionFind.make
-                  (Valtype { typ = I32; internal = I32; inline = None })
+                Cell.make (Valtype { typ = I32; internal = I32; inline = None })
             | Add | Sub | Mul ->
                 (match typ with
                 | Valtype { internal = I32; _ }
@@ -3119,20 +3112,18 @@ and type_arith ctx i =
                 | Valtype { internal = I64; _ }
                 | Int ->
                     ()
-                | Number -> UnionFind.set ty1 Int
+                | Number -> Cell.set ty1 Int
                 | _ -> mismatch ());
-                UnionFind.make
-                  (Valtype { typ = I32; internal = I32; inline = None })
+                Cell.make (Valtype { typ = I32; internal = I32; inline = None })
             | Lt None | Gt None | Le None | Ge None ->
                 (match typ with
                 | Valtype { internal = F32; _ }
                 | Valtype { internal = F64; _ }
                 | Float ->
                     ()
-                | Number -> UnionFind.set ty1 Float
+                | Number -> Cell.set ty1 Float
                 | _ -> mismatch ());
-                UnionFind.make
-                  (Valtype { typ = I32; internal = I32; inline = None })
+                Cell.make (Valtype { typ = I32; internal = I32; inline = None })
             | Ne ->
                 (match typ with
                 | Valtype { internal = I32; _ }
@@ -3142,12 +3133,12 @@ and type_arith ctx i =
                 | Number | Int | Float ->
                     ()
                 | _ -> mismatch ());
-                UnionFind.make
-                  (Valtype { typ = I32; internal = I32; inline = None }))
+                Cell.make (Valtype { typ = I32; internal = I32; inline = None })
+            )
         | _ -> (
             match op.desc with
             | Eq ->
-                (match (UnionFind.find ty1, UnionFind.find ty2) with
+                (match (Cell.get ty1, Cell.get ty2) with
                 | ( Valtype { internal = Ref _ as ty1; _ },
                     Valtype { internal = Ref _ as ty2; _ } ) ->
                     if
@@ -3163,14 +3154,14 @@ and type_arith ctx i =
                         (Wax_wasm.Types.val_subtype ctx.subtyping_info typ1
                            (Ref { nullable = true; typ = Eq }))
                     then mismatch ();
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty2)
+                    Cell.merge ty1 ty2 (Cell.get ty2)
                 | Null, Valtype { internal = Ref _ as typ2; _ } ->
                     if
                       not
                         (Wax_wasm.Types.val_subtype ctx.subtyping_info typ2
                            (Ref { nullable = true; typ = Eq }))
                     then mismatch ();
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty2)
+                    Cell.merge ty1 ty2 (Cell.get ty2)
                 | Valtype { internal = I32; _ }, Valtype { internal = I32; _ }
                 | Valtype { internal = I64; _ }, Valtype { internal = I64; _ }
                 | Valtype { internal = F32; _ }, Valtype { internal = F32; _ }
@@ -3181,22 +3172,21 @@ and type_arith ctx i =
                 | ( (Valtype { internal = F32 | F64; _ } | Float),
                     (Number | Float | LargeInt) )
                 | Number, Number ->
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty1)
+                    Cell.merge ty1 ty2 (Cell.get ty1)
                 | (Number | Int), Valtype { internal = I32 | I64; _ }
                 | ( (Number | Float | LargeInt),
                     Valtype { internal = F32 | F64; _ } ) ->
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty2)
+                    Cell.merge ty1 ty2 (Cell.get ty2)
                 | Valtype { internal = I64; _ }, LargeInt
                 | LargeInt, (LargeInt | Number | Int) ->
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty1)
+                    Cell.merge ty1 ty2 (Cell.get ty1)
                 | LargeInt, Valtype { internal = I64; _ }
                 | (Number | Int), LargeInt ->
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty2)
+                    Cell.merge ty1 ty2 (Cell.get ty2)
                 | _ -> mismatch ());
-                UnionFind.make
-                  (Valtype { typ = I32; internal = I32; inline = None })
+                Cell.make (Valtype { typ = I32; internal = I32; inline = None })
             | Add | Sub | Mul ->
-                (match (UnionFind.find ty1, UnionFind.find ty2) with
+                (match (Cell.get ty1, Cell.get ty2) with
                 | Valtype { internal = I32; _ }, Valtype { internal = I32; _ }
                 | Valtype { internal = I64; _ }, Valtype { internal = I64; _ }
                 | Valtype { internal = F32; _ }, Valtype { internal = F32; _ }
@@ -3207,56 +3197,54 @@ and type_arith ctx i =
                 | ( (Valtype { internal = F32 | F64; _ } | Float),
                     (Number | Float | LargeInt) )
                 | Number, Number ->
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty1)
+                    Cell.merge ty1 ty2 (Cell.get ty1)
                 | (Number | Int), Valtype { internal = I32 | I64; _ }
                 | ( (Number | Float | LargeInt),
                     Valtype { internal = F32 | F64; _ } ) ->
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty2)
+                    Cell.merge ty1 ty2 (Cell.get ty2)
                 | Valtype { internal = I64; _ }, LargeInt
                 | LargeInt, (LargeInt | Number | Int) ->
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty1)
+                    Cell.merge ty1 ty2 (Cell.get ty1)
                 | LargeInt, Valtype { internal = I64; _ }
                 | (Number | Int), LargeInt ->
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty2)
+                    Cell.merge ty1 ty2 (Cell.get ty2)
                 | _ -> mismatch ());
                 ty1
             | Div (Some _) | Rem _ | And | Or | Xor | Shl | Shr _ ->
                 check_int_bin_op ctx ~location:op.info ty1 ty2
             | Div None -> check_float_bin_op ctx ~location:op.info ty1 ty2
             | Lt (Some _) | Gt (Some _) | Le (Some _) | Ge (Some _) ->
-                (match (UnionFind.find ty1, UnionFind.find ty2) with
+                (match (Cell.get ty1, Cell.get ty2) with
                 | Valtype { internal = I32; _ }, Valtype { internal = I32; _ }
                 | Valtype { internal = I64; _ }, Valtype { internal = I64; _ }
                 | (Valtype { internal = I32 | I64; _ } | Int), (Number | Int) ->
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty1)
+                    Cell.merge ty1 ty2 (Cell.get ty1)
                 | (Number | Int), Valtype { internal = I32 | I64; _ } ->
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty2)
-                | Number, Number -> UnionFind.merge ty1 ty2 Int
+                    Cell.merge ty1 ty2 (Cell.get ty2)
+                | Number, Number -> Cell.merge ty1 ty2 Int
                 | Valtype { internal = I64; _ }, LargeInt
                 | LargeInt, (LargeInt | Number | Int) ->
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty1)
+                    Cell.merge ty1 ty2 (Cell.get ty1)
                 | LargeInt, Valtype { internal = I64; _ }
                 | (Number | Int), LargeInt ->
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty2)
+                    Cell.merge ty1 ty2 (Cell.get ty2)
                 | _ -> mismatch ());
-                UnionFind.make
-                  (Valtype { typ = I32; internal = I32; inline = None })
+                Cell.make (Valtype { typ = I32; internal = I32; inline = None })
             | Lt None | Gt None | Le None | Ge None ->
-                (match (UnionFind.find ty1, UnionFind.find ty2) with
+                (match (Cell.get ty1, Cell.get ty2) with
                 | Valtype { internal = F32; _ }, Valtype { internal = F32; _ }
                 | Valtype { internal = F64; _ }, Valtype { internal = F64; _ }
                 | ( (Valtype { internal = F32 | F64; _ } | Float),
                     (Number | Float | LargeInt) ) ->
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty1)
+                    Cell.merge ty1 ty2 (Cell.get ty1)
                 | ( (Number | Float | LargeInt),
                     Valtype { internal = F32 | F64; _ } ) ->
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty2)
-                | Number, Number -> UnionFind.merge ty1 ty2 Float
+                    Cell.merge ty1 ty2 (Cell.get ty2)
+                | Number, Number -> Cell.merge ty1 ty2 Float
                 | _ -> mismatch ());
-                UnionFind.make
-                  (Valtype { typ = I32; internal = I32; inline = None })
+                Cell.make (Valtype { typ = I32; internal = I32; inline = None })
             | Ne ->
-                (match (UnionFind.find ty1, UnionFind.find ty2) with
+                (match (Cell.get ty1, Cell.get ty2) with
                 | Valtype { internal = I32; _ }, Valtype { internal = I32; _ }
                 | Valtype { internal = I64; _ }, Valtype { internal = I64; _ }
                 | Valtype { internal = F32; _ }, Valtype { internal = F32; _ }
@@ -3267,54 +3255,52 @@ and type_arith ctx i =
                 | ( (Valtype { internal = F32 | F64; _ } | Float),
                     (Number | Float | LargeInt) )
                 | Number, Number ->
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty1)
+                    Cell.merge ty1 ty2 (Cell.get ty1)
                 | (Number | Int), Valtype { internal = I32 | I64; _ }
                 | ( (Number | Float | LargeInt),
                     Valtype { internal = F32 | F64; _ } ) ->
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty2)
+                    Cell.merge ty1 ty2 (Cell.get ty2)
                 | Valtype { internal = I64; _ }, LargeInt
                 | LargeInt, (LargeInt | Number | Int) ->
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty1)
+                    Cell.merge ty1 ty2 (Cell.get ty1)
                 | LargeInt, Valtype { internal = I64; _ }
                 | (Number | Int), LargeInt ->
-                    UnionFind.merge ty1 ty2 (UnionFind.find ty2)
+                    Cell.merge ty1 ty2 (Cell.get ty2)
                 | _ -> mismatch ());
-                UnionFind.make
-                  (Valtype { typ = I32; internal = I32; inline = None }))
+                Cell.make (Valtype { typ = I32; internal = I32; inline = None })
+            )
       in
       return_expression i (BinOp (op, i1', i2')) ty
   | UnOp (op, i') ->
       let* i' = instruction ctx i' in
       let typ = expression_type ctx i' in
       let ty =
-        match UnionFind.find typ with
+        match Cell.get typ with
         | Unknown | Error -> (
             match op.desc with
             | Not ->
-                UnionFind.make
-                  (Valtype { typ = I32; internal = I32; inline = None })
-            | Neg | Pos -> UnionFind.make Number)
+                Cell.make (Valtype { typ = I32; internal = I32; inline = None })
+            | Neg | Pos -> Cell.make Number)
         | _ -> (
             match op.desc with
             | Not ->
-                (match UnionFind.find typ with
+                (match Cell.get typ with
                 | Valtype { internal = I32 | I64 | Ref _; _ }
                 | Null | Int | LargeInt ->
                     ()
-                | Number -> UnionFind.set typ Int
+                | Number -> Cell.set typ Int
                 | _ ->
                     Error.instruction_type_mismatch ctx.diagnostics
-                      ~location:op.info typ (UnionFind.make Int));
-                UnionFind.make
-                  (Valtype { typ = I32; internal = I32; inline = None })
+                      ~location:op.info typ (Cell.make Int));
+                Cell.make (Valtype { typ = I32; internal = I32; inline = None })
             | Neg | Pos ->
-                (match UnionFind.find typ with
+                (match Cell.get typ with
                 | Valtype { internal = I32 | I64 | F32 | F64; _ }
                 | Int | LargeInt | Float | Number ->
                     ()
                 | _ ->
                     Error.instruction_type_mismatch ctx.diagnostics
-                      ~location:op.info typ (UnionFind.make Number));
+                      ~location:op.info typ (Cell.make Number));
                 typ)
       in
       return_expression i (UnOp (op, i')) ty
@@ -3344,33 +3330,33 @@ and type_cast ctx i =
          - [(e as &i31) as &extern] -> [e as &extern]: an [i32] boxed as an
            [i31] ([ref.i31]) before [extern.convert_any]. *)
       let is_packed_read e =
-        match UnionFind.find (expression_type ctx e) with
+        match Cell.get (expression_type ctx e) with
         | Int8 | Int16 -> true
         | _ -> false
       in
       let is_ref e =
-        match UnionFind.find (expression_type ctx e) with
+        match Cell.get (expression_type ctx e) with
         | Valtype { internal = Ref _; _ } -> true
         | _ -> false
       in
       let is_non_i31_ref e =
-        match UnionFind.find (expression_type ctx e) with
+        match Cell.get (expression_type ctx e) with
         | Valtype { internal = Ref { typ = I31; _ }; _ } -> false
         | Valtype { internal = Ref _; _ } -> true
         | _ -> false
       in
       let is_i64 e =
-        match UnionFind.find (expression_type ctx e) with
+        match Cell.get (expression_type ctx e) with
         | Valtype { internal = I64; _ } -> true
         | _ -> false
       in
       let is_i32 e =
-        match UnionFind.find (expression_type ctx e) with
+        match Cell.get (expression_type ctx e) with
         | Valtype { internal = I32; _ } -> true
         | _ -> false
       in
       let is_extern e =
-        match UnionFind.find (expression_type ctx e) with
+        match Cell.get (expression_type ctx e) with
         | Valtype { internal = Ref { typ = Extern | NoExtern; _ }; _ } -> true
         | _ -> false
       in
@@ -3404,14 +3390,14 @@ and type_cast ctx i =
       (* Snapshot the inner type *before* [cast]/[signed_cast] below concretize it
          to the cast target: this is the type the inner expression would settle on
          if the cast were removed (see [load_bearing_literal]). *)
-      let ty'_natural = UnionFind.find ty' in
+      let ty'_natural = Cell.get ty' in
       (* [extern.convert_any]/[any.convert_extern] preserve non-nullness, so a
          cast to [&?extern]/[&?any] of a non-nullable argument actually yields
          [&extern]/[&any]; refine the target accordingly. Like the
          redundant-cast removal below, this only applies when converting from
          Wasm ([ctx.simplify]); otherwise the cast is kept as written. *)
       let arg_non_nullable =
-        match UnionFind.find ty' with
+        match Cell.get ty' with
         | Valtype { typ = Ref { nullable = false; _ }; _ } -> true
         | _ -> false
       in
@@ -3490,7 +3476,7 @@ and type_cast ctx i =
         | Null | Valtype _ | Unknown | Error | Collecting _ -> None
       in
       let load_bearing_literal =
-        match (natural_typ, UnionFind.find ty) with
+        match (natural_typ, Cell.get ty) with
         | Some d, Valtype { typ; _ } -> d <> typ
         | _ -> false
       in
@@ -3516,7 +3502,7 @@ and type_cast ctx i =
        check_type ctx i' typ);
       return_expression i
         (Test (i', ty))
-        (UnionFind.make (Valtype { typ = I32; internal = I32; inline = None }))
+        (Cell.make (Valtype { typ = I32; internal = I32; inline = None }))
   (* Construction literals carry an optional type name that can be inferred from
      an expected type. Their typing lives in [check_instruction]; in synthesis position
      there is no expectation, so [check_instruction] against the [Unknown] sentinel keeps a
@@ -3531,7 +3517,7 @@ and type_aggregate_access ctx i =
       let* i' = instruction ctx i' in
       let*! ty =
         let ty = expression_type ctx i' in
-        match (UnionFind.find ty, field.desc) with
+        match (Cell.get ty, field.desc) with
         | Valtype { typ = Ref { typ = Type ty; _ }; _ }, _ -> (
             let*@ _, def = Tbl.find_opt ctx.type_context.types ty in
             match def.typ with
@@ -3560,12 +3546,12 @@ and type_aggregate_access ctx i =
            reported elsewhere): keep the access with an error result type rather
            than giving up, which would drop a hole receiver and desync hole
            counting. *)
-        | Error, _ -> Some (UnionFind.make Error)
+        | Error, _ -> Some (Cell.make Error)
         (* The receiver's type is unknown (unreachable / branch code): the
            struct type cannot be resolved, so the field cannot be read. *)
         | Unknown, _ ->
             Error.unknown_operand_type ctx.diagnostics ~location:(snd i'.info);
-            Some (UnionFind.make Error)
+            Some (Cell.make Error)
         (* A name that is an instruction method was likely meant as the
            parenthesised call [x.sqrt()]; any other field access on a non-struct
            type has no fields to find. *)
@@ -3585,7 +3571,7 @@ and type_aggregate_access ctx i =
          struct/array literal can drop its name. The value is then typed on
          every path, so its holes are always consumed. *)
       let expected =
-        match UnionFind.find (expression_type ctx i1') with
+        match Cell.get (expression_type ctx i1') with
         | Valtype { typ = Ref { typ = Type ty; _ }; _ } -> (
             match lookup_struct_type ctx ty with
             | None -> None
@@ -3632,7 +3618,7 @@ and type_aggregate_access ctx i =
     when Tbl.find_opt ctx.tables tabname <> None ->
       let at, rt = Option.get (Tbl.find_opt ctx.tables tabname) in
       let* i2' = instruction ctx i2 in
-      check_type ctx i2' (UnionFind.make (Valtype (address_valtype at)));
+      check_type ctx i2' (Cell.make (Valtype (address_valtype at)));
       let*! typ = internalize ctx (Ref rt) in
       return_expression i
         (ArrayGet ({ desc = Get tabname; info = ([||], recv.info) }, i2'))
@@ -3641,29 +3627,29 @@ and type_aggregate_access ctx i =
       let* i1' = instruction ctx i1 in
       let* i2' = instruction ctx i2 in
       check_type ctx i2'
-        (UnionFind.make (Valtype { typ = I32; internal = I32; inline = None }));
-      match UnionFind.find (expression_type ctx i1') with
+        (Cell.make (Valtype { typ = I32; internal = I32; inline = None }));
+      match Cell.get (expression_type ctx i1') with
       | Valtype { typ = Ref { typ = Type ty; _ }; _ } ->
           let*! typ = lookup_array_type ~location:i1.info ctx ty in
           let*! ty = field_read_type ctx typ in
           return_expression i (ArrayGet (i1', i2')) ty
       | Error ->
           (* Receiver already failed to type; recover silently. *)
-          return_expression i (ArrayGet (i1', i2')) (UnionFind.make Error)
+          return_expression i (ArrayGet (i1', i2')) (Cell.make Error)
       | Unknown ->
           (* The receiver's type is unknown (unreachable / branch code): the
              array type cannot be resolved, so the element cannot be read. *)
           Error.unknown_operand_type ctx.diagnostics ~location:i1.info;
-          return_expression i (ArrayGet (i1', i2')) (UnionFind.make Error)
+          return_expression i (ArrayGet (i1', i2')) (Cell.make Error)
       | _ ->
           Error.expected_array_type ctx.diagnostics ~location:i1.info;
-          return_expression i (ArrayGet (i1', i2')) (UnionFind.make Error))
+          return_expression i (ArrayGet (i1', i2')) (Cell.make Error))
   (* [tab[i] = v] on a table name is [table.set]; the receiver is not a value. *)
   | ArraySet (({ desc = Get tabname; _ } as recv), i2, i3)
     when Tbl.find_opt ctx.tables tabname <> None ->
       let at, rt = Option.get (Tbl.find_opt ctx.tables tabname) in
       let* i2' = instruction ctx i2 in
-      check_type ctx i2' (UnionFind.make (Valtype (address_valtype at)));
+      check_type ctx i2' (Cell.make (Valtype (address_valtype at)));
       (* Check the stored value against the table's element type, so a
          struct/array literal can drop its name. *)
       let* i3' =
@@ -3680,8 +3666,8 @@ and type_aggregate_access ctx i =
       let* i1' = instruction ctx i1 in
       let* i2' = instruction ctx i2 in
       check_type ctx i2'
-        (UnionFind.make (Valtype { typ = I32; internal = I32; inline = None }));
-      match UnionFind.find (expression_type ctx i1') with
+        (Cell.make (Valtype { typ = I32; internal = I32; inline = None }));
+      match Cell.get (expression_type ctx i1') with
       | Valtype { typ = Ref { typ = Type ty; _ }; _ } ->
           (* Resolve the element type (pure) before typing the value, so a
              struct/array literal value can drop its name. *)
@@ -3732,14 +3718,12 @@ and type_variable_access ctx i =
               Error.uninitialized_local ctx.diagnostics ~location:idx.info idx;
             (* A poison local ([None]) reads as [Error] so its uses don't
                cascade. *)
-            UnionFind.make
-              (match ty with Some ity -> Valtype ity | None -> Error)
+            Cell.make (match ty with Some ity -> Valtype ity | None -> Error)
         | Global (_, ty) ->
-            UnionFind.make
-              (match ty with Some ity -> Valtype ity | None -> Error)
+            Cell.make (match ty with Some ity -> Valtype ity | None -> Error)
         | Func_ref (ty, ty') ->
             let name = Ast.no_loc ty' in
-            UnionFind.make
+            Cell.make
               (Valtype
                  {
                    typ = Ref { nullable = false; typ = Type name };
@@ -3750,7 +3734,7 @@ and type_variable_access ctx i =
             Error.unbound_name ctx.diagnostics ~location:idx.info
               ~suggestions:(get_suggestions ctx idx.desc)
               "variable" idx;
-            UnionFind.make Error
+            Cell.make Error
       in
       return_expression i desc ty
   | Set (None, i') ->
@@ -3758,7 +3742,7 @@ and type_variable_access ctx i =
       (* [_ = e] drops one value, so [e] must produce exactly one; otherwise wax
          emits a [drop] with nothing (or too much) on the stack. [expression_type]
          reports [not_an_expression] when the arity is not 1. *)
-      ignore (expression_type ctx i' : inferred_type UnionFind.t);
+      ignore (expression_type ctx i' : inferred_type Cell.t);
       return_statement i (Set (None, i')) [||]
   | Set (Some idx, i') ->
       (* Resolve the target first (a pure lookup) so the value can be checked
@@ -3770,9 +3754,7 @@ and type_variable_access ctx i =
       let* i' =
         match resolved with
         | Local (Some ity) | Global (_, Some ity) ->
-            let* i', _ =
-              check_instruction ctx (UnionFind.make (Valtype ity)) i'
-            in
+            let* i', _ = check_instruction ctx (Cell.make (Valtype ity)) i' in
             return i'
         | Local None | Global (_, None) | Func_ref _ | Unbound ->
             instruction ctx i'
@@ -3797,7 +3779,7 @@ and type_variable_access ctx i =
          match against. *)
       match resolve_variable ctx idx with
       | Local (Some ity) ->
-          let typ = UnionFind.make (Valtype ity) in
+          let typ = Cell.make (Valtype ity) in
           let* i', _ = check_instruction ctx typ i' in
           mark_initialized ctx idx.desc;
           return_expression i (Tee (idx, i')) typ
@@ -3842,9 +3824,7 @@ and type_let ctx i =
             | None -> true
           in
           let* i', needed =
-            check_instruction ~drop_supertype ctx
-              (UnionFind.make (Valtype ity))
-              i'
+            check_instruction ~drop_supertype ctx (Cell.make (Valtype ity)) i'
           in
           Option.iter
             (fun name ->
@@ -3880,7 +3860,7 @@ and type_let ctx i =
               (fun idx binding ->
                 let result_ty =
                   if idx < Array.length result_types then result_types.(idx)
-                  else UnionFind.make Error
+                  else Cell.make Error
                 in
                 bind_let_value ctx ~location:i.info result_ty binding)
               bindings
@@ -4041,7 +4021,7 @@ and type_block_construct ctx i =
   | If { label; typ; cond; if_block; else_block } -> (
       let* cond' = instruction ctx cond in
       check_type ctx cond'
-        (UnionFind.make (Valtype { typ = I32; internal = I32; inline = None }));
+        (Cell.make (Valtype { typ = I32; internal = I32; inline = None }));
       if Array.length typ.params > 0 then
         Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
       match if_inference ctx i label typ ~cond:cond' ~if_block ~else_block with
@@ -4130,7 +4110,7 @@ and type_block_construct ctx i =
 
 and type_mem_method_call ctx i func recv memname meth args =
   let _, address_type = Option.get (Tbl.find_opt ctx.memories memname) in
-  let addr_vt = UnionFind.make (Valtype (address_valtype address_type)) in
+  let addr_vt = Cell.make (Valtype (address_valtype address_type)) in
   let is_store = mem_store_method meth.desc in
   let nstack = if is_store then 2 else 1 in
   let* args' = instructions ctx args in
@@ -4148,24 +4128,24 @@ and type_mem_method_call ctx i func recv memname meth args =
             match meth.desc with
             | "store64" ->
                 check_type ctx value'
-                  (UnionFind.make
+                  (Cell.make
                      (Valtype { typ = I64; internal = I64; inline = None }))
             | "storef32" ->
                 check_type ctx value'
-                  (UnionFind.make
+                  (Cell.make
                      (Valtype { typ = F32; internal = F32; inline = None }))
             | "storef64" ->
                 check_type ctx value'
-                  (UnionFind.make
+                  (Cell.make
                      (Valtype { typ = F64; internal = F64; inline = None }))
             | _ -> (
-                match UnionFind.find vty with
+                match Cell.get vty with
                 | Valtype { internal = I32 | I64; _ }
                 | Int | Number | Unknown | Error ->
                     ()
                 | _ ->
                     Error.instruction_type_mismatch ctx.diagnostics
-                      ~location:(snd value'.info) vty (UnionFind.make Int)))
+                      ~location:(snd value'.info) vty (Cell.make Int)))
         | [] -> ())
   | [] -> ());
   List.iteri
@@ -4185,7 +4165,7 @@ and type_mem_method_call ctx i func recv memname meth args =
     if is_store then [||]
     else
       match mem_load_result meth.desc with
-      | Some t -> [| UnionFind.make t |]
+      | Some t -> [| Cell.make t |]
       | None -> [||]
   in
   return_statement i
@@ -4201,7 +4181,7 @@ and type_mem_method_call ctx i func recv memname meth args =
 and type_simd_mem_method_call ctx i func recv memname meth args =
   let mop = Option.get (Simd.mem_method meth.desc) in
   let _, address_type = Option.get (Tbl.find_opt ctx.memories memname) in
-  let addr_vt = UnionFind.make (Valtype (address_valtype address_type)) in
+  let addr_vt = Cell.make (Valtype (address_valtype address_type)) in
   let nstack = List.length mop.m_operands in
   let nimm = if mop.m_lane then 1 else 0 in
   let* args' = instructions ctx args in
@@ -4249,9 +4229,9 @@ and type_simd_mem_method_call ctx i func recv memname meth args =
 
 and type_mem_mgmt_call ctx i func recv name meth args =
   let _, at = Option.get (Tbl.find_opt ctx.memories name) in
-  let addr () = UnionFind.make (Valtype (address_valtype at)) in
+  let addr () = Cell.make (Valtype (address_valtype at)) in
   let i32 () =
-    UnionFind.make (Valtype { typ = I32; internal = I32; inline = None })
+    Cell.make (Valtype { typ = I32; internal = I32; inline = None })
   in
   let recv' = { desc = Get name; info = ([||], recv.info) } in
   let mk args' =
@@ -4290,7 +4270,7 @@ and type_mem_mgmt_call ctx i func recv name meth args =
       let src_at =
         match Tbl.find_opt ctx.memories src with Some (_, a) -> a | None -> at
       in
-      let addr_of a = UnionFind.make (Valtype (address_valtype a)) in
+      let addr_of a = Cell.make (Valtype (address_valtype a)) in
       let min_at =
         match (at, src_at) with `I32, _ | _, `I32 -> `I32 | `I64, `I64 -> `I64
       in
@@ -4318,9 +4298,9 @@ and type_mem_mgmt_call ctx i func recv name meth args =
 
 and type_table_mgmt_call ctx i func recv name meth args =
   let at, rt = Option.get (Tbl.find_opt ctx.tables name) in
-  let addr () = UnionFind.make (Valtype (address_valtype at)) in
+  let addr () = Cell.make (Valtype (address_valtype at)) in
   let i32 () =
-    UnionFind.make (Valtype { typ = I32; internal = I32; inline = None })
+    Cell.make (Valtype { typ = I32; internal = I32; inline = None })
   in
   let check_elt e =
     let>@ t = internalize ctx (Ref rt) in
@@ -4369,7 +4349,7 @@ and type_table_mgmt_call ctx i func recv name meth args =
             a
         | None -> at
       in
-      let addr_of a = UnionFind.make (Valtype (address_valtype a)) in
+      let addr_of a = Cell.make (Valtype (address_valtype a)) in
       let min_at =
         match (at, src_at) with `I32, _ | _, `I32 -> `I32 | `I64, `I64 -> `I64
       in
@@ -4402,10 +4382,10 @@ and type_array_fill_call ctx i func a meth j v n =
   let* v' = instruction ctx v in
   let* n' = instruction ctx n in
   check_type ctx n'
-    (UnionFind.make (Valtype { typ = I32; internal = I32; inline = None }));
+    (Cell.make (Valtype { typ = I32; internal = I32; inline = None }));
   check_type ctx j'
-    (UnionFind.make (Valtype { typ = I32; internal = I32; inline = None }));
-  (match UnionFind.find (expression_type ctx a') with
+    (Cell.make (Valtype { typ = I32; internal = I32; inline = None }));
+  (match Cell.get (expression_type ctx a') with
   | Valtype { typ = Ref { typ = Type ty; _ }; _ } ->
       let>@ typ = lookup_array_type ctx ty in
       if not typ.mut then
@@ -4434,14 +4414,14 @@ and type_array_copy_call ctx i func a1 meth i1 a2 i2 n =
   let* i2' = instruction ctx i2 in
   let* n' = instruction ctx n in
   check_type ctx n'
-    (UnionFind.make (Valtype { typ = I32; internal = I32; inline = None }));
+    (Cell.make (Valtype { typ = I32; internal = I32; inline = None }));
   check_type ctx i2'
-    (UnionFind.make (Valtype { typ = I32; internal = I32; inline = None }));
+    (Cell.make (Valtype { typ = I32; internal = I32; inline = None }));
   let ty' = expression_type ctx a2' in
   check_type ctx i1'
-    (UnionFind.make (Valtype { typ = I32; internal = I32; inline = None }));
+    (Cell.make (Valtype { typ = I32; internal = I32; inline = None }));
   let ty = expression_type ctx a1' in
-  (match (UnionFind.find ty, UnionFind.find ty') with
+  (match (Cell.get ty, Cell.get ty') with
   (* Either array already failed to type; recover silently. *)
   | Error, _ | _, Error -> ()
   (* An array's type is unknown (unreachable / branch code): its element type
@@ -4467,16 +4447,14 @@ and type_array_copy_call ctx i func a1 meth i1 a2 i2 n =
 and type_array_init_call ctx i func a meth seg sinfo rest =
   let* a' = instruction ctx a in
   let* rest' = instructions ctx rest in
-  let i32 =
-    UnionFind.make (Valtype { typ = I32; internal = I32; inline = None })
-  in
+  let i32 = Cell.make (Valtype { typ = I32; internal = I32; inline = None }) in
   (match rest' with
   | [ d'; s'; n' ] ->
       check_type ctx d' i32;
       check_type ctx s' i32;
       check_type ctx n' i32
   | _ -> ());
-  (match UnionFind.find (expression_type ctx a') with
+  (match Cell.get (expression_type ctx a') with
   | Valtype { typ = Ref { typ = Type ty; _ }; _ } -> (
       let>@ field = lookup_array_type ctx ty in
       if not field.mut then
@@ -4518,71 +4496,54 @@ and type_unary_intrinsic_call ctx i func recv meth =
   let* recv' = instruction ctx recv in
   let*! ty =
     let ty = expression_type ctx recv' in
-    match (UnionFind.find ty, meth.desc) with
+    match (Cell.get ty, meth.desc) with
     | Valtype { typ = Ref { typ = Type t; _ }; _ }, "length" -> (
         let*@ _, def = Tbl.find_opt ctx.type_context.types t in
         match def.typ with
         | Array _ ->
             Some
-              (UnionFind.make
-                 (Valtype { typ = I32; internal = I32; inline = None }))
+              (Cell.make (Valtype { typ = I32; internal = I32; inline = None }))
         | Struct _ | Func _ | Cont _ ->
             Error.expected_array_type ctx.diagnostics ~location:i.info;
             None)
     | (Null | Valtype { typ = Ref { typ = Array; _ }; _ }), "length" ->
-        Some
-          (UnionFind.make
-             (Valtype { typ = I32; internal = I32; inline = None }))
+        Some (Cell.make (Valtype { typ = I32; internal = I32; inline = None }))
     | Valtype { typ = I32; _ }, "from_bits" ->
-        Some
-          (UnionFind.make
-             (Valtype { typ = F32; internal = F32; inline = None }))
+        Some (Cell.make (Valtype { typ = F32; internal = F32; inline = None }))
     | Valtype { typ = I64; _ }, "from_bits" ->
-        Some
-          (UnionFind.make
-             (Valtype { typ = F64; internal = F64; inline = None }))
+        Some (Cell.make (Valtype { typ = F64; internal = F64; inline = None }))
     | Valtype { typ = F32; _ }, "to_bits" ->
-        Some
-          (UnionFind.make
-             (Valtype { typ = I32; internal = I32; inline = None }))
+        Some (Cell.make (Valtype { typ = I32; internal = I32; inline = None }))
     | Valtype { typ = F64; _ }, "to_bits" ->
-        Some
-          (UnionFind.make
-             (Valtype { typ = I64; internal = I64; inline = None }))
+        Some (Cell.make (Valtype { typ = I64; internal = I64; inline = None }))
     (* An abstract numeric receiver (e.g. a bare float literal whose redundant
        cast [simplify] dropped) defaults like any other operation: [to_bits] on a
        [Float] is f64->i64, [from_bits] on an integer is i32->f32 (or i64->f64
        for a [LargeInt]). The non-default widths keep their cast (load-bearing),
        so they reach the concrete arms above. *)
     | Float, "to_bits" ->
-        UnionFind.set ty (Valtype { typ = F64; internal = F64; inline = None });
-        Some
-          (UnionFind.make
-             (Valtype { typ = I64; internal = I64; inline = None }))
+        Cell.set ty (Valtype { typ = F64; internal = F64; inline = None });
+        Some (Cell.make (Valtype { typ = I64; internal = I64; inline = None }))
     | (Number | Int), "from_bits" ->
-        UnionFind.set ty (Valtype { typ = I32; internal = I32; inline = None });
-        Some
-          (UnionFind.make
-             (Valtype { typ = F32; internal = F32; inline = None }))
+        Cell.set ty (Valtype { typ = I32; internal = I32; inline = None });
+        Some (Cell.make (Valtype { typ = F32; internal = F32; inline = None }))
     | LargeInt, "from_bits" ->
-        UnionFind.set ty (Valtype { typ = I64; internal = I64; inline = None });
-        Some
-          (UnionFind.make
-             (Valtype { typ = F64; internal = F64; inline = None }))
+        Cell.set ty (Valtype { typ = I64; internal = I64; inline = None });
+        Some (Cell.make (Valtype { typ = F64; internal = F64; inline = None }))
     | ( ((Number | Int | Valtype { typ = I32 | I64; _ }) as ty'),
         ("clz" | "ctz" | "popcnt" | "extend8_s" | "extend16_s") ) ->
-        if ty' = Number then UnionFind.set ty Int;
+        if ty' = Number then Cell.set ty Int;
         Some ty
     | ( ((Number | Float | Valtype { typ = F32 | F64; _ }) as ty'),
         ("abs" | "ceil" | "floor" | "trunc" | "nearest" | "sqrt") ) ->
-        if ty' = Number then UnionFind.set ty Float;
+        if ty' = Number then Cell.set ty Float;
         Some ty
-    | Error, _ -> Some (UnionFind.make Error)
+    | Error, _ -> Some (Cell.make Error)
     | Unknown, _ ->
         (* The receiver's type is unknown (unreachable / branch code): the
            method cannot be resolved, so the call cannot be compiled. *)
         Error.unknown_operand_type ctx.diagnostics ~location:(snd recv'.info);
-        Some (UnionFind.make Error)
+        Some (Cell.make Error)
     | _ ->
         Error.invalid_method_receiver ctx.diagnostics ~location:meth.info ty;
         None
@@ -4711,7 +4672,7 @@ and type_simd_free_intrinsic_call ctx i func name args =
 and check_instruction ?(drop_supertype = false) ctx expected
     (i : location instr) =
   let i32_cell () =
-    UnionFind.make (Valtype { typ = I32; internal = I32; inline = None })
+    Cell.make (Valtype { typ = I32; internal = I32; inline = None })
   in
   (* The construction's type name: explicit, or inferred from an exact expected
      type; [missing] reports a [cannot_infer_*] error and yields [None]. *)
@@ -4799,7 +4760,7 @@ and check_instruction ?(drop_supertype = false) ctx expected
             in
             return_expression i
               (Struct (None, List.rev fields'))
-              (UnionFind.make Error)
+              (Cell.make Error)
         | Some typ ->
             let*! field_types = lookup_struct_type ctx typ in
             (* ZZZ We should check the evaluation order*)
@@ -4870,8 +4831,7 @@ and check_instruction ?(drop_supertype = false) ctx expected
           resolve_name ty ~missing:(fun () ->
               Error.cannot_infer_struct_type ctx.diagnostics ~location:i.info)
         with
-        | None ->
-            return_expression i (StructDefault None) (UnionFind.make Error)
+        | None -> return_expression i (StructDefault None) (Cell.make Error)
         | Some typ ->
             let*! fields = lookup_struct_type ctx typ in
             if
@@ -4897,7 +4857,7 @@ and check_instruction ?(drop_supertype = false) ctx expected
             let* i1' = instruction ctx i1 in
             let* i2' = instruction ctx i2 in
             check_type ctx i2' (i32_cell ());
-            return_expression i (Array (None, i1', i2')) (UnionFind.make Error)
+            return_expression i (Array (None, i1', i2')) (Cell.make Error)
         | Some typ ->
             (* Resolve the element type (pure) before typing the element value,
                so a struct/array literal or null cast there can be inferred /
@@ -4933,7 +4893,7 @@ and check_instruction ?(drop_supertype = false) ctx expected
         | None ->
             let* n' = instruction ctx n in
             check_type ctx n' (i32_cell ());
-            return_expression i (ArrayDefault (None, n')) (UnionFind.make Error)
+            return_expression i (ArrayDefault (None, n')) (Cell.make Error)
         | Some typ ->
             let* n' = instruction ctx n in
             check_type ctx n' (i32_cell ());
@@ -4964,7 +4924,7 @@ and check_instruction ?(drop_supertype = false) ctx expected
             in
             return_expression i
               (ArrayFixed (None, List.rev instrs'))
-              (UnionFind.make Error)
+              (Cell.make Error)
         | Some typ ->
             let*! field' = lookup_array_type ctx typ in
             let elt = internalize ctx (unpack_type field') in
@@ -5004,7 +4964,7 @@ and check_instruction ?(drop_supertype = false) ctx expected
             check_type ctx len' (i32_cell ());
             return_expression i
               (ArraySegment (None, seg, off', len'))
-              (UnionFind.make Error)
+              (Cell.make Error)
         | Some typ ->
             let* off' = instruction ctx off in
             let* len' = instruction ctx len in
@@ -5081,7 +5041,7 @@ and check_instruction ?(drop_supertype = false) ctx expected
         if
           ctx.simplify
           &&
-          match (typ, UnionFind.find expected) with
+          match (typ, Cell.get expected) with
           | Ast.Valtype vt, Valtype b -> (
               match internalize_valtype ctx vt with
               | Some a -> valtype_equal ctx a b
@@ -5414,7 +5374,7 @@ and type_indirect_call ctx i i' l =
   let param_types = peek_call_params ctx i' in
   let* l' = typed_call_args ctx l param_types in
   let* i' = instruction ctx i' in
-  match UnionFind.find (expression_type ctx i') with
+  match Cell.get (expression_type ctx i') with
   | Valtype { typ = Ref { typ = Type ty; _ }; _ } ->
       let*! typ = lookup_func_type ctx ty in
       (let>@ param_types =
@@ -5579,7 +5539,7 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
   | If { label; typ; cond; if_block; else_block } -> (
       let* cond = toplevel_instruction ctx cond in
       check_type ctx cond
-        (UnionFind.make (Valtype { typ = I32; internal = I32; inline = None }));
+        (Cell.make (Valtype { typ = I32; internal = I32; inline = None }));
       match if_inference ctx i label typ ~cond ~if_block ~else_block with
       | Some (desc, results) -> return_statement i desc results
       | None ->
@@ -5944,8 +5904,7 @@ and block_keep_bool ctx loc label ~result ~br_params body =
           to [result], so it joins with the branched values at its own type. *)
        (match st with
        | Cons (loc', tv, _) ->
-           cs.collected <-
-             (Some loc', UnionFind.make (UnionFind.find tv)) :: cs.collected
+           cs.collected <- (Some loc', Cell.make (Cell.get tv)) :: cs.collected
        | Empty | Unreachable -> ());
        let st, () = pop_args ctx ~location:loc [| result |] st in
        (* Return the cell: the caller may deliver more values to it (a [try]'s catch
@@ -5961,7 +5920,7 @@ and block_keep_bool ctx loc label ~result ~br_params body =
    exit differs from the context type [result]. Read after any extra deliveries
    (a [try]'s catch handlers) have been collected. *)
 and block_keep_needed ctx ~loc ~result r =
-  match UnionFind.find r with
+  match Cell.get r with
   | Collecting cs -> (
       cs.needed
       ||
@@ -6011,7 +5970,7 @@ and finalize_inferred ?(needed = false) ctx typ ~inferred =
   if typ.results = [||] then
     match Option.bind inferred (resolve_omitted_valtype ctx) with
     | Some iv ->
-        ([| UnionFind.make (Valtype iv) |], { typ with results = [| iv.typ |] })
+        ([| Cell.make (Valtype iv) |], { typ with results = [| iv.typ |] })
     | None -> ([||], typ)
   else
     let result_cells =
@@ -6107,7 +6066,7 @@ and declared_result ctx typ =
    be load-bearing. *)
 and fresh_collecting ?(needed = false) declared =
   let cs = { collected = []; declared; needed } in
-  (cs, UnionFind.make (Collecting cs))
+  (cs, Cell.make (Collecting cs))
 
 (* Type a (possibly branch-targeted) block body in synthesis, inferring its
    single result from every value that reaches its exit: the fall-through value
@@ -6314,7 +6273,7 @@ let rec check_constant_instruction ctx i =
   | BinOp ({ desc = Add | Sub | Mul; _ }, i1, i2) -> (
       check_constant_instruction ctx i1;
       check_constant_instruction ctx i2;
-      match UnionFind.find (expression_type ctx i) with
+      match Cell.get (expression_type ctx i) with
       | Int | Valtype { internal = I32 | I64; _ } -> ()
       | _ -> Error.constant_expression_required ctx.diagnostics ~location)
   | Cast ({ desc = Null; _ }, Valtype (Ref { nullable = true; _ })) ->
@@ -6323,14 +6282,14 @@ let rec check_constant_instruction ctx i =
   | Cast (i', Valtype (Ref { typ = I31; _ })) -> (
       (* ref.i31 *)
       check_constant_instruction ctx i';
-      match UnionFind.find (expression_type ctx i') with
+      match Cell.get (expression_type ctx i') with
       | Valtype { internal = I32; _ } -> ()
       | _ -> Error.constant_expression_required ctx.diagnostics ~location)
   | Cast (i', Valtype (Ref { typ = Extern; nullable })) ->
       (* extern.convert_any *)
       check_constant_instruction ctx i';
       if
-        match (UnionFind.find (expression_type ctx i') : inferred_type) with
+        match (Cell.get (expression_type ctx i') : inferred_type) with
         | Valtype { internal; _ } ->
             not
               (Wax_wasm.Types.val_subtype ctx.subtyping_info internal
@@ -6341,7 +6300,7 @@ let rec check_constant_instruction ctx i =
       (* any.convert_extern *)
       check_constant_instruction ctx i';
       if
-        match (UnionFind.find (expression_type ctx i') : inferred_type) with
+        match (Cell.get (expression_type ctx i') : inferred_type) with
         | Valtype { internal; _ } ->
             not
               (Wax_wasm.Types.val_subtype ctx.subtyping_info internal
@@ -6391,7 +6350,7 @@ let type_data_offset ctx address_type off =
     with_empty_stack ctx ~location:off.info ~kind:Expression
       (toplevel_instruction ctx off)
   in
-  check_type ctx off' (UnionFind.make (Valtype (address_valtype address_type)));
+  check_type ctx off' (Cell.make (Valtype (address_valtype address_type)));
   check_constant_instruction ctx off';
   off'
 
@@ -6517,8 +6476,7 @@ let rec globals ctx fields =
                     let def', needed =
                       with_empty_stack ctx ~location:def.info ~kind:Expression
                         (check_toplevel ~drop_supertype:(not mut) ctx
-                           (UnionFind.make (Valtype ity))
-                           def)
+                           (Cell.make (Valtype ity)) def)
                     in
                     Tbl.add ctx.diagnostics ctx.globals name (mut, Some ity);
                     let drop =
@@ -7017,7 +6975,7 @@ let type_configuration ?(warn_unused = false) ~simplify diagnostics fields =
             (fun (types, loc) ->
               ( Array.map
                   (fun ty ->
-                    match UnionFind.find ty with
+                    match Cell.get ty with
                     | Unknown | Error | Collecting _ -> None
                     | Null ->
                         Some (Value (Ref { nullable = true; typ = None_ }))

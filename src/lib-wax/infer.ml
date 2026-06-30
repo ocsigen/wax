@@ -1,5 +1,5 @@
-(* The inferred-type lattice used while type checking, the mutable union-find
-   cells that carry it, and the shared printers/type aliases built on top. Kept
+(* The inferred-type lattice used while type checking, the mutable cells
+   ([Cell]) that carry it, and the shared printers/type aliases built on top. Kept
    in its own module so the checker ([Typing]) and its error messages share one
    definition; see [infer.mli] for the documented interface. *)
 
@@ -13,7 +13,7 @@ module Output = struct
   let instr f i = Wax_utils.Printer.run f (fun pp -> Output.instr pp i)
 end
 
-module UnionFind = struct
+module Cell = struct
   type 'a state = Link of 'a t | Root of 'a
   and 'a t = { mutable state : 'a state }
 
@@ -27,7 +27,7 @@ module UnionFind = struct
         if next != root then node.state <- Link root;
         root
 
-  let find node =
+  let get node =
     let root = representative node in
     match root.state with Root v -> v | Link _ -> assert false
 
@@ -95,12 +95,12 @@ type inferred_type =
           other uses treat it like [Unknown]. *)
 
 and collecting = {
-  mutable collected : (Ast.location option * inferred_type UnionFind.t) list;
+  mutable collected : (Ast.location option * inferred_type Cell.t) list;
       (** Each value reaching the block's exit (a [br]/[br_on_*] target value or
           the fall-through), paired with the location it was produced at when
           the caller has one, so a join failure can point at the offending exits
           ([None] otherwise). *)
-  declared : inferred_type UnionFind.t option;
+  declared : inferred_type Cell.t option;
       (** The single result type the block already carries while it is being
           inferred — a Wasm->Wax annotation under test, or [None] when omitted.
           A consumer that needs a concrete type, rather than an ordinary exit
@@ -113,7 +113,7 @@ and collecting = {
 }
 
 let rec output_inferred_type f ty =
-  match UnionFind.find ty with
+  match Cell.get ty with
   (* A block result still being inferred renders as the annotation under test (the
      type a reader, e.g. a mismatched [br]/catch, is checked against), not [any]. *)
   | Collecting { declared = Some d; _ } -> output_inferred_type f d
@@ -134,4 +134,4 @@ let rec output_inferred_type f ty =
    whereas an [Error] operand stays silent. This predicate is for the many
    places that need only the common "type unknown" test. *)
 let is_unknown_or_error ty =
-  match UnionFind.find ty with Unknown | Error -> true | _ -> false
+  match Cell.get ty with Unknown | Error -> true | _ -> false

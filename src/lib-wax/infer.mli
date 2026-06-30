@@ -1,5 +1,6 @@
-(** The inferred-type lattice used while type checking, the mutable union-find
-    cells that carry it, and the shared printers/type aliases built on top. *)
+(** The inferred-type lattice used while type checking, the mutable cells
+    ([Cell]) that carry it, and the shared printers/type aliases built on top.
+*)
 
 (** Output printers wrapping {!module:Output} so they take a [Format.formatter]
     directly (rather than a {!Wax_utils.Printer.t}), for use in diagnostics. *)
@@ -9,13 +10,13 @@ module Output : sig
   val comptype : Format.formatter -> Ast.comptype -> unit
 end
 
-(** A mutable union-find cell. Cells are unified destructively as inference
-    proceeds; [find] resolves a cell to its current root value. *)
-module UnionFind : sig
+(** A mutable cell carrying a value, backed by union-find: [merge] unifies two
+    cells so they share one value, and [get] resolves a cell to that value. *)
+module Cell : sig
   type 'a t
 
   val make : 'a -> 'a t
-  val find : 'a t -> 'a
+  val get : 'a t -> 'a
 
   val merge : 'a t -> 'a t -> 'a -> unit
   (** [merge a b v] unions [a] and [b] and sets the shared root to [v]. *)
@@ -66,11 +67,11 @@ type inferred_type =
           inference, so other uses treat it like [Unknown]. *)
 
 and collecting = {
-  mutable collected : (Ast.location option * inferred_type UnionFind.t) list;
+  mutable collected : (Ast.location option * inferred_type Cell.t) list;
       (** Each value reaching the block's exit, paired with the location it was
           produced at (when known) so a join failure can point at the offending
           exits. *)
-  declared : inferred_type UnionFind.t option;
+  declared : inferred_type Cell.t option;
       (** The single result type the block already carries while being inferred
           — a Wasm->Wax annotation under test, or [None] when omitted. *)
   mutable needed : bool;
@@ -78,10 +79,10 @@ and collecting = {
           forcing the annotation to be kept. *)
 }
 
-val output_inferred_type : Format.formatter -> inferred_type UnionFind.t -> unit
+val output_inferred_type : Format.formatter -> inferred_type Cell.t -> unit
 (** Render an inferred type for diagnostics (an unresolved one prints as [any]).
 *)
 
-val is_unknown_or_error : inferred_type UnionFind.t -> bool
+val is_unknown_or_error : inferred_type Cell.t -> bool
 (** Whether a cell resolves to [Unknown] or [Error] — the common "no concrete
     type known" test. *)
