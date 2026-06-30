@@ -2765,6 +2765,16 @@ and type_branch ctx i =
                    anon_comptype;
                  })
         | (Unknown | Error) as ity -> Cell.make ity
+        | Null ->
+            (* A bare [null] is always null, so the branch is always taken; the
+               non-null fall-through value has the bottom reference type. *)
+            Cell.make
+              (Valtype
+                 {
+                   typ = Ref { nullable = false; typ = None_ };
+                   internal = Ref { nullable = false; typ = None_ };
+                   anon_comptype = None;
+                 })
         | _ ->
             Error.expected_ref ctx.diagnostics ~location:(snd i'.info);
             Cell.make Error
@@ -4518,9 +4528,10 @@ and type_unary_intrinsic_call ctx i func recv meth =
     | LargeInt, "from_bits" ->
         Cell.set ty (Valtype i64_valtype);
         Some f64_cell
-    | ( ((Number | Int | Valtype { typ = I32 | I64; _ }) as ty'),
+    | ( ((Number | Int | LargeInt | Valtype { typ = I32 | I64; _ }) as ty'),
         ("clz" | "ctz" | "popcnt" | "extend8_s" | "extend16_s") ) ->
-        if ty' = Number then Cell.set ty Int;
+        (if ty' = Number then Cell.set ty Int
+         else if ty' = LargeInt then Cell.set ty (Valtype i64_valtype));
         Some ty
     | ( ((Number | Float | Valtype { typ = F32 | F64; _ }) as ty'),
         ("abs" | "ceil" | "floor" | "trunc" | "nearest" | "sqrt") ) ->
