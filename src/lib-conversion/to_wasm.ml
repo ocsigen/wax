@@ -1023,7 +1023,11 @@ and instruction_desc ret ctx i : location Text.instr list =
               | I32, Valtype (Ref { typ = I31; _ }) -> RefI31
               | Ref _, Signedtype { typ = `I32; signage; _ } -> I31Get signage
               (* Extern / Any *)
-              | ( Ref { typ = Any | I31 | Struct | Array | Type _ | None_; _ },
+              | ( Ref
+                    {
+                      typ = Any | Eq | I31 | Struct | Array | Type _ | None_;
+                      _;
+                    },
                   Valtype (Ref { typ = Extern; _ }) ) ->
                   ExternConvertAny
               | Ref { typ = Extern; _ }, Valtype (Ref { typ = Any; _ }) ->
