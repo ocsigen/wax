@@ -1170,7 +1170,9 @@ and instruction_desc ret ctx i : location Text.instr list =
       folded loc (RefTest (reftype typ)) (instruction ret ctx expr)
   | NonNull expr -> folded loc RefAsNonNull (instruction ret ctx expr)
   | Struct (opt_idx, fields) ->
-      let idx = Option.value ~default:(expr_type_name i) opt_idx in
+      let idx =
+        match opt_idx with Some idx -> idx | None -> expr_type_name i
+      in
       let field_names = Hashtbl.find ctx.struct_fields idx.desc in
       let field_map =
         List.fold_left
@@ -1183,7 +1185,12 @@ and instruction_desc ret ctx i : location Text.instr list =
       let args_code = List.concat_map (instruction ret ctx) instrs in
       folded loc (StructNew (index idx)) args_code
   | StructDefault opt_idx ->
-      let idx = Option.value ~default:(expr_type_name i) opt_idx in
+      (* Compute the fallback type only when no index was written: [expr_type_name]
+         asserts on an abstract [&struct] receiver, and [Option.value ~default:]
+         would evaluate it even for the [Some] case. *)
+      let idx =
+        match opt_idx with Some idx -> idx | None -> expr_type_name i
+      in
       folded loc (StructNewDefault (index idx)) []
   | StructGet (instr_val, field) ->
       (* Plain struct field access; the instruction methods that used to share
@@ -1198,20 +1205,28 @@ and instruction_desc ret ctx i : location Text.instr list =
         (StructSet (index (expr_type_name instr_val), index field_idx))
         (code_val @ code_new)
   | Array (opt_idx, val_instr, len_instr) ->
-      let idx = Option.value ~default:(expr_type_name i) opt_idx in
+      let idx =
+        match opt_idx with Some idx -> idx | None -> expr_type_name i
+      in
       folded loc
         (ArrayNew (index idx))
         (instruction ret ctx val_instr @ instruction ret ctx len_instr)
   | ArrayDefault (opt_idx, len_instr) ->
-      let idx = Option.value ~default:(expr_type_name i) opt_idx in
+      let idx =
+        match opt_idx with Some idx -> idx | None -> expr_type_name i
+      in
       folded loc (ArrayNewDefault (index idx)) (instruction ret ctx len_instr)
   | ArrayFixed (opt_idx, instrs) ->
-      let idx = Option.value ~default:(expr_type_name i) opt_idx in
+      let idx =
+        match opt_idx with Some idx -> idx | None -> expr_type_name i
+      in
       let args_code = List.concat_map (instruction ret ctx) instrs in
       let len = Uint32.of_int (List.length instrs) in
       folded loc (ArrayNewFixed (index idx, len)) args_code
   | ArraySegment (opt_idx, seg, off_instr, len_instr) ->
-      let idx = Option.value ~default:(expr_type_name i) opt_idx in
+      let idx =
+        match opt_idx with Some idx -> idx | None -> expr_type_name i
+      in
       (* An element segment means [array.new_elem]; otherwise a data segment. *)
       let desc : _ Text.instr_desc =
         if Hashtbl.mem ctx.elems seg.desc then
@@ -1505,7 +1520,7 @@ and instruction_desc ret ctx i : location Text.instr list =
          the [mut i8] default that a bare [(@string "..")] already lowers to, so
          it stays omitted; a concrete inferred type (e.g. an immutable [chars])
          is pinned explicitly. *)
-      let idx = Option.value ~default:(expr_type_name i) ty in
+      let idx = match ty with Some idx -> idx | None -> expr_type_name i in
       let idx =
         if idx.desc <> "" && idx.desc.[0] = '<' then None else Some idx
       in
