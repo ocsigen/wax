@@ -545,7 +545,7 @@ let caml_stderr: &eq = 0 as &i31;
 #[export = "caml_ml_open_descriptor_out"]
 fn caml_ml_open_descriptor_out(fd: &eq) -> &eq {
     let buffer = ta_new(IO_BUFFER_SIZE);
-    let res: &eq =
+    let res =
         {
             ops: channel_ops,
             id: custom_next_id(),

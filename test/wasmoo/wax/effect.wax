@@ -84,7 +84,7 @@ fn caml_continuation_use_noexc(vcont: &eq) -> &eq {
     _ =
         'used: do {
             let continuation = vcont as &block;
-            let stack: &eq = br_on_cast_fail 'used &generic_fiber continuation[1];
+            let stack = br_on_cast_fail 'used &generic_fiber continuation[1];
             continuation[1] = 0 as &i31;
             return stack;
         };

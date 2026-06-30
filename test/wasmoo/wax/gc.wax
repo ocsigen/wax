@@ -46,7 +46,7 @@ fn caml_gc_compaction(&eq) -> &eq {
 
 #[export = "caml_gc_counters"]
 fn caml_gc_counters(&eq) -> &eq {
-    let f: &eq = { f: 0 };
+    let f = { f: 0 };
     [block|0 as &i31, f, f, f];
 }
 
@@ -54,7 +54,7 @@ fn caml_gc_counters(&eq) -> &eq {
 #[export = "caml_gc_stat"]
 #[export = "caml_gc_quick_stat"]
 fn caml_gc_stat(&eq) -> &eq {
-    let f: &eq = { f: 0 };
+    let f = { f: 0 };
     [block|
         0 as &i31,
         f,
@@ -81,7 +81,7 @@ fn caml_gc_stat(&eq) -> &eq {
 #[export = "caml_gc_stat"]
 #[export = "caml_gc_quick_stat"]
 fn caml_gc_stat(&eq) -> &eq {
-    let f: &eq = { f: 0 };
+    let f = { f: 0 };
     [block|
         0 as &i31,
         f,

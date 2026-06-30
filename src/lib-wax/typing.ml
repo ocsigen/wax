@@ -796,6 +796,13 @@ type module_context = {
   local_decls : ident list ref;
       (* The [let]-bound locals declared in the current function, in declaration
          order, so an unread one can be reported as unused. Reset per function. *)
+  assigned_locals : StringSet.t;
+      (* Names of locals assigned ([Set]/[Tee] targets) anywhere in the current
+         function, collected once on entry (see [collect_assigned_locals]). Lets
+         the annotation-drop on a fused [let x: T = e] tell a write-once local —
+         which may narrow to [e]'s subtype just like an immutable global — from
+         one a later assignment still needs the wider [T] for. Reset per
+         function. *)
   mutable initialized_locals : StringSet.t;
       (* Locals known to hold a value at the current point. A non-defaultable
          (non-nullable reference) local starts uninitialized and must be
@@ -1929,6 +1936,90 @@ let rec count_holes i =
   | Throw (_, None)
   | Return None ->
       0
+
+(* Accumulate into [acc] the local names assigned ([Set]/[Tee] targets) anywhere
+   in [i], recursing through every sub-instruction. Mirrors the case coverage of
+   {!Sink_let.occurs}: only [Set]/[Tee] write a local, every other case just
+   recurses. A [Set None] (a value left on the stack, not a named write) names no
+   local. Wasm-derived locals are uniquely named within a function, so the
+   resulting by-name set is exact; a stray name collision could only keep an
+   annotation, never wrongly drop one. *)
+let rec collect_assigned_locals acc i =
+  let in_list acc l = List.fold_left collect_assigned_locals acc l in
+  let in_opt acc o =
+    match o with Some i -> collect_assigned_locals acc i | None -> acc
+  in
+  match i.desc with
+  | Set (Some id, e) | Tee (id, e) ->
+      collect_assigned_locals (StringSet.add id.desc acc) e
+  | Set (None, e) -> collect_assigned_locals acc e
+  | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
+      in_list acc block
+  | While { cond; block; _ } -> in_list (collect_assigned_locals acc cond) block
+  | If { cond; if_block; else_block; _ } ->
+      let acc = in_list (collect_assigned_locals acc cond) if_block.desc in
+      Option.fold ~none:acc ~some:(fun b -> in_list acc b.desc) else_block
+  | Try { block; catches; catch_all; _ } ->
+      let acc = in_list acc block in
+      let acc = List.fold_left (fun acc (_, b) -> in_list acc b) acc catches in
+      Option.fold ~none:acc ~some:(in_list acc) catch_all
+  | Call (t, args) | TailCall (t, args) ->
+      in_list (collect_assigned_locals acc t) args
+  | Cast (e, _)
+  | Test (e, _)
+  | NonNull e
+  | StructGet (e, _)
+  | UnOp (_, e)
+  | Br_if (_, e)
+  | Br_table (_, e)
+  | Br_on_null (_, e)
+  | Br_on_non_null (_, e)
+  | Br_on_cast (_, _, e)
+  | Br_on_cast_fail (_, _, e)
+  | ThrowRef e
+  | ArrayDefault (_, e)
+  | ContNew (_, e) ->
+      collect_assigned_locals acc e
+  | Struct (_, fields) ->
+      List.fold_left
+        (fun acc (_, e) -> collect_assigned_locals acc e)
+        acc fields
+  | StructSet (e1, _, e2)
+  | Array (_, e1, e2)
+  | ArraySegment (_, _, e1, e2)
+  | ArrayGet (e1, e2)
+  | BinOp (_, e1, e2) ->
+      collect_assigned_locals (collect_assigned_locals acc e1) e2
+  | ArraySet (e1, e2, e3) | Select (e1, e2, e3) ->
+      collect_assigned_locals
+        (collect_assigned_locals (collect_assigned_locals acc e1) e2)
+        e3
+  | ArrayFixed (_, l)
+  | ContBind (_, _, l)
+  | Suspend (_, l)
+  | Resume (_, _, l)
+  | ResumeThrow (_, _, _, l)
+  | ResumeThrowRef (_, _, l)
+  | Switch (_, _, l)
+  | Sequence l ->
+      in_list acc l
+  | Dispatch { index; arms; _ } ->
+      List.fold_left
+        (fun acc (_, b) -> in_list acc b)
+        (collect_assigned_locals acc index)
+        arms
+  | Match { scrutinee; arms; default } ->
+      let acc = collect_assigned_locals acc scrutinee in
+      let acc = List.fold_left (fun acc (_, b) -> in_list acc b) acc arms in
+      in_list acc default
+  | Let (_, body) -> in_opt acc body
+  | Br (_, o) | Throw (_, o) | Return o -> in_opt acc o
+  | If_annotation { then_body; else_body; _ } ->
+      let acc = in_list acc then_body in
+      Option.fold ~none:acc ~some:(in_list acc) else_body
+  | Get _ | Unreachable | Nop | Hole | Null | Char _ | String _ | Int _
+  | Float _ | StructDefault _ ->
+      acc
 
 let rec check_hole_order_rec ctx i n =
   match i.desc with
@@ -3494,13 +3585,23 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
          checking mode against the annotation, so an omitted struct/array name
          is inferred from it; the keep-bool then says whether the annotation is
          load-bearing. Dropping a present annotation stays gated on [simplify]
-         (Wasm->Wax), so hand-written Wax is never rewritten. *)
+         (Wasm->Wax), so hand-written Wax is never rewritten. A binding no later
+         assignment writes is effectively immutable, so — like a [const] global
+         — it also drops an annotation that is a mere supertype of the
+         initializer's type ([drop_supertype]), narrowing to that subtype. *)
       match internalize_valtype ctx annot with
       | None ->
           let* i' = instruction ctx i' in
           return_statement i (Let ([ (name_opt, Some annot) ], Some i')) [||]
       | Some ity ->
-          let* i', needed = check ctx (UnionFind.make (Valtype ity)) i' in
+          let drop_supertype =
+            match name_opt with
+            | Some name -> not (StringSet.mem name.desc ctx.assigned_locals)
+            | None -> true
+          in
+          let* i', needed =
+            check ~drop_supertype ctx (UnionFind.make (Valtype ity)) i'
+          in
           Option.iter
             (fun name ->
               ctx.locals <- StringMap.add name.desc (Some ity) ctx.locals;
@@ -6497,6 +6598,11 @@ let rec functions ctx fields =
               (* Fresh per-function tracking of declared and read locals. *)
               read_locals = ref StringSet.empty;
               local_decls = ref [];
+              (* Locals a later assignment writes, collected up front so a
+                 fused [let]'s drop can spot a write-once binding (linear: one
+                 traversal per function, not per binding). *)
+              assigned_locals =
+                List.fold_left collect_assigned_locals StringSet.empty body;
               control_types =
                 [ (Option.map (fun l -> l.desc) label, return_types) ];
               return_types;
@@ -6761,6 +6867,7 @@ let type_configuration ?(warn_unused = false) ~simplify diagnostics fields =
       warn_unused;
       read_locals = ref StringSet.empty;
       local_decls = ref [];
+      assigned_locals = StringSet.empty;
       initialized_locals = StringSet.empty;
       control_types = [];
       return_types = [||];

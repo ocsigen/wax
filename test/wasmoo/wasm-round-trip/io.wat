@@ -599,7 +599,7 @@
 
 (func $caml_ml_open_descriptor_out (export "caml_ml_open_descriptor_out")
   (param $fd (ref eq)) (result (ref eq))
-  (local $buffer (ref extern)) (local $res (ref eq))
+  (local $buffer (ref extern)) (local $res (ref $channel))
   (local.set $buffer (call $ta_new (global.get $IO_BUFFER_SIZE)))
   (local.set $res
     (struct.new $channel (global.get $channel_ops) (call $custom_next_id)

@@ -104,7 +104,7 @@
 
 (func $caml_continuation_use_noexc (export "caml_continuation_use_noexc")
   (param $vcont (ref eq)) (result (ref eq))
-  (local $continuation (ref $block)) (local $stack (ref eq))
+  (local $continuation (ref $block)) (local $stack (ref $generic_fiber))
   (drop
     (block $used (result (ref eq))
       (local.set $continuation (ref.cast (ref $block) (local.get $vcont)))
