@@ -1979,15 +1979,35 @@ let rec collect_assigned_locals acc i =
   | Float _ | StructDefault _ ->
       acc
 
-(* For a SIMD intrinsic written as a method (e.g. [v.extract_lane_s_i8x16(3)]),
-   the number of leading constant lane immediates in its argument list, or [None]
-   if [meth] is not such an intrinsic. The dispatch is by name only, mirroring
-   how the call itself is typed (see [type_simd_vector_op_call]). *)
-let simd_method_imms meth =
+(* If [meth] names an intrinsic written as a method on a value receiver — a SIMD
+   lane/vector op [v.add_i32x4(b)], or a scalar [x.copysign(y)], [x.min(y)],
+   [x.rotl(y)] — the number of leading constant lane immediates in its argument
+   list (always 0 for the scalar ops), else [None]. Such a call evaluates the
+   receiver before its operands, unlike a generic call whose callee is evaluated
+   last; the leading SIMD lane immediates are static and never reach the stack.
+   The set of names matches the call dispatch (see [type_simd_vector_op_call],
+   [type_binary_intrinsic_call]). This is decided by name alone — but the same
+   names are only receiver-first when the receiver is actually a value, see
+   [receiver_is_value]. *)
+let intrinsic_method_imms meth =
   match Wax_wasm.Simd.classify meth with
   | Some { free = false; imm; _ } -> (
       match imm with No_imm -> Some 0 | Lane _ -> Some 1 | Shuffle -> Some 16)
-  | _ -> None
+  | _ -> (
+      match meth with
+      | "rotl" | "rotr" | "copysign" | "min" | "max" -> Some 0
+      | _ -> None)
+
+(* Whether [obj], the receiver of an [obj.meth(args)] call, is a value rather
+   than a reference. Only a value receiver makes [meth] an intrinsic evaluated
+   receiver-first: when [obj] is a reference, [obj.meth] may instead load a
+   function-pointer field, so the call is an indirect call whose arguments are
+   evaluated first (then the loaded callee). Treating that as receiver-first
+   could hide a value occurring before a hole, so the reorder is gated on this. *)
+let receiver_is_value ctx obj =
+  match Cell.get (expression_type ctx obj) with
+  | Null | Valtype { internal = Ref _; _ } -> false
+  | _ -> true
 
 let rec check_hole_order_rec ctx i n =
   match i.desc with
@@ -2026,13 +2046,17 @@ let rec check_hole_order_rec ctx i n =
             n |> check_hole_order_rec ctx t |> check_hole_order_rec ctx i
             |> check_hole_order_rec ctx v
         | Call ({ desc = StructGet (obj, meth); _ }, args)
-          when simd_method_imms meth.desc <> None ->
-            (* A SIMD intrinsic written as a method, [recv.op(imms.., operands..)].
+          when intrinsic_method_imms meth.desc <> None
+               && receiver_is_value ctx obj ->
+            (* An intrinsic method on a value receiver, [recv.op(imms.., ops..)].
                [to_wasm] evaluates the receiver first, then the non-immediate
-               stack operands; the leading lane immediates ([Lane]/[Shuffle]) are
-               static and never reach the operand stack. Mirror that order so a
-               static lane index is not mistaken for a value before a hole. *)
-            let nimm = Option.get (simd_method_imms meth.desc) in
+               stack operands; any leading SIMD lane immediates ([Lane]/[Shuffle])
+               are static and never reach the operand stack. Mirror that order so
+               a static lane index — or an operand of a receiver-first scalar op
+               like [copysign] — is not mistaken for a value before a hole. A
+               reference receiver is excluded ([receiver_is_value]): it could be a
+               function-pointer field, i.e. an args-first indirect call. *)
+            let nimm = Option.get (intrinsic_method_imms meth.desc) in
             let operands = List.filteri (fun k _ -> k >= nimm) args in
             n
             |> check_hole_order_rec ctx obj

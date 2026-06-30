@@ -27,3 +27,27 @@ The receiver appears as a hole and the lane index stays an immediate argument:
 And it round-trips back to valid wasm:
 
   $ wax -i wat -f wax lane.wat -o lane.wax && wax -i wax -f wasm lane.wax -o /dev/null --validate
+
+The same applies to a receiver-first scalar intrinsic method whose receiver is a
+hole, e.g. `_.copysign(c)`: the operand `c` follows the receiver on the stack, so
+it must not be reported as occurring before the receiver hole.
+
+  $ cat > cs.wat <<'WAT'
+  > (module
+  >   (func (export "f") (param f64) (result f64)
+  >     local.get 0
+  >     (block (param f64) (result f64)
+  >       f64.const 0x1p-1
+  >       f64.copysign)))
+  > WAT
+
+  $ wax -i wat -f wax cs.wat
+  #[export = "f"]
+  fn f(x: f64) -> f64 {
+      x;
+      do (f64) -> f64 {
+          _.copysign(0x1p-1);
+      }
+  }
+
+  $ wax -i wat -f wax cs.wat -o cs.wax && wax -i wax -f wasm cs.wax -o /dev/null --validate
