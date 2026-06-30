@@ -2846,6 +2846,10 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
         | _ -> (i', typ)
       in
       let ty' = expression_type ctx i' in
+      (* Snapshot the inner type *before* [cast]/[signed_cast] below concretize it
+         to the cast target: this is the type the inner expression would settle on
+         if the cast were removed (see [load_bearing_literal]). *)
+      let ty'_natural = UnionFind.find ty' in
       (* [extern.convert_any]/[any.convert_extern] preserve non-nullness, so a
          cast to [&?extern]/[&?any] of a non-nullable argument actually yields
          [&extern]/[&any]; refine the target accordingly. Like the
@@ -2913,6 +2917,28 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                   Error.invalid_cast ctx.diagnostics ~location:i.info ty'
             | Valtype _ | Functype _ -> assert false)
       in
+      (* A cast is load-bearing when its target differs from the type the inner
+         expression would settle on if the cast were removed — its natural
+         default, read from [ty'_natural] (the inner type *before* [cast] above
+         concretized it to the target). A still-abstract numeric value re-parses
+         at its default width (int -> i32, an out-of-i32-range int -> i64,
+         float -> f64), so a cast to any other width must be kept or the value
+         changes on the round-trip. This keeps e.g. [(nan as f32).to_bits()] /
+         [(5 as i64).from_bits()] from losing the operand's type. Only an abstract
+         numeric inner has such a default; a concrete inner (numeric or reference)
+         is already pinned, so [subtype] below is the right redundancy test. *)
+      let natural_typ =
+        match ty'_natural with
+        | Number | Int | Int8 | Int16 -> Some I32
+        | LargeInt -> Some I64
+        | Float -> Some F64
+        | Null | Valtype _ | Unknown | Error | Collecting _ -> None
+      in
+      let load_bearing_literal =
+        match (natural_typ, UnionFind.find ty) with
+        | Some d, Valtype { typ; _ } -> d <> typ
+        | _ -> false
+      in
       (* Drop a cast the inferred types already make redundant. This is only
          desirable when converting from Wasm ([ctx.simplify]): there casts are
          inserted to pin types and precise inference makes some unnecessary. For
@@ -2920,7 +2946,9 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
          written.
          ZZZ Handle select instruction better *)
       let unnecessary_cast =
-        ctx.simplify && (not (is_unknown_or_error ty')) && subtype ctx ty' ty
+        ctx.simplify && (not load_bearing_literal)
+        && (not (is_unknown_or_error ty'))
+        && subtype ctx ty' ty
       in
       if unnecessary_cast then return { i' with info = ([| ty |], snd i'.info) }
       else return_expression i (Cast (i', typ)) ty
@@ -4334,6 +4362,26 @@ and type_unary_intrinsic_call ctx i func recv meth =
         Some
           (UnionFind.make
              (Valtype { typ = I64; internal = I64; inline = None }))
+    (* An abstract numeric receiver (e.g. a bare float literal whose redundant
+       cast [simplify] dropped) defaults like any other operation: [to_bits] on a
+       [Float] is f64->i64, [from_bits] on an integer is i32->f32 (or i64->f64
+       for a [LargeInt]). The non-default widths keep their cast (load-bearing),
+       so they reach the concrete arms above. *)
+    | Float, "to_bits" ->
+        UnionFind.set ty (Valtype { typ = F64; internal = F64; inline = None });
+        Some
+          (UnionFind.make
+             (Valtype { typ = I64; internal = I64; inline = None }))
+    | (Number | Int), "from_bits" ->
+        UnionFind.set ty (Valtype { typ = I32; internal = I32; inline = None });
+        Some
+          (UnionFind.make
+             (Valtype { typ = F32; internal = F32; inline = None }))
+    | LargeInt, "from_bits" ->
+        UnionFind.set ty (Valtype { typ = I64; internal = I64; inline = None });
+        Some
+          (UnionFind.make
+             (Valtype { typ = F64; internal = F64; inline = None }))
     | ( ((Number | Int | Valtype { typ = I32 | I64; _ }) as ty'),
         ("clz" | "ctz" | "popcnt" | "extend8_s" | "extend16_s") ) ->
         if ty' = Number then UnionFind.set ty Int;
