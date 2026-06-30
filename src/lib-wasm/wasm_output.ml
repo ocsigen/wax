@@ -174,8 +174,15 @@ module Encoder = struct
         vec' subtype b t
 
   let memarg b (m : memarg) idx =
+    (* A well-formed align is a small power of two. Guard against a malformed one
+       reaching the encoder through an unvalidated conversion (wat -> wasm with no
+       --validate): a huge value would assert in [Uint64.to_int], and 0 / a
+       non-power-of-two would feed [log2] a bad argument. Such input yields a
+       binary the reference then rejects, but encoding itself never crashes. *)
     let align =
-      Int.of_float (Float.log2 (Float.of_int (Wax_utils.Uint64.to_int m.align)))
+      match Int64.unsigned_to_int (Wax_utils.Uint64.to_int64 m.align) with
+      | Some a when a > 0 -> Int.of_float (Float.log2 (Float.of_int a))
+      | _ -> 0
     in
     if idx = 0 then (
       uint b align;

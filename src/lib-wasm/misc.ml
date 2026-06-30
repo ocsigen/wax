@@ -99,17 +99,23 @@ let rec is_int conv sub s =
 let is_int32 s = is_int Int32.of_string Int32.sub s
 let is_int64 s = is_int Int64.of_string Int64.sub s
 
+(* A valid i8/i16 value fits a *signed* Int32, so parse with [of_string_opt]: a
+   value that [is_int32] accepts only via its unsigned (["0u"]) fallback (i.e. in
+   the (i32-max, u32-max] range) fails the signed parse here and is correctly out
+   of the i8/i16 range — rather than crashing [Int32.of_string]. *)
 let is_int16 s =
   is_int32 s
   &&
-  let i = Int32.of_string s in
-  i >= -32768l && i < 65536l
+  match Int32.of_string_opt s with
+  | Some i -> i >= -32768l && i < 65536l
+  | None -> false
 
 let is_int8 s =
   is_int32 s
   &&
-  let i = Int32.of_string s in
-  i >= -128l && i < 256l
+  match Int32.of_string_opt s with
+  | Some i -> i >= -128l && i < 256l
+  | None -> false
 
 let check_float s w f =
   if String.length s <= 2 then f s

@@ -762,9 +762,12 @@ let string_args n args =
   else
     let byte_of_arg arg =
       match arg.Ast.desc with
-      | Ast.Int c ->
-          let c = int_of_string c in
-          if c >= 0 && c < 256 then Some c else None
+      | Ast.Int c -> (
+          (* [int_of_string_opt]: a byte value too large for an [int] (let alone a
+             byte) is simply not a string byte, not a crash. *)
+          match int_of_string_opt c with
+          | Some c when c >= 0 && c < 256 -> Some c
+          | _ -> None)
       | Ast.Char c when Uchar.to_int c < 128 -> Some (Uchar.to_int c)
       | _ -> None
     in

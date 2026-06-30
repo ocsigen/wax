@@ -1446,9 +1446,10 @@ let check_float_bin_op ctx ~location typ1 typ2 =
   (match (UnionFind.find typ1, UnionFind.find typ2) with
   | Valtype { internal = F32; _ }, Valtype { internal = F32; _ }
   | Valtype { internal = F64; _ }, Valtype { internal = F64; _ }
-  | (Valtype { internal = F32 | F64; _ } | Float), (Number | Float) ->
+  | (Valtype { internal = F32 | F64; _ } | Float), (Number | Float | LargeInt)
+    ->
       UnionFind.merge typ1 typ2 (UnionFind.find typ1)
-  | (Number | Float), Valtype { internal = F32 | F64; _ } ->
+  | (Number | Float | LargeInt), Valtype { internal = F32 | F64; _ } ->
       UnionFind.merge typ1 typ2 (UnionFind.find typ2)
   | Number, Number -> UnionFind.merge typ1 typ2 Float
   | _ -> Error.binop_type_mismatch ctx.diagnostics ~location typ1 typ2);
@@ -3467,11 +3468,13 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                   ->
                     ()
                 | (Valtype { internal = I32 | I64; _ } | Int), (Number | Int)
-                | (Valtype { internal = F32 | F64; _ } | Float), (Number | Float)
+                | ( (Valtype { internal = F32 | F64; _ } | Float),
+                    (Number | Float | LargeInt) )
                 | Number, Number ->
                     UnionFind.merge ty1 ty2 (UnionFind.find ty1)
                 | (Number | Int), Valtype { internal = I32 | I64; _ }
-                | (Number | Float), Valtype { internal = F32 | F64; _ } ->
+                | ( (Number | Float | LargeInt),
+                    Valtype { internal = F32 | F64; _ } ) ->
                     UnionFind.merge ty1 ty2 (UnionFind.find ty2)
                 | Valtype { internal = I64; _ }, LargeInt
                 | LargeInt, (LargeInt | Number | Int) ->
@@ -3491,11 +3494,13 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                   ->
                     ()
                 | (Valtype { internal = I32 | I64; _ } | Int), (Number | Int)
-                | (Valtype { internal = F32 | F64; _ } | Float), (Number | Float)
+                | ( (Valtype { internal = F32 | F64; _ } | Float),
+                    (Number | Float | LargeInt) )
                 | Number, Number ->
                     UnionFind.merge ty1 ty2 (UnionFind.find ty1)
                 | (Number | Int), Valtype { internal = I32 | I64; _ }
-                | (Number | Float), Valtype { internal = F32 | F64; _ } ->
+                | ( (Number | Float | LargeInt),
+                    Valtype { internal = F32 | F64; _ } ) ->
                     UnionFind.merge ty1 ty2 (UnionFind.find ty2)
                 | Valtype { internal = I64; _ }, LargeInt
                 | LargeInt, (LargeInt | Number | Int) ->
@@ -3530,10 +3535,11 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                 (match (UnionFind.find ty1, UnionFind.find ty2) with
                 | Valtype { internal = F32; _ }, Valtype { internal = F32; _ }
                 | Valtype { internal = F64; _ }, Valtype { internal = F64; _ }
-                | (Valtype { internal = F32 | F64; _ } | Float), (Number | Float)
-                  ->
+                | ( (Valtype { internal = F32 | F64; _ } | Float),
+                    (Number | Float | LargeInt) ) ->
                     UnionFind.merge ty1 ty2 (UnionFind.find ty1)
-                | (Number | Float), Valtype { internal = F32 | F64; _ } ->
+                | ( (Number | Float | LargeInt),
+                    Valtype { internal = F32 | F64; _ } ) ->
                     UnionFind.merge ty1 ty2 (UnionFind.find ty2)
                 | Number, Number -> UnionFind.merge ty1 ty2 Float
                 | _ -> mismatch ());
@@ -3548,11 +3554,13 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                   ->
                     ()
                 | (Valtype { internal = I32 | I64; _ } | Int), (Number | Int)
-                | (Valtype { internal = F32 | F64; _ } | Float), (Number | Float)
+                | ( (Valtype { internal = F32 | F64; _ } | Float),
+                    (Number | Float | LargeInt) )
                 | Number, Number ->
                     UnionFind.merge ty1 ty2 (UnionFind.find ty1)
                 | (Number | Int), Valtype { internal = I32 | I64; _ }
-                | (Number | Float), Valtype { internal = F32 | F64; _ } ->
+                | ( (Number | Float | LargeInt),
+                    Valtype { internal = F32 | F64; _ } ) ->
                     UnionFind.merge ty1 ty2 (UnionFind.find ty2)
                 | Valtype { internal = I64; _ }, LargeInt
                 | LargeInt, (LargeInt | Number | Int) ->

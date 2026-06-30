@@ -872,7 +872,16 @@ let rectype d ctx ty =
 
 let typeuse d ctx (idx, sign) =
   match (idx, sign) with
-  | Some idx, _ -> resolve_type_index d ctx idx
+  | Some idx, _ -> (
+      (* A typeuse always denotes a function type, so reject a reference to a
+         struct/array type with a clean error rather than letting the later
+         [typeuse_functype]/[reference_functype] assert. *)
+      let*@ ty = resolve_type_index d ctx idx in
+      match reference_comptype ctx idx with
+      | Func _ -> Some ty
+      | _ ->
+          Error.expected_func_type d ~location:idx.info idx;
+          None)
   | _, Some sign ->
       let+@ ty = functype d ctx sign in
       Types.add_rectype ctx.types
