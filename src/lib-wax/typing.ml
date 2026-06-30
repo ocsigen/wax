@@ -91,6 +91,11 @@ type inferred_type =
   | Int8
   | Int16
   | Int
+  | LargeInt
+    (* An integer literal too large for i32: it can still be i64, f32 or f64
+         (a numeric literal narrowed by context), but never i32 — and it defaults
+         to i64 rather than i32. Lets a decompiled out-of-range constant keep its
+         width instead of overflowing. *)
   | Float
   | Valtype of inferred_valtype
   | Collecting of (Ast.location option * inferred_type UnionFind.t) list ref
@@ -112,6 +117,7 @@ let output_inferred_type f ty =
   | Null -> Format.fprintf f "null"
   | Number -> Format.fprintf f "number"
   | Int -> Format.fprintf f "int"
+  | LargeInt -> Format.fprintf f "int"
   | Int16 -> Format.fprintf f "i16"
   | Int8 -> Format.fprintf f "i8"
   | Float -> Format.fprintf f "float"
@@ -982,10 +988,27 @@ let subtype ?location ctx ty ty' =
   | Valtype { internal = I32 | I64 | V128 | Ref _; _ }, Float
   | Number, (Null | Int | Float | Valtype { internal = V128 | Ref _; _ })
   | Int, (Null | Float | Valtype { internal = F32 | F64 | V128 | Ref _; _ })
-  | Float, (Null | Int | Valtype { internal = I32 | I64 | V128 | Ref _; _ })
-  | (Int8 | Int16), _
-  | _, (Int8 | Int16) ->
+  | Float, (Null | Int | Valtype { internal = I32 | I64 | V128 | Ref _; _ }) ->
       false
+  (* LargeInt — a numeric literal too big for i32. It is a numeric literal like
+     [Number] (so it can be a float — an integer-valued f32/f64 constant), only
+     it can never be i32 and defaults to i64. Meeting it with Number or Int keeps
+     LargeInt; with Float it narrows to Float; the concrete types it accepts are
+     i64, f32 and f64. *)
+  | LargeInt, (LargeInt | Number | Int) | (Number | Int), LargeInt ->
+      UnionFind.merge ty ty' LargeInt;
+      true
+  | LargeInt, Float | Float, LargeInt ->
+      UnionFind.merge ty ty' Float;
+      true
+  | LargeInt, Valtype { internal = I64 | F32 | F64; _ } ->
+      UnionFind.merge ty ty' ity';
+      true
+  | Valtype { internal = I64 | F32 | F64; _ }, LargeInt ->
+      UnionFind.merge ty ty' ity;
+      true
+  | LargeInt, (Null | Valtype _) | (Null | Valtype _), LargeInt -> false
+  | (Int8 | Int16), _ | _, (Int8 | Int16) -> false
   | (Unknown | Error), _ -> true
   | _, (Unknown | Error) -> assert false
 
@@ -1007,6 +1030,12 @@ let cast ctx ty ty' =
   | (Number | Float), F64 | Float, I64 ->
       UnionFind.set ty (Valtype { typ = F64; internal = F64; inline = None });
       true
+  (* As with Int, a cast to a float is allowed (it converts from the integer);
+     the literal is always i64 here since it is too big for i32. *)
+  | LargeInt, (I64 | F32 | F64) ->
+      UnionFind.set ty (Valtype { typ = I64; internal = I64; inline = None });
+      true
+  | LargeInt, _ -> false (* too big for i32; not v128 or a reference *)
   | Null, Ref { typ = ty'; _ } ->
       (let>@ typ = top_heap_type ctx ty' in
        let ty' = Ref { nullable = true; typ } in
@@ -1084,6 +1113,11 @@ let signed_cast ctx ty ty' =
   | (Number | Int), `I64 ->
       UnionFind.set ty (Valtype { typ = I32; internal = I32; inline = None });
       true
+  | LargeInt, `I64 ->
+      UnionFind.set ty (Valtype { typ = I64; internal = I64; inline = None });
+      true
+  | LargeInt, _ ->
+      false (* never i32; a signed cast to a float is rejected too *)
   | Valtype { internal = I32; _ }, `I64
   | Valtype { internal = I32 | I64; _ }, (`F32 | `F64)
   | Valtype { internal = F32 | F64; _ }, (`I32 | `I64) ->
@@ -1353,6 +1387,14 @@ let check_int_bin_op ctx ~location typ1 typ2 =
   | (Number | Int), Valtype { internal = I32 | I64; _ } ->
       UnionFind.merge typ1 typ2 (UnionFind.find typ2)
   | Number, Number -> UnionFind.merge typ1 typ2 Int
+  (* A LargeInt operand forces i64: it pairs with i64 or another flexible integer
+     (never i32). *)
+  | Valtype { internal = I64; _ }, LargeInt ->
+      UnionFind.merge typ1 typ2 (UnionFind.find typ1)
+  | LargeInt, Valtype { internal = I64; _ } ->
+      UnionFind.merge typ1 typ2 (UnionFind.find typ2)
+  | LargeInt, (LargeInt | Number | Int) | (Number | Int), LargeInt ->
+      UnionFind.merge typ1 typ2 LargeInt
   | _ -> Error.binop_type_mismatch ctx.diagnostics ~location typ1 typ2);
   typ1
 
@@ -1419,6 +1461,7 @@ let standalone_valtype ctx ty =
   match UnionFind.find ty with
   | Valtype v -> Some v
   | Int | Number -> Some { typ = I32; internal = I32; inline = None }
+  | LargeInt -> Some { typ = I64; internal = I64; inline = None }
   | Float -> Some { typ = F64; internal = F64; inline = None }
   | Null -> internalize_valtype ctx (Ref { nullable = true; typ = None_ })
   | Int8 | Int16 | Unknown | Error | Collecting _ -> None
@@ -1431,6 +1474,10 @@ let standalone_valtype ctx ty =
 let resolve_omitted_valtype ctx ty =
   match UnionFind.find ty with
   | Valtype v -> Some v
+  | LargeInt ->
+      let v = { typ = I64; internal = I64; inline = None } in
+      UnionFind.set ty (Valtype v);
+      Some v
   | Int | Number | Int8 | Int16 | Unknown | Error | Collecting _ ->
       let v = { typ = I32; internal = I32; inline = None } in
       UnionFind.set ty (Valtype v);
@@ -2705,7 +2752,21 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
   | Char _ as desc ->
       return_expression i desc
         (UnionFind.make (Valtype { typ = I32; internal = I32; inline = None }))
-  | Int _ as desc -> return_expression i desc (UnionFind.make Number)
+  | Int s as desc ->
+      (* A literal whose magnitude exceeds the 32-bit range cannot be i32, so
+         give it [LargeInt] (which defaults to i64) rather than the i32-defaulting
+         [Number]. The sign is a separate [Neg], so the magnitude is unsigned;
+         parse it quietly (a value that does not even fit i64 stays [Number]). *)
+      let large =
+        match
+          if String.starts_with ~prefix:"0x" s then Int64.of_string_opt s
+          else Int64.of_string_opt ("0u" ^ s)
+        with
+        | Some v -> Int64.unsigned_compare v 0xFFFFFFFFL > 0
+        | None -> false
+      in
+      return_expression i desc
+        (UnionFind.make (if large then LargeInt else Number))
   | Float _ as desc -> return_expression i desc (UnionFind.make Float)
   | Cast (i', typ) ->
       let* i' = instruction ctx i' in
@@ -3215,6 +3276,12 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                 | (Number | Int), Valtype { internal = I32 | I64; _ }
                 | (Number | Float), Valtype { internal = F32 | F64; _ } ->
                     UnionFind.merge ty1 ty2 (UnionFind.find ty2)
+                | Valtype { internal = I64; _ }, LargeInt
+                | LargeInt, (LargeInt | Number | Int) ->
+                    UnionFind.merge ty1 ty2 (UnionFind.find ty1)
+                | LargeInt, Valtype { internal = I64; _ }
+                | (Number | Int), LargeInt ->
+                    UnionFind.merge ty1 ty2 (UnionFind.find ty2)
                 | _ -> mismatch ());
                 UnionFind.make
                   (Valtype { typ = I32; internal = I32; inline = None })
@@ -3233,6 +3300,12 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                 | (Number | Int), Valtype { internal = I32 | I64; _ }
                 | (Number | Float), Valtype { internal = F32 | F64; _ } ->
                     UnionFind.merge ty1 ty2 (UnionFind.find ty2)
+                | Valtype { internal = I64; _ }, LargeInt
+                | LargeInt, (LargeInt | Number | Int) ->
+                    UnionFind.merge ty1 ty2 (UnionFind.find ty1)
+                | LargeInt, Valtype { internal = I64; _ }
+                | (Number | Int), LargeInt ->
+                    UnionFind.merge ty1 ty2 (UnionFind.find ty2)
                 | _ -> mismatch ());
                 ty1
             | Div (Some _) | Rem _ | And | Or | Xor | Shl | Shr _ ->
@@ -3247,6 +3320,12 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                 | (Number | Int), Valtype { internal = I32 | I64; _ } ->
                     UnionFind.merge ty1 ty2 (UnionFind.find ty2)
                 | Number, Number -> UnionFind.merge ty1 ty2 Int
+                | Valtype { internal = I64; _ }, LargeInt
+                | LargeInt, (LargeInt | Number | Int) ->
+                    UnionFind.merge ty1 ty2 (UnionFind.find ty1)
+                | LargeInt, Valtype { internal = I64; _ }
+                | (Number | Int), LargeInt ->
+                    UnionFind.merge ty1 ty2 (UnionFind.find ty2)
                 | _ -> mismatch ());
                 UnionFind.make
                   (Valtype { typ = I32; internal = I32; inline = None })
@@ -3278,6 +3357,12 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                 | (Number | Int), Valtype { internal = I32 | I64; _ }
                 | (Number | Float), Valtype { internal = F32 | F64; _ } ->
                     UnionFind.merge ty1 ty2 (UnionFind.find ty2)
+                | Valtype { internal = I64; _ }, LargeInt
+                | LargeInt, (LargeInt | Number | Int) ->
+                    UnionFind.merge ty1 ty2 (UnionFind.find ty1)
+                | LargeInt, Valtype { internal = I64; _ }
+                | (Number | Int), LargeInt ->
+                    UnionFind.merge ty1 ty2 (UnionFind.find ty2)
                 | _ -> mismatch ());
                 UnionFind.make
                   (Valtype { typ = I32; internal = I32; inline = None }))
@@ -3298,7 +3383,9 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
             match op.desc with
             | Not ->
                 (match UnionFind.find typ with
-                | Valtype { internal = I32 | I64 | Ref _; _ } | Null | Int -> ()
+                | Valtype { internal = I32 | I64 | Ref _; _ }
+                | Null | Int | LargeInt ->
+                    ()
                 | Number -> UnionFind.set typ Int
                 | _ ->
                     Error.instruction_type_mismatch ctx.diagnostics
@@ -3308,7 +3395,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
             | Neg | Pos ->
                 (match UnionFind.find typ with
                 | Valtype { internal = I32 | I64 | F32 | F64; _ }
-                | Int | Float | Number ->
+                | Int | LargeInt | Float | Number ->
                     ()
                 | _ ->
                     Error.instruction_type_mismatch ctx.diagnostics
@@ -6579,6 +6666,7 @@ let type_configuration ?(warn_unused = false) ~simplify diagnostics fields =
                     | Int8 -> Some (Packed I8)
                     | Int16 -> Some (Packed I16)
                     | Int -> Some (Value I32)
+                    | LargeInt -> Some (Value I64)
                     | Float -> Some (Value F64)
                     | Valtype { typ; _ } -> Some (Value typ))
                   types,
