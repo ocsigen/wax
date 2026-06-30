@@ -1135,22 +1135,28 @@ let signed_cast ctx ty ty' =
             _;
           } ),
       (`I64 | `F32 | `F64) )
-  | ( ( Float
-      | Valtype
-          {
-            internal =
-              ( V128
-              | Ref
-                  {
-                    typ =
-                      ( Func | NoFunc | Exn | NoExn | Cont | NoCont | Extern
-                      | NoExtern );
-                    _;
-                  } );
-            _;
-          } ),
+  | ( Valtype
+        {
+          internal =
+            ( V128
+            | Ref
+                {
+                  typ =
+                    ( Func | NoFunc | Exn | NoExn | Cont | NoCont | Extern
+                    | NoExtern );
+                  _;
+                } );
+          _;
+        },
       _ ) ->
       false
+  (* A bare float literal carries the abstract [Float]; default it to its
+     canonical f64 (like the concrete [F32 | F64] arms above) so a strict cast on
+     it — e.g. [1.5 as i64_s_strict], the [i64.trunc_f64_s] a decompiled
+     [f64.const] produces — type-checks instead of being rejected as float. *)
+  | Float, (`I32 | `I64 | `F32 | `F64) ->
+      UnionFind.set ty (Valtype { typ = F64; internal = F64; inline = None });
+      true
   | (Unknown | Error | Collecting _), _ -> true
 
 type stack =
