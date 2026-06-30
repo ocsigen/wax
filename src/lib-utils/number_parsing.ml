@@ -32,6 +32,26 @@ let parse_custom_nan s is_double =
 
 let float32 s = parse_custom_nan s false
 let float64 s = parse_custom_nan s true
+
+(* The exact 32-bit pattern of an f32 literal. Unlike [float32], this preserves a
+   signaling NaN's payload: a [nan:0x...] literal is assembled into bits directly,
+   and other values go through [bits_of_float] (the only lossy case being a
+   double-rounded decimal, as for [float32]). Routing a NaN through an OCaml
+   [float] would quiet it (widening single->double sets the quiet bit). *)
+let float32_bits s =
+  let len = String.length s in
+  let has_sign = len > 0 && (s.[0] = '-' || s.[0] = '+') in
+  let offset = if has_sign then 1 else 0 in
+  if len > offset + 4 && String.sub s offset 4 = "nan:" then
+    let payload =
+      Int64.of_string (String.sub s (offset + 4) (len - offset - 4))
+    in
+    let sign = if s.[0] = '-' then 0x80000000l else 0l in
+    Int32.logor
+      (Int32.logor sign 0x7F800000l) (* sign | exponent (all ones) *)
+      (Int64.to_int32 (Int64.logand payload 0x7FFFFFL))
+  else Int32.bits_of_float (float_of_string s)
+
 let int_conv conv s = try conv s with Failure _ -> conv ("0u" ^ s)
 let int32 s = int_conv Int32.of_string s
 let int64 s = int_conv Int64.of_string s

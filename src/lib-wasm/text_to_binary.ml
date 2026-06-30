@@ -305,8 +305,7 @@ let rec instr ~resolve_string_type ~resolve_func_type ctx (i : 'info T.instr) =
     | ElemDrop i -> ElemDrop (resolve_idx ctx.elems i)
     | Const (I32 x) -> Const (I32 (Wax_utils.Number_parsing.int32 x))
     | Const (I64 x) -> Const (I64 (Wax_utils.Number_parsing.int64 x))
-    | Const (F32 x) ->
-        Const (F32 (Int32.bits_of_float (Wax_utils.Number_parsing.float32 x)))
+    | Const (F32 x) -> Const (F32 (Wax_utils.Number_parsing.float32_bits x))
     | Const (F64 x) -> Const (F64 (Wax_utils.Number_parsing.float64 x))
     | UnOp op -> UnOp op
     | BinOp op -> BinOp op

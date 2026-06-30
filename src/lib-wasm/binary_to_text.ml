@@ -14,6 +14,27 @@ let numeric_index i = no_loc (T.Num (Uint32.of_int i))
 let float_text x =
   if Float.is_finite x then Printf.sprintf "%h" x else string_of_float x
 
+(* Text for an f32 constant given its raw 32 bits. A NaN keeps its exact payload
+   as [nan:0xPAYLOAD] (with sign) — routing it through [float_of_bits] would
+   quiet a signaling NaN — while any other value uses [float_text]. *)
+let f32_text bits =
+  let exp = Int32.logand (Int32.shift_right_logical bits 23) 0xFFl in
+  let mant = Int32.logand bits 0x7FFFFFl in
+  if Int32.equal exp 0xFFl && not (Int32.equal mant 0l) then
+    (if Int32.logand bits Int32.min_int <> 0l then "-" else "")
+    ^ Printf.sprintf "nan:0x%lx" mant
+  else float_text (Int32.float_of_bits bits)
+
+(* Text for an f64 constant. A NaN keeps its payload (f64 bits survive
+   [bits_of_float], so the payload is intact); other values use [float_text]. *)
+let f64_text x =
+  if Float.is_nan x then
+    let bits = Int64.bits_of_float x in
+    let mant = Int64.logand bits 0xFFFFFFFFFFFFFL in
+    (if Int64.logand bits Int64.min_int <> 0L then "-" else "")
+    ^ Printf.sprintf "nan:0x%Lx" mant
+  else float_text x
+
 let index ~map i =
   match B.IntMap.find_opt i map with
   | Some s -> no_loc (T.Id s)
@@ -345,8 +366,8 @@ let rec instr (names : B.names) local_names label_names label_counter stack
     | I31Get s -> I31Get s
     | Const (I32 x) -> Const (I32 (Int32.to_string x))
     | Const (I64 x) -> Const (I64 (Int64.to_string x))
-    | Const (F32 x) -> Const (F32 (float_text (Int32.float_of_bits x)))
-    | Const (F64 x) -> Const (F64 (float_text x))
+    | Const (F32 x) -> Const (F32 (f32_text x))
+    | Const (F64 x) -> Const (F64 (f64_text x))
     | UnOp op -> UnOp op
     | BinOp op -> BinOp op
     | I32WrapI64 -> I32WrapI64
