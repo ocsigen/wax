@@ -48,6 +48,13 @@ type inferred_type =
       (** The recovery type of a value whose own typing already failed. An error
           has already been reported, so [Error] propagates silently — treated
           like [Unknown] but raising no further error. *)
+  | UnknownRef
+      (** A non-null reference of unknown heap type — the Wax counterpart of the
+          Wasm [(ref bot)]. Produced when a reference is recovered from an
+          otherwise-polymorphic value ([null!] / [br_on_null] on an [Unknown]
+          operand or a bare [null]). Behaves like [Unknown] everywhere except
+          that [subtype] knows it is a reference: a subtype of every reference
+          type but of no numeric or vector type. *)
   | Null
   | Number
   | Int8
@@ -84,8 +91,8 @@ val output_inferred_type : Format.formatter -> inferred_type Cell.t -> unit
 *)
 
 val is_unknown_or_error : inferred_type Cell.t -> bool
-(** Whether a cell resolves to [Unknown] or [Error] — the common "no concrete
-    type known" test. *)
+(** Whether a cell resolves to [Unknown], [Error] or [UnknownRef] — the common
+    "no concrete type known" test. *)
 
 (** The numeric value types, and shared cells holding them. A concrete base type
     is never re-resolved during inference, so a base-type cell's value never

@@ -77,6 +77,15 @@ type inferred_type =
           local/global read, an out-of-range value, an unresolved construction,
           …). An error has already been reported, so [Error] propagates silently
           — instructions treat it like [Unknown] but raise no further error. *)
+  | UnknownRef
+      (** A non-null reference of unknown heap type — the Wax counterpart of the
+          Wasm [(ref bot)]. Produced when a reference is recovered from an
+          otherwise-polymorphic value: [null!] / [br_on_null] on an [Unknown]
+          operand or a bare [null]. Like [Unknown] it carries no concrete type
+          (so it behaves exactly like [Unknown] everywhere — reporting an error
+          at a compile-needs-the-type site), except that [subtype] knows it is a
+          reference: a subtype of every reference type but of no numeric or
+          vector type, so a numeric use of it is still rejected. *)
   | Null
   | Number
   | Int8
@@ -123,6 +132,7 @@ let rec output_inferred_type f ty =
      type a reader, e.g. a mismatched [br]/catch, is checked against), not [any]. *)
   | Collecting { declared = Some d; _ } -> output_inferred_type f d
   | Unknown | Error | Collecting _ -> Format.fprintf f "any"
+  | UnknownRef -> Format.fprintf f "&_"
   | Null -> Format.fprintf f "null"
   | Number -> Format.fprintf f "number"
   | Int -> Format.fprintf f "int"
@@ -133,13 +143,14 @@ let rec output_inferred_type f ty =
   | Valtype { anon_comptype = Some c; _ } -> Output.comptype f c
   | Valtype ty -> Output.valtype f ty.typ
 
-(* Both [Unknown] (unreachable/branch) and [Error] (recovery) stand for "no
-   concrete type known". They behave identically except that an [Unknown]
-   operand still triggers a fresh diagnostic at a compile-needs-the-type site,
-   whereas an [Error] operand stays silent. This predicate is for the many
-   places that need only the common "type unknown" test. *)
+(* [Unknown] (unreachable/branch), [Error] (recovery) and [UnknownRef] (a
+   reference of unknown heap type) all stand for "no concrete type known". They
+   behave identically except that an [Unknown]/[UnknownRef] operand still
+   triggers a fresh diagnostic at a compile-needs-the-type site, whereas an
+   [Error] operand stays silent. This predicate is for the many places that need
+   only the common "type unknown" test. *)
 let is_unknown_or_error ty =
-  match Cell.get ty with Unknown | Error -> true | _ -> false
+  match Cell.get ty with Unknown | Error | UnknownRef -> true | _ -> false
 
 (* The numeric value types, and shared cells holding them. A concrete base type
    is never re-resolved during inference (only floating cells are unified into a

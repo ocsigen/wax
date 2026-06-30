@@ -356,6 +356,14 @@ module Error = struct
   let expected_ref context ~location =
     report context ~location "A reference type is expected here."
 
+  let nonnull_on_null context ~location =
+    report context ~location
+      ~hint:(fun f () ->
+        Format.fprintf f "Give the null a reference type, e.g. %s."
+          "(null as &T)!")
+      "Cannot apply `!` to `null`: it has no reference type to assert non-null \
+       on (and the assertion would always trap)."
+
   let dispatch_duplicate_arm context ~location x =
     report context ~location "This dispatch has several cases named %a."
       print_name x
@@ -852,9 +860,11 @@ let is_inferring ty = match Cell.get ty with Collecting _ -> true | _ -> false
    Not a pure relation: when the two are compatible it *unifies* their
    union-find cells (so an as-yet-unconstrained literal like [Int]/[Number]
    gets pinned to the concrete type it is checked against). [Unknown] or [Error]
-   on the left (dead code / error recovery) is a subtype of anything; neither
-   appears on the right because expected types always come from a real
-   declaration, annotation or instruction signature — hence the [assert]. *)
+   on the left (dead code / error recovery) is a subtype of anything;
+   [UnknownRef] is a subtype of every reference type but of no other (so a
+   numeric use of it is rejected). None of the three appears on the right
+   because expected types always come from a real declaration, annotation or
+   instruction signature — hence the [assert]. *)
 let rec subtype ?location ctx ty ty' =
   let ity = Cell.get ty in
   let ity' = Cell.get ty' in
@@ -939,7 +949,9 @@ let rec subtype ?location ctx ty ty' =
   | LargeInt, (Null | Valtype _) | (Null | Valtype _), LargeInt -> false
   | (Int8 | Int16), _ | _, (Int8 | Int16) -> false
   | (Unknown | Error), _ -> true
-  | _, (Unknown | Error) -> assert false
+  | UnknownRef, Valtype { internal = Ref _; _ } -> true
+  | _, (Unknown | Error | UnknownRef) -> assert false
+  | UnknownRef, _ -> false
 
 let cast ctx ty ty' =
   let ity = Cell.get ty in
@@ -1021,7 +1033,7 @@ let cast ctx ty ty' =
   | Valtype { internal = V128; _ }, (I64 | F32 | F64 | Ref _)
   | (Int8 | Int16), _ ->
       false
-  | (Unknown | Error | Collecting _), _ -> true
+  | (Unknown | Error | UnknownRef | Collecting _), _ -> true
 
 let signed_cast ctx ty ty' =
   let ity = Cell.get ty in
@@ -1089,7 +1101,7 @@ let signed_cast ctx ty ty' =
   | Float, (`I32 | `I64 | `F32 | `F64) ->
       Cell.set ty (Valtype f64_valtype);
       true
-  | (Unknown | Error | Collecting _), _ -> true
+  | (Unknown | Error | UnknownRef | Collecting _), _ -> true
 
 type stack =
   | Unreachable
@@ -1418,6 +1430,10 @@ let standalone_valtype ctx ty =
   | LargeInt -> Some i64_valtype
   | Float -> Some f64_valtype
   | Null -> internalize_valtype ctx (Ref { nullable = true; typ = None_ })
+  (* The bottom reference concretizes to the non-null [&none], matching the type
+     [null!] produced before [UnknownRef] existed. *)
+  | UnknownRef ->
+      internalize_valtype ctx (Ref { nullable = false; typ = None_ })
   | Int8 | Int16 | Unknown | Error | Collecting _ -> None
 
 (* Resolve the type that an omitted annotation takes from its initializer, as in
@@ -1443,6 +1459,14 @@ let resolve_omitted_valtype ctx ty =
   | Null ->
       let+@ v =
         internalize_valtype ctx (Ref { nullable = true; typ = None_ })
+      in
+      Cell.set ty (Valtype v);
+      v
+  (* The bottom reference concretizes to the non-null [&none], matching the type
+     [null!] produced before [UnknownRef] existed. *)
+  | UnknownRef ->
+      let+@ v =
+        internalize_valtype ctx (Ref { nullable = false; typ = None_ })
       in
       Cell.set ty (Valtype v);
       v
@@ -2162,8 +2186,11 @@ let val_lub ctx v1 v2 =
    branches of an [if], etc.) when inferring the block's result type. *)
 let join_value_types ctx ty1 ty2 =
   match (Cell.get ty1, Cell.get ty2) with
-  | _, (Unknown | Error) -> Some ty1
-  | (Unknown | Error), _ -> Some ty2
+  (* [UnknownRef] (a bottom reference) joins like [Unknown]: the other side, a
+     subtype-bound it always satisfies, wins — including across reference
+     hierarchies, where a concrete [val_lub] with [&none] would wrongly fail. *)
+  | _, (Unknown | Error | UnknownRef) -> Some ty1
+  | (Unknown | Error | UnknownRef), _ -> Some ty2
   | Null, Null -> Some ty1
   | Valtype { internal = I32; _ }, Valtype { internal = I32; _ }
   | Valtype { internal = I64; _ }, Valtype { internal = I64; _ }
@@ -2592,9 +2619,10 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
           (* The callee already failed to type; recover without a spurious
              "expected function type". *)
           return_statement i (TailCall (i', l')) [||]
-      | Unknown ->
-          (* The callee's type is unknown (unreachable / branch code): the
-             function type cannot be resolved, so the call cannot be compiled. *)
+      | Unknown | UnknownRef ->
+          (* The callee's type is unknown (unreachable / branch code) or only a
+             reference (its function type cannot be resolved), so the call
+             cannot be compiled. *)
           Error.unknown_operand_type ctx.diagnostics ~location:(snd i'.info);
           return_statement i (TailCall (i', l')) [||]
       | _ ->
@@ -2653,22 +2681,17 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                     internal = Ref { nullable = false; typ = ityp };
                     anon_comptype;
                   }))
-      | Unknown | Error ->
-          return_expression i (NonNull i') (expression_type ctx i')
+      | Unknown | UnknownRef ->
+          (* A reference recovered from a polymorphic value — dead/branch code,
+             or a value already known only as a reference: the non-null bottom
+             reference [UnknownRef], a subtype of every reference type (so it
+             satisfies any consumer). A bare [null] is rejected below: its heap
+             type is unknown and the assertion would always trap. *)
+          return_expression i (NonNull i') (Cell.make UnknownRef)
+      | Error -> return_expression i (NonNull i') (expression_type ctx i')
       | Null ->
-          (* [null!] on a bare (floating) null: the non-null bottom reference
-             [&none], a subtype of every reference type (so it satisfies any
-             consumer) and trapping at runtime like the original [ref.as_non_null]
-             of a null. Arises e.g. from a decompiled null in unreachable code,
-             where its heap type was not pinned. *)
-          return_expression i (NonNull i')
-            (Cell.make
-               (Valtype
-                  {
-                    typ = Ref { nullable = false; typ = None_ };
-                    internal = Ref { nullable = false; typ = None_ };
-                    anon_comptype = None;
-                  }))
+          Error.nonnull_on_null ctx.diagnostics ~location:(snd i'.info);
+          return_expression i (NonNull i') (Cell.make Error)
       | _ ->
           Error.expected_ref ctx.diagnostics ~location:(snd i'.info);
           return_expression i (NonNull i') (Cell.make Error))
@@ -2699,8 +2722,9 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
         let ty1 = expression_type ctx i2' in
         let ty2 = expression_type ctx i3' in
         match (Cell.get ty1, Cell.get ty2) with
-        | _, (Unknown | Error) -> Some ty1
-        | (Unknown | Error), _ -> Some ty2
+        (* A bottom reference reconciles like [Unknown]: the other side wins. *)
+        | _, (Unknown | Error | UnknownRef) -> Some ty1
+        | (Unknown | Error | UnknownRef), _ -> Some ty2
         | Valtype { internal = I32; _ }, Valtype { internal = I32; _ }
         | Valtype { internal = I64; _ }, Valtype { internal = I64; _ }
         | Valtype { internal = F32; _ }, Valtype { internal = F32; _ }
@@ -2808,17 +2832,14 @@ and type_branch ctx i =
                    internal = Ref { nullable = false; typ = ityp };
                    anon_comptype;
                  })
-        | (Unknown | Error) as ity -> Cell.make ity
-        | Null ->
-            (* A bare [null] is always null, so the branch is always taken; the
-               non-null fall-through value has the bottom reference type. *)
-            Cell.make
-              (Valtype
-                 {
-                   typ = Ref { nullable = false; typ = None_ };
-                   internal = Ref { nullable = false; typ = None_ };
-                   anon_comptype = None;
-                 })
+        | Unknown | UnknownRef | Null ->
+            (* A reference recovered from a polymorphic value, or a bare [null]
+               (always null, so the branch is always taken): the non-null
+               fall-through value is the bottom reference type [UnknownRef].
+               Unlike [null!], this is a well-defined branch, not a contradiction
+               — so a bare null is accepted here. *)
+            Cell.make UnknownRef
+        | Error -> Cell.make Error
         | _ ->
             Error.expected_ref ctx.diagnostics ~location:(snd i'.info);
             Cell.make Error
@@ -2832,7 +2853,7 @@ and type_branch ctx i =
       let typ, types = split_on_last_type ctx ~location:(snd i'.info) i' in
       let typ = Cell.get typ in
       (match typ with
-      | Unknown | Error -> ()
+      | Unknown | Error | UnknownRef -> ()
       | Valtype
           {
             typ = Ref { nullable = _; typ; _ };
@@ -2879,7 +2900,7 @@ and type_branch ctx i =
             let*@ typ1 = internalize ctx ty1 in
             let+@ typ2 = internalize ctx (Ref (diff_ref_type ty' ty)) in
             (typ1, typ2)
-        | (Unknown | Error) as ity -> Some (typ', Cell.make ity)
+        | (Unknown | Error | UnknownRef) as ity -> Some (typ', Cell.make ity)
         | _ ->
             Error.expected_ref ctx.diagnostics ~location:(snd i'.info);
             None
@@ -2907,7 +2928,7 @@ and type_branch ctx i =
             let*@ typ1 = internalize ctx ty1 in
             let+@ typ2 = internalize ctx (Ref (diff_ref_type ty' ty)) in
             (typ1, typ2)
-        | (Unknown | Error) as ity -> Some (typ', Cell.make ity)
+        | (Unknown | Error | UnknownRef) as ity -> Some (typ', Cell.make ity)
         | _ ->
             Error.expected_ref ctx.diagnostics ~location:(snd i'.info);
             None
@@ -3540,7 +3561,7 @@ and type_cast ctx i =
         | Number | Int | Int8 | Int16 -> Some I32
         | LargeInt -> Some I64
         | Float -> Some F64
-        | Null | Valtype _ | Unknown | Error | Collecting _ -> None
+        | Null | UnknownRef | Valtype _ | Unknown | Error | Collecting _ -> None
       in
       let load_bearing_literal =
         match (natural_typ, Cell.get ty) with
@@ -3612,9 +3633,10 @@ and type_aggregate_access ctx i =
            than giving up, which would drop a hole receiver and desync hole
            counting. *)
         | Error, _ -> Some (Cell.make Error)
-        (* The receiver's type is unknown (unreachable / branch code): the
-           struct type cannot be resolved, so the field cannot be read. *)
-        | Unknown, _ ->
+        (* The receiver's type is unknown (unreachable / branch code) or only a
+           reference (its struct type cannot be resolved), so the field cannot
+           be read. *)
+        | (Unknown | UnknownRef), _ ->
             Error.unknown_operand_type ctx.diagnostics ~location:(snd i'.info);
             Some (Cell.make Error)
         (* A name that is an instruction method was likely meant as the
@@ -3661,9 +3683,10 @@ and type_aggregate_access ctx i =
             (* Receiver already failed to type; recover without a spurious
                "expected struct type". *)
             None
-        | Unknown ->
-            (* The receiver's type is unknown (unreachable / branch code): the
-               struct type cannot be resolved, so the field cannot be written. *)
+        | Unknown | UnknownRef ->
+            (* The receiver's type is unknown (unreachable / branch code) or
+               only a reference (its struct type cannot be resolved), so the
+               field cannot be written. *)
             Error.unknown_operand_type ctx.diagnostics ~location:i1.info;
             None
         | _ ->
@@ -3700,9 +3723,10 @@ and type_aggregate_access ctx i =
       | Error ->
           (* Receiver already failed to type; recover silently. *)
           return_expression i (ArrayGet (i1', i2')) (Cell.make Error)
-      | Unknown ->
-          (* The receiver's type is unknown (unreachable / branch code): the
-             array type cannot be resolved, so the element cannot be read. *)
+      | Unknown | UnknownRef ->
+          (* The receiver's type is unknown (unreachable / branch code) or only
+             a reference (its array type cannot be resolved), so the element
+             cannot be read. *)
           Error.unknown_operand_type ctx.diagnostics ~location:i1.info;
           return_expression i (ArrayGet (i1', i2')) (Cell.make Error)
       | _ ->
@@ -3755,10 +3779,11 @@ and type_aggregate_access ctx i =
              value so its holes are consumed). *)
           let* i3' = instruction ctx i3 in
           return_statement i (ArraySet (i1', i2', i3')) [||]
-      | Unknown ->
-          (* The receiver's type is unknown (unreachable / branch code): the
-             array type cannot be resolved, so the element cannot be written.
-             Still type the value so its holes are consumed. *)
+      | Unknown | UnknownRef ->
+          (* The receiver's type is unknown (unreachable / branch code) or only
+             a reference (its array type cannot be resolved), so the element
+             cannot be written. Still type the value so its holes are
+             consumed. *)
           let* i3' = instruction ctx i3 in
           Error.unknown_operand_type ctx.diagnostics ~location:i1.info;
           return_statement i (ArraySet (i1', i2', i3')) [||]
@@ -4447,9 +4472,10 @@ and type_array_fill_call ctx i func a meth j v n =
         Error.instruction_type_mismatch ctx.diagnostics ~location:(snd v'.info)
           ty' ty
   | Error -> (* receiver already failed to type; recover silently *) ()
-  | Unknown ->
-      (* The receiver's type is unknown (unreachable / branch code): the array
-         type cannot be resolved, so the operation cannot be compiled. *)
+  | Unknown | UnknownRef ->
+      (* The receiver's type is unknown (unreachable / branch code) or only a
+         reference (its array type cannot be resolved), so the operation cannot
+         be compiled. *)
       Error.unknown_operand_type ctx.diagnostics ~location:a.info
   | _ -> Error.expected_array_type ctx.diagnostics ~location:a.info);
   return_statement i
@@ -4475,8 +4501,10 @@ and type_array_copy_call ctx i func a1 meth i1 a2 i2 n =
   (* An array's type is unknown (unreachable / branch code): its element type
      cannot be resolved, so the copy cannot be compiled. Point at the offending
      array. *)
-  | Unknown, _ -> Error.unknown_operand_type ctx.diagnostics ~location:a1.info
-  | _, Unknown -> Error.unknown_operand_type ctx.diagnostics ~location:a2.info
+  | (Unknown | UnknownRef), _ ->
+      Error.unknown_operand_type ctx.diagnostics ~location:a1.info
+  | _, (Unknown | UnknownRef) ->
+      Error.unknown_operand_type ctx.diagnostics ~location:a2.info
   | ( Valtype { typ = Ref { typ = Type ty; _ }; _ },
       Valtype { typ = Ref { typ = Type ty'; _ }; _ } ) ->
       let>@ typ = lookup_array_type ~location:a1.info ctx ty in
@@ -4513,9 +4541,10 @@ and type_array_init_call ctx i func a meth seg sinfo rest =
           check_elem_subtype ctx ~location:a.info ~src ~dst
       | _ -> ignore (Tbl.find ctx.diagnostics ctx.datas seg : unit option))
   | Error -> (* receiver already failed to type; recover silently *) ()
-  | Unknown ->
-      (* The receiver's type is unknown (unreachable / branch code): the array
-         type cannot be resolved, so the operation cannot be compiled. *)
+  | Unknown | UnknownRef ->
+      (* The receiver's type is unknown (unreachable / branch code) or only a
+         reference (its array type cannot be resolved), so the operation cannot
+         be compiled. *)
       Error.unknown_operand_type ctx.diagnostics ~location:a.info
   | _ -> Error.expected_array_type ctx.diagnostics ~location:a.info);
   let seg' = { desc = Get seg; info = ([||], sinfo) } in
@@ -4582,9 +4611,10 @@ and type_unary_intrinsic_call ctx i func recv meth =
         if ty' = Number then Cell.set ty Float;
         Some ty
     | Error, _ -> Some (Cell.make Error)
-    | Unknown, _ ->
-        (* The receiver's type is unknown (unreachable / branch code): the
-           method cannot be resolved, so the call cannot be compiled. *)
+    | (Unknown | UnknownRef), _ ->
+        (* The receiver's type is unknown (unreachable / branch code) or only a
+           reference (its method cannot be resolved), so the call cannot be
+           compiled. *)
         Error.unknown_operand_type ctx.diagnostics ~location:(snd recv'.info);
         Some (Cell.make Error)
     | _ ->
@@ -5463,9 +5493,10 @@ and type_indirect_call ctx i i' l =
       (* The callee already failed to type (e.g. an unbound name); recover
          silently rather than adding a spurious "expected function type". *)
       return_statement i (Call (i', l')) [||]
-  | Unknown ->
-      (* The callee's type is unknown (unreachable / branch code): the function
-         type cannot be resolved, so the call cannot be compiled. *)
+  | Unknown | UnknownRef ->
+      (* The callee's type is unknown (unreachable / branch code) or only a
+         reference (its function type cannot be resolved), so the call cannot be
+         compiled. *)
       Error.unknown_operand_type ctx.diagnostics ~location:(snd i'.info);
       return_statement i (Call (i', l')) [||]
   | _ ->
@@ -7028,6 +7059,8 @@ let type_configuration ?(warn_unused = false) ~simplify diagnostics fields =
                     | Unknown | Error | Collecting _ -> None
                     | Null ->
                         Some (Value (Ref { nullable = true; typ = None_ }))
+                    | UnknownRef ->
+                        Some (Value (Ref { nullable = false; typ = None_ }))
                     | Number -> Some (Value I32)
                     | Int8 -> Some (Packed I8)
                     | Int16 -> Some (Packed I16)

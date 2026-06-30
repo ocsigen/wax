@@ -1,13 +1,22 @@
-`null!` (ref.as_non_null on a bare, floating null) is the non-null bottom
-reference `&none` — a subtype of every reference type, trapping at runtime like
-the original. It previously failed with "a reference type is expected here".
-Regression: found by smith (a null in unreachable code whose heap type was not
-pinned).
+`null!` (ref.as_non_null) on a bare, floating `null` is rejected: the null's
+heap type is unknown, so there is no reference type to assert non-null on, and
+the assertion would always trap anyway. (A `!` on a value whose reference type
+is known — a local of reference type, a struct field, … — still works; only the
+typeless bare null is refused.)
 
   $ cat > t.wax <<'EOF'
   > fn f() -> &none {
   >     null!;
   > }
   > EOF
-  $ wax -i wax -f wat t.wax --validate | grep -c ref.as_non_null
-  1
+  $ wax check -f wax t.wax
+  Error:
+    Cannot apply `!` to `null`: it has no reference type to assert non-null on (and the assertion would always trap).
+   ──➤  t.wax:2:5
+  1 │ fn f() -> &none {
+  2 │     null!;
+    ·     ^^^^
+  3 │ }
+  4 │ 
+  Hint: Give the null a reference type, e.g. (null as &T)!.
+  [123]
