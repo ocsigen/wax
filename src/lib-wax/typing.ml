@@ -2000,22 +2000,6 @@ let join_value_types ctx ty1 ty2 =
       | None -> None)
   | _ -> None
 
-(* Whether a block body's trailing statement is a construction literal (or a
-   [null] cast) — the forms [block_contents] routes through [check] against the
-   block result. We keep the explicit [=> T] on such blocks rather than infer it,
-   so the construction's own name/cast dropping (which needs the result type) is
-   preserved. *)
-let trailing_is_construction (l : _ Ast.instr list) =
-  match List.rev l with
-  | last :: _ -> (
-      match last.Ast.desc with
-      | Struct _ | StructDefault _ | Array _ | ArrayDefault _ | ArrayFixed _
-      | ArraySegment _ | String _ ->
-          true
-      | Cast (e, _) -> is_null_initializer e
-      | _ -> false)
-  | [] -> false
-
 let address_valtype (at : [ `I32 | `I64 ]) : inferred_valtype =
   match at with
   | `I32 -> { typ = I32; internal = I32; inline = None }
@@ -5402,8 +5386,12 @@ and finalize_inferred ctx typ ~inferred =
    ([instruction]) and statement-position ([toplevel_instruction]) [If] cases;
    [cond] is the already-typed condition. Applies only with an [else], no branch
    to the [if]'s own label, at most one result, and either an omitted annotation
-   (re-parse, must re-infer) or — to keep the drop honest — [simplify] with
-   neither tail a construction (whose own name dropping needs the result type). *)
+   (re-parse, must re-infer) or [simplify]. The branches are typed in synthesis
+   (via [block_infer]), so a trailing construction synthesizes its own type —
+   keeping its type name only when the fields don't pin it — rather than taking
+   it from the result as the [check] path does; [finalize_inferred] then only
+   drops [=> T] when that synthesized type is a subtype of it, so a tail that
+   cannot synthesize on its own (a bare [null]) keeps it. *)
 and if_inference ctx i label typ ~cond ~if_block ~else_block =
   let no_self_branch =
     match label with
@@ -5417,18 +5405,11 @@ and if_inference ctx i label typ ~cond ~if_block ~else_block =
           | None -> false)
   in
   let omitted = typ.results = [||] in
-  let trailing_ok =
-    (not (trailing_is_construction if_block.desc))
-    &&
-    match else_block with
-    | Some b -> not (trailing_is_construction b.desc)
-    | None -> true
-  in
   let use_infer =
     Array.length typ.params = 0
     && Option.is_some else_block && no_self_branch
     && Array.length typ.results <= 1
-    && (omitted || (ctx.simplify && trailing_ok))
+    && (omitted || ctx.simplify)
   in
   if not use_infer then None
   else
