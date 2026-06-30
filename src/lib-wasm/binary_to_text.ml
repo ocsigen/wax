@@ -253,14 +253,16 @@ let rec instr (names : B.names) local_names label_names label_counter stack
     | Return -> Return
     | Call i -> Call (index ~map:names.functions i)
     | CallRef i -> CallRef (index ~map:names.types i)
-    | CallIndirect (t, i) ->
+    | CallIndirect (table, ty) ->
         CallIndirect
-          (index ~map:names.tables i, (Some (index ~map:names.types t), None))
+          ( index ~map:names.tables table,
+            (Some (index ~map:names.types ty), None) )
     | ReturnCall i -> ReturnCall (index ~map:names.functions i)
     | ReturnCallRef i -> ReturnCallRef (index ~map:names.types i)
-    | ReturnCallIndirect (t, i) ->
+    | ReturnCallIndirect (table, ty) ->
         ReturnCallIndirect
-          (index ~map:names.tables i, (Some (index ~map:names.types t), None))
+          ( index ~map:names.tables table,
+            (Some (index ~map:names.types ty), None) )
     | Drop -> Drop
     | Select None -> Select None
     | Select (Some l) -> Select (Some (List.map (valtype names.types) l))
@@ -280,7 +282,11 @@ let rec instr (names : B.names) local_names label_names label_counter stack
     | MemoryCopy (i1, i2) ->
         MemoryCopy (index ~map:names.memories i1, index ~map:names.memories i2)
     | MemoryInit (i1, i2) ->
-        MemoryInit (index ~map:names.memories i1, index ~map:names.data i2)
+        (* Binary order is (data, memory); text order is (memory, data). Bind
+           with lets so the two index spaces are mapped to the right operand. *)
+        let data = index ~map:names.data i1 in
+        let mem = index ~map:names.memories i2 in
+        MemoryInit (mem, data)
     | DataDrop i -> DataDrop (index ~map:names.data i)
     | TableGet i -> TableGet (index ~map:names.tables i)
     | TableSet i -> TableSet (index ~map:names.tables i)
@@ -290,7 +296,10 @@ let rec instr (names : B.names) local_names label_names label_counter stack
     | TableCopy (i1, i2) ->
         TableCopy (index ~map:names.tables i1, index ~map:names.tables i2)
     | TableInit (i1, i2) ->
-        TableInit (index ~map:names.tables i1, index ~map:names.elem i2)
+        (* Binary order is (elem, table); text order is (table, elem). *)
+        let elem = index ~map:names.elem i1 in
+        let table = index ~map:names.tables i2 in
+        TableInit (table, elem)
     | ElemDrop i -> ElemDrop (index ~map:names.elem i)
     | RefNull h -> RefNull (heaptype names.types h)
     | RefFunc i -> RefFunc (index ~map:names.functions i)

@@ -275,7 +275,10 @@ let rec instr ~resolve_string_type ~resolve_func_type ctx (i : 'info T.instr) =
     | MemoryCopy (i1, i2) ->
         MemoryCopy (resolve_idx ctx.memories i1, resolve_idx ctx.memories i2)
     | MemoryInit (i1, i2) ->
-        MemoryInit (resolve_idx ctx.memories i1, resolve_idx ctx.datas i2)
+        (* Text order is (memory, data); binary order is (data, memory). *)
+        let mem = resolve_idx ctx.memories i1 in
+        let data = resolve_idx ctx.datas i2 in
+        MemoryInit (data, mem)
     | DataDrop i -> DataDrop (resolve_idx ctx.datas i)
     | TableGet i -> TableGet (resolve_idx ctx.tables i)
     | TableSet i -> TableSet (resolve_idx ctx.tables i)
@@ -285,7 +288,10 @@ let rec instr ~resolve_string_type ~resolve_func_type ctx (i : 'info T.instr) =
     | TableCopy (i1, i2) ->
         TableCopy (resolve_idx ctx.tables i1, resolve_idx ctx.tables i2)
     | TableInit (i1, i2) ->
-        TableInit (resolve_idx ctx.tables i1, resolve_idx ctx.elems i2)
+        (* Text order is (table, elem); binary order is (elem, table). *)
+        let table = resolve_idx ctx.tables i1 in
+        let elem = resolve_idx ctx.elems i2 in
+        TableInit (elem, table)
     | ElemDrop i -> ElemDrop (resolve_idx ctx.elems i)
     | Const (I32 x) -> Const (I32 (Wax_utils.Number_parsing.int32 x))
     | Const (I64 x) -> Const (I64 (Wax_utils.Number_parsing.int64 x))

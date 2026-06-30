@@ -496,14 +496,16 @@ and instruction ch =
     | 0x0F -> Return
     | 0x10 -> Call (uint ch)
     | 0x11 ->
-        let x = uint ch in
-        let y = uint ch in
-        CallIndirect (x, y)
+        (* Binary order is (type, table); the AST holds (table, type). *)
+        let type_idx = uint ch in
+        let table = uint ch in
+        CallIndirect (table, type_idx)
     | 0x12 -> ReturnCall (uint ch)
     | 0x13 ->
-        let x = uint ch in
-        let y = uint ch in
-        ReturnCallIndirect (x, y)
+        (* Binary order is (type, table); the AST holds (table, type). *)
+        let type_idx = uint ch in
+        let table = uint ch in
+        ReturnCallIndirect (table, type_idx)
     | 0x14 -> CallRef (uint ch)
     | 0x15 -> ReturnCallRef (uint ch)
     | 0x1A -> Drop
