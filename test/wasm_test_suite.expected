@@ -269,3 +269,33 @@ from wasm:
   (func $type-block-value-nested-return-void-vs-num (result i32)
     (block (block (return (i32.const 0))))
   )
+Wax type-checking should have failed (type mismatch):
+  fn f() -> i32 {
+      loop {
+          do {
+              unreachable;
+          }
+      }
+  }
+from wasm:
+  (func $type-loop-value-nested-unreachable-void-vs-num (result i32)
+    (loop (block (unreachable)))
+  )
+Wax type-checking should have failed (type mismatch):
+  fn f() -> i32 {
+      'l_2: loop {
+          nop;
+          br 'l_2;
+      }
+  }
+from wasm:
+  (func $type-cont-last-void-vs-empty (result i32) (loop (br 0 (nop))))
+Wax type-checking should have failed (type mismatch):
+  fn f() -> i32 {
+      'l_2: loop {
+          0 as i32;
+          br 'l_2;
+      }
+  }
+from wasm:
+  (func $type-cont-last-num-vs-empty (result i32) (loop (br 0 (i32.const 0))))

@@ -1509,6 +1509,36 @@ let has_expectation expected =
   | Unknown | Collecting _ -> false
   | _ -> true
 
+(* For a block-like construct (do/loop/try/try_table) checked against [expected]:
+   the single cell to type its body and handlers against — its declared result,
+   or [expected] when the annotation was omitted (a re-parse of a dropped one). *)
+let context_result_cell ctx typ ~expected =
+  if typ.results = [||] then expected
+  else
+    match array_map_opt (internalize ctx) typ.results with
+    | Some [| c |] -> c
+    | _ -> expected
+
+(* The [typ] to store for such a construct after its body is typed: fill an
+   omitted result from [expected] (so re-parse / [to_wasm] recovers it), or drop
+   a declared result on [simplify] when it equals the context — then re-parse
+   recovers the same type from the same context, so nothing is lost. *)
+let context_block_typ ctx typ ~expected ~result_cell =
+  if typ.results = [||] then
+    match standalone_valtype ctx expected with
+    | Some iv -> { typ with results = [| iv.typ |] }
+    | None -> typ
+  else if
+    ctx.simplify
+    &&
+    match
+      (standalone_valtype ctx expected, standalone_valtype ctx result_cell)
+    with
+    | Some a, Some b -> valtype_equal ctx a b
+    | _ -> false
+  then { typ with results = [||] }
+  else typ
+
 (* The exact user heap-type name [expected] pins, if any — usable to supply an
    omitted struct/array type name. A supertype top ([any]/[eq]/[struct]/[array]/
    …) or a floating/non-ref cell returns [None]: construction needs the exact
@@ -2505,56 +2535,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       in
       let*! results = array_map_opt (internalize ctx) typ.results in
       let body' = block ctx i.info label params results results body in
-      (* Catching an exception passes the tag's values (and, for the [_ref]
-         variants, the exception reference) to the handler's branch target, so
-         they must match that target. Report at the target label rather than at
-         the whole [try], and frame it as a handler/target mismatch. *)
-      let check_catch types label =
-        let params = branch_target ctx label in
-        if Array.length types <> Array.length params then
-          Error.value_count_mismatch ctx.diagnostics ~location:label.info
-            ~expected:(Array.length params) ~provided:(Array.length types)
-        else
-          Array.iter2
-            (fun provided expected ->
-              if not (subtype ctx provided expected) then
-                Error.catch_target_mismatch ctx.diagnostics ~location:label.info
-                  provided expected)
-            types params
-      in
-      List.iter
-        (fun catch ->
-          match catch with
-          | Catch (tag, label) ->
-              let>@ { params; results = r } =
-                Tbl.find ctx.diagnostics ctx.tags tag
-              in
-              if r <> [||] then
-                Error.tag_with_results ctx.diagnostics ~location:tag.info;
-              let>@ params =
-                array_map_opt (fun p -> internalize ctx (snd p.desc)) params
-              in
-              check_catch params label
-          | CatchRef (tag, label) ->
-              let>@ { params; results = r } =
-                Tbl.find ctx.diagnostics ctx.tags tag
-              in
-              if r <> [||] then
-                Error.tag_with_results ctx.diagnostics ~location:tag.info;
-              let>@ params =
-                array_map_opt (fun p -> internalize ctx (snd p.desc)) params
-              in
-              let>@ ref_exn =
-                internalize ctx (Ref { nullable = false; typ = Exn })
-              in
-              check_catch (Array.append params [| ref_exn |]) label
-          | CatchAll label -> check_catch [||] label
-          | CatchAllRef label ->
-              let>@ ref_exn =
-                internalize ctx (Ref { nullable = false; typ = Exn })
-              in
-              check_catch [| ref_exn |] label)
-        catches;
+      check_trytable_catches ctx catches;
       return_statement i
         (TryTable { label; typ; block = body'; catches })
         results
@@ -2562,25 +2543,8 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       assert (typ.params = [||]);
       let*! results = array_map_opt (internalize ctx) typ.results in
       let body' = block ctx i.info label [||] results results body in
-      let catches =
-        List.filter_map
-          (fun (tag, body) ->
-            let*@ { params; results = r } =
-              Tbl.find ctx.diagnostics ctx.tags tag
-            in
-            if r <> [||] then
-              Error.tag_with_results ctx.diagnostics ~location:tag.info;
-            let+@ params =
-              array_map_opt (fun p -> internalize ctx (snd p.desc)) params
-            in
-            let body' = block ctx i.info label params results results body in
-            (tag, body'))
-          catches
-      in
-      let catch_all =
-        Option.map
-          (fun body -> block ctx i.info label [||] results results body)
-          catch_all
+      let catches, catch_all =
+        type_try_catches ctx i label ~results catches catch_all
       in
       return_statement i
         (Try { label; typ; block = body'; catches; catch_all })
@@ -4845,51 +4809,74 @@ and check ctx expected (i : location instr) =
           results
       in
       return (node, needed)
+  (* A [do]/[loop]/[try]/[try_table] block in a checking context need not
+     annotate its own result: thread [expected] in as the result type so a
+     redundant annotation drops (on [simplify]) and re-parse recovers it from the
+     same context ([context_result_cell] / [context_block_typ]). Branches to the
+     block's own label, and (for [try]) the catch handlers, are checked against
+     [expected] like the fall-through value. The keep-bool is conservatively
+     [true]: unlike an [if], the value may arrive via a branch the cheap
+     fall-through test would miss, so a surrounding binding annotation is kept —
+     safe, at worst occasionally redundant. *)
   | Block { label; typ; block = instrs } when has_expectation expected ->
-      (* The checking context supplies a result type, so a [do] block in value
-         position need not annotate its own: thread [expected] in as the result
-         (and branch-target) type so a redundant annotation drops (on [simplify])
-         and re-parse recovers it from the same context. Branches to the block's
-         own label are checked against [expected] like the fall-through value. *)
       if Array.length typ.params > 0 then
         Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
-      let omitted = typ.results = [||] in
-      let result_cell =
-        if omitted then expected
-        else
-          match array_map_opt (internalize ctx) typ.results with
-          | Some [| c |] -> c
-          | _ -> expected
-      in
+      let result_cell = context_result_cell ctx typ ~expected in
       let results = [| result_cell |] in
       let instrs' = block ctx i.info label [||] results results instrs in
-      (* The block's result (its annotation, or [expected] when omitted) must fit
-         the context. *)
       check_subtype ctx ~location:i.info result_cell expected;
-      let typ =
-        if omitted then
-          match standalone_valtype ctx expected with
-          | Some iv -> { typ with results = [| iv.typ |] }
-          | None -> typ
-        else if
-          ctx.simplify
-          &&
-          match
-            (standalone_valtype ctx expected, standalone_valtype ctx result_cell)
-          with
-          | Some a, Some b -> valtype_equal ctx a b
-          | _ -> false
-        then { typ with results = [||] }
-        else typ
-      in
+      let typ = context_block_typ ctx typ ~expected ~result_cell in
       let* node =
         return_statement i (Block { label; typ; block = instrs' }) results
       in
-      (* Conservative keep-bool: a surrounding binding annotation is reported as
-         still needed. Unlike an [if], the value may arrive via a branch rather
-         than the fall-through, so the cheap fall-through test the [if] arm uses
-         would not see it; leaving the binding annotated is safe at the cost of
-         an occasional redundant one. *)
+      return (node, true)
+  | Loop { label; typ; block = instrs } when has_expectation expected ->
+      if Array.length typ.params > 0 then
+        Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
+      let result_cell = context_result_cell ctx typ ~expected in
+      let results = [| result_cell |] in
+      (* A [br] to a loop re-enters at its top with the loop's parameters, so it
+         carries no result; the loop's value is its fall-through. Hence the
+         branch-target type is the (empty) parameters, not [results]. *)
+      let instrs' = block ctx i.info label [||] results [||] instrs in
+      check_subtype ctx ~location:i.info result_cell expected;
+      let typ = context_block_typ ctx typ ~expected ~result_cell in
+      let* node =
+        return_statement i (Loop { label; typ; block = instrs' }) results
+      in
+      return (node, true)
+  | TryTable { label; typ; block = body; catches } when has_expectation expected
+    ->
+      if Array.length typ.params > 0 then
+        Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
+      let result_cell = context_result_cell ctx typ ~expected in
+      let results = [| result_cell |] in
+      let body' = block ctx i.info label [||] results results body in
+      check_trytable_catches ctx catches;
+      check_subtype ctx ~location:i.info result_cell expected;
+      let typ = context_block_typ ctx typ ~expected ~result_cell in
+      let* node =
+        return_statement i
+          (TryTable { label; typ; block = body'; catches })
+          results
+      in
+      return (node, true)
+  | Try { label; typ; block = body; catches; catch_all }
+    when has_expectation expected ->
+      assert (typ.params = [||]);
+      let result_cell = context_result_cell ctx typ ~expected in
+      let results = [| result_cell |] in
+      let body' = block ctx i.info label [||] results results body in
+      let catches, catch_all =
+        type_try_catches ctx i label ~results catches catch_all
+      in
+      check_subtype ctx ~location:i.info result_cell expected;
+      let typ = context_block_typ ctx typ ~expected ~result_cell in
+      let* node =
+        return_statement i
+          (Try { label; typ; block = body'; catches; catch_all })
+          results
+      in
       return (node, true)
   | _ ->
       let* i' = instruction ctx i in
@@ -5213,56 +5200,7 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
       let*! results = array_map_opt (internalize ctx) typ.results in
       let* () = pop_args ctx ~location:i.info params in
       let body' = block ctx i.info label params results results body in
-      (* Catching an exception passes the tag's values (and, for the [_ref]
-         variants, the exception reference) to the handler's branch target, so
-         they must match that target. Report at the target label rather than at
-         the whole [try], and frame it as a handler/target mismatch. *)
-      let check_catch types label =
-        let params = branch_target ctx label in
-        if Array.length types <> Array.length params then
-          Error.value_count_mismatch ctx.diagnostics ~location:label.info
-            ~expected:(Array.length params) ~provided:(Array.length types)
-        else
-          Array.iter2
-            (fun provided expected ->
-              if not (subtype ctx provided expected) then
-                Error.catch_target_mismatch ctx.diagnostics ~location:label.info
-                  provided expected)
-            types params
-      in
-      List.iter
-        (fun catch ->
-          match catch with
-          | Catch (tag, label) ->
-              let>@ { params; results = r } =
-                Tbl.find ctx.diagnostics ctx.tags tag
-              in
-              if r <> [||] then
-                Error.tag_with_results ctx.diagnostics ~location:tag.info;
-              let>@ params =
-                array_map_opt (fun p -> internalize ctx (snd p.desc)) params
-              in
-              check_catch params label
-          | CatchRef (tag, label) ->
-              let>@ { params; results = r } =
-                Tbl.find ctx.diagnostics ctx.tags tag
-              in
-              if r <> [||] then
-                Error.tag_with_results ctx.diagnostics ~location:tag.info;
-              let>@ params =
-                array_map_opt (fun p -> internalize ctx (snd p.desc)) params
-              in
-              let>@ ref_exn =
-                internalize ctx (Ref { nullable = false; typ = Exn })
-              in
-              check_catch (Array.append params [| ref_exn |]) label
-          | CatchAll label -> check_catch [||] label
-          | CatchAllRef label ->
-              let>@ ref_exn =
-                internalize ctx (Ref { nullable = false; typ = Exn })
-              in
-              check_catch [| ref_exn |] label)
-        catches;
+      check_trytable_catches ctx catches;
       return_statement i
         (TryTable { label; typ; block = body'; catches })
         results
@@ -5273,25 +5211,8 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
       let*! results = array_map_opt (internalize ctx) typ.results in
       let* () = pop_args ctx ~location:i.info params in
       let body' = block ctx i.info label params results results body in
-      let catches =
-        List.filter_map
-          (fun (tag, body) ->
-            let*@ { params; results = r } =
-              Tbl.find ctx.diagnostics ctx.tags tag
-            in
-            if r <> [||] then
-              Error.tag_with_results ctx.diagnostics ~location:tag.info;
-            let+@ params =
-              array_map_opt (fun p -> internalize ctx (snd p.desc)) params
-            in
-            let body' = block ctx i.info label params results results body in
-            (tag, body'))
-          catches
-      in
-      let catch_all =
-        Option.map
-          (fun body -> block ctx i.info label [||] results results body)
-          catch_all
+      let catches, catch_all =
+        type_try_catches ctx i label ~results catches catch_all
       in
       return_statement i
         (Try { label; typ; block = body'; catches; catch_all })
@@ -5357,6 +5278,84 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
       ignore (check_hole_order ctx res count : bool);
       return res
 
+(* Check that each [try_table] catch clause forwards the right value types to its
+   branch target. The handler is a separate block (the target label), so unlike
+   [try] the catch contributes nothing to the [try_table]'s own result. Reported
+   at the target label, framed as a handler/target mismatch. Shared by the
+   expression-, statement-, and checking-position [TryTable] cases. *)
+and check_trytable_catches ctx catches =
+  let check_catch types label =
+    let params = branch_target ctx label in
+    if Array.length types <> Array.length params then
+      Error.value_count_mismatch ctx.diagnostics ~location:label.info
+        ~expected:(Array.length params) ~provided:(Array.length types)
+    else
+      Array.iter2
+        (fun provided expected ->
+          if not (subtype ctx provided expected) then
+            Error.catch_target_mismatch ctx.diagnostics ~location:label.info
+              provided expected)
+        types params
+  in
+  List.iter
+    (fun catch ->
+      match catch with
+      | Catch (tag, label) ->
+          let>@ { params; results = r } =
+            Tbl.find ctx.diagnostics ctx.tags tag
+          in
+          if r <> [||] then
+            Error.tag_with_results ctx.diagnostics ~location:tag.info;
+          let>@ params =
+            array_map_opt (fun p -> internalize ctx (snd p.desc)) params
+          in
+          check_catch params label
+      | CatchRef (tag, label) ->
+          let>@ { params; results = r } =
+            Tbl.find ctx.diagnostics ctx.tags tag
+          in
+          if r <> [||] then
+            Error.tag_with_results ctx.diagnostics ~location:tag.info;
+          let>@ params =
+            array_map_opt (fun p -> internalize ctx (snd p.desc)) params
+          in
+          let>@ ref_exn =
+            internalize ctx (Ref { nullable = false; typ = Exn })
+          in
+          check_catch (Array.append params [| ref_exn |]) label
+      | CatchAll label -> check_catch [||] label
+      | CatchAllRef label ->
+          let>@ ref_exn =
+            internalize ctx (Ref { nullable = false; typ = Exn })
+          in
+          check_catch [| ref_exn |] label)
+    catches
+
+(* Type a [try]'s catch handlers (and catch-all) against [results] — each handler
+   is a block that produces the try's result, like the body. Shared by the
+   expression-, statement-, and checking-position [Try] cases; the body is typed
+   by the caller. *)
+and type_try_catches ctx i label ~results catches catch_all =
+  let catches =
+    List.filter_map
+      (fun (tag, body) ->
+        let*@ { params; results = r } = Tbl.find ctx.diagnostics ctx.tags tag in
+        if r <> [||] then
+          Error.tag_with_results ctx.diagnostics ~location:tag.info;
+        let+@ params =
+          array_map_opt (fun p -> internalize ctx (snd p.desc)) params
+        in
+        let body' = block ctx i.info label params results results body in
+        (tag, body'))
+      catches
+  in
+  let catch_all =
+    Option.map
+      (fun body -> block ctx i.info label [||] results results body)
+      catch_all
+  in
+  (catches, catch_all)
+
 and block_contents ctx results l =
   match l with
   | [] -> return []
@@ -5367,14 +5366,19 @@ and block_contents ctx results l =
          | Struct _ | StructDefault _ | Array _ | ArrayDefault _ | ArrayFixed _
          | ArraySegment _ | String _ ->
              true
-         (* A trailing [if]/[do] block is routed through [check] too, so the
-            outer block's result type flows into it (context-driven inference):
-            the inner block's own result annotation then drops, and the type
-            propagates further into a nested trailing block or construction. A
-            parameterized block stays on the statement path, which pops its
-            parameters off the stack (expression position has no stack to take
-            them from). *)
-         | If { typ; _ } | Block { typ; _ } -> Array.length typ.params = 0
+         (* A trailing block (if / do / loop / try / try_table) is routed through
+            [check] too, so the outer block's result type flows into it
+            (context-driven inference): the inner block's own result annotation
+            then drops, and the type propagates further into a nested trailing
+            block or construction. A parameterized block stays on the statement
+            path, which pops its parameters off the stack (expression position
+            has no stack to take them from). *)
+         | If { typ; _ }
+         | Block { typ; _ }
+         | Loop { typ; _ }
+         | TryTable { typ; _ }
+         | Try { typ; _ } ->
+             Array.length typ.params = 0
          | Cast (e, _) -> is_null_initializer e
          | _ -> false ->
       fun st ->

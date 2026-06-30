@@ -385,7 +385,7 @@ type block = [mut &eq];
 #[else]
 #[export = "caml_sys_getcwd"]
 fn caml_sys_getcwd(&eq) -> &eq {
-    try &eq {
+    try {
         caml_string_of_jsstring(wrap(getcwd()));
     } catch {
         javascript_exception => {
@@ -538,7 +538,7 @@ fn caml_sys_read_directory(name: &eq) -> &eq {
 #[else]
 #[export = "caml_sys_read_directory"]
 fn caml_sys_read_directory(name: &eq) -> &eq {
-    try &eq {
+    try {
         caml_js_to_string_array(read_dir(unwrap(caml_jsstring_of_string(name))));
     } catch {
         javascript_exception => {
@@ -699,7 +699,7 @@ fn caml_fs_init() -> &eq {
 #[else]
 #[export = "caml_sys_is_directory"]
 fn caml_sys_is_directory(name: &eq) -> &eq {
-    try &eq {
+    try {
         is_directory(unwrap(caml_jsstring_of_string(name)));
     } catch {
         javascript_exception => {
@@ -717,7 +717,7 @@ fn caml_sys_is_regular_file(name: &eq) -> &eq {
 #[else]
 #[export = "caml_sys_is_regular_file"]
 fn caml_sys_is_regular_file(name: &eq) -> &eq {
-    try &eq {
+    try {
         is_file(unwrap(caml_jsstring_of_string(name)));
     } catch {
         javascript_exception => {

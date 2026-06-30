@@ -130,8 +130,8 @@
             'handle_exception: do {
                 let (resume_res_0, resume_res_1) =
                     'handle_effect: do () -> (&eq, &continuation) {
-                        let res =
-                            try &eq {
+                        let res: &eq =
+                            try {
                                 resume continuation [effect -> 'handle_effect]
                                     (f, v, fiber.continuation);
                             } catch {

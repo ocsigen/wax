@@ -933,7 +933,7 @@ fn caml_alloc_stat(
     #[export = "unix_stat"]
     #[export = "caml_unix_stat"]
     fn unix_stat(path: &eq) -> &eq {
-        try &eq {
+        try {
             stat(unwrap(caml_jsstring_of_string(path)), 0);
         } catch {
             javascript_exception => {
@@ -946,7 +946,7 @@ fn caml_alloc_stat(
     #[export = "unix_stat_64"]
     #[export = "caml_unix_stat_64"]
     fn unix_stat_64(path: &eq) -> &eq {
-        try &eq {
+        try {
             stat(unwrap(caml_jsstring_of_string(path)), 1);
         } catch {
             javascript_exception => {
@@ -959,7 +959,7 @@ fn caml_alloc_stat(
     #[export = "unix_lstat"]
     #[export = "caml_unix_lstat"]
     fn unix_lstat(path: &eq) -> &eq {
-        try &eq {
+        try {
             lstat(unwrap(caml_jsstring_of_string(path)), 0);
         } catch {
             javascript_exception => {
@@ -972,7 +972,7 @@ fn caml_alloc_stat(
     #[export = "unix_lstat_64"]
     #[export = "caml_unix_lstat_64"]
     fn unix_lstat_64(path: &eq) -> &eq {
-        try &eq {
+        try {
             lstat(unwrap(caml_jsstring_of_string(path)), 1);
         } catch {
             javascript_exception => {
@@ -985,7 +985,7 @@ fn caml_alloc_stat(
     #[export = "unix_fstat"]
     #[export = "caml_unix_fstat"]
     fn unix_fstat(fd: &eq) -> &eq {
-        try &eq {
+        try {
             fstat(fd, 0);
         } catch {
             javascript_exception => {
@@ -998,7 +998,7 @@ fn caml_alloc_stat(
     #[export = "unix_fstat_64"]
     #[export = "caml_unix_fstat_64"]
     fn unix_fstat_64(fd: &eq) -> &eq {
-        try &eq {
+        try {
             fstat(fd, 1);
         } catch {
             javascript_exception => {
@@ -1131,7 +1131,7 @@ fn unix_rename(o: &eq, n: &eq) -> &eq {
     #[export = "unix_getcwd"]
     #[export = "caml_unix_getcwd"]
     fn unix_getcwd(&eq) -> &eq {
-        try &eq {
+        try {
             caml_string_of_jsstring(wrap(getcwd()));
         } catch {
             javascript_exception => {
@@ -1340,7 +1340,7 @@ fn unix_mkdir(name: &eq, perm: &eq) -> &eq {
     #[export = "unix_opendir"]
     #[export = "caml_unix_opendir"]
     fn unix_opendir(name: &eq) -> &eq {
-        try &eq {
+        try {
             wrap(opendir(unwrap(caml_jsstring_of_string(name))));
         } catch {
             javascript_exception => {
@@ -1365,7 +1365,7 @@ fn unix_mkdir(name: &eq, perm: &eq) -> &eq {
     fn readdir_helper(dir: &eq) -> &eq {
         'end: do {
             return
-                try &eq {
+                try {
                     caml_string_of_jsstring(wrap(br_on_null 'end readdir(unwrap(dir))));
                 } catch {
                     javascript_exception => {
