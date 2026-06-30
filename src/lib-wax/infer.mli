@@ -95,6 +95,10 @@ val i32_valtype : inferred_valtype
 val i64_valtype : inferred_valtype
 val f32_valtype : inferred_valtype
 val f64_valtype : inferred_valtype
+
+val valtype_cell : inferred_valtype -> inferred_type Cell.t
+(** [valtype_cell v] wraps a fully resolved value type in a fresh cell. *)
+
 val i32_cell : inferred_type Cell.t
 val i64_cell : inferred_type Cell.t
 val f32_cell : inferred_type Cell.t

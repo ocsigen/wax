@@ -1217,7 +1217,7 @@ let internalize_valtype ctx typ =
 
 let internalize ?inline ctx typ =
   let+@ internal = valtype ctx.diagnostics ctx.type_context typ in
-  Cell.make (Valtype { typ; internal; inline })
+  valtype_cell { typ; internal; inline }
 
 (* Check that a source element reference type can be stored where [dst] elements
    are expected (table.copy / table.init / array.init_elem): [src] must be a
@@ -1232,7 +1232,7 @@ let check_elem_subtype ctx ~location ~src ~dst =
           (Wax_wasm.Types.val_subtype ctx.subtyping_info s.internal d.internal)
       then
         Error.incompatible_element_type ctx.diagnostics ~location
-          (Cell.make (Valtype s)) (Cell.make (Valtype d))
+          (valtype_cell s) (valtype_cell d)
   | _ -> ()
 
 (* The inferred type of a value read from a field: a packed [i8]/[i16] field
@@ -1586,7 +1586,7 @@ let bind_let_value ctx ~location result_ty (name, typ) =
       let drop =
         Option.value ~default:false
           (let+@ ity = internalize_valtype ctx typ in
-           check_subtype ctx ~location result_ty (Cell.make (Valtype ity));
+           check_subtype ctx ~location result_ty (valtype_cell ity);
            Option.iter
              (fun name ->
                ctx.locals <- StringMap.add name.desc (Some ity) ctx.locals;
@@ -2189,6 +2189,8 @@ let join_value_types ctx ty1 ty2 =
 let address_valtype (at : [ `I32 | `I64 ]) : inferred_valtype =
   match at with `I32 -> i32_valtype | `I64 -> i64_valtype
 
+let address_cell at = valtype_cell (address_valtype at)
+
 (* Expected operand/result type of a SIMD intrinsic, as a fresh type cell. *)
 let simd_valtype : Simd.ty -> inferred_valtype = function
   | TV128 -> { typ = V128; internal = V128; inline = None }
@@ -2197,7 +2199,7 @@ let simd_valtype : Simd.ty -> inferred_valtype = function
   | TF32 -> f32_valtype
   | TF64 -> f64_valtype
 
-let simd_cell t = Cell.make (Valtype (simd_valtype t))
+let simd_cell t = valtype_cell (simd_valtype t)
 
 (* Memory access method names. The value width is in the name; signedness and the
    i32/i64 result come from a surrounding [as iN_s/u] cast (see [to_wasm]). *)
@@ -3601,7 +3603,7 @@ and type_aggregate_access ctx i =
     when Tbl.find_opt ctx.tables tabname <> None ->
       let at, rt = Option.get (Tbl.find_opt ctx.tables tabname) in
       let* i2' = instruction ctx i2 in
-      check_type ctx i2' (Cell.make (Valtype (address_valtype at)));
+      check_type ctx i2' (address_cell at);
       let*! typ = internalize ctx (Ref rt) in
       return_expression i
         (ArrayGet ({ desc = Get tabname; info = ([||], recv.info) }, i2'))
@@ -3631,7 +3633,7 @@ and type_aggregate_access ctx i =
     when Tbl.find_opt ctx.tables tabname <> None ->
       let at, rt = Option.get (Tbl.find_opt ctx.tables tabname) in
       let* i2' = instruction ctx i2 in
-      check_type ctx i2' (Cell.make (Valtype (address_valtype at)));
+      check_type ctx i2' (address_cell at);
       (* Check the stored value against the table's element type, so a
          struct/array literal can drop its name. *)
       let* i3' =
@@ -3735,7 +3737,7 @@ and type_variable_access ctx i =
       let* i' =
         match resolved with
         | Local (Some ity) | Global (_, Some ity) ->
-            let* i', _ = check_instruction ctx (Cell.make (Valtype ity)) i' in
+            let* i', _ = check_instruction ctx (valtype_cell ity) i' in
             return i'
         | Local None | Global (_, None) | Func_ref _ | Unbound ->
             instruction ctx i'
@@ -3760,7 +3762,7 @@ and type_variable_access ctx i =
          match against. *)
       match resolve_variable ctx idx with
       | Local (Some ity) ->
-          let typ = Cell.make (Valtype ity) in
+          let typ = valtype_cell ity in
           let* i', _ = check_instruction ctx typ i' in
           mark_initialized ctx idx.desc;
           return_expression i (Tee (idx, i')) typ
@@ -3805,7 +3807,7 @@ and type_let ctx i =
             | None -> true
           in
           let* i', needed =
-            check_instruction ~drop_supertype ctx (Cell.make (Valtype ity)) i'
+            check_instruction ~drop_supertype ctx (valtype_cell ity) i'
           in
           Option.iter
             (fun name ->
@@ -4090,7 +4092,7 @@ and type_block_construct ctx i =
 
 and type_mem_method_call ctx i func recv memname meth args =
   let _, address_type = Option.get (Tbl.find_opt ctx.memories memname) in
-  let addr_vt = Cell.make (Valtype (address_valtype address_type)) in
+  let addr_vt = address_cell address_type in
   let is_store = mem_store_method meth.desc in
   let nstack = if is_store then 2 else 1 in
   let* args' = instructions ctx args in
@@ -4152,7 +4154,7 @@ and type_mem_method_call ctx i func recv memname meth args =
 and type_simd_mem_method_call ctx i func recv memname meth args =
   let mop = Option.get (Simd.mem_method meth.desc) in
   let _, address_type = Option.get (Tbl.find_opt ctx.memories memname) in
-  let addr_vt = Cell.make (Valtype (address_valtype address_type)) in
+  let addr_vt = address_cell address_type in
   let nstack = List.length mop.m_operands in
   let nimm = if mop.m_lane then 1 else 0 in
   let* args' = instructions ctx args in
@@ -4200,7 +4202,7 @@ and type_simd_mem_method_call ctx i func recv memname meth args =
 
 and type_mem_mgmt_call ctx i func recv name meth args =
   let _, at = Option.get (Tbl.find_opt ctx.memories name) in
-  let addr () = Cell.make (Valtype (address_valtype at)) in
+  let addr () = address_cell at in
   let i32 () = i32_cell in
   let recv' = { desc = Get name; info = ([||], recv.info) } in
   let mk args' =
@@ -4239,7 +4241,7 @@ and type_mem_mgmt_call ctx i func recv name meth args =
       let src_at =
         match Tbl.find_opt ctx.memories src with Some (_, a) -> a | None -> at
       in
-      let addr_of a = Cell.make (Valtype (address_valtype a)) in
+      let addr_of a = address_cell a in
       let min_at =
         match (at, src_at) with `I32, _ | _, `I32 -> `I32 | `I64, `I64 -> `I64
       in
@@ -4267,7 +4269,7 @@ and type_mem_mgmt_call ctx i func recv name meth args =
 
 and type_table_mgmt_call ctx i func recv name meth args =
   let at, rt = Option.get (Tbl.find_opt ctx.tables name) in
-  let addr () = Cell.make (Valtype (address_valtype at)) in
+  let addr () = address_cell at in
   let i32 () = i32_cell in
   let check_elt e =
     let>@ t = internalize ctx (Ref rt) in
@@ -4316,7 +4318,7 @@ and type_table_mgmt_call ctx i func recv name meth args =
             a
         | None -> at
       in
-      let addr_of a = Cell.make (Valtype (address_valtype a)) in
+      let addr_of a = address_cell a in
       let min_at =
         match (at, src_at) with `I32, _ | _, `I32 -> `I32 | `I64, `I64 -> `I64
       in
@@ -5921,8 +5923,7 @@ and block_infer ctx loc label body =
 and finalize_inferred ?(needed = false) ctx typ ~inferred =
   if typ.results = [||] then
     match Option.bind inferred (resolve_omitted_valtype ctx) with
-    | Some iv ->
-        ([| Cell.make (Valtype iv) |], { typ with results = [| iv.typ |] })
+    | Some iv -> ([| valtype_cell iv |], { typ with results = [| iv.typ |] })
     | None -> ([||], typ)
   else
     let result_cells =
@@ -6302,7 +6303,7 @@ let type_data_offset ctx address_type off =
     with_empty_stack ctx ~location:off.info ~kind:Expression
       (toplevel_instruction ctx off)
   in
-  check_type ctx off' (Cell.make (Valtype (address_valtype address_type)));
+  check_type ctx off' (address_cell address_type);
   check_constant_instruction ctx off';
   off'
 
@@ -6428,7 +6429,7 @@ let rec globals ctx fields =
                     let def', needed =
                       with_empty_stack ctx ~location:def.info ~kind:Expression
                         (check_toplevel ~drop_supertype:(not mut) ctx
-                           (Cell.make (Valtype ity)) def)
+                           (valtype_cell ity) def)
                     in
                     Tbl.add ctx.diagnostics ctx.globals name (mut, Some ity);
                     let drop =

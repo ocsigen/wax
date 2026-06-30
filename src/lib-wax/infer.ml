@@ -144,7 +144,10 @@ let i32_valtype = { typ = I32; internal = I32; inline = None }
 let i64_valtype = { typ = I64; internal = I64; inline = None }
 let f32_valtype = { typ = F32; internal = F32; inline = None }
 let f64_valtype = { typ = F64; internal = F64; inline = None }
-let i32_cell = Cell.make (Valtype i32_valtype)
-let i64_cell = Cell.make (Valtype i64_valtype)
-let f32_cell = Cell.make (Valtype f32_valtype)
-let f64_cell = Cell.make (Valtype f64_valtype)
+
+(* Wrap a (fully resolved) value type in a fresh cell. *)
+let valtype_cell v = Cell.make (Valtype v)
+let i32_cell = valtype_cell i32_valtype
+let i64_cell = valtype_cell i64_valtype
+let f32_cell = valtype_cell f32_valtype
+let f64_cell = valtype_cell f64_valtype
