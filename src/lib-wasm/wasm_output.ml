@@ -89,8 +89,18 @@ module Encoder = struct
     | Type idx -> sint b idx
 
   let reftype b (t : reftype) =
-    byte b (if t.nullable then 0x63 else 0x64);
-    heaptype b t.typ
+    match t with
+    | { nullable = true; typ = Type _ } ->
+        (* A nullable reference to a concrete type has no shorthand. *)
+        byte b 0x63;
+        heaptype b t.typ
+    | { nullable = true; typ } ->
+        (* A nullable reference to an abstract heap type abbreviates to the
+           single heap-type byte (e.g. funcref = 0x70, exnref = 0x69). *)
+        heaptype b typ
+    | { nullable = false; _ } ->
+        byte b 0x64;
+        heaptype b t.typ
 
   let valtype b (t : valtype) =
     match t with
