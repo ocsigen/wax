@@ -5241,7 +5241,10 @@ and block_infer ctx loc label body =
    stack effect and the [typ] to store on the node. For an omitted annotation
    ([typ.results = [||]]) the inferred type fills it in; for an explicit single
    result the annotation is dropped (cleared) when [simplify] and the inferred
-   type equals it (so it re-infers identically), else kept. *)
+   type is a subtype of it, else kept. (When it is a strict subtype the block
+   re-infers to that subtype — a more precise but still valid result type that
+   the surrounding context, which accepted the declared supertype, still
+   accepts.) *)
 and finalize_inferred ctx typ ~inferred =
   if typ.results = [||] then
     match Option.bind inferred (resolve_omitted_valtype ctx) with
@@ -5262,7 +5265,8 @@ and finalize_inferred ctx typ ~inferred =
         ( Option.bind inferred (standalone_valtype ctx),
           standalone_valtype ctx result_cells.(0) )
       with
-      | Some v, Some t -> valtype_equal ctx v t
+      | Some v, Some t ->
+          Wax_wasm.Types.val_subtype ctx.subtyping_info v.internal t.internal
       | _ -> false
     in
     (result_cells, if drop then { typ with results = [||] } else typ)

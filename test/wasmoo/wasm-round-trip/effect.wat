@@ -574,7 +574,7 @@
         (i32.add (local.get $i) (i32.const 1)))
       (return_call_ref $function_2
         (array.get $block (local.get $args) (local.get $i))
-        (if (result (ref eq))
+        (if (result (ref $closure))
           (i32.eq (i32.add (local.get $i) (i32.const 1))
             (array.len (local.get $args)))
           (then (global.get $identity_closure))

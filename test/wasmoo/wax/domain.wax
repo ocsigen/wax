@@ -27,7 +27,7 @@ type block = [mut &eq];
 #[export = "caml_atomic_cas"]
 fn caml_atomic_cas(ref: &eq, o: &eq, n: &eq) -> &eq {
     let b = ref as &block;
-    if b[1] == o => &eq {
+    if b[1] == o {
         b[1] = n;
         1 as &i31;
     } else {
@@ -39,7 +39,7 @@ fn caml_atomic_cas(ref: &eq, o: &eq, n: &eq) -> &eq {
 fn caml_atomic_cas_field(ref: &eq, i: &eq, o: &eq, n: &eq) -> &eq {
     let j = i as i32_u + 1;
     let b = ref as &block;
-    if b[j] == o => &eq {
+    if b[j] == o {
         b[j] = n;
         1 as &i31;
     } else {
@@ -165,7 +165,7 @@ fn caml_domain_dls_set(a: &eq) -> &eq {
 
 #[export = "caml_domain_dls_compare_and_set"]
 fn caml_domain_dls_compare_and_set(old: &eq, new: &eq) -> &eq {
-    if caml_domain_dls == old => &eq {
+    if caml_domain_dls == old {
         caml_domain_dls = new;
         1 as &i31;
     } else {

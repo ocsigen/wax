@@ -442,7 +442,7 @@
   (local.set $b (ref.cast (ref $block) (local.get $v)))
   (local.set $i
     (i32.add (i31.get_u (ref.cast (ref i31) (local.get $vi))) (i32.const 1)))
-  (if (result (ref eq))
+  (if (result (ref i31))
     (ref.eq (array.get $block (local.get $b) (local.get $i)) (local.get $old))
     (then
       (array.set $block (local.get $b) (local.get $i) (local.get $new))

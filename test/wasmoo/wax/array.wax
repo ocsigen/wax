@@ -242,7 +242,7 @@ fn caml_array_concat(vl: &eq) -> &eq {
             };
     }
     let i: i32;
-    if isfloat => &eq {
+    if isfloat {
         let fa: &float_array = [0; len];
         l = vl;
         i = 0;

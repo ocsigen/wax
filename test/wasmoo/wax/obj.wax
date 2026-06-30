@@ -334,7 +334,7 @@ fn caml_lazy_update_to_forcing(v: &eq) -> &eq {
 fn caml_obj_compare_and_swap(v: &eq, vi: &eq, old: &eq, new: &eq) -> &eq {
     let b = v as &block;
     let i = vi as i32_u + 1;
-    if b[i] == old => &eq {
+    if b[i] == old {
         b[i] = new;
         1 as &i31;
     } else {

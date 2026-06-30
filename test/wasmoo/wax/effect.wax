@@ -484,7 +484,7 @@ fn caml_is_continuation(v: &eq) -> i32 {
         env.i = i + 1;
         become (f as &cps_closure).func(
             args[i],
-            if i + 1 == args.length() => &eq {
+            if i + 1 == args.length() {
                 identity_closure;
             } else {
                 env;
