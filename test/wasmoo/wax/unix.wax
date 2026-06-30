@@ -2230,7 +2230,7 @@ fn lseek(fd: &eq, offset: i64, cmd: &eq) -> i64 {
     fn lseek(vfd: &eq, offset: i64, cmd: &eq) -> i64 {
         let fd = vfd as i32_u;
         let fd_offset =
-            'non_null: do &fd_offset {
+            'non_null: do {
                 br_on_non_null 'non_null get_fd_offset_unchecked(fd);
                 throw ocaml_exception lseek_exn(3);
             }; // EBADF

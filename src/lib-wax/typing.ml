@@ -93,10 +93,19 @@ type inferred_type =
   | Int
   | Float
   | Valtype of inferred_valtype
+  | Collecting of inferred_type UnionFind.t list ref
+      (** Transient state of a fresh cell used as the result / branch-target
+          type of a block whose result is being inferred (see
+          [block_infer_general]). A value checked against such a cell (a [br]
+          target value, or the fall-through) is recorded into the list rather
+          than unified — [subtype] would otherwise assert on an unconstrained
+          right-hand side. After the body is typed the list is joined by
+          [val_lub] to give the result. The cell never escapes inference, so
+          other uses treat it like [Unknown]. *)
 
 let output_inferred_type f ty =
   match UnionFind.find ty with
-  | Unknown | Error -> Format.fprintf f "any"
+  | Unknown | Error | Collecting _ -> Format.fprintf f "any"
   | Null -> Format.fprintf f "null"
   | Number -> Format.fprintf f "number"
   | Int -> Format.fprintf f "int"
@@ -914,10 +923,22 @@ let field_subtype info (ty : Wax_wasm.Ast.Binary.fieldtype)
    on the left (dead code / error recovery) is a subtype of anything; neither
    appears on the right because expected types always come from a real
    declaration, annotation or instruction signature — hence the [assert]. *)
+(* Whether [ty] is the result cell of a block whose type is being inferred. *)
+let is_inferring ty =
+  match UnionFind.find ty with Collecting _ -> true | _ -> false
+
 let subtype ctx ty ty' =
   let ity = UnionFind.find ty in
   let ity' = UnionFind.find ty' in
   match (ity, ity') with
+  (* [ty'] is a block result being inferred: record [ty] as one of the values
+     reaching the block's exit and accept it; the type is joined later (see
+     [block_infer_general]). A [Collecting] cell never appears as a real value
+     type, so the left-hand cases below treat it like [Unknown]. *)
+  | _, Collecting collected ->
+      collected := ty :: !collected;
+      true
+  | Collecting _, _ -> true
   | Valtype ty, Valtype ty' ->
       Wax_wasm.Types.val_subtype ctx.subtyping_info ty.internal ty'.internal
   | Null, Null
@@ -1029,7 +1050,7 @@ let cast ctx ty ty' =
   | Valtype { internal = V128; _ }, (I64 | F32 | F64 | Ref _)
   | (Int8 | Int16), _ ->
       false
-  | (Unknown | Error), _ -> true
+  | (Unknown | Error | Collecting _), _ -> true
 
 let signed_cast ctx ty ty' =
   let ity = UnionFind.find ty in
@@ -1084,7 +1105,7 @@ let signed_cast ctx ty ty' =
           } ),
       _ ) ->
       false
-  | (Unknown | Error), _ -> true
+  | (Unknown | Error | Collecting _), _ -> true
 
 type stack =
   | Unreachable
@@ -1386,7 +1407,7 @@ let standalone_valtype ctx ty =
   | Int | Number -> Some { typ = I32; internal = I32; inline = None }
   | Float -> Some { typ = F64; internal = F64; inline = None }
   | Null -> internalize_valtype ctx (Ref { nullable = true; typ = None_ })
-  | Int8 | Int16 | Unknown | Error -> None
+  | Int8 | Int16 | Unknown | Error | Collecting _ -> None
 
 (* Resolve the type that an omitted annotation takes from its initializer, as in
    [let x = e] or [const x = e]: an as-yet-unconstrained literal is pinned to a
@@ -1396,7 +1417,7 @@ let standalone_valtype ctx ty =
 let resolve_omitted_valtype ctx ty =
   match UnionFind.find ty with
   | Valtype v -> Some v
-  | Int | Number | Int8 | Int16 | Unknown | Error ->
+  | Int | Number | Int8 | Int16 | Unknown | Error | Collecting _ ->
       let v = { typ = I32; internal = I32; inline = None } in
       UnionFind.set ty (Valtype v);
       Some v
@@ -1469,7 +1490,10 @@ let annotation_needed ctx (standalone : inferred_valtype option) expected =
    sentinel used when [check] is entered from synthesis with no context).
    [subtype] asserts on an [Unknown] right-hand side, so callers guard with
    this before checking against [expected]. *)
-let has_expectation expected = UnionFind.find expected <> Unknown
+let has_expectation expected =
+  match UnionFind.find expected with
+  | Unknown | Collecting _ -> false
+  | _ -> true
 
 (* The exact user heap-type name [expected] pins, if any — usable to supply an
    omitted struct/array type name. A supertype top ([any]/[eq]/[struct]/[array]/
@@ -2306,19 +2330,26 @@ let debug = false
 let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
   if debug then Format.eprintf "%a@." Output.instr i;
   match i.desc with
-  | Block { label; typ; block = instrs } ->
+  | Block { label; typ; block = instrs } -> (
       (* An expression-position block draws nothing from a stack, so a parameter
          type has no source; report it, then recover by supplying the declared
          parameters anyway so the body does not underflow into spurious "stack
          empty" errors. (With no parameters this is the empty stack, unchanged.) *)
       if Array.length typ.params > 0 then
         Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
-      let*! params =
-        array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
-      in
-      let*! results = array_map_opt (internalize ctx) typ.results in
-      let instrs' = block ctx i.info label params results results instrs in
-      return_statement i (Block { label; typ; block = instrs' }) results
+      (* The block's value is consumed here, so it is value-producing: infer (and
+         on [simplify] drop) its result type, admitting branches to its own
+         label (unlike [if]). An omitted annotation is therefore always a dropped
+         single result, never a void block. *)
+      match block_inference ctx i label typ ~instrs with
+      | Some (desc, results) -> return_statement i desc results
+      | None ->
+          let*! params =
+            array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
+          in
+          let*! results = array_map_opt (internalize ctx) typ.results in
+          let instrs' = block ctx i.info label params results results instrs in
+          return_statement i (Block { label; typ; block = instrs' }) results)
   | Dispatch { index; cases; default; arms } ->
       (* The case (arm) labels become distinct block labels in the lowering and
          key the arm bodies, so they must be distinct. *)
@@ -4898,6 +4929,14 @@ and typed_call_args ctx l param_types =
    and check the whole tuple, as before. *)
 and check_against ctx expected i =
   match expected with
+  | [| ty |] when is_inferring ty ->
+      (* The block's result type is being inferred: synthesize the branched
+         value and record it instead of checking it against the not-yet-known
+         result (a plain [check] would discard it, as [has_expectation] is false
+         for a [Collecting] cell). *)
+      let* i' = instruction ctx i in
+      ignore (subtype ctx (expression_type ctx i') ty : bool);
+      return i'
   | [| ty |] ->
       let* i', _ = check ctx ty i in
       return i'
@@ -5353,8 +5392,10 @@ and block_infer ctx loc label body =
    type is a subtype of it, else kept. (When it is a strict subtype the block
    re-infers to that subtype — a more precise but still valid result type that
    the surrounding context, which accepted the declared supertype, still
-   accepts.) *)
-and finalize_inferred ctx typ ~inferred =
+   accepts.) With [~exact] the drop instead requires the inferred type to equal
+   the declared one: a branch-targeted block may be deliberately widened past the
+   join of its exit values, and narrowing it would change the round-trip. *)
+and finalize_inferred ?(exact = false) ctx typ ~inferred =
   if typ.results = [||] then
     match Option.bind inferred (resolve_omitted_valtype ctx) with
     | Some iv ->
@@ -5375,7 +5416,8 @@ and finalize_inferred ctx typ ~inferred =
           standalone_valtype ctx result_cells.(0) )
       with
       | Some v, Some t ->
-          Wax_wasm.Types.val_subtype ctx.subtyping_info v.internal t.internal
+          let sub = Wax_wasm.Types.val_subtype ctx.subtyping_info in
+          sub v.internal t.internal && ((not exact) || sub t.internal v.internal)
       | _ -> false
     in
     (result_cells, if drop then { typ with results = [||] } else typ)
@@ -5443,6 +5485,74 @@ and if_inference ctx i label typ ~cond ~if_block ~else_block =
               Some { (Option.get else_block) with desc = else_block' };
           },
         results )
+
+(* Type a (possibly branch-targeted) block body in synthesis, inferring its
+   single result from every value that reaches its exit: the fall-through value
+   plus each value branched to its label. Unlike [block_infer] (used for [if],
+   which forbids self-branches), the label is bound to a fresh [Unknown] result
+   cell ([Collecting]), so [br]/[br_on_*] to it record their value (via
+   [subtype]) rather than unifying. Returns the typed body and the collected
+   values reaching the exit. *)
+and block_infer_general ctx loc label instrs =
+  let collected = ref [] in
+  let r = UnionFind.make (Collecting collected) in
+  with_empty_stack ctx ~location:loc ~kind:Block
+    (let* body' =
+       block_contents
+         {
+           ctx with
+           control_types =
+             (Option.map (fun l -> l.desc) label, [| r |]) :: ctx.control_types;
+         }
+         [||] instrs
+     in
+     fun st ->
+       (* The fall-through value (if any) reaches the exit alongside the
+          branched ones. A single leftover is consumed; anything else is left
+          for [with_empty_stack] to report. *)
+       match st with
+       | Cons (_, tv, Empty) ->
+           collected := tv :: !collected;
+           (Empty, (body', !collected))
+       | Empty -> (Empty, (body', !collected))
+       | Unreachable -> (Unreachable, (body', !collected))
+       | Cons _ -> (st, (body', !collected)))
+
+(* Join the values reaching a block's exit into its inferred result, or [None]
+   when none do (a void or fully divergent body). Incompatible exit types are
+   reported at the block (unreachable for well-typed input, where every exit is
+   a subtype of the declared result), keeping one type so a single result is
+   still produced. *)
+and join_collected ctx ~location collected =
+  match collected with
+  | [] -> None
+  | first :: rest ->
+      Some
+        (List.fold_left
+           (fun acc ty ->
+             match join_value_types ctx acc ty with
+             | Some r -> r
+             | None ->
+                 Error.if_branch_type_mismatch ctx.diagnostics ~location
+                   ~loc1:location ~loc2:location acc ty;
+                 acc)
+           first rest)
+
+(* Try to infer (and, on [simplify], drop) the result type of a [do]/labelled
+   block from the values reaching its exit. Mirrors [if_inference] for the
+   single-branch [Block] form, but admits branches to the block's own label. *)
+and block_inference ctx i label typ ~instrs =
+  let omitted = typ.results = [||] in
+  let use_infer =
+    Array.length typ.params = 0
+    && (omitted || (ctx.simplify && Array.length typ.results = 1))
+  in
+  if not use_infer then None
+  else
+    let body', collected = block_infer_general ctx i.info label instrs in
+    let inferred = join_collected ctx ~location:i.info collected in
+    let results, typ = finalize_inferred ~exact:true ctx typ ~inferred in
+    Some (Block { label; typ; block = body' }, results)
 
 let check_type_definitions ctx =
   (*ZZZ In-order check? *)
@@ -6213,7 +6323,7 @@ let type_configuration ?(warn_unused = false) ~simplify diagnostics fields =
               ( Array.map
                   (fun ty ->
                     match UnionFind.find ty with
-                    | Unknown | Error -> None
+                    | Unknown | Error | Collecting _ -> None
                     | Null ->
                         Some (Value (Ref { nullable = true; typ = None_ }))
                     | Number -> Some (Value I32)

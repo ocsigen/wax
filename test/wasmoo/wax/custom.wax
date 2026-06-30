@@ -58,7 +58,7 @@ fn caml_is_custom(v: &eq) -> i32 {
 
 #[export = "caml_dup_custom"]
 fn caml_dup_custom(v: &eq) -> &eq {
-    ('custom: do &custom {
+    ('custom: do {
          _ = br_on_cast 'custom &custom v;
          unreachable;
      }.ops.dup!)(

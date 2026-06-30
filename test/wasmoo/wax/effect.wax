@@ -82,7 +82,7 @@ let effect_allowed = 1;
 #[export = "caml_continuation_use_noexc"]
 fn caml_continuation_use_noexc(vcont: &eq) -> &eq {
     _ =
-        'used: do &eq {
+        'used: do {
             let continuation = vcont as &block;
             let stack: &eq = br_on_cast_fail 'used &generic_fiber continuation[1];
             continuation[1] = 0 as &i31;
@@ -181,7 +181,7 @@ fn caml_is_continuation(v: &eq) -> i32 {
 
     fn capture_continuation(f: &called_with_continuation, v: &eq) -> &eq {
         _ =
-            'unsupported: do &?any {
+            'unsupported: do {
                 become apply_pair(
                     br_on_cast_fail 'unsupported &pair
                         suspend_fiber(apply_continuation, { func: f, v: v }),
@@ -242,7 +242,7 @@ fn caml_is_continuation(v: &eq) -> i32 {
         let head = p.head as &fiber;
         let tail: &fiber;
         tail =
-            'available: do &fiber {
+            'available: do {
                 _ = br_on_cast 'available &fiber p.tail;
                 tail = head;
                 // Pre OCaml 5.2, last was not populated.
@@ -595,7 +595,7 @@ fn caml_is_continuation(v: &eq) -> i32 {
             head: &cps_fiber => {
                 let tail: &cps_fiber;
                 tail =
-                    'available: do &cps_fiber {
+                    'available: do {
                         _ = br_on_cast 'available &cps_fiber vtail;
                         tail = head;
                         // Pre OCaml 5.2, last was not populated.

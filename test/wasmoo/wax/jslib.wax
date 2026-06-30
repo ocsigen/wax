@@ -514,7 +514,7 @@ type bytes = [mut i8];
         let i = 0;
         let l = v;
         _ =
-            'done: do &eq {
+            'done: do {
                 'compute_length: loop {
                     l = (br_on_cast_fail 'done &block l)[2];
                     i = i + 1;
@@ -526,7 +526,7 @@ type bytes = [mut i8];
         i = 0;
         l = v;
         _ =
-            'exit: do &eq {
+            'exit: do {
                 'loop: loop {
                     let b = br_on_cast_fail 'exit &block l;
                     array_set(a, i, unwrap(b[1]));

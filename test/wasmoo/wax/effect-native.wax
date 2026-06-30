@@ -127,7 +127,7 @@
         }
         let fiber = vfiber as &fiber;
         let exn =
-            'handle_exception: do &eq {
+            'handle_exception: do {
                 let (resume_res_0, resume_res_1) =
                     'handle_effect: do () -> (&eq, &continuation) {
                         let res =

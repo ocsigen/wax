@@ -225,12 +225,12 @@ fn caml_array_concat(vl: &eq) -> &eq {
     let b: &block;
     'compute_length: loop {
         _ =
-            'exit: do &eq {
+            'exit: do {
                 b = br_on_cast_fail 'exit &block l;
                 let v = b[1];
                 'continue: do {
                     _ =
-                        'not_block: do &eq {
+                        'not_block: do {
                             len = len + ((br_on_cast_fail 'not_block &block v).length() - 1);
                             br 'continue;
                         };
@@ -248,7 +248,7 @@ fn caml_array_concat(vl: &eq) -> &eq {
         i = 0;
         'fill: loop {
             _ =
-                'exit: do &eq {
+                'exit: do {
                     b = br_on_cast_fail 'exit &block l;
                     l = b[2];
                     match b[1] {
@@ -271,7 +271,7 @@ fn caml_array_concat(vl: &eq) -> &eq {
         i = 1;
         'fill: loop {
             _ =
-                'exit: do &eq {
+                'exit: do {
                     b = br_on_cast_fail 'exit &block l;
                     let a' = b[1] as &block;
                     len = a'.length() - 1;
@@ -292,7 +292,7 @@ fn caml_floatarray_concat(vl: &eq) -> &eq {
     let b: &block;
     'compute_length: loop {
         _ =
-            'exit: do &eq {
+            'exit: do {
                 b = br_on_cast_fail 'exit &block l;
                 let v = b[1];
                 if v is &float_array {
@@ -307,7 +307,7 @@ fn caml_floatarray_concat(vl: &eq) -> &eq {
     let i = 0;
     'fill: loop {
         _ =
-            'exit: do &eq {
+            'exit: do {
                 b = br_on_cast_fail 'exit &block l;
                 l = b[2];
                 match b[1] {
@@ -333,7 +333,7 @@ fn caml_uniform_array_concat(vl: &eq) -> &eq {
     let b: &block;
     'compute_length: loop {
         _ =
-            'exit: do &eq {
+            'exit: do {
                 b = br_on_cast_fail 'exit &block l;
                 let v = b[1];
                 len = len + ((v as &block).length() - 1);
@@ -346,7 +346,7 @@ fn caml_uniform_array_concat(vl: &eq) -> &eq {
     let i = 1;
     'fill: loop {
         _ =
-            'exit: do &eq {
+            'exit: do {
                 b = br_on_cast_fail 'exit &block l;
                 let a' = b[1] as &block;
                 len = a'.length() - 1;
@@ -386,7 +386,7 @@ fn caml_array_fill(a: &eq, i: &eq, vlen: &eq, v: &eq) -> &eq {
     let len = vlen as i32_u;
     'done: if len {
         _ =
-            'not_block: do &eq {
+            'not_block: do {
                 (br_on_cast_fail 'not_block &block a).fill(i as i32_u + 1, v, len);
                 br 'done;
             };

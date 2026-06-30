@@ -194,7 +194,7 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32 {
                         _ => {
                             // check for forward tag
                             _ =
-                                'v2_not_forward: do &eq {
+                                'v2_not_forward: do {
                                     b2 = br_on_cast_fail 'v2_not_forward &block v2;
                                     t2 = b2[0] as i32_u;
                                     if t2 == forward_tag {
@@ -205,7 +205,7 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32 {
                                 };
                             'v2_not_comparable: do {
                                 _ =
-                                    'v2_not_custom: do &eq {
+                                    'v2_not_custom: do {
                                         c2 = br_on_cast_fail 'v2_not_custom &custom v2;
                                         res =
                                             (br_on_null 'v2_not_comparable c2.ops.compare_ext)(
@@ -229,7 +229,7 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32 {
                     if v2 is &i31 {
                         // check for forward tag
                         _ =
-                            'v1_not_forward: do &eq {
+                            'v1_not_forward: do {
                                 b1 = br_on_cast_fail 'v1_not_forward &block v1;
                                 t1 = b1[0] as i32_u;
                                 if t1 == forward_tag {
@@ -240,7 +240,7 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32 {
                             };
                         'v1_not_comparable: do {
                             _ =
-                                'v1_not_custom: do &eq {
+                                'v1_not_custom: do {
                                     c1 = br_on_cast_fail 'v1_not_custom &custom v1;
                                     res =
                                         (br_on_null 'v1_not_comparable c1.ops.compare_ext)(
@@ -256,11 +256,11 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32 {
                         return 1;
                     }
                     _ =
-                        'heterogeneous: do &eq {
+                        'heterogeneous: do {
                             let s1: i32;
                             let s2: i32;
                             _ =
-                                'v1_not_block: do &eq {
+                                'v1_not_block: do {
                                     b1 = br_on_cast_fail 'v1_not_block &block v1;
                                     t1 = b1[0] as i32_u;
                                     b2 = br_on_cast_fail 'heterogeneous &block v2;
@@ -357,7 +357,7 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32 {
                                 }
                                 _ => {
                                     _ =
-                                        'v1_not_custom: do &eq {
+                                        'v1_not_custom: do {
                                             c1 = br_on_cast_fail 'v1_not_custom &custom v1;
                                             c2 = br_on_cast_fail 'heterogeneous &custom v2;
                                             if !(c1.ops == c2.ops) {
@@ -385,7 +385,7 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32 {
                                     #[if(not(wasi))]
                                     {
                                         _ =
-                                            'v1_not_js: do &eq {
+                                            'v1_not_js: do {
                                                 jsv = br_on_cast_fail 'v1_not_js &js v1;
                                                 js1 = jsv.js;
                                                 js2 = (br_on_cast_fail 'heterogeneous &js v2).js;

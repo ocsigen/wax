@@ -304,7 +304,7 @@ fn re_match(vre: &eq, s: &bytes, pos: i32, accept_partial_match: i32) -> &eq {
                 // backtrack
                 'loop: loop {
                     let u =
-                        'undo: do &stack {
+                        'undo: do {
                             let p = br_on_cast_fail 'undo &pos br_on_null 'reject stack;
                             pc = p.pc;
                             pos = p.pos;

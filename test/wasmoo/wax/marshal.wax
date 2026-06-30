@@ -1087,7 +1087,7 @@ fn extern_rec(s: &extern_state, v: &eq) {
                         }
                         _ => {
                             _ =
-                                'not_custom: do &eq {
+                                'not_custom: do {
                                     let (r_0, r_1) =
                                         extern_custom(s, br_on_cast_fail 'not_custom &custom v);
                                     extern_size(s, r_0 + 7 >>u 2, r_1 + 15 >>u 3);

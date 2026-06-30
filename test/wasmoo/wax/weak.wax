@@ -120,7 +120,7 @@ fn caml_ephe_get_data(vx: &eq) -> &eq {
 fn caml_ephe_get_data_copy(x: &eq) -> &eq {
     let r = caml_ephe_get_data(x);
     _ =
-        'no_copy: do &eq {
+        'no_copy: do {
             let v = (br_on_cast_fail 'no_copy &block r)[1];
             // Copy the mutable heap blocks that can alias the original:
             // ordinary blocks, bytes and float arrays. Float arrays are
@@ -182,7 +182,7 @@ fn caml_ephe_check_data(x: &eq) -> &eq {
 
 fn caml_ephe_set_data_opt(x: &eq, opt_data: &eq) {
     _ =
-        'no_data: do &eq {
+        'no_data: do {
             caml_ephe_set_data(x, (br_on_cast_fail 'no_data &block opt_data)[1]);
         };
 }
@@ -214,7 +214,7 @@ fn caml_ephe_get_key(vx: &eq, vi: &eq) -> &eq {
 fn caml_ephe_get_key_copy(x: &eq, i: &eq) -> &eq {
     let r = caml_ephe_get_key(x, i);
     _ =
-        'no_copy: do &eq {
+        'no_copy: do {
             let v = (br_on_cast_fail 'no_copy &block r)[1];
             // Copy the mutable heap blocks that can alias the original:
             // ordinary blocks, bytes and float arrays. Float arrays are
@@ -323,7 +323,7 @@ fn caml_ephe_blit_key(x: &eq, i: &eq, y: &eq, j: &eq, l: &eq) -> &eq {
 #[export = "caml_weak_set"]
 fn caml_weak_set(x: &eq, i: &eq, v: &eq) -> &eq {
     _ =
-        'unset: do &eq {
+        'unset: do {
             become caml_ephe_set_key(x, i, (br_on_cast_fail 'unset &block v)[1]);
         };
     become caml_ephe_unset_key(x, i);

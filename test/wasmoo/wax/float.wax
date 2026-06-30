@@ -88,7 +88,7 @@ fn caml_hexstring_of_float(v: &eq, vprec: &eq, vstyle: &eq) -> &eq {
     let i = sign | (style != '-');
     let s: &bytes;
     s =
-        'sign: do &bytes {
+        'sign: do {
             let len: i32;
             if exp == 0x7FF {
                 let txt =
@@ -277,7 +277,7 @@ fn caml_format_float(vfmt: &eq, arg: &eq) -> &eq {
     let len: i32;
     let s: &bytes;
     s =
-        'sign: do &bytes {
+        'sign: do {
             let exp = (b >>u 52) as i32 & 0x7FF;
             if exp == 0x7FF {
                 let m = b << 12;

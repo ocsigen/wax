@@ -70,7 +70,7 @@ fn caml_format_exception(vexn: &eq) -> &eq {
         let bucket: &block;
         let i: i32;
         bucket =
-            'continue: do &block {
+            'continue: do {
                 'default: do {
                     br_if 'default exn.length() != 3;
                     br_if 'default !caml_is_special_exception(exn[1]);

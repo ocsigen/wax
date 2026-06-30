@@ -223,7 +223,7 @@ fn caml_obj_dup(v: &eq) -> &eq {
         }
         _ => {
             _ =
-                'not_float: do &eq {
+                'not_float: do {
                     return { f: (br_on_cast_fail 'not_float &float v).f };
                 };
             caml_dup_custom(v);
@@ -261,7 +261,7 @@ fn caml_obj_tag(v: &eq) -> &eq {
         return 1000 as &i31;
     }
     _ =
-        'not_block: do &eq {
+        'not_block: do {
             return (br_on_cast_fail 'not_block &block v)[0];
         };
     if v is &bytes {
@@ -490,7 +490,7 @@ fn caml_obj_reachable_words(&eq) -> &eq {
     #[export = "caml_callback_2"]
     fn caml_callback_2(f: &eq, x: &eq, y: &eq) -> &eq {
         _ =
-            'not_direct: do &eq {
+            'not_direct: do {
                 become (br_on_cast_fail 'not_direct &closure_2 f).direct(x, y, f);
             };
         become caml_callback_1(caml_callback_1(f, x), y);
