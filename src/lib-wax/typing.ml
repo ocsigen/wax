@@ -286,26 +286,27 @@ module Error = struct
     report context ~location "This type is not a valid subtype of %a."
       print_name name
 
-  let select_type_mismatch context ~location ty1 ty2 =
+  (* A secondary caret at [location] labelled with an inferred value type. Used
+     to point at each branch of an [if]/select whose branches are in
+     incompatible type hierarchies: there is no common supertype — and, unlike a
+     checked position which can name one expected type, no annotation that would
+     reconcile them — so we just show what each branch produces. *)
+  let typed_branch_label location ty =
+    {
+      Wax_utils.Diagnostic.location;
+      message =
+        (fun f () -> Format.fprintf f "@[<2>%a@]" output_inferred_type ty);
+    }
+
+  let select_type_mismatch context ~location ~loc1 ~loc2 ty1 ty2 =
     report context ~location
-      "The two branches of the select does not have a common supertype. There \
-       types are respectively@ @[<2>%a@]@ and@ @[<2>%a@]."
-      output_inferred_type ty1 output_inferred_type ty2
+      ~related:[ typed_branch_label loc1 ty1; typed_branch_label loc2 ty2 ]
+      "The two branches of this select have no common supertype, so its result \
+       type cannot be inferred."
 
   let if_branch_type_mismatch context ~location ~loc1 ~loc2 ty1 ty2 =
-    (* Point a caret at each branch's offending value, labelled with its type.
-       The two are in incompatible type hierarchies, so — unlike a checked
-       position, which can name one expected type — there is no common
-       supertype and hence no [=> T] annotation that would reconcile them. *)
-    let branch_label location ty =
-      {
-        Wax_utils.Diagnostic.location;
-        message =
-          (fun f () -> Format.fprintf f "@[<2>%a@]" output_inferred_type ty);
-      }
-    in
     report context ~location
-      ~related:[ branch_label loc1 ty1; branch_label loc2 ty2 ]
+      ~related:[ typed_branch_label loc1 ty1; typed_branch_label loc2 ty2 ]
       "The branches of this if produce values with no common supertype, so its \
        result type cannot be inferred."
 
@@ -3796,8 +3797,8 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
             match val_lub ctx typ1 typ2 with
             | Some ty -> internalize ctx ty
             | None ->
-                Error.select_type_mismatch ctx.diagnostics ~location:i.info ty1
-                  ty2;
+                Error.select_type_mismatch ctx.diagnostics ~location:i.info
+                  ~loc1:i2.info ~loc2:i3.info ty1 ty2;
                 None)
         | Valtype { typ = Ref { typ; _ }; _ }, Null ->
             let*@ ty = internalize ctx (Ref { typ; nullable = true }) in
@@ -3808,7 +3809,8 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
             UnionFind.set ty1 (UnionFind.find ty);
             Some ty
         | _ ->
-            Error.select_type_mismatch ctx.diagnostics ~location:i.info ty1 ty2;
+            Error.select_type_mismatch ctx.diagnostics ~location:i.info
+              ~loc1:i2.info ~loc2:i3.info ty1 ty2;
             None
       in
       return_expression i (Select (i1', i2', i3')) ty
