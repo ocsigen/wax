@@ -533,7 +533,7 @@ fn caml_is_continuation(v: &eq) -> i32 {
             };
         let args = vargs as &block;
         let res: &eq;
-        let exn: &eq =
+        let exn =
             try {
                 res =
                     if args.length() == 1 {

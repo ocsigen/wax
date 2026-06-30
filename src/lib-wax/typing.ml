@@ -5075,10 +5075,11 @@ and check ctx expected (i : location instr) =
       if Array.length typ.params > 0 then
         Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
       let result_cell = context_result_cell ctx typ ~expected in
-      let instrs', needed =
+      let instrs', r =
         block_keep_bool ctx i.info label ~result:result_cell
           ~br_params:[| result_cell |] instrs
       in
+      let needed = block_keep_needed ctx ~loc:i.info ~result:result_cell r in
       check_subtype ctx ~location:i.info result_cell expected;
       let typ = context_block_typ ctx typ ~expected ~result_cell in
       let* node =
@@ -5095,10 +5096,11 @@ and check ctx expected (i : location instr) =
          carries no result; the loop's value is its fall-through. Hence the
          branch-target type is the (empty) parameters, not the result, and a
          branch to the loop's label does not deliver the value. *)
-      let instrs', needed =
+      let instrs', r =
         block_keep_bool ctx i.info label ~result:result_cell ~br_params:[||]
           instrs
       in
+      let needed = block_keep_needed ctx ~loc:i.info ~result:result_cell r in
       check_subtype ctx ~location:i.info result_cell expected;
       let typ = context_block_typ ctx typ ~expected ~result_cell in
       let* node =
@@ -5114,11 +5116,12 @@ and check ctx expected (i : location instr) =
       let result_cell = context_result_cell ctx typ ~expected in
       (* A [try_table]'s catches branch to other targets, not its own label, so
          its value is the body's (the fall-through, or a [br] to its label). *)
-      let body', needed =
+      let body', r =
         block_keep_bool ctx i.info label ~result:result_cell
           ~br_params:[| result_cell |] body
       in
       check_trytable_catches ctx catches;
+      let needed = block_keep_needed ctx ~loc:i.info ~result:result_cell r in
       check_subtype ctx ~location:i.info result_cell expected;
       let typ = context_block_typ ctx typ ~expected ~result_cell in
       let* node =
@@ -5131,19 +5134,18 @@ and check ctx expected (i : location instr) =
     when has_expectation expected ->
       assert (typ.params = [||]);
       let result_cell = context_result_cell ctx typ ~expected in
-      (* A catch handler also produces the try's value, but — like a branch to
-         the block's label — it is checked to be a subtype of the result, so it
-         cannot raise the inferred join above the body's fall-through. So the
-         body's keep-bool decides; the handlers are typed against the result
-         afterwards. *)
-      let body', needed =
+      (* A catch handler also produces the try's value. Type the handlers against
+         the same inferring cell [r] as the body, so their values are collected too
+         (a [try] whose body diverges takes its value entirely from the handlers);
+         the keep-bool then sees every exit. *)
+      let body', r =
         block_keep_bool ctx i.info label ~result:result_cell
           ~br_params:[| result_cell |] body
       in
       let catches, catch_all =
-        type_try_catches ctx i label ~results:[| result_cell |] catches
-          catch_all
+        type_try_catches ctx i label ~results:[| r |] catches catch_all
       in
+      let needed = block_keep_needed ctx ~loc:i.info ~result:result_cell r in
       check_subtype ctx ~location:i.info result_cell expected;
       let typ = context_block_typ ctx typ ~expected ~result_cell in
       let* node =
@@ -5768,7 +5770,11 @@ and block_keep_bool ctx loc label ~result ~br_params body =
         | _ -> (false, false))
     | [] -> (false, false)
   in
-  let cs = { collected = []; declared = Some result; needed = false } in
+  (* A trailing construction is routed through [result], hiding its natural type,
+     so its annotation is load-bearing — mark the cell needed up front. *)
+  let cs =
+    { collected = []; declared = Some result; needed = trailing_construction }
+  in
   let r = UnionFind.make (Collecting cs) in
   (* Branches deliver the result for every kind but [loop] (where they re-enter):
      mirror the caller's [br_params] arity with the [Collecting] cell so their
@@ -5796,20 +5802,27 @@ and block_keep_bool ctx loc label ~result ~br_params body =
              (Some loc', UnionFind.make (UnionFind.find tv)) :: cs.collected
        | Empty | Unreachable -> ());
        let st, () = pop_args ctx ~location:loc [| result |] st in
-       (* Every value reaching the exit is already validated against [result] —
-          the fall-through by [pop_args], the branched values per-delivery as they
-          were collected — so the join below only decides the keep-bool. *)
-       let inferred = join_collected ctx ~location:loc cs.collected in
-       let needed =
-         if trailing_construction then true
-         else
-           cs.needed
-           ||
-           match inferred with
-           | Some j -> annotation_needed ctx (standalone_valtype ctx j) result
-           | None -> true
-       in
-       (st, (block', needed)))
+       (* Return the cell: the caller may deliver more values to it (a [try]'s catch
+          handlers) before [block_keep_needed] reads the join. Every value reaching
+          the exit is already validated against [result] — the fall-through by
+          [pop_args], the branched/caught values per-delivery as they were
+          collected — so the join only decides the keep-bool. *)
+       (st, (block', r)))
+
+(* The keep-bool for a checked block typed by [block_keep_bool]: keep the
+   annotation when a delivery relied on it ([cs.needed] — a trailing construction,
+   or a [resume] handler that read the cell) or the join of the values reaching the
+   exit differs from the context type [result]. Read after any extra deliveries
+   (a [try]'s catch handlers) have been collected. *)
+and block_keep_needed ctx ~loc ~result r =
+  match UnionFind.find r with
+  | Collecting cs -> (
+      cs.needed
+      ||
+      match join_collected ctx ~location:loc cs.collected with
+      | Some j -> annotation_needed ctx (standalone_valtype ctx j) result
+      | None -> true)
+  | _ -> true
 
 (* Type a block body in synthesis (no expected result), inferring its single
    fall-through value as the block's result. Only valid where no branch targets
