@@ -2727,86 +2727,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
   | StructGet _ | StructSet _ | ArrayGet _ | ArraySet _ ->
       type_aggregate_access ctx i
   | BinOp _ | UnOp _ -> type_arith ctx i
-  | Let ([ (name_opt, Some annot) ], Some i') -> (
-      (* Bidirectional single annotated binding: type the initializer in
-         checking mode against the annotation, so an omitted struct/array name
-         is inferred from it; the keep-bool then says whether the annotation is
-         load-bearing. Dropping a present annotation stays gated on [simplify]
-         (Wasm->Wax), so hand-written Wax is never rewritten. A binding no later
-         assignment writes is effectively immutable, so — like a [const] global
-         — it also drops an annotation that is a mere supertype of the
-         initializer's type ([drop_supertype]), narrowing to that subtype. *)
-      match internalize_valtype ctx annot with
-      | None ->
-          let* i' = instruction ctx i' in
-          return_statement i (Let ([ (name_opt, Some annot) ], Some i')) [||]
-      | Some ity ->
-          let drop_supertype =
-            match name_opt with
-            | Some name -> not (StringSet.mem name.desc ctx.assigned_locals)
-            | None -> true
-          in
-          let* i', needed =
-            check_instruction ~drop_supertype ctx
-              (UnionFind.make (Valtype ity))
-              i'
-          in
-          Option.iter
-            (fun name ->
-              ctx.locals <- StringMap.add name.desc (Some ity) ctx.locals;
-              ctx.local_decls := name :: !(ctx.local_decls);
-              mark_initialized ctx name.desc)
-            name_opt;
-          let drop = ctx.simplify && not needed in
-          return_statement i
-            (Let ([ (name_opt, if drop then None else Some annot) ], Some i'))
-            [||])
-  | Let (bindings, Some i') ->
-      let* i' = instruction ctx i' in
-      let bindings =
-        match bindings with
-        | [ binding ] ->
-            (* Single binding: the initializer must be a one-value expression;
-               [expression_type] reports it if it is not. *)
-            [
-              bind_let_value ctx ~location:(snd i'.info)
-                (expression_type ctx i') binding;
-            ]
-        | _ ->
-            (* Each name takes one value off a multi-value initializer, left to
-               right (the names match the values in order). *)
-            let result_types = fst i'.info in
-            let n = List.length bindings in
-            if Array.length result_types <> n then
-              Error.value_count_mismatch ctx.diagnostics ~location:i.info
-                ~expected:n
-                ~provided:(Array.length result_types);
-            List.mapi
-              (fun idx binding ->
-                let result_ty =
-                  if idx < Array.length result_types then result_types.(idx)
-                  else UnionFind.make Error
-                in
-                bind_let_value ctx ~location:i.info result_ty binding)
-              bindings
-      in
-      return_statement i (Let (bindings, Some i')) [||]
-  | Let (bindings, None) ->
-      (* No initializer: each annotated name declares a local at its zero
-         value; an unannotated name has no type to take and is left out. *)
-      List.iter
-        (fun (name, typ) ->
-          match (name, typ) with
-          | Some name, Some typ ->
-              let>@ ity = internalize_valtype ctx typ in
-              ctx.locals <- StringMap.add name.desc (Some ity) ctx.locals;
-              ctx.local_decls := name :: !(ctx.local_decls);
-              (* A defaultable local holds its zero value; a non-defaultable one
-                 stays uninitialized until assigned. *)
-              if is_defaultable typ then mark_initialized ctx name.desc
-          | _ -> ())
-        bindings;
-      return_statement i (Let (bindings, None)) [||]
+  | Let _ -> type_let ctx i
   | Br _ | Br_if _ | Br_table _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
   | Br_on_cast_fail _ ->
       type_branch ctx i
@@ -4058,6 +3979,92 @@ and type_variable_access ctx i =
             "variable" idx;
           return_expression i (Tee (idx, i')) (expression_type ctx i'))
   | _ -> assert false (* only invoked on Get/Set/Tee *)
+
+and type_let ctx i =
+  (* Let bindings: a single annotated binding, a multi-value binding, and a bare
+     declaration ([let x: t;]). *)
+  match i.desc with
+  | Let ([ (name_opt, Some annot) ], Some i') -> (
+      (* Bidirectional single annotated binding: type the initializer in
+         checking mode against the annotation, so an omitted struct/array name
+         is inferred from it; the keep-bool then says whether the annotation is
+         load-bearing. Dropping a present annotation stays gated on [simplify]
+         (Wasm->Wax), so hand-written Wax is never rewritten. A binding no later
+         assignment writes is effectively immutable, so — like a [const] global
+         — it also drops an annotation that is a mere supertype of the
+         initializer's type ([drop_supertype]), narrowing to that subtype. *)
+      match internalize_valtype ctx annot with
+      | None ->
+          let* i' = instruction ctx i' in
+          return_statement i (Let ([ (name_opt, Some annot) ], Some i')) [||]
+      | Some ity ->
+          let drop_supertype =
+            match name_opt with
+            | Some name -> not (StringSet.mem name.desc ctx.assigned_locals)
+            | None -> true
+          in
+          let* i', needed =
+            check_instruction ~drop_supertype ctx
+              (UnionFind.make (Valtype ity))
+              i'
+          in
+          Option.iter
+            (fun name ->
+              ctx.locals <- StringMap.add name.desc (Some ity) ctx.locals;
+              ctx.local_decls := name :: !(ctx.local_decls);
+              mark_initialized ctx name.desc)
+            name_opt;
+          let drop = ctx.simplify && not needed in
+          return_statement i
+            (Let ([ (name_opt, if drop then None else Some annot) ], Some i'))
+            [||])
+  | Let (bindings, Some i') ->
+      let* i' = instruction ctx i' in
+      let bindings =
+        match bindings with
+        | [ binding ] ->
+            (* Single binding: the initializer must be a one-value expression;
+               [expression_type] reports it if it is not. *)
+            [
+              bind_let_value ctx ~location:(snd i'.info)
+                (expression_type ctx i') binding;
+            ]
+        | _ ->
+            (* Each name takes one value off a multi-value initializer, left to
+               right (the names match the values in order). *)
+            let result_types = fst i'.info in
+            let n = List.length bindings in
+            if Array.length result_types <> n then
+              Error.value_count_mismatch ctx.diagnostics ~location:i.info
+                ~expected:n
+                ~provided:(Array.length result_types);
+            List.mapi
+              (fun idx binding ->
+                let result_ty =
+                  if idx < Array.length result_types then result_types.(idx)
+                  else UnionFind.make Error
+                in
+                bind_let_value ctx ~location:i.info result_ty binding)
+              bindings
+      in
+      return_statement i (Let (bindings, Some i')) [||]
+  | Let (bindings, None) ->
+      (* No initializer: each annotated name declares a local at its zero
+         value; an unannotated name has no type to take and is left out. *)
+      List.iter
+        (fun (name, typ) ->
+          match (name, typ) with
+          | Some name, Some typ ->
+              let>@ ity = internalize_valtype ctx typ in
+              ctx.locals <- StringMap.add name.desc (Some ity) ctx.locals;
+              ctx.local_decls := name :: !(ctx.local_decls);
+              (* A defaultable local holds its zero value; a non-defaultable one
+                 stays uninitialized until assigned. *)
+              if is_defaultable typ then mark_initialized ctx name.desc
+          | _ -> ())
+        bindings;
+      return_statement i (Let (bindings, None)) [||]
+  | _ -> assert false (* only invoked on Let *)
 
 and type_mem_method_call ctx i func recv memname meth args =
   let _, address_type = Option.get (Tbl.find_opt ctx.memories memname) in
