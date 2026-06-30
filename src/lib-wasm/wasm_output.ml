@@ -171,8 +171,8 @@ module Encoder = struct
       uint64 b m.offset)
     else (
       uint b (align lor 64);
-      uint64 b m.offset;
-      uint b idx)
+      uint b idx;
+      uint64 b m.offset)
 
   let blocktype b (t : blocktype) =
     match t with Valtype v -> valtype b v | Typeuse i -> sint b i

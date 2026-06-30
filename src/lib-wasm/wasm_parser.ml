@@ -372,10 +372,12 @@ let export ch =
   { name = export_name; kind; index = idx }
 
 let memarg ch =
+  (* Binary order is align, then (when align's bit 6 is set) the explicit memory
+     index, then the offset — read the offset last, after the memory index. *)
   let a = uint ch in
-  let o = uint64 ch in
   let m, a = if a land 0x40 <> 0 then (uint ch, a lxor 0x40) else (0, a) in
   if a >= 64 then error ch "malformed memop flags";
+  let o = uint64 ch in
   (m, { align = Wax_utils.Uint64.of_int (1 lsl a); offset = o })
 
 let with_loc ch pos desc =
