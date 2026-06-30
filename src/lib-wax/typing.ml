@@ -292,6 +292,13 @@ module Error = struct
        types are respectively@ @[<2>%a@]@ and@ @[<2>%a@]."
       output_inferred_type ty1 output_inferred_type ty2
 
+  let if_branch_type_mismatch context ~location ty1 ty2 =
+    report context ~location
+      "The branches of this if produce values with no common supertype, so its \
+       result type cannot be inferred; their types are respectively@ \
+       @[<2>%a@]@ and@ @[<2>%a@].@ Add an explicit @[=> T@] result type."
+      output_inferred_type ty1 output_inferred_type ty2
+
   let name_already_bound context ~location kind x =
     report context ~location "A %s named %a is already bound." kind print_name x
 
@@ -5302,7 +5309,14 @@ and if_inference ctx i label typ ~cond ~if_block ~else_block =
     in
     let inferred =
       match (r1, r2) with
-      | Some a, Some b -> join_value_types ctx a b
+      | Some a, Some b -> (
+          match join_value_types ctx a b with
+          | Some _ as r -> r
+          | None ->
+              Error.if_branch_type_mismatch ctx.diagnostics ~location:i.info a b;
+              (* Recover with one branch's type so the result is still a single
+                 value (avoids a cascading empty-stack error downstream). *)
+              Some a)
       | (Some _ as r), None | None, (Some _ as r) -> r
       | None, None -> None
     in
