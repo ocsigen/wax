@@ -3471,6 +3471,11 @@ let validate_configuration ?(warn_unused = true) diagnostics (_, fields) =
       | _ -> ())
     fields;
   collect_implicit_types diagnostics type_context fields;
+  (* Register the implicit [<string>] array type ([mut i8]) up front, so that
+     validating an unnamed [@string] — which looks the type up via [string_type]
+     ([add_rectype], idempotent) — gets an index within [subtyping_info] instead
+     of one appended past the snapshot taken here. *)
+  ignore (string_type type_context : int);
   let ctx =
     {
       diagnostics;
