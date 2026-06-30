@@ -5,6 +5,11 @@ module StringMap = Map.Make (String)
 
 exception Conditional_in_binary of location
 
+(* Raised when a named index or label reference resolves to nothing. Carries the
+   reference's location and a message describing what could not be resolved, so
+   the caller can report a located diagnostic rather than crash. *)
+exception Unresolved_reference of location * string
+
 type index_space = { map : B.idx StringMap.t; count : int }
 
 let empty_space = { map = StringMap.empty; count = 0 }
@@ -55,7 +60,10 @@ let resolve_idx space (idx : T.idx) : B.idx =
   | T.Id id -> (
       match StringMap.find_opt id space.map with
       | Some i -> i
-      | None -> failwith ("Unknown identifier: " ^ id))
+      | None ->
+          raise
+            (Unresolved_reference (idx.info, "Unknown identifier $" ^ id ^ "."))
+      )
 
 let resolve_label labels (idx : T.idx) : B.idx =
   match idx.desc with
@@ -63,7 +71,9 @@ let resolve_label labels (idx : T.idx) : B.idx =
   | T.Id id ->
       let rec find_depth stack depth =
         match stack with
-        | [] -> failwith ("Unknown label: " ^ id)
+        | [] ->
+            raise
+              (Unresolved_reference (idx.info, "Unknown label $" ^ id ^ "."))
         | Some name :: rest ->
             if name = id then depth else find_depth rest (depth + 1)
         | None :: rest -> find_depth rest (depth + 1)
@@ -165,13 +175,13 @@ let resolve_field_idx ctx type_idx (field_idx_text : T.idx) : B.idx =
           match StringMap.find_opt id field_map with
           | Some f_idx -> f_idx
           | None ->
-              failwith
-                (Printf.sprintf
-                   "Unknown field identifier '%s' for type index %d" id type_idx)
-          )
+              raise
+                (Unresolved_reference
+                   (field_idx_text.info, "Unknown field $" ^ id ^ ".")))
       | None ->
-          failwith
-            (Printf.sprintf "No field map found for type index %d" type_idx))
+          raise
+            (Unresolved_reference
+               (field_idx_text.info, "Unknown field $" ^ id ^ ".")))
 
 let push_label ctx label =
   { ctx with labels = Option.map (fun l -> l.Ast.desc) label :: ctx.labels }

@@ -24,7 +24,9 @@ val wat_to_binary :
     is named after its export (see
     {!Wax_wasm.Naming.name_functions_from_exports}) so it appears in the binary
     "name" section. Raises {!Wax_wasm.Text_to_binary.Conditional_in_binary} if a
-    conditional annotation survived specialization. *)
+    conditional annotation survived specialization, or
+    {!Wax_wasm.Text_to_binary.Unresolved_reference} if a named index or label
+    reference resolves to nothing. *)
 
 val wax_to_binary :
   ?color:Wax_utils.Colors.flag ->

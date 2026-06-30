@@ -65,19 +65,24 @@ let specialize_wat ?ctx ~color ~text defines ast =
    than an uncaught exception) and suggest resolving it. *)
 let to_binary ~color ~source ast =
   Wax_utils.Diagnostic.run ~color ~source (fun d ->
-      try Wax_wasm.Text_to_binary.module_ ast
-      with Wax_wasm.Text_to_binary.Conditional_in_binary location ->
-        Wax_utils.Diagnostic.report d ~location ~severity:Error
-          ~message:(fun f () ->
-            Format.pp_print_string f
-              "Conditional annotations cannot be emitted to the WebAssembly \
-               binary format.")
-          ~hint:(fun f () ->
-            Format.pp_print_string f
-              "Resolve the conditionals with -D/--define, or convert to a text \
-               format (wat or wax).")
-          ();
-        Wax_utils.Diagnostic.abort ())
+      try Wax_wasm.Text_to_binary.module_ ast with
+      | Wax_wasm.Text_to_binary.Conditional_in_binary location ->
+          Wax_utils.Diagnostic.report d ~location ~severity:Error
+            ~message:(fun f () ->
+              Format.pp_print_string f
+                "Conditional annotations cannot be emitted to the WebAssembly \
+                 binary format.")
+            ~hint:(fun f () ->
+              Format.pp_print_string f
+                "Resolve the conditionals with -D/--define, or convert to a \
+                 text format (wat or wax).")
+            ();
+          Wax_utils.Diagnostic.abort ()
+      | Wax_wasm.Text_to_binary.Unresolved_reference (location, message) ->
+          Wax_utils.Diagnostic.report d ~location ~severity:Error
+            ~message:(fun f () -> Format.pp_print_string f message)
+            ();
+          Wax_utils.Diagnostic.abort ())
 
 type fold_mode = Auto | Fold | Unfold
 
