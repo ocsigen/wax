@@ -31,7 +31,7 @@ module Simd = Wax_wasm.Simd
 type inferred_valtype = {
   typ : Ast.valtype;
   internal : Internal.valtype;
-  inline : Ast.comptype option;
+  anon_comptype : Ast.comptype option;
       (** For a synthesized reference type with no source name — a string's byte
           array, an inline function-type cast target — the referenced composite
           type, which diagnostics render inline (e.g. [[mut i8]]) instead of the

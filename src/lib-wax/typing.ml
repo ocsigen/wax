@@ -764,7 +764,7 @@ let lookup_array_type ?location ctx name =
       None
 
 (* The composite type of a synthesized type (its name starting with ['<'], e.g.
-   [<string>] or an inline function type) — used as the [inline] form of an
+   [<string>] or an inline function type) — used as the [anon_comptype] of an
    [inferred_valtype] so a reference to it renders by that composite type rather
    than by its meaningless synthetic name. [None] for a source-named type. *)
 let inline_comptype ctx (name : ident) =
@@ -957,7 +957,8 @@ let cast ctx ty ty' =
       (let>@ typ = top_heap_type ctx ty' in
        let ty' = Ref { nullable = true; typ } in
        let>@ ity' = valtype ctx.diagnostics ctx.type_context ty' in
-       Cell.set ty (Valtype { typ = ty'; internal = ity'; inline = None }));
+       Cell.set ty
+         (Valtype { typ = ty'; internal = ity'; anon_comptype = None }));
       true
   | Valtype { internal = F32 | F64; _ }, (F32 | F64)
   | Valtype { internal = I32 | I64; _ }, I32
@@ -1024,7 +1025,7 @@ let signed_cast ctx ty ty' =
            {
              typ = Ref { typ = Any; nullable = true };
              internal = Ref { typ = Any; nullable = true };
-             inline = None;
+             anon_comptype = None;
            });
       true
   | (Number | Int), `I64 ->
@@ -1213,11 +1214,11 @@ let with_empty_stack ctx ~kind:_ ~location f =
 
 let internalize_valtype ctx typ =
   let+@ internal = valtype ctx.diagnostics ctx.type_context typ in
-  { typ; internal; inline = None }
+  { typ; internal; anon_comptype = None }
 
 let internalize ?inline ctx typ =
   let+@ internal = valtype ctx.diagnostics ctx.type_context typ in
-  valtype_cell { typ; internal; inline }
+  valtype_cell { typ; internal; anon_comptype = inline }
 
 (* Check that a source element reference type can be stored where [dst] elements
    are expected (table.copy / table.init / array.init_elem): [src] must be a
@@ -2193,7 +2194,7 @@ let address_cell at = valtype_cell (address_valtype at)
 
 (* Expected operand/result type of a SIMD intrinsic, as a fresh type cell. *)
 let simd_valtype : Simd.ty -> inferred_valtype = function
-  | TV128 -> { typ = V128; internal = V128; inline = None }
+  | TV128 -> { typ = V128; internal = V128; anon_comptype = None }
   | TI32 -> i32_valtype
   | TI64 -> i64_valtype
   | TF32 -> f32_valtype
@@ -2600,7 +2601,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
           {
             typ = Ref { nullable = _; typ; _ };
             internal = Ref { nullable = _; typ = ityp; _ };
-            inline;
+            anon_comptype;
           } ->
           return_expression i (NonNull i')
             (Cell.make
@@ -2608,7 +2609,7 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                   {
                     typ = Ref { nullable = false; typ };
                     internal = Ref { nullable = false; typ = ityp };
-                    inline;
+                    anon_comptype;
                   }))
       | Unknown | Error ->
           return_expression i (NonNull i') (expression_type ctx i')
@@ -2742,14 +2743,14 @@ and type_branch ctx i =
             {
               typ = Ref { nullable = _; typ; _ };
               internal = Ref { nullable = _; typ = ityp; _ };
-              inline;
+              anon_comptype;
             } ->
             Cell.make
               (Valtype
                  {
                    typ = Ref { nullable = false; typ };
                    internal = Ref { nullable = false; typ = ityp };
-                   inline;
+                   anon_comptype;
                  })
         | (Unknown | Error) as ity -> Cell.make ity
         | _ ->
@@ -2770,7 +2771,7 @@ and type_branch ctx i =
           {
             typ = Ref { nullable = _; typ; _ };
             internal = Ref { nullable = _; typ = ityp; _ };
-            inline;
+            anon_comptype;
           } ->
           check_subtypes ctx ~location:(snd i'.info)
             (Array.append types
@@ -2780,7 +2781,7 @@ and type_branch ctx i =
                       {
                         typ = Ref { nullable = false; typ };
                         internal = Ref { nullable = false; typ = ityp };
-                        inline;
+                        anon_comptype;
                       });
                |])
             params
@@ -2797,7 +2798,7 @@ and type_branch ctx i =
       (let>@ ityp = reftype ctx.diagnostics ctx.type_context ty in
        let typ =
          Cell.make
-           (Valtype { typ = Ref ty; internal = Ref ityp; inline = None })
+           (Valtype { typ = Ref ty; internal = Ref ityp; anon_comptype = None })
        in
        check_subtypes ctx ~location:(snd i'.info)
          (Array.append types [| typ |])
@@ -2843,7 +2844,8 @@ and type_branch ctx i =
         (Array.append types [| typ2 |])
         params;
       let typ =
-        Cell.make (Valtype { typ = Ref ty; internal = Ref ityp; inline = None })
+        Cell.make
+          (Valtype { typ = Ref ty; internal = Ref ityp; anon_comptype = None })
       in
       return_statement i
         (Br_on_cast_fail
@@ -3075,7 +3077,7 @@ and type_arith ctx i =
                          {
                            typ = Ref { nullable = true; typ = Eq };
                            internal = Ref { nullable = true; typ = Eq };
-                           inline = None;
+                           anon_comptype = None;
                          })
                 | Valtype { internal = I32; _ }
                 | Valtype { internal = I64; _ }
@@ -3711,7 +3713,7 @@ and type_variable_access ctx i =
                  {
                    typ = Ref { nullable = false; typ = Type name };
                    internal = Ref { nullable = false; typ = Type ty };
-                   inline = inline_comptype ctx name;
+                   anon_comptype = inline_comptype ctx name;
                  })
         | Unbound ->
             Error.unbound_name ctx.diagnostics ~location:idx.info

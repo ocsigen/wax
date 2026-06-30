@@ -57,7 +57,7 @@ type inferred_valtype = {
      resolve it), but diagnostics render this composite type inline (e.g.
      [[mut i8]] or [fn(..) -> ..]) rather than the meaningless synthetic name.
      [None] for every other type. *)
-  inline : comptype option;
+  anon_comptype : comptype option;
 }
 
 type inferred_type =
@@ -125,7 +125,7 @@ let rec output_inferred_type f ty =
   | Int16 -> Format.fprintf f "i16"
   | Int8 -> Format.fprintf f "i8"
   | Float -> Format.fprintf f "float"
-  | Valtype { inline = Some c; _ } -> Output.comptype f c
+  | Valtype { anon_comptype = Some c; _ } -> Output.comptype f c
   | Valtype ty -> Output.valtype f ty.typ
 
 (* Both [Unknown] (unreachable/branch) and [Error] (recovery) stand for "no
@@ -140,10 +140,10 @@ let is_unknown_or_error ty =
    is never re-resolved during inference (only floating cells are unified into a
    concrete type), so a base-type cell's value is invariant and one shared cell
    per type is safe — no need to reallocate one on every use. *)
-let i32_valtype = { typ = I32; internal = I32; inline = None }
-let i64_valtype = { typ = I64; internal = I64; inline = None }
-let f32_valtype = { typ = F32; internal = F32; inline = None }
-let f64_valtype = { typ = F64; internal = F64; inline = None }
+let i32_valtype = { typ = I32; internal = I32; anon_comptype = None }
+let i64_valtype = { typ = I64; internal = I64; anon_comptype = None }
+let f32_valtype = { typ = F32; internal = F32; anon_comptype = None }
+let f64_valtype = { typ = F64; internal = F64; anon_comptype = None }
 
 (* Wrap a (fully resolved) value type in a fresh cell. *)
 let valtype_cell v = Cell.make (Valtype v)
