@@ -450,9 +450,13 @@ let runtest filename _ =
             | `Valid ->
                 let ok =
                   in_child_process (fun () ->
+                      (* Simplify the converted module — dropping casts the
+                         precise types make redundant — exactly as the CLI's
+                         wasm->wax path does, so the round-trip and validation
+                         below exercise the [simplify] pass. *)
                       let _, m =
                         Wax_utils.Diagnostic.run ~color ~source (fun d ->
-                            Wax_lang.Typing.f d m)
+                            Wax_lang.Typing.f ~simplify:true d m)
                       in
                       let types, m =
                         Wax_utils.Diagnostic.run ~color ~source (fun d ->
