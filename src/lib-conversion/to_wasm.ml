@@ -229,11 +229,19 @@ let expr_opt_valtype i =
 let expr_valtype i = unpack_type (expr_type i)
 let expr_reftype i = match expr_valtype i with Ref r -> r | _ -> assert false
 
-let expr_opt_reftype i =
-  match expr_opt_valtype i with
-  | Some (Ref r) -> Some r
-  | None -> None
-  | _ -> assert false
+(* The reference type of the LAST value [i] produces. A [br_on_cast] tests the
+   top of the stack, but its decompiled operand carries all [label_arity] values
+   the branch passes on (a [Sequence] when the label arity is >1), so the cast
+   value is the last of them — taking the whole expression's [reftype] would
+   instead see a multi-value type and assert. [None] if there is no determinable
+   trailing reference type (the caller falls back to the cast's target type). *)
+let expr_last_opt_reftype i =
+  let tys, _ = i.info in
+  if Array.length tys = 0 then None
+  else
+    match tys.(Array.length tys - 1) with
+    | Some t -> ( match unpack_type t with Ref r -> Some r | _ -> None)
+    | None -> None
 
 let expr_type_name i =
   match expr_reftype i with
@@ -1435,7 +1443,8 @@ and instruction_desc ret ctx i : location Text.instr list =
         (Br_on_cast
            ( label ret l,
              reftype
-               (Option.value ~default:target_reftype (expr_opt_reftype expr)),
+               (Option.value ~default:target_reftype
+                  (expr_last_opt_reftype expr)),
              reftype target_reftype ))
         (instruction ret ctx expr)
   | Br_on_cast_fail (l, target_reftype, expr) ->
@@ -1443,7 +1452,8 @@ and instruction_desc ret ctx i : location Text.instr list =
         (Br_on_cast_fail
            ( label ret l,
              reftype
-               (Option.value ~default:target_reftype (expr_opt_reftype expr)),
+               (Option.value ~default:target_reftype
+                  (expr_last_opt_reftype expr)),
              reftype target_reftype ))
         (instruction ret ctx expr)
   | Throw (tag_idx, args) ->

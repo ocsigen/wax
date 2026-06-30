@@ -2609,6 +2609,20 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                   }))
       | Unknown | Error ->
           return_expression i (NonNull i') (expression_type ctx i')
+      | Null ->
+          (* [null!] on a bare (floating) null: the non-null bottom reference
+             [&none], a subtype of every reference type (so it satisfies any
+             consumer) and trapping at runtime like the original [ref.as_non_null]
+             of a null. Arises e.g. from a decompiled null in unreachable code,
+             where its heap type was not pinned. *)
+          return_expression i (NonNull i')
+            (Cell.make
+               (Valtype
+                  {
+                    typ = Ref { nullable = false; typ = None_ };
+                    internal = Ref { nullable = false; typ = None_ };
+                    anon_comptype = None;
+                  }))
       | _ ->
           Error.expected_ref ctx.diagnostics ~location:(snd i'.info);
           return_expression i (NonNull i') (Cell.make Error))
