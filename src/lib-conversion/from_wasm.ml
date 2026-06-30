@@ -844,12 +844,31 @@ let int_un_op i0 sz (op : Src.int_un_op) =
     | ExtendS `_8 -> method_call (e (inttype sz)) "extend8_s"
     | ExtendS `_16 -> method_call (e (inttype sz)) "extend16_s")
 
-let int_bin_op i0 (op : Src.int_bin_op) =
+(* Pop an operand for a method-form intrinsic, ascribing it the operator's
+   scalar type [ty]. A non-inlinable operand becomes a typed hole [(_ as ty)]
+   rather than a bare [_], so the call type-checks in unreachable code where the
+   operand stack is polymorphic (mirrors the unary ops [int_un_op]/[float_un_op]).
+   The arithmetic/comparison operators need no such cast: they lower to plain
+   [BinOp]s, which accept a polymorphic operand. *)
+let pop_typed ty =
+  let* o = Stack.try_pop in
+  return
+    (match o with
+    | Some e -> e
+    | None -> Ast.no_loc (Ast.Cast (Ast.no_loc Ast.Hole, Valtype ty)))
+
+let int_bin_op i0 sz (op : Src.int_bin_op) =
   let with_loc (i : _ Ast.instr_desc) = { i0 with Ast.desc = i } in
   let symbol op =
     let* e2 = Stack.pop in
     let* e1 = Stack.pop in
     Stack.push 1 (with_loc (BinOp (op_loc i0 op, e1, e2)))
+  in
+  let meth name =
+    let* e2 = pop_typed (inttype sz) in
+    let* e1 = pop_typed (inttype sz) in
+    Stack.push 1
+      (with_loc (Call (with_loc (StructGet (e1, Ast.no_loc name)), [ e2 ])))
   in
   match op with
   | Add -> symbol Add
@@ -862,16 +881,8 @@ let int_bin_op i0 (op : Src.int_bin_op) =
   | Xor -> symbol Xor
   | Shl -> symbol Shl
   | Shr s -> symbol (Shr s)
-  | Rotl ->
-      let* e2 = Stack.pop in
-      let* e1 = Stack.pop in
-      Stack.push 1
-        (with_loc (Call (with_loc (StructGet (e1, Ast.no_loc "rotl")), [ e2 ])))
-  | Rotr ->
-      let* e2 = Stack.pop in
-      let* e1 = Stack.pop in
-      Stack.push 1
-        (with_loc (Call (with_loc (StructGet (e1, Ast.no_loc "rotr")), [ e2 ])))
+  | Rotl -> meth "rotl"
+  | Rotr -> meth "rotr"
   | Eq -> symbol Eq
   | Ne -> symbol Ne
   | Lt s -> symbol (Lt (Some s))
@@ -912,34 +923,27 @@ let float_un_op i0 sz (op : Src.float_un_op) =
            else { e with desc = Ast.Cast (e, Valtype (inttype sz)) })
           "from_bits")
 
-let float_bin_op i0 (op : Src.float_bin_op) =
+let float_bin_op i0 sz (op : Src.float_bin_op) =
   let with_loc (i : _ Ast.instr_desc) = { i0 with Ast.desc = i } in
   let symbol op =
     let* e2 = Stack.pop in
     let* e1 = Stack.pop in
     Stack.push 1 (with_loc (BinOp (op_loc i0 op, e1, e2)))
   in
+  let meth name =
+    let* e2 = pop_typed (floattype sz) in
+    let* e1 = pop_typed (floattype sz) in
+    Stack.push 1
+      (with_loc (Call (with_loc (StructGet (e1, Ast.no_loc name)), [ e2 ])))
+  in
   match op with
   | Add -> symbol Add
   | Sub -> symbol Sub
   | Mul -> symbol Mul
   | Div -> symbol (Div None)
-  | Min ->
-      let* e2 = Stack.pop in
-      let* e1 = Stack.pop in
-      Stack.push 1
-        (with_loc (Call (with_loc (StructGet (e1, Ast.no_loc "min")), [ e2 ])))
-  | Max ->
-      let* e2 = Stack.pop in
-      let* e1 = Stack.pop in
-      Stack.push 1
-        (with_loc (Call (with_loc (StructGet (e1, Ast.no_loc "max")), [ e2 ])))
-  | CopySign ->
-      let* e2 = Stack.pop in
-      let* e1 = Stack.pop in
-      Stack.push 1
-        (with_loc
-           (Call (with_loc (StructGet (e1, Ast.no_loc "copysign")), [ e2 ])))
+  | Min -> meth "min"
+  | Max -> meth "max"
+  | CopySign -> meth "copysign"
   | Eq -> symbol Eq
   | Ne -> symbol Ne
   | Lt -> symbol (Lt None)
@@ -1221,8 +1225,10 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   | LocalTee x ->
       let* e = Stack.pop in
       Stack.push 1 (with_loc (Tee (idx ctx `Local x, e)))
-  | BinOp (I32 op) | BinOp (I64 op) -> int_bin_op i op
-  | BinOp (F32 op) | BinOp (F64 op) -> float_bin_op i op
+  | BinOp (I32 op) -> int_bin_op i `I32 op
+  | BinOp (I64 op) -> int_bin_op i `I64 op
+  | BinOp (F32 op) -> float_bin_op i `F32 op
+  | BinOp (F64 op) -> float_bin_op i `F64 op
   | UnOp (I64 op) -> int_un_op i `I64 op
   | UnOp (I32 op) -> int_un_op i `I32 op
   | UnOp (F64 op) -> float_un_op i `F64 op
