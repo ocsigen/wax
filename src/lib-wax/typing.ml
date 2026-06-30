@@ -2467,190 +2467,9 @@ let debug = false
 let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
   if debug then Format.eprintf "%a@." Output.instr i;
   match i.desc with
-  | Block { label; typ; block = instrs } -> (
-      (* An expression-position block draws nothing from a stack, so a parameter
-         type has no source; report it, then recover by supplying the declared
-         parameters anyway so the body does not underflow into spurious "stack
-         empty" errors. (With no parameters this is the empty stack, unchanged.) *)
-      if Array.length typ.params > 0 then
-        Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
-      (* The block's value is consumed here, so it is value-producing: infer (and
-         on [simplify] drop) its result type, admitting branches to its own
-         label (unlike [if]). An omitted annotation is therefore always a dropped
-         single result, never a void block. *)
-      match block_inference ctx i label typ ~instrs with
-      | Some (desc, results) -> return_statement i desc results
-      | None ->
-          let*! params =
-            array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
-          in
-          let*! results = array_map_opt (internalize ctx) typ.results in
-          let instrs' = block ctx i.info label params results results instrs in
-          return_statement i (Block { label; typ; block = instrs' }) results)
-  | Dispatch { index; cases; default; arms } ->
-      (* The case (arm) labels become distinct block labels in the lowering and
-         key the arm bodies, so they must be distinct. *)
-      let rec check_dups seen = function
-        | [] -> ()
-        | (l, _) :: r ->
-            if List.exists (fun s -> s = l.desc) seen then
-              Error.dispatch_duplicate_arm ctx.diagnostics ~location:l.info l;
-            check_dups (l.desc :: seen) r
-      in
-      check_dups [] arms;
-      (* Type-check against the equivalent blocks (see [Ast_utils.lower_dispatch])
-         as a void block body — the outermost case block followed by the first
-         arm's trailing body. This validates the index is an [i32], every
-         [br_table] target resolves to a 0-ary label, and each case body is
-         well-typed. Then rebuild a typed [Dispatch], preserving the high-level
-         form for the formatter and for the identical re-lowering in [To_wasm]. *)
-      let lowered =
-        Ast_utils.lower_dispatch ~block_info:i.info ~index ~cases ~default ~arms
-      in
-      (* In expression position the dispatch is checked in isolation (a void
-         block body); a divergence in the trailing case body is propagated only
-         in statement position — see [toplevel_instruction]. *)
-      let typed = block ctx i.info None [||] [||] [||] lowered in
-      let index', arms' = rebuild_dispatch typed arms in
-      return_statement i
-        (Dispatch { index = index'; cases; default; arms = arms' })
-        [||]
-  | Match { scrutinee; arms; default } ->
-      (* Type-check against the nested type-test ladder (see
-         [Ast_utils.lower_match]): the scrutinee is threaded once through a
-         [br_on_cast]/[br_on_null] chain whose tests branch out to the arm
-         blocks. The arm bodies must diverge (a block's result is supplied only
-         on the matching-branch path); the lowered block check enforces this.
-         Rebuild a typed [Match] for the formatter and the identical re-lowering
-         in [To_wasm]. *)
-      let* scrut' = instruction ctx scrutinee in
-      (* The chain's casts require a reference scrutinee; flag a non-reference
-         here (the failed cast in the lowered form reports at the same spot). *)
-      (match match_scrut_reftype ctx scrut' with
-      | Some _ -> ()
-      | None -> Error.expected_ref ctx.diagnostics ~location:(snd scrut'.info));
-      let labels = match_labels i.info arms in
-      let lowered =
-        Ast_utils.lower_match ~block_info:i.info ~labels ~scrutinee ~arms
-          ~default
-      in
-      let typed = block ctx i.info None [||] [||] [||] lowered in
-      let arms', default' = rebuild_match typed arms in
-      return_statement i
-        (Match { scrutinee = scrut'; arms = arms'; default = default' })
-        [||]
-  | Loop { label; typ; block = instrs } -> (
-      if Array.length typ.params > 0 then
-        Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
-      match loop_inference ctx i label typ ~instrs with
-      | Some (desc, results) -> return_statement i desc results
-      | None ->
-          let*! params =
-            array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
-          in
-          let*! results = array_map_opt (internalize ctx) typ.results in
-          let instrs' = block ctx i.info label params results params instrs in
-          return_statement i (Loop { label; typ; block = instrs' }) results)
-  | While { label; cond; block = instrs } ->
-      (* Type-check the equivalent loop (see [Ast_utils.lower_while]): this
-         validates that [cond] is an [i32] and the body is well-typed, with the
-         loop label in scope so a [br] to it (continue) resolves. Then rebuild a
-         typed [While], keeping the high-level form for the formatter and for the
-         identical re-lowering in [To_wasm]. *)
-      let lowered =
-        Ast_utils.lower_while ~block_info:i.info ~label ~cond ~block:instrs
-      in
-      let typed = block ctx i.info None [||] [||] [||] lowered in
-      let cond', instrs' = rebuild_while typed in
-      return_statement i (While { label; cond = cond'; block = instrs' }) [||]
-  | If { label; typ; cond; if_block; else_block } -> (
-      let* cond' = instruction ctx cond in
-      check_type ctx cond'
-        (UnionFind.make (Valtype { typ = I32; internal = I32; inline = None }));
-      if Array.length typ.params > 0 then
-        Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
-      match if_inference ctx i label typ ~cond:cond' ~if_block ~else_block with
-      | Some (desc, results) -> return_statement i desc results
-      | None ->
-          let*! params =
-            array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
-          in
-          let*! results = array_map_opt (internalize ctx) typ.results in
-          let if_block' =
-            {
-              if_block with
-              desc = block ctx i.info label params results results if_block.desc;
-            }
-          in
-          let else_block' =
-            match else_block with
-            | Some b ->
-                Some
-                  {
-                    b with
-                    desc = block ctx i.info label params results results b.desc;
-                  }
-            | None ->
-                if not (missing_else_ok ctx params results) then
-                  Error.if_without_else ctx.diagnostics ~location:i.info;
-                None
-          in
-          return_statement i
-            (If
-               {
-                 label;
-                 typ;
-                 cond = cond';
-                 if_block = if_block';
-                 else_block = else_block';
-               })
-            results)
-  | If_annotation { cond; then_body; else_body } ->
-      (* Type each branch as an isolated block, under the branch's assumption so
-         names resolve per branch (a name may be declared only in, or with a
-         different type in, the matching configuration). *)
-      let then_body' =
-        with_cond ctx ~location:i.info cond true (fun () ->
-            block ctx i.info None [||] [||] [||] then_body)
-      in
-      let else_body' =
-        Option.map
-          (fun b ->
-            with_cond ctx ~location:i.info cond false (fun () ->
-                block ctx i.info None [||] [||] [||] b))
-          else_body
-      in
-      return_statement i
-        (If_annotation { cond; then_body = then_body'; else_body = else_body' })
-        [||]
-  | TryTable { label; typ; block = body; catches } -> (
-      if Array.length typ.params > 0 then
-        Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
-      match trytable_inference ctx i label typ ~body ~catches with
-      | Some (desc, results) -> return_statement i desc results
-      | None ->
-          let*! params =
-            array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
-          in
-          let*! results = array_map_opt (internalize ctx) typ.results in
-          let body' = block ctx i.info label params results results body in
-          check_trytable_catches ctx catches;
-          return_statement i
-            (TryTable { label; typ; block = body'; catches })
-            results)
-  | Try { label; typ; block = body; catches; catch_all } -> (
-      assert (typ.params = [||]);
-      match try_inference ctx i label typ ~body ~catches ~catch_all with
-      | Some (desc, results) -> return_statement i desc results
-      | None ->
-          let*! results = array_map_opt (internalize ctx) typ.results in
-          let body' = block ctx i.info label [||] results results body in
-          let catches, catch_all =
-            type_try_catches ctx i label ~results catches catch_all
-          in
-          return_statement i
-            (Try { label; typ; block = body'; catches; catch_all })
-            results)
+  | Block _ | Dispatch _ | Match _ | Loop _ | While _ | If _ | If_annotation _
+  | TryTable _ | Try _ ->
+      type_block_construct ctx i
   | (Unreachable | Nop) as desc ->
       (* [unreachable] and [nop] are statements that yield no value; they are
          only meaningful in statement (top-level) position, where
@@ -4072,6 +3891,197 @@ and type_exception ctx i =
        check_type ctx i' typ);
       return_statement i (ThrowRef i') [||]
   | _ -> assert false (* only invoked on Throw/ThrowRef *)
+
+and type_block_construct ctx i =
+  (* The block-like control constructs (block, loop, while, if, dispatch, match,
+     try, try_table), which type their bodies and results through the
+     block-inference helpers. *)
+  match i.desc with
+  | Block { label; typ; block = instrs } -> (
+      (* An expression-position block draws nothing from a stack, so a parameter
+         type has no source; report it, then recover by supplying the declared
+         parameters anyway so the body does not underflow into spurious "stack
+         empty" errors. (With no parameters this is the empty stack, unchanged.) *)
+      if Array.length typ.params > 0 then
+        Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
+      (* The block's value is consumed here, so it is value-producing: infer (and
+         on [simplify] drop) its result type, admitting branches to its own
+         label (unlike [if]). An omitted annotation is therefore always a dropped
+         single result, never a void block. *)
+      match block_inference ctx i label typ ~instrs with
+      | Some (desc, results) -> return_statement i desc results
+      | None ->
+          let*! params =
+            array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
+          in
+          let*! results = array_map_opt (internalize ctx) typ.results in
+          let instrs' = block ctx i.info label params results results instrs in
+          return_statement i (Block { label; typ; block = instrs' }) results)
+  | Dispatch { index; cases; default; arms } ->
+      (* The case (arm) labels become distinct block labels in the lowering and
+         key the arm bodies, so they must be distinct. *)
+      let rec check_dups seen = function
+        | [] -> ()
+        | (l, _) :: r ->
+            if List.exists (fun s -> s = l.desc) seen then
+              Error.dispatch_duplicate_arm ctx.diagnostics ~location:l.info l;
+            check_dups (l.desc :: seen) r
+      in
+      check_dups [] arms;
+      (* Type-check against the equivalent blocks (see [Ast_utils.lower_dispatch])
+         as a void block body — the outermost case block followed by the first
+         arm's trailing body. This validates the index is an [i32], every
+         [br_table] target resolves to a 0-ary label, and each case body is
+         well-typed. Then rebuild a typed [Dispatch], preserving the high-level
+         form for the formatter and for the identical re-lowering in [To_wasm]. *)
+      let lowered =
+        Ast_utils.lower_dispatch ~block_info:i.info ~index ~cases ~default ~arms
+      in
+      (* In expression position the dispatch is checked in isolation (a void
+         block body); a divergence in the trailing case body is propagated only
+         in statement position — see [toplevel_instruction]. *)
+      let typed = block ctx i.info None [||] [||] [||] lowered in
+      let index', arms' = rebuild_dispatch typed arms in
+      return_statement i
+        (Dispatch { index = index'; cases; default; arms = arms' })
+        [||]
+  | Match { scrutinee; arms; default } ->
+      (* Type-check against the nested type-test ladder (see
+         [Ast_utils.lower_match]): the scrutinee is threaded once through a
+         [br_on_cast]/[br_on_null] chain whose tests branch out to the arm
+         blocks. The arm bodies must diverge (a block's result is supplied only
+         on the matching-branch path); the lowered block check enforces this.
+         Rebuild a typed [Match] for the formatter and the identical re-lowering
+         in [To_wasm]. *)
+      let* scrut' = instruction ctx scrutinee in
+      (* The chain's casts require a reference scrutinee; flag a non-reference
+         here (the failed cast in the lowered form reports at the same spot). *)
+      (match match_scrut_reftype ctx scrut' with
+      | Some _ -> ()
+      | None -> Error.expected_ref ctx.diagnostics ~location:(snd scrut'.info));
+      let labels = match_labels i.info arms in
+      let lowered =
+        Ast_utils.lower_match ~block_info:i.info ~labels ~scrutinee ~arms
+          ~default
+      in
+      let typed = block ctx i.info None [||] [||] [||] lowered in
+      let arms', default' = rebuild_match typed arms in
+      return_statement i
+        (Match { scrutinee = scrut'; arms = arms'; default = default' })
+        [||]
+  | Loop { label; typ; block = instrs } -> (
+      if Array.length typ.params > 0 then
+        Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
+      match loop_inference ctx i label typ ~instrs with
+      | Some (desc, results) -> return_statement i desc results
+      | None ->
+          let*! params =
+            array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
+          in
+          let*! results = array_map_opt (internalize ctx) typ.results in
+          let instrs' = block ctx i.info label params results params instrs in
+          return_statement i (Loop { label; typ; block = instrs' }) results)
+  | While { label; cond; block = instrs } ->
+      (* Type-check the equivalent loop (see [Ast_utils.lower_while]): this
+         validates that [cond] is an [i32] and the body is well-typed, with the
+         loop label in scope so a [br] to it (continue) resolves. Then rebuild a
+         typed [While], keeping the high-level form for the formatter and for the
+         identical re-lowering in [To_wasm]. *)
+      let lowered =
+        Ast_utils.lower_while ~block_info:i.info ~label ~cond ~block:instrs
+      in
+      let typed = block ctx i.info None [||] [||] [||] lowered in
+      let cond', instrs' = rebuild_while typed in
+      return_statement i (While { label; cond = cond'; block = instrs' }) [||]
+  | If { label; typ; cond; if_block; else_block } -> (
+      let* cond' = instruction ctx cond in
+      check_type ctx cond'
+        (UnionFind.make (Valtype { typ = I32; internal = I32; inline = None }));
+      if Array.length typ.params > 0 then
+        Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
+      match if_inference ctx i label typ ~cond:cond' ~if_block ~else_block with
+      | Some (desc, results) -> return_statement i desc results
+      | None ->
+          let*! params =
+            array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
+          in
+          let*! results = array_map_opt (internalize ctx) typ.results in
+          let if_block' =
+            {
+              if_block with
+              desc = block ctx i.info label params results results if_block.desc;
+            }
+          in
+          let else_block' =
+            match else_block with
+            | Some b ->
+                Some
+                  {
+                    b with
+                    desc = block ctx i.info label params results results b.desc;
+                  }
+            | None ->
+                if not (missing_else_ok ctx params results) then
+                  Error.if_without_else ctx.diagnostics ~location:i.info;
+                None
+          in
+          return_statement i
+            (If
+               {
+                 label;
+                 typ;
+                 cond = cond';
+                 if_block = if_block';
+                 else_block = else_block';
+               })
+            results)
+  | If_annotation { cond; then_body; else_body } ->
+      (* Type each branch as an isolated block, under the branch's assumption so
+         names resolve per branch (a name may be declared only in, or with a
+         different type in, the matching configuration). *)
+      let then_body' =
+        with_cond ctx ~location:i.info cond true (fun () ->
+            block ctx i.info None [||] [||] [||] then_body)
+      in
+      let else_body' =
+        Option.map
+          (fun b ->
+            with_cond ctx ~location:i.info cond false (fun () ->
+                block ctx i.info None [||] [||] [||] b))
+          else_body
+      in
+      return_statement i
+        (If_annotation { cond; then_body = then_body'; else_body = else_body' })
+        [||]
+  | TryTable { label; typ; block = body; catches } -> (
+      if Array.length typ.params > 0 then
+        Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
+      match trytable_inference ctx i label typ ~body ~catches with
+      | Some (desc, results) -> return_statement i desc results
+      | None ->
+          let*! params =
+            array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
+          in
+          let*! results = array_map_opt (internalize ctx) typ.results in
+          let body' = block ctx i.info label params results results body in
+          check_trytable_catches ctx catches;
+          return_statement i
+            (TryTable { label; typ; block = body'; catches })
+            results)
+  | Try { label; typ; block = body; catches; catch_all } -> (
+      assert (typ.params = [||]);
+      match try_inference ctx i label typ ~body ~catches ~catch_all with
+      | Some (desc, results) -> return_statement i desc results
+      | None ->
+          let*! results = array_map_opt (internalize ctx) typ.results in
+          let body' = block ctx i.info label [||] results results body in
+          let catches, catch_all =
+            type_try_catches ctx i label ~results catches catch_all
+          in
+          return_statement i
+            (Try { label; typ; block = body'; catches; catch_all })
+            results)
+  | _ -> assert false (* only invoked on a block-like construct *)
 
 and type_mem_method_call ctx i func recv memname meth args =
   let _, address_type = Option.get (Tbl.find_opt ctx.memories memname) in
