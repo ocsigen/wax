@@ -207,6 +207,7 @@ let ref_i31 = { nullable = false; typ = I31 }
 
 let reftype i ch =
   match i with
+  | 0x74 -> nullable NoExn
   | 0X73 -> nullable NoFunc
   | 0x72 -> nullable NoExtern
   | 0x71 -> nullable None_
@@ -217,6 +218,7 @@ let reftype i ch =
   | 0x6C -> nullable I31
   | 0x6B -> nullable Struct
   | 0x6A -> nullable Array
+  | 0x69 -> nullable Exn
   | 0x68 -> nullable Cont
   | 0x75 -> nullable NoCont
   | 0x63 -> nullable (heaptype ch)
