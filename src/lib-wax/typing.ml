@@ -5392,6 +5392,23 @@ and block_contents ctx results l =
          | _ -> false ->
       fun st ->
         (match st with
+        | Empty when is_inferring results.(0) ->
+            (* The block's own result type is being inferred (synthesis), so the
+               result cell is a [Collecting] one: checking this trailing value
+               against it would discard it ([has_expectation] is false). Instead
+               synthesize the value — a nested block runs its own inference — and
+               push its type, to be collected by the enclosing block. *)
+            let count = count_holes i in
+            let* args = pop_many ctx i count [] in
+            let args, i' = instruction ctx i args in
+            assert (args = []);
+            ignore (check_hole_order ctx i' count : bool);
+            let* () =
+              push_results
+                (Array.to_list
+                   (Array.map (fun ty -> (i.info, ty)) (fst i'.info)))
+            in
+            return [ i' ]
         | Empty ->
             (* The stack is empty, so this trailing instruction must produce the
                 block's value: a construction literal (incl. a string) or null
@@ -5593,7 +5610,12 @@ and block_infer_general ctx loc label instrs =
            control_types =
              (Option.map (fun l -> l.desc) label, [| r |]) :: ctx.control_types;
          }
-         [||] instrs
+         (* Pass the [Collecting] cell as the result too (not [||]): a trailing
+            nested block is then routed and synthesized (its value collected),
+            rather than typed as a void statement and lost. The fall-through is
+            still read off the stack below. *)
+         [| r |]
+         instrs
      in
      fun st ->
        (* The fall-through value (if any) reaches the exit alongside the

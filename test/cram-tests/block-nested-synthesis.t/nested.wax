@@ -1,0 +1,9 @@
+// A block whose trailing value is itself a nested block, in synthesis position
+// (no expected type from the context): the inner block runs its own inference
+// and its value becomes the outer block's value.
+fn h(c: i32) -> i32 {
+    let a = do { do { 5; } };
+    let b = do { if c { 5; } else { 7; } };
+    let d = loop { do { 9; } };
+    a + b + d;
+}
