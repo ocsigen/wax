@@ -126,8 +126,11 @@ and collecting = {
       *)
 }
 
-let output_inferred_type f ty =
+let rec output_inferred_type f ty =
   match UnionFind.find ty with
+  (* A block result still being inferred renders as the annotation under test (the
+     type a reader, e.g. a mismatched [br]/catch, is checked against), not [any]. *)
+  | Collecting { declared = Some d; _ } -> output_inferred_type f d
   | Unknown | Error | Collecting _ -> Format.fprintf f "any"
   | Null -> Format.fprintf f "null"
   | Number -> Format.fprintf f "number"
@@ -962,18 +965,24 @@ let field_subtype info (ty : Wax_wasm.Ast.Binary.fieldtype)
 let is_inferring ty =
   match UnionFind.find ty with Collecting _ -> true | _ -> false
 
-let subtype ?location ctx ty ty' =
+let rec subtype ?location ctx ty ty' =
   let ity = UnionFind.find ty in
   let ity' = UnionFind.find ty' in
   match (ity, ity') with
-  (* [ty'] is a block result being inferred: record [ty] (with [location], when
-     the caller has one) as a value reaching the block's exit and accept it; the
-     type is joined later (see [block_infer_general]). A [Collecting] cell never
-     appears as a real value type, so the left-hand cases below treat it like
-     [Unknown]. *)
-  | _, Collecting st ->
-      st.collected <- (location, ty) :: st.collected;
-      true
+  (* [ty'] is a block result being inferred. Record [ty]'s natural type — a
+     snapshot taken before any validation below resolves it — as a value reaching
+     the block's exit, to be joined later (see [block_infer_general]); pair it with
+     [location] when the caller has one, so a join failure can point at the exit.
+     When an annotation is under test ([declared]), also validate [ty] against it
+     per-delivery and return that result, so a [br]/catch carrying the wrong type
+     is reported precisely at its site rather than once, generically, at the join.
+     A [Collecting] cell never appears as a real value type, so the left-hand
+     cases below treat it like [Unknown]. *)
+  | _, Collecting st -> (
+      st.collected <- (location, UnionFind.make ity) :: st.collected;
+      match st.declared with
+      | Some d -> subtype ?location ctx ty d
+      | None -> true)
   | Collecting _, _ -> true
   | Valtype ty, Valtype ty' ->
       Wax_wasm.Types.val_subtype ctx.subtyping_info ty.internal ty'.internal
@@ -3559,7 +3568,13 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
         (UnionFind.make (Valtype { typ = I32; internal = I32; inline = None }));
       let params = branch_target ctx label in
       check_subtypes ctx ~location:loc types params;
-      return_statement i (Br_if (label, i')) params
+      (* On the fall-through the values stay on the stack; type them by what they
+         already are ([types], checked against the target just above) rather than
+         by [params]. For a concrete target the two coincide, but when the target
+         is a block result still being inferred ([params] is a [Collecting] cell),
+         returning [params] would leak that cell onto the stack as [any]. *)
+      let result = if Array.exists is_inferring params then types else params in
+      return_statement i (Br_if (label, i')) result
   | Br_table (labels, i') ->
       let* i' = instruction ctx i' in
       let loc = snd i'.info in
@@ -5732,6 +5747,13 @@ and block ctx loc label params results br_params block =
    fall-through), whose values are not on the stack to read. Returns the typed
    body and that keep-bool. *)
 and block_keep_bool ctx loc label ~result ~br_params body =
+  (* A trailing construction / nested block is routed through [result] below (so
+     it resolves a name the context pins), which hides its natural type — keep the
+     surrounding annotation for it. Otherwise the keep-bool is decided from every
+     value reaching the exit: the fall-through, plus values branched to the label,
+     the latter collected at their natural types into [cs] (the branch-target [r]
+     is a [Collecting] cell). So a value delivered only by a branch — with a
+     divergent fall-through — still drops a redundant annotation. *)
   let trailing_routable =
     match List.rev body with
     | last :: _ -> (
@@ -5744,27 +5766,44 @@ and block_keep_bool ctx loc label ~result ~br_params body =
         | _ -> false)
     | [] -> false
   in
+  let cs = { collected = []; declared = Some result; needed = false } in
+  let r = UnionFind.make (Collecting cs) in
+  (* Branches deliver the result for every kind but [loop] (where they re-enter):
+     mirror the caller's [br_params] arity with the [Collecting] cell so their
+     values are recorded. *)
+  let br = if Array.length br_params > 0 then [| r |] else [||] in
   with_empty_stack ctx ~location:loc ~kind:Block
     (let* block' =
        block_contents
          {
            ctx with
            control_types =
-             (Option.map (fun l -> l.desc) label, br_params)
-             :: ctx.control_types;
+             (Option.map (fun l -> l.desc) label, br) :: ctx.control_types;
          }
          [| result |] body
      in
      fun st ->
+       (* Snapshot the fall-through's natural type before [pop_args] resolves it
+          to [result], so it joins with the branched values at its own type. *)
+       (match st with
+       | Cons (loc', tv, _) ->
+           cs.collected <-
+             (Some loc', UnionFind.make (UnionFind.find tv)) :: cs.collected
+       | Empty | Unreachable -> ());
+       let st, () = pop_args ctx ~location:loc [| result |] st in
+       (* Every value reaching the exit is already validated against [result] —
+          the fall-through by [pop_args], the branched values per-delivery as they
+          were collected — so the join below only decides the keep-bool. *)
+       let inferred = join_collected ctx ~location:loc cs.collected in
        let needed =
          if trailing_routable then true
          else
-           match st with
-           | Cons (_, tv, _) ->
-               annotation_needed ctx (standalone_valtype ctx tv) result
-           | Empty | Unreachable -> true
+           cs.needed
+           ||
+           match inferred with
+           | Some j -> annotation_needed ctx (standalone_valtype ctx j) result
+           | None -> true
        in
-       let st, () = pop_args ctx ~location:loc [| result |] st in
        (st, (block', needed)))
 
 (* Type a block body in synthesis (no expected result), inferring its single

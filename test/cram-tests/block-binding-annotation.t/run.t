@@ -56,3 +56,16 @@ it:
           };
       x;
   }
+  // The value reaches the block only by a branch to its label; the fall-through
+  // diverges (unreachable), so there is nothing on the stack to read. The
+  // branched value ($n, already i64) is still collected at its natural type, so
+  // the annotation drops anyway.
+  #[export = "divergent_drops"]
+  fn divergent_drops(n: i64) -> i64 {
+      let x =
+          'l_2: do {
+              br 'l_2 n;
+              unreachable;
+          };
+      x;
+  }

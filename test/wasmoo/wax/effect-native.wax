@@ -126,7 +126,7 @@
             caml_raise_constant(caml_named_value(already_resumed)!);
         }
         let fiber = vfiber as &fiber;
-        let exn: &eq =
+        let exn =
             'handle_exception: do {
                 let (resume_res_0, resume_res_1) =
                     'handle_effect: do () -> (&eq, &continuation) {

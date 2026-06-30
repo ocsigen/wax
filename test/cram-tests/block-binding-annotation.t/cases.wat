@@ -32,4 +32,13 @@
     (local $x i64)
     (local.set $x
       (try (result i64) (do (local.get $n)) (catch $e (i64.const 0))))
+    (local.get $x))
+  ;; The value reaches the block only by a branch to its label; the fall-through
+  ;; diverges (unreachable), so there is nothing on the stack to read. The
+  ;; branched value ($n, already i64) is still collected at its natural type, so
+  ;; the annotation drops anyway.
+  (func $divergent_drops (export "divergent_drops") (param $n i64) (result i64)
+    (local $x i64)
+    (local.set $x
+      (block $l (result i64) (br $l (local.get $n)) (unreachable)))
     (local.get $x)))
