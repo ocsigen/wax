@@ -93,15 +93,18 @@ type inferred_type =
   | Int
   | Float
   | Valtype of inferred_valtype
-  | Collecting of inferred_type UnionFind.t list ref
+  | Collecting of (Ast.location option * inferred_type UnionFind.t) list ref
       (** Transient state of a fresh cell used as the result / branch-target
           type of a block whose result is being inferred (see
           [block_infer_general]). A value checked against such a cell (a [br]
           target value, or the fall-through) is recorded into the list rather
           than unified — [subtype] would otherwise assert on an unconstrained
-          right-hand side. After the body is typed the list is joined by
-          [val_lub] to give the result. The cell never escapes inference, so
-          other uses treat it like [Unknown]. *)
+          right-hand side. Each value is paired with the location it was
+          produced at when the caller has one (a [br] site, the fall-through),
+          so a join failure can point at the offending exits; [None] otherwise.
+          After the body is typed the list is joined by [val_lub] to give the
+          result. The cell never escapes inference, so other uses treat it like
+          [Unknown]. *)
 
 let output_inferred_type f ty =
   match UnionFind.find ty with
@@ -317,6 +320,14 @@ module Error = struct
     report context ~location
       ~related:[ typed_branch_label loc1 ty1; typed_branch_label loc2 ty2 ]
       "The branches of this if produce values with no common supertype, so its \
+       result type cannot be inferred."
+
+  (* As [if_branch_type_mismatch], but for a [do]/labelled block whose exit
+     values (a fall-through and/or values branched to its label) do not join. *)
+  let block_exit_type_mismatch context ~location ~loc1 ~loc2 ty1 ty2 =
+    report context ~location
+      ~related:[ typed_branch_label loc1 ty1; typed_branch_label loc2 ty2 ]
+      "The values reaching this block's exit have no common supertype, so its \
        result type cannot be inferred."
 
   let name_already_bound context ~location kind x =
@@ -927,16 +938,17 @@ let field_subtype info (ty : Wax_wasm.Ast.Binary.fieldtype)
 let is_inferring ty =
   match UnionFind.find ty with Collecting _ -> true | _ -> false
 
-let subtype ctx ty ty' =
+let subtype ?location ctx ty ty' =
   let ity = UnionFind.find ty in
   let ity' = UnionFind.find ty' in
   match (ity, ity') with
-  (* [ty'] is a block result being inferred: record [ty] as one of the values
-     reaching the block's exit and accept it; the type is joined later (see
-     [block_infer_general]). A [Collecting] cell never appears as a real value
-     type, so the left-hand cases below treat it like [Unknown]. *)
+  (* [ty'] is a block result being inferred: record [ty] (with [location], when
+     the caller has one) as a value reaching the block's exit and accept it; the
+     type is joined later (see [block_infer_general]). A [Collecting] cell never
+     appears as a real value type, so the left-hand cases below treat it like
+     [Unknown]. *)
   | _, Collecting collected ->
-      collected := ty :: !collected;
+      collected := (location, ty) :: !collected;
       true
   | Collecting _, _ -> true
   | Valtype ty, Valtype ty' ->
@@ -1380,7 +1392,9 @@ let expression_type ctx i =
       UnionFind.make Error
 
 let check_subtype ctx ~location ty' ty =
-  if not (subtype ctx ty' ty) then
+  (* Pass [location] so that, when [ty] is an inferring block result, the value
+     is recorded with its branch site (see [Collecting]). *)
+  if not (subtype ~location ctx ty' ty) then
     Error.instruction_type_mismatch ctx.diagnostics ~location ty' ty
 
 let check_subtypes ctx ~location types' types =
@@ -4981,7 +4995,8 @@ and check_against ctx expected i =
          result (a plain [check] would discard it, as [has_expectation] is false
          for a [Collecting] cell). *)
       let* i' = instruction ctx i in
-      ignore (subtype ctx (expression_type ctx i') ty : bool);
+      ignore
+        (subtype ~location:(snd i'.info) ctx (expression_type ctx i') ty : bool);
       return i'
   | [| ty |] ->
       let* i', _ = check ctx ty i in
@@ -5572,8 +5587,8 @@ and block_infer_general ctx loc label instrs =
           branched ones. A single leftover is consumed; anything else is left
           for [with_empty_stack] to report. *)
        match st with
-       | Cons (_, tv, Empty) ->
-           collected := tv :: !collected;
+       | Cons (loc, tv, Empty) ->
+           collected := (Some loc, tv) :: !collected;
            (Empty, (body', !collected))
        | Empty -> (Empty, (body', !collected))
        | Unreachable -> (Unreachable, (body', !collected))
@@ -5581,23 +5596,27 @@ and block_infer_general ctx loc label instrs =
 
 (* Join the values reaching a block's exit into its inferred result, or [None]
    when none do (a void or fully divergent body). Incompatible exit types are
-   reported at the block (unreachable for well-typed input, where every exit is
-   a subtype of the declared result), keeping one type so a single result is
-   still produced. *)
+   reported with a caret at each offending value (falling back to [location], the
+   block, when a value carries none); this is unreachable for well-typed input,
+   where every exit is a subtype of the declared result. One type is kept so a
+   single result is still produced. *)
 and join_collected ctx ~location collected =
   match collected with
   | [] -> None
-  | first :: rest ->
+  | (loc0, first) :: rest ->
       Some
-        (List.fold_left
-           (fun acc ty ->
-             match join_value_types ctx acc ty with
-             | Some r -> r
-             | None ->
-                 Error.if_branch_type_mismatch ctx.diagnostics ~location
-                   ~loc1:location ~loc2:location acc ty;
-                 acc)
-           first rest)
+        (snd
+           (List.fold_left
+              (fun (loc_acc, acc) (loc, ty) ->
+                match join_value_types ctx acc ty with
+                | Some r -> (loc_acc, r)
+                | None ->
+                    Error.block_exit_type_mismatch ctx.diagnostics ~location
+                      ~loc1:(Option.value loc_acc ~default:location)
+                      ~loc2:(Option.value loc ~default:location)
+                      acc ty;
+                    (loc_acc, acc))
+              (loc0, first) rest))
 
 (* Try to infer (and, on [simplify], drop) the result type of a [do]/labelled
    block from the values reaching its exit. Mirrors [if_inference] for the

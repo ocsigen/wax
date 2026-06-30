@@ -1,0 +1,6 @@
+fn f(c: i32) {
+    _ = 'l: do {
+        if c { br 'l 5; }
+        null as &any;
+    };
+}

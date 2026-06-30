@@ -1,0 +1,7 @@
+fn f(c: i32) {
+    _ = 'l: do {
+        if c { br 'l 5; }
+        if c { br 'l (null as &any); }
+        unreachable;
+    };
+}
