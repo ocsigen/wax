@@ -26,7 +26,11 @@ ORACLE="$(dirname "${BASH_SOURCE[0]}")/oracle.sh"
 
 # Enable the same bleeding-edge proposals wax targets, so smith generates the
 # full language (GC, exceptions, stack switching, ...) rather than just the MVP.
-SMITH_FLAGS=(--ensure-termination)
+# Threads/atomics (the 0xFE opcodes) are *not* implemented by wax, so leaving
+# them on just floods the report with one FALSE_REJECT signature ("illegal opcode
+# fe"); disable them to keep generation within wax's feature set.
+SMITH_FLAGS=(--ensure-termination --threads-enabled false
+  --shared-everything-threads-enabled false)
 
 echo "generating + checking $COUNT modules ($BYTES seed bytes each)..."
 nfind=0

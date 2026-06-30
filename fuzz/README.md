@@ -31,6 +31,11 @@ Overridable via environment: `WAX`, `WASM_TOOLS`, `TIMEOUT` (seconds per
 invocation, default 30), `WT_FEATURES` (default `all` — wax targets bleeding-edge
 proposals, so the reference must enable them too or it false-rejects valid output).
 
+The **execution oracles** below need an external runner: `node` (`exec.sh`),
+wabt's `wast2json` + `spectest-interp` (`exec-interp.sh`), or the WebAssembly
+reference interpreter (`exec-ref.sh`, default `~/sources/Wasm/interpreter/wasm`,
+override with `REF`).
+
 ## Usage
 
 ```sh
@@ -38,10 +43,17 @@ fuzz/build-corpus.sh        # populate fuzz/corpus/{valid,invalid}/ (~7000 modul
 fuzz/run.sh                 # run every oracle over the corpus, print a report
 fuzz/oracle.sh FILE [valid|invalid|unknown]   # check one file (the fuzzing unit)
 fuzz/smith.sh [count] [bytes]                 # generate valid modules + check them
+fuzz/triage.sh REPORT       # collapse a findings report into ranked bug signatures
+
+# Execution (behavioural-equivalence) oracles — run on spec .wast files:
+fuzz/exec-ref.sh [wast…]    # via the reference interpreter (strongest; GC/SIMD/EH/multi-mem)
+fuzz/exec-interp.sh [wast…] # via wabt spectest-interp
+fuzz/exec.sh [wast…]        # via Node
 ```
 
 `run.sh` and `smith.sh` exit non-zero if any **HIGH**-severity finding appears,
-so either can gate CI. `fuzz/corpus/` and `fuzz/smith-findings/` are gitignored.
+so either can gate CI; the execution oracles exit non-zero on any behavioural
+regression. `fuzz/corpus/` and `fuzz/smith-findings/` are gitignored.
 
 ## The corpus
 
@@ -74,7 +86,27 @@ Textual equivalence of `x → wasm` vs `x → wax → wasm`. wax legitimately re
 locals, dedups/renumbers types and rewrites the name section, so two
 semantically-equal binaries differ textually. The round-trip oracle therefore
 checks *validity* of the recompiled binary, not byte/text identity. True
-behavioural equivalence belongs in the execution oracle below.
+behavioural equivalence belongs in the execution oracles below.
+
+## The execution oracles
+
+The strongest check: recompile each spec module through wax, then run the spec's
+own `assert_return` / `assert_trap` assertions and confirm the results are
+unchanged. A difference is a *miscompilation* — the bug class the validity/crash
+oracles cannot see. All three are differential (compare a baseline run of the
+original against a run after wax recompiled the modules) so any runner limitation
+cancels out, and all take `MODE=codec` (wasm→wasm, default) or `MODE=wax`
+(wasm→wax→wasm). A module the runner cannot instantiate (unsupported proposal) or
+wax cannot recompile is skipped and counted, not failed.
+
+| Script            | Runner | Reach |
+|-------------------|--------|-------|
+| `exec-ref.sh`     | WebAssembly reference interpreter | Widest — GC, SIMD, exceptions, multi-memory (not stack switching). Runs `.wast` directly via `wast-rewrite.js`. |
+| `exec-interp.sh`  | wabt `spectest-interp` | SIMD/v128, GC, memory64; but `wast2json` crashes on ~100 core files. |
+| `exec.sh`         | Node (`exec-run.js`) | MVP + common proposals; no v128. |
+
+`exec-ref.sh` is the one to reach for; the others predate it and remain for
+cross-checking against a second engine.
 
 ## Triaging findings
 
@@ -90,8 +122,8 @@ Replay any finding with the `repro` command, or for a saved smith module:
 
 ## Roadmap
 
-This is the **corpus + oracle** layer. Natural extensions, each reusing
-`oracle.sh` unchanged:
+The **corpus + oracle** and **execution oracle** layers are both built (above).
+Natural remaining extensions, each reusing `oracle.sh` unchanged:
 
 1. **Mutation** — parse a corpus `.wasm`, perturb the AST (swap operands, nudge
    indices, drop/duplicate instructions), re-emit, feed to `oracle.sh`. Keeps
@@ -99,9 +131,3 @@ This is the **corpus + oracle** layer. Natural extensions, each reusing
 2. **Coverage-guided** — build wax with AFL instrumentation (or wrap the OCaml
    entry points with [Crowbar](https://github.com/stedolan/crowbar)) so the
    generator is steered by coverage rather than blind random bytes.
-3. **Execution oracle (behavioural equivalence)** — the strongest check. The
-   spec `.wast` files carry `assert_return` / `assert_trap` expectations.
-   Recompile each module through wax, point the original assertions at wax's
-   binary, and run them under `spectest-interp` (or Node). A result that differs
-   from the expectation is a miscompilation — the bug class the validity oracles
-   cannot see.
