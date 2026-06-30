@@ -1030,7 +1030,8 @@ and instruction_desc ret ctx i : location Text.instr list =
                     },
                   Valtype (Ref { typ = Extern; _ }) ) ->
                   ExternConvertAny
-              | Ref { typ = Extern; _ }, Valtype (Ref { typ = Any; _ }) ->
+              | ( Ref { typ = Extern | NoExtern; _ },
+                  Valtype (Ref { typ = Any; _ }) ) ->
                   AnyConvertExtern
               (* RefCast *)
               | Ref _, Valtype (Ref r) -> RefCast (reftype r)
