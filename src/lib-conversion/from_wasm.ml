@@ -15,7 +15,7 @@ exception Numeric_ref_in_conditional of Wax_wasm.Ast.location
    range, or names an undeclared entity. This only happens on a module that
    validation would reject (with an "unknown ..." error), so conversion gives up
    rather than inventing a target. *)
-exception Unresolved_reference
+exception Unresolved_reference of Wax_wasm.Ast.location
 
 module Sequence = struct
   type t = {
@@ -179,11 +179,11 @@ module Sequence = struct
               raise (Numeric_ref_in_conditional idx.Ast.info);
             match Hashtbl.find_opt seq.index_mapping n with
             | Some name -> name
-            | None -> raise Unresolved_reference)
+            | None -> raise (Unresolved_reference idx.Ast.info))
         | Id id -> (
             match Hashtbl.find_opt seq.label_mapping id with
             | Some name -> name
-            | None -> raise Unresolved_reference));
+            | None -> raise (Unresolved_reference idx.Ast.info)));
     }
 
   let get_current seq =
@@ -252,11 +252,11 @@ module LabelStack = struct
       | Num n -> (
           match List.nth_opt st.stack (Uint32.to_int n) with
           | Some entry -> snd entry
-          | None -> raise Unresolved_reference)
+          | None -> raise (Unresolved_reference idx.Ast.info))
       | Id id -> (
           match List.assoc_opt (Some id) st.stack with
           | Some entry -> entry
-          | None -> raise Unresolved_reference)
+          | None -> raise (Unresolved_reference idx.Ast.info))
     in
     used := true;
     { idx with desc = name }
@@ -615,11 +615,11 @@ let label_arity ctx (idx : Src.idx) =
           ctx.label_arities
       with
       | Some e -> snd e
-      | None -> raise Unresolved_reference)
+      | None -> raise (Unresolved_reference idx.Ast.info))
   | Num i -> (
       match List.nth_opt ctx.label_arities (Uint32.to_int i) with
       | Some e -> snd e
-      | None -> raise Unresolved_reference)
+      | None -> raise (Unresolved_reference idx.Ast.info))
 
 (* (parameter count, result count) of the function type a continuation type
    wraps. *)
@@ -2452,7 +2452,7 @@ let register_names ctx export_tbl fields =
                       | Some sup -> (
                           match Sequence.get ctx.types sup with
                           | exception
-                              ( Unresolved_reference
+                              ( Unresolved_reference _
                               | Numeric_ref_in_conditional _ ) ->
                               [||]
                           | { desc = parent; _ } -> (
@@ -2680,11 +2680,20 @@ let module_ ?(strict_constants = false) diagnostics (_, fields) =
          (Recover_loops.module_
             (Recover_dispatch.module_
                (List.concat_map (fun f -> modulefield ctx export_tbl f) fields))))
-  with Numeric_ref_in_conditional location ->
-    Wax_utils.Diagnostic.report diagnostics ~location ~severity:Error
-      ~message:(fun f () ->
-        Format.pp_print_string f
-          "Numeric references to module fields are not supported in a module \
-           with conditional annotations; use a symbolic $name.")
-      ();
-    Wax_utils.Diagnostic.abort ()
+  with
+  | Numeric_ref_in_conditional location ->
+      Wax_utils.Diagnostic.report diagnostics ~location ~severity:Error
+        ~message:(fun f () ->
+          Format.pp_print_string f
+            "Numeric references to module fields are not supported in a module \
+             with conditional annotations; use a symbolic $name.")
+        ();
+      Wax_utils.Diagnostic.abort ()
+  | Unresolved_reference location ->
+      Wax_utils.Diagnostic.report diagnostics ~location ~severity:Error
+        ~message:(fun f () ->
+          Format.pp_print_string f
+            "This reference resolves to nothing: it is out of range or names \
+             an undeclared entity.")
+        ();
+      Wax_utils.Diagnostic.abort ()

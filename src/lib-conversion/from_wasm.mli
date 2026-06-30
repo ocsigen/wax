@@ -1,8 +1,9 @@
-exception Unresolved_reference
-(** Raised by {!module_} when an index or label reference resolves to nothing
+exception Unresolved_reference of Wax_wasm.Ast.location
+(** Carries the location of an index or label reference that resolves to nothing
     (it is out of range or names an undeclared entity). Such a module would be
     rejected by validation; conversion gives up rather than inventing a target.
-*)
+    {!module_} catches this internally and reports it through its diagnostics
+    context (then aborts), so it is not raised to callers. *)
 
 val module_ :
   ?strict_constants:bool ->

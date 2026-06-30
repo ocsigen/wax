@@ -414,7 +414,7 @@ let runtest filename _ =
             wasm_m
         with
         | exception
-            (( Wax_conversion.From_wasm.Unresolved_reference
+            (( Wax_conversion.From_wasm.Unresolved_reference _
              | Wax_utils.Diagnostic.Aborted ) as e) -> (
             (* On an invalid module, conversion legitimately gives up: an
                out-of-range / undeclared reference, or a type-invalid construct
