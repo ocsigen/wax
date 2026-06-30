@@ -261,13 +261,39 @@ module Error = struct
           "Type mismatch: the first type must be a supertype of the second one.")
       ()
 
-  let select_type_mismatch context ~location ~source1 ~source2 =
-    Diagnostic.report context ~location ~severity:Error
+  let select_type_mismatch context ~location ~loc1 ~source1 ~loc2 ~source2 =
+    (* Point a caret at each branch value (when its push site is known),
+       labelled with its type. A placeholder location uses a negative column;
+       skip those, as in [locations]. *)
+    let branch_label loc source =
+      match loc with
+      | Some loc when loc.Ast.loc_start.Lexing.pos_cnum >= 0 ->
+          Some
+            {
+              Wax_utils.Diagnostic.location = loc;
+              message =
+                (fun f () ->
+                  Format.fprintf f "@[<2>%a@]" print_source_type source);
+            }
+      | _ -> None
+    in
+    let related =
+      List.filter_map Fun.id
+        [ branch_label loc1 source1; branch_label loc2 source2 ]
+    in
+    Diagnostic.report context ~location ~severity:Error ~related
       ~message:(fun f () ->
-        Format.fprintf f
-          "Type mismatch: both branches of a select should have the same \
-           type.@ Here, they have type@ @[<2>%a@]@ and@ @[<2>%a@]."
-          print_source_type source1 print_source_type source2)
+        (* When both carets are shown they carry the types; otherwise name the
+           two types in the message so they are not lost. *)
+        if List.length related = 2 then
+          Format.fprintf f
+            "Type mismatch: both branches of a select should have the same \
+             type."
+        else
+          Format.fprintf f
+            "Type mismatch: both branches of a select should have the same \
+             type.@ Here, they have type@ @[<2>%a@]@ and@ @[<2>%a@]."
+            print_source_type source1 print_source_type source2)
       ()
 
   let empty_stack context ~location =
@@ -2009,8 +2035,8 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       return ()
   | Select None -> (
       let* () = pop_known ctx loc I32 in
-      let* ty1, _ = pop_any ctx loc in
-      let* ty2, _ = pop_any ctx loc in
+      let* ty1, loc1 = pop_any ctx loc in
+      let* ty2, loc2 = pop_any ctx loc in
       match (ty1, ty2) with
       | None, None -> push_poly loc
       | Some (ty1, source1), Some (ty2, source2) ->
@@ -2021,8 +2047,8 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
             Error.expected_number_or_vec ctx.modul.diagnostics ~location:loc
               ~source:source2;
           if ty1 <> ty2 then
-            Error.select_type_mismatch ctx.modul.diagnostics ~location:loc
-              ~source1 ~source2;
+            Error.select_type_mismatch ctx.modul.diagnostics ~location:loc ~loc1
+              ~source1 ~loc2 ~source2;
           push ~source:source1 (Some loc) ty1
       | Some (ty, source), None | None, Some (ty, source) ->
           if not (number_or_vec ty) then
