@@ -12,6 +12,7 @@ type ctx = {
   memories : (string, unit) Hashtbl.t;
   tables : (string, reftype) Hashtbl.t;
   elems : (string, unit) Hashtbl.t;
+  datas : (string, unit) Hashtbl.t;
   mutable locals : string StringMap.t;
   allocated_locals : (Text.name option * Text.valtype) list ref;
   namespace : Namespace.t;
@@ -287,6 +288,10 @@ let memory_receiver ctx s =
 
 let table_receiver ctx s =
   Hashtbl.mem ctx.tables s && not (StringMap.mem s ctx.locals)
+
+let segment_receiver ctx s =
+  (Hashtbl.mem ctx.datas s || Hashtbl.mem ctx.elems s)
+  && not (StringMap.mem s ctx.locals)
 
 (* The branch context threaded down a function body. [return] is the function's
    result label with its current de Bruijn depth, so a branch to it is emitted
@@ -885,8 +890,10 @@ and instruction_desc ret ctx i : location Text.instr list =
                 List.concat_map (instruction ret ctx) (List.tl args)
               in
               folded loc (TableInit (t, index seg)) rest_code)
-      (* data.drop / elem.drop *)
-      | StructGet ({ desc = Get name; _ }, { desc = "drop"; _ }) ->
+      (* data.drop / elem.drop — only on an actual segment name, not shadowed by
+         a local (a same-named field call is an indirect call, below). *)
+      | StructGet ({ desc = Get name; _ }, { desc = "drop"; _ })
+        when segment_receiver ctx name.desc ->
           if Hashtbl.mem ctx.elems name.desc then
             folded loc (ElemDrop (index name)) []
           else folded loc (DataDrop (index name)) []
@@ -1693,6 +1700,7 @@ let module_ diagnostics types fields =
       memories = Hashtbl.create 16;
       tables = Hashtbl.create 16;
       elems = Hashtbl.create 16;
+      datas = Hashtbl.create 16;
       locals = StringMap.empty;
       allocated_locals = ref [];
       namespace = Namespace.make ();
@@ -1737,7 +1745,9 @@ let module_ diagnostics types fields =
       | Table { name; reftype = rt; _ } ->
           Hashtbl.replace ctx.tables name.desc rt
       | Elem { name; _ } -> Hashtbl.replace ctx.elems name.desc ()
-      | Tag _ | Data _ | Group _ | Conditional _ -> ())
+      | Data { name; _ } ->
+          Option.iter (fun n -> Hashtbl.replace ctx.datas n.desc ()) name
+      | Tag _ | Group _ | Conditional _ -> ())
     fields;
   (* Record unconditionally-declared types as reuse targets for synthesized
      types. Descend into [Group] (always present) but not [Conditional]: a type

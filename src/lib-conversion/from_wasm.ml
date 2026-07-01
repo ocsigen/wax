@@ -1823,10 +1823,11 @@ let string_of_name (nm : Src.name) =
 (* Reserve, in a function's fresh local namespace, the Wax names of the
    module-level entities its body references by a bare identifier: globals (via
    [global.get]/[global.set]), functions (via [call]/[return_call]/[ref.func]),
-   and the memories/tables a memory/table access names as its receiver
-   ([mem.load(..)], [tab[..]], [tab.size()], …). Without this an auto-named local
-   could be assigned a colliding name and shadow the reference, since Wax
-   resolves a bare name to a local before anything else. *)
+   the memories/tables a memory/table access names as its receiver
+   ([mem.load(..)], [tab[..]], [tab.size()], …), and the data/element segments
+   named by [seg.drop()] / [mem.init] / [tab.init] / array segment ops. Without
+   this an auto-named local could be assigned a colliding name and shadow the
+   reference, since Wax resolves a bare name to a local before anything else. *)
 let rec reserve_module_names_in_instr ctx ns (i : _ Src.instr) =
   match i.desc with
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
@@ -1855,7 +1856,6 @@ let rec reserve_module_names_in_instr ctx ns (i : _ Src.instr) =
   | MemorySize m
   | MemoryGrow m
   | MemoryFill m
-  | MemoryInit (m, _)
   | VecLoad (m, _, _)
   | VecStore (m, _)
   | VecLoadSplat (m, _, _)
@@ -1865,18 +1865,27 @@ let rec reserve_module_names_in_instr ctx ns (i : _ Src.instr) =
   | MemoryCopy (m, m') ->
       Namespace.reserve ns (idx ctx `Mem m).desc;
       Namespace.reserve ns (idx ctx `Mem m').desc
+  | MemoryInit (m, d) ->
+      Namespace.reserve ns (idx ctx `Mem m).desc;
+      Namespace.reserve ns (idx ctx `Data d).desc
   | TableGet t
   | TableSet t
   | TableSize t
   | TableGrow t
   | TableFill t
-  | TableInit (t, _)
   | CallIndirect (t, _)
   | ReturnCallIndirect (t, _) ->
       Namespace.reserve ns (idx ctx `Table t).desc
   | TableCopy (t, t') ->
       Namespace.reserve ns (idx ctx `Table t).desc;
       Namespace.reserve ns (idx ctx `Table t').desc
+  | TableInit (t, e) ->
+      Namespace.reserve ns (idx ctx `Table t).desc;
+      Namespace.reserve ns (idx ctx `Elem e).desc
+  | DataDrop d | ArrayNewData (_, d) | ArrayInitData (_, d) ->
+      Namespace.reserve ns (idx ctx `Data d).desc
+  | ElemDrop e | ArrayNewElem (_, e) | ArrayInitElem (_, e) ->
+      Namespace.reserve ns (idx ctx `Elem e).desc
   | _ -> ()
 
 and reserve_module_names_in_instrs ctx ns l =
@@ -2644,10 +2653,8 @@ let module_ ?(strict_constants = false) diagnostics (_, fields) =
         tables = Sequence.make ~forbid_numeric ~diagnostics common_namespace "t";
         tags =
           Sequence.make ~forbid_numeric ~diagnostics (Namespace.make ()) "t";
-        datas =
-          Sequence.make ~forbid_numeric ~diagnostics (Namespace.make ()) "d";
-        elems =
-          Sequence.make ~forbid_numeric ~diagnostics (Namespace.make ()) "e";
+        datas = Sequence.make ~forbid_numeric ~diagnostics common_namespace "d";
+        elems = Sequence.make ~forbid_numeric ~diagnostics common_namespace "e";
         referenced_elems = Hashtbl.create 16;
         type_defs = CondTbl.make ();
         implicit_types = Hashtbl.create 16;

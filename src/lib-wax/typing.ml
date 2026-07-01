@@ -1349,6 +1349,13 @@ let table_receiver ctx name =
   (not (StringMap.mem name.desc ctx.locals))
   && Tbl.find_opt ctx.tables name <> None
 
+(* Likewise for a data/element segment named by [seg.drop()] (and the segment
+   operand of [mem.init]/[tab.init]/array segment ops): usable as such only when
+   not shadowed by a local. *)
+let segment_receiver ctx name =
+  (not (StringMap.mem name.desc ctx.locals))
+  && (Tbl.find_opt ctx.datas name <> None || Tbl.find_opt ctx.elems name <> None)
+
 (* Check the operands of an integer (resp. float) binary operator and return
    the unified result-type cell — the two operand cells are merged on success,
    so the caller takes [typ1] as the operator's result type. *)
@@ -2042,10 +2049,13 @@ let rec check_hole_order_rec ctx i n =
       (* Casts in unreachable / failed code should be ignored: they are here to
          guide the translation but are not emitted. *)
       check_hole_order_rec ctx i n
-  | Get name when memory_receiver ctx name || table_receiver ctx name ->
-      (* A memory/table name — a method/index receiver ([mem.load(..)],
-         [tab[..]]) or a cross-mem/table [copy] source — is a static immediate,
-         not a stack value, so it never counts as occurring before a hole. *)
+  | Get name
+    when memory_receiver ctx name || table_receiver ctx name
+         || segment_receiver ctx name ->
+      (* A memory/table name (a method/index receiver [mem.load(..)], [tab[..]],
+         or a cross-mem/table [copy] source) or a data/element segment name (a
+         [seg.drop()] receiver or an [init] operand) is a static immediate, not a
+         stack value, so it never counts as occurring before a hole. *)
       n
   | _ when n <= 0 -> n
   | _ ->
@@ -5706,8 +5716,7 @@ and call_instruction ctx i =
            _;
          } as func),
         [] )
-    when Tbl.find_opt ctx.datas name <> None
-         || Tbl.find_opt ctx.elems name <> None ->
+    when segment_receiver ctx name ->
       let recv' = { desc = Get name; info = ([||], recv.info) } in
       return_statement i
         (Call ({ desc = StructGet (recv', meth); info = ([||], func.info) }, []))

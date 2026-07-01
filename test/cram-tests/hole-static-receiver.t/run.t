@@ -31,3 +31,32 @@ not be reported as "occurring before a hole".
 And it round-trips back to valid wasm:
 
   $ wax -i wat -f wax copy.wat -o copy.wax && wax -i wax -f wasm copy.wax -o /dev/null --validate
+
+A data/element segment operand is also a static immediate. `memory.init $m $d`
+decompiles to `m.init(d, _, s, n)`: the segment `d` is a name, the destination
+`_` is the hole, and `d` must not be reported as occurring before it:
+
+  $ cat > init.wat <<'WAT'
+  > (module
+  >   (memory $m 1)
+  >   (data $d "ab")
+  >   (func (export "f") (param $s i32) (param $n i32)
+  >     i32.const 0
+  >     (block (param i32)
+  >       local.get $s
+  >       local.get $n
+  >       memory.init $m $d)))
+  > WAT
+
+  $ wax -i wat -f wax init.wat
+  memory m: i32 [1];
+  data d = "ab";
+  #[export = "f"]
+  fn f(s: i32, n: i32) {
+      0;
+      do (i32) {
+          m.init(d, _, s, n);
+      }
+  }
+
+  $ wax -i wat -f wax init.wat -o init.wax && wax -i wax -f wasm init.wax -o /dev/null --validate
