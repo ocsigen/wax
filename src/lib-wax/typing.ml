@@ -910,55 +910,36 @@ let rec subtype ?location ctx ty ty' =
   | Collecting _, _ -> true
   | Valtype ty, Valtype ty' ->
       Wax_wasm.Types.val_subtype ctx.subtyping_info ty.internal ty'.internal
-  | Null, Null
-  | Int, Int
-  | Float, Float
-  | Number, Number
-  | (Int | Float | Valtype { internal = I32 | I64 | F32 | F64; _ }), Number
-  | Valtype { internal = I32 | I64; _ }, Int
-  | Valtype { internal = F32 | F64; _ }, Float ->
+  (* A flexible numeric literal ([Number]/[Int]/[LargeInt]/[Float]) never appears
+     as the expected (right-hand) type: an expected type comes from a declaration,
+     annotation or instruction signature — always a concrete valtype, or a
+     [Collecting] block result (handled above). This is the numeric counterpart of
+     the [Unknown]/[Error]/[UnknownRef] right-hand assertion below. *)
+  | _, (Number | Int | LargeInt | Float) -> assert false
+  | Null, Null ->
       Cell.merge ty ty' ity;
       true
   | Number, Valtype { internal = I32 | I64 | F32 | F64; _ }
   | Int, Valtype { internal = I32 | I64; _ }
   | Float, Valtype { internal = F32 | F64; _ }
+  (* LargeInt — a numeric literal too big for i32: never i32, defaults to i64; the
+     concrete types it accepts are i64, f32 and f64. *)
+  | LargeInt, Valtype { internal = I64 | F32 | F64; _ }
   | Null, Valtype { internal = Ref { nullable = true; _ }; _ } ->
       Cell.merge ty ty' ity';
       true
   | ( Null,
-      ( Number | Int | Float
-      | Valtype
-          {
-            internal =
-              I32 | I64 | F32 | F64 | V128 | Ref { nullable = false; _ };
-            _;
-          } ) )
+      Valtype
+        {
+          internal = I32 | I64 | F32 | F64 | V128 | Ref { nullable = false; _ };
+          _;
+        } )
   | Valtype _, Null
-  | Valtype { internal = V128 | Ref _; _ }, Number
-  | Valtype { internal = F32 | F64 | V128 | Ref _; _ }, Int
-  | Valtype { internal = I32 | I64 | V128 | Ref _; _ }, Float
-  | Number, (Null | Int | Float | Valtype { internal = V128 | Ref _; _ })
-  | Int, (Null | Float | Valtype { internal = F32 | F64 | V128 | Ref _; _ })
-  | Float, (Null | Int | Valtype { internal = I32 | I64 | V128 | Ref _; _ }) ->
+  | Number, (Null | Valtype { internal = V128 | Ref _; _ })
+  | Int, (Null | Valtype { internal = F32 | F64 | V128 | Ref _; _ })
+  | Float, (Null | Valtype { internal = I32 | I64 | V128 | Ref _; _ })
+  | LargeInt, (Null | Valtype _) ->
       false
-  (* LargeInt — a numeric literal too big for i32. It is a numeric literal like
-     [Number] (so it can be a float — an integer-valued f32/f64 constant), only
-     it can never be i32 and defaults to i64. Meeting it with Number or Int keeps
-     LargeInt; with Float it narrows to Float; the concrete types it accepts are
-     i64, f32 and f64. *)
-  | LargeInt, (LargeInt | Number | Int) | (Number | Int), LargeInt ->
-      Cell.merge ty ty' LargeInt;
-      true
-  | LargeInt, Float | Float, LargeInt ->
-      Cell.merge ty ty' Float;
-      true
-  | LargeInt, Valtype { internal = I64 | F32 | F64; _ } ->
-      Cell.merge ty ty' ity';
-      true
-  | Valtype { internal = I64 | F32 | F64; _ }, LargeInt ->
-      Cell.merge ty ty' ity;
-      true
-  | LargeInt, (Null | Valtype _) | (Null | Valtype _), LargeInt -> false
   | (Int8 | Int16), _ | _, (Int8 | Int16) -> false
   | (Unknown | Error), _ -> true
   | UnknownRef, (Valtype { internal = Ref _; _ } as t) ->

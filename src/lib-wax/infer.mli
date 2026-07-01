@@ -80,15 +80,15 @@ type inferred_type =
           16-bit. Defaults to i32. *)
   | Int
       (** An integer literal committed to the integer family (e.g. by a bitwise
-          or shift operator): narrows to i32 or i64, defaulting to i32. It can no
-          longer become a float by inference — only an explicit [as] cast, which
-          emits a conversion, does that. *)
+          or shift operator): narrows to i32 or i64, defaulting to i32. It can
+          no longer become a float by inference — only an explicit [as] cast,
+          which emits a conversion, does that. *)
   | LargeInt
       (** A numeric literal too large for i32: narrows to i64, f32 or f64 (never
           i32), defaulting to i64. Despite the name it is float-capable and so
           belongs to the [number] family, not [Int] — it is [Number] with i32
-          excluded by magnitude. Lets a decompiled out-of-range constant keep its
-          width instead of overflowing, and renders as [large number]. *)
+          excluded by magnitude. Lets a decompiled out-of-range constant keep
+          its width instead of overflowing, and renders as [large number]. *)
   | Float
       (** A floating-point literal: narrows to f32 or f64, defaulting to f64. *)
   | Valtype of inferred_valtype
