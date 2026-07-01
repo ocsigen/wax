@@ -3289,9 +3289,18 @@ and type_branch ctx i =
       let*! typ1, typ2 =
         match Cell.get typ' with
         | Valtype { typ = Ref ty'; _ } ->
+            (* The fall-through residual must be [diff(source, ty)] for the source
+               [to_wasm] emits — [lub(ty, operand)] — not the operand's own [ty'];
+               see the matching note in [Br_on_cast_fail]. A no-op when [ty <: ty']
+               (a plain cast), where the lub is [ty']. *)
             let*@ ty1 = val_lub ctx (Ref ty) (Ref ty') in
             let*@ typ1 = internalize ctx ty1 in
-            let+@ typ2 = internalize ctx (Ref (diff_ref_type ty' ty)) in
+            let+@ typ2 =
+              internalize ctx
+                (match ty1 with
+                | Ref lub -> Ref (diff_ref_type lub ty)
+                | _ -> Ref (diff_ref_type ty' ty))
+            in
             (typ1, typ2)
         (* A polymorphic operand (unreachable / branch code): [to_wasm] recovers the
            source type as the cast target [ty], so the fall-through is [ty \ ty]
@@ -3340,9 +3349,23 @@ and type_branch ctx i =
       let*! typ1, typ2 =
         match Cell.get typ' with
         | Valtype { typ = Ref ty'; _ } ->
+            (* [to_wasm] emits the source as [lub(ty, operand)] — widened so the
+               target [ty] is a subtype of it — and wasm then derives the branch
+               residual as [diff(source, ty)]. Type the residual from that same
+               [lub] source, not the operand's own [ty']: otherwise, when the
+               operand and target are unrelated (a chained cast whose source
+               widens to their common supertype), the residual the typer feeds
+               the label's join is narrower than the one the emitted instruction
+               delivers, and the block infers too narrow to accept it. When
+               [ty <: ty'] (a plain cast) the lub is [ty'] and this is unchanged. *)
             let*@ ty1 = val_lub ctx (Ref ty) (Ref ty') in
             let*@ typ1 = internalize ctx ty1 in
-            let+@ typ2 = internalize ctx (Ref (diff_ref_type ty' ty)) in
+            let+@ typ2 =
+              internalize ctx
+                (match ty1 with
+                | Ref lub -> Ref (diff_ref_type lub ty)
+                | _ -> Ref (diff_ref_type ty' ty))
+            in
             (typ1, typ2)
         (* A polymorphic operand: as for [br_on_cast] above, [to_wasm] recovers the
            source as the cast target [ty], so the residual sent to the branch is
