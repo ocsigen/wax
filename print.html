@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-45348e28.js";
+            window.path_to_searchindex_js = "searchindex-1019ba69.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -898,6 +898,12 @@ data) decompiles as an ordinary <a href="#arrays">array literal</a> instead.</p>
 <pre><code class="language-wax">memory mem0: i32 [1, 1000];     // address type i32, min 1 page, max 1000
 memory mem1: i64 [2];           // min 2 pages, no maximum
 memory mem2: i32;               // size derived from data segments
+</code></pre>
+<p>A memory may declare a custom page size with a <code>pagesize</code> clause after its
+limits. The page size is a byte count and must be <code>1</code> or <code>65536</code> (the default);
+limits are then counted in pages of that size:</p>
+<pre><code class="language-wax">memory small: i32 [4096] pagesize 1;      // 4096 pages of 1 byte
+memory mem3: i32 [1, 1000] pagesize 65536; // the default page size, explicit
 </code></pre>
 <h3 id="data-segments"><a class="header" href="#data-segments">Data Segments</a></h3>
 <pre><code class="language-wax">memory mem1: i64 {
@@ -2360,6 +2366,11 @@ memory mem2: i32;
 (memory $mem2 i32 ...)
 </code></pre>
 <p>When the limits are omitted, the minimum size is derived from the extent of the memory’s data segments (using their literal offsets).</p>
+<p>A custom page size is written with a <code>pagesize</code> clause after the limits, mapping to the WAT <code>(pagesize N)</code> form. The page size must be <code>1</code> or <code>65536</code> (the default), and the limits are counted in pages of that size:</p>
+<pre><code class="language-wax">memory small: i32 [4096] pagesize 1;
+</code></pre>
+<pre><code class="language-wat">(memory $small 4096 (pagesize 1))
+</code></pre>
 <p>Loads and stores use method-call syntax on the memory, with the value’s width in the method name and its signedness expressed by the surrounding <a href="#memory-access"><code>as iN_s</code>/<code>as iN_u</code> cast</a> — the same convention as packed array access:</p>
 <pre><code class="language-wax">let x: i32 = mem0.load32(p);
 let b: i32 = mem0.load8(p) as i32_u;
