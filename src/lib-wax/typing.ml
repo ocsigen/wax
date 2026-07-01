@@ -3246,7 +3246,7 @@ and type_arith ctx i =
                 | Valtype { internal = I64; _ }
                 | Valtype { internal = F32; _ }
                 | Valtype { internal = F64; _ }
-                | Number | Int | Float ->
+                | Number | Int | LargeInt | Float ->
                     ()
                 | _ -> mismatch ());
                 i32_cell
@@ -3256,7 +3256,7 @@ and type_arith ctx i =
                 | Valtype { internal = I64; _ }
                 | Valtype { internal = F32; _ }
                 | Valtype { internal = F64; _ }
-                | Number | Int | Float ->
+                | Number | Int | LargeInt | Float ->
                     ()
                 | _ -> mismatch ());
                 ty1
@@ -3267,7 +3267,7 @@ and type_arith ctx i =
                 (match typ with
                 | Valtype { internal = I32; _ }
                 | Valtype { internal = I64; _ }
-                | Int ->
+                | Int | LargeInt ->
                     ()
                 | Number -> Cell.set ty1 Int
                 | _ -> mismatch ());
