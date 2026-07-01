@@ -42,6 +42,7 @@ let reserved =
       "is";
       "let";
       "loop";
+      "match";
       "memory";
       "mut";
       "nan";
