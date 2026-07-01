@@ -292,6 +292,14 @@ module Error = struct
           "Type mismatch: the first type must be a supertype of the second one.")
       ()
 
+  let br_on_non_null_no_ref context ~location =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f
+          "Type mismatch: br_on_non_null requires the target label to end in a \
+           reference type, but it has no result types.")
+      ()
+
   let select_type_mismatch context ~location ~loc1 ~source1 ~loc2 ~source2 =
     (* Point a caret at each branch value (when its push site is known),
        labelled with its type. A placeholder location uses a negative column;
@@ -1938,10 +1946,17 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let to_branch push_ref =
         let* () = push_ref in
         let*! params, param_source = branch_target ctx idx in
-        let* () = pop_args ctx loc ~source:param_source params in
-        let* () = push_results ~source:param_source params in
-        let* _ = pop_any ctx loc in
-        return ()
+        (* [br_on_non_null] requires the target label to be [t* (ref ht)]: the
+           pushed non-null reference is consumed by that trailing type. An empty
+           label has no such type, so [pop_args] would silently accept it. *)
+        if Array.length params = 0 then (
+          Error.br_on_non_null_no_ref ctx.modul.diagnostics ~location:loc;
+          unreachable)
+        else
+          let* () = pop_args ctx loc ~source:param_source params in
+          let* () = push_results ~source:param_source params in
+          let* _ = pop_any ctx loc in
+          return ()
       in
       match ty with
       | Bot | Bot_ref -> to_branch (push_bot_ref None)
