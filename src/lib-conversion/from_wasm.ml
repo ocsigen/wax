@@ -195,6 +195,13 @@ module Sequence = struct
   (* A fresh, unique name in this sequence's namespace, for an entity not in the
      source (e.g. an element segment synthesised from an inline table init). *)
   let fresh_name seq = Ast.no_loc (Namespace.add seq.namespace seq.default)
+
+  (* Bind [name] at a specific [idx], for an entity materialised on demand
+     outside the normal registration order — an implicit (inline-signature) type
+     first referenced from a ref-type position (see [type_ref_name]). *)
+  let find_bound seq idx = Hashtbl.find_opt seq.index_mapping idx
+  let bind_at seq idx name = Hashtbl.replace seq.index_mapping idx name
+  let mint_name seq = Namespace.add seq.namespace seq.default
   let consume_currents seq = seq.current_index <- seq.last_index
 
   (* Consume an index slot without binding a name, for an entity rendered
@@ -335,6 +342,11 @@ type ctx = {
          are anonymous: they are rendered inline ([&fn(..)] / an inline [sign]),
          never as a named Wax type. Empty for modules with conditional
          annotations, where numeric references are forbidden anyway. *)
+  mutable named_implicit : (string * Src.functype) list;
+      (* Implicit function types that had to be given a name because they are
+         referenced from a ref-type position (where Wax has no inline
+         function-type form). Each is emitted as a [type <name> = fn(..)]
+         declaration; accumulated in reverse order of first use. *)
   function_types : Src.typeuse CondTbl.t;
   exports : (Src.exportable * string, (Cond.t * Src.name) list) Hashtbl.t;
       (* Standalone [(export …)] fields, keyed by the Wax name of their target,
@@ -386,6 +398,27 @@ let idx ctx kind i =
 
 let label ctx i = LabelStack.get ctx.labels i
 
+(* The Wax name for a concrete type reference [i] appearing in a ref-type. An
+   implicit (inline-signature) function type has no source name and is normally
+   rendered inline, but a ref-type position has no inline function-type form, so
+   such a type is given a name on first use and emitted as a [type] declaration
+   (see [named_implicit] / [extra_type_decls]). *)
+let type_ref_name ctx (i : Src.idx) =
+  match i.Ast.desc with
+  | Src.Num n when Hashtbl.mem ctx.implicit_types n ->
+      let name =
+        match Sequence.find_bound ctx.types n with
+        | Some name -> name
+        | None ->
+            let name = Sequence.mint_name ctx.types in
+            Sequence.bind_at ctx.types n name;
+            ctx.named_implicit <-
+              (name, Hashtbl.find ctx.implicit_types n) :: ctx.named_implicit;
+            name
+      in
+      { i with desc = name }
+  | _ -> idx ctx `Type i
+
 let heaptype st (t : Src.heaptype) : Ast.heaptype =
   match t with
   | Src.Func -> Ast.Func
@@ -402,8 +435,8 @@ let heaptype st (t : Src.heaptype) : Ast.heaptype =
   | Struct -> Struct
   | Array -> Array
   | None_ -> None_
-  | Type i -> Type (idx st `Type i)
-  | Exact i -> Exact (idx st `Type i)
+  | Type i -> Type (type_ref_name st i)
+  | Exact i -> Exact (type_ref_name st i)
 
 let reftype st (t : Src.reftype) : Ast.reftype =
   { nullable = t.nullable; typ = heaptype st t.typ }
@@ -2695,6 +2728,31 @@ let rec count_memories fields =
       | _ -> n)
     0 fields
 
+(* The [type <name> = fn(..)] declarations for implicit function types that were
+   named because a ref-type referenced them ([type_ref_name]). Converting a
+   signature can itself name further implicit types (a nested ref-type use), so
+   drain [named_implicit] to a fixpoint; a dependency named while converting an
+   earlier one is emitted before it. *)
+let extra_type_decls ctx =
+  let rec loop acc =
+    match ctx.named_implicit with
+    | [] -> acc
+    | pending ->
+        ctx.named_implicit <- [];
+        let decls =
+          List.rev_map
+            (fun (name, ft) ->
+              let name = Ast.no_loc name in
+              let sub : Ast.subtype =
+                { typ = Func (functype ctx ft); supertype = None; final = true }
+              in
+              Ast.no_loc (Ast.Type [| annotated name.Ast.info name sub |]))
+            pending
+        in
+        loop (decls @ acc)
+  in
+  loop []
+
 let module_ ?(strict_constants = false) diagnostics (_, fields) =
   Wax_utils.Debug.timed "convert" @@ fun () ->
   try
@@ -2729,6 +2787,7 @@ let module_ ?(strict_constants = false) diagnostics (_, fields) =
         referenced_elems = Hashtbl.create 16;
         type_defs = CondTbl.make ();
         implicit_types = Hashtbl.create 16;
+        named_implicit = [];
         function_types = CondTbl.make ();
         tag_types = CondTbl.make ();
         exports = Hashtbl.create 16;
@@ -2792,11 +2851,15 @@ let module_ ?(strict_constants = false) diagnostics (_, fields) =
       | _ -> ()
     in
     List.iter collect_field fields;
+    let converted =
+      List.concat_map (fun f -> modulefield ctx export_tbl f) fields
+    in
+    (* Prepend the type declarations synthesised for implicit types named by a
+       ref-type reference (computed after conversion, which is what names them). *)
+    let converted = extra_type_decls ctx @ converted in
     Recover_match.module_
       (Sink_let.module_
-         (Recover_loops.module_
-            (Recover_dispatch.module_
-               (List.concat_map (fun f -> modulefield ctx export_tbl f) fields))))
+         (Recover_loops.module_ (Recover_dispatch.module_ converted)))
   with
   | Numeric_ref_in_conditional location ->
       Wax_utils.Diagnostic.report diagnostics ~location ~severity:Error
