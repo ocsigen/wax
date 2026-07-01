@@ -743,12 +743,16 @@ let reference_comptype tc (idx : Ast.Text.idx) =
 let reference_functype tc idx =
   match reference_comptype tc idx with Func ft -> ft | _ -> assert false
 
-(* The source function type a [typeuse] denotes: its inline signature, or the
-   one named by its type reference. *)
+(* The source function type a [typeuse] denotes: the one named by its type
+   reference, or its inline signature. Resolve the reference in preference to the
+   inline signature, consistent with [typeuse] (which drives the corresponding
+   [return_types]); for valid input the two agree, and preferring one uniformly
+   keeps their arities in step when a malformed module gives both a [(type $i)]
+   and a disagreeing inline signature. *)
 let typeuse_functype tc (tu_idx, tu_sign) =
-  match (tu_sign, tu_idx) with
-  | Some ft, _ -> ft
-  | None, Some idx -> reference_functype tc idx
+  match (tu_idx, tu_sign) with
+  | Some idx, _ -> reference_functype tc idx
+  | None, Some ft -> ft
   | _ -> assert false
 
 (* Per-element source types for a source function type's params and results, to
