@@ -351,14 +351,6 @@ module Error = struct
   let expected_ref context ~location =
     report context ~location "A reference type is expected here."
 
-  let nonnull_on_null context ~location =
-    report context ~location
-      ~hint:(fun f () ->
-        Format.fprintf f "Give the null a reference type, e.g. %s."
-          "(null as &T)!")
-      "Cannot apply `!` to `null`: it has no reference type to assert non-null \
-       on (and the assertion would always trap)."
-
   let dispatch_duplicate_arm context ~location x =
     report context ~location "This dispatch has several cases named %a."
       print_name x
@@ -2932,17 +2924,15 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
                     internal = Ref { nullable = false; typ = ityp };
                     anon_comptype;
                   }))
-      | Unknown | UnknownRef ->
-          (* A reference recovered from a polymorphic value — dead/branch code,
-             or a value already known only as a reference: the non-null bottom
-             reference [UnknownRef], a subtype of every reference type (so it
-             satisfies any consumer). A bare [null] is rejected below: its heap
-             type is unknown and the assertion would always trap. *)
+      | Unknown | UnknownRef | Null ->
+          (* A reference recovered from a polymorphic value — dead/branch code, a
+             value already known only as a reference, or a bare [null]: the
+             non-null bottom reference [UnknownRef], a subtype of every reference
+             type (so it satisfies any consumer). [ref.as_non_null] of a null is
+             valid Wasm (it just always traps), so a bare [null] is accepted here
+             too — like [br_on_null] and [ref.is_null] on a bottom reference. *)
           return_expression i (NonNull i') (Cell.make UnknownRef)
       | Error -> return_expression i (NonNull i') (expression_type ctx i')
-      | Null ->
-          Error.nonnull_on_null ctx.diagnostics ~location:(snd i'.info);
-          return_expression i (NonNull i') (Cell.make Error)
       | _ ->
           Error.expected_ref ctx.diagnostics ~location:(snd i'.info);
           return_expression i (NonNull i') (Cell.make Error))
