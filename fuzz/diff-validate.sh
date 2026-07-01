@@ -29,7 +29,11 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 REF="${REF:-$HOME/sources/Wasm/interpreter/wasm}"
 COUNT="${1:-2000}"
 BYTES="${2:-2048}"
-JOBS="${JOBS:-$(nproc 2>/dev/null || echo 4)}"
+# The per-module oracle is latency-bound — smith + two reference-interpreter runs
+# + two wax forks, each mostly fork/exec/IO wait — so at one worker per core the
+# cores sit ~80% idle. Oversubscribe (like smith.sh); ~4x the core count is the
+# sweet spot, plateauing around 6x. Raise JOBS further on a roomy machine.
+JOBS="${JOBS:-$(( $(nproc 2>/dev/null || echo 4) * 4 ))}"
 KEEP="$ROOT/fuzz/diff-findings"
 mkdir -p "$KEEP"
 RESULTS="$(mktemp -d)"
@@ -37,16 +41,13 @@ trap 'rm -rf "$RESULTS"' EXIT
 
 # Reference-interpreter verdict on a binary: 0 = valid, non-zero = rejected.
 ref_validate() { "$REF" -d "$1" >/dev/null 2>&1; }
-export -f ref_validate
 
 # Run one module through the differential. Writes a finding line to $RESULTS/$i
 # and prints a progress byte (. ok, F finding, s could-not-generate, x ref-reject).
+# The temp files ($seed/$mod/$wax/$bin/$ERRLOG) belong to the calling worker and
+# are reused across its modules, so no per-module process is spawned to make them.
 diff_one() {
-  local i="$1" seed mod wax bin v ERRLOG
-  seed="$(mktemp)"; mod="$(mktemp --suffix=.wasm)"
-  wax="$(mktemp --suffix=.wax)"; bin="$(mktemp --suffix=.wasm)"
-  ERRLOG="$(mktemp)"   # per-worker; classify_wax writes the diagnostic here
-  trap 'rm -f "$seed" "$mod" "$wax" "$bin" "$ERRLOG"' RETURN
+  local i="$1" v
   head -c "$BYTES" /dev/urandom >"$seed"
   "$WASM_TOOLS" smith $SMITH_FLAGS "$seed" -o "$mod" 2>/dev/null || { printf 's' >&2; return 0; }
   # Only difference modules the reference accepts.
@@ -73,7 +74,6 @@ diff_one() {
   fi
   printf '.' >&2
 }
-export -f diff_one
 
 # Persist a failing module and record its finding line.
 save() {
@@ -81,12 +81,35 @@ save() {
   cp "$mod" "$keep"
   echo "FINDING	$msg	$keep" >"$RESULTS/$i"
 }
-export -f save
-export -f classify_wax   # defined in lib.sh; diff_one calls it in the xargs subshell
-export WAX WASM_TOOLS TIMEOUT SMITH_FLAGS REF BYTES KEEP RESULTS
+
+# One worker: allocate its temp files once, then run a contiguous range of module
+# indices through [diff_one], reusing those files. Batching the range into a
+# single shell (rather than [xargs -I{}] execing a fresh [bash] and five [mktemp]
+# per module) removes most of the per-module process-spawn overhead — the oracle
+# is spawn/latency-bound, not CPU-bound.
+diff_worker() {
+  local first="$1" last="$2" i
+  local seed mod wax bin ERRLOG
+  seed="$(mktemp)"; mod="$(mktemp --suffix=.wasm)"
+  wax="$(mktemp --suffix=.wax)"; bin="$(mktemp --suffix=.wasm)"
+  ERRLOG="$(mktemp)"   # classify_wax writes the diagnostic here
+  trap 'rm -f "$seed" "$mod" "$wax" "$bin" "$ERRLOG"' RETURN
+  for ((i = first; i <= last; i++)); do diff_one "$i"; done
+}
 
 rm -f "$KEEP"/*.wasm 2>/dev/null
-seq 1 "$COUNT" | xargs -P "$JOBS" -I{} bash -c 'diff_one "$@"' _ {}
+# Fan [COUNT] modules across [JOBS] background workers as contiguous ranges. Each
+# worker is a forked subshell of this script, so it inherits the functions and
+# variables directly — no [export]/[xargs] round-trip.
+chunk=$(((COUNT + JOBS - 1) / JOBS))
+for ((w = 0; w < JOBS; w++)); do
+  first=$((w * chunk + 1))
+  [ "$first" -gt "$COUNT" ] && break
+  last=$((first + chunk - 1))
+  [ "$last" -gt "$COUNT" ] && last="$COUNT"
+  diff_worker "$first" "$last" &
+done
+wait
 echo >&2
 
 echo "================= differential validation report ================="
