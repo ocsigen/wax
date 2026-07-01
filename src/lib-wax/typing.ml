@@ -5058,9 +5058,15 @@ and type_unary_intrinsic_call ctx i func recv meth =
        resolved the same way: the method alone fixes the int/float family, so it
        defaults to that family's natural width rather than failing to compile.
        [to_bits] needs a float receiver, so an integer-valued float constant
-       decompiled to a bare integer literal ([Number]/[Int]/[LargeInt]) coerces
-       to [f64] too (like the [LargeInt] coercion in a float binop). *)
-    | (Float | Number | Int | LargeInt | Unknown), "to_bits" ->
+       decompiled to a bare integer literal ([Number]/[LargeInt]) coerces to
+       [f64] too (like the [LargeInt] coercion in a float binop). A receiver
+       already committed to the integer family ([Int], e.g. the result of
+       [clz]/[extend8_s]) is *not* coerced: [to_bits] on an integer is
+       meaningless, and coercing its shared cell to [f64] would make the
+       integer-producing operation below it lower against an [f64] operand. It
+       falls through to the receiver-type error, mirroring [from_bits] rejecting
+       a [Float] receiver. *)
+    | (Float | Number | LargeInt | Unknown), "to_bits" ->
         Cell.set ty (Valtype f64_valtype);
         Some i64_cell
     | (Number | Int | Unknown), "from_bits" ->
