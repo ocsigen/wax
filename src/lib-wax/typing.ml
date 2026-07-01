@@ -1407,8 +1407,11 @@ let check_int_bin_op ctx ~location typ1 typ2 =
       Cell.merge typ1 typ2 (Cell.get typ1)
   | LargeInt, Valtype { internal = I64; _ } ->
       Cell.merge typ1 typ2 (Cell.get typ2)
+  (* An integer-only operator pins every [LargeInt] operand to i64: it exceeds
+     i32, and the result is a committed integer (never a float), so the pair takes
+     i64 rather than the still-float-capable [LargeInt]. *)
   | LargeInt, (LargeInt | Number | Int) | (Number | Int), LargeInt ->
-      Cell.merge typ1 typ2 LargeInt
+      Cell.merge typ1 typ2 (Valtype i64_valtype)
   (* A fully-flexible [Number] on the left pairs with a flexible [Int] (the
      symmetric [Int, Number] and [Number, Number] cases are above). *)
   | Number, Int -> Cell.merge typ1 typ2 Int
@@ -1454,9 +1457,13 @@ let check_num_concrete ctx ~location ty1 ty2 =
       Cell.merge ty1 ty2 (Cell.get ty2)
   | Valtype { internal = I64; _ }, LargeInt -> Cell.merge ty1 ty2 (Cell.get ty1)
   | LargeInt, Valtype { internal = I64; _ } -> Cell.merge ty1 ty2 (Cell.get ty2)
-  (* Two flexible literals: their most specific common type (the [Float, _],
-     [Int, _] and [LargeInt, Valtype] cases are above). *)
-  | LargeInt, (LargeInt | Int | Number) | (Int | Number), LargeInt ->
+  (* Two flexible literals (the [Float, _] and [LargeInt, Valtype] cases are
+     above). A [LargeInt] with a committed [Int] must be an integer — the [Int]
+     cannot be a float — and a [LargeInt] cannot be i32, so their sole common type
+     is i64; with another [LargeInt] or a fully-flexible [Number] it stays
+     [LargeInt] (the operator could still resolve to a float). *)
+  | LargeInt, Int | Int, LargeInt -> Cell.merge ty1 ty2 (Valtype i64_valtype)
+  | LargeInt, (LargeInt | Number) | Number, LargeInt ->
       Cell.merge ty1 ty2 LargeInt
   | LargeInt, Float -> Cell.merge ty1 ty2 Float
   | Number, Float -> Cell.merge ty1 ty2 Float
@@ -2464,13 +2471,19 @@ let join_value_types ctx ty1 ty2 =
       Cell.merge ty1 ty2 (Cell.get ty1);
       Some ty1
   (* A [LargeInt] (literal too big for i32) defaults to i64 and is also
-     convertible to a float. It joins with another flexible integer (staying
-     [LargeInt]) or with a concrete i64/f32/f64 or a flexible float (taking that
-     type), but never with i32. Mirrors [check_int_bin_op]/[check_float_bin_op]. *)
-  | LargeInt, (LargeInt | Int | Number) ->
+     convertible to a float. It joins with another [LargeInt] or a fully-flexible
+     [Number] staying [LargeInt] (i64/f32/f64), or with a concrete i64/f32/f64 or a
+     flexible float taking that type, but never with i32. A committed [Int], being
+     integer-only, has i64 as its sole common type with a [LargeInt] — pin it
+     there, so the join cannot later be coerced to a float the [Int] cannot be.
+     Mirrors [check_int_bin_op]/[check_num_concrete]. *)
+  | LargeInt, Int | Int, LargeInt ->
+      Cell.merge ty1 ty2 (Valtype i64_valtype);
+      Some ty1
+  | LargeInt, (LargeInt | Number) ->
       Cell.merge ty1 ty2 LargeInt;
       Some ty1
-  | (Int | Number), LargeInt ->
+  | Number, LargeInt ->
       Cell.merge ty1 ty2 LargeInt;
       Some ty2
   | LargeInt, (Float | Valtype { internal = I64 | F32 | F64; _ }) ->
