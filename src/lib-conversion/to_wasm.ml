@@ -241,7 +241,18 @@ let expr_last_opt_reftype i =
   if Array.length tys = 0 then None
   else
     match tys.(Array.length tys - 1) with
-    | Some t -> ( match unpack_type t with Ref r -> Some r | _ -> None)
+    | Some t -> (
+        match unpack_type t with
+        (* A bottom heap type ([none]/[nofunc]/… — the type wax gives a polymorphic
+           operand, e.g. a hole in dead code after a terminator) is a subtype of
+           every reference but a supertype of none, so it cannot serve as the
+           [br_on_cast] source type: the emitted [rt2 <: rt1] well-formedness check
+           would fail whenever the target [rt2] is in a different hierarchy. Report
+           "no determinable source" so the caller falls back to the cast target,
+           which is always a valid source ([rt2 <: rt2]). *)
+        | Ref { typ = None_ | NoFunc | NoExtern | NoExn | NoCont; _ } -> None
+        | Ref r -> Some r
+        | _ -> None)
     | None -> None
 
 let expr_type_name i =
