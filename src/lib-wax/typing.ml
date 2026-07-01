@@ -2042,6 +2042,11 @@ let rec check_hole_order_rec ctx i n =
       (* Casts in unreachable / failed code should be ignored: they are here to
          guide the translation but are not emitted. *)
       check_hole_order_rec ctx i n
+  | Get name when memory_receiver ctx name || table_receiver ctx name ->
+      (* A memory/table name — a method/index receiver ([mem.load(..)],
+         [tab[..]]) or a cross-mem/table [copy] source — is a static immediate,
+         not a stack value, so it never counts as occurring before a hole. *)
+      n
   | _ when n <= 0 -> n
   | _ ->
       let n =
