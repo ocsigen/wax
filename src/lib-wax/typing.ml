@@ -3048,8 +3048,19 @@ and type_branch ctx i =
         Array.iter2
           (fun ty param ->
             match Cell.get param with
-            | Collecting cs ->
-                cs.exacts <- (Some loc, Cell.make (Cell.get ty)) :: cs.exacts
+            | Collecting cs -> (
+                cs.exacts <- (Some loc, Cell.make (Cell.get ty)) :: cs.exacts;
+                (* When declared=None (the annotation was dropped, i.e. re-parse),
+                   the pass-through returns this same delivered cell below, so a
+                   downstream operation that pins its width (a cast, a select/binop
+                   join, a call argument) also pins this exit — re-inferring the
+                   block to a width the exact snapshot cannot predict. Only a still-
+                   flexible numeric literal is pinnable this way (a concrete value is
+                   demoted/converted, not re-typed); when one is delivered, the
+                   annotation may be load-bearing, so keep it. *)
+                match Cell.get ty with
+                | Number | Int | LargeInt | Float -> cs.needed <- true
+                | _ -> ())
             | _ -> ())
           types params;
       check_subtypes ctx ~location:loc types params;
@@ -3124,8 +3135,14 @@ and type_branch ctx i =
         Array.iter2
           (fun ty param ->
             match Cell.get param with
-            | Collecting cs ->
-                cs.exacts <- (Some loc, Cell.make (Cell.get ty)) :: cs.exacts
+            | Collecting cs -> (
+                cs.exacts <- (Some loc, Cell.make (Cell.get ty)) :: cs.exacts;
+                (* A flexible numeric pass-through can be pinned to a non-default
+                   width by a downstream op on re-parse; keep the annotation. See
+                   [br_if] above. *)
+                match Cell.get ty with
+                | Number | Int | LargeInt | Float -> cs.needed <- true
+                | _ -> ())
             | _ -> ())
           types params;
       check_subtypes ctx ~location:loc types params;
@@ -4973,12 +4990,13 @@ and type_unary_intrinsic_call ctx i func recv meth =
         if ty' = Number || ty' = Unknown then Cell.set ty Int
         else if ty' = LargeInt then Cell.set ty (Valtype i64_valtype);
         Some ty
-    | ( (( Number | Float | Unknown | LargeInt | Valtype { typ = F32 | F64; _ })
+    | ( ((Number | Float | Unknown | LargeInt | Valtype { typ = F32 | F64; _ })
          as ty'),
         ("abs" | "ceil" | "floor" | "trunc" | "nearest" | "sqrt") ) ->
         (* A [LargeInt] receiver is a float here (a float intrinsic), like a
            [Number]/[Unknown] one. *)
-        if ty' = Number || ty' = Unknown || ty' = LargeInt then Cell.set ty Float;
+        if ty' = Number || ty' = Unknown || ty' = LargeInt then
+          Cell.set ty Float;
         Some ty
     | Error, _ -> Some (Cell.make Error)
     | (Unknown | UnknownRef), _ ->
