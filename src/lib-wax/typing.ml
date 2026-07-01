@@ -2420,8 +2420,19 @@ let join_value_types ctx ty1 ty2 =
      another [UnknownRef] — which, being a supertype, wins; a bottom reference
      paired with a non-reference (e.g. [i32]) has no common type and falls
      through to a mismatch. *)
-  | _, (Unknown | Error) -> Some ty1
-  | (Unknown | Error), _ -> Some ty2
+  (* An [Unknown] value reaching a block's exit (a hole on the polymorphic stack of
+     dead code) genuinely takes the block's result type: pin it (merge), so a
+     branch that also passes it through — a [br_if]/[br_on_null] whose value is then
+     cast — sees the resolved width rather than staying [Unknown], which would make
+     [To_wasm] drop the cast. [Error] (already reported) stays the untouched bottom. *)
+  | _, Unknown ->
+      Cell.merge ty1 ty2 (Cell.get ty1);
+      Some ty1
+  | Unknown, _ ->
+      Cell.merge ty1 ty2 (Cell.get ty2);
+      Some ty2
+  | _, Error -> Some ty1
+  | Error, _ -> Some ty2
   | UnknownRef, UnknownRef ->
       (* Merge the two bottom references so pinning one (later, against a concrete
          type) pins the other too. *)
