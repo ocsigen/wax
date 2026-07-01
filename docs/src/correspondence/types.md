@@ -13,6 +13,31 @@ Wax types map directly to WebAssembly types.
 | `v128` | `v128` | 128-bit vector |
 | `(ref null <ht>)` | `&?<ht>` | Nullable reference to heap type `<ht>` |
 | `(ref <ht>)` | `&<ht>` | Non-nullable reference to heap type `<ht>` |
+| `(ref (exact <t>))` | `&!<t>` | Reference to *exactly* concrete type `<t>` |
+| `(ref null (exact <t>))` | `&?!<t>` | Nullable reference to exactly `<t>` |
+
+### Exact References
+
+An **exact** reference (from the
+[custom-descriptors proposal](https://github.com/WebAssembly/custom-descriptors))
+points to values of exactly one concrete type, with no subtypes. Wax writes the
+exactness marker `!` between the `&`/`&?` sigil and the type name, so it sits
+alongside the nullability `?`:
+
+```wax
+let a: &!point = ...;   // (ref (exact $point))
+let b: &?!point = ...;  // (ref null (exact $point))
+```
+
+Only a concrete (declared) type can be exact; `&!any` and other abstract heap
+types are rejected. An exact reference is a subtype of the corresponding inexact
+one (`&!point` flows where an `&point` is expected), but exactness is invariant
+among distinct concrete types.
+
+Because the `!` marker precedes the type name, it never clashes with the postfix
+[non-null assertion](instructions.md#reference-instructions) `!`: `x as &!point`
+is a cast to an exact reference, whereas `(x as &point)!` asserts the cast result
+is non-null.
 
 ## Storage Types
 

@@ -403,6 +403,7 @@ let heaptype st (t : Src.heaptype) : Ast.heaptype =
   | Array -> Array
   | None_ -> None_
   | Type i -> Type (idx st `Type i)
+  | Exact i -> Exact (idx st `Type i)
 
 let reftype st (t : Src.reftype) : Ast.reftype =
   { nullable = t.nullable; typ = heaptype st t.typ }

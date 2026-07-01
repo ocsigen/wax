@@ -88,10 +88,15 @@ module Encoder = struct
     | Cont -> byte b 0x68
     | NoCont -> byte b 0x75
     | Type idx -> sint b idx
+    (* [exact] uses a u32 index (not the s33 of [Type]), which makes an exact
+       abstract heap type unencodable. *)
+    | Exact idx ->
+        byte b 0x62;
+        uint b idx
 
   let reftype b (t : reftype) =
     match t with
-    | { nullable = true; typ = Type _ } ->
+    | { nullable = true; typ = Type _ | Exact _ } ->
         (* A nullable reference to a concrete type has no shorthand. *)
         byte b 0x63;
         heaptype b t.typ

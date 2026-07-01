@@ -22,6 +22,7 @@
 %token NOCONT
 %token EXTERN
 %token NOEXTERN
+%token EXACT
 %token ANYREF
 %token EQREF
 %token I31REF
@@ -371,6 +372,7 @@ heap_type:
 | NOCONT { NoCont }
 | EXTERN { Extern }
 | NOEXTERN { NoExtern }
+| "(" EXACT i = index ")" { Exact i }
 | i = index { Type i }
 
 reference_type:

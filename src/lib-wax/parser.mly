@@ -306,8 +306,17 @@ heap_type:
 | t = ident { try Hashtbl.find absheaptype_tbl t.desc with Not_found -> Type t }
 
 reference_type:
-| "&" nullable = boption("?") typ = heap_type
-  { { nullable; typ } }
+| "&" nullable = boption("?") exact = boption("!") typ = heap_type
+  { let typ =
+      if exact then
+        match (typ : heaptype) with
+        | Type t -> Exact t
+        | _ ->
+            raise (Wax_wasm.Parsing.Syntax_error
+                     ($sloc, "Only a concrete type can be exact.\n"))
+      else typ
+    in
+    { nullable; typ } }
 
 value_type:
 | t = IDENT

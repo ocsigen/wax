@@ -99,6 +99,7 @@ let heaptype ctx (h : T.heaptype) : B.heaptype =
   | Array -> Array
   | None_ -> None_
   | Type i -> Type (resolve_idx ctx.types i)
+  | Exact i -> Exact (resolve_idx ctx.types i)
 
 let reftype ctx (r : T.reftype) : B.reftype =
   { nullable = r.nullable; typ = heaptype ctx r.typ }

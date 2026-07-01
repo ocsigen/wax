@@ -195,7 +195,11 @@ let index ?(style = Identifier) x =
 let heaptype (ty : heaptype) =
   match heaptype_keyword ty with
   | Some kw -> type_ kw
-  | None -> ( match ty with Type t -> index t | _ -> assert false)
+  | None -> (
+      match ty with
+      | Type t -> index t
+      | Exact t -> list [ type_ "exact"; index t ]
+      | _ -> assert false)
 
 let reftype { nullable; typ } =
   match (nullable, typ) with

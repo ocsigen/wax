@@ -1,0 +1,16 @@
+type s = { f: i32 };
+
+#[export = "cast"]
+fn cast(x: &?s) -> &!s {
+    x as &!s;
+}
+
+#[export = "test"]
+fn test(x: &?!s) -> i32 {
+    x is &!s;
+}
+
+#[export = "widen"]
+fn widen(x: &!s) -> &s {
+    x;
+}

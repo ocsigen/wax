@@ -57,6 +57,7 @@ let rec heaptype type_names (h : B.heaptype) : T.heaptype =
   | Array -> Array
   | None_ -> None_
   | Type i -> Type (index ~map:type_names i)
+  | Exact i -> Exact (index ~map:type_names i)
 
 and reftype type_names (r : B.reftype) : T.reftype =
   { nullable = r.nullable; typ = heaptype type_names r.typ }

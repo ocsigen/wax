@@ -8,7 +8,11 @@ module RecTypeTbl = Hashtbl.Make (struct
     Hashtbl.hash_param 15 100 t
 
   let heaptype_eq t1 t2 =
-    t1 == t2 || match (t1, t2) with Type i1, Type i2 -> i1 = i2 | _ -> false
+    t1 == t2
+    ||
+    match (t1, t2) with
+    | Type i1, Type i2 | Exact i1, Exact i2 -> i1 = i2
+    | _ -> false
 
   let reftype_eq { nullable = n1; typ = t1 } { nullable = n2; typ = t2 } =
     n1 = n2 && heaptype_eq t1 t2
@@ -90,6 +94,7 @@ let subtyping_info t =
     | I31 | Struct | Array | None_ ->
         ty
     | Type i' -> Type (update_index i i')
+    | Exact i' -> Exact (update_index i i')
   in
   let update_valtype i (ty : valtype) =
     match ty with
@@ -157,39 +162,45 @@ let heap_subtype (subtyping_info : subtype array) (ty : heaptype)
   | (Array | None_), Array
   | None_, None_ ->
       true
-  | Type i, (Any | Eq) -> (
+  (* An [exact i] reference is a subtype of the same supertypes as [i] (via
+     [exact i <: i]), so on the left it follows the [Type i] rules. *)
+  | (Type i | Exact i), (Any | Eq) -> (
       match subtyping_info.(i).typ with
       | Struct _ | Array _ -> true
       | Func _ | Cont _ -> false)
-  | Type i, Struct -> (
+  | (Type i | Exact i), Struct -> (
       match subtyping_info.(i).typ with
       | Struct _ -> true
       | Array _ | Func _ | Cont _ -> false)
-  | Type i, Array -> (
+  | (Type i | Exact i), Array -> (
       match subtyping_info.(i).typ with
       | Array _ -> true
       | Struct _ | Func _ | Cont _ -> false)
-  | Type i, Func -> (
+  | (Type i | Exact i), Func -> (
       match subtyping_info.(i).typ with
       | Func _ -> true
       | Struct _ | Array _ | Cont _ -> false)
-  | Type i, Cont -> (
+  | (Type i | Exact i), Cont -> (
       match subtyping_info.(i).typ with
       | Cont _ -> true
       | Func _ | Struct _ | Array _ -> false)
-  | None_, Type i -> (
+  (* The bottom heap types are subtypes of the exact types too. *)
+  | None_, (Type i | Exact i) -> (
       match subtyping_info.(i).typ with
       | Struct _ | Array _ -> true
       | Func _ | Cont _ -> false)
-  | NoFunc, Type i -> (
+  | NoFunc, (Type i | Exact i) -> (
       match subtyping_info.(i).typ with
       | Func _ -> true
       | Struct _ | Array _ | Cont _ -> false)
-  | NoCont, Type i -> (
+  | NoCont, (Type i | Exact i) -> (
       match subtyping_info.(i).typ with
       | Cont _ -> true
       | Func _ | Struct _ | Array _ -> false)
+  | Exact i, Type i' -> subtype subtyping_info i i'
   | Type i, Type i' -> subtype subtyping_info i i'
+  (* [exact] is invariant among concrete types. *)
+  | Exact i, Exact i' -> i = i'
   | _ -> false
 
 let ref_subtype subtyping_info { nullable; typ }

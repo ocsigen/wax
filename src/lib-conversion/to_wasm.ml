@@ -57,6 +57,7 @@ let rec heaptype (h : heaptype) : Text.heaptype =
   | Array -> Array
   | None_ -> None_
   | Type idx -> Type (index idx)
+  | Exact idx -> Exact (index idx)
 
 and valtype ty : Text.valtype =
   match ty with

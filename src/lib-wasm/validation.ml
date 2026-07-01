@@ -38,7 +38,11 @@ let print_wrapped f s =
 let print_text_heaptype f (ty : Ast.Text.heaptype) =
   match Ast.Text.heaptype_keyword ty with
   | Some kw -> Format.pp_print_string f kw
-  | None -> ( match ty with Type idx -> print_index f idx | _ -> assert false)
+  | None -> (
+      match ty with
+      | Type idx -> print_index f idx
+      | Exact idx -> Format.fprintf f "@[<1>(exact@ %a)@]" print_index idx
+      | _ -> assert false)
 
 let print_text_valtype f (ty : Ast.Text.valtype) =
   match ty with
@@ -127,7 +131,7 @@ let source_of_heaptype (h : heaptype) : Ast.Text.heaptype =
   | Struct -> Struct
   | Array -> Array
   | None_ -> None_
-  | Type _ -> assert false
+  | Type _ | Exact _ -> assert false
 
 let source_of_valtype (ty : valtype) : source_type =
   Plain
@@ -827,6 +831,9 @@ let heaptype d ctx (h : Ast.Text.heaptype) : heaptype option =
   | Type idx ->
       let+@ ty = resolve_type_index d ctx idx in
       Type ty
+  | Exact idx ->
+      let+@ ty = resolve_type_index d ctx idx in
+      Exact ty
 
 let reftype d ctx { Ast.Text.nullable; typ } =
   let+@ typ = heaptype d ctx typ in
@@ -1486,7 +1493,7 @@ let top_heap_type ctx (t : heaptype) : heaptype =
   | Exn | NoExn -> Exn
   | Cont | NoCont -> Cont
   | Extern | NoExtern -> Extern
-  | Type ty -> (
+  | Type ty | Exact ty -> (
       match (Types.get_subtype ctx.modul.subtyping_info ty).typ with
       | Struct _ | Array _ -> Any
       | Func _ -> Func

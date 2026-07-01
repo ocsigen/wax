@@ -52,9 +52,10 @@ struct
     | Array
     | None_
     | Type of X.idx
+    | Exact of X.idx
 
   (* The keyword naming a heap type, shared by both printers; [None] for the
-     [Type] case, whose index each printer renders in its own way. *)
+     [Type] and [Exact] cases, whose index each printer renders in its own way. *)
   let heaptype_keyword (ty : heaptype) =
     match ty with
     | Func -> Some "func"
@@ -72,6 +73,7 @@ struct
     | Array -> Some "array"
     | None_ -> Some "none"
     | Type _ -> None
+    | Exact _ -> None
 
   type reftype = { nullable : bool; typ : heaptype }
   type valtype = I32 | I64 | F32 | F64 | V128 | Ref of reftype

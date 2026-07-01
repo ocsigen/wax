@@ -532,6 +532,9 @@ let heaptype d ctx (h : heaptype) : Internal.heaptype option =
   | Type idx ->
       let+@ ty = resolve_type_name d ctx idx in
       (Type ty : Internal.heaptype)
+  | Exact idx ->
+      let+@ ty = resolve_type_name d ctx idx in
+      (Exact ty : Internal.heaptype)
 
 let reftype d ctx { nullable; typ } =
   let+@ typ = heaptype d ctx typ in
@@ -816,7 +819,7 @@ let top_heap_type ctx (t : heaptype) : heaptype option =
   | Exn | NoExn -> Some Exn
   | Cont | NoCont -> Some Cont
   | Extern | NoExtern -> Some Extern
-  | Type ty -> (
+  | Type ty | Exact ty -> (
       let+@ ty = Tbl.find ctx.diagnostics ctx.types ty in
       match (snd ty).typ with
       | Struct _ | Array _ -> Any
@@ -828,7 +831,7 @@ let top_heap_type ctx (t : heaptype) : heaptype option =
 let is_cont_heaptype ctx (t : heaptype) =
   match t with
   | Cont | NoCont -> true
-  | Type ty -> (
+  | Type ty | Exact ty -> (
       match Tbl.find_opt ctx.types ty with
       | Some x -> ( match (snd x).typ with Cont _ -> true | _ -> false)
       | None -> false)
@@ -1065,7 +1068,7 @@ let cast ctx ty ty' =
           {
             typ =
               ( Func | NoFunc | Exn | NoExn | Cont | NoCont | Extern | NoExtern
-              | Any | Eq | Array | Struct | Type _ | None_ );
+              | Any | Eq | Array | Struct | Type _ | Exact _ | None_ );
             _;
           }
       | V128 ) )
@@ -1139,7 +1142,12 @@ let signed_cast ctx ty ty' =
       | Valtype
           {
             internal =
-              Ref { typ = Type _ | None_ | Struct | Array | I31 | Eq | Any; _ };
+              Ref
+                {
+                  typ =
+                    Type _ | Exact _ | None_ | Struct | Array | I31 | Eq | Any;
+                  _;
+                };
             _;
           } ),
       (`I64 | `F32 | `F64) )
@@ -2369,7 +2377,7 @@ let heaptype_top ctx (h : Ast.heaptype) : Ast.heaptype option =
   | Extern | NoExtern -> Some Extern
   | Exn | NoExn -> Some Exn
   | Cont | NoCont -> Some Cont
-  | Type id -> (
+  | Type id | Exact id -> (
       match Tbl.find_opt ctx.type_context.types id with
       | Some (_, s) -> (
           match s.typ with
@@ -2394,6 +2402,15 @@ let rec heap_lub ctx (h1 : Ast.heaptype) (h2 : Ast.heaptype) =
       Some h
   | h, b when is_bottom_heaptype b && heaptype_top ctx b = heaptype_top ctx h ->
       Some h
+  (* [exact] survives a lub only when both sides are the same exact type; any
+     generalization drops exactness (an [exact a]/[exact b] pair joins at their
+     common non-exact supertype). *)
+  | Exact id1, Exact id2 ->
+      let*@ i1, _ = Tbl.find_opt ctx.type_context.types id1 in
+      let*@ i2, _ = Tbl.find_opt ctx.type_context.types id2 in
+      if i1 = i2 then Some (Exact id1) else heap_lub ctx (Type id1) (Type id2)
+  | Exact id1, h -> heap_lub ctx (Type id1) h
+  | h, Exact id2 -> heap_lub ctx h (Type id2)
   | Type id1, Type id2 ->
       let*@ i1, s1 = Tbl.find_opt ctx.type_context.types id1 in
       let*@ i2, s2 = Tbl.find_opt ctx.type_context.types id2 in
@@ -2742,7 +2759,8 @@ let anon_function_type ctx (sign : functype) =
       | Struct -> "struct"
       | Array -> "array"
       | None_ -> "none"
-      | Type id -> "$" ^ id.desc)
+      | Type id -> "$" ^ id.desc
+      | Exact id -> "!$" ^ id.desc)
   in
   Buffer.add_string buf "<fn:";
   Array.iter

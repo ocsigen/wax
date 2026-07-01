@@ -216,6 +216,8 @@ let heaptype ch =
   | 0x69 -> Exn
   | 0x68 -> Cont
   | 0x75 -> NoCont
+  (* [exact x]: the index is a u32 that follows the 0x62 tag. *)
+  | 0x62 -> Exact (uint ch)
   | _ ->
       if i < 0 then error ch "unknown heap type %d" i;
       Type i

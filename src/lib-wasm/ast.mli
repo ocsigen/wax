@@ -55,6 +55,7 @@ end) : sig
     | Array
     | None_
     | Type of X.idx
+    | Exact of X.idx
 
   type reftype = { nullable : bool; typ : heaptype }
   type valtype = I32 | I64 | F32 | F64 | V128 | Ref of reftype

@@ -138,10 +138,17 @@ let print_arg_list f pp l =
 let heaptype pp (t : heaptype) =
   match heaptype_keyword t with
   | Some kw -> type_ pp kw
-  | None -> ( match t with Type s -> type_ pp s.desc | _ -> assert false)
+  | None -> (
+      match t with Type s | Exact s -> type_ pp s.desc | _ -> assert false)
 
 let reftype pp { nullable; typ } =
-  punctuation pp (if nullable then "&?" else "&");
+  (* The [!] exact marker sits between the [&]/[&?] sigil and the type name. *)
+  punctuation pp
+    (match (nullable, typ) with
+    | true, Exact _ -> "&?!"
+    | false, Exact _ -> "&!"
+    | true, _ -> "&?"
+    | false, _ -> "&");
   heaptype pp typ
 
 let rec valtype pp t =

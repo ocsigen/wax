@@ -200,6 +200,8 @@ types are always kept.
 | `i31.get_u` | `val as i32_u` |
 | `ref.cast` | `val as &type` |
 | `ref.test` | `val is &type` |
+| `ref.cast (ref (exact $t))` | `val as &!t` |
+| `ref.test (ref (exact $t))` | `val is &!t` |
 
 These casts can also chain through a forced intermediate, written as a single `as`:
 

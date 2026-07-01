@@ -273,6 +273,7 @@ let rec token_rec ctx lexbuf =
   | "nocont" -> NOCONT
   | "extern" -> EXTERN
   | "noextern" -> NOEXTERN
+  | "exact" -> EXACT
   | "anyref" -> ANYREF
   | "eqref" -> EQREF
   | "i31ref" -> I31REF
