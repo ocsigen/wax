@@ -975,16 +975,24 @@ let cast ctx ty ty' =
   | (Number | Int), Ref { typ = I31 | Extern; _ } ->
       Cell.set ty (Valtype i32_valtype);
       true
-  | (Number | Int), I32 | Int, F32 ->
+  | (Number | Int), I32 ->
       Cell.set ty (Valtype i32_valtype);
       true
-  | (Number | Int), I64 | Int, F64 ->
+  | (Number | Int), I64 ->
       Cell.set ty (Valtype i64_valtype);
       true
-  | (Number | Float), F32 | Float, I32 ->
+  (* A still-flexible numeric literal ([Number]) folds straight to the target
+     float constant. A value already committed to a family — [Int] (an integer
+     operation such as [x & y] or [clz]) or [Float] (a float operation, or a
+     float literal) — is *not* accepted here for the opposite family: a plain
+     [int <-> float] cast needs a signedness ([as f32_s], [as i32_u]) to lower to
+     a [convert]/[trunc], so it falls through to the cast error, exactly as a cast
+     of a concrete [i32]/[f32] value does. (An integer-to-float [convert] would
+     carry a sign, as [signed_cast].) *)
+  | (Number | Float), F32 ->
       Cell.set ty (Valtype f32_valtype);
       true
-  | (Number | Float), F64 | Float, I64 ->
+  | (Number | Float), F64 ->
       Cell.set ty (Valtype f64_valtype);
       true
   (* The literal is always i64 here since it is too big for i32. A cast to
@@ -994,9 +1002,10 @@ let cast ctx ty ty' =
       Cell.set ty (Valtype i64_valtype);
       true
   (* A cast to a float folds the literal to a float constant, exactly like a
-     small [Int] operand (an integer-to-float [convert] would carry a sign, as
-     [signed_cast]). Settle the operand at the target float type so [to_wasm]
-     emits [f32.const]/[f64.const] rather than an unlowerable [i64] value. *)
+     small [Number] literal above (a runtime integer-to-float [convert] would
+     carry a sign, as [signed_cast]). Settle the operand at the target float type
+     so [to_wasm] emits [f32.const]/[f64.const] rather than an unlowerable [i64]
+     value. *)
   | LargeInt, F32 ->
       Cell.set ty (Valtype f32_valtype);
       true
@@ -1063,6 +1072,11 @@ let cast ctx ty ty' =
   | Valtype { internal = F32 | F64; _ }, (I32 | I64)
   | Valtype { internal = I32 | I64; _ }, (F32 | F64)
   | Valtype { internal = I32; _ }, I64
+  (* A value committed to one numeric family cast to the other with a plain
+     (unsigned) cast: it needs a signedness to lower to a [convert]/[trunc], so
+     it is rejected here (a still-flexible [Number] literal folds above). *)
+  | Int, (F32 | F64)
+  | Float, I64
   | ( (Float | Valtype { internal = F32 | F64 | V128; _ }),
       (I32 | Ref { typ = I31; _ }) )
   | (Null | Valtype { internal = Ref _; _ }), (I32 | I64 | F32 | F64 | V128)
@@ -1116,7 +1130,10 @@ let signed_cast ctx ty ty' =
   | Int, `I32 (* no integer-to-i32 signed conversion exists *)
   | Valtype { internal = I32; _ }, `I32
   | Valtype { internal = I64; _ }, (`I32 | `I64)
-  | Valtype { internal = F32 | F64; _ }, (`F32 | `F64)
+  (* A signed cast to a float is an integer->float [convert]; float->float has no
+     signedness, so a float source (concrete or the abstract [Float]) is rejected
+     for a float target — only [demote]/[promote] via a plain cast. *)
+  | (Float | Valtype { internal = F32 | F64; _ }), (`F32 | `F64)
   | (Int8 | Int16), (`F32 | `F64)
   | ( ( Null
       | Valtype
@@ -1145,10 +1162,15 @@ let signed_cast ctx ty ty' =
      canonical f64 (like the concrete [F32 | F64] arms above) so a strict cast on
      it — e.g. [1.5 as i64_s_strict], the [i64.trunc_f64_s] a decompiled
      [f64.const] produces — type-checks instead of being rejected as float. *)
-  | Float, (`I32 | `I64 | `F32 | `F64) ->
+  | Float, (`I32 | `I64) ->
       Cell.set ty (Valtype f64_valtype);
       true
-  | (Unknown | Error | UnknownRef | Collecting _), _ -> true
+  (* A polymorphic reference (the bottom [UnknownRef], e.g. [null!] in dead code)
+     is a reference: a signed cast to [i32]/[i64] is [i31.get] (as for a concrete
+     any-hierarchy reference above), but it can never convert to a float. *)
+  | UnknownRef, (`I32 | `I64) -> true
+  | UnknownRef, (`F32 | `F64) -> false
+  | (Unknown | Error | Collecting _), _ -> true
 
 type stack =
   | Unreachable
