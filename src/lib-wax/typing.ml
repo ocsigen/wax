@@ -4745,30 +4745,34 @@ and type_unary_intrinsic_call ctx i func recv meth =
        cast [simplify] dropped) defaults like any other operation: [to_bits] on a
        [Float] is f64->i64, [from_bits] on an integer is i32->f32 (or i64->f64
        for a [LargeInt]). The non-default widths keep their cast (load-bearing),
-       so they reach the concrete arms above. *)
-    | Float, "to_bits" ->
+       so they reach the concrete arms above. A fully-polymorphic [Unknown]
+       receiver (a value taken off the polymorphic stack of unreachable code) is
+       resolved the same way: the method alone fixes the int/float family, so it
+       defaults to that family's natural width rather than failing to compile. *)
+    | (Float | Unknown), "to_bits" ->
         Cell.set ty (Valtype f64_valtype);
         Some i64_cell
-    | (Number | Int), "from_bits" ->
+    | (Number | Int | Unknown), "from_bits" ->
         Cell.set ty (Valtype i32_valtype);
         Some f32_cell
     | LargeInt, "from_bits" ->
         Cell.set ty (Valtype i64_valtype);
         Some f64_cell
-    | ( ((Number | Int | LargeInt | Valtype { typ = I32 | I64; _ }) as ty'),
+    | ( ((Number | Int | LargeInt | Unknown | Valtype { typ = I32 | I64; _ }) as
+         ty'),
         ("clz" | "ctz" | "popcnt" | "extend8_s" | "extend16_s") ) ->
-        if ty' = Number then Cell.set ty Int
+        if ty' = Number || ty' = Unknown then Cell.set ty Int
         else if ty' = LargeInt then Cell.set ty (Valtype i64_valtype);
         Some ty
-    | ( ((Number | Float | Valtype { typ = F32 | F64; _ }) as ty'),
+    | ( ((Number | Float | Unknown | Valtype { typ = F32 | F64; _ }) as ty'),
         ("abs" | "ceil" | "floor" | "trunc" | "nearest" | "sqrt") ) ->
-        if ty' = Number then Cell.set ty Float;
+        if ty' = Number || ty' = Unknown then Cell.set ty Float;
         Some ty
     | Error, _ -> Some (Cell.make Error)
     | (Unknown | UnknownRef), _ ->
-        (* The receiver's type is unknown (unreachable / branch code) or only a
-           reference (its method cannot be resolved), so the call cannot be
-           compiled. *)
+        (* The receiver is only a reference (its method cannot be resolved), or it
+           is [Unknown] with a method that fixes no numeric family, so the call
+           cannot be compiled. *)
         Error.unknown_operand_type ctx.diagnostics ~location:(snd recv'.info);
         Some (Cell.make Error)
     | _ ->
