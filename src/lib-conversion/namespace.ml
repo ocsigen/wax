@@ -47,6 +47,7 @@ let reserved =
       "nan";
       "nop";
       "null";
+      "pagesize";
       "open";
       "rec";
       "resume";

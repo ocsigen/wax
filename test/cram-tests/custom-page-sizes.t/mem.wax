@@ -1,0 +1,7 @@
+#[export = "small"]
+memory small: i32 [4096] pagesize 1;
+
+memory big: i32 [2, 4] pagesize 65536;
+
+#[export = "def"]
+memory def: i32 [1];

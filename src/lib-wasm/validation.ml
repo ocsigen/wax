@@ -453,6 +453,12 @@ module Error = struct
           (Uint64.to_int64 max))
       ()
 
+  let invalid_page_size context ~location =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f "The custom page size must be 1 or 65536.")
+      ()
+
   let limit_mismatch context ~location kind =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
@@ -2952,9 +2958,13 @@ let register_exports ctx lst =
       else Hashtbl.add ctx.exports name.desc ())
     lst
 
-let limits ctx kind { Ast.desc = { mi; ma; address_type }; info = location }
+let limits ctx kind
+    { Ast.desc = { mi; ma; address_type; page_size_log2 }; info = location }
     max_fn =
-  let max = max_fn address_type in
+  (match page_size_log2 with
+  | None | Some (0 | 16) -> ()
+  | Some _ -> Error.invalid_page_size ctx.diagnostics ~location);
+  let max = max_fn address_type page_size_log2 in
   match ma with
   | None ->
       if Uint64.compare mi max > 0 then
@@ -2965,11 +2975,28 @@ let limits ctx kind { Ast.desc = { mi; ma; address_type }; info = location }
       if Uint64.compare ma max > 0 then
         Error.limit_too_large ctx.diagnostics ~location kind max
 
-let max_memory_size = function
-  | `I32 -> Uint64.of_int 65536
-  | `I64 -> Uint64.of_string "0x1_0000_0000_0000"
+(* The maximum number of pages: [min(2^bits - 1, 2^(bits - p))] where [bits] is
+   32 (i32) or 64 (i64) and [2^p] is the page size (default 2^16). The byte span
+   gives the [2^(bits - p)] term; the [2^bits - 1] cap bounds the page index
+   itself (so e.g. a page size of 1 allows 2^32 - 1 pages, not 2^32). With the
+   default page size this is the familiar 65536 / 2^48 pages. *)
+let max_memory_size address_type page_size_log2 =
+  let p = match page_size_log2 with None -> 16 | Some p -> p in
+  let bits, index_max =
+    match address_type with
+    | `I32 -> (32, Uint64.of_string "0xffff_ffff")
+    | `I64 -> (64, Uint64.of_string "0xffff_ffff_ffff_ffff")
+  in
+  let e = bits - p in
+  let by_page =
+    if e >= 64 then index_max
+    else if e <= 0 then Uint64.zero
+    else Uint64.of_int64 (Int64.shift_left 1L e)
+  in
+  if Uint64.compare index_max by_page <= 0 then index_max else by_page
 
-let max_table_size = function
+let max_table_size address_type _page_size_log2 =
+  match address_type with
   | `I32 -> Uint64.of_string "0xffff_ffff"
   | `I64 -> Uint64.of_string "0xffff_ffff_ffff_ffff"
 

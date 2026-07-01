@@ -1827,12 +1827,19 @@ let module_ diagnostics types fields =
       (fun field ->
         match field.desc with
         | Group { fields = flds; _ } -> convert_fields flds
-        | Memory { name; address_type; limits; data; attributes } ->
+        | Memory
+            { name; address_type; limits; page_size_log2; data; attributes } ->
             let exports = exports attributes in
             let limits_value : Ast.limits =
               match limits with
-              | Some (mi, ma) -> { mi; ma; address_type }
-              | None -> { mi = derive_min_pages data; ma = None; address_type }
+              | Some (mi, ma) -> { mi; ma; address_type; page_size_log2 }
+              | None ->
+                  {
+                    mi = derive_min_pages data;
+                    ma = None;
+                    address_type;
+                    page_size_log2;
+                  }
             in
             let memory_field =
               match import attributes with
@@ -1906,7 +1913,8 @@ let module_ diagnostics types fields =
             in
             let typ : Text.tabletype =
               {
-                limits = Ast.no_loc { Ast.mi; ma; address_type };
+                limits =
+                  Ast.no_loc { Ast.mi; ma; address_type; page_size_log2 = None };
                 reftype = reftype rt;
               }
             in

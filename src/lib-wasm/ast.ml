@@ -22,6 +22,10 @@ type limits = {
   mi : Uint64.t;
   ma : Uint64.t option;
   address_type : [ `I32 | `I64 ];
+  (* Custom page size, as its base-2 logarithm, for a memory that declares one
+     ([None] is the default 65536-byte page, i.e. exponent 16). Always [None]
+     for a table. *)
+  page_size_log2 : int option;
 }
 
 module Make_types (X : sig
@@ -93,6 +97,7 @@ struct
     mi : Uint64.t;
     ma : Uint64.t option;
     address_type : [ `I32 | `I64 ];
+    page_size_log2 : int option;
   }
 
   type globaltype = valtype muttype

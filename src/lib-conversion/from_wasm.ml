@@ -2189,6 +2189,7 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
                    name;
                    address_type = l.address_type;
                    limits = Some (l.mi, l.ma);
+                   page_size_log2 = l.page_size_log2;
                    data = [];
                    attributes = import module_ nm :: exports ctx Memory name e;
                  })
@@ -2245,6 +2246,7 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
                name;
                address_type = l.address_type;
                limits = Some (l.mi, l.ma);
+               page_size_log2 = l.page_size_log2;
                data;
                attributes = exports ctx Memory name e;
              })

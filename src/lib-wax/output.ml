@@ -1352,7 +1352,8 @@ let rec modulefield pp field =
               space pp ();
               valtype pp typ;
               semicolon pp))
-  | Memory { name; address_type; limits; data; attributes = a } ->
+  | Memory { name; address_type; limits; page_size_log2; data; attributes = a }
+    ->
       print_attr_prefix pp a (fun () ->
           hvbox pp (fun () ->
               box pp (fun () ->
@@ -1375,7 +1376,14 @@ let rec modulefield pp field =
                           constant pp (Wax_utils.Uint64.to_string m))
                         ma;
                       punctuation pp "]")
-                    limits);
+                    limits;
+                  Option.iter
+                    (fun p ->
+                      space pp ();
+                      keyword pp "pagesize";
+                      space pp ();
+                      constant pp (Int64.to_string (Int64.shift_left 1L p)))
+                    page_size_log2);
               match data with
               | [] -> semicolon pp
               | _ ->

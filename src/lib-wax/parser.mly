@@ -77,7 +77,7 @@
 %token SUSPEND RESUME RESUME_THROW RESUME_THROW_REF SWITCH
 %token DISPATCH
 %token MATCH
-%token MEMORY DATA TABLE ELEM
+%token MEMORY DATA TABLE ELEM PAGESIZE
 
 %on_error_reduce statement plaininstr separated_nonempty_list_trailing(",",structure_type_field) list(module_field) separated_nonempty_list_trailing(",",value_type) block_type separated_nonempty_list_trailing(",",function_parameter) list(label) list(attribute) list(typedef) list(legacy_catch) separated_nonempty_list_trailing(",",catch) separated_nonempty_list_trailing(",",let_pattern) blockinstr statement_list loption(separated_nonempty_list_trailing(",",catch)) separated_nonempty_list_trailing(",",expression) let_pattern structure_field separated_nonempty_list_trailing(",",structure_field) constant_expression attribute_expression parenthesized_expression index_expression then_branch condition_expression length_expression optional_function_type structure_type result_type_ expression_list structure
 
@@ -203,6 +203,19 @@ let decl_sign loc t sign =
    Used for memory/table limits; a table64 bound may exceed [Int64.max_int],
    so parse across the full unsigned range. *)
 let u64_of_int_literal n = Wax_utils.Uint64.of_string n
+
+(* A custom page size is written [pagesize 65536] but stored as its base-2
+   logarithm, so require a power of two (the restriction to 1 or 65536 is a
+   type-checking concern). *)
+let page_size_log2 loc n =
+  let v = Wax_utils.Uint64.to_int (Wax_utils.Uint64.of_string n) in
+  if v > 0 && v land (v - 1) = 0 then
+    let rec exp x p = if x = 1 then p else exp (x lsr 1) (p + 1) in
+    exp v 0
+  else
+    raise
+      (Wax_wasm.Parsing.Syntax_error
+         (loc, "The page size must be a power of two.\n"))
 %}
 
 %start <location module_> parse
@@ -266,6 +279,7 @@ ident_or_keyword:
 | RESUME_THROW_REF { "resume_throw_ref" }
 | SWITCH { "switch" }
 | MEMORY { "memory" }
+| PAGESIZE { "pagesize" }
 | DATA { "data" }
 | TABLE { "table" }
 | ELEM { "elem" }
@@ -758,17 +772,23 @@ data_item:
 | DATA n = data_name "@" "[" off = constant_expression "]" "=" s = STRING ";"
   { { data_name = n; offset = off; init = s.desc } }
 
+mem_pagesize:
+| PAGESIZE n = INT { page_size_log2 $loc(n) n }
+
 memory:
-| MEMORY name = ident ":" at = address_type lim = ioption(mem_limits) ";"
+| MEMORY name = ident ":" at = address_type lim = ioption(mem_limits)
+  ps = ioption(mem_pagesize) ";"
   { fun attributes ->
       with_loc $sloc
-        (Memory {name; address_type = at; limits = lim; data = []; attributes}) }
+        (Memory {name; address_type = at; limits = lim; page_size_log2 = ps;
+                 data = []; attributes}) }
 | MEMORY name = ident ":" at = address_type lim = ioption(mem_limits)
-  "{" items = list(data_item) "}"
+  ps = ioption(mem_pagesize) "{" items = list(data_item) "}"
   { fun attributes ->
       with_loc $sloc
         (Memory
-           {name; address_type = at; limits = lim; data = items; attributes}) }
+           {name; address_type = at; limits = lim; page_size_log2 = ps;
+            data = items; attributes}) }
 
 data:
 | DATA n = data_name "=" s = STRING ";"

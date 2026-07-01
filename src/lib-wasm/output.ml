@@ -282,9 +282,20 @@ let blocktype =
 
 let address_type at = match at with `I32 -> [] | `I64 -> [ keyword "i64" ]
 
-let limits { Ast.desc = { mi; ma; address_type = at }; _ } =
+let limits { Ast.desc = { mi; ma; address_type = at; page_size_log2 }; _ } =
   address_type at
   @ (u64 ~style:Constant mi :: option (fun i -> [ u64 ~style:Constant i ]) ma)
+  @
+  match page_size_log2 with
+  | None -> []
+  | Some p ->
+      [
+        list
+          [
+            keyword "pagesize";
+            u64 ~style:Constant (Uint64.of_int64 (Int64.shift_left 1L p));
+          ];
+      ]
 
 let tabletype { limits = l; reftype = typ } = limits l @ [ reftype typ ]
 

@@ -244,6 +244,16 @@ Maps to:
 
 When the limits are omitted, the minimum size is derived from the extent of the memory's data segments (using their literal offsets).
 
+A custom page size is written with a `pagesize` clause after the limits, mapping to the WAT `(pagesize N)` form. The page size must be `1` or `65536` (the default), and the limits are counted in pages of that size:
+
+```wax
+memory small: i32 [4096] pagesize 1;
+```
+
+```wat
+(memory $small 4096 (pagesize 1))
+```
+
 Loads and stores use method-call syntax on the memory, with the value's width in the method name and its signedness expressed by the surrounding [`as iN_s`/`as iN_u` cast](instructions.md#memory-access) — the same convention as packed array access:
 
 ```wax

@@ -306,6 +306,9 @@ module Error = struct
     report context ~location
       "The %s maximum size should be larger than the minimal size." kind
 
+  let invalid_page_size context ~location =
+    report context ~location "The custom page size must be 1 or 65536."
+
   let duplicated_export context ~location name =
     report context ~location "There is already an export of name %S." name
 
@@ -2613,20 +2616,36 @@ let check_memarg ctx ~address_type ~natural ~align ~offset =
         | _ -> Error.bad_memory_align ctx.diagnostics ~location:(snd align.info)
       )
 
-let max_memory_size = function
-  | `I32 -> Wax_utils.Uint64.of_int 65536
-  | `I64 -> Wax_utils.Uint64.of_string "0x1_0000_0000_0000"
+(* [min(2^bits - 1, 2^(bits - p))]; mirrors [Validation.max_memory_size]. *)
+let max_memory_size address_type page_size_log2 =
+  let p = match page_size_log2 with None -> 16 | Some p -> p in
+  let bits, index_max =
+    match address_type with
+    | `I32 -> (32, Wax_utils.Uint64.of_string "0xffff_ffff")
+    | `I64 -> (64, Wax_utils.Uint64.of_string "0xffff_ffff_ffff_ffff")
+  in
+  let e = bits - p in
+  let by_page =
+    if e >= 64 then index_max
+    else if e <= 0 then Wax_utils.Uint64.zero
+    else Wax_utils.Uint64.of_int64 (Int64.shift_left 1L e)
+  in
+  if Wax_utils.Uint64.compare index_max by_page <= 0 then index_max else by_page
 
-let max_table_size = function
+let max_table_size address_type _page_size_log2 =
+  match address_type with
   | `I32 -> Wax_utils.Uint64.of_string "0xffff_ffff"
   | `I64 -> Wax_utils.Uint64.of_string "0xffff_ffff_ffff_ffff"
 
-(* Validate a memory/table size limit. Mirrors [Validation.limits]. *)
-let check_limits ctx ~location kind address_type limits max_fn =
+(* Validate a memory/table size limit and page size. Mirrors [Validation.limits]. *)
+let check_limits ctx ~location kind address_type page_size_log2 limits max_fn =
+  (match page_size_log2 with
+  | None | Some (0 | 16) -> ()
+  | Some _ -> Error.invalid_page_size ctx.diagnostics ~location);
   match limits with
   | None -> ()
   | Some (mi, ma) -> (
-      let max = max_fn address_type in
+      let max = max_fn address_type page_size_log2 in
       match ma with
       | None ->
           if Wax_utils.Uint64.compare mi max > 0 then
@@ -6942,8 +6961,8 @@ let rec globals ctx fields =
     (fun field ->
       match field.desc with
       | Memory ({ address_type; data; _ } as m) ->
-          check_limits ctx ~location:field.info "memory" address_type m.limits
-            max_memory_size;
+          check_limits ctx ~location:field.info "memory" address_type
+            m.page_size_log2 m.limits max_memory_size;
           let data =
             List.map
               (fun (d : _ Ast.memdata) ->
@@ -7009,8 +7028,8 @@ let rec globals ctx fields =
           in
           After { field with desc = Elem { e with mode; init } }
       | Table ({ reftype = rt; init; _ } as t) ->
-          check_limits ctx ~location:field.info "table" t.address_type t.limits
-            max_table_size;
+          check_limits ctx ~location:field.info "table" t.address_type None
+            t.limits max_table_size;
           (* Without an initializer the table is filled with the element type's
              default value, which a non-nullable reference does not have. *)
           if Option.is_none init && not rt.nullable then

@@ -306,6 +306,7 @@ let rec token_rec ctx lexbuf =
   | "declare" -> DECLARE
   | "item" -> ITEM
   | "memory" -> MEMORY
+  | "pagesize" -> PAGESIZE
   | "table" -> TABLE
   | "data" -> DATA
   | "offset" -> OFFSET

@@ -68,6 +68,7 @@ ZZZ
 %token DECLARE
 %token ITEM
 %token MEMORY
+%token PAGESIZE
 %token TABLE
 %token DATA
 %token OFFSET
@@ -244,6 +245,18 @@ let vec_load_width : vec_load_op -> Uint64.t = function
   | Load64Zero ->
       Uint64.of_int 8
   | Load32Zero -> Uint64.of_int 4
+
+(* A custom page size is written in WAT as its byte value [(pagesize 65536)] but
+   the format stores its base-2 logarithm, so require a power of two here (the
+   further restriction to 1 or 65536 is a validation check). *)
+let page_size_log2 loc (n : Uint32.t) =
+  let n = Uint32.to_int n in
+  if n > 0 && n land (n - 1) = 0 then
+    let rec exp v p = if v = 1 then p else exp (v lsr 1) (p + 1) in
+    exp n 0
+  else
+    raise
+      (Parsing.Syntax_error (loc, "The page size must be a power of two.\n"))
 
 let with_loc loc desc =
   Wax_utils.Trivia.with_pos Context.context {loc_start = fst loc; loc_end = snd loc} desc
@@ -475,15 +488,22 @@ address_type:
 | I64 { `I64 }
 
 limits:
-| mi = u64 { with_loc $sloc {mi; ma = None; address_type = `I32} }
-| mi = u64 ma = u64 { with_loc $sloc {mi; ma = Some ma; address_type = `I32} }
+| mi = u64
+  { with_loc $sloc {mi; ma = None; address_type = `I32; page_size_log2 = None} }
+| mi = u64 ma = u64
+  { with_loc $sloc {mi; ma = Some ma; address_type = `I32; page_size_log2 = None} }
 | at = address_type mi = u64
-  { with_loc $sloc {mi; ma = None; address_type = at} }
+  { with_loc $sloc {mi; ma = None; address_type = at; page_size_log2 = None} }
 | at = address_type mi = u64 ma = u64
-  { with_loc $sloc {mi; ma = Some ma; address_type = at} }
+  { with_loc $sloc {mi; ma = Some ma; address_type = at; page_size_log2 = None} }
+
+pagesize_clause:
+| "(" PAGESIZE p = u32 ")" { page_size_log2 $loc(p) p }
 
 memory_type:
 | l = limits { l }
+| l = limits ps = pagesize_clause
+  { { l with Ast.desc = { l.Ast.desc with page_size_log2 = Some ps } } }
 
 table_type:
 | l = limits t = reference_type { {limits = l; reftype = t} }
@@ -868,7 +888,7 @@ import:
 external_type:
 | "(" FUNC i = ID ? t = type_use ")"
     { (i, Func t) }
-| "(" MEMORY i = ID ? l = limits ")"
+| "(" MEMORY i = ID ? l = memory_type ")"
     { (i, (Memory l)) }
 | "(" TABLE i = ID ? t = table_type ")"
     { (i, (Table t)) }
@@ -906,12 +926,17 @@ memory:
 | "(" MEMORY id = ID? exports = exports limits = memory_type ")"
   { with_loc $sloc (Memory {id; limits; init = None; exports}) }
 | "(" MEMORY id = ID?
-  exports = exports at = ioption(address_type) "(" DATA s = data_string ")" ")"
+  exports = exports at = ioption(address_type) ps = ioption(pagesize_clause)
+  "(" DATA s = data_string ")" ")"
   { let address_type = Option.value ~default:`I32 at in
     let data_len =
       List.fold_left (fun len {Ast.desc; _} -> len + String.length desc) 0 s in
-    let sz = Uint64.of_int ((data_len + 65535) lsr 16) in
-    let limits = Ast.no_loc {mi = sz; ma = Some sz; address_type} in
+    (* Size in whole pages of the (custom or default) page size. *)
+    let page_bits = match ps with Some p -> p | None -> 16 in
+    let page_mask = (1 lsl page_bits) - 1 in
+    let sz = Uint64.of_int ((data_len + page_mask) lsr page_bits) in
+    let limits =
+      Ast.no_loc {mi = sz; ma = Some sz; address_type; page_size_log2 = ps} in
     with_loc $sloc (Memory {id; limits; init = Some s; exports}) }
 | "(" MEMORY id = ID ?
   exports = exports LPAREN_IMPORT module_ = name name = name ")" t = memory_type ")"
@@ -926,7 +951,8 @@ table:
   "(" ELEM elem = list(elemexpr) ")" ")"
   { let address_type = Option.value ~default:`I32 at in
     let len = Uint64.of_int (List.length elem) in
-    let limits = Ast.no_loc {mi=len; ma =Some len; address_type} in
+    let limits =
+      Ast.no_loc {mi=len; ma =Some len; address_type; page_size_log2 = None} in
     with_loc $sloc
       (Table {id; typ = {limits; reftype};
               init = Init_segment elem; exports}) }
@@ -936,7 +962,8 @@ table:
   { let address_type = Option.value ~default:`I32 at in
     let len = Uint64.of_int (List.length elem) in
     let elem = List.map (fun i -> [{i with Ast.desc = RefFunc i}]) elem in
-    let limits = Ast.no_loc {mi=len; ma =Some len; address_type} in
+    let limits =
+      Ast.no_loc {mi=len; ma =Some len; address_type; page_size_log2 = None} in
     with_loc $sloc
       (Table {id; typ = { limits; reftype };
               init = Init_segment elem; exports}) }

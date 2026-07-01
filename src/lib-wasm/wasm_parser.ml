@@ -327,15 +327,23 @@ let type_section ch =
   let n = uint ch in
   repeat n rectype ch
 
-let limits ch =
+let limits ?(page_size = false) ch =
   let kind = input_byte ch in
-  if kind >= 8 then error ch "malformed limits flags";
+  (* Bit 3 (a custom page size follows) is only valid for a memory. *)
+  if kind >= if page_size then 16 else 8 then error ch "malformed limits flags";
   let address_type = if kind land 4 = 0 then `I32 else `I64 in
   let mi = uint64 ch in
   let ma = if kind land 1 = 0 then None else Some (uint64 ch) in
-  { mi; ma; address_type }
+  let page_size_log2 =
+    if kind land 8 = 0 then None
+    else
+      let p = uint ch in
+      if p > 64 then error ch "malformed custom page size";
+      Some p
+  in
+  { mi; ma; address_type; page_size_log2 }
 
-let memtype ch = limits ch
+let memtype ch = limits ~page_size:true ch
 
 let tabletype ch =
   let reftype = reftype_first_byte ch in
@@ -1425,7 +1433,7 @@ let module_ diagnostics ?filename buf =
               { m with tables }
           | 5 ->
               (* Memory section *)
-              { m with memories = Array.to_list (vec limits ch) }
+              { m with memories = Array.to_list (vec memtype ch) }
           | 6 ->
               (* Global section *)
               let globals =

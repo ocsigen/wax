@@ -239,6 +239,7 @@ let rec token_rec ctx lexbuf =
   | "resume_throw_ref" -> RESUME_THROW_REF
   | "switch" -> SWITCH
   | "memory" -> MEMORY
+  | "pagesize" -> PAGESIZE
   | "data" -> DATA
   | "table" -> TABLE
   | "elem" -> ELEM

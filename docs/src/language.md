@@ -894,6 +894,15 @@ memory mem1: i64 [2];           // min 2 pages, no maximum
 memory mem2: i32;               // size derived from data segments
 ```
 
+A memory may declare a custom page size with a `pagesize` clause after its
+limits. The page size is a byte count and must be `1` or `65536` (the default);
+limits are then counted in pages of that size:
+
+```wax
+memory small: i32 [4096] pagesize 1;      // 4096 pages of 1 byte
+memory mem3: i32 [1, 1000] pagesize 65536; // the default page size, explicit
+```
+
 ### Data Segments
 
 ```wax
