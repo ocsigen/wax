@@ -2981,6 +2981,27 @@ and type_branch ctx i =
             let+@ typ2 = internalize ctx (Ref (diff_ref_type ty' ty)) in
             (typ1, typ2)
         | (Unknown | Error | UnknownRef) as ity -> Some (typ', Cell.make ity)
+        | Null ->
+            (* A bare [null] operand: the cast operand is [ty] made nullable (the
+               lub of a null and the cast target), and the fall-through is what is
+               left of the null after the cast — the residual of the bottom
+               nullable reference of [ty]'s hierarchy minus [ty]. (A cast never
+               crosses hierarchies, so the null belongs to [ty]'s; using that
+               hierarchy keeps the residual well defined for func/extern/exn
+               targets, not just [any].) *)
+            let*@ top = top_heap_type ctx ty.typ in
+            let bottom =
+              match top with
+              | Func -> NoFunc
+              | Extern -> NoExtern
+              | Exn -> NoExn
+              | Cont -> NoCont
+              | _ -> None_
+            in
+            let ty' = { nullable = true; typ = bottom } in
+            let*@ typ1 = internalize ctx (Ref { ty with nullable = true }) in
+            let+@ typ2 = internalize ctx (Ref (diff_ref_type ty' ty)) in
+            (typ1, typ2)
         | _ ->
             Error.expected_ref ctx.diagnostics ~location:(snd i'.info);
             None
