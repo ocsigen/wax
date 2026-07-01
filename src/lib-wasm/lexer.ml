@@ -274,6 +274,8 @@ let rec token_rec ctx lexbuf =
   | "extern" -> EXTERN
   | "noextern" -> NOEXTERN
   | "exact" -> EXACT
+  | "descriptor" -> LPAREN_DESCRIPTOR
+  | "describes" -> LPAREN_DESCRIBES
   | "anyref" -> ANYREF
   | "eqref" -> EQREF
   | "i31ref" -> I31REF
@@ -959,7 +961,8 @@ let token ctx =
       | ( None,
           ( LPAREN_CATCH_ALL_REF | LPAREN_CATCH_REF | LPAREN_EXPORT
           | LPAREN_IMPORT | LPAREN_LOCAL | LPAREN_PARAM | LPAREN_RESULT
-          | LPAREN_THEN | LPAREN_TYPE | LPAREN_ON ) ) ->
+          | LPAREN_THEN | LPAREN_TYPE | LPAREN_ON | LPAREN_DESCRIPTOR
+          | LPAREN_DESCRIBES ) ) ->
           raise
             (Parsing.Syntax_error
                ( Sedlexing.lexing_bytes_positions lexbuf,
@@ -978,7 +981,8 @@ let token ctx =
       | ( Some LPAREN,
           ( LPAREN_CATCH_ALL_REF | LPAREN_CATCH_REF | LPAREN_EXPORT
           | LPAREN_IMPORT | LPAREN_LOCAL | LPAREN_PARAM | LPAREN_RESULT
-          | LPAREN_THEN | LPAREN_TYPE | LPAREN_ON ) ) ->
+          | LPAREN_THEN | LPAREN_TYPE | LPAREN_ON | LPAREN_DESCRIPTOR
+          | LPAREN_DESCRIBES ) ) ->
           prev_token := None;
           t
       | Some t', _ ->

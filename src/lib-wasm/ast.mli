@@ -76,7 +76,14 @@ end) : sig
     | Array of fieldtype
     | Cont of X.idx
 
-  type subtype = { typ : comptype; supertype : X.idx option; final : bool }
+  type subtype = {
+    typ : comptype;
+    supertype : X.idx option;
+    final : bool;
+    descriptor : X.idx option;
+    describes : X.idx option;
+  }
+
   type rectype = subtype X.annotated_array
 
   type nonrec limits = limits = {

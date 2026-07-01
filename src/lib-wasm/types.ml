@@ -123,11 +123,13 @@ let subtyping_info t =
     List.map
       (fun (i, a) ->
         Array.map
-          (fun { typ; supertype; final } ->
+          (fun { typ; supertype; final; descriptor; describes } ->
             {
               typ = update_comptype i typ;
               supertype = Option.map (update_index i) supertype;
               final;
+              descriptor = Option.map (update_index i) descriptor;
+              describes = Option.map (update_index i) describes;
             })
           a)
       t.rev_list

@@ -315,15 +315,39 @@ let supertype ch =
       Some t
   | _ -> error ch "malformed sub type"
 
+(* The [describes]/[descriptor] clauses (custom-descriptors) wrap the composite
+   type, [0x4C x] (describes) outermost then [0x4D x] (descriptor); [b] is the
+   already-read leading byte. *)
+let described_comptype b ch =
+  (* Read the index before the next tag byte: a tuple would leave the order
+     unspecified (OCaml evaluates it right-to-left). *)
+  let describes, b =
+    if b = 0x4C then
+      let x = uint ch in
+      (Some x, input_byte ch)
+    else (None, b)
+  in
+  let descriptor, b =
+    if b = 0x4D then
+      let x = uint ch in
+      (Some x, input_byte ch)
+    else (None, b)
+  in
+  (describes, descriptor, comptype b ch)
+
 let subtype i ch =
   match i with
   | 0x50 ->
       let supertype = supertype ch in
-      { final = false; supertype; typ = comptype (input_byte ch) ch }
+      let describes, descriptor, typ = described_comptype (input_byte ch) ch in
+      { final = false; supertype; typ; descriptor; describes }
   | 0x4F ->
       let supertype = supertype ch in
-      { final = true; supertype; typ = comptype (input_byte ch) ch }
-  | _ -> { final = true; supertype = None; typ = comptype i ch }
+      let describes, descriptor, typ = described_comptype (input_byte ch) ch in
+      { final = true; supertype; typ; descriptor; describes }
+  | _ ->
+      let describes, descriptor, typ = described_comptype i ch in
+      { final = true; supertype = None; typ; descriptor; describes }
 
 let rectype ch =
   match input_byte ch with

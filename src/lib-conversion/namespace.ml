@@ -37,6 +37,8 @@ let reserved =
       "elem";
       "else";
       "fn";
+      "describes";
+      "descriptor";
       "inf";
       "if";
       "is";

@@ -106,6 +106,8 @@ let subtype (names : B.names) idx (s : B.subtype) : T.subtype =
     typ = comptype names idx s.typ;
     supertype = Option.map (index ~map:names.types) s.supertype;
     final = s.final;
+    descriptor = Option.map (index ~map:names.types) s.descriptor;
+    describes = Option.map (index ~map:names.types) s.describes;
   }
 
 let rectype (names : B.names) index r =

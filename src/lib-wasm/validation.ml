@@ -510,6 +510,38 @@ module Error = struct
           "This type is not a valid subtype of its declared supertype.")
       ()
 
+  let descriptor_outside_rec_group context ~location ~described =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f "The %s type must be in the same recursion group."
+          (if described then "described" else "descriptor"))
+      ()
+
+  let descriptor_not_reciprocal context ~location ~described =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        if described then
+          Format.fprintf f
+            "This descriptor does not describe the type it is attached to."
+        else
+          Format.fprintf f
+            "The descriptor of this type does not describe it back.")
+      ()
+
+  let forward_use_of_described context ~location =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f
+          "A described type must be declared before its descriptor.")
+      ()
+
+  let descriptor_not_struct context ~location ~described =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f "A %s type must be a struct type."
+          (if described then "described" else "descriptor"))
+      ()
+
   let not_function_type context ~location =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () -> Format.fprintf f "This should be a function type.")
@@ -913,9 +945,10 @@ let comptype d ctx (ty : Ast.Text.comptype) =
       let+@ ty = resolve_type_index d ctx idx in
       Cont ty
 
-let subtype d ctx current { Ast.Text.typ; supertype; final } =
+let subtype d ctx current
+    { Ast.Text.typ; supertype; final; descriptor; describes } =
   let*@ typ = comptype d ctx typ in
-  let+@ supertype =
+  let*@ supertype =
     match supertype with
     | None -> Some None
     | Some idx ->
@@ -935,7 +968,15 @@ let subtype d ctx current { Ast.Text.typ; supertype; final } =
            Error.unbound_index d ~location:idx.info "type" idx lst);
         Some i
   in
-  { typ; supertype; final }
+  let resolve_opt = function
+    | None -> Some None
+    | Some idx ->
+        let+@ i = resolve_type_index d ctx idx in
+        Some i
+  in
+  let*@ descriptor = resolve_opt descriptor in
+  let+@ describes = resolve_opt describes in
+  { typ; supertype; final; descriptor; describes }
 
 let rectype d ctx ty =
   array_mapi_opt (fun i e -> subtype d ctx i (snd e.Ast.desc)) ty
@@ -955,7 +996,15 @@ let typeuse d ctx (idx, sign) =
   | _, Some sign ->
       let+@ ty = functype d ctx sign in
       Types.add_rectype ctx.types
-        [| { typ = Func ty; supertype = None; final = true } |]
+        [|
+          {
+            typ = Func ty;
+            supertype = None;
+            final = true;
+            descriptor = None;
+            describes = None;
+          };
+        |]
   | None, None -> assert false (* Should not happen *)
 
 (* Intern the internal representation type of Wax strings — a mutable array of
@@ -967,6 +1016,8 @@ let string_type ctx =
         typ = Array { mut = true; typ = Packed I8 };
         supertype = None;
         final = true;
+        descriptor = None;
+        describes = None;
       };
     |]
 
@@ -2963,6 +3014,51 @@ let add_type d ctx ty =
             label)
         ty
   | Some ty' ->
+      (* Well-formedness of [descriptor] / [describes] clauses, which must link
+         two struct types within the same recursion group. In [ty'] an in-group
+         type reference is a negative placeholder [lnot pos]; a non-negative
+         index denotes an already-defined type, i.e. one outside this group. *)
+      let in_group idx = if idx < 0 then Some (lnot idx) else None in
+      Array.iteri
+        (fun i (sub : Ast.Binary.subtype) ->
+          let location = ty.(i).Ast.info in
+          (match sub.descriptor with
+          | None -> ()
+          | Some di -> (
+              match in_group di with
+              | None ->
+                  Error.descriptor_outside_rec_group d ~location
+                    ~described:false
+              | Some pos -> (
+                  (* This type is described by [ty'.(pos)]; that descriptor must
+                     describe this type back. *)
+                  match ty'.(pos).describes with
+                  | Some o when in_group o = Some i -> ()
+                  | _ ->
+                      Error.descriptor_not_reciprocal d ~location
+                        ~described:false)));
+          (match sub.describes with
+          | None -> ()
+          | Some oi -> (
+              match in_group oi with
+              | None ->
+                  Error.descriptor_outside_rec_group d ~location ~described:true
+              | Some pos -> (
+                  if pos >= i then Error.forward_use_of_described d ~location;
+                  (* This type is the descriptor of [ty'.(pos)], which must name
+                     this type as its descriptor. *)
+                  match ty'.(pos).descriptor with
+                  | Some dd when in_group dd = Some i -> ()
+                  | _ ->
+                      Error.descriptor_not_reciprocal d ~location
+                        ~described:true)));
+          if
+            (sub.descriptor <> None || sub.describes <> None)
+            && match sub.typ with Struct _ -> false | _ -> true
+          then
+            Error.descriptor_not_struct d ~location
+              ~described:(sub.describes <> None))
+        ty';
       let i' = Types.add_rectype ctx.types ty' in
       Array.iteri
         (fun i e ->
@@ -3119,7 +3215,15 @@ let collect_implicit_types d ctx fields =
     let before = Types.last_index ctx.types in
     let idx =
       Types.add_rectype ctx.types
-        [| { typ = Func ft; supertype = None; final = true } |]
+        [|
+          {
+            typ = Func ft;
+            supertype = None;
+            final = true;
+            descriptor = None;
+            describes = None;
+          };
+        |]
     in
     if Types.last_index ctx.types > before then (
       Hashtbl.replace ctx.index_mapping
@@ -3253,8 +3357,8 @@ let check_type_definitions ctx =
     let ty' = Types.get_subtype ctx.subtyping_info j in
     let invalid () = Error.invalid_subtype ctx.diagnostics ~location in
     if ty'.final then invalid ()
-    else
-      match (ty.typ, ty'.typ) with
+    else begin
+      (match (ty.typ, ty'.typ) with
       | Func { params; results }, Func { params = params'; results = results' }
         ->
           if
@@ -3286,7 +3390,27 @@ let check_type_definitions ctx =
       | Struct _, (Func _ | Array _ | Cont _)
       | Array _, (Func _ | Struct _ | Cont _)
       | Cont _, (Func _ | Struct _ | Array _) ->
-          Error.supertype_mismatch ctx.diagnostics ~location
+          Error.supertype_mismatch ctx.diagnostics ~location);
+      (* If the supertype has a descriptor, the subtype must too, and its
+         descriptor must be a subtype of the supertype's. (A subtype may add a
+         descriptor that its supertype lacks.) *)
+      (match ty'.descriptor with
+      | None -> ()
+      | Some dp -> (
+          match ty.descriptor with
+          | Some ds
+            when Types.heap_subtype ctx.subtyping_info (Type ds) (Type dp) ->
+              ()
+          | _ -> invalid ()));
+      (* A subtype has a described type iff its supertype does, and the
+         subtype's described type must be a subtype of the supertype's. *)
+      match (ty.describes, ty'.describes) with
+      | None, None -> ()
+      | Some os, Some op ->
+          if not (Types.heap_subtype ctx.subtyping_info (Type os) (Type op))
+          then invalid ()
+      | Some _, None | None, Some _ -> invalid ()
+    end
   done
 
 let tables_and_memories ctx fields =

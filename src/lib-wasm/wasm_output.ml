@@ -167,12 +167,26 @@ module Encoder = struct
         byte b 0x5D;
         heaptype b (Type idx)
 
+  (* [describes] ([0x4C]) then [descriptor] ([0x4D]) wrap the composite type. *)
+  let described_comptype b (t : subtype) =
+    (match t.describes with
+    | Some x ->
+        byte b 0x4C;
+        uint b x
+    | None -> ());
+    (match t.descriptor with
+    | Some x ->
+        byte b 0x4D;
+        uint b x
+    | None -> ());
+    comptype b t.typ
+
   let subtype b (t : subtype) =
-    if t.final && t.supertype = None then comptype b t.typ
+    if t.final && t.supertype = None then described_comptype b t
     else (
       byte b (if t.final then 0x4F else 0x50);
       vec uint b (match t.supertype with Some i -> [ i ] | None -> []);
-      comptype b t.typ)
+      described_comptype b t)
 
   let rectype b (t : rectype) =
     match t with

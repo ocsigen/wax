@@ -1705,7 +1705,13 @@ let subtype s : Text.subtype =
     | Array { mut; typ } -> Array { mut; typ = storagetype typ }
     | Cont idx -> Cont (index idx)
   in
-  { typ; supertype = Option.map index s.supertype; final = s.final }
+  {
+    typ;
+    supertype = Option.map index s.supertype;
+    final = s.final;
+    descriptor = Option.map index s.descriptor;
+    describes = Option.map index s.describes;
+  }
 
 let reorder_imports lst =
   (* Whether a field introduces an index-consuming definition that imports must

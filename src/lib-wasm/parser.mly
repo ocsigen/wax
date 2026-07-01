@@ -23,6 +23,8 @@
 %token EXTERN
 %token NOEXTERN
 %token EXACT
+%token LPAREN_DESCRIPTOR "(descriptor"
+%token LPAREN_DESCRIBES "(describes"
 %token ANYREF
 %token EQREF
 %token I31REF
@@ -474,11 +476,34 @@ typedef:
 | LPAREN_TYPE name = ID ? t = subtype ")"
  { with_loc $sloc (name, t) }
 
+(* custom-descriptors: optional [(describes $o)] then [(descriptor $d)] clauses
+   preceding the composite type. Inside [(sub …)] the (possibly empty) form is
+   fine — the clauses start with the glued [(describes]/[(descriptor] tokens,
+   distinct from the composite type's [(]. At the top level of a subtype an
+   empty prefix would clash with [(sub …)] on [(], so the non-empty form is
+   split out and the plain composite type kept as its own alternative. *)
+descriptor_clauses:
+| describes = ioption("(describes" o = index ")" { o })
+  descriptor = ioption("(descriptor" d = index ")" { d })
+  { (describes, descriptor) }
+
+descriptor_clauses_nonempty:
+| "(describes" o = index ")"
+  descriptor = ioption("(descriptor" d = index ")" { d })
+  { (Some o, descriptor) }
+| "(descriptor" d = index ")"
+  { (None, Some d) }
+
 subtype:
-| "(" SUB final = boption(FINAL) supertype = index ? typ = composite_type
-  ")"
-  { {final; supertype; typ} }
-| typ = composite_type { {final = true; supertype = None; typ } }
+| "(" SUB final = boption(FINAL) supertype = index ?
+  c = descriptor_clauses typ = composite_type ")"
+  { let (describes, descriptor) = c in
+    {final; supertype; typ; descriptor; describes} }
+| c = descriptor_clauses_nonempty typ = composite_type
+  { let (describes, descriptor) = c in
+    {final = true; supertype = None; typ; descriptor; describes} }
+| typ = composite_type
+  { {final = true; supertype = None; typ; descriptor = None; describes = None} }
 
 address_type:
 | I32 { `I32 }

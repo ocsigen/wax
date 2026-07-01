@@ -1100,10 +1100,17 @@ let instrs l =
   match l with [] -> [] | _ -> [ Vertical_block (None, List.map instr l) ]
 
 let subtype ?loc t =
-  let id, { typ; supertype; final } = t.Ast.desc in
+  let id, { typ; supertype; final; descriptor; describes } = t.Ast.desc in
   let loc = match loc with Some _ -> loc | None -> Some t.Ast.info in
+  (* [(describes $o)] / [(descriptor $d)] clauses precede the composite type. *)
+  let clauses =
+    option (fun i -> [ list [ keyword "describes"; index i ] ]) describes
+    @ option (fun i -> [ list [ keyword "descriptor"; index i ] ]) descriptor
+  in
   if final && Option.is_none supertype then
-    list ?loc [ block (keyword "type" :: opt_id id); block [ comptype typ ] ]
+    list ?loc
+      (block (keyword "type" :: opt_id id)
+      :: (clauses @ [ block [ comptype typ ] ]))
   else
     list ?loc
       [
@@ -1111,13 +1118,11 @@ let subtype ?loc t =
         list
           [
             block
-              [
-                block
-                  (keyword "sub"
-                  :: ((if final then [ keyword "final" ] else [])
-                     @ option (fun i -> [ index i ]) supertype));
-                comptype typ;
-              ];
+              (block
+                 (keyword "sub"
+                 :: ((if final then [ keyword "final" ] else [])
+                    @ option (fun i -> [ index i ]) supertype))
+              :: (clauses @ [ comptype typ ]));
           ];
       ]
 

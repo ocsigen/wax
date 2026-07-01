@@ -262,7 +262,7 @@ let comptype pp (t : comptype) =
       type_ pp s.desc
 
 let subtype pp field =
-  let nm, { typ; supertype; final } = field.desc in
+  let nm, { typ; supertype; final; descriptor; describes } = field.desc in
   atomic_node pp (Some field.info) @@ fun () ->
   hvbox pp (fun () ->
       let is_struct = match typ with Struct _ -> true | _ -> false in
@@ -281,6 +281,17 @@ let subtype pp field =
           if not final then (
             space pp ();
             keyword pp "open");
+          (* custom-descriptors clauses, between [open] and the body. *)
+          let clause kw = function
+            | Some (id : ident) ->
+                space pp ();
+                keyword pp kw;
+                space pp ();
+                identifier pp id.desc
+            | None -> ()
+          in
+          clause "describes" describes;
+          clause "descriptor" descriptor;
           if is_struct then (
             space pp ();
             punctuation pp "{"));

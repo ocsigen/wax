@@ -137,3 +137,38 @@ type point = { x: i32, y: i32 };                  // final by default
 type open_point = open { x: i32 };                // non-final: extensible
 type sub_point : open_point = { x: i32, y: i32 }; // extends open_point
 ```
+
+### Custom Descriptors
+
+The [custom-descriptors proposal](https://github.com/WebAssembly/custom-descriptors)
+lets a struct carry a *descriptor*: a second struct associated with it (used, for
+instance, to model a runtime type or vtable). The described type names its
+descriptor with a `descriptor <name>` clause, and the descriptor names what it
+describes with a `describes <name>` clause. Both clauses sit between the `open`
+marker and the struct body:
+
+```wax
+rec {
+  type obj = descriptor obj_desc { x: i32 };
+  type obj_desc = describes obj { };
+}
+```
+
+Maps to Wasm:
+
+```wat
+(rec
+  (type $obj (descriptor $obj_desc) (struct (field $x i32)))
+  (type $obj_desc (describes $obj) (struct)))
+```
+
+The two types must satisfy several well-formedness rules, all checked during
+validation:
+
+- both must be **structs**, declared in the **same `rec` group**;
+- the clauses must be **reciprocal** — if `obj` names `obj_desc` as its
+  descriptor, then `obj_desc` must describe `obj`;
+- a described type must be declared **before** its descriptor;
+- in a subtype hierarchy, if a supertype has a descriptor its subtypes must too
+  (with a descriptor that is itself a subtype), and a described type is inherited
+  covariantly.

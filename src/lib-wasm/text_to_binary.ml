@@ -137,6 +137,8 @@ let sub_type ctx (s : T.subtype) : B.subtype =
     typ = comp_type ctx s.typ;
     supertype = Option.map (resolve_idx ctx.types) s.supertype;
     final = s.final;
+    descriptor = Option.map (resolve_idx ctx.types) s.descriptor;
+    describes = Option.map (resolve_idx ctx.types) s.describes;
   }
 
 let rec_type ctx r = Array.map (fun e -> sub_type ctx (snd e.Ast.desc)) r
@@ -614,7 +616,7 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
               [|
                 {
                   Ast.desc =
-                    _, { final = true; supertype = None; typ = T.Func f };
+                    _, { final = true; supertype = None; typ = T.Func f; _ };
                   _;
                 };
               |];
@@ -635,6 +637,7 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
                         final = true;
                         supertype = None;
                         typ = T.Array { mut = true; typ = Packed I8 };
+                        _;
                       } );
                   _;
                 };
@@ -1070,7 +1073,16 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
   let types =
     explicit_types
     @ (List.rev !extra_types
-      |> List.map (fun typ -> [| { B.typ; supertype = None; final = true } |]))
+      |> List.map (fun typ ->
+          [|
+            {
+              B.typ;
+              supertype = None;
+              final = true;
+              descriptor = None;
+              describes = None;
+            };
+          |]))
   in
 
   {

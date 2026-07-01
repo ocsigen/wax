@@ -1,0 +1,4 @@
+rec {
+  type a = descriptor b fn();
+  type b = describes a { };
+}

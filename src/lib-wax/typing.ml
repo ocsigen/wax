@@ -193,6 +193,26 @@ module Error = struct
     report context ~location "This type is not a valid subtype of %a."
       print_name name
 
+  let descriptor_outside_rec_group context ~location ~described =
+    report context ~location "The %s type must be in the same recursion group."
+      (if described then "described" else "descriptor")
+
+  let descriptor_not_reciprocal context ~location ~described =
+    if described then
+      report context ~location
+        "This descriptor does not describe the type it is attached to."
+    else
+      report context ~location
+        "The descriptor of this type does not describe it back."
+
+  let forward_use_of_described context ~location =
+    report context ~location
+      "A described type must be declared before its descriptor."
+
+  let descriptor_not_struct context ~location ~described =
+    report context ~location "A %s type must be a struct type."
+      (if described then "described" else "descriptor")
+
   (* A secondary caret at [location] labelled with an inferred value type. Used
      to point at each branch of an [if]/select whose branches are in
      incompatible type hierarchies: there is no common supertype — and, unlike a
@@ -632,9 +652,9 @@ let comptype d ctx (ty : comptype) =
       let+@ ty = resolve_type_name d ctx idx in
       (Cont ty : Internal.comptype)
 
-let subtype d ctx current { typ; supertype; final } =
+let subtype d ctx current { typ; supertype; final; descriptor; describes } =
   let*@ typ = comptype d ctx typ in
-  let+@ supertype =
+  let*@ supertype =
     match supertype with
     | None -> Some None
     | Some sup ->
@@ -646,7 +666,17 @@ let subtype d ctx current { typ; supertype; final } =
           Error.unbound_name d ~location:sup.info "type" sup;
         Some ty
   in
-  { Internal.typ; supertype; final }
+  (* [descriptor]/[describes] may refer mutually within the rec group, so no
+     declared-before restriction applies. *)
+  let resolve_opt = function
+    | None -> Some None
+    | Some idx ->
+        let+@ ty = resolve_type_name d ctx idx in
+        Some ty
+  in
+  let*@ descriptor = resolve_opt descriptor in
+  let+@ describes = resolve_opt describes in
+  { Internal.typ; supertype; final; descriptor; describes }
 
 let rectype d ctx ty =
   array_mapi_opt (fun i elt -> subtype d ctx i (snd elt.desc)) ty
@@ -663,6 +693,47 @@ let add_type d ctx ty =
       Array.iter (fun elt -> Tbl.remove ctx.types (fst elt.desc)) ty;
       None
   | Some ity ->
+      (* Well-formedness of [descriptor]/[describes] clauses, which must link two
+         struct types within the same recursion group. In [ity] an in-group type
+         reference is a negative placeholder [lnot pos]; a non-negative index
+         denotes an already-defined type, i.e. one outside this group. *)
+      let in_group idx = if idx < 0 then Some (lnot idx) else None in
+      Array.iteri
+        (fun i (sub : Wax_wasm.Ast.Binary.subtype) ->
+          let location = ty.(i).info in
+          (match sub.descriptor with
+          | None -> ()
+          | Some di -> (
+              match in_group di with
+              | None ->
+                  Error.descriptor_outside_rec_group d ~location
+                    ~described:false
+              | Some pos -> (
+                  match ity.(pos).describes with
+                  | Some o when in_group o = Some i -> ()
+                  | _ ->
+                      Error.descriptor_not_reciprocal d ~location
+                        ~described:false)));
+          (match sub.describes with
+          | None -> ()
+          | Some oi -> (
+              match in_group oi with
+              | None ->
+                  Error.descriptor_outside_rec_group d ~location ~described:true
+              | Some pos -> (
+                  if pos >= i then Error.forward_use_of_described d ~location;
+                  match ity.(pos).descriptor with
+                  | Some dd when in_group dd = Some i -> ()
+                  | _ ->
+                      Error.descriptor_not_reciprocal d ~location
+                        ~described:true)));
+          if
+            (sub.descriptor <> None || sub.describes <> None)
+            && match sub.typ with Struct _ -> false | _ -> true
+          then
+            Error.descriptor_not_struct d ~location
+              ~described:(sub.describes <> None))
+        ity;
       let i' = Wax_wasm.Types.add_rectype ctx.internal_types ity in
       Array.iteri
         (fun i elt ->
@@ -2784,7 +2855,15 @@ let anon_function_type ctx (sign : functype) =
     ignore
       (add_type ctx.diagnostics ctx.type_context
          [|
-           Ast.no_loc (name, { supertype = None; typ = Func sign; final = true });
+           Ast.no_loc
+             ( name,
+               {
+                 supertype = None;
+                 typ = Func sign;
+                 final = true;
+                 descriptor = None;
+                 describes = None;
+               } );
          |]
         : int option);
   name
@@ -7007,7 +7086,30 @@ let check_type_definitions ctx =
               | Cont _, (Func _ | Struct _ | Array _) ->
                   false
             in
-            if not valid_subtype then
+            let descriptor_ok =
+              (* If the supertype has a descriptor, the subtype must too, and its
+                 descriptor must be a subtype of the supertype's. (A subtype may
+                 add a descriptor that its supertype lacks.) *)
+              match ty'.descriptor with
+              | None -> true
+              | Some dp -> (
+                  match ty.descriptor with
+                  | Some ds ->
+                      Wax_wasm.Types.heap_subtype ctx.subtyping_info (Type ds)
+                        (Type dp)
+                  | None -> false)
+            in
+            let describes_ok =
+              (* A subtype has a described type iff its supertype does, and the
+                 subtype's described type must be a subtype of the supertype's. *)
+              match (ty.describes, ty'.describes) with
+              | None, None -> true
+              | Some os, Some op ->
+                  Wax_wasm.Types.heap_subtype ctx.subtyping_info (Type os)
+                    (Type op)
+              | Some _, None | None, Some _ -> false
+            in
+            if not (valid_subtype && descriptor_ok && describes_ok) then
               Error.invalid_subtype ctx.diagnostics ~location sup)
 
 let rec check_constant_instruction ctx i =
@@ -7452,7 +7554,14 @@ let fundecl ctx name typ sign =
               add_type ctx.diagnostics ctx.type_context
                 [|
                   Ast.no_loc
-                    (name, { supertype = None; typ = Func sign; final = true });
+                    ( name,
+                      {
+                        supertype = None;
+                        typ = Func sign;
+                        final = true;
+                        descriptor = None;
+                        describes = None;
+                      } );
                 |]
             in
             (i, name.desc)
@@ -7711,6 +7820,8 @@ let type_configuration ?(warn_unused = false) ~simplify diagnostics fields =
               supertype = None;
               typ = Array { mut = true; typ = Packed I8 };
               final = true;
+              descriptor = None;
+              describes = None;
             } );
       |]
   in

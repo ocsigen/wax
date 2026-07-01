@@ -94,7 +94,17 @@ struct
     | Array of fieldtype
     | Cont of X.idx
 
-  type subtype = { typ : comptype; supertype : X.idx option; final : bool }
+  type subtype = {
+    typ : comptype;
+    supertype : X.idx option;
+    final : bool;
+    (* custom-descriptors: the type this struct's runtime descriptor has
+       ([(descriptor $d)]), and the type this struct is the descriptor of
+       ([(describes $o)]). A type may carry either, both, or neither. *)
+    descriptor : X.idx option;
+    describes : X.idx option;
+  }
+
   type rectype = subtype X.annotated_array
 
   type nonrec limits = limits = {

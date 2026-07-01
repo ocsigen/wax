@@ -241,6 +241,8 @@ let rec token_rec ctx lexbuf =
   | "memory" -> MEMORY
   | "pagesize" -> PAGESIZE
   | "shared" -> SHARED
+  | "descriptor" -> DESCRIPTOR
+  | "describes" -> DESCRIBES
   | "data" -> DATA
   | "table" -> TABLE
   | "elem" -> ELEM

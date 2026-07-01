@@ -78,6 +78,7 @@
 %token DISPATCH
 %token MATCH
 %token MEMORY DATA TABLE ELEM PAGESIZE SHARED
+%token DESCRIPTOR DESCRIBES
 
 %on_error_reduce statement plaininstr separated_nonempty_list_trailing(",",structure_type_field) list(module_field) separated_nonempty_list_trailing(",",value_type) block_type separated_nonempty_list_trailing(",",function_parameter) list(label) list(attribute) list(typedef) list(legacy_catch) separated_nonempty_list_trailing(",",catch) separated_nonempty_list_trailing(",",let_pattern) blockinstr statement_list loption(separated_nonempty_list_trailing(",",catch)) separated_nonempty_list_trailing(",",expression) let_pattern structure_field separated_nonempty_list_trailing(",",structure_field) constant_expression attribute_expression parenthesized_expression index_expression then_branch condition_expression length_expression optional_function_type structure_type result_type_ expression_list structure
 
@@ -293,6 +294,8 @@ ident_or_keyword:
 | ELEM { "elem" }
 | DISPATCH { "dispatch" }
 | MATCH { "match" }
+| DESCRIPTOR { "descriptor" }
+| DESCRIBES { "describes" }
 | INF { "inf" }
 | NAN { "nan" }
 
@@ -392,8 +395,12 @@ type_name:
 typedef:
 | TYPE name = type_name
   supertype = option(":" s = type_name { s })
-  "=" op = boption(OPEN) typ = composite_type ";"
-    { with_loc $sloc (name, {typ; supertype; final = not op}) }
+  "=" op = boption(OPEN)
+  describes = ioption(DESCRIBES o = type_name { o })
+  descriptor = ioption(DESCRIPTOR d = type_name { d })
+  typ = composite_type ";"
+    { with_loc $sloc
+        (name, {typ; supertype; final = not op; descriptor; describes}) }
 
 rectype:
 | REC "{" l = list(typedef) "}" { with_loc $loc($1) (Array.of_list l) }

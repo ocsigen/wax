@@ -519,6 +519,8 @@ let subtype st name (t : Src.subtype) : Ast.subtype =
     typ = comptype st name t.typ;
     supertype = Option.map (fun i -> idx st `Type i) t.supertype;
     final = t.final;
+    descriptor = Option.map (fun i -> idx st `Type i) t.descriptor;
+    describes = Option.map (fun i -> idx st `Type i) t.describes;
   }
 
 let rectype st (t : Src.rectype) : Ast.rectype =
@@ -2744,7 +2746,13 @@ let extra_type_decls ctx =
             (fun (name, ft) ->
               let name = Ast.no_loc name in
               let sub : Ast.subtype =
-                { typ = Func (functype ctx ft); supertype = None; final = true }
+                {
+                  typ = Func (functype ctx ft);
+                  supertype = None;
+                  final = true;
+                  descriptor = None;
+                  describes = None;
+                }
               in
               Ast.no_loc (Ast.Type [| annotated name.Ast.info name sub |]))
             pending
