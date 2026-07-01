@@ -147,6 +147,19 @@ const answer = 42;              // i32
 A global's initializer must be a constant expression (a literal, another
 global, or a simple reference-building expression).
 
+### Names and Scope
+
+Functions, globals, memories, and tables share one module-level namespace: a
+name must be distinct across all four — you cannot, say, declare both a memory
+and a global named `buf`. Types, tags, and data/element segments each have their
+own namespace, so those names may overlap with the above and with one another.
+
+A local variable is scoped to its function and takes precedence over module-level
+names. A bare name resolves to a local before a global or function, and the
+name-based module forms — `mem.load(..)`, `tab[i]`, `seg.drop()` — likewise defer
+to a same-named local. So a local that reuses a memory, table, or segment name
+shadows it; rename the local if you still need to reach the module entity.
+
 ## Expressions
 
 Wax is a readable layer over WebAssembly, and it keeps WebAssembly's execution
