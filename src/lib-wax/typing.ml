@@ -3282,25 +3282,18 @@ and type_branch ctx i =
             (typ', typ2)
         | Error -> Some (typ', Cell.make Error)
         | Null ->
-            (* A bare [null] operand: the cast operand is [ty] made nullable (the
-               lub of a null and the cast target), and the fall-through is what is
-               left of the null after the cast — the residual of the bottom
-               nullable reference of [ty]'s hierarchy minus [ty]. (A cast never
-               crosses hierarchies, so the null belongs to [ty]'s; using that
-               hierarchy keeps the residual well defined for func/extern/exn
-               targets, not just [any].) *)
-            let*@ top = top_heap_type ctx ty.typ in
-            let bottom =
-              match top with
-              | Func -> NoFunc
-              | Extern -> NoExtern
-              | Exn -> NoExn
-              | Cont -> NoCont
-              | _ -> None_
-            in
-            let ty' = { nullable = true; typ = bottom } in
-            let*@ typ1 = internalize ctx (Ref { ty with nullable = true }) in
-            let+@ typ2 = internalize ctx (Ref (diff_ref_type ty' ty)) in
+            (* A bare [null] operand carries no type wider than the cast target,
+               so [to_wasm] reconstructs the source as [ty] made nullable and
+               emits [br_on_cast (ref null H) ty]; the residual must be
+               [diff(source, ty)] to match what wasm validation derives from
+               those immediates. A null always matches a nullable [ty] and falls
+               through, so the residual is unreachable at runtime, but wasm types
+               it from the immediates, not the operand's nullness — typing it as
+               the [(ref none)] bottom instead would accept programs whose
+               emitted wasm the validator rejects. *)
+            let source = { ty with nullable = true } in
+            let*@ typ1 = internalize ctx (Ref source) in
+            let+@ typ2 = internalize ctx (Ref (diff_ref_type source ty)) in
             (typ1, typ2)
         | _ ->
             Error.expected_ref ctx.diagnostics ~location:(snd i'.info);
@@ -3339,21 +3332,14 @@ and type_branch ctx i =
             (typ', typ2)
         | Error -> Some (typ', Cell.make Error)
         | Null ->
-            (* A bare [null] operand, as in [br_on_cast] above: the operand is [ty]
-               made nullable, and the residual sent to the branch is the bottom
-               nullable reference of [ty]'s hierarchy minus [ty]. *)
-            let*@ top = top_heap_type ctx ty.typ in
-            let bottom =
-              match top with
-              | Func -> NoFunc
-              | Extern -> NoExtern
-              | Exn -> NoExn
-              | Cont -> NoCont
-              | _ -> None_
-            in
-            let ty' = { nullable = true; typ = bottom } in
-            let*@ typ1 = internalize ctx (Ref { ty with nullable = true }) in
-            let+@ typ2 = internalize ctx (Ref (diff_ref_type ty' ty)) in
+            (* A bare [null] operand, as in [br_on_cast] above: [to_wasm] emits
+               the source as [ty] made nullable, so the residual sent to the
+               branch is [diff(source, ty)] — mirroring wasm validation rather
+               than the narrower [(ref none)] bottom, which would let programs
+               through whose emitted wasm the validator rejects. *)
+            let source = { ty with nullable = true } in
+            let*@ typ1 = internalize ctx (Ref source) in
+            let+@ typ2 = internalize ctx (Ref (diff_ref_type source ty)) in
             (typ1, typ2)
         | _ ->
             Error.expected_ref ctx.diagnostics ~location:(snd i'.info);
