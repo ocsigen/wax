@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-1019ba69.js";
+            window.path_to_searchindex_js = "searchindex-28607277.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -812,6 +812,24 @@ limits are then counted in pages of that size:</p>
 <pre><code class="language-wax">memory small: i32 [4096] pagesize 1;      // 4096 pages of 1 byte
 memory mem3: i32 [1, 1000] pagesize 65536; // the default page size, explicit
 </code></pre>
+<p>A memory may be declared <code>shared</code> (the threads proposal), for use with atomic
+accesses across threads. A shared memory must specify a maximum size:</p>
+<pre><code class="language-wax">memory pool: i32 [1, 16] shared;
+</code></pre>
+<h3 id="atomics"><a class="header" href="#atomics">Atomics</a></h3>
+<p>Atomic memory operations are methods on a memory, named after the WebAssembly
+mnemonic with <code>.</code> rewritten as <code>_</code> (the value type is part of the name):</p>
+<pre><code class="language-wax">mem.i32_atomic_load(p)              // atomic load
+mem.i32_atomic_store(p, v);         // atomic store
+mem.i32_atomic_rmw_add(p, v)        // read-modify-write, returns the old value
+mem.i64_atomic_rmw16_add_u(p, v)    // narrow (16-bit) RMW on an i64
+mem.i32_atomic_rmw_cmpxchg(p, expected, replacement)
+mem.atomic_notify(p, count)         // wake waiters
+mem.atomic_wait32(p, expected, timeout)
+</code></pre>
+<p>An atomic access must use its natural alignment. <code>atomic.fence</code>, which has no
+memory operand, is written as the <a href="#qualified-intrinsics"><code>atomic::fence()</code></a>
+intrinsic.</p>
 <h3 id="data-segments"><a class="header" href="#data-segments">Data Segments</a></h3>
 <pre><code class="language-wax">memory mem1: i64 {
     data _ @ [0x1000] = "hello world";   // active, anonymous

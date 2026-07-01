@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-1019ba69.js";
+            window.path_to_searchindex_js = "../searchindex-28607277.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f031991a.js"></script>
@@ -333,6 +333,11 @@ memory mem2: i32;
 <pre><code class="language-wax">memory small: i32 [4096] pagesize 1;
 </code></pre>
 <pre><code class="language-wat">(memory $small 4096 (pagesize 1))
+</code></pre>
+<p>A <code>shared</code> clause (the threads proposal) marks the memory shared; it must have a maximum size:</p>
+<pre><code class="language-wax">memory pool: i32 [1, 16] shared;
+</code></pre>
+<pre><code class="language-wat">(memory $pool 1 16 shared)
 </code></pre>
 <p>Loads and stores use method-call syntax on the memory, with the value’s width in the method name and its signedness expressed by the surrounding <a href="instructions.html#memory-access"><code>as iN_s</code>/<code>as iN_u</code> cast</a> — the same convention as packed array access:</p>
 <pre><code class="language-wax">let x: i32 = mem0.load32(p);

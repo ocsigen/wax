@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-1019ba69.js";
+            window.path_to_searchindex_js = "../searchindex-28607277.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f031991a.js"></script>
@@ -484,6 +484,25 @@ m.load32(p, 1, 16);   // i32.load align=1 offset=16
 <tr><td><code>m.copy(m2, dest, src, len)</code></td><td><code>memory.copy m m2</code> (copy from <code>m2</code> into <code>m</code>)</td></tr>
 <tr><td><code>m.init(seg, dest, src, len)</code></td><td><code>memory.init seg</code></td></tr>
 <tr><td><code>seg.drop()</code></td><td><code>data.drop seg</code></td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="atomics"><a class="header" href="#atomics">Atomics</a></h3>
+<p>Atomic accesses (the threads proposal) are methods on a memory, named after the WebAssembly mnemonic with <code>.</code> rewritten as <code>_</code> (the value type stays in the name). They require exactly their natural alignment. <code>atomic.fence</code> has no memory operand and is the <a href="language.html#qualified-intrinsics"><code>atomic::fence()</code></a> intrinsic.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Wasm</th><th>Wax</th></tr>
+</thead>
+<tbody>
+<tr><td><code>i32.atomic.load</code></td><td><code>m.i32_atomic_load(p)</code></td></tr>
+<tr><td><code>i64.atomic.store8</code></td><td><code>m.i64_atomic_store8(p, v)</code></td></tr>
+<tr><td><code>i32.atomic.rmw.add</code></td><td><code>m.i32_atomic_rmw_add(p, v)</code></td></tr>
+<tr><td><code>i64.atomic.rmw16.add_u</code></td><td><code>m.i64_atomic_rmw16_add_u(p, v)</code></td></tr>
+<tr><td><code>i32.atomic.rmw.cmpxchg</code></td><td><code>m.i32_atomic_rmw_cmpxchg(p, expected, replacement)</code></td></tr>
+<tr><td><code>memory.atomic.notify</code></td><td><code>m.atomic_notify(p, count)</code></td></tr>
+<tr><td><code>memory.atomic.wait32</code></td><td><code>m.atomic_wait32(p, expected, timeout)</code></td></tr>
+<tr><td><code>atomic.fence</code></td><td><code>atomic::fence()</code></td></tr>
 </tbody>
 </table>
 </div>
