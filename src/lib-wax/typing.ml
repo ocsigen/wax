@@ -944,7 +944,12 @@ let rec subtype ?location ctx ty ty' =
   | LargeInt, (Null | Valtype _) | (Null | Valtype _), LargeInt -> false
   | (Int8 | Int16), _ | _, (Int8 | Int16) -> false
   | (Unknown | Error), _ -> true
-  | UnknownRef, Valtype { internal = Ref _; _ } -> true
+  | UnknownRef, (Valtype { internal = Ref _; _ } as t) ->
+      (* The bottom reference is a subtype of every reference; pin it to the
+         hierarchy it is checked against, so it resolves to a concrete type in
+         that hierarchy rather than the default any-hierarchy [&none]. *)
+      Cell.set ty t;
+      true
   | _, (Unknown | Error | UnknownRef) -> assert false
   | UnknownRef, _ -> false
 
@@ -2288,11 +2293,25 @@ let val_lub ctx v1 v2 =
    branches of an [if], etc.) when inferring the block's result type. *)
 let join_value_types ctx ty1 ty2 =
   match (Cell.get ty1, Cell.get ty2) with
-  (* [UnknownRef] (a bottom reference) joins like [Unknown]: the other side, a
-     subtype-bound it always satisfies, wins — including across reference
-     hierarchies, where a concrete [val_lub] with [&none] would wrongly fail. *)
-  | _, (Unknown | Error | UnknownRef) -> Some ty1
-  | (Unknown | Error | UnknownRef), _ -> Some ty2
+  (* [Unknown]/[Error] are the universal bottom: the other side wins (the lub of
+     [Unknown] and [UnknownRef] is the more informative [UnknownRef]). [UnknownRef]
+     (a bottom reference) joins with any other reference — concrete, [Null] or
+     another [UnknownRef] — which, being a supertype, wins; a bottom reference
+     paired with a non-reference (e.g. [i32]) has no common type and falls
+     through to a mismatch. *)
+  | _, (Unknown | Error) -> Some ty1
+  | (Unknown | Error), _ -> Some ty2
+  | UnknownRef, UnknownRef ->
+      (* Merge the two bottom references so pinning one (later, against a concrete
+         type) pins the other too. *)
+      Cell.merge ty1 ty2 UnknownRef;
+      Some ty1
+  | (Valtype { internal = Ref _; _ } | Null), UnknownRef ->
+      Cell.set ty2 (Cell.get ty1);
+      Some ty1
+  | UnknownRef, (Valtype { internal = Ref _; _ } | Null) ->
+      Cell.set ty1 (Cell.get ty2);
+      Some ty2
   | Null, Null -> Some ty1
   | Valtype { internal = I32; _ }, Valtype { internal = I32; _ }
   | Valtype { internal = I64; _ }, Valtype { internal = I64; _ }
@@ -2840,9 +2859,25 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
         let ty1 = expression_type ctx i2' in
         let ty2 = expression_type ctx i3' in
         match (Cell.get ty1, Cell.get ty2) with
-        (* A bottom reference reconciles like [Unknown]: the other side wins. *)
-        | _, (Unknown | Error | UnknownRef) -> Some ty1
-        | (Unknown | Error | UnknownRef), _ -> Some ty2
+        (* [Unknown]/[Error] are the universal bottom, so the other side wins
+           (the lub of [Unknown] and [UnknownRef] is the more informative
+           [UnknownRef]). [UnknownRef] (a bottom reference) joins with any other
+           reference — concrete, [Null] or another [UnknownRef] — which, being a
+           supertype, wins; a bottom reference paired with a non-reference (e.g.
+           [i32]) has no common type and falls through to a mismatch. *)
+        | _, (Unknown | Error) -> Some ty1
+        | (Unknown | Error), _ -> Some ty2
+        | UnknownRef, UnknownRef ->
+            (* Merge the two bottom references so pinning one (later, against a
+               concrete type) pins the other too. *)
+            Cell.merge ty1 ty2 UnknownRef;
+            Some ty1
+        | (Valtype { internal = Ref _; _ } | Null), UnknownRef ->
+            Cell.set ty2 (Cell.get ty1);
+            Some ty1
+        | UnknownRef, (Valtype { internal = Ref _; _ } | Null) ->
+            Cell.set ty1 (Cell.get ty2);
+            Some ty2
         | Valtype { internal = I32; _ }, Valtype { internal = I32; _ }
         | Valtype { internal = I64; _ }, Valtype { internal = I64; _ }
         | Valtype { internal = F32; _ }, Valtype { internal = F32; _ }
@@ -3340,6 +3375,8 @@ and type_arith ctx i =
                 | Valtype { internal = F64; _ }
                 | Number | Int | LargeInt | Float ->
                     ()
+                (* The bottom reference is [eqref], so [ref.eq] accepts it. *)
+                | UnknownRef -> ()
                 | _ -> mismatch ());
                 i32_cell
             | Add | Sub | Mul ->
@@ -3431,6 +3468,16 @@ and type_arith ctx i =
                 | LargeInt, Valtype { internal = I64; _ }
                 | (Number | Int), LargeInt ->
                     Cell.merge ty1 ty2 (Cell.get ty2)
+                (* [ref.eq] needs both operands [eqref]; the bottom reference
+                   [UnknownRef] always is, so only a concrete side is checked. *)
+                | Valtype { internal = Ref _ as ty; _ }, UnknownRef
+                | UnknownRef, Valtype { internal = Ref _ as ty; _ } ->
+                    if
+                      not
+                        (Wax_wasm.Types.val_subtype ctx.subtyping_info ty
+                           (Ref { nullable = true; typ = Eq }))
+                    then mismatch ()
+                | UnknownRef, (UnknownRef | Null) | Null, UnknownRef -> ()
                 | _ -> mismatch ());
                 i32_cell
             | Add | Sub | Mul ->

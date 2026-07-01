@@ -1,10 +1,9 @@
-A try_table catch clause branches to a label, so it references it. [refs_label]
-omitted the catch labels, so a catch branching back to an enclosing `if`'s label
-was not seen as a self-branch; if-result inference then ran and (under simplify)
-dropped the if's `=> f64` annotation, leaving the label with no result — and the
-catch, which delivers the tag's value to it, failed with "This instruction
-provides 1 value(s) but 0 was/were expected." Regression: differential-validation
-fuzzer.
+A try_table catch clause branching back to an enclosing `if`'s label used to
+confuse if-result inference: the label was left with no result, and the catch,
+which delivers the tag's value to it, failed with "This instruction provides 1
+value(s) but 0 was/were expected." With if-blocks inferred uniformly like the
+other block forms, the construct now round-trips (the result type lands on the
+`try`). Regression: differential-validation fuzzer.
 
   $ cat > c.wat <<'WAT'
   > (module
@@ -18,15 +17,15 @@ fuzzer.
   >         (else (unreachable))))))
   > WAT
 
-The catch is recognised as a use of 'l_2, so its `=> f64` is kept:
+The result type is recovered (on the `try`), so the catch's value has a target:
 
   $ wax -i wat -f wax c.wat
   tag e(f64);
   #[export = "f"]
   fn f(x: i32) {
       _ =
-          'l_2: if x => f64 {
-              try {
+          'l_2: if x {
+              try f64 {
                   1;
               } catch [ e -> 'l_2]
           } else {
