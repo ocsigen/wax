@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-72f00c9f.js";
+            window.path_to_searchindex_js = "searchindex-4af3d4d9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -273,6 +273,16 @@ initializer (an unconstrained integer literal defaults to <code>i32</code>):</p>
 </code></pre>
 <p>A global’s initializer must be a constant expression (a literal, another
 global, or a simple reference-building expression).</p>
+<h3 id="names-and-scope"><a class="header" href="#names-and-scope">Names and Scope</a></h3>
+<p>Functions, globals, memories, and tables share one module-level namespace: a
+name must be distinct across all four — you cannot, say, declare both a memory
+and a global named <code>buf</code>. Types, tags, and data/element segments each have their
+own namespace, so those names may overlap with the above and with one another.</p>
+<p>A local variable is scoped to its function and takes precedence over module-level
+names. A bare name resolves to a local before a global or function, and the
+name-based module forms — <code>mem.load(..)</code>, <code>tab[i]</code>, <code>seg.drop()</code> — likewise defer
+to a same-named local. So a local that reuses a memory, table, or segment name
+shadows it; rename the local if you still need to reach the module entity.</p>
 <h2 id="expressions"><a class="header" href="#expressions">Expressions</a></h2>
 <p>Wax is a readable layer over WebAssembly, and it keeps WebAssembly’s execution
 model: the <strong>operand stack</strong>. A function or block body is a sequence of
