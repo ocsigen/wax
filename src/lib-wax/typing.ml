@@ -988,11 +988,21 @@ let cast ctx ty ty' =
   | (Number | Float), F64 | Float, I64 ->
       Cell.set ty (Valtype f64_valtype);
       true
-  (* The literal is always i64 here since it is too big for i32. A cast to a
-     float converts from that integer; a cast to [i32] wraps it (the low 32
-     bits), as produced when decompiling e.g. [i64.extend32_s] of a constant. *)
-  | LargeInt, (I32 | I64 | F32 | F64) ->
+  (* The literal is always i64 here since it is too big for i32. A cast to
+     [i32] wraps it (the low 32 bits), as produced when decompiling e.g.
+     [i64.extend32_s] of a constant; a cast to [i64] is the identity. *)
+  | LargeInt, (I32 | I64) ->
       Cell.set ty (Valtype i64_valtype);
+      true
+  (* A cast to a float folds the literal to a float constant, exactly like a
+     small [Int] operand (an integer-to-float [convert] would carry a sign, as
+     [signed_cast]). Settle the operand at the target float type so [to_wasm]
+     emits [f32.const]/[f64.const] rather than an unlowerable [i64] value. *)
+  | LargeInt, F32 ->
+      Cell.set ty (Valtype f32_valtype);
+      true
+  | LargeInt, F64 ->
+      Cell.set ty (Valtype f64_valtype);
       true
   (* [ref.i31] takes an [i32]; the i64-sized literal wraps to [i32] first, exactly
      like [i64 as &i31] below ([to_wasm] re-emits [i32.wrap_i64] then [ref.i31]).
