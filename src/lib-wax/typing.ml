@@ -4387,7 +4387,10 @@ and type_mem_method_call ctx i func recv memname meth args =
             | _ -> (
                 match Cell.get vty with
                 | Valtype { internal = I32 | I64; _ }
-                | Int | Number | Unknown | Error ->
+                | Int | Number | LargeInt | Unknown | Error ->
+                    (* A narrowing store ([store8]/[store16]/[store32]) wraps, so
+                       it also accepts an i64-wide value, including a [LargeInt]
+                       literal too big for i32. *)
                     ()
                 | _ ->
                     Error.instruction_type_mismatch ctx.diagnostics
