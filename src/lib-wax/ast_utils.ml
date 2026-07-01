@@ -41,8 +41,8 @@ let rec map_instr f instr =
                 catches;
             catch_all = Option.map (List.map (map_instr f)) catch_all;
           }
-    | ( Unreachable | Nop | Hole | Null | Get _ | Char _ | String _ | Int _
-      | Float _ | StructDefault _ ) as x ->
+    | ( Unreachable | Nop | Hole | Null | Get _ | Path _ | Char _ | String _
+      | Int _ | Float _ | StructDefault _ ) as x ->
         x
     | Set (idx, v) -> Set (idx, map_instr f v)
     | Tee (idx, v) -> Tee (idx, map_instr f v)

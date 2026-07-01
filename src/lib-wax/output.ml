@@ -483,7 +483,7 @@ let get_prec (i : _ Ast.instr) =
   | Block _ | Loop _ | While _ | If _ | Try _ | TryTable _ | If_annotation _
   | Dispatch _ | Match _ ->
       Atom
-  | Unreachable | Nop | Hole | Null | Get _ | Char _ | String _ | Int _
+  | Unreachable | Nop | Hole | Null | Get _ | Path _ | Char _ | String _ | Int _
   | Float _ | Struct _ | StructDefault _ | Array _ | ArrayDefault _
   | ArrayFixed _ | ArraySegment _ | ArrayGet _ | ArraySet _ | Sequence _ ->
       Atom
@@ -510,7 +510,7 @@ let is_block (i : _ Ast.instr) =
   | Block _ | Loop _ | While _ | If _ | Try _ | TryTable _ | If_annotation _
   | Dispatch _ | Match _ ->
       true
-  | Call _ | Unreachable | Nop | Hole | Null | Get _ | Set _ | Tee _
+  | Call _ | Unreachable | Nop | Hole | Null | Get _ | Path _ | Set _ | Tee _
   | TailCall _ | Char _ | String _ | Int _ | Float _ | Cast _ | Test _
   | NonNull _ | Struct _ | StructDefault _ | StructGet _ | StructSet _ | Array _
   | ArrayDefault _ | ArrayFixed _ | ArraySegment _ | ArrayGet _ | ArraySet _
@@ -539,13 +539,13 @@ let rec starts_with_block_prec prec (i : 'a Ast.instr) =
         let _, left, _ = prec_op op.desc in
         starts_with_block_prec left i
     | Select (i, _, _) -> starts_with_block_prec Select i
-    | Unreachable | Nop | Hole | Null | Get _ | Set _ | Tee _ | TailCall _
-    | Char _ | String _ | Int _ | Float _ | Struct _ | StructDefault _ | Array _
-    | ArrayDefault _ | ArrayFixed _ | ArraySegment _ | Let _ | Br _ | Br_if _
-    | Br_table _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
-    | Br_on_cast_fail _ | Throw _ | ThrowRef _ | ContNew _ | ContBind _
-    | Suspend _ | Resume _ | ResumeThrow _ | ResumeThrowRef _ | Switch _
-    | Return _ | Sequence _ ->
+    | Unreachable | Nop | Hole | Null | Get _ | Path _ | Set _ | Tee _
+    | TailCall _ | Char _ | String _ | Int _ | Float _ | Struct _
+    | StructDefault _ | Array _ | ArrayDefault _ | ArrayFixed _ | ArraySegment _
+    | Let _ | Br _ | Br_if _ | Br_table _ | Br_on_null _ | Br_on_non_null _
+    | Br_on_cast _ | Br_on_cast_fail _ | Throw _ | ThrowRef _ | ContNew _
+    | ContBind _ | Suspend _ | Resume _ | ResumeThrow _ | ResumeThrowRef _
+    | Switch _ | Return _ | Sequence _ ->
         false
 
 let starts_with_block i = starts_with_block_prec Instruction i
@@ -820,6 +820,10 @@ let rec instr prec pp (i : _ instr) =
   | Nop -> operator pp "nop"
   | Hole -> operator pp "_"
   | Get x -> identifier pp x.desc
+  | Path (x, y) ->
+      identifier pp x.desc;
+      operator pp "::";
+      identifier pp y.desc
   | Set (x, i) ->
       box pp ~indent:indent_level (fun () ->
           simple_pat pp x;

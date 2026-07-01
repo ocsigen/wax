@@ -61,6 +61,19 @@ Binary and unary operations use standard mathematical operators. Signedness is o
 | `i32.extend8_s` ... `i64.extend16_s` | `val.extend8_s()`, `val.extend16_s()` |
 | `i32.rotl` ... `i64.rotr` | `v1.rotl(v2)`, `v1.rotr(v2)` |
 
+### Wide Arithmetic
+
+These 128-bit operations take and return their operands as `(low, high)` pairs
+of `i64` values, so each is written as a call returning two results (typically
+bound with a multi-value `let`).
+
+| Wasm | Wax |
+|---|---|
+| `i64.add128` | `i64::add128(a_lo, a_hi, b_lo, b_hi)` |
+| `i64.sub128` | `i64::sub128(a_lo, a_hi, b_lo, b_hi)` |
+| `i64.mul_wide_s` | `i64::mul_wide_s(a, b)` |
+| `i64.mul_wide_u` | `i64::mul_wide_u(a, b)` |
+
 
 
 ### Conversions

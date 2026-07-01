@@ -1,0 +1,3 @@
+fn f(a_lo: i64, a_hi: i64) -> (i64, i64) {
+    i64::add128(a_lo, a_hi);
+}

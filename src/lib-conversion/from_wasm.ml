@@ -1251,12 +1251,21 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   | BinOp (F32 op) -> float_bin_op i `F32 op
   | BinOp (F64 op) -> float_bin_op i `F64 op
   | Add128 | Sub128 | MulWide _ ->
-      (* Decompiling wide arithmetic to the [i64::...] Wax surface is added in
-         the follow-up commit; until then, give up rather than crash. *)
-      conversion_error ctx ~location:i.Ast.info (fun f () ->
-          Format.fprintf f
-            "Decompiling wide-arithmetic instructions to Wax is not yet \
-             supported.")
+      (* Wide arithmetic decompiles to the [i64::...] path intrinsics, whose two
+         i64 results are consumed by a multi-value [let]. *)
+      let name, input =
+        match i.desc with
+        | Add128 -> ("add128", 4)
+        | Sub128 -> ("sub128", 4)
+        | MulWide Signed -> ("mul_wide_s", 2)
+        | MulWide Unsigned -> ("mul_wide_u", 2)
+        | _ -> assert false
+      in
+      let* args = Stack.grab input in
+      Stack.push 2
+        (with_loc
+           (Ast.Call
+              (with_loc (Ast.Path (Ast.no_loc "i64", Ast.no_loc name)), args)))
   | UnOp (I64 op) -> int_un_op i `I64 op
   | UnOp (I32 op) -> int_un_op i `I32 op
   | UnOp (F64 op) -> float_un_op i `F64 op

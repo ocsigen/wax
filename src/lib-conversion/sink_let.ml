@@ -69,8 +69,8 @@ let rec occurs name i =
   | If_annotation { then_body; else_body; _ } -> (
       in_list then_body
       || match else_body with Some b -> in_list b | None -> false)
-  | Unreachable | Nop | Hole | Null | Char _ | String _ | Int _ | Float _
-  | StructDefault _ ->
+  | Path _ | Unreachable | Nop | Hole | Null | Char _ | String _ | Int _
+  | Float _ | StructDefault _ ->
       false
 
 let list_occurs name l = List.exists (occurs name) l
@@ -193,8 +193,8 @@ let rec first_access name i =
   | If_annotation { then_body; else_body; _ } ->
       agree (fl then_body)
         (match else_body with Some b -> fl b | None -> None)
-  | Unreachable | Nop | Hole | Null | Char _ | String _ | Int _ | Float _
-  | StructDefault _ ->
+  | Path _ | Unreachable | Nop | Hole | Null | Char _ | String _ | Int _
+  | Float _ | StructDefault _ ->
       None
 
 and first_access_list name l =

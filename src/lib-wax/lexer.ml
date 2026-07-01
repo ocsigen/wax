@@ -156,6 +156,7 @@ let rec token_rec ctx lexbuf =
   | '[' -> LBRACKET
   | ']' -> RBRACKET
   | ',' -> COMMA
+  | "::" -> COLONCOLON
   | ':' -> COLON
   | "->" -> ARROW
   | "=>" -> FATARROW

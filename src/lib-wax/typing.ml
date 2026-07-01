@@ -255,6 +255,13 @@ module Error = struct
     report ?hint:(did_you_mean suggestions) context ~location
       "The %s %a is not bound." kind print_name x
 
+  let unknown_intrinsic context ~location ns name =
+    report context ~location "There is no %s::%s intrinsic." ns name
+
+  let intrinsic_not_called context ~location ns name =
+    report context ~location
+      "The qualified name %s::%s can only be used as a function call." ns name
+
   let before_hole context ~location =
     report context ~location "This expression occurs before a hole '_'."
 
@@ -1983,7 +1990,7 @@ let rec count_holes i =
      to, so no hole at this level draws from the stack. *)
   | Block _ | Loop _ | While _ | TryTable _ | Try _ | If_annotation _
   | Dispatch _ | Match _ | StructDefault _ | Char _ | String _ | Int _ | Float _
-  | Get _ | Null | Unreachable | Nop
+  | Get _ | Path _ | Null | Unreachable | Nop
   | Let (_, None)
   | Br (_, None)
   | Throw (_, None)
@@ -2070,7 +2077,7 @@ let rec collect_assigned_locals acc i =
   | If_annotation { then_body; else_body; _ } ->
       let acc = in_list acc then_body in
       Option.fold ~none:acc ~some:(in_list acc) else_body
-  | Get _ | Unreachable | Nop | Hole | Null | Char _ | String _ | Int _
+  | Get _ | Path _ | Unreachable | Nop | Hole | Null | Char _ | String _ | Int _
   | Float _ | StructDefault _ ->
       acc
 
@@ -2162,7 +2169,7 @@ let rec check_hole_order_rec ctx i n =
         match i.desc with
         | Block _ | Loop _ | While _ | TryTable _ | Try _ | If_annotation _
         | Dispatch _ | Match _ | StructDefault _ | Char _ | String _ | Int _
-        | Float _ | Get _ | Null | Unreachable | Nop
+        | Float _ | Get _ | Path _ | Null | Unreachable | Nop
         | Let (_, None)
         | Br (_, None)
         | Throw (_, None)
@@ -2877,6 +2884,10 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       return_expression i Hole ty
   | Null -> return_expression i Null (Cell.make Null)
   | Get _ | Set _ | Tee _ -> type_variable_access ctx i
+  | Path (ns, name) ->
+      Error.intrinsic_not_called ctx.diagnostics ~location:i.info ns.desc
+        name.desc;
+      return_expression i (Path (ns, name)) (Cell.make Error)
   | Call _ -> call_instruction ctx i
   | TailCall (i', l) -> (
       let param_types = peek_call_params ctx i' in
@@ -5990,8 +6001,41 @@ and call_instruction ctx i =
          && Tbl.find_opt ctx.globals name = None
          && Tbl.find_opt ctx.functions name = None ->
       type_simd_free_intrinsic_call ctx i func name args
+  (* Built-in intrinsics written as a qualified path, [i64::add128(...)]. *)
+  | Call (({ desc = Path (ns, name); _ } as func), args) ->
+      type_path_intrinsic_call ctx i func ns name args
   | Call (i', l) -> type_indirect_call ctx i i' l
   | _ -> assert false (* only invoked on [Call] *)
+
+(* A qualified-path intrinsic call [ns::name(args)]. Currently the only such
+   namespace is [i64], for the wide-arithmetic instructions: [add128]/[sub128]
+   take four i64 operands (each of the two 128-bit inputs as low/high) and
+   [mul_wide_s]/[mul_wide_u] take two, all returning two i64 results
+   (low, high). *)
+and type_path_intrinsic_call ctx i func ns name args =
+  let* args' = instructions ctx args in
+  let arity =
+    match (ns.desc, name.desc) with
+    | "i64", ("add128" | "sub128") -> Some 4
+    | "i64", ("mul_wide_s" | "mul_wide_u") -> Some 2
+    | _ -> None
+  in
+  match arity with
+  | None ->
+      Error.unknown_intrinsic ctx.diagnostics ~location:i.info ns.desc name.desc;
+      (* Recover with two [Error] results (the arity every wide-arithmetic
+         intrinsic has), so a typo does not cascade into a value-count error. *)
+      return_statement i
+        (Call ({ desc = Path (ns, name); info = ([||], func.info) }, args'))
+        [| Cell.make Error; Cell.make Error |]
+  | Some n ->
+      if List.length args' <> n then
+        Error.value_count_mismatch ctx.diagnostics ~location:i.info ~expected:n
+          ~provided:(List.length args');
+      List.iter (fun a -> check_type ctx a i64_cell) args';
+      return_statement i
+        (Call ({ desc = Path (ns, name); info = ([||], func.info) }, args'))
+        [| valtype_cell i64_valtype; valtype_cell i64_valtype |]
 
 and instructions ctx l : _ -> _ * _ list =
   match l with
@@ -6851,13 +6895,13 @@ let rec check_constant_instruction ctx i =
         _,
         _ )
   | Block _ | Loop _ | While _ | If _ | TryTable _ | Try _ | Dispatch _
-  | Match _ | Unreachable | Nop | Hole | Set _ | Tee _ | Call _ | TailCall _
-  | Cast _ | Test _ | NonNull _ | StructGet _ | StructSet _ | ArraySegment _
-  | ArrayGet _ | ArraySet _ | Let _ | Br _ | Br_if _ | Br_table _ | Br_on_null _
-  | Br_on_non_null _ | Br_on_cast _ | Br_on_cast_fail _ | Throw _ | ThrowRef _
-  | ContNew _ | ContBind _ | Suspend _ | Resume _ | ResumeThrow _
-  | ResumeThrowRef _ | Switch _ | Return _ | Sequence _ | Select _
-  | If_annotation _ ->
+  | Match _ | Unreachable | Nop | Hole | Path _ | Set _ | Tee _ | Call _
+  | TailCall _ | Cast _ | Test _ | NonNull _ | StructGet _ | StructSet _
+  | ArraySegment _ | ArrayGet _ | ArraySet _ | Let _ | Br _ | Br_if _
+  | Br_table _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
+  | Br_on_cast_fail _ | Throw _ | ThrowRef _ | ContNew _ | ContBind _
+  | Suspend _ | Resume _ | ResumeThrow _ | ResumeThrowRef _ | Switch _
+  | Return _ | Sequence _ | Select _ | If_annotation _ ->
       Error.constant_expression_required ctx.diagnostics ~location
 
 type ('before, 'after) phased =
@@ -7584,7 +7628,7 @@ let rec instr_has_conditional (i : (_ instr_desc, _) annotated) =
   | ContNew (_, i) ->
       instr_has_conditional i
   | Let (_, i) | Br (_, i) | Throw (_, i) | Return i -> opt i
-  | Unreachable | Nop | Hole | Null | Get _ | Char _ | String _ | Int _
+  | Unreachable | Nop | Hole | Null | Get _ | Path _ | Char _ | String _ | Int _
   | Float _ | StructDefault _ ->
       false
 
@@ -7730,8 +7774,8 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
     | Sequence l -> Sequence (sinstrs asm l)
     | Select (c, t, e) -> Select (sone asm c, sone asm t, sone asm e)
     | If_annotation _ -> assert false (* handled in [sinstr] *)
-    | ( Unreachable | Nop | Hole | Null | Get _ | Char _ | String _ | Int _
-      | Float _ | StructDefault _ ) as x ->
+    | ( Unreachable | Nop | Hole | Null | Get _ | Path _ | Char _ | String _
+      | Int _ | Float _ | StructDefault _ ) as x ->
         x
   in
   let rec sfields asm fl =
@@ -7810,7 +7854,7 @@ let sub_instrs (i : (_ instr_desc, _) annotated) =
   | ContNew (_, i) ->
       [ i ]
   | Let (_, o) | Br (_, o) | Throw (_, o) | Return o -> Option.to_list o
-  | Unreachable | Nop | Hole | Null | Get _ | Char _ | String _ | Int _
+  | Unreachable | Nop | Hole | Null | Get _ | Path _ | Char _ | String _ | Int _
   | Float _ | StructDefault _ ->
       []
 

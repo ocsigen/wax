@@ -19,6 +19,7 @@
 %token RBRACKET "]"
 %token COMMA ","
 %token COLON ":"
+%token COLONCOLON "::"
 %token ARROW "->"
 %token FATARROW "=>"
 %token EQUAL "="
@@ -540,6 +541,7 @@ plaininstr:
 | NULL { with_loc $sloc Null }
 | "_" {with_loc $sloc Hole }
 | x = ident { with_loc $sloc (Get x) } %prec prec_ident
+| x = ident "::" y = ident { with_loc $sloc (Path (x, y)) }
 | "(" l = parenthesized_expression ")" { l }
 | "(" i = expression "," l = expression_list ")"
   { with_loc $sloc (Sequence (i :: l)) }

@@ -1,0 +1,21 @@
+#[export = "add"]
+fn add(a_lo: i64, a_hi: i64, b_lo: i64, b_hi: i64) -> (i64, i64) {
+    let (lo, hi) = i64::add128(a_lo, a_hi, b_lo, b_hi);
+    lo;
+    hi;
+}
+
+#[export = "sub"]
+fn sub(a_lo: i64, a_hi: i64, b_lo: i64, b_hi: i64) -> (i64, i64) {
+    i64::sub128(a_lo, a_hi, b_lo, b_hi);
+}
+
+#[export = "mul_s"]
+fn mul_s(a: i64, b: i64) -> (i64, i64) {
+    i64::mul_wide_s(a, b);
+}
+
+#[export = "mul_u"]
+fn mul_u(a: i64, b: i64) -> (i64, i64) {
+    i64::mul_wide_u(a, b);
+}

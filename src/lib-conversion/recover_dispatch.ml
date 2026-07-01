@@ -192,8 +192,8 @@ and rewrite_desc (desc : location instr_desc) : location instr_desc =
   | Sequence l -> Sequence (List.map rewrite_instr l)
   | Select (a, b, c) ->
       Select (rewrite_instr a, rewrite_instr b, rewrite_instr c)
-  | ( Unreachable | Nop | Hole | Null | Get _ | Char _ | String _ | Int _
-    | Float _ | StructDefault _ ) as x ->
+  | ( Unreachable | Nop | Hole | Null | Get _ | Path _ | Char _ | String _
+    | Int _ | Float _ | StructDefault _ ) as x ->
       x
 
 let rec field_desc (f : location modulefield) =

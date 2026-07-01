@@ -283,6 +283,19 @@ x.rotl(y)      // Rotate left
 x.rotr(y)      // Rotate right
 ```
 
+### Wide Arithmetic
+
+128-bit integer operations are written as `i64::` intrinsics. They take and
+return their operands as `(low, high)` pairs of `i64` values, so each returns
+two results (bind them with a multi-value `let`):
+
+```wax
+i64::add128(a_lo, a_hi, b_lo, b_hi)   // 128-bit add, returns (lo, hi)
+i64::sub128(a_lo, a_hi, b_lo, b_hi)   // 128-bit subtract
+i64::mul_wide_s(a, b)                 // signed 64×64 → 128-bit product
+i64::mul_wide_u(a, b)                 // unsigned 64×64 → 128-bit product
+```
+
 ### Type Conversions
 
 Use `as` for type conversions:

@@ -109,6 +109,9 @@ type 'info instr_desc =
   | Hole
   | Null
   | Get of ident
+  (* A qualified name [namespace::member], used as the callee of a built-in
+     intrinsic call such as [i64::add128(...)]. *)
+  | Path of ident * ident
   | Set of ident option * 'info instr
   | Tee of ident * 'info instr
   | Call of 'info instr * 'info instr list

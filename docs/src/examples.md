@@ -644,3 +644,25 @@ fn checksum(a: i32, b: i32) -> i32 {
   local.get $r
   i32.add)
 ```
+
+## Wide Arithmetic
+
+128-bit integer arithmetic uses the `i64::` intrinsics, which take and return
+their operands as `(low, high)` pairs of `i64` values. Each returns two
+results, so a multi-value `let` binds them.
+
+### Wax
+
+```wax
+#[export = "add_u128"]
+fn add_u128(a_lo: i64, a_hi: i64, b_lo: i64, b_hi: i64) -> (i64, i64) {
+    let (lo, hi) = i64::add128(a_lo, a_hi, b_lo, b_hi);
+    lo;
+    hi;
+}
+
+#[export = "mul_u64_to_u128"]
+fn mul_u64_to_u128(a: i64, b: i64) -> (i64, i64) {
+    i64::mul_wide_u(a, b);
+}
+```

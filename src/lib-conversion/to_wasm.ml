@@ -422,8 +422,8 @@ let labels_in_list l =
     | Br_on_cast (_, _, e)
     | Br_on_cast_fail (_, _, e) ->
         instr e
-    | Unreachable | Nop | Hole | Null | Get _ | Char _ | String _ | Int _
-    | Float _ | StructDefault _ ->
+    | Unreachable | Nop | Hole | Null | Get _ | Path _ | Char _ | String _
+    | Int _ | Float _ | StructDefault _ ->
         ()
   in
   List.iter instr l;
@@ -655,6 +655,10 @@ and instruction_desc ret ctx i : location Text.instr list =
          folded loc (Text.RefFunc (index idx)))
           []
       else folded loc (Text.GlobalGet (index idx)) []
+  | Path _ ->
+      (* A qualified path is only valid as a call callee (handled in the [Call]
+         case); typing rejects a bare one, so it never reaches lowering. *)
+      assert false
   | Set (None, expr) -> folded loc Drop (instruction ret ctx expr)
   | Set (Some idx, expr) ->
       let code = instruction ret ctx expr in
@@ -669,6 +673,18 @@ and instruction_desc ret ctx i : location Text.instr list =
   | Call (f, args) -> (
       let arg_code = List.concat_map (instruction ret ctx) args in
       match f.desc with
+      (* Wide-arithmetic intrinsics, [i64::add128(..)] etc. The operands are
+         already on the stack in call order (low/high of each 128-bit input). *)
+      | Path (ns, name) ->
+          let desc : _ Text.instr_desc =
+            match (ns.desc, name.desc) with
+            | "i64", "add128" -> Add128
+            | "i64", "sub128" -> Sub128
+            | "i64", "mul_wide_s" -> MulWide Signed
+            | "i64", "mul_wide_u" -> MulWide Unsigned
+            | _ -> assert false (* typing rejects any other path *)
+          in
+          folded loc desc arg_code
       (* SIMD free-function intrinsics: [v128_const_<shape>(...)] and
          [v128_bitselect(a, b, mask)]. A user binding of the same name wins. *)
       | Get name

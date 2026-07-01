@@ -145,8 +145,8 @@ let module_ ctx env (fields : location Ast.module_) :
     | Sequence l -> Sequence (sinstrs l)
     | Select (c, t, e) -> Select (sone c, sone t, sone e)
     | If_annotation _ -> assert false (* handled in [sinstr] *)
-    | ( Unreachable | Nop | Hole | Null | Get _ | Char _ | String _ | Int _
-      | Float _ | StructDefault _ ) as x ->
+    | ( Unreachable | Nop | Hole | Null | Get _ | Path _ | Char _ | String _
+      | Int _ | Float _ | StructDefault _ ) as x ->
         x
   in
   let rec sfields fl = List.concat_map sfield fl
