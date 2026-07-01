@@ -1280,7 +1280,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
               (e1, Valtype (Ref { nullable = true; typ = Type type_name }));
         }
       in
-      Stack.push 1 (with_loc (StructSet (e1, name, e2)))
+      Stack.push 0 (with_loc (StructSet (e1, name, e2)))
   | ArrayNew t ->
       let* len = Stack.pop in
       let* v = Stack.pop in
@@ -1328,7 +1328,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
               );
         }
       in
-      Stack.push 1 (with_loc (ArraySet (e1, e2, e3)))
+      Stack.push 0 (with_loc (ArraySet (e1, e2, e3)))
   | Call f ->
       let input, output = function_arity ctx f in
       let* args = Stack.grab input in
@@ -1432,7 +1432,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   | TableSet t ->
       let* value = Stack.pop in
       let* index = Stack.pop in
-      Stack.push 1
+      Stack.push 0
         (with_loc (ArraySet (with_loc (Get (idx ctx `Table t)), index, value)))
   (* call_indirect desugars to [(tab[i] as &$functype)(args)] (a call_ref);
      [to_wasm] re-fuses this back to call_indirect. *)
