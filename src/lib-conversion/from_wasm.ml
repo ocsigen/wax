@@ -1306,6 +1306,14 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       let* len = Stack.pop in
       Stack.push 1 (with_loc (ArrayDefault (Some (idx ctx `Type t), len)))
   | ArrayNewFixed (t, n) ->
+      (* [n] is a u32 immediate and each element becomes an argument node, so a
+         faithful decompilation of a huge [n] is inherently that large (the
+         operands not on the stack are filled with holes). No validation runs
+         on this path, so an adversarial [n] (e.g. 2^31) makes conversion slow /
+         memory-hungry. Left unguarded by design: capping [n] would silently
+         mis-convert valid dead code that legitimately needs holes, and any real
+         module's count is small. Validation itself is O(operands present) --
+         see [pop_repeat] in validation.ml. *)
       let* args = Stack.grab (Uint32.to_int n) in
       Stack.push 1
         (match string_args n args with
