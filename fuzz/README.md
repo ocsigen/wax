@@ -43,6 +43,7 @@ fuzz/build-corpus.sh        # populate fuzz/corpus/{valid,invalid}/ (~7000 modul
 fuzz/run.sh                 # run every oracle over the corpus, print a report
 fuzz/oracle.sh FILE [valid|invalid|unknown]   # check one file (the fuzzing unit)
 fuzz/smith.sh [count] [bytes]                 # generate valid modules + check them
+fuzz/diff-validate.sh [count] [bytes]         # differential validation vs the spec reference (both directions)
 fuzz/triage.sh REPORT       # collapse a findings report into ranked bug signatures
 
 # Wax *source* side (compile direction: parser, type checker, to_wasm):
@@ -146,6 +147,28 @@ locals, dedups/renumbers types and rewrites the name section, so two
 semantically-equal binaries differ textually. The round-trip oracle therefore
 checks *validity* of the recompiled binary, not byte/text identity. True
 behavioural equivalence belongs in the execution oracles below.
+
+## Differential validation (`diff-validate.sh`)
+
+The `FALSE_REJECT` / emitter-`FALSE_ACCEPT` checks above use `wasm-tools validate`
+as the reference and run over the fixed corpus. `diff-validate.sh` is the same
+idea aimed at the **spec reference interpreter** (`REF`, default
+`~/sources/Wasm/interpreter/wasm`) over freshly `smith`-generated modules, testing
+both directions in one pass. For each module the reference accepts, it decompiles
+to Wax and compares verdicts:
+
+* **`OVER_REJECT`** — the reference accepts the module but wax rejects its faithful
+  decompilation (a completeness gap: wax's typing is too strict).
+* **`UNSOUND`** — wax accepts the decompiled Wax, but the binary it re-emits is
+  rejected by the reference (wax's typing is too lenient).
+* **`CRASH`** — wax crashed on either step.
+
+Modules the reference rejects are skipped. Failing modules are saved under
+`fuzz/diff-findings/` (gitignored). Because a decompiled module exercises the full
+`wasm → wax → wasm` path against ground truth on *both* sides, this is the sharpest
+net for the typing/`to_wasm` edges the corpus oracles miss (the reference is the
+`REF` interpreter, not `wasm-tools`, so it also covers proposals `wasm-tools` lags
+on).
 
 ## The execution oracles
 
