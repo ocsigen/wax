@@ -2106,13 +2106,26 @@ let receiver_is_array ctx recv =
       | _ -> false)
   | _ -> false
 
+(* A cast is transparent to the hole-order check exactly when [to_wasm] lowers it
+   to no instruction (so it occupies its operand's position and produces nothing):
+   an operand with no value type — unreachable / failed code, where the cast emits
+   nothing — or a numeric-scalar identity, the only [Nop] case in [to_wasm]'s cast
+   lowering. Everything else IS emitted: a numeric conversion ([_ as f32] on an
+   [f64] hole is [f32.demote_f64]) or a reference cast (always a [ref.cast], even
+   an up-cast), and operates on the stack top, so it must be ordered like any
+   other value-producing expression. *)
+let cast_is_transparent ctx ~cast ~operand =
+  match Cell.get (expression_type ctx operand) with
+  | Unknown | Error -> true
+  | Valtype { internal = (I32 | I64 | F32 | F64) as src; _ } -> (
+      match Cell.get (expression_type ctx cast) with
+      | Valtype { internal = dst; _ } -> src = dst
+      | _ -> false)
+  | _ -> false
+
 let rec check_hole_order_rec ctx i n =
   match i.desc with
   | Hole -> n - 1
-  | Cast (i, _) when is_unknown_or_error (expression_type ctx i) ->
-      (* Casts in unreachable / failed code should be ignored: they are here to
-         guide the translation but are not emitted. *)
-      check_hole_order_rec ctx i n
   | Get name
     when memory_receiver ctx name || table_receiver ctx name
          || segment_receiver ctx name ->
@@ -2122,6 +2135,13 @@ let rec check_hole_order_rec ctx i n =
          stack value, so it never counts as occurring before a hole. *)
       n
   | _ when n <= 0 -> n
+  | Cast (inner, _) when cast_is_transparent ctx ~cast:i ~operand:inner ->
+      (* A nop cast (see [cast_is_transparent]) is transparent: recurse into the
+         operand, which is itself flagged if it is a value occurring before a
+         hole, without counting the cast as such — so [(_ as T)] with a hole
+         already of type [T] is fine even when later holes remain. A non-nop
+         cast falls through to the normal handling below. *)
+      check_hole_order_rec ctx inner n
   | _ ->
       let n =
         match i.desc with
