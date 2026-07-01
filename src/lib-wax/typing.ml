@@ -3573,9 +3573,13 @@ and type_arith ctx i =
                 (match typ with
                 | Valtype { internal = I32; _ }
                 | Valtype { internal = I64; _ }
-                | Int | LargeInt ->
+                | Int ->
                     ()
                 | Number -> Cell.set ty1 Int
+                (* A signed integer comparison forces a [LargeInt] operand to i64
+                   (it cannot be i32, and this is an integer op), pinning it rather
+                   than leaving it float-capable. *)
+                | LargeInt -> Cell.set ty1 (Valtype i64_valtype)
                 | _ -> mismatch ());
                 i32_cell
             | Lt None | Gt None | Le None | Ge None ->
@@ -3584,7 +3588,9 @@ and type_arith ctx i =
                 | Valtype { internal = F64; _ }
                 | Float ->
                     ()
-                | Number -> Cell.set ty1 Float
+                (* A float comparison takes a [LargeInt] operand as a float (it is
+                   a numeric literal, so float-capable), like a [Number]. *)
+                | Number | LargeInt -> Cell.set ty1 Float
                 | _ -> mismatch ());
                 i32_cell
             | Ne ->
@@ -3670,9 +3676,12 @@ and type_arith ctx i =
                    reference; [UnknownRef] is a (bottom) reference, so it takes
                    the [ref.is_null] reading like any other ref. *)
                 | Valtype { internal = I32 | I64 | Ref _; _ }
-                | Null | Int | LargeInt | UnknownRef ->
+                | Null | Int | UnknownRef ->
                     ()
                 | Number -> Cell.set typ Int
+                (* [!] on a [LargeInt] is [i64.eqz]; pin it to i64 so it cannot be
+                   left float-capable (there is no float [eqz]). *)
+                | LargeInt -> Cell.set typ (Valtype i64_valtype)
                 | _ ->
                     Error.instruction_type_mismatch ctx.diagnostics
                       ~location:op.info typ (Cell.make Int));
@@ -4964,9 +4973,12 @@ and type_unary_intrinsic_call ctx i func recv meth =
         if ty' = Number || ty' = Unknown then Cell.set ty Int
         else if ty' = LargeInt then Cell.set ty (Valtype i64_valtype);
         Some ty
-    | ( ((Number | Float | Unknown | Valtype { typ = F32 | F64; _ }) as ty'),
+    | ( (( Number | Float | Unknown | LargeInt | Valtype { typ = F32 | F64; _ })
+         as ty'),
         ("abs" | "ceil" | "floor" | "trunc" | "nearest" | "sqrt") ) ->
-        if ty' = Number || ty' = Unknown then Cell.set ty Float;
+        (* A [LargeInt] receiver is a float here (a float intrinsic), like a
+           [Number]/[Unknown] one. *)
+        if ty' = Number || ty' = Unknown || ty' = LargeInt then Cell.set ty Float;
         Some ty
     | Error, _ -> Some (Cell.make Error)
     | (Unknown | UnknownRef), _ ->
