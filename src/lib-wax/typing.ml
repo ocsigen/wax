@@ -3203,7 +3203,13 @@ and type_branch ctx i =
             let*@ typ1 = internalize ctx ty1 in
             let+@ typ2 = internalize ctx (Ref (diff_ref_type ty' ty)) in
             (typ1, typ2)
-        | (Unknown | Error | UnknownRef) as ity -> Some (typ', Cell.make ity)
+        (* A polymorphic operand (unreachable / branch code): the source keeps its
+           unknown type, but [br_on_cast]'s fall-through is always a reference (the
+           residual of a reference cast), so give it the bottom reference
+           [UnknownRef] rather than [Unknown] — otherwise a consumer like [!]
+           ([ref.is_null] on a reference) would default to the integer [i32.eqz]. *)
+        | Unknown | UnknownRef -> Some (typ', Cell.make UnknownRef)
+        | Error -> Some (typ', Cell.make Error)
         | Null ->
             (* A bare [null] operand: the cast operand is [ty] made nullable (the
                lub of a null and the cast target), and the fall-through is what is
@@ -3252,7 +3258,29 @@ and type_branch ctx i =
             let*@ typ1 = internalize ctx ty1 in
             let+@ typ2 = internalize ctx (Ref (diff_ref_type ty' ty)) in
             (typ1, typ2)
-        | (Unknown | Error | UnknownRef) as ity -> Some (typ', Cell.make ity)
+        (* A polymorphic operand: the residual sent to the branch is a reference
+           (the residual of a reference cast), so give it the bottom reference
+           [UnknownRef] rather than [Unknown] — as for [br_on_cast] above, so a
+           later [!] / inference on it does not fall back to an integer. *)
+        | Unknown | UnknownRef -> Some (typ', Cell.make UnknownRef)
+        | Error -> Some (typ', Cell.make Error)
+        | Null ->
+            (* A bare [null] operand, as in [br_on_cast] above: the operand is [ty]
+               made nullable, and the residual sent to the branch is the bottom
+               nullable reference of [ty]'s hierarchy minus [ty]. *)
+            let*@ top = top_heap_type ctx ty.typ in
+            let bottom =
+              match top with
+              | Func -> NoFunc
+              | Extern -> NoExtern
+              | Exn -> NoExn
+              | Cont -> NoCont
+              | _ -> None_
+            in
+            let ty' = { nullable = true; typ = bottom } in
+            let*@ typ1 = internalize ctx (Ref { ty with nullable = true }) in
+            let+@ typ2 = internalize ctx (Ref (diff_ref_type ty' ty)) in
+            (typ1, typ2)
         | _ ->
             Error.expected_ref ctx.diagnostics ~location:(snd i'.info);
             None
@@ -6309,6 +6337,41 @@ and exact_reparse_internal ctx ty =
 and exact_reparse_matches ctx ~result ty =
   match exact_reparse_internal ctx ty with None -> true | Some e -> e = result
 
+(* The width a flexible numeric literal re-defaults to on re-parse (int/number ->
+   i32, large-int -> i64, float -> f64); [None] for anything already concrete or
+   non-numeric. *)
+and flexible_default_internal = function
+  | Int | Number | Int8 | Int16 -> Some i32_valtype.internal
+  | LargeInt -> Some i64_valtype.internal
+  | Float -> Some f64_valtype.internal
+  | _ -> None
+
+(* Whether keeping the result annotation is load-bearing because dropping it would
+   change the width on re-parse. [natural] are the exit types snapshotted before
+   [join_collected] pinned them. When the join settled to a concrete type only
+   because the declared annotation pinned a flexible exit to it (e.g. a bare float
+   literal reaching an [f32] block, which the annotation pins to f32 but which
+   re-defaults to f64 without it), dropping the annotation lets that exit re-infer
+   the block to a different width — so keep it. Gated on [inferred] being concrete:
+   when the join stayed flexible (an [if] over a large-int and an int branch joins
+   to a large int) it self-resolves the same way on re-parse and the annotation is
+   redundant. *)
+and natural_width_forces_annotation ~natural ~inferred =
+  match Option.map (fun c -> Cell.get c) inferred with
+  | Some (Valtype rv) ->
+      List.exists
+        (fun ty ->
+          match flexible_default_internal ty with
+          | Some def -> def <> rv.internal
+          | None -> false)
+        natural
+  | _ -> false
+
+(* Snapshot the natural types of a block's collected exit values before
+   [join_collected] pins them (for [natural_width_forces_annotation]). *)
+and collected_natural collected =
+  List.map (fun (_, ty) -> Cell.get ty) collected
+
 (* A [br_if] value stays on the stack typed as the block's result; when the result
    is fixed (a present annotation, a context type, or the inferred join, all of
    which pin a flexible exact), only a *concrete* exact of a different type is a
@@ -6328,8 +6391,8 @@ and report_exact_mismatches ctx ~location ~result exacts =
           | _ -> ())
         exacts
 
-and finalize_inferred ?(needed = false) ?(exacts = []) ?location ctx typ
-    ~inferred =
+and finalize_inferred ?(needed = false) ?(exacts = []) ?(natural = []) ?location
+    ctx typ ~inferred =
   if typ.results = [||] then
     match Option.bind inferred (resolve_omitted_valtype ctx) with
     | Some iv ->
@@ -6352,6 +6415,9 @@ and finalize_inferred ?(needed = false) ?(exacts = []) ?location ctx typ
     let drop =
       ctx.simplify && (not needed)
       && Array.length result_cells = 1
+      (* Keep the annotation if any exit (a fall-through / [br_table] value, …)
+         would re-default to a different width on re-parse. *)
+      && (not (natural_width_forces_annotation ~natural ~inferred))
       (* Only drop the annotation when every exact ([br_if]) exit re-defaults to
          exactly the result; otherwise re-parse would re-infer a different result
          and the pass-through value would no longer match it. *)
@@ -6393,10 +6459,11 @@ and if_inference ctx i label typ ~cond ~if_block ~else_block =
     let else_block' =
       collect_into ctx i.info label ~cs ~r (Option.get else_block).desc
     in
+    let natural = collected_natural cs.collected in
     let inferred = join_collected ctx ~location:i.info cs.collected in
     let results, typ =
-      finalize_inferred ~needed:cs.needed ~exacts:cs.exacts ~location:i.info ctx
-        typ ~inferred
+      finalize_inferred ~needed:cs.needed ~exacts:cs.exacts ~natural
+        ~location:i.info ctx typ ~inferred
     in
     Some
       ( If
@@ -6503,10 +6570,11 @@ and block_inference ctx i label typ ~instrs =
   else
     let cs, r = fresh_collecting (declared_result ctx typ) in
     let body' = collect_into ctx i.info label ~cs ~r instrs in
+    let natural = collected_natural cs.collected in
     let inferred = join_collected ctx ~location:i.info cs.collected in
     let results, typ =
-      finalize_inferred ~needed:cs.needed ~exacts:cs.exacts ~location:i.info ctx
-        typ ~inferred
+      finalize_inferred ~needed:cs.needed ~exacts:cs.exacts ~natural
+        ~location:i.info ctx typ ~inferred
     in
     Some (Block { label; typ; block = body' }, results)
 
@@ -6523,10 +6591,11 @@ and loop_inference ctx i label typ ~instrs =
     let cs, r = fresh_collecting (declared_result ctx typ) in
     let results = [| r |] in
     let instrs' = block ctx i.info label [||] results [||] instrs in
+    let natural = collected_natural cs.collected in
     let inferred = join_collected ctx ~location:i.info cs.collected in
     let results, typ =
-      finalize_inferred ~needed:cs.needed ~exacts:cs.exacts ~location:i.info ctx
-        typ ~inferred
+      finalize_inferred ~needed:cs.needed ~exacts:cs.exacts ~natural
+        ~location:i.info ctx typ ~inferred
     in
     Some (Loop { label; typ; block = instrs' }, results)
 
@@ -6537,10 +6606,11 @@ and trytable_inference ctx i label typ ~body ~catches =
     let results = [| r |] in
     let body' = block ctx i.info label [||] results results body in
     check_trytable_catches ctx catches;
+    let natural = collected_natural cs.collected in
     let inferred = join_collected ctx ~location:i.info cs.collected in
     let results, typ =
-      finalize_inferred ~needed:cs.needed ~exacts:cs.exacts ~location:i.info ctx
-        typ ~inferred
+      finalize_inferred ~needed:cs.needed ~exacts:cs.exacts ~natural
+        ~location:i.info ctx typ ~inferred
     in
     Some (TryTable { label; typ; block = body'; catches }, results)
 
@@ -6553,10 +6623,11 @@ and try_inference ctx i label typ ~body ~catches ~catch_all =
     let catches, catch_all =
       type_try_catches ctx i label ~results catches catch_all
     in
+    let natural = collected_natural cs.collected in
     let inferred = join_collected ctx ~location:i.info cs.collected in
     let results, typ =
-      finalize_inferred ~needed:cs.needed ~exacts:cs.exacts ~location:i.info ctx
-        typ ~inferred
+      finalize_inferred ~needed:cs.needed ~exacts:cs.exacts ~natural
+        ~location:i.info ctx typ ~inferred
     in
     Some (Try { label; typ; block = body'; catches; catch_all }, results)
 
