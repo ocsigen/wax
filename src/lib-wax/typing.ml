@@ -6386,13 +6386,18 @@ and block_keep_needed ctx ~loc ~result r =
    byte-identical, as elsewhere.) *)
 (* The concrete width an exact ([br_if]) exit value re-defaults to on re-parse
    ([resolve_omitted_valtype]: a flexible int/number/int8/int16 -> i32, large-int
-   -> i64, float -> f64, a concrete value -> itself). [None] for a polymorphic
-   value (dead code), which imposes no constraint. Used for the drop decision: an
-   annotation dropped here must be re-derivable, so a flexible exact that would
-   re-default to a different width keeps it. *)
+   -> i64, float -> f64, a concrete value -> itself). A polymorphic ([Unknown])
+   exact is a [br_if] value on the polymorphic stack of dead code, snapshotted here
+   before its own downstream context (an arithmetic op, a cast) could type it; with
+   the annotation dropped that context re-defaults it to i32 (the dead-code
+   default), so treat it as i32 rather than "no constraint" — otherwise a block
+   whose result is wider (an i64 fall-through alongside such a [br_if]) would drop
+   the load-bearing annotation and no longer re-infer. [None] only for [Error]
+   (recovery) and a bottom reference, which impose no width constraint. Used for the
+   drop decision: an annotation dropped here must be re-derivable. *)
 and exact_reparse_internal ctx ty =
   match Cell.get ty with
-  | Int8 | Int16 -> Some i32_valtype.internal
+  | Int8 | Int16 | Unknown -> Some i32_valtype.internal
   | _ -> Option.map (fun v -> v.internal) (standalone_valtype ctx ty)
 
 (* Whether an exact exit's re-parse type equals a candidate result [internal]. *)
