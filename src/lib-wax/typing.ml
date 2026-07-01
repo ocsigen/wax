@@ -851,6 +851,19 @@ let field_subtype info (ty : Wax_wasm.Ast.Binary.fieldtype)
 (* Whether [ty] is the result cell of a block whose type is being inferred. *)
 let is_inferring ty = match Cell.get ty with Collecting _ -> true | _ -> false
 
+(* Resolve a cell that may be a block's transient [Collecting] result to a real
+   type: the declared annotation under test, marked needed (kept) since this use
+   relies on it and the join cannot re-derive it. A [Collecting] cell never
+   escapes inference as a value, so a consumer that pushes one as a value type
+   (e.g. [br_on_null]'s pass-through) must resolve it first. Cells that are not
+   under inference are returned unchanged. *)
+let rec resolve_inferring ty =
+  match Cell.get ty with
+  | Collecting ({ declared = Some d; _ } as cs) ->
+      cs.needed <- true;
+      resolve_inferring d
+  | _ -> ty
+
 (* Whether the inferred type [ty] is a subtype of the expected type [ty'].
    Not a pure relation: when the two are compatible it *unifies* their
    union-find cells (so an as-yet-unconstrained literal like [Int]/[Number]
@@ -2956,6 +2969,14 @@ and type_branch ctx i =
       in
       let params = branch_target ctx idx in
       check_subtypes ctx ~location:(snd i'.info) types params;
+      (* The fall-through carries the values below the reference through at the
+         branch target's parameter types (Wasm types [br_on_null]'s result by the
+         label, which may be a supertype of the operands). When the target is a
+         block whose result is still being inferred, that parameter is the
+         transient [Collecting] cell; resolve it to the declared annotation under
+         test (marking it needed) so a real type — not the inference cell — is
+         pushed, where a later [_] hole would otherwise adopt it as a value type. *)
+      let params = Array.map resolve_inferring params in
       return_statement i (Br_on_null (idx, i')) (Array.append params [| typ' |])
   | Br_on_non_null (idx, i') ->
       let* i' = instruction ctx i' in
