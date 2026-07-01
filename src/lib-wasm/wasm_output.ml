@@ -638,6 +638,18 @@ module Encoder = struct
         | F64 Gt -> byte b 0x64
         | F64 Le -> byte b 0x65
         | F64 Ge -> byte b 0x66)
+    | Add128 ->
+        byte b 0xFC;
+        byte b 0x13
+    | Sub128 ->
+        byte b 0xFC;
+        byte b 0x14
+    | MulWide Signed ->
+        byte b 0xFC;
+        byte b 0x15
+    | MulWide Unsigned ->
+        byte b 0xFC;
+        byte b 0x16
     | I32WrapI64 -> byte b 0xA7
     | I64ExtendI32 Signed -> byte b 0xAC
     | I64ExtendI32 Unsigned -> byte b 0xAD

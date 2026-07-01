@@ -309,6 +309,9 @@ let rec instr ~resolve_string_type ~resolve_func_type ctx (i : 'info T.instr) =
     | Const (F64 x) -> Const (F64 (Wax_utils.Number_parsing.float64 x))
     | UnOp op -> UnOp op
     | BinOp op -> BinOp op
+    | Add128 -> Add128
+    | Sub128 -> Sub128
+    | MulWide s -> MulWide s
     | RefNull t -> RefNull (heaptype ctx t)
     | RefFunc i -> RefFunc (resolve_idx ctx.funcs i)
     | RefIsNull -> RefIsNull

@@ -541,6 +541,11 @@ end) : sig
     | Const of (X.int32_t, X.int64_t, X.f32_t, X.float_t) op
     | BinOp of (int_bin_op, int_bin_op, float_bin_op, float_bin_op) op
     | UnOp of (int_un_op, int_un_op, float_un_op, float_un_op) op
+    (* Wide arithmetic: [i64 i64 i64 i64] -> [i64 i64] and, for [MulWide],
+       [i64 i64] -> [i64 i64]. Each operand/result pair is (low, high). *)
+    | Add128
+    | Sub128
+    | MulWide of signage
     | VecConst of X.v128_t
     | VecUnOp of vec_un_op
     | VecBinOp of vec_bin_op

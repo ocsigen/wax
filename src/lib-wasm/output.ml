@@ -624,6 +624,9 @@ let rec instr i =
   | BinOp (I64 op) -> instruction ~loc ("i64." ^ int_bin_op "64" op)
   | BinOp (F32 op) -> instruction ~loc ("f32." ^ float_bin_op "32" op)
   | BinOp (F64 op) -> instruction ~loc ("f64." ^ float_bin_op "64" op)
+  | Add128 -> instruction ~loc "i64.add128"
+  | Sub128 -> instruction ~loc "i64.sub128"
+  | MulWide s -> instruction ~loc (signage "i64.mul_wide" s)
   | I32WrapI64 -> instruction ~loc "i32.wrap_i64"
   | I64ExtendI32 s -> instruction ~loc (signage "i64.extend_i32" s)
   | F32DemoteF64 -> instruction ~loc "f32.demote_f64"

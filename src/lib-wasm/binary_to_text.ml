@@ -370,6 +370,9 @@ let rec instr (names : B.names) local_names label_names label_counter stack
     | Const (F64 x) -> Const (F64 (f64_text x))
     | UnOp op -> UnOp op
     | BinOp op -> BinOp op
+    | Add128 -> Add128
+    | Sub128 -> Sub128
+    | MulWide s -> MulWide s
     | I32WrapI64 -> I32WrapI64
     | I64ExtendI32 s -> I64ExtendI32 s
     | F32DemoteF64 -> F32DemoteF64

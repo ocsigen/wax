@@ -2734,6 +2734,18 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let* () = pop_known ctx loc F64 in
       let* () = pop_known ctx loc F64 in
       push_known (Some loc) (float_bin_op_type F64 op)
+  | Add128 | Sub128 ->
+      let* () = pop_known ctx loc I64 in
+      let* () = pop_known ctx loc I64 in
+      let* () = pop_known ctx loc I64 in
+      let* () = pop_known ctx loc I64 in
+      let* () = push_known (Some loc) I64 in
+      push_known (Some loc) I64
+  | MulWide _ ->
+      let* () = pop_known ctx loc I64 in
+      let* () = pop_known ctx loc I64 in
+      let* () = push_known (Some loc) I64 in
+      push_known (Some loc) I64
   | I32WrapI64 ->
       let* () = pop_known ctx loc I64 in
       push_known (Some loc) I32
@@ -2828,7 +2840,7 @@ let rec check_constant_instruction ctx (i : _ Ast.Text.instr) =
   | RefAsNonNull | RefEq | RefTest _ | RefCast _ | StructGet _ | StructSet _
   | ArrayNewData _ | ArrayNewElem _ | ArrayGet _ | ArraySet _ | ArrayLen
   | ArrayFill _ | ArrayCopy _ | ArrayInitData _ | ArrayInitElem _ | I31Get _
-  | UnOp _
+  | UnOp _ | Add128 | Sub128 | MulWide _
   | BinOp
       ( F32 _ | F64 _
       | I32
@@ -2997,11 +3009,12 @@ and register_typeuses_instr d ctx (i : _ Ast.Text.instr) =
   | ArrayNewDefault _ | ArrayNewFixed _ | ArrayNewData _ | ArrayNewElem _
   | ArrayGet _ | ArraySet _ | ArrayLen | ArrayFill _ | ArrayCopy _
   | ArrayInitData _ | ArrayInitElem _ | RefI31 | I31Get _ | Const _ | UnOp _
-  | BinOp _ | I32WrapI64 | I64ExtendI32 _ | F32DemoteF64 | F64PromoteF32
-  | ExternConvertAny | AnyConvertExtern | VecBitselect | VecConst _ | VecUnOp _
-  | VecBinOp _ | VecTest _ | VecShift _ | VecBitmask _ | VecLoad _ | VecStore _
-  | VecLoadLane _ | VecStoreLane _ | VecLoadSplat _ | VecExtract _
-  | VecReplace _ | VecSplat _ | VecShuffle _ | VecTernOp _ | Char _ ->
+  | BinOp _ | Add128 | Sub128 | MulWide _ | I32WrapI64 | I64ExtendI32 _
+  | F32DemoteF64 | F64PromoteF32 | ExternConvertAny | AnyConvertExtern
+  | VecBitselect | VecConst _ | VecUnOp _ | VecBinOp _ | VecTest _ | VecShift _
+  | VecBitmask _ | VecLoad _ | VecStore _ | VecLoadLane _ | VecStoreLane _
+  | VecLoadSplat _ | VecExtract _ | VecReplace _ | VecSplat _ | VecShuffle _
+  | VecTernOp _ | Char _ ->
       ()
 
 (* Collect the implicit function types denoted by inline signatures (function

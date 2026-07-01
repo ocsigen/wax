@@ -430,6 +430,8 @@ let arity env i =
   | Const _ -> (0, 1)
   | UnOp _ -> (1, 1)
   | BinOp _ -> (2, 1)
+  | Add128 | Sub128 -> (4, 2)
+  | MulWide _ -> (2, 2)
   | I32WrapI64 -> (1, 1)
   | I64ExtendI32 _ -> (1, 1)
   | F32DemoteF64 -> (1, 1)

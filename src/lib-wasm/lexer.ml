@@ -509,6 +509,10 @@ let rec token_rec ctx lexbuf =
   | "i64.shr_u" -> INSTR (BinOp (I64 (Shr Unsigned)))
   | "i64.rotl" -> INSTR (BinOp (I64 Rotl))
   | "i64.rotr" -> INSTR (BinOp (I64 Rotr))
+  | "i64.add128" -> INSTR Add128
+  | "i64.sub128" -> INSTR Sub128
+  | "i64.mul_wide_s" -> INSTR (MulWide Signed)
+  | "i64.mul_wide_u" -> INSTR (MulWide Unsigned)
   | "i64.eq" -> INSTR (BinOp (I64 Eq))
   | "i64.ne" -> INSTR (BinOp (I64 Ne))
   | "i64.lt_s" -> INSTR (BinOp (I64 (Lt Signed)))

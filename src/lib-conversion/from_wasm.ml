@@ -1250,6 +1250,13 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   | BinOp (I64 op) -> int_bin_op i `I64 op
   | BinOp (F32 op) -> float_bin_op i `F32 op
   | BinOp (F64 op) -> float_bin_op i `F64 op
+  | Add128 | Sub128 | MulWide _ ->
+      (* Decompiling wide arithmetic to the [i64::...] Wax surface is added in
+         the follow-up commit; until then, give up rather than crash. *)
+      conversion_error ctx ~location:i.Ast.info (fun f () ->
+          Format.fprintf f
+            "Decompiling wide-arithmetic instructions to Wax is not yet \
+             supported.")
   | UnOp (I64 op) -> int_un_op i `I64 op
   | UnOp (I32 op) -> int_un_op i `I32 op
   | UnOp (F64 op) -> float_un_op i `F64 op

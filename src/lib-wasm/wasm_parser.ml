@@ -874,6 +874,10 @@ and instruction ch =
         | 15 -> TableGrow (uint ch)
         | 16 -> TableSize (uint ch)
         | 17 -> TableFill (uint ch)
+        | 19 -> Add128
+        | 20 -> Sub128
+        | 21 -> MulWide Signed
+        | 22 -> MulWide Unsigned
         | c -> error ch "unknown 0xfc opcode %d" c)
     | 0x05 -> error ch "unexpected else opcode"
     | 0x07 -> error ch "unexpected catch opcode"
