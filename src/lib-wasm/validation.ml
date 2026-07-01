@@ -2560,13 +2560,13 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
              fields)
       in
       push ~source:(named_ref_source idx) (Some loc)
-        (Ref { nullable = false; typ = Type ty })
+        (Ref { nullable = false; typ = Exact ty })
   | StructNewDefault idx ->
       let*! ty, _, fields = lookup_struct_type ctx idx in
       if not (Array.for_all field_has_default fields) then
         Error.not_defaultable ctx.modul.diagnostics ~location:i.info;
       push ~source:(named_ref_source idx) (Some loc)
-        (Ref { nullable = false; typ = Type ty })
+        (Ref { nullable = false; typ = Exact ty })
   | StructGet (signage, idx, idx') ->
       let*! ty, field_map, fields = lookup_struct_type ctx idx in
       let* () =
@@ -2608,14 +2608,14 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           (unpack_type field)
       in
       push ~source:(named_ref_source idx) (Some loc)
-        (Ref { nullable = false; typ = Type ty })
+        (Ref { nullable = false; typ = Exact ty })
   | ArrayNewDefault idx ->
       let*! ty, field = lookup_array_type ctx idx in
       if not (field_has_default field) then
         Error.not_defaultable ctx.modul.diagnostics ~location:i.info;
       let* () = pop_known ctx loc I32 in
       push ~source:(named_ref_source idx) (Some loc)
-        (Ref { nullable = false; typ = Type ty })
+        (Ref { nullable = false; typ = Exact ty })
   | ArrayNewFixed (idx, n) ->
       let*! ty, field = lookup_array_type ctx idx in
       let* () =
@@ -2624,7 +2624,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           (unpack_type field) (Uint32.to_int n)
       in
       push ~source:(named_ref_source idx) (Some loc)
-        (Ref { nullable = false; typ = Type ty })
+        (Ref { nullable = false; typ = Exact ty })
   | ArrayNewData (idx, idx') ->
       let*! ty, field = lookup_array_type ctx idx in
       ignore (get_data ctx idx');
@@ -2635,7 +2635,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let* () = pop_known ctx loc I32 in
       let* () = pop_known ctx loc I32 in
       push ~source:(named_ref_source idx) (Some loc)
-        (Ref { nullable = false; typ = Type ty })
+        (Ref { nullable = false; typ = Exact ty })
   | ArrayNewElem (idx, idx') ->
       let*! ty, field = lookup_array_type ctx idx in
       let*! ty', _ = get_elem ctx idx' in
@@ -2648,7 +2648,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let* () = pop_known ctx loc I32 in
       let* () = pop_known ctx loc I32 in
       push ~source:(named_ref_source idx) (Some loc)
-        (Ref { nullable = false; typ = Type ty })
+        (Ref { nullable = false; typ = Exact ty })
   | ArrayGet (signage, idx) ->
       let*! ty, field = lookup_array_type ctx idx in
       (match field.typ with
@@ -2832,12 +2832,12 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       | Value (Ref _ | V128) ->
           Error.numeric_array_required ctx.modul.diagnostics ~location:i.info);
       push ~source:(named_ref_source idx) (Some loc)
-        (Ref { nullable = false; typ = Type ty })
+        (Ref { nullable = false; typ = Exact ty })
   | String (None, _) ->
       let i = string_type ctx.modul.types in
       let comptype = Ast.Text.Array { mut = true; typ = Packed I8 } in
       push ~source:(Inline_ref comptype) (Some loc)
-        (Ref { nullable = false; typ = Type i })
+        (Ref { nullable = false; typ = Exact i })
   | Char _ -> push_known (Some loc) I32
   (* Conditional annotations are spliced out by [specialize] before a
      configuration is validated, so none can remain at this point. *)

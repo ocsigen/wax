@@ -1,0 +1,13 @@
+type point = { x: i32, y: i32 };
+type bytes = [i8];
+
+// A concrete allocation may be used where an exact reference is required.
+#[export = "make"]
+fn make() -> &!point {
+    { point | x: 1, y: 2 };
+}
+
+#[export = "bytes"]
+fn make_bytes() -> &!bytes {
+    [bytes | 0; 4];
+}

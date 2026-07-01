@@ -1745,7 +1745,7 @@ let context_block_typ ctx typ ~expected ~result_cell =
    type, never a supertype. *)
 let exact_named_type expected =
   match Cell.get expected with
-  | Valtype { typ = Ref { typ = Type ident; _ }; _ } -> Some ident
+  | Valtype { typ = Ref { typ = Type ident | Exact ident; _ }; _ } -> Some ident
   | _ -> None
 
 (* A value type is defaultable unless it is a non-nullable reference: such a
@@ -2162,7 +2162,7 @@ let receiver_is_array ctx recv =
   match fst recv.Ast.info with
   | [| cell |] -> (
       match Cell.get cell with
-      | Valtype { typ = Ref { typ = Type ty; _ }; _ } -> (
+      | Valtype { typ = Ref { typ = Type ty | Exact ty; _ }; _ } -> (
           match Tbl.find_opt ctx.type_context.types ty with
           | Some t -> ( match (snd t).typ with Array _ -> true | _ -> false)
           | None -> false)
@@ -2302,7 +2302,7 @@ let rec check_hole_order_rec ctx i n =
         | Struct (_, l) ->
             let fields =
               match Cell.get (expression_type ctx i) with
-              | Valtype { typ = Ref { typ = Type t; _ }; _ } -> (
+              | Valtype { typ = Ref { typ = Type t | Exact t; _ }; _ } -> (
                   match lookup_struct_type ctx t with
                   | Some fields ->
                       let field_map =
@@ -3521,7 +3521,7 @@ and type_stack_switching ctx i =
          types. *)
       let inner_sg =
         match if np = 0 then None else Some (snd sg.params.(np - 1).desc) with
-        | Some (Ref { typ = Type ct2; _ }) ->
+        | Some (Ref { typ = Type ct2 | Exact ct2; _ }) ->
             let*@ inner2 = lookup_cont_inner ctx ct2 in
             lookup_func_type ctx inner2
         | _ -> None
@@ -4023,7 +4023,7 @@ and type_aggregate_access ctx i =
       let*! ty =
         let ty = expression_type ctx i' in
         match (Cell.get ty, field.desc) with
-        | Valtype { typ = Ref { typ = Type ty; _ }; _ }, _ -> (
+        | Valtype { typ = Ref { typ = Type ty | Exact ty; _ }; _ }, _ -> (
             let*@ _, def = Tbl.find_opt ctx.type_context.types ty in
             match def.typ with
             | Struct fields -> (
@@ -4078,7 +4078,7 @@ and type_aggregate_access ctx i =
          every path, so its holes are always consumed. *)
       let expected =
         match Cell.get (expression_type ctx i1') with
-        | Valtype { typ = Ref { typ = Type ty; _ }; _ } -> (
+        | Valtype { typ = Ref { typ = Type ty | Exact ty; _ }; _ } -> (
             match lookup_struct_type ctx ty with
             | None -> None
             | Some fields -> (
@@ -4135,7 +4135,7 @@ and type_aggregate_access ctx i =
       let* i2' = instruction ctx i2 in
       check_type ctx i2' i32_cell;
       match Cell.get (expression_type ctx i1') with
-      | Valtype { typ = Ref { typ = Type ty; _ }; _ } ->
+      | Valtype { typ = Ref { typ = Type ty | Exact ty; _ }; _ } ->
           let*! typ = lookup_array_type ~location:i1.info ctx ty in
           let*! ty = field_read_type ctx typ in
           return_expression i (ArrayGet (i1', i2')) ty
@@ -4174,7 +4174,7 @@ and type_aggregate_access ctx i =
       let* i2' = instruction ctx i2 in
       check_type ctx i2' i32_cell;
       match Cell.get (expression_type ctx i1') with
-      | Valtype { typ = Ref { typ = Type ty; _ }; _ } ->
+      | Valtype { typ = Ref { typ = Type ty | Exact ty; _ }; _ } ->
           (* Resolve the element type (pure) before typing the value, so a
              struct/array literal value can drop its name. *)
           let expected =
@@ -4950,7 +4950,7 @@ and type_array_fill_call ctx i func a meth j v n =
   check_type ctx n' i32_cell;
   check_type ctx j' i32_cell;
   (match Cell.get (expression_type ctx a') with
-  | Valtype { typ = Ref { typ = Type ty; _ }; _ } ->
+  | Valtype { typ = Ref { typ = Type ty | Exact ty; _ }; _ } ->
       let>@ typ = lookup_array_type ~location:a.info ctx ty in
       if not typ.mut then
         Error.immutable ctx.diagnostics ~location:a.info "array";
@@ -4993,8 +4993,8 @@ and type_array_copy_call ctx i func a1 meth i1 a2 i2 n =
       Error.unknown_operand_type ctx.diagnostics ~location:a1.info
   | _, (Unknown | UnknownRef) ->
       Error.unknown_operand_type ctx.diagnostics ~location:a2.info
-  | ( Valtype { typ = Ref { typ = Type ty; _ }; _ },
-      Valtype { typ = Ref { typ = Type ty'; _ }; _ } ) ->
+  | ( Valtype { typ = Ref { typ = Type ty | Exact ty; _ }; _ },
+      Valtype { typ = Ref { typ = Type ty' | Exact ty'; _ }; _ } ) ->
       let>@ typ = lookup_array_type ~location:a1.info ctx ty in
       let>@ typ' = lookup_array_type ~location:a2.info ctx ty' in
       if not typ.mut then
@@ -5019,7 +5019,7 @@ and type_array_init_call ctx i func a meth seg sinfo rest =
       check_type ctx n' i32
   | _ -> ());
   (match Cell.get (expression_type ctx a') with
-  | Valtype { typ = Ref { typ = Type ty; _ }; _ } -> (
+  | Valtype { typ = Ref { typ = Type ty | Exact ty; _ }; _ } -> (
       let>@ field = lookup_array_type ~location:a.info ctx ty in
       if not field.mut then
         Error.immutable ctx.diagnostics ~location:a.info "array";
@@ -5078,7 +5078,7 @@ and type_unary_intrinsic_call ctx i func recv meth =
   let*! ty =
     let ty = expression_type ctx recv' in
     match (Cell.get ty, meth.desc) with
-    | Valtype { typ = Ref { typ = Type t; _ }; _ }, "length" -> (
+    | Valtype { typ = Ref { typ = Type t | Exact t; _ }; _ }, "length" -> (
         let*@ _, def = Tbl.find_opt ctx.type_context.types t in
         match def.typ with
         | Array _ -> Some i32_cell
@@ -5319,9 +5319,23 @@ and check_instruction ?(drop_supertype = false) ctx expected
   (* The result reference type of a construction of [name]; validates it against
      [expected] when there is one. *)
   let construction_result name =
+    (* A concrete allocator ([struct.new] / [array.new*]) yields an *exact*
+       reference at the Wasm level. In synthesis position we keep the plainer
+       inexact type (an exact result is always usable where an inexact one is);
+       exactness is only material when the context demands it, so we produce it
+       precisely when the expected type is itself exact. *)
+    let want_exact =
+      match Cell.get expected with
+      | Valtype { typ = Ref { typ = Exact _; _ }; _ } -> true
+      | _ -> false
+    in
     let result =
       internalize ?inline:(inline_comptype ctx name) ctx
-        (Ref { nullable = false; typ = Type name })
+        (Ref
+           {
+             nullable = false;
+             typ = (if want_exact then Exact name else Type name);
+           })
     in
     Option.iter
       (fun result ->
@@ -5425,7 +5439,8 @@ and check_instruction ?(drop_supertype = false) ctx expected
       let standalone = standalone_valtype ctx (expression_type ctx node) in
       let fields_pin_result =
         match (field_match, standalone) with
-        | Some n, Some { typ = Ref { typ = Type t; _ }; _ } -> t.desc = n.desc
+        | Some n, Some { typ = Ref { typ = Type t | Exact t; _ }; _ } ->
+            t.desc = n.desc
         | _ -> false
       in
       return
@@ -5933,13 +5948,13 @@ and peek_call_params ctx callee =
     | Get name -> (
         match resolve_variable ctx name with
         | Func_ref (_, ty') -> Some (Ast.no_loc ty')
-        | Local (Some { typ = Ref { typ = Type t; _ }; _ })
-        | Global (_, Some { typ = Ref { typ = Type t; _ }; _ }) ->
+        | Local (Some { typ = Ref { typ = Type t | Exact t; _ }; _ })
+        | Global (_, Some { typ = Ref { typ = Type t | Exact t; _ }; _ }) ->
             Some t
         | Local _ | Global _ | Unbound -> None)
     (* A cast target names the value's type directly; [from_wasm] inserts these
        on a receiver before a field access (e.g. [(k as &cont_2).cont_func]). *)
-    | Cast (_, Valtype (Ref { typ = Type t; _ })) -> Some t
+    | Cast (_, Valtype (Ref { typ = Type t | Exact t; _ })) -> Some t
     | NonNull e -> callee_heaptype e
     | StructGet (recv, field) -> (
         match callee_heaptype recv with
@@ -5952,7 +5967,7 @@ and peek_call_params ctx callee =
                     let nm, (ftyp : fieldtype) = f.desc in
                     if nm.desc = field.desc then
                       match ftyp.typ with
-                      | Value (Ref { typ = Type t; _ }) -> Some t
+                      | Value (Ref { typ = Type t | Exact t; _ }) -> Some t
                       | Value _ | Packed _ -> None
                     else None)
                   fields
@@ -6013,7 +6028,7 @@ and type_indirect_call ctx i i' l =
   let* l' = typed_call_args ctx l param_types in
   let* i' = instruction ctx i' in
   match Cell.get (expression_type ctx i') with
-  | Valtype { typ = Ref { typ = Type ty; _ }; _ } ->
+  | Valtype { typ = Ref { typ = Type ty | Exact ty; _ }; _ } ->
       let*! typ = lookup_func_type ctx ty in
       (let>@ param_types =
          array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params

@@ -83,16 +83,6 @@ Wax type-checking should have failed (type mismatch):
       0 as i32 as f64_u;
   }
 from wasm: (func (result f64) (f64.convert_i64_u (i32.const 0)))
-==== core/custom-descriptors/array_new_exact.wast ====
-Error: Type mismatch: this produces a value of type (ref $a1), but type
-  (ref (exact $a1)) is expected.
-  ──➤  wasm-test-suite/core/custom-descriptors/array_new_exact.wast:10:6
- 8 │ 
- 9 │   (func (result (ref (exact $a1)))
-10 │     (array.new $a1 (i32.const 0) (i32.const 0))
-   ·      ^^^^^^^^^^^^^
-11 │   )
-12 │   (func (result (ref (exact $a1)))
 ==== core/custom-descriptors/exact-func-import.wast ====
 Error: Expecting a type use.
 

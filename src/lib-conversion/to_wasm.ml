@@ -259,7 +259,7 @@ let expr_last_opt_reftype i =
 
 let expr_type_name i =
   match expr_reftype i with
-  | { typ = Type idx; _ } -> idx
+  | { typ = Type idx | Exact idx; _ } -> idx
   | _ ->
       print_valtype (Ref (expr_reftype i));
       print_instr i;
@@ -280,7 +280,7 @@ let receiver_is_array ctx i =
   (* A named type, resolved through [ctx.types] so synthesized array types (a
      string's [<string>] byte array, used by [s.length()]/[s.copy(..)]) are
      recognized too, not only module-declared ones. *)
-  | Ref { typ = Type idx; _ } -> (
+  | Ref { typ = Type idx | Exact idx; _ } -> (
       match
         Wax_lang.Typing.get_type_definition ctx.diagnostics ctx.types idx
       with

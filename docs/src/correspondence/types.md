@@ -39,6 +39,12 @@ Because the `!` marker precedes the type name, it never clashes with the postfix
 is a cast to an exact reference, whereas `(x as &point)!` asserts the cast result
 is non-null.
 
+A concrete allocation — a struct or array [construction](instructions.md#aggregate-instructions)
+— produces an exact reference (the fresh object has exactly the allocated type),
+so a construction literal can be delivered where an `&!point` is required without
+a cast. In ordinary (synthesis) position the plainer inexact type is kept, since
+an exact result is always usable where an inexact one is expected.
+
 ## Storage Types
 
 Storage types are used in fields of structs and arrays to define packed data.
