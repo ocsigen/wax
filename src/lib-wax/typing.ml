@@ -3721,9 +3721,15 @@ and type_cast ctx i =
         | Valtype { internal = Ref _; _ } -> true
         | _ -> false
       in
+      (* A non-[i31] reference in the [any] hierarchy — the operand of a plain
+         [ref.cast] to [&i31]. [extern]/[noextern] are excluded: [e as &i31] for an
+         [extern] is not a [ref.cast] but a cross-hierarchy convert then cast
+         ([any.convert_extern]; [ref.cast]), so fusing it with a trailing [i31.get]
+         into [e as i32] would leave an untranslatable [&extern as i32]. *)
       let is_non_i31_ref e =
         match Cell.get (expression_type ctx e) with
-        | Valtype { internal = Ref { typ = I31; _ }; _ } -> false
+        | Valtype { internal = Ref { typ = I31 | Extern | NoExtern; _ }; _ } ->
+            false
         | Valtype { internal = Ref _; _ } -> true
         | _ -> false
       in
