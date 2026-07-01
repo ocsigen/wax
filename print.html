@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-d7750c98.js";
+            window.path_to_searchindex_js = "searchindex-45348e28.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -475,10 +475,23 @@ x.copysign(y)
 x.rotl(y)      // Rotate left
 x.rotr(y)      // Rotate right
 </code></pre>
-<h3 id="wide-arithmetic"><a class="header" href="#wide-arithmetic">Wide Arithmetic</a></h3>
-<p>128-bit integer operations are written as <code>i64::</code> intrinsics. They take and
-return their operands as <code>(low, high)</code> pairs of <code>i64</code> values, so each returns
-two results (bind them with a multi-value <code>let</code>):</p>
+<h3 id="qualified-intrinsics"><a class="header" href="#qualified-intrinsics">Qualified Intrinsics</a></h3>
+<p>Most built-in operations are written as methods on a receiver (<code>x.clz()</code>,
+<code>a.add_i32x4(b)</code> above). The few that have no natural receiver are written
+instead as a <strong>qualified path</strong>, <code>type::member(args)</code> — a built-in free
+function namespaced by the WebAssembly type it belongs to. These names are
+built in, not user functions, and because the <code>::</code> form is distinct from an
+ordinary name it can never clash with your own functions, globals, or locals.</p>
+<p>Two families use this syntax today.</p>
+<p><strong><code>v128::</code> — SIMD free functions.</strong> The vector constants (one argument per
+lane) and <code>bitselect</code>, which have no receiver:</p>
+<pre><code class="language-wax">v128::const_i32x4(1, 2, 3, 4)         // a v128 constant (also a constant expression)
+v128::const_f32x4(1.5, 2.5, 3.5, 4.5)
+v128::bitselect(a, b, mask)           // per-bit select
+</code></pre>
+<p><strong><code>i64::</code> — wide arithmetic.</strong> 128-bit integer operations, taking and returning
+their operands as <code>(low, high)</code> pairs of <code>i64</code>, so each returns two results
+(bind them with a multi-value <code>let</code>):</p>
 <pre><code class="language-wax">i64::add128(a_lo, a_hi, b_lo, b_hi)   // 128-bit add, returns (lo, hi)
 i64::sub128(a_lo, a_hi, b_lo, b_hi)   // 128-bit subtract
 i64::mul_wide_s(a, b)                 // signed 64×64 → 128-bit product
@@ -1576,7 +1589,7 @@ fn checksum(a: i32, b: i32) -&gt; i32 {
   local.get $r
   i32.add)
 </code></pre>
-<h2 id="wide-arithmetic-1"><a class="header" href="#wide-arithmetic-1">Wide Arithmetic</a></h2>
+<h2 id="wide-arithmetic"><a class="header" href="#wide-arithmetic">Wide Arithmetic</a></h2>
 <p>128-bit integer arithmetic uses the <code>i64::</code> intrinsics, which take and return
 their operands as <code>(low, high)</code> pairs of <code>i64</code> values. Each returns two
 results, so a multi-value <code>let</code> binds them.</p>
@@ -1780,7 +1793,7 @@ than tab/newline/carriage return); otherwise it stays an
 </tbody>
 </table>
 </div>
-<h3 id="wide-arithmetic-2"><a class="header" href="#wide-arithmetic-2">Wide Arithmetic</a></h3>
+<h3 id="wide-arithmetic-1"><a class="header" href="#wide-arithmetic-1">Wide Arithmetic</a></h3>
 <p>These 128-bit operations take and return their operands as <code>(low, high)</code> pairs
 of <code>i64</code> values, so each is written as a call returning two results (typically
 bound with a multi-value <code>let</code>).</p>
@@ -2117,7 +2130,7 @@ m.load32(p, 1, 16);   // i32.load align=1 offset=16
 <tbody>
 <tr><td><code>v128.and</code> / <code>or</code> / <code>xor</code> / <code>andnot</code></td><td><code>a.and_v128(b)</code>, <code>a.or_v128(b)</code>, <code>a.xor_v128(b)</code>, <code>a.andnot_v128(b)</code></td></tr>
 <tr><td><code>v128.not</code></td><td><code>v.not_v128()</code></td></tr>
-<tr><td><code>v128.bitselect</code></td><td><code>v128_bitselect(a, b, mask)</code></td></tr>
+<tr><td><code>v128.bitselect</code></td><td><code>v128::bitselect(a, b, mask)</code></td></tr>
 </tbody>
 </table>
 </div>
@@ -2151,16 +2164,16 @@ m.load32(p, 1, 16);   // i32.load align=1 offset=16
 </tbody>
 </table>
 </div>
-<p>Constants are free functions (one argument per lane: 16, 8, 4, or 2). <code>v128.const</code> is a constant expression, so it may initialise a global:</p>
+<p>Constants are <code>v128::</code> free functions (one argument per lane: 16, 8, 4, or 2). <code>v128.const</code> is a constant expression, so it may initialise a global:</p>
 <div class="table-wrapper">
 <table>
 <thead>
 <tr><th>Wasm</th><th>Wax</th></tr>
 </thead>
 <tbody>
-<tr><td><code>v128.const i32x4 1 2 3 4</code></td><td><code>v128_const_i32x4(1, 2, 3, 4)</code></td></tr>
-<tr><td><code>v128.const f32x4 1.5 2.5 3.5 4.5</code></td><td><code>v128_const_f32x4(1.5, 2.5, 3.5, 4.5)</code></td></tr>
-<tr><td><code>v128.const i8x16 0 1 ... 15</code></td><td><code>v128_const_i8x16(0, 1, ..., 15)</code></td></tr>
+<tr><td><code>v128.const i32x4 1 2 3 4</code></td><td><code>v128::const_i32x4(1, 2, 3, 4)</code></td></tr>
+<tr><td><code>v128.const f32x4 1.5 2.5 3.5 4.5</code></td><td><code>v128::const_f32x4(1.5, 2.5, 3.5, 4.5)</code></td></tr>
+<tr><td><code>v128.const i8x16 0 1 ... 15</code></td><td><code>v128::const_i8x16(0, 1, ..., 15)</code></td></tr>
 </tbody>
 </table>
 </div>
@@ -2193,7 +2206,7 @@ m.load32(p, 1, 16);   // i32.load align=1 offset=16
 </tbody>
 </table>
 </div>
-<p>These intrinsic names are reserved: when converting from WAT/WASM, a module entity whose name would collide with one is renamed (e.g. a function <code>$v128_bitselect</code> becomes <code>v128_bitselect_2</code>).</p>
+<p>No intrinsic can clash with a module entity name: the free-function intrinsics are written as <code>v128::</code>/<code>i64::</code> qualified paths and every other is a method on a receiver, so a function may freely be named e.g. <code>v128_bitselect</code> without any renaming.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="module-fields"><a class="header" href="#module-fields">Module Fields</a></h1>
 <p>Wax modules are defined by a sequence of top-level fields: types, functions, globals, tags, memories, and data segments.</p>

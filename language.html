@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-d7750c98.js";
+            window.path_to_searchindex_js = "searchindex-45348e28.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -382,10 +382,23 @@ x.copysign(y)
 x.rotl(y)      // Rotate left
 x.rotr(y)      // Rotate right
 </code></pre>
-<h3 id="wide-arithmetic"><a class="header" href="#wide-arithmetic">Wide Arithmetic</a></h3>
-<p>128-bit integer operations are written as <code>i64::</code> intrinsics. They take and
-return their operands as <code>(low, high)</code> pairs of <code>i64</code> values, so each returns
-two results (bind them with a multi-value <code>let</code>):</p>
+<h3 id="qualified-intrinsics"><a class="header" href="#qualified-intrinsics">Qualified Intrinsics</a></h3>
+<p>Most built-in operations are written as methods on a receiver (<code>x.clz()</code>,
+<code>a.add_i32x4(b)</code> above). The few that have no natural receiver are written
+instead as a <strong>qualified path</strong>, <code>type::member(args)</code> — a built-in free
+function namespaced by the WebAssembly type it belongs to. These names are
+built in, not user functions, and because the <code>::</code> form is distinct from an
+ordinary name it can never clash with your own functions, globals, or locals.</p>
+<p>Two families use this syntax today.</p>
+<p><strong><code>v128::</code> — SIMD free functions.</strong> The vector constants (one argument per
+lane) and <code>bitselect</code>, which have no receiver:</p>
+<pre><code class="language-wax">v128::const_i32x4(1, 2, 3, 4)         // a v128 constant (also a constant expression)
+v128::const_f32x4(1.5, 2.5, 3.5, 4.5)
+v128::bitselect(a, b, mask)           // per-bit select
+</code></pre>
+<p><strong><code>i64::</code> — wide arithmetic.</strong> 128-bit integer operations, taking and returning
+their operands as <code>(low, high)</code> pairs of <code>i64</code>, so each returns two results
+(bind them with a multi-value <code>let</code>):</p>
 <pre><code class="language-wax">i64::add128(a_lo, a_hi, b_lo, b_hi)   // 128-bit add, returns (lo, hi)
 i64::sub128(a_lo, a_hi, b_lo, b_hi)   // 128-bit subtract
 i64::mul_wide_s(a, b)                 // signed 64×64 → 128-bit product

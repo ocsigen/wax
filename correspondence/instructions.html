@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d7750c98.js";
+            window.path_to_searchindex_js = "../searchindex-45348e28.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f031991a.js"></script>
@@ -592,7 +592,7 @@ m.load32(p, 1, 16);   // i32.load align=1 offset=16
 <tbody>
 <tr><td><code>v128.and</code> / <code>or</code> / <code>xor</code> / <code>andnot</code></td><td><code>a.and_v128(b)</code>, <code>a.or_v128(b)</code>, <code>a.xor_v128(b)</code>, <code>a.andnot_v128(b)</code></td></tr>
 <tr><td><code>v128.not</code></td><td><code>v.not_v128()</code></td></tr>
-<tr><td><code>v128.bitselect</code></td><td><code>v128_bitselect(a, b, mask)</code></td></tr>
+<tr><td><code>v128.bitselect</code></td><td><code>v128::bitselect(a, b, mask)</code></td></tr>
 </tbody>
 </table>
 </div>
@@ -626,16 +626,16 @@ m.load32(p, 1, 16);   // i32.load align=1 offset=16
 </tbody>
 </table>
 </div>
-<p>Constants are free functions (one argument per lane: 16, 8, 4, or 2). <code>v128.const</code> is a constant expression, so it may initialise a global:</p>
+<p>Constants are <code>v128::</code> free functions (one argument per lane: 16, 8, 4, or 2). <code>v128.const</code> is a constant expression, so it may initialise a global:</p>
 <div class="table-wrapper">
 <table>
 <thead>
 <tr><th>Wasm</th><th>Wax</th></tr>
 </thead>
 <tbody>
-<tr><td><code>v128.const i32x4 1 2 3 4</code></td><td><code>v128_const_i32x4(1, 2, 3, 4)</code></td></tr>
-<tr><td><code>v128.const f32x4 1.5 2.5 3.5 4.5</code></td><td><code>v128_const_f32x4(1.5, 2.5, 3.5, 4.5)</code></td></tr>
-<tr><td><code>v128.const i8x16 0 1 ... 15</code></td><td><code>v128_const_i8x16(0, 1, ..., 15)</code></td></tr>
+<tr><td><code>v128.const i32x4 1 2 3 4</code></td><td><code>v128::const_i32x4(1, 2, 3, 4)</code></td></tr>
+<tr><td><code>v128.const f32x4 1.5 2.5 3.5 4.5</code></td><td><code>v128::const_f32x4(1.5, 2.5, 3.5, 4.5)</code></td></tr>
+<tr><td><code>v128.const i8x16 0 1 ... 15</code></td><td><code>v128::const_i8x16(0, 1, ..., 15)</code></td></tr>
 </tbody>
 </table>
 </div>
@@ -668,7 +668,7 @@ m.load32(p, 1, 16);   // i32.load align=1 offset=16
 </tbody>
 </table>
 </div>
-<p>These intrinsic names are reserved: when converting from WAT/WASM, a module entity whose name would collide with one is renamed (e.g. a function <code>$v128_bitselect</code> becomes <code>v128_bitselect_2</code>).</p>
+<p>No intrinsic can clash with a module entity name: the free-function intrinsics are written as <code>v128::</code>/<code>i64::</code> qualified paths and every other is a method on a receiver, so a function may freely be named e.g. <code>v128_bitselect</code> without any renaming.</p>
 
                     </main>
 
