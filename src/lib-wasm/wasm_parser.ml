@@ -160,7 +160,14 @@ let float64 ch =
   let i = Int64.logor i (Int64.shift_left b7 48) in
   Int64.logor i (Int64.shift_left b8 56) |> Int64.float_of_bits
 
-let repeat n f ch = Array.init n (fun _ -> f ch)
+let repeat n f ch =
+  (* A vector's [n] elements each occupy at least one byte, so a count larger
+     than the bytes left in the module cannot be satisfied. Reject it before
+     [Array.init] allocates an [n]-element array, so a bogus huge count (from a
+     truncated or corrupt binary) is a clean error rather than a memory blow-up. *)
+  if n > ch.limit - ch.pos then error ch "length out of bounds";
+  Array.init n (fun _ -> f ch)
+
 let vec f ch = repeat (uint ch) f ch
 let v128 ch = really_input_string ch 16
 

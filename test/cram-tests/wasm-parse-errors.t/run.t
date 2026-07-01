@@ -59,6 +59,17 @@ so the leftover byte is a size mismatch rather than being silently ignored.
   Error: section size mismatch
   [128]
 
+A vector whose element count is larger than the bytes left in the module (here a
+function section declaring 0xffffffff type indices): each element needs at least
+one byte, so the count cannot be satisfied. It is rejected before allocating a
+vector that large, rather than looping/allocating toward the end of the file.
+
+  $ printf '\000asm\001\000\000\000\003\005\377\377\377\377\017' > huge-vec.wasm
+  $ wax -i wasm huge-vec.wasm -f wat
+  File "huge-vec.wasm", line 1, characters 15-15:
+  Error: length out of bounds
+  [128]
+
 An LEB128 integer (here a section size) encoded with more bytes than its type
 allows:
 
