@@ -2305,9 +2305,40 @@ let immediate_supertype s : Ast.heaptype =
   | None, Func _ -> Func
   | None, Cont _ -> Cont
 
+(* The top of [h]'s subtyping hierarchy ([Any]/[Func]/[Extern]/[Exn]/[Cont]),
+   without reporting an unbound type ([None] then). *)
+let heaptype_top ctx (h : Ast.heaptype) : Ast.heaptype option =
+  match h with
+  | Any | Eq | I31 | Struct | Array | None_ -> Some Any
+  | Func | NoFunc -> Some Func
+  | Extern | NoExtern -> Some Extern
+  | Exn | NoExn -> Some Exn
+  | Cont | NoCont -> Some Cont
+  | Type id -> (
+      match Tbl.find_opt ctx.type_context.types id with
+      | Some (_, s) -> (
+          match s.typ with
+          | Struct _ | Array _ -> Some Any
+          | Func _ -> Some Func
+          | Cont _ -> Some Cont)
+      | None -> None)
+
+(* A bottom reference of a hierarchy. *)
+let is_bottom_heaptype = function
+  | None_ | NoFunc | NoExtern | NoExn | NoCont -> true
+  | _ -> false
+
 (* The type lookups below never fail *)
 let rec heap_lub ctx (h1 : Ast.heaptype) (h2 : Ast.heaptype) =
   match (h1, h2) with
+  (* A bottom reference is below everything in its hierarchy, so its lub with any
+     type of that same hierarchy is that other type. Handle this before walking a
+     concrete [Type] up to its supertype, which would otherwise discard the
+     bottom and over-generalise (e.g. [lub(none, $t)] giving [struct] not [$t]). *)
+  | b, h when is_bottom_heaptype b && heaptype_top ctx b = heaptype_top ctx h ->
+      Some h
+  | h, b when is_bottom_heaptype b && heaptype_top ctx b = heaptype_top ctx h ->
+      Some h
   | Type id1, Type id2 ->
       let*@ i1, s1 = Tbl.find_opt ctx.type_context.types id1 in
       let*@ i2, s2 = Tbl.find_opt ctx.type_context.types id2 in
