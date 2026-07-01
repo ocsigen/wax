@@ -39,7 +39,10 @@ freeze_wax() {
     return 1
   fi
   local frozen
-  if [ -n "${1:-}" ]; then frozen="$1/wax-frozen"; else frozen="$(mktemp)"; fi
+  # A dotfile name when placed in the run's scratch dir: the report collectors
+  # glob [$RESULTS/*] (which skips dotfiles), so the binary snapshot is never
+  # slurped into a findings report, while [rm -rf $RESULTS] still removes it.
+  if [ -n "${1:-}" ]; then frozen="$1/.wax-frozen"; else frozen="$(mktemp)"; fi
   cp "$WAX" "$frozen" && chmod +x "$frozen"
   WAX="$frozen"
   WAX_FROZEN="$frozen"
