@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-1eedc4a9.js";
+            window.path_to_searchindex_js = "searchindex-2f7da03e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -296,9 +296,36 @@ fn add(a: i32, b: i32,) -&gt; i32 {
 0o52        // Octal
 0b101010    // Binary
 </code></pre>
-<p>Integer literals are typed based on context:</p>
-<pre><code class="language-wax">let x: i64 = 42;        // Inferred from the type annotation
+<p>A numeric literal is <strong>flexible</strong>: it has no fixed type of its own but takes a
+concrete one from its context — a type annotation, the operation it feeds, or a
+function’s result type.</p>
+<pre><code class="language-wax">let x: i64 = 42;        // takes i64 from the annotation
 </code></pre>
+<p>Which concrete types a literal can take depends on its magnitude:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Literal</th><th>Can become</th><th>Defaults to</th></tr>
+</thead>
+<tbody>
+<tr><td>fits in 32 bits (≤ <code>0xFFFF_FFFF</code>)</td><td><code>i32</code>, <code>i64</code>, <code>f32</code>, <code>f64</code></td><td><code>i32</code></td></tr>
+<tr><td>larger, fits in 64 bits</td><td><code>i64</code>, <code>f32</code>, <code>f64</code> (never <code>i32</code>)</td><td><code>i64</code></td></tr>
+<tr><td>larger than 64 bits</td><td><code>f32</code>, <code>f64</code> only</td><td><code>f64</code></td></tr>
+<tr><td>a floating-point literal</td><td><code>f32</code>, <code>f64</code></td><td><code>f64</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>The <em>defaults</em> apply only when nothing constrains the literal:</p>
+<pre><code class="language-wax">let a = 42;             // unconstrained -&gt; i32
+let b = 5_000_000_000;  // too big for i32 -&gt; i64
+let c = 3.14;           // float literal -&gt; f64
+</code></pre>
+<p>Once a literal is used where only integers are allowed (a bitwise op, a shift,
+<code>ctz</code>, …) it commits to the <strong>integer</strong> family and can then only be <code>i32</code> or
+<code>i64</code> — it can no longer become a float by inference. These are <em>implicit</em>
+coercions; an explicit <a href="#type-conversions"><code>as</code> cast</a> is broader and emits the
+conversion — e.g. an out-of-range constant <code>as i32</code> wraps to its low 32 bits, and
+an integer <code>as f64</code> converts.</p>
 <h3 id="floating-point"><a class="header" href="#floating-point">Floating Point</a></h3>
 <pre><code class="language-wax">3.14        // Decimal
 1.0e10      // Scientific notation
@@ -306,6 +333,8 @@ fn add(a: i32, b: i32,) -&gt; i32 {
 inf         // Infinity
 nan         // Not a number
 </code></pre>
+<p>A floating-point literal is <code>f32</code> or <code>f64</code>, defaulting to <code>f64</code> when
+unconstrained (see the table above).</p>
 <h3 id="characters"><a class="header" href="#characters">Characters</a></h3>
 <p>A character literal is a single character in single quotes. It evaluates to that
 character’s Unicode code point as an <code>i32</code> — it is simply a readable spelling of
