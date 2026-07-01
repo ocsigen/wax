@@ -3886,6 +3886,20 @@ and type_cast ctx i =
             top_heap_type ctx ht <> Some Any
         | _ -> false
       in
+      (* Likewise a cast of a bottom reference (the residual of a polymorphic
+         [br_on_cast] in dead code, or [ref.null nofunc]) to a concrete type of a
+         non-[any] hierarchy: the bottom heap type ([nofunc]/…) carries no usable
+         type, so dropping the cast leaves e.g. a [call_ref] receiver of type
+         [(ref nofunc)] with no function type to resolve. As for [load_bearing_null]
+         the [any]-hierarchy bottom [&none] satisfies its consumers and is safe. *)
+      let load_bearing_bottom_ref =
+        match (ty'_natural, Cell.get ty) with
+        | ( Valtype { typ = Ref { typ = bot; _ }; _ },
+            Valtype { typ = Ref { typ = ht; _ }; _ } )
+          when is_bottom_heaptype bot && not (is_bottom_heaptype ht) ->
+            top_heap_type ctx ht <> Some Any
+        | _ -> false
+      in
       (* Drop a cast the inferred types already make redundant. This is only
          desirable when converting from Wasm ([ctx.simplify]): there casts are
          inserted to pin types and precise inference makes some unnecessary. For
@@ -3894,6 +3908,7 @@ and type_cast ctx i =
          ZZZ Handle select instruction better *)
       let unnecessary_cast =
         ctx.simplify && (not load_bearing_literal) && (not load_bearing_null)
+        && (not load_bearing_bottom_ref)
         && (not (is_unknown_or_error ty'))
         && subtype ctx ty' ty
       in
