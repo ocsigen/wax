@@ -6109,6 +6109,12 @@ and block_infer ctx loc label body =
      fun st ->
        match st with
        | Cons (loc, tv, Empty) -> (Empty, (body', Some (loc, tv)))
+       (* A value over an [Unreachable] base is a dead fall-through (pushed after
+          a [br]/[return]/[become]): take it as the branch's exit value, like a
+          reachable one — its type still has to agree with the other branches —
+          and leave the unreachable base so [with_empty_stack] does not mistake
+          it for a leftover. Mirrors [block_infer_general]. *)
+       | Cons (loc, tv, Unreachable) -> (Unreachable, (body', Some (loc, tv)))
        | Empty -> (Empty, (body', None))
        | Unreachable -> (Unreachable, (body', None))
        | Cons _ -> (st, (body', None)))
