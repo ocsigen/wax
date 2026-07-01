@@ -1078,6 +1078,15 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   let free_call name args =
     with_loc (Ast.Call (with_loc (Ast.Get (Ast.no_loc name)), args))
   in
+  (* Ascribe a (struct/array) method receiver its reference type, so the method
+     resolves even when the receiver is a hole on a polymorphic stack (unreachable
+     code); a redundant cast on a concrete receiver is dropped by [simplify]. *)
+  let cast_ref recv typ =
+    {
+      recv with
+      Ast.desc = Ast.Cast (recv, Valtype (Ref { nullable = true; typ }));
+    }
+  in
   match i.desc with
   | Block { label; typ; block } ->
       let label, ctx = push_label ctx ~loop:false label typ in
@@ -1450,6 +1459,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       Stack.push_poly (with_loc (TailCall (f, args)))
   | ArrayLen ->
       let* e = Stack.pop in
+      let e = cast_ref e Array in
       Stack.push 1
         (with_loc (Call (with_loc (StructGet (e, Ast.no_loc "length")), [])))
   | RefCast t ->
@@ -1535,20 +1545,23 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   | RefAsNonNull ->
       let* e = Stack.pop in
       Stack.push 1 (with_loc (NonNull e))
-  | ArrayFill _ ->
+  | ArrayFill t ->
       let* n = Stack.pop in
       let* v = Stack.pop in
       let* i = Stack.pop in
       let* a = Stack.pop in
+      let a = cast_ref a (Type (idx ctx `Type t)) in
       Stack.push 0
         (with_loc
            (Call (with_loc (StructGet (a, Ast.no_loc "fill")), [ i; v; n ])))
-  | ArrayCopy _ ->
+  | ArrayCopy (t1, t2) ->
       let* n = Stack.pop in
       let* i2 = Stack.pop in
       let* a2 = Stack.pop in
       let* i1 = Stack.pop in
       let* a1 = Stack.pop in
+      let a1 = cast_ref a1 (Type (idx ctx `Type t1)) in
+      let a2 = cast_ref a2 (Type (idx ctx `Type t2)) in
       Stack.push 0
         (with_loc
            (Call
@@ -1674,20 +1687,22 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       let seg = with_loc (Ast.Get (idx ctx `Elem elem)) in
       Stack.push 0 (table_call t "init" [ seg; d; s; n ])
   | ElemDrop elem -> Stack.push 0 (drop_call `Elem elem)
-  | ArrayInitData (_, data) ->
+  | ArrayInitData (t, data) ->
       let* n = Stack.pop in
       let* s = Stack.pop in
       let* d = Stack.pop in
       let* a = Stack.pop in
+      let a = cast_ref a (Type (idx ctx `Type t)) in
       let seg = with_loc (Ast.Get (idx ctx `Data data)) in
       Stack.push 0
         (with_loc
            (Call (with_loc (StructGet (a, Ast.no_loc "init")), [ seg; d; s; n ])))
-  | ArrayInitElem (_, elem) ->
+  | ArrayInitElem (t, elem) ->
       let* n = Stack.pop in
       let* s = Stack.pop in
       let* d = Stack.pop in
       let* a = Stack.pop in
+      let a = cast_ref a (Type (idx ctx `Type t)) in
       let seg = with_loc (Ast.Get (idx ctx `Elem elem)) in
       Stack.push 0
         (with_loc
