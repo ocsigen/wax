@@ -251,6 +251,43 @@ let expr_type_name i =
       print_instr i;
       assert false
 
+(* Whether the receiver of an [obj.meth(..)] call is an array — the case that
+   makes a [fill]/[copy]/[init] method an array operation, as opposed to a
+   struct-field/indirect call. Mirrors the type checker and [check_hole_order],
+   which also key these on the receiver being an array, so a struct field that
+   happens to be named [fill]/[copy]/[init] is lowered as an indirect call. *)
+let receiver_is_array ctx i =
+  match expr_valtype i with
+  (* The abstract array heap type [(ref array)] and the bottom reference
+     [(ref none)] (a subtype of [array]) are valid [array.len] receivers.
+     [fill]/[copy]/[init] need a concrete element type, so the type checker
+     already rejects those on such a receiver — only [length] reaches here. *)
+  | Ref { typ = Array | None_; _ } -> true
+  (* A named type, resolved through [ctx.types] so synthesized array types (a
+     string's [<string>] byte array, used by [s.length()]/[s.copy(..)]) are
+     recognized too, not only module-declared ones. *)
+  | Ref { typ = Type idx; _ } -> (
+      match
+        Wax_lang.Typing.get_type_definition ctx.diagnostics ctx.types idx
+      with
+      | Some { typ = Array _; _ } -> true
+      | _ -> false)
+  | _ -> false
+
+(* Whether the receiver of a scalar or SIMD intrinsic method ([x.max(y)],
+   [x.sqrt()], [x.add_i32x4(b)]) is a value (not a reference): a same-named field
+   on a struct has a reference receiver and lowers as an indirect call instead. *)
+let receiver_is_value i = match expr_valtype i with Ref _ -> false | _ -> true
+
+(* Whether [s] names a memory (resp. table) usable as a method/index receiver: a
+   local of the same name shadows it (Wax resolves a bare name to a local first),
+   so the receiver form must defer to the local — mirroring the type checker. *)
+let memory_receiver ctx s =
+  Hashtbl.mem ctx.memories s && not (StringMap.mem s ctx.locals)
+
+let table_receiver ctx s =
+  Hashtbl.mem ctx.tables s && not (StringMap.mem s ctx.locals)
+
 (* The branch context threaded down a function body. [return] is the function's
    result label with its current de Bruijn depth, so a branch to it is emitted
    numerically; [labels] is every enclosing label name (innermost first),
@@ -639,7 +676,7 @@ and instruction_desc ret ctx i : location Text.instr list =
       (* Memory access: mem.loadN/storeN(addr [, align [, offset]]). Signed
          narrow loads are handled (under an [as iN_s] cast) in the Cast case. *)
       | StructGet ({ desc = Get memname; _ }, meth)
-        when Hashtbl.mem ctx.memories memname.desc && is_mem_method meth.desc ->
+        when memory_receiver ctx memname.desc && is_mem_method meth.desc ->
           let memidx = index memname in
           if mem_store_method meth.desc then
             let memarg = mem_memarg meth.desc 2 args in
@@ -679,8 +716,7 @@ and instruction_desc ret ctx i : location Text.instr list =
          Stack operands first, then the constant lane immediate (if any), then
          align/offset. *)
       | StructGet ({ desc = Get memname; _ }, meth)
-        when Hashtbl.mem ctx.memories memname.desc
-             && Simd.is_mem_method meth.desc ->
+        when memory_receiver ctx memname.desc && Simd.is_mem_method meth.desc ->
           let mop = Option.get (Simd.mem_method meth.desc) in
           let memidx = index memname in
           let nstack = List.length mop.m_operands in
@@ -711,31 +747,32 @@ and instruction_desc ret ctx i : location Text.instr list =
           in
           folded loc (mop.m_make memidx memarg lane) operand_code
       (* Binary intrinsics, written with the dot notation *)
-      | StructGet (obj, { desc = "rotl"; _ }) -> (
+      | StructGet (obj, { desc = "rotl"; _ }) when receiver_is_value obj -> (
           let obj_code = instruction ret ctx obj in
           match expr_valtype i with
           | I32 -> folded loc (BinOp (I32 Rotl)) (obj_code @ arg_code)
           | I64 -> folded loc (BinOp (I64 Rotl)) (obj_code @ arg_code)
           | _ -> assert false)
-      | StructGet (obj, { desc = "rotr"; _ }) -> (
+      | StructGet (obj, { desc = "rotr"; _ }) when receiver_is_value obj -> (
           let obj_code = instruction ret ctx obj in
           match expr_valtype i with
           | I32 -> folded loc (BinOp (I32 Rotr)) (obj_code @ arg_code)
           | I64 -> folded loc (BinOp (I64 Rotr)) (obj_code @ arg_code)
           | _ -> assert false)
-      | StructGet (obj, { desc = "min"; _ }) -> (
+      | StructGet (obj, { desc = "min"; _ }) when receiver_is_value obj -> (
           let obj_code = instruction ret ctx obj in
           match expr_valtype i with
           | F32 -> folded loc (BinOp (F32 Min)) (obj_code @ arg_code)
           | F64 -> folded loc (BinOp (F64 Min)) (obj_code @ arg_code)
           | _ -> assert false)
-      | StructGet (obj, { desc = "max"; _ }) -> (
+      | StructGet (obj, { desc = "max"; _ }) when receiver_is_value obj -> (
           let obj_code = instruction ret ctx obj in
           match expr_valtype i with
           | F32 -> folded loc (BinOp (F32 Max)) (obj_code @ arg_code)
           | F64 -> folded loc (BinOp (F64 Max)) (obj_code @ arg_code)
           | _ -> assert false)
-      | StructGet (obj, { desc = "copysign"; _ }) -> (
+      | StructGet (obj, { desc = "copysign"; _ }) when receiver_is_value obj
+        -> (
           let obj_code = instruction ret ctx obj in
           match expr_valtype i with
           | F32 -> folded loc (BinOp (F32 CopySign)) (obj_code @ arg_code)
@@ -743,9 +780,11 @@ and instruction_desc ret ctx i : location Text.instr list =
           | _ -> assert false)
       (* No-argument instruction methods written with dot notation:
          [arr.length()], and the unary operators / reinterpret casts below. *)
-      | StructGet (obj, { desc = "length"; _ }) ->
+      | StructGet (obj, { desc = "length"; _ }) when receiver_is_array ctx obj
+        ->
           folded loc ArrayLen (instruction ret ctx obj)
-      | StructGet (obj, meth) when is_unary_op_method meth.desc -> (
+      | StructGet (obj, meth)
+        when is_unary_op_method meth.desc && receiver_is_value obj -> (
           let obj_code = instruction ret ctx obj in
           match (meth.desc, expr_valtype obj) with
           (* Int Unary *)
@@ -781,7 +820,8 @@ and instruction_desc ret ctx i : location Text.instr list =
       (* SIMD vector op written as a method intrinsic, [recv.add_i32x4(b)]. The
          lane shape comes from the method name; arguments are the lane immediates
          (if any) followed by the remaining stack operands. *)
-      | StructGet (obj, meth) when Simd.classify meth.desc <> None ->
+      | StructGet (obj, meth)
+        when Simd.classify meth.desc <> None && receiver_is_value obj ->
           let op = Option.get (Simd.classify meth.desc) in
           let nimm =
             match op.imm with No_imm -> 0 | Lane _ -> 1 | Shuffle -> 16
@@ -795,7 +835,7 @@ and instruction_desc ret ctx i : location Text.instr list =
           folded loc (op.build lanes) (obj_code @ stack_code)
       (* Memory management: mem.size/grow/fill/copy/init *)
       | StructGet ({ desc = Get name; _ }, meth)
-        when Hashtbl.mem ctx.memories name.desc && is_mgmt_method meth.desc -> (
+        when memory_receiver ctx name.desc && is_mgmt_method meth.desc -> (
           let m = index name in
           match meth.desc with
           | "size" -> folded loc (MemorySize m) []
@@ -804,8 +844,8 @@ and instruction_desc ret ctx i : location Text.instr list =
           | "copy" -> (
               (* Cross-memory copy names the source memory as the first arg. *)
               match args with
-              | { desc = Get src; _ } :: rest
-                when Hashtbl.mem ctx.memories src.desc ->
+              | { desc = Get src; _ } :: rest when memory_receiver ctx src.desc
+                ->
                   let rest_code = List.concat_map (instruction ret ctx) rest in
                   folded loc (MemoryCopy (m, index src)) rest_code
               | _ -> folded loc (MemoryCopy (m, m)) arg_code)
@@ -821,7 +861,7 @@ and instruction_desc ret ctx i : location Text.instr list =
               folded loc (MemoryInit (m, index seg)) rest_code)
       (* Table management: tab.size/grow/fill/copy/init *)
       | StructGet ({ desc = Get name; _ }, meth)
-        when Hashtbl.mem ctx.tables name.desc && is_mgmt_method meth.desc -> (
+        when table_receiver ctx name.desc && is_mgmt_method meth.desc -> (
           let t = index name in
           match meth.desc with
           | "size" -> folded loc (TableSize t) []
@@ -830,8 +870,8 @@ and instruction_desc ret ctx i : location Text.instr list =
           | "copy" -> (
               (* Cross-table copy names the source table as the first arg. *)
               match args with
-              | { desc = Get src; _ } :: rest
-                when Hashtbl.mem ctx.tables src.desc ->
+              | { desc = Get src; _ } :: rest when table_receiver ctx src.desc
+                ->
                   let rest_code = List.concat_map (instruction ret ctx) rest in
                   folded loc (TableCopy (t, index src)) rest_code
               | _ -> folded loc (TableCopy (t, t)) arg_code)
@@ -850,11 +890,11 @@ and instruction_desc ret ctx i : location Text.instr list =
           if Hashtbl.mem ctx.elems name.desc then
             folded loc (ElemDrop (index name)) []
           else folded loc (DataDrop (index name)) []
-      | StructGet (obj, { desc = "fill"; _ }) ->
+      | StructGet (obj, { desc = "fill"; _ }) when receiver_is_array ctx obj ->
           let array_code = instruction ret ctx obj in
           let type_name_idx = expr_type_name obj in
           folded loc (ArrayFill (index type_name_idx)) (array_code @ arg_code)
-      | StructGet (obj, { desc = "copy"; _ }) ->
+      | StructGet (obj, { desc = "copy"; _ }) when receiver_is_array ctx obj ->
           let a1_code = instruction ret ctx obj in
           let type_a1 = expr_type_name obj in
           let a2_code = List.nth args 1 in
@@ -863,7 +903,7 @@ and instruction_desc ret ctx i : location Text.instr list =
             (ArrayCopy (index type_a1, index type_a2))
             (a1_code @ arg_code)
       (* array.init_data / array.init_elem: arr.init(seg, dest, src, len) *)
-      | StructGet (obj, { desc = "init"; _ }) ->
+      | StructGet (obj, { desc = "init"; _ }) when receiver_is_array ctx obj ->
           let seg =
             match args with { desc = Get s; _ } :: _ -> s | _ -> assert false
           in
@@ -884,7 +924,7 @@ and instruction_desc ret ctx i : location Text.instr list =
       | Cast
           ( { desc = ArrayGet ({ desc = Get tab; _ }, idx_expr); _ },
             Valtype (Ref { typ = Type ft; _ }) )
-        when Hashtbl.mem ctx.tables tab.desc ->
+        when table_receiver ctx tab.desc ->
           let index_code = instruction ret ctx idx_expr in
           folded loc
             (CallIndirect (index tab, (Some (index ft), None)))
@@ -892,14 +932,14 @@ and instruction_desc ret ctx i : location Text.instr list =
       | Cast
           ( { desc = ArrayGet ({ desc = Get tab; _ }, idx_expr); _ },
             Functype { sign; _ } )
-        when Hashtbl.mem ctx.tables tab.desc ->
+        when table_receiver ctx tab.desc ->
           (* Inline function type: emit an inline typeuse [(result ..)]. *)
           let index_code = instruction ret ctx idx_expr in
           folded loc
             (CallIndirect (index tab, (None, Some (functype sign))))
             (arg_code @ index_code)
       | ArrayGet ({ desc = Get tab; _ }, idx_expr)
-        when Hashtbl.mem ctx.tables tab.desc
+        when table_receiver ctx tab.desc
              &&
              match Hashtbl.find ctx.tables tab.desc with
              | { typ = Type _; _ } -> true
@@ -925,7 +965,7 @@ and instruction_desc ret ctx i : location Text.instr list =
       | Cast
           ( { desc = ArrayGet ({ desc = Get tab; _ }, idx_expr); _ },
             Valtype (Ref { typ = Type ft; _ }) )
-        when Hashtbl.mem ctx.tables tab.desc ->
+        when table_receiver ctx tab.desc ->
           let index_code = instruction ret ctx idx_expr in
           folded loc
             (ReturnCallIndirect (index tab, (Some (index ft), None)))
@@ -933,13 +973,13 @@ and instruction_desc ret ctx i : location Text.instr list =
       | Cast
           ( { desc = ArrayGet ({ desc = Get tab; _ }, idx_expr); _ },
             Functype { sign; _ } )
-        when Hashtbl.mem ctx.tables tab.desc ->
+        when table_receiver ctx tab.desc ->
           let index_code = instruction ret ctx idx_expr in
           folded loc
             (ReturnCallIndirect (index tab, (None, Some (functype sign))))
             (arg_code @ index_code)
       | ArrayGet ({ desc = Get tab; _ }, idx_expr)
-        when Hashtbl.mem ctx.tables tab.desc
+        when table_receiver ctx tab.desc
              &&
              match Hashtbl.find ctx.tables tab.desc with
              | { typ = Type _; _ } -> true
@@ -1094,7 +1134,7 @@ and instruction_desc ret ctx i : location Text.instr list =
               _;
             },
             Signedtype { typ = `I32; signage = s1; _ } )
-        when Hashtbl.mem ctx.memories memname.desc
+        when memory_receiver ctx memname.desc
              && (meth.desc = "load8" || meth.desc = "load16") -> (
           match cast_ty with
           | Signedtype { typ = `I64; signage = s2; _ } when s1 = s2 ->
@@ -1109,7 +1149,7 @@ and instruction_desc ret ctx i : location Text.instr list =
       (* mem.load8/16(p) as i32_S -> i32.load8/16_S ; mem.load32(p) as i64_S ->
          i64.load32_S *)
       | Call ({ desc = StructGet ({ desc = Get memname; _ }, meth); _ }, args)
-        when Hashtbl.mem ctx.memories memname.desc
+        when memory_receiver ctx memname.desc
              && (meth.desc = "load8" || meth.desc = "load16"
                || meth.desc = "load32") -> (
           let emit result_ty size signage =
@@ -1242,7 +1282,7 @@ and instruction_desc ret ctx i : location Text.instr list =
         (instruction ret ctx off_instr @ instruction ret ctx len_instr)
   (* [tab[i]] on a table name is [table.get]. *)
   | ArrayGet ({ desc = Get name; _ }, idx_instr)
-    when Hashtbl.mem ctx.tables name.desc ->
+    when table_receiver ctx name.desc ->
       folded loc (TableGet (index name)) (instruction ret ctx idx_instr)
   | ArrayGet (arr_instr, idx_instr) ->
       (* Signed accesses are under a cast *)
@@ -1251,7 +1291,7 @@ and instruction_desc ret ctx i : location Text.instr list =
         (instruction ret ctx arr_instr @ instruction ret ctx idx_instr)
   (* [tab[i] = v] on a table name is [table.set]. *)
   | ArraySet ({ desc = Get name; _ }, idx_instr, val_instr)
-    when Hashtbl.mem ctx.tables name.desc ->
+    when table_receiver ctx name.desc ->
       folded loc
         (TableSet (index name))
         (instruction ret ctx idx_instr @ instruction ret ctx val_instr)

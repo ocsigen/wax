@@ -1336,6 +1336,19 @@ let resolve_variable ctx idx =
           | Some (ty, ty') -> Func_ref (ty, ty')
           | None -> Unbound))
 
+(* Whether [name] denotes a memory (resp. table) usable as a method/index
+   receiver — [mem.load(..)], [tab[..]], [tab.size()]. A local of the same name
+   shadows it: Wax resolves a bare name to a local first, and globals, functions,
+   memories and tables share one namespace (so only a local can collide), so the
+   receiver form must defer to the local just as [Get name] does. *)
+let memory_receiver ctx name =
+  (not (StringMap.mem name.desc ctx.locals))
+  && Tbl.find_opt ctx.memories name <> None
+
+let table_receiver ctx name =
+  (not (StringMap.mem name.desc ctx.locals))
+  && Tbl.find_opt ctx.tables name <> None
+
 (* Check the operands of an integer (resp. float) binary operator and return
    the unified result-type cell — the two operand cells are merged on success,
    so the caller takes [typ1] as the operator's result type. *)
@@ -2005,6 +2018,23 @@ let receiver_is_value ctx obj =
   | Null | Valtype { internal = Ref _; _ } -> false
   | _ -> true
 
+(* Whether the receiver of an [obj.meth(..)] call is a concrete array — the case
+   that makes a [fill]/[copy]/[init] method an array operation (evaluated
+   receiver-first), as opposed to a struct-field/indirect call or a static
+   memory/table form (both args-first / static-receiver). Reads the receiver's
+   type cell directly: a memory/table receiver carries no value type ([||]), for
+   which [expression_type] would spuriously report "not an expression". *)
+let receiver_is_array ctx recv =
+  match fst recv.Ast.info with
+  | [| cell |] -> (
+      match Cell.get cell with
+      | Valtype { typ = Ref { typ = Type ty; _ }; _ } -> (
+          match Tbl.find_opt ctx.type_context.types ty with
+          | Some t -> ( match (snd t).typ with Array _ -> true | _ -> false)
+          | None -> false)
+      | _ -> false)
+  | _ -> false
+
 let rec check_hole_order_rec ctx i n =
   match i.desc with
   | Hole -> n - 1
@@ -2027,11 +2057,10 @@ let rec check_hole_order_rec ctx i n =
         (* A table reference [tab[..]] has a static receiver (the table name),
            not an evaluated operand, so it does not count as occurring before a
            hole; only the index/value do. *)
-        | ArrayGet ({ desc = Get tab; _ }, r)
-          when Tbl.find_opt ctx.tables tab <> None ->
+        | ArrayGet ({ desc = Get tab; _ }, r) when table_receiver ctx tab ->
             check_hole_order_rec ctx r n
-        | ArraySet ({ desc = Get tab; _ }, idx, v)
-          when Tbl.find_opt ctx.tables tab <> None ->
+        | ArraySet ({ desc = Get tab; _ }, idx, v) when table_receiver ctx tab
+          ->
             n |> check_hole_order_rec ctx idx |> check_hole_order_rec ctx v
         | BinOp (_, l, r)
         | Array (_, l, r)
@@ -2057,6 +2086,22 @@ let rec check_hole_order_rec ctx i n =
             n
             |> check_hole_order_rec ctx obj
             |> check_hole_order_in_list ctx operands
+        | Call ({ desc = StructGet (recv, meth); _ }, args)
+          when (match meth.desc with
+                 | "fill" | "copy" | "init" -> true
+                 | _ -> false)
+               && receiver_is_array ctx recv ->
+            (* [arr.fill/copy/init] on an array receiver is a receiver-first array
+               operation, like the intrinsics above: [to_wasm] and the type
+               checker both evaluate the array receiver before the operands, so
+               mirror that order. The same method name on a non-array receiver is
+               a struct-field/indirect call or a static memory/table form, all of
+               which the general case below handles (args-first, with a static
+               [Get name] receiver not counted). The arity is not re-checked —
+               typing has already validated it. *)
+            n
+            |> check_hole_order_rec ctx recv
+            |> check_hole_order_in_list ctx args
         | Call (f, args) | TailCall (f, args) ->
             n |> check_hole_order_in_list ctx args |> check_hole_order_rec ctx f
         | If { cond = i; _ }
@@ -3811,7 +3856,7 @@ and type_aggregate_access ctx i =
       return_statement i (StructSet (i1', field, i2')) [||]
   (* [tab[i]] on a table name is [table.get]; the receiver is not a value. *)
   | ArrayGet (({ desc = Get tabname; _ } as recv), i2)
-    when Tbl.find_opt ctx.tables tabname <> None ->
+    when table_receiver ctx tabname ->
       let at, rt = Option.get (Tbl.find_opt ctx.tables tabname) in
       let* i2' = instruction ctx i2 in
       check_type ctx i2' (address_cell at);
@@ -3842,7 +3887,7 @@ and type_aggregate_access ctx i =
           return_expression i (ArrayGet (i1', i2')) (Cell.make Error))
   (* [tab[i] = v] on a table name is [table.set]; the receiver is not a value. *)
   | ArraySet (({ desc = Get tabname; _ } as recv), i2, i3)
-    when Tbl.find_opt ctx.tables tabname <> None ->
+    when table_receiver ctx tabname ->
       let at, rt = Option.get (Tbl.find_opt ctx.tables tabname) in
       let* i2' = instruction ctx i2 in
       check_type ctx i2' (address_cell at);
@@ -4450,7 +4495,7 @@ and type_mem_mgmt_call ctx i func recv name meth args =
       check_type ctx n' (addr ());
       return_statement i (mk [ d'; s'; n' ]) [||]
   | "copy", { desc = Get src; info = sinfo } :: ([ _; _; _ ] as rest)
-    when Tbl.find_opt ctx.memories src <> None ->
+    when memory_receiver ctx src ->
       let src_at =
         match Tbl.find_opt ctx.memories src with Some (_, a) -> a | None -> at
       in
@@ -4525,7 +4570,7 @@ and type_table_mgmt_call ctx i func recv name meth args =
       check_type ctx n' (addr ());
       return_statement i (mk [ d'; s'; n' ]) [||]
   | "copy", { desc = Get src; info = sinfo } :: ([ _; _; _ ] as rest)
-    when Tbl.find_opt ctx.tables src <> None ->
+    when table_receiver ctx src ->
       let src_at =
         match Tbl.find_opt ctx.tables src with
         | Some (a, src_rt) ->
@@ -4571,7 +4616,7 @@ and type_array_fill_call ctx i func a meth j v n =
   check_type ctx j' i32_cell;
   (match Cell.get (expression_type ctx a') with
   | Valtype { typ = Ref { typ = Type ty; _ }; _ } ->
-      let>@ typ = lookup_array_type ctx ty in
+      let>@ typ = lookup_array_type ~location:a.info ctx ty in
       if not typ.mut then
         Error.immutable ctx.diagnostics ~location:a.info "array";
       let>@ ty = internalize ctx (unpack_type typ) in
@@ -4640,7 +4685,7 @@ and type_array_init_call ctx i func a meth seg sinfo rest =
   | _ -> ());
   (match Cell.get (expression_type ctx a') with
   | Valtype { typ = Ref { typ = Type ty; _ }; _ } -> (
-      let>@ field = lookup_array_type ctx ty in
+      let>@ field = lookup_array_type ~location:a.info ctx ty in
       if not field.mut then
         Error.immutable ctx.diagnostics ~location:a.info "array";
       match field.typ with
@@ -4689,7 +4734,10 @@ and type_unary_intrinsic_call ctx i func recv meth =
         | Struct _ | Func _ | Cont _ ->
             Error.expected_array_type ctx.diagnostics ~location:i.info;
             None)
-    | (Null | Valtype { typ = Ref { typ = Array; _ }; _ }), "length" ->
+    (* [array.len] accepts any subtype of [(ref null array)]: the abstract
+       array, a bare [null], and the bottom reference [&none] (which is below
+       [array]). A concrete array is handled above. *)
+    | (Null | Valtype { typ = Ref { typ = Array | None_; _ }; _ }), "length" ->
         Some i32_cell
     | Valtype { typ = I32; _ }, "from_bits" -> Some f32_cell
     | Valtype { typ = I64; _ }, "from_bits" -> Some f64_cell
@@ -5621,7 +5669,7 @@ and call_instruction ctx i =
       ( ({ desc = StructGet (({ desc = Get memname; _ } as recv), meth); _ } as
          func),
         args )
-    when is_mem_method meth.desc && Tbl.find_opt ctx.memories memname <> None ->
+    when is_mem_method meth.desc && memory_receiver ctx memname ->
       type_mem_method_call ctx i func recv memname meth args
   (* SIMD memory accesses: mem.v128_load(addr), mem.v128_store(addr, v),
      mem.v128_load8_lane(addr, v, lane), etc. Stack operands first, then the
@@ -5630,20 +5678,19 @@ and call_instruction ctx i =
       ( ({ desc = StructGet (({ desc = Get memname; _ } as recv), meth); _ } as
          func),
         args )
-    when Simd.is_mem_method meth.desc
-         && Tbl.find_opt ctx.memories memname <> None ->
+    when Simd.is_mem_method meth.desc && memory_receiver ctx memname ->
       type_simd_mem_method_call ctx i func recv memname meth args
   (* Memory management: mem.size/grow/fill/copy/init, on a memory name. *)
   | Call
       ( ({ desc = StructGet (({ desc = Get name; _ } as recv), meth); _ } as func),
         args )
-    when is_mgmt_method meth.desc && Tbl.find_opt ctx.memories name <> None ->
+    when is_mgmt_method meth.desc && memory_receiver ctx name ->
       type_mem_mgmt_call ctx i func recv name meth args
   (* Table management: tab.size/grow/fill/copy/init, on a table name. *)
   | Call
       ( ({ desc = StructGet (({ desc = Get name; _ } as recv), meth); _ } as func),
         args )
-    when is_mgmt_method meth.desc && Tbl.find_opt ctx.tables name <> None ->
+    when is_mgmt_method meth.desc && table_receiver ctx name ->
       type_table_mgmt_call ctx i func recv name meth args
   (* data.drop / elem.drop, on a segment name. *)
   | Call

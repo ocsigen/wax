@@ -1822,10 +1822,11 @@ let string_of_name (nm : Src.name) =
 
 (* Reserve, in a function's fresh local namespace, the Wax names of the
    module-level entities its body references by a bare identifier: globals (via
-   [global.get]/[global.set]) and functions (via [call]/[return_call]/
-   [ref.func], all of which lower to [Get name]). Without this an auto-named
-   local could be assigned a colliding name and shadow the reference, since Wax
-   resolves a bare name to a local before a global or function. *)
+   [global.get]/[global.set]), functions (via [call]/[return_call]/[ref.func]),
+   and the memories/tables a memory/table access names as its receiver
+   ([mem.load(..)], [tab[..]], [tab.size()], …). Without this an auto-named local
+   could be assigned a colliding name and shadow the reference, since Wax
+   resolves a bare name to a local before anything else. *)
 let rec reserve_module_names_in_instr ctx ns (i : _ Src.instr) =
   match i.desc with
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
@@ -1847,6 +1848,35 @@ let rec reserve_module_names_in_instr ctx ns (i : _ Src.instr) =
   | GlobalGet x | GlobalSet x -> Namespace.reserve ns (idx ctx `Global x).desc
   | Call f | ReturnCall f | RefFunc f ->
       Namespace.reserve ns (idx ctx `Func f).desc
+  | Load (m, _, _)
+  | LoadS (m, _, _, _, _)
+  | Store (m, _, _)
+  | StoreS (m, _, _, _)
+  | MemorySize m
+  | MemoryGrow m
+  | MemoryFill m
+  | MemoryInit (m, _)
+  | VecLoad (m, _, _)
+  | VecStore (m, _)
+  | VecLoadSplat (m, _, _)
+  | VecLoadLane (m, _, _, _)
+  | VecStoreLane (m, _, _, _) ->
+      Namespace.reserve ns (idx ctx `Mem m).desc
+  | MemoryCopy (m, m') ->
+      Namespace.reserve ns (idx ctx `Mem m).desc;
+      Namespace.reserve ns (idx ctx `Mem m').desc
+  | TableGet t
+  | TableSet t
+  | TableSize t
+  | TableGrow t
+  | TableFill t
+  | TableInit (t, _)
+  | CallIndirect (t, _)
+  | ReturnCallIndirect (t, _) ->
+      Namespace.reserve ns (idx ctx `Table t).desc
+  | TableCopy (t, t') ->
+      Namespace.reserve ns (idx ctx `Table t).desc;
+      Namespace.reserve ns (idx ctx `Table t').desc
   | _ -> ()
 
 and reserve_module_names_in_instrs ctx ns l =
