@@ -1182,7 +1182,8 @@ and instruction_desc ret ctx i : location Text.instr list =
               | I32, Valtype I32
               | I64, Valtype I64
               | F32, Valtype F32
-              | F64, Valtype F64 ->
+              | F64, Valtype F64
+              | V128, Valtype V128 ->
                   Nop
               (* Cast to an inline function type: ref.cast to the anonymous
                  function type minted for the cast's result. *)
