@@ -1066,11 +1066,18 @@ and instruction_desc ret ctx i : location Text.instr list =
               | I32, Valtype (Ref { typ = Extern; _ }) ->
                   (folded loc RefI31 code, Ref { nullable = false; typ = I31 })
               (* [extern as &T] for an [any]-hierarchy [T]: convert to [any]
-                 first, then the match below does the [ref.cast] to [T]. *)
+                 first, then the match below does the [ref.cast] to [T]. A
+                 non-null [&any] target from a *nullable* operand needs that
+                 [ref.cast] too, to null-check the [any.convert_extern] result;
+                 a non-null operand already yields a non-null [any] (the convert
+                 preserves non-nullness), and a nullable [&?any] target is just
+                 the convert (both handled by the [Any] arm of the match below). *)
               | ( Ref { typ = Extern | NoExtern; _ },
                   Valtype
                     (Ref { typ = Eq | I31 | Struct | Array | Type _ | None_; _ })
-                ) ->
+                )
+              | ( Ref { typ = Extern | NoExtern; nullable = true },
+                  Valtype (Ref { typ = Any; nullable = false }) ) ->
                   ( folded loc AnyConvertExtern code,
                     Ref { nullable = true; typ = Any } )
               | _ -> (code, in_ty)

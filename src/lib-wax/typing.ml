@@ -1028,7 +1028,7 @@ let cast ctx ty ty' =
   (* [i32 as &extern]: [ref.i31] then [extern.convert_any]. *)
   | Valtype { internal = I32; _ }, Ref { typ = Extern; _ } ->
       true
-  | Valtype { internal = Ref _ as ity; _ }, Ref { typ = ty'; nullable } -> (
+  | Valtype { internal = Ref _ as ity; _ }, Ref { typ = ty'; _ } -> (
       let sub a b = Wax_wasm.Types.val_subtype ctx.subtyping_info a b in
       Option.value ~default:true
         (let*@ typ = top_heap_type ctx ty' in
@@ -1038,14 +1038,16 @@ let cast ctx ty ty' =
          in
          sub ity ity')
       ||
-      (*ZZZ Replace nullable by non nullable if possible *)
+      (* [extern] <-> [any] across hierarchies ([any.convert_extern] /
+         [extern.convert_any]), then a [ref.cast] to the concrete target. The
+         [ref.cast] handles nullability, so only hierarchy membership is checked
+         here — test the operand against a *nullable* reference regardless of the
+         target's nullability (a nullable operand cast to a non-null target is a
+         valid convert-then-null-checking-cast). *)
       match ty' with
-      | Extern -> sub ity (Ref { nullable; typ = Any })
-      | Any -> sub ity (Ref { nullable; typ = Extern })
+      | Extern -> sub ity (Ref { nullable = true; typ = Any })
+      | Any -> sub ity (Ref { nullable = true; typ = Extern })
       | _ ->
-          (* [extern] <-> [any] across hierarchies, then a [ref.cast] to the
-             concrete target. The [ref.cast] handles nullability, so only
-             hierarchy membership is checked here. *)
           Option.value ~default:false
             (let+@ top = top_heap_type ctx ty' in
              (sub ity (Ref { nullable = true; typ = Extern }) && top = Any)
