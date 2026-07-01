@@ -48,7 +48,8 @@ fuzz/triage.sh REPORT       # collapse a findings report into ranked bug signatu
 
 # Wax *source* side (compile direction: parser, type checker, to_wasm):
 fuzz/wax-corpus.sh [smith-count] [bytes]   # build .wax seeds: spec corpus + smith modules
-fuzz/mutate-wax.sh [count]  # AST-mutate the wax seeds + check them
+fuzz/mutate-wax.sh [count]       # AST-mutate the wax seeds + check them (needs wasm-tools)
+fuzz/mutate-validate.sh [count]  # AST-mutate + emitter-soundness vs the spec reference (no wasm-tools)
 
 # WAT *input* side (the text lexer/parser):
 fuzz/wat-corpus.sh [smith-count] [bytes]   # build .wat seeds: spec corpus + smith modules
@@ -63,9 +64,9 @@ fuzz/exec-interp.sh [wast…] # via wabt spectest-interp
 fuzz/exec.sh [wast…]        # via Node
 ```
 
-`run.sh`, `smith.sh` and `mutate-wax.sh` exit non-zero if any **HIGH**-severity
-finding appears, so any can gate CI; the execution oracles exit non-zero on any
-behavioural regression. `fuzz/corpus/`, `fuzz/corpus-wax/`,
+`run.sh`, `smith.sh`, `mutate-wax.sh`, `diff-validate.sh` and `mutate-validate.sh`
+exit non-zero if any **HIGH**-severity finding appears, so any can gate CI; the
+execution oracles exit non-zero on any behavioural regression. `fuzz/corpus/`, `fuzz/corpus-wax/`,
 `fuzz/smith-findings/` and `fuzz/mutate-findings/` are gitignored.
 
 ## The corpus
@@ -103,11 +104,29 @@ on anything the decompiler would not itself emit. Two scripts close that gap:
   soundness, and the wax round-trip; each finding is re-verified to drop transient
   load noise.
 
-There is no external reference for Wax (no `wasm-tools validate` equivalent), so
-a wax-side bug is: a crash; wax accepting a program whose emitted wasm the
-reference rejects (`FALSE_ACCEPT`); or a broken `wax → wasm → wax → wasm`
+There is no external reference for Wax *source* (no `wasm-tools validate`
+equivalent), so a wax-side bug is: a crash; wax accepting a program whose emitted
+wasm the reference rejects (`FALSE_ACCEPT`); or a broken `wax → wasm → wax → wasm`
 round-trip. A natural next step (not yet built) is a from-scratch grammar-based
 Wax generator for syntactic constructs the decompiler never emits.
+
+* `mutate-validate.sh` is the `FALSE_ACCEPT` (emitter-soundness) check on its own,
+  judged by the spec **reference interpreter** instead of `wasm-tools` — so it runs
+  where `mutate-wax.sh`'s full oracle cannot (no `wasm-tools` installed). It mutates
+  a seed, type-checks it (`wax --validate`), and if wax accepts, the emitted binary
+  must decode+validate under the reference; a wax accept + reference reject is
+  `UNSOUND`, a wax crash is `CRASH`, a wax rejection is fine. Two precautions avoid
+  false positives: seeds are pre-filtered to those the reference can decode
+  unmutated (dropping proposals the REF build lacks, e.g. stack switching), and a
+  reference *decoding* error on a mutant (an unsupported proposal a graft pulled in)
+  is ignored — only a *validation* rejection counts. This targets the hand-written
+  soundness class the decompiler-based oracles structurally miss: decompiled wax
+  always carries explicit casts, so implicit coercions and flexible-literal
+  defaults (e.g. a large-int literal used as an integer then coerced to a float)
+  only arise in source a human — or the mutator — writes. Caveat: `fuzz_mutate`
+  only edits literals and cast targets plus grafts, so it under-explores those
+  patterns; reviewing the flexible-literal arms of `lib-wax/typing.ml` directly is
+  the higher-signal method, and a clean run is corroboration, not proof.
 
 ## The WAT input side
 

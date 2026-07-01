@@ -6,3 +6,4 @@ corpus-wat/
 mutate-wat-findings/
 mutate-wasm-findings/
 diff-findings/
+mutate-sound-findings/
