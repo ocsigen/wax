@@ -48,6 +48,17 @@ parsed as an empty section.
   Error: unexpected end
   [128]
 
+A section whose body parses to fewer bytes than its declared size, leaving
+trailing data inside the section (here a type section declaring 2 bytes but
+whose count of 0 consumes only 1): the body must be exactly its declared length,
+so the leftover byte is a size mismatch rather than being silently ignored.
+
+  $ printf '\000asm\001\000\000\000\001\002\000\000' > trailing-section.wasm
+  $ wax -i wasm trailing-section.wasm -f wat
+  File "trailing-section.wasm", line 1, characters 11-11:
+  Error: section size mismatch
+  [128]
+
 An LEB128 integer (here a section size) encoded with more bytes than its type
 allows:
 

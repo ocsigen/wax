@@ -1382,7 +1382,7 @@ let module_ diagnostics ?filename buf =
   let rec loop m last_section_order =
     match next_section ch with
     | None -> m
-    | Some sect -> (
+    | Some sect ->
         let current_order =
           match sect.id with
           | 12 -> 11
@@ -1397,140 +1397,133 @@ let module_ diagnostics ?filename buf =
         let next_section_order =
           if sect.id = 0 then last_section_order else current_order
         in
-        match sect.id with
-        | 1 ->
-            (* Type section *)
-            loop
+        let m =
+          match sect.id with
+          | 1 ->
+              (* Type section *)
               { m with types = Array.to_list (type_section ch) }
-              next_section_order
-        | 2 ->
-            (* Import section *)
-            loop
+          | 2 ->
+              (* Import section *)
               { m with imports = Array.to_list (vec import ch) }
-              next_section_order
-        | 3 ->
-            (* Function section *)
-            loop
+          | 3 ->
+              (* Function section *)
               { m with functions = Array.to_list (vec typeidx ch) }
-              next_section_order
-        | 4 ->
-            (* Table section *)
-            let tables = Array.to_list (vec table ch) in
-            loop { m with tables } next_section_order
-        | 5 ->
-            (* Memory section *)
-            loop
+          | 4 ->
+              (* Table section *)
+              let tables = Array.to_list (vec table ch) in
+              { m with tables }
+          | 5 ->
+              (* Memory section *)
               { m with memories = Array.to_list (vec limits ch) }
-              next_section_order
-        | 6 ->
-            (* Global section *)
-            let globals =
-              Array.to_list
-                (vec
-                   (fun ch ->
-                     let typ = globaltype ch in
-                     { typ; init = expr ch })
-                   ch)
-            in
-            loop { m with globals } next_section_order
-        | 7 ->
-            (* Export section *)
-            loop
+          | 6 ->
+              (* Global section *)
+              let globals =
+                Array.to_list
+                  (vec
+                     (fun ch ->
+                       let typ = globaltype ch in
+                       { typ; init = expr ch })
+                     ch)
+              in
+              { m with globals }
+          | 7 ->
+              (* Export section *)
               { m with exports = Array.to_list (vec export ch) }
-              next_section_order
-        | 8 ->
-            (* Start section *)
-            loop { m with start = Some (uint ch) } next_section_order
-        | 9 ->
-            (* Element section *)
-            loop
+          | 8 ->
+              (* Start section *)
+              { m with start = Some (uint ch) }
+          | 9 ->
+              (* Element section *)
               { m with elem = Array.to_list (vec elem ch) }
-              next_section_order
-        | 10 ->
-            (* Code section *)
-            loop
+          | 10 ->
+              (* Code section *)
               { m with code = Array.to_list (vec code ch) }
-              next_section_order
-        | 11 ->
-            (* Data section *)
-            loop
+          | 11 ->
+              (* Data section *)
               { m with data = Array.to_list (vec data ch) }
-              next_section_order
-        | 12 ->
-            (* DataCount section *)
-            data_count := Some (uint ch);
-            ch.has_data_count <- true;
-            loop m next_section_order
-        | 13 ->
-            (* Tag section *)
-            let tags = Array.to_list (vec tag ch) in
-            loop { m with Ast.Binary.tags } next_section_order
-        | 0 -> (
-            (* Custom section *)
-            let start_pos = pos_in ch in
-            let custom_name = name ch in
-            match custom_name with
-            | "name" ->
-                let rec parse_name_subsections current_names =
-                  if pos_in ch = start_pos + sect.size then current_names
-                  else
-                    let subsection_id = uint ch in
-                    let subsection_size = uint ch in
-                    let subsection_start_pos = pos_in ch in
-                    let updated_names =
-                      match subsection_id with
-                      | 0 ->
-                          (* Module name *)
-                          let module_name = name ch in
-                          {
-                            current_names with
-                            Ast.Binary.module_ = Some module_name;
-                          }
-                      | 1 ->
-                          (* Function names *)
-                          { current_names with functions = name_map ch }
-                      | 2 ->
-                          (* Local names *)
-                          { current_names with locals = indirect_name_map ch }
-                      | 3 ->
-                          (* Label names *)
-                          { current_names with labels = indirect_name_map ch }
-                      | 4 ->
-                          (* Type names *)
-                          { current_names with types = name_map ch }
-                      | 5 ->
-                          (* Table names *)
-                          { current_names with tables = name_map ch }
-                      | 6 ->
-                          (* Memory names *)
-                          { current_names with memories = name_map ch }
-                      | 7 ->
-                          (* Global names *)
-                          { current_names with globals = name_map ch }
-                      | 8 ->
-                          (* Elem names *)
-                          { current_names with elem = name_map ch }
-                      | 9 ->
-                          (* Data names *)
-                          { current_names with data = name_map ch }
-                      | 10 ->
-                          (* Field names *)
-                          { current_names with fields = indirect_name_map ch }
-                      | 11 ->
-                          (* Tag names *)
-                          { current_names with tags = name_map ch }
-                      | _ -> current_names (* Skip unknown subsections *)
-                    in
-                    seek_in ch (subsection_start_pos + subsection_size);
-                    parse_name_subsections updated_names
-                in
-                let names = parse_name_subsections m.names in
-                loop { m with Ast.Binary.names } next_section_order
-            | _ ->
-                (* Skip other custom sections *)
-                skip_section ch sect;
-                loop m next_section_order)
-        | _ -> error ch "malformed section id %d" sect.id)
+          | 12 ->
+              (* DataCount section *)
+              data_count := Some (uint ch);
+              ch.has_data_count <- true;
+              m
+          | 13 ->
+              (* Tag section *)
+              let tags = Array.to_list (vec tag ch) in
+              { m with Ast.Binary.tags }
+          | 0 -> (
+              (* Custom section *)
+              let start_pos = pos_in ch in
+              let custom_name = name ch in
+              match custom_name with
+              | "name" ->
+                  let rec parse_name_subsections current_names =
+                    if pos_in ch = start_pos + sect.size then current_names
+                    else
+                      let subsection_id = uint ch in
+                      let subsection_size = uint ch in
+                      let subsection_start_pos = pos_in ch in
+                      let updated_names =
+                        match subsection_id with
+                        | 0 ->
+                            (* Module name *)
+                            let module_name = name ch in
+                            {
+                              current_names with
+                              Ast.Binary.module_ = Some module_name;
+                            }
+                        | 1 ->
+                            (* Function names *)
+                            { current_names with functions = name_map ch }
+                        | 2 ->
+                            (* Local names *)
+                            { current_names with locals = indirect_name_map ch }
+                        | 3 ->
+                            (* Label names *)
+                            { current_names with labels = indirect_name_map ch }
+                        | 4 ->
+                            (* Type names *)
+                            { current_names with types = name_map ch }
+                        | 5 ->
+                            (* Table names *)
+                            { current_names with tables = name_map ch }
+                        | 6 ->
+                            (* Memory names *)
+                            { current_names with memories = name_map ch }
+                        | 7 ->
+                            (* Global names *)
+                            { current_names with globals = name_map ch }
+                        | 8 ->
+                            (* Elem names *)
+                            { current_names with elem = name_map ch }
+                        | 9 ->
+                            (* Data names *)
+                            { current_names with data = name_map ch }
+                        | 10 ->
+                            (* Field names *)
+                            { current_names with fields = indirect_name_map ch }
+                        | 11 ->
+                            (* Tag names *)
+                            { current_names with tags = name_map ch }
+                        | _ -> current_names (* Skip unknown subsections *)
+                      in
+                      seek_in ch (subsection_start_pos + subsection_size);
+                      parse_name_subsections updated_names
+                  in
+                  let names = parse_name_subsections m.names in
+                  { m with Ast.Binary.names }
+              | _ ->
+                  (* Skip other custom sections *)
+                  skip_section ch sect;
+                  m)
+          | _ -> error ch "malformed section id %d" sect.id
+        in
+        (* The section body must be exactly its declared length: reject a section
+           whose content parses to fewer bytes (trailing data in the section) or
+           more (it ran into the next section), rather than resuming from wherever
+           the content parser happened to stop. [next_section] already rejected a
+           length that runs past the end of the module. *)
+        if ch.pos <> sect.pos + sect.size then error ch "section size mismatch";
+        loop m next_section_order
   in
   let res =
     loop
