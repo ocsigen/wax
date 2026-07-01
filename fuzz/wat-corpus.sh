@@ -19,7 +19,9 @@ SMITH_COUNT="${1:-1000}"
 SMITH_BYTES="${2:-8192}"
 SRC="${SRC:-$ROOT/fuzz/corpus/valid}"
 OUT="${OUT:-$ROOT/fuzz/corpus-wat}"
-JOBS="${JOBS:-$(nproc 2>/dev/null || echo 4)}"
+# Conversion is latency-bound (a short-lived wax fork per module), so
+# oversubscribe to fill the idle cores (like smith.sh) — ~4x the core count.
+JOBS="${JOBS:-$(( $(nproc 2>/dev/null || echo 4) * 4 ))}"
 rm -rf "$OUT"; mkdir -p "$OUT/valid"
 export WAX WASM_TOOLS TIMEOUT OUT SMITH_BYTES SMITH_FLAGS
 

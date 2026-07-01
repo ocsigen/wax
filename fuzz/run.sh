@@ -16,7 +16,10 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 CORPUS="${1:-$ROOT/fuzz/corpus}"
 [ -d "$CORPUS" ] || { echo "no corpus at $CORPUS — run fuzz/build-corpus.sh first" >&2; exit 2; }
 
-JOBS="${JOBS:-$(nproc 2>/dev/null || echo 4)}"
+# The oracle is latency-bound (a handful of short-lived wax forks per file), so
+# one worker per core leaves the cores mostly idle. Oversubscribe (like smith.sh);
+# ~4x the core count is the sweet spot.
+JOBS="${JOBS:-$(( $(nproc 2>/dev/null || echo 4) * 4 ))}"
 REPORT="$(mktemp)"
 ORACLE="$(dirname "${BASH_SOURCE[0]}")/oracle.sh"
 
