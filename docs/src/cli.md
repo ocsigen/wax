@@ -35,12 +35,12 @@ files (see [Formatting](#formatting)) and `check` validates them (see
     - Default: Auto-detected from input filename, or `wax` if reading from stdin.
 
 - **`-v`**, **`--validate`**
-    - Perform validation during conversion.
+    - Force validation, and additionally report unused locals.
     - For Wax: Runs type checking.
     - For Wasm Text: Runs well-formedness checks.
-    - Reports a warning for any local that is declared but never read — a Wax `let` binding, or a Wasm Text `(local …)`. Prefix the name with `_` (e.g. `let _x = …`, `(local $_x i32)`) to mark it intentionally unused and silence the warning; function parameters are never reported. This `unused-local` warning can be silenced, kept, or promoted to an error with [`-W`](#options) (e.g. `-W unused-local=error`).
+    - A text input (Wax/Wat) is **validated by default before it is converted to a different format** — the conversion and lowering passes trust that their input is well-formed, so a malformed module is rejected up front rather than reaching them. A same-format conversion (`wat` → `wat`, `wax` → `wax`) only re-prints and is *not* validated by default; a Wasm *binary* input is trusted and *not* validated. `--validate` forces validation in every case.
+    - Reports a warning for any local that is declared but never read — a Wax `let` binding, or a Wasm Text `(local …)`. This reporting is only enabled by `--validate` (the default validation above does not turn it on). Prefix the name with `_` (e.g. `let _x = …`, `(local $_x i32)`) to mark it intentionally unused and silence the warning; function parameters are never reported. This `unused-local` warning can be silenced, kept, or promoted to an error with [`-W`](#options) (e.g. `-W unused-local=error`).
     - For input containing conditional annotations (`#[if]` / `(@if ...)`), every reachable combination of conditions is checked independently, and each error is reported with the assumption (`reachable when ...`) under which it occurs.
-    - Disabled by default.
 
 - **`-s`**, **`--strict-validate`**
     - Perform strict reference validation for Wasm Text input (overrides the default relaxed validation). Wasm *binary* input is always validated strictly, regardless of this flag. When compiling Wax or Wasm Text to a binary, functions referenced by `ref.func` only inside a function body are automatically declared (via a declarative element segment), so the output passes strict validation.
@@ -81,9 +81,10 @@ files (see [Formatting](#formatting)) and `check` validates them (see
       `-W all=error -W unused-local=warning` makes every warning fatal except
       unused locals.
     - The validation warnings (`unused-local`, `truncated-coverage`) are
-      produced only while validating, so `-W` takes effect together with
-      `--validate` (for `convert` / `format`) and always for `check`. The
-      `naming` warnings are produced when converting a Wasm module to Wax.
+      produced only while validating. `truncated-coverage` can arise from the
+      validation `convert` runs on a text input; `unused-local` reporting is
+      turned on only by `--validate`, and always for `check`. The `naming`
+      warnings are produced when converting a Wasm module to Wax.
 
 - **`--color`** *WHEN*
     - Colorize output.
@@ -143,6 +144,8 @@ wax input.wax -D debug=false -D ocaml_version=5.1.0 -D target=wasi -o output.was
 
 The `format` subcommand reformats files in their own format (`.wat` → `.wat`,
 `.wax` → `.wax`, `.wasm` → `.wasm`), detected from each file's extension.
+Formatting never validates — it only re-prints; use [`check`](#checking) to
+validate.
 
 ```sh
 wax format [OPTIONS] FILE…
@@ -161,10 +164,8 @@ wax format [OPTIONS] FILE…
 - **`-f`**, **`--format`**, **`--input-format`** *FORMAT*
     - Treat all input files as this format (`wat`, `wasm` or `wax`), overriding
       the detection from each file's extension.
-- **`-v`**, **`--validate`**
-    - Also type-check (Wax) / well-formedness-check (Wasm) while formatting.
 - **`-W`** *NAME=LEVEL*, **`--warn`** *NAME=LEVEL* — set a warning's level, as
-  above (takes effect together with `--validate`).
+  above.
 - **`--color`** *WHEN* — as above (ignored when writing back in place).
 - **`--fold`** / **`--unfold`** — as above.
 - **`--debug`** *CATEGORY* — as above.

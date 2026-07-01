@@ -135,8 +135,8 @@ let wax_trivia ?retarget ctx ast =
   | None -> (trivia, tail)
   | Some (src, dst) -> Wax_utils.Trivia.retarget ~src ~dst trivia tail
 
-let wat_to_wat ~input_file ~output_file ~validate ~color ~output_color
-    ~fold_mode ~defines ~source_map_file:opt_source_map_file =
+let wat_to_wat ~input_file ~output_file ~validate ~warn_unused ~color
+    ~output_color ~fold_mode ~defines ~source_map_file:opt_source_map_file =
   let _ = opt_source_map_file in
   (* Ignored for non-wasm output *)
   let text = with_open_in input_file In_channel.input_all in
@@ -148,12 +148,12 @@ let wat_to_wat ~input_file ~output_file ~validate ~color ~output_color
   let ast = specialize_wat ~ctx ~color ~text defines ast in
   if validate then
     Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
-        Wax_wasm.Validation.f d ast);
+        Wax_wasm.Validation.f ~warn_unused d ast);
   let trivia, tail = wat_trivia ~fold_mode ctx ast in
   output_wat ~fold_mode ~output_file ~color:output_color ~trivia ~tail ast
 
-let wat_to_wax ~input_file ~output_file ~validate ~color ~output_color
-    ~fold_mode:_ ~defines ~source_map_file:opt_source_map_file =
+let wat_to_wax ~input_file ~output_file ~validate ~warn_unused ~color
+    ~output_color ~fold_mode:_ ~defines ~source_map_file:opt_source_map_file =
   let _ = opt_source_map_file in
   (* Ignored for non-wasm output *)
   let text = with_open_in input_file In_channel.input_all in
@@ -165,7 +165,7 @@ let wat_to_wax ~input_file ~output_file ~validate ~color ~output_color
   let ast = specialize_wat ~ctx ~color ~text defines ast in
   if validate then
     Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
-        Wax_wasm.Validation.f d ast);
+        Wax_wasm.Validation.f ~warn_unused d ast);
   let wax_ast =
     Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
         Wax_conversion.From_wasm.module_ d ast)
@@ -192,8 +192,8 @@ let wat_to_wax ~input_file ~output_file ~validate ~color ~output_color
       let fmt = Format.formatter_of_out_channel oc in
       Format.fprintf fmt "%a@." print_wax wax_ast)
 
-let wax_to_wat ~input_file ~output_file ~validate ~color ~output_color
-    ~fold_mode ~defines ~source_map_file:opt_source_map_file =
+let wax_to_wat ~input_file ~output_file ~validate ~warn_unused ~color
+    ~output_color ~fold_mode ~defines ~source_map_file:opt_source_map_file =
   let _ = opt_source_map_file in
   (* Ignored for non-wasm output *)
   let text = with_open_in input_file In_channel.input_all in
@@ -205,7 +205,7 @@ let wax_to_wat ~input_file ~output_file ~validate ~color ~output_color
   let ast = specialize_wax ~ctx ~color ~text defines ast in
   let types, ast =
     Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
-        Wax_lang.Typing.f ~warn_unused:validate d ast)
+        Wax_lang.Typing.f ~warn_unused d ast)
   in
   let wasm_ast =
     Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
@@ -226,8 +226,8 @@ let wax_to_wat ~input_file ~output_file ~validate ~color ~output_color
   in
   output_wat ~fold_mode ~output_file ~color:output_color ~trivia ~tail wasm_ast
 
-let wax_to_wax ~input_file ~output_file ~validate ~color ~output_color
-    ~fold_mode:_ ~defines ~source_map_file:opt_source_map_file =
+let wax_to_wax ~input_file ~output_file ~validate ~warn_unused ~color
+    ~output_color ~fold_mode:_ ~defines ~source_map_file:opt_source_map_file =
   let _ = opt_source_map_file in
   (* Ignored for non-wasm output *)
   let text = with_open_in input_file In_channel.input_all in
@@ -240,7 +240,7 @@ let wax_to_wax ~input_file ~output_file ~validate ~color ~output_color
   if validate then
     ignore
       (Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
-           Wax_lang.Typing.f ~warn_unused:true d ast));
+           Wax_lang.Typing.f ~warn_unused d ast));
   let trivia, tail = wax_trivia ctx ast in
   with_open_out output_file (fun oc ->
       let print_wax f m =
@@ -251,9 +251,9 @@ let wax_to_wax ~input_file ~output_file ~validate ~color ~output_color
       let fmt = Format.formatter_of_out_channel oc in
       Format.fprintf fmt "%a@." print_wax ast)
 
-let wax_to_wasm ~input_file ~output_file ~validate ~color ~output_color:_
-    ~fold_mode:_ ~defines ~source_map_file:(opt_source_map_file : string option)
-    =
+let wax_to_wasm ~input_file ~output_file ~validate ~warn_unused ~color
+    ~output_color:_ ~fold_mode:_ ~defines
+    ~source_map_file:(opt_source_map_file : string option) =
   let text = with_open_in input_file In_channel.input_all in
   let ast, _ctx =
     Wax_parser.parse_from_string
@@ -263,7 +263,7 @@ let wax_to_wasm ~input_file ~output_file ~validate ~color ~output_color:_
   let ast = specialize_wax ~color ~text defines ast in
   let types, ast =
     Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
-        Wax_lang.Typing.f ~warn_unused:validate d ast)
+        Wax_lang.Typing.f ~warn_unused d ast)
   in
   let wasm_ast_text =
     Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
@@ -279,8 +279,8 @@ let wax_to_wasm ~input_file ~output_file ~validate ~color ~output_color:_
       Wax_wasm.Wasm_output.module_ ~out_channel:oc ?opt_source_map_file
         wasm_ast_binary)
 
-let wat_to_wasm ~input_file ~output_file ~validate ~color ~output_color:_
-    ~fold_mode:_ ~defines ~source_map_file:opt_source_map_file =
+let wat_to_wasm ~input_file ~output_file ~validate ~warn_unused ~color
+    ~output_color:_ ~fold_mode:_ ~defines ~source_map_file:opt_source_map_file =
   let text = with_open_in input_file In_channel.input_all in
   let ast, _ctx =
     Wat_parser.parse_from_string
@@ -293,7 +293,7 @@ let wat_to_wasm ~input_file ~output_file ~validate ~color ~output_color:_
   let ast = Wax_wasm.Declare_refs.module_ ast in
   if validate then
     Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
-        Wax_wasm.Validation.f d ast);
+        Wax_wasm.Validation.f ~warn_unused d ast);
   let wasm_ast_binary = to_binary ~color ~source:(Some text) ast in
   with_open_out output_file (fun oc ->
       Wax_wasm.Wasm_output.module_ ~out_channel:oc ?opt_source_map_file
@@ -305,36 +305,36 @@ let parse_wasm ~color ?filename text =
   Wax_utils.Diagnostic.run ~color ~source:None (fun d ->
       Wax_wasm.Wasm_parser.module_ d ?filename text)
 
-let wasm_to_wasm ~input_file ~output_file ~validate:_validate ~color
-    ~output_color:_ ~fold_mode:_ ~defines:_ ~source_map_file:opt_source_map_file
-    =
+let wasm_to_wasm ~input_file ~output_file ~validate:_validate ~warn_unused:_
+    ~color ~output_color:_ ~fold_mode:_ ~defines:_
+    ~source_map_file:opt_source_map_file =
   let text = with_open_in input_file In_channel.input_all in
   let ast = parse_wasm ~color ?filename:input_file text in
   (* if validate then Wax_wasm.Validation.f ast; *)
   with_open_out output_file (fun oc ->
       Wax_wasm.Wasm_output.module_ ~out_channel:oc ?opt_source_map_file ast)
 
-let wasm_to_wat ~input_file ~output_file ~validate ~color ~output_color
-    ~fold_mode ~defines:_ ~source_map_file:opt_source_map_file =
+let wasm_to_wat ~input_file ~output_file ~validate ~warn_unused ~color
+    ~output_color ~fold_mode ~defines:_ ~source_map_file:opt_source_map_file =
   let _ = opt_source_map_file in
   let text = with_open_in input_file In_channel.input_all in
   let binary_ast = parse_wasm ~color ?filename:input_file text in
   let text_ast = Wax_wasm.Binary_to_text.module_ binary_ast in
   if validate then
     Wax_utils.Diagnostic.run ~color ~source:None (fun d ->
-        Wax_wasm.Validation.f d text_ast);
+        Wax_wasm.Validation.f ~warn_unused d text_ast);
   let trivia = Hashtbl.create 0 in
   output_wat ~fold_mode ~output_file ~color:output_color ~trivia text_ast
 
-let wasm_to_wax ~input_file ~output_file ~validate ~color ~output_color
-    ~fold_mode:_ ~defines:_ ~source_map_file:opt_source_map_file =
+let wasm_to_wax ~input_file ~output_file ~validate ~warn_unused ~color
+    ~output_color ~fold_mode:_ ~defines:_ ~source_map_file:opt_source_map_file =
   let _ = opt_source_map_file in
   let text = with_open_in input_file In_channel.input_all in
   let binary_ast = parse_wasm ~color ?filename:input_file text in
   let text_ast = Wax_wasm.Binary_to_text.module_ binary_ast in
   if validate then
     Wax_utils.Diagnostic.run ~color ~source:None (fun d ->
-        Wax_wasm.Validation.f d text_ast);
+        Wax_wasm.Validation.f ~warn_unused d text_ast);
   let wax_ast =
     Wax_utils.Diagnostic.run ~color ~source:None (fun d ->
         Wax_conversion.From_wasm.module_ d text_ast)
@@ -414,6 +414,18 @@ let convert input_file output_file input_format_opt output_format_opt validate
   let output_format =
     resolve_format output_file output_format_opt ~default:Wasm
   in
+  (* [--validate] enables unused-local reporting; it is not implied by the
+     forced validation below. *)
+  let warn_unused = validate in
+  (* A text input (Wax/Wat) is validated before it is transformed to a different
+     format: the conversion and lowering passes trust that their input is
+     well-formed, so a malformed module would otherwise reach them and misbehave.
+     A same-format transform (wat->wat, wax->wax) only re-prints, so it is not
+     validated by default; nor is a Wasm binary (trusted, from a producer that
+     already validated it). [--validate] forces validation in every case. *)
+  let validate =
+    validate || (input_format <> Wasm && input_format <> output_format)
+  in
   let convert =
     match (input_format, output_format) with
     | Wat, Wat -> wat_to_wat
@@ -438,7 +450,7 @@ let convert input_file output_file input_format_opt output_format_opt validate
     | Some _ -> (color, fun f -> f ())
   in
   with_pager @@ fun () ->
-  convert ~input_file ~output_file ~validate ~color ~output_color
+  convert ~input_file ~output_file ~validate ~warn_unused ~color ~output_color
     ~source_map_file:opt_source_map_file ~fold_mode ~defines
 
 (* Format files: re-print each in its own format (wat -> wat, wax -> wax, wasm
@@ -446,9 +458,8 @@ let convert input_file output_file input_format_opt output_format_opt validate
    [--inplace] the result is written back to each file; with [--check] nothing
    is written and files that are not already formatted are listed (a non-zero
    exit status reports this); otherwise exactly one file is formatted to stdout.
-   [validate] additionally type-checks (Wax) / well-formedness-checks (Wasm). *)
-let format inplace check format_opt validate color fold_mode warnings debug
-    files =
+   Formatting never validates: it only re-prints. *)
+let format inplace check format_opt color fold_mode warnings debug files =
   Wax_utils.Diagnostic.set_policy (build_policy warnings);
   Wax_utils.Debug.enable debug;
   if inplace && check then (
@@ -476,8 +487,9 @@ let format inplace check format_opt validate color fold_mode warnings debug
           | Wasm -> wasm_to_wasm
         in
         let run ~output_file ~output_color =
-          same_format ~input_file:(Some file) ~output_file ~validate ~color
-            ~output_color ~source_map_file:None ~fold_mode
+          same_format ~input_file:(Some file) ~output_file ~validate:false
+            ~warn_unused:false ~color ~output_color ~source_map_file:None
+            ~fold_mode
             ~defines:(Wax_wasm.Cond_specialize.of_list [])
         in
         if check then
@@ -633,8 +645,11 @@ let output_format =
 (* Define the --validate option *)
 let validate_flag =
   let doc =
-    "Perform validation (type checking for Wax, well-formedness for Wasm \
-     Text). Validation is disabled by default."
+    "Force validation (type checking for Wax, well-formedness for Wasm Text) \
+     and report unused locals. A text input (Wax/Wat) is already validated \
+     before it is converted to a different format; this flag additionally \
+     validates a same-format conversion and a trusted Wasm binary input, and \
+     turns on unused-local reporting."
   in
   Arg.(value & flag & info [ "v"; "validate" ] ~doc)
 
@@ -824,14 +839,13 @@ let format_term =
   let+ inplace = inplace_flag
   and+ check = check_flag
   and+ format_opt = format_input
-  and+ validate = validate_flag
   and+ color = color_option
   and+ fold_mode = fold_mode_option
   and+ warnings = warn_option
   and+ debug = debug_option
   and+ files = format_files in
-  format inplace check format_opt validate color fold_mode warnings
-    (List.concat debug) files
+  format inplace check format_opt color fold_mode warnings (List.concat debug)
+    files
 
 let format_cmd =
   let doc = "Format WebAssembly source files (.wat, .wasm, .wax)" in

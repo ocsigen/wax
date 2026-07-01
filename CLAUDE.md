@@ -47,7 +47,7 @@ bare `wax <file>` form working — edit that heuristic if adding subcommands.
 | `-i` | `--input-format` | Input format: `wax`, `wat`, `wasm` (default: auto from extension, else `wax`) |
 | `-f` | `--format` / `--output-format` | Output format: `wax`, `wat`, `wasm` (default: `wasm`) |
 | `-o` | `--output` | Output file (default: stdout) |
-| `-v` | `--validate` | Enable type checking (disabled by default) |
+| `-v` | `--validate` | Force validation everywhere and report unused locals. Text input (wax/wat) converted to a *different* format is validated by default already; this additionally validates a same-format conversion and a trusted wasm binary input |
 | `-s` | `--strict-validate` | Stricter validation |
 | `-D` | `--define` | Set a conditional-compilation variable (`NAME`, `NAME=true/false`, `NAME=N.N.N`, `NAME=STR`); specializes `#[if]`/`(@if)` annotations. Repeatable |
 | `-W` | `--warn` | Set a warning's level: `NAME=LEVEL` where `NAME` is a warning (`unused-local`, `truncated-coverage`, `naming-conflict`, `reserved-word-rename`, `generated-name`), a group (`unused`, `naming`), or `all`, and `LEVEL` is `hidden`/`warning`/`error`. The `naming` warnings (Wasm→Wax renames/generated names) are hidden by default. Later settings override earlier; repeatable |
@@ -58,14 +58,19 @@ bare `wax <file>` form working — edit that heuristic if adding subcommands.
 
 Binary output to a terminal is blocked; use `-o` to write WASM to a file.
 
-**format** — `dune exec wax -- format [options] FILE…`. Reformats each file in its own format (detected from the extension unless `-f` forces one).
+A text input (wax/wat) is validated before being converted to a *different*
+format, so a malformed module is rejected instead of reaching the conversion /
+lowering passes (which trust their input). A same-format conversion (wat→wat,
+wax→wax) only re-prints and is not validated by default; a wasm binary input is
+trusted and not validated. `--validate` forces validation in every case.
+
+**format** — `dune exec wax -- format [options] FILE…`. Reformats each file in its own format (detected from the extension unless `-f` forces one). Formatting never validates.
 
 | Flag | Long | Description |
 |------|------|-------------|
 | `-i` | `--inplace` | Write back to each file; otherwise exactly one file is formatted to stdout |
 | `-c` | `--check` | Write nothing; list unformatted files, exit non-zero if any (mutually exclusive with `--inplace`) |
 | `-f` | `--format` / `--input-format` | Force the format of all files (overrides extension detection) |
-| `-v` | `--validate` | Also type-check / well-formedness-check while formatting |
 | `-W` | `--warn` | Set a warning's level (as for convert) |
 |      | `--color` / `--fold` / `--unfold` / `--debug` | As for convert |
 

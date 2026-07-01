@@ -7,6 +7,7 @@ checked.
   parse: <t> ms
   type-check: <t> ms
   convert: <t> ms
+  validate: <t> ms
   output: <t> ms
 
 Categories are repeatable and may be comma-separated; an unknown category is
