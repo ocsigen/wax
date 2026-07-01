@@ -4892,14 +4892,30 @@ and type_array_init_call ctx i func a meth seg sinfo rest =
 and type_binary_intrinsic_call ctx i func i1 meth op i2 =
   let* i1' = instruction ctx i1 in
   let* i2' = instruction ctx i2 in
+  let ty1 = expression_type ctx i1' in
+  let ty2 = expression_type ctx i2' in
+  let is_int = match op with "rotl" | "rotr" -> true | _ -> false in
+  let check ty1 ty2 =
+    if is_int then check_int_bin_op ctx ~location:meth.info ty1 ty2
+    else check_float_bin_op ctx ~location:meth.info ty1 ty2
+  in
+  (* An abstract operand (a hole on the polymorphic stack of unreachable / branch
+     code) is unified onto the other operand's type; two abstract operands take the
+     operator's family default (int for [rotl]/[rotr], float for
+     [copysign]/[min]/[max]). [check_int_bin_op]/[check_float_bin_op] leave the
+     [Unknown]/[Error] arms to their caller, as the [BinOp] arms of [type_arith] do. *)
   let ty =
-    match op with
-    | "rotl" | "rotr" ->
-        check_int_bin_op ctx ~location:meth.info (expression_type ctx i1')
-          (expression_type ctx i2')
-    | _ ->
-        check_float_bin_op ctx ~location:meth.info (expression_type ctx i1')
-          (expression_type ctx i2')
+    match (Cell.get ty1, Cell.get ty2) with
+    | (Unknown | Error), (Unknown | Error) ->
+        Cell.merge ty1 ty2 (if is_int then Int else Float);
+        ty1
+    | (Unknown | Error), _ ->
+        Cell.merge ty1 ty2 (Cell.get ty2);
+        check ty1 ty2
+    | _, (Unknown | Error) ->
+        Cell.merge ty1 ty2 (Cell.get ty1);
+        check ty1 ty2
+    | _ -> check ty1 ty2
   in
   return_expression i
     (Call ({ desc = StructGet (i1', meth); info = ([||], func.info) }, [ i2' ]))
