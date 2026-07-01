@@ -12,16 +12,24 @@ width-agnostic popcnt/ctz chain) round-trip. Regression: found by the smith fuzz
   > WAX
   $ wax -i wax -f wasm f.wax -o /dev/null --validate
 
-There is no integer-to-i32 signed conversion, so a cast of an integer literal to
-i32_s is still rejected:
+The only numeric-to-i32 signed cast is a float truncation (i32.trunc_f*_s), so a
+flexible `number` source — a literal like `5`, which can be a float — is taken as
+one (defaulting to f64), not rejected:
 
-  $ printf 'fn f() -> i32 {\n    5 as i32_s;\n}\n' > bad.wax
+  $ printf 'fn f() -> i32 {\n    5 as i32_s;\n}\n' > ok.wax
+  $ wax -i wax -f wat ok.wax
+  (func $f (result i32) (i32.trunc_sat_f64_s (f64.const 5)))
+
+A *committed* integer source (here `5 & 5`, an int-only operator) has no
+integer-to-i32 signed conversion, so it is still rejected:
+
+  $ printf 'fn f() -> i32 {\n    (5 & 5) as i32_s;\n}\n' > bad.wax
   $ wax -i wax -f wasm bad.wax -o /dev/null
-  Error: This value of type number cannot be cast to the target type.
+  Error: This value of type int cannot be cast to the target type.
    ──➤  bad.wax:2:5
   1 │ fn f() -> i32 {
-  2 │     5 as i32_s;
-    ·     ^^^^^^^^^^
+  2 │     (5 & 5) as i32_s;
+    ·     ^^^^^^^^^^^^^^^^
   3 │ }
   4 │ 
   [128]

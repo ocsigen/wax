@@ -1079,7 +1079,14 @@ let signed_cast ctx ty ty' =
   | Valtype { internal = I32 | I64; _ }, (`F32 | `F64)
   | Valtype { internal = F32 | F64; _ }, (`I32 | `I64) ->
       true
-  | (Number | Int), `I32 (* no integer-to-i32 signed conversion exists *)
+  | Number, `I32 ->
+      (* The only numeric -> i32 signed cast is a float truncation
+         ([i32.trunc_f*_s]), so a flexible [Number] source is a float and defaults
+         to f64 (like the [Float] case below). ([Int] is rejected below: no
+         integer -> i32 signed conversion exists.) *)
+      Cell.set ty (Valtype f64_valtype);
+      true
+  | Int, `I32 (* no integer-to-i32 signed conversion exists *)
   | Valtype { internal = I32; _ }, `I32
   | Valtype { internal = I64; _ }, (`I32 | `I64)
   | Valtype { internal = F32 | F64; _ }, (`F32 | `F64)
