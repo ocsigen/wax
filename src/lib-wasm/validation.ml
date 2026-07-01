@@ -1498,11 +1498,20 @@ let with_current_stack f st = (st, f st)
 let unpack_type (f : fieldtype) =
   match f.typ with Value v -> v | Packed _ -> I32
 
-let rec repeat n f =
-  if n = 0 then return ()
+(* Pop [n] values of type [ty] (as [array.new_fixed] does), in time proportional
+   to the operands actually present, not to [n]. Once the stack is [Unreachable]
+   -- the polymorphic base, or a reachable underflow after the first empty pop
+   turns it into one -- every remaining pop trivially succeeds, so stop. This
+   keeps a huge immediate count (e.g. [array.new_fixed 2^31]) from making
+   validation O(n). *)
+let rec pop_repeat ctx loc ~expected_source ty n st =
+  if n <= 0 then (st, ())
   else
-    let* () = f in
-    repeat (n - 1) f
+    match st with
+    | Unreachable -> (Unreachable, ())
+    | _ ->
+        let st, () = pop ctx loc ~expected_source ty st in
+        pop_repeat ctx loc ~expected_source ty (n - 1) st
 
 let address_type_to_valtype = function `I32 -> I32 | `I64 -> I64
 
@@ -2550,10 +2559,9 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
   | ArrayNewFixed (idx, n) ->
       let*! ty, field = lookup_array_type ctx idx in
       let* () =
-        repeat (Uint32.to_int n)
-          (pop ctx loc
-             ~expected_source:(source_element_valtype ctx idx)
-             (unpack_type field))
+        pop_repeat ctx loc
+          ~expected_source:(source_element_valtype ctx idx)
+          (unpack_type field) (Uint32.to_int n)
       in
       push ~source:(named_ref_source idx) (Some loc)
         (Ref { nullable = false; typ = Type ty })
