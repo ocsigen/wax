@@ -343,7 +343,7 @@
           (@if (not $wasi)
             (@then
               (drop
-                (block $not_jsstring (result (ref eq))
+                (block $not_jsstring (result anyref)
                   (local.set $str
                     (struct.get $js $js
                       (br_on_cast_fail $not_jsstring (ref eq) (ref $js)

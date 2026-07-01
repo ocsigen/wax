@@ -256,7 +256,7 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32 {
                         return 1;
                     }
                     _ =
-                        'heterogeneous: do {
+                        'heterogeneous: do &eq {
                             let s1: i32;
                             let s2: i32;
                             _ =

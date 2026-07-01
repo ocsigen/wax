@@ -220,6 +220,18 @@ module Error = struct
       "The values reaching this block's exit have no common supertype, so its \
        result type cannot be inferred."
 
+  (* A value delivered by [br_if] stays on the stack (the fall-through) typed as
+     the block's result, so its type must equal the inferred result exactly, not
+     merely be a subtype. Here it is a strict subtype and there is no annotation
+     to pin the result, so the block cannot be given a result type consistent with
+     both. *)
+  let br_if_result_mismatch context ~location ~loc ~result ty =
+    report context ~location
+      ~related:[ typed_branch_label loc ty; typed_branch_label location result ]
+      "This [br_if] value stays on the stack as the block's result, so its \
+       type must match the inferred result exactly; add a result annotation to \
+       the block."
+
   let name_already_bound context ~location kind x =
     report context ~location "A %s named %a is already bound." kind print_name x
 
@@ -843,17 +855,17 @@ let field_subtype info (ty : Wax_wasm.Ast.Binary.fieldtype)
 (* Whether [ty] is the result cell of a block whose type is being inferred. *)
 let is_inferring ty = match Cell.get ty with Collecting _ -> true | _ -> false
 
-(* Resolve a cell that may be a block's transient [Collecting] result to a real
-   type: the declared annotation under test, marked needed (kept) since this use
-   relies on it and the join cannot re-derive it. A [Collecting] cell never
-   escapes inference as a value, so a consumer that pushes one as a value type
-   (e.g. [br_on_null]'s pass-through) must resolve it first. Cells that are not
-   under inference are returned unchanged. *)
-let rec resolve_inferring ty =
+(* The type a value passing through a branch to [ty] takes: it continues on the
+   stack typed as the target's result. When the target is a block being inferred
+   ([Collecting]) with a declared result (an annotation under test, or the context
+   type in expression position), that result is the right type — resolve to it, so
+   the pass-through is typed as the block's result rather than its own, possibly
+   narrower, operand (which would be unsound, see [Collecting.exacts]). With no
+   declared result (a fully-inferred block) the [Collecting] cell would leak as a
+   value, so the caller keeps the operand's own type instead. *)
+let rec resolve_declared ty =
   match Cell.get ty with
-  | Collecting ({ declared = Some d; _ } as cs) ->
-      cs.needed <- true;
-      resolve_inferring d
+  | Collecting { declared = Some d; _ } -> resolve_declared d
   | _ -> ty
 
 (* Whether the inferred type [ty] is a subtype of the expected type [ty'].
@@ -3007,13 +3019,33 @@ and type_branch ctx i =
       let ty, types = split_on_last_type ctx ~location:loc i' in
       check_subtype ctx ~location:loc ty i32_cell;
       let params = branch_target ctx label in
+      (* The delivered values continue on the stack (the fall-through) typed as
+         [types] — so, when the target is a block result being inferred, each is
+         an [exact] exit: its natural type (snapshotted here, before the delivery
+         below pins it) must equal the block's result, not merely be a subtype. *)
+      if Array.length types = Array.length params then
+        Array.iter2
+          (fun ty param ->
+            match Cell.get param with
+            | Collecting cs ->
+                cs.exacts <- (Some loc, Cell.make (Cell.get ty)) :: cs.exacts
+            | _ -> ())
+          types params;
       check_subtypes ctx ~location:loc types params;
-      (* On the fall-through the values stay on the stack; type them by what they
-         already are ([types], checked against the target just above) rather than
-         by [params]. For a concrete target the two coincide, but when the target
-         is a block result still being inferred ([params] is a [Collecting] cell),
-         returning [params] would leak that cell onto the stack as [any]. *)
-      let result = if Array.exists is_inferring params then types else params in
+      (* On the fall-through the values stay on the stack typed as the target's
+         result. When the target is being inferred but has a declared result,
+         resolve to it ([resolve_declared]); when it has none, that cell would leak
+         as a value, so fall back to the operands' own [types]. *)
+      let result =
+        if Array.exists is_inferring params then
+          Array.map2
+            (fun ty param ->
+              match Cell.get param with
+              | Collecting { declared = None; _ } -> ty
+              | _ -> resolve_declared param)
+            types params
+        else params
+      in
       return_statement i (Br_if (label, i')) result
   | Br_table (labels, i') ->
       let* i' = instruction ctx i' in
@@ -3061,17 +3093,35 @@ and type_branch ctx i =
             Error.expected_ref ctx.diagnostics ~location:(snd i'.info);
             Cell.make Error
       in
+      let loc = snd i'.info in
       let params = branch_target ctx idx in
-      check_subtypes ctx ~location:(snd i'.info) types params;
-      (* The fall-through carries the values below the reference through at the
-         branch target's parameter types (Wasm types [br_on_null]'s result by the
-         label, which may be a supertype of the operands). When the target is a
-         block whose result is still being inferred, that parameter is the
-         transient [Collecting] cell; resolve it to the declared annotation under
-         test (marking it needed) so a real type — not the inference cell — is
-         pushed, where a later [_] hole would otherwise adopt it as a value type. *)
-      let params = Array.map resolve_inferring params in
-      return_statement i (Br_on_null (idx, i')) (Array.append params [| typ' |])
+      (* Like [br_if]: the values below the reference are delivered to the target
+         and also continue on the non-null fall-through typed as [types], so, when
+         the target is being inferred, each is an [exact] exit whose natural type
+         (snapshotted before the delivery pins it) must equal the block's result. *)
+      if Array.length types = Array.length params then
+        Array.iter2
+          (fun ty param ->
+            match Cell.get param with
+            | Collecting cs ->
+                cs.exacts <- (Some loc, Cell.make (Cell.get ty)) :: cs.exacts
+            | _ -> ())
+          types params;
+      check_subtypes ctx ~location:loc types params;
+      (* Carry the values below the reference through typed as the target's result
+         ([resolve_declared]); with no declared result that cell would leak, so keep
+         the operands' own [types]. (See [br_if] above.) *)
+      let result =
+        if Array.exists is_inferring params then
+          Array.map2
+            (fun ty param ->
+              match Cell.get param with
+              | Collecting { declared = None; _ } -> ty
+              | _ -> resolve_declared param)
+            types params
+        else params
+      in
+      return_statement i (Br_on_null (idx, i')) (Array.append result [| typ' |])
   | Br_on_non_null (idx, i') ->
       let* i' = instruction ctx i' in
       let params = branch_target ctx idx in
@@ -6233,10 +6283,54 @@ and block_keep_needed ctx ~loc ~result r =
    the surrounding context, which accepted the declared supertype, still
    accepts; the round-trip is then more precise than the source rather than
    byte-identical, as elsewhere.) *)
-and finalize_inferred ?(needed = false) ctx typ ~inferred =
+(* The concrete width an exact ([br_if]) exit value re-defaults to on re-parse
+   ([resolve_omitted_valtype]: a flexible int/number/int8/int16 -> i32, large-int
+   -> i64, float -> f64, a concrete value -> itself). [None] for a polymorphic
+   value (dead code), which imposes no constraint. Used for the drop decision: an
+   annotation dropped here must be re-derivable, so a flexible exact that would
+   re-default to a different width keeps it. *)
+and exact_reparse_internal ctx ty =
+  match Cell.get ty with
+  | Int8 | Int16 -> Some i32_valtype.internal
+  | _ -> Option.map (fun v -> v.internal) (standalone_valtype ctx ty)
+
+(* Whether an exact exit's re-parse type equals a candidate result [internal]. *)
+and exact_reparse_matches ctx ~result ty =
+  match exact_reparse_internal ctx ty with None -> true | Some e -> e = result
+
+(* A [br_if] value stays on the stack typed as the block's result; when the result
+   is fixed (a present annotation, a context type, or the inferred join, all of
+   which pin a flexible exact), only a *concrete* exact of a different type is a
+   genuine mismatch — a flexible one is coerced to the result. Report each such
+   exact against [result] (a concrete width). *)
+and report_exact_mismatches ctx ~location ~result exacts =
+  match standalone_valtype ctx result with
+  | None -> ()
+  | Some t ->
+      List.iter
+        (fun (loc, ty) ->
+          match Cell.get ty with
+          | Valtype v when v.internal <> t.internal ->
+              Error.br_if_result_mismatch ctx.diagnostics ~location
+                ~loc:(Option.value loc ~default:location)
+                ~result ty
+          | _ -> ())
+        exacts
+
+and finalize_inferred ?(needed = false) ?(exacts = []) ?location ctx typ
+    ~inferred =
   if typ.results = [||] then
     match Option.bind inferred (resolve_omitted_valtype ctx) with
-    | Some iv -> ([| valtype_cell iv |], { typ with results = [| iv.typ |] })
+    | Some iv ->
+        (* The inferred result pins a flexible exact, so only a concrete exact of a
+           different type is unsound; without an annotation there is nothing to make
+           it match, so report it. *)
+        (match location with
+        | Some location ->
+            report_exact_mismatches ctx ~location ~result:(valtype_cell iv)
+              exacts
+        | None -> ());
+        ([| valtype_cell iv |], { typ with results = [| iv.typ |] })
     | None -> ([||], typ)
   else
     let result_cells =
@@ -6247,6 +6341,15 @@ and finalize_inferred ?(needed = false) ctx typ ~inferred =
     let drop =
       ctx.simplify && (not needed)
       && Array.length result_cells = 1
+      (* Only drop the annotation when every exact ([br_if]) exit re-defaults to
+         exactly the result; otherwise re-parse would re-infer a different result
+         and the pass-through value would no longer match it. *)
+      && (match standalone_valtype ctx result_cells.(0) with
+        | Some t ->
+            List.for_all
+              (fun (_, ty) -> exact_reparse_matches ctx ~result:t.internal ty)
+              exacts
+        | None -> exacts = [])
       &&
       match
         ( Option.bind inferred (standalone_valtype ctx),
@@ -6280,7 +6383,10 @@ and if_inference ctx i label typ ~cond ~if_block ~else_block =
       collect_into ctx i.info label ~cs ~r (Option.get else_block).desc
     in
     let inferred = join_collected ctx ~location:i.info cs.collected in
-    let results, typ = finalize_inferred ~needed:cs.needed ctx typ ~inferred in
+    let results, typ =
+      finalize_inferred ~needed:cs.needed ~exacts:cs.exacts ~location:i.info ctx
+        typ ~inferred
+    in
     Some
       ( If
           {
@@ -6302,7 +6408,7 @@ and declared_result ctx typ =
    annotation under test (or [None]), [needed] preset when it is already known to
    be load-bearing. *)
 and fresh_collecting ?(needed = false) declared =
-  let cs = { collected = []; declared; needed } in
+  let cs = { collected = []; exacts = []; declared; needed } in
   (cs, Cell.make (Collecting cs))
 
 (* Type one block body against the shared [Collecting] result cell [r] (backed
@@ -6387,7 +6493,10 @@ and block_inference ctx i label typ ~instrs =
     let cs, r = fresh_collecting (declared_result ctx typ) in
     let body' = collect_into ctx i.info label ~cs ~r instrs in
     let inferred = join_collected ctx ~location:i.info cs.collected in
-    let results, typ = finalize_inferred ~needed:cs.needed ctx typ ~inferred in
+    let results, typ =
+      finalize_inferred ~needed:cs.needed ~exacts:cs.exacts ~location:i.info ctx
+        typ ~inferred
+    in
     Some (Block { label; typ; block = body' }, results)
 
 (* Expression-position synthesis inference for [loop]/[try]/[try_table], the
@@ -6404,7 +6513,10 @@ and loop_inference ctx i label typ ~instrs =
     let results = [| r |] in
     let instrs' = block ctx i.info label [||] results [||] instrs in
     let inferred = join_collected ctx ~location:i.info cs.collected in
-    let results, typ = finalize_inferred ~needed:cs.needed ctx typ ~inferred in
+    let results, typ =
+      finalize_inferred ~needed:cs.needed ~exacts:cs.exacts ~location:i.info ctx
+        typ ~inferred
+    in
     Some (Loop { label; typ; block = instrs' }, results)
 
 and trytable_inference ctx i label typ ~body ~catches =
@@ -6415,7 +6527,10 @@ and trytable_inference ctx i label typ ~body ~catches =
     let body' = block ctx i.info label [||] results results body in
     check_trytable_catches ctx catches;
     let inferred = join_collected ctx ~location:i.info cs.collected in
-    let results, typ = finalize_inferred ~needed:cs.needed ctx typ ~inferred in
+    let results, typ =
+      finalize_inferred ~needed:cs.needed ~exacts:cs.exacts ~location:i.info ctx
+        typ ~inferred
+    in
     Some (TryTable { label; typ; block = body'; catches }, results)
 
 and try_inference ctx i label typ ~body ~catches ~catch_all =
@@ -6428,7 +6543,10 @@ and try_inference ctx i label typ ~body ~catches ~catch_all =
       type_try_catches ctx i label ~results catches catch_all
     in
     let inferred = join_collected ctx ~location:i.info cs.collected in
-    let results, typ = finalize_inferred ~needed:cs.needed ctx typ ~inferred in
+    let results, typ =
+      finalize_inferred ~needed:cs.needed ~exacts:cs.exacts ~location:i.info ctx
+        typ ~inferred
+    in
     Some (Try { label; typ; block = body'; catches; catch_all }, results)
 
 let check_type_definitions ctx =

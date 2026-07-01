@@ -78,6 +78,14 @@ and collecting = {
       (** Each value reaching the block's exit, paired with the location it was
           produced at (when known) so a join failure can point at the offending
           exits. *)
+  mutable exacts : (Ast.location option * inferred_type Cell.t) list;
+      (** Snapshots of the natural types of values delivered by [br_if] (and
+          other pass-through branches). Such a value continues on the stack and
+          is typed as the block result, so — unlike an ordinary exit, which need
+          only be a subtype — its type must be [exact]ly the result. Recorded
+          before the delivery pins the live cell; used to decide the keep-bool
+          (drop the annotation only if every exact matches it) and to reject an
+          inferred block whose result would differ from an exact. *)
   declared : inferred_type Cell.t option;
       (** The single result type the block already carries while being inferred
           — a Wasm->Wax annotation under test, or [None] when omitted. *)

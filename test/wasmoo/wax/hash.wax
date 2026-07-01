@@ -242,7 +242,7 @@ fn caml_hash(count: &eq, limit: &eq, seed: &eq, obj: &eq) -> &eq {
                         #[if(not(wasi))]
                         {
                             _ =
-                                'not_jsstring: do {
+                                'not_jsstring: do &?any {
                                     str = (br_on_cast_fail 'not_jsstring &js v).js;
                                     _ = br_if 'not_jsstring (0 as &i31, !jsstring_test(str));
                                     h = jsstring_hash(h, str);
