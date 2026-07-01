@@ -4746,14 +4746,22 @@ and type_simd_mem_method_call ctx i func recv memname meth args =
     args';
   (if mop.m_lane then
      let>@ lane = List.nth_opt args' nstack in
-     let>@ l = int_literal lane in
      let max_lane = 16 / mop.m_nat_align in
-     (* Compare unsigned: a lane index too large even for an [int] (e.g. a
-        literal near [u64] max) must still be rejected, not crash [Uint64.to_int]
-        with an assertion. *)
-     if Wax_utils.Uint64.compare l (Wax_utils.Uint64.of_int max_lane) >= 0 then
-       Error.invalid_lane_index ctx.diagnostics ~location:(snd lane.info)
-         max_lane);
+     (* Compare unsigned, and reject an [Ast.Int] too large even for [u64]
+        ([int_literal] = [None]): otherwise it slips past this check and crashes
+        [to_wasm]'s [int_of_string] (as for the SIMD lane index in
+        [type_simd_method_call]). A non-constant lane is reported above. *)
+     match lane.desc with
+     | Ast.Int _ -> (
+         match int_literal lane with
+         | Some l
+           when Wax_utils.Uint64.compare l (Wax_utils.Uint64.of_int max_lane)
+                < 0 ->
+             ()
+         | _ ->
+             Error.invalid_lane_index ctx.diagnostics ~location:(snd lane.info)
+               max_lane)
+     | _ -> ());
   check_memarg ctx ~address_type ~natural:mop.m_nat_align
     ~align:(List.nth_opt args' (nstack + nimm))
     ~offset:(List.nth_opt args' (nstack + nimm + 1));
@@ -5145,19 +5153,26 @@ and type_simd_vector_op_call ctx i func recv meth args =
   in
   List.iteri
     (fun k a ->
-      if k < nimm then (
-        (match a.desc with
-        | Ast.Int _ -> ()
+      if k < nimm then
+        (* A lane immediate must be a constant integer in range. Unsigned
+           compare, and reject an [Ast.Int] too large even for [u64]
+           ([int_literal] = [None]) — otherwise it reaches [to_wasm]'s
+           [int_of_string] and crashes (as for the memory lane index in
+           [type_simd_mem_method_call]). *)
+        match a.desc with
+        | Ast.Int _ -> (
+            let>@ bound = lane_bound in
+            match int_literal a with
+            | Some l
+              when Wax_utils.Uint64.compare l (Wax_utils.Uint64.of_int bound)
+                   < 0 ->
+                ()
+            | _ ->
+                Error.invalid_lane_index ctx.diagnostics ~location:(snd a.info)
+                  bound)
         | _ ->
             Error.constant_expression_required ctx.diagnostics
-              ~location:(snd a.info));
-        let>@ bound = lane_bound in
-        let>@ l = int_literal a in
-        (* Unsigned compare: a lane index too large even for an [int] must be
-           rejected, not crash [Uint64.to_int]'s assertion (as for the memory
-           lane index in [type_simd_mem_method_call]). *)
-        if Wax_utils.Uint64.compare l (Wax_utils.Uint64.of_int bound) >= 0 then
-          Error.invalid_lane_index ctx.diagnostics ~location:(snd a.info) bound)
+              ~location:(snd a.info)
       else
         let operand = 1 + (k - nimm) in
         if operand < List.length op.operands then
