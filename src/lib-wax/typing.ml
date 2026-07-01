@@ -1394,6 +1394,9 @@ let check_int_bin_op ctx ~location typ1 typ2 =
       Cell.merge typ1 typ2 (Cell.get typ2)
   | LargeInt, (LargeInt | Number | Int) | (Number | Int), LargeInt ->
       Cell.merge typ1 typ2 LargeInt
+  (* A fully-flexible [Number] on the left pairs with a flexible [Int] (the
+     symmetric [Int, Number] and [Number, Number] cases are above). *)
+  | Number, Int -> Cell.merge typ1 typ2 Int
   | _ -> Error.binop_type_mismatch ctx.diagnostics ~location typ1 typ2);
   typ1
 
@@ -1406,9 +1409,45 @@ let check_float_bin_op ctx ~location typ1 typ2 =
       Cell.merge typ1 typ2 (Cell.get typ1)
   | (Number | Float | LargeInt), Valtype { internal = F32 | F64; _ } ->
       Cell.merge typ1 typ2 (Cell.get typ2)
-  | Number, Number -> Cell.merge typ1 typ2 Float
+  (* Two flexible operands of a float operator (the [Float, _] cases are above):
+     a large-int literal is taken as a float here, so anything pairs to [Float]. *)
+  | (Number | LargeInt), (Number | Float | LargeInt) ->
+      Cell.merge typ1 typ2 Float
   | _ -> Error.binop_type_mismatch ctx.diagnostics ~location typ1 typ2);
   typ1
+
+(* Check and unify the operands of a numeric binary operator that accepts either
+   integers or floats (+, -, *, ==, !=); the two cells are merged to their common
+   type. Operands here are concrete or flexible numeric literals — the caller
+   handles the abstract [Unknown]/[Error] arms. Two fully-flexible [Number]s stay
+   [Number] (the operator could still resolve either way); any more committed
+   operand pins the pair to its group. Mirrors [check_int_bin_op] (int group) and
+   [check_float_bin_op] (float group) unioned. *)
+let check_num_concrete ctx ~location ty1 ty2 =
+  match (Cell.get ty1, Cell.get ty2) with
+  | Valtype { internal = I32; _ }, Valtype { internal = I32; _ }
+  | Valtype { internal = I64; _ }, Valtype { internal = I64; _ }
+  | Valtype { internal = F32; _ }, Valtype { internal = F32; _ }
+  | Valtype { internal = F64; _ }, Valtype { internal = F64; _ } ->
+      ()
+  | (Valtype { internal = I32 | I64; _ } | Int), (Number | Int)
+  | (Valtype { internal = F32 | F64; _ } | Float), (Number | Float | LargeInt)
+    ->
+      Cell.merge ty1 ty2 (Cell.get ty1)
+  | (Number | Int), Valtype { internal = I32 | I64; _ }
+  | (Number | Float | LargeInt), Valtype { internal = F32 | F64; _ } ->
+      Cell.merge ty1 ty2 (Cell.get ty2)
+  | Valtype { internal = I64; _ }, LargeInt -> Cell.merge ty1 ty2 (Cell.get ty1)
+  | LargeInt, Valtype { internal = I64; _ } -> Cell.merge ty1 ty2 (Cell.get ty2)
+  (* Two flexible literals: their most specific common type (the [Float, _],
+     [Int, _] and [LargeInt, Valtype] cases are above). *)
+  | LargeInt, (LargeInt | Int | Number) | (Int | Number), LargeInt ->
+      Cell.merge ty1 ty2 LargeInt
+  | LargeInt, Float -> Cell.merge ty1 ty2 Float
+  | Number, Float -> Cell.merge ty1 ty2 Float
+  | Number, Int -> Cell.merge ty1 ty2 Int
+  | Number, Number -> Cell.merge ty1 ty2 Number
+  | _ -> Error.binop_type_mismatch ctx.diagnostics ~location ty1 ty2
 
 let field_has_default (ty : fieldtype) =
   match ty.typ with
@@ -3425,27 +3464,6 @@ and type_arith ctx i =
                            (Ref { nullable = true; typ = Eq }))
                     then mismatch ();
                     Cell.merge ty1 ty2 (Cell.get ty2)
-                | Valtype { internal = I32; _ }, Valtype { internal = I32; _ }
-                | Valtype { internal = I64; _ }, Valtype { internal = I64; _ }
-                | Valtype { internal = F32; _ }, Valtype { internal = F32; _ }
-                | Valtype { internal = F64; _ }, Valtype { internal = F64; _ }
-                  ->
-                    ()
-                | (Valtype { internal = I32 | I64; _ } | Int), (Number | Int)
-                | ( (Valtype { internal = F32 | F64; _ } | Float),
-                    (Number | Float | LargeInt) )
-                | Number, Number ->
-                    Cell.merge ty1 ty2 (Cell.get ty1)
-                | (Number | Int), Valtype { internal = I32 | I64; _ }
-                | ( (Number | Float | LargeInt),
-                    Valtype { internal = F32 | F64; _ } ) ->
-                    Cell.merge ty1 ty2 (Cell.get ty2)
-                | Valtype { internal = I64; _ }, LargeInt
-                | LargeInt, (LargeInt | Number | Int) ->
-                    Cell.merge ty1 ty2 (Cell.get ty1)
-                | LargeInt, Valtype { internal = I64; _ }
-                | (Number | Int), LargeInt ->
-                    Cell.merge ty1 ty2 (Cell.get ty2)
                 (* [ref.eq] needs both operands [eqref]; the bottom reference
                    [UnknownRef] always is, so only a concrete side is checked. *)
                 | Valtype { internal = Ref _ as ty; _ }, UnknownRef
@@ -3456,90 +3474,24 @@ and type_arith ctx i =
                            (Ref { nullable = true; typ = Eq }))
                     then mismatch ()
                 | UnknownRef, (UnknownRef | Null) | Null, UnknownRef -> ()
-                | _ -> mismatch ());
+                (* Any non-reference operands are the ordinary numeric comparison.
+                   [check_num_concrete] reports the same mismatch otherwise. *)
+                | _ -> check_num_concrete ctx ~location:op.info ty1 ty2);
                 i32_cell
             | Add | Sub | Mul ->
-                (match (Cell.get ty1, Cell.get ty2) with
-                | Valtype { internal = I32; _ }, Valtype { internal = I32; _ }
-                | Valtype { internal = I64; _ }, Valtype { internal = I64; _ }
-                | Valtype { internal = F32; _ }, Valtype { internal = F32; _ }
-                | Valtype { internal = F64; _ }, Valtype { internal = F64; _ }
-                  ->
-                    ()
-                | (Valtype { internal = I32 | I64; _ } | Int), (Number | Int)
-                | ( (Valtype { internal = F32 | F64; _ } | Float),
-                    (Number | Float | LargeInt) )
-                | Number, Number ->
-                    Cell.merge ty1 ty2 (Cell.get ty1)
-                | (Number | Int), Valtype { internal = I32 | I64; _ }
-                | ( (Number | Float | LargeInt),
-                    Valtype { internal = F32 | F64; _ } ) ->
-                    Cell.merge ty1 ty2 (Cell.get ty2)
-                | Valtype { internal = I64; _ }, LargeInt
-                | LargeInt, (LargeInt | Number | Int) ->
-                    Cell.merge ty1 ty2 (Cell.get ty1)
-                | LargeInt, Valtype { internal = I64; _ }
-                | (Number | Int), LargeInt ->
-                    Cell.merge ty1 ty2 (Cell.get ty2)
-                | _ -> mismatch ());
+                check_num_concrete ctx ~location:op.info ty1 ty2;
                 ty1
             | Div (Some _) | Rem _ | And | Or | Xor | Shl | Shr _ ->
                 check_int_bin_op ctx ~location:op.info ty1 ty2
             | Div None -> check_float_bin_op ctx ~location:op.info ty1 ty2
             | Lt (Some _) | Gt (Some _) | Le (Some _) | Ge (Some _) ->
-                (match (Cell.get ty1, Cell.get ty2) with
-                | Valtype { internal = I32; _ }, Valtype { internal = I32; _ }
-                | Valtype { internal = I64; _ }, Valtype { internal = I64; _ }
-                | (Valtype { internal = I32 | I64; _ } | Int), (Number | Int) ->
-                    Cell.merge ty1 ty2 (Cell.get ty1)
-                | (Number | Int), Valtype { internal = I32 | I64; _ } ->
-                    Cell.merge ty1 ty2 (Cell.get ty2)
-                | Number, Number -> Cell.merge ty1 ty2 Int
-                | Valtype { internal = I64; _ }, LargeInt
-                | LargeInt, (LargeInt | Number | Int) ->
-                    Cell.merge ty1 ty2 (Cell.get ty1)
-                | LargeInt, Valtype { internal = I64; _ }
-                | (Number | Int), LargeInt ->
-                    Cell.merge ty1 ty2 (Cell.get ty2)
-                | _ -> mismatch ());
+                ignore (check_int_bin_op ctx ~location:op.info ty1 ty2);
                 i32_cell
             | Lt None | Gt None | Le None | Ge None ->
-                (match (Cell.get ty1, Cell.get ty2) with
-                | Valtype { internal = F32; _ }, Valtype { internal = F32; _ }
-                | Valtype { internal = F64; _ }, Valtype { internal = F64; _ }
-                | ( (Valtype { internal = F32 | F64; _ } | Float),
-                    (Number | Float | LargeInt) ) ->
-                    Cell.merge ty1 ty2 (Cell.get ty1)
-                | ( (Number | Float | LargeInt),
-                    Valtype { internal = F32 | F64; _ } ) ->
-                    Cell.merge ty1 ty2 (Cell.get ty2)
-                | Number, Number -> Cell.merge ty1 ty2 Float
-                | _ -> mismatch ());
+                ignore (check_float_bin_op ctx ~location:op.info ty1 ty2);
                 i32_cell
             | Ne ->
-                (match (Cell.get ty1, Cell.get ty2) with
-                | Valtype { internal = I32; _ }, Valtype { internal = I32; _ }
-                | Valtype { internal = I64; _ }, Valtype { internal = I64; _ }
-                | Valtype { internal = F32; _ }, Valtype { internal = F32; _ }
-                | Valtype { internal = F64; _ }, Valtype { internal = F64; _ }
-                  ->
-                    ()
-                | (Valtype { internal = I32 | I64; _ } | Int), (Number | Int)
-                | ( (Valtype { internal = F32 | F64; _ } | Float),
-                    (Number | Float | LargeInt) )
-                | Number, Number ->
-                    Cell.merge ty1 ty2 (Cell.get ty1)
-                | (Number | Int), Valtype { internal = I32 | I64; _ }
-                | ( (Number | Float | LargeInt),
-                    Valtype { internal = F32 | F64; _ } ) ->
-                    Cell.merge ty1 ty2 (Cell.get ty2)
-                | Valtype { internal = I64; _ }, LargeInt
-                | LargeInt, (LargeInt | Number | Int) ->
-                    Cell.merge ty1 ty2 (Cell.get ty1)
-                | LargeInt, Valtype { internal = I64; _ }
-                | (Number | Int), LargeInt ->
-                    Cell.merge ty1 ty2 (Cell.get ty2)
-                | _ -> mismatch ());
+                check_num_concrete ctx ~location:op.info ty1 ty2;
                 i32_cell)
       in
       return_expression i (BinOp (op, i1', i2')) ty
