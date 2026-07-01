@@ -33,7 +33,19 @@ A section whose declared contents run past the end of the input:
   $ printf '\000asm\001\000\000\000\001\012' > truncated.wasm
   $ wax -i wasm truncated.wasm -f wat
   File "truncated.wasm", line 1, characters 10-10:
-  Error: unexpected end of section or function
+  Error: unexpected end
+  [128]
+
+A section whose declared size exceeds the bytes actually present, even when the
+content parsed so far is well-formed (here a type section declaring 5 bytes but
+followed by only its 1-byte count of 0): the declared length is checked against
+the end of the module, so this truncation is rejected rather than silently
+parsed as an empty section.
+
+  $ printf '\000asm\001\000\000\000\001\005\000' > short-section.wasm
+  $ wax -i wasm short-section.wasm -f wat
+  File "short-section.wasm", line 1, characters 10-10:
+  Error: unexpected end
   [128]
 
 An LEB128 integer (here a section size) encoded with more bytes than its type

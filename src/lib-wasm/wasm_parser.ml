@@ -176,7 +176,12 @@ let next_section ch =
   else
     let id = input_byte ch in
     let size = uint ch in
-    Some { id; pos = pos_in ch; size }
+    let pos = pos_in ch in
+    (* A section declares its byte length; reject one that runs past the end of
+       the module (a truncated section) rather than silently parsing whatever
+       content is present and ignoring the missing bytes. *)
+    if pos + size > ch.limit then error ~pos ch "unexpected end";
+    Some { id; pos; size }
 
 let skip_section (ch : ch) { pos; size; _ } =
   if ch.pos > pos + size then error ch "section size mismatch";
