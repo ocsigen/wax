@@ -3597,7 +3597,7 @@ and type_arith ctx i =
                 | Valtype { internal = I64; _ }
                 | Valtype { internal = F32; _ }
                 | Valtype { internal = F64; _ }
-                | Number | Int | Float ->
+                | Number | Int | LargeInt | Float ->
                     ()
                 | _ -> mismatch ());
                 i32_cell)
