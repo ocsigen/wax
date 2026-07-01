@@ -990,7 +990,14 @@ let cast ctx ty ty' =
   | LargeInt, (I32 | I64 | F32 | F64) ->
       Cell.set ty (Valtype i64_valtype);
       true
-  | LargeInt, _ -> false (* not v128 or a reference *)
+  (* [ref.i31] takes an [i32]; the i64-sized literal wraps to [i32] first, exactly
+     like [i64 as &i31] below ([to_wasm] re-emits [i32.wrap_i64] then [ref.i31]).
+     This is the residue of [(big as i32) as &i31] after [simplify] fuses the
+     inner wrap into the [i31] cast. *)
+  | LargeInt, Ref { typ = I31; _ } ->
+      Cell.set ty (Valtype i64_valtype);
+      true
+  | LargeInt, _ -> false (* not v128 or another reference *)
   | Null, Ref { typ = ty'; _ } ->
       (let>@ typ = top_heap_type ctx ty' in
        let ty' = Ref { nullable = true; typ } in
