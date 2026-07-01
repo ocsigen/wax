@@ -541,6 +541,18 @@ let conversion_error ctx ~location message =
     ();
   Wax_utils.Diagnostic.abort ()
 
+(* The field sequence and names of the struct type [type_name] refers to.
+   [ctx.struct_fields] holds only struct types, so a miss means the index names a
+   non-struct type -- a [struct.new]/[.get]/[.set] validation would reject.
+   Report it and abort like other conversion errors rather than crash on the
+   missing table entry. *)
+let struct_fields ctx type_name =
+  match Hashtbl.find_opt ctx.struct_fields type_name.Ast.desc with
+  | Some fields -> fields
+  | None ->
+      conversion_error ctx ~location:type_name.Ast.info (fun f () ->
+          Format.fprintf f "This type should be a struct type.")
+
 let functype_arity { Src.params; results } =
   (Array.length params, Array.length results)
 
@@ -1244,7 +1256,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   | UnOp (F32 op) -> float_un_op i `F32 op
   | StructNew i ->
       let type_name = idx ctx `Type i in
-      let fields = snd (Hashtbl.find ctx.struct_fields type_name.desc) in
+      let fields = snd (struct_fields ctx type_name) in
       let* args = Stack.grab (List.length fields) in
       Stack.push 1
         (with_loc
@@ -1255,9 +1267,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       Stack.push 1 (with_loc (StructDefault (Some (idx ctx `Type i))))
   | StructGet (s, t, f) ->
       let type_name = idx ctx `Type t in
-      let name =
-        Sequence.get (fst (Hashtbl.find ctx.struct_fields type_name.desc)) f
-      in
+      let name = Sequence.get (fst (struct_fields ctx type_name)) f in
       let* arg = Stack.pop in
       let arg =
         {
@@ -1276,9 +1286,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
               (Cast (e, Signedtype { typ = `I32; signage; strict = false })))
   | StructSet (t, f) ->
       let type_name = idx ctx `Type t in
-      let name =
-        Sequence.get (fst (Hashtbl.find ctx.struct_fields type_name.desc)) f
-      in
+      let name = Sequence.get (fst (struct_fields ctx type_name)) f in
       let* e2 = Stack.pop in
       let* e1 = Stack.pop in
       let e1 =
