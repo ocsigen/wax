@@ -34,6 +34,18 @@ val replace_name : Ast.vec_shape -> string
 val shuffle_name : string
 val bitselect_name : string
 val const_name : Wax_utils.V128.shape -> string
+
+val free_namespace : string
+(** The namespace of the free-function intrinsics, spelled [v128::<member>]. *)
+
+val free_full : string -> string
+(** [free_full member] is the registry key [v128_<member>] for a [v128::member]
+    path (the inverse of {!free_member}). *)
+
+val free_member : string -> string
+(** [free_member "v128_bitselect" = "bitselect"]: the [v128::] member name for a
+    full registry key (the inverse of {!free_full}). *)
+
 val vec_load_name : Ast.vec_load_op -> string
 val load_lane_name : [ `I8 | `I16 | `I32 | `I64 ] -> string
 val store_lane_name : [ `I8 | `I16 | `I32 | `I64 ] -> string
@@ -87,7 +99,3 @@ type mem_intrinsic = {
 
 val mem_method : string -> mem_intrinsic option
 val is_mem_method : string -> bool
-
-val all_names : string list
-(** Every reserved intrinsic name (methods, free functions, memory ops). Used to
-    keep generated wax names from shadowing an intrinsic. *)

@@ -192,6 +192,17 @@ let shuffle_name = "shuffle_i8x16"
 let bitselect_name = "v128_bitselect"
 let const_name (s : Wax_utils.V128.shape) = "v128_const_" ^ v128_shape_str s
 
+(* The free-function intrinsics are spelled [v128::<member>] in Wax; the registry
+   keys them by the full [v128_<member>] mnemonic. These convert between the two:
+   [free_full "bitselect" = "v128_bitselect"], [free_member "v128_bitselect" =
+   "bitselect"]. *)
+let free_namespace = "v128"
+let free_full member = free_namespace ^ "_" ^ member
+
+let free_member full =
+  let p = String.length free_namespace + 1 in
+  String.sub full p (String.length full - p)
+
 let extract_name s (sign : Ast.signage option) =
   "extract_lane"
   ^ (match sign with Some x -> sgn x | None -> "")
@@ -590,33 +601,3 @@ let mem_method name : mem_intrinsic option =
   | _ -> None
 
 let is_mem_method name = mem_method name <> None
-
-(* Every reserved intrinsic name (methods, free functions and memory ops), so
-   [from_wasm] can rename any module entity that would otherwise shadow one. *)
-let all_names : string list =
-  let methods = Hashtbl.fold (fun k _ acc -> k :: acc) table [] in
-  let consts =
-    List.map const_name
-      ([ I8x16; I16x8; I32x4; I64x2; F32x4; F64x2 ] : Wax_utils.V128.shape list)
-  in
-  let loads =
-    List.map vec_load_name
-      ([
-         Load128;
-         Load8x8S;
-         Load8x8U;
-         Load16x4S;
-         Load16x4U;
-         Load32x2S;
-         Load32x2U;
-         Load32Zero;
-         Load64Zero;
-       ]
-        : Ast.vec_load_op list)
-  in
-  let lane_ops =
-    List.concat_map
-      (fun w -> [ load_splat_name w; load_lane_name w; store_lane_name w ])
-      [ `I8; `I16; `I32; `I64 ]
-  in
-  methods @ consts @ loads @ (store_name :: lane_ops)

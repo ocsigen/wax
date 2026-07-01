@@ -7,9 +7,9 @@ lowering back (wax -> wat); the binary is byte-identical modulo debug names.
   $ wax simd.wat -f wax -o out.wax && cat out.wax
   memory m: i32 [1];
   fn f(a: v128, b: v128) -> v128 {
-      _ = v128_const_i32x4(1, 2, 3, 4);
-      _ = v128_const_f32x4(1.5, 2.5, 3.5, 4.5);
-      _ = v128_const_i8x16(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
+      _ = v128::const_i32x4(1, 2, 3, 4);
+      _ = v128::const_f32x4(1.5, 2.5, 3.5, 4.5);
+      _ = v128::const_i8x16(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
       _ = (5).splat_i32x4();
       _ = (1.5).splat_f64x2();
       _ = a.add_i32x4(b);
@@ -38,7 +38,7 @@ lowering back (wax -> wat); the binary is byte-identical modulo debug names.
       _ = a.any_true_v128();
       _ = a.all_true_i32x4();
       _ = a.bitmask_i8x16();
-      _ = v128_bitselect(a, b, a);
+      _ = v128::bitselect(a, b, a);
       _ = a.relaxed_madd_f32x4(b, a);
       _ = m.v128_load(0);
       _ = m.v128_load8x8_s(0);
@@ -103,4 +103,4 @@ Lowering back to WAT reproduces the instructions (the wax round-trips):
 A v128.const global initializer is a constant expression:
 
   $ wax global.wat -f wax -o g.wax && cat g.wax
-  let g = v128_const_i32x4(0, 1, 2, 3);
+  let g = v128::const_i32x4(0, 1, 2, 3);

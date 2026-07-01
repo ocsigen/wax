@@ -5068,72 +5068,79 @@ and type_simd_vector_op_call ctx i func recv meth args =
     (Call ({ desc = StructGet (recv', meth); info = ([||], func.info) }, args'))
     result
 
-and type_simd_free_intrinsic_call ctx i func name args =
+and type_simd_free_intrinsic_call ctx i func ns name args =
+  let full = Simd.free_full name.desc in
+  let callee = { desc = Path (ns, name); info = ([||], func.info) } in
   let* args' = instructions ctx args in
-  (match Simd.const_shape_of_name name.desc with
-  | Some shape ->
-      let arity = Simd.const_arity shape in
-      if List.length args' <> arity then
-        Error.value_count_mismatch ctx.diagnostics ~location:i.info
-          ~expected:arity ~provided:(List.length args');
-      (* Each lane of an integer shape must fit its width, accepting both the
+  if not (Simd.is_free_intrinsic full) then (
+    Error.unknown_intrinsic ctx.diagnostics ~location:i.info ns.desc name.desc;
+    return_expression i (Call (callee, args')) (Cell.make Error))
+  else (
+    (match Simd.const_shape_of_name full with
+    | Some shape ->
+        let arity = Simd.const_arity shape in
+        if List.length args' <> arity then
+          Error.value_count_mismatch ctx.diagnostics ~location:i.info
+            ~expected:arity ~provided:(List.length args');
+        (* Each lane of an integer shape must fit its width, accepting both the
          signed and unsigned range [-2^(b-1), 2^b-1] (so an i8 lane is
          [-128, 255]). Beyond rejecting a malformed const, this stops an
          out-of-[int]-range literal from later crashing [V128.to_string]'s
          [int_of_string] in the binary encoder. *)
-      let bits =
-        match shape with
-        | I8x16 -> Some 8
-        | I16x8 -> Some 16
-        | I32x4 -> Some 32
-        | I64x2 -> Some 64
-        | F32x4 | F64x2 -> None
-      in
-      List.iter
-        (let lane_in_range b neg l =
-           match int_literal l with
-           | None -> false (* exceeds u64 *)
-           | Some v ->
-               let v = Wax_utils.Uint64.to_int64 v in
-               if neg then
-                 (* magnitude <= 2^(b-1) *)
-                 Int64.unsigned_compare v (Int64.shift_left 1L (b - 1)) <= 0
-               else if b = 64 then true
-               else
-                 Int64.unsigned_compare v (Int64.sub (Int64.shift_left 1L b) 1L)
-                 <= 0
-         in
-         fun a ->
-           match (bits, a.desc) with
-           | Some b, Ast.Int _ ->
-               if not (lane_in_range b false a) then
+        let bits =
+          match shape with
+          | I8x16 -> Some 8
+          | I16x8 -> Some 16
+          | I32x4 -> Some 32
+          | I64x2 -> Some 64
+          | F32x4 | F64x2 -> None
+        in
+        List.iter
+          (let lane_in_range b neg l =
+             match int_literal l with
+             | None -> false (* exceeds u64 *)
+             | Some v ->
+                 let v = Wax_utils.Uint64.to_int64 v in
+                 if neg then
+                   (* magnitude <= 2^(b-1) *)
+                   Int64.unsigned_compare v (Int64.shift_left 1L (b - 1)) <= 0
+                 else if b = 64 then true
+                 else
+                   Int64.unsigned_compare v
+                     (Int64.sub (Int64.shift_left 1L b) 1L)
+                   <= 0
+           in
+           fun a ->
+             match (bits, a.desc) with
+             | Some b, Ast.Int _ ->
+                 if not (lane_in_range b false a) then
+                   Error.lane_value_out_of_range ctx.diagnostics
+                     ~location:(snd a.info) b
+             | ( Some b,
+                 Ast.UnOp ({ desc = Neg; _ }, ({ desc = Ast.Int _; _ } as l)) )
+               ->
+                 if not (lane_in_range b true l) then
+                   Error.lane_value_out_of_range ctx.diagnostics
+                     ~location:(snd a.info) b
+             | ( Some b,
+                 ( Ast.Float _
+                 | Ast.UnOp ({ desc = Neg; _ }, { desc = Ast.Float _; _ }) ) )
+               ->
+                 (* a float literal is not a valid integer lane *)
                  Error.lane_value_out_of_range ctx.diagnostics
                    ~location:(snd a.info) b
-           | Some b, Ast.UnOp ({ desc = Neg; _ }, ({ desc = Ast.Int _; _ } as l))
-             ->
-               if not (lane_in_range b true l) then
-                 Error.lane_value_out_of_range ctx.diagnostics
-                   ~location:(snd a.info) b
-           | ( Some b,
-               ( Ast.Float _
-               | Ast.UnOp ({ desc = Neg; _ }, { desc = Ast.Float _; _ }) ) ) ->
-               (* a float literal is not a valid integer lane *)
-               Error.lane_value_out_of_range ctx.diagnostics
-                 ~location:(snd a.info) b
-           | ( None,
-               ( Ast.Int _ | Ast.Float _
-               | Ast.UnOp
-                   ({ desc = Neg; _ }, { desc = Ast.Int _ | Ast.Float _; _ }) )
-             ) ->
-               () (* a float shape accepts any numeric literal lane *)
-           | _ ->
-               Error.constant_expression_required ctx.diagnostics
-                 ~location:(snd a.info))
-        args'
-  | None -> List.iter (fun a -> check_type ctx a (simd_cell TV128)) args');
-  return_expression i
-    (Call ({ desc = Get name; info = ([||], func.info) }, args'))
-    (simd_cell TV128)
+             | ( None,
+                 ( Ast.Int _ | Ast.Float _
+                 | Ast.UnOp
+                     ({ desc = Neg; _ }, { desc = Ast.Int _ | Ast.Float _; _ })
+                   ) ) ->
+                 () (* a float shape accepts any numeric literal lane *)
+             | _ ->
+                 Error.constant_expression_required ctx.diagnostics
+                   ~location:(snd a.info))
+          args'
+    | None -> List.iter (fun a -> check_type ctx a (simd_cell TV128)) args');
+    return_expression i (Call (callee, args')) (simd_cell TV128))
 
 (* Bidirectional checking mode: type [i] against an [expected] type and report
    whether the contextual annotation is load-bearing (the keep-bool). A
@@ -5992,32 +5999,37 @@ and call_instruction ctx i =
   | Call (({ desc = StructGet (recv, meth); _ } as func), args)
     when Simd.classify meth.desc <> None ->
       type_simd_vector_op_call ctx i func recv meth args
-  (* SIMD free-function intrinsics: [v128_const_<shape>(...)] and
-     [v128_bitselect(a, b, mask)]. A user binding of the same name takes
-     precedence (these only fire when the name is unbound). *)
-  | Call (({ desc = Get name; _ } as func), args)
-    when Simd.is_free_intrinsic name.desc
-         && StringMap.find_opt name.desc ctx.locals = None
-         && Tbl.find_opt ctx.globals name = None
-         && Tbl.find_opt ctx.functions name = None ->
-      type_simd_free_intrinsic_call ctx i func name args
-  (* Built-in intrinsics written as a qualified path, [i64::add128(...)]. *)
+  (* Built-in intrinsics written as a qualified path, [i64::add128(...)] or
+     [v128::bitselect(...)]. *)
   | Call (({ desc = Path (ns, name); _ } as func), args) ->
       type_path_intrinsic_call ctx i func ns name args
   | Call (i', l) -> type_indirect_call ctx i i' l
   | _ -> assert false (* only invoked on [Call] *)
 
-(* A qualified-path intrinsic call [ns::name(args)]. Currently the only such
-   namespace is [i64], for the wide-arithmetic instructions: [add128]/[sub128]
-   take four i64 operands (each of the two 128-bit inputs as low/high) and
+(* A qualified-path intrinsic call [ns::name(args)]. The [v128] namespace holds
+   the SIMD free-function intrinsics ([const_<shape>], [bitselect]); the [i64]
+   namespace holds the wide-arithmetic instructions. *)
+and type_path_intrinsic_call ctx i func ns name args =
+  match ns.desc with
+  | "v128" -> type_simd_free_intrinsic_call ctx i func ns name args
+  | "i64" -> type_wide_arith_call ctx i func ns name args
+  | _ ->
+      let* args' = instructions ctx args in
+      Error.unknown_intrinsic ctx.diagnostics ~location:i.info ns.desc name.desc;
+      return_expression i
+        (Call ({ desc = Path (ns, name); info = ([||], func.info) }, args'))
+        (Cell.make Error)
+
+(* The [i64::] wide-arithmetic intrinsics: [add128]/[sub128] take four i64
+   operands (each of the two 128-bit inputs as low/high) and
    [mul_wide_s]/[mul_wide_u] take two, all returning two i64 results
    (low, high). *)
-and type_path_intrinsic_call ctx i func ns name args =
+and type_wide_arith_call ctx i func ns name args =
   let* args' = instructions ctx args in
   let arity =
-    match (ns.desc, name.desc) with
-    | "i64", ("add128" | "sub128") -> Some 4
-    | "i64", ("mul_wide_s" | "mul_wide_u") -> Some 2
+    match name.desc with
+    | "add128" | "sub128" -> Some 4
+    | "mul_wide_s" | "mul_wide_u" -> Some 2
     | _ -> None
   in
   match arity with
@@ -6879,10 +6891,11 @@ let rec check_constant_instruction ctx i =
       then Error.constant_expression_required ctx.diagnostics ~location
   | UnOp ({ desc = Pos; _ }, i') -> check_constant_instruction ctx i'
   | UnOp ({ desc = Neg; _ }, { desc = Float _ | Int _; _ }) -> ()
-  (* [v128.const] is a constant expression; its lanes are literals. Other SIMD
-     ops are not constant. *)
-  | Call ({ desc = Get name; _ }, args)
-    when Simd.const_shape_of_name name.desc <> None ->
+  (* [v128::const_<shape>(..)] is a constant expression; its lanes are literals.
+     Other SIMD ops are not constant. *)
+  | Call ({ desc = Path (ns, name); _ }, args)
+    when ns.desc = Simd.free_namespace
+         && Simd.const_shape_of_name (Simd.free_full name.desc) <> None ->
       List.iter (check_constant_instruction ctx) args
   | UnOp ({ desc = Neg | Not; _ }, _)
   | BinOp

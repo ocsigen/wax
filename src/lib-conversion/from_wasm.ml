@@ -1087,8 +1087,11 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   let meth_call recv meth args =
     with_loc (Ast.Call (with_loc (Ast.StructGet (recv, Ast.no_loc meth)), args))
   in
-  let free_call name args =
-    with_loc (Ast.Call (with_loc (Ast.Get (Ast.no_loc name)), args))
+  (* [ns::name(args)] qualified-path intrinsic call (SIMD free functions, wide
+     arithmetic). *)
+  let path_call ns name args =
+    with_loc
+      (Ast.Call (with_loc (Ast.Path (Ast.no_loc ns, Ast.no_loc name)), args))
   in
   (* Ascribe a (struct/array) method receiver its reference type, so the method
      resolves even when the receiver is a hole on a polymorphic stack (unreachable
@@ -1262,10 +1265,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
         | _ -> assert false
       in
       let* args = Stack.grab input in
-      Stack.push 2
-        (with_loc
-           (Ast.Call
-              (with_loc (Ast.Path (Ast.no_loc "i64", Ast.no_loc name)), args)))
+      Stack.push 2 (path_call "i64" name args)
   | UnOp (I64 op) -> int_un_op i `I64 op
   | UnOp (I32 op) -> int_un_op i `I32 op
   | UnOp (F64 op) -> float_un_op i `F64 op
@@ -1768,7 +1768,10 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       let* e3 = Stack.pop in
       let* e2 = Stack.pop in
       let* e1 = Stack.pop in
-      Stack.push 1 (free_call Simd.bitselect_name [ e1; e2; e3 ])
+      Stack.push 1
+        (path_call Simd.free_namespace
+           (Simd.free_member Simd.bitselect_name)
+           [ e1; e2; e3 ])
   | VecExtract (s, sign, lane) ->
       let* v = Stack.pop in
       Stack.push 1
@@ -1794,7 +1797,9 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
         | I8x16 | I16x8 | I32x4 | I64x2 -> integer i
       in
       Stack.push 1
-        (free_call (Simd.const_name v.shape) (List.map lit v.components))
+        (path_call Simd.free_namespace
+           (Simd.free_member (Simd.const_name v.shape))
+           (List.map lit v.components))
   | VecLoad (m, op, memarg) ->
       let* addr = Stack.pop in
       let nat = Simd.vec_load_nat_align op in

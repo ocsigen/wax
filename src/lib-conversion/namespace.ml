@@ -12,58 +12,58 @@ type t = {
 
 let build l = List.fold_left (fun m s -> StringMap.add s 1 m) StringMap.empty l
 
-(* SIMD intrinsic names are reserved so a generated entity name never shadows
-   an intrinsic (which would silently mis-lower the corresponding instruction). *)
+(* Only the Wax keywords are reserved. Intrinsics need no reservation: the
+   free-function ones are spelled as [v128::]/[i64::] paths and every other is a
+   receiver-based method, so no bare entity name can ever shadow one. *)
 let reserved =
   build
-    (Wax_wasm.Simd.all_names
-    @ [
-        "as";
-        "become";
-        "br";
-        "br_if";
-        "br_on_cast";
-        "br_on_cast_fail";
-        "br_on_non_null";
-        "br_on_null";
-        "br_table";
-        "catch";
-        "const";
-        "cont_bind";
-        "cont_new";
-        "data";
-        "dispatch";
-        "do";
-        "elem";
-        "else";
-        "fn";
-        "inf";
-        "if";
-        "is";
-        "let";
-        "loop";
-        "memory";
-        "mut";
-        "nan";
-        "nop";
-        "null";
-        "open";
-        "rec";
-        "resume";
-        "resume_throw";
-        "resume_throw_ref";
-        "return";
-        "suspend";
-        "switch";
-        "table";
-        "tag";
-        "throw";
-        "throw_ref";
-        "try";
-        "type";
-        "unreachable";
-        "while";
-      ])
+    [
+      "as";
+      "become";
+      "br";
+      "br_if";
+      "br_on_cast";
+      "br_on_cast_fail";
+      "br_on_non_null";
+      "br_on_null";
+      "br_table";
+      "catch";
+      "const";
+      "cont_bind";
+      "cont_new";
+      "data";
+      "dispatch";
+      "do";
+      "elem";
+      "else";
+      "fn";
+      "inf";
+      "if";
+      "is";
+      "let";
+      "loop";
+      "memory";
+      "mut";
+      "nan";
+      "nop";
+      "null";
+      "open";
+      "rec";
+      "resume";
+      "resume_throw";
+      "resume_throw_ref";
+      "return";
+      "suspend";
+      "switch";
+      "table";
+      "tag";
+      "throw";
+      "throw_ref";
+      "try";
+      "type";
+      "unreachable";
+      "while";
+    ]
 
 let reserved_heap_types =
   StringMap.union

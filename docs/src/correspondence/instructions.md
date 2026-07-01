@@ -356,7 +356,7 @@ Whole-vector bitwise operations, bit selection (a free function):
 |------|-----|
 | `v128.and` / `or` / `xor` / `andnot` | `a.and_v128(b)`, `a.or_v128(b)`, `a.xor_v128(b)`, `a.andnot_v128(b)` |
 | `v128.not` | `v.not_v128()` |
-| `v128.bitselect` | `v128_bitselect(a, b, mask)` |
+| `v128.bitselect` | `v128::bitselect(a, b, mask)` |
 
 Splat, lane access, and shuffle:
 
@@ -378,13 +378,13 @@ Shifts, tests, and bitmask:
 | `i32x4.all_true` | `v.all_true_i32x4()` |
 | `i8x16.bitmask` | `v.bitmask_i8x16()` |
 
-Constants are free functions (one argument per lane: 16, 8, 4, or 2). `v128.const` is a constant expression, so it may initialise a global:
+Constants are `v128::` free functions (one argument per lane: 16, 8, 4, or 2). `v128.const` is a constant expression, so it may initialise a global:
 
 | Wasm | Wax |
 |------|-----|
-| `v128.const i32x4 1 2 3 4` | `v128_const_i32x4(1, 2, 3, 4)` |
-| `v128.const f32x4 1.5 2.5 3.5 4.5` | `v128_const_f32x4(1.5, 2.5, 3.5, 4.5)` |
-| `v128.const i8x16 0 1 ... 15` | `v128_const_i8x16(0, 1, ..., 15)` |
+| `v128.const i32x4 1 2 3 4` | `v128::const_i32x4(1, 2, 3, 4)` |
+| `v128.const f32x4 1.5 2.5 3.5 4.5` | `v128::const_f32x4(1.5, 2.5, 3.5, 4.5)` |
+| `v128.const i8x16 0 1 ... 15` | `v128::const_i8x16(0, 1, ..., 15)` |
 
 Memory loads and stores are methods on a [memory](module_fields.md#memories), like the scalar accesses above (the optional trailing `align`/`offset` arguments work the same way):
 
@@ -405,4 +405,4 @@ Relaxed-SIMD operations follow the same scheme:
 | `f32x4.relaxed_madd` | `a.relaxed_madd_f32x4(b, c)` |
 | `i8x16.relaxed_swizzle` | `a.relaxed_swizzle_i8x16(b)` |
 
-These intrinsic names are reserved: when converting from WAT/WASM, a module entity whose name would collide with one is renamed (e.g. a function `$v128_bitselect` becomes `v128_bitselect_2`).
+No intrinsic can clash with a module entity name: the free-function intrinsics are written as `v128::`/`i64::` qualified paths and every other is a method on a receiver, so a function may freely be named e.g. `v128_bitselect` without any renaming.

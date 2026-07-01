@@ -673,8 +673,15 @@ and instruction_desc ret ctx i : location Text.instr list =
   | Call (f, args) -> (
       let arg_code = List.concat_map (instruction ret ctx) args in
       match f.desc with
-      (* Wide-arithmetic intrinsics, [i64::add128(..)] etc. The operands are
-         already on the stack in call order (low/high of each 128-bit input). *)
+      (* Qualified-path intrinsics. [v128::const_<shape>(..)] / [v128::bitselect]
+         are the SIMD free functions; [i64::add128(..)] etc. are wide arithmetic
+         (operands already on the stack in call order, low/high of each input). *)
+      | Path ({ desc = "v128"; _ }, name) -> (
+          match Simd.const_shape_of_name (Simd.free_full name.desc) with
+          | Some shape ->
+              let components = List.map literal_string args in
+              folded loc (VecConst { Wax_utils.V128.shape; components }) []
+          | None -> folded loc VecBitselect arg_code)
       | Path (ns, name) ->
           let desc : _ Text.instr_desc =
             match (ns.desc, name.desc) with
@@ -685,18 +692,6 @@ and instruction_desc ret ctx i : location Text.instr list =
             | _ -> assert false (* typing rejects any other path *)
           in
           folded loc desc arg_code
-      (* SIMD free-function intrinsics: [v128_const_<shape>(...)] and
-         [v128_bitselect(a, b, mask)]. A user binding of the same name wins. *)
-      | Get name
-        when Simd.is_free_intrinsic name.desc
-             && (not (Hashtbl.mem ctx.functions name.desc))
-             && (not (Hashtbl.mem ctx.globals name.desc))
-             && not (StringMap.mem name.desc ctx.locals) -> (
-          match Simd.const_shape_of_name name.desc with
-          | Some shape ->
-              let components = List.map literal_string args in
-              folded loc (VecConst { Wax_utils.V128.shape; components }) []
-          | None -> folded loc VecBitselect arg_code)
       | Get idx ->
           if
             Hashtbl.mem ctx.functions idx.desc
