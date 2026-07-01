@@ -3981,17 +3981,23 @@ and type_cast ctx i =
         | _ -> false
       in
       (* Likewise a cast of a bottom reference (the residual of a polymorphic
-         [br_on_cast] in dead code, or [ref.null nofunc]) to a concrete type of a
-         non-[any] hierarchy: the bottom heap type ([nofunc]/…) carries no usable
-         type, so dropping the cast leaves e.g. a [call_ref] receiver of type
-         [(ref nofunc)] with no function type to resolve. As for [load_bearing_null]
-         the [any]-hierarchy bottom [&none] satisfies its consumers and is safe. *)
+         [br_on_cast] in dead code, or [ref.null nofunc]) to a type the bottom
+         cannot stand in for. The bottom heap type carries no usable type, so
+         dropping the cast leaves a value that no longer names one: a [(ref
+         nofunc)] feeding [call_ref] has no function type to resolve (any
+         non-[any]-hierarchy target), and — even in the [any] hierarchy — a
+         bottom [&none] feeding a struct/array field access ([s.f], [a[i]])
+         names no concrete type for the field to resolve against (Wasm's
+         [struct.get] carries the type index; Wax's [.f] recovers it from the
+         receiver). An *abstract* [any]-hierarchy target ([any]/[eq]/[struct]/…)
+         is still safe: [&none] satisfies those consumers. *)
       let load_bearing_bottom_ref =
         match (ty'_natural, Cell.get ty) with
         | ( Valtype { typ = Ref { typ = bot; _ }; _ },
             Valtype { typ = Ref { typ = ht; _ }; _ } )
-          when is_bottom_heaptype bot && not (is_bottom_heaptype ht) ->
+          when is_bottom_heaptype bot && not (is_bottom_heaptype ht) -> (
             top_heap_type ctx ht <> Some Any
+            || match ht with Type _ -> true | _ -> false)
         | _ -> false
       in
       (* Drop a cast the inferred types already make redundant. This is only
