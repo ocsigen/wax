@@ -2256,6 +2256,22 @@ let join_value_types ctx ty1 ty2 =
   | (Int | Float), Number ->
       Cell.merge ty1 ty2 (Cell.get ty1);
       Some ty1
+  (* A [LargeInt] (literal too big for i32) defaults to i64 and is also
+     convertible to a float. It joins with another flexible integer (staying
+     [LargeInt]) or with a concrete i64/f32/f64 or a flexible float (taking that
+     type), but never with i32. Mirrors [check_int_bin_op]/[check_float_bin_op]. *)
+  | LargeInt, (LargeInt | Int | Number) ->
+      Cell.merge ty1 ty2 LargeInt;
+      Some ty1
+  | (Int | Number), LargeInt ->
+      Cell.merge ty1 ty2 LargeInt;
+      Some ty2
+  | LargeInt, (Float | Valtype { internal = I64 | F32 | F64; _ }) ->
+      Cell.merge ty1 ty2 (Cell.get ty2);
+      Some ty2
+  | (Float | Valtype { internal = I64 | F32 | F64; _ }), LargeInt ->
+      Cell.merge ty1 ty2 (Cell.get ty1);
+      Some ty1
   | Valtype { typ = typ1; _ }, Valtype { typ = typ2; _ } -> (
       match val_lub ctx typ1 typ2 with
       | Some ty -> internalize ctx ty
