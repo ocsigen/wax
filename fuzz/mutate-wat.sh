@@ -29,6 +29,7 @@ AWK="$(dirname "${BASH_SOURCE[0]}")/mutate-wat.awk"
 mkdir -p "$KEEP"
 RESULTS="$(mktemp -d)"
 trap 'rm -rf "$RESULTS"' EXIT
+freeze_wax "$RESULTS"  # run against a snapshot so a concurrent rebuild can't corrupt workers
 
 mapfile -t SEED_FILES < <(find "$SEEDS" -name '*.wat')
 NSEEDS=${#SEED_FILES[@]}
