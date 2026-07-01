@@ -52,7 +52,7 @@ no `=> T` annotation could reconcile them, so none is suggested):
 
   $ wax check mismatched-synth.wax
   Error:
-    The branches of this if produce values with no common supertype, so its result type cannot be inferred.
+    The values reaching this block's exit have no common supertype, so its result type cannot be inferred.
    ──➤  mismatched-synth.wax:2:6
   1 │ fn f(c: i32) -> i32 {
   2 │     (if c { 0 as i64; } else { null as &any; }).clz() as i32;

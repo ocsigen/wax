@@ -211,14 +211,9 @@ module Error = struct
       "The two branches of this select have no common supertype, so its result \
        type cannot be inferred."
 
-  let if_branch_type_mismatch context ~location ~loc1 ~loc2 ty1 ty2 =
-    report context ~location
-      ~related:[ typed_branch_label loc1 ty1; typed_branch_label loc2 ty2 ]
-      "The branches of this if produce values with no common supertype, so its \
-       result type cannot be inferred."
-
-  (* As [if_branch_type_mismatch], but for a [do]/labelled block whose exit
-     values (a fall-through and/or values branched to its label) do not join. *)
+  (* The exit values of a block-like construct (an [if]'s two branches, or a
+     [do]/[loop]/[try]'s fall-through and/or values branched to its label) do not
+     join to a common supertype. A caret marks each offending value. *)
   let block_exit_type_mismatch context ~location ~loc1 ~loc2 ty1 ty2 =
     report context ~location
       ~related:[ typed_branch_label loc1 ty1; typed_branch_label loc2 ty2 ]
@@ -5750,39 +5745,41 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
       let* () = pop_args ctx ~location:i.info params in
       let instrs' = block ctx i.info label params results params instrs in
       return_statement i (Loop { label; typ; block = instrs' }) results
-  | If { label; typ; cond; if_block; else_block } -> (
+  | If { label; typ; cond; if_block; else_block } ->
+      (* A statement-position [if] is void (a value-producing one is consumed by
+         its context, so it is typed in expression position). Like a
+         statement-position [block]/[loop] it is not inferred — only its
+         expression-position form is ([if_inference], from [type_block_construct]).
+         This also keeps a void [if] reached by a [br] to its own label working:
+         the label's branch-target is then the void result, not an inferred
+         single value. *)
       let* cond = toplevel_instruction ctx cond in
       check_type ctx cond i32_cell;
-      match if_inference ctx i label typ ~cond ~if_block ~else_block with
-      | Some (desc, results) -> return_statement i desc results
-      | None ->
-          let*! params =
-            array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
-          in
-          let*! results = array_map_opt (internalize ctx) typ.results in
-          let* () = pop_args ctx ~location:i.info params in
-          let if_block =
-            {
-              if_block with
-              desc = block ctx i.info label params results results if_block.desc;
-            }
-          in
-          let else_block =
-            match else_block with
-            | Some b ->
-                Some
-                  {
-                    b with
-                    desc = block ctx i.info label params results results b.desc;
-                  }
-            | None ->
-                if not (missing_else_ok ctx params results) then
-                  Error.if_without_else ctx.diagnostics ~location:i.info;
-                None
-          in
-          return_statement i
-            (If { label; typ; cond; if_block; else_block })
-            results)
+      let*! params =
+        array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
+      in
+      let*! results = array_map_opt (internalize ctx) typ.results in
+      let* () = pop_args ctx ~location:i.info params in
+      let if_block =
+        {
+          if_block with
+          desc = block ctx i.info label params results results if_block.desc;
+        }
+      in
+      let else_block =
+        match else_block with
+        | Some b ->
+            Some
+              {
+                b with
+                desc = block ctx i.info label params results results b.desc;
+              }
+        | None ->
+            if not (missing_else_ok ctx params results) then
+              Error.if_without_else ctx.diagnostics ~location:i.info;
+            None
+      in
+      return_statement i (If { label; typ; cond; if_block; else_block }) results
   | TryTable { label; typ; block = body; catches } ->
       let*! params =
         array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
@@ -6123,39 +6120,6 @@ and block_keep_needed ctx ~loc ~result r =
       | None -> true)
   | _ -> true
 
-(* Type a block body in synthesis (no expected result), inferring its single
-   fall-through value as the block's result. Only valid where no branch targets
-   the block's label (the caller checks via [Ast_utils.refs_label_list]), so the
-   label is never used as a branch target and the value reaching the exit is
-   exactly the trailing fall-through one. Returns the typed body and the inferred
-   result cell, paired with the location where that value was pushed (for
-   diagnostics): [Some (loc, tv)] for a single trailing value, [None] for a void
-   or divergent body (the caller then keeps the source annotation / treats it as
-   void). *)
-and block_infer ctx loc label body =
-  with_empty_stack ctx ~location:loc ~kind:Block
-    (let* body' =
-       block_contents
-         {
-           ctx with
-           control_types =
-             (Option.map (fun l -> l.desc) label, [||]) :: ctx.control_types;
-         }
-         [||] body
-     in
-     fun st ->
-       match st with
-       | Cons (loc, tv, Empty) -> (Empty, (body', Some (loc, tv)))
-       (* A value over an [Unreachable] base is a dead fall-through (pushed after
-          a [br]/[return]/[become]): take it as the branch's exit value, like a
-          reachable one — its type still has to agree with the other branches —
-          and leave the unreachable base so [with_empty_stack] does not mistake
-          it for a leftover. Mirrors [block_infer_general]. *)
-       | Cons (loc, tv, Unreachable) -> (Unreachable, (body', Some (loc, tv)))
-       | Empty -> (Empty, (body', None))
-       | Unreachable -> (Unreachable, (body', None))
-       | Cons _ -> (st, (body', None)))
-
 (* From the [inferred] result of an inferring block (already joined across an
    [if]'s branches) and the source [typ], produce the result-type cells for the
    stack effect and the [typ] to store on the node. For an omitted annotation
@@ -6191,58 +6155,29 @@ and finalize_inferred ?(needed = false) ctx typ ~inferred =
     in
     (result_cells, if drop then { typ with results = [||] } else typ)
 
-(* Try to infer (and, on [simplify], drop) an [if]'s result type from its two
-   branches' fall-through values, returning the typed node when it applies and
-   [None] to fall back to the annotated path. Shared by the expression-position
-   ([instruction]) and statement-position ([toplevel_instruction]) [If] cases;
-   [cond] is the already-typed condition. Applies only with an [else], no branch
-   to the [if]'s own label, at most one result, and either an omitted annotation
-   (re-parse, must re-infer) or [simplify]. The branches are typed in synthesis
-   (via [block_infer]), so a trailing construction synthesizes its own type —
-   keeping its type name only when the fields don't pin it — rather than taking
-   it from the result as the [check_instruction] path does; [finalize_inferred] then only
-   drops [=> T] when that synthesized type is a subtype of it, so a tail that
-   cannot synthesize on its own (a bare [null]) keeps it. *)
+(* Try to infer (and, on [simplify], drop) an [if]'s result type from the values
+   reaching its exit, returning the typed node when it applies and [None] to fall
+   back to the annotated path. Called from the expression-position [If] case
+   ([type_block_construct]); a statement-position [if] is void and not inferred,
+   like a statement [block]/[loop]. [cond] is the already-typed condition.
+   Applies with an [else] and under the same conditions as the other block forms
+   ([infer_block_applies]). Like them, both branches are typed against one shared
+   [Collecting] cell (via [collect_into]), so every value reaching the exit —
+   each branch's fall-through and any value branched to the [if]'s own label — is
+   recorded and then joined. A trailing construction still synthesizes its own
+   type (its natural type is what is collected), so [finalize_inferred] only
+   drops [=> T] when that synthesized type is a subtype of it (a tail that cannot
+   synthesize on its own, e.g. a bare [null], keeps it). *)
 and if_inference ctx i label typ ~cond ~if_block ~else_block =
-  let no_self_branch =
-    match label with
-    | None -> true
-    | Some l ->
-        not
-          (Ast_utils.refs_label_list l.desc if_block.desc
-          ||
-          match else_block with
-          | Some b -> Ast_utils.refs_label_list l.desc b.desc
-          | None -> false)
-  in
-  let omitted = typ.results = [||] in
-  let use_infer =
-    Array.length typ.params = 0
-    && Option.is_some else_block && no_self_branch
-    && Array.length typ.results <= 1
-    && (omitted || ctx.simplify)
-  in
-  if not use_infer then None
+  if not (infer_block_applies ctx typ && Option.is_some else_block) then None
   else
-    let if_block', r1 = block_infer ctx i.info label if_block.desc in
-    let else_block', r2 =
-      block_infer ctx i.info label (Option.get else_block).desc
+    let cs, r = fresh_collecting (declared_result ctx typ) in
+    let if_block' = collect_into ctx i.info label ~cs ~r if_block.desc in
+    let else_block' =
+      collect_into ctx i.info label ~cs ~r (Option.get else_block).desc
     in
-    let inferred =
-      match (r1, r2) with
-      | Some (loc1, a), Some (loc2, b) -> (
-          match join_value_types ctx a b with
-          | Some _ as r -> r
-          | None ->
-              Error.if_branch_type_mismatch ctx.diagnostics ~location:i.info
-                ~loc1 ~loc2 a b;
-              (* Recover with one branch's type so the result is still a single
-                 value (avoids a cascading empty-stack error downstream). *)
-              Some a)
-      | Some (_, a), None | None, Some (_, a) -> Some a
-      | None, None -> None
-    in
-    let results, typ = finalize_inferred ctx typ ~inferred in
+    let inferred = join_collected ctx ~location:i.info cs.collected in
+    let results, typ = finalize_inferred ~needed:cs.needed ctx typ ~inferred in
     Some
       ( If
           {
@@ -6267,15 +6202,16 @@ and fresh_collecting ?(needed = false) declared =
   let cs = { collected = []; declared; needed } in
   (cs, Cell.make (Collecting cs))
 
-(* Type a (possibly branch-targeted) block body in synthesis, inferring its
-   single result from every value that reaches its exit: the fall-through value
-   plus each value branched to its label. Unlike [block_infer] (used for [if],
-   which forbids self-branches), the label is bound to a fresh [Unknown] result
-   cell ([Collecting]), so [br]/[br_on_*] to it record their value (via
-   [subtype]) rather than unifying. Returns the typed body and the collected
-   values reaching the exit. *)
-and block_infer_general ctx loc label ~declared instrs =
-  let cs, r = fresh_collecting declared in
+(* Type one block body against the shared [Collecting] result cell [r] (backed
+   by [cs]), in synthesis, recording every value reaching its exit — the
+   fall-through plus each value branched to [label] — into [cs.collected] (via
+   [subtype]) rather than unifying. The label is bound to [r] so [br]/[br_on_*]
+   record their value; [r] is also passed as the body's result so a trailing
+   nested block is routed and synthesized (its value collected) rather than typed
+   as a void statement and lost — the fall-through is still read off the stack
+   below. Returns the typed body. Every inferring block routes through this; [if]
+   calls it once per branch with a shared cell so both branches' exits join. *)
+and collect_into ctx loc label ~cs ~r instrs =
   with_empty_stack ctx ~location:loc ~kind:Block
     (let* body' =
        block_contents
@@ -6284,12 +6220,7 @@ and block_infer_general ctx loc label ~declared instrs =
            control_types =
              (Option.map (fun l -> l.desc) label, [| r |]) :: ctx.control_types;
          }
-         (* Pass the [Collecting] cell as the result too (not [||]): a trailing
-            nested block is then routed and synthesized (its value collected),
-            rather than typed as a void statement and lost. The fall-through is
-            still read off the stack below. *)
-         [| r |]
-         instrs
+         [| r |] instrs
      in
      fun st ->
        (* The fall-through value (if any) reaches the exit alongside the
@@ -6300,13 +6231,13 @@ and block_infer_general ctx loc label ~declared instrs =
        match st with
        | Cons (loc, tv, Empty) ->
            cs.collected <- (Some loc, tv) :: cs.collected;
-           (Empty, (body', cs))
+           (Empty, body')
        | Cons (loc, tv, Unreachable) ->
            cs.collected <- (Some loc, tv) :: cs.collected;
-           (Unreachable, (body', cs))
-       | Empty -> (Empty, (body', cs))
-       | Unreachable -> (Unreachable, (body', cs))
-       | Cons _ -> (st, (body', cs)))
+           (Unreachable, body')
+       | Empty -> (Empty, body')
+       | Unreachable -> (Unreachable, body')
+       | Cons _ -> (st, body'))
 
 (* Join the values reaching a block's exit into its inferred result, or [None]
    when none do (a void or fully divergent body). Incompatible exit types are
@@ -6315,7 +6246,10 @@ and block_infer_general ctx loc label ~declared instrs =
    where every exit is a subtype of the declared result. One type is kept so a
    single result is still produced. *)
 and join_collected ctx ~location collected =
-  match collected with
+  (* [collected] is built in reverse (cons as each exit is met); fold in source
+     order so a mismatch points at the values that way and recovers with the
+     first. *)
+  match List.rev collected with
   | [] -> None
   | (loc0, first) :: rest ->
       Some
@@ -6332,9 +6266,6 @@ and join_collected ctx ~location collected =
                     (loc_acc, acc))
               (loc0, first) rest))
 
-(* Try to infer (and, on [simplify], drop) the result type of a [do]/labelled
-   block from the values reaching its exit. Mirrors [if_inference] for the
-   single-branch [Block] form, but admits branches to the block's own label. *)
 (* Whether to infer a block's result in expression (synthesis) position: only
    for the single-result, parameterless forms, and only when the annotation is
    omitted (a re-parse of a dropped one, which must be re-inferred) or [simplify]
@@ -6343,13 +6274,15 @@ and infer_block_applies ctx typ =
   Array.length typ.params = 0
   && (typ.results = [||] || (ctx.simplify && Array.length typ.results = 1))
 
+(* Infer (and, on [simplify], drop) the result type of a [do]/labelled block
+   from the values reaching its exit. The single-branch counterpart of
+   [if_inference]: same [fresh_collecting] / [collect_into] / [join_collected]
+   shape, with one body. *)
 and block_inference ctx i label typ ~instrs =
   if not (infer_block_applies ctx typ) then None
   else
-    let body', cs =
-      block_infer_general ctx i.info label ~declared:(declared_result ctx typ)
-        instrs
-    in
+    let cs, r = fresh_collecting (declared_result ctx typ) in
+    let body' = collect_into ctx i.info label ~cs ~r instrs in
     let inferred = join_collected ctx ~location:i.info cs.collected in
     let results, typ = finalize_inferred ~needed:cs.needed ctx typ ~inferred in
     Some (Block { label; typ; block = body' }, results)

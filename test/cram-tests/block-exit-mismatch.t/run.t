@@ -12,7 +12,7 @@ from a `br` to the block's label and the fall-through:
     ·         ^^^^^^^^^
   3 │         if c { br 'l 5; }
     · ^^^^^^^^^^^^^^^^^^^^^^^^^^
-    ·                      ^ number
+    ·                      ^ i32
   4 │         null as &any;
     · ^^^^^^^^^^^^^^^^^^^^^^
     ·         ^^^^^^^^^^^^ &any
@@ -33,7 +33,7 @@ from a `br` to the block's label and the fall-through:
     ·         ^^^^^^^^^
   3 │         if c { br 'l 5; }
     · ^^^^^^^^^^^^^^^^^^^^^^^^^^
-    ·                      ^ number
+    ·                      ^ i32
   4 │         if c { br 'l (null as &any); }
     · ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     ·                       ^^^^^^^^^^^^ &any
