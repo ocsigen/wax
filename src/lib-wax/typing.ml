@@ -2312,7 +2312,11 @@ let join_value_types ctx ty1 ty2 =
   | UnknownRef, (Valtype { internal = Ref _; _ } | Null) ->
       Cell.set ty1 (Cell.get ty2);
       Some ty2
-  | Null, Null -> Some ty1
+  | Null, Null ->
+      (* Unify the two nulls so pinning one (later, to a reference type) pins the
+         other too. *)
+      Cell.merge ty1 ty2 Null;
+      Some ty1
   | Valtype { internal = I32; _ }, Valtype { internal = I32; _ }
   | Valtype { internal = I64; _ }, Valtype { internal = I64; _ }
   | Valtype { internal = F32; _ }, Valtype { internal = F32; _ }
@@ -2858,59 +2862,12 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       let*! ty =
         let ty1 = expression_type ctx i2' in
         let ty2 = expression_type ctx i3' in
-        match (Cell.get ty1, Cell.get ty2) with
-        (* [Unknown]/[Error] are the universal bottom, so the other side wins
-           (the lub of [Unknown] and [UnknownRef] is the more informative
-           [UnknownRef]). [UnknownRef] (a bottom reference) joins with any other
-           reference — concrete, [Null] or another [UnknownRef] — which, being a
-           supertype, wins; a bottom reference paired with a non-reference (e.g.
-           [i32]) has no common type and falls through to a mismatch. *)
-        | _, (Unknown | Error) -> Some ty1
-        | (Unknown | Error), _ -> Some ty2
-        | UnknownRef, UnknownRef ->
-            (* Merge the two bottom references so pinning one (later, against a
-               concrete type) pins the other too. *)
-            Cell.merge ty1 ty2 UnknownRef;
-            Some ty1
-        | (Valtype { internal = Ref _; _ } | Null), UnknownRef ->
-            Cell.set ty2 (Cell.get ty1);
-            Some ty1
-        | UnknownRef, (Valtype { internal = Ref _; _ } | Null) ->
-            Cell.set ty1 (Cell.get ty2);
-            Some ty2
-        | Valtype { internal = I32; _ }, Valtype { internal = I32; _ }
-        | Valtype { internal = I64; _ }, Valtype { internal = I64; _ }
-        | Valtype { internal = F32; _ }, Valtype { internal = F32; _ }
-        | Valtype { internal = F64; _ }, Valtype { internal = F64; _ } ->
-            Some ty2
-        | (Int | Number), (Int | Valtype { internal = I32 | I64; _ })
-        | (Float | Number), (Float | Valtype { internal = F32 | F64; _ })
-        | Number, Number ->
-            Cell.merge ty1 ty2 (Cell.get ty2);
-            Some ty2
-        | ( (Valtype { internal = I32; _ } | Valtype { internal = I64; _ }),
-            (Int | Number) )
-        | ( (Valtype { internal = F32; _ } | Valtype { internal = F64; _ }),
-            (Float | Number) )
-        | (Int | Float), Number ->
-            Cell.merge ty1 ty2 (Cell.get ty1);
-            Some ty1
-        | Valtype { typ = typ1; _ }, Valtype { typ = typ2; _ } -> (
-            match val_lub ctx typ1 typ2 with
-            | Some ty -> internalize ctx ty
-            | None ->
-                Error.select_type_mismatch ctx.diagnostics ~location:i.info
-                  ~loc1:i2.info ~loc2:i3.info ty1 ty2;
-                None)
-        | Valtype { typ = Ref { typ; _ }; _ }, Null ->
-            let*@ ty = internalize ctx (Ref { typ; nullable = true }) in
-            Cell.set ty2 (Cell.get ty);
-            Some ty
-        | Null, Valtype { typ = Ref { typ; _ }; _ } ->
-            let*@ ty = internalize ctx (Ref { typ; nullable = true }) in
-            Cell.set ty1 (Cell.get ty);
-            Some ty
-        | _ ->
+        (* A select's two branch values join exactly as the values reaching a
+           block's exit do; reuse [join_value_types] and, on no common type,
+           report it against the select. *)
+        match join_value_types ctx ty1 ty2 with
+        | Some _ as r -> r
+        | None ->
             Error.select_type_mismatch ctx.diagnostics ~location:i.info
               ~loc1:i2.info ~loc2:i3.info ty1 ty2;
             None
