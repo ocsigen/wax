@@ -1190,7 +1190,10 @@ let rec modulefield f =
   | Import { module_; name; id; desc; exports = e } -> (
       let kind, typ =
         match desc with
-        | Func typ -> ("func", fundecl typ)
+        | Func { exact; typ } ->
+            ( "func",
+              if exact then [ list (type_ "exact" :: fundecl typ) ]
+              else fundecl typ )
         | Global ty -> ("global", [ globaltype ty ])
         | Tag typ -> ("tag", fundecl typ)
         | Memory l -> ("memory", limits l)

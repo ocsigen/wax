@@ -430,14 +430,24 @@ optional_function_type: sign = option (function_type) { sign }
 
 %inline fundecl:
 | FN name = function_name
-  t = ioption(":" t = type_name { t } )
+  ex1 = boption("!")
+  t = ioption(":" ex2 = boption("!") t = type_name { (ex2, t) } )
   sign = optional_function_type
-  { (name, t, decl_sign $sloc t sign) }
+  { let ex2, t =
+      match t with Some (e, t) -> (e, Some t) | None -> (false, None) in
+    if ex1 && ex2 then
+      raise (Wax_wasm.Parsing.Syntax_error
+               ($sloc, "Duplicate exact marker '!'.\n"));
+    (name, t, decl_sign $sloc t sign, ex1 || ex2) }
 
 func:
 | f = fundecl body = block
   { fun attributes ->
-    let (name, typ, sign) = f in
+    let (name, typ, sign, exact) = f in
+    if exact then
+      raise (Wax_wasm.Parsing.Syntax_error
+               ($sloc, "A function definition is always exact; the '!' marker \
+                        is only allowed on an (imported) function declaration.\n"));
     with_loc $sloc (Func {name; typ; sign; body; attributes}) }
 
 tag_name:
@@ -752,8 +762,8 @@ globaldecl:
 declaration:
 | f = fundecl ";"
   { fun attributes ->
-    let (name, typ, sign) = f in
-    with_loc $sloc (Fundecl {name; typ; sign; attributes}) }
+    let (name, typ, sign, exact) = f in
+    with_loc $sloc (Fundecl {name; typ; sign; exact; attributes}) }
 | g = globaldecl { g }
 | f = tag
   { fun attributes ->

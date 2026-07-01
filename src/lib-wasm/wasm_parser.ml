@@ -370,11 +370,12 @@ let import ch =
   let module_ = name ch in
   let name = name ch in
   let d = uint ch in
-  if d > 4 then error ch "malformed import kind 0x%02x" d;
   let map i = i in
   let importdesc =
     match d with
-    | 0 -> Func (map (uint ch))
+    | 0 -> Func { exact = false; typ = map (uint ch) }
+    (* 0x20: an exact function import (bit 6 of the func kind marks exactness). *)
+    | 0x20 -> Func { exact = true; typ = map (uint ch) }
     | 1 -> Table (tabletype ch)
     | 2 -> Memory (memtype ch)
     | 3 -> Global (globaltype ch)
@@ -382,7 +383,7 @@ let import ch =
         let b = uint ch in
         if b <> 0 then error ch "malformed tag attribute";
         Tag (map (uint ch))
-    | _ -> assert false
+    | _ -> error ch "malformed import kind 0x%02x" d
   in
   { module_; name; desc = importdesc }
 

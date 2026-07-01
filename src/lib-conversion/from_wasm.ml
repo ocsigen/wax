@@ -2161,7 +2161,7 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
              })
     | Import { module_; name = nm; desc; exports = e; _ } -> (
         match desc with
-        | Func typ ->
+        | Func { exact; typ } ->
             let typ, sign = typeuse ctx typ in
             let name = Sequence.get_current ctx.functions in
             Some
@@ -2170,6 +2170,7 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
                    name;
                    typ;
                    sign;
+                   exact;
                    attributes = import module_ nm :: exports ctx Func name e;
                  })
         | Tag typ ->
@@ -2515,7 +2516,8 @@ let elaborate_implicit_types ctx fields =
       | Func { typ; instrs = body; _ } ->
           consider typ;
           instrs body
-      | Import { desc = Func tu; _ } | Import { desc = Tag tu; _ } ->
+      | Import { desc = Func { typ = tu; _ }; _ } | Import { desc = Tag tu; _ }
+        ->
           consider tu
       | Tag { typ; _ } -> consider typ
       | Global { init; _ } -> instrs init
@@ -2623,7 +2625,8 @@ let register_names ctx export_tbl fields =
         match field.desc with
         | Import { id; desc; exports; _ } -> (
             match desc with
-            | Func typ -> register_type ctx export_tbl Func id exports typ
+            | Func { typ; _ } ->
+                register_type ctx export_tbl Func id exports typ
             | Memory _ | Table _ | Global _ | Tag _ -> ())
         | Func { id; exports; typ; _ } ->
             register_type ctx export_tbl Func id exports typ

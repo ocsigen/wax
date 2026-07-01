@@ -45,6 +45,14 @@ so a construction literal can be delivered where an `&!point` is required withou
 a cast. In ordinary (synthesis) position the plainer inexact type is kept, since
 an exact result is always usable where an inexact one is expected.
 
+A **function import** can be declared exact, so that referencing it yields an
+exact reference. The `!` marks the type exact in the [function declaration](module_fields.md#functions):
+`fn g: !ft;` for a named type, or `fn h!(x: i32) -> i64;` for an inline
+signature. It maps to the WAT `(func (exact <type>))` import descriptor. (A
+module-defined function is always exact, so the marker is only written on an
+import.) A plainly imported function is *not* exact — its dynamic type may be a
+subtype — so a reference to it must be cast to reach an exact type.
+
 ## Storage Types
 
 Storage types are used in fields of structs and arrays to define packed data.

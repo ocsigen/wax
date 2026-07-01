@@ -687,7 +687,9 @@ type module_context = {
   type_context : type_context;
   subtyping_info : Wax_wasm.Types.subtyping_info;
   types : (int * subtype) Tbl.t;
-  functions : (int * string) Tbl.t;
+  (* Per function: interned type index, type name, and whether a reference to it
+     is exact (a defined function or an exact import — custom-descriptors). *)
+  functions : (int * string * bool) Tbl.t;
   globals : (*mutable:*) (bool * inferred_valtype option) Tbl.t;
       (* As for [locals], the type is [None] for a global whose initializer
          failed to type — a poison global read as [Error] to avoid cascades. *)
@@ -1403,7 +1405,7 @@ let local_suggestions ctx name =
 type resolved_var =
   | Local of inferred_valtype option
   | Global of bool (* mutable *) * inferred_valtype option
-  | Func_ref of int * string
+  | Func_ref of int * string * bool
   | Unbound
 
 let resolve_variable ctx idx =
@@ -1414,7 +1416,7 @@ let resolve_variable ctx idx =
       | Some (mut, ty) -> Global (mut, ty)
       | None -> (
           match Tbl.find_opt ctx.functions idx with
-          | Some (ty, ty') -> Func_ref (ty, ty')
+          | Some (ty, ty', exact) -> Func_ref (ty, ty', exact)
           | None -> Unbound))
 
 (* Whether [name] denotes a memory (resp. table) usable as a method/index
@@ -4228,13 +4230,23 @@ and type_variable_access ctx i =
             Cell.make (match ty with Some ity -> Valtype ity | None -> Error)
         | Global (_, ty) ->
             Cell.make (match ty with Some ity -> Valtype ity | None -> Error)
-        | Func_ref (ty, ty') ->
+        | Func_ref (ty, ty', exact) ->
             let name = Ast.no_loc ty' in
             Cell.make
               (Valtype
                  {
-                   typ = Ref { nullable = false; typ = Type name };
-                   internal = Ref { nullable = false; typ = Type ty };
+                   typ =
+                     Ref
+                       {
+                         nullable = false;
+                         typ = (if exact then Exact name else Type name);
+                       };
+                   internal =
+                     Ref
+                       {
+                         nullable = false;
+                         typ = (if exact then Exact ty else Type ty);
+                       };
                    anon_comptype = inline_comptype ctx name;
                  })
         | Unbound ->
@@ -5947,7 +5959,7 @@ and peek_call_params ctx callee =
     match c.desc with
     | Get name -> (
         match resolve_variable ctx name with
-        | Func_ref (_, ty') -> Some (Ast.no_loc ty')
+        | Func_ref (_, ty', _) -> Some (Ast.no_loc ty')
         | Local (Some { typ = Ref { typ = Type t | Exact t; _ }; _ })
         | Global (_, Some { typ = Ref { typ = Type t | Exact t; _ }; _ }) ->
             Some t
@@ -7281,9 +7293,8 @@ let rec functions ctx fields =
            } as f) ->
           let*@ func_typ =
             let*@ ty =
-              let*@ func_typ = Tbl.find ctx.diagnostics ctx.functions name in
-              Tbl.find ctx.diagnostics ctx.types
-                { name with desc = snd func_typ }
+              let*@ _, tname, _ = Tbl.find ctx.diagnostics ctx.functions name in
+              Tbl.find ctx.diagnostics ctx.types { name with desc = tname }
             in
             match ty with
             | _, { typ = Func typ; _ } -> Some typ
@@ -7621,15 +7632,16 @@ let type_configuration ?(warn_unused = false) ~simplify diagnostics fields =
                 (fun n -> Tbl.add diagnostics ctx.datas n ())
                 d.data_name)
             data
-      | Fundecl { name; typ; sign; _ } ->
-          let>@ decl = fundecl ctx name typ sign in
-          Tbl.add diagnostics ctx.functions name decl
+      | Fundecl { name; typ; sign; exact; _ } ->
+          let>@ i, n = fundecl ctx name typ sign in
+          Tbl.add diagnostics ctx.functions name (i, n, exact)
       | GlobalDecl { name; mut; typ; _ } ->
           let>@ typ = internalize_valtype ctx typ in
           Tbl.add diagnostics ctx.globals name (mut, Some typ)
       | Func { name; typ; sign; _ } ->
-          let>@ decl = fundecl ctx name typ sign in
-          Tbl.add diagnostics ctx.functions name decl
+          (* A module-defined function has exactly its declared type. *)
+          let>@ i, n = fundecl ctx name typ sign in
+          Tbl.add diagnostics ctx.functions name (i, n, true)
       | Tag { name; typ; sign; _ } ->
           let>@ typ =
             match (typ, sign) with

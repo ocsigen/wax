@@ -980,7 +980,10 @@ type module_context = {
      names argument and result types from the function's own declaration rather
      than a shared (deduplicated) type index that another structurally-equal type
      may own. *)
-  functions : (int * Ast.Text.idx option * Ast.Text.functype) Sequence.t;
+  (* Per function: interned type, source type index (if named), signature, and
+     whether [ref.func] on it yields an *exact* reference (true for a defined
+     function or an exact import, false for a plain import). *)
+  functions : (int * Ast.Text.idx option * Ast.Text.functype * bool) Sequence.t;
   memories : limits Sequence.t;
   tables : (Ast.Binary.tabletype * source_type) Sequence.t;
   globals : (globaltype * source_type) Sequence.t;
@@ -2074,7 +2077,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let* () = pop_args ctx loc ~source:ctx.return_source ctx.return_types in
       unreachable
   | Call idx -> (
-      let*! ty, _, sign = get_function ctx idx in
+      let*! ty, _, sign, _ = get_function ctx idx in
       match (Types.get_subtype ctx.modul.subtyping_info ty).typ with
       | Struct _ | Array _ | Cont _ ->
           Error.expected_func_type ctx.modul.diagnostics ~location:loc idx;
@@ -2119,7 +2122,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
             let* () = pop_args ctx loc ~source:param_source params in
             push_results ~source:result_source results)
   | ReturnCall idx -> (
-      let*! ty, _, sign = get_function ctx idx in
+      let*! ty, _, sign, _ = get_function ctx idx in
       match (Types.get_subtype ctx.modul.subtyping_info ty).typ with
       | Struct _ | Array _ | Cont _ ->
           Error.expected_func_type ctx.modul.diagnostics ~location:loc idx;
@@ -2492,7 +2495,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let*! typ = heaptype ctx.modul.diagnostics ctx.modul.types typ in
       push ~source (Some loc) (Ref { nullable = true; typ })
   | RefFunc idx ->
-      let*! i, type_idx, sign = get_function ctx idx in
+      let*! i, type_idx, sign, exact = get_function ctx idx in
       if not ((not !validate_refs) || Hashtbl.mem ctx.modul.refs i) then
         Error.ref_func_inaccessible ctx.modul.diagnostics ~location:loc idx;
       (* Name the function's type when it was declared with a named type,
@@ -2503,7 +2506,8 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
         | Some ({ desc = Id _; _ } as idx) -> named_ref_source idx
         | _ -> Inline_ref (Func sign)
       in
-      push ~source (Some loc) (Ref { nullable = false; typ = Type i })
+      push ~source (Some loc)
+        (Ref { nullable = false; typ = (if exact then Exact i else Type i) })
   | RefIsNull -> (
       let* ty, loc' = pop_any ctx loc in
       match ty with
@@ -2873,7 +2877,7 @@ let rec check_constant_instruction ctx (i : _ Ast.Text.instr) =
       if ty.mut then
         Error.non_constant_global ctx.diagnostics ~location:idx.info idx
   | RefFunc i ->
-      let*? ty, _, _ = Sequence.get ctx.diagnostics ctx.functions i in
+      let*? ty, _, _, _ = Sequence.get ctx.diagnostics ctx.functions i in
       Hashtbl.replace ctx.refs ty ()
   | RefNull _ | StructNew _ | StructNewDefault _ | ArrayNew _
   | ArrayNewDefault _ | ArrayNewFixed _ | RefI31 | Const _
@@ -3155,7 +3159,7 @@ let collect_implicit_types d ctx fields =
   List.iter
     (fun (field : (_ Ast.Text.modulefield, _) Ast.annotated) ->
       (match field.desc with
-      | Import { desc = Func (None, Some sign); _ }
+      | Import { desc = Func { typ = None, Some sign; _ }; _ }
       | Import { desc = Tag (None, Some sign); _ }
       | Func { typ = None, Some sign; _ }
       | Tag { typ = None, Some sign; _ } ->
@@ -3173,11 +3177,11 @@ let build_initial_env ctx fields =
       | Import { id; desc; exports; module_ = _; name = _ } -> (
           register_exports ctx exports;
           match desc with
-          | Func tu ->
+          | Func { exact; typ = tu } ->
               ignore
                 (let+@ ty = typeuse ctx.diagnostics ctx.types tu in
                  Sequence.register ctx.functions id
-                   (ty, fst tu, typeuse_functype ctx.types tu))
+                   (ty, fst tu, typeuse_functype ctx.types tu, exact))
           | Memory lim ->
               limits ctx "memory" lim max_memory_size;
               Sequence.register ctx.memories id lim.desc
@@ -3201,7 +3205,8 @@ let build_initial_env ctx fields =
       | Func { id; typ; instrs; _ } ->
           let>@ ty = typeuse ctx.diagnostics ctx.types typ in
           let sign = typeuse_functype ctx.types typ in
-          Sequence.register ctx.functions id (ty, fst typ, sign);
+          (* A module-defined function has exactly its declared type. *)
+          Sequence.register ctx.functions id (ty, fst typ, sign, true);
           register_typeuses ctx.diagnostics ctx.types instrs
       | Tag { id; typ; exports } ->
           let>@ ty = typeuse ctx.diagnostics ctx.types typ in
@@ -3511,7 +3516,7 @@ let start ctx fields =
     (fun (field : (_ Ast.Text.modulefield, _) Ast.annotated) ->
       match field.desc with
       | Start idx -> (
-          let*? ty, _, _ = Sequence.get ctx.diagnostics ctx.functions idx in
+          let*? ty, _, _, _ = Sequence.get ctx.diagnostics ctx.functions idx in
           match (Types.get_subtype ctx.subtyping_info ty).typ with
           | Struct _ | Array _ | Cont _ ->
               Error.not_function_type ctx.diagnostics ~location:idx.info
@@ -3637,7 +3642,7 @@ let check_syntax ctx lst =
           in
           check_unbound tbl kind id;
           match desc with
-          | Func (Some idx, Some sign) -> check_inline_type idx sign
+          | Func { typ = Some idx, Some sign; _ } -> check_inline_type idx sign
           | Tag (Some idx, Some sign) -> check_inline_type idx sign
           | _ -> ())
       | Func { id; typ; locals; instrs; _ } ->

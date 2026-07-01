@@ -193,6 +193,9 @@ type 'info modulefield =
       name : ident;
       typ : ident option;
       sign : functype option;
+      (* [true] for an exact function import ([fn f: !t]): [ref.func] on it
+         yields an exact reference (custom-descriptors). *)
+      exact : bool;
       attributes : attributes;
     }
   | Func of {

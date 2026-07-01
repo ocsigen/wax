@@ -684,9 +684,11 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
         | T.Import { module_; name; desc; _ } ->
             let desc : B.importdesc =
               match desc with
-              | Func (Some i, _) -> Func (resolve_idx ctx.types i)
-              | Func (None, Some ty) -> Func (resolve_func_type ctx ty)
-              | Func (None, None) -> assert false
+              | Func { exact; typ = Some i, _ } ->
+                  Func { exact; typ = resolve_idx ctx.types i }
+              | Func { exact; typ = None, Some ty } ->
+                  Func { exact; typ = resolve_func_type ctx ty }
+              | Func { typ = None, None; _ } -> assert false
               | Table t -> Table (table_type ctx t)
               | Memory l -> Memory l.desc
               | Global g -> Global (global_type ctx g)

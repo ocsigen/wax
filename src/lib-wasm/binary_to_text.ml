@@ -524,9 +524,9 @@ let module_ (m : _ B.module_) : _ T.module_ =
               id;
               desc =
                 (match imp.desc with
-                | Func i ->
+                | Func { exact; typ = i } ->
                     let typ, sign = expand_functype f_i i in
-                    T.Func (typ, Some sign)
+                    T.Func { exact; typ = (typ, Some sign) }
                 | Memory l -> T.Memory (Ast.no_loc l)
                 | Table t -> T.Table (tabletype m.names.types t)
                 | Global gt -> T.Global (globaltype m.names.types gt)

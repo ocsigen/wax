@@ -1158,8 +1158,8 @@ let module_ ~out_channel ?output_file ?opt_source_map_file
            Encoder.name b i.module_;
            Encoder.name b i.name;
            match i.desc with
-           | Func i ->
-               Encoder.byte b 0x00;
+           | Func { exact; typ = i } ->
+               Encoder.byte b (if exact then 0x20 else 0x00);
                Encoder.sint b i
            | Table t ->
                Encoder.byte b 0x01;

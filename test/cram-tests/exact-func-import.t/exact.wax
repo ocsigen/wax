@@ -1,0 +1,10 @@
+type ft = fn(_: i32) -> i64;
+
+// An exact function import: `ref.func` on it yields an exact reference. The
+// `!` marks the type exact, mirroring `&!t`. A named type uses `: !ft`; an
+// inline signature marks the name (`fn h!(...)`).
+#[import = ("env", "g")]
+fn g: !ft;
+
+#[import = ("env", "h")]
+fn h!(_: i32) -> i64;

@@ -188,6 +188,7 @@ type 'info modulefield =
       name : ident;
       typ : ident option;
       sign : functype option;
+      exact : bool;
       attributes : attributes;
     }
   | Func of {

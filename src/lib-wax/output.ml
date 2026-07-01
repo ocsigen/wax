@@ -1226,7 +1226,7 @@ and block_contents pp (l : _ instr list) =
 and located_block_contents pp (b : (_ instr list, location) annotated) =
   atomic_node pp (Some b.info) (fun () -> block_contents pp b.desc)
 
-let fundecl ~tag pp (name, typ, sign) =
+let fundecl ?(exact = false) ~tag pp (name, typ, sign) =
   (* The whole signature is one all-or-nothing group anchored at the [fn]
      column: [fn name] stays glued (its own [hbox]) and so does [-> Ret], so the
      only thing that can break — when [fn name(params) -> Ret] overflows — is
@@ -1236,10 +1236,15 @@ let fundecl ~tag pp (name, typ, sign) =
           keyword pp (if tag then "tag" else "fn");
           space pp ();
           identifier pp name.desc;
+          (* An exact declaration with an inline signature marks the name
+             ([fn f!(…)]); with a named type the marker hugs the type
+             ([fn f: !t]). *)
+          if exact && Option.is_none typ then punctuation pp "!";
           Option.iter
             (fun typ ->
               punctuation pp ":";
               space pp ();
+              if exact then punctuation pp "!";
               identifier pp typ.desc;
               space pp ())
             typ);
@@ -1339,10 +1344,10 @@ let rec modulefield pp field =
               space pp ();
               instr Instruction pp def;
               semicolon pp))
-  | Fundecl { name; typ; sign; attributes = a } ->
+  | Fundecl { name; typ; sign; exact; attributes = a } ->
       print_attr_prefix pp a (fun () ->
           box pp (fun () ->
-              fundecl ~tag:false pp (name, typ, sign);
+              fundecl ~exact ~tag:false pp (name, typ, sign);
               semicolon pp))
   | Tag { name; typ; sign; attributes = a } ->
       print_attr_prefix pp a (fun () ->

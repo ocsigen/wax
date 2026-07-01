@@ -84,15 +84,8 @@ Wax type-checking should have failed (type mismatch):
   }
 from wasm: (func (result f64) (f64.convert_i64_u (i32.const 0)))
 ==== core/custom-descriptors/exact-func-import.wast ====
-Error: Expecting a type use.
-
- ──➤  wasm-test-suite/core/custom-descriptors/exact-func-import.wast:3:27
-1 │ (module definition
-2 │   (type $f (func))
-3 │   (import "" "" (func $1 (exact (type 0))))
-  ·                           ^^^^^
-4 │   ;; (import "" "" (func $2 (exact (type $f) (param) (result)))) ;; TODO: parser support
-5 │   (import "" "" (func $2 (exact (type $f))))
+Wax_utils.Diagnostic.Aborted
+Wax_utils.Diagnostic.Aborted
 ==== core/gc/br_on_cast.wast ====
 Wax type-checking should have failed (type mismatch):
   type t = { };

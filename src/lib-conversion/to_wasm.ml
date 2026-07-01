@@ -2053,14 +2053,14 @@ let module_ diagnostics types fields =
                       desc = Global (globaltype mut typ);
                       exports = exports attributes;
                     }
-              | Fundecl { name; typ; sign; attributes } ->
+              | Fundecl { name; typ; sign; exact; attributes } ->
                   let module_, import_name = Option.get (import attributes) in
                   Text.Import
                     {
                       module_;
                       name = import_name;
                       id = Some name;
-                      desc = Func (typeuse typ sign);
+                      desc = Func { exact; typ = typeuse typ sign };
                       exports = exports attributes;
                     }
               | Tag { name; typ; sign; attributes } -> (

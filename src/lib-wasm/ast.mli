@@ -659,7 +659,7 @@ module Text : sig
   type datastring = (string, location) annotated list
 
   type importdesc =
-    | Func of typeuse
+    | Func of { exact : bool; typ : typeuse }
     | Memory of (limits, location) annotated
     | Table of tabletype
     | Global of globaltype
@@ -768,7 +768,7 @@ module Binary : sig
   type 'info elemmode = Passive | Active of idx * 'info expr | Declare
 
   type importdesc =
-    | Func of typeuse
+    | Func of { exact : bool; typ : typeuse }
     | Memory of limits
     | Table of tabletype
     | Global of globaltype

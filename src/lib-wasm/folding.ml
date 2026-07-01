@@ -183,7 +183,7 @@ let types cctx m =
 let functions cctx f =
   let rec add tbl f =
     match f.Ast.desc with
-    | Func { id; typ; _ } | Import { id; desc = Func typ; _ } ->
+    | Func { id; typ; _ } | Import { id; desc = Func { typ; _ }; _ } ->
         Tbl.add id typ tbl
     | Module_if_annotation { cond; then_fields; else_fields } ->
         fold_fields cctx add tbl ~location:f.info cond then_fields else_fields

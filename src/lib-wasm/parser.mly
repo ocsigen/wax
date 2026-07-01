@@ -886,7 +886,9 @@ import:
 
 external_type:
 | "(" FUNC i = ID ? t = type_use ")"
-    { (i, Func t) }
+    { (i, Func { exact = false; typ = t }) }
+| "(" FUNC i = ID ? "(" EXACT t = type_use ")" ")"
+    { (i, Func { exact = true; typ = t }) }
 | "(" MEMORY i = ID ? l = memory_type ")"
     { (i, (Memory l)) }
 | "(" TABLE i = ID ? t = table_type ")"
@@ -903,7 +905,13 @@ func:
 | "(" FUNC id = ID ?
   exports = exports LPAREN_IMPORT module_ = name name = name ")"
   t = type_use ")"
-  { with_loc $sloc (Import {module_; name; id; desc = Func t; exports }) }
+  { with_loc $sloc
+      (Import {module_; name; id; desc = Func { exact = false; typ = t }; exports }) }
+| "(" FUNC id = ID ?
+  exports = exports LPAREN_IMPORT module_ = name name = name ")"
+  "(" EXACT t = type_use ")" ")"
+  { with_loc $sloc
+      (Import {module_; name; id; desc = Func { exact = true; typ = t }; exports }) }
 
 exports:
 | { [] }
