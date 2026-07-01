@@ -1,4 +1,4 @@
-An integer literal too big for i32 has type "large int" (it defaults to i64).
+An integer literal too big for i32 has type "large number" (it defaults to i64).
 Casting it to i32 wraps it to the low 32 bits — the form produced when
 decompiling `i32.wrap_i64` (or `i64.extend32_s`) applied to such a constant. This
 previously failed with "This value of type int cannot be cast to the target

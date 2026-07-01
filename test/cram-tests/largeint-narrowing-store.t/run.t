@@ -1,6 +1,6 @@
 A narrowing integer store (store8/store16/store32) wraps its value, so it accepts
-an i64-wide value — including a literal too big for i32, of type "large int".
-The store-value check accepted i32/i64/int/number but not "large int", so this
+an i64-wide value — including a literal too big for i32, of type "large number".
+The store-value check accepted i32/i64/int/number but not "large number", so this
 failed to decompile with "This instruction has type int but is expected to have
 type int". Regression: found by the differential-validation fuzzer.
 

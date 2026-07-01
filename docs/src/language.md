@@ -38,11 +38,37 @@ fn add(a: i32, b: i32,) -> i32 {
 0b101010    // Binary
 ```
 
-Integer literals are typed based on context:
+A numeric literal is **flexible**: it has no fixed type of its own but takes a
+concrete one from its context — a type annotation, the operation it feeds, or a
+function's result type.
 
 ```wax
-let x: i64 = 42;        // Inferred from the type annotation
+let x: i64 = 42;        // takes i64 from the annotation
 ```
+
+Which concrete types a literal can take depends on its magnitude:
+
+| Literal | Can become | Defaults to |
+|---------|-----------|-------------|
+| fits in 32 bits (≤ `0xFFFF_FFFF`) | `i32`, `i64`, `f32`, `f64` | `i32` |
+| larger, fits in 64 bits | `i64`, `f32`, `f64` (never `i32`) | `i64` |
+| larger than 64 bits | `f32`, `f64` only | `f64` |
+| a floating-point literal | `f32`, `f64` | `f64` |
+
+The *defaults* apply only when nothing constrains the literal:
+
+```wax
+let a = 42;             // unconstrained -> i32
+let b = 5_000_000_000;  // too big for i32 -> i64
+let c = 3.14;           // float literal -> f64
+```
+
+Once a literal is used where only integers are allowed (a bitwise op, a shift,
+`ctz`, …) it commits to the **integer** family and can then only be `i32` or
+`i64` — it can no longer become a float by inference. These are *implicit*
+coercions; an explicit [`as` cast](#type-conversions) is broader and emits the
+conversion — e.g. an out-of-range constant `as i32` wraps to its low 32 bits, and
+an integer `as f64` converts.
 
 ### Floating Point
 
@@ -53,6 +79,9 @@ let x: i64 = 42;        // Inferred from the type annotation
 inf         // Infinity
 nan         // Not a number
 ```
+
+A floating-point literal is `f32` or `f64`, defaulting to `f64` when
+unconstrained (see the table above).
 
 ### Characters
 

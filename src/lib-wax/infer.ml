@@ -142,9 +142,14 @@ let rec output_inferred_type f ty =
   | Unknown | Error | Collecting _ -> Format.fprintf f "any"
   | UnknownRef -> Format.fprintf f "&_"
   | Null -> Format.fprintf f "null"
+  (* These flexible literal types render by the family they resolve to, distinct
+     from one another and from the concrete valtypes: [number] is any numeric
+     (i32/i64/f32/f64), [int] an integer (i32/i64), [large number] a numeric
+     literal too big for i32 (i64/f32/f64, defaulting to i64 — float-capable, so
+     it belongs to the [number] family, not [int]), [float] a float (f32/f64). *)
   | Number -> Format.fprintf f "number"
   | Int -> Format.fprintf f "int"
-  | LargeInt -> Format.fprintf f "int"
+  | LargeInt -> Format.fprintf f "large number"
   | Int16 -> Format.fprintf f "i16"
   | Int8 -> Format.fprintf f "i8"
   | Float -> Format.fprintf f "float"

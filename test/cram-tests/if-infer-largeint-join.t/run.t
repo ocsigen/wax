@@ -1,8 +1,9 @@
 Inferring an `if`'s result type joins the branches' value types. A literal too
-big for i32 has type "large int" (defaulting to i64), and `join_value_types` had
-no case for it, so an `if` (or block) with one large-int branch and another
-integer branch was rejected with "no common supertype". A large int joins with
-another flexible integer (staying a large int) or with a concrete i64/f32/f64.
+big for i32 has type "large number" (defaulting to i64), and `join_value_types`
+had no case for it, so an `if` (or block) with one large-number branch and
+another integer branch was rejected with "no common supertype". A large number
+joins with another flexible integer (staying a large number) or with a concrete
+i64/f32/f64.
 Regression: found by the differential-validation fuzzer.
 
   $ cat > lj.wat <<'WAT'

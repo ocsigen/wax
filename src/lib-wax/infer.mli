@@ -56,15 +56,41 @@ type inferred_type =
           that [subtype] knows it is a reference: a subtype of every reference
           type but of no numeric or vector type. *)
   | Null
+      (** A bare [null] literal: a null reference whose heap type is not yet
+          fixed. Narrowed to a concrete reference type by context; with none it
+          takes the bottom of the relevant hierarchy. *)
+  (* The flexible numeric-literal types below form a small lattice: each is a
+     literal with no fixed type that a context (an annotation, an operator, a
+     result type) narrows to one concrete numeric type, and that defaults to a
+     chosen width when nothing constrains it. [Number] is the bottom (any of the
+     four numeric types); [Int]/[Float] commit to the integer/float family;
+     [LargeInt] is a [Number] restricted to exclude i32 (still float-capable), NOT
+     an integer-committed type. [output_inferred_type] renders them by family —
+     [number], [int], [large number], [float] — so a diagnostic distinguishes them
+     from one another and from a concrete valtype. *)
   | Number
+      (** Any numeric literal: narrows to i32, i64, f32 or f64, defaulting to
+          i32. The bottom of the flexible-literal lattice. *)
   | Int8
+      (** A packed narrow read — a [load8] or an [i8] struct/array field — which
+          yields an i32 value tracked as 8-bit wide so a following widening cast
+          ([as i64_s]/[i64_u]) fuses into the read. Defaults to i32. *)
   | Int16
+      (** A packed narrow read — a [load16] or an [i16] field — as [Int8] but
+          16-bit. Defaults to i32. *)
   | Int
+      (** An integer literal committed to the integer family (e.g. by a bitwise
+          or shift operator): narrows to i32 or i64, defaulting to i32. It can no
+          longer become a float by inference — only an explicit [as] cast, which
+          emits a conversion, does that. *)
   | LargeInt
-      (** An integer literal too large for i32: still i64/f32/f64 (narrowed by
-          context), never i32, and defaulting to i64. Lets a decompiled
-          out-of-range constant keep its width instead of overflowing. *)
+      (** A numeric literal too large for i32: narrows to i64, f32 or f64 (never
+          i32), defaulting to i64. Despite the name it is float-capable and so
+          belongs to the [number] family, not [Int] — it is [Number] with i32
+          excluded by magnitude. Lets a decompiled out-of-range constant keep its
+          width instead of overflowing, and renders as [large number]. *)
   | Float
+      (** A floating-point literal: narrows to f32 or f64, defaulting to f64. *)
   | Valtype of inferred_valtype
   | Collecting of collecting
       (** Transient state of a fresh cell used as the result / branch-target

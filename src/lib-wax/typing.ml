@@ -6420,9 +6420,9 @@ and flexible_default_internal = function
    literal reaching an [f32] block, which the annotation pins to f32 but which
    re-defaults to f64 without it), dropping the annotation lets that exit re-infer
    the block to a different width — so keep it. Gated on [inferred] being concrete:
-   when the join stayed flexible (an [if] over a large-int and an int branch joins
-   to a large int) it self-resolves the same way on re-parse and the annotation is
-   redundant. *)
+   when the join stayed flexible (an [if] over a [LargeInt] and an [Int] branch
+   joins to a [LargeInt]) it self-resolves the same way on re-parse and the
+   annotation is redundant. *)
 and natural_width_forces_annotation ~natural ~inferred =
   match Option.map (fun c -> Cell.get c) inferred with
   | Some (Valtype rv) ->

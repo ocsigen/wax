@@ -41,7 +41,7 @@ Regression: found by the WAT-mutation fuzzer.
 
   $ printf 'fn f() -> i64 {\n    4294967296 as i64_s;\n}\n' > bigi64.wax
   $ wax -i wax -f wasm bigi64.wax -o /dev/null
-  Error: This value of type int cannot be cast to the target type.
+  Error: This value of type large number cannot be cast to the target type.
    ──➤  bigi64.wax:2:5
   1 │ fn f() -> i64 {
   2 │     4294967296 as i64_s;

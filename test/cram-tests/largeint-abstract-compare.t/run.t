@@ -1,8 +1,8 @@
 A comparison between an abstract operand (the polymorphic value of unreachable
-code) and a literal too big for i32 — a "large int", defaulting to i64 — was
+code) and a literal too big for i32 — a "large number", defaulting to i64 — was
 rejected with "This operator cannot be applied to operands of types int and
 int." The one-abstract path of the arithmetic checker accepted `int` but not
-`large int`, though the both-concrete path already did. Regression: found by the
+`large number`, though the both-concrete path already did. Regression: found by the
 differential-validation fuzzer.
 
   $ cat > lic.wat <<'WAT'
