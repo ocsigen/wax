@@ -419,6 +419,14 @@ module Error = struct
         Format.fprintf f "The memory alignment should be a power of two.")
       ()
 
+  let atomic_alignment context ~location natural =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f
+          "The alignment of an atomic access must be its natural alignment %d."
+          natural)
+      ()
+
   let invalid_lane_index context ~location max_lane =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
@@ -457,6 +465,12 @@ module Error = struct
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
         Format.fprintf f "The custom page size must be 1 or 65536.")
+      ()
+
+  let shared_memory_without_max context ~location =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f "A shared memory must have a maximum size.")
       ()
 
   let limit_mismatch context ~location kind =
@@ -1554,6 +1568,18 @@ let check_memarg ctx location limits sz { Ast.Text.offset; align } =
     | 1 | 2 | 4 | 8 | 16 -> ()
     | _ -> Error.bad_memory_align ctx.modul.diagnostics ~location
 
+(* An atomic access requires exactly its natural alignment, not merely at most. *)
+let check_atomic_memarg ctx location limits op { Ast.Text.offset; align } =
+  if
+    limits.address_type = `I32
+    && Uint64.compare offset max_offset_i32_exclusive >= 0
+  then
+    Error.memory_offset_too_large ctx.modul.diagnostics ~location
+      max_offset_i32_exclusive;
+  let natural = 1 lsl Atomics.natural_align_log2 op in
+  if Uint64.compare align (Uint64.of_int natural) <> 0 then
+    Error.atomic_alignment ctx.modul.diagnostics ~location natural
+
 let memory_instruction_type_and_size ty =
   match (ty : Ast.Text.num_type) with
   | NumI32 -> (I32, `I32)
@@ -2235,6 +2261,26 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
         memarg;
       let* () = pop_known ctx loc ty in
       pop_address ctx loc limits
+  | Atomic (idx, op, memarg) ->
+      let*! limits = get_memory ctx idx in
+      check_atomic_memarg ctx loc limits op memarg;
+      let vt = function `I32 -> I32 | `I64 -> I64 in
+      let operands, results = Atomics.signature op in
+      (* Operands sit above the address, topmost last, so pop in reverse. *)
+      let* () =
+        List.fold_left
+          (fun acc t ->
+            let* () = acc in
+            pop_known ctx loc (vt t))
+          (return ()) (List.rev operands)
+      in
+      let* () = pop_address ctx loc limits in
+      List.fold_left
+        (fun acc t ->
+          let* () = acc in
+          push_known (Some loc) (vt t))
+        (return ()) results
+  | AtomicFence -> return ()
   | MemorySize idx ->
       let*! limits = get_memory ctx idx in
       let ty = address_type_to_valtype limits.address_type in
@@ -2839,14 +2885,14 @@ let rec check_constant_instruction ctx (i : _ Ast.Text.instr) =
   | Br_on_non_null _ | Br_on_cast _ | Br_on_cast_fail _ | Return | Call _
   | CallRef _ | CallIndirect _ | ReturnCall _ | ReturnCallRef _
   | ReturnCallIndirect _ | Drop | Select _ | LocalGet _ | LocalSet _
-  | LocalTee _ | GlobalSet _ | Load _ | LoadS _ | Store _ | StoreS _
-  | MemorySize _ | MemoryGrow _ | MemoryFill _ | MemoryCopy _ | MemoryInit _
-  | DataDrop _ | TableGet _ | TableSet _ | TableSize _ | TableGrow _
-  | TableFill _ | TableCopy _ | TableInit _ | ElemDrop _ | RefIsNull
-  | RefAsNonNull | RefEq | RefTest _ | RefCast _ | StructGet _ | StructSet _
-  | ArrayNewData _ | ArrayNewElem _ | ArrayGet _ | ArraySet _ | ArrayLen
-  | ArrayFill _ | ArrayCopy _ | ArrayInitData _ | ArrayInitElem _ | I31Get _
-  | UnOp _ | Add128 | Sub128 | MulWide _
+  | LocalTee _ | GlobalSet _ | Load _ | LoadS _ | Store _ | StoreS _ | Atomic _
+  | AtomicFence | MemorySize _ | MemoryGrow _ | MemoryFill _ | MemoryCopy _
+  | MemoryInit _ | DataDrop _ | TableGet _ | TableSet _ | TableSize _
+  | TableGrow _ | TableFill _ | TableCopy _ | TableInit _ | ElemDrop _
+  | RefIsNull | RefAsNonNull | RefEq | RefTest _ | RefCast _ | StructGet _
+  | StructSet _ | ArrayNewData _ | ArrayNewElem _ | ArrayGet _ | ArraySet _
+  | ArrayLen | ArrayFill _ | ArrayCopy _ | ArrayInitData _ | ArrayInitElem _
+  | I31Get _ | UnOp _ | Add128 | Sub128 | MulWide _
   | BinOp
       ( F32 _ | F64 _
       | I32
@@ -2959,11 +3005,16 @@ let register_exports ctx lst =
     lst
 
 let limits ctx kind
-    { Ast.desc = { mi; ma; address_type; page_size_log2 }; info = location }
-    max_fn =
+    {
+      Ast.desc = { mi; ma; address_type; page_size_log2; shared };
+      info = location;
+    } max_fn =
   (match page_size_log2 with
   | None | Some (0 | 16) -> ()
   | Some _ -> Error.invalid_page_size ctx.diagnostics ~location);
+  (* A shared memory must declare a maximum size. *)
+  if shared && ma = None then
+    Error.shared_memory_without_max ctx.diagnostics ~location;
   let max = max_fn address_type page_size_log2 in
   match ma with
   | None ->
@@ -3027,21 +3078,21 @@ and register_typeuses_instr d ctx (i : _ Ast.Text.instr) =
   | Br_table _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
   | Br_on_cast_fail _ | Return | Call _ | CallRef _ | ReturnCall _
   | ReturnCallRef _ | Drop | Select _ | LocalGet _ | LocalSet _ | LocalTee _
-  | GlobalGet _ | GlobalSet _ | Load _ | LoadS _ | Store _ | StoreS _
-  | MemorySize _ | MemoryGrow _ | MemoryFill _ | MemoryCopy _ | MemoryInit _
-  | DataDrop _ | TableGet _ | TableSet _ | TableSize _ | TableGrow _
-  | TableFill _ | TableCopy _ | TableInit _ | ElemDrop _ | RefNull _ | RefFunc _
-  | RefIsNull | RefAsNonNull | RefEq | RefTest _ | RefCast _ | StructNew _
-  | StructNewDefault _ | StructGet _ | StructSet _ | ArrayNew _
-  | ArrayNewDefault _ | ArrayNewFixed _ | ArrayNewData _ | ArrayNewElem _
-  | ArrayGet _ | ArraySet _ | ArrayLen | ArrayFill _ | ArrayCopy _
-  | ArrayInitData _ | ArrayInitElem _ | RefI31 | I31Get _ | Const _ | UnOp _
-  | BinOp _ | Add128 | Sub128 | MulWide _ | I32WrapI64 | I64ExtendI32 _
-  | F32DemoteF64 | F64PromoteF32 | ExternConvertAny | AnyConvertExtern
-  | VecBitselect | VecConst _ | VecUnOp _ | VecBinOp _ | VecTest _ | VecShift _
-  | VecBitmask _ | VecLoad _ | VecStore _ | VecLoadLane _ | VecStoreLane _
-  | VecLoadSplat _ | VecExtract _ | VecReplace _ | VecSplat _ | VecShuffle _
-  | VecTernOp _ | Char _ ->
+  | GlobalGet _ | GlobalSet _ | Load _ | LoadS _ | Store _ | StoreS _ | Atomic _
+  | AtomicFence | MemorySize _ | MemoryGrow _ | MemoryFill _ | MemoryCopy _
+  | MemoryInit _ | DataDrop _ | TableGet _ | TableSet _ | TableSize _
+  | TableGrow _ | TableFill _ | TableCopy _ | TableInit _ | ElemDrop _
+  | RefNull _ | RefFunc _ | RefIsNull | RefAsNonNull | RefEq | RefTest _
+  | RefCast _ | StructNew _ | StructNewDefault _ | StructGet _ | StructSet _
+  | ArrayNew _ | ArrayNewDefault _ | ArrayNewFixed _ | ArrayNewData _
+  | ArrayNewElem _ | ArrayGet _ | ArraySet _ | ArrayLen | ArrayFill _
+  | ArrayCopy _ | ArrayInitData _ | ArrayInitElem _ | RefI31 | I31Get _
+  | Const _ | UnOp _ | BinOp _ | Add128 | Sub128 | MulWide _ | I32WrapI64
+  | I64ExtendI32 _ | F32DemoteF64 | F64PromoteF32 | ExternConvertAny
+  | AnyConvertExtern | VecBitselect | VecConst _ | VecUnOp _ | VecBinOp _
+  | VecTest _ | VecShift _ | VecBitmask _ | VecLoad _ | VecStore _
+  | VecLoadLane _ | VecStoreLane _ | VecLoadSplat _ | VecExtract _
+  | VecReplace _ | VecSplat _ | VecShuffle _ | VecTernOp _ | Char _ ->
       ()
 
 (* Collect the implicit function types denoted by inline signatures (function

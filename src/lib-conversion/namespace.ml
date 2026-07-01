@@ -55,6 +55,7 @@ let reserved =
       "resume_throw";
       "resume_throw_ref";
       "return";
+      "shared";
       "suspend";
       "switch";
       "table";

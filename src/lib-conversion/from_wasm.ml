@@ -1,6 +1,7 @@
 open Wax_lang
 module Src = Wax_wasm.Ast.Text
 module Simd = Wax_wasm.Simd
+module Atomics = Wax_wasm.Atomics
 module Uint32 = Wax_utils.Uint32
 module Cond = Wax_wasm.Cond_solver
 module StringMap = Map.Make (String)
@@ -1650,6 +1651,15 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       in
       Stack.push 0
         (mem_call m meth (addr :: value :: mem_extra with_loc memarg nat))
+  | Atomic (m, op, memarg) ->
+      let operands, results = Atomics.signature op in
+      let* ops = Stack.grab (List.length operands) in
+      let* addr = Stack.pop in
+      let nat = 1 lsl Atomics.natural_align_log2 op in
+      Stack.push (List.length results)
+        (mem_call m (Atomics.method_name op)
+           ((addr :: ops) @ mem_extra with_loc memarg nat))
+  | AtomicFence -> Stack.push 0 (path_call "atomic" "fence" [])
   | Char c -> Stack.push 1 (with_loc (Char c))
   | String (t, s) ->
       let s = String.concat "" (List.map (fun s -> s.Ast.desc) s) in
@@ -2190,6 +2200,7 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
                    address_type = l.address_type;
                    limits = Some (l.mi, l.ma);
                    page_size_log2 = l.page_size_log2;
+                   shared = l.shared;
                    data = [];
                    attributes = import module_ nm :: exports ctx Memory name e;
                  })
@@ -2247,6 +2258,7 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
                address_type = l.address_type;
                limits = Some (l.mi, l.ma);
                page_size_log2 = l.page_size_log2;
+               shared = l.shared;
                data;
                attributes = exports ctx Memory name e;
              })

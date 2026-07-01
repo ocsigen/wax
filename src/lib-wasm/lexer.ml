@@ -307,6 +307,7 @@ let rec token_rec ctx lexbuf =
   | "item" -> ITEM
   | "memory" -> MEMORY
   | "pagesize" -> PAGESIZE
+  | "shared" -> SHARED
   | "table" -> TABLE
   | "data" -> DATA
   | "offset" -> OFFSET
@@ -346,6 +347,7 @@ let rec token_rec ctx lexbuf =
   | "local.tee" -> LOCAL_TEE
   | "global.get" -> GLOBAL_GET
   | "global.set" -> GLOBAL_SET
+  | "atomic.fence" -> INSTR AtomicFence
   | "i32.load" -> LOAD NumI32
   | "i64.load" -> LOAD NumI64
   | "f32.load" -> LOAD NumF32
@@ -922,12 +924,17 @@ let rec token_rec ctx lexbuf =
   | ">" -> CMP_GT
   | "<=" -> CMP_LE
   | ">=" -> CMP_GE
-  | keyword ->
-      raise
-        (Parsing.Syntax_error
-           ( Sedlexing.lexing_bytes_positions lexbuf,
-             Printf.sprintf "Unknown keyword '%s'.\n"
-               (Sedlexing.Utf8.lexeme lexbuf) ))
+  | keyword -> (
+      let s = Sedlexing.Utf8.lexeme lexbuf in
+      (* The atomic mnemonics are matched here via the shared table rather than
+         as ~66 explicit arms (see {!Atomics}). *)
+      match Atomics.of_name s with
+      | Some op -> ATOMIC op
+      | None ->
+          raise
+            (Parsing.Syntax_error
+               ( Sedlexing.lexing_bytes_positions lexbuf,
+                 Printf.sprintf "Unknown keyword '%s'.\n" s )))
   | reserved, Opt '"' ->
       raise
         (Parsing.Syntax_error

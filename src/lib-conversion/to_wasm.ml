@@ -3,6 +3,7 @@ module Ast = Wax_wasm.Ast
 module Binary = Ast.Binary
 module Text = Ast.Text
 module Simd = Wax_wasm.Simd
+module Atomics = Wax_wasm.Atomics
 open Wax_lang.Ast
 module StringMap = Map.Make (String)
 
@@ -527,6 +528,25 @@ let mem_memarg meth nstack args : Ast.memarg =
   in
   { offset; align }
 
+(* [mem_memarg] for an atomic op, whose natural (default) alignment is fixed by
+   the access size. *)
+let atomic_memarg op nstack args : Ast.memarg =
+  let int_lit a =
+    match a.desc with
+    | Int s -> Wax_utils.Uint64.of_string s
+    | _ -> assert false
+  in
+  let extra = List.filteri (fun k _ -> k >= nstack) args in
+  let align =
+    match extra with
+    | a :: _ -> int_lit a
+    | [] -> Wax_utils.Uint64.of_int (1 lsl Atomics.natural_align_log2 op)
+  in
+  let offset =
+    match extra with _ :: o :: _ -> int_lit o | _ -> Wax_utils.Uint64.zero
+  in
+  { offset; align }
+
 (* Literal value of a [v128_const_*] lane argument, as a string for
    [Wax_utils.V128.t]; a negative literal is [UnOp (Neg, _)]. *)
 let rec literal_string a =
@@ -682,6 +702,8 @@ and instruction_desc ret ctx i : location Text.instr list =
               let components = List.map literal_string args in
               folded loc (VecConst { Wax_utils.V128.shape; components }) []
           | None -> folded loc VecBitselect arg_code)
+      | Path ({ desc = "atomic"; _ }, { desc = "fence"; _ }) ->
+          folded loc AtomicFence []
       | Path (ns, name) ->
           let desc : _ Text.instr_desc =
             match (ns.desc, name.desc) with
@@ -700,6 +722,18 @@ and instruction_desc ret ctx i : location Text.instr list =
           else
             let code = instruction ret ctx f in
             folded loc (CallRef (index (expr_type_name f))) (arg_code @ code)
+      (* Atomic access: mem.iN_atomic_*(addr [, val…] [, align [, offset]]). *)
+      | StructGet ({ desc = Get memname; _ }, meth)
+        when memory_receiver ctx memname.desc
+             && Atomics.of_method_name meth.desc <> None ->
+          let op = Option.get (Atomics.of_method_name meth.desc) in
+          let memidx = index memname in
+          let operands, _ = Atomics.signature op in
+          let nstack = 1 + List.length operands in
+          let memarg = atomic_memarg op nstack args in
+          let stack_args = List.filteri (fun k _ -> k < nstack) args in
+          let code = List.concat_map (instruction ret ctx) stack_args in
+          folded loc (Atomic (memidx, op, memarg)) code
       (* Memory access: mem.loadN/storeN(addr [, align [, offset]]). Signed
          narrow loads are handled (under an [as iN_s] cast) in the Cast case. *)
       | StructGet ({ desc = Get memname; _ }, meth)
@@ -1828,17 +1862,27 @@ let module_ diagnostics types fields =
         match field.desc with
         | Group { fields = flds; _ } -> convert_fields flds
         | Memory
-            { name; address_type; limits; page_size_log2; data; attributes } ->
+            {
+              name;
+              address_type;
+              limits;
+              page_size_log2;
+              shared;
+              data;
+              attributes;
+            } ->
             let exports = exports attributes in
             let limits_value : Ast.limits =
               match limits with
-              | Some (mi, ma) -> { mi; ma; address_type; page_size_log2 }
+              | Some (mi, ma) ->
+                  { mi; ma; address_type; page_size_log2; shared }
               | None ->
                   {
                     mi = derive_min_pages data;
                     ma = None;
                     address_type;
                     page_size_log2;
+                    shared;
                   }
             in
             let memory_field =
@@ -1914,7 +1958,14 @@ let module_ diagnostics types fields =
             let typ : Text.tabletype =
               {
                 limits =
-                  Ast.no_loc { Ast.mi; ma; address_type; page_size_log2 = None };
+                  Ast.no_loc
+                    {
+                      Ast.mi;
+                      ma;
+                      address_type;
+                      page_size_log2 = None;
+                      shared = false;
+                    };
                 reftype = reftype rt;
               }
             in

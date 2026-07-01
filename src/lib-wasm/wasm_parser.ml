@@ -332,6 +332,7 @@ let limits ?(page_size = false) ch =
   (* Bit 3 (a custom page size follows) is only valid for a memory. *)
   if kind >= if page_size then 16 else 8 then error ch "malformed limits flags";
   let address_type = if kind land 4 = 0 then `I32 else `I64 in
+  let shared = kind land 2 <> 0 in
   let mi = uint64 ch in
   let ma = if kind land 1 = 0 then None else Some (uint64 ch) in
   let page_size_log2 =
@@ -341,7 +342,7 @@ let limits ?(page_size = false) ch =
       if p > 64 then error ch "malformed custom page size";
       Some p
   in
-  { mi; ma; address_type; page_size_log2 }
+  { mi; ma; address_type; page_size_log2; shared }
 
 let memtype ch = limits ~page_size:true ch
 
@@ -891,6 +892,18 @@ and instruction ch =
     | 0x07 -> error ch "unexpected catch opcode"
     | 0x09 -> error ch "unknown opcode 0x09"
     | 0x0B -> error ch "unexpected end opcode"
+    | 0xFE -> (
+        let code = uint ch in
+        if code = 0x03 then
+          (* atomic.fence: a reserved consistency-model byte follows *)
+          let (_ : int) = uint ch in
+          AtomicFence
+        else
+          match Atomics.of_opcode code with
+          | Some op ->
+              let m, arg = memarg ch in
+              Atomic (m, op, arg)
+          | None -> error ch "unknown atomic opcode %d" code)
     | 0xFD -> (
         match uint ch with
         | 0 ->

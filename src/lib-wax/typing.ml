@@ -291,6 +291,11 @@ module Error = struct
   let bad_memory_align context ~location =
     report context ~location "The memory alignment should be a power of two."
 
+  let atomic_alignment context ~location natural =
+    report context ~location
+      "The alignment of an atomic access must be its natural alignment %d."
+      natural
+
   let invalid_lane_index context ~location max_lane =
     report context ~location "The lane index should be less than %d." max_lane
 
@@ -308,6 +313,9 @@ module Error = struct
 
   let invalid_page_size context ~location =
     report context ~location "The custom page size must be 1 or 65536."
+
+  let shared_memory_without_max context ~location =
+    report context ~location "A shared memory must have a maximum size."
 
   let duplicated_export context ~location name =
     report context ~location "There is already an export of name %S." name
@@ -2638,10 +2646,13 @@ let max_table_size address_type _page_size_log2 =
   | `I64 -> Wax_utils.Uint64.of_string "0xffff_ffff_ffff_ffff"
 
 (* Validate a memory/table size limit and page size. Mirrors [Validation.limits]. *)
-let check_limits ctx ~location kind address_type page_size_log2 limits max_fn =
+let check_limits ctx ~location kind ~shared address_type page_size_log2 limits
+    max_fn =
   (match page_size_log2 with
   | None | Some (0 | 16) -> ()
   | Some _ -> Error.invalid_page_size ctx.diagnostics ~location);
+  if shared && match limits with Some (_, Some _) -> false | _ -> true then
+    Error.shared_memory_without_max ctx.diagnostics ~location;
   match limits with
   | None -> ()
   | Some (mi, ma) -> (
@@ -4644,6 +4655,64 @@ and type_mem_method_call ctx i func recv memname meth args =
          args' ))
     result
 
+and type_atomic_method_call ctx i func recv memname meth op args =
+  let _, address_type = Option.get (Tbl.find_opt ctx.memories memname) in
+  let vt_cell = function
+    | `I32 -> valtype_cell i32_valtype
+    | `I64 -> valtype_cell i64_valtype
+  in
+  let operands, results = Wax_wasm.Atomics.signature op in
+  (* The address, then the value operands; then optional align/offset literals. *)
+  let nstack = 1 + List.length operands in
+  let* args' = instructions ctx args in
+  let nargs = List.length args' in
+  if nargs < nstack || nargs > nstack + 2 then
+    Error.value_count_mismatch ctx.diagnostics ~location:i.info ~expected:nstack
+      ~provided:nargs;
+  (match args' with
+  | addr' :: rest ->
+      check_type ctx addr' (address_cell address_type);
+      List.iteri
+        (fun k t ->
+          match List.nth_opt rest k with
+          | Some a -> check_type ctx a (vt_cell t)
+          | None -> ())
+        operands
+  | [] -> ());
+  List.iteri
+    (fun k a ->
+      if k >= nstack then
+        match a.desc with
+        | Ast.Int _ -> ()
+        | _ ->
+            Error.constant_expression_required ctx.diagnostics
+              ~location:(snd a.info))
+    args';
+  let natural = 1 lsl Wax_wasm.Atomics.natural_align_log2 op in
+  (* Only the offset immediate is range-checked here; an atomic access requires
+     exactly its natural alignment, not merely at most, so check that below. *)
+  check_memarg ctx ~address_type ~natural ~align:None
+    ~offset:(List.nth_opt args' (nstack + 1));
+  (match List.nth_opt args' nstack with
+  | Some a -> (
+      match int_literal a with
+      | Some v
+        when Wax_utils.Uint64.compare v (Wax_utils.Uint64.of_int natural) = 0 ->
+          ()
+      | _ ->
+          Error.atomic_alignment ctx.diagnostics ~location:(snd a.info) natural)
+  | None -> ());
+  let result = match results with [] -> [||] | t :: _ -> [| vt_cell t |] in
+  return_statement i
+    (Call
+       ( {
+           desc =
+             StructGet ({ desc = Get memname; info = ([||], recv.info) }, meth);
+           info = ([||], func.info);
+         },
+         args' ))
+    result
+
 and type_simd_mem_method_call ctx i func recv memname meth args =
   let mop = Option.get (Simd.mem_method meth.desc) in
   let _, address_type = Option.get (Tbl.find_opt ctx.memories memname) in
@@ -5938,6 +6007,14 @@ and call_instruction ctx i =
       ( ({ desc = StructGet (({ desc = Get memname; _ } as recv), meth); _ } as
          func),
         args )
+    when Wax_wasm.Atomics.of_method_name meth.desc <> None
+         && memory_receiver ctx memname ->
+      let op = Option.get (Wax_wasm.Atomics.of_method_name meth.desc) in
+      type_atomic_method_call ctx i func recv memname meth op args
+  | Call
+      ( ({ desc = StructGet (({ desc = Get memname; _ } as recv), meth); _ } as
+         func),
+        args )
     when is_mem_method meth.desc && memory_receiver ctx memname ->
       type_mem_method_call ctx i func recv memname meth args
   (* SIMD memory accesses: mem.v128_load(addr), mem.v128_store(addr, v),
@@ -6032,6 +6109,14 @@ and type_path_intrinsic_call ctx i func ns name args =
   match ns.desc with
   | "v128" -> type_simd_free_intrinsic_call ctx i func ns name args
   | "i64" -> type_wide_arith_call ctx i func ns name args
+  | "atomic" when name.desc = "fence" ->
+      let* args' = instructions ctx args in
+      if args' <> [] then
+        Error.value_count_mismatch ctx.diagnostics ~location:i.info ~expected:0
+          ~provided:(List.length args');
+      return_statement i
+        (Call ({ desc = Path (ns, name); info = ([||], func.info) }, args'))
+        [||]
   | _ ->
       let* args' = instructions ctx args in
       Error.unknown_intrinsic ctx.diagnostics ~location:i.info ns.desc name.desc;
@@ -6961,8 +7046,8 @@ let rec globals ctx fields =
     (fun field ->
       match field.desc with
       | Memory ({ address_type; data; _ } as m) ->
-          check_limits ctx ~location:field.info "memory" address_type
-            m.page_size_log2 m.limits max_memory_size;
+          check_limits ctx ~location:field.info "memory" ~shared:m.shared
+            address_type m.page_size_log2 m.limits max_memory_size;
           let data =
             List.map
               (fun (d : _ Ast.memdata) ->
@@ -7028,8 +7113,8 @@ let rec globals ctx fields =
           in
           After { field with desc = Elem { e with mode; init } }
       | Table ({ reftype = rt; init; _ } as t) ->
-          check_limits ctx ~location:field.info "table" t.address_type None
-            t.limits max_table_size;
+          check_limits ctx ~location:field.info "table" ~shared:false
+            t.address_type None t.limits max_table_size;
           (* Without an initializer the table is filled with the element type's
              default value, which a non-nullable reference does not have. *)
           if Option.is_none init && not rt.nullable then

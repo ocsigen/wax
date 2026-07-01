@@ -279,6 +279,8 @@ let rec instr ~resolve_string_type ~resolve_func_type ctx (i : 'info T.instr) =
     | Store (o, m, op) -> Store (resolve_idx ctx.memories o, m, op)
     | LoadS (o, m, sz, bt, s) -> LoadS (resolve_idx ctx.memories o, m, sz, bt, s)
     | StoreS (o, m, sz, bt) -> StoreS (resolve_idx ctx.memories o, m, sz, bt)
+    | Atomic (o, op, m) -> Atomic (resolve_idx ctx.memories o, op, m)
+    | AtomicFence -> AtomicFence
     | MemorySize i -> MemorySize (resolve_idx ctx.memories i)
     | MemoryGrow i -> MemoryGrow (resolve_idx ctx.memories i)
     | MemoryFill i -> MemoryFill (resolve_idx ctx.memories i)

@@ -69,6 +69,7 @@ ZZZ
 %token ITEM
 %token MEMORY
 %token PAGESIZE
+%token SHARED
 %token TABLE
 %token DATA
 %token OFFSET
@@ -99,6 +100,7 @@ ZZZ
 %token GLOBAL_SET
 %token <Ast.Text.num_type> STORE
 %token <[`I32|`I64] * [`I8 | `I16 | `I32]> STORES
+%token <Ast.atomicop> ATOMIC
 %token <Ast.Text.num_type> LOAD
 %token <Ast.Text.vec_load_op> VEC_LOAD
 %token VEC_STORE
@@ -489,21 +491,20 @@ address_type:
 
 limits:
 | mi = u64
-  { with_loc $sloc {mi; ma = None; address_type = `I32; page_size_log2 = None} }
+  { with_loc $sloc {mi; ma = None; address_type = `I32; page_size_log2 = None; shared = false} }
 | mi = u64 ma = u64
-  { with_loc $sloc {mi; ma = Some ma; address_type = `I32; page_size_log2 = None} }
+  { with_loc $sloc {mi; ma = Some ma; address_type = `I32; page_size_log2 = None; shared = false} }
 | at = address_type mi = u64
-  { with_loc $sloc {mi; ma = None; address_type = at; page_size_log2 = None} }
+  { with_loc $sloc {mi; ma = None; address_type = at; page_size_log2 = None; shared = false} }
 | at = address_type mi = u64 ma = u64
-  { with_loc $sloc {mi; ma = Some ma; address_type = at; page_size_log2 = None} }
+  { with_loc $sloc {mi; ma = Some ma; address_type = at; page_size_log2 = None; shared = false} }
 
 pagesize_clause:
 | "(" PAGESIZE p = u32 ")" { page_size_log2 $loc(p) p }
 
 memory_type:
-| l = limits { l }
-| l = limits ps = pagesize_clause
-  { { l with Ast.desc = { l.Ast.desc with page_size_log2 = Some ps } } }
+| l = limits sh = boption(SHARED) ps = ioption(pagesize_clause)
+  { { l with Ast.desc = { l.Ast.desc with shared = sh; page_size_log2 = ps } } }
 
 table_type:
 | l = limits t = reference_type { {limits = l; reftype = t} }
@@ -631,6 +632,9 @@ plain_instruction:
   { with_loc $sloc (VecStore (i, m (Uint64.of_int 16))) }
 | sz = STORES i = memindex m = memarg
   { with_loc $sloc (StoreS (i, m (storage_width (snd sz)), fst sz, snd sz)) }
+| op = ATOMIC i = memindex m = memarg
+  { let nat = Uint64.of_int (1 lsl Atomics.natural_align_log2 op) in
+    with_loc $sloc (Atomic (i, op, m nat)) }
 | MEMORY_SIZE i = memindex { with_loc $sloc (MemorySize i) }
 | MEMORY_GROW i = memindex { with_loc $sloc (MemoryGrow i) }
 | MEMORY_FILL i = memindex { with_loc $sloc (MemoryFill i) }
@@ -936,7 +940,9 @@ memory:
     let page_mask = (1 lsl page_bits) - 1 in
     let sz = Uint64.of_int ((data_len + page_mask) lsr page_bits) in
     let limits =
-      Ast.no_loc {mi = sz; ma = Some sz; address_type; page_size_log2 = ps} in
+      Ast.no_loc
+        {mi = sz; ma = Some sz; address_type; page_size_log2 = ps;
+         shared = false} in
     with_loc $sloc (Memory {id; limits; init = Some s; exports}) }
 | "(" MEMORY id = ID ?
   exports = exports LPAREN_IMPORT module_ = name name = name ")" t = memory_type ")"
@@ -952,7 +958,7 @@ table:
   { let address_type = Option.value ~default:`I32 at in
     let len = Uint64.of_int (List.length elem) in
     let limits =
-      Ast.no_loc {mi=len; ma =Some len; address_type; page_size_log2 = None} in
+      Ast.no_loc {mi=len; ma =Some len; address_type; page_size_log2 = None; shared = false} in
     with_loc $sloc
       (Table {id; typ = {limits; reftype};
               init = Init_segment elem; exports}) }
@@ -963,7 +969,7 @@ table:
     let len = Uint64.of_int (List.length elem) in
     let elem = List.map (fun i -> [{i with Ast.desc = RefFunc i}]) elem in
     let limits =
-      Ast.no_loc {mi=len; ma =Some len; address_type; page_size_log2 = None} in
+      Ast.no_loc {mi=len; ma =Some len; address_type; page_size_log2 = None; shared = false} in
     with_loc $sloc
       (Table {id; typ = { limits; reftype };
               init = Init_segment elem; exports}) }

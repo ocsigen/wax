@@ -254,6 +254,16 @@ memory small: i32 [4096] pagesize 1;
 (memory $small 4096 (pagesize 1))
 ```
 
+A `shared` clause (the threads proposal) marks the memory shared; it must have a maximum size:
+
+```wax
+memory pool: i32 [1, 16] shared;
+```
+
+```wat
+(memory $pool 1 16 shared)
+```
+
 Loads and stores use method-call syntax on the memory, with the value's width in the method name and its signedness expressed by the surrounding [`as iN_s`/`as iN_u` cast](instructions.md#memory-access) — the same convention as packed array access:
 
 ```wax

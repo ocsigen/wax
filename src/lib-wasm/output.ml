@@ -282,9 +282,11 @@ let blocktype =
 
 let address_type at = match at with `I32 -> [] | `I64 -> [ keyword "i64" ]
 
-let limits { Ast.desc = { mi; ma; address_type = at; page_size_log2 }; _ } =
+let limits
+    { Ast.desc = { mi; ma; address_type = at; page_size_log2; shared }; _ } =
   address_type at
   @ (u64 ~style:Constant mi :: option (fun i -> [ u64 ~style:Constant i ]) ma)
+  @ (if shared then [ keyword "shared" ] else [])
   @
   match page_size_log2 with
   | None -> []
@@ -821,6 +823,12 @@ let rec instr i =
               (match sz with `I32 -> "i32" | `I64 -> "i64")
               (match sz' with `I8 -> "8" | `I16 -> "16" | `I32 -> "32"))
         :: (memidx i @ memarg (Uint64.of_int (storage_type_nat_align sz')) m))
+  | Atomic (i, op, m) ->
+      block ~loc
+        (instruction (Atomics.name op)
+        :: (memidx i
+           @ memarg (Uint64.of_int (1 lsl Atomics.natural_align_log2 op)) m))
+  | AtomicFence -> instruction ~loc "atomic.fence"
   | MemorySize m -> block ~loc (instruction "memory.size" :: memidx m)
   | MemoryGrow m -> block ~loc (instruction "memory.grow" :: memidx m)
   | MemoryFill m -> block ~loc (instruction "memory.fill" :: memidx m)

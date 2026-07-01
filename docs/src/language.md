@@ -903,6 +903,32 @@ memory small: i32 [4096] pagesize 1;      // 4096 pages of 1 byte
 memory mem3: i32 [1, 1000] pagesize 65536; // the default page size, explicit
 ```
 
+A memory may be declared `shared` (the threads proposal), for use with atomic
+accesses across threads. A shared memory must specify a maximum size:
+
+```wax
+memory pool: i32 [1, 16] shared;
+```
+
+### Atomics
+
+Atomic memory operations are methods on a memory, named after the WebAssembly
+mnemonic with `.` rewritten as `_` (the value type is part of the name):
+
+```wax
+mem.i32_atomic_load(p)              // atomic load
+mem.i32_atomic_store(p, v);         // atomic store
+mem.i32_atomic_rmw_add(p, v)        // read-modify-write, returns the old value
+mem.i64_atomic_rmw16_add_u(p, v)    // narrow (16-bit) RMW on an i64
+mem.i32_atomic_rmw_cmpxchg(p, expected, replacement)
+mem.atomic_notify(p, count)         // wake waiters
+mem.atomic_wait32(p, expected, timeout)
+```
+
+An atomic access must use its natural alignment. `atomic.fence`, which has no
+memory operand, is written as the [`atomic::fence()`](#qualified-intrinsics)
+intrinsic.
+
 ### Data Segments
 
 ```wax

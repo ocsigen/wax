@@ -240,6 +240,7 @@ let rec token_rec ctx lexbuf =
   | "switch" -> SWITCH
   | "memory" -> MEMORY
   | "pagesize" -> PAGESIZE
+  | "shared" -> SHARED
   | "data" -> DATA
   | "table" -> TABLE
   | "elem" -> ELEM

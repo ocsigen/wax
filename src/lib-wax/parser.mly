@@ -77,7 +77,7 @@
 %token SUSPEND RESUME RESUME_THROW RESUME_THROW_REF SWITCH
 %token DISPATCH
 %token MATCH
-%token MEMORY DATA TABLE ELEM PAGESIZE
+%token MEMORY DATA TABLE ELEM PAGESIZE SHARED
 
 %on_error_reduce statement plaininstr separated_nonempty_list_trailing(",",structure_type_field) list(module_field) separated_nonempty_list_trailing(",",value_type) block_type separated_nonempty_list_trailing(",",function_parameter) list(label) list(attribute) list(typedef) list(legacy_catch) separated_nonempty_list_trailing(",",catch) separated_nonempty_list_trailing(",",let_pattern) blockinstr statement_list loption(separated_nonempty_list_trailing(",",catch)) separated_nonempty_list_trailing(",",expression) let_pattern structure_field separated_nonempty_list_trailing(",",structure_field) constant_expression attribute_expression parenthesized_expression index_expression then_branch condition_expression length_expression optional_function_type structure_type result_type_ expression_list structure
 
@@ -280,6 +280,7 @@ ident_or_keyword:
 | SWITCH { "switch" }
 | MEMORY { "memory" }
 | PAGESIZE { "pagesize" }
+| SHARED { "shared" }
 | DATA { "data" }
 | TABLE { "table" }
 | ELEM { "elem" }
@@ -777,18 +778,18 @@ mem_pagesize:
 
 memory:
 | MEMORY name = ident ":" at = address_type lim = ioption(mem_limits)
-  ps = ioption(mem_pagesize) ";"
+  ps = ioption(mem_pagesize) sh = boption(SHARED) ";"
   { fun attributes ->
       with_loc $sloc
         (Memory {name; address_type = at; limits = lim; page_size_log2 = ps;
-                 data = []; attributes}) }
+                 shared = sh; data = []; attributes}) }
 | MEMORY name = ident ":" at = address_type lim = ioption(mem_limits)
-  ps = ioption(mem_pagesize) "{" items = list(data_item) "}"
+  ps = ioption(mem_pagesize) sh = boption(SHARED) "{" items = list(data_item) "}"
   { fun attributes ->
       with_loc $sloc
         (Memory
            {name; address_type = at; limits = lim; page_size_log2 = ps;
-            data = items; attributes}) }
+            shared = sh; data = items; attributes}) }
 
 data:
 | DATA n = data_name "=" s = STRING ";"

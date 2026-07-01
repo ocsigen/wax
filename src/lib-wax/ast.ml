@@ -228,6 +228,7 @@ type 'info modulefield =
       (* Custom page size as its base-2 logarithm ([None] is the default
          65536-byte page). *)
       page_size_log2 : int option;
+      shared : bool;
       data : 'info memdata list;
       attributes : attributes;
     }

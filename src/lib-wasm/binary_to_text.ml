@@ -306,6 +306,8 @@ let rec instr (names : B.names) local_names label_names label_counter stack
         LoadS (index ~map:names.memories o, m, sz, bt, s)
     | Store (o, m, op) -> Store (index ~map:names.memories o, m, op)
     | StoreS (o, m, sz, bt) -> StoreS (index ~map:names.memories o, m, sz, bt)
+    | Atomic (o, op, m) -> Atomic (index ~map:names.memories o, op, m)
+    | AtomicFence -> AtomicFence
     | MemorySize i -> MemorySize (index ~map:names.memories i)
     | MemoryGrow i -> MemoryGrow (index ~map:names.memories i)
     | MemoryFill i -> MemoryFill (index ~map:names.memories i)

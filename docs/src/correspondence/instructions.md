@@ -270,6 +270,21 @@ The remaining memory operations are also methods on the memory (a data segment i
 | `m.init(seg, dest, src, len)` | `memory.init seg` |
 | `seg.drop()` | `data.drop seg` |
 
+### Atomics
+
+Atomic accesses (the threads proposal) are methods on a memory, named after the WebAssembly mnemonic with `.` rewritten as `_` (the value type stays in the name). They require exactly their natural alignment. `atomic.fence` has no memory operand and is the [`atomic::fence()`](language.md#qualified-intrinsics) intrinsic.
+
+| Wasm | Wax |
+|---|---|
+| `i32.atomic.load` | `m.i32_atomic_load(p)` |
+| `i64.atomic.store8` | `m.i64_atomic_store8(p, v)` |
+| `i32.atomic.rmw.add` | `m.i32_atomic_rmw_add(p, v)` |
+| `i64.atomic.rmw16.add_u` | `m.i64_atomic_rmw16_add_u(p, v)` |
+| `i32.atomic.rmw.cmpxchg` | `m.i32_atomic_rmw_cmpxchg(p, expected, replacement)` |
+| `memory.atomic.notify` | `m.atomic_notify(p, count)` |
+| `memory.atomic.wait32` | `m.atomic_wait32(p, expected, timeout)` |
+| `atomic.fence` | `atomic::fence()` |
+
 ## Table Access
 
 A [table](module_fields.md#tables) is indexed like an array, and an indirect call is written as a call through a table slot cast to the callee's function type.

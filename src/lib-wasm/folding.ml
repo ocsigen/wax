@@ -389,6 +389,10 @@ let arity env i =
   | GlobalGet g -> (0, global_arity env g)
   | GlobalSet g -> (global_arity env g, 0)
   | Load _ | LoadS _ | Store _ | StoreS _ -> (1, 1)
+  | Atomic (_, op, _) ->
+      let operands, results = Atomics.signature op in
+      (1 + List.length operands, List.length results)
+  | AtomicFence -> (0, 0)
   | MemorySize _ -> (0, 1)
   | MemoryGrow _ -> (1, 1)
   | MemoryFill _ | MemoryCopy _ | MemoryInit _ -> (3, 0)

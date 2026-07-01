@@ -127,6 +127,7 @@ module Encoder = struct
   let limits b (l : limits) =
     let flag =
       (if l.ma <> None then 0x01 else 0x00)
+      lor (if l.shared then 0x02 else 0x00)
       lor (if l.address_type = `I64 then 0x04 else 0x00)
       lor if l.page_size_log2 <> None then 0x08 else 0x00
     in
@@ -452,6 +453,14 @@ module Encoder = struct
         | `I64, `I32 -> byte b 0x3E
         | _ -> failwith "Invalid StoreS combination");
         memarg b m mem_idx
+    | Atomic (mem_idx, op, m) ->
+        byte b 0xFE;
+        byte b (Atomics.opcode op);
+        memarg b m mem_idx
+    | AtomicFence ->
+        byte b 0xFE;
+        byte b 0x03;
+        byte b 0x00
     | MemorySize i ->
         byte b 0x3F;
         uint b i

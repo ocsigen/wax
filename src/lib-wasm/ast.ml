@@ -26,6 +26,8 @@ type limits = {
      ([None] is the default 65536-byte page, i.e. exponent 16). Always [None]
      for a table. *)
   page_size_log2 : int option;
+  (* A shared memory (the threads proposal); always [false] for a table. *)
+  shared : bool;
 }
 
 module Make_types (X : sig
@@ -98,6 +100,7 @@ struct
     ma : Uint64.t option;
     address_type : [ `I32 | `I64 ];
     page_size_log2 : int option;
+    shared : bool;
   }
 
   type globaltype = valtype muttype
@@ -241,6 +244,25 @@ type vec_load_op =
   | Load32x2U
   | Load32Zero
   | Load64Zero
+
+(* Atomic memory operations (the threads proposal). The width option is [None]
+   for the value type's full width and [Some w] for a narrower access, which is
+   always zero-extended (the [_u] mnemonics). *)
+type atomic_rmwop =
+  | AtomicAdd
+  | AtomicSub
+  | AtomicAnd
+  | AtomicOr
+  | AtomicXor
+  | AtomicXchg
+  | AtomicCmpxchg
+
+type atomicop =
+  | AtomicNotify
+  | AtomicWait of [ `I32 | `I64 ]
+  | AtomicLoad of [ `I32 | `I64 ] * [ `I8 | `I16 | `I32 ] option
+  | AtomicStore of [ `I32 | `I64 ] * [ `I8 | `I16 | `I32 ] option
+  | AtomicRmw of atomic_rmwop * [ `I32 | `I64 ] * [ `I8 | `I16 | `I32 ] option
 
 type ('i32, 'i64, 'f32, 'f64) op =
   | I32 of 'i32
@@ -517,6 +539,8 @@ struct
         X.idx * memarg * [ `I32 | `I64 ] * [ `I8 | `I16 | `I32 ] * signage
     | Store of X.idx * memarg * num_type
     | StoreS of X.idx * memarg * [ `I32 | `I64 ] * [ `I8 | `I16 | `I32 ]
+    | Atomic of X.idx * atomicop * memarg
+    | AtomicFence
     | MemorySize of X.idx
     | MemoryGrow of X.idx
     | MemoryFill of X.idx

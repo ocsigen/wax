@@ -1,0 +1,31 @@
+memory mem: i32 [1, 1] shared;
+
+#[export = "load"]
+fn load(p: i32) -> i32 {
+    mem.i32_atomic_load(p);
+}
+
+#[export = "rmw"]
+fn rmw(p: i32, v: i64) -> i64 {
+    mem.i64_atomic_rmw16_add_u(p, v);
+}
+
+#[export = "cmpxchg"]
+fn cmpxchg(p: i32, e: i32, r: i32) -> i32 {
+    mem.i32_atomic_rmw_cmpxchg(p, e, r);
+}
+
+#[export = "wait"]
+fn wait(p: i32, e: i32, t: i64) -> i32 {
+    mem.atomic_wait32(p, e, t);
+}
+
+#[export = "notify"]
+fn notify(p: i32, n: i32) -> i32 {
+    mem.atomic_notify(p, n);
+}
+
+#[export = "fence"]
+fn fence() {
+    atomic::fence();
+}
