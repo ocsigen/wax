@@ -13,21 +13,26 @@
 #
 # The space is small and enumerable, so we enumerate it. For every
 # (source flavour x cast target x signedness) — as a single cast, a two-level
-# chain, and a cast feeding a unary intrinsic — we assert wax never *crashes*:
-# it must either compile or cleanly reject (both are intended answers). A
-# combination that compiles is also round-tripped (wax -> wasm -> wax -> wasm) so
-# the *fused* cast path — [to_wasm] re-expanding a single cast the decompiler
-# fused from two — is covered. The property being guarded: the set of casts the
-# typer ACCEPTS must equal the set [to_wasm] can LOWER — [cast]/[signed_cast]
-# (typing.ml) and [default_cast] (to_wasm.ml) are two hand-maintained tables that
-# must agree cell for cell.
+# chain, and a cast feeding a unary intrinsic — we assert two things. First, wax
+# never *crashes*: every combination must compile or cleanly reject (both are
+# intended answers), never hit [assert false]. Second, a combination that
+# compiles to valid wasm must *round-trip* (wax -> wasm -> wax -> wasm) back to
+# valid wasm — so the *fused* cast path ([to_wasm] re-expanding a single cast the
+# decompiler fused from two) is covered, and a broken round-trip is a finding
+# whether it crashes OR merely rejects (a faithful decompilation that no longer
+# type-checks / re-emits invalid wasm is the over-rejection / emitter-soundness
+# class, e.g. smith-13300, diff-558, which reject cleanly rather than crash). The
+# property guarded: the set of casts the typer ACCEPTS must equal the set
+# [to_wasm] can LOWER — [cast]/[signed_cast] (typing.ml) and [default_cast]
+# (to_wasm.ml) are two hand-maintained tables that must agree cell for cell.
 #
 # Each combination is its own wax invocation (one bad cast per module — batching
 # would let a rejected function's error stop compilation before [to_wasm] runs,
 # masking a crash in a sibling function). They are fanned across cores (override
 # JOBS) so the several-thousand-combination sweep still finishes in seconds.
 #
-# Exits non-zero if any combination crashes, so it can gate CI. Deterministic.
+# Exits non-zero if any combination crashes or fails to round-trip, so it can
+# gate CI. Deterministic.
 
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
@@ -114,17 +119,22 @@ lattice_worker() {
       printf F >&2; continue
     fi
     if [ "$v" = ok ]; then
-      # Round-trip: decompile (may fuse casts under simplify), then recompile
-      # (re-expands). A crash in either leg is a finding.
+      # The combination compiled to valid wasm, so it must round-trip: decompile
+      # (may fuse casts under simplify) then recompile (re-expands) back to valid
+      # wasm. Any non-ok on either leg is a finding — not only a crash but a
+      # *rejection* (exit 128): a valid module whose faithful decompilation no
+      # longer type-checks / re-emits invalid wasm is the over-rejection /
+      # emitter-soundness class (e.g. smith-13300, diff-558), which surfaces as a
+      # clean reject, not a crash.
       v="$(classify_wax -i wasm -f wax "$a" -o "$b")"
-      if [[ "$v" == crash:* ]]; then
+      if [ "$v" != ok ]; then
         out+="$(finding CAST HIGH "$label" "$v (decompile)" "$body")"$'\n'
         printf F >&2; continue
       fi
-      if [ "$v" = ok ]; then
-        v="$(classify_wax -i wax -f wasm "$b" -o "$c")"
-        [[ "$v" == crash:* ]] &&
-          out+="$(finding CAST HIGH "$label" "$v (recompile-fused)" "$body")"$'\n'
+      v="$(classify_wax -i wax -f wasm "$b" -o "$c")"
+      if [ "$v" != ok ]; then
+        out+="$(finding CAST HIGH "$label" "$v (recompile-fused)" "$body")"$'\n'
+        printf F >&2; continue
       fi
     fi
     printf . >&2
@@ -149,7 +159,7 @@ cat "$RESULTS"/[0-9]* 2>/dev/null >"$REPORT"
 n=$(grep -c '^FINDING' "$REPORT" 2>/dev/null || echo 0)
 echo "=================== cast-lattice report ==================="
 echo "combinations tested: $N"
-echo "crashes: $n"
+echo "findings (crash or broken round-trip): $n"
 if [ "$n" -gt 0 ]; then
   echo
   cut -f2,3,4,5 "$REPORT" | sort -u | sed 's/^/  /'
