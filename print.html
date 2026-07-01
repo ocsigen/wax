@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-2f7da03e.js";
+            window.path_to_searchindex_js = "searchindex-d7750c98.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -474,6 +474,15 @@ x.max(y)
 x.copysign(y)
 x.rotl(y)      // Rotate left
 x.rotr(y)      // Rotate right
+</code></pre>
+<h3 id="wide-arithmetic"><a class="header" href="#wide-arithmetic">Wide Arithmetic</a></h3>
+<p>128-bit integer operations are written as <code>i64::</code> intrinsics. They take and
+return their operands as <code>(low, high)</code> pairs of <code>i64</code> values, so each returns
+two results (bind them with a multi-value <code>let</code>):</p>
+<pre><code class="language-wax">i64::add128(a_lo, a_hi, b_lo, b_hi)   // 128-bit add, returns (lo, hi)
+i64::sub128(a_lo, a_hi, b_lo, b_hi)   // 128-bit subtract
+i64::mul_wide_s(a, b)                 // signed 64×64 → 128-bit product
+i64::mul_wide_u(a, b)                 // unsigned 64×64 → 128-bit product
 </code></pre>
 <h3 id="type-conversions"><a class="header" href="#type-conversions">Type Conversions</a></h3>
 <p>Use <code>as</code> for type conversions:</p>
@@ -1567,6 +1576,23 @@ fn checksum(a: i32, b: i32) -&gt; i32 {
   local.get $r
   i32.add)
 </code></pre>
+<h2 id="wide-arithmetic-1"><a class="header" href="#wide-arithmetic-1">Wide Arithmetic</a></h2>
+<p>128-bit integer arithmetic uses the <code>i64::</code> intrinsics, which take and return
+their operands as <code>(low, high)</code> pairs of <code>i64</code> values. Each returns two
+results, so a multi-value <code>let</code> binds them.</p>
+<h3 id="wax-19"><a class="header" href="#wax-19">Wax</a></h3>
+<pre><code class="language-wax">#[export = "add_u128"]
+fn add_u128(a_lo: i64, a_hi: i64, b_lo: i64, b_hi: i64) -&gt; (i64, i64) {
+    let (lo, hi) = i64::add128(a_lo, a_hi, b_lo, b_hi);
+    lo;
+    hi;
+}
+
+#[export = "mul_u64_to_u128"]
+fn mul_u64_to_u128(a: i64, b: i64) -&gt; (i64, i64) {
+    i64::mul_wide_u(a, b);
+}
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="introduction-1"><a class="header" href="#introduction-1">Introduction</a></h1>
 <p>This guide documents the correspondence between WebAssembly (Wasm) and Wax constructs. It is intended for developers who are familiar with Wasm and want to understand how Wax maps to it.</p>
@@ -1751,6 +1777,23 @@ than tab/newline/carriage return); otherwise it stays an
 <tr><td><code>i32.clz</code> … <code>i64.popcnt</code></td><td><code>val.clz()</code>, <code>val.ctz()</code>, <code>val.popcnt()</code></td></tr>
 <tr><td><code>i32.extend8_s</code> … <code>i64.extend16_s</code></td><td><code>val.extend8_s()</code>, <code>val.extend16_s()</code></td></tr>
 <tr><td><code>i32.rotl</code> … <code>i64.rotr</code></td><td><code>v1.rotl(v2)</code>, <code>v1.rotr(v2)</code></td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="wide-arithmetic-2"><a class="header" href="#wide-arithmetic-2">Wide Arithmetic</a></h3>
+<p>These 128-bit operations take and return their operands as <code>(low, high)</code> pairs
+of <code>i64</code> values, so each is written as a call returning two results (typically
+bound with a multi-value <code>let</code>).</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Wasm</th><th>Wax</th></tr>
+</thead>
+<tbody>
+<tr><td><code>i64.add128</code></td><td><code>i64::add128(a_lo, a_hi, b_lo, b_hi)</code></td></tr>
+<tr><td><code>i64.sub128</code></td><td><code>i64::sub128(a_lo, a_hi, b_lo, b_hi)</code></td></tr>
+<tr><td><code>i64.mul_wide_s</code></td><td><code>i64::mul_wide_s(a, b)</code></td></tr>
+<tr><td><code>i64.mul_wide_u</code></td><td><code>i64::mul_wide_u(a, b)</code></td></tr>
 </tbody>
 </table>
 </div>

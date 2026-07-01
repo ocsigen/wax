@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-2f7da03e.js";
+            window.path_to_searchindex_js = "searchindex-d7750c98.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -381,6 +381,15 @@ x.max(y)
 x.copysign(y)
 x.rotl(y)      // Rotate left
 x.rotr(y)      // Rotate right
+</code></pre>
+<h3 id="wide-arithmetic"><a class="header" href="#wide-arithmetic">Wide Arithmetic</a></h3>
+<p>128-bit integer operations are written as <code>i64::</code> intrinsics. They take and
+return their operands as <code>(low, high)</code> pairs of <code>i64</code> values, so each returns
+two results (bind them with a multi-value <code>let</code>):</p>
+<pre><code class="language-wax">i64::add128(a_lo, a_hi, b_lo, b_hi)   // 128-bit add, returns (lo, hi)
+i64::sub128(a_lo, a_hi, b_lo, b_hi)   // 128-bit subtract
+i64::mul_wide_s(a, b)                 // signed 64×64 → 128-bit product
+i64::mul_wide_u(a, b)                 // unsigned 64×64 → 128-bit product
 </code></pre>
 <h3 id="type-conversions"><a class="header" href="#type-conversions">Type Conversions</a></h3>
 <p>Use <code>as</code> for type conversions:</p>

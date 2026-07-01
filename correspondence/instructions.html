@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-2f7da03e.js";
+            window.path_to_searchindex_js = "../searchindex-d7750c98.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f031991a.js"></script>
@@ -252,6 +252,23 @@ than tab/newline/carriage return); otherwise it stays an
 <tr><td><code>i32.clz</code> … <code>i64.popcnt</code></td><td><code>val.clz()</code>, <code>val.ctz()</code>, <code>val.popcnt()</code></td></tr>
 <tr><td><code>i32.extend8_s</code> … <code>i64.extend16_s</code></td><td><code>val.extend8_s()</code>, <code>val.extend16_s()</code></td></tr>
 <tr><td><code>i32.rotl</code> … <code>i64.rotr</code></td><td><code>v1.rotl(v2)</code>, <code>v1.rotr(v2)</code></td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="wide-arithmetic"><a class="header" href="#wide-arithmetic">Wide Arithmetic</a></h3>
+<p>These 128-bit operations take and return their operands as <code>(low, high)</code> pairs
+of <code>i64</code> values, so each is written as a call returning two results (typically
+bound with a multi-value <code>let</code>).</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Wasm</th><th>Wax</th></tr>
+</thead>
+<tbody>
+<tr><td><code>i64.add128</code></td><td><code>i64::add128(a_lo, a_hi, b_lo, b_hi)</code></td></tr>
+<tr><td><code>i64.sub128</code></td><td><code>i64::sub128(a_lo, a_hi, b_lo, b_hi)</code></td></tr>
+<tr><td><code>i64.mul_wide_s</code></td><td><code>i64::mul_wide_s(a, b)</code></td></tr>
+<tr><td><code>i64.mul_wide_u</code></td><td><code>i64::mul_wide_u(a, b)</code></td></tr>
 </tbody>
 </table>
 </div>

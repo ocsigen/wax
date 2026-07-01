@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-2f7da03e.js";
+            window.path_to_searchindex_js = "searchindex-d7750c98.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -710,6 +710,23 @@ fn checksum(a: i32, b: i32) -&gt; i32 {
   local.get $q
   local.get $r
   i32.add)
+</code></pre>
+<h2 id="wide-arithmetic"><a class="header" href="#wide-arithmetic">Wide Arithmetic</a></h2>
+<p>128-bit integer arithmetic uses the <code>i64::</code> intrinsics, which take and return
+their operands as <code>(low, high)</code> pairs of <code>i64</code> values. Each returns two
+results, so a multi-value <code>let</code> binds them.</p>
+<h3 id="wax-19"><a class="header" href="#wax-19">Wax</a></h3>
+<pre><code class="language-wax">#[export = "add_u128"]
+fn add_u128(a_lo: i64, a_hi: i64, b_lo: i64, b_hi: i64) -&gt; (i64, i64) {
+    let (lo, hi) = i64::add128(a_lo, a_hi, b_lo, b_hi);
+    lo;
+    hi;
+}
+
+#[export = "mul_u64_to_u128"]
+fn mul_u64_to_u128(a: i64, b: i64) -&gt; (i64, i64) {
+    i64::mul_wide_u(a, b);
+}
 </code></pre>
 
                     </main>
