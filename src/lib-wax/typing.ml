@@ -1091,12 +1091,16 @@ let signed_cast ctx ty ty' =
       (* [i64.extend_i32], [f*.convert_i32]: default the integer source to i32. *)
       Cell.set ty (Valtype i32_valtype);
       true
-  | LargeInt, (`I64 | `F32 | `F64) ->
+  | LargeInt, (`F32 | `F64) ->
       (* [f*.convert_i64]: a [LargeInt] source defaults to i64. *)
       Cell.set ty (Valtype i64_valtype);
       true
   | LargeInt, _ ->
-      false (* never i32; there is no integer-to-i32 signed conversion *)
+      (* Never [i32]/[i64]: a [LargeInt] can only be the source of an
+         integer->float conversion. It exceeds i32 so it cannot be the i32 source
+         of an [i64.extend_i32], and there is no i64->i64 (or i32->i32) signed
+         conversion. *)
+      false
   | Valtype { internal = I32; _ }, `I64
   | Valtype { internal = I32 | I64; _ }, (`F32 | `F64)
   | Valtype { internal = F32 | F64; _ }, (`I32 | `I64) ->
@@ -4902,8 +4906,11 @@ and type_unary_intrinsic_call ctx i func recv meth =
        so they reach the concrete arms above. A fully-polymorphic [Unknown]
        receiver (a value taken off the polymorphic stack of unreachable code) is
        resolved the same way: the method alone fixes the int/float family, so it
-       defaults to that family's natural width rather than failing to compile. *)
-    | (Float | Unknown), "to_bits" ->
+       defaults to that family's natural width rather than failing to compile.
+       [to_bits] needs a float receiver, so an integer-valued float constant
+       decompiled to a bare integer literal ([Number]/[Int]/[LargeInt]) coerces
+       to [f64] too (like the [LargeInt] coercion in a float binop). *)
+    | (Float | Number | Int | LargeInt | Unknown), "to_bits" ->
         Cell.set ty (Valtype f64_valtype);
         Some i64_cell
     | (Number | Int | Unknown), "from_bits" ->

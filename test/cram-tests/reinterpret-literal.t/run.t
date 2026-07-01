@@ -35,3 +35,13 @@ recovered by the intrinsic's defaulting, the kept casts pin the other widths).
   $ wax -i wax -f wasm reinterp.wax -o out.wasm --validate
   $ wax -i wasm -f wat out.wasm --validate | grep -c reinterpret
   4
+
+An integer-valued float constant decompiles to a bare integer literal (no cast),
+so `to_bits` sees a `Number`/`LargeInt` receiver rather than a `Float`. Since
+`to_bits` needs a float, it coerces that receiver to f64 (like a float binop
+does), so the round-trip recompiles instead of being rejected. Regression: found
+by the WAT-mutation fuzzer.
+
+  $ printf 'fn f() -> i64 { (-4294967295).to_bits(); }\n' > tobits.wax
+  $ wax -i wax -f wat tobits.wax
+  (func $f (result i64) (i64.reinterpret_f64 (f64.const -4294967295)))

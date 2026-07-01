@@ -33,3 +33,19 @@ integer-to-i32 signed conversion, so it is still rejected:
   3 │ }
   4 │ 
   [128]
+
+A LargeInt source likewise has no signed conversion to i64: it exceeds i32, so it
+cannot be the i32 source of an i64.extend_i32, and there is no i64->i64
+conversion. It is rejected (rather than reaching an unlowerable i64->i64 cast).
+Regression: found by the WAT-mutation fuzzer.
+
+  $ printf 'fn f() -> i64 {\n    4294967296 as i64_s;\n}\n' > bigi64.wax
+  $ wax -i wax -f wasm bigi64.wax -o /dev/null
+  Error: This value of type int cannot be cast to the target type.
+   ──➤  bigi64.wax:2:5
+  1 │ fn f() -> i64 {
+  2 │     4294967296 as i64_s;
+    ·     ^^^^^^^^^^^^^^^^^^^
+  3 │ }
+  4 │ 
+  [128]
