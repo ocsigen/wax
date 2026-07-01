@@ -3217,12 +3217,15 @@ and type_branch ctx i =
             let*@ typ1 = internalize ctx ty1 in
             let+@ typ2 = internalize ctx (Ref (diff_ref_type ty' ty)) in
             (typ1, typ2)
-        (* A polymorphic operand (unreachable / branch code): the source keeps its
-           unknown type, but [br_on_cast]'s fall-through is always a reference (the
-           residual of a reference cast), so give it the bottom reference
-           [UnknownRef] rather than [Unknown] — otherwise a consumer like [!]
-           ([ref.is_null] on a reference) would default to the integer [i32.eqz]. *)
-        | Unknown | UnknownRef -> Some (typ', Cell.make UnknownRef)
+        (* A polymorphic operand (unreachable / branch code): [to_wasm] recovers the
+           source type as the cast target [ty], so the fall-through is [ty \ ty]
+           (as the [Valtype] case computes with the operand's own type) — a concrete
+           reference matching the emitted instruction. Not [Unknown]: the residual is
+           always a reference, and not the bottom [UnknownRef] either, or a chained
+           [br_on_cast] would recover a source that mismatches this one. *)
+        | Unknown | UnknownRef ->
+            let+@ typ2 = internalize ctx (Ref (diff_ref_type ty ty)) in
+            (typ', typ2)
         | Error -> Some (typ', Cell.make Error)
         | Null ->
             (* A bare [null] operand: the cast operand is [ty] made nullable (the
@@ -3272,11 +3275,14 @@ and type_branch ctx i =
             let*@ typ1 = internalize ctx ty1 in
             let+@ typ2 = internalize ctx (Ref (diff_ref_type ty' ty)) in
             (typ1, typ2)
-        (* A polymorphic operand: the residual sent to the branch is a reference
-           (the residual of a reference cast), so give it the bottom reference
-           [UnknownRef] rather than [Unknown] — as for [br_on_cast] above, so a
-           later [!] / inference on it does not fall back to an integer. *)
-        | Unknown | UnknownRef -> Some (typ', Cell.make UnknownRef)
+        (* A polymorphic operand: as for [br_on_cast] above, [to_wasm] recovers the
+           source as the cast target [ty], so the residual sent to the branch is
+           [ty \ ty] — a concrete reference matching the emitted instruction, not
+           [Unknown] (the residual is always a reference) nor the bottom [UnknownRef]
+           (a chained cast would then recover a mismatching source). *)
+        | Unknown | UnknownRef ->
+            let+@ typ2 = internalize ctx (Ref (diff_ref_type ty ty)) in
+            (typ', typ2)
         | Error -> Some (typ', Cell.make Error)
         | Null ->
             (* A bare [null] operand, as in [br_on_cast] above: the operand is [ty]
