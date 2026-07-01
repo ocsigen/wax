@@ -283,11 +283,29 @@ x.rotl(y)      // Rotate left
 x.rotr(y)      // Rotate right
 ```
 
-### Wide Arithmetic
+### Qualified Intrinsics
 
-128-bit integer operations are written as `i64::` intrinsics. They take and
-return their operands as `(low, high)` pairs of `i64` values, so each returns
-two results (bind them with a multi-value `let`):
+Most built-in operations are written as methods on a receiver (`x.clz()`,
+`a.add_i32x4(b)` above). The few that have no natural receiver are written
+instead as a **qualified path**, `type::member(args)` — a built-in free
+function namespaced by the WebAssembly type it belongs to. These names are
+built in, not user functions, and because the `::` form is distinct from an
+ordinary name it can never clash with your own functions, globals, or locals.
+
+Two families use this syntax today.
+
+**`v128::` — SIMD free functions.** The vector constants (one argument per
+lane) and `bitselect`, which have no receiver:
+
+```wax
+v128::const_i32x4(1, 2, 3, 4)         // a v128 constant (also a constant expression)
+v128::const_f32x4(1.5, 2.5, 3.5, 4.5)
+v128::bitselect(a, b, mask)           // per-bit select
+```
+
+**`i64::` — wide arithmetic.** 128-bit integer operations, taking and returning
+their operands as `(low, high)` pairs of `i64`, so each returns two results
+(bind them with a multi-value `let`):
 
 ```wax
 i64::add128(a_lo, a_hi, b_lo, b_hi)   // 128-bit add, returns (lo, hi)
