@@ -3529,8 +3529,11 @@ and type_arith ctx i =
             match op.desc with
             | Not ->
                 (match Cell.get typ with
+                (* [!] is [i32.eqz] on an integer and [ref.is_null] on a
+                   reference; [UnknownRef] is a (bottom) reference, so it takes
+                   the [ref.is_null] reading like any other ref. *)
                 | Valtype { internal = I32 | I64 | Ref _; _ }
-                | Null | Int | LargeInt ->
+                | Null | Int | LargeInt | UnknownRef ->
                     ()
                 | Number -> Cell.set typ Int
                 | _ ->
