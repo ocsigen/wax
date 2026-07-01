@@ -57,6 +57,7 @@ KEEP="$ROOT/fuzz/mutate-sound-findings"
 mkdir -p "$KEEP"
 RESULTS="$(mktemp -d)"
 trap 'rm -rf "$RESULTS"' EXIT
+freeze_wax "$RESULTS"  # run against a snapshot so a concurrent rebuild can't corrupt workers
 
 # --- Pre-filter seeds to ones the reference can decode+validate unmutated. ---
 # (Parallel: a wax compile + a ref decode per seed.) A seed the REF build cannot

@@ -25,6 +25,26 @@ if ! command -v "$WASM_TOOLS" >/dev/null 2>&1; then
   fi
 fi
 
+# Snapshot the wax binary and repoint $WAX at the copy. A long parallel campaign
+# fans hundreds of short wax invocations across workers; if the developer rebuilds
+# `_build/.../main.exe` while it runs, a worker can exec a half-written binary and
+# get a spurious non-zero exit, which the crash oracles then report as a bug (a
+# whole burst of them). Running against a frozen copy makes a campaign immune to
+# concurrent rebuilds. Pass the run's scratch dir so the copy is removed with it;
+# call once, before exporting WAX to the workers. Idempotent.
+freeze_wax() {
+  [ -n "${WAX_FROZEN:-}" ] && return 0
+  if [ ! -x "$WAX" ]; then
+    echo "freeze_wax: wax not found or not executable at $WAX (run 'dune build')" >&2
+    return 1
+  fi
+  local frozen
+  if [ -n "${1:-}" ]; then frozen="$1/wax-frozen"; else frozen="$(mktemp)"; fi
+  cp "$WAX" "$frozen" && chmod +x "$frozen"
+  WAX="$frozen"
+  WAX_FROZEN="$frozen"
+}
+
 # Run wax under a timeout and classify the exit status into one bucket, printed
 # on stdout: ok | rejected | crash:<detail>. The whole command line is passed in.
 #   ok        — exit 0 (accepted / converted)

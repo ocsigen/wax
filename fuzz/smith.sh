@@ -34,6 +34,7 @@ mkdir -p "$KEEP"
 REPORT="$(mktemp)"
 RESULTS="$(mktemp -d)"
 trap 'rm -rf "$RESULTS"' EXIT
+freeze_wax "$RESULTS"  # run against a snapshot so a concurrent rebuild can't corrupt workers
 ORACLE="$(dirname "${BASH_SOURCE[0]}")/oracle.sh"
 
 # SMITH_FLAGS (the smith proposal set, threads disabled) comes from lib.sh, shared

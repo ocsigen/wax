@@ -38,6 +38,7 @@ KEEP="$ROOT/fuzz/diff-findings"
 mkdir -p "$KEEP"
 RESULTS="$(mktemp -d)"
 trap 'rm -rf "$RESULTS"' EXIT
+freeze_wax "$RESULTS"  # run against a snapshot so a concurrent rebuild can't corrupt workers
 
 # Reference-interpreter verdict on a binary: 0 = valid, non-zero = rejected.
 ref_validate() { "$REF" -d "$1" >/dev/null 2>&1; }

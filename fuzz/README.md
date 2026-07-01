@@ -50,6 +50,7 @@ fuzz/triage.sh REPORT       # collapse a findings report into ranked bug signatu
 fuzz/wax-corpus.sh [smith-count] [bytes]   # build .wax seeds: spec corpus + smith modules
 fuzz/mutate-wax.sh [count]       # AST-mutate the wax seeds + check them (needs wasm-tools)
 fuzz/mutate-validate.sh [count]  # AST-mutate + emitter-soundness vs the spec reference (no wasm-tools)
+fuzz/cast-lattice.sh             # deterministic sweep of the numeric/ref cast lattice
 
 # WAT *input* side (the text lexer/parser):
 fuzz/wat-corpus.sh [smith-count] [bytes]   # build .wat seeds: spec corpus + smith modules
@@ -64,10 +65,19 @@ fuzz/exec-interp.sh [wast…] # via wabt spectest-interp
 fuzz/exec.sh [wast…]        # via Node
 ```
 
-`run.sh`, `smith.sh`, `mutate-wax.sh`, `diff-validate.sh` and `mutate-validate.sh`
-exit non-zero if any **HIGH**-severity finding appears, so any can gate CI; the
-execution oracles exit non-zero on any behavioural regression. `fuzz/corpus/`, `fuzz/corpus-wax/`,
-`fuzz/smith-findings/` and `fuzz/mutate-findings/` are gitignored.
+`run.sh`, `smith.sh`, `mutate-wax.sh`, `diff-validate.sh`, `mutate-validate.sh`
+and `cast-lattice.sh` exit non-zero if any **HIGH**-severity finding appears, so
+any can gate CI; the execution oracles exit non-zero on any behavioural
+regression. `fuzz/corpus/`, `fuzz/corpus-wax/`, `fuzz/smith-findings/` and
+`fuzz/mutate-findings/` are gitignored.
+
+The parallel campaigns (`smith.sh`, `mutate-wax.sh`, `diff-validate.sh`,
+`mutate-validate.sh`, `cast-lattice.sh`) snapshot the wax binary at start-up
+(`freeze_wax` in `lib.sh`) and run every worker against the frozen copy. A long
+run fans thousands of short wax invocations across workers; without the snapshot,
+rebuilding `_build/.../main.exe` mid-run would let a worker exec a half-written
+binary and report the resulting non-zero exit as a spurious crash (a whole burst
+of them). The copy lives in the run's scratch dir and is removed on exit.
 
 ## The corpus
 
@@ -127,6 +137,23 @@ Wax generator for syntactic constructs the decompiler never emits.
   only edits literals and cast targets plus grafts, so it under-explores those
   patterns; reviewing the flexible-literal arms of `lib-wax/typing.ml` directly is
   the higher-signal method, and a clean run is corroboration, not proof.
+
+* `cast-lattice.sh` makes that "higher-signal method" a deterministic guard for
+  one especially bug-prone corner: numeric/reference **casts**. Several crashes
+  had the same shape — the type checker accepts a cast whose emitted form
+  `to_wasm` has no instruction to lower, so lowering hits `assert false`. These
+  live in the flexible-numeric (`Number`/`Int`/`Float`/`LargeInt`/`Unknown`) arms
+  of `cast`/`signed_cast`, which the decompiler-seeded oracles never reach
+  (decompiled Wax always carries concrete, explicit casts), and which random
+  mutation only samples one cell at a time. The cast space is small and
+  enumerable, so `cast-lattice.sh` enumerates it: every (source flavour × cast
+  target × signedness), as a single cast, a two-level chain, and a cast feeding a
+  unary intrinsic, asserting wax never *crashes* (it must compile or cleanly
+  reject). Compiling cases are round-tripped so the *fused* cast path — `to_wasm`
+  re-expanding a single cast the decompiler fused from two — is covered too. The
+  property: the set of casts the typer accepts must equal the set `to_wasm` can
+  lower (`cast`/`signed_cast` and `default_cast` are two hand-maintained tables
+  that must agree cell for cell). Deterministic, so it belongs in CI.
 
 ## The WAT input side
 
