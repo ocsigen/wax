@@ -431,6 +431,27 @@ let branch_ref_instr instr pp name label ty i =
       space pp ();
       instr Branch pp i)
 
+(* As [branch_ref_instr], with a trailing [descriptor <d>] operand (the
+   custom-descriptors [br_on_cast_desc_eq] / [_fail]). *)
+let branch_ref_desc_instr instr pp name label ty i d =
+  box pp ~indent:indent_level (fun () ->
+      keyword pp name;
+      space pp ();
+      identifier pp "'";
+      identifier pp label.desc;
+      space pp ();
+      reftype pp ty;
+      space pp ();
+      (* The value is printed above [Cast] precedence: a bare cast value would
+         otherwise absorb the following [descriptor] into a [CastDesc]. *)
+      instr UnaryPrefix pp i;
+      space pp ();
+      keyword pp "descriptor";
+      space pp ();
+      (* The descriptor operand binds tightly (see the [DESCRIPTOR] precedence),
+         so a non-atomic operand (e.g. a cast) must be parenthesized. *)
+      instr CallAndFieldAccess pp d)
+
 let call_instr instr pp ?prefix i l =
   hvbox pp (fun () ->
       (* Keep an optional prefix ([become]/[return]) and the callee glued to the
@@ -485,6 +506,28 @@ let struct_instr pp nm f =
           f ());
       space pp ())
 
+(* As [struct_instr], with a [descriptor <d>] clause between the type name and
+   the [|] (the custom-descriptors [struct.new_desc] / [struct.new_default_desc]).
+   [print_desc] renders the descriptor operand. *)
+let struct_desc_instr pp nm print_desc f =
+  hvbox pp ~indent:0 (fun () ->
+      box pp (fun () ->
+          punctuation pp "{";
+          Option.iter
+            (fun t ->
+              identifier pp t.desc;
+              space pp ())
+            nm;
+          keyword pp "descriptor";
+          space pp ();
+          print_desc ();
+          punctuation pp "|");
+      indent pp indent_level (fun () ->
+          space pp ();
+          f ());
+      space pp ();
+      punctuation pp "}")
+
 let array_instr pp nm f =
   (* Indent the elements one level and break before the closing [\]] at the
      array's own column (like [struct_instr]), so a wrapped array reads
@@ -502,24 +545,26 @@ let get_prec (i : _ Ast.instr) =
   | Dispatch _ | Match _ ->
       Atom
   | Unreachable | Nop | Hole | Null | Get _ | Path _ | Char _ | String _ | Int _
-  | Float _ | Struct _ | StructDefault _ | Array _ | ArrayDefault _
-  | ArrayFixed _ | ArraySegment _ | ArrayGet _ | ArraySet _ | Sequence _ ->
+  | Float _ | Struct _ | StructDefault _ | StructDesc _ | StructDefaultDesc _
+  | Array _ | ArrayDefault _ | ArrayFixed _ | ArraySegment _ | ArrayGet _
+  | ArraySet _ | Sequence _ ->
       Atom
   | Set _ | Tee _ -> Assignement
   | Call _ | TailCall _ -> CallAndFieldAccess
   | ContNew _ | ContBind _ | Suspend _ | Resume _ | ResumeThrow _
   | ResumeThrowRef _ | Switch _ ->
       CallAndFieldAccess
-  | Cast _ | Test _ -> Cast
+  | Cast _ | CastDesc _ | Test _ -> Cast
   | NonNull _ -> UnaryPostfix
   | UnOp _ -> UnaryPrefix
-  | StructGet _ | StructSet _ -> CallAndFieldAccess
+  | StructGet _ | StructSet _ | GetDescriptor _ -> CallAndFieldAccess
   | BinOp (op, _, _) ->
       let out, _, _ = prec_op op.desc in
       out
   | Let _ -> Instruction
   | Br _ | Br_if _ | Br_table _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
-  | Br_on_cast_fail _ | Throw _ | ThrowRef _ | Return _ ->
+  | Br_on_cast_fail _ | Br_on_cast_desc_eq _ | Br_on_cast_desc_eq_fail _
+  | Throw _ | ThrowRef _ | Return _ ->
       Branch
   | Select _ -> Select
 
@@ -529,11 +574,13 @@ let is_block (i : _ Ast.instr) =
   | Dispatch _ | Match _ ->
       true
   | Call _ | Unreachable | Nop | Hole | Null | Get _ | Path _ | Set _ | Tee _
-  | TailCall _ | Char _ | String _ | Int _ | Float _ | Cast _ | Test _
-  | NonNull _ | Struct _ | StructDefault _ | StructGet _ | StructSet _ | Array _
+  | TailCall _ | Char _ | String _ | Int _ | Float _ | Cast _ | CastDesc _
+  | Test _ | NonNull _ | Struct _ | StructDefault _ | StructDesc _
+  | StructDefaultDesc _ | StructGet _ | GetDescriptor _ | StructSet _ | Array _
   | ArrayDefault _ | ArrayFixed _ | ArraySegment _ | ArrayGet _ | ArraySet _
   | BinOp _ | UnOp _ | Let _ | Br _ | Br_if _ | Br_table _ | Br_on_null _
-  | Br_on_non_null _ | Br_on_cast _ | Br_on_cast_fail _ | Throw _ | ThrowRef _
+  | Br_on_non_null _ | Br_on_cast _ | Br_on_cast_fail _ | Br_on_cast_desc_eq _
+  | Br_on_cast_desc_eq_fail _ | Throw _ | ThrowRef _
   | ContNew _ | ContBind _ | Suspend _ | Resume _ | ResumeThrow _
   | ResumeThrowRef _ | Switch _ | Return _ | Sequence _ | Select _ ->
       false
@@ -548,10 +595,11 @@ let rec starts_with_block_prec prec (i : 'a Ast.instr) =
         true
     | Call (i, _) | ArrayGet (i, _) | ArraySet (i, _, _) ->
         starts_with_block_prec CallAndFieldAccess i
-    | Cast (i, _) | Test (i, _) -> starts_with_block_prec Cast i
+    | Cast (i, _) | CastDesc (i, _, _) | Test (i, _) ->
+        starts_with_block_prec Cast i
     | NonNull i -> starts_with_block_prec UnaryPostfix i
     | UnOp (_, i) -> starts_with_block_prec UnaryPrefix i
-    | StructGet (i, _) | StructSet (i, _, _) ->
+    | StructGet (i, _) | StructSet (i, _, _) | GetDescriptor i ->
         starts_with_block_prec CallAndFieldAccess i
     | BinOp (op, i, _) ->
         let _, left, _ = prec_op op.desc in
@@ -559,9 +607,11 @@ let rec starts_with_block_prec prec (i : 'a Ast.instr) =
     | Select (i, _, _) -> starts_with_block_prec Select i
     | Unreachable | Nop | Hole | Null | Get _ | Path _ | Set _ | Tee _
     | TailCall _ | Char _ | String _ | Int _ | Float _ | Struct _
-    | StructDefault _ | Array _ | ArrayDefault _ | ArrayFixed _ | ArraySegment _
+    | StructDefault _ | StructDesc _ | StructDefaultDesc _ | Array _
+    | ArrayDefault _ | ArrayFixed _ | ArraySegment _
     | Let _ | Br _ | Br_if _ | Br_table _ | Br_on_null _ | Br_on_non_null _
-    | Br_on_cast _ | Br_on_cast_fail _ | Throw _ | ThrowRef _ | ContNew _
+    | Br_on_cast _ | Br_on_cast_fail _ | Br_on_cast_desc_eq _
+    | Br_on_cast_desc_eq_fail _ | Throw _ | ThrowRef _ | ContNew _
     | ContBind _ | Suspend _ | Resume _ | ResumeThrow _ | ResumeThrowRef _
     | Switch _ | Return _ | Sequence _ ->
         false
@@ -885,6 +935,21 @@ let rec instr prec pp (i : _ instr) =
               keyword pp "as";
               space pp ();
               casttype pp t))
+  | CastDesc (i, t, d) ->
+      box pp ~indent:indent_level (fun () ->
+          instr Cast pp i;
+          space pp ();
+          box pp (fun () ->
+              keyword pp "as";
+              space pp ();
+              reftype pp t;
+              space pp ();
+              keyword pp "descriptor";
+              space pp ();
+              (* Parenthesize a non-atomic descriptor operand: it binds tightly
+                 (see the [DESCRIPTOR] precedence), so a trailing operator (e.g. a
+                 cast) would otherwise escape it. *)
+              instr CallAndFieldAccess pp d))
   | NonNull i ->
       instr UnaryPostfix pp i;
       operator pp "!"
@@ -902,10 +967,25 @@ let rec instr prec pp (i : _ instr) =
             (fun pp (nm, i) -> print_key_value pp nm.desc (instr Instruction) i)
             pp l)
   | StructDefault nm -> struct_instr pp nm (fun () -> punctuation pp "..")
+  | StructDesc (nm, d, l) ->
+      struct_desc_instr pp nm
+        (fun () -> instr Instruction pp d)
+        (fun () ->
+          list_commasep_trailing
+            (fun pp (nm, i) -> print_key_value pp nm.desc (instr Instruction) i)
+            pp l)
+  | StructDefaultDesc (nm, d) ->
+      struct_desc_instr pp nm
+        (fun () -> instr Instruction pp d)
+        (fun () -> punctuation pp "..")
   | StructGet (i, s) ->
       field_receiver pp i;
       operator pp ".";
       identifier pp s.desc
+  | GetDescriptor i ->
+      field_receiver pp i;
+      operator pp ".";
+      keyword pp "descriptor"
   | StructSet (i, s, i') ->
       box pp ~indent:indent_level (fun () ->
           field_receiver pp i;
@@ -1007,6 +1087,10 @@ let rec instr prec pp (i : _ instr) =
       branch_ref_instr instr pp "br_on_cast" label ty i
   | Br_on_cast_fail (label, ty, i) ->
       branch_ref_instr instr pp "br_on_cast_fail" label ty i
+  | Br_on_cast_desc_eq (label, ty, i, d) ->
+      branch_ref_desc_instr instr pp "br_on_cast" label ty i d
+  | Br_on_cast_desc_eq_fail (label, ty, i, d) ->
+      branch_ref_desc_instr instr pp "br_on_cast_fail" label ty i d
   | Br_table (labels, i) ->
       let default, cases =
         match List.rev labels with

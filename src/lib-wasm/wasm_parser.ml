@@ -879,6 +879,27 @@ and instruction ch =
         | 28 -> RefI31
         | 29 -> I31Get Signed
         | 30 -> I31Get Unsigned
+        | 32 -> StructNewDesc (uint ch)
+        | 33 -> StructNewDefaultDesc (uint ch)
+        | 34 -> RefGetDesc (uint ch)
+        | 35 -> RefCastDescEq { nullable = false; typ = heaptype ch }
+        | 36 -> RefCastDescEq (nullable (heaptype ch))
+        | 37 ->
+            let flags = input_byte ch in
+            let label = uint ch in
+            let ht1 = heaptype ch in
+            let ht2 = heaptype ch in
+            let rt1 = { nullable = flags land 1 <> 0; typ = ht1 } in
+            let rt2 = { nullable = flags land 2 <> 0; typ = ht2 } in
+            Br_on_cast_desc_eq (label, rt1, rt2)
+        | 38 ->
+            let flags = input_byte ch in
+            let label = uint ch in
+            let ht1 = heaptype ch in
+            let ht2 = heaptype ch in
+            let rt1 = { nullable = flags land 1 <> 0; typ = ht1 } in
+            let rt2 = { nullable = flags land 2 <> 0; typ = ht2 } in
+            Br_on_cast_desc_eq_fail (label, rt1, rt2)
         | c -> error ch "unknown GC opcode %d" c)
     | 0xFC -> (
         match uint ch with

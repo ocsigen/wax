@@ -385,17 +385,25 @@ let labels_in_list l =
         instr a;
         lst l
     | Struct (_, fs) -> List.iter (fun (_, e) -> instr e) fs
+    | StructDesc (_, d, fs) ->
+        List.iter (fun (_, e) -> instr e) fs;
+        instr d
     | Set (_, e)
     | Tee (_, e)
     | Cast (e, _)
     | Test (e, _)
     | NonNull e
     | StructGet (e, _)
+    | GetDescriptor e
+    | StructDefaultDesc (_, e)
     | ArrayDefault (_, e)
     | UnOp (_, e)
     | ThrowRef e
     | ContNew (_, e) ->
         instr e
+    | CastDesc (a, _, b)
+    | Br_on_cast_desc_eq (_, _, a, b)
+    | Br_on_cast_desc_eq_fail (_, _, a, b)
     | StructSet (a, _, b)
     | Array (_, a, b)
     | ArraySegment (_, _, a, b)
@@ -1102,8 +1110,12 @@ and instruction_desc ret ctx i : location Text.instr list =
                  the convert (both handled by the [Any] arm of the match below). *)
               | ( Ref { typ = Extern | NoExtern; _ },
                   Valtype
-                    (Ref { typ = Eq | I31 | Struct | Array | Type _ | None_; _ })
-                )
+                    (Ref
+                       {
+                         typ =
+                           Eq | I31 | Struct | Array | Type _ | Exact _ | None_;
+                         _;
+                       }) )
               | ( Ref { typ = Extern | NoExtern; nullable = true },
                   Valtype (Ref { typ = Any; nullable = false }) ) ->
                   ( folded loc AnyConvertExtern code,
@@ -1118,7 +1130,9 @@ and instruction_desc ret ctx i : location Text.instr list =
               (* Extern / Any *)
               | ( Ref
                     {
-                      typ = Any | Eq | I31 | Struct | Array | Type _ | None_;
+                      typ =
+                        Any | Eq | I31 | Struct | Array | Type _ | Exact _
+                        | None_;
                       _;
                     },
                   Valtype (Ref { typ = Extern; _ }) ) ->
@@ -1292,12 +1306,44 @@ and instruction_desc ret ctx i : location Text.instr list =
         match opt_idx with Some idx -> idx | None -> expr_type_name i
       in
       folded loc (StructNewDefault (index idx)) []
+  | StructDesc (opt_idx, d, fields) ->
+      let idx =
+        match opt_idx with Some idx -> idx | None -> expr_type_name i
+      in
+      let field_names = Hashtbl.find ctx.struct_fields idx.desc in
+      let field_map =
+        List.fold_left
+          (fun acc (name, instr) -> StringMap.add name.desc instr acc)
+          StringMap.empty fields
+      in
+      let instrs =
+        List.map (fun name -> StringMap.find name field_map) field_names
+      in
+      let args_code = List.concat_map (instruction ret ctx) instrs in
+      (* The descriptor operand is pushed last, above the field values. *)
+      folded loc
+        (StructNewDesc (index idx))
+        (args_code @ instruction ret ctx d)
+  | StructDefaultDesc (opt_idx, d) ->
+      let idx =
+        match opt_idx with Some idx -> idx | None -> expr_type_name i
+      in
+      folded loc (StructNewDefaultDesc (index idx)) (instruction ret ctx d)
   | StructGet (instr_val, field) ->
       (* Plain struct field access; the instruction methods that used to share
          this syntax now take parentheses and are handled in the [Call] case. *)
       folded loc
         (StructGet (None, index (expr_type_name instr_val), index field))
         (instruction ret ctx instr_val)
+  | GetDescriptor instr_val ->
+      folded loc
+        (RefGetDesc (index (expr_type_name instr_val)))
+        (instruction ret ctx instr_val)
+  | CastDesc (value, t, d) ->
+      (* The descriptor operand is pushed last, above the value. *)
+      folded loc
+        (RefCastDescEq (reftype t))
+        (instruction ret ctx value @ instruction ret ctx d)
   | StructSet (instr_val, field_idx, new_val) ->
       let code_val = instruction ret ctx instr_val in
       let code_new = instruction ret ctx new_val in
@@ -1569,6 +1615,24 @@ and instruction_desc ret ctx i : location Text.instr list =
                   (expr_last_opt_reftype expr)),
              reftype target_reftype ))
         (instruction ret ctx expr)
+  | Br_on_cast_desc_eq (l, target_reftype, expr, d) ->
+      folded loc
+        (Br_on_cast_desc_eq
+           ( label ret l,
+             reftype
+               (Option.value ~default:target_reftype
+                  (expr_last_opt_reftype expr)),
+             reftype target_reftype ))
+        (instruction ret ctx expr @ instruction ret ctx d)
+  | Br_on_cast_desc_eq_fail (l, target_reftype, expr, d) ->
+      folded loc
+        (Br_on_cast_desc_eq_fail
+           ( label ret l,
+             reftype
+               (Option.value ~default:target_reftype
+                  (expr_last_opt_reftype expr)),
+             reftype target_reftype ))
+        (instruction ret ctx expr @ instruction ret ctx d)
   | Throw (tag_idx, args) ->
       let args =
         match args with None -> [] | Some args -> instruction ret ctx args

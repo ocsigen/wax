@@ -379,14 +379,24 @@ let rec instr ~resolve_string_type ~resolve_func_type ctx (i : 'info T.instr) =
     | Br_on_cast_fail (i, r1, r2) ->
         Br_on_cast_fail
           (resolve_label ctx.labels i, reftype ctx r1, reftype ctx r2)
+    | Br_on_cast_desc_eq (i, r1, r2) ->
+        Br_on_cast_desc_eq
+          (resolve_label ctx.labels i, reftype ctx r1, reftype ctx r2)
+    | Br_on_cast_desc_eq_fail (i, r1, r2) ->
+        Br_on_cast_desc_eq_fail
+          (resolve_label ctx.labels i, reftype ctx r1, reftype ctx r2)
     | CallRef i -> CallRef (resolve_idx ctx.types i)
     | ReturnCallRef i -> ReturnCallRef (resolve_idx ctx.types i)
     | RefAsNonNull -> RefAsNonNull
     | RefEq -> RefEq
     | RefTest r -> RefTest (reftype ctx r)
     | RefCast r -> RefCast (reftype ctx r)
+    | RefCastDescEq r -> RefCastDescEq (reftype ctx r)
+    | RefGetDesc i -> RefGetDesc (resolve_idx ctx.types i)
     | StructNew i -> StructNew (resolve_idx ctx.types i)
     | StructNewDefault i -> StructNewDefault (resolve_idx ctx.types i)
+    | StructNewDesc i -> StructNewDesc (resolve_idx ctx.types i)
+    | StructNewDefaultDesc i -> StructNewDefaultDesc (resolve_idx ctx.types i)
     | StructGet (s, i1, i2) ->
         let type_idx = resolve_idx ctx.types i1 in
         StructGet (s, type_idx, resolve_field_idx ctx type_idx i2)

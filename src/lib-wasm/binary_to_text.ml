@@ -283,6 +283,16 @@ let rec instr (names : B.names) local_names label_names label_counter stack
           ( get_label_reference stack l,
             reftype names.types r1,
             reftype names.types r2 )
+    | Br_on_cast_desc_eq (l, r1, r2) ->
+        Br_on_cast_desc_eq
+          ( get_label_reference stack l,
+            reftype names.types r1,
+            reftype names.types r2 )
+    | Br_on_cast_desc_eq_fail (l, r1, r2) ->
+        Br_on_cast_desc_eq_fail
+          ( get_label_reference stack l,
+            reftype names.types r1,
+            reftype names.types r2 )
     | Return -> Return
     | Call i -> Call (index ~map:names.functions i)
     | CallRef i -> CallRef (index ~map:names.types i)
@@ -343,8 +353,12 @@ let rec instr (names : B.names) local_names label_names label_counter stack
     | RefEq -> RefEq
     | RefTest r -> RefTest (reftype names.types r)
     | RefCast r -> RefCast (reftype names.types r)
+    | RefCastDescEq r -> RefCastDescEq (reftype names.types r)
+    | RefGetDesc i -> RefGetDesc (index ~map:names.types i)
     | StructNew i -> StructNew (index ~map:names.types i)
     | StructNewDefault i -> StructNewDefault (index ~map:names.types i)
+    | StructNewDesc i -> StructNewDesc (index ~map:names.types i)
+    | StructNewDefaultDesc i -> StructNewDefaultDesc (index ~map:names.types i)
     | StructGet (s, s_idx, f_idx) ->
         StructGet
           (s, index ~map:names.types s_idx, field_index names s_idx f_idx)

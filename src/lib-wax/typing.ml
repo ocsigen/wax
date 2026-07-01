@@ -213,6 +213,15 @@ module Error = struct
     report context ~location "A %s type must be a struct type."
       (if described then "described" else "descriptor")
 
+  let type_without_descriptor context ~location =
+    report context ~location
+      "This descriptor instruction requires a type that has a descriptor."
+
+  let descriptor_allocation_required context ~location =
+    report context ~location
+      "A type with a descriptor must be allocated with a descriptor: {T \
+       descriptor d | …}."
+
   (* A secondary caret at [location] labelled with an inferred value type. Used
      to point at each branch of an [if]/select whose branches are in
      incompatible type hierarchies: there is no common supertype — and, unlike a
@@ -2085,10 +2094,18 @@ let rec count_holes i =
   | ThrowRef i
   | ContNew (_, i)
   | Return (Some i)
+  | StructDefaultDesc (_, i)
+  | GetDescriptor i
   | StructGet (i, _) ->
       count_holes i
-  | StructSet (i1, _, i2) -> count_holes i1 + count_holes i2
+  | CastDesc (i1, _, i2)
+  | Br_on_cast_desc_eq (_, _, i1, i2)
+  | Br_on_cast_desc_eq_fail (_, _, i1, i2)
+  | StructSet (i1, _, i2) ->
+      count_holes i1 + count_holes i2
   | Struct (_, l) -> List.fold_left (fun acc (_, i) -> acc + count_holes i) 0 l
+  | StructDesc (_, d, l) ->
+      count_holes d + List.fold_left (fun acc (_, i) -> acc + count_holes i) 0 l
   | Sequence l
   | ArrayFixed (_, l)
   | ContBind (_, _, l)
@@ -2143,6 +2160,8 @@ let rec collect_assigned_locals acc i =
   | Test (e, _)
   | NonNull e
   | StructGet (e, _)
+  | GetDescriptor e
+  | StructDefaultDesc (_, e)
   | UnOp (_, e)
   | Br_if (_, e)
   | Br_table (_, e)
@@ -2158,6 +2177,14 @@ let rec collect_assigned_locals acc i =
       List.fold_left
         (fun acc (_, e) -> collect_assigned_locals acc e)
         acc fields
+  | StructDesc (_, d, fields) ->
+      List.fold_left
+        (fun acc (_, e) -> collect_assigned_locals acc e)
+        (collect_assigned_locals acc d)
+        fields
+  | CastDesc (e1, _, e2)
+  | Br_on_cast_desc_eq (_, _, e1, e2)
+  | Br_on_cast_desc_eq_fail (_, _, e1, e2)
   | StructSet (e1, _, e2)
   | Array (_, e1, e2)
   | ArraySegment (_, _, e1, e2)
@@ -2359,8 +2386,13 @@ let rec check_hole_order_rec ctx i n =
         | ThrowRef i
         | ContNew (_, i)
         | Return (Some i)
+        | StructDefaultDesc (_, i)
+        | GetDescriptor i
         | StructGet (i, _) ->
             check_hole_order_rec ctx i n
+        | CastDesc (i1, _, i2)
+        | Br_on_cast_desc_eq (_, _, i1, i2)
+        | Br_on_cast_desc_eq_fail (_, _, i1, i2)
         | StructSet (i1, _, i2) ->
             n |> check_hole_order_rec ctx i1 |> check_hole_order_rec ctx i2
         | Sequence l
@@ -2394,6 +2426,29 @@ let rec check_hole_order_rec ctx i n =
               | _ -> List.map snd l
             in
             check_hole_order_in_list ctx fields n
+        | StructDesc (_, d, l) ->
+            (* As [Struct], with the descriptor operand evaluated last (after the
+               field values). *)
+            let fields =
+              match Cell.get (expression_type ctx i) with
+              | Valtype { typ = Ref { typ = Type t | Exact t; _ }; _ } -> (
+                  match lookup_struct_type ctx t with
+                  | Some fields ->
+                      let field_map =
+                        List.fold_left
+                          (fun acc (name, instr) ->
+                            StringMap.add name.desc instr acc)
+                          StringMap.empty l
+                      in
+                      Array.map
+                        (fun field ->
+                          StringMap.find (fst field.desc).desc field_map)
+                        fields
+                      |> Array.to_list
+                  | None -> List.map snd l)
+              | _ -> List.map snd l
+            in
+            check_hole_order_in_list ctx (fields @ [ d ]) n
         | Select (c, t, e) ->
             n |> check_hole_order_rec ctx t |> check_hole_order_rec ctx e
             |> check_hole_order_rec ctx c
@@ -2992,12 +3047,12 @@ let match_scrut_reftype ctx scrut' =
    types it on the statement path rather than against its result. *)
 let rec classify_trailing ctx desc =
   match desc with
-  | Struct (_, fields) -> (
+  | Struct (_, fields) | StructDesc (_, _, fields) -> (
       match infer_struct_by_fields ctx fields with
       | Some _ -> (false, true)
       | None -> (true, false))
-  | StructDefault _ | Array _ | ArrayDefault _ | ArrayFixed _ | ArraySegment _
-  | String _ ->
+  | StructDefault _ | StructDefaultDesc _ | Array _ | ArrayDefault _
+  | ArrayFixed _ | ArraySegment _ | String _ ->
       (true, false)
   | If { typ; _ }
   | Block { typ; _ }
@@ -3071,17 +3126,17 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       in
       return_expression i desc (Cell.make lattice)
   | Float _ as desc -> return_expression i desc (Cell.make Float)
-  | Cast _ | Test _ -> type_cast ctx i
-  | Struct _ | StructDefault _ | Array _ | ArrayDefault _ | ArrayFixed _
-  | ArraySegment _ | String _ ->
+  | Cast _ | CastDesc _ | Test _ -> type_cast ctx i
+  | Struct _ | StructDefault _ | StructDesc _ | StructDefaultDesc _ | Array _
+  | ArrayDefault _ | ArrayFixed _ | ArraySegment _ | String _ ->
       let* i', _ = check_instruction ctx (Cell.make Unknown) i in
       return i'
-  | StructGet _ | StructSet _ | ArrayGet _ | ArraySet _ ->
+  | StructGet _ | GetDescriptor _ | StructSet _ | ArrayGet _ | ArraySet _ ->
       type_aggregate_access ctx i
   | BinOp _ | UnOp _ -> type_arith ctx i
   | Let _ -> type_let ctx i
   | Br _ | Br_if _ | Br_table _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
-  | Br_on_cast_fail _ ->
+  | Br_on_cast_fail _ | Br_on_cast_desc_eq _ | Br_on_cast_desc_eq_fail _ ->
       type_branch ctx i
   | Throw _ | ThrowRef _ -> type_exception ctx i
   | ContNew _ | ContBind _ | Suspend _ | Resume _ | ResumeThrow _
@@ -3153,6 +3208,33 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
             None
       in
       return_expression i (Select (i1', i2', i3')) ty
+
+and type_descriptor_operand ctx ~location (ty : reftype) d =
+  (* Type the descriptor operand [d] of a [br_on_cast_desc_eq] / [_fail] against
+     [(ref null (exact_1 y))], where [y] is the descriptor of the target type
+     [ty] and [exact_1] matches [ty]'s exactness. *)
+  let exact = match ty.typ with Exact _ -> true | _ -> false in
+  let descname =
+    match ty.typ with
+    | Type n | Exact n -> (
+        match Tbl.find_opt ctx.type_context.types n with
+        | Some (_, def) -> def.descriptor
+        | None -> None)
+    | _ -> None
+  in
+  match descname with
+  | None ->
+      Error.type_without_descriptor ctx.diagnostics ~location;
+      instruction ctx d
+  | Some dn -> (
+      match
+        internalize ctx
+          (Ref { nullable = true; typ = (if exact then Exact dn else Type dn) })
+      with
+      | Some cell ->
+          let* d', _ = check_instruction ctx cell d in
+          return d'
+      | None -> instruction ctx d)
 
 and type_branch ctx i =
   (* The branch instructions: [br], [br_if], [br_table] and the [br_on_*]
@@ -3480,6 +3562,88 @@ and type_branch ctx i =
            ( label,
              ty,
              { i' with info = (Array.append types [| typ1 |], snd i'.info) } ))
+        (Array.append (Array.sub params 0 (Array.length params - 1)) [| typ |])
+  | Br_on_cast_desc_eq (label, ty, i', d) ->
+      (* As [br_on_cast], with a descriptor operand [d] typed as
+         [(ref null (exact_1 y))] (its exactness matching the target [ty]). *)
+      let* i' = instruction ctx i' in
+      let* d = type_descriptor_operand ctx ~location:i.info ty d in
+      if is_cont_heaptype ctx ty.typ then
+        Error.invalid_cast_type ctx.diagnostics ~location:i.info;
+      let typ', types = split_on_last_type ctx ~location:(snd i'.info) i' in
+      let params = branch_target ctx label in
+      (let>@ ityp = reftype ctx.diagnostics ctx.type_context ty in
+       let typ =
+         Cell.make
+           (Valtype { typ = Ref ty; internal = Ref ityp; anon_comptype = None })
+       in
+       check_subtypes ctx ~location:(snd i'.info)
+         (Array.append types [| typ |])
+         params);
+      let*! typ1, typ2 =
+        match Cell.get typ' with
+        | Valtype { typ = Ref ty'; _ } ->
+            (* The target [ty] and operand [ty'] must share a supertype (a
+               failed [val_lub] means different hierarchies). The operand keeps
+               its own type [typ'] — a lub would emit the wrong source reftype on
+               the round-trip. *)
+            if Option.is_none (val_lub ctx (Ref ty) (Ref ty')) then
+              Error.invalid_cast ctx.diagnostics ~location:(snd i'.info) typ';
+            let+@ typ2 = internalize ctx (Ref (diff_ref_type ty' ty)) in
+            (typ', typ2)
+        | Unknown | UnknownRef ->
+            let+@ typ2 = internalize ctx (Ref (diff_ref_type ty ty)) in
+            (typ', typ2)
+        | Error -> Some (typ', Cell.make Error)
+        | _ ->
+            Error.expected_ref ctx.diagnostics ~location:(snd i'.info);
+            None
+      in
+      return_statement i
+        (Br_on_cast_desc_eq
+           ( label,
+             ty,
+             { i' with info = (Array.append types [| typ1 |], snd i'.info) },
+             d ))
+        (Array.append (Array.sub params 0 (Array.length params - 1)) [| typ2 |])
+  | Br_on_cast_desc_eq_fail (label, ty, i', d) ->
+      let* i' = instruction ctx i' in
+      let* d = type_descriptor_operand ctx ~location:i.info ty d in
+      if is_cont_heaptype ctx ty.typ then
+        Error.invalid_cast_type ctx.diagnostics ~location:i.info;
+      let typ', types = split_on_last_type ctx ~location:(snd i'.info) i' in
+      let*! ityp = reftype ctx.diagnostics ctx.type_context ty in
+      let*! typ1, typ2 =
+        match Cell.get typ' with
+        | Valtype { typ = Ref ty'; _ } ->
+            (* See [Br_on_cast_desc_eq]: shared-supertype check, operand keeps
+               its own type. *)
+            if Option.is_none (val_lub ctx (Ref ty) (Ref ty')) then
+              Error.invalid_cast ctx.diagnostics ~location:(snd i'.info) typ';
+            let+@ typ2 = internalize ctx (Ref (diff_ref_type ty' ty)) in
+            (typ', typ2)
+        | Unknown | UnknownRef ->
+            let+@ typ2 = internalize ctx (Ref (diff_ref_type ty ty)) in
+            (typ', typ2)
+        | Error -> Some (typ', Cell.make Error)
+        | _ ->
+            Error.expected_ref ctx.diagnostics ~location:(snd i'.info);
+            None
+      in
+      let params = branch_target ctx label in
+      check_subtypes ctx ~location:(snd i'.info)
+        (Array.append types [| typ2 |])
+        params;
+      let typ =
+        Cell.make
+          (Valtype { typ = Ref ty; internal = Ref ityp; anon_comptype = None })
+      in
+      return_statement i
+        (Br_on_cast_desc_eq_fail
+           ( label,
+             ty,
+             { i' with info = (Array.append types [| typ1 |], snd i'.info) },
+             d ))
         (Array.append (Array.sub params 0 (Array.length params - 1)) [| typ |])
   | _ -> assert false (* only invoked on a branch instruction *)
 
@@ -4081,6 +4245,52 @@ and type_cast ctx i =
       in
       if unnecessary_cast then return { i' with info = ([| ty |], snd i'.info) }
       else return_expression i (Cast (i', typ)) ty
+  | CastDesc (value, t, d) ->
+      (* [value as &!X descriptor d]: a descriptor-equality cast. The target
+         [t] is the exact/inexact reference to [X]; [d] is the descriptor
+         operand, whose type is [X]'s descriptor with the same exactness. *)
+      let* value' = instruction ctx value in
+      let target_exact, target_name =
+        match t.typ with
+        | Exact n -> (true, Some n)
+        | Type n -> (false, Some n)
+        | _ -> (false, None)
+      in
+      let desc_expected =
+        match target_name with
+        | None ->
+            (* The target is not a concrete type, so it has no descriptor. *)
+            Error.type_without_descriptor ctx.diagnostics ~location:i.info;
+            None
+        | Some n -> (
+            match Tbl.find_opt ctx.type_context.types n with
+            | None -> None
+            | Some (_, def) -> (
+                match def.descriptor with
+                | None ->
+                    Error.type_without_descriptor ctx.diagnostics
+                      ~location:i.info;
+                    None
+                | Some dn ->
+                    internalize ctx
+                      (Ref
+                         {
+                           nullable = true;
+                           typ = (if target_exact then Exact dn else Type dn);
+                         })))
+      in
+      let* d' =
+        match desc_expected with
+        | Some cell ->
+            let* d', _ = check_instruction ctx cell d in
+            return d'
+        | None -> instruction ctx d
+      in
+      let*! ty = internalize ctx (Ref t) in
+      let ty' = expression_type ctx value' in
+      if not (cast ctx ty' (Ref t)) then
+        Error.invalid_cast ctx.diagnostics ~location:i.info ty';
+      return_expression i (CastDesc (value', t, d')) ty
   | Test (i, ty) ->
       let* i' = instruction ctx i in
       if is_cont_heaptype ctx ty.typ then
@@ -4151,6 +4361,34 @@ and type_aggregate_access ctx i =
             None
       in
       return_expression i (StructGet (i', field)) ty
+  | GetDescriptor i' ->
+      let* i' = instruction ctx i' in
+      let*! ty =
+        match Cell.get (expression_type ctx i') with
+        | Valtype { typ = Ref { typ = (Type ty | Exact ty) as ht; _ }; _ } -> (
+            let exact = match ht with Exact _ -> true | _ -> false in
+            let*@ _, def = Tbl.find_opt ctx.type_context.types ty in
+            match def.descriptor with
+            | None ->
+                Error.type_without_descriptor ctx.diagnostics
+                  ~location:(snd i'.info);
+                None
+            | Some descname ->
+                internalize ctx
+                  (Ref
+                     {
+                       nullable = false;
+                       typ = (if exact then Exact descname else Type descname);
+                     }))
+        | Error -> Some (Cell.make Error)
+        | Unknown | UnknownRef ->
+            Error.unknown_operand_type ctx.diagnostics ~location:(snd i'.info);
+            Some (Cell.make Error)
+        | _ ->
+            Error.expected_struct_type ctx.diagnostics ~location:(snd i'.info);
+            None
+      in
+      return_expression i (GetDescriptor i') ty
   | StructSet (i1, field, i2) ->
       let* i1' = instruction ctx i1 in
       (* Resolve the field's declared type (pure, reporting any field error)
@@ -5411,22 +5649,13 @@ and check_instruction ?(drop_supertype = false) ctx expected
      [expected] when there is one. *)
   let construction_result name =
     (* A concrete allocator ([struct.new] / [array.new*]) yields an *exact*
-       reference at the Wasm level. In synthesis position we keep the plainer
-       inexact type (an exact result is always usable where an inexact one is);
-       exactness is only material when the context demands it, so we produce it
-       precisely when the expected type is itself exact. *)
-    let want_exact =
-      match Cell.get expected with
-      | Valtype { typ = Ref { typ = Exact _; _ }; _ } -> true
-      | _ -> false
-    in
+       reference at the Wasm level, so we type it exact too. An exact result is
+       usable wherever an inexact one is, and the exactness does not leak into
+       binding/block annotations — those come from the (usually inexact) Wasm
+       declarations, and the annotation-keeping logic preserves them. *)
     let result =
       internalize ?inline:(inline_comptype ctx name) ctx
-        (Ref
-           {
-             nullable = false;
-             typ = (if want_exact then Exact name else Type name);
-           })
+        (Ref { nullable = false; typ = Exact name })
     in
     Option.iter
       (fun result ->
@@ -5434,6 +5663,32 @@ and check_instruction ?(drop_supertype = false) ctx expected
           check_subtype ctx ~location:i.info result expected)
       result;
     result
+  in
+  (* Type the descriptor operand of a [struct.new_desc] / [struct.new_default_desc]
+     against [(ref null (exact y))], where [y] is [name]'s descriptor. *)
+  let check_descriptor name d =
+    match
+      match Tbl.find_opt ctx.type_context.types name with
+      | Some (_, def) -> def.descriptor
+      | None -> None
+    with
+    | None ->
+        Error.type_without_descriptor ctx.diagnostics ~location:i.info;
+        instruction ctx d
+    | Some dn -> (
+        match internalize ctx (Ref { nullable = true; typ = Exact dn }) with
+        | Some cell ->
+            let* d', _ = check_instruction ctx cell d in
+            return d'
+        | None -> instruction ctx d)
+  in
+  (* A type carrying a [descriptor] clause must be allocated with a descriptor
+     ([{T descriptor d | …}]), not a plain [{T | …}]. *)
+  let require_no_descriptor typ =
+    match Tbl.find_opt ctx.type_context.types typ with
+    | Some (_, def) when Option.is_some def.descriptor ->
+        Error.descriptor_allocation_required ctx.diagnostics ~location:i.info
+    | _ -> ()
   in
   match i.desc with
   | Struct (ty, fields) ->
@@ -5475,6 +5730,7 @@ and check_instruction ?(drop_supertype = false) ctx expected
               (Struct (None, List.rev fields'))
               (Cell.make Error)
         | Some typ ->
+            require_no_descriptor typ;
             let*! field_types = lookup_struct_type ctx typ in
             (* ZZZ We should check the evaluation order*)
             if List.length fields <> Array.length field_types then
@@ -5554,11 +5810,95 @@ and check_instruction ?(drop_supertype = false) ctx expected
                    (fun field -> field_has_default (snd field.desc))
                    fields)
             then Error.not_defaultable ctx.diagnostics ~location:i.info;
+            require_no_descriptor typ;
             let emitted =
               emitted_name ty typ ~parseable:true ~field_unique:false
             in
             let*! result = construction_result typ in
             return_expression i (StructDefault emitted) result
+      in
+      return (node, true)
+  | StructDesc (ty, d, fields) ->
+      let field_match = infer_struct_by_fields ctx fields in
+      let resolved =
+        match ty with
+        | Some _ -> ty
+        | None -> (
+            match field_match with
+            | Some name -> Some name
+            | None -> exact_named_type expected)
+      in
+      let* node =
+        match resolved with
+        | None ->
+            Error.cannot_infer_struct_type ctx.diagnostics ~location:i.info;
+            let* d' = instruction ctx d in
+            let* fields' =
+              List.fold_left
+                (fun prev (name, fi) ->
+                  let* l = prev in
+                  let* fi' = instruction ctx fi in
+                  return ((name, fi') :: l))
+                (return []) fields
+            in
+            return_expression i
+              (StructDesc (None, d', List.rev fields'))
+              (Cell.make Error)
+        | Some typ ->
+            let* d' = check_descriptor typ d in
+            let*! field_types = lookup_struct_type ctx typ in
+            if List.length fields <> Array.length field_types then
+              Error.field_count_mismatch ctx.diagnostics ~location:i.info
+                ~expected:(Array.length field_types)
+                ~provided:(List.length fields);
+            let* fields' =
+              Array.fold_left
+                (fun prev field ->
+                  let name, (f : fieldtype) = field.desc in
+                  match
+                    List.find_opt (fun (idx, _) -> name.desc = idx.desc) fields
+                  with
+                  | None ->
+                      Error.missing_field ctx.diagnostics ~location:i.info name;
+                      prev
+                  | Some (name, i') ->
+                      let* l = prev in
+                      let* i' =
+                        match internalize ctx (unpack_type f) with
+                        | Some cell ->
+                            let* i', _ = check_instruction ctx cell i' in
+                            return i'
+                        | None -> instruction ctx i'
+                      in
+                      return ((name, i') :: l))
+                (return []) field_types
+            in
+            let*! result = construction_result typ in
+            return_expression i
+              (StructDesc (Some typ, d', List.rev fields'))
+              result
+      in
+      return (node, true)
+  | StructDefaultDesc (ty, d) ->
+      let* node =
+        match
+          resolve_name ty ~missing:(fun () ->
+              Error.cannot_infer_struct_type ctx.diagnostics ~location:i.info)
+        with
+        | None ->
+            let* d' = instruction ctx d in
+            return_expression i (StructDefaultDesc (None, d')) (Cell.make Error)
+        | Some typ ->
+            let*! fields = lookup_struct_type ctx typ in
+            if
+              not
+                (Array.for_all
+                   (fun field -> field_has_default (snd field.desc))
+                   fields)
+            then Error.not_defaultable ctx.diagnostics ~location:i.info;
+            let* d' = check_descriptor typ d in
+            let*! result = construction_result typ in
+            return_expression i (StructDefaultDesc (Some typ, d')) result
       in
       return (node, true)
   | Array (ty, i1, i2) ->
@@ -5714,6 +6054,14 @@ and check_instruction ?(drop_supertype = false) ctx expected
         internalize_valtype ctx
           (Ref { nullable = false; typ = Type string_typ })
       in
+      (* The natural type a bare string re-infers to: the default [<string>]
+         array, allocated *exact* (like every construction). This — not the
+         inexact [string_valtype], used only for the structural [is_default]
+         check — is what decides whether a binding annotation is redundant. *)
+      let string_valtype_exact =
+        internalize_valtype ctx
+          (Ref { nullable = false; typ = Exact string_typ })
+      in
       let is_default name =
         match
           ( internalize_valtype ctx (Ref { nullable = false; typ = Type name }),
@@ -5743,7 +6091,8 @@ and check_instruction ?(drop_supertype = false) ctx expected
         return_expression i (String (emitted, s)) result
       in
       return
-        (node, annotation_needed ~drop_supertype ctx string_valtype expected)
+        ( node,
+          annotation_needed ~drop_supertype ctx string_valtype_exact expected )
   | Cast (e, typ) when is_null_initializer e ->
       let* i' = instruction ctx i in
       (* A cast of [null] is redundant when the checking context already
@@ -7125,6 +7474,10 @@ let rec check_constant_instruction ctx i =
       ()
   | Struct (_, l) ->
       List.iter (fun (_, i) -> check_constant_instruction ctx i) l
+  | StructDesc (_, d, l) ->
+      check_constant_instruction ctx d;
+      List.iter (fun (_, i) -> check_constant_instruction ctx i) l
+  | StructDefaultDesc (_, d) -> check_constant_instruction ctx d
   | ArrayFixed (_, l) -> List.iter (check_constant_instruction ctx) l
   | Array (_, i1, i2) ->
       check_constant_instruction ctx i1;
@@ -7186,10 +7539,12 @@ let rec check_constant_instruction ctx i =
         _ )
   | Block _ | Loop _ | While _ | If _ | TryTable _ | Try _ | Dispatch _
   | Match _ | Unreachable | Nop | Hole | Path _ | Set _ | Tee _ | Call _
-  | TailCall _ | Cast _ | Test _ | NonNull _ | StructGet _ | StructSet _
+  | TailCall _ | Cast _ | CastDesc _ | Test _ | NonNull _ | StructGet _
+  | GetDescriptor _ | StructSet _
   | ArraySegment _ | ArrayGet _ | ArraySet _ | Let _ | Br _ | Br_if _
   | Br_table _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
-  | Br_on_cast_fail _ | Throw _ | ThrowRef _ | ContNew _ | ContBind _
+  | Br_on_cast_fail _ | Br_on_cast_desc_eq _ | Br_on_cast_desc_eq_fail _
+  | Throw _ | ThrowRef _ | ContNew _ | ContBind _
   | Suspend _ | Resume _ | ResumeThrow _ | ResumeThrowRef _ | Switch _
   | Return _ | Sequence _ | Select _ | If_annotation _ ->
       Error.constant_expression_required ctx.diagnostics ~location
@@ -7900,6 +8255,12 @@ let rec instr_has_conditional (i : (_ instr_desc, _) annotated) =
       any l
   | Call (a, l) | TailCall (a, l) -> instr_has_conditional a || any l
   | Struct (_, l) -> List.exists (fun (_, i) -> instr_has_conditional i) l
+  | StructDesc (_, d, l) ->
+      instr_has_conditional d
+      || List.exists (fun (_, i) -> instr_has_conditional i) l
+  | CastDesc (a, _, b)
+  | Br_on_cast_desc_eq (_, _, a, b)
+  | Br_on_cast_desc_eq_fail (_, _, a, b)
   | BinOp (_, a, b)
   | Array (_, a, b)
   | ArraySegment (_, _, a, b)
@@ -7916,6 +8277,8 @@ let rec instr_has_conditional (i : (_ instr_desc, _) annotated) =
   | NonNull i
   | UnOp (_, i)
   | StructGet (i, _)
+  | GetDescriptor i
+  | StructDefaultDesc (_, i)
   | ArrayDefault (_, i)
   | Br_if (_, i)
   | Br_table (_, i)
@@ -8021,11 +8384,17 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
     | Call (t, args) -> Call (sone asm t, List.map (sone asm) args)
     | TailCall (t, args) -> TailCall (sone asm t, List.map (sone asm) args)
     | Cast (v, t) -> Cast (sone asm v, t)
+    | CastDesc (v, t, d) -> CastDesc (sone asm v, t, sone asm d)
     | Test (v, t) -> Test (sone asm v, t)
     | NonNull v -> NonNull (sone asm v)
     | Struct (idx, fields) ->
         Struct (idx, List.map (fun (i, v) -> (i, sone asm v)) fields)
+    | StructDesc (idx, d, fields) ->
+        StructDesc
+          (idx, sone asm d, List.map (fun (i, v) -> (i, sone asm v)) fields)
+    | StructDefaultDesc (idx, d) -> StructDefaultDesc (idx, sone asm d)
     | StructGet (v, idx) -> StructGet (sone asm v, idx)
+    | GetDescriptor v -> GetDescriptor (sone asm v)
     | StructSet (v, idx, w) -> StructSet (sone asm v, idx, sone asm w)
     | Array (idx, a, b) -> Array (idx, sone asm a, sone asm b)
     | ArrayDefault (idx, v) -> ArrayDefault (idx, sone asm v)
@@ -8059,6 +8428,10 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
     | Br_on_non_null (l, v) -> Br_on_non_null (l, sone asm v)
     | Br_on_cast (l, t, v) -> Br_on_cast (l, t, sone asm v)
     | Br_on_cast_fail (l, t, v) -> Br_on_cast_fail (l, t, sone asm v)
+    | Br_on_cast_desc_eq (l, t, v, d) ->
+        Br_on_cast_desc_eq (l, t, sone asm v, sone asm d)
+    | Br_on_cast_desc_eq_fail (l, t, v, d) ->
+        Br_on_cast_desc_eq_fail (l, t, sone asm v, sone asm d)
     | Throw (idx, v) -> Throw (idx, Option.map (sone asm) v)
     | ThrowRef v -> ThrowRef (sone asm v)
     | ContNew (ct, v) -> ContNew (ct, sone asm v)
@@ -8128,6 +8501,10 @@ let sub_instrs (i : (_ instr_desc, _) annotated) =
       l
   | Call (a, l) | TailCall (a, l) -> a :: l
   | Struct (_, l) -> List.map snd l
+  | StructDesc (_, d, l) -> List.map snd l @ [ d ]
+  | CastDesc (a, _, b)
+  | Br_on_cast_desc_eq (_, _, a, b)
+  | Br_on_cast_desc_eq_fail (_, _, a, b)
   | BinOp (_, a, b)
   | Array (_, a, b)
   | ArraySegment (_, _, a, b)
@@ -8142,6 +8519,8 @@ let sub_instrs (i : (_ instr_desc, _) annotated) =
   | NonNull i
   | UnOp (_, i)
   | StructGet (i, _)
+  | GetDescriptor i
+  | StructDefaultDesc (_, i)
   | ArrayDefault (_, i)
   | Br_if (_, i)
   | Br_table (_, i)

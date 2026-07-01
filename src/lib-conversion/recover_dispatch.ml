@@ -154,11 +154,17 @@ and rewrite_desc (desc : location instr_desc) : location instr_desc =
   | Call (t, args) -> Call (rewrite_instr t, List.map rewrite_instr args)
   | TailCall (t, args) -> TailCall (rewrite_instr t, List.map rewrite_instr args)
   | Cast (e, t) -> Cast (rewrite_instr e, t)
+  | CastDesc (e, t, d) -> CastDesc (rewrite_instr e, t, rewrite_instr d)
   | Test (e, t) -> Test (rewrite_instr e, t)
   | NonNull e -> NonNull (rewrite_instr e)
   | Struct (idx, fs) ->
       Struct (idx, List.map (fun (n, e) -> (n, rewrite_instr e)) fs)
+  | StructDesc (idx, d, fs) ->
+      StructDesc
+        (idx, rewrite_instr d, List.map (fun (n, e) -> (n, rewrite_instr e)) fs)
+  | StructDefaultDesc (idx, d) -> StructDefaultDesc (idx, rewrite_instr d)
   | StructGet (e, x) -> StructGet (rewrite_instr e, x)
+  | GetDescriptor e -> GetDescriptor (rewrite_instr e)
   | StructSet (e, x, v) -> StructSet (rewrite_instr e, x, rewrite_instr v)
   | Array (idx, a, b) -> Array (idx, rewrite_instr a, rewrite_instr b)
   | ArrayDefault (idx, e) -> ArrayDefault (idx, rewrite_instr e)
@@ -178,6 +184,10 @@ and rewrite_desc (desc : location instr_desc) : location instr_desc =
   | Br_on_non_null (l, e) -> Br_on_non_null (l, rewrite_instr e)
   | Br_on_cast (l, t, e) -> Br_on_cast (l, t, rewrite_instr e)
   | Br_on_cast_fail (l, t, e) -> Br_on_cast_fail (l, t, rewrite_instr e)
+  | Br_on_cast_desc_eq (l, t, e, d) ->
+      Br_on_cast_desc_eq (l, t, rewrite_instr e, rewrite_instr d)
+  | Br_on_cast_desc_eq_fail (l, t, e, d) ->
+      Br_on_cast_desc_eq_fail (l, t, rewrite_instr e, rewrite_instr d)
   | Throw (idx, e) -> Throw (idx, Option.map rewrite_instr e)
   | ThrowRef e -> ThrowRef (rewrite_instr e)
   | ContNew (ct, e) -> ContNew (ct, rewrite_instr e)

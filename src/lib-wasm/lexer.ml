@@ -329,6 +329,8 @@ let rec token_rec ctx lexbuf =
   | "br_on_null" -> BR_ON_NULL
   | "br_on_non_null" -> BR_ON_NON_NULL
   | "br_on_cast" -> BR_ON_CAST
+  | "br_on_cast_desc_eq" -> BR_ON_CAST_DESC_EQ
+  | "br_on_cast_desc_eq_fail" -> BR_ON_CAST_DESC_EQ_FAIL
   | "i8x16" -> I8X16
   | "i16x8" -> I16X8
   | "i32x4" -> I32X4
@@ -439,8 +441,12 @@ let rec token_rec ctx lexbuf =
   | "ref.eq" -> INSTR RefEq
   | "ref.test" -> REF_TEST
   | "ref.cast" -> REF_CAST
+  | "ref.cast_desc_eq" -> REF_CAST_DESC_EQ
+  | "ref.get_desc" -> REF_GET_DESC
   | "struct.new" -> STRUCT_NEW
   | "struct.new_default" -> STRUCT_NEW_DEFAULT
+  | "struct.new_desc" -> STRUCT_NEW_DESC
+  | "struct.new_default_desc" -> STRUCT_NEW_DEFAULT_DESC
   | "struct.get" -> STRUCT_GET None
   | "struct.get_u" -> STRUCT_GET (Some Unsigned)
   | "struct.get_s" -> STRUCT_GET (Some Signed)

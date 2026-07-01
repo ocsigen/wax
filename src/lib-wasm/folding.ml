@@ -373,6 +373,11 @@ let arity env i =
   | Br_on_cast (l, _, _) | Br_on_cast_fail (l, _, _) ->
       let i = label_arity env l in
       (i, i)
+  | Br_on_cast_desc_eq (l, _, _) | Br_on_cast_desc_eq_fail (l, _, _) ->
+      (* As [br_on_cast], plus a descriptor operand consumed on the fall-through
+         path. *)
+      let i = label_arity env l in
+      (i + 1, i)
   | Return -> (env.return_arity, unreachable)
   | ReturnCallIndirect (_, ty) ->
       let i, _ = typeuse_arity env ty in
@@ -442,6 +447,8 @@ let arity env i =
   | RefEq -> (2, 1)
   | RefTest _ -> (1, 1)
   | RefCast _ -> (1, 1)
+  | RefCastDescEq _ -> (2, 1)
+  | RefGetDesc _ -> (1, 1)
   | StructNew t -> (
       match (lookup_type env t).typ with
       | Struct f -> (Array.length f, 1)
@@ -449,6 +456,12 @@ let arity env i =
           error env.outer_env.cctx.report ~location:t.Ast.info
             "This type should be a struct type.")
   | StructNewDefault _ -> (0, 1)
+  | StructNewDesc t -> (
+      (* The field values plus a descriptor operand. *)
+      match (lookup_type env t).typ with
+      | Struct f -> (Array.length f + 1, 1)
+      | Func _ | Array _ | Cont _ -> assert false)
+  | StructNewDefaultDesc _ -> (1, 1)
   | StructGet _ -> (1, 1)
   | StructSet _ -> (2, 0)
   | ArrayNew _ -> (2, 1)

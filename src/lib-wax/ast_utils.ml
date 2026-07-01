@@ -51,11 +51,19 @@ let rec map_instr f instr =
     | TailCall (target, args) ->
         TailCall (map_instr f target, List.map (map_instr f) args)
     | Cast (v, t) -> Cast (map_instr f v, t)
+    | CastDesc (v, t, d) -> CastDesc (map_instr f v, t, map_instr f d)
     | Test (v, t) -> Test (map_instr f v, t)
     | NonNull v -> NonNull (map_instr f v)
     | Struct (idx, fields) ->
         Struct (idx, List.map (fun (i, v) -> (i, map_instr f v)) fields)
+    | StructDesc (idx, d, fields) ->
+        StructDesc
+          ( idx,
+            map_instr f d,
+            List.map (fun (i, v) -> (i, map_instr f v)) fields )
+    | StructDefaultDesc (idx, d) -> StructDefaultDesc (idx, map_instr f d)
     | StructGet (v, idx) -> StructGet (map_instr f v, idx)
+    | GetDescriptor v -> GetDescriptor (map_instr f v)
     | StructSet (v, idx, w) -> StructSet (map_instr f v, idx, map_instr f w)
     | Array (idx, len, init) -> Array (idx, map_instr f len, map_instr f init)
     | ArrayDefault (idx, len) -> ArrayDefault (idx, map_instr f len)
@@ -94,6 +102,10 @@ let rec map_instr f instr =
     | Br_on_non_null (label, v) -> Br_on_non_null (label, map_instr f v)
     | Br_on_cast (label, t, v) -> Br_on_cast (label, t, map_instr f v)
     | Br_on_cast_fail (label, t, v) -> Br_on_cast_fail (label, t, map_instr f v)
+    | Br_on_cast_desc_eq (label, t, v, d) ->
+        Br_on_cast_desc_eq (label, t, map_instr f v, map_instr f d)
+    | Br_on_cast_desc_eq_fail (label, t, v, d) ->
+        Br_on_cast_desc_eq_fail (label, t, map_instr f v, map_instr f d)
     | Throw (idx, args) -> Throw (idx, Option.map (map_instr f) args)
     | ThrowRef v -> ThrowRef (map_instr f v)
     | ContNew (ct, v) -> ContNew (ct, map_instr f v)

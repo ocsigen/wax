@@ -514,6 +514,8 @@ end) : sig
     | Br_on_non_null of X.idx
     | Br_on_cast of X.idx * X.reftype * X.reftype
     | Br_on_cast_fail of X.idx * X.reftype * X.reftype
+    | Br_on_cast_desc_eq of X.idx * X.reftype * X.reftype
+    | Br_on_cast_desc_eq_fail of X.idx * X.reftype * X.reftype
     | Return
     | Call of X.idx
     | CallRef of X.idx
@@ -556,8 +558,12 @@ end) : sig
     | RefEq
     | RefTest of X.reftype
     | RefCast of X.reftype
+    | RefCastDescEq of X.reftype
+    | RefGetDesc of X.idx
     | StructNew of X.idx
     | StructNewDefault of X.idx
+    | StructNewDesc of X.idx
+    | StructNewDefaultDesc of X.idx
     | StructGet of signage option * X.idx * X.idx
     | StructSet of X.idx * X.idx
     | ArrayNew of X.idx

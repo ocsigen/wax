@@ -365,6 +365,20 @@ module Encoder = struct
         uint b i;
         heaptype b r1.typ;
         heaptype b r2.typ
+    | Br_on_cast_desc_eq (i, r1, r2) ->
+        byte b 0xFB;
+        byte b 0x25;
+        byte b ((if r1.nullable then 1 else 0) + if r2.nullable then 2 else 0);
+        uint b i;
+        heaptype b r1.typ;
+        heaptype b r2.typ
+    | Br_on_cast_desc_eq_fail (i, r1, r2) ->
+        byte b 0xFB;
+        byte b 0x26;
+        byte b ((if r1.nullable then 1 else 0) + if r2.nullable then 2 else 0);
+        uint b i;
+        heaptype b r1.typ;
+        heaptype b r2.typ
     | Return -> byte b 0x0F
     | Call i ->
         byte b 0x10;
@@ -711,6 +725,14 @@ module Encoder = struct
         byte b 0xFB;
         byte b (if t.nullable then 0x17 else 0x16);
         heaptype b t.typ
+    | RefCastDescEq t ->
+        byte b 0xFB;
+        byte b (if t.nullable then 0x24 else 0x23);
+        heaptype b t.typ
+    | RefGetDesc i ->
+        byte b 0xFB;
+        byte b 0x22;
+        uint b i
     | StructNew i ->
         byte b 0xFB;
         byte b 0x00;
@@ -718,6 +740,14 @@ module Encoder = struct
     | StructNewDefault i ->
         byte b 0xFB;
         byte b 0x01;
+        uint b i
+    | StructNewDesc i ->
+        byte b 0xFB;
+        byte b 0x20;
+        uint b i
+    | StructNewDefaultDesc i ->
+        byte b 0xFB;
+        byte b 0x21;
         uint b i
     | StructGet (s, type_idx, field_idx) ->
         byte b 0xFB;

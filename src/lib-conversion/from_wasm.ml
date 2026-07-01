@@ -1275,6 +1275,22 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       let* args = Stack.grab input in
       Stack.push input
         (with_loc (Br_on_cast_fail (label ctx i, reftype ctx t, sequence args)))
+  | Br_on_cast_desc_eq (i, _, t) ->
+      (* The descriptor operand is on top of the branch operands. *)
+      let input = label_arity ctx i in
+      let* d = Stack.pop in
+      let* args = Stack.grab input in
+      Stack.push input
+        (with_loc
+           (Br_on_cast_desc_eq (label ctx i, reftype ctx t, sequence args, d)))
+  | Br_on_cast_desc_eq_fail (i, _, t) ->
+      let input = label_arity ctx i in
+      let* d = Stack.pop in
+      let* args = Stack.grab input in
+      Stack.push input
+        (with_loc
+           (Br_on_cast_desc_eq_fail
+              (label ctx i, reftype ctx t, sequence args, d)))
   | Folded (i, l) ->
       let* () = instructions ctx l in
       instruction ctx i
@@ -1321,6 +1337,21 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
                 List.map2 (fun nm i -> (Ast.no_loc nm, i)) fields args )))
   | StructNewDefault i ->
       Stack.push 1 (with_loc (StructDefault (Some (idx ctx `Type i))))
+  | StructNewDesc i ->
+      let type_name = idx ctx `Type i in
+      let fields = snd (struct_fields ctx type_name) in
+      (* The descriptor operand is on top of the field values. *)
+      let* d = Stack.pop in
+      let* args = Stack.grab (List.length fields) in
+      Stack.push 1
+        (with_loc
+           (StructDesc
+              ( Some (idx ctx `Type i),
+                d,
+                List.map2 (fun nm i -> (Ast.no_loc nm, i)) fields args )))
+  | StructNewDefaultDesc i ->
+      let* d = Stack.pop in
+      Stack.push 1 (with_loc (StructDefaultDesc (Some (idx ctx `Type i), d)))
   | StructGet (s, t, f) ->
       let type_name = idx ctx `Type t in
       let name = Sequence.get (fst (struct_fields ctx type_name)) f in
@@ -1537,6 +1568,23 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   | RefCast t ->
       let* e = Stack.pop in
       Stack.push 1 (with_loc (Cast (e, Valtype (Ref (reftype ctx t)))))
+  | RefCastDescEq t ->
+      (* The descriptor operand is on top of the value. *)
+      let* d = Stack.pop in
+      let* e = Stack.pop in
+      Stack.push 1 (with_loc (CastDesc (e, reftype ctx t, d)))
+  | RefGetDesc t ->
+      let type_name = idx ctx `Type t in
+      let* arg = Stack.pop in
+      let arg =
+        {
+          arg with
+          desc =
+            Ast.Cast
+              (arg, Valtype (Ref { nullable = true; typ = Type type_name }));
+        }
+      in
+      Stack.push 1 (with_loc (GetDescriptor arg))
   | RefTest t ->
       let* e = Stack.pop in
       Stack.push 1 (with_loc (Test (e, reftype ctx t)))

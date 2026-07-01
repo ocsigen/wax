@@ -95,11 +95,16 @@ let module_ ctx env (fields : location Ast.module_) :
     | Call (t, args) -> Call (sone t, List.map sone args)
     | TailCall (t, args) -> TailCall (sone t, List.map sone args)
     | Cast (v, t) -> Cast (sone v, t)
+    | CastDesc (v, t, d) -> CastDesc (sone v, t, sone d)
     | Test (v, t) -> Test (sone v, t)
     | NonNull v -> NonNull (sone v)
     | Struct (idx, fields) ->
         Struct (idx, List.map (fun (i, v) -> (i, sone v)) fields)
+    | StructDesc (idx, d, fields) ->
+        StructDesc (idx, sone d, List.map (fun (i, v) -> (i, sone v)) fields)
+    | StructDefaultDesc (idx, d) -> StructDefaultDesc (idx, sone d)
     | StructGet (v, idx) -> StructGet (sone v, idx)
+    | GetDescriptor v -> GetDescriptor (sone v)
     | StructSet (v, idx, w) -> StructSet (sone v, idx, sone w)
     | Array (idx, a, b) -> Array (idx, sone a, sone b)
     | ArrayDefault (idx, v) -> ArrayDefault (idx, sone v)
@@ -132,6 +137,9 @@ let module_ ctx env (fields : location Ast.module_) :
     | Br_on_non_null (l, v) -> Br_on_non_null (l, sone v)
     | Br_on_cast (l, t, v) -> Br_on_cast (l, t, sone v)
     | Br_on_cast_fail (l, t, v) -> Br_on_cast_fail (l, t, sone v)
+    | Br_on_cast_desc_eq (l, t, v, d) -> Br_on_cast_desc_eq (l, t, sone v, sone d)
+    | Br_on_cast_desc_eq_fail (l, t, v, d) ->
+        Br_on_cast_desc_eq_fail (l, t, sone v, sone d)
     | Throw (idx, v) -> Throw (idx, Option.map sone v)
     | ThrowRef v -> ThrowRef (sone v)
     | ContNew (ct, v) -> ContNew (ct, sone v)

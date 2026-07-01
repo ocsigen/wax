@@ -905,11 +905,18 @@ let rec instr i =
   | StructNew typ -> block ~loc [ instruction "struct.new"; index typ ]
   | StructNewDefault typ ->
       block ~loc [ instruction "struct.new_default"; index typ ]
+  | StructNewDesc typ ->
+      block ~loc [ instruction "struct.new_desc"; index typ ]
+  | StructNewDefaultDesc typ ->
+      block ~loc [ instruction "struct.new_default_desc"; index typ ]
   | StructGet (None, typ, f) ->
       block ~loc [ instruction "struct.get"; index typ; index f ]
   | StructGet (Some s, typ, f) ->
       block ~loc [ instruction (signage "struct.get" s); index typ; index f ]
   | RefCast ty -> block ~loc [ instruction "ref.cast"; reftype ty ]
+  | RefCastDescEq ty ->
+      block ~loc [ instruction "ref.cast_desc_eq"; reftype ty ]
+  | RefGetDesc i -> block ~loc [ instruction "ref.get_desc"; index i ]
   | RefTest ty -> block ~loc [ instruction "ref.test"; reftype ty ]
   | RefEq -> instruction ~loc "ref.eq"
   | RefNull ty -> block ~loc [ instruction "ref.null"; heaptype ty ]
@@ -984,6 +991,14 @@ let rec instr i =
   | Br_on_cast_fail (i, ty, ty') ->
       block ~loc
         [ instruction "br_on_cast_fail"; index i; reftype ty; reftype ty' ]
+  | Br_on_cast_desc_eq (i, ty, ty') ->
+      block ~loc
+        [ instruction "br_on_cast_desc_eq"; index i; reftype ty; reftype ty' ]
+  | Br_on_cast_desc_eq_fail (i, ty, ty') ->
+      block ~loc
+        [
+          instruction "br_on_cast_desc_eq_fail"; index i; reftype ty; reftype ty';
+        ]
   | Return -> instruction ~loc "return"
   | Throw tag -> block ~loc [ instruction "throw"; index tag ]
   | ThrowRef -> block ~loc [ instruction "throw_ref" ]

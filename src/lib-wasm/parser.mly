@@ -82,6 +82,8 @@
 %token BR_ON_NON_NULL
 %token BR_ON_CAST
 %token BR_ON_CAST_FAIL
+%token BR_ON_CAST_DESC_EQ
+%token BR_ON_CAST_DESC_EQ_FAIL
 %token CALL
 %token CALL_REF
 %token CALL_INDIRECT
@@ -127,8 +129,12 @@
 %token REF_FUNC
 %token REF_TEST
 %token REF_CAST
+%token REF_CAST_DESC_EQ
+%token REF_GET_DESC
 %token STRUCT_NEW
 %token STRUCT_NEW_DEFAULT
+%token STRUCT_NEW_DESC
+%token STRUCT_NEW_DEFAULT_DESC
 %token <Ast.Text.signage option> STRUCT_GET
 %token STRUCT_SET
 %token ARRAY_NEW
@@ -626,6 +632,10 @@ plain_instruction:
   { with_loc $sloc (Br_on_cast (i, t1, t2)) }
 | BR_ON_CAST_FAIL i = index t1 = reference_type t2 = reference_type
   { with_loc $sloc (Br_on_cast_fail (i, t1, t2)) }
+| BR_ON_CAST_DESC_EQ i = index t1 = reference_type t2 = reference_type
+  { with_loc $sloc (Br_on_cast_desc_eq (i, t1, t2)) }
+| BR_ON_CAST_DESC_EQ_FAIL i = index t1 = reference_type t2 = reference_type
+  { with_loc $sloc (Br_on_cast_desc_eq_fail (i, t1, t2)) }
 | CALL i = index { with_loc $sloc (Call i) }
 | CALL_REF i = index { with_loc $sloc (CallRef i) }
 | RETURN_CALL i = index { with_loc $sloc (ReturnCall i) }
@@ -679,8 +689,12 @@ plain_instruction:
 | REF_FUNC i = index { with_loc $sloc (RefFunc i) }
 | REF_TEST t = reference_type { with_loc $sloc (RefTest t) }
 | REF_CAST t = reference_type { with_loc $sloc (RefCast t) }
+| REF_CAST_DESC_EQ t = reference_type { with_loc $sloc (RefCastDescEq t) }
+| REF_GET_DESC i = index { with_loc $sloc (RefGetDesc i) }
 | STRUCT_NEW i = index { with_loc $sloc (StructNew i) }
 | STRUCT_NEW_DEFAULT i = index { with_loc $sloc (StructNewDefault i) }
+| STRUCT_NEW_DESC i = index { with_loc $sloc (StructNewDesc i) }
+| STRUCT_NEW_DEFAULT_DESC i = index { with_loc $sloc (StructNewDefaultDesc i) }
 | s = STRUCT_GET i1 = index i2 = index { with_loc $sloc (StructGet (s, i1, i2)) }
 | STRUCT_SET i1 = index i2 = index { with_loc $sloc (StructSet (i1, i2)) }
 | ARRAY_NEW i = index { with_loc $sloc (ArrayNew i) }

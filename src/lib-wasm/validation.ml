@@ -634,6 +634,21 @@ module Error = struct
           "Continuation types cannot be used in a cast instruction.")
       ()
 
+  let type_without_descriptor context ~location =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f
+          "This descriptor instruction requires a type that has a descriptor.")
+      ()
+
+  let descriptor_allocation_required context ~location =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f
+          "A type with a descriptor must be allocated with a descriptor \
+           (struct.new_desc / struct.new_default_desc).")
+      ()
+
   let expected_number_or_vec context ~location ~source =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
@@ -782,6 +797,13 @@ type type_context = {
      check on a type is reported at the exact definition and names types as they
      appear in the source. *)
   type_defs : (int, Ast.Text.idx * Ast.Text.idx option) Hashtbl.t;
+  (* For a type carrying a [descriptor] clause, keyed by its resolved global
+     index: the source reference to its descriptor type. The descriptor
+     instructions derive the descriptor type from the described one, so this
+     recovers the descriptor's source name for error rendering (there is no
+     immediate to name it by). Deduplicated types share a descriptor, so keying
+     by the global index is unambiguous. *)
+  descriptor_source : (int, Ast.Text.idx) Hashtbl.t;
 }
 
 (* The source composite type a reference resolves to, named as the source wrote
@@ -1115,6 +1137,32 @@ let lookup_array_type ctx idx =
       Error.expected_array_type ctx.diagnostics ~location:idx.info idx;
       None
 
+(* The descriptor type of the type at global index [ty], for the descriptor
+   instructions ([struct.new_desc], [ref.get_desc], …). Reports an error and
+   returns [None] when the type carries no [descriptor] clause. *)
+let type_descriptor ctx ~location ty =
+  match (Types.get_subtype ctx.modul.subtyping_info ty).descriptor with
+  | Some desc -> Some desc
+  | None ->
+      Error.type_without_descriptor ctx.modul.diagnostics ~location;
+      None
+
+(* The heap type of the descriptor operand expected by a [_desc_eq] cast/branch
+   whose target heap type is [target] (either [Exact x] or [Type x]). The
+   operand's exactness matches the target's ([exact_1] in the spec); [y] is [x]'s
+   descriptor. *)
+let descriptor_operand_type ctx ~location (target : heaptype) =
+  match target with
+  | Exact x ->
+      let+@ d = type_descriptor ctx ~location x in
+      Exact d
+  | Type x ->
+      let+@ d = type_descriptor ctx ~location x in
+      Type d
+  | _ ->
+      Error.invalid_cast_type ctx.modul.diagnostics ~location;
+      None
+
 (* The parameter types of an exception [tag] and, when known, their source
    types for naming a thrown payload. *)
 let lookup_tag_type ctx tag =
@@ -1290,6 +1338,29 @@ let named_ref_source idx : source_type =
 
 let named_ref_null_source idx : source_type =
   Plain (Ref { nullable = true; typ = Type idx })
+
+(* The source rendering of the (nullable) descriptor operand of a descriptor
+   instruction, whose type is the descriptor of the type at global index
+   [described]. The descriptor type has no immediate to name it by, so its
+   source name is recovered from [descriptor_source] (recorded at its
+   definition); [exact] matches the described type's own exactness. *)
+let descriptor_operand_source tc (described : heaptype) : source_type =
+  let build exact x =
+    match Hashtbl.find_opt tc.descriptor_source x with
+    | Some node ->
+        Plain
+          (Ref
+             { nullable = true; typ = (if exact then Exact node else Type node) })
+    | None ->
+        (* No recorded source (a well-formed descriptor type always has one);
+           fall back to the abstract struct supertype rather than a misleading
+           index. *)
+        Plain (Ref { nullable = true; typ = source_of_heaptype Struct })
+  in
+  match described with
+  | Exact x -> build true x
+  | Type x -> build false x
+  | _ -> Plain (Ref { nullable = true; typ = source_of_heaptype Struct })
 
 (* Source-type array for popping the prefix arguments [param_source] followed by a
    continuation operand of the type named by [x]. *)
@@ -2124,6 +2195,70 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let* () = push_results ~source:param_source params in
       let* _ = pop_any ctx loc in
       push ~source:src_ty2 (Some loc) (Ref ty2)
+  | Br_on_cast_desc_eq (idx, ty1, ty2) ->
+      (* As [br_on_cast], preceded by consuming a descriptor operand whose
+         exactness matches the target [ty2]. *)
+      let src_ty1 = Plain (Ast.Text.Ref ty1)
+      and src_ty2 = Plain (Ast.Text.Ref ty2) in
+      let src_diff =
+        Plain
+          (Ast.Text.Ref
+             { nullable = ty1.nullable && not ty2.nullable; typ = ty1.typ })
+      in
+      let*! ty1 = reftype ctx.modul.diagnostics ctx.modul.types ty1 in
+      let*! ty2 = reftype ctx.modul.diagnostics ctx.modul.types ty2 in
+      (match (top_heap_type ctx ty1.typ, top_heap_type ctx ty2.typ) with
+      | Cont, _ | _, Cont ->
+          Error.invalid_cast_type ctx.modul.diagnostics ~location:loc
+      | _ -> ());
+      if top_heap_type ctx ty1.typ <> top_heap_type ctx ty2.typ then
+        (* [rt_1] and [rt_2] need only share a common supertype (same hierarchy),
+           not [rt_2 <: rt_1]. *)
+        Error.br_cast_type_mismatch ctx.modul.diagnostics ~location:loc;
+      let*! desc_ht = descriptor_operand_type ctx ~location:loc ty2.typ in
+      let* () =
+        pop ctx loc
+          ~expected_source:(descriptor_operand_source ctx.modul.types ty2.typ)
+          (Ref { nullable = true; typ = desc_ht })
+      in
+      let* () = pop ctx loc ~expected_source:src_ty1 (Ref ty1) in
+      let* () = push ~source:src_ty2 None (Ref ty2) in
+      let*! params, param_source = branch_target ctx idx in
+      let* () = pop_args ctx loc ~source:param_source params in
+      let* () = push_results ~source:param_source params in
+      let* _ = pop_any ctx loc in
+      push ~source:src_diff (Some loc) (Ref (diff_ref_type ty1 ty2))
+  | Br_on_cast_desc_eq_fail (idx, ty1, ty2) ->
+      let src_ty1 = Plain (Ast.Text.Ref ty1)
+      and src_ty2 = Plain (Ast.Text.Ref ty2) in
+      let src_diff =
+        Plain
+          (Ast.Text.Ref
+             { nullable = ty1.nullable && not ty2.nullable; typ = ty1.typ })
+      in
+      let*! ty1 = reftype ctx.modul.diagnostics ctx.modul.types ty1 in
+      let*! ty2 = reftype ctx.modul.diagnostics ctx.modul.types ty2 in
+      (match (top_heap_type ctx ty1.typ, top_heap_type ctx ty2.typ) with
+      | Cont, _ | _, Cont ->
+          Error.invalid_cast_type ctx.modul.diagnostics ~location:loc
+      | _ -> ());
+      if top_heap_type ctx ty1.typ <> top_heap_type ctx ty2.typ then
+        (* [rt_1] and [rt_2] need only share a common supertype (same hierarchy),
+           not [rt_2 <: rt_1]. *)
+        Error.br_cast_type_mismatch ctx.modul.diagnostics ~location:loc;
+      let*! desc_ht = descriptor_operand_type ctx ~location:loc ty2.typ in
+      let* () =
+        pop ctx loc
+          ~expected_source:(descriptor_operand_source ctx.modul.types ty2.typ)
+          (Ref { nullable = true; typ = desc_ht })
+      in
+      let* () = pop ctx loc ~expected_source:src_ty1 (Ref ty1) in
+      let* () = push ~source:src_diff None (Ref (diff_ref_type ty1 ty2)) in
+      let*! params, param_source = branch_target ctx idx in
+      let* () = pop_args ctx loc ~source:param_source params in
+      let* () = push_results ~source:param_source params in
+      let* _ = pop_any ctx loc in
+      push ~source:src_ty2 (Some loc) (Ref ty2)
   | Return ->
       let* () = pop_args ctx loc ~source:ctx.return_source ctx.return_types in
       unreachable
@@ -2603,8 +2738,51 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           (Ref { nullable = true; typ = top_heap_type ctx ty.typ })
       in
       push ~source (Some loc) (Ref ty)
+  | RefCastDescEq ty ->
+      let source = Plain Ast.Text.(Ref ty) in
+      let*! ty = reftype ctx.modul.diagnostics ctx.modul.types ty in
+      (* The descriptor operand (top of stack); its exactness matches the target
+         [ty]. *)
+      let*! desc_ht = descriptor_operand_type ctx ~location:loc ty.typ in
+      let* () =
+        pop ctx loc
+          ~expected_source:(descriptor_operand_source ctx.modul.types ty.typ)
+          (Ref { nullable = true; typ = desc_ht })
+      in
+      let* () =
+        pop_known ctx loc
+          (Ref { nullable = true; typ = top_heap_type ctx ty.typ })
+      in
+      push ~source (Some loc) (Ref ty)
+  | RefGetDesc idx ->
+      let*! ty, _, _ = lookup_struct_type ctx idx in
+      let*! desc = type_descriptor ctx ~location:i.info ty in
+      let* entry, _ = pop_any ctx loc in
+      (* [exact_1]: the descriptor is exact exactly when the operand is a
+         statically-exact reference. Validate the operand is a reference to
+         [idx] (accepting a subtype or null) either way. *)
+      let exact =
+        match entry with
+        | Bot | Bot_ref -> false
+        | Val (ty', source) ->
+            if
+              not
+                (Types.val_subtype ctx.modul.subtyping_info ty'
+                   (Ref { nullable = true; typ = Type ty }))
+            then
+              Error.type_mismatch ctx.modul.diagnostics ~location:loc
+                ~provided_source:source
+                ~expected_source:(named_ref_null_source idx);
+            (match ty' with Ref { typ = Exact _; _ } -> true | _ -> false)
+      in
+      push ~source:(named_ref_source idx) (Some loc)
+        (Ref { nullable = false; typ = (if exact then Exact desc else Type desc) })
   | StructNew idx ->
       let*! ty, _, fields = lookup_struct_type ctx idx in
+      if Option.is_some (Types.get_subtype ctx.modul.subtyping_info ty).descriptor
+      then
+        Error.descriptor_allocation_required ctx.modul.diagnostics
+          ~location:i.info;
       let* () =
         pop_args ctx loc
           ~source:
@@ -2620,6 +2798,42 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let*! ty, _, fields = lookup_struct_type ctx idx in
       if not (Array.for_all field_has_default fields) then
         Error.not_defaultable ctx.modul.diagnostics ~location:i.info;
+      if Option.is_some (Types.get_subtype ctx.modul.subtyping_info ty).descriptor
+      then
+        Error.descriptor_allocation_required ctx.modul.diagnostics
+          ~location:i.info;
+      push ~source:(named_ref_source idx) (Some loc)
+        (Ref { nullable = false; typ = Exact ty })
+  | StructNewDesc idx ->
+      let*! ty, _, fields = lookup_struct_type ctx idx in
+      let*! desc = type_descriptor ctx ~location:i.info ty in
+      (* The descriptor operand is on top of the field values. *)
+      let* () =
+        pop ctx loc
+          ~expected_source:(descriptor_operand_source ctx.modul.types (Exact ty))
+          (Ref { nullable = true; typ = Exact desc })
+      in
+      let* () =
+        pop_args ctx loc
+          ~source:
+            (Array.init (Array.length fields) (source_field_valtype ctx idx))
+          (Array.map
+             (fun (f : fieldtype) ->
+               match f.typ with Value v -> v | Packed _ -> I32)
+             fields)
+      in
+      push ~source:(named_ref_source idx) (Some loc)
+        (Ref { nullable = false; typ = Exact ty })
+  | StructNewDefaultDesc idx ->
+      let*! ty, _, fields = lookup_struct_type ctx idx in
+      if not (Array.for_all field_has_default fields) then
+        Error.not_defaultable ctx.modul.diagnostics ~location:i.info;
+      let*! desc = type_descriptor ctx ~location:i.info ty in
+      let* () =
+        pop ctx loc
+          ~expected_source:(descriptor_operand_source ctx.modul.types (Exact ty))
+          (Ref { nullable = true; typ = Exact desc })
+      in
       push ~source:(named_ref_source idx) (Some loc)
         (Ref { nullable = false; typ = Exact ty })
   | StructGet (signage, idx, idx') ->
@@ -2930,8 +3144,9 @@ let rec check_constant_instruction ctx (i : _ Ast.Text.instr) =
   | RefFunc i ->
       let*? ty, _, _, _ = Sequence.get ctx.diagnostics ctx.functions i in
       Hashtbl.replace ctx.refs ty ()
-  | RefNull _ | StructNew _ | StructNewDefault _ | ArrayNew _
-  | ArrayNewDefault _ | ArrayNewFixed _ | RefI31 | Const _
+  | RefNull _ | StructNew _ | StructNewDefault _ | StructNewDesc _
+  | StructNewDefaultDesc _ | ArrayNew _ | ArrayNewDefault _ | ArrayNewFixed _
+  | RefI31 | Const _
   | BinOp (I32 (Add | Sub | Mul) | I64 (Add | Sub | Mul))
   | ExternConvertAny | AnyConvertExtern | VecConst _ | String _ | Char _ ->
       ()
@@ -2941,14 +3156,16 @@ let rec check_constant_instruction ctx (i : _ Ast.Text.instr) =
   | Block _ | Loop _ | If _ | TryTable _ | Try _ | Unreachable | Nop | Throw _
   | ThrowRef | ContNew _ | ContBind _ | Suspend _ | Resume _ | ResumeThrow _
   | ResumeThrowRef _ | Switch _ | Br _ | Br_if _ | Br_table _ | Br_on_null _
-  | Br_on_non_null _ | Br_on_cast _ | Br_on_cast_fail _ | Return | Call _
+  | Br_on_non_null _ | Br_on_cast _ | Br_on_cast_fail _ | Br_on_cast_desc_eq _
+  | Br_on_cast_desc_eq_fail _ | Return | Call _
   | CallRef _ | CallIndirect _ | ReturnCall _ | ReturnCallRef _
   | ReturnCallIndirect _ | Drop | Select _ | LocalGet _ | LocalSet _
   | LocalTee _ | GlobalSet _ | Load _ | LoadS _ | Store _ | StoreS _ | Atomic _
   | AtomicFence | MemorySize _ | MemoryGrow _ | MemoryFill _ | MemoryCopy _
   | MemoryInit _ | DataDrop _ | TableGet _ | TableSet _ | TableSize _
   | TableGrow _ | TableFill _ | TableCopy _ | TableInit _ | ElemDrop _
-  | RefIsNull | RefAsNonNull | RefEq | RefTest _ | RefCast _ | StructGet _
+  | RefIsNull | RefAsNonNull | RefEq | RefTest _ | RefCast _ | RefCastDescEq _
+  | RefGetDesc _ | StructGet _
   | StructSet _ | ArrayNewData _ | ArrayNewElem _ | ArrayGet _ | ArraySet _
   | ArrayLen | ArrayFill _ | ArrayCopy _ | ArrayInitData _ | ArrayInitElem _
   | I31Get _ | UnOp _ | Add128 | Sub128 | MulWide _
@@ -3093,6 +3310,9 @@ let add_type d ctx ty =
           in
           Hashtbl.replace ctx.type_defs (ctx.last_index + i) (def_idx, cont_ref);
           Option.iter
+            (fun node -> Hashtbl.replace ctx.descriptor_source (i' + i) node)
+            (typ : Ast.Text.subtype).descriptor;
+          Option.iter
             (fun label ->
               Hashtbl.replace ctx.label_mapping label.Ast.desc
                 (i' + i, fields, typ.typ))
@@ -3180,14 +3400,16 @@ and register_typeuses_instr d ctx (i : _ Ast.Text.instr) =
   | Unreachable | Nop | Throw _ | ThrowRef | ContNew _ | ContBind _ | Suspend _
   | Resume _ | ResumeThrow _ | ResumeThrowRef _ | Switch _ | Br _ | Br_if _
   | Br_table _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
-  | Br_on_cast_fail _ | Return | Call _ | CallRef _ | ReturnCall _
+  | Br_on_cast_fail _ | Br_on_cast_desc_eq _ | Br_on_cast_desc_eq_fail _
+  | Return | Call _ | CallRef _ | ReturnCall _
   | ReturnCallRef _ | Drop | Select _ | LocalGet _ | LocalSet _ | LocalTee _
   | GlobalGet _ | GlobalSet _ | Load _ | LoadS _ | Store _ | StoreS _ | Atomic _
   | AtomicFence | MemorySize _ | MemoryGrow _ | MemoryFill _ | MemoryCopy _
   | MemoryInit _ | DataDrop _ | TableGet _ | TableSet _ | TableSize _
   | TableGrow _ | TableFill _ | TableCopy _ | TableInit _ | ElemDrop _
   | RefNull _ | RefFunc _ | RefIsNull | RefAsNonNull | RefEq | RefTest _
-  | RefCast _ | StructNew _ | StructNewDefault _ | StructGet _ | StructSet _
+  | RefCast _ | RefCastDescEq _ | RefGetDesc _ | StructNew _ | StructNewDefault _
+  | StructNewDesc _ | StructNewDefaultDesc _ | StructGet _ | StructSet _
   | ArrayNew _ | ArrayNewDefault _ | ArrayNewFixed _ | ArrayNewData _
   | ArrayNewElem _ | ArrayGet _ | ArraySet _ | ArrayLen | ArrayFill _
   | ArrayCopy _ | ArrayInitData _ | ArrayInitElem _ | RefI31 | I31Get _
@@ -3807,6 +4029,7 @@ let validate_configuration ?(warn_unused = true) diagnostics (_, fields) =
       index_mapping = Hashtbl.create 16;
       label_mapping = Hashtbl.create 16;
       type_defs = Hashtbl.create 16;
+      descriptor_source = Hashtbl.create 16;
     }
   in
   List.iter
