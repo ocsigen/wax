@@ -1021,7 +1021,7 @@ and instruction_desc ret ctx i : location Text.instr list =
         let code = instruction ret ctx expr in
         match expr_opt_valtype expr with
         | None -> code
-        | Some in_ty ->
+        | Some in_ty -> (
             (* Several casts widen or convert through a forced intermediate
                type; emit it here (and update [in_ty]) so the single Wax cast
                lowers to the same instructions the double cast would. The
@@ -1114,7 +1114,8 @@ and instruction_desc ret ctx i : location Text.instr list =
                   UnOp (F64 (Convert (`I32, signage)))
               | I64, Signedtype { typ = `F64; signage; _ } ->
                   UnOp (F64 (Convert (`I64, signage)))
-              (* Identity *)
+              (* Identity: no instruction needed; [Nop] is a sentinel elided
+                 below. *)
               | I32, Valtype I32
               | I64, Valtype I64
               | F32, Valtype F32
@@ -1128,7 +1129,7 @@ and instruction_desc ret ctx i : location Text.instr list =
                   print_instr i;
                   assert false
             in
-            folded loc instr code
+            match instr with Nop -> code | _ -> folded loc instr code)
       in
       match expr.desc with
       (* (mem.load8/16(p) as i32_S) as i64_S  ->  i64.load8/16_S *)
