@@ -54,7 +54,7 @@ bare `wax <file>` form working — edit that heuristic if adding subcommands.
 | `-W` | `--warn` | Set a warning's level: `NAME=LEVEL` where `NAME` is a warning (`unused-local`, `truncated-coverage`, `naming-conflict`, `reserved-word-rename`, `generated-name`), a group (`unused`, `naming`), or `all`, and `LEVEL` is `hidden`/`warning`/`error`. The `naming` warnings (Wasm→Wax renames/generated names) are hidden by default. Later settings override earlier; repeatable |
 |      | `--fold` / `--unfold` | Force folded / unfolded instruction form (default: auto) |
 |      | `--color` | Color output: `auto`/`always`/`never` |
-|      | `--source-map-file` | Emit a source map to the given file |
+|      | `--source-map-file` | Emit a source map to the given file (wasm output only; rejected for wat/wax output) |
 |      | `--debug` | Enable developer debug output for a category (repeatable, comma-separated). Categories: `timing` (log each pass's wall-clock time to stderr) |
 
 Binary output to a terminal is blocked; use `-o` to write WASM to a file.

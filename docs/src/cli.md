@@ -113,7 +113,8 @@ files (see [Formatting](#formatting)) and `check` validates them (see
     - Affects WAT output (the default form is chosen automatically).
 
 - **`--source-map-file`** *FILE*
-    - Generate a source map file.
+    - Generate a source map file. Only valid with wasm output (`-f wasm`);
+      requesting one for wat or wax output is an error.
 
 - **`--debug`** *CATEGORY*
     - Enable developer debug output for a category. Repeatable, and a single

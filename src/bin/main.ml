@@ -136,9 +136,7 @@ let wax_trivia ?retarget ctx ast =
   | Some (src, dst) -> Wax_utils.Trivia.retarget ~src ~dst trivia tail
 
 let wat_to_wat ~input_file ~output_file ~validate ~warn_unused ~color
-    ~output_color ~fold_mode ~defines ~source_map_file:opt_source_map_file =
-  let _ = opt_source_map_file in
-  (* Ignored for non-wasm output *)
+    ~output_color ~fold_mode ~defines ~source_map_file:_ =
   let text = with_open_in input_file In_channel.input_all in
   let ast, ctx =
     Wat_parser.parse_from_string
@@ -154,9 +152,7 @@ let wat_to_wat ~input_file ~output_file ~validate ~warn_unused ~color
   output_wat ~output_file ~color:output_color ~trivia ~tail ast
 
 let wat_to_wax ~input_file ~output_file ~validate ~warn_unused ~color
-    ~output_color ~fold_mode:_ ~defines ~source_map_file:opt_source_map_file =
-  let _ = opt_source_map_file in
-  (* Ignored for non-wasm output *)
+    ~output_color ~fold_mode:_ ~defines ~source_map_file:_ =
   let text = with_open_in input_file In_channel.input_all in
   let ast, ctx =
     Wat_parser.parse_from_string
@@ -194,9 +190,7 @@ let wat_to_wax ~input_file ~output_file ~validate ~warn_unused ~color
       Format.fprintf fmt "%a@." print_wax wax_ast)
 
 let wax_to_wat ~input_file ~output_file ~validate ~warn_unused ~color
-    ~output_color ~fold_mode ~defines ~source_map_file:opt_source_map_file =
-  let _ = opt_source_map_file in
-  (* Ignored for non-wasm output *)
+    ~output_color ~fold_mode ~defines ~source_map_file:_ =
   let text = with_open_in input_file In_channel.input_all in
   let ast, ctx =
     Wax_parser.parse_from_string
@@ -229,9 +223,7 @@ let wax_to_wat ~input_file ~output_file ~validate ~warn_unused ~color
   output_wat ~output_file ~color:output_color ~trivia ~tail wasm_ast
 
 let wax_to_wax ~input_file ~output_file ~validate ~warn_unused ~color
-    ~output_color ~fold_mode:_ ~defines ~source_map_file:opt_source_map_file =
-  let _ = opt_source_map_file in
-  (* Ignored for non-wasm output *)
+    ~output_color ~fold_mode:_ ~defines ~source_map_file:_ =
   let text = with_open_in input_file In_channel.input_all in
   let ast, ctx =
     Wax_parser.parse_from_string
@@ -318,8 +310,7 @@ let wasm_to_wasm ~input_file ~output_file ~validate:_validate ~warn_unused:_
         ?opt_source_map_file ast)
 
 let wasm_to_wat ~input_file ~output_file ~validate ~warn_unused ~color
-    ~output_color ~fold_mode ~defines:_ ~source_map_file:opt_source_map_file =
-  let _ = opt_source_map_file in
+    ~output_color ~fold_mode ~defines:_ ~source_map_file:_ =
   let text = with_open_in input_file In_channel.input_all in
   let binary_ast = parse_wasm ~color ?filename:input_file text in
   let text_ast = Wax_wasm.Binary_to_text.module_ binary_ast in
@@ -331,8 +322,7 @@ let wasm_to_wat ~input_file ~output_file ~validate ~warn_unused ~color
   output_wat ~output_file ~color:output_color ~trivia text_ast
 
 let wasm_to_wax ~input_file ~output_file ~validate ~warn_unused ~color
-    ~output_color ~fold_mode:_ ~defines:_ ~source_map_file:opt_source_map_file =
-  let _ = opt_source_map_file in
+    ~output_color ~fold_mode:_ ~defines:_ ~source_map_file:_ =
   let text = with_open_in input_file In_channel.input_all in
   let binary_ast = parse_wasm ~color ?filename:input_file text in
   let text_ast = Wax_wasm.Binary_to_text.module_ binary_ast in
@@ -420,6 +410,12 @@ let convert input_file output_file input_format_opt output_format_opt validate
   let output_format =
     resolve_format output_file output_format_opt ~default:Wasm
   in
+  (* A source map relates a wasm binary's byte offsets to source positions, so
+     it is only meaningful for wasm output. Reject it for text output rather
+     than silently discarding it (the text emitters ignore it). *)
+  if opt_source_map_file <> None && output_format <> Wasm then (
+    Printf.eprintf "--source-map-file is only supported for wasm output\n";
+    exit 123);
   (* [--validate] enables unused-local reporting; it is not implied by the
      forced validation below. *)
   let warn_unused = validate in

@@ -18,3 +18,11 @@ previous instruction's location.
     "names": [],
     "mappings": "CAGI,AAAA,I"
   }
+
+A source map relates a wasm binary's byte offsets to source positions, so it is
+only meaningful for wasm output. Requesting one for text output is rejected
+rather than silently ignored:
+
+  $ wax decl.wax -f wat --source-map-file decl.map
+  --source-map-file is only supported for wasm output
+  [123]
