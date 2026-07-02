@@ -2575,8 +2575,6 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       | Value _ ->
           if signage <> None then
             Error.unpacked_struct_access ctx.modul.diagnostics ~location:i.info);
-      (*ZZZ signage + validate n*)
-      ignore signage;
       push
         ~source:(source_field_valtype ctx idx n)
         (Some loc)
