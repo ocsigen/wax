@@ -145,9 +145,9 @@ Setting a variable to a value of the wrong kind is an error.
 
 An empty variable name is rejected.
 
-  $ wax -f wax -D =oops def.wax
+  $ NO_COLOR=1 wax -f wax -D =oops def.wax
   Usage: wax [--help] [COMMAND] …
-  wax: option -D: empty variable name
+  wax: option '-D': empty variable name
   [124]
 
 Comments inside a removed branch are dropped, rather than re-attaching to a

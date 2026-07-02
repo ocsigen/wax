@@ -101,18 +101,18 @@ promoting it to an error makes the check fail:
 
 An unknown warning or group name is rejected:
 
-  $ wax --validate -W bogus=error unused.wax -f wat
+  $ NO_COLOR=1 wax --validate -W bogus=error unused.wax -f wat
   Usage: wax [--help] [COMMAND] …
-  wax: option -W: Unknown warning or group 'bogus'. Known names: unused-local,
-       truncated-coverage, naming-conflict, reserved-word-rename,
+  wax: option '-W': Unknown warning or group 'bogus'. Known names:
+       unused-local, truncated-coverage, naming-conflict, reserved-word-rename,
        generated-name, unused, naming, all.
   [124]
 
 An unknown level is rejected:
 
-  $ wax --validate -W unused-local=loud unused.wax -f wat
+  $ NO_COLOR=1 wax --validate -W unused-local=loud unused.wax -f wat
   Usage: wax [--help] [COMMAND] …
-  wax: option -W: Unknown warning level 'loud'; expected hidden, warning, or
+  wax: option '-W': Unknown warning level 'loud'; expected hidden, warning, or
        error.
   [124]
 
