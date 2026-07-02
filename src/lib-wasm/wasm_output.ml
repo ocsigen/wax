@@ -1203,10 +1203,23 @@ let import_desc b (desc : importdesc) =
       Encoder.byte b 0x00;
       Encoder.sint b t
 
-(* Maximal runs of consecutive imports sharing a module name. Only consecutive
-   imports may be grouped: an import's index is its position, so reordering to
-   gather non-adjacent same-module imports would break references. *)
-let imports_by_module imports =
+let leb_len n =
+  let rec go n acc = if n < 128 then acc else go (n lsr 7) (acc + 1) in
+  go n 1
+
+(* Import-section entries: maximal runs of consecutive imports sharing a module
+   name, kept grouped only when grouping is actually smaller — else the run is
+   split back into singletons (each written plainly). Only consecutive imports
+   may be grouped: an import's index is its position, so reordering to gather
+   non-adjacent same-module imports would break references.
+
+   A group of [n] imports from module [m] writes [m]'s (length-prefixed) name
+   once instead of [n] times, saving [(n-1) * (1 + |m|)] bytes, but adds the
+   empty second name, the marker byte, and the inner count — [2 + leb_len n]. *)
+let import_entries imports =
+  let should_group (first : import) n =
+    n >= 2 && (n - 1) * (1 + String.length first.module_) > 2 + leb_len n
+  in
   let rec go = function
     | [] -> []
     | (first : import) :: _ as l ->
@@ -1216,7 +1229,11 @@ let imports_by_module imports =
           | rest -> (List.rev acc, rest)
         in
         let run, rest = take [] l in
-        run :: go rest
+        let entries =
+          if should_group first (List.length run) then [ run ]
+          else List.map (fun i -> [ i ]) run
+        in
+        entries @ go rest
   in
   go imports
 
@@ -1253,7 +1270,7 @@ let output_import_section out_channel imports =
                    import_desc b i.desc)
                  b run
            | [] -> assert false))
-      (imports_by_module imports)
+      (import_entries imports)
 
 let module_ ~out_channel ?output_file ?opt_source_map_file
     (m : Ast.location module_) =
