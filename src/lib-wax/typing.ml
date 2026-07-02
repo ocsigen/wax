@@ -3312,7 +3312,13 @@ and type_branch ctx i =
          resolve to it ([resolve_declared]); when it has none, that cell would leak
          as a value, so fall back to the operands' own [types]. *)
       let result =
-        if Array.exists is_inferring params then
+        (* Guard the arities as the [Array.iter2] above does: on a mismatch
+           [check_subtypes] has already reported the arity error, so [map2] would
+           only crash on the unequal lengths — fall back to the target's params. *)
+        if
+          Array.exists is_inferring params
+          && Array.length types = Array.length params
+        then
           Array.map2
             (fun ty param ->
               match Cell.get param with
@@ -3448,7 +3454,11 @@ and type_branch ctx i =
       | _ -> Error.expected_ref ctx.diagnostics ~location:(snd i'.info));
       return_statement i
         (Br_on_non_null (idx, i'))
-        (Array.sub params 0 (Array.length params - 1))
+        (* The branch delivers [types ++ [ref]] to the target and the fall-through
+           keeps all but that trailing ref. A target with no params is malformed
+           (already reported by [check_subtypes] above); [max 0] avoids
+           [Array.sub _ 0 (-1)] and leaves an empty fall-through. *)
+        (Array.sub params 0 (max 0 (Array.length params - 1)))
   | Br_on_cast (label, ty, i') ->
       let* i' = instruction ctx i' in
       if is_cont_heaptype ctx ty.typ then

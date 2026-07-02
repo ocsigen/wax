@@ -96,7 +96,11 @@ done
 check=(check "$IN")
 verdict="$(classify_wax "${check[@]}")"
 case "$verdict:$EXPECT" in
-  crash:*) : ;;                       # already reported by the crash sweep
+  crash:*)
+    # `check` is its own code path — the convert crash sweep above does not
+    # exercise it, so a crash here would otherwise go unreported.
+    finding CRASH HIGH "$IN" "${verdict#crash:} on: wax check $IN" \
+      "$(repro "${check[@]}")" ;;
   rejected:valid)
     finding FALSE_REJECT HIGH "$IN" \
       "wax rejected a valid module: $(grep -m1 -i error "$ERRLOG" || true)" \
