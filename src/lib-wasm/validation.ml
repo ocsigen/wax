@@ -2029,7 +2029,6 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       | Cont, _ | _, Cont ->
           Error.invalid_cast_type ctx.modul.diagnostics ~location:loc
       | _ -> ());
-      (* ZZZ Relaxed condition *)
       if not (Types.val_subtype ctx.modul.subtyping_info (Ref ty2) (Ref ty1))
       then Error.br_cast_type_mismatch ctx.modul.diagnostics ~location:loc;
       let* () = pop ctx loc ~expected_source:src_ty1 (Ref ty1) in
@@ -3189,11 +3188,10 @@ let build_initial_env ctx fields =
           | Tag tu ->
               let>@ ty = typeuse ctx.diagnostics ctx.types tu in
               let sign = typeuse_functype ctx.types tu in
-              (*
-              (match (Types.get_subtype ctx.subtyping_info ty).typ with
-              | Func { results; _ } -> assert (results = [||])
-              | Struct _ | Array _ -> assert false (*ZZZ*));
-*)
+              (* A tag's function type is deliberately not required to have empty
+                 results: the stack-switching proposal uses tags with result
+                 types (for [suspend] / [resume]), so the exception-handling
+                 restriction to no results is not enforced. *)
               Sequence.register ctx.tags id (ty, sign))
       | Func { id; typ; instrs; _ } ->
           let>@ ty = typeuse ctx.diagnostics ctx.types typ in
@@ -3203,11 +3201,10 @@ let build_initial_env ctx fields =
       | Tag { id; typ; exports } ->
           let>@ ty = typeuse ctx.diagnostics ctx.types typ in
           let sign = typeuse_functype ctx.types typ in
-          (*
-          (match (Types.get_subtype ctx.subtyping_info ty).typ with
-          | Func { results; _ } -> assert (results = [||])
-          | Struct _ | Array _ -> assert false (*ZZZ*));
-*)
+          (* A tag's function type is deliberately not required to have empty
+             results: the stack-switching proposal uses tags with result types
+             (for [suspend] / [resume]), so the exception-handling restriction to
+             no results is not enforced. *)
           register_exports ctx exports;
           Sequence.register ctx.tags id (ty, sign)
       | _ -> ())
