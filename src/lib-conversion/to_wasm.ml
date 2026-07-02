@@ -1570,7 +1570,6 @@ and instruction_desc ret ctx i : location Text.instr list =
   | Br_on_non_null (l, expr) ->
       folded loc (Br_on_non_null (label ret l)) (instruction ret ctx expr)
   | Br_on_cast (l, target_reftype, expr) ->
-      (*ZZZ LUB for now *)
       folded loc
         (Br_on_cast
            ( label ret l,

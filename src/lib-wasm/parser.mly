@@ -1,10 +1,3 @@
-(*
-ZZZ
-- More memory instructions
-- Tables
-- Segments
-*)
-
 %token <string> NAT
 %token <string> INT
 %token <string> FLOAT

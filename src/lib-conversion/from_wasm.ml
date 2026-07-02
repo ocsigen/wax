@@ -666,11 +666,6 @@ Step 1: traverse types and find existing names
 Step 2: use this info to generate using names without reusing existing names
 *)
 
-(*ZZZ
-  - first pass to see missing labels
-  - explode tuples
-*)
-
 module Stack = struct
   type stack = (bool * Ast.location Ast.instr) list
   type 'a t = stack -> stack * 'a

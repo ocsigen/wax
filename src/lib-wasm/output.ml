@@ -931,7 +931,6 @@ let rec instr i =
             (block (instruction "block" :: (opt_id label @ blocktype typ)));
           Contents (List.map instr b);
           Delimiter (instruction "end");
-          (*ZZZ Comment?*)
         ]
   | Loop { label; typ; block = b } ->
       structured_block ~loc
@@ -940,7 +939,6 @@ let rec instr i =
             (block (instruction "loop" :: (opt_id label @ blocktype typ)));
           Contents (List.map instr b);
           Delimiter (instruction "end");
-          (*ZZZ Comment?*)
         ]
   | TryTable { label; typ; catches = c; block = b } ->
       structured_block ~loc
@@ -949,7 +947,6 @@ let rec instr i =
             (block (instruction "try_table" :: (opt_id label @ blocktype typ)));
           Contents (catches c @ List.map instr b);
           Delimiter (instruction "end");
-          (*ZZZ Comment?*)
         ]
   | Try { label; typ; block = b; catches; catch_all } ->
       structured_block ~loc
@@ -970,7 +967,7 @@ let rec instr i =
                    Delimiter (instruction "catch_all");
                    Contents (List.map instr c);
                  ])
-           @ [ Delimiter (instruction "end") (*ZZZ Comment?*) ]))
+           @ [ Delimiter (instruction "end") ]))
   | Br_table (l, i) ->
       block ~loc
         (instruction "br_table" :: List.map (fun i -> index i) (l @ [ i ]))
@@ -1025,20 +1022,17 @@ let rec instr i =
       list ~loc
         (block (instruction "block" :: (opt_id label @ blocktype typ))
         :: List.map instr b)
-      (*ZZZ Comment?*)
   | Folded ({ desc = Loop { label; typ; block = b }; _ }, l) ->
       assert (l = []);
       list ~loc
         (block (instruction "loop" :: (opt_id label @ blocktype typ))
         :: List.map instr b)
-      (*ZZZ Comment?*)
   | Folded ({ desc = TryTable { label; typ; catches = c; block = b }; _ }, l) ->
       assert (l = []);
       list ~loc
         (block (instruction "try_table" :: (opt_id label @ blocktype typ))
         :: block (catches c)
         :: List.map instr b)
-      (*ZZZ Comment?*)
   | Folded ({ desc = Try { label; typ; block = b; catches; catch_all }; _ }, l)
     ->
       assert (l = []);
