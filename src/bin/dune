@@ -5,8 +5,10 @@
  (package wax)
  (libraries wax_wasm wax_lang wax_conversion cmdliner unix))
 
-; Private developer/test executables, not installed (no public names).
+; Private developer/test executables, not installed (no public names):
+; run_wasm_testsuite drives the spec suite (see test/dune) and fuzz_mutate is
+; the AST mutator behind fuzz/mutate-wax.sh.
 
 (executables
- (names test_wasm convert pretty_print run_wasm_testsuite fuzz_mutate)
+ (names run_wasm_testsuite fuzz_mutate)
  (libraries wax_wasm wax_lang wax_conversion menhirLib re unix cmdliner))
