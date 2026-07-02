@@ -424,9 +424,13 @@ let vec_un_op op =
   | VecAbs _ -> "abs"
   | VecSqrt _ -> "sqrt"
   | VecNot -> "not"
-  | VecTruncSat (f, s) ->
-      let f_str = match f with `F32 -> "f32x4" | `F64 -> "f64x2" in
-      signage ("trunc_sat_" ^ f_str) s
+  | VecTruncSat (f, s) -> (
+      (* The f64x2 form is spelled with a trailing [_zero] (it fills the upper
+         two i32x4 lanes with zero) — the only spec name for opcodes 252/253.
+         Without it wasm-tools and the spec reject the output. *)
+      match f with
+      | `F32 -> signage "trunc_sat_f32x4" s
+      | `F64 -> signage "trunc_sat_f64x2" s ^ "_zero")
   | VecConvert (f, s) ->
       let low = match f with `F32 -> "" | `F64 -> "low_" in
       signage ("convert_" ^ low ^ "i32x4") s

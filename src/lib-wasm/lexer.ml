@@ -825,8 +825,6 @@ let rec token_rec ctx lexbuf =
       INSTR (VecUnOp (VecTruncSat (`F64, Signed)))
   | "i32x4.trunc_sat_f64x2_u_zero" ->
       INSTR (VecUnOp (VecTruncSat (`F64, Unsigned)))
-  | "i32x4.trunc_sat_f64x2_s" -> INSTR (VecUnOp (VecTruncSat (`F64, Signed)))
-  | "i32x4.trunc_sat_f64x2_u" -> INSTR (VecUnOp (VecTruncSat (`F64, Unsigned)))
   | "f64x2.convert_low_i32x4_s" -> INSTR (VecUnOp (VecConvert (`F64, Signed)))
   | "f64x2.convert_low_i32x4_u" -> INSTR (VecUnOp (VecConvert (`F64, Unsigned)))
   | "f32x4.demote_f64x2_zero" -> INSTR (VecUnOp VecDemote)
