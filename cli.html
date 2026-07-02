@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ed857b00.js";
+            window.path_to_searchindex_js = "searchindex-0b2b49b9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -332,7 +332,8 @@ warnings are produced when converting a Wasm module to Wax.</li>
 <li>
 <p><strong><code>--source-map-file</code></strong> <em>FILE</em></p>
 <ul>
-<li>Generate a source map file.</li>
+<li>Generate a source map file. Only valid with wasm output (<code>-f wasm</code>);
+requesting one for wat or wax output is an error.</li>
 </ul>
 </li>
 <li>
@@ -437,6 +438,27 @@ above.</li>
 <p><strong>Type-check several Wax files (e.g. in CI):</strong></p>
 <pre><code class="language-sh">wax check src/*.wax
 </code></pre>
+<h2 id="exit-status"><a class="header" href="#exit-status">Exit status</a></h2>
+<p>All three commands share the same exit codes:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Code</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>0</code></td><td>Success. For <code>check</code> / <code>format --check</code>, also means every file passed.</td></tr>
+<tr><td><code>123</code></td><td>A <strong>usage</strong> error — an invalid combination of flags (e.g. <code>--source-map-file</code> with text output, or binary output to a terminal) — or a <code>format --check</code> run that found files needing formatting.</td></tr>
+<tr><td><code>124</code></td><td>A command-line parse error: an unknown flag or a bad option value (reported by the argument parser).</td></tr>
+<tr><td><code>125</code></td><td>An internal error (an uncaught exception).</td></tr>
+<tr><td><code>128</code></td><td>The input was <strong>rejected by a diagnostic</strong>: a parse, validation, or type error, or a malformed wasm binary. This is also the status of a <code>check</code> run that found any problem.</td></tr>
+</tbody>
+</table>
+</div>
+<p>The distinction is <em>how you used the tool</em> (<code>123</code>/<code>124</code>) versus <em>the input is
+bad</em> (<code>128</code>). A rejected input reports <code>128</code> wherever the error is found —
+syntax, validation, or type-checking — so <code>check</code> exits <code>0</code> when every input is
+valid and <code>128</code> otherwise, which is what a CI gate wants. For scripting, treat
+any non-zero status as failure.</p>
 
                     </main>
 
