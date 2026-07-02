@@ -165,57 +165,73 @@ let associate ?only ctx =
     in
     aux [] comments
   in
-  let rec process locs comments =
-    match locs with
-    | [] -> comments
-    | loc :: rest_locs ->
-        let is_child l =
-          l.Ast.loc_end.Lexing.pos_cnum <= loc.Ast.loc_end.Lexing.pos_cnum
-        in
-        let rec span acc = function
-          | l :: rs when is_child l -> span (l :: acc) rs
-          | rs -> (List.rev acc, rs)
-        in
-        let children, siblings = span [] rest_locs in
-        (* Trailing comments reach up to the next sibling's start; with no next
-           sibling, only those exactly at the node's end (so trailing comments
-           after the last child stay with the parent). *)
-        let upto =
-          match siblings with
-          | s :: _ -> s.Ast.loc_start.Lexing.pos_cnum
-          | [] -> loc.Ast.loc_end.Lexing.pos_cnum + 1
-        in
-        let before, rem1 =
-          split_before loc.Ast.loc_start.Lexing.pos_cnum comments
-        in
-        let rem2 = process children rem1 in
-        let within_candidates, rem3 =
-          split_before loc.Ast.loc_end.Lexing.pos_cnum rem2
-        in
-        let steal_candidate =
-          match List.rev children with
-          | last_child :: _
-            when last_child.Ast.loc_end.Lexing.pos_cnum
-                 = loc.Ast.loc_end.Lexing.pos_cnum ->
-              Some last_child
-          | _ -> None
-        in
-        let final_after, rem4 =
-          match steal_candidate with
-          | Some last_child -> (
-              match Hashtbl.find_opt tbl last_child with
-              | Some assoc ->
-                  let stolen = assoc.after in
-                  Hashtbl.replace tbl last_child { assoc with after = [] };
-                  (stolen, rem3)
-              | None -> get_after loc.Ast.loc_end.Lexing.pos_cnum ~upto rem3)
-          | None -> get_after loc.Ast.loc_end.Lexing.pos_cnum ~upto rem3
-        in
-        Hashtbl.add tbl loc
-          { before; within = within_candidates; after = final_after };
-        process siblings rem4
+  (* Rebuild the nesting from the flat, sorted (start asc, end desc — i.e.
+     preorder) location list in one linear pass. [subtree_end.(i)] is the last
+     index whose node is contained in [arr.(i)]: the maximal run of nodes right
+     after [i] whose end does not exceed [arr.(i)]'s. That run is exactly the
+     prefix the old recursive [span] recomputed at every nesting level, which
+     made the whole pass O(n^2) in depth. A monotonic stack of still-open
+     ancestors yields it in O(n): a node's subtree ends at [i-1] the moment we
+     meet an [i] whose end exceeds it (a strictly greater end means [i] is not
+     contained, so [i] is a sibling/uncle); equal ends keep it open, since an
+     equal-end node with a later start nests inside — matching [is_child]'s
+     [<=]. Any node never popped spans to the end. *)
+  let arr = Array.of_list locs in
+  let n = Array.length arr in
+  let ecnum i = arr.(i).Ast.loc_end.Lexing.pos_cnum in
+  let scnum i = arr.(i).Ast.loc_start.Lexing.pos_cnum in
+  let subtree_end = Array.make (max n 1) 0 in
+  let stack = ref [] in
+  for i = 0 to n - 1 do
+    let rec pop = function
+      | t :: tl when ecnum t < ecnum i ->
+          subtree_end.(t) <- i - 1;
+          pop tl
+      | s -> s
+    in
+    stack := i :: pop !stack
+  done;
+  List.iter (fun t -> subtree_end.(t) <- n - 1) !stack;
+  (* Partition the comments over that tree. Semantics unchanged from the old
+     [process]: [before] = comments anchored before the node; [within] = those
+     between its children and its own end; [after] = trailing comments up to the
+     next sibling's start ([upto]) — or, when the node's last flat descendant
+     ([arr.(child_hi)]) ends exactly where the node does, that descendant's
+     [after] (the [steal] path, preserving shared-span comment attachment).
+     Comments thread left to right through [rem]; each index is visited once as
+     a node, so the pass is O(n + #comments). The sibling tail call recurses in
+     width, the child call in depth — the same recursion depth (tree height) as
+     the old code. *)
+  let rec process_range lo hi comments =
+    if lo > hi then comments
+    else
+      let child_lo = lo + 1 and child_hi = subtree_end.(lo) in
+      let next_sib = child_hi + 1 in
+      let upto = if next_sib <= hi then scnum next_sib else ecnum lo + 1 in
+      let before, rem1 = split_before (scnum lo) comments in
+      let rem2 = process_range child_lo child_hi rem1 in
+      let within_candidates, rem3 = split_before (ecnum lo) rem2 in
+      let steal_candidate =
+        if child_hi >= child_lo && ecnum child_hi = ecnum lo then
+          Some arr.(child_hi)
+        else None
+      in
+      let final_after, rem4 =
+        match steal_candidate with
+        | Some last_child -> (
+            match Hashtbl.find_opt tbl last_child with
+            | Some assoc ->
+                let stolen = assoc.after in
+                Hashtbl.replace tbl last_child { assoc with after = [] };
+                (stolen, rem3)
+            | None -> get_after (ecnum lo) ~upto rem3)
+        | None -> get_after (ecnum lo) ~upto rem3
+      in
+      Hashtbl.add tbl arr.(lo)
+        { before; within = within_candidates; after = final_after };
+      process_range next_sib hi rem4
   in
-  let leftover = process locs comments in
+  let leftover = process_range 0 (n - 1) comments in
   (* [leftover] holds comments that no location owns: trailing comments after
      the last node, or — when the module has no locations at all (e.g. an empty
      [(module)]) — the whole file. The caller prints them as tail trivia. *)
