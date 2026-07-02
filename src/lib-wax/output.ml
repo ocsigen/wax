@@ -705,9 +705,9 @@ let rec instr prec pp (i : _ instr) =
   parentheses prec (get_prec i) pp @@ fun () ->
   match i.desc with
   | Block { label; typ; block = l } ->
-      block pp label
-        (if true || need_blocktype typ then Some "do" else None)
-        typ l
+      (* A plain block is always introduced by [do] (a bare or labelled [{ … }]
+         also parses, but [do] is the canonical form we emit). *)
+      block pp label (Some "do") typ l
   | If_annotation { cond; then_body; else_body } ->
       let branch body =
         space pp ();
