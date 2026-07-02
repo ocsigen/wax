@@ -208,9 +208,16 @@ let u64_of_int_literal n = Wax_utils.Uint64.of_string n
    logarithm, so require a power of two (the restriction to 1 or 65536 is a
    type-checking concern). *)
 let page_size_log2 loc n =
-  let v = Wax_utils.Uint64.to_int (Wax_utils.Uint64.of_string n) in
-  if v > 0 && v land (v - 1) = 0 then
-    let rec exp x p = if x = 1 then p else exp (x lsr 1) (p + 1) in
+  (* Compute the base-2 logarithm on the 64-bit value directly, without first
+     narrowing to [int]: a literal above [max_int] would overflow
+     [Uint64.to_int]. A power of two has a single set bit; its log2 is that
+     bit's position, which always fits an [int]. *)
+  let v = Wax_utils.Uint64.to_int64 (Wax_utils.Uint64.of_string n) in
+  if (not (Int64.equal v 0L)) && Int64.equal (Int64.logand v (Int64.sub v 1L)) 0L
+  then
+    let rec exp x p =
+      if Int64.equal x 1L then p else exp (Int64.shift_right_logical x 1) (p + 1)
+    in
     exp v 0
   else
     raise

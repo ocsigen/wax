@@ -14,7 +14,8 @@ val of_int : int -> t
 (** [of_int n] converts an OCaml [int] to a 64-bit unsigned integer. *)
 
 val to_int : t -> int
-(** Convert to an OCaml [int]. May raise if the value doesn't fit. *)
+(** Convert to an OCaml [int]. The caller must ensure the value fits (bound it
+    first); an unguarded call that overflows is a bug, and this asserts. *)
 
 val to_int64 : t -> int64
 (** Convert to an OCaml [int64]. *)

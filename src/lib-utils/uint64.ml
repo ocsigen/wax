@@ -11,6 +11,9 @@ let of_string s =
 let to_string s = Printf.sprintf "%Lu" s
 let of_int i = Int64.of_int i
 
+(* Every caller must first bound the value so it is known to fit an OCaml [int]
+   (see [.mli]): an unguarded call that overflows is a bug at the call site, not
+   a condition to recover from here. *)
 let to_int i =
   match Int64.unsigned_to_int i with Some i -> i | None -> assert false
 

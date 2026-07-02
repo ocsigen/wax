@@ -38,6 +38,24 @@ A value that is not a power of two is rejected while parsing.
   2 │ 
   [123]
 
+A page size larger than [max_int] is still parsed by its base-2 logarithm (it
+is a power of two) rather than overflowing the narrowing to [int], so it is
+rejected by the 1-or-65536 check like any other unsupported size (its large
+exponent also trips the memory-size bound) instead of crashing.
+
+  $ wax check huge-pow2.wax
+  Error: The custom page size must be 1 or 65536.
+   ──➤  huge-pow2.wax:1:1
+  1 │ memory m: i32 [1] pagesize 9223372036854775808;
+    · ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  2 │ 
+  Error: The memory size is too large. It should be less than 0x0.
+   ──➤  huge-pow2.wax:1:1
+  1 │ memory m: i32 [1] pagesize 9223372036854775808;
+    · ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  2 │ 
+  [123]
+
 With a page size of 1, the page count may run up to 2^32 - 1; one more is
 rejected (the byte span still bounds it).
 
