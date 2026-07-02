@@ -151,6 +151,8 @@ its own assignment.
 | `br_on_non_null $l` | `br_on_non_null 'l val` |
 | `br_on_cast $l $t1 $t2` | `br_on_cast 'l t2 val` |
 | `br_on_cast_fail $l $t1 $t2` | `br_on_cast_fail 'l t2 val` |
+| `br_on_cast_desc_eq $l $t1 $t2` | `br_on_cast 'l [?]descriptor(d) val` |
+| `br_on_cast_desc_eq_fail $l $t1 $t2` | `br_on_cast_fail 'l [?]descriptor(d) val` |
 | `return` | `return val` |
 | `call $f` | `f(args)` |
 | `call_ref $t` | `(val as &?t)(args)` |
@@ -202,6 +204,8 @@ types are always kept.
 | `ref.test` | `val is &type` |
 | `ref.cast (ref (exact $t))` | `val as &!t` |
 | `ref.test (ref (exact $t))` | `val is &!t` |
+| `ref.cast_desc_eq $t` | `val as descriptor(d)` |
+| `ref.cast_desc_eq (ref null …) $t` | `val as ?descriptor(d)` |
 
 These casts can also chain through a forced intermediate, written as a single `as`:
 
@@ -217,8 +221,11 @@ These casts can also chain through a forced intermediate, written as a single `a
 |------|-----|
 | `struct.new $t` | `{t\| field: val, ... }` |
 | `struct.new_default $t` | `{t\| .. }` |
+| `struct.new_desc $t` | `{descriptor(d)\| field: val, ... }` |
+| `struct.new_default_desc $t` | `{descriptor(d)\| .. }` |
 | `struct.get $t $f` | `val.field` |
 | `struct.set $t $f` | `val.field = new_val` |
+| `ref.get_desc $t` | `val.descriptor` |
 | `array.new $t` | `[t\| val; len]` |
 | `array.new_default $t` | `[t\| ..; len]` |
 | `array.new_fixed $t` | `[t\| val, ...]` |

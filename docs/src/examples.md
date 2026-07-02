@@ -666,3 +666,37 @@ fn mul_u64_to_u128(a: i64, b: i64) -> (i64, i64) {
     i64::mul_wide_u(a, b);
 }
 ```
+
+## Custom Descriptors
+
+A struct can carry a *descriptor* — a second struct linked to it by reciprocal
+[`descriptor`/`describes` clauses](correspondence/types.md#descriptors). The
+descriptor instructions never name the target type: it is recovered from the
+descriptor operand (the type the operand *describes*), so all of them share one
+`descriptor(d)` clause. `struct.new_desc` allocates carrying a descriptor,
+`.descriptor` reads it back, and `as [?]descriptor(d)` / `br_on_cast [?]descriptor(d)`
+cast on descriptor equality (a leading `?` makes the result nullable).
+
+### Wax
+
+```wax
+rec {
+    type obj = descriptor obj_desc { x: i32 };
+    type obj_desc = describes obj { kind: i32 };
+}
+
+#[export = "make"]
+fn make(kind: i32, x: i32) -> &!obj {
+    { descriptor({obj_desc| kind: kind})| x: x };
+}
+
+#[export = "kind_of"]
+fn kind_of(o: &obj) -> i32 {
+    o.descriptor.kind;
+}
+
+#[export = "narrow"]
+fn narrow(v: &?any, d: &!obj_desc) -> &?obj {
+    v as ?descriptor(d);
+}
+```

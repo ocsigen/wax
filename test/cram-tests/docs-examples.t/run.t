@@ -11,9 +11,10 @@ Confirm the expected number of examples was extracted (bump this and promote
 when you add or remove an example):
 
   $ ls blk*.wax | wc -l
-  20
+  21
 
-Each example must type-check and convert to WAT. A failing block prints its
+Each example must type-check and convert to WAT (optional proposals the examples
+may use, such as custom-descriptors, are enabled). A failing block prints its
 name and first error; success prints nothing:
 
-  $ for f in blk*.wax; do wax -v -f wat "$f" >/dev/null 2>&1 || echo "FAILED: $f -- $(wax -v -f wat "$f" 2>&1 | grep -m1 -i error)"; done
+  $ for f in blk*.wax; do wax -X custom-descriptors -v -f wat "$f" >/dev/null 2>&1 || echo "FAILED: $f -- $(wax -X custom-descriptors -v -f wat "$f" 2>&1 | grep -m1 -i error)"; done
