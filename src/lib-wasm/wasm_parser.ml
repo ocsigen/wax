@@ -1382,16 +1382,26 @@ let code ch =
   let size = uint ch in
   let start_pos = pos_in ch in
   let locals =
-    let count = ref 0 in
     let n = uint ch in
-    let vec_locals ch =
+    let read_group ch =
       let n = uint ch in
-      if n > 65535 then error ch "too many locals";
-      count := !count + n;
       let t = valtype_first_byte ch in
-      List.init n (fun _ -> t)
+      (n, t)
     in
-    List.flatten (Array.to_list (repeat n vec_locals ch))
+    let groups = Array.to_list (repeat n read_group ch) in
+    (* The spec's only bound on locals is that a function declare at most
+       2^32-1 of them. Check the accumulated total before materialising, so an
+       over-limit function is a diagnostic rather than a huge allocation.
+       Accumulate in [Int64], matching the reference interpreter: a group count
+       is a u32, so the sum can exceed [max_int] on a 32-bit / js_of_ocaml
+       [int] (where 0xffff_ffff is not even representable). *)
+    let total =
+      List.fold_left
+        (fun acc (n, _) -> Int64.add acc (Int64.of_int n))
+        0L groups
+    in
+    if Int64.compare total 0xffff_ffffL > 0 then error ch "too many locals";
+    List.concat_map (fun (n, t) -> List.init n (fun _ -> t)) groups
   in
   let instrs = expr ch in
   (* Compare bytes consumed against the declared body [size] rather than
