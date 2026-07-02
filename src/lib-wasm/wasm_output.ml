@@ -212,15 +212,18 @@ module Encoder = struct
       b clauses
 
   let rec instr ~source_map_t b (i : Ast.location instr) =
-    (*ZZZ push absence of mapping *)
-    (if
+    (* Record where this instruction starts. A synthesized instruction has no
+       source location; emit an absent mapping there so the previous location
+       does not, by the source map's sticky rule, bleed onto its bytes. *)
+    (let generated_offset = Buffer.length b in
+     if
        i.info.Wax_utils.Ast.loc_start.Lexing.pos_fname <> ""
        && i.info.Wax_utils.Ast.loc_start.Lexing.pos_lnum <> -1
        && i.info.Wax_utils.Ast.loc_start.Lexing.pos_cnum <> -1
      then
-       let generated_offset = Buffer.length b in
        Wax_utils.Source_map.add_mapping source_map_t ~generated_offset
-         ~original_location:i.info);
+         ~original_location:i.info
+     else Wax_utils.Source_map.add_absent_mapping source_map_t ~generated_offset);
 
     match i.desc with
     | Unreachable -> byte b 0x00
