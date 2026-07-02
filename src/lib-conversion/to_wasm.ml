@@ -257,6 +257,28 @@ let expr_last_opt_reftype i =
         | _ -> None)
     | None -> None
 
+(* The source reftype [rt1] to emit for a branching cast whose Wax form dropped
+   it (the typer recovers it from the operand): the operand's own reftype when
+   determinable, else the cast target [rt2]. A bottom-heap operand ([none] /
+   [nofunc] / … — a hole in dead code, or a literal [ref.null none]) has no
+   usable heap type of its own, so [expr_last_opt_reftype] yields [None] and the
+   target stands in; but a *nullable* such operand is not a subtype of the
+   non-null target, so carry its nullability over — otherwise the emitted
+   [operand <: rt1] check rejects the module. *)
+let br_on_cast_source expr target =
+  match expr_last_opt_reftype expr with
+  | Some r -> r
+  | None ->
+      let nullable =
+        let tys, _ = expr.info in
+        Array.length tys > 0
+        &&
+        match Option.map unpack_type tys.(Array.length tys - 1) with
+        | Some (Ref { nullable; _ }) -> nullable
+        | _ -> false
+      in
+      { target with nullable = target.nullable || nullable }
+
 let expr_type_name i =
   match expr_reftype i with
   | { typ = Type idx | Exact idx; _ } -> idx
@@ -1599,36 +1621,28 @@ and instruction_desc ret ctx i : location Text.instr list =
       folded loc
         (Br_on_cast
            ( label ret l,
-             reftype
-               (Option.value ~default:target_reftype
-                  (expr_last_opt_reftype expr)),
+             reftype (br_on_cast_source expr target_reftype),
              reftype target_reftype ))
         (instruction ret ctx expr)
   | Br_on_cast_fail (l, target_reftype, expr) ->
       folded loc
         (Br_on_cast_fail
            ( label ret l,
-             reftype
-               (Option.value ~default:target_reftype
-                  (expr_last_opt_reftype expr)),
+             reftype (br_on_cast_source expr target_reftype),
              reftype target_reftype ))
         (instruction ret ctx expr)
   | Br_on_cast_desc_eq (l, target_reftype, expr, d) ->
       folded loc
         (Br_on_cast_desc_eq
            ( label ret l,
-             reftype
-               (Option.value ~default:target_reftype
-                  (expr_last_opt_reftype expr)),
+             reftype (br_on_cast_source expr target_reftype),
              reftype target_reftype ))
         (instruction ret ctx expr @ instruction ret ctx d)
   | Br_on_cast_desc_eq_fail (l, target_reftype, expr, d) ->
       folded loc
         (Br_on_cast_desc_eq_fail
            ( label ret l,
-             reftype
-               (Option.value ~default:target_reftype
-                  (expr_last_opt_reftype expr)),
+             reftype (br_on_cast_source expr target_reftype),
              reftype target_reftype ))
         (instruction ret ctx expr @ instruction ret ctx d)
   | Throw (tag_idx, args) ->
