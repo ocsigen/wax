@@ -131,7 +131,7 @@ let iter_files dirs skip suffix ~output f =
     Array.iter
       (fun entry ->
         let path = Filename.concat dir entry in
-        if not (skip entry) then
+        if not (skip path) then
           let full_path = Filename.concat root path in
           if Sys.is_directory full_path then visit root path
           else if Filename.check_suffix entry suffix then (
@@ -522,7 +522,21 @@ let output path s =
 
 let dirs = [ "wasm-test-suite"; "additional-tests" ]
 
-let () =
-  iter_files dirs ~output
-    (fun p -> List.mem p [ "try_delegate.wast"; "rethrow.wast" ])
-    ".wast" runtest
+let custom_descriptors_on =
+  Wax_utils.Feature.is_enabled
+    (Wax_utils.Feature.default ())
+    Wax_utils.Feature.Custom_descriptors
+
+(* The custom-descriptors tests only make sense with the feature enabled; the
+   pre-proposal [gc/br_on_cast*] tests, conversely, conflict with the relaxed
+   branching-cast typing the proposal introduces (same-hierarchy casts they
+   assert invalid become valid), so they are skipped when it is on. *)
+let skip path =
+  let base = Filename.basename path in
+  List.mem base [ "try_delegate.wast"; "rethrow.wast" ]
+  || (contains_substring path "custom-descriptors" && not custom_descriptors_on)
+  || custom_descriptors_on
+     && Filename.basename (Filename.dirname path) = "gc"
+     && List.mem base [ "br_on_cast.wast"; "br_on_cast_fail.wast" ]
+
+let () = iter_files dirs ~output skip ".wast" runtest

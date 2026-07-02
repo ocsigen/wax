@@ -3470,8 +3470,17 @@ and type_branch ctx i =
             (* The fall-through residual must be [diff(source, ty)] for the source
                [to_wasm] emits — [lub(ty, operand)] — not the operand's own [ty'];
                see the matching note in [Br_on_cast_fail]. A no-op when [ty <: ty']
-               (a plain cast), where the lub is [ty']. *)
-            let*@ ty1 = val_lub ctx (Ref ty) (Ref ty') in
+               (a plain cast), where the lub is [ty']. A failed [val_lub] means
+               [ty] and the operand are in different hierarchies — an invalid
+               cast; report it and recover with the cast target. *)
+            let ty1 =
+              match val_lub ctx (Ref ty) (Ref ty') with
+              | Some t -> t
+              | None ->
+                  Error.invalid_cast ctx.diagnostics ~location:(snd i'.info)
+                    typ';
+                  Ref ty
+            in
             let*@ typ1 = internalize ctx ty1 in
             let+@ typ2 =
               internalize ctx
@@ -3535,8 +3544,17 @@ and type_branch ctx i =
                widens to their common supertype), the residual the typer feeds
                the label's join is narrower than the one the emitted instruction
                delivers, and the block infers too narrow to accept it. When
-               [ty <: ty'] (a plain cast) the lub is [ty'] and this is unchanged. *)
-            let*@ ty1 = val_lub ctx (Ref ty) (Ref ty') in
+               [ty <: ty'] (a plain cast) the lub is [ty'] and this is unchanged.
+               A failed [val_lub] means different hierarchies — an invalid cast;
+               report it and recover with the cast target. *)
+            let ty1 =
+              match val_lub ctx (Ref ty) (Ref ty') with
+              | Some t -> t
+              | None ->
+                  Error.invalid_cast ctx.diagnostics ~location:(snd i'.info)
+                    typ';
+                  Ref ty
+            in
             let*@ typ1 = internalize ctx ty1 in
             let+@ typ2 =
               internalize ctx
@@ -3602,10 +3620,12 @@ and type_branch ctx i =
       let*! typ1, typ2 =
         match Cell.get typ' with
         | Valtype { typ = Ref ty'; _ } ->
-            (* The target [ty] and operand [ty'] must share a supertype (a
-               failed [val_lub] means different hierarchies). The operand keeps
-               its own type [typ'] — a lub would emit the wrong source reftype on
-               the round-trip. *)
+            (* Unlike [br_on_cast], the operand keeps its own type [typ'] rather
+               than widening to [lub(ty, operand)]: the descriptor operand forces
+               the target's exactness, and a lub source would break that
+               reciprocity on the round-trip. [ty] and the operand must still
+               share a supertype; a failed [val_lub] means different hierarchies —
+               an invalid cast. *)
             if Option.is_none (val_lub ctx (Ref ty) (Ref ty')) then
               Error.invalid_cast ctx.diagnostics ~location:(snd i'.info) typ';
             let+@ typ2 = internalize ctx (Ref (diff_ref_type ty' ty)) in
@@ -3635,8 +3655,8 @@ and type_branch ctx i =
       let*! typ1, typ2 =
         match Cell.get typ' with
         | Valtype { typ = Ref ty'; _ } ->
-            (* See [Br_on_cast_desc_eq]: shared-supertype check, operand keeps
-               its own type. *)
+            (* See [Br_on_cast_desc_eq]: operand keeps its own type [typ']
+               (descriptor forces exactness); shared supertype required. *)
             if Option.is_none (val_lub ctx (Ref ty) (Ref ty')) then
               Error.invalid_cast ctx.diagnostics ~location:(snd i'.info) typ';
             let+@ typ2 = internalize ctx (Ref (diff_ref_type ty' ty)) in
@@ -8141,9 +8161,16 @@ let type_configuration ?(warn_unused = false)
           let>@ typ = internalize_valtype ctx typ in
           Tbl.add diagnostics ctx.globals name (mut, Some typ)
       | Func { name; typ; sign; _ } ->
-          (* A module-defined function has exactly its declared type. *)
+          (* A module-defined function has exactly its declared type, so a
+             reference to it is exact — but exact reference types are part of
+             custom-descriptors; without it, type it as the plain inexact
+             reference, as before the proposal. *)
           let>@ i, n = fundecl ctx name typ sign in
-          Tbl.add diagnostics ctx.functions name (i, n, true)
+          let exact =
+            Wax_utils.Feature.is_enabled ctx.type_context.features
+              Wax_utils.Feature.Custom_descriptors
+          in
+          Tbl.add diagnostics ctx.functions name (i, n, exact)
       | Tag { name; typ; sign; _ } ->
           let>@ typ =
             match (typ, sign) with

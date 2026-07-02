@@ -1673,6 +1673,30 @@ let field_subtype info (ty : fieldtype) (ty' : fieldtype) =
 let diff_ref_type t1 t2 =
   { nullable = t1.nullable && not t2.nullable; typ = t1.typ }
 
+(* Whether a branching cast from [ty1] to [ty2] is well-typed. The
+   custom-descriptors proposal relaxes the pre-existing [rt2 <: rt1] to only
+   requiring that [rt1] and [rt2] share a supertype — i.e. lie in the same heap
+   type hierarchy — so under that feature we compare the hierarchy tops. *)
+let br_cast_compatible ctx (ty1 : reftype) (ty2 : reftype) =
+  if
+    Wax_utils.Feature.is_enabled ctx.modul.types.features
+      Wax_utils.Feature.Custom_descriptors
+  then top_heap_type ctx ty1.typ = top_heap_type ctx ty2.typ
+  else Types.val_subtype ctx.modul.subtyping_info (Ref ty2) (Ref ty1)
+
+(* The target of a branching cast ([br_on_cast] and its variants) always carries
+   at least the matched reference to the label, so a zero-result label cannot
+   receive it. [branch_target] alone accepts it — with a polymorphic operand the
+   per-value [pop_args] check below is vacuous — so reject an empty label here. *)
+let branch_cast_target ctx (idx : Ast.Text.idx) ~location =
+  match branch_target ctx idx with
+  | None -> None
+  | Some (params, source) ->
+      if Array.length params = 0 then (
+        Error.br_cast_type_mismatch ctx.modul.diagnostics ~location;
+        None)
+      else Some (params, source)
+
 (* Run [f] on the current stack and return its result as the monad value while
    leaving the stack untouched — a peek. [Br_table] uses it to validate every
    branch target against the same incoming stack. *)
@@ -2188,11 +2212,11 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       | Cont, _ | _, Cont ->
           Error.invalid_cast_type ctx.modul.diagnostics ~location:loc
       | _ -> ());
-      if not (Types.val_subtype ctx.modul.subtyping_info (Ref ty2) (Ref ty1))
-      then Error.br_cast_type_mismatch ctx.modul.diagnostics ~location:loc;
+      if not (br_cast_compatible ctx ty1 ty2) then
+        Error.br_cast_type_mismatch ctx.modul.diagnostics ~location:loc;
       let* () = pop ctx loc ~expected_source:src_ty1 (Ref ty1) in
       let* () = push ~source:src_ty2 None (Ref ty2) in
-      let*! params, param_source = branch_target ctx idx in
+      let*! params, param_source = branch_cast_target ctx idx ~location:loc in
       let* () = pop_args ctx loc ~source:param_source params in
       let* () = push_results ~source:param_source params in
       let* _ = pop_any ctx loc in
@@ -2213,11 +2237,11 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       | Cont, _ | _, Cont ->
           Error.invalid_cast_type ctx.modul.diagnostics ~location:loc
       | _ -> ());
-      if not (Types.val_subtype ctx.modul.subtyping_info (Ref ty2) (Ref ty1))
-      then Error.br_cast_type_mismatch ctx.modul.diagnostics ~location:loc;
+      if not (br_cast_compatible ctx ty1 ty2) then
+        Error.br_cast_type_mismatch ctx.modul.diagnostics ~location:loc;
       let* () = pop ctx loc ~expected_source:src_ty1 (Ref ty1) in
       let* () = push ~source:src_diff None (Ref (diff_ref_type ty1 ty2)) in
-      let*! params, param_source = branch_target ctx idx in
+      let*! params, param_source = branch_cast_target ctx idx ~location:loc in
       let* () = pop_args ctx loc ~source:param_source params in
       let* () = push_results ~source:param_source params in
       let* _ = pop_any ctx loc in
@@ -2238,9 +2262,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       | Cont, _ | _, Cont ->
           Error.invalid_cast_type ctx.modul.diagnostics ~location:loc
       | _ -> ());
-      if top_heap_type ctx ty1.typ <> top_heap_type ctx ty2.typ then
-        (* [rt_1] and [rt_2] need only share a common supertype (same hierarchy),
-           not [rt_2 <: rt_1]. *)
+      if not (br_cast_compatible ctx ty1 ty2) then
         Error.br_cast_type_mismatch ctx.modul.diagnostics ~location:loc;
       let*! desc_ht = descriptor_operand_type ctx ~location:loc ty2.typ in
       let* () =
@@ -2250,7 +2272,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       in
       let* () = pop ctx loc ~expected_source:src_ty1 (Ref ty1) in
       let* () = push ~source:src_ty2 None (Ref ty2) in
-      let*! params, param_source = branch_target ctx idx in
+      let*! params, param_source = branch_cast_target ctx idx ~location:loc in
       let* () = pop_args ctx loc ~source:param_source params in
       let* () = push_results ~source:param_source params in
       let* _ = pop_any ctx loc in
@@ -2269,9 +2291,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       | Cont, _ | _, Cont ->
           Error.invalid_cast_type ctx.modul.diagnostics ~location:loc
       | _ -> ());
-      if top_heap_type ctx ty1.typ <> top_heap_type ctx ty2.typ then
-        (* [rt_1] and [rt_2] need only share a common supertype (same hierarchy),
-           not [rt_2 <: rt_1]. *)
+      if not (br_cast_compatible ctx ty1 ty2) then
         Error.br_cast_type_mismatch ctx.modul.diagnostics ~location:loc;
       let*! desc_ht = descriptor_operand_type ctx ~location:loc ty2.typ in
       let* () =
@@ -2281,7 +2301,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       in
       let* () = pop ctx loc ~expected_source:src_ty1 (Ref ty1) in
       let* () = push ~source:src_diff None (Ref (diff_ref_type ty1 ty2)) in
-      let*! params, param_source = branch_target ctx idx in
+      let*! params, param_source = branch_cast_target ctx idx ~location:loc in
       let* () = pop_args ctx loc ~source:param_source params in
       let* () = push_results ~source:param_source params in
       let* _ = pop_any ctx loc in
@@ -2786,11 +2806,13 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let*! desc = type_descriptor ctx ~location:i.info ty in
       let* entry, _ = pop_any ctx loc in
       (* [exact_1]: the descriptor is exact exactly when the operand is a
-         statically-exact reference. Validate the operand is a reference to
-         [idx] (accepting a subtype or null) either way. *)
+         statically-exact reference. Validate the operand is a reference to [idx]
+         (accepting a subtype or null) either way. A polymorphic operand
+         (unreachable code) has unconstrained exactness — take the most precise,
+         exact, which validates against an exact or an inexact expected result. *)
       let exact =
         match entry with
-        | Bot | Bot_ref -> false
+        | Bot | Bot_ref -> true
         | Val (ty', source) -> (
             if
               not

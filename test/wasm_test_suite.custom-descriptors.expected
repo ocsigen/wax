@@ -83,24 +83,7 @@ Wax type-checking should have failed (type mismatch):
       0 as i32 as f64_u;
   }
 from wasm: (func (result f64) (f64.convert_i64_u (i32.const 0)))
-==== core/custom-descriptors/br_on_cast.wast ====
-Error: Type mismatch: the first type must be a supertype of the second one.
-   ──➤  wasm-test-suite/core/custom-descriptors/br_on_cast.wast:221:32
-219 │   )
-220 │   (func (param (ref any)) (result (ref null $t))
-221 │     (block (result (ref any)) (br_on_cast 1 (ref any) (ref null $t) (local.get 0))) (unreachable)
-    ·                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-222 │   )
-223 │   (func (param (ref null any)) (result (ref null $t))
 ==== core/custom-descriptors/br_on_cast_desc_eq.wast ====
-Validation should have failed (type mismatch):
-  (rec (type $a (descriptor $b) (struct)) (type $b (describes $a) (struct)))
-  (func (br_on_cast_desc_eq 0 anyref (ref $a) (unreachable))
-        (unreachable))
-Validation should have failed (type mismatch):
-  (rec (type $a (descriptor $b) (struct)) (type $b (describes $a) (struct)))
-  (func (br_on_cast_desc_eq 0 anyref (ref $a) (unreachable))
-        (unreachable))
 Wax type-checking should have failed (type mismatch):
   rec { type a = descriptor b { }; type b = describes a { }; }
   fn f() -> &?any 'l: {
@@ -496,14 +479,6 @@ const b1: &!b = {b| };
 const b2: &!b = {b| };
 const a1: &!a = {a descriptor b1| };
 ==== core/custom-descriptors/br_on_cast_desc_eq_fail.wast ====
-Validation should have failed (type mismatch):
-  (rec (type $a (descriptor $b) (struct)) (type $b (describes $a) (struct)))
-  (func (br_on_cast_desc_eq_fail 0 anyref (ref $a) (unreachable))
-        (unreachable))
-Validation should have failed (type mismatch):
-  (rec (type $a (descriptor $b) (struct)) (type $b (describes $a) (struct)))
-  (func (br_on_cast_desc_eq_fail 0 anyref (ref $a) (unreachable))
-        (unreachable))
 Wax type-checking should have failed (type mismatch):
   rec { type a = descriptor b { }; type b = describes a { }; }
   fn f() -> &?any 'l: {
@@ -885,82 +860,42 @@ const b1: &!b = {b| };
 const b2: &!b = {b| };
 const a1: &!a = {a descriptor b1| };
 ==== core/custom-descriptors/br_on_cast_fail.wast ====
-Error: Type mismatch: the first type must be a supertype of the second one.
-   ──➤  wasm-test-suite/core/custom-descriptors/br_on_cast_fail.wast:236:36
-234 │   )
-235 │   (func (param (ref any)) (result (ref any))
-236 │     (block (result (ref null $t)) (br_on_cast_fail 1 (ref any) (ref null $t) (local.get 0))) (ref.as_non_null)
-    ·                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-237 │   )
-238 │   (func (param (ref null any)) (result (ref null any))
+Wax type-checking should have failed (type mismatch):
+  fn f(x: &?any) -> &?func 'l: {
+      do &?func {
+          x;
+          unreachable;
+          br_on_cast_fail 'l &?func _;
+      }
+  }
+from wasm:
+  (func (param anyref) (result funcref)
+    (block (result funcref)
+      (br_on_cast_fail 1 anyref funcref (local.get 0) (unreachable)))
+  )
+Wax type-checking should have failed (type mismatch):
+  fn f(x: &func) -> &any 'l: {
+      do &any {
+          x;
+          unreachable;
+          br_on_cast_fail 'l &any _;
+      }
+  }
+from wasm:
+  (func (param (ref func)) (result (ref any))
+    (block (result (ref any))
+      (br_on_cast_fail 1 (ref func) (ref any) (local.get 0) (unreachable)))
+  )
 ==== core/custom-descriptors/ref_get_desc.wast ====
 Error: Type mismatch: this produces a value of type (ref $a), but type
   (ref (exact $b)) is expected.
-  ──➤  wasm-test-suite/core/custom-descriptors/ref_get_desc.wast:23:6
-21 │ 
-22 │   (func (result (ref (exact $b)))
-23 │     (ref.get_desc $a (unreachable))
-   ·      ^^^^^^^^^^^^^^^
+  ──➤  wasm-test-suite/core/custom-descriptors/ref_get_desc.wast:26:6
 24 │   )
 25 │   (func (result (ref (exact $b)))
-==== core/gc/br_on_cast.wast ====
-Wax type-checking should have failed (type mismatch):
-  type t = { };
-  fn f(x: &any) -> &?t 'l: {
-      do &any {
-          br_on_cast 'l &?t x;
-      }
-      unreachable;
-  }
-from wasm:
-  (type $t (struct))
-  (func (param (ref any)) (result (ref null $t))
-    (block (result (ref any))
-      (br_on_cast 1 (ref any) (ref null $t) (local.get 0)))
-    (unreachable)
-  )
-Wax type-checking should have failed (type mismatch):
-  fn f() -> &?any 'l: {
-      unreachable;
-      br_on_cast 'l &?any _;
-  }
-from wasm: (func (result anyref) (br_on_cast 0 eqref anyref (unreachable)))
-Wax type-checking should have failed (type mismatch):
-  fn f() -> &?any 'l: {
-      unreachable;
-      br_on_cast 'l &?array _;
-  }
-from wasm:
-  (func (result anyref) (br_on_cast 0 structref arrayref (unreachable)))
-==== core/gc/br_on_cast_fail.wast ====
-Wax type-checking should have failed (type mismatch):
-  type t = { };
-  fn f(x: &any) -> &any 'l: {
-      (do &?t {
-           br_on_cast_fail 'l &?t x;
-       }!);
-  }
-from wasm:
-  (type $t (struct))
-  (func (param (ref any)) (result (ref any))
-    (block (result (ref null $t))
-      (br_on_cast_fail 1 (ref any) (ref null $t) (local.get 0)))
-    (ref.as_non_null)
-  )
-Wax type-checking should have failed (type mismatch):
-  fn f() -> &?any 'l: {
-      unreachable;
-      br_on_cast_fail 'l &?any _;
-  }
-from wasm:
-  (func (result anyref) (br_on_cast_fail 0 eqref anyref (unreachable)))
-Wax type-checking should have failed (type mismatch):
-  fn f() -> &?any 'l: {
-      unreachable;
-      br_on_cast_fail 'l &?array _;
-  }
-from wasm:
-  (func (result anyref) (br_on_cast_fail 0 structref arrayref (unreachable)))
+26 │     (ref.get_desc $a (ref.null none))
+   ·      ^^^^^^^^^^^^^^^
+27 │   )
+28 │   (func (result (ref (exact $b)))
 ==== core/i32.wast ====
 Wax type-checking should have failed (type mismatch):
   fn f() -> i32 {
