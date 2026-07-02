@@ -9,15 +9,24 @@
 (license "Apache-2.0")
 
 (package
-  (name wax)
-  (synopsis "A compiler toolchain for Wax, a Rust-like syntax for WebAssembly")
-  (description "A compiler toolchain for Wax, a Rust-like syntax for WebAssembly. Capabilities: Formatting, Type Checking, Syntax Conversion (Wax <-> Wasm Text <-> Wasm Binary).")
+  (name wax-lib)
+  (synopsis "Libraries for Wax, a Rust-like syntax for WebAssembly")
+  (description "The parsing, type-checking and format-conversion libraries behind the Wax toolchain (bidirectional Wax <-> Wasm Text <-> Wasm Binary).")
   (depends
     sedlex
     (menhir :build)
     menhirLib
-    (uucp :with-dev-setup)
     re
+    (uucp :with-dev-setup)
+  )
+)
+
+(package
+  (name wax)
+  (synopsis "A compiler toolchain for Wax, a Rust-like syntax for WebAssembly")
+  (description "A compiler toolchain for Wax, a Rust-like syntax for WebAssembly. Capabilities: Formatting, Type Checking, Syntax Conversion (Wax <-> Wasm Text <-> Wasm Binary).")
+  (depends
+    (wax-lib (= :version))
     cmdliner
   )
 )

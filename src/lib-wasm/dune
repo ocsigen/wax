@@ -1,6 +1,6 @@
 (library
  (name wax_wasm)
- (public_name wax.wasm)
+ (public_name wax-lib.wasm)
  (preprocess
   (pps sedlex.ppx))
  ; (modules :standard \ wasm_link)

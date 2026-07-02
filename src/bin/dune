@@ -2,7 +2,10 @@
  (name main)
  (modes exe wasm)
  (public_name wax)
+ (package wax)
  (libraries wax_wasm wax_lang wax_conversion cmdliner unix))
+
+; Private developer/test executables, not installed (no public names).
 
 (executables
  (names test_wasm convert pretty_print run_wasm_testsuite fuzz_mutate)

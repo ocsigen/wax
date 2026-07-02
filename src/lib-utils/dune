@@ -1,6 +1,6 @@
 (library
  (name wax_utils)
- (public_name wax.utils)
+ (public_name wax-lib.utils)
  (libraries unix))
 
 (rule

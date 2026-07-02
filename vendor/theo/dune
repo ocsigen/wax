@@ -1,4 +1,4 @@
 (library
  (name theo)
- (public_name wax.theo)
+ (public_name wax-lib.theo)
  (wrapped false))
