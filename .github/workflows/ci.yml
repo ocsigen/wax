@@ -54,11 +54,15 @@ jobs:
       - name: Install dependencies
         run: opam install . --deps-only --with-test
 
-      # @install builds the library and the `wax` executable. A bare `dune build`
-      # would also build the `wasm` mode of the binary (see src/bin/dune), which
-      # needs wasm_of_ocaml; that is left to the deploy path.
+      # --only-packages restricts the build to the two published packages'
+      # install artifacts: the libraries and the `wax` executable (exe mode).
+      # It excludes stanzas with no package (the dev-only run_wasm_testsuite /
+      # fuzz_mutate executables) and the `wasm` mode of the binary (see
+      # src/bin/dune) — the latter needs wasm_of_ocaml, which CI does not
+      # install. Plain `dune build @install` builds those extras on some
+      # platforms (Windows), so scope it explicitly.
       - name: Build
-        run: opam exec -- dune build @install
+        run: opam exec -- dune build @install --only-packages wax-lib,wax
 
       # The test harness (run_wasm_testsuite) uses Domain, which is OCaml 5.0+,
       # so the suite runs on the 5.x cells only; 4.14 is a build-only check.
