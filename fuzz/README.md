@@ -60,6 +60,10 @@ fuzz/wat-cast-chain.sh      # deterministic byte-identical round-trip of WAT two
 # wasm *binary* input side (the binary reader):
 fuzz/mutate-wasm.sh [count] # byte-mutate the valid wasm corpus + check them
 
+# Deterministic cross-cutting guards (no corpus needed; CI-gating):
+fuzz/stress.sh              # resource-limit sweep: deep nesting / wide constructs never crash
+fuzz/comment-preserve.sh    # planted sentinel comments survive every text<->text conversion
+
 # Execution (behavioural-equivalence) oracles — run on spec .wast files:
 fuzz/exec-ref.sh [wast…]    # via the reference interpreter (strongest; GC/SIMD/EH/multi-mem)
 fuzz/exec-interp.sh [wast…] # via wabt spectest-interp
@@ -67,9 +71,15 @@ fuzz/exec.sh [wast…]        # via Node
 ```
 
 `run.sh`, `smith.sh`, `mutate-wax.sh`, `diff-validate.sh`, `mutate-validate.sh`,
-`cast-lattice.sh` and `wat-cast-chain.sh` exit non-zero if any **HIGH**-severity
-finding appears, so any can gate CI; the execution oracles exit non-zero on any
-behavioural regression. `fuzz/corpus/`, `fuzz/corpus-wax/`, `fuzz/smith-findings/` and
+`cast-lattice.sh`, `wat-cast-chain.sh`, `stress.sh` and `comment-preserve.sh`
+exit non-zero if any **HIGH**-severity finding appears, so any can gate CI; the
+execution oracles exit non-zero on any behavioural regression.
+
+The mutation campaigns (`mutate-wax.sh`, `mutate-wat.sh`, `mutate-wasm.sh`) are
+reproducible: each derives every per-mutation seed from a master `SEED`
+(announced at start with a replay command), so `SEED=<n> fuzz/mutate-…` replays
+a run exactly — including one that found a bug by luck. Left unset, a `SEED` is
+chosen and printed. `fuzz/corpus/`, `fuzz/corpus-wax/`, `fuzz/smith-findings/` and
 `fuzz/mutate-findings/` are gitignored.
 
 The parallel campaigns (`smith.sh`, `mutate-wax.sh`, `diff-validate.sh`,
@@ -194,6 +204,34 @@ verbatim is not required — a `ref.cast` to a supertype-or-equal of the operand
 static type is a proven no-op wax drops, and `i32.wrap_i64; i64.extend_i32_s` is
 folded to the equivalent `i64.extend32_s`. Deterministic; needs `wasm-tools` (for
 `strip --all`), the round-trip legs themselves being wax-only.
+
+## Deterministic cross-cutting guards
+
+Two more guards need no corpus and target subsystems the corpus/mutation oracles
+structurally miss; both are deterministic and gate CI.
+
+`stress.sh` generates *pathological* inputs — nothing else does — which matter
+because wax's recursive parser, type checker, folding pass and printers make deep
+nesting a real `Stack_overflow` risk and wide constructs (huge label vectors,
+many locals/functions, long literals) a blow-up risk. It grows each dimension by
+doubling until wax stops accepting and asserts the failure is always graceful: a
+clean rejection or a tolerated timeout, never a crash. It distinguishes a crash
+(HIGH, gates) from a timeout (REVIEW soft limit — a large enough input always
+times out, so it is reported, not failed) and *pins* each dimension's
+accepted-up-to limit, so a regression or a newly-superlinear pass is visible.
+(It found exactly that: `Trivia.associate` was O(n²) in nesting depth, since
+fixed.)
+
+`comment-preserve.sh` guards comment preservation — a headline feature every
+other oracle is blind to, because the whole corpus is comment-free (smith and
+decompiler output carry none), so the trivia machinery always runs on empty
+input. It plants uniquely-numbered sentinel comments on every line of a formatted
+module and asserts each comment-preserving conversion (format `wat→wat`/`wax→wax`
+and cross-format `wat→wax`/`wax→wat`, whose delimiters are retargeted but whose
+`SENT<n>` content is not) carries every sentinel through. A missing id is a HIGH
+finding naming which vanished on which conversion — planting *unique* strings
+makes the check a grep. Seeds are the curated spec-source WAT modules and those
+same modules decompiled to Wax, so no separate wax corpus is needed.
 
 ## The oracles (`oracle.sh`)
 
