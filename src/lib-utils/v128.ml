@@ -24,8 +24,7 @@ let to_string v =
   | F32x4 ->
       List.iteri
         (fun i f ->
-          Bytes.set_int32_le buffer (i * 4)
-            (Int32.bits_of_float (Number_parsing.float32 f)))
+          Bytes.set_int32_le buffer (i * 4) (Number_parsing.float32_bits f))
         components
   | F64x2 ->
       List.iteri
