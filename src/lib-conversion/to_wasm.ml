@@ -1231,6 +1231,20 @@ and instruction_desc ret ctx i : location Text.instr list =
             match instr with Nop -> code | _ -> folded loc instr code)
       in
       match expr.desc with
+      (* (i64 as i32) as i64_s  ->  i64.extend32_s. There is no dedicated Wax
+         spelling for [i64.extend32_s], so the decompiler renders it as this
+         wrap-then-sign-extend pair; re-fuse it back into the single instruction
+         (as [default_cast] would otherwise emit the pair verbatim). Only a
+         *signed* widening of a genuinely *wrapped* [i64] is [extend32_s]: an
+         unsigned widen, or an [i32] source (where the inner cast is the
+         identity), is a different operation and falls through. *)
+      | Cast (inner, Valtype I32)
+        when expr_opt_valtype inner = Some I64
+             &&
+             match cast_ty with
+             | Signedtype { typ = `I64; signage = Signed; _ } -> true
+             | _ -> false ->
+          folded loc (UnOp (I64 (ExtendS `_32))) (instruction ret ctx inner)
       (* (mem.load8/16(p) as i32_S) as i64_S  ->  i64.load8/16_S *)
       | Cast
           ( {

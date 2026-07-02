@@ -1178,9 +1178,7 @@
           (i64.mul (local.get $sz)
             (i64.extend_i32_s
               (array.get $int_array (local.get $dim) (local.get $i)))))
-        (if
-          (i64.ne (local.get $sz)
-            (i64.extend_i32_s (i32.wrap_i64 (local.get $sz))))
+        (if (i64.ne (local.get $sz) (i64.extend32_s (local.get $sz)))
           (then (call $caml_raise_out_of_memory)))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
         (br $loop))))
@@ -1200,7 +1198,7 @@
   (local.set $l
     (i64.mul (i64.extend_i32_s (local.get $sz))
       (i64.extend_i32_s (call $caml_ba_size_per_element (local.get $kind)))))
-  (if (i64.ne (local.get $l) (i64.extend_i32_s (i32.wrap_i64 (local.get $l))))
+  (if (i64.ne (local.get $l) (i64.extend32_s (local.get $l)))
     (then (call $caml_raise_out_of_memory)))
   (return_call $ta_create (local.get $kind) (i32.wrap_i64 (local.get $l)))
 )
@@ -2367,7 +2365,7 @@
           (i64.mul (local.get $num_elts) (i64.extend_i32_s (local.get $d))))
         (if
           (i64.ne (local.get $num_elts)
-            (i64.extend_i32_s (i32.wrap_i64 (local.get $num_elts))))
+            (i64.extend32_s (local.get $num_elts)))
           (then (call $caml_raise_out_of_memory)))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
         (br $loop))))

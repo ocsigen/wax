@@ -55,6 +55,7 @@ fuzz/cast-lattice.sh             # deterministic sweep of the numeric/ref cast l
 # WAT *input* side (the text lexer/parser):
 fuzz/wat-corpus.sh [smith-count] [bytes]   # build .wat seeds: spec corpus + smith modules
 fuzz/mutate-wat.sh [count]  # text-mutate the wat seeds (edge literals) + check them
+fuzz/wat-cast-chain.sh      # deterministic byte-identical round-trip of WAT two-cast chains
 
 # wasm *binary* input side (the binary reader):
 fuzz/mutate-wasm.sh [count] # byte-mutate the valid wasm corpus + check them
@@ -65,10 +66,10 @@ fuzz/exec-interp.sh [wast…] # via wabt spectest-interp
 fuzz/exec.sh [wast…]        # via Node
 ```
 
-`run.sh`, `smith.sh`, `mutate-wax.sh`, `diff-validate.sh`, `mutate-validate.sh`
-and `cast-lattice.sh` exit non-zero if any **HIGH**-severity finding appears, so
-any can gate CI; the execution oracles exit non-zero on any behavioural
-regression. `fuzz/corpus/`, `fuzz/corpus-wax/`, `fuzz/smith-findings/` and
+`run.sh`, `smith.sh`, `mutate-wax.sh`, `diff-validate.sh`, `mutate-validate.sh`,
+`cast-lattice.sh` and `wat-cast-chain.sh` exit non-zero if any **HIGH**-severity
+finding appears, so any can gate CI; the execution oracles exit non-zero on any
+behavioural regression. `fuzz/corpus/`, `fuzz/corpus-wax/`, `fuzz/smith-findings/` and
 `fuzz/mutate-findings/` are gitignored.
 
 The parallel campaigns (`smith.sh`, `mutate-wax.sh`, `diff-validate.sh`,
@@ -170,6 +171,29 @@ Text (not AST) mutation is the right tool here: the bugs are in the parser/lexer
 so feeding it almost-valid-but-malformed text is the point. A mutant is almost
 always invalid, so a clean rejection (123/128) is expected, not a finding; the
 hunt is purely for crashes. Findings are re-verified to drop transient load noise.
+
+`wat-cast-chain.sh` is the WAT-side counterpart of `cast-lattice.sh`: where the
+latter drives cast *lowering* from Wax source, this drives cast *decompilation
+and re-fusion* from WAT. The decompiler fuses adjacent casts (the wasm pair
+`ref.cast (ref i31)` then `i31.get_s` becomes a single Wax `x as i32_s`, which
+`to_wasm` must re-expand), and that seam is only exercised when the input already
+lines two casts up just so — which decompiled corpus/smith modules rarely do, and
+which the Wax-seeded `cast-lattice.sh` cannot reach (its casts are always single
+and explicit). So this script builds every WAT function whose body is a chain of
+two type-composing cast-like instructions (numeric conversions plus the GC
+reference casts), batches them into modules (translating several at once — every
+chain is valid *by construction*, so unlike `cast-lattice.sh` there is no need to
+isolate one per invocation), and asserts each round-trips **byte-identically**:
+`wasm → wax → wasm` must equal the straight `wat → wasm` compile after
+`wasm-tools strip --all` removes the name section. Anchoring to the *original*
+binary (not to a fixed point of the round-trip) is what lets it catch a *wrong
+first decompilation* — a self-consistent misread such as `i31.get_s` as unsigned
+— that a fixed-point check would wave through. The one subtlety byte-identity
+forces: pairs wax legitimately *canonicalises* are pruned, since re-emitting them
+verbatim is not required — a `ref.cast` to a supertype-or-equal of the operand's
+static type is a proven no-op wax drops, and `i32.wrap_i64; i64.extend_i32_s` is
+folded to the equivalent `i64.extend32_s`. Deterministic; needs `wasm-tools` (for
+`strip --all`), the round-trip legs themselves being wax-only.
 
 ## The oracles (`oracle.sh`)
 
