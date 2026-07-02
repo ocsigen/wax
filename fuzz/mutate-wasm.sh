@@ -41,18 +41,20 @@ printf '%s\n' "${SEED_FILES[@]}" >"$RESULTS/seeds"
 # i), then run the oracle, re-verifying any finding (wax is deterministic, so a
 # transient load failure does not reproduce).
 mutate_one() {
-  local i="$1" cur nxt out n
+  local i="$1" cur nxt out n step=0
   cur="$(mktemp --suffix=.wasm)"
   cp "${SEED_FILES[$(( (i * 2654435761) % NSEEDS ))]}" "$cur"
   n=$(( (i % 3) + 1 ))
   while [ "$n" -gt 0 ]; do
     nxt="$(mktemp --suffix=.wasm)"
-    if "$NODE" "$MUT" "$cur" "$RANDOM" >"$nxt" 2>/dev/null && [ -s "$nxt" ]; then
+    # Deterministic per-(mutant, step) seed from the master $SEED so the campaign
+    # replays from one number (was $RANDOM — irreproducible).
+    if "$NODE" "$MUT" "$cur" "$(( SEED + i * 8 + step ))" >"$nxt" 2>/dev/null && [ -s "$nxt" ]; then
       mv "$nxt" "$cur"
     else
       rm -f "$nxt"
     fi
-    n=$((n-1))
+    step=$((step + 1)); n=$((n - 1))
   done
   out="$(bash "$ORACLE" "$cur" unknown 2>/dev/null)"
   if [ -n "$out" ] && [ -n "$(bash "$ORACLE" "$cur" unknown 2>/dev/null)" ]; then
@@ -66,8 +68,9 @@ mutate_one() {
   rm -f "$cur"
 }
 export -f mutate_one
-export WAX WASM_TOOLS TIMEOUT WT_FEATURES ORACLE RESULTS KEEP NSEEDS MUT NODE
+export WAX WASM_TOOLS TIMEOUT WT_FEATURES ORACLE RESULTS KEEP NSEEDS MUT NODE SEED
 
+announce_seed "$(basename "$0") $COUNT"
 echo "mutating $COUNT wasm variants from $NSEEDS seeds across $JOBS jobs..." >&2
 seq 1 "$COUNT" | xargs -P "$JOBS" -I{} bash -c '
   mapfile -t SEED_FILES < "$RESULTS/seeds"; mutate_one "$@"' _ {}

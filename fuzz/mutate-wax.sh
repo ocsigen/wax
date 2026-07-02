@@ -43,18 +43,20 @@ printf '%s\n' "${SEED_FILES[@]}" >"$RESULTS/seeds"
 # output drives several mutations deep. Findings go to a private file under
 # $RESULTS with the temp path rewritten to a preserved copy.
 mutate_one() {
-  local i="$1" cur nxt out n
+  local i="$1" cur nxt out n step=0
   cur="$(mktemp --suffix=.wax)"
   cp "${SEED_FILES[$(( (i * 2654435761) % NSEEDS ))]}" "$cur"
   n=$(( (i % 3) + 1 ))
   while [ "$n" -gt 0 ]; do
     nxt="$(mktemp --suffix=.wax)"
-    if "$MUT" "$cur" "$RANDOM" >"$nxt" 2>/dev/null && [ -s "$nxt" ]; then
+    # Deterministic per-(mutant, step) seed derived from the master $SEED, so the
+    # whole campaign replays from one number (was $RANDOM — irreproducible).
+    if "$MUT" "$cur" "$(( SEED + i * 8 + step ))" >"$nxt" 2>/dev/null && [ -s "$nxt" ]; then
       mv "$nxt" "$cur"
     else
       rm -f "$nxt"   # a mutation failed; keep the previous mutant
     fi
-    n=$((n-1))
+    step=$((step + 1)); n=$((n - 1))
   done
   out="$(bash "$ORACLE" "$cur" unknown 2>/dev/null)"
   # Re-verify before reporting: wax is deterministic, so a real finding
@@ -71,10 +73,11 @@ mutate_one() {
   rm -f "$cur"
 }
 export -f mutate_one
-export WAX WASM_TOOLS TIMEOUT WT_FEATURES ORACLE RESULTS KEEP NSEEDS MUT
+export WAX WASM_TOOLS TIMEOUT WT_FEATURES ORACLE RESULTS KEEP NSEEDS MUT SEED
 # The seed list is passed via a file ($RESULTS/seeds, written above), not the
 # environment: exporting thousands of paths overflows ARG_MAX and every exec in
 # the workers fails with E2BIG. Each worker rebuilds the array from that file.
+announce_seed "$(basename "$0") $COUNT"
 echo "mutating $COUNT variants from $NSEEDS seeds across $JOBS jobs..." >&2
 seq 1 "$COUNT" | xargs -P "$JOBS" -I{} bash -c '
   mapfile -t SEED_FILES < "$RESULTS/seeds"; mutate_one "$@"' _ {}

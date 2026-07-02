@@ -18,6 +18,18 @@ WT_FEATURES="${WT_FEATURES:-all}"
 # proposal wax does not implement (it would only add noise).
 SMITH_FLAGS="${SMITH_FLAGS:---ensure-termination --threads-enabled true --shared-everything-threads-enabled false}"
 
+# Master seed for reproducible mutation campaigns. Each mutator (fuzz_mutate,
+# mutate-wasm.js, mutate-wat.awk) is deterministic given an integer seed; the
+# campaigns below derive every per-mutation seed from $SEED and the mutant index
+# (see the workers), so a whole run replays from this one number. Left unset it
+# is chosen here and announced by the campaign (announce_seed) so any run — even
+# one that stumbled on a finding by luck — can be reproduced with SEED=<n>.
+SEED="${SEED:-$((RANDOM * 32768 + RANDOM))}"
+
+# Announce the master seed and how to replay. Call once at a campaign's start,
+# passing the campaign's own invocation for the hint.
+announce_seed() { echo "master seed $SEED  (replay with: SEED=$SEED $*)" >&2; }
+
 # Locate wasm-tools, falling back to the usual cargo location.
 if ! command -v "$WASM_TOOLS" >/dev/null 2>&1; then
   if [ -x "$HOME/.cargo/bin/wasm-tools" ]; then
