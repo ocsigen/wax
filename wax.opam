@@ -10,8 +10,9 @@ homepage: "https://github.com/vouillon/wasm-syntax"
 bug-reports: "https://github.com/vouillon/wasm-syntax/issues"
 depends: [
   "dune" {>= "3.20"}
+  "ocaml" {>= "4.14"}
   "wax-lib" {= version}
-  "cmdliner"
+  "cmdliner" {>= "1.1.0"}
   "odoc" {with-doc}
 ]
 build: [
