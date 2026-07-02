@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-6d116778.js";
+            window.path_to_searchindex_js = "searchindex-ec936ab6.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -2951,6 +2951,11 @@ themselves cause a non-zero exit — unless promoted to an error with
 all files, overriding extension detection.</li>
 <li><strong><code>-s</code></strong>, <strong><code>--strict-validate</code></strong> — strict reference validation for Wasm Text,
 as above (Wasm binary is always strict).</li>
+<li><strong><code>-D</code></strong> <em>NAME[=VALUE]</em>, <strong><code>--define</code></strong> <em>NAME[=VALUE]</em> — set a
+conditional-compilation variable, as for <a href="#options"><code>convert</code></a>: the
+conditionals are specialized before validation. A full set validates one
+configuration; a partial set leaves the remaining conditionals for the
+path-sensitive check to explore. Repeatable.</li>
 <li><strong><code>-W</code></strong> <em>NAME=LEVEL</em>, <strong><code>--warn</code></strong> <em>NAME=LEVEL</em> — set a warning’s level, as
 above.</li>
 <li><strong><code>--color</code></strong> <em>WHEN</em> — as above.</li>
