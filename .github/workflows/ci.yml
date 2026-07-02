@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  format:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: "5.4"
+
+      - name: Install dependencies
+        run: opam install . --deps-only --with-test
+
+      # Pinned to match the version in .ocamlformat so the check is reproducible.
+      - name: Install ocamlformat
+        run: opam install ocamlformat.0.29.0
+
+      - name: Check formatting
+        run: opam exec -- dune build @fmt
+
+  build:
+    name: Build & test (${{ matrix.os }}, OCaml ${{ matrix.ocaml-compiler }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+        ocaml-compiler:
+          - "4.14"
+          - "5.4"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up OCaml ${{ matrix.ocaml-compiler }}
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ matrix.ocaml-compiler }}
+
+      - name: Install dependencies
+        run: opam install . --deps-only --with-test
+
+      # @install builds the library and the `wax` executable. A bare `dune build`
+      # would also build the `wasm` mode of the binary (see src/bin/dune), which
+      # needs wasm_of_ocaml; that is left to the deploy path.
+      - name: Build
+        run: opam exec -- dune build @install
+
+      # The test harness (run_wasm_testsuite) uses Domain, which is OCaml 5.0+,
+      # so the suite runs on the 5.x cells only; 4.14 is a build-only check.
+      - name: Run tests
+        if: matrix.ocaml-compiler != '4.14'
+        run: opam exec -- dune runtest
