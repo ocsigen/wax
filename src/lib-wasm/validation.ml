@@ -1363,31 +1363,29 @@ let named_ref_source idx : source_type =
 let named_ref_null_source idx : source_type =
   Plain (Ref { nullable = true; typ = Type idx })
 
-(* The source rendering of the (nullable) descriptor operand of a descriptor
-   instruction, whose type is the descriptor of the type at global index
-   [described]. The descriptor type has no immediate to name it by, so its
-   source name is recovered from [descriptor_source] (recorded at its
-   definition); [exact] matches the described type's own exactness. *)
-let descriptor_operand_source tc (described : heaptype) : source_type =
+(* The source rendering of the descriptor of the type at global index
+   [described] — the [_desc_eq] cast/branch operand (nullable), or the
+   [ref.get_desc] result (non-null, via [~nullable:false]). The descriptor type
+   has no immediate to name it by, so its source name is recovered from
+   [descriptor_source] (recorded at its definition); [exact] matches [described]'s
+   own exactness. *)
+let descriptor_operand_source ?(nullable = true) tc (described : heaptype) :
+    source_type =
   let build exact x =
     match Hashtbl.find_opt tc.descriptor_source x with
     | Some node ->
         Plain
-          (Ref
-             {
-               nullable = true;
-               typ = (if exact then Exact node else Type node);
-             })
+          (Ref { nullable; typ = (if exact then Exact node else Type node) })
     | None ->
         (* No recorded source (a well-formed descriptor type always has one);
            fall back to the abstract struct supertype rather than a misleading
            index. *)
-        Plain (Ref { nullable = true; typ = source_of_heaptype Struct })
+        Plain (Ref { nullable; typ = source_of_heaptype Struct })
   in
   match described with
   | Exact x -> build true x
   | Type x -> build false x
-  | _ -> Plain (Ref { nullable = true; typ = source_of_heaptype Struct })
+  | _ -> Plain (Ref { nullable; typ = source_of_heaptype Struct })
 
 (* Source-type array for popping the prefix arguments [param_source] followed by a
    continuation operand of the type named by [x]. *)
@@ -2805,15 +2803,17 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let*! ty, _, _ = lookup_struct_type ctx idx in
       let*! desc = type_descriptor ctx ~location:i.info ty in
       let* entry, _ = pop_any ctx loc in
-      (* [exact_1]: the descriptor is exact exactly when the operand is a
-         statically-exact reference. Validate the operand is a reference to [idx]
-         (accepting a subtype or null) either way. A polymorphic operand
-         (unreachable code) has unconstrained exactness — take the most precise,
-         exact, which validates against an exact or an inexact expected result. *)
+      (* [exact_1] is shared between the operand type [(ref null (exact_1 idx))]
+         and the result [(ref (exact_1 desc))]: the descriptor is exact exactly
+         when the operand is a subtype of the *exact* operand type. A subtype
+         [(ref (exact $c))] with [$c <: idx] is NOT — its descriptor is [$c]'s,
+         not [idx]'s — so the result is inexact there. A polymorphic operand
+         (unreachable) fits either; take the most precise, exact. Validate the
+         operand is a reference to [idx] (a subtype or null) either way. *)
       let exact =
         match entry with
         | Bot | Bot_ref -> true
-        | Val (ty', source) -> (
+        | Val (ty', source) ->
             if
               not
                 (Types.val_subtype ctx.modul.subtyping_info ty'
@@ -2822,9 +2822,14 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
               Error.type_mismatch ctx.modul.diagnostics ~location:loc
                 ~provided_source:source
                 ~expected_source:(named_ref_null_source idx);
-            match ty' with Ref { typ = Exact _; _ } -> true | _ -> false)
+            Types.val_subtype ctx.modul.subtyping_info ty'
+              (Ref { nullable = true; typ = Exact ty })
       in
-      push ~source:(named_ref_source idx) (Some loc)
+      push
+        ~source:
+          (descriptor_operand_source ~nullable:false ctx.modul.types
+             (if exact then Exact ty else Type ty))
+        (Some loc)
         (Ref
            { nullable = false; typ = (if exact then Exact desc else Type desc) })
   | StructNew idx ->

@@ -149,15 +149,44 @@ from wasm:
       (br_on_cast_fail 1 (ref func) (ref any) (local.get 0) (unreachable)))
   )
 ==== core/custom-descriptors/ref_get_desc.wast ====
-Error: Type mismatch: this produces a value of type (ref $a), but type
-  (ref (exact $b)) is expected.
-  ──➤  wasm-test-suite/core/custom-descriptors/ref_get_desc.wast:26:6
-24 │   )
-25 │   (func (result (ref (exact $b)))
-26 │     (ref.get_desc $a (ref.null none))
-   ·      ^^^^^^^^^^^^^^^
-27 │   )
-28 │   (func (result (ref (exact $b)))
+Wax type-checking should have failed (type mismatch):
+  rec {
+      type a = open descriptor b { };
+      type b = open describes a { };
+      type c: a = open descriptor d { };
+      type d: b = open describes c { };
+  }
+  fn f(x: &!c) -> &d {
+      x.descriptor;
+  }
+from wasm:
+  (rec
+    (type $a (sub (descriptor $b) (struct)))
+    (type $b (sub (describes $a) (struct)))
+    (type $c (sub $a (descriptor $d) (struct)))
+    (type $d (sub $b (describes $c) (struct)))
+  )
+  (func (param (ref (exact $c))) (result (ref $d))
+    (ref.get_desc $a (local.get 0))
+  )
+Wax type-checking should have failed (type mismatch):
+  rec {
+      type a = open descriptor b { };
+      type b = open describes a { };
+      type c: a = open descriptor d { };
+      type d: b = open describes c { };
+  }
+  fn f(x: &c) -> &d {
+      x.descriptor;
+  }
+from wasm:
+  (rec
+    (type $a (sub (descriptor $b) (struct)))
+    (type $b (sub (describes $a) (struct)))
+    (type $c (sub $a (descriptor $d) (struct)))
+    (type $d (sub $b (describes $c) (struct)))
+  )
+  (func (param (ref $c)) (result (ref $d)) (ref.get_desc $a (local.get 0)))
 ==== core/i32.wast ====
 Wax type-checking should have failed (type mismatch):
   fn f() -> i32 {

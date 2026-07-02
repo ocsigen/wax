@@ -1576,13 +1576,33 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   | RefGetDesc t ->
       let type_name = idx ctx `Type t in
       let* arg = Stack.pop in
+      (* [ref.get_desc $t] requires its operand to be [<: (ref null (exact? $t))],
+         so a concrete operand already carries a descriptor-bearing type and
+         [e.descriptor] resolves directly — casting it to [&?$t] would only strip
+         its exactness (the result's exactness mirrors the operand's). Cast only
+         an operand with no descriptor of its own: a bottom reference (a hole in
+         dead code, or a [ref.null none]-style null cast to a bottom heap type)
+         or a bare null. *)
+      (* A bottom operand fits the *exact* operand type, and [ref.get_desc]'s
+         result is then exact (validation takes the most precise), so pin the
+         exact descriptor type. Rewrite the target of an existing bottom cast
+         ([ref.null none] → [null as &?none]) in place rather than wrapping it —
+         a nested [(null as &?none) as &?!t] is folded back to the bottom by
+         [simplify], undoing the pin. *)
+      let exact_pin =
+        Ast.Valtype (Ref { nullable = true; typ = Exact type_name })
+      in
+      let is_bottom (t : Ast.heaptype) =
+        match t with
+        | None_ | NoFunc | NoExtern | NoExn | NoCont -> true
+        | _ -> false
+      in
       let arg =
-        {
-          arg with
-          desc =
-            Ast.Cast
-              (arg, Valtype (Ref { nullable = true; typ = Type type_name }));
-        }
+        match arg.Ast.desc with
+        | Ast.Hole | Ast.Null -> { arg with desc = Ast.Cast (arg, exact_pin) }
+        | Ast.Cast (inner, Valtype (Ref { typ; _ })) when is_bottom typ ->
+            { arg with desc = Ast.Cast (inner, exact_pin) }
+        | _ -> arg
       in
       Stack.push 1 (with_loc (GetDescriptor arg))
   | RefTest t ->
