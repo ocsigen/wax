@@ -177,7 +177,7 @@ fn caml_ephe_unset_data(vx: &eq) -> &eq {
 
 #[export = "caml_ephe_check_data"]
 fn caml_ephe_check_data(x: &eq) -> &eq {
-    !(caml_ephe_get_data(x) == 0 as &i31) as &i31;
+    (caml_ephe_get_data(x) != 0 as &i31) as &i31;
 }
 
 fn caml_ephe_set_data_opt(x: &eq, opt_data: &eq) {

@@ -105,6 +105,10 @@ bound with a multi-value `let`).
 | `ge_s` / `ge` | `>=s` / `>=` |
 | `ge_u` | `>=u` |
 
+On reference operands (any subtype of `&eq`), `==` and `!=` are reference
+equality: `a == b` is `ref.eq`, and `a != b` is `ref.eq` followed by `i32.eqz`
+(there is no `ref.ne` instruction).
+
 ## Variable Instructions
 
 | Wasm | Wax |

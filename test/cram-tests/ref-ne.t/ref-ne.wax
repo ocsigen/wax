@@ -1,0 +1,6 @@
+fn eq(a: &eq, b: &eq) -> i32 {
+    a == b;
+}
+fn ne(a: &eq, b: &eq) -> i32 {
+    a != b;
+}

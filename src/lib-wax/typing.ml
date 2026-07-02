@@ -3619,7 +3619,10 @@ and type_arith ctx i =
         | typ, (Unknown | Error) | (Unknown | Error), typ -> (
             Cell.merge ty1 ty2 typ;
             match op.desc with
-            | Eq ->
+            | Eq | Ne ->
+                (* [==]/[!=] on references are both [ref.eq] (the latter negated
+                   in lowering), so they take the same operands: [eqref] or a
+                   number. *)
                 (match typ with
                 | Valtype { internal = Ref _ as ty; _ } ->
                     if
@@ -3681,20 +3684,10 @@ and type_arith ctx i =
                    a numeric literal, so float-capable), like a [Number]. *)
                 | Number | LargeInt -> Cell.set ty1 Float
                 | _ -> mismatch ());
-                i32_cell
-            | Ne ->
-                (match typ with
-                | Valtype { internal = I32; _ }
-                | Valtype { internal = I64; _ }
-                | Valtype { internal = F32; _ }
-                | Valtype { internal = F64; _ }
-                | Number | Int | LargeInt | Float ->
-                    ()
-                | _ -> mismatch ());
                 i32_cell)
         | _ -> (
             match op.desc with
-            | Eq ->
+            | Eq | Ne ->
                 (match (Cell.get ty1, Cell.get ty2) with
                 | ( Valtype { internal = Ref _ as ty1; _ },
                     Valtype { internal = Ref _ as ty2; _ } ) ->
@@ -3744,9 +3737,6 @@ and type_arith ctx i =
                 i32_cell
             | Lt None | Gt None | Le None | Ge None ->
                 ignore (check_float_bin_op ctx ~location:op.info ty1 ty2);
-                i32_cell
-            | Ne ->
-                check_num_concrete ctx ~location:op.info ty1 ty2;
                 i32_cell)
       in
       return_expression i (BinOp (op, i1', i2')) ty

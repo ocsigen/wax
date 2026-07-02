@@ -190,7 +190,7 @@ fn caml_ba_get_data(&eq) -> &extern;
             'loop: loop {
                 br_if 'done cur is &i31;
                 let cell = cur as &block;
-                if !(cell[1] == ch) {
+                if cell[1] != ch {
                     new = [block|0 as &i31, cell[1], new];
                 }
                 cur = cell[2];

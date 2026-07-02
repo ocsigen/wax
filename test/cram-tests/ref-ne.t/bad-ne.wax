@@ -1,0 +1,3 @@
+fn f(a: &func, b: &func) -> i32 {
+    a != b;
+}

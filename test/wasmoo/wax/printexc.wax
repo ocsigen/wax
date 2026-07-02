@@ -77,7 +77,7 @@ fn caml_format_exception(vexn: &eq) -> &eq {
                     v = exn[2];
                     br_if 'default !(v is &block);
                     bucket = v as &block;
-                    br_if 'default !(bucket[0] == 0 as &i31);
+                    br_if 'default bucket[0] != 0 as &i31;
                     i = 1;
                     br 'continue bucket;
                 }

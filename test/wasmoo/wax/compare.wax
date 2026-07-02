@@ -360,7 +360,7 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32 {
                                         'v1_not_custom: do {
                                             c1 = br_on_cast_fail 'v1_not_custom &custom v1;
                                             c2 = br_on_cast_fail 'heterogeneous &custom v2;
-                                            if !(c1.ops == c2.ops) {
+                                            if c1.ops != c2.ops {
                                                 return
                                                     caml_string_compare(c1.ops.id, c2.ops.id)
                                                         as i32_s;

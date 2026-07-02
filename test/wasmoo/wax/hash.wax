@@ -186,7 +186,7 @@ fn caml_hash(count: &eq, limit: &eq, seed: &eq, obj: &eq) -> &eq {
                                 _ =
                                     'not_block': do {
                                         bv = br_on_cast_fail 'not_block' &block v;
-                                        br_if 'again !(bv[0] == forward_tag as &i31);
+                                        br_if 'again bv[0] != forward_tag as &i31;
                                         i = i + 1;
                                         br_if 'loop i == MAX_FORWARD_DEREFERENCE;
                                         br 'forward;

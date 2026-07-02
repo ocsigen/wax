@@ -826,7 +826,15 @@ let int_un_op i0 sz (op : Src.int_un_op) =
     | Clz -> method_call (e (inttype sz)) "clz"
     | Ctz -> method_call (e (inttype sz)) "ctz"
     | Popcnt -> method_call (e (inttype sz)) "popcnt"
-    | Eqz -> with_loc (UnOp (op_loc i0 Ast.Not, e (inttype sz)))
+    | Eqz -> (
+        let operand = e (inttype sz) in
+        match operand.Ast.desc with
+        (* [eqz] of an equality is exactly the negated comparison; recover
+           [i32.eqz (ref.eq a b)] — how [a != b] on references lowers — as
+           [a != b] rather than [!(a == b)]. *)
+        | BinOp ({ Ast.desc = Ast.Eq; _ }, e1, e2) ->
+            with_loc (BinOp (op_loc i0 Ast.Ne, e1, e2))
+        | _ -> with_loc (UnOp (op_loc i0 Ast.Not, operand)))
     | Trunc (_, signage) ->
         with_loc
           (Cast

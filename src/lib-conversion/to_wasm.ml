@@ -1380,8 +1380,7 @@ and instruction_desc ret ctx i : location Text.instr list =
       match (op, operand_type) with
       | Eq, Ref _ -> folded loc RefEq (code_a @ code_b)
       | Ne, Ref _ ->
-          (* !(a == b) *)
-          (*ZZZ Support in types?*)
+          (* There is no [ref.ne]; [a != b] on references is [!(a == b)]. *)
           folded loc (Text.UnOp (I32 Eqz)) (folded loc RefEq (code_a @ code_b))
       | _ ->
           let opcode = binop i op operand_type in
