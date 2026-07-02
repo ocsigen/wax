@@ -2534,7 +2534,6 @@ let register_names ctx export_tbl fields =
       (fun (field : (_ Src.modulefield, _) Ast.annotated) ->
         match field.desc with
         | Import { id; desc; exports; _ } -> (
-            (* ZZZ Check for non-import fields *)
             match desc with
             | Func _ -> ()
             | Memory _ ->
@@ -2622,7 +2621,6 @@ let register_names ctx export_tbl fields =
       (fun (field : (_ Src.modulefield, _) Ast.annotated) ->
         match field.desc with
         | Import { id; desc; exports; _ } -> (
-            (* ZZZ Check for non-import fields *)
             match desc with
             | Func typ -> register_type ctx export_tbl Func id exports typ
             | Memory _ | Table _ | Global _ | Tag _ -> ())
