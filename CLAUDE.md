@@ -50,6 +50,7 @@ bare `wax <file>` form working — edit that heuristic if adding subcommands.
 | `-v` | `--validate` | Force validation everywhere and report unused locals. Text input (wax/wat) converted to a *different* format is validated by default already; this additionally validates a same-format conversion and a trusted wasm binary input |
 | `-s` | `--strict-validate` | Stricter validation |
 | `-D` | `--define` | Set a conditional-compilation variable (`NAME`, `NAME=true/false`, `NAME=N.N.N`, `NAME=STR`); specializes `#[if]`/`(@if)` annotations. Repeatable |
+| `-X` | `--feature` | Enable/disable an optional proposal (off by default): `NAME[=on\|off]`. Known: `custom-descriptors` (exact refs, descriptor structs + instructions), `compact-import-section` (group same-module imports in the binary; gated on output, always accepted on input). Repeatable |
 | `-W` | `--warn` | Set a warning's level: `NAME=LEVEL` where `NAME` is a warning (`unused-local`, `truncated-coverage`, `naming-conflict`, `reserved-word-rename`, `generated-name`), a group (`unused`, `naming`), or `all`, and `LEVEL` is `hidden`/`warning`/`error`. The `naming` warnings (Wasm→Wax renames/generated names) are hidden by default. Later settings override earlier; repeatable |
 |      | `--fold` / `--unfold` | Force folded / unfolded instruction form (default: auto) |
 |      | `--color` | Color output: `auto`/`always`/`never` |

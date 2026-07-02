@@ -1184,6 +1184,77 @@ let output_section ch id encoder data =
   output_uint len;
   Buffer.output_buffer ch b
 
+let import_desc b (desc : importdesc) =
+  match desc with
+  | Func { exact; typ = i } ->
+      Encoder.byte b (if exact then 0x20 else 0x00);
+      Encoder.sint b i
+  | Table t ->
+      Encoder.byte b 0x01;
+      Encoder.tabletype b t
+  | Memory l ->
+      Encoder.byte b 0x02;
+      Encoder.limits b l
+  | Global g ->
+      Encoder.byte b 0x03;
+      Encoder.globaltype b g
+  | Tag t ->
+      Encoder.byte b 0x04;
+      Encoder.byte b 0x00;
+      Encoder.sint b t
+
+(* Maximal runs of consecutive imports sharing a module name. Only consecutive
+   imports may be grouped: an import's index is its position, so reordering to
+   gather non-adjacent same-module imports would break references. *)
+let imports_by_module imports =
+  let rec go = function
+    | [] -> []
+    | (first : import) :: _ as l ->
+        let rec take acc = function
+          | (i : import) :: rest when i.module_ = first.module_ ->
+              take (i :: acc) rest
+          | rest -> (List.rev acc, rest)
+        in
+        let run, rest = take [] l in
+        run :: go rest
+  in
+  go imports
+
+(* Import section. With the compact-import-section proposal a run of same-module
+   imports is written once under its module name, followed by [0x00] (empty
+   second name), the [0x7F] marker, and the list of (field name, externtype)
+   pairs — the marker sits where an externtype kind byte would, and [0x7F] is not
+   a valid kind, so a plain import (kind byte next) stays unambiguous. *)
+let output_import_section out_channel imports =
+  let compact =
+    Wax_utils.Feature.is_enabled
+      (Wax_utils.Feature.default ())
+      Wax_utils.Feature.Compact_import_section
+  in
+  let write_plain b (i : import) =
+    Encoder.name b i.module_;
+    Encoder.name b i.name;
+    import_desc b i.desc
+  in
+  if not compact then
+    output_section out_channel 2 (Encoder.vec write_plain) imports
+  else
+    output_section out_channel 2
+      (Encoder.vec (fun b run ->
+           match run with
+           | [ i ] -> write_plain b i
+           | (i0 : import) :: _ ->
+               Encoder.name b i0.module_;
+               Encoder.name b "";
+               Encoder.byte b 0x7F;
+               Encoder.vec
+                 (fun b (i : import) ->
+                   Encoder.name b i.name;
+                   import_desc b i.desc)
+                 b run
+           | [] -> assert false))
+      (imports_by_module imports)
+
 let module_ ~out_channel ?output_file ?opt_source_map_file
     (m : Ast.location module_) =
   Wax_utils.Debug.timed "output" @@ fun () ->
@@ -1196,29 +1267,7 @@ let module_ ~out_channel ?output_file ?opt_source_map_file
     output_section out_channel 1 (Encoder.vec Encoder.rectype) m.types;
 
   (* 2. Import Section *)
-  if m.imports <> [] then
-    output_section out_channel 2
-      (Encoder.vec (fun b (i : import) ->
-           Encoder.name b i.module_;
-           Encoder.name b i.name;
-           match i.desc with
-           | Func { exact; typ = i } ->
-               Encoder.byte b (if exact then 0x20 else 0x00);
-               Encoder.sint b i
-           | Table t ->
-               Encoder.byte b 0x01;
-               Encoder.tabletype b t
-           | Memory l ->
-               Encoder.byte b 0x02;
-               Encoder.limits b l
-           | Global g ->
-               Encoder.byte b 0x03;
-               Encoder.globaltype b g
-           | Tag t ->
-               Encoder.byte b 0x04;
-               Encoder.byte b 0x00;
-               Encoder.sint b t))
-      m.imports;
+  if m.imports <> [] then output_import_section out_channel m.imports;
 
   (* 3. Function Section *)
   if m.functions <> [] then

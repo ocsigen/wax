@@ -57,6 +57,18 @@ files (see [Formatting](#formatting)) and `check` validates them (see
     - Repeatable, to set several variables. Has no effect on Wasm binary input
       (which carries no conditionals).
 
+- **`-X`** *NAME[=on|off]*, **`--feature`** *NAME[=on|off]*
+    - Enable (or disable) an optional WebAssembly proposal, off by default.
+      Bare *NAME* or `NAME=on`/`true`/`yes` enables it; `NAME=off`/`false`/`no`
+      disables it. Repeatable. Known features:
+        - `custom-descriptors` — exact reference types (`&!t`), `descriptor`/`describes`
+          struct clauses, and the descriptor instructions. Without it these
+          constructs are rejected during validation.
+        - `compact-import-section` — group a module's consecutive same-module
+          imports under one module name in the binary import section. Gated on
+          *output* only: it is emitted just when enabled, but the compact form is
+          always accepted on input.
+
 - **`-W`** *NAME=LEVEL*, **`--warn`** *NAME=LEVEL*
     - Set the reporting level of a warning produced during validation.
     - *NAME* is a single warning, a group, or `all`:

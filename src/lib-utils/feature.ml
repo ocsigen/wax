@@ -1,15 +1,24 @@
-type t = Custom_descriptors
+type t = Custom_descriptors | Compact_import_section
 
-let all = [ Custom_descriptors ]
-let name = function Custom_descriptors -> "custom-descriptors"
+let all = [ Custom_descriptors; Compact_import_section ]
+
+let name = function
+  | Custom_descriptors -> "custom-descriptors"
+  | Compact_import_section -> "compact-import-section"
 
 let description = function
   | Custom_descriptors ->
       "Custom Descriptors proposal: exact reference types, descriptor structs, \
        and the associated instructions."
+  | Compact_import_section ->
+      "Compact Import Section proposal: group a module's imports under one \
+       module name in the binary import section."
 
 (* Off by default: an experimental proposal, enabled with [--enable]. *)
-let enabled_by_default = function Custom_descriptors -> false
+let enabled_by_default = function
+  | Custom_descriptors -> false
+  | Compact_import_section -> false
+
 let of_name s = List.find_opt (fun t -> String.equal (name t) s) all
 
 type set = { enabled : t -> bool; mutable used : t list }

@@ -5,7 +5,7 @@
     construct, and {!mark_used} / {!used} track which features a module actually
     exercises. *)
 
-type t = Custom_descriptors
+type t = Custom_descriptors | Compact_import_section
 
 val all : t list
 (** Every known feature. *)

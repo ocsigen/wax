@@ -390,26 +390,41 @@ let globaltype ch =
   if mut >= 2 then error ch "malformed mutability";
   { mut = mut <> 0; typ }
 
-let import ch =
+let importdesc ch d =
+  match d with
+  | 0 -> Func { exact = false; typ = uint ch }
+  (* 0x20: an exact function import (bit 6 of the func kind marks exactness). *)
+  | 0x20 -> Func { exact = true; typ = uint ch }
+  | 1 -> Table (tabletype ch)
+  | 2 -> Memory (memtype ch)
+  | 3 -> Global (globaltype ch)
+  | 4 ->
+      let b = uint ch in
+      if b <> 0 then error ch "malformed tag attribute";
+      Tag (uint ch)
+  | _ -> error ch "malformed import kind 0x%02x" d
+
+(* One entry of the import section, expanded to the imports it denotes. The
+   compact-import-section proposal reuses the externtype-kind position: after the
+   module name and a (conventionally empty) second name, a [0x7F] marker groups a
+   whole [(field name, externtype)] list under the one module name, and [0x7E]
+   groups a [field name] list that all share one externtype. Neither marker is a
+   valid kind byte, so a plain import stays unambiguous. *)
+let import_entry ch =
   let module_ = name ch in
-  let name = name ch in
-  let d = uint ch in
-  let map i = i in
-  let importdesc =
-    match d with
-    | 0 -> Func { exact = false; typ = map (uint ch) }
-    (* 0x20: an exact function import (bit 6 of the func kind marks exactness). *)
-    | 0x20 -> Func { exact = true; typ = map (uint ch) }
-    | 1 -> Table (tabletype ch)
-    | 2 -> Memory (memtype ch)
-    | 3 -> Global (globaltype ch)
-    | 4 ->
-        let b = uint ch in
-        if b <> 0 then error ch "malformed tag attribute";
-        Tag (map (uint ch))
-    | _ -> error ch "malformed import kind 0x%02x" d
-  in
-  { module_; name; desc = importdesc }
+  let nm = name ch in
+  match uint ch with
+  | 0x7F ->
+      Array.to_list
+        (vec
+           (fun ch ->
+             let name = name ch in
+             { module_; name; desc = importdesc ch (uint ch) })
+           ch)
+  | 0x7E ->
+      let desc = importdesc ch (uint ch) in
+      Array.to_list (vec (fun ch -> { module_; name = name ch; desc }) ch)
+  | d -> [ { module_; name = nm; desc = importdesc ch d } ]
 
 let exportable_kind d : exportable =
   match d with
@@ -1491,8 +1506,12 @@ let module_ diagnostics ?filename buf =
               (* Type section *)
               { m with types = Array.to_list (type_section ch) }
           | 2 ->
-              (* Import section *)
-              { m with imports = Array.to_list (vec import ch) }
+              (* Import section (entries may expand to several imports under the
+                 compact-import-section proposal). *)
+              {
+                m with
+                imports = List.concat (Array.to_list (vec import_entry ch));
+              }
           | 3 ->
               (* Function section *)
               { m with functions = Array.to_list (vec typeidx ch) }
