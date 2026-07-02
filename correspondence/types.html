@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-3c4c5ad2.js";
+            window.path_to_searchindex_js = "../searchindex-ed857b00.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f031991a.js"></script>
@@ -193,9 +193,40 @@
 <tr><td><code>v128</code></td><td><code>v128</code></td><td>128-bit vector</td></tr>
 <tr><td><code>(ref null &lt;ht&gt;)</code></td><td><code>&amp;?&lt;ht&gt;</code></td><td>Nullable reference to heap type <code>&lt;ht&gt;</code></td></tr>
 <tr><td><code>(ref &lt;ht&gt;)</code></td><td><code>&amp;&lt;ht&gt;</code></td><td>Non-nullable reference to heap type <code>&lt;ht&gt;</code></td></tr>
+<tr><td><code>(ref (exact &lt;t&gt;))</code></td><td><code>&amp;!&lt;t&gt;</code></td><td>Reference to <em>exactly</em> concrete type <code>&lt;t&gt;</code></td></tr>
+<tr><td><code>(ref null (exact &lt;t&gt;))</code></td><td><code>&amp;?!&lt;t&gt;</code></td><td>Nullable reference to exactly <code>&lt;t&gt;</code></td></tr>
 </tbody>
 </table>
 </div>
+<h3 id="exact-references"><a class="header" href="#exact-references">Exact References</a></h3>
+<p>An <strong>exact</strong> reference (from the
+<a href="https://github.com/WebAssembly/custom-descriptors">custom-descriptors proposal</a>)
+points to values of exactly one concrete type, with no subtypes. Wax writes the
+exactness marker <code>!</code> between the <code>&amp;</code>/<code>&amp;?</code> sigil and the type name, so it sits
+alongside the nullability <code>?</code>:</p>
+<pre><code class="language-wax">let a: &amp;!point = ...;   // (ref (exact $point))
+let b: &amp;?!point = ...;  // (ref null (exact $point))
+</code></pre>
+<p>Only a concrete (declared) type can be exact; <code>&amp;!any</code> and other abstract heap
+types are rejected. An exact reference is a subtype of the corresponding inexact
+one (<code>&amp;!point</code> flows where an <code>&amp;point</code> is expected), but exactness is invariant
+among distinct concrete types.</p>
+<p>Because the <code>!</code> marker precedes the type name, it never clashes with the postfix
+<a href="instructions.html#reference-instructions">non-null assertion</a> <code>!</code>: <code>x as &amp;!point</code>
+is a cast to an exact reference, whereas <code>(x as &amp;point)!</code> asserts the cast result
+is non-null.</p>
+<p>A concrete allocation — a struct or array <a href="instructions.html#aggregate-instructions">construction</a>
+— produces an exact reference (the fresh object has exactly the allocated type),
+so a construction literal can be delivered where an <code>&amp;!point</code> is required without
+a cast. In ordinary (synthesis) position the plainer inexact type is kept, since
+an exact result is always usable where an inexact one is expected.</p>
+<p>A <strong>function import</strong> can be declared exact, so that referencing it yields an
+exact reference. The <code>!</code> marks the type exact in the <a href="module_fields.html#functions">function declaration</a>:
+<code>fn g: !ft;</code> for a named type, or <code>fn h!(x: i32) -&gt; i64;</code> for an inline
+signature. It maps to the WAT <code>(func (exact &lt;type&gt;))</code> import descriptor. (A
+module-defined function is always exact, so the marker is only written on an
+import.) A plainly imported function is <em>not</em> exact — its dynamic type may be a
+subtype — so a reference to it must be cast to reach an exact type.</p>
 <h2 id="storage-types"><a class="header" href="#storage-types">Storage Types</a></h2>
 <p>Storage types are used in fields of structs and arrays to define packed data.</p>
 <div class="table-wrapper">
@@ -272,6 +303,34 @@ To specify a supertype, use <code>: supertype</code> before the assignment.</p>
 type open_point = open { x: i32 };                // non-final: extensible
 type sub_point : open_point = { x: i32, y: i32 }; // extends open_point
 </code></pre>
+<h3 id="custom-descriptors"><a class="header" href="#custom-descriptors">Custom Descriptors</a></h3>
+<p>The <a href="https://github.com/WebAssembly/custom-descriptors">custom-descriptors proposal</a>
+lets a struct carry a <em>descriptor</em>: a second struct associated with it (used, for
+instance, to model a runtime type or vtable). The described type names its
+descriptor with a <code>descriptor &lt;name&gt;</code> clause, and the descriptor names what it
+describes with a <code>describes &lt;name&gt;</code> clause. Both clauses sit between the <code>open</code>
+marker and the struct body:</p>
+<pre><code class="language-wax">rec {
+  type obj = descriptor obj_desc { x: i32 };
+  type obj_desc = describes obj { };
+}
+</code></pre>
+<p>Maps to Wasm:</p>
+<pre><code class="language-wat">(rec
+  (type $obj (descriptor $obj_desc) (struct (field $x i32)))
+  (type $obj_desc (describes $obj) (struct)))
+</code></pre>
+<p>The two types must satisfy several well-formedness rules, all checked during
+validation:</p>
+<ul>
+<li>both must be <strong>structs</strong>, declared in the <strong>same <code>rec</code> group</strong>;</li>
+<li>the clauses must be <strong>reciprocal</strong> — if <code>obj</code> names <code>obj_desc</code> as its
+descriptor, then <code>obj_desc</code> must describe <code>obj</code>;</li>
+<li>a described type must be declared <strong>before</strong> its descriptor;</li>
+<li>in a subtype hierarchy, if a supertype has a descriptor its subtypes must too
+(with a descriptor that is itself a subtype), and a described type is inherited
+covariantly.</li>
+</ul>
 
                     </main>
 

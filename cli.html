@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-3c4c5ad2.js";
+            window.path_to_searchindex_js = "searchindex-ed857b00.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -249,6 +249,24 @@ sets a boolean; <code>NAME=N.N.N</code> (three integers) sets a version; any oth
 <code>NAME=VALUE</code> sets a string.</li>
 <li>Repeatable, to set several variables. Has no effect on Wasm binary input
 (which carries no conditionals).</li>
+</ul>
+</li>
+<li>
+<p><strong><code>-X</code></strong> <em>NAME[=on|off]</em>, <strong><code>--feature</code></strong> <em>NAME[=on|off]</em></p>
+<ul>
+<li>Enable (or disable) an optional WebAssembly proposal, off by default.
+Bare <em>NAME</em> or <code>NAME=on</code>/<code>true</code>/<code>yes</code> enables it; <code>NAME=off</code>/<code>false</code>/<code>no</code>
+disables it. Repeatable. Known features:
+<ul>
+<li><code>custom-descriptors</code> — exact reference types (<code>&amp;!t</code>), <code>descriptor</code>/<code>describes</code>
+struct clauses, and the descriptor instructions. Without it these
+constructs are rejected during validation.</li>
+<li><code>compact-import-section</code> — group a module’s consecutive same-module
+imports under one module name in the binary import section. Gated on
+<em>output</em> only: it is emitted just when enabled, but the compact form is
+always accepted on input.</li>
+</ul>
+</li>
 </ul>
 </li>
 <li>

@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-3c4c5ad2.js";
+            window.path_to_searchindex_js = "../searchindex-ed857b00.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f031991a.js"></script>
@@ -360,6 +360,8 @@ its own assignment.</p>
 <tr><td><code>br_on_non_null $l</code></td><td><code>br_on_non_null 'l val</code></td></tr>
 <tr><td><code>br_on_cast $l $t1 $t2</code></td><td><code>br_on_cast 'l t2 val</code></td></tr>
 <tr><td><code>br_on_cast_fail $l $t1 $t2</code></td><td><code>br_on_cast_fail 'l t2 val</code></td></tr>
+<tr><td><code>br_on_cast_desc_eq $l $t1 $t2</code></td><td><code>br_on_cast 'l [?]descriptor(d) val</code></td></tr>
+<tr><td><code>br_on_cast_desc_eq_fail $l $t1 $t2</code></td><td><code>br_on_cast_fail 'l [?]descriptor(d) val</code></td></tr>
 <tr><td><code>return</code></td><td><code>return val</code></td></tr>
 <tr><td><code>call $f</code></td><td><code>f(args)</code></td></tr>
 <tr><td><code>call_ref $t</code></td><td><code>(val as &amp;?t)(args)</code></td></tr>
@@ -406,6 +408,10 @@ types are always kept.</p>
 <tr><td><code>i31.get_u</code></td><td><code>val as i32_u</code></td></tr>
 <tr><td><code>ref.cast</code></td><td><code>val as &amp;type</code></td></tr>
 <tr><td><code>ref.test</code></td><td><code>val is &amp;type</code></td></tr>
+<tr><td><code>ref.cast (ref (exact $t))</code></td><td><code>val as &amp;!t</code></td></tr>
+<tr><td><code>ref.test (ref (exact $t))</code></td><td><code>val is &amp;!t</code></td></tr>
+<tr><td><code>ref.cast_desc_eq $t</code></td><td><code>val as descriptor(d)</code></td></tr>
+<tr><td><code>ref.cast_desc_eq (ref null …) $t</code></td><td><code>val as ?descriptor(d)</code></td></tr>
 </tbody>
 </table>
 </div>
@@ -426,8 +432,11 @@ types are always kept.</p>
 <tbody>
 <tr><td><code>struct.new $t</code></td><td><code>{t| field: val, ... }</code></td></tr>
 <tr><td><code>struct.new_default $t</code></td><td><code>{t| .. }</code></td></tr>
+<tr><td><code>struct.new_desc $t</code></td><td><code>{descriptor(d)| field: val, ... }</code></td></tr>
+<tr><td><code>struct.new_default_desc $t</code></td><td><code>{descriptor(d)| .. }</code></td></tr>
 <tr><td><code>struct.get $t $f</code></td><td><code>val.field</code></td></tr>
 <tr><td><code>struct.set $t $f</code></td><td><code>val.field = new_val</code></td></tr>
+<tr><td><code>ref.get_desc $t</code></td><td><code>val.descriptor</code></td></tr>
 <tr><td><code>array.new $t</code></td><td><code>[t| val; len]</code></td></tr>
 <tr><td><code>array.new_default $t</code></td><td><code>[t| ..; len]</code></td></tr>
 <tr><td><code>array.new_fixed $t</code></td><td><code>[t| val, ...]</code></td></tr>

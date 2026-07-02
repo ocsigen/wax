@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-3c4c5ad2.js";
+            window.path_to_searchindex_js = "searchindex-ed857b00.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -726,6 +726,35 @@ fn add_u128(a_lo: i64, a_hi: i64, b_lo: i64, b_hi: i64) -&gt; (i64, i64) {
 #[export = "mul_u64_to_u128"]
 fn mul_u64_to_u128(a: i64, b: i64) -&gt; (i64, i64) {
     i64::mul_wide_u(a, b);
+}
+</code></pre>
+<h2 id="custom-descriptors"><a class="header" href="#custom-descriptors">Custom Descriptors</a></h2>
+<p>A struct can carry a <em>descriptor</em> — a second struct linked to it by reciprocal
+<a href="correspondence/types.html#descriptors"><code>descriptor</code>/<code>describes</code> clauses</a>. The
+descriptor instructions never name the target type: it is recovered from the
+descriptor operand (the type the operand <em>describes</em>), so all of them share one
+<code>descriptor(d)</code> clause. <code>struct.new_desc</code> allocates carrying a descriptor,
+<code>.descriptor</code> reads it back, and <code>as [?]descriptor(d)</code> / <code>br_on_cast [?]descriptor(d)</code>
+cast on descriptor equality (a leading <code>?</code> makes the result nullable).</p>
+<h3 id="wax-20"><a class="header" href="#wax-20">Wax</a></h3>
+<pre><code class="language-wax">rec {
+    type obj = descriptor obj_desc { x: i32 };
+    type obj_desc = describes obj { kind: i32 };
+}
+
+#[export = "make"]
+fn make(kind: i32, x: i32) -&gt; &amp;!obj {
+    { descriptor({obj_desc| kind: kind})| x: x };
+}
+
+#[export = "kind_of"]
+fn kind_of(o: &amp;obj) -&gt; i32 {
+    o.descriptor.kind;
+}
+
+#[export = "narrow"]
+fn narrow(v: &amp;?any, d: &amp;!obj_desc) -&gt; &amp;?obj {
+    v as ?descriptor(d);
 }
 </code></pre>
 

@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-3c4c5ad2.js";
+            window.path_to_searchindex_js = "searchindex-ed857b00.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -1634,6 +1634,35 @@ fn mul_u64_to_u128(a: i64, b: i64) -&gt; (i64, i64) {
     i64::mul_wide_u(a, b);
 }
 </code></pre>
+<h2 id="custom-descriptors"><a class="header" href="#custom-descriptors">Custom Descriptors</a></h2>
+<p>A struct can carry a <em>descriptor</em> — a second struct linked to it by reciprocal
+<a href="#descriptors"><code>descriptor</code>/<code>describes</code> clauses</a>. The
+descriptor instructions never name the target type: it is recovered from the
+descriptor operand (the type the operand <em>describes</em>), so all of them share one
+<code>descriptor(d)</code> clause. <code>struct.new_desc</code> allocates carrying a descriptor,
+<code>.descriptor</code> reads it back, and <code>as [?]descriptor(d)</code> / <code>br_on_cast [?]descriptor(d)</code>
+cast on descriptor equality (a leading <code>?</code> makes the result nullable).</p>
+<h3 id="wax-20"><a class="header" href="#wax-20">Wax</a></h3>
+<pre><code class="language-wax">rec {
+    type obj = descriptor obj_desc { x: i32 };
+    type obj_desc = describes obj { kind: i32 };
+}
+
+#[export = "make"]
+fn make(kind: i32, x: i32) -&gt; &amp;!obj {
+    { descriptor({obj_desc| kind: kind})| x: x };
+}
+
+#[export = "kind_of"]
+fn kind_of(o: &amp;obj) -&gt; i32 {
+    o.descriptor.kind;
+}
+
+#[export = "narrow"]
+fn narrow(v: &amp;?any, d: &amp;!obj_desc) -&gt; &amp;?obj {
+    v as ?descriptor(d);
+}
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="introduction-1"><a class="header" href="#introduction-1">Introduction</a></h1>
 <p>This guide documents the correspondence between WebAssembly (Wasm) and Wax constructs. It is intended for developers who are familiar with Wasm and want to understand how Wax maps to it.</p>
@@ -1663,9 +1692,40 @@ fn mul_u64_to_u128(a: i64, b: i64) -&gt; (i64, i64) {
 <tr><td><code>v128</code></td><td><code>v128</code></td><td>128-bit vector</td></tr>
 <tr><td><code>(ref null &lt;ht&gt;)</code></td><td><code>&amp;?&lt;ht&gt;</code></td><td>Nullable reference to heap type <code>&lt;ht&gt;</code></td></tr>
 <tr><td><code>(ref &lt;ht&gt;)</code></td><td><code>&amp;&lt;ht&gt;</code></td><td>Non-nullable reference to heap type <code>&lt;ht&gt;</code></td></tr>
+<tr><td><code>(ref (exact &lt;t&gt;))</code></td><td><code>&amp;!&lt;t&gt;</code></td><td>Reference to <em>exactly</em> concrete type <code>&lt;t&gt;</code></td></tr>
+<tr><td><code>(ref null (exact &lt;t&gt;))</code></td><td><code>&amp;?!&lt;t&gt;</code></td><td>Nullable reference to exactly <code>&lt;t&gt;</code></td></tr>
 </tbody>
 </table>
 </div>
+<h3 id="exact-references"><a class="header" href="#exact-references">Exact References</a></h3>
+<p>An <strong>exact</strong> reference (from the
+<a href="https://github.com/WebAssembly/custom-descriptors">custom-descriptors proposal</a>)
+points to values of exactly one concrete type, with no subtypes. Wax writes the
+exactness marker <code>!</code> between the <code>&amp;</code>/<code>&amp;?</code> sigil and the type name, so it sits
+alongside the nullability <code>?</code>:</p>
+<pre><code class="language-wax">let a: &amp;!point = ...;   // (ref (exact $point))
+let b: &amp;?!point = ...;  // (ref null (exact $point))
+</code></pre>
+<p>Only a concrete (declared) type can be exact; <code>&amp;!any</code> and other abstract heap
+types are rejected. An exact reference is a subtype of the corresponding inexact
+one (<code>&amp;!point</code> flows where an <code>&amp;point</code> is expected), but exactness is invariant
+among distinct concrete types.</p>
+<p>Because the <code>!</code> marker precedes the type name, it never clashes with the postfix
+<a href="#reference-instructions">non-null assertion</a> <code>!</code>: <code>x as &amp;!point</code>
+is a cast to an exact reference, whereas <code>(x as &amp;point)!</code> asserts the cast result
+is non-null.</p>
+<p>A concrete allocation — a struct or array <a href="#aggregate-instructions">construction</a>
+— produces an exact reference (the fresh object has exactly the allocated type),
+so a construction literal can be delivered where an <code>&amp;!point</code> is required without
+a cast. In ordinary (synthesis) position the plainer inexact type is kept, since
+an exact result is always usable where an inexact one is expected.</p>
+<p>A <strong>function import</strong> can be declared exact, so that referencing it yields an
+exact reference. The <code>!</code> marks the type exact in the <a href="#functions-2">function declaration</a>:
+<code>fn g: !ft;</code> for a named type, or <code>fn h!(x: i32) -&gt; i64;</code> for an inline
+signature. It maps to the WAT <code>(func (exact &lt;type&gt;))</code> import descriptor. (A
+module-defined function is always exact, so the marker is only written on an
+import.) A plainly imported function is <em>not</em> exact — its dynamic type may be a
+subtype — so a reference to it must be cast to reach an exact type.</p>
 <h2 id="storage-types"><a class="header" href="#storage-types">Storage Types</a></h2>
 <p>Storage types are used in fields of structs and arrays to define packed data.</p>
 <div class="table-wrapper">
@@ -1742,6 +1802,34 @@ To specify a supertype, use <code>: supertype</code> before the assignment.</p>
 type open_point = open { x: i32 };                // non-final: extensible
 type sub_point : open_point = { x: i32, y: i32 }; // extends open_point
 </code></pre>
+<h3 id="custom-descriptors-1"><a class="header" href="#custom-descriptors-1">Custom Descriptors</a></h3>
+<p>The <a href="https://github.com/WebAssembly/custom-descriptors">custom-descriptors proposal</a>
+lets a struct carry a <em>descriptor</em>: a second struct associated with it (used, for
+instance, to model a runtime type or vtable). The described type names its
+descriptor with a <code>descriptor &lt;name&gt;</code> clause, and the descriptor names what it
+describes with a <code>describes &lt;name&gt;</code> clause. Both clauses sit between the <code>open</code>
+marker and the struct body:</p>
+<pre><code class="language-wax">rec {
+  type obj = descriptor obj_desc { x: i32 };
+  type obj_desc = describes obj { };
+}
+</code></pre>
+<p>Maps to Wasm:</p>
+<pre><code class="language-wat">(rec
+  (type $obj (descriptor $obj_desc) (struct (field $x i32)))
+  (type $obj_desc (describes $obj) (struct)))
+</code></pre>
+<p>The two types must satisfy several well-formedness rules, all checked during
+validation:</p>
+<ul>
+<li>both must be <strong>structs</strong>, declared in the <strong>same <code>rec</code> group</strong>;</li>
+<li>the clauses must be <strong>reciprocal</strong> — if <code>obj</code> names <code>obj_desc</code> as its
+descriptor, then <code>obj_desc</code> must describe <code>obj</code>;</li>
+<li>a described type must be declared <strong>before</strong> its descriptor;</li>
+<li>in a subtype hierarchy, if a supertype has a descriptor its subtypes must too
+(with a descriptor that is itself a subtype), and a described type is inherited
+covariantly.</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="instructions"><a class="header" href="#instructions">Instructions</a></h1>
 <p>Wax instructions are expression-oriented.</p>
@@ -1926,6 +2014,8 @@ its own assignment.</p>
 <tr><td><code>br_on_non_null $l</code></td><td><code>br_on_non_null 'l val</code></td></tr>
 <tr><td><code>br_on_cast $l $t1 $t2</code></td><td><code>br_on_cast 'l t2 val</code></td></tr>
 <tr><td><code>br_on_cast_fail $l $t1 $t2</code></td><td><code>br_on_cast_fail 'l t2 val</code></td></tr>
+<tr><td><code>br_on_cast_desc_eq $l $t1 $t2</code></td><td><code>br_on_cast 'l [?]descriptor(d) val</code></td></tr>
+<tr><td><code>br_on_cast_desc_eq_fail $l $t1 $t2</code></td><td><code>br_on_cast_fail 'l [?]descriptor(d) val</code></td></tr>
 <tr><td><code>return</code></td><td><code>return val</code></td></tr>
 <tr><td><code>call $f</code></td><td><code>f(args)</code></td></tr>
 <tr><td><code>call_ref $t</code></td><td><code>(val as &amp;?t)(args)</code></td></tr>
@@ -1972,6 +2062,10 @@ types are always kept.</p>
 <tr><td><code>i31.get_u</code></td><td><code>val as i32_u</code></td></tr>
 <tr><td><code>ref.cast</code></td><td><code>val as &amp;type</code></td></tr>
 <tr><td><code>ref.test</code></td><td><code>val is &amp;type</code></td></tr>
+<tr><td><code>ref.cast (ref (exact $t))</code></td><td><code>val as &amp;!t</code></td></tr>
+<tr><td><code>ref.test (ref (exact $t))</code></td><td><code>val is &amp;!t</code></td></tr>
+<tr><td><code>ref.cast_desc_eq $t</code></td><td><code>val as descriptor(d)</code></td></tr>
+<tr><td><code>ref.cast_desc_eq (ref null …) $t</code></td><td><code>val as ?descriptor(d)</code></td></tr>
 </tbody>
 </table>
 </div>
@@ -1992,8 +2086,11 @@ types are always kept.</p>
 <tbody>
 <tr><td><code>struct.new $t</code></td><td><code>{t| field: val, ... }</code></td></tr>
 <tr><td><code>struct.new_default $t</code></td><td><code>{t| .. }</code></td></tr>
+<tr><td><code>struct.new_desc $t</code></td><td><code>{descriptor(d)| field: val, ... }</code></td></tr>
+<tr><td><code>struct.new_default_desc $t</code></td><td><code>{descriptor(d)| .. }</code></td></tr>
 <tr><td><code>struct.get $t $f</code></td><td><code>val.field</code></td></tr>
 <tr><td><code>struct.set $t $f</code></td><td><code>val.field = new_val</code></td></tr>
+<tr><td><code>ref.get_desc $t</code></td><td><code>val.descriptor</code></td></tr>
 <tr><td><code>array.new $t</code></td><td><code>[t| val; len]</code></td></tr>
 <tr><td><code>array.new_default $t</code></td><td><code>[t| ..; len]</code></td></tr>
 <tr><td><code>array.new_fixed $t</code></td><td><code>[t| val, ...]</code></td></tr>
@@ -2576,6 +2673,24 @@ sets a boolean; <code>NAME=N.N.N</code> (three integers) sets a version; any oth
 <code>NAME=VALUE</code> sets a string.</li>
 <li>Repeatable, to set several variables. Has no effect on Wasm binary input
 (which carries no conditionals).</li>
+</ul>
+</li>
+<li>
+<p><strong><code>-X</code></strong> <em>NAME[=on|off]</em>, <strong><code>--feature</code></strong> <em>NAME[=on|off]</em></p>
+<ul>
+<li>Enable (or disable) an optional WebAssembly proposal, off by default.
+Bare <em>NAME</em> or <code>NAME=on</code>/<code>true</code>/<code>yes</code> enables it; <code>NAME=off</code>/<code>false</code>/<code>no</code>
+disables it. Repeatable. Known features:
+<ul>
+<li><code>custom-descriptors</code> — exact reference types (<code>&amp;!t</code>), <code>descriptor</code>/<code>describes</code>
+struct clauses, and the descriptor instructions. Without it these
+constructs are rejected during validation.</li>
+<li><code>compact-import-section</code> — group a module’s consecutive same-module
+imports under one module name in the binary import section. Gated on
+<em>output</em> only: it is emitted just when enabled, but the compact form is
+always accepted on input.</li>
+</ul>
+</li>
 </ul>
 </li>
 <li>
