@@ -141,14 +141,14 @@ let is_float32 s =
 
 let is_float64 s = check_float s 52 (fun s -> Float.(is_finite (of_string s)))
 
-(*ZZZ We could be smarter: if we have invalid UTF-8 character, use \xx
-  for all characters *)
 let escape_string s =
   let b = Buffer.create (String.length s + 2) in
-  let rec loop b i len =
-    if i < len then
-      let dec = String.get_utf_8_uchar s i in
-      if Uchar.utf_decode_is_valid dec then (
+  if String.is_valid_utf_8 s then
+    (* Valid UTF-8: keep it readable, escaping only the characters a WAT string
+       literal cannot carry raw (controls, the quote and the backslash). *)
+    let rec loop i len =
+      if i < len then (
+        let dec = String.get_utf_8_uchar s i in
         let u = Uchar.utf_decode_uchar dec in
         let c = Uchar.to_int u in
         (if c >= 32 && c <> 127 && c <> 34 (* '"' *) && c <> 92 (* '\\' *) then
@@ -161,11 +161,12 @@ let escape_string s =
            | '"' -> Buffer.add_string b "\\\""
            | '\\' -> Buffer.add_string b "\\\\"
            | _ -> Printf.bprintf b "\\%02x" c);
-        loop b (i + Uchar.utf_decode_length dec) len)
-      else (
-        Printf.bprintf b "\\%02x" (Char.code s.[i]);
-        loop b (i + 1) len)
-  in
-  loop b 0 (String.length s);
+        loop (i + Uchar.utf_decode_length dec) len)
+    in
+    loop 0 (String.length s)
+  else
+    (* Not valid UTF-8: this is binary data, so dump every byte as a [\HH]
+       escape rather than interleaving decoded text with byte escapes. *)
+    String.iter (fun c -> Printf.bprintf b "\\%02x" (Char.code c)) s;
   let s' = Buffer.contents b in
   (Wax_utils.Unicode.terminal_width s', s')
