@@ -1135,7 +1135,8 @@ let output_section ch id encoder data =
   output_uint len;
   Buffer.output_buffer ch b
 
-let module_ ~out_channel ?opt_source_map_file (m : Ast.location module_) =
+let module_ ~out_channel ?output_file ?opt_source_map_file
+    (m : Ast.location module_) =
   Wax_utils.Debug.timed "output" @@ fun () ->
   Out_channel.output_string out_channel "\x00\x61\x73\x6D\x01\x00\x00\x00";
 
@@ -1429,9 +1430,14 @@ let module_ ~out_channel ?opt_source_map_file (m : Ast.location module_) =
   (* Generate source map file *)
   match opt_source_map_file with
   | Some map_file_name ->
-      let json_content =
-        Wax_utils.Source_map.to_json source_map_t ~file_name:map_file_name
+      (* The [file] field names the generated binary this map describes, not the
+         map itself; use its basename so the map stays valid when moved with the
+         binary. Fall back to the map name if the binary went to stdout. *)
+      let file_name =
+        Filename.basename
+          (match output_file with Some f -> f | None -> map_file_name)
       in
+      let json_content = Wax_utils.Source_map.to_json source_map_t ~file_name in
       Out_channel.with_open_text map_file_name (fun oc ->
           Out_channel.output_string oc json_content)
   | None -> ()

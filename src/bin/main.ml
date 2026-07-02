@@ -278,8 +278,8 @@ let wax_to_wasm ~input_file ~output_file ~validate ~warn_unused ~color
         Wax_wasm.Validation.f ~warn_unused:false d wasm_ast_text);
   let wasm_ast_binary = to_binary ~color ~source:(Some text) wasm_ast_text in
   with_open_out output_file (fun oc ->
-      Wax_wasm.Wasm_output.module_ ~out_channel:oc ?opt_source_map_file
-        wasm_ast_binary)
+      Wax_wasm.Wasm_output.module_ ~out_channel:oc ?output_file
+        ?opt_source_map_file wasm_ast_binary)
 
 let wat_to_wasm ~input_file ~output_file ~validate ~warn_unused ~color
     ~output_color:_ ~fold_mode:_ ~defines ~source_map_file:opt_source_map_file =
@@ -298,8 +298,8 @@ let wat_to_wasm ~input_file ~output_file ~validate ~warn_unused ~color
         Wax_wasm.Validation.f ~warn_unused d ast);
   let wasm_ast_binary = to_binary ~color ~source:(Some text) ast in
   with_open_out output_file (fun oc ->
-      Wax_wasm.Wasm_output.module_ ~out_channel:oc ?opt_source_map_file
-        wasm_ast_binary)
+      Wax_wasm.Wasm_output.module_ ~out_channel:oc ?output_file
+        ?opt_source_map_file wasm_ast_binary)
 
 (* Parse a Wasm binary, reporting malformed input as a diagnostic (and exiting)
    through the standard diagnostics machinery. *)
@@ -314,7 +314,8 @@ let wasm_to_wasm ~input_file ~output_file ~validate:_validate ~warn_unused:_
   let ast = parse_wasm ~color ?filename:input_file text in
   (* if validate then Wax_wasm.Validation.f ast; *)
   with_open_out output_file (fun oc ->
-      Wax_wasm.Wasm_output.module_ ~out_channel:oc ?opt_source_map_file ast)
+      Wax_wasm.Wasm_output.module_ ~out_channel:oc ?output_file
+        ?opt_source_map_file ast)
 
 let wasm_to_wat ~input_file ~output_file ~validate ~warn_unused ~color
     ~output_color ~fold_mode ~defines:_ ~source_map_file:opt_source_map_file =
