@@ -3,9 +3,34 @@
  (public_name wax-lib.utils)
  (libraries unix))
 
-(rule
- (mode fallback)
- (action
-  (with-stdout-to
-   unicode_widths.ml
-   (run %{project_root}/scripts/build_unicode_width_table.exe))))
+; unicode_widths.ml is a committed, generated table (character display
+; widths). Its generator, scripts/build_unicode_width_table.exe, depends on
+; uucp — a dev-only dependency (:with-dev-setup). The regeneration rule is
+; therefore isolated in a virtual subdirectory marked vendored below, which
+; dune excludes from @all (and hence from @install/@runtest and the default
+; build). A normal build uses the committed table and never requires uucp on
+; any platform; regeneration happens only on demand, from a dev switch that
+; has uucp, with:
+;   dune build @src/lib-utils/regenerate-unicode-widths
+
+(vendored_dirs unicode-widths-gen)
+
+(subdir
+ unicode-widths-gen
+ (rule
+  (target unicode_widths.ml)
+  ; (universe) so an explicit regeneration always reruns the generator,
+  ; picking up a newer uucp (and thus Unicode version) even when nothing in
+  ; the repository changed.
+  (deps %{project_root}/scripts/build_unicode_width_table.exe (universe))
+  (mode
+   (promote
+    (into ..)))
+  (action
+   (with-stdout-to
+    unicode_widths.ml
+    (run %{project_root}/scripts/build_unicode_width_table.exe)))))
+
+(alias
+ (name regenerate-unicode-widths)
+ (deps unicode-widths-gen/unicode_widths.ml))
