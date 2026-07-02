@@ -10,7 +10,7 @@ Extract each ```wax block into its own file:
 Confirm the expected number of examples was extracted (bump this and promote
 when you add or remove an example):
 
-  $ ls blk*.wax | wc -l
+  $ ls blk*.wax | wc -l | tr -d ' '
   21
 
 Each example must type-check and convert to WAT (optional proposals the examples

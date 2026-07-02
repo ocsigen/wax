@@ -10,7 +10,7 @@ are unchanged, so a compact binary decodes back to the same module.
 The compact section is smaller — the three consecutive `env` imports share one
 module name rather than repeating it:
 
-  $ test "$(stat -c %s compact.wasm)" -lt "$(stat -c %s plain.wasm)" && echo smaller
+  $ test $(wc -c < compact.wasm) -lt $(wc -c < plain.wasm) && echo smaller
   smaller
 
 It decodes back to exactly the same imports, in order:

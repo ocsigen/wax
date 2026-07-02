@@ -29,7 +29,7 @@ type-checks, round-trips, and lowers to WAT and to the binary format.
   (func $m (throw $stop))
   (func $f (try (do (call $m)) (catch $stop (nop))))
 
-  $ wax -f wasm stop.wax -o stop.wasm && wc -c < stop.wasm
+  $ wax -f wasm stop.wax -o stop.wasm && wc -c < stop.wasm | tr -d ' '
   68
 
 The parentheses are required: a bare `tag NAME;` or `fn NAME { … }` (no
