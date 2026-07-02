@@ -100,9 +100,9 @@ let module_ ctx env (fields : location Ast.module_) :
     | NonNull v -> NonNull (sone v)
     | Struct (idx, fields) ->
         Struct (idx, List.map (fun (i, v) -> (i, sone v)) fields)
-    | StructDesc (idx, d, fields) ->
-        StructDesc (idx, sone d, List.map (fun (i, v) -> (i, sone v)) fields)
-    | StructDefaultDesc (idx, d) -> StructDefaultDesc (idx, sone d)
+    | StructDesc (d, fields) ->
+        StructDesc (sone d, List.map (fun (i, v) -> (i, sone v)) fields)
+    | StructDefaultDesc d -> StructDefaultDesc (sone d)
     | StructGet (v, idx) -> StructGet (sone v, idx)
     | GetDescriptor v -> GetDescriptor (sone v)
     | StructSet (v, idx, w) -> StructSet (sone v, idx, sone w)

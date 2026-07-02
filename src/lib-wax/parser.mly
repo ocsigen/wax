@@ -103,10 +103,6 @@
 %nonassoc prec_unary
 %nonassoc "!"
 %left "." "(" "["
-(* A [descriptor] suffix binds to the nearest enclosing [br_on_cast] / cast:
-   shifting it (rather than reducing the plain branch) resolves the otherwise
-   arbitrary conflict, higher than [prec_branch]. *)
-%nonassoc DESCRIPTOR
 
 (* BR 'foo 1 + 2 understood as BR 'foo (1 + 2)
    BR_TABLE { ...} 1 + 2 understood as BR_TABLE { ...} (1 + 2)
@@ -337,8 +333,6 @@ cast_type:
        try Hashtbl.find casttype_tbl t with Not_found ->
          raise (Wax_wasm.Parsing.Syntax_error
                   ($sloc, Printf.sprintf "Identifier '%s' is not a cast type.\n" t )) }
-(* Lower precedence than [DESCRIPTOR] so that, after [e as &T], a following
-   [descriptor] shifts into a [CastDesc] rather than reducing a plain [Cast]. *)
 | t = reference_type { Valtype (Ref t) } %prec AS
 | "&" nullable = boption("?") FN s = function_type
    { Functype { nullable; sign = s } }
@@ -583,6 +577,10 @@ braced_block:
 | "{" l = statement_list "}" { with_loc ($startpos, $endpos(l)) l }
 
 parenthesized_expression: e = expression { e }
+(* The [descriptor(d)] clause shared by the custom-descriptors instructions
+   ([struct.new_desc], [ref.cast_desc_eq], [br_on_cast_desc_eq]): the target type
+   is recovered from [d]'s (descriptor) type, so only the operand is written. *)
+descriptor_operand: DESCRIPTOR "(" d = expression ")" { d }
 index_expression: e = expression { e }
 then_branch: e = expression { e }
 condition_expression: e = expression { e }
@@ -621,16 +619,16 @@ plaininstr:
   { with_loc $sloc (StructDefault (Some x)) }
 | "{" ".." "}"
   { with_loc $sloc (StructDefault (None)) }
-| "{" x = ident DESCRIPTOR d = expression "|" l = structure "}"
-  { with_loc $sloc (StructDesc (Some x, d, l)) }
-| "{" x = ident DESCRIPTOR d = expression "|" ".." "}"
-  { with_loc $sloc (StructDefaultDesc (Some x, d)) }
+| "{" d = descriptor_operand "|" l = structure "}"
+  { with_loc $sloc (StructDesc (d, l)) }
+| "{" d = descriptor_operand "|" ".." "}"
+  { with_loc $sloc (StructDefaultDesc d) }
 | "[" b = array_body "]" { with_loc $sloc (b None) }
 | "[" t = ident "|" b = array_body "]" { with_loc $sloc (b (Some t)) }
 | x = ident ":=" i = expression { with_loc $sloc (Tee (x, i)) }
 | i = expression AS t = cast_type { with_loc $sloc (Cast(i, t)) }
-| i = expression AS t = reference_type DESCRIPTOR d = expression
-  { with_loc $sloc (CastDesc(i, t, d)) } %prec AS
+| i = expression AS nullable = boption("?") d = descriptor_operand
+  { with_loc $sloc (CastDesc(i, nullable, d)) } %prec AS
 | i = expression IS t = reference_type { with_loc $sloc (Test(i, t)) }
 | i = expression "." x = ident { with_loc $sloc (StructGet(i, x)) }
 | i = expression "." DESCRIPTOR { with_loc $sloc (GetDescriptor i) }
@@ -673,8 +671,8 @@ plaininstr:
 | BR_ON_NON_NULL l = label i = expression { with_loc $sloc (Br_on_non_null (l, i)) }  %prec prec_branch
 | BR_ON_CAST l = label t = reference_type i = expression { with_loc $sloc (Br_on_cast (l, t, i)) } %prec prec_branch
 | BR_ON_CAST_FAIL l = label t = reference_type i = expression { with_loc $sloc (Br_on_cast_fail (l, t, i)) } %prec prec_branch
-| BR_ON_CAST l = label t = reference_type i = expression DESCRIPTOR d = expression { with_loc $sloc (Br_on_cast_desc_eq (l, t, i, d)) } %prec prec_branch
-| BR_ON_CAST_FAIL l = label t = reference_type i = expression DESCRIPTOR d = expression { with_loc $sloc (Br_on_cast_desc_eq_fail (l, t, i, d)) } %prec prec_branch
+| BR_ON_CAST l = label nullable = boption("?") d = descriptor_operand i = expression { with_loc $sloc (Br_on_cast_desc_eq (l, nullable, i, d)) } %prec prec_branch
+| BR_ON_CAST_FAIL l = label nullable = boption("?") d = descriptor_operand i = expression { with_loc $sloc (Br_on_cast_desc_eq_fail (l, nullable, i, d)) } %prec prec_branch
 | CONT_NEW t = type_name "(" i = expression ")"
   { with_loc $sloc (ContNew (t, i)) }
 | CONT_BIND src = type_name dst = type_name "(" l = expression_list ")"

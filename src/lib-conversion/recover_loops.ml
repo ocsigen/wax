@@ -67,7 +67,7 @@ let rec refs_instr name (i : location instr) : bool =
   | NonNull e
   | StructGet (e, _)
   | GetDescriptor e
-  | StructDefaultDesc (_, e)
+  | StructDefaultDesc e
   | ArrayDefault (_, e)
   | UnOp (_, e)
   | ThrowRef e
@@ -75,7 +75,7 @@ let rec refs_instr name (i : location instr) : bool =
       refs_instr name e
   | Call (a, l) | TailCall (a, l) -> refs_instr name a || any l
   | Struct (_, fs) -> List.exists (fun (_, e) -> refs_instr name e) fs
-  | StructDesc (_, d, fs) ->
+  | StructDesc (d, fs) ->
       refs_instr name d || List.exists (fun (_, e) -> refs_instr name e) fs
   | CastDesc (a, _, b)
   | StructSet (a, _, b)
@@ -198,10 +198,10 @@ and rewrite_desc (desc : location instr_desc) : location instr_desc =
   | NonNull e -> NonNull (rewrite_instr e)
   | Struct (idx, fs) ->
       Struct (idx, List.map (fun (n, e) -> (n, rewrite_instr e)) fs)
-  | StructDesc (idx, d, fs) ->
+  | StructDesc (d, fs) ->
       StructDesc
-        (idx, rewrite_instr d, List.map (fun (n, e) -> (n, rewrite_instr e)) fs)
-  | StructDefaultDesc (idx, d) -> StructDefaultDesc (idx, rewrite_instr d)
+        (rewrite_instr d, List.map (fun (n, e) -> (n, rewrite_instr e)) fs)
+  | StructDefaultDesc d -> StructDefaultDesc (rewrite_instr d)
   | StructGet (e, x) -> StructGet (rewrite_instr e, x)
   | GetDescriptor e -> GetDescriptor (rewrite_instr e)
   | StructSet (e, x, v) -> StructSet (rewrite_instr e, x, rewrite_instr v)

@@ -287,6 +287,22 @@ let expr_type_name i =
       print_instr i;
       assert false
 
+(* The target reftype [(ref nullable (exact_1 X))] of a descriptor cast/branch,
+   recovered from the descriptor operand [d : (ref null? (exact_1 Y))] with
+   [Y describes X]: the described type [X] and the exactness [exact_1] come from
+   [d]; only the result [nullable] bit is written in the source. *)
+let descriptor_cast_target ctx ~nullable d : reftype =
+  let exact = match (expr_reftype d).typ with Exact _ -> true | _ -> false in
+  let x =
+    match
+      Wax_lang.Typing.get_type_definition ctx.diagnostics ctx.types
+        (expr_type_name d)
+    with
+    | Some { describes = Some x; _ } -> x
+    | _ -> assert false
+  in
+  { nullable; typ = (if exact then Exact x else Type x) }
+
 (* Whether the receiver of an [obj.meth(..)] call is an array — the case that
    makes a [fill]/[copy]/[init] method an array operation, as opposed to a
    struct-field/indirect call. Mirrors the type checker and [check_hole_order],
@@ -407,7 +423,7 @@ let labels_in_list l =
         instr a;
         lst l
     | Struct (_, fs) -> List.iter (fun (_, e) -> instr e) fs
-    | StructDesc (_, d, fs) ->
+    | StructDesc (d, fs) ->
         List.iter (fun (_, e) -> instr e) fs;
         instr d
     | Set (_, e)
@@ -417,7 +433,7 @@ let labels_in_list l =
     | NonNull e
     | StructGet (e, _)
     | GetDescriptor e
-    | StructDefaultDesc (_, e)
+    | StructDefaultDesc e
     | ArrayDefault (_, e)
     | UnOp (_, e)
     | ThrowRef e
@@ -1328,10 +1344,9 @@ and instruction_desc ret ctx i : location Text.instr list =
         match opt_idx with Some idx -> idx | None -> expr_type_name i
       in
       folded loc (StructNewDefault (index idx)) []
-  | StructDesc (opt_idx, d, fields) ->
-      let idx =
-        match opt_idx with Some idx -> idx | None -> expr_type_name i
-      in
+  | StructDesc (d, fields) ->
+      (* The struct type is the (exact) result type. *)
+      let idx = expr_type_name i in
       let field_names = Hashtbl.find ctx.struct_fields idx.desc in
       let field_map =
         List.fold_left
@@ -1344,11 +1359,10 @@ and instruction_desc ret ctx i : location Text.instr list =
       let args_code = List.concat_map (instruction ret ctx) instrs in
       (* The descriptor operand is pushed last, above the field values. *)
       folded loc (StructNewDesc (index idx)) (args_code @ instruction ret ctx d)
-  | StructDefaultDesc (opt_idx, d) ->
-      let idx =
-        match opt_idx with Some idx -> idx | None -> expr_type_name i
-      in
-      folded loc (StructNewDefaultDesc (index idx)) (instruction ret ctx d)
+  | StructDefaultDesc d ->
+      folded loc
+        (StructNewDefaultDesc (index (expr_type_name i)))
+        (instruction ret ctx d)
   | StructGet (instr_val, field) ->
       (* Plain struct field access; the instruction methods that used to share
          this syntax now take parentheses and are handled in the [Call] case. *)
@@ -1359,10 +1373,11 @@ and instruction_desc ret ctx i : location Text.instr list =
       folded loc
         (RefGetDesc (index (expr_type_name instr_val)))
         (instruction ret ctx instr_val)
-  | CastDesc (value, t, d) ->
-      (* The descriptor operand is pushed last, above the value. *)
+  | CastDesc (value, _, d) ->
+      (* The target reftype is the cast's (exact) result type; the descriptor
+         operand is pushed last, above the value. *)
       folded loc
-        (RefCastDescEq (reftype t))
+        (RefCastDescEq (reftype (expr_reftype i)))
         (instruction ret ctx value @ instruction ret ctx d)
   | StructSet (instr_val, field_idx, new_val) ->
       let code_val = instruction ret ctx instr_val in
@@ -1631,14 +1646,16 @@ and instruction_desc ret ctx i : location Text.instr list =
              reftype (br_on_cast_source expr target_reftype),
              reftype target_reftype ))
         (instruction ret ctx expr)
-  | Br_on_cast_desc_eq (l, target_reftype, expr, d) ->
+  | Br_on_cast_desc_eq (l, nullable, expr, d) ->
+      let target_reftype = descriptor_cast_target ctx ~nullable d in
       folded loc
         (Br_on_cast_desc_eq
            ( label ret l,
              reftype (br_on_cast_source expr target_reftype),
              reftype target_reftype ))
         (instruction ret ctx expr @ instruction ret ctx d)
-  | Br_on_cast_desc_eq_fail (l, target_reftype, expr, d) ->
+  | Br_on_cast_desc_eq_fail (l, nullable, expr, d) ->
+      let target_reftype = descriptor_cast_target ctx ~nullable d in
       folded loc
         (Br_on_cast_desc_eq_fail
            ( label ret l,

@@ -431,26 +431,31 @@ let branch_ref_instr instr pp name label ty i =
       space pp ();
       instr Branch pp i)
 
-(* As [branch_ref_instr], with a trailing [descriptor <d>] operand (the
-   custom-descriptors [br_on_cast_desc_eq] / [_fail]). *)
-let branch_ref_desc_instr instr pp name label ty i d =
+(* [ [?]descriptor(d) ] — the target-spec of the custom-descriptors instructions
+   ([ref.cast_desc_eq], [br_on_cast_desc_eq], [struct.new_desc]). The target type
+   is recovered from [d]'s descriptor type, so only the operand is written; a
+   leading [?] marks a nullable result. The [( )] delimit [d] so it may be any
+   expression with no precedence clash. *)
+let descriptor_operand instr pp ?(nullable = false) d =
+  if nullable then punctuation pp "?";
+  keyword pp "descriptor";
+  punctuation pp "(";
+  box pp (fun () -> instr Instruction pp d);
+  punctuation pp ")"
+
+(* As [branch_ref_instr], for the custom-descriptors [br_on_cast_desc_eq] /
+   [_fail]: the [[?]descriptor(d)] target-spec precedes the value, so the value
+   is the sole trailing operand and prints at [Branch] like the plain form. *)
+let branch_ref_desc_instr instr pp name label nullable i d =
   box pp ~indent:indent_level (fun () ->
       keyword pp name;
       space pp ();
       identifier pp "'";
       identifier pp label.desc;
       space pp ();
-      reftype pp ty;
+      descriptor_operand instr pp ~nullable d;
       space pp ();
-      (* The value is printed above [Cast] precedence: a bare cast value would
-         otherwise absorb the following [descriptor] into a [CastDesc]. *)
-      instr UnaryPrefix pp i;
-      space pp ();
-      keyword pp "descriptor";
-      space pp ();
-      (* The descriptor operand binds tightly (see the [DESCRIPTOR] precedence),
-         so a non-atomic operand (e.g. a cast) must be parenthesized. *)
-      instr CallAndFieldAccess pp d)
+      instr Branch pp i)
 
 let call_instr instr pp ?prefix i l =
   hvbox pp (fun () ->
@@ -506,19 +511,13 @@ let struct_instr pp nm f =
           f ());
       space pp ())
 
-(* As [struct_instr], with a [descriptor <d>] clause between the type name and
-   the [|] (the custom-descriptors [struct.new_desc] / [struct.new_default_desc]).
-   [print_desc] renders the descriptor operand. *)
-let struct_desc_instr pp nm print_desc f =
+(* As [struct_instr] but with a leading [descriptor(d)] target-spec instead of a
+   type name (the custom-descriptors [struct.new_desc] / [struct.new_default_desc];
+   the struct type is recovered from [d]). [print_desc] renders the operand. *)
+let struct_desc_instr pp print_desc f =
   hvbox pp ~indent:0 (fun () ->
       box pp (fun () ->
           punctuation pp "{";
-          Option.iter
-            (fun t ->
-              identifier pp t.desc;
-              space pp ())
-            nm;
-          keyword pp "descriptor";
           space pp ();
           print_desc ();
           punctuation pp "|");
@@ -934,21 +933,14 @@ let rec instr prec pp (i : _ instr) =
               keyword pp "as";
               space pp ();
               casttype pp t))
-  | CastDesc (i, t, d) ->
+  | CastDesc (i, nullable, d) ->
       box pp ~indent:indent_level (fun () ->
           instr Cast pp i;
           space pp ();
           box pp (fun () ->
               keyword pp "as";
               space pp ();
-              reftype pp t;
-              space pp ();
-              keyword pp "descriptor";
-              space pp ();
-              (* Parenthesize a non-atomic descriptor operand: it binds tightly
-                 (see the [DESCRIPTOR] precedence), so a trailing operator (e.g. a
-                 cast) would otherwise escape it. *)
-              instr CallAndFieldAccess pp d))
+              descriptor_operand instr pp ~nullable d))
   | NonNull i ->
       instr UnaryPostfix pp i;
       operator pp "!"
@@ -966,16 +958,16 @@ let rec instr prec pp (i : _ instr) =
             (fun pp (nm, i) -> print_key_value pp nm.desc (instr Instruction) i)
             pp l)
   | StructDefault nm -> struct_instr pp nm (fun () -> punctuation pp "..")
-  | StructDesc (nm, d, l) ->
-      struct_desc_instr pp nm
-        (fun () -> instr Instruction pp d)
+  | StructDesc (d, l) ->
+      struct_desc_instr pp
+        (fun () -> descriptor_operand instr pp d)
         (fun () ->
           list_commasep_trailing
             (fun pp (nm, i) -> print_key_value pp nm.desc (instr Instruction) i)
             pp l)
-  | StructDefaultDesc (nm, d) ->
-      struct_desc_instr pp nm
-        (fun () -> instr Instruction pp d)
+  | StructDefaultDesc d ->
+      struct_desc_instr pp
+        (fun () -> descriptor_operand instr pp d)
         (fun () -> punctuation pp "..")
   | StructGet (i, s) ->
       field_receiver pp i;
@@ -1086,10 +1078,10 @@ let rec instr prec pp (i : _ instr) =
       branch_ref_instr instr pp "br_on_cast" label ty i
   | Br_on_cast_fail (label, ty, i) ->
       branch_ref_instr instr pp "br_on_cast_fail" label ty i
-  | Br_on_cast_desc_eq (label, ty, i, d) ->
-      branch_ref_desc_instr instr pp "br_on_cast" label ty i d
-  | Br_on_cast_desc_eq_fail (label, ty, i, d) ->
-      branch_ref_desc_instr instr pp "br_on_cast_fail" label ty i d
+  | Br_on_cast_desc_eq (label, nullable, i, d) ->
+      branch_ref_desc_instr instr pp "br_on_cast" label nullable i d
+  | Br_on_cast_desc_eq_fail (label, nullable, i, d) ->
+      branch_ref_desc_instr instr pp "br_on_cast_fail" label nullable i d
   | Br_table (labels, i) ->
       let default, cases =
         match List.rev labels with

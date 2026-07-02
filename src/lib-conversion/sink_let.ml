@@ -30,7 +30,7 @@ let rec occurs name i =
   | NonNull e
   | StructGet (e, _)
   | GetDescriptor e
-  | StructDefaultDesc (_, e)
+  | StructDefaultDesc e
   | UnOp (_, e)
   | Br_if (_, e)
   | Br_table (_, e)
@@ -43,7 +43,7 @@ let rec occurs name i =
   | ContNew (_, e) ->
       occurs name e
   | Struct (_, fields) -> List.exists (fun (_, e) -> occurs name e) fields
-  | StructDesc (_, d, fields) ->
+  | StructDesc (d, fields) ->
       occurs name d || List.exists (fun (_, e) -> occurs name e) fields
   | CastDesc (e1, _, e2)
   | Br_on_cast_desc_eq (_, _, e1, e2)
@@ -156,7 +156,7 @@ let rec first_access name i =
   | NonNull e
   | StructGet (e, _)
   | GetDescriptor e
-  | StructDefaultDesc (_, e)
+  | StructDefaultDesc e
   | UnOp (_, e)
   | Br_if (_, e)
   | Br_table (_, e)
@@ -169,7 +169,7 @@ let rec first_access name i =
   | ContNew (_, e) ->
       first_access name e
   | Struct (_, fields) -> fl (List.map snd fields)
-  | StructDesc (_, d, fields) ->
+  | StructDesc (d, fields) ->
       (* The field values are evaluated before the descriptor operand. *)
       fst2 (fl (List.map snd fields)) (first_access name d)
   | CastDesc (e1, _, e2)

@@ -118,13 +118,13 @@ type 'info instr_desc =
   | Int of string
   | Float of string
   | Cast of 'info instr * casttype
-  | CastDesc of 'info instr * reftype * 'info instr
+  | CastDesc of 'info instr * (* nullable result *) bool * 'info instr
   | Test of 'info instr * reftype
   | NonNull of 'info instr
   | Struct of ident option * (ident * 'info instr) list
   | StructDefault of ident option
-  | StructDesc of ident option * 'info instr * (ident * 'info instr) list
-  | StructDefaultDesc of ident option * 'info instr
+  | StructDesc of 'info instr * (ident * 'info instr) list
+  | StructDefaultDesc of 'info instr
   | StructGet of 'info instr * ident
   | GetDescriptor of 'info instr
   | StructSet of 'info instr * ident * 'info instr
@@ -155,8 +155,10 @@ type 'info instr_desc =
   | Br_on_non_null of label * 'info instr
   | Br_on_cast of label * reftype * 'info instr
   | Br_on_cast_fail of label * reftype * 'info instr
-  | Br_on_cast_desc_eq of label * reftype * 'info instr * 'info instr
-  | Br_on_cast_desc_eq_fail of label * reftype * 'info instr * 'info instr
+  | Br_on_cast_desc_eq of
+      label * (* nullable *) bool * 'info instr * 'info instr
+  | Br_on_cast_desc_eq_fail of
+      label * (* nullable *) bool * 'info instr * 'info instr
   | Throw of ident * 'info instr option
   | ThrowRef of 'info instr
   | ContNew of ident * 'info instr

@@ -56,12 +56,10 @@ let rec map_instr f instr =
     | NonNull v -> NonNull (map_instr f v)
     | Struct (idx, fields) ->
         Struct (idx, List.map (fun (i, v) -> (i, map_instr f v)) fields)
-    | StructDesc (idx, d, fields) ->
+    | StructDesc (d, fields) ->
         StructDesc
-          ( idx,
-            map_instr f d,
-            List.map (fun (i, v) -> (i, map_instr f v)) fields )
-    | StructDefaultDesc (idx, d) -> StructDefaultDesc (idx, map_instr f d)
+          (map_instr f d, List.map (fun (i, v) -> (i, map_instr f v)) fields)
+    | StructDefaultDesc d -> StructDefaultDesc (map_instr f d)
     | StructGet (v, idx) -> StructGet (map_instr f v, idx)
     | GetDescriptor v -> GetDescriptor (map_instr f v)
     | StructSet (v, idx, w) -> StructSet (map_instr f v, idx, map_instr f w)

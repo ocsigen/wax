@@ -1095,6 +1095,44 @@ let indirect_callee ctx with_loc tab ((tyidx, sign) : Src.typeuse) index =
   | Some ct -> with_loc (Ast.Cast (tabget, ct))
   | None -> tabget
 
+(* A bottom descriptor operand carries no descriptor type of its own — a hole
+   (dead code, popped from an empty stack) or a [ref.null none]-style null (a cast
+   to a bottom heap type) — so the typer cannot recover the target from it. Pin it
+   to the descriptor type of the target [x] ([exact] matching the target's
+   exactness); a concrete operand keeps its own type. An existing bottom cast's
+   target is rewritten in place, so [simplify] cannot fold the pin back to bottom. *)
+let pin_descriptor ctx ~exact x d =
+  match (lookup_type ctx Type x).descriptor with
+  | None -> d
+  | Some y -> (
+      let y = idx ctx `Type y in
+      let pin =
+        Ast.Valtype
+          (Ast.Ref
+             {
+               nullable = true;
+               typ = (if exact then Ast.Exact y else Ast.Type y);
+             })
+      in
+      let is_bottom (t : Ast.heaptype) =
+        match t with
+        | None_ | NoFunc | NoExtern | NoExn | NoCont -> true
+        | _ -> false
+      in
+      match d.Ast.desc with
+      | Ast.Hole | Ast.Null -> { d with Ast.desc = Ast.Cast (d, pin) }
+      | Ast.Cast (inner, Ast.Valtype (Ast.Ref { typ; _ })) when is_bottom typ ->
+          { d with Ast.desc = Ast.Cast (inner, pin) }
+      | _ -> d)
+
+(* As [pin_descriptor], taking the target as the [reftype] the branch/cast
+   immediate carries (an abstract target has no descriptor — leave the hole). *)
+let pin_descriptor_reftype ctx (t : Src.reftype) d =
+  match t.typ with
+  | Type x -> pin_descriptor ctx ~exact:false x d
+  | Exact x -> pin_descriptor ctx ~exact:true x d
+  | _ -> d
+
 let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   let with_loc (i' : _ Ast.instr_desc) = { i with Ast.desc = i' } in
   let mem_call m meth args =
@@ -1276,21 +1314,24 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       Stack.push input
         (with_loc (Br_on_cast_fail (label ctx i, reftype ctx t, sequence args)))
   | Br_on_cast_desc_eq (i, _, t) ->
-      (* The descriptor operand is on top of the branch operands. *)
+      (* The descriptor operand is on top of the branch operands. The target type
+         and its exactness are recovered from the descriptor, so only the result
+         nullability of [t] is kept. *)
       let input = label_arity ctx i in
       let* d = Stack.pop in
+      let d = pin_descriptor_reftype ctx t d in
       let* args = Stack.grab input in
       Stack.push input
         (with_loc
-           (Br_on_cast_desc_eq (label ctx i, reftype ctx t, sequence args, d)))
+           (Br_on_cast_desc_eq (label ctx i, t.nullable, sequence args, d)))
   | Br_on_cast_desc_eq_fail (i, _, t) ->
       let input = label_arity ctx i in
       let* d = Stack.pop in
+      let d = pin_descriptor_reftype ctx t d in
       let* args = Stack.grab input in
       Stack.push input
         (with_loc
-           (Br_on_cast_desc_eq_fail
-              (label ctx i, reftype ctx t, sequence args, d)))
+           (Br_on_cast_desc_eq_fail (label ctx i, t.nullable, sequence args, d)))
   | Folded (i, l) ->
       let* () = instructions ctx l in
       instruction ctx i
@@ -1340,18 +1381,19 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   | StructNewDesc i ->
       let type_name = idx ctx `Type i in
       let fields = snd (struct_fields ctx type_name) in
-      (* The descriptor operand is on top of the field values. *)
+      (* The descriptor operand is on top of the field values. The struct type is
+         recovered from the descriptor, so it is not written. *)
       let* d = Stack.pop in
+      let d = pin_descriptor ctx ~exact:true i d in
       let* args = Stack.grab (List.length fields) in
       Stack.push 1
         (with_loc
            (StructDesc
-              ( Some (idx ctx `Type i),
-                d,
-                List.map2 (fun nm i -> (Ast.no_loc nm, i)) fields args )))
+              (d, List.map2 (fun nm i -> (Ast.no_loc nm, i)) fields args)))
   | StructNewDefaultDesc i ->
       let* d = Stack.pop in
-      Stack.push 1 (with_loc (StructDefaultDesc (Some (idx ctx `Type i), d)))
+      let d = pin_descriptor ctx ~exact:true i d in
+      Stack.push 1 (with_loc (StructDefaultDesc d))
   | StructGet (s, t, f) ->
       let type_name = idx ctx `Type t in
       let name = Sequence.get (fst (struct_fields ctx type_name)) f in
@@ -1569,10 +1611,13 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       let* e = Stack.pop in
       Stack.push 1 (with_loc (Cast (e, Valtype (Ref (reftype ctx t)))))
   | RefCastDescEq t ->
-      (* The descriptor operand is on top of the value. *)
+      (* The descriptor operand is on top of the value. The target type and its
+         exactness are recovered from the descriptor, so only [t]'s result
+         nullability is kept. *)
       let* d = Stack.pop in
+      let d = pin_descriptor_reftype ctx t d in
       let* e = Stack.pop in
-      Stack.push 1 (with_loc (CastDesc (e, reftype ctx t, d)))
+      Stack.push 1 (with_loc (CastDesc (e, t.nullable, d)))
   | RefGetDesc t ->
       let type_name = idx ctx `Type t in
       let* arg = Stack.pop in
