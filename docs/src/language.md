@@ -658,6 +658,11 @@ fn factorial_helper(n: i32, acc: i32) -> i32 {
 }
 ```
 
+`become` also accepts an intrinsic operation (for example `become mem.grow(n)`);
+since there is no tail-call instruction for intrinsics, this is equivalent to
+`return mem.grow(n)` — the intrinsic's result must match the function's result
+type.
+
 ## Functions
 
 ### Definition

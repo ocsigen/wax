@@ -1,0 +1,14 @@
+type ft = fn(i32) -> i32;
+
+memory mem: i32 [1];
+
+fn g(x: i32) -> i32 { x; }
+
+// A genuine tail call still emits return_call.
+fn direct(x: i32) -> i32 { become g(x); }
+
+// A call through a reference emits return_call_ref.
+fn viaref(x: i32, p: &ft) -> i32 { become (p)(x); }
+
+// An intrinsic cannot be a tail call, so it is evaluated and returned.
+fn grow(n: i32) -> i32 { become mem.grow(n); }

@@ -2942,38 +2942,16 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       return_expression i (Path (ns, name)) (Cell.make Error)
   | Call _ -> call_instruction ctx i
   | TailCall (i', l) -> (
-      let param_types = peek_call_params ctx i' in
-      let* l' = typed_call_args ctx l param_types in
-      let* i' = instruction ctx i' in
-      match Cell.get (expression_type ctx i') with
-      | Valtype { typ = Ref { typ = Type ty; _ }; _ } ->
-          let*! typ = lookup_func_type ctx ty in
-          (let>@ param_types =
-             array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
-           in
-           if Array.length param_types <> List.length l' then
-             Error.value_count_mismatch ctx.diagnostics ~location:i.info
-               ~expected:(Array.length param_types) ~provided:(List.length l')
-           else
-             Array.iter2
-               (fun i ty -> check_type ctx i ty)
-               (Array.of_list l') param_types);
-          (let>@ returned_types = array_map_opt (internalize ctx) typ.results in
-           check_subtypes ctx ~location:i.info returned_types ctx.return_types);
-          return_statement i (TailCall (i', l')) [||]
-      | Error ->
-          (* The callee already failed to type; recover without a spurious
-             "expected function type". *)
-          return_statement i (TailCall (i', l')) [||]
-      | Unknown | UnknownRef ->
-          (* The callee's type is unknown (unreachable / branch code) or only a
-             reference (its function type cannot be resolved), so the call
-             cannot be compiled. *)
-          Error.unknown_operand_type ctx.diagnostics ~location:(snd i'.info);
-          return_statement i (TailCall (i', l')) [||]
-      | _ ->
-          Error.expected_func_type ctx.diagnostics ~location:i.info;
-          return_statement i (TailCall (i', l')) [||])
+      (* Type it exactly as the corresponding call — reusing the whole intrinsic
+         dispatch, so [become mem.grow(n)] etc. are accepted like [mem.grow(n)]
+         — then re-tag it as a tail call and require the callee's results to be
+         subtypes of this function's declared results. *)
+      let* typed = call_instruction ctx { i with desc = Call (i', l) } in
+      match typed.desc with
+      | Call (i'', l') ->
+          check_subtypes ctx ~location:i.info (fst typed.info) ctx.return_types;
+          return_statement i (TailCall (i'', l')) [||]
+      | _ -> assert false)
   | Char _ as desc -> return_expression i desc i32_cell
   | Int s as desc ->
       (* Pick the lattice type from the magnitude (the sign is a separate [Neg],

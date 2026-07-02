@@ -1020,46 +1020,28 @@ and instruction_desc ret ctx i : location Text.instr list =
           let code = instruction ret ctx f in
           folded loc (CallRef (index (expr_type_name f))) (arg_code @ code))
   | TailCall (f, args) -> (
-      (*ZZZ handle intrinsics as well? (Or reject while typing?) *)
-      let arg_code = List.concat_map (instruction ret ctx) args in
-      match f.desc with
-      | Get idx when Hashtbl.mem ctx.functions idx.desc ->
-          folded loc (ReturnCall (index idx)) arg_code
-      | Cast
-          ( { desc = ArrayGet ({ desc = Get tab; _ }, idx_expr); _ },
-            Valtype (Ref { typ = Type ft; _ }) )
-        when table_receiver ctx tab.desc ->
-          let index_code = instruction ret ctx idx_expr in
-          folded loc
-            (ReturnCallIndirect (index tab, (Some (index ft), None)))
-            (arg_code @ index_code)
-      | Cast
-          ( { desc = ArrayGet ({ desc = Get tab; _ }, idx_expr); _ },
-            Functype { sign; _ } )
-        when table_receiver ctx tab.desc ->
-          let index_code = instruction ret ctx idx_expr in
-          folded loc
-            (ReturnCallIndirect (index tab, (None, Some (functype sign))))
-            (arg_code @ index_code)
-      | ArrayGet ({ desc = Get tab; _ }, idx_expr)
-        when table_receiver ctx tab.desc
-             &&
-             match Hashtbl.find ctx.tables tab.desc with
-             | { typ = Type _; _ } -> true
-             | _ -> false ->
-          let ft =
-            match Hashtbl.find ctx.tables tab.desc with
-            | { typ = Type ft; _ } -> ft
-            | _ -> assert false
+      (* A tail call lowers like the corresponding call (reusing the whole
+         intrinsic-and-call dispatch of the [Call] case), then the trailing call
+         instruction becomes its [return_call*] form. An intrinsic operation
+         cannot be a tail call, so it is instead evaluated and its result
+         returned. *)
+      let code = instruction_desc ret ctx { i with desc = Call (f, args) } in
+      match code with
+      | [ ({ desc = Text.Folded (inner, ops); _ } as node) ] -> (
+          let return_desc : _ Text.instr_desc option =
+            match inner.desc with
+            | Call idx -> Some (ReturnCall idx)
+            | CallIndirect (tab, tu) -> Some (ReturnCallIndirect (tab, tu))
+            | CallRef t -> Some (ReturnCallRef t)
+            | _ -> None
           in
-          let index_code = instruction ret ctx idx_expr in
-          folded loc
-            (ReturnCallIndirect (index tab, (Some (index ft), None)))
-            (arg_code @ index_code)
-      | _ ->
-          let code = instruction ret ctx f in
-          folded loc (ReturnCallRef (index (expr_type_name f))) (arg_code @ code)
-      )
+          match return_desc with
+          | Some d ->
+              [
+                { node with desc = Text.Folded ({ inner with desc = d }, ops) };
+              ]
+          | None -> folded loc Return code)
+      | _ -> folded loc Return code)
   | Int s -> (
       match expr_valtype i with
       | I32 -> folded loc (Const (I32 s)) []

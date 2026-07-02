@@ -1,0 +1,4 @@
+memory mem: i32 [1];
+
+// The intrinsic result must match the function's result type.
+fn f(n: i32) -> i64 { become mem.grow(n); }
