@@ -20,6 +20,16 @@ const src = fs.readFileSync(file, "utf8");
 const WAX = process.env.WAX;
 const MODE = process.env.MODE || "codec";
 const WT = process.env.WASM_TOOLS || "wasm-tools";
+// Semantics-preserving mutation mode (used by exec-mutate.sh). When MUTATE_SEED
+// is set, each text module is replaced not by wax's recompilation but by a
+// `wasm-tools mutate --preserve-semantics` variant of it — structurally novel
+// yet behaviourally identical, so the script's assertions still hold. This turns
+// the fixed spec suite into an endless supply of assertion-bearing modules to
+// feed the behavioural oracle. Unset => the original wax/codec behaviour below,
+// byte-for-byte.
+const MUTATE_SEED = process.env.MUTATE_SEED;
+const MUTATE_STEPS = parseInt(process.env.MUTATE_STEPS || "10", 10);
+let modIndex = 0;
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "wastrw-"));
 let recompiled = 0, failed = 0;
@@ -37,6 +47,47 @@ function waxCompile(ref, out) {
          run(WAX, ["-i", "wax", "-f", "wasm", mid, "-o", out]);
 }
 
+// Semantics-preserving mutation of the reference binary [ref] into [out]:
+// chain MUTATE_STEPS `wasm-tools mutate --preserve-semantics` passes (each a
+// distinct, deterministic seed derived from MUTATE_SEED and the module index).
+// Behaviour is preserved, so the script's assertions still hold on the result.
+// Returns false if not even one pass applied (the module is then left as-is).
+function mutate(ref, out) {
+  const base = ((parseInt(MUTATE_SEED, 10) | 0) + modIndex * 1000) >>> 0;
+  modIndex++;
+  fs.copyFileSync(ref, out);
+  const tmpf = out + ".m";
+  let ok = false;
+  for (let k = 0; k < MUTATE_STEPS; k++) {
+    if (run(WT, ["mutate", out, "--preserve-semantics", "--seed", String(base + k), "-o", tmpf])) {
+      fs.copyFileSync(tmpf, out);
+      ok = true;
+    } else break; // out of fuel / cannot mutate further: keep what we have
+  }
+  return ok;
+}
+
+// Transform one module's reference binary [ref] into [out]. Composes an optional
+// semantics-preserving mutation (when MUTATE_SEED is set) with the MODE step:
+//   MODE=mutate  -> emit the mutant as-is (mutate-only; used to baseline it);
+//   MODE=wax     -> wax round-trip of the (possibly mutated) module;
+//   MODE=codec   -> wasm->wasm of the (possibly mutated) module.
+// A mutate-only run and a wax run over the SAME file derive identical per-module
+// seeds (same order), so the wax run recompiles exactly the module the
+// mutate-only run baselined — the two need not be chained through a .wast (which
+// would not work: the mutant is embedded in binary form, which this rewriter
+// leaves untouched).
+function transformModule(ref, out) {
+  let cur = ref;
+  if (MUTATE_SEED !== undefined) {
+    const mref = out + ".mut";
+    if (!mutate(cur, mref)) return false; // could not mutate: leave module as-is
+    cur = mref;
+  }
+  if (MODE === "mutate") { fs.copyFileSync(cur, out); return true; }
+  return waxCompile(cur, out);
+}
+
 // .wast byte-string escape: every byte as \XX.
 const escape = (buf) => '"' + [...buf].map((b) => "\\" + b.toString(16).padStart(2, "0")).join("") + '"';
 
@@ -51,19 +102,21 @@ function rewriteModule(group) {
   // composition stays unlinkable, so a flipped assert_unlinkable is expected.
   // The codec path (MODE=codec, wasm->wasm) does no inference and must preserve
   // types exactly, so there a flipped assert_unlinkable IS a real bug — keep it.
-  if (MODE === "wax" && /^\(\s*assert_unlinkable\b/.test(group)) return "";
-  // Skip the binary/quote forms and module-less groups; recompile plain text.
+  // (Only on the wax recompile path; a semantics-preserving mutation keeps
+  // linkability, so in mutate mode every assertion is kept.)
+  if (!MUTATE_SEED && MODE === "wax" && /^\(\s*assert_unlinkable\b/.test(group)) return "";
+  // Skip the binary/quote forms and module-less groups; transform plain text.
   const m = group.match(/^\(\s*module\b\s*(\$[^\s()]+)?\s*([a-z]*)/);
   if (!m || m[2] === "binary" || m[2] === "quote") return group; // not a text module
   const name = m[1] ? " " + m[1] : "";
   const wat = path.join(tmp, "m.wat"), ref = path.join(tmp, "m.wasm"), out = path.join(tmp, "m.out.wasm");
   fs.writeFileSync(wat, group);
-  if (run(WT, ["parse", wat, "-o", ref]) && waxCompile(ref, out)) {
+  if (run(WT, ["parse", wat, "-o", ref]) && transformModule(ref, out)) {
     recompiled++;
     return "(module" + name + " binary " + escape(fs.readFileSync(out)) + ")";
   }
   failed++;
-  return group; // wax couldn't reproduce it: keep the original (NOT tested via wax)
+  return group; // could not transform it: keep the original (NOT tested)
 }
 
 // Walk the script; only ( ... ) groups need parsing (to find their extent,

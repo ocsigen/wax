@@ -68,6 +68,7 @@ fuzz/comment-preserve.sh    # planted sentinel comments survive every text<->tex
 fuzz/exec-ref.sh [wast…]    # via the reference interpreter (strongest; GC/SIMD/EH/multi-mem)
 fuzz/exec-interp.sh [wast…] # via wabt spectest-interp
 fuzz/exec.sh [wast…]        # via Node
+fuzz/exec-mutate.sh [wast…] # behavioural check on semantics-preserving mutants (lifts the fixed-suite ceiling)
 ```
 
 `run.sh`, `smith.sh`, `mutate-wax.sh`, `diff-validate.sh`, `mutate-validate.sh`,
@@ -297,6 +298,28 @@ wax cannot recompile is skipped and counted, not failed.
 
 `exec-ref.sh` is the one to reach for; the others predate it and remain for
 cross-checking against a second engine.
+
+### Beyond the fixed suite: `exec-mutate.sh`
+
+All of the above can only check behaviour where spec assertions exist — the fixed
+`.wast` suite. `exec-mutate.sh` lifts that ceiling. For each `.wast` it rewrites
+every module with `wasm-tools mutate --preserve-semantics` — a structurally novel
+but behaviourally identical module, so the script's own assertions still hold —
+then checks wax against that mutant, driven by the reference interpreter:
+
+1. baseline the original (skip the file if the interpreter cannot run it);
+2. baseline the *mutant* — if it fails, the mutation did not preserve behaviour
+   (a wasm-mutate limitation, not wax): counted `mut-broke`, not a regression;
+3. run the *same* mutant wax-recompiled — a pass on step 1 but a failure here is
+   a wax miscompilation on a module the fixed suite never contained.
+
+Steps 2 and 3 both re-derive the mutant from the original with the same
+per-module seed (`MODE=mutate` vs `MODE=wax` in `wast-rewrite.js`), so step 3
+recompiles exactly what step 2 baselined. Deterministic per file (seed = master
+`SEED` + a hash of the path); exits non-zero on any regression. This turns the
+handful of assertion-bearing spec files into an endless supply of them, so
+miscompilation detection is no longer bounded by which modules happen to carry
+assertions.
 
 ## Triaging findings
 
