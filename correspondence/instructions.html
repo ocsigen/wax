@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-28607277.js";
+            window.path_to_searchindex_js = "../searchindex-3c4c5ad2.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f031991a.js"></script>
@@ -311,6 +311,9 @@ bound with a multi-value <code>let</code>).</p>
 </tbody>
 </table>
 </div>
+<p>On reference operands (any subtype of <code>&amp;eq</code>), <code>==</code> and <code>!=</code> are reference
+equality: <code>a == b</code> is <code>ref.eq</code>, and <code>a != b</code> is <code>ref.eq</code> followed by <code>i32.eqz</code>
+(there is no <code>ref.ne</code> instruction).</p>
 <h2 id="variable-instructions"><a class="header" href="#variable-instructions">Variable Instructions</a></h2>
 <div class="table-wrapper">
 <table>

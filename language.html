@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-28607277.js";
+            window.path_to_searchindex_js = "searchindex-3c4c5ad2.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -657,6 +657,10 @@ binary).</p>
     }
 }
 </code></pre>
+<p><code>become</code> also accepts an intrinsic operation (for example <code>become mem.grow(n)</code>);
+since there is no tail-call instruction for intrinsics, this is equivalent to
+<code>return mem.grow(n)</code> — the intrinsic’s result must match the function’s result
+type.</p>
 <h2 id="functions"><a class="header" href="#functions">Functions</a></h2>
 <h3 id="definition"><a class="header" href="#definition">Definition</a></h3>
 <pre><code class="language-wax">fn name(param1: type1, param2: type2) -&gt; return_type {
