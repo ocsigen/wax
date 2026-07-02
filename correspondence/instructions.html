@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-0b2b49b9.js";
+            window.path_to_searchindex_js = "../searchindex-6d116778.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f031991a.js"></script>
@@ -393,6 +393,18 @@ it wherever it is redundant: a <code>do i32 { ... }</code> becomes <code>do { ..
 reaching the block’s exit or from the surrounding context (see
 <a href="../language.html#blocks">Type inference</a>). Parameterized and multi-result block
 types are always kept.</p>
+<h3 id="branch-hints"><a class="header" href="#branch-hints">Branch hints</a></h3>
+<p>The <a href="https://github.com/WebAssembly/branch-hinting">branch-hinting proposal</a>
+annotates a conditional branch as likely or unlikely taken. Wax writes the hint
+as an attribute on the branch and preserves it on every round-trip (it is stored
+in the <code>metadata.code.branch_hint</code> custom section; no feature flag is needed):</p>
+<pre><code class="language-wax">#[likely] if cond { ... } else { ... }
+#[unlikely] br_if 'l cond
+</code></pre>
+<p>Any conditional branch may be hinted — <code>if</code>, <code>br_if</code>, <code>br_on_null</code>,
+<code>br_on_non_null</code>, <code>br_on_cast</code>, and <code>br_on_cast_fail</code>. In WAT the same hint is
+the <code>(@metadata.code.branch_hint "\00"|"\01")</code> annotation preceding the branch
+(<code>"\01"</code> = likely, <code>"\00"</code> = unlikely).</p>
 <h2 id="reference-instructions"><a class="header" href="#reference-instructions">Reference Instructions</a></h2>
 <div class="table-wrapper">
 <table>

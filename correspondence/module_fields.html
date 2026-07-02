@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-0b2b49b9.js";
+            window.path_to_searchindex_js = "../searchindex-6d116778.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f031991a.js"></script>
@@ -179,6 +179,17 @@
                     <main>
                         <h1 id="module-fields"><a class="header" href="#module-fields">Module Fields</a></h1>
 <p>Wax modules are defined by a sequence of top-level fields: types, functions, globals, tags, memories, and data segments.</p>
+<h2 id="module-name"><a class="header" href="#module-name">Module Name</a></h2>
+<p>A <code>#![module = "..."]</code> inner attribute at the top of the file names the module.
+It maps to the WebAssembly module name — the symbolic name stored in the module
+subsection of the <code>name</code> custom section, written <code>$name</code> in WAT:</p>
+<pre><code class="language-wax">#![module = "my_module"]
+</code></pre>
+<p>corresponds to the WAT</p>
+<pre><code class="language-wat">(module $my_module …)
+</code></pre>
+<p>A module may carry at most one name. See also
+<a href="../language.html#module-name">Module Name</a> in the language guide.</p>
 <h2 id="types"><a class="header" href="#types">Types</a></h2>
 <p>Types are defined using <code>type</code> for single definitions or <code>rec { ... }</code> for mutually recursive types.</p>
 <h3 id="simple-types"><a class="header" href="#simple-types">Simple Types</a></h3>

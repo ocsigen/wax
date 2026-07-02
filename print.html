@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-0b2b49b9.js";
+            window.path_to_searchindex_js = "searchindex-6d116778.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -272,6 +272,21 @@ and an <code>f64</code>:</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="language-guide"><a class="header" href="#language-guide">Language Guide</a></h1>
 <p>This guide covers Wax syntax and semantics. For the detailed mapping to WebAssembly instructions, see <a href="#introduction-1">Correspondence</a>.</p>
+<h2 id="module-name"><a class="header" href="#module-name">Module Name</a></h2>
+<p>A whole <code>.wax</code> file is a module. To give the module a name, place a
+<code>#![module = "..."]</code> inner attribute at the top of the file:</p>
+<pre><code class="language-wax">#![module = "my_module"]
+
+fn f() -&gt; i32 {
+    1;
+}
+</code></pre>
+<p>Unlike the <code>#[...]</code> outer attributes that decorate a following field (such as
+<code>#[export]</code>), <code>#![...]</code> is an <em>inner</em> attribute: it applies to the enclosing
+module. A module may carry at most one name.</p>
+<p>(This maps to the WebAssembly module name stored in the <code>name</code> custom section —
+the <code>$name</code> in a WAT <code>(module $name …)</code>; see
+<a href="#module-name-1">Module Fields</a>.)</p>
 <h2 id="comments"><a class="header" href="#comments">Comments</a></h2>
 <p>Wax supports C-style comments:</p>
 <pre><code class="language-wax">// Single-line comment
@@ -659,6 +674,27 @@ br_table ['a 'b else 'default] i;   // branch to the i-th label, else 'default
 <p>The labels in a <code>br_table</code> are separated by spaces, and <code>else</code> gives the
 fallback for an out-of-range index. A branch also carries any values its target
 expects — a <code>do i32</code> target receives an <code>i32</code>, and so on.</p>
+<h3 id="branch-hints"><a class="header" href="#branch-hints">Branch Hints</a></h3>
+<p>A conditional branch can be annotated <code>#[likely]</code> or <code>#[unlikely]</code> to tell the
+engine which way it usually goes (the
+<a href="https://github.com/WebAssembly/branch-hinting">branch-hinting proposal</a>). The
+attribute prefixes the branch:</p>
+<pre><code class="language-wax">#[likely] if cond {
+    // the common case
+} else {
+    // the rare case
+}
+
+'next: loop {
+    #[unlikely] br_if 'next done;   // rarely taken
+}
+</code></pre>
+<p>Any conditional branch accepts a hint — <code>if</code>, <code>br_if</code>, <code>br_on_null</code>,
+<code>br_on_non_null</code>, <code>br_on_cast</code>, and <code>br_on_cast_fail</code>. The hint is purely
+advisory (it does not change behaviour) and is preserved across every conversion
+to and from WebAssembly, so no compiler flag is needed. See
+<a href="#branch-hints-2">Instructions → Branch hints</a> for
+the WebAssembly encoding.</p>
 <h3 id="dispatch"><a class="header" href="#dispatch">Dispatch</a></h3>
 <p>A <code>dispatch</code> is a multi-way branch — the readable form of a <code>br_table</code> jump
 table. A bracket maps an index to a case label (with an <code>else</code> default for an
@@ -1085,8 +1121,25 @@ Hint: reachable when not debug
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="examples"><a class="header" href="#examples">Examples</a></h1>
 <p>Complete examples demonstrating Wax features and their WebAssembly equivalents.</p>
-<h2 id="arithmetic-functions"><a class="header" href="#arithmetic-functions">Arithmetic Functions</a></h2>
+<h2 id="named-module"><a class="header" href="#named-module">Named Module</a></h2>
+<p>A <code>#![module = "..."]</code> inner attribute names the module.</p>
 <h3 id="wax"><a class="header" href="#wax">Wax</a></h3>
+<pre><code class="language-wax">#![module = "calculator"]
+
+#[export = "square"]
+fn square(x: i32) -&gt; i32 {
+    x * x;
+}
+</code></pre>
+<h3 id="equivalent-wat"><a class="header" href="#equivalent-wat">Equivalent WAT</a></h3>
+<pre><code class="language-wat">(module $calculator
+  (func $square (export "square") (param $x i32) (result i32)
+    local.get $x
+    local.get $x
+    i32.mul))
+</code></pre>
+<h2 id="arithmetic-functions"><a class="header" href="#arithmetic-functions">Arithmetic Functions</a></h2>
+<h3 id="wax-1"><a class="header" href="#wax-1">Wax</a></h3>
 <pre><code class="language-wax">#[export = "add"]
 fn add(x: i32, y: i32) -&gt; i32 {
     x + y;
@@ -1097,7 +1150,7 @@ fn multiply(x: i32, y: i32) -&gt; i32 {
     x * y;
 }
 </code></pre>
-<h3 id="equivalent-wat"><a class="header" href="#equivalent-wat">Equivalent WAT</a></h3>
+<h3 id="equivalent-wat-1"><a class="header" href="#equivalent-wat-1">Equivalent WAT</a></h3>
 <pre><code class="language-wat">(func $add (export "add") (param $x i32) (param $y i32) (result i32)
   local.get $x
   local.get $y
@@ -1109,7 +1162,7 @@ fn multiply(x: i32, y: i32) -&gt; i32 {
   i32.mul)
 </code></pre>
 <h2 id="factorial-with-recursion"><a class="header" href="#factorial-with-recursion">Factorial with Recursion</a></h2>
-<h3 id="wax-1"><a class="header" href="#wax-1">Wax</a></h3>
+<h3 id="wax-2"><a class="header" href="#wax-2">Wax</a></h3>
 <pre><code class="language-wax">#[export = "factorial"]
 fn factorial(n: i32) -&gt; i32 {
     if n &lt;=s 1 =&gt; i32 {
@@ -1119,7 +1172,7 @@ fn factorial(n: i32) -&gt; i32 {
     }
 }
 </code></pre>
-<h3 id="equivalent-wat-1"><a class="header" href="#equivalent-wat-1">Equivalent WAT</a></h3>
+<h3 id="equivalent-wat-2"><a class="header" href="#equivalent-wat-2">Equivalent WAT</a></h3>
 <pre><code class="language-wat">(func $factorial (export "factorial") (param $n i32) (result i32)
   local.get $n
   i32.const 1
@@ -1136,7 +1189,7 @@ fn factorial(n: i32) -&gt; i32 {
   end)
 </code></pre>
 <h2 id="factorial-with-tail-call"><a class="header" href="#factorial-with-tail-call">Factorial with Tail Call</a></h2>
-<h3 id="wax-2"><a class="header" href="#wax-2">Wax</a></h3>
+<h3 id="wax-3"><a class="header" href="#wax-3">Wax</a></h3>
 <pre><code class="language-wax">#[export = "factorial"]
 fn factorial(n: i32) -&gt; i32 {
     become factorial_helper(n, 1);
@@ -1151,7 +1204,7 @@ fn factorial_helper(n: i32, acc: i32) -&gt; i32 {
 }
 </code></pre>
 <h2 id="loop-with-early-exit"><a class="header" href="#loop-with-early-exit">Loop with Early Exit</a></h2>
-<h3 id="wax-3"><a class="header" href="#wax-3">Wax</a></h3>
+<h3 id="wax-4"><a class="header" href="#wax-4">Wax</a></h3>
 <pre><code class="language-wax">type ints = [i32];
 
 #[export = "find_first_zero"]
@@ -1173,7 +1226,7 @@ fn find_first_zero(arr: &amp;ints) -&gt; i32 {
     unreachable;
 }
 </code></pre>
-<h3 id="equivalent-wat-2"><a class="header" href="#equivalent-wat-2">Equivalent WAT</a></h3>
+<h3 id="equivalent-wat-3"><a class="header" href="#equivalent-wat-3">Equivalent WAT</a></h3>
 <pre><code class="language-wat">(func $find_first_zero (export "find_first_zero")
       (param $arr (ref $array_i32)) (result i32)
   (local $i i32)
@@ -1206,7 +1259,7 @@ fn find_first_zero(arr: &amp;ints) -&gt; i32 {
     br $search))
 </code></pre>
 <h2 id="while-loops-1"><a class="header" href="#while-loops-1">While Loops</a></h2>
-<h3 id="wax-4"><a class="header" href="#wax-4">Wax</a></h3>
+<h3 id="wax-5"><a class="header" href="#wax-5">Wax</a></h3>
 <pre><code class="language-wax">#[export = "triangle"]
 fn triangle(n: i32) -&gt; i32 {
     let i: i32 = 0;
@@ -1229,7 +1282,7 @@ fn countdown(n: i32) -&gt; i32 {
     steps;
 }
 </code></pre>
-<h3 id="equivalent-wat-3"><a class="header" href="#equivalent-wat-3">Equivalent WAT</a></h3>
+<h3 id="equivalent-wat-4"><a class="header" href="#equivalent-wat-4">Equivalent WAT</a></h3>
 <pre><code class="language-wat">(func $triangle (export "triangle") (param $n i32) (result i32)
   (local $i i32) (local $total i32)
   (local.set $i (i32.const 0))
@@ -1254,7 +1307,7 @@ fn countdown(n: i32) -&gt; i32 {
 )
 </code></pre>
 <h2 id="dispatch-jump-table"><a class="header" href="#dispatch-jump-table">Dispatch (Jump Table)</a></h2>
-<h3 id="wax-5"><a class="header" href="#wax-5">Wax</a></h3>
+<h3 id="wax-6"><a class="header" href="#wax-6">Wax</a></h3>
 <pre><code class="language-wax">#[export = "rgb_channel"]
 fn rgb_channel(color: i32, value: i32) -&gt; i32 {
     dispatch color ['red 'green 'blue else 'bad] {
@@ -1265,7 +1318,7 @@ fn rgb_channel(color: i32, value: i32) -&gt; i32 {
     }
 }
 </code></pre>
-<h3 id="equivalent-wat-4"><a class="header" href="#equivalent-wat-4">Equivalent WAT</a></h3>
+<h3 id="equivalent-wat-5"><a class="header" href="#equivalent-wat-5">Equivalent WAT</a></h3>
 <pre><code class="language-wat">(func $rgb_channel (export "rgb_channel")
   (param $color i32) (param $value i32) (result i32)
   (block $red
@@ -1280,7 +1333,7 @@ fn rgb_channel(color: i32, value: i32) -&gt; i32 {
     (i32.shl (i32.and (local.get $value) (i32.const 255)) (i32.const 16))))
 </code></pre>
 <h2 id="type-match"><a class="header" href="#type-match">Type Match</a></h2>
-<h3 id="wax-6"><a class="header" href="#wax-6">Wax</a></h3>
+<h3 id="wax-7"><a class="header" href="#wax-7">Wax</a></h3>
 <pre><code class="language-wax">type cell = { value: i32 };
 type cons = { head: &amp;eq, tail: &amp;?eq };
 
@@ -1293,7 +1346,7 @@ fn sum_list(v: &amp;?eq) -&gt; i32 {
     }
 }
 </code></pre>
-<h3 id="equivalent-wat-5"><a class="header" href="#equivalent-wat-5">Equivalent WAT</a></h3>
+<h3 id="equivalent-wat-6"><a class="header" href="#equivalent-wat-6">Equivalent WAT</a></h3>
 <p>The scrutinee is evaluated once and threaded through a <code>br_on_cast</code> chain in the
 innermost block; each test branches out to its arm’s block (named by a readable
 <code>$arm</code>/<code>$default</code> label, picked fresh so it cannot capture a user branch)
@@ -1318,7 +1371,7 @@ carrying the narrowed value, and the default trails the outer escape block:</p>
   (return (i32.const 0)))
 </code></pre>
 <h2 id="structs-and-methods"><a class="header" href="#structs-and-methods">Structs and Methods</a></h2>
-<h3 id="wax-7"><a class="header" href="#wax-7">Wax</a></h3>
+<h3 id="wax-8"><a class="header" href="#wax-8">Wax</a></h3>
 <pre><code class="language-wax">type point = { x: i32, y: i32 };
 
 #[export = "make_point"]
@@ -1336,7 +1389,7 @@ fn distance_squared(p1: &amp;point, p2: &amp;point) -&gt; i32 {
 }
 </code></pre>
 <h2 id="mutable-structs"><a class="header" href="#mutable-structs">Mutable Structs</a></h2>
-<h3 id="wax-8"><a class="header" href="#wax-8">Wax</a></h3>
+<h3 id="wax-9"><a class="header" href="#wax-9">Wax</a></h3>
 <pre><code class="language-wax">type counter = { value: mut i32 };
 
 #[export = "new_counter"]
@@ -1355,7 +1408,7 @@ fn get_value(c: &amp;counter) -&gt; i32 {
 }
 </code></pre>
 <h2 id="inferring-struct-and-array-types"><a class="header" href="#inferring-struct-and-array-types">Inferring Struct and Array Types</a></h2>
-<h3 id="wax-9"><a class="header" href="#wax-9">Wax</a></h3>
+<h3 id="wax-10"><a class="header" href="#wax-10">Wax</a></h3>
 <pre><code class="language-wax">type point = { x: i32, y: i32 };
 type ints = [mut i32];
 
@@ -1390,7 +1443,7 @@ fn pick(c: i32) -&gt; &amp;point {
 }
 </code></pre>
 <h2 id="inferring-block-result-types"><a class="header" href="#inferring-block-result-types">Inferring Block Result Types</a></h2>
-<h3 id="wax-10"><a class="header" href="#wax-10">Wax</a></h3>
+<h3 id="wax-11"><a class="header" href="#wax-11">Wax</a></h3>
 <p>A block’s result type — <code>=&gt; T</code> on an <code>if</code>, or the type after <code>do</code> (and likewise
 <code>loop</code>, <code>try</code>, and <code>try_table</code>) — may be omitted where it is fixed by the values
 the block produces or by the surrounding context:</p>
@@ -1414,7 +1467,7 @@ fn answer() -&gt; i32 {
 }
 </code></pre>
 <h2 id="arrays-1"><a class="header" href="#arrays-1">Arrays</a></h2>
-<h3 id="wax-11"><a class="header" href="#wax-11">Wax</a></h3>
+<h3 id="wax-12"><a class="header" href="#wax-12">Wax</a></h3>
 <pre><code class="language-wax">type bytes = [mut i8];
 
 #[export = "sum_bytes"]
@@ -1453,7 +1506,7 @@ fn fill_bytes(arr: &amp;bytes, val: i32) {
 }
 </code></pre>
 <h2 id="exception-handling"><a class="header" href="#exception-handling">Exception Handling</a></h2>
-<h3 id="wax-12"><a class="header" href="#wax-12">Wax</a></h3>
+<h3 id="wax-13"><a class="header" href="#wax-13">Wax</a></h3>
 <pre><code class="language-wax">tag divide_by_zero();
 tag overflow();
 
@@ -1476,7 +1529,7 @@ fn try_divide(a: i32, b: i32) -&gt; i32 {
 }
 </code></pre>
 <h2 id="recursive-types-linked-list"><a class="header" href="#recursive-types-linked-list">Recursive Types (Linked List)</a></h2>
-<h3 id="wax-13"><a class="header" href="#wax-13">Wax</a></h3>
+<h3 id="wax-14"><a class="header" href="#wax-14">Wax</a></h3>
 <pre><code class="language-wax">type list = { value: i32, next: &amp;?list };
 
 #[export = "make_node"]
@@ -1495,7 +1548,7 @@ fn sum_list(head: &amp;?list) -&gt; i32 {
 }
 </code></pre>
 <h2 id="imports-and-exports"><a class="header" href="#imports-and-exports">Imports and Exports</a></h2>
-<h3 id="wax-14"><a class="header" href="#wax-14">Wax</a></h3>
+<h3 id="wax-15"><a class="header" href="#wax-15">Wax</a></h3>
 <pre><code class="language-wax">// Import a function from the host environment
 #[import = ("env", "log")]
 fn log(value: i32);
@@ -1515,7 +1568,7 @@ fn compute_and_log(x: i32) -&gt; i32 {
 </code></pre>
 <h2 id="hash-function"><a class="header" href="#hash-function">Hash Function</a></h2>
 <p>A more complex example showing bitwise operations:</p>
-<h3 id="wax-15"><a class="header" href="#wax-15">Wax</a></h3>
+<h3 id="wax-16"><a class="header" href="#wax-16">Wax</a></h3>
 <pre><code class="language-wax">#[export = "hash_mix_int"]
 fn hash_mix_int(h: i32, d: i32) -&gt; i32 {
     ((d * 0xcc9e2d51).rotl(15) * 0x1b873593 ^ h).rotl(13) * 5 + 0xe6546b64;
@@ -1534,7 +1587,7 @@ fn hash_finalize(h: i32) -&gt; i32 {
 <p>A character literal is an <code>i32</code> code point; a string literal builds a byte array
 (<code>[mut i8]</code> by default, or a named array type with the <code>T # "…"</code> prefix). See
 <a href="#strings">Strings</a>.</p>
-<h3 id="wax-16"><a class="header" href="#wax-16">Wax</a></h3>
+<h3 id="wax-17"><a class="header" href="#wax-17">Wax</a></h3>
 <pre><code class="language-wax">type chars = [i8];
 
 #[export = "newline"]
@@ -1547,7 +1600,7 @@ fn greeting() -&gt; &amp;chars {
     chars # "hi\u{21}";         // the bytes 'h', 'i', '!'
 }
 </code></pre>
-<h3 id="equivalent-wat-6"><a class="header" href="#equivalent-wat-6">Equivalent WAT</a></h3>
+<h3 id="equivalent-wat-7"><a class="header" href="#equivalent-wat-7">Equivalent WAT</a></h3>
 <p><code>wax -f wat</code> keeps the literals as <code>(@char …)</code> / <code>(@string …)</code> annotations, so
 they round-trip back to Wax unchanged:</p>
 <pre><code class="language-wat">(func $newline (export "newline") (result i32) (@char "\n"))
@@ -1563,7 +1616,7 @@ UTF-8).</p>
 <p>Holes (<code>_</code>) plug in values that earlier statements leave on the operand stack.
 The two holes in <code>_ + _</code> consume <code>x * 2</code> and <code>y * 3</code>, left-to-right in the order
 they were produced. See <a href="#holes">Holes</a> for the full rules.</p>
-<h3 id="wax-17"><a class="header" href="#wax-17">Wax</a></h3>
+<h3 id="wax-18"><a class="header" href="#wax-18">Wax</a></h3>
 <pre><code class="language-wax">#[export = "blend"]
 fn blend(x: i32, y: i32) -&gt; i32 {
     x * 2;
@@ -1571,7 +1624,7 @@ fn blend(x: i32, y: i32) -&gt; i32 {
     _ + _;
 }
 </code></pre>
-<h3 id="equivalent-wat-7"><a class="header" href="#equivalent-wat-7">Equivalent WAT</a></h3>
+<h3 id="equivalent-wat-8"><a class="header" href="#equivalent-wat-8">Equivalent WAT</a></h3>
 <pre><code class="language-wat">(func $blend (export "blend") (param $x i32) (param $y i32) (result i32)
   local.get $x
   i32.const 2
@@ -1585,7 +1638,7 @@ fn blend(x: i32, y: i32) -&gt; i32 {
 <p>A function may return several values, and a <code>let</code> can bind them all at once
 from a parenthesised list of names. The call runs once and its results are
 stored into the locals. See <a href="#local-variables">Local Variables</a>.</p>
-<h3 id="wax-18"><a class="header" href="#wax-18">Wax</a></h3>
+<h3 id="wax-19"><a class="header" href="#wax-19">Wax</a></h3>
 <pre><code class="language-wax">fn divmod(a: i32, b: i32) -&gt; (i32, i32) {
     a /s b;
     a %s b;
@@ -1597,7 +1650,7 @@ fn checksum(a: i32, b: i32) -&gt; i32 {
     q + r;
 }
 </code></pre>
-<h3 id="equivalent-wat-8"><a class="header" href="#equivalent-wat-8">Equivalent WAT</a></h3>
+<h3 id="equivalent-wat-9"><a class="header" href="#equivalent-wat-9">Equivalent WAT</a></h3>
 <pre><code class="language-wat">(func $divmod (param $a i32) (param $b i32) (result i32 i32)
   local.get $a
   local.get $b
@@ -1621,7 +1674,7 @@ fn checksum(a: i32, b: i32) -&gt; i32 {
 <p>128-bit integer arithmetic uses the <code>i64::</code> intrinsics, which take and return
 their operands as <code>(low, high)</code> pairs of <code>i64</code> values. Each returns two
 results, so a multi-value <code>let</code> binds them.</p>
-<h3 id="wax-19"><a class="header" href="#wax-19">Wax</a></h3>
+<h3 id="wax-20"><a class="header" href="#wax-20">Wax</a></h3>
 <pre><code class="language-wax">#[export = "add_u128"]
 fn add_u128(a_lo: i64, a_hi: i64, b_lo: i64, b_hi: i64) -&gt; (i64, i64) {
     let (lo, hi) = i64::add128(a_lo, a_hi, b_lo, b_hi);
@@ -1642,7 +1695,7 @@ descriptor operand (the type the operand <em>describes</em>), so all of them sha
 <code>descriptor(d)</code> clause. <code>struct.new_desc</code> allocates carrying a descriptor,
 <code>.descriptor</code> reads it back, and <code>as [?]descriptor(d)</code> / <code>br_on_cast [?]descriptor(d)</code>
 cast on descriptor equality (a leading <code>?</code> makes the result nullable).</p>
-<h3 id="wax-20"><a class="header" href="#wax-20">Wax</a></h3>
+<h3 id="wax-21"><a class="header" href="#wax-21">Wax</a></h3>
 <pre><code class="language-wax">rec {
     type obj = descriptor obj_desc { x: i32 };
     type obj_desc = describes obj { kind: i32 };
@@ -1661,6 +1714,28 @@ fn kind_of(o: &amp;obj) -&gt; i32 {
 #[export = "narrow"]
 fn narrow(v: &amp;?any, d: &amp;!obj_desc) -&gt; &amp;?obj {
     v as ?descriptor(d);
+}
+</code></pre>
+<h2 id="branch-hints-1"><a class="header" href="#branch-hints-1">Branch hints</a></h2>
+<p>The <a href="#branch-hints-2">branch-hinting proposal</a> marks
+a conditional branch likely or unlikely taken. Prefix the branch with
+<code>#[likely]</code> / <code>#[unlikely]</code>; the hint is preserved through every conversion (no
+feature flag required).</p>
+<h3 id="wax-22"><a class="header" href="#wax-22">Wax</a></h3>
+<pre><code class="language-wax">#[export = "clamp_low"]
+fn clamp_low(x: i32) -&gt; i32 {
+    #[likely] if x &gt;=s 0 =&gt; i32 {
+        x;
+    } else {
+        0;
+    }
+}
+
+#[export = "drain"]
+fn drain(n: i32) {
+    'l: loop {
+        #[unlikely] br_if 'l n;
+    }
 }
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div>
@@ -2047,6 +2122,18 @@ it wherever it is redundant: a <code>do i32 { ... }</code> becomes <code>do { ..
 reaching the block’s exit or from the surrounding context (see
 <a href="#blocks">Type inference</a>). Parameterized and multi-result block
 types are always kept.</p>
+<h3 id="branch-hints-2"><a class="header" href="#branch-hints-2">Branch hints</a></h3>
+<p>The <a href="https://github.com/WebAssembly/branch-hinting">branch-hinting proposal</a>
+annotates a conditional branch as likely or unlikely taken. Wax writes the hint
+as an attribute on the branch and preserves it on every round-trip (it is stored
+in the <code>metadata.code.branch_hint</code> custom section; no feature flag is needed):</p>
+<pre><code class="language-wax">#[likely] if cond { ... } else { ... }
+#[unlikely] br_if 'l cond
+</code></pre>
+<p>Any conditional branch may be hinted — <code>if</code>, <code>br_if</code>, <code>br_on_null</code>,
+<code>br_on_non_null</code>, <code>br_on_cast</code>, and <code>br_on_cast_fail</code>. In WAT the same hint is
+the <code>(@metadata.code.branch_hint "\00"|"\01")</code> annotation preceding the branch
+(<code>"\01"</code> = likely, <code>"\00"</code> = unlikely).</p>
 <h2 id="reference-instructions"><a class="header" href="#reference-instructions">Reference Instructions</a></h2>
 <div class="table-wrapper">
 <table>
@@ -2357,6 +2444,17 @@ m.load32(p, 1, 16);   // i32.load align=1 offset=16
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="module-fields"><a class="header" href="#module-fields">Module Fields</a></h1>
 <p>Wax modules are defined by a sequence of top-level fields: types, functions, globals, tags, memories, and data segments.</p>
+<h2 id="module-name-1"><a class="header" href="#module-name-1">Module Name</a></h2>
+<p>A <code>#![module = "..."]</code> inner attribute at the top of the file names the module.
+It maps to the WebAssembly module name — the symbolic name stored in the module
+subsection of the <code>name</code> custom section, written <code>$name</code> in WAT:</p>
+<pre><code class="language-wax">#![module = "my_module"]
+</code></pre>
+<p>corresponds to the WAT</p>
+<pre><code class="language-wat">(module $my_module …)
+</code></pre>
+<p>A module may carry at most one name. See also
+<a href="#module-name">Module Name</a> in the language guide.</p>
 <h2 id="types-1"><a class="header" href="#types-1">Types</a></h2>
 <p>Types are defined using <code>type</code> for single definitions or <code>rec { ... }</code> for mutually recursive types.</p>
 <h3 id="simple-types"><a class="header" href="#simple-types">Simple Types</a></h3>

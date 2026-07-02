@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-0b2b49b9.js";
+            window.path_to_searchindex_js = "searchindex-6d116778.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f031991a.js"></script>
@@ -179,6 +179,21 @@
                     <main>
                         <h1 id="language-guide"><a class="header" href="#language-guide">Language Guide</a></h1>
 <p>This guide covers Wax syntax and semantics. For the detailed mapping to WebAssembly instructions, see <a href="./correspondence/intro.html">Correspondence</a>.</p>
+<h2 id="module-name"><a class="header" href="#module-name">Module Name</a></h2>
+<p>A whole <code>.wax</code> file is a module. To give the module a name, place a
+<code>#![module = "..."]</code> inner attribute at the top of the file:</p>
+<pre><code class="language-wax">#![module = "my_module"]
+
+fn f() -&gt; i32 {
+    1;
+}
+</code></pre>
+<p>Unlike the <code>#[...]</code> outer attributes that decorate a following field (such as
+<code>#[export]</code>), <code>#![...]</code> is an <em>inner</em> attribute: it applies to the enclosing
+module. A module may carry at most one name.</p>
+<p>(This maps to the WebAssembly module name stored in the <code>name</code> custom section —
+the <code>$name</code> in a WAT <code>(module $name …)</code>; see
+<a href="./correspondence/module_fields.html#module-name">Module Fields</a>.)</p>
 <h2 id="comments"><a class="header" href="#comments">Comments</a></h2>
 <p>Wax supports C-style comments:</p>
 <pre><code class="language-wax">// Single-line comment
@@ -566,6 +581,27 @@ br_table ['a 'b else 'default] i;   // branch to the i-th label, else 'default
 <p>The labels in a <code>br_table</code> are separated by spaces, and <code>else</code> gives the
 fallback for an out-of-range index. A branch also carries any values its target
 expects — a <code>do i32</code> target receives an <code>i32</code>, and so on.</p>
+<h3 id="branch-hints"><a class="header" href="#branch-hints">Branch Hints</a></h3>
+<p>A conditional branch can be annotated <code>#[likely]</code> or <code>#[unlikely]</code> to tell the
+engine which way it usually goes (the
+<a href="https://github.com/WebAssembly/branch-hinting">branch-hinting proposal</a>). The
+attribute prefixes the branch:</p>
+<pre><code class="language-wax">#[likely] if cond {
+    // the common case
+} else {
+    // the rare case
+}
+
+'next: loop {
+    #[unlikely] br_if 'next done;   // rarely taken
+}
+</code></pre>
+<p>Any conditional branch accepts a hint — <code>if</code>, <code>br_if</code>, <code>br_on_null</code>,
+<code>br_on_non_null</code>, <code>br_on_cast</code>, and <code>br_on_cast_fail</code>. The hint is purely
+advisory (it does not change behaviour) and is preserved across every conversion
+to and from WebAssembly, so no compiler flag is needed. See
+<a href="correspondence/instructions.html#branch-hints">Instructions → Branch hints</a> for
+the WebAssembly encoding.</p>
 <h3 id="dispatch"><a class="header" href="#dispatch">Dispatch</a></h3>
 <p>A <code>dispatch</code> is a multi-way branch — the readable form of a <code>br_table</code> jump
 table. A bracket maps an index to a case label (with an <code>else</code> default for an
