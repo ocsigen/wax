@@ -69,6 +69,25 @@ for fold in --fold --unfold; do
   esac
 done
 
+# Other wiring paths the convert sweep above does not touch, each its own code
+# path: the `format` subcommand (a separate entry point in main.ml), strict
+# validation (-s), and warnings-as-errors (-W all=error, exercising the
+# diagnostic machinery). Crash-only checks — the verdict may legitimately be a
+# clean rejection, only a crash is a finding.
+# (`format` writes to stdout, which classify_wax discards — it has no -o flag.)
+paths=("format -f $FMT $IN"
+       "check -s $IN"
+       "-i $FMT -f wasm -W all=error $IN -o $WORK/warn.wasm")
+for p in "${paths[@]}"; do
+  read -ra args <<<"$p"
+  r="$(classify_wax "${args[@]}")"
+  case "$r" in
+    crash:*)
+      finding CRASH HIGH "$IN" "${r#crash:} on: wax $p" "$(repro "${args[@]}")"
+      ;;
+  esac
+done
+
 # ---- 2. Validator correctness: `wax check` vs the ground truth. ----
 # `wax check` is the dedicated validation path (type-check Wax / well-formedness
 # Wasm); it returns ok or a clean rejection. Compare its verdict to what we know
@@ -87,9 +106,12 @@ case "$verdict:$EXPECT" in
       "wax's validator accepted a module documented as invalid" \
       "$(repro "${check[@]}")" ;;
   ok:unknown|rejected:unknown)
-    # No documented verdict: differentially compare against the reference, but
-    # only when the reference can read the input directly (wasm binary).
-    if [ "$FMT" = wasm ]; then
+    # No documented verdict: differentially compare against the reference, for
+    # any input it can read directly — a wasm binary, or WAT (wasm-tools parses
+    # text too), which makes wax's WAT-parser verdict comparable to the
+    # reference's parse+validate. REVIEW severity: a mismatch may be a genuine
+    # divergence or just a proposal one side parses and the other does not.
+    if [ "$FMT" = wasm ] || [ "$FMT" = wat ]; then
       if wt_validate "$IN"; then ref=ok; else ref=rejected; fi
       if [ "$verdict" != "$ref" ]; then
         finding VALIDATOR_DIFF REVIEW "$IN" \
@@ -124,7 +146,7 @@ if [ "$FMT" = wat ] || [ "$FMT" = wax ]; then
        && ! diff -q "$WORK/fmt1" "$WORK/fmt2" >/dev/null; then
       finding IDEMPOTENCE REVIEW "$IN" \
         "format is not a fixed point (fmt1 != fmt2)" \
-        "$(repro "${a1[@]}"); diff <(...) <(...)"
+        "$(repro "${a1[@]}") && $(repro "${a2[@]}") && diff $WORK/fmt1 $WORK/fmt2"
     fi
   fi
 fi

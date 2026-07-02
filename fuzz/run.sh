@@ -10,6 +10,11 @@
 # Exits non-zero if any HIGH-severity finding was reported, so it can gate CI.
 # Files run in parallel across cores (override with JOBS); each runs in its own
 # process, so a crash or hang on one input is contained, not fatal to the run.
+#
+# Scope: this drives the *validity/crash/round-trip* oracles (oracle.sh) over a
+# static corpus. It does NOT run the behavioural-equivalence (execution) oracles
+# — those need a runner and spec .wast assertions; run them separately with
+# fuzz/exec-ref.sh (preferred), fuzz/exec-interp.sh, or fuzz/exec.sh.
 
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
@@ -56,6 +61,8 @@ if [ "$nfind" -gt 0 ]; then
   echo
   echo "full report with reproduction commands: $REPORT"
 fi
+echo
+echo "note: behavioural (execution) oracles are separate — run fuzz/exec-ref.sh"
 
 # Gate on HIGH findings only (REVIEW items may include benign naming noise).
 grep -q $'\tHIGH\t' "$REPORT" && exit 1
