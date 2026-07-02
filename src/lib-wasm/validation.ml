@@ -641,6 +641,16 @@ module Error = struct
           "This descriptor instruction requires a type that has a descriptor.")
       ()
 
+  let feature_disabled context ~location feature =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f
+          "This uses the %s feature, which is not enabled; pass @[--feature \
+           %s@]."
+          (Wax_utils.Feature.name feature)
+          (Wax_utils.Feature.name feature))
+      ()
+
   let descriptor_allocation_required context ~location =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
@@ -804,6 +814,8 @@ type type_context = {
      immediate to name it by). Deduplicated types share a descriptor, so keying
      by the global index is unambiguous. *)
   descriptor_source : (int, Ast.Text.idx) Hashtbl.t;
+  (* The enabled optional features / proposals, and which are used. *)
+  features : Wax_utils.Feature.set;
 }
 
 (* The source composite type a reference resolves to, named as the source wrote
@@ -866,6 +878,14 @@ let resolve_type_index d ctx idx =
   let+@ gidx, _, _ = get_type_info d ctx idx in
   gidx
 
+(* Record that [feature] is used and, if it is not enabled, report it at
+   [location]. Validation continues either way (the construct is still typed,
+   for error recovery). *)
+let require_feature d (ctx : type_context) ~location feature =
+  Wax_utils.Feature.mark_used ctx.features feature;
+  if not (Wax_utils.Feature.is_enabled ctx.features feature) then
+    Error.feature_disabled d ~location feature
+
 let heaptype d ctx (h : Ast.Text.heaptype) : heaptype option =
   match h with
   | Func -> Some Func
@@ -886,6 +906,8 @@ let heaptype d ctx (h : Ast.Text.heaptype) : heaptype option =
       let+@ ty = resolve_type_index d ctx idx in
       Type ty
   | Exact idx ->
+      require_feature d ctx ~location:idx.info
+        Wax_utils.Feature.Custom_descriptors;
       let+@ ty = resolve_type_index d ctx idx in
       Exact ty
 
@@ -992,7 +1014,9 @@ let subtype d ctx current
   in
   let resolve_opt = function
     | None -> Some None
-    | Some idx ->
+    | Some (idx : Ast.Text.idx) ->
+        require_feature d ctx ~location:idx.info
+          Wax_utils.Feature.Custom_descriptors;
         let+@ i = resolve_type_index d ctx idx in
         Some i
   in
@@ -1350,7 +1374,10 @@ let descriptor_operand_source tc (described : heaptype) : source_type =
     | Some node ->
         Plain
           (Ref
-             { nullable = true; typ = (if exact then Exact node else Type node) })
+             {
+               nullable = true;
+               typ = (if exact then Exact node else Type node);
+             })
     | None ->
         (* No recorded source (a well-formed descriptor type always has one);
            fall back to the abstract struct supertype rather than a misleading
@@ -2764,7 +2791,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let exact =
         match entry with
         | Bot | Bot_ref -> false
-        | Val (ty', source) ->
+        | Val (ty', source) -> (
             if
               not
                 (Types.val_subtype ctx.modul.subtyping_info ty'
@@ -2773,13 +2800,16 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
               Error.type_mismatch ctx.modul.diagnostics ~location:loc
                 ~provided_source:source
                 ~expected_source:(named_ref_null_source idx);
-            (match ty' with Ref { typ = Exact _; _ } -> true | _ -> false)
+            match ty' with Ref { typ = Exact _; _ } -> true | _ -> false)
       in
       push ~source:(named_ref_source idx) (Some loc)
-        (Ref { nullable = false; typ = (if exact then Exact desc else Type desc) })
+        (Ref
+           { nullable = false; typ = (if exact then Exact desc else Type desc) })
   | StructNew idx ->
       let*! ty, _, fields = lookup_struct_type ctx idx in
-      if Option.is_some (Types.get_subtype ctx.modul.subtyping_info ty).descriptor
+      if
+        Option.is_some
+          (Types.get_subtype ctx.modul.subtyping_info ty).descriptor
       then
         Error.descriptor_allocation_required ctx.modul.diagnostics
           ~location:i.info;
@@ -2798,7 +2828,9 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let*! ty, _, fields = lookup_struct_type ctx idx in
       if not (Array.for_all field_has_default fields) then
         Error.not_defaultable ctx.modul.diagnostics ~location:i.info;
-      if Option.is_some (Types.get_subtype ctx.modul.subtyping_info ty).descriptor
+      if
+        Option.is_some
+          (Types.get_subtype ctx.modul.subtyping_info ty).descriptor
       then
         Error.descriptor_allocation_required ctx.modul.diagnostics
           ~location:i.info;
@@ -2810,7 +2842,8 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       (* The descriptor operand is on top of the field values. *)
       let* () =
         pop ctx loc
-          ~expected_source:(descriptor_operand_source ctx.modul.types (Exact ty))
+          ~expected_source:
+            (descriptor_operand_source ctx.modul.types (Exact ty))
           (Ref { nullable = true; typ = Exact desc })
       in
       let* () =
@@ -2831,7 +2864,8 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let*! desc = type_descriptor ctx ~location:i.info ty in
       let* () =
         pop ctx loc
-          ~expected_source:(descriptor_operand_source ctx.modul.types (Exact ty))
+          ~expected_source:
+            (descriptor_operand_source ctx.modul.types (Exact ty))
           (Ref { nullable = true; typ = Exact desc })
       in
       push ~source:(named_ref_source idx) (Some loc)
@@ -3157,18 +3191,17 @@ let rec check_constant_instruction ctx (i : _ Ast.Text.instr) =
   | ThrowRef | ContNew _ | ContBind _ | Suspend _ | Resume _ | ResumeThrow _
   | ResumeThrowRef _ | Switch _ | Br _ | Br_if _ | Br_table _ | Br_on_null _
   | Br_on_non_null _ | Br_on_cast _ | Br_on_cast_fail _ | Br_on_cast_desc_eq _
-  | Br_on_cast_desc_eq_fail _ | Return | Call _
-  | CallRef _ | CallIndirect _ | ReturnCall _ | ReturnCallRef _
-  | ReturnCallIndirect _ | Drop | Select _ | LocalGet _ | LocalSet _
-  | LocalTee _ | GlobalSet _ | Load _ | LoadS _ | Store _ | StoreS _ | Atomic _
-  | AtomicFence | MemorySize _ | MemoryGrow _ | MemoryFill _ | MemoryCopy _
-  | MemoryInit _ | DataDrop _ | TableGet _ | TableSet _ | TableSize _
-  | TableGrow _ | TableFill _ | TableCopy _ | TableInit _ | ElemDrop _
-  | RefIsNull | RefAsNonNull | RefEq | RefTest _ | RefCast _ | RefCastDescEq _
-  | RefGetDesc _ | StructGet _
-  | StructSet _ | ArrayNewData _ | ArrayNewElem _ | ArrayGet _ | ArraySet _
-  | ArrayLen | ArrayFill _ | ArrayCopy _ | ArrayInitData _ | ArrayInitElem _
-  | I31Get _ | UnOp _ | Add128 | Sub128 | MulWide _
+  | Br_on_cast_desc_eq_fail _ | Return | Call _ | CallRef _ | CallIndirect _
+  | ReturnCall _ | ReturnCallRef _ | ReturnCallIndirect _ | Drop | Select _
+  | LocalGet _ | LocalSet _ | LocalTee _ | GlobalSet _ | Load _ | LoadS _
+  | Store _ | StoreS _ | Atomic _ | AtomicFence | MemorySize _ | MemoryGrow _
+  | MemoryFill _ | MemoryCopy _ | MemoryInit _ | DataDrop _ | TableGet _
+  | TableSet _ | TableSize _ | TableGrow _ | TableFill _ | TableCopy _
+  | TableInit _ | ElemDrop _ | RefIsNull | RefAsNonNull | RefEq | RefTest _
+  | RefCast _ | RefCastDescEq _ | RefGetDesc _ | StructGet _ | StructSet _
+  | ArrayNewData _ | ArrayNewElem _ | ArrayGet _ | ArraySet _ | ArrayLen
+  | ArrayFill _ | ArrayCopy _ | ArrayInitData _ | ArrayInitElem _ | I31Get _
+  | UnOp _ | Add128 | Sub128 | MulWide _
   | BinOp
       ( F32 _ | F64 _
       | I32
@@ -3401,24 +3434,24 @@ and register_typeuses_instr d ctx (i : _ Ast.Text.instr) =
   | Resume _ | ResumeThrow _ | ResumeThrowRef _ | Switch _ | Br _ | Br_if _
   | Br_table _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
   | Br_on_cast_fail _ | Br_on_cast_desc_eq _ | Br_on_cast_desc_eq_fail _
-  | Return | Call _ | CallRef _ | ReturnCall _
-  | ReturnCallRef _ | Drop | Select _ | LocalGet _ | LocalSet _ | LocalTee _
-  | GlobalGet _ | GlobalSet _ | Load _ | LoadS _ | Store _ | StoreS _ | Atomic _
-  | AtomicFence | MemorySize _ | MemoryGrow _ | MemoryFill _ | MemoryCopy _
-  | MemoryInit _ | DataDrop _ | TableGet _ | TableSet _ | TableSize _
-  | TableGrow _ | TableFill _ | TableCopy _ | TableInit _ | ElemDrop _
-  | RefNull _ | RefFunc _ | RefIsNull | RefAsNonNull | RefEq | RefTest _
-  | RefCast _ | RefCastDescEq _ | RefGetDesc _ | StructNew _ | StructNewDefault _
-  | StructNewDesc _ | StructNewDefaultDesc _ | StructGet _ | StructSet _
-  | ArrayNew _ | ArrayNewDefault _ | ArrayNewFixed _ | ArrayNewData _
-  | ArrayNewElem _ | ArrayGet _ | ArraySet _ | ArrayLen | ArrayFill _
-  | ArrayCopy _ | ArrayInitData _ | ArrayInitElem _ | RefI31 | I31Get _
-  | Const _ | UnOp _ | BinOp _ | Add128 | Sub128 | MulWide _ | I32WrapI64
-  | I64ExtendI32 _ | F32DemoteF64 | F64PromoteF32 | ExternConvertAny
-  | AnyConvertExtern | VecBitselect | VecConst _ | VecUnOp _ | VecBinOp _
-  | VecTest _ | VecShift _ | VecBitmask _ | VecLoad _ | VecStore _
-  | VecLoadLane _ | VecStoreLane _ | VecLoadSplat _ | VecExtract _
-  | VecReplace _ | VecSplat _ | VecShuffle _ | VecTernOp _ | Char _ ->
+  | Return | Call _ | CallRef _ | ReturnCall _ | ReturnCallRef _ | Drop
+  | Select _ | LocalGet _ | LocalSet _ | LocalTee _ | GlobalGet _ | GlobalSet _
+  | Load _ | LoadS _ | Store _ | StoreS _ | Atomic _ | AtomicFence
+  | MemorySize _ | MemoryGrow _ | MemoryFill _ | MemoryCopy _ | MemoryInit _
+  | DataDrop _ | TableGet _ | TableSet _ | TableSize _ | TableGrow _
+  | TableFill _ | TableCopy _ | TableInit _ | ElemDrop _ | RefNull _ | RefFunc _
+  | RefIsNull | RefAsNonNull | RefEq | RefTest _ | RefCast _ | RefCastDescEq _
+  | RefGetDesc _ | StructNew _ | StructNewDefault _ | StructNewDesc _
+  | StructNewDefaultDesc _ | StructGet _ | StructSet _ | ArrayNew _
+  | ArrayNewDefault _ | ArrayNewFixed _ | ArrayNewData _ | ArrayNewElem _
+  | ArrayGet _ | ArraySet _ | ArrayLen | ArrayFill _ | ArrayCopy _
+  | ArrayInitData _ | ArrayInitElem _ | RefI31 | I31Get _ | Const _ | UnOp _
+  | BinOp _ | Add128 | Sub128 | MulWide _ | I32WrapI64 | I64ExtendI32 _
+  | F32DemoteF64 | F64PromoteF32 | ExternConvertAny | AnyConvertExtern
+  | VecBitselect | VecConst _ | VecUnOp _ | VecBinOp _ | VecTest _ | VecShift _
+  | VecBitmask _ | VecLoad _ | VecStore _ | VecLoadLane _ | VecStoreLane _
+  | VecLoadSplat _ | VecExtract _ | VecReplace _ | VecSplat _ | VecShuffle _
+  | VecTernOp _ | Char _ ->
       ()
 
 (* Collect the implicit function types denoted by inline signatures (function
@@ -4021,7 +4054,8 @@ let check_syntax ctx lst =
       Error.multiple_start ctx.diagnostics ~location:second.Ast.info
   | _ -> ()
 
-let validate_configuration ?(warn_unused = true) diagnostics (_, fields) =
+let validate_configuration ?(warn_unused = true)
+    ?(features = Wax_utils.Feature.default ()) diagnostics (_, fields) =
   let type_context =
     {
       types = Types.create ();
@@ -4030,6 +4064,7 @@ let validate_configuration ?(warn_unused = true) diagnostics (_, fields) =
       label_mapping = Hashtbl.create 16;
       type_defs = Hashtbl.create 16;
       descriptor_source = Hashtbl.create 16;
+      features;
     }
   in
   List.iter
@@ -4250,16 +4285,17 @@ let check_import_order diagnostics fields =
              can_import)
        None fields)
 
-let f ?(warn_unused = true) diagnostics ((name, fields) as modul) =
+let f ?(warn_unused = true) ?(features = Wax_utils.Feature.default ())
+    diagnostics ((name, fields) as modul) =
   Wax_utils.Debug.timed "validate" @@ fun () ->
   check_import_order diagnostics fields;
   if not (List.exists field_has_conditional fields) then
-    validate_configuration ~warn_unused diagnostics modul
+    validate_configuration ~warn_unused ~features diagnostics modul
   else
     Cond_explore.check_all diagnostics
       ?truncation_location:
         (match fields with f :: _ -> Some f.Ast.info | [] -> None)
       ~specialize:(fun env asm ~enqueue ~record ->
         (name, specialize env diagnostics ~enqueue ~record asm fields))
-      ~check:(validate_configuration ~warn_unused)
+      ~check:(validate_configuration ~warn_unused ~features)
       ()

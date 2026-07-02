@@ -580,9 +580,9 @@ let is_block (i : _ Ast.instr) =
   | ArrayDefault _ | ArrayFixed _ | ArraySegment _ | ArrayGet _ | ArraySet _
   | BinOp _ | UnOp _ | Let _ | Br _ | Br_if _ | Br_table _ | Br_on_null _
   | Br_on_non_null _ | Br_on_cast _ | Br_on_cast_fail _ | Br_on_cast_desc_eq _
-  | Br_on_cast_desc_eq_fail _ | Throw _ | ThrowRef _
-  | ContNew _ | ContBind _ | Suspend _ | Resume _ | ResumeThrow _
-  | ResumeThrowRef _ | Switch _ | Return _ | Sequence _ | Select _ ->
+  | Br_on_cast_desc_eq_fail _ | Throw _ | ThrowRef _ | ContNew _ | ContBind _
+  | Suspend _ | Resume _ | ResumeThrow _ | ResumeThrowRef _ | Switch _
+  | Return _ | Sequence _ | Select _ ->
       false
 
 let rec starts_with_block_prec prec (i : 'a Ast.instr) =
@@ -608,12 +608,11 @@ let rec starts_with_block_prec prec (i : 'a Ast.instr) =
     | Unreachable | Nop | Hole | Null | Get _ | Path _ | Set _ | Tee _
     | TailCall _ | Char _ | String _ | Int _ | Float _ | Struct _
     | StructDefault _ | StructDesc _ | StructDefaultDesc _ | Array _
-    | ArrayDefault _ | ArrayFixed _ | ArraySegment _
-    | Let _ | Br _ | Br_if _ | Br_table _ | Br_on_null _ | Br_on_non_null _
-    | Br_on_cast _ | Br_on_cast_fail _ | Br_on_cast_desc_eq _
-    | Br_on_cast_desc_eq_fail _ | Throw _ | ThrowRef _ | ContNew _
-    | ContBind _ | Suspend _ | Resume _ | ResumeThrow _ | ResumeThrowRef _
-    | Switch _ | Return _ | Sequence _ ->
+    | ArrayDefault _ | ArrayFixed _ | ArraySegment _ | Let _ | Br _ | Br_if _
+    | Br_table _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
+    | Br_on_cast_fail _ | Br_on_cast_desc_eq _ | Br_on_cast_desc_eq_fail _
+    | Throw _ | ThrowRef _ | ContNew _ | ContBind _ | Suspend _ | Resume _
+    | ResumeThrow _ | ResumeThrowRef _ | Switch _ | Return _ | Sequence _ ->
         false
 
 let starts_with_block i = starts_with_block_prec Instruction i

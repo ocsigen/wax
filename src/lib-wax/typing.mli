@@ -6,6 +6,7 @@ type types
 val f :
   ?simplify:bool ->
   ?warn_unused:bool ->
+  ?features:Wax_utils.Feature.set ->
   Wax_utils.Diagnostic.context ->
   Ast.location Ast.module_ ->
   types * typed_module_annotation Ast.module_

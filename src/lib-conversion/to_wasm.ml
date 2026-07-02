@@ -1131,8 +1131,8 @@ and instruction_desc ret ctx i : location Text.instr list =
               | ( Ref
                     {
                       typ =
-                        Any | Eq | I31 | Struct | Array | Type _ | Exact _
-                        | None_;
+                        ( Any | Eq | I31 | Struct | Array | Type _ | Exact _
+                        | None_ );
                       _;
                     },
                   Valtype (Ref { typ = Extern; _ }) ) ->
@@ -1321,9 +1321,7 @@ and instruction_desc ret ctx i : location Text.instr list =
       in
       let args_code = List.concat_map (instruction ret ctx) instrs in
       (* The descriptor operand is pushed last, above the field values. *)
-      folded loc
-        (StructNewDesc (index idx))
-        (args_code @ instruction ret ctx d)
+      folded loc (StructNewDesc (index idx)) (args_code @ instruction ret ctx d)
   | StructDefaultDesc (opt_idx, d) ->
       let idx =
         match opt_idx with Some idx -> idx | None -> expr_type_name i

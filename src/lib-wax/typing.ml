@@ -222,6 +222,12 @@ module Error = struct
       "A type with a descriptor must be allocated with a descriptor: {T \
        descriptor d | …}."
 
+  let feature_disabled context ~location feature =
+    report context ~location
+      "This uses the %s feature, which is not enabled; pass --feature %s."
+      (Wax_utils.Feature.name feature)
+      (Wax_utils.Feature.name feature)
+
   (* A secondary caret at [location] labelled with an inferred value type. Used
      to point at each branch of an [if]/select whose branches are in
      incompatible type hierarchies: there is no common supertype — and, unlike a
@@ -534,6 +540,8 @@ type types = (int * subtype) Tbl.t
 type type_context = {
   internal_types : Wax_wasm.Types.t;
   types : (int * subtype) Tbl.t;
+  features : Wax_utils.Feature.set;
+      (* The enabled optional features / proposals, and which are used. *)
 }
 
 let get_type_definition d types nm = Option.map snd (Tbl.find d types nm)
@@ -541,6 +549,13 @@ let get_type_definition d types nm = Option.map snd (Tbl.find d types nm)
 let resolve_type_name d ctx name =
   let+@ res = Tbl.find d ctx.types name in
   fst res
+
+(* Record that [feature] is used and, if it is disabled, report it at
+   [location]. Typing continues either way (error recovery). *)
+let require_feature d (ctx : type_context) ~location feature =
+  Wax_utils.Feature.mark_used ctx.features feature;
+  if not (Wax_utils.Feature.is_enabled ctx.features feature) then
+    Error.feature_disabled d ~location feature
 
 let heaptype d ctx (h : heaptype) : Internal.heaptype option =
   match h with
@@ -562,6 +577,8 @@ let heaptype d ctx (h : heaptype) : Internal.heaptype option =
       let+@ ty = resolve_type_name d ctx idx in
       (Type ty : Internal.heaptype)
   | Exact idx ->
+      require_feature d ctx ~location:idx.info
+        Wax_utils.Feature.Custom_descriptors;
       let+@ ty = resolve_type_name d ctx idx in
       (Exact ty : Internal.heaptype)
 
@@ -680,6 +697,8 @@ let subtype d ctx current { typ; supertype; final; descriptor; describes } =
   let resolve_opt = function
     | None -> Some None
     | Some idx ->
+        require_feature d ctx ~location:idx.info
+          Wax_utils.Feature.Custom_descriptors;
         let+@ ty = resolve_type_name d ctx idx in
         Some ty
   in
@@ -5649,13 +5668,20 @@ and check_instruction ?(drop_supertype = false) ctx expected
      [expected] when there is one. *)
   let construction_result name =
     (* A concrete allocator ([struct.new] / [array.new*]) yields an *exact*
-       reference at the Wasm level, so we type it exact too. An exact result is
-       usable wherever an inexact one is, and the exactness does not leak into
-       binding/block annotations — those come from the (usually inexact) Wasm
-       declarations, and the annotation-keeping logic preserves them. *)
+       reference at the Wasm level. We type it exact only when custom-descriptors
+       is enabled (exact reference types are part of that proposal); otherwise it
+       is the plain inexact reference, as before the proposal. *)
+    let want_exact =
+      Wax_utils.Feature.is_enabled ctx.type_context.features
+        Wax_utils.Feature.Custom_descriptors
+    in
     let result =
       internalize ?inline:(inline_comptype ctx name) ctx
-        (Ref { nullable = false; typ = Exact name })
+        (Ref
+           {
+             nullable = false;
+             typ = (if want_exact then Exact name else Type name);
+           })
     in
     Option.iter
       (fun result ->
@@ -6055,12 +6081,22 @@ and check_instruction ?(drop_supertype = false) ctx expected
           (Ref { nullable = false; typ = Type string_typ })
       in
       (* The natural type a bare string re-infers to: the default [<string>]
-         array, allocated *exact* (like every construction). This — not the
-         inexact [string_valtype], used only for the structural [is_default]
-         check — is what decides whether a binding annotation is redundant. *)
-      let string_valtype_exact =
+         array, allocated exactly as [construction_result] would (exact only
+         when custom-descriptors is enabled). This — not the always-inexact
+         [string_valtype], used only for the structural [is_default] check — is
+         what decides whether a binding annotation is redundant. *)
+      let string_valtype_natural =
         internalize_valtype ctx
-          (Ref { nullable = false; typ = Exact string_typ })
+          (Ref
+             {
+               nullable = false;
+               typ =
+                 (if
+                    Wax_utils.Feature.is_enabled ctx.type_context.features
+                      Wax_utils.Feature.Custom_descriptors
+                  then Exact string_typ
+                  else Type string_typ);
+             })
       in
       let is_default name =
         match
@@ -6092,7 +6128,8 @@ and check_instruction ?(drop_supertype = false) ctx expected
       in
       return
         ( node,
-          annotation_needed ~drop_supertype ctx string_valtype_exact expected )
+          annotation_needed ~drop_supertype ctx string_valtype_natural expected
+        )
   | Cast (e, typ) when is_null_initializer e ->
       let* i' = instruction ctx i in
       (* A cast of [null] is redundant when the checking context already
@@ -7540,11 +7577,10 @@ let rec check_constant_instruction ctx i =
   | Block _ | Loop _ | While _ | If _ | TryTable _ | Try _ | Dispatch _
   | Match _ | Unreachable | Nop | Hole | Path _ | Set _ | Tee _ | Call _
   | TailCall _ | Cast _ | CastDesc _ | Test _ | NonNull _ | StructGet _
-  | GetDescriptor _ | StructSet _
-  | ArraySegment _ | ArrayGet _ | ArraySet _ | Let _ | Br _ | Br_if _
-  | Br_table _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
-  | Br_on_cast_fail _ | Br_on_cast_desc_eq _ | Br_on_cast_desc_eq_fail _
-  | Throw _ | ThrowRef _ | ContNew _ | ContBind _
+  | GetDescriptor _ | StructSet _ | ArraySegment _ | ArrayGet _ | ArraySet _
+  | Let _ | Br _ | Br_if _ | Br_table _ | Br_on_null _ | Br_on_non_null _
+  | Br_on_cast _ | Br_on_cast_fail _ | Br_on_cast_desc_eq _
+  | Br_on_cast_desc_eq_fail _ | Throw _ | ThrowRef _ | ContNew _ | ContBind _
   | Suspend _ | Resume _ | ResumeThrow _ | ResumeThrowRef _ | Switch _
   | Return _ | Sequence _ | Select _ | If_annotation _ ->
       Error.constant_expression_required ctx.diagnostics ~location
@@ -7998,13 +8034,15 @@ let check_attributes diagnostics field =
       Error.declaration_without_import diagnostics ~location:field.info
   | _ -> ()
 
-let type_configuration ?(warn_unused = false) ~simplify diagnostics fields =
+let type_configuration ?(warn_unused = false)
+    ?(features = Wax_utils.Feature.default ()) ~simplify diagnostics fields =
   let cond = ref Cond.true_ in
   let cond_env = Cond.create () in
   let type_context =
     {
       internal_types = Wax_wasm.Types.create ();
       types = Tbl.make (Namespace.make cond) "type";
+      features;
     }
   in
   (* Walk module fields, recursing into groups and threading the branch
@@ -8554,7 +8592,8 @@ let rec check_let_in_conditionals diagnostics (i : (_ instr_desc, _) annotated)
   | _ -> ());
   List.iter (check_let_in_conditionals diagnostics) (sub_instrs i)
 
-let f ?(simplify = false) ?(warn_unused = false) diagnostics fields =
+let f ?(simplify = false) ?(warn_unused = false)
+    ?(features = Wax_utils.Feature.default ()) diagnostics fields =
   Wax_utils.Debug.timed "type-check" @@ fun () ->
   Ast_utils.iter_fields
     (fun (field : (_ modulefield, _) annotated) ->
@@ -8565,7 +8604,7 @@ let f ?(simplify = false) ?(warn_unused = false) diagnostics fields =
       | _ -> ())
     fields;
   if not (List.exists field_has_conditional fields) then
-    type_configuration ~warn_unused ~simplify diagnostics fields
+    type_configuration ~warn_unused ~features ~simplify diagnostics fields
   else begin
     (* Check every reachable configuration: each is specialized to be
        conditional-free and typed independently, so a diagnostic is reported
@@ -8577,14 +8616,16 @@ let f ?(simplify = false) ?(warn_unused = false) diagnostics fields =
       ~specialize:(fun env asm ~enqueue ~record ->
         specialize_fields env diagnostics ~enqueue ~record asm fields)
       ~check:(fun ctx m ->
-        ignore (type_configuration ~warn_unused ~simplify ctx m))
+        ignore (type_configuration ~warn_unused ~features ~simplify ctx m))
       ();
     (* Build the typed module (consumed only by the deferred WAT conversion;
        wax -> wax ignores it) by typing the module with conditionals preserved.
        [type_configuration] resolves names per branch (condition-aware tables),
        so each branch is typed under its own assumption. Diagnostics are
        discarded — the exploration above did the real checking. *)
-    type_configuration ~simplify (Wax_utils.Diagnostic.collector ()) fields
+    type_configuration ~features ~simplify
+      (Wax_utils.Diagnostic.collector ())
+      fields
   end
 
 let erase_types m =

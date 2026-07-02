@@ -45,3 +45,28 @@
  (alias runtest)
  (action
   (diff wasm_test_suite.expected wasm_test_suite.output)))
+
+; The same suite with the custom-descriptors proposal enabled: the standard
+; tests also exercise the exact-reference / always-exact path, and the
+; custom-descriptors tests validate (in the default run above they are rejected
+; as feature-disabled, which checks the gate).
+
+(rule
+ (deps
+  (glob_files_rec wasm-test-suite/*.wast)
+  (glob_files_rec additional-tests/*.wast))
+ (action
+  (with-stdout-to
+   wasm_test_suite.custom-descriptors.output
+   (run
+    ../src/bin/run_wasm_testsuite.exe
+    --no-color
+    --enable
+    custom-descriptors))))
+
+(rule
+ (alias runtest)
+ (action
+  (diff
+   wasm_test_suite.custom-descriptors.expected
+   wasm_test_suite.custom-descriptors.output)))

@@ -403,8 +403,10 @@ let build_policy specs =
     Wax_utils.Warning.default_policy specs
 
 let convert input_file output_file input_format_opt output_format_opt validate
-    strict_validate color opt_source_map_file fold_mode defines warnings debug =
+    strict_validate color opt_source_map_file fold_mode defines warnings
+    features debug =
   Wax_utils.Diagnostic.set_policy (build_policy warnings);
+  Wax_utils.Feature.set_config features;
   Wax_utils.Debug.enable debug;
   let defines = Wax_wasm.Cond_specialize.of_list defines in
   let std file = Option.bind file (fun f -> if f = "-" then None else Some f) in
@@ -528,10 +530,11 @@ let format inplace check format_opt color fold_mode warnings debug files =
    without producing any output, reporting diagnostics and exiting with a
    non-zero status if any file fails. [format_opt] forces the format; otherwise
    it is detected from the extension. *)
-let check format_opt strict color warnings debug files =
+let check format_opt strict color warnings features debug files =
   Wax_wasm.Validation.validate_refs := strict;
   let policy = build_policy warnings in
   Wax_utils.Diagnostic.set_policy policy;
+  Wax_utils.Feature.set_config features;
   Wax_utils.Debug.enable debug;
   let check_one file =
     match
@@ -782,6 +785,28 @@ let warn_option =
   Arg.(
     value & opt_all warn_conv [] & info [ "W"; "warn" ] ~docv:"NAME=LEVEL" ~doc)
 
+(* Define the --feature/-X option (enable/disable optional proposals) *)
+let feature_option =
+  let doc =
+    "Enable or disable an optional feature / proposal. $(i,NAME) or \
+     $(i,NAME=on) enables it, $(i,NAME=off) disables it. Repeatable; later \
+     settings win. Known: $(b,custom-descriptors) (off by default)."
+  in
+  let feature_conv =
+    let parse s =
+      match Wax_utils.Feature.parse_spec s with
+      | Ok v -> Ok v
+      | Error e -> Error (`Msg e)
+    in
+    let print ppf ((t, b) : Wax_utils.Feature.t * bool) =
+      Format.fprintf ppf "%s=%s" (Wax_utils.Feature.name t)
+        (if b then "on" else "off")
+    in
+    Arg.conv (parse, print)
+  in
+  Arg.(
+    value & opt_all feature_conv [] & info [ "X"; "feature" ] ~docv:"NAME" ~doc)
+
 (* Define the --inplace/-i flag (format command) *)
 let inplace_flag =
   let doc = "Write the formatted output back to each input file." in
@@ -835,9 +860,10 @@ let convert_term =
   and+ fold_mode = fold_mode_option
   and+ defines = define_option
   and+ warnings = warn_option
+  and+ features = feature_option
   and+ debug = debug_option in
   convert input output in_fmt out_fmt validate strict_validate color
-    source_map_file fold_mode defines warnings (List.concat debug)
+    source_map_file fold_mode defines warnings features (List.concat debug)
 
 let format_term =
   let+ inplace = inplace_flag
@@ -884,9 +910,10 @@ let check_term =
   and+ strict = strict_validate_flag
   and+ color = color_option
   and+ warnings = warn_option
+  and+ features = feature_option
   and+ debug = debug_option
   and+ files = check_files in
-  check format_opt strict color warnings (List.concat debug) files
+  check format_opt strict color warnings features (List.concat debug) files
 
 let check_cmd =
   let doc = "Validate WebAssembly files without producing output" in

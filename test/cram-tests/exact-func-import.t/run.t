@@ -4,7 +4,7 @@ exact reference. Wax marks it with [!]: [fn g: !ft] for a named type, or
 [fn h!(..)] for an inline signature. It maps to the WAT [(func (exact <type>))]
 import form (binary import kind [0x20]).
 
-  $ wax --validate exact.wax -f wat
+  $ wax --validate -X custom-descriptors exact.wax -f wat
   (type $ft (func (param i32) (result i64)))
   
   ;; An exact function import: `ref.func` on it yields an exact reference. The
@@ -18,7 +18,7 @@ import form (binary import kind [0x20]).
 
 A WAT module using an exact function import decompiles back to the [!] form.
 
-  $ wax roundtrip.wat -f wax
+  $ wax -X custom-descriptors roundtrip.wat -f wax
   type ft = fn(i32) -> i64;
   #[import = ("env", "g")]
   fn g_2: !ft ;
@@ -26,8 +26,8 @@ A WAT module using an exact function import decompiles back to the [!] form.
 
 It survives a binary round-trip.
 
-  $ wax exact.wax -f wasm -o exact.wasm
-  $ wax exact.wasm -f wat
+  $ wax -X custom-descriptors exact.wax -f wasm -o exact.wasm
+  $ wax -X custom-descriptors exact.wasm -f wat
   (type $ft (func (param i32) (result i64)))
   (import "env" "g" (func $g (exact (param i32) (result i64))))
   (import "env" "h" (func $h (exact (param i32) (result i64))))

@@ -905,8 +905,7 @@ let rec instr i =
   | StructNew typ -> block ~loc [ instruction "struct.new"; index typ ]
   | StructNewDefault typ ->
       block ~loc [ instruction "struct.new_default"; index typ ]
-  | StructNewDesc typ ->
-      block ~loc [ instruction "struct.new_desc"; index typ ]
+  | StructNewDesc typ -> block ~loc [ instruction "struct.new_desc"; index typ ]
   | StructNewDefaultDesc typ ->
       block ~loc [ instruction "struct.new_default_desc"; index typ ]
   | StructGet (None, typ, f) ->
@@ -997,7 +996,10 @@ let rec instr i =
   | Br_on_cast_desc_eq_fail (i, ty, ty') ->
       block ~loc
         [
-          instruction "br_on_cast_desc_eq_fail"; index i; reftype ty; reftype ty';
+          instruction "br_on_cast_desc_eq_fail";
+          index i;
+          reftype ty;
+          reftype ty';
         ]
   | Return -> instruction ~loc "return"
   | Throw tag -> block ~loc [ instruction "throw"; index tag ]

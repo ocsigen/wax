@@ -3,7 +3,7 @@ reference at the Wasm level: [struct.new]/[array.new] yield [(ref (exact $t))].
 So a construction literal can be delivered where an [&!t] is required, without a
 cast.
 
-  $ wax --validate alloc.wax -f wat
+  $ wax --validate -X custom-descriptors alloc.wax -f wat
   (type $point (struct (field $x i32) (field $y i32)))
   (type $bytes (array i8))
   
@@ -23,7 +23,7 @@ In synthesis position (no exact expectation) the plainer inexact type is kept â€
 an exact result is always usable where an inexact one is â€” so ordinary code is
 unaffected.
 
-  $ wax roundtrip.wat -f wax
+  $ wax -X custom-descriptors roundtrip.wat -f wax
   type point = { f: i32, f_2: i32 };
   #[export = "g"]
   fn g() -> &point {

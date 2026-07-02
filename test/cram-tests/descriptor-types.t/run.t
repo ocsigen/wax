@@ -3,7 +3,7 @@ struct to another struct. Wax spells the two clauses as [descriptor <name>] (on
 the described type) and [describes <name>] (on the descriptor), between the
 [open] marker and the struct body. They must pair up within a single [rec] group.
 
-  $ wax --validate desc.wax -f wat
+  $ wax --validate -X custom-descriptors desc.wax -f wat
   (rec
     (type $obj (descriptor $obj_desc) (struct (field $x i32)))
     (type $obj_desc (describes $obj) (struct))
@@ -11,13 +11,13 @@ the described type) and [describes <name>] (on the descriptor), between the
 
 The clauses survive a binary round-trip.
 
-  $ wax desc.wax -f wasm -o desc.wasm
-  $ wax desc.wasm -f wax
+  $ wax -X custom-descriptors desc.wax -f wasm -o desc.wasm
+  $ wax -X custom-descriptors desc.wasm -f wax
   rec { type obj = descriptor obj_desc { x: i32 }; type obj_desc = describes obj { }; }
 
 A descriptor and its described type must refer to each other.
 
-  $ wax check not-reciprocal.wax
+  $ wax check -X custom-descriptors not-reciprocal.wax
   Error: The descriptor of this type does not describe it back.
    ──➤  not-reciprocal.wax:2:3
   1 │ rec {
@@ -30,7 +30,7 @@ A descriptor and its described type must refer to each other.
 
 Both types in a descriptor pair must be structs.
 
-  $ wax check not-struct.wax
+  $ wax check -X custom-descriptors not-struct.wax
   Error: A descriptor type must be a struct type.
    ──➤  not-struct.wax:2:3
   1 │ rec {
@@ -43,7 +43,7 @@ Both types in a descriptor pair must be structs.
 
 If a supertype has a descriptor, its subtype must have one too.
 
-  $ wax check sub-missing-descriptor.wax
+  $ wax check -X custom-descriptors sub-missing-descriptor.wax
   Error: This type is not a valid subtype of 'a'.
    ──➤  sub-missing-descriptor.wax:4:11
   2 │   type a = open descriptor a_desc { };

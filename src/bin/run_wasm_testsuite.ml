@@ -9,6 +9,7 @@
 let wasm_only = ref false
 let color = ref Wax_utils.Colors.Always
 let all_errors = ref false
+let feature_specs = ref []
 
 let () =
   let speclist =
@@ -18,11 +19,19 @@ let () =
       ( "--all-errors",
         Arg.Unit (fun () -> all_errors := true),
         "Output all errors" );
+      ( "--enable",
+        Arg.String
+          (fun s ->
+            match Wax_utils.Feature.parse_spec s with
+            | Ok spec -> feature_specs := !feature_specs @ [ spec ]
+            | Error e -> raise (Arg.Bad e)),
+        "Enable/disable an optional feature (e.g. custom-descriptors)" );
     ]
   in
   Arg.parse speclist
     (fun arg -> raise (Arg.Bad (Printf.sprintf "Unexpected argument: %s" arg)))
-    "Usage: run_wasm_testsuite [options]"
+    "Usage: run_wasm_testsuite [options]";
+  Wax_utils.Feature.set_config !feature_specs
 
 let print_flushed s =
   print_string s;

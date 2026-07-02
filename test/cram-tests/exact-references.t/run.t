@@ -4,7 +4,7 @@ between the [&]/[&?] sigil and the type name ([&!s], [&?!s]), mapping to the WAT
 [(ref (exact $s))] form. It is a subtype of the corresponding inexact reference,
 so an [&!s] flows where an [&s] is expected.
 
-  $ wax --validate exact.wax -f wat
+  $ wax --validate -X custom-descriptors exact.wax -f wat
   (type $s (struct (field $f i32)))
   
   (func $cast (export "cast") (param $x (ref null $s)) (result (ref (exact $s)))
@@ -24,8 +24,8 @@ so an [&!s] flows where an [&s] is expected.
 
 Exact references survive a binary round-trip.
 
-  $ wax exact.wax -f wasm -o exact.wasm
-  $ wax exact.wasm -f wax
+  $ wax -X custom-descriptors exact.wax -f wasm -o exact.wasm
+  $ wax -X custom-descriptors exact.wasm -f wax
   type s = { f: i32 };
   type t = fn(&?s) -> &!s;
   type t_2 = fn(&?!s) -> i32;
@@ -45,7 +45,7 @@ Exact references survive a binary round-trip.
 
 A WAT module using exact references decompiles to the [&!] forms and back.
 
-  $ wax roundtrip.wat -f wax
+  $ wax -X custom-descriptors roundtrip.wat -f wax
   type s = { f: i32 };
   #[export = "cast"]
   fn cast(x: &?s) -> &!s {
@@ -55,7 +55,7 @@ A WAT module using exact references decompiles to the [&!] forms and back.
 
 Only a concrete type can be exact; [&!any] is rejected.
 
-  $ wax check bad.wax
+  $ wax check -X custom-descriptors bad.wax
   Error: Only a concrete type can be exact.
   
    ──➤  bad.wax:1:19

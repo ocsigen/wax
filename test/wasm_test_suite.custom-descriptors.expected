@@ -1,0 +1,1059 @@
+==== core/call_ref.wast ====
+Wax type-checking should have failed (type mismatch):
+  type t = fn();
+  fn f(r: &?func) {
+      (r as &?t)();
+  }
+from wasm:
+  (type $t (func))
+  (func $f (param $r funcref) (call_ref $t (local.get $r)))
+==== core/conversions.wast ====
+Wax type-checking should have failed (type mismatch):
+  fn f() -> i64 {
+      0 as f32 as i64_s;
+  }
+from wasm: (func (result i64) (i64.extend_i32_s (f32.const 0)))
+Wax type-checking should have failed (type mismatch):
+  fn f() -> i64 {
+      0 as f32 as i64_u;
+  }
+from wasm: (func (result i64) (i64.extend_i32_u (f32.const 0)))
+Wax type-checking should have failed (type mismatch):
+  fn f() -> i64 {
+      0 as i32 as i64_s_strict;
+  }
+from wasm: (func (result i64) (i64.trunc_f32_s (i32.const 0)))
+Wax type-checking should have failed (type mismatch):
+  fn f() -> i64 {
+      0 as i32 as i64_u_strict;
+  }
+from wasm: (func (result i64) (i64.trunc_f32_u (i32.const 0)))
+Wax type-checking should have failed (type mismatch):
+  fn f() -> i64 {
+      0 as i32 as i64_s_strict;
+  }
+from wasm: (func (result i64) (i64.trunc_f64_s (i32.const 0)))
+Wax type-checking should have failed (type mismatch):
+  fn f() -> i64 {
+      0 as i32 as i64_u_strict;
+  }
+from wasm: (func (result i64) (i64.trunc_f64_u (i32.const 0)))
+Wax type-checking should have failed (type mismatch):
+  fn f() -> f32 {
+      0 as i64 as f32_s;
+  }
+from wasm: (func (result f32) (f32.convert_i32_s (i64.const 0)))
+Wax type-checking should have failed (type mismatch):
+  fn f() -> f32 {
+      0 as i64 as f32_u;
+  }
+from wasm: (func (result f32) (f32.convert_i32_u (i64.const 0)))
+Wax type-checking should have failed (type mismatch):
+  fn f() -> f32 {
+      0 as i32 as f32_s;
+  }
+from wasm: (func (result f32) (f32.convert_i64_s (i32.const 0)))
+Wax type-checking should have failed (type mismatch):
+  fn f() -> f32 {
+      0 as i32 as f32_u;
+  }
+from wasm: (func (result f32) (f32.convert_i64_u (i32.const 0)))
+Wax type-checking should have failed (type mismatch):
+  fn f() -> f32 {
+      (0 as i64 as i32).from_bits();
+  }
+from wasm: (func (result f32) (f32.reinterpret_i32 (i64.const 0)))
+Wax type-checking should have failed (type mismatch):
+  fn f() -> f64 {
+      0 as i64 as f64_s;
+  }
+from wasm: (func (result f64) (f64.convert_i32_s (i64.const 0)))
+Wax type-checking should have failed (type mismatch):
+  fn f() -> f64 {
+      0 as i64 as f64_u;
+  }
+from wasm: (func (result f64) (f64.convert_i32_u (i64.const 0)))
+Wax type-checking should have failed (type mismatch):
+  fn f() -> f64 {
+      0 as i32 as f64_s;
+  }
+from wasm: (func (result f64) (f64.convert_i64_s (i32.const 0)))
+Wax type-checking should have failed (type mismatch):
+  fn f() -> f64 {
+      0 as i32 as f64_u;
+  }
+from wasm: (func (result f64) (f64.convert_i64_u (i32.const 0)))
+==== core/custom-descriptors/br_on_cast.wast ====
+Error: Type mismatch: the first type must be a supertype of the second one.
+   ──➤  wasm-test-suite/core/custom-descriptors/br_on_cast.wast:221:32
+219 │   )
+220 │   (func (param (ref any)) (result (ref null $t))
+221 │     (block (result (ref any)) (br_on_cast 1 (ref any) (ref null $t) (local.get 0))) (unreachable)
+    ·                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+222 │   )
+223 │   (func (param (ref null any)) (result (ref null $t))
+==== core/custom-descriptors/br_on_cast_desc_eq.wast ====
+Validation should have failed (type mismatch):
+  (rec (type $a (descriptor $b) (struct)) (type $b (describes $a) (struct)))
+  (func (br_on_cast_desc_eq 0 anyref (ref $a) (unreachable))
+        (unreachable))
+Validation should have failed (type mismatch):
+  (rec (type $a (descriptor $b) (struct)) (type $b (describes $a) (struct)))
+  (func (br_on_cast_desc_eq 0 anyref (ref $a) (unreachable))
+        (unreachable))
+Wax type-checking should have failed (type mismatch):
+  rec { type a = descriptor b { }; type b = describes a { }; }
+  fn f() -> &?any 'l: {
+      unreachable;
+      br_on_cast 'l &a _ descriptor _;
+  }
+from wasm:
+  (rec (type $a (descriptor $b) (struct)) (type $b (describes $a) (struct)))
+  (func (result anyref) (br_on_cast_desc_eq 0 funcref (ref $a) (unreachable)))
+Wax type-checking should have failed (type mismatch):
+  rec { type a = descriptor b { }; type b = describes a { }; }
+  fn f() -> &a 'l: {
+      do () -> (i32, &a) {
+          unreachable;
+          br_on_cast 'l &a _ descriptor _;
+      }
+      unreachable;
+  }
+from wasm:
+  (rec (type $a (descriptor $b) (struct)) (type $b (describes $a) (struct)))
+  (func (result (ref $a))
+    (block (result i32 (ref $a))
+      (br_on_cast_desc_eq 1 anyref (ref $a) (unreachable)))
+    (unreachable)
+  )
+Error: Type mismatch: this produces a value of type (ref null none), but type
+  (ref $a) is expected.
+    ──➤  wasm-test-suite/core/custom-descriptors/br_on_cast_desc_eq.wast:1967:8
+1965 │       (i32.const 1)
+1966 │       (i32.const 2)
+1967 │       (ref.null none)
+     ·        ^^^^^^^^^^^^^
+1968 │       (br_on_cast_desc_eq 0 eqref (ref $a) (global.get $b2))
+     ·        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected here
+1969 │       (call $assert-eq-ref (ref.null none))
+1970 │       (call $assert-eq-i32 (i32.const 2))
+(rec (type $a (descriptor $b) (struct)) (type $b (describes $a) (struct)))
+(global $b1 (ref (exact $b)) (struct.new $b))
+(global $b2 (ref (exact $b)) (struct.new $b))
+(global $a1 (ref (exact $a)) (struct.new_desc $a (global.get $b1)))
+(func $f (param $x i32) (param $x_2 i32)
+  (if (i32.eq (local.get $x) (local.get $x_2))
+    (then (return))
+    (else (unreachable)))
+)
+(func $f_2 (param $x eqref) (param $x_2 eqref)
+  (if (ref.eq (local.get $x) (local.get $x_2))
+    (then (return))
+    (else (unreachable)))
+)
+(func $f_3 (export "cast-succeeds-null")
+  (block $l_2 (result i32 i32 eqref)
+    (br_on_cast_desc_eq $l_2 (ref null $a) (ref null $a) (i32.const 1)
+      (i32.const 2) (ref.null none) (global.get $b1))
+    (unreachable))
+  (call $f_2 (ref.null none))
+  (call $f (i32.const 2))
+  (call $f (i32.const 1))
+)
+(func $f_4 (export "cast-succeeds-val")
+  (block $l_2 (result i32 i32 eqref)
+    (br_on_cast_desc_eq $l_2 (ref (exact $a)) (ref null $a) (i32.const 1)
+      (i32.const 2) (global.get $a1) (global.get $b1))
+    (unreachable))
+  (call $f_2 (global.get $a1))
+  (call $f (i32.const 2))
+  (call $f (i32.const 1))
+)
+(func $f_5 (export "cast-fails-null")
+  (block $l_2 (result i32 i32 eqref)
+    (br_on_cast_desc_eq $l_2 (ref $a) (ref $a) (i32.const 1) (i32.const 2)
+      (ref.null none) (global.get $b2))
+    (call $f_2 (ref.null none))
+    (call $f (i32.const 2))
+    (call $f (i32.const 1))
+    (return))
+  (unreachable)
+)
+(func $f_6 (export "cast-fails-val")
+  (block $l_2 (result i32 i32 eqref)
+    (br_on_cast_desc_eq $l_2 (ref (exact $a)) (ref $a) (i32.const 1)
+      (i32.const 2) (global.get $a1) (global.get $b2))
+    (call $f_2 (global.get $a1))
+    (call $f (i32.const 2))
+    (call $f (i32.const 1))
+    (return))
+  (unreachable)
+)
+rec { type a = descriptor b { }; type b = describes a { }; }
+const b1: &!b = {b| };
+const b2: &!b = {b| };
+const a1: &!a = {a descriptor b1| };
+fn f(x: i32, x_2: i32) {
+    if x == x_2 {
+        return;
+    } else {
+        unreachable;
+    }
+}
+fn f_2(x: &?eq, x_2: &?eq) {
+    if x == x_2 {
+        return;
+    } else {
+        unreachable;
+    }
+}
+#[export = "cast-succeeds-null"]
+fn f_3() {
+    'l_2: do () -> (i32, i32, &?eq) {
+        br_on_cast 'l_2 &?a (1, 2, null as &?none) descriptor b1;
+        unreachable;
+    }
+    f_2(_, null as &?none);
+    f(_, 2);
+    f(_, 1);
+}
+#[export = "cast-succeeds-val"]
+fn f_4() {
+    'l_2: do () -> (i32, i32, &?eq) {
+        br_on_cast 'l_2 &?a (1, 2, a1) descriptor b1;
+        unreachable;
+    }
+    f_2(_, a1);
+    f(_, 2);
+    f(_, 1);
+}
+#[export = "cast-fails-null"]
+fn f_5() {
+    'l_2: do () -> (i32, i32, &?eq) {
+        br_on_cast 'l_2 &a (1, 2, null as &?none) descriptor b2;
+        f_2(_, null as &?none);
+        f(_, 2);
+        f(_, 1);
+        return;
+    }
+    unreachable;
+}
+#[export = "cast-fails-val"]
+fn f_6() {
+    'l_2: do () -> (i32, i32, &?eq) {
+        br_on_cast 'l_2 &a (1, 2, a1) descriptor b2;
+        f_2(_, a1);
+        f(_, 2);
+        f(_, 1);
+        return;
+    }
+    unreachable;
+}
+Error: Type mismatch: this produces a value of type (ref null none), but type
+  (ref $a) is expected.
+  ──➤  wasm-test-suite/core/custom-descriptors/br_on_cast_desc_eq.wast:41:6
+39 │     (i32.const 1)
+40 │     (i32.const 2)
+41 │     (ref.null none)
+   ·      ^^^^^^^^^^^^^
+42 │     (br_on_cast_desc_eq 0 eqref (ref $a) (global.get $b2))
+   ·      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected here
+43 │     (call $assert-eq-ref (ref.null none))
+44 │     (call $assert-eq-i32 (i32.const 2))
+(rec (type $a (descriptor $b) (struct)) (type $b (describes $a) (struct)))
+(global $b1 (ref (exact $b)) (struct.new $b))
+(global $b2 (ref (exact $b)) (struct.new $b))
+(global $a1 (ref (exact $a)) (struct.new_desc $a (global.get $b1)))
+(func $f (param $x i32) (param $x_2 i32)
+  (if (i32.eq (local.get $x) (local.get $x_2))
+    (then (return))
+    (else (unreachable)))
+)
+(func $f_2 (param $x eqref) (param $x_2 eqref)
+  (if (ref.eq (local.get $x) (local.get $x_2))
+    (then (return))
+    (else (unreachable)))
+)
+(func $f_3 (export "cast-succeeds-null")
+  (block $l_2 (result i32 i32 eqref)
+    (br_on_cast_desc_eq $l_2 (ref null $a) (ref null $a) (i32.const 1)
+      (i32.const 2) (ref.null none) (global.get $b1))
+    (unreachable))
+  (call $f_2 (ref.null none))
+  (call $f (i32.const 2))
+  (call $f (i32.const 1))
+)
+(func $f_4 (export "cast-succeeds-val")
+  (block $l_2 (result i32 i32 eqref)
+    (br_on_cast_desc_eq $l_2 (ref (exact $a)) (ref null $a) (i32.const 1)
+      (i32.const 2) (global.get $a1) (global.get $b1))
+    (unreachable))
+  (call $f_2 (global.get $a1))
+  (call $f (i32.const 2))
+  (call $f (i32.const 1))
+)
+(func $f_5 (export "cast-fails-null")
+  (block $l_2 (result i32 i32 eqref)
+    (br_on_cast_desc_eq $l_2 (ref $a) (ref $a) (i32.const 1) (i32.const 2)
+      (ref.null none) (global.get $b2))
+    (call $f_2 (ref.null none))
+    (call $f (i32.const 2))
+    (call $f (i32.const 1))
+    (return))
+  (unreachable)
+)
+(func $f_6 (export "cast-fails-val")
+  (block $l_2 (result i32 i32 eqref)
+    (br_on_cast_desc_eq $l_2 (ref (exact $a)) (ref $a) (i32.const 1)
+      (i32.const 2) (global.get $a1) (global.get $b2))
+    (call $f_2 (global.get $a1))
+    (call $f (i32.const 2))
+    (call $f (i32.const 1))
+    (return))
+  (unreachable)
+)
+rec { type a = descriptor b { }; type b = describes a { }; }
+const b1: &!b = {b| };
+const b2: &!b = {b| };
+const a1: &!a = {a descriptor b1| };
+fn f(x: i32, x_2: i32) {
+    if x == x_2 {
+        return;
+    } else {
+        unreachable;
+    }
+}
+fn f_2(x: &?eq, x_2: &?eq) {
+    if x == x_2 {
+        return;
+    } else {
+        unreachable;
+    }
+}
+#[export = "cast-succeeds-null"]
+fn f_3() {
+    'l_2: do () -> (i32, i32, &?eq) {
+        br_on_cast 'l_2 &?a (1, 2, null as &?none) descriptor b1;
+        unreachable;
+    }
+    f_2(_, null as &?none);
+    f(_, 2);
+    f(_, 1);
+}
+#[export = "cast-succeeds-val"]
+fn f_4() {
+    'l_2: do () -> (i32, i32, &?eq) {
+        br_on_cast 'l_2 &?a (1, 2, a1) descriptor b1;
+        unreachable;
+    }
+    f_2(_, a1);
+    f(_, 2);
+    f(_, 1);
+}
+#[export = "cast-fails-null"]
+fn f_5() {
+    'l_2: do () -> (i32, i32, &?eq) {
+        br_on_cast 'l_2 &a (1, 2, null as &?none) descriptor b2;
+        f_2(_, null as &?none);
+        f(_, 2);
+        f(_, 1);
+        return;
+    }
+    unreachable;
+}
+#[export = "cast-fails-val"]
+fn f_6() {
+    'l_2: do () -> (i32, i32, &?eq) {
+        br_on_cast 'l_2 &a (1, 2, a1) descriptor b2;
+        f_2(_, a1);
+        f(_, 2);
+        f(_, 1);
+        return;
+    }
+    unreachable;
+}
+File "-", line 1, characters 263-265:
+Error: Type mismatch: this produces a value of type (ref null none), but type
+  (ref $a) is expected.
+(rec (type $a (descriptor $b) (struct)) (type $b (describes $a) (struct)))
+(type $t (func (param i32 i32)))
+(type $t_2 (func (param eqref eqref)))
+(type $t_3 (func))
+(type $t_4 (func (result i32 i32 eqref)))
+(func $f (param $x i32) (param $x_2 i32)
+  (if (i32.eq (local.get $x) (local.get $x_2))
+    (then (return))
+    (else (unreachable)))
+)
+(func $f_2 (param $x eqref) (param $x_2 eqref)
+  (if (ref.eq (local.get $x) (local.get $x_2))
+    (then (return))
+    (else (unreachable)))
+)
+(func $f_3 (export "cast-succeeds-null")
+  (block $l_2 (result i32 i32 eqref)
+    (br_on_cast_desc_eq $l_2 (ref null $a) (ref null $a) (i32.const 1)
+      (i32.const 2) (ref.null none) (global.get $b1))
+    (unreachable))
+  (call $f_2 (ref.null none))
+  (call $f (i32.const 2))
+  (call $f (i32.const 1))
+)
+(func $f_4 (export "cast-succeeds-val")
+  (block $l_2 (result i32 i32 eqref)
+    (br_on_cast_desc_eq $l_2 (ref (exact $a)) (ref null $a) (i32.const 1)
+      (i32.const 2) (global.get $a1) (global.get $b1))
+    (unreachable))
+  (call $f_2 (global.get $a1))
+  (call $f (i32.const 2))
+  (call $f (i32.const 1))
+)
+(func $f_5 (export "cast-fails-null")
+  (block $l_2 (result i32 i32 eqref)
+    (br_on_cast_desc_eq $l_2 (ref $a) (ref $a) (i32.const 1) (i32.const 2)
+      (ref.null none) (global.get $b2))
+    (call $f_2 (ref.null none))
+    (call $f (i32.const 2))
+    (call $f (i32.const 1))
+    (return))
+  (unreachable)
+)
+(func $f_6 (export "cast-fails-val")
+  (block $l_2 (result i32 i32 eqref)
+    (br_on_cast_desc_eq $l_2 (ref (exact $a)) (ref $a) (i32.const 1)
+      (i32.const 2) (global.get $a1) (global.get $b2))
+    (call $f_2 (global.get $a1))
+    (call $f (i32.const 2))
+    (call $f (i32.const 1))
+    (return))
+  (unreachable)
+)
+(global $b1 (ref (exact $b)) (struct.new $b))
+(global $b2 (ref (exact $b)) (struct.new $b))
+(global $a1 (ref (exact $a)) (struct.new_desc $a (global.get $b1)))
+rec { type a = descriptor b { }; type b = describes a { }; }
+type t = fn(i32, i32);
+type t_2 = fn(&?eq, &?eq);
+type t_3 = fn();
+type t_4 = fn() -> (i32, i32, &?eq);
+fn f(x: i32, x_2: i32) {
+    if x == x_2 {
+        return;
+    } else {
+        unreachable;
+    }
+}
+fn f_2(x: &?eq, x_2: &?eq) {
+    if x == x_2 {
+        return;
+    } else {
+        unreachable;
+    }
+}
+#[export = "cast-succeeds-null"]
+fn f_3() {
+    'l_2: do () -> (i32, i32, &?eq) {
+        br_on_cast 'l_2 &?a (1, 2, null as &?none) descriptor b1;
+        unreachable;
+    }
+    f_2(_, null as &?none);
+    f(_, 2);
+    f(_, 1);
+}
+#[export = "cast-succeeds-val"]
+fn f_4() {
+    'l_2: do () -> (i32, i32, &?eq) {
+        br_on_cast 'l_2 &?a (1, 2, a1) descriptor b1;
+        unreachable;
+    }
+    f_2(_, a1);
+    f(_, 2);
+    f(_, 1);
+}
+#[export = "cast-fails-null"]
+fn f_5() {
+    'l_2: do () -> (i32, i32, &?eq) {
+        br_on_cast 'l_2 &a (1, 2, null as &?none) descriptor b2;
+        f_2(_, null as &?none);
+        f(_, 2);
+        f(_, 1);
+        return;
+    }
+    unreachable;
+}
+#[export = "cast-fails-val"]
+fn f_6() {
+    'l_2: do () -> (i32, i32, &?eq) {
+        br_on_cast 'l_2 &a (1, 2, a1) descriptor b2;
+        f_2(_, a1);
+        f(_, 2);
+        f(_, 1);
+        return;
+    }
+    unreachable;
+}
+const b1: &!b = {b| };
+const b2: &!b = {b| };
+const a1: &!a = {a descriptor b1| };
+==== core/custom-descriptors/br_on_cast_desc_eq_fail.wast ====
+Validation should have failed (type mismatch):
+  (rec (type $a (descriptor $b) (struct)) (type $b (describes $a) (struct)))
+  (func (br_on_cast_desc_eq_fail 0 anyref (ref $a) (unreachable))
+        (unreachable))
+Validation should have failed (type mismatch):
+  (rec (type $a (descriptor $b) (struct)) (type $b (describes $a) (struct)))
+  (func (br_on_cast_desc_eq_fail 0 anyref (ref $a) (unreachable))
+        (unreachable))
+Wax type-checking should have failed (type mismatch):
+  rec { type a = descriptor b { }; type b = describes a { }; }
+  fn f() -> &?any 'l: {
+      unreachable;
+      br_on_cast_fail 'l &a _ descriptor _;
+  }
+from wasm:
+  (rec (type $a (descriptor $b) (struct)) (type $b (describes $a) (struct)))
+  (func (result anyref)
+    (br_on_cast_desc_eq_fail 0 funcref (ref $a) (unreachable))
+  )
+Error: Type mismatch: this produces a value of type (ref null none), but type
+  (ref $a) is expected.
+    ──➤  wasm-test-suite/core/custom-descriptors/br_on_cast_desc_eq_fail.wast:1955:8
+1953 │       (i32.const 1)
+1954 │       (i32.const 2)
+1955 │       (ref.null none)
+     ·        ^^^^^^^^^^^^^
+1956 │       (br_on_cast_desc_eq_fail 0 eqref (ref $a) (global.get $b2))
+     ·        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected here
+1957 │       (unreachable)
+1958 │     )
+(rec (type $a (descriptor $b) (struct)) (type $b (describes $a) (struct)))
+(global $b1 (ref (exact $b)) (struct.new $b))
+(global $b2 (ref (exact $b)) (struct.new $b))
+(global $a1 (ref (exact $a)) (struct.new_desc $a (global.get $b1)))
+(func $f (param $x i32) (param $x_2 i32)
+  (if (i32.eq (local.get $x) (local.get $x_2))
+    (then (return))
+    (else (unreachable)))
+)
+(func $f_2 (param $x eqref) (param $x_2 eqref)
+  (if (ref.eq (local.get $x) (local.get $x_2))
+    (then (return))
+    (else (unreachable)))
+)
+(func $f_3 (export "cast-succeeds-null")
+  (block $l_2 (result i32 i32 eqref)
+    (br_on_cast_desc_eq_fail $l_2 (ref null $a) (ref null $a) (i32.const 1)
+      (i32.const 2) (ref.null none) (global.get $b1))
+    (call $f_2 (ref.null none))
+    (call $f (i32.const 2))
+    (call $f (i32.const 1))
+    (return))
+  (unreachable)
+)
+(func $f_4 (export "cast-succeeds-val")
+  (block $l_2 (result i32 i32 eqref)
+    (br_on_cast_desc_eq_fail $l_2 (ref (exact $a)) (ref null $a) (i32.const 1)
+      (i32.const 2) (global.get $a1) (global.get $b1))
+    (call $f_2 (global.get $a1))
+    (call $f (i32.const 2))
+    (call $f (i32.const 1))
+    (return))
+  (unreachable)
+)
+(func $f_5 (export "cast-fails-null")
+  (block $l_2 (result i32 i32 eqref)
+    (br_on_cast_desc_eq_fail $l_2 (ref $a) (ref $a) (i32.const 1)
+      (i32.const 2) (ref.null none) (global.get $b2))
+    (unreachable))
+  (call $f_2 (ref.null none))
+  (call $f (i32.const 2))
+  (call $f (i32.const 1))
+)
+(func $f_6 (export "cast-fails-val")
+  (block $l_2 (result i32 i32 eqref)
+    (br_on_cast_desc_eq_fail $l_2 (ref (exact $a)) (ref $a) (i32.const 1)
+      (i32.const 2) (global.get $a1) (global.get $b2))
+    (unreachable))
+  (call $f_2 (global.get $a1))
+  (call $f (i32.const 2))
+  (call $f (i32.const 1))
+)
+rec { type a = descriptor b { }; type b = describes a { }; }
+const b1: &!b = {b| };
+const b2: &!b = {b| };
+const a1: &!a = {a descriptor b1| };
+fn f(x: i32, x_2: i32) {
+    if x == x_2 {
+        return;
+    } else {
+        unreachable;
+    }
+}
+fn f_2(x: &?eq, x_2: &?eq) {
+    if x == x_2 {
+        return;
+    } else {
+        unreachable;
+    }
+}
+#[export = "cast-succeeds-null"]
+fn f_3() {
+    'l_2: do () -> (i32, i32, &?eq) {
+        br_on_cast_fail 'l_2 &?a (1, 2, null as &?none) descriptor b1;
+        f_2(_, null as &?none);
+        f(_, 2);
+        f(_, 1);
+        return;
+    }
+    unreachable;
+}
+#[export = "cast-succeeds-val"]
+fn f_4() {
+    'l_2: do () -> (i32, i32, &?eq) {
+        br_on_cast_fail 'l_2 &?a (1, 2, a1) descriptor b1;
+        f_2(_, a1);
+        f(_, 2);
+        f(_, 1);
+        return;
+    }
+    unreachable;
+}
+#[export = "cast-fails-null"]
+fn f_5() {
+    'l_2: do () -> (i32, i32, &?eq) {
+        br_on_cast_fail 'l_2 &a (1, 2, null as &?none) descriptor b2;
+        unreachable;
+    }
+    f_2(_, null as &?none);
+    f(_, 2);
+    f(_, 1);
+}
+#[export = "cast-fails-val"]
+fn f_6() {
+    'l_2: do () -> (i32, i32, &?eq) {
+        br_on_cast_fail 'l_2 &a (1, 2, a1) descriptor b2;
+        unreachable;
+    }
+    f_2(_, a1);
+    f(_, 2);
+    f(_, 1);
+}
+Error: Type mismatch: this produces a value of type (ref null none), but type
+  (ref $a) is expected.
+  ──➤  wasm-test-suite/core/custom-descriptors/br_on_cast_desc_eq_fail.wast:43:6
+41 │     (i32.const 1)
+42 │     (i32.const 2)
+43 │     (ref.null none)
+   ·      ^^^^^^^^^^^^^
+44 │     (br_on_cast_desc_eq_fail 0 eqref (ref $a) (global.get $b2))
+   ·      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected here
+45 │     (unreachable))
+46 │   (call $assert-eq-ref (ref.null none))
+(rec (type $a (descriptor $b) (struct)) (type $b (describes $a) (struct)))
+(global $b1 (ref (exact $b)) (struct.new $b))
+(global $b2 (ref (exact $b)) (struct.new $b))
+(global $a1 (ref (exact $a)) (struct.new_desc $a (global.get $b1)))
+(func $f (param $x i32) (param $x_2 i32)
+  (if (i32.eq (local.get $x) (local.get $x_2))
+    (then (return))
+    (else (unreachable)))
+)
+(func $f_2 (param $x eqref) (param $x_2 eqref)
+  (if (ref.eq (local.get $x) (local.get $x_2))
+    (then (return))
+    (else (unreachable)))
+)
+(func $f_3 (export "cast-succeeds-null")
+  (block $l_2 (result i32 i32 eqref)
+    (br_on_cast_desc_eq_fail $l_2 (ref null $a) (ref null $a) (i32.const 1)
+      (i32.const 2) (ref.null none) (global.get $b1))
+    (call $f_2 (ref.null none))
+    (call $f (i32.const 2))
+    (call $f (i32.const 1))
+    (return))
+  (unreachable)
+)
+(func $f_4 (export "cast-succeeds-val")
+  (block $l_2 (result i32 i32 eqref)
+    (br_on_cast_desc_eq_fail $l_2 (ref (exact $a)) (ref null $a) (i32.const 1)
+      (i32.const 2) (global.get $a1) (global.get $b1))
+    (call $f_2 (global.get $a1))
+    (call $f (i32.const 2))
+    (call $f (i32.const 1))
+    (return))
+  (unreachable)
+)
+(func $f_5 (export "cast-fails-null")
+  (block $l_2 (result i32 i32 eqref)
+    (br_on_cast_desc_eq_fail $l_2 (ref $a) (ref $a) (i32.const 1)
+      (i32.const 2) (ref.null none) (global.get $b2))
+    (unreachable))
+  (call $f_2 (ref.null none))
+  (call $f (i32.const 2))
+  (call $f (i32.const 1))
+)
+(func $f_6 (export "cast-fails-val")
+  (block $l_2 (result i32 i32 eqref)
+    (br_on_cast_desc_eq_fail $l_2 (ref (exact $a)) (ref $a) (i32.const 1)
+      (i32.const 2) (global.get $a1) (global.get $b2))
+    (unreachable))
+  (call $f_2 (global.get $a1))
+  (call $f (i32.const 2))
+  (call $f (i32.const 1))
+)
+rec { type a = descriptor b { }; type b = describes a { }; }
+const b1: &!b = {b| };
+const b2: &!b = {b| };
+const a1: &!a = {a descriptor b1| };
+fn f(x: i32, x_2: i32) {
+    if x == x_2 {
+        return;
+    } else {
+        unreachable;
+    }
+}
+fn f_2(x: &?eq, x_2: &?eq) {
+    if x == x_2 {
+        return;
+    } else {
+        unreachable;
+    }
+}
+#[export = "cast-succeeds-null"]
+fn f_3() {
+    'l_2: do () -> (i32, i32, &?eq) {
+        br_on_cast_fail 'l_2 &?a (1, 2, null as &?none) descriptor b1;
+        f_2(_, null as &?none);
+        f(_, 2);
+        f(_, 1);
+        return;
+    }
+    unreachable;
+}
+#[export = "cast-succeeds-val"]
+fn f_4() {
+    'l_2: do () -> (i32, i32, &?eq) {
+        br_on_cast_fail 'l_2 &?a (1, 2, a1) descriptor b1;
+        f_2(_, a1);
+        f(_, 2);
+        f(_, 1);
+        return;
+    }
+    unreachable;
+}
+#[export = "cast-fails-null"]
+fn f_5() {
+    'l_2: do () -> (i32, i32, &?eq) {
+        br_on_cast_fail 'l_2 &a (1, 2, null as &?none) descriptor b2;
+        unreachable;
+    }
+    f_2(_, null as &?none);
+    f(_, 2);
+    f(_, 1);
+}
+#[export = "cast-fails-val"]
+fn f_6() {
+    'l_2: do () -> (i32, i32, &?eq) {
+        br_on_cast_fail 'l_2 &a (1, 2, a1) descriptor b2;
+        unreachable;
+    }
+    f_2(_, a1);
+    f(_, 2);
+    f(_, 1);
+}
+File "-", line 1, characters 265-267:
+Error: Type mismatch: this produces a value of type (ref null none), but type
+  (ref $a) is expected.
+(rec (type $a (descriptor $b) (struct)) (type $b (describes $a) (struct)))
+(type $t (func (param i32 i32)))
+(type $t_2 (func (param eqref eqref)))
+(type $t_3 (func))
+(type $t_4 (func (result i32 i32 eqref)))
+(func $f (param $x i32) (param $x_2 i32)
+  (if (i32.eq (local.get $x) (local.get $x_2))
+    (then (return))
+    (else (unreachable)))
+)
+(func $f_2 (param $x eqref) (param $x_2 eqref)
+  (if (ref.eq (local.get $x) (local.get $x_2))
+    (then (return))
+    (else (unreachable)))
+)
+(func $f_3 (export "cast-succeeds-null")
+  (block $l_2 (result i32 i32 eqref)
+    (br_on_cast_desc_eq_fail $l_2 (ref null $a) (ref null $a) (i32.const 1)
+      (i32.const 2) (ref.null none) (global.get $b1))
+    (call $f_2 (ref.null none))
+    (call $f (i32.const 2))
+    (call $f (i32.const 1))
+    (return))
+  (unreachable)
+)
+(func $f_4 (export "cast-succeeds-val")
+  (block $l_2 (result i32 i32 eqref)
+    (br_on_cast_desc_eq_fail $l_2 (ref (exact $a)) (ref null $a) (i32.const 1)
+      (i32.const 2) (global.get $a1) (global.get $b1))
+    (call $f_2 (global.get $a1))
+    (call $f (i32.const 2))
+    (call $f (i32.const 1))
+    (return))
+  (unreachable)
+)
+(func $f_5 (export "cast-fails-null")
+  (block $l_2 (result i32 i32 eqref)
+    (br_on_cast_desc_eq_fail $l_2 (ref $a) (ref $a) (i32.const 1)
+      (i32.const 2) (ref.null none) (global.get $b2))
+    (unreachable))
+  (call $f_2 (ref.null none))
+  (call $f (i32.const 2))
+  (call $f (i32.const 1))
+)
+(func $f_6 (export "cast-fails-val")
+  (block $l_2 (result i32 i32 eqref)
+    (br_on_cast_desc_eq_fail $l_2 (ref (exact $a)) (ref $a) (i32.const 1)
+      (i32.const 2) (global.get $a1) (global.get $b2))
+    (unreachable))
+  (call $f_2 (global.get $a1))
+  (call $f (i32.const 2))
+  (call $f (i32.const 1))
+)
+(global $b1 (ref (exact $b)) (struct.new $b))
+(global $b2 (ref (exact $b)) (struct.new $b))
+(global $a1 (ref (exact $a)) (struct.new_desc $a (global.get $b1)))
+rec { type a = descriptor b { }; type b = describes a { }; }
+type t = fn(i32, i32);
+type t_2 = fn(&?eq, &?eq);
+type t_3 = fn();
+type t_4 = fn() -> (i32, i32, &?eq);
+fn f(x: i32, x_2: i32) {
+    if x == x_2 {
+        return;
+    } else {
+        unreachable;
+    }
+}
+fn f_2(x: &?eq, x_2: &?eq) {
+    if x == x_2 {
+        return;
+    } else {
+        unreachable;
+    }
+}
+#[export = "cast-succeeds-null"]
+fn f_3() {
+    'l_2: do () -> (i32, i32, &?eq) {
+        br_on_cast_fail 'l_2 &?a (1, 2, null as &?none) descriptor b1;
+        f_2(_, null as &?none);
+        f(_, 2);
+        f(_, 1);
+        return;
+    }
+    unreachable;
+}
+#[export = "cast-succeeds-val"]
+fn f_4() {
+    'l_2: do () -> (i32, i32, &?eq) {
+        br_on_cast_fail 'l_2 &?a (1, 2, a1) descriptor b1;
+        f_2(_, a1);
+        f(_, 2);
+        f(_, 1);
+        return;
+    }
+    unreachable;
+}
+#[export = "cast-fails-null"]
+fn f_5() {
+    'l_2: do () -> (i32, i32, &?eq) {
+        br_on_cast_fail 'l_2 &a (1, 2, null as &?none) descriptor b2;
+        unreachable;
+    }
+    f_2(_, null as &?none);
+    f(_, 2);
+    f(_, 1);
+}
+#[export = "cast-fails-val"]
+fn f_6() {
+    'l_2: do () -> (i32, i32, &?eq) {
+        br_on_cast_fail 'l_2 &a (1, 2, a1) descriptor b2;
+        unreachable;
+    }
+    f_2(_, a1);
+    f(_, 2);
+    f(_, 1);
+}
+const b1: &!b = {b| };
+const b2: &!b = {b| };
+const a1: &!a = {a descriptor b1| };
+==== core/custom-descriptors/br_on_cast_fail.wast ====
+Error: Type mismatch: the first type must be a supertype of the second one.
+   ──➤  wasm-test-suite/core/custom-descriptors/br_on_cast_fail.wast:236:36
+234 │   )
+235 │   (func (param (ref any)) (result (ref any))
+236 │     (block (result (ref null $t)) (br_on_cast_fail 1 (ref any) (ref null $t) (local.get 0))) (ref.as_non_null)
+    ·                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+237 │   )
+238 │   (func (param (ref null any)) (result (ref null any))
+==== core/custom-descriptors/ref_get_desc.wast ====
+Error: Type mismatch: this produces a value of type (ref $a), but type
+  (ref (exact $b)) is expected.
+  ──➤  wasm-test-suite/core/custom-descriptors/ref_get_desc.wast:23:6
+21 │ 
+22 │   (func (result (ref (exact $b)))
+23 │     (ref.get_desc $a (unreachable))
+   ·      ^^^^^^^^^^^^^^^
+24 │   )
+25 │   (func (result (ref (exact $b)))
+==== core/gc/br_on_cast.wast ====
+Wax type-checking should have failed (type mismatch):
+  type t = { };
+  fn f(x: &any) -> &?t 'l: {
+      do &any {
+          br_on_cast 'l &?t x;
+      }
+      unreachable;
+  }
+from wasm:
+  (type $t (struct))
+  (func (param (ref any)) (result (ref null $t))
+    (block (result (ref any))
+      (br_on_cast 1 (ref any) (ref null $t) (local.get 0)))
+    (unreachable)
+  )
+Wax type-checking should have failed (type mismatch):
+  fn f() -> &?any 'l: {
+      unreachable;
+      br_on_cast 'l &?any _;
+  }
+from wasm: (func (result anyref) (br_on_cast 0 eqref anyref (unreachable)))
+Wax type-checking should have failed (type mismatch):
+  fn f() -> &?any 'l: {
+      unreachable;
+      br_on_cast 'l &?array _;
+  }
+from wasm:
+  (func (result anyref) (br_on_cast 0 structref arrayref (unreachable)))
+==== core/gc/br_on_cast_fail.wast ====
+Wax type-checking should have failed (type mismatch):
+  type t = { };
+  fn f(x: &any) -> &any 'l: {
+      (do &?t {
+           br_on_cast_fail 'l &?t x;
+       }!);
+  }
+from wasm:
+  (type $t (struct))
+  (func (param (ref any)) (result (ref any))
+    (block (result (ref null $t))
+      (br_on_cast_fail 1 (ref any) (ref null $t) (local.get 0)))
+    (ref.as_non_null)
+  )
+Wax type-checking should have failed (type mismatch):
+  fn f() -> &?any 'l: {
+      unreachable;
+      br_on_cast_fail 'l &?any _;
+  }
+from wasm:
+  (func (result anyref) (br_on_cast_fail 0 eqref anyref (unreachable)))
+Wax type-checking should have failed (type mismatch):
+  fn f() -> &?any 'l: {
+      unreachable;
+      br_on_cast_fail 'l &?array _;
+  }
+from wasm:
+  (func (result anyref) (br_on_cast_fail 0 structref arrayref (unreachable)))
+==== core/i32.wast ====
+Wax type-checking should have failed (type mismatch):
+  fn f() -> i32 {
+      !(0 as i64);
+  }
+from wasm: (func (result i32) (i32.eqz (i64.const 0)))
+==== core/ref_func.wast ====
+Wax type-checking should have failed (undeclared function reference):
+  fn f() {
+      _ = f;
+  }
+from wasm: (func $f (drop (ref.func $f)))
+Wax type-checking should have failed (undeclared function reference):
+  #[start]
+  fn f() {
+      _ = f;
+  }
+from wasm: (start $f)
+  (func $f (drop (ref.func $f)))
+==== core/return_call_ref.wast ====
+Wax type-checking should have failed (type mismatch):
+  type t = fn();
+  fn f(r: &?func) {
+      become (r as &?t)();
+  }
+from wasm:
+  (type $t (func))
+  (func $f (param $r funcref) (return_call_ref $t (local.get $r)))
+==== core/select.wast ====
+Wax type-checking should have failed (type mismatch):
+  type t = fn();
+  fn f(r: &t) {
+      _ = 1 as i32?r:r;
+  }
+from wasm:
+  (type $t (func))
+  (func $type-ref-implicit (param $r (ref $t))
+    (drop (select (local.get $r) (local.get $r) (i32.const 1)))
+  )
+Wax type-checking should have failed (type mismatch):
+  fn f(r: &?func) {
+      _ = 1 as i32?r:r;
+  }
+from wasm:
+  (func $type-funcref-implicit (param $r funcref)
+    (drop (select (local.get $r) (local.get $r) (i32.const 1)))
+  )
+Wax type-checking should have failed (type mismatch):
+  fn f(r: &?extern) {
+      _ = 1 as i32?r:r;
+  }
+from wasm:
+  (func $type-externref-implicit (param $r externref)
+    (drop (select (local.get $r) (local.get $r) (i32.const 1)))
+  )
+==== core/unreached-invalid.wast ====
+Wax type-checking should have failed (type mismatch):
+  fn f() {
+      unreachable;
+      _ = !(0 as i32);
+  }
+from wasm:
+  (func $type-num-vs-num (unreachable)
+                         (drop (i64.eqz (i32.const 0))))
+Wax type-checking should have failed (type mismatch):
+  fn f() -> i32 {
+      'l_2: do i32 {
+          do {
+              unreachable;
+              br_if 'l_2 (0 as i32, 0 as i32);
+          }
+      }
+  }
+from wasm:
+  (func $type-br_if-num-vs-void-after-unreachable (result i32)
+    (block (result i32)
+      (block (unreachable) (br_if 1 (i32.const 0) (i32.const 0))))
+  )
+Wax type-checking should have failed (type mismatch):
+  fn f() -> i32 {
+      'l_2: loop {
+          nop;
+          br 'l_2;
+      }
+  }
+from wasm:
+  (func $type-cont-last-void-vs-empty (result i32) (loop (br 0 (nop))))
+Wax type-checking should have failed (type mismatch):
+  fn f() -> i32 {
+      'l_2: loop {
+          0 as i32;
+          br 'l_2;
+      }
+  }
+from wasm:
+  (func $type-cont-last-num-vs-empty (result i32) (loop (br 0 (i32.const 0))))

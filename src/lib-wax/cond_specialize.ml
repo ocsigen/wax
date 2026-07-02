@@ -137,7 +137,8 @@ let module_ ctx env (fields : location Ast.module_) :
     | Br_on_non_null (l, v) -> Br_on_non_null (l, sone v)
     | Br_on_cast (l, t, v) -> Br_on_cast (l, t, sone v)
     | Br_on_cast_fail (l, t, v) -> Br_on_cast_fail (l, t, sone v)
-    | Br_on_cast_desc_eq (l, t, v, d) -> Br_on_cast_desc_eq (l, t, sone v, sone d)
+    | Br_on_cast_desc_eq (l, t, v, d) ->
+        Br_on_cast_desc_eq (l, t, sone v, sone d)
     | Br_on_cast_desc_eq_fail (l, t, v, d) ->
         Br_on_cast_desc_eq_fail (l, t, sone v, sone d)
     | Throw (idx, v) -> Throw (idx, Option.map sone v)
