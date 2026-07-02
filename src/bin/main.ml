@@ -86,13 +86,19 @@ let to_binary ~color ~source ast =
 
 type fold_mode = Auto | Fold | Unfold
 
-let output_wat ?(tail = []) ~fold_mode ~output_file ~color ~trivia ast =
-  let ast =
-    match fold_mode with
-    | Auto -> ast
-    | Fold -> Wax_wasm.Folding.fold ast
-    | Unfold -> Wax_wasm.Folding.unfold ast
-  in
+(* Apply the requested folding to a WAT module. Folding runs on input that is
+   not validated first (unvalidated wat->wat, trusted wasm->wat), so [fold]
+   reports malformed indices as diagnostics; give it a context. Unfolding is a
+   pure structural rewrite that cannot fail. *)
+let fold_module ~fold_mode ~color ~source ast =
+  match fold_mode with
+  | Auto -> ast
+  | Fold ->
+      Wax_utils.Diagnostic.run ~color ~source (fun d ->
+          Wax_wasm.Folding.fold d ast)
+  | Unfold -> Wax_wasm.Folding.unfold ast
+
+let output_wat ?(tail = []) ~output_file ~color ~trivia ast =
   with_open_out output_file (fun oc ->
       let print_wat f m =
         Wax_utils.Printer.run f (fun p ->
@@ -109,13 +115,7 @@ let null_formatter () = Format.make_formatter (fun _ _ _ -> ()) (fun () -> ())
    locations the printer actually emits (collected by a dry pass). This keeps a
    comment from attaching to a node the printer skips — which would drop it.
    [retarget], when given, rewrites the comment delimiters between formats. *)
-let wat_trivia ?retarget ~fold_mode ctx ast =
-  let ast =
-    match fold_mode with
-    | Auto -> ast
-    | Fold -> Wax_wasm.Folding.fold ast
-    | Unfold -> Wax_wasm.Folding.unfold ast
-  in
+let wat_trivia ?retarget ctx ast =
   let used = Hashtbl.create 256 in
   Wax_utils.Printer.run (null_formatter ()) (fun p ->
       Wax_wasm.Output.module_ p ~trivia:(Hashtbl.create 0) ~collect:used ast);
@@ -149,8 +149,9 @@ let wat_to_wat ~input_file ~output_file ~validate ~warn_unused ~color
   if validate then
     Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
         Wax_wasm.Validation.f ~warn_unused d ast);
-  let trivia, tail = wat_trivia ~fold_mode ctx ast in
-  output_wat ~fold_mode ~output_file ~color:output_color ~trivia ~tail ast
+  let ast = fold_module ~fold_mode ~color ~source:(Some text) ast in
+  let trivia, tail = wat_trivia ctx ast in
+  output_wat ~output_file ~color:output_color ~trivia ~tail ast
 
 let wat_to_wax ~input_file ~output_file ~validate ~warn_unused ~color
     ~output_color ~fold_mode:_ ~defines ~source_map_file:opt_source_map_file =
@@ -216,15 +217,16 @@ let wax_to_wat ~input_file ~output_file ~validate ~warn_unused ~color
         (* Unused locals are reported against the Wax source by [Wax_lang.Typing.f]
            above; do not repeat them against the compiled Wasm. *)
         Wax_wasm.Validation.f ~warn_unused:false d wasm_ast);
+  let wasm_ast = fold_module ~fold_mode ~color ~source:(Some text) wasm_ast in
   (* Typing and conversion preserve the source Wax locations, so the source
      trivia (keyed by those locations) maps onto the converted Wasm nodes;
      rewrite the comment delimiters from Wax to Wat syntax. *)
   let trivia, tail =
     wat_trivia
       ~retarget:(Wax_utils.Trivia.wax_syntax, Wax_utils.Trivia.wat_syntax)
-      ~fold_mode ctx wasm_ast
+      ctx wasm_ast
   in
-  output_wat ~fold_mode ~output_file ~color:output_color ~trivia ~tail wasm_ast
+  output_wat ~output_file ~color:output_color ~trivia ~tail wasm_ast
 
 let wax_to_wax ~input_file ~output_file ~validate ~warn_unused ~color
     ~output_color ~fold_mode:_ ~defines ~source_map_file:opt_source_map_file =
@@ -323,8 +325,9 @@ let wasm_to_wat ~input_file ~output_file ~validate ~warn_unused ~color
   if validate then
     Wax_utils.Diagnostic.run ~color ~source:None (fun d ->
         Wax_wasm.Validation.f ~warn_unused d text_ast);
+  let text_ast = fold_module ~fold_mode ~color ~source:None text_ast in
   let trivia = Hashtbl.create 0 in
-  output_wat ~fold_mode ~output_file ~color:output_color ~trivia text_ast
+  output_wat ~output_file ~color:output_color ~trivia text_ast
 
 let wasm_to_wax ~input_file ~output_file ~validate ~warn_unused ~color
     ~output_color ~fold_mode:_ ~defines:_ ~source_map_file:opt_source_map_file =

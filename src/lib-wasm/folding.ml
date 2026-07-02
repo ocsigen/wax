@@ -52,7 +52,8 @@ module Cond = Cond_solver
 
 (* Shared state for condition-aware arity resolution: the current branch
    assumption (set while folding a conditional branch), the solver env used to
-   intern condition variables, and a throwaway diagnostics sink for [of_cond].
+   intern condition variables, a throwaway diagnostics sink for [of_cond], and
+   the caller-provided context to which malformed-input errors are reported.
    A name declared in two mutually-exclusive branches with different arities
    (e.g. a function imported with a different signature in each) resolves to the
    declaration of the branch currently being folded. *)
@@ -60,14 +61,26 @@ type cond_ctx = {
   cur : Cond.t ref;
   env : Cond.env;
   diag : Wax_utils.Diagnostic.context;
+  report : Wax_utils.Diagnostic.context;
 }
 
-let make_cond_ctx () =
+let make_cond_ctx report =
   {
     cur = ref Cond.true_;
     env = Cond.create ();
     diag = Wax_utils.Diagnostic.collector ();
+    report;
   }
+
+(* Folding runs on input that is not validated first — an unvalidated wat->wat
+   conversion or a trusted wasm->wat binary. An index that is unbound, or that
+   resolves to the wrong kind of definition, must therefore be reported as a
+   diagnostic rather than crash the process on an uncaught exception. *)
+let error report ~location message =
+  Wax_utils.Diagnostic.report report ~location ~severity:Error
+    ~message:(fun f () -> Format.pp_print_string f message)
+    ();
+  Wax_utils.Diagnostic.abort ()
 
 (* Fold [f] under the assumption of a conditional branch, restoring after. *)
 let with_cond cctx ~location cond positive f =
@@ -124,7 +137,8 @@ let lookup (tbl : _ Tbl.t) idx =
     match idx.Ast.desc with
     | Num i -> Uint32Map.find i tbl.by_index
     | Id i -> Tbl.resolve tbl i
-  with Not_found -> assert false
+  with Not_found ->
+    error tbl.cctx.report ~location:idx.Ast.info "This index is unbound."
 
 type outer_env = {
   cctx : cond_ctx;
@@ -219,7 +233,9 @@ let locals env typ l =
       | Some ty, None -> (
           match (lookup env.types ty).typ with
           | Func ty -> ty
-          | Struct _ | Array _ | Cont _ -> assert false)
+          | Struct _ | Array _ | Cont _ ->
+              error env.cctx.report ~location:ty.Ast.info
+                "This type should be a function type.")
       | None, None -> assert false
     in
     Array.fold_left
@@ -234,8 +250,8 @@ let locals env typ l =
       Tbl.add id typ tbl)
     tbl l
 
-let module_env (_, m) =
-  let cctx = make_cond_ctx () in
+let module_env report (_, m) =
+  let cctx = make_cond_ctx report in
   {
     cctx;
     types = types cctx m;
@@ -261,7 +277,9 @@ let functype_arity { params; results } =
 let type_arity env idx =
   match (lookup_type env idx).typ with
   | Func ty -> functype_arity ty
-  | Struct _ | Array _ | Cont _ -> assert false
+  | Struct _ | Array _ | Cont _ ->
+      error env.outer_env.cctx.report ~location:idx.Ast.info
+        "This type should be a function type."
 
 (* The function type underlying a continuation type [(cont $ft)]. *)
 let cont_functype env idx =
@@ -269,8 +287,12 @@ let cont_functype env idx =
   | Cont ft -> (
       match (lookup_type env ft).typ with
       | Func ty -> ty
-      | Struct _ | Array _ | Cont _ -> assert false)
-  | Func _ | Struct _ | Array _ -> assert false
+      | Struct _ | Array _ | Cont _ ->
+          error env.outer_env.cctx.report ~location:ft.Ast.info
+            "This type should be a function type.")
+  | Func _ | Struct _ | Array _ ->
+      error env.outer_env.cctx.report ~location:idx.Ast.info
+        "This type should be a continuation type."
 
 let typeuse_arity env (i, ty) =
   match (i, ty) with
@@ -297,14 +319,24 @@ let local_arity env l = valtype_arity (lookup env.outer_env.locals l)
 let unreachable = 100_000
 
 let label_arity env idx =
+  let unbound () =
+    error env.outer_env.cctx.report ~location:idx.Ast.info
+      "This label is unbound."
+  in
   match idx.Ast.desc with
-  | Id id ->
-      snd
-        (List.find
-           (fun e ->
-             match e with Some id', _ -> id = id'.Ast.desc | _ -> false)
-           env.labels)
-  | Num i -> snd (List.nth env.labels (Uint32.to_int i))
+  | Id id -> (
+      match
+        List.find_opt
+          (fun e ->
+            match e with Some id', _ -> id = id'.Ast.desc | _ -> false)
+          env.labels
+      with
+      | Some (_, arity) -> arity
+      | None -> unbound ())
+  | Num i -> (
+      match List.nth_opt env.labels (Uint32.to_int i) with
+      | Some (_, arity) -> arity
+      | None -> unbound ())
 
 let arity env i =
   match i.Ast.desc with
@@ -413,7 +445,9 @@ let arity env i =
   | StructNew t -> (
       match (lookup_type env t).typ with
       | Struct f -> (Array.length f, 1)
-      | Func _ | Array _ | Cont _ -> assert false)
+      | Func _ | Array _ | Cont _ ->
+          error env.outer_env.cctx.report ~location:t.Ast.info
+            "This type should be a struct type.")
   | StructNewDefault _ -> (0, 1)
   | StructGet _ -> (1, 1)
   | StructSet _ -> (2, 0)
@@ -624,8 +658,10 @@ and fold_instr env folded args tentative_args stream i inputs outputs =
             :: push_back tentative_args ((n - inputs, i') :: folded'))
             stream
 
-let fold m =
-  let env = { outer_env = module_env m; labels = []; return_arity = 0 } in
+let fold report m =
+  let env =
+    { outer_env = module_env report m; labels = []; return_arity = 0 }
+  in
   map_instrs
     ~enter:(fun ~location cond positive f ->
       with_cond env.outer_env.cctx ~location cond positive f)

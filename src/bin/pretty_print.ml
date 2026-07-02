@@ -16,9 +16,12 @@ let print_module trivia f m =
 
 let convert ~filename =
   let ast, trivia = P.parse ~filename () in
+  let folded =
+    Wax_utils.Diagnostic.run ~source:None (fun d ->
+        Wax_wasm.Folding.fold d (Wax_wasm.Folding.unfold ast))
+  in
   Format.printf "/////////// %s //////////@.@.%a@." filename
-    (print_module trivia)
-    (Wax_wasm.Folding.fold (Wax_wasm.Folding.unfold ast))
+    (print_module trivia) folded
 
 let _ =
   let p = "/home/jerome/wasm_of_ocaml/runtime/wasm" in

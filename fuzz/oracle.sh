@@ -54,6 +54,21 @@ for v in "" "-v"; do
   done
 done
 
+# Fold/unfold are wat-output-only rewrites (there is no folding on wax output).
+# They run on unvalidated (wat->wat) and trusted (wasm->wat) input, so the
+# folding pass has its own crash class — see INVARIANTS.md. Sweep both modes so
+# it stays covered.
+for fold in --fold --unfold; do
+  args=(-i "$FMT" -f wat "$fold" "$IN" -o "$WORK/out.wat")
+  r="$(classify_wax "${args[@]}")"
+  case "$r" in
+    crash:*)
+      finding CRASH HIGH "$IN" "${r#crash:} on ${FMT}->wat ($fold)" \
+        "$(repro "${args[@]}")"
+      ;;
+  esac
+done
+
 # ---- 2. Validator correctness: `wax check` vs the ground truth. ----
 # `wax check` is the dedicated validation path (type-check Wax / well-formedness
 # Wasm); it returns ok or a clean rejection. Compare its verdict to what we know

@@ -1,0 +1,1 @@
+(module (type $s (struct)) (func $f (type $s)))
