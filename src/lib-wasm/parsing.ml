@@ -52,7 +52,10 @@ struct
     Wax_utils.Diagnostic.output_error_with_source ~theme ~source ~severity:Error
       ~location:{ loc_start; loc_end } ~related (fun f () ->
         Format.fprintf f "%s" msg);
-    exit 123
+    (* A syntax error is a rejected input, like a validation or type error, so
+       it shares their exit code (128) rather than the usage-error code. See
+       the exit-code contract in bin/main.ml. *)
+    exit 128
 
   let read filename = In_channel.with_open_bin filename In_channel.input_all
 

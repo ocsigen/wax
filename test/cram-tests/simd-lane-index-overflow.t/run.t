@@ -13,7 +13,7 @@ AST-mutation fuzzer.
   1 │ fn f(v: v128) -> i32 { v.extract_lane_i32x4(18446744073709551616); }
     ·                                             ^^^^^^^^^^^^^^^^^^^^
   2 │ 
-  [123]
+  [128]
 
 A valid lane index still compiles.
 

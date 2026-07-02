@@ -19,7 +19,7 @@ The start function must have no parameters and no results:
   1 │ #[start] fn main() -> i32 { return 0 as i32; }
     ·             ^^^^
   2 │ 
-  [123]
+  [128]
 
 A module may have at most one start function:
 
@@ -30,4 +30,4 @@ A module may have at most one start function:
   2 │ #[start] fn g() {}
     · ^^^^^^^^^^^^^^^^^^
   3 │ 
-  [123]
+  [128]

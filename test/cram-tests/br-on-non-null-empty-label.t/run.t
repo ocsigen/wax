@@ -13,7 +13,7 @@ type (here the enclosing function, whose result is empty) is invalid:
     ·     ^^^^^^^^^^^^^^^^
   6 │     unreachable))
   7 │ 
-  [123]
+  [128]
 
 A label that does end in a reference type is accepted:
 

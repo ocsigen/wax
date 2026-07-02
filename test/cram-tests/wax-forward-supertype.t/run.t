@@ -10,7 +10,7 @@ the type-checker):
     ·           ^
   3 │   type b = open { };
   4 │ }
-  [123]
+  [128]
 
   $ wax check self.wax
   Error: The type 'a' is not bound.
@@ -18,7 +18,7 @@ the type-checker):
   1 │ type a: a = open { };
     ·         ^
   2 │ 
-  [123]
+  [128]
 
 A supertype declared earlier in the rec group is fine:
 

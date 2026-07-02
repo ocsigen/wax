@@ -15,7 +15,7 @@ out-of-range-immediate crashes.
   2 │   (func (param i32) (result i32) (i32.load offset=99999999999999999999 (local.get 0))))
     ·                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
   3 │ 
-  [123]
+  [128]
 
 A u64-max offset on an i64 memory is in range and accepted:
 

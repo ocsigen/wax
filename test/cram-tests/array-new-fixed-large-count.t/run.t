@@ -18,4 +18,4 @@ first empty pop turns the stack polymorphic, so this is fast too):
   5 │     array.new_fixed $vec 4294967295))
     ·     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   6 │ 
-  [123]
+  [128]

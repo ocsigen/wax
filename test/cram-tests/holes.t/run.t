@@ -67,7 +67,7 @@ stopping at the first) is reported, not a crash:
     ·        ^
   8 │ }
   9 │ 
-  [123]
+  [128]
 
 Select condition is considered after the two branches
 

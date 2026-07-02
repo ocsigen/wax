@@ -22,4 +22,4 @@ type is unknown. The diagnostic points at the offending operand:
      ·             ^
   17 │     let _ = b;
   18 │ }
-  [123]
+  [128]

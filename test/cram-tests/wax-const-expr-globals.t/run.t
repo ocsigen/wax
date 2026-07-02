@@ -13,7 +13,7 @@ point only imported globals are in scope:
   2 │ table t: &?func [10] = g;
     ·                        ^
   3 │ 
-  [123]
+  [128]
 
 Referencing an imported global is fine:
 

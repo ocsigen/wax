@@ -21,4 +21,4 @@ source operand is checked against the source memory.
     ·                                               ^^^^^^^^^^^
     ·          ^^^^^^^^^^^^^^^^^^^^^ expected here
   5 │ 
-  [123]
+  [128]

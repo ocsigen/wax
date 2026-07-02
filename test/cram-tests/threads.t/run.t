@@ -58,4 +58,4 @@ rejected.
   2 │ fn f(p: i32) -> i32 { mem.i32_atomic_load(p, 1); }
     ·                                              ^
   3 │ 
-  [123]
+  [128]

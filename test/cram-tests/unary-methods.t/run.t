@@ -35,7 +35,7 @@ method name and naming the parenthesised form to use.
     ·       ^^^^
   3 │ }
   4 │ 
-  [123]
+  [128]
 
 This also applies to the array [length] method on a typed reference, where the
 receiver's type resolves to a non-struct definition:
@@ -50,4 +50,4 @@ receiver's type resolves to a non-struct definition:
     ·       ^^^^^^
   5 │ }
   6 │ 
-  [123]
+  [128]

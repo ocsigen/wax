@@ -42,4 +42,4 @@ descriptor ($b), not the described type.
   8 │     (ref.get_desc $a (local.get 0))))
     ·      ^^^^^^^^^^^^^^^
   9 │ 
-  [123]
+  [128]

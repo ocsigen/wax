@@ -25,7 +25,7 @@ The page size must be 1 or 65536; another power of two is rejected.
   1 │ memory m: i32 [1] pagesize 4;
     · ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   2 │ 
-  [123]
+  [128]
 
 A value that is not a power of two is rejected while parsing.
 
@@ -36,7 +36,7 @@ A value that is not a power of two is rejected while parsing.
   1 │ memory m: i32 [1] pagesize 3;
     ·                            ^
   2 │ 
-  [123]
+  [128]
 
 A page size larger than [max_int] is still parsed by its base-2 logarithm (it
 is a power of two) rather than overflowing the narrowing to [int], so it is
@@ -54,7 +54,7 @@ exponent also trips the memory-size bound) instead of crashing.
   1 │ memory m: i32 [1] pagesize 9223372036854775808;
     · ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   2 │ 
-  [123]
+  [128]
 
 With a page size of 1, the page count may run up to 2^32 - 1; one more is
 rejected (the byte span still bounds it).
@@ -65,4 +65,4 @@ rejected (the byte span still bounds it).
   1 │ memory m: i32 [4294967296] pagesize 1;
     · ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   2 │ 
-  [123]
+  [128]

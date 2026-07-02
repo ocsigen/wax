@@ -20,7 +20,7 @@ from a `br` to the block's label and the fall-through:
     · ^^^^^
   6 │ }
   7 │ 
-  [123]
+  [128]
 
 …or from two different branches to the label:
 
@@ -43,4 +43,4 @@ from a `br` to the block's label and the fall-through:
     · ^^^^^
   7 │ }
   8 │ 
-  [123]
+  [128]

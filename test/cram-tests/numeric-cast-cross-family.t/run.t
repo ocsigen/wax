@@ -21,7 +21,7 @@ A committed float cast to an integer with a plain cast (no signedness):
   1 │ fn f() { (1.0 + 2.0) as i32; }
     ·          ^^^^^^^^^^^^^^^^^^
   2 │ 
-  [123]
+  [128]
 
 A committed integer cast to a float with a plain cast:
 
@@ -37,7 +37,7 @@ A committed integer cast to a float with a plain cast:
   1 │ fn f() { (5 & 3) as f32; }
     ·          ^^^^^^^^^^^^^^
   2 │ 
-  [123]
+  [128]
 
 A signedness on a float-to-float cast is meaningless:
 
@@ -48,7 +48,7 @@ A signedness on a float-to-float cast is meaningless:
   1 │ fn f(x: f64) -> f32 { x as f32_u; }
     ·                       ^^^^^^^^^^
   2 │ 
-  [123]
+  [128]
 
 A polymorphic reference (here [null!] in dead code) cannot convert to a float:
 
@@ -62,7 +62,7 @@ A polymorphic reference (here [null!] in dead code) cannot convert to a float:
     ·     ^^^^^^^^^^^^^^
   4 │ }
   5 │ 
-  [123]
+  [128]
 
 The signed forms, a float->float plain cast, and a numeric literal folded to the
 other family all still compile.

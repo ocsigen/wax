@@ -8,7 +8,7 @@ an explicit type definition, and a tag declaration.
   1 │ fn f(x: i32, x: i32) { }
     ·              ^
   2 │ 
-  [123]
+  [128]
 
   $ wax check type.wax
   Error: Several parameters have the same name 'a'.
@@ -16,7 +16,7 @@ an explicit type definition, and a tag declaration.
   1 │ type T = fn(a: i32, a: f64);
     ·                     ^
   2 │ 
-  [123]
+  [128]
 
   $ wax check tag.wax
   Error: Several parameters have the same name 'p'.
@@ -24,4 +24,4 @@ an explicit type definition, and a tag declaration.
   1 │ tag foo(p: i32, p: i32);
     ·                 ^
   2 │ 
-  [123]
+  [128]

@@ -21,7 +21,7 @@ Regression: found by the AST-mutation fuzzer.
     ·               ^^^^^^^
   3 │ }
   4 │ 
-  [123]
+  [128]
 
 A legitimate float receiver (here a bare float literal) still round-trips.
 

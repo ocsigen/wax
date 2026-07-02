@@ -17,7 +17,7 @@ the type cannot be inferred:
     ·             ^^^^^^^^^^^^^
   7 │     return p;
   8 │ }
-  [123]
+  [128]
 
 The same holds for a global, and its use does not cascade into a second error:
 
@@ -31,7 +31,7 @@ The same holds for a global, and its use does not cascade into a second error:
     ·           ^^^^^^^^^^^^^
   7 │ 
   8 │ fn use_g() -> &point {
-  [123]
+  [128]
 
 An array literal has no field-based inference, so with no expected type its
 element type cannot be inferred either:
@@ -46,4 +46,4 @@ element type cannot be inferred either:
     ·             ^^^^^^
   5 │     return a;
   6 │ }
-  [123]
+  [128]

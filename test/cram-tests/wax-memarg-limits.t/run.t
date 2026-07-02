@@ -9,7 +9,7 @@ A memory-access alignment may not exceed the access's natural alignment:
   1 │ memory m: i32 [0]; fn f() { _ = m.load8(0, 2) as i32_s; }
     ·                                            ^
   2 │ 
-  [123]
+  [128]
 
 The lane index of a SIMD lane operation must be in range for the shape:
 
@@ -21,7 +21,7 @@ The lane index of a SIMD lane operation must be in range for the shape:
     ·                                                                                          ^^
   3 │ }
   4 │ 
-  [123]
+  [128]
 
 A memory's size limit must fit the address type:
 
@@ -31,7 +31,7 @@ A memory's size limit must fit the address type:
   1 │ memory m: i32 [65537];
     · ^^^^^^^^^^^^^^^^^^^^^^
   2 │ 
-  [123]
+  [128]
 
 The minimum of a limit must not exceed the maximum:
 
@@ -41,7 +41,7 @@ The minimum of a limit must not exceed the maximum:
   1 │ memory m: i32 [1, 0];
     · ^^^^^^^^^^^^^^^^^^^^^
   2 │ 
-  [123]
+  [128]
 
 A memory offset immediate must fit the address type:
 
@@ -51,7 +51,7 @@ A memory offset immediate must fit the address type:
   1 │ memory m: i32 [1]; fn f() { _ = m.load32(0, 4, 4294967296); }
     ·                                                ^^^^^^^^^^
   2 │ 
-  [123]
+  [128]
 
 Table size limits are checked too:
 
@@ -61,7 +61,7 @@ Table size limits are checked too:
   1 │ table t: &?func [4294967296];
     · ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   2 │ 
-  [123]
+  [128]
 
 A table whose element type is non-nullable must have an initializer (otherwise
 its default-filled elements would have no value):
@@ -72,7 +72,7 @@ its default-filled elements would have no value):
   1 │ table t: &func [0];
     · ^^^^^^^^^^^^^^^^^^^
   2 │ 
-  [123]
+  [128]
 
 Giving an initializer, or using a nullable element type, is fine:
 
@@ -88,7 +88,7 @@ A module may not export the same name twice:
     ·            ^^^
   3 │ fn a() {}
   4 │ 
-  [123]
+  [128]
 
 Exporting one item under several distinct names, or different items under
 distinct names, is fine:

@@ -25,7 +25,7 @@ A descriptor and its described type must refer to each other.
     ·   ^^^^^^^^^^^^^^^^^^^^^^^^^^
   3 │   type b = { };
   4 │ }
-  [123]
+  [128]
 
 
 Both types in a descriptor pair must be structs.
@@ -38,7 +38,7 @@ Both types in a descriptor pair must be structs.
     ·   ^^^^^^^^^^^^^^^^^^^^^^^^^^^
   3 │   type b = describes a { };
   4 │ }
-  [123]
+  [128]
 
 
 If a supertype has a descriptor, its subtype must have one too.
@@ -52,5 +52,5 @@ If a supertype has a descriptor, its subtype must have one too.
     ·           ^
   5 │ }
   6 │ 
-  [123]
+  [128]
 

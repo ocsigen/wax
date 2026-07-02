@@ -63,4 +63,4 @@ Only a concrete type can be exact; [&!any] is rejected.
     ·                   ^^^^^
   2 │     x;
   3 │ }
-  [123]
+  [128]

@@ -63,8 +63,10 @@ freeze_wax() {
 # Run wax under a timeout and classify the exit status into one bucket, printed
 # on stdout: ok | rejected | crash:<detail>. The whole command line is passed in.
 #   ok        — exit 0 (accepted / converted)
-#   rejected  — a clean "no": 128 (located validation diagnostic), 123 (parse /
-#               malformed-input error). Both are intended answers, not bugs.
+#   rejected  — a clean "no": 128 (the input was rejected by a diagnostic — a
+#               parse, validation or type error, or a malformed wasm binary) or
+#               123 (a usage error). Both are intended answers, not bugs.
+#               (See docs/src/cli.md, "Exit status".)
 #   crash:... — anything else: cmdliner internal error from an uncaught
 #               exception (125), a bare uncaught exception (2), a signal,
 #               a timeout (124), or any unexpected code. These are the bugs.

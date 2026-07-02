@@ -10,7 +10,7 @@ Reading a never-assigned local is rejected:
   2 │ fn f() { let x: &t; _ = x; }
     ·                         ^
   3 │ 
-  [123]
+  [128]
 
 An assignment inside a block does not escape it, so the local is still
 uninitialized afterwards:
@@ -21,7 +21,7 @@ uninitialized afterwards:
   1 │ fn f(p: &extern) { let x: &extern; do { x = p; } _ = x; }
     ·                                                      ^
   2 │ 
-  [123]
+  [128]
 
 Likewise an assignment in each branch of an if does not carry past its end:
 
@@ -34,7 +34,7 @@ Likewise an assignment in each branch of an if does not carry past its end:
     ·         ^
   5 │ }
   6 │ 
-  [123]
+  [128]
 
 A straight-line assignment before the read is fine:
 

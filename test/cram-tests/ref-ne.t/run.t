@@ -20,4 +20,4 @@ non-equatable references is rejected the same way for both operators.
     ·       ^^
   3 │ }
   4 │ 
-  [123]
+  [128]

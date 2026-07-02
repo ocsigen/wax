@@ -34,4 +34,4 @@ the same tail-call constraint a genuine call is held to.
   4 │ fn f(n: i32) -> i64 { become mem.grow(n); }
     ·                       ^^^^^^^^^^^^^^^^^^
   5 │ 
-  [123]
+  [128]

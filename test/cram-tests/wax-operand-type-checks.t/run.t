@@ -9,7 +9,7 @@ A float-only method requires a floating-point receiver:
   1 │ fn f() -> f32 { (0 as i64).ceil(); }
     ·                            ^^^^
   2 │ 
-  [123]
+  [128]
 
 An integer-only method requires an integer receiver:
 
@@ -19,7 +19,7 @@ An integer-only method requires an integer receiver:
   1 │ fn f() -> i32 { (0.0 as f32).clz(); }
     ·                              ^^^
   2 │ 
-  [123]
+  [128]
 
 table.copy requires the source element type to fit the destination:
 
@@ -32,7 +32,7 @@ table.copy requires the source element type to fit the destination:
   3 │ fn f() { t1.copy(t2, 0 as i32, 1 as i32, 2 as i32); }
     ·          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   4 │ 
-  [123]
+  [128]
 
 table.init requires the element segment's type to fit the table:
 
@@ -45,7 +45,7 @@ table.init requires the element segment's type to fit the table:
   3 │ fn f() { t.init(el, 0 as i32, 1 as i32, 2 as i32); }
     ·          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   4 │ 
-  [123]
+  [128]
 
 array.init_elem requires the element segment's type to fit the array:
 
@@ -58,7 +58,7 @@ array.init_elem requires the element segment's type to fit the array:
   3 │ fn f(x: &a) { x.init(e, 0 as i32, 0 as i32, 0 as i32); }
     ·               ^
   4 │ 
-  [123]
+  [128]
 
 array.new_elem likewise requires the element segment's type to fit the array:
 
@@ -71,7 +71,7 @@ array.new_elem likewise requires the element segment's type to fit the array:
   3 │ fn f() -> &a { [a | e @ 0 as i32; 0 as i32]; }
     ·                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   4 │ 
-  [123]
+  [128]
 
 Reading a field that the struct type does not declare is rejected:
 
@@ -82,7 +82,7 @@ Reading a field that the struct type does not declare is rejected:
   2 │ fn f(p: &s) -> i32 { p.y; }
     ·                        ^
   3 │ 
-  [123]
+  [128]
 
 An 'if' condition must be an i32, in both statement and expression position:
 
@@ -92,7 +92,7 @@ An 'if' condition must be an i32, in both statement and expression position:
   1 │ fn f() { if 0.0 as f64 { } }
     ·             ^^^^^^^^^^
   2 │ 
-  [123]
+  [128]
 
   $ wax check if-cond-not-i32-expr.wax
   Error: This instruction has type f64 but is expected to have type i32.
@@ -100,7 +100,7 @@ An 'if' condition must be an i32, in both statement and expression position:
   1 │ fn f() -> i32 { if 0.0 as f64 => i32 { 0 as i32; } else { 1 as i32; } }
     ·                    ^^^^^^^^^^
   2 │ 
-  [123]
+  [128]
 
 An 'if' that produces a result must have an 'else' branch:
 
@@ -110,7 +110,7 @@ An 'if' that produces a result must have an 'else' branch:
   1 │ fn f() -> i32 { if 1 as i32 => i32 { 0 as i32; } }
     ·                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   2 │ 
-  [123]
+  [128]
 
 But an 'if' whose parameters already match its results may omit the else (the
 empty else forwards them):
@@ -128,7 +128,7 @@ rather than crashing:
   2 │ fn f() { 'count: loop { br_if 'count g(); } }
     ·                                      ^^^
   3 │ 
-  [123]
+  [128]
 
 A throw argument must match the tag's parameter type; the caret points at the
 offending argument, not the whole throw:
@@ -139,7 +139,7 @@ offending argument, not the whole throw:
   1 │ tag t(i32); fn f() { throw t 5 as i64; }
     ·                              ^^^^^^^^
   2 │ 
-  [123]
+  [128]
 
 A branch or return operand whose type does not match the target underlines the
 operand, not the whole branch/return:
@@ -150,7 +150,7 @@ operand, not the whole branch/return:
   1 │ fn f() -> i32 { return 0 as i64; }
     ·                        ^^^^^^^^
   2 │ 
-  [123]
+  [128]
 
   $ wax check br-operand-type.wax
   Error: This instruction has type i64 but is expected to have type i32.
@@ -158,7 +158,7 @@ operand, not the whole branch/return:
   1 │ fn f() -> i32 'l: { br 'l 0 as i64; }
     ·                           ^^^^^^^^
   2 │ 
-  [123]
+  [128]
 
 A binary operator written as a method underlines the operator (the method
 name):
@@ -169,7 +169,7 @@ name):
   1 │ fn f() { _ = (0 as i64).copysign(0 as f64); }
     ·                         ^^^^^^^^
   2 │ 
-  [123]
+  [128]
 
 In infix form the same error underlines the operator token itself:
 
@@ -179,7 +179,7 @@ In infix form the same error underlines the operator token itself:
   1 │ fn f() { _ = (0 as i64) + (0 as f64); }
     ·                         ^
   2 │ 
-  [123]
+  [128]
 
 A unary operator applied to an operand of the wrong type underlines the
 operator:
@@ -190,7 +190,7 @@ operator:
   1 │ fn f(x: &eq) { _ = -x; }
     ·                    ^
   2 │ 
-  [123]
+  [128]
 
 A try_table catch routes the tag's values to a branch target; when they do not
 match, the error names the tag/target mismatch and points at the target label:
@@ -204,7 +204,7 @@ match, the error names the tag/target mismatch and points at the target label:
   3 │ fn f() -> &t { 'l: do &t { try {} catch [ e -> 'l] unreachable; } }
     ·                                                ^^
   4 │ 
-  [123]
+  [128]
 
 Matching element types and correct receivers pass:
 

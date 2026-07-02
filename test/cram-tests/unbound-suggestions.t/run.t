@@ -14,7 +14,7 @@ A misspelled function call suggests the function:
   5 │ }
   6 │ 
   Hint: Did you mean helper?
-  [123]
+  [128]
 
 A misspelled type suggests the type:
 
@@ -28,7 +28,7 @@ A misspelled type suggests the type:
   5 │     q.length();
   6 │ }
   Hint: Did you mean vec?
-  [123]
+  [128]
 
 A misspelled branch label suggests the label:
 
@@ -42,7 +42,7 @@ A misspelled branch label suggests the label:
   4 │     }
   5 │ }
   Hint: Did you mean next?
-  [123]
+  [128]
 
 An assignment to a misspelled name suggests a mutable global, a valid target:
 
@@ -56,7 +56,7 @@ An assignment to a misspelled name suggests a mutable global, a valid target:
   5 │ }
   6 │ 
   Hint: Did you mean counter?
-  [123]
+  [128]
 
 But an immutable const cannot be assigned, so it is not suggested (no hint):
 
@@ -69,7 +69,7 @@ But an immutable const cannot be assigned, so it is not suggested (no hint):
     ·     ^^^^
   5 │ }
   6 │ 
-  [123]
+  [128]
 
 A tee (:=) targets a local, so a misspelled tee suggests the local:
 
@@ -83,7 +83,7 @@ A tee (:=) targets a local, so a misspelled tee suggests the local:
   4 │ }
   5 │ 
   Hint: Did you mean value?
-  [123]
+  [128]
 
 A tee never targets a global, so a nearby global is not suggested (no hint):
 
@@ -96,4 +96,4 @@ A tee never targets a global, so a nearby global is not suggested (no hint):
     ·      ^^^^^^
   5 │ }
   6 │ 
-  [123]
+  [128]

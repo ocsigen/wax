@@ -50,7 +50,7 @@ The number of names must match the number of values the initializer provides.
     ·     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   8 │     x;
   9 │ }
-  [123]
+  [128]
 
 An annotation is checked against the value bound to that name.
 
@@ -63,4 +63,4 @@ An annotation is checked against the value bound to that name.
     ·     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   8 │     x;
   9 │ }
-  [123]
+  [128]

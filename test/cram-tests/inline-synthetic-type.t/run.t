@@ -13,7 +13,7 @@ A bare string is a [mut i8] byte array:
     ·     ^^^^
   3 │ }
   4 │ 
-  [123]
+  [128]
 
 A function declared with an inline signature, referenced as a value:
 
@@ -26,7 +26,7 @@ A function declared with an inline signature, referenced as a value:
     ·     ^
   7 │ }
   8 │ 
-  [123]
+  [128]
 
 A cast to an inline function type [&fn(..)]:
 
@@ -39,4 +39,4 @@ A cast to an inline function type [&fn(..)]:
     ·      ^^^^^^^^^^^^^^^^^^^^
   6 │ }
   7 │ 
-  [123]
+  [128]

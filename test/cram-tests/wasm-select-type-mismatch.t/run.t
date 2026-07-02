@@ -12,4 +12,4 @@ type, rather than only at the `select` keyword:
     ·                                  ^^^^^^^^^^^ i64
     ·                    ^^^^^^^^^^^ i32
   4 │ 
-  [123]
+  [128]

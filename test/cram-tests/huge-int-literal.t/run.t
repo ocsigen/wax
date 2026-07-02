@@ -17,7 +17,7 @@ AST-mutation fuzzer's edge-value literals.
     ·     ^^^^^^^^^^^^^^^^^^^^
   3 │ }
   4 │ 
-  [123]
+  [128]
 
   $ cat > okf.wax <<'EOF'
   > fn f() -> f64 {

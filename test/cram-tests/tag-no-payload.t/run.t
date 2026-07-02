@@ -42,7 +42,7 @@ parameter list and no type reference) is a syntax error, not an empty signature.
   1 │ tag stop;
     · ^^^^^^^^^
   2 │ 
-  [123]
+  [128]
 
 
   $ printf 'fn f { nop; }\n' | wax -i wax -f wat
@@ -52,5 +52,5 @@ parameter list and no type reference) is a syntax error, not an empty signature.
   1 │ fn f { nop; }
     · ^^^^
   2 │ 
-  [123]
+  [128]
 

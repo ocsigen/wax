@@ -9,7 +9,7 @@ A continuation type must wrap a function type:
   1 │ type ct = cont ct;
     ·                ^^
   2 │ 
-  [123]
+  [128]
 
 Continuation types cannot be the target of a cast instruction (ref.cast,
 ref.test, br_on_cast, br_on_cast_fail):
@@ -20,7 +20,7 @@ ref.test, br_on_cast, br_on_cast_fail):
   1 │ fn f() { unreachable; _ = _ as &?cont; }
     ·                           ^^^^^^^^^^^
   2 │ 
-  [123]
+  [128]
 
   $ wax check test-cont.wax
   Error: Continuation types cannot be used in a cast instruction.
@@ -28,7 +28,7 @@ ref.test, br_on_cast, br_on_cast_fail):
   1 │ fn f() { unreachable; _ = _ is &?cont; }
     ·                           ^
   2 │ 
-  [123]
+  [128]
 
   $ wax check br-on-cast-cont.wax
   Error: Continuation types cannot be used in a cast instruction.
@@ -36,7 +36,7 @@ ref.test, br_on_cast, br_on_cast_fail):
   1 │ fn f() { _ = 'l: do &?cont { unreachable; br_on_cast 'l &?cont _; }; }
     ·                                           ^^^^^^^^^^^^^^^^^^^^^^
   2 │ 
-  [123]
+  [128]
 
 A resume handler label must receive the tag's parameters followed by a
 continuation of the remaining result type:
@@ -51,7 +51,7 @@ continuation of the remaining result type:
     ·                               ^^^^^^^
   8 │             unreachable;
   9 │         };
-  [123]
+  [128]
 
 A cont.bind's destination continuation must match the source with its leading
 parameters bound away:
@@ -65,7 +65,7 @@ parameters bound away:
   5 │ fn error(p: &ct2) { _ = cont_bind ct2 ct1_alt(123 as i64, p); }
     ·                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   6 │ 
-  [123]
+  [128]
 
 A switch's continuation must have a continuation type as its last parameter (it
 names the continuation being switched to):
@@ -79,7 +79,7 @@ names the continuation being switched to):
   4 │ fn sw(k: &?ct1) { switch ct1 e(k); }
     ·                   ^^^^^^^^^^^^^^^
   5 │ 
-  [123]
+  [128]
 
 A switch tag must take no parameters and its results must match both
 continuation types:
@@ -93,7 +93,7 @@ continuation types:
   8 │ fn sw(k: &?ct1) -> i32 { switch ct1 e(k); }
     ·                          ^^^^^^^^^^^^^^^
   9 │ 
-  [123]
+  [128]
 
 Well-formed stack-switching code passes (a null cast to a nullable continuation
 reference lowers to ref.null, so it is allowed; a switch whose continuation's

@@ -54,7 +54,7 @@ An unknown member of the [i64] namespace is rejected.
     ·     ^^^^^^^^^^^^^^^^^
   3 │ }
   4 │ 
-  [123]
+  [128]
 
 Passing the wrong number of operands is a value-count mismatch.
 
@@ -66,4 +66,4 @@ Passing the wrong number of operands is a value-count mismatch.
     ·     ^^^^^^^^^^^^^^^^^^^^^^^
   3 │ }
   4 │ 
-  [123]
+  [128]

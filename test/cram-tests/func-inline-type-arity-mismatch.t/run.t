@@ -14,4 +14,4 @@ both resolve the reference first, so it is rejected cleanly:
     ·               ^^
   4 │     unreachable))
   5 │ 
-  [123]
+  [128]

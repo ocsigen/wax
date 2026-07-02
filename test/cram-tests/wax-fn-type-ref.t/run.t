@@ -8,7 +8,7 @@ function type, just as a tag does.
   2 │ #[import = ("m", "n")] fn f: point;
     ·                              ^^^^^
   3 │ 
-  [123]
+  [128]
 
 A reference to an actual function type is accepted:
 
@@ -26,7 +26,7 @@ signature must match the referenced type (this holds for tags too):
   2 │ #[import = ("m", "n")] fn f: ft (f64) -> f64;
     ·                              ^^
   3 │ 
-  [123]
+  [128]
 
   $ wax check tag-inline-bad.wax
   Error: The inline function type does not match the type definition.
@@ -35,4 +35,4 @@ signature must match the referenced type (this holds for tags too):
   2 │ tag t: ft (f64);
     ·        ^^
   3 │ 
-  [123]
+  [128]

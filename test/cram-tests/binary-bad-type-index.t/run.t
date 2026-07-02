@@ -10,4 +10,4 @@ rather than raising an uncaught exception.
   Error: Unknown type: index 0 is not bound.
   Error: Unknown type: index 0 is not bound.
   Error: Unknown type: index 0 is not bound.
-  [123]
+  [128]

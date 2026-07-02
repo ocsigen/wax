@@ -230,3 +230,21 @@ wax check [OPTIONS] FILE…
 ```sh
 wax check src/*.wax
 ```
+
+## Exit status
+
+All three commands share the same exit codes:
+
+| Code | Meaning |
+|------|---------|
+| `0`  | Success. For `check` / `format --check`, also means every file passed. |
+| `123` | A **usage** error — an invalid combination of flags (e.g. `--source-map-file` with text output, or binary output to a terminal) — or a `format --check` run that found files needing formatting. |
+| `124` | A command-line parse error: an unknown flag or a bad option value (reported by the argument parser). |
+| `125` | An internal error (an uncaught exception). |
+| `128` | The input was **rejected by a diagnostic**: a parse, validation, or type error, or a malformed wasm binary. This is also the status of a `check` run that found any problem. |
+
+The distinction is *how you used the tool* (`123`/`124`) versus *the input is
+bad* (`128`). A rejected input reports `128` wherever the error is found —
+syntax, validation, or type-checking — so `check` exits `0` when every input is
+valid and `128` otherwise, which is what a CI gate wants. For scripting, treat
+any non-zero status as failure.

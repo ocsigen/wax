@@ -22,4 +22,4 @@ receiver rather than collapsing or crashing:
   2 │ fn f() -> i32 { unreachable; _ = _.x; }
     ·                                  ^
   3 │ 
-  [123]
+  [128]

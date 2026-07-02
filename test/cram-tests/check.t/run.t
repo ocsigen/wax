@@ -11,7 +11,7 @@ An invalid file is reported and the exit status is non-zero:
   1 │ fn h() -> i32 { 1.0; }
     ·                 ^^^
   2 │ 
-  [123]
+  [128]
 
 Every file is checked; errors in several files are all reported before exiting:
 
@@ -21,7 +21,7 @@ Every file is checked; errors in several files are all reported before exiting:
   1 │ fn h() -> i32 { 1.0; }
     ·                 ^^^
   2 │ 
-  [123]
+  [128]
 
 --format (-f) overrides the extension-based detection:
 
@@ -32,10 +32,10 @@ Every file is checked; errors in several files are all reported before exiting:
   1 │ fn h() -> i32 { 1.0; }
     ·                 ^^^
   2 │ 
-  [123]
+  [128]
 
 A file whose format cannot be detected is reported:
 
   $ wax check no-extension
   no-extension: cannot detect format (expected .wat, .wax or .wasm)
-  [123]
+  [128]

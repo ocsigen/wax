@@ -84,6 +84,17 @@ trusted and not validated. `--validate` forces validation in every case.
 | `-W` | `--warn` | Set a warning's level (as for convert) |
 |      | `--color` / `--debug` | As for convert |
 
+**Exit status** (shared by all commands; see `docs/src/cli.md`): `0` success;
+`123` a usage error (bad flag combination) or a `format --check` run that found
+files needing formatting; `124` a command-line parse error (cmdliner); `125` an
+internal error; `128` the input was rejected by a diagnostic — a parse,
+validation, or type error, or a malformed wasm binary (also a `check` that
+found any problem). The distinction is misuse (`123`) vs bad input (`128`).
+Rejected input exits `128` wherever detected: `parsing.ml` (syntax),
+`Diagnostic.output_errors` (validation/type), and the `check` aggregate;
+`usage_error` in `main.ml` owns `123`. `fuzz/lib.sh`'s `classify_wax` mirrors
+the contract — keep them in sync.
+
 ## Non-Negotiable Rules
 
 1. **Test integrity:** NEVER modify `.expected` files to make tests pass. If a test fails, the code is broken. NEVER modify `dune` rules in `test/` without explicit permission.

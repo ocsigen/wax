@@ -12,7 +12,7 @@ check). Regression: found auditing literal-parsing paths.
   1 │ (module (func (export "\u{ffffffffffffffff}")))
     ·                        ^^^^^^^^^^^^^^^^^^^^
   2 │ 
-  [123]
+  [128]
 
 A valid escape still works:
 

@@ -10,7 +10,7 @@ offending expression, not the whole try/catch:
   1 │ tag t(); fn f() { try {} catch { t => { 42 as i32; } } }
     ·                                         ^^^^^^^^^
   2 │ 
-  [123]
+  [128]
 
 A function body that leaves a value although it declares no result:
 
@@ -20,7 +20,7 @@ A function body that leaves a value although it declares no result:
   1 │ fn f() { 42 as i32; }
     ·          ^^^^^^^^^
   2 │ 
-  [123]
+  [128]
 
 When several values are left, a caret lands on each of them:
 
@@ -31,4 +31,4 @@ When several values are left, a caret lands on each of them:
     ·                    ^^^^^^^^
     ·          ^^^^^^^^ 
   2 │ 
-  [123]
+  [128]

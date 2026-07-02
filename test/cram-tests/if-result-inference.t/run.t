@@ -31,7 +31,7 @@ checked position the offending branch is pointed at:
     ·                               ^^^^^^^^^^^^
   3 │ }
   4 │ 
-  [123]
+  [128]
 
 A value-producing `if` needs an `else`:
 
@@ -43,7 +43,7 @@ A value-producing `if` needs an `else`:
     ·     ^^^^^^^^^^^
   3 │ }
   4 │ 
-  [123]
+  [128]
 
 With no context to draw on (here a method receiver, typed in synthesis), the two
 branches have no common supertype, so a caret points at each branch's value and
@@ -61,4 +61,4 @@ no `=> T` annotation could reconcile them, so none is suggested):
     ·                                ^^^^^^^^^^^^ &any
   3 │ }
   4 │ 
-  [123]
+  [128]

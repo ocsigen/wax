@@ -114,7 +114,7 @@ The default arm is required (like a `dispatch`'s `else`):
     ·     ^
   5 │ }
   6 │ 
-  [123]
+  [128]
 
 The scrutinee must be a reference:
 

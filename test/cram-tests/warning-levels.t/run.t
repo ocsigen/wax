@@ -97,7 +97,7 @@ promoting it to an error makes the check fail:
     ·         ^^^^
   3 │     n;
   4 │ }
-  [123]
+  [128]
 
 An unknown warning or group name is rejected:
 

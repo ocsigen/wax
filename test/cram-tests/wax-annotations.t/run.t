@@ -10,7 +10,7 @@ An unknown annotation is rejected:
   1 │ #[inline] fn f() {}
     · ^^^^^^^^^^^^^^^^^^^
   2 │ 
-  [123]
+  [128]
 
 The export annotation takes a string; the import annotation takes a module and
 name:
@@ -21,14 +21,14 @@ name:
   1 │ #[export = 5] fn f() {}
     ·            ^
   2 │ 
-  [123]
+  [128]
   $ wax check import-bad-value.wax
   Error: The import annotation expects a module and name, e.g. ("env", "f").
    ──➤  import-bad-value.wax:1:12
   1 │ #[import = "env"] fn f();
     ·            ^^^^^
   2 │ 
-  [123]
+  [128]
 
 import is for declarations, not definitions:
 
@@ -38,7 +38,7 @@ import is for declarations, not definitions:
   1 │ #[import = ("e", "f")] fn f() {}
     ·            ^^^^^^^^^^
   2 │ 
-  [123]
+  [128]
 
 A field can have at most one import:
 
@@ -48,7 +48,7 @@ A field can have at most one import:
   1 │ #[import = ("a", "b")] #[import = ("c", "d")] fn f();
     ·                                   ^^^^^^^^^^
   2 │ 
-  [123]
+  [128]
 
 A function (or global) declaration with no body needs an import:
 
@@ -58,7 +58,7 @@ A function (or global) declaration with no body needs an import:
   1 │ fn f();
     · ^^^^^^^
   2 │ 
-  [123]
+  [128]
 
 A well-formed imported, re-exported declaration is accepted:
 

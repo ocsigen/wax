@@ -135,6 +135,23 @@ let wax_trivia ?retarget ctx ast =
   | None -> (trivia, tail)
   | Some (src, dst) -> Wax_utils.Trivia.retarget ~src ~dst trivia tail
 
+(* Process exit codes (see docs/src/cli.md, "Exit status"):
+     0   success
+     123 a usage error (an invalid flag combination), or a [format --check]
+         run that found files needing formatting
+     124 a command-line parse error (from cmdliner: unknown flag, bad value)
+     125 an internal error / uncaught exception (from cmdliner)
+     128 the input was rejected by a diagnostic: a parse, validation or type
+         error, or a malformed wasm binary (also the status of a [check] run
+         that found any problem)
+   Rejected input exits 128 wherever it is detected: [parsing.ml] (syntax),
+   [Diagnostic.output_errors] (validation/type), and the [check] aggregate
+   below. [usage_error] owns the 123 usage path. Keep in sync with
+   fuzz/lib.sh's classify_wax. *)
+let usage_error msg =
+  Printf.eprintf "%s\n" msg;
+  exit 123
+
 let wat_to_wat ~input_file ~output_file ~validate ~warn_unused ~color
     ~output_color ~fold_mode ~defines ~source_map_file:_ =
   let text = with_open_in input_file In_channel.input_all in
@@ -413,9 +430,8 @@ let convert input_file output_file input_format_opt output_format_opt validate
   (* A source map relates a wasm binary's byte offsets to source positions, so
      it is only meaningful for wasm output. Reject it for text output rather
      than silently discarding it (the text emitters ignore it). *)
-  if opt_source_map_file <> None && output_format <> Wasm then (
-    Printf.eprintf "--source-map-file is only supported for wasm output\n";
-    exit 123);
+  if opt_source_map_file <> None && output_format <> Wasm then
+    usage_error "--source-map-file is only supported for wasm output";
   (* [--validate] enables unused-local reporting; it is not implied by the
      forced validation below. *)
   let warn_unused = validate in
@@ -440,9 +456,8 @@ let convert input_file output_file input_format_opt output_format_opt validate
     | Wasm, Wasm -> wasm_to_wasm
     | Wasm, Wax -> wasm_to_wax
   in
-  if output_format = Wasm && output_file = None && Unix.isatty Unix.stdout then (
-    Printf.eprintf "Binary output not allowed on terminal\n";
-    exit 123);
+  if output_format = Wasm && output_file = None && Unix.isatty Unix.stdout then
+    usage_error "Binary output not allowed on terminal";
   (* [update_flag] resolves color for the wat/wax output only (against the real
      stdout, before the pager redirects it). Errors keep the original flag, so
      [Diagnostic] resolves them against stderr. *)
@@ -464,13 +479,11 @@ let convert input_file output_file input_format_opt output_format_opt validate
 let format inplace check format_opt color fold_mode warnings debug files =
   Wax_utils.Diagnostic.set_policy (build_policy warnings);
   Wax_utils.Debug.enable debug;
-  if inplace && check then (
-    Printf.eprintf "--inplace and --check cannot be combined.\n";
-    exit 123);
-  if (not inplace) && (not check) && List.length files <> 1 then (
-    Printf.eprintf
-      "Exactly one input file must be specified without --inplace or --check.\n";
-    exit 123);
+  if inplace && check then
+    usage_error "--inplace and --check cannot be combined.";
+  if (not inplace) && (not check) && List.length files <> 1 then
+    usage_error
+      "Exactly one input file must be specified without --inplace or --check.";
   let read path = In_channel.with_open_bin path In_channel.input_all in
   (* Returns false on an error or, in check mode, a file that needs formatting. *)
   let format_one file =
@@ -596,8 +609,10 @@ let check format_opt strict color warnings features debug files =
             in
             not (List.exists is_error entries))
   in
+  (* A failed check means the input was rejected, so it shares the diagnostic
+     exit code (128) with convert, not the usage-error code. *)
   if not (List.fold_left (fun ok file -> check_one file && ok) true files) then
-    exit 123
+    exit 128
 
 (* Define the input file argument (optional for stdin) *)
 let input_file =
