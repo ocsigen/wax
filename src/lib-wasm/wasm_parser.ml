@@ -63,7 +63,10 @@ let peek_byte ch =
    overlong length is reported as the spec's "length out of bounds". *)
 let really_input_string ch len =
   let pos = ch.pos in
-  if len < 0 || pos + len > ch.limit then error ch "length out of bounds";
+  (* Test [len] against the bytes remaining rather than [pos + len > ch.limit]:
+     [len] is an untrusted decoded length, and the sum could overflow the OCaml
+     [int] on a 32-bit / js_of_ocaml build. [ch.pos <= ch.limit] always. *)
+  if len < 0 || len > ch.limit - pos then error ch "length out of bounds";
   ch.pos <- pos + len;
   String.sub ch.buf pos len
 
@@ -186,8 +189,10 @@ let next_section ch =
     let pos = pos_in ch in
     (* A section declares its byte length; reject one that runs past the end of
        the module (a truncated section) rather than silently parsing whatever
-       content is present and ignoring the missing bytes. *)
-    if pos + size > ch.limit then error ~pos ch "unexpected end";
+       content is present and ignoring the missing bytes. Compare against the
+       bytes remaining rather than [pos + size]: [size] is untrusted and the sum
+       could overflow the OCaml [int] on a 32-bit / js_of_ocaml build. *)
+    if size > ch.limit - pos then error ~pos ch "unexpected end";
     Some { id; pos; size }
 
 let skip_section (ch : ch) { pos; size; _ } =
@@ -1326,7 +1331,10 @@ let code ch =
     List.flatten (Array.to_list (repeat n vec_locals ch))
   in
   let instrs = expr ch in
-  if pos_in ch <> start_pos + size then error ch "function body size mismatch";
+  (* Compare bytes consumed against the declared body [size] rather than
+     [start_pos + size]: [size] is untrusted and the sum could overflow the
+     OCaml [int] on a 32-bit / js_of_ocaml build. [pos_in ch >= start_pos]. *)
+  if pos_in ch - start_pos <> size then error ch "function body size mismatch";
   { locals; instrs }
 
 let data ch =
