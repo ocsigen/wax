@@ -388,7 +388,7 @@ name: s = STRING
         (Parsing.Syntax_error
            ( (s.info.Ast.loc_start, s.info.loc_end),
              Printf.sprintf "Malformed name \"%s\".\n"
-               (snd (Misc.escape_string s.desc))));
+               (snd (Wax_utils.Unicode.escape_string s.desc))));
     s
   }
 
@@ -918,7 +918,7 @@ folded_instruction:
           (Parsing.Syntax_error
              ( $sloc,
                Printf.sprintf "Malformed char \"%s\".\n"
-                 (snd (Misc.escape_string s.desc))));
+                 (snd (Wax_utils.Unicode.escape_string s.desc))));
       with_loc $sloc (Char (Uchar.utf_decode_uchar c)) }
 
 (* The (then ...) / (else ...) clauses of a folded if. Each carries the

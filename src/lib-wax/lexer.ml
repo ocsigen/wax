@@ -58,23 +58,13 @@ let comment lexbuf =
   s
 
 let unicode_escape lexbuf s =
-  let i = ref 0 in
-  let len = String.length s - 6 in
-  while !i < len && (s.[!i] = '0' || s.[!i] = '-') do
-    incr i
-  done;
-  if len - !i > 0 then
-    raise
-      (Wax_wasm.Parsing.Syntax_error
-         ( Sedlexing.lexing_bytes_positions lexbuf,
-           Printf.sprintf "Malformed Unicode escape.\n" ));
-  let n = int_of_string ("0x" ^ String.sub s !i (len + 6)) in
-  if not (Uchar.is_valid n) then
-    raise
-      (Wax_wasm.Parsing.Syntax_error
-         ( Sedlexing.lexing_bytes_positions lexbuf,
-           Printf.sprintf "Malformed Unicode escape.\n" ));
-  Uchar.unsafe_of_int n
+  match Wax_utils.Unicode.scalar_of_hex s with
+  | Some u -> u
+  | None ->
+      raise
+        (Wax_wasm.Parsing.Syntax_error
+           ( Sedlexing.lexing_bytes_positions lexbuf,
+             Printf.sprintf "Malformed Unicode escape.\n" ))
 
 let rec string lexbuf =
   match%sedlex lexbuf with

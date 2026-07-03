@@ -173,7 +173,7 @@ let structured_block ?loc l = Structured_block (loc, l)
 let option f x = match x with None -> [] | Some x -> f x
 let u32 ~style ?loc i = atom ~style ?loc (Uint32.to_string i)
 let u64 ?loc i = atom ?loc (Uint64.to_string i)
-let escape_string = Misc.escape_string
+let escape_string = Wax_utils.Unicode.escape_string
 
 let id ?(style = Identifier) ?loc x =
   if Lexer.is_valid_identifier x then

@@ -61,33 +61,3 @@ let is_float32 s =
       <> 0x7f800000l)
 
 let is_float64 s = check_float s 52 (fun s -> Float.(is_finite (of_string s)))
-
-let escape_string s =
-  let b = Buffer.create (String.length s + 2) in
-  if String.is_valid_utf_8 s then
-    (* Valid UTF-8: keep it readable, escaping only the characters a WAT string
-       literal cannot carry raw (controls, the quote and the backslash). *)
-    let rec loop i len =
-      if i < len then (
-        let dec = String.get_utf_8_uchar s i in
-        let u = Uchar.utf_decode_uchar dec in
-        let c = Uchar.to_int u in
-        (if c >= 32 && c <> 127 && c <> 34 (* '"' *) && c <> 92 (* '\\' *) then
-           Buffer.add_utf_8_uchar b u
-         else
-           match Char.chr c with
-           | '\t' -> Buffer.add_string b "\\t"
-           | '\n' -> Buffer.add_string b "\\n"
-           | '\r' -> Buffer.add_string b "\\r"
-           | '"' -> Buffer.add_string b "\\\""
-           | '\\' -> Buffer.add_string b "\\\\"
-           | _ -> Printf.bprintf b "\\%02x" c);
-        loop (i + Uchar.utf_decode_length dec) len)
-    in
-    loop 0 (String.length s)
-  else
-    (* Not valid UTF-8: this is binary data, so dump every byte as a [\HH]
-       escape rather than interleaving decoded text with byte escapes. *)
-    String.iter (fun c -> Printf.bprintf b "\\%02x" (Char.code c)) s;
-  let s' = Buffer.contents b in
-  (Wax_utils.Unicode.terminal_width s', s')

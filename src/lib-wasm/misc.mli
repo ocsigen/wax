@@ -17,8 +17,3 @@ val is_float32 : string -> bool
 
 val is_float64 : string -> bool
 (** Checks if string [s] represents a valid 64-bit float. *)
-
-val escape_string : string -> int * string
-(** [escape_string s] returns a pair [(len, escaped)] where [escaped] is the
-    escaped version of [s] suitable for WAT string literals, and [len] is its
-    display length. *)
