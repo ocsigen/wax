@@ -37,7 +37,7 @@ jobs:
             os: macos-latest
             exe: wax-macos-arm64
           - target: macos-x86_64
-            os: macos-13
+            os: macos-15-intel
             exe: wax-macos-x86_64
           - target: windows-x86_64
             os: windows-latest
