@@ -18,25 +18,13 @@ module KeySet = Set.Make (struct
   let compare = compare
 end)
 
-(* The [ref.func] targets occurring in an instruction list, innermost-first
-   accumulated onto [acc]. *)
-let rec refs_instr acc (i : _ T.instr) =
-  match i.desc with
-  | T.RefFunc idx -> idx :: acc
-  | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
-      refs_instrs acc block
-  | If { if_block; else_block; _ } ->
-      refs_instrs (refs_instrs acc if_block.desc) else_block.desc
-  | Try { block; catches; catch_all; _ } -> (
-      let acc = refs_instrs acc block in
-      let acc =
-        List.fold_left (fun acc (_, is) -> refs_instrs acc is) acc catches
-      in
-      match catch_all with Some is -> refs_instrs acc is | None -> acc)
-  | Folded (i, is) -> refs_instrs (refs_instr acc i) is
-  | _ -> acc
-
-and refs_instrs acc instrs = List.fold_left refs_instr acc instrs
+(* The [ref.func] targets occurring in an instruction list, accumulated onto
+   [acc]. *)
+let refs_instrs acc instrs =
+  List.fold_left
+    (Ast_utils.fold_instr (fun acc (i : _ T.instr) ->
+         match i.desc with T.RefFunc idx -> idx :: acc | _ -> acc))
+    acc instrs
 
 let is_conditional (f : (_ T.modulefield, _) annotated) =
   match f.desc with T.Module_if_annotation _ -> true | _ -> false
