@@ -12,15 +12,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up OCaml
         uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: "5.4"
-
-      - name: Install dependencies
-        run: opam install . --deps-only --with-test
 
       # Pinned to match the version in .ocamlformat so the check is reproducible.
       - name: Install ocamlformat
@@ -30,7 +27,7 @@ jobs:
         run: opam exec -- dune build @fmt
 
   build:
-    name: Build & test (${{ matrix.os }}, OCaml ${{ matrix.ocaml-compiler }})
+    name: "Build${{ (matrix.ocaml-compiler != '4.14' && matrix.os != 'windows-latest') && ' & test' || '' }} (${{ matrix.os }}, OCaml ${{ matrix.ocaml-compiler }})"
     strategy:
       fail-fast: false
       matrix:
@@ -44,7 +41,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up OCaml ${{ matrix.ocaml-compiler }}
         uses: ocaml/setup-ocaml@v3
@@ -54,18 +51,15 @@ jobs:
       - name: Install dependencies
         run: opam install . --deps-only --with-test
 
-      # --only-packages restricts the build to the two published packages'
-      # install artifacts: the libraries and the `wax` executable (exe mode).
-      # It excludes stanzas with no package (the dev-only run_wasm_testsuite /
-      # fuzz_mutate executables) and the `wasm` mode of the binary (see
-      # src/bin/dune) — the latter needs wasm_of_ocaml, which CI does not
-      # install. Plain `dune build @install` builds those extras on some
-      # platforms (Windows), so scope it explicitly.
+      # Build and install like a user would, which also exercises the install
+      # path itself.
       - name: Build
-        run: opam exec -- dune build @install --only-packages wax-lib,wax
+        run: opam install .
 
-      # The test harness (run_wasm_testsuite) uses Domain, which is OCaml 5.0+,
-      # so the suite runs on the 5.x cells only; 4.14 is a build-only check.
+      # Skip the suite where it cannot run: on OCaml 4.14 (run_wasm_testsuite
+      # uses Domain, 5.0+) and on Windows (it uses Unix.fork and the cram tests
+      # assume a POSIX shell, e.g. /dev/null). Those cells are a build-only
+      # check.
       - name: Run tests
-        if: matrix.ocaml-compiler != '4.14'
+        if: matrix.ocaml-compiler != '4.14' && matrix.os != 'windows-latest'
         run: opam exec -- dune runtest
