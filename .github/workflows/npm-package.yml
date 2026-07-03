@@ -49,6 +49,9 @@ jobs:
 
       - name: Install dependencies
         run: |
+          # Temporary: dune 3.24.0 breaks wasm_of_ocaml 9.4, so hold dune at
+          # 3.23.1 for the wasm_of_ocaml build.
+          opam pin add --yes --no-action dune 3.23.1
           opam install . --deps-only
           opam install wasm_of_ocaml-compiler
 
