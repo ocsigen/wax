@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ebf5f2d6.js";
+            window.path_to_searchindex_js = "searchindex-db4aaba1.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-0d649137.js"></script>
@@ -1058,17 +1058,25 @@ together in a <code>rec</code> group:</p>
 }
 </code></pre>
 <h2 id="strings"><a class="header" href="#strings">Strings</a></h2>
-<p>A string literal builds a new array, one element per byte of the (UTF-8) text.
-By default its type is <code>[mut i8]</code>, and it lowers to an <code>array.new_fixed</code>:</p>
+<p>A string literal builds a new array and lowers to an <code>array.new_fixed</code>. The
+element type must be <code>i8</code> or <code>i16</code>, and it decides the encoding:</p>
+<ul>
+<li>an <code>i8</code> array holds the raw bytes of the (UTF-8) text — one element per byte;</li>
+<li>an <code>i16</code> array holds the UTF-16 code units of the text, so it must be a valid
+Unicode string (a code point outside the basic plane becomes a surrogate pair,
+hence two elements).</li>
+</ul>
+<p>By default its type is <code>[mut i8]</code>:</p>
 <pre><code class="language-wax">"hello";                    // a new [mut i8] holding the 5 bytes
 </code></pre>
 <p>As with <a href="#arrays">array</a> and <a href="#structs">struct</a> literals, a different array type
 can be selected — either by prefixing the string with the type name and <code>#</code>, or
-by an expected type from the context. The element type must be numeric or packed
-(<code>i8</code>, <code>i16</code>, <code>i32</code>, …):</p>
+by an expected type from the context:</p>
 <pre><code class="language-wax">type chars = [i8];
+type wide = [i16];
 
-chars # "hi";               // a &amp;chars (explicit type)
+chars # "hi";               // a &amp;chars, one i8 per UTF-8 byte
+wide # "café";              // a &amp;wide, one i16 per UTF-16 code unit
 let s: &amp;chars = "yo";       // type taken from the annotation
 </code></pre>
 <p>String literals recognise the same escapes as <a href="#characters">character literals</a>
@@ -1081,9 +1089,10 @@ let s: &amp;chars = "yo";       // type taken from the annotation
 <p>A string literal round-trips faithfully through WAT, where it is written with a
 <code>(@string …)</code> annotation. Through WASM it is best-effort: the binary keeps only
 the <code>array.new_fixed</code>, which is recovered as a string literal only when its
-bytes form a <em>reasonable</em> UTF-8 string — valid UTF-8 with no control characters
-other than tab, newline, and carriage return. Anything else (arbitrary binary
-data) decompiles as an ordinary <a href="#arrays">array literal</a> instead.</p>
+elements — decoded by the array’s element type (UTF-8 for <code>i8</code>, UTF-16 for
+<code>i16</code>) — form a <em>reasonable</em> string: valid text with no control characters other
+than tab, newline, and carriage return. Anything else (arbitrary binary data)
+decompiles as an ordinary <a href="#arrays">array literal</a> instead.</p>
 <h2 id="simd-v128"><a class="header" href="#simd-v128">SIMD (v128)</a></h2>
 <p>The 128-bit vector type is <code>v128</code>. Its operations are written as method
 intrinsics with the lane shape baked into the name: the Wax name is the
@@ -1790,11 +1799,13 @@ fn hash_finalize(h: i32) -&gt; i32 {
 }
 </code></pre>
 <h2 id="strings-and-characters"><a class="header" href="#strings-and-characters">Strings and Characters</a></h2>
-<p>A character literal is an <code>i32</code> code point; a string literal builds a byte array
-(<code>[mut i8]</code> by default, or a named array type with the <code>T # "…"</code> prefix). See
-<a href="#strings">Strings</a>.</p>
+<p>A character literal is an <code>i32</code> code point; a string literal builds an <code>i8</code> or
+<code>i16</code> array (<code>[mut i8]</code> by default, or a named array type with the <code>T # "…"</code>
+prefix). An <code>i8</code> array holds the raw UTF-8 bytes; an <code>i16</code> array holds the
+UTF-16 code units. See <a href="#strings">Strings</a>.</p>
 <h3 id="wax-17"><a class="header" href="#wax-17">Wax</a></h3>
 <pre><code class="language-wax">type chars = [i8];
+type wide = [i16];
 
 #[export = "newline"]
 fn newline() -&gt; i32 {
@@ -1805,6 +1816,11 @@ fn newline() -&gt; i32 {
 fn greeting() -&gt; &amp;chars {
     chars # "hi\u{21}";         // the bytes 'h', 'i', '!'
 }
+
+#[export = "wide_greeting"]
+fn wide_greeting() -&gt; &amp;wide {
+    wide # "café";              // the UTF-16 units 'c', 'a', 'f', 'é'
+}
 </code></pre>
 <h3 id="equivalent-wat-7"><a class="header" href="#equivalent-wat-7">Equivalent WAT</a></h3>
 <p><code>wax -f wat</code> keeps the literals as <code>(@char …)</code> / <code>(@string …)</code> annotations, so
@@ -1813,11 +1829,14 @@ they round-trip back to Wax unchanged:</p>
 
 (func $greeting (export "greeting") (result (ref $chars))
   (@string $chars "hi!"))
+
+(func $wide_greeting (export "wide_greeting") (result (ref $wide))
+  (@string $wide "café"))
 </code></pre>
-<p>In a WASM binary these lower to <code>i32.const 10</code> and an <code>array.new_fixed</code> of the
-three bytes <code>104, 105, 33</code> — from which the character comes back as the integer
-<code>10</code>, while the string is still recovered as <code>"hi!"</code> (its bytes are reasonable
-UTF-8).</p>
+<p>In a WASM binary these lower to <code>i32.const 10</code> and an <code>array.new_fixed</code>: the
+<code>i8</code> greeting holds the three bytes <code>104, 105, 33</code>, and the <code>i16</code> greeting the
+four UTF-16 units <code>99, 97, 102, 233</code>. The character comes back as the integer
+<code>10</code>, while each string is still recovered (its elements are reasonable text).</p>
 <h2 id="holes-stack-values"><a class="header" href="#holes-stack-values">Holes (Stack Values)</a></h2>
 <p>Holes (<code>_</code>) plug in values that earlier statements leave on the operand stack.
 The two holes in <code>_ + _</code> consume <code>x * 2</code> and <code>y * 3</code>, left-to-right in the order
@@ -2123,8 +2142,9 @@ covariantly.</li>
 <p>Wax instructions are expression-oriented.</p>
 <h2 id="literals-1"><a class="header" href="#literals-1">Literals</a></h2>
 <p>A <a href="#characters">character literal</a> is an <code>i32</code> constant (its
-Unicode code point); a <a href="#strings">string literal</a> builds a byte
-array with <code>array.new_fixed</code>.</p>
+Unicode code point); a <a href="#strings">string literal</a> builds an <code>i8</code>
+or <code>i16</code> array with <code>array.new_fixed</code>. An <code>i8</code> array holds the raw UTF-8 bytes;
+an <code>i16</code> array holds the UTF-16 code units (so the string must be valid Unicode).</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -2139,8 +2159,9 @@ array with <code>array.new_fixed</code>.</p>
 <p>In WAT both forms are written with annotations — <code>(@char …)</code> and <code>(@string …)</code>
 — so they round-trip faithfully through WAT. A WASM binary keeps only the
 underlying <code>i32.const</code> / <code>array.new_fixed</code>: a character decompiles to a plain
-integer, and an <code>array.new_fixed</code> is recovered as a string only when its bytes
-look like a reasonable UTF-8 string (valid UTF-8, no control characters other
+integer, and an <code>array.new_fixed</code> is recovered as a string only when its
+elements — decoded by the array’s element type (UTF-8 for <code>i8</code>, UTF-16 for
+<code>i16</code>) — form a reasonable string (valid text, no control characters other
 than tab/newline/carriage return); otherwise it stays an
 <a href="#aggregate-instructions">array literal</a>.</p>
 <h2 id="numeric-instructions"><a class="header" href="#numeric-instructions">Numeric Instructions</a></h2>
@@ -3113,6 +3134,22 @@ warnings are produced when converting a Wasm module to Wax.</li>
 <ul>
 <li>Unfold instructions into flat instruction lists.</li>
 <li>Affects WAT output (the default form is chosen automatically).</li>
+</ul>
+</li>
+<li>
+<p><strong><code>--desugar</code></strong></p>
+<ul>
+<li>Expand the Wax-specific <code>(@string …)</code> and <code>(@char …)</code> annotations into
+core WebAssembly (<code>array.new_fixed</code> / <code>i32.const</code>), so the output is plain
+WebAssembly text that other tools accept. An <code>i8</code> string keeps its raw
+UTF-8 bytes; an <code>i16</code> string is UTF-16-encoded; an untyped string reuses an
+existing <code>(array (mut i8))</code> type when the module has one and otherwise pins
+a synthesised one. A module-level <code>(@string …)</code> global becomes an ordinary
+global.</li>
+<li>Only valid with wat output (<code>-f wat</code>); requesting it for wasm or wax
+output is a usage error.</li>
+<li>Fails (exit <code>128</code>) if a conditional-compilation directive <code>(@if …)</code>
+remains unresolved; resolve them first with <code>-D</code>/<code>--define</code>.</li>
 </ul>
 </li>
 <li>

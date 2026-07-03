@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ebf5f2d6.js";
+            window.path_to_searchindex_js = "searchindex-db4aaba1.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-0d649137.js"></script>
@@ -908,17 +908,25 @@ together in a <code>rec</code> group:</p>
 }
 </code></pre>
 <h2 id="strings"><a class="header" href="#strings">Strings</a></h2>
-<p>A string literal builds a new array, one element per byte of the (UTF-8) text.
-By default its type is <code>[mut i8]</code>, and it lowers to an <code>array.new_fixed</code>:</p>
+<p>A string literal builds a new array and lowers to an <code>array.new_fixed</code>. The
+element type must be <code>i8</code> or <code>i16</code>, and it decides the encoding:</p>
+<ul>
+<li>an <code>i8</code> array holds the raw bytes of the (UTF-8) text — one element per byte;</li>
+<li>an <code>i16</code> array holds the UTF-16 code units of the text, so it must be a valid
+Unicode string (a code point outside the basic plane becomes a surrogate pair,
+hence two elements).</li>
+</ul>
+<p>By default its type is <code>[mut i8]</code>:</p>
 <pre><code class="language-wax">"hello";                    // a new [mut i8] holding the 5 bytes
 </code></pre>
 <p>As with <a href="#arrays">array</a> and <a href="#structs">struct</a> literals, a different array type
 can be selected — either by prefixing the string with the type name and <code>#</code>, or
-by an expected type from the context. The element type must be numeric or packed
-(<code>i8</code>, <code>i16</code>, <code>i32</code>, …):</p>
+by an expected type from the context:</p>
 <pre><code class="language-wax">type chars = [i8];
+type wide = [i16];
 
-chars # "hi";               // a &amp;chars (explicit type)
+chars # "hi";               // a &amp;chars, one i8 per UTF-8 byte
+wide # "café";              // a &amp;wide, one i16 per UTF-16 code unit
 let s: &amp;chars = "yo";       // type taken from the annotation
 </code></pre>
 <p>String literals recognise the same escapes as <a href="#characters">character literals</a>
@@ -931,9 +939,10 @@ let s: &amp;chars = "yo";       // type taken from the annotation
 <p>A string literal round-trips faithfully through WAT, where it is written with a
 <code>(@string …)</code> annotation. Through WASM it is best-effort: the binary keeps only
 the <code>array.new_fixed</code>, which is recovered as a string literal only when its
-bytes form a <em>reasonable</em> UTF-8 string — valid UTF-8 with no control characters
-other than tab, newline, and carriage return. Anything else (arbitrary binary
-data) decompiles as an ordinary <a href="#arrays">array literal</a> instead.</p>
+elements — decoded by the array’s element type (UTF-8 for <code>i8</code>, UTF-16 for
+<code>i16</code>) — form a <em>reasonable</em> string: valid text with no control characters other
+than tab, newline, and carriage return. Anything else (arbitrary binary data)
+decompiles as an ordinary <a href="#arrays">array literal</a> instead.</p>
 <h2 id="simd-v128"><a class="header" href="#simd-v128">SIMD (v128)</a></h2>
 <p>The 128-bit vector type is <code>v128</code>. Its operations are written as method
 intrinsics with the lane shape baked into the name: the Wax name is the

@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ebf5f2d6.js";
+            window.path_to_searchindex_js = "searchindex-db4aaba1.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-0d649137.js"></script>
@@ -642,11 +642,13 @@ fn hash_finalize(h: i32) -&gt; i32 {
 }
 </code></pre>
 <h2 id="strings-and-characters"><a class="header" href="#strings-and-characters">Strings and Characters</a></h2>
-<p>A character literal is an <code>i32</code> code point; a string literal builds a byte array
-(<code>[mut i8]</code> by default, or a named array type with the <code>T # "…"</code> prefix). See
-<a href="language.html#strings">Strings</a>.</p>
+<p>A character literal is an <code>i32</code> code point; a string literal builds an <code>i8</code> or
+<code>i16</code> array (<code>[mut i8]</code> by default, or a named array type with the <code>T # "…"</code>
+prefix). An <code>i8</code> array holds the raw UTF-8 bytes; an <code>i16</code> array holds the
+UTF-16 code units. See <a href="language.html#strings">Strings</a>.</p>
 <h3 id="wax-17"><a class="header" href="#wax-17">Wax</a></h3>
 <pre><code class="language-wax">type chars = [i8];
+type wide = [i16];
 
 #[export = "newline"]
 fn newline() -&gt; i32 {
@@ -657,6 +659,11 @@ fn newline() -&gt; i32 {
 fn greeting() -&gt; &amp;chars {
     chars # "hi\u{21}";         // the bytes 'h', 'i', '!'
 }
+
+#[export = "wide_greeting"]
+fn wide_greeting() -&gt; &amp;wide {
+    wide # "café";              // the UTF-16 units 'c', 'a', 'f', 'é'
+}
 </code></pre>
 <h3 id="equivalent-wat-7"><a class="header" href="#equivalent-wat-7">Equivalent WAT</a></h3>
 <p><code>wax -f wat</code> keeps the literals as <code>(@char …)</code> / <code>(@string …)</code> annotations, so
@@ -665,11 +672,14 @@ they round-trip back to Wax unchanged:</p>
 
 (func $greeting (export "greeting") (result (ref $chars))
   (@string $chars "hi!"))
+
+(func $wide_greeting (export "wide_greeting") (result (ref $wide))
+  (@string $wide "café"))
 </code></pre>
-<p>In a WASM binary these lower to <code>i32.const 10</code> and an <code>array.new_fixed</code> of the
-three bytes <code>104, 105, 33</code> — from which the character comes back as the integer
-<code>10</code>, while the string is still recovered as <code>"hi!"</code> (its bytes are reasonable
-UTF-8).</p>
+<p>In a WASM binary these lower to <code>i32.const 10</code> and an <code>array.new_fixed</code>: the
+<code>i8</code> greeting holds the three bytes <code>104, 105, 33</code>, and the <code>i16</code> greeting the
+four UTF-16 units <code>99, 97, 102, 233</code>. The character comes back as the integer
+<code>10</code>, while each string is still recovered (its elements are reasonable text).</p>
 <h2 id="holes-stack-values"><a class="header" href="#holes-stack-values">Holes (Stack Values)</a></h2>
 <p>Holes (<code>_</code>) plug in values that earlier statements leave on the operand stack.
 The two holes in <code>_ + _</code> consume <code>x * 2</code> and <code>y * 3</code>, left-to-right in the order
