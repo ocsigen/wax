@@ -34,18 +34,21 @@ integer-to-i32 signed conversion, so it is still rejected:
   4 │ 
   [128]
 
-A LargeInt source likewise has no signed conversion to i64: it exceeds i32, so it
-cannot be the i32 source of an i64.extend_i32, and there is no i64->i64
-conversion. It is rejected (rather than reaching an unlowerable i64->i64 cast).
-Regression: found by the WAT-mutation fuzzer.
+A LargeInt source under a signed cast to i64 (or i32) is, like a `number`, taken
+as a float: the only numeric->iNN signed conversion is a float truncation
+(iNN.trunc_f*_s) — there is no i64->i64 or i64->i32 signed *integer* conversion —
+so the source defaults to f64 and the cast lowers to a truncation. This lets a
+decompiled iNN.trunc_f* (f*.const <big>), whose const renders as a large integer
+literal, round-trip. Regression: found by the WAT-mutation fuzzer.
 
   $ printf 'fn f() -> i64 {\n    4294967296 as i64_s;\n}\n' > bigi64.wax
-  $ wax -i wax -f wasm bigi64.wax -o /dev/null
-  Error: This value of type large number cannot be cast to the target type.
-   ──➤  bigi64.wax:2:5
-  1 │ fn f() -> i64 {
-  2 │     4294967296 as i64_s;
-    ·     ^^^^^^^^^^^^^^^^^^^
-  3 │ }
-  4 │ 
-  [128]
+  $ wax -i wax -f wat bigi64.wax
+  (func $f (result i64) (i64.trunc_sat_f64_s (f64.const 4294967296)))
+
+So the truncation of an out-of-range float const round-trips: it decompiles to
+`<big> as iNN_*_strict` (the const rendered as a large integer literal) and that
+must recompile. Regression: a ROUNDTRIP failure found by the WAT-mutation fuzzer.
+
+  $ printf '(module (func (result i32) (i32.trunc_f64_u (f64.const -4294967296))))\n' > rt.wat
+  $ wax -i wat -f wax rt.wat -o rt.wax && wax -i wax -f wasm rt.wax -o /dev/null && echo ok
+  ok

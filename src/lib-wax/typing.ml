@@ -1214,12 +1214,15 @@ let signed_cast ctx ty ty' =
       (* [f*.convert_i64]: a [LargeInt] source defaults to i64. *)
       Cell.set ty (Valtype i64_valtype);
       true
-  | LargeInt, _ ->
-      (* Never [i32]/[i64]: a [LargeInt] can only be the source of an
-         integer->float conversion. It exceeds i32 so it cannot be the i32 source
-         of an [i64.extend_i32], and there is no i64->i64 (or i32->i32) signed
-         conversion. *)
-      false
+  | LargeInt, (`I32 | `I64) ->
+      (* The only numeric -> i32/i64 signed cast is a float truncation
+         ([iNN.trunc_f*_X]) — there is no i64->i32 or i64->i64 signed *integer*
+         conversion — so the flexible source is a float and defaults to f64, as
+         the [Number, `I32] case below. Without this a [LargeInt] there was
+         rejected, so a decompiled [iNN.trunc_f* (f*.const <big>)] — which
+         renders the const as a large integer literal — failed to recompile. *)
+      Cell.set ty (Valtype f64_valtype);
+      true
   | Valtype { internal = I32; _ }, `I64
   | Valtype { internal = I32 | I64; _ }, (`F32 | `F64)
   | Valtype { internal = F32 | F64; _ }, (`I32 | `I64) ->
