@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-e7b1acd4.js";
+            window.path_to_searchindex_js = "searchindex-dbc7f649.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-0d649137.js"></script>
@@ -280,6 +280,34 @@ always accepted on input.</li>
 <ul>
 <li><code>unused-local</code> (group <code>unused</code>) — a local that is declared but never
 read. Produced while validating; shown by default.</li>
+<li><code>unused-field</code> (groups <code>unused</code>, <code>correctness</code>) — a module field (a
+function or global) that is defined but never referenced, exported, or
+used as the start function. The module-level analog of <code>unused-local</code>;
+prefix its name with <code>_</code> to silence one. Shown by default.</li>
+<li><code>unused-label</code> (groups <code>unused</code>, <code>correctness</code>) — a block label that
+is declared but never branched to. Prefix its name with <code>_</code> to silence
+one. Shown by default.</li>
+<li><code>shift-count-overflow</code> (group <code>correctness</code>) — a shift by a constant
+count at least the operand’s bit width. Wasm masks the count modulo
+the width, so the shift is almost certainly not what was meant. Shown
+by default.</li>
+<li><code>constant-trap</code> (group <code>correctness</code>) — an operation that always traps
+on a constant operand: an integer division or remainder by zero, or a
+trapping float-to-integer conversion of an out-of-range constant.
+Shown by default.</li>
+<li><code>tautological-comparison</code> (group <code>correctness</code>) — a comparison whose
+result is constant regardless of its variable operand: an unsigned
+comparison against zero (<code>x &gt;=u 0</code>, <code>x &lt;u 0</code>), or two identical
+operands (<code>x == x</code>). Shown by default.</li>
+<li><code>constant-condition</code> (group <code>correctness</code>) — a branch, loop, or
+<code>select</code> condition that is a constant literal (the idiomatic infinite
+loop <code>while &lt;nonzero&gt;</code> is not flagged). Shown by default.</li>
+<li><code>unused-result</code> (group <code>correctness</code>) — the result of a
+side-effect-free expression is computed and then discarded, as in
+<code>_ = x + 1</code>. Shown by default.</li>
+<li><code>dead-code</code> (group <code>correctness</code>) — a statement that can never be
+reached, following an unconditional branch, <code>return</code>, or
+<code>unreachable</code>. Shown by default.</li>
 <li><code>truncated-coverage</code> — path-sensitive validation gave up after too
 many conditional configurations. Shown by default.</li>
 <li><code>naming-conflict</code> (group <code>naming</code>) — converting from Wasm, a source
@@ -303,11 +331,19 @@ it cannot be rendered anonymously. Hidden by default.</li>
 <li>Repeatable; later settings override earlier ones. For example,
 <code>-W all=error -W unused-local=warning</code> makes every warning fatal except
 unused locals.</li>
-<li>The validation warnings (<code>unused-local</code>, <code>truncated-coverage</code>) are
-produced only while validating. <code>truncated-coverage</code> can arise from the
-validation <code>convert</code> runs on a text input; <code>unused-local</code> reporting is
-turned on only by <code>--validate</code>, and always for <code>check</code>. The <code>naming</code>
-warnings are produced when converting a Wasm module to Wax.</li>
+<li>The validation warnings — <code>truncated-coverage</code>, and the <code>unused</code> and
+<code>correctness</code> lints — are produced only while validating.
+<code>truncated-coverage</code> can arise from the validation <code>convert</code> runs on a
+text input; the <code>unused</code>/<code>correctness</code> lints are turned on only by
+<code>--validate</code>, and always for <code>check</code>. The <code>naming</code> warnings are produced
+when converting a Wasm module to Wax.</li>
+<li>The <code>WAX_WARN</code> environment variable sets default levels applied <em>before</em>
+the <code>-W</code> options. Its value is a list of <code>NAME=LEVEL</code> specs separated by
+commas or whitespace, e.g. <code>WAX_WARN="correctness=hidden unused-local=error"</code>. Unlike a plain environment fallback, these defaults
+still apply when <code>-W</code> is given — the command line only refines them (so
+<code>WAX_WARN=correctness=hidden</code> with <code>-W dead-code=warning</code> hides the tier
+except dead code). A malformed or unknown entry is reported on stderr and
+skipped.</li>
 </ul>
 </li>
 <li>
