@@ -39,6 +39,7 @@ override with `REF`).
 ## Usage
 
 ```sh
+fuzz/check.sh               # CI gate: run all deterministic guards, non-zero on any HIGH finding
 fuzz/build-corpus.sh        # populate fuzz/corpus/{valid,invalid}/ (~7000 modules)
 fuzz/run.sh                 # run every oracle over the corpus, print a report
 fuzz/oracle.sh FILE [valid|invalid|unknown]   # check one file (the fuzzing unit)
@@ -84,6 +85,13 @@ fuzz/exec-mutate.sh [wast…] # behavioural check on semantics-preserving mutant
 `comment-preserve.sh`, `cond-fuzz.sh`, `fold-fuzz.sh`, `type-fuzz.sh` and
 `validate-fuzz.sh` exit non-zero if any **HIGH**-severity finding appears, so any
 can gate CI; the execution oracles exit non-zero on any behavioural regression.
+
+**`fuzz/check.sh` chains all of these into one gate** — the per-PR tier. It runs
+each deterministic guard at a fixed `SEED` and modest budget, SKIPS any whose
+optional dependency (wasm-tools) or seed corpus is absent, and exits non-zero iff
+some guard found a HIGH problem. `QUICK=1` shrinks the budgets; `GEN=… COUNT=…
+SEED=…` grow them for a heavier run. The stochastic campaigns and the corpus
+`run.sh` are the separate nightly/budgeted tier (they need `build-corpus.sh`).
 
 The mutation campaigns (`mutate-wax.sh`, `mutate-wat.sh`, `mutate-wasm.sh`) are
 reproducible: each derives every per-mutation seed from a master `SEED`
