@@ -117,9 +117,34 @@ case "$verdict:$EXPECT" in
     # divergence or just a proposal one side parses and the other does not.
     if [ "$FMT" = wasm ] || [ "$FMT" = wat ]; then
       if wt_validate "$IN"; then ref=ok; else ref=rejected; fi
+      report_diff=0
+      diffmsg="wax says $verdict, wasm-tools says $ref"
       if [ "$verdict" != "$ref" ]; then
-        finding VALIDATOR_DIFF REVIEW "$IN" \
-          "wax says $verdict, wasm-tools says $ref" \
+        if [ "$verdict" = ok ] || [ "$FMT" = wat ]; then
+          # wax MORE LENIENT (accepts what the reference rejects — the soundness
+          # direction), or any WAT-text divergence: report directly.
+          report_diff=1
+        else
+          # wax rejected a BINARY the reference accepts. wax fully and strictly
+          # decodes the binary — including custom sections like `name`, which it
+          # must read to recover names for wat/wax output — so it rightly rejects
+          # malformed UTF-8 / bad lengths there that the reference leaves opaque.
+          # To tell that custom-section noise from a genuine core-decode
+          # divergence, strip all custom sections and re-test: if wax now accepts,
+          # the rejection was custom-section-only (expected, suppress); if it
+          # persists, the core genuinely diverges (report).
+          if "$WASM_TOOLS" strip --all "$IN" -o "$WORK/stripped.wasm" 2>/dev/null \
+            && [ "$(classify_wax -i wasm -f wat "$WORK/stripped.wasm" -o /dev/null)" = ok ]
+          then
+            report_diff=0
+          else
+            report_diff=1
+            diffmsg="wax rejects the core (custom sections stripped), wasm-tools accepts"
+          fi
+        fi
+      fi
+      if [ "$report_diff" = 1 ]; then
+        finding VALIDATOR_DIFF REVIEW "$IN" "$diffmsg" \
           "$(repro "${check[@]}"); wasm-tools validate --features all $IN"
       fi
     fi ;;
