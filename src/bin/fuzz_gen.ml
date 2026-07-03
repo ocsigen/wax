@@ -40,15 +40,16 @@ let pick a = a.(rnd (Array.length a))
 let nl = Ast.no_loc
 let id s = nl s
 
-(* The value types expressions are built to: four numeric, plus references to
-   the two struct types, the array type, and the abstract eq supertype. *)
-type ty = I32 | I64 | F32 | F64 | Point | Pair | Ints | Eq
+(* The value types expressions are built to: four numeric, the v128 vector,
+   references to the two struct types and the array type, and the abstract eq
+   supertype. *)
+type ty = I32 | I64 | F32 | F64 | Vec | Point | Pair | Ints | Eq
 
 let num_ty = [| I32; I64; F32; F64 |]
-let all_params = [| I32; I64; F32; F64; Point; Pair; Ints; Eq |]
+let all_params = [| I32; I64; F32; F64; Vec; Point; Pair; Ints; Eq |]
 
 (* Result types a function may return (Eq excluded: less useful as a callee). *)
-let result_ty = [| I32; I64; F32; F64; Point; Pair; Ints |]
+let result_ty = [| I32; I64; F32; F64; Vec; Point; Pair; Ints |]
 let is_num = function I32 | I64 | F32 | F64 -> true | _ -> false
 let is_int = function I32 | I64 -> true | _ -> false
 
@@ -66,6 +67,7 @@ let valtype = function
   | I64 -> Ast.I64
   | F32 -> Ast.F32
   | F64 -> Ast.F64
+  | Vec -> Ast.V128
   | t -> Ast.Ref (reftype t)
 
 let pname = function
@@ -73,10 +75,14 @@ let pname = function
   | I64 -> "b"
   | F32 -> "c"
   | F64 -> "d"
+  | Vec -> "v"
   | Point -> "p"
   | Pair -> "r"
   | Ints -> "q"
   | Eq -> "s"
+
+(* Method call on the declared memory [m]: [m.load32(p)], [m.store32(p, v)], … *)
+let mem = nl (Ast.Get (id "m"))
 
 (* Number of functions and their result types (round-robin, so a call of any
    type always has a callee). *)
@@ -117,6 +123,52 @@ let int_umeth = [| "clz"; "ctz"; "popcnt"; "extend8_s"; "extend16_s" |]
 let int_bmeth = [| "rotl"; "rotr" |]
 let flt_umeth = [| "abs"; "sqrt"; "floor"; "ceil"; "trunc"; "nearest" |]
 let flt_bmeth = [| "min"; "max"; "copysign" |]
+
+(* SIMD lane ops, named [<op>_<shape>], as methods on a v128 receiver. *)
+let vec_bin =
+  [|
+    "add_i8x16";
+    "sub_i8x16";
+    "add_i16x8";
+    "sub_i16x8";
+    "mul_i16x8";
+    "add_i32x4";
+    "sub_i32x4";
+    "mul_i32x4";
+    "add_i64x2";
+    "sub_i64x2";
+    "mul_i64x2";
+    "add_f32x4";
+    "sub_f32x4";
+    "mul_f32x4";
+    "div_f32x4";
+    "min_f32x4";
+    "max_f32x4";
+    "add_f64x2";
+    "sub_f64x2";
+    "mul_f64x2";
+    "div_f64x2";
+    "min_f64x2";
+    "max_f64x2";
+  |]
+
+let vec_un =
+  [|
+    "abs_i8x16";
+    "neg_i8x16";
+    "abs_i16x8";
+    "neg_i16x8";
+    "abs_i32x4";
+    "neg_i32x4";
+    "abs_f32x4";
+    "neg_f32x4";
+    "sqrt_f32x4";
+    "ceil_f32x4";
+    "floor_f32x4";
+    "abs_f64x2";
+    "neg_f64x2";
+    "sqrt_f64x2";
+  |]
 
 (* A leaf is always the parameter of type [t] — a definite type. Bare integer
    and float literals are polymorphic in Wax (a float literal defaults to f64),
@@ -207,7 +259,43 @@ and if_ t d : Ast.location Ast.instr =
 
 (* An expression of type [t] at depth [d]. *)
 and gen t d : Ast.location Ast.instr =
-  if d <= 0 then leaf t else if is_num t then gen_num t d else gen_ref t d
+  if d <= 0 then leaf t
+  else if is_num t then gen_num t d
+  else if t = Vec then gen_vec d
+  else gen_ref t d
+
+(* A v128 expression: lane arithmetic, splats from a scalar, the [v128::] free
+   functions (const / bitselect), a shuffle, or a call/leaf. *)
+and gen_vec d : Ast.location Ast.instr =
+  let path fn args = nl (Ast.Call (nl (Ast.Path (id "v128", id fn)), args)) in
+  match rnd 100 with
+  | n when n < 26 -> meth (gen Vec (d - 1)) (pick vec_bin) [ gen Vec (d - 1) ]
+  | n when n < 42 -> meth (gen Vec (d - 1)) (pick vec_un) []
+  | n when n < 56 -> (
+      (* splat a scalar across the lanes *)
+      match rnd 6 with
+      | 0 -> meth (gen I32 (d - 1)) "splat_i8x16" []
+      | 1 -> meth (gen I32 (d - 1)) "splat_i16x8" []
+      | 2 -> meth (gen I32 (d - 1)) "splat_i32x4" []
+      | 3 -> meth (gen I64 (d - 1)) "splat_i64x2" []
+      | 4 -> meth (gen F32 (d - 1)) "splat_f32x4" []
+      | _ -> meth (gen F64 (d - 1)) "splat_f64x2" [])
+  | n when n < 66 ->
+      path "const_i32x4"
+        [
+          nl (Ast.Int "1"); nl (Ast.Int "2"); nl (Ast.Int "3"); nl (Ast.Int "4");
+        ]
+  | n when n < 74 ->
+      path "bitselect" [ gen Vec (d - 1); gen Vec (d - 1); gen Vec (d - 1) ]
+  | n when n < 82 ->
+      (* shuffle: 16 lane indices then a second v128 operand *)
+      meth
+        (gen Vec (d - 1))
+        "shuffle_i8x16"
+        (List.init 16 (fun i -> nl (Ast.Int (string_of_int i)))
+        @ [ gen Vec (d - 1) ])
+  | n when n < 92 -> if_ Vec d
+  | _ -> call Vec
 
 and gen_num t d : Ast.location Ast.instr =
   (* A bare literal is only unambiguous in a top-down type-FORCED position (a
@@ -228,29 +316,47 @@ and gen_num t d : Ast.location Ast.instr =
   in
   let ternary () = nl (Ast.Select (gen I32 (d - 1), gen t (d - 1), flit ())) in
   let neg () = nl (Ast.UnOp (nl Ast.Neg, gen t (d - 1))) in
+  (* Extract a lane of the matching shape from a v128 (produces this scalar). *)
+  let extract () =
+    let shp =
+      match t with
+      | I32 -> "i32x4"
+      | I64 -> "i64x2"
+      | F32 -> "f32x4"
+      | _ -> "f64x2"
+    in
+    meth (gen Vec (d - 1)) ("extract_lane_" ^ shp) [ nl (Ast.Int "0") ]
+  in
+  (* A memory load of the matching width (load32 -> i32, load64 -> i64). *)
+  let load () =
+    meth mem (if t = I64 then "load64" else "load32") [ gen I32 (d - 1) ]
+  in
   if is_int t then
     match rnd 100 with
-    | n when n < 22 -> bin int_binops
-    | n when n < 32 && t = I32 -> cmp ()
-    | n when n < 40 -> umeth int_umeth
-    | n when n < 46 -> bmeth int_bmeth
-    | n when n < 51 -> neg ()
-    | n when n < 63 -> cast t d
-    | n when n < 73 -> if_ t d
-    | n when n < 80 -> ternary ()
-    | n when n < 88 && t = I32 -> field_get ()
-    | n when n < 92 && t = I32 -> nl (Ast.ArrayGet (leaf Ints, gen I32 (d - 1)))
-    | n when n < 95 && t = I32 -> meth (leaf Ints) "length" []
+    | n when n < 20 -> bin int_binops
+    | n when n < 30 && t = I32 -> cmp ()
+    | n when n < 38 -> umeth int_umeth
+    | n when n < 44 -> bmeth int_bmeth
+    | n when n < 49 -> neg ()
+    | n when n < 61 -> cast t d
+    | n when n < 70 -> if_ t d
+    | n when n < 77 -> ternary ()
+    | n when n < 82 && t = I32 -> field_get ()
+    | n when n < 85 && t = I32 -> nl (Ast.ArrayGet (leaf Ints, gen I32 (d - 1)))
+    | n when n < 88 && t = I32 -> meth (leaf Ints) "length" []
+    | n when n < 93 -> extract ()
+    | n when n < 97 -> load ()
     | _ -> call t
   else
     match rnd 100 with
-    | n when n < 28 -> bin flt_binops
-    | n when n < 42 -> umeth flt_umeth
-    | n when n < 50 -> bmeth flt_bmeth
-    | n when n < 56 -> neg ()
-    | n when n < 74 -> cast t d
-    | n when n < 88 -> if_ t d
-    | n when n < 94 -> ternary ()
+    | n when n < 26 -> bin flt_binops
+    | n when n < 40 -> umeth flt_umeth
+    | n when n < 48 -> bmeth flt_bmeth
+    | n when n < 54 -> neg ()
+    | n when n < 70 -> cast t d
+    | n when n < 82 -> if_ t d
+    | n when n < 88 -> ternary ()
+    | n when n < 94 -> extract ()
     | _ -> call t
 
 and gen_ref t d : Ast.location Ast.instr =
@@ -324,6 +430,10 @@ let rec stmt d : Ast.location Ast.instr =
   | n when n < 68 ->
       (* the array element type is mutable *)
       nl (Ast.ArraySet (leaf Ints, gen I32 d, gen I32 d))
+  | n when n < 74 ->
+      (* memory store: width by method, value type by argument *)
+      if rnd 2 = 0 then meth mem "store32" [ gen I32 d; gen I32 d ]
+      else meth mem "store64" [ gen I32 d; gen I64 d ]
   | n when n < 84 && d > 0 ->
       let void = Ast.{ params = [||]; results = [||] } in
       nl
@@ -389,6 +499,16 @@ let type_decls : Ast.location Ast.modulefield list =
           );
       |];
     Ast.Type [| nl (id "ints", subtype (Ast.Array (ftype true I32))) |];
+    Ast.Memory
+      {
+        name = id "m";
+        address_type = `I32;
+        limits = Some (Wax_utils.Uint64.of_int 1, None);
+        page_size_log2 = None;
+        shared = false;
+        data = [];
+        attributes = [];
+      };
   ]
 
 let func k : Ast.location Ast.modulefield =
