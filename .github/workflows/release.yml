@@ -90,15 +90,18 @@ jobs:
       - name: Verify the Linux binary is static
         if: matrix.static
         shell: bash
+        # Check via `file` (which exits 0): `ldd` on a static binary exits 1,
+        # which under `set -o pipefail` fails an `ldd | grep` check even when it
+        # matches. A `case` on `file -b` avoids pipes and is locale-forced.
         run: |
-          file "${{ matrix.exe }}"
-          # LC_ALL=C so ldd's message is the English one the grep expects.
-          if LC_ALL=C ldd "${{ matrix.exe }}" 2>&1 | grep -q "not a dynamic executable"; then
-            echo "static link OK"
-          else
-            echo "ERROR: expected a static binary"; LC_ALL=C ldd "${{ matrix.exe }}" || true
-            exit 1
-          fi
+          info=$(LC_ALL=C file -b "${{ matrix.exe }}")
+          echo "$info"
+          case "$info" in
+            *"statically linked"* | *"static-pie linked"*)
+              echo "static link OK" ;;
+            *)
+              echo "ERROR: expected a static binary"; exit 1 ;;
+          esac
 
       - name: Smoke-test
         shell: bash
