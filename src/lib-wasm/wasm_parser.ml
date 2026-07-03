@@ -1322,16 +1322,18 @@ let elem ch =
       }
   | 0x01 ->
       (* Passive, elemkind=0, vec(funcidx) *)
-      let _elemkind = input_byte ch in
-      (* Must be 0x00 *)
+      let elemkind = input_byte ch in
+      if elemkind <> 0 then
+        error ch "element kind must be 0x00, got 0x%02x" elemkind;
       let init = Array.to_list (vec func ch) in
       { typ = { nullable = false; typ = Func }; init; mode = Passive }
   | 0x02 ->
       (* Active, tableidx, offset, elemkind=0, vec(funcidx) *)
       let table_idx = uint ch in
       let offset_expr = expr ch in
-      let _elemkind = input_byte ch in
-      (* Must be 0x00 *)
+      let elemkind = input_byte ch in
+      if elemkind <> 0 then
+        error ch "element kind must be 0x00, got 0x%02x" elemkind;
       let init = Array.to_list (vec func ch) in
       {
         typ = { nullable = false; typ = Func };
@@ -1340,8 +1342,9 @@ let elem ch =
       }
   | 0x03 ->
       (* Declarative, elemkind=0, vec(funcidx) *)
-      let _elemkind = input_byte ch in
-      (* Must be 0x00 *)
+      let elemkind = input_byte ch in
+      if elemkind <> 0 then
+        error ch "element kind must be 0x00, got 0x%02x" elemkind;
       let init = Array.to_list (vec func ch) in
       { typ = { nullable = false; typ = Func }; init; mode = Declare }
   | 0x04 ->
