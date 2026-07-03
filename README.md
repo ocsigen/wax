@@ -22,6 +22,10 @@ dune runtest
 opam install .
 ```
 
+Want to contribute? See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the submission
+process, the data-flow overview, and the checklists for changing the AST or
+adding syntax.
+
 ## Capabilities
 
 *   **Formatting:** Ensures consistent code style.
