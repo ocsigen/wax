@@ -57,6 +57,7 @@ fuzz/cond-fuzz.sh                # fuzz #[if]/-D conditional compilation (Cond_e
 # WAT *input* side (the text lexer/parser):
 fuzz/wat-corpus.sh [smith-count] [bytes]   # build .wat seeds: spec corpus + smith modules
 fuzz/mutate-wat.sh [count]  # text-mutate the wat seeds (edge literals) + check them
+fuzz/validate-fuzz.sh       # type-flip valid wat + differential vs the reference (validator rejection arms); COUNT=N
 fuzz/wat-cast-chain.sh      # deterministic byte-identical round-trip of WAT two-cast chains
 fuzz/wat-cast-const.sh      # deterministic round-trip of each conversion on edge-value consts (catches over-rejection)
 
@@ -79,9 +80,9 @@ fuzz/exec-mutate.sh [wast…] # behavioural check on semantics-preserving mutant
 
 `run.sh`, `smith.sh`, `mutate-wax.sh`, `diff-validate.sh`, `mutate-validate.sh`,
 `cast-lattice.sh`, `wat-cast-chain.sh`, `wat-cast-const.sh`, `stress.sh`,
-`comment-preserve.sh`, `cond-fuzz.sh`, `fold-fuzz.sh` and `type-fuzz.sh` exit
-non-zero if any **HIGH**-severity finding appears, so any can gate CI; the
-execution oracles exit non-zero on any behavioural regression.
+`comment-preserve.sh`, `cond-fuzz.sh`, `fold-fuzz.sh`, `type-fuzz.sh` and
+`validate-fuzz.sh` exit non-zero if any **HIGH**-severity finding appears, so any
+can gate CI; the execution oracles exit non-zero on any behavioural regression.
 
 The mutation campaigns (`mutate-wax.sh`, `mutate-wat.sh`, `mutate-wasm.sh`) are
 reproducible: each derives every per-mutation seed from a master `SEED`
@@ -305,6 +306,24 @@ Text (not AST) mutation is the right tool here: the bugs are in the parser/lexer
 so feeding it almost-valid-but-malformed text is the point. A mutant is almost
 always invalid, so a clean rejection (123/128) is expected, not a finding; the
 hunt is purely for crashes. Findings are re-verified to drop transient load noise.
+
+`validate-fuzz.sh` targets a different blind spot in the same subsystem: the
+Wasm validator's REJECTION arms (`lib-wasm/validation.ml`). validation.ml is a
+per-instruction type checker; the corpus is all well-typed, so it only ever
+takes the accept path — the arms that reject an ill-typed instruction ("expects
+i32 but the stack has f64") stay dark (the mutate-wat literal fuzzer perturbs
+numbers, not types, so it misses them too). `wat-type-mutate.awk` flips ONE value
+type in a valid module (decompiled from the wasm corpus, for instruction
+variety), so validation runs normally until the one now-ill-typed instruction and
+takes its rejection arm — one error deep in a real module, not the shallow
+first-error bail a garbage generator triggers (measured: +100 lines of
+validation.ml over the accept-only corpus). The oracle is a differential against
+the reference validator, both under strict validation so only *type* divergences
+remain: a base is used only if wax and the reference already agree it is valid
+(isolating the flip as the sole cause), then a `FALSE_ACCEPT` (wax accepts what
+the reference rejects) or `OVER_REJECT` split is a REVIEW finding and a crash is
+HIGH. Clean on the corpus; the guard makes it precise (it fired only on
+pre-existing base divergences before the agreement precondition was added).
 
 `wat-cast-chain.sh` is the WAT-side counterpart of `cast-lattice.sh`: where the
 latter drives cast *lowering* from Wax source, this drives cast *decompilation
