@@ -115,6 +115,18 @@ mistaken for a subcommand). The `format` subcommand reformats files (see
     - Unfold instructions into flat instruction lists.
     - Affects WAT output (the default form is chosen automatically).
 
+- **`--desugar`**
+    - Expand the Wax-specific `(@string …)` and `(@char …)` annotations into
+      core WebAssembly (`array.new_fixed` / `i32.const`), so the output is plain
+      WebAssembly text that other tools accept. An `i8` string keeps its raw
+      UTF-8 bytes; an `i16` string is UTF-16-encoded; an untyped string gets a
+      synthesised `[mut i8]` array type. A module-level `(@string …)` global
+      becomes an ordinary global.
+    - Only valid with wat output (`-f wat`); requesting it for wasm or wax
+      output is a usage error.
+    - Fails (exit `128`) if a conditional-compilation directive `(@if …)`
+      remains unresolved; resolve them first with `-D`/`--define`.
+
 - **`--source-map-file`** *FILE*
     - Generate a source map file. Only valid with wasm output (`-f wasm`);
       requesting one for wat or wax output is an error.

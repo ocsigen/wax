@@ -37,3 +37,18 @@ let expand_tabs ?(offset = 0) s =
     in
     loop offset 0 (String.length s);
     Buffer.contents buf
+
+let utf16_code_units s =
+  let n = String.length s in
+  let rec loop i acc =
+    if i >= n then List.rev acc
+    else
+      let d = String.get_utf_8_uchar s i in
+      let c = Uchar.to_int (Uchar.utf_decode_uchar d) in
+      let i = i + Uchar.utf_decode_length d in
+      if c < 0x10000 then loop i (c :: acc)
+      else
+        let c = c - 0x10000 in
+        loop i ((0xDC00 lor (c land 0x3FF)) :: (0xD800 lor (c lsr 10)) :: acc)
+  in
+  loop 0 []
