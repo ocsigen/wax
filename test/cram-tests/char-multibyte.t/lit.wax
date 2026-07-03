@@ -1,0 +1,4 @@
+fn ascii() -> i32 { 'A'; }
+fn accent() -> i32 { 'é'; }
+fn cjk() -> i32 { '漢'; }
+fn emoji() -> i32 { '😀'; }

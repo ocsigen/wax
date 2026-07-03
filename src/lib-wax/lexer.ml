@@ -267,9 +267,10 @@ let rec token_rec ctx lexbuf =
   | ident -> IDENT (Sedlexing.Utf8.lexeme lexbuf)
   | '"' -> STRING (with_loc string lexbuf)
   | "'", Sub (any, (0 .. 31 | 0x7f | '"' | '\\')), "'" ->
+      (* One code point between the quotes; it may be multibyte (e.g. an emoji),
+         so decode it from UTF-8 rather than assuming a single byte. *)
       let s = Sedlexing.Utf8.lexeme lexbuf in
-      assert (String.length s = 3);
-      CHAR (Uchar.of_char s.[1])
+      CHAR (Uchar.utf_decode_uchar (String.get_utf_8_uchar s 1))
   | "'", ("\\t" | "\\n" | "\\r" | "\\'" | "\\\"" | "\\\\"), "'" ->
       let s = Sedlexing.Utf8.lexeme lexbuf in
       assert (String.length s = 4);
