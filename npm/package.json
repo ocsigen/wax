@@ -23,10 +23,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/vouillon/wax.git"
+    "url": "git+https://github.com/ocsigen/wax.git"
   },
-  "homepage": "https://github.com/vouillon/wax#readme",
+  "homepage": "https://github.com/ocsigen/wax#readme",
   "bugs": {
-    "url": "https://github.com/vouillon/wax/issues"
+    "url": "https://github.com/ocsigen/wax/issues"
   }
 }

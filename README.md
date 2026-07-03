@@ -45,7 +45,7 @@ Generation (wasm-smith), AST/byte mutation, and deterministic lattice sweeps fee
 the oracles.
 
 ## Documentation
-Full documentation is available at [vouillon.github.io/wax/](https://vouillon.github.io/wax/).
+Full documentation is available at [ocsigen.github.io/wax/](https://ocsigen.github.io/wax/).
 You can also build it locally with `mdbook build docs` (requires
 [mdBook](https://rust-lang.github.io/mdBook/)).
 
@@ -65,7 +65,7 @@ The input format is detected from the file extension (override with `-i`); the
 default output format is `wasm` (override with `-f`). `wax` reads from `stdin`
 when no input file is given and writes to `stdout` when `-o` is omitted.
 
-See the [CLI reference](https://vouillon.github.io/wax/cli.html) for the
+See the [CLI reference](https://ocsigen.github.io/wax/cli.html) for the
 complete set of options — including `-D`/`-X`/`-W`, `--source-map-file`, the
 validation flags, and the exit-status contract.
 

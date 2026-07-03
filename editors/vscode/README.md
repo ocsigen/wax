@@ -1,7 +1,7 @@
 # Wax for Visual Studio Code
 
 Syntax highlighting, bracket matching, and snippets for
-[Wax](https://github.com/vouillon/wax) — a Rust-like syntax for
+[Wax](https://github.com/ocsigen/wax) — a Rust-like syntax for
 WebAssembly — in `.wax` files.
 
 ## Features

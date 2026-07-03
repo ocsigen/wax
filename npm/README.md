@@ -1,6 +1,6 @@
 # wax
 
-A compiler toolchain for [Wax](https://github.com/vouillon/wax), a
+A compiler toolchain for [Wax](https://github.com/ocsigen/wax), a
 Rust-like syntax for WebAssembly. It converts between three formats — Wax
 (`.wax`), WebAssembly text (`.wat`), and WebAssembly binary (`.wasm`) — and can
 type-check and format Wax.

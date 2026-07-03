@@ -8,7 +8,7 @@
   "author": "Jérôme Vouillon",
   "repository": {
     "type": "git",
-    "url": "https://github.com/vouillon/wax.git",
+    "url": "https://github.com/ocsigen/wax.git",
     "directory": "editors/vscode"
   },
   "engines": {
