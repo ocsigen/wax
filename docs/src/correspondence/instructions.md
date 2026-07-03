@@ -162,6 +162,12 @@ its own assignment.
 | `nop` | `nop` |
 | `select` | `cond ? v1 : v2` |
 
+The rows above are the raw instructions. Two common *shapes* built from them are
+recovered as higher-level constructs on the way back to Wax: a `br_table` in the
+conventional dense void-switch shape becomes a [`dispatch`](#dispatch-and-match),
+and a `br_on_cast`/`br_on_null` ladder becomes a [`match`](#dispatch-and-match)
+(both below).
+
 ### Block Labels and Types
 
 Blocks, loops, and ifs can be labeled and typed.
@@ -206,6 +212,39 @@ Any conditional branch may be hinted — `if`, `br_if`, `br_on_null`,
 `br_on_non_null`, `br_on_cast`, and `br_on_cast_fail`. In WAT the same hint is
 the `(@metadata.code.branch_hint "\00"|"\01")` annotation preceding the branch
 (`"\01"` = likely, `"\00"` = unlikely).
+
+### Dispatch and Match
+
+Two Wax control constructs have no instruction of their own: they are readable
+spellings of a lower-level *shape*, so they lower to that shape and are
+*recovered* from it on decompilation (both round-trip through the binary). See
+the language guide for the surface syntax — [`dispatch`](../language.md#dispatch)
+and [`match`](../language.md#match).
+
+`dispatch` is a jump table. It lowers to one nested block per case with a
+`br_table` in the innermost block and the case bodies (which fall through) after
+their blocks; a `br_table` matching that dense void-switch shape decompiles back
+to `dispatch`:
+
+```
+(block $big (block $b (block $a           dispatch x ['zero 'one else 'big] {
+  (br_table $a $b $big (local.get $x)))     'big:  { … }
+  … 'one body …) … 'big body …)             'one:  { … }
+                                            'zero: { … } }
+```
+
+`match` is a multi-way type test. It lowers to a ladder of blocks threading the
+scrutinee through `br_on_cast` (and `br_on_null` for a `null` arm), each branch
+delivering the narrowed value out to its arm; such a ladder decompiles back to
+`match`:
+
+```
+(block $default (block $arm_1                match v {
+  (block $arm (result (ref $point))            p: &point => { … }
+    (br_on_null $arm_1                          null      => { … }
+      (br_on_cast $arm eqref (ref $point) …)))  _         => { … } }
+  … arm body …) … default …)
+```
 
 ## Reference Instructions
 
