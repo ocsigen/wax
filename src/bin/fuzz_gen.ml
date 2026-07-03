@@ -43,13 +43,13 @@ let id s = nl s
 (* The value types expressions are built to: four numeric, the v128 vector,
    references to the two struct types and the array type, and the abstract eq
    supertype. *)
-type ty = I32 | I64 | F32 | F64 | Vec | Point | Pair | Ints | Eq
+type ty = I32 | I64 | F32 | F64 | Vec | Point | Pair | Ints | Eq | I31 | Cont
 
 let num_ty = [| I32; I64; F32; F64 |]
-let all_params = [| I32; I64; F32; F64; Vec; Point; Pair; Ints; Eq |]
+let all_params = [| I32; I64; F32; F64; Vec; Point; Pair; Ints; Eq; I31; Cont |]
 
 (* Result types a function may return (Eq excluded: less useful as a callee). *)
-let result_ty = [| I32; I64; F32; F64; Vec; Point; Pair; Ints |]
+let result_ty = [| I32; I64; F32; F64; Vec; Point; Pair; Ints; I31; Cont |]
 let is_num = function I32 | I64 | F32 | F64 -> true | _ -> false
 let is_int = function I32 | I64 -> true | _ -> false
 
@@ -58,6 +58,8 @@ let heaptype : ty -> Ast.heaptype = function
   | Pair -> Ast.Type (id "pair")
   | Ints -> Ast.Type (id "ints")
   | Eq -> Ast.Eq
+  | I31 -> Ast.I31
+  | Cont -> Ast.Type (id "k")
   | _ -> assert false
 
 let reftype t : Ast.reftype = { nullable = false; typ = heaptype t }
@@ -80,6 +82,8 @@ let pname = function
   | Pair -> "r"
   | Ints -> "q"
   | Eq -> "s"
+  | I31 -> "n"
+  | Cont -> "kc"
 
 (* Method call on the declared memory [m]: [m.load32(p)], [m.store32(p, v)], … *)
 let mem = nl (Ast.Get (id "m"))
@@ -257,6 +261,22 @@ and if_ t d : Ast.location Ast.instr =
          else_block = Some (nl [ gen t (d - 1) ]);
        })
 
+(* A `try`/`catch` expression of type [t]. The body and each handler produce
+   [t]; the `stop` tag carries no payload, so a handler needs nothing off the
+   stack. Exercises the exception-typing arms the decompiler never reaches (it
+   lowers to try_table). *)
+and try_ t d : Ast.location Ast.instr =
+  let typ = Ast.{ params = [||]; results = [| valtype t |] } in
+  nl
+    (Ast.Try
+       {
+         label = None;
+         typ;
+         block = [ gen t (d - 1) ];
+         catches = [ (id "stop", [ gen t (d - 1) ]) ];
+         catch_all = Some [ gen t (d - 1) ];
+       })
+
 (* An expression of type [t] at depth [d]. *)
 and gen t d : Ast.location Ast.instr =
   if d <= 0 then leaf t
@@ -331,6 +351,18 @@ and gen_num t d : Ast.location Ast.instr =
   let load () =
     meth mem (if t = I64 then "load64" else "load32") [ gen I32 (d - 1) ]
   in
+  (* Read an i31ref back to i32 ([r as i32_s]). *)
+  let i31get () =
+    let sgn = if rnd 2 = 0 then Ast.Signed else Ast.Unsigned in
+    nl
+      (Ast.Cast
+         ( gen I31 (d - 1),
+           Ast.Signedtype { typ = `I32; signage = sgn; strict = false } ))
+  in
+  (* Test a reference against a concrete type ([e is &point]) -> i32. *)
+  let reftest () =
+    nl (Ast.Test (gen Eq (d - 1), reftype (pick [| Point; Pair; I31 |])))
+  in
   if is_int t then
     match rnd 100 with
     | n when n < 20 -> bin int_binops
@@ -339,11 +371,14 @@ and gen_num t d : Ast.location Ast.instr =
     | n when n < 44 -> bmeth int_bmeth
     | n when n < 49 -> neg ()
     | n when n < 61 -> cast t d
-    | n when n < 70 -> if_ t d
-    | n when n < 77 -> ternary ()
-    | n when n < 82 && t = I32 -> field_get ()
-    | n when n < 85 && t = I32 -> nl (Ast.ArrayGet (leaf Ints, gen I32 (d - 1)))
-    | n when n < 88 && t = I32 -> meth (leaf Ints) "length" []
+    | n when n < 66 -> if_ t d
+    | n when n < 70 -> try_ t d
+    | n when n < 74 -> ternary ()
+    | n when n < 78 && t = I32 -> field_get ()
+    | n when n < 80 && t = I32 -> nl (Ast.ArrayGet (leaf Ints, gen I32 (d - 1)))
+    | n when n < 82 && t = I32 -> meth (leaf Ints) "length" []
+    | n when n < 85 && t = I32 -> i31get ()
+    | n when n < 88 && t = I32 -> reftest ()
     | n when n < 93 -> extract ()
     | n when n < 97 -> load ()
     | _ -> call t
@@ -354,9 +389,10 @@ and gen_num t d : Ast.location Ast.instr =
     | n when n < 48 -> bmeth flt_bmeth
     | n when n < 54 -> neg ()
     | n when n < 70 -> cast t d
-    | n when n < 82 -> if_ t d
-    | n when n < 88 -> ternary ()
-    | n when n < 94 -> extract ()
+    | n when n < 79 -> if_ t d
+    | n when n < 85 -> try_ t d
+    | n when n < 91 -> ternary ()
+    | n when n < 95 -> extract ()
     | _ -> call t
 
 and gen_ref t d : Ast.location Ast.instr =
@@ -391,10 +427,26 @@ and gen_ref t d : Ast.location Ast.instr =
   | Eq -> (
       (* Any struct/array is a subtype of eq, so a struct literal serves. *)
       match rnd 100 with
-      | n when n < 30 -> gen Point (d - 1)
-      | n when n < 50 -> gen Pair (d - 1)
-      | n when n < 65 -> gen Ints (d - 1)
-      | n when n < 80 -> if_ t d
+      | n when n < 26 -> gen Point (d - 1)
+      | n when n < 44 -> gen Pair (d - 1)
+      | n when n < 58 -> gen Ints (d - 1)
+      | n when n < 68 -> gen I31 (d - 1) (* i31 is an eq subtype too *)
+      | n when n < 82 -> if_ t d
+      | _ -> leaf t)
+  | I31 -> (
+      match rnd 100 with
+      (* box an i32 into an i31ref: [x as &i31] *)
+      | n when n < 44 ->
+          nl (Ast.Cast (gen I32 (d - 1), Ast.Valtype (valtype I31)))
+      | n when n < 62 -> if_ t d
+      | n when n < 80 -> call t
+      | _ -> leaf t)
+  | Cont -> (
+      match rnd 100 with
+      (* wrap the fixed `worker` task into a continuation: [cont_new k (worker)] *)
+      | n when n < 46 -> nl (Ast.ContNew (id "k", nl (Ast.Get (id "worker"))))
+      | n when n < 64 -> if_ t d
+      | n when n < 82 -> call t
       | _ -> leaf t)
   | _ -> assert false
 
@@ -510,6 +562,32 @@ let type_decls : Ast.location Ast.modulefield list =
           );
       |];
     Ast.Type [| nl (id "ints", subtype (Ast.Array (ftype true I32))) |];
+    (* A continuation scaffold: a task function type, its continuation type, and
+       a `worker` that suspends the `yield` tag — so cont_new/suspend and the
+       cont typing arms are exercised. *)
+    Ast.Type
+      [|
+        nl
+          ( id "task",
+            subtype
+              (Ast.Func
+                 Ast.{ params = [| nl (None, I32) |]; results = [| I32 |] }) );
+      |];
+    Ast.Type [| nl (id "k", subtype (Ast.Cont (id "task"))) |];
+    Ast.Tag
+      {
+        name = id "stop";
+        typ = None;
+        sign = Some Ast.{ params = [||]; results = [||] };
+        attributes = [];
+      };
+    Ast.Tag
+      {
+        name = id "yield";
+        typ = None;
+        sign = Some Ast.{ params = [| nl (None, I32) |]; results = [| I32 |] };
+        attributes = [];
+      };
     Ast.Memory
       {
         name = id "m";
@@ -518,6 +596,17 @@ let type_decls : Ast.location Ast.modulefield list =
         page_size_log2 = None;
         shared = false;
         data = [];
+        attributes = [];
+      };
+    Ast.Func
+      {
+        name = id "worker";
+        typ = None;
+        sign =
+          Some
+            Ast.{ params = [| nl (Some (id "x"), I32) |]; results = [| I32 |] };
+        body =
+          (None, [ nl (Ast.Suspend (id "yield", [ nl (Ast.Get (id "x")) ])) ]);
         attributes = [];
       };
   ]
@@ -534,8 +623,16 @@ let func k : Ast.location Ast.modulefield =
     let poison = if err && k = nf - 1 then [ poison () ] else [] in
     (* Occasionally end the function with a returning [match] instead of a plain
        value expression (a match must diverge, so it is a tail, not a value). *)
+    (* Occasionally end with a diverging construct instead of a value: a
+       returning [match], or a bare [throw] (which satisfies any result type,
+       since it never returns). *)
     let tail =
-      if poison = [] && rnd 100 < 30 then [ tail_match res ] else [ gen res 2 ]
+      if poison <> [] then [ gen res 2 ]
+      else
+        match rnd 100 with
+        | n when n < 25 -> [ tail_match res ]
+        | n when n < 33 -> [ nl (Ast.Throw (id "stop", None)) ]
+        | _ -> [ gen res 2 ]
     in
     stmts @ poison @ tail
   in
