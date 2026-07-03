@@ -1456,8 +1456,8 @@ let set_desc target e =
   match e.Ast.desc with
   | Ast.BinOp (op, { desc = Get y; _ }, rhs)
     when has_compound_form op.desc && String.equal y.desc target.Ast.desc ->
-      Ast.Set (Some target, Some op, rhs)
-  | _ -> Ast.Set (Some target, None, e)
+      Ast.Set (target, Some op, rhs)
+  | _ -> Ast.Set (target, None, e)
 
 let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   let with_loc (i' : _ Ast.instr_desc) = { i with Ast.desc = i' } in
@@ -1604,9 +1604,20 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   | Drop ->
       (* A dropped value supplies no expected type: a width eraser (see [Stack]).
          [i64.div_u (2147483648 + 2147483648)] would re-default its divisor to a
-         trapping [0]; the erased pop pins the opcode width to prevent it. *)
-      let* e = Stack.pop_width_erased in
-      Stack.push 0 (with_loc (Set (None, None, e)))
+         trapping [0]. The drop is an anonymous [Let] ([_ = e]); a non-default
+         flexible width is pinned in its type annotation ([_: i64 = e]) rather
+         than by an identity cast on the value, so the reader is never left to
+         disambiguate a genuine [as] conversion from a width pin. The keep/drop
+         of that annotation then reuses the ordinary [Let] machinery. *)
+      let* e, w = Stack.pop_tagged in
+      let annot : Ast.valtype option =
+        match w with
+        | Some `I64 -> Some I64
+        | Some `F32 -> Some F32
+        | Some `F64 -> Some F64
+        | Some `I32 | None -> None
+      in
+      Stack.push 0 (with_loc (Let ([ (None, annot) ], Some e)))
   | Br i ->
       let input = label_arity ctx i in
       let* args = Stack.grab input in

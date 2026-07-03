@@ -134,12 +134,14 @@ type 'info instr_desc =
   (* A qualified name [namespace::member], used as the callee of a built-in
      intrinsic call such as [i64::add128(...)]. *)
   | Path of ident * ident
-  (* Assignment to a local or global. The middle field is the compound-assignment
-     operator: [None] for a plain [x = e]; [Some op] for [x op= e], which is
-     equivalent to [x = x op e]. The operator is preserved through typing and
-     lowering so it round-trips in both directions ([x op= e] on the Wax side, a
-     [get]/op/[set] on the Wasm side); the middle field carries the RHS type. *)
-  | Set of ident option * (binop, location) annotated option * 'info instr
+  (* Assignment to a named local or global. The middle field is the
+     compound-assignment operator: [None] for a plain [x = e]; [Some op] for
+     [x op= e], which is equivalent to [x = x op e]. The operator is preserved
+     through typing and lowering so it round-trips in both directions ([x op= e]
+     on the Wax side, a [get]/op/[set] on the Wasm side); the middle field
+     carries the RHS type. A discarded value ([_ = e]) is not a [Set] but an
+     anonymous [Let] ([Let ([ (None, _) ], Some e)]); see {!Let}. *)
+  | Set of ident * (binop, location) annotated option * 'info instr
   | Tee of ident * 'info instr
   | Call of 'info instr * 'info instr list
   | TailCall of 'info instr * 'info instr list

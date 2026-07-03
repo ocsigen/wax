@@ -11,9 +11,7 @@ let rec occurs name i =
   match i.desc with
   | Get id -> String.equal id.desc name
   | Tee (id, e) -> String.equal id.desc name || occurs name e
-  | Set (id, _, e) ->
-      (match id with Some id -> String.equal id.desc name | None -> false)
-      || occurs name e
+  | Set (id, _, e) -> String.equal id.desc name || occurs name e
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
       in_list block
   | While { cond; step; block; _ } ->
@@ -95,8 +93,7 @@ let init_let (name, typ) e info =
    read-before-write behaviour intact. *)
 let fusable s name =
   match s.desc with
-  | Set (Some id, None, e) when String.equal id.desc name && not (occurs name e)
-    ->
+  | Set (id, None, e) when String.equal id.desc name && not (occurs name e) ->
       Some e
   | _ -> None
 
@@ -138,9 +135,7 @@ let rec first_access name i =
         (if String.equal id.desc name then Some `Write else None)
   | Set (id, _, e) ->
       fst2 (first_access name e)
-        (match id with
-        | Some id when String.equal id.desc name -> Some `Write
-        | _ -> None)
+        (if String.equal id.desc name then Some `Write else None)
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } -> fl block
   | While { cond; step; block; _ } ->
       (* One iteration reads [cond], then the body, then the step. *)
@@ -354,15 +349,13 @@ let rec sink_into ((name, _) as decl) s =
         in
         Some { s with desc = Dispatch { r with arms } }
   (* Expression carriers: descend through an operand toward a nested block. *)
-  | Set (id, op, e)
-    when match id with
-         | Some n -> not (String.equal n.desc name.desc)
-         | None -> true ->
-      (* A discarded or assigned block expression — e.g. [_ = do {..}] or
-         [x = do {..}] — holds all uses in its body; sink into it. We exclude
-         [name = e]: there [e] is this local's own initializer (the non-reading
-         case is already fused by [sink_decl]), and sinking the declaration into
-         [e] would shadow it. *)
+  | Set (id, op, e) when not (String.equal id.desc name.desc) ->
+      (* An assigned block expression — [x = do {..}] — holds all uses in its
+         body; sink into it. (A discarded block, [_ = do {..}], is an anonymous
+         [Let] and is handled by the [Let] case below.) We exclude [name = e]:
+         there [e] is this local's own initializer (the non-reading case is
+         already fused by [sink_decl]), and sinking the declaration into [e]
+         would shadow it. *)
       pick [ (e, fun e' -> Set (id, op, e')) ]
   | Tee (n, e) when not (String.equal n.desc name.desc) ->
       pick [ (e, fun e' -> Tee (n, e')) ]

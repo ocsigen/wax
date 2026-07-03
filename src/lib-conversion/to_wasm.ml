@@ -738,8 +738,7 @@ and instruction_desc ret ctx i : location Text.instr list =
       (* A qualified path is only valid as a call callee (handled in the [Call]
          case); typing rejects a bare one, so it never reaches lowering. *)
       assert false
-  | Set (None, _, expr) -> folded loc Drop (instruction ret ctx expr)
-  | Set (Some idx, op, expr) ->
+  | Set (idx, op, expr) ->
       (* A compound assignment [x op= e] reads [x], evaluates [e], applies the
          operator, then stores back into [x]; a plain [x = e] just stores. *)
       let store, load =

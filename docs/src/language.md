@@ -194,6 +194,29 @@ Every value-producing arithmetic and bitwise operator has a compound form:
 unsigned variants apply to integers, while the sign-agnostic `/=` is float
 division. Comparisons have no compound form.
 
+### Discarding a value
+
+Assigning to `_` evaluates an expression and throws its result away — the
+equivalent of WebAssembly's `drop`. Nothing is bound, so no name comes into
+scope:
+
+```wax
+_ = f();            // call f for its side effects, ignore its result
+```
+
+An optional type annotation, `_: t = e`, pins the type of the discarded value.
+It is only ever needed for a bare numeric expression whose type the surrounding
+syntax does not otherwise fix: an unconstrained integer literal defaults to
+`i32` and a float to `f64`, so without the annotation a discarded `i64`
+computation would be re-read at the wrong width (silently changing a value, or
+turning a well-defined result into a trap). Hand-written code rarely needs it;
+converting from WebAssembly adds it only where it is load-bearing:
+
+```wax
+_: i64 = 1 << 40;   // discarded, but kept i64 — without the pin it would be
+                    // i32.shl, whose count wraps mod 32 to a different result
+```
+
 ### Global Variables
 
 Globals are declared at module level. `const` is immutable; `let` is mutable:

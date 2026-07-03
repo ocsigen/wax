@@ -64,17 +64,17 @@ let split_decls stmts =
 (* Strip a ladder block's consume of its inner block, returning any leading
    declarations to hoist, the binding ([Some x] for a bound cast arm), that inner
    block, and the trailing arm body. A [null] arm consumes nothing (a bare
-   block), an unbound cast drops the block ([Set None]), a bound cast binds it
-   ([Set Some] / a fused [let]). *)
+   block), an unbound cast drops the block (an anonymous [Let], [_ = block]), a
+   bound cast binds it (a [Set] / a fused [let]). *)
 let consume_step stmts =
   let decls, stmts = split_decls stmts in
   match stmts with
   | { desc = Let ([ (Some x, _) ], Some inner); _ } :: body when is_block inner
     ->
       Some (decls, Some x, inner, body)
-  | { desc = Set (Some x, _, inner); _ } :: body when is_block inner ->
+  | { desc = Set (x, _, inner); _ } :: body when is_block inner ->
       Some (decls, Some x, inner, body)
-  | { desc = Set (None, _, inner); _ } :: body when is_block inner ->
+  | { desc = Let ([ (None, _) ], Some inner); _ } :: body when is_block inner ->
       Some (decls, None, inner, body)
   | ({ desc = Block _; _ } as inner) :: body -> Some (decls, None, inner, body)
   | _ -> None
@@ -87,7 +87,10 @@ let rec descend blk =
   | Block { label = Some lbl; block = body; _ } -> (
       let decls0, body = split_decls body in
       match body with
-      | [ { desc = Set (None, _, chain); _ }; { desc = Br (escape, None); _ } ]
+      | [
+       { desc = Let ([ (None, _) ], Some chain); _ };
+       { desc = Br (escape, None); _ };
+      ]
         when is_chain chain ->
           Some ([], lbl, chain, escape, decls0)
       | _ -> (
@@ -167,20 +170,21 @@ and diverges_list l =
    the fold drops). The body must diverge (leave the [match]). *)
 let arm_block stmt =
   match stmt.desc with
-  | Set
-      ( None,
-        _,
-        { desc = Block { label = Some self; typ; block = test :: body }; _ } )
+  | Let
+      ( [ (None, _) ],
+        Some
+          { desc = Block { label = Some self; typ; block = test :: body }; _ }
+      )
     when typ.params = [||] && Array.length typ.results = 1 && diverges_list body
     -> (
       match test.desc with
       | Let ([ (Some x, _) ], Some { desc = Br_on_cast_fail (l, rt, scrut); _ })
         when l.desc = self.desc ->
           Some (MatchCast (Some x, rt), scrut, body, `Fused)
-      | Set (Some x, _, { desc = Br_on_cast_fail (l, rt, scrut); _ })
+      | Set (x, _, { desc = Br_on_cast_fail (l, rt, scrut); _ })
         when l.desc = self.desc ->
           Some (MatchCast (Some x, rt), scrut, body, `Decl x)
-      | Set (None, _, { desc = Br_on_cast_fail (l, rt, scrut); _ })
+      | Let ([ (None, _) ], Some { desc = Br_on_cast_fail (l, rt, scrut); _ })
         when l.desc = self.desc ->
           Some (MatchCast (None, rt), scrut, body, `Fused)
       | Br_on_non_null (l, scrut) when l.desc = self.desc ->

@@ -128,9 +128,7 @@ let rec reads_var name (i : location instr) : bool =
   | Select (a, b, c) -> reads_var name a || reads_var name b || reads_var name c
   | Call (f, args) | TailCall (f, args) -> reads_var name f || any args
   | Tee (id, e) -> String.equal id.desc name || reads_var name e
-  | Set (id, _, e) ->
-      (match id with Some id -> String.equal id.desc name | None -> false)
-      || reads_var name e
+  | Set (id, _, e) -> String.equal id.desc name || reads_var name e
   | Block { block; _ } | Loop { block; _ } -> any block
   | If { cond; if_block; else_block; _ } -> (
       reads_var name cond || any if_block.desc
@@ -177,8 +175,8 @@ let fold_loop l typ block =
                  at least one other body statement must remain. *)
               match (label, List.rev body) with
               | ( None,
-                  ({ desc = Set (Some x, _, _); _ } as step)
-                  :: (_ :: _ as rev_rest) )
+                  ({ desc = Set (x, _, _); _ } as step) :: (_ :: _ as rev_rest)
+                )
                 when reads_var x.desc cond ->
                   While
                     {

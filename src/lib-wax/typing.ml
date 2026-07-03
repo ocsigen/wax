@@ -2011,11 +2011,10 @@ let merge_let_tuple ctx head rest =
     if n = 0 then Some (List.rev acc, l)
     else
       match l with
-      | { desc = Let ([ ((Some _, _) as b) ], Some v); _ } :: r when is_hole v
-        ->
+      (* A named binding [let x = _] or an anonymous drop [_ = _] (both a
+         single-binding [Let] over a hole): peel one value each. *)
+      | { desc = Let ([ b ], Some v); _ } :: r when is_hole v ->
           take (n - 1) (b :: acc) r
-      | { desc = Set (None, _, v); _ } :: r when is_hole v ->
-          take (n - 1) ((None, None) :: acc) r
       | _ -> None
   in
   if (not ctx.simplify) || arity < 2 then head :: rest
@@ -2245,8 +2244,9 @@ let rec count_holes i =
 (* Accumulate into [acc] the local names assigned ([Set]/[Tee] targets) anywhere
    in [i], recursing through every sub-instruction. Mirrors the case coverage of
    {!Sink_let.occurs}: only [Set]/[Tee] write a local, every other case just
-   recurses. A [Set None] (a value left on the stack, not a named write) names no
-   local. Wasm-derived locals are uniquely named within a function, so the
+   recurses. A drop ([_ = e], an anonymous [Let]) names no local, so it just
+   recurses via the [Let] case. Wasm-derived locals are uniquely named within a
+   function, so the
    resulting by-name set is exact; a stray name collision could only keep an
    annotation, never wrongly drop one. *)
 let rec collect_assigned_locals acc i =
@@ -2255,9 +2255,8 @@ let rec collect_assigned_locals acc i =
     match o with Some i -> collect_assigned_locals acc i | None -> acc
   in
   match i.desc with
-  | Set (Some id, _, e) | Tee (id, e) ->
+  | Set (id, _, e) | Tee (id, e) ->
       collect_assigned_locals (StringSet.add id.desc acc) e
-  | Set (None, _, e) -> collect_assigned_locals acc e
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
       in_list acc block
   | While { cond; step; block; _ } ->
@@ -3139,7 +3138,7 @@ let rebuild_match typed_list arms =
             { desc = Ast.Let (_, Some inner); _ } :: body ) ->
             (inner, body)
         | ( Ast.MatchCast (None, _),
-            { desc = Ast.Set (None, _, inner); _ } :: body ) ->
+            { desc = Ast.Let ([ (None, _) ], Some inner); _ } :: body ) ->
             (inner, body)
         | Ast.MatchNull, inner :: body -> (inner, body)
         | _ -> assert false
@@ -4695,14 +4694,7 @@ and type_variable_access ctx i =
             Cell.make Error
       in
       return_expression i desc ty
-  | Set (None, _, i') ->
-      let* i' = instruction ctx i' in
-      (* [_ = e] drops one value, so [e] must produce exactly one; otherwise wax
-         emits a [drop] with nothing (or too much) on the stack. [expression_type]
-         reports [not_an_expression] when the arity is not 1. *)
-      ignore (expression_type ctx i' : inferred_type Cell.t);
-      return_statement i (Set (None, None, i')) [||]
-  | Set (Some idx, op, i') ->
+  | Set (idx, op, i') ->
       (* Resolve the target first (a pure lookup) so the value can be checked
          against its type, letting a struct/array literal drop its name. The
          local is marked initialized only after the value is typed, so an
@@ -4747,7 +4739,7 @@ and type_variable_access ctx i =
           Error.unbound_name ctx.diagnostics ~location:idx.info
             ~suggestions:(set_suggestions ctx idx.desc)
             "variable" idx);
-      return_statement i (Set (Some idx, op, value)) [||]
+      return_statement i (Set (idx, op, value)) [||]
   | Tee (idx, i') -> (
       (* Only a local is assignable. Resolve it first so the value can be
          checked against the local's type (letting a struct/array literal drop
@@ -8724,7 +8716,12 @@ let rec check_let_in_conditionals diagnostics (i : (_ instr_desc, _) annotated)
       let check_branch =
         List.iter (fun (s : (_ instr_desc, _) annotated) ->
             match s.desc with
-            | Let _ -> Error.let_in_conditional diagnostics ~location:s.info
+            (* Only a binding that introduces a name would leak; an anonymous
+               [Let] ([_ = e], a drop) binds nothing, so it is allowed. *)
+            | Let (bindings, _)
+              when List.exists (fun (name, _) -> Option.is_some name) bindings
+              ->
+                Error.let_in_conditional diagnostics ~location:s.info
             | _ -> ())
       in
       check_branch then_body;
