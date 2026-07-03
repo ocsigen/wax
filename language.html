@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ec936ab6.js";
+            window.path_to_searchindex_js = "searchindex-ba3e703f.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-f031991a.js"></script>
+        <script src="toc-0d649137.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -189,8 +189,8 @@ fn f() -&gt; i32 {
 }
 </code></pre>
 <p>Unlike the <code>#[...]</code> outer attributes that decorate a following field (such as
-<code>#[export]</code>), <code>#![...]</code> is an <em>inner</em> attribute: it applies to the enclosing
-module. A module may carry at most one name.</p>
+<code>#[export = "name"]</code>), <code>#![...]</code> is an <em>inner</em> attribute: it applies to the
+enclosing module. A module may carry at most one name.</p>
 <p>(This maps to the WebAssembly module name stored in the <code>name</code> custom section —
 the <code>$name</code> in a WAT <code>(module $name …)</code>; see
 <a href="./correspondence/module_fields.html#module-name">Module Fields</a>.)</p>
@@ -481,7 +481,7 @@ has no enclosing stack to draw from, so it cannot take parameters. To combine a
 parameterized block’s result with other operands, keep the block at statement
 level and pick up its result with a <a href="#holes">hole</a>:</p>
 <pre><code class="language-wax">x;                        // leaves an i32 on the stack
-do (i32) -&gt; i32 { … };    // a statement: consumes that i32, leaves an i32
+do (i32) -&gt; i32 { … }     // a statement: consumes that i32, leaves an i32
 _ + 1;                    // the hole plugs in the block's result
 </code></pre>
 <p>Blocks can be labelled and used as branch targets; see
@@ -740,6 +740,31 @@ fn init() {
 <p>Call through a function reference:</p>
 <pre><code class="language-wax">(func_ref as &amp;?callback)(arg)
 </code></pre>
+<h2 id="imports-and-exports"><a class="header" href="#imports-and-exports">Imports and Exports</a></h2>
+<p>A module talks to its host through imports and exports, both written as
+attributes on the field.</p>
+<p><strong>Export</strong> a definition under a name with <code>#[export = "name"]</code>. It applies to
+functions, globals, memories, tables, and tags, and a field may carry several:</p>
+<pre><code class="language-wax check">#[export = "add"]
+fn add(x: i32, y: i32) -&gt; i32 { x + y; }
+
+#[export = "PI"]
+const PI: f64 = 3.14159;
+</code></pre>
+<p><strong>Import</strong> a field from the host with <code>#[import = ("module", "name")]</code>. An
+imported field has no body — a function is declared with just its signature and
+a trailing <code>;</code>, and a global with its type:</p>
+<pre><code class="language-wax check">#[import = ("env", "log")]
+fn log(x: i32);
+
+#[import = ("env", "base")]
+const base: i32;
+
+#[export = "run"]
+fn run() { log(base); }
+</code></pre>
+<p>The same field can be both imported and re-exported by giving it both
+attributes.</p>
 <h2 id="references"><a class="header" href="#references">References</a></h2>
 <h3 id="reference-types"><a class="header" href="#reference-types">Reference Types</a></h3>
 <pre><code class="language-wax">&amp;type           // Non-nullable reference
@@ -813,6 +838,36 @@ e.g. <code>let xs: &amp;bytes = [0; 100];</code>.</p>
 arr[i] = val;               // Set element (if mutable)
 arr.length()                // Array length
 </code></pre>
+<h2 id="recursive-and-subtyped-types"><a class="header" href="#recursive-and-subtyped-types">Recursive and Subtyped Types</a></h2>
+<p>Struct and array types can refer to one another, form subtype hierarchies, and
+be left open for extension — the WebAssembly GC type features.</p>
+<h3 id="recursive-groups"><a class="header" href="#recursive-groups">Recursive groups</a></h3>
+<p>Types that reference each other are declared together in a <code>rec { … }</code> group, so
+each name is in scope for the others:</p>
+<pre><code class="language-wax check">rec {
+    type expr = { op: i32, args: &amp;?args };
+    type args = [mut &amp;expr];
+}
+</code></pre>
+<h3 id="subtyping"><a class="header" href="#subtyping">Subtyping</a></h3>
+<p><code>type sub : super</code> declares <code>sub</code> as a subtype of <code>super</code>: it repeats the
+supertype’s fields in order and may add more, and a <code>&amp;sub</code> is accepted wherever
+a <code>&amp;super</code> is expected. Types are <em>final</em> by default; a type must be declared
+<code>open</code> to be extended.</p>
+<pre><code class="language-wax check">type shape = open { kind: i32 };
+type circle : shape = { kind: i32, radius: f64 };
+
+fn kind_of(s: &amp;shape) -&gt; i32 { s.kind; }   // also accepts a &amp;circle
+</code></pre>
+<h3 id="descriptors-experimental"><a class="header" href="#descriptors-experimental">Descriptors (experimental)</a></h3>
+<p>Behind <code>-X custom-descriptors</code>, a struct type can carry a runtime <em>descriptor</em> —
+another type it points to — via the <code>descriptor</code> / <code>describes</code> clauses, declared
+together in a <code>rec</code> group:</p>
+<pre><code class="language-wax check">rec {
+    type obj = descriptor obj_desc { x: i32 };
+    type obj_desc = describes obj { };
+}
+</code></pre>
 <h2 id="strings"><a class="header" href="#strings">Strings</a></h2>
 <p>A string literal builds a new array, one element per byte of the (UTF-8) text.
 By default its type is <code>[mut i8]</code>, and it lowers to an <code>array.new_fixed</code>:</p>
@@ -840,6 +895,27 @@ the <code>array.new_fixed</code>, which is recovered as a string literal only wh
 bytes form a <em>reasonable</em> UTF-8 string — valid UTF-8 with no control characters
 other than tab, newline, and carriage return. Anything else (arbitrary binary
 data) decompiles as an ordinary <a href="#arrays">array literal</a> instead.</p>
+<h2 id="simd-v128"><a class="header" href="#simd-v128">SIMD (v128)</a></h2>
+<p>The 128-bit vector type is <code>v128</code>. Its operations are written as method
+intrinsics with the lane shape baked into the name: the Wax name is the
+WebAssembly mnemonic with the leading shape moved to the end, so <code>i32x4.add</code>
+becomes <code>add_i32x4</code> and <code>f32x4.splat</code> becomes <code>splat_f32x4</code>. Signed/unsigned
+variants keep their <code>_s</code>/<code>_u</code> suffix, and constant lane immediates (lane and
+shuffle indices) come first in the argument list.</p>
+<pre><code class="language-wax check">fn scale(v: v128, k: i32) -&gt; v128 {
+    v.add_i32x4(k.splat_i32x4());     // i32x4.add of v and (i32x4.splat k)
+}
+
+fn lane0(v: v128) -&gt; i32 {
+    v.extract_lane_i32x4(0);          // extract lane 0
+}
+</code></pre>
+<p>Constants are <code>v128::</code> free functions, one argument per lane:</p>
+<pre><code class="language-wax check">const ones: v128 = v128::const_i32x4(1, 1, 1, 1);
+</code></pre>
+<p>See <a href="./correspondence/instructions.html#simd-vector-instructions">Instructions › SIMD</a> for the full
+mnemonic mapping (<code>extract_lane</code>/<code>replace_lane</code>/<code>shuffle</code>, comparisons, shifts,
+and the whole-vector <code>*_v128</code> operations).</p>
 <h2 id="memories"><a class="header" href="#memories">Memories</a></h2>
 <h3 id="declaration"><a class="header" href="#declaration">Declaration</a></h3>
 <pre><code class="language-wax">memory mem0: i32 [1, 1000];     // address type i32, min 1 page, max 1000
@@ -912,6 +988,11 @@ is required — write <code>()</code> for no payload:</p>
 tag overflow(i32);          // carries an i32
 tag pair(i32, f64);         // carries several values
 </code></pre>
+<p>A tag may also declare a <strong>result type</strong>, written like a function signature.
+This is used by <a href="#stack-switching">stack switching</a>: resuming a suspended
+continuation hands this value back to the <code>suspend</code> expression.</p>
+<pre><code class="language-wax">tag yield(i32) -&gt; i32;      // carries an i32; resumes with an i32
+</code></pre>
 <h3 id="throw"><a class="header" href="#throw">Throw</a></h3>
 <p><code>throw</code> raises a tag together with its payload:</p>
 <pre><code class="language-wax">throw overflow 42;
@@ -939,8 +1020,37 @@ mapping directly to WebAssembly’s <code>try_table</code>:</p>
 try { might_throw(); } catch [overflow &amp; -&gt; 'h]  // also deliver the exnref
 try { might_throw(); } catch [_ -&gt; 'h]           // catch any exception
 </code></pre>
-<p>The target label receives the payload (and, with <code>&amp;</code>, the <code>exnref</code>), so the
-labelled block’s type must match what it is handed.</p>
+<p>The target label receives the payload (and, with <code>&amp;</code>, the exception reference,
+of type <code>&amp;exn</code> — or <code>&amp;?exn</code> for the nullable form), so the labelled block’s type
+must match what it is handed.</p>
+<h2 id="stack-switching"><a class="header" href="#stack-switching">Stack Switching</a></h2>
+<p><em>Stack switching</em> (the WebAssembly typed-continuations proposal) lets a
+computation suspend itself, yield control to a scheduler, and later be resumed.
+A <strong>continuation type</strong> wraps a function type with <code>cont</code>:</p>
+<pre><code class="language-wax">type task = fn(i32) -&gt; i32;
+type k = cont task;
+</code></pre>
+<p>A <a href="#tags">tag with a result type</a> is the suspend/resume channel: <code>suspend</code>
+passes the tag’s payload out and evaluates to its result once resumed.</p>
+<pre><code class="language-wax">tag yield(i32) -&gt; i32;
+
+fn worker(x: i32) -&gt; i32 {
+    suspend yield(x);          // yield `x`; the result is what resumes it
+}
+</code></pre>
+<p>Continuations are created and driven with <code>cont_new</code>, <code>cont_bind</code>, <code>resume</code>,
+<code>resume_throw</code>, and <code>resume_throw_ref</code>. <code>cont</code> wraps a <em>named</em> function type, so
+each continuation shape is a <code>type</code>. <code>resume</code> takes a list of handlers mapping a
+suspended tag to a label (empty here):</p>
+<pre><code class="language-wax">type unit_task = fn() -&gt; i32;
+type k0 = cont unit_task;
+
+fn spawn() -&gt; &amp;k { cont_new k (worker); }          // wrap `worker` (a task)
+fn prime(c: &amp;k) -&gt; &amp;k0 { cont_bind k k0 (7, c); }  // bind the argument
+fn go(c: &amp;k0) -&gt; i32 { resume k0 [] (c); }         // run until it suspends
+</code></pre>
+<p>The abstract continuation heap types are written <code>&amp;cont</code> and <code>&amp;nocont</code> (with
+<code>&amp;?cont</code> for the nullable form).</p>
 <h2 id="holes"><a class="header" href="#holes">Holes</a></h2>
 <p>A hole (<code>_</code>) is a placeholder for a value that an <strong>earlier statement in the
 same sequence</strong> has left on WebAssembly’s implicit operand stack. It is the
@@ -1030,7 +1140,7 @@ Hint: reachable when not debug
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="introduction.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="features.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
@@ -1044,7 +1154,7 @@ Hint: reachable when not debug
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="introduction.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="features.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 

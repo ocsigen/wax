@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ec936ab6.js";
+            window.path_to_searchindex_js = "searchindex-ba3e703f.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-f031991a.js"></script>
+        <script src="toc-0d649137.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -179,7 +179,7 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
-<p>Wax is a Rust-like syntax for WebAssembly that compiles to standard Wasm binary or text formats. It provides a more familiar programming experience while maintaining a direct correspondence to WebAssembly concepts.</p>
+<p>Wax is a Rust-like syntax for WebAssembly that compiles to standard Wasm binary or text formats. It provides a more familiar programming experience while maintaining a direct correspondence to WebAssembly concepts. It is validated against the official WebAssembly spec test suite and a differential, round-trip fuzzing harness, so conversions preserve meaning across all three formats. See <a href="#feature-support">Feature Support</a> for the proposals it covers.</p>
 <h2 id="why-wax"><a class="header" href="#why-wax">Why Wax?</a></h2>
 <p>WebAssembly Text format (WAT) uses S-expressions and stack-based operations, which can be verbose and unfamiliar to most programmers:</p>
 <pre><code class="language-wat">(func $add (param $x i32) (param $y i32) (result i32)
@@ -194,7 +194,8 @@
 </code></pre>
 <p>Both compile to identical WebAssembly bytecode.</p>
 <h2 id="installation"><a class="header" href="#installation">Installation</a></h2>
-<p><strong>Requirements:</strong> <a href="https://opam.ocaml.org/">Opam</a> (2.1+) and OCaml 5.0+.</p>
+<p><strong>Requirements:</strong> <a href="https://opam.ocaml.org/">Opam</a> (2.1+) and OCaml 4.14+ (5.0+
+to run the full test suite).</p>
 <pre><code class="language-sh"># Install dependencies
 opam install . --deps-only
 
@@ -250,11 +251,9 @@ fn factorial(n: i32) -&gt; i32 {
 </table>
 </div>
 <h2 id="type-checking"><a class="header" href="#type-checking">Type Checking</a></h2>
-<p>Enable type checking with the <code>-v</code> flag:</p>
-<pre><code class="language-sh">wax hello.wax -v -o hello.wasm
-</code></pre>
-<p>This catches type errors before generating output. For example, adding an <code>i32</code>
-and an <code>f64</code>:</p>
+<p>Compiling Wax to <code>.wat</code> or <code>.wasm</code> type-checks it automatically — type errors
+are reported before any output is produced. For example, adding an <code>i32</code> and an
+<code>f64</code>:</p>
 <pre><code>Error: This operator cannot be applied to operands of types i32 and f64.
  ──➤  hello.wax:3:5
 1 │ #[export = "add"]
@@ -263,12 +262,70 @@ and an <code>f64</code>:</p>
   ·     ^^^^^
 4 │ }
 </code></pre>
+<p>The <code>-v</code>/<code>--validate</code> flag adds checks that are off by default: it validates a
+same-format conversion (<code>.wax</code> → <code>.wax</code>) or a trusted <code>.wasm</code> input, and reports
+unused locals.</p>
 <h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
 <ul>
 <li><a href="#language-guide">Language Guide</a> — Variables, expressions, and control flow</li>
 <li><a href="#introduction-1">Correspondence</a> — How Wax maps to WebAssembly</li>
 <li><a href="#cli-reference">CLI Reference</a> — Complete command-line options</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="feature-support"><a class="header" href="#feature-support">Feature Support</a></h1>
+<p>Wax works across all three formats (Wax, WAT, WASM) and targets recent
+WebAssembly proposals — several of them <strong>on by default</strong> that most toolchains
+still gate. This page summarises what the toolchain accepts and produces.</p>
+<h2 id="on-by-default"><a class="header" href="#on-by-default">On by default</a></h2>
+<p>Wax fully supports the <strong>WebAssembly 3.0</strong> standard — garbage collection
+(WasmGC), exception handling (<code>try_table</code>), tail calls, multiple memories,
+64-bit memory (memory64), reference types, bulk memory, and SIMD (including
+relaxed SIMD).</p>
+<p>On top of that, it enables these further proposals by default:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Proposal</th><th>In Wax</th></tr>
+</thead>
+<tbody>
+<tr><td>Stack switching (typed continuations)</td><td><code>cont</code>, <code>suspend</code>, <code>resume</code>, …</td></tr>
+<tr><td>Threads / atomics</td><td>shared memory, atomic loads/stores/RMW, <code>atomic::fence()</code></td></tr>
+<tr><td>Wide arithmetic</td><td>128-bit integer ops (e.g. <code>i64::add128</code>)</td></tr>
+<tr><td>Branch hinting</td><td><code>#[likely]</code> / <code>#[unlikely]</code></td></tr>
+<tr><td>Custom page sizes</td><td><code>pagesize</code></td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="enabled-with--x"><a class="header" href="#enabled-with--x">Enabled with <code>-X</code></a></h2>
+<p>Off by default; turn one on with <code>-X NAME</code> (see the <a href="#cli-reference">CLI reference</a>):</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Feature</th><th>What it adds</th></tr>
+</thead>
+<tbody>
+<tr><td><code>custom-descriptors</code></td><td>exact reference types, descriptor structs, and the descriptor instructions (<code>descriptor</code> / <code>describes</code>)</td></tr>
+<tr><td><code>compact-import-section</code></td><td>groups same-module imports in the binary — a binary-encoding option, gated on output but always accepted on input</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="not-supported"><a class="header" href="#not-supported">Not supported</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Feature</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td>Legacy <code>delegate</code> / <code>rethrow</code></td><td>rejected on input. The rest of legacy exception handling — <code>try</code>/<code>catch</code>/<code>catch_all</code> — <em>is</em> supported: it has dedicated Wax syntax (<code>try { … } catch { … }</code>) and round-trips through the legacy binary opcodes</td></tr>
+<tr><td>Component Model</td><td></td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="a-deliberate-relaxation"><a class="header" href="#a-deliberate-relaxation">A deliberate relaxation</a></h3>
+<p>A tag may carry a <strong>result type</strong> — <code>tag yield(i32) -&gt; i32</code>. The MVP requires
+tags to have empty results; the stack-switching proposal lifts that (a suspended
+tag resumes with a value), so Wax permits it on purpose. See
+<a href="#stack-switching">Stack Switching</a>.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="language-guide"><a class="header" href="#language-guide">Language Guide</a></h1>
 <p>This guide covers Wax syntax and semantics. For the detailed mapping to WebAssembly instructions, see <a href="#introduction-1">Correspondence</a>.</p>
@@ -282,8 +339,8 @@ fn f() -&gt; i32 {
 }
 </code></pre>
 <p>Unlike the <code>#[...]</code> outer attributes that decorate a following field (such as
-<code>#[export]</code>), <code>#![...]</code> is an <em>inner</em> attribute: it applies to the enclosing
-module. A module may carry at most one name.</p>
+<code>#[export = "name"]</code>), <code>#![...]</code> is an <em>inner</em> attribute: it applies to the
+enclosing module. A module may carry at most one name.</p>
 <p>(This maps to the WebAssembly module name stored in the <code>name</code> custom section —
 the <code>$name</code> in a WAT <code>(module $name …)</code>; see
 <a href="#module-name-1">Module Fields</a>.)</p>
@@ -574,7 +631,7 @@ has no enclosing stack to draw from, so it cannot take parameters. To combine a
 parameterized block’s result with other operands, keep the block at statement
 level and pick up its result with a <a href="#holes">hole</a>:</p>
 <pre><code class="language-wax">x;                        // leaves an i32 on the stack
-do (i32) -&gt; i32 { … };    // a statement: consumes that i32, leaves an i32
+do (i32) -&gt; i32 { … }     // a statement: consumes that i32, leaves an i32
 _ + 1;                    // the hole plugs in the block's result
 </code></pre>
 <p>Blocks can be labelled and used as branch targets; see
@@ -833,6 +890,31 @@ fn init() {
 <p>Call through a function reference:</p>
 <pre><code class="language-wax">(func_ref as &amp;?callback)(arg)
 </code></pre>
+<h2 id="imports-and-exports"><a class="header" href="#imports-and-exports">Imports and Exports</a></h2>
+<p>A module talks to its host through imports and exports, both written as
+attributes on the field.</p>
+<p><strong>Export</strong> a definition under a name with <code>#[export = "name"]</code>. It applies to
+functions, globals, memories, tables, and tags, and a field may carry several:</p>
+<pre><code class="language-wax check">#[export = "add"]
+fn add(x: i32, y: i32) -&gt; i32 { x + y; }
+
+#[export = "PI"]
+const PI: f64 = 3.14159;
+</code></pre>
+<p><strong>Import</strong> a field from the host with <code>#[import = ("module", "name")]</code>. An
+imported field has no body — a function is declared with just its signature and
+a trailing <code>;</code>, and a global with its type:</p>
+<pre><code class="language-wax check">#[import = ("env", "log")]
+fn log(x: i32);
+
+#[import = ("env", "base")]
+const base: i32;
+
+#[export = "run"]
+fn run() { log(base); }
+</code></pre>
+<p>The same field can be both imported and re-exported by giving it both
+attributes.</p>
 <h2 id="references"><a class="header" href="#references">References</a></h2>
 <h3 id="reference-types"><a class="header" href="#reference-types">Reference Types</a></h3>
 <pre><code class="language-wax">&amp;type           // Non-nullable reference
@@ -906,6 +988,36 @@ e.g. <code>let xs: &amp;bytes = [0; 100];</code>.</p>
 arr[i] = val;               // Set element (if mutable)
 arr.length()                // Array length
 </code></pre>
+<h2 id="recursive-and-subtyped-types"><a class="header" href="#recursive-and-subtyped-types">Recursive and Subtyped Types</a></h2>
+<p>Struct and array types can refer to one another, form subtype hierarchies, and
+be left open for extension — the WebAssembly GC type features.</p>
+<h3 id="recursive-groups"><a class="header" href="#recursive-groups">Recursive groups</a></h3>
+<p>Types that reference each other are declared together in a <code>rec { … }</code> group, so
+each name is in scope for the others:</p>
+<pre><code class="language-wax check">rec {
+    type expr = { op: i32, args: &amp;?args };
+    type args = [mut &amp;expr];
+}
+</code></pre>
+<h3 id="subtyping"><a class="header" href="#subtyping">Subtyping</a></h3>
+<p><code>type sub : super</code> declares <code>sub</code> as a subtype of <code>super</code>: it repeats the
+supertype’s fields in order and may add more, and a <code>&amp;sub</code> is accepted wherever
+a <code>&amp;super</code> is expected. Types are <em>final</em> by default; a type must be declared
+<code>open</code> to be extended.</p>
+<pre><code class="language-wax check">type shape = open { kind: i32 };
+type circle : shape = { kind: i32, radius: f64 };
+
+fn kind_of(s: &amp;shape) -&gt; i32 { s.kind; }   // also accepts a &amp;circle
+</code></pre>
+<h3 id="descriptors-experimental"><a class="header" href="#descriptors-experimental">Descriptors (experimental)</a></h3>
+<p>Behind <code>-X custom-descriptors</code>, a struct type can carry a runtime <em>descriptor</em> —
+another type it points to — via the <code>descriptor</code> / <code>describes</code> clauses, declared
+together in a <code>rec</code> group:</p>
+<pre><code class="language-wax check">rec {
+    type obj = descriptor obj_desc { x: i32 };
+    type obj_desc = describes obj { };
+}
+</code></pre>
 <h2 id="strings"><a class="header" href="#strings">Strings</a></h2>
 <p>A string literal builds a new array, one element per byte of the (UTF-8) text.
 By default its type is <code>[mut i8]</code>, and it lowers to an <code>array.new_fixed</code>:</p>
@@ -933,6 +1045,27 @@ the <code>array.new_fixed</code>, which is recovered as a string literal only wh
 bytes form a <em>reasonable</em> UTF-8 string — valid UTF-8 with no control characters
 other than tab, newline, and carriage return. Anything else (arbitrary binary
 data) decompiles as an ordinary <a href="#arrays">array literal</a> instead.</p>
+<h2 id="simd-v128"><a class="header" href="#simd-v128">SIMD (v128)</a></h2>
+<p>The 128-bit vector type is <code>v128</code>. Its operations are written as method
+intrinsics with the lane shape baked into the name: the Wax name is the
+WebAssembly mnemonic with the leading shape moved to the end, so <code>i32x4.add</code>
+becomes <code>add_i32x4</code> and <code>f32x4.splat</code> becomes <code>splat_f32x4</code>. Signed/unsigned
+variants keep their <code>_s</code>/<code>_u</code> suffix, and constant lane immediates (lane and
+shuffle indices) come first in the argument list.</p>
+<pre><code class="language-wax check">fn scale(v: v128, k: i32) -&gt; v128 {
+    v.add_i32x4(k.splat_i32x4());     // i32x4.add of v and (i32x4.splat k)
+}
+
+fn lane0(v: v128) -&gt; i32 {
+    v.extract_lane_i32x4(0);          // extract lane 0
+}
+</code></pre>
+<p>Constants are <code>v128::</code> free functions, one argument per lane:</p>
+<pre><code class="language-wax check">const ones: v128 = v128::const_i32x4(1, 1, 1, 1);
+</code></pre>
+<p>See <a href="#simd-vector-instructions">Instructions › SIMD</a> for the full
+mnemonic mapping (<code>extract_lane</code>/<code>replace_lane</code>/<code>shuffle</code>, comparisons, shifts,
+and the whole-vector <code>*_v128</code> operations).</p>
 <h2 id="memories"><a class="header" href="#memories">Memories</a></h2>
 <h3 id="declaration"><a class="header" href="#declaration">Declaration</a></h3>
 <pre><code class="language-wax">memory mem0: i32 [1, 1000];     // address type i32, min 1 page, max 1000
@@ -1005,6 +1138,11 @@ is required — write <code>()</code> for no payload:</p>
 tag overflow(i32);          // carries an i32
 tag pair(i32, f64);         // carries several values
 </code></pre>
+<p>A tag may also declare a <strong>result type</strong>, written like a function signature.
+This is used by <a href="#stack-switching">stack switching</a>: resuming a suspended
+continuation hands this value back to the <code>suspend</code> expression.</p>
+<pre><code class="language-wax">tag yield(i32) -&gt; i32;      // carries an i32; resumes with an i32
+</code></pre>
 <h3 id="throw"><a class="header" href="#throw">Throw</a></h3>
 <p><code>throw</code> raises a tag together with its payload:</p>
 <pre><code class="language-wax">throw overflow 42;
@@ -1032,8 +1170,37 @@ mapping directly to WebAssembly’s <code>try_table</code>:</p>
 try { might_throw(); } catch [overflow &amp; -&gt; 'h]  // also deliver the exnref
 try { might_throw(); } catch [_ -&gt; 'h]           // catch any exception
 </code></pre>
-<p>The target label receives the payload (and, with <code>&amp;</code>, the <code>exnref</code>), so the
-labelled block’s type must match what it is handed.</p>
+<p>The target label receives the payload (and, with <code>&amp;</code>, the exception reference,
+of type <code>&amp;exn</code> — or <code>&amp;?exn</code> for the nullable form), so the labelled block’s type
+must match what it is handed.</p>
+<h2 id="stack-switching"><a class="header" href="#stack-switching">Stack Switching</a></h2>
+<p><em>Stack switching</em> (the WebAssembly typed-continuations proposal) lets a
+computation suspend itself, yield control to a scheduler, and later be resumed.
+A <strong>continuation type</strong> wraps a function type with <code>cont</code>:</p>
+<pre><code class="language-wax">type task = fn(i32) -&gt; i32;
+type k = cont task;
+</code></pre>
+<p>A <a href="#tags">tag with a result type</a> is the suspend/resume channel: <code>suspend</code>
+passes the tag’s payload out and evaluates to its result once resumed.</p>
+<pre><code class="language-wax">tag yield(i32) -&gt; i32;
+
+fn worker(x: i32) -&gt; i32 {
+    suspend yield(x);          // yield `x`; the result is what resumes it
+}
+</code></pre>
+<p>Continuations are created and driven with <code>cont_new</code>, <code>cont_bind</code>, <code>resume</code>,
+<code>resume_throw</code>, and <code>resume_throw_ref</code>. <code>cont</code> wraps a <em>named</em> function type, so
+each continuation shape is a <code>type</code>. <code>resume</code> takes a list of handlers mapping a
+suspended tag to a label (empty here):</p>
+<pre><code class="language-wax">type unit_task = fn() -&gt; i32;
+type k0 = cont unit_task;
+
+fn spawn() -&gt; &amp;k { cont_new k (worker); }          // wrap `worker` (a task)
+fn prime(c: &amp;k) -&gt; &amp;k0 { cont_bind k k0 (7, c); }  // bind the argument
+fn go(c: &amp;k0) -&gt; i32 { resume k0 [] (c); }         // run until it suspends
+</code></pre>
+<p>The abstract continuation heap types are written <code>&amp;cont</code> and <code>&amp;nocont</code> (with
+<code>&amp;?cont</code> for the nullable form).</p>
 <h2 id="holes"><a class="header" href="#holes">Holes</a></h2>
 <p>A hole (<code>_</code>) is a placeholder for a value that an <strong>earlier statement in the
 same sequence</strong> has left on WebAssembly’s implicit operand stack. It is the
@@ -1547,7 +1714,7 @@ fn sum_list(head: &amp;?list) -&gt; i32 {
     n.value + sum_list(n.next);
 }
 </code></pre>
-<h2 id="imports-and-exports"><a class="header" href="#imports-and-exports">Imports and Exports</a></h2>
+<h2 id="imports-and-exports-1"><a class="header" href="#imports-and-exports-1">Imports and Exports</a></h2>
 <h3 id="wax-15"><a class="header" href="#wax-15">Wax</a></h3>
 <pre><code class="language-wax">// Import a function from the host environment
 #[import = ("env", "log")]
@@ -2102,6 +2269,11 @@ its own assignment.</p>
 </tbody>
 </table>
 </div>
+<p>The rows above are the raw instructions. Two common <em>shapes</em> built from them are
+recovered as higher-level constructs on the way back to Wax: a <code>br_table</code> in the
+conventional dense void-switch shape becomes a <a href="#dispatch-and-match"><code>dispatch</code></a>,
+and a <code>br_on_cast</code>/<code>br_on_null</code> ladder becomes a <a href="#dispatch-and-match"><code>match</code></a>
+(both below).</p>
 <h3 id="block-labels-and-types"><a class="header" href="#block-labels-and-types">Block Labels and Types</a></h3>
 <p>Blocks, loops, and ifs can be labeled and typed.
 Labels are identifiers starting with <code>'</code> followed by a colon.</p>
@@ -2134,6 +2306,31 @@ in the <code>metadata.code.branch_hint</code> custom section; no feature flag is
 <code>br_on_non_null</code>, <code>br_on_cast</code>, and <code>br_on_cast_fail</code>. In WAT the same hint is
 the <code>(@metadata.code.branch_hint "\00"|"\01")</code> annotation preceding the branch
 (<code>"\01"</code> = likely, <code>"\00"</code> = unlikely).</p>
+<h3 id="dispatch-and-match"><a class="header" href="#dispatch-and-match">Dispatch and Match</a></h3>
+<p>Two Wax control constructs have no instruction of their own: they are readable
+spellings of a lower-level <em>shape</em>, so they lower to that shape and are
+<em>recovered</em> from it on decompilation (both round-trip through the binary). See
+the language guide for the surface syntax — <a href="#dispatch"><code>dispatch</code></a>
+and <a href="#match"><code>match</code></a>.</p>
+<p><code>dispatch</code> is a jump table. It lowers to one nested block per case with a
+<code>br_table</code> in the innermost block and the case bodies (which fall through) after
+their blocks; a <code>br_table</code> matching that dense void-switch shape decompiles back
+to <code>dispatch</code>:</p>
+<pre><code>(block $big (block $b (block $a           dispatch x ['zero 'one else 'big] {
+  (br_table $a $b $big (local.get $x)))     'big:  { … }
+  … 'one body …) … 'big body …)             'one:  { … }
+                                            'zero: { … } }
+</code></pre>
+<p><code>match</code> is a multi-way type test. It lowers to a ladder of blocks threading the
+scrutinee through <code>br_on_cast</code> (and <code>br_on_null</code> for a <code>null</code> arm), each branch
+delivering the narrowed value out to its arm; such a ladder decompiles back to
+<code>match</code>:</p>
+<pre><code>(block $default (block $arm_1                match v {
+  (block $arm (result (ref $point))            p: &amp;point =&gt; { … }
+    (br_on_null $arm_1                          null      =&gt; { … }
+      (br_on_cast $arm eqref (ref $point) …)))  _         =&gt; { … } }
+  … arm body …) … default …)
+</code></pre>
 <h2 id="reference-instructions"><a class="header" href="#reference-instructions">Reference Instructions</a></h2>
 <div class="table-wrapper">
 <table>
@@ -2165,24 +2362,31 @@ the <code>(@metadata.code.branch_hint "\00"|"\01")</code> annotation preceding t
 <li><strong><code>i32_val as &amp;extern</code></strong> boxes the <code>i32</code> with <code>ref.i31</code> before <code>extern.convert_any</code>.</li>
 </ul>
 <h2 id="aggregate-instructions"><a class="header" href="#aggregate-instructions">Aggregate Instructions</a></h2>
+<p>A struct or array literal takes an optional type prefix — <code>{t| … }</code> for a
+struct, <code>[t| … ]</code> for an array — but it is omitted whenever the literal’s type
+can be inferred from context (an assignment, a return, a call argument), which
+is the common case shown below. Write the prefix only when the type is
+ambiguous. The <code>{descriptor(d)| … }</code> forms are different: <code>descriptor(d)</code>
+supplies the runtime descriptor and is part of the construction, not a prefix
+that can be dropped.</p>
 <div class="table-wrapper">
 <table>
 <thead>
 <tr><th>Wasm</th><th>Wax</th></tr>
 </thead>
 <tbody>
-<tr><td><code>struct.new $t</code></td><td><code>{t| field: val, ... }</code></td></tr>
-<tr><td><code>struct.new_default $t</code></td><td><code>{t| .. }</code></td></tr>
+<tr><td><code>struct.new $t</code></td><td><code>{ field: val, ... }</code></td></tr>
+<tr><td><code>struct.new_default $t</code></td><td><code>{ .. }</code></td></tr>
 <tr><td><code>struct.new_desc $t</code></td><td><code>{descriptor(d)| field: val, ... }</code></td></tr>
 <tr><td><code>struct.new_default_desc $t</code></td><td><code>{descriptor(d)| .. }</code></td></tr>
 <tr><td><code>struct.get $t $f</code></td><td><code>val.field</code></td></tr>
 <tr><td><code>struct.set $t $f</code></td><td><code>val.field = new_val</code></td></tr>
 <tr><td><code>ref.get_desc $t</code></td><td><code>val.descriptor</code></td></tr>
-<tr><td><code>array.new $t</code></td><td><code>[t| val; len]</code></td></tr>
-<tr><td><code>array.new_default $t</code></td><td><code>[t| ..; len]</code></td></tr>
-<tr><td><code>array.new_fixed $t</code></td><td><code>[t| val, ...]</code></td></tr>
-<tr><td><code>array.new_data $t $d</code></td><td><code>[t| d @ offset; count]</code></td></tr>
-<tr><td><code>array.new_elem $t $e</code></td><td><code>[t| e @ offset; count]</code></td></tr>
+<tr><td><code>array.new $t</code></td><td><code>[ val; len ]</code></td></tr>
+<tr><td><code>array.new_default $t</code></td><td><code>[ ..; len ]</code></td></tr>
+<tr><td><code>array.new_fixed $t</code></td><td><code>[ val, ... ]</code></td></tr>
+<tr><td><code>array.new_data $t $d</code></td><td><code>[ d @ offset; count ]</code></td></tr>
+<tr><td><code>array.new_elem $t $e</code></td><td><code>[ e @ offset; count ]</code></td></tr>
 <tr><td><code>array.init_data $t $d</code></td><td><code>arr.init(d, dest, src, count)</code></td></tr>
 <tr><td><code>array.init_elem $t $e</code></td><td><code>arr.init(e, dest, src, count)</code></td></tr>
 <tr><td><code>array.get $t</code></td><td><code>arr[idx]</code></td></tr>
@@ -2269,13 +2473,13 @@ m.load32(p, 1, 16);   // i32.load align=1 offset=16
 <tbody>
 <tr><td><code>table.get $t</code></td><td><code>t[i]</code></td></tr>
 <tr><td><code>table.set $t</code></td><td><code>t[i] = v</code></td></tr>
-<tr><td><code>call_indirect $t (type $ft)</code></td><td><code>(t[i] as &amp;ft)(args)</code></td></tr>
-<tr><td><code>call_indirect $t (result i32)</code></td><td><code>(t[i] as &amp;fn() -&gt; i32)(args)</code></td></tr>
-<tr><td><code>return_call_indirect $t (type $ft)</code></td><td><code>return (t[i] as &amp;ft)(args)</code></td></tr>
+<tr><td><code>call_indirect $t (type $ft)</code></td><td><code>(t[i] as &amp;?ft)(args)</code></td></tr>
+<tr><td><code>call_indirect $t (result i32)</code></td><td><code>(t[i] as &amp;?fn() -&gt; i32)(args)</code></td></tr>
+<tr><td><code>return_call_indirect $t (type $ft)</code></td><td><code>return (t[i] as &amp;?ft)(args)</code></td></tr>
 </tbody>
 </table>
 </div>
-<p><code>call_indirect</code> is reconstructed from this pattern on conversion to WAT/WASM, so it round-trips. The cast target names the callee’s function type: either a defined type (<code>&amp;ft</code>) or an inline one written <code>&amp;fn(params) -&gt; results</code> (used when the WAT type is anonymous). When the table’s element type is already the concrete function type <code>&amp;ft</code>, the cast may be omitted (<code>t[i](args)</code>).</p>
+<p><code>call_indirect</code> is reconstructed from this pattern on conversion to WAT/WASM, so it round-trips. The cast target names the callee’s function type — a defined type (<code>ft</code>) or an inline one written <code>fn(params) -&gt; results</code> (used when the WAT type is anonymous) — and matches the table’s element type: for a <code>funcref</code> table (the usual case) it is the nullable <code>&amp;?ft</code>, as shown. When the element type is already a non-null <code>&amp;ft</code>, the cast may be omitted (<code>t[i](args)</code>).</p>
 <p>The other table operations are methods on the table (an element segment is named directly):</p>
 <div class="table-wrapper">
 <table>
@@ -2301,7 +2505,7 @@ m.load32(p, 1, 16);   // i32.load align=1 offset=16
 <tr><th>Wasm</th><th>Wax</th></tr>
 </thead>
 <tbody>
-<tr><td><code>throw $tag</code></td><td><code>throw tag(args)</code></td></tr>
+<tr><td><code>throw $tag</code></td><td><code>throw tag</code> (no payload), <code>throw tag x</code> (one), <code>throw tag (x, y)</code> (several)</td></tr>
 <tr><td><code>throw_ref</code></td><td><code>throw_ref</code></td></tr>
 <tr><td><code>try_table ... catch $tag $l ...</code></td><td><code>try { ... } catch [ tag -&gt; 'l, ... ]</code></td></tr>
 <tr><td><code>try_table ... catch_ref $tag $l ...</code></td><td><code>try { ... } catch [ tag &amp; -&gt; 'l, ... ]</code></td></tr>
@@ -2652,7 +2856,10 @@ funcs[i] = g;
 
 (funcs[i] as &amp;cmp)(x, y)        // call_indirect $funcs (type $cmp)
 </code></pre>
-<p>Other table-management instructions (<code>table.size</code>/<code>grow</code>/<code>fill</code>/<code>copy</code>/<code>init</code>) do not yet have dedicated syntax.</p>
+<p>The other table-management instructions have method syntax too: <code>t.size()</code>,
+<code>t.grow(init, n)</code>, <code>t.fill(dst, val, n)</code>, <code>t.copy(dst, src, n)</code>,
+<code>t.init(seg, dst, src, n)</code>, and <code>seg.drop()</code> on an element segment (see
+<a href="#instructions">Instructions</a>).</p>
 <h2 id="element-segments"><a class="header" href="#element-segments">Element Segments</a></h2>
 <p>An element segment is declared with <code>elem</code>, its element reference type, and a bracketed list of constant element expressions. A bare <code>elem</code> is passive; <code>@ table[offset]</code> makes it an active segment that initializes a table:</p>
 <pre><code class="language-wax">elem dispatch: &amp;?func = [handler_a, handler_b, handler_c];   // passive
@@ -2702,12 +2909,15 @@ fn compute(x: i32) -&gt; i32 {
 <h1 id="cli-reference"><a class="header" href="#cli-reference">CLI Reference</a></h1>
 <p>The <code>wax</code> binary is the primary interface for the Wax toolchain. It supports conversion between Wax, WebAssembly Text (WAT), and WebAssembly Binary (Wasm) formats.</p>
 <h2 id="usage"><a class="header" href="#usage">Usage</a></h2>
-<pre><code class="language-sh">wax [OPTIONS] [INPUT]        # convert (the default command)
-wax format [OPTIONS] FILE…   # reformat files
-wax check [OPTIONS] FILE…    # validate files
+<pre><code class="language-sh">wax [OPTIONS] [INPUT]         # convert (the default command)
+wax convert [OPTIONS] [INPUT] # the same, named explicitly
+wax format [OPTIONS] FILE…    # reformat files
+wax check [OPTIONS] FILE…     # validate files
 </code></pre>
-<p>By default <code>wax</code> converts between formats. The <code>format</code> subcommand reformats
-files (see <a href="#formatting">Formatting</a>) and <code>check</code> validates them (see
+<p>By default <code>wax</code> converts between formats; this command is also available under
+its explicit name, <code>wax convert</code> (useful when an input filename could be
+mistaken for a subcommand). The <code>format</code> subcommand reformats files (see
+<a href="#formatting">Formatting</a>) and <code>check</code> validates them (see
 <a href="#checking">Checking</a>).</p>
 <h2 id="positional-arguments"><a class="header" href="#positional-arguments">Positional Arguments</a></h2>
 <ul>
@@ -2956,6 +3166,8 @@ conditional-compilation variable, as for <a href="#options"><code>convert</code>
 conditionals are specialized before validation. A full set validates one
 configuration; a partial set leaves the remaining conditionals for the
 path-sensitive check to explore. Repeatable.</li>
+<li><strong><code>-X</code></strong> <em>NAME[=on|off]</em>, <strong><code>--feature</code></strong> <em>NAME[=on|off]</em> — enable or disable
+an optional proposal, as for <a href="#options"><code>convert</code></a>. Repeatable.</li>
 <li><strong><code>-W</code></strong> <em>NAME=LEVEL</em>, <strong><code>--warn</code></strong> <em>NAME=LEVEL</em> — set a warning’s level, as
 above.</li>
 <li><strong><code>--color</code></strong> <em>WHEN</em> — as above.</li>

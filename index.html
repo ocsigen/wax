@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ec936ab6.js";
+            window.path_to_searchindex_js = "searchindex-ba3e703f.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-f031991a.js"></script>
+        <script src="toc-0d649137.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -178,7 +178,7 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
-<p>Wax is a Rust-like syntax for WebAssembly that compiles to standard Wasm binary or text formats. It provides a more familiar programming experience while maintaining a direct correspondence to WebAssembly concepts.</p>
+<p>Wax is a Rust-like syntax for WebAssembly that compiles to standard Wasm binary or text formats. It provides a more familiar programming experience while maintaining a direct correspondence to WebAssembly concepts. It is validated against the official WebAssembly spec test suite and a differential, round-trip fuzzing harness, so conversions preserve meaning across all three formats. See <a href="./features.html">Feature Support</a> for the proposals it covers.</p>
 <h2 id="why-wax"><a class="header" href="#why-wax">Why Wax?</a></h2>
 <p>WebAssembly Text format (WAT) uses S-expressions and stack-based operations, which can be verbose and unfamiliar to most programmers:</p>
 <pre><code class="language-wat">(func $add (param $x i32) (param $y i32) (result i32)
@@ -193,7 +193,8 @@
 </code></pre>
 <p>Both compile to identical WebAssembly bytecode.</p>
 <h2 id="installation"><a class="header" href="#installation">Installation</a></h2>
-<p><strong>Requirements:</strong> <a href="https://opam.ocaml.org/">Opam</a> (2.1+) and OCaml 5.0+.</p>
+<p><strong>Requirements:</strong> <a href="https://opam.ocaml.org/">Opam</a> (2.1+) and OCaml 4.14+ (5.0+
+to run the full test suite).</p>
 <pre><code class="language-sh"># Install dependencies
 opam install . --deps-only
 
@@ -249,11 +250,9 @@ fn factorial(n: i32) -&gt; i32 {
 </table>
 </div>
 <h2 id="type-checking"><a class="header" href="#type-checking">Type Checking</a></h2>
-<p>Enable type checking with the <code>-v</code> flag:</p>
-<pre><code class="language-sh">wax hello.wax -v -o hello.wasm
-</code></pre>
-<p>This catches type errors before generating output. For example, adding an <code>i32</code>
-and an <code>f64</code>:</p>
+<p>Compiling Wax to <code>.wat</code> or <code>.wasm</code> type-checks it automatically — type errors
+are reported before any output is produced. For example, adding an <code>i32</code> and an
+<code>f64</code>:</p>
 <pre><code>Error: This operator cannot be applied to operands of types i32 and f64.
  ──➤  hello.wax:3:5
 1 │ #[export = "add"]
@@ -262,6 +261,9 @@ and an <code>f64</code>:</p>
   ·     ^^^^^
 4 │ }
 </code></pre>
+<p>The <code>-v</code>/<code>--validate</code> flag adds checks that are off by default: it validates a
+same-format conversion (<code>.wax</code> → <code>.wax</code>) or a trusted <code>.wasm</code> input, and reports
+unused locals.</p>
 <h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
 <ul>
 <li><a href="./language.html">Language Guide</a> — Variables, expressions, and control flow</li>
@@ -274,7 +276,7 @@ and an <code>f64</code>:</p>
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
 
-                            <a rel="next prefetch" href="language.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="features.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -285,7 +287,7 @@ and an <code>f64</code>:</p>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
 
-                    <a rel="next prefetch" href="language.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="features.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

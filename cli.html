@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ec936ab6.js";
+            window.path_to_searchindex_js = "searchindex-ba3e703f.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-f031991a.js"></script>
+        <script src="toc-0d649137.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -180,12 +180,15 @@
                         <h1 id="cli-reference"><a class="header" href="#cli-reference">CLI Reference</a></h1>
 <p>The <code>wax</code> binary is the primary interface for the Wax toolchain. It supports conversion between Wax, WebAssembly Text (WAT), and WebAssembly Binary (Wasm) formats.</p>
 <h2 id="usage"><a class="header" href="#usage">Usage</a></h2>
-<pre><code class="language-sh">wax [OPTIONS] [INPUT]        # convert (the default command)
-wax format [OPTIONS] FILE…   # reformat files
-wax check [OPTIONS] FILE…    # validate files
+<pre><code class="language-sh">wax [OPTIONS] [INPUT]         # convert (the default command)
+wax convert [OPTIONS] [INPUT] # the same, named explicitly
+wax format [OPTIONS] FILE…    # reformat files
+wax check [OPTIONS] FILE…     # validate files
 </code></pre>
-<p>By default <code>wax</code> converts between formats. The <code>format</code> subcommand reformats
-files (see <a href="#formatting">Formatting</a>) and <code>check</code> validates them (see
+<p>By default <code>wax</code> converts between formats; this command is also available under
+its explicit name, <code>wax convert</code> (useful when an input filename could be
+mistaken for a subcommand). The <code>format</code> subcommand reformats files (see
+<a href="#formatting">Formatting</a>) and <code>check</code> validates them (see
 <a href="#checking">Checking</a>).</p>
 <h2 id="positional-arguments"><a class="header" href="#positional-arguments">Positional Arguments</a></h2>
 <ul>
@@ -434,6 +437,8 @@ conditional-compilation variable, as for <a href="#options"><code>convert</code>
 conditionals are specialized before validation. A full set validates one
 configuration; a partial set leaves the remaining conditionals for the
 path-sensitive check to explore. Repeatable.</li>
+<li><strong><code>-X</code></strong> <em>NAME[=on|off]</em>, <strong><code>--feature</code></strong> <em>NAME[=on|off]</em> — enable or disable
+an optional proposal, as for <a href="#options"><code>convert</code></a>. Repeatable.</li>
 <li><strong><code>-W</code></strong> <em>NAME=LEVEL</em>, <strong><code>--warn</code></strong> <em>NAME=LEVEL</em> — set a warning’s level, as
 above.</li>
 <li><strong><code>--color</code></strong> <em>WHEN</em> — as above.</li>

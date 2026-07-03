@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ec936ab6.js";
+            window.path_to_searchindex_js = "../searchindex-ba3e703f.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-f031991a.js"></script>
+        <script src="../toc-0d649137.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -387,7 +387,10 @@ funcs[i] = g;
 
 (funcs[i] as &amp;cmp)(x, y)        // call_indirect $funcs (type $cmp)
 </code></pre>
-<p>Other table-management instructions (<code>table.size</code>/<code>grow</code>/<code>fill</code>/<code>copy</code>/<code>init</code>) do not yet have dedicated syntax.</p>
+<p>The other table-management instructions have method syntax too: <code>t.size()</code>,
+<code>t.grow(init, n)</code>, <code>t.fill(dst, val, n)</code>, <code>t.copy(dst, src, n)</code>,
+<code>t.init(seg, dst, src, n)</code>, and <code>seg.drop()</code> on an element segment (see
+<a href="instructions.html">Instructions</a>).</p>
 <h2 id="element-segments"><a class="header" href="#element-segments">Element Segments</a></h2>
 <p>An element segment is declared with <code>elem</code>, its element reference type, and a bracketed list of constant element expressions. A bare <code>elem</code> is passive; <code>@ table[offset]</code> makes it an active segment that initializes a table:</p>
 <pre><code class="language-wax">elem dispatch: &amp;?func = [handler_a, handler_b, handler_c];   // passive

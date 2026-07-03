@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ec936ab6.js";
+            window.path_to_searchindex_js = "../searchindex-ba3e703f.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-f031991a.js"></script>
+        <script src="../toc-0d649137.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -373,6 +373,11 @@ its own assignment.</p>
 </tbody>
 </table>
 </div>
+<p>The rows above are the raw instructions. Two common <em>shapes</em> built from them are
+recovered as higher-level constructs on the way back to Wax: a <code>br_table</code> in the
+conventional dense void-switch shape becomes a <a href="#dispatch-and-match"><code>dispatch</code></a>,
+and a <code>br_on_cast</code>/<code>br_on_null</code> ladder becomes a <a href="#dispatch-and-match"><code>match</code></a>
+(both below).</p>
 <h3 id="block-labels-and-types"><a class="header" href="#block-labels-and-types">Block Labels and Types</a></h3>
 <p>Blocks, loops, and ifs can be labeled and typed.
 Labels are identifiers starting with <code>'</code> followed by a colon.</p>
@@ -405,6 +410,31 @@ in the <code>metadata.code.branch_hint</code> custom section; no feature flag is
 <code>br_on_non_null</code>, <code>br_on_cast</code>, and <code>br_on_cast_fail</code>. In WAT the same hint is
 the <code>(@metadata.code.branch_hint "\00"|"\01")</code> annotation preceding the branch
 (<code>"\01"</code> = likely, <code>"\00"</code> = unlikely).</p>
+<h3 id="dispatch-and-match"><a class="header" href="#dispatch-and-match">Dispatch and Match</a></h3>
+<p>Two Wax control constructs have no instruction of their own: they are readable
+spellings of a lower-level <em>shape</em>, so they lower to that shape and are
+<em>recovered</em> from it on decompilation (both round-trip through the binary). See
+the language guide for the surface syntax — <a href="../language.html#dispatch"><code>dispatch</code></a>
+and <a href="../language.html#match"><code>match</code></a>.</p>
+<p><code>dispatch</code> is a jump table. It lowers to one nested block per case with a
+<code>br_table</code> in the innermost block and the case bodies (which fall through) after
+their blocks; a <code>br_table</code> matching that dense void-switch shape decompiles back
+to <code>dispatch</code>:</p>
+<pre><code>(block $big (block $b (block $a           dispatch x ['zero 'one else 'big] {
+  (br_table $a $b $big (local.get $x)))     'big:  { … }
+  … 'one body …) … 'big body …)             'one:  { … }
+                                            'zero: { … } }
+</code></pre>
+<p><code>match</code> is a multi-way type test. It lowers to a ladder of blocks threading the
+scrutinee through <code>br_on_cast</code> (and <code>br_on_null</code> for a <code>null</code> arm), each branch
+delivering the narrowed value out to its arm; such a ladder decompiles back to
+<code>match</code>:</p>
+<pre><code>(block $default (block $arm_1                match v {
+  (block $arm (result (ref $point))            p: &amp;point =&gt; { … }
+    (br_on_null $arm_1                          null      =&gt; { … }
+      (br_on_cast $arm eqref (ref $point) …)))  _         =&gt; { … } }
+  … arm body …) … default …)
+</code></pre>
 <h2 id="reference-instructions"><a class="header" href="#reference-instructions">Reference Instructions</a></h2>
 <div class="table-wrapper">
 <table>
@@ -436,24 +466,31 @@ the <code>(@metadata.code.branch_hint "\00"|"\01")</code> annotation preceding t
 <li><strong><code>i32_val as &amp;extern</code></strong> boxes the <code>i32</code> with <code>ref.i31</code> before <code>extern.convert_any</code>.</li>
 </ul>
 <h2 id="aggregate-instructions"><a class="header" href="#aggregate-instructions">Aggregate Instructions</a></h2>
+<p>A struct or array literal takes an optional type prefix — <code>{t| … }</code> for a
+struct, <code>[t| … ]</code> for an array — but it is omitted whenever the literal’s type
+can be inferred from context (an assignment, a return, a call argument), which
+is the common case shown below. Write the prefix only when the type is
+ambiguous. The <code>{descriptor(d)| … }</code> forms are different: <code>descriptor(d)</code>
+supplies the runtime descriptor and is part of the construction, not a prefix
+that can be dropped.</p>
 <div class="table-wrapper">
 <table>
 <thead>
 <tr><th>Wasm</th><th>Wax</th></tr>
 </thead>
 <tbody>
-<tr><td><code>struct.new $t</code></td><td><code>{t| field: val, ... }</code></td></tr>
-<tr><td><code>struct.new_default $t</code></td><td><code>{t| .. }</code></td></tr>
+<tr><td><code>struct.new $t</code></td><td><code>{ field: val, ... }</code></td></tr>
+<tr><td><code>struct.new_default $t</code></td><td><code>{ .. }</code></td></tr>
 <tr><td><code>struct.new_desc $t</code></td><td><code>{descriptor(d)| field: val, ... }</code></td></tr>
 <tr><td><code>struct.new_default_desc $t</code></td><td><code>{descriptor(d)| .. }</code></td></tr>
 <tr><td><code>struct.get $t $f</code></td><td><code>val.field</code></td></tr>
 <tr><td><code>struct.set $t $f</code></td><td><code>val.field = new_val</code></td></tr>
 <tr><td><code>ref.get_desc $t</code></td><td><code>val.descriptor</code></td></tr>
-<tr><td><code>array.new $t</code></td><td><code>[t| val; len]</code></td></tr>
-<tr><td><code>array.new_default $t</code></td><td><code>[t| ..; len]</code></td></tr>
-<tr><td><code>array.new_fixed $t</code></td><td><code>[t| val, ...]</code></td></tr>
-<tr><td><code>array.new_data $t $d</code></td><td><code>[t| d @ offset; count]</code></td></tr>
-<tr><td><code>array.new_elem $t $e</code></td><td><code>[t| e @ offset; count]</code></td></tr>
+<tr><td><code>array.new $t</code></td><td><code>[ val; len ]</code></td></tr>
+<tr><td><code>array.new_default $t</code></td><td><code>[ ..; len ]</code></td></tr>
+<tr><td><code>array.new_fixed $t</code></td><td><code>[ val, ... ]</code></td></tr>
+<tr><td><code>array.new_data $t $d</code></td><td><code>[ d @ offset; count ]</code></td></tr>
+<tr><td><code>array.new_elem $t $e</code></td><td><code>[ e @ offset; count ]</code></td></tr>
 <tr><td><code>array.init_data $t $d</code></td><td><code>arr.init(d, dest, src, count)</code></td></tr>
 <tr><td><code>array.init_elem $t $e</code></td><td><code>arr.init(e, dest, src, count)</code></td></tr>
 <tr><td><code>array.get $t</code></td><td><code>arr[idx]</code></td></tr>
@@ -540,13 +577,13 @@ m.load32(p, 1, 16);   // i32.load align=1 offset=16
 <tbody>
 <tr><td><code>table.get $t</code></td><td><code>t[i]</code></td></tr>
 <tr><td><code>table.set $t</code></td><td><code>t[i] = v</code></td></tr>
-<tr><td><code>call_indirect $t (type $ft)</code></td><td><code>(t[i] as &amp;ft)(args)</code></td></tr>
-<tr><td><code>call_indirect $t (result i32)</code></td><td><code>(t[i] as &amp;fn() -&gt; i32)(args)</code></td></tr>
-<tr><td><code>return_call_indirect $t (type $ft)</code></td><td><code>return (t[i] as &amp;ft)(args)</code></td></tr>
+<tr><td><code>call_indirect $t (type $ft)</code></td><td><code>(t[i] as &amp;?ft)(args)</code></td></tr>
+<tr><td><code>call_indirect $t (result i32)</code></td><td><code>(t[i] as &amp;?fn() -&gt; i32)(args)</code></td></tr>
+<tr><td><code>return_call_indirect $t (type $ft)</code></td><td><code>return (t[i] as &amp;?ft)(args)</code></td></tr>
 </tbody>
 </table>
 </div>
-<p><code>call_indirect</code> is reconstructed from this pattern on conversion to WAT/WASM, so it round-trips. The cast target names the callee’s function type: either a defined type (<code>&amp;ft</code>) or an inline one written <code>&amp;fn(params) -&gt; results</code> (used when the WAT type is anonymous). When the table’s element type is already the concrete function type <code>&amp;ft</code>, the cast may be omitted (<code>t[i](args)</code>).</p>
+<p><code>call_indirect</code> is reconstructed from this pattern on conversion to WAT/WASM, so it round-trips. The cast target names the callee’s function type — a defined type (<code>ft</code>) or an inline one written <code>fn(params) -&gt; results</code> (used when the WAT type is anonymous) — and matches the table’s element type: for a <code>funcref</code> table (the usual case) it is the nullable <code>&amp;?ft</code>, as shown. When the element type is already a non-null <code>&amp;ft</code>, the cast may be omitted (<code>t[i](args)</code>).</p>
 <p>The other table operations are methods on the table (an element segment is named directly):</p>
 <div class="table-wrapper">
 <table>
@@ -572,7 +609,7 @@ m.load32(p, 1, 16);   // i32.load align=1 offset=16
 <tr><th>Wasm</th><th>Wax</th></tr>
 </thead>
 <tbody>
-<tr><td><code>throw $tag</code></td><td><code>throw tag(args)</code></td></tr>
+<tr><td><code>throw $tag</code></td><td><code>throw tag</code> (no payload), <code>throw tag x</code> (one), <code>throw tag (x, y)</code> (several)</td></tr>
 <tr><td><code>throw_ref</code></td><td><code>throw_ref</code></td></tr>
 <tr><td><code>try_table ... catch $tag $l ...</code></td><td><code>try { ... } catch [ tag -&gt; 'l, ... ]</code></td></tr>
 <tr><td><code>try_table ... catch_ref $tag $l ...</code></td><td><code>try { ... } catch [ tag &amp; -&gt; 'l, ... ]</code></td></tr>
