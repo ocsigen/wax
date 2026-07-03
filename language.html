@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-529717a3.js";
+            window.path_to_searchindex_js = "searchindex-ebf5f2d6.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-0d649137.js"></script>
@@ -566,6 +566,22 @@ tests <em>before</em> each iteration:</p>
 (<code>'l: while …</code>), which names the loop, so a <code>br 'l</code> from inside the body is a
 <em>continue</em> — it jumps back to re-test. Decompiling recovers a <code>while</code> from this
 shape, so a loop written this way survives a round trip through WAT or WASM.</p>
+<p>A <code>while</code> may carry a <em>continue-expression</em> after the condition,
+<code>while cond : (step) { … }</code> — a statement run at the end of every iteration,
+including on a <code>continue</code>. It keeps the loop’s step next to its header instead of
+at the bottom of the body, and — unlike a step written as the last statement —
+it still runs when the body branches to the loop label:</p>
+<pre><code class="language-wax">'l: while i &lt;s n : (i += 1) {
+    if skip(i) { br 'l; }   // continue: runs `i += 1`, then re-tests
+    total += i;
+}
+</code></pre>
+<p>The step must be parenthesised (a bare statement would be ambiguous with the
+loop body). Without a <code>continue</code> this is equivalent to writing the step as the
+last statement of the body — and decompiling recovers it: a loop whose last
+statement updates a variable its condition reads (the induction variable) is
+rendered as <code>while … : (step) { … }</code>, so index-and-stride loops read like <code>for</code>
+loops.</p>
 <p>A <em>trailing</em>-test loop, where the body always runs at least once, has no
 leading-<code>while</code> form. Write it directly as a <code>loop</code> with a back-<code>br_if</code>:</p>
 <pre><code class="language-wax">'next: loop {
@@ -871,6 +887,17 @@ type circle : shape = { kind: i32, radius: f64 };
 
 fn kind_of(s: &amp;shape) -&gt; i32 { s.kind; }   // also accepts a &amp;circle
 </code></pre>
+<p>Since the inherited fields must be repeated verbatim, a leading <code>..</code> stands in
+for them: it copies the supertype’s field names and types, and the fields after
+it are the subtype’s additions. So <code>circle</code> above can be written to highlight
+just its delta:</p>
+<pre><code class="language-wax check">type shape = open { kind: i32 };
+type circle : shape = { .., radius: f64 };
+</code></pre>
+<p><code>..</code> must come first and appear once, and only where there is a supertype to
+inherit from. An inherited field that is <em>renamed</em> or whose type is <em>refined</em>
+(a covariant subtype) is no longer a verbatim copy, so it must be written out
+explicitly rather than covered by <code>..</code>.</p>
 <h3 id="descriptors-experimental"><a class="header" href="#descriptors-experimental">Descriptors (experimental)</a></h3>
 <p>Behind <code>-X custom-descriptors</code>, a struct type can carry a runtime <em>descriptor</em> —
 another type it points to — via the <code>descriptor</code> / <code>describes</code> clauses, declared

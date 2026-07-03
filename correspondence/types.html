@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-529717a3.js";
+            window.path_to_searchindex_js = "../searchindex-ebf5f2d6.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-0d649137.js"></script>
@@ -303,6 +303,13 @@ To specify a supertype, use <code>: supertype</code> before the assignment.</p>
 type open_point = open { x: i32 };                // non-final: extensible
 type sub_point : open_point = { x: i32, y: i32 }; // extends open_point
 </code></pre>
+<p>A subtype repeats its supertype’s fields in order; a leading <code>..</code> abbreviates
+that repeated prefix (<code>type sub_point : open_point = { .., y: i32 };</code>). There is
+no Wasm counterpart — every Wasm struct lists all its fields — so <code>..</code> is
+expanded on the way to Wasm. Decompiling reverses it: when a subtype’s leading
+fields exactly match (name and type) its supertype’s, they are collapsed back to
+<code>..</code>. A renamed or covariantly-refined inherited field does not match, so it is
+kept explicit.</p>
 <h3 id="custom-descriptors"><a class="header" href="#custom-descriptors">Custom Descriptors</a></h3>
 <p>The <a href="https://github.com/WebAssembly/custom-descriptors">custom-descriptors proposal</a>
 lets a struct carry a <em>descriptor</em>: a second struct associated with it (used, for

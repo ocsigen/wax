@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-529717a3.js";
+            window.path_to_searchindex_js = "../searchindex-ebf5f2d6.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-0d649137.js"></script>
@@ -358,6 +358,7 @@ operator with <code>x</code> as its <em>left</em> operand — and reconstructs t
 <tr><td><code>block</code></td><td><code>do { ... }</code> or <code>{ ... }</code></td></tr>
 <tr><td><code>loop</code></td><td><code>loop { ... }</code></td></tr>
 <tr><td><code>loop</code> + leading back-<code>br</code> idiom</td><td><code>while cond { ... }</code></td></tr>
+<tr><td><code>loop { if c { block 'l {...}; step; br } }</code></td><td><code>'l: while c : (step) { ... }</code> (continue-expression)</td></tr>
 <tr><td><code>loop</code> + trailing back-<code>br_if</code> idiom</td><td><code>loop { ... br_if 'l cond; }</code> (kept as a plain loop)</td></tr>
 <tr><td><code>if ... else ...</code></td><td><code>if cond { ... } else { ... }</code></td></tr>
 <tr><td><code>br $l</code></td><td><code>br 'l</code></td></tr>
