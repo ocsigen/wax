@@ -3138,7 +3138,15 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
       | Call (i'', l') ->
           check_subtypes ctx ~location:i.info (fst typed.info) ctx.return_types;
           return_statement i (TailCall (i'', l')) [||]
-      | _ -> assert false)
+      | _ ->
+          (* The target types to a non-[Call] only when typing it already
+             failed: a [let*!] on a [None] lookup yields an [Unreachable] node
+             typed [Error] (with the error already reported). A call that
+             type-checks is always a [Call] — an ill-formed or indirect callee
+             too, via [type_indirect_call] — so there is no tail call to form
+             here; propagate the failed result rather than re-reporting or
+             [assert false]. *)
+          return typed)
   | Char _ as desc -> return_expression i desc i32_cell
   | Int s as desc ->
       (* Pick the lattice type from the magnitude (the sign is a separate [Neg],
