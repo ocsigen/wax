@@ -534,6 +534,11 @@ struct
     | Br_on_cast_fail of X.idx * X.reftype * X.reftype
     | Br_on_cast_desc_eq of X.idx * X.reftype * X.reftype
     | Br_on_cast_desc_eq_fail of X.idx * X.reftype * X.reftype
+    (* Branch-hinting proposal: wraps a conditional branch ([if], [br_if], or a
+       [br_on_*]) with its hint ([true] = likely taken, [false] = unlikely). No
+       bytecode of its own; the hint is emitted into the [metadata.code.branch_hint]
+       section at the wrapped instruction's offset. *)
+    | Hinted of (* likely *) bool * 'info instr
     | Return
     | Call of X.idx
     | CallRef of X.idx

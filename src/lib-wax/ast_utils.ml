@@ -76,6 +76,7 @@ let rec map_instr f instr =
     | Let (bindings, body) -> Let (bindings, Option.map (map_instr f) body)
     | Br (label, v) -> Br (label, Option.map (map_instr f) v)
     | Br_if (label, v) -> Br_if (label, map_instr f v)
+    | Hinted (h, i) -> Hinted (h, map_instr f i)
     | Br_table (labels, v) -> Br_table (labels, map_instr f v)
     | Dispatch { index; cases; default; arms } ->
         Dispatch

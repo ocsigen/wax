@@ -195,6 +195,7 @@ and rebuild : location instr_desc -> location instr_desc = function
   | Select (a, b, c) -> Select (go a, go b, go c)
   | Br (l, e) -> Br (l, Option.map go e)
   | Br_if (l, e) -> Br_if (l, go e)
+  | Hinted (h, e) -> Hinted (h, go e)
   | Br_table (ls, e) -> Br_table (ls, go e)
   | StructGet (e, id) -> StructGet (go e, id)
   | StructSet (e, id, v) -> StructSet (go e, id, go v)

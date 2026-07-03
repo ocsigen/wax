@@ -1408,7 +1408,9 @@ let code ch =
      [start_pos + size]: [size] is untrusted and the sum could overflow the
      OCaml [int] on a 32-bit / js_of_ocaml build. [pos_in ch >= start_pos]. *)
   if pos_in ch - start_pos <> size then error ch "function body size mismatch";
-  { locals; instrs }
+  (* [start_pos] is where this function's locals declaration begins — the origin
+     for branch-hint offsets (branch-hinting proposal). *)
+  (start_pos, { locals; instrs })
 
 let data ch =
   let mode_byte = uint ch in
@@ -1477,6 +1479,76 @@ let indirect_name_map ch =
       (i, name_map ch))
     ch
 
+(* Branch-hinting proposal. [sections] holds the parsed [metadata.code.branch_hint]
+   entries: for each (absolute) function index, a list of (body-relative offset,
+   hint). [code_starts] gives, in defined-function order, the byte offset where
+   each function body (its locals declaration) begins — the origin for those
+   offsets. Wrap in [Hinted] the conditional branch whose opcode sits at the
+   matching offset (its source location records that absolute offset). A hint whose
+   offset does not fall on a conditional branch is dropped. *)
+let attach_branch_hints ~num_func_imports ~code_starts ~sections
+    (code : Ast.location code list) =
+  if sections = [] then code
+  else
+    let by_func : (int, (int, bool) Hashtbl.t) Hashtbl.t = Hashtbl.create 16 in
+    List.iter
+      (fun (funcidx, hints) ->
+        let tbl =
+          match Hashtbl.find_opt by_func funcidx with
+          | Some t -> t
+          | None ->
+              let t = Hashtbl.create 8 in
+              Hashtbl.add by_func funcidx t;
+              t
+        in
+        List.iter (fun (off, h) -> Hashtbl.replace tbl off h) hints)
+      sections;
+    let is_conditional_branch = function
+      | If _ | Br_if _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
+      | Br_on_cast_fail _ | Br_on_cast_desc_eq _ | Br_on_cast_desc_eq_fail _ ->
+          true
+      | _ -> false
+    in
+    let rec go start_pos tbl (i : Ast.location instr) =
+      let lst = List.map (go start_pos tbl) in
+      let desc =
+        match i.desc with
+        | Block b -> Block { b with block = lst b.block }
+        | Loop b -> Loop { b with block = lst b.block }
+        | If b ->
+            If
+              {
+                b with
+                if_block = { b.if_block with desc = lst b.if_block.desc };
+                else_block = { b.else_block with desc = lst b.else_block.desc };
+              }
+        | TryTable b -> TryTable { b with block = lst b.block }
+        | Try b ->
+            Try
+              {
+                b with
+                block = lst b.block;
+                catches = List.map (fun (t, bl) -> (t, lst bl)) b.catches;
+                catch_all = Option.map lst b.catch_all;
+              }
+        | d -> d
+      in
+      let i = { i with desc } in
+      let rel = i.info.Wax_utils.Ast.loc_start.Lexing.pos_cnum - start_pos in
+      match Hashtbl.find_opt tbl rel with
+      | Some h when is_conditional_branch i.desc ->
+          { i with desc = Hinted (h, i) }
+      | _ -> i
+    in
+    List.mapi
+      (fun ci (c : Ast.location code) ->
+        match Hashtbl.find_opt by_func (num_func_imports + ci) with
+        | None -> c
+        | Some tbl ->
+            let start_pos = List.nth code_starts ci in
+            { c with instrs = List.map (go start_pos tbl) c.instrs })
+      code
+
 let module_ diagnostics ?filename buf =
   Wax_utils.Debug.timed "parse" @@ fun () ->
   let ch =
@@ -1491,6 +1563,11 @@ let module_ diagnostics ?filename buf =
   in
   check_header ch;
   let data_count = ref None in
+  (* Branch-hinting proposal: parsed [metadata.code.branch_hint] entries and the
+     byte offset at which each function body begins, applied together after the
+     whole module is read (the section may sit before or after the code section). *)
+  let branch_hint_sections = ref [] in
+  let code_body_starts = ref [] in
   ch.pos <- 8;
   let rec loop m last_section_order =
     match next_section ch with
@@ -1554,7 +1631,9 @@ let module_ diagnostics ?filename buf =
               { m with elem = Array.to_list (vec elem ch) }
           | 10 ->
               (* Code section *)
-              { m with code = Array.to_list (vec code ch) }
+              let entries = Array.to_list (vec code ch) in
+              code_body_starts := List.map fst entries;
+              { m with code = List.map snd entries }
           | 11 ->
               (* Data section *)
               { m with data = Array.to_list (vec data ch) }
@@ -1628,6 +1707,36 @@ let module_ diagnostics ?filename buf =
                   in
                   let names = parse_name_subsections m.names in
                   { m with Ast.Binary.names }
+              | "metadata.code.branch_hint" ->
+                  (* Branch-hinting proposal. Buffer the entries; they are matched
+                     to instructions after the code section is parsed. The trailing
+                     section-size check verifies the whole content was consumed. *)
+                  let entries =
+                    vec
+                      (fun ch ->
+                        let funcidx = uint ch in
+                        let hints =
+                          vec
+                            (fun ch ->
+                              let offset = uint ch in
+                              let len = uint ch in
+                              (* The payload is [len] bytes (always 1 in practice:
+                                 a single 0x00/0x01 hint byte); read them all and
+                                 take the first as the hint value. *)
+                              if len = 0 then error ch "empty branch hint";
+                              let v = input_byte ch <> 0 in
+                              for _ = 2 to len do
+                                ignore (input_byte ch)
+                              done;
+                              (offset, v))
+                            ch
+                        in
+                        (funcidx, Array.to_list hints))
+                      ch
+                  in
+                  branch_hint_sections :=
+                    !branch_hint_sections @ Array.to_list entries;
+                  m
               | _ ->
                   (* Skip other custom sections *)
                   skip_section ch sect;
@@ -1667,4 +1776,15 @@ let module_ diagnostics ?filename buf =
   | _ -> ());
   if List.length res.functions <> List.length res.code then
     error ch "function and code section have inconsistent lengths";
-  res
+  (* Branch-hinting proposal: attach the buffered hints to their instructions. *)
+  let num_func_imports =
+    List.fold_left
+      (fun n (i : import) -> match i.desc with Func _ -> n + 1 | _ -> n)
+      0 res.imports
+  in
+  {
+    res with
+    code =
+      attach_branch_hints ~num_func_imports ~code_starts:!code_body_starts
+        ~sections:!branch_hint_sections res.code;
+  }

@@ -700,3 +700,30 @@ fn narrow(v: &?any, d: &!obj_desc) -> &?obj {
     v as ?descriptor(d);
 }
 ```
+
+## Branch hints
+
+The [branch-hinting proposal](correspondence/instructions.md#branch-hints) marks
+a conditional branch likely or unlikely taken. Prefix the branch with
+`#[likely]` / `#[unlikely]`; the hint is preserved through every conversion (no
+feature flag required).
+
+### Wax
+
+```wax
+#[export = "clamp_low"]
+fn clamp_low(x: i32) -> i32 {
+    #[likely] if x >=s 0 => i32 {
+        x;
+    } else {
+        0;
+    }
+}
+
+#[export = "drain"]
+fn drain(n: i32) {
+    'l: loop {
+        #[unlikely] br_if 'l n;
+    }
+}
+```

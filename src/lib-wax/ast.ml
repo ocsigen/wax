@@ -162,6 +162,11 @@ type 'info instr_desc =
       label * (* nullable *) bool * 'info instr * 'info instr
   | Br_on_cast_desc_eq_fail of
       label * (* nullable *) bool * 'info instr * 'info instr
+  (* Branch-hinting proposal: wraps a conditional branch ([if], [br_if], or a
+     [br_on_*]) with its hint ([true] = likely taken, [false] = unlikely). It has
+     no runtime effect; on lowering the hint is emitted into the
+     [metadata.code.branch_hint] section at the wrapped instruction's offset. *)
+  | Hinted of (* likely *) bool * 'info instr
   | Throw of ident * 'info instr option
   | ThrowRef of 'info instr
   | ContNew of ident * 'info instr

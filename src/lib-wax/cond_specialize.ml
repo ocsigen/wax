@@ -117,6 +117,7 @@ let module_ ctx env (fields : location Ast.module_) :
     | Let (bs, body) -> Let (bs, Option.map sone body)
     | Br (l, v) -> Br (l, Option.map sone v)
     | Br_if (l, v) -> Br_if (l, sone v)
+    | Hinted (h, i) -> Hinted (h, sone i)
     | Br_table (ls, v) -> Br_table (ls, sone v)
     | Dispatch { index; cases; default; arms } ->
         Dispatch

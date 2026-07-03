@@ -190,6 +190,23 @@ reaching the block's exit or from the surrounding context (see
 [Type inference](../language.md#blocks)). Parameterized and multi-result block
 types are always kept.
 
+### Branch hints
+
+The [branch-hinting proposal](https://github.com/WebAssembly/branch-hinting)
+annotates a conditional branch as likely or unlikely taken. Wax writes the hint
+as an attribute on the branch and preserves it on every round-trip (it is stored
+in the `metadata.code.branch_hint` custom section; no feature flag is needed):
+
+```wax
+#[likely] if cond { ... } else { ... }
+#[unlikely] br_if 'l cond
+```
+
+Any conditional branch may be hinted — `if`, `br_if`, `br_on_null`,
+`br_on_non_null`, `br_on_cast`, and `br_on_cast_fail`. In WAT the same hint is
+the `(@metadata.code.branch_hint "\00"|"\01")` annotation preceding the branch
+(`"\01"` = likely, `"\00"` = unlikely).
+
 ## Reference Instructions
 
 | Wasm | Wax |

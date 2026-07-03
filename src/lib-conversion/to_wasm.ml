@@ -464,6 +464,7 @@ let labels_in_list l =
         lst l
     | Let (_, e) | Throw (_, e) | Return e | Br (_, e) -> opt e
     | Br_if (_, e)
+    | Hinted (_, e)
     | Br_table (_, e)
     | Br_on_null (_, e)
     | Br_on_non_null (_, e)
@@ -1591,6 +1592,20 @@ and instruction_desc ret ctx i : location Text.instr list =
       folded loc (Br (label ret l)) (instruction ret ctx expr)
   | Br_if (l, expr) ->
       folded loc (Br_if (label ret l)) (instruction ret ctx expr)
+  (* Branch-hinting proposal: convert the wrapped branch, then insert [Hinted]
+     just inside its folded node — matching the shape the fold pass produces
+     ([Folded (Hinted (h, inner), args)]) so print/unfold handle it uniformly. *)
+  | Hinted (h, inner) -> (
+      match instruction ret ctx inner with
+      | [ ({ Ast.desc = Text.Folded (d, args); _ } as i') ] ->
+          [
+            {
+              i' with
+              Ast.desc = Text.Folded (with_loc loc (Text.Hinted (h, d)), args);
+            };
+          ]
+      | [ single ] -> [ with_loc loc (Text.Hinted (h, single)) ]
+      | code -> code)
   | Br_table (labels, expr) -> (
       let code = instruction ret ctx expr in
       match List.rev labels with

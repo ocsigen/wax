@@ -147,6 +147,8 @@ let rec token_rec ctx lexbuf =
   | ';' -> SEMI
   | "#[if(" -> HASH_IF
   | "#[else]" -> HASH_ELSE
+  | "#[likely]" -> LIKELY_HINT
+  | "#[unlikely]" -> UNLIKELY_HINT
   | '#' -> SHARP
   | '?' -> QUESTIONMARK
   | '(' -> LPAREN

@@ -244,6 +244,8 @@ let rec instr ~resolve_string_type ~resolve_func_type ctx (i : 'info T.instr) =
     | Nop -> Nop
     | Br i -> Br (resolve_label ctx.labels i)
     | Br_if i -> Br_if (resolve_label ctx.labels i)
+    | Hinted (h, inner) ->
+        Hinted (h, instr ~resolve_string_type ~resolve_func_type ctx inner)
     | Br_table (ls, d) ->
         Br_table
           (List.map (resolve_label ctx.labels) ls, resolve_label ctx.labels d)

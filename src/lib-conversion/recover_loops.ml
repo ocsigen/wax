@@ -37,6 +37,7 @@ let rec refs_instr name (i : location instr) : bool =
   | Br (l, e) -> lab l || opt e
   | Br_if (l, e) -> lab l || refs_instr name e
   | Br_table (ls, e) -> List.exists lab ls || refs_instr name e
+  | Hinted (_, e) -> refs_instr name e
   | Br_on_null (l, e) | Br_on_non_null (l, e) -> lab l || refs_instr name e
   | Br_on_cast (l, _, e) | Br_on_cast_fail (l, _, e) ->
       lab l || refs_instr name e
@@ -218,6 +219,7 @@ and rewrite_desc (desc : location instr_desc) : location instr_desc =
   | Let (bs, e) -> Let (bs, Option.map rewrite_instr e)
   | Br (l, e) -> Br (l, Option.map rewrite_instr e)
   | Br_if (l, e) -> Br_if (l, rewrite_instr e)
+  | Hinted (h, e) -> Hinted (h, rewrite_instr e)
   | Br_table (ls, e) -> Br_table (ls, rewrite_instr e)
   | Br_on_null (l, e) -> Br_on_null (l, rewrite_instr e)
   | Br_on_non_null (l, e) -> Br_on_non_null (l, rewrite_instr e)

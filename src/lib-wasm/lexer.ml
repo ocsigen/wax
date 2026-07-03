@@ -220,6 +220,8 @@ let rec token_rec ctx lexbuf =
   | "(@if" -> IF_ANNOT
   | "(@then" -> THEN_ANNOT
   | "(@else" -> ELSE_ANNOT
+  (* Branch-hinting proposal: [(@metadata.code.branch_hint "\00"|"\01")]. *)
+  | "(@metadata.code.branch_hint" -> BRANCH_HINT_ANNOT
   | "(@", Plus idchar ->
       skip_annotation 1 lexbuf;
       Wax_utils.Trivia.report_item ctx Annotation "";

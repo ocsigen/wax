@@ -179,6 +179,7 @@ and rewrite_desc (desc : location instr_desc) : location instr_desc =
   | Let (bs, e) -> Let (bs, Option.map rewrite_instr e)
   | Br (l, e) -> Br (l, Option.map rewrite_instr e)
   | Br_if (l, e) -> Br_if (l, rewrite_instr e)
+  | Hinted (h, e) -> Hinted (h, rewrite_instr e)
   | Br_table (ls, e) -> Br_table (ls, rewrite_instr e)
   | Br_on_null (l, e) -> Br_on_null (l, rewrite_instr e)
   | Br_on_non_null (l, e) -> Br_on_non_null (l, rewrite_instr e)

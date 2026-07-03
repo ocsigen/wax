@@ -619,6 +619,22 @@ let rec cond_doc (c : Ast.cond) =
   | Cond_cmp (op, a, b) ->
       list [ atom ~style:Annotation (cmp_op_string op); cond_doc a; cond_doc b ]
 
+(* Branch-hinting proposal: the [(@metadata.code.branch_hint "\00"|"\01")]
+   annotation that prefixes a hinted conditional branch. *)
+let branch_hint_annotation (likely : bool) =
+  let i, s = escape_string (if likely then "\001" else "\000") in
+  list
+    [
+      atom ~style:Annotation "@metadata.code.branch_hint";
+      Atom
+        {
+          loc = None;
+          style = Annotation;
+          len = Some (i + 2);
+          s = "\"" ^ s ^ "\"";
+        };
+    ]
+
 let rec instr i =
   let loc = i.Ast.info in
   match i.Ast.desc with
@@ -1005,6 +1021,17 @@ let rec instr i =
           reftype ty;
           reftype ty';
         ]
+  (* Branch-hinting proposal: unfolded hinted branch — the annotation precedes the
+     wrapped instruction. A block-form [if] keeps its own multi-line layout (the
+     annotation on its own line above it); an inline [br_if]/[br_on_*] stays on one
+     line with the annotation. *)
+  | Hinted (h, inner) -> (
+      match inner.Ast.desc with
+      | If _ ->
+          Vertical_block (Some loc, [ branch_hint_annotation h; instr inner ])
+      | _ ->
+          block ~loc ~transparent:true [ branch_hint_annotation h; instr inner ]
+      )
   | Return -> instruction ~loc "return"
   | Throw tag -> block ~loc [ instruction "throw"; index tag ]
   | ThrowRef -> block ~loc [ instruction "throw_ref" ]
@@ -1114,6 +1141,14 @@ let rec instr i =
         (block [ atom ~style:Annotation "@if"; cond_doc cond ]
         :: clause "then" then_body
         :: option (fun e -> [ clause "else" e ]) else_body)
+  (* Branch-hinting proposal: a folded hinted branch puts the annotation *before*
+     the folded group — [(@…) (br_if …)] / [(@…) (if …)] — not inside it. The
+     wrapped instruction is printed as its own folded node. *)
+  | Folded ({ desc = Hinted (h, inner); info }, l) ->
+      block ~loc ~transparent:true
+        [
+          branch_hint_annotation h; instr { Ast.desc = Folded (inner, l); info };
+        ]
   | Folded (i, l) ->
       list ~loc [ block ~transparent:true (instr i :: List.map instr l) ]
 

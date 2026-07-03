@@ -268,6 +268,8 @@ let rec instr (names : B.names) local_names label_names label_counter stack
     | Switch (i, j) -> Switch (index ~map:names.types i, index ~map:names.tags j)
     | Br i -> Br (get_label_reference stack i)
     | Br_if i -> Br_if (get_label_reference stack i)
+    | Hinted (h, inner) ->
+        Hinted (h, instr names local_names label_names label_counter stack inner)
     | Br_table (l, d) ->
         let target i = (get_label_reference stack) i in
         Br_table (List.map target l, target d)

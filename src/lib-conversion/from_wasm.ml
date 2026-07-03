@@ -1290,6 +1290,14 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       let input = label_arity ctx i in
       let* args = Stack.grab (input + 1) in
       Stack.push input (with_loc (Br_if (label ctx i, sequence args)))
+  (* Branch-hinting proposal: convert the wrapped branch, then re-wrap the Wax
+     instruction it left on the stack in [Hinted]. *)
+  | Hinted (h, inner) -> (
+      let* () = instruction ctx inner in
+      fun stack ->
+        match stack with
+        | (arity, top) :: rem -> ((arity, with_loc (Hinted (h, top))) :: rem, ())
+        | [] -> ([], ()))
   | Br_table (labels, lab) ->
       let input = label_arity ctx lab in
       let* args = Stack.grab (input + 1) in

@@ -1,0 +1,13 @@
+fn f(x: i32) -> i32 {
+    #[likely] if x => i32 {
+        1;
+    } else {
+        2;
+    }
+}
+
+fn g(x: i32) {
+    'l: loop {
+        #[unlikely] br_if 'l x;
+    }
+}

@@ -2127,6 +2127,9 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let*! params, param_source = branch_target ctx idx in
       let* () = pop_args ctx loc ~source:param_source params in
       push_results ~source:param_source params
+  (* Branch-hinting proposal: the wrapper is advisory and has the exact stack
+     effect of the branch it wraps. *)
+  | Hinted (_, inner) -> instruction ctx inner
   | Br_table (lst, idx) ->
       let* () = pop_known ctx loc I32 in
       let*! params, _ = branch_target ctx idx in
@@ -3218,17 +3221,18 @@ let rec check_constant_instruction ctx (i : _ Ast.Text.instr) =
   | ThrowRef | ContNew _ | ContBind _ | Suspend _ | Resume _ | ResumeThrow _
   | ResumeThrowRef _ | Switch _ | Br _ | Br_if _ | Br_table _ | Br_on_null _
   | Br_on_non_null _ | Br_on_cast _ | Br_on_cast_fail _ | Br_on_cast_desc_eq _
-  | Br_on_cast_desc_eq_fail _ | Return | Call _ | CallRef _ | CallIndirect _
-  | ReturnCall _ | ReturnCallRef _ | ReturnCallIndirect _ | Drop | Select _
-  | LocalGet _ | LocalSet _ | LocalTee _ | GlobalSet _ | Load _ | LoadS _
-  | Store _ | StoreS _ | Atomic _ | AtomicFence | MemorySize _ | MemoryGrow _
-  | MemoryFill _ | MemoryCopy _ | MemoryInit _ | DataDrop _ | TableGet _
-  | TableSet _ | TableSize _ | TableGrow _ | TableFill _ | TableCopy _
-  | TableInit _ | ElemDrop _ | RefIsNull | RefAsNonNull | RefEq | RefTest _
-  | RefCast _ | RefCastDescEq _ | RefGetDesc _ | StructGet _ | StructSet _
-  | ArrayNewData _ | ArrayNewElem _ | ArrayGet _ | ArraySet _ | ArrayLen
-  | ArrayFill _ | ArrayCopy _ | ArrayInitData _ | ArrayInitElem _ | I31Get _
-  | UnOp _ | Add128 | Sub128 | MulWide _
+  | Br_on_cast_desc_eq_fail _ | Hinted _ | Return | Call _ | CallRef _
+  | CallIndirect _ | ReturnCall _ | ReturnCallRef _ | ReturnCallIndirect _
+  | Drop | Select _ | LocalGet _ | LocalSet _ | LocalTee _ | GlobalSet _
+  | Load _ | LoadS _ | Store _ | StoreS _ | Atomic _ | AtomicFence
+  | MemorySize _ | MemoryGrow _ | MemoryFill _ | MemoryCopy _ | MemoryInit _
+  | DataDrop _ | TableGet _ | TableSet _ | TableSize _ | TableGrow _
+  | TableFill _ | TableCopy _ | TableInit _ | ElemDrop _ | RefIsNull
+  | RefAsNonNull | RefEq | RefTest _ | RefCast _ | RefCastDescEq _
+  | RefGetDesc _ | StructGet _ | StructSet _ | ArrayNewData _ | ArrayNewElem _
+  | ArrayGet _ | ArraySet _ | ArrayLen | ArrayFill _ | ArrayCopy _
+  | ArrayInitData _ | ArrayInitElem _ | I31Get _ | UnOp _ | Add128 | Sub128
+  | MulWide _
   | BinOp
       ( F32 _ | F64 _
       | I32
@@ -3457,6 +3461,7 @@ and register_typeuses_instr d ctx (i : _ Ast.Text.instr) =
   | Folded (i, l) ->
       register_typeuses_instr d ctx i;
       register_typeuses d ctx l
+  | Hinted (_, i) -> register_typeuses_instr d ctx i
   | Unreachable | Nop | Throw _ | ThrowRef | ContNew _ | ContBind _ | Suspend _
   | Resume _ | ResumeThrow _ | ResumeThrowRef _ | Switch _ | Br _ | Br_if _
   | Br_table _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _

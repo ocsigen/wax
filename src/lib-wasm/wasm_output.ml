@@ -230,19 +230,27 @@ module Encoder = struct
             uint b tag)
       b clauses
 
+  (* Branch-hinting proposal: while a function body is being encoded this sink
+     receives [(offset, hint)] for each hinted [if]/[br_if], where [offset] is the
+     byte position of the branch opcode relative to the start of the body buffer
+     (which begins with the locals declaration) — exactly the offset the
+     [metadata.code.branch_hint] section stores. Reset to a no-op outside code
+     encoding. See [output_branch_hint_section] / the code-section encoder. *)
+  let branch_hint_sink = ref (fun (_ : int) (_ : bool) -> ())
+
   let rec instr ~source_map_t b (i : Ast.location instr) =
     (* Record where this instruction starts. A synthesized instruction has no
        source location; emit an absent mapping there so the previous location
        does not, by the source map's sticky rule, bleed onto its bytes. *)
-    (let generated_offset = Buffer.length b in
-     if
-       i.info.Wax_utils.Ast.loc_start.Lexing.pos_fname <> ""
-       && i.info.Wax_utils.Ast.loc_start.Lexing.pos_lnum <> -1
-       && i.info.Wax_utils.Ast.loc_start.Lexing.pos_cnum <> -1
-     then
-       Wax_utils.Source_map.add_mapping source_map_t ~generated_offset
-         ~original_location:i.info
-     else Wax_utils.Source_map.add_absent_mapping source_map_t ~generated_offset);
+    let generated_offset = Buffer.length b in
+    if
+      i.info.Wax_utils.Ast.loc_start.Lexing.pos_fname <> ""
+      && i.info.Wax_utils.Ast.loc_start.Lexing.pos_lnum <> -1
+      && i.info.Wax_utils.Ast.loc_start.Lexing.pos_cnum <> -1
+    then
+      Wax_utils.Source_map.add_mapping source_map_t ~generated_offset
+        ~original_location:i.info
+    else Wax_utils.Source_map.add_absent_mapping source_map_t ~generated_offset;
 
     match i.desc with
     | Unreachable -> byte b 0x00
@@ -341,6 +349,12 @@ module Encoder = struct
     | Br_if i ->
         byte b 0x0D;
         uint b i
+    (* Branch-hinting proposal: the wrapper emits no bytecode; it records its hint
+       at [generated_offset] (the wrapped branch's opcode, which [instr inner]
+       writes next) and emits the inner instruction. *)
+    | Hinted (h, inner) ->
+        !branch_hint_sink generated_offset h;
+        instr ~source_map_t b inner
     | Br_table (ls, d) ->
         byte b 0x0E;
         vec uint b ls;
@@ -1272,6 +1286,30 @@ let output_import_section out_channel imports =
            | [] -> assert false))
       (import_entries imports)
 
+(* Branch-hinting proposal: emit the [metadata.code.branch_hint] custom section.
+   [func_hints] maps a (absolute) function index to its hints, each a byte offset
+   (of the branch opcode, relative to the start of the function body) paired with
+   the hint ([true] = likely, [false] = unlikely). Both the function entries and
+   each function's hints are already in increasing-offset order (functions are
+   encoded in order; a body's opcodes are emitted at strictly increasing
+   offsets), as the section requires. *)
+let output_branch_hint_section out_channel
+    (func_hints : (int * (int * bool) list) list) =
+  output_section out_channel 0
+    (fun b () ->
+      Encoder.name b "metadata.code.branch_hint";
+      Encoder.vec
+        (fun b (funcidx, hints) ->
+          Encoder.uint b funcidx;
+          Encoder.vec
+            (fun b (offset, hint) ->
+              Encoder.uint b offset;
+              Encoder.uint b 1 (* reserved: length of the hint payload *);
+              Encoder.byte b (if hint then 1 else 0))
+            b hints)
+        b func_hints)
+    ()
+
 let module_ ~out_channel ?output_file ?opt_source_map_file
     (m : Ast.location module_) =
   Wax_utils.Debug.timed "output" @@ fun () ->
@@ -1412,9 +1450,23 @@ let module_ ~out_channel ?output_file ?opt_source_map_file
     output_section out_channel 12 Encoder.uint (List.length m.data);
 
   (* 11. Code Section *)
-  if m.code <> [] then
+  (* Branch-hinting proposal: collect each function's hints while encoding its
+     body (the [branch_hint_sink] fires per hinted [if]/[br_if]) and emit the
+     [metadata.code.branch_hint] section afterwards. Function indices are absolute
+     (defined functions follow the imported ones). *)
+  let branch_hints = ref [] in
+  if m.code <> [] then (
+    let num_func_imports =
+      List.fold_left
+        (fun n (i : import) -> match i.desc with Func _ -> n + 1 | _ -> n)
+        0 m.imports
+    in
+    let code_index = ref 0 in
     output_section out_channel 10
       (Encoder.vec (fun b (c : Ast.location code) ->
+           let this = ref [] in
+           (Encoder.branch_hint_sink :=
+              fun offset hint -> this := (offset, hint) :: !this);
            let b_code = Buffer.create 128 in
            let coalesce_locals l =
              let rec loop acc n t l =
@@ -1434,8 +1486,21 @@ let module_ ~out_channel ?output_file ?opt_source_map_file
              b_code locals;
            (Encoder.expr ~source_map_t b_code) c.instrs;
            Encoder.uint b (Buffer.length b_code);
-           Buffer.add_buffer b b_code))
+           Buffer.add_buffer b b_code;
+           (match List.rev !this with
+           | [] -> ()
+           | hs ->
+               branch_hints :=
+                 (num_func_imports + !code_index, hs) :: !branch_hints);
+           incr code_index))
       m.code;
+    Encoder.branch_hint_sink := fun _ _ -> ());
+
+  (* metadata.code.branch_hint custom section (after the code section it refers
+     to; custom sections may appear anywhere). *)
+  (match List.rev !branch_hints with
+  | [] -> ()
+  | fhs -> output_branch_hint_section out_channel fhs);
 
   (* 12. Data Section *)
   if m.data <> [] then

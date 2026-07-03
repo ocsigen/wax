@@ -10,6 +10,8 @@
 %token SHARP "#"
 %token HASH_IF "#[if("
 %token HASH_ELSE "#[else]"
+%token LIKELY_HINT "#[likely]"
+%token UNLIKELY_HINT "#[unlikely]"
 %token QUESTIONMARK "?"
 %token LPAREN "("
 %token RPAREN ")"
@@ -171,6 +173,22 @@ let storagetype_tbl =
 
 let with_loc loc desc =
    Wax_utils.Trivia.with_pos Context.context {loc_start = fst loc; loc_end = snd loc} desc
+
+(* Branch-hinting proposal: [#[likely]]/[#[unlikely]] may only prefix a
+   conditional branch. Wrap it in [Hinted]; reject the attribute anywhere else. *)
+let is_branch_hint_target = function
+  | If _ | Br_if _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
+  | Br_on_cast_fail _ | Br_on_cast_desc_eq _ | Br_on_cast_desc_eq_fail _ -> true
+  | _ -> false
+
+let hinted loc h (i : _ instr) =
+  if is_branch_hint_target i.desc then with_loc loc (Hinted (h, i))
+  else
+    raise
+      (Wax_wasm.Parsing.Syntax_error
+         (loc,
+          "A branch hint may only prefix a conditional branch (if, br_if, or \
+           br_on_*).\n"))
 
 (* Build a binary/unary operator node, giving the operator itself a source
    location (its token span [oploc]) so a comment sitting between an operand and
@@ -414,6 +432,25 @@ attribute:
 | "#" "[" name = IDENT "=" i = attribute_expression "]" { (name, Some i) }
 | "#" "[" name = IDENT "]" { (name, None) }
 
+(* Branch-hinting proposal: [#[likely]]/[#[unlikely]] prefixing an [if]/[br_if].
+   Lexed as dedicated tokens (like [#[if(]) so the form does not collide with the
+   general [#[name]] module-field attribute. *)
+%inline branch_hint_attr:
+| LIKELY_HINT { true }
+| UNLIKELY_HINT { false }
+
+(* The conditional branches that carry an operand ([if] is a [blockinstr], handled
+   separately). Shared by the plain plaininstr productions and the hinted wrapper
+   so a [#[likely]]/[#[unlikely]] prefix needs no per-branch duplication. *)
+branch_expr:
+| BR_IF l = label i = expression { with_loc $sloc (Br_if (l, i)) } %prec prec_branch
+| BR_ON_NULL l = label i = expression { with_loc $sloc (Br_on_null (l, i)) } %prec prec_branch
+| BR_ON_NON_NULL l = label i = expression { with_loc $sloc (Br_on_non_null (l, i)) } %prec prec_branch
+| BR_ON_CAST l = label t = reference_type i = expression { with_loc $sloc (Br_on_cast (l, t, i)) } %prec prec_branch
+| BR_ON_CAST_FAIL l = label t = reference_type i = expression { with_loc $sloc (Br_on_cast_fail (l, t, i)) } %prec prec_branch
+| BR_ON_CAST l = label nullable = boption("?") d = descriptor_operand i = expression { with_loc $sloc (Br_on_cast_desc_eq (l, nullable, i, d)) } %prec prec_branch
+| BR_ON_CAST_FAIL l = label nullable = boption("?") d = descriptor_operand i = expression { with_loc $sloc (Br_on_cast_desc_eq_fail (l, nullable, i, d)) } %prec prec_branch
+
 simple_pattern:
 | x = ident { Some x }
 | "_" { None }
@@ -536,6 +573,10 @@ match_default:
 blockinstr:
 | b = block
   { let (label, l) = b in with_loc $sloc (Block{label; typ = blocktype None; block = l}) }
+(* Branch-hinting proposal: a hinted [if] stays a [blockinstr] (so, like a plain
+   [if], it needs no trailing [;]); [hinted] rejects the attribute on any other
+   block form. *)
+| h = branch_hint_attr i = blockinstr { hinted $sloc h i }
 | DISPATCH index = expression
   "[" cases = list(label) ELSE default = label "]"
   "{" arms = list(dispatch_arm) "}"
@@ -661,18 +702,11 @@ plaininstr:
 | i = expression o = "<=" j = expression { binop $sloc o $loc(o) (Le None) i j }
 | i = expression o = "<=s" j = expression { binop $sloc o $loc(o) (Le (Some Signed)) i j }
 | i = expression o = "<=u" j = expression { binop $sloc o $loc(o) (Le (Some Unsigned)) i j }
-| BR_IF l = label i = expression %prec prec_branch
-  { with_loc $sloc (Br_if (l, i))} 
-(*
-| BR l = label IF i = expression
-  { with_loc $sloc (Br_if (l, i)) } %prec prec_branch
-*)
-| BR_ON_NULL l = label i = expression { with_loc $sloc (Br_on_null (l, i)) } %prec prec_branch
-| BR_ON_NON_NULL l = label i = expression { with_loc $sloc (Br_on_non_null (l, i)) }  %prec prec_branch
-| BR_ON_CAST l = label t = reference_type i = expression { with_loc $sloc (Br_on_cast (l, t, i)) } %prec prec_branch
-| BR_ON_CAST_FAIL l = label t = reference_type i = expression { with_loc $sloc (Br_on_cast_fail (l, t, i)) } %prec prec_branch
-| BR_ON_CAST l = label nullable = boption("?") d = descriptor_operand i = expression { with_loc $sloc (Br_on_cast_desc_eq (l, nullable, i, d)) } %prec prec_branch
-| BR_ON_CAST_FAIL l = label nullable = boption("?") d = descriptor_operand i = expression { with_loc $sloc (Br_on_cast_desc_eq_fail (l, nullable, i, d)) } %prec prec_branch
+| b = branch_expr { b }
+(* Branch-hinting proposal: [#[likely]] / [#[unlikely]] wraps the [br_if]/[br_on_*]
+   that follows; a hinted [if] is a [blockinstr] (above). *)
+| h = branch_hint_attr b = branch_expr
+  { with_loc $sloc (Hinted (h, b)) }
 | CONT_NEW t = type_name "(" i = expression ")"
   { with_loc $sloc (ContNew (t, i)) }
 | CONT_BIND src = type_name dst = type_name "(" l = expression_list ")"

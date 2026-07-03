@@ -542,6 +542,32 @@ The labels in a `br_table` are separated by spaces, and `else` gives the
 fallback for an out-of-range index. A branch also carries any values its target
 expects — a `do i32` target receives an `i32`, and so on.
 
+### Branch Hints
+
+A conditional branch can be annotated `#[likely]` or `#[unlikely]` to tell the
+engine which way it usually goes (the
+[branch-hinting proposal](https://github.com/WebAssembly/branch-hinting)). The
+attribute prefixes the branch:
+
+```wax
+#[likely] if cond {
+    // the common case
+} else {
+    // the rare case
+}
+
+'next: loop {
+    #[unlikely] br_if 'next done;   // rarely taken
+}
+```
+
+Any conditional branch accepts a hint — `if`, `br_if`, `br_on_null`,
+`br_on_non_null`, `br_on_cast`, and `br_on_cast_fail`. The hint is purely
+advisory (it does not change behaviour) and is preserved across every conversion
+to and from WebAssembly, so no compiler flag is needed. See
+[Instructions → Branch hints](correspondence/instructions.md#branch-hints) for
+the WebAssembly encoding.
+
 ### Dispatch
 
 A `dispatch` is a multi-way branch — the readable form of a `br_table` jump

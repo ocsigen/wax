@@ -172,6 +172,7 @@
 %token <string> MEM_OFFSET
 (* Binaryen extensions *)
 %token STRING_ANNOT CHAR_ANNOT
+%token BRANCH_HINT_ANNOT
 %token IF_ANNOT THEN_ANNOT ELSE_ANNOT
 %token AND OR NOT
 %token CMP_EQ CMP_NE CMP_LT CMP_GT CMP_LE CMP_GE
@@ -295,6 +296,34 @@ let check_labels lab (lab' : Ast.Text.name option) =
           (Parsing.Syntax_error
              ( (lab'.info.loc_start, lab'.info.loc_end),
                Printf.sprintf "Label mismatch.\n"))
+
+(* Branch-hinting proposal: decode a [(@metadata.code.branch_hint "…")] payload.
+   The string is a single byte: 0x00 = unlikely, otherwise likely. *)
+let branch_hint_of_annotation loc (s : (string, Ast.location) Ast.annotated) =
+  if String.length s.Ast.desc <> 1 then
+    raise
+      (Parsing.Syntax_error
+         (loc, "A branch hint must be a single byte (\"\\00\" or \"\\01\").\n"))
+  else Char.code s.Ast.desc.[0] <> 0
+
+(* A branch hint may only prefix a conditional branch (looking through a folded
+   wrapper). Reject the annotation anywhere else. *)
+let rec is_branch_hint_target d =
+  match d with
+  | If _ | Br_if _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
+  | Br_on_cast_fail _ | Br_on_cast_desc_eq _ | Br_on_cast_desc_eq_fail _ ->
+      true
+  | Folded (i, _) -> is_branch_hint_target i.Ast.desc
+  | _ -> false
+
+let hinted loc h (i : _ instr) =
+  if is_branch_hint_target i.Ast.desc then with_loc loc (Hinted (h, i))
+  else
+    raise
+      (Parsing.Syntax_error
+         ( loc,
+           "A branch hint may only prefix a conditional branch (if, br_if, or \
+            br_on_*).\n" ))
 
 
 %}
@@ -536,6 +565,10 @@ table_type:
 | l = limits t = reference_type { {limits = l; reftype = t} }
 
 (* Instructions *)
+
+(* Branch-hinting proposal: the annotation prefixing a hinted [if]/[br_if]. *)
+branch_hint_annot:
+| BRANCH_HINT_ANNOT s = STRING ")" { branch_hint_of_annotation $loc(s) s }
 
 blockinstr:
 | BLOCK label = label typ = block_type block =instructions END label2 = label
@@ -793,6 +826,15 @@ instructions:
 | i = blockinstr r = instructions { i :: r }
 | i = folded_instruction r = instructions { i :: r }
 | i = cond_instr r = instructions { i :: r }
+(* Branch-hinting proposal: the [(@metadata.code.branch_hint …)] annotation wraps
+   the conditional branch that follows it (unfolded [if]/[br_if]/[br_on_*] or the
+   folded form). [hinted] rejects the annotation on any other instruction. *)
+| h = branch_hint_annot i = plain_instruction r = instructions
+  { hinted $sloc h i :: r }
+| h = branch_hint_annot i = blockinstr r = instructions
+  { hinted $sloc h i :: r }
+| h = branch_hint_annot i = folded_instruction r = instructions
+  { hinted $sloc h i :: r }
 
 string_list: l = list(STRING) { l }
 

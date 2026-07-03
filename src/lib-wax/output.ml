@@ -67,6 +67,12 @@ let type_ pp s = print_styled pp Type s
 let string pp ?len s = print_styled pp String ?len s
 let attribute pp s = print_styled pp Attribute s
 
+(* Branch-hinting proposal: the [#[likely]]/[#[unlikely]] prefix on a hinted
+   conditional branch. *)
+let branch_hint_attr pp likely =
+  attribute pp (if likely then "#[likely]" else "#[unlikely]");
+  space pp ()
+
 (* Comment preservation: emit the trivia (comments, blank lines) the lexer
    collected, looked up by AST-node location. The rendering logic is shared with
    the WebAssembly printer in [Wax_utils.Trivia]. *)
@@ -538,8 +544,11 @@ let array_instr pp nm f =
           f ());
       cut pp ())
 
-let get_prec (i : _ Ast.instr) =
+let rec get_prec (i : _ Ast.instr) =
   match i.desc with
+  (* Branch-hinting proposal: the hint is a transparent prefix; the wrapped
+     branch drives precedence, block-ness, and layout. *)
+  | Hinted (_, i) -> get_prec i
   | Block _ | Loop _ | While _ | If _ | Try _ | TryTable _ | If_annotation _
   | Dispatch _ | Match _ ->
       Atom
@@ -567,8 +576,9 @@ let get_prec (i : _ Ast.instr) =
       Branch
   | Select _ -> Select
 
-let is_block (i : _ Ast.instr) =
+let rec is_block (i : _ Ast.instr) =
   match i.desc with
+  | Hinted (_, i) -> is_block i
   | Block _ | Loop _ | While _ | If _ | Try _ | TryTable _ | If_annotation _
   | Dispatch _ | Match _ ->
       true
@@ -589,6 +599,7 @@ let rec starts_with_block_prec prec (i : 'a Ast.instr) =
   if prec > actual then false
   else
     match i.desc with
+    | Hinted (_, i) -> starts_with_block_prec prec i
     | Block _ | Loop _ | While _ | If _ | Try _ | TryTable _ | If_annotation _
     | Dispatch _ | Match _ ->
         true
@@ -1082,6 +1093,12 @@ let rec instr prec pp (i : _ instr) =
       branch_ref_desc_instr instr pp "br_on_cast" label nullable i d
   | Br_on_cast_desc_eq_fail (label, nullable, i, d) ->
       branch_ref_desc_instr instr pp "br_on_cast_fail" label nullable i d
+  (* Branch-hinting proposal: [#[likely]] / [#[unlikely]] prefixing the wrapped
+     conditional branch. The attribute is a bare prefix so the branch keeps its own
+     layout (and stays on the same line: [#[likely] if …]). *)
+  | Hinted (h, inner) ->
+      branch_hint_attr pp h;
+      instr prec pp inner
   | Br_table (labels, i) ->
       let default, cases =
         match List.rev labels with

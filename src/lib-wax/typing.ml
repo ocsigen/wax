@@ -2111,6 +2111,7 @@ let rec count_holes i =
   | NonNull i
   | Br (_, Some i)
   | Br_if (_, i)
+  | Hinted (_, i)
   | Br_table (_, i)
   | Br_on_null (_, i)
   | Br_on_non_null (_, i)
@@ -2191,6 +2192,7 @@ let rec collect_assigned_locals acc i =
   | StructDefaultDesc e
   | UnOp (_, e)
   | Br_if (_, e)
+  | Hinted (_, e)
   | Br_table (_, e)
   | Br_on_null (_, e)
   | Br_on_non_null (_, e)
@@ -2403,6 +2405,7 @@ let rec check_hole_order_rec ctx i n =
         | NonNull i
         | Br (_, Some i)
         | Br_if (_, i)
+        | Hinted (_, i)
         | Br_table (_, i)
         | Br_on_null (_, i)
         | Br_on_non_null (_, i)
@@ -3163,7 +3166,8 @@ let rec instruction ctx i : 'a list -> 'a list * (_, _ array * _) annotated =
   | BinOp _ | UnOp _ -> type_arith ctx i
   | Let _ -> type_let ctx i
   | Br _ | Br_if _ | Br_table _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
-  | Br_on_cast_fail _ | Br_on_cast_desc_eq _ | Br_on_cast_desc_eq_fail _ ->
+  | Br_on_cast_fail _ | Br_on_cast_desc_eq _ | Br_on_cast_desc_eq_fail _
+  | Hinted _ ->
       type_branch ctx i
   | Throw _ | ThrowRef _ -> type_exception ctx i
   | ContNew _ | ContBind _ | Suspend _ | Resume _ | ResumeThrow _
@@ -3331,6 +3335,11 @@ and type_branch ctx i =
         else params
       in
       return_statement i (Br_if (label, i')) result
+  (* Branch-hinting proposal: the hint is advisory; type the wrapped branch and
+     carry its result through unchanged. *)
+  | Hinted (h, inner) ->
+      let* inner = instruction ctx inner in
+      return_statement i (Hinted (h, inner)) (fst inner.info)
   | Br_table (labels, i') ->
       let* i' = instruction ctx i' in
       let loc = snd i'.info in
@@ -7552,9 +7561,9 @@ let rec check_constant_instruction ctx i =
   | GetDescriptor _ | StructSet _ | ArraySegment _ | ArrayGet _ | ArraySet _
   | Let _ | Br _ | Br_if _ | Br_table _ | Br_on_null _ | Br_on_non_null _
   | Br_on_cast _ | Br_on_cast_fail _ | Br_on_cast_desc_eq _
-  | Br_on_cast_desc_eq_fail _ | Throw _ | ThrowRef _ | ContNew _ | ContBind _
-  | Suspend _ | Resume _ | ResumeThrow _ | ResumeThrowRef _ | Switch _
-  | Return _ | Sequence _ | Select _ | If_annotation _ ->
+  | Br_on_cast_desc_eq_fail _ | Hinted _ | Throw _ | ThrowRef _ | ContNew _
+  | ContBind _ | Suspend _ | Resume _ | ResumeThrow _ | ResumeThrowRef _
+  | Switch _ | Return _ | Sequence _ | Select _ | If_annotation _ ->
       Error.constant_expression_required ctx.diagnostics ~location
 
 type ('before, 'after) phased =
@@ -8298,6 +8307,7 @@ let rec instr_has_conditional (i : (_ instr_desc, _) annotated) =
   | StructDefaultDesc i
   | ArrayDefault (_, i)
   | Br_if (_, i)
+  | Hinted (_, i)
   | Br_table (_, i)
   | Br_on_null (_, i)
   | Br_on_non_null (_, i)
@@ -8424,6 +8434,7 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
     | Let (bs, body) -> Let (bs, Option.map (sone asm) body)
     | Br (l, v) -> Br (l, Option.map (sone asm) v)
     | Br_if (l, v) -> Br_if (l, sone asm v)
+    | Hinted (h, v) -> Hinted (h, sone asm v)
     | Br_table (ls, v) -> Br_table (ls, sone asm v)
     | Dispatch { index; cases; default; arms } ->
         Dispatch
@@ -8539,6 +8550,7 @@ let sub_instrs (i : (_ instr_desc, _) annotated) =
   | StructDefaultDesc i
   | ArrayDefault (_, i)
   | Br_if (_, i)
+  | Hinted (_, i)
   | Br_table (_, i)
   | Br_on_null (_, i)
   | Br_on_non_null (_, i)

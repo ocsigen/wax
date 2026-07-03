@@ -338,7 +338,7 @@ let label_arity env idx =
       | Some (_, arity) -> arity
       | None -> unbound ())
 
-let arity env i =
+let rec arity env i =
   match i.Ast.desc with
   | Block { typ; _ } | Loop { typ; _ } | Try { typ; _ } | TryTable { typ; _ } ->
       blocktype_arity env typ
@@ -361,6 +361,7 @@ let arity env i =
   | Br_if l ->
       let i = label_arity env l in
       (i + 1, i)
+  | Hinted (_, inner) -> arity env inner
   | Br_table (_, l) ->
       let i = label_arity env l in
       (i + 1, unreachable)
@@ -577,6 +578,38 @@ let rec fold_stream env folded stream : _ Ast.Text.instr list =
       fold_instr env folded [] [] rem
         { i with desc = If { b with if_block; else_block } }
         inputs outputs
+  (* Branch-hinting proposal: a hinted conditional branch folds exactly like the
+     branch it wraps — recurse into an [if]'s bodies, then fold operands onto the
+     wrapper (yielding [Folded (Hinted (h, inner), args)]). *)
+  | ({ Ast.desc = Hinted (h, inner); _ } as i) :: rem ->
+      let inner =
+        match inner.Ast.desc with
+        | If ({ label; typ; if_block; else_block; _ } as b) ->
+            let env' =
+              let _, n = blocktype_arity env typ in
+              { env with labels = (label, n) :: env.labels }
+            in
+            {
+              inner with
+              Ast.desc =
+                If
+                  {
+                    b with
+                    if_block =
+                      { if_block with desc = fold_stream env' [] if_block.desc };
+                    else_block =
+                      {
+                        else_block with
+                        desc = fold_stream env' [] else_block.desc;
+                      };
+                  };
+            }
+        | _ -> inner
+      in
+      let inputs, outputs = arity env inner in
+      fold_instr env folded [] [] rem
+        { i with desc = Hinted (h, inner) }
+        inputs outputs
   | ({ Ast.desc = TryTable ({ label; typ; block; _ } as b); _ } as i) :: rem ->
       let block =
         let _, i = blocktype_arity env typ in
@@ -699,7 +732,7 @@ let fold report m =
 let rec unfold_stream stream start =
   List.fold_left
     (fun start i ->
-      let unfold_block i =
+      let rec unfold_block i =
         match i.Ast.desc with
         | Block ({ block; _ } as b) ->
             Block { b with block = unfold_instrs block }
@@ -730,6 +763,11 @@ let rec unfold_stream stream start =
                 then_body = unfold_instrs then_body;
                 else_body = Option.map unfold_instrs else_body;
               }
+        | Hinted (h, inner) ->
+            (* Branch-hinting proposal: unfold the wrapped branch, keeping the
+               wrapper. [inner] may be a [Folded] node (from the fold pass) or a
+               block-family instruction with bodies to unfold. *)
+            Hinted (h, { inner with desc = unfold_block inner })
         | Folded _ -> assert false
         | _ -> i.desc
       in
