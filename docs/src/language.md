@@ -782,6 +782,40 @@ Call through a function reference:
 (func_ref as &?callback)(arg)
 ```
 
+## Imports and Exports
+
+A module talks to its host through imports and exports, both written as
+attributes on the field.
+
+**Export** a definition under a name with `#[export = "name"]`. It applies to
+functions, globals, memories, tables, and tags, and a field may carry several:
+
+```wax
+#[export = "add"]
+fn add(x: i32, y: i32) -> i32 { x + y; }
+
+#[export = "PI"]
+const PI: f64 = 3.14159;
+```
+
+**Import** a field from the host with `#[import = ("module", "name")]`. An
+imported field has no body — a function is declared with just its signature and
+a trailing `;`, and a global with its type:
+
+```wax
+#[import = ("env", "log")]
+fn log(x: i32);
+
+#[import = ("env", "base")]
+const base: i32;
+
+#[export = "run"]
+fn run() { log(base); }
+```
+
+The same field can be both imported and re-exported by giving it both
+attributes.
+
 ## References
 
 ### Reference Types
@@ -897,6 +931,50 @@ arr[i] = val;               // Set element (if mutable)
 arr.length()                // Array length
 ```
 
+## Recursive and Subtyped Types
+
+Struct and array types can refer to one another, form subtype hierarchies, and
+be left open for extension — the WebAssembly GC type features.
+
+### Recursive groups
+
+Types that reference each other are declared together in a `rec { … }` group, so
+each name is in scope for the others:
+
+```wax
+rec {
+    type expr = { op: i32, args: &?args };
+    type args = [mut &expr];
+}
+```
+
+### Subtyping
+
+`type sub : super` declares `sub` as a subtype of `super`: it repeats the
+supertype's fields in order and may add more, and a `&sub` is accepted wherever
+a `&super` is expected. Types are *final* by default; a type must be declared
+`open` to be extended.
+
+```wax
+type shape = open { kind: i32 };
+type circle : shape = { kind: i32, radius: f64 };
+
+fn kind_of(s: &shape) -> i32 { s.kind; }   // also accepts a &circle
+```
+
+### Descriptors (experimental)
+
+Behind `-X custom-descriptors`, a struct type can carry a runtime *descriptor* —
+another type it points to — via the `descriptor` / `describes` clauses, declared
+together in a `rec` group:
+
+```wax
+rec {
+    type obj = descriptor obj_desc { x: i32 };
+    type obj_desc = describes obj { };
+}
+```
+
 ## Strings
 
 A string literal builds a new array, one element per byte of the (UTF-8) text.
@@ -935,6 +1013,35 @@ the `array.new_fixed`, which is recovered as a string literal only when its
 bytes form a *reasonable* UTF-8 string — valid UTF-8 with no control characters
 other than tab, newline, and carriage return. Anything else (arbitrary binary
 data) decompiles as an ordinary [array literal](#arrays) instead.
+
+## SIMD (v128)
+
+The 128-bit vector type is `v128`. Its operations are written as method
+intrinsics with the lane shape baked into the name: the Wax name is the
+WebAssembly mnemonic with the leading shape moved to the end, so `i32x4.add`
+becomes `add_i32x4` and `f32x4.splat` becomes `splat_f32x4`. Signed/unsigned
+variants keep their `_s`/`_u` suffix, and constant lane immediates (lane and
+shuffle indices) come first in the argument list.
+
+```wax
+fn scale(v: v128, k: i32) -> v128 {
+    v.add_i32x4(k.splat_i32x4());     // i32x4.add of v and (i32x4.splat k)
+}
+
+fn lane0(v: v128) -> i32 {
+    v.extract_lane_i32x4(0);          // extract lane 0
+}
+```
+
+Constants are `v128::` free functions, one argument per lane:
+
+```wax
+const ones: v128 = v128::const_i32x4(1, 1, 1, 1);
+```
+
+See [Instructions › SIMD](./correspondence/instructions.md#simd-vector-instructions) for the full
+mnemonic mapping (`extract_lane`/`replace_lane`/`shuffle`, comparisons, shifts,
+and the whole-vector `*_v128` operations).
 
 ## Memories
 
@@ -1042,6 +1149,14 @@ tag overflow(i32);          // carries an i32
 tag pair(i32, f64);         // carries several values
 ```
 
+A tag may also declare a **result type**, written like a function signature.
+This is used by [stack switching](#stack-switching): resuming a suspended
+continuation hands this value back to the `suspend` expression.
+
+```wax
+tag yield(i32) -> i32;      // carries an i32; resumes with an i32
+```
+
 ### Throw
 
 `throw` raises a tag together with its payload:
@@ -1082,8 +1197,48 @@ try { might_throw(); } catch [overflow & -> 'h]  // also deliver the exnref
 try { might_throw(); } catch [_ -> 'h]           // catch any exception
 ```
 
-The target label receives the payload (and, with `&`, the `exnref`), so the
-labelled block's type must match what it is handed.
+The target label receives the payload (and, with `&`, the exception reference,
+of type `&exn` — or `&?exn` for the nullable form), so the labelled block's type
+must match what it is handed.
+
+## Stack Switching
+
+*Stack switching* (the WebAssembly typed-continuations proposal) lets a
+computation suspend itself, yield control to a scheduler, and later be resumed.
+A **continuation type** wraps a function type with `cont`:
+
+```wax
+type task = fn(i32) -> i32;
+type k = cont task;
+```
+
+A [tag with a result type](#tags) is the suspend/resume channel: `suspend`
+passes the tag's payload out and evaluates to its result once resumed.
+
+```wax
+tag yield(i32) -> i32;
+
+fn worker(x: i32) -> i32 {
+    suspend yield(x);          // yield `x`; the result is what resumes it
+}
+```
+
+Continuations are created and driven with `cont_new`, `cont_bind`, `resume`,
+`resume_throw`, and `resume_throw_ref`. `cont` wraps a *named* function type, so
+each continuation shape is a `type`. `resume` takes a list of handlers mapping a
+suspended tag to a label (empty here):
+
+```wax
+type unit_task = fn() -> i32;
+type k0 = cont unit_task;
+
+fn spawn() -> &k { cont_new k (worker); }          // wrap `worker` (a task)
+fn prime(c: &k) -> &k0 { cont_bind k k0 (7, c); }  // bind the argument
+fn go(c: &k0) -> i32 { resume k0 [] (c); }         // run until it suspends
+```
+
+The abstract continuation heap types are written `&cont` and `&nocont` (with
+`&?cont` for the nullable form).
 
 ## Holes
 
