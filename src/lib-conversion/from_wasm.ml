@@ -637,6 +637,79 @@ let struct_fields ctx type_name =
       conversion_error ctx ~location:type_name.Ast.info (fun f () ->
           Format.fprintf f "This type should be a struct type.")
 
+(* Decompilation ergonomics: when a reconstructed struct's leading fields exactly
+   match (name and type) its supertype's full field list, replace that prefix
+   with a [..] splice sentinel so the printer renders [type c: p = { .., delta }].
+   A renamed or covariantly-refined inherited field breaks the match and stays
+   explicit. Field types are compared at the Src level, which carries no Wax
+   source locations (Ast field types would differ on location alone). The
+   supertype is always defined-before (earlier in the group or in an earlier
+   group), so the reconstructed [..] re-typechecks. *)
+let collapse_splices ctx (rt : Ast.rectype) : Ast.rectype =
+  let src_struct name =
+    match
+      try Some (CondTbl.find ctx.type_defs ctx.cond_asm name.Ast.desc)
+      with Not_found -> None
+    with
+    | Some { Src.typ = Struct fields; _ } -> Some fields
+    | _ -> None
+  in
+  (* Compare field types without their source locations (which differ between a
+     supertype's declaration and the subtype's copy): [Src] text-format indices
+     carry a location, so print the reconstructed Wax type and compare that. *)
+  let same_type (a : Ast.fieldtype) (b : Ast.fieldtype) =
+    let s (ft : Ast.fieldtype) =
+      Format.asprintf "%t" (fun f ->
+          Wax_utils.Printer.run f (fun pp ->
+              Wax_lang.Output.storagetype pp ft.typ))
+    in
+    a.mut = b.mut && String.equal (s a) (s b)
+  in
+  Array.map
+    (fun elt ->
+      let name, (sub : Ast.subtype) = elt.Ast.desc in
+      match (sub.typ, sub.supertype) with
+      | Struct child_ast_fields, Some parent_name -> (
+          match
+            ( src_struct parent_name,
+              Hashtbl.find_opt ctx.struct_fields parent_name.Ast.desc )
+          with
+          | Some parent_src, Some (_, parent_names) ->
+              let parent_names = Array.of_list parent_names in
+              let n = Array.length parent_src in
+              let prefix_matches =
+                (* [n = 0] would splice nothing, so [..] is pure noise there. *)
+                n >= 1
+                && n <= Array.length child_ast_fields
+                && n <= Array.length parent_names
+                &&
+                let ok = ref true in
+                for i = 0 to n - 1 do
+                  if
+                    not
+                      (String.equal (fst child_ast_fields.(i).Ast.desc).desc
+                         parent_names.(i)
+                      && same_type
+                           (snd child_ast_fields.(i).Ast.desc)
+                           (fieldtype ctx (get_type parent_src.(i))))
+                  then ok := false
+                done;
+                !ok
+              in
+              if prefix_matches then
+                let delta =
+                  Array.sub child_ast_fields n
+                    (Array.length child_ast_fields - n)
+                in
+                let fields =
+                  Array.append [| Ast.splice_field name.Ast.info |] delta
+                in
+                { elt with desc = (name, { sub with typ = Struct fields }) }
+              else elt
+          | _ -> elt)
+      | _ -> elt)
+    rt
+
 let functype_arity { Src.params; results } =
   (Array.length params, Array.length results)
 
@@ -2275,7 +2348,7 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
   let extra = ref [] in
   let desc : _ Ast.modulefield option =
     match f.desc with
-    | Types t -> Some (Type (rectype ctx t))
+    | Types t -> Some (Type (collapse_splices ctx (rectype ctx t)))
     | Func { locals; instrs; typ; exports = e; _ } ->
         let label, labels = LabelStack.push (LabelStack.make ()) None in
         let ctx =

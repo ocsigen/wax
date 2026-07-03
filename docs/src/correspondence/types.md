@@ -138,6 +138,14 @@ type open_point = open { x: i32 };                // non-final: extensible
 type sub_point : open_point = { x: i32, y: i32 }; // extends open_point
 ```
 
+A subtype repeats its supertype's fields in order; a leading `..` abbreviates
+that repeated prefix (`type sub_point : open_point = { .., y: i32 };`). There is
+no Wasm counterpart — every Wasm struct lists all its fields — so `..` is
+expanded on the way to Wasm. Decompiling reverses it: when a subtype's leading
+fields exactly match (name and type) its supertype's, they are collapsed back to
+`..`. A renamed or covariantly-refined inherited field does not match, so it is
+kept explicit.
+
 ### Custom Descriptors
 
 The [custom-descriptors proposal](https://github.com/WebAssembly/custom-descriptors)

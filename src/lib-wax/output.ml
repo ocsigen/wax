@@ -254,11 +254,15 @@ let comptype pp (t : comptype) =
           space pp ();
           list_commasep
             (fun pp field ->
-              let nm, t = field.desc in
-              (* Look the field's trivia up by its own location, so a trailing
-                 comment attaches to the whole field. *)
-              atomic_node pp (Some field.info) (fun () ->
-                  print_key_value pp nm.desc fieldtype t))
+              (* A leading [..] inherits the supertype's fields; the parser puts
+                 it first, so it prints as the first comma-separated item. *)
+              if Ast.is_splice_field field then punctuation pp ".."
+              else
+                let nm, t = field.desc in
+                (* Look the field's trivia up by its own location, so a trailing
+                   comment attaches to the whole field. *)
+                atomic_node pp (Some field.info) (fun () ->
+                    print_key_value pp nm.desc fieldtype t))
             pp (Array.to_list l));
       space pp ();
       punctuation pp "}"

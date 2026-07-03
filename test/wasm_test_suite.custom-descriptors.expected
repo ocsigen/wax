@@ -479,7 +479,7 @@ Wax type-checking should have failed (type mismatch):
   rec {
       type a = open descriptor b { f: i32 };
       type b = open describes a { };
-      type c: a = open descriptor d { f: i32 };
+      type c: a = open descriptor d { .. };
       type d: b = open describes c { };
   }
   fn f(x: &!d) -> &?any {
@@ -499,7 +499,7 @@ Wax type-checking should have failed (type mismatch):
   rec {
       type a = open descriptor b { f: i32 };
       type b = open describes a { };
-      type c: a = open descriptor d { f: i32 };
+      type c: a = open descriptor d { .. };
       type d: b = open describes c { };
   }
   fn f(x: &!b) -> &?any {

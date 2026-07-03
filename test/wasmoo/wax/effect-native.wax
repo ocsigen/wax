@@ -51,7 +51,7 @@
     type function_1 = fn(&eq, &eq) -> &eq;
     type closure = open { /*(field i32)*/ func: &function_1 };
     type function_3 = fn(&eq, &eq, &eq, &eq) -> &eq;
-    type closure_3: closure = open { func: &function_1, direct: &function_3 };
+    type closure_3: closure = open { .., direct: &function_3 };
 
     // Effect types
 
@@ -63,12 +63,7 @@
 
     type generic_fiber = open { value: mut &eq, exn: mut &eq, effect: mut &eq };
 
-    type fiber: generic_fiber = {
-        value: mut &eq,
-        exn: mut &eq,
-        effect: mut &eq,
-        continuation: mut &continuation
-    };
+    type fiber: generic_fiber = { .., continuation: mut &continuation };
 
     // Unhandled effects
 

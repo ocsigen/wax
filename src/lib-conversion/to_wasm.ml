@@ -1927,6 +1927,22 @@ let module_ diagnostics types fields =
       diagnostics;
     }
   in
+  (* A [..] splice keeps its sentinel in the module AST; the full fields live in
+     the (expanded) type table. Resolve the expanded subtype for a spliced struct
+     so lowering sees the inherited fields; every other type is already complete
+     in the AST and passes through untouched. *)
+  let resolve_subtype idx (s : subtype) =
+    match s.typ with
+    | Struct fields
+      when Array.length fields > 0 && Wax_lang.Ast.is_splice_field fields.(0)
+      -> (
+        match
+          Wax_lang.Typing.get_type_definition ctx.diagnostics ctx.types idx
+        with
+        | Some s' -> s'
+        | None -> s)
+    | _ -> s
+  in
   Wax_lang.Ast_utils.iter_fields
     (fun field ->
       match field.desc with
@@ -1934,6 +1950,7 @@ let module_ diagnostics types fields =
           Array.iter
             (fun rt ->
               let idx, subtype = rt.desc in
+              let subtype = resolve_subtype idx subtype in
               let kind =
                 match subtype.typ with
                 | Func _ -> `Func
@@ -1976,6 +1993,7 @@ let module_ diagnostics types fields =
               Array.fold_left
                 (fun acc rt ->
                   let idx, subtype = rt.desc in
+                  let subtype = resolve_subtype idx subtype in
                   if idx.desc <> "" && idx.desc.[0] <> '<' then
                     (subtype, idx.desc) :: acc
                   else acc)
@@ -2191,7 +2209,7 @@ let module_ diagnostics types fields =
                     (Array.map
                        (fun rt ->
                          let idx, s = rt.desc in
-                         Ast.no_loc (Some idx, subtype s))
+                         Ast.no_loc (Some idx, subtype (resolve_subtype idx s)))
                        rectype)
               | Global { name; mut; typ; def; attributes } ->
                   let typ =

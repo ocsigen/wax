@@ -49,7 +49,7 @@ type custom_operations = {
 };
 type custom = open { ops: &custom_operations };
 
-type custom_with_id: custom = open { ops: &custom_operations, id: i64 };
+type custom_with_id: custom = open { .., id: i64 };
 
 #[export = "caml_is_custom"]
 fn caml_is_custom(v: &eq) -> i32 {

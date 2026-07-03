@@ -188,6 +188,8 @@ let storagetype_tbl =
 let with_loc loc desc =
    Wax_utils.Trivia.with_pos Context.context {loc_start = fst loc; loc_end = snd loc} desc
 
+let location_of loc : location = {loc_start = fst loc; loc_end = snd loc}
+
 (* Branch-hinting proposal: [#[likely]]/[#[unlikely]] may only prefix a
    conditional branch. Wrap it in [Hinted]; reject the attribute anywhere else. *)
 let is_branch_hint_target = function
@@ -403,6 +405,11 @@ structure_type:
 | l = separated_list_trailing(",", structure_type_field) { l }
 
 structtype:
+(* A leading [..] inherits the supertype's fields (see [Ast.splice_field]); it
+   must come first and appear at most once, which these productions enforce. *)
+| "{" ".." "}" { [| splice_field (location_of $sloc) |] }
+| "{" ".." "," l = structure_type "}"
+  { Array.of_list (splice_field (location_of $sloc) :: l) }
 | "{" l = structure_type "}" { Array.of_list l }
 
 arraytype:

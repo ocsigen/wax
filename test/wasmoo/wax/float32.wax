@@ -74,7 +74,7 @@ const float32_ops =
         dup: float32_dup,
     };
 
-type float32: custom = { ops: &custom_operations, f32: f32 };
+type float32: custom = { .., f32: f32 };
 
 fn box_float32(f: f32) -> &eq {
     { ops: float32_ops, f32: f };

@@ -62,7 +62,7 @@ const int32_ops =
         dup: int32_dup,
     };
 
-type int32: custom = { ops: &custom_operations, i32: i32 };
+type int32: custom = { .., i32: i32 };
 
 fn int32_cmp(v1: &eq, v2: &eq, i32) -> i32 {
     let i1 = (v1 as &int32).i32;

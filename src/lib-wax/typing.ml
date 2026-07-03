@@ -309,6 +309,17 @@ module Error = struct
     report context ~location "Several fields have the same name %a." print_name
       x
 
+  let splice_without_supertype context ~location =
+    report context ~location
+      "'..' requires a supertype to inherit fields from (write 'type t: super \
+       = { .., ... }')."
+
+  let splice_non_struct context ~location x =
+    report context ~location
+      "'..' can only inherit fields from a struct supertype; %a is not a \
+       struct."
+      print_name x
+
   let duplicated_parameter context ~location x =
     report context ~location "Several parameters have the same name %a."
       print_name x
@@ -718,12 +729,67 @@ let subtype d ctx current { typ; supertype; final; descriptor; describes } =
 let rectype d ctx ty =
   array_mapi_opt (fun i elt -> subtype d ctx i (snd elt.desc)) ty
 
+(* Replace a leading [..] splice sentinel in each struct of the rec group with
+   the supertype's fields. Called after the group's names are temporarily
+   registered (so an in-group supertype resolves), and expands members in source
+   order so an earlier member is already expanded when a later one inherits from
+   it. Returns a fresh array; the parsed module AST keeps its sentinel (for
+   [format] / decompilation round-trip), while the internal type and [ctx.types]
+   get the expanded fields. *)
+let expand_splices d ctx ty =
+  let expanded = Array.copy ty in
+  Array.iteri
+    (fun i elt ->
+      let name, (sub : subtype) = elt.desc in
+      match sub.typ with
+      | Struct fields
+        when Array.length fields > 0 && Ast.is_splice_field fields.(0) ->
+          let delta = Array.sub fields 1 (Array.length fields - 1) in
+          let parent_fields =
+            match sub.supertype with
+            | None ->
+                Error.splice_without_supertype d ~location:fields.(0).info;
+                None
+            | Some sup -> (
+                match Tbl.find_opt ctx.types sup with
+                | Some (idx, parent) -> (
+                    (* An in-group member has a negative placeholder index; use
+                       its already-expanded form. A self/forward reference
+                       ([j >= i]) is reported as unbound by [subtype], so skip. *)
+                    let parent =
+                      if idx < 0 then
+                        let j = lnot idx in
+                        if j < i then Some (snd expanded.(j).desc) else None
+                      else Some parent
+                    in
+                    match parent with
+                    | Some { typ = Struct pf; _ } -> Some pf
+                    | Some _ ->
+                        Error.splice_non_struct d ~location:sup.info sup;
+                        None
+                    | None -> None)
+                | None -> None (* unbound supertype: reported by [subtype] *))
+          in
+          let fields' =
+            match parent_fields with
+            | Some pf -> Array.append pf delta
+            | None -> delta
+          in
+          expanded.(i) <-
+            { elt with desc = (name, { sub with typ = Struct fields' }) }
+      | _ -> ())
+    ty;
+  expanded
+
 let add_type d ctx ty =
   Array.iteri
     (fun i elt ->
       let name, (typ : subtype) = elt.desc in
       Tbl.add d ctx.types name (lnot i, typ))
     ty;
+  (* Expand [..] splices before building the internal type and before the final
+     [ctx.types] override below, so both see the supertype's fields. *)
+  let ty = expand_splices d ctx ty in
   match rectype d ctx ty with
   | None ->
       (* Remove temporary names on failure *)

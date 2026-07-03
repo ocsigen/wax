@@ -978,6 +978,21 @@ type circle : shape = { kind: i32, radius: f64 };
 fn kind_of(s: &shape) -> i32 { s.kind; }   // also accepts a &circle
 ```
 
+Since the inherited fields must be repeated verbatim, a leading `..` stands in
+for them: it copies the supertype's field names and types, and the fields after
+it are the subtype's additions. So `circle` above can be written to highlight
+just its delta:
+
+```wax,check
+type shape = open { kind: i32 };
+type circle : shape = { .., radius: f64 };
+```
+
+`..` must come first and appear once, and only where there is a supertype to
+inherit from. An inherited field that is *renamed* or whose type is *refined*
+(a covariant subtype) is no longer a verbatim copy, so it must be written out
+explicitly rather than covered by `..`.
+
 ### Descriptors (experimental)
 
 Behind `-X custom-descriptors`, a struct type can carry a runtime *descriptor* —

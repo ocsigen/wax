@@ -56,7 +56,7 @@ type bytes = [mut i8];
 type function_1 = fn(&eq, &eq) -> &eq;
 type closure = open { func: &function_1 };
 type function_3 = fn(&eq, &eq, &eq, &eq) -> &eq;
-type closure_3: closure = open { func: &function_1, direct: &function_3 };
+type closure_3: closure = open { .., direct: &function_3 };
 
 // Generic fibers
 
@@ -165,7 +165,7 @@ fn caml_is_continuation(v: &eq) -> i32 {
 
     type thunk = { func: &called_with_continuation, v: &eq };
 
-    type cont_resume: continuation = { cont_func: &cont_func, cont_resolver: &?extern };
+    type cont_resume: continuation = { .., cont_resolver: &?extern };
 
     fn invoke_promise_resolver(p: &pair, k: &eq) {
         become resume_fiber((k as &cont_resume).cont_resolver, p);
@@ -193,13 +193,7 @@ fn caml_is_continuation(v: &eq) -> i32 {
 
     // Stack of fibers
 
-    type fiber: generic_fiber = {
-        value: mut &eq,
-        exn: mut &eq,
-        effect: mut &eq,
-        continuation: mut &continuation,
-        next: mut &?fiber
-    };
+    type fiber: generic_fiber = { .., continuation: mut &continuation, next: mut &?fiber };
 
     fn initial_cont(p: &pair, &eq) {
         become start_fiber(p);
@@ -273,12 +267,7 @@ fn caml_is_continuation(v: &eq) -> i32 {
 
     // Perform
 
-    type call_handler_env: closure = {
-        func: &function_1,
-        handler: &eq,
-        eff: &eq,
-        continuation: &eq
-    };
+    type call_handler_env: closure = { .., handler: &eq, eff: &eq, continuation: &eq };
 
     fn call_effect_handler(tail: &eq, venv: &eq) -> &eq {
         let env = venv as &call_handler_env;
@@ -419,16 +408,14 @@ fn caml_is_continuation(v: &eq) -> i32 {
     type function_4 = fn(&eq, &eq, &eq, &eq, &eq) -> &eq;
     type cps_closure = open { func: &function_2 };
     type cps_closure_0 = open { func: &function_1 };
-    type cps_closure_3: cps_closure = open { func: &function_2, direct: &function_4 };
+    type cps_closure_3: cps_closure = open { .., direct: &function_4 };
 
-    type iterator: closure = { func: &function_1, i: mut i32, args: &block };
+    type iterator: closure = { .., i: mut i32, args: &block };
 
     type exn_stack = { h: &eq, next: &?exn_stack };
 
     type cps_fiber: generic_fiber = {
-        value: mut &eq,
-        exn: mut &eq,
-        effect: mut &eq,
+        ..,
         continuation: mut &eq,
         exn_stack: mut &?exn_stack,
         next: mut &?cps_fiber

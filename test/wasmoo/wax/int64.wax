@@ -64,7 +64,7 @@ const int64_ops =
         dup: int64_dup,
     };
 
-type int64: custom = { ops: &custom_operations, i64: i64 };
+type int64: custom = { .., i64: i64 };
 
 fn int64_cmp(v1: &eq, v2: &eq, i32) -> i32 {
     let i1 = (v1 as &int64).i64;

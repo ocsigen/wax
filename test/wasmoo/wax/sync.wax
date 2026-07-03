@@ -42,7 +42,7 @@ type custom_operations = {
     dup: &?dup
 };
 type custom = open { ops: &custom_operations };
-type custom_with_id: custom = open { ops: &custom_operations, id: i64 };
+type custom_with_id: custom = open { .., id: i64 };
 
 const mutex_ops =
     {
@@ -56,7 +56,7 @@ const mutex_ops =
         dup: null,
     };
 
-type mutex: custom_with_id = { ops: &custom_operations, id: i64, state: mut i32 };
+type mutex: custom_with_id = { .., state: mut i32 };
 
 #[export = "caml_ml_mutex_new"]
 fn caml_ml_mutex_new(&eq) -> &eq {
@@ -104,7 +104,7 @@ const condition_ops =
         dup: null,
     };
 
-type condition: custom_with_id = { ops: &custom_operations, id: i64 };
+type condition: custom_with_id = { .. };
 
 #[export = "caml_ml_condition_new"]
 fn caml_ml_condition_new(&eq) -> &eq {

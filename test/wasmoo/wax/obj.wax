@@ -33,44 +33,32 @@ type float = { f: f64 };
 type float_array = [mut f64];
 type function_1 = fn(&eq, &eq) -> &eq;
 type closure = open { func: &function_1 };
-type closure_last_arg: closure = open { func: &function_1 };
+type closure_last_arg: closure = open { .. };
 type function_2 = fn(&eq, &eq, &eq) -> &eq;
 type cps_closure = open { func: &function_2 };
-type cps_closure_last_arg: cps_closure = open { func: &function_2 };
+type cps_closure_last_arg: cps_closure = open { .. };
 
 type int_array = [mut i32];
 
-type dummy_closure_1: closure_last_arg = { func: &function_1, closure: mut &?closure };
+type dummy_closure_1: closure_last_arg = { .., closure: mut &?closure };
 
-type closure_2: closure = open { func: &function_1, direct: &function_2 };
+type closure_2: closure = open { .., direct: &function_2 };
 
-type dummy_closure_2: closure_2 = {
-    func: &function_1,
-    direct: &function_2,
-    closure: mut &?closure_2
-};
+type dummy_closure_2: closure_2 = { .., closure: mut &?closure_2 };
 
 type function_3 = fn(&eq, &eq, &eq, &eq) -> &eq;
 
-type closure_3: closure = open { func: &function_1, direct: &function_3 };
+type closure_3: closure = open { .., direct: &function_3 };
 
-type dummy_closure_3: closure_3 = {
-    func: &function_1,
-    direct: &function_3,
-    closure: mut &?closure_3
-};
+type dummy_closure_3: closure_3 = { .., closure: mut &?closure_3 };
 
 type function_4 = fn(&eq, &eq, &eq, &eq, &eq) -> &eq;
 
-type closure_4: closure = open { func: &function_1, direct: &function_4 };
+type closure_4: closure = open { .., direct: &function_4 };
 
-type dummy_closure_4: closure_4 = {
-    func: &function_1,
-    direct: &function_4,
-    closure: mut &?closure_4
-};
+type dummy_closure_4: closure_4 = { .., closure: mut &?closure_4 };
 
-type cps_dummy_closure: cps_closure_last_arg = { func: &function_2, closure: mut &?cps_closure };
+type cps_dummy_closure: cps_closure_last_arg = { .., closure: mut &?cps_closure };
 
 const forcing_tag = 244;
 #[export = "cont_tag"]

@@ -21,6 +21,17 @@ include module type of Wax_wasm.Ast.Make_types (struct
   type 'a opt_annotated_array = (ident option * 'a, location) annotated array
 end)
 
+val splice_field_name : string
+(** The reserved field name marking a [..] splice at the head of a struct
+    definition (inherits the supertype's fields). Not a valid identifier, so it
+    never collides with a real field. *)
+
+val is_splice_field : (ident * fieldtype, location) annotated -> bool
+(** Whether a struct field is the [..] splice sentinel. *)
+
+val splice_field : location -> (ident * fieldtype, location) annotated
+(** Build a [..] splice sentinel field at the given location. *)
+
 (** Signage for integer operations. *)
 type signage = Wax_wasm.Ast.signage = Signed | Unsigned
 

@@ -22,6 +22,24 @@ include Wax_wasm.Ast.Make_types (struct
   type 'a opt_annotated_array = (ident option * 'a, location) annotated array
 end)
 
+(* A [..] splice at the head of a struct definition inherits the supertype's
+   fields. It is carried through the AST as a sentinel field whose name is
+   [splice_field_name] — not a valid identifier, so it never collides with a real
+   field. Typing replaces it with the supertype's fields; the printer renders it
+   back as [..]. Its field type is a placeholder and is never inspected. *)
+let splice_field_name = ".."
+
+let is_splice_field (f : (ident * fieldtype, location) annotated) =
+  String.equal (fst f.desc).desc splice_field_name
+
+let splice_field loc : (ident * fieldtype, location) annotated =
+  {
+    desc =
+      ( { desc = splice_field_name; info = loc },
+        { mut = false; typ = Value I32 } );
+    info = loc;
+  }
+
 type signage = Wax_wasm.Ast.signage = Signed | Unsigned
 type unop = Neg | Pos | Not
 

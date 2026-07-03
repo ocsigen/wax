@@ -267,7 +267,7 @@ type custom_operations = {
     dup: &?dup
 };
 type custom = open { ops: &custom_operations };
-type custom_with_id: custom = open { ops: &custom_operations, id: i64 };
+type custom_with_id: custom = open { .., id: i64 };
 
 const channel_ops =
     {
@@ -282,8 +282,7 @@ const channel_ops =
     };
 
 type channel: custom_with_id = {
-    ops: &custom_operations,
-    id: i64,
+    ..,
     fd: mut i32,
     buffer: mut &extern,
     buffer_view: mut &extern,

@@ -165,7 +165,7 @@ const bigarray_ops =
 type int_array = [mut i32];
 
 type bigarray: custom = {
-    f: &custom_operations,
+    ..,
     ba_data: mut &extern, // data
     ba_dim: &int_array, // size in each dimension
     ba_num_dims: i8, // number of dimensions
