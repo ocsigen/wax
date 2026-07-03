@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-db4aaba1.js";
+            window.path_to_searchindex_js = "searchindex-e7b1acd4.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-0d649137.js"></script>
@@ -318,6 +318,22 @@ total /s= n;         // total = total /s n
 <code>&gt;&gt;s=</code>, and <code>&gt;&gt;u=</code>. As for the corresponding binary operators, the signed and
 unsigned variants apply to integers, while the sign-agnostic <code>/=</code> is float
 division. Comparisons have no compound form.</p>
+<h3 id="discarding-a-value"><a class="header" href="#discarding-a-value">Discarding a value</a></h3>
+<p>Assigning to <code>_</code> evaluates an expression and throws its result away — the
+equivalent of WebAssembly’s <code>drop</code>. Nothing is bound, so no name comes into
+scope:</p>
+<pre><code class="language-wax">_ = f();            // call f for its side effects, ignore its result
+</code></pre>
+<p>An optional type annotation, <code>_: t = e</code>, pins the type of the discarded value.
+It is only ever needed for a bare numeric expression whose type the surrounding
+syntax does not otherwise fix: an unconstrained integer literal defaults to
+<code>i32</code> and a float to <code>f64</code>, so without the annotation a discarded <code>i64</code>
+computation would be re-read at the wrong width (silently changing a value, or
+turning a well-defined result into a trap). Hand-written code rarely needs it;
+converting from WebAssembly adds it only where it is load-bearing:</p>
+<pre><code class="language-wax">_: i64 = 1 &lt;&lt; 40;   // discarded, but kept i64 — without the pin it would be
+                    // i32.shl, whose count wraps mod 32 to a different result
+</code></pre>
 <h3 id="global-variables"><a class="header" href="#global-variables">Global Variables</a></h3>
 <p>Globals are declared at module level. <code>const</code> is immutable; <code>let</code> is mutable:</p>
 <pre><code class="language-wax">const PI: f64 = 3.14159;        // immutable global
