@@ -3204,7 +3204,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       (match field.typ with
       | Packed I8 -> ()
       | Packed I16 ->
-          let s = String.concat "" (List.map (fun x -> x.Ast.desc) s) in
+          let s = Wax_utils.Ast.concat_desc s in
           if not (String.is_valid_utf_8 s) then
             Error.string_not_unicode ctx.modul.diagnostics ~location:i.info
       | Value _ ->
@@ -3810,9 +3810,7 @@ let globals ctx fields =
                     (match (Types.get_subtype ctx.subtyping_info ty).typ with
                     | Array { typ = Packed I8; _ } -> ()
                     | Array { typ = Packed I16; _ } ->
-                        let s =
-                          String.concat "" (List.map (fun x -> x.Ast.desc) init)
-                        in
+                        let s = Wax_utils.Ast.concat_desc init in
                         if not (String.is_valid_utf_8 s) then
                           Error.string_not_unicode ctx.diagnostics
                             ~location:idx.info

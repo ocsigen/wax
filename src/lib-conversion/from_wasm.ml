@@ -4,7 +4,6 @@ module Simd = Wax_wasm.Simd
 module Atomics = Wax_wasm.Atomics
 module Uint32 = Wax_utils.Uint32
 module Cond = Wax_wasm.Cond_solver
-module StringMap = Map.Make (String)
 
 (* Raised by [Sequence.get] for a numeric field reference in a module with
    conditional annotations: the field's index depends on which branch is taken,
@@ -2005,7 +2004,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   | AtomicFence -> Stack.push 0 (path_call "atomic" "fence" [])
   | Char c -> Stack.push 1 (with_loc (Char c))
   | String (t, s) ->
-      let s = String.concat "" (List.map (fun s -> s.Ast.desc) s) in
+      let s = Wax_utils.Ast.concat_desc s in
       Stack.push 1 (with_loc (String (Option.map (idx ctx `Type) t, s)))
   | If_annotation { cond; then_body; else_body } ->
       let then_body =
@@ -2588,7 +2587,7 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
           match init with
           | None -> []
           | Some bytes ->
-              let s = String.concat "" (List.map (fun b -> b.Ast.desc) bytes) in
+              let s = Wax_utils.Ast.concat_desc bytes in
               [
                 {
                   Ast.data_name = None;
@@ -2610,7 +2609,7 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
              })
     | Data { init; mode; _ } ->
         let name = Sequence.get_current ctx.datas in
-        let s = String.concat "" (List.map (fun b -> b.Ast.desc) init) in
+        let s = Wax_utils.Ast.concat_desc init in
         let mode' : _ Ast.datamode =
           match mode with
           | Passive -> Passive
@@ -2729,8 +2728,7 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
                    desc =
                      String
                        ( Option.map (idx ctx `Type) typ,
-                         String.concat "" (List.map (fun s -> s.Ast.desc) init)
-                       );
+                         Wax_utils.Ast.concat_desc init );
                  };
                attributes = [];
              })

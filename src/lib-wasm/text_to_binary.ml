@@ -201,7 +201,7 @@ let push_label ctx label =
 (* A [@string] lowers to [array.new_fixed]. An [i8] array holds the raw bytes
    (its UTF-8 encoding); an [i16] array ([wide]) holds the UTF-16 code units. *)
 let string ~wide i ty s =
-  let s = String.concat "" (List.map (fun s -> s.Ast.desc) s) in
+  let s = Wax_utils.Ast.concat_desc s in
   let values =
     if wide then Wax_utils.Unicode.utf16_code_units s
     else List.init (String.length s) (fun j -> Char.code s.[j])
@@ -1082,7 +1082,7 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
                       (instr ~resolve_string_type ~resolve_func_type ctx)
                       ex )
           in
-          let init = String.concat "" (List.map (fun s -> s.Ast.desc) init) in
+          let init = Wax_utils.Ast.concat_desc init in
           let d = { B.init; mode } in
           scan rest mem_idx (d :: acc)
       | { desc = T.Memory { init = Some init; limits; _ }; _ } :: rest ->
@@ -1097,7 +1097,7 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
                        | `I64 -> B.I64 0L));
                 ] )
           in
-          let init = String.concat "" (List.map (fun s -> s.Ast.desc) init) in
+          let init = Wax_utils.Ast.concat_desc init in
           let d = { B.init; mode } in
           scan rest (mem_idx + 1) (d :: acc)
       | { desc = T.Memory _; _ } :: rest -> scan rest (mem_idx + 1) acc

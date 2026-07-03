@@ -117,7 +117,7 @@ let module_ ((name, fields) : Ast.location module_) : Ast.location module_ =
   (* A string [array.new_fixed] over its encoded elements: UTF-16 code units for
      an [i16] array, raw UTF-8 bytes for an [i8] one. *)
   let string_expr loc (idxo : idx option) (s : datastring) =
-    let content = String.concat "" (List.map (fun x -> x.Ast.desc) s) in
+    let content = Wax_utils.Ast.concat_desc s in
     let type_idx, wide = resolve_type loc idxo in
     let values =
       if wide then Wax_utils.Unicode.utf16_code_units content
