@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-dbc7f649.js";
+            window.path_to_searchindex_js = "searchindex-adcf863c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-0d649137.js"></script>
@@ -465,8 +465,7 @@ x.from_bits()   // Reinterpret int as float
 <p>This maps directly to Wasm’s <code>select</code> instruction.</p>
 <h2 id="control-flow"><a class="header" href="#control-flow">Control Flow</a></h2>
 <h3 id="blocks"><a class="header" href="#blocks">Blocks</a></h3>
-<p>A block groups a sequence of statements, written with <code>do</code>. (A bare <code>{ … }</code> is
-accepted as shorthand for <code>do { … }</code>.)</p>
+<p>A block groups a sequence of statements, written with <code>do</code>.</p>
 <pre><code class="language-wax">do {
     let x: i32;
     x = compute();
@@ -859,6 +858,13 @@ expected type:</p>
 a subtype of the expected type, that subtype is used. The type must still be
 given when the field set is ambiguous (several types share it) or absent (a
 <code>{..}</code> default with no fields).</p>
+<p>A field written as a bare name is <strong>punned</strong> to the like-named local or global:
+<code>{x}</code> is shorthand for <code>{x: x}</code>. Punned and explicit fields mix freely, in any
+order:</p>
+<pre><code class="language-wax">fn make(x: i32, y: i32) -&gt; &amp;point {
+    {x, y: y + 1};              // same as {x: x, y: y + 1}
+}
+</code></pre>
 <h3 id="field-access"><a class="header" href="#field-access">Field Access</a></h3>
 <pre><code class="language-wax">p.x                         // read a field
 p.x = 42;                   // write a field (only if it is `mut`)
