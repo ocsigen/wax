@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ba3e703f.js";
+            window.path_to_searchindex_js = "searchindex-529717a3.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-0d649137.js"></script>
@@ -456,6 +456,18 @@ let (n: i64, _) = stats();      // n annotated, the second result dropped
 </code></pre>
 <p><code>:=</code> works on local variables only — WebAssembly has no <code>global.tee</code>, so applying
 it to a global is an error.</p>
+<p>A compound assignment combines a binary operator with <code>=</code>: <code>x op= e</code> is
+shorthand for <code>x = x op e</code>, where the left-hand side is a local or global
+variable.</p>
+<pre><code class="language-wax">counter += 1;       // counter = counter + 1
+mask &amp;= 0xff;        // mask = mask &amp; 0xff
+total /s= n;         // total = total /s n
+</code></pre>
+<p>Every value-producing arithmetic and bitwise operator has a compound form:
+<code>+=</code>, <code>-=</code>, <code>*=</code>, <code>/=</code>, <code>/s=</code>, <code>/u=</code>, <code>%s=</code>, <code>%u=</code>, <code>&amp;=</code>, <code>|=</code>, <code>^=</code>, <code>&lt;&lt;=</code>,
+<code>&gt;&gt;s=</code>, and <code>&gt;&gt;u=</code>. As for the corresponding binary operators, the signed and
+unsigned variants apply to integers, while the sign-agnostic <code>/=</code> is float
+division. Comparisons have no compound form.</p>
 <h3 id="global-variables"><a class="header" href="#global-variables">Global Variables</a></h3>
 <p>Globals are declared at module level. <code>const</code> is immutable; <code>let</code> is mutable:</p>
 <pre><code class="language-wax">const PI: f64 = 3.14159;        // immutable global
@@ -1432,8 +1444,8 @@ fn triangle(n: i32) -&gt; i32 {
     let i: i32 = 0;
     let total: i32 = 0;
     while i &lt;s n {
-        i = i + 1;
-        total = total + i;
+        i += 1;
+        total += i;
     }
     total;
 }
@@ -1442,8 +1454,8 @@ fn triangle(n: i32) -&gt; i32 {
 fn countdown(n: i32) -&gt; i32 {
     let steps: i32 = 0;
     'loop: loop {
-        n = n - 1;
-        steps = steps + 1;
+        n -= 1;
+        steps += 1;
         br_if 'loop n &gt;s 0;
     }
     steps;
@@ -2237,6 +2249,13 @@ multi-binding <code>let</code>. A <code>drop</code> of one of the results become
 <p>The number of stores folded is exactly the producer’s result arity, so a
 <code>local.set</code> that consumes a value already on the stack below the call is left as
 its own assignment.</p>
+<p>A <a href="#assignment">compound assignment</a> <code>x op= val</code> is shorthand for
+<code>x = x op val</code>; it lowers to a <code>local.get</code>/<code>global.get</code> of <code>x</code>, the operand, the
+binary operator, and a <code>local.set</code>/<code>global.set</code> back into <code>x</code>. The reverse
+direction recognises exactly this shape — a <code>set</code> of <code>x</code> whose value is a binary
+operator with <code>x</code> as its <em>left</em> operand — and reconstructs the compound form
+(<code>x = x + 1</code> becomes <code>x += 1</code>). A comparison, or <code>x</code> in the right operand
+(<code>x = 1 - x</code>), is left as an ordinary assignment.</p>
 <h2 id="control-instructions"><a class="header" href="#control-instructions">Control Instructions</a></h2>
 <div class="table-wrapper">
 <table>

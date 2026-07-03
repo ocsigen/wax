@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ba3e703f.js";
+            window.path_to_searchindex_js = "../searchindex-529717a3.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-0d649137.js"></script>
@@ -341,6 +341,13 @@ multi-binding <code>let</code>. A <code>drop</code> of one of the results become
 <p>The number of stores folded is exactly the producer’s result arity, so a
 <code>local.set</code> that consumes a value already on the stack below the call is left as
 its own assignment.</p>
+<p>A <a href="../language.html#assignment">compound assignment</a> <code>x op= val</code> is shorthand for
+<code>x = x op val</code>; it lowers to a <code>local.get</code>/<code>global.get</code> of <code>x</code>, the operand, the
+binary operator, and a <code>local.set</code>/<code>global.set</code> back into <code>x</code>. The reverse
+direction recognises exactly this shape — a <code>set</code> of <code>x</code> whose value is a binary
+operator with <code>x</code> as its <em>left</em> operand — and reconstructs the compound form
+(<code>x = x + 1</code> becomes <code>x += 1</code>). A comparison, or <code>x</code> in the right operand
+(<code>x = 1 - x</code>), is left as an ordinary assignment.</p>
 <h2 id="control-instructions"><a class="header" href="#control-instructions">Control Instructions</a></h2>
 <div class="table-wrapper">
 <table>

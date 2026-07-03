@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ba3e703f.js";
+            window.path_to_searchindex_js = "searchindex-529717a3.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-0d649137.js"></script>
@@ -306,6 +306,18 @@ let (n: i64, _) = stats();      // n annotated, the second result dropped
 </code></pre>
 <p><code>:=</code> works on local variables only — WebAssembly has no <code>global.tee</code>, so applying
 it to a global is an error.</p>
+<p>A compound assignment combines a binary operator with <code>=</code>: <code>x op= e</code> is
+shorthand for <code>x = x op e</code>, where the left-hand side is a local or global
+variable.</p>
+<pre><code class="language-wax">counter += 1;       // counter = counter + 1
+mask &amp;= 0xff;        // mask = mask &amp; 0xff
+total /s= n;         // total = total /s n
+</code></pre>
+<p>Every value-producing arithmetic and bitwise operator has a compound form:
+<code>+=</code>, <code>-=</code>, <code>*=</code>, <code>/=</code>, <code>/s=</code>, <code>/u=</code>, <code>%s=</code>, <code>%u=</code>, <code>&amp;=</code>, <code>|=</code>, <code>^=</code>, <code>&lt;&lt;=</code>,
+<code>&gt;&gt;s=</code>, and <code>&gt;&gt;u=</code>. As for the corresponding binary operators, the signed and
+unsigned variants apply to integers, while the sign-agnostic <code>/=</code> is float
+division. Comparisons have no compound form.</p>
 <h3 id="global-variables"><a class="header" href="#global-variables">Global Variables</a></h3>
 <p>Globals are declared at module level. <code>const</code> is immutable; <code>let</code> is mutable:</p>
 <pre><code class="language-wax">const PI: f64 = 3.14159;        // immutable global

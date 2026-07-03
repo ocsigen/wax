@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ba3e703f.js";
+            window.path_to_searchindex_js = "searchindex-529717a3.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-0d649137.js"></script>
@@ -323,8 +323,8 @@ fn triangle(n: i32) -&gt; i32 {
     let i: i32 = 0;
     let total: i32 = 0;
     while i &lt;s n {
-        i = i + 1;
-        total = total + i;
+        i += 1;
+        total += i;
     }
     total;
 }
@@ -333,8 +333,8 @@ fn triangle(n: i32) -&gt; i32 {
 fn countdown(n: i32) -&gt; i32 {
     let steps: i32 = 0;
     'loop: loop {
-        n = n - 1;
-        steps = steps + 1;
+        n -= 1;
+        steps += 1;
         br_if 'loop n &gt;s 0;
     }
     steps;
