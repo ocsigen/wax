@@ -5,13 +5,16 @@ The `wax` binary is the primary interface for the Wax toolchain. It supports con
 ## Usage
 
 ```sh
-wax [OPTIONS] [INPUT]        # convert (the default command)
-wax format [OPTIONS] FILE…   # reformat files
-wax check [OPTIONS] FILE…    # validate files
+wax [OPTIONS] [INPUT]         # convert (the default command)
+wax convert [OPTIONS] [INPUT] # the same, named explicitly
+wax format [OPTIONS] FILE…    # reformat files
+wax check [OPTIONS] FILE…     # validate files
 ```
 
-By default `wax` converts between formats. The `format` subcommand reformats
-files (see [Formatting](#formatting)) and `check` validates them (see
+By default `wax` converts between formats; this command is also available under
+its explicit name, `wax convert` (useful when an input filename could be
+mistaken for a subcommand). The `format` subcommand reformats files (see
+[Formatting](#formatting)) and `check` validates them (see
 [Checking](#checking)).
 
 ## Positional Arguments

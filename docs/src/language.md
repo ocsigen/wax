@@ -790,7 +790,7 @@ attributes on the field.
 **Export** a definition under a name with `#[export = "name"]`. It applies to
 functions, globals, memories, tables, and tags, and a field may carry several:
 
-```wax
+```wax,check
 #[export = "add"]
 fn add(x: i32, y: i32) -> i32 { x + y; }
 
@@ -802,7 +802,7 @@ const PI: f64 = 3.14159;
 imported field has no body — a function is declared with just its signature and
 a trailing `;`, and a global with its type:
 
-```wax
+```wax,check
 #[import = ("env", "log")]
 fn log(x: i32);
 
@@ -941,7 +941,7 @@ be left open for extension — the WebAssembly GC type features.
 Types that reference each other are declared together in a `rec { … }` group, so
 each name is in scope for the others:
 
-```wax
+```wax,check
 rec {
     type expr = { op: i32, args: &?args };
     type args = [mut &expr];
@@ -955,7 +955,7 @@ supertype's fields in order and may add more, and a `&sub` is accepted wherever
 a `&super` is expected. Types are *final* by default; a type must be declared
 `open` to be extended.
 
-```wax
+```wax,check
 type shape = open { kind: i32 };
 type circle : shape = { kind: i32, radius: f64 };
 
@@ -968,7 +968,7 @@ Behind `-X custom-descriptors`, a struct type can carry a runtime *descriptor* �
 another type it points to — via the `descriptor` / `describes` clauses, declared
 together in a `rec` group:
 
-```wax
+```wax,check
 rec {
     type obj = descriptor obj_desc { x: i32 };
     type obj_desc = describes obj { };
@@ -1023,7 +1023,7 @@ becomes `add_i32x4` and `f32x4.splat` becomes `splat_f32x4`. Signed/unsigned
 variants keep their `_s`/`_u` suffix, and constant lane immediates (lane and
 shuffle indices) come first in the argument list.
 
-```wax
+```wax,check
 fn scale(v: v128, k: i32) -> v128 {
     v.add_i32x4(k.splat_i32x4());     // i32x4.add of v and (i32x4.splat k)
 }
@@ -1035,7 +1035,7 @@ fn lane0(v: v128) -> i32 {
 
 Constants are `v128::` free functions, one argument per lane:
 
-```wax
+```wax,check
 const ones: v128 = v128::const_i32x4(1, 1, 1, 1);
 ```
 
