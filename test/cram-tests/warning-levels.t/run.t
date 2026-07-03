@@ -214,8 +214,9 @@ and the `naming` warnings report it:
   4 │ 
   type t = fn(if_2: i32, x: i32, x_2: i32) -> i32;
 
-Labels are renamed when one shadows an enclosing label of the same name, but
-only when the inner label is actually referenced (an unused label is dropped):
+Labels are renamed when one shadows an enclosing label of the same name. A
+named block keeps its label even when no branch targets it, so both the outer
+(unused) and inner labels are shown:
 
   $ wax -i wat -f wax -W naming=warning label.wat
   Warning: The name 'x' is already in use; renaming this occurrence to 'x_2'.
@@ -228,7 +229,7 @@ only when the inner label is actually referenced (an unused label is dropped):
     ·              ^^
   5 │ 
   fn f() -> i32 {
-      do {
+      'x: do {
           'x_2: do {
               br 'x_2 1;
           }

@@ -247,18 +247,18 @@ fn bigarray_hash(x: &eq) -> i32 {
                 i += 4;
             }
             w = 0;
-            dispatch (len & 3) [ 'l_2 'l_3 'l_4 else 'l_5 ] {
-                'l_5: {
+            dispatch (len & 3) [ '_0_bytes '_1_byte '_2_bytes else '_3_bytes ] {
+                '_3_bytes: {
                     w = ta_get_ui8(data_2, i + 2) << 16;
                 }
-                'l_4: {
+                '_2_bytes: {
                     w |= ta_get_ui8(data_2, i + 1) << 8;
                 }
-                'l_3: {
+                '_1_byte: {
                     w |= ta_get_ui8(data_2, i);
                     h = caml_hash_mix_int(h, w);
                 }
-                'l_2: {
+                '_0_bytes: {
                     return h;
                 }
             }
@@ -278,18 +278,18 @@ fn bigarray_hash(x: &eq) -> i32 {
                 i += 4;
             }
             w = 0;
-            dispatch (len & 3) [ 'l_2 'l_3 'l_4 else 'l_5 ] {
-                'l_5: {
+            dispatch (len & 3) [ '_0_bytes '_1_byte '_2_bytes else '_3_bytes ] {
+                '_3_bytes: {
                     w = ta_get_i8(data_2, i + 2) << 16;
                 }
-                'l_4: {
+                '_2_bytes: {
                     w |= ta_get_i8(data_2, i + 1) << 8;
                 }
-                'l_3: {
+                '_1_byte: {
                     w |= ta_get_i8(data_2, i);
                     h = caml_hash_mix_int(h, w);
                 }
-                'l_2: {
+                '_0_bytes: {
                     return h;
                 }
             }

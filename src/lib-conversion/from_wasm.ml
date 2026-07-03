@@ -211,6 +211,37 @@ module Sequence = struct
   let skip seq = seq.last_index <- seq.last_index + 1
 end
 
+(* Turn a Wasm identifier into a valid Wax identifier. Wasm identifiers are
+   ASCII (see the Wasm lexer's [idchar]), so every character Wax does not accept
+   in an identifier is mapped to an underscore ([$label$n] -> [label_n]), then
+   one more is prefixed when the result still cannot start an identifier (it
+   begins with a digit or a ['], as in [$0_bytes] -> [_0_bytes]). We give up
+   (returning [None], so the caller falls back to a generated name) when two
+   rejected characters sit side by side: a lone separator reads fine, but a run
+   of them ([$!!!]) collapses to a [__] blob that no longer resembles a name. *)
+let sanitize_identifier s =
+  if Lexer.is_valid_identifier s then Some s
+  else if s = "" then None
+  else
+    let is_idchar c =
+      (c >= 'a' && c <= 'z')
+      || (c >= 'A' && c <= 'Z')
+      || (c >= '0' && c <= '9')
+      || c = '_' || c = '\''
+    in
+    let rec adjacent_rejects i =
+      i + 1 < String.length s
+      && (((not (is_idchar s.[i])) && not (is_idchar s.[i + 1]))
+         || adjacent_rejects (i + 1))
+    in
+    if adjacent_rejects 0 then None
+    else
+      let mapped = String.map (fun c -> if is_idchar c then c else '_') s in
+      let candidate =
+        match mapped.[0] with '0' .. '9' | '\'' -> "_" ^ mapped | _ -> mapped
+      in
+      if Lexer.is_valid_identifier candidate then Some candidate else None
+
 module LabelStack = struct
   type t = {
     ns : Namespace.t;
@@ -220,12 +251,17 @@ module LabelStack = struct
   let push ?diagnostics st (label : Src.name option) =
     let ns = Namespace.dup st.ns in
     let used = ref false in
-    (* The source label name, when present and usable; an absent or invalid one
-       falls back to the generated "l" and is never worth a rename warning. *)
+    (* The source label name made into a valid Wax identifier (sanitizing e.g. a
+       leading digit, [$0_bytes] -> ['_0_bytes]); [None] when the source had no
+       name or it cannot be sanitized, in which case we fall back to the
+       generated "l". *)
     let src =
       match label with
-      | Some label when Lexer.is_valid_identifier label.desc -> Some label
-      | _ -> None
+      | Some label -> (
+          match sanitize_identifier label.Ast.desc with
+          | Some desc -> Some { label with Ast.desc }
+          | None -> None)
+      | None -> None
     in
     let candidate = match src with Some l -> l.Ast.desc | None -> "l" in
     let name, outcome =
@@ -234,11 +270,14 @@ module LabelStack = struct
       | None -> Namespace.add' ns candidate
     in
     ( (fun () ->
-        if !used then (
-          (* Warn only now that the label is rendered: an unused label is
-             dropped, so its rename never reaches the output. A label namespace
-             reserves no words, so a rename is always a collision with an
-             enclosing label of the same name. *)
+        (* Render the label when a branch targets it, or when the source named
+           the block with a name we could keep — a named block keeps its label
+           even if no branch targets it, so the name survives the round-trip. An
+           anonymous (or unsalvageably-named) unbranched block stays
+           label-free. *)
+        if !used || Option.is_some src then (
+          (* A label namespace reserves no words, so a rename is always a
+             collision with an enclosing label of the same name. *)
           (match (src, outcome, diagnostics) with
           | Some l, Namespace.Renamed { reserved; previous }, Some diagnostics
             ->

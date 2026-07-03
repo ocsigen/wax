@@ -939,18 +939,18 @@
           (i64.shr_u (local.tee $x_4 (i64.reinterpret_f64 (local.get $x)))
             (i64.const 52)) (i64.const 2047)))))
   (local.set $x_7 (i64.reinterpret_f64 (local.get $z)))
-  (block $l_2
-    (block $l_3
-      (br_if $l_3 (i64.gt_u (local.get $x_3) (i64.const 1993)))
-      (br_if $l_3 (i64.gt_u (local.get $x_5) (i64.const 1993)))
-      (br_if $l_3 (i64.gt_u (local.get $x_6) (i64.const 3016)))
-      (br_if $l_3
+  (block $label_1
+    (block $label_2
+      (br_if $label_2 (i64.gt_u (local.get $x_3) (i64.const 1993)))
+      (br_if $label_2 (i64.gt_u (local.get $x_5) (i64.const 1993)))
+      (br_if $label_2 (i64.gt_u (local.get $x_6) (i64.const 3016)))
+      (br_if $label_2
         (i64.gt_u (i64.and (local.get $x_7) (i64.const 0x7fe0000000000000))
           (i64.const 0x7c90000000000000)))
       (local.set $x_8 (i32.const 0))
-      (br_if $l_3 (i64.le_u (local.get $x_6) (i64.const 1076)))
+      (br_if $label_2 (i64.le_u (local.get $x_6) (i64.const 1076)))
       (local.set $x_9 (i32.const 0))
-      (br $l_2))
+      (br $label_1))
     (local.set $x_7
       (i64.and (i64.shr_u (local.get $x_7) (i64.const 52)) (i64.const 2047)))
     (block $cont
@@ -992,10 +992,10 @@
           (f64.mul
             (f64.add (f64.mul (local.get $z) (f64.const 0x1p54))
               (local.get $y)) (f64.const 0x1p-54)))))
-    (block $l_3
-      (block $l_4
-        (block $l_5
-          (br_if $l_5 (i64.lt_u (local.get $x_6) (i64.const 3017)))
+    (block $label_10
+      (block $label_11
+        (block $label_12
+          (br_if $label_12 (i64.lt_u (local.get $x_6) (i64.const 3017)))
           (local.set $z
             (select (f64.mul (local.get $z) (f64.const 0x1p-53))
               (local.get $z) (i64.gt_u (local.get $x_7) (i64.const 53))))
@@ -1006,41 +1006,41 @@
           (local.set $y
             (select (local.get $y)
               (f64.mul (local.get $y) (f64.const 0x1p-53)) (local.get $x_8)))
-          (br $l_4))
-        (br_if $l_3 (i64.lt_u (local.get $x_7) (i64.const 1994)))
-        (block $l_5
-          (block $l_6
-            (br_if $l_6 (i64.gt_u (local.get $x_6) (i64.const 1129)))
-            (block $l_7
-              (br_if $l_7 (i64.le_u (local.get $x_5) (local.get $x_3)))
+          (br $label_11))
+        (br_if $label_10 (i64.lt_u (local.get $x_7) (i64.const 1994)))
+        (block $label_13
+          (block $label_14
+            (br_if $label_14 (i64.gt_u (local.get $x_6) (i64.const 1129)))
+            (block $label_15
+              (br_if $label_15 (i64.le_u (local.get $x_5) (local.get $x_3)))
               (local.set $x (f64.mul (local.get $x) (f64.const 0x1p108)))
-              (br $l_5))
+              (br $label_13))
             (local.set $y (f64.mul (local.get $y) (f64.const 0x1p108)))
-            (br $l_5))
-          (block $l_6
-            (br_if $l_6 (i64.le_u (local.get $x_5) (local.get $x_3)))
+            (br $label_13))
+          (block $label_16
+            (br_if $label_16 (i64.le_u (local.get $x_5) (local.get $x_3)))
             (local.set $x
               (select (f64.mul (local.get $x) (f64.const 0x1p-53))
                 (local.get $x) (i64.gt_u (local.get $x_5) (i64.const 53))))
-            (br $l_5))
+            (br $label_13))
           (local.set $y
             (select (f64.mul (local.get $y) (f64.const 0x1p-53))
               (local.get $y) (i64.gt_u (local.get $x_3) (i64.const 53)))))
         (local.set $z (f64.mul (local.get $z) (f64.const 0x1p-53))))
       (local.set $x_9 (i32.const 0))
       (local.set $x_8 (i32.const 1))
-      (br $l_2))
-    (block $l_3
-      (block $l_4
-        (br_if $l_4 (i64.lt_u (local.get $x_5) (i64.const 1994)))
+      (br $label_1))
+    (block $label_17
+      (block $label_18
+        (br_if $label_18 (i64.lt_u (local.get $x_5) (i64.const 1994)))
         (local.set $y (f64.mul (local.get $y) (f64.const 0x1p53)))
         (local.set $x (f64.mul (local.get $x) (f64.const 0x1p-53)))
-        (br $l_3))
-      (block $l_4
-        (br_if $l_4 (i64.lt_u (local.get $x_3) (i64.const 1994)))
+        (br $label_17))
+      (block $label_19
+        (br_if $label_19 (i64.lt_u (local.get $x_3) (i64.const 1994)))
         (local.set $x (f64.mul (local.get $x) (f64.const 0x1p53)))
         (local.set $y (f64.mul (local.get $y) (f64.const 0x1p-53)))
-        (br $l_3))
+        (br $label_17))
       (local.set $z
         (select (f64.mul (local.get $z) (f64.const 0x1p108)) (local.get $z)
           (local.tee $x_9 (i64.lt_u (local.get $x_7) (i64.const 219)))))
@@ -1051,7 +1051,7 @@
         (select (local.get $y) (f64.mul (local.get $y) (f64.const 0x1p108))
           (local.get $x_8)))
       (local.set $x_8 (i32.const 0))
-      (br $l_2))
+      (br $label_1))
     (local.set $x_8 (i32.const 0))
     (local.set $x_9 (i32.const 0)))
   (block $cont
@@ -1086,12 +1086,12 @@
             (f64.mul (local.get $x_10) (local.get $x_12)))
           (f64.mul (local.get $x_11) (local.get $x_12)))
         (f64.mul (local.get $x_10) (local.get $x_13)))))
-  (block $l_2
-    (block $l_3
-      (br_if $l_3
+  (block $label_21
+    (block $label_22
+      (br_if $label_22
         (f64.ne (local.tee $y (f64.add (local.get $z) (local.get $x_14)))
           (f64.const 0)))
-      (br_if $l_2 (f64.eq (local.get $x) (f64.const 0))))
+      (br_if $label_21 (f64.eq (local.get $x) (f64.const 0))))
     (block $cont
       (br_if $cont
         (f64.eq

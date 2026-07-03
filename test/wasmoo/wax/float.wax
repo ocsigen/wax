@@ -764,16 +764,16 @@ fn caml_fma_float(vx: &eq, vy: &eq, vz: &eq) -> &eq {
     let x_7 = z.to_bits();
     let x_8: i32;
     let x_9: i32;
-    'l_2: do {
-        'l_3: do {
-            br_if 'l_3 x_3 >u 1993;
-            br_if 'l_3 x_5 >u 1993;
-            br_if 'l_3 x_6 >u 3016;
-            br_if 'l_3 x_7 & 0x7fe0000000000000 >u 0x7c90000000000000;
+    'label_1: do {
+        'label_2: do {
+            br_if 'label_2 x_3 >u 1993;
+            br_if 'label_2 x_5 >u 1993;
+            br_if 'label_2 x_6 >u 3016;
+            br_if 'label_2 x_7 & 0x7fe0000000000000 >u 0x7c90000000000000;
             x_8 = 0;
-            br_if 'l_3 x_6 <=u 1076;
+            br_if 'label_2 x_6 <=u 1076;
             x_9 = 0;
-            br 'l_2;
+            br 'label_1;
         }
         x_7 = x_7 >>u 52 & 2047;
         'cont: do {
@@ -811,31 +811,31 @@ fn caml_fma_float(vx: &eq, vy: &eq, vz: &eq) -> &eq {
             }
             return { f: (z * 0x1p54 + y) * 0x1p-54 };
         }
-        'l_3: do {
-            'l_4: do {
-                'l_5: do {
-                    br_if 'l_5 x_6 <u 3017;
+        'label_10: do {
+            'label_11: do {
+                'label_12: do {
+                    br_if 'label_12 x_6 <u 3017;
                     z = x_7 >u 53?z * 0x1p-53:z;
                     x = (x_8 := x_5 >u x_3)?x * 0x1p-53:x;
                     y = x_8?y:y * 0x1p-53;
-                    br 'l_4;
+                    br 'label_11;
                 }
-                br_if 'l_3 x_7 <u 1994;
-                'l_5: do {
-                    'l_6: do {
-                        br_if 'l_6 x_6 >u 1129;
-                        'l_7: do {
-                            br_if 'l_7 x_5 <=u x_3;
+                br_if 'label_10 x_7 <u 1994;
+                'label_13: do {
+                    'label_14: do {
+                        br_if 'label_14 x_6 >u 1129;
+                        'label_15: do {
+                            br_if 'label_15 x_5 <=u x_3;
                             x *= 0x1p108;
-                            br 'l_5;
+                            br 'label_13;
                         }
                         y *= 0x1p108;
-                        br 'l_5;
+                        br 'label_13;
                     }
-                    'l_6: do {
-                        br_if 'l_6 x_5 <=u x_3;
+                    'label_16: do {
+                        br_if 'label_16 x_5 <=u x_3;
                         x = x_5 >u 53?x * 0x1p-53:x;
-                        br 'l_5;
+                        br 'label_13;
                     }
                     y = x_3 >u 53?y * 0x1p-53:y;
                 }
@@ -843,26 +843,26 @@ fn caml_fma_float(vx: &eq, vy: &eq, vz: &eq) -> &eq {
             }
             x_9 = 0;
             x_8 = 1;
-            br 'l_2;
+            br 'label_1;
         }
-        'l_3: do {
-            'l_4: do {
-                br_if 'l_4 x_5 <u 1994;
+        'label_17: do {
+            'label_18: do {
+                br_if 'label_18 x_5 <u 1994;
                 y *= 0x1p53;
                 x *= 0x1p-53;
-                br 'l_3;
+                br 'label_17;
             }
-            'l_4: do {
-                br_if 'l_4 x_3 <u 1994;
+            'label_19: do {
+                br_if 'label_19 x_3 <u 1994;
                 x *= 0x1p53;
                 y *= 0x1p-53;
-                br 'l_3;
+                br 'label_17;
             }
             z = (x_9 := x_7 <u 219)?z * 0x1p108:z;
             x = (x_8 := x_5 >u x_3)?x * 0x1p108:x;
             y = x_8?y:y * 0x1p108;
             x_8 = 0;
-            br 'l_2;
+            br 'label_1;
         }
         x_8 = 0;
         x_9 = 0;
@@ -881,10 +881,10 @@ fn caml_fma_float(vx: &eq, vy: &eq, vz: &eq) -> &eq {
         (x_11 := x - (x_10 := (x_10 := x * 0x8000001) - (x_10 - x)))
             * (x_13 := y - (x_12 := (x_12 := y * 0x8000001) - (x_12 - y)))
             - ((x_14 := y * x) - x_10 * x_12 - x_11 * x_12 - x_10 * x_13);
-    'l_2: do {
-        'l_3: do {
-            br_if 'l_3 (y := z + x_14) != 0;
-            br_if 'l_2 x == 0;
+    'label_21: do {
+        'label_22: do {
+            br_if 'label_22 (y := z + x_14) != 0;
+            br_if 'label_21 x == 0;
         }
         'cont: do {
             br_if 'cont
