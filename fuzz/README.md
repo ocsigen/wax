@@ -56,6 +56,7 @@ fuzz/cast-lattice.sh             # deterministic sweep of the numeric/ref cast l
 fuzz/wat-corpus.sh [smith-count] [bytes]   # build .wat seeds: spec corpus + smith modules
 fuzz/mutate-wat.sh [count]  # text-mutate the wat seeds (edge literals) + check them
 fuzz/wat-cast-chain.sh      # deterministic byte-identical round-trip of WAT two-cast chains
+fuzz/wat-cast-const.sh      # deterministic round-trip of each conversion on edge-value consts (catches over-rejection)
 
 # wasm *binary* input side (the binary reader):
 fuzz/mutate-wasm.sh [count] # byte-mutate the valid wasm corpus + check them
@@ -72,9 +73,10 @@ fuzz/exec-mutate.sh [wast…] # behavioural check on semantics-preserving mutant
 ```
 
 `run.sh`, `smith.sh`, `mutate-wax.sh`, `diff-validate.sh`, `mutate-validate.sh`,
-`cast-lattice.sh`, `wat-cast-chain.sh`, `stress.sh` and `comment-preserve.sh`
-exit non-zero if any **HIGH**-severity finding appears, so any can gate CI; the
-execution oracles exit non-zero on any behavioural regression.
+`cast-lattice.sh`, `wat-cast-chain.sh`, `wat-cast-const.sh`, `stress.sh` and
+`comment-preserve.sh` exit non-zero if any **HIGH**-severity finding appears, so
+any can gate CI; the execution oracles exit non-zero on any behavioural
+regression.
 
 The mutation campaigns (`mutate-wax.sh`, `mutate-wat.sh`, `mutate-wasm.sh`) are
 reproducible: each derives every per-mutation seed from a master `SEED`
@@ -205,6 +207,21 @@ verbatim is not required — a `ref.cast` to a supertype-or-equal of the operand
 static type is a proven no-op wax drops, and `i32.wrap_i64; i64.extend_i32_s` is
 folded to the equivalent `i64.extend32_s`. Deterministic; needs `wasm-tools` (for
 `strip --all`), the round-trip legs themselves being wax-only.
+
+`wat-cast-const.sh` closes an *over-rejection* blind spot that `cast-lattice.sh`
+has by construction. cast-lattice drives casts from Wax source with no ground
+truth, so it only flags crashes and broken round-trips of casts that *compiled* —
+a cast the typer wrongly *rejects* but `to_wasm` could lower is invisible (a clean
+rejection reads as an intended answer). This script supplies the ground truth:
+it enumerates each numeric conversion instruction applied to an edge-value
+*constant* (`wat-cast-chain.sh` uses `local.get` operands; a const is what
+decompiles to a numeric *literal*, where the flexible-numeric typer/`to_wasm`
+arms actually disagree), keeps only the modules `wasm-tools` validates, and
+round-trips each through Wax — so a rejection on the way back is provably an
+over-rejection, not an intended "no". The edge values (signed zero, powers of two
+straddling the i32/u32/i64 limits, range limits, inf, nan) probe those arms
+exhaustively; it is what would have caught the `i64.trunc_f* (f*.const 2^32)` →
+`<big> as i64_s` over-rejection directly.
 
 ## Deterministic cross-cutting guards
 
