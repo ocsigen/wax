@@ -904,6 +904,26 @@ let format_term =
   format inplace check format_opt color fold_mode warnings (List.concat debug)
     files
 
+(* Exit codes, documented in docs/src/cli.md. Given explicitly rather than
+   extending [Cmd.Exit.defaults] because the toolchain repurposes 123 (usage
+   error, not cmdliner's generic "some error") and adds 128 (rejected input);
+   0/124/125 keep cmdliner's standard meaning. This only drives the generated
+   --help, so it matches the reference. *)
+let exits =
+  [
+    Cmd.Exit.info 0 ~doc:"on success.";
+    Cmd.Exit.info 123
+      ~doc:
+        "on a usage error (an invalid flag combination), or a $(b,format \
+         --check) run that found files needing formatting.";
+    Cmd.Exit.info 124 ~doc:"on command line parsing errors.";
+    Cmd.Exit.info 125 ~doc:"on unexpected internal errors (bugs).";
+    Cmd.Exit.info 128
+      ~doc:
+        "on rejected input: a parse, validation or type error, or a malformed \
+         wasm binary (also a $(b,check) run that found any problem).";
+  ]
+
 let format_cmd =
   let doc = "Format WebAssembly source files (.wat, .wasm, .wax)" in
   let man =
@@ -930,7 +950,7 @@ let format_cmd =
       `S Manpage.s_options;
     ]
   in
-  Cmd.v (Cmd.info "format" ~doc ~man) format_term
+  Cmd.v (Cmd.info "format" ~doc ~man ~exits) format_term
 
 let check_term =
   let+ format_opt = format_input
@@ -962,11 +982,11 @@ let check_cmd =
       `S Manpage.s_options;
     ]
   in
-  Cmd.v (Cmd.info "check" ~doc ~man) check_term
+  Cmd.v (Cmd.info "check" ~doc ~man ~exits) check_term
 
 let convert_cmd =
   let doc = "Convert between WebAssembly formats (the default command)" in
-  Cmd.v (Cmd.info "convert" ~doc) convert_term
+  Cmd.v (Cmd.info "convert" ~doc ~exits) convert_term
 
 let main_cmd =
   let doc = "Convert between WebAssembly formats (.wat, .wasm, .wax)" in
@@ -1001,7 +1021,9 @@ let main_cmd =
       `S Manpage.s_options;
     ]
   in
-  Cmd.group (Cmd.info "wax" ~doc ~man) ~default:convert_term
+  Cmd.group
+    (Cmd.info "wax" ~doc ~man ~exits)
+    ~default:convert_term
     [ convert_cmd; format_cmd; check_cmd ]
 
 (* cmdliner reads the first token as a subcommand name and, even with a default
