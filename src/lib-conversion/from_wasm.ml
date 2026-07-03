@@ -871,14 +871,18 @@ let int_un_op i0 sz (op : Src.int_un_op) =
         | BinOp ({ Ast.desc = Ast.Eq; _ }, e1, e2) ->
             with_loc (BinOp (op_loc i0 Ast.Ne, e1, e2))
         | _ -> with_loc (UnOp (op_loc i0 Ast.Not, operand)))
-    | Trunc (_, signage) ->
+    | Trunc (f, signage) ->
+        (* The operand is a float of [f]'s width, NOT [floattype sz] ([sz] is the
+           integer *result* size — wrong for e.g. [i32.trunc_f64], whose operand
+           is f64 not f32). This only affects a non-inlinable operand, where [e]
+           materialises the type as a hole cast; an inlined operand is returned
+           untyped and takes its type from context. *)
+        let fty : Ast.valtype = match f with `F32 -> F32 | `F64 -> F64 in
+        with_loc (Cast (e fty, Signedtype { typ = sz; signage; strict = true }))
+    | TruncSat (f, signage) ->
+        let fty : Ast.valtype = match f with `F32 -> F32 | `F64 -> F64 in
         with_loc
-          (Cast
-             (e (floattype sz), Signedtype { typ = sz; signage; strict = true }))
-    | TruncSat (_, signage) ->
-        with_loc
-          (Cast
-             (e (floattype sz), Signedtype { typ = sz; signage; strict = false }))
+          (Cast (e fty, Signedtype { typ = sz; signage; strict = false }))
     | Reinterpret ->
         method_call
           (let e = e (floattype sz) in
