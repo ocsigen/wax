@@ -789,6 +789,14 @@ module Sequence = struct
     | Id id -> (
         try Hashtbl.find seq.label_mapping id
         with Not_found -> assert false (* Should not happen *))
+
+  (* Resolve to an index without reporting or raising when a name is unbound —
+     for callers that only want to note a resolvable reference and leave the
+     error reporting to the pass that validates the reference. *)
+  let get_index_opt seq (idx : Ast.Text.idx) =
+    match idx.desc with
+    | Num n -> Some (Uint32.to_int n)
+    | Id id -> Hashtbl.find_opt seq.label_mapping id
 end
 
 (*** Types and the type context ***)
@@ -2746,8 +2754,12 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       push ~source (Some loc) (Ref { nullable = true; typ })
   | RefFunc idx ->
       let*! i, type_idx, sign, exact = get_function ctx idx in
-      if not ((not !validate_refs) || Hashtbl.mem ctx.modul.refs i) then
-        Error.ref_func_inaccessible ctx.modul.diagnostics ~location:loc idx;
+      if
+        not
+          ((not !validate_refs)
+          || Hashtbl.mem ctx.modul.refs
+               (Sequence.get_index ctx.modul.functions idx))
+      then Error.ref_func_inaccessible ctx.modul.diagnostics ~location:loc idx;
       (* Name the function's type when it was declared with a named type,
          otherwise show the signature inline (a numeric index would be
          meaningless, as the interned index space is deduplicated). *)
@@ -3224,8 +3236,11 @@ let rec check_constant_instruction ctx (i : _ Ast.Text.instr) =
       if ty.mut then
         Error.non_constant_global ctx.diagnostics ~location:idx.info idx
   | RefFunc i ->
-      let*? ty, _, _, _ = Sequence.get ctx.diagnostics ctx.functions i in
-      Hashtbl.replace ctx.refs ty ()
+      (* Record the referenced function by INDEX, not by its type: a ref.func in
+         a body is valid only if that SAME function occurs outside any body, so
+         keying by type would wrongly accept any other same-typed function. *)
+      let*? _ = Sequence.get ctx.diagnostics ctx.functions i in
+      Hashtbl.replace ctx.refs (Sequence.get_index ctx.functions i) ()
   | RefNull _ | StructNew _ | StructNewDefault _ | StructNewDesc _
   | StructNewDefaultDesc _ | ArrayNew _ | ArrayNewDefault _ | ArrayNewFixed _
   | RefI31 | Const _
@@ -3825,6 +3840,34 @@ let segments ctx fields =
       | _ -> ())
     fields
 
+(* An exported function is referenceable by [ref.func] (it is in the module's
+   [refs] set), like a function named in a global or element segment. Record
+   exported functions by index BEFORE bodies are validated — the dedicated
+   [exports] pass runs after [functions], too late for the [ref.func] check.
+   Both a standalone export field and an inline export on a function count; in a
+   binary all exports are standalone (the export section), inline being WAT
+   sugar. Function indices are counted positionally, imports first (their order
+   is enforced by [check_import_order]), matching how [build_initial_env]
+   registers them. *)
+let declared_func_exports ctx fields =
+  let fi = ref 0 in
+  List.iter
+    (fun (field : (_ Ast.Text.modulefield, _) Ast.annotated) ->
+      match field.desc with
+      | Import { desc = Func _; exports; _ } ->
+          if exports <> [] then Hashtbl.replace ctx.refs !fi ();
+          incr fi
+      | Import _ -> ()
+      | Func { exports; _ } ->
+          if exports <> [] then Hashtbl.replace ctx.refs !fi ();
+          incr fi
+      | Export { kind = Func; index; _ } ->
+          Option.iter
+            (fun i -> Hashtbl.replace ctx.refs i ())
+            (Sequence.get_index_opt ctx.functions index)
+      | _ -> ())
+    fields
+
 let functions ?(warn_unused = true) ctx fields =
   List.iter
     (fun (field : (_ Ast.Text.modulefield, _) Ast.annotated) ->
@@ -4160,6 +4203,7 @@ let validate_configuration ?(warn_unused = true)
   tables_and_memories ctx fields;
   globals ctx fields;
   segments ctx fields;
+  declared_func_exports ctx fields;
   functions ~warn_unused ctx fields;
   exports ctx fields;
   start ctx fields
