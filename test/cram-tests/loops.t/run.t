@@ -47,9 +47,8 @@ is:
   fn sum(n: i32) -> i32 {
       let i = 0;
       let total = 0;
-      while i <s n {
+      while i <s n : (i += 1) {
           total += i;
-          i += 1;
       }
       'loop: loop {
           total -= 1;

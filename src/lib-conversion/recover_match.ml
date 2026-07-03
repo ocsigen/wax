@@ -344,8 +344,14 @@ and rewrite_desc (desc : location instr_desc) : location instr_desc =
       Block { label; typ; block = rewrite_list block }
   | Loop { label; typ; block } ->
       Loop { label; typ; block = rewrite_list block }
-  | While { label; cond; block } ->
-      While { label; cond = rewrite_instr cond; block = rewrite_list block }
+  | While { label; cond; step; block } ->
+      While
+        {
+          label;
+          cond = rewrite_instr cond;
+          step = Option.map rewrite_instr step;
+          block = rewrite_list block;
+        }
   | If { label; typ; cond; if_block; else_block } ->
       If
         {

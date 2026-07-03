@@ -91,11 +91,10 @@
         }
         'continue: if string_builtins_available & (len <=u utf16_buffer_size) {
             let i: i32;
-            while i <u len {
+            while i <u len : (i += 1) {
                 let c = s[pos + i] as i32_u;
                 br_if 'continue c >=u 128;
                 buffer[i] = c;
-                i += 1;
             }
             return fromCharCodeArray(buffer, 0, len) as &any;
         }
@@ -120,11 +119,10 @@
             _ = intoCharCodeArray(s', buffer, 0);
             let b: &bytes = [..; len];
             let i: i32;
-            while i <u len {
+            while i <u len : (i += 1) {
                 let c = buffer[i] as i32_u;
                 br_if 'continue c >=u 128;
                 b[i] = c;
-                i += 1;
             }
             return b;
         }
@@ -140,9 +138,8 @@
 
     fn write_to_buffer(s: &bytes, pos: i32, len: i32) {
         let i: i32;
-        while i <u len {
+        while i <u len : (i += 1) {
             caml_buffer.store8(i, s[pos + i] as i32_u);
-            i += 1;
         }
     }
 
@@ -166,9 +163,8 @@
 
     fn read_from_buffer(s: &bytes, pos: i32, len: i32) {
         let i: i32;
-        while i <u len {
+        while i <u len : (i += 1) {
             s[pos + i] = caml_buffer.load8(i) as i32_u;
-            i += 1;
         }
     }
 

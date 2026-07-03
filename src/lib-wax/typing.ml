@@ -2257,7 +2257,12 @@ let rec collect_assigned_locals acc i =
   | Set (None, _, e) -> collect_assigned_locals acc e
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
       in_list acc block
-  | While { cond; block; _ } -> in_list (collect_assigned_locals acc cond) block
+  | While { cond; step; block; _ } ->
+      let acc = collect_assigned_locals acc cond in
+      let acc =
+        Option.fold ~none:acc ~some:(collect_assigned_locals acc) step
+      in
+      in_list acc block
   | If { cond; if_block; else_block; _ } ->
       let acc = in_list (collect_assigned_locals acc cond) if_block.desc in
       Option.fold ~none:acc ~some:(fun b -> in_list acc b.desc) else_block
@@ -3076,9 +3081,11 @@ let rebuild_dispatch typed_list arms =
   | _ -> assert false
 
 (* Peel a type-checked [while] lowering (see [Ast_utils.lower_while]) back to the
-   typed condition and body, dropping the synthesised loop, [if] and back-edge.
-   Deterministic — the lowering we just type-checked guarantees the shape. *)
-let rebuild_while typed_list =
+   typed condition, continue-expression and body, dropping the synthesised loop,
+   [if] and back-edge. Deterministic — the lowering we just type-checked
+   guarantees the shape. [stepped]/[labelled] pick which of the three shapes
+   [lower_while] produced. *)
+let rebuild_while ~stepped ~labelled typed_list =
   match typed_list with
   | [
    {
@@ -3086,9 +3093,22 @@ let rebuild_while typed_list =
      _;
    };
   ] -> (
-      match List.rev if_block.desc with
-      | { desc = Ast.Br _; _ } :: rev_body -> (cond, List.rev rev_body)
-      | _ -> assert false)
+      match (stepped, labelled) with
+      (* Labelled step: [ block { body } ; step ; br ] *)
+      | true, true -> (
+          match if_block.desc with
+          | [
+           { desc = Ast.Block { block = body; _ }; _ }; step; { desc = Br _; _ };
+          ] ->
+              (cond, Some step, body)
+          | _ -> assert false)
+      (* Unlabelled step: [ body… ; step ; br ]; else just [ body… ; br ]. *)
+      | _ -> (
+          match List.rev if_block.desc with
+          | { desc = Ast.Br _; _ } :: step :: rev_body when stepped ->
+              (cond, Some step, List.rev rev_body)
+          | { desc = Ast.Br _; _ } :: rev_body -> (cond, None, List.rev rev_body)
+          | _ -> assert false))
   | _ -> assert false
 
 (* Peel a type-checked [match] lowering (see [Ast_utils.lower_match]) apart. The
@@ -4960,18 +4980,25 @@ and type_block_construct ctx i =
           let*! results = array_map_opt (internalize ctx) typ.results in
           let instrs' = block ctx i.info label params results params instrs in
           return_statement i (Loop { label; typ; block = instrs' }) results)
-  | While { label; cond; block = instrs } ->
+  | While { label; cond; step; block = instrs } ->
       (* Type-check the equivalent loop (see [Ast_utils.lower_while]): this
-         validates that [cond] is an [i32] and the body is well-typed, with the
-         loop label in scope so a [br] to it (continue) resolves. Then rebuild a
-         typed [While], keeping the high-level form for the formatter and for the
-         identical re-lowering in [To_wasm]. *)
+         validates that [cond] is an [i32], the continue-expression and body are
+         well-typed, and — for a labelled step — that a [br] to the loop label
+         (continue) runs the step. Then rebuild a typed [While], keeping the
+         high-level form for the formatter and for the identical re-lowering in
+         [To_wasm]. *)
       let lowered =
-        Ast_utils.lower_while ~block_info:i.info ~label ~cond ~block:instrs
+        Ast_utils.lower_while ~block_info:i.info
+          ~fresh_loop:(Ast.no_loc Ast_utils.synthetic_loop_label)
+          ~label ~cond ~step ~block:instrs
       in
       let typed = block ctx i.info None [||] [||] [||] lowered in
-      let cond', instrs' = rebuild_while typed in
-      return_statement i (While { label; cond = cond'; block = instrs' }) [||]
+      let cond', step', instrs' =
+        rebuild_while ~stepped:(step <> None) ~labelled:(label <> None) typed
+      in
+      return_statement i
+        (While { label; cond = cond'; step = step'; block = instrs' })
+        [||]
   | If { label; typ; cond; if_block; else_block } -> (
       let* cond' = instruction ctx cond in
       check_type ctx cond' i32_cell;
@@ -8363,7 +8390,10 @@ let rec instr_has_conditional (i : (_ instr_desc, _) annotated) =
   match i.desc with
   | If_annotation _ -> true
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } -> any block
-  | While { cond; block; _ } -> instr_has_conditional cond || any block
+  | While { cond; step; block; _ } ->
+      instr_has_conditional cond
+      || Option.fold ~none:false ~some:instr_has_conditional step
+      || any block
   | If { cond; if_block; else_block; _ } ->
       instr_has_conditional cond || any if_block.desc
       || Option.fold ~none:false ~some:(fun b -> any b.desc) else_block
@@ -8489,8 +8519,14 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
         Block { label; typ; block = sinstrs asm block }
     | Loop { label; typ; block } ->
         Loop { label; typ; block = sinstrs asm block }
-    | While { label; cond; block } ->
-        While { label; cond = sone asm cond; block = sinstrs asm block }
+    | While { label; cond; step; block } ->
+        While
+          {
+            label;
+            cond = sone asm cond;
+            step = Option.map (sone asm) step;
+            block = sinstrs asm block;
+          }
     | If { label; typ; cond; if_block; else_block } ->
         If
           {
@@ -8615,7 +8651,7 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
 let sub_instrs (i : (_ instr_desc, _) annotated) =
   match i.desc with
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } -> block
-  | While { cond; block; _ } -> cond :: block
+  | While { cond; step; block; _ } -> (cond :: Option.to_list step) @ block
   | If { cond; if_block; else_block; _ } ->
       (cond :: if_block.desc)
       @ Option.fold ~none:[] ~some:(fun b -> b.desc) else_block

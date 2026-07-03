@@ -125,7 +125,7 @@ fn compare_bytes(s1: &bytes, s2: &bytes) -> i32 {
     let l2 = s2.length();
     let len = l1 <=u l2?l1:l2;
     let i = 0;
-    while i <s len {
+    while i <s len : (i += 1) {
         let c1 = s1[i] as i32_u;
         let c2 = s2[i] as i32_u;
         if c1 != c2 {
@@ -135,7 +135,6 @@ fn compare_bytes(s1: &bytes, s2: &bytes) -> i32 {
                 return 1;
             }
         }
-        i += 1;
     }
     l1 - l2;
 }
@@ -331,7 +330,7 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32 {
                                         return s1 - s2;
                                     }
                                     let i = 0;
-                                    while i <s s1 {
+                                    while i <s s1 : (i += 1) {
                                         f1 = fa1[i];
                                         f2 = fa2[i];
                                         if f1 < f2 {
@@ -351,7 +350,6 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32 {
                                                 return -1;
                                             }
                                         }
-                                        i += 1;
                                     }
                                     br 'next_item;
                                 }

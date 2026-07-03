@@ -400,9 +400,10 @@ let labels_in_list l =
     | Block { label; block; _ } | Loop { label; block; _ } ->
         add label;
         lst block
-    | While { label; cond; block } ->
+    | While { label; cond; step; block } ->
         add label;
         instr cond;
+        opt step;
         lst block
     | If { label; cond; if_block; else_block; _ } ->
         add label;
@@ -1648,20 +1649,20 @@ and instruction_desc ret ctx i : location Text.instr list =
       List.concat_map (instruction ret ctx)
         (Wax_lang.Ast_utils.lower_dispatch ~block_info:i.info ~index ~cases
            ~default ~arms)
-  | While { label; cond; block } ->
-      (* Lower to the equivalent ['L: loop { if C { B; br 'L; } }] and convert;
-         a label-less loop gets a fresh readable [loop]/[loopN] that avoids both
-         the enclosing labels (threaded into [ret]) and any label nested in the
-         body — e.g. a recovered trailing-test [loop] that kept its name. *)
-      let label =
-        Some
-          (Option.value label
-             ~default:
-               (Ast.no_loc
-                  (fresh_loop_label ret (labels_in_list (cond :: block)))))
+  | While { label; cond; step; block } ->
+      (* Lower to the equivalent ['L: loop { if C { B; br 'L; } }] (with a
+         continue-expression, an inner block runs the step on every iteration;
+         see [Ast_utils.lower_while]) and convert. The synthesised loop label is
+         a fresh readable [loop]/[loopN] avoiding the enclosing labels (threaded
+         into [ret]), any label nested in the body, and the user's own label. *)
+      let avoid =
+        (match label with Some l -> [ l.desc ] | None -> [])
+        @ labels_in_list ((cond :: Option.to_list step) @ block)
       in
+      let fresh_loop = Ast.no_loc (fresh_loop_label ret avoid) in
       List.concat_map (instruction ret ctx)
-        (Wax_lang.Ast_utils.lower_while ~block_info:i.info ~label ~cond ~block)
+        (Wax_lang.Ast_utils.lower_while ~block_info:i.info ~fresh_loop ~label
+           ~cond ~step ~block)
   | Match { scrutinee; arms; default } ->
       (* Lower to the nested type-test ladder (see [Ast_utils.lower_match]) and
          convert each statement. Readable [arm]/[default] labels (one per arm,

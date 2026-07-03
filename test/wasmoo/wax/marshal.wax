@@ -55,11 +55,10 @@ type block = [mut &eq];
         let size = m.size;
         let keys = m.keys;
         let i: i32;
-        while i <u size {
+        while i <u size : (i += 1) {
             if keys[i] == k {
                 return m.values[i] as &i31;
             }
-            i += 1;
         }
         null;
     }
@@ -313,9 +312,8 @@ fn readfloats(s: &intern_state, code: i32, len: i32) -> &eq {
             :CODE_DOUBLE_LITTLE;
     let dest: &float_array = [0; len];
     let i: i32;
-    while i <u len {
+    while i <u len : (i += 1) {
         dest[i] = readfloat(s, code);
-        i += 1;
     }
     dest;
 }
@@ -876,7 +874,7 @@ fn writefloats(s: &extern_state, b: &float_array) {
     let pos = reserve_extern_output(s, sz << 3);
     let buf = s.buf;
     let j = 0;
-    while j <u sz {
+    while j <u sz : (j += 1) {
         let d = b[j].to_bits();
         let i = 0;
         'loop: loop {
@@ -885,7 +883,6 @@ fn writefloats(s: &extern_state, b: &float_array) {
             br_if 'loop i <u 8;
         }
         pos += 8;
-        j += 1;
     }
 }
 

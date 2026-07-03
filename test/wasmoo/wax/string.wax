@@ -35,11 +35,10 @@ fn caml_string_equal(p1: &eq, p2: &eq) -> &eq {
         return 0 as &i31;
     }
     let i = 0;
-    while i <s len {
+    while i <s len : (i += 1) {
         if s1[i] as i32_u != s2[i] as i32_u {
             return 0 as &i31;
         }
-        i += 1;
     }
     1 as &i31;
 }
@@ -60,7 +59,7 @@ fn string_compare(p1: &eq, p2: &eq) -> i32 {
     let l2 = s2.length();
     let len = l1 <=u l2?l1:l2;
     let i = 0;
-    while i <s len {
+    while i <s len : (i += 1) {
         let c1 = s1[i] as i32_u;
         let c2 = s2[i] as i32_u;
         if c1 <u c2 {
@@ -69,7 +68,6 @@ fn string_compare(p1: &eq, p2: &eq) -> i32 {
         if c1 >u c2 {
             return 1;
         }
-        i += 1;
     }
     if l1 <u l2 {
         return -1;

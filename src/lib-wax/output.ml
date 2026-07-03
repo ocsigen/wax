@@ -750,14 +750,24 @@ let rec instr prec pp (i : _ instr) =
               branch b)
             else_body)
   | Loop { label; typ; block = l } -> block pp label (Some "loop") typ l
-  | While { label; cond; block = l } ->
+  | While { label; cond; step; block = l } ->
       hvbox pp (fun () ->
           box pp (fun () ->
               block_label pp label;
               keyword pp "while";
               indent pp indent_level (fun () ->
                   space pp ();
-                  instr Instruction pp cond);
+                  instr Instruction pp cond;
+                  (* Zig-style continue-expression: [: (step)] after the cond. *)
+                  match step with
+                  | None -> ()
+                  | Some s ->
+                      space pp ();
+                      punctuation pp ":";
+                      space pp ();
+                      punctuation pp "(";
+                      instr Instruction pp s;
+                      punctuation pp ")");
               space pp ();
               punctuation pp "{");
           block_contents pp l;

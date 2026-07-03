@@ -535,9 +535,24 @@ let rec stmt d : Ast.location Ast.instr =
              else_block = Some (nl [ stmt (d - 1) ]);
            })
   | _ when d > 0 ->
+      (* Sometimes a Zig-style continue-expression: a compound assignment on a
+         numeric param (always initialised, so well-typed). Exercises the stepped
+         [while] lowering and its round-trip. *)
+      let step =
+        if rnd 2 = 0 then None
+        else
+          let t = pick num_ty in
+          let op = pick (if is_int t then int_binops else flt_binops) in
+          Some (nl (Ast.Set (Some (id (pname t)), Some (nl op), gen t (d - 1))))
+      in
       nl
         (Ast.While
-           { label = None; cond = gen I32 (d - 1); block = [ stmt (d - 1) ] })
+           {
+             label = None;
+             cond = gen I32 (d - 1);
+             step;
+             block = [ stmt (d - 1) ];
+           })
   | _ ->
       let t = pick num_ty in
       nl (Ast.Set (Some (id (pname t)), None, gen t d))

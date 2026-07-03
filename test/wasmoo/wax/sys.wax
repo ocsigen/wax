@@ -147,22 +147,20 @@ fn caml_sys_exit(code: &eq) -> &eq {
         let len = var.length();
         'not_found: do {
             let i: i32;
-            while i <u len {
+            while i <u len : (i += 1) {
                 br_if 'not_found
                     61 // '='
                         == var[i] as i32_u;
-                i += 1;
             }
             i = 0;
-            while i <u environment_count {
+            while i <u environment_count : (i += 1) {
                 let s = m.load32(environment + (i << 2));
                 let j = 0;
                 'next: do {
-                    while j <u len {
+                    while j <u len : (j += 1) {
                         let c = m.load8(s + j) as i32_u;
                         br_if 'next !c;
                         br_if 'next c != var[j] as i32_u;
-                        j += 1;
                     }
                     br_if 'next
                         61 // '='
@@ -170,7 +168,6 @@ fn caml_sys_exit(code: &eq) -> &eq {
                     s += j + 1;
                     become blit_memory_to_string(s, strlen(s));
                 }
-                i += 1;
             }
         }
         null;
@@ -227,10 +224,9 @@ fn caml_sys_getenv_opt(name: &eq) -> &eq {
             br_if 'error res;
             let args: &block = [0 as &i31; argc + 1];
             let i: i32;
-            while i <u argc {
+            while i <u argc : (i += 1) {
                 let arg = m.load32(argv_ptr + (i << 2));
                 args[i + 1] = blit_memory_to_string(arg, strlen(arg));
-                i += 1;
             }
             argv = args;
             free(argv_ptr);
@@ -323,9 +319,8 @@ fn caml_sys_random_seed(&eq) -> &eq {
     }
     let a: &block = [0 as &i31; n + 1];
     let i: i32;
-    while i <u n {
+    while i <u n : (i += 1) {
         a[i + 1] = m.load32(buffer + (i << 2)) as &i31;
-        i += 1;
     }
     a;
 }
@@ -336,9 +331,8 @@ fn caml_sys_random_seed(&eq) -> &eq {
     let n = ta_length(r);
     let a: &block = [0 as &i31; n + 1];
     let i: i32;
-    while i <u n {
+    while i <u n : (i += 1) {
         a[i + 1] = ta_get_i32(r, i) as &i31;
-        i += 1;
     }
     a;
 }

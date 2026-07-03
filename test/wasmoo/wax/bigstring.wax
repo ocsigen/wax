@@ -82,9 +82,8 @@ fn caml_hash_mix_bigstring(h: i32, b: &eq) -> i32 {
     let view = caml_ba_get_view(b);
     let len = caml_ba_num_elts(b);
     let i: i32;
-    while i + 4 <=u len {
+    while i + 4 <=u len : (i += 4) {
         h = caml_hash_mix_int(h, dv_get_i32_unaligned(view, i, 1));
-        i += 4;
     }
     let w = 0;
     dispatch (len & 3) [ '_0_bytes '_1_byte '_2_bytes else '_3_bytes ] {
@@ -300,7 +299,7 @@ fn caml_bigstring_memrchr(s: &eq, vc: &eq, vpos: &eq, vlen: &eq) -> &eq {
     // Create mask: c | (c<<8) | (c<<16) | (c<<24)
     let mask = c * 0x01010101;
     // Main loop: process 4 bytes at a time, backwards
-    while cur - pos >=s 3 {
+    while cur - pos >=s 3 : (cur -= 4) {
         // Read 4 bytes ending at cur (so from cur-3 to cur)
         let word = dv_get_i32_unaligned(v, cur - 3, 1);
         let xored = word ^ mask;
@@ -318,14 +317,12 @@ fn caml_bigstring_memrchr(s: &eq, vc: &eq, vpos: &eq, vlen: &eq) -> &eq {
             }
             return (cur - 3) as &i31;
         }
-        cur -= 4;
     }
     // Handle remaining 0-3 bytes at the beginning
-    while cur >=s pos {
+    while cur >=s pos : (cur -= 1) {
         if c == dv_get_ui8(v, cur) {
             return cur as &i31;
         }
-        cur -= 1;
     }
     -1 as &i31;
 }

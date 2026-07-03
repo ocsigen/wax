@@ -272,10 +272,9 @@ type bytes = [mut i8];
         let l = a.length();
         let i = 1;
         let o = new_obj();
-        while i <u l {
+        while i <u l : (i += 1) {
             let p = a[i] as &block;
             set(o, unwrap(caml_jsstring_of_bytes(p[1])), unwrap(p[2]));
-            i += 1;
         }
         { js: o };
     }
@@ -290,9 +289,8 @@ type bytes = [mut i8];
                 l = a.length() - 1;
                 a' = new_array(l);
                 i = 0;
-                while i <u l {
+                while i <u l : (i += 1) {
                     array_set(a', i, unwrap(a[i + 1]));
-                    i += 1;
                 }
                 return { js: a' as &any };
             }
@@ -301,9 +299,8 @@ type bytes = [mut i8];
                 l = fa.length();
                 a' = new_array(l);
                 i = 0;
-                while i <u l {
+                while i <u l : (i += 1) {
                     array_set(a', i, { f: fa[i] });
-                    i += 1;
                 }
                 { js: a' as &any };
             }
@@ -319,18 +316,16 @@ type bytes = [mut i8];
             if array_get(a, 0) is &float {
                 let fa: &float_array = [0; l];
                 i = 0;
-                while i <u l {
+                while i <u l : (i += 1) {
                     fa[i] = (array_get(a, i) as &float).f;
-                    i += 1;
                 }
                 return fa;
             }
         }
         let a': &block = [0 as &i31; l + 1];
         i = 0;
-        while i <u l {
+        while i <u l : (i += 1) {
             a'[i + 1] = wrap(array_get(a, i));
-            i += 1;
         }
         a';
     }
@@ -340,9 +335,8 @@ type bytes = [mut i8];
         let l = array_length(a);
         let a': &block = [0 as &i31; l + 1];
         let i = 0;
-        while i <u l {
+        while i <u l : (i += 1) {
             a'[i + 1] = caml_string_of_jsstring(wrap(array_get(a, i)));
-            i += 1;
         }
         a';
     }
@@ -411,10 +405,9 @@ type bytes = [mut i8];
         } else {
             i = 0;
             'done: do {
-                while i <u count {
+                while i <u count : (i += 1) {
                     br_if 'done !caml_is_closure(acc);
                     acc = caml_callback_1(acc, wrap(get(args, i as &i31)));
-                    i += 1;
                 }
             }
             if kind {
@@ -444,11 +437,10 @@ type bytes = [mut i8];
         let l = s.length();
         let i = 0;
         let n = 0;
-        while i <u l {
+        while i <u l : (i += 1) {
             if s[i] as i32_u >=u 128 {
                 n += 1;
             }
-            i += 1;
         }
         if !n {
             return { js: jsstring_of_bytes(s) };
@@ -456,7 +448,7 @@ type bytes = [mut i8];
         let s': &bytes = [0; i + n];
         i = 0;
         n = 0;
-        while i <u l {
+        while i <u l : (i += 1) {
             let c = s[i] as i32_u;
             if c <u 128 {
                 s'[n] = c;
@@ -466,7 +458,6 @@ type bytes = [mut i8];
                 s'[n + 1] = 0x80 | c & 0x3F;
                 n += 2;
             }
-            i += 1;
         }
         return { js: jsstring_of_bytes(s') };
     }
@@ -483,11 +474,10 @@ type bytes = [mut i8];
         let l = s'.length();
         let i = 0;
         let n = 0;
-        while i <u l {
+        while i <u l : (i += 1) {
             if s'[i] as i32_u >=u 0xC0 {
                 n += 1;
             }
-            i += 1;
         }
         if !n {
             return s';

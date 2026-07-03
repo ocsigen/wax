@@ -90,6 +90,9 @@ type 'info instr_desc =
   | While of {
       label : label option;
       cond : 'info instr;
+      (* Zig-style continue-expression: a statement run at the end of every
+         iteration, including on a [continue] (a branch to the loop label). *)
+      step : 'info instr option;
       block : 'info instr list;
     }
   | If of {

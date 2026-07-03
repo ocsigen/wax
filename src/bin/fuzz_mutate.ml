@@ -177,7 +177,14 @@ and rebuild : location instr_desc -> location instr_desc = function
   | UnOp (op, e) -> UnOp (op, go e)
   | Block r -> Block { r with block = go_list r.block }
   | Loop r -> Loop { r with block = go_list r.block }
-  | While r -> While { r with cond = go r.cond; block = go_list r.block }
+  | While r ->
+      While
+        {
+          r with
+          cond = go r.cond;
+          step = Option.map go r.step;
+          block = go_list r.block;
+        }
   | If r ->
       If
         {

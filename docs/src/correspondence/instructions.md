@@ -150,6 +150,7 @@ operator with `x` as its *left* operand — and reconstructs the compound form
 | `block` | `do { ... }` or `{ ... }` |
 | `loop` | `loop { ... }` |
 | `loop` + leading back-`br` idiom | `while cond { ... }` |
+| `loop { if c { block 'l {...}; step; br } }` | `'l: while c : (step) { ... }` (continue-expression) |
 | `loop` + trailing back-`br_if` idiom | `loop { ... br_if 'l cond; }` (kept as a plain loop) |
 | `if ... else ...` | `if cond { ... } else { ... }` |
 | `br $l` | `br 'l` |

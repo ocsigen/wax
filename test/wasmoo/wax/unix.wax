@@ -1909,7 +1909,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
         m.store32(iovs, buffer);
         let iovs_len = 1;
         let written: i32;
-        while len >u 0 {
+        while len >u 0 : (len -= n) {
             let numbytes = len >u IO_BUFFER_SIZE?IO_BUFFER_SIZE:len;
             blit_substring_to_memory(buffer, s, pos, numbytes);
             m.store32(iovs, numbytes, 4, 4);
@@ -1918,7 +1918,6 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
             let n = m.load32(nwritten);
             written += n;
             pos += n;
-            len -= n;
         }
         written as &i31;
     }
@@ -2050,7 +2049,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
             offset = file_size(fd);
         }
         let written: i32;
-        while len >u 0 {
+        while len >u 0 : (len -= n) {
             let numbytes = len >u IO_BUFFER_SIZE?IO_BUFFER_SIZE:len;
             caml_blit_bytes_to_dataview(s, pos, buf_view, 0, numbytes);
             let n: i32;
@@ -2070,7 +2069,6 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
             fd_offset.offset = offset;
             written += n;
             pos += n;
-            len -= n;
         }
         written as &i31;
     }

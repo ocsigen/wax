@@ -123,9 +123,8 @@ fn caml_hexstring_of_float(v: &eq, vprec: &eq, vstyle: &eq) -> &eq {
             }
             frac = m << 12;
             let j = 0;
-            while frac != 0 {
+            while frac != 0 : (frac <<= 4) {
                 j += 1;
-                frac <<= 4;
             }
             if prec <s j {
                 prec = j;
@@ -448,11 +447,10 @@ fn caml_parse_float(err_msg: &eq, v: &eq) -> &eq {
     let len = s.length();
     let i: i32;
     let j: i32;
-    while i <u len {
+    while i <u len : (i += 1) {
         if '_' == s[i] as i32_u {
             j += 1;
         }
-        i += 1;
     }
     let c: i32;
     if j {
@@ -582,12 +580,11 @@ fn caml_parse_float(err_msg: &eq, v: &eq) -> &eq {
             // that cannot appear in one. Start after the leading spaces already
             // skipped above.
             i = start;
-            while i <u len {
+            while i <u len : (i += 1) {
                 c = s[i] as i32_u;
                 br_if 'error
                     !((c >=u '0') & (c <=u '9')
                           | ((c == '.') | ((c & 0xdf == 'E') | ((c == '+') | (c == '-')))));
-                i += 1;
             }
             f = parse_float(jsstring_of_bytes(s));
             br_if 'error f != f;

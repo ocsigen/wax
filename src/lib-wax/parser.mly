@@ -614,7 +614,15 @@ blockinstr:
   { with_loc $sloc (Block{label; typ = blocktype bt; block = l}) }
 | label = block_label WHILE cond = condition_expression
   "{" l = statement_list "}"
-  { with_loc $sloc (While{label; cond; block = l}) }
+  { with_loc $sloc (While{label; cond; step = None; block = l}) }
+(* Zig-style continue-expression: [while c : (step) { … }]. The step is a
+   parenthesized statement run at the end of every iteration (incl. [continue]).
+   Parentheses are required (a bare statement would collide with the body brace
+   for branch statements). *)
+| label = block_label WHILE cond = condition_expression
+  ":" "(" step = statement ")"
+  "{" l = statement_list "}"
+  { with_loc $sloc (While{label; cond; step = Some step; block = l}) }
 | label = block_label LOOP bt = option(block_type)
   "{" l = statement_list "}"
   { with_loc $sloc (Loop{label; typ = blocktype bt; block = l}) }

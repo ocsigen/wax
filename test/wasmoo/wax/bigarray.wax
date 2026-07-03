@@ -128,22 +128,19 @@ fn caml_deserialize_int_8(&eq) -> i64;
         let i: i32;
         if a is &i32_array {
             let a32 = a as &i32_array;
-            while i <u len {
+            while i <u len : (i += 1) {
                 a32[ofs + i] = v;
-                i += 1;
             }
         } else {
             if a is &i16_array {
                 let a16 = a as &i16_array;
-                while i <u len {
+                while i <u len : (i += 1) {
                     a16[ofs + i] = v;
-                    i += 1;
                 }
             } else {
                 let a8 = a as &bytes;
-                while i <u len {
+                while i <u len : (i += 1) {
                     a8[ofs + i] = v;
-                    i += 1;
                 }
             }
         }
@@ -157,16 +154,14 @@ fn caml_deserialize_int_8(&eq) -> i64;
         let i: i32;
         if a is &float_array {
             let a64 = a as &float_array;
-            while i <u len {
+            while i <u len : (i += 1) {
                 a64[ofs + i] = f;
-                i += 1;
             }
         } else {
             let a32 = a as &f32_array;
             let f32 = f as f32;
-            while i <u len {
+            while i <u len : (i += 1) {
                 a32[ofs + i] = f32;
-                i += 1;
             }
         }
     }
@@ -184,49 +179,43 @@ fn caml_deserialize_int_8(&eq) -> i64;
         if sa is &float_array {
             let sf64 = sa as &float_array;
             let df64 = da as &float_array;
-            while i <u len {
+            while i <u len : (i += 1) {
                 df64[doff + i] = sf64[so + i];
-                i += 1;
             }
         }
         if sa is &f32_array {
             let sf32 = sa as &f32_array;
             let df32 = da as &f32_array;
-            while i <u len {
+            while i <u len : (i += 1) {
                 df32[doff + i] = sf32[so + i];
-                i += 1;
             }
         }
         if sa is &i64_array {
             let si64 = sa as &i64_array;
             let di64 = da as &i64_array;
-            while i <u len {
+            while i <u len : (i += 1) {
                 di64[doff + i] = si64[so + i];
-                i += 1;
             }
         }
         if sa is &i32_array {
             let si32 = sa as &i32_array;
             let di32 = da as &i32_array;
-            while i <u len {
+            while i <u len : (i += 1) {
                 di32[doff + i] = si32[so + i];
-                i += 1;
             }
         }
         if sa is &i16_array {
             let si16 = sa as &i16_array;
             let di16 = da as &i16_array;
-            while i <u len {
+            while i <u len : (i += 1) {
                 di16[doff + i] = si16[so + i] as i32_u;
-                i += 1;
             }
         }
         if sa is &bytes {
             let si8 = sa as &bytes;
             let di8 = da as &bytes;
-            while i <u len {
+            while i <u len : (i += 1) {
                 di8[doff + i] = si8[so + i] as i32_u;
-                i += 1;
             }
         }
     }
@@ -252,9 +241,8 @@ fn caml_deserialize_int_8(&eq) -> i64;
         let d = dat.array as &bytes;
         doff += dat.offset;
         let i: i32;
-        while i <u len {
+        while i <u len : (i += 1) {
             d[doff + i] = s[so + i] as i32_u;
-            i += 1;
         }
     }
 
@@ -264,9 +252,8 @@ fn caml_deserialize_int_8(&eq) -> i64;
         let s = dat.array as &bytes;
         so += dat.offset;
         let i: i32;
-        while i <u len {
+        while i <u len : (i += 1) {
             d[doff + i] = s[so + i] as i32_u;
-            i += 1;
         }
     }
 
@@ -555,9 +542,8 @@ fn caml_ba_num_elts(b: &eq) -> i32 {
     let dim = (b as &bigarray).ba_dim;
     let num_elts = 1;
     let i: i32;
-    while i <u dim.length() {
+    while i <u dim.length() : (i += 1) {
         num_elts *= dim[i];
-        i += 1;
     }
     num_elts;
 }
@@ -578,9 +564,8 @@ fn bigarray_hash(vba: &eq) -> i32 {
             if len >u 256 {
                 len = 256;
             }
-            while i <u len {
+            while i <u len : (i += 2) {
                 h = caml_hash_mix_float16(h, dv_get_ui16(view, i, littleEndian));
-                i += 2;
             }
             return h;
         }
@@ -590,9 +575,8 @@ fn bigarray_hash(vba: &eq) -> i32 {
             if len >u 256 {
                 len = 256;
             }
-            while i <u len {
+            while i <u len : (i += 8) {
                 h = caml_hash_mix_int64(h, dv_get_i64(view, i, littleEndian));
-                i += 8;
             }
             return h;
         }
@@ -602,9 +586,8 @@ fn bigarray_hash(vba: &eq) -> i32 {
             if len >u 256 {
                 len = 256;
             }
-            while i <u len {
+            while i <u len : (i += 4) {
                 h = caml_hash_mix_int(h, dv_get_i32(view, i, littleEndian));
-                i += 4;
             }
             return h;
         }
@@ -614,14 +597,13 @@ fn bigarray_hash(vba: &eq) -> i32 {
             if len >u 256 {
                 len = 256;
             }
-            while i + 4 <=u len {
+            while i + 4 <=u len : (i += 4) {
                 h =
                     caml_hash_mix_int(
                         h,
                         dv_get_ui16(view, i, littleEndian)
                             | dv_get_ui16(view, i + 2, littleEndian) << 16,
                     );
-                i += 4;
             }
             if len & 2 {
                 h = caml_hash_mix_int(h, dv_get_ui16(view, i, littleEndian));
@@ -633,9 +615,8 @@ fn bigarray_hash(vba: &eq) -> i32 {
             if len >u 256 {
                 len = 256;
             }
-            while i + 4 <=u len {
+            while i + 4 <=u len : (i += 4) {
                 h = caml_hash_mix_int(h, dv_get_i32_unaligned(view, i, 1));
-                i += 4;
             }
             let w = 0;
             dispatch (len & 3) [ '_0_bytes '_1_byte '_2_bytes else '_3_bytes ] {
@@ -665,9 +646,8 @@ fn bigarray_hash(vba: &eq) -> i32 {
             if len >u 256 {
                 len = 256;
             }
-            while i <u len {
+            while i <u len : (i += 4) {
                 h = caml_hash_mix_float(h, dv_get_f32(view, i, littleEndian));
-                i += 4;
             }
             return h;
         }
@@ -682,9 +662,8 @@ fn bigarray_hash(vba: &eq) -> i32 {
             if len >u 256 {
                 len = 256;
             }
-            while i <u len {
+            while i <u len : (i += 8) {
                 h = caml_hash_mix_double(h, dv_get_f64(view, i, littleEndian));
-                i += 8;
             }
             return h;
         }
@@ -699,7 +678,7 @@ fn bigarray_serialize(s: &eq, v: &eq) -> (i32, i32) {
     caml_serialize_int_4(s, b.ba_kind as i32_u | b.ba_layout as i32_u << 8);
     let i: i32;
     let len: i32;
-    while i <u num_dims {
+    while i <u num_dims : (i += 1) {
         len = dim[i];
         if len <u 0xffff {
             caml_serialize_int_2(s, len);
@@ -707,7 +686,6 @@ fn bigarray_serialize(s: &eq, v: &eq) -> (i32, i32) {
             caml_serialize_int_2(s, 0xffff);
             caml_serialize_int_8(s, len as i64_u);
         }
-        i += 1;
     }
     'done: do {
         let view = b.ba_view;
@@ -725,9 +703,8 @@ fn bigarray_serialize(s: &eq, v: &eq) -> (i32, i32) {
                 // fallthrough
                 // float64
                 len <<= 3;
-                while i <u len {
+                while i <u len : (i += 8) {
                     caml_serialize_int_8(s, dv_get_f64(view, i, littleEndian).to_bits());
-                    i += 8;
                 }
                 br 'done;
             }
@@ -739,18 +716,16 @@ fn bigarray_serialize(s: &eq, v: &eq) -> (i32, i32) {
                 // fallthrough
                 // float32
                 len <<= 2;
-                while i <u len {
+                while i <u len : (i += 4) {
                     caml_serialize_int_4(s, dv_get_f32(view, i, littleEndian).to_bits());
-                    i += 4;
                 }
                 br 'done;
             }
             'int64: {
                 // int64
                 len <<= 3;
-                while i <u len {
+                while i <u len : (i += 8) {
                     caml_serialize_int_8(s, dv_get_i64(view, i, littleEndian));
-                    i += 8;
                 }
                 br 'done;
             }
@@ -762,26 +737,23 @@ fn bigarray_serialize(s: &eq, v: &eq) -> (i32, i32) {
                 // fallthrough
                 // int32
                 len <<= 2;
-                while i <u len {
+                while i <u len : (i += 4) {
                     caml_serialize_int_4(s, dv_get_i32(view, i, littleEndian));
-                    i += 4;
                 }
                 br 'done;
             }
             'int16: {
                 // int16 / uint16 / float16
                 len <<= 1;
-                while i <u len {
+                while i <u len : (i += 2) {
                     caml_serialize_int_2(s, dv_get_i16(view, i, littleEndian));
-                    i += 2;
                 }
                 br 'done;
             }
             'int8: {
                 // int8 / uint8
-                while i <u len {
+                while i <u len : (i += 1) {
                     caml_serialize_int_1(s, dv_get_i8(view, i));
-                    i += 1;
                 }
             }
         }
@@ -804,7 +776,7 @@ fn bigarray_deserialize(s: &eq) -> (&eq, i32) {
     let dim: &int_array = [0; num_dims];
     let i: i32;
     let len: i32;
-    while i <u num_dims {
+    while i <u num_dims : (i += 1) {
         len = caml_deserialize_uint_2(s);
         if len == 0xffff {
             // A dimension that does not fit in a 32-bit machine
@@ -816,7 +788,6 @@ fn bigarray_deserialize(s: &eq) -> (&eq, i32) {
             len = l as i32;
         }
         dim[i] = len;
-        i += 1;
     }
     len = caml_ba_get_size(dim);
     let dat = caml_ba_create_buffer(kind, len);
@@ -845,9 +816,8 @@ fn bigarray_deserialize(s: &eq) -> (&eq, i32) {
                 // fallthrough
                 // float64
                 len <<= 3;
-                while i <u len {
+                while i <u len : (i += 8) {
                     dv_set_f64(view, i, caml_deserialize_int_8(s).from_bits(), littleEndian);
-                    i += 8;
                 }
                 br 'done;
             }
@@ -859,18 +829,16 @@ fn bigarray_deserialize(s: &eq) -> (&eq, i32) {
                 // fallthrough
                 // float32
                 len <<= 2;
-                while i <u len {
+                while i <u len : (i += 4) {
                     dv_set_f32(view, i, caml_deserialize_int_4(s).from_bits(), littleEndian);
-                    i += 4;
                 }
                 br 'done;
             }
             'int64: {
                 // int64
                 len <<= 3;
-                while i <u len {
+                while i <u len : (i += 8) {
                     dv_set_i64(view, i, caml_deserialize_int_8(s), littleEndian);
-                    i += 8;
                 }
                 br 'done;
             }
@@ -884,26 +852,23 @@ fn bigarray_deserialize(s: &eq) -> (&eq, i32) {
                 // fallthrough
                 // int32
                 len <<= 2;
-                while i <u len {
+                while i <u len : (i += 4) {
                     dv_set_i32(view, i, caml_deserialize_int_4(s), littleEndian);
-                    i += 4;
                 }
                 br 'done;
             }
             'int16: {
                 // int16 / uint16 / float16
                 len <<= 1;
-                while i <u len {
+                while i <u len : (i += 2) {
                     dv_set_i16(view, i, caml_deserialize_sint_2(s), littleEndian);
-                    i += 2;
                 }
                 br 'done;
             }
             'int8: {
                 // int8 / uint8
-                while i <u len {
+                while i <u len : (i += 1) {
                     dv_set_i8(view, i, caml_deserialize_sint_1(s));
-                    i += 1;
                 }
             }
         }
@@ -916,12 +881,11 @@ fn caml_ba_get_size(dim: &int_array) -> i32 {
     let n = dim.length();
     let i = 0;
     let sz: i64 = 1;
-    while i <u n {
+    while i <u n : (i += 1) {
         sz *= dim[i] as i64_s;
         if sz != sz as i32 as i64_s {
             caml_raise_out_of_memory();
         }
-        i += 1;
     }
     sz as i32;
 }
@@ -954,13 +918,12 @@ fn caml_ba_create(vkind: &eq, layout: &eq, d: &eq) -> &eq {
     }
     let dim: &int_array = [0; num_dims];
     let i = 0;
-    while i <u num_dims {
+    while i <u num_dims : (i += 1) {
         let n = vdim[i + 1] as i32_s;
         if n <s 0 {
             caml_invalid_argument(ba_create_negative_dim);
         }
         dim[i] = n;
-        i += 1;
     }
     let dat = caml_ba_create_buffer(kind, caml_ba_get_size(dim));
     {
@@ -1443,25 +1406,23 @@ fn caml_ba_offset(b: &bigarray, index: &int_array) -> i32 {
     let l: i32;
     if b.ba_layout as i32_u {
         i = b.ba_num_dims as i32_u - 1;
-        while i >=s 0 {
+        while i >=s 0 : (i -= 1) {
             idx = index[i] - 1;
             l = dim[i];
             if idx >=u l {
                 caml_bound_error();
             }
             offset = offset * l + idx;
-            i -= 1;
         }
     } else {
         let num_dims = b.ba_num_dims as i32_u;
-        while i <s num_dims {
+        while i <s num_dims : (i += 1) {
             idx = index[i];
             l = dim[i];
             if idx >=u l {
                 caml_bound_error();
             }
             offset = offset * l + idx;
-            i += 1;
         }
     }
     offset;
@@ -1475,25 +1436,23 @@ fn caml_ba_offset'(b: &bigarray, index: &block) -> i32 {
     let l: i32;
     if b.ba_layout as i32_u {
         i = b.ba_num_dims as i32_u - 1;
-        while i >=s 0 {
+        while i >=s 0 : (i -= 1) {
             idx = index[i + 1] as i32_s - 1;
             l = dim[i];
             if idx >=u l {
                 caml_bound_error();
             }
             offset = offset * l + idx;
-            i -= 1;
         }
     } else {
         let num_dims = b.ba_num_dims as i32_u;
-        while i <s num_dims {
+        while i <s num_dims : (i += 1) {
             idx = index[i + 1] as i32_s;
             l = dim[i];
             if idx >=u l {
                 caml_bound_error();
             }
             offset = offset * l + idx;
-            i += 1;
         }
     }
     offset;
@@ -1529,17 +1488,15 @@ fn caml_ba_slice(vb: &eq, vind: &eq) -> &eq {
     let offset: i32;
     if b.ba_layout as i32_u {
         index = [1; num_dims];
-        while i <u num_inds {
+        while i <u num_inds : (i += 1) {
             index[num_dims + i - num_inds] = ind[i + 1] as i32_u;
-            i += 1;
         }
         offset = caml_ba_offset(b, index);
         sub_dim.copy(0, b.ba_dim, 0, num_dims - num_inds);
     } else {
         index = [0; num_dims];
-        while i <u num_inds {
+        while i <u num_inds : (i += 1) {
             index[i] = ind[i + 1] as i32_u;
-            i += 1;
         }
         offset = caml_ba_offset(b, index);
         sub_dim.copy(0, b.ba_dim, num_inds, num_dims - num_inds);
@@ -1574,16 +1531,14 @@ fn caml_ba_sub(vba: &eq, vofs: &eq, vlen: &eq) -> &eq {
         changed_dim = num_dims - 1;
         ofs -= 1;
         i = 0;
-        while i <u changed_dim {
+        while i <u changed_dim : (i += 1) {
             mul *= dim[i];
-            i += 1;
         }
     } else {
         changed_dim = 0;
         i = 1;
-        while i <u num_dims {
+        while i <u num_dims : (i += 1) {
             mul *= dim[i];
-            i += 1;
         }
     }
     if (ofs <s 0) | (len <s 0) | (ofs + len >s dim[changed_dim]) {
@@ -1629,10 +1584,9 @@ fn caml_ba_fill(vba: &eq, v: &eq) -> &eq {
             b = v as &float_array;
             let f1 = b[0];
             let f2 = b[1];
-            while i <u len {
+            while i <u len : (i += 16) {
                 dv_set_f64(view, i, f1, littleEndian);
                 dv_set_f64(view, i + 8, f2, littleEndian);
-                i += 16;
             }
             return 0 as &i31;
         }
@@ -1643,10 +1597,9 @@ fn caml_ba_fill(vba: &eq, v: &eq) -> &eq {
             b = v as &float_array;
             let f1' = b[0] as f32;
             let f2' = b[1] as f32;
-            while i <u len {
+            while i <u len : (i += 8) {
                 dv_set_f32(view, i, f1', littleEndian);
                 dv_set_f32(view, i + 4, f2', littleEndian);
-                i += 8;
             }
             return 0 as &i31;
         }
@@ -1655,9 +1608,8 @@ fn caml_ba_fill(vba: &eq, v: &eq) -> &eq {
             view = ba.ba_view;
             len = caml_ba_num_elts(ba) << 3;
             let l = Int64_val(v);
-            while i <u len {
+            while i <u len : (i += 8) {
                 dv_set_i64(view, i, l, littleEndian);
-                i += 8;
             }
             return 0 as &i31;
         }
@@ -1692,11 +1644,10 @@ fn caml_ba_blit(vsrc: &eq, vdst: &eq) -> &eq {
     let sdim = src.ba_dim;
     let ddim = dst.ba_dim;
     let i: i32;
-    while i <s len {
+    while i <s len : (i += 1) {
         if sdim[i] != ddim[i] {
             caml_invalid_argument(dim_mismatch);
         }
-        i += 1;
     }
     ta_blit(src.ba_data, dst.ba_data);
     0 as &i31;
@@ -1717,7 +1668,7 @@ fn caml_ba_reshape(vb: &eq, vd: &eq) -> &eq {
     let num_elts: i64 = 1;
     let dim: &int_array = [0; num_dims];
     let i: i32;
-    while i <u num_dims {
+    while i <u num_dims : (i += 1) {
         let d = vdim[i + 1] as i32_s;
         if d <s 0 {
             caml_invalid_argument(negative_dim);
@@ -1727,7 +1678,6 @@ fn caml_ba_reshape(vb: &eq, vd: &eq) -> &eq {
         if num_elts != num_elts as i32 as i64_s {
             caml_raise_out_of_memory();
         }
-        i += 1;
     }
     if num_elts as i32 != caml_ba_get_size(b.ba_dim) {
         caml_invalid_argument(size_mismatch);
@@ -1752,9 +1702,8 @@ fn caml_ba_change_layout(vb: &eq, vlayout: &eq) -> &eq {
         let dim = b.ba_dim;
         let new_dim: &int_array = [0; num_dims];
         let i: i32;
-        while i <u num_dims {
+        while i <u num_dims : (i += 1) {
             new_dim[i] = dim[num_dims - i - 1];
-            i += 1;
         }
         {
             ops: bigarray_ops,
@@ -1801,13 +1750,12 @@ fn caml_ba_compare(v1: &eq, v2: &eq, total: i32) -> i32 {
     let i1: i32;
     let i2: i32;
     let i: i32;
-    while i <u len {
+    while i <u len : (i += 1) {
         i1 = b1.ba_dim[i];
         i2 = b2.ba_dim[i];
         if i1 != i2 {
             return i1 <u i2?-1:1;
         }
-        i += 1;
     }
     let view1 = b1.ba_view;
     let view2 = b2.ba_view;
@@ -1822,7 +1770,7 @@ fn caml_ba_compare(v1: &eq, v2: &eq, total: i32) -> i32 {
         'float16: {
             // float16
             len <<= 1;
-            while i <u len {
+            while i <u len : (i += 2) {
                 f1 = double_of_float16(dv_get_ui16(view1, i, littleEndian));
                 f2 = double_of_float16(dv_get_ui16(view2, i, littleEndian));
                 if f1 < f2 {
@@ -1842,14 +1790,13 @@ fn caml_ba_compare(v1: &eq, v2: &eq, total: i32) -> i32 {
                         return -1;
                     }
                 }
-                i += 2;
             }
             return 0;
         }
         'int64: {
             // int64
             len <<= 3;
-            while i <u len {
+            while i <u len : (i += 8) {
                 let l1 = dv_get_i64(view1, i, littleEndian);
                 let l2 = dv_get_i64(view2, i, littleEndian);
                 if l1 <s l2 {
@@ -1858,14 +1805,13 @@ fn caml_ba_compare(v1: &eq, v2: &eq, total: i32) -> i32 {
                 if l1 >s l2 {
                     return 1;
                 }
-                i += 8;
             }
             return 0;
         }
         'int32: {
             // int32
             len <<= 2;
-            while i <u len {
+            while i <u len : (i += 4) {
                 i1 = dv_get_i32(view1, i, littleEndian);
                 i2 = dv_get_i32(view2, i, littleEndian);
                 if i1 <s i2 {
@@ -1874,14 +1820,13 @@ fn caml_ba_compare(v1: &eq, v2: &eq, total: i32) -> i32 {
                 if i1 >s i2 {
                     return 1;
                 }
-                i += 4;
             }
             return 0;
         }
         'uint16: {
             // uint16
             len <<= 1;
-            while i <u len {
+            while i <u len : (i += 2) {
                 i1 = dv_get_ui16(view1, i, littleEndian);
                 i2 = dv_get_ui16(view2, i, littleEndian);
                 if i1 <s i2 {
@@ -1890,14 +1835,13 @@ fn caml_ba_compare(v1: &eq, v2: &eq, total: i32) -> i32 {
                 if i1 >s i2 {
                     return 1;
                 }
-                i += 2;
             }
             return 0;
         }
         'int16: {
             // int16
             len <<= 1;
-            while i <u len {
+            while i <u len : (i += 2) {
                 i1 = dv_get_i16(view1, i, littleEndian);
                 i2 = dv_get_i16(view2, i, littleEndian);
                 if i1 <s i2 {
@@ -1906,13 +1850,12 @@ fn caml_ba_compare(v1: &eq, v2: &eq, total: i32) -> i32 {
                 if i1 >s i2 {
                     return 1;
                 }
-                i += 2;
             }
             return 0;
         }
         'uint8: {
             // uint8
-            while i <u len {
+            while i <u len : (i += 1) {
                 i1 = dv_get_ui8(view1, i);
                 i2 = dv_get_ui8(view2, i);
                 if i1 <s i2 {
@@ -1921,13 +1864,12 @@ fn caml_ba_compare(v1: &eq, v2: &eq, total: i32) -> i32 {
                 if i1 >s i2 {
                     return 1;
                 }
-                i += 1;
             }
             return 0;
         }
         'int8: {
             // int8
-            while i <u len {
+            while i <u len : (i += 1) {
                 i1 = dv_get_i8(view1, i);
                 i2 = dv_get_i8(view2, i);
                 if i1 <s i2 {
@@ -1936,7 +1878,6 @@ fn caml_ba_compare(v1: &eq, v2: &eq, total: i32) -> i32 {
                 if i1 >s i2 {
                     return 1;
                 }
-                i += 1;
             }
             return 0;
         }
@@ -1948,7 +1889,7 @@ fn caml_ba_compare(v1: &eq, v2: &eq, total: i32) -> i32 {
             // fallthrough
             // float64
             len <<= 3;
-            while i <u len {
+            while i <u len : (i += 8) {
                 f1 = dv_get_f64(view1, i, littleEndian);
                 f2 = dv_get_f64(view2, i, littleEndian);
                 if f1 < f2 {
@@ -1968,7 +1909,6 @@ fn caml_ba_compare(v1: &eq, v2: &eq, total: i32) -> i32 {
                         return -1;
                     }
                 }
-                i += 8;
             }
             return 0;
         }
@@ -1980,7 +1920,7 @@ fn caml_ba_compare(v1: &eq, v2: &eq, total: i32) -> i32 {
             // fallthrough
             // float32
             len <<= 2;
-            while i <u len {
+            while i <u len : (i += 4) {
                 let f1' = dv_get_f32(view1, i, littleEndian);
                 let f2' = dv_get_f32(view2, i, littleEndian);
                 if f1' < f2' {
@@ -2000,7 +1940,6 @@ fn caml_ba_compare(v1: &eq, v2: &eq, total: i32) -> i32 {
                         return -1;
                     }
                 }
-                i += 4;
             }
             return 0;
         }

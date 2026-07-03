@@ -51,7 +51,8 @@ let rec refs_instr name (i : location instr) : bool =
       || List.exists (fun (_, b) -> any b) arms
       || any default
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } -> any block
-  | While { cond; block; _ } -> refs_instr name cond || any block
+  | While { cond; step; block; _ } ->
+      refs_instr name cond || opt step || any block
   | If { cond; if_block; else_block; _ } -> (
       refs_instr name cond || any if_block.desc
       || match else_block with Some b -> any b.desc | None -> false)
@@ -108,6 +109,34 @@ let refs_list name l = List.exists (refs_instr name) l
 let keep_label l cond body =
   if refs_list l.desc body || refs_instr l.desc cond then Some l else None
 
+(* Whether [i] reads the variable [name] (a [Get]). Conservative: unlisted forms
+   report [false], which only makes the induction-step heuristic in [fold_loop]
+   fire less often, never wrongly. *)
+let rec reads_var name (i : location instr) : bool =
+  let any = List.exists (reads_var name) in
+  match i.desc with
+  | Get id -> String.equal id.desc name
+  | BinOp (_, a, b) | ArrayGet (a, b) -> reads_var name a || reads_var name b
+  | UnOp (_, e)
+  | Cast (e, _)
+  | Test (e, _)
+  | NonNull e
+  | StructGet (e, _)
+  | GetDescriptor e
+  | Hinted (_, e) ->
+      reads_var name e
+  | Select (a, b, c) -> reads_var name a || reads_var name b || reads_var name c
+  | Call (f, args) | TailCall (f, args) -> reads_var name f || any args
+  | Tee (id, e) -> String.equal id.desc name || reads_var name e
+  | Set (id, _, e) ->
+      (match id with Some id -> String.equal id.desc name | None -> false)
+      || reads_var name e
+  | Block { block; _ } | Loop { block; _ } -> any block
+  | If { cond; if_block; else_block; _ } -> (
+      reads_var name cond || any if_block.desc
+      || match else_block with Some b -> any b.desc | None -> false)
+  | _ -> false
+
 (* Fold an already-rewritten void [loop] labelled [l] into a [while] when its
    body is the leading-test shape, else leave it a [loop]. *)
 let fold_loop l typ block =
@@ -123,9 +152,42 @@ let fold_loop l typ block =
     when is_void it -> (
       match List.rev if_block.desc with
       | { desc = Br (bl, None); _ } :: rev_body when String.equal bl.desc l.desc
-        ->
+        -> (
           let body = List.rev rev_body in
-          While { label = keep_label l cond body; cond; block = body }
+          match body with
+          (* Continue-expression shape (see [Ast_utils.lower_while]): the body is
+             a labelled block (the continue target) whose own body branches to it,
+             followed by the step, then the loop back-edge. Recover it as
+             [while 'blk cond : (step) { inner }]. *)
+          | [
+           { desc = Block { label = Some blk; typ = bt; block = inner }; _ };
+           step;
+          ]
+            when is_void bt
+                 && (not (String.equal blk.desc l.desc))
+                 && refs_list blk.desc inner ->
+              While { label = Some blk; cond; step = Some step; block = inner }
+          | _ -> (
+              let label = keep_label l cond body in
+              (* Readability recovery: with no continue (label dropped, so
+                 re-lowering is byte-identical), present a trailing
+                 induction-variable update — an assignment to a variable the
+                 condition reads — as a continue-expression, so index-and-stride
+                 loops read as [while i <s n : (i += 1) { … }]. Kept conservative:
+                 at least one other body statement must remain. *)
+              match (label, List.rev body) with
+              | ( None,
+                  ({ desc = Set (Some x, _, _); _ } as step)
+                  :: (_ :: _ as rev_rest) )
+                when reads_var x.desc cond ->
+                  While
+                    {
+                      label = None;
+                      cond;
+                      step = Some step;
+                      block = List.rev rev_rest;
+                    }
+              | _ -> While { label; cond; step = None; block = body }))
       | _ -> Loop { label = Some l; typ; block })
   | _ -> Loop { label = Some l; typ; block }
 
@@ -142,8 +204,14 @@ and rewrite_desc (desc : location instr_desc) : location instr_desc =
       Loop { label; typ; block = rewrite_list block }
   | Block { label; typ; block } ->
       Block { label; typ; block = rewrite_list block }
-  | While { label; cond; block } ->
-      While { label; cond = rewrite_instr cond; block = rewrite_list block }
+  | While { label; cond; step; block } ->
+      While
+        {
+          label;
+          cond = rewrite_instr cond;
+          step = Option.map rewrite_instr step;
+          block = rewrite_list block;
+        }
   | If { label; typ; cond; if_block; else_block } ->
       If
         {

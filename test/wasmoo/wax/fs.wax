@@ -286,11 +286,10 @@ type block = [mut &eq];
             }
         }
         let i: i32;
-        while i <u len {
+        while i <u len : (i += 1) {
             if path[i] as i32_u != prefix[i] as i32_u {
                 return 0;
             }
-            i += 1;
         }
         return 1;
     }

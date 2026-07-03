@@ -25,9 +25,8 @@
     #[export = "blit_substring_to_memory"]
     fn blit_substring_to_memory(buf: i32, s: &bytes, ofs: i32, len: i32) {
         let i: i32;
-        while i <u len {
+        while i <u len : (i += 1) {
             m.store8(buf + i, s[ofs + i] as i32_u);
-            i += 1;
         }
     }
 
@@ -35,18 +34,16 @@
     fn blit_string_to_memory(buf: i32, s: &bytes) {
         let len = s.length();
         let i: i32;
-        while i <u len {
+        while i <u len : (i += 1) {
             m.store8(buf + i, s[i] as i32_u);
-            i += 1;
         }
     }
 
     #[export = "blit_memory_to_substring"]
     fn blit_memory_to_substring(buf: i32, s: &bytes, ofs: i32, len: i32) {
         let i: i32;
-        while i <u len {
+        while i <u len : (i += 1) {
             s[ofs + i] = m.load8(buf + i) as i32_u;
-            i += 1;
         }
     }
 
@@ -54,9 +51,8 @@
     fn blit_memory_to_string(buf: i32, len: i32) -> &bytes {
         let s: &bytes = [0; len];
         let i: i32;
-        while i <u len {
+        while i <u len : (i += 1) {
             s[i] = m.load8(buf + i) as i32_u;
-            i += 1;
         }
         s;
     }

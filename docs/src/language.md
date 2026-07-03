@@ -541,6 +541,26 @@ It is void, and the test must be an `i32`. It may carry a label
 *continue* — it jumps back to re-test. Decompiling recovers a `while` from this
 shape, so a loop written this way survives a round trip through WAT or WASM.
 
+A `while` may carry a *continue-expression* after the condition,
+`while cond : (step) { … }` — a statement run at the end of every iteration,
+including on a `continue`. It keeps the loop's step next to its header instead of
+at the bottom of the body, and — unlike a step written as the last statement —
+it still runs when the body branches to the loop label:
+
+```wax
+'l: while i <s n : (i += 1) {
+    if skip(i) { br 'l; }   // continue: runs `i += 1`, then re-tests
+    total += i;
+}
+```
+
+The step must be parenthesised (a bare statement would be ambiguous with the
+loop body). Without a `continue` this is equivalent to writing the step as the
+last statement of the body — and decompiling recovers it: a loop whose last
+statement updates a variable its condition reads (the induction variable) is
+rendered as `while … : (step) { … }`, so index-and-stride loops read like `for`
+loops.
+
 A *trailing*-test loop, where the body always runs at least once, has no
 leading-`while` form. Write it directly as a `loop` with a back-`br_if`:
 

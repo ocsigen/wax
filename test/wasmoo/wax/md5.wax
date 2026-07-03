@@ -52,13 +52,12 @@ fn caml_md5_chan(ch: &eq, vlen: &eq) -> &eq {
             }
         }
     } else {
-        while len {
+        while len : (len -= read) {
             read = caml_getblock(ch, buf, 0, len <=u 4096?len:4096);
             if !read {
                 caml_raise_end_of_file();
             }
             MD5Update(ctx, buf, 0, read);
-            len -= read;
         }
     }
     become MD5Final(ctx);
@@ -194,10 +193,9 @@ fn MD5Update(ctx: &context, input: &bytes, input_pos: i32, input_len: i32) {
         input_pos += missing;
         input_len -= missing;
     }
-    while input_len >=u 64 {
+    while input_len >=u 64 : (input_len -= 64) {
         MD5Transform(ctx.w, ctx.buffer, input, input_pos);
         input_pos += 64;
-        input_len -= 64;
     }
     if input_len {
         ctx.intermediate.copy(0, input, input_pos, input_len);
@@ -213,9 +211,8 @@ fn MD5Final(ctx: &context) -> &bytes {
     let i: i32;
     if in_buf >u 56 {
         i = in_buf;
-        while i <u 64 {
+        while i <u 64 : (i += 1) {
             buffer[i] = 0;
-            i += 1;
         }
         MD5Transform(ctx.w, ctx.buffer, buffer, 0);
         in_buf = 0;

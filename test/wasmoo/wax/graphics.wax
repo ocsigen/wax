@@ -329,11 +329,10 @@
         let n = a.length() - 1;
         let flat = new_array(n * 2);
         let i = 0;
-        while i <u n {
+        while i <u n : (i += 1) {
             let p = a[i + 1] as &block;
             array_set(flat, i * 2, from_int32(p[1] as i32_s));
             array_set(flat, i * 2 + 1, from_int32(p[2] as i32_s));
-            i += 1;
         }
         gr_fill_poly(flat as &any, n);
         0 as &i31;
@@ -371,15 +370,13 @@
         let flat = new_array(h * w);
         let idx = 0;
         let i = 0;
-        while i <u h {
+        while i <u h : (i += 1) {
             row = a[i + 1] as &block;
             let j = 0;
-            while j <u w {
+            while j <u w : (j += 1) {
                 array_set(flat, idx, from_int32(row[j + 1] as i32_s));
                 idx += 1;
-                j += 1;
             }
-            i += 1;
         }
         { js: gr_make_image(flat as &any, w, h) };
     }
@@ -391,15 +388,13 @@
         let h = gr_dump_image_height(js_im);
         let result: &block = [0 as &i31; h + 1];
         let i = 0;
-        while i <u h {
+        while i <u h : (i += 1) {
             let row: &block = [0 as &i31; w + 1];
             let j = 0;
-            while j <u w {
+            while j <u w : (j += 1) {
                 row[j + 1] = gr_dump_image_pixel(js_im, i, j) as &i31;
-                j += 1;
             }
             result[i + 1] = row;
-            i += 1;
         }
         result;
     }

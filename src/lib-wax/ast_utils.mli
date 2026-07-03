@@ -15,16 +15,25 @@ val lower_dispatch :
     the inverse of {!Recover_dispatch} and is used by both type checking and
     Wax-to-Wasm conversion. *)
 
+val synthetic_loop_label : string
+(** Placeholder loop label used only in the discarded type-check lowering (the
+    name never reaches emitted Wat; see {!lower_while} and [To_wasm]). *)
+
 val lower_while :
   block_info:'info ->
+  fresh_loop:Ast.label ->
   label:Ast.label option ->
   cond:'info Ast.instr ->
+  step:'info Ast.instr option ->
   block:'info Ast.instr list ->
   'info Ast.instr list
 (** [lower_while] desugars a leading-test [while C { B }] to
-    ['L: loop { if C { B; br 'L; } }] (synthesising ['L] when [label] is
-    [None]). Inverse of the [while] case of {!Recover_loops}; used by both type
-    checking and Wax-to-Wasm conversion. *)
+    ['L: loop { if C { B; br 'L; } }]. A continue-expression [step] runs at the
+    end of every iteration: an unlabelled loop appends it to the body; a
+    labelled loop wraps the body in a block (the continue target) so a
+    [continue] runs the step before the [fresh_loop] back-edge. Inverse of the
+    [while] case of {!Recover_loops}; used by both type checking and Wax-to-Wasm
+    conversion. *)
 
 val lower_match :
   block_info:'info ->

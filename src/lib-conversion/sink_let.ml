@@ -16,7 +16,8 @@ let rec occurs name i =
       || occurs name e
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
       in_list block
-  | While { cond; block; _ } -> occurs name cond || in_list block
+  | While { cond; step; block; _ } ->
+      occurs name cond || in_opt step || in_list block
   | If { cond; if_block; else_block; _ } -> (
       occurs name cond || in_list if_block.desc
       || match else_block with Some b -> in_list b.desc | None -> false)
@@ -141,7 +142,9 @@ let rec first_access name i =
         | Some id when String.equal id.desc name -> Some `Write
         | _ -> None)
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } -> fl block
-  | While { cond; block; _ } -> fst2 (first_access name cond) (fl block)
+  | While { cond; step; block; _ } ->
+      (* One iteration reads [cond], then the body, then the step. *)
+      fst2 (first_access name cond) (fst2 (fl block) (fo step))
   | If { cond; if_block; else_block; _ } ->
       fst2 (first_access name cond)
         (agree (fl if_block.desc)

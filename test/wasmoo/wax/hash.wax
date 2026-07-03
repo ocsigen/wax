@@ -113,14 +113,13 @@ fn caml_hash_mix_float16(h: i32, i: i32) -> i32 {
 fn caml_hash_mix_string(h: i32, s: &bytes) -> i32 {
     let len = s.length();
     let i = 0;
-    while i + 4 <=u len {
+    while i + 4 <=u len : (i += 4) {
         h =
             caml_hash_mix_int(
                 h,
                 s[i] as i32_u | s[i + 1] as i32_u << 8
                     | (s[i + 2] as i32_u << 16 | s[i + 3] as i32_u << 24),
             );
-        i += 4;
     }
     let w = 0;
     dispatch (len & 3) [ '_0_bytes '_1_byte '_2_bytes else '_3_bytes ] {

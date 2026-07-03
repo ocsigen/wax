@@ -127,11 +127,10 @@ fn re_match(vre: &eq, s: &bytes, pos: i32, accept_partial_match: i32) -> &eq {
                                 s' = cpool[arg + 1] as &bytes;
                                 i = 0;
                                 l = s'.length();
-                                while i <u l {
+                                while i <u l : (i += 1) {
                                     br_if 'prefix_match pos == len;
                                     br_if 'backtrack s'[i] as i32_u != s[pos] as i32_u;
                                     pos += 1;
-                                    i += 1;
                                 }
                                 br 'continue;
                             }
@@ -141,12 +140,11 @@ fn re_match(vre: &eq, s: &bytes, pos: i32, accept_partial_match: i32) -> &eq {
                                 s' = cpool[arg + 1] as &bytes;
                                 i = 0;
                                 l = s'.length();
-                                while i <u l {
+                                while i <u l : (i += 1) {
                                     br_if 'prefix_match pos == len;
                                     br_if 'backtrack
                                         s'[i] as i32_u != normtable[s[pos] as i32_u] as i32_u;
                                     pos += 1;
-                                    i += 1;
                                 }
                                 br 'continue;
                             }
@@ -221,11 +219,10 @@ fn re_match(vre: &eq, s: &bytes, pos: i32, accept_partial_match: i32) -> &eq {
                                 i = group_start[arg];
                                 j = group_end[arg];
                                 br_if 'backtrack (i <s 0) | (j <s 0);
-                                while i <u j {
+                                while i <u j : (i += 1) {
                                     br_if 'prefix_match pos == len;
                                     br_if 'backtrack s[i] as i32_u != s[pos] as i32_u;
                                     pos += 1;
-                                    i += 1;
                                 }
                                 br 'continue;
                             }
@@ -321,7 +318,7 @@ fn re_match(vre: &eq, s: &bytes, pos: i32, accept_partial_match: i32) -> &eq {
         group_end[0] = pos;
         let res: &block = [0 as &i31; (numgroups << 1) + 1];
         i = 0;
-        while i <u numgroups {
+        while i <u numgroups : (i += 1) {
             j = i << 1;
             if (group_start[i] <s 0) | (group_end[i] <s 0) {
                 res[j + 1] = -1 as &i31;
@@ -330,7 +327,6 @@ fn re_match(vre: &eq, s: &bytes, pos: i32, accept_partial_match: i32) -> &eq {
                 res[j + 1] = group_start[i] as &i31;
                 res[j + 2] = group_end[i] as &i31;
             }
-            i += 1;
         }
         return res;
     }
