@@ -48,7 +48,7 @@ ORACLE="$(dirname "${BASH_SOURCE[0]}")/oracle.sh"
 smith_one() {
   local i="$1" seed mod out
   seed="$(mktemp)"; mod="$(mktemp --suffix=.wasm)"
-  head -c "$SMITH_BYTES" /dev/urandom >"$seed"
+  rand_bytes "$SEED-$i" "$SMITH_BYTES" >"$seed"
   if ! "$WASM_TOOLS" smith $SMITH_FLAGS "$seed" -o "$mod" 2>/dev/null; then
     rm -f "$seed" "$mod"; printf 's' >&2; return 0
   fi

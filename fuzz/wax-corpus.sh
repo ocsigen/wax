@@ -49,7 +49,7 @@ export -f decompile_one
 smith_one() {
   local i="$1" seed mod
   seed="$(mktemp)"; mod="$(mktemp --suffix=.wasm)"
-  head -c "$SMITH_BYTES" /dev/urandom >"$seed"
+  rand_bytes "$SEED-$i" "$SMITH_BYTES" >"$seed"
   if "$WASM_TOOLS" smith $SMITH_FLAGS "$seed" -o "$mod" 2>/dev/null \
     && timeout "$TIMEOUT" "$WAX" -i wasm -f wax "$mod" -o "$OUT/valid/smith-$i.wax" 2>/dev/null; then
     printf '.' >&2

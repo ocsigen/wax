@@ -33,7 +33,7 @@ RESULTS="$(mktemp -d)"
 trap 'rm -rf "$RESULTS"' EXIT
 freeze_wax "$RESULTS"  # run against a snapshot so a concurrent rebuild can't corrupt workers
 
-mapfile -t SEED_FILES < <(find "$SEEDS" -name '*.wax')
+mapfile -t SEED_FILES < <(find "$SEEDS" -name '*.wax' | sort)
 NSEEDS=${#SEED_FILES[@]}
 printf '%s\n' "${SEED_FILES[@]}" >"$RESULTS/seeds"
 

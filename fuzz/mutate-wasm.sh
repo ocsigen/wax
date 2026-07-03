@@ -48,7 +48,7 @@ mkdir -p "$KEEP"
 RESULTS="$(mktemp -d)"
 trap 'rm -rf "$RESULTS"' EXIT
 
-mapfile -t SEED_FILES < <(find "$SEEDS" -name '*.wasm')
+mapfile -t SEED_FILES < <(find "$SEEDS" -name '*.wasm' | sort)
 NSEEDS=${#SEED_FILES[@]}
 printf '%s\n' "${SEED_FILES[@]}" >"$RESULTS/seeds"
 

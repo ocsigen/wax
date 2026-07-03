@@ -25,6 +25,23 @@ SMITH_FLAGS="${SMITH_FLAGS:---ensure-termination --threads-enabled true --shared
 # is chosen here and announced by the campaign (announce_seed) so any run — even
 # one that stumbled on a finding by luck — can be reproduced with SEED=<n>.
 SEED="${SEED:-$((RANDOM * 32768 + RANDOM))}"
+export SEED
+
+# Deterministic pseudo-random bytes from a key string, so smith-generated corpora
+# replay from $SEED instead of being freshly random each run (which made a
+# smith-seed finding impossible to reproduce from SEED alone). AES-CTR over zeros
+# keyed by the string is a repeatable byte stream; falls back to /dev/urandom
+# when openssl is unavailable (then that corpus is non-reproducible, as before,
+# but still valid). Usage: rand_bytes <key> <count>.
+rand_bytes() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl enc -aes-256-ctr -pass "pass:$1" -nosalt -in /dev/zero 2>/dev/null \
+      | head -c "$2"
+  else
+    head -c "$2" /dev/urandom
+  fi
+}
+export -f rand_bytes 2>/dev/null || true
 
 # Announce the master seed and how to replay. Call once at a campaign's start,
 # passing the campaign's own invocation for the hint.
