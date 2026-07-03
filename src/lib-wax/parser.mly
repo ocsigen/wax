@@ -351,7 +351,7 @@ cast_type:
        try Hashtbl.find casttype_tbl t with Not_found ->
          raise (Wax_wasm.Parsing.Syntax_error
                   ($sloc, Printf.sprintf "Identifier '%s' is not a cast type.\n" t )) }
-| t = reference_type { Valtype (Ref t) } %prec AS
+| t = reference_type { Valtype (Ref t) }
 | "&" nullable = boption("?") FN s = function_type
    { Functype { nullable; sign = s } }
 (*
@@ -674,7 +674,7 @@ plaininstr:
 | x = ident ":=" i = expression { with_loc $sloc (Tee (x, i)) }
 | i = expression AS t = cast_type { with_loc $sloc (Cast(i, t)) }
 | i = expression AS nullable = boption("?") d = descriptor_operand
-  { with_loc $sloc (CastDesc(i, nullable, d)) } %prec AS
+  { with_loc $sloc (CastDesc(i, nullable, d)) }
 | i = expression IS t = reference_type { with_loc $sloc (Test(i, t)) }
 | i = expression "." x = ident { with_loc $sloc (StructGet(i, x)) }
 | i = expression "." DESCRIPTOR { with_loc $sloc (GetDescriptor i) }
