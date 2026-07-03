@@ -224,6 +224,8 @@ wax check [OPTIONS] FILE…
   conditionals are specialized before validation. A full set validates one
   configuration; a partial set leaves the remaining conditionals for the
   path-sensitive check to explore. Repeatable.
+- **`-X`** *NAME[=on|off]*, **`--feature`** *NAME[=on|off]* — enable or disable
+  an optional proposal, as for [`convert`](#options). Repeatable.
 - **`-W`** *NAME=LEVEL*, **`--warn`** *NAME=LEVEL* — set a warning's level, as
   above.
 - **`--color`** *WHEN* — as above.

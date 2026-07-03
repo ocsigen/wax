@@ -345,7 +345,10 @@ type cmp = fn(_: i32, _: i32) -> i32;
 (funcs[i] as &cmp)(x, y)        // call_indirect $funcs (type $cmp)
 ```
 
-Other table-management instructions (`table.size`/`grow`/`fill`/`copy`/`init`) do not yet have dedicated syntax.
+The other table-management instructions have method syntax too: `t.size()`,
+`t.grow(init, n)`, `t.fill(dst, val, n)`, `t.copy(dst, src, n)`,
+`t.init(seg, dst, src, n)`, and `seg.drop()` on an element segment (see
+[Instructions](instructions.md)).
 
 ## Element Segments
 

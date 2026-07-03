@@ -25,7 +25,8 @@ Both compile to identical WebAssembly bytecode.
 
 ## Installation
 
-**Requirements:** [Opam](https://opam.ocaml.org/) (2.1+) and OCaml 5.0+.
+**Requirements:** [Opam](https://opam.ocaml.org/) (2.1+) and OCaml 4.14+ (5.0+
+to run the full test suite).
 
 ```sh
 # Install dependencies
@@ -94,14 +95,9 @@ Wax supports all 9 combinations of input and output formats:
 
 ## Type Checking
 
-Enable type checking with the `-v` flag:
-
-```sh
-wax hello.wax -v -o hello.wasm
-```
-
-This catches type errors before generating output. For example, adding an `i32`
-and an `f64`:
+Compiling Wax to `.wat` or `.wasm` type-checks it automatically — type errors
+are reported before any output is produced. For example, adding an `i32` and an
+`f64`:
 
 ```
 Error: This operator cannot be applied to operands of types i32 and f64.
@@ -112,6 +108,10 @@ Error: This operator cannot be applied to operands of types i32 and f64.
   ·     ^^^^^
 4 │ }
 ```
+
+The `-v`/`--validate` flag adds checks that are off by default: it validates a
+same-format conversion (`.wax` → `.wax`) or a trusted `.wasm` input, and reports
+unused locals.
 
 ## Next Steps
 

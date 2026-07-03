@@ -816,7 +816,8 @@ let feature_option =
   let doc =
     "Enable or disable an optional feature / proposal. $(i,NAME) or \
      $(i,NAME=on) enables it, $(i,NAME=off) disables it. Repeatable; later \
-     settings win. Known: $(b,custom-descriptors) (off by default)."
+     settings win. Known: $(b,custom-descriptors), $(b,compact-import-section) \
+     (both off by default)."
   in
   let feature_conv =
     let parse s =

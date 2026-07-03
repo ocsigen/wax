@@ -323,11 +323,11 @@ A [table](module_fields.md#tables) is indexed like an array, and an indirect cal
 |------|-----|
 | `table.get $t` | `t[i]` |
 | `table.set $t` | `t[i] = v` |
-| `call_indirect $t (type $ft)` | `(t[i] as &ft)(args)` |
-| `call_indirect $t (result i32)` | `(t[i] as &fn() -> i32)(args)` |
-| `return_call_indirect $t (type $ft)` | `return (t[i] as &ft)(args)` |
+| `call_indirect $t (type $ft)` | `(t[i] as &?ft)(args)` |
+| `call_indirect $t (result i32)` | `(t[i] as &?fn() -> i32)(args)` |
+| `return_call_indirect $t (type $ft)` | `return (t[i] as &?ft)(args)` |
 
-`call_indirect` is reconstructed from this pattern on conversion to WAT/WASM, so it round-trips. The cast target names the callee's function type: either a defined type (`&ft`) or an inline one written `&fn(params) -> results` (used when the WAT type is anonymous). When the table's element type is already the concrete function type `&ft`, the cast may be omitted (`t[i](args)`).
+`call_indirect` is reconstructed from this pattern on conversion to WAT/WASM, so it round-trips. The cast target names the callee's function type — a defined type (`ft`) or an inline one written `fn(params) -> results` (used when the WAT type is anonymous) — and matches the table's element type: for a `funcref` table (the usual case) it is the nullable `&?ft`, as shown. When the element type is already a non-null `&ft`, the cast may be omitted (`t[i](args)`).
 
 The other table operations are methods on the table (an element segment is named directly):
 
@@ -347,7 +347,7 @@ A GC array can also be filled from a segment with `arr.init(seg, dest, src, len)
 
 | Wasm | Wax |
 |------|-----|
-| `throw $tag` | `throw tag(args)` |
+| `throw $tag` | `throw tag` (no payload), `throw tag x` (one), `throw tag (x, y)` (several) |
 | `throw_ref` | `throw_ref` |
 | `try_table ... catch $tag $l ...` | `try { ... } catch [ tag -> 'l, ... ]` |
 | `try_table ... catch_ref $tag $l ...` | `try { ... } catch [ tag & -> 'l, ... ]` |

@@ -4,7 +4,9 @@ Wax offers a Rust-like syntax for WebAssembly, complete with tools to type-check
 
 ## Installation
 
-**Requirements:** [Opam](https://opam.ocaml.org/) (2.1+) and OCaml 5.0+.
+**Requirements:** [Opam](https://opam.ocaml.org/) (2.1+) and OCaml 4.14+. The
+toolchain builds on OCaml 4.14; running the full test suite requires 5.0+ (it
+uses `Domain`).
 
 ```sh
 # Install dependencies
@@ -24,49 +26,32 @@ opam install .
 
 *   **Formatting:** Ensures consistent code style.
 *   **Type Checking:** Verifies the semantic correctness of Wax code.
-*   **Syntax Conversion:** Supports conversion between Wax, WebAssembly Text (WAT), and eventually WebAssembly Binary.
+*   **Syntax Conversion:** Converts between Wax, WebAssembly Text (WAT), and WebAssembly Binary (the default output) — in any direction.
 
 ## Documentation
 Full documentation is available at [vouillon.github.io/wax/](https://vouillon.github.io/wax/).
-You can also build the documentation locally using `mdbook build docs`.
+You can also build it locally with `mdbook build docs` (requires
+[mdBook](https://rust-lang.github.io/mdBook/)).
 
 ## CLI Interface
 
+`wax` is a group of three commands: the default converts between formats,
+`format` reformats files, and `check` validates them.
 
-**Usage:** `wax [OPTION]… [INPUT]` (convert, the default command), `wax format [OPTION]… FILE…` (reformat files), or `wax check [OPTION]… FILE…` (validate files).
+```sh
+wax input.wax -o output.wasm      # compile Wax to a Wasm binary (the default output)
+wax -i wat -f wax input.wat       # convert WAT to Wax (to stdout)
+wax check input.wax               # type-check only, no output
+wax format -i input.wax           # reformat in place
+```
 
-### Positional Arguments
+The input format is detected from the file extension (override with `-i`); the
+default output format is `wasm` (override with `-f`). `wax` reads from `stdin`
+when no input file is given and writes to `stdout` when `-o` is omitted.
 
-*   `[INPUT]`: Source file to convert/format. Optional. If omitted, the tool reads from `stdin`.
-
-### Options
-
-*   `-f`, `--format`, `--output-format`: Output format (Default: Auto/`wasm`). Values: `wat`, `wasm`, `wax`.
-*   `-i`, `--input-format`: Input format (Default: Auto/`wax`). Values: `wat`, `wasm`, `wax`.
-*   `-o`, `--output`: Output file (Default: `stdout`).
-*   `-v`, `--validate`: Perform validation (type checking for Wax, well-formedness for Wasm Text). Validation is disabled by default.
-*   `-s`, `--strict-validate`: Perform strict reference validation (for Wasm Text). This overrides the default relaxed reference validation behavior.
-*   `--color`: Color output: `always`, `never`, or `auto` (default). `auto` colors only if output is a TTY.
-*   `--fold`: Fold instructions into nested S-expressions (for Wasm Text output).
-*   `--unfold`: Unfold instructions into flat instruction lists (for Wasm Text output).
-
-### `format` command
-
-`wax format [OPTION]… FILE…` reformats files in their own format (detected from each extension).
-
-*   `-i`, `--inplace`: Write the formatted output back to each file. Without it (and without `--check`), exactly one file is formatted to `stdout`.
-*   `-c`, `--check`: Write nothing; list files that are not already formatted and exit non-zero if any are found.
-*   `-f`, `--format`, `--input-format`: Treat all files as this format (`wat`, `wasm`, `wax`), overriding extension detection.
-*   `-v`, `--validate`: Also type-check / well-formedness-check while formatting.
-*   `--color`, `--fold`, `--unfold`: as above.
-
-### `check` command
-
-`wax check [OPTION]… FILE…` validates files (type-checking Wax, well-formedness Wasm) without producing output, exiting non-zero if any file fails.
-
-*   `-f`, `--format`, `--input-format`: Treat all files as this format, overriding extension detection.
-*   `-s`, `--strict-validate`: Strict reference validation (for Wasm Text).
-*   `--color`: as above.
+See the [CLI reference](https://vouillon.github.io/wax/cli.html) for the
+complete set of options — including `-D`/`-X`/`-W`, `--source-map-file`, the
+validation flags, and the exit-status contract.
 
 ## Example
 

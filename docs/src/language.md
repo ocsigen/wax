@@ -16,8 +16,8 @@ fn f() -> i32 {
 ```
 
 Unlike the `#[...]` outer attributes that decorate a following field (such as
-`#[export]`), `#![...]` is an *inner* attribute: it applies to the enclosing
-module. A module may carry at most one name.
+`#[export = "name"]`), `#![...]` is an *inner* attribute: it applies to the
+enclosing module. A module may carry at most one name.
 
 (This maps to the WebAssembly module name stored in the `name` custom section —
 the `$name` in a WAT `(module $name …)`; see
@@ -424,7 +424,7 @@ level and pick up its result with a [hole](#holes):
 
 ```wax
 x;                        // leaves an i32 on the stack
-do (i32) -> i32 { … };    // a statement: consumes that i32, leaves an i32
+do (i32) -> i32 { … }     // a statement: consumes that i32, leaves an i32
 _ + 1;                    // the hole plugs in the block's result
 ```
 
