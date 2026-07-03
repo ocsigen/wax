@@ -210,9 +210,9 @@ fn caml_nextafter_float32_bytecode(x: f32, y: f32) -> f32 {
         let i = x.to_bits();
         let j = y.to_bits();
         if (i <s j) & (i <u j) {
-            i = i + 1;
+            i += 1;
         } else {
-            i = i - 1;
+            i -= 1;
         }
         return i.from_bits();
     }

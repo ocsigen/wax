@@ -419,11 +419,19 @@ let tail_match res : Ast.location Ast.instr =
    mutate a struct field / array element, or a nested control statement. *)
 let rec stmt d : Ast.location Ast.instr =
   match rnd 100 with
-  | n when n < 34 ->
+  | n when n < 28 ->
       let t = pick all_params in
-      nl (Ast.Set (Some (id (pname t)), gen t d))
+      nl (Ast.Set (Some (id (pname t)), None, gen t d))
+  | n when n < 40 ->
+      (* [x op= e] — a compound assignment over a numeric param, with an operator
+         valid for its type. Params are always initialized, so reading [x] (which
+         [x op= e] does) is well-typed. *)
+      let t = pick num_ty in
+      let op = pick (if is_int t then int_binops else flt_binops) in
+      nl (Ast.Set (Some (id (pname t)), Some (nl op), gen t d))
   | n when n < 46 ->
-      nl (Ast.Set (None, gen (pick num_ty) (max 1 d))) (* `_ = <determined>` *)
+      nl (Ast.Set (None, None, gen (pick num_ty) (max 1 d)))
+      (* `_ = <determined>` *)
   | n when n < 58 ->
       (* [point.x] is the one mutable struct field. *)
       nl (Ast.StructSet (leaf Point, id "x", gen I32 d))
@@ -451,7 +459,7 @@ let rec stmt d : Ast.location Ast.instr =
            { label = None; cond = gen I32 (d - 1); block = [ stmt (d - 1) ] })
   | _ ->
       let t = pick num_ty in
-      nl (Ast.Set (Some (id (pname t)), gen t d))
+      nl (Ast.Set (Some (id (pname t)), None, gen t d))
 
 (* One clean type error, to reach the checker's mismatch-reporting arms. *)
 let poison () : Ast.location Ast.instr =
@@ -460,11 +468,14 @@ let poison () : Ast.location Ast.instr =
       nl
         (Ast.Set
            ( None,
+             None,
              nl
                (Ast.BinOp
                   (nl Ast.Add, nl (Ast.Get (id "a")), nl (Ast.Get (id "d")))) ))
       (* i32 + f64 *)
-  | 1 -> nl (Ast.Set (Some (id "b"), nl (Ast.Get (id "c")))) (* f32 into i64 *)
+  | 1 ->
+      nl (Ast.Set (Some (id "b"), None, nl (Ast.Get (id "c"))))
+      (* f32 into i64 *)
   | 2 -> nl (Ast.StructGet (leaf Point, id "nope")) (* unknown field *)
   | _ ->
       nl

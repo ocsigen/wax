@@ -151,7 +151,7 @@ fn caml_sys_exit(code: &eq) -> &eq {
                 br_if 'not_found
                     61 // '='
                         == var[i] as i32_u;
-                i = i + 1;
+                i += 1;
             }
             i = 0;
             while i <u environment_count {
@@ -162,15 +162,15 @@ fn caml_sys_exit(code: &eq) -> &eq {
                         let c = m.load8(s + j) as i32_u;
                         br_if 'next !c;
                         br_if 'next c != var[j] as i32_u;
-                        j = j + 1;
+                        j += 1;
                     }
                     br_if 'next
                         61 // '='
                             != m.load8(s + j) as i32_u;
-                    s = s + (j + 1);
+                    s += j + 1;
                     become blit_memory_to_string(s, strlen(s));
                 }
-                i = i + 1;
+                i += 1;
             }
         }
         null;
@@ -230,7 +230,7 @@ fn caml_sys_getenv_opt(name: &eq) -> &eq {
             while i <u argc {
                 let arg = m.load32(argv_ptr + (i << 2));
                 args[i + 1] = blit_memory_to_string(arg, strlen(arg));
-                i = i + 1;
+                i += 1;
             }
             argv = args;
             free(argv_ptr);
@@ -325,7 +325,7 @@ fn caml_sys_random_seed(&eq) -> &eq {
     let i: i32;
     while i <u n {
         a[i + 1] = m.load32(buffer + (i << 2)) as &i31;
-        i = i + 1;
+        i += 1;
     }
     a;
 }
@@ -338,7 +338,7 @@ fn caml_sys_random_seed(&eq) -> &eq {
     let i: i32;
     while i <u n {
         a[i + 1] = ta_get_i32(r, i) as &i31;
-        i = i + 1;
+        i += 1;
     }
     a;
 }

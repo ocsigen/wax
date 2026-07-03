@@ -59,7 +59,7 @@ type block = [mut &eq];
             if keys[i] == k {
                 return m.values[i] as &i31;
             }
-            i = i + 1;
+            i += 1;
         }
         null;
     }
@@ -137,7 +137,7 @@ fn caml_input_value(ch: &eq) -> &eq {
         if len <u 5 {
             fail_bad_object(input_value);
         }
-        len = len - 5;
+        len -= 5;
     }
     if !len {
         fail_bad_object(input_value);
@@ -277,7 +277,7 @@ fn readstr(s: &intern_state) -> &bytes {
     let pos = s.pos;
     let len: i32;
     while src[pos + len] as i32_u {
-        len = len + 1;
+        len += 1;
     }
     let res: &bytes = [0; len];
     res.copy(0, src, pos, len);
@@ -294,13 +294,13 @@ fn readfloat(s: &intern_state, code: i32) -> f64 {
     if code == CODE_DOUBLE_BIG {
         'loop: loop {
             d = d << 8 | src[pos + i] as i64_u;
-            i = i + 1;
+            i += 1;
             br_if 'loop i <u 8;
         }
     } else {
         'loop: loop {
             d = (d | src[pos + i] as i64_u).rotr(8);
-            i = i + 1;
+            i += 1;
             br_if 'loop i <u 8;
         }
     }
@@ -315,7 +315,7 @@ fn readfloats(s: &intern_state, code: i32, len: i32) -> &eq {
     let i: i32;
     while i <u len {
         dest[i] = readfloat(s, code);
-        i = i + 1;
+        i += 1;
     }
     dest;
 }
@@ -866,7 +866,7 @@ fn writefloat(s: &extern_state, f: f64) {
     let i: i32;
     'loop: loop {
         buf[pos + i] = (d >>u (i << 3) as i64_u) as i32;
-        i = i + 1;
+        i += 1;
         br_if 'loop i <u 8;
     }
 }
@@ -881,11 +881,11 @@ fn writefloats(s: &extern_state, b: &float_array) {
         let i = 0;
         'loop: loop {
             buf[pos + i] = (d >>u (i << 3) as i64_u) as i32;
-            i = i + 1;
+            i += 1;
             br_if 'loop i <u 8;
         }
-        pos = pos + 8;
-        j = j + 1;
+        pos += 8;
+        j += 1;
     }
 }
 
@@ -1114,7 +1114,7 @@ fn extern_rec(s: &extern_state, v: &eq) {
             let b = item.blk;
             pos = item.pos;
             v = b[pos];
-            pos = pos + 1;
+            pos += 1;
             item.pos = pos;
             if pos == b.length() {
                 sp = item.next;
@@ -1133,7 +1133,7 @@ fn extern_output_length(s: &extern_state, pos: i32) -> i32 {
         let len: i32;
         'loop: loop {
             'done: do {
-                len = len + output_block.end;
+                len += output_block.end;
                 output_block = br_on_null 'done output_block.next;
                 br 'loop;
             }
@@ -1175,7 +1175,7 @@ fn caml_output_value_to_string(v: &eq, flags: &eq) -> &eq {
         'done: do {
             let len = blk.end;
             res.copy(pos, blk.dat, 0, len);
-            pos = pos + len;
+            pos += len;
             blk = br_on_null 'done blk.next;
             br 'loop;
         }

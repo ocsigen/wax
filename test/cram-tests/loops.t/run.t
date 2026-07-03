@@ -48,11 +48,11 @@ is:
       let i = 0;
       let total = 0;
       while i <s n {
-          total = total + i;
-          i = i + 1;
+          total += i;
+          i += 1;
       }
       'loop: loop {
-          total = total - 1;
+          total -= 1;
           br_if 'loop total >s 0;
       }
       total;
@@ -66,11 +66,11 @@ label-less:
   fn f(n: i32) -> i32 {
       let i = 0;
       'top: while i <s n {
-          i = i + 1;
+          i += 1;
           if i == 3 {
               br 'top;
           }
-          n = n - 1;
+          n -= 1;
       }
       n;
   }

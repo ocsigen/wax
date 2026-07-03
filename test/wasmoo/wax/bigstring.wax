@@ -84,7 +84,7 @@ fn caml_hash_mix_bigstring(h: i32, b: &eq) -> i32 {
     let i: i32;
     while i + 4 <=u len {
         h = caml_hash_mix_int(h, dv_get_i32_unaligned(view, i, 1));
-        i = i + 4;
+        i += 4;
     }
     let w = 0;
     dispatch (len & 3) [ 'l_2 'l_3 'l_4 else 'l_5 ] {
@@ -92,10 +92,10 @@ fn caml_hash_mix_bigstring(h: i32, b: &eq) -> i32 {
             w = dv_get_ui8(view, i + 2) << 16;
         }
         'l_4: {
-            w = w | dv_get_ui8(view, i + 1) << 8;
+            w |= dv_get_ui8(view, i + 1) << 8;
         }
         'l_3: {
-            w = w | dv_get_ui8(view, i);
+            w |= dv_get_ui8(view, i);
             h = caml_hash_mix_int(h, w);
         }
         'l_2: {
@@ -146,7 +146,7 @@ fn caml_bigstring_memcmp(s1: &eq, vpos1: &eq, s2: &eq, vpos2: &eq, vlen: &eq) ->
             let w1 = dv_get_i32_unaligned(v1, pos1 + i, 1);
             let w2 = dv_get_i32_unaligned(v2, pos2 + i, 1);
             if w1 == w2 {
-                i = i + 4;
+                i += 4;
                 br 'loop;
             }
             // Words differ, find first differing byte (little-endian)
@@ -177,7 +177,7 @@ fn caml_bigstring_memcmp(s1: &eq, vpos1: &eq, s2: &eq, vpos2: &eq, vlen: &eq) ->
         if i <u len {
             c1 = dv_get_ui8(v1, pos1 + i);
             c2 = dv_get_ui8(v2, pos2 + i);
-            i = i + 1;
+            i += 1;
             br_if 'loop c1 == c2;
             return c1 <u c2?-1 as &i31:1 as &i31;
         }
@@ -206,7 +206,7 @@ fn caml_bigstring_memcmp_string(s1: &eq, vpos1: &eq, vs2: &eq, vpos2: &eq, vlen:
                 s2[j] as i32_u | s2[j + 1] as i32_u << 8
                     | (s2[j + 2] as i32_u << 16 | s2[j + 3] as i32_u << 24);
             if w1 == w2 {
-                i = i + 4;
+                i += 4;
                 br 'loop;
             }
             // Words differ, find first differing byte (little-endian)
@@ -237,7 +237,7 @@ fn caml_bigstring_memcmp_string(s1: &eq, vpos1: &eq, vs2: &eq, vpos2: &eq, vlen:
         if i <u len {
             c1 = dv_get_ui8(v1, pos1 + i);
             c2 = s2[pos2 + i] as i32_u;
-            i = i + 1;
+            i += 1;
             br_if 'loop c1 == c2;
             return c1 <u c2?-1 as &i31:1 as &i31;
         }
@@ -273,8 +273,8 @@ fn caml_bigstring_memchr(s: &eq, vc: &eq, vpos: &eq, vlen: &eq) -> &eq {
                 }
                 return (pos + 3) as &i31;
             }
-            pos = pos + 4;
-            len = len - 4;
+            pos += 4;
+            len -= 4;
             br 'loop;
         }
     }
@@ -283,8 +283,8 @@ fn caml_bigstring_memchr(s: &eq, vc: &eq, vpos: &eq, vlen: &eq) -> &eq {
         if c == dv_get_ui8(v, pos) {
             return pos as &i31;
         }
-        len = len - 1;
-        pos = pos + 1;
+        len -= 1;
+        pos += 1;
     }
     -1 as &i31;
 }
@@ -318,14 +318,14 @@ fn caml_bigstring_memrchr(s: &eq, vc: &eq, vpos: &eq, vlen: &eq) -> &eq {
             }
             return (cur - 3) as &i31;
         }
-        cur = cur - 4;
+        cur -= 4;
     }
     // Handle remaining 0-3 bytes at the beginning
     while cur >=s pos {
         if c == dv_get_ui8(v, cur) {
             return cur as &i31;
         }
-        cur = cur - 1;
+        cur -= 1;
     }
     -1 as &i31;
 }
@@ -353,7 +353,7 @@ fn caml_bigstring_strncmp(vs1: &eq, vpos1: &eq, vs2: &eq, vpos2: &eq, vlen: &eq)
                     // Contains null, strings equal up to null
                     return 0 as &i31;
                 }
-                i = i + 4;
+                i += 4;
                 br 'loop;
             }
             // Words differ - find first differing byte, checking for nulls
@@ -410,7 +410,7 @@ fn caml_bigstring_strncmp(vs1: &eq, vpos1: &eq, vs2: &eq, vpos2: &eq, vlen: &eq)
     while i <u len {
         c1 = dv_get_ui8(v1, pos1 + i);
         c2 = dv_get_ui8(v2, pos2 + i);
-        i = i + 1;
+        i += 1;
         if c1 <u c2 {
             return -1 as &i31;
         }

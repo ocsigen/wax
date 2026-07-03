@@ -149,7 +149,7 @@ and rewrite_desc (desc : location instr_desc) : location instr_desc =
           then_body = rewrite_list then_body;
           else_body = Option.map rewrite_list else_body;
         }
-  | Set (x, e) -> Set (x, rewrite_instr e)
+  | Set (x, op, e) -> Set (x, op, rewrite_instr e)
   | Tee (x, e) -> Tee (x, rewrite_instr e)
   | Call (t, args) -> Call (rewrite_instr t, List.map rewrite_instr args)
   | TailCall (t, args) -> TailCall (rewrite_instr t, List.map rewrite_instr args)

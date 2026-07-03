@@ -56,10 +56,10 @@ fn caml_hash_mix_int(h: i32, d: i32) -> i32 {
 
 #[export = "caml_hash_mix_final"]
 fn caml_hash_mix_final(h: i32) -> i32 {
-    h = h ^ h >>u 16;
-    h = h * 0x85ebca6b;
-    h = h ^ h >>u 13;
-    h = h * 0xc2b2ae35;
+    h ^= h >>u 16;
+    h *= 0x85ebca6b;
+    h ^= h >>u 13;
+    h *= 0xc2b2ae35;
     h ^ h >>u 16;
 }
 
@@ -120,7 +120,7 @@ fn caml_hash_mix_string(h: i32, s: &bytes) -> i32 {
                 s[i] as i32_u | s[i + 1] as i32_u << 8
                     | (s[i + 2] as i32_u << 16 | s[i + 3] as i32_u << 24),
             );
-        i = i + 4;
+        i += 4;
     }
     let w = 0;
     dispatch (len & 3) [ 'l_2 'l_3 'l_4 else 'l_5 ] {
@@ -128,10 +128,10 @@ fn caml_hash_mix_string(h: i32, s: &bytes) -> i32 {
             w = s[i + 2] as i32_u << 16;
         }
         'l_4: {
-            w = w | s[i + 1] as i32_u << 8;
+            w |= s[i + 1] as i32_u << 8;
         }
         'l_3: {
-            w = w | s[i] as i32_u;
+            w |= s[i] as i32_u;
             h = caml_hash_mix_int(h, w);
         }
         'l_2: {
@@ -162,19 +162,19 @@ fn caml_hash(count: &eq, limit: &eq, seed: &eq, obj: &eq) -> &eq {
     'loop: loop {
         if (rd <u wr) & (num >u 0) {
             let v = caml_hash_queue[rd];
-            rd = rd + 1;
+            rd += 1;
             'again: do {
                 let i: i32;
                 let len: i32;
                 match v {
                     iv: &i31 => {
                         h = caml_hash_mix_int(h, (iv as i32_s << 1) + 1);
-                        num = num - 1;
+                        num -= 1;
                         br 'loop;
                     }
                     sv: &bytes => {
                         h = caml_hash_mix_string(h, sv);
-                        num = num - 1;
+                        num -= 1;
                         br 'loop;
                     }
                     bv: &block => {
@@ -187,7 +187,7 @@ fn caml_hash(count: &eq, limit: &eq, seed: &eq, obj: &eq) -> &eq {
                                     'not_block': do {
                                         bv = br_on_cast_fail 'not_block' &block v;
                                         br_if 'again bv[0] != forward_tag as &i31;
-                                        i = i + 1;
+                                        i += 1;
                                         br_if 'loop i == MAX_FORWARD_DEREFERENCE;
                                         br 'forward;
                                     };
@@ -207,15 +207,15 @@ fn caml_hash(count: &eq, limit: &eq, seed: &eq, obj: &eq) -> &eq {
                             br_if 'loop i >=u len;
                             br_if 'loop wr >=u sz;
                             caml_hash_queue[wr] = bv[i];
-                            wr = wr + 1;
-                            i = i + 1;
+                            wr += 1;
+                            i += 1;
                             br 'block_iter;
                         }
                         unreachable;
                     }
                     flv: &float => {
                         h = caml_hash_mix_double(h, flv.f);
-                        num = num - 1;
+                        num -= 1;
                         br 'loop;
                     }
                     fa: &float_array => {
@@ -225,8 +225,8 @@ fn caml_hash(count: &eq, limit: &eq, seed: &eq, obj: &eq) -> &eq {
                         'fa_iter: loop {
                             if i <u len {
                                 h = caml_hash_mix_double(h, fa[i]);
-                                num = num - 1;
-                                i = i + 1;
+                                num -= 1;
+                                i += 1;
                                 br_if 'fa_iter num >s 0;
                             }
                         }
@@ -234,7 +234,7 @@ fn caml_hash(count: &eq, limit: &eq, seed: &eq, obj: &eq) -> &eq {
                     }
                     cv: &custom => {
                         h = caml_hash_mix_int(h, (br_on_null 'loop cv.ops.hash)(v));
-                        num = num - 1;
+                        num -= 1;
                         br 'loop;
                     }
                     _ => {
@@ -248,7 +248,7 @@ fn caml_hash(count: &eq, limit: &eq, seed: &eq, obj: &eq) -> &eq {
                                     h = jsstring_hash(h, str);
                                     // count the string against the budget, like every other
                                     // hashed leaf (and like the JS runtime)
-                                    num = num - 1;
+                                    num -= 1;
                                     0 as &i31;
                                 };
                         }

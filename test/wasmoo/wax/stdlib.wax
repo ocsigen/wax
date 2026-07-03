@@ -218,7 +218,7 @@ fn caml_set_link_info(info: &eq) -> &eq {
                 // Insert into symbol hash table
                 let h = caml_string_hash(0 as &i31, key) as i32_s %u symbol_table_size;
                 symbol_table[h] = { name: key, value: pair[2], next: symbol_table[h] };
-                j = j + 1;
+                j += 1;
                 br 'loop;
             }
         }
@@ -290,7 +290,7 @@ fn do_register_global(v: &eq, name: &eq, is_predef: i32) -> &eq {
             } else {
                 // Not found in symbols: assign a new index
                 i = next_idx + 1;
-                next_idx = next_idx + 1;
+                next_idx += 1;
             }
         } else {
             // 3. No relocation info: nothing to do.

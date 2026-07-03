@@ -170,19 +170,33 @@ let rec token_rec ctx lexbuf =
   | ".." -> DOTDOT
   | "!" -> BANG
   | "+" -> PLUS
+  | "+=" -> PLUSEQUAL
   | "-" -> MINUS
+  | "-=" -> MINUSEQUAL
   | "*" -> STAR
+  | "*=" -> STAREQUAL
   | "/" -> SLASH
+  | "/=" -> SLASHEQUAL
   | "/s" -> SLASHS
+  | "/s=" -> SLASHSEQUAL
   | "/u" -> SLASHU
+  | "/u=" -> SLASHUEQUAL
   | "%s" -> PERCENTS
+  | "%s=" -> PERCENTSEQUAL
   | "%u" -> PERCENTU
+  | "%u=" -> PERCENTUEQUAL
   | '&' -> AMPERSAND
+  | "&=" -> AMPERSANDEQUAL
   | '|' -> PIPE
+  | "|=" -> PIPEEQUAL
   | '^' -> CARET
+  | "^=" -> CARETEQUAL
   | "<<" -> SHL
+  | "<<=" -> SHLEQUAL
   | ">>s" -> SHRS
+  | ">>s=" -> SHRSEQUAL
   | ">>u" -> SHRU
+  | ">>u=" -> SHRUEQUAL
   | "==" -> EQUALEQUAL
   | "!=" -> BANGEQUAL
   | "_" -> UNDERSCORE

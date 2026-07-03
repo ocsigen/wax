@@ -911,11 +911,13 @@ let rec instr prec pp (i : _ instr) =
       identifier pp x.desc;
       operator pp "::";
       identifier pp y.desc
-  | Set (x, i) ->
+  | Set (x, op, i) ->
       box pp ~indent:indent_level (fun () ->
           simple_pat pp x;
           space pp ();
-          operator pp "=";
+          (* [x op= e] for a compound assignment; a plain [=] otherwise. *)
+          operator pp
+            (match op with None -> "=" | Some o -> binop o.desc ^ "=");
           space pp ();
           instr Instruction pp i)
   | Tee (x, i) ->

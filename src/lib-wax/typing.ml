@@ -1945,7 +1945,7 @@ let merge_let_tuple ctx head rest =
       | { desc = Let ([ ((Some _, _) as b) ], Some v); _ } :: r when is_hole v
         ->
           take (n - 1) (b :: acc) r
-      | { desc = Set (None, v); _ } :: r when is_hole v ->
+      | { desc = Set (None, _, v); _ } :: r when is_hole v ->
           take (n - 1) ((None, None) :: acc) r
       | _ -> None
   in
@@ -2120,7 +2120,7 @@ let rec count_holes i =
       count_holes f + List.fold_left (fun acc i -> acc + count_holes i) 0 args
   | If { cond = i; _ }
   | Let (_, Some i)
-  | Set (_, i)
+  | Set (_, _, i)
   | Tee (_, i)
   | UnOp (_, i)
   | Cast (i, _)
@@ -2186,9 +2186,9 @@ let rec collect_assigned_locals acc i =
     match o with Some i -> collect_assigned_locals acc i | None -> acc
   in
   match i.desc with
-  | Set (Some id, e) | Tee (id, e) ->
+  | Set (Some id, _, e) | Tee (id, e) ->
       collect_assigned_locals (StringSet.add id.desc acc) e
-  | Set (None, e) -> collect_assigned_locals acc e
+  | Set (None, _, e) -> collect_assigned_locals acc e
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
       in_list acc block
   | While { cond; block; _ } -> in_list (collect_assigned_locals acc cond) block
@@ -2414,7 +2414,7 @@ let rec check_hole_order_rec ctx i n =
             n |> check_hole_order_in_list ctx args |> check_hole_order_rec ctx f
         | If { cond = i; _ }
         | Let (_, Some i)
-        | Set (_, i)
+        | Set (_, _, i)
         | Tee (_, i)
         | UnOp (_, i)
         | Cast (i, _)
@@ -3049,8 +3049,8 @@ let rebuild_match typed_list arms =
         | ( Ast.MatchCast (Some _, _),
             { desc = Ast.Let (_, Some inner); _ } :: body ) ->
             (inner, body)
-        | Ast.MatchCast (None, _), { desc = Ast.Set (None, inner); _ } :: body
-          ->
+        | ( Ast.MatchCast (None, _),
+            { desc = Ast.Set (None, _, inner); _ } :: body ) ->
             (inner, body)
         | Ast.MatchNull, inner :: body -> (inner, body)
         | _ -> assert false
@@ -4598,27 +4598,46 @@ and type_variable_access ctx i =
             Cell.make Error
       in
       return_expression i desc ty
-  | Set (None, i') ->
+  | Set (None, _, i') ->
       let* i' = instruction ctx i' in
       (* [_ = e] drops one value, so [e] must produce exactly one; otherwise wax
          emits a [drop] with nothing (or too much) on the stack. [expression_type]
          reports [not_an_expression] when the arity is not 1. *)
       ignore (expression_type ctx i' : inferred_type Cell.t);
-      return_statement i (Set (None, i')) [||]
-  | Set (Some idx, i') ->
+      return_statement i (Set (None, None, i')) [||]
+  | Set (Some idx, op, i') ->
       (* Resolve the target first (a pure lookup) so the value can be checked
          against its type, letting a struct/array literal drop its name. The
          local is marked initialized only after the value is typed, so an
          assignment reading the same local (e.g. [x = x + 1]) still sees its
          pre-assignment state. *)
       let resolved = resolve_variable ctx idx in
-      let* i' =
+      (* A compound assignment [x op= e] is type-checked as [x = x op e]: reading
+         [x] requires it to be initialized already, and the operator is validated
+         against its type by the ordinary [BinOp] path. The compound form is kept
+         in the typed AST (so it round-trips and lowers back to a get/op/set); the
+         typed right-hand side is the [BinOp]'s second operand. *)
+      let to_check =
+        match op with
+        | None -> i'
+        | Some op ->
+            { i' with desc = BinOp (op, { idx with desc = Get idx }, i') }
+      in
+      let* checked =
         match resolved with
         | Local (Some ity) | Global (_, Some ity) ->
-            let* i', _ = check_instruction ctx (valtype_cell ity) i' in
-            return i'
+            let* c, _ = check_instruction ctx (valtype_cell ity) to_check in
+            return c
         | Local None | Global (_, None) | Func_ref _ | Unbound ->
-            instruction ctx i'
+            instruction ctx to_check
+      in
+      let value =
+        match (op, checked.desc) with
+        | None, _ -> checked
+        (* A numeric [BinOp] is never wrapped by [check_instruction], so its typed
+           right operand is recoverable directly. *)
+        | Some _, BinOp (_, _, rhs) -> rhs
+        | Some _, _ -> assert false
       in
       (match resolved with
       | Local _ -> mark_initialized ctx idx.desc
@@ -4631,7 +4650,7 @@ and type_variable_access ctx i =
           Error.unbound_name ctx.diagnostics ~location:idx.info
             ~suggestions:(set_suggestions ctx idx.desc)
             "variable" idx);
-      return_statement i (Set (Some idx, i')) [||]
+      return_statement i (Set (Some idx, op, value)) [||]
   | Tee (idx, i') -> (
       (* Only a local is assignable. Resolve it first so the value can be
          checked against the local's type (letting a struct/array literal drop
@@ -8311,7 +8330,7 @@ let rec instr_has_conditional (i : (_ instr_desc, _) annotated) =
   | ArraySet (a, b, c) | Select (a, b, c) ->
       instr_has_conditional a || instr_has_conditional b
       || instr_has_conditional c
-  | Set (_, i)
+  | Set (_, _, i)
   | Tee (_, i)
   | Cast (i, _)
   | Test (i, _)
@@ -8421,7 +8440,7 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
             catches = List.map (fun (t, l) -> (t, sinstrs asm l)) catches;
             catch_all = Option.map (sinstrs asm) catch_all;
           }
-    | Set (idx, v) -> Set (idx, sone asm v)
+    | Set (idx, op, v) -> Set (idx, op, sone asm v)
     | Tee (idx, v) -> Tee (idx, sone asm v)
     | Call (t, args) -> Call (sone asm t, List.map (sone asm) args)
     | TailCall (t, args) -> TailCall (sone asm t, List.map (sone asm) args)
@@ -8554,7 +8573,7 @@ let sub_instrs (i : (_ instr_desc, _) annotated) =
   | StructSet (a, _, b) ->
       [ a; b ]
   | ArraySet (a, b, c) | Select (a, b, c) -> [ a; b; c ]
-  | Set (_, i)
+  | Set (_, _, i)
   | Tee (_, i)
   | Cast (i, _)
   | Test (i, _)

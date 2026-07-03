@@ -486,7 +486,7 @@ const no_arg = "";
             'loop: loop {
                 if errcode <u error_codes.length() {
                     if n != error_codes[errcode] as i32_s {
-                        errcode = errcode + 1;
+                        errcode += 1;
                         br 'loop;
                     }
                 } else {
@@ -1905,7 +1905,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
         let buffer = get_buffer();
         let nwritten = buffer;
         let iovs = buffer + 4;
-        buffer = buffer + 12;
+        buffer += 12;
         m.store32(iovs, buffer);
         let iovs_len = 1;
         let written: i32;
@@ -1916,9 +1916,9 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
             let res = fd_write(fd, iovs, iovs_len, nwritten);
             caml_unix_error_if(res, "write", no_arg);
             let n = m.load32(nwritten);
-            written = written + n;
-            pos = pos + n;
-            len = len - n;
+            written += n;
+            pos += n;
+            len -= n;
         }
         written as &i31;
     }
@@ -1938,7 +1938,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
         let buffer = get_buffer();
         let nwritten = buffer;
         let iovs = buffer + 4;
-        buffer = buffer + 12;
+        buffer += 12;
         m.store32(iovs, buffer);
         let iovs_len = 1;
         let numbytes = len >u IO_BUFFER_SIZE?IO_BUFFER_SIZE:len;
@@ -1961,7 +1961,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
         let buffer = get_buffer();
         let nread = buffer;
         let iovs = buffer + 4;
-        buffer = buffer + 12;
+        buffer += 12;
         m.store32(iovs, buffer);
         m.store32(iovs, len, 4, 4);
         let iovs_len = 1;
@@ -1985,7 +1985,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
         let buffer = get_buffer();
         let nwritten = buffer;
         let iovs = buffer + 4;
-        buffer = buffer + 12;
+        buffer += 12;
         m.store32(iovs, buffer);
         let iovs_len = 1;
         let written: i32;
@@ -1997,9 +1997,9 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
                 let res = fd_write(fd, iovs, iovs_len, nwritten);
                 caml_unix_error_if(res, "write", no_arg);
                 let n = m.load32(nwritten);
-                written = written + n;
-                pos = pos + n;
-                len = len - n;
+                written += n;
+                pos += n;
+                len -= n;
                 br_if 'loop vsingle == 0 as &i31;
             }
         }
@@ -2020,7 +2020,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
         let buffer = get_buffer();
         let nread = buffer;
         let iovs = buffer + 4;
-        buffer = buffer + 12;
+        buffer += 12;
         m.store32(iovs, buffer);
         m.store32(iovs, len, 4, 4);
         let iovs_len = 1;
@@ -2066,11 +2066,11 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
                     caml_unix_error(_, null);
                 }
             }
-            offset = offset + n as i64_u;
+            offset += n as i64_u;
             fd_offset.offset = offset;
-            written = written + n;
-            pos = pos + n;
-            len = len - n;
+            written += n;
+            pos += n;
+            len -= n;
         }
         written as &i31;
     }
@@ -2107,7 +2107,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
                     caml_unix_error(_, null);
                 }
             }
-            offset = offset + n as i64_u;
+            offset += n as i64_u;
             fd_offset.offset = offset;
         }
         n as &i31;
@@ -2139,7 +2139,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
                 caml_unix_error(_, null);
             }
         }
-        offset = offset + n as i64_u;
+        offset += n as i64_u;
         fd_offset.offset = offset;
         caml_blit_dataview_to_bytes(buf_view, 0, vbuf as &bytes, pos, n);
         n as &i31;
@@ -2175,11 +2175,11 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
                         caml_unix_error(_, null);
                     }
                 }
-                offset = offset + n as i64_u;
+                offset += n as i64_u;
                 fd_offset.offset = offset;
-                written = written + n;
-                pos = pos + n;
-                len = len - n;
+                written += n;
+                pos += n;
+                len -= n;
                 br_if 'loop vsingle == 0 as &i31;
             }
         }
@@ -2208,7 +2208,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
                 caml_unix_error(_, null);
             }
         }
-        offset = offset + n as i64_u;
+        offset += n as i64_u;
         fd_offset.offset = offset;
         n as &i31;
     }

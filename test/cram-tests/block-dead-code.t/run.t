@@ -6,12 +6,11 @@ spurious "value remains on the stack":
   #[export = "f"]
   fn f() -> i32 {
       let x: i32;
-      x =
-          x
-              + 'l_2: do {
-                    br 'l_2 0x4;
-                    (_ as i32).ctz();
-                };
+      x +=
+          'l_2: do {
+              br 'l_2 0x4;
+              (_ as i32).ctz();
+          };
       x;
   }
 

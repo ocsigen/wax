@@ -366,7 +366,7 @@ fn convert_flag_list(tbl: &open_flags, vflags: &eq) -> i32 {
     'loop: loop {
         match vflags {
             cons: &block => {
-                flags = flags | tbl[cons[1] as i32_u] as i32_u;
+                flags |= tbl[cons[1] as i32_u] as i32_u;
                 vflags = cons[2];
                 br 'loop;
             }
@@ -626,7 +626,7 @@ fn read(fd: i32, buf: &extern, pos: i32, n: i32) -> i32 {
     let buffer = get_buffer();
     let nread = buffer;
     let iovs = buffer + 4;
-    buffer = buffer + 12;
+    buffer += 12;
     m.store32(iovs, buffer);
     m.store32(iovs, n, 4, 4);
     let iovs_len = 1;
@@ -772,8 +772,8 @@ fn caml_really_getblock(ch: &eq, s: &bytes, pos: i32, len: i32) -> i32 {
         if !read {
             return len - n;
         }
-        pos = pos + read;
-        n = n - read;
+        pos += read;
+        n -= read;
     }
     len;
 }
@@ -824,8 +824,8 @@ fn caml_ml_input_char(ch: &eq) -> &eq {
 fn caml_ml_input_int(vch: &eq) -> &eq {
     let ch = vch as &channel;
     let res = caml_getch(ch) << 24;
-    res = res | caml_getch(ch) << 16;
-    res = res | caml_getch(ch) << 8;
+    res |= caml_getch(ch) << 16;
+    res |= caml_getch(ch) << 8;
     return (res | caml_getch(ch)) as &i31;
 }
 
@@ -961,7 +961,7 @@ fn caml_ml_input_scan_line(vch: &eq) -> &eq {
                 ta_copy(ch.buffer, 0, n, ch.max);
                 ch.curr = 0;
                 ch.max = ch.max - n;
-                p = p - n;
+                p -= n;
             }
             if ch.max >=u ch.size {
                 return (ch.curr - ch.size) as &i31;
@@ -977,7 +977,7 @@ fn caml_ml_input_scan_line(vch: &eq) -> &eq {
                 == dv_get_ui8(ch.buffer_view, p) {
             return (1 + (p - ch.curr)) as &i31;
         }
-        p = p + 1;
+        p += 1;
         br 'loop;
     }
     unreachable;
@@ -1011,7 +1011,7 @@ fn write(fd: i32, buf: &extern, pos: i32, n: i32) -> i32 {
     let buffer = get_buffer();
     let nwritten = buffer;
     let iovs = buffer + 4;
-    buffer = buffer + 12;
+    buffer += 12;
     m.store32(iovs, buffer);
     m.store32(iovs, n, 4, 4);
     let iovs_len = 1;
@@ -1030,7 +1030,7 @@ fn write(fd: i32, buf: &extern, pos: i32, n: i32) -> i32 {
         let buffer = get_buffer();
         let nwritten = buffer;
         let iovs = buffer + 4;
-        buffer = buffer + 12;
+        buffer += 12;
         let buf = write_string_to_memory(buffer, IO_BUFFER_SIZE, v);
         let remaining = buf;
         'write: loop {
@@ -1038,8 +1038,8 @@ fn write(fd: i32, buf: &extern, pos: i32, n: i32) -> i32 {
             m.store32(iovs, len, 4, 4);
             let res = fd_write(fd, iovs, 1, nwritten);
             if !res {
-                len = len - m.load32(nwritten);
-                remaining = remaining + m.load32(nwritten);
+                len -= m.load32(nwritten);
+                remaining += m.load32(nwritten);
                 br_if 'write len;
             }
         }
@@ -1058,7 +1058,7 @@ fn write(fd: i32, buf: &extern, pos: i32, n: i32) -> i32 {
             if towrite >u written {
                 ta_copy(buf, 0, written, towrite);
             }
-            towrite = towrite - written;
+            towrite -= written;
             ch.curr = towrite;
         }
         !towrite;
@@ -1098,7 +1098,7 @@ fn caml_flush_partial(ch: &channel) -> i32 {
             if towrite >u written {
                 ta_copy(buf, 0, written, towrite);
             }
-            towrite = towrite - written;
+            towrite -= written;
             ch.curr = towrite;
         } else {
             let tmp: &bytes = [0; towrite];
@@ -1145,16 +1145,16 @@ fn caml_putblock_typed_array(ch: &channel, d: &extern, pos: i32, len: i32) -> i3
 fn caml_really_putblock(ch: &eq, s: &bytes, pos: i32, len: i32) {
     while len {
         let written = caml_putblock(ch as &channel, s, pos, len);
-        pos = pos + written;
-        len = len - written;
+        pos += written;
+        len -= written;
     }
 }
 
 fn caml_really_putblock_typed_array(ch: &eq, d: &extern, pos: i32, len: i32) {
     while len {
         let written = caml_putblock_typed_array(ch as &channel, d, pos, len);
-        pos = pos + written;
-        len = len - written;
+        pos += written;
+        len -= written;
     }
 }
 
@@ -1165,8 +1165,8 @@ fn caml_ml_output(ch: &eq, s: &eq, vpos: &eq, vlen: &eq) -> &eq {
     let len = vlen as i32_u;
     while len >u 0 {
         let written = caml_putblock(ch as &channel, s as &bytes, pos, len);
-        pos = pos + written;
-        len = len - written;
+        pos += written;
+        len -= written;
     }
     caml_flush_if_unbuffered(ch);
     0 as &i31;

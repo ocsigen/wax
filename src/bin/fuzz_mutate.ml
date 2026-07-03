@@ -66,6 +66,10 @@ let swap_binop : binop -> binop = function
 
 let swap_unop = function Neg -> Not | Pos -> Neg | Not -> Pos
 
+(* Operators with a compound-assignment form, used to promote a plain assignment
+   into a compound one. All of [swap_binop]'s outputs on these stay in the set. *)
+let compound_binops = [| Ast.Add; Sub; Mul; And; Or; Xor; Shl; Shr Signed |]
+
 (* Edge-value literal pools (strings the lexer accepts as a single token; sign is
    a separate [Neg], so these stay non-negative). *)
 let int_pool =
@@ -130,6 +134,15 @@ let mutate_node (i : location instr) : location instr =
     | Cast (e, Valtype _) ->
         if next () mod 2 = 0 then Cast (e, Valtype (pick valtype_pool))
         else graft ()
+    (* Perturb a compound assignment [x op= e]: swap the operator or drop it to a
+       plain [x = e]. Promote a plain assignment to a variable into a compound
+       one. Either may become ill-typed — an expected rejection, not a crash. *)
+    | Set (id, Some op, e) ->
+        if next () mod 2 = 0 then
+          Set (id, Some { op with desc = swap_binop op.desc }, e)
+        else Set (id, None, e)
+    | Set ((Some _ as id), None, e) when next () mod 2 = 0 ->
+        Set (id, Some { desc = pick compound_binops; info = e.info }, e)
     | _ -> graft ()
   in
   { i with desc }
@@ -184,7 +197,7 @@ and rebuild : location instr_desc -> location instr_desc = function
         }
   | TryTable r -> TryTable { r with block = go_list r.block }
   | Sequence l -> Sequence (go_list l)
-  | Set (id, e) -> Set (id, go e)
+  | Set (id, op, e) -> Set (id, op, go e)
   | Tee (id, e) -> Tee (id, go e)
   | Call (f, args) -> Call (go f, List.map go args)
   | TailCall (f, args) -> TailCall (go f, List.map go args)

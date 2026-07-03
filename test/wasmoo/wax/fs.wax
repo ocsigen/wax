@@ -128,19 +128,19 @@ type block = [mut &eq];
                 let c = prefix[i] as i32_u;
                 if c == 47 // '/'
                 {
-                    i = i + 1;
+                    i += 1;
                     br 'loop;
                 }
                 if c == 46 // '.'
                 {
                     if i == len - 1 {
-                        i = i + 1;
+                        i += 1;
                         br 'loop;
                     } else {
                         c = prefix[i + 1] as i32_u;
                         if c == 47 // '/'
                         {
-                            i = i + 2;
+                            i += 2;
                             br 'loop;
                         }
                     }
@@ -157,7 +157,7 @@ type block = [mut &eq];
         // is already normalized, so return it unchanged. Subtracting from
         // [$i = 0] would wrap to a huge unsigned index and trap the copy.
         if i >u 1 {
-            i = i - 1;
+            i -= 1;
             let res: &bytes = [0; len - i];
             res.copy(0, prefix, i, len - i);
             return res;
@@ -184,7 +184,7 @@ type block = [mut &eq];
                             next: preopens,
                         };
                 }
-                fd = fd + 1;
+                fd += 1;
                 br 'loop;
             }
             preopens_initialized = 1;
@@ -251,12 +251,12 @@ type block = [mut &eq];
                 if
                     47 // '/'
                         == abs_path[i] as i32_u {
-                    i = i - 1;
+                    i -= 1;
                     br 'loop;
                 }
             }
         }
-        i = i + 1;
+        i += 1;
         if i <u abs_path.length() {
             let path: &bytes = [0; i];
             path.copy(0, abs_path, 0, i);
@@ -274,7 +274,7 @@ type block = [mut &eq];
         if len >u 0 {
             if prefix[len - 1] as i32_u == 47 // '/'
             {
-                len = len - 1;
+                len -= 1;
             }
         }
         if path.length() <u len {
@@ -290,7 +290,7 @@ type block = [mut &eq];
             if path[i] as i32_u != prefix[i] as i32_u {
                 return 0;
             }
-            i = i + 1;
+            i += 1;
         }
         return 1;
     }
@@ -320,7 +320,7 @@ type block = [mut &eq];
             if i <u path.length() {
                 if path[i] as i32_u == 47 // 47
                 {
-                    i = i + 1;
+                    i += 1;
                     br 'loop;
                 }
                 let rel_path: &bytes = [0; path.length() - i];
@@ -478,7 +478,7 @@ fn caml_sys_read_directory(name: &eq) -> &eq {
             let namelen = m.load32(entry, 4, 16);
             entry_size = namelen + 24;
             br_if 'refill left <u entry_size;
-            pos = pos + entry_size;
+            pos += entry_size;
             cookie = m.load64(entry);
             if i == tbl.length() {
                 new_tbl = [0 as &i31; i << 1];
@@ -495,7 +495,7 @@ fn caml_sys_read_directory(name: &eq) -> &eq {
                 }
             }
             tbl[i] = s;
-            i = i + 1;
+            i += 1;
             br 'loop;
         }
         // refill

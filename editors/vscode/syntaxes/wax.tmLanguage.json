@@ -257,6 +257,10 @@
     "operators": {
       "patterns": [
         {
+          "name": "keyword.operator.assignment.wax",
+          "match": "\\+=|-=|\\*=|/[su]?=|%[su]=|<<=|>>[su]=|&=|\\|=|\\^="
+        },
+        {
           "name": "keyword.operator.arrow.wax",
           "match": "->|=>"
         },

@@ -90,7 +90,7 @@ let module_ ctx env (fields : location Ast.module_) :
             catches = List.map (fun (t, l) -> (t, sinstrs l)) catches;
             catch_all = Option.map sinstrs catch_all;
           }
-    | Set (idx, v) -> Set (idx, sone v)
+    | Set (idx, op, v) -> Set (idx, op, sone v)
     | Tee (idx, v) -> Tee (idx, sone v)
     | Call (t, args) -> Call (sone t, List.map sone args)
     | TailCall (t, args) -> TailCall (sone t, List.map sone args)

@@ -95,7 +95,7 @@ fn re_match(vre: &eq, s: &bytes, pos: i32, accept_partial_match: i32) -> &eq {
                 'backtrack: do {
                     'prefix_match: do {
                         let instr = prog[pc] as i32_s;
-                        pc = pc + 1;
+                        pc += 1;
                         let s': &bytes;
                         let set: &bytes;
                         let arg: i32;
@@ -110,7 +110,7 @@ fn re_match(vre: &eq, s: &bytes, pos: i32, accept_partial_match: i32) -> &eq {
                                 br_if 'prefix_match pos == len;
                                 arg = instr >>u 8;
                                 br_if 'backtrack arg != s[pos] as i32_u;
-                                pos = pos + 1;
+                                pos += 1;
                                 br 'continue;
                             }
                             'CHARNORM: {
@@ -118,7 +118,7 @@ fn re_match(vre: &eq, s: &bytes, pos: i32, accept_partial_match: i32) -> &eq {
                                 br_if 'prefix_match pos == len;
                                 arg = instr >>u 8;
                                 br_if 'backtrack arg != normtable[s[pos] as i32_u] as i32_u;
-                                pos = pos + 1;
+                                pos += 1;
                                 br 'continue;
                             }
                             'STRING: {
@@ -130,8 +130,8 @@ fn re_match(vre: &eq, s: &bytes, pos: i32, accept_partial_match: i32) -> &eq {
                                 while i <u l {
                                     br_if 'prefix_match pos == len;
                                     br_if 'backtrack s'[i] as i32_u != s[pos] as i32_u;
-                                    pos = pos + 1;
-                                    i = i + 1;
+                                    pos += 1;
+                                    i += 1;
                                 }
                                 br 'continue;
                             }
@@ -145,8 +145,8 @@ fn re_match(vre: &eq, s: &bytes, pos: i32, accept_partial_match: i32) -> &eq {
                                     br_if 'prefix_match pos == len;
                                     br_if 'backtrack
                                         s'[i] as i32_u != normtable[s[pos] as i32_u] as i32_u;
-                                    pos = pos + 1;
-                                    i = i + 1;
+                                    pos += 1;
+                                    i += 1;
                                 }
                                 br 'continue;
                             }
@@ -156,7 +156,7 @@ fn re_match(vre: &eq, s: &bytes, pos: i32, accept_partial_match: i32) -> &eq {
                                 arg = instr >>u 8;
                                 br_if 'backtrack
                                     !in_bitset(cpool[arg + 1] as &bytes, s[pos] as i32_u);
-                                pos = pos + 1;
+                                pos += 1;
                                 br 'continue;
                             }
                             'BOL: {
@@ -224,8 +224,8 @@ fn re_match(vre: &eq, s: &bytes, pos: i32, accept_partial_match: i32) -> &eq {
                                 while i <u j {
                                     br_if 'prefix_match pos == len;
                                     br_if 'backtrack s[i] as i32_u != s[pos] as i32_u;
-                                    pos = pos + 1;
-                                    i = i + 1;
+                                    pos += 1;
+                                    i += 1;
                                 }
                                 br 'continue;
                             }
@@ -234,7 +234,7 @@ fn re_match(vre: &eq, s: &bytes, pos: i32, accept_partial_match: i32) -> &eq {
                                 arg = instr >>u 8;
                                 if pos <u len {
                                     if in_bitset(cpool[arg + 1] as &bytes, s[pos] as i32_u) {
-                                        pos = pos + 1;
+                                        pos += 1;
                                     }
                                 }
                                 br 'continue;
@@ -246,7 +246,7 @@ fn re_match(vre: &eq, s: &bytes, pos: i32, accept_partial_match: i32) -> &eq {
                                 'loop: loop {
                                     if pos <u len {
                                         if in_bitset(set, s[pos] as i32_u) {
-                                            pos = pos + 1;
+                                            pos += 1;
                                             br 'loop;
                                         }
                                     }
@@ -260,7 +260,7 @@ fn re_match(vre: &eq, s: &bytes, pos: i32, accept_partial_match: i32) -> &eq {
                                 set = cpool[arg + 1] as &bytes;
                                 br_if 'backtrack !in_bitset(set, s[pos] as i32_u);
                                 'loop: loop {
-                                    pos = pos + 1;
+                                    pos += 1;
                                     if pos <u len {
                                         br_if 'loop in_bitset(set, s[pos] as i32_u);
                                     }
@@ -269,7 +269,7 @@ fn re_match(vre: &eq, s: &bytes, pos: i32, accept_partial_match: i32) -> &eq {
                             }
                             'GOTO: {
                                 // GOTO
-                                pc = pc + (instr >>s 8);
+                                pc += instr >>s 8;
                                 br 'continue;
                             }
                             'PUSHBACK: {
@@ -330,7 +330,7 @@ fn re_match(vre: &eq, s: &bytes, pos: i32, accept_partial_match: i32) -> &eq {
                 res[j + 1] = group_start[i] as &i31;
                 res[j + 2] = group_end[i] as &i31;
             }
-            i = i + 1;
+            i += 1;
         }
         return res;
     }
@@ -354,7 +354,7 @@ fn re_search_forward(re: &eq, vs: &eq, vpos: &eq) -> &eq {
         if res is &block {
             return res;
         }
-        pos = pos + 1;
+        pos += 1;
         br_if 'loop pos <=u len;
     }
     [block|0 as &i31];
@@ -376,7 +376,7 @@ fn re_search_backward(re: &eq, vs: &eq, vpos: &eq) -> &eq {
         if res is &block {
             return res;
         }
-        pos = pos - 1;
+        pos -= 1;
         br_if 'loop pos >=s 0;
     }
     [block|0 as &i31];
@@ -434,26 +434,26 @@ fn re_replacement_text(vrepl: &eq, vgroups: &eq, vorig: &eq) -> &eq {
     let end: i32;
     'loop: while i <u l {
         c = repl[i] as i32_u;
-        i = i + 1;
+        i += 1;
         if c != '\\' {
-            len = len + 1;
+            len += 1;
             br 'loop;
         }
         if i == l {
             caml_failwith(illegal_backslash);
         }
         c = repl[i] as i32_u;
-        i = i + 1;
+        i += 1;
         if c == '\\' {
-            len = len + 1;
+            len += 1;
             br 'loop;
         }
-        c = c - '0';
+        c -= '0';
         if c >u 9 {
-            len = len + 2;
+            len += 2;
             br 'loop;
         }
-        c = c << 1;
+        c <<= 1;
         if c + 1 >=u groups.length() {
             caml_failwith(unmatched_group);
         }
@@ -462,34 +462,34 @@ fn re_replacement_text(vrepl: &eq, vgroups: &eq, vorig: &eq) -> &eq {
         if start == -1 {
             caml_failwith(unmatched_group);
         }
-        len = len + (end - start);
+        len += end - start;
     }
     let res: &bytes = [0; len];
     i = 0;
     let j: i32;
     'loop: while i <u l {
         c = repl[i] as i32_u;
-        i = i + 1;
+        i += 1;
         if c != '\\' {
             res[j] = c;
-            j = j + 1;
+            j += 1;
             br 'loop;
         }
         c = repl[i] as i32_u;
-        i = i + 1;
+        i += 1;
         if c == '\\' {
             res[j] = c;
-            j = j + 1;
+            j += 1;
             br 'loop;
         }
-        c = c - '0';
+        c -= '0';
         if c >u 9 {
             res[j] = '\\';
             res[j + 1] = c + '0';
-            j = j + 2;
+            j += 2;
             br 'loop;
         }
-        c = c << 1;
+        c <<= 1;
         if c + 1 >=u groups.length() {
             caml_failwith(unmatched_group);
         }
@@ -497,7 +497,7 @@ fn re_replacement_text(vrepl: &eq, vgroups: &eq, vorig: &eq) -> &eq {
         end = groups[c + 2] as i32_s;
         len = end - start;
         res.copy(j, orig, start, len);
-        j = j + len;
+        j += len;
     }
     res;
 }

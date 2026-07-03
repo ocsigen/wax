@@ -434,7 +434,7 @@ let labels_in_list l =
     | StructDesc (d, fs) ->
         List.iter (fun (_, e) -> instr e) fs;
         instr d
-    | Set (_, e)
+    | Set (_, _, e)
     | Tee (_, e)
     | Cast (e, _)
     | Test (e, _)
@@ -737,13 +737,28 @@ and instruction_desc ret ctx i : location Text.instr list =
       (* A qualified path is only valid as a call callee (handled in the [Call]
          case); typing rejects a bare one, so it never reaches lowering. *)
       assert false
-  | Set (None, expr) -> folded loc Drop (instruction ret ctx expr)
-  | Set (Some idx, expr) ->
+  | Set (None, _, expr) -> folded loc Drop (instruction ret ctx expr)
+  | Set (Some idx, op, expr) ->
+      (* A compound assignment [x op= e] reads [x], evaluates [e], applies the
+         operator, then stores back into [x]; a plain [x = e] just stores. *)
+      let store, load =
+        if StringMap.mem idx.desc ctx.locals then
+          let id =
+            with_loc idx.info (Text.Id (StringMap.find idx.desc ctx.locals))
+          in
+          (Text.LocalSet id, Text.LocalGet id)
+        else (Text.GlobalSet (index idx), Text.GlobalGet (index idx))
+      in
       let code = instruction ret ctx expr in
-      if StringMap.mem idx.desc ctx.locals then
-        let wasm_name = StringMap.find idx.desc ctx.locals in
-        folded loc (LocalSet (with_loc idx.info (Text.Id wasm_name))) code
-      else folded loc (GlobalSet (index idx)) code
+      let code =
+        match op with
+        | None -> code
+        | Some op ->
+            folded loc
+              (binop i op.desc (expr_valtype expr))
+              (folded loc load [] @ code)
+      in
+      folded loc store code
   | Tee (idx, expr) ->
       let code = instruction ret ctx expr in
       let wasm_name = StringMap.find idx.desc ctx.locals in

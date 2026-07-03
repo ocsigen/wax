@@ -21,7 +21,7 @@ let caml_custom_event_index = 0;
 
 #[export = "caml_runtime_events_user_register"]
 fn caml_runtime_events_user_register(evname: &eq, evtag: &eq, evtype: &eq) -> &eq {
-    caml_custom_event_index = caml_custom_event_index + 1;
+    caml_custom_event_index += 1;
     // The record is { id; name; typ; tag } -- typ comes before tag.
     [block|0 as &i31, caml_custom_event_index as &i31, evname, evtype, evtag];
 }

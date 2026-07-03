@@ -100,7 +100,7 @@ fn caml_format_exception(vexn: &eq) -> &eq {
                         add_char(buf, '_');
                     }
                 }
-                i = i + 1;
+                i += 1;
                 if i <u len {
                     add_char(buf, ',');
                     add_char(buf, ' ');

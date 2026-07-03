@@ -90,7 +90,7 @@ fn caml_ephe_get_data(vx: &eq) -> &eq {
                 len = x.length();
                 'loop: while i <u len {
                     v = x[i];
-                    i = i + 1;
+                    i += 1;
                     br_if 'loop v == caml_ephe_none;
                     br_if 'loop v is &i31;
                     v = br_on_null 'released weak_deref(unwrap(v));
@@ -146,7 +146,7 @@ fn caml_ephe_set_data(vx: &eq, dat: &eq) -> &eq {
         i = x.length();
         m = dat;
         'loop: loop {
-            i = i - 1;
+            i -= 1;
             if i >=u caml_ephe_key_offset {
                 v = x[i];
                 br_if 'loop v == caml_ephe_none;

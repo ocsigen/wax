@@ -135,6 +135,14 @@ The number of stores folded is exactly the producer's result arity, so a
 `local.set` that consumes a value already on the stack below the call is left as
 its own assignment.
 
+A [compound assignment](../language.md#assignment) `x op= val` is shorthand for
+`x = x op val`; it lowers to a `local.get`/`global.get` of `x`, the operand, the
+binary operator, and a `local.set`/`global.set` back into `x`. The reverse
+direction recognises exactly this shape — a `set` of `x` whose value is a binary
+operator with `x` as its *left* operand — and reconstructs the compound form
+(`x = x + 1` becomes `x += 1`). A comparison, or `x` in the right operand
+(`x = 1 - x`), is left as an ordinary assignment.
+
 ## Control Instructions
 
 | Wasm | Wax |

@@ -27,7 +27,7 @@
         let i: i32;
         while i <u len {
             m.store8(buf + i, s[ofs + i] as i32_u);
-            i = i + 1;
+            i += 1;
         }
     }
 
@@ -37,7 +37,7 @@
         let i: i32;
         while i <u len {
             m.store8(buf + i, s[i] as i32_u);
-            i = i + 1;
+            i += 1;
         }
     }
 
@@ -46,7 +46,7 @@
         let i: i32;
         while i <u len {
             s[ofs + i] = m.load8(buf + i) as i32_u;
-            i = i + 1;
+            i += 1;
         }
     }
 
@@ -56,7 +56,7 @@
         let i: i32;
         while i <u len {
             s[i] = m.load8(buf + i) as i32_u;
-            i = i + 1;
+            i += 1;
         }
         s;
     }

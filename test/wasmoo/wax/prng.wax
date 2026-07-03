@@ -45,10 +45,10 @@ fn caml_lxm_next(v: &eq) -> i64 {
     let z = s + q0;
     z = (z ^ z >>u 32) * 0xdaba0b6eb09322e3;
     z = (z ^ z >>u 32) * 0xdaba0b6eb09322e3;
-    z = z ^ z >>u 32;
+    z ^= z >>u 32;
     s = s * 0xd1342543de82ef95 + a;
     dv_set_i64(view, 8, s, littleEndian);
-    q1 = q1 ^ q0;
+    q1 ^= q0;
     q0 = q0.rotl(24);
     q0 = q0 ^ q1 ^ q1 << 16;
     q1 = q1.rotl(37);

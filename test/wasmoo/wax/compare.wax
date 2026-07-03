@@ -135,7 +135,7 @@ fn compare_bytes(s1: &bytes, s2: &bytes) -> i32 {
                 return 1;
             }
         }
-        i = i + 1;
+        i += 1;
     }
     l1 - l2;
 }
@@ -145,7 +145,7 @@ fn clear_compare_stack() {
     let stack = default_compare_stack;
     let n = stack.pos;
     if n >=s 0 {
-        n = n + 1;
+        n += 1;
         stack.v1.fill(0, dummy_block, n);
         stack.v2.fill(0, dummy_block, n);
     }
@@ -351,7 +351,7 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32 {
                                                 return -1;
                                             }
                                         }
-                                        i = i + 1;
+                                        i += 1;
                                     }
                                     br 'next_item;
                                 }

@@ -23,7 +23,7 @@ type bytes = [mut i8];
 
 fn get(a: &eq, i: i32) -> i32 {
     let s = a as &bytes;
-    i = i + i;
+    i += i;
     (s[i] as i32_u | s[i + 1] as i32_u << 8).extend16_s();
 }
 
@@ -119,7 +119,7 @@ fn run_mem(s: &bytes, i: i32, lexbuf: &block, curr_pos: &eq) {
             return;
         }
         let src = s[i + 1] as i32_u;
-        i = i + 2;
+        i += 2;
         mem[dst + 1] =
             if src == 0xff {
                 curr_pos;

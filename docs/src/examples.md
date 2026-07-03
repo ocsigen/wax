@@ -182,8 +182,8 @@ fn triangle(n: i32) -> i32 {
     let i: i32 = 0;
     let total: i32 = 0;
     while i <s n {
-        i = i + 1;
-        total = total + i;
+        i += 1;
+        total += i;
     }
     total;
 }
@@ -192,8 +192,8 @@ fn triangle(n: i32) -> i32 {
 fn countdown(n: i32) -> i32 {
     let steps: i32 = 0;
     'loop: loop {
-        n = n - 1;
-        steps = steps + 1;
+        n -= 1;
+        steps += 1;
         br_if 'loop n >s 0;
     }
     steps;

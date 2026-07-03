@@ -11,7 +11,7 @@ let rec occurs name i =
   match i.desc with
   | Get id -> String.equal id.desc name
   | Tee (id, e) -> String.equal id.desc name || occurs name e
-  | Set (id, e) ->
+  | Set (id, _, e) ->
       (match id with Some id -> String.equal id.desc name | None -> false)
       || occurs name e
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
@@ -94,7 +94,8 @@ let init_let (name, typ) e info =
    read-before-write behaviour intact. *)
 let fusable s name =
   match s.desc with
-  | Set (Some id, e) when String.equal id.desc name && not (occurs name e) ->
+  | Set (Some id, None, e) when String.equal id.desc name && not (occurs name e)
+    ->
       Some e
   | _ -> None
 
@@ -134,7 +135,7 @@ let rec first_access name i =
   | Tee (id, e) ->
       fst2 (first_access name e)
         (if String.equal id.desc name then Some `Write else None)
-  | Set (id, e) ->
+  | Set (id, _, e) ->
       fst2 (first_access name e)
         (match id with
         | Some id when String.equal id.desc name -> Some `Write
@@ -350,7 +351,7 @@ let rec sink_into ((name, _) as decl) s =
         in
         Some { s with desc = Dispatch { r with arms } }
   (* Expression carriers: descend through an operand toward a nested block. *)
-  | Set (id, e)
+  | Set (id, op, e)
     when match id with
          | Some n -> not (String.equal n.desc name.desc)
          | None -> true ->
@@ -359,7 +360,7 @@ let rec sink_into ((name, _) as decl) s =
          [name = e]: there [e] is this local's own initializer (the non-reading
          case is already fused by [sink_decl]), and sinking the declaration into
          [e] would shadow it. *)
-      pick [ (e, fun e' -> Set (id, e')) ]
+      pick [ (e, fun e' -> Set (id, op, e')) ]
   | Tee (n, e) when not (String.equal n.desc name.desc) ->
       pick [ (e, fun e' -> Tee (n, e')) ]
   | Let (bindings, Some e)

@@ -95,7 +95,7 @@
                 let c = s[pos + i] as i32_u;
                 br_if 'continue c >=u 128;
                 buffer[i] = c;
-                i = i + 1;
+                i += 1;
             }
             return fromCharCodeArray(buffer, 0, len) as &any;
         }
@@ -124,7 +124,7 @@
                 let c = buffer[i] as i32_u;
                 br_if 'continue c >=u 128;
                 b[i] = c;
-                i = i + 1;
+                i += 1;
             }
             return b;
         }
@@ -142,7 +142,7 @@
         let i: i32;
         while i <u len {
             caml_buffer.store8(i, s[pos + i] as i32_u);
-            i = i + 1;
+            i += 1;
         }
     }
 
@@ -154,8 +154,8 @@
         write_to_buffer(s, pos, buffer_size);
         let s' = read_string_stream(buffer_size, 1);
         'loop: loop {
-            len = len - buffer_size;
-            pos = pos + buffer_size;
+            len -= buffer_size;
+            pos += buffer_size;
             let continued = len >u buffer_size;
             write_to_buffer(s, pos, continued?buffer_size:len);
             s' = append_string(s', read_string_stream(continued?buffer_size:len, continued));
@@ -168,7 +168,7 @@
         let i: i32;
         while i <u len {
             s[pos + i] = caml_buffer.load8(i) as i32_u;
-            i = i + 1;
+            i += 1;
         }
     }
 
@@ -188,7 +188,7 @@
         'done: do {
             item = br_on_null 'done stack;
             'loop: loop {
-                ofs = ofs + item.s.length();
+                ofs += item.s.length();
                 item = br_on_null 'done item.next;
                 br 'loop;
             }
@@ -201,7 +201,7 @@
             'loop: loop {
                 let s'' = item.s;
                 len = s''.length();
-                ofs = ofs - len;
+                ofs -= len;
                 s'.copy(ofs, s'', 0, len);
                 item = br_on_null 'done item.next;
                 br 'loop;

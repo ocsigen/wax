@@ -32,7 +32,7 @@ type bytes = [mut i8];
 
 fn get(a: &eq, i: i32) -> i32 {
     let s = a as &bytes;
-    i = i + i;
+    i += i;
     (s[i] as i32_u | s[i + 1] as i32_u << 8).extend16_s();
 }
 
@@ -94,7 +94,7 @@ const tbl_names_block = 16;
 fn strlen(s: &bytes, p: i32) -> i32 {
     let i = p;
     while s[i] as i32_u != 0 {
-        i = i + 1;
+        i += 1;
     }
     i - p;
 }
@@ -109,8 +109,8 @@ fn token_name(vnames: &eq, number: i32) -> &eq {
             return unknown_token;
         }
         if number != 0 {
-            i = i + (strlen(names, i) + 1);
-            number = number - 1;
+            i += strlen(names, i) + 1;
+            number -= 1;
             br 'loop;
         }
     }
@@ -309,7 +309,7 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                                 }
                                 return RAISE_PARSE_ERROR as &i31;
                             }
-                            sp = sp - 1;
+                            sp -= 1;
                             br 'loop2;
                         }
                     } else {
@@ -329,7 +329,7 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                     // shift:
                     env[env_curr_char] = -1 as &i31;
                     if errflag >s 0 {
-                        errflag = errflag - 1;
+                        errflag -= 1;
                     }
                 }
                 'shift_recover: {
@@ -343,7 +343,7 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                         output_nl();
                     }
                     state = get(tbl_table, n2);
-                    sp = sp + 1;
+                    sp += 1;
                     if sp >=s env[env_stacksize] as i32_s {
                         res = GROW_STACKS_1;
                         br 'exit;
@@ -372,7 +372,7 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
                     env[env_asp] = sp as &i31;
                     env[env_rule_number] = n as &i31;
                     env[env_rule_len] = m as &i31;
-                    sp = sp + (1 - m);
+                    sp += 1 - m;
                     m = get(tbl_lhs, n);
                     state1 = (env[env_s_stack] as &block)[sp] as i32_s;
                     n1 = get(tbl_gindex, m);

@@ -333,7 +333,7 @@
             let p = a[i + 1] as &block;
             array_set(flat, i * 2, from_int32(p[1] as i32_s));
             array_set(flat, i * 2 + 1, from_int32(p[2] as i32_s));
-            i = i + 1;
+            i += 1;
         }
         gr_fill_poly(flat as &any, n);
         0 as &i31;
@@ -376,10 +376,10 @@
             let j = 0;
             while j <u w {
                 array_set(flat, idx, from_int32(row[j + 1] as i32_s));
-                idx = idx + 1;
-                j = j + 1;
+                idx += 1;
+                j += 1;
             }
-            i = i + 1;
+            i += 1;
         }
         { js: gr_make_image(flat as &any, w, h) };
     }
@@ -396,10 +396,10 @@
             let j = 0;
             while j <u w {
                 row[j + 1] = gr_dump_image_pixel(js_im, i, j) as &i31;
-                j = j + 1;
+                j += 1;
             }
             result[i + 1] = row;
-            i = i + 1;
+            i += 1;
         }
         result;
     }

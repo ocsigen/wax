@@ -123,8 +123,8 @@
         'done1: do {
             'loop1: loop {
                 br_if 'done1 i >=u arr.length();
-                len = len + (arr[i] as &bytes).length();
-                i = i + 1;
+                len += (arr[i] as &bytes).length();
+                i += 1;
                 br 'loop1;
             }
         }
@@ -138,8 +138,8 @@
                 let chunk = arr[i] as &bytes;
                 let chunk_len = chunk.length();
                 buf.copy(pos, chunk, 0, chunk_len);
-                pos = pos + chunk_len;
-                i = i + 1;
+                pos += chunk_len;
+                i += 1;
                 br 'loop2;
             }
         }

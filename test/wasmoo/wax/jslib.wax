@@ -275,7 +275,7 @@ type bytes = [mut i8];
         while i <u l {
             let p = a[i] as &block;
             set(o, unwrap(caml_jsstring_of_bytes(p[1])), unwrap(p[2]));
-            i = i + 1;
+            i += 1;
         }
         { js: o };
     }
@@ -292,7 +292,7 @@ type bytes = [mut i8];
                 i = 0;
                 while i <u l {
                     array_set(a', i, unwrap(a[i + 1]));
-                    i = i + 1;
+                    i += 1;
                 }
                 return { js: a' as &any };
             }
@@ -303,7 +303,7 @@ type bytes = [mut i8];
                 i = 0;
                 while i <u l {
                     array_set(a', i, { f: fa[i] });
-                    i = i + 1;
+                    i += 1;
                 }
                 { js: a' as &any };
             }
@@ -321,7 +321,7 @@ type bytes = [mut i8];
                 i = 0;
                 while i <u l {
                     fa[i] = (array_get(a, i) as &float).f;
-                    i = i + 1;
+                    i += 1;
                 }
                 return fa;
             }
@@ -330,7 +330,7 @@ type bytes = [mut i8];
         i = 0;
         while i <u l {
             a'[i + 1] = wrap(array_get(a, i));
-            i = i + 1;
+            i += 1;
         }
         a';
     }
@@ -342,7 +342,7 @@ type bytes = [mut i8];
         let i = 0;
         while i <u l {
             a'[i + 1] = caml_string_of_jsstring(wrap(array_get(a, i)));
-            i = i + 1;
+            i += 1;
         }
         a';
     }
@@ -405,7 +405,7 @@ type bytes = [mut i8];
             'loop: loop {
                 f = acc;
                 acc = caml_callback_1(acc, wrap(get(args, i as &i31)));
-                i = i + 1;
+                i += 1;
                 br_if 'loop !caml_is_last_arg(f);
             }
         } else {
@@ -414,7 +414,7 @@ type bytes = [mut i8];
                 while i <u count {
                     br_if 'done !caml_is_closure(acc);
                     acc = caml_callback_1(acc, wrap(get(args, i as &i31)));
-                    i = i + 1;
+                    i += 1;
                 }
             }
             if kind {
@@ -446,9 +446,9 @@ type bytes = [mut i8];
         let n = 0;
         while i <u l {
             if s[i] as i32_u >=u 128 {
-                n = n + 1;
+                n += 1;
             }
-            i = i + 1;
+            i += 1;
         }
         if !n {
             return { js: jsstring_of_bytes(s) };
@@ -460,13 +460,13 @@ type bytes = [mut i8];
             let c = s[i] as i32_u;
             if c <u 128 {
                 s'[n] = c;
-                n = n + 1;
+                n += 1;
             } else {
                 s'[n] = c >>u 6 | 0xC0;
                 s'[n + 1] = 0x80 | c & 0x3F;
-                n = n + 2;
+                n += 2;
             }
-            i = i + 1;
+            i += 1;
         }
         return { js: jsstring_of_bytes(s') };
     }
@@ -485,9 +485,9 @@ type bytes = [mut i8];
         let n = 0;
         while i <u l {
             if s'[i] as i32_u >=u 0xC0 {
-                n = n + 1;
+                n += 1;
             }
-            i = i + 1;
+            i += 1;
         }
         if !n {
             return s';
@@ -499,12 +499,12 @@ type bytes = [mut i8];
             let c = s'[i] as i32_u;
             if c <u 0xC0 {
                 s''[n] = c;
-                i = i + 1;
+                i += 1;
             } else {
                 s''[n] = (c << 6) + s'[i + 1] as i32_u - 0x3080;
-                i = i + 2;
+                i += 2;
             }
-            n = n + 1;
+            n += 1;
         }
         s'';
     }
@@ -517,7 +517,7 @@ type bytes = [mut i8];
             'done: do {
                 'compute_length: loop {
                     l = (br_on_cast_fail 'done &block l)[2];
-                    i = i + 1;
+                    i += 1;
                     br 'compute_length;
                 }
                 unreachable;
@@ -531,7 +531,7 @@ type bytes = [mut i8];
                     let b = br_on_cast_fail 'exit &block l;
                     array_set(a, i, unwrap(b[1]));
                     l = b[2];
-                    i = i + 1;
+                    i += 1;
                     br 'loop;
                 }
                 unreachable;
@@ -546,7 +546,7 @@ type bytes = [mut i8];
         let i = len;
         let l: &eq = 0 as &i31;
         while i {
-            i = i - 1;
+            i -= 1;
             l = [block|0 as &i31, wrap(array_get(a, i)), l];
         }
         l;

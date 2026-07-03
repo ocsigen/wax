@@ -1151,6 +1151,22 @@ let pin_descriptor_reftype ctx (t : Src.reftype) d =
 
 (*** The instruction converter ***)
 
+(* Only value-producing arithmetic and bitwise operators have a compound-
+   assignment form; comparisons do not. *)
+let has_compound_form : Ast.binop -> bool = function
+  | Add | Sub | Mul | Div _ | Rem _ | And | Or | Xor | Shl | Shr _ -> true
+  | Eq | Ne | Lt _ | Gt _ | Le _ | Ge _ -> false
+
+(* Build the assignment [target = e], collapsing [x = x op e] back into the
+   compound assignment [x op= e] — the inverse of the lowering in {!To_wasm}.
+   The variable must be the operator's left operand. *)
+let set_desc target e =
+  match e.Ast.desc with
+  | Ast.BinOp (op, { desc = Get y; _ }, rhs)
+    when has_compound_form op.desc && String.equal y.desc target.Ast.desc ->
+      Ast.Set (Some target, Some op, rhs)
+  | _ -> Ast.Set (Some target, None, e)
+
 let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   let with_loc (i' : _ Ast.instr_desc) = { i with Ast.desc = i' } in
   let mem_call m meth args =
@@ -1295,7 +1311,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   | Nop -> Stack.push 0 (with_loc Nop)
   | Drop ->
       let* e = Stack.pop in
-      Stack.push 0 (with_loc (Set (None, e)))
+      Stack.push 0 (with_loc (Set (None, None, e)))
   | Br i ->
       let input = label_arity ctx i in
       let* args = Stack.grab input in
@@ -1365,10 +1381,10 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   | GlobalGet x -> Stack.push 1 (with_loc (Get (idx ctx `Global x)))
   | LocalSet x ->
       let* e = Stack.pop in
-      Stack.push 0 (with_loc (Set (Some (idx ctx `Local x), e)))
+      Stack.push 0 (with_loc (set_desc (idx ctx `Local x) e))
   | GlobalSet x ->
       let* e = Stack.pop in
-      Stack.push 0 (with_loc (Set (Some (idx ctx `Global x), e)))
+      Stack.push 0 (with_loc (set_desc (idx ctx `Global x) e))
   | LocalTee x ->
       let* e = Stack.pop in
       Stack.push 1 (with_loc (Tee (idx ctx `Local x, e)))

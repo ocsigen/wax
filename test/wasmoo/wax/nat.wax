@@ -93,7 +93,7 @@ fn num_digits(d: &digits, ofs: i32, len: i32) -> i32 {
         if d[ofs + i] != 0 {
             return i + 1;
         }
-        i = i - 1;
+        i -= 1;
     }
     1;
 } // 0 counts as 1 digit
@@ -122,7 +122,7 @@ fn caml_hash_nat(v: &eq) -> i32 {
     let i: i32;
     while i <s len {
         h = caml_hash_mix_int(h, d[i]);
-        i = i + 1;
+        i += 1;
     }
     h;
 }
@@ -134,7 +134,7 @@ fn serialize_nat(s: &eq, v: &eq) -> (i32, i32) {
     let i: i32;
     while i <s len {
         caml_serialize_int_4(s, d[i]);
-        i = i + 1;
+        i += 1;
     }
     len * 4;
     len * 8;
@@ -146,7 +146,7 @@ fn deserialize_nat(s: &eq) -> (&eq, i32) {
     let i: i32;
     while i <s len {
         d[i] = caml_deserialize_int_4(s);
-        i = i + 1;
+        i += 1;
     }
     { f: nat_ops, dat: d };
     len * 4;
@@ -177,7 +177,7 @@ fn set_to_zero_nat(nat: &eq, ofs: &eq, len: &eq) -> &eq {
     let i: i32;
     while i <s l {
         d[o + i] = 0;
-        i = i + 1;
+        i += 1;
     }
     0 as &i31;
 }
@@ -269,7 +269,7 @@ fn add(d1: &digits, o1: i32, l1: i32, d2: &digits, o2: i32, l2: i32, carry: i32)
         let x = d1[o1 + i] as i64_u + d2[o2 + i] as i64_u + carry as i64_u;
         d1[o1 + i] = x as i32;
         carry = (x >>u 32) as i32;
-        i = i + 1;
+        i += 1;
     }
     become incr(d1, o1 + l2, l1 - l2, carry);
 }
@@ -289,7 +289,7 @@ fn complement_nat(nat: &eq, ofs: &eq, len: &eq) -> &eq {
     while i <s l {
         let idx = o + i;
         d[idx] = -1 - d[idx];
-        i = i + 1;
+        i += 1;
     }
     0 as &i31;
 }
@@ -322,7 +322,7 @@ fn sub(d1: &digits, o1: i32, l1: i32, d2: &digits, o2: i32, l2: i32, carry_in: i
         let x = d1[o1 + i] as i64_u - d2[o2 + i] as i64_u - borrow as i64_u;
         d1[o1 + i] = x as i32;
         borrow = x <s 0;
-        i = i + 1;
+        i += 1;
     }
     become decr(d1, o1 + l2, l1 - l2, !borrow);
 }
@@ -356,8 +356,8 @@ fn mult_digit(
         // x3 = x1 + (x2 % 65536) * 65536
         let x3 = x1 + ((x2 & 0xffff) << 16);
         d1[o1 + i] = x3 as i32;
-        carry = carry + (x3 >>u 32);
-        i = i + 1;
+        carry += x3 >>u 32;
+        i += 1;
     }
     if (l2 <s l1) & (carry != 0) {
         become add(d1, o1 + l2, l1 - l2, single(carry as i32).dat, 0, 1, 0);
@@ -402,8 +402,8 @@ fn mult(
     let i: i32;
     let carry: i32;
     while i <s l3 {
-        carry = carry + mult_digit(d1, o1 + i, l1 - i, d2, o2, l2, d3, o3 + i);
-        i = i + 1;
+        carry += mult_digit(d1, o1 + i, l1 - i, d2, o2, l2, d3, o3 + i);
+        i += 1;
     }
     carry;
 }
@@ -442,7 +442,7 @@ fn square_nat(nat1: &eq, ofs1: &eq, len1: &eq, nat2: &eq, ofs2: &eq, len2: &eq) 
     let o2 = int(ofs2);
     let l2 = int(len2);
     let carry = add(d1, o1, l1, d1, o1, l1, 0);
-    carry = carry + mult(d1, o1, l1, d2, o2, l2, d2, o2, l2);
+    carry += mult(d1, o1, l1, d2, o2, l2, d2, o2, l2);
     carry as &i31;
 }
 
@@ -458,7 +458,7 @@ fn shift_left(d1: &digits, o1: i32, l1: i32, d2: &digits, o2: i32, nbits: i32) {
         let a = d1[idx];
         d1[idx] = a << nbits | wrap;
         wrap = a >>u 32 - nbits;
-        i = i + 1;
+        i += 1;
     }
     d2[o2] = wrap;
 }
@@ -481,7 +481,7 @@ fn shift_right(d1: &digits, o1: i32, l1: i32, d2: &digits, o2: i32, nbits: i32) 
         let a = d1[idx];
         d1[idx] = a >>u nbits | wrap;
         wrap = a << 32 - nbits;
-        i = i - 1;
+        i -= 1;
     }
     d2[o2] = wrap;
 }
@@ -511,7 +511,7 @@ fn compare(d1: &digits, o1: i32, l1: i32, d2: &digits, o2: i32, l2: i32) -> i32 
         if x <u y {
             return -1;
         }
-        i = i - 1;
+        i -= 1;
     }
     0;
 }
@@ -573,7 +573,7 @@ fn div_digit(
         rem = _;
         let q = _;
         dq[oq + i] = q;
-        i = i - 1;
+        i -= 1;
     }
     dr[or] = rem;
 }
@@ -639,11 +639,11 @@ fn div_nat(nat1: &eq, ofs1: &eq, len1: &eq, nat2: &eq, ofs2: &eq, len2: &eq) -> 
         _ = mult_digit(a, 0, l2 + 1, d2, o2, l2, single(quo).dat, 0);
         _ = sub(d1, o1 + i - l2, l2 + 1, a, 0, l2 + 1, 1);
         while (d1[o1 + i] != 0) | (compare(d1, o1 + i - l2, l2, d2, o2, l2) >=s 0) {
-            quo = quo + 1;
+            quo += 1;
             _ = sub(d1, o1 + i - l2, l2 + 1, d2, o2, l2, 1);
         }
         d1[o1 + i] = quo;
-        i = i - 1;
+        i -= 1;
     }
     shift_right(d1, o1, l2, zero, 0, s);
     shift_right(d2, o2, l2, zero, 0, s);
@@ -655,6 +655,6 @@ fn set_zero(d: &digits, ofs: i32, len: i32) {
     let i: i32;
     while i <s len {
         d[ofs + i] = 0;
-        i = i + 1;
+        i += 1;
     }
 }

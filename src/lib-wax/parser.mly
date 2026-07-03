@@ -32,19 +32,33 @@
 %token DOTDOT ".."
 %token BANG "!"
 %token PLUS "+"
+%token PLUSEQUAL "+="
 %token MINUS "-"
+%token MINUSEQUAL "-="
 %token STAR "*"
+%token STAREQUAL "*="
 %token SLASH "/"
+%token SLASHEQUAL "/="
 %token SLASHS "/s"
+%token SLASHSEQUAL "/s="
 %token SLASHU "/u"
+%token SLASHUEQUAL "/u="
 %token PERCENTS "%s"
+%token PERCENTSEQUAL "%s="
 %token PERCENTU "%u"
+%token PERCENTUEQUAL "%u="
 %token AMPERSAND "&"
+%token AMPERSANDEQUAL "&="
 %token PIPE "|"
+%token PIPEEQUAL "|="
 %token CARET "^"
+%token CARETEQUAL "^="
 %token SHL "<<"
+%token SHLEQUAL "<<="
 %token SHRS ">>s"
+%token SHRSEQUAL ">>s="
 %token SHRU ">>u"
+%token SHRUEQUAL ">>u="
 %token EQUALEQUAL "=="
 %token BANGEQUAL "!="
 %token GT ">"
@@ -752,11 +766,31 @@ let_pattern:
 let_pattern_:
 | p = separated_list_trailing(",", let_pattern) { p }
 
+(* The operator of a compound assignment [x op= e]. Mirrors the value-producing
+   arithmetic and bitwise binary operators; comparisons are excluded. *)
+compound_assign_op:
+| "+=" { with_loc $sloc Add }
+| "-=" { with_loc $sloc Sub }
+| "*=" { with_loc $sloc Mul }
+| "/=" { with_loc $sloc (Div None) }
+| "/s=" { with_loc $sloc (Div (Some Signed)) }
+| "/u=" { with_loc $sloc (Div (Some Unsigned)) }
+| "%s=" { with_loc $sloc (Rem Signed) }
+| "%u=" { with_loc $sloc (Rem Unsigned) }
+| "&=" { with_loc $sloc And }
+| "|=" { with_loc $sloc Or }
+| "^=" { with_loc $sloc Xor }
+| "<<=" { with_loc $sloc Shl }
+| ">>s=" { with_loc $sloc (Shr Signed) }
+| ">>u=" { with_loc $sloc (Shr Unsigned) }
+
 statement:
 | i = plaininstr { i }
 | NOP { with_loc $sloc Nop }
 | UNREACHABLE { with_loc $sloc Unreachable }
-| x = simple_pattern "=" i = expression { with_loc $sloc (Set (x, i)) }
+| x = simple_pattern "=" i = expression { with_loc $sloc (Set (x, None, i)) }
+| x = ident o = compound_assign_op i = expression
+  { with_loc $sloc (Set (Some x, Some o, i)) }
 | LET x = simple_pattern
   { with_loc $sloc (Let ([(x, None)], None)) }
 | LET x = simple_pattern "=" i = expression

@@ -390,7 +390,7 @@ fn caml_oo_cache_id() -> &eq {
     let len = method_cache.length();
     if cacheid >=s len {
         'size: loop {
-            len = len << 1;
+            len <<= 1;
             br_if 'size cacheid >=s len;
         }
         let a: &int_array = [4; len];

@@ -44,7 +44,7 @@ let rec map_instr f instr =
     | ( Unreachable | Nop | Hole | Null | Get _ | Path _ | Char _ | String _
       | Int _ | Float _ | StructDefault _ ) as x ->
         x
-    | Set (idx, v) -> Set (idx, map_instr f v)
+    | Set (idx, op, v) -> Set (idx, op, map_instr f v)
     | Tee (idx, v) -> Tee (idx, map_instr f v)
     | Call (target, args) ->
         Call (map_instr f target, List.map (map_instr f) args)
@@ -229,7 +229,7 @@ let lower_match ~block_info ~labels ~scrutinee ~arms ~default =
     match pat with
     | MatchCast ((Some _ as bind), rt) ->
         mk (Let ([ (bind, Some (Ref rt)) ], Some blk)) :: body
-    | MatchCast (None, _) -> mk (Set (None, blk)) :: body
+    | MatchCast (None, _) -> mk (Set (None, None, blk)) :: body
     | MatchNull -> blk :: body
   in
   match arms with
@@ -258,7 +258,7 @@ let lower_match ~block_info ~labels ~scrutinee ~arms ~default =
       in
       (* Innermost block drops the final fall-through value then escapes; the
          default follows the [escape] block as trailing code. *)
-      let inner = [ mk (Set (None, chain)); mk (Br (escape, None)) ] in
+      let inner = [ mk (Set (None, None, chain)); mk (Br (escape, None)) ] in
       let block_l0 =
         mk (Block { label = Some l0; typ = res p0; block = inner })
       in

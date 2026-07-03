@@ -178,6 +178,22 @@ y = (x := 42) + 1;  // x is set to 42, y is set to 43
 `:=` works on local variables only — WebAssembly has no `global.tee`, so applying
 it to a global is an error.
 
+A compound assignment combines a binary operator with `=`: `x op= e` is
+shorthand for `x = x op e`, where the left-hand side is a local or global
+variable.
+
+```wax
+counter += 1;       // counter = counter + 1
+mask &= 0xff;        // mask = mask & 0xff
+total /s= n;         // total = total /s n
+```
+
+Every value-producing arithmetic and bitwise operator has a compound form:
+`+=`, `-=`, `*=`, `/=`, `/s=`, `/u=`, `%s=`, `%u=`, `&=`, `|=`, `^=`, `<<=`,
+`>>s=`, and `>>u=`. As for the corresponding binary operators, the signed and
+unsigned variants apply to integers, while the sign-agnostic `/=` is float
+division. Comparisons have no compound form.
+
 ### Global Variables
 
 Globals are declared at module level. `const` is immutable; `let` is mutable:

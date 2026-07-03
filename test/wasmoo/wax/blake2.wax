@@ -52,7 +52,7 @@
             'cont: loop {
                 br_if 'done i == len;
                 m.store8(dst + i, src[src_ofs + i] as i32_u);
-                i = i + 1;
+                i += 1;
                 br 'cont;
             }
         }
@@ -65,7 +65,7 @@
             'cont: loop {
                 br_if 'done i == len;
                 dst[dst_ofs + i] = m.load8(src + i) as i32_u;
-                i = i + 1;
+                i += 1;
                 br 'cont;
             }
         }
@@ -97,8 +97,8 @@
                 let chunk = len >u chunk_max?chunk_max:len;
                 bytes_to_mem(buf, ofs, chunk_buf(), chunk);
                 blake2_update(chunk);
-                ofs = ofs + chunk;
-                len = len - chunk;
+                ofs += chunk;
+                len -= chunk;
                 br 'cont;
             }
         }

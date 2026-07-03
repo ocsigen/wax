@@ -52,21 +52,21 @@ fn parse_sign_and_base(s: &bytes) -> (i32, i32, i32, i32) {
             if (c == 'X') | (c == 'x') {
                 base = 16;
                 signedness = 0;
-                i = i + 2;
+                i += 2;
             } else {
                 if (c == 'O') | (c == 'o') {
                     base = 8;
                     signedness = 0;
-                    i = i + 2;
+                    i += 2;
                 } else {
                     if (c == 'B') | (c == 'b') {
                         base = 2;
                         signedness = 0;
-                        i = i + 2;
+                        i += 2;
                     } else {
                         if (c == 'U') | (c == 'u') {
                             signedness = 0;
-                            i = i + 2;
+                            i += 2;
                         }
                     }
                 }
@@ -111,7 +111,7 @@ fn parse_int(v: &eq, nbits: i32, errmsg: &eq) -> i32 {
     }
     let res = d;
     'loop: loop {
-        i = i + 1;
+        i += 1;
         if i <s len {
             let c = s[i] as i32_u;
             br_if 'loop c == '_';
@@ -196,15 +196,15 @@ fn format_int_default(d: i32) -> &eq {
     }
     let n = d;
     'count: loop {
-        i = i + 1;
-        n = n /u 10;
+        i += 1;
+        n /u= 10;
         br_if 'count n;
     }
     let s: &bytes = [0; i];
     'write: loop {
-        i = i - 1;
+        i -= 1;
         s[i] = '0' + d %u 10;
-        d = d /u 10;
+        d /u= 10;
         br_if 'write d;
     }
     if negative {
@@ -231,20 +231,20 @@ fn parse_int_format(s: &bytes) -> (i32, i32, i32, i32, i32) {
             let c = s[1] as i32_u;
             if c == '+' {
                 sign_style = 1;
-                i = i + 1;
+                i += 1;
             }
             if c == ' ' {
                 sign_style = 2;
-                i = i + 1;
+                i += 1;
             }
             if c == '#' {
                 alternate = 1;
-                i = i + 1;
+                i += 1;
             }
             br_if 'bad_format i == len;
             c = s[i] as i32_u;
             if (c == 'L') | (c == 'l') | (c == 'n') {
-                i = i + 1;
+                i += 1;
                 br_if 'bad_format i == len;
                 c = s[i] as i32_u;
             }
@@ -299,36 +299,36 @@ fn format_int(vs: &eq, d: i32, small: i32) -> &eq {
             d = 0 - d;
         } else {
             if small {
-                d = d & 0x7fffffff;
+                d &= 0x7fffffff;
             }
         }
     }
     let n = d;
     let i: i32;
     'count: loop {
-        i = i + 1;
-        n = n /u base;
+        i += 1;
+        n /u= base;
         br_if 'count n;
     }
     if negative | sign_style {
-        i = i + 1;
+        i += 1;
     }
     if alternate {
         if d {
             if base == 16 {
-                i = i + 2;
+                i += 2;
             }
             if base == 8 {
-                i = i + 1;
+                i += 1;
             }
         }
     }
     let chars = uppercase?uppercase_hex_table:lowercase_hex_table;
     s = [0; i];
     'write: loop {
-        i = i - 1;
+        i -= 1;
         s[i] = chars[d %u base] as i32_u;
-        d = d /u base;
+        d /u= base;
         br_if 'write d;
     }
     if negative {

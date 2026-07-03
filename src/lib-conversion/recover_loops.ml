@@ -61,7 +61,7 @@ let rec refs_instr name (i : location instr) : bool =
       || match catch_all with Some b -> any b | None -> false)
   | If_annotation { then_body; else_body; _ } -> (
       any then_body || match else_body with Some b -> any b | None -> false)
-  | Set (_, e)
+  | Set (_, _, e)
   | Tee (_, e)
   | Cast (e, _)
   | Test (e, _)
@@ -189,7 +189,7 @@ and rewrite_desc (desc : location instr_desc) : location instr_desc =
           then_body = rewrite_list then_body;
           else_body = Option.map rewrite_list else_body;
         }
-  | Set (x, e) -> Set (x, rewrite_instr e)
+  | Set (x, op, e) -> Set (x, op, rewrite_instr e)
   | Tee (x, e) -> Tee (x, rewrite_instr e)
   | Call (t, args) -> Call (rewrite_instr t, List.map rewrite_instr args)
   | TailCall (t, args) -> TailCall (rewrite_instr t, List.map rewrite_instr args)

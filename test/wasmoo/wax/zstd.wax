@@ -63,7 +63,7 @@
             'cont: loop {
                 br_if 'done i == len;
                 m.store8(dst + i, src[src_ofs + i] as i32_u);
-                i = i + 1;
+                i += 1;
                 br 'cont;
             }
         }
@@ -76,7 +76,7 @@
             'cont: loop {
                 br_if 'done i == len;
                 dst[dst_ofs + i] = m.load8(src + i) as i32_u;
-                i = i + 1;
+                i += 1;
                 br 'cont;
             }
         }
@@ -121,7 +121,7 @@
                     // Input exhausted before the frame ended: truncated data.
                     br_if 'done !avail;
                     bytes_to_mem(input, src_ofs, in_buf(), avail);
-                    src_ofs = src_ofs + avail;
+                    src_ofs += avail;
                     stream_set_input(avail);
                     need_input = 0;
                 }
@@ -135,7 +135,7 @@
                     caml_failwith(decompress_failed);
                 }
                 mem_to_bytes(out_buf(), output, out_ofs, produced);
-                out_ofs = out_ofs + produced;
+                out_ofs += produced;
                 br_if 'done !ret; // frame complete
                 if in_done() {
                     need_input = 1;
