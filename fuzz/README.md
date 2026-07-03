@@ -207,6 +207,11 @@ combination infeasible, so this is what actually stresses the solver (and the
 `all`/`any`/`not`/comparison condition algebra) rather than the trivial corpus
 conditions. Both top-level and in-function conditionals are generated.
 
+`GEN=N GEN_FMT=wat` generates the same shape in **WAT** instead (`cond-gen-wat.awk`,
+`(@if …)` / `(@then)` / `(and`/`or`/`not`/prefix-comparison), exercising the
+lib-wasm WAT specializer that the Wax `#[if]` path never touches. So between the
+two the fuzzer now covers both formats and both conditional positions.
+
 ## The WAT input side
 
 The lexer and WAT parser are a blind spot for everything above: `mutate-wax.sh`

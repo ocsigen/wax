@@ -63,11 +63,13 @@ declare -A VALS=(
 
 # Every variable mentioned in a seed's #[if(...)] conditions.
 vars_of() {
-  # Strip string literals first, so a compared value like effects = "other"
-  # does not leak "other" as if it were a variable.
-  grep -ohE "#\[if\([^]]*\)\]" "$1" 2>/dev/null \
+  # Condition text from either syntax — Wax [#[if(...)]] or WAT [(@if ...)] — with
+  # string literals stripped (so effects = "other" does not leak "other"). The
+  # known variable names are then pulled out, matching bare (Wax) or $-prefixed
+  # (WAT) occurrences alike.
+  { grep -ohE "#\[if\([^]]*\)\]" "$1"; grep -ohE "\(@if.*" "$1"; } 2>/dev/null \
     | sed 's/"[^"]*"//g' \
-    | grep -oE "[a-z_][a-z_0-9]*" | grep -vE "^(if|all|any|not)$" | sort -u
+    | grep -oE "wasi|oxcaml|cps|jspi|native|effects|ocaml_version" | sort -u
 }
 
 # Worker: fuzz one seed. Writes findings to $RESULTS/<n>.
@@ -148,17 +150,22 @@ fuzz_seed() {
 # cond_solver with conditions the corpus never contains. Generated modules are
 # kept only if they parse (they always do, but the guard is cheap).
 GEN="${GEN:-0}"
-GENAWK="$(dirname "${BASH_SOURCE[0]}")/cond-gen.awk"
+GEN_FMT="${GEN_FMT:-wax}"       # wax (#[if], cond-gen.awk) or wat ((@if), cond-gen-wat.awk)
+if [ "$GEN_FMT" = wat ]; then
+  GENAWK="$(dirname "${BASH_SOURCE[0]}")/cond-gen-wat.awk"
+else
+  GENAWK="$(dirname "${BASH_SOURCE[0]}")/cond-gen.awk"
+fi
 if [ "$GEN" -gt 0 ]; then
   gendir="$RESULTS/gen"; mkdir -p "$gendir"
   i=0; n=0
   while [ "$n" -lt "$GEN" ] && [ "$i" -lt "$((GEN * 4 + 8))" ]; do
-    f="$gendir/g$(printf '%05d' "$n").wax"
+    f="$gendir/g$(printf '%05d' "$n").$GEN_FMT"
     awk -v seed="$((SEED + i))" -f "$GENAWK" </dev/null >"$f"
     i=$((i + 1))
-    if "$WAX" -i wax -f wax "$f" -o /dev/null 2>/dev/null; then n=$((n + 1)); else rm -f "$f"; fi
+    if "$WAX" -i "$GEN_FMT" -f "$GEN_FMT" "$f" -o /dev/null 2>/dev/null; then n=$((n + 1)); else rm -f "$f"; fi
   done
-  mapfile -t SEED_FILES < <(find "$gendir" -name '*.wax' | sort)
+  mapfile -t SEED_FILES < <(find "$gendir" -type f | sort)
 else
   mapfile -t SEED_FILES < <(grep -rl "#\[if(" "$SEEDS"/*.wax 2>/dev/null | sort)
 fi
