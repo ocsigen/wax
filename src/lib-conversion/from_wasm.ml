@@ -824,7 +824,27 @@ Step 2: use this info to generate using names without reusing existing names
 (*** The conversion stack ***)
 
 module Stack = struct
-  type stack = (bool * Ast.location Ast.instr) list
+  (* Each entry is [(present, width, instr)]. [width] records the numeric result
+     width the producing opcode states — a const or arithmetic op tags its own
+     width, everything else is [None].
+
+     The two pops encode whether the consuming instruction's Wax surface syntax
+     preserves or erases that width, so the choice is explicit at every call site
+     (a "width eraser" left as a plain pop would silently drift):
+     - [pop_width_preserved]: the operand's width is recoverable from the printed
+       form — either the operand is not numeric, or the consumer's result has the
+       same width and re-pins it (arithmetic: [a + b] round-trips to the operand
+       width via the sum's own type).
+     - [pop_width_erased]: the consumer's surface carries a *different* width (or
+       none) — [drop], [i32.wrap_i64], comparisons, [eqz] — so an anchor-free
+       operand tree re-defaults to i32 on re-parse, silently changing its width
+       (and value: [(4096 >>u 40)] is 0 as i64, 16 as i32). It pins any non-i32
+       opcode width with a cast so the width (and value) survive. [None] and
+       [I32] need no pin (a typed anchor re-pins, or i32 is the default);
+       [simplify]'s [load_bearing_literal] drops the pin again when it is
+       redundant. *)
+  type width = [ `I32 | `I64 | `F32 | `F64 ] option
+  type stack = (bool * width * Ast.location Ast.instr) list
   type 'a t = stack -> stack * 'a
 
   let rec complete n cur =
@@ -834,32 +854,67 @@ module Stack = struct
     if n = 0 then (stack, cur)
     else
       match stack with
-      | (true, instr) :: rem -> grab_rec (n - 1) rem (instr :: cur)
+      | (true, _, instr) :: rem -> grab_rec (n - 1) rem (instr :: cur)
       | _ -> (stack, complete n cur)
 
   let consume inputs stack =
     if inputs = 0 then (stack, ())
     else
       ( (match stack with
-        | (true, instr) :: rem -> (false, instr) :: rem
+        | (true, w, instr) :: rem -> (false, w, instr) :: rem
         | _ -> stack),
         () )
 
   let grab n stack = grab_rec n stack []
-  let push arity i stack = ((arity = 1, i) :: stack, ())
-  let push_poly i stack = ((false, i) :: stack, ())
+  let push arity i stack = ((arity = 1, None, i) :: stack, ())
 
-  let pop stack =
+  (* Push a numeric value tagged with the width its opcode states. *)
+  let push_num width i stack = ((true, width, i) :: stack, ())
+  let push_poly i stack = ((false, None, i) :: stack, ())
+
+  let pop_width_preserved stack =
     match stack with
-    | (true, i) :: rem -> (rem, i)
+    | (true, _, i) :: rem -> (rem, i)
     | _ -> (stack, Ast.no_loc Ast.Hole)
 
+  (* Wrap [i] in an identity cast to its non-i32 opcode width (see the module
+     comment). [None]/[I32] are the re-parse default, so leave the tree as is. *)
+  let pin_width w i =
+    match w with
+    | Some `I64 -> { i with Ast.desc = Ast.Cast (i, Valtype I64) }
+    | Some `F32 -> { i with Ast.desc = Ast.Cast (i, Valtype F32) }
+    | Some `F64 -> { i with Ast.desc = Ast.Cast (i, Valtype F64) }
+    | Some `I32 | None -> i
+
+  (* Pop, pinning the operand's opcode width. Used by single-operand width
+     erasers ([drop], [wrap], [promote], [demote]). *)
+  let pop_width_erased stack =
+    match stack with
+    | (true, w, i) :: rem -> (rem, pin_width w i)
+    | _ -> (stack, Ast.no_loc Ast.Hole)
+
+  (* Pop with the width tag, without pinning — the caller decides (used by
+     comparisons, which pin one operand only when *both* are anchor-free). *)
+  let pop_tagged stack =
+    match stack with
+    | (true, w, i) :: rem -> (rem, (i, w))
+    | _ -> (stack, (Ast.no_loc Ast.Hole, None))
+
   let try_pop stack =
-    match stack with (true, i) :: rem -> (rem, Some i) | _ -> (stack, None)
+    match stack with (true, _, i) :: rem -> (rem, Some i) | _ -> (stack, None)
+
+  (* [try_pop] carrying the width tag — a method-form op tags its result with its
+     receiver's flexibility, so an erasing consumer pins it (and the pin, cast on
+     the result, propagates back to the receiver: [((5).clz()) as i64] is
+     [i64.clz]). *)
+  let try_pop_tagged stack =
+    match stack with
+    | (true, w, i) :: rem -> (rem, Some (i, w))
+    | _ -> (stack, None)
 
   let run f =
     let st, () = f [] in
-    List.rev_map snd st
+    List.rev_map (fun (_, _, i) -> i) st
 end
 
 let ( let* ) e f st =
@@ -1002,38 +1057,76 @@ let int_un_op i0 sz (op : Src.int_un_op) =
   let method_call recv meth =
     with_loc (Call (with_loc (StructGet (recv, Ast.no_loc meth)), []))
   in
-  let* e' = Stack.try_pop in
+  let* recv = Stack.try_pop_tagged in
+  let e' = Option.map fst recv in
+  (* The operand's own width tag (its flexibility): a method-form op below
+     ([clz]/[ctz]/[popcnt]/[extend8_s]/[extend16_s]) has result width = receiver
+     width, so it carries the receiver's flexibility to its result — an erasing
+     consumer then pins it, and the pin (a cast on the result) propagates back to
+     the receiver. Ops that fix a concrete result width (a cast: [trunc], [eqz]'s
+     i32) are grounded, [None]. *)
+  let recv_w = match recv with Some (_, w) -> w | None -> None in
   let e ty =
     match e' with
     | Some e -> e
     | None -> Ast.no_loc (Ast.Cast (Ast.no_loc Ast.Hole, Valtype ty))
   in
-  Stack.push 1
+  (* Materialise the operand with its scalar width [ty] pinned by a cast when
+     [ty] is a non-default width (i64/f32/f64) and the operand is inlined —
+     otherwise the surface form re-defaults it (a bare float literal to f64, a
+     bare integer to i32). An absent operand ([None]) is already the hole cast
+     [e] builds; an [i32] target needs no pin (i32 is the re-parse default), so
+     it also leaves the operand's shape untouched (keeping the [eqz] special case
+     below matchable). Used by the width-erasing unary ops whose surface carries
+     the *result* width, not the operand's: the truncations (float source) and
+     [eqz] (i64 operand -> i32 result). *)
+  let pin ty =
+    let x = e ty in
+    match (e', ty) with
+    | Some _, (Ast.I64 | F32 | F64) ->
+        { x with Ast.desc = Ast.Cast (x, Valtype ty) }
+    | _ -> x
+  in
+  (* Width-preserving method-form ops carry the receiver's flexibility; the rest
+     produce a concrete (grounded) result. *)
+  let result_w =
+    match op with
+    | Clz | Ctz | Popcnt | ExtendS (`_8 | `_16) -> recv_w
+    | _ -> None
+  in
+  Stack.push_num result_w
     (match op with
     | Clz -> method_call (e (inttype sz)) "clz"
     | Ctz -> method_call (e (inttype sz)) "ctz"
     | Popcnt -> method_call (e (inttype sz)) "popcnt"
     | Eqz -> (
-        let operand = e (inttype sz) in
+        let operand = pin (inttype sz) in
         match operand.Ast.desc with
         (* [eqz] of an equality is exactly the negated comparison; recover
            [i32.eqz (ref.eq a b)] — how [a != b] on references lowers — as
-           [a != b] rather than [!(a == b)]. *)
+           [a != b] rather than [!(a == b)]. ([sz] is [i32] here, so [pin] leaves
+           the [BinOp] shape untouched.) *)
         | BinOp ({ Ast.desc = Ast.Eq; _ }, e1, e2) ->
             with_loc (BinOp (op_loc i0 Ast.Ne, e1, e2))
         | _ -> with_loc (UnOp (op_loc i0 Ast.Not, operand)))
     | Trunc (f, signage) ->
         (* The operand is a float of [f]'s width, NOT [floattype sz] ([sz] is the
            integer *result* size — wrong for e.g. [i32.trunc_f64], whose operand
-           is f64 not f32). This only affects a non-inlinable operand, where [e]
-           materialises the type as a hole cast; an inlined operand is returned
-           untyped and takes its type from context. *)
+           is f64 not f32). Unlike the trunc's own [as int] cast (which fixes the
+           *result* width), nothing here pins the *source* float width, so an
+           inlined operand must carry it explicitly: a bare float literal
+           re-defaults to f64 (so an f32 source drifts), and an integer-valued
+           float const prints as a bare integer that re-defaults to i32 (so even
+           an f64 source drifts) — both silently changing which inputs trap. Pin
+           it with a cast, as [Reinterpret] does; [simplify] drops the pin again
+           when the operand already settles on [fty] (a plain f64 literal). *)
         let fty : Ast.valtype = match f with `F32 -> F32 | `F64 -> F64 in
-        with_loc (Cast (e fty, Signedtype { typ = sz; signage; strict = true }))
+        with_loc
+          (Cast (pin fty, Signedtype { typ = sz; signage; strict = true }))
     | TruncSat (f, signage) ->
         let fty : Ast.valtype = match f with `F32 -> F32 | `F64 -> F64 in
         with_loc
-          (Cast (e fty, Signedtype { typ = sz; signage; strict = false }))
+          (Cast (pin fty, Signedtype { typ = sz; signage; strict = false }))
     | Reinterpret ->
         method_call
           (let e = e (floattype sz) in
@@ -1064,38 +1157,73 @@ let pop_typed ty =
     | Some e -> e
     | None -> Ast.no_loc (Ast.Cast (Ast.no_loc Ast.Hole, Valtype ty)))
 
+(* [pop_typed] carrying the receiver's width tag, for a method-form op that
+   inherits its receiver's flexibility (a rotate, a float method). A hole is
+   grounded ([None]). *)
+let pop_typed_tagged ty =
+  let* o = Stack.try_pop_tagged in
+  return
+    (match o with
+    | Some (e, w) -> (e, w)
+    | None -> (Ast.no_loc (Ast.Cast (Ast.no_loc Ast.Hole, Valtype ty)), None))
+
 let int_bin_op i0 sz (op : Src.int_bin_op) =
   let with_loc (i : _ Ast.instr_desc) = { i0 with Ast.desc = i } in
-  let symbol op =
-    let* e2 = Stack.pop in
-    let* e1 = Stack.pop in
+  (* An arithmetic operator yields the operand width, so [a + b] round-trips to
+     that width via the sum's own type — operands are width-preserved. Its result
+     is a flexible literal tree (tagged) only when BOTH operands are; if either is
+     grounded (tag [None]: a local, a call — a typed anchor), the sum is grounded
+     too ([x + 1] re-parses to [x]'s width on its own), so it takes no tag and no
+     downstream eraser pins it. *)
+  let symbol width op =
+    let* e2, w2 = Stack.pop_tagged in
+    let* e1, w1 = Stack.pop_tagged in
+    let width = match (w1, w2) with Some _, Some _ -> width | _ -> None in
+    Stack.push_num width (with_loc (BinOp (op_loc i0 op, e1, e2)))
+  in
+  let arith = Some (sz :> [ `I32 | `I64 | `F32 | `F64 ]) in
+  (* A comparison yields i32 whatever its operands' width, so it *erases* it:
+     [(4096 >>u 40) == 0] would re-default the shift to i32 and flip true->false.
+     Pin one operand's width only when *both* are anchor-free numeric producers
+     (both tagged) — an anchored operand (tag [None]: a local, a call result)
+     already fixes the width and the other unifies to it, so [x <s 0] needs no
+     pin. The i32 result carries no tag. *)
+  let compare op =
+    let* e2, w2 = Stack.pop_tagged in
+    let* e1, w1 = Stack.pop_tagged in
+    let e1 =
+      match (w1, w2) with Some _, Some _ -> Stack.pin_width arith e1 | _ -> e1
+    in
     Stack.push 1 (with_loc (BinOp (op_loc i0 op, e1, e2)))
   in
+  (* [rotl]/[rotr]: result width = receiver width, so it carries the receiver's
+     flexibility (the count arg is pinned by the method once the receiver fixes
+     it). Like [clz], an erasing consumer then pins it back to the receiver. *)
   let meth name =
     let* e2 = pop_typed (inttype sz) in
-    let* e1 = pop_typed (inttype sz) in
-    Stack.push 1
+    let* e1, w1 = pop_typed_tagged (inttype sz) in
+    Stack.push_num w1
       (with_loc (Call (with_loc (StructGet (e1, Ast.no_loc name)), [ e2 ])))
   in
   match op with
-  | Add -> symbol Add
-  | Sub -> symbol Sub
-  | Mul -> symbol Mul
-  | Div s -> symbol (Div (Some s))
-  | Rem s -> symbol (Rem s)
-  | And -> symbol And
-  | Or -> symbol Or
-  | Xor -> symbol Xor
-  | Shl -> symbol Shl
-  | Shr s -> symbol (Shr s)
+  | Add -> symbol arith Add
+  | Sub -> symbol arith Sub
+  | Mul -> symbol arith Mul
+  | Div s -> symbol arith (Div (Some s))
+  | Rem s -> symbol arith (Rem s)
+  | And -> symbol arith And
+  | Or -> symbol arith Or
+  | Xor -> symbol arith Xor
+  | Shl -> symbol arith Shl
+  | Shr s -> symbol arith (Shr s)
   | Rotl -> meth "rotl"
   | Rotr -> meth "rotr"
-  | Eq -> symbol Eq
-  | Ne -> symbol Ne
-  | Lt s -> symbol (Lt (Some s))
-  | Gt s -> symbol (Gt (Some s))
-  | Le s -> symbol (Le (Some s))
-  | Ge s -> symbol (Ge (Some s))
+  | Eq -> compare Eq
+  | Ne -> compare Ne
+  | Lt s -> compare (Lt (Some s))
+  | Gt s -> compare (Gt (Some s))
+  | Le s -> compare (Le (Some s))
+  | Ge s -> compare (Ge (Some s))
 
 let float_un_op i0 sz (op : Src.float_un_op) =
   let with_loc (i : _ Ast.instr_desc) = { i0 with Ast.desc = i } in
@@ -1103,13 +1231,23 @@ let float_un_op i0 sz (op : Src.float_un_op) =
   let method_call recv meth =
     with_loc (Call (with_loc (StructGet (recv, Ast.no_loc meth)), []))
   in
-  let* e' = Stack.try_pop in
+  let* recv = Stack.try_pop_tagged in
+  let e' = Option.map fst recv in
+  let recv_w = match recv with Some (_, w) -> w | None -> None in
   let e ty =
     match e' with
     | Some e -> e
     | None -> Ast.no_loc (Ast.Cast (Ast.no_loc Ast.Hole, Valtype ty))
   in
-  Stack.push 1
+  (* [neg]/[abs]/…/[sqrt] have result width = operand width, so they carry the
+     operand's flexibility (like [clz]); [convert]/[reinterpret] fix a concrete
+     result width via a cast, so they are grounded ([None]). *)
+  let result_w =
+    match op with
+    | Neg | Abs | Ceil | Floor | Trunc | Nearest | Sqrt -> recv_w
+    | Convert _ | Reinterpret -> None
+  in
+  Stack.push_num result_w
     (match op with
     | Neg -> with_loc (UnOp (op_loc i0 Ast.Neg, e (floattype sz)))
     | Abs -> method_call (e (floattype sz)) "abs"
@@ -1132,31 +1270,46 @@ let float_un_op i0 sz (op : Src.float_un_op) =
 
 let float_bin_op i0 sz (op : Src.float_bin_op) =
   let with_loc (i : _ Ast.instr_desc) = { i0 with Ast.desc = i } in
-  let symbol op =
-    let* e2 = Stack.pop in
-    let* e1 = Stack.pop in
+  (* As for [int_bin_op]: an arithmetic operator preserves the operand width and
+     its result is flexible only when both operands are (else grounded, no tag); a
+     comparison erases the width (i32 result), so it pins its operands. *)
+  let symbol width op =
+    let* e2, w2 = Stack.pop_tagged in
+    let* e1, w1 = Stack.pop_tagged in
+    let width = match (w1, w2) with Some _, Some _ -> width | _ -> None in
+    Stack.push_num width (with_loc (BinOp (op_loc i0 op, e1, e2)))
+  in
+  let arith = Some (sz :> [ `I32 | `I64 | `F32 | `F64 ]) in
+  (* As for [int_bin_op]: pin one operand only when both are anchor-free. *)
+  let compare op =
+    let* e2, w2 = Stack.pop_tagged in
+    let* e1, w1 = Stack.pop_tagged in
+    let e1 =
+      match (w1, w2) with Some _, Some _ -> Stack.pin_width arith e1 | _ -> e1
+    in
     Stack.push 1 (with_loc (BinOp (op_loc i0 op, e1, e2)))
   in
+  (* [min]/[max]/[copysign]: result width = receiver width (as [rotl]). *)
   let meth name =
     let* e2 = pop_typed (floattype sz) in
-    let* e1 = pop_typed (floattype sz) in
-    Stack.push 1
+    let* e1, w1 = pop_typed_tagged (floattype sz) in
+    Stack.push_num w1
       (with_loc (Call (with_loc (StructGet (e1, Ast.no_loc name)), [ e2 ])))
   in
   match op with
-  | Add -> symbol Add
-  | Sub -> symbol Sub
-  | Mul -> symbol Mul
-  | Div -> symbol (Div None)
+  | Add -> symbol arith Add
+  | Sub -> symbol arith Sub
+  | Mul -> symbol arith Mul
+  | Div -> symbol arith (Div None)
   | Min -> meth "min"
   | Max -> meth "max"
   | CopySign -> meth "copysign"
-  | Eq -> symbol Eq
-  | Ne -> symbol Ne
-  | Lt -> symbol (Lt None)
-  | Gt -> symbol (Gt None)
-  | Le -> symbol (Le None)
-  | Ge -> symbol (Ge None)
+  | Eq -> compare Eq
+  | Ne -> compare Ne
+  | Lt -> compare (Lt None)
+  | Gt -> compare (Gt None)
+  | Le -> compare (Le None)
+  | Ge -> compare (Ge None)
 
 let blocktype ctx (typ : Src.blocktype option) =
   match typ with
@@ -1388,7 +1541,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
             }
       in
       let inputs, outputs = blocktype_arity ctx typ in
-      let* cond = Stack.pop in
+      let* cond = Stack.pop_width_preserved in
       let* () = Stack.consume inputs in
       Stack.push
         (if inputs > 0 then 0 else outputs)
@@ -1449,7 +1602,10 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   | Unreachable -> Stack.push_poly (with_loc Unreachable)
   | Nop -> Stack.push 0 (with_loc Nop)
   | Drop ->
-      let* e = Stack.pop in
+      (* A dropped value supplies no expected type: a width eraser (see [Stack]).
+         [i64.div_u (2147483648 + 2147483648)] would re-default its divisor to a
+         trapping [0]; the erased pop pins the opcode width to prevent it. *)
+      let* e = Stack.pop_width_erased in
       Stack.push 0 (with_loc (Set (None, None, e)))
   | Br i ->
       let input = label_arity ctx i in
@@ -1465,7 +1621,8 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       let* () = instruction ctx inner in
       fun stack ->
         match stack with
-        | (arity, top) :: rem -> ((arity, with_loc (Hinted (h, top))) :: rem, ())
+        | (arity, w, top) :: rem ->
+            ((arity, w, with_loc (Hinted (h, top))) :: rem, ())
         | [] -> ([], ()))
   | Br_table (labels, lab) ->
       let input = label_arity ctx lab in
@@ -1499,7 +1656,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
          and its exactness are recovered from the descriptor, so only the result
          nullability of [t] is kept. *)
       let input = label_arity ctx i in
-      let* d = Stack.pop in
+      let* d = Stack.pop_width_preserved in
       let d = pin_descriptor_reftype ctx t d in
       let* args = Stack.grab input in
       Stack.push input
@@ -1507,7 +1664,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
            (Br_on_cast_desc_eq (label ctx i, t.nullable, sequence args, d)))
   | Br_on_cast_desc_eq_fail (i, _, t) ->
       let input = label_arity ctx i in
-      let* d = Stack.pop in
+      let* d = Stack.pop_width_preserved in
       let d = pin_descriptor_reftype ctx t d in
       let* args = Stack.grab input in
       Stack.push input
@@ -1519,13 +1676,13 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   | LocalGet x -> Stack.push 1 (with_loc (Get (idx ctx `Local x)))
   | GlobalGet x -> Stack.push 1 (with_loc (Get (idx ctx `Global x)))
   | LocalSet x ->
-      let* e = Stack.pop in
+      let* e = Stack.pop_width_preserved in
       Stack.push 0 (with_loc (set_desc (idx ctx `Local x) e))
   | GlobalSet x ->
-      let* e = Stack.pop in
+      let* e = Stack.pop_width_preserved in
       Stack.push 0 (with_loc (set_desc (idx ctx `Global x) e))
   | LocalTee x ->
-      let* e = Stack.pop in
+      let* e = Stack.pop_width_preserved in
       Stack.push 1 (with_loc (Tee (idx ctx `Local x, e)))
   | BinOp (I32 op) -> int_bin_op i `I32 op
   | BinOp (I64 op) -> int_bin_op i `I64 op
@@ -1564,7 +1721,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       let fields = snd (struct_fields ctx type_name) in
       (* The descriptor operand is on top of the field values. The struct type is
          recovered from the descriptor, so it is not written. *)
-      let* d = Stack.pop in
+      let* d = Stack.pop_width_preserved in
       let d = pin_descriptor ctx ~exact:true i d in
       let* args = Stack.grab (List.length fields) in
       Stack.push 1
@@ -1572,13 +1729,13 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
            (StructDesc
               (d, List.map2 (fun nm i -> (Ast.no_loc nm, i)) fields args)))
   | StructNewDefaultDesc i ->
-      let* d = Stack.pop in
+      let* d = Stack.pop_width_preserved in
       let d = pin_descriptor ctx ~exact:true i d in
       Stack.push 1 (with_loc (StructDefaultDesc d))
   | StructGet (s, t, f) ->
       let type_name = idx ctx `Type t in
       let name = Sequence.get (fst (struct_fields ctx type_name)) f in
-      let* arg = Stack.pop in
+      let* arg = Stack.pop_width_preserved in
       let arg =
         {
           arg with
@@ -1597,8 +1754,8 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   | StructSet (t, f) ->
       let type_name = idx ctx `Type t in
       let name = Sequence.get (fst (struct_fields ctx type_name)) f in
-      let* e2 = Stack.pop in
-      let* e1 = Stack.pop in
+      let* e2 = Stack.pop_width_preserved in
+      let* e1 = Stack.pop_width_preserved in
       let e1 =
         {
           e1 with
@@ -1609,11 +1766,11 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       in
       Stack.push 0 (with_loc (StructSet (e1, name, e2)))
   | ArrayNew t ->
-      let* len = Stack.pop in
-      let* v = Stack.pop in
+      let* len = Stack.pop_width_preserved in
+      let* v = Stack.pop_width_preserved in
       Stack.push 1 (with_loc (Array (Some (idx ctx `Type t), v, len)))
   | ArrayNewDefault t ->
-      let* len = Stack.pop in
+      let* len = Stack.pop_width_preserved in
       Stack.push 1 (with_loc (ArrayDefault (Some (idx ctx `Type t), len)))
   | ArrayNewFixed (t, n) ->
       (* [n] is a u32 immediate and each element becomes an argument node, so a
@@ -1639,8 +1796,8 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
         | Some s -> with_loc (String (Some (idx ctx `Type t), s))
         | None -> with_loc (ArrayFixed (Some (idx ctx `Type t), args)))
   | ArrayGet (s, t) ->
-      let* e2 = Stack.pop in
-      let* e1 = Stack.pop in
+      let* e2 = Stack.pop_width_preserved in
+      let* e1 = Stack.pop_width_preserved in
       let e1 =
         {
           e1 with
@@ -1659,9 +1816,9 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
             with_loc
               (Cast (e, Signedtype { typ = `I32; signage; strict = false })))
   | ArraySet t ->
-      let* e3 = Stack.pop in
-      let* e2 = Stack.pop in
-      let* e1 = Stack.pop in
+      let* e3 = Stack.pop_width_preserved in
+      let* e2 = Stack.pop_width_preserved in
+      let* e1 = Stack.pop_width_preserved in
       let e1 =
         {
           e1 with
@@ -1680,7 +1837,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
         (with_loc (Call (with_loc (Get (idx ctx `Func f)), args)))
   | CallRef t ->
       let input, output = type_arity ctx t in
-      let* f = Stack.pop in
+      let* f = Stack.pop_width_preserved in
       let f =
         {
           f with
@@ -1700,7 +1857,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
         (with_loc (TailCall (with_loc (Get (idx ctx `Func f)), args)))
   | ReturnCallRef t ->
       let input, _ = type_arity ctx t in
-      let* f = Stack.pop in
+      let* f = Stack.pop_width_preserved in
       let f =
         {
           f with
@@ -1717,100 +1874,107 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       let* args = Stack.grab ctx.return_arity in
       Stack.push_poly (with_loc (Return (sequence_opt args)))
   | Const c ->
-      let lit, ty =
+      let lit, ty, width =
         match c with
-        | I32 n -> (integer i n, Ast.I32)
-        | I64 n -> (integer i n, Ast.I64)
-        | F32 f -> (float i f, Ast.F32)
-        | F64 f -> (float i f, Ast.F64)
+        | I32 n -> (integer i n, Ast.I32, `I32)
+        | I64 n -> (integer i n, Ast.I64, `I64)
+        | F32 f -> (float i f, Ast.F32, `F32)
+        | F64 f -> (float i f, Ast.F64, `F64)
       in
-      Stack.push 1
+      Stack.push_num (Some width)
         (if ctx.strict_constants then with_loc (Cast (lit, Valtype ty)) else lit)
   | RefI31 ->
-      let* e = Stack.pop in
+      let* e = Stack.pop_width_preserved in
       Stack.push 1
         (with_loc (Cast (e, Valtype (Ref { nullable = false; typ = I31 }))))
   | I31Get signage ->
-      let* e = Stack.pop in
+      let* e = Stack.pop_width_preserved in
       Stack.push 1
         (with_loc
            (Cast (e, Signedtype { typ = `I32; signage; strict = false })))
   | I64ExtendI32 signage ->
-      let* e = Stack.pop in
+      let* e = Stack.pop_width_preserved in
       Stack.push 1
         (with_loc
            (Cast (e, Signedtype { typ = `I64; signage; strict = false })))
   | I32WrapI64 ->
-      let* e = Stack.pop in
+      (* Width eraser: [i32.wrap_i64 (4096 >>u 40)] is 0, but a bare [4096 >>u 40]
+         re-defaults to i32 and the shift count masks to 8, yielding 16 (a LIVE
+         miscompilation). Pin the i64 operand. *)
+      let* e = Stack.pop_width_erased in
       Stack.push 1 (with_loc (Cast (e, Valtype I32)))
   | F64PromoteF32 ->
-      let* e = Stack.pop in
+      (* Width eraser: the f32 source is not carried by [e as f64]; a bare float
+         literal re-defaults to f64, dropping the promote (and its f32 rounding). *)
+      let* e = Stack.pop_width_erased in
       Stack.push 1 (with_loc (Cast (e, Valtype F64)))
   | F32DemoteF64 ->
-      let* e = Stack.pop in
+      (* Width eraser: an integer-valued f64 source prints as a bare integer that
+         re-defaults to i32, turning the demote into an i32->f32 convert. *)
+      let* e = Stack.pop_width_erased in
       Stack.push 1 (with_loc (Cast (e, Valtype F32)))
   | ExternConvertAny ->
-      let* e = Stack.pop in
+      let* e = Stack.pop_width_preserved in
       Stack.push 1
         (with_loc (Cast (e, Valtype (Ref { nullable = true; typ = Extern }))))
   | AnyConvertExtern ->
-      let* e = Stack.pop in
+      let* e = Stack.pop_width_preserved in
       Stack.push 1
         (with_loc (Cast (e, Valtype (Ref { nullable = true; typ = Any }))))
   | ArrayNewData (t, d) ->
-      let* len = Stack.pop in
-      let* off = Stack.pop in
+      let* len = Stack.pop_width_preserved in
+      let* off = Stack.pop_width_preserved in
       Stack.push 1
         (with_loc
            (ArraySegment (Some (idx ctx `Type t), idx ctx `Data d, off, len)))
   | ArrayNewElem (t, e) ->
-      let* len = Stack.pop in
-      let* off = Stack.pop in
+      let* len = Stack.pop_width_preserved in
+      let* off = Stack.pop_width_preserved in
       Stack.push 1
         (with_loc
            (ArraySegment (Some (idx ctx `Type t), idx ctx `Elem e, off, len)))
   | TableGet t ->
-      let* index = Stack.pop in
+      let* index = Stack.pop_width_preserved in
       Stack.push 1
         (with_loc (ArrayGet (with_loc (Get (idx ctx `Table t)), index)))
   | TableSet t ->
-      let* value = Stack.pop in
-      let* index = Stack.pop in
+      let* value = Stack.pop_width_preserved in
+      let* index = Stack.pop_width_preserved in
       Stack.push 0
         (with_loc (ArraySet (with_loc (Get (idx ctx `Table t)), index, value)))
   (* call_indirect desugars to [(tab[i] as &$functype)(args)] (a call_ref);
      [to_wasm] re-fuses this back to call_indirect. *)
   | CallIndirect (tab, tu) ->
       let input, output = typeuse_arity ctx tu in
-      let* index = Stack.pop in
+      let* index = Stack.pop_width_preserved in
       let* args = Stack.grab input in
       let f = indirect_callee ctx with_loc tab tu index in
       Stack.push output (with_loc (Call (f, args)))
   | ReturnCallIndirect (tab, tu) ->
       let input, _ = typeuse_arity ctx tu in
-      let* index = Stack.pop in
+      let* index = Stack.pop_width_preserved in
       let* args = Stack.grab input in
       let f = indirect_callee ctx with_loc tab tu index in
       Stack.push_poly (with_loc (TailCall (f, args)))
   | ArrayLen ->
-      let* e = Stack.pop in
+      let* e = Stack.pop_width_preserved in
       let e = cast_ref e Array in
       Stack.push 1
         (with_loc (Call (with_loc (StructGet (e, Ast.no_loc "length")), [])))
   | RefCast t ->
-      let* e = Stack.pop in
+      let* e = Stack.pop_width_preserved in
       Stack.push 1 (with_loc (Cast (e, Valtype (Ref (reftype ctx t)))))
   | RefCastDescEq t ->
       (* The descriptor operand is on top of the value. The target type and its
          exactness are recovered from the descriptor, so only [t]'s result
          nullability is kept. *)
-      let* d = Stack.pop in
+      let* d = Stack.pop_width_preserved in
       let d = pin_descriptor_reftype ctx t d in
-      let* e = Stack.pop in
+      let* e = Stack.pop_width_preserved in
       Stack.push 1 (with_loc (CastDesc (e, t.nullable, d)))
   | RefGetDesc t ->
       let type_name = idx ctx `Type t in
-      let* arg = Stack.pop in
+      let* arg = Stack.pop_width_preserved in
       (* [ref.get_desc $t] requires its operand to be [<: (ref null (exact? $t))],
          so a concrete operand already carries a descriptor-bearing type and
          [e.descriptor] resolves directly — casting it to [&?$t] would only strip
@@ -1841,11 +2005,11 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       in
       Stack.push 1 (with_loc (GetDescriptor arg))
   | RefTest t ->
-      let* e = Stack.pop in
+      let* e = Stack.pop_width_preserved in
       Stack.push 1 (with_loc (Test (e, reftype ctx t)))
   | RefEq ->
-      let* e2 = Stack.pop in
-      let* e1 = Stack.pop in
+      let* e2 = Stack.pop_width_preserved in
+      let* e1 = Stack.pop_width_preserved in
       Stack.push 1 (with_loc (BinOp (op_loc i Ast.Eq, e1, e2)))
   | RefFunc f -> Stack.push 1 (with_loc (Get (idx ctx `Func f)))
   | RefNull typ ->
@@ -1855,7 +2019,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
               ( with_loc Null,
                 Valtype (Ref { nullable = true; typ = heaptype ctx typ }) )))
   | RefIsNull ->
-      let* e = Stack.pop in
+      let* e = Stack.pop_width_preserved in
       Stack.push 1 (with_loc (UnOp (op_loc i Ast.Not, e)))
   | Select tys ->
       (* The Wax [?:] carries no result type, but resolve the annotation (if
@@ -1863,19 +2027,19 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       Option.iter
         (List.iter (fun t -> ignore (valtype ctx t : Ast.valtype)))
         tys;
-      let* cond = Stack.pop in
-      let* e2 = Stack.pop in
-      let* e1 = Stack.pop in
+      let* cond = Stack.pop_width_preserved in
+      let* e2 = Stack.pop_width_preserved in
+      let* e1 = Stack.pop_width_preserved in
       Stack.push 1 (with_loc (Select (cond, e1, e2)))
   | Throw t ->
       let input, _ = tag_arity ctx t in
       let* args = Stack.grab input in
       Stack.push_poly (with_loc (Throw (idx ctx `Tag t, sequence_opt args)))
   | ThrowRef ->
-      let* e = Stack.pop in
+      let* e = Stack.pop_width_preserved in
       Stack.push_poly (with_loc (ThrowRef e))
   | ContNew ct ->
-      let* f = Stack.pop in
+      let* f = Stack.pop_width_preserved in
       Stack.push 1 (with_loc (ContNew (idx ctx `Type ct, f)))
   | ContBind (src, dst) ->
       let sp, _ = cont_arity ctx src in
@@ -1918,23 +2082,23 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       Stack.push output
         (with_loc (Switch (idx ctx `Type ct, idx ctx `Tag tag, args)))
   | RefAsNonNull ->
-      let* e = Stack.pop in
+      let* e = Stack.pop_width_preserved in
       Stack.push 1 (with_loc (NonNull e))
   | ArrayFill t ->
-      let* n = Stack.pop in
-      let* v = Stack.pop in
-      let* i = Stack.pop in
-      let* a = Stack.pop in
+      let* n = Stack.pop_width_preserved in
+      let* v = Stack.pop_width_preserved in
+      let* i = Stack.pop_width_preserved in
+      let* a = Stack.pop_width_preserved in
       let a = cast_ref a (Type (idx ctx `Type t)) in
       Stack.push 0
         (with_loc
            (Call (with_loc (StructGet (a, Ast.no_loc "fill")), [ i; v; n ])))
   | ArrayCopy (t1, t2) ->
-      let* n = Stack.pop in
-      let* i2 = Stack.pop in
-      let* a2 = Stack.pop in
-      let* i1 = Stack.pop in
-      let* a1 = Stack.pop in
+      let* n = Stack.pop_width_preserved in
+      let* i2 = Stack.pop_width_preserved in
+      let* a2 = Stack.pop_width_preserved in
+      let* i1 = Stack.pop_width_preserved in
+      let* a1 = Stack.pop_width_preserved in
       let a1 = cast_ref a1 (Type (idx ctx `Type t1)) in
       let a2 = cast_ref a2 (Type (idx ctx `Type t2)) in
       Stack.push 0
@@ -1942,7 +2106,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
            (Call
               (with_loc (StructGet (a1, Ast.no_loc "copy")), [ i1; a2; i2; n ])))
   | Load (m, memarg, nt) ->
-      let* addr = Stack.pop in
+      let* addr = Stack.pop_width_preserved in
       let meth, nat =
         match nt with
         | NumI32 -> ("load32", 4)
@@ -1952,7 +2116,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       in
       Stack.push 1 (mem_call m meth (addr :: mem_extra with_loc memarg nat))
   | LoadS (m, memarg, result_ty, size, signage) ->
-      let* addr = Stack.pop in
+      let* addr = Stack.pop_width_preserved in
       let meth, nat =
         match size with
         | `I8 -> ("load8", 1)
@@ -1971,8 +2135,8 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       in
       Stack.push 1 result
   | Store (m, memarg, nt) ->
-      let* value = Stack.pop in
-      let* addr = Stack.pop in
+      let* value = Stack.pop_width_preserved in
+      let* addr = Stack.pop_width_preserved in
       let meth, nat =
         match nt with
         | NumI32 -> ("store32", 4)
@@ -1983,8 +2147,8 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       Stack.push 0
         (mem_call m meth (addr :: value :: mem_extra with_loc memarg nat))
   | StoreS (m, memarg, _result_ty, size) ->
-      let* value = Stack.pop in
-      let* addr = Stack.pop in
+      let* value = Stack.pop_width_preserved in
+      let* addr = Stack.pop_width_preserved in
       let meth, nat =
         match size with
         | `I8 -> ("store8", 1)
@@ -1996,7 +2160,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   | Atomic (m, op, memarg) ->
       let operands, results = Atomics.signature op in
       let* ops = Stack.grab (List.length operands) in
-      let* addr = Stack.pop in
+      let* addr = Stack.pop_width_preserved in
       let nat = 1 lsl Atomics.natural_align_log2 op in
       Stack.push (List.length results)
         (mem_call m (Atomics.method_name op)
@@ -2021,17 +2185,17 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       Stack.push 0 (with_loc (If_annotation { cond; then_body; else_body }))
   | MemorySize m -> Stack.push 1 (mem_call m "size" [])
   | MemoryGrow m ->
-      let* d = Stack.pop in
+      let* d = Stack.pop_width_preserved in
       Stack.push 1 (mem_call m "grow" [ d ])
   | MemoryFill m ->
-      let* n = Stack.pop in
-      let* v = Stack.pop in
-      let* d = Stack.pop in
+      let* n = Stack.pop_width_preserved in
+      let* v = Stack.pop_width_preserved in
+      let* d = Stack.pop_width_preserved in
       Stack.push 0 (mem_call m "fill" [ d; v; n ])
   | MemoryCopy (m, m') ->
-      let* n = Stack.pop in
-      let* s = Stack.pop in
-      let* d = Stack.pop in
+      let* n = Stack.pop_width_preserved in
+      let* s = Stack.pop_width_preserved in
+      let* d = Stack.pop_width_preserved in
       (* A copy between two different memories names the source explicitly. *)
       let args =
         if (idx ctx `Mem m).desc = (idx ctx `Mem m').desc then [ d; s; n ]
@@ -2039,105 +2203,105 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       in
       Stack.push 0 (mem_call m "copy" args)
   | MemoryInit (m, data) ->
-      let* n = Stack.pop in
-      let* s = Stack.pop in
-      let* d = Stack.pop in
+      let* n = Stack.pop_width_preserved in
+      let* s = Stack.pop_width_preserved in
+      let* d = Stack.pop_width_preserved in
       let seg = with_loc (Ast.Get (idx ctx `Data data)) in
       Stack.push 0 (mem_call m "init" [ seg; d; s; n ])
   | DataDrop data -> Stack.push 0 (drop_call `Data data)
   | TableSize t -> Stack.push 1 (table_call t "size" [])
   | TableGrow t ->
-      let* n = Stack.pop in
-      let* v = Stack.pop in
+      let* n = Stack.pop_width_preserved in
+      let* v = Stack.pop_width_preserved in
       Stack.push 1 (table_call t "grow" [ v; n ])
   | TableFill t ->
-      let* n = Stack.pop in
-      let* v = Stack.pop in
-      let* d = Stack.pop in
+      let* n = Stack.pop_width_preserved in
+      let* v = Stack.pop_width_preserved in
+      let* d = Stack.pop_width_preserved in
       Stack.push 0 (table_call t "fill" [ d; v; n ])
   | TableCopy (t, t') ->
-      let* n = Stack.pop in
-      let* s = Stack.pop in
-      let* d = Stack.pop in
+      let* n = Stack.pop_width_preserved in
+      let* s = Stack.pop_width_preserved in
+      let* d = Stack.pop_width_preserved in
       let args =
         if (idx ctx `Table t).desc = (idx ctx `Table t').desc then [ d; s; n ]
         else with_loc (Ast.Get (idx ctx `Table t')) :: [ d; s; n ]
       in
       Stack.push 0 (table_call t "copy" args)
   | TableInit (t, elem) ->
-      let* n = Stack.pop in
-      let* s = Stack.pop in
-      let* d = Stack.pop in
+      let* n = Stack.pop_width_preserved in
+      let* s = Stack.pop_width_preserved in
+      let* d = Stack.pop_width_preserved in
       let seg = with_loc (Ast.Get (idx ctx `Elem elem)) in
       Stack.push 0 (table_call t "init" [ seg; d; s; n ])
   | ElemDrop elem -> Stack.push 0 (drop_call `Elem elem)
   | ArrayInitData (t, data) ->
-      let* n = Stack.pop in
-      let* s = Stack.pop in
-      let* d = Stack.pop in
-      let* a = Stack.pop in
+      let* n = Stack.pop_width_preserved in
+      let* s = Stack.pop_width_preserved in
+      let* d = Stack.pop_width_preserved in
+      let* a = Stack.pop_width_preserved in
       let a = cast_ref a (Type (idx ctx `Type t)) in
       let seg = with_loc (Ast.Get (idx ctx `Data data)) in
       Stack.push 0
         (with_loc
            (Call (with_loc (StructGet (a, Ast.no_loc "init")), [ seg; d; s; n ])))
   | ArrayInitElem (t, elem) ->
-      let* n = Stack.pop in
-      let* s = Stack.pop in
-      let* d = Stack.pop in
-      let* a = Stack.pop in
+      let* n = Stack.pop_width_preserved in
+      let* s = Stack.pop_width_preserved in
+      let* d = Stack.pop_width_preserved in
+      let* a = Stack.pop_width_preserved in
       let a = cast_ref a (Type (idx ctx `Type t)) in
       let seg = with_loc (Ast.Get (idx ctx `Elem elem)) in
       Stack.push 0
         (with_loc
            (Call (with_loc (StructGet (a, Ast.no_loc "init")), [ seg; d; s; n ])))
   | VecUnOp op ->
-      let* v = Stack.pop in
+      let* v = Stack.pop_width_preserved in
       Stack.push 1 (meth_call v (Simd.unop_name op) [])
   | VecBinOp op ->
-      let* e2 = Stack.pop in
-      let* e1 = Stack.pop in
+      let* e2 = Stack.pop_width_preserved in
+      let* e1 = Stack.pop_width_preserved in
       Stack.push 1 (meth_call e1 (Simd.binop_name op) [ e2 ])
   | VecTernOp op ->
-      let* e3 = Stack.pop in
-      let* e2 = Stack.pop in
-      let* e1 = Stack.pop in
+      let* e3 = Stack.pop_width_preserved in
+      let* e2 = Stack.pop_width_preserved in
+      let* e1 = Stack.pop_width_preserved in
       Stack.push 1 (meth_call e1 (Simd.ternop_name op) [ e2; e3 ])
   | VecShift op ->
-      let* count = Stack.pop in
-      let* v = Stack.pop in
+      let* count = Stack.pop_width_preserved in
+      let* v = Stack.pop_width_preserved in
       Stack.push 1 (meth_call v (Simd.shift_name op) [ count ])
   | VecTest op ->
-      let* v = Stack.pop in
+      let* v = Stack.pop_width_preserved in
       Stack.push 1 (meth_call v (Simd.test_name op) [])
   | VecBitmask op ->
-      let* v = Stack.pop in
+      let* v = Stack.pop_width_preserved in
       Stack.push 1 (meth_call v (Simd.bitmask_name op) [])
   | VecSplat s ->
-      let* x = Stack.pop in
+      let* x = Stack.pop_width_preserved in
       Stack.push 1 (meth_call x (Simd.splat_name s) [])
   | VecBitselect ->
-      let* e3 = Stack.pop in
-      let* e2 = Stack.pop in
-      let* e1 = Stack.pop in
+      let* e3 = Stack.pop_width_preserved in
+      let* e2 = Stack.pop_width_preserved in
+      let* e1 = Stack.pop_width_preserved in
       Stack.push 1
         (path_call Simd.free_namespace
            (Simd.free_member Simd.bitselect_name)
            [ e1; e2; e3 ])
   | VecExtract (s, sign, lane) ->
-      let* v = Stack.pop in
+      let* v = Stack.pop_width_preserved in
       Stack.push 1
         (meth_call v (Simd.extract_name s sign)
            [ integer i (Int.to_string lane) ])
   | VecReplace (s, lane) ->
-      let* value = Stack.pop in
-      let* v = Stack.pop in
+      let* value = Stack.pop_width_preserved in
+      let* v = Stack.pop_width_preserved in
       Stack.push 1
         (meth_call v (Simd.replace_name s)
            [ integer i (Int.to_string lane); value ])
   | VecShuffle lanes ->
-      let* e2 = Stack.pop in
-      let* e1 = Stack.pop in
+      let* e2 = Stack.pop_width_preserved in
+      let* e1 = Stack.pop_width_preserved in
       let imms =
         List.init 16 (fun k -> integer i (Int.to_string (Char.code lanes.[k])))
       in
@@ -2153,26 +2317,26 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
            (Simd.free_member (Simd.const_name v.shape))
            (List.map lit v.components))
   | VecLoad (m, op, memarg) ->
-      let* addr = Stack.pop in
+      let* addr = Stack.pop_width_preserved in
       let nat = Simd.vec_load_nat_align op in
       Stack.push 1
         (mem_call m (Simd.vec_load_name op)
            (addr :: mem_extra with_loc memarg nat))
   | VecStore (m, memarg) ->
-      let* value = Stack.pop in
-      let* addr = Stack.pop in
+      let* value = Stack.pop_width_preserved in
+      let* addr = Stack.pop_width_preserved in
       Stack.push 0
         (mem_call m Simd.store_name
            (addr :: value :: mem_extra with_loc memarg 16))
   | VecLoadSplat (m, w, memarg) ->
-      let* addr = Stack.pop in
+      let* addr = Stack.pop_width_preserved in
       let nat = Simd.lane_nat_align w in
       Stack.push 1
         (mem_call m (Simd.load_splat_name w)
            (addr :: mem_extra with_loc memarg nat))
   | VecLoadLane (m, w, memarg, lane) ->
-      let* v = Stack.pop in
-      let* addr = Stack.pop in
+      let* v = Stack.pop_width_preserved in
+      let* addr = Stack.pop_width_preserved in
       let nat = Simd.lane_nat_align w in
       Stack.push 1
         (mem_call m (Simd.load_lane_name w)
@@ -2180,8 +2344,8 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
            :: integer i (Int.to_string lane)
            :: mem_extra with_loc memarg nat))
   | VecStoreLane (m, w, memarg, lane) ->
-      let* v = Stack.pop in
-      let* addr = Stack.pop in
+      let* v = Stack.pop_width_preserved in
+      let* addr = Stack.pop_width_preserved in
       let nat = Simd.lane_nat_align w in
       Stack.push 0
         (mem_call m (Simd.store_lane_name w)

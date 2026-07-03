@@ -19,26 +19,6 @@ Wax type-checking should have failed (type mismatch):
   }
 from wasm: (func (result i64) (i64.extend_i32_u (f32.const 0)))
 Wax type-checking should have failed (type mismatch):
-  fn f() -> i64 {
-      0 as i32 as i64_s_strict;
-  }
-from wasm: (func (result i64) (i64.trunc_f32_s (i32.const 0)))
-Wax type-checking should have failed (type mismatch):
-  fn f() -> i64 {
-      0 as i32 as i64_u_strict;
-  }
-from wasm: (func (result i64) (i64.trunc_f32_u (i32.const 0)))
-Wax type-checking should have failed (type mismatch):
-  fn f() -> i64 {
-      0 as i32 as i64_s_strict;
-  }
-from wasm: (func (result i64) (i64.trunc_f64_s (i32.const 0)))
-Wax type-checking should have failed (type mismatch):
-  fn f() -> i64 {
-      0 as i32 as i64_u_strict;
-  }
-from wasm: (func (result i64) (i64.trunc_f64_u (i32.const 0)))
-Wax type-checking should have failed (type mismatch):
   fn f() -> f32 {
       0 as i64 as f32_s;
   }
@@ -571,14 +551,6 @@ from wasm:
     (drop (select (local.get $r) (local.get $r) (i32.const 1)))
   )
 ==== core/unreached-invalid.wast ====
-Wax type-checking should have failed (type mismatch):
-  fn f() {
-      unreachable;
-      _ = !(0 as i32);
-  }
-from wasm:
-  (func $type-num-vs-num (unreachable)
-                         (drop (i64.eqz (i32.const 0))))
 Wax type-checking should have failed (type mismatch):
   fn f() -> i32 {
       'l_2: do i32 {

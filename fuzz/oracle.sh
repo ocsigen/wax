@@ -38,6 +38,37 @@ trap 'rm -rf "$WORK"' EXIT
 
 repro() { echo "$WAX $*"; }
 
+# Count-per-opcode histogram of the *width-sensitive* numeric operators in a
+# module — integer div/rem, the shifts (shl/shr), and the (non-saturating)
+# float->int truncations. Their WIDTH is load-bearing and NOT carried by the Wax
+# surface at every consumer: a dropped/unpinned i64 tree that narrows to i32
+# turns a nonzero divisor into 0 (a divide-by-zero trap), a shift count masks to
+# the wrong modulus (4096 >>u 40 is 0 as i64, 16 as i32), and a trunc whose
+# source float width narrows changes which inputs trap / the value it produces.
+# This is the width-eraser class (ROADMAP.md §1), invisible to every validity
+# oracle (both sides validate; only execution sees it). No legitimate round-trip
+# rewrite touches these families (cast fusion only moves extend/wrap/reinterpret;
+# div/rem/shift lower straight through; a truncation's source is pinned in
+# from_wasm), so any change is a bug — verified false-positive-free over the
+# corpus (0 findings; fires on a neutered wax).
+#
+# Deliberately EXCLUDED: comparisons, [eqz] and [i32.wrap_i64]. Their width is
+# also erased and IS fixed in from_wasm, but they are not histogram-clean: a
+# comparison in dead code drifts harmlessly (holes re-default: [f32.eq]->[i32.eq]),
+# and a [wrap] is legitimately folded away against an [extend] ([i32.wrap_i64
+# (i64.extend_i32_u x)] = x). Those consumers are covered by the deterministic
+# [fuzz/drop-width.sh] sweep instead, which controls the operand shape.
+#
+# Returns non-zero (so the caller skips the check) if the reference cannot print
+# the argument — then there is no trustworthy ground truth to compare against.
+width_op_histogram() {
+  local txt
+  txt="$("$WASM_TOOLS" print "$1" 2>/dev/null)" || return 1
+  printf '%s\n' "$txt" \
+    | grep -oE 'i(32|64)\.(div|rem|shr)_[su]|i(32|64)\.shl\b|i(32|64)\.trunc_f(32|64)_[su]\b' \
+    | sort | uniq -c
+}
+
 # ---- 1. Crash sweep: convert to every target format, with and without -v. ----
 # Pure conversion must never crash regardless of validity; validation (-v) adds
 # the typing/well-formedness paths.
@@ -201,6 +232,16 @@ if [ "$FMT" != wax ]; then
       finding ROUNDTRIP HIGH "$IN" \
         "x->wax->wasm is rejected by wasm-tools: $(head -1 "$WORK/via.wasm.err")" \
         "$(repro "${wa[@]}") && $(repro "${rb[@]}") && wasm-tools validate --features all $WORK/via.wasm"
+    elif orig_hist="$(width_op_histogram "$IN")" \
+         && via_hist="$(width_op_histogram "$WORK/via.wasm")" \
+         && [ "$orig_hist" != "$via_hist" ]; then
+      # The recompiled binary validates but a width-sensitive opcode changed width
+      # (or count) — the width-eraser class, which both sides validate through.
+      # Generalizes drop-width.sh to arbitrary corpus/smith/mutant inputs, which
+      # carry no assertions for the execution oracles.
+      finding WIDTHDRIFT HIGH "$IN" \
+        "round-trip changed a width-sensitive opcode (div/rem/shift/trunc_f histogram: [${orig_hist//$'\n'/; }] -> [${via_hist//$'\n'/; }])" \
+        "$(repro "${wa[@]}") && $(repro "${rb[@]}") && diff <(wasm-tools print $IN | grep -oE 'i(32|64)\.(div|rem|shr)_[su]|i(32|64)\.shl|i(32|64)\.trunc_f(32|64)_[su]') <(wasm-tools print $WORK/via.wasm | grep -oE 'i(32|64)\.(div|rem|shr)_[su]|i(32|64)\.shl|i(32|64)\.trunc_f(32|64)_[su]')"
     fi
   fi
 fi
