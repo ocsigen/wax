@@ -10,6 +10,8 @@ exception Conditional_in_binary of location
    the caller can report a located diagnostic rather than crash. *)
 exception Unresolved_reference of location * string
 
+(*** Index spaces and the context ***)
+
 type index_space = { map : B.idx StringMap.t; count : int }
 
 let empty_space = { map = StringMap.empty; count = 0 }
@@ -81,6 +83,8 @@ let resolve_label labels (idx : T.idx) : B.idx =
       find_depth labels 0
 
 (* Conversion functions *)
+
+(*** Type conversion ***)
 
 let heaptype ctx (h : T.heaptype) : B.heaptype =
   match h with
@@ -197,6 +201,8 @@ let string i ty s =
         (fun c acc ->
           { i with desc = B.Const (I32 (Int32.of_int (Char.code c))) } :: acc)
         s [] )
+
+(*** Instruction conversion ***)
 
 let rec instr ~resolve_string_type ~resolve_func_type ctx (i : 'info T.instr) =
   let desc : _ B.instr_desc =
@@ -464,6 +470,8 @@ let rec instr ~resolve_string_type ~resolve_func_type ctx (i : 'info T.instr) =
             List.map (instr ~resolve_string_type ~resolve_func_type ctx) is )
   in
   { desc; info = i.info }
+
+(*** Module conversion ***)
 
 let collect_labels instrs ctr map =
   let add ctr map label =

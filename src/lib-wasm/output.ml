@@ -6,6 +6,8 @@ module Uint32 = Wax_utils.Uint32
 module Uint64 = Wax_utils.Uint64
 open Ast.Text
 
+(*** Printer primitives and sexp model ***)
+
 let get_theme use_color =
   if use_color then
     {
@@ -192,6 +194,8 @@ let index ?(style = Identifier) x =
   let loc = x.Ast.info in
   match x.desc with Num i -> u32 ~style ~loc i | Id s -> id ~style ~loc s
 
+(*** Type printing ***)
+
 let heaptype (ty : heaptype) =
   match heaptype_keyword ty with
   | Some kw -> type_ kw
@@ -304,6 +308,8 @@ let limits
       ]
 
 let tabletype { limits = l; reftype = typ } = limits l @ [ reftype typ ]
+
+(*** Operators, immediates, and SIMD ***)
 
 let quoted_string s =
   let loc = s.Ast.info in
@@ -634,6 +640,8 @@ let branch_hint_annotation (likely : bool) =
           s = "\"" ^ s ^ "\"";
         };
     ]
+
+(*** The instruction printer ***)
 
 let rec instr i =
   let loc = i.Ast.info in
@@ -1155,6 +1163,8 @@ let rec instr i =
 let instrs l =
   match l with [] -> [] | _ -> [ Vertical_block (None, List.map instr l) ]
 
+(*** Types, declarations, and module fields ***)
+
 let subtype ?loc t =
   let id, { typ; supertype; final; descriptor; describes } = t.Ast.desc in
   let loc = match loc with Some _ -> loc | None -> Some t.Ast.info in
@@ -1406,6 +1416,8 @@ let rec modulefield f =
         (block [ atom ~style:Annotation "@if"; cond_doc cond ]
         :: clause "then" then_fields
         :: option (fun e -> [ clause "else" e ]) else_fields)
+
+(*** Entry points ***)
 
 let module_ ?(color = Auto) ?out_channel ?(tail = []) ?collect printer ~trivia
     (id, fields) =

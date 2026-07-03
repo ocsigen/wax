@@ -7,6 +7,8 @@ module Atomics = Wax_wasm.Atomics
 open Wax_lang.Ast
 module StringMap = Map.Make (String)
 
+(*** The conversion context ***)
+
 type ctx = {
   globals : (string, unit) Hashtbl.t;
   functions : (string, unit) Hashtbl.t;
@@ -28,6 +30,8 @@ type ctx = {
   types : Wax_lang.Typing.types;
   diagnostics : Wax_utils.Diagnostic.context;
 }
+
+(*** Types, indices, and instruction helpers ***)
 
 let with_loc loc desc = { desc; info = loc }
 
@@ -206,6 +210,8 @@ let typeuse typ sign =
   in
   (idx, type_info)
 
+(*** Expression and receiver helpers ***)
+
 (* Raised when an instruction's type is unknown ([None]). After type-checking
    succeeds this only happens in unreachable (dead) code — a value taken off the
    polymorphic stack. The instruction cannot be translated (e.g. [array.get]
@@ -343,6 +349,8 @@ let table_receiver ctx s =
 let segment_receiver ctx s =
   (Hashtbl.mem ctx.datas s || Hashtbl.mem ctx.elems s)
   && not (StringMap.mem s ctx.locals)
+
+(*** Labels, control, and memory helpers ***)
 
 (* The branch context threaded down a function body. [return] is the function's
    result label with its current de Bruijn depth, so a branch to it is emitted
@@ -620,6 +628,8 @@ let neg_int_const_fits bits s =
   with
   | None -> false (* magnitude exceeds u64 *)
   | Some v -> Int64.unsigned_compare v (Int64.shift_left 1L (bits - 1)) <= 0
+
+(*** The instruction converter ***)
 
 let rec instruction ret ctx i : location Text.instr list =
   let _, loc = i.info in
@@ -1758,6 +1768,8 @@ and instruction_desc ret ctx i : location Text.instr list =
                else_body = Option.map conv else_body;
              });
       ]
+
+(*** Module-field conversion ***)
 
 let import attributes =
   List.find_map

@@ -1,6 +1,8 @@
 open Cmdliner
 open Term.Syntax
 
+(*** Parsers and I/O helpers ***)
+
 module Wat_parser =
   Wax_wasm.Parsing.Make_parser
     (struct
@@ -151,6 +153,8 @@ let wax_trivia ?retarget ctx ast =
 let usage_error msg =
   Printf.eprintf "%s\n" msg;
   exit 123
+
+(*** Conversion pipelines ***)
 
 let wat_to_wat ~input_file ~output_file ~validate ~warn_unused ~color
     ~output_color ~fold_mode ~defines ~source_map_file:_ =
@@ -365,6 +369,8 @@ let wasm_to_wax ~input_file ~output_file ~validate ~warn_unused ~color
       let fmt = Format.formatter_of_out_channel oc in
       Format.fprintf fmt "%a@." print_wax wax_ast)
 
+(*** Formats, options, and policy ***)
+
 type format = Wat | Wasm | Wax
 
 let string_of_format = function Wat -> "wat" | Wasm -> "wasm" | Wax -> "wax"
@@ -407,6 +413,8 @@ let build_policy specs =
       | Ok policy -> policy
       | Error _ -> policy)
     Wax_utils.Warning.default_policy specs
+
+(*** Command implementations ***)
 
 let convert input_file output_file input_format_opt output_format_opt validate
     strict_validate color opt_source_map_file fold_mode defines warnings
@@ -618,6 +626,8 @@ let check format_opt strict color warnings features debug defines files =
      exit code (128) with convert, not the usage-error code. *)
   if not (List.fold_left (fun ok file -> check_one file && ok) true files) then
     exit 128
+
+(*** Command-line interface ***)
 
 (* Define the input file argument (optional for stdin) *)
 let input_file =

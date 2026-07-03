@@ -18,6 +18,8 @@ exception Numeric_ref_in_conditional of Wax_wasm.Ast.location
    rather than inventing a target. *)
 exception Unresolved_reference of Wax_wasm.Ast.location
 
+(*** Symbol tables and stacks ***)
+
 module Sequence = struct
   type t = {
     index_mapping : (Uint32.t, string) Hashtbl.t;
@@ -317,6 +319,8 @@ module CondTbl = struct
           entries
 end
 
+(*** The conversion context ***)
+
 type ctx = {
   types : Sequence.t;
   struct_fields : (string, Sequence.t * string list) Hashtbl.t;
@@ -375,6 +379,8 @@ type ctx = {
          converted; threaded through [Module_if_annotation]/[If_annotation] so
          the type tables above resolve to the right per-branch declaration. *)
 }
+
+(*** Names, indices, and type conversions ***)
 
 let get_annot e = fst e.Ast.desc
 let get_type e = snd e.Ast.desc
@@ -531,6 +537,8 @@ let rectype st (t : Src.rectype) : Ast.rectype =
     t
 
 let globaltype st = muttype valtype st
+
+(*** Type lookup and arity ***)
 
 type _ kind =
   | Type : Src.subtype kind
@@ -702,6 +710,8 @@ Step 1: traverse types and find existing names
 Step 2: use this info to generate using names without reusing existing names
 *)
 
+(*** The conversion stack ***)
+
 module Stack = struct
   type stack = (bool * Ast.location Ast.instr) list
   type 'a t = stack -> stack * 'a
@@ -747,6 +757,8 @@ let ( let* ) e f st =
 
 let return v st = (st, v)
 let sequence l = match l with [ i ] -> i | _ -> Ast.no_loc (Ast.Sequence l)
+
+(*** Instruction-conversion helpers ***)
 
 let is_integer =
   let int_re =
@@ -1136,6 +1148,8 @@ let pin_descriptor_reftype ctx (t : Src.reftype) d =
   | Type x -> pin_descriptor ctx ~exact:false x d
   | Exact x -> pin_descriptor ctx ~exact:true x d
   | _ -> d
+
+(*** The instruction converter ***)
 
 let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   let with_loc (i' : _ Ast.instr_desc) = { i with Ast.desc = i' } in
@@ -2018,6 +2032,8 @@ and instructions ctx l =
       let* () = instruction ctx i in
       instructions ctx rem
 
+(*** Module-field conversion ***)
+
 let bind_locals st l =
   List.map
     (fun e ->
@@ -2577,6 +2593,8 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
   in
   Option.to_list (Option.map (fun desc -> { f with desc }) desc) @ !extra
 
+(*** Implicit type elaboration and name registration ***)
+
 (* Structural equality on function types, ignoring parameter names and source
    locations. Used to replicate the WAT type-use abbreviation, where an inline
    signature reuses an identical existing type rather than minting a new one. *)
@@ -2832,6 +2850,8 @@ let collect_exports cond_env diagnostics fields =
   in
   go Cond.true_ fields;
   (tbl, !lst)
+
+(*** Module conversion ***)
 
 let rec module_has_conditional fields =
   List.exists

@@ -1,5 +1,7 @@
 (*ZZZ Fix string/ident location*)
 
+(*** Regexp definitions ***)
+
 let sign = [%sedlex.regexp? Opt ('+' | '-')]
 let digit = [%sedlex.regexp? '0' .. '9']
 let hexdigit = [%sedlex.regexp? '0' .. '9' | 'a' .. 'f' | 'A' .. 'F']
@@ -47,6 +49,8 @@ let reserved = [%sedlex.regexp? Plus (idchar | ',' | '[' | ']' | '{' | '}')]
 let space = [%sedlex.regexp? ' ' | format | comment]
 *)
 let keyword = [%sedlex.regexp? 'a' .. 'z', Star idchar]
+(*** String and comment scanning ***)
+
 let string_buffer = Buffer.create 256
 
 let rec comment_rec lexbuf =
@@ -181,6 +185,8 @@ let with_loc ctx f lexbuf =
     desc
 
 open Tokens
+
+(*** The tokenizer ***)
 
 let rec token_rec ctx lexbuf =
   match%sedlex lexbuf with
@@ -955,6 +961,8 @@ let rec token_rec ctx lexbuf =
         (Parsing.Syntax_error
            ( Sedlexing.lexing_bytes_positions lexbuf,
              Printf.sprintf "Syntax error.\n" ))
+
+(*** Entry points ***)
 
 let token ctx =
   let prev_token = ref None in

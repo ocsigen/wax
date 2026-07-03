@@ -12,6 +12,8 @@ let ( let*@ ) = Option.bind
 let ( let+@ ) o f = Option.map f o
 let ( let>@ ) o f = Option.iter f o
 
+(*** Source types and printers ***)
+
 let print_string f s =
   let s = s.Ast.desc in
   let len, s = Output.escape_string s in
@@ -142,6 +144,8 @@ let source_of_valtype (ty : valtype) : source_type =
     | F64 -> F64
     | V128 -> V128
     | Ref { nullable; typ } -> Ref { nullable; typ = source_of_heaptype typ })
+
+(*** Diagnostics ***)
 
 module Error = struct
   open Wax_utils
@@ -736,6 +740,8 @@ end
 
 let print_instr f i = Wax_utils.Printer.run f (fun p -> Output.instr p i)
 
+(*** Symbol tables (sequences) ***)
+
 module Sequence = struct
   type 'a t = {
     name : string;
@@ -784,6 +790,8 @@ module Sequence = struct
         try Hashtbl.find seq.label_mapping id
         with Not_found -> assert false (* Should not happen *))
 end
+
+(*** Types and the type context ***)
 
 type type_context = {
   types : Types.t;
@@ -1067,6 +1075,8 @@ let string_type ctx =
       };
     |]
 
+(*** The module context ***)
+
 type module_context = {
   diagnostics : Wax_utils.Diagnostic.context;
   types : type_context;
@@ -1278,6 +1288,8 @@ let source_element_valtype ctx idx : source_type =
   | Array (ft : Ast.Text.fieldtype) -> (
       match ft.typ with Value v -> Plain v | Packed _ -> Plain I32)
   | _ -> assert false
+
+(*** The validation stack ***)
 
 (* A stack entry is one of the two bottoms of the validation type lattice or a
    concrete value. [Bot] is the unknown value of a polymorphic (unreachable)
@@ -1582,6 +1594,8 @@ let with_empty_stack ctx location f =
           Error.non_empty_stack ctx.diagnostics ~location (fun f () ->
               Format.fprintf f "@[%a@]" (output_stack ~full:false) st))
 
+(*** Instruction-checking helpers ***)
+
 (* Check that a list of [provided] argument types matches a list of [expected]
    parameter types: same length, and each argument a subtype of the
    corresponding parameter. [descr] names the construct supplying the
@@ -1861,6 +1875,8 @@ let get_elem ctx = Sequence.get ctx.modul.diagnostics ctx.modul.elem
 (* Pop a memory/table address operand, whose width follows the address type. *)
 let pop_address ctx loc limits =
   pop_known ctx loc (address_type_to_valtype limits.address_type)
+
+(*** The instruction validator ***)
 
 let rec instruction ctx (i : _ Ast.Text.instr) =
   if false then Format.eprintf "%a@." print_instr i;
@@ -3199,6 +3215,8 @@ and block ctx loc label ~param_source ~result_source ~br_source ~params ~results
      in
      pop_args ctx loc ~source:result_source (*ZZZ More precise loc*) results)
 
+(*** Constant expressions ***)
+
 let rec check_constant_instruction ctx (i : _ Ast.Text.instr) =
   match i.desc with
   | GlobalGet idx ->
@@ -3268,6 +3286,8 @@ let constant_expression ctx ~location ~expected_source ty expr =
      in
      let* () = instructions ctx expr in
      pop ctx location ~expected_source ty)
+
+(*** Type registration and the module environment ***)
 
 let add_type d ctx ty =
   Array.iteri
@@ -3700,6 +3720,8 @@ let check_type_definitions ctx =
     end
   done
 
+(*** Module-field validation passes ***)
+
 let tables_and_memories ctx fields =
   List.iter
     (fun (field : (_ Ast.Text.modulefield, _) Ast.annotated) ->
@@ -3938,6 +3960,8 @@ let start ctx fields =
       | _ -> ())
     fields
 
+(*** Whole-module validation ***)
+
 (* Syntactic well-formedness checks that the stack-based validation does not
    cover: duplicate identifiers in each namespace, an inline type annotation
    that disagrees with the type it names, duplicate parameter/local names, and a
@@ -4149,6 +4173,8 @@ let validate_configuration ?(warn_unused = true)
    a conditional-free module — validating it with {!validate_configuration}, and
    reporting each distinct error once, annotated with the minimal assumption
    under which it occurs. *)
+
+(*** Conditional compilation and entry point ***)
 
 let rec instr_has_conditional (i : _ Ast.Text.instr) =
   match i.desc with

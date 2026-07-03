@@ -21,6 +21,8 @@ type typed_module_annotation = Ast.storagetype option array * Ast.location
 
 open Infer
 
+(*** Diagnostics ***)
+
 module Error = struct
   open Wax_utils
 
@@ -424,6 +426,8 @@ module Error = struct
       print_name x
 end
 
+(*** Symbol tables and namespaces ***)
+
 module StringSet = Set.Make (String)
 module StringMap = Map.Make (String)
 
@@ -537,6 +541,8 @@ module Tbl = struct
     | _ :: (_ :: _ as tl) -> Hashtbl.replace env.tbl x.desc tl
     | _ -> Hashtbl.remove env.tbl x.desc
 end
+
+(*** Types and the type context ***)
 
 type types = (int * subtype) Tbl.t
 
@@ -773,6 +779,8 @@ let add_type d ctx ty =
         ty;
       Some i'
 
+(*** The module context ***)
+
 type module_context = {
   (* --- Diagnostics and whole-run configuration --- *)
   diagnostics : Wax_utils.Diagnostic.context;
@@ -843,6 +851,8 @@ type module_context = {
          set while typing a conditional branch so names resolve per branch. *)
   cond_env : Cond.env;
 }
+
+(*** Name resolution and subtyping ***)
 
 (* Type [f] under the assumption of a conditional branch ([positive] for
    [@then], negative for [@else]), restoring the previous assumption after. *)
@@ -1287,6 +1297,8 @@ let signed_cast ctx ty ty' =
   | UnknownRef, (`F32 | `F64) -> false
   | (Unknown | Error | Collecting _), _ -> true
 
+(*** The typing stack ***)
+
 type stack =
   | Unreachable
   | Empty
@@ -1423,6 +1435,8 @@ let with_empty_stack ctx ~kind:_ ~location f =
           Error.non_empty_stack ctx.diagnostics ~location (fun f () ->
               Format.fprintf f "@[%a@]" output_stack st)));
   res
+
+(*** Instruction-checking helpers ***)
 
 let internalize_valtype ctx typ =
   let+@ internal = valtype ctx.diagnostics ctx.type_context typ in
@@ -3100,6 +3114,8 @@ let rec classify_trailing ctx desc =
       ( fst (classify_trailing ctx a.desc) || fst (classify_trailing ctx b.desc),
         false )
   | _ -> (false, false)
+
+(*** The instruction type-checker ***)
 
 (* Set to [true] to trace each instruction as it is type-checked. *)
 let debug = false
@@ -7363,6 +7379,8 @@ and try_inference ctx i label typ ~body ~catches ~catch_all =
       in
       fun typ -> Try { label; typ; block = body'; catches; catch_all })
 
+(*** Module type and constant checking ***)
+
 let check_type_definitions ctx =
   (*ZZZ In-order check? *)
   Tbl.iter ctx.types (fun _ (i, (st : subtype)) ->
@@ -7529,6 +7547,8 @@ let rec check_constant_instruction ctx i =
   | ContBind _ | Suspend _ | Resume _ | ResumeThrow _ | ResumeThrowRef _
   | Switch _ | Return _ | Sequence _ | Select _ | If_annotation _ ->
       Error.constant_expression_required ctx.diagnostics ~location
+
+(*** Globals, functions, and declarations ***)
 
 type ('before, 'after) phased =
   | Before of 'before
@@ -7995,6 +8015,8 @@ let check_attributes diagnostics field =
       Error.declaration_without_import diagnostics ~location:field.info
   | _ -> ()
 
+(*** Type-checking a configuration ***)
+
 let type_configuration ?(warn_unused = false) ?(build = true)
     ?(features = Wax_utils.Feature.default ()) ~simplify diagnostics fields =
   let cond = ref Cond.true_ in
@@ -8239,6 +8261,8 @@ let type_configuration ?(warn_unused = false) ?(build = true)
 (* Conditional annotations denote mutually-exclusive branches, so they are
    type-checked by exploring every reachable configuration (as the WAT validator
    does), rather than checking both branches as if they coexisted. *)
+
+(*** Conditional compilation and entry points ***)
 
 let rec instr_has_conditional (i : (_ instr_desc, _) annotated) =
   let any = List.exists instr_has_conditional in

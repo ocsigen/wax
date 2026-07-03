@@ -1,6 +1,8 @@
 open Ast
 open Ast.Binary
 
+(*** The byte encoder ***)
+
 module Encoder = struct
   let byte b i = Buffer.add_char b (Char.chr i)
   let string b s = Buffer.add_string b s
@@ -1184,6 +1186,8 @@ module Encoder = struct
     byte b 0x0B
 end
 
+(*** Section emission ***)
+
 let output_section ch id encoder data =
   let b = Buffer.create 1024 in
   encoder b data;
@@ -1309,6 +1313,8 @@ let output_branch_hint_section out_channel
             b hints)
         b func_hints)
     ()
+
+(*** The module writer ***)
 
 let module_ ~out_channel ?output_file ?opt_source_map_file
     (m : Ast.location module_) =

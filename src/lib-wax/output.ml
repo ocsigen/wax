@@ -13,6 +13,8 @@ let indent_level = 4
    formatter. *)
 let width = 100
 
+(*** Printer primitives ***)
+
 let get_theme use_color =
   if use_color then
     {
@@ -140,6 +142,8 @@ let print_arg_list f pp l =
           list_commasep_trailing f pp l);
       cut pp ());
   punctuation pp ")"
+
+(*** Type printing ***)
 
 let heaptype pp (t : heaptype) =
   match heaptype_keyword t with
@@ -320,6 +324,8 @@ let rectype pp t =
           space pp ();
           punctuation pp "}")
 
+(*** Operators and precedence ***)
+
 let binop op =
   match op with
   | Add -> "+"
@@ -393,6 +399,8 @@ let prec_op op =
   | Xor -> (LogicalXor, LogicalXor, LogicalAnd)
   | Shl | Shr _ -> (Shift, Shift, Addition)
   | Gt _ | Lt _ | Ge _ | Le _ | Eq | Ne -> (Comparison, LogicalOr, LogicalOr)
+
+(*** Instruction-printing helpers ***)
 
 let block_label pp label =
   Option.iter
@@ -710,6 +718,8 @@ let match_pattern pp (pat : Ast.match_pattern) =
         bind;
       reftype pp rt
   | MatchNull -> keyword pp "null"
+
+(*** The instruction printer ***)
 
 let rec instr prec pp (i : _ instr) =
   atomic_node pp (pp.locate i.info) @@ fun () ->
@@ -1329,6 +1339,8 @@ and block_contents pp (l : _ instr list) =
 and located_block_contents pp (b : (_ instr list, location) annotated) =
   atomic_node pp (Some b.info) (fun () -> block_contents pp b.desc)
 
+(*** Declarations, attributes, and module fields ***)
+
 let fundecl ?(exact = false) ~tag pp (name, typ, sign) =
   (* The whole signature is one all-or-nothing group anchored at the [fn]
      column: [fn name] stays glued (its own [hbox]) and so does [-> Ret], so the
@@ -1661,6 +1673,8 @@ let rec modulefield pp field =
               newline pp ();
               branch e)
             else_fields)
+
+(*** Entry points ***)
 
 let module_ ?(color = Auto) ?out_channel ?(tail = []) ?collect printer ~trivia
     (l : location module_) =

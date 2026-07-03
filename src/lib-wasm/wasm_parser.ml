@@ -2,6 +2,8 @@ open Ast.Binary
 
 let header = "\000asm\001\000\000\000"
 
+(*** The input channel and primitive readers ***)
+
 type ch = {
   filename : string option;
   buf : string;
@@ -179,6 +181,8 @@ let name ch =
   if not (String.is_valid_utf_8 s) then error ch "malformed UTF-8 encoding";
   s
 
+(*** Section framing ***)
+
 type section = { id : int; pos : int; size : int }
 
 let next_section ch =
@@ -198,6 +202,8 @@ let next_section ch =
 let skip_section (ch : ch) { pos; size; _ } =
   if ch.pos > pos + size then error ch "section size mismatch";
   seek_in ch (pos + size)
+
+(*** Type and entity decoding ***)
 
 let heaptype ch =
   let i = sint ch in
@@ -475,6 +481,8 @@ let on_clause ch =
 let resumetable ch =
   let n = uint ch in
   List.init n (fun _ -> on_clause ch)
+
+(*** Instruction decoding ***)
 
 let rec instructions ch acc =
   if pos_in ch = ch.limit then List.rev acc
@@ -1288,6 +1296,8 @@ and instruction ch =
   in
   with_loc ch pos desc
 
+(*** Section readers ***)
+
 let expr ch =
   let instrs = instructions ch [] in
   expect_end ch;
@@ -1548,6 +1558,8 @@ let attach_branch_hints ~num_func_imports ~code_starts ~sections
             let start_pos = List.nth code_starts ci in
             { c with instrs = List.map (go start_pos tbl) c.instrs })
       code
+
+(*** The module reader ***)
 
 let module_ diagnostics ?filename buf =
   Wax_utils.Debug.timed "parse" @@ fun () ->
