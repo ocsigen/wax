@@ -75,7 +75,11 @@ jobs:
 
       - name: Stage the binary
         shell: bash
-        run: cp _build/default/src/bin/main.exe "${{ matrix.exe }}"
+        # dune leaves _build artifacts read-only; make the copy writable so the
+        # strip step can rewrite it in place.
+        run: |
+          cp _build/default/src/bin/main.exe "${{ matrix.exe }}"
+          chmod u+w "${{ matrix.exe }}"
 
       # Only the (large) static Linux binary is stripped; macOS/Windows strip
       # behaviour varies and the size win there is small.
