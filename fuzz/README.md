@@ -50,6 +50,7 @@ fuzz/triage.sh REPORT       # collapse a findings report into ranked bug signatu
 fuzz/wax-corpus.sh [smith-count] [bytes]   # build .wax seeds: spec corpus + smith modules
 fuzz/mutate-wax.sh [count]       # AST-mutate the wax seeds + check them (needs wasm-tools)
 fuzz/mutate-validate.sh [count]  # AST-mutate + emitter-soundness vs the spec reference (no wasm-tools)
+fuzz/type-fuzz.sh                # type-check GENERATED hand-written-style wax (fuzz_gen); COUNT=N
 fuzz/cast-lattice.sh             # deterministic sweep of the numeric/ref cast lattice
 fuzz/cond-fuzz.sh                # fuzz #[if]/-D conditional compilation (Cond_explore soundness); GEN=N for generated conditions
 
@@ -78,9 +79,9 @@ fuzz/exec-mutate.sh [wast…] # behavioural check on semantics-preserving mutant
 
 `run.sh`, `smith.sh`, `mutate-wax.sh`, `diff-validate.sh`, `mutate-validate.sh`,
 `cast-lattice.sh`, `wat-cast-chain.sh`, `wat-cast-const.sh`, `stress.sh`,
-`comment-preserve.sh`, `cond-fuzz.sh` and `fold-fuzz.sh` exit non-zero if any
-**HIGH**-severity finding appears, so any can gate CI; the execution oracles
-exit non-zero on any behavioural regression.
+`comment-preserve.sh`, `cond-fuzz.sh`, `fold-fuzz.sh` and `type-fuzz.sh` exit
+non-zero if any **HIGH**-severity finding appears, so any can gate CI; the
+execution oracles exit non-zero on any behavioural regression.
 
 The mutation campaigns (`mutate-wax.sh`, `mutate-wat.sh`, `mutate-wasm.sh`) are
 reproducible: each derives every per-mutation seed from a master `SEED`
@@ -172,6 +173,43 @@ Wax generator for syntactic constructs the decompiler never emits.
   property: the set of casts the typer accepts must equal the set `to_wasm` can
   lower (`cast`/`signed_cast` and `default_cast` are two hand-maintained tables
   that must agree cell for cell). Deterministic, so it belongs in CI.
+
+## Generated Wax source (`type-fuzz.sh`)
+
+Everything above type-checks Wax that was **decompiled from wasm** (the
+`mutate-wax` / `diff-validate` seeds), so it only ever contains the constructs
+`from_wasm` emits — never the surface sugar a human writes, which is exactly
+what large parts of `lib-wax/typing.ml` exist to check: infix operators and
+their signed/unsigned variants, `as` conversions, method and reinterpret
+intrinsics (`.clz()`, `.sqrt()`, `.to_bits()`, …), and `if`/`?:` with inferred
+result types. `type-fuzz.sh` closes that gap with `fuzz_gen`
+(`src/bin/fuzz_gen.ml`), an AST generator.
+
+`fuzz_gen` builds a **real Wax AST and prints it through `Wax_lang.Output`** —
+the same technique as `fuzz_mutate` — so the source ALWAYS re-parses; a rejection
+is a genuine type verdict, never a serialization slip (unlike a text generator,
+which fights the grammar's precedence and optional tokens). It is
+**type-directed**: every expression is built to a chosen type, so a module
+type-checks and the checker runs its inference/checking arms in full rather than
+bailing early — measured at 100% accepted over 400 seeds. The trick that keeps
+this tractable is that every function shares one parameter signature
+(`a:i32 b:i64 c:f32 d:f64`), so an expression of any type is always formable and
+any function is callable uniformly. Polymorphic literals (a bare float defaults
+to f64) are emitted only in type-*forced* positions — a binop operand pinned by
+its sibling, an `if`/`?:` branch pinned by the result type — never as a
+method/cast receiver, whose type the checker infers bottom-up. With `err` it
+plants a single mismatch instead, to exercise the rejection arms (100% cleanly
+rejected, never a crash).
+
+The oracle is the checker-soundness invariant *"Wax typing mirrors Wasm
+validation"*: an accepted module must emit a binary the reference validator
+accepts (`UNSOUND` otherwise), whose decompilation recompiles to a valid binary
+(`ROUNDTRIP`), and type-checking must never crash. On its own `fuzz_gen` reaches
+the scalar-numeric + control fragment of `typing.ml`; its value is the arms the
+decompiled corpus never reaches (operators, conversions, select/if inference —
+worth ~+90 lines of `typing.ml` and +8 pts of `infer.ml` over a decompiled-only
+baseline). Struct/array/reference types and `match`/`dispatch` are the natural
+next extension for a larger share of the checker.
 
 ## Conditional compilation
 
