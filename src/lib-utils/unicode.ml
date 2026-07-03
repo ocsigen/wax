@@ -52,3 +52,19 @@ let utf16_code_units s =
         loop i ((0xDC00 lor (c land 0x3FF)) :: (0xD800 lor (c lsr 10)) :: acc)
   in
   loop 0 []
+
+let utf16_decode units =
+  let b = Buffer.create (List.length units) in
+  let rec decode = function
+    | [] -> Some (Buffer.contents b)
+    | hi :: lo :: rest when hi land 0xFC00 = 0xD800 && lo land 0xFC00 = 0xDC00
+      ->
+        let c = 0x10000 + ((hi land 0x3FF) lsl 10) + (lo land 0x3FF) in
+        Buffer.add_utf_8_uchar b (Uchar.of_int c);
+        decode rest
+    | u :: rest when u < 0xD800 || u > 0xDFFF ->
+        Buffer.add_utf_8_uchar b (Uchar.of_int u);
+        decode rest
+    | _ -> None
+  in
+  decode units
