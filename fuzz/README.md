@@ -62,6 +62,9 @@ fuzz/wat-cast-const.sh      # deterministic round-trip of each conversion on edg
 # wasm *binary* input side (the binary reader):
 fuzz/mutate-wasm.sh [count] # byte-mutate the valid wasm corpus + check them
 
+# Folding pass (--fold/--unfold; lib-wasm/folding.ml):
+fuzz/fold-fuzz.sh           # fold/unfold confluence on modules generated dense with exotic opcodes; GEN=N
+
 # Deterministic cross-cutting guards (no corpus needed; CI-gating):
 fuzz/stress.sh              # resource-limit sweep: deep nesting / wide constructs never crash
 fuzz/comment-preserve.sh    # planted sentinel comments survive every text<->text conversion
@@ -75,9 +78,9 @@ fuzz/exec-mutate.sh [wast…] # behavioural check on semantics-preserving mutant
 
 `run.sh`, `smith.sh`, `mutate-wax.sh`, `diff-validate.sh`, `mutate-validate.sh`,
 `cast-lattice.sh`, `wat-cast-chain.sh`, `wat-cast-const.sh`, `stress.sh`,
-`comment-preserve.sh` and `cond-fuzz.sh` exit non-zero if any **HIGH**-severity
-finding appears, so any can gate CI; the execution oracles exit non-zero on any
-behavioural regression.
+`comment-preserve.sh`, `cond-fuzz.sh` and `fold-fuzz.sh` exit non-zero if any
+**HIGH**-severity finding appears, so any can gate CI; the execution oracles
+exit non-zero on any behavioural regression.
 
 The mutation campaigns (`mutate-wax.sh`, `mutate-wat.sh`, `mutate-wasm.sh`) are
 reproducible: each derives every per-mutation seed from a master `SEED`
@@ -215,6 +218,39 @@ conditions. Both top-level and in-function conditionals are generated.
 `(@if …)` / `(@then)` / `(and`/`or`/`not`/prefix-comparison), exercising the
 lib-wasm WAT specializer that the Wax `#[if]` path never touches. So between the
 two the fuzzer now covers both formats and both conditional positions.
+
+## The folding pass
+
+`fold-fuzz.sh` targets the fold/unfold rewrites (`lib-wasm/folding.ml`), which
+everything else reaches only shallowly: `oracle.sh` sweeps `--fold`/`--unfold`
+for crashes but never checks that folding *preserves* the instruction stream,
+and the corpus's `.wat` files exercise barely half of folding's per-opcode
+arity computation — a ~170-line match over the whole opcode set plus the
+index-resolution helpers. The dark arms are the opcodes the corpus rarely
+carries: stack switching (`cont.*`/`resume*`/`switch`/`suspend`), GC
+struct/array, the SIMD and atomic families, 128-bit ops, and the by-name
+resolution of a name declared with a *different arity* in each branch of a
+conditional.
+
+`fold-gen.awk` generates modules dense with exactly that variety. Two facts
+about the pass shape the output: it runs on **unvalidated** input (so a module
+need only parse, not type-check — and deliberate stack *imbalance* drives
+folding's operand-shortfall / leftover paths, themselves dark arms), and it
+aborts only on an unbound/wrong-kind index or unbound label (so the preamble
+populates every index space and branches only target in-scope labels; all else
+is free to be nonsense). One in two modules also declares a function with a
+different arity in each branch of a top-level `(@if $native …)` and calls it
+unconditionally — the only thing that reaches folding's cross-branch by-name
+resolution. Generating 500 such modules covers **79 %** of `folding.ml` on its
+own, against ~54 % from the whole corpus.
+
+Writing `F` for `--fold` and `U` for `--unfold` (both wat→wat rewrites that do
+not validate), `fold-fuzz.sh` pins two confluence identities per module:
+`U(F(x)) == U(x)` (folding must not perturb the stream) and `F(U(x)) == F(x)`
+(nor must unfolding), plus idempotence `F(F(x)) == F(x)` / `U(U(x)) == U(x)`. A
+text difference is a fold/unfold pass that dropped, duplicated or reordered an
+instruction — a HIGH miscompilation. `GEN=N` sets the module count; the check is
+pure wax text round-trips (no `wasm-tools`) and deterministic given `SEED`.
 
 ## The WAT input side
 
