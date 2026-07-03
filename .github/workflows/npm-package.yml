@@ -1,0 +1,90 @@
+name: npm package
+
+# Build the npm distribution of the Wax CLI and prove it works, without
+# publishing. The package is a single, cross-platform wasm_of_ocaml artifact
+# (one .wasm module + a shebang'd loader as the `wax` bin): it is built once on
+# Linux and then installed and run on Linux, macOS and Windows Node, since the
+# artifact is identical on every OS.
+#
+# Publishing to npm is intentionally not wired up yet; add a tag-gated publish
+# job once this is green and an NPM_TOKEN secret and package name are set.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build package (Ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: "5.4"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Set up Binaryen
+        # Required by wasm_of_ocaml (wasm-opt/wasm-merge); same action and
+        # version js_of_ocaml's own CI uses. `token` avoids GitHub API rate
+        # limits when fetching the Binaryen release.
+        uses: Aandreba/setup-binaryen@v1.0.0
+        with:
+          token: ${{ github.token }}
+
+      - name: Install dependencies
+        run: |
+          opam install . --deps-only
+          opam install wasm_of_ocaml-compiler
+
+      - name: Build and assemble the package
+        run: opam exec -- npm/build.sh
+
+      - name: Pack
+        run: cd npm && npm pack
+
+      - name: Upload package tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-package
+          path: npm/*.tgz
+
+  run:
+    name: Run (${{ matrix.os }}, Node ${{ matrix.node }})
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: ["22", "24"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Download package tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: npm-package
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Install the tarball globally and run the CLI
+        shell: bash
+        run: |
+          npm install -g ./*.tgz
+          wax --help
+          printf 'fn sq(x: i32) -> i32 { x * x; }\n' > t.wax
+          wax -i wax -f wat t.wax
+          wax -i wax -f wasm t.wax -o t.wasm
+          wax -i wasm -f wat t.wasm

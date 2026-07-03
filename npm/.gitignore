@@ -1,0 +1,3 @@
+# Build artifacts assembled by build.sh (published, not committed).
+/wax
+/main.bc.wasm.assets/

@@ -1,0 +1,32 @@
+{
+  "name": "wax",
+  "version": "0.1.0",
+  "description": "A Rust-like syntax for WebAssembly — convert between .wax, .wat and .wasm",
+  "bin": {
+    "wax": "./wax"
+  },
+  "files": [
+    "wax",
+    "main.bc.wasm.assets/",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "license": "Apache-2.0",
+  "keywords": [
+    "webassembly",
+    "wasm",
+    "wat",
+    "wax",
+    "compiler"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vouillon/wasm-syntax.git"
+  },
+  "homepage": "https://github.com/vouillon/wasm-syntax#readme",
+  "bugs": {
+    "url": "https://github.com/vouillon/wasm-syntax/issues"
+  }
+}
