@@ -1,0 +1,161 @@
+name: Release binaries
+
+# Prebuilt `wax` CLI binaries attached to GitHub Releases.
+#
+#   * push to main    -> refresh the rolling `nightly` prerelease
+#   * push a `v*` tag -> attach the same binaries to that version's release
+#   * manual dispatch -> build only (no release), for testing the workflow
+#
+# Targets: a fully static x86_64 Linux binary (runs on any distro, no libc
+# version dependency), native macOS arm64 and x86_64, and a Windows x86_64
+# `.exe`. The npm package (npm-package.yml) ships the portable wasm build; this
+# workflow ships native executables.
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-x86_64
+            os: ubuntu-latest
+            exe: wax-linux-x86_64
+            static: true
+          - target: macos-arm64
+            os: macos-latest
+            exe: wax-macos-arm64
+          - target: macos-x86_64
+            os: macos-13
+            exe: wax-macos-x86_64
+          - target: windows-x86_64
+            os: windows-latest
+            exe: wax-windows-x86_64.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: "5.4"
+
+      - name: Install dependencies
+        run: opam install . --deps-only
+
+      # A fully static Linux binary: inject `-static` at link time through a
+      # CI-only dune-workspace, leaving the committed build files untouched — so
+      # the flag never reaches the macOS/Windows builds, which cannot statically
+      # link against the system libc.
+      - name: Configure static linking (Linux)
+        if: matrix.static
+        shell: bash
+        run: |
+          cat > dune-workspace <<'EOF'
+          (lang dune 3.20)
+          (env
+           (_
+            (link_flags (:standard -ccopt -static))))
+          EOF
+
+      - name: Build
+        run: opam exec -- dune build --profile release src/bin/main.exe
+
+      - name: Stage the binary
+        shell: bash
+        run: cp _build/default/src/bin/main.exe "${{ matrix.exe }}"
+
+      # Only the (large) static Linux binary is stripped; macOS/Windows strip
+      # behaviour varies and the size win there is small.
+      - name: Strip (Linux)
+        if: matrix.static
+        run: strip "${{ matrix.exe }}"
+
+      - name: Verify the Linux binary is static
+        if: matrix.static
+        shell: bash
+        run: |
+          file "${{ matrix.exe }}"
+          # LC_ALL=C so ldd's message is the English one the grep expects.
+          if LC_ALL=C ldd "${{ matrix.exe }}" 2>&1 | grep -q "not a dynamic executable"; then
+            echo "static link OK"
+          else
+            echo "ERROR: expected a static binary"; LC_ALL=C ldd "${{ matrix.exe }}" || true
+            exit 1
+          fi
+
+      - name: Smoke-test
+        shell: bash
+        run: |
+          ./"${{ matrix.exe }}" --help >/dev/null
+          printf 'fn sq(x: i32) -> i32 { x * x; }\n' > t.wax
+          ./"${{ matrix.exe }}" -i wax -f wat t.wax
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.exe }}
+          path: ${{ matrix.exe }}
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: build
+    # Manual dispatch runs build-only, so the workflow can be exercised without
+    # touching any release.
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: release-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - name: Download binaries
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum * > SHA256SUMS
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            tag="$GITHUB_REF_NAME"
+            if gh release view "$tag" >/dev/null 2>&1; then
+              gh release upload "$tag" dist/* --clobber
+            else
+              gh release create "$tag" dist/* \
+                --verify-tag \
+                --title "$tag" \
+                --notes "Prebuilt \`wax\` binaries for $tag."
+            fi
+          else
+            # Rolling prerelease: delete and recreate so the `nightly` tag tracks
+            # the latest main and its assets are always the freshest build.
+            gh release delete nightly --yes --cleanup-tag || true
+            gh release create nightly dist/* \
+              --prerelease \
+              --target "$GITHUB_SHA" \
+              --title "Nightly (main)" \
+              --notes "Prebuilt \`wax\` binaries from the latest \`main\` (${GITHUB_SHA::7}). Rebuilt on every push to main."
+          fi
