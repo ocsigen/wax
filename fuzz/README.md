@@ -62,7 +62,8 @@ fuzz/wat-cast-chain.sh      # deterministic byte-identical round-trip of WAT two
 fuzz/wat-cast-const.sh      # deterministic round-trip of each conversion on edge-value consts (catches over-rejection)
 
 # wasm *binary* input side (the binary reader):
-fuzz/mutate-wasm.sh [count] # byte-mutate the valid wasm corpus + check them
+fuzz/mutate-wasm.sh [count]            # byte-mutate the valid wasm corpus + check them (decoder)
+MODE=struct fuzz/mutate-wasm.sh [count] # structure-aware mutants (wasm-tools mutate): from_wasm / validation / round-trip
 
 # Folding pass (--fold/--unfold; lib-wasm/folding.ml):
 fuzz/fold-fuzz.sh           # fold/unfold confluence on modules generated dense with exotic opcodes; GEN=N

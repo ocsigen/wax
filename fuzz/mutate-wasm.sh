@@ -2,15 +2,24 @@
 #
 # mutate-wasm.sh [count]
 #
-# Byte-mutation fuzzer for the wasm-binary *input* path (the binary reader, which
-# no other fuzzer exercises on malformed input: smith and the corpus are always
-# valid, and mutate-wax/-wat feed text). Each iteration takes a random valid
-# .wasm seed and applies 1-3 byte mutations with mutate-wasm.js — flips,
-# truncation, LEB-edge bytes, insert/delete — keeping the magic+version header so
-# the mutant reaches the section parser, then runs the oracle. The mutant is
-# almost always malformed, so a clean rejection (exit 123 / 128) is expected and
-# NOT a finding; we hunt for what must never happen on ANY input: a CRASH
-# (uncaught exception / signal / timeout) while decoding.
+# Mutation fuzzer for the wasm-binary *input* path (which no other fuzzer
+# exercises: smith and the corpus are always valid, and mutate-wax/-wat feed
+# text). Two complementary modes, selected by MODE (default `bytes`):
+#
+#   MODE=bytes  — blind byte mutation (mutate-wasm.js): 1-3 flips / truncation /
+#     LEB-edge bytes / insert-delete on a valid seed, keeping the magic+version
+#     header so the mutant reaches the section parser. Targets the DECODER on
+#     malformed input: the mutant is almost always malformed, so a clean
+#     rejection (123/128) is expected — we hunt only for a CRASH (uncaught
+#     exception / signal / timeout) while decoding.
+#
+#   MODE=struct — structure-aware mutation (`wasm-tools mutate`): 1-3 chained
+#     transformations that re-encode the parsed module, so the mutant is
+#     STRUCTURALLY valid and gets past the decoder into from_wasm, validation and
+#     the round-trip — the surface byte-flips never reach (they die in the outer
+#     parser). Here a mutant may be semantically valid or invalid; the oracle's
+#     differential, emitter-soundness and round-trip checks carry the signal, not
+#     just crashes. Needs wasm-tools; complements bytes, does not replace it.
 #
 # Seeds default to the valid wasm corpus (fuzz/corpus/valid, from
 # build-corpus.sh); override with SEEDS. Parallel across cores (override with
@@ -20,13 +29,19 @@
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 COUNT="${1:-2000}"
+MODE="${MODE:-bytes}"           # bytes (mutate-wasm.js) | struct (wasm-tools mutate)
 SEEDS="${SEEDS:-$ROOT/fuzz/corpus/valid}"
 JOBS="${JOBS:-$(( $(nproc 2>/dev/null || echo 4) * 4 ))}"
 KEEP="$ROOT/fuzz/mutate-wasm-findings"
 ORACLE="$(dirname "${BASH_SOURCE[0]}")/oracle.sh"
 MUT="$(dirname "${BASH_SOURCE[0]}")/mutate-wasm.js"
 NODE="${NODE:-node}"
-command -v "$NODE" >/dev/null 2>&1 || { echo "node not found (set NODE)" >&2; exit 2; }
+if [ "$MODE" = struct ]; then
+  command -v "$WASM_TOOLS" >/dev/null 2>&1 \
+    || { echo "wasm-tools not found (needed for MODE=struct)" >&2; exit 2; }
+else
+  command -v "$NODE" >/dev/null 2>&1 || { echo "node not found (set NODE)" >&2; exit 2; }
+fi
 [ -d "$SEEDS" ] && [ -n "$(find "$SEEDS" -name '*.wasm' -print -quit)" ] \
   || { echo "no wasm seeds at $SEEDS — run fuzz/build-corpus.sh first" >&2; exit 2; }
 mkdir -p "$KEEP"
@@ -49,11 +64,17 @@ mutate_one() {
     nxt="$(mktemp --suffix=.wasm)"
     # Deterministic per-(mutant, step) seed from the master $SEED so the campaign
     # replays from one number (was $RANDOM — irreproducible).
-    if "$NODE" "$MUT" "$cur" "$(( SEED + i * 8 + step ))" >"$nxt" 2>/dev/null && [ -s "$nxt" ]; then
-      mv "$nxt" "$cur"
+    local s=$(( SEED + i * 8 + step ))
+    local made=0
+    if [ "$MODE" = struct ]; then
+      # wasm-tools mutate applies one structural transformation; chaining n of
+      # them compounds them. It occasionally fails to find a mutation for a seed
+      # (exit 3) — keep the current module and move on.
+      "$WASM_TOOLS" mutate "$cur" --seed "$s" -o "$nxt" 2>/dev/null && [ -s "$nxt" ] && made=1
     else
-      rm -f "$nxt"
+      "$NODE" "$MUT" "$cur" "$s" >"$nxt" 2>/dev/null && [ -s "$nxt" ] && made=1
     fi
+    if [ "$made" = 1 ]; then mv "$nxt" "$cur"; else rm -f "$nxt"; fi
     step=$((step + 1)); n=$((n - 1))
   done
   out="$(bash "$ORACLE" "$cur" unknown 2>/dev/null)"
@@ -68,10 +89,10 @@ mutate_one() {
   rm -f "$cur"
 }
 export -f mutate_one
-export WAX WASM_TOOLS TIMEOUT WT_FEATURES ORACLE RESULTS KEEP NSEEDS MUT NODE SEED
+export WAX WASM_TOOLS TIMEOUT WT_FEATURES ORACLE RESULTS KEEP NSEEDS MUT NODE SEED MODE
 
 announce_seed "$(basename "$0") $COUNT"
-echo "mutating $COUNT wasm variants from $NSEEDS seeds across $JOBS jobs..." >&2
+echo "mutating $COUNT wasm variants ($MODE) from $NSEEDS seeds across $JOBS jobs..." >&2
 seq 1 "$COUNT" | xargs -P "$JOBS" -I{} bash -c '
   mapfile -t SEED_FILES < "$RESULTS/seeds"; mutate_one "$@"' _ {}
 echo >&2
