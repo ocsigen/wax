@@ -6,8 +6,8 @@ description:
 maintainer: ["Jérôme Vouillon"]
 authors: ["Jérôme Vouillon"]
 license: "Apache-2.0"
-homepage: "https://github.com/vouillon/wasm-syntax"
-bug-reports: "https://github.com/vouillon/wasm-syntax/issues"
+homepage: "https://github.com/vouillon/wax"
+bug-reports: "https://github.com/vouillon/wax/issues"
 depends: [
   "dune" {>= "3.20"}
   "ocaml" {>= "4.14"}
@@ -32,5 +32,5 @@ build: [
     "@doc" {with-doc}
   ]
 ]
-dev-repo: "git+https://github.com/vouillon/wasm-syntax.git"
+dev-repo: "git+https://github.com/vouillon/wax.git"
 x-maintenance-intent: ["(latest)"]

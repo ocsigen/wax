@@ -5,7 +5,7 @@
 
 (authors "Jérôme Vouillon")
 (maintainers "Jérôme Vouillon")
-(source (github vouillon/wasm-syntax))
+(source (github vouillon/wax))
 (license "Apache-2.0")
 
 (package

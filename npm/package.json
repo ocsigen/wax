@@ -23,10 +23,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/vouillon/wasm-syntax.git"
+    "url": "git+https://github.com/vouillon/wax.git"
   },
-  "homepage": "https://github.com/vouillon/wasm-syntax#readme",
+  "homepage": "https://github.com/vouillon/wax#readme",
   "bugs": {
-    "url": "https://github.com/vouillon/wasm-syntax/issues"
+    "url": "https://github.com/vouillon/wax/issues"
   }
 }
