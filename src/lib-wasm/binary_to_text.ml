@@ -690,7 +690,7 @@ let module_ (m : _ B.module_) : _ T.module_ =
           })
       m.tags
   in
-  ( None,
+  ( Option.map Ast.no_loc m.names.module_,
     List.map Ast.no_loc
       (List.flatten
          [

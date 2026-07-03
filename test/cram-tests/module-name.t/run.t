@@ -1,0 +1,107 @@
+A whole `.wax` file is a module; a `#![module = "..."]` inner attribute names
+it. The name maps to the WebAssembly module name (the `$name` in a WAT
+`(module $name …)`, stored in the `name` custom section), and survives every
+conversion direction.
+
+A named Wax module carries its name into WAT:
+
+  $ cat > named.wax <<'EOF'
+  > #![module = "mymod"]
+  > 
+  > #[export = "f"]
+  > fn f() -> i32 {
+  >     1;
+  > }
+  > EOF
+
+  $ wax -i wax -f wat named.wax
+  (module $mymod
+  
+    (func $f (export "f") (result i32) (i32.const 1))
+  )
+
+The attribute round-trips through a wax -> wax reprint:
+
+  $ wax -i wax -f wax named.wax
+  #![module = "mymod"]
+  
+  #[export = "f"]
+  fn f() -> i32 {
+      1;
+  }
+
+
+A WAT module name decompiles to the inner attribute:
+
+  $ cat > named.wat <<'EOF'
+  > (module $fromwat
+  >   (func $g (export "g") (result i32)
+  >     i32.const 2))
+  > EOF
+
+  $ wax -i wat -f wax named.wat
+  #![module = "fromwat"]
+  #[export = "g"]
+  fn g() -> i32 {
+      2;
+  }
+
+The name also survives a round-trip through the binary format:
+
+  $ wax -i wax -f wasm named.wax -o named.wasm
+  $ wax -i wasm -f wax named.wasm
+  #![module = "mymod"]
+  type t = fn() -> i32;
+  #[export = "f"]
+  fn f() -> i32 {
+      1;
+  }
+
+The `module` annotation must be a string:
+
+  $ printf '#![module = 42]\nfn f() {}\n' > bad-value.wax
+  $ wax -i wax -f wat bad-value.wax --validate
+  Error: The module annotation expects a string.
+   ──➤  bad-value.wax:1:13
+  1 │ #![module = 42]
+    ·             ^^
+  2 │ fn f() {}
+  3 │ 
+  [128]
+
+A module may carry at most one name:
+
+  $ printf '#![module = "a"]\n#![module = "b"]\nfn f() {}\n' > dup.wax
+  $ wax -i wax -f wat dup.wax --validate
+  Error: A module can have at most one name annotation.
+   ──➤  dup.wax:2:1
+  1 │ #![module = "a"]
+  2 │ #![module = "b"]
+    · ^^^^^^^^^^^^^^^^
+  3 │ fn f() {}
+  4 │ 
+  [128]
+
+`module` is an inner attribute only; the outer `#[module = …]` form is rejected:
+
+  $ printf '#[module = "x"]\nfn f() {}\n' > outer.wax
+  $ wax -i wax -f wat outer.wax --validate
+  Error: The module annotation is not allowed here.
+   ──➤  outer.wax:1:12
+  1 │ #[module = "x"]
+    ·            ^^^
+  2 │ fn f() {}
+  3 │ 
+  [128]
+
+Conversely, the field-level attributes are rejected as inner attributes:
+
+  $ printf '#![export = "x"]\nfn f() {}\n' > inner-export.wax
+  $ wax -i wax -f wat inner-export.wax --validate
+  Error: The export annotation is not allowed here.
+   ──➤  inner-export.wax:1:13
+  1 │ #![export = "x"]
+    ·             ^^^
+  2 │ fn f() {}
+  3 │ 
+  [128]

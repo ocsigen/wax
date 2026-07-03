@@ -2,6 +2,27 @@
 
 This guide covers Wax syntax and semantics. For the detailed mapping to WebAssembly instructions, see [Correspondence](./correspondence/intro.md).
 
+## Module Name
+
+A whole `.wax` file is a module. To give the module a name, place a
+`#![module = "..."]` inner attribute at the top of the file:
+
+```wax
+#![module = "my_module"]
+
+fn f() -> i32 {
+    1;
+}
+```
+
+Unlike the `#[...]` outer attributes that decorate a following field (such as
+`#[export]`), `#![...]` is an *inner* attribute: it applies to the enclosing
+module. A module may carry at most one name.
+
+(This maps to the WebAssembly module name stored in the `name` custom section —
+the `$name` in a WAT `(module $name …)`; see
+[Module Fields](./correspondence/module_fields.md#module-name).)
+
 ## Comments
 
 Wax supports C-style comments:

@@ -2886,7 +2886,7 @@ let extra_type_decls ctx =
   in
   loop []
 
-let module_ ?(strict_constants = false) diagnostics (_, fields) =
+let module_ ?(strict_constants = false) diagnostics (module_name, fields) =
   Wax_utils.Debug.timed "convert" @@ fun () ->
   try
     let forbid_numeric = module_has_conditional fields in
@@ -2990,9 +2990,22 @@ let module_ ?(strict_constants = false) diagnostics (_, fields) =
     (* Prepend the type declarations synthesised for implicit types named by a
        ref-type reference (computed after conversion, which is what names them). *)
     let converted = extra_type_decls ctx @ converted in
-    Recover_match.module_
-      (Sink_let.module_
-         (Recover_loops.module_ (Recover_dispatch.module_ converted)))
+    let recovered =
+      Recover_match.module_
+        (Sink_let.module_
+           (Recover_loops.module_ (Recover_dispatch.module_ converted)))
+    in
+    (* A named module becomes a leading [#![module = "name"]] inner attribute. *)
+    let name_annotation =
+      match module_name with
+      | Some nm ->
+          [
+            Ast.no_loc
+              (Ast.Module_annotation [ ("module", Some (string_of_name nm)) ]);
+          ]
+      | None -> []
+    in
+    name_annotation @ recovered
   with
   | Numeric_ref_in_conditional location ->
       Wax_utils.Diagnostic.report diagnostics ~location ~severity:Error

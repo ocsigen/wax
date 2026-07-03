@@ -447,9 +447,8 @@ let runtest filename _ =
                       let m', _ctx =
                         WaxParser.parse_from_string ~color ~filename text
                       in
-                      ignore
-                        (Wax_utils.Diagnostic.run ~color ~source:(Some text)
-                           (fun d -> Wax_lang.Typing.f d m')))
+                      Wax_utils.Diagnostic.run ~color ~source:(Some text)
+                        (fun d -> Wax_lang.Typing.check d m'))
                 in
                 if ok then
                   Format.eprintf
@@ -495,10 +494,9 @@ let runtest filename _ =
                       if true then
                         let ok =
                           in_child_process (fun () ->
-                              ignore
-                                (Wax_utils.Diagnostic.run ~color
-                                   ~source:(Some text) (fun d ->
-                                     Wax_lang.Typing.f d m')))
+                              Wax_utils.Diagnostic.run ~color
+                                ~source:(Some text) (fun d ->
+                                  Wax_lang.Typing.check d m'))
                         in
                         if not ok then
                           if false then prerr_endline "(after parsing)"

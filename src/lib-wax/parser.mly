@@ -451,6 +451,11 @@ branch_expr:
 | BR_ON_CAST l = label nullable = boption("?") d = descriptor_operand i = expression { with_loc $sloc (Br_on_cast_desc_eq (l, nullable, i, d)) } %prec prec_branch
 | BR_ON_CAST_FAIL l = label nullable = boption("?") d = descriptor_operand i = expression { with_loc $sloc (Br_on_cast_desc_eq_fail (l, nullable, i, d)) } %prec prec_branch
 
+(* A module-level inner attribute, [#![module = "name"]]. *)
+inner_attribute:
+| "#" "!" "[" name = IDENT "=" i = attribute_expression "]" { (name, Some i) }
+| "#" "!" "[" name = IDENT "]" { (name, None) }
+
 simple_pattern:
 | x = ident { Some x }
 | "_" { None }
@@ -904,6 +909,7 @@ elem:
 
 module_field:
 | r = rectype { {desc = Type r.desc; info = r.info} }
+| a = inner_attribute { with_loc $sloc (Module_annotation [a]) }
 | attributes = list(attribute) d = declaration { attributed $sloc attributes d }
 | attributes = list(attribute) d = definition { attributed $sloc attributes d }
 | attributes = list(attribute) "{" fields = list(module_field) "}"

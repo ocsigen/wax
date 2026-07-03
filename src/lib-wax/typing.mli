@@ -23,6 +23,19 @@ val f :
     never read is reported as a warning (unless its name starts with [_]). Only
     honored for conditional-free modules. *)
 
+val check :
+  ?warn_unused:bool ->
+  ?features:Wax_utils.Feature.set ->
+  Wax_utils.Diagnostic.context ->
+  Ast.location Ast.module_ ->
+  unit
+(** [check] type-checks the module for errors like [f], but does not build the
+    typed module. Use it on the validation-only paths (a same-format wax -> wax
+    conversion, the [check] command) that discard the typed AST; [f] is reserved
+    for conversion to Wasm/WAT, which consumes it.
+
+    [warn_unused] behaves as for [f]. *)
+
 val erase_types :
   typed_module_annotation Ast.module_ -> Ast.location Ast.module_
 (** [erase_types modul] removes type annotations from the module, returning it

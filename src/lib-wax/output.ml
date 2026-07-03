@@ -1353,9 +1353,9 @@ let fundecl ?(exact = false) ~tag pp (name, typ, sign) =
             typ);
       Option.iter (fun ty -> raw_functype pp ty) sign)
 
-let print_attribute pp (name, i) =
+let print_attribute_gen open_ pp (name, i) =
   box pp ~indent:indent_level (fun () ->
-      attribute pp "#[";
+      attribute pp open_;
       attribute pp name;
       (match i with
       | None -> ()
@@ -1365,6 +1365,11 @@ let print_attribute pp (name, i) =
           space pp ();
           with_style pp Attribute (fun () -> instr Instruction pp i));
       attribute pp "]")
+
+let print_attribute pp a = print_attribute_gen "#[" pp a
+
+(* Module-level inner attribute: [#![module = "name"]]. *)
+let print_inner_attribute pp a = print_attribute_gen "#![" pp a
 
 (* Separate attributes at this (enclosing) level rather than with a trailing
    space inside each attribute's box: a break between them then lands at the
@@ -1415,6 +1420,13 @@ let rec modulefield pp field =
   atomic_node pp (Some field.info) @@ fun () ->
   match field.desc with
   | Type t -> rectype pp t
+  | Module_annotation attrs ->
+      hvbox pp (fun () ->
+          List.iteri
+            (fun i a ->
+              if i > 0 then space pp ();
+              print_inner_attribute pp a)
+            attrs)
   | Func { name; typ; sign; body = label, body; attributes = a } ->
       print_attr_prefix pp a (fun () ->
           hvbox pp (fun () ->

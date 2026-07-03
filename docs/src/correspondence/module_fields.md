@@ -2,6 +2,25 @@
 
 Wax modules are defined by a sequence of top-level fields: types, functions, globals, tags, memories, and data segments.
 
+## Module Name
+
+A `#![module = "..."]` inner attribute at the top of the file names the module.
+It maps to the WebAssembly module name — the symbolic name stored in the module
+subsection of the `name` custom section, written `$name` in WAT:
+
+```wax
+#![module = "my_module"]
+```
+
+corresponds to the WAT
+
+```wat
+(module $my_module …)
+```
+
+A module may carry at most one name. See also
+[Module Name](../language.md#module-name) in the language guide.
+
 ## Types
 
 Types are defined using `type` for single definitions or `rec { ... }` for mutually recursive types.

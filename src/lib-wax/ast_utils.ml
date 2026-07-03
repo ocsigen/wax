@@ -293,6 +293,7 @@ let lower_match ~block_info ~labels ~scrutinee ~arms ~default =
 let rec map_modulefield f field =
   match field with
   | Type t -> Type t
+  | Module_annotation a -> Module_annotation a
   | Fundecl f -> Fundecl f
   | GlobalDecl g -> GlobalDecl g
   | Tag t -> Tag t

@@ -249,9 +249,8 @@ let wax_to_wax ~input_file ~output_file ~validate ~warn_unused ~color
   in
   let ast = specialize_wax ~ctx ~color ~text defines ast in
   if validate then
-    ignore
-      (Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
-           Wax_lang.Typing.f ~warn_unused d ast));
+    Wax_utils.Diagnostic.run ~color ~source:(Some text) (fun d ->
+        Wax_lang.Typing.check ~warn_unused d ast);
   let trivia, tail = wax_trivia ctx ast in
   with_open_out output_file (fun oc ->
       let print_wax f m =
@@ -568,7 +567,7 @@ let check format_opt strict color warnings features debug files =
                let ast, _ =
                  Wax_parser.parse_from_string ~color ~filename:file text
                in
-               ignore (Wax_lang.Typing.f ~warn_unused:true d ast : _ * _)
+               Wax_lang.Typing.check ~warn_unused:true d ast
            | Wat ->
                let ast, _ =
                  Wat_parser.parse_from_string ~color ~filename:file text

@@ -1784,6 +1784,19 @@ let exports attributes =
     attributes
 
 let has_start attributes = List.exists (fun (k, _) -> k = "start") attributes
+
+(* The module name carried by a [#![module = "name"]] inner attribute, if any.
+   Lowered into the binary's module-name subsection (the WAT [(module $name)]),
+   not into a module field. *)
+let module_name attributes =
+  List.find_map
+    (fun (k, v) ->
+      match (k, v) with
+      | "module", Some { desc = String (_, n); info } ->
+          Some { Ast.desc = n; info }
+      | _ -> None)
+    attributes
+
 let globaltype mut t : Text.globaltype = { mut; typ = valtype t }
 
 (* Smallest memory size (in 64KiB pages) that holds the declared active data
@@ -1921,7 +1934,7 @@ let module_ diagnostics types fields =
       | Elem { name; _ } -> Hashtbl.replace ctx.elems name.desc ()
       | Data { name; _ } ->
           Option.iter (fun n -> Hashtbl.replace ctx.datas n.desc ()) name
-      | Tag _ | Group _ | Conditional _ -> ())
+      | Tag _ | Group _ | Conditional _ | Module_annotation _ -> ())
     fields;
   (* Record unconditionally-declared types as reuse targets for synthesized
      types. Descend into [Group] (always present) but not [Conditional]: a type
@@ -1971,6 +1984,9 @@ let module_ diagnostics types fields =
       (fun field ->
         match field.desc with
         | Group { fields = flds; _ } -> convert_fields flds
+        (* The module name is lowered separately into the name section; the
+           annotation itself produces no module field. *)
+        | Module_annotation _ -> []
         | Memory
             {
               name;
@@ -2254,7 +2270,7 @@ let module_ diagnostics types fields =
                       exports = exports attributes;
                     }
               | Group _ | Conditional _ | Memory _ | Data _ | Table _ | Elem _
-                ->
+              | Module_annotation _ ->
                   assert false
             in
             let field' = { field with desc } in
@@ -2316,4 +2332,17 @@ let module_ diagnostics types fields =
   in
   let wasm_fields = wasm_fields @ extra_types @ elem_declare in
   let wasm_fields = reorder_imports wasm_fields in
-  (None, wasm_fields)
+  (* A [#![module = "name"]] inner attribute names the module; carry it into the
+     text module's name slot (typing has already ensured at most one). *)
+  let mod_name =
+    let found = ref None in
+    Wax_lang.Ast_utils.iter_fields
+      (fun field ->
+        match field.desc with
+        | Module_annotation attrs ->
+            if !found = None then found := module_name attrs
+        | _ -> ())
+      fields;
+    !found
+  in
+  (mod_name, wasm_fields)

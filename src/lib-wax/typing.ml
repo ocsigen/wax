@@ -168,6 +168,9 @@ module Error = struct
   let multiple_start context ~location =
     report context ~location "A module can have at most one start function."
 
+  let multiple_module context ~location =
+    report context ~location "A module can have at most one name annotation."
+
   let unknown_annotation context ~location name =
     report context ~location "Unknown annotation %S." name
 
@@ -7878,7 +7881,12 @@ let rec functions ctx fields =
           } ->
           assert false
       | After f -> Some f
-      | Before ({ desc = Type _ | Fundecl _ | GlobalDecl _ | Tag _; _ } as f) ->
+      | Before
+          ({
+             desc =
+               Type _ | Module_annotation _ | Fundecl _ | GlobalDecl _ | Tag _;
+             _;
+           } as f) ->
           Some f)
     fields
 
@@ -7950,7 +7958,8 @@ let field_attributes (field : _ modulefield) =
   | Data { attributes; _ }
   | Table { attributes; _ }
   | Elem { attributes; _ }
-  | Group { attributes; _ } ->
+  | Group { attributes; _ }
+  | Module_annotation attributes ->
       attributes
   | Type _ | Conditional _ -> []
 
@@ -7958,13 +7967,15 @@ let field_attributes (field : _ modulefield) =
    value shape of [export] / [import] / [start], allow each only where it is
    meaningful, and require an [import] on a body-less declaration. *)
 let check_attributes diagnostics field =
-  let export_ok, import_ok, start_ok =
+  let export_ok, import_ok, start_ok, module_ok =
     match field.desc with
-    | Func _ -> (true, false, true)
-    | Fundecl _ | GlobalDecl _ -> (true, true, false)
-    | Global _ -> (true, false, false)
-    | Memory _ | Table _ | Tag _ -> (true, true, false)
-    | Data _ | Elem _ | Type _ | Group _ | Conditional _ -> (false, false, false)
+    | Func _ -> (true, false, true, false)
+    | Fundecl _ | GlobalDecl _ -> (true, true, false, false)
+    | Global _ -> (true, false, false, false)
+    | Memory _ | Table _ | Tag _ -> (true, true, false, false)
+    | Module_annotation _ -> (false, false, false, true)
+    | Data _ | Elem _ | Type _ | Group _ | Conditional _ ->
+        (false, false, false, false)
   in
   List.iter
     (fun (name, value) ->
@@ -8000,6 +8011,14 @@ let check_attributes diagnostics field =
                 "no value");
           if not start_ok then
             Error.annotation_not_allowed diagnostics ~location "start"
+      | "module" ->
+          (match value with
+          | Some { desc = String _; _ } -> ()
+          | _ ->
+              Error.annotation_value_mismatch diagnostics ~location "module"
+                "a string");
+          if not module_ok then
+            Error.annotation_not_allowed diagnostics ~location "module"
       | _ -> Error.unknown_annotation diagnostics ~location name)
     (field_attributes field.desc);
   let imports =
@@ -8015,7 +8034,7 @@ let check_attributes diagnostics field =
       Error.declaration_without_import diagnostics ~location:field.info
   | _ -> ()
 
-let type_configuration ?(warn_unused = false)
+let type_configuration ?(warn_unused = false) ?(build = true)
     ?(features = Wax_utils.Feature.default ()) ~simplify diagnostics fields =
   let cond = ref Cond.true_ in
   let cond_env = Cond.create () in
@@ -8153,7 +8172,7 @@ let type_configuration ?(warn_unused = false)
       | Table { name; address_type; reftype = rt; _ } ->
           Tbl.add diagnostics ctx.tables name (address_type, rt)
       | Elem { name; reftype = rt; _ } -> Tbl.add diagnostics ctx.elems name rt
-      | Group _ | Conditional _ | Type _ | Global _ -> ())
+      | Group _ | Conditional _ | Type _ | Global _ | Module_annotation _ -> ())
     fields;
   (* A module may not export the same name twice. Each [#[export = "..."]]
      attribute is one export; [walk_fields] descends into groups and resolves
@@ -8161,6 +8180,7 @@ let type_configuration ?(warn_unused = false)
      clash. *)
   let exports = Hashtbl.create 16 in
   let start_seen = ref false in
+  let module_seen = ref false in
   walk_fields
     (fun field ->
       check_attributes diagnostics field;
@@ -8188,6 +8208,11 @@ let type_configuration ?(warn_unused = false)
               if !start_seen then
                 Error.multiple_start diagnostics ~location:field.info
               else start_seen := true
+          | "module", _ ->
+              (* A module may carry at most one name annotation. *)
+              if !module_seen then
+                Error.multiple_module diagnostics ~location:field.info
+              else module_seen := true
           | _ -> ())
         (field_attributes field.desc))
     fields;
@@ -8218,32 +8243,37 @@ let type_configuration ?(warn_unused = false)
   let phased_fields = globals ctx fields in
   let typed_fields = functions ctx phased_fields in
   ( ctx.type_context.types,
-    List.map
-      (fun f ->
-        let desc =
-          Ast_utils.map_modulefield
-            (fun (types, loc) ->
-              ( Array.map
-                  (fun ty ->
-                    match Cell.get ty with
-                    | Unknown | Error | Collecting _ -> None
-                    | Null ->
-                        Some (Value (Ref { nullable = true; typ = None_ }))
-                    | UnknownRef ->
-                        Some (Value (Ref { nullable = false; typ = None_ }))
-                    | Number -> Some (Value I32)
-                    | Int8 -> Some (Packed I8)
-                    | Int16 -> Some (Packed I16)
-                    | Int -> Some (Value I32)
-                    | LargeInt -> Some (Value I64)
-                    | Float -> Some (Value F64)
-                    | Valtype { typ; _ } -> Some (Value typ))
-                  types,
-                loc ))
-            f.desc
-        in
-        { f with desc })
-      typed_fields )
+    (* Building the annotated module is only needed for the deferred conversion
+       to Wasm/WAT; a validation-only pass ([~build:false]) runs the checking
+       above for its diagnostics and skips this projection. *)
+    if not build then []
+    else
+      List.map
+        (fun f ->
+          let desc =
+            Ast_utils.map_modulefield
+              (fun (types, loc) ->
+                ( Array.map
+                    (fun ty ->
+                      match Cell.get ty with
+                      | Unknown | Error | Collecting _ -> None
+                      | Null ->
+                          Some (Value (Ref { nullable = true; typ = None_ }))
+                      | UnknownRef ->
+                          Some (Value (Ref { nullable = false; typ = None_ }))
+                      | Number -> Some (Value I32)
+                      | Int8 -> Some (Packed I8)
+                      | Int16 -> Some (Packed I16)
+                      | Int -> Some (Value I32)
+                      | LargeInt -> Some (Value I64)
+                      | Float -> Some (Value F64)
+                      | Valtype { typ; _ } -> Some (Value typ))
+                    types,
+                  loc ))
+              f.desc
+          in
+          { f with desc })
+        typed_fields )
 
 (* Conditional annotations denote mutually-exclusive branches, so they are
    type-checked by exploring every reachable configuration (as the WAT validator
@@ -8582,9 +8612,7 @@ let rec check_let_in_conditionals diagnostics (i : (_ instr_desc, _) annotated)
   | _ -> ());
   List.iter (check_let_in_conditionals diagnostics) (sub_instrs i)
 
-let f ?(simplify = false) ?(warn_unused = false)
-    ?(features = Wax_utils.Feature.default ()) diagnostics fields =
-  Wax_utils.Debug.timed "type-check" @@ fun () ->
+let check_let_bindings diagnostics fields =
   Ast_utils.iter_fields
     (fun (field : (_ modulefield, _) annotated) ->
       match field.desc with
@@ -8592,31 +8620,56 @@ let f ?(simplify = false) ?(warn_unused = false)
           List.iter (check_let_in_conditionals diagnostics) instrs
       | Global { def; _ } -> check_let_in_conditionals diagnostics def
       | _ -> ())
-    fields;
+    fields
+
+(* Check every reachable configuration of a conditional module: each is
+   specialized to be conditional-free and typed independently, so a diagnostic
+   is reported once with the assumption under which it is reachable. Only the
+   diagnostics matter here, so the typed module is not built ([~build:false]). *)
+let check_configurations ~warn_unused ~features ~simplify diagnostics fields =
+  Wax_wasm.Cond_explore.check_all diagnostics
+    ?truncation_location:
+      (match fields with hd :: _ -> Some hd.info | [] -> None)
+    ~explain:(fun env c -> Wax_wasm.Cond_solver.explain env ~style:`Wax c)
+    ~specialize:(fun env asm ~enqueue ~record ->
+      specialize_fields env diagnostics ~enqueue ~record asm fields)
+    ~check:(fun ctx m ->
+      ignore
+        (type_configuration ~build:false ~warn_unused ~features ~simplify ctx m
+          : _ * _))
+    ()
+
+let f ?(simplify = false) ?(warn_unused = false)
+    ?(features = Wax_utils.Feature.default ()) diagnostics fields =
+  Wax_utils.Debug.timed "type-check" @@ fun () ->
+  check_let_bindings diagnostics fields;
   if not (List.exists field_has_conditional fields) then
     type_configuration ~warn_unused ~features ~simplify diagnostics fields
   else begin
-    (* Check every reachable configuration: each is specialized to be
-       conditional-free and typed independently, so a diagnostic is reported
-       once with the assumption under which it is reachable. *)
-    Wax_wasm.Cond_explore.check_all diagnostics
-      ?truncation_location:
-        (match fields with hd :: _ -> Some hd.info | [] -> None)
-      ~explain:(fun env c -> Wax_wasm.Cond_solver.explain env ~style:`Wax c)
-      ~specialize:(fun env asm ~enqueue ~record ->
-        specialize_fields env diagnostics ~enqueue ~record asm fields)
-      ~check:(fun ctx m ->
-        ignore (type_configuration ~warn_unused ~features ~simplify ctx m))
-      ();
+    check_configurations ~warn_unused ~features ~simplify diagnostics fields;
     (* Build the typed module (consumed only by the deferred WAT conversion;
-       wax -> wax ignores it) by typing the module with conditionals preserved.
-       [type_configuration] resolves names per branch (condition-aware tables),
-       so each branch is typed under its own assumption. Diagnostics are
-       discarded — the exploration above did the real checking. *)
+       validation-only paths use [check] and never reach here) by typing the
+       module with conditionals preserved. [type_configuration] resolves names
+       per branch (condition-aware tables), so each branch is typed under its
+       own assumption. Diagnostics are discarded — [check_configurations] above
+       did the real checking. *)
     type_configuration ~features ~simplify
       (Wax_utils.Diagnostic.collector ())
       fields
   end
+
+let check ?(warn_unused = false) ?(features = Wax_utils.Feature.default ())
+    diagnostics fields =
+  Wax_utils.Debug.timed "type-check" @@ fun () ->
+  check_let_bindings diagnostics fields;
+  if not (List.exists field_has_conditional fields) then
+    ignore
+      (type_configuration ~build:false ~warn_unused ~features ~simplify:false
+         diagnostics fields
+        : _ * _)
+  else
+    check_configurations ~warn_unused ~features ~simplify:false diagnostics
+      fields
 
 let erase_types m =
   List.map (fun m -> { m with desc = Ast_utils.map_modulefield snd m.desc }) m

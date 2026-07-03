@@ -2,6 +2,31 @@
 
 Complete examples demonstrating Wax features and their WebAssembly equivalents.
 
+## Named Module
+
+A `#![module = "..."]` inner attribute names the module.
+
+### Wax
+
+```wax
+#![module = "calculator"]
+
+#[export = "square"]
+fn square(x: i32) -> i32 {
+    x * x;
+}
+```
+
+### Equivalent WAT
+
+```wat
+(module $calculator
+  (func $square (export "square") (param $x i32) (result i32)
+    local.get $x
+    local.get $x
+    i32.mul))
+```
+
 ## Arithmetic Functions
 
 ### Wax

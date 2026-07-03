@@ -273,6 +273,10 @@ type 'info modulefield =
       attributes : attributes;
       fields : ('info modulefield, location) annotated list;
     }
+  (* A module-level inner attribute, [#![module = "name"]]. Unlike the outer
+     attributes above it is attached to the whole module rather than a field;
+     the only one recognized is [module], which names the module. *)
+  | Module_annotation of attributes
   | Conditional of {
       cond : Wax_wasm.Ast.cond;
       then_fields : ('info modulefield, location) annotated list;

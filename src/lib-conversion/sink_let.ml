@@ -509,8 +509,8 @@ let rec field_desc (f : location modulefield) =
           then_fields = map_fields then_fields;
           else_fields = Option.map map_fields else_fields;
         }
-  | ( Type _ | Fundecl _ | GlobalDecl _ | Global _ | Tag _ | Memory _ | Data _
-    | Table _ | Elem _ ) as f ->
+  | ( Type _ | Module_annotation _ | Fundecl _ | GlobalDecl _ | Global _ | Tag _
+    | Memory _ | Data _ | Table _ | Elem _ ) as f ->
       f
 
 let module_ (m : location module_) : location module_ =
