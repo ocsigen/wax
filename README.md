@@ -28,6 +28,18 @@ opam install .
 *   **Type Checking:** Verifies the semantic correctness of Wax code.
 *   **Syntax Conversion:** Converts between Wax, WebAssembly Text (WAT), and WebAssembly Binary (the default output) — in any direction.
 
+## How it's tested
+
+Beyond unit and cram tests, Wax runs the official WebAssembly spec test suite and
+is guarded by a differential, round-trip fuzzing harness (see
+[`fuzz/README.md`](fuzz/README.md)). It cross-checks validation against the
+WebAssembly reference interpreter and
+[`wasm-tools`](https://github.com/bytecodealliance/wasm-tools) in both directions,
+requires every module to survive a decompile-and-recompile round-trip, and
+re-runs spec assertions through an execution oracle after the round-trip.
+Generation (wasm-smith), AST/byte mutation, and deterministic lattice sweeps feed
+the oracles.
+
 ## Documentation
 Full documentation is available at [vouillon.github.io/wax/](https://vouillon.github.io/wax/).
 You can also build it locally with `mdbook build docs` (requires

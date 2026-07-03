@@ -1,6 +1,6 @@
 # Introduction
 
-Wax is a Rust-like syntax for WebAssembly that compiles to standard Wasm binary or text formats. It provides a more familiar programming experience while maintaining a direct correspondence to WebAssembly concepts.
+Wax is a Rust-like syntax for WebAssembly that compiles to standard Wasm binary or text formats. It provides a more familiar programming experience while maintaining a direct correspondence to WebAssembly concepts. It is validated against the official WebAssembly spec test suite and a differential, round-trip fuzzing harness, so conversions preserve meaning across all three formats. See [Feature Support](./features.md) for the proposals it covers.
 
 ## Why Wax?
 

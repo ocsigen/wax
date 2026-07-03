@@ -1,6 +1,7 @@
 # Summary
 
 - [Introduction](./introduction.md)
+- [Feature Support](./features.md)
 - [Language Guide](./language.md)
 - [Examples](./examples.md)
 
