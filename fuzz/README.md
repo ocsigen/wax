@@ -51,7 +51,7 @@ fuzz/wax-corpus.sh [smith-count] [bytes]   # build .wax seeds: spec corpus + smi
 fuzz/mutate-wax.sh [count]       # AST-mutate the wax seeds + check them (needs wasm-tools)
 fuzz/mutate-validate.sh [count]  # AST-mutate + emitter-soundness vs the spec reference (no wasm-tools)
 fuzz/cast-lattice.sh             # deterministic sweep of the numeric/ref cast lattice
-fuzz/cond-fuzz.sh                # fuzz #[if]/-D conditional compilation (Cond_explore soundness)
+fuzz/cond-fuzz.sh                # fuzz #[if]/-D conditional compilation (Cond_explore soundness); GEN=N for generated conditions
 
 # WAT *input* side (the text lexer/parser):
 fuzz/wat-corpus.sh [smith-count] [bytes]   # build .wat seeds: spec corpus + smith modules
@@ -193,6 +193,19 @@ the product of each used variable's edge values that gives:
 
 Deterministic; needs wasm-tools. (This is also what motivated giving `check` a
 `-D` flag, for partial checks.)
+
+By default it runs the hand-written conditional seeds, whose conditions are
+simple (single variable, one comparison). `GEN=N` instead fuzzes N *generated*
+modules (`cond-gen.awk`): each has top-level globals guarded by random
+conditions and a function that conditionally *references* them, so whether a
+configuration type-checks depends on the interplay of two conditions drawn from
+the same variables — many combinations infeasible. Half the references are made
+safe by construction (`all(def_condition, …)`, which implies the global is
+defined) and half are independent, giving a mix of accepted and rejected
+modules. The accepted ones type-check only if `cond_solver` proves the unbound
+combination infeasible, so this is what actually stresses the solver (and the
+`all`/`any`/`not`/comparison condition algebra) rather than the trivial corpus
+conditions. Both top-level and in-function conditionals are generated.
 
 ## The WAT input side
 

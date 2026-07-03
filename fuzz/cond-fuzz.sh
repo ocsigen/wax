@@ -37,7 +37,9 @@ if ! command -v "$WASM_TOOLS" >/dev/null 2>&1; then
   exit 2
 fi
 
-JOBS="${JOBS:-$(nproc 2>/dev/null || echo 4)}"
+# Latency-bound (many short-lived wax forks per seed), so oversubscribe the
+# cores like the other campaigns rather than one worker per core.
+JOBS="${JOBS:-$(( $(nproc 2>/dev/null || echo 4) * 4 ))}"
 CAP="${CAP:-256}"          # max assignments per seed; larger products are sampled
 SEEDS="${SEEDS:-$ROOT/test/wasmoo/wax}"
 RESULTS="$(mktemp -d)"
@@ -61,7 +63,10 @@ declare -A VALS=(
 
 # Every variable mentioned in a seed's #[if(...)] conditions.
 vars_of() {
+  # Strip string literals first, so a compared value like effects = "other"
+  # does not leak "other" as if it were a variable.
   grep -ohE "#\[if\([^]]*\)\]" "$1" 2>/dev/null \
+    | sed 's/"[^"]*"//g' \
     | grep -oE "[a-z_][a-z_0-9]*" | grep -vE "^(if|all|any|not)$" | sort -u
 }
 
@@ -99,7 +104,8 @@ fuzz_seed() {
   if [ "$total" -gt "$CAP" ]; then
     # Deterministic sub-sample: keep a stride derived from the master SEED.
     exhaustive=0
-    local step=$(((total + CAP - 1) / CAP)) off=$((SEED % step)) i sampled=()
+    local step=$(((total + CAP - 1) / CAP))
+    local off=$((SEED % step)) i sampled=()
     for ((i = off; i < total; i += step)); do sampled+=("${assigns[$i]}"); done
     assigns=("${sampled[@]}")
   fi
@@ -136,12 +142,31 @@ fuzz_seed() {
   printf '.' >&2
 }
 
-mapfile -t SEED_FILES < <(grep -rl "#\[if(" "$SEEDS"/*.wax 2>/dev/null | sort)
+# Seeds: either the fixed hand-written conditional modules (default), or, with
+# GEN=N, N freshly *generated* ones (cond-gen.awk) — synthetic modules whose
+# top-level and in-function conditions cross-reference each other, stressing
+# cond_solver with conditions the corpus never contains. Generated modules are
+# kept only if they parse (they always do, but the guard is cheap).
+GEN="${GEN:-0}"
+GENAWK="$(dirname "${BASH_SOURCE[0]}")/cond-gen.awk"
+if [ "$GEN" -gt 0 ]; then
+  gendir="$RESULTS/gen"; mkdir -p "$gendir"
+  i=0; n=0
+  while [ "$n" -lt "$GEN" ] && [ "$i" -lt "$((GEN * 4 + 8))" ]; do
+    f="$gendir/g$(printf '%05d' "$n").wax"
+    awk -v seed="$((SEED + i))" -f "$GENAWK" </dev/null >"$f"
+    i=$((i + 1))
+    if "$WAX" -i wax -f wax "$f" -o /dev/null 2>/dev/null; then n=$((n + 1)); else rm -f "$f"; fi
+  done
+  mapfile -t SEED_FILES < <(find "$gendir" -name '*.wax' | sort)
+else
+  mapfile -t SEED_FILES < <(grep -rl "#\[if(" "$SEEDS"/*.wax 2>/dev/null | sort)
+fi
 NSEEDS=${#SEED_FILES[@]}
-[ "$NSEEDS" -gt 0 ] || { echo "no conditional wax seeds in $SEEDS" >&2; exit 2; }
+[ "$NSEEDS" -gt 0 ] || { echo "no conditional seeds (set GEN=N or check $SEEDS)" >&2; exit 2; }
 
 announce_seed "$(basename "$0")"
-echo "fuzzing $NSEEDS conditional seeds (cap $CAP assignments each) across $JOBS jobs..." >&2
+echo "fuzzing $NSEEDS conditional ${GEN:+generated }seeds (cap $CAP assignments each) across $JOBS jobs..." >&2
 idx=0
 for seed in "${SEED_FILES[@]}"; do
   # A ( ) subshell inherits the VALS array and the lib.sh helpers directly.
