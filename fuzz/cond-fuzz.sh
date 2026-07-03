@@ -22,6 +22,12 @@
 #   COND_OVERREJECT — "wax check" rejected it, yet EVERY assignment is accepted
 #                     (only trusted when the product was enumerated exhaustively):
 #                     a path-sensitive false positive.
+#   COMMUTE         — specialising then compiling ([-D -f wasm]) disagrees with
+#                     specialising to text ([-D -f wax|wat]) then compiling that
+#                     with no -D: specialization must commute with the text
+#                     boundary (the two are just when the same conditional is
+#                     resolved), so a valid [-D -f wasm] whose specialize-to-text
+#                     no longer recompiles is a bug.
 #   EMIT_UNSOUND    — a concrete assignment is accepted but the binary it emits is
 #                     rejected by wasm-tools.
 #   CRASH           — any specialise/convert under -D exits other than ok/rejected.
@@ -76,6 +82,7 @@ vars_of() {
 fuzz_seed() {
   local seed="$1" n="$2" out=""
   local p="$RESULTS/w$n"
+  local fmt; fmt="$(fmt_of "$seed")"
   ERRLOG="$p.err"
   local vars; mapfile -t vars < <(vars_of "$seed")
   [ ${#vars[@]} -eq 0 ] && { printf 's' >&2; return 0; }
@@ -125,6 +132,22 @@ fuzz_seed() {
           out+="$(finding COND HIGH "$(basename "$seed")" \
             "EMIT_UNSOUND: accepted under$a but binary rejected: $(head -1 "$bin.err")" \
             "wax$a -f wasm $seed && wasm-tools validate $bin")"$'\n'; printf F >&2
+        else
+          # Commutation: specializing then compiling must equal specialize-to-text
+          # then compile-with-no-D. Specialize to the source format ([-D -f fmt]),
+          # then compile that conditional-free text with no [-D]; it must also
+          # produce a reference-valid binary. A failure means specialization does
+          # not commute with the text boundary (the specializer emits text that no
+          # longer recompiles).
+          local spec="$p.spec.$fmt"
+          if [ "$(classify_wax $a -f "$fmt" "$seed" -o "$spec")" = ok ]; then
+            if [ "$(classify_wax -f wasm "$spec" -o "$p.commute.wasm")" != ok ] \
+               || ! wt_validate "$p.commute.wasm"; then
+              out+="$(finding COND HIGH "$(basename "$seed")" \
+                "COMMUTE: [-D -f wasm] valid but specialize-to-$fmt then compile fails, under$a" \
+                "wax$a -f $fmt $seed -o s.$fmt && wax -f wasm s.$fmt")"$'\n'; printf F >&2
+            fi
+          fi
         fi ;;
     esac
   done
@@ -189,7 +212,7 @@ cat "$RESULTS"/[0-9]* 2>/dev/null >"$REPORT"
 n=$(grep -c '^FINDING' "$REPORT" 2>/dev/null); n=${n:-0}
 echo "=================== cond-fuzz report ==================="
 echo "conditional seeds: $NSEEDS"
-echo "findings (crash / cond-unsound / over-reject / emit-unsound): $n"
+echo "findings (crash / cond-unsound / over-reject / emit-unsound / commute): $n"
 if [ "$n" -gt 0 ]; then
   echo
   cut -f2,3,4,5 "$REPORT" | sort -u | sed 's/^/  /'

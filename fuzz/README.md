@@ -190,6 +190,10 @@ the product of each used variable's edge values that gives:
   accepted (trusted only when the product was enumerated exhaustively);
 * **`EMIT_UNSOUND`** — an accepted assignment emits a binary the reference
   rejects; and a plain crash under any `-D`.
+* **`COMMUTE`** — specialising then compiling (`-D … -f wasm`) disagrees with
+  specialising to text (`-D … -f wax`/`-f wat`) then compiling that with no
+  `-D`: since both merely differ in *when* the conditional is resolved, a valid
+  `-D -f wasm` whose specialize-to-text no longer recompiles is a bug.
 
 Deterministic; needs wasm-tools. (This is also what motivated giving `check` a
 `-D` flag, for partial checks.)
