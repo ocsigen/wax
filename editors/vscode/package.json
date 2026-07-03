@@ -1,0 +1,48 @@
+{
+  "name": "wax",
+  "displayName": "Wax",
+  "description": "Syntax highlighting for Wax, a Rust-like syntax for WebAssembly.",
+  "version": "0.1.0",
+  "publisher": "vouillon",
+  "license": "Apache-2.0",
+  "author": "Jérôme Vouillon",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vouillon/wax.git",
+    "directory": "editors/vscode"
+  },
+  "engines": {
+    "vscode": "^1.60.0"
+  },
+  "categories": ["Programming Languages"],
+  "keywords": ["wax", "webassembly", "wasm", "wat"],
+  "scripts": {
+    "package": "vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3.2.0"
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "wax",
+        "aliases": ["Wax", "wax"],
+        "extensions": [".wax"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "wax",
+        "scopeName": "source.wax",
+        "path": "./syntaxes/wax.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "wax",
+        "path": "./snippets/wax.json"
+      }
+    ]
+  }
+}

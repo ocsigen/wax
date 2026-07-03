@@ -1,0 +1,299 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Wax",
+  "scopeName": "source.wax",
+  "fileTypes": ["wax"],
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#attributes" },
+    { "include": "#strings" },
+    { "include": "#char-literal" },
+    { "include": "#numbers" },
+    { "include": "#function-definition" },
+    { "include": "#type-definition" },
+    { "include": "#keywords" },
+    { "include": "#constants" },
+    { "include": "#types" },
+    { "include": "#aggregate-type" },
+    { "include": "#qualified-path" },
+    { "include": "#labels" },
+    { "include": "#function-call" },
+    { "include": "#method-call" },
+    { "include": "#property" },
+    { "include": "#operators" },
+    { "include": "#punctuation" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.wax",
+          "begin": "//",
+          "end": "$"
+        },
+        {
+          "name": "comment.block.wax",
+          "begin": "/\\*",
+          "end": "\\*/",
+          "patterns": [{ "include": "#comments" }]
+        }
+      ]
+    },
+    "attributes": {
+      "comments": "Outer #[...], inner #![...] attributes, and conditional-compilation forms.",
+      "patterns": [
+        {
+          "name": "meta.attribute.wax",
+          "begin": "#!?\\[",
+          "end": "\\]",
+          "beginCaptures": { "0": { "name": "punctuation.definition.attribute.wax" } },
+          "endCaptures": { "0": { "name": "punctuation.definition.attribute.wax" } },
+          "patterns": [
+            { "include": "#strings" },
+            {
+              "name": "keyword.control.attribute.combinator.wax",
+              "match": "\\b(all|any|not)\\b"
+            },
+            {
+              "name": "entity.other.attribute-name.wax",
+              "match": "\\b(if|else|module|export|import|start|likely|unlikely)\\b"
+            },
+            { "include": "#numbers" },
+            { "include": "#operators" },
+            { "include": "#punctuation" }
+          ]
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.wax",
+      "begin": "\"",
+      "end": "\"",
+      "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.wax" } },
+      "endCaptures": { "0": { "name": "punctuation.definition.string.end.wax" } },
+      "patterns": [{ "include": "#string-escapes" }]
+    },
+    "string-escapes": {
+      "patterns": [
+        {
+          "name": "constant.character.escape.unicode.wax",
+          "match": "\\\\u\\{[0-9a-fA-F_]+\\}"
+        },
+        {
+          "name": "constant.character.escape.byte.wax",
+          "match": "\\\\[0-9a-fA-F]{2}"
+        },
+        {
+          "name": "constant.character.escape.wax",
+          "match": "\\\\[tnr'\"\\\\]"
+        },
+        {
+          "name": "invalid.illegal.unrecognized-escape.wax",
+          "match": "\\\\."
+        }
+      ]
+    },
+    "char-literal": {
+      "comments": "A character literal is a single quote with a closing quote; must be tried before labels.",
+      "name": "string.quoted.single.wax",
+      "match": "'(\\\\u\\{[0-9a-fA-F_]+\\}|\\\\[0-9a-fA-F]{2}|\\\\[tnr'\"\\\\]|[^'\\\\\\n])'",
+      "captures": {
+        "1": { "name": "constant.character.escape.wax" }
+      }
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "comment": "Hexadecimal float",
+          "name": "constant.numeric.float.hex.wax",
+          "match": "\\b0[xX][0-9a-fA-F][0-9a-fA-F_]*(\\.[0-9a-fA-F_]*)?[pP][-+]?[0-9][0-9_]*\\b"
+        },
+        {
+          "comment": "Decimal float",
+          "name": "constant.numeric.float.wax",
+          "match": "\\b[0-9][0-9_]*(\\.[0-9_]*)?([eE][-+]?[0-9][0-9_]*)\\b|\\b[0-9][0-9_]*\\.[0-9_]*"
+        },
+        {
+          "comment": "nan payload",
+          "name": "constant.numeric.float.nan.wax",
+          "match": "\\bnan:0[xX][0-9a-fA-F_]+\\b"
+        },
+        {
+          "name": "constant.numeric.integer.hexadecimal.wax",
+          "match": "\\b0[xX][0-9a-fA-F][0-9a-fA-F_]*\\b"
+        },
+        {
+          "name": "constant.numeric.integer.octal.wax",
+          "match": "\\b0[oO][0-7][0-7_]*\\b"
+        },
+        {
+          "name": "constant.numeric.integer.binary.wax",
+          "match": "\\b0[bB][01][01_]*\\b"
+        },
+        {
+          "name": "constant.numeric.integer.decimal.wax",
+          "match": "\\b[0-9][0-9_]*\\b"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.wax",
+          "match": "\\b(do|while|loop|if|else|return|become|dispatch|match|switch|try|catch|throw|throw_ref|suspend|resume|resume_throw|resume_throw_ref|cont_new|cont_bind)\\b"
+        },
+        {
+          "name": "keyword.control.branch.wax",
+          "match": "\\b(br|br_if|br_table|br_on_null|br_on_non_null|br_on_cast|br_on_cast_fail)\\b"
+        },
+        {
+          "name": "keyword.control.flow.wax",
+          "match": "\\b(nop|unreachable)\\b"
+        },
+        {
+          "name": "storage.type.wax",
+          "match": "\\b(fn|let|const|type|rec|tag|memory|table|data|elem)\\b"
+        },
+        {
+          "name": "storage.modifier.wax",
+          "match": "\\b(mut|open|shared|pagesize|descriptor|describes|cont)\\b"
+        },
+        {
+          "name": "keyword.operator.word.wax",
+          "match": "\\b(as|is)\\b"
+        }
+      ]
+    },
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.language.wax",
+          "match": "\\b(null|inf|nan)\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "comment": "Numeric / vector value types, incl. as-cast suffixes (i32_s, f64_u, ...)",
+          "name": "support.type.primitive.wax",
+          "match": "\\b(i8|i16|i32|i64|f32|f64|v128)(_[su])?\\b"
+        },
+        {
+          "comment": "Abstract heap types",
+          "name": "support.type.heap.wax",
+          "match": "\\b(func|nofunc|exn|noexn|cont|nocont|extern|noextern|any|eq|i31|struct|array|none)\\b"
+        }
+      ]
+    },
+    "function-definition": {
+      "match": "\\b(fn)\\s+([\\p{L}_][\\p{L}\\p{N}_]*)",
+      "captures": {
+        "1": { "name": "storage.type.function.wax" },
+        "2": { "name": "entity.name.function.wax" }
+      }
+    },
+    "type-definition": {
+      "match": "\\b(type)\\s+([\\p{L}_][\\p{L}\\p{N}_]*)",
+      "captures": {
+        "1": { "name": "storage.type.wax" },
+        "2": { "name": "entity.name.type.wax" }
+      }
+    },
+    "aggregate-type": {
+      "comments": "The type prefix in aggregate literals: {point| ...}, [bytes| ...], chars # \"...\"",
+      "patterns": [
+        {
+          "match": "([\\{\\[])\\s*([\\p{L}_][\\p{L}\\p{N}_]*)\\s*(\\|)",
+          "captures": {
+            "1": { "name": "punctuation.section.aggregate.wax" },
+            "2": { "name": "entity.name.type.wax" },
+            "3": { "name": "punctuation.separator.aggregate.wax" }
+          }
+        },
+        {
+          "match": "\\b([\\p{L}_][\\p{L}\\p{N}_]*)\\s*(#)\\s*(?=\")",
+          "captures": {
+            "1": { "name": "entity.name.type.wax" },
+            "2": { "name": "keyword.operator.aggregate.wax" }
+          }
+        }
+      ]
+    },
+    "qualified-path": {
+      "comment": "Qualified intrinsics: v128::const_i32x4, i64::add128, atomic::fence",
+      "match": "\\b([\\p{L}_][\\p{L}\\p{N}_]*)\\s*(::)\\s*([\\p{L}_][\\p{L}\\p{N}_]*)",
+      "captures": {
+        "1": { "name": "support.type.wax" },
+        "2": { "name": "punctuation.separator.namespace.wax" },
+        "3": { "name": "support.function.intrinsic.wax" }
+      }
+    },
+    "labels": {
+      "comment": "A label: single quote followed by an identifier, not closed by another quote.",
+      "name": "entity.name.label.wax",
+      "match": "'[\\p{L}_][\\p{L}\\p{N}_']*"
+    },
+    "function-call": {
+      "match": "\\b([\\p{L}_][\\p{L}\\p{N}_]*)\\s*(?=\\()",
+      "name": "entity.name.function.call.wax"
+    },
+    "method-call": {
+      "comment": "Method-style intrinsics and calls: x.abs(), v.add_i32x4(), mem.load32()",
+      "match": "(\\.)\\s*([\\p{L}_][\\p{L}\\p{N}_]*)\\s*(?=\\()",
+      "captures": {
+        "1": { "name": "punctuation.accessor.wax" },
+        "2": { "name": "support.function.method.wax" }
+      }
+    },
+    "property": {
+      "comment": "Field access: p.x",
+      "match": "(\\.)\\s*([\\p{L}_][\\p{L}\\p{N}_]*)",
+      "captures": {
+        "1": { "name": "punctuation.accessor.wax" },
+        "2": { "name": "variable.other.property.wax" }
+      }
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.arrow.wax",
+          "match": "->|=>"
+        },
+        {
+          "name": "keyword.operator.comparison.wax",
+          "match": "==|!=|<=[su]?|>=[su]?|<[su]?|>[su]?"
+        },
+        {
+          "name": "keyword.operator.assignment.wax",
+          "match": ":=|="
+        },
+        {
+          "name": "keyword.operator.arithmetic.wax",
+          "match": "\\+|-|\\*|/[su]?|%[su]"
+        },
+        {
+          "name": "keyword.operator.bitwise.wax",
+          "match": "<<|>>[su]?|&|\\||\\^"
+        },
+        {
+          "name": "keyword.operator.reference.wax",
+          "match": "!|\\?"
+        },
+        {
+          "name": "keyword.operator.other.wax",
+          "match": "\\.\\.|@"
+        }
+      ]
+    },
+    "punctuation": {
+      "patterns": [
+        { "name": "punctuation.separator.namespace.wax", "match": "::" },
+        { "name": "punctuation.separator.colon.wax", "match": ":" },
+        { "name": "punctuation.terminator.wax", "match": ";" },
+        { "name": "punctuation.separator.comma.wax", "match": "," },
+        { "name": "punctuation.accessor.wax", "match": "\\." }
+      ]
+    }
+  }
+}

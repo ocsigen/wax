@@ -1,0 +1,72 @@
+{
+  "Function": {
+    "prefix": "fn",
+    "body": ["fn ${1:name}(${2:params}) -> ${3:i32} {", "\t$0", "}"],
+    "description": "Function definition"
+  },
+  "Exported function": {
+    "prefix": "export",
+    "body": [
+      "#[export = \"${1:name}\"]",
+      "fn ${1:name}(${2:params}) -> ${3:i32} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Exported function"
+  },
+  "Imported function": {
+    "prefix": "import",
+    "body": ["#[import = (\"${1:module}\", \"${2:name}\")]", "fn ${2:name}(${3:params});$0"],
+    "description": "Imported function declaration"
+  },
+  "Struct type": {
+    "prefix": "type-struct",
+    "body": ["type ${1:name} = { ${2:field}: ${3:i32} };$0"],
+    "description": "Struct type definition"
+  },
+  "Array type": {
+    "prefix": "type-array",
+    "body": ["type ${1:name} = [${2:i32}];$0"],
+    "description": "Array type definition"
+  },
+  "If / else": {
+    "prefix": "if",
+    "body": ["if ${1:cond} {", "\t$2", "} else {", "\t$0", "}"],
+    "description": "If / else"
+  },
+  "Loop": {
+    "prefix": "loop",
+    "body": ["'${1:next}: loop {", "\t$0", "}"],
+    "description": "Labelled loop"
+  },
+  "While": {
+    "prefix": "while",
+    "body": ["while ${1:cond} {", "\t$0", "}"],
+    "description": "While loop"
+  },
+  "Block": {
+    "prefix": "do",
+    "body": ["do {", "\t$0", "}"],
+    "description": "Block"
+  },
+  "Try / catch": {
+    "prefix": "try",
+    "body": ["try {", "\t$1", "} catch {", "\t${2:tag} => { $0 }", "}"],
+    "description": "Try / catch"
+  },
+  "Match": {
+    "prefix": "match",
+    "body": ["match ${1:scrutinee} {", "\t${2:x}: &${3:type} => { $4 }", "\t_ => { $0 }", "}"],
+    "description": "Match on reference type"
+  },
+  "Tag": {
+    "prefix": "tag",
+    "body": ["tag ${1:name}(${2:i32});$0"],
+    "description": "Exception tag"
+  },
+  "Memory": {
+    "prefix": "memory",
+    "body": ["memory ${1:mem}: i32 [${2:1}];$0"],
+    "description": "Memory declaration"
+  }
+}
