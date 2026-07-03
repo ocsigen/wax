@@ -24,11 +24,13 @@
 
    The trick that makes type-directed generation tractable: every function has
    the SAME parameter signature (a:i32 b:i64 c:f32 d:f64 p:&point r:&pair q:&ints
-   s:&eq), so an expression of a given type is always formable from those names,
-   and any function is callable with a uniform argument list. Three struct/array
-   types are declared up front; structs are subtypes of eq, so `match` on the eq
-   parameter can downcast to them (and, lowered, exercises the decompiler's
-   match/br_on_cast recovery on a round-trip). *)
+   cs:&chars ws:&wchars s:&eq), so an expression of a given type is always
+   formable from those names, and any function is callable with a uniform
+   argument list. Several struct/array types are declared up front; structs are
+   subtypes of eq, so `match` on the eq parameter can downcast to them (and,
+   lowered, exercises the decompiler's match/br_on_cast recovery on a
+   round-trip). The [chars]/[wchars] arrays ([i8]/[i16]) are what string literals
+   build — [wchars] being UTF-16-encoded — so they exercise the string arms. *)
 
 module Ast = Wax_lang.Ast
 
@@ -43,13 +45,30 @@ let id s = nl s
 (* The value types expressions are built to: four numeric, the v128 vector,
    references to the two struct types and the array type, and the abstract eq
    supertype. *)
-type ty = I32 | I64 | F32 | F64 | Vec | Point | Pair | Ints | Eq | I31 | Cont
+type ty =
+  | I32
+  | I64
+  | F32
+  | F64
+  | Vec
+  | Point
+  | Pair
+  | Ints
+  | Chars
+  | Wchars
+  | Eq
+  | I31
+  | Cont
 
 let num_ty = [| I32; I64; F32; F64 |]
-let all_params = [| I32; I64; F32; F64; Vec; Point; Pair; Ints; Eq; I31; Cont |]
+
+let all_params =
+  [| I32; I64; F32; F64; Vec; Point; Pair; Ints; Chars; Wchars; Eq; I31; Cont |]
 
 (* Result types a function may return (Eq excluded: less useful as a callee). *)
-let result_ty = [| I32; I64; F32; F64; Vec; Point; Pair; Ints; I31; Cont |]
+let result_ty =
+  [| I32; I64; F32; F64; Vec; Point; Pair; Ints; Chars; Wchars; I31; Cont |]
+
 let is_num = function I32 | I64 | F32 | F64 -> true | _ -> false
 let is_int = function I32 | I64 -> true | _ -> false
 
@@ -57,6 +76,8 @@ let heaptype : ty -> Ast.heaptype = function
   | Point -> Ast.Type (id "point")
   | Pair -> Ast.Type (id "pair")
   | Ints -> Ast.Type (id "ints")
+  | Chars -> Ast.Type (id "chars")
+  | Wchars -> Ast.Type (id "wchars")
   | Eq -> Ast.Eq
   | I31 -> Ast.I31
   | Cont -> Ast.Type (id "k")
@@ -81,6 +102,8 @@ let pname = function
   | Point -> "p"
   | Pair -> "r"
   | Ints -> "q"
+  | Chars -> "cs"
+  | Wchars -> "ws"
   | Eq -> "s"
   | I31 -> "n"
   | Cont -> "kc"
@@ -121,6 +144,13 @@ let int_cmps =
 
 let flt_cmps =
   [| Ast.Eq; Ast.Ne; Ast.Lt None; Ast.Gt None; Ast.Le None; Ast.Ge None |]
+
+(* String-literal contents: all valid Unicode (so an [i16]/UTF-16 string is
+   accepted) and free of control characters (so a lowered string still
+   decompiles back to a literal), spanning 1–4 UTF-8 bytes per scalar including a
+   non-BMP scalar that becomes a UTF-16 surrogate pair. *)
+let str_pool =
+  [| "hi"; "abc"; "wax"; "café"; "naïve"; "Ω≈ç"; "日本語"; "😀"; "a😀b"; "é漢😀" |]
 
 (* Method-style intrinsics: [x.m(args)] parses as Call (StructGet (x, m), args). *)
 let int_umeth = [| "clz"; "ctz"; "popcnt"; "extend8_s"; "extend16_s" |]
@@ -424,6 +454,22 @@ and gen_ref t d : Ast.location Ast.instr =
       | n when n < 72 -> nl (Ast.Cast (leaf Eq, Ast.Valtype (valtype Ints)))
       | n when n < 84 -> call t
       | _ -> leaf t)
+  | Chars -> (
+      (* An [i8] array, built by a string literal (its raw UTF-8 bytes). *)
+      match rnd 100 with
+      | n when n < 44 -> nl (Ast.String (Some (id "chars"), pick str_pool))
+      | n when n < 60 -> if_ t d
+      | n when n < 72 -> nl (Ast.Cast (leaf Eq, Ast.Valtype (valtype Chars)))
+      | n when n < 84 -> call t
+      | _ -> leaf t)
+  | Wchars -> (
+      (* An [i16] array, built by a string literal (its UTF-16 code units). *)
+      match rnd 100 with
+      | n when n < 44 -> nl (Ast.String (Some (id "wchars"), pick str_pool))
+      | n when n < 60 -> if_ t d
+      | n when n < 72 -> nl (Ast.Cast (leaf Eq, Ast.Valtype (valtype Wchars)))
+      | n when n < 84 -> call t
+      | _ -> leaf t)
   | Eq -> (
       (* Any struct/array is a subtype of eq, so a struct literal serves. *)
       match rnd 100 with
@@ -559,7 +605,7 @@ let rec stmt d : Ast.location Ast.instr =
 
 (* One clean type error, to reach the checker's mismatch-reporting arms. *)
 let poison () : Ast.location Ast.instr =
-  match rnd 4 with
+  match rnd 6 with
   | 0 ->
       nl
         (Ast.Set
@@ -573,6 +619,12 @@ let poison () : Ast.location Ast.instr =
       nl (Ast.Set (Some (id "b"), None, nl (Ast.Get (id "c"))))
       (* f32 into i64 *)
   | 2 -> nl (Ast.StructGet (leaf Point, id "nope")) (* unknown field *)
+  | 3 ->
+      nl (Ast.Set (None, None, nl (Ast.String (Some (id "ints"), "x"))))
+      (* a string on an i32 array — only i8/i16 are allowed *)
+  | 4 ->
+      nl (Ast.Set (None, None, nl (Ast.String (Some (id "wchars"), "\xff"))))
+      (* invalid Unicode in an i16 (UTF-16) string *)
   | _ ->
       nl
         (Ast.BinOp
@@ -606,6 +658,17 @@ let type_decls : Ast.location Ast.modulefield list =
           );
       |];
     Ast.Type [| nl (id "ints", subtype (Ast.Array (ftype true I32))) |];
+    (* The two array types string literals build: [i8] (raw UTF-8 bytes) and
+       [i16] (UTF-16 code units). *)
+    Ast.Type
+      [|
+        nl (id "chars", subtype (Ast.Array { mut = true; typ = Ast.Packed I8 }));
+      |];
+    Ast.Type
+      [|
+        nl
+          (id "wchars", subtype (Ast.Array { mut = true; typ = Ast.Packed I16 }));
+      |];
     (* A continuation scaffold: a task function type, its continuation type, and
        a `worker` that suspends the `yield` tag — so cont_new/suspend and the
        cont typing arms are exercised. *)
