@@ -63,3 +63,36 @@ jobs:
       - name: Run tests
         if: matrix.ocaml-compiler != '4.14' && matrix.os != 'windows-latest'
         run: opam exec -- dune runtest
+
+  fuzz:
+    name: Fuzz guards
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: "5.4"
+
+      - name: Install dependencies
+        run: opam install . --deps-only --with-test
+
+      - name: Build
+        run: opam exec -- dune build
+
+      # The guards diff wax against the reference validator; one whose wasm-tools
+      # dependency is absent SKIPS rather than fails, but install it so they run.
+      - name: Install wasm-tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-tools@1.246.2
+
+      # fuzz/check.sh runs every deterministic guard at a fixed SEED and modest
+      # budget, exiting non-zero on any HIGH-severity finding. Guards needing the
+      # generated corpus (build-corpus.sh) SKIP here — those, and the stochastic
+      # mutation campaigns, are the separate nightly tier. Set QUICK=1 to shrink
+      # the budgets further.
+      - name: Run deterministic fuzz guards
+        run: opam exec -- bash fuzz/check.sh
