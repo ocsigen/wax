@@ -79,8 +79,11 @@ jobs:
       - name: Install dependencies
         run: opam install . --deps-only --with-test
 
+      # Build only the executables the guards drive — a plain `dune build` builds
+      # @all, which pulls in wasm_of_ocaml-compiler (main.exe's `wasm` mode) and
+      # uucp (the scripts/ unicode-table generator), neither of which is needed.
       - name: Build
-        run: opam exec -- dune build
+        run: opam exec -- dune build src/bin/main.exe src/bin/fuzz_gen.exe
 
       # The guards diff wax against the reference validator; one whose wasm-tools
       # dependency is absent SKIPS rather than fails, but install it so they run.
