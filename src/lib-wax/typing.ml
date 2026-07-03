@@ -3543,7 +3543,9 @@ and type_branch ctx i =
            ( label,
              ty,
              { i' with info = (Array.append types [| typ1 |], snd i'.info) } ))
-        (Array.append (Array.sub params 0 (Array.length params - 1)) [| typ2 |])
+        (Array.append
+           (Array.sub params 0 (max 0 (Array.length params - 1)))
+           [| typ2 |])
   | Br_on_cast_fail (label, ty, i') ->
       let* i' = instruction ctx i' in
       if is_cont_heaptype ctx ty.typ then
@@ -3620,7 +3622,9 @@ and type_branch ctx i =
            ( label,
              ty,
              { i' with info = (Array.append types [| typ1 |], snd i'.info) } ))
-        (Array.append (Array.sub params 0 (Array.length params - 1)) [| typ |])
+        (Array.append
+           (Array.sub params 0 (max 0 (Array.length params - 1)))
+           [| typ |])
   | Br_on_cast_desc_eq (label, nullable, i', d) ->
       (* As [br_on_cast]; the target [ty] is recovered from the descriptor
          operand [d] ([d : (ref null? (exact_1 Y))], [Y describes X] ⇒ target
@@ -3664,7 +3668,9 @@ and type_branch ctx i =
              nullable,
              { i' with info = (Array.append types [| typ1 |], snd i'.info) },
              d ))
-        (Array.append (Array.sub params 0 (Array.length params - 1)) [| typ2 |])
+        (Array.append
+           (Array.sub params 0 (max 0 (Array.length params - 1)))
+           [| typ2 |])
   | Br_on_cast_desc_eq_fail (label, nullable, i', d) ->
       let* d, target = descriptor_target ctx ~location:i.info ~nullable d in
       let* i' = instruction ctx i' in
@@ -3703,7 +3709,9 @@ and type_branch ctx i =
              nullable,
              { i' with info = (Array.append types [| typ1 |], snd i'.info) },
              d ))
-        (Array.append (Array.sub params 0 (Array.length params - 1)) [| typ |])
+        (Array.append
+           (Array.sub params 0 (max 0 (Array.length params - 1)))
+           [| typ |])
   | _ -> assert false (* only invoked on a branch instruction *)
 
 and type_stack_switching ctx i =
