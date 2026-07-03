@@ -34,7 +34,7 @@ Off by default; turn one on with `-X NAME` (see the [CLI reference](./cli.md)):
 
 | Feature | Notes |
 |---------|-------|
-| Legacy exception handling (`try`/`catch`/`delegate`/`rethrow`) | superseded by `try_table`; rejected on input |
+| Legacy `delegate` / `rethrow` | rejected on input. The rest of legacy exception handling — `try`/`catch`/`catch_all` — *is* supported: it has dedicated Wax syntax (`try { … } catch { … }`) and round-trips through the legacy binary opcodes |
 | Component Model | |
 
 ### A deliberate relaxation
