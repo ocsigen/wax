@@ -81,6 +81,7 @@ trusted and not validated. `--validate` forces validation in every case.
 |------|------|-------------|
 | `-f` | `--format` / `--input-format` | Force the format of all files (overrides extension detection) |
 | `-s` | `--strict-validate` | Strict reference validation (Wasm Text) |
+| `-D` | `--define` | Set a conditional-compilation variable (as for convert); specializes `#[if]`/`(@if)` before validating. A partial set leaves the rest for the path-sensitive check. Repeatable |
 | `-W` | `--warn` | Set a warning's level (as for convert) |
 |      | `--color` / `--debug` | As for convert |
 

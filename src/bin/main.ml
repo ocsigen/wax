@@ -538,12 +538,16 @@ let format inplace check format_opt color fold_mode warnings debug files =
    without producing any output, reporting diagnostics and exiting with a
    non-zero status if any file fails. [format_opt] forces the format; otherwise
    it is detected from the extension. *)
-let check format_opt strict color warnings features debug files =
+let check format_opt strict color warnings features debug defines files =
   Wax_wasm.Validation.validate_refs := strict;
   let policy = build_policy warnings in
   Wax_utils.Diagnostic.set_policy policy;
   Wax_utils.Feature.set_config features;
   Wax_utils.Debug.enable debug;
+  (* -D bindings specialize the conditionals before validation, exactly as in
+     [convert]; a partial set leaves the remaining conditionals for the
+     path-sensitive check to explore. *)
+  let defines = Wax_wasm.Cond_specialize.of_list defines in
   let check_one file =
     match
       match format_opt with Some _ -> format_opt | None -> detect_format file
@@ -567,11 +571,13 @@ let check format_opt strict color warnings features debug files =
                let ast, _ =
                  Wax_parser.parse_from_string ~color ~filename:file text
                in
+               let ast = specialize_wax ~color ~text defines ast in
                Wax_lang.Typing.check ~warn_unused:true d ast
            | Wat ->
                let ast, _ =
                  Wat_parser.parse_from_string ~color ~filename:file text
                in
+               let ast = specialize_wat ~color ~text defines ast in
                Wax_wasm.Validation.f d ast
            | Wasm ->
                let binary = parse_wasm ~color ~filename:file text in
@@ -922,8 +928,10 @@ let check_term =
   and+ warnings = warn_option
   and+ features = feature_option
   and+ debug = debug_option
+  and+ defines = define_option
   and+ files = check_files in
-  check format_opt strict color warnings features (List.concat debug) files
+  check format_opt strict color warnings features (List.concat debug) defines
+    files
 
 let check_cmd =
   let doc = "Validate WebAssembly files without producing output" in

@@ -219,6 +219,11 @@ wax check [OPTIONS] FILE…
   all files, overriding extension detection.
 - **`-s`**, **`--strict-validate`** — strict reference validation for Wasm Text,
   as above (Wasm binary is always strict).
+- **`-D`** *NAME[=VALUE]*, **`--define`** *NAME[=VALUE]* — set a
+  conditional-compilation variable, as for [`convert`](#options): the
+  conditionals are specialized before validation. A full set validates one
+  configuration; a partial set leaves the remaining conditionals for the
+  path-sensitive check to explore. Repeatable.
 - **`-W`** *NAME=LEVEL*, **`--warn`** *NAME=LEVEL* — set a warning's level, as
   above.
 - **`--color`** *WHEN* — as above.
