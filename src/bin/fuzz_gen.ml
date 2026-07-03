@@ -458,13 +458,42 @@ and gen_ref t d : Ast.location Ast.instr =
    a round-trip. *)
 let tail_match res : Ast.location Ast.instr =
   let ret () = nl (Ast.Return (Some (gen res 1))) in
-  let arm t = (Ast.MatchCast (None, reftype t), [ ret () ]) in
+  (* For an i32 result, bind the narrowed value and return one of its fields —
+     exercising the match binding's type; otherwise leave the pattern anonymous. *)
+  let arm t =
+    if res = I32 then
+      let fld = if t = Point then "x" else "a" in
+      ( Ast.MatchCast (Some (id "mv"), reftype t),
+        [
+          nl
+            (Ast.Return
+               (Some (nl (Ast.StructGet (nl (Ast.Get (id "mv")), id fld)))));
+        ] )
+    else (Ast.MatchCast (None, reftype t), [ ret () ])
+  in
   nl
     (Ast.Match
        {
          scrutinee = leaf Eq;
          arms = [ arm Point; arm Pair ];
          default = [ ret () ];
+       })
+
+(* A `dispatch` (jump table) as a function TAIL: an i32 selects a case label,
+   with an `else` default; every arm `return`s the result type. Like `match`, a
+   diverging control construct — and one the decompiler never emits (it lowers to
+   a br_table). *)
+let tail_dispatch res : Ast.location Ast.instr =
+  let ret () = nl (Ast.Return (Some (gen res 1))) in
+  let cases = [ id "c0"; id "c1"; id "c2" ] in
+  let default = id "cd" in
+  nl
+    (Ast.Dispatch
+       {
+         index = gen I32 1;
+         cases;
+         default;
+         arms = List.map (fun l -> (l, [ ret () ])) (cases @ [ default ]);
        })
 
 (* A statement (no value escapes): assign a param (fully type-constrained),
@@ -630,8 +659,9 @@ let func k : Ast.location Ast.modulefield =
       if poison <> [] then [ gen res 2 ]
       else
         match rnd 100 with
-        | n when n < 25 -> [ tail_match res ]
-        | n when n < 33 -> [ nl (Ast.Throw (id "stop", None)) ]
+        | n when n < 22 -> [ tail_match res ]
+        | n when n < 34 -> [ tail_dispatch res ]
+        | n when n < 42 -> [ nl (Ast.Throw (id "stop", None)) ]
         | _ -> [ gen res 2 ]
     in
     stmts @ poison @ tail

@@ -193,11 +193,12 @@ what large parts of `lib-wax/typing.ml` exist to check: infix operators and
 their signed/unsigned variants, `as` conversions, method and reinterpret
 intrinsics (`.clz()`, `.sqrt()`, `.to_bits()`, …), `if`/`?:` with inferred
 result types, struct/array literals with field/index access, reference types,
-`match` and `try`/`catch`/`throw` (which the decompiler never emits — it lowers
-them to `br_on_cast` / `try_table`), `is` type tests, i31 boxing, continuations
-(`cont_new` / `suspend`), SIMD lane ops (`.add_i32x4()`, `v128::const_i32x4(…)`,
-shuffles), and memory load/store methods. `type-fuzz.sh` closes that gap with
-`fuzz_gen` (`src/bin/fuzz_gen.ml`), an AST generator.
+`match` (with bound patterns), `dispatch`, and `try`/`catch`/`throw` (which the
+decompiler never emits — it lowers them to `br_on_cast` / `br_table` /
+`try_table`), `is` type tests, i31 boxing, continuations (`cont_new` /
+`suspend`), SIMD lane ops (`.add_i32x4()`, `v128::const_i32x4(…)`, shuffles), and
+memory load/store methods. `type-fuzz.sh` closes that gap with `fuzz_gen`
+(`src/bin/fuzz_gen.ml`), an AST generator.
 
 `fuzz_gen` builds a **real Wax AST and prints it through `Wax_lang.Output`** —
 the same technique as `fuzz_mutate` — so the source ALWAYS re-parses; a rejection
@@ -225,16 +226,18 @@ validation"*: an accepted module must emit a binary the reference validator
 accepts (`UNSOUND` otherwise), whose decompilation recompiles to a valid binary
 (`ROUNDTRIP`), and type-checking must never crash. Its value is the arms the
 decompiled corpus never reaches — operators, conversions, select/if inference,
-struct/array/reference typing, `match`, exceptions, `is` tests, i31, and
-continuations — worth ~+225 lines of `typing.ml` over a decompiled-only baseline
-(and, via the round-trip, the decompiler's `match`/loop recovery). Note the
+struct/array/reference typing, `match` (bound and anonymous), `dispatch`,
+exceptions, `is` tests, i31, and continuations — worth ~+240 lines of `typing.ml`
+over a decompiled-only baseline (and, via the round-trip, the decompiler's
+`match`/loop recovery). Note the
 split by construct: `match`/`try`/`throw`/`is`/i31/`cont_new`/`suspend` each have
 dedicated typer logic and do move `typing.ml`, whereas the SIMD and memory ops
 land mostly in `lib-wasm/simd.ml` (~80% from the generator alone) and the
 validator's SIMD arms — the typer routes those through the same generic
 intrinsic method dispatch as `.clz()`, so their type-specific logic lives in
 lowering/validation, not the checker. What remains cold in `typing.ml` is
-`dispatch`, `resume`/`cont_bind`, and the rarer reference forms.
+`resume`/`cont_bind` (their handler-block typing is awkward to generate) and the
+rarer reference forms — the genuine tail of the returns curve.
 
 ## Conditional compilation
 
