@@ -51,6 +51,7 @@ fuzz/wax-corpus.sh [smith-count] [bytes]   # build .wax seeds: spec corpus + smi
 fuzz/mutate-wax.sh [count]       # AST-mutate the wax seeds + check them (needs wasm-tools)
 fuzz/mutate-validate.sh [count]  # AST-mutate + emitter-soundness vs the spec reference (no wasm-tools)
 fuzz/cast-lattice.sh             # deterministic sweep of the numeric/ref cast lattice
+fuzz/cond-fuzz.sh                # fuzz #[if]/-D conditional compilation (Cond_explore soundness)
 
 # WAT *input* side (the text lexer/parser):
 fuzz/wat-corpus.sh [smith-count] [bytes]   # build .wat seeds: spec corpus + smith modules
@@ -73,10 +74,10 @@ fuzz/exec-mutate.sh [wast…] # behavioural check on semantics-preserving mutant
 ```
 
 `run.sh`, `smith.sh`, `mutate-wax.sh`, `diff-validate.sh`, `mutate-validate.sh`,
-`cast-lattice.sh`, `wat-cast-chain.sh`, `wat-cast-const.sh`, `stress.sh` and
-`comment-preserve.sh` exit non-zero if any **HIGH**-severity finding appears, so
-any can gate CI; the execution oracles exit non-zero on any behavioural
-regression.
+`cast-lattice.sh`, `wat-cast-chain.sh`, `wat-cast-const.sh`, `stress.sh`,
+`comment-preserve.sh` and `cond-fuzz.sh` exit non-zero if any **HIGH**-severity
+finding appears, so any can gate CI; the execution oracles exit non-zero on any
+behavioural regression.
 
 The mutation campaigns (`mutate-wax.sh`, `mutate-wat.sh`, `mutate-wasm.sh`) are
 reproducible: each derives every per-mutation seed from a master `SEED`
@@ -168,6 +169,30 @@ Wax generator for syntactic constructs the decompiler never emits.
   property: the set of casts the typer accepts must equal the set `to_wasm` can
   lower (`cast`/`signed_cast` and `default_cast` are two hand-maintained tables
   that must agree cell for cell). Deterministic, so it belongs in CI.
+
+## Conditional compilation
+
+`cond-fuzz.sh` is the only oracle that exercises the conditional-compilation
+subsystem (`Cond_explore` / `Cond_specialize` / `cond_solver`): the corpus
+builder skips `(@if)` files and nothing else generates `#[if]`/`-D`, so that
+machinery otherwise only runs on empty input. It drives the real hand-written
+conditional seeds (`test/wasmoo/wax/*.wax`, whose conditions use a known handful
+of variables) under `-D` bindings, and pins `Cond_explore` against ground truth
+from the concrete configurations it abstracts. wax's path-sensitive validation
+(`wax check`, no `-D`) accepts a conditional module iff *every* feasible
+configuration is well-typed; a *full* `-D` assignment selects one configuration
+and specialises the module completely, so it can be validated and emitted. Over
+the product of each used variable's edge values that gives:
+
+* **`COND_UNSOUND`** — `wax check` accepted the module, yet a concrete assignment
+  is rejected (`Cond_explore` missed an ill-typed configuration);
+* **`COND_OVERREJECT`** — `wax check` rejected it, yet every assignment is
+  accepted (trusted only when the product was enumerated exhaustively);
+* **`EMIT_UNSOUND`** — an accepted assignment emits a binary the reference
+  rejects; and a plain crash under any `-D`.
+
+Deterministic; needs wasm-tools. (This is also what motivated giving `check` a
+`-D` flag, for partial checks.)
 
 ## The WAT input side
 
