@@ -35,8 +35,15 @@ echo "wasmoo .wat: $n (skipped $skipped with conditional annotations)"
 # 2. Spec suite, exploded per module. json-from-wast emits module .wasm files
 # plus a JSON describing each one; the "type" field gives the ground truth.
 command -v jq >/dev/null 2>&1 && HAVE_JQ=1 || HAVE_JQ=0
-nv=0; ni=0; nfail=0
+nv=0; ni=0; nfail=0; nprop=0
 while IFS= read -r wast; do
+  # Skip spec tests for proposals wax gates OFF by default: their modules need a
+  # feature flag (e.g. -X custom-descriptors) that the oracle does not pass, so
+  # default wax rejects them and they would show up as spurious FALSE_REJECTs.
+  # custom-descriptors is the only validation-affecting one today.
+  case "$wast" in
+    *custom-descriptors*) nprop=$((nprop + 1)); continue ;;
+  esac
   rel="$(echo "${wast#$ROOT/test/wasm-test-suite/}" | tr '/' '-')"
   tmp="$(mktemp -d)"
   if ! "$WASM_TOOLS" json-from-wast "$wast" --output "$tmp/out.json" \
@@ -67,6 +74,7 @@ done < <(find "$ROOT/test/wasm-test-suite" -name '*.wast')
 echo "spec-suite valid modules:   $nv"
 echo "spec-suite invalid modules: $ni"
 [ "$nfail" -gt 0 ] && echo "spec-suite .wast that json-from-wast could not split: $nfail"
+[ "$nprop" -gt 0 ] && echo "spec-suite .wast skipped (off-by-default proposal): $nprop"
 [ "$HAVE_JQ" = 0 ] && echo "(install jq to also harvest the invalid-module corpus)"
 echo
 echo "corpus written to $OUT"
