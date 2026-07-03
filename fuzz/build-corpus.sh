@@ -20,17 +20,38 @@ OUT="${1:-$ROOT/fuzz/corpus}"
 rm -rf "$OUT"
 mkdir -p "$OUT/valid" "$OUT/invalid"
 
-# 1. Curated wat sources. Skip files using wax conditional annotations
-# ((@if ...)): they are not standalone wasm modules — they require -D defines
-# before a binary can be emitted, so the reference oracles do not apply.
-n=0; skipped=0
+# 1. Curated wat sources. A file using wax conditional annotations ((@if ...))
+# is not a standalone module — it needs -D defines to pick each branch before it
+# can be lowered. Rather than drop it (most of these js_of_ocaml runtime modules
+# are large and only lightly conditional), SPECIALIZE it: emit it under two
+# assignments differing in $wasi (the dominant condition), so both branches of
+# the wasi-gated code enter the corpus. The other condition variables ($effects,
+# $ocaml_version) are few, so they are pinned. Any assignment that fully resolves
+# a file (no leftover @if) contributes a module; a plain file is copied as-is.
+# Falls back to skipping conditional files if wax is not built (this step needs
+# it; the rest of build-corpus only needs wasm-tools).
+COMMON_DEFS="-D oxcaml=false -D cps=false -D jspi=false -D native=true -D effects=cps -D ocaml_version=5.2.0"
+n=0; nspec=0; nskip=0
 for f in "$ROOT"/test/wasmoo/wasm-source/*.wat; do
   [ -e "$f" ] || continue
-  if grep -q '(@if' "$f"; then skipped=$((skipped+1)); continue; fi
-  cp "$f" "$OUT/valid/wasmoo-$(basename "$f")"
-  n=$((n+1))
+  base="$(basename "$f" .wat)"
+  if ! grep -q '(@if' "$f"; then
+    cp "$f" "$OUT/valid/wasmoo-$base.wat"; n=$((n+1)); continue
+  fi
+  if [ ! -x "$WAX" ]; then nskip=$((nskip+1)); continue; fi
+  for wasi in false true; do
+    out="$OUT/valid/wasmoo-$base-wasi_$wasi.wat"
+    if "$WAX" -D wasi="$wasi" $COMMON_DEFS -i wat -f wat "$f" -o "$out" 2>/dev/null \
+       && ! grep -q '(@if' "$out"; then
+      nspec=$((nspec + 1))
+    else
+      rm -f "$out"
+    fi
+  done
 done
-echo "wasmoo .wat: $n (skipped $skipped with conditional annotations)"
+msg="wasmoo .wat: $n plain + $nspec specialized from conditional files"
+[ "$nskip" -gt 0 ] && msg="$msg ($nskip skipped — build wax to include them)"
+echo "$msg"
 
 # 2. Spec suite, exploded per module. json-from-wast emits module .wasm files
 # plus a JSON describing each one; the "type" field gives the ground truth.
