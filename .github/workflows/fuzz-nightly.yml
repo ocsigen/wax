@@ -1,0 +1,92 @@
+name: Fuzz (nightly)
+
+# The budgeted stochastic campaign tier: build the corpora and run the
+# mutation/generation campaigns (fuzz/nightly.sh). Runs on a schedule (and on
+# demand) rather than per-PR — the per-PR deterministic guards are the `fuzz`
+# job in ci.yml. A failure means a campaign hit a HIGH-severity finding; the
+# inputs are uploaded as an artifact and the run's SEED (in the log) replays it.
+on:
+  schedule:
+    - cron: "17 3 * * *" # daily, 03:17 UTC
+  workflow_dispatch:
+    inputs:
+      count:
+        description: "Mutants per mutation campaign"
+        default: "2000"
+      smith:
+        description: "Smith-generated modules"
+        default: "500"
+
+jobs:
+  nightly:
+    name: Nightly fuzz campaigns
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    # github-script needs issue write to file the failure report.
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: "5.4"
+
+      - name: Install dependencies
+        run: opam install . --deps-only --with-test
+
+      # Only the executables the campaigns drive — a plain `dune build` builds
+      # @all, pulling in wasm_of_ocaml-compiler (main.exe's `wasm` mode) and uucp
+      # (the scripts/ unicode-table generator), neither of which is needed.
+      - name: Build
+        run: opam exec -- dune build src/bin/main.exe src/bin/fuzz_mutate.exe src/bin/fuzz_gen.exe
+
+      - name: Install wasm-tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-tools@1.246.2
+
+      # node (for the byte-mutation mode of mutate-wasm) is preinstalled on the
+      # ubuntu runner. SEED is left unset so each night explores fresh inputs;
+      # the chosen value is logged for replay.
+      - name: Run nightly fuzz campaigns
+        run: opam exec -- bash fuzz/nightly.sh
+        env:
+          COUNT: ${{ github.event.inputs.count || '2000' }}
+          SMITH: ${{ github.event.inputs.smith || '500' }}
+
+      # A campaign that found something saved its (re-verified) inputs here.
+      - name: Upload findings
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-findings
+          path: fuzz/*-findings/
+          if-no-files-found: ignore
+
+      # A repo-visible failure signal that does not depend on personal
+      # notification settings: file (or comment on) a `nightly-fuzz` issue. This
+      # is on top of GitHub's built-in email to the workflow's last committer.
+      - name: Report failure as an issue
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              `The scheduled fuzz campaign failed.`,
+              ``,
+              `- Run log: ${run}`,
+              `- Failing inputs: the run's \`fuzz-findings\` artifact.`,
+              `- Replay locally with the SEED printed near the top of the log: \`SEED=<n> fuzz/nightly.sh\`.`,
+            ].join('\n');
+            const q = { owner: context.repo.owner, repo: context.repo.repo };
+            const open = await github.rest.issues.listForRepo({ ...q, state: 'open', labels: 'nightly-fuzz' });
+            if (open.data.length > 0) {
+              await github.rest.issues.createComment({ ...q, issue_number: open.data[0].number, body });
+            } else {
+              await github.rest.issues.create({ ...q, title: 'Nightly fuzz run failed', labels: ['nightly-fuzz'], body });
+            }
