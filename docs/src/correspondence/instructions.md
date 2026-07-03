@@ -273,20 +273,28 @@ These casts can also chain through a forced intermediate, written as a single `a
 
 ## Aggregate Instructions
 
+A struct or array literal takes an optional type prefix — `{t| … }` for a
+struct, `[t| … ]` for an array — but it is omitted whenever the literal's type
+can be inferred from context (an assignment, a return, a call argument), which
+is the common case shown below. Write the prefix only when the type is
+ambiguous. The `{descriptor(d)| … }` forms are different: `descriptor(d)`
+supplies the runtime descriptor and is part of the construction, not a prefix
+that can be dropped.
+
 | Wasm | Wax |
 |------|-----|
-| `struct.new $t` | `{t\| field: val, ... }` |
-| `struct.new_default $t` | `{t\| .. }` |
+| `struct.new $t` | `{ field: val, ... }` |
+| `struct.new_default $t` | `{ .. }` |
 | `struct.new_desc $t` | `{descriptor(d)\| field: val, ... }` |
 | `struct.new_default_desc $t` | `{descriptor(d)\| .. }` |
 | `struct.get $t $f` | `val.field` |
 | `struct.set $t $f` | `val.field = new_val` |
 | `ref.get_desc $t` | `val.descriptor` |
-| `array.new $t` | `[t\| val; len]` |
-| `array.new_default $t` | `[t\| ..; len]` |
-| `array.new_fixed $t` | `[t\| val, ...]` |
-| `array.new_data $t $d` | `[t\| d @ offset; count]` |
-| `array.new_elem $t $e` | `[t\| e @ offset; count]` |
+| `array.new $t` | `[ val; len ]` |
+| `array.new_default $t` | `[ ..; len ]` |
+| `array.new_fixed $t` | `[ val, ... ]` |
+| `array.new_data $t $d` | `[ d @ offset; count ]` |
+| `array.new_elem $t $e` | `[ e @ offset; count ]` |
 | `array.init_data $t $d` | `arr.init(d, dest, src, count)` |
 | `array.init_elem $t $e` | `arr.init(e, dest, src, count)` |
 | `array.get $t` | `arr[idx]` |
