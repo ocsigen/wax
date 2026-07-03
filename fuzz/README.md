@@ -183,9 +183,11 @@ Everything above type-checks Wax that was **decompiled from wasm** (the
 `from_wasm` emits — never the surface sugar a human writes, which is exactly
 what large parts of `lib-wax/typing.ml` exist to check: infix operators and
 their signed/unsigned variants, `as` conversions, method and reinterpret
-intrinsics (`.clz()`, `.sqrt()`, `.to_bits()`, …), and `if`/`?:` with inferred
-result types. `type-fuzz.sh` closes that gap with `fuzz_gen`
-(`src/bin/fuzz_gen.ml`), an AST generator.
+intrinsics (`.clz()`, `.sqrt()`, `.to_bits()`, …), `if`/`?:` with inferred
+result types, struct/array literals with field/index access, reference types,
+and `match` (which the decompiler never emits — it lowers to a `br_on_cast`
+chain). `type-fuzz.sh` closes that gap with `fuzz_gen` (`src/bin/fuzz_gen.ml`),
+an AST generator.
 
 `fuzz_gen` builds a **real Wax AST and prints it through `Wax_lang.Output`** —
 the same technique as `fuzz_mutate` — so the source ALWAYS re-parses; a rejection
@@ -195,23 +197,28 @@ which fights the grammar's precedence and optional tokens). It is
 type-checks and the checker runs its inference/checking arms in full rather than
 bailing early — measured at 100% accepted over 400 seeds. The trick that keeps
 this tractable is that every function shares one parameter signature
-(`a:i32 b:i64 c:f32 d:f64`), so an expression of any type is always formable and
-any function is callable uniformly. Polymorphic literals (a bare float defaults
-to f64) are emitted only in type-*forced* positions — a binop operand pinned by
-its sibling, an `if`/`?:` branch pinned by the result type — never as a
-method/cast receiver, whose type the checker infers bottom-up. With `err` it
-plants a single mismatch instead, to exercise the rejection arms (100% cleanly
-rejected, never a crash).
+(`a:i32 b:i64 c:f32 d:f64 p:&point r:&pair q:&ints s:&eq`), so an expression of
+any type is always formable and any function is callable uniformly; three
+struct/array types are declared up front, and since structs are subtypes of eq,
+a `match` on the eq parameter downcasts to them. Polymorphic literals (a bare
+float defaults to f64) are emitted only in type-*forced* positions — a binop
+operand pinned by its sibling, an `if`/`?:` branch pinned by the result type —
+never as a method/cast receiver, whose type the checker infers bottom-up.
+`match` is generated only where Wax accepts it — as a function tail whose arms
+`return` (it is a diverging control construct, not a value-producing
+expression). With `err` it plants a single mismatch instead, to exercise the
+rejection arms (100% accepted / 100% cleanly rejected respectively, never a
+crash).
 
 The oracle is the checker-soundness invariant *"Wax typing mirrors Wasm
 validation"*: an accepted module must emit a binary the reference validator
 accepts (`UNSOUND` otherwise), whose decompilation recompiles to a valid binary
-(`ROUNDTRIP`), and type-checking must never crash. On its own `fuzz_gen` reaches
-the scalar-numeric + control fragment of `typing.ml`; its value is the arms the
-decompiled corpus never reaches (operators, conversions, select/if inference —
-worth ~+90 lines of `typing.ml` and +8 pts of `infer.ml` over a decompiled-only
-baseline). Struct/array/reference types and `match`/`dispatch` are the natural
-next extension for a larger share of the checker.
+(`ROUNDTRIP`), and type-checking must never crash. Its value is the arms the
+decompiled corpus never reaches — operators, conversions, select/if inference,
+struct/array/reference typing, and `match` — worth ~+150 lines of `typing.ml`
+over a decompiled-only baseline (and, via the round-trip, the decompiler's
+`match`/loop recovery). The remaining cold `typing.ml` regions are the exotic
+GC / continuation / SIMD / memory constructs the generator does not yet build.
 
 ## Conditional compilation
 
