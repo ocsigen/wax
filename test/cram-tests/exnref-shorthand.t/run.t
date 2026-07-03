@@ -4,5 +4,5 @@ form (0x63 followed by the heap type). exnref.wasm uses the 0x69 shorthand for
 both the parameter and the result; the binary reader must accept it.
 
   $ wax -i wasm -f wat exnref.wasm
-  (type (func (param (ref null exn)) (result (ref null exn))))
-  (func (param (ref null exn)) (result (ref null exn)) local.get 0)
+  (type (func (param exnref) (result exnref)))
+  (func (param exnref) (result exnref) local.get 0)

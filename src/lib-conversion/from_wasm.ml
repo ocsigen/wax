@@ -2252,6 +2252,7 @@ let rec reserve_module_names_in_instr ctx ns (i : _ Src.instr) =
   | Folded (i, l) ->
       reserve_module_names_in_instrs ctx ns l;
       reserve_module_names_in_instr ctx ns i
+  | Hinted (_, i) -> reserve_module_names_in_instr ctx ns i
   | GlobalGet x | GlobalSet x -> Namespace.reserve ns (idx ctx `Global x).desc
   | Call f | ReturnCall f | RefFunc f ->
       Namespace.reserve ns (idx ctx `Func f).desc
@@ -2314,6 +2315,7 @@ let rec collect_elem_refs ctx acc (i : _ Src.instr) =
   | Folded (i, l) ->
       collect_elem_refs_instrs ctx acc l;
       collect_elem_refs ctx acc i
+  | Hinted (_, i) -> collect_elem_refs ctx acc i
   | TableInit (_, e) | ElemDrop e | ArrayNewElem (_, e) | ArrayInitElem (_, e)
     -> (
       try Hashtbl.replace acc (idx ctx `Elem e).desc () with _ -> ())
@@ -2339,6 +2341,7 @@ let rec collect_local_refs acc (i : _ Src.instr) =
   | Folded (i, l) ->
       collect_local_refs_instrs acc l;
       collect_local_refs acc i
+  | Hinted (_, i) -> collect_local_refs acc i
   | LocalGet x | LocalSet x | LocalTee x -> (
       match x.Ast.desc with Num n -> Hashtbl.replace acc n () | Id _ -> ())
   | _ -> ()
@@ -2849,6 +2852,7 @@ let elaborate_implicit_types ctx fields =
     | Folded (i, l) ->
         instr i;
         instrs l
+    | Hinted (_, i) -> instr i
     | _ -> ()
   and instrs l = List.iter instr l in
   List.iter

@@ -217,6 +217,10 @@ let reftype { nullable; typ } =
   | true, Struct -> type_ "structref"
   | true, Array -> type_ "arrayref"
   | true, None_ -> type_ "nullref"
+  | true, Exn -> type_ "exnref"
+  | true, NoExn -> type_ "nullexnref"
+  | true, Cont -> type_ "contref"
+  | true, NoCont -> type_ "nullcontref"
   | _ ->
       let r = [ heaptype typ ] in
       list (type_ "ref" :: (if nullable then type_ "null" :: r else r))

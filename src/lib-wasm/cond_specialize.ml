@@ -264,8 +264,24 @@ let module_ ctx env ((name, fields) : Ast.location Ast.Text.module_) :
         in
         [ { f with desc = Table { r with init } } ]
     | Elem r ->
-        [ { f with desc = Elem { r with init = List.map sinstrs r.init } } ]
-    | _ -> [ f ]
+        let mode : Ast.location elemmode =
+          match r.mode with
+          | Active (idx, e) -> Active (idx, sinstrs e)
+          | (Passive | Declare) as mode -> mode
+        in
+        [
+          { f with desc = Elem { r with init = List.map sinstrs r.init; mode } };
+        ]
+    | Data r ->
+        let mode : Ast.location datamode =
+          match r.mode with
+          | Active (idx, e) -> Active (idx, sinstrs e)
+          | Passive as mode -> mode
+        in
+        [ { f with desc = Data { r with mode } } ]
+    | Types _ | Import _ | Memory _ | Tag _ | Export _ | Start _
+    | String_global _ ->
+        [ f ]
   and sinstrs l = List.concat_map sinstr l
   and sinstr (i : Ast.location instr) =
     match i.desc with
@@ -313,7 +329,37 @@ let module_ ctx env ((name, fields) : Ast.location Ast.Text.module_) :
             catch_all = Option.map sinstrs b.catch_all;
           }
     | Folded (h, l) -> Folded ({ h with desc = sstructured h.desc }, sinstrs l)
-    | desc -> desc
+    | Hinted (hint, inner) ->
+        Hinted (hint, { inner with desc = sstructured inner.desc })
+    (* Every instruction that carries no nested instruction is returned as-is.
+       Enumerated rather than caught by a wildcard so a future instruction that
+       nests others is a compile error here instead of silently escaping
+       specialization. Kept in sync with {!Validation.specialize}. *)
+    | ( Unreachable | Nop | Throw _ | ThrowRef | ContNew _ | ContBind _
+      | Suspend _ | Resume _ | ResumeThrow _ | ResumeThrowRef _ | Switch _
+      | Br _ | Br_if _ | Br_table _ | Br_on_null _ | Br_on_non_null _
+      | Br_on_cast _ | Br_on_cast_fail _ | Br_on_cast_desc_eq _
+      | Br_on_cast_desc_eq_fail _ | Return | Call _ | CallRef _ | ReturnCall _
+      | ReturnCallRef _ | Drop | Select _ | LocalGet _ | LocalSet _ | LocalTee _
+      | GlobalGet _ | GlobalSet _ | Load _ | LoadS _ | Store _ | StoreS _
+      | Atomic _ | AtomicFence | MemorySize _ | MemoryGrow _ | MemoryFill _
+      | MemoryCopy _ | MemoryInit _ | DataDrop _ | TableGet _ | TableSet _
+      | TableSize _ | TableGrow _ | TableFill _ | TableCopy _ | TableInit _
+      | ElemDrop _ | RefNull _ | RefFunc _ | RefIsNull | RefAsNonNull | RefEq
+      | RefTest _ | RefCast _ | RefCastDescEq _ | RefGetDesc _ | StructNew _
+      | StructNewDefault _ | StructNewDesc _ | StructNewDefaultDesc _
+      | StructGet _ | StructSet _ | ArrayNew _ | ArrayNewDefault _
+      | ArrayNewFixed _ | ArrayNewData _ | ArrayNewElem _ | ArrayGet _
+      | ArraySet _ | ArrayLen | ArrayFill _ | ArrayCopy _ | ArrayInitData _
+      | ArrayInitElem _ | RefI31 | I31Get _ | Const _ | UnOp _ | BinOp _
+      | Add128 | Sub128 | MulWide _ | I32WrapI64 | I64ExtendI32 _ | F32DemoteF64
+      | F64PromoteF32 | ExternConvertAny | AnyConvertExtern | VecBitselect
+      | VecConst _ | VecUnOp _ | VecBinOp _ | VecTest _ | VecShift _
+      | VecBitmask _ | VecLoad _ | VecStore _ | VecLoadLane _ | VecStoreLane _
+      | VecLoadSplat _ | VecExtract _ | VecReplace _ | VecSplat _ | VecShuffle _
+      | VecTernOp _ | Char _ | CallIndirect _ | ReturnCallIndirect _ | String _
+      | If_annotation _ ) as desc ->
+        desc
   in
   let fields = sfields fields in
   ((name, fields), List.rev !ranges)

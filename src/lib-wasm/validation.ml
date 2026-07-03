@@ -860,7 +860,9 @@ let reference_comptype tc (idx : Ast.Text.idx) =
 
 (* The source function type a reference resolves to, when it names one. *)
 let reference_functype tc idx =
-  match reference_comptype tc idx with Func ft -> ft | _ -> assert false
+  match reference_comptype tc idx with
+  | Func ft -> ft
+  | Struct _ | Array _ | Cont _ -> assert false
 
 (* The source function type a [typeuse] denotes: the one named by its type
    reference, or its inline signature. Resolve the reference in preference to the
@@ -1152,7 +1154,7 @@ let lookup_func_type ctx idx =
   let def = Types.get_subtype ctx.subtyping_info ty in
   match def.typ with
   | Func f -> Some (ty, f)
-  | _ ->
+  | Struct _ | Array _ | Cont _ ->
       Error.expected_func_type ctx.diagnostics ~location:idx.info idx;
       None
 
@@ -1162,7 +1164,7 @@ let lookup_struct_type ctx idx =
   let def = Types.get_subtype ctx.subtyping_info ty in
   match def.typ with
   | Struct fields -> Some (ty, field_map, fields)
-  | _ ->
+  | Func _ | Array _ | Cont _ ->
       Error.expected_struct_type ctx.diagnostics ~location:idx.info idx;
       None
 
@@ -1188,7 +1190,7 @@ let lookup_array_type ctx idx =
   let def = Types.get_subtype ctx.subtyping_info ty in
   match def.typ with
   | Array field -> Some (ty, field)
-  | _ ->
+  | Func _ | Struct _ | Cont _ ->
       Error.expected_array_type ctx.diagnostics ~location:idx.info idx;
       None
 
@@ -3570,9 +3572,8 @@ let collect_implicit_types d ctx fields =
         (idx, [], Func sign);
       ctx.last_index <- ctx.last_index + 1)
   in
-  let rec collect_instrs l = List.iter collect_instr l
-  and collect_instr (i : _ Ast.Text.instr) =
-    (match i.desc with
+  let collect_instr (i : _ Ast.Text.instr) =
+    match i.desc with
     | Block { typ = Some (Typeuse (None, Some ft)); _ }
     | Loop { typ = Some (Typeuse (None, Some ft)); _ }
     | If { typ = Some (Typeuse (None, Some ft)); _ }
@@ -3582,23 +3583,14 @@ let collect_implicit_types d ctx fields =
     | CallIndirect (_, (None, Some ft)) | ReturnCallIndirect (_, (None, Some ft))
       ->
         collect ft
-    | _ -> ());
-    match i.desc with
-    | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
-        collect_instrs block
-    | If { if_block; else_block; _ } ->
-        collect_instrs if_block.desc;
-        collect_instrs else_block.desc
-    | Try { block; catches; catch_all; _ } ->
-        collect_instrs block;
-        List.iter (fun (_, c) -> collect_instrs c) catches;
-        Option.iter collect_instrs catch_all
-    | If_annotation _ -> assert false
-    | Folded (i, l) ->
-        collect_instr i;
-        collect_instrs l
+    | If_annotation _ ->
+        (* Spliced out by [specialize] before validation; cannot occur here. *)
+        assert false
     | _ -> ()
   in
+  (* The canonical walk descends into every nesting instruction, branch hints
+     included, so inline types buried there are interned like any other. *)
+  let collect_instrs l = List.iter (Ast_utils.iter_instr collect_instr) l in
   List.iter
     (fun (field : (_ Ast.Text.modulefield, _) Ast.annotated) ->
       (match field.desc with
@@ -4248,37 +4240,44 @@ let validate_configuration ?(warn_unused = true)
 
 (*** Conditional compilation and entry point ***)
 
-let rec instr_has_conditional (i : _ Ast.Text.instr) =
-  match i.desc with
-  | If_annotation _ -> true
-  | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
-      List.exists instr_has_conditional block
-  | If { if_block; else_block; _ } ->
-      List.exists instr_has_conditional if_block.desc
-      || List.exists instr_has_conditional else_block.desc
-  | Try { block; catches; catch_all; _ } ->
-      List.exists instr_has_conditional block
-      || List.exists (fun (_, l) -> List.exists instr_has_conditional l) catches
-      || Option.fold ~none:false
-           ~some:(List.exists instr_has_conditional)
-           catch_all
-  | Folded (h, l) ->
-      instr_has_conditional h || List.exists instr_has_conditional l
-  | _ -> false
+(* Walk through every nested instruction (branch hints included) via the
+   canonical [Ast_utils.fold_instr], so a conditional buried inside a
+   branch-hinted branch is not missed. *)
+let instr_has_conditional (i : _ Ast.Text.instr) =
+  Ast_utils.fold_instr
+    (fun found (i : _ Ast.Text.instr) ->
+      found || match i.desc with If_annotation _ -> true | _ -> false)
+    false i
 
+let expr_has_conditional e = List.exists instr_has_conditional e
+
+(* Exhaustive over [modulefield]: every instruction list a field can carry is
+   inspected (including the offset expression of an active [data]/[elem]
+   segment), and a new field variant is a compile error rather than a silent
+   miss. Must stay in sync with [specialize] below, which walks the same lists. *)
 let field_has_conditional (f : (_ Ast.Text.modulefield, _) Ast.annotated) =
   match f.desc with
   | Module_if_annotation _ -> true
-  | Func { instrs; _ } -> List.exists instr_has_conditional instrs
-  | Global { init; _ } -> List.exists instr_has_conditional init
-  | Elem { init; _ } -> List.exists (List.exists instr_has_conditional) init
+  | Func { instrs; _ } -> expr_has_conditional instrs
+  | Global { init; _ } -> expr_has_conditional init
   | Table { init; _ } -> (
       match init with
       | Init_default -> false
-      | Init_expr e -> List.exists instr_has_conditional e
-      | Init_segment segs ->
-          List.exists (List.exists instr_has_conditional) segs)
-  | _ -> false
+      | Init_expr e -> expr_has_conditional e
+      | Init_segment segs -> List.exists expr_has_conditional segs)
+  | Elem { init; mode; _ } -> (
+      List.exists expr_has_conditional init
+      ||
+      match mode with
+      | Active (_, offset) -> expr_has_conditional offset
+      | Passive | Declare -> false)
+  | Data { mode; _ } -> (
+      match mode with
+      | Active (_, offset) -> expr_has_conditional offset
+      | Passive -> false)
+  | Types _ | Import _ | Memory _ | Tag _ | Export _ | Start _ | String_global _
+    ->
+      false
 
 (* Specialize a module for one configuration: resolve every conditional using
    the assumption [asm], splicing in the selected branch. Undetermined
@@ -4341,11 +4340,25 @@ let specialize env diagnostics ~enqueue ~record asm0 fields =
         let desc : _ Ast.Text.modulefield = Table { id; typ; init; exports } in
         ([ { f with desc } ], asm)
     | Elem { id; typ; init; mode } ->
+        let mode : _ Ast.Text.elemmode =
+          match mode with
+          | Active (idx, e) -> Active (idx, sinstrs asm e)
+          | (Passive | Declare) as mode -> mode
+        in
         let desc : _ Ast.Text.modulefield =
           Elem { id; typ; init = List.map (sinstrs asm) init; mode }
         in
         ([ { f with desc } ], asm)
-    | _ -> ([ f ], asm)
+    | Data { id; init; mode } ->
+        let mode : _ Ast.Text.datamode =
+          match mode with
+          | Active (idx, e) -> Active (idx, sinstrs asm e)
+          | Passive as mode -> mode
+        in
+        ([ { f with desc = Data { id; init; mode } } ], asm)
+    | Types _ | Import _ | Memory _ | Tag _ | Export _ | Start _
+    | String_global _ ->
+        ([ f ], asm)
   and sinstrs asm l =
     match l with
     | [] -> []
@@ -4383,7 +4396,37 @@ let specialize env diagnostics ~enqueue ~record asm0 fields =
           }
     | Folded (h, l) ->
         Folded ({ h with desc = sstructured asm h.desc }, sinstrs asm l)
-    | desc -> desc
+    | Hinted (hint, inner) ->
+        Hinted (hint, { inner with desc = sstructured asm inner.desc })
+    (* Every instruction that carries no nested instruction is returned as-is.
+       Enumerated rather than caught by a wildcard so a future instruction that
+       nests others is a compile error here instead of silently escaping
+       specialization. *)
+    | ( Unreachable | Nop | Throw _ | ThrowRef | ContNew _ | ContBind _
+      | Suspend _ | Resume _ | ResumeThrow _ | ResumeThrowRef _ | Switch _
+      | Br _ | Br_if _ | Br_table _ | Br_on_null _ | Br_on_non_null _
+      | Br_on_cast _ | Br_on_cast_fail _ | Br_on_cast_desc_eq _
+      | Br_on_cast_desc_eq_fail _ | Return | Call _ | CallRef _ | ReturnCall _
+      | ReturnCallRef _ | Drop | Select _ | LocalGet _ | LocalSet _ | LocalTee _
+      | GlobalGet _ | GlobalSet _ | Load _ | LoadS _ | Store _ | StoreS _
+      | Atomic _ | AtomicFence | MemorySize _ | MemoryGrow _ | MemoryFill _
+      | MemoryCopy _ | MemoryInit _ | DataDrop _ | TableGet _ | TableSet _
+      | TableSize _ | TableGrow _ | TableFill _ | TableCopy _ | TableInit _
+      | ElemDrop _ | RefNull _ | RefFunc _ | RefIsNull | RefAsNonNull | RefEq
+      | RefTest _ | RefCast _ | RefCastDescEq _ | RefGetDesc _ | StructNew _
+      | StructNewDefault _ | StructNewDesc _ | StructNewDefaultDesc _
+      | StructGet _ | StructSet _ | ArrayNew _ | ArrayNewDefault _
+      | ArrayNewFixed _ | ArrayNewData _ | ArrayNewElem _ | ArrayGet _
+      | ArraySet _ | ArrayLen | ArrayFill _ | ArrayCopy _ | ArrayInitData _
+      | ArrayInitElem _ | RefI31 | I31Get _ | Const _ | UnOp _ | BinOp _
+      | Add128 | Sub128 | MulWide _ | I32WrapI64 | I64ExtendI32 _ | F32DemoteF64
+      | F64PromoteF32 | ExternConvertAny | AnyConvertExtern | VecBitselect
+      | VecConst _ | VecUnOp _ | VecBinOp _ | VecTest _ | VecShift _
+      | VecBitmask _ | VecLoad _ | VecStore _ | VecLoadLane _ | VecStoreLane _
+      | VecLoadSplat _ | VecExtract _ | VecReplace _ | VecSplat _ | VecShuffle _
+      | VecTernOp _ | Char _ | CallIndirect _ | ReturnCallIndirect _ | String _
+      | If_annotation _ ) as desc ->
+        desc
   in
   sfields asm0 fields
 
