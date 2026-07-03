@@ -559,14 +559,16 @@ fn hash_finalize(h: i32) -> i32 {
 
 ## Strings and Characters
 
-A character literal is an `i32` code point; a string literal builds a byte array
-(`[mut i8]` by default, or a named array type with the `T # "…"` prefix). See
-[Strings](language.md#strings).
+A character literal is an `i32` code point; a string literal builds an `i8` or
+`i16` array (`[mut i8]` by default, or a named array type with the `T # "…"`
+prefix). An `i8` array holds the raw UTF-8 bytes; an `i16` array holds the
+UTF-16 code units. See [Strings](language.md#strings).
 
 ### Wax
 
 ```wax
 type chars = [i8];
+type wide = [i16];
 
 #[export = "newline"]
 fn newline() -> i32 {
@@ -576,6 +578,11 @@ fn newline() -> i32 {
 #[export = "greeting"]
 fn greeting() -> &chars {
     chars # "hi\u{21}";         // the bytes 'h', 'i', '!'
+}
+
+#[export = "wide_greeting"]
+fn wide_greeting() -> &wide {
+    wide # "café";              // the UTF-16 units 'c', 'a', 'f', 'é'
 }
 ```
 
@@ -589,12 +596,15 @@ they round-trip back to Wax unchanged:
 
 (func $greeting (export "greeting") (result (ref $chars))
   (@string $chars "hi!"))
+
+(func $wide_greeting (export "wide_greeting") (result (ref $wide))
+  (@string $wide "café"))
 ```
 
-In a WASM binary these lower to `i32.const 10` and an `array.new_fixed` of the
-three bytes `104, 105, 33` — from which the character comes back as the integer
-`10`, while the string is still recovered as `"hi!"` (its bytes are reasonable
-UTF-8).
+In a WASM binary these lower to `i32.const 10` and an `array.new_fixed`: the
+`i8` greeting holds the three bytes `104, 105, 33`, and the `i16` greeting the
+four UTF-16 units `99, 97, 102, 233`. The character comes back as the integer
+`10`, while each string is still recovered (its elements are reasonable text).
 
 ## Holes (Stack Values)
 

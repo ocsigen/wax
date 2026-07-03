@@ -702,6 +702,19 @@ module Error = struct
         Format.fprintf f "This operation requires an array of numeric elements.")
       ()
 
+  let string_array_required context ~location =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f "A string can only build an i8 or i16 array.")
+      ()
+
+  let string_not_unicode context ~location =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f
+          "A string building an i16 array must be a valid Unicode string.")
+      ()
+
   let incompatible_array_element context ~location =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
@@ -3186,12 +3199,16 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
   | Folded (i, l) ->
       let* () = instructions ctx l in
       instruction ctx i
-  | String (Some idx, _) ->
+  | String (Some idx, s) ->
       let*! ty, field = lookup_array_type ctx idx in
       (match field.typ with
-      | Value (I32 | I64 | F32 | F64) | Packed _ -> ()
-      | Value (Ref _ | V128) ->
-          Error.numeric_array_required ctx.modul.diagnostics ~location:i.info);
+      | Packed I8 -> ()
+      | Packed I16 ->
+          let s = String.concat "" (List.map (fun x -> x.Ast.desc) s) in
+          if not (String.is_valid_utf_8 s) then
+            Error.string_not_unicode ctx.modul.diagnostics ~location:i.info
+      | Value _ ->
+          Error.string_array_required ctx.modul.diagnostics ~location:i.info);
       push ~source:(named_ref_source idx) (Some loc)
         (Ref { nullable = false; typ = Exact ty })
   | String (None, _) ->
@@ -3774,13 +3791,43 @@ let globals ctx fields =
             typ.typ init;
           Sequence.register ctx.globals id (typ, src);
           register_exports ctx exports
-      | String_global { id; _ } ->
-          let i = string_type ctx.types in
-          let typ =
-            { mut = false; typ = Ref { nullable = false; typ = Type i } }
+      | String_global { id; typ; init } ->
+          (* A named array type is honoured (and must be an i8/i16 array, like
+             any string); with none, the global takes the default [<string>]
+             ([mut i8]) type. *)
+          let ty, src =
+            match typ with
+            | None ->
+                ( string_type ctx.types,
+                  Inline_ref (Ast.Text.Array { mut = true; typ = Packed I8 }) )
+            | Some idx -> (
+                match resolve_type_index ctx.diagnostics ctx.types idx with
+                | None ->
+                    ( string_type ctx.types,
+                      Inline_ref
+                        (Ast.Text.Array { mut = true; typ = Packed I8 }) )
+                | Some ty ->
+                    (match (Types.get_subtype ctx.subtyping_info ty).typ with
+                    | Array { typ = Packed I8; _ } -> ()
+                    | Array { typ = Packed I16; _ } ->
+                        let s =
+                          String.concat "" (List.map (fun x -> x.Ast.desc) init)
+                        in
+                        if not (String.is_valid_utf_8 s) then
+                          Error.string_not_unicode ctx.diagnostics
+                            ~location:idx.info
+                    | Array { typ = Value _; _ } ->
+                        Error.string_array_required ctx.diagnostics
+                          ~location:idx.info
+                    | _ ->
+                        Error.expected_array_type ctx.diagnostics
+                          ~location:idx.info idx);
+                    (ty, named_ref_source idx))
           in
-          let comptype = Ast.Text.Array { mut = true; typ = Packed I8 } in
-          Sequence.register ctx.globals (Some id) (typ, Inline_ref comptype)
+          let typ =
+            { mut = false; typ = Ref { nullable = false; typ = Type ty } }
+          in
+          Sequence.register ctx.globals (Some id) (typ, src)
       | _ -> ())
     fields
 

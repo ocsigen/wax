@@ -1028,8 +1028,15 @@ rec {
 
 ## Strings
 
-A string literal builds a new array, one element per byte of the (UTF-8) text.
-By default its type is `[mut i8]`, and it lowers to an `array.new_fixed`:
+A string literal builds a new array and lowers to an `array.new_fixed`. The
+element type must be `i8` or `i16`, and it decides the encoding:
+
+- an `i8` array holds the raw bytes of the (UTF-8) text — one element per byte;
+- an `i16` array holds the UTF-16 code units of the text, so it must be a valid
+  Unicode string (a code point outside the basic plane becomes a surrogate pair,
+  hence two elements).
+
+By default its type is `[mut i8]`:
 
 ```wax
 "hello";                    // a new [mut i8] holding the 5 bytes
@@ -1037,13 +1044,14 @@ By default its type is `[mut i8]`, and it lowers to an `array.new_fixed`:
 
 As with [array](#arrays) and [struct](#structs) literals, a different array type
 can be selected — either by prefixing the string with the type name and `#`, or
-by an expected type from the context. The element type must be numeric or packed
-(`i8`, `i16`, `i32`, …):
+by an expected type from the context:
 
 ```wax
 type chars = [i8];
+type wide = [i16];
 
-chars # "hi";               // a &chars (explicit type)
+chars # "hi";               // a &chars, one i8 per UTF-8 byte
+wide # "café";              // a &wide, one i16 per UTF-16 code unit
 let s: &chars = "yo";       // type taken from the annotation
 ```
 
@@ -1061,9 +1069,10 @@ A string also supplies the bytes of a [data segment](#data-segments).
 A string literal round-trips faithfully through WAT, where it is written with a
 `(@string …)` annotation. Through WASM it is best-effort: the binary keeps only
 the `array.new_fixed`, which is recovered as a string literal only when its
-bytes form a *reasonable* UTF-8 string — valid UTF-8 with no control characters
-other than tab, newline, and carriage return. Anything else (arbitrary binary
-data) decompiles as an ordinary [array literal](#arrays) instead.
+elements — decoded by the array's element type (UTF-8 for `i8`, UTF-16 for
+`i16`) — form a *reasonable* string: valid text with no control characters other
+than tab, newline, and carriage return. Anything else (arbitrary binary data)
+decompiles as an ordinary [array literal](#arrays) instead.
 
 ## SIMD (v128)
 

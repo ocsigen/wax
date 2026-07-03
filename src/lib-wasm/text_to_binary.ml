@@ -2,6 +2,7 @@ open Ast
 module T = Text
 module B = Binary
 module StringMap = Map.Make (String)
+module IntSet = Set.Make (Int)
 
 exception Conditional_in_binary of location
 
@@ -32,6 +33,9 @@ type context = {
   memories : index_space;
   types : index_space;
   fields : int StringMap.t B.IntMap.t;
+  (* Type indices that are [i16] arrays, so a [@string] targeting one is
+     UTF-16-encoded rather than kept as raw bytes. *)
+  wide_arrays : IntSet.t;
   tags : index_space;
   datas : index_space;
   elems : index_space;
@@ -49,6 +53,7 @@ let empty_context =
     memories = empty_space;
     types = empty_space;
     fields = B.IntMap.empty;
+    wide_arrays = IntSet.empty;
     tags = empty_space;
     datas = empty_space;
     elems = empty_space;
@@ -193,14 +198,36 @@ let resolve_field_idx ctx type_idx (field_idx_text : T.idx) : B.idx =
 let push_label ctx label =
   { ctx with labels = Option.map (fun l -> l.Ast.desc) label :: ctx.labels }
 
-let string i ty s =
+(* The UTF-16 code units (each a 16-bit value) of a valid UTF-8 string, for an
+   [i16] string array; a non-BMP scalar becomes a surrogate pair. *)
+let utf16_code_units s =
+  let n = String.length s in
+  let rec loop i acc =
+    if i >= n then List.rev acc
+    else
+      let d = String.get_utf_8_uchar s i in
+      let c = Uchar.to_int (Uchar.utf_decode_uchar d) in
+      let i = i + Uchar.utf_decode_length d in
+      if c < 0x10000 then loop i (c :: acc)
+      else
+        let c = c - 0x10000 in
+        loop i ((0xDC00 lor (c land 0x3FF)) :: (0xD800 lor (c lsr 10)) :: acc)
+  in
+  loop 0 []
+
+(* A [@string] lowers to [array.new_fixed]. An [i8] array holds the raw bytes
+   (its UTF-8 encoding); an [i16] array ([wide]) holds the UTF-16 code units. *)
+let string ~wide i ty s =
   let s = String.concat "" (List.map (fun s -> s.Ast.desc) s) in
+  let values =
+    if wide then utf16_code_units s
+    else List.init (String.length s) (fun j -> Char.code s.[j])
+  in
   B.Folded
-    ( { i with desc = ArrayNewFixed (ty, Uint32.of_int (String.length s)) },
-      String.fold_right
-        (fun c acc ->
-          { i with desc = B.Const (I32 (Int32.of_int (Char.code c))) } :: acc)
-        s [] )
+    ( { i with desc = ArrayNewFixed (ty, Uint32.of_int (List.length values)) },
+      List.map
+        (fun c -> { i with desc = B.Const (I32 (Int32.of_int c)) })
+        values )
 
 (*** Instruction conversion ***)
 
@@ -461,7 +488,7 @@ let rec instr ~resolve_string_type ~resolve_func_type ctx (i : 'info T.instr) =
           | None -> resolve_string_type ()
           | Some id -> resolve_idx ctx.types id
         in
-        string i ty s
+        string ~wide:(IntSet.mem ty ctx.wide_arrays) i ty s
     | Char c -> Const (I32 (Int32.of_int (Uchar.to_int c)))
     | If_annotation _ -> raise (Conditional_in_binary i.info)
     | Folded (i, is) ->
@@ -538,7 +565,19 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
                 (acc_func_types, 0) r
               |> fst
             in
-            ({ ctx with types = types_space }, acc_func_types)
+            let wide_arrays =
+              snd
+                (Array.fold_left
+                   (fun (idx_in_arr, wide) e ->
+                     let subtype = snd e.Ast.desc in
+                     match subtype.T.typ with
+                     | T.Array { typ = Packed I16; _ } ->
+                         ( idx_in_arr + 1,
+                           IntSet.add (current_type_idx + idx_in_arr) wide )
+                     | _ -> (idx_in_arr + 1, wide))
+                   (0, ctx.wide_arrays) r)
+            in
+            ({ ctx with types = types_space; wide_arrays }, acc_func_types)
         | T.Import { id; desc; _ } -> (
             match desc with
             | T.Func _ ->
@@ -863,13 +902,19 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
                     (instr ~resolve_string_type ~resolve_func_type ctx)
                     init;
               }
-        | T.String_global { init; _ } ->
-            let ty = resolve_string_type () in
+        | T.String_global { typ; init; _ } ->
+            let ty, wide =
+              match typ with
+              | None -> (resolve_string_type (), false)
+              | Some idx ->
+                  let ty = resolve_idx ctx.types idx in
+                  (ty, IntSet.mem ty ctx.wide_arrays)
+            in
             Some
               {
                 B.typ =
                   { mut = false; typ = Ref { nullable = false; typ = Type ty } };
-                B.init = [ { f with desc = string f ty init } ];
+                B.init = [ { f with desc = string ~wide f ty init } ];
               }
         | _ -> None)
       fields

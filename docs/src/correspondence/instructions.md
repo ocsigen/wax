@@ -5,8 +5,9 @@ Wax instructions are expression-oriented.
 ## Literals
 
 A [character literal](../language.md#characters) is an `i32` constant (its
-Unicode code point); a [string literal](../language.md#strings) builds a byte
-array with `array.new_fixed`.
+Unicode code point); a [string literal](../language.md#strings) builds an `i8`
+or `i16` array with `array.new_fixed`. An `i8` array holds the raw UTF-8 bytes;
+an `i16` array holds the UTF-16 code units (so the string must be valid Unicode).
 
 | Wasm | Wax |
 |------|-----|
@@ -16,8 +17,9 @@ array with `array.new_fixed`.
 In WAT both forms are written with annotations — `(@char …)` and `(@string …)`
 — so they round-trip faithfully through WAT. A WASM binary keeps only the
 underlying `i32.const` / `array.new_fixed`: a character decompiles to a plain
-integer, and an `array.new_fixed` is recovered as a string only when its bytes
-look like a reasonable UTF-8 string (valid UTF-8, no control characters other
+integer, and an `array.new_fixed` is recovered as a string only when its
+elements — decoded by the array's element type (UTF-8 for `i8`, UTF-16 for
+`i16`) — form a reasonable string (valid text, no control characters other
 than tab/newline/carriage return); otherwise it stays an
 [array literal](#aggregate-instructions).
 

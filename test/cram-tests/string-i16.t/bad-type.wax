@@ -1,0 +1,2 @@
+type w = [mut i32];
+fn f() -> &w { w # "hi"; }

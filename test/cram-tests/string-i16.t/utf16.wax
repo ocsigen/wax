@@ -1,0 +1,12 @@
+type utf16 = [mut i16];
+type utf8 = [mut i8];
+
+#[export = "wide"]
+fn wide() -> &utf16 {
+    utf16 # "hé😀";
+}
+
+#[export = "narrow"]
+fn narrow() -> &utf8 {
+    utf8 # "hé";
+}

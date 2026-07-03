@@ -953,6 +953,47 @@ let string_args n args =
       else None
     with Exit -> None
 
+(* As [string_args], but for an [i16] array: each argument is a UTF-16 code unit
+   (0..0xffff), decoded back to the source string. Falls back ([None]) on a
+   value out of range or a lone surrogate, so a genuine numeric array stays one. *)
+let wide_string_args n args =
+  if n = Uint32.zero then None
+  else
+    let unit_of_arg arg =
+      match arg.Ast.desc with
+      | Ast.Int c -> (
+          match int_of_string_opt c with
+          | Some c when c >= 0 && c < 0x10000 -> Some c
+          | _ -> None)
+      | Ast.Char c when Uchar.to_int c < 0x10000 -> Some (Uchar.to_int c)
+      | _ -> None
+    in
+    try
+      if Uint32.of_int (List.length args) <> n then raise Exit;
+      let units =
+        List.map
+          (fun arg ->
+            match unit_of_arg arg with Some c -> c | None -> raise Exit)
+          args
+      in
+      let b = Buffer.create (List.length units) in
+      let rec decode = function
+        | [] -> ()
+        | hi :: lo :: rest
+          when hi land 0xfc00 = 0xd800 && lo land 0xfc00 = 0xdc00 ->
+            let c = 0x10000 + ((hi land 0x3ff) lsl 10) + (lo land 0x3ff) in
+            Buffer.add_utf_8_uchar b (Uchar.of_int c);
+            decode rest
+        | u :: rest when u < 0xd800 || u > 0xdfff ->
+            Buffer.add_utf_8_uchar b (Uchar.of_int u);
+            decode rest
+        | _ -> raise Exit (* lone surrogate *)
+      in
+      decode units;
+      let s = Buffer.contents b in
+      if Re.execp reasonable_string s then Some s else None
+    with Exit -> None
+
 let inttype ty : Ast.valtype =
   match ty with
   | `I32 -> I32
@@ -1598,8 +1639,17 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
          module's count is small. Validation itself is O(operands present) --
          see [pop_repeat] in validation.ml. *)
       let* args = Stack.grab (Uint32.to_int n) in
+      (* A string only builds an [i8] (raw bytes) or [i16] (UTF-16) array, so
+         only those decode back to a string literal; any other element type
+         stays an array literal. *)
+      let str =
+        match (lookup_type ctx Type t).typ with
+        | Array { typ = Packed I8; _ } -> string_args n args
+        | Array { typ = Packed I16; _ } -> wide_string_args n args
+        | _ -> None
+      in
       Stack.push 1
-        (match string_args n args with
+        (match str with
         | Some s -> with_loc (String (Some (idx ctx `Type t), s))
         | None -> with_loc (ArrayFixed (Some (idx ctx `Type t), args)))
   | ArrayGet (s, t) ->

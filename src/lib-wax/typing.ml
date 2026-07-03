@@ -426,8 +426,11 @@ module Error = struct
 
   let invalid_string_element_type context ~location =
     report context ~location
-      "A string literal can only build an array with numeric or packed \
-       elements."
+      "A string literal can only build an [i8] or [i16] array."
+
+  let string_not_unicode context ~location =
+    report context ~location
+      "A string building an [i16] array must be a valid Unicode string."
 
   let expected_ref context ~location =
     report context ~location "A reference type is expected here."
@@ -6213,8 +6216,11 @@ and check_instruction ?(drop_supertype = false) ctx expected
       in
       (let>@ field = lookup_array_type ctx typ in
        match field.typ with
-       | Value (I32 | I64 | F32 | F64) | Packed _ -> ()
-       | Value (Ref _ | V128) ->
+       | Packed I8 -> ()
+       | Packed I16 ->
+           if not (String.is_valid_utf_8 s) then
+             Error.string_not_unicode ctx.diagnostics ~location:i.info
+       | Value _ ->
            Error.invalid_string_element_type ctx.diagnostics ~location:i.info);
       let emitted =
         if typ.desc = string_typ.desc then None
