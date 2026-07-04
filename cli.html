@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-1bc8aede.js";
+            window.path_to_searchindex_js = "searchindex-11004f30.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-0d649137.js"></script>
@@ -305,7 +305,9 @@ operands (<code>x == x</code>). Shown by default.</li>
 loop <code>while &lt;nonzero&gt;</code> is not flagged). Shown by default.</li>
 <li><code>unused-result</code> (group <code>correctness</code>) — the result of a
 side-effect-free expression is computed and then discarded, as in
-<code>_ = x + 1</code>. Shown by default.</li>
+<code>_ = x + 1</code>. Covers reads, constants, pure arithmetic, and heap
+allocations (a discarded struct/array literal) whose operands are
+themselves effect-free. Shown by default.</li>
 <li><code>dead-code</code> (group <code>correctness</code>) — a statement that can never be
 reached, following an unconditional branch, <code>return</code>, or
 <code>unreachable</code>. Shown by default.</li>
@@ -338,6 +340,15 @@ unused locals.</li>
 text input; the <code>unused</code>/<code>correctness</code> lints are turned on only by
 <code>--validate</code>, and always for <code>check</code>. The <code>naming</code> warnings are produced
 when converting a Wasm module to Wax.</li>
+<li>The <code>correctness</code> lints apply to WebAssembly text/binary input as well as
+Wax: <code>shift-count-overflow</code>, <code>constant-trap</code>, <code>tautological-comparison</code>,
+<code>constant-condition</code>, <code>unused-result</code> and <code>dead-code</code> are checked by the
+Wasm validator too (so <code>wax check foo.wat</code> reports them). On Wasm input
+<code>unused-result</code> covers discarding a constant or a pure <code>local.get</code>/
+<code>global.get</code> read. <code>unused-field</code> and <code>unused-label</code> are also checked on
+WebAssembly input — a numeric <code>br N</code> counts as a use of the label <code>N</code>
+levels out — but, like <code>unused-local</code>, only when unused reporting is on
+(under <code>check</code>, or under a conversion with <code>--validate</code>).</li>
 <li>The <code>WAX_WARN</code> environment variable sets default levels applied <em>before</em>
 the <code>-W</code> options. Its value is a list of <code>NAME=LEVEL</code> specs separated by
 commas or whitespace, e.g. <code>WAX_WARN="correctness=hidden unused-local=error"</code>. Unlike a plain environment fallback, these defaults

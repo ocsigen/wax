@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-1bc8aede.js";
+            window.path_to_searchindex_js = "searchindex-11004f30.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-0d649137.js"></script>
@@ -1443,10 +1443,8 @@ Hint: reachable when not debug
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"find_first_zero"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">find_first_zero</span>(arr: &amp;ints) -&gt; <span class="hljs-type">i32</span> {
-    <span class="hljs-keyword">let</span> i: <span class="hljs-type">i32</span>;
-    <span class="hljs-keyword">let</span> len: <span class="hljs-type">i32</span>;
-    len = arr.<span class="hljs-title">length</span>();
-    i = <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">let</span> len = arr.<span class="hljs-title">length</span>();
+    <span class="hljs-keyword">let</span> i = <span class="hljs-number">0</span>;
     <span class="hljs-symbol">'search</span>: <span class="hljs-keyword">loop</span> {
         <span class="hljs-keyword">if</span> i &gt;=s len {
             <span class="hljs-keyword">return</span> -<span class="hljs-number">1</span>;
@@ -1454,7 +1452,7 @@ Hint: reachable when not debug
         <span class="hljs-keyword">if</span> arr[i] == <span class="hljs-number">0</span> {
             <span class="hljs-keyword">return</span> i;
         }
-        i = i + <span class="hljs-number">1</span>;
+        i += <span class="hljs-number">1</span>;
         <span class="hljs-keyword">br</span> <span class="hljs-symbol">'search</span>;
     }
     <span class="hljs-keyword">unreachable</span>;
@@ -1463,8 +1461,8 @@ Hint: reachable when not debug
 <h3 id="equivalent-wat-3"><a class="header" href="#equivalent-wat-3">Equivalent WAT</a></h3>
 <pre><code class="language-wat">(func $find_first_zero (export "find_first_zero")
       (param $arr (ref $array_i32)) (result i32)
-  (local $i i32)
   (local $len i32)
+  (local $i i32)
   local.get $arr
   array.len
   local.set $len
@@ -1615,10 +1613,8 @@ carrying the narrowed value, and the default trails the outer escape block:</p>
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"distance_squared"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">distance_squared</span>(p1: &amp;point, p2: &amp;point) -&gt; <span class="hljs-type">i32</span> {
-    <span class="hljs-keyword">let</span> dx: <span class="hljs-type">i32</span>;
-    <span class="hljs-keyword">let</span> dy: <span class="hljs-type">i32</span>;
-    dx = p1.<span class="hljs-variable">x</span> - p2.<span class="hljs-variable">x</span>;
-    dy = p1.<span class="hljs-variable">y</span> - p2.<span class="hljs-variable">y</span>;
+    <span class="hljs-keyword">let</span> dx = p1.<span class="hljs-variable">x</span> - p2.<span class="hljs-variable">x</span>;
+    <span class="hljs-keyword">let</span> dy = p1.<span class="hljs-variable">y</span> - p2.<span class="hljs-variable">y</span>;
     dx * dx + dy * dy;
 }</span></pre>
 
@@ -1706,18 +1702,15 @@ the block produces or by the surrounding context:</p>
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"sum_bytes"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">sum_bytes</span>(arr: &amp;bytes) -&gt; <span class="hljs-type">i32</span> {
-    <span class="hljs-keyword">let</span> sum: <span class="hljs-type">i32</span>;
-    <span class="hljs-keyword">let</span> i: <span class="hljs-type">i32</span>;
-    <span class="hljs-keyword">let</span> len: <span class="hljs-type">i32</span>;
-    sum = <span class="hljs-number">0</span>;
-    i = <span class="hljs-number">0</span>;
-    len = arr.<span class="hljs-title">length</span>();
+    <span class="hljs-keyword">let</span> sum = <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">let</span> i = <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">let</span> len = arr.<span class="hljs-title">length</span>();
     <span class="hljs-symbol">'loop</span>: <span class="hljs-keyword">loop</span> {
         <span class="hljs-keyword">if</span> i &gt;=s len {
             <span class="hljs-keyword">return</span> sum;
         }
-        sum = sum + arr[i] <span class="hljs-keyword">as</span> <span class="hljs-type">i32_u</span>;
-        i = i + <span class="hljs-number">1</span>;
+        sum += arr[i] <span class="hljs-keyword">as</span> <span class="hljs-type">i32_u</span>;
+        i += <span class="hljs-number">1</span>;
         <span class="hljs-keyword">br</span> <span class="hljs-symbol">'loop</span>;
     }
     <span class="hljs-keyword">unreachable</span>;
@@ -1725,16 +1718,14 @@ the block produces or by the surrounding context:</p>
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"fill_bytes"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">fill_bytes</span>(arr: &amp;bytes, val: <span class="hljs-type">i32</span>) {
-    <span class="hljs-keyword">let</span> i: <span class="hljs-type">i32</span>;
-    <span class="hljs-keyword">let</span> len: <span class="hljs-type">i32</span>;
-    i = <span class="hljs-number">0</span>;
-    len = arr.<span class="hljs-title">length</span>();
+    <span class="hljs-keyword">let</span> i = <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">let</span> len = arr.<span class="hljs-title">length</span>();
     <span class="hljs-symbol">'loop</span>: <span class="hljs-keyword">loop</span> {
         <span class="hljs-keyword">if</span> i &gt;=s len {
             <span class="hljs-keyword">return</span>;
         }
         arr[i] = val;
-        i = i + <span class="hljs-number">1</span>;
+        i += <span class="hljs-number">1</span>;
         <span class="hljs-keyword">br</span> <span class="hljs-symbol">'loop</span>;
     }
 }</span></pre>
@@ -1768,7 +1759,7 @@ the block produces or by the surrounding context:</p>
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"make_node"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">make_node</span>(value: <span class="hljs-type">i32</span>, next: &amp;?list) -&gt; &amp;list {
-    {<span class="hljs-type">list</span>| value: value, next: next};
+    {<span class="hljs-type">list</span>| value, next};
 }
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"sum_list"</span><span class="hljs-meta">]</span>
@@ -1776,8 +1767,7 @@ the block produces or by the surrounding context:</p>
     <span class="hljs-keyword">if</span> !head {
         <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;
     }
-    <span class="hljs-keyword">let</span> n: &amp;list;
-    n = head!;
+    <span class="hljs-keyword">let</span> n = head!;
     n.<span class="hljs-variable">value</span> + <span class="hljs-title">sum_list</span>(n.<span class="hljs-variable">next</span>);
 }</span></pre>
 
@@ -1794,8 +1784,7 @@ the block produces or by the surrounding context:</p>
 <span class="hljs-comment">// Export a function that uses the imports</span>
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"compute_and_log"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">compute_and_log</span>(x: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> {
-    <span class="hljs-keyword">let</span> result: <span class="hljs-type">i32</span>;
-    result = x + base_value;
+    <span class="hljs-keyword">let</span> result = x + base_value;
     <span class="hljs-title">log</span>(result);
     result;
 }</span></pre>
@@ -1810,10 +1799,10 @@ the block produces or by the surrounding context:</p>
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"hash_finalize"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">hash_finalize</span>(h: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> {
-    h = h ^ h &gt;&gt;u <span class="hljs-number">16</span>;
-    h = h * <span class="hljs-number">0x85ebca6b</span>;
-    h = h ^ h &gt;&gt;u <span class="hljs-number">13</span>;
-    h = h * <span class="hljs-number">0xc2b2ae35</span>;
+    h ^= h &gt;&gt;u <span class="hljs-number">16</span>;
+    h *= <span class="hljs-number">0x85ebca6b</span>;
+    h ^= h &gt;&gt;u <span class="hljs-number">13</span>;
+    h *= <span class="hljs-number">0xc2b2ae35</span>;
     h ^ h &gt;&gt;u <span class="hljs-number">16</span>;
 }</span></pre>
 
@@ -1947,7 +1936,7 @@ cast on descriptor equality (a leading <code>?</code> makes the result nullable)
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"make"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">make</span>(kind: <span class="hljs-type">i32</span>, x: <span class="hljs-type">i32</span>) -&gt; &amp;!obj {
-    { <span class="hljs-keyword">descriptor</span>({<span class="hljs-type">obj_desc</span>| kind: kind})| x: x };
+    { <span class="hljs-keyword">descriptor</span>({<span class="hljs-type">obj_desc</span>| kind})| x };
 }
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"kind_of"</span><span class="hljs-meta">]</span>
@@ -3136,7 +3125,9 @@ operands (<code>x == x</code>). Shown by default.</li>
 loop <code>while &lt;nonzero&gt;</code> is not flagged). Shown by default.</li>
 <li><code>unused-result</code> (group <code>correctness</code>) — the result of a
 side-effect-free expression is computed and then discarded, as in
-<code>_ = x + 1</code>. Shown by default.</li>
+<code>_ = x + 1</code>. Covers reads, constants, pure arithmetic, and heap
+allocations (a discarded struct/array literal) whose operands are
+themselves effect-free. Shown by default.</li>
 <li><code>dead-code</code> (group <code>correctness</code>) — a statement that can never be
 reached, following an unconditional branch, <code>return</code>, or
 <code>unreachable</code>. Shown by default.</li>
@@ -3169,6 +3160,15 @@ unused locals.</li>
 text input; the <code>unused</code>/<code>correctness</code> lints are turned on only by
 <code>--validate</code>, and always for <code>check</code>. The <code>naming</code> warnings are produced
 when converting a Wasm module to Wax.</li>
+<li>The <code>correctness</code> lints apply to WebAssembly text/binary input as well as
+Wax: <code>shift-count-overflow</code>, <code>constant-trap</code>, <code>tautological-comparison</code>,
+<code>constant-condition</code>, <code>unused-result</code> and <code>dead-code</code> are checked by the
+Wasm validator too (so <code>wax check foo.wat</code> reports them). On Wasm input
+<code>unused-result</code> covers discarding a constant or a pure <code>local.get</code>/
+<code>global.get</code> read. <code>unused-field</code> and <code>unused-label</code> are also checked on
+WebAssembly input — a numeric <code>br N</code> counts as a use of the label <code>N</code>
+levels out — but, like <code>unused-local</code>, only when unused reporting is on
+(under <code>check</code>, or under a conversion with <code>--validate</code>).</li>
 <li>The <code>WAX_WARN</code> environment variable sets default levels applied <em>before</em>
 the <code>-W</code> options. Its value is a list of <code>NAME=LEVEL</code> specs separated by
 commas or whitespace, e.g. <code>WAX_WARN="correctness=hidden unused-local=error"</code>. Unlike a plain environment fallback, these defaults
