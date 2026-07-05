@@ -3,6 +3,7 @@ val module_ :
   ?output_file:string ->
   ?source_map:bool ->
   ?coalesce_imports:bool ->
+  ?dwarf:bool ->
   ?features:Wax_utils.Feature.set ->
   Ast.location Ast.Binary.module_ ->
   unit
@@ -14,4 +15,6 @@ val module_ :
     coalesces maximal runs of ungrouped same-module imports into one group when
     compact-import-section is enabled; it is the binary-input compressor path
     (default [false]), off for text inputs whose import layout comes from their
-    own group syntax. *)
+    own group syntax. [?dwarf] appends DWARF debug-info custom sections
+    (byte-appended last, so a plain build stays a byte-prefix of the [-g] one).
+*)

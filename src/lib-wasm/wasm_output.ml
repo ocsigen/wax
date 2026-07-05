@@ -1386,8 +1386,8 @@ let output_branch_hint_section out_channel
 (*** The module writer ***)
 
 let module_ ~out_channel ?output_file ?(source_map = false)
-    ?(coalesce_imports = false) ?(features = Wax_utils.Feature.default ())
-    (m : Ast.location module_) =
+    ?(coalesce_imports = false) ?(dwarf = false)
+    ?(features = Wax_utils.Feature.default ()) (m : Ast.location module_) =
   Wax_utils.Debug.timed "output" @@ fun () ->
   Out_channel.output_string out_channel "\x00\x61\x73\x6D\x01\x00\x00\x00";
 
@@ -1556,6 +1556,12 @@ let module_ ~out_channel ?output_file ?(source_map = false)
      [metadata.code.branch_hint] section afterwards. Function indices are absolute
      (defined functions follow the imported ones). *)
   let branch_hints = ref [] in
+  (* DWARF (when requested) needs each function body's file-absolute offset and
+     size, plus the file offset where the code section payload begins; the line
+     table addresses instructions relative to that payload start. Populated while
+     the code section is written, consumed after everything else is emitted. *)
+  let func_layouts = Hashtbl.create 16 in
+  let code_payload_start = ref 0 in
   if m.code <> [] then (
     let num_func_imports =
       List.fold_left
@@ -1595,7 +1601,15 @@ let module_ ~out_channel ?output_file ?(source_map = false)
             below then lifts the whole section to file-absolute offsets. *)
         let cp_fn = Wax_utils.Source_map.checkpoint source_map_t in
         Encoder.expr ~end_pos:c.loc.loc_end ~source_map_t b_code c.instrs;
-        Encoder.uint b (Buffer.length b_code);
+        let body_size = Buffer.length b_code in
+        Encoder.uint b body_size;
+        (* [Buffer.length b] now names where this body lands within the section
+           content (after the size prefix just written); record its layout, to be
+           lifted to file-absolute once the section's payload start is known. *)
+        let body_offset_in_content = Buffer.length b in
+        Hashtbl.replace func_layouts
+          (num_func_imports + !code_index)
+          (body_offset_in_content, body_size);
         Wax_utils.Source_map.shift_since source_map_t cp_fn
           ~delta:(Buffer.length b);
         Buffer.add_buffer b b_code;
@@ -1625,6 +1639,13 @@ let module_ ~out_channel ?output_file ?(source_map = false)
     output_uint len;
     Wax_utils.Source_map.shift_since source_map_t cp
       ~delta:(content_start + leb_size len);
+    (* Lift the body layouts from section-content-relative to file-absolute, the
+       same rebase [shift_since] just applied to the mappings. *)
+    code_payload_start := content_start + leb_size len;
+    Hashtbl.filter_map_inplace
+      (fun _ (offset_in_content, size) ->
+        Some (!code_payload_start + offset_in_content, size))
+      func_layouts;
     Buffer.output_buffer out_channel code_content;
     bump len;
     Encoder.branch_hint_sink := fun _ _ -> ());
@@ -1757,32 +1778,61 @@ let module_ ~out_channel ?output_file ?(source_map = false)
     Buffer.output_buffer out_channel b_custom_section_content);
 
   (* Generate source map file and custom section *)
-  if source_map then
-    match output_file with
-    | Some f ->
-        let map_file_name = f ^ ".map" in
-        let file_name = Filename.basename f in
-        let map_basename = file_name ^ ".map" in
+  (if source_map then
+     match output_file with
+     | Some f ->
+         let map_file_name = f ^ ".map" in
+         let file_name = Filename.basename f in
+         let map_basename = file_name ^ ".map" in
 
-        (* Write the custom section sourceMappingURL *)
-        let b_custom = Buffer.create 128 in
-        Encoder.name b_custom "sourceMappingURL";
-        Encoder.name b_custom map_basename;
-        let custom_len = Buffer.length b_custom in
+         (* Write the custom section sourceMappingURL *)
+         let b_custom = Buffer.create 128 in
+         Encoder.name b_custom "sourceMappingURL";
+         Encoder.name b_custom map_basename;
+         let custom_len = Buffer.length b_custom in
 
-        Out_channel.output_byte out_channel 0;
-        let rec output_uint i =
-          if i < 128 then Out_channel.output_byte out_channel i
-          else (
-            Out_channel.output_byte out_channel (128 + (i land 127));
-            output_uint (i lsr 7))
-        in
-        output_uint custom_len;
-        Buffer.output_buffer out_channel b_custom;
+         Out_channel.output_byte out_channel 0;
+         let rec output_uint i =
+           if i < 128 then Out_channel.output_byte out_channel i
+           else (
+             Out_channel.output_byte out_channel (128 + (i land 127));
+             output_uint (i lsr 7))
+         in
+         output_uint custom_len;
+         Buffer.output_buffer out_channel b_custom;
 
-        let json_content =
-          Wax_utils.Source_map.to_json source_map_t ~file_name
-        in
-        Out_channel.with_open_text map_file_name (fun oc ->
-            Out_channel.output_string oc json_content)
-    | None -> failwith "--source-map requires an output file"
+         let json_content =
+           Wax_utils.Source_map.to_json source_map_t ~file_name
+         in
+         Out_channel.with_open_text map_file_name (fun oc ->
+             Out_channel.output_string oc json_content)
+     | None -> failwith "--source-map requires an output file");
+
+  (* DWARF debug sections, appended last so a plain build stays a byte-prefix of
+     the [-g] one. The source positions come from the same [source_map_t]
+     mappings; [Dwarf.generate] buckets them into the recorded [func_layouts]. *)
+  if dwarf then
+    let source_filename =
+      match Wax_utils.Source_map.files source_map_t with
+      | f :: _ -> f
+      | [] -> ""
+    in
+    let output_custom_section name content =
+      let b = Buffer.create (String.length name + String.length content + 16) in
+      Encoder.name b name;
+      Buffer.add_string b content;
+      Out_channel.output_byte out_channel 0;
+      let len = Buffer.length b in
+      let rec output_uint i =
+        if i < 128 then Out_channel.output_byte out_channel i
+        else (
+          Out_channel.output_byte out_channel (128 + (i land 127));
+          output_uint (i lsr 7))
+      in
+      output_uint len;
+      Buffer.output_buffer out_channel b
+    in
+    List.iter
+      (fun (name, content) -> output_custom_section name content)
+      (Wax_utils.Dwarf.generate ~source_map:source_map_t
+         ~code_payload_start:!code_payload_start ~func_layouts ~source_filename)

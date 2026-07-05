@@ -304,6 +304,10 @@ server](#language-server)).
     - Generate a source map file alongside the output file and insert a `sourceMappingURL` custom section. Only valid with wasm output (`-f wasm`) to a file, when the source is a text file (not a Wasm binary).
       Requesting one for wat or wax output, when the source is a Wasm binary, or when outputting to `stdout`, is an error.
 
+- **`-g`**, **`--dwarf`**
+    - Generate DWARF debug information. Only valid with wasm output (`-f wasm`);
+      requesting it for wat or wax output is an error.
+
 - **`--debug`** *CATEGORY*
     - Enable developer debug output for a category. Repeatable, and a single
       value may list several categories separated by commas

@@ -29,6 +29,18 @@ let create ~enabled =
 
 let entry_offset = function Mapped m -> m.generated_offset | Unmapped o -> o
 
+(* The registered files in index order, so [original_file_idx] indexes into the
+   returned list. *)
+let files t =
+  Hashtbl.fold (fun f_name f_idx acc -> (f_idx, f_name) :: acc) t.files []
+  |> List.sort (fun (idx_a, _) (idx_b, _) -> compare idx_a idx_b)
+  |> List.map snd
+
+(* The recorded mappings in insertion order. Their [generated_offset]s are
+   file-absolute once the module writer has rebased them (see [shift_since]);
+   this feeds the DWARF line-table builder. *)
+let entries t = List.rev t.mappings
+
 let register_file t filename =
   match Hashtbl.find_opt t.files filename with
   | Some idx -> idx
