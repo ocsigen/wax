@@ -7,6 +7,8 @@ type mapping = {
   original_column : int;
 }
 
+type entry = Mapped of mapping | Unmapped of int
+
 val create : enabled:bool -> t
 (** [create ~enabled:false] returns a sink whose recording functions are no-ops,
     so a module writer that never serializes a map does not pay for accumulating
@@ -39,5 +41,14 @@ val checkpoint : t -> checkpoint
 val shift_since : t -> checkpoint -> delta:int -> unit
 (** [shift_since t cp ~delta] adds [delta] to the generated offset of every
     mapping recorded since the checkpoint [cp]. *)
+
+val files : t -> string list
+(** The registered source files in index order, so an [original_file_idx]
+    indexes into this list. *)
+
+val entries : t -> entry list
+(** The recorded mappings in insertion order. Once the module writer has rebased
+    them (see {!shift_since}) their [generated_offset]s are file-absolute; the
+    DWARF line-table builder reads them through this. *)
 
 val to_json : t -> file_name:string -> string

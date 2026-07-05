@@ -154,7 +154,7 @@ let usage_error msg =
 
 let wat_to_wat ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
     ~color ~output_color ~fold_mode ~defines ~desugar ~source_map:_ ~faithful:_
-    =
+    ~dwarf:_ =
   let ast, ctx =
     Wat_parser.parse_from_string ~color
       ~filename:(Option.value ~default:"-" input_file)
@@ -187,7 +187,7 @@ let width_check_mode () =
 
 let wat_to_wax ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
     ~color ~output_color ~fold_mode:_ ~defines ~desugar:_ ~source_map:_
-    ~faithful =
+    ~faithful ~dwarf:_ =
   let ast, ctx =
     Wat_parser.parse_from_string ~color
       ~filename:(Option.value ~default:"-" input_file)
@@ -226,7 +226,7 @@ let wat_to_wax ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
 
 let wax_to_wat ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
     ~color ~output_color ~fold_mode ~defines ~desugar ~source_map:_ ~faithful:_
-    =
+    ~dwarf:_ =
   let ast, ctx =
     Wax_parser.parse_from_string ~color
       ~filename:(Option.value ~default:"-" input_file)
@@ -273,7 +273,7 @@ let wax_to_wat ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
 
 let wax_to_wax ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
     ~color ~output_color ~fold_mode:_ ~defines ~desugar:_ ~source_map:_
-    ~faithful:_ =
+    ~faithful:_ ~dwarf:_ =
   let ast, ctx =
     Wax_parser.parse_from_string ~color
       ~filename:(Option.value ~default:"-" input_file)
@@ -289,7 +289,8 @@ let wax_to_wax ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
   output_wax ~oc ~color:output_color ~trivia ~tail ast
 
 let wax_to_wasm ~input_file ~output_file ~text ~oc ~validate ~warn_unused ~color
-    ~output_color:_ ~fold_mode:_ ~defines ~desugar:_ ~source_map ~faithful:_ =
+    ~output_color:_ ~fold_mode:_ ~defines ~desugar:_ ~source_map ~faithful:_
+    ~dwarf =
   let ast, _ctx =
     Wax_parser.parse_from_string ~color
       ~filename:(Option.value ~default:"-" input_file)
@@ -319,11 +320,12 @@ let wax_to_wasm ~input_file ~output_file ~text ~oc ~validate ~warn_unused ~color
   let wasm_ast_binary =
     Wax_conversion.Driver.to_binary ~color ~source:(Some text) wasm_ast_text
   in
-  Wax_wasm.Wasm_output.module_ ~out_channel:oc ?output_file ~source_map
+  Wax_wasm.Wasm_output.module_ ~out_channel:oc ?output_file ~source_map ~dwarf
     ~features wasm_ast_binary
 
 let wat_to_wasm ~input_file ~output_file ~text ~oc ~validate ~warn_unused ~color
-    ~output_color:_ ~fold_mode:_ ~defines ~desugar:_ ~source_map ~faithful:_ =
+    ~output_color:_ ~fold_mode:_ ~defines ~desugar:_ ~source_map ~faithful:_
+    ~dwarf =
   let ast, _ctx =
     Wat_parser.parse_from_string ~color
       ~filename:(Option.value ~default:"-" input_file)
@@ -344,7 +346,7 @@ let wat_to_wasm ~input_file ~output_file ~text ~oc ~validate ~warn_unused ~color
   let wasm_ast_binary =
     Wax_conversion.Driver.to_binary ~color ~source:(Some text) ast
   in
-  Wax_wasm.Wasm_output.module_ ~out_channel:oc ?output_file ~source_map
+  Wax_wasm.Wasm_output.module_ ~out_channel:oc ?output_file ~source_map ~dwarf
     ~features wasm_ast_binary
 
 (* Parse a Wasm binary, reporting malformed input as a diagnostic (and exiting)
@@ -356,18 +358,18 @@ let parse_wasm ~color ?features ?filename text =
 
 let wasm_to_wasm ~input_file ~output_file ~text ~oc ~validate:_validate
     ~warn_unused:_ ~color ~output_color:_ ~fold_mode:_ ~defines:_ ~desugar:_
-    ~source_map ~faithful:_ =
+    ~source_map ~faithful:_ ~dwarf =
   let ast = parse_wasm ~color ?filename:input_file text in
   (* if validate then Wax_wasm.Validation.f ast; *)
   (* A binary input carries no authorial text layout for its import section, so
      this is the one path that may compress it: with compact-import-section
      enabled, coalesce runs of same-module imports. *)
   Wax_wasm.Wasm_output.module_ ~out_channel:oc ?output_file ~source_map
-    ~coalesce_imports:true ast
+    ~coalesce_imports:true ~dwarf ast
 
 let wasm_to_wat ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
     ~color ~output_color ~fold_mode ~defines:_ ~desugar:_ ~source_map:_
-    ~faithful:_ =
+    ~faithful:_ ~dwarf:_ =
   (* The decoder records the gated features the binary exercises; emit each as
      a [(@feature)] annotation so the text output is self-describing. *)
   let features = Wax_utils.Feature.default () in
@@ -382,7 +384,7 @@ let wasm_to_wat ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
 
 let wasm_to_wax ~input_file ~output_file:_ ~text ~oc ~validate ~warn_unused
     ~color ~output_color ~fold_mode:_ ~defines:_ ~desugar:_ ~source_map:_
-    ~faithful =
+    ~faithful ~dwarf:_ =
   (* The decoder records the gated features the binary exercises; each becomes
      a [(@feature)] annotation, converted below to a [#![feature]] attribute,
      so the output recompiles standalone. *)
@@ -504,8 +506,8 @@ let warn_env_info =
 (*** Command implementations ***)
 
 let convert input_file output_file input_format_opt output_format_opt validate
-    strict_validate color source_map fold_mode desugar faithful defines warnings
-    features debug error_format =
+    strict_validate color source_map dwarf fold_mode desugar faithful defines
+    warnings features debug error_format =
   Wax_utils.Diagnostic.set_policy (build_policy warnings);
   Wax_utils.Diagnostic.set_format error_format;
   Wax_utils.Feature.set_config features;
@@ -532,6 +534,11 @@ let convert input_file output_file input_format_opt output_format_opt validate
     usage_error "--source-map is only supported for wasm output";
   if source_map && output_file = None then
     usage_error "--source-map requires an output file";
+  (* DWARF debug info is embedded in the wasm binary, so like [--source-map] it
+     is only meaningful for wasm output. Unlike it, the sections live inside the
+     binary, so stdout is fine. *)
+  if dwarf && output_format <> Wasm then
+    usage_error "--dwarf is only supported for wasm output";
   (* Desugaring rewrites Wax-specific annotations into core wasm *text*; it is
      meaningful only for wat output (wasm output is already desugared, and wax
      output is the sugar). *)
@@ -589,7 +596,7 @@ let convert input_file output_file input_format_opt output_format_opt validate
   let text = with_open_in ~color input_file In_channel.input_all in
   with_output @@ fun oc ->
   convert ~input_file ~output_file ~text ~oc ~validate ~warn_unused ~color
-    ~output_color ~source_map ~fold_mode ~defines ~desugar ~faithful
+    ~output_color ~source_map ~dwarf ~fold_mode ~defines ~desugar ~faithful
 
 (* Format files: re-print each in its own format (wat -> wat, wax -> wax, wasm
    -> wasm), detected from the extension unless [format_opt] forces one. With
@@ -628,7 +635,8 @@ let format inplace check format_opt color fold_mode warnings debug error_format
         (same_format_of fmt) ~input_file:None ~output_file:None ~text ~oc:stdout
           ~validate:false ~warn_unused:false ~color
           ~output_color:(Wax_utils.Colors.update_flag ~color)
-          ~source_map:false ~fold_mode ~desugar:false ~faithful:false
+          ~source_map:false ~dwarf:false ~fold_mode ~desugar:false
+          ~faithful:false
           ~defines:(Wax_wasm.Cond_specialize.of_list []))
   else begin
     if (not inplace) && (not check) && List.length files <> 1 then
@@ -655,7 +663,8 @@ let format inplace check format_opt color fold_mode warnings debug error_format
             with_open_out ~color output_file (fun oc ->
                 same_format ~input_file:(Some file) ~output_file ~text ~oc
                   ~validate:false ~warn_unused:false ~color ~output_color
-                  ~source_map:false ~fold_mode ~desugar:false ~faithful:false
+                  ~source_map:false ~dwarf:false ~fold_mode ~desugar:false
+                  ~faithful:false
                   ~defines:(Wax_wasm.Cond_specialize.of_list []))
           in
           if check then
@@ -1009,6 +1018,14 @@ let source_map_option =
   in
   Arg.(value & flag & info [ "source-map" ] ~doc)
 
+(* Define the --dwarf/-g option *)
+let dwarf_option =
+  let doc =
+    "Generate DWARF debug information (embedded as custom sections in the wasm \
+     binary). Only valid with wasm output."
+  in
+  Arg.(value & flag & info [ "g"; "dwarf" ] ~doc)
+
 (* Define the --define/-D option (set conditional-compilation variables) *)
 let define_option =
   let doc =
@@ -1253,6 +1270,7 @@ let convert_term =
   and+ strict_validate = strict_validate_flag
   and+ color = color_option
   and+ source_map = source_map_option
+  and+ dwarf = dwarf_option
   and+ fold_mode = fold_mode_option
   and+ desugar = desugar_flag
   and+ faithful = faithful_flag
@@ -1262,8 +1280,8 @@ let convert_term =
   and+ debug = debug_option
   and+ error_format = error_format_option in
   convert input output in_fmt out_fmt validate strict_validate color source_map
-    fold_mode desugar faithful defines warnings features (List.concat debug)
-    error_format
+    dwarf fold_mode desugar faithful defines warnings features
+    (List.concat debug) error_format
 
 let format_term =
   let+ inplace = inplace_flag
