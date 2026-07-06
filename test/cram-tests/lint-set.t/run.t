@@ -76,6 +76,15 @@ below re-enable what they demonstrate with an explicit `-W`.
      ·         ^^^^^^^
   45 │     x;
   46 │ }
+  Warning:
+    The result of this expression is discarded, and computing it has no effect.
+    ──➤  lints.wax:52:17
+  50 │ #[export = "unusedalloc"]
+  51 │ fn unusedalloc() -> i32 {
+  52 │     _: &point = {x: 1, y: 2};
+     ·                 ^^^^^^^^^^^^
+  53 │     0;
+  54 │ }
   Warning: The global 'UNUSED' is never used.
    ──➤  lints.wax:1:7
   1 │ const UNUSED = 42;
@@ -169,6 +178,15 @@ The result of a side-effect-free expression, computed and discarded:
      ·         ^^^^^
   39 │     x;
   40 │ }
+  Warning:
+    The result of this expression is discarded, and computing it has no effect.
+    ──➤  lints.wax:52:17
+  50 │ #[export = "unusedalloc"]
+  51 │ fn unusedalloc() -> i32 {
+  52 │     _: &point = {x: 1, y: 2};
+     ·                 ^^^^^^^^^^^^
+  53 │     0;
+  54 │ }
 
 The `unused` group covers unused module fields and labels (the module-level
 analog of `unused-local`); prefix a name with `_` to silence one:
@@ -261,6 +279,15 @@ analog of `unused-local`); prefix a name with `_` to silence one:
      ·         ^^^^^^^
   45 │     x;
   46 │ }
+  Error:
+    The result of this expression is discarded, and computing it has no effect.
+    ──➤  lints.wax:52:17
+  50 │ #[export = "unusedalloc"]
+  51 │ fn unusedalloc() -> i32 {
+  52 │     _: &point = {x: 1, y: 2};
+     ·                 ^^^^^^^^^^^^
+  53 │     0;
+  54 │ }
   Error: The global 'UNUSED' is never used.
    ──➤  lints.wax:1:7
   1 │ const UNUSED = 42;

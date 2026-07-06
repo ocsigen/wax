@@ -101,7 +101,9 @@ mistaken for a subcommand). The `format` subcommand reformats files (see
           loop `while <nonzero>` is not flagged). Shown by default.
         - `unused-result` (group `correctness`) — the result of a
           side-effect-free expression is computed and then discarded, as in
-          `_ = x + 1`. Shown by default.
+          `_ = x + 1`. Covers reads, constants, pure arithmetic, and heap
+          allocations (a discarded struct/array literal) whose operands are
+          themselves effect-free. Shown by default.
         - `dead-code` (group `correctness`) — a statement that can never be
           reached, following an unconditional branch, `return`, or
           `unreachable`. Shown by default.

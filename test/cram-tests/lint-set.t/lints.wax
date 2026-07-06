@@ -44,3 +44,11 @@ fn unusedlabel(x: i32) -> i32 {
     _ = 'unused: do { x; };
     x;
 }
+
+type point = { x: i32, y: i32 };
+
+#[export = "unusedalloc"]
+fn unusedalloc() -> i32 {
+    _: &point = {x: 1, y: 2};
+    0;
+}

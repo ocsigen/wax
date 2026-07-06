@@ -1965,10 +1965,15 @@ let lint_condition ctx ?(is_while = false) (cond : _ Ast.instr) =
 
 (* Whether evaluating [e] has no side effect and cannot trap, so computing it
    only to discard the result is pointless. Conservative: reads of locals/
-   globals and constants, and pure arithmetic/logic over them, but not calls,
-   assignments, memory/field/array accesses, casts, or trapping arithmetic
-   ([/]/[%]). *)
+   globals and constants, pure arithmetic/logic over them, and heap allocations
+   (which are effect-free and non-trapping) whose operands are themselves
+   effect-free. Excludes calls, assignments, field/element accesses (may trap on
+   null / out of bounds), casts, [array.new_data]/[array.new_elem] (trap out of
+   bounds), and trapping arithmetic ([/]/[%]). Mirrors the Wasm validator's
+   purity classification (see [lint_body] in [Validation]). *)
 let rec is_effectless (e : _ Ast.instr) =
+  (* A field value; the punning shorthand [{x}] reads a local/global. *)
+  let field (_, v) = match v with Some e -> is_effectless e | None -> true in
   match e.desc with
   | Get _ | Int _ | Float _ | Char _ | String _ | Null | StructDefault _ -> true
   | UnOp (_, a) -> is_effectless a
@@ -1976,6 +1981,12 @@ let rec is_effectless (e : _ Ast.instr) =
   | BinOp (_, a, b) -> is_effectless a && is_effectless b
   | Select (a, b, c) -> is_effectless a && is_effectless b && is_effectless c
   | Test (a, _) -> is_effectless a
+  | Struct (_, fields) -> List.for_all field fields
+  | StructDesc (d, fields) -> is_effectless d && List.for_all field fields
+  | StructDefaultDesc d -> is_effectless d
+  | Array (_, elt, len) -> is_effectless elt && is_effectless len
+  | ArrayDefault (_, len) -> is_effectless len
+  | ArrayFixed (_, elts) -> List.for_all is_effectless elts
   | _ -> false
 
 (* The concrete type an initializer would take with no annotation, matching the
