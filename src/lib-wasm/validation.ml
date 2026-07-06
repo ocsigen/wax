@@ -4069,13 +4069,14 @@ let lint_body ctx instrs =
      silently defaulting. *)
   let classify (d : _ Ast.Text.instr_desc) =
     match d with
-    (* Effect-free, non-trapping, fixed-arity operators. Every value on the lint
-       stack is pure by construction (impure/unhandled producers clear it), so
-       the result is pure exactly when the stack is deep enough for the operands
-       — [Pure n] pops [n] and pushes a pure value. *)
+    (* Effect-free, non-trapping operators. Every value on the lint stack is
+       pure by construction (impure/unhandled producers clear it), so the
+       results are pure exactly when the stack is deep enough for the operands —
+       [Pure (consumed, produced)] pops [consumed] operands and pushes [produced]
+       pure values. *)
     | Const _ | LocalGet _ | GlobalGet _ | RefNull _ | RefFunc _ | MemorySize _
     | TableSize _ | VecConst _ | StructNewDefault _ ->
-        `Pure 0
+        `Pure (0, 1)
     | UnOp (I32 (Trunc _) | I64 (Trunc _)) ->
         `Impure (* trapping float→int conversion *)
     (* [struct.new_default] with a descriptor takes just the descriptor
@@ -4084,27 +4085,32 @@ let lint_body ctx instrs =
     | ExternConvertAny | AnyConvertExtern | RefIsNull | RefTest _ | RefI31
     | VecUnOp _ | VecTest _ | VecBitmask _ | VecExtract _ | VecSplat _
     | ArrayNewDefault _ | StructNewDefaultDesc _ ->
-        `Pure 1
+        `Pure (1, 1)
     | BinOp (I32 (Div _ | Rem _) | I64 (Div _ | Rem _)) ->
         `Impure (* integer division/remainder may trap *)
     | BinOp _ | RefEq | VecBinOp _ | VecShift _ | VecReplace _ | VecShuffle _
     | ArrayNew _ ->
-        `Pure 2
-    | Select _ | VecTernOp _ | VecBitselect -> `Pure 3
+        `Pure (2, 1)
+    | Select _ | VecTernOp _ | VecBitselect -> `Pure (3, 1)
+    (* Wide integer arithmetic: pure, but produces a two-limb result. *)
+    | Add128 | Sub128 -> `Pure (4, 2)
+    | MulWide _ -> `Pure (2, 2)
     (* Allocations are effect-free and non-trapping (a dropped allocation is
        dead code): [array.new_fixed] takes its element count as an explicit
        immediate — unlike [struct.new], whose arity comes from the type — and
        [struct.new_default]/[array.new]/[array.new_default] above have a fixed
        arity too. *)
-    | ArrayNewFixed (_, n) -> `Pure (Uint32.to_int n)
+    | ArrayNewFixed (_, n) -> `Pure (Uint32.to_int n, 1)
     (* [struct.new] takes one operand per field; the arity comes from the type,
        looked up the same way folding does. [struct.new_desc] adds a descriptor
        operand. An unresolvable type falls through to [`Unhandled]. *)
     | StructNew idx -> (
-        match struct_arity idx with Some n -> `Pure n | None -> `Unhandled)
+        match struct_arity idx with
+        | Some n -> `Pure (n, 1)
+        | None -> `Unhandled)
     | StructNewDesc idx -> (
         match struct_arity idx with
-        | Some n -> `Pure (n + 1)
+        | Some n -> `Pure (n + 1, 1)
         | None -> `Unhandled)
     (* [nop] neither pops nor pushes, so it leaves the tracked stack unchanged
        rather than clearing it. *)
@@ -4126,11 +4132,13 @@ let lint_body ctx instrs =
     | VecLoad _ | VecStore _ | VecLoadLane _ | VecStoreLane _ | VecLoadSplat _
       ->
         `Impure
-    (* Possibly pure, but not modelled here (block-structured, produces more
-       than one value, or a Wax extension); clears the stack conservatively.
-       Distinct from [`Impure] to flag as future work. *)
-    | Block _ | Loop _ | If _ | TryTable _ | Try _ | Hinted _ | Drop | Add128
-    | Sub128 | MulWide _ | Folded _ | String _ | Char _ | If_annotation _ ->
+    (* Possibly pure, but not modelled here; clears the stack conservatively,
+       kept distinct from [`Impure] to flag as future work. The block forms
+       would need a whole-body purity analysis (and reasoning about branches
+       escaping the block) to be treated as a value producer; [Drop]/[Folded]
+       are handled structurally in [step]; the rest are Wax extensions. *)
+    | Block _ | Loop _ | If _ | TryTable _ | Try _ | Hinted _ | Drop | Folded _
+    | String _ | Char _ | If_annotation _ ->
         `Unhandled
   in
   let rec drop_n n l =
@@ -4174,11 +4182,12 @@ let lint_body ctx instrs =
     | _ -> (
         check_op i st;
         recurse i;
-        (* A pure operator whose operands are all pure yields a pure value (so a
-           later [drop] of it is flagged too); [local.get]/[global.get] and other
-           [`Pure 0] producers push a pure marker; anything else clears. *)
+        (* A pure operator whose operands are all pure yields pure results (so a
+           later [drop] of one is flagged too); [local.get]/[global.get] and
+           other zero-arity producers push a pure marker; anything else clears. *)
         match classify i.desc with
-        | `Pure n when List.length st >= n -> LPure :: drop_n n st
+        | `Pure (consumed, produced) when List.length st >= consumed ->
+            List.init produced (fun _ -> LPure) @ drop_n consumed st
         | `Neutral -> st
         | `Pure _ | `Impure | `Unhandled -> [])
   and recurse (i : _ Ast.Text.instr) =

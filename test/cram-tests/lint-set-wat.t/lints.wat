@@ -18,6 +18,12 @@
   (func $dead (result i32)
     (return (i32.const 1))
     (i32.const 2))
+  (func $wide (param i64 i64)
+    local.get 0
+    local.get 1
+    i64.mul_wide_s
+    drop
+    drop)
   (func $flat (param i32) (result i32)
     local.get 0
     i32.const 40

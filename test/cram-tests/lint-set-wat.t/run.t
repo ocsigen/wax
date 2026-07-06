@@ -76,13 +76,22 @@ the tier with an explicit `-W`:
      ·      ^^^^^^^^^^^^^^^^^^^^^ Control never returns from here.
   20 │     (i32.const 2))
      ·      ^^^^^^^^^^^^
-  21 │   (func $flat (param i32) (result i32)
+  21 │   (func $wide (param i64 i64)
   22 │     local.get 0
+  Warning:
+    The result of this expression is discarded, and computing it has no effect.
+    ──➤  lints.wat:25:5
+  23 │     local.get 1
+  24 │     i64.mul_wide_s
+  25 │     drop
+     ·     ^^^^
+  26 │     drop)
+  27 │   (func $flat (param i32) (result i32)
   Warning: The shift count 40 is at least the operand width (32 bits).
-    ──➤  lints.wat:24:5
-  22 │     local.get 0
-  23 │     i32.const 40
-  24 │     i32.shl))
+    ──➤  lints.wat:30:5
+  28 │     local.get 0
+  29 │     i32.const 40
+  30 │     i32.shl))
      ·     ^^^^^^^
-  25 │ 
+  31 │ 
   Hint: Wasm masks the count modulo 32, shifting by 8 instead.
