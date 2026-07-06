@@ -542,6 +542,20 @@ let tail_dispatch res : Ast.location Ast.instr =
          arms = List.map (fun l -> (l, [ ret () ])) (cases @ [ default ]);
        })
 
+(* Branch-hinting proposal: wrap a conditional branch in [#[likely]] (true) or
+   [#[unlikely]] (false) roughly a third of the time, so generated modules
+   exercise the [Hinted] wrapper end to end — the type checker descending through
+   it, the wasm branch-hint section codec, and (via the round-trip oracle) that a
+   hinted binary decompiles and recompiles to a reference-valid module. Only a
+   statement-position [if] is hinted: a value-producing [if] carries the hint
+   as a [blockinstr] (statement) only, not inside an operand, so hinting one there
+   would print Wax that does not re-parse. *)
+let maybe_hint i =
+  match rnd 3 with
+  | 0 -> nl (Ast.Hinted (true, i))
+  | 1 -> nl (Ast.Hinted (false, i))
+  | _ -> i
+
 (* A statement (no value escapes): assign a param (fully type-constrained),
    mutate a struct field / array element, or a nested control statement. *)
 let rec stmt d : Ast.location Ast.instr =
@@ -571,15 +585,16 @@ let rec stmt d : Ast.location Ast.instr =
       else meth mem "store64" [ gen I32 d; gen I64 d ]
   | n when n < 84 && d > 0 ->
       let void = Ast.{ params = [||]; results = [||] } in
-      nl
-        (Ast.If
-           {
-             label = None;
-             typ = void;
-             cond = gen I32 (d - 1);
-             if_block = nl [ stmt (d - 1) ];
-             else_block = Some (nl [ stmt (d - 1) ]);
-           })
+      maybe_hint
+        (nl
+           (Ast.If
+              {
+                label = None;
+                typ = void;
+                cond = gen I32 (d - 1);
+                if_block = nl [ stmt (d - 1) ];
+                else_block = Some (nl [ stmt (d - 1) ]);
+              }))
   | _ when d > 0 ->
       (* Sometimes a Zig-style continue-expression: a compound assignment on a
          numeric param (always initialised, so well-typed). Exercises the stepped
