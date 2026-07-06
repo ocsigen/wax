@@ -2,7 +2,8 @@ let validate_refs = ref true
 
 module Uint32 = Wax_utils.Uint32
 module Uint64 = Wax_utils.Uint64
-open Ast.Binary.Types
+open Types.Internal
+module Nz = Types.Normalized
 
 (* The [@]-suffixed operators sequence [option] computations, short-circuiting
    on [None]: [let*@] binds, [let+@] maps, and [let>@] runs the body for its
@@ -896,9 +897,13 @@ type type_context = {
      so [$a] is named with [$a] even when a structurally-equal [$b] shares its
      global index. *)
   index_mapping :
-    (Uint32.t, int * (string * int) list * Ast.Text.comptype) Hashtbl.t;
+    ( Uint32.t,
+      Types.ref_index * (string * int) list * Ast.Text.comptype )
+    Hashtbl.t;
   label_mapping :
-    (string, int * (string * int) list * Ast.Text.comptype) Hashtbl.t;
+    ( string,
+      Types.ref_index * (string * int) list * Ast.Text.comptype )
+    Hashtbl.t;
   (* For each type definition, keyed by its text-level index: its source index
      node (its name when it has one, else its numeric index, carrying the
      definition's location), and — for a continuation type — the source
@@ -913,7 +918,7 @@ type type_context = {
      recovers the descriptor's source name for error rendering (there is no
      immediate to name it by). Deduplicated types share a descriptor, so keying
      by the global index is unambiguous. *)
-  descriptor_source : (int, Ast.Text.idx) Hashtbl.t;
+  descriptor_source : (Types.Id.t, Ast.Text.idx) Hashtbl.t;
   (* The enabled optional features / proposals, and which are used. *)
   features : Wax_utils.Feature.set;
 }
@@ -976,9 +981,27 @@ let get_type_info d ctx (idx : Ast.Text.idx) =
     Error.unbound_index d ~location:idx.info "type" idx lst;
     None
 
+(* Resolve a source type reference to how it should appear inside a rec group
+   being registered: [Def id] for an already-defined type, [Rec pos] for a member
+   of the group currently under construction. This is what the type-definition
+   builders below produce. *)
+let resolve_type_ref d ctx idx =
+  let+@ r, _, _ = get_type_info d ctx idx in
+  r
+
+(* The canonical index of an already-defined type. A [Rec] would mean referring
+   to a group still under construction, which never happens outside the
+   type-definition builders. *)
+let def_id : Types.ref_index -> Types.Id.t = function
+  | Def id -> id
+  | Rec _ -> assert false
+
+(* Resolve a source type reference to its canonical index, for the many contexts
+   that consult an *already-defined* type (function/cont/struct lookups, casts,
+   …). *)
 let resolve_type_index d ctx idx =
-  let+@ gidx, _, _ = get_type_info d ctx idx in
-  gidx
+  let+@ r = resolve_type_ref d ctx idx in
+  def_id r
 
 (* Record that [feature] is used and, if it is not enabled, report it at
    [location]. Validation continues either way (the construct is still typed,
@@ -1055,51 +1078,111 @@ let functype d ctx { Ast.Text.params; results } =
   let+@ results = array_map_opt (fun ty -> valtype d ctx ty) results in
   { params; results }
 
-let storagetype d ctx (ty : Ast.Text.storagetype) =
-  match ty with
-  | Value ty ->
-      let+@ ty = valtype d ctx ty in
-      Value ty
-  | Packed ty -> Some (Packed ty)
-
 let muttype f d ctx { mut; typ } =
   let+@ typ = f d ctx typ in
   { mut; typ }
 
-let fieldtype d ctx ty = muttype storagetype d ctx ty
-
 let tabletype d ctx ({ limits; reftype = typ } : Ast.Text.tabletype) =
   let+@ reftype = reftype d ctx typ in
-  { Ast.Binary.limits = limits.desc; reftype }
+  { Types.Internal.limits = limits.desc; reftype }
 
 let globaltype d ctx ty = muttype valtype d ctx ty
 
-let comptype d ctx (ty : Ast.Text.comptype) =
+(* Type-definition builders. These produce the *normalized* representation
+   ([Types.Normalized]) that {!Types.add_rectype} takes: a reference to a member
+   of the group being defined is [Rec pos], anything else is [Def id]. They are
+   deliberately separate from the [Internal]-producing builders above, which
+   serve instruction checking where every reference is already defined. *)
+let n_heaptype d ctx (h : Ast.Text.heaptype) : Nz.heaptype option =
+  match h with
+  | Func -> Some Nz.Func
+  | NoFunc -> Some Nz.NoFunc
+  | Exn -> Some Nz.Exn
+  | NoExn -> Some Nz.NoExn
+  | Cont -> Some Nz.Cont
+  | NoCont -> Some Nz.NoCont
+  | Extern -> Some Nz.Extern
+  | NoExtern -> Some Nz.NoExtern
+  | Any -> Some Nz.Any
+  | Eq -> Some Nz.Eq
+  | I31 -> Some Nz.I31
+  | Struct -> Some Nz.Struct
+  | Array -> Some Nz.Array
+  | None_ -> Some Nz.None_
+  | Type idx ->
+      let+@ r = resolve_type_ref d ctx idx in
+      Nz.Type r
+  | Exact idx ->
+      require_feature d ctx ~location:idx.info
+        Wax_utils.Feature.Custom_descriptors;
+      let+@ r = resolve_type_ref d ctx idx in
+      Nz.Exact r
+
+let n_reftype d ctx { Ast.Text.nullable; typ } : Nz.reftype option =
+  let+@ typ = n_heaptype d ctx typ in
+  { Nz.nullable; typ }
+
+let n_valtype d ctx (ty : Ast.Text.valtype) : Nz.valtype option =
+  match ty with
+  | I32 -> Some Nz.I32
+  | I64 -> Some Nz.I64
+  | F32 -> Some Nz.F32
+  | F64 -> Some Nz.F64
+  | V128 -> Some Nz.V128
+  | Ref r ->
+      let+@ ty = n_reftype d ctx r in
+      Nz.Ref ty
+
+let n_functype d ctx { Ast.Text.params; results } : Nz.functype option =
+  let*@ params =
+    array_map_opt (fun p -> n_valtype d ctx (snd p.Ast.desc)) params
+  in
+  let+@ results = array_map_opt (fun ty -> n_valtype d ctx ty) results in
+  { Nz.params; results }
+
+let n_storagetype d ctx (ty : Ast.Text.storagetype) : Nz.storagetype option =
+  match ty with
+  | Value ty ->
+      let+@ ty = n_valtype d ctx ty in
+      Nz.Value ty
+  | Packed ty -> Some (Nz.Packed ty)
+
+let n_fieldtype d ctx ty : Nz.fieldtype option = muttype n_storagetype d ctx ty
+
+let comptype d ctx (ty : Ast.Text.comptype) : Nz.comptype option =
   match ty with
   | Func ty ->
-      let+@ ty = functype d ctx ty in
-      Func ty
+      let+@ ty = n_functype d ctx ty in
+      Nz.Func ty
   | Struct fields ->
       let+@ fields =
-        array_map_opt (fun e -> fieldtype d ctx (snd e.Ast.desc)) fields
+        array_map_opt (fun e -> n_fieldtype d ctx (snd e.Ast.desc)) fields
       in
-      Struct fields
+      Nz.Struct fields
   | Array field ->
-      let+@ field = fieldtype d ctx field in
-      Array field
+      let+@ field = n_fieldtype d ctx field in
+      Nz.Array field
   | Cont idx ->
-      let+@ ty = resolve_type_index d ctx idx in
-      Cont ty
+      let+@ r = resolve_type_ref d ctx idx in
+      Nz.Cont r
+
+(* A reference is to an already-defined type when it is a [Def], or a [Rec]
+   member strictly before [current] in the group (defined earlier). *)
+let defined_before current (r : Types.ref_index) =
+  match r with Def _ -> true | Rec pos -> pos < current
 
 let subtype d ctx current
-    { Ast.Text.typ; supertype; final; descriptor; describes } =
+    ({ Ast.Text.typ; supertype; final; descriptor; describes } :
+      Ast.Text.subtype) : Types.Normalized.subtype option =
   let*@ typ = comptype d ctx typ in
   let*@ supertype =
     match supertype with
     | None -> Some None
     | Some idx ->
-        let+@ i = resolve_type_index d ctx idx in
-        (if i <= lnot current then
+        let+@ r = resolve_type_ref d ctx idx in
+        (* A supertype must be an already-defined type: reject a self/forward
+           reference to a member of this group at position [>= current]. *)
+        (if not (defined_before current r) then
            let lst =
              match idx.desc with
              | Num _ -> []
@@ -1107,24 +1190,25 @@ let subtype d ctx current
                  Wax_utils.Spell_check.f
                    (fun f ->
                      Hashtbl.iter
-                       (fun id' (i, _, _) -> if i > lnot current then f id')
+                       (fun id' (r, _, _) ->
+                         if defined_before current r then f id')
                        ctx.label_mapping)
                    id
            in
            Error.unbound_index d ~location:idx.info "type" idx lst);
-        Some i
+        Some r
   in
   let resolve_opt = function
     | None -> Some None
     | Some (idx : Ast.Text.idx) ->
         require_feature d ctx ~location:idx.info
           Wax_utils.Feature.Custom_descriptors;
-        let+@ i = resolve_type_index d ctx idx in
-        Some i
+        let+@ r = resolve_type_ref d ctx idx in
+        Some r
   in
   let*@ descriptor = resolve_opt descriptor in
   let+@ describes = resolve_opt describes in
-  { typ; supertype; final; descriptor; describes }
+  { Nz.typ; supertype; final; descriptor; describes }
 
 let rectype d ctx ty =
   array_mapi_opt (fun i e -> subtype d ctx i (snd e.Ast.desc)) ty
@@ -1142,7 +1226,7 @@ let typeuse d ctx (idx, sign) =
           Error.expected_func_type d ~location:idx.info idx;
           None)
   | _, Some sign ->
-      let+@ ty = functype d ctx sign in
+      let+@ ty = n_functype d ctx sign in
       Types.add_rectype ctx.types
         [|
           {
@@ -1156,7 +1240,7 @@ let typeuse d ctx (idx, sign) =
   | None, None -> assert false (* Should not happen *)
 
 (* Intern the internal representation type of Wax strings — a mutable array of
-   [i8] — and return its global index. *)
+   [i8] — and return its canonical index. *)
 let string_type ctx =
   Types.add_rectype ctx.types
     [|
@@ -1184,13 +1268,14 @@ type module_context = {
   (* Per function: interned type, source type index (if named), signature, and
      whether [ref.func] on it yields an *exact* reference (true for a defined
      function or an exact import, false for a plain import). *)
-  functions : (int * Ast.Text.idx option * Ast.Text.functype * bool) Sequence.t;
+  functions :
+    (Types.Id.t * Ast.Text.idx option * Ast.Text.functype * bool) Sequence.t;
   memories : limits Sequence.t;
-  tables : (Ast.Binary.tabletype * source_type) Sequence.t;
+  tables : (Types.Internal.tabletype * source_type) Sequence.t;
   globals : (globaltype * source_type) Sequence.t;
   (* Each tag carries its type's global index and its source signature, to name
      a thrown payload's types. *)
-  tags : (int * Ast.Text.functype) Sequence.t;
+  tags : (Types.Id.t * Ast.Text.functype) Sequence.t;
   data : unit Sequence.t;
   (* Each element segment carries its interned reference type and the source
      reference type from its declaration, to name a mismatched element type. *)
@@ -1250,6 +1335,7 @@ let lookup_func_type ctx idx =
 let lookup_struct_type ctx idx =
   let ctx = ctx.modul in
   let*@ ty, field_map, _ = get_type_info ctx.diagnostics ctx.types idx in
+  let ty = def_id ty in
   let def = Types.get_subtype ctx.subtyping_info ty in
   match def.typ with
   | Struct fields -> Some (ty, field_map, fields)
@@ -3460,10 +3546,11 @@ let add_type d ctx ty =
          not consulted meanwhile, but carrying it keeps the field total. *)
       Hashtbl.replace ctx.index_mapping
         (Uint32.of_int (ctx.last_index + i))
-        (lnot i, [], sub.typ);
+        (Types.Rec i, [], sub.typ);
       Option.iter
         (fun label ->
-          Hashtbl.replace ctx.label_mapping label.Ast.desc (lnot i, [], sub.typ))
+          Hashtbl.replace ctx.label_mapping label.Ast.desc
+            (Types.Rec i, [], sub.typ))
         label)
     ty;
   match rectype d ctx ty with
@@ -3478,43 +3565,35 @@ let add_type d ctx ty =
         ty
   | Some ty' ->
       (* Well-formedness of [descriptor] / [describes] clauses, which must link
-         two struct types within the same recursion group. In [ty'] an in-group
-         type reference is a negative placeholder [lnot pos]; a non-negative
-         index denotes an already-defined type, i.e. one outside this group. *)
-      let in_group idx = if idx < 0 then Some (lnot idx) else None in
+         two struct types within the same recursion group. In [ty'] a [Rec]
+         reference names a member of this group; a [Def] denotes an
+         already-defined type outside it. *)
       Array.iteri
-        (fun i (sub : Ast.Binary.subtype) ->
+        (fun i (sub : Types.Normalized.subtype) ->
           let location = ty.(i).Ast.info in
           (match sub.descriptor with
           | None -> ()
-          | Some di -> (
-              match in_group di with
-              | None ->
-                  Error.descriptor_outside_rec_group d ~location
-                    ~described:false
-              | Some pos -> (
-                  (* This type is described by [ty'.(pos)]; that descriptor must
-                     describe this type back. *)
-                  match ty'.(pos).describes with
-                  | Some o when in_group o = Some i -> ()
-                  | _ ->
-                      Error.descriptor_not_reciprocal d ~location
-                        ~described:false)));
+          | Some (Def _) ->
+              Error.descriptor_outside_rec_group d ~location ~described:false
+          | Some (Rec pos) -> (
+              (* This type is described by [ty'.(pos)]; that descriptor must
+                 describe this type back. *)
+              match ty'.(pos).describes with
+              | Some (Rec o) when o = i -> ()
+              | _ ->
+                  Error.descriptor_not_reciprocal d ~location ~described:false));
           (match sub.describes with
           | None -> ()
-          | Some oi -> (
-              match in_group oi with
-              | None ->
-                  Error.descriptor_outside_rec_group d ~location ~described:true
-              | Some pos -> (
-                  if pos >= i then Error.forward_use_of_described d ~location;
-                  (* This type is the descriptor of [ty'.(pos)], which must name
-                     this type as its descriptor. *)
-                  match ty'.(pos).descriptor with
-                  | Some dd when in_group dd = Some i -> ()
-                  | _ ->
-                      Error.descriptor_not_reciprocal d ~location
-                        ~described:true)));
+          | Some (Def _) ->
+              Error.descriptor_outside_rec_group d ~location ~described:true
+          | Some (Rec pos) -> (
+              if pos >= i then Error.forward_use_of_described d ~location;
+              (* This type is the descriptor of [ty'.(pos)], which must name this
+                 type as its descriptor. *)
+              match ty'.(pos).descriptor with
+              | Some (Rec dd) when dd = i -> ()
+              | _ -> Error.descriptor_not_reciprocal d ~location ~described:true
+              ));
           if
             (sub.descriptor <> None || sub.describes <> None)
             && match sub.typ with Struct _ -> false | _ -> true
@@ -3540,7 +3619,7 @@ let add_type d ctx ty =
           in
           Hashtbl.replace ctx.index_mapping
             (Uint32.of_int (ctx.last_index + i))
-            (i' + i, fields, typ.typ);
+            (Types.Def (Types.Id.add i' i), fields, typ.typ);
           let def_idx =
             let desc =
               match label with
@@ -3556,12 +3635,13 @@ let add_type d ctx ty =
           in
           Hashtbl.replace ctx.type_defs (ctx.last_index + i) (def_idx, cont_ref);
           Option.iter
-            (fun node -> Hashtbl.replace ctx.descriptor_source (i' + i) node)
+            (fun node ->
+              Hashtbl.replace ctx.descriptor_source (Types.Id.add i' i) node)
             (typ : Ast.Text.subtype).descriptor;
           Option.iter
             (fun label ->
               Hashtbl.replace ctx.label_mapping label.Ast.desc
-                (i' + i, fields, typ.typ))
+                (Types.Def (Types.Id.add i' i), fields, typ.typ))
             label)
         ty;
       ctx.last_index <- ctx.last_index + Array.length ty
@@ -3680,7 +3760,7 @@ and register_typeuses_instr d ctx (i : _ Ast.Text.instr) =
    type table. *)
 let collect_implicit_types d ctx fields =
   let collect sign =
-    let>@ ft = functype d ctx sign in
+    let>@ ft = n_functype d ctx sign in
     let before = Types.last_index ctx.types in
     let idx =
       Types.add_rectype ctx.types
@@ -3697,7 +3777,7 @@ let collect_implicit_types d ctx fields =
     if Types.last_index ctx.types > before then (
       Hashtbl.replace ctx.index_mapping
         (Uint32.of_int ctx.last_index)
-        (idx, [], Func sign);
+        (Types.Def idx, [], Func sign);
       ctx.last_index <- ctx.last_index + 1)
   in
   let collect_instr (i : _ Ast.Text.instr) =
@@ -3803,7 +3883,7 @@ let check_type_definitions ctx =
       get_type_info ctx.diagnostics ctx.types
         (Ast.no_loc (Ast.Text.Num (Uint32.of_int i)))
     in
-    let ty = Types.get_subtype ctx.subtyping_info gidx in
+    let ty = Types.get_subtype ctx.subtyping_info (def_id gidx) in
     (* A continuation type must wrap a function type. *)
     (match ty.typ with
     | Cont ft -> (
@@ -3812,11 +3892,11 @@ let check_type_definitions ctx =
         | Struct _ | Array _ | Cont _ ->
             (* Name the wrapped type as the source wrote it: the resolved index
                [ft] is canonical, so identical types would otherwise be
-               indistinguishable. *)
+               indistinguishable. A [Cont] type is only ever registered by
+               [add_type], which records its wrapped-type source, so [cont_ref]
+               is necessarily [Some] here. *)
             let wrapped =
-              Option.value
-                ~default:(Ast.no_loc (Ast.Text.Num (Uint32.of_int ft)))
-                cont_ref
+              match cont_ref with Some r -> r | None -> assert false
             in
             Error.expected_func_type ctx.diagnostics ~location wrapped)
     | Func _ | Struct _ | Array _ -> ());
@@ -4114,7 +4194,7 @@ let lint_body ctx instrs =
       with Not_found -> None
     with
     | Some (gidx, _, _) -> (
-        match (Types.get_subtype m.subtyping_info gidx).typ with
+        match (Types.get_subtype m.subtyping_info (def_id gidx)).typ with
         | Struct fields -> Some (Array.length fields)
         | Func _ | Array _ | Cont _ -> None)
     | None -> None
@@ -4681,7 +4761,7 @@ let validate_configuration ?(warn_unused = true)
      validating an unnamed [@string] — which looks the type up via [string_type]
      ([add_rectype], idempotent) — gets an index within [subtyping_info] instead
      of one appended past the snapshot taken here. *)
-  ignore (string_type type_context : int);
+  ignore (string_type type_context : Types.Id.t);
   let ctx =
     {
       diagnostics;

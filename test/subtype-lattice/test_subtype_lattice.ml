@@ -9,7 +9,7 @@
    the reference interpreter lives in fuzz/subtype-lattice.sh; this is its fast,
    dependency-free in-process complement. *)
 
-open Wax_wasm.Ast.Binary
+open Wax_wasm.Types.Internal
 module T = Wax_wasm.Types
 
 (* The five top hierarchies; membership is disjoint and (except through the
@@ -34,8 +34,8 @@ let failures = ref 0
 
 let name (h : heaptype) =
   match h with
-  | Type i -> Printf.sprintf "(type %d)" i
-  | Exact i -> Printf.sprintf "(exact %d)" i
+  | Type i -> Printf.sprintf "(type %d)" (T.Id.to_int_for_tests_only i)
+  | Exact i -> Printf.sprintf "(exact %d)" (T.Id.to_int_for_tests_only i)
   | _ -> ( match heaptype_keyword h with Some s -> s | None -> "?")
 
 let check msg cond =
@@ -45,18 +45,22 @@ let check msg cond =
 
 let () =
   let t = T.create () in
-  let sub ?(super = None) ?(final = false) typ =
+  (* Rec groups are built in the normalized form fed to [add_rectype]; each type
+     here is a singleton group referring only to already-defined types ([Def]). *)
+  let module N = Wax_wasm.Types.Normalized in
+  let sub ?super ?(final = false) typ : N.subtype =
     { typ; supertype = super; final; descriptor = None; describes = None }
   in
-  let field = { mut = false; typ = Value I32 } in
-  let ft = { params = [||]; results = [||] } in
+  let field : N.fieldtype = { mut = false; typ = N.Value N.I32 } in
+  let ft : N.functype = { params = [||]; results = [||] } in
   (* Concrete universe: a struct with a proper subtype, an array, a func and a
      cont — each interned and referred to by its canonical index. *)
-  let s0 = T.add_rectype t [| sub (Struct [||]) |] in
-  let s1 = T.add_rectype t [| sub ~super:(Some s0) (Struct [||]) |] in
-  let a0 = T.add_rectype t [| sub ~final:true (Array field) |] in
-  let f0 = T.add_rectype t [| sub ~final:true (Func ft) |] in
-  let c0 = T.add_rectype t [| sub ~final:true (Cont f0) |] in
+  let add rt = T.add_rectype t rt in
+  let s0 = add [| sub (N.Struct [||]) |] in
+  let s1 = add [| sub ~super:(T.Def s0) (N.Struct [||]) |] in
+  let a0 = add [| sub ~final:true (N.Array field) |] in
+  let f0 = add [| sub ~final:true (N.Func ft) |] in
+  let c0 = add [| sub ~final:true (N.Cont (T.Def f0)) |] in
   let info = T.subtyping_info t in
   let hs a b = T.heap_subtype info a b in
   let concrete = [ (s0, Aggr); (s1, Aggr); (a0, Aggr); (f0, Fn); (c0, Con) ] in

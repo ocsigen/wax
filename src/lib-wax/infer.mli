@@ -25,7 +25,7 @@ module Cell : sig
   (** [set t v] overwrites the value at [t]'s root with [v]. *)
 end
 
-module Internal = Wax_wasm.Ast.Binary.Types
+module Internal = Wax_wasm.Types.Internal
 module Simd = Wax_wasm.Simd
 
 type inferred_valtype = {

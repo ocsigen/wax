@@ -50,7 +50,7 @@ module Cell = struct
     root.state <- Root new_val
 end
 
-module Internal = Wax_wasm.Ast.Binary.Types
+module Internal = Wax_wasm.Types.Internal
 module Simd = Wax_wasm.Simd
 
 type inferred_valtype = {

@@ -1,7 +1,65 @@
-open Ast.Binary
+(* The canonical index of a type. Abstract outside this module (its .mli exposes
+   neither [of_int] nor [to_int]), so an [Id.t] elsewhere can only originate from
+   the store — never be fabricated from, or mistaken for, a source-level or
+   wire-level integer. *)
+module Id = struct
+  type t = int
 
+  let of_int i = i
+  let to_int i = i
+  let to_int_for_tests_only = to_int
+  let equal = Int.equal
+  let add id n = id + n
+end
+
+(* The internal (resolved) type representation: type references carry the
+   abstract canonical [Id.t] rather than the wire format's plain [int]. The type
+   store and validation reason about this; the binary/text codec stays on
+   [Ast.Binary]. *)
+module Internal = struct
+  module X = struct
+    type idx = Id.t
+    type 'a annotated_array = 'a array
+    type 'a opt_annotated_array = 'a array
+  end
+
+  include Ast.Make_types (X)
+
+  type tabletype = { limits : limits; reftype : reftype }
+end
+
+module I = Internal
+
+(* A reference inside a *normalized* rec-type. An intra-group back-reference is
+   the constructor [Rec] carrying the referenced member's position in the group;
+   a reference to an already-defined type is [Def] carrying its canonical index.
+   Making these two distinct constructors — rather than a canonical index and a
+   negative sign-bit sharing one integer space — means they can no longer be
+   confused, and an [Id.t] is only ever a genuine store index. A caller resolving
+   a source rec group builds [Normalized.rectype] directly. *)
+type ref_index = Def of Id.t | Rec of int
+
+module Normalized = struct
+  module X = struct
+    type idx = ref_index
+    type 'a annotated_array = 'a array
+    type 'a opt_annotated_array = 'a array
+  end
+
+  include Ast.Make_types (X)
+end
+
+module N = Normalized
+
+type normalized_rectype = N.rectype
+
+(* Deduplication keys on the normalized form directly: two structurally-equal rec
+   groups yield equal normalized values. The structural hash/equality below is
+   the tuned one carried over from the binary representation, now over [N]. *)
 module RecTypeTbl = Hashtbl.Make (struct
-  type t = rectype
+  open N
+
+  type t = N.rectype
 
   let hash t =
     (* We have large structs, that tend to hash to the same value *)
@@ -67,7 +125,7 @@ end)
 type t = {
   types : int RecTypeTbl.t;
   mutable last_index : int;
-  mutable rev_list : (int * rectype) list;
+  mutable rev_list : (int * normalized_rectype) list;
 }
 
 let create () =
@@ -75,153 +133,157 @@ let create () =
 
 let last_index types = types.last_index
 
-(* Interim backstop for the normalization contract (see [add_rectype] in the
-   .mli). A normalized rec group references its own members by a negative
-   back-reference [lnot pos] and every already-defined type by its non-negative
-   canonical index; the two currencies must never cross. A mis-normalized group
-   — the source-vs-canonical index confusion class behind a known V8 soundness
-   bug — is caught here at its origin rather than silently corrupting the
-   subtyping relation. [types.last_index] is the base index this group is about
-   to receive, so a well-formed non-negative reference is strictly below it. *)
-let check_normalized types typ =
-  let n = Array.length typ in
-  let check_index i =
-    if i < 0 then (
-      if lnot i >= n then
-        invalid_arg "Types.add_rectype: back-reference outside the rec group")
-    else if i >= types.last_index then
-      invalid_arg
-        "Types.add_rectype: self/forward reference must be a back-reference"
+(* Lower a normalized subtype to the internal (resolved) form, mapping every
+   reference with [f]. Shared by [subtyping_info]/[get_all_rectypes] (resolving a
+   back-reference to its absolute canonical index) and the backstop (visiting
+   every reference to validate it). *)
+let subtype_to_internal (f : ref_index -> Id.t) (s : N.subtype) : I.subtype =
+  let heaptype (h : N.heaptype) : I.heaptype =
+    match h with
+    | Func -> Func
+    | NoFunc -> NoFunc
+    | Exn -> Exn
+    | NoExn -> NoExn
+    | Cont -> Cont
+    | NoCont -> NoCont
+    | Extern -> Extern
+    | NoExtern -> NoExtern
+    | Any -> Any
+    | Eq -> Eq
+    | I31 -> I31
+    | Struct -> Struct
+    | Array -> Array
+    | None_ -> None_
+    | Type i -> Type (f i)
+    | Exact i -> Exact (f i)
   in
-  let check_heaptype (ty : heaptype) =
-    match ty with
-    | Func | NoFunc | Exn | NoExn | Cont | NoCont | Extern | NoExtern | Any | Eq
-    | I31 | Struct | Array | None_ ->
-        ()
-    | Type i | Exact i -> check_index i
+  let valtype (v : N.valtype) : I.valtype =
+    match v with
+    | I32 -> I32
+    | I64 -> I64
+    | F32 -> F32
+    | F64 -> F64
+    | V128 -> V128
+    | Ref { nullable; typ } -> Ref { nullable; typ = heaptype typ }
   in
-  let check_valtype (ty : valtype) =
-    match ty with
-    | I32 | I64 | F32 | F64 | V128 -> ()
-    | Ref { typ; _ } -> check_heaptype typ
+  let storagetype (s : N.storagetype) : I.storagetype =
+    match s with Value v -> Value (valtype v) | Packed p -> Packed p
   in
-  let check_storagetype (ty : storagetype) =
-    match ty with Value v -> check_valtype v | Packed _ -> ()
+  let fieldtype ({ mut; typ } : N.fieldtype) : I.fieldtype =
+    { mut; typ = storagetype typ }
   in
-  let check_comptype (ty : comptype) =
-    match ty with
+  let comptype (c : N.comptype) : I.comptype =
+    match c with
     | Func { params; results } ->
-        Array.iter check_valtype params;
-        Array.iter check_valtype results
-    | Struct fields ->
-        Array.iter
-          (fun ({ typ; _ } : fieldtype) -> check_storagetype typ)
-          fields
-    | Array { typ; _ } -> check_storagetype typ
-    | Cont i -> check_index i
+        Func
+          {
+            params = Array.map valtype params;
+            results = Array.map valtype results;
+          }
+    | Struct a -> Struct (Array.map fieldtype a)
+    | Array ft -> Array (fieldtype ft)
+    | Cont i -> Cont (f i)
+  in
+  ({
+     typ = comptype s.typ;
+     supertype = Option.map f s.supertype;
+     final = s.final;
+     descriptor = Option.map f s.descriptor;
+     describes = Option.map f s.describes;
+   }
+    : I.subtype)
+
+(* Backstop for the normalization contract (see [add_rectype] in the .mli). A
+   [Rec] back-reference must fall inside the group and a [Def] must denote an
+   already-defined type; [last_index] is the base index this group is about to
+   receive, so a well-formed [Def] is strictly below it. A violation is a
+   mis-normalized group (the source-vs-canonical index confusion class) and is
+   rejected here rather than silently corrupting the subtyping relation. *)
+let check_normalized types (rt : normalized_rectype) =
+  let n = Array.length rt in
+  let check_ref = function
+    | Rec pos ->
+        if pos < 0 || pos >= n then
+          invalid_arg "Types.add_rectype: back-reference outside the rec group"
+    | Def id ->
+        if Id.to_int id < 0 || Id.to_int id >= types.last_index then
+          invalid_arg
+            "Types.add_rectype: reference to an undefined or in-group type"
   in
   Array.iter
-    (fun { typ; supertype; descriptor; describes; final = _ } ->
-      check_comptype typ;
-      Option.iter check_index supertype;
-      Option.iter check_index descriptor;
-      Option.iter check_index describes)
-    typ
+    (fun s ->
+      ignore
+        (subtype_to_internal
+           (fun r ->
+             check_ref r;
+             Id.of_int 0)
+           s))
+    rt
 
-let add_rectype types typ =
+let add_rectype types (typ : normalized_rectype) =
   check_normalized types typ;
-  try RecTypeTbl.find types.types typ
-  with Not_found ->
-    let index = types.last_index in
-    RecTypeTbl.add types.types typ index;
-    types.last_index <- Array.length typ + index;
-    types.rev_list <- (index, typ) :: types.rev_list;
-    index
+  Id.of_int
+    (try RecTypeTbl.find types.types typ
+     with Not_found ->
+       let index = types.last_index in
+       RecTypeTbl.add types.types typ index;
+       types.last_index <- Array.length typ + index;
+       types.rev_list <- (index, typ) :: types.rev_list;
+       index)
 
-type subtyping_info = subtype array
+type subtyping_info = I.subtype array
+
+(* Resolve every reference to an absolute canonical index: a [Def] is already
+   one; a [Rec pos] is the [pos]-th member of a group based at [base]. *)
+let resolve_ref base = function
+  | Def id -> id
+  | Rec pos -> Id.of_int (base + pos)
 
 let subtyping_info t =
-  let update_index i i' = if i' >= 0 then i' else i + lnot i' in
-  let update_heaptype i (ty : heaptype) =
-    match ty with
-    | Func | NoFunc | Exn | NoExn | Cont | NoCont | Extern | NoExtern | Any | Eq
-    | I31 | Struct | Array | None_ ->
-        ty
-    | Type i' -> Type (update_index i i')
-    | Exact i' -> Exact (update_index i i')
-  in
-  let update_valtype i (ty : valtype) =
-    match ty with
-    | I32 | I64 | F32 | F64 | V128 -> ty
-    | Ref { nullable; typ } -> Ref { nullable; typ = update_heaptype i typ }
-  in
-  let update_functype i { params; results } =
-    {
-      params = Array.map (update_valtype i) params;
-      results = Array.map (update_valtype i) results;
-    }
-  in
-  let update_fieldtype i ({ mut; typ } as ty) =
-    match typ with
-    | Value v -> { mut; typ = Value (update_valtype i v) }
-    | Packed _ -> ty
-  in
-  let update_comptype i (ty : comptype) : comptype =
-    match ty with
-    | Func ty -> Func (update_functype i ty)
-    | Struct a -> Struct (Array.map (update_fieldtype i) a)
-    | Array ty -> Array (update_fieldtype i ty)
-    | Cont i' -> Cont (update_index i i')
-  in
   let l =
     List.map
-      (fun (i, a) ->
-        Array.map
-          (fun { typ; supertype; final; descriptor; describes } ->
-            {
-              typ = update_comptype i typ;
-              supertype = Option.map (update_index i) supertype;
-              final;
-              descriptor = Option.map (update_index i) descriptor;
-              describes = Option.map (update_index i) describes;
-            })
-          a)
+      (fun (base, a) -> Array.map (subtype_to_internal (resolve_ref base)) a)
       t.rev_list
   in
   Array.concat (List.rev l)
 
-let get_subtype a i = a.(i)
-let get_all_rectypes t = List.map (fun (_idx, typ) -> typ) (List.rev t.rev_list)
+let get_subtype a i = a.(Id.to_int i)
 
-let rec subtype subtyping_info (i : int) i' =
-  i = i'
+let get_all_rectypes t =
+  List.map
+    (fun (base, a) -> Array.map (subtype_to_internal (resolve_ref base)) a)
+    (List.rev t.rev_list)
+
+let rec subtype subtyping_info (i : Id.t) i' =
+  Id.equal i i'
   ||
-  match subtyping_info.(i).supertype with
+  match subtyping_info.(Id.to_int i).I.supertype with
   | None -> false
   | Some s -> subtype subtyping_info s i'
 
-let heap_subtype (subtyping_info : subtype array) (ty : heaptype)
-    (ty' : heaptype) =
+let heap_subtype (subtyping_info : I.subtype array) (ty : I.heaptype)
+    (ty' : I.heaptype) =
+  let open I in
   (* Which top hierarchy a concrete type index [i] belongs to. Enumerating the
      comptype constructors (no [_]) means a newly added comptype forces every
      concrete-type arm below to be revisited. *)
   let is_struct i =
-    match subtyping_info.(i).typ with
+    match subtyping_info.(Id.to_int i).typ with
     | Struct _ -> true
     | Func _ | Array _ | Cont _ -> false
   in
   let is_array i =
-    match subtyping_info.(i).typ with
+    match subtyping_info.(Id.to_int i).typ with
     | Array _ -> true
     | Func _ | Struct _ | Cont _ -> false
   in
   let is_func i =
-    match subtyping_info.(i).typ with
+    match subtyping_info.(Id.to_int i).typ with
     | Func _ -> true
     | Struct _ | Array _ | Cont _ -> false
   in
   let is_cont i =
-    match subtyping_info.(i).typ with
+    match subtyping_info.(Id.to_int i).typ with
     | Cont _ -> true
     | Func _ | Struct _ | Array _ -> false
   in
@@ -332,7 +394,7 @@ let heap_subtype (subtyping_info : subtype array) (ty : heaptype)
   | Exact i' -> (
       match ty with
       (* [exact] is invariant among concrete types: only the same exact type. *)
-      | Exact i -> i = i'
+      | Exact i -> Id.equal i i'
       | None_ -> is_aggregate i'
       | NoFunc -> is_func i'
       | NoCont -> is_cont i'
@@ -340,11 +402,11 @@ let heap_subtype (subtyping_info : subtype array) (ty : heaptype)
       | Struct | Array ->
           false)
 
-let ref_subtype subtyping_info { nullable; typ }
-    { nullable = nullable'; typ = typ' } =
+let ref_subtype subtyping_info { I.nullable; typ }
+    { I.nullable = nullable'; typ = typ' } =
   ((not nullable) || nullable') && heap_subtype subtyping_info typ typ'
 
 let val_subtype subtyping_info ty ty' =
   match (ty, ty') with
-  | Ref t, Ref t' -> ref_subtype subtyping_info t t'
+  | I.Ref t, I.Ref t' -> ref_subtype subtyping_info t t'
   | _ -> ty == ty'
