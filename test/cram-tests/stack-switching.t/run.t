@@ -20,14 +20,12 @@ exposed in Wax and compile to WebAssembly, with validation.
   (func $t_resume_throw (param $c (ref $k0)) (result i32)
     (resume_throw $k0 $myexn (i32.const 8) (local.get $c))
   )
-  (func $t_resume_throw_ref
-    (param $c (ref $k0)) (param $e (ref null exn)) (result i32)
+  (func $t_resume_throw_ref (param $c (ref $k0)) (param $e exnref) (result i32)
     (resume_throw_ref $k0 (local.get $e) (local.get $c))
   )
   
   ;; the abstract cont / nocont heap types are written &cont / &nocont
-  (func $abstract_refs
-    (param $a (ref null cont)) (param $b (ref nocont)) (result i32)
+  (func $abstract_refs (param $a contref) (param $b (ref nocont)) (result i32)
     (i32.const 0)
   )
   (elem declare func $g1)
