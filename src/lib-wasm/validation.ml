@@ -3958,7 +3958,10 @@ let declared_func_exports ctx fields =
    constants on the real operand stack — the top is a binary operator's right
    operand (its last-pushed value). Folded operands flatten into the same push
    sequence, so folded and flat forms are handled alike. *)
-type lint_const = LInt of int64 | LFloat of float
+(* A value tracked on the lint stack: a known integer/float constant, or a value
+   produced with no side effect and no trap ([LPure] — a [local.get]/[global.get]
+   read). Constants are also pure. Anything else clears the stack. *)
+type lint_val = LInt of int64 | LFloat of float | LPure
 
 let lint_int_value s =
   Int64.of_string_opt (String.concat "" (String.split_on_char '_' s))
@@ -4027,7 +4030,7 @@ let lint_body diagnostics instrs =
         | _ -> ())
     | Drop -> (
         match st with
-        | (LInt _ | LFloat _) :: _ ->
+        | (LInt _ | LFloat _ | LPure) :: _ ->
             Error.unused_result diagnostics ~location:op.info
         | _ -> ())
     | _ -> ()
@@ -4040,6 +4043,68 @@ let lint_body diagnostics instrs =
         true
     | Folded (op, _) -> is_diverging op
     | _ -> false
+  in
+  (* How an instruction affects the lint's purity tracking. The match is
+     exhaustive so a newly added instruction must be classified rather than
+     silently defaulting. *)
+  let classify (d : _ Ast.Text.instr_desc) =
+    match d with
+    (* Effect-free, non-trapping, fixed-arity operators. Every value on the lint
+       stack is pure by construction (impure/unhandled producers clear it), so
+       the result is pure exactly when the stack is deep enough for the operands
+       — [Pure n] pops [n] and pushes a pure value. *)
+    | Const _ | LocalGet _ | GlobalGet _ | RefNull _ | RefFunc _ | MemorySize _
+    | TableSize _ | VecConst _ | StructNewDefault _ ->
+        `Pure 0
+    | UnOp (I32 (Trunc _) | I64 (Trunc _)) ->
+        `Impure (* trapping float→int conversion *)
+    | UnOp _ | I32WrapI64 | I64ExtendI32 _ | F32DemoteF64 | F64PromoteF32
+    | ExternConvertAny | AnyConvertExtern | RefIsNull | RefTest _ | RefI31
+    | VecUnOp _ | VecTest _ | VecBitmask _ | VecExtract _ | VecSplat _
+    | ArrayNewDefault _ ->
+        `Pure 1
+    | BinOp (I32 (Div _ | Rem _) | I64 (Div _ | Rem _)) ->
+        `Impure (* integer division/remainder may trap *)
+    | BinOp _ | RefEq | VecBinOp _ | VecShift _ | VecReplace _ | VecShuffle _
+    | ArrayNew _ ->
+        `Pure 2
+    | Select _ | VecTernOp _ | VecBitselect -> `Pure 3
+    (* Allocations are effect-free and non-trapping (a dropped allocation is
+       dead code): [array.new_fixed] takes its element count as an explicit
+       immediate — unlike [struct.new], whose arity comes from the type — and
+       [struct.new_default]/[array.new]/[array.new_default] above have a fixed
+       arity too. *)
+    | ArrayNewFixed (_, n) -> `Pure (Uint32.to_int n)
+    (* [nop] neither pops nor pushes, so it leaves the tracked stack unchanged
+       rather than clearing it. *)
+    | Nop -> `Neutral
+    (* Has a side effect, transfers control, or may trap — never pure. *)
+    | Unreachable | Throw _ | ThrowRef | Br _ | Br_if _ | Br_table _
+    | Br_on_null _ | Br_on_non_null _ | Br_on_cast _ | Br_on_cast_fail _
+    | Br_on_cast_desc_eq _ | Br_on_cast_desc_eq_fail _ | Return | Call _
+    | CallRef _ | CallIndirect _ | ReturnCall _ | ReturnCallRef _
+    | ReturnCallIndirect _ | ContNew _ | ContBind _ | Suspend _ | Resume _
+    | ResumeThrow _ | ResumeThrowRef _ | Switch _ | LocalSet _ | LocalTee _
+    | GlobalSet _ | Load _ | LoadS _ | Store _ | StoreS _ | Atomic _
+    | AtomicFence | MemoryGrow _ | MemoryFill _ | MemoryCopy _ | MemoryInit _
+    | DataDrop _ | TableGet _ | TableSet _ | TableGrow _ | TableFill _
+    | TableCopy _ | TableInit _ | ElemDrop _ | RefAsNonNull | RefCast _
+    | RefCastDescEq _ | RefGetDesc _ | StructGet _ | StructSet _
+    | ArrayNewData _ | ArrayNewElem _ | ArrayGet _ | ArraySet _ | ArrayLen
+    | ArrayFill _ | ArrayCopy _ | ArrayInitData _ | ArrayInitElem _ | I31Get _
+    | VecLoad _ | VecStore _ | VecLoadLane _ | VecStoreLane _ | VecLoadSplat _
+      ->
+        `Impure
+    (* Possibly pure, but not modelled here (variable arity, block-structured,
+       produces no single value, or a Wax extension); clears the stack
+       conservatively. Distinct from [`Impure] to flag as future work. *)
+    | Block _ | Loop _ | If _ | TryTable _ | Try _ | Hinted _ | Drop
+    | StructNew _ | StructNewDesc _ | StructNewDefaultDesc _ | Add128 | Sub128
+    | MulWide _ | Folded _ | String _ | Char _ | If_annotation _ ->
+        `Unhandled
+  in
+  let rec drop_n n l =
+    if n <= 0 then l else match l with [] -> [] | _ :: t -> drop_n (n - 1) t
   in
   let rec walk instrs =
     (* Dead code: after the first unconditional divergence, the next statement
@@ -4061,7 +4126,7 @@ let lint_body diagnostics instrs =
       | _ -> ()
     in
     dead instrs;
-    ignore (List.fold_left step [] instrs : lint_const list)
+    ignore (List.fold_left step [] instrs : lint_val list)
   and step st (i : _ Ast.Text.instr) =
     match i.desc with
     | Const (I32 s) | Const (I64 s) -> (
@@ -4076,10 +4141,16 @@ let lint_body diagnostics instrs =
         let st' = List.fold_left step st operands in
         step st' op
     | Hinted (_, inner) -> step st inner
-    | _ ->
+    | _ -> (
         check_op i st;
         recurse i;
-        []
+        (* A pure operator whose operands are all pure yields a pure value (so a
+           later [drop] of it is flagged too); [local.get]/[global.get] and other
+           [`Pure 0] producers push a pure marker; anything else clears. *)
+        match classify i.desc with
+        | `Pure n when List.length st >= n -> LPure :: drop_n n st
+        | `Neutral -> st
+        | `Pure _ | `Impure | `Unhandled -> [])
   and recurse (i : _ Ast.Text.instr) =
     match i.desc with
     | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
