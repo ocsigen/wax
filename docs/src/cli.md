@@ -81,6 +81,10 @@ mistaken for a subcommand). The `format` subcommand reformats files (see
           function or global) that is defined but never referenced, exported, or
           used as the start function. The module-level analog of `unused-local`;
           prefix its name with `_` to silence one. Shown by default.
+        - `unused-import` (groups `unused`, `correctness`) — an imported function
+          or global that is never referenced, exported, or used as the start
+          function. Like `unused-field`, but for imports; `_` silences one. Shown
+          by default.
         - `unused-label` (groups `unused`, `correctness`) — a block label that
           is declared but never branched to. Prefix its name with `_` to silence
           one. Shown by default.
@@ -107,6 +111,16 @@ mistaken for a subcommand). The `format` subcommand reformats files (see
         - `dead-code` (group `correctness`) — a statement that can never be
           reached, following an unconditional branch, `return`, or
           `unreachable`. Shown by default.
+        - `cast-always-fails` (group `correctness`) — a reference cast or test
+          whose operand can never have the target type (the two are unrelated in
+          the type hierarchy), so the cast always traps and the test is always
+          false. Shown by default.
+        - `redundant-operation` (group `redundant`) — an operation with no effect
+          on its result: an arithmetic identity (`x + 0`, `x * 1`, `x << 0`, …),
+          an absorbing operand (`x * 0`, `x & 0`), two identical operands
+          (`x - x`, `x ^ x`), a self-assignment (`x = x`), or a cast to a type
+          the operand already has. **Hidden by default** (these are common in
+          generated code); enable with `-W redundant=warning`.
         - `truncated-coverage` — path-sensitive validation gave up after too
           many conditional configurations. Shown by default.
         - `naming-conflict` (group `naming`) — converting from Wasm, a source
@@ -131,15 +145,15 @@ mistaken for a subcommand). The `format` subcommand reformats files (see
       text input; the `unused`/`correctness` lints are turned on only by
       `--validate`, and always for `check`. The `naming` warnings are produced
       when converting a Wasm module to Wax.
-    - The `correctness` lints apply to WebAssembly text/binary input as well as
-      Wax: `shift-count-overflow`, `constant-trap`, `tautological-comparison`,
-      `constant-condition`, `unused-result` and `dead-code` are checked by the
-      Wasm validator too (so `wax check foo.wat` reports them). On Wasm input
-      `unused-result` covers discarding a constant or a pure `local.get`/
-      `global.get` read. `unused-field` and `unused-label` are also checked on
-      WebAssembly input — a numeric `br N` counts as a use of the label `N`
-      levels out — but, like `unused-local`, only when unused reporting is on
-      (under `check`, or under a conversion with `--validate`).
+    - Every one of these lints applies to WebAssembly text/binary input as well
+      as Wax — the Wasm validator runs the same checks, so `wax check foo.wat`
+      reports them. On Wasm input `unused-result` covers discarding a constant or
+      a pure `local.get`/`global.get` read; for `unused-label` a numeric `br N`
+      counts as a use of the label `N` levels out; `cast-always-fails` and
+      `redundant-operation` reason about `ref.cast`/`ref.test` and constant
+      operands directly from the bytecode. As with `unused-local`, they fire only
+      when unused reporting is on (under `check`, or under a conversion with
+      `--validate`).
     - The `WAX_WARN` environment variable sets default levels applied *before*
       the `-W` options. Its value is a list of `NAME=LEVEL` specs separated by
       commas or whitespace, e.g. `WAX_WARN="correctness=hidden

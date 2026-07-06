@@ -1,0 +1,12 @@
+(module
+  (type $A (sub (struct (field i32))))
+  (type $B (struct (field i64)))
+  (type $C (sub $A (struct (field i32) (field i32))))
+  (func (export "redundant") (param (ref $A)) (result (ref $A))
+    (ref.cast (ref $A) (local.get 0)))
+  (func (export "downcast") (param (ref $A)) (result (ref $C))
+    (ref.cast (ref $C) (local.get 0)))
+  (func (export "fail") (param (ref $A)) (result (ref $B))
+    (ref.cast (ref $B) (local.get 0)))
+  (func (export "test_false") (param (ref $A)) (result i32)
+    (ref.test (ref $B) (local.get 0))))

@@ -1,0 +1,11 @@
+#[export = "id"]
+fn id(x: i32) -> i32 { x + 0; }
+
+#[export = "zero"]
+fn zero(x: i32) -> i32 { x * 0; }
+
+#[export = "same"]
+fn same(x: i32) -> i32 { x ^ x; }
+
+#[export = "selfset"]
+fn selfset(y: i32) -> i32 { let x = y; x = x; x; }
