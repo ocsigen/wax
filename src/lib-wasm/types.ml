@@ -248,7 +248,6 @@ let subtyping_info t =
   Array.concat (List.rev l)
 
 let get_subtype a i = a.(Id.to_int i)
-let has_type a i = Id.to_int i < Array.length a
 
 let get_all_rectypes t =
   List.map

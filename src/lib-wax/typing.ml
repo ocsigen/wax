@@ -658,6 +658,11 @@ type type_context = {
   types : (Wax_wasm.Types.ref_index * subtype) Tbl.t;
   features : Wax_utils.Feature.set;
       (* The enabled optional features / proposals, and which are used. *)
+  mutable subtyping_info_cache : Wax_wasm.Types.subtyping_info option;
+      (* Memoised subtyping info for [internal_types]; invalidated by [add_type]
+         when a type is added (including function types minted while
+         type-checking, e.g. an inline [&fn(..)] cast target), so subtyping
+         queries always see the current type space. Read via [subtyping_info]. *)
 }
 
 let get_type_definition d types nm = Option.map snd (Tbl.find d types nm)
@@ -989,6 +994,8 @@ let add_type d ctx ty =
               ~described:(sub.describes <> None))
         ity;
       let i' = Wax_wasm.Types.add_rectype ctx.internal_types ity in
+      (* The type space grew, so any memoised subtyping info is stale. *)
+      ctx.subtyping_info_cache <- None;
       Array.iteri
         (fun i elt ->
           let name, (typ : subtype) = elt.desc in
@@ -1013,7 +1020,6 @@ type module_context = {
          written. *)
   (* --- Module-wide type and name tables (built once, before any body) --- *)
   type_context : type_context;
-  subtyping_info : Wax_wasm.Types.subtyping_info;
   types : (Wax_wasm.Types.ref_index * subtype) Tbl.t;
   (* Per function: interned type index, type name, and whether a reference to it
      is exact (a defined function or an exact import — custom-descriptors). *)
@@ -1077,6 +1083,20 @@ type module_context = {
          set while typing a conditional branch so names resolve per branch. *)
   cond_env : Cond.env;
 }
+
+(* The subtyping info for the current type space, memoised on [type_context] and
+   rebuilt on demand after [add_type] invalidates it. Always current, so a
+   subtyping query on a type minted while type-checking (an inline [&fn(..)] cast
+   target) sees it rather than indexing past a stale snapshot. *)
+let subtyping_info ctx =
+  match ctx.type_context.subtyping_info_cache with
+  | Some info -> info
+  | None ->
+      let info =
+        Wax_wasm.Types.subtyping_info ctx.type_context.internal_types
+      in
+      ctx.type_context.subtyping_info_cache <- Some info;
+      info
 
 (*** Name resolution and subtyping ***)
 
@@ -1197,7 +1217,7 @@ let storage_subtype ctx ty ty' =
       Option.value ~default:true (* Do not generate a spurious error *)
         (let*@ ty = valtype ctx.diagnostics ctx.type_context ty in
          let+@ ty' = valtype ctx.diagnostics ctx.type_context ty' in
-         Wax_wasm.Types.val_subtype ctx.subtyping_info ty ty')
+         Wax_wasm.Types.val_subtype (subtyping_info ctx) ty ty')
   | Packed I8, Packed I16
   | Packed I16, Packed I8
   | Packed _, Value _
@@ -1208,7 +1228,8 @@ let storage_subtype' ctx (ty : Wax_wasm.Types.Internal.storagetype)
     (ty' : Wax_wasm.Types.Internal.storagetype) =
   match (ty, ty') with
   | Packed I8, Packed I8 | Packed I16, Packed I16 -> true
-  | Value ty, Value ty' -> Wax_wasm.Types.val_subtype ctx.subtyping_info ty ty'
+  | Value ty, Value ty' ->
+      Wax_wasm.Types.val_subtype (subtyping_info ctx) ty ty'
   | Packed I8, Packed I16
   | Packed I16, Packed I8
   | Packed _, Value _
@@ -1278,7 +1299,7 @@ let rec subtype ?location ctx ty ty' =
           true)
   | Collecting _, _ -> true
   | Valtype ty, Valtype ty' ->
-      Wax_wasm.Types.val_subtype ctx.subtyping_info ty.internal ty'.internal
+      Wax_wasm.Types.val_subtype (subtyping_info ctx) ty.internal ty'.internal
   (* A flexible numeric literal ([Number]/[Int]/[LargeInt]/[Float]) never appears
      as the expected (right-hand) type: an expected type comes from a declaration,
      annotation or instruction signature — always a concrete valtype, or a
@@ -1388,7 +1409,7 @@ let cast ctx ty ty' =
   | Valtype { internal = I32; _ }, Ref { typ = Extern; _ } ->
       true
   | Valtype { internal = Ref _ as ity; _ }, Ref { typ = ty'; _ } -> (
-      let sub a b = Wax_wasm.Types.val_subtype ctx.subtyping_info a b in
+      let sub a b = Wax_wasm.Types.val_subtype (subtyping_info ctx) a b in
       Option.value ~default:true
         (let*@ typ = top_heap_type ctx ty' in
          let+@ ity' =
@@ -1442,7 +1463,7 @@ let signed_cast ctx ty ty' =
   | (Int8 | Int16), (`I32 | `I64) -> true
   | Valtype { internal = Ref _ as ity; _ }, (`I32 | `I64) ->
       (* [i31.get] extracts an [i32]; [&ref as i64_X] widens it further. *)
-      Wax_wasm.Types.val_subtype ctx.subtyping_info ity
+      Wax_wasm.Types.val_subtype (subtyping_info ctx) ity
         (Ref { nullable = true; typ = Any })
   | Null, `I32 ->
       Cell.set ty
@@ -1690,7 +1711,7 @@ let check_elem_subtype ctx ~location ~src ~dst =
   | Some s, Some d ->
       if
         not
-          (Wax_wasm.Types.val_subtype ctx.subtyping_info s.internal d.internal)
+          (Wax_wasm.Types.val_subtype (subtyping_info ctx) s.internal d.internal)
       then
         Error.incompatible_element_type ctx.diagnostics ~location
           (valtype_cell s) (valtype_cell d)
@@ -2219,8 +2240,8 @@ let rec is_null_initializer (i : _ instr) =
   | _ -> false
 
 let valtype_equal ctx (a : inferred_valtype) (b : inferred_valtype) =
-  Wax_wasm.Types.val_subtype ctx.subtyping_info a.internal b.internal
-  && Wax_wasm.Types.val_subtype ctx.subtyping_info b.internal a.internal
+  Wax_wasm.Types.val_subtype (subtyping_info ctx) a.internal b.internal
+  && Wax_wasm.Types.val_subtype (subtyping_info ctx) b.internal a.internal
 
 (* Bidirectional checking helpers (see [check_instruction] below).
 
@@ -2244,7 +2265,7 @@ let annotation_needed ?(drop_supertype = false) ctx
   | Some v, Valtype b ->
       if drop_supertype then
         not
-          (Wax_wasm.Types.val_subtype ctx.subtyping_info v.internal b.internal)
+          (Wax_wasm.Types.val_subtype (subtyping_info ctx) v.internal b.internal)
       else not (valtype_equal ctx v b)
   | _ -> true
 
@@ -2399,9 +2420,9 @@ let missing_else_ok ctx params results =
 let cont_functype ctx (h : Internal.heaptype) : Internal.functype option =
   match h with
   | Type ty -> (
-      match (Wax_wasm.Types.get_subtype ctx.subtyping_info ty).typ with
+      match (Wax_wasm.Types.get_subtype (subtyping_info ctx) ty).typ with
       | Cont ft -> (
-          match (Wax_wasm.Types.get_subtype ctx.subtyping_info ft).typ with
+          match (Wax_wasm.Types.get_subtype (subtyping_info ctx) ft).typ with
           | Func f -> Some f
           | Struct _ | Array _ | Cont _ -> None)
       | Func _ | Struct _ | Array _ -> None)
@@ -2444,7 +2465,7 @@ let internal_functype ctx (ft : functype) : Internal.functype option =
    result type of the resumed continuation. Mirrors
    [Validation.check_resume_table]. *)
 let check_resume_handlers ctx ~result_types handlers =
-  let info = ctx.subtyping_info in
+  let info = subtyping_info ctx in
   (* A block whose result is being inferred presents its label as a [Collecting]
      cell. The handler reads the label's type to validate the contract, which the
      join cannot re-derive, so resolve to the declared annotation under test and
@@ -3222,20 +3243,11 @@ let is_bottom_heaptype = function
    type makes it redundant. A bottom-reference operand is skipped: its cast is
    load-bearing (dropping it loses the type the value stands in for). *)
 let lint_ref_cast ctx ~location ~is_test op_natural target_natural =
-  let info = ctx.subtyping_info in
-  (* A concrete heap type is only resolvable when its index is covered by [info];
-     an anon type minted while type-checking (e.g. an inline [&fn(..)] cast
-     target) lies past the snapshot, so the lint cannot decide and is skipped. *)
-  let resolvable (h : Internal.heaptype) =
-    match h with
-    | Type i | Exact i -> Wax_wasm.Types.has_type info i
-    | _ -> true
-  in
+  let info = subtyping_info ctx in
   match (op_natural, target_natural) with
   | ( Valtype { typ = Ref { typ = op_src; _ }; internal = Ref op; _ },
       Valtype { internal = Ref tgt; _ } )
-    when (not (is_bottom_heaptype op_src))
-         && resolvable op.typ && resolvable tgt.typ ->
+    when not (is_bottom_heaptype op_src) ->
       let related =
         Wax_wasm.Types.heap_subtype info op.typ tgt.typ
         || Wax_wasm.Types.heap_subtype info tgt.typ op.typ
@@ -4441,7 +4453,7 @@ and type_stack_switching ctx i =
          let ts12 = Array.sub src_ft.params np (Array.length dst_ft.params) in
          if
            not
-             (functype_matches ctx.subtyping_info
+             (functype_matches (subtyping_info ctx)
                 { params = ts12; results = src_ft.results }
                 dst_ft)
          then
@@ -4549,7 +4561,7 @@ and type_stack_switching ctx i =
             && Array.for_all Fun.id
                  (Array.mapi
                     (fun i t ->
-                      Wax_wasm.Types.val_subtype ctx.subtyping_info t b.(i))
+                      Wax_wasm.Types.val_subtype (subtyping_info ctx) t b.(i))
                     a)
         | _ -> true
       in
@@ -4630,7 +4642,7 @@ and type_arith ctx i =
                 | Valtype { internal = Ref _ as ty; _ } ->
                     if
                       not
-                        (Wax_wasm.Types.val_subtype ctx.subtyping_info ty
+                        (Wax_wasm.Types.val_subtype (subtyping_info ctx) ty
                            (Ref { nullable = true; typ = Eq }))
                     then mismatch ()
                 | Null ->
@@ -4696,22 +4708,22 @@ and type_arith ctx i =
                     Valtype { internal = Ref _ as ty2; _ } ) ->
                     if
                       not
-                        (Wax_wasm.Types.val_subtype ctx.subtyping_info ty1
+                        (Wax_wasm.Types.val_subtype (subtyping_info ctx) ty1
                            (Ref { nullable = true; typ = Eq })
-                        && Wax_wasm.Types.val_subtype ctx.subtyping_info ty2
+                        && Wax_wasm.Types.val_subtype (subtyping_info ctx) ty2
                              (Ref { nullable = true; typ = Eq }))
                     then mismatch ()
                 | Valtype { internal = Ref _ as typ1; _ }, Null ->
                     if
                       not
-                        (Wax_wasm.Types.val_subtype ctx.subtyping_info typ1
+                        (Wax_wasm.Types.val_subtype (subtyping_info ctx) typ1
                            (Ref { nullable = true; typ = Eq }))
                     then mismatch ();
                     Cell.merge ty1 ty2 (Cell.get ty2)
                 | Null, Valtype { internal = Ref _ as typ2; _ } ->
                     if
                       not
-                        (Wax_wasm.Types.val_subtype ctx.subtyping_info typ2
+                        (Wax_wasm.Types.val_subtype (subtyping_info ctx) typ2
                            (Ref { nullable = true; typ = Eq }))
                     then mismatch ();
                     Cell.merge ty1 ty2 (Cell.get ty2)
@@ -4721,7 +4733,7 @@ and type_arith ctx i =
                 | UnknownRef, Valtype { internal = Ref _ as ty; _ } ->
                     if
                       not
-                        (Wax_wasm.Types.val_subtype ctx.subtyping_info ty
+                        (Wax_wasm.Types.val_subtype (subtyping_info ctx) ty
                            (Ref { nullable = true; typ = Eq }))
                     then mismatch ()
                 | UnknownRef, (UnknownRef | Null) | Null, UnknownRef -> ()
@@ -7965,7 +7977,7 @@ and finalize_inferred ?(needed = false) ?(exacts = []) ?(natural = []) ?location
           standalone_valtype ctx result_cells.(0) )
       with
       | Some v, Some t ->
-          Wax_wasm.Types.val_subtype ctx.subtyping_info v.internal t.internal
+          Wax_wasm.Types.val_subtype (subtyping_info ctx) v.internal t.internal
       | _ -> false
     in
     (result_cells, if drop then { typ with results = [||] } else typ)
@@ -8150,12 +8162,12 @@ and try_inference ctx i label typ ~body ~catches ~catch_all =
 
 let check_type_definitions ctx =
   Tbl.iter ctx.types (fun _ (i, (st : subtype)) ->
-      let ty = Wax_wasm.Types.get_subtype ctx.subtyping_info (def_id i) in
+      let ty = Wax_wasm.Types.get_subtype (subtyping_info ctx) (def_id i) in
       (* A continuation type must wrap a function type. Point at the wrapped
          type as the source wrote it. *)
       (match (ty.typ, st.typ) with
       | Cont ft, Cont src_ref -> (
-          match (Wax_wasm.Types.get_subtype ctx.subtyping_info ft).typ with
+          match (Wax_wasm.Types.get_subtype (subtyping_info ctx) ft).typ with
           | Func _ -> ()
           | Struct _ | Array _ | Cont _ ->
               Error.expected_func_type ctx.diagnostics ~location:src_ref.info)
@@ -8166,7 +8178,7 @@ let check_type_definitions ctx =
       | None, _ | _, None -> ()
       | Some j, Some sup ->
           let location = sup.info in
-          let ty' = Wax_wasm.Types.get_subtype ctx.subtyping_info j in
+          let ty' = Wax_wasm.Types.get_subtype (subtyping_info ctx) j in
           if ty'.final then Error.final_supertype ctx.diagnostics ~location sup
           else
             let valid_subtype =
@@ -8177,11 +8189,11 @@ let check_type_definitions ctx =
                   && Array.length results = Array.length results'
                   && Array.for_all2
                        (fun p p' ->
-                         Wax_wasm.Types.val_subtype ctx.subtyping_info p' p)
+                         Wax_wasm.Types.val_subtype (subtyping_info ctx) p' p)
                        params params'
                   && Array.for_all2
                        (fun r r' ->
-                         Wax_wasm.Types.val_subtype ctx.subtyping_info r r')
+                         Wax_wasm.Types.val_subtype (subtyping_info ctx) r r')
                        results results'
               | Struct fields, Struct fields' ->
                   Array.length fields' <= Array.length fields
@@ -8193,7 +8205,7 @@ let check_type_definitions ctx =
                   loop 0
               | Array field, Array field' -> field_subtype ctx field field'
               | Cont ft, Cont ft' ->
-                  Wax_wasm.Types.heap_subtype ctx.subtyping_info (Type ft)
+                  Wax_wasm.Types.heap_subtype (subtyping_info ctx) (Type ft)
                     (Type ft')
               | Func _, (Struct _ | Array _ | Cont _)
               | Struct _, (Func _ | Array _ | Cont _)
@@ -8210,7 +8222,7 @@ let check_type_definitions ctx =
               | Some dp -> (
                   match ty.descriptor with
                   | Some ds ->
-                      Wax_wasm.Types.heap_subtype ctx.subtyping_info (Type ds)
+                      Wax_wasm.Types.heap_subtype (subtyping_info ctx) (Type ds)
                         (Type dp)
                   | None -> false)
             in
@@ -8220,7 +8232,7 @@ let check_type_definitions ctx =
               match (ty.describes, ty'.describes) with
               | None, None -> true
               | Some os, Some op ->
-                  Wax_wasm.Types.heap_subtype ctx.subtyping_info (Type os)
+                  Wax_wasm.Types.heap_subtype (subtyping_info ctx) (Type os)
                     (Type op)
               | Some _, None | None, Some _ -> false
             in
@@ -8272,7 +8284,7 @@ let rec check_constant_instruction ctx i =
         match (Cell.get (expression_type ctx i') : inferred_type) with
         | Valtype { internal; _ } ->
             not
-              (Wax_wasm.Types.val_subtype ctx.subtyping_info internal
+              (Wax_wasm.Types.val_subtype (subtyping_info ctx) internal
                  (Ref { nullable; typ = Any }))
         | _ -> true
       then Error.constant_expression_required ctx.diagnostics ~location
@@ -8283,7 +8295,7 @@ let rec check_constant_instruction ctx i =
         match (Cell.get (expression_type ctx i') : inferred_type) with
         | Valtype { internal; _ } ->
             not
-              (Wax_wasm.Types.val_subtype ctx.subtyping_info internal
+              (Wax_wasm.Types.val_subtype (subtyping_info ctx) internal
                  (Ref { nullable; typ = Extern }))
         | _ -> true
       then Error.constant_expression_required ctx.diagnostics ~location
@@ -8821,6 +8833,7 @@ let type_configuration ?(warn_unused = false) ?(build = true)
       internal_types = Wax_wasm.Types.create ();
       types = Tbl.make (Namespace.make cond) "type";
       features;
+      subtyping_info_cache = None;
     }
   in
   (* Walk module fields, recursing into groups and threading the branch
@@ -8875,7 +8888,6 @@ let type_configuration ?(warn_unused = false) ?(build = true)
     {
       diagnostics;
       type_context;
-      subtyping_info = Wax_wasm.Types.subtyping_info type_context.internal_types;
       types = type_context.types;
       structs_by_fields;
       functions = Tbl.make namespace "function";
@@ -9016,7 +9028,6 @@ let type_configuration ?(warn_unused = false) ?(build = true)
   let ctx =
     {
       ctx with
-      subtyping_info = Wax_wasm.Types.subtyping_info type_context.internal_types;
       (* Only imports are registered at this point; snapshot them as the global
          scope visible to table initializers. *)
       import_globals = { ctx.globals with tbl = Hashtbl.copy ctx.globals.tbl };

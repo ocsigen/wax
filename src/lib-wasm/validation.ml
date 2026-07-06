@@ -1969,24 +1969,14 @@ let lint_cast ctx ~location ~is_test (target : reftype) =
         match st with
         | Cons (_, Val (Ref op, _), _) ->
             let info = ctx.modul.subtyping_info in
-            (* A concrete heap type is resolvable only when its index is covered
-               by [info]. Here it always is (every type is interned before
-               [subtyping_info] is taken), but guard rather than risk an
-               out-of-bounds index. *)
-            let resolvable (h : heaptype) =
-              match h with
-              | Type i | Exact i -> Types.has_type info i
-              | _ -> true
+            let related =
+              Types.heap_subtype info op.typ target.typ
+              || Types.heap_subtype info target.typ op.typ
             in
-            if resolvable op.typ && resolvable target.typ then
-              let related =
-                Types.heap_subtype info op.typ target.typ
-                || Types.heap_subtype info target.typ op.typ
-              in
-              if (not related) && not (op.nullable && target.nullable) then
-                Error.cast_always_fails ctx.modul.diagnostics ~location ~is_test
-              else if Types.ref_subtype info op target then
-                Error.redundant_cast ctx.modul.diagnostics ~location ~is_test
+            if (not related) && not (op.nullable && target.nullable) then
+              Error.cast_always_fails ctx.modul.diagnostics ~location ~is_test
+            else if Types.ref_subtype info op target then
+              Error.redundant_cast ctx.modul.diagnostics ~location ~is_test
         | _ -> ())
 
 let unpack_type (f : fieldtype) =

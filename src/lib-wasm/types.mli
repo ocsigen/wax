@@ -89,9 +89,6 @@ val get_subtype : subtyping_info -> Id.t -> Internal.subtype
 (** [get_subtype info index] returns the subtype at the given canonical index.
 *)
 
-val has_type : subtyping_info -> Id.t -> bool
-(** [has_type info id] checks if the type index [id] is covered by [info]. *)
-
 val get_all_rectypes : t -> Internal.rectype list
 (** Returns all recursive type definitions from the context. *)
 

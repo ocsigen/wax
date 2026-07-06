@@ -40,3 +40,10 @@ A cast to an inline function type [&fn(..)]:
   6 │ }
   7 │ 
   [128]
+
+The inline function type is minted while type-checking, so it lies outside the
+snapshot the subtyping info was first built from. Subtyping against it (here
+[&fn(i32) -> i32] against the declared result [&func]) must still work — the
+info is rebuilt on demand — rather than crash with an out-of-bounds index:
+
+  $ wax check subtype.wax
