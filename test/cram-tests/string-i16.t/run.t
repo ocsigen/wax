@@ -82,7 +82,9 @@ named `i16` type it is UTF-16-encoded, otherwise it defaults to `i8`:
   (type $w (array (mut i16)))
   (type (func (result (ref $w))))
   (type (array (mut i8)))
-  (func (result (ref $w)) global.get $wide)
+  (func (result (ref $w))
+    global.get $wide
+  )
   (global $wide (ref $w)
     i32.const 104
     i32.const 233
@@ -90,7 +92,9 @@ named `i16` type it is UTF-16-encoded, otherwise it defaults to `i8`:
     i32.const 56832
     array.new_fixed $w 4
   )
-  (global $narrow (ref 2) i32.const 104
-                          i32.const 105
-                          array.new_fixed 2 2)
+  (global $narrow (ref 2)
+    i32.const 104
+    i32.const 105
+    array.new_fixed 2 2
+  )
   (export "g" (func 0))

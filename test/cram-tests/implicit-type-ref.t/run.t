@@ -18,4 +18,6 @@ The materialised type round-trips back to the same module.
   $ wax ref.wasm -f wat
   (type (func (param i32) (result i64)))
   (import "env" "f" (func $f (param i32) (result i64)))
-  (global (mut (ref null 0)) ref.null 0)
+  (global (mut (ref null 0))
+    ref.null 0
+  )

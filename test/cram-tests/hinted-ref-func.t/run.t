@@ -10,6 +10,9 @@ and the `(elem declare func $target)` is present:
   (func (param i32)
     local.get 0
     (@metadata.code.branch_hint "\01")
-    if (type 0) ref.func $target drop end
+    if (type 0)
+      ref.func $target
+      drop
+    end
   )
   (elem declare func $target)

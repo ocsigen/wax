@@ -5,5 +5,7 @@ constant for pi; disassembly must show the exact value, not a truncated decimal.
 
   $ wax -i wasm -f wat pi.wasm
   (type (func (result f64)))
-  (func (result f64) f64.const 0x1.921fb54442d18p+1)
+  (func (result f64)
+    f64.const 0x1.921fb54442d18p+1
+  )
   (export "f" (func 0))

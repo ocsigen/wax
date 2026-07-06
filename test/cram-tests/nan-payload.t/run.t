@@ -6,9 +6,15 @@ the bits are carried as nan:0xPAYLOAD rather than collapsed to a plain "nan"
   $ wax -i wasm -f wat nan.wasm
   (type (func (result f32)))
   (type (func (result f64)))
-  (func (result f32) f32.const nan:0x200000)
-  (func (result f64) f64.const nan:0x4000000000000)
-  (func (result f32) f32.const -nan:0x200000)
+  (func (result f32)
+    f32.const nan:0x200000
+  )
+  (func (result f64)
+    f64.const nan:0x4000000000000
+  )
+  (func (result f32)
+    f32.const -nan:0x200000
+  )
   (export "f" (func 0))
   (export "g" (func 1))
   (export "h" (func 2))

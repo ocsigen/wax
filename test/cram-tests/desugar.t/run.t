@@ -9,7 +9,9 @@ type. A module-level `(@string …)` global becomes an ordinary global:
   (type $w (array (mut i16)))
   (type $b (array (mut i8)))
   (global $sg (ref $b) (array.new_fixed $b 2 (i32.const 104) (i32.const 105)))
-  (func (export "ch") (result i32) i32.const 128512)
+  (func (export "ch") (result i32)
+    i32.const 128512
+  )
   (func (export "s") (result (ref $b))
     (array.new_fixed $b 2 (i32.const 121) (i32.const 111))
   )

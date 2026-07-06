@@ -13,7 +13,15 @@ Each lowers to an `i32.const` of its code point (`é` = 233, `漢` = 28450,
 
   $ wax lit.wax -f wasm -o lit.wasm && wax lit.wasm -f wat
   (type (func (result i32)))
-  (func $ascii (result i32) i32.const 65)
-  (func $accent (result i32) i32.const 233)
-  (func $cjk (result i32) i32.const 28450)
-  (func $emoji (result i32) i32.const 128512)
+  (func $ascii (result i32)
+    i32.const 65
+  )
+  (func $accent (result i32)
+    i32.const 233
+  )
+  (func $cjk (result i32)
+    i32.const 28450
+  )
+  (func $emoji (result i32)
+    i32.const 128512
+  )

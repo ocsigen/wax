@@ -62,6 +62,12 @@ type sexp =
 
 and structure = Delimiter of sexp | Contents of sexp list
 
+let rec needs_vertical_layout = function
+  | Vertical_block _ | Structured_block _ -> true
+  | Atom _ -> false
+  | List (_, l) -> List.exists needs_vertical_layout l
+  | Block { l; _ } -> List.exists needs_vertical_layout l
+
 let rec format_sexp in_block depth first ctx s =
   let p = ctx.base.printer in
   match s with
@@ -84,7 +90,10 @@ let rec format_sexp in_block depth first ctx s =
   | List (loc, l) ->
       let trivia = get_trivia ctx loc in
       print_trivia ctx trivia.before;
-      (if (not in_block) && ctx.format = Expansive then Printer.vbox
+      (if
+         ((not in_block) && ctx.format = Expansive)
+         || List.exists needs_vertical_layout l
+       then Printer.vbox
        else Printer.hvbox) p (fun () ->
           print_styled ctx Punctuation "(";
           Printer.indent p ctx.indent_level (fun () ->
@@ -137,13 +146,13 @@ let rec format_sexp in_block depth first ctx s =
   | Structured_block (loc, l) ->
       let trivia = get_trivia ctx loc in
       print_trivia ctx trivia.before;
-      Printer.hvbox p (fun () ->
+      Printer.vbox p (fun () ->
           let len = List.length l in
           List.iteri
             (fun i s ->
               match s with
               | Delimiter d ->
-                  if i > 0 then Printer.space p ();
+                  if i > 0 then Printer.newline p ();
                   if i = len - 1 then print_trivia ctx trivia.within;
                   Printer.box p (fun () ->
                       format_sexp in_block depth false ctx d;
@@ -151,11 +160,11 @@ let rec format_sexp in_block depth first ctx s =
               | Contents [] -> ()
               | Contents l ->
                   Printer.indent p ctx.indent_level (fun () ->
-                      Printer.space p ();
-                      Printer.hvbox p (fun () ->
+                      Printer.newline p ();
+                      Printer.vbox p (fun () ->
                           List.iteri
                             (fun i v ->
-                              if i > 0 then Printer.space p ();
+                              if i > 0 then Printer.newline p ();
                               format_sexp in_block depth false ctx v)
                             l)))
             l)
@@ -1164,8 +1173,21 @@ let rec instr i =
   | Folded (i, l) ->
       list ~loc [ block ~transparent:true (instr i :: List.map instr l) ]
 
+let instr_list_needs_vertical_layout l =
+  List.exists
+    (fun (i : _ Ast.Text.instr) ->
+      match i.Ast.desc with Folded _ -> false | _ -> true)
+    l
+
+let inline_instrs l = List.map instr l
+
 let instrs l =
-  match l with [] -> [] | _ -> [ Vertical_block (None, List.map instr l) ]
+  match l with
+  | [] -> []
+  | _ ->
+      let docs = List.map instr l in
+      if instr_list_needs_vertical_layout l then [ Vertical_block (None, docs) ]
+      else docs
 
 (*** Types, declarations, and module fields ***)
 
@@ -1223,7 +1245,7 @@ let fundecl (idx, typ) =
 let expr name e =
   match e with
   | [ ({ Ast.desc = Folded _; _ } as i) ] -> instr i
-  | _ -> list (keyword name :: instrs e)
+  | _ -> list (keyword name :: inline_instrs e)
 
 let function_indices lst =
   let extract i =

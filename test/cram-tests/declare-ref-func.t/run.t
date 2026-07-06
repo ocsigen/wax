@@ -8,7 +8,9 @@ shows it.
   $ wax -i wasm -f wat reffunc.wasm
   (type (func))
   (func $f)
-  (func ref.func $f
-        drop)
+  (func
+    ref.func $f
+    drop
+  )
   (export "g" (func 1))
   (elem declare func $f)

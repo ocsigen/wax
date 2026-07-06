@@ -5,4 +5,6 @@ both the parameter and the result; the binary reader must accept it.
 
   $ wax -i wasm -f wat exnref.wasm
   (type (func (param exnref) (result exnref)))
-  (func (param exnref) (result exnref) local.get 0)
+  (func (param exnref) (result exnref)
+    local.get 0
+  )

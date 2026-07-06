@@ -1,0 +1,10 @@
+(func $f (param i32) (result i32)
+  (local.get 0)
+  (block
+    (local.get 0)
+    (i32.const 1)
+    i32.add)
+  (if (result i32)
+    (local.get 0)
+    (then (i32.const 1))
+    (else (i32.const 2))))

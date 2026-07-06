@@ -6,7 +6,9 @@ offset 8, and a round-trip through the binary format must preserve both.
   $ wax -i wat -f wasm load.wat -o load.wasm
   $ wax -i wasm -f wat load.wasm
   (type (func (param i32) (result i32)))
-  (func (param i32) (result i32) local.get 0
-                                 i32.load $m1 offset=8)
+  (func (param i32) (result i32)
+    local.get 0
+    i32.load $m1 offset=8
+  )
   (memory $m0 1)
   (memory $m1 1)
