@@ -3,7 +3,7 @@
   (target array.wat.gen)
   (deps ../wasm-source/array.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/array.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/array.wat)))
  (rule
   (alias runtest)
   (action
@@ -14,7 +14,7 @@
   (target array.wax.gen)
   (deps ../wasm-source/array.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/array.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/array.wat)))
  (rule
   (alias runtest)
   (action
@@ -25,7 +25,7 @@
   (target array.wat.gen)
   (deps ../wax/array.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/array.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/array.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -36,7 +36,7 @@
   (target array.wat.gen)
   (deps ../wasm-formatted/array.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/array.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/array.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -47,7 +47,7 @@
   (target array.wax.gen)
   (deps ../wax/array.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/array.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/array.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -58,7 +58,7 @@
   (target array.wax.gen)
   (deps ../wasm-round-trip/array.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/array.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/array.wat)))
  (rule
   (alias runtest)
   (action
@@ -69,7 +69,7 @@
   (target backtrace.wat.gen)
   (deps ../wasm-source/backtrace.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/backtrace.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/backtrace.wat)))
  (rule
   (alias runtest)
   (action
@@ -80,7 +80,7 @@
   (target backtrace.wax.gen)
   (deps ../wasm-source/backtrace.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/backtrace.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/backtrace.wat)))
  (rule
   (alias runtest)
   (action
@@ -91,7 +91,7 @@
   (target backtrace.wat.gen)
   (deps ../wax/backtrace.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/backtrace.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/backtrace.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -102,7 +102,7 @@
   (target backtrace.wat.gen)
   (deps ../wasm-formatted/backtrace.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/backtrace.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/backtrace.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -113,7 +113,7 @@
   (target backtrace.wax.gen)
   (deps ../wax/backtrace.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/backtrace.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/backtrace.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -124,7 +124,7 @@
   (target backtrace.wax.gen)
   (deps ../wasm-round-trip/backtrace.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/backtrace.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/backtrace.wat)))
  (rule
   (alias runtest)
   (action
@@ -135,7 +135,7 @@
   (target bigarray.wat.gen)
   (deps ../wasm-source/bigarray.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/bigarray.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/bigarray.wat)))
  (rule
   (alias runtest)
   (action
@@ -146,7 +146,7 @@
   (target bigarray.wax.gen)
   (deps ../wasm-source/bigarray.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/bigarray.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/bigarray.wat)))
  (rule
   (alias runtest)
   (action
@@ -157,7 +157,7 @@
   (target bigarray.wat.gen)
   (deps ../wax/bigarray.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/bigarray.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/bigarray.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -168,7 +168,7 @@
   (target bigarray.wat.gen)
   (deps ../wasm-formatted/bigarray.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/bigarray.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/bigarray.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -179,7 +179,7 @@
   (target bigarray.wax.gen)
   (deps ../wax/bigarray.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/bigarray.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/bigarray.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -190,7 +190,7 @@
   (target bigarray.wax.gen)
   (deps ../wasm-round-trip/bigarray.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/bigarray.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/bigarray.wat)))
  (rule
   (alias runtest)
   (action
@@ -201,7 +201,7 @@
   (target bigstring.wat.gen)
   (deps ../wasm-source/bigstring.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/bigstring.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/bigstring.wat)))
  (rule
   (alias runtest)
   (action
@@ -212,7 +212,7 @@
   (target bigstring.wax.gen)
   (deps ../wasm-source/bigstring.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/bigstring.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/bigstring.wat)))
  (rule
   (alias runtest)
   (action
@@ -223,7 +223,7 @@
   (target bigstring.wat.gen)
   (deps ../wax/bigstring.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/bigstring.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/bigstring.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -234,7 +234,7 @@
   (target bigstring.wat.gen)
   (deps ../wasm-formatted/bigstring.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/bigstring.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/bigstring.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -245,7 +245,7 @@
   (target bigstring.wax.gen)
   (deps ../wax/bigstring.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/bigstring.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/bigstring.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -256,7 +256,7 @@
   (target bigstring.wax.gen)
   (deps ../wasm-round-trip/bigstring.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/bigstring.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/bigstring.wat)))
  (rule
   (alias runtest)
   (action
@@ -267,7 +267,7 @@
   (target blake2.wat.gen)
   (deps ../wasm-source/blake2.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/blake2.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/blake2.wat)))
  (rule
   (alias runtest)
   (action
@@ -278,7 +278,7 @@
   (target blake2.wax.gen)
   (deps ../wasm-source/blake2.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/blake2.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/blake2.wat)))
  (rule
   (alias runtest)
   (action
@@ -289,7 +289,7 @@
   (target blake2.wat.gen)
   (deps ../wax/blake2.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/blake2.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/blake2.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -300,7 +300,7 @@
   (target blake2.wat.gen)
   (deps ../wasm-formatted/blake2.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/blake2.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/blake2.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -311,7 +311,7 @@
   (target blake2.wax.gen)
   (deps ../wax/blake2.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/blake2.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/blake2.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -322,7 +322,7 @@
   (target blake2.wax.gen)
   (deps ../wasm-round-trip/blake2.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/blake2.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/blake2.wat)))
  (rule
   (alias runtest)
   (action
@@ -333,7 +333,7 @@
   (target compare.wat.gen)
   (deps ../wasm-source/compare.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/compare.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/compare.wat)))
  (rule
   (alias runtest)
   (action
@@ -344,7 +344,7 @@
   (target compare.wax.gen)
   (deps ../wasm-source/compare.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/compare.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/compare.wat)))
  (rule
   (alias runtest)
   (action
@@ -355,7 +355,7 @@
   (target compare.wat.gen)
   (deps ../wax/compare.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/compare.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/compare.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -366,7 +366,7 @@
   (target compare.wat.gen)
   (deps ../wasm-formatted/compare.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/compare.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/compare.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -377,7 +377,7 @@
   (target compare.wax.gen)
   (deps ../wax/compare.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/compare.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/compare.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -388,7 +388,7 @@
   (target compare.wax.gen)
   (deps ../wasm-round-trip/compare.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/compare.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/compare.wat)))
  (rule
   (alias runtest)
   (action
@@ -399,7 +399,7 @@
   (target custom.wat.gen)
   (deps ../wasm-source/custom.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/custom.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/custom.wat)))
  (rule
   (alias runtest)
   (action
@@ -410,7 +410,7 @@
   (target custom.wax.gen)
   (deps ../wasm-source/custom.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/custom.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/custom.wat)))
  (rule
   (alias runtest)
   (action
@@ -421,7 +421,7 @@
   (target custom.wat.gen)
   (deps ../wax/custom.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/custom.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/custom.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -432,7 +432,7 @@
   (target custom.wat.gen)
   (deps ../wasm-formatted/custom.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/custom.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/custom.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -443,7 +443,7 @@
   (target custom.wax.gen)
   (deps ../wax/custom.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/custom.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/custom.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -454,7 +454,7 @@
   (target custom.wax.gen)
   (deps ../wasm-round-trip/custom.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/custom.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/custom.wat)))
  (rule
   (alias runtest)
   (action
@@ -465,7 +465,7 @@
   (target domain.wat.gen)
   (deps ../wasm-source/domain.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/domain.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/domain.wat)))
  (rule
   (alias runtest)
   (action
@@ -476,7 +476,7 @@
   (target domain.wax.gen)
   (deps ../wasm-source/domain.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/domain.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/domain.wat)))
  (rule
   (alias runtest)
   (action
@@ -487,7 +487,7 @@
   (target domain.wat.gen)
   (deps ../wax/domain.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/domain.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/domain.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -498,7 +498,7 @@
   (target domain.wat.gen)
   (deps ../wasm-formatted/domain.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/domain.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/domain.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -509,7 +509,7 @@
   (target domain.wax.gen)
   (deps ../wax/domain.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/domain.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/domain.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -520,7 +520,7 @@
   (target domain.wax.gen)
   (deps ../wasm-round-trip/domain.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/domain.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/domain.wat)))
  (rule
   (alias runtest)
   (action
@@ -531,7 +531,7 @@
   (target dynlink.wat.gen)
   (deps ../wasm-source/dynlink.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/dynlink.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/dynlink.wat)))
  (rule
   (alias runtest)
   (action
@@ -542,7 +542,7 @@
   (target dynlink.wax.gen)
   (deps ../wasm-source/dynlink.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/dynlink.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/dynlink.wat)))
  (rule
   (alias runtest)
   (action
@@ -553,7 +553,7 @@
   (target dynlink.wat.gen)
   (deps ../wax/dynlink.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/dynlink.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/dynlink.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -564,7 +564,7 @@
   (target dynlink.wat.gen)
   (deps ../wasm-formatted/dynlink.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/dynlink.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/dynlink.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -575,7 +575,7 @@
   (target dynlink.wax.gen)
   (deps ../wax/dynlink.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/dynlink.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/dynlink.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -586,7 +586,7 @@
   (target dynlink.wax.gen)
   (deps ../wasm-round-trip/dynlink.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/dynlink.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/dynlink.wat)))
  (rule
   (alias runtest)
   (action
@@ -597,7 +597,7 @@
   (target effect-native.wat.gen)
   (deps ../wasm-source/effect-native.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/effect-native.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/effect-native.wat)))
  (rule
   (alias runtest)
   (action
@@ -608,7 +608,7 @@
   (target effect-native.wax.gen)
   (deps ../wasm-source/effect-native.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/effect-native.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/effect-native.wat)))
  (rule
   (alias runtest)
   (action
@@ -619,7 +619,7 @@
   (target effect-native.wat.gen)
   (deps ../wax/effect-native.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/effect-native.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/effect-native.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -630,7 +630,7 @@
   (target effect-native.wat.gen)
   (deps ../wasm-formatted/effect-native.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/effect-native.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/effect-native.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -641,7 +641,7 @@
   (target effect-native.wax.gen)
   (deps ../wax/effect-native.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/effect-native.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/effect-native.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -652,7 +652,7 @@
   (target effect-native.wax.gen)
   (deps ../wasm-round-trip/effect-native.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/effect-native.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/effect-native.wat)))
  (rule
   (alias runtest)
   (action
@@ -663,7 +663,7 @@
   (target effect.wat.gen)
   (deps ../wasm-source/effect.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/effect.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/effect.wat)))
  (rule
   (alias runtest)
   (action
@@ -674,7 +674,7 @@
   (target effect.wax.gen)
   (deps ../wasm-source/effect.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/effect.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/effect.wat)))
  (rule
   (alias runtest)
   (action
@@ -685,7 +685,7 @@
   (target effect.wat.gen)
   (deps ../wax/effect.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/effect.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/effect.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -696,7 +696,7 @@
   (target effect.wat.gen)
   (deps ../wasm-formatted/effect.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/effect.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/effect.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -707,7 +707,7 @@
   (target effect.wax.gen)
   (deps ../wax/effect.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/effect.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/effect.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -718,7 +718,7 @@
   (target effect.wax.gen)
   (deps ../wasm-round-trip/effect.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/effect.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/effect.wat)))
  (rule
   (alias runtest)
   (action
@@ -729,7 +729,7 @@
   (target fail.wat.gen)
   (deps ../wasm-source/fail.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/fail.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/fail.wat)))
  (rule
   (alias runtest)
   (action
@@ -740,7 +740,7 @@
   (target fail.wax.gen)
   (deps ../wasm-source/fail.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/fail.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/fail.wat)))
  (rule
   (alias runtest)
   (action
@@ -751,7 +751,7 @@
   (target fail.wat.gen)
   (deps ../wax/fail.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/fail.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/fail.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -762,7 +762,7 @@
   (target fail.wat.gen)
   (deps ../wasm-formatted/fail.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/fail.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/fail.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -773,7 +773,7 @@
   (target fail.wax.gen)
   (deps ../wax/fail.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/fail.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/fail.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -784,7 +784,7 @@
   (target fail.wax.gen)
   (deps ../wasm-round-trip/fail.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/fail.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/fail.wat)))
  (rule
   (alias runtest)
   (action
@@ -795,7 +795,7 @@
   (target float.wat.gen)
   (deps ../wasm-source/float.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/float.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/float.wat)))
  (rule
   (alias runtest)
   (action
@@ -806,7 +806,7 @@
   (target float.wax.gen)
   (deps ../wasm-source/float.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/float.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/float.wat)))
  (rule
   (alias runtest)
   (action
@@ -817,7 +817,7 @@
   (target float.wat.gen)
   (deps ../wax/float.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/float.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/float.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -828,7 +828,7 @@
   (target float.wat.gen)
   (deps ../wasm-formatted/float.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/float.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/float.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -839,7 +839,7 @@
   (target float.wax.gen)
   (deps ../wax/float.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/float.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/float.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -850,7 +850,7 @@
   (target float.wax.gen)
   (deps ../wasm-round-trip/float.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/float.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/float.wat)))
  (rule
   (alias runtest)
   (action
@@ -861,7 +861,7 @@
   (target float32.wat.gen)
   (deps ../wasm-source/float32.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/float32.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/float32.wat)))
  (rule
   (alias runtest)
   (action
@@ -872,7 +872,7 @@
   (target float32.wax.gen)
   (deps ../wasm-source/float32.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/float32.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/float32.wat)))
  (rule
   (alias runtest)
   (action
@@ -883,7 +883,7 @@
   (target float32.wat.gen)
   (deps ../wax/float32.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/float32.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/float32.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -894,7 +894,7 @@
   (target float32.wat.gen)
   (deps ../wasm-formatted/float32.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/float32.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/float32.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -905,7 +905,7 @@
   (target float32.wax.gen)
   (deps ../wax/float32.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/float32.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/float32.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -916,7 +916,7 @@
   (target float32.wax.gen)
   (deps ../wasm-round-trip/float32.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/float32.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/float32.wat)))
  (rule
   (alias runtest)
   (action
@@ -927,7 +927,7 @@
   (target fs.wat.gen)
   (deps ../wasm-source/fs.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/fs.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/fs.wat)))
  (rule
   (alias runtest)
   (action
@@ -938,7 +938,7 @@
   (target fs.wax.gen)
   (deps ../wasm-source/fs.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/fs.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/fs.wat)))
  (rule
   (alias runtest)
   (action
@@ -949,7 +949,7 @@
   (target fs.wat.gen)
   (deps ../wax/fs.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/fs.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/fs.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -960,7 +960,7 @@
   (target fs.wat.gen)
   (deps ../wasm-formatted/fs.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/fs.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/fs.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -971,7 +971,7 @@
   (target fs.wax.gen)
   (deps ../wax/fs.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/fs.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/fs.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -982,7 +982,7 @@
   (target fs.wax.gen)
   (deps ../wasm-round-trip/fs.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/fs.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/fs.wat)))
  (rule
   (alias runtest)
   (action
@@ -993,7 +993,7 @@
   (target gc.wat.gen)
   (deps ../wasm-source/gc.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/gc.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/gc.wat)))
  (rule
   (alias runtest)
   (action
@@ -1004,7 +1004,7 @@
   (target gc.wax.gen)
   (deps ../wasm-source/gc.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/gc.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/gc.wat)))
  (rule
   (alias runtest)
   (action
@@ -1015,7 +1015,7 @@
   (target gc.wat.gen)
   (deps ../wax/gc.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/gc.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/gc.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -1026,7 +1026,7 @@
   (target gc.wat.gen)
   (deps ../wasm-formatted/gc.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/gc.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/gc.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -1037,7 +1037,7 @@
   (target gc.wax.gen)
   (deps ../wax/gc.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/gc.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/gc.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -1048,7 +1048,7 @@
   (target gc.wax.gen)
   (deps ../wasm-round-trip/gc.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/gc.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/gc.wat)))
  (rule
   (alias runtest)
   (action
@@ -1059,7 +1059,7 @@
   (target graphics.wat.gen)
   (deps ../wasm-source/graphics.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/graphics.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/graphics.wat)))
  (rule
   (alias runtest)
   (action
@@ -1070,7 +1070,7 @@
   (target graphics.wax.gen)
   (deps ../wasm-source/graphics.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/graphics.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/graphics.wat)))
  (rule
   (alias runtest)
   (action
@@ -1081,7 +1081,7 @@
   (target graphics.wat.gen)
   (deps ../wax/graphics.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/graphics.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/graphics.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -1092,7 +1092,7 @@
   (target graphics.wat.gen)
   (deps ../wasm-formatted/graphics.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/graphics.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/graphics.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -1103,7 +1103,7 @@
   (target graphics.wax.gen)
   (deps ../wax/graphics.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/graphics.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/graphics.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -1114,7 +1114,7 @@
   (target graphics.wax.gen)
   (deps ../wasm-round-trip/graphics.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/graphics.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/graphics.wat)))
  (rule
   (alias runtest)
   (action
@@ -1125,7 +1125,7 @@
   (target hash.wat.gen)
   (deps ../wasm-source/hash.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/hash.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/hash.wat)))
  (rule
   (alias runtest)
   (action
@@ -1136,7 +1136,7 @@
   (target hash.wax.gen)
   (deps ../wasm-source/hash.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/hash.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/hash.wat)))
  (rule
   (alias runtest)
   (action
@@ -1147,7 +1147,7 @@
   (target hash.wat.gen)
   (deps ../wax/hash.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/hash.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/hash.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -1158,7 +1158,7 @@
   (target hash.wat.gen)
   (deps ../wasm-formatted/hash.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/hash.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/hash.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -1169,7 +1169,7 @@
   (target hash.wax.gen)
   (deps ../wax/hash.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/hash.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/hash.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -1180,7 +1180,7 @@
   (target hash.wax.gen)
   (deps ../wasm-round-trip/hash.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/hash.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/hash.wat)))
  (rule
   (alias runtest)
   (action
@@ -1191,7 +1191,7 @@
   (target int32.wat.gen)
   (deps ../wasm-source/int32.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/int32.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/int32.wat)))
  (rule
   (alias runtest)
   (action
@@ -1202,7 +1202,7 @@
   (target int32.wax.gen)
   (deps ../wasm-source/int32.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/int32.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/int32.wat)))
  (rule
   (alias runtest)
   (action
@@ -1213,7 +1213,7 @@
   (target int32.wat.gen)
   (deps ../wax/int32.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/int32.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/int32.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -1224,7 +1224,7 @@
   (target int32.wat.gen)
   (deps ../wasm-formatted/int32.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/int32.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/int32.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -1235,7 +1235,7 @@
   (target int32.wax.gen)
   (deps ../wax/int32.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/int32.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/int32.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -1246,7 +1246,7 @@
   (target int32.wax.gen)
   (deps ../wasm-round-trip/int32.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/int32.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/int32.wat)))
  (rule
   (alias runtest)
   (action
@@ -1257,7 +1257,7 @@
   (target int64.wat.gen)
   (deps ../wasm-source/int64.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/int64.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/int64.wat)))
  (rule
   (alias runtest)
   (action
@@ -1268,7 +1268,7 @@
   (target int64.wax.gen)
   (deps ../wasm-source/int64.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/int64.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/int64.wat)))
  (rule
   (alias runtest)
   (action
@@ -1279,7 +1279,7 @@
   (target int64.wat.gen)
   (deps ../wax/int64.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/int64.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/int64.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -1290,7 +1290,7 @@
   (target int64.wat.gen)
   (deps ../wasm-formatted/int64.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/int64.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/int64.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -1301,7 +1301,7 @@
   (target int64.wax.gen)
   (deps ../wax/int64.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/int64.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/int64.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -1312,7 +1312,7 @@
   (target int64.wax.gen)
   (deps ../wasm-round-trip/int64.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/int64.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/int64.wat)))
  (rule
   (alias runtest)
   (action
@@ -1323,7 +1323,7 @@
   (target ints.wat.gen)
   (deps ../wasm-source/ints.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/ints.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/ints.wat)))
  (rule
   (alias runtest)
   (action
@@ -1334,7 +1334,7 @@
   (target ints.wax.gen)
   (deps ../wasm-source/ints.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/ints.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/ints.wat)))
  (rule
   (alias runtest)
   (action
@@ -1345,7 +1345,7 @@
   (target ints.wat.gen)
   (deps ../wax/ints.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/ints.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/ints.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -1356,7 +1356,7 @@
   (target ints.wat.gen)
   (deps ../wasm-formatted/ints.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/ints.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/ints.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -1367,7 +1367,7 @@
   (target ints.wax.gen)
   (deps ../wax/ints.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/ints.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/ints.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -1378,7 +1378,7 @@
   (target ints.wax.gen)
   (deps ../wasm-round-trip/ints.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/ints.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/ints.wat)))
  (rule
   (alias runtest)
   (action
@@ -1389,7 +1389,7 @@
   (target io.wat.gen)
   (deps ../wasm-source/io.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/io.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/io.wat)))
  (rule
   (alias runtest)
   (action
@@ -1400,7 +1400,7 @@
   (target io.wax.gen)
   (deps ../wasm-source/io.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/io.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/io.wat)))
  (rule
   (alias runtest)
   (action
@@ -1411,7 +1411,7 @@
   (target io.wat.gen)
   (deps ../wax/io.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/io.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/io.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -1422,7 +1422,7 @@
   (target io.wat.gen)
   (deps ../wasm-formatted/io.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/io.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/io.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -1433,7 +1433,7 @@
   (target io.wax.gen)
   (deps ../wax/io.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/io.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/io.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -1444,7 +1444,7 @@
   (target io.wax.gen)
   (deps ../wasm-round-trip/io.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/io.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/io.wat)))
  (rule
   (alias runtest)
   (action
@@ -1455,7 +1455,7 @@
   (target jslib.wat.gen)
   (deps ../wasm-source/jslib.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/jslib.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/jslib.wat)))
  (rule
   (alias runtest)
   (action
@@ -1466,7 +1466,7 @@
   (target jslib.wax.gen)
   (deps ../wasm-source/jslib.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/jslib.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/jslib.wat)))
  (rule
   (alias runtest)
   (action
@@ -1477,7 +1477,7 @@
   (target jslib.wat.gen)
   (deps ../wax/jslib.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/jslib.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/jslib.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -1488,7 +1488,7 @@
   (target jslib.wat.gen)
   (deps ../wasm-formatted/jslib.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/jslib.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/jslib.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -1499,7 +1499,7 @@
   (target jslib.wax.gen)
   (deps ../wax/jslib.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/jslib.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/jslib.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -1510,7 +1510,7 @@
   (target jslib.wax.gen)
   (deps ../wasm-round-trip/jslib.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/jslib.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/jslib.wat)))
  (rule
   (alias runtest)
   (action
@@ -1521,7 +1521,7 @@
   (target jslib_js_of_ocaml.wat.gen)
   (deps ../wasm-source/jslib_js_of_ocaml.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/jslib_js_of_ocaml.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/jslib_js_of_ocaml.wat)))
  (rule
   (alias runtest)
   (action
@@ -1532,7 +1532,7 @@
   (target jslib_js_of_ocaml.wax.gen)
   (deps ../wasm-source/jslib_js_of_ocaml.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/jslib_js_of_ocaml.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/jslib_js_of_ocaml.wat)))
  (rule
   (alias runtest)
   (action
@@ -1543,7 +1543,7 @@
   (target jslib_js_of_ocaml.wat.gen)
   (deps ../wax/jslib_js_of_ocaml.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/jslib_js_of_ocaml.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/jslib_js_of_ocaml.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -1554,7 +1554,7 @@
   (target jslib_js_of_ocaml.wat.gen)
   (deps ../wasm-formatted/jslib_js_of_ocaml.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/jslib_js_of_ocaml.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/jslib_js_of_ocaml.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -1565,7 +1565,7 @@
   (target jslib_js_of_ocaml.wax.gen)
   (deps ../wax/jslib_js_of_ocaml.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/jslib_js_of_ocaml.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/jslib_js_of_ocaml.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -1576,7 +1576,7 @@
   (target jslib_js_of_ocaml.wax.gen)
   (deps ../wasm-round-trip/jslib_js_of_ocaml.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/jslib_js_of_ocaml.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/jslib_js_of_ocaml.wat)))
  (rule
   (alias runtest)
   (action
@@ -1587,7 +1587,7 @@
   (target jsstring.wat.gen)
   (deps ../wasm-source/jsstring.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/jsstring.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/jsstring.wat)))
  (rule
   (alias runtest)
   (action
@@ -1598,7 +1598,7 @@
   (target jsstring.wax.gen)
   (deps ../wasm-source/jsstring.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/jsstring.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/jsstring.wat)))
  (rule
   (alias runtest)
   (action
@@ -1609,7 +1609,7 @@
   (target jsstring.wat.gen)
   (deps ../wax/jsstring.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/jsstring.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/jsstring.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -1620,7 +1620,7 @@
   (target jsstring.wat.gen)
   (deps ../wasm-formatted/jsstring.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/jsstring.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/jsstring.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -1631,7 +1631,7 @@
   (target jsstring.wax.gen)
   (deps ../wax/jsstring.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/jsstring.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/jsstring.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -1642,7 +1642,7 @@
   (target jsstring.wax.gen)
   (deps ../wasm-round-trip/jsstring.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/jsstring.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/jsstring.wat)))
  (rule
   (alias runtest)
   (action
@@ -1653,7 +1653,7 @@
   (target lexing.wat.gen)
   (deps ../wasm-source/lexing.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/lexing.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/lexing.wat)))
  (rule
   (alias runtest)
   (action
@@ -1664,7 +1664,7 @@
   (target lexing.wax.gen)
   (deps ../wasm-source/lexing.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/lexing.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/lexing.wat)))
  (rule
   (alias runtest)
   (action
@@ -1675,7 +1675,7 @@
   (target lexing.wat.gen)
   (deps ../wax/lexing.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/lexing.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/lexing.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -1686,7 +1686,7 @@
   (target lexing.wat.gen)
   (deps ../wasm-formatted/lexing.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/lexing.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/lexing.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -1697,7 +1697,7 @@
   (target lexing.wax.gen)
   (deps ../wax/lexing.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/lexing.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/lexing.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -1708,7 +1708,7 @@
   (target lexing.wax.gen)
   (deps ../wasm-round-trip/lexing.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/lexing.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/lexing.wat)))
  (rule
   (alias runtest)
   (action
@@ -1719,7 +1719,7 @@
   (target marshal.wat.gen)
   (deps ../wasm-source/marshal.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/marshal.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/marshal.wat)))
  (rule
   (alias runtest)
   (action
@@ -1730,7 +1730,7 @@
   (target marshal.wax.gen)
   (deps ../wasm-source/marshal.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/marshal.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/marshal.wat)))
  (rule
   (alias runtest)
   (action
@@ -1741,7 +1741,7 @@
   (target marshal.wat.gen)
   (deps ../wax/marshal.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/marshal.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/marshal.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -1752,7 +1752,7 @@
   (target marshal.wat.gen)
   (deps ../wasm-formatted/marshal.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/marshal.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/marshal.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -1763,7 +1763,7 @@
   (target marshal.wax.gen)
   (deps ../wax/marshal.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/marshal.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/marshal.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -1774,7 +1774,7 @@
   (target marshal.wax.gen)
   (deps ../wasm-round-trip/marshal.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/marshal.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/marshal.wat)))
  (rule
   (alias runtest)
   (action
@@ -1785,7 +1785,7 @@
   (target md5.wat.gen)
   (deps ../wasm-source/md5.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/md5.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/md5.wat)))
  (rule
   (alias runtest)
   (action
@@ -1796,7 +1796,7 @@
   (target md5.wax.gen)
   (deps ../wasm-source/md5.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/md5.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/md5.wat)))
  (rule
   (alias runtest)
   (action
@@ -1807,7 +1807,7 @@
   (target md5.wat.gen)
   (deps ../wax/md5.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/md5.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/md5.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -1818,7 +1818,7 @@
   (target md5.wat.gen)
   (deps ../wasm-formatted/md5.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/md5.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/md5.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -1829,7 +1829,7 @@
   (target md5.wax.gen)
   (deps ../wax/md5.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/md5.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/md5.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -1840,7 +1840,7 @@
   (target md5.wax.gen)
   (deps ../wasm-round-trip/md5.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/md5.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/md5.wat)))
  (rule
   (alias runtest)
   (action
@@ -1851,7 +1851,7 @@
   (target nat.wat.gen)
   (deps ../wasm-source/nat.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/nat.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/nat.wat)))
  (rule
   (alias runtest)
   (action
@@ -1862,7 +1862,7 @@
   (target nat.wax.gen)
   (deps ../wasm-source/nat.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/nat.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/nat.wat)))
  (rule
   (alias runtest)
   (action
@@ -1873,7 +1873,7 @@
   (target nat.wat.gen)
   (deps ../wax/nat.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/nat.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/nat.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -1884,7 +1884,7 @@
   (target nat.wat.gen)
   (deps ../wasm-formatted/nat.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/nat.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/nat.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -1895,7 +1895,7 @@
   (target nat.wax.gen)
   (deps ../wax/nat.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/nat.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/nat.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -1906,7 +1906,7 @@
   (target nat.wax.gen)
   (deps ../wasm-round-trip/nat.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/nat.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/nat.wat)))
  (rule
   (alias runtest)
   (action
@@ -1917,7 +1917,7 @@
   (target obj.wat.gen)
   (deps ../wasm-source/obj.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/obj.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/obj.wat)))
  (rule
   (alias runtest)
   (action
@@ -1928,7 +1928,7 @@
   (target obj.wax.gen)
   (deps ../wasm-source/obj.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/obj.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/obj.wat)))
  (rule
   (alias runtest)
   (action
@@ -1939,7 +1939,7 @@
   (target obj.wat.gen)
   (deps ../wax/obj.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/obj.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/obj.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -1950,7 +1950,7 @@
   (target obj.wat.gen)
   (deps ../wasm-formatted/obj.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/obj.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/obj.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -1961,7 +1961,7 @@
   (target obj.wax.gen)
   (deps ../wax/obj.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/obj.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/obj.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -1972,7 +1972,7 @@
   (target obj.wax.gen)
   (deps ../wasm-round-trip/obj.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/obj.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/obj.wat)))
  (rule
   (alias runtest)
   (action
@@ -1983,7 +1983,7 @@
   (target parsing.wat.gen)
   (deps ../wasm-source/parsing.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/parsing.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/parsing.wat)))
  (rule
   (alias runtest)
   (action
@@ -1994,7 +1994,7 @@
   (target parsing.wax.gen)
   (deps ../wasm-source/parsing.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/parsing.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/parsing.wat)))
  (rule
   (alias runtest)
   (action
@@ -2005,7 +2005,7 @@
   (target parsing.wat.gen)
   (deps ../wax/parsing.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/parsing.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/parsing.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -2016,7 +2016,7 @@
   (target parsing.wat.gen)
   (deps ../wasm-formatted/parsing.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/parsing.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/parsing.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -2027,7 +2027,7 @@
   (target parsing.wax.gen)
   (deps ../wax/parsing.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/parsing.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/parsing.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -2038,7 +2038,7 @@
   (target parsing.wax.gen)
   (deps ../wasm-round-trip/parsing.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/parsing.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/parsing.wat)))
  (rule
   (alias runtest)
   (action
@@ -2049,7 +2049,7 @@
   (target printexc.wat.gen)
   (deps ../wasm-source/printexc.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/printexc.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/printexc.wat)))
  (rule
   (alias runtest)
   (action
@@ -2060,7 +2060,7 @@
   (target printexc.wax.gen)
   (deps ../wasm-source/printexc.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/printexc.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/printexc.wat)))
  (rule
   (alias runtest)
   (action
@@ -2071,7 +2071,7 @@
   (target printexc.wat.gen)
   (deps ../wax/printexc.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/printexc.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/printexc.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -2082,7 +2082,7 @@
   (target printexc.wat.gen)
   (deps ../wasm-formatted/printexc.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/printexc.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/printexc.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -2093,7 +2093,7 @@
   (target printexc.wax.gen)
   (deps ../wax/printexc.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/printexc.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/printexc.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -2104,7 +2104,7 @@
   (target printexc.wax.gen)
   (deps ../wasm-round-trip/printexc.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/printexc.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/printexc.wat)))
  (rule
   (alias runtest)
   (action
@@ -2115,7 +2115,7 @@
   (target prng.wat.gen)
   (deps ../wasm-source/prng.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/prng.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/prng.wat)))
  (rule
   (alias runtest)
   (action
@@ -2126,7 +2126,7 @@
   (target prng.wax.gen)
   (deps ../wasm-source/prng.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/prng.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/prng.wat)))
  (rule
   (alias runtest)
   (action
@@ -2137,7 +2137,7 @@
   (target prng.wat.gen)
   (deps ../wax/prng.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/prng.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/prng.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -2148,7 +2148,7 @@
   (target prng.wat.gen)
   (deps ../wasm-formatted/prng.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/prng.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/prng.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -2159,7 +2159,7 @@
   (target prng.wax.gen)
   (deps ../wax/prng.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/prng.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/prng.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -2170,7 +2170,7 @@
   (target prng.wax.gen)
   (deps ../wasm-round-trip/prng.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/prng.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/prng.wat)))
  (rule
   (alias runtest)
   (action
@@ -2181,7 +2181,7 @@
   (target promise.wat.gen)
   (deps ../wasm-source/promise.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/promise.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/promise.wat)))
  (rule
   (alias runtest)
   (action
@@ -2192,7 +2192,7 @@
   (target promise.wax.gen)
   (deps ../wasm-source/promise.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/promise.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/promise.wat)))
  (rule
   (alias runtest)
   (action
@@ -2203,7 +2203,7 @@
   (target promise.wat.gen)
   (deps ../wax/promise.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/promise.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/promise.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -2214,7 +2214,7 @@
   (target promise.wat.gen)
   (deps ../wasm-formatted/promise.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/promise.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/promise.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -2225,7 +2225,7 @@
   (target promise.wax.gen)
   (deps ../wax/promise.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/promise.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/promise.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -2236,7 +2236,7 @@
   (target promise.wax.gen)
   (deps ../wasm-round-trip/promise.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/promise.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/promise.wat)))
  (rule
   (alias runtest)
   (action
@@ -2247,7 +2247,7 @@
   (target runtime_events.wat.gen)
   (deps ../wasm-source/runtime_events.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/runtime_events.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/runtime_events.wat)))
  (rule
   (alias runtest)
   (action
@@ -2258,7 +2258,7 @@
   (target runtime_events.wax.gen)
   (deps ../wasm-source/runtime_events.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/runtime_events.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/runtime_events.wat)))
  (rule
   (alias runtest)
   (action
@@ -2269,7 +2269,7 @@
   (target runtime_events.wat.gen)
   (deps ../wax/runtime_events.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/runtime_events.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/runtime_events.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -2280,7 +2280,7 @@
   (target runtime_events.wat.gen)
   (deps ../wasm-formatted/runtime_events.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/runtime_events.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/runtime_events.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -2291,7 +2291,7 @@
   (target runtime_events.wax.gen)
   (deps ../wax/runtime_events.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/runtime_events.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/runtime_events.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -2302,7 +2302,7 @@
   (target runtime_events.wax.gen)
   (deps ../wasm-round-trip/runtime_events.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/runtime_events.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/runtime_events.wat)))
  (rule
   (alias runtest)
   (action
@@ -2313,7 +2313,7 @@
   (target stdlib.wat.gen)
   (deps ../wasm-source/stdlib.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/stdlib.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/stdlib.wat)))
  (rule
   (alias runtest)
   (action
@@ -2324,7 +2324,7 @@
   (target stdlib.wax.gen)
   (deps ../wasm-source/stdlib.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/stdlib.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/stdlib.wat)))
  (rule
   (alias runtest)
   (action
@@ -2335,7 +2335,7 @@
   (target stdlib.wat.gen)
   (deps ../wax/stdlib.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/stdlib.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/stdlib.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -2346,7 +2346,7 @@
   (target stdlib.wat.gen)
   (deps ../wasm-formatted/stdlib.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/stdlib.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/stdlib.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -2357,7 +2357,7 @@
   (target stdlib.wax.gen)
   (deps ../wax/stdlib.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/stdlib.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/stdlib.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -2368,7 +2368,7 @@
   (target stdlib.wax.gen)
   (deps ../wasm-round-trip/stdlib.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/stdlib.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/stdlib.wat)))
  (rule
   (alias runtest)
   (action
@@ -2379,7 +2379,7 @@
   (target str.wat.gen)
   (deps ../wasm-source/str.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/str.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/str.wat)))
  (rule
   (alias runtest)
   (action
@@ -2390,7 +2390,7 @@
   (target str.wax.gen)
   (deps ../wasm-source/str.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/str.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/str.wat)))
  (rule
   (alias runtest)
   (action
@@ -2401,7 +2401,7 @@
   (target str.wat.gen)
   (deps ../wax/str.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/str.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/str.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -2412,7 +2412,7 @@
   (target str.wat.gen)
   (deps ../wasm-formatted/str.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/str.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/str.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -2423,7 +2423,7 @@
   (target str.wax.gen)
   (deps ../wax/str.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/str.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/str.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -2434,7 +2434,7 @@
   (target str.wax.gen)
   (deps ../wasm-round-trip/str.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/str.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/str.wat)))
  (rule
   (alias runtest)
   (action
@@ -2445,7 +2445,7 @@
   (target string.wat.gen)
   (deps ../wasm-source/string.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/string.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/string.wat)))
  (rule
   (alias runtest)
   (action
@@ -2456,7 +2456,7 @@
   (target string.wax.gen)
   (deps ../wasm-source/string.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/string.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/string.wat)))
  (rule
   (alias runtest)
   (action
@@ -2467,7 +2467,7 @@
   (target string.wat.gen)
   (deps ../wax/string.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/string.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/string.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -2478,7 +2478,7 @@
   (target string.wat.gen)
   (deps ../wasm-formatted/string.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/string.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/string.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -2489,7 +2489,7 @@
   (target string.wax.gen)
   (deps ../wax/string.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/string.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/string.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -2500,7 +2500,7 @@
   (target string.wax.gen)
   (deps ../wasm-round-trip/string.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/string.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/string.wat)))
  (rule
   (alias runtest)
   (action
@@ -2511,7 +2511,7 @@
   (target sync.wat.gen)
   (deps ../wasm-source/sync.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/sync.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/sync.wat)))
  (rule
   (alias runtest)
   (action
@@ -2522,7 +2522,7 @@
   (target sync.wax.gen)
   (deps ../wasm-source/sync.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/sync.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/sync.wat)))
  (rule
   (alias runtest)
   (action
@@ -2533,7 +2533,7 @@
   (target sync.wat.gen)
   (deps ../wax/sync.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/sync.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/sync.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -2544,7 +2544,7 @@
   (target sync.wat.gen)
   (deps ../wasm-formatted/sync.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/sync.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/sync.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -2555,7 +2555,7 @@
   (target sync.wax.gen)
   (deps ../wax/sync.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/sync.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/sync.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -2566,7 +2566,7 @@
   (target sync.wax.gen)
   (deps ../wasm-round-trip/sync.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/sync.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/sync.wat)))
  (rule
   (alias runtest)
   (action
@@ -2577,7 +2577,7 @@
   (target sys.wat.gen)
   (deps ../wasm-source/sys.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/sys.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/sys.wat)))
  (rule
   (alias runtest)
   (action
@@ -2588,7 +2588,7 @@
   (target sys.wax.gen)
   (deps ../wasm-source/sys.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/sys.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/sys.wat)))
  (rule
   (alias runtest)
   (action
@@ -2599,7 +2599,7 @@
   (target sys.wat.gen)
   (deps ../wax/sys.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/sys.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/sys.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -2610,7 +2610,7 @@
   (target sys.wat.gen)
   (deps ../wasm-formatted/sys.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/sys.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/sys.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -2621,7 +2621,7 @@
   (target sys.wax.gen)
   (deps ../wax/sys.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/sys.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/sys.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -2632,7 +2632,7 @@
   (target sys.wax.gen)
   (deps ../wasm-round-trip/sys.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/sys.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/sys.wat)))
  (rule
   (alias runtest)
   (action
@@ -2643,7 +2643,7 @@
   (target toplevel.wat.gen)
   (deps ../wasm-source/toplevel.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/toplevel.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/toplevel.wat)))
  (rule
   (alias runtest)
   (action
@@ -2654,7 +2654,7 @@
   (target toplevel.wax.gen)
   (deps ../wasm-source/toplevel.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/toplevel.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/toplevel.wat)))
  (rule
   (alias runtest)
   (action
@@ -2665,7 +2665,7 @@
   (target toplevel.wat.gen)
   (deps ../wax/toplevel.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/toplevel.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/toplevel.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -2676,7 +2676,7 @@
   (target toplevel.wat.gen)
   (deps ../wasm-formatted/toplevel.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/toplevel.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/toplevel.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -2687,7 +2687,7 @@
   (target toplevel.wax.gen)
   (deps ../wax/toplevel.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/toplevel.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/toplevel.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -2698,7 +2698,7 @@
   (target toplevel.wax.gen)
   (deps ../wasm-round-trip/toplevel.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/toplevel.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/toplevel.wat)))
  (rule
   (alias runtest)
   (action
@@ -2709,7 +2709,7 @@
   (target unix.wat.gen)
   (deps ../wasm-source/unix.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/unix.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/unix.wat)))
  (rule
   (alias runtest)
   (action
@@ -2720,7 +2720,7 @@
   (target unix.wax.gen)
   (deps ../wasm-source/unix.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/unix.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/unix.wat)))
  (rule
   (alias runtest)
   (action
@@ -2731,7 +2731,7 @@
   (target unix.wat.gen)
   (deps ../wax/unix.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/unix.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/unix.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -2742,7 +2742,7 @@
   (target unix.wat.gen)
   (deps ../wasm-formatted/unix.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/unix.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/unix.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -2753,7 +2753,7 @@
   (target unix.wax.gen)
   (deps ../wax/unix.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/unix.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/unix.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -2764,7 +2764,7 @@
   (target unix.wax.gen)
   (deps ../wasm-round-trip/unix.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/unix.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/unix.wat)))
  (rule
   (alias runtest)
   (action
@@ -2775,7 +2775,7 @@
   (target wasi_errors.wat.gen)
   (deps ../wasm-source/wasi_errors.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/wasi_errors.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/wasi_errors.wat)))
  (rule
   (alias runtest)
   (action
@@ -2786,7 +2786,7 @@
   (target wasi_errors.wax.gen)
   (deps ../wasm-source/wasi_errors.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/wasi_errors.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/wasi_errors.wat)))
  (rule
   (alias runtest)
   (action
@@ -2797,7 +2797,7 @@
   (target wasi_errors.wat.gen)
   (deps ../wax/wasi_errors.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/wasi_errors.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/wasi_errors.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -2808,7 +2808,7 @@
   (target wasi_errors.wat.gen)
   (deps ../wasm-formatted/wasi_errors.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/wasi_errors.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/wasi_errors.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -2819,7 +2819,7 @@
   (target wasi_errors.wax.gen)
   (deps ../wax/wasi_errors.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/wasi_errors.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/wasi_errors.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -2830,7 +2830,7 @@
   (target wasi_errors.wax.gen)
   (deps ../wasm-round-trip/wasi_errors.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/wasi_errors.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/wasi_errors.wat)))
  (rule
   (alias runtest)
   (action
@@ -2841,7 +2841,7 @@
   (target wasi_memory.wat.gen)
   (deps ../wasm-source/wasi_memory.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/wasi_memory.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/wasi_memory.wat)))
  (rule
   (alias runtest)
   (action
@@ -2852,7 +2852,7 @@
   (target wasi_memory.wax.gen)
   (deps ../wasm-source/wasi_memory.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/wasi_memory.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/wasi_memory.wat)))
  (rule
   (alias runtest)
   (action
@@ -2863,7 +2863,7 @@
   (target wasi_memory.wat.gen)
   (deps ../wax/wasi_memory.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/wasi_memory.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/wasi_memory.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -2874,7 +2874,7 @@
   (target wasi_memory.wat.gen)
   (deps ../wasm-formatted/wasi_memory.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/wasi_memory.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/wasi_memory.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -2885,7 +2885,7 @@
   (target wasi_memory.wax.gen)
   (deps ../wax/wasi_memory.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/wasi_memory.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/wasi_memory.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -2896,7 +2896,7 @@
   (target wasi_memory.wax.gen)
   (deps ../wasm-round-trip/wasi_memory.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/wasi_memory.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/wasi_memory.wat)))
  (rule
   (alias runtest)
   (action
@@ -2907,7 +2907,7 @@
   (target weak.wat.gen)
   (deps ../wasm-source/weak.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/weak.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/weak.wat)))
  (rule
   (alias runtest)
   (action
@@ -2918,7 +2918,7 @@
   (target weak.wax.gen)
   (deps ../wasm-source/weak.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/weak.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/weak.wat)))
  (rule
   (alias runtest)
   (action
@@ -2929,7 +2929,7 @@
   (target weak.wat.gen)
   (deps ../wax/weak.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/weak.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/weak.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -2940,7 +2940,7 @@
   (target weak.wat.gen)
   (deps ../wasm-formatted/weak.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/weak.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/weak.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -2951,7 +2951,7 @@
   (target weak.wax.gen)
   (deps ../wax/weak.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/weak.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/weak.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -2962,7 +2962,7 @@
   (target weak.wax.gen)
   (deps ../wasm-round-trip/weak.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/weak.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/weak.wat)))
  (rule
   (alias runtest)
   (action
@@ -2973,7 +2973,7 @@
   (target zstd.wat.gen)
   (deps ../wasm-source/zstd.wat)
   (action
-   (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-source/zstd.wat)))
+   (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-source/zstd.wat)))
  (rule
   (alias runtest)
   (action
@@ -2984,7 +2984,7 @@
   (target zstd.wax.gen)
   (deps ../wasm-source/zstd.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-source/zstd.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-source/zstd.wat)))
  (rule
   (alias runtest)
   (action
@@ -2995,7 +2995,7 @@
   (target zstd.wat.gen)
   (deps ../wax/zstd.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wat -o %{target} ../wax/zstd.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wat -o %{target} ../wax/zstd.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -3006,7 +3006,7 @@
   (target zstd.wat.gen)
   (deps ../wasm-formatted/zstd.wat.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/zstd.wat.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wat -o %{target} ../wasm-formatted/zstd.wat.gen)))
  (rule
   (alias runtest)
   (action
@@ -3017,7 +3017,7 @@
   (target zstd.wax.gen)
   (deps ../wax/zstd.wax.gen)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wax --format wax -o %{target} ../wax/zstd.wax.gen)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wax --format wax -o %{target} ../wax/zstd.wax.gen)))
  (rule
   (alias runtest)
   (action
@@ -3028,7 +3028,7 @@
   (target zstd.wax.gen)
   (deps ../wasm-round-trip/zstd.wat)
  (action
-  (run wax --validate -W all=error -W correctness=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/zstd.wat)))
+  (run wax --validate -W all=error -W correctness=hidden -W redundant=hidden --input-format wat --format wax -o %{target} ../wasm-round-trip/zstd.wat)))
  (rule
   (alias runtest)
   (action

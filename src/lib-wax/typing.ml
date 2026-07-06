@@ -60,6 +60,27 @@ module Error = struct
     warn ~warning:Wax_utils.Warning.Redundant_operation ~universal:true context
       ~location fmt
 
+  (* A cast/test whose operand can never have the target type. *)
+  let cast_always_fails context ~location ~is_test =
+    if is_test then
+      warn ~warning:Wax_utils.Warning.Cast_always_fails ~universal:true context
+        ~location
+        "This type test is always false: the value can never have this type."
+    else
+      warn ~warning:Wax_utils.Warning.Cast_always_fails ~universal:true context
+        ~location "This cast always traps: the value can never have this type."
+
+  (* A cast/test whose operand already has the target type. *)
+  let redundant_cast context ~location ~is_test =
+    if is_test then
+      warn ~warning:Wax_utils.Warning.Redundant_operation ~universal:true
+        context ~location
+        "This type test is always true: the value already has this type."
+    else
+      warn ~warning:Wax_utils.Warning.Redundant_operation ~universal:true
+        context ~location
+        "This cast is redundant: the value already has this type."
+
   (* A block label declared but never branched to. Prefix its name with [_] to
      silence the warning. *)
   let unused_label context ~location name =
@@ -3193,6 +3214,34 @@ let is_bottom_heaptype = function
   | None_ | NoFunc | NoExtern | NoExn | NoCont -> true
   | _ -> false
 
+(* Lint a reference cast ([is_test = false]) or test ([is_test = true]) given the
+   operand's inferred type and the interned target type. Under single-inheritance
+   subtyping two heap types share a value only when one is a subtype of the
+   other, so unrelated types make the cast always trap / the test always false
+   (unless a shared [null] slips through); an operand that already has the target
+   type makes it redundant. A bottom-reference operand is skipped: its cast is
+   load-bearing (dropping it loses the type the value stands in for). *)
+let lint_ref_cast ctx ~location ~is_test op_natural target_natural =
+  match (op_natural, target_natural) with
+  | ( Valtype { typ = Ref { typ = op_src; _ }; internal = Ref op; _ },
+      Valtype { internal = Ref tgt; _ } )
+    when not (is_bottom_heaptype op_src) -> (
+      let info = ctx.subtyping_info in
+      (* Subtyping queries index [info] by type index; a freshly minted anon type
+         (e.g. an inline [&fn(..)] cast target) may lie outside the snapshot, so
+         treat an out-of-range lookup as "cannot decide" and skip the lint. *)
+      try
+        let related =
+          Wax_wasm.Types.heap_subtype info op.typ tgt.typ
+          || Wax_wasm.Types.heap_subtype info tgt.typ op.typ
+        in
+        if (not related) && not (op.nullable && tgt.nullable) then
+          Error.cast_always_fails ctx.diagnostics ~location ~is_test
+        else if Wax_wasm.Types.ref_subtype info op tgt then
+          Error.redundant_cast ctx.diagnostics ~location ~is_test
+      with Invalid_argument _ -> ())
+  | _ -> ()
+
 (* The type lookups below never fail *)
 let rec heap_lub ctx (h1 : Ast.heaptype) (h2 : Ast.heaptype) =
   match (h1, h2) with
@@ -4893,6 +4942,13 @@ and type_cast ctx i =
                   Error.invalid_cast ctx.diagnostics ~location:i.info ty'
             | Valtype _ | Functype _ -> assert false)
       in
+      (* Lint the cast against its operand's natural type (snapshotted before
+         [cast] above concretised it to the target). Skipped for from-Wasm input
+         ([simplify]), whose casts are compiler-inserted and whose redundant ones
+         are dropped below. *)
+      if ctx.warn_unused && not ctx.simplify then
+        lint_ref_cast ctx ~location:i.info ~is_test:false ty'_natural
+          (Cell.get ty);
       (* A cast is load-bearing when its target differs from the type the inner
          expression would settle on if the cast were removed — its natural
          default, read from [ty'_natural] (the inner type *before* [cast] above
@@ -4977,9 +5033,15 @@ and type_cast ctx i =
       let* i' = instruction ctx i in
       if is_cont_heaptype ctx ty.typ then
         Error.invalid_cast_type ctx.diagnostics ~location:i.info;
+      (* The operand's natural type, before [check_type] below concretises it. *)
+      let op_natural = Cell.get (expression_type ctx i') in
       (let>@ typ = top_heap_type ctx ty.typ in
        let>@ typ = internalize ctx (Ref { nullable = true; typ }) in
        check_type ctx i' typ);
+      (if ctx.warn_unused && not ctx.simplify then
+         let>@ target = internalize ctx (Ref ty) in
+         lint_ref_cast ctx ~location:i.info ~is_test:true op_natural
+           (Cell.get target));
       return_expression i (Test (i', ty)) i32_cell
   (* Construction literals carry an optional type name that can be inferred from
      an expected type. Their typing lives in [check_instruction]; in synthesis position

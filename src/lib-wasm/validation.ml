@@ -677,6 +677,22 @@ module Error = struct
   let redundant_operation context ~location fmt =
     warn_lint context ~location Warning.Redundant_operation fmt
 
+  let cast_always_fails context ~location ~is_test =
+    if is_test then
+      warn_lint context ~location Warning.Cast_always_fails
+        "This type test is always false: the value can never have this type."
+    else
+      warn_lint context ~location Warning.Cast_always_fails
+        "This cast always traps: the value can never have this type."
+
+  let redundant_cast context ~location ~is_test =
+    if is_test then
+      warn_lint context ~location Warning.Redundant_operation
+        "This type test is always true: the value already has this type."
+    else
+      warn_lint context ~location Warning.Redundant_operation
+        "This cast is redundant: the value already has this type."
+
   let index_already_bound context ~location kind index =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
@@ -1940,6 +1956,33 @@ let branch_cast_target ctx (idx : Ast.Text.idx) ~location =
    branch target against the same incoming stack. *)
 let with_current_stack f st = (st, f st)
 
+(* Lint a [ref.cast]/[ref.test] against its operand (the top of the current
+   stack). Under single-inheritance subtyping two heap types share a value only
+   when one is a subtype of the other, so unrelated types make the cast always
+   trap (the test always false) — unless a shared [null] slips through. When the
+   operand already has the target type the cast/test is redundant. Only fires
+   when unused reporting is on. *)
+let lint_cast ctx ~location ~is_test (target : reftype) =
+  if not ctx.modul.warn_unused then return ()
+  else
+    with_current_stack (fun st ->
+        match st with
+        | Cons (_, Val (Ref op, _), _) -> (
+            let info = ctx.modul.subtyping_info in
+            (* Best-effort: an out-of-range type index (should not occur for
+               already-validated types) simply skips the lint. *)
+            try
+              let related =
+                Types.heap_subtype info op.typ target.typ
+                || Types.heap_subtype info target.typ op.typ
+              in
+              if (not related) && not (op.nullable && target.nullable) then
+                Error.cast_always_fails ctx.modul.diagnostics ~location ~is_test
+              else if Types.ref_subtype info op target then
+                Error.redundant_cast ctx.modul.diagnostics ~location ~is_test
+            with Invalid_argument _ -> ())
+        | _ -> ())
+
 let unpack_type (f : fieldtype) =
   match f.typ with Value v -> v | Packed _ -> I32
 
@@ -3049,6 +3092,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       (match top_heap_type ctx ty.typ with
       | Cont -> Error.invalid_cast_type ctx.modul.diagnostics ~location:loc
       | _ -> ());
+      let* () = lint_cast ctx ~location:loc ~is_test:true ty in
       let* () =
         pop_known ctx loc
           (Ref { nullable = true; typ = top_heap_type ctx ty.typ })
@@ -3060,6 +3104,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       (match top_heap_type ctx ty.typ with
       | Cont -> Error.invalid_cast_type ctx.modul.diagnostics ~location:loc
       | _ -> ());
+      let* () = lint_cast ctx ~location:loc ~is_test:false ty in
       let* () =
         pop_known ctx loc
           (Ref { nullable = true; typ = top_heap_type ctx ty.typ })

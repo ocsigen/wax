@@ -15,8 +15,9 @@ let () =
         printf "  (deps ../wasm-source/%s)\n" file;
         printf "  (action\n";
         printf
-          "   (run wax --validate -W all=error -W correctness=hidden \
-           --input-format wat --format wat -o %%{target} ../wasm-source/%s)))\n"
+          "   (run wax --validate -W all=error -W correctness=hidden -W \
+           redundant=hidden --input-format wat --format wat -o %%{target} \
+           ../wasm-source/%s)))\n"
           file;
         printf " (rule\n";
         printf "  (alias runtest)\n";
@@ -32,8 +33,9 @@ let () =
         printf "  (deps ../wasm-source/%s)\n" file;
         printf " (action\n";
         printf
-          "  (run wax --validate -W all=error -W correctness=hidden \
-           --input-format wat --format wax -o %%{target} ../wasm-source/%s)))\n"
+          "  (run wax --validate -W all=error -W correctness=hidden -W \
+           redundant=hidden --input-format wat --format wax -o %%{target} \
+           ../wasm-source/%s)))\n"
           file;
         printf " (rule\n";
         printf "  (alias runtest)\n";
@@ -49,8 +51,9 @@ let () =
         printf "  (deps ../wax/%s.wax.gen)\n" base;
         printf " (action\n";
         printf
-          "  (run wax --validate -W all=error -W correctness=hidden \
-           --input-format wax --format wat -o %%{target} ../wax/%s.wax.gen)))\n"
+          "  (run wax --validate -W all=error -W correctness=hidden -W \
+           redundant=hidden --input-format wax --format wat -o %%{target} \
+           ../wax/%s.wax.gen)))\n"
           base;
         printf " (rule\n";
         printf "  (alias runtest)\n";
@@ -66,8 +69,8 @@ let () =
         printf "  (deps ../wasm-formatted/%s.gen)\n" file;
         printf " (action\n";
         printf
-          "  (run wax --validate -W all=error -W correctness=hidden \
-           --input-format wat --format wat -o %%{target} \
+          "  (run wax --validate -W all=error -W correctness=hidden -W \
+           redundant=hidden --input-format wat --format wat -o %%{target} \
            ../wasm-formatted/%s.gen)))\n"
           file;
         printf " (rule\n";
@@ -83,8 +86,9 @@ let () =
         printf "  (deps ../wax/%s.wax.gen)\n" base;
         printf " (action\n";
         printf
-          "  (run wax --validate -W all=error -W correctness=hidden \
-           --input-format wax --format wax -o %%{target} ../wax/%s.wax.gen)))\n"
+          "  (run wax --validate -W all=error -W correctness=hidden -W \
+           redundant=hidden --input-format wax --format wax -o %%{target} \
+           ../wax/%s.wax.gen)))\n"
           base;
         printf " (rule\n";
         printf "  (alias runtest)\n";
@@ -104,8 +108,8 @@ let () =
         printf "  (deps ../wasm-round-trip/%s)\n" file;
         printf " (action\n";
         printf
-          "  (run wax --validate -W all=error -W correctness=hidden \
-           --input-format wat --format wax -o %%{target} \
+          "  (run wax --validate -W all=error -W correctness=hidden -W \
+           redundant=hidden --input-format wat --format wax -o %%{target} \
            ../wasm-round-trip/%s)))\n"
           file;
         printf " (rule\n";
