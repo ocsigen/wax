@@ -3222,24 +3222,28 @@ let is_bottom_heaptype = function
    type makes it redundant. A bottom-reference operand is skipped: its cast is
    load-bearing (dropping it loses the type the value stands in for). *)
 let lint_ref_cast ctx ~location ~is_test op_natural target_natural =
+  let info = ctx.subtyping_info in
+  (* A concrete heap type is only resolvable when its index is covered by [info];
+     an anon type minted while type-checking (e.g. an inline [&fn(..)] cast
+     target) lies past the snapshot, so the lint cannot decide and is skipped. *)
+  let resolvable (h : Internal.heaptype) =
+    match h with
+    | Type i | Exact i -> Wax_wasm.Types.has_type info i
+    | _ -> true
+  in
   match (op_natural, target_natural) with
   | ( Valtype { typ = Ref { typ = op_src; _ }; internal = Ref op; _ },
       Valtype { internal = Ref tgt; _ } )
-    when not (is_bottom_heaptype op_src) -> (
-      let info = ctx.subtyping_info in
-      (* Subtyping queries index [info] by type index; a freshly minted anon type
-         (e.g. an inline [&fn(..)] cast target) may lie outside the snapshot, so
-         treat an out-of-range lookup as "cannot decide" and skip the lint. *)
-      try
-        let related =
-          Wax_wasm.Types.heap_subtype info op.typ tgt.typ
-          || Wax_wasm.Types.heap_subtype info tgt.typ op.typ
-        in
-        if (not related) && not (op.nullable && tgt.nullable) then
-          Error.cast_always_fails ctx.diagnostics ~location ~is_test
-        else if Wax_wasm.Types.ref_subtype info op tgt then
-          Error.redundant_cast ctx.diagnostics ~location ~is_test
-      with Invalid_argument _ -> ())
+    when (not (is_bottom_heaptype op_src))
+         && resolvable op.typ && resolvable tgt.typ ->
+      let related =
+        Wax_wasm.Types.heap_subtype info op.typ tgt.typ
+        || Wax_wasm.Types.heap_subtype info tgt.typ op.typ
+      in
+      if (not related) && not (op.nullable && tgt.nullable) then
+        Error.cast_always_fails ctx.diagnostics ~location ~is_test
+      else if Wax_wasm.Types.ref_subtype info op tgt then
+        Error.redundant_cast ctx.diagnostics ~location ~is_test
   | _ -> ()
 
 (* The type lookups below never fail *)
