@@ -47,9 +47,9 @@ A WAT annotation decompiles to the Wax attribute:
       }
   }
   fn f_2(x: i32) {
-      'l_2: do {
+      'l: do {
           #[unlikely]
-          br_if 'l_2 x;
+          br_if 'l x;
       }
   }
   // A hint on a br_on_* branch (all conditional branches are supported).

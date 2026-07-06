@@ -179,10 +179,10 @@ from wasm:
 ==== core/unreached-invalid.wast ====
 Wax type-checking should have failed (type mismatch):
   fn f() -> i32 {
-      'l_2: do i32 {
+      'l: do i32 {
           do {
               unreachable;
-              br_if 'l_2 (0 as i32, 0 as i32);
+              br_if 'l (0 as i32, 0 as i32);
           }
       }
   }
@@ -193,18 +193,18 @@ from wasm:
   )
 Wax type-checking should have failed (type mismatch):
   fn f() -> i32 {
-      'l_2: loop {
+      'l: loop {
           nop;
-          br 'l_2;
+          br 'l;
       }
   }
 from wasm:
   (func $type-cont-last-void-vs-empty (result i32) (loop (br 0 (nop))))
 Wax type-checking should have failed (type mismatch):
   fn f() -> i32 {
-      'l_2: loop {
+      'l: loop {
           0 as i32;
-          br 'l_2;
+          br 'l;
       }
   }
 from wasm:

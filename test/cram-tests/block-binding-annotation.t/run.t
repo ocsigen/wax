@@ -33,9 +33,9 @@ it:
   #[export = "br_drops"]
   fn br_drops(c: i32, n: i64) -> i64 {
       let x =
-          'l_2: do {
+          'l: do {
               if c {
-                  br 'l_2 42;
+                  br 'l 42;
               }
               n;
           };
@@ -63,8 +63,8 @@ it:
   #[export = "divergent_drops"]
   fn divergent_drops(n: i64) -> i64 {
       let x =
-          'l_2: do {
-              br 'l_2 n;
+          'l: do {
+              br 'l n;
               unreachable;
           };
       x;

@@ -5,15 +5,15 @@ just `if` and `do`. A `loop` takes its result from the function's return type:
   $ wax loop.wat -f wax
   #[export = "f"]
   fn f(n: i32) -> i32 {
-      'l_2: loop {
-          br_if 'l_2 n;
+      'l: loop {
+          br_if 'l n;
           9;
       }
   }
 
   $ wax loop.wat -f wax | wax -i wax -f wat
   (func $f (export "f") (param $n i32) (result i32)
-    (loop $l_2 (result i32) (br_if $l_2 (local.get $n)) (i32.const 9))
+    (loop $l (result i32) (br_if $l (local.get $n)) (i32.const 9))
   )
 
 …and so does a `try_table` (here in `return` position):
@@ -46,8 +46,8 @@ the values reaching the exit rather than taken from the context:
   #[export = "f"]
   fn f(n: i32) -> i32 {
       0
-          + 'l_2: loop {
-                br_if 'l_2 n;
+          + 'l: loop {
+                br_if 'l n;
                 9;
             };
   }
@@ -55,5 +55,5 @@ the values reaching the exit rather than taken from the context:
   $ wax loop-synthesis.wat -f wax | wax -i wax -f wat
   (func $f (export "f") (param $n i32) (result i32)
     (i32.add (i32.const 0)
-      (loop $l_2 (result i32) (br_if $l_2 (local.get $n)) (i32.const 9)))
+      (loop $l (result i32) (br_if $l (local.get $n)) (i32.const 9)))
   )

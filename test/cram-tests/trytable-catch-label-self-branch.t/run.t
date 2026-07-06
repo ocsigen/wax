@@ -24,10 +24,10 @@ The result type is recovered (on the `try`), so the catch's value has a target:
   #[export = "f"]
   fn f(x: i32) {
       _ =
-          'l_2: if x {
+          'l: if x {
               try f64 {
                   1;
-              } catch [ e -> 'l_2]
+              } catch [ e -> 'l]
           } else {
               unreachable;
           };

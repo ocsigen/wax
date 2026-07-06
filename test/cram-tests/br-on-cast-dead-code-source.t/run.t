@@ -20,9 +20,9 @@ target, which is always a valid source (`rt2 <: rt2`):
   $ wax -i wat -f wax b.wat
   #[export = "f"]
   fn f() -> &?any {
-      'l_2: do {
+      'l: do {
           unreachable;
-          br_on_cast_fail 'l_2 &struct _!;
+          br_on_cast_fail 'l &struct _!;
       }
   }
   $ wax -i wat -f wax b.wat -o b.wax && wax -i wax -f wasm b.wax -o /dev/null --validate

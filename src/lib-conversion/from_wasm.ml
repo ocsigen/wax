@@ -247,7 +247,7 @@ module LabelStack = struct
     stack : (string option * (string * bool ref)) list;
   }
 
-  let push ?diagnostics st (label : Src.name option) =
+  let push ?diagnostics ?(targeted = true) st (label : Src.name option) =
     let ns = Namespace.dup st.ns in
     let used = ref false in
     (* The source label name made into a valid Wax identifier (sanitizing e.g. a
@@ -263,10 +263,20 @@ module LabelStack = struct
       | None -> None
     in
     let candidate = match src with Some l -> l.Ast.desc | None -> "l" in
+    (* Only claim a name for a label that will actually render: a source-named
+       block always renders (see below), and an anonymous block renders only
+       when a branch targets it ([targeted]). Reserving a name for an anonymous,
+       untargeted block would waste the fallback "l" and needlessly bump a real
+       inner label of the same name — the block renders label-free, so it needs
+       no name. When not reserved, [name] is a bare candidate that is never
+       emitted (its [used] stays false); it would only leak if [targeted]
+       under-approximated, which the round-trip corpus would flag. *)
     let name, outcome =
-      match src with
-      | Some l -> Namespace.add' ~loc:l.Ast.info ns candidate
-      | None -> Namespace.add' ns candidate
+      if Option.is_some src || targeted then
+        match src with
+        | Some l -> Namespace.add' ~loc:l.Ast.info ns candidate
+        | None -> Namespace.add' ns candidate
+      else (candidate, Namespace.Available)
     in
     ( (fun () ->
         (* Render the label when a branch targets it, or when the source named
@@ -1334,14 +1344,62 @@ let blocktype ctx (typ : Src.blocktype option) =
         results = Array.map (fun t -> valtype ctx t) results;
       }
 
-let push_label ctx ~loop label typ =
+let label_targeted (instrs : _ Src.instr list) =
+  let hit depth (idx : Src.idx) =
+    match idx.desc with Num n -> Uint32.to_int n = depth | Id _ -> false
+  in
+  let rec any depth instrs = List.exists (one depth) instrs
+  and one depth (i : _ Src.instr) =
+    match i.desc with
+    | Br i
+    | Br_if i
+    | Br_on_null i
+    | Br_on_non_null i
+    | Br_on_cast (i, _, _)
+    | Br_on_cast_fail (i, _, _)
+    | Br_on_cast_desc_eq (i, _, _)
+    | Br_on_cast_desc_eq_fail (i, _, _) ->
+        hit depth i
+    | Br_table (labels, lab) -> List.exists (hit depth) (lab :: labels)
+    | Block { block; _ } | Loop { block; _ } -> any (depth + 1) block
+    | If { if_block; else_block; _ } ->
+        any (depth + 1) if_block.desc || any (depth + 1) else_block.desc
+    | TryTable { block; catches; _ } ->
+        any (depth + 1) block
+        || List.exists
+             (fun (c : Src.catch) ->
+               match c with
+               | Catch (_, l) | CatchRef (_, l) | CatchAll l | CatchAllRef l ->
+                   hit depth l)
+             catches
+    | Try { block; catches; catch_all; _ } -> (
+        any (depth + 1) block
+        || List.exists (fun (_, b) -> any (depth + 1) b) catches
+        || match catch_all with Some b -> any (depth + 1) b | None -> false)
+    | Resume (_, handlers)
+    | ResumeThrowRef (_, handlers)
+    | ResumeThrow (_, _, handlers) ->
+        List.exists
+          (fun (c : Src.on_clause) ->
+            match c with OnLabel (_, l) -> hit depth l | OnSwitch _ -> false)
+          handlers
+    | Hinted (_, i) -> one depth i
+    (* Folded WAT form: the operands [l] and the head [i] run at this same
+       depth (the wrapper opens no block scope), mirroring how [instruction]
+       flattens it. *)
+    | Folded (i, l) -> one depth i || any depth l
+    | _ -> false
+  in
+  any 0 instrs
+
+let push_label ctx ~loop ~targeted label typ =
   let arity = blocktype_arity ctx typ in
   let i = if loop then fst arity else snd arity in
   let label_arities =
     (Option.map (fun l -> l.Ast.desc) label, i) :: ctx.label_arities
   in
   let label, labels =
-    LabelStack.push ~diagnostics:ctx.diagnostics ctx.labels label
+    LabelStack.push ~diagnostics:ctx.diagnostics ~targeted ctx.labels label
   in
   (label, { ctx with labels; label_arities })
 
@@ -1517,7 +1575,9 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   in
   match i.desc with
   | Block { label; typ; block } ->
-      let label, ctx = push_label ctx ~loop:false label typ in
+      let label, ctx =
+        push_label ctx ~loop:false ~targeted:(label_targeted block) label typ
+      in
       let block = Stack.run (instructions ctx block) in
       let inputs, outputs = blocktype_arity ctx typ in
       let* () = Stack.consume inputs in
@@ -1525,7 +1585,9 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
         (if inputs > 0 then 0 else outputs)
         (with_loc (Block { label = label (); typ = blocktype ctx typ; block }))
   | Loop { label; typ; block } ->
-      let label, ctx = push_label ctx ~loop:true label typ in
+      let label, ctx =
+        push_label ctx ~loop:true ~targeted:(label_targeted block) label typ
+      in
       let block = Stack.run (instructions ctx block) in
       let inputs, outputs = blocktype_arity ctx typ in
       let* () = Stack.consume inputs in
@@ -1533,7 +1595,12 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
         (if inputs > 0 then 0 else outputs)
         (with_loc (Loop { label = label (); typ = blocktype ctx typ; block }))
   | If { label; typ; if_block; else_block } ->
-      let label, ctx = push_label ctx ~loop:false label typ in
+      let label, ctx =
+        push_label ctx ~loop:false
+          ~targeted:
+            (label_targeted if_block.desc || label_targeted else_block.desc)
+          label typ
+      in
       (* Keep the (then ...)/(else ...) clause locations on the Wax blocks so a
          comment opening a clause attaches to the block rather than the
          condition or the previous clause's last instruction. *)
@@ -1564,7 +1631,9 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
                 else_block;
               }))
   | TryTable { label = labl; typ; block; catches } ->
-      let labl, block_ctx = push_label ctx ~loop:false labl typ in
+      let labl, block_ctx =
+        push_label ctx ~loop:false ~targeted:(label_targeted block) labl typ
+      in
       let block = Stack.run (instructions block_ctx block) in
       let catches =
         List.map
@@ -1584,7 +1653,14 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
            (TryTable
               { label = labl (); typ = blocktype ctx typ; block; catches }))
   | Try { label; typ; block; catches; catch_all } ->
-      let label, ctx = push_label ctx ~loop:false label typ in
+      (* A [br] out of the try's body or any of its handler blocks targets the
+         one try scope, so all of them bear on whether this label renders. *)
+      let targeted =
+        label_targeted block
+        || List.exists (fun (_, b) -> label_targeted b) catches
+        || match catch_all with Some b -> label_targeted b | None -> false
+      in
+      let label, ctx = push_label ctx ~loop:false ~targeted label typ in
       let block = Stack.run (instructions ctx block) in
       let catches =
         List.map
@@ -2569,7 +2645,10 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
     match f.desc with
     | Types t -> Some (Type (collapse_splices ctx (rectype ctx t)))
     | Func { locals; instrs; typ; exports = e; _ } ->
-        let label, labels = LabelStack.push (LabelStack.make ()) None in
+        let label, labels =
+          LabelStack.push ~targeted:(label_targeted instrs) (LabelStack.make ())
+            None
+        in
         let ctx =
           let return_arity = snd (typeuse_arity ctx typ) in
           let local_namespace =

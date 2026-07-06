@@ -27,9 +27,9 @@ failed validation ("Expected struct type"). The cast is now kept:
   #[export = "f"]
   fn f() -> i32 {
       _ =
-          'l_2: do {
+          'l: do {
               unreachable;
-              _ = ((br_on_cast 'l_2 &?none _) as &s).f;
+              _ = ((br_on_cast 'l &?none _) as &s).f;
               null;
           };
       0;

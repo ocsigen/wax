@@ -7,8 +7,8 @@ spurious "value remains on the stack":
   fn f() -> i32 {
       let x: i32;
       x +=
-          'l_2: do {
-              br 'l_2 0x4;
+          'l: do {
+              br 'l 0x4;
               (_ as i32).ctz();
           };
       x;
@@ -21,6 +21,6 @@ It round-trips, reconstructing the original `(block (result i32) …)`:
     (local $x i32)
     (local.set $x
       (i32.add (local.get $x)
-        (block $l_2 (result i32) (br $l_2 (i32.const 0x4)) (i32.ctz))))
+        (block $l (result i32) (br $l (i32.const 0x4)) (i32.ctz))))
     (local.get $x)
   )

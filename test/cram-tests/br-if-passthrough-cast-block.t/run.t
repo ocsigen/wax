@@ -30,9 +30,9 @@ regardless of what pins the pass-through downstream, and the module round-trips:
   let g: i64 = 0;
   #[export = "f"]
   fn f(c: i32) -> i64 {
-      ('l_2: do f64 {
-           br 'l_2 1.5;
-           _ = (br_if 'l_2 (2.5, c)) as f32;
+      ('l: do f64 {
+           br 'l 1.5;
+           _ = (br_if 'l (2.5, c)) as f32;
            0;
        }.to_bits() ^ g);
   }

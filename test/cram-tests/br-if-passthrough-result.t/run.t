@@ -43,8 +43,8 @@ delivers a `&i31` to an `anyref` block and the pass-through is dropped:
   $ wax -i wat -f wax ok.wat
   #[export = "f"]
   fn f(c: i32) -> &?any {
-      'l_2: do {
-          _ = br_if 'l_2 (5 as &i31, c);
+      'l: do {
+          _ = br_if 'l (5 as &i31, c);
           null;
       }
   }

@@ -91,8 +91,8 @@ followed by the step, before the back-edge) recovers the continue-expression:
   fn f(n: i32) -> i32 {
       let i: i32;
       let t: i32;
-      'l_3: while i <s n : (i += 1) {
-          br_if 'l_3 !i;
+      'l: while i <s n : (i += 1) {
+          br_if 'l !i;
           t += i;
       }
       t;
