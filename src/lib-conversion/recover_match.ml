@@ -410,10 +410,11 @@ and rewrite_desc (desc : location instr_desc) : location instr_desc =
   | Test (e, t) -> Test (rewrite_instr e, t)
   | NonNull e -> NonNull (rewrite_instr e)
   | Struct (idx, fs) ->
-      Struct (idx, List.map (fun (n, e) -> (n, rewrite_instr e)) fs)
+      Struct (idx, List.map (fun (n, e) -> (n, Option.map rewrite_instr e)) fs)
   | StructDesc (d, fs) ->
       StructDesc
-        (rewrite_instr d, List.map (fun (n, e) -> (n, rewrite_instr e)) fs)
+        ( rewrite_instr d,
+          List.map (fun (n, e) -> (n, Option.map rewrite_instr e)) fs )
   | StructDefaultDesc d -> StructDefaultDesc (rewrite_instr d)
   | StructGet (e, x) -> StructGet (rewrite_instr e, x)
   | GetDescriptor e -> GetDescriptor (rewrite_instr e)

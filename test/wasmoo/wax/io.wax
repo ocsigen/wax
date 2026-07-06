@@ -311,7 +311,7 @@ fn get_fd_offsets() -> &extern {
 
 #[export = "initialize_fd_offset"]
 fn initialize_fd_offset(fd: i32, offset: i64, append: i32) {
-    map_set(get_fd_offsets(), fd, { offset: offset, seeked: 0, append: append });
+    map_set(get_fd_offsets(), fd, { offset, seeked: 0, append });
 }
 
 #[export = "release_fd_offset"]
@@ -527,7 +527,7 @@ fn caml_ml_open_descriptor_in(fd: &eq) -> &eq {
         ops: channel_ops,
         id: custom_next_id(),
         fd: fd as i32_u,
-        buffer: buffer,
+        buffer,
         buffer_view: dv_make(buffer),
         curr: 0,
         max: 0,
@@ -549,7 +549,7 @@ fn caml_ml_open_descriptor_out(fd: &eq) -> &eq {
             ops: channel_ops,
             id: custom_next_id(),
             fd: fd as i32_u,
-            buffer: buffer,
+            buffer,
             buffer_view: dv_make(buffer),
             curr: 0,
             max: -1,

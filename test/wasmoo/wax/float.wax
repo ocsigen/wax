@@ -498,7 +498,7 @@ fn caml_parse_float(err_msg: &eq, v: &eq) -> &eq {
                     if negative {
                         f = -f;
                     }
-                    return { f: f };
+                    return { f };
                 }
             }
         }
@@ -589,7 +589,7 @@ fn caml_parse_float(err_msg: &eq, v: &eq) -> &eq {
             f = parse_float(jsstring_of_bytes(s));
             br_if 'error f != f;
         }
-        return { f: f };
+        return { f };
     }
     caml_failwith(err_msg);
     return 0 as &i31;
@@ -672,7 +672,7 @@ fn caml_modf_float(v: &eq) -> &eq {
         i = x;
         f = x;
     }
-    [block|0 as &i31, { f: f }, { f: i }];
+    [block|0 as &i31, { f }, { f: i }];
 }
 
 #[export = "caml_ldexp_float"]

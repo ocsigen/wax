@@ -42,9 +42,9 @@ let rec occurs name i =
   | ArrayDefault (_, e)
   | ContNew (_, e) ->
       occurs name e
-  | Struct (_, fields) -> List.exists (fun (_, e) -> occurs name e) fields
+  | Struct (_, fields) -> List.exists (field_occurs name) fields
   | StructDesc (d, fields) ->
-      occurs name d || List.exists (fun (_, e) -> occurs name e) fields
+      occurs name d || List.exists (field_occurs name) fields
   | CastDesc (e1, _, e2)
   | Br_on_cast_desc_eq (_, _, e1, e2)
   | Br_on_cast_desc_eq_fail (_, _, e1, e2)
@@ -79,6 +79,12 @@ let rec occurs name i =
   | Path _ | Unreachable | Nop | Hole | Null | Char _ | String _ | Int _
   | Float _ | StructDefault _ ->
       false
+
+(* A struct-literal field. A punned field [{x}] ([None]) is an implicit [Get] of
+   the like-named local, so it references [name] exactly when [name] is that
+   field. *)
+and field_occurs name (fn, e) =
+  match e with Some e -> occurs name e | None -> String.equal fn.desc name
 
 let list_occurs name l = List.exists (occurs name) l
 let bare_let (name, typ) = no_loc (Let ([ (Some name, Some typ) ], None))
@@ -169,10 +175,10 @@ let rec first_access name i =
   | ArrayDefault (_, e)
   | ContNew (_, e) ->
       first_access name e
-  | Struct (_, fields) -> fl (List.map snd fields)
+  | Struct (_, fields) -> field_list_access name fields
   | StructDesc (d, fields) ->
       (* The field values are evaluated before the descriptor operand. *)
-      fst2 (fl (List.map snd fields)) (first_access name d)
+      fst2 (field_list_access name fields) (first_access name d)
   | CastDesc (e1, _, e2)
   | Br_on_cast_desc_eq (_, _, e1, e2)
   | Br_on_cast_desc_eq_fail (_, _, e1, e2)
@@ -217,6 +223,19 @@ and first_access_list name l =
   List.fold_left
     (fun acc i -> match acc with Some _ -> acc | None -> first_access name i)
     None l
+
+(* First access to [name] across a struct literal's fields, in evaluation order.
+   A punned field [{x}] ([None]) is an implicit [Get] of the like-named local. *)
+and field_list_access name fields =
+  List.fold_left
+    (fun acc (fn, e) ->
+      match acc with
+      | Some _ -> acc
+      | None -> (
+          match e with
+          | Some e -> first_access name e
+          | None -> if String.equal fn.desc name then Some `Read else None))
+    None fields
 
 (* A loop / while body runs many times, so a local the body reads
    before assigning carries its value across iterations and belongs in the
@@ -415,17 +434,22 @@ let rec sink_into ((name, _) as decl) s =
           (c, fun c' -> Select (a, b, c'));
         ]
   | Struct (idx, fields) ->
+      (* A punned field ([None]) has no sub-expression to sink into, so only
+         explicit field values become sink candidates. *)
       pick
-        (List.mapi
-           (fun i (_, e) ->
-             ( e,
-               fun e' ->
-                 Struct
-                   ( idx,
-                     List.mapi
-                       (fun j (fn, x) -> (fn, if i = j then e' else x))
-                       fields ) ))
-           fields)
+        (List.filter_map
+           (fun (i, (_, e)) ->
+             Option.map
+               (fun e ->
+                 ( e,
+                   fun e' ->
+                     Struct
+                       ( idx,
+                         List.mapi
+                           (fun j (fn, x) -> (fn, if i = j then Some e' else x))
+                           fields ) ))
+               e)
+           (List.mapi (fun i f -> (i, f)) fields))
   | Cast (e, t) -> pick [ (e, fun e' -> Cast (e', t)) ]
   | Test (e, t) -> pick [ (e, fun e' -> Test (e', t)) ]
   | NonNull e -> pick [ (e, fun e' -> NonNull e') ]

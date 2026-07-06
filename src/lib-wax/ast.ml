@@ -153,9 +153,13 @@ type 'info instr_desc =
   | CastDesc of 'info instr * (* nullable result *) bool * 'info instr
   | Test of 'info instr * reftype
   | NonNull of 'info instr
-  | Struct of ident option * (ident * 'info instr) list
+  (* A field's value is [None] when written in the punning shorthand [{x}],
+     which abbreviates [{x: x}] (the value is taken from the like-named
+     local/global). Typing resolves the pun to the explicit [Get] before
+     lowering; the printer renders [None] back as the shorthand. *)
+  | Struct of ident option * (ident * 'info instr option) list
   | StructDefault of ident option
-  | StructDesc of 'info instr * (ident * 'info instr) list
+  | StructDesc of 'info instr * (ident * 'info instr option) list
   | StructDefaultDesc of 'info instr
   | StructGet of 'info instr * ident
   | GetDescriptor of 'info instr

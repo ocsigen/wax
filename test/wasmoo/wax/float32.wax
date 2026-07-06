@@ -34,7 +34,7 @@ fn caml_make_vect(&eq, &eq) -> &eq;
 type float = { f: f64 };
 
 fn box_float(f: f64) -> &eq {
-    { f: f };
+    { f };
 }
 
 fn unbox_float(f: &eq) -> f64 {

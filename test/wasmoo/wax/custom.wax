@@ -93,7 +93,7 @@ let custom_operations: &?custom_operations_list = null;
 
 #[export = "caml_register_custom_operations"]
 fn caml_register_custom_operations(ops: &custom_operations) {
-    custom_operations = { ops: ops, next: custom_operations };
+    custom_operations = { ops, next: custom_operations };
 }
 
 #[export = "caml_find_custom_operations"]

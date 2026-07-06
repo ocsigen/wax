@@ -271,7 +271,7 @@ fn re_match(vre: &eq, s: &bytes, pos: i32, accept_partial_match: i32) -> &eq {
                             }
                             'PUSHBACK: {
                                 // PUSHBACK
-                                stack = { pos_previous: stack, pc: pc + (instr >>s 8), pos: pos };
+                                stack = { pos_previous: stack, pc: pc + (instr >>s 8), pos };
                                 br 'continue;
                             }
                             'SETMARK: {

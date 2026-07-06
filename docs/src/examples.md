@@ -315,7 +315,7 @@ type point = { x: i32, y: i32 };
 
 #[export = "make_point"]
 fn make_point(x: i32, y: i32) -> &point {
-    {point| x: x, y: y};
+    {point| x, y};             // field shorthand: {x, y} means {x: x, y: y}
 }
 
 #[export = "distance_squared"]

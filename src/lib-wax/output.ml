@@ -990,18 +990,12 @@ let rec instr prec pp (i : _ instr) =
               space pp ();
               reftype pp t))
   | Struct (nm, l) ->
-      struct_instr pp nm (fun () ->
-          list_commasep_trailing
-            (fun pp (nm, i) -> print_key_value pp nm.desc (instr Instruction) i)
-            pp l)
+      struct_instr pp nm (fun () -> list_commasep_trailing struct_field_kv pp l)
   | StructDefault nm -> struct_instr pp nm (fun () -> punctuation pp "..")
   | StructDesc (d, l) ->
       struct_desc_instr pp
         (fun () -> descriptor_operand instr pp d)
-        (fun () ->
-          list_commasep_trailing
-            (fun pp (nm, i) -> print_key_value pp nm.desc (instr Instruction) i)
-            pp l)
+        (fun () -> list_commasep_trailing struct_field_kv pp l)
   | StructDefaultDesc d ->
       struct_desc_instr pp
         (fun () -> descriptor_operand instr pp d)
@@ -1313,6 +1307,13 @@ let rec instr prec pp (i : _ instr) =
           operator pp ":";
           instr Assignement pp i3)
   | Null -> keyword pp "null"
+
+(* A struct-literal field. A punned field ([None], written [{x}]) prints as the
+   bare name; an explicit field prints as [name: value]. *)
+and struct_field_kv pp (nm, i) =
+  match i with
+  | None -> identifier pp nm.desc
+  | Some i -> print_key_value pp nm.desc (instr Instruction) i
 
 and field_receiver pp i =
   (* A bare numeric literal receiver would be misparsed: [0.foo] lexes [0.]

@@ -569,7 +569,10 @@ legacy_catch_all:
 | label = block_label "{" l = statement_list "}" { (label, l) }
 
 structure_field:
-| y = field_name ":" i = expression { (y, i) }
+| y = field_name ":" i = expression { (y, Some i) }
+(* Field shorthand (punning): [{x}] abbreviates [{x: x}], taking the field's
+   value from the like-named local/global. Carried as [None] (see [Ast.Struct]). *)
+| y = field_name { (y, None) }
 
 structure:
 | l = separated_list_trailing(",", structure_field) { l }
@@ -597,8 +600,6 @@ match_default:
 | "_" "=>" "{" body = statement_list "}" { body }
 
 blockinstr:
-| b = block
-  { let (label, l) = b in with_loc $sloc (Block{label; typ = blocktype None; block = l}) }
 (* Branch-hinting proposal: a hinted [if] stays a [blockinstr] (so, like a plain
    [if], it needs no trailing [;]); [hinted] rejects the attribute on any other
    block form. *)

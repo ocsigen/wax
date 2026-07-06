@@ -1033,6 +1033,14 @@ let infer_struct_by_fields ctx fields =
   | Some (Some name) -> Some name
   | Some None | None -> None
 
+(* A struct-literal field's value. A punned field ([None], written [{x}]) stands
+   for the like-named local/global, i.e. [Get x]; typing resolves it to that
+   explicit [Get], which is what is type-checked and emitted, so lowering never
+   sees a pun. *)
+let field_value (name : ident) = function
+  | Some i -> i
+  | None -> { desc = Get name; info = name.info }
+
 let lookup_array_type ?location ctx name =
   let*@ ty = Tbl.find_opt ctx.type_context.types name in
   match (snd ty).typ with
@@ -2434,9 +2442,16 @@ let rec count_holes i =
   | Br_on_cast_desc_eq_fail (_, _, i1, i2)
   | StructSet (i1, _, i2) ->
       count_holes i1 + count_holes i2
-  | Struct (_, l) -> List.fold_left (fun acc (_, i) -> acc + count_holes i) 0 l
+  (* A punned field ([None]) is a [Get], which contains no holes. *)
+  | Struct (_, l) ->
+      List.fold_left
+        (fun acc (_, i) -> acc + Option.fold ~none:0 ~some:count_holes i)
+        0 l
   | StructDesc (d, l) ->
-      count_holes d + List.fold_left (fun acc (_, i) -> acc + count_holes i) 0 l
+      count_holes d
+      + List.fold_left
+          (fun acc (_, i) -> acc + Option.fold ~none:0 ~some:count_holes i)
+          0 l
   | Sequence l
   | ArrayFixed (_, l)
   | ContBind (_, _, l)
@@ -2510,13 +2525,16 @@ let rec collect_assigned_locals acc i =
   | ArrayDefault (_, e)
   | ContNew (_, e) ->
       collect_assigned_locals acc e
+  (* A punned field ([None]) is a [Get] and assigns nothing. *)
   | Struct (_, fields) ->
       List.fold_left
-        (fun acc (_, e) -> collect_assigned_locals acc e)
+        (fun acc (_, e) ->
+          Option.fold ~none:acc ~some:(collect_assigned_locals acc) e)
         acc fields
   | StructDesc (d, fields) ->
       List.fold_left
-        (fun acc (_, e) -> collect_assigned_locals acc e)
+        (fun acc (_, e) ->
+          Option.fold ~none:acc ~some:(collect_assigned_locals acc) e)
         (collect_assigned_locals acc d)
         fields
   | CastDesc (e1, _, e2)
@@ -2609,10 +2627,10 @@ let rec collect_labels acc (i : _ Ast.instr) =
   | ContNew (_, e) ->
       collect_labels acc e
   | Struct (_, fields) ->
-      List.fold_left (fun acc (_, e) -> collect_labels acc e) acc fields
+      List.fold_left (fun acc (_, e) -> in_opt acc e) acc fields
   | StructDesc (d, fields) ->
       List.fold_left
-        (fun acc (_, e) -> collect_labels acc e)
+        (fun acc (_, e) -> in_opt acc e)
         (collect_labels acc d) fields
   | CastDesc (e1, _, e2)
   | Br_on_cast_desc_eq (_, _, e1, e2)
@@ -2709,10 +2727,11 @@ let rec lint_source ctx (i : _ Ast.instr) =
   | ArrayDefault (_, e)
   | ContNew (_, e) ->
       lint_source ctx e
-  | Struct (_, fields) -> List.iter (fun (_, e) -> lint_source ctx e) fields
+  | Struct (_, fields) ->
+      List.iter (fun (_, e) -> Option.iter (lint_source ctx) e) fields
   | StructDesc (d, fields) ->
       lint_source ctx d;
-      List.iter (fun (_, e) -> lint_source ctx e) fields
+      List.iter (fun (_, e) -> Option.iter (lint_source ctx) e) fields
   | CastDesc (e1, _, e2)
   | Br_on_cast_desc_eq (_, _, e1, e2)
   | Br_on_cast_desc_eq_fail (_, _, e1, e2)
@@ -2954,14 +2973,15 @@ let rec check_hole_order_rec ctx i n =
                             StringMap.add name.desc instr acc)
                           StringMap.empty l
                       in
-                      (* Reorder fields according to definition *)
+                      (* Reorder fields according to definition. Pinned fields
+                         ([None]) are [Get]s with no hole, so drop them. *)
                       Array.map
                         (fun field ->
                           StringMap.find (fst field.desc).desc field_map)
                         fields
-                      |> Array.to_list
-                  | None -> List.map snd l)
-              | _ -> List.map snd l
+                      |> Array.to_list |> List.filter_map Fun.id
+                  | None -> List.filter_map snd l)
+              | _ -> List.filter_map snd l
             in
             check_hole_order_in_list ctx fields n
         | StructDesc (d, l) ->
@@ -2982,9 +3002,9 @@ let rec check_hole_order_rec ctx i n =
                         (fun field ->
                           StringMap.find (fst field.desc).desc field_map)
                         fields
-                      |> Array.to_list
-                  | None -> List.map snd l)
-              | _ -> List.map snd l
+                      |> Array.to_list |> List.filter_map Fun.id
+                  | None -> List.filter_map snd l)
+              | _ -> List.filter_map snd l
             in
             check_hole_order_in_list ctx (fields @ [ d ]) n
         | Select (c, t, e) ->
@@ -6273,10 +6293,10 @@ and check_instruction ?(drop_supertype = false) ctx expected
                [Error] result. *)
             let* fields' =
               List.fold_left
-                (fun prev (name, fi) ->
+                (fun prev (name, written) ->
                   let* l = prev in
-                  let* fi' = instruction ctx fi in
-                  return ((name, fi') :: l))
+                  let* fi' = instruction ctx (field_value name written) in
+                  return ((name, Option.map (fun _ -> fi') written) :: l))
                 (return []) fields
             in
             return_expression i
@@ -6299,18 +6319,22 @@ and check_instruction ?(drop_supertype = false) ctx expected
                   | None ->
                       Error.missing_field ctx.diagnostics ~location:i.info name;
                       prev
-                  | Some (name, i') ->
+                  | Some (name, written) ->
                       let* l = prev in
                       (* Check the field value against its declared type, so a
                          nested struct/array literal can drop its own name. *)
-                      let* i' =
+                      let* checked =
+                        let i' = field_value name written in
                         match internalize ctx (unpack_type f) with
                         | Some cell ->
                             let* i', _ = check_instruction ctx cell i' in
                             return i'
                         | None -> instruction ctx i'
                       in
-                      return ((name, i') :: l))
+                      (* Preserve punning: a punned field ([written = None]) stays
+                         [None] so the printer re-emits [{x}]; the check above
+                         still validates it and gives it its stack effect. *)
+                      return ((name, Option.map (fun _ -> checked) written) :: l))
                 (return []) field_types
             in
             (* The fields alone pin this type (re-parse re-resolves to it via
@@ -6382,10 +6406,10 @@ and check_instruction ?(drop_supertype = false) ctx expected
         | None | Some None ->
             let* fields' =
               List.fold_left
-                (fun prev (name, fi) ->
+                (fun prev (name, written) ->
                   let* l = prev in
-                  let* fi' = instruction ctx fi in
-                  return ((name, fi') :: l))
+                  let* fi' = instruction ctx (field_value name written) in
+                  return ((name, Option.map (fun _ -> fi') written) :: l))
                 (return []) fields
             in
             return_expression i
@@ -6407,16 +6431,17 @@ and check_instruction ?(drop_supertype = false) ctx expected
                   | None ->
                       Error.missing_field ctx.diagnostics ~location:i.info name;
                       prev
-                  | Some (name, i') ->
+                  | Some (name, written) ->
                       let* l = prev in
-                      let* i' =
+                      let* checked =
+                        let i' = field_value name written in
                         match internalize ctx (unpack_type f) with
                         | Some cell ->
                             let* i', _ = check_instruction ctx cell i' in
                             return i'
                         | None -> instruction ctx i'
                       in
-                      return ((name, i') :: l))
+                      return ((name, Option.map (fun _ -> checked) written) :: l))
                 (return []) field_types
             in
             let*! result = construction_result typ in
@@ -8030,11 +8055,13 @@ let rec check_constant_instruction ctx i =
   | Null | StructDefault _ | ArrayDefault _ | Int _ | Float _ | Char _
   | String _ ->
       ()
-  | Struct (_, l) ->
-      List.iter (fun (_, i) -> check_constant_instruction ctx i) l
+  (* A punned field ([None], written [{x}]) is a [Get] of the like-named global,
+     so it must satisfy the same constant-global rule; check that implicit [Get].
+     The [storagetype] array of the fabricated node is unused by the [Get] arm. *)
+  | Struct (_, l) -> List.iter (check_constant_field ctx) l
   | StructDesc (d, l) ->
       check_constant_instruction ctx d;
-      List.iter (fun (_, i) -> check_constant_instruction ctx i) l
+      List.iter (check_constant_field ctx) l
   | StructDefaultDesc d -> check_constant_instruction ctx d
   | ArrayFixed (_, l) -> List.iter (check_constant_instruction ctx) l
   | Array (_, i1, i2) ->
@@ -8105,6 +8132,16 @@ let rec check_constant_instruction ctx i =
   | ContBind _ | Suspend _ | Resume _ | ResumeThrow _ | ResumeThrowRef _
   | Switch _ | Return _ | Sequence _ | Select _ | If_annotation _ ->
       Error.constant_expression_required ctx.diagnostics ~location
+
+(* A struct-literal field in a constant expression. An explicit value is checked
+   directly; a punned field ([None]) is the implicit [Get] of the like-named
+   global, which must also be an immutable global. *)
+and check_constant_field ctx (name, i) =
+  match i with
+  | Some i -> check_constant_instruction ctx i
+  | None ->
+      check_constant_instruction ctx
+        { desc = Get name; info = ([||], name.info) }
 
 (*** Globals, functions, and declarations ***)
 
@@ -8905,10 +8942,16 @@ let rec instr_has_conditional (i : (_ instr_desc, _) annotated) =
   | Switch (_, _, l) ->
       any l
   | Call (a, l) | TailCall (a, l) -> instr_has_conditional a || any l
-  | Struct (_, l) -> List.exists (fun (_, i) -> instr_has_conditional i) l
+  (* A punned field ([None]) is a [Get] and carries no conditional. *)
+  | Struct (_, l) ->
+      List.exists
+        (fun (_, i) -> Option.fold ~none:false ~some:instr_has_conditional i)
+        l
   | StructDesc (d, l) ->
       instr_has_conditional d
-      || List.exists (fun (_, i) -> instr_has_conditional i) l
+      || List.exists
+           (fun (_, i) -> Option.fold ~none:false ~some:instr_has_conditional i)
+           l
   | CastDesc (a, _, b)
   | Br_on_cast_desc_eq (_, _, a, b)
   | Br_on_cast_desc_eq_fail (_, _, a, b)
@@ -9046,9 +9089,12 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
     | Test (v, t) -> Test (sone asm v, t)
     | NonNull v -> NonNull (sone asm v)
     | Struct (idx, fields) ->
-        Struct (idx, List.map (fun (i, v) -> (i, sone asm v)) fields)
+        Struct
+          (idx, List.map (fun (i, v) -> (i, Option.map (sone asm) v)) fields)
     | StructDesc (d, fields) ->
-        StructDesc (sone asm d, List.map (fun (i, v) -> (i, sone asm v)) fields)
+        StructDesc
+          ( sone asm d,
+            List.map (fun (i, v) -> (i, Option.map (sone asm) v)) fields )
     | StructDefaultDesc d -> StructDefaultDesc (sone asm d)
     | StructGet (v, idx) -> StructGet (sone asm v, idx)
     | GetDescriptor v -> GetDescriptor (sone asm v)
@@ -9158,8 +9204,9 @@ let sub_instrs (i : (_ instr_desc, _) annotated) =
   | Switch (_, _, l) ->
       l
   | Call (a, l) | TailCall (a, l) -> a :: l
-  | Struct (_, l) -> List.map snd l
-  | StructDesc (d, l) -> List.map snd l @ [ d ]
+  (* A punned field ([None]) is a leaf [Get] with no sub-instruction. *)
+  | Struct (_, l) -> List.filter_map snd l
+  | StructDesc (d, l) -> List.filter_map snd l @ [ d ]
   | CastDesc (a, _, b)
   | Br_on_cast_desc_eq (_, _, a, b)
   | Br_on_cast_desc_eq_fail (_, _, a, b)

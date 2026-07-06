@@ -221,7 +221,7 @@ type intern_state = {
 };
 
 fn get_intern_state(src: &bytes, pos: i32) -> &intern_state {
-    { src: src, pos: pos, obj_table: null, obj_counter: 0, overflow: 0 };
+    { src, pos, obj_table: null, obj_counter: 0, overflow: 0 };
 }
 
 fn read8u(s: &intern_state) -> i32 {
@@ -681,13 +681,7 @@ fn parse_header(s: &intern_state, prim: &eq) -> &marshal_header {
             fail_bad_object(prim);
         }
     }
-    {
-        header_len: header_len,
-        data_len: data_len,
-        uncompressed_data_len: uncompressed_data_len,
-        num_objects: num_objects,
-        compressed: compressed,
-    };
+    { header_len, data_len, uncompressed_data_len, num_objects, compressed };
 }
 
 const marshal_data_size = "Marshal.data_size";
@@ -765,14 +759,14 @@ fn init_extern_state(
         }
     }
     {
-        no_sharing: no_sharing,
-        user_provided_output: user_provided_output,
+        no_sharing,
+        user_provided_output,
         obj_counter: 0,
         size_32: 0,
         size_64: 0,
         pos_table: map_new(),
         buf: output.dat,
-        pos: pos,
+        pos,
         limit: output.end,
         output_first: output,
         output_last: output,

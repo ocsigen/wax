@@ -220,6 +220,12 @@ let operand t d gen_t : Ast.location Ast.instr =
   else if is_int t then nl (Ast.Int (string_of_int (rnd 9)))
   else nl (Ast.Float (Printf.sprintf "%d.5" (rnd 9)))
 
+(* Struct field names that may be punned in a literal: each has a like-named i32
+   binding in scope (the [x]/[y] globals or the i32 param [a]), so [{f}] resolves
+   to a value of the field's type. [pair.b] is excluded — the i64 param [b] would
+   shadow, giving a type mismatch. *)
+let punnable_field = [ "x"; "y"; "a" ]
+
 (* i32-producing accessors on the reference parameters: struct fields, an array
    element, the array length. *)
 let field_get () =
@@ -429,7 +435,17 @@ and gen_ref t d : Ast.location Ast.instr =
   let struct_lit name fields =
     nl
       (Ast.Struct
-         (Some (id name), List.map (fun f -> (id f, gen I32 (d - 1))) fields))
+         ( Some (id name),
+           List.map
+             (fun f ->
+               (* Field punning [{f}]: when a like-named i32 binding is in scope
+                  (the i32 globals [x]/[y] or the i32 param [a]), sometimes drop
+                  the value so it is taken from that binding — [None] in the AST.
+                  Other field names (e.g. [pair.b], shadowed by the i64 param [b])
+                  are never punned, so the pun always type-checks. *)
+               if List.mem f punnable_field && rnd 3 = 0 then (id f, None)
+               else (id f, Some (gen I32 (d - 1))))
+             fields ))
   in
   match t with
   | Point -> (
@@ -700,6 +716,26 @@ let type_decls : Ast.location Ast.modulefield list =
                  Ast.{ params = [| nl (None, I32) |]; results = [| I32 |] }) );
       |];
     Ast.Type [| nl (id "k", subtype (Ast.Cont (id "task"))) |];
+    (* Immutable i32 globals named after the [point] fields [x]/[y] (which have no
+       like-named parameter), so a struct literal can *pun* those fields — a
+       punned [x]/[y] reads these globals. The [pair] field [a] puns instead to
+       the i32 parameter [a]; see [punnable_field] / [struct_lit]. *)
+    Ast.Global
+      {
+        name = id "x";
+        mut = false;
+        typ = Some I32;
+        def = nl (Ast.Int "0");
+        attributes = [];
+      };
+    Ast.Global
+      {
+        name = id "y";
+        mut = false;
+        typ = Some I32;
+        def = nl (Ast.Int "0");
+        attributes = [];
+      };
     Ast.Tag
       {
         name = id "stop";

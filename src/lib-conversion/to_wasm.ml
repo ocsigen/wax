@@ -431,9 +431,9 @@ let labels_in_list l =
     | Call (a, l) | TailCall (a, l) ->
         instr a;
         lst l
-    | Struct (_, fs) -> List.iter (fun (_, e) -> instr e) fs
+    | Struct (_, fs) -> List.iter (fun (_, e) -> opt e) fs
     | StructDesc (d, fs) ->
-        List.iter (fun (_, e) -> instr e) fs;
+        List.iter (fun (_, e) -> opt e) fs;
         instr d
     | Set (_, _, e)
     | Tee (_, e)
@@ -638,6 +638,23 @@ let rec instruction ret ctx i : location Text.instr list =
      can only be unreachable code (type-checking has already succeeded); emit
      [unreachable] for it, which is valid and never executed. *)
   try instruction_desc ret ctx i with Dead_code -> folded loc Unreachable []
+
+(* Lower a struct literal's field values in the type's declared field order.
+   [fields] maps names to values; a punned field ([None], written [{x}]) lowers
+   as [Get x] of the like-named local/global/function. *)
+and struct_field_args ret ctx field_names fields =
+  let field_map =
+    List.fold_left
+      (fun acc (name, instr) -> StringMap.add name.desc (name, instr) acc)
+      StringMap.empty fields
+  in
+  List.concat_map
+    (fun fname ->
+      match StringMap.find fname field_map with
+      | _, Some e -> instruction ret ctx e
+      | name, None ->
+          instruction ret ctx { desc = Get name; info = ([||], name.info) })
+    field_names
 
 and instruction_desc ret ctx i : location Text.instr list =
   let _, loc = i.info in
@@ -1366,15 +1383,7 @@ and instruction_desc ret ctx i : location Text.instr list =
         match opt_idx with Some idx -> idx | None -> expr_type_name i
       in
       let field_names = Hashtbl.find ctx.struct_fields idx.desc in
-      let field_map =
-        List.fold_left
-          (fun acc (name, instr) -> StringMap.add name.desc instr acc)
-          StringMap.empty fields
-      in
-      let instrs =
-        List.map (fun name -> StringMap.find name field_map) field_names
-      in
-      let args_code = List.concat_map (instruction ret ctx) instrs in
+      let args_code = struct_field_args ret ctx field_names fields in
       folded loc (StructNew (index idx)) args_code
   | StructDefault opt_idx ->
       (* Compute the fallback type only when no index was written: [expr_type_name]
@@ -1388,15 +1397,7 @@ and instruction_desc ret ctx i : location Text.instr list =
       (* The struct type is the (exact) result type. *)
       let idx = expr_type_name i in
       let field_names = Hashtbl.find ctx.struct_fields idx.desc in
-      let field_map =
-        List.fold_left
-          (fun acc (name, instr) -> StringMap.add name.desc instr acc)
-          StringMap.empty fields
-      in
-      let instrs =
-        List.map (fun name -> StringMap.find name field_map) field_names
-      in
-      let args_code = List.concat_map (instruction ret ctx) instrs in
+      let args_code = struct_field_args ret ctx field_names fields in
       (* The descriptor operand is pushed last, above the field values. *)
       folded loc (StructNewDesc (index idx)) (args_code @ instruction ret ctx d)
   | StructDefaultDesc d ->

@@ -402,8 +402,7 @@ This maps directly to Wasm's `select` instruction.
 
 ### Blocks
 
-A block groups a sequence of statements, written with `do`. (A bare `{ … }` is
-accepted as shorthand for `do { … }`.)
+A block groups a sequence of statements, written with `do`.
 
 ```wax
 do {
@@ -951,6 +950,16 @@ Field inference takes precedence over the expected type, so when the fields name
 a subtype of the expected type, that subtype is used. The type must still be
 given when the field set is ambiguous (several types share it) or absent (a
 `{..}` default with no fields).
+
+A field written as a bare name is **punned** to the like-named local or global:
+`{x}` is shorthand for `{x: x}`. Punned and explicit fields mix freely, in any
+order:
+
+```wax
+fn make(x: i32, y: i32) -> &point {
+    {x, y: y + 1};              // same as {x: x, y: y + 1}
+}
+```
 
 ### Field Access
 

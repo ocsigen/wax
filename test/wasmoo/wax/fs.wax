@@ -180,7 +180,7 @@ type block = [mut &eq];
                     preopens =
                         {
                             prefix: normalize_prefix(blit_memory_to_string(buffer, len)),
-                            fd: fd,
+                            fd,
                             next: preopens,
                         };
                 }

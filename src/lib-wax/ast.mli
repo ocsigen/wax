@@ -142,9 +142,11 @@ type 'info instr_desc =
   | CastDesc of 'info instr * (* nullable result *) bool * 'info instr
   | Test of 'info instr * reftype
   | NonNull of 'info instr
-  | Struct of ident option * (ident * 'info instr) list
+  (* A field's value is [None] when written in the punning shorthand [{x}],
+     abbreviating [{x: x}]; see the [Struct] constructor in [ast.ml]. *)
+  | Struct of ident option * (ident * 'info instr option) list
   | StructDefault of ident option
-  | StructDesc of 'info instr * (ident * 'info instr) list
+  | StructDesc of 'info instr * (ident * 'info instr option) list
   | StructDefaultDesc of 'info instr
   | StructGet of 'info instr * ident
   | GetDescriptor of 'info instr

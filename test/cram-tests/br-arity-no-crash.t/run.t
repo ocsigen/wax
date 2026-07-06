@@ -9,7 +9,7 @@ zero params. It is now a clean rejection:
 
   $ cat > nonnull.wax <<'WAX'
   > fn f(p: &?any) {
-  >     'l: {
+  >     'l: do {
   >         br_on_non_null 'l p;
   >     }
   > }
@@ -18,7 +18,7 @@ zero params. It is now a clean rejection:
   Error: This instruction provides 1 value(s) but 0 was/were expected.
    ──➤  nonnull.wax:3:27
   1 │ fn f(p: &?any) {
-  2 │     'l: {
+  2 │     'l: do {
   3 │         br_on_non_null 'l p;
     ·                           ^
   4 │     }

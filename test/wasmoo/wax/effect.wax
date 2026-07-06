@@ -184,7 +184,7 @@ fn caml_is_continuation(v: &eq) -> i32 {
             'unsupported: do {
                 become apply_pair(
                     br_on_cast_fail 'unsupported &pair
-                        suspend_fiber(apply_continuation, { func: f, v: v }),
+                        suspend_fiber(apply_continuation, { func: f, v }),
                 );
             };
         caml_failwith(unsupported);
@@ -261,7 +261,7 @@ fn caml_is_continuation(v: &eq) -> i32 {
         }
         become capture_continuation(
             do_resume,
-            { head: stack_head, tail: stack_tail, dat: { f: f, v: v } },
+            { head: stack_head, tail: stack_tail, dat: { f, v } },
         );
     }
 
@@ -287,16 +287,7 @@ fn caml_is_continuation(v: &eq) -> i32 {
         let continuation: &block = [cont_tag as &i31, last_fiber, last_fiber];
         let k1 = pop_fiber();
         become k1.cont_func(
-            {
-                f:
-                    {
-                        func: call_effect_handler,
-                        handler: handler,
-                        eff: eff,
-                        continuation: continuation,
-                    },
-                v: last_fiber,
-            },
+            { f: { func: call_effect_handler, handler, eff, continuation }, v: last_fiber },
             k1,
         );
     }
@@ -323,16 +314,7 @@ fn caml_is_continuation(v: &eq) -> i32 {
         continuation[2] = last_fiber;
         let k1 = pop_fiber();
         become k1.cont_func(
-            {
-                f:
-                    {
-                        func: call_effect_handler,
-                        handler: handler,
-                        eff: p.eff,
-                        continuation: continuation,
-                    },
-                v: last_fiber,
-            },
+            { f: { func: call_effect_handler, handler, eff: p.eff, continuation }, v: last_fiber },
             k1,
         );
     }
@@ -347,10 +329,7 @@ fn caml_is_continuation(v: &eq) -> i32 {
                 tail,
             );
         }
-        become capture_continuation(
-            do_reperform,
-            { eff: eff, continuation: continuation, tail: tail },
-        );
+        become capture_continuation(do_reperform, { eff, continuation, tail });
     }
 
     // Allocate a stack
@@ -358,7 +337,7 @@ fn caml_is_continuation(v: &eq) -> i32 {
     fn call_handler(f: &eq, x: &eq) {
         let continuation: &continuation;
         // Propagate a value or an exception to the parent fiber
-        become continuation.cont_func({ f: f, v: x }, continuation := pop_fiber());
+        become continuation.cont_func({ f, v: x }, continuation := pop_fiber());
     }
 
     #[export = "caml_start_fiber"]
@@ -391,14 +370,14 @@ fn caml_is_continuation(v: &eq) -> i32 {
     fn f_2(hv: &eq, hx: &eq, hf: &eq, f: &eq, v: &eq) -> &eq {
         let stack =
             { value: hv, exn: hx, effect: hf, continuation: initial_cont_closure, next: null };
-        become capture_continuation(do_resume, { head: stack, tail: stack, dat: { f: f, v: v } });
+        become capture_continuation(do_resume, { head: stack, tail: stack, dat: { f, v } });
     }
 
     #[export = "%with_stack_bind"]
     fn f_3(hv: &eq, hx: &eq, hf: &eq, dyn: &eq, bind: &eq, f: &eq, v: &eq) -> &eq {
         let stack =
             { value: hv, exn: hx, effect: hf, continuation: initial_cont_closure, next: null };
-        become capture_continuation(do_resume, { head: stack, tail: stack, dat: { f: f, v: v } });
+        become capture_continuation(do_resume, { head: stack, tail: stack, dat: { f, v } });
     }
 }
 
@@ -433,7 +412,7 @@ fn caml_is_continuation(v: &eq) -> i32 {
 
     #[export = "caml_push_trap"]
     fn caml_push_trap(h: &eq) -> &eq {
-        cps_fiber_stack.exn_stack = { h: h, next: cps_fiber_stack.exn_stack };
+        cps_fiber_stack.exn_stack = { h, next: cps_fiber_stack.exn_stack };
         0 as &i31;
     }
 
@@ -531,7 +510,7 @@ fn caml_is_continuation(v: &eq) -> i32 {
                             if 2 == args.length() {
                                 identity_closure;
                             } else {
-                                { func: trampoline_iterator, i: 2, args: args };
+                                { func: trampoline_iterator, i: 2, args };
                             },
                             f,
                         );

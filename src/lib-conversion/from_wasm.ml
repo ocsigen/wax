@@ -1459,6 +1459,15 @@ let set_desc target e =
       Ast.Set (target, Some op, rhs)
   | _ -> Ast.Set (target, None, e)
 
+(* A decompiled struct-literal field. When the value is a plain [Get] of the
+   like-named local/global/function, use the punning shorthand [{x}] ([None])
+   rather than the redundant [{x: x}]; re-parsing resolves the pun to that same
+   [Get], so the output round-trips. *)
+let struct_field nm (v : _ Ast.instr) =
+  match v.desc with
+  | Ast.Get x when String.equal x.desc nm -> (Ast.no_loc nm, None)
+  | _ -> (Ast.no_loc nm, Some v)
+
 let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   let with_loc (i' : _ Ast.instr_desc) = { i with Ast.desc = i' } in
   let mem_call m meth args =
@@ -1722,9 +1731,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       let* args = Stack.grab (List.length fields) in
       Stack.push 1
         (with_loc
-           (Struct
-              ( Some (idx ctx `Type i),
-                List.map2 (fun nm i -> (Ast.no_loc nm, i)) fields args )))
+           (Struct (Some (idx ctx `Type i), List.map2 struct_field fields args)))
   | StructNewDefault i ->
       Stack.push 1 (with_loc (StructDefault (Some (idx ctx `Type i))))
   | StructNewDesc i ->
@@ -1736,9 +1743,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       let d = pin_descriptor ctx ~exact:true i d in
       let* args = Stack.grab (List.length fields) in
       Stack.push 1
-        (with_loc
-           (StructDesc
-              (d, List.map2 (fun nm i -> (Ast.no_loc nm, i)) fields args)))
+        (with_loc (StructDesc (d, List.map2 struct_field fields args)))
   | StructNewDefaultDesc i ->
       let* d = Stack.pop_width_preserved in
       let d = pin_descriptor ctx ~exact:true i d in

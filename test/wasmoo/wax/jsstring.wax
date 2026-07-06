@@ -210,6 +210,6 @@
     fn caml_extract_bytes(len: i32) {
         let s: &bytes = [0; len];
         read_from_buffer(s, 0, len);
-        stack = { s: s, next: stack };
+        stack = { s, next: stack };
     }
 }
