@@ -8,6 +8,31 @@
 
 type t =
   | Unused_local  (** A local that is declared but never read. *)
+  | Unused_field
+      (** A module field (a function or global) that is defined but never
+          referenced, exported, or used as the start function. *)
+  | Unused_label  (** A block label that is declared but never branched to. *)
+  | Shift_overflow
+      (** A shift by a constant count at least as large as the operand's bit
+          width; Wasm masks the count modulo the width, so the shift is almost
+          certainly not what was meant. *)
+  | Constant_trap
+      (** An operation that always traps on a constant operand: an integer
+          division or remainder by zero, or a trapping float-to-integer
+          conversion of an out-of-range constant. *)
+  | Tautological_comparison
+      (** A comparison whose result is constant regardless of its variable
+          operand: an unsigned comparison against zero, or a comparison of two
+          identical operands. *)
+  | Constant_condition
+      (** A branch, loop, or [select] condition that is a constant, so it always
+          (or never) takes the same path. *)
+  | Unused_result
+      (** The result of a side-effect-free expression is computed and then
+          discarded (e.g. [_ = x + 1]). *)
+  | Dead_code
+      (** A statement that can never be reached because it follows an
+          unconditional branch, [return], or [unreachable]. *)
   | Truncated_coverage
       (** Path-sensitive validation gave up after too many conditional
           configurations. *)

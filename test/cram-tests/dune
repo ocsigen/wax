@@ -1,3 +1,14 @@
+; The correctness lints (see [Warning]) fire during the validation these tests
+; exercise, cluttering unrelated tests with incidental warnings. Hide the whole
+; group by default here via [WAX_WARN]; the lint-specific tests re-enable what
+; they check with an explicit [-W] (which overrides the environment) or by
+; clearing [WAX_WARN].
+
+(env
+ (_
+  (env-vars
+   (WAX_WARN correctness=hidden))))
+
 (cram
  (deps
   %{bin:wax}

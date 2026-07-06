@@ -41,6 +41,67 @@ module Error = struct
     warn ~warning:Wax_utils.Warning.Unused_local ~universal:true context
       ~location "The local variable %a is never used." print_name name
 
+  (* A module field (a function or global) declared but never referenced,
+     exported, or used as the start function. Prefix its name with [_] to
+     silence the warning. *)
+  let unused_field context ~location kind name =
+    warn ~warning:Wax_utils.Warning.Unused_field ~universal:true context
+      ~location "The %s %a is never used." kind print_name name
+
+  (* A block label declared but never branched to. Prefix its name with [_] to
+     silence the warning. *)
+  let unused_label context ~location name =
+    warn ~warning:Wax_utils.Warning.Unused_label ~universal:true context
+      ~location "The label %a is never used." print_name name
+
+  (* A shift whose constant count is at least the operand's bit width. Wasm
+     shifts mask the count modulo the width, so the result is very likely not
+     what was intended. *)
+  let shift_overflow context ~location ~width count =
+    warn ~warning:Wax_utils.Warning.Shift_overflow ~universal:true context
+      ~location
+      ~hint:(fun f () ->
+        Format.fprintf f
+          "Wasm masks the count modulo %d, shifting by %Ld instead." width
+          (Int64.rem count (Int64.of_int width)))
+      "The shift count %Ld is at least the operand width (%d bits)." count width
+
+  (* An integer division or remainder by a constant zero: it always traps. *)
+  let division_by_zero context ~location =
+    warn ~warning:Wax_utils.Warning.Constant_trap ~universal:true context
+      ~location "This integer division or remainder by zero always traps."
+
+  (* A comparison whose result does not depend on its variable operand. *)
+  let tautological_comparison context ~location ~value =
+    warn ~warning:Wax_utils.Warning.Tautological_comparison ~universal:true
+      context ~location "This comparison is always %b." value
+
+  (* A branch, loop, or [select] condition that is a constant. *)
+  let constant_condition context ~location ~value =
+    warn ~warning:Wax_utils.Warning.Constant_condition ~universal:true context
+      ~location "This condition is always %b." value
+
+  (* A side-effect-free expression whose result is computed and then dropped. *)
+  let unused_result context ~location =
+    warn ~warning:Wax_utils.Warning.Unused_result ~universal:true context
+      ~location
+      "The result of this expression is discarded, and computing it has no \
+       effect."
+
+  (* A trapping float-to-integer conversion of a constant that lies outside the
+     target type's range (or is NaN/infinite): it always traps. *)
+  let conversion_out_of_range context ~location =
+    warn ~warning:Wax_utils.Warning.Constant_trap ~universal:true context
+      ~location
+      "This conversion always traps: the constant is out of the target type's \
+       range."
+
+  (* A statement that can never be reached: it follows an unconditional branch,
+     [return], or [unreachable]. [related] points at the diverging instruction. *)
+  let dead_code context ~location ~related =
+    warn ~warning:Wax_utils.Warning.Dead_code ~universal:true context ~location
+      ~related "This code is unreachable."
+
   let empty_stack context ~location =
     report context ~location "The stack is empty."
 
@@ -480,9 +541,17 @@ module Tbl = struct
     kind : string;
     namespace : Namespace.t;
     tbl : (string, (Cond.t * 'a) list) Hashtbl.t;
+    (* Names referenced (looked up) through this table, so a declaration that is
+       never referenced can be reported as unused. Populated by [resolve];
+       queried by [is_used]. *)
+    used : (string, unit) Hashtbl.t;
   }
 
-  let make namespace kind = { kind; namespace; tbl = Hashtbl.create 16 }
+  let make namespace kind =
+    { kind; namespace; tbl = Hashtbl.create 16; used = Hashtbl.create 16 }
+
+  (* Whether a name declared in this table has been referenced. *)
+  let is_used env name = Hashtbl.mem env.used name
   let cur env = !(env.namespace.cond)
   let entries env x = try Hashtbl.find env.tbl x.desc with Not_found -> []
 
@@ -500,20 +569,27 @@ module Tbl = struct
     | [] -> Hashtbl.replace env.tbl x.desc [ (cur env, v) ]
 
   (* Pick the declaration whose assumption is entailed by the current one,
-     falling back to one merely compatible with it, then to the most recent. *)
+     falling back to one merely compatible with it, then to the most recent.
+     A successful lookup marks the name referenced (for the unused-field lint);
+     [resolve] is only ever called to look up a reference, never for a
+     declaration (which goes through [add]). *)
   let resolve env x =
-    match entries env x with
-    | [] -> None
-    | [ (_, v) ] -> Some v
-    | l -> (
-        let c = cur env in
-        let pick p = Option.map snd (List.find_opt (fun (c', _) -> p c') l) in
-        match pick (fun c' -> Cond.logical_implies c c') with
-        | Some _ as r -> r
-        | None -> (
-            match pick (fun c' -> Cond.is_satisfiable (Cond.and_ c c')) with
-            | Some _ as r -> r
-            | None -> ( match l with (_, v) :: _ -> Some v | [] -> None)))
+    let r =
+      match entries env x with
+      | [] -> None
+      | [ (_, v) ] -> Some v
+      | l -> (
+          let c = cur env in
+          let pick p = Option.map snd (List.find_opt (fun (c', _) -> p c') l) in
+          match pick (fun c' -> Cond.logical_implies c c') with
+          | Some _ as r -> r
+          | None -> (
+              match pick (fun c' -> Cond.is_satisfiable (Cond.and_ c c')) with
+              | Some _ as r -> r
+              | None -> ( match l with (_, v) :: _ -> Some v | [] -> None)))
+    in
+    (match r with Some _ -> Hashtbl.replace env.used x.desc () | None -> ());
+    r
 
   let find d env x =
     match resolve env x with
@@ -889,6 +965,14 @@ type module_context = {
   local_decls : ident list ref;
       (* The [let]-bound locals declared in the current function, in declaration
          order, so an unread one can be reported as unused. Reset per function. *)
+  used_labels : StringSet.t ref;
+      (* Names of block labels branched to so far in the current function
+         (marked by [branch_target]). A [ref] so a branch nested in a block
+         propagates to the function level. Reset per function. *)
+  label_decls : ident list;
+      (* The block labels declared in the current function's body, collected up
+         front from the source AST (see [collect_labels]), so one never branched
+         to can be reported as unused. Reset per function. *)
   assigned_locals : StringSet.t;
       (* Names of locals assigned ([Set]/[Tee] targets) anywhere in the current
          function, collected once on entry (see [collect_assigned_locals]). Lets
@@ -1541,7 +1625,9 @@ let branch_target ctx label =
         Error.unbound_name ctx.diagnostics ~location:label.info ~suggestions
           "label" label;
         [||]
-    | (Some label', res) :: _ when label.desc = label' -> res
+    | (Some label', res) :: _ when label.desc = label' ->
+        ctx.used_labels := StringSet.add label.desc !(ctx.used_labels);
+        res
     | _ :: rem -> find rem label
   in
   find ctx.control_types label
@@ -1735,6 +1821,154 @@ let check_type ctx i ty =
   if not ok then
     Error.instruction_type_mismatch ctx.diagnostics ~location:(snd i.info) ty'
       ty
+
+(*** Lint checks on constant operands ***)
+
+(* Parse a Wax integer literal (decimal or [0x] hex, with [_] separators) to an
+   [int64], or [None] if it is malformed or does not fit. *)
+let int_literal_value s =
+  Int64.of_string_opt (String.concat "" (String.split_on_char '_' s))
+
+(* Whether [e] is the integer literal zero. *)
+let int_literal_value_is_zero (e : _ Ast.instr) =
+  match e.desc with Ast.Int s -> int_literal_value s = Some 0L | _ -> false
+
+(* [x << n] / [x >> n] with a constant [n] at least the operand's bit width:
+   Wasm masks [n] modulo the width, so the shift is almost certainly not what
+   was meant. Only fires when the operand is a concrete i32/i64 (so the width is
+   known) and [n] a non-negative literal. *)
+let lint_shift ctx op result rhs =
+  match op.desc with
+  | Shl | Shr _ -> (
+      match rhs.desc with
+      | Ast.Int s -> (
+          match (int_literal_value s, Cell.get result) with
+          | Some n, Valtype { internal = (I32 | I64) as t; _ } when n >= 0L ->
+              let width = match t with I32 -> 32 | _ -> 64 in
+              if n >= Int64.of_int width then
+                Error.shift_overflow ctx.diagnostics ~location:op.info ~width n
+          | _ -> ())
+      | _ -> ())
+  | _ -> ()
+
+(* Integer [/] or [%] by a constant zero always traps. [Div (Some _)] and
+   [Rem _] are the integer forms ([Div None] is float division, which does not
+   trap on a zero divisor). *)
+let lint_division ctx op rhs =
+  match op.desc with
+  | (Div (Some _) | Rem _) when int_literal_value_is_zero rhs ->
+      Error.division_by_zero ctx.diagnostics ~location:op.info
+  | _ -> ()
+
+(* Parse a Wax float literal (decimal or hex float with [_] separators, or the
+   [nan:0x…] form) to an OCaml float, or [None] if it is malformed. *)
+let float_literal_value s =
+  if String.length s >= 3 && String.equal (String.sub s 0 3) "nan" then
+    Some Float.nan
+  else float_of_string_opt (String.concat "" (String.split_on_char '_' s))
+
+(* The float value of a constant operand, looking through a leading sign. *)
+let rec float_operand_value i =
+  match i.desc with
+  | Ast.Float s -> float_literal_value s
+  | UnOp ({ desc = Neg; _ }, e) -> Option.map Float.neg (float_operand_value e)
+  | UnOp ({ desc = Pos; _ }, e) -> float_operand_value e
+  | _ -> None
+
+(* Whether a trapping (toward-zero) float-to-integer conversion of [f] to the
+   given target/signage would trap: [f] is NaN or infinite, or its truncation
+   lies outside the target range. Bounds are the exact powers of two, so a value
+   is flagged only when it is definitely out of range (no false positives near a
+   boundary the float type cannot represent exactly). *)
+let float_conversion_traps target signage f =
+  if not (Float.is_finite f) then true
+  else
+    let t = Float.trunc f in
+    let pow2 n = Float.ldexp 1. n in
+    match (target, signage) with
+    | `I32, Signed -> t < -.pow2 31 || t >= pow2 31
+    | `I32, Unsigned -> t < 0. || t >= pow2 32
+    | `I64, Signed -> t < -.pow2 63 || t >= pow2 63
+    | `I64, Unsigned -> t < 0. || t >= pow2 64
+
+(* A trapping float-to-integer conversion ([e as i32_s] and the like — the
+   [strict] cast forms lower to [trunc], which traps, rather than [trunc_sat])
+   of a constant float that is out of the target range: it always traps. *)
+let lint_conversion ctx ~location typ operand =
+  match typ with
+  | Signedtype { typ = (`I32 | `I64) as target; signage; strict = true } -> (
+      match float_operand_value operand with
+      | Some f when float_conversion_traps target signage f ->
+          Error.conversion_out_of_range ctx.diagnostics ~location
+      | _ -> ())
+  | _ -> ()
+
+(* Whether two operands are the same pure read (a local or global [get]), so the
+   two evaluations yield the same value with no side effect. Restricted to [get]
+   to stay conservative — no calls, no field/array reads that could trap. *)
+let identical_operands (l : _ Ast.instr) (r : _ Ast.instr) =
+  match (l.desc, r.desc) with
+  | Get a, Get b -> String.equal a.desc b.desc
+  | _ -> false
+
+(* A comparison whose result is constant regardless of its variable operand: an
+   unsigned comparison against zero ([a <u 0] is false, [a >=u 0] is true), or a
+   comparison of two identical operands ([a < a] is false, [a == a] is true).
+   The signed/unsigned option marks an integer comparison; [Eq]/[Ne] carry no
+   signage, so a self-comparison is only flagged for a concrete integer operand
+   (a float [a == a] is false on NaN, and reference identity is a separate
+   concern). *)
+let lint_comparison ctx op l r =
+  let is_int e =
+    match Cell.get (expression_type ctx e) with
+    | Valtype { internal = I32 | I64; _ } -> true
+    | _ -> false
+  in
+  let tautology =
+    match op.desc with
+    | Lt (Some Unsigned) when int_literal_value_is_zero r -> Some false
+    | Ge (Some Unsigned) when int_literal_value_is_zero r -> Some true
+    | Gt (Some Unsigned) when int_literal_value_is_zero l -> Some false
+    | Le (Some Unsigned) when int_literal_value_is_zero l -> Some true
+    | (Lt (Some _) | Gt (Some _)) when identical_operands l r -> Some false
+    | (Le (Some _) | Ge (Some _)) when identical_operands l r -> Some true
+    | Eq when identical_operands l r && is_int l -> Some true
+    | Ne when identical_operands l r && is_int l -> Some false
+    | _ -> None
+  in
+  match tautology with
+  | Some value ->
+      Error.tautological_comparison ctx.diagnostics ~location:op.info ~value
+  | None -> ()
+
+(* A branch, loop, or [select] condition that is a constant literal, so it
+   always takes the same path. [is_while] excludes the idiomatic infinite loop
+   [while <nonzero>] (only [while 0], a loop that never runs, is flagged). *)
+let lint_condition ctx ?(is_while = false) (cond : _ Ast.instr) =
+  match cond.desc with
+  | Ast.Int s -> (
+      match int_literal_value s with
+      | Some n ->
+          let value = n <> 0L in
+          if not (is_while && value) then
+            Error.constant_condition ctx.diagnostics ~location:cond.info ~value
+      | None -> ())
+  | _ -> ()
+
+(* Whether evaluating [e] has no side effect and cannot trap, so computing it
+   only to discard the result is pointless. Conservative: reads of locals/
+   globals and constants, and pure arithmetic/logic over them, but not calls,
+   assignments, memory/field/array accesses, casts, or trapping arithmetic
+   ([/]/[%]). *)
+let rec is_effectless (e : _ Ast.instr) =
+  match e.desc with
+  | Get _ | Int _ | Float _ | Char _ | String _ | Null | StructDefault _ -> true
+  | UnOp (_, a) -> is_effectless a
+  | BinOp ({ desc = Div _ | Rem _; _ }, _, _) -> false
+  | BinOp (_, a, b) -> is_effectless a && is_effectless b
+  | Select (a, b, c) -> is_effectless a && is_effectless b && is_effectless c
+  | Test (a, _) -> is_effectless a
+  | _ -> false
 
 (* The concrete type an initializer would take with no annotation, matching the
    resolution of the unannotated [let] case. Returns [None] for types we never
@@ -2324,6 +2558,206 @@ let rec collect_assigned_locals acc i =
   | Get _ | Path _ | Unreachable | Nop | Hole | Null | Char _ | String _ | Int _
   | Float _ | StructDefault _ ->
       acc
+
+(* Accumulate into [acc] the block labels declared anywhere in [i], from the
+   source AST (before any lowering, so synthesized labels from [while]/[dispatch]/
+   [match] desugaring are never collected). Every case recurses; the labelled
+   constructs also contribute their own label. The [dispatch]/[match] arm labels
+   are branch targets, not declarations, so they are not collected. Mirrors the
+   case coverage of {!collect_assigned_locals}. *)
+let rec collect_labels acc (i : _ Ast.instr) =
+  let in_list acc l = List.fold_left collect_labels acc l in
+  let in_opt acc o =
+    match o with Some i -> collect_labels acc i | None -> acc
+  in
+  let add acc label = match label with Some l -> l :: acc | None -> acc in
+  match i.desc with
+  | Block { label; block; _ }
+  | Loop { label; block; _ }
+  | TryTable { label; block; _ } ->
+      in_list (add acc label) block
+  | While { label; cond; step; block; _ } ->
+      let acc = collect_labels (add acc label) cond in
+      let acc = Option.fold ~none:acc ~some:(collect_labels acc) step in
+      in_list acc block
+  | If { label; cond; if_block; else_block; _ } ->
+      let acc = in_list (collect_labels (add acc label) cond) if_block.desc in
+      Option.fold ~none:acc ~some:(fun b -> in_list acc b.desc) else_block
+  | Try { label; block; catches; catch_all; _ } ->
+      let acc = in_list (add acc label) block in
+      let acc = List.fold_left (fun acc (_, b) -> in_list acc b) acc catches in
+      Option.fold ~none:acc ~some:(in_list acc) catch_all
+  | Call (t, args) | TailCall (t, args) -> in_list (collect_labels acc t) args
+  | Set (_, _, e)
+  | Tee (_, e)
+  | Cast (e, _)
+  | Test (e, _)
+  | NonNull e
+  | StructGet (e, _)
+  | GetDescriptor e
+  | StructDefaultDesc e
+  | UnOp (_, e)
+  | Br_if (_, e)
+  | Hinted (_, e)
+  | Br_table (_, e)
+  | Br_on_null (_, e)
+  | Br_on_non_null (_, e)
+  | Br_on_cast (_, _, e)
+  | Br_on_cast_fail (_, _, e)
+  | ThrowRef e
+  | ArrayDefault (_, e)
+  | ContNew (_, e) ->
+      collect_labels acc e
+  | Struct (_, fields) ->
+      List.fold_left (fun acc (_, e) -> collect_labels acc e) acc fields
+  | StructDesc (d, fields) ->
+      List.fold_left
+        (fun acc (_, e) -> collect_labels acc e)
+        (collect_labels acc d) fields
+  | CastDesc (e1, _, e2)
+  | Br_on_cast_desc_eq (_, _, e1, e2)
+  | Br_on_cast_desc_eq_fail (_, _, e1, e2)
+  | StructSet (e1, _, e2)
+  | Array (_, e1, e2)
+  | ArraySegment (_, _, e1, e2)
+  | ArrayGet (e1, e2)
+  | BinOp (_, e1, e2) ->
+      collect_labels (collect_labels acc e1) e2
+  | ArraySet (e1, e2, e3) | Select (e1, e2, e3) ->
+      collect_labels (collect_labels (collect_labels acc e1) e2) e3
+  | ArrayFixed (_, l)
+  | ContBind (_, _, l)
+  | Suspend (_, l)
+  | Resume (_, _, l)
+  | ResumeThrow (_, _, _, l)
+  | ResumeThrowRef (_, _, l)
+  | Switch (_, _, l)
+  | Sequence l ->
+      in_list acc l
+  | Dispatch { index; arms; _ } ->
+      List.fold_left
+        (fun acc (_, b) -> in_list acc b)
+        (collect_labels acc index) arms
+  | Match { scrutinee; arms; default } ->
+      let acc = collect_labels acc scrutinee in
+      let acc = List.fold_left (fun acc (_, b) -> in_list acc b) acc arms in
+      in_list acc default
+  | Let (_, body) -> in_opt acc body
+  | Br (_, o) | Throw (_, o) | Return o -> in_opt acc o
+  | If_annotation { then_body; else_body; _ } ->
+      let acc = in_list acc then_body in
+      Option.fold ~none:acc ~some:(in_list acc) else_body
+  | Get _ | Path _ | Unreachable | Nop | Hole | Null | Char _ | String _ | Int _
+  | Float _ | StructDefault _ ->
+      acc
+
+(* Walk the source AST (before any lowering, so [while] keeps its own condition
+   rather than the [if] it desugars to) and report the purely-syntactic lints: a
+   constant branch/loop/select condition, and a drop ([_ = e]) of a
+   side-effect-free expression. Runs once over the source rather than in the type
+   checker's expression handling. Mirrors the case coverage of
+   {!collect_labels}. *)
+let rec lint_source ctx (i : _ Ast.instr) =
+  let list l = List.iter (lint_source ctx) l in
+  let opt o = Option.iter (lint_source ctx) o in
+  match i.desc with
+  | If { cond; if_block; else_block; _ } ->
+      lint_condition ctx cond;
+      lint_source ctx cond;
+      list if_block.desc;
+      Option.iter (fun b -> list b.desc) else_block
+  | While { cond; step; block; _ } ->
+      lint_condition ctx ~is_while:true cond;
+      lint_source ctx cond;
+      opt step;
+      list block
+  | Select (c, t, e) ->
+      lint_condition ctx c;
+      lint_source ctx c;
+      lint_source ctx t;
+      lint_source ctx e
+  | Br_if (_, c) ->
+      lint_condition ctx c;
+      lint_source ctx c
+  | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } -> list block
+  | Try { block; catches; catch_all; _ } ->
+      list block;
+      List.iter (fun (_, b) -> list b) catches;
+      Option.iter list catch_all
+  | Call (t, args) | TailCall (t, args) ->
+      lint_source ctx t;
+      list args
+  | Set (_, _, e) ->
+      (* An assignment to a named target; the pointless-drop check lives in the
+         [Let] case, since a drop [_ = e] is an anonymous binding. *)
+      lint_source ctx e
+  | Tee (_, e)
+  | Cast (e, _)
+  | Test (e, _)
+  | NonNull e
+  | StructGet (e, _)
+  | GetDescriptor e
+  | StructDefaultDesc e
+  | UnOp (_, e)
+  | Hinted (_, e)
+  | Br_table (_, e)
+  | Br_on_null (_, e)
+  | Br_on_non_null (_, e)
+  | Br_on_cast (_, _, e)
+  | Br_on_cast_fail (_, _, e)
+  | ThrowRef e
+  | ArrayDefault (_, e)
+  | ContNew (_, e) ->
+      lint_source ctx e
+  | Struct (_, fields) -> List.iter (fun (_, e) -> lint_source ctx e) fields
+  | StructDesc (d, fields) ->
+      lint_source ctx d;
+      List.iter (fun (_, e) -> lint_source ctx e) fields
+  | CastDesc (e1, _, e2)
+  | Br_on_cast_desc_eq (_, _, e1, e2)
+  | Br_on_cast_desc_eq_fail (_, _, e1, e2)
+  | StructSet (e1, _, e2)
+  | Array (_, e1, e2)
+  | ArraySegment (_, _, e1, e2)
+  | ArrayGet (e1, e2)
+  | BinOp (_, e1, e2) ->
+      lint_source ctx e1;
+      lint_source ctx e2
+  | ArraySet (e1, e2, e3) ->
+      lint_source ctx e1;
+      lint_source ctx e2;
+      lint_source ctx e3
+  | ArrayFixed (_, l)
+  | ContBind (_, _, l)
+  | Suspend (_, l)
+  | Resume (_, _, l)
+  | ResumeThrow (_, _, _, l)
+  | ResumeThrowRef (_, _, l)
+  | Switch (_, _, l)
+  | Sequence l ->
+      list l
+  | Dispatch { index; arms; _ } ->
+      lint_source ctx index;
+      List.iter (fun (_, b) -> list b) arms
+  | Match { scrutinee; arms; default } ->
+      lint_source ctx scrutinee;
+      List.iter (fun (_, b) -> list b) arms;
+      list default
+  | Let (bindings, body) ->
+      (* A drop [_ = e] is a single anonymous binding; if [e] is effect-free,
+         computing it only to discard the result is pointless. *)
+      (match (bindings, body) with
+      | [ (None, _) ], Some e when is_effectless e ->
+          Error.unused_result ctx.diagnostics ~location:e.info
+      | _ -> ());
+      opt body
+  | Br (_, o) | Throw (_, o) | Return o -> opt o
+  | If_annotation { then_body; else_body; _ } ->
+      list then_body;
+      Option.iter list else_body
+  | Get _ | Path _ | Unreachable | Nop | Hole | Null | Char _ | String _ | Int _
+  | Float _ | StructDefault _ ->
+      ()
 
 (* If [meth] names an intrinsic written as a method on a value receiver — a SIMD
    lane/vector op [v.add_i32x4(b)], or a scalar [x.copysign(y)], [x.min(y)],
@@ -4119,6 +4553,11 @@ and type_arith ctx i =
                 ignore (check_float_bin_op ctx ~location:op.info ty1 ty2);
                 i32_cell)
       in
+      if ctx.warn_unused then begin
+        lint_shift ctx op ty i2';
+        lint_division ctx op i2';
+        lint_comparison ctx op i1' i2'
+      end;
       return_expression i (BinOp (op, i1', i2')) ty
   | UnOp (op, i') ->
       let* i' = instruction ctx i' in
@@ -4163,6 +4602,7 @@ and type_cast ctx i =
   match i.desc with
   | Cast (i', typ) ->
       let* i' = instruction ctx i' in
+      if ctx.warn_unused then lint_conversion ctx ~location:i.info typ i';
       (* When converting from Wasm, fuse two casts whose inserted intermediate
          type is superfluous (only when [ctx.simplify]); [to_wasm] re-expands
          each single cast to the same instructions:
@@ -7059,13 +7499,34 @@ and block_contents ctx results l =
             return [ i' ])
           st
   | i :: r ->
-      let* i' = toplevel_instruction ctx i in
-      let* () =
-        push_results
-          (Array.to_list (Array.map (fun ty -> (i.info, ty)) (fst i'.info)))
-      in
-      let* r' = block_contents ctx results r in
-      return (merge_let_tuple ctx i' r')
+      fun st ->
+        let st_after, i' = toplevel_instruction ctx i st in
+        (* Dead code: the stack was reachable before [i], typing [i] left it
+           polymorphic ([Unreachable] — [i] is a [br]/[return]/[unreachable] or
+           the like), and a statement still follows. Report the first such
+           statement, pointing back at the divergence. The following statements
+           are then typed on the [Unreachable] stack, so this fires once, at the
+           point control is lost. *)
+        (match (st, st_after, r) with
+        | (Empty | Cons _), Unreachable, dead :: _ when ctx.warn_unused ->
+            Error.dead_code ctx.diagnostics ~location:dead.info
+              ~related:
+                [
+                  {
+                    Wax_utils.Diagnostic.location = i.info;
+                    message =
+                      (fun f () ->
+                        Format.fprintf f "Control never returns from here.");
+                  };
+                ]
+        | _ -> ());
+        let st_after, () =
+          push_results
+            (Array.to_list (Array.map (fun ty -> (i.info, ty)) (fst i'.info)))
+            st_after
+        in
+        let st_after, r' = block_contents ctx results r st_after in
+        (st_after, merge_let_tuple ctx i' r')
 
 and block ctx loc label params results br_params block =
   with_empty_stack ctx ~location:loc ~kind:Block
@@ -7894,6 +8355,10 @@ let rec functions ctx fields =
               (* Fresh per-function tracking of declared and read locals. *)
               read_locals = ref StringSet.empty;
               local_decls = ref [];
+              (* Fresh per-function tracking of branched-to labels, and the
+                 labels declared in the body (collected once, up front). *)
+              used_labels = ref StringSet.empty;
+              label_decls = List.fold_left collect_labels [] body;
               (* Locals a later assignment writes, collected up front so a
                  fused [let]'s drop can spot a write-once binding (linear: one
                  traversal per function, not per binding). *)
@@ -7904,14 +8369,18 @@ let rec functions ctx fields =
               return_types;
             }
           in
+          (* The syntactic lints (constant conditions, dropped pure values) read
+             the source body, before typing shadows [body] with the typed one. *)
+          if ctx.warn_unused then List.iter (lint_source ctx) body;
           let body =
             with_empty_stack ctx ~location ~kind:Function
               (let* body = block_contents ctx return_types body in
                let* () = pop_args ctx ~location return_types in
                return body)
           in
-          (* A local whose name starts with [_] is intentionally unused. *)
-          if ctx.warn_unused then
+          (* A local or label whose name starts with [_] is intentionally
+             unused. *)
+          if ctx.warn_unused then begin
             List.iter
               (fun name ->
                 let n = name.desc in
@@ -7920,6 +8389,15 @@ let rec functions ctx fields =
                   && not (String.length n > 0 && n.[0] = '_')
                 then Error.unused_local ctx.diagnostics ~location:name.info name)
               (List.rev !(ctx.local_decls));
+            List.iter
+              (fun name ->
+                let n = name.desc in
+                if
+                  (not (StringSet.mem n !(ctx.used_labels)))
+                  && not (String.length n > 0 && n.[0] = '_')
+                then Error.unused_label ctx.diagnostics ~location:name.info name)
+              (List.rev ctx.label_decls)
+          end;
           Some
             {
               f with
@@ -8190,6 +8668,8 @@ let type_configuration ?(warn_unused = false) ?(build = true)
       warn_unused;
       read_locals = ref StringSet.empty;
       local_decls = ref [];
+      used_labels = ref StringSet.empty;
+      label_decls = [];
       assigned_locals = StringSet.empty;
       initialized_locals = StringSet.empty;
       control_types = [];
@@ -8322,6 +8802,36 @@ let type_configuration ?(warn_unused = false) ?(build = true)
   in
   let phased_fields = globals ctx fields in
   let typed_fields = functions ctx phased_fields in
+  (* Report module fields — functions and globals — that are defined but never
+     referenced (the module-level analog of an unused local). A field is exempt
+     if its name starts with [_], if it is exported or is the start function
+     (both externally reachable), or if it is an import (an external contract,
+     not a definition; those are [Fundecl]/[GlobalDecl] and never reach the
+     arms below). Uses are collected by [Tbl.resolve] as names are looked up
+     while typing the globals and function bodies above. *)
+  if warn_unused then begin
+    let exempt field =
+      List.exists
+        (fun (k, _) -> k = "export" || k = "start" || k = "import")
+        (field_attributes field)
+    in
+    let unused tbl (name : ident) =
+      (not (String.length name.desc > 0 && name.desc.[0] = '_'))
+      && not (Tbl.is_used tbl name.desc)
+    in
+    walk_fields
+      (fun field ->
+        match field.desc with
+        | Func { name; _ }
+          when (not (exempt field.desc)) && unused ctx.functions name ->
+            Error.unused_field ctx.diagnostics ~location:name.info "function"
+              name
+        | Global { name; _ }
+          when (not (exempt field.desc)) && unused ctx.globals name ->
+            Error.unused_field ctx.diagnostics ~location:name.info "global" name
+        | _ -> ())
+      fields
+  end;
   ( ctx.type_context.types,
     (* Building the annotated module is only needed for the deferred conversion
        to Wasm/WAT; a validation-only pass ([~build:false]) runs the checking

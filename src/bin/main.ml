@@ -431,15 +431,61 @@ let resolve_format file_opt format_opt ~default =
       match detect_format file with Some fmt -> fmt | None -> default)
   | None, None -> default
 
-(* Build a warning policy from the [-W] specs, applied left to right (the names
-   are already validated by [warn_option]'s converter). *)
+(* Warning specs from the [WAX_WARN] environment variable, a list of
+   [NAME=LEVEL] specs separated by commas or whitespace (e.g.
+   [WAX_WARN="correctness=hidden unused-local=error"]). They seed the policy
+   before the command-line [-W] specs, which therefore refine them: unlike
+   cmdliner's built-in env fallback (dropped entirely when the flag is given),
+   the environment defaults still apply when [-W] is passed. A malformed or
+   unknown entry is reported on stderr and skipped, so a stray value never
+   aborts the run. *)
+let wax_warn_env = "WAX_WARN"
+
+let env_warn_specs () =
+  match Sys.getenv_opt wax_warn_env with
+  | None | Some "" -> []
+  | Some s ->
+      String.split_on_char ',' s
+      |> List.concat_map (String.split_on_char ' ')
+      |> List.concat_map (String.split_on_char '\t')
+      |> List.filter (fun s -> s <> "")
+      |> List.filter_map (fun spec ->
+          match Wax_utils.Warning.parse_spec spec with
+          | Ok (name, level) -> (
+              match
+                Wax_utils.Warning.set Wax_utils.Warning.default_policy name
+                  level
+              with
+              | Ok _ -> Some (name, level)
+              | Error e ->
+                  prerr_endline (Printf.sprintf "wax: %s: %s" wax_warn_env e);
+                  None)
+          | Error e ->
+              prerr_endline (Printf.sprintf "wax: %s: %s" wax_warn_env e);
+              None)
+
+(* Build a warning policy: the defaults, then the [WAX_WARN] environment specs,
+   then the [-W] command-line specs — each left to right, so later settings win
+   (command line over environment over defaults). The command-line names are
+   already validated by [warn_option]'s converter. *)
 let build_policy specs =
   List.fold_left
     (fun policy (name, level) ->
       match Wax_utils.Warning.set policy name level with
       | Ok policy -> policy
       | Error _ -> policy)
-    Wax_utils.Warning.default_policy specs
+    Wax_utils.Warning.default_policy
+    (env_warn_specs () @ specs)
+
+(* Documents [WAX_WARN] in the ENVIRONMENT section of each command's help. The
+   variable is read directly by [env_warn_specs] (not via cmdliner's [~env]
+   fallback, which would be dropped when [-W] is given). *)
+let warn_env_info =
+  Cmd.Env.info wax_warn_env
+    ~doc:
+      "Default warning levels applied before any $(b,-W) option, as a list of \
+       $(i,NAME=LEVEL) specs separated by commas or whitespace (e.g. \
+       $(b,correctness=hidden unused-local=error))."
 
 (*** Command implementations ***)
 
@@ -825,7 +871,8 @@ let warn_option =
      unused), or $(b,all); $(i,LEVEL) is $(b,hidden), $(b,warning), or \
      $(b,error). Later settings override earlier ones, so $(b,-W all=error -W \
      unused-local=warning) makes every warning fatal except unused locals. \
-     Repeatable."
+     Repeatable. The $(b,WAX_WARN) environment variable sets defaults applied \
+     before these (see the ENVIRONMENT section)."
   in
   let warn_conv =
     let parse s =
@@ -995,7 +1042,7 @@ let format_cmd =
       `S Manpage.s_options;
     ]
   in
-  Cmd.v (Cmd.info "format" ~doc ~man ~exits) format_term
+  Cmd.v (Cmd.info "format" ~doc ~man ~exits ~envs:[ warn_env_info ]) format_term
 
 let check_term =
   let+ format_opt = format_input
@@ -1027,11 +1074,11 @@ let check_cmd =
       `S Manpage.s_options;
     ]
   in
-  Cmd.v (Cmd.info "check" ~doc ~man ~exits) check_term
+  Cmd.v (Cmd.info "check" ~doc ~man ~exits ~envs:[ warn_env_info ]) check_term
 
 let convert_cmd =
   let doc = "Convert between WebAssembly formats (the default command)" in
-  Cmd.v (Cmd.info "convert" ~doc ~exits) convert_term
+  Cmd.v (Cmd.info "convert" ~doc ~exits ~envs:[ warn_env_info ]) convert_term
 
 let main_cmd =
   let doc = "Convert between WebAssembly formats (.wat, .wasm, .wax)" in
@@ -1067,7 +1114,7 @@ let main_cmd =
     ]
   in
   Cmd.group
-    (Cmd.info "wax" ~doc ~man ~exits)
+    (Cmd.info "wax" ~doc ~man ~exits ~envs:[ warn_env_info ])
     ~default:convert_term
     [ convert_cmd; format_cmd; check_cmd ]
 

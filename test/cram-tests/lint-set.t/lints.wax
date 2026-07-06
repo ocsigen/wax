@@ -1,0 +1,46 @@
+const UNUSED = 42;
+
+#[export = "shift"]
+fn shift(x: i32) -> i32 {
+    x << 40;
+}
+
+#[export = "divzero"]
+fn divzero(x: i32) -> i32 {
+    x /s 0;
+}
+
+#[export = "trunc"]
+fn trunc() -> i32 {
+    1e30 as i32_s_strict;
+}
+
+#[export = "dead"]
+fn dead() -> i32 {
+    return 1;
+    2;
+}
+
+#[export = "tautology"]
+fn tautology(x: i32) -> i32 {
+    if x >=u 0 { return 1; }
+    x;
+}
+
+#[export = "constcond"]
+fn constcond(x: i32) -> i32 {
+    if 0 { return 1; }
+    x;
+}
+
+#[export = "unusedresult"]
+fn unusedresult(x: i32) -> i32 {
+    _ = x + 1;
+    x;
+}
+
+#[export = "unusedlabel"]
+fn unusedlabel(x: i32) -> i32 {
+    _ = 'unused: do { x; };
+    x;
+}

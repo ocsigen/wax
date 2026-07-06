@@ -1,5 +1,13 @@
 type t =
   | Unused_local
+  | Unused_field
+  | Unused_label
+  | Shift_overflow
+  | Constant_trap
+  | Tautological_comparison
+  | Constant_condition
+  | Unused_result
+  | Dead_code
   | Truncated_coverage
   | Naming_conflict
   | Reserved_word_rename
@@ -8,6 +16,14 @@ type t =
 let all =
   [
     Unused_local;
+    Unused_field;
+    Unused_label;
+    Shift_overflow;
+    Constant_trap;
+    Tautological_comparison;
+    Constant_condition;
+    Unused_result;
+    Dead_code;
     Truncated_coverage;
     Naming_conflict;
     Reserved_word_rename;
@@ -16,6 +32,14 @@ let all =
 
 let name = function
   | Unused_local -> "unused-local"
+  | Unused_field -> "unused-field"
+  | Unused_label -> "unused-label"
+  | Shift_overflow -> "shift-count-overflow"
+  | Constant_trap -> "constant-trap"
+  | Tautological_comparison -> "tautological-comparison"
+  | Constant_condition -> "constant-condition"
+  | Unused_result -> "unused-result"
+  | Dead_code -> "dead-code"
   | Truncated_coverage -> "truncated-coverage"
   | Naming_conflict -> "naming-conflict"
   | Reserved_word_rename -> "reserved-word-rename"
@@ -23,6 +47,25 @@ let name = function
 
 let description = function
   | Unused_local -> "A local that is declared but never read."
+  | Unused_field -> "A module field that is defined but never used."
+  | Unused_label -> "A block label that is declared but never branched to."
+  | Shift_overflow ->
+      "A constant shift count is at least the operand's bit width (Wasm masks \
+       it)."
+  | Constant_trap ->
+      "An operation always traps on a constant operand (integer division by \
+       zero, or an out-of-range trapping conversion)."
+  | Tautological_comparison ->
+      "A comparison whose result is constant (an unsigned comparison against \
+       zero, or identical operands)."
+  | Constant_condition ->
+      "A branch, loop, or select condition that is a constant."
+  | Unused_result ->
+      "The result of a side-effect-free expression is computed and then \
+       discarded."
+  | Dead_code ->
+      "A statement is unreachable: it follows an unconditional branch, return, \
+       or unreachable."
   | Truncated_coverage ->
       "Path-sensitive validation gave up after too many configurations."
   | Naming_conflict -> "A Wasm name collided with another and was renamed."
@@ -34,7 +77,18 @@ let description = function
    [set] so it need not be listed here. *)
 let group_table =
   [
-    ("unused", [ Unused_local ]);
+    ("unused", [ Unused_local; Unused_field; Unused_label ]);
+    ( "correctness",
+      [
+        Shift_overflow;
+        Constant_trap;
+        Tautological_comparison;
+        Constant_condition;
+        Unused_result;
+        Dead_code;
+        Unused_field;
+        Unused_label;
+      ] );
     ("naming", [ Naming_conflict; Reserved_word_rename; Generated_name ]);
   ]
 
@@ -50,7 +104,10 @@ type policy = t -> level
    hidden unless explicitly enabled with [-W]; everything else is shown. *)
 let default_policy = function
   | Naming_conflict | Reserved_word_rename | Generated_name -> Hidden
-  | Unused_local | Truncated_coverage -> Displayed
+  | Unused_local | Unused_field | Unused_label | Shift_overflow | Constant_trap
+  | Tautological_comparison | Constant_condition | Unused_result | Dead_code
+  | Truncated_coverage ->
+      Displayed
 
 let resolve (policy : policy) w = policy w
 

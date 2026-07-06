@@ -77,6 +77,34 @@ mistaken for a subcommand). The `format` subcommand reformats files (see
     - *NAME* is a single warning, a group, or `all`:
         - `unused-local` (group `unused`) — a local that is declared but never
           read. Produced while validating; shown by default.
+        - `unused-field` (groups `unused`, `correctness`) — a module field (a
+          function or global) that is defined but never referenced, exported, or
+          used as the start function. The module-level analog of `unused-local`;
+          prefix its name with `_` to silence one. Shown by default.
+        - `unused-label` (groups `unused`, `correctness`) — a block label that
+          is declared but never branched to. Prefix its name with `_` to silence
+          one. Shown by default.
+        - `shift-count-overflow` (group `correctness`) — a shift by a constant
+          count at least the operand's bit width. Wasm masks the count modulo
+          the width, so the shift is almost certainly not what was meant. Shown
+          by default.
+        - `constant-trap` (group `correctness`) — an operation that always traps
+          on a constant operand: an integer division or remainder by zero, or a
+          trapping float-to-integer conversion of an out-of-range constant.
+          Shown by default.
+        - `tautological-comparison` (group `correctness`) — a comparison whose
+          result is constant regardless of its variable operand: an unsigned
+          comparison against zero (`x >=u 0`, `x <u 0`), or two identical
+          operands (`x == x`). Shown by default.
+        - `constant-condition` (group `correctness`) — a branch, loop, or
+          `select` condition that is a constant literal (the idiomatic infinite
+          loop `while <nonzero>` is not flagged). Shown by default.
+        - `unused-result` (group `correctness`) — the result of a
+          side-effect-free expression is computed and then discarded, as in
+          `_ = x + 1`. Shown by default.
+        - `dead-code` (group `correctness`) — a statement that can never be
+          reached, following an unconditional branch, `return`, or
+          `unreachable`. Shown by default.
         - `truncated-coverage` — path-sensitive validation gave up after too
           many conditional configurations. Shown by default.
         - `naming-conflict` (group `naming`) — converting from Wasm, a source
@@ -95,11 +123,20 @@ mistaken for a subcommand). The `format` subcommand reformats files (see
     - Repeatable; later settings override earlier ones. For example,
       `-W all=error -W unused-local=warning` makes every warning fatal except
       unused locals.
-    - The validation warnings (`unused-local`, `truncated-coverage`) are
-      produced only while validating. `truncated-coverage` can arise from the
-      validation `convert` runs on a text input; `unused-local` reporting is
-      turned on only by `--validate`, and always for `check`. The `naming`
-      warnings are produced when converting a Wasm module to Wax.
+    - The validation warnings — `truncated-coverage`, and the `unused` and
+      `correctness` lints — are produced only while validating.
+      `truncated-coverage` can arise from the validation `convert` runs on a
+      text input; the `unused`/`correctness` lints are turned on only by
+      `--validate`, and always for `check`. The `naming` warnings are produced
+      when converting a Wasm module to Wax.
+    - The `WAX_WARN` environment variable sets default levels applied *before*
+      the `-W` options. Its value is a list of `NAME=LEVEL` specs separated by
+      commas or whitespace, e.g. `WAX_WARN="correctness=hidden
+      unused-local=error"`. Unlike a plain environment fallback, these defaults
+      still apply when `-W` is given — the command line only refines them (so
+      `WAX_WARN=correctness=hidden` with `-W dead-code=warning` hides the tier
+      except dead code). A malformed or unknown entry is reported on stderr and
+      skipped.
 
 - **`--color`** *WHEN*
     - Colorize output.
