@@ -636,7 +636,7 @@ let rec stmt d : Ast.location Ast.instr =
 
 (* One clean type error, to reach the checker's mismatch-reporting arms. *)
 let poison () : Ast.location Ast.instr =
-  match rnd 6 with
+  match rnd 7 with
   | 0 ->
       nl
         (Ast.Let
@@ -660,13 +660,40 @@ let poison () : Ast.location Ast.instr =
            ( [ (None, None) ],
              Some (nl (Ast.String (Some (id "wchars"), "\xff"))) ))
       (* invalid Unicode in an i16 (UTF-16) string *)
-  | _ ->
+  | 5 ->
       nl
         (Ast.BinOp
            ( nl (Ast.Lt (Some Ast.Signed)),
              nl (Ast.Get (id "c")),
              nl (Ast.Get (id "d")) ))
-(* signed cmp on floats *)
+      (* signed cmp on floats *)
+  | _ ->
+      (* An [&eq] cast to an inline function type whose signature matches no
+         declared type: cross-hierarchy, so it rejects, but the target type is
+         minted *while type-checking* — the case that outran the old
+         subtyping-info snapshot (see [subtyping_info] in the typer). A distinctive
+         signature keeps it novel regardless of the functions generated above. *)
+      nl
+        (Ast.Let
+           ( [ (None, None) ],
+             Some
+               (nl
+                  (Ast.Cast
+                     ( leaf Eq,
+                       Ast.Functype
+                         {
+                           nullable = false;
+                           sign =
+                             Ast.
+                               {
+                                 params =
+                                   [|
+                                     nl (None, valtype F64);
+                                     nl (None, valtype F32);
+                                   |];
+                                 results = [| valtype I64 |];
+                               };
+                         } ))) ))
 
 let ftype mut t : Ast.fieldtype = { mut; typ = Ast.Value (valtype t) }
 

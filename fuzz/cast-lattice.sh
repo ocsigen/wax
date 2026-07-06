@@ -60,17 +60,23 @@ SOURCES=(
   "refany|p: &?any| p"
   "i31|p: &?i31| p"
   "extern|p: &?extern| p"
+  "reffunc|p: &?func| p"
   "Unknown|| { unreachable; _ }"
   "UnknownRef|| { unreachable; null! }"
 )
 
 # Cast targets: numeric types with each signedness / strictness variant, plus the
-# reference and v128 targets a numeric or reference source might be cast to.
+# reference and v128 targets a numeric or reference source might be cast to. The
+# inline function-type targets [&fn(..)] carry a signature that matches no
+# declared type, so they mint a fresh type *while type-checking* — the case that
+# outran the old subtyping-info snapshot (see the [subtyping_info] memoisation in
+# the typer); casting a [&func] source down to one exercises the lowering too.
 TARGETS=(
   i32 i32_s i32_u i32_s_strict i32_u_strict
   i64 i64_s i64_u i64_s_strict i64_u_strict
   f32 f32_s f32_u f64 f64_s f64_u
   v128 "&i31" "&?i31" "&any" "&?any" "&extern" "&?extern"
+  "&fn(i32) -> i32" "&?fn(i32) -> i32"
 )
 
 # Unary intrinsics a cast result might feed (the [clz().to_bits()] class): one
@@ -81,7 +87,7 @@ METHODS=(to_bits from_bits clz sqrt)
 # Second-level targets for the two-level chain: one representative of each
 # numeric family x signedness, plus the reference intermediates the fusion
 # patterns use, cover the distinct lowering cells without the quadratic blow-up.
-CHAIN_T2=(i32 i32_s i64 f32 f32_s f64 "&i31" "&any")
+CHAIN_T2=(i32 i32_s i64 f32 f32_s f64 "&i31" "&any" "&fn(i32) -> i32")
 
 # Build the combination list. Each element is "label<TAB>one-line function"; the
 # result is discarded with [_ = (..)] so the function type-checks for any target
