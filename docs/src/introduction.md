@@ -101,11 +101,11 @@ are reported before any output is produced. For example, adding an `i32` and an
 
 ```
 Error: This operator cannot be applied to operands of types i32 and f64.
- ──➤  hello.wax:3:5
+ ──➤  hello.wax:3:7
 1 │ #[export = "add"]
 2 │ fn add(x: i32, y: f64) -> i32 {
 3 │     x + y;
-  ·     ^^^^^
+  ·       ^
 4 │ }
 ```
 

@@ -1441,7 +1441,7 @@ Variables can be given values on the command line with [`-D`/`--define`](cli.md)
 When type checking is enabled (`--validate`), every reachable combination of conditions is checked independently. Because branches are mutually exclusive, a name defined in both the `#[if]` and `#[else]` branch is accepted. An error that occurs only under some conditions is reported together with the assumption that makes it reachable:
 
 ```
-Error: Expecting type i32 but got type float.
+Error: This instruction has type float but is expected to have type i32.
  ──➤  example.wax:4:16
 Hint: reachable when not debug
 ```

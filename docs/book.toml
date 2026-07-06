@@ -6,4 +6,4 @@ src = "src"
 title = "Wax Documentation"
 
 [output.html]
-git-repository-url = "https://github.com/wax-lang/wax"
+git-repository-url = "https://github.com/ocsigen/wax"
