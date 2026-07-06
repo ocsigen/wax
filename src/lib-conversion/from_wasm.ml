@@ -976,22 +976,9 @@ let wide_string_args n args =
             match unit_of_arg arg with Some c -> c | None -> raise Exit)
           args
       in
-      let b = Buffer.create (List.length units) in
-      let rec decode = function
-        | [] -> ()
-        | hi :: lo :: rest
-          when hi land 0xfc00 = 0xd800 && lo land 0xfc00 = 0xdc00 ->
-            let c = 0x10000 + ((hi land 0x3ff) lsl 10) + (lo land 0x3ff) in
-            Buffer.add_utf_8_uchar b (Uchar.of_int c);
-            decode rest
-        | u :: rest when u < 0xd800 || u > 0xdfff ->
-            Buffer.add_utf_8_uchar b (Uchar.of_int u);
-            decode rest
-        | _ -> raise Exit (* lone surrogate *)
-      in
-      decode units;
-      let s = Buffer.contents b in
-      if Re.execp reasonable_string s then Some s else None
+      match Wax_utils.Unicode.utf16_decode units with
+      | Some s when Re.execp reasonable_string s -> Some s
+      | _ -> None
     with Exit -> None
 
 let inttype ty : Ast.valtype =
