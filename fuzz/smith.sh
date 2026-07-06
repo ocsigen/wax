@@ -74,7 +74,7 @@ cat "$RESULTS"/* 2>/dev/null >"$REPORT"
 
 echo "=================== smith report ==================="
 echo "modules checked: $COUNT"
-n=$(grep -c '^FINDING' "$REPORT" 2>/dev/null || echo 0)
+n=$(grep -c '^FINDING' "$REPORT" 2>/dev/null); n=${n:-0}
 echo "findings: $n"
 if [ "$n" -gt 0 ]; then
   echo

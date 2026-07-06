@@ -156,7 +156,7 @@ echo >&2
 
 REPORT="$RESULTS/report"
 cat "$RESULTS"/[0-9]* 2>/dev/null >"$REPORT"
-n=$(grep -c '^FINDING' "$REPORT" 2>/dev/null || echo 0)
+n=$(grep -c '^FINDING' "$REPORT" 2>/dev/null); n=${n:-0}
 echo "=================== cast-lattice report ==================="
 echo "combinations tested: $N"
 echo "findings (crash or broken round-trip): $n"

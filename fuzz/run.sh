@@ -49,7 +49,7 @@ find "$CORPUS" -type f \( -name '*.wat' -o -name '*.wasm' -o -name '*.wax' \) -p
 echo "=================== fuzz report ==================="
 echo "corpus:   $CORPUS"
 echo "checked:  $total files"
-nfind=$(grep -c '^FINDING' "$REPORT" 2>/dev/null || echo 0)
+nfind=$(grep -c '^FINDING' "$REPORT" 2>/dev/null); nfind=${nfind:-0}
 echo "findings: $nfind"
 echo
 if [ "$nfind" -gt 0 ]; then
