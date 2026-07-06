@@ -134,8 +134,10 @@ mistaken for a subcommand). The `format` subcommand reformats files (see
       `constant-condition`, `unused-result` and `dead-code` are checked by the
       Wasm validator too (so `wax check foo.wat` reports them). On Wasm input
       `unused-result` covers discarding a constant or a pure `local.get`/
-      `global.get` read; `unused-field` and `unused-label` are currently reported
-      for Wax input only.
+      `global.get` read. `unused-field` and `unused-label` are also checked on
+      WebAssembly input — a numeric `br N` counts as a use of the label `N`
+      levels out — but, like `unused-local`, only when unused reporting is on
+      (under `check`, or under a conversion with `--validate`).
     - The `WAX_WARN` environment variable sets default levels applied *before*
       the `-W` options. Its value is a list of `NAME=LEVEL` specs separated by
       commas or whitespace, e.g. `WAX_WARN="correctness=hidden
