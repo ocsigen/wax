@@ -50,6 +50,7 @@ dune build src/bin/main.exe src/bin/fuzz_gen.exe 2>&1 | tail -3 || {
 
 # Deterministic cross-cutting guards (self-contained).
 run cast-lattice.sh
+run drop-width.sh
 run stress.sh
 run wat-cast-chain.sh
 run wat-cast-const.sh
