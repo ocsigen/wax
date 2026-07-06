@@ -1201,7 +1201,7 @@ module_:
   { fun status -> [(status, `Parsed (name, l))] }
 | "(" MODULE DEFINITION ? ID ? BINARY s = STRING *  ")"
   { fun status ->
-    [(status, `Binary (String.concat "" (List.map (fun s -> s.Ast.desc) s)))] }
+    [(status, `Binary (Wax_utils.Ast.concat_desc s))] }
 | "(" MODULE DEFINITION ? ID ? QUOTE s = STRING *  ")"
   { fun status ->
     [(status, `Text (String.concat "\n" (List.map (fun s -> s.Ast.desc) s)))] }
