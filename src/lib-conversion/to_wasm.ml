@@ -1876,11 +1876,21 @@ let subtype s : Text.subtype =
     describes = Option.map index s.describes;
   }
 
+let module_has_conditional fields =
+  let exception Found in
+  try
+    Wax_lang.Ast_utils.iter_fields
+      (fun field ->
+        match field.desc with Conditional _ -> raise Found | _ -> ())
+      fields;
+    false
+  with Found -> true
+
 let reorder_imports lst =
   (* Whether a field introduces an index-consuming definition that imports must
-     precede. Types, exports, [start] and elem/data segments do not, and a
-     conditional counts only when one of its branches does — so an import-only
-     [#[if]] block is not an import boundary and imports around it stay put. *)
+     precede. Types, exports, [start] and elem/data segments do not.
+     Conditional modules skip reordering entirely so their field order stays as
+     written. *)
   let rec defines (f : (_ Ast.Text.modulefield, _) Ast.annotated) =
     match f.desc with
     | Func _ | Memory _ | Table _ | Tag _ | Global _ | String_global _ -> true
@@ -2340,16 +2350,7 @@ let module_ diagnostics types fields =
      would reference an index that is absent under some configuration. Until the
      segment can be gated per condition, skip it entirely for conditional
      modules. *)
-  let has_conditional =
-    let exception Found in
-    try
-      Wax_lang.Ast_utils.iter_fields
-        (fun field ->
-          match field.desc with Conditional _ -> raise Found | _ -> ())
-        fields;
-      false
-    with Found -> true
-  in
+  let has_conditional = module_has_conditional fields in
   let elem_declare : (_ Text.modulefield, _) Ast.annotated list =
     let funcs =
       Hashtbl.fold
@@ -2377,7 +2378,9 @@ let module_ diagnostics types fields =
       ]
   in
   let wasm_fields = wasm_fields @ extra_types @ elem_declare in
-  let wasm_fields = reorder_imports wasm_fields in
+  let wasm_fields =
+    if has_conditional then wasm_fields else reorder_imports wasm_fields
+  in
   (* A [#![module = "name"]] inner attribute names the module; carry it into the
      text module's name slot (typing has already ensured at most one). *)
   let mod_name =
