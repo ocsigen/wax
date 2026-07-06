@@ -26,25 +26,52 @@ let module_ ((name, fields) : Ast.location module_) : Ast.location module_ =
   let wide_names = ref StringSet.empty in
   let wide_indices = ref IntSet.empty in
   let type_names = ref StringSet.empty in
+  (* A type usable as the default [<string>] for an untyped string: as in
+     [Text_to_binary], a singleton rec group that is a plain [(array (mut i8))]
+     (final, no supertype). Referencing it avoids synthesising a redundant one;
+     the last such type wins, matching [Text_to_binary]. *)
+  let default_type = ref None in
   let next = ref 0 in
   List.iter
     (fun f ->
       match f.Ast.desc with
       | Types r ->
+          let singleton = Array.length r = 1 in
           Array.iter
             (fun e ->
               let nameo, (st : subtype) = e.Ast.desc in
+              let here = !next in
               Option.iter
                 (fun n -> type_names := StringSet.add n.Ast.desc !type_names)
                 nameo;
               (match st.typ with
               | Array { typ = Packed I16; _ } ->
-                  wide_indices := IntSet.add !next !wide_indices;
+                  wide_indices := IntSet.add here !wide_indices;
                   Option.iter
                     (fun n ->
                       wide_names := StringSet.add n.Ast.desc !wide_names)
                     nameo
               | _ -> ());
+              (if singleton then
+                 match st with
+                 | {
+                  final = true;
+                  supertype = None;
+                  typ = Array { mut = true; typ = Packed I8 };
+                  _;
+                 } ->
+                     let idx =
+                       match nameo with
+                       | Some n ->
+                           { Ast.desc = Id n.Ast.desc; info = n.Ast.info }
+                       | None ->
+                           {
+                             Ast.desc = Num (Wax_utils.Uint32.of_int here);
+                             info = f.Ast.info;
+                           }
+                     in
+                     default_type := Some idx
+                 | _ -> ());
               incr next)
             r
       | _ -> ())
@@ -65,14 +92,18 @@ let module_ ((name, fields) : Ast.location module_) : Ast.location module_ =
     | Id n -> StringSet.mem n !wide_names
     | Num k -> IntSet.mem (Wax_utils.Uint32.to_int k) !wide_indices
   in
-  (* The type to build with, and whether it is UTF-16; an absent type falls back
-     to the synthesised [<string>]. *)
+  (* The type to build with, and whether it is UTF-16. An untyped string reuses
+     an existing default [<string>] type when one exists, and otherwise pins a
+     synthesised one. *)
   let resolve_type loc (idxo : idx option) =
     match idxo with
     | Some i -> (i, is_wide i)
-    | None ->
-        needs_string_type := true;
-        ({ Ast.desc = Id string_type_name; info = loc }, false)
+    | None -> (
+        match !default_type with
+        | Some idx -> (idx, false)
+        | None ->
+            needs_string_type := true;
+            ({ Ast.desc = Id string_type_name; info = loc }, false))
   in
   (* An operand of the folded [array.new_fixed] must itself be folded (an
      [(i32.const N)] sub-expression), not a bare stack instruction. *)

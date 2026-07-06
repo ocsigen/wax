@@ -119,9 +119,10 @@ mistaken for a subcommand). The `format` subcommand reformats files (see
     - Expand the Wax-specific `(@string …)` and `(@char …)` annotations into
       core WebAssembly (`array.new_fixed` / `i32.const`), so the output is plain
       WebAssembly text that other tools accept. An `i8` string keeps its raw
-      UTF-8 bytes; an `i16` string is UTF-16-encoded; an untyped string gets a
-      synthesised `[mut i8]` array type. A module-level `(@string …)` global
-      becomes an ordinary global.
+      UTF-8 bytes; an `i16` string is UTF-16-encoded; an untyped string reuses an
+      existing `(array (mut i8))` type when the module has one and otherwise pins
+      a synthesised one. A module-level `(@string …)` global becomes an ordinary
+      global.
     - Only valid with wat output (`-f wat`); requesting it for wasm or wax
       output is a usage error.
     - Fails (exit `128`) if a conditional-compilation directive `(@if …)`

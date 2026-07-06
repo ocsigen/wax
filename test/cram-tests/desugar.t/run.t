@@ -1,16 +1,14 @@
 `--desugar` expands the Wax-specific `(@string …)` and `(@char …)` annotations
 into core WebAssembly (`array.new_fixed` / `i32.const`), producing plain text
 other tools accept. An `i8` string keeps its raw UTF-8 bytes and an `i16` one is
-UTF-16-encoded; an untyped string gets a synthesised `<string>` (`[mut i8]`)
-type, appended so it takes the highest type index. A module-level `(@string …)`
-global becomes an ordinary global:
+UTF-16-encoded. An untyped string reuses an existing `(array (mut i8))` type
+when the module has one (here `$b`), and otherwise pins a synthesised `<string>`
+type. A module-level `(@string …)` global becomes an ordinary global:
 
   $ wax m.wat -f wat --desugar
   (type $w (array (mut i16)))
   (type $b (array (mut i8)))
-  (global $sg (ref $<string>)
-    (array.new_fixed $<string> 2 (i32.const 104) (i32.const 105))
-  )
+  (global $sg (ref $b) (array.new_fixed $b 2 (i32.const 104) (i32.const 105)))
   (func (export "ch") (result i32) i32.const 128512)
   (func (export "s") (result (ref $b))
     (array.new_fixed $b 2 (i32.const 121) (i32.const 111))
@@ -18,7 +16,6 @@ global becomes an ordinary global:
   (func (export "w") (result (ref $w))
     (array.new_fixed $w 3 (i32.const 233) (i32.const 55357) (i32.const 56832))
   )
-  (type $<string> (array (mut i8)))
 
 The result is well-formed core wasm — no Wax annotations remain, so it compiles:
 
