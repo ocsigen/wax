@@ -132,3 +132,17 @@ bracketed offsets / element lists expand into structured multi-line blocks.
           )
       ] =
       "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz";
+
+Long aggregate segment constructors use the same structured bracket layout.
+
+  $ cat > agg.wax <<'EOF'
+  > type bytes = [mut i8];
+  > const a = [bytes| seg @ offset_expr.with_a_really_long_method_name(argument_one, argument_two, argument_three); count_expr.with_a_really_long_method_name(argument_one, argument_two, argument_three)];
+  > EOF
+  $ wax format -f wax agg.wax
+  type bytes = [mut i8];
+  const a =
+      [bytes| seg @
+          offset_expr.with_a_really_long_method_name(argument_one, argument_two, argument_three);
+          count_expr.with_a_really_long_method_name(argument_one, argument_two, argument_three)
+      ];

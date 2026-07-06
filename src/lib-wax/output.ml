@@ -1036,15 +1036,27 @@ let rec instr prec pp (i : _ instr) =
             pp
             (List.mapi (fun n i -> (n = 0, i)) l))
   | ArraySegment (nm, d, off, len) ->
-      array_instr pp nm (fun () ->
-          identifier pp d.desc;
-          space pp ();
-          operator pp "@";
-          space pp ();
-          instr Instruction pp off;
+      hvbox pp ~indent:0 (fun () ->
+          box pp (fun () ->
+              punctuation pp "[";
+              Option.iter
+                (fun t ->
+                  identifier pp t.desc;
+                  punctuation pp "|")
+                nm;
+              space pp ();
+              identifier pp d.desc;
+              space pp ();
+              operator pp "@");
+          indent pp indent_level (fun () ->
+              space pp ();
+              instr Instruction pp off);
           punctuation pp ";";
-          space pp ();
-          instr Instruction pp len)
+          indent pp indent_level (fun () ->
+              space pp ();
+              instr Instruction pp len);
+          cut pp ();
+          punctuation pp "]")
   | ArrayGet (i1, i2) ->
       box pp ~indent:indent_level (fun () ->
           instr CallAndFieldAccess pp i1;
