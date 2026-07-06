@@ -61,3 +61,16 @@ An already-formatted file passes silently:
   $ cat a.wat > m.txt
   $ wax format -f wat m.txt
   (func $f (result i32) (i32.const 1))
+
+Long tag headers keep `tag` on the opening line when formatting wraps:
+
+  $ cat > tag.wat <<'EOF'
+  > (tag $very_long_tag_name (param (ref $some_really_long_type_name)) (param (ref $some_really_long_type_name_2)) (result (ref $some_really_long_type_name_3)))
+  > EOF
+  $ wax format -f wat tag.wat
+  (tag $very_long_tag_name
+    (param
+      (ref $some_really_long_type_name)
+      (ref $some_really_long_type_name_2))
+    (result (ref $some_really_long_type_name_3))
+  )

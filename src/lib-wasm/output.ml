@@ -107,28 +107,31 @@ let rec format_sexp in_block depth first ctx s =
           Printer.box p (fun () ->
               print_styled ctx Punctuation ")";
               print_trivia ctx trivia.after))
-  | Block { l; transparent; loc; bk } ->
+  | Block { l; transparent; loc; bk } -> (
       let trivia = get_trivia ctx loc in
       let indent = if first then ctx.indent_level - 1 else 0 in
       print_trivia ctx trivia.before;
-      (match bk with
-      | `Hv -> Printer.hvbox
-      | `Hov -> Printer.hovbox
+      let render () =
+        List.iteri
+          (fun i v ->
+            if i > 0 then Printer.space p ();
+            format_sexp
+              (in_block || not transparent)
+              depth
+              (first && i = 0)
+              ctx v)
+          l;
+        print_trivia ctx trivia.within;
+        print_trivia ctx trivia.after
+      in
+      match bk with
+      | `Hv -> Printer.hvbox p ~indent render
+      | `Hov -> Printer.hovbox p ~indent render
       | `Box ->
-          if (not in_block) && transparent && ctx.format = Expansive then
-            Printer.vbox
-          else Printer.box) p ~indent (fun () ->
-          List.iteri
-            (fun i v ->
-              if i > 0 then Printer.space p ();
-              format_sexp
-                (in_block || not transparent)
-                depth
-                (first && i = 0)
-                ctx v)
-            l;
-          print_trivia ctx trivia.within;
-          print_trivia ctx trivia.after)
+          (if (not in_block) && transparent && ctx.format = Expansive then
+             Printer.vbox
+           else Printer.box)
+            p ~indent render)
   | Vertical_block (loc, l) ->
       let trivia = get_trivia ctx loc in
       (* Printed before the box opens so a comment leading the first element
@@ -1323,30 +1326,38 @@ let rec modulefield f =
         (block (keyword "global" :: (opt_id id @ exports e @ [ globaltype typ ]))
         :: instrs init)
   | Tag { id; typ; exports = e } ->
-      list ~loc (keyword "tag" :: (opt_id id @ exports e @ fundecl typ))
-  | Data { id; init; mode } ->
       list ~loc
-        (block (keyword "data" :: opt_id id)
-        :: ((match mode with
-              | Passive -> []
-              | Active (i, e) ->
-                  (if i.desc = Num Uint32.zero then []
-                   else [ list [ keyword "memory"; index i ] ])
-                  @ [ expr "offset" e ])
-           @ List.map quoted_string init))
+        [ block (keyword "tag" :: (opt_id id @ exports e @ fundecl typ)) ]
+  | Data { id; init; mode } ->
+      let head =
+        keyword "data"
+        :: (opt_id id
+           @
+           match mode with
+           | Passive -> []
+           | Active (i, e) ->
+               (if i.desc = Num Uint32.zero then []
+                else [ list [ keyword "memory"; index i ] ])
+               @ [ expr "offset" e ])
+      in
+      list ~loc (block head :: List.map quoted_string init)
   | Start idx -> list ~loc [ keyword "start"; index idx ]
   | Memory { id; limits = l; init; exports = e } ->
+      let head =
+        keyword "memory"
+        :: (opt_id id @ exports e
+           @
+           match init with
+           | None -> limits l
+           | Some _ -> address_type l.desc.address_type)
+      in
       list ~loc
-        (block
-           (keyword "memory"
-           :: (opt_id id @ exports e
-              @ match init with None -> limits l | Some _ -> []))
+        (block head
         ::
         (match init with
         | None -> []
-        | Some init ->
-            address_type l.desc.address_type
-            @ [ list (keyword "data" :: List.map quoted_string init) ]))
+        | Some init -> [ list (keyword "data" :: List.map quoted_string init) ])
+        )
   | Table { id; typ; init; exports = e } ->
       list ~loc
         (block

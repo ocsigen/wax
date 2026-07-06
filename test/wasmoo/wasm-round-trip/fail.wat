@@ -20,9 +20,7 @@
 )
 (@if $wasi
   (@then
-    (tag
-      $javascript_exception
-      (export "javascript_exception")
+    (tag $javascript_exception (export "javascript_exception")
       (param externref)))
   (@else
     (tag $javascript_exception (export "javascript_exception")
