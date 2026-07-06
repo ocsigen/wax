@@ -54,6 +54,7 @@ type compare_stack = {
     v2: &block_array, // second value
     vpos: &int_array
 }; // position in value
+
 type compare = fn(&eq, &eq, i32) -> i32;
 type hash = fn(&eq) -> i32;
 type fixed_length = { bsize_32: i32, bsize_64: i32 };

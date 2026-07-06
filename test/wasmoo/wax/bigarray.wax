@@ -503,6 +503,7 @@ type bigarray: custom = {
     ba_kind: i8, // kind
     ba_layout: i8
 }; // layout
+
 #[export = "caml_float16_of_double"]
 fn double_to_float16(f: f64) -> i32 {
     let x = (f as f32).to_bits();

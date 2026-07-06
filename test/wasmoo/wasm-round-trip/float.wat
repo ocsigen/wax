@@ -793,6 +793,7 @@
             (then (i32.const 1)) ;; subnormal
             (else (i32.const 4)))))))
 ) ;; nan
+
 (func $caml_modf_float (export "caml_modf_float")
   (param $v (ref eq)) (result (ref eq))
   (local $x f64) (local $a f64) (local $i f64) (local $f f64)

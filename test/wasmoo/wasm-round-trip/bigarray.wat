@@ -674,6 +674,7 @@
       (field $ba_kind i8) ;; kind
       (field $ba_layout i8)))
 ) ;; layout
+
 (func $double_to_float16 (export "caml_float16_of_double")
   (param $f f64) (result i32)
   (local $x i32) (local $sign i32) (local $o i32)

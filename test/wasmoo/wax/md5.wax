@@ -29,6 +29,7 @@ type context = {
     buffer: &int_array, // buffer
     intermediate: &bytes
 }; // intermediate buffer
+
 #[export = "caml_md5_string"]
 #[export = "caml_md5_bytes"]
 fn caml_md5_string(vs: &eq, vofs: &eq, vlen: &eq) -> &eq {

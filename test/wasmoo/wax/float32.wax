@@ -239,6 +239,7 @@ fn caml_classify_float32_bytecode(a: f32) -> i32 {
         }
     }
 } // nan
+
 #[export = "caml_ldexp_float32_bytecode"]
 fn caml_ldexp_float32_bytecode(x: f32, n: i32) -> f32 {
     caml_ldexp_float(x as f64, n) as f32;

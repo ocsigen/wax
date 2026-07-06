@@ -652,6 +652,7 @@ fn caml_classify_float(x: f64) -> i32 {
         }
     }
 } // nan
+
 #[export = "caml_modf_float"]
 fn caml_modf_float(v: &eq) -> &eq {
     let x = (v as &float).f;

@@ -252,6 +252,7 @@
             (then (i32.const 1)) ;; subnormal
             (else (i32.const 4)))))))
 ) ;; nan
+
 (func (export "caml_ldexp_float32_bytecode")
   (param $x f32) (param $n i32) (result f32)
   (f32.demote_f64

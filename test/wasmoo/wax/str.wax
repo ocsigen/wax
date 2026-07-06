@@ -61,6 +61,7 @@ const re_word_letters: &char_table =
         0x7F,
         0xFF,
     ]; // Latin-1 accented lowercase
+
 type stack = open { next: &?stack };
 type pos: stack = { pos_previous: &?stack, pc: i32, pos: i32 };
 type undo: stack = { undo_previous: &?stack, tbl: &int_array, idx: i32, val: i32 };

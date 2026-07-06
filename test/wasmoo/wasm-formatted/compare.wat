@@ -57,6 +57,7 @@
     (field $v2 (ref $block_array)) ;; second value
     (field $vpos (ref $int_array)))
 ) ;; position in value
+
 (type $compare (func (param (ref eq) (ref eq) i32) (result i32)))
 (type $hash (func (param (ref eq)) (result i32)))
 (type $fixed_length (struct (field $bsize_32 i32) (field $bsize_64 i32)))

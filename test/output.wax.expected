@@ -172,6 +172,7 @@ type bigarray: custom = {
     ba_kind: i8, // kind
     ba_layout: i8
 }; // layout
+
 fn bigarray_hash(x: &eq) -> i32 {
     let b = x as &bigarray;
     let data_2 = b.ba_data;

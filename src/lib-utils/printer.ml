@@ -81,16 +81,23 @@ module Doc = struct
      comment hugs the preceding token instead of being pushed past a break. *)
   let drop_trailing_break st =
     let fr = top st in
-    match fr.items with Brk _ :: tl -> fr.items <- tl | _ -> ()
+    match fr.items with
+    | Brk s :: tl ->
+        fr.items <- tl;
+        Some s
+    | _ -> None
 
   let force_eol st =
     match st.pending_eol with
     | None -> ()
     | Some emit ->
         st.pending_eol <- None;
-        drop_trailing_break st;
+        let dropped = drop_trailing_break st in
         emit ();
-        append st (Brk Newline);
+        let next_brk =
+          match dropped with Some Blank_line -> Blank_line | _ -> Newline
+        in
+        append st (Brk next_brk);
         st.has_emitted <- false
 
   let defer_eol st emit =

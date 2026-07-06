@@ -106,6 +106,7 @@
         (br $loop))))
   (i32.const 1)
 ) ;; 0 counts as 1 digit
+
 ;; Assuming c > a, returns the quotient and remainder of (a<<32 + b)/c.
 (func $div_helper
   (param $a i32) (param $b i32) (param $c i32) (result i32 i32)
