@@ -1,0 +1,40 @@
+/* Styling for Wax code blocks rendered by the mdbook-wax-highlight
+ * preprocessor. The preprocessor emits a bare <pre class="hljs wax-highlight">
+ * (no inner <code>), so the padding mdbook normally puts on `pre > code` and
+ * the mono font it puts on `code` have to be restored here. Token colours come
+ * for free from the active theme's hljs-* classes. */
+
+/* Firefox queues a scroll-anchoring adjustment after a reload (reconciling the
+ * restored scroll position against the settled layout) and applies it on the
+ * first interaction. When that first interaction is a copy-button click, the
+ * page visibly nudges. Disabling scroll anchoring on the document scroller
+ * drops the queued adjustment; any earlier scroll would otherwise flush it
+ * harmlessly. Chrome does not scroll-anchor here, so it is unaffected. */
+html {
+    overflow-anchor: none;
+}
+
+/* The outer <pre> is a bare container: it holds the copy button and its
+ * tooltip and must NOT clip them, so it keeps overflow visible and no padding
+ * or background of its own. */
+pre.wax-highlight {
+    position: relative;
+    overflow: visible;
+    padding: 0;
+    background: none;
+}
+
+/* The inner element carries the block's appearance. The `hljs` class supplies
+ * the active theme's background/foreground; since its parent is a <pre>,
+ * mdbook's inline-code rule `:not(pre) > .hljs` does not match it, so base
+ * `.hljs { display: block }` stands. It owns the horizontal scroll and the
+ * padding mdbook normally puts on `pre > code`. */
+pre.wax-highlight > .wax-code.hljs {
+    display: block;
+    overflow-x: auto;
+    padding: 1rem;
+    border-radius: 0;
+    font-family: var(--mono-font);
+    font-size: var(--code-font-size);
+    tab-size: 4;
+}

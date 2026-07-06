@@ -1,0 +1,11 @@
+{
+  "name": "mdbook-wax-highlight",
+  "version": "0.1.0",
+  "private": true,
+  "description": "mdbook preprocessor: highlight Wax code blocks using the VS Code TextMate grammar",
+  "bin": { "mdbook-wax-highlight": "index.js" },
+  "dependencies": {
+    "vscode-oniguruma": "^2.0.1",
+    "vscode-textmate": "^9.1.0"
+  }
+}

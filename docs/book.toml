@@ -5,5 +5,11 @@ language = "en"
 src = "src"
 title = "Wax Documentation"
 
+[preprocessor.wax-highlight]
+command = "node tools/wax-highlight/index.js"
+renderers = ["html"]
+
 [output.html]
 git-repository-url = "https://github.com/ocsigen/wax"
+additional-css = ["assets/wax-highlight.css"]
+additional-js = ["assets/wax-copy.js"]

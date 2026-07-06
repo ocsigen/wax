@@ -21,6 +21,14 @@ jobs:
         with:
           mdbook-version: 'latest'
 
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+
+      - name: Install docs preprocessor deps
+        run: npm ci --prefix docs/tools/wax-highlight
+
       - name: Build Documentation
         run: mdbook build docs
 
