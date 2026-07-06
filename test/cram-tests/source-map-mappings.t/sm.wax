@@ -1,0 +1,7 @@
+#[export = "poly"]
+fn poly(a: i32, b: i32) -> i32 {
+    let s = a * a;
+    let t = s + b;
+    let u = t - a;
+    u * b;
+}

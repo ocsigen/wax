@@ -16,7 +16,7 @@ previous instruction's location.
     "sources": ["decl.wax"],
     "sourcesContent": [],
     "names": [],
-    "mappings": "CAGI,AAAA,I"
+    "mappings": "CAGI,I"
   }
 
 A source map relates a wasm binary's byte offsets to source positions, so it is

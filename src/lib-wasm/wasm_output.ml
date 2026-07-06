@@ -243,16 +243,27 @@ module Encoder = struct
   let rec instr ~source_map_t b (i : Ast.location instr) =
     (* Record where this instruction starts. A synthesized instruction has no
        source location; emit an absent mapping there so the previous location
-       does not, by the source map's sticky rule, bleed onto its bytes. *)
+       does not, by the source map's sticky rule, bleed onto its bytes.
+
+       A [Folded]/[Hinted] wrapper emits no opcode of its own — the wrapped
+       instruction, recursed below, carries the same location and records the
+       mapping — so it is skipped here. Recording one for the wrapper too would
+       leave a second mapping at the same offset (the wrapper shares its start
+       offset with its first operand, or with its head), so a byte would carry
+       several identical mappings instead of one. *)
     let generated_offset = Buffer.length b in
-    if
-      i.info.Wax_utils.Ast.loc_start.Lexing.pos_fname <> ""
-      && i.info.Wax_utils.Ast.loc_start.Lexing.pos_lnum <> -1
-      && i.info.Wax_utils.Ast.loc_start.Lexing.pos_cnum <> -1
-    then
-      Wax_utils.Source_map.add_mapping source_map_t ~generated_offset
-        ~original_location:i.info
-    else Wax_utils.Source_map.add_absent_mapping source_map_t ~generated_offset;
+    (match i.desc with
+    | Folded _ | Hinted _ -> ()
+    | _ ->
+        if
+          i.info.Wax_utils.Ast.loc_start.Lexing.pos_fname <> ""
+          && i.info.Wax_utils.Ast.loc_start.Lexing.pos_lnum <> -1
+          && i.info.Wax_utils.Ast.loc_start.Lexing.pos_cnum <> -1
+        then
+          Wax_utils.Source_map.add_mapping source_map_t ~generated_offset
+            ~original_location:i.info
+        else
+          Wax_utils.Source_map.add_absent_mapping source_map_t ~generated_offset);
 
     match i.desc with
     | Unreachable -> byte b 0x00
