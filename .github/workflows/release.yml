@@ -2,7 +2,7 @@ name: Release binaries
 
 # Prebuilt `wax` CLI binaries attached to GitHub Releases.
 #
-#   * push to main    -> refresh the rolling `nightly` prerelease
+#   * push to main    -> refresh the rolling `edge` prerelease
 #   * push a `v*` tag -> attach the same binaries to that version's release
 #   * manual dispatch -> build only (no release), for testing the workflow
 #
@@ -157,12 +157,12 @@ jobs:
                 --notes "Prebuilt \`wax\` binaries for $tag."
             fi
           else
-            # Rolling prerelease: delete and recreate so the `nightly` tag tracks
+            # Rolling prerelease: delete and recreate so the `edge` tag tracks
             # the latest main and its assets are always the freshest build.
-            gh release delete nightly --yes --cleanup-tag || true
-            gh release create nightly dist/* \
+            gh release delete edge --yes --cleanup-tag || true
+            gh release create edge dist/* \
               --prerelease \
               --target "$GITHUB_SHA" \
-              --title "Nightly (main)" \
+              --title "Edge (main)" \
               --notes "Prebuilt \`wax\` binaries from the latest \`main\` (${GITHUB_SHA::7}). Rebuilt on every push to main."
           fi
