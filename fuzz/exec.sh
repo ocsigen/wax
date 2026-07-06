@@ -26,6 +26,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 RUNNER="$(dirname "${BASH_SOURCE[0]}")/exec-run.js"
 MODE="${MODE:-wax}"
 NODE="${NODE:-node}"
+command -v "$NODE" >/dev/null 2>&1 || { echo "node not found (set NODE)" >&2; exit 2; }
+command -v jq >/dev/null 2>&1 || { echo "jq not found" >&2; exit 2; }
 # Files are processed in parallel across cores (override with JOBS); each runs in
 # its own process and temp dir, so a crash or hang on one is contained. A second
 # pool (INNER_JOBS) fans out the per-module recompile within a file: a few files

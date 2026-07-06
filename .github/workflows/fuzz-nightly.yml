@@ -28,6 +28,9 @@ on:
       mutate_wasm_struct_count:
         description: "mutate-wasm.sh MODE=struct mutants"
         default: "8000"
+      exec_wast_count:
+        description: "exec.sh .wast files in the nightly behavioural slice"
+        default: "64"
       diff_validate_count:
         description: "diff-validate.sh modules"
         default: "3000"
@@ -77,6 +80,7 @@ jobs:
           MUTATE_WAT_COUNT: ${{ github.event.inputs.mutate_wat_count || '6000' }}
           MUTATE_WASM_COUNT: ${{ github.event.inputs.mutate_wasm_count || '8000' }}
           MUTATE_WASM_STRUCT_COUNT: ${{ github.event.inputs.mutate_wasm_struct_count || '8000' }}
+          EXEC_WAST_COUNT: ${{ github.event.inputs.exec_wast_count || '64' }}
           DIFF_VALIDATE_COUNT: ${{ github.event.inputs.diff_validate_count || '3000' }}
 
       # A campaign that found something saved its (re-verified) inputs here.

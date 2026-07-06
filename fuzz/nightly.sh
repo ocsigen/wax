@@ -3,21 +3,23 @@
 # fuzz/nightly.sh — the budgeted stochastic campaign tier (scheduled, not per-PR).
 #
 # Where fuzz/check.sh runs the deterministic guards on committed/generated seeds,
-# this builds the corpora and runs the mutation / generation campaigns over them:
+# this builds the corpora and runs the budgeted stochastic + behavioural tier:
 # run.sh (oracles over the whole corpus), smith, mutate-wax/-wat/-wasm (both
-# byte and structure-aware) and diff-validate. Each campaign exits non-zero on a
-# HIGH-severity finding; this script's exit is non-zero iff some campaign did.
+# byte and structure-aware), a seed-keyed slice of the Node execution oracle, and
+# diff-validate. Each campaign exits non-zero on a HIGH-severity finding; this
+# script's exit is non-zero iff some campaign did.
 #
 # SEED defaults to a fresh value each run (announced, so a finding replays with
 # the same SEED); override it to reproduce a night. The budgets are split so the
 # nightly can spend more time in the high-yield mutation campaigns without
 # bloating corpus startup: SMITH_COUNT drives smith.sh, CORPUS_SMITH_COUNT drives
 # the extra smith-derived Wax/WAT seeds, the MUTATE_* counts drive the mutation
-# campaigns, and DIFF_VALIDATE_COUNT drives diff-validate.sh. COUNT and SMITH are
-# still accepted as legacy coarse overrides. QUICK=1 shrinks everything for a
-# smoke test. Needs wasm-tools (and node for the byte-mutation mode of
-# mutate-wasm). Failing campaigns leave their minimized inputs under
-# fuzz/*-findings/.
+# campaigns, EXEC_WAST_COUNT drives the behavioural slice (`exec.sh` over a
+# deterministic SEED-keyed subset of core .wast files), and DIFF_VALIDATE_COUNT
+# drives diff-validate.sh. COUNT and SMITH are still accepted as legacy coarse
+# overrides. QUICK=1 shrinks everything for a smoke test. Needs wasm-tools (and
+# node for the byte-mutation mode of mutate-wasm and the execution oracle).
+# Failing campaigns leave their minimized inputs under fuzz/*-findings/.
 
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -32,6 +34,7 @@ mutate_wax="${MUTATE_WAX_COUNT:-${MUTATE_COUNT:-${legacy_count:-4000}}}"
 mutate_wat="${MUTATE_WAT_COUNT:-${MUTATE_COUNT:-${legacy_count:-6000}}}"
 mutate_wasm="${MUTATE_WASM_COUNT:-${legacy_count:-8000}}"
 mutate_wasm_struct="${MUTATE_WASM_STRUCT_COUNT:-${mutate_wasm}}"
+exec_wast="${EXEC_WAST_COUNT:-64}"
 diff_validate="${DIFF_VALIDATE_COUNT:-${legacy_count:-3000}}"
 if [ "${QUICK:-0}" = 1 ]; then
   smith=40
@@ -40,6 +43,7 @@ if [ "${QUICK:-0}" = 1 ]; then
   mutate_wat=100
   mutate_wasm=100
   mutate_wasm_struct=100
+  exec_wast=5
   diff_validate=100
 fi
 
@@ -49,7 +53,7 @@ command -v "$WASM_TOOLS" >/dev/null 2>&1 || {
 }
 
 echo "nightly campaigns — SEED=$SEED  (replay this run with: SEED=$SEED fuzz/nightly.sh)" >&2
-echo "budgets: smith=$smith corpus-smith=$corpus_smith mutate-wax=$mutate_wax mutate-wat=$mutate_wat mutate-wasm=$mutate_wasm mutate-wasm-struct=$mutate_wasm_struct diff-validate=$diff_validate" >&2
+echo "budgets: smith=$smith corpus-smith=$corpus_smith mutate-wax=$mutate_wax mutate-wat=$mutate_wat mutate-wasm=$mutate_wasm mutate-wasm-struct=$mutate_wasm_struct exec-wast=$exec_wast diff-validate=$diff_validate" >&2
 
 fail=0 passed=0 skipped=0 failed_list=""
 
@@ -71,6 +75,21 @@ run() {
     2) skipped=$((skipped + 1)); echo ">> $name: SKIPPED" >&2 ;;
     *) fail=$((fail + 1)); failed_list="$failed_list $name"; echo ">> $name: FAILED (exit $rc)" >&2 ;;
   esac
+}
+
+# Pick a deterministic pseudo-random slice of the core .wast suite keyed by
+# $SEED, so the nightly execution oracle explores different files over time while
+# still replaying from one seed. The score is a stable checksum of "$SEED:$path".
+pick_exec_wasts() {
+  local count="$1"
+  [ "$count" -gt 0 ] || return 0
+  find "$ROOT/test/wasm-test-suite/core" -name '*.wast' -print \
+    | while IFS= read -r wast; do
+        printf '%s\t%s\n' "$(printf '%s\n' "$SEED:$wast" | cksum | cut -d' ' -f1)" "$wast"
+      done \
+    | sort -n -k1,1 -k2 \
+    | head -n "$count" \
+    | cut -f2-
 }
 
 # Build the tools and the corpora the campaigns feed on.
@@ -98,6 +117,10 @@ run mutate-wax.sh "$mutate_wax"
 run mutate-wat.sh "$mutate_wat"
 run mutate-wasm.sh "$mutate_wasm"
 run "MODE=struct" mutate-wasm.sh "$mutate_wasm_struct"
+if [ "$exec_wast" -gt 0 ]; then
+  mapfile -t exec_wasts < <(pick_exec_wasts "$exec_wast")
+  [ ${#exec_wasts[@]} -gt 0 ] && run exec.sh "${exec_wasts[@]}"
+fi
 run diff-validate.sh "$diff_validate"
 
 echo >&2

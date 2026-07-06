@@ -98,10 +98,13 @@ SEED=…` grow them for a heavier run. The stochastic campaigns and the corpus
 by campaign so the nightly can spend more time in the mutation-heavy paths without
 stretching startup: `SMITH_COUNT` drives `smith.sh`, `CORPUS_SMITH_COUNT` drives
 the extra smith-derived Wax/WAT seeds, `MUTATE_WAX_COUNT`, `MUTATE_WAT_COUNT`,
-`MUTATE_WASM_COUNT`, `MUTATE_WASM_STRUCT_COUNT` and `DIFF_VALIDATE_COUNT` drive
-their named campaigns. The older coarse knobs `SMITH` and `COUNT` are still
-accepted as compatibility fallbacks (`COUNT` seeds the mutation and
-diff-validation budgets unless a more specific variable overrides it).
+`MUTATE_WASM_COUNT`, `MUTATE_WASM_STRUCT_COUNT`, `EXEC_WAST_COUNT` and
+`DIFF_VALIDATE_COUNT` drive their named campaigns. `EXEC_WAST_COUNT` runs a
+deterministic SEED-keyed slice of `exec.sh`, so the nightly now covers a bounded
+behavioural-equivalence tier as well as the validity/crash/round-trip oracles.
+The older coarse knobs `SMITH` and `COUNT` are still accepted as compatibility
+fallbacks (`COUNT` seeds the mutation and diff-validation budgets unless a more
+specific variable overrides it).
 
 The mutation campaigns (`mutate-wax.sh`, `mutate-wat.sh`, `mutate-wasm.sh`) are
 reproducible: each derives every per-mutation seed from a master `SEED`
