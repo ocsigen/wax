@@ -256,7 +256,7 @@ let lower_match ~block_info ~labels ~scrutinee ~arms ~default =
     match pat with
     | MatchCast ((Some _ as bind), rt) ->
         mk (Let ([ (bind, Some (Ref rt)) ], Some blk)) :: body
-    | MatchCast (None, _) -> mk (Set (None, None, blk)) :: body
+    | MatchCast (None, _) -> mk (Let ([ (None, None) ], Some blk)) :: body
     | MatchNull -> blk :: body
   in
   match arms with
@@ -285,7 +285,9 @@ let lower_match ~block_info ~labels ~scrutinee ~arms ~default =
       in
       (* Innermost block drops the final fall-through value then escapes; the
          default follows the [escape] block as trailing code. *)
-      let inner = [ mk (Set (None, None, chain)); mk (Br (escape, None)) ] in
+      let inner =
+        [ mk (Let ([ (None, None) ], Some chain)); mk (Br (escape, None)) ]
+      in
       let block_l0 =
         mk (Block { label = Some l0; typ = res p0; block = inner })
       in

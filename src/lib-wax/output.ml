@@ -927,7 +927,7 @@ let rec instr prec pp (i : _ instr) =
       identifier pp y.desc
   | Set (x, op, i) ->
       box pp ~indent:indent_level (fun () ->
-          simple_pat pp x;
+          identifier pp x.desc;
           space pp ();
           (* [x op= e] for a compound assignment; a plain [=] otherwise. *)
           operator pp
@@ -1087,6 +1087,23 @@ let rec instr prec pp (i : _ instr) =
   | UnOp (op, i) ->
       atomic_node pp (Some op.info) (fun () -> operator pp (unop op.desc));
       instr UnaryPrefix pp i
+  | Let ([ (None, typ) ], Some i) ->
+      (* An anonymous binding is a discarded value: printed [_ = e] (or, when a
+         width annotation is load-bearing, [_: t = e]) — without [let], since
+         nothing is bound. Mirrors the [Set] layout. *)
+      box pp ~indent:indent_level (fun () ->
+          hbox pp (fun () ->
+              operator pp "_";
+              Option.iter
+                (fun t ->
+                  punctuation pp ":";
+                  space pp ();
+                  valtype pp t)
+                typ;
+              space pp ();
+              operator pp "=");
+          space pp ();
+          instr Instruction pp i)
   | Let (l, i) ->
       box pp ~indent:indent_level (fun () ->
           (* Keep [let pat =] together as one unit: when the value breaks the

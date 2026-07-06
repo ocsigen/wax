@@ -172,6 +172,16 @@ operator with `x` as its *left* operand — and reconstructs the compound form
 | `unreachable` | `unreachable` |
 | `nop` | `nop` |
 | `select` | `cond ? v1 : v2` |
+| `drop` | `_ = val` |
+
+A `drop` becomes an assignment to `_` — an anonymous binding that evaluates its
+value and discards it (see [Discarding a value](../language.md#discarding-a-value)).
+When the dropped value is a bare numeric expression whose width the Wax syntax
+would not otherwise carry, the conversion pins it with a type annotation,
+`_: t = val`, so re-reading the Wax does not re-default the value to `i32`/`f64`
+and silently change its width. The annotation is emitted only where it is
+load-bearing; a value already anchored by a typed sub-expression (a local, a
+call) needs none.
 
 The rows above are the raw instructions. Two common *shapes* built from them are
 recovered as higher-level constructs on the way back to Wax: a `br_table` in the

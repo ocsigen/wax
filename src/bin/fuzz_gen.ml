@@ -548,17 +548,17 @@ let rec stmt d : Ast.location Ast.instr =
   match rnd 100 with
   | n when n < 28 ->
       let t = pick all_params in
-      nl (Ast.Set (Some (id (pname t)), None, gen t d))
+      nl (Ast.Set (id (pname t), None, gen t d))
   | n when n < 40 ->
       (* [x op= e] — a compound assignment over a numeric param, with an operator
          valid for its type. Params are always initialized, so reading [x] (which
          [x op= e] does) is well-typed. *)
       let t = pick num_ty in
       let op = pick (if is_int t then int_binops else flt_binops) in
-      nl (Ast.Set (Some (id (pname t)), Some (nl op), gen t d))
+      nl (Ast.Set (id (pname t), Some (nl op), gen t d))
   | n when n < 46 ->
-      nl (Ast.Set (None, None, gen (pick num_ty) (max 1 d)))
-      (* `_ = <determined>` *)
+      nl (Ast.Let ([ (None, None) ], Some (gen (pick num_ty) (max 1 d))))
+      (* `_ = <determined>` (a drop, an anonymous [Let]) *)
   | n when n < 58 ->
       (* [point.x] is the one mutable struct field. *)
       nl (Ast.StructSet (leaf Point, id "x", gen I32 d))
@@ -589,7 +589,7 @@ let rec stmt d : Ast.location Ast.instr =
         else
           let t = pick num_ty in
           let op = pick (if is_int t then int_binops else flt_binops) in
-          Some (nl (Ast.Set (Some (id (pname t)), Some (nl op), gen t (d - 1))))
+          Some (nl (Ast.Set (id (pname t), Some (nl op), gen t (d - 1))))
       in
       nl
         (Ast.While
@@ -601,29 +601,33 @@ let rec stmt d : Ast.location Ast.instr =
            })
   | _ ->
       let t = pick num_ty in
-      nl (Ast.Set (Some (id (pname t)), None, gen t d))
+      nl (Ast.Set (id (pname t), None, gen t d))
 
 (* One clean type error, to reach the checker's mismatch-reporting arms. *)
 let poison () : Ast.location Ast.instr =
   match rnd 6 with
   | 0 ->
       nl
-        (Ast.Set
-           ( None,
-             None,
-             nl
-               (Ast.BinOp
-                  (nl Ast.Add, nl (Ast.Get (id "a")), nl (Ast.Get (id "d")))) ))
+        (Ast.Let
+           ( [ (None, None) ],
+             Some
+               (nl
+                  (Ast.BinOp
+                     (nl Ast.Add, nl (Ast.Get (id "a")), nl (Ast.Get (id "d")))))
+           ))
       (* i32 + f64 *)
-  | 1 ->
-      nl (Ast.Set (Some (id "b"), None, nl (Ast.Get (id "c"))))
-      (* f32 into i64 *)
+  | 1 -> nl (Ast.Set (id "b", None, nl (Ast.Get (id "c")))) (* f32 into i64 *)
   | 2 -> nl (Ast.StructGet (leaf Point, id "nope")) (* unknown field *)
   | 3 ->
-      nl (Ast.Set (None, None, nl (Ast.String (Some (id "ints"), "x"))))
+      nl
+        (Ast.Let
+           ([ (None, None) ], Some (nl (Ast.String (Some (id "ints"), "x")))))
       (* a string on an i32 array — only i8/i16 are allowed *)
   | 4 ->
-      nl (Ast.Set (None, None, nl (Ast.String (Some (id "wchars"), "\xff"))))
+      nl
+        (Ast.Let
+           ( [ (None, None) ],
+             Some (nl (Ast.String (Some (id "wchars"), "\xff"))) ))
       (* invalid Unicode in an i16 (UTF-16) string *)
   | _ ->
       nl

@@ -141,7 +141,7 @@ let mutate_node (i : location instr) : location instr =
         if next () mod 2 = 0 then
           Set (id, Some { op with desc = swap_binop op.desc }, e)
         else Set (id, None, e)
-    | Set ((Some _ as id), None, e) when next () mod 2 = 0 ->
+    | Set (id, None, e) when next () mod 2 = 0 ->
         Set (id, Some { desc = pick compound_binops; info = e.info }, e)
     | _ -> graft ()
   in

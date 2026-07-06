@@ -803,9 +803,17 @@ statement:
 | i = plaininstr { i }
 | NOP { with_loc $sloc Nop }
 | UNREACHABLE { with_loc $sloc Unreachable }
-| x = simple_pattern "=" i = expression { with_loc $sloc (Set (x, None, i)) }
+| x = ident "=" i = expression { with_loc $sloc (Set (x, None, i)) }
+(* A discarded value: [_ = e] drops [e]. An optional type annotation ([_: t = e])
+   pins a width that the surface syntax of the value would otherwise not carry,
+   so the value round-trips at its original width; it lowers to the value
+   followed by [drop]. Represented as an anonymous [Let] (nothing is bound), not
+   a [Set]. *)
+| "_" "=" i = expression { with_loc $sloc (Let ([(None, None)], Some i)) }
+| "_" ":" t = value_type "=" i = expression
+  { with_loc $sloc (Let ([(None, Some t)], Some i)) }
 | x = ident o = compound_assign_op i = expression
-  { with_loc $sloc (Set (Some x, Some o, i)) }
+  { with_loc $sloc (Set (x, Some o, i)) }
 | LET x = simple_pattern
   { with_loc $sloc (Let ([(x, None)], None)) }
 | LET x = simple_pattern "=" i = expression
