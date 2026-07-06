@@ -1446,21 +1446,74 @@ let print_data_name pp n =
   | Some (n : ident) -> identifier pp n.desc
   | None -> punctuation pp "_"
 
+let simple_inline_instr (i : _ Ast.instr) =
+  match i.desc with
+  | Get _ | Path _ | Char _ | String _ | Int _ | Float _ -> true
+  | _ -> false
+
+let print_square_instr ?(leading_space = false) pp i =
+  if simple_inline_instr i then (
+    if leading_space then space pp ();
+    punctuation pp "[";
+    instr Instruction pp i;
+    punctuation pp "]")
+  else (
+    if leading_space then
+      hbox pp (fun () ->
+          space pp ();
+          punctuation pp "[")
+    else punctuation pp "[";
+    indent pp indent_level (fun () ->
+        newline pp ();
+        instr Instruction pp i);
+    newline pp ();
+    punctuation pp "]")
+
+let print_square_instr_list ?(multiline = false) pp l =
+  if not multiline then (
+    punctuation pp "[";
+    box pp (fun () -> list_commasep (fun pp i -> instr Instruction pp i) pp l);
+    punctuation pp "]")
+  else (
+    punctuation pp "[";
+    indent pp indent_level (fun () ->
+        newline pp ();
+        list_commasep (fun pp i -> instr Instruction pp i) pp l);
+    newline pp ();
+    punctuation pp "]")
+
+let print_offset_brackets pp off = print_square_instr ~leading_space:true pp off
+
+let print_targeted_offset pp target off =
+  hbox pp (fun () ->
+      space pp ();
+      operator pp "@";
+      space pp ();
+      identifier pp target.desc);
+  print_offset_brackets pp off
+
+let print_eq_square_instr_list pp l =
+  hbox pp (fun () ->
+      space pp ();
+      punctuation pp "=";
+      space pp ());
+  print_square_instr_list ~multiline:(List.length l > 3) pp l
+
 let print_memdata pp (d : _ Ast.memdata) =
-  keyword pp "data";
-  space pp ();
-  print_data_name pp d.data_name;
-  space pp ();
-  operator pp "@";
-  space pp ();
-  punctuation pp "[";
-  instr Instruction pp d.offset;
-  punctuation pp "]";
-  space pp ();
-  punctuation pp "=";
-  space pp ();
-  print_data_bytes pp d.init;
-  punctuation pp ";"
+  box pp ~indent:indent_level (fun () ->
+      hbox pp (fun () ->
+          keyword pp "data";
+          space pp ();
+          print_data_name pp d.data_name;
+          space pp ();
+          operator pp "@");
+      print_offset_brackets pp d.offset;
+      hbox pp (fun () ->
+          space pp ();
+          punctuation pp "=");
+      space pp ();
+      print_data_bytes pp d.init;
+      punctuation pp ";")
 
 let rec modulefield pp field =
   atomic_node pp (Some field.info) @@ fun () ->
@@ -1571,8 +1624,9 @@ let rec modulefield pp field =
               match data with
               | [] -> semicolon pp
               | _ ->
-                  space pp ();
-                  punctuation pp "{";
+                  hbox pp (fun () ->
+                      space pp ();
+                      punctuation pp "{");
                   indent pp indent_level (fun () ->
                       List.iter
                         (fun d ->
@@ -1583,88 +1637,71 @@ let rec modulefield pp field =
                   punctuation pp "}"))
   | Data { name; mode; init; attributes = a } ->
       print_attr_prefix pp a (fun () ->
-          box pp (fun () ->
-              keyword pp "data";
-              space pp ();
-              print_data_name pp name;
+          box pp ~indent:indent_level (fun () ->
+              hbox pp (fun () ->
+                  keyword pp "data";
+                  space pp ();
+                  print_data_name pp name);
               (match mode with
               | Passive -> ()
-              | Active (mem, off) ->
+              | Active (mem, off) -> print_targeted_offset pp mem off);
+              hbox pp (fun () ->
                   space pp ();
-                  operator pp "@";
-                  space pp ();
-                  identifier pp mem.desc;
-                  space pp ();
-                  punctuation pp "[";
-                  instr Instruction pp off;
-                  punctuation pp "]");
-              space pp ();
-              punctuation pp "=";
+                  punctuation pp "=");
               space pp ();
               print_data_bytes pp init;
               semicolon pp))
   | Table { name; address_type; reftype = rt; limits; init; attributes = a } ->
       print_attr_prefix pp a (fun () ->
-          box pp (fun () ->
-              keyword pp "table";
-              space pp ();
-              identifier pp name.desc;
-              punctuation pp ":";
-              space pp ();
-              (match address_type with
-              | `I32 -> ()
-              | `I64 ->
-                  keyword pp "i64";
-                  space pp ());
-              reftype pp rt;
-              Option.iter
-                (fun (mi, ma) ->
+          box pp ~indent:indent_level (fun () ->
+              hbox pp (fun () ->
+                  keyword pp "table";
                   space pp ();
-                  punctuation pp "[";
-                  constant pp (Wax_utils.Uint64.to_string mi);
+                  identifier pp name.desc;
+                  punctuation pp ":";
+                  space pp ();
+                  (match address_type with
+                  | `I32 -> ()
+                  | `I64 ->
+                      keyword pp "i64";
+                      space pp ());
+                  reftype pp rt;
                   Option.iter
-                    (fun m ->
-                      punctuation pp ",";
+                    (fun (mi, ma) ->
                       space pp ();
-                      constant pp (Wax_utils.Uint64.to_string m))
-                    ma;
-                  punctuation pp "]")
-                limits;
+                      punctuation pp "[";
+                      constant pp (Wax_utils.Uint64.to_string mi);
+                      Option.iter
+                        (fun m ->
+                          punctuation pp ",";
+                          space pp ();
+                          constant pp (Wax_utils.Uint64.to_string m))
+                        ma;
+                      punctuation pp "]")
+                    limits);
               Option.iter
                 (fun e ->
-                  space pp ();
-                  punctuation pp "=";
+                  hbox pp (fun () ->
+                      space pp ();
+                      punctuation pp "=");
                   space pp ();
                   instr Instruction pp e)
                 init;
               semicolon pp))
   | Elem { name; reftype = rt; mode; init; attributes = a } ->
       print_attr_prefix pp a (fun () ->
-          box pp (fun () ->
-              keyword pp "elem";
-              space pp ();
-              identifier pp name.desc;
-              punctuation pp ":";
-              space pp ();
-              reftype pp rt;
+          box pp ~indent:indent_level (fun () ->
+              hbox pp (fun () ->
+                  keyword pp "elem";
+                  space pp ();
+                  identifier pp name.desc;
+                  punctuation pp ":";
+                  space pp ();
+                  reftype pp rt);
               (match mode with
               | EPassive -> ()
-              | EActive (tab, off) ->
-                  space pp ();
-                  operator pp "@";
-                  space pp ();
-                  identifier pp tab.desc;
-                  space pp ();
-                  punctuation pp "[";
-                  instr Instruction pp off;
-                  punctuation pp "]");
-              space pp ();
-              punctuation pp "=";
-              space pp ();
-              punctuation pp "[";
-              box pp (fun () ->
-                  list_commasep (fun pp i -> instr Instruction pp i) pp init);
-              punctuation pp "]";
+              | EActive (tab, off) -> print_targeted_offset pp tab off);
+              print_eq_square_instr_list pp init;
               semicolon pp))
   | Group { attributes; fields } ->
       print_attr_prefix pp attributes (fun () ->

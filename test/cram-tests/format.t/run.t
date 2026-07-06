@@ -74,3 +74,61 @@ Long tag headers keep `tag` on the opening line when formatting wraps:
       (ref $some_really_long_type_name_2))
     (result (ref $some_really_long_type_name_3))
   )
+
+Long Wax data initializers indent the string continuation, both at top level and
+inside a memory block.
+
+  $ cat > data.wax <<'EOF'
+  > data d_9 @ zstd_memory [3396] =
+  > "\01\00\00\00\02\00\00\00\04\00\00\00\00\00\00\00\02\00\00\00\04\00\00\00\08\00\00\00\00\00\00\00\01\00\00\00\02\00\00\00\01\00\00\00\04\00\00\00\04\00\00\00\04\00\00\00\04\00\00\00\08\00\00\00\08\00\00\00\08\00\00\00\07\00\00\00\08\00\00\00\09\00\00\00\0a\00\00\00\0b";
+  > memory zstd_memory: i32 {
+  >     data d_9 @ [3396] = "\01\00\00\00\02\00\00\00\04\00\00\00\00\00\00\00\02\00\00\00\04\00\00\00\08\00\00\00\00\00\00\00\01\00\00\00\02\00\00\00\01\00\00\00\04\00\00\00\04\00\00\00\04\00\00\00\04\00\00\00\08\00\00\00\08\00\00\00\08\00\00\00\07\00\00\00\08\00\00\00\09\00\00\00\0a\00\00\00\0b";
+  > }
+  > EOF
+  $ wax format -f wax data.wax
+  data d_9 @ zstd_memory [3396] =
+      "\01\00\00\00\02\00\00\00\04\00\00\00\00\00\00\00\02\00\00\00\04\00\00\00\08\00\00\00\00\00\00\00\01\00\00\00\02\00\00\00\01\00\00\00\04\00\00\00\04\00\00\00\04\00\00\00\04\00\00\00\08\00\00\00\08\00\00\00\08\00\00\00\07\00\00\00\08\00\00\00\t\00\00\00\n\00\00\00\0b";
+  memory zstd_memory: i32 {
+      data d_9 @ [3396] =
+          "\01\00\00\00\02\00\00\00\04\00\00\00\00\00\00\00\02\00\00\00\04\00\00\00\08\00\00\00\00\00\00\00\01\00\00\00\02\00\00\00\01\00\00\00\04\00\00\00\04\00\00\00\04\00\00\00\04\00\00\00\08\00\00\00\08\00\00\00\08\00\00\00\07\00\00\00\08\00\00\00\t\00\00\00\n\00\00\00\0b";
+  }
+
+Long table, elem, and active-data declarations indent continuations, and
+bracketed offsets / element lists expand into structured multi-line blocks.
+
+  $ cat > wrap.wax <<'EOF'
+  > table tab0: i64 &?func [10, 20] = some_really_long_initializer_expression.with_a_really_long_method_name(argument_one, argument_two, argument_three);
+  > elem seg: &?func = [handler_with_a_really_long_name_a, handler_with_a_really_long_name_b, handler_with_a_really_long_name_c, handler_with_a_really_long_name_d, handler_with_a_really_long_name_e];
+  > elem seg2: &?func @ funcs[some_really_long_offset_expression.with_a_really_long_method_name(argument_one, argument_two, argument_three)] = [handler_with_a_really_long_name_a, handler_with_a_really_long_name_b, handler_with_a_really_long_name_c, handler_with_a_really_long_name_d];
+  > data d @ mem0[some_really_long_offset_expression.with_a_really_long_method_name(argument_one, argument_two, argument_three)] = "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz";
+  > EOF
+  $ wax format -f wax wrap.wax
+  table tab0: i64 &?func [10, 20] =
+      some_really_long_initializer_expression.with_a_really_long_method_name(
+          argument_one,
+          argument_two,
+          argument_three,
+      );
+  elem seg: &?func = [
+          handler_with_a_really_long_name_a, handler_with_a_really_long_name_b,
+          handler_with_a_really_long_name_c, handler_with_a_really_long_name_d,
+          handler_with_a_really_long_name_e
+      ];
+  elem seg2: &?func @ funcs [
+          some_really_long_offset_expression.with_a_really_long_method_name(
+              argument_one,
+              argument_two,
+              argument_three,
+          )
+      ] = [
+          handler_with_a_really_long_name_a, handler_with_a_really_long_name_b,
+          handler_with_a_really_long_name_c, handler_with_a_really_long_name_d
+      ];
+  data d @ mem0 [
+          some_really_long_offset_expression.with_a_really_long_method_name(
+              argument_one,
+              argument_two,
+              argument_three,
+          )
+      ] =
+      "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz";
