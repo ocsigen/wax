@@ -59,15 +59,18 @@ type ty =
   | Eq
   | I31
   | Cont
+  | Fn (* a function reference of the [task] type ([&fn(i32) -> i32]) *)
 
 let num_ty = [| I32; I64; F32; F64 |]
 
 let all_params =
-  [| I32; I64; F32; F64; Vec; Point; Pair; Ints; Chars; Wchars; Eq; I31; Cont |]
+  [|
+    I32; I64; F32; F64; Vec; Point; Pair; Ints; Chars; Wchars; Eq; I31; Cont; Fn;
+  |]
 
 (* Result types a function may return (Eq excluded: less useful as a callee). *)
 let result_ty =
-  [| I32; I64; F32; F64; Vec; Point; Pair; Ints; Chars; Wchars; I31; Cont |]
+  [| I32; I64; F32; F64; Vec; Point; Pair; Ints; Chars; Wchars; I31; Cont; Fn |]
 
 let is_num = function I32 | I64 | F32 | F64 -> true | _ -> false
 let is_int = function I32 | I64 -> true | _ -> false
@@ -81,6 +84,8 @@ let heaptype : ty -> Ast.heaptype = function
   | Eq -> Ast.Eq
   | I31 -> Ast.I31
   | Cont -> Ast.Type (id "k")
+  (* A reference to the declared [task] function type is a funcref [&task]. *)
+  | Fn -> Ast.Type (id "task")
   | _ -> assert false
 
 let reftype t : Ast.reftype = { nullable = false; typ = heaptype t }
@@ -107,6 +112,7 @@ let pname = function
   | Eq -> "s"
   | I31 -> "n"
   | Cont -> "kc"
+  | Fn -> "fr"
 
 (* Method call on the declared memory [m]: [m.load32(p)], [m.store32(p, v)], … *)
 let mem = nl (Ast.Get (id "m"))
@@ -399,6 +405,8 @@ and gen_num t d : Ast.location Ast.instr =
   let reftest () =
     nl (Ast.Test (gen Eq (d - 1), reftype (pick [| Point; Pair; I31 |])))
   in
+  (* [call_ref]: call the [fr] funcref ([task] = [fn(i32) -> i32]) -> i32. *)
+  let callref () = nl (Ast.Call (leaf Fn, [ gen I32 (d - 1) ])) in
   if is_int t then
     match rnd 100 with
     | n when n < 20 -> bin int_binops
@@ -415,6 +423,7 @@ and gen_num t d : Ast.location Ast.instr =
     | n when n < 82 && t = I32 -> meth (leaf Ints) "length" []
     | n when n < 85 && t = I32 -> i31get ()
     | n when n < 88 && t = I32 -> reftest ()
+    | n when n < 90 && t = I32 -> callref ()
     | n when n < 93 -> extract ()
     | n when n < 97 -> load ()
     | _ -> call t
@@ -509,6 +518,14 @@ and gen_ref t d : Ast.location Ast.instr =
       | n when n < 46 -> nl (Ast.ContNew (id "k", nl (Ast.Get (id "worker"))))
       | n when n < 64 -> if_ t d
       | n when n < 82 -> call t
+      | _ -> leaf t)
+  | Fn -> (
+      match rnd 100 with
+      (* [ref.func]: a function's name is a reference to it. [worker] has the
+         [task] signature, so [worker] typed as a value is a [&task]. *)
+      | n when n < 40 -> nl (Ast.Get (id "worker"))
+      | n when n < 60 -> if_ t d
+      | n when n < 80 -> call t
       | _ -> leaf t)
   | _ -> assert false
 
