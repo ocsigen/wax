@@ -1,38 +1,4 @@
 (rule
- (target output.wax)
- (action
-  (run
-   wax
-   --validate
-   -W
-   unused-local=hidden
-   -o
-   output.wax
-   %{dep:bigarray.wat})))
-
-(rule
- (alias runtest)
- (action
-  (diff output.wax.expected output.wax)))
-
-(rule
- (target output.wat)
- (action
-  (run
-   wax
-   --validate
-   -W
-   unused-local=hidden
-   -o
-   output.wat
-   %{dep:bigarray.wat})))
-
-(rule
- (alias runtest)
- (action
-  (diff output.wat.expected output.wat)))
-
-(rule
  (deps
   (glob_files_rec wasm-test-suite/*.wast)
   (glob_files_rec additional-tests/*.wast))
