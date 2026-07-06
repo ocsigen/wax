@@ -53,6 +53,7 @@ jobs:
       # ubuntu runner. SEED is left unset so each night explores fresh inputs;
       # the chosen value is logged for replay.
       - name: Run nightly fuzz campaigns
+        id: campaign
         run: opam exec -- bash fuzz/nightly.sh
         env:
           COUNT: ${{ github.event.inputs.count || '2000' }}
@@ -70,8 +71,11 @@ jobs:
       # A repo-visible failure signal that does not depend on personal
       # notification settings: file (or comment on) a `nightly-fuzz` issue. This
       # is on top of GitHub's built-in email to the workflow's last committer.
+      # Gated on the campaign step itself failing (a HIGH-severity finding): a
+      # setup/build breakage means the campaign never ran, which is an
+      # infrastructure problem, not a fuzz finding, so it must not file an issue.
       - name: Report failure as an issue
-        if: failure()
+        if: failure() && steps.campaign.outcome == 'failure'
         uses: actions/github-script@v9
         with:
           script: |
