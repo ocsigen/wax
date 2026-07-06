@@ -42,58 +42,66 @@ the constant-operand and dead-code checks (see `unused-fields-wat.t` for those):
    9 │   (func $taut (param i32) (result i32)
   10 │     (i32.ge_u (local.get 0) (i32.const 0)))
      ·      ^^^^^^^^
-  11 │   (func $constcond (param i32) (result i32)
-  12 │     (if (i32.const 0) (then (return (i32.const 1))))
-  Warning: This condition is always false.
+  11 │   (func $self (param i32) (result i32)
+  12 │     (i32.eq (local.get 0) (local.get 0)))
+  Warning: This comparison is always true.
     ──➤  lints.wat:12:6
   10 │     (i32.ge_u (local.get 0) (i32.const 0)))
-  11 │   (func $constcond (param i32) (result i32)
-  12 │     (if (i32.const 0) (then (return (i32.const 1))))
+  11 │   (func $self (param i32) (result i32)
+  12 │     (i32.eq (local.get 0) (local.get 0)))
+     ·      ^^^^^^
+  13 │   (func $constcond (param i32) (result i32)
+  14 │     (if (i32.const 0) (then (return (i32.const 1))))
+  Warning: This condition is always false.
+    ──➤  lints.wat:14:6
+  12 │     (i32.eq (local.get 0) (local.get 0)))
+  13 │   (func $constcond (param i32) (result i32)
+  14 │     (if (i32.const 0) (then (return (i32.const 1))))
      ·      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  13 │     (local.get 0))
-  14 │   (func $droppure
-  Warning:
-    The result of this expression is discarded, and computing it has no effect.
-    ──➤  lints.wat:15:6
-  13 │     (local.get 0))
-  14 │   (func $droppure
-  15 │     (drop (i32.const 5)))
-     ·      ^^^^
-  16 │   (func $dropstruct
-  17 │     (drop (struct.new $pair (i32.const 1) (i32.const 2))))
+  15 │     (local.get 0))
+  16 │   (func $droppure
   Warning:
     The result of this expression is discarded, and computing it has no effect.
     ──➤  lints.wat:17:6
-  15 │     (drop (i32.const 5)))
-  16 │   (func $dropstruct
-  17 │     (drop (struct.new $pair (i32.const 1) (i32.const 2))))
+  15 │     (local.get 0))
+  16 │   (func $droppure
+  17 │     (drop (i32.const 5)))
      ·      ^^^^
-  18 │   (func $dead (result i32)
-  19 │     (return (i32.const 1))
-  Warning: This code is unreachable.
-    ──➤  lints.wat:20:6
-  17 │     (drop (struct.new $pair (i32.const 1) (i32.const 2))))
-  18 │   (func $dead (result i32)
-  19 │     (return (i32.const 1))
-     ·      ^^^^^^^^^^^^^^^^^^^^^ Control never returns from here.
-  20 │     (i32.const 2))
-     ·      ^^^^^^^^^^^^
-  21 │   (func $wide (param i64 i64)
-  22 │     local.get 0
+  18 │   (func $dropstruct
+  19 │     (drop (struct.new $pair (i32.const 1) (i32.const 2))))
   Warning:
     The result of this expression is discarded, and computing it has no effect.
-    ──➤  lints.wat:25:5
-  23 │     local.get 1
-  24 │     i64.mul_wide_s
-  25 │     drop
+    ──➤  lints.wat:19:6
+  17 │     (drop (i32.const 5)))
+  18 │   (func $dropstruct
+  19 │     (drop (struct.new $pair (i32.const 1) (i32.const 2))))
+     ·      ^^^^
+  20 │   (func $dead (result i32)
+  21 │     (return (i32.const 1))
+  Warning: This code is unreachable.
+    ──➤  lints.wat:22:6
+  19 │     (drop (struct.new $pair (i32.const 1) (i32.const 2))))
+  20 │   (func $dead (result i32)
+  21 │     (return (i32.const 1))
+     ·      ^^^^^^^^^^^^^^^^^^^^^ Control never returns from here.
+  22 │     (i32.const 2))
+     ·      ^^^^^^^^^^^^
+  23 │   (func $wide (param i64 i64)
+  24 │     local.get 0
+  Warning:
+    The result of this expression is discarded, and computing it has no effect.
+    ──➤  lints.wat:27:5
+  25 │     local.get 1
+  26 │     i64.mul_wide_s
+  27 │     drop
      ·     ^^^^
-  26 │     drop)
-  27 │   (func $flat (param i32) (result i32)
+  28 │     drop)
+  29 │   (func $flat (param i32) (result i32)
   Warning: The shift count 40 is at least the operand width (32 bits).
-    ──➤  lints.wat:30:5
-  28 │     local.get 0
-  29 │     i32.const 40
-  30 │     i32.shl))
+    ──➤  lints.wat:32:5
+  30 │     local.get 0
+  31 │     i32.const 40
+  32 │     i32.shl))
      ·     ^^^^^^^
-  31 │ 
+  33 │ 
   Hint: Wasm masks the count modulo 32, shifting by 8 instead.

@@ -4056,10 +4056,17 @@ let declared_func_exports ctx fields =
    constants on the real operand stack — the top is a binary operator's right
    operand (its last-pushed value). Folded operands flatten into the same push
    sequence, so folded and flat forms are handled alike. *)
-(* A value tracked on the lint stack: a known integer/float constant, or a value
-   produced with no side effect and no trap ([LPure] — a [local.get]/[global.get]
-   read). Constants are also pure. Anything else clears the stack. *)
-type lint_val = LInt of int64 | LFloat of float | LPure
+(* A value tracked on the lint stack: a known integer/float constant, a bare
+   [local.get]/[global.get] read (tracked by resolved index so two reads of the
+   same variable can be recognised as identical operands), or some other value
+   produced with no side effect and no trap ([LPure]). Constants and reads are
+   also pure. Anything else clears the stack. *)
+type lint_val =
+  | LInt of int64
+  | LFloat of float
+  | LLocal of int
+  | LGlobal of int
+  | LPure
 
 let lint_int_value s =
   Int64.of_string_opt (String.concat "" (String.split_on_char '_' s))
@@ -4112,16 +4119,33 @@ let lint_body ctx instrs =
         | Func _ | Array _ | Cont _ -> None)
     | None -> None
   in
+  (* Two operands that are the same bare local/global read (with nothing impure
+     in between — an assignment would have cleared the stack). *)
+  let same_read a b =
+    match (a, b) with
+    | LLocal i, LLocal j | LGlobal i, LGlobal j -> i = j
+    | _ -> false
+  in
   let check_int_binop (op : _ Ast.Text.instr) (o : Ast.int_bin_op) width st =
+    let taut value =
+      Error.tautological_comparison diagnostics ~location:op.info ~value
+    in
+    (* [st] is [right :: left :: _]. *)
     match (o, st) with
     | (Shl | Shr _), LInt n :: _ when n >= 0L && n >= Int64.of_int width ->
         Error.shift_overflow diagnostics ~location:op.info ~width n
     | (Div _ | Rem _), LInt 0L :: _ ->
         Error.division_by_zero diagnostics ~location:op.info
-    | Lt Ast.Unsigned, LInt 0L :: _ ->
-        Error.tautological_comparison diagnostics ~location:op.info ~value:false
-    | Ge Ast.Unsigned, LInt 0L :: _ ->
-        Error.tautological_comparison diagnostics ~location:op.info ~value:true
+    (* An unsigned comparison against a constant zero, on either side. *)
+    | Lt Ast.Unsigned, LInt 0L :: _ -> taut false (* a <u 0 *)
+    | Ge Ast.Unsigned, LInt 0L :: _ -> taut true (* a >=u 0 *)
+    | Gt Ast.Unsigned, _ :: LInt 0L :: _ -> taut false (* 0 >u a *)
+    | Le Ast.Unsigned, _ :: LInt 0L :: _ -> taut true (* 0 <=u a *)
+    (* Two identical integer operands: [a == a]/[a <= a]/[a >= a] hold, the
+       strict and inequality forms do not. All comparisons here are integer (the
+       float ones are a different opcode), so there is no NaN caveat. *)
+    | (Eq | Le _ | Ge _), a :: b :: _ when same_read a b -> taut true
+    | (Ne | Lt _ | Gt _), a :: b :: _ when same_read a b -> taut false
     | _ -> ()
   in
   (* Check the operator [op] against the constant stack [st] (top = right
@@ -4148,7 +4172,7 @@ let lint_body ctx instrs =
         | _ -> ())
     | Drop -> (
         match st with
-        | (LInt _ | LFloat _ | LPure) :: _ ->
+        | (LInt _ | LFloat _ | LLocal _ | LGlobal _ | LPure) :: _ ->
             Error.unused_result diagnostics ~location:op.info
         | _ -> ())
     | _ -> ()
@@ -4269,6 +4293,16 @@ let lint_body ctx instrs =
         match lint_int_value s with Some n -> LInt n :: st | None -> [])
     | Const (F32 s) | Const (F64 s) -> (
         match lint_float_value s with Some f -> LFloat f :: st | None -> [])
+    (* A bare read is pure; track its resolved index so a comparison of two reads
+       of the same variable is recognised as identical operands. *)
+    | LocalGet idx -> (
+        match Sequence.get_index_opt ctx.locals idx with
+        | Some i -> LLocal i :: st
+        | None -> LPure :: st)
+    | GlobalGet idx -> (
+        match Sequence.get_index_opt ctx.modul.globals idx with
+        | Some i -> LGlobal i :: st
+        | None -> LPure :: st)
     | Folded (op, operands) ->
         (* Folded form wraps every instruction, even a leaf constant, as
            [Folded (Const n, [])]. Flatten to "operands then head": process the

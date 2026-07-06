@@ -8,6 +8,8 @@
     (i32.trunc_f64_s (f64.const 1e30)))
   (func $taut (param i32) (result i32)
     (i32.ge_u (local.get 0) (i32.const 0)))
+  (func $self (param i32) (result i32)
+    (i32.eq (local.get 0) (local.get 0)))
   (func $constcond (param i32) (result i32)
     (if (i32.const 0) (then (return (i32.const 1))))
     (local.get 0))
