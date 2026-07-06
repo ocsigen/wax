@@ -119,10 +119,8 @@ type ints = [i32];
 
 #[export = "find_first_zero"]
 fn find_first_zero(arr: &ints) -> i32 {
-    let i: i32;
-    let len: i32;
-    len = arr.length();
-    i = 0;
+    let len = arr.length();
+    let i = 0;
     'search: loop {
         if i >=s len {
             return -1;
@@ -130,7 +128,7 @@ fn find_first_zero(arr: &ints) -> i32 {
         if arr[i] == 0 {
             return i;
         }
-        i = i + 1;
+        i += 1;
         br 'search;
     }
     unreachable;
@@ -142,8 +140,8 @@ fn find_first_zero(arr: &ints) -> i32 {
 ```wat
 (func $find_first_zero (export "find_first_zero")
       (param $arr (ref $array_i32)) (result i32)
-  (local $i i32)
   (local $len i32)
+  (local $i i32)
   local.get $arr
   array.len
   local.set $len
@@ -320,10 +318,8 @@ fn make_point(x: i32, y: i32) -> &point {
 
 #[export = "distance_squared"]
 fn distance_squared(p1: &point, p2: &point) -> i32 {
-    let dx: i32;
-    let dy: i32;
-    dx = p1.x - p2.x;
-    dy = p1.y - p2.y;
+    let dx = p1.x - p2.x;
+    let dy = p1.y - p2.y;
     dx * dx + dy * dy;
 }
 ```
@@ -428,18 +424,15 @@ type bytes = [mut i8];
 
 #[export = "sum_bytes"]
 fn sum_bytes(arr: &bytes) -> i32 {
-    let sum: i32;
-    let i: i32;
-    let len: i32;
-    sum = 0;
-    i = 0;
-    len = arr.length();
+    let sum = 0;
+    let i = 0;
+    let len = arr.length();
     'loop: loop {
         if i >=s len {
             return sum;
         }
-        sum = sum + arr[i] as i32_u;
-        i = i + 1;
+        sum += arr[i] as i32_u;
+        i += 1;
         br 'loop;
     }
     unreachable;
@@ -447,16 +440,14 @@ fn sum_bytes(arr: &bytes) -> i32 {
 
 #[export = "fill_bytes"]
 fn fill_bytes(arr: &bytes, val: i32) {
-    let i: i32;
-    let len: i32;
-    i = 0;
-    len = arr.length();
+    let i = 0;
+    let len = arr.length();
     'loop: loop {
         if i >=s len {
             return;
         }
         arr[i] = val;
-        i = i + 1;
+        i += 1;
         br 'loop;
     }
 }
@@ -498,7 +489,7 @@ type list = { value: i32, next: &?list };
 
 #[export = "make_node"]
 fn make_node(value: i32, next: &?list) -> &list {
-    {list| value: value, next: next};
+    {list| value, next};
 }
 
 #[export = "sum_list"]
@@ -506,8 +497,7 @@ fn sum_list(head: &?list) -> i32 {
     if !head {
         return 0;
     }
-    let n: &list;
-    n = head!;
+    let n = head!;
     n.value + sum_list(n.next);
 }
 ```
@@ -528,8 +518,7 @@ const base_value: i32;
 // Export a function that uses the imports
 #[export = "compute_and_log"]
 fn compute_and_log(x: i32) -> i32 {
-    let result: i32;
-    result = x + base_value;
+    let result = x + base_value;
     log(result);
     result;
 }
@@ -549,10 +538,10 @@ fn hash_mix_int(h: i32, d: i32) -> i32 {
 
 #[export = "hash_finalize"]
 fn hash_finalize(h: i32) -> i32 {
-    h = h ^ h >>u 16;
-    h = h * 0x85ebca6b;
-    h = h ^ h >>u 13;
-    h = h * 0xc2b2ae35;
+    h ^= h >>u 16;
+    h *= 0x85ebca6b;
+    h ^= h >>u 13;
+    h *= 0xc2b2ae35;
     h ^ h >>u 16;
 }
 ```
@@ -722,7 +711,7 @@ rec {
 
 #[export = "make"]
 fn make(kind: i32, x: i32) -> &!obj {
-    { descriptor({obj_desc| kind: kind})| x: x };
+    { descriptor({obj_desc| kind})| x };
 }
 
 #[export = "kind_of"]
