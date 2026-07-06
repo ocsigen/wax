@@ -1,96 +1,29 @@
-Priorities
-==========
-- Improve typing / validation
-- Fix library names
-- Library to use within Js_of_ocaml
+- environment variables to select warnings?
+
+- support for string imports
+
+- what is the right way to reorder imports?
+
+- struct field pinning
+
+- maybe remove fast parser (large+ slow compile time)
+
 - Fix end of then location in conditionals
 
-Improvements
-============
-- Check output format
-- Improve comment preservation
 - More robust support for conditional compilation
 - Use plain attributes for conditional compilation, rather than the current hack
   where #[if( and #[else] are token
-- warning for unused variables (never read)
-
-
-=====================
 
 Use a wrapper library to print errors
 ==> deal with line breaking / proper string width for escaped strings
 
-rewrite trapping int instructions into non-trapping instruction when
-the type is undeterminate
-
-============
-
-inferred types: keep track of one optional constraint
-   ==> mandatory constraint ==> no need to keep any other constraint
-
-====================
-
-syntaxic sugar:
-- i++
-- for (...)  / while / do { ... } while
-- switch translated to br_table?
-    match (foo) {
-    1 => ..,
-    2 => ..,
-    _ => ..
-    }
-- same for try/catch
-    try (body) { a => br x, ..., _ => br z}
-  (not sure this works well)
-- When inheriting, we can omit existing fields
-
-  type int32 : custom = { .., foo: i32 }
+- names in result type (symmetry with params) ?
 
 ====
 
 Maybe
 =====
 
-We are dropping duplicated names when converting from wasm to wat.
-We could put name annotations so as not to loose this information.
-
 allow comma/semicolon at end of block
 
 include a file (e.g. common types, imports)
-
-Two-step inference?
-  - preserve overloading of number functions
-  - propagate type in all directions (simple unification / union find?)
-
-============
-
-strings: we should probably not escape them as much as we do
-
-
-fn caml_string_equal(p1: &eq, p2: &eq) -> &eq {
-  if p1 == p2 { return 1 }
-  let s1 = p1 as &string;
-  let s2 = p2 as &string;
-  let len = array_len(s1);
-  if len != array_len(s2) { return 0 }
-  for (let i; i++; i <s len) {
-    if unsigned(s1[i]) != unsigned(s2[i]) { return 0 }
-  }
-  1
-}
-
-i = ..
-loop {
-  if e {
-    ...
-    i = ...;
-    br loop
-  }
-}
-===>
-for (i = ...; e; i = ...) { ... }
-
-=============================
-
-Attaching comments: https://jayconrod.com/posts/129/preserving-comments-when-parsing-and-formatting-code
-https://journal.stuffwithstuff.com/2015/09/08/the-hardest-program-ive-ever-written/#4-note

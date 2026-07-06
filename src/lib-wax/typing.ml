@@ -1,19 +1,3 @@
-(*
-TODO:
-- locations on the heap when push several values?
-- desugar by default? (or option)
-- utf-16 string / js strings
-
-Syntax changes:
-- names in result type (symmetry with params)
-- no need to have func type for tags (declaration tag : ty)
-
-Misc:
-- blocks in an expression context return one value;
-  otherwise, no value by default
-  (or infer return type when no type is given?)
-*)
-
 open Ast
 module Cond = Wax_wasm.Cond_solver
 
@@ -5861,7 +5845,6 @@ and check_instruction ?(drop_supertype = false) ctx expected
         | Some typ ->
             require_no_descriptor typ;
             let*! field_types = lookup_struct_type ctx typ in
-            (* ZZZ We should check the evaluation order*)
             if List.length fields <> Array.length field_types then
               Error.field_count_mismatch ctx.diagnostics ~location:i.info
                 ~expected:(Array.length field_types)
@@ -6797,9 +6780,6 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
   if debug then Format.eprintf "%a@." Output.instr i;
   match i.desc with
   | Block { label; typ; block = instrs } ->
-      (*ZZZ Blocks take argument from the stack *)
-      (*ZZZ Grab the arguments from the stack before internalizing the types;
-       push the right number of values in case of failure *)
       let*! params =
         array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
       in
@@ -7500,7 +7480,6 @@ and try_inference ctx i label typ ~body ~catches ~catch_all =
 (*** Module type and constant checking ***)
 
 let check_type_definitions ctx =
-  (*ZZZ In-order check? *)
   Tbl.iter ctx.types (fun _ (i, (st : subtype)) ->
       let ty = Wax_wasm.Types.get_subtype ctx.subtyping_info i in
       (* A continuation type must wrap a function type. Point at the wrapped
