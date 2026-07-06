@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-11004f30.js";
+            window.path_to_searchindex_js = "searchindex-0d0cc0ae.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-0d649137.js"></script>
@@ -285,6 +285,10 @@ read. Produced while validating; shown by default.</li>
 function or global) that is defined but never referenced, exported, or
 used as the start function. The module-level analog of <code>unused-local</code>;
 prefix its name with <code>_</code> to silence one. Shown by default.</li>
+<li><code>unused-import</code> (groups <code>unused</code>, <code>correctness</code>) — an imported function
+or global that is never referenced, exported, or used as the start
+function. Like <code>unused-field</code>, but for imports; <code>_</code> silences one. Shown
+by default.</li>
 <li><code>unused-label</code> (groups <code>unused</code>, <code>correctness</code>) — a block label that
 is declared but never branched to. Prefix its name with <code>_</code> to silence
 one. Shown by default.</li>
@@ -311,6 +315,16 @@ themselves effect-free. Shown by default.</li>
 <li><code>dead-code</code> (group <code>correctness</code>) — a statement that can never be
 reached, following an unconditional branch, <code>return</code>, or
 <code>unreachable</code>. Shown by default.</li>
+<li><code>cast-always-fails</code> (group <code>correctness</code>) — a reference cast or test
+whose operand can never have the target type (the two are unrelated in
+the type hierarchy), so the cast always traps and the test is always
+false. Shown by default.</li>
+<li><code>redundant-operation</code> (group <code>redundant</code>) — an operation with no effect
+on its result: an arithmetic identity (<code>x + 0</code>, <code>x * 1</code>, <code>x &lt;&lt; 0</code>, …),
+an absorbing operand (<code>x * 0</code>, <code>x &amp; 0</code>), two identical operands
+(<code>x - x</code>, <code>x ^ x</code>), a self-assignment (<code>x = x</code>), or a cast to a type
+the operand already has. <strong>Hidden by default</strong> (these are common in
+generated code); enable with <code>-W redundant=warning</code>.</li>
 <li><code>truncated-coverage</code> — path-sensitive validation gave up after too
 many conditional configurations. Shown by default.</li>
 <li><code>naming-conflict</code> (group <code>naming</code>) — converting from Wasm, a source
@@ -340,15 +354,15 @@ unused locals.</li>
 text input; the <code>unused</code>/<code>correctness</code> lints are turned on only by
 <code>--validate</code>, and always for <code>check</code>. The <code>naming</code> warnings are produced
 when converting a Wasm module to Wax.</li>
-<li>The <code>correctness</code> lints apply to WebAssembly text/binary input as well as
-Wax: <code>shift-count-overflow</code>, <code>constant-trap</code>, <code>tautological-comparison</code>,
-<code>constant-condition</code>, <code>unused-result</code> and <code>dead-code</code> are checked by the
-Wasm validator too (so <code>wax check foo.wat</code> reports them). On Wasm input
-<code>unused-result</code> covers discarding a constant or a pure <code>local.get</code>/
-<code>global.get</code> read. <code>unused-field</code> and <code>unused-label</code> are also checked on
-WebAssembly input — a numeric <code>br N</code> counts as a use of the label <code>N</code>
-levels out — but, like <code>unused-local</code>, only when unused reporting is on
-(under <code>check</code>, or under a conversion with <code>--validate</code>).</li>
+<li>Every one of these lints applies to WebAssembly text/binary input as well
+as Wax — the Wasm validator runs the same checks, so <code>wax check foo.wat</code>
+reports them. On Wasm input <code>unused-result</code> covers discarding a constant or
+a pure <code>local.get</code>/<code>global.get</code> read; for <code>unused-label</code> a numeric <code>br N</code>
+counts as a use of the label <code>N</code> levels out; <code>cast-always-fails</code> and
+<code>redundant-operation</code> reason about <code>ref.cast</code>/<code>ref.test</code> and constant
+operands directly from the bytecode. As with <code>unused-local</code>, they fire only
+when unused reporting is on (under <code>check</code>, or under a conversion with
+<code>--validate</code>).</li>
 <li>The <code>WAX_WARN</code> environment variable sets default levels applied <em>before</em>
 the <code>-W</code> options. Its value is a list of <code>NAME=LEVEL</code> specs separated by
 commas or whitespace, e.g. <code>WAX_WARN="correctness=hidden unused-local=error"</code>. Unlike a plain environment fallback, these defaults
