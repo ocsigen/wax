@@ -7,15 +7,30 @@ name: Fuzz (nightly)
 # inputs are uploaded as an artifact and the run's SEED (in the log) replays it.
 on:
   schedule:
-    - cron: "17 3 * * *" # daily, 03:17 UTC
+    - cron: "27 1 * * *" # daily, 01:27 UTC
   workflow_dispatch:
     inputs:
-      count:
-        description: "Mutants per mutation campaign"
-        default: "2000"
-      smith:
-        description: "Smith-generated modules"
+      smith_count:
+        description: "smith.sh modules"
+        default: "1000"
+      corpus_smith_count:
+        description: "Smith-generated modules added to each text seed corpus"
         default: "500"
+      mutate_wax_count:
+        description: "mutate-wax.sh mutants"
+        default: "4000"
+      mutate_wat_count:
+        description: "mutate-wat.sh mutants"
+        default: "6000"
+      mutate_wasm_count:
+        description: "mutate-wasm.sh MODE=bytes mutants"
+        default: "8000"
+      mutate_wasm_struct_count:
+        description: "mutate-wasm.sh MODE=struct mutants"
+        default: "8000"
+      diff_validate_count:
+        description: "diff-validate.sh modules"
+        default: "3000"
 
 jobs:
   nightly:
@@ -56,8 +71,13 @@ jobs:
         id: campaign
         run: opam exec -- bash fuzz/nightly.sh
         env:
-          COUNT: ${{ github.event.inputs.count || '2000' }}
-          SMITH: ${{ github.event.inputs.smith || '500' }}
+          SMITH_COUNT: ${{ github.event.inputs.smith_count || '1000' }}
+          CORPUS_SMITH_COUNT: ${{ github.event.inputs.corpus_smith_count || '500' }}
+          MUTATE_WAX_COUNT: ${{ github.event.inputs.mutate_wax_count || '4000' }}
+          MUTATE_WAT_COUNT: ${{ github.event.inputs.mutate_wat_count || '6000' }}
+          MUTATE_WASM_COUNT: ${{ github.event.inputs.mutate_wasm_count || '8000' }}
+          MUTATE_WASM_STRUCT_COUNT: ${{ github.event.inputs.mutate_wasm_struct_count || '8000' }}
+          DIFF_VALIDATE_COUNT: ${{ github.event.inputs.diff_validate_count || '3000' }}
 
       # A campaign that found something saved its (re-verified) inputs here.
       - name: Upload findings

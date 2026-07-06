@@ -42,6 +42,7 @@ override with `REF`).
 fuzz/check.sh               # CI gate: run all deterministic guards, non-zero on any HIGH finding
 fuzz/build-corpus.sh        # populate fuzz/corpus/{valid,invalid}/ (~7000 modules)
 fuzz/run.sh                 # run every oracle over the corpus, print a report
+fuzz/nightly.sh             # budgeted stochastic tier: corpus build + mutation/generation campaigns
 fuzz/oracle.sh FILE [valid|invalid|unknown]   # check one file (the fuzzing unit)
 fuzz/smith.sh [count] [bytes]                 # generate valid modules + check them
 fuzz/diff-validate.sh [count] [bytes]         # differential validation vs the spec reference (both directions)
@@ -92,6 +93,15 @@ optional dependency (wasm-tools) or seed corpus is absent, and exits non-zero if
 some guard found a HIGH problem. `QUICK=1` shrinks the budgets; `GEN=… COUNT=…
 SEED=…` grow them for a heavier run. The stochastic campaigns and the corpus
 `run.sh` are the separate nightly/budgeted tier (they need `build-corpus.sh`).
+
+**`fuzz/nightly.sh` is separately budgeted.** Its defaults are intentionally split
+by campaign so the nightly can spend more time in the mutation-heavy paths without
+stretching startup: `SMITH_COUNT` drives `smith.sh`, `CORPUS_SMITH_COUNT` drives
+the extra smith-derived Wax/WAT seeds, `MUTATE_WAX_COUNT`, `MUTATE_WAT_COUNT`,
+`MUTATE_WASM_COUNT`, `MUTATE_WASM_STRUCT_COUNT` and `DIFF_VALIDATE_COUNT` drive
+their named campaigns. The older coarse knobs `SMITH` and `COUNT` are still
+accepted as compatibility fallbacks (`COUNT` seeds the mutation and
+diff-validation budgets unless a more specific variable overrides it).
 
 The mutation campaigns (`mutate-wax.sh`, `mutate-wat.sh`, `mutate-wasm.sh`) are
 reproducible: each derives every per-mutation seed from a master `SEED`

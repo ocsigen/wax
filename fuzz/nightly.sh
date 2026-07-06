@@ -9,10 +9,14 @@
 # HIGH-severity finding; this script's exit is non-zero iff some campaign did.
 #
 # SEED defaults to a fresh value each run (announced, so a finding replays with
-# the same SEED); override it to reproduce a night. Budgets: COUNT mutants per
-# mutation campaign and SMITH generated modules (and smith-corpus size); QUICK=1
-# shrinks them for a smoke test. Needs wasm-tools (and node for the byte-mutation
-# mode of mutate-wasm). Failing campaigns leave their minimized inputs under
+# the same SEED); override it to reproduce a night. The budgets are split so the
+# nightly can spend more time in the high-yield mutation campaigns without
+# bloating corpus startup: SMITH_COUNT drives smith.sh, CORPUS_SMITH_COUNT drives
+# the extra smith-derived Wax/WAT seeds, the MUTATE_* counts drive the mutation
+# campaigns, and DIFF_VALIDATE_COUNT drives diff-validate.sh. COUNT and SMITH are
+# still accepted as legacy coarse overrides. QUICK=1 shrinks everything for a
+# smoke test. Needs wasm-tools (and node for the byte-mutation mode of
+# mutate-wasm). Failing campaigns leave their minimized inputs under
 # fuzz/*-findings/.
 
 set -u
@@ -20,11 +24,23 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/fuzz/lib.sh" # for WASM_TOOLS discovery and the SEED default
 
 export SEED
-count="${COUNT:-2000}"
-smith="${SMITH:-500}"
+legacy_count="${COUNT:-}"
+legacy_smith="${SMITH:-}"
+smith="${SMITH_COUNT:-${legacy_smith:-1000}}"
+corpus_smith="${CORPUS_SMITH_COUNT:-${legacy_smith:-500}}"
+mutate_wax="${MUTATE_WAX_COUNT:-${MUTATE_COUNT:-${legacy_count:-4000}}}"
+mutate_wat="${MUTATE_WAT_COUNT:-${MUTATE_COUNT:-${legacy_count:-6000}}}"
+mutate_wasm="${MUTATE_WASM_COUNT:-${legacy_count:-8000}}"
+mutate_wasm_struct="${MUTATE_WASM_STRUCT_COUNT:-${mutate_wasm}}"
+diff_validate="${DIFF_VALIDATE_COUNT:-${legacy_count:-3000}}"
 if [ "${QUICK:-0}" = 1 ]; then
-  count=100
   smith=40
+  corpus_smith=40
+  mutate_wax=100
+  mutate_wat=100
+  mutate_wasm=100
+  mutate_wasm_struct=100
+  diff_validate=100
 fi
 
 command -v "$WASM_TOOLS" >/dev/null 2>&1 || {
@@ -33,6 +49,7 @@ command -v "$WASM_TOOLS" >/dev/null 2>&1 || {
 }
 
 echo "nightly campaigns — SEED=$SEED  (replay this run with: SEED=$SEED fuzz/nightly.sh)" >&2
+echo "budgets: smith=$smith corpus-smith=$corpus_smith mutate-wax=$mutate_wax mutate-wat=$mutate_wat mutate-wasm=$mutate_wasm mutate-wasm-struct=$mutate_wasm_struct diff-validate=$diff_validate" >&2
 
 fail=0 passed=0 skipped=0 failed_list=""
 
@@ -61,18 +78,27 @@ dune build src/bin/main.exe src/bin/fuzz_mutate.exe src/bin/fuzz_gen.exe 2>&1 | 
   || { echo "nightly: build failed" >&2; exit 3; }
 echo "building the wasm corpus (spec suite + curated sources)…" >&2
 bash "$ROOT/fuzz/build-corpus.sh" >&2 || { echo "nightly: build-corpus failed" >&2; exit 3; }
-echo "building the wax and wat seed corpora (spec + $smith smith modules each)…" >&2
-bash "$ROOT/fuzz/wax-corpus.sh" "$smith" >&2 || true
-bash "$ROOT/fuzz/wat-corpus.sh" "$smith" >&2 || true
+echo "building the wax and wat seed corpora (spec + $corpus_smith smith modules each)…" >&2
+wax_log="$(mktemp)"
+wat_log="$(mktemp)"
+bash "$ROOT/fuzz/wax-corpus.sh" "$corpus_smith" >"$wax_log" 2>&1 &
+wax_pid=$!
+bash "$ROOT/fuzz/wat-corpus.sh" "$corpus_smith" >"$wat_log" 2>&1 &
+wat_pid=$!
+wait "$wax_pid" || true
+wait "$wat_pid" || true
+cat "$wax_log" >&2
+cat "$wat_log" >&2
+rm -f "$wax_log" "$wat_log"
 
 # The campaigns (each is deterministic given SEED and self-reports its replay).
 run run.sh
 run smith.sh "$smith"
-run mutate-wax.sh "$count"
-run mutate-wat.sh "$count"
-run mutate-wasm.sh "$count"
-run "MODE=struct" mutate-wasm.sh "$count"
-run diff-validate.sh "$count"
+run mutate-wax.sh "$mutate_wax"
+run mutate-wat.sh "$mutate_wat"
+run mutate-wasm.sh "$mutate_wasm"
+run "MODE=struct" mutate-wasm.sh "$mutate_wasm_struct"
+run diff-validate.sh "$diff_validate"
 
 echo >&2
 echo "==================== fuzz/nightly.sh summary ====================" >&2

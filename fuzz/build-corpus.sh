@@ -17,6 +17,7 @@
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 OUT="${1:-$ROOT/fuzz/corpus}"
+JOBS="${JOBS:-$(nproc 2>/dev/null || echo 4)}"
 rm -rf "$OUT"
 mkdir -p "$OUT/valid" "$OUT/invalid"
 
@@ -56,29 +57,44 @@ echo "$msg"
 # 2. Spec suite, exploded per module. json-from-wast emits module .wasm files
 # plus a JSON describing each one; the "type" field gives the ground truth.
 command -v jq >/dev/null 2>&1 && HAVE_JQ=1 || HAVE_JQ=0
-nv=0; ni=0; nfail=0; nprop=0
-while IFS= read -r wast; do
+STATS="$(mktemp -d)"
+trap 'rm -rf "$STATS"' EXIT
+
+spec_one() {
+  local wast="$1" rel tmp stats nv=0 ni=0
+  stats="$(mktemp "$STATS/part.XXXXXX")" || return 1
   # Skip spec tests for proposals wax gates OFF by default: their modules need a
   # feature flag (e.g. -X custom-descriptors) that the oracle does not pass, so
   # default wax rejects them and they would show up as spurious FALSE_REJECTs.
   # custom-descriptors is the only validation-affecting one today.
   case "$wast" in
-    *custom-descriptors*) nprop=$((nprop + 1)); continue ;;
+    *custom-descriptors*)
+      printf '0\t0\t0\t1\n' >"$stats"
+      return 0
+      ;;
   esac
-  rel="$(echo "${wast#$ROOT/test/wasm-test-suite/}" | tr '/' '-')"
+  rel="${wast#$ROOT/test/wasm-test-suite/}"
+  rel="${rel//\//-}"
   tmp="$(mktemp -d)"
   if ! "$WASM_TOOLS" json-from-wast "$wast" --output "$tmp/out.json" \
         --wasm-dir "$tmp" >/dev/null 2>&1; then
-    nfail=$((nfail+1)); rm -rf "$tmp"; continue
+    printf '0\t0\t1\t0\n' >"$stats"
+    rm -rf "$tmp"
+    return 0
   fi
   if [ "$HAVE_JQ" = 1 ]; then
     # Map each emitted .wasm to valid/invalid via the command type that owns it.
     while IFS=$'\t' read -r kind file; do
       [ -n "$file" ] && [ -f "$tmp/$(basename "$file")" ] || continue
       case "$kind" in
-        module) cp "$tmp/$(basename "$file")" "$OUT/valid/$rel-$(basename "$file")"; nv=$((nv+1)) ;;
+        module)
+          cp "$tmp/$(basename "$file")" "$OUT/valid/$rel-$(basename "$file")"
+          nv=$((nv + 1))
+          ;;
         assert_invalid|assert_malformed)
-          cp "$tmp/$(basename "$file")" "$OUT/invalid/$rel-$(basename "$file")"; ni=$((ni+1)) ;;
+          cp "$tmp/$(basename "$file")" "$OUT/invalid/$rel-$(basename "$file")"
+          ni=$((ni + 1))
+          ;;
       esac
     done < <(jq -r '.commands[] | select(.filename) | [.type, .filename] | @tsv' "$tmp/out.json")
   else
@@ -86,11 +102,26 @@ while IFS= read -r wast; do
     # .wasm for assemblable modules; invalid ones are usually skipped).
     for w in "$tmp"/*.wasm; do
       [ -e "$w" ] || continue
-      cp "$w" "$OUT/valid/$rel-$(basename "$w")"; nv=$((nv+1))
+      cp "$w" "$OUT/valid/$rel-$(basename "$w")"
+      nv=$((nv + 1))
     done
   fi
+  printf '%s\t%s\t0\t0\n' "$nv" "$ni" >"$stats"
   rm -rf "$tmp"
-done < <(find "$ROOT/test/wasm-test-suite" -name '*.wast')
+}
+export -f spec_one
+export HAVE_JQ OUT ROOT STATS WASM_TOOLS
+
+echo "splitting the spec suite across $JOBS jobs..."
+find "$ROOT/test/wasm-test-suite" -name '*.wast' -print0 \
+  | xargs -0 -P "$JOBS" -I{} bash -c 'spec_one "$@"' _ {}
+
+read -r nv ni nfail nprop < <(
+  awk -F '\t' '
+    { nv += $1; ni += $2; nfail += $3; nprop += $4 }
+    END { printf "%d %d %d %d\n", nv, ni, nfail, nprop }
+  ' "$STATS"/*
+)
 
 echo "spec-suite valid modules:   $nv"
 echo "spec-suite invalid modules: $ni"
