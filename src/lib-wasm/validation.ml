@@ -16,12 +16,12 @@ let ( let>@ ) o f = Option.iter f o
 
 let print_string f s =
   let s = s.Ast.desc in
-  let len, s = Output.escape_string s in
+  let len, s = Wax_utils.Unicode.escape_string s in
   Format.pp_print_as f len s
 
 let print_ident f id =
   if Lexer.is_valid_identifier id then Format.fprintf f "$%s" id
-  else Format.fprintf f "$\"%s\"" (snd (Misc.escape_string id))
+  else Format.fprintf f "$\"%s\"" (snd (Wax_utils.Unicode.escape_string id))
 
 let print_index f (idx : Ast.Text.idx) =
   match idx.desc with

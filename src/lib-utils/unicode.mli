@@ -22,3 +22,14 @@ val utf16_decode : int list -> string option
 (** [utf16_decode units] is the UTF-8 string the UTF-16 [units] (each a 16-bit
     value) encode — the inverse of {!utf16_code_units} — pairing surrogates.
     [None] if a surrogate is unpaired. *)
+
+val scalar_of_hex : string -> Uchar.t option
+(** [scalar_of_hex s] decodes the hex digits [s] (the payload of a [\u{...}]
+    escape) to a Unicode scalar value. [None] if [s] is not valid hex, overflows
+    a native int, or is out of the scalar range (above U+10FFFF or a surrogate).
+*)
+
+val escape_string : string -> int * string
+(** [escape_string s] returns a pair [(len, escaped)] where [escaped] is the
+    escaped version of [s] suitable for WAT/Wax string literals, and [len] is
+    its display length. *)
