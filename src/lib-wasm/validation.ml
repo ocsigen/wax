@@ -4073,25 +4073,8 @@ let check_syntax ctx lst =
       Error.index_already_bound ctx.diagnostics ~location:id.info kind id
     else Hashtbl.add tbl id.desc ()
   in
-  let rec iter_instrs f instrs =
-    List.iter
-      (fun i ->
-        f i.Ast.desc;
-        match i.Ast.desc with
-        | Ast.Text.Block { block; _ }
-        | Ast.Text.Loop { block; _ }
-        | Ast.Text.TryTable { block; _ } ->
-            iter_instrs f block
-        | Ast.Text.If { if_block; else_block; _ } ->
-            iter_instrs f if_block.desc;
-            iter_instrs f else_block.desc
-        | Ast.Text.Try { block; catches; catch_all; _ } ->
-            iter_instrs f block;
-            List.iter (fun (_, c) -> iter_instrs f c) catches;
-            Option.iter (iter_instrs f) catch_all
-        | Ast.Text.Folded (instr, instrs') -> iter_instrs f (instr :: instrs')
-        | _ -> ())
-      instrs
+  let iter_instrs f instrs =
+    List.iter (Ast_utils.iter_instr (fun i -> f i.Ast.desc)) instrs
   in
   (* An inline type annotation [(type idx) (param ...) (result ...)] must name a
      function type whose signature equals the inline one. *)

@@ -1,21 +1,28 @@
 open Ast
 open Ast.Text
 
-let rec iter_instr f instr =
-  f instr.info;
-  (* Apply f to the current instruction's info *)
-  match instr.desc with
-  | Block { block; _ } | Loop { block; _ } -> List.iter (iter_instr f) block
+(* The canonical pre-order walk of an instruction tree: visit [i], then recurse
+   into every nested instruction it carries. Keeping this in one place means a
+   new instruction that nests others (or a missed case, as [Hinted] once was)
+   is handled for every traversal at once. *)
+let rec fold_instr f acc (i : 'info instr) =
+  let acc = f acc i in
+  match i.desc with
+  | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
+      fold_instrs f acc block
   | If { if_block; else_block; _ } ->
-      List.iter (iter_instr f) if_block.desc;
-      List.iter (iter_instr f) else_block.desc
-  | TryTable { block; _ } -> List.iter (iter_instr f) block
+      fold_instrs f (fold_instrs f acc if_block.desc) else_block.desc
   | Try { block; catches; catch_all; _ } ->
-      List.iter (iter_instr f) block;
-      List.iter (fun (_, instrs) -> List.iter (iter_instr f) instrs) catches;
-      Option.iter (List.iter (iter_instr f)) catch_all
-  | Folded (i, instrs) ->
-      iter_instr f i;
-      List.iter (iter_instr f) instrs
-  (* All other variants don't contain nested 'info instr, so they do nothing *)
-  | _ -> ()
+      let acc = fold_instrs f acc block in
+      let acc =
+        List.fold_left (fun acc (_, is) -> fold_instrs f acc is) acc catches
+      in
+      Option.fold ~none:acc ~some:(fold_instrs f acc) catch_all
+  | Folded (h, is) -> fold_instrs f (fold_instr f acc h) is
+  | Hinted (_, inner) -> fold_instr f acc inner
+  (* The remaining variants carry no nested instruction. *)
+  | _ -> acc
+
+and fold_instrs f acc l = List.fold_left (fold_instr f) acc l
+
+let iter_instr f i = fold_instr (fun () i -> f i) () i
