@@ -88,7 +88,7 @@ module Sequence = struct
     Wax_utils.Diagnostic.report diagnostics ~location ~severity:Warning ~warning
       ~related ~message ()
 
-  let register' ?hint seq export_tbl (kind : Src.exportable option)
+  let register' ?hint ?claimed seq export_tbl (kind : Src.exportable option)
       (id : Src.name option) exports =
     let idx = Uint32.of_int seq.last_index in
     (* The same entity may already have been registered in another branch of a
@@ -117,10 +117,19 @@ module Sequence = struct
               exports
       else None
     in
+    (* A source name already claimed by the caller's priority pass (see the
+       local sequence's pre-pass): it is reserved in the namespace under this
+       name and any rename was already reported, so take it as-is. This lets a
+       real source name win the plain name over a generated default. *)
+    let pre_claimed =
+      match (claimed, id) with
+      | Some tbl, Some nm -> Hashtbl.find_opt tbl nm.Ast.desc
+      | _ -> None
+    in
     let name =
-      match reused with
-      | Some name -> name
-      | None ->
+      match (reused, pre_claimed) with
+      | Some name, _ | _, Some name -> name
+      | None, None ->
           (* [src] is the source identifier the name was taken from (with its
              location), or [None] for a synthesized default; only a renamed
              source identifier is worth a warning. *)
@@ -168,8 +177,22 @@ module Sequence = struct
     | [] -> ());
     name
 
-  let register seq export_tbl kind id exports =
-    ignore (register' seq export_tbl kind id exports)
+  let register ?claimed seq export_tbl kind id exports =
+    ignore (register' ?claimed seq export_tbl kind id exports)
+
+  (* Claim source name [candidate] in the namespace ahead of positional
+     registration, reporting a rename (reserved word, or a collision with an
+     already-claimed name) exactly as [register'] would. Returns the final,
+     possibly-renamed name. Used to give real source names priority over the
+     generated default before any unnamed entity is registered. *)
+  let claim_name seq ~loc candidate =
+    let name, outcome = Namespace.add' ~loc seq.namespace candidate in
+    (match (outcome, seq.diagnostics) with
+    | Namespace.Renamed { reserved; previous }, Some diagnostics ->
+        report_rename diagnostics ~location:loc ~previous ~reserved
+          ~original:candidate ~renamed:name
+    | _ -> ());
+    name
 
   let get seq (idx : Src.idx) =
     {
@@ -2674,7 +2697,7 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
            referenced by the body, in which case it is rendered anonymously. Its
            index slot is still consumed so later locals stay correctly aligned.
            [i] is the parameter's position, i.e. its wasm local index. *)
-        let convert_params params =
+        let convert_params ~claimed params =
           Array.mapi
             (fun i p ->
               let id, t = p.Ast.desc in
@@ -2687,7 +2710,7 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
                   None)
                 else
                   let name =
-                    Sequence.register' ctx.locals export_tbl None id []
+                    Sequence.register' ~claimed ctx.locals export_tbl None id []
                   in
                   Some
                     (match id with
@@ -2710,15 +2733,9 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
               annotated p.Ast.info pat (valtype ctx t))
             params
         in
-        let sign =
+        let param_arr, result_arr =
           match typ with
-          | _, Some { params; results } ->
-              let params = convert_params params in
-              Sequence.consume_currents ctx.locals;
-              {
-                Ast.params;
-                results = Array.map (fun t -> valtype ctx t) results;
-              }
+          | _, Some { params; results } -> (params, results)
           | Some i, None -> (
               let functype =
                 match implicit_functype ctx i with
@@ -2729,15 +2746,34 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
                     | Struct _ | Array _ | Cont _ -> None)
               in
               match functype with
-              | Some { params; results } ->
-                  let params = convert_params params in
-                  Sequence.consume_currents ctx.locals;
-                  {
-                    Ast.params;
-                    results = Array.map (fun t -> valtype ctx t) results;
-                  }
+              | Some { params; results } -> (params, results)
               | None -> assert false)
           | None, None -> assert false (* Should not happen *)
+        in
+        (* Priority pass: claim every source name (params, then locals) before
+           any unnamed entity is registered, so the generated default never
+           displaces a real source name (a user local [$x] keeps [x], the
+           unnamed one becomes [x_2], not the reverse). Renames are reported here
+           once; [register']/[register] then take the claimed name as-is. *)
+        let claimed = Hashtbl.create 16 in
+        let claim id =
+          match id with
+          | Some nm
+            when Lexer.is_valid_identifier nm.Ast.desc
+                 && not (Hashtbl.mem claimed nm.Ast.desc) ->
+              Hashtbl.replace claimed nm.Ast.desc
+                (Sequence.claim_name ctx.locals ~loc:nm.Ast.info nm.Ast.desc)
+          | _ -> ()
+        in
+        Array.iter (fun p -> claim (fst p.Ast.desc)) param_arr;
+        List.iter (fun e -> claim (fst e.Ast.desc)) locals;
+        let sign =
+          let params = convert_params ~claimed param_arr in
+          Sequence.consume_currents ctx.locals;
+          {
+            Ast.params;
+            results = Array.map (fun t -> valtype ctx t) result_arr;
+          }
         in
         (* An anonymous implicit type has no name to reference; the inline [sign]
            above already carries its signature, so drop the named reference. *)
@@ -2748,7 +2784,8 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
         in
         List.iter
           (fun e ->
-            Sequence.register ctx.locals export_tbl None (fst e.Ast.desc) [])
+            Sequence.register ~claimed ctx.locals export_tbl None
+              (fst e.Ast.desc) [])
           locals;
         let locals = bind_locals ctx locals in
         let name = Sequence.get_current ctx.functions in
