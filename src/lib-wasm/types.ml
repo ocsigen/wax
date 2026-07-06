@@ -75,7 +75,61 @@ let create () =
 
 let last_index types = types.last_index
 
+(* Interim backstop for the normalization contract (see [add_rectype] in the
+   .mli). A normalized rec group references its own members by a negative
+   back-reference [lnot pos] and every already-defined type by its non-negative
+   canonical index; the two currencies must never cross. A mis-normalized group
+   — the source-vs-canonical index confusion class behind a known V8 soundness
+   bug — is caught here at its origin rather than silently corrupting the
+   subtyping relation. [types.last_index] is the base index this group is about
+   to receive, so a well-formed non-negative reference is strictly below it. *)
+let check_normalized types typ =
+  let n = Array.length typ in
+  let check_index i =
+    if i < 0 then (
+      if lnot i >= n then
+        invalid_arg "Types.add_rectype: back-reference outside the rec group")
+    else if i >= types.last_index then
+      invalid_arg
+        "Types.add_rectype: self/forward reference must be a back-reference"
+  in
+  let check_heaptype (ty : heaptype) =
+    match ty with
+    | Func | NoFunc | Exn | NoExn | Cont | NoCont | Extern | NoExtern | Any | Eq
+    | I31 | Struct | Array | None_ ->
+        ()
+    | Type i | Exact i -> check_index i
+  in
+  let check_valtype (ty : valtype) =
+    match ty with
+    | I32 | I64 | F32 | F64 | V128 -> ()
+    | Ref { typ; _ } -> check_heaptype typ
+  in
+  let check_storagetype (ty : storagetype) =
+    match ty with Value v -> check_valtype v | Packed _ -> ()
+  in
+  let check_comptype (ty : comptype) =
+    match ty with
+    | Func { params; results } ->
+        Array.iter check_valtype params;
+        Array.iter check_valtype results
+    | Struct fields ->
+        Array.iter
+          (fun ({ typ; _ } : fieldtype) -> check_storagetype typ)
+          fields
+    | Array { typ; _ } -> check_storagetype typ
+    | Cont i -> check_index i
+  in
+  Array.iter
+    (fun { typ; supertype; descriptor; describes; final = _ } ->
+      check_comptype typ;
+      Option.iter check_index supertype;
+      Option.iter check_index descriptor;
+      Option.iter check_index describes)
+    typ
+
 let add_rectype types typ =
+  check_normalized types typ;
   try RecTypeTbl.find types.types typ
   with Not_found ->
     let index = types.last_index in
@@ -148,62 +202,143 @@ let rec subtype subtyping_info (i : int) i' =
 
 let heap_subtype (subtyping_info : subtype array) (ty : heaptype)
     (ty' : heaptype) =
-  match (ty, ty') with
-  | (Func | NoFunc), Func
-  | NoFunc, NoFunc
-  | (Exn | NoExn), Exn
-  | NoExn, NoExn
-  | (Cont | NoCont), Cont
-  | NoCont, NoCont
-  | (Extern | NoExtern), Extern
-  | NoExtern, NoExtern
-  | (Any | Eq | I31 | Struct | Array | None_), Any
-  | (Eq | I31 | Struct | Array | None_), Eq
-  | (I31 | None_), I31
-  | (Struct | None_), Struct
-  | (Array | None_), Array
-  | None_, None_ ->
-      true
-  (* An [exact i] reference is a subtype of the same supertypes as [i] (via
-     [exact i <: i]), so on the left it follows the [Type i] rules. *)
-  | (Type i | Exact i), (Any | Eq) -> (
-      match subtyping_info.(i).typ with
-      | Struct _ | Array _ -> true
-      | Func _ | Cont _ -> false)
-  | (Type i | Exact i), Struct -> (
-      match subtyping_info.(i).typ with
-      | Struct _ -> true
-      | Array _ | Func _ | Cont _ -> false)
-  | (Type i | Exact i), Array -> (
-      match subtyping_info.(i).typ with
-      | Array _ -> true
-      | Struct _ | Func _ | Cont _ -> false)
-  | (Type i | Exact i), Func -> (
-      match subtyping_info.(i).typ with
-      | Func _ -> true
-      | Struct _ | Array _ | Cont _ -> false)
-  | (Type i | Exact i), Cont -> (
-      match subtyping_info.(i).typ with
-      | Cont _ -> true
-      | Func _ | Struct _ | Array _ -> false)
-  (* The bottom heap types are subtypes of the exact types too. *)
-  | None_, (Type i | Exact i) -> (
-      match subtyping_info.(i).typ with
-      | Struct _ | Array _ -> true
-      | Func _ | Cont _ -> false)
-  | NoFunc, (Type i | Exact i) -> (
-      match subtyping_info.(i).typ with
-      | Func _ -> true
-      | Struct _ | Array _ | Cont _ -> false)
-  | NoCont, (Type i | Exact i) -> (
-      match subtyping_info.(i).typ with
-      | Cont _ -> true
-      | Func _ | Struct _ | Array _ -> false)
-  | Exact i, Type i' -> subtype subtyping_info i i'
-  | Type i, Type i' -> subtype subtyping_info i i'
-  (* [exact] is invariant among concrete types. *)
-  | Exact i, Exact i' -> i = i'
-  | _ -> false
+  (* Which top hierarchy a concrete type index [i] belongs to. Enumerating the
+     comptype constructors (no [_]) means a newly added comptype forces every
+     concrete-type arm below to be revisited. *)
+  let is_struct i =
+    match subtyping_info.(i).typ with
+    | Struct _ -> true
+    | Func _ | Array _ | Cont _ -> false
+  in
+  let is_array i =
+    match subtyping_info.(i).typ with
+    | Array _ -> true
+    | Func _ | Struct _ | Cont _ -> false
+  in
+  let is_func i =
+    match subtyping_info.(i).typ with
+    | Func _ -> true
+    | Struct _ | Array _ | Cont _ -> false
+  in
+  let is_cont i =
+    match subtyping_info.(i).typ with
+    | Cont _ -> true
+    | Func _ | Struct _ | Array _ -> false
+  in
+  let is_aggregate i = is_struct i || is_array i in
+  (* Matched supertype-first, then subtype, both exhaustively and without a [_]
+     row, so a new heap type constructor forces every relevant arm to be
+     revisited. An [exact i] reference has the same proper supertypes as [i]
+     (via [exact i <: i]), so on the left it follows the [Type i] rules; the
+     bottom heap types are subtypes of the exact concrete types too. *)
+  match ty' with
+  | Func -> (
+      match ty with
+      | Func | NoFunc -> true
+      | Type i | Exact i -> is_func i
+      | Exn | NoExn | Cont | NoCont | Extern | NoExtern | Any | Eq | I31
+      | Struct | Array | None_ ->
+          false)
+  | NoFunc -> (
+      match ty with
+      | NoFunc -> true
+      | Func | Exn | NoExn | Cont | NoCont | Extern | NoExtern | Any | Eq | I31
+      | Struct | Array | None_ | Type _ | Exact _ ->
+          false)
+  | Exn -> (
+      match ty with
+      | Exn | NoExn -> true
+      | Func | NoFunc | Cont | NoCont | Extern | NoExtern | Any | Eq | I31
+      | Struct | Array | None_ | Type _ | Exact _ ->
+          false)
+  | NoExn -> (
+      match ty with
+      | NoExn -> true
+      | Func | NoFunc | Exn | Cont | NoCont | Extern | NoExtern | Any | Eq | I31
+      | Struct | Array | None_ | Type _ | Exact _ ->
+          false)
+  | Cont -> (
+      match ty with
+      | Cont | NoCont -> true
+      | Type i | Exact i -> is_cont i
+      | Func | NoFunc | Exn | NoExn | Extern | NoExtern | Any | Eq | I31
+      | Struct | Array | None_ ->
+          false)
+  | NoCont -> (
+      match ty with
+      | NoCont -> true
+      | Func | NoFunc | Exn | NoExn | Cont | Extern | NoExtern | Any | Eq | I31
+      | Struct | Array | None_ | Type _ | Exact _ ->
+          false)
+  | Extern -> (
+      match ty with
+      | Extern | NoExtern -> true
+      | Func | NoFunc | Exn | NoExn | Cont | NoCont | Any | Eq | I31 | Struct
+      | Array | None_ | Type _ | Exact _ ->
+          false)
+  | NoExtern -> (
+      match ty with
+      | NoExtern -> true
+      | Func | NoFunc | Exn | NoExn | Cont | NoCont | Extern | Any | Eq | I31
+      | Struct | Array | None_ | Type _ | Exact _ ->
+          false)
+  | Any -> (
+      match ty with
+      | Any | Eq | I31 | Struct | Array | None_ -> true
+      | Type i | Exact i -> is_aggregate i
+      | Func | NoFunc | Exn | NoExn | Cont | NoCont | Extern | NoExtern -> false
+      )
+  | Eq -> (
+      match ty with
+      | Eq | I31 | Struct | Array | None_ -> true
+      | Type i | Exact i -> is_aggregate i
+      | Any | Func | NoFunc | Exn | NoExn | Cont | NoCont | Extern | NoExtern ->
+          false)
+  | I31 -> (
+      match ty with
+      | I31 | None_ -> true
+      | Any | Eq | Struct | Array | Func | NoFunc | Exn | NoExn | Cont | NoCont
+      | Extern | NoExtern | Type _ | Exact _ ->
+          false)
+  | Struct -> (
+      match ty with
+      | Struct | None_ -> true
+      | Type i | Exact i -> is_struct i
+      | Any | Eq | I31 | Array | Func | NoFunc | Exn | NoExn | Cont | NoCont
+      | Extern | NoExtern ->
+          false)
+  | Array -> (
+      match ty with
+      | Array | None_ -> true
+      | Type i | Exact i -> is_array i
+      | Any | Eq | I31 | Struct | Func | NoFunc | Exn | NoExn | Cont | NoCont
+      | Extern | NoExtern ->
+          false)
+  | None_ -> (
+      match ty with
+      | None_ -> true
+      | Any | Eq | I31 | Struct | Array | Func | NoFunc | Exn | NoExn | Cont
+      | NoCont | Extern | NoExtern | Type _ | Exact _ ->
+          false)
+  | Type i' -> (
+      match ty with
+      | Type i | Exact i -> subtype subtyping_info i i'
+      | None_ -> is_aggregate i'
+      | NoFunc -> is_func i'
+      | NoCont -> is_cont i'
+      | Func | Exn | NoExn | Cont | Extern | NoExtern | Any | Eq | I31 | Struct
+      | Array ->
+          false)
+  | Exact i' -> (
+      match ty with
+      (* [exact] is invariant among concrete types: only the same exact type. *)
+      | Exact i -> i = i'
+      | None_ -> is_aggregate i'
+      | NoFunc -> is_func i'
+      | NoCont -> is_cont i'
+      | Type _ | Func | Exn | NoExn | Cont | Extern | NoExtern | Any | Eq | I31
+      | Struct | Array ->
+          false)
 
 let ref_subtype subtyping_info { nullable; typ }
     { nullable = nullable'; typ = typ' } =
