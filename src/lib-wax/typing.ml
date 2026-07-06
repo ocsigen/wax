@@ -49,6 +49,12 @@ module Error = struct
     warn ~warning:Wax_utils.Warning.Unused_field ~universal:true context
       ~location "The %s %a is never used." kind print_name name
 
+  (* An imported function or global never referenced, exported, or used as the
+     start function. Prefix its name with [_] to silence the warning. *)
+  let unused_import context ~location kind name =
+    warn ~warning:Wax_utils.Warning.Unused_import ~universal:true context
+      ~location "The imported %s %a is never used." kind print_name name
+
   (* A block label declared but never branched to. Prefix its name with [_] to
      silence the warning. *)
   let unused_label context ~location name =
@@ -8922,6 +8928,14 @@ let type_configuration ?(warn_unused = false) ?(build = true)
         (fun (k, _) -> k = "export" || k = "start" || k = "import")
         (field_attributes field)
     in
+    (* An import always carries an [import] annotation, so the definition-level
+       [exempt] would exempt every one of them; for imports only [export] and
+       [start] make them externally reachable. *)
+    let exempt_import field =
+      List.exists
+        (fun (k, _) -> k = "export" || k = "start")
+        (field_attributes field)
+    in
     let unused tbl (name : ident) =
       (not (String.length name.desc > 0 && name.desc.[0] = '_'))
       && not (Tbl.is_used tbl name.desc)
@@ -8936,6 +8950,13 @@ let type_configuration ?(warn_unused = false) ?(build = true)
         | Global { name; _ }
           when (not (exempt field.desc)) && unused ctx.globals name ->
             Error.unused_field ctx.diagnostics ~location:name.info "global" name
+        | Fundecl { name; _ }
+          when (not (exempt_import field.desc)) && unused ctx.functions name ->
+            Error.unused_import ctx.diagnostics ~location:name.info "function"
+              name
+        | GlobalDecl { name; _ }
+          when (not (exempt_import field.desc)) && unused ctx.globals name ->
+            Error.unused_import ctx.diagnostics ~location:name.info "global" name
         | _ -> ())
       fields
   end;

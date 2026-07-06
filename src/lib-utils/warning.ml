@@ -1,6 +1,7 @@
 type t =
   | Unused_local
   | Unused_field
+  | Unused_import
   | Unused_label
   | Shift_overflow
   | Constant_trap
@@ -8,6 +9,8 @@ type t =
   | Constant_condition
   | Unused_result
   | Dead_code
+  | Cast_always_fails
+  | Redundant_operation
   | Truncated_coverage
   | Naming_conflict
   | Reserved_word_rename
@@ -17,6 +20,7 @@ let all =
   [
     Unused_local;
     Unused_field;
+    Unused_import;
     Unused_label;
     Shift_overflow;
     Constant_trap;
@@ -24,6 +28,8 @@ let all =
     Constant_condition;
     Unused_result;
     Dead_code;
+    Cast_always_fails;
+    Redundant_operation;
     Truncated_coverage;
     Naming_conflict;
     Reserved_word_rename;
@@ -33,6 +39,7 @@ let all =
 let name = function
   | Unused_local -> "unused-local"
   | Unused_field -> "unused-field"
+  | Unused_import -> "unused-import"
   | Unused_label -> "unused-label"
   | Shift_overflow -> "shift-count-overflow"
   | Constant_trap -> "constant-trap"
@@ -40,6 +47,8 @@ let name = function
   | Constant_condition -> "constant-condition"
   | Unused_result -> "unused-result"
   | Dead_code -> "dead-code"
+  | Cast_always_fails -> "cast-always-fails"
+  | Redundant_operation -> "redundant-operation"
   | Truncated_coverage -> "truncated-coverage"
   | Naming_conflict -> "naming-conflict"
   | Reserved_word_rename -> "reserved-word-rename"
@@ -48,6 +57,7 @@ let name = function
 let description = function
   | Unused_local -> "A local that is declared but never read."
   | Unused_field -> "A module field that is defined but never used."
+  | Unused_import -> "An imported function or global that is never used."
   | Unused_label -> "A block label that is declared but never branched to."
   | Shift_overflow ->
       "A constant shift count is at least the operand's bit width (Wasm masks \
@@ -66,6 +76,13 @@ let description = function
   | Dead_code ->
       "A statement is unreachable: it follows an unconditional branch, return, \
        or unreachable."
+  | Cast_always_fails ->
+      "A reference cast or test whose operand can never have the target type, \
+       so it always traps (or is always false)."
+  | Redundant_operation ->
+      "An operation with no effect on its result (an arithmetic identity, an \
+       absorbing operand, identical operands, a self-assignment, or a \
+       superfluous cast)."
   | Truncated_coverage ->
       "Path-sensitive validation gave up after too many configurations."
   | Naming_conflict -> "A Wasm name collided with another and was renamed."
@@ -77,7 +94,7 @@ let description = function
    [set] so it need not be listed here. *)
 let group_table =
   [
-    ("unused", [ Unused_local; Unused_field; Unused_label ]);
+    ("unused", [ Unused_local; Unused_field; Unused_import; Unused_label ]);
     ( "correctness",
       [
         Shift_overflow;
@@ -86,9 +103,12 @@ let group_table =
         Constant_condition;
         Unused_result;
         Dead_code;
+        Cast_always_fails;
         Unused_field;
+        Unused_import;
         Unused_label;
       ] );
+    ("redundant", [ Redundant_operation ]);
     ("naming", [ Naming_conflict; Reserved_word_rename; Generated_name ]);
   ]
 
@@ -100,13 +120,17 @@ type level = Hidden | Displayed | Error
    function, so later assignments naturally override earlier ones. *)
 type policy = t -> level
 
-(* The From_wasm renaming warnings are noisy round-trip notices, so they are
-   hidden unless explicitly enabled with [-W]; everything else is shown. *)
+(* The From_wasm renaming warnings are noisy round-trip notices, and the
+   redundant-operation lints are optimisation hints that are common in generated
+   code, so all of these are hidden unless explicitly enabled with [-W];
+   everything else is shown. *)
 let default_policy = function
-  | Naming_conflict | Reserved_word_rename | Generated_name -> Hidden
-  | Unused_local | Unused_field | Unused_label | Shift_overflow | Constant_trap
-  | Tautological_comparison | Constant_condition | Unused_result | Dead_code
-  | Truncated_coverage ->
+  | Naming_conflict | Reserved_word_rename | Generated_name | Redundant_operation
+    ->
+      Hidden
+  | Unused_local | Unused_field | Unused_import | Unused_label | Shift_overflow
+  | Constant_trap | Tautological_comparison | Constant_condition | Unused_result
+  | Dead_code | Cast_always_fails | Truncated_coverage ->
       Displayed
 
 let resolve (policy : policy) w = policy w

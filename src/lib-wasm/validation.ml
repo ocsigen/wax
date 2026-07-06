@@ -606,6 +606,19 @@ module Error = struct
         | None -> Format.fprintf f "This %s is never used." kind)
       ()
 
+  (* An imported function or global never referenced, exported, or used as the
+     start function. Prefix its name with [_] to silence the warning. *)
+  let unused_import context ~location kind name =
+    Diagnostic.report context ~location ~severity:Warning
+      ~warning:Warning.Unused_import ~universal:true
+      ~message:(fun f () ->
+        match name with
+        | Some id ->
+            Format.fprintf f "The imported %s %a is never used." kind
+              print_ident id
+        | None -> Format.fprintf f "This imported %s is never used." kind)
+      ()
+
   (* A block label declared but never branched to. Prefix its name with [_] to
      silence the warning. *)
   let unused_label context ~location name =
@@ -1288,10 +1301,17 @@ type module_context = {
   used_functions : (int, unit) Hashtbl.t;
   used_globals : (int, unit) Hashtbl.t;
   (* Each module-defined (non-import) function / global, as (index, source name,
-     report location): the candidates the [unused-field] warning ranges over.
-     Imports are external contracts and never recorded. *)
+     report location): the candidates the [unused-field] warning ranges over. *)
   mutable defined_functions : (int * Ast.Text.name option * Ast.location) list;
   mutable defined_globals : (int * Ast.Text.name option * Ast.location) list;
+  (* Likewise for imported functions / globals — the [unused-import] candidates.
+     They share the index space (and so the [used_*] marks) with the defined
+     ones, but are reported with a distinct wording. *)
+  mutable imported_functions : (int * Ast.Text.name option * Ast.location) list;
+  mutable imported_globals : (int * Ast.Text.name option * Ast.location) list;
+  (* Whether the extra "unused" analyses run (tied to [-v]/[check], like
+     [unused-local]); consulted by lints emitted during stack validation. *)
+  warn_unused : bool;
 }
 
 module IntSet = Set.Make (Int)
@@ -3819,12 +3839,21 @@ let build_initial_env ctx fields =
       match field.desc with
       | Import { id; desc; exports; module_ = _; name = _ } -> (
           register_exports ctx exports;
+          (* Record a func/global import as an [unused-import] candidate; an
+             inline export re-exports it, so mark it used. *)
+          let location =
+            match id with Some id -> id.Ast.info | None -> field.info
+          in
           match desc with
           | Func { exact; typ = tu } ->
+              let idx = Sequence.next_index ctx.functions in
               ignore
                 (let+@ ty = typeuse ctx.diagnostics ctx.types tu in
                  Sequence.register ctx.functions id
-                   (ty, fst tu, typeuse_functype ctx.types tu, exact))
+                   (ty, fst tu, typeuse_functype ctx.types tu, exact));
+              ctx.imported_functions <-
+                (idx, id, location) :: ctx.imported_functions;
+              if exports <> [] then Hashtbl.replace ctx.used_functions idx ()
           | Memory lim ->
               limits ctx "memory" lim max_memory_size;
               Sequence.register ctx.memories id lim.desc
@@ -3834,9 +3863,13 @@ let build_initial_env ctx fields =
               let>@ typ = tabletype ctx.diagnostics ctx.types typ in
               Sequence.register ctx.tables id (typ, src)
           | Global ty ->
+              let idx = Sequence.next_index ctx.globals in
               let src = Plain ty.typ in
               let>@ ty = globaltype ctx.diagnostics ctx.types ty in
-              Sequence.register ctx.globals id (ty, src)
+              Sequence.register ctx.globals id (ty, src);
+              ctx.imported_globals <-
+                (idx, id, location) :: ctx.imported_globals;
+              if exports <> [] then Hashtbl.replace ctx.used_globals idx ()
           | Tag tu ->
               let>@ ty = typeuse ctx.diagnostics ctx.types tu in
               let sign = typeuse_functype ctx.types tu in
@@ -4583,11 +4616,13 @@ let start ctx fields =
 
 (* Report module-defined functions and globals that are never referenced,
    exported, or used as the start function (the module-level analog of an unused
-   local). Uses are collected during validation into [used_functions] /
-   [used_globals]; a name starting with [_] is intentionally unused. Runs after
-   every other pass so all references have been seen. *)
+   local), and likewise for imports. Uses are collected during validation into
+   [used_functions] / [used_globals]; a name starting with [_] is intentionally
+   unused. Runs after every other pass so all references have been seen. *)
 let unused_fields ctx =
-  let report used kind decls =
+  if not ctx.warn_unused then ()
+  else
+  let report emit used kind decls =
     List.iter
       (fun (idx, (name : Ast.Text.name option), location) ->
         if
@@ -4597,12 +4632,15 @@ let unused_fields ctx =
                | Some n -> String.length n.desc > 0 && n.desc.[0] = '_'
                | None -> false)
         then
-          Error.unused_field ctx.diagnostics ~location kind
+          emit ctx.diagnostics ~location kind
             (Option.map (fun (n : Ast.Text.name) -> n.desc) name))
       (List.rev decls)
   in
-  report ctx.used_functions "function" ctx.defined_functions;
-  report ctx.used_globals "global" ctx.defined_globals
+  report Error.unused_field ctx.used_functions "function" ctx.defined_functions;
+  report Error.unused_field ctx.used_globals "global" ctx.defined_globals;
+  report Error.unused_import ctx.used_functions "function"
+    ctx.imported_functions;
+  report Error.unused_import ctx.used_globals "global" ctx.imported_globals
 
 (*** Whole-module validation ***)
 
@@ -4780,6 +4818,9 @@ let validate_configuration ?(warn_unused = true)
       used_globals = Hashtbl.create 16;
       defined_functions = [];
       defined_globals = [];
+      imported_functions = [];
+      imported_globals = [];
+      warn_unused;
     }
   in
   check_type_definitions ctx;
@@ -4795,7 +4836,7 @@ let validate_configuration ?(warn_unused = true)
   functions ~warn_unused ctx fields;
   exports ctx fields;
   start ctx fields;
-  if warn_unused then unused_fields ctx
+  unused_fields ctx
 
 (* Path-sensitive validation of conditional annotations.
 

@@ -11,6 +11,9 @@ type t =
   | Unused_field
       (** A module field (a function or global) that is defined but never
           referenced, exported, or used as the start function. *)
+  | Unused_import
+      (** An imported function or global that is never referenced, exported, or
+          used as the start function. *)
   | Unused_label  (** A block label that is declared but never branched to. *)
   | Shift_overflow
       (** A shift by a constant count at least as large as the operand's bit
@@ -33,6 +36,16 @@ type t =
   | Dead_code
       (** A statement that can never be reached because it follows an
           unconditional branch, [return], or [unreachable]. *)
+  | Cast_always_fails
+      (** A reference cast or test whose operand can never have the target type
+          (the two are unrelated in the type hierarchy), so the cast always
+          traps and the test is always false. *)
+  | Redundant_operation
+      (** An operation with no effect on its result: an arithmetic identity
+          ([x + 0], [x * 1], [x << 0], …), an absorbing operand ([x * 0],
+          [x & 0]), an operation on two identical operands ([x - x], [x ^ x],
+          [x & x]), a self-assignment ([x = x]), or a cast to a type the operand
+          already has. *)
   | Truncated_coverage
       (** Path-sensitive validation gave up after too many conditional
           configurations. *)

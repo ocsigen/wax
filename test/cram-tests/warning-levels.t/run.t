@@ -104,10 +104,12 @@ An unknown warning or group name is rejected:
   $ NO_COLOR=1 wax --validate -W bogus=error unused.wax -f wat
   Usage: wax [--help] [COMMAND] …
   wax: option '-W': Unknown warning or group 'bogus'. Known names:
-       unused-local, unused-field, unused-label, shift-count-overflow,
-       constant-trap, tautological-comparison, constant-condition,
-       unused-result, dead-code, truncated-coverage, naming-conflict,
-       reserved-word-rename, generated-name, unused, correctness, naming, all.
+       unused-local, unused-field, unused-import, unused-label,
+       shift-count-overflow, constant-trap, tautological-comparison,
+       constant-condition, unused-result, dead-code, cast-always-fails,
+       redundant-operation, truncated-coverage, naming-conflict,
+       reserved-word-rename, generated-name, unused, correctness, redundant,
+       naming, all.
   [124]
 
 An unknown level is rejected:
