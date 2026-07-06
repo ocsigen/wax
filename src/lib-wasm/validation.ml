@@ -3993,7 +3993,27 @@ let float_conversion_traps target signage f =
 (* Report the constant-operand lints (shift count, division/remainder by zero,
    out-of-range trapping conversion, tautological unsigned comparison, constant
    condition, discarded constant) and dead code over a function body. *)
-let lint_body diagnostics instrs =
+let lint_body ctx instrs =
+  let diagnostics = ctx.modul.diagnostics in
+  (* The number of field operands of a [struct.new] on the type at [idx], or
+     [None] if the index does not resolve to a struct type. Looks the type up
+     silently (the body has already been validated, so a bad index has already
+     been reported — re-reporting here would duplicate the diagnostic). *)
+  let struct_arity idx =
+    let m = ctx.modul in
+    match
+      try
+        match idx.Ast.desc with
+        | Ast.Text.Num x -> Some (Hashtbl.find m.types.index_mapping x)
+        | Ast.Text.Id id -> Some (Hashtbl.find m.types.label_mapping id)
+      with Not_found -> None
+    with
+    | Some (gidx, _, _) -> (
+        match (Types.get_subtype m.subtyping_info gidx).typ with
+        | Struct fields -> Some (Array.length fields)
+        | Func _ | Array _ | Cont _ -> None)
+    | None -> None
+  in
   let check_int_binop (op : _ Ast.Text.instr) (o : Ast.int_bin_op) width st =
     match (o, st) with
     | (Shl | Shr _), LInt n :: _ when n >= 0L && n >= Int64.of_int width ->
@@ -4058,10 +4078,12 @@ let lint_body diagnostics instrs =
         `Pure 0
     | UnOp (I32 (Trunc _) | I64 (Trunc _)) ->
         `Impure (* trapping float→int conversion *)
+    (* [struct.new_default] with a descriptor takes just the descriptor
+       operand, so its arity is fixed at 1 like the other unary pure ops. *)
     | UnOp _ | I32WrapI64 | I64ExtendI32 _ | F32DemoteF64 | F64PromoteF32
     | ExternConvertAny | AnyConvertExtern | RefIsNull | RefTest _ | RefI31
     | VecUnOp _ | VecTest _ | VecBitmask _ | VecExtract _ | VecSplat _
-    | ArrayNewDefault _ ->
+    | ArrayNewDefault _ | StructNewDefaultDesc _ ->
         `Pure 1
     | BinOp (I32 (Div _ | Rem _) | I64 (Div _ | Rem _)) ->
         `Impure (* integer division/remainder may trap *)
@@ -4075,6 +4097,15 @@ let lint_body diagnostics instrs =
        [struct.new_default]/[array.new]/[array.new_default] above have a fixed
        arity too. *)
     | ArrayNewFixed (_, n) -> `Pure (Uint32.to_int n)
+    (* [struct.new] takes one operand per field; the arity comes from the type,
+       looked up the same way folding does. [struct.new_desc] adds a descriptor
+       operand. An unresolvable type falls through to [`Unhandled]. *)
+    | StructNew idx -> (
+        match struct_arity idx with Some n -> `Pure n | None -> `Unhandled)
+    | StructNewDesc idx -> (
+        match struct_arity idx with
+        | Some n -> `Pure (n + 1)
+        | None -> `Unhandled)
     (* [nop] neither pops nor pushes, so it leaves the tracked stack unchanged
        rather than clearing it. *)
     | Nop -> `Neutral
@@ -4095,12 +4126,11 @@ let lint_body diagnostics instrs =
     | VecLoad _ | VecStore _ | VecLoadLane _ | VecStoreLane _ | VecLoadSplat _
       ->
         `Impure
-    (* Possibly pure, but not modelled here (variable arity, block-structured,
-       produces no single value, or a Wax extension); clears the stack
-       conservatively. Distinct from [`Impure] to flag as future work. *)
-    | Block _ | Loop _ | If _ | TryTable _ | Try _ | Hinted _ | Drop
-    | StructNew _ | StructNewDesc _ | StructNewDefaultDesc _ | Add128 | Sub128
-    | MulWide _ | Folded _ | String _ | Char _ | If_annotation _ ->
+    (* Possibly pure, but not modelled here (block-structured, produces more
+       than one value, or a Wax extension); clears the stack conservatively.
+       Distinct from [`Impure] to flag as future work. *)
+    | Block _ | Loop _ | If _ | TryTable _ | Try _ | Hinted _ | Drop | Add128
+    | Sub128 | MulWide _ | Folded _ | String _ | Char _ | If_annotation _ ->
         `Unhandled
   in
   let rec drop_n n l =
@@ -4266,7 +4296,7 @@ let functions ?(warn_unused = true) ctx fields =
                        | None -> false)
                 then Error.unused_local ctx.modul.diagnostics ~location name)
               (List.rev !declared_locals);
-          if warn_unused then lint_body ctx.modul.diagnostics instrs;
+          if warn_unused then lint_body ctx instrs;
           register_exports ctx.modul exports
       | _ -> ())
     fields

@@ -1,4 +1,5 @@
 (module
+  (type $pair (struct (field i32) (field i32)))
   (func $shift (param i32) (result i32)
     (i32.shl (local.get 0) (i32.const 40)))
   (func $divzero (param i32) (result i32)
@@ -12,6 +13,8 @@
     (local.get 0))
   (func $droppure
     (drop (i32.const 5)))
+  (func $dropstruct
+    (drop (struct.new $pair (i32.const 1) (i32.const 2))))
   (func $dead (result i32)
     (return (i32.const 1))
     (i32.const 2))
