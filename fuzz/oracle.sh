@@ -47,10 +47,18 @@ repro() { echo "$WAX $*"; }
 # source float width narrows changes which inputs trap / the value it produces.
 # This is the width-eraser class (ROADMAP.md §1), invisible to every validity
 # oracle (both sides validate; only execution sees it). No legitimate round-trip
-# rewrite touches these families (cast fusion only moves extend/wrap/reinterpret;
-# div/rem/shift lower straight through; a truncation's source is pinned in
-# from_wasm), so any change is a bug — verified false-positive-free over the
-# corpus (0 findings; fires on a neutered wax).
+# rewrite touches these families IN REACHABLE CODE (cast fusion only moves
+# extend/wrap/reinterpret; div/rem/shift lower straight through; a truncation's
+# source is pinned in from_wasm), so any change is a bug — verified
+# false-positive-free over the corpus (0 findings; fires on a neutered wax).
+#
+# Dead code is EXCLUDED from the count (the awk below tracks reachability):
+# from_wasm deliberately does not pin widths after a terminator (ROADMAP §1
+# "dead code is exempt — never executes"), so a width op on the polymorphic
+# dead-code stack legitimately re-defaults (or collapses to `unreachable`) —
+# the same reason comparisons/eqz/wrap are excluded entirely. wasm-smith puts
+# div/rem/trunc in dead code too (smith-findings/smith-{318,475}.wasm), which
+# the corpus never did.
 #
 # Deliberately EXCLUDED: comparisons, [eqz] and [i32.wrap_i64]. Their width is
 # also erased and IS fixed in from_wasm, but they are not histogram-clean: a
@@ -64,7 +72,28 @@ repro() { echo "$WAX $*"; }
 width_op_histogram() {
   local txt
   txt="$("$WASM_TOOLS" print "$1" 2>/dev/null)" || return 1
+  # Reachability tracker over the flat `wasm-tools print` form: after an
+  # unconditional terminator, skip lines until the enclosing frame's
+  # end/else/catch (nested dead blocks tracked by depth); a lone `)` closes
+  # the function. Only live lines reach the opcode grep.
   printf '%s\n' "$txt" \
+    | awk '
+        { t = $1 }
+        t == ")" { dead = 0; depth = 0 }
+        t == "block" || t == "loop" || t == "if" || t == "try" || t == "try_table" { depth++ }
+        t == "end" || t == "delegate" {
+          if (dead && depth == dead_depth) dead = 0
+          depth--
+        }
+        t == "else" || t == "catch" || t == "catch_all" {
+          if (dead && depth == dead_depth) dead = 0
+        }
+        dead { next }
+        { print }
+        t == "br" || t == "br_table" || t == "return" || t ~ /^return_call/ \
+          || t == "unreachable" || t == "throw" || t == "throw_ref" || t == "rethrow" {
+          dead = 1; dead_depth = depth
+        }' \
     | grep -oE 'i(32|64)\.(div|rem|shr)_[su]|i(32|64)\.shl\b|i(32|64)\.trunc_f(32|64)_[su]\b' \
     | sort | uniq -c
 }
@@ -151,7 +180,13 @@ case "$verdict:$EXPECT" in
       report_diff=0
       diffmsg="wax says $verdict, wasm-tools says $ref"
       if [ "$verdict" != "$ref" ]; then
-        if [ "$verdict" = ok ] || [ "$FMT" = wat ]; then
+        if [ "$FMT" = wat ] && ! grep -q '[^[:space:]]' "$IN"; then
+          # A whitespace-only WAT is a valid empty module to wax (and to
+          # wat2wasm, which warns but accepts); only wasm-tools refuses a bare
+          # empty top-level. That divergence is a reference quirk the text
+          # mutator hits whenever it deletes every token — suppress it.
+          report_diff=0
+        elif [ "$verdict" = ok ] || [ "$FMT" = wat ]; then
           # wax MORE LENIENT (accepts what the reference rejects — the soundness
           # direction), or any WAT-text divergence: report directly.
           report_diff=1
