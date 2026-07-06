@@ -592,6 +592,28 @@ module Error = struct
         | None -> Format.fprintf f "This local is never used.")
       ()
 
+  (* A module field (a function or global) defined but never referenced,
+     exported, or used as the start function. Prefix its name with [_] to
+     silence the warning. *)
+  let unused_field context ~location kind name =
+    Diagnostic.report context ~location ~severity:Warning
+      ~warning:Warning.Unused_field ~universal:true
+      ~message:(fun f () ->
+        match name with
+        | Some id ->
+            Format.fprintf f "The %s %a is never used." kind print_ident id
+        | None -> Format.fprintf f "This %s is never used." kind)
+      ()
+
+  (* A block label declared but never branched to. Prefix its name with [_] to
+     silence the warning. *)
+  let unused_label context ~location name =
+    Diagnostic.report context ~location ~severity:Warning
+      ~warning:Warning.Unused_label ~universal:true
+      ~message:(fun f () ->
+        Format.fprintf f "The label %a is never used." print_ident name)
+      ()
+
   (* --- The correctness lint tier (shared with the Wax typer; same warnings and
      wording). Emitted while validating a WAT/WASM function body. --- *)
 
@@ -816,6 +838,9 @@ module Sequence = struct
       label_mapping = Hashtbl.create 16;
       last_index = 0;
     }
+
+  (* The index the next [register] will assign (the current length). *)
+  let next_index seq = seq.last_index
 
   let register seq id v =
     let idx = seq.last_index in
@@ -1172,6 +1197,16 @@ type module_context = {
   elem : (reftype * source_type) Sequence.t;
   exports : (string, unit) Hashtbl.t;
   refs : (int, unit) Hashtbl.t;
+  (* Function / global indices referenced anywhere (a call, [ref.func], a
+     [global.get]/[global.set], an export, or the start function) — the marks the
+     [unused-field] warning checks against. *)
+  used_functions : (int, unit) Hashtbl.t;
+  used_globals : (int, unit) Hashtbl.t;
+  (* Each module-defined (non-import) function / global, as (index, source name,
+     report location): the candidates the [unused-field] warning ranges over.
+     Imports are external contracts and never recorded. *)
+  mutable defined_functions : (int * Ast.Text.name option * Ast.location) list;
+  mutable defined_globals : (int * Ast.Text.name option * Ast.location) list;
 }
 
 module IntSet = Set.Make (Int)
@@ -1181,8 +1216,12 @@ type ctx = {
      messages (reconstructed from the interned type if no source is known). *)
   locals : (valtype * source_type) Sequence.t;
   (* Each entry is a branch target: its optional label, the interned types a
-     branch carries to it, and their source types for error messages. *)
-  control_types : (string option * valtype array * source_type array) list;
+     branch carries to it, their source types for error messages, and a flag set
+     when a branch resolves to this frame (used to report labels never branched
+     to). The flag is shared by reference, so a branch deep in a block marks the
+     frame the enclosing instruction created. *)
+  control_types :
+    (string option * valtype array * source_type array * bool ref) list;
   return_types : valtype array;
   return_source : source_type array;
   modul : module_context;
@@ -1192,6 +1231,10 @@ type ctx = {
      (rather than a snapshot field like [initialized_locals]) so a read inside a
      block propagates up to the function level. *)
   used_locals : IntSet.t ref;
+  (* Named block labels declared in this function, each with the [bool ref] its
+     control frame carries. A label whose flag is still unset once the body has
+     been validated was never branched to and is reported as unused. *)
+  label_decls : (Ast.Text.name * bool ref) list ref;
 }
 
 let lookup_func_type ctx idx =
@@ -1689,7 +1732,10 @@ let branch_target ctx (idx : Ast.Text.idx) =
   match idx.desc with
   | Num i -> (
       try
-        let _, params, source = List.nth ctx.control_types (Uint32.to_int i) in
+        let _, params, source, used =
+          List.nth ctx.control_types (Uint32.to_int i)
+        in
+        used := true;
         Some (params, source)
       with Failure _ ->
         Error.unbound_label ctx.modul.diagnostics ~location:idx.Ast.info idx [];
@@ -1702,7 +1748,7 @@ let branch_target ctx (idx : Ast.Text.idx) =
               Wax_utils.Spell_check.f
                 (fun f ->
                   List.iter
-                    (fun (id_opt, _, _) ->
+                    (fun (id_opt, _, _, _) ->
                       match id_opt with Some id -> f id | None -> ())
                     ctx.control_types)
                 id
@@ -1710,7 +1756,9 @@ let branch_target ctx (idx : Ast.Text.idx) =
             Error.unbound_label ctx.modul.diagnostics ~location:idx.Ast.info idx
               lst;
             None
-        | (Some id', params, source) :: _ when id = id' -> Some (params, source)
+        | (Some id', params, source, used) :: _ when id = id' ->
+            used := true;
+            Some (params, source)
         | _ :: rem -> find rem id
       in
       find ctx.control_types id
@@ -1936,8 +1984,23 @@ let check_resume_table ctx loc ts2 clauses =
    error (via {!Sequence.get}) when the reference does not resolve. *)
 let get_memory ctx = Sequence.get ctx.modul.diagnostics ctx.modul.memories
 let get_table ctx = Sequence.get ctx.modul.diagnostics ctx.modul.tables
-let get_global ctx = Sequence.get ctx.modul.diagnostics ctx.modul.globals
-let get_function ctx = Sequence.get ctx.modul.diagnostics ctx.modul.functions
+
+(* [get_global]/[get_function] are the single resolution points for every
+   [global.get]/[global.set] and [call]/[return_call]/[ref.func] (in a body or a
+   constant expression), so noting the resolved index here records the field as
+   used for the [unused-field] warning. *)
+let get_global ctx idx =
+  Option.iter
+    (fun i -> Hashtbl.replace ctx.modul.used_globals i ())
+    (Sequence.get_index_opt ctx.modul.globals idx);
+  Sequence.get ctx.modul.diagnostics ctx.modul.globals idx
+
+let get_function ctx idx =
+  Option.iter
+    (fun i -> Hashtbl.replace ctx.modul.used_functions i ())
+    (Sequence.get_index_opt ctx.modul.functions idx);
+  Sequence.get ctx.modul.diagnostics ctx.modul.functions idx
+
 let get_data ctx = Sequence.get ctx.modul.diagnostics ctx.modul.data
 let get_elem ctx = Sequence.get ctx.modul.diagnostics ctx.modul.elem
 
@@ -1947,6 +2010,17 @@ let pop_address ctx loc limits =
 
 (*** The instruction validator ***)
 
+(* The usage flag to give a block form's control frame(s). A named label is also
+   recorded in [ctx.label_decls] so an un-branched-to one can be reported once
+   the body is validated; the same flag is shared across an [if]'s two arms and a
+   [try]'s several bodies, which reuse one source label. *)
+let track_label ctx label =
+  let used = ref false in
+  Option.iter
+    (fun l -> ctx.label_decls := (l, used) :: !(ctx.label_decls))
+    label;
+  used
+
 let rec instruction ctx (i : _ Ast.Text.instr) =
   if false then Format.eprintf "%a@." print_instr i;
   let loc = i.info in
@@ -1954,29 +2028,35 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
   | Block { label; typ; block = b } ->
       let*! params, results, param_source, result_source = blocktype ctx typ in
       let* () = pop_args ctx loc ~source:param_source params in
-      block ctx loc label ~param_source ~result_source ~br_source:result_source
-        ~params ~results ~br_params:results b;
+      let used = track_label ctx label in
+      block ctx loc label ~used ~param_source ~result_source
+        ~br_source:result_source ~params ~results ~br_params:results b;
       push_results ~source:result_source results
   | Loop { label; typ; block = b } ->
       let*! params, results, param_source, result_source = blocktype ctx typ in
       let* () = pop_args ctx loc ~source:param_source params in
-      block ctx loc label ~param_source ~result_source ~br_source:param_source
-        ~params ~results ~br_params:params b;
+      let used = track_label ctx label in
+      block ctx loc label ~used ~param_source ~result_source
+        ~br_source:param_source ~params ~results ~br_params:params b;
       push_results ~source:result_source results
   | If { label; typ; if_block; else_block } ->
       let*! params, results, param_source, result_source = blocktype ctx typ in
       let* () = pop_known ctx loc I32 in
       let* () = pop_args ctx loc ~source:param_source params in
-      block ctx loc label ~param_source ~result_source ~br_source:result_source
-        ~params ~results ~br_params:results if_block.desc;
-      block ctx loc label ~param_source ~result_source ~br_source:result_source
-        ~params ~results ~br_params:results else_block.desc;
+      let used = track_label ctx label in
+      block ctx loc label ~used ~param_source ~result_source
+        ~br_source:result_source ~params ~results ~br_params:results
+        if_block.desc;
+      block ctx loc label ~used ~param_source ~result_source
+        ~br_source:result_source ~params ~results ~br_params:results
+        else_block.desc;
       push_results ~source:result_source results
   | TryTable { label; typ; block = b; catches } ->
       let*! params, results, param_source, result_source = blocktype ctx typ in
       let* () = pop_args ctx loc ~source:param_source params in
-      block ctx loc label ~param_source ~result_source ~br_source:result_source
-        ~params ~results ~br_params:results b;
+      let used = track_label ctx label in
+      block ctx loc label ~used ~param_source ~result_source
+        ~br_source:result_source ~params ~results ~br_params:results b;
       List.iter
         (fun (catch : Ast.Text.catch) ->
           match catch with
@@ -2023,18 +2103,19 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
   | Try { label; typ; block = b; catches; catch_all } ->
       let*! params, results, param_source, result_source = blocktype ctx typ in
       let* () = pop_args ctx loc ~source:param_source params in
-      block ctx loc label ~param_source ~result_source ~br_source:result_source
-        ~params ~results ~br_params:results b;
+      let used = track_label ctx label in
+      block ctx loc label ~used ~param_source ~result_source
+        ~br_source:result_source ~params ~results ~br_params:results b;
       List.iter
         (fun (tag, b) ->
           let*? params', param_source = lookup_tag_type ctx tag in
-          block ctx loc label ~param_source ~result_source
+          block ctx loc label ~used ~param_source ~result_source
             ~br_source:result_source ~params:params' ~results ~br_params:results
             b)
         catches;
       Option.iter
         (fun b ->
-          block ctx loc label ~param_source ~result_source
+          block ctx loc label ~used ~param_source ~result_source
             ~br_source:result_source ~params ~results ~br_params:results b)
         catch_all;
       push_results ~source:result_source results
@@ -3276,8 +3357,8 @@ and instructions ctx l =
       let* () = instruction ctx i in
       instructions ctx r
 
-and block ctx loc label ~param_source ~result_source ~br_source ~params ~results
-    ~br_params block =
+and block ctx loc label ~used ~param_source ~result_source ~br_source ~params
+    ~results ~br_params block =
   with_empty_stack ctx.modul loc
     (let* () = push_results ~source:param_source params in
      let* () =
@@ -3285,7 +3366,7 @@ and block ctx loc label ~param_source ~result_source ~br_source ~params ~results
          {
            ctx with
            control_types =
-             (Option.map (fun l -> l.Ast.desc) label, br_params, br_source)
+             (Option.map (fun l -> l.Ast.desc) label, br_params, br_source, used)
              :: ctx.control_types;
          }
          block
@@ -3362,6 +3443,7 @@ let constant_expression ctx ~location ~expected_source ty expr =
          modul = ctx;
          initialized_locals = IntSet.empty;
          used_locals = ref IntSet.empty;
+         label_decls = ref [];
        }
      in
      let* () = instructions ctx expr in
@@ -3683,11 +3765,19 @@ let build_initial_env ctx fields =
                  types (for [suspend] / [resume]), so the exception-handling
                  restriction to no results is not enforced. *)
               Sequence.register ctx.tags id (ty, sign))
-      | Func { id; typ; instrs; _ } ->
+      | Func { id; typ; instrs; exports; locals = _ } ->
           let>@ ty = typeuse ctx.diagnostics ctx.types typ in
           let sign = typeuse_functype ctx.types typ in
           (* A module-defined function has exactly its declared type. *)
+          let idx = Sequence.next_index ctx.functions in
           Sequence.register ctx.functions id (ty, fst typ, sign, true);
+          (* Record it as an [unused-field] candidate; an inline export makes it
+             externally reachable, so mark it used. *)
+          let location =
+            match id with Some id -> id.Ast.info | None -> field.info
+          in
+          ctx.defined_functions <- (idx, id, location) :: ctx.defined_functions;
+          if exports <> [] then Hashtbl.replace ctx.used_functions idx ();
           register_typeuses ctx.diagnostics ctx.types instrs
       | Tag { id; typ; exports } ->
           let>@ ty = typeuse ctx.diagnostics ctx.types typ in
@@ -3827,7 +3917,15 @@ let globals ctx fields =
           let>@ typ = globaltype ctx.diagnostics ctx.types typ in
           constant_expression ctx ~location:field.info ~expected_source:src
             typ.typ init;
+          let idx = Sequence.next_index ctx.globals in
           Sequence.register ctx.globals id (typ, src);
+          (* Record it as an [unused-field] candidate; an inline export makes it
+             externally reachable, so mark it used. *)
+          let location =
+            match id with Some id -> id.Ast.info | None -> field.info
+          in
+          ctx.defined_globals <- (idx, id, location) :: ctx.defined_globals;
+          if exports <> [] then Hashtbl.replace ctx.used_globals idx ();
           register_exports ctx exports
       | String_global { id; typ; init } ->
           (* A named array type is honoured (and must be an i8/i16 array, like
@@ -4281,12 +4379,13 @@ let functions ?(warn_unused = true) ctx fields =
           let ctx =
             {
               locals;
-              control_types = [ (None, return_types, return_source) ];
+              control_types = [ (None, return_types, return_source, ref false) ];
               return_types;
               return_source;
               modul = ctx;
               initialized_locals = !initialized_locals;
               used_locals = ref IntSet.empty;
+              label_decls = ref [];
             }
           in
           with_empty_stack ctx.modul field.info
@@ -4305,6 +4404,18 @@ let functions ?(warn_unused = true) ctx fields =
                        | None -> false)
                 then Error.unused_local ctx.modul.diagnostics ~location name)
               (List.rev !declared_locals);
+          (* A named block label never branched to. A name starting with [_] is
+             intentionally unused. *)
+          if warn_unused then
+            List.iter
+              (fun ((name : Ast.Text.name), used) ->
+                if
+                  (not !used)
+                  && not (String.length name.desc > 0 && name.desc.[0] = '_')
+                then
+                  Error.unused_label ctx.modul.diagnostics ~location:name.info
+                    name.desc)
+              (List.rev !(ctx.label_decls));
           if warn_unused then lint_body ctx instrs;
           register_exports ctx.modul exports
       | _ -> ())
@@ -4316,12 +4427,23 @@ let exports ctx fields =
       match field.desc with
       | Export { name; kind; index } -> (
           register_exports ctx [ name ];
+          (* An exported field is externally reachable, so mark it used for the
+             [unused-field] warning. *)
+          let mark used seq =
+            Option.iter
+              (fun i -> Hashtbl.replace used i ())
+              (Sequence.get_index_opt seq index)
+          in
           match kind with
-          | Func -> ignore (Sequence.get ctx.diagnostics ctx.functions index)
+          | Func ->
+              ignore (Sequence.get ctx.diagnostics ctx.functions index);
+              mark ctx.used_functions ctx.functions
           | Memory -> ignore (Sequence.get ctx.diagnostics ctx.memories index)
           | Table -> ignore (Sequence.get ctx.diagnostics ctx.tables index)
           | Tag -> ignore (Sequence.get ctx.diagnostics ctx.tags index)
-          | Global -> ignore (Sequence.get ctx.diagnostics ctx.globals index))
+          | Global ->
+              ignore (Sequence.get ctx.diagnostics ctx.globals index);
+              mark ctx.used_globals ctx.globals)
       | _ -> ())
     fields
 
@@ -4331,6 +4453,10 @@ let start ctx fields =
       match field.desc with
       | Start idx -> (
           let*? ty, _, _, _ = Sequence.get ctx.diagnostics ctx.functions idx in
+          (* The start function is externally reachable. *)
+          Option.iter
+            (fun i -> Hashtbl.replace ctx.used_functions i ())
+            (Sequence.get_index_opt ctx.functions idx);
           match (Types.get_subtype ctx.subtyping_info ty).typ with
           | Struct _ | Array _ | Cont _ ->
               Error.not_function_type ctx.diagnostics ~location:idx.info
@@ -4340,6 +4466,29 @@ let start ctx fields =
                   ~location:idx.info)
       | _ -> ())
     fields
+
+(* Report module-defined functions and globals that are never referenced,
+   exported, or used as the start function (the module-level analog of an unused
+   local). Uses are collected during validation into [used_functions] /
+   [used_globals]; a name starting with [_] is intentionally unused. Runs after
+   every other pass so all references have been seen. *)
+let unused_fields ctx =
+  let report used kind decls =
+    List.iter
+      (fun (idx, (name : Ast.Text.name option), location) ->
+        if
+          (not (Hashtbl.mem used idx))
+          && not
+               (match name with
+               | Some n -> String.length n.desc > 0 && n.desc.[0] = '_'
+               | None -> false)
+        then
+          Error.unused_field ctx.diagnostics ~location kind
+            (Option.map (fun (n : Ast.Text.name) -> n.desc) name))
+      (List.rev decls)
+  in
+  report ctx.used_functions "function" ctx.defined_functions;
+  report ctx.used_globals "global" ctx.defined_globals
 
 (*** Whole-module validation ***)
 
@@ -4513,6 +4662,10 @@ let validate_configuration ?(warn_unused = true)
       elem = Sequence.make "elem segment";
       exports = Hashtbl.create 16;
       refs = Hashtbl.create 16;
+      used_functions = Hashtbl.create 16;
+      used_globals = Hashtbl.create 16;
+      defined_functions = [];
+      defined_globals = [];
     }
   in
   check_type_definitions ctx;
@@ -4527,7 +4680,8 @@ let validate_configuration ?(warn_unused = true)
   declared_func_exports ctx fields;
   functions ~warn_unused ctx fields;
   exports ctx fields;
-  start ctx fields
+  start ctx fields;
+  if warn_unused then unused_fields ctx
 
 (* Path-sensitive validation of conditional annotations.
 

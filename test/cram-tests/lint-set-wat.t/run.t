@@ -5,9 +5,11 @@ at each non-constant instruction, so they work on both folded and flat WAT — t
 last `$flat` function below is the unfolded form of the first.
 
 This directory sets `WAX_WARN=correctness=hidden` (see its `dune`), so re-enable
-the tier with an explicit `-W`:
+the tier with an explicit `-W`. Every function here is intentionally unused (they
+exist only to trigger a lint), so hide the `unused` group to keep the focus on
+the constant-operand and dead-code checks (see `unused-fields-wat.t` for those):
 
-  $ wax check -W correctness=warning lints.wat
+  $ wax check -W correctness=warning -W unused=hidden lints.wat
   Warning: The shift count 40 is at least the operand width (32 bits).
    ──➤  lints.wat:4:6
   2 │   (type $pair (struct (field i32) (field i32)))
