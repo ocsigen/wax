@@ -55,6 +55,11 @@ module Error = struct
     warn ~warning:Wax_utils.Warning.Unused_import ~universal:true context
       ~location "The imported %s %a is never used." kind print_name name
 
+  (* An operation with no effect on its result, or a constant result. *)
+  let redundant_operation context ~location fmt =
+    warn ~warning:Wax_utils.Warning.Redundant_operation ~universal:true context
+      ~location fmt
+
   (* A block label declared but never branched to. Prefix its name with [_] to
      silence the warning. *)
   let unused_label context ~location name =
@@ -1900,9 +1905,12 @@ let check_type ctx i ty =
 let int_literal_value s =
   Int64.of_string_opt (String.concat "" (String.split_on_char '_' s))
 
+(* Whether [e] is the integer literal equal to [n]. *)
+let int_literal_value_is n (e : _ Ast.instr) =
+  match e.desc with Ast.Int s -> int_literal_value s = Some n | _ -> false
+
 (* Whether [e] is the integer literal zero. *)
-let int_literal_value_is_zero (e : _ Ast.instr) =
-  match e.desc with Ast.Int s -> int_literal_value s = Some 0L | _ -> false
+let int_literal_value_is_zero e = int_literal_value_is 0L e
 
 (* [x << n] / [x >> n] with a constant [n] at least the operand's bit width:
    Wasm masks [n] modulo the width, so the shift is almost certainly not what
@@ -2011,6 +2019,33 @@ let lint_comparison ctx op l r =
   | Some value ->
       Error.tautological_comparison ctx.diagnostics ~location:op.info ~value
   | None -> ()
+
+(* An arithmetic operation with no effect on its result (an identity operand or
+   two identical operands), or whose result is a constant regardless of the
+   variable operand (an absorbing operand). Off by default. *)
+let lint_redundant ctx op l r =
+  let is0 = int_literal_value_is 0L in
+  let is1 = int_literal_value_is 1L in
+  let no_effect () =
+    Error.redundant_operation ctx.diagnostics ~location:op.info
+      "This operation has no effect on its result."
+  in
+  let always v =
+    Error.redundant_operation ctx.diagnostics ~location:op.info
+      "This operation always yields %Ld." v
+  in
+  match op.desc with
+  | Add when is0 l || is0 r -> no_effect () (* x + 0 *)
+  | (Sub | Shl | Shr _) when is0 r -> no_effect () (* x - 0, x << 0 *)
+  | Mul when is1 l || is1 r -> no_effect () (* x * 1 *)
+  | Div (Some _) when is1 r -> no_effect () (* x / 1 *)
+  | (Or | Xor) when is0 l || is0 r -> no_effect () (* x | 0, x ^ 0 *)
+  | (And | Or) when identical_operands l r -> no_effect () (* x & x, x | x *)
+  | Mul when is0 l || is0 r -> always 0L (* x * 0 *)
+  | And when is0 l || is0 r -> always 0L (* x & 0 *)
+  | Rem _ when is1 r -> always 0L (* x % 1 *)
+  | (Sub | Xor) when identical_operands l r -> always 0L (* x - x, x ^ x *)
+  | _ -> ()
 
 (* A branch, loop, or [select] condition that is a constant literal, so it
    always takes the same path. [is_while] excludes the idiomatic infinite loop
@@ -2779,9 +2814,16 @@ let rec lint_source ctx (i : _ Ast.instr) =
   | Call (t, args) | TailCall (t, args) ->
       lint_source ctx t;
       list args
-  | Set (_, _, e) ->
-      (* An assignment to a named target; the pointless-drop check lives in the
-         [Let] case, since a drop [_ = e] is an anonymous binding. *)
+  | Set (id, op, e) ->
+      (* A plain self-assignment [x = x] has no effect. A compound assignment
+         [x op= x] is not redundant (e.g. [x += x] doubles it). The pointless-
+         drop check lives in the [Let] case, since a drop [_ = e] is an anonymous
+         binding. *)
+      (match (op, e.desc) with
+      | None, Get id' when String.equal id.desc id'.desc ->
+          Error.redundant_operation ctx.diagnostics ~location:i.info
+            "This assignment writes the variable back to itself."
+      | _ -> ());
       lint_source ctx e
   | Tee (_, e)
   | Cast (e, _)
@@ -4650,7 +4692,8 @@ and type_arith ctx i =
       if ctx.warn_unused then begin
         lint_shift ctx op ty i2';
         lint_division ctx op i2';
-        lint_comparison ctx op i1' i2'
+        lint_comparison ctx op i1' i2';
+        lint_redundant ctx op i1' i2'
       end;
       return_expression i (BinOp (op, i1', i2')) ty
   | UnOp (op, i') ->
@@ -8956,7 +8999,8 @@ let type_configuration ?(warn_unused = false) ?(build = true)
               name
         | GlobalDecl { name; _ }
           when (not (exempt_import field.desc)) && unused ctx.globals name ->
-            Error.unused_import ctx.diagnostics ~location:name.info "global" name
+            Error.unused_import ctx.diagnostics ~location:name.info "global"
+              name
         | _ -> ())
       fields
   end;

@@ -125,8 +125,8 @@ type policy = t -> level
    code, so all of these are hidden unless explicitly enabled with [-W];
    everything else is shown. *)
 let default_policy = function
-  | Naming_conflict | Reserved_word_rename | Generated_name | Redundant_operation
-    ->
+  | Naming_conflict | Reserved_word_rename | Generated_name
+  | Redundant_operation ->
       Hidden
   | Unused_local | Unused_field | Unused_import | Unused_label | Shift_overflow
   | Constant_trap | Tautological_comparison | Constant_condition | Unused_result

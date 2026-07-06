@@ -674,6 +674,9 @@ module Error = struct
     warn_lint context ~location ~related Warning.Dead_code
       "This code is unreachable."
 
+  let redundant_operation context ~location fmt =
+    warn_lint context ~location Warning.Redundant_operation fmt
+
   let index_already_bound context ~location kind index =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
@@ -4243,7 +4246,17 @@ let lint_body ctx instrs =
     let taut value =
       Error.tautological_comparison diagnostics ~location:op.info ~value
     in
-    (* [st] is [right :: left :: _]. *)
+    let no_effect () =
+      Error.redundant_operation diagnostics ~location:op.info
+        "This operation has no effect on its result."
+    in
+    let always v =
+      Error.redundant_operation diagnostics ~location:op.info
+        "This operation always yields %Ld." v
+    in
+    (* [st] is [right :: left :: _]. The redundant-operation cases require both
+       operands to be tracked (so the whole expression is effect-free): a
+       constant on one side plus a second entry ([_ :: _]) for the other. *)
     match (o, st) with
     | (Shl | Shr _), LInt n :: _ when n >= 0L && n >= Int64.of_int width ->
         Error.shift_overflow diagnostics ~location:op.info ~width n
@@ -4259,6 +4272,22 @@ let lint_body ctx instrs =
        float ones are a different opcode), so there is no NaN caveat. *)
     | (Eq | Le _ | Ge _), a :: b :: _ when same_read a b -> taut true
     | (Ne | Lt _ | Gt _), a :: b :: _ when same_read a b -> taut false
+    (* Arithmetic identities: the result is the other operand unchanged. *)
+    | Add, (LInt 0L :: _ :: _ | _ :: LInt 0L :: _) -> no_effect () (* x + 0 *)
+    | (Sub | Shl | Shr _ | Rotl | Rotr), LInt 0L :: _ :: _ ->
+        no_effect () (* x - 0, x << 0, … *)
+    | Mul, (LInt 1L :: _ :: _ | _ :: LInt 1L :: _) -> no_effect () (* x * 1 *)
+    | Div _, LInt 1L :: _ :: _ -> no_effect () (* x / 1 *)
+    | (Or | Xor), (LInt 0L :: _ :: _ | _ :: LInt 0L :: _) ->
+        no_effect () (* x | 0, x ^ 0 *)
+    | (And | Or), a :: b :: _ when same_read a b ->
+        no_effect () (* x & x, x | x *)
+    (* Absorbing operands: the result is a constant, independent of the other. *)
+    | Mul, (LInt 0L :: _ :: _ | _ :: LInt 0L :: _) -> always 0L (* x * 0 *)
+    | And, (LInt 0L :: _ :: _ | _ :: LInt 0L :: _) -> always 0L (* x & 0 *)
+    | Rem _, LInt 1L :: _ :: _ -> always 0L (* x % 1 *)
+    | (Sub | Xor), a :: b :: _ when same_read a b ->
+        always 0L (* x - x, x ^ x *)
     | _ -> ()
   in
   (* Check the operator [op] against the constant stack [st] (top = right
@@ -4287,6 +4316,20 @@ let lint_body ctx instrs =
         match st with
         | (LInt _ | LFloat _ | LLocal _ | LGlobal _ | LPure) :: _ ->
             Error.unused_result diagnostics ~location:op.info
+        | _ -> ())
+    (* A self-assignment [x = x]: the value written is a fresh read of the same
+       variable, with nothing impure in between (which would have cleared it). *)
+    | LocalSet idx -> (
+        match (st, Sequence.get_index_opt ctx.locals idx) with
+        | LLocal j :: _, Some i when i = j ->
+            Error.redundant_operation diagnostics ~location:op.info
+              "This assignment writes the local back to itself."
+        | _ -> ())
+    | GlobalSet idx -> (
+        match (st, Sequence.get_index_opt ctx.modul.globals idx) with
+        | LGlobal j :: _, Some i when i = j ->
+            Error.redundant_operation diagnostics ~location:op.info
+              "This assignment writes the global back to itself."
         | _ -> ())
     | _ -> ()
   in
@@ -4622,25 +4665,26 @@ let start ctx fields =
 let unused_fields ctx =
   if not ctx.warn_unused then ()
   else
-  let report emit used kind decls =
-    List.iter
-      (fun (idx, (name : Ast.Text.name option), location) ->
-        if
-          (not (Hashtbl.mem used idx))
-          && not
-               (match name with
-               | Some n -> String.length n.desc > 0 && n.desc.[0] = '_'
-               | None -> false)
-        then
-          emit ctx.diagnostics ~location kind
-            (Option.map (fun (n : Ast.Text.name) -> n.desc) name))
-      (List.rev decls)
-  in
-  report Error.unused_field ctx.used_functions "function" ctx.defined_functions;
-  report Error.unused_field ctx.used_globals "global" ctx.defined_globals;
-  report Error.unused_import ctx.used_functions "function"
-    ctx.imported_functions;
-  report Error.unused_import ctx.used_globals "global" ctx.imported_globals
+    let report emit used kind decls =
+      List.iter
+        (fun (idx, (name : Ast.Text.name option), location) ->
+          if
+            (not (Hashtbl.mem used idx))
+            && not
+                 (match name with
+                 | Some n -> String.length n.desc > 0 && n.desc.[0] = '_'
+                 | None -> false)
+          then
+            emit ctx.diagnostics ~location kind
+              (Option.map (fun (n : Ast.Text.name) -> n.desc) name))
+        (List.rev decls)
+    in
+    report Error.unused_field ctx.used_functions "function"
+      ctx.defined_functions;
+    report Error.unused_field ctx.used_globals "global" ctx.defined_globals;
+    report Error.unused_import ctx.used_functions "function"
+      ctx.imported_functions;
+    report Error.unused_import ctx.used_globals "global" ctx.imported_globals
 
 (*** Whole-module validation ***)
 
