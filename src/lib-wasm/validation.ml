@@ -592,6 +592,52 @@ module Error = struct
         | None -> Format.fprintf f "This local is never used.")
       ()
 
+  (* --- The correctness lint tier (shared with the Wax typer; same warnings and
+     wording). Emitted while validating a WAT/WASM function body. --- *)
+
+  let warn_lint context ~location ?hint ?related warning fmt =
+    Format.kdprintf
+      (fun msg ->
+        Diagnostic.report context ~location ~severity:Warning ~warning
+          ~universal:true ?hint ?related
+          ~message:(fun f () -> msg f)
+          ())
+      fmt
+
+  let shift_overflow context ~location ~width count =
+    warn_lint context ~location Warning.Shift_overflow
+      ~hint:(fun f () ->
+        Format.fprintf f
+          "Wasm masks the count modulo %d, shifting by %Ld instead." width
+          (Int64.rem count (Int64.of_int width)))
+      "The shift count %Ld is at least the operand width (%d bits)." count width
+
+  let division_by_zero context ~location =
+    warn_lint context ~location Warning.Constant_trap
+      "This integer division or remainder by zero always traps."
+
+  let conversion_out_of_range context ~location =
+    warn_lint context ~location Warning.Constant_trap
+      "This conversion always traps: the constant is out of the target type's \
+       range."
+
+  let tautological_comparison context ~location ~value =
+    warn_lint context ~location Warning.Tautological_comparison
+      "This comparison is always %b." value
+
+  let constant_condition context ~location ~value =
+    warn_lint context ~location Warning.Constant_condition
+      "This condition is always %b." value
+
+  let unused_result context ~location =
+    warn_lint context ~location Warning.Unused_result
+      "The result of this expression is discarded, and computing it has no \
+       effect."
+
+  let dead_code context ~location ~related =
+    warn_lint context ~location ~related Warning.Dead_code
+      "This code is unreachable."
+
   let index_already_bound context ~location kind index =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
@@ -3905,6 +3951,150 @@ let declared_func_exports ctx fields =
       | _ -> ())
     fields
 
+(*** Correctness lints over a function body (see {!Wax_utils.Warning}) ***)
+
+(* A constant operand tracked while linting. Crossing any non-constant
+   instruction clears the stack, so its entries mirror the most recent run of
+   constants on the real operand stack — the top is a binary operator's right
+   operand (its last-pushed value). Folded operands flatten into the same push
+   sequence, so folded and flat forms are handled alike. *)
+type lint_const = LInt of int64 | LFloat of float
+
+let lint_int_value s =
+  Int64.of_string_opt (String.concat "" (String.split_on_char '_' s))
+
+let lint_float_value s =
+  let s = String.concat "" (String.split_on_char '_' s) in
+  let body =
+    if String.length s > 0 && (s.[0] = '+' || s.[0] = '-') then
+      String.sub s 1 (String.length s - 1)
+    else s
+  in
+  if String.length body >= 3 && String.equal (String.sub body 0 3) "nan" then
+    Some Float.nan
+  else float_of_string_opt s
+
+(* Whether a trapping (toward-zero) float-to-integer conversion of [f] to the
+   given target/signage would trap: NaN/infinite, or out of range. *)
+let float_conversion_traps target signage f =
+  if not (Float.is_finite f) then true
+  else
+    let t = Float.trunc f in
+    let pow2 n = Float.ldexp 1. n in
+    match (target, signage) with
+    | `I32, Ast.Signed -> t < -.pow2 31 || t >= pow2 31
+    | `I32, Ast.Unsigned -> t < 0. || t >= pow2 32
+    | `I64, Ast.Signed -> t < -.pow2 63 || t >= pow2 63
+    | `I64, Ast.Unsigned -> t < 0. || t >= pow2 64
+
+(* Report the constant-operand lints (shift count, division/remainder by zero,
+   out-of-range trapping conversion, tautological unsigned comparison, constant
+   condition, discarded constant) and dead code over a function body. *)
+let lint_body diagnostics instrs =
+  let check_int_binop (op : _ Ast.Text.instr) (o : Ast.int_bin_op) width st =
+    match (o, st) with
+    | (Shl | Shr _), LInt n :: _ when n >= 0L && n >= Int64.of_int width ->
+        Error.shift_overflow diagnostics ~location:op.info ~width n
+    | (Div _ | Rem _), LInt 0L :: _ ->
+        Error.division_by_zero diagnostics ~location:op.info
+    | Lt Ast.Unsigned, LInt 0L :: _ ->
+        Error.tautological_comparison diagnostics ~location:op.info ~value:false
+    | Ge Ast.Unsigned, LInt 0L :: _ ->
+        Error.tautological_comparison diagnostics ~location:op.info ~value:true
+    | _ -> ()
+  in
+  (* Check the operator [op] against the constant stack [st] (top = right
+     operand / condition). *)
+  let check_op (op : _ Ast.Text.instr) st =
+    match op.desc with
+    | BinOp (I32 o) -> check_int_binop op o 32 st
+    | BinOp (I64 o) -> check_int_binop op o 64 st
+    | UnOp (I32 (Trunc (_, sign))) -> (
+        match st with
+        | LFloat f :: _ when float_conversion_traps `I32 sign f ->
+            Error.conversion_out_of_range diagnostics ~location:op.info
+        | _ -> ())
+    | UnOp (I64 (Trunc (_, sign))) -> (
+        match st with
+        | LFloat f :: _ when float_conversion_traps `I64 sign f ->
+            Error.conversion_out_of_range diagnostics ~location:op.info
+        | _ -> ())
+    | Br_if _ | If _ | Select _ -> (
+        match st with
+        | LInt n :: _ ->
+            Error.constant_condition diagnostics ~location:op.info
+              ~value:(n <> 0L)
+        | _ -> ())
+    | Drop -> (
+        match st with
+        | (LInt _ | LFloat _) :: _ ->
+            Error.unused_result diagnostics ~location:op.info
+        | _ -> ())
+    | _ -> ()
+  in
+  (* An instruction after which control does not fall through. *)
+  let rec is_diverging (i : _ Ast.Text.instr) =
+    match i.desc with
+    | Br _ | Br_table _ | Return | Unreachable | ReturnCall _ | ReturnCallRef _
+    | ReturnCallIndirect _ | Throw _ | ThrowRef ->
+        true
+    | Folded (op, _) -> is_diverging op
+    | _ -> false
+  in
+  let rec walk instrs =
+    (* Dead code: after the first unconditional divergence, the next statement
+       (if any) can never be reached. Reported once, at that statement. *)
+    let rec dead = function
+      | a :: (b :: _ as rest) ->
+          if is_diverging a then
+            Error.dead_code diagnostics ~location:b.info
+              ~related:
+                [
+                  {
+                    Wax_utils.Diagnostic.location = a.info;
+                    message =
+                      (fun f () ->
+                        Format.fprintf f "Control never returns from here.");
+                  };
+                ]
+          else dead rest
+      | _ -> ()
+    in
+    dead instrs;
+    ignore (List.fold_left step [] instrs : lint_const list)
+  and step st (i : _ Ast.Text.instr) =
+    match i.desc with
+    | Const (I32 s) | Const (I64 s) -> (
+        match lint_int_value s with Some n -> LInt n :: st | None -> [])
+    | Const (F32 s) | Const (F64 s) -> (
+        match lint_float_value s with Some f -> LFloat f :: st | None -> [])
+    | Folded (op, operands) ->
+        (* Folded form wraps every instruction, even a leaf constant, as
+           [Folded (Const n, [])]. Flatten to "operands then head": process the
+           operands, then the head as if it were the next flat instruction (so a
+           folded constant pushes, and a folded operator checks and clears). *)
+        let st' = List.fold_left step st operands in
+        step st' op
+    | Hinted (_, inner) -> step st inner
+    | _ ->
+        check_op i st;
+        recurse i;
+        []
+  and recurse (i : _ Ast.Text.instr) =
+    match i.desc with
+    | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
+        walk block
+    | If { if_block; else_block; _ } ->
+        walk if_block.desc;
+        walk else_block.desc
+    | Try { block; catches; catch_all; _ } ->
+        walk block;
+        List.iter (fun (_, b) -> walk b) catches;
+        Option.iter walk catch_all
+    | _ -> ()
+  in
+  walk instrs
+
 let functions ?(warn_unused = true) ctx fields =
   List.iter
     (fun (field : (_ Ast.Text.modulefield, _) Ast.annotated) ->
@@ -4005,6 +4195,7 @@ let functions ?(warn_unused = true) ctx fields =
                        | None -> false)
                 then Error.unused_local ctx.modul.diagnostics ~location name)
               (List.rev !declared_locals);
+          if warn_unused then lint_body ctx.modul.diagnostics instrs;
           register_exports ctx.modul exports
       | _ -> ())
     fields

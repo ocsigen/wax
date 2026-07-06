@@ -129,6 +129,11 @@ mistaken for a subcommand). The `format` subcommand reformats files (see
       text input; the `unused`/`correctness` lints are turned on only by
       `--validate`, and always for `check`. The `naming` warnings are produced
       when converting a Wasm module to Wax.
+    - The `correctness` lints apply to WebAssembly text/binary input as well as
+      Wax: `shift-count-overflow`, `constant-trap`, `tautological-comparison`,
+      `constant-condition`, `unused-result` and `dead-code` are checked by the
+      Wasm validator too (so `wax check foo.wat` reports them). `unused-field`
+      and `unused-label` are currently reported for Wax input only.
     - The `WAX_WARN` environment variable sets default levels applied *before*
       the `-W` options. Its value is a list of `NAME=LEVEL` specs separated by
       commas or whitespace, e.g. `WAX_WARN="correctness=hidden
