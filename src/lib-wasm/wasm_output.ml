@@ -1563,8 +1563,7 @@ let module_ ~out_channel ?output_file ?(source_map = false)
       m.elem;
 
   (* 12. Data Count Section *)
-  if m.data <> [] then
-    bump (datacount_section out_channel (List.length m.data));
+  if m.data <> [] then bump (datacount_section out_channel (List.length m.data));
 
   (* 11. Code Section *)
   (* Branch-hinting / compilation-hints proposals: collect each function's hints

@@ -133,3 +133,26 @@ Link two modules with branch hints and verify hints are merged and preserved at 
   )
   (export "f1" (func 0))
   (export "f2" (func 1))
+
+Link two modules with source maps and verify instruction boundaries match:
+  $ cat > map1.wat <<EOF
+  > (module
+  >   (func (export "f1") (param i32) (result i32)
+  >     local.get 0
+  >     i32.const 2
+  >     i32.add)
+  > )
+  > EOF
+  $ cat > map2.wat <<EOF
+  > (module
+  >   (func (export "f2") (param i32) (result i32)
+  >     local.get 0
+  >     i32.const 3
+  >     i32.mul)
+  > )
+  > EOF
+  $ wax map1.wat -o map1.wasm --source-map
+  $ wax map2.wat -o map2.wasm --source-map
+  $ wax link -o map_linked.wasm --source-map-file map_linked.wasm.map m1:map1.wasm m2:map2.wasm
+  $ ../../check-sourcemap/check_sourcemap.exe map_linked.wasm map_linked.wasm.map map1.wasm map2.wasm
+  Instruction-boundary source map verification successful!
