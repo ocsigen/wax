@@ -8,10 +8,6 @@
 %token INF NAN
 %token SEMI ";"
 %token SHARP "#"
-%token HASH_IF "#[if("
-%token HASH_ELSE "#[else]"
-%token LIKELY_HINT "#[likely]"
-%token UNLIKELY_HINT "#[unlikely]"
 %token QUESTIONMARK "?"
 %token LPAREN "("
 %token RPAREN ")"
@@ -99,11 +95,6 @@
 
 %on_error_reduce statement plaininstr separated_nonempty_list_trailing(",",structure_type_field) semi_list(module_field) separated_nonempty_list_trailing(",",value_type) block_type separated_nonempty_list_trailing(",",function_parameter) list(label) list(attribute) list(typedef) semi_list(legacy_catch) separated_nonempty_list_trailing(",",catch) separated_nonempty_list_trailing(",",let_pattern) blockinstr statement_list loption(separated_nonempty_list_trailing(",",catch)) separated_nonempty_list_trailing(",",expression) let_pattern structure_field separated_nonempty_list_trailing(",",structure_field) constant_expression attribute_expression parenthesized_expression index_expression then_branch condition_expression length_expression optional_function_type structure_type result_type_ expression_list structure
 
-
-(* Dangling [#[else]]: an [#[else]] binds to the nearest [#[if]], i.e. shifting
-   is preferred over reducing the empty [else_clause]. *)
-%nonassoc prec_no_else
-%nonassoc "#[else]"
 
 %nonassoc prec_ident (* {a|...} *) prec_block
 %right prec_branch
@@ -213,6 +204,44 @@ let hinted loc h (i : _ instr) =
           "A branch hint may only prefix a conditional branch (if, br_if, or \
            br_on_*).\n"))
 
+(* [#[likely]]/[#[unlikely]] are parsed as ordinary attributes (the lexer no
+   longer has dedicated tokens); recover the hint's boolean, rejecting any other
+   attribute in a branch-hint position. *)
+let branch_hint_of_attr loc (name, value) =
+  match (name, value) with
+  | "likely", None -> true
+  | "unlikely", None -> false
+  | _ ->
+      raise
+        (Wax_wasm.Parsing.Syntax_error
+           (loc, "Expected a branch hint '#[likely]' or '#[unlikely]'.\n"))
+
+(* Statement-level conditional annotations. The parser cannot pair [#[if]] with a
+   following [#[else]] itself: with [#[else]] no longer a single token, that
+   dangling-else decision is not LALR(1). So each brace group is parsed into a
+   marker and [process_stmts] pairs adjacent [#[if]]/[#[else]] groups into an
+   [If_annotation], leaving every other statement untouched. *)
+type raw_stmt =
+  | RS_plain of location instr
+  | RS_if of (Lexing.position * Lexing.position) * Wax_wasm.Ast.cond
+      * location instr list
+  | RS_else of (Lexing.position * Lexing.position) * location instr list
+
+let rec process_stmts = function
+  | [] -> []
+  | RS_plain i :: rest -> i :: process_stmts rest
+  | RS_if (loc, cond, then_body) :: RS_else (eloc, else_body) :: rest ->
+      with_loc (fst loc, snd eloc)
+        (If_annotation { cond; then_body; else_body = Some else_body })
+      :: process_stmts rest
+  | RS_if (loc, cond, then_body) :: rest ->
+      with_loc loc (If_annotation { cond; then_body; else_body = None })
+      :: process_stmts rest
+  | RS_else (loc, _) :: _ ->
+      raise
+        (Wax_wasm.Parsing.Syntax_error
+           (loc, "An '#[else]' must directly follow an '#[if(...)]' group.\n"))
+
 (* Build a binary/unary operator node, giving the operator itself a source
    location (its token span [oploc]) so a comment sitting between an operand and
    the operator attaches to the right place. [_tok] is the operator token's
@@ -227,6 +256,51 @@ let unop sloc _tok oploc op i = with_loc sloc (UnOp (with_loc oploc op, i))
 let attributed loc attributes d =
   let f = d attributes in
   match attributes with [] -> f | _ :: _ -> with_loc loc f.desc
+
+(* Module-field conditional annotations, the [#[if(...)]]/[#[else]] counterpart
+   of [raw_stmt]. [#[if(c)] field] and [#[else] field] recurse on a whole
+   [module_field] (so nested [#[if]] stays as-is, matching the former grammar),
+   producing markers; [lower_fields] then pairs a marker with the following
+   [#[else]] sibling into a [Conditional]. The [#[else]] binds to the nearest —
+   i.e. innermost — [#[if]] (see [lower_if]), preserving the former
+   [%prec]-based dangling-else behaviour. *)
+type raw_field =
+  | RF_plain of (location modulefield, location) annotated
+  | RF_if of (Lexing.position * Lexing.position) * Wax_wasm.Ast.cond * raw_field
+  | RF_else of (Lexing.position * Lexing.position) * raw_field
+
+let rec lower_fields = function
+  | [] -> []
+  | RF_plain f :: rest -> f :: lower_fields rest
+  | (RF_if _ as rif) :: RF_else (eloc, eb) :: rest ->
+      lower_if ~else_for:(eloc, eb) rif @ lower_fields rest
+  | (RF_if _ as rif) :: rest -> lower_if rif @ lower_fields rest
+  | RF_else (loc, _) :: _ ->
+      raise
+        (Wax_wasm.Parsing.Syntax_error
+           (loc, "An '#[else]' must directly follow an '#[if(...)]' field.\n"))
+
+(* Lower one [#[if]] marker, attaching [else_for] to the innermost [#[if]]
+   (nearest-if binding). When an else is present, every conditional in the chain
+   ends at the else's closing position, matching the span the former single
+   [#[if(...)] … #[else] …] production reported. *)
+and lower_if ?else_for = function
+  | RF_if (loc, cond, then_raw) ->
+      let end_pos =
+        match else_for with Some (eloc, _) -> snd eloc | None -> snd loc
+      in
+      let then_fields, else_fields =
+        match then_raw with
+        | RF_if _ ->
+            (* Not innermost: carry [else_for] down; this level has no else. *)
+            (lower_if ?else_for then_raw, None)
+        | _ ->
+            ( lower_fields [ then_raw ],
+              Option.map (fun (_, e) -> lower_fields [ e ]) else_for )
+      in
+      [ with_loc (fst loc, end_pos)
+          (Conditional { cond; then_fields; else_fields }) ]
+  | (RF_plain _ | RF_else _) as f -> lower_fields [ f ]
 
 let blocktype bt = Option.value ~default:{params = [||]; results = [||]} bt
 
@@ -469,11 +543,10 @@ attribute:
 | "#" "[" name = attribute_name "]" { (name, None) }
 
 (* Branch-hinting proposal: [#[likely]]/[#[unlikely]] prefixing an [if]/[br_if].
-   Lexed as dedicated tokens (like [#[if(]) so the form does not collide with the
-   general [#[name]] module-field attribute. *)
+   Parsed as an ordinary attribute (the lexer no longer has dedicated tokens);
+   [branch_hint_of_attr] recovers the hint and rejects any other attribute. *)
 %inline branch_hint_attr:
-| LIKELY_HINT { true }
-| UNLIKELY_HINT { false }
+| a = attribute { branch_hint_of_attr $loc(a) a }
 
 (* The conditional branches that carry an operand ([if] is a [blockinstr], handled
    separately). Shared by the plain plaininstr productions and the hinted wrapper
@@ -866,7 +939,11 @@ statement:
 | i1 = expression "[" i2 = index_expression "]" "=" i3 = expression
   { with_loc $sloc (ArraySet (i1, i2, i3)) }
 
+(* [process_stmts] pairs adjacent [#[if]]/[#[else]] groups (see the header). *)
 statement_list:
+| l = raw_statement_list { process_stmts l }
+
+raw_statement_list:
 | { [] }
 (*
 | i = statement { [i] }
@@ -881,20 +958,19 @@ statement_list:
    [plaininstr: expression], so it cannot arrive via the expression/plaininstr
    path), so a following [;] never clashes with reducing [expression: blockinstr]
    (which continues a plaininstr on an operator, never on [;]). *)
-| ";" l = statement_list { l }
-| i = blockinstr l = statement_list { i :: l }
-| i = statement ";" l = statement_list { i :: l }
-| i = cond_stmt l = statement_list { i :: l }
+| ";" l = raw_statement_list { l }
+| i = blockinstr l = raw_statement_list { RS_plain i :: l }
+| i = statement ";" l = raw_statement_list { RS_plain i :: l }
+| i = cond_stmt l = raw_statement_list { i :: l }
 
 (* Instruction-level conditional annotation. Braces are required, so the body
-   is a transparent statement list (not a block). *)
+   is a transparent statement list (not a block). Each [#[if]]/[#[else]] group is
+   a marker; [process_stmts] pairs adjacent ones into an [If_annotation]. *)
 cond_stmt:
-| "#[if(" c = condition ")" "]" "{" t = statement_list "}" e = cond_else
-  { with_loc $sloc (If_annotation {cond = c; then_body = t; else_body = e}) }
-
-cond_else:
-| { None }
-| "#[else]" "{" b = statement_list "}" { Some b }
+| "#" "[" IF "(" c = condition ")" "]" "{" t = statement_list "}"
+  { RS_if ($sloc, c, t) }
+| "#" "[" ELSE "]" "{" b = statement_list "}"
+  { RS_else ($sloc, b) }
 
 globalmut:
 | LET { true }
@@ -993,18 +1069,22 @@ elem:
         (Elem {name; reftype = rt; mode = EActive (tab, off); init = l;
                attributes}) }
 
+(* A module field returns a [raw_field]: [#[if]]/[#[else]] recurse on a whole
+   field, producing markers that [lower_fields] pairs into [Conditional]s (see
+   the header). Every other production is a plain field. *)
 module_field:
-| r = rectype { {desc = Type r.desc; info = r.info} }
-| a = inner_attribute { with_loc $sloc (Module_annotation [a]) }
-| attributes = list(attribute) d = definition { attributed $sloc attributes d }
+| r = rectype { RF_plain {desc = Type r.desc; info = r.info} }
+| a = inner_attribute { RF_plain (with_loc $sloc (Module_annotation [a])) }
+| attributes = list(attribute) d = definition
+  { RF_plain (attributed $sloc attributes d) }
 | attributes = list(attribute) "{" fields = semi_list(module_field) "}"
-  { with_loc $sloc (Group {attributes; fields}) }
+  { RF_plain (with_loc $sloc (Group {attributes; fields = lower_fields fields})) }
 | IMPORT m = STRING d = import_item
-  { with_loc $sloc (Import {module_ = m; decl = d}) }
+  { RF_plain (with_loc $sloc (Import {module_ = m; decl = d})) }
 | IMPORT m = STRING "{" decls = semi_list(import_item) "}"
-  { with_loc $sloc (Import_group {module_ = m; decls}) }
-| "#[if(" c = condition ")" "]" t = module_field e = else_clause
-  { with_loc $sloc (Conditional {cond = c; then_fields = [t]; else_fields = e}) }
+  { RF_plain (with_loc $sloc (Import_group {module_ = m; decls})) }
+| "#" "[" IF "(" c = condition ")" "]" t = module_field { RF_if ($sloc, c, t) }
+| "#" "[" ELSE "]" e = module_field { RF_else ($sloc, e) }
 
 (* One entry of an import block: an [fn]/[const]/[let]/[tag]/[memory]/[table]
    declaration, optionally carrying a name-only [#[import = "name"]] (imported
@@ -1033,10 +1113,6 @@ import_kind_decl:
      Import_table {address_type = Option.value ~default:`I32 at; reftype = rt;
                    limits = lim}) }
 
-else_clause:
-| %prec prec_no_else { None }
-| "#[else]" e = module_field { Some [e] }
-
 (* Conditions of conditional annotations. Reuse the WAT-level [Wax_wasm.Ast.cond]
    (we do not evaluate them; they are preserved for the preprocessor). *)
 condition:
@@ -1062,7 +1138,11 @@ condition_relop:
 | "=" { Wax_wasm.Ast.Eq } | "!=" { Wax_wasm.Ast.Ne } | "<" { Wax_wasm.Ast.Lt }
 | ">" { Wax_wasm.Ast.Gt } | "<=" { Wax_wasm.Ast.Le } | ">=" { Wax_wasm.Ast.Ge }
 
+(* [lower_fields] pairs top-level [#[if]]/[#[else]] fields into [Conditional]s. *)
 parse:
+| l = raw_parse { lower_fields l }
+
+raw_parse:
 | EOF { [] }
-| ";" r = parse { r }
-| f = module_field r = parse { f :: r }
+| ";" r = raw_parse { r }
+| f = module_field r = raw_parse { f :: r }
