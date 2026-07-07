@@ -115,6 +115,12 @@ mistaken for a subcommand). The `format` subcommand reformats files (see
           whose operand can never have the target type (the two are unrelated in
           the type hierarchy), so the cast always traps and the test is always
           false. Shown by default.
+        - `eager-select` (group `correctness`) — a trapping or effectful
+          operation in a branch of a `?:` (which compiles to a `select`,
+          evaluating both branches unconditionally), so it runs even when the
+          condition selects the other branch. Shown by default. On Wasm input
+          the check covers a folded `select` (its value operands are distinct
+          subtrees); an unfolded `select` is not flagged.
         - `redundant-operation` (group `redundant`) — an operation with no effect
           on its result: an arithmetic identity (`x + 0`, `x * 1`, `x << 0`, …),
           an absorbing operand (`x * 0`, `x & 0`), two identical operands

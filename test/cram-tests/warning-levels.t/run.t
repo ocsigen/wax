@@ -107,7 +107,7 @@ An unknown warning or group name is rejected:
        unused-local, unused-field, unused-import, unused-label,
        shift-count-overflow, constant-trap, tautological-comparison,
        constant-condition, unused-result, dead-code, cast-always-fails,
-       redundant-operation, truncated-coverage, naming-conflict,
+       eager-select, redundant-operation, truncated-coverage, naming-conflict,
        reserved-word-rename, generated-name, unused, correctness, redundant,
        naming, all.
   [124]

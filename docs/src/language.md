@@ -398,6 +398,17 @@ cond ? val_true : val_false
 
 This maps directly to Wasm's `select` instruction.
 
+> **⚠ Warning — both branches are always evaluated.** Unlike the `?:` (or
+> `if`/`else` expression) of most languages, this operator is *not* lazy: it
+> compiles to a `select`, which computes *both* `val_true` and `val_false`
+> before choosing between them. So `cond ? 1 /s x : 0` still divides by `x`
+> even when `cond` is false (trapping if `x` is `0`), and `cond ? f() : g()`
+> calls *both* `f` and `g`. When a branch may trap or has a side effect, use an
+> [`if` expression](#if-expressions) instead — it evaluates only the chosen
+> branch. The
+> [`eager-select` lint](cli.md) (in the `correctness` group, on by default)
+> flags a trapping or effectful operation in a `?:` branch.
+
 ## Control Flow
 
 ### Blocks

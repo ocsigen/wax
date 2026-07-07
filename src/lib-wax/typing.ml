@@ -135,6 +135,30 @@ module Error = struct
     warn ~warning:Wax_utils.Warning.Dead_code ~universal:true context ~location
       ~related "This code is unreachable."
 
+  (* A trapping or effectful operation inside a branch of a [?:]. Because [?:]
+     compiles to a [select], which evaluates both branches, the operation runs
+     even when the condition selects the other branch — unlike the [?:] of most
+     languages, which is lazy. [select] points at the whole [?:]. *)
+  let eager_select context ~location ~select =
+    warn ~warning:Wax_utils.Warning.Eager_select ~universal:true context
+      ~location
+      ~related:
+        [
+          {
+            Wax_utils.Diagnostic.location = select;
+            message =
+              (fun f () ->
+                Format.fprintf f
+                  "This '?:' evaluates both branches (it compiles to a \
+                   'select').");
+          };
+        ]
+      ~hint:(fun f () ->
+        Format.fprintf f
+          "Use an 'if' expression to evaluate only the chosen branch.")
+      "This operation is evaluated even when the condition selects the other \
+       branch."
+
   let empty_stack context ~location =
     report context ~location "The stack is empty."
 
@@ -2820,6 +2844,63 @@ let rec collect_labels acc (i : _ Ast.instr) =
   | Float _ | StructDefault _ ->
       acc
 
+(* The location of a trapping or effectful operation reached on the eagerly-
+   evaluated spine of a [?:] branch [e], or [None] if the branch only reads
+   locals/globals and computes pure arithmetic. Descends through pure operators
+   (into the operands that are always evaluated) but stops at any nested control
+   construct (an inner [if], [?:], block, loop, …): the sub-expressions guarded
+   by it are not evaluated unconditionally, and a nested [?:] is linted in its
+   own right. The hazard set matches the Wasm validator's ([lint_eager_select]
+   in [Validation]): integer division/remainder, field and element accesses,
+   [!], the descriptor cast, [array.new_data]/[array.new_elem], [unreachable],
+   calls, assignments, throws, and stack-switching — but not plain casts (a
+   [ref.cast] is diagnosed by [cast-always-fails] instead). *)
+let rec find_eager_hazard (e : _ Ast.instr) =
+  let ( <|> ) o f = match o with Some _ -> o | None -> f () in
+  let descend l =
+    List.fold_left (fun acc e -> acc <|> fun () -> find_eager_hazard e) None l
+  in
+  match e.desc with
+  (* Trapping or effectful operations: report the operation itself. *)
+  | ArrayGet _ | ArraySet _ | StructGet _ | StructSet _ | GetDescriptor _
+  | NonNull _ | CastDesc _ | ArraySegment _ | Unreachable | Call _ | TailCall _
+  | Set _ | Tee _ | Throw _ | ThrowRef _ | ContNew _ | ContBind _ | Suspend _
+  | Resume _ | ResumeThrow _ | ResumeThrowRef _ | Switch _ ->
+      Some e.info
+  | BinOp ({ desc = Div (Some _) | Rem _; _ }, _, _) -> Some e.info
+  (* Pure operators: descend into their eagerly-evaluated operands. *)
+  | BinOp (_, a, b) -> descend [ a; b ]
+  | UnOp (_, a)
+  | Cast (a, _)
+  | Test (a, _)
+  | ArrayDefault (_, a)
+  | StructDefaultDesc a ->
+      find_eager_hazard a
+  | Array (_, a, b) -> descend [ a; b ]
+  | ArrayFixed (_, l) | Sequence l -> descend l
+  | Struct (_, fields) -> descend (List.filter_map (fun (_, v) -> v) fields)
+  | StructDesc (d, fields) ->
+      find_eager_hazard d <|> fun () ->
+      descend (List.filter_map (fun (_, v) -> v) fields)
+  | Let (_, init) -> (
+      match init with Some e -> find_eager_hazard e | None -> None)
+  (* Constants, reads, and allocations of default values never trap; nested
+     control constructs guard their sub-expressions, so stop there. *)
+  | Get _ | Path _ | Int _ | Float _ | Char _ | String _ | Null | Nop | Hole
+  | StructDefault _ | Block _ | Loop _ | While _ | If _ | TryTable _ | Try _
+  | Br _ | Br_if _ | Br_table _ | Dispatch _ | Match _ | Br_on_null _
+  | Br_on_non_null _ | Br_on_cast _ | Br_on_cast_fail _ | Br_on_cast_desc_eq _
+  | Br_on_cast_desc_eq_fail _ | Hinted _ | Return _ | Select _ | If_annotation _
+    ->
+      None
+
+(* Report an eager-evaluation hazard in the [?:] branch [arm]; [select] is the
+   location of the whole [?:] (for the secondary caret). *)
+let lint_eager_select ctx ~select arm =
+  match find_eager_hazard arm with
+  | Some location -> Error.eager_select ctx.diagnostics ~location ~select
+  | None -> ()
+
 (* Walk the source AST (before any lowering, so [while] keeps its own condition
    rather than the [if] it desugars to) and report the purely-syntactic lints: a
    constant branch/loop/select condition, and a drop ([_ = e]) of a
@@ -2842,6 +2923,8 @@ let rec lint_source ctx (i : _ Ast.instr) =
       list block
   | Select (c, t, e) ->
       lint_condition ctx c;
+      lint_eager_select ctx ~select:i.info t;
+      lint_eager_select ctx ~select:i.info e;
       lint_source ctx c;
       lint_source ctx t;
       lint_source ctx e

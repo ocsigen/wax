@@ -40,6 +40,12 @@ type t =
       (** A reference cast or test whose operand can never have the target type
           (the two are unrelated in the type hierarchy), so the cast always
           traps and the test is always false. *)
+  | Eager_select
+      (** A trapping or effectful operation (an integer division, a field or
+          element access, a [!], a descriptor cast, a call, an assignment, …)
+          appears in a branch of a [?:]. Since [?:] compiles to a [select],
+          which evaluates {e both} branches, that operation runs even when the
+          condition selects the other branch. *)
   | Redundant_operation
       (** An operation with no effect on its result: an arithmetic identity
           ([x + 0], [x * 1], [x << 0], …), an absorbing operand ([x * 0],

@@ -1,0 +1,16 @@
+fn f() -> i32 { 42; }
+
+#[export = "div"]
+fn div(c: i32, x: i32) -> i32 { c ? 1 /s x : 0; }
+
+#[export = "call"]
+fn call(c: i32) -> i32 { c ? f() : 0; }
+
+#[export = "pure"]
+fn pure(c: i32, x: i32) -> i32 { c ? x + 1 : 0; }
+
+#[export = "buried"]
+fn buried(c: i32, x: i32) -> i32 { c ? 1 + (2 /s x) : 0; }
+
+#[export = "nested"]
+fn nested(c: i32, a: i32, x: i32) -> i32 { c ? (a ? 1 /s x : 0) : 7; }

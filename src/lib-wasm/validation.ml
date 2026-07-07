@@ -693,6 +693,24 @@ module Error = struct
       warn_lint context ~location Warning.Redundant_operation
         "This cast is redundant: the value already has this type."
 
+  (* A trapping or effectful operation among the value operands of a [select],
+     which evaluates both operands unconditionally. Mirrors the Wax typer's
+     [eager-select] lint (a Wax [?:] compiles to a [select]). [select] points at
+     the [select] instruction. *)
+  let eager_select context ~location ~select =
+    warn_lint context ~location Warning.Eager_select
+      ~related:
+        [
+          {
+            Wax_utils.Diagnostic.location = select;
+            message =
+              (fun f () ->
+                Format.fprintf f "This 'select' evaluates both of its operands.");
+          };
+        ]
+      "This operation is evaluated even when the condition selects the other \
+       operand."
+
   let index_already_bound context ~location kind index =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
@@ -4532,7 +4550,72 @@ let lint_body ctx instrs =
         Option.iter walk catch_all
     | _ -> ()
   in
-  walk instrs
+  (* The [eager-select] lint. A [select] evaluates both of its value operands,
+     so a trapping or effectful operation among them runs even when the
+     condition picks the other one (the footgun behind Wax's [?:]). Reuses
+     [classify]'s purity table: a hazard is any [`Impure] operator except the
+     casts already covered by other lints. Only handles the folded form, where
+     each value operand is a distinct operand subtree — an unfolded [select]
+     leaves its operands on the flat stream, out of reach here. *)
+  let is_control (d : _ Ast.Text.instr_desc) =
+    match d with
+    | Block _ | Loop _ | If _ | TryTable _ | Try _ | Select _ | Br _ | Br_if _
+    | Br_table _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
+    | Br_on_cast_fail _ | Br_on_cast_desc_eq _ | Br_on_cast_desc_eq_fail _
+    | Return | Folded _ | Hinted _ ->
+        true
+    | _ -> false
+  in
+  let is_eager_hazard (d : _ Ast.Text.instr_desc) =
+    match d with
+    (* Plain casts / trapping numeric conversions are reported by
+       [cast-always-fails] and [constant-trap]; exclude them so the hazard set
+       matches the Wax typer's [find_eager_hazard]. *)
+    | UnOp (I32 (Trunc _) | I64 (Trunc _)) | RefCast _ -> false
+    | _ -> ( match classify d with `Impure -> true | _ -> false)
+  in
+  (* The location of a hazard reached on the eagerly-evaluated spine of a
+     [select] value operand, descending through pure operators but stopping at
+     any nested control construct. *)
+  let rec has_hazard (i : _ Ast.Text.instr) =
+    match i.desc with
+    | Folded (op, operands) ->
+        if is_control op.desc then None
+        else if is_eager_hazard op.desc then Some op.info
+        else List.find_map has_hazard operands
+    | Hinted (_, inner) -> has_hazard inner
+    | d ->
+        if (not (is_control d)) && is_eager_hazard d then Some i.info else None
+  in
+  let rec sel_walk (i : _ Ast.Text.instr) =
+    (match i.desc with
+    | Folded (({ desc = Select _; _ } as sel), [ v1; v2; _cond ]) ->
+        List.iter
+          (fun operand ->
+            match has_hazard operand with
+            | Some location ->
+                Error.eager_select diagnostics ~location ~select:sel.info
+            | None -> ())
+          [ v1; v2 ]
+    | _ -> ());
+    match i.desc with
+    | Folded (op, operands) ->
+        List.iter sel_walk operands;
+        sel_walk op
+    | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
+        List.iter sel_walk block
+    | If { if_block; else_block; _ } ->
+        List.iter sel_walk if_block.desc;
+        List.iter sel_walk else_block.desc
+    | Try { block; catches; catch_all; _ } ->
+        List.iter sel_walk block;
+        List.iter (fun (_, b) -> List.iter sel_walk b) catches;
+        Option.iter (List.iter sel_walk) catch_all
+    | Hinted (_, inner) -> sel_walk inner
+    | _ -> ()
+  in
+  walk instrs;
+  List.iter sel_walk instrs
 
 let functions ?(warn_unused = true) ctx fields =
   List.iter

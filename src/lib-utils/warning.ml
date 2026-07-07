@@ -10,6 +10,7 @@ type t =
   | Unused_result
   | Dead_code
   | Cast_always_fails
+  | Eager_select
   | Redundant_operation
   | Truncated_coverage
   | Naming_conflict
@@ -29,6 +30,7 @@ let all =
     Unused_result;
     Dead_code;
     Cast_always_fails;
+    Eager_select;
     Redundant_operation;
     Truncated_coverage;
     Naming_conflict;
@@ -48,6 +50,7 @@ let name = function
   | Unused_result -> "unused-result"
   | Dead_code -> "dead-code"
   | Cast_always_fails -> "cast-always-fails"
+  | Eager_select -> "eager-select"
   | Redundant_operation -> "redundant-operation"
   | Truncated_coverage -> "truncated-coverage"
   | Naming_conflict -> "naming-conflict"
@@ -79,6 +82,9 @@ let description = function
   | Cast_always_fails ->
       "A reference cast or test whose operand can never have the target type, \
        so it always traps (or is always false)."
+  | Eager_select ->
+      "A trapping or effectful operation in a branch of a '?:' (which compiles \
+       to a 'select', evaluating both branches unconditionally)."
   | Redundant_operation ->
       "An operation with no effect on its result (an arithmetic identity, an \
        absorbing operand, identical operands, a self-assignment, or a \
@@ -104,6 +110,7 @@ let group_table =
         Unused_result;
         Dead_code;
         Cast_always_fails;
+        Eager_select;
         Unused_field;
         Unused_import;
         Unused_label;
@@ -130,7 +137,7 @@ let default_policy = function
       Hidden
   | Unused_local | Unused_field | Unused_import | Unused_label | Shift_overflow
   | Constant_trap | Tautological_comparison | Constant_condition | Unused_result
-  | Dead_code | Cast_always_fails | Truncated_coverage ->
+  | Dead_code | Cast_always_fails | Eager_select | Truncated_coverage ->
       Displayed
 
 let resolve (policy : policy) w = policy w
