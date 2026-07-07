@@ -20,8 +20,12 @@
 #   UNSOUND   — wax's type checker accepts the module (`-f wasm --validate` ok)
 #               but the binary it emits is rejected by the reference validator: a
 #               hole in the type checker.
-#   ROUNDTRIP — an accepted module's binary, decompiled to wax and recompiled,
-#               no longer produces a reference-valid binary.
+#   ROUNDTRIP — an accepted module's binary fails to decompile to wax, the
+#               decompilation fails to recompile, or the recompiled binary is no
+#               longer reference-valid. Since the binary is one wax emitted and
+#               the reference accepted, every step must succeed: a crash or
+#               rejection at any of them is a finding (e.g. a decompiler scoping
+#               bug surfaces as an unbound-variable rejection *during* decompile).
 #   ROUNDTRIP-WAT — same, but through the wat *text* form (wax->wat->wax->wasm):
 #               covers the wat printer/parser (e.g. the branch-hint annotation)
 #               that the binary round-trip never touches.
@@ -69,11 +73,28 @@ fuzz_one() {
           "UNSOUND: type checker accepted but binary rejected: $(head -1 "$bin.err")" \
           "fuzz_gen $((SEED + i)) | wax -f wasm -o m.wasm && wasm-tools validate m.wasm")"$'\n'; printf F >&2
       else
-        # Round-trip: decompile the binary and recompile; must stay valid.
-        local rt="$p.rt.wax" rbin="$p.rt.wasm"
-        if [ "$(classify_wax -i wasm "$bin" -f wax -o "$rt")" = ok ] \
-           && [ "$(classify_wax -i wax "$rt" -f wasm -o "$rbin")" = ok ]; then
-          if ! wt_validate "$rbin"; then
+        # Round-trip: a binary wax emitted and the reference validated must
+        # decompile and recompile cleanly, and the recompiled binary must stay
+        # reference-valid. A crash or rejection at ANY step is a finding — not a
+        # skip. (An earlier version guarded the whole round-trip on each step
+        # being `ok` and only reported a reference-INVALID recompilation, so a
+        # decompiler that crashed or rejected its own valid input slipped
+        # through silently — e.g. a sink_let scoping bug surfaces as an
+        # unbound-variable rejection *during decompilation*, never reaching the
+        # validity check.)
+        local rt="$p.rt.wax" rbin="$p.rt.wasm" r
+        r="$(classify_wax -i wasm "$bin" -f wax -o "$rt")"
+        if [ "$r" != ok ]; then
+          out+="$(finding TYPE HIGH "gen$i" \
+            "ROUNDTRIP: decompiling a reference-valid binary failed ($r): $(head -1 "$ERRLOG")" \
+            "fuzz_gen $((SEED + i)) | wax -f wasm | wax -i wasm -f wax")"$'\n'; printf F >&2
+        else
+          r="$(classify_wax -i wax "$rt" -f wasm -o "$rbin")"
+          if [ "$r" != ok ]; then
+            out+="$(finding TYPE HIGH "gen$i" \
+              "ROUNDTRIP: recompiling the decompilation failed ($r): $(head -1 "$ERRLOG")" \
+              "fuzz_gen $((SEED + i)) | wax -f wasm | wax -i wasm -f wax | wax -f wasm")"$'\n'; printf F >&2
+          elif ! wt_validate "$rbin"; then
             out+="$(finding TYPE HIGH "gen$i" \
               "ROUNDTRIP: recompiled decompilation is reference-invalid: $(head -1 "$rbin.err")" \
               "fuzz_gen $((SEED + i)) | wax -f wasm | wax -i wasm -f wax | wax -f wasm")"$'\n'; printf F >&2
@@ -82,17 +103,31 @@ fuzz_one() {
         # Wat round-trip: the same module via the wat *text* form, which the
         # binary path never exercises — the wat printer and parser of the
         # branch-hint annotation ([(@metadata.code.branch_hint …)]) in
-        # particular. Decompile the wat back to wax and recompile; must stay
-        # reference-valid.
+        # particular. Each step (wax->wat, wat->wax, wax->wasm) must succeed and
+        # the result stay reference-valid; a failure at any step is a finding.
         local wat="$p.wat" wat_rt="$p.wat.wax" wat_bin="$p.wat.wasm"
-        if [ "$(classify_wax -i wax "$wax" -f wat -o "$wat")" = ok ] \
-           && [ "$(classify_wax -i wat "$wat" -f wax -o "$wat_rt")" = ok ] \
-           && [ "$(classify_wax -i wax "$wat_rt" -f wasm -o "$wat_bin")" = ok ]
-        then
-          if ! wt_validate "$wat_bin"; then
+        r="$(classify_wax -i wax "$wax" -f wat -o "$wat")"
+        if [ "$r" != ok ]; then
+          out+="$(finding TYPE HIGH "gen$i" \
+            "ROUNDTRIP-WAT: printing a valid module to wat failed ($r): $(head -1 "$ERRLOG")" \
+            "fuzz_gen $((SEED + i)) | wax -f wat")"$'\n'; printf F >&2
+        else
+          r="$(classify_wax -i wat "$wat" -f wax -o "$wat_rt")"
+          if [ "$r" != ok ]; then
             out+="$(finding TYPE HIGH "gen$i" \
-              "ROUNDTRIP-WAT: recompiled wat round-trip is reference-invalid: $(head -1 "$wat_bin.err")" \
-              "fuzz_gen $((SEED + i)) | wax -f wat | wax -i wat -f wax | wax -f wasm")"$'\n'; printf F >&2
+              "ROUNDTRIP-WAT: decompiling valid wat failed ($r): $(head -1 "$ERRLOG")" \
+              "fuzz_gen $((SEED + i)) | wax -f wat | wax -i wat -f wax")"$'\n'; printf F >&2
+          else
+            r="$(classify_wax -i wax "$wat_rt" -f wasm -o "$wat_bin")"
+            if [ "$r" != ok ]; then
+              out+="$(finding TYPE HIGH "gen$i" \
+                "ROUNDTRIP-WAT: recompiling the wat decompilation failed ($r): $(head -1 "$ERRLOG")" \
+                "fuzz_gen $((SEED + i)) | wax -f wat | wax -i wat -f wax | wax -f wasm")"$'\n'; printf F >&2
+            elif ! wt_validate "$wat_bin"; then
+              out+="$(finding TYPE HIGH "gen$i" \
+                "ROUNDTRIP-WAT: recompiled wat round-trip is reference-invalid: $(head -1 "$wat_bin.err")" \
+                "fuzz_gen $((SEED + i)) | wax -f wat | wax -i wat -f wax | wax -f wasm")"$'\n'; printf F >&2
+            fi
           fi
         fi
       fi ;;
