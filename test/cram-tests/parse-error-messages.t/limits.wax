@@ -1,0 +1,3 @@
+import "env" {
+  memory m: i32 5
+}

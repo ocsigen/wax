@@ -1,0 +1,3 @@
+fn f() {
+  resume cont [_ => switch 5] ()
+}
