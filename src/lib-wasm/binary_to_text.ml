@@ -40,42 +40,22 @@ let index ~map i =
   | Some s -> no_loc (T.Id s)
   | None -> numeric_index i
 
-let rec heaptype type_names (h : B.heaptype) : T.heaptype =
-  match h with
-  | Func -> Func
-  | NoFunc -> NoFunc
-  | Exn -> Exn
-  | NoExn -> NoExn
-  | Cont -> Cont
-  | NoCont -> NoCont
-  | Extern -> Extern
-  | NoExtern -> NoExtern
-  | Any -> Any
-  | Eq -> Eq
-  | I31 -> I31
-  | Struct -> Struct
-  | Array -> Array
-  | None_ -> None_
-  | Type i -> Type (index ~map:type_names i)
-  | Exact i -> Exact (index ~map:type_names i)
+(* The spine ([heaptype]…[fieldtype]) is a straight copy that only rewrites each
+   index to its text name via [index]; [comptype]/[subtype]/[rectype] below stay
+   hand-written because they attach type- and field-names from [B.names]. *)
+module Map =
+  Ast.Map_types_spine (B) (T)
+    (struct
+      type ctx = B.name_map
 
-and reftype type_names (r : B.reftype) : T.reftype =
-  { nullable = r.nullable; typ = heaptype type_names r.typ }
+      let idx map i = index ~map i
+    end)
 
-let valtype type_names (v : B.valtype) : T.valtype =
-  match v with
-  | I32 -> I32
-  | I64 -> I64
-  | F32 -> F32
-  | F64 -> F64
-  | V128 -> V128
-  | Ref r -> Ref (reftype type_names r)
-
-let storagetype type_names (s : B.storagetype) : T.storagetype =
-  match s with Value v -> Value (valtype type_names v) | Packed p -> Packed p
-
+let heaptype = Map.heaptype
+let reftype = Map.reftype
+let valtype = Map.valtype
 let muttype f (m : 'a B.muttype) : 'b T.muttype = { mut = m.mut; typ = f m.typ }
-let fieldtype type_names f = muttype (storagetype type_names) f
+let fieldtype = Map.fieldtype
 
 let functype type_names (f : B.functype) : T.functype =
   {

@@ -34,11 +34,14 @@ type limits = {
   shared : bool;
 }
 
-module Make_types (X : sig
+(** The set of types produced by {!Make_types}, abstracted over the index and
+    array-wrapper representations. Naming it lets {!Map_types} map the whole
+    family from one instance to another. *)
+module type TYPES = sig
   type idx
   type 'a annotated_array
   type 'a opt_annotated_array
-end) : sig
+
   type heaptype =
     | Func
     | NoFunc
@@ -54,14 +57,14 @@ end) : sig
     | Struct
     | Array
     | None_
-    | Type of X.idx
-    | Exact of X.idx
+    | Type of idx
+    | Exact of idx
 
   type reftype = { nullable : bool; typ : heaptype }
   type valtype = I32 | I64 | F32 | F64 | V128 | Ref of reftype
 
   type functype = {
-    params : valtype X.opt_annotated_array;
+    params : valtype opt_annotated_array;
     results : valtype array;
   }
 
@@ -72,19 +75,19 @@ end) : sig
 
   type comptype =
     | Func of functype
-    | Struct of fieldtype X.annotated_array
+    | Struct of fieldtype annotated_array
     | Array of fieldtype
-    | Cont of X.idx
+    | Cont of idx
 
   type subtype = {
     typ : comptype;
-    supertype : X.idx option;
+    supertype : idx option;
     final : bool;
-    descriptor : X.idx option;
-    describes : X.idx option;
+    descriptor : idx option;
+    describes : idx option;
   }
 
-  type rectype = subtype X.annotated_array
+  type rectype = subtype annotated_array
 
   type nonrec limits = limits = {
     mi : Uint64.t;
@@ -99,6 +102,76 @@ end) : sig
   val heaptype_keyword : heaptype -> string option
   (** The keyword naming a heap type (e.g. [Some "func"]); [None] for the [Type]
       case, whose index each printer renders in its own way. *)
+end
+
+module Make_types (X : sig
+  type idx
+  type 'a annotated_array
+  type 'a opt_annotated_array
+end) :
+  TYPES
+    with type idx = X.idx
+     and type 'a annotated_array = 'a X.annotated_array
+     and type 'a opt_annotated_array = 'a X.opt_annotated_array
+
+(** Map the [heaptype]/[reftype]/[valtype]/[storagetype]/[fieldtype] family from
+    one {!Make_types} instance to another. Only the [idx]-carrying arms differ
+    between instances; everything else is copied through. [ctx] is threaded to
+    [M.idx] so a mapper that resolves or renames indices can carry its context
+    (a name map, a symbol table, …). *)
+module Map_types_spine
+    (Src : TYPES)
+    (Dst : TYPES)
+    (M : sig
+      type ctx
+
+      val idx : ctx -> Src.idx -> Dst.idx
+    end) : sig
+  val heaptype : M.ctx -> Src.heaptype -> Dst.heaptype
+  val reftype : M.ctx -> Src.reftype -> Dst.reftype
+  val valtype : M.ctx -> Src.valtype -> Dst.valtype
+  val storagetype : M.ctx -> Src.storagetype -> Dst.storagetype
+  val fieldtype : M.ctx -> Src.fieldtype -> Dst.fieldtype
+end
+
+(** Extends {!Map_types_spine} to the whole type family. The array wrappers
+    differ per instance, so the caller supplies how to map each one; the
+    [functype]/[comptype]/[subtype]/[rectype] structure is copied through. *)
+module Map_types
+    (Src : TYPES)
+    (Dst : TYPES)
+    (M : sig
+      type ctx
+
+      val idx : ctx -> Src.idx -> Dst.idx
+
+      val params :
+        ctx ->
+        (Src.valtype -> Dst.valtype) ->
+        Src.valtype Src.opt_annotated_array ->
+        Dst.valtype Dst.opt_annotated_array
+
+      val fields :
+        ctx ->
+        (Src.fieldtype -> Dst.fieldtype) ->
+        Src.fieldtype Src.annotated_array ->
+        Dst.fieldtype Dst.annotated_array
+
+      val members :
+        ctx ->
+        (Src.subtype -> Dst.subtype) ->
+        Src.subtype Src.annotated_array ->
+        Dst.subtype Dst.annotated_array
+    end) : sig
+  val heaptype : M.ctx -> Src.heaptype -> Dst.heaptype
+  val reftype : M.ctx -> Src.reftype -> Dst.reftype
+  val valtype : M.ctx -> Src.valtype -> Dst.valtype
+  val storagetype : M.ctx -> Src.storagetype -> Dst.storagetype
+  val fieldtype : M.ctx -> Src.fieldtype -> Dst.fieldtype
+  val functype : M.ctx -> Src.functype -> Dst.functype
+  val comptype : M.ctx -> Src.comptype -> Dst.comptype
+  val subtype : M.ctx -> Src.subtype -> Dst.subtype
+  val rectype : M.ctx -> Src.rectype -> Dst.rectype
 end
 
 (* Instructions *)
@@ -653,7 +726,7 @@ module Text : sig
   end
 
   module Types : module type of Make_types (X)
-  include module type of Make_types (X)
+  include module type of Make_types (X) with type idx := idx
 
   type typeuse = idx option * functype option
   type tabletype = { limits : (limits, location) annotated; reftype : reftype }
@@ -747,7 +820,7 @@ module Text : sig
   type 'info module_ =
     name option * ('info modulefield, location) annotated list
   (** A Wasm module in text format. *)
-end
+  end
 
 (** Wasm Text format specific AST. *)
 
@@ -762,7 +835,7 @@ module Binary : sig
   end
 
   module Types : module type of Make_types (X)
-  include module type of Make_types (X)
+  include module type of Make_types (X) with type idx := idx
 
   type typeuse = idx
   type tabletype = { limits : limits; reftype : reftype }
@@ -850,6 +923,6 @@ module Binary : sig
     names : names;
   }
   (** A Wasm module in binary format. *)
-end
+  end
 
 (** Wasm Binary format specific AST. *)

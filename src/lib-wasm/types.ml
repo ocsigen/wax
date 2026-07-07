@@ -134,64 +134,24 @@ let create () =
 let last_index types = types.last_index
 
 (* Lower a normalized subtype to the internal (resolved) form, mapping every
-   reference with [f]. Shared by [subtyping_info]/[get_all_rectypes] (resolving a
-   back-reference to its absolute canonical index) and the backstop (visiting
-   every reference to validate it). *)
+   reference with [f]. Both forms use plain arrays, so the array wrappers are a
+   straight [Array.map]; only the [idx] arms change. Shared by
+   [subtyping_info]/[get_all_rectypes] (resolving a back-reference to its
+   absolute canonical index) and the backstop (visiting every reference to
+   validate it). *)
+module N_to_I =
+  Ast.Map_types (N) (I)
+    (struct
+      type ctx = ref_index -> Id.t
+
+      let idx f i = f i
+      let params _ f a = Array.map f a
+      let fields _ f a = Array.map f a
+      let members _ f a = Array.map f a
+    end)
+
 let subtype_to_internal (f : ref_index -> Id.t) (s : N.subtype) : I.subtype =
-  let heaptype (h : N.heaptype) : I.heaptype =
-    match h with
-    | Func -> Func
-    | NoFunc -> NoFunc
-    | Exn -> Exn
-    | NoExn -> NoExn
-    | Cont -> Cont
-    | NoCont -> NoCont
-    | Extern -> Extern
-    | NoExtern -> NoExtern
-    | Any -> Any
-    | Eq -> Eq
-    | I31 -> I31
-    | Struct -> Struct
-    | Array -> Array
-    | None_ -> None_
-    | Type i -> Type (f i)
-    | Exact i -> Exact (f i)
-  in
-  let valtype (v : N.valtype) : I.valtype =
-    match v with
-    | I32 -> I32
-    | I64 -> I64
-    | F32 -> F32
-    | F64 -> F64
-    | V128 -> V128
-    | Ref { nullable; typ } -> Ref { nullable; typ = heaptype typ }
-  in
-  let storagetype (s : N.storagetype) : I.storagetype =
-    match s with Value v -> Value (valtype v) | Packed p -> Packed p
-  in
-  let fieldtype ({ mut; typ } : N.fieldtype) : I.fieldtype =
-    { mut; typ = storagetype typ }
-  in
-  let comptype (c : N.comptype) : I.comptype =
-    match c with
-    | Func { params; results } ->
-        Func
-          {
-            params = Array.map valtype params;
-            results = Array.map valtype results;
-          }
-    | Struct a -> Struct (Array.map fieldtype a)
-    | Array ft -> Array (fieldtype ft)
-    | Cont i -> Cont (f i)
-  in
-  ({
-     typ = comptype s.typ;
-     supertype = Option.map f s.supertype;
-     final = s.final;
-     descriptor = Option.map f s.descriptor;
-     describes = Option.map f s.describes;
-   }
-    : I.subtype)
+  N_to_I.subtype f s
 
 (* Backstop for the normalization contract (see [add_rectype] in the .mli). A
    [Rec] back-reference must fall inside the group and a [Def] must denote an

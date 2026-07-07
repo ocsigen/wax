@@ -496,36 +496,21 @@ let type_ref_name ctx (i : Src.idx) =
       { i with desc = name }
   | _ -> idx ctx `Type i
 
-let heaptype st (t : Src.heaptype) : Ast.heaptype =
-  match t with
-  | Src.Func -> Ast.Func
-  | NoFunc -> NoFunc
-  | Exn -> Exn
-  | NoExn -> NoExn
-  | Cont -> Cont
-  | NoCont -> NoCont
-  | Extern -> Extern
-  | NoExtern -> NoExtern
-  | Any -> Any
-  | Eq -> Eq
-  | I31 -> I31
-  | Struct -> Struct
-  | Array -> Array
-  | None_ -> None_
-  | Type i -> Type (type_ref_name st i)
-  | Exact i -> Exact (type_ref_name st i)
+(* The spine ([heaptype]…[fieldtype]) copies each constructor through, naming
+   each index via [type_ref_name]; [functype]/[comptype]/[subtype] below stay
+   hand-written because they allocate Wax names (with rename diagnostics) and
+   look up struct-field names. *)
+module Map =
+  Wax_wasm.Ast.Map_types_spine (Src) (Ast)
+    (struct
+      type nonrec ctx = ctx
 
-let reftype st (t : Src.reftype) : Ast.reftype =
-  { nullable = t.nullable; typ = heaptype st t.typ }
+      let idx st i = type_ref_name st i
+    end)
 
-let valtype st (t : Src.valtype) : Ast.valtype =
-  match t with
-  | I32 -> I32
-  | I64 -> I64
-  | F32 -> F32
-  | F64 -> F64
-  | V128 -> V128
-  | Ref t -> Ref (reftype st t)
+let heaptype = Map.heaptype
+let reftype = Map.reftype
+let valtype = Map.valtype
 
 (* Render a function type's parameters into a fresh namespace, renaming a named
    parameter that is a reserved word or collides with an earlier one (and
@@ -560,17 +545,10 @@ let functype st (t : Src.functype) : Ast.functype =
     results = Array.map (fun t -> valtype st t) t.results;
   }
 
-let packedtype _ (t : Src.packedtype) : Ast.packedtype = t
-
-let storagetype st (t : Src.storagetype) : Ast.storagetype =
-  match t with
-  | Value t -> Value (valtype st t)
-  | Packed t -> Packed (packedtype st t)
-
 let muttype typ st (t : _ Src.muttype) : _ Ast.muttype =
   { t with typ = typ st t.typ }
 
-let fieldtype st = muttype storagetype st
+let fieldtype = Map.fieldtype
 
 let comptype st name (t : Src.comptype) : Ast.comptype =
   match t with

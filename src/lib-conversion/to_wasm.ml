@@ -44,35 +44,21 @@ let index wax_idx : Text.idx =
   let wax_idx = !type_remap wax_idx in
   with_loc wax_idx.info (Text.Id wax_idx.desc)
 
-let rec heaptype (h : heaptype) : Text.heaptype =
-  match h with
-  | Func -> Func
-  | NoFunc -> NoFunc
-  | Exn -> Exn
-  | NoExn -> NoExn
-  | Cont -> Cont
-  | NoCont -> NoCont
-  | Extern -> Extern
-  | NoExtern -> NoExtern
-  | Any -> Any
-  | Eq -> Eq
-  | I31 -> I31
-  | Struct -> Struct
-  | Array -> Array
-  | None_ -> None_
-  | Type idx -> Type (index idx)
-  | Exact idx -> Exact (index idx)
+(* The spine ([heaptype]/[reftype]/[valtype]/[storagetype]) only rewrites each
+   index with [index]; the index carries no extra context, so [ctx] is unit.
+   [functype]/[subtype] below stay hand-written to preserve source locations and
+   struct-field names. *)
+module Map =
+  Ast.Map_types_spine (Wax_lang.Ast) (Text)
+    (struct
+      type ctx = unit
 
-and valtype ty : Text.valtype =
-  match ty with
-  | I32 -> I32
-  | I64 -> I64
-  | F32 -> F32
-  | F64 -> F64
-  | V128 -> V128
-  | Ref { nullable; typ } -> Ref { nullable; typ = heaptype typ }
+      let idx () i = index i
+    end)
 
-let reftype r : Text.reftype = { nullable = r.nullable; typ = heaptype r.typ }
+let heaptype h = Map.heaptype () h
+let valtype ty = Map.valtype () ty
+let reftype r = Map.reftype () r
 let unpack_type f = match f with Value v -> v | Packed _ -> I32
 
 let is_mgmt_method m =
@@ -1847,8 +1833,7 @@ let derive_min_pages (data : _ Wax_lang.Ast.memdata list) =
   let pages = Int64.div (Int64.add extent 65535L) 65536L in
   Wax_utils.Uint64.of_int64 (if Int64.compare pages 1L < 0 then 1L else pages)
 
-let storagetype typ : Text.storagetype =
-  match typ with Value v -> Value (valtype v) | Packed p -> Packed p
+let storagetype ty = Map.storagetype () ty
 
 let subtype s : Text.subtype =
   let typ : Text.comptype =

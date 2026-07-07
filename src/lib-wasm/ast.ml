@@ -30,12 +30,87 @@ type limits = {
   shared : bool;
 }
 
+(* The set of types produced by [Make_types], abstracted over the index and
+   array-wrapper representations. Naming it lets [Map_types] below map the whole
+   family from one instance to another. *)
+module type TYPES = sig
+  type idx
+  type 'a annotated_array
+  type 'a opt_annotated_array
+
+  type heaptype =
+    | Func
+    | NoFunc
+    | Exn
+    | NoExn
+    | Cont
+    | NoCont
+    | Extern
+    | NoExtern
+    | Any
+    | Eq
+    | I31
+    | Struct
+    | Array
+    | None_
+    | Type of idx
+    | Exact of idx
+
+  type reftype = { nullable : bool; typ : heaptype }
+  type valtype = I32 | I64 | F32 | F64 | V128 | Ref of reftype
+
+  type functype = {
+    params : valtype opt_annotated_array;
+    results : valtype array;
+  }
+
+  type nonrec packedtype = packedtype = I8 | I16
+  type storagetype = Value of valtype | Packed of packedtype
+  type nonrec 'typ muttype = 'typ muttype = { mut : bool; typ : 'typ }
+  type fieldtype = storagetype muttype
+
+  type comptype =
+    | Func of functype
+    | Struct of fieldtype annotated_array
+    | Array of fieldtype
+    | Cont of idx
+
+  type subtype = {
+    typ : comptype;
+    supertype : idx option;
+    final : bool;
+    descriptor : idx option;
+    describes : idx option;
+  }
+
+  type rectype = subtype annotated_array
+
+  type nonrec limits = limits = {
+    mi : Uint64.t;
+    ma : Uint64.t option;
+    address_type : [ `I32 | `I64 ];
+    page_size_log2 : int option;
+    shared : bool;
+  }
+
+  type globaltype = valtype muttype
+
+  val heaptype_keyword : heaptype -> string option
+end
+
 module Make_types (X : sig
   type idx
   type 'a annotated_array
   type 'a opt_annotated_array
-end) =
-struct
+end) :
+  TYPES
+    with type idx = X.idx
+     and type 'a annotated_array = 'a X.annotated_array
+     and type 'a opt_annotated_array = 'a X.opt_annotated_array = struct
+  type idx = X.idx
+  type nonrec 'a annotated_array = 'a X.annotated_array
+  type nonrec 'a opt_annotated_array = 'a X.opt_annotated_array
+
   type heaptype =
     | Func
     | NoFunc
@@ -116,6 +191,124 @@ struct
   }
 
   type globaltype = valtype muttype
+end
+
+(* Map the [heaptype]/[reftype]/[valtype]/[storagetype]/[fieldtype] family from
+   one [Make_types] instance to another. Only the [idx]-carrying arms actually
+   differ between instances; every other constructor is copied through. [ctx] is
+   threaded to [M.idx] so a mapper that resolves or renames indices can carry its
+   context (a name map, a symbol table, …) exactly as a hand-written mapper
+   would. *)
+module Map_types_spine
+    (Src : TYPES)
+    (Dst : TYPES)
+    (M : sig
+      type ctx
+
+      val idx : ctx -> Src.idx -> Dst.idx
+    end) =
+struct
+  let heaptype ctx (h : Src.heaptype) : Dst.heaptype =
+    match h with
+    | Func -> Func
+    | NoFunc -> NoFunc
+    | Exn -> Exn
+    | NoExn -> NoExn
+    | Cont -> Cont
+    | NoCont -> NoCont
+    | Extern -> Extern
+    | NoExtern -> NoExtern
+    | Any -> Any
+    | Eq -> Eq
+    | I31 -> I31
+    | Struct -> Struct
+    | Array -> Array
+    | None_ -> None_
+    | Type i -> Type (M.idx ctx i)
+    | Exact i -> Exact (M.idx ctx i)
+
+  let reftype ctx (r : Src.reftype) : Dst.reftype =
+    { nullable = r.nullable; typ = heaptype ctx r.typ }
+
+  let valtype ctx (v : Src.valtype) : Dst.valtype =
+    match v with
+    | I32 -> I32
+    | I64 -> I64
+    | F32 -> F32
+    | F64 -> F64
+    | V128 -> V128
+    | Ref r -> Ref (reftype ctx r)
+
+  let storagetype ctx (s : Src.storagetype) : Dst.storagetype =
+    match s with Value v -> Value (valtype ctx v) | Packed p -> Packed p
+
+  let fieldtype ctx (f : Src.fieldtype) : Dst.fieldtype =
+    { mut = f.mut; typ = storagetype ctx f.typ }
+end
+
+(* Extends {!Map_types_spine} to the whole type family. The array wrappers differ
+   per instance, so the caller supplies how to map each one (dropping or adding
+   annotations, looking up names, …); the [functype]/[comptype]/[subtype]/
+   [rectype] structure is then copied through. *)
+module Map_types
+    (Src : TYPES)
+    (Dst : TYPES)
+    (M : sig
+      type ctx
+
+      val idx : ctx -> Src.idx -> Dst.idx
+
+      val params :
+        ctx ->
+        (Src.valtype -> Dst.valtype) ->
+        Src.valtype Src.opt_annotated_array ->
+        Dst.valtype Dst.opt_annotated_array
+
+      val fields :
+        ctx ->
+        (Src.fieldtype -> Dst.fieldtype) ->
+        Src.fieldtype Src.annotated_array ->
+        Dst.fieldtype Dst.annotated_array
+
+      val members :
+        ctx ->
+        (Src.subtype -> Dst.subtype) ->
+        Src.subtype Src.annotated_array ->
+        Dst.subtype Dst.annotated_array
+    end) =
+struct
+  include
+    Map_types_spine (Src) (Dst)
+      (struct
+        type ctx = M.ctx
+
+        let idx = M.idx
+      end)
+
+  let functype ctx (t : Src.functype) : Dst.functype =
+    {
+      params = M.params ctx (valtype ctx) t.params;
+      results = Array.map (valtype ctx) t.results;
+    }
+
+  let comptype ctx (c : Src.comptype) : Dst.comptype =
+    match c with
+    | Func t -> Func (functype ctx t)
+    | Struct a -> Struct (M.fields ctx (fieldtype ctx) a)
+    | Array f -> Array (fieldtype ctx f)
+    | Cont i -> Cont (M.idx ctx i)
+
+  let subtype ctx (s : Src.subtype) : Dst.subtype =
+    {
+      typ = comptype ctx s.typ;
+      supertype = Option.map (M.idx ctx) s.supertype;
+      final = s.final;
+      descriptor = Option.map (M.idx ctx) s.descriptor;
+      describes = Option.map (M.idx ctx) s.describes;
+    }
+
+  let rectype ctx (r : Src.rectype) : Dst.rectype =
+    M.members ctx (subtype ctx) r
 end
 
 (* Instructions *)
@@ -667,7 +860,7 @@ module Text = struct
   end
 
   module Types = Make_types (X)
-  include Types
+  include (Types : module type of Types with type idx := idx)
 
   type typeuse = idx option * functype option
   type tabletype = { limits : (limits, location) annotated; reftype : reftype }
@@ -769,7 +962,7 @@ module Binary = struct
   end
 
   module Types = Make_types (X)
-  include Types
+  include (Types : module type of Types with type idx := idx)
 
   type typeuse = idx
   type tabletype = { limits : limits; reftype : reftype }

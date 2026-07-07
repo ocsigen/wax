@@ -91,66 +91,25 @@ let resolve_label labels (idx : T.idx) : B.idx =
 
 (*** Type conversion ***)
 
-let heaptype ctx (h : T.heaptype) : B.heaptype =
-  match h with
-  | Func -> Func
-  | NoFunc -> NoFunc
-  | Exn -> Exn
-  | NoExn -> NoExn
-  | Cont -> Cont
-  | NoCont -> NoCont
-  | Extern -> Extern
-  | NoExtern -> NoExtern
-  | Any -> Any
-  | Eq -> Eq
-  | I31 -> I31
-  | Struct -> Struct
-  | Array -> Array
-  | None_ -> None_
-  | Type i -> Type (resolve_idx ctx.types i)
-  | Exact i -> Exact (resolve_idx ctx.types i)
+(* The whole type family is copied through, resolving each index with
+   [resolve_idx] and dropping the source-side name annotations on every array. *)
+module Map =
+  Ast.Map_types (T) (B)
+    (struct
+      type ctx = context
 
-let reftype ctx (r : T.reftype) : B.reftype =
-  { nullable = r.nullable; typ = heaptype ctx r.typ }
+      let idx ctx i = resolve_idx ctx.types i
+      let params _ f a = Array.map (fun p -> f (snd p.Ast.desc)) a
+      let fields _ f a = Array.map (fun e -> f (snd e.Ast.desc)) a
+      let members _ f a = Array.map (fun e -> f (snd e.Ast.desc)) a
+    end)
 
-let valtype ctx (v : T.valtype) : B.valtype =
-  match v with
-  | I32 -> I32
-  | I64 -> I64
-  | F32 -> F32
-  | F64 -> F64
-  | V128 -> V128
-  | Ref r -> Ref (reftype ctx r)
-
-let storage_type ctx (s : T.storagetype) : B.storagetype =
-  match s with Value v -> Value (valtype ctx v) | Packed p -> Packed p
-
+let heaptype = Map.heaptype
+let reftype = Map.reftype
+let valtype = Map.valtype
 let mut_type typ_f ctx m = { mut = m.mut; typ = typ_f ctx m.typ }
-let field_type ctx f = mut_type storage_type ctx f
-
-let func_type ctx (f : T.functype) : B.functype =
-  {
-    params = Array.map (fun p -> valtype ctx (snd p.Ast.desc)) f.params;
-    results = Array.map (valtype ctx) f.results;
-  }
-
-let comp_type ctx (c : T.comptype) : B.comptype =
-  match c with
-  | Func f -> Func (func_type ctx f)
-  | Struct f -> Struct (Array.map (fun e -> field_type ctx (snd e.Ast.desc)) f)
-  | Array f -> Array (field_type ctx f)
-  | Cont i -> Cont (resolve_idx ctx.types i)
-
-let sub_type ctx (s : T.subtype) : B.subtype =
-  {
-    typ = comp_type ctx s.typ;
-    supertype = Option.map (resolve_idx ctx.types) s.supertype;
-    final = s.final;
-    descriptor = Option.map (resolve_idx ctx.types) s.descriptor;
-    describes = Option.map (resolve_idx ctx.types) s.describes;
-  }
-
-let rec_type ctx r = Array.map (fun e -> sub_type ctx (snd e.Ast.desc)) r
+let func_type = Map.functype
+let rec_type = Map.rectype
 let global_type ctx g = mut_type valtype ctx g
 
 let table_type ctx (t : T.tabletype) : B.tabletype =
