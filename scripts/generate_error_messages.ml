@@ -48,6 +48,8 @@ let strip_constructor s =
     extract_content 8 1
   else if starts_with ~prefix:"list(" s && ends_with ~suffix:")" s then
     extract_content 5 1
+  else if starts_with ~prefix:"semi_list(" s && ends_with ~suffix:")" s then
+    extract_content 10 1
   else if starts_with ~prefix:"nonempty_list(" s && ends_with ~suffix:")" s then
     extract_content 14 1
   else if starts_with ~prefix:"separated_list(" s && ends_with ~suffix:")" s
@@ -75,7 +77,7 @@ let involves_anonymous s =
 
 (* Check if a symbol is nullable (heuristic based on name) *)
 let is_nullable_symbol s =
-  let prefixes = [ "option("; "boption("; "loption("; "list(" ] in
+  let prefixes = [ "option("; "boption("; "loption("; "list("; "semi_list(" ] in
   List.exists
     (fun prefix ->
       String.length s >= String.length prefix

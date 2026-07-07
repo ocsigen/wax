@@ -97,7 +97,7 @@
 %token DESCRIPTOR DESCRIBES
 %token IMPORT
 
-%on_error_reduce statement plaininstr separated_nonempty_list_trailing(",",structure_type_field) list(module_field) separated_nonempty_list_trailing(",",value_type) block_type separated_nonempty_list_trailing(",",function_parameter) list(label) list(attribute) list(typedef) list(legacy_catch) separated_nonempty_list_trailing(",",catch) separated_nonempty_list_trailing(",",let_pattern) blockinstr statement_list loption(separated_nonempty_list_trailing(",",catch)) separated_nonempty_list_trailing(",",expression) let_pattern structure_field separated_nonempty_list_trailing(",",structure_field) constant_expression attribute_expression parenthesized_expression index_expression then_branch condition_expression length_expression optional_function_type structure_type result_type_ expression_list structure
+%on_error_reduce statement plaininstr separated_nonempty_list_trailing(",",structure_type_field) semi_list(module_field) separated_nonempty_list_trailing(",",value_type) block_type separated_nonempty_list_trailing(",",function_parameter) list(label) list(attribute) list(typedef) semi_list(legacy_catch) separated_nonempty_list_trailing(",",catch) separated_nonempty_list_trailing(",",let_pattern) blockinstr statement_list loption(separated_nonempty_list_trailing(",",catch)) separated_nonempty_list_trailing(",",expression) let_pattern structure_field separated_nonempty_list_trailing(",",structure_field) constant_expression attribute_expression parenthesized_expression index_expression then_branch condition_expression length_expression optional_function_type structure_type result_type_ expression_list structure
 
 
 (* Dangling [#[else]]: an [#[else]] binds to the nearest [#[if]], i.e. shifting
@@ -614,6 +614,17 @@ match_arm:
 match_default:
 | "_" "=>" "{" body = statement_list "}" { body }
 
+(* A [list(X)] that also swallows bare [;] empty elements — the list analogue of
+   [statement_list]'s empty statement (see there). Used for the lists where an
+   [X] carries no separator of its own: module fields, import items, and the arm
+   lists of [dispatch]/[match]/[try]. So a stray or reflexive [;] between (or
+   after) entries is harmless, just as between statements. Each [X] begins with a
+   distinctive token, none of them [;], so the empty case never clashes. *)
+semi_list(X):
+| { [] }
+| ";" l = semi_list(X) { l }
+| x = X l = semi_list(X) { x :: l }
+
 blockinstr:
 (* Branch-hinting proposal: a hinted [if] stays a [blockinstr] (so, like a plain
    [if], it needs no trailing [;]); [hinted] rejects the attribute on any other
@@ -621,10 +632,10 @@ blockinstr:
 | h = branch_hint_attr i = blockinstr { hinted $sloc h i }
 | DISPATCH index = expression
   "[" cases = list(label) ELSE default = label "]"
-  "{" arms = list(dispatch_arm) "}"
+  "{" arms = semi_list(dispatch_arm) "}"
   { with_loc $sloc (Dispatch {index; cases; default; arms}) }
 | MATCH scrutinee = expression
-  "{" arms = list(match_arm) default = match_default "}"
+  "{" arms = semi_list(match_arm) default = match_default "}"
   { with_loc $sloc (Match {scrutinee; arms; default}) }
 | label = block_label DO bt = option(block_type) "{" l = statement_list "}"
   { with_loc $sloc (Block{label; typ = blocktype bt; block = l}) }
@@ -652,7 +663,7 @@ blockinstr:
   { with_loc $sloc (TryTable {label; typ = blocktype bt; catches; block = l}) }
 | label = block_label TRY bt = option(block_type) "{" l = statement_list "}"
   CATCH
-  "{" catches = list(legacy_catch); catch_all = option(legacy_catch_all) "}"
+  "{" catches = semi_list(legacy_catch); catch_all = option(legacy_catch_all) "}"
   { with_loc $sloc
       (Try {label; typ = blocktype bt; block = l; catches; catch_all}) }
 
@@ -986,11 +997,11 @@ module_field:
 | r = rectype { {desc = Type r.desc; info = r.info} }
 | a = inner_attribute { with_loc $sloc (Module_annotation [a]) }
 | attributes = list(attribute) d = definition { attributed $sloc attributes d }
-| attributes = list(attribute) "{" fields = list(module_field) "}"
+| attributes = list(attribute) "{" fields = semi_list(module_field) "}"
   { with_loc $sloc (Group {attributes; fields}) }
 | IMPORT m = STRING d = import_item
   { with_loc $sloc (Import {module_ = m; decl = d}) }
-| IMPORT m = STRING "{" decls = list(import_item) "}"
+| IMPORT m = STRING "{" decls = semi_list(import_item) "}"
   { with_loc $sloc (Import_group {module_ = m; decls}) }
 | "#[if(" c = condition ")" "]" t = module_field e = else_clause
   { with_loc $sloc (Conditional {cond = c; then_fields = [t]; else_fields = e}) }
@@ -1051,6 +1062,7 @@ condition_relop:
 | "=" { Wax_wasm.Ast.Eq } | "!=" { Wax_wasm.Ast.Ne } | "<" { Wax_wasm.Ast.Lt }
 | ">" { Wax_wasm.Ast.Gt } | "<=" { Wax_wasm.Ast.Le } | ">=" { Wax_wasm.Ast.Ge }
 
-parse: 
+parse:
 | EOF { [] }
+| ";" r = parse { r }
 | f = module_field r = parse { f :: r }

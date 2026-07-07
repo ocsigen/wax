@@ -450,7 +450,10 @@ block's or function's value. The block-shaped statements below —
 exception: their closing `}` ends the statement, so no `;` is needed. A bare
 `;` is an empty statement (it does nothing), so a redundant one is harmless
 anywhere and dropped on formatting — most usefully after a block, where the
-reflex of ending every line with `;` would otherwise be an error.
+reflex of ending every line with `;` would otherwise be an error. The same
+holds outside function bodies: a stray `;` is an empty element wherever items
+are listed — among module fields, the declarations of an `import` block, and
+the arms of a `dispatch`, `match`, or `catch`.
 
 ### Blocks
 
