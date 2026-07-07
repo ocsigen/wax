@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="assets/wax128.png" alt="Wax logo" width="120" height="120">
+</div>
+
 # Wax
 
 [![CI](https://github.com/ocsigen/wax/actions/workflows/ci.yml/badge.svg)](https://github.com/ocsigen/wax/actions/workflows/ci.yml)
@@ -6,8 +10,8 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
 **Wax is a Rust-like syntax for WebAssembly.** Write Wasm — including WasmGC —
-in a familiar, expression-oriented notation, and convert losslessly between
-Wax, WebAssembly Text (WAT), and the binary format, in any direction.
+in a familiar, expression-oriented notation, and convert between Wax,
+WebAssembly Text (WAT), and the binary format, in any direction.
 
 Where the WebAssembly text format spells out a stack machine:
 
@@ -108,10 +112,30 @@ default output format is `wasm` (override with `-f`). `wax` reads from `stdin`
 when no input file is given and writes to `stdout` when `-o` is omitted.
 
 See the [CLI reference](https://ocsigen.github.io/wax/cli.html) for the
-complete set of options — including `-D`/`-X`/`-W`, `--source-map-file`, the
-validation flags, and the exit-status contract.
+complete set of options.
+
+## Editor support
+
+A [Wax extension for Visual Studio Code](https://marketplace.visualstudio.com/items?itemName=wax-wasm.wax)
+provides syntax highlighting and snippets. Its source lives in
+[`editors/vscode/`](editors/vscode/).
 
 ## Installation
+
+### Prebuilt binaries
+
+Native `wax` executables for Linux, macOS (Apple silicon and Intel), and
+Windows — with `SHA256SUMS` — are attached to the
+[`edge` prerelease](https://github.com/ocsigen/wax/releases/tag/edge), which is
+rebuilt on every push to `main`. Download the one for your platform, make it
+executable, and put it on your `PATH`:
+
+```sh
+curl -LO https://github.com/ocsigen/wax/releases/download/edge/wax-linux-x86_64
+chmod +x wax-linux-x86_64 && mv wax-linux-x86_64 /usr/local/bin/wax
+```
+
+### From source
 
 **Requirements:** [Opam](https://opam.ocaml.org/) (2.1+) and OCaml 4.14+. The
 toolchain builds on OCaml 4.14; running the full test suite requires 5.0+ (it
@@ -131,6 +155,14 @@ dune runtest
 opam install .
 ```
 
+## Documentation
+
+Full documentation is available at
+[ocsigen.github.io/wax/](https://ocsigen.github.io/wax/) — a language guide,
+the Wax↔WebAssembly correspondence, examples, and the CLI reference. You can
+also build it locally with `mdbook build docs` (requires
+[mdBook](https://rust-lang.github.io/mdBook/)).
+
 ## Correctness
 
 Wax is built to be trusted with your binaries:
@@ -143,14 +175,6 @@ Wax is built to be trusted with your binaries:
   verified by re-running the spec tests on round-tripped modules.
 
 See [`fuzz/README.md`](fuzz/README.md) for how the harness works.
-
-## Documentation
-
-Full documentation is available at
-[ocsigen.github.io/wax/](https://ocsigen.github.io/wax/) — a language guide,
-the Wax↔WebAssembly correspondence, examples, and the CLI reference. You can
-also build it locally with `mdbook build docs` (requires
-[mdBook](https://rust-lang.github.io/mdBook/)).
 
 ## Contributing
 

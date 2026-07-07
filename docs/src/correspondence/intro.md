@@ -10,4 +10,4 @@ Key differences:
 - **Expressions vs Stack**: Wax uses variables (`let`) and nested expressions instead of explicit stack manipulation (`local.get`/`set`, `drop`).
 - **Control Flow**: Wax uses structured control flow (`if`, `loop`, `do`, `try`) that resembles high-level languages but maps directly to Wasm structured control instructions.
 - **Types**: Wax types define a direct mapping to Wasm types, with a slightly more concise syntax.
-- **Modules**: Wax modules use attributes to handle imports and exports, rather than separate import/export definitions.
+- **Modules**: Wax modules group imports under an `import "module" { … }` block and mark exports with an `#[export]` attribute on the field itself, rather than using separate import/export definitions.
