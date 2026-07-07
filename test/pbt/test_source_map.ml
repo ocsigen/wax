@@ -9,9 +9,9 @@ let naive_resize_mappings resize_data mappings =
     let col_acc = ref 0 in
     let new_col_acc = ref 0 in
     let new_segments =
-      List.map
+      List.filter_map
         (fun segment ->
-          if segment = "" then ""
+          if segment = "" then None
           else
             let fields =
               Vlq64.decode_l segment ~pos:0 ~len:(String.length segment)
@@ -27,24 +27,26 @@ let naive_resize_mappings resize_data mappings =
                     shift := !shift + resize_data.delta.(k)
                 done;
                 let new_col = col + !shift in
-                let new_relative_col = new_col - !new_col_acc in
-                new_col_acc := new_col;
-                let buf = Buffer.create 16 in
-                Vlq64.encode buf new_relative_col;
-                let input =
-                  {
-                    Vlq64.string = segment;
-                    pos = 0;
-                    len = String.length segment;
-                  }
-                in
-                let _ = Vlq64.decode input in
-                let rest_str =
-                  String.sub segment input.pos
-                    (String.length segment - input.pos)
-                in
-                Buffer.add_string buf rest_str;
-                Buffer.contents buf)
+                if new_col < 0 then None
+                else
+                  let new_relative_col = new_col - !new_col_acc in
+                  new_col_acc := new_col;
+                  let buf = Buffer.create 16 in
+                  Vlq64.encode buf new_relative_col;
+                  let input =
+                    {
+                      Vlq64.string = segment;
+                      pos = 0;
+                      len = String.length segment;
+                    }
+                  in
+                  let _ = Vlq64.decode input in
+                  let rest_str =
+                    String.sub segment input.pos
+                      (String.length segment - input.pos)
+                  in
+                  Buffer.add_string buf rest_str;
+                  Some (Buffer.contents buf))
         segments
     in
     String.concat "," new_segments
@@ -70,7 +72,7 @@ let test_resize =
     let rd = { i = n; pos; delta } in
 
     (* 2. Generate mappings *)
-    int_range (1 - first_delta) (200 - first_delta) >>= fun first_rel_col ->
+    int_range 0 (200 - first_delta) >>= fun first_rel_col ->
     list (int_range 1 100) >>= fun rest_rel_cols ->
     let rel_cols = first_rel_col :: rest_rel_cols in
     let make_segment rel_col =

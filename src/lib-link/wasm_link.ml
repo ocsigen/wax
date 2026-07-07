@@ -570,7 +570,7 @@ module Scan = struct
     p.(i) <- pos;
     position_data.i <- i + 1
 
-  let scanner report mark maps buf code =
+  let scanner ?(mark_instructions = false) report mark maps buf code =
     let rec output_uint buf i =
       if i < 128 then Buffer.add_char buf (Char.chr i)
       else (
@@ -584,6 +584,7 @@ module Scan = struct
         output_sint buf (i asr 7))
     in
     let start = ref 0 in
+    let in_func = ref false in
     let get pos = Char.code (String.get code pos) in
     let rec int pos = if get pos >= 128 then int (pos + 1) else pos + 1 in
     let rec uint32 pos =
@@ -730,6 +731,7 @@ module Scan = struct
     in
     let rec instructions pos =
       if debug then Format.eprintf "0x%02X (@%d)@." (get pos) pos;
+      if mark_instructions && !in_func then mark pos;
       match get pos with
       (* Control instruction *)
       | 0x00 (* unreachable *) | 0x01 (* nop *) | 0x0F (* return *) ->
@@ -951,7 +953,10 @@ module Scan = struct
     let expr pos = pos |> instructions |> block_end in
     let func pos =
       start := pos;
-      pos |> vector locals |> expr |> flush
+      in_func := true;
+      let res = pos |> vector locals |> expr |> flush in
+      in_func := false;
+      res
     in
     let mut pos = pos + 1 in
     let limits pos =
@@ -1739,8 +1744,7 @@ let f ?(filter_export = fun _ -> true) files ~output_file =
         (data_mappings, data_count)
       in
       if data_count > 0 then
-        ignore
-          (Wax_wasm.Wasm_output.datacount_section out_ch data_count : int);
+        ignore (Wax_wasm.Wasm_output.datacount_section out_ch data_count : int);
 
       (* 10: code *)
       let code_pieces = Buffer.create 100000 in
@@ -1979,3 +1983,31 @@ let f ?(filter_export = fun _ -> true) files ~output_file =
       close_out out_ch;
 
       source_map)
+
+let get_instruction_offsets ~filename buf =
+  let offsets = ref [] in
+  let mark pos = offsets := pos :: !offsets in
+  let count = ref 0 in
+  Wax_utils.Diagnostic.run ~color:Wax_utils.Colors.Never
+    ~palette:Wax_utils.Colors.wat_theme ~source:(Some buf) (fun d ->
+      let ch = Wax_wasm.Wasm_parser.make_ch d ~filename buf 0 in
+      Wax_wasm.Wasm_parser.check_header ch;
+      ch.pos <- 8;
+      let index = Wax_wasm.Wasm_parser.index ch in
+      let contents = { Read.id = 0; ch; index } in
+      if Read.find_section contents 10 then (
+        let count' = Read.uint contents.ch in
+        count := count';
+        let code (ch : Wax_wasm.Wasm_parser.ch) =
+          let size = Read.uint ch in
+          let pos' = ch.pos in
+          let _, _, _, _, func, _ =
+            Scan.scanner ~mark_instructions:true
+              (fun _ _ -> ())
+              mark Scan.default_maps (Buffer.create 0) ch.buf
+          in
+          let _ = func pos' in
+          ch.pos <- ch.pos + size
+        in
+        Read.repeat' count' code contents.ch));
+  (List.rev !offsets, !count)
