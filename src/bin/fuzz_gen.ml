@@ -16,6 +16,12 @@
    first error) — while `err` produces the opposite, a single well-placed
    mismatch, to exercise the rejection arms.
 
+   It also emits imports in both surface forms — a singleton `import "m" <decl>;`
+   and a grouped `import "m" { … }` block — covering typing's import arms
+   (function/global/tag registration, the name-only `#[import = "…"]` override,
+   `#[export]` re-export). Imported functions share the uniform signature so
+   they join the call pool; imported globals are read and written by the bodies.
+
    Unlike a text generator, the module is built as a real AST and printed through
    Wax_lang.Output, so the output ALWAYS re-parses: the only rejections are
    genuine type verdicts, never a serialization bug. The paired driver is
@@ -121,6 +127,21 @@ let mem = nl (Ast.Get (id "m"))
    type always has a callee). *)
 let nf = 2 + rnd 4
 let rtys = Array.init nf (fun k -> result_ty.(k mod Array.length result_ty))
+
+(* Imported functions [g0…] share the SAME uniform parameter signature as the
+   defined [f] functions, so they fold into one call pool: any call site can
+   target either, with the same argument list. Their result types round-robin
+   like [rtys] (offset by [nf] for variety). *)
+let ng = 1 + rnd 3
+
+let gtys =
+  Array.init ng (fun k -> result_ty.((k + nf) mod Array.length result_ty))
+
+(* Every callee — defined [f<k>] and imported [g<k>] — paired with its result
+   type, so [call] can draw a callee of a wanted type from the whole set. *)
+let callees =
+  List.init nf (fun k -> ("f" ^ string_of_int k, rtys.(k)))
+  @ List.init ng (fun k -> ("g" ^ string_of_int k, gtys.(k)))
 
 let int_binops =
   [|
@@ -278,16 +299,17 @@ let rec cast t d : Ast.location Ast.instr =
 and meth recv name args : Ast.location Ast.instr =
   nl (Ast.Call (nl (Ast.StructGet (recv, id name)), args))
 
-(* A call to some function returning type [t] (falls back to a leaf if none). *)
+(* A call to some callee returning type [t] — defined or imported, since both
+   share the uniform signature (falls back to a leaf if none). *)
 and call t : Ast.location Ast.instr =
-  let cands = List.filter (fun k -> rtys.(k) = t) (List.init nf Fun.id) in
+  let cands = List.filter (fun (_, rt) -> rt = t) callees in
   match cands with
   | [] -> leaf t
   | _ ->
-      let k = List.nth cands (rnd (List.length cands)) in
+      let name, _ = List.nth cands (rnd (List.length cands)) in
       nl
         (Ast.Call
-           ( nl (Ast.Get (id ("f" ^ string_of_int k))),
+           ( nl (Ast.Get (id name)),
              Array.to_list (Array.map (fun pt -> gen pt 0) all_params) ))
 
 (* An `if`-expression of type [t]. *)
@@ -426,6 +448,9 @@ and gen_num t d : Ast.location Ast.instr =
     | n when n < 90 && t = I32 -> callref ()
     | n when n < 93 -> extract ()
     | n when n < 97 -> load ()
+    | n when n < 99 ->
+        (* Read an imported mutable global of the matching width. *)
+        nl (Ast.Get (id (if t = I32 then "gi32" else "gi64")))
     | _ -> call t
   else
     match rnd 100 with
@@ -594,8 +619,14 @@ let maybe_hint i =
 let rec stmt d : Ast.location Ast.instr =
   match rnd 100 with
   | n when n < 28 ->
-      let t = pick all_params in
-      nl (Ast.Set (id (pname t), None, gen t d))
+      (* Assign a param (fully type-constrained), or occasionally an imported
+         mutable global — exercising [global.set] on an import. *)
+      if rnd 4 = 0 then
+        let t, name = if rnd 2 = 0 then (I32, "gi32") else (I64, "gi64") in
+        nl (Ast.Set (id name, None, gen t d))
+      else
+        let t = pick all_params in
+        nl (Ast.Set (id (pname t), None, gen t d))
   | n when n < 40 ->
       (* [x op= e] — a compound assignment over a numeric param, with an operator
          valid for its type. Params are always initialized, so reading [x] (which
@@ -719,6 +750,79 @@ let subtype (typ : Ast.comptype) : Ast.subtype =
 
 let field name mut t : (Ast.ident * Ast.fieldtype, Ast.location) Ast.annotated =
   nl (id name, ftype mut t)
+
+(* Attributes on an imported declaration: a name-only [#[import = "…"]] renames
+   the entity in the host module, and [#[export]] re-exports it (which also
+   counts as a use, so an otherwise-unreferenced import never trips
+   unused-import). Both are exercised roughly a third of the time each. *)
+let import_attrs base : Ast.attributes =
+  let str s = Some (nl (Ast.String (None, s))) in
+  (if rnd 3 = 0 then [ ("import", str (base ^ "_ext")) ] else [])
+  @ if rnd 3 = 0 then [ ("export", str (base ^ "_x")) ] else []
+
+(* One imported function [g<k>]: the uniform parameter signature (anonymous
+   params, since an import has no body) and a result drawn from [gtys]. *)
+let import_func_decl k : (Ast.import_decl, Ast.location) Ast.annotated =
+  let name = "g" ^ string_of_int k in
+  let sign =
+    Ast.
+      {
+        params = Array.map (fun t -> nl (None, valtype t)) all_params;
+        results = [| valtype gtys.(k) |];
+      }
+  in
+  nl
+    {
+      Ast.id = id name;
+      kind = Ast.Import_func { typ = None; sign = Some sign; exact = false };
+      attributes = import_attrs name;
+    }
+
+(* An imported mutable numeric global, read (and written) by the generated
+   bodies — see [gen_num] / [stmt]. *)
+let import_global_decl name t : (Ast.import_decl, Ast.location) Ast.annotated =
+  nl
+    {
+      Ast.id = id name;
+      kind = Ast.Import_global { mut = true; typ = valtype t };
+      attributes = import_attrs name;
+    }
+
+(* An imported tag ([tag itag(i32);]): exercises [register_import]'s tag arm.
+   Left unreferenced — tags carry no unused-import lint. *)
+let import_tag_decl : (Ast.import_decl, Ast.location) Ast.annotated =
+  nl
+    {
+      Ast.id = id "itag";
+      kind =
+        Ast.Import_tag
+          {
+            typ = None;
+            sign =
+              Some Ast.{ params = [| nl (None, valtype I32) |]; results = [||] };
+          };
+      attributes = [];
+    }
+
+(* Imports exercise both module fields: a singleton [import "env2" fn g0(…);]
+   ([Import]) and a grouped [import "env" { … }] block ([Import_group]) carrying
+   the remaining functions, two globals and a tag. Every imported function is in
+   the call pool; the globals are read/written above. *)
+let import_decls : Ast.location Ast.modulefield list =
+  [
+    Ast.Import { module_ = nl "env2"; decl = import_func_decl 0 };
+    Ast.Import_group
+      {
+        module_ = nl "env";
+        decls =
+          List.init (ng - 1) (fun k -> import_func_decl (k + 1))
+          @ [
+              import_global_decl "gi32" I32;
+              import_global_decl "gi64" I64;
+              import_tag_decl;
+            ];
+      };
+  ]
 
 let type_decls : Ast.location Ast.modulefield list =
   [
@@ -853,7 +957,7 @@ let func k : Ast.location Ast.modulefield =
     }
 
 let () =
-  let fields = type_decls @ List.init nf func in
+  let fields = type_decls @ import_decls @ List.init nf func in
   let m : Ast.location Ast.module_ = List.map nl fields in
   let f = Format.std_formatter in
   Wax_utils.Printer.run ~width:Wax_lang.Output.width f (fun p ->
