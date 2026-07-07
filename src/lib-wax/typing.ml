@@ -302,8 +302,8 @@ module Error = struct
 
   let descriptor_allocation_required context ~location =
     report context ~location
-      "A type with a descriptor must be allocated with a descriptor: {T \
-       descriptor d | …}."
+      "A type with a descriptor must be allocated with a descriptor: \
+       {descriptor(d) | …}."
 
   let feature_disabled context ~location feature =
     report context ~location
@@ -6451,7 +6451,7 @@ and check_instruction ?(drop_supertype = false) ctx expected
     result
   in
   (* A type carrying a [descriptor] clause must be allocated with a descriptor
-     ([{T descriptor d | …}]), not a plain [{T | …}]. *)
+     ([{descriptor(d) | …}]), not a plain [{T | …}]. *)
   let require_no_descriptor typ =
     match Tbl.find_opt ctx.type_context.types typ with
     | Some (_, def) when Option.is_some def.descriptor ->
