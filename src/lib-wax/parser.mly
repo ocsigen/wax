@@ -845,7 +845,15 @@ statement_list:
 (*
 | i = statement { [i] }
 *)
-| i = blockinstr l = statement_list { i :: l }
+(* A block-shaped statement ([do]/[if]/[while]/[loop]/[dispatch]/[match]/[try])
+   needs no trailing [;], but one is accepted and ignored: the [;]-per-statement
+   habit is strong, and the docs' own author wrote the [;] form more than once.
+   The redundant [;] is safe here — a bare block reaches statement position only
+   through this rule (there is no [plaininstr: expression], so a block cannot
+   become a statement via the expression/plaininstr path), so shifting the [;]
+   does not clash with reducing [expression: blockinstr] (which continues a
+   plaininstr on an operator, never on [;]). *)
+| i = blockinstr ioption(";") l = statement_list { i :: l }
 | i = statement ";" l = statement_list { i :: l }
 | i = cond_stmt l = statement_list { i :: l }
 

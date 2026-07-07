@@ -1,0 +1,11 @@
+#[export = "f"]
+fn f(c: i32, r: &any) -> i32 {
+  do { nop; };
+  if c { nop; } else { nop; };
+  'l: loop { br 'l; };
+  let i = 0;
+  while i <u c : (i += 1) { nop; };
+  dispatch c ['a 'b else 'd] { 'a: {} 'b: {} 'd: {} };
+  match r { _ => {} };
+  0;
+}

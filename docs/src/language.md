@@ -444,6 +444,13 @@ This maps directly to Wasm's `select` instruction.
 
 ## Control Flow
 
+Statements are terminated by `;`, including the final one that produces the
+block's or function's value. The block-shaped statements below —
+`do`, `if`, `while`, `loop`, `dispatch`, `match`, and `try` — are the
+exception: their closing `}` ends the statement, so no `;` is needed. A
+redundant `;` after one is nonetheless accepted (and dropped on formatting), so
+the reflex of ending every line with `;` does not cause an error.
+
 ### Blocks
 
 A block groups a sequence of statements, written with `do`.
