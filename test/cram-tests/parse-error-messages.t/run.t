@@ -42,3 +42,17 @@ the raw `separated_nonempty_list_trailing(comma,on_clause)`:
   3 │ }
   4 │ 
   [128]
+
+The same generator drives the WAT parser. Here the head noun governs agreement
+("the list of indices is complete", not "are"):
+
+  $ wax check indices.wat
+  Error: Assuming that the list of indices is complete, expecting ')'.
+   ──➤  indices.wat:3:28
+  1 │ (module
+  2 │   (func $f)
+  3 │   (table funcref (elem $f (nop))))
+    ·                            ^^^
+    ·                   ^^^^ This '(' might be unmatched.
+  4 │ 
+  [128]
