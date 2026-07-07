@@ -14,10 +14,10 @@
     ],
     "description": "Exported function"
   },
-  "Imported function": {
+  "Import block": {
     "prefix": "import",
-    "body": ["#[import = (\"${1:module}\", \"${2:name}\")]", "fn ${2:name}(${3:params});$0"],
-    "description": "Imported function declaration"
+    "body": ["import \"${1:module}\" {", "\tfn ${2:name}(${3:params});$0", "}"],
+    "description": "Import block"
   },
   "Struct type": {
     "prefix": "type-struct",
