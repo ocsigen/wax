@@ -15,7 +15,10 @@
 // along with this program; if not, write to the Free Software
 // Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
-import "obj" { const abstract_tag: i32; fn caml_obj_dup(&eq) -> &eq; }
+import "obj" {
+    const abstract_tag: i32;
+    fn caml_obj_dup(&eq) -> &eq;
+}
 import "fail" fn caml_invalid_argument(arg: &eq);
 
 #[if(wasi)]
@@ -42,7 +45,10 @@ import "fail" fn caml_invalid_argument(arg: &eq);
         fn map_get(&any, &eq) -> &?any;
         fn map_set(&any, &eq, &any);
     }
-    import "jslib" { fn unwrap(&eq) -> &?any; fn wrap(&?any) -> &eq; }
+    import "jslib" {
+        fn unwrap(&eq) -> &?any;
+        fn wrap(&?any) -> &eq;
+    }
 }
 
 type block = [mut &eq];

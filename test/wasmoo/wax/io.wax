@@ -15,7 +15,10 @@
 // along with this program; if not, write to the Free Software
 // Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
-import "fail" { fn caml_raise_end_of_file(); fn caml_raise_sys_error(&eq); }
+import "fail" {
+    fn caml_raise_end_of_file();
+    fn caml_raise_sys_error(&eq);
+}
 import "jslib" {
     fn wrap(&?any) -> &eq;
     fn unwrap(&eq) -> &?any;
@@ -43,7 +46,10 @@ import "jslib" {
         fn write_string_to_memory(i32, i32, &eq) -> i32;
         fn release_memory(i32, i32);
     }
-    import "sys" { fn caml_handle_sys_error(&eq, i32); fn caml_handle_sys_error_if(&eq, i32); }
+    import "sys" {
+        fn caml_handle_sys_error(&eq, i32);
+        fn caml_handle_sys_error_if(&eq, i32);
+    }
     import "fail" fn caml_invalid_argument(&eq);
     import "fs" fn caml_sys_resolve_path(&eq) -> (i32, i32, i32);
 }
@@ -64,7 +70,10 @@ import "jslib" {
         fn unregister_channel(&eq);
         fn channel_list() -> &?any;
     }
-    import "jslib" { fn caml_js_fun_call(&eq, &eq) -> &eq; fn caml_jsbytes_of_string(&eq) -> &eq; }
+    import "jslib" {
+        fn caml_js_fun_call(&eq, &eq) -> &eq;
+        fn caml_jsbytes_of_string(&eq) -> &eq;
+    }
     import "bindings" {
         fn ta_new(i32) -> &extern;
         fn ta_copy(&extern, i32, i32, i32);
@@ -86,7 +95,10 @@ import "custom" {
     fn custom_hash_id(&eq) -> i32;
     fn custom_next_id() -> i64;
 }
-import "int64" { fn caml_copy_int64(i64) -> &eq; fn Int64_val(&eq) -> i64; }
+import "int64" {
+    fn caml_copy_int64(i64) -> &eq;
+    fn Int64_val(&eq) -> i64;
+}
 import "bigarray" fn caml_ba_get_data(&eq) -> &extern;
 
 #[if(wasi)]

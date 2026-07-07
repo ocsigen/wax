@@ -21,13 +21,19 @@ import "fail" {
     fn caml_invalid_argument(&eq);
     fn caml_failwith(&eq);
 }
-import "jslib" { fn wrap(&?any) -> &eq; fn unwrap(&eq) -> &?any; }
+import "jslib" {
+    fn wrap(&?any) -> &eq;
+    fn unwrap(&eq) -> &?any;
+}
 import "int32" {
     fn caml_copy_int32(i32) -> &eq;
     fn Int32_val(&eq) -> i32;
     fn caml_copy_nativeint(i32) -> &eq;
 }
-import "int64" { fn caml_copy_int64(i64) -> &eq; fn Int64_val(&eq) -> i64; }
+import "int64" {
+    fn caml_copy_int64(i64) -> &eq;
+    fn Int64_val(&eq) -> i64;
+}
 import "obj" const double_array_tag: i32;
 import "compare" const unordered: i32;
 import "hash" {

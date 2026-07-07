@@ -56,7 +56,10 @@
         fn blit_memory_to_substring(i32, &bytes, i32, i32);
         fn blit_substring_to_memory(i32, &bytes, i32, i32);
     }
-    import "fs" { fn wasi_resolve_path(&eq) -> (i32, i32, i32); fn wasi_chdir(&eq); }
+    import "fs" {
+        fn wasi_resolve_path(&eq) -> (i32, i32, i32);
+        fn wasi_chdir(&eq);
+    }
     import "wasi_errors" const error_messages: &block;
     import "ints" fn caml_format_int(&eq, &eq) -> &eq;
     import "string" fn caml_string_concat(&eq, &eq) -> &eq;
@@ -145,13 +148,19 @@ import "io" {
     fn caml_ml_open_descriptor_in(&eq) -> &eq;
     fn caml_ml_open_descriptor_out(&eq) -> &eq;
 }
-import "bindings" { fn ta_new(i32) -> &extern; fn dv_make(&extern) -> &extern; }
+import "bindings" {
+    fn ta_new(i32) -> &extern;
+    fn dv_make(&extern) -> &extern;
+}
 import "bigarray" {
     fn caml_blit_dataview_to_bytes(&extern, i32, &bytes, i32, i32);
     fn caml_blit_bytes_to_dataview(&bytes, i32, &extern, i32, i32);
     fn caml_ba_get_data(&eq) -> &extern;
 }
-import "int64" { fn caml_copy_int64(i64) -> &eq; fn Int64_val(&eq) -> i64; }
+import "int64" {
+    fn caml_copy_int64(i64) -> &eq;
+    fn Int64_val(&eq) -> i64;
+}
 
 type bytes = [mut i8];
 type block = [mut &eq];

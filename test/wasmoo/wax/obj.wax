@@ -16,7 +16,10 @@
 // Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
 import "fail" fn caml_failwith(&eq);
-import "custom" { fn caml_is_custom(&eq) -> i32; fn caml_dup_custom(&eq) -> &eq; }
+import "custom" {
+    fn caml_is_custom(&eq) -> i32;
+    fn caml_dup_custom(&eq) -> &eq;
+}
 import "effect" fn caml_is_continuation(&eq) -> i32;
 #[if(effects = "cps")]
 import "effect" fn caml_cps_trampoline(&eq, &eq) -> &eq;

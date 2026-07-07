@@ -17,7 +17,10 @@
 
 #[if(not(wasi))]
 {
-    import "stdlib" { let caml_global_data: &block; let link_info: &block; }
+    import "stdlib" {
+        let caml_global_data: &block;
+        let link_info: &block;
+    }
     import "obj" fn caml_callback_2(&eq, &eq, &eq) -> &eq;
     import "fail" fn caml_failwith(&eq);
     import "string" fn caml_string_concat(&eq, &eq) -> &eq;

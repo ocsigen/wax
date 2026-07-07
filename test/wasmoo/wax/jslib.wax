@@ -60,7 +60,10 @@ type bytes = [mut i8];
         fn wrap_meth_callback_unsafe(&eq) -> &?any;
         fn wrap_fun_arguments(&?any) -> &?any;
     }
-    import "fail" { fn caml_failwith_tag() -> &eq; tag javascript_exception(&?extern); }
+    import "fail" {
+        fn caml_failwith_tag() -> &eq;
+        tag javascript_exception(&?extern);
+    }
     import "stdlib" fn caml_named_value(&eq) -> &?eq;
     import "obj" {
         fn caml_callback_1(&eq, &eq) -> &eq;

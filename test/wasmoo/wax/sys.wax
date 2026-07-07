@@ -15,7 +15,10 @@
 // along with this program; if not, write to the Free Software
 // Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
-import "fail" { fn caml_raise_sys_error(&eq); fn caml_raise_not_found(); }
+import "fail" {
+    fn caml_raise_sys_error(&eq);
+    fn caml_raise_not_found();
+}
 #[if(wasi)]
 {
     import "wasi_snapshot_preview1" {

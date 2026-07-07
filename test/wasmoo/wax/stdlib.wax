@@ -18,8 +18,14 @@
 import "hash" fn caml_string_hash(&eq, &eq) -> &eq;
 import "string" fn caml_string_equal(&eq, &eq) -> &eq;
 
-import "jslib" { fn caml_jsstring_of_string(&eq) -> &eq; fn unwrap(&eq) -> &?any; }
-import "obj" { fn caml_callback_1(&eq, &eq) -> &eq; fn caml_callback_2(&eq, &eq, &eq) -> &eq; }
+import "jslib" {
+    fn caml_jsstring_of_string(&eq) -> &eq;
+    fn unwrap(&eq) -> &?any;
+}
+import "obj" {
+    fn caml_callback_1(&eq, &eq) -> &eq;
+    fn caml_callback_2(&eq, &eq, &eq) -> &eq;
+}
 import "string" fn caml_string_concat(&eq, &eq) -> &eq;
 import "printexc" fn caml_format_exception(&eq) -> &eq;
 import "sys" tag ocaml_exit();
@@ -34,7 +40,10 @@ import "fail" tag ocaml_exception(&eq);
 #[else]
 {
     import "fail" tag javascript_exception(&?extern);
-    import "bindings" { fn write(i32, &?any); fn exit(i32); }
+    import "bindings" {
+        fn write(i32, &?any);
+        fn exit(i32);
+    }
 }
 
 type block = [mut &eq];

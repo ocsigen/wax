@@ -16,7 +16,10 @@
 // Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
 import "float32" const float32_ops: &custom_operations;
-import "int32" { const int32_ops: &custom_operations; const nativeint_ops: &custom_operations; }
+import "int32" {
+    const int32_ops: &custom_operations;
+    const nativeint_ops: &custom_operations;
+}
 import "int64" const int64_ops: &custom_operations;
 import "bigarray" const bigarray_ops: &custom_operations;
 import "nat" const nat_ops: &custom_operations;

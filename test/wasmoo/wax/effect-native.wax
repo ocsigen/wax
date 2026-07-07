@@ -17,10 +17,20 @@
 
 #[if(effects = "native")]
 {
-    import "fail" { fn caml_raise_constant(&eq); fn caml_raise_with_arg(tg: &eq, arg: &eq); }
-    import "obj" { fn caml_fresh_oo_id(&eq) -> &eq; const cont_tag: i32; const object_tag: i32; }
+    import "fail" {
+        fn caml_raise_constant(&eq);
+        fn caml_raise_with_arg(tg: &eq, arg: &eq);
+    }
+    import "obj" {
+        fn caml_fresh_oo_id(&eq) -> &eq;
+        const cont_tag: i32;
+        const object_tag: i32;
+    }
     import "stdlib" fn caml_named_value(&eq) -> &?eq;
-    import "fail" { tag ocaml_exception(&eq); tag javascript_exception(&?extern); }
+    import "fail" {
+        tag ocaml_exception(&eq);
+        tag javascript_exception(&?extern);
+    }
     import "stdlib" let caml_main_wrapper: &?wrapper_func;
     import "effect" let effect_allowed: i32;
     #[if(wasi)]

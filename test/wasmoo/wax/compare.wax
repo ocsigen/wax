@@ -28,7 +28,10 @@ import "obj" {
 import "fail" fn caml_invalid_argument(&eq);
 import "effect" fn caml_is_continuation(&eq) -> i32;
 import "string" fn caml_string_compare(&eq, &eq) -> &eq;
-import "jsstring" { fn jsstring_test(&?any) -> i32; fn jsstring_compare(&?any, &?any) -> i32; }
+import "jsstring" {
+    fn jsstring_test(&?any) -> i32;
+    fn jsstring_compare(&?any, &?any) -> i32;
+}
 
 type block = [mut &eq];
 type bytes = [mut i8];

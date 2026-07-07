@@ -15,7 +15,10 @@
 // along with this program; if not, write to the Free Software
 // Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
-import "ints" { fn parse_int(&eq, i32, &eq) -> i32; fn format_int(&eq, i32, i32) -> &eq; }
+import "ints" {
+    fn parse_int(&eq, i32, &eq) -> i32;
+    fn format_int(&eq, i32, i32) -> &eq;
+}
 import "fail" fn caml_failwith(&eq);
 import "marshal" {
     fn caml_serialize_int_1(&eq, i32);

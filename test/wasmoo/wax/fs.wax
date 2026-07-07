@@ -42,7 +42,10 @@
         fn fd_readddir(i32, i32, i32, i64, i32) -> i32;
         fn fd_close(i32) -> i32;
     }
-    import "sys" { fn caml_handle_sys_error(&eq, i32); fn caml_handle_sys_error_if(&eq, i32); }
+    import "sys" {
+        fn caml_handle_sys_error(&eq, i32);
+        fn caml_handle_sys_error_if(&eq, i32);
+    }
 }
 #[else]
 {
@@ -76,7 +79,10 @@
 }
 import "string" fn caml_string_concat(&eq, &eq) -> &eq;
 import "fail" fn caml_raise_sys_error(&eq);
-import "bindings" { fn register_file(&?any, &?any); fn read_file(&?any) -> &?any; }
+import "bindings" {
+    fn register_file(&?any, &?any);
+    fn read_file(&?any) -> &?any;
+}
 
 type bytes = [mut i8];
 type block = [mut &eq];

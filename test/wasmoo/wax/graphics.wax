@@ -19,7 +19,10 @@
 {
 
     // Imports from other wasm modules
-    import "fail" { fn caml_failwith(&eq); fn caml_raise_with_arg(&eq, &eq); }
+    import "fail" {
+        fn caml_failwith(&eq);
+        fn caml_raise_with_arg(&eq, &eq);
+    }
     import "stdlib" fn caml_named_value(&eq) -> &?eq;
     import "jslib" {
         fn wrap(&?any) -> &eq;

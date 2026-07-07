@@ -1811,14 +1811,17 @@ let rec modulefield pp field =
               print_data_bytes pp module_.desc;
               space pp ();
               punctuation pp "{");
+          (* Like any brace-delimited block (see [block_contents]), a non-empty
+             import group always lays its declarations out vertically, one per
+             line; an empty group stays [{}]. *)
           if decls <> [] then (
             indent pp indent_level (fun () ->
                 List.iter
                   (fun d ->
-                    space pp ();
+                    newline pp ();
                     print_import_decl pp d.desc)
                   decls);
-            space pp ());
+            newline pp ());
           punctuation pp "}")
   | Conditional { cond; then_fields; else_fields } ->
       let branch fields =

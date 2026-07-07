@@ -21,7 +21,10 @@
 
 #[if(not(wasi))]
 {
-    import "jslib" { fn wrap(&?any) -> &eq; fn unwrap(&eq) -> &?any; }
+    import "jslib" {
+        fn wrap(&?any) -> &eq;
+        fn unwrap(&eq) -> &?any;
+    }
     import "js" {
         #[import = "caml_jsoo_promise_wrap"]
         fn caml_jsoo_promise_wrap_js(&?any) -> &?any;

@@ -27,7 +27,10 @@ import "obj" {
     fn caml_callback_1(&eq, &eq) -> &eq;
 }
 import "stdlib" fn caml_named_value(&eq) -> &?eq;
-import "fail" { tag ocaml_exception(&eq); tag javascript_exception(&?extern); }
+import "fail" {
+    tag ocaml_exception(&eq);
+    tag javascript_exception(&?extern);
+}
 #[if(wasi)]
 fn caml_wrap_exception(&?extern) -> &eq {
     unreachable;
