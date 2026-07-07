@@ -15,26 +15,19 @@
 // along with this program; if not, write to the Free Software
 // Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
-#[import = ("bigarray", "caml_uint8_array_of_string")]
-fn caml_uint8_array_of_string(&eq) -> &eq;
-#[import = ("jslib", "unwrap")]
-fn unwrap(&eq) -> &?any;
-#[import = ("jslib", "wrap")]
-fn wrap(&?any) -> &eq;
-#[import = ("jslib", "caml_jsstring_of_string")]
-fn caml_jsstring_of_string(&eq) -> &eq;
-#[import = ("bindings", "load_module")]
-fn load_module(&?any) -> &?any;
-#[import = ("bindings", "load_wasmo")]
-fn load_wasmo(&?any);
-#[import = ("bindings", "register_fragments")]
-fn register_fragments(&?any, &?any);
-#[import = ("fail", "caml_failwith")]
-fn caml_failwith(&eq);
-#[import = ("fail", "javascript_exception")]
-tag javascript_exception(&?extern);
-#[import = ("stdlib", "link_info")]
-let link_info: &block;
+import "bigarray" fn caml_uint8_array_of_string(&eq) -> &eq;
+import "jslib" {
+    fn unwrap(&eq) -> &?any;
+    fn wrap(&?any) -> &eq;
+    fn caml_jsstring_of_string(&eq) -> &eq;
+}
+import "bindings" {
+    fn load_module(&?any) -> &?any;
+    fn load_wasmo(&?any);
+    fn register_fragments(&?any, &?any);
+}
+import "fail" { fn caml_failwith(&eq); tag javascript_exception(&?extern); }
+import "stdlib" let link_info: &block;
 
 type block = [mut &eq];
 type bytes = [mut i8];

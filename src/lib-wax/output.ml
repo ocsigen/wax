@@ -1544,6 +1544,72 @@ let print_memdata pp (d : _ Ast.memdata) =
       print_data_bytes pp d.init;
       punctuation pp ";")
 
+let print_limits pp limits =
+  Option.iter
+    (fun (mi, ma) ->
+      space pp ();
+      punctuation pp "[";
+      constant pp (Wax_utils.Uint64.to_string mi);
+      Option.iter
+        (fun m ->
+          punctuation pp ",";
+          space pp ();
+          constant pp (Wax_utils.Uint64.to_string m))
+        ma;
+      punctuation pp "]")
+    limits
+
+(* Print one entry of an [import "module" { ... }] block: its attributes and an
+   [#[import = "name"]] override (when it is imported under a name other than
+   its own), then the declaration itself. *)
+let print_import_decl pp (decl : Ast.import_decl) =
+  print_attr_prefix pp decl.attributes (fun () ->
+      box pp (fun () ->
+          (match decl.kind with
+          | Import_func { typ; sign; exact } ->
+              fundecl ~exact ~tag:false pp (decl.id, typ, sign)
+          | Import_tag { typ; sign } -> fundecl ~tag:true pp (decl.id, typ, sign)
+          | Import_global { mut; typ } ->
+              keyword pp (if mut then "let" else "const");
+              space pp ();
+              identifier pp decl.id.desc;
+              punctuation pp ":";
+              space pp ();
+              valtype pp typ
+          | Import_memory { address_type; limits; page_size_log2; shared } ->
+              keyword pp "memory";
+              space pp ();
+              identifier pp decl.id.desc;
+              punctuation pp ":";
+              space pp ();
+              keyword pp
+                (match address_type with `I32 -> "i32" | `I64 -> "i64");
+              print_limits pp limits;
+              Option.iter
+                (fun p ->
+                  space pp ();
+                  keyword pp "pagesize";
+                  space pp ();
+                  constant pp (Int64.to_string (Int64.shift_left 1L p)))
+                page_size_log2;
+              if shared then (
+                space pp ();
+                keyword pp "shared")
+          | Import_table { address_type; reftype = rt; limits } ->
+              keyword pp "table";
+              space pp ();
+              identifier pp decl.id.desc;
+              punctuation pp ":";
+              space pp ();
+              (match address_type with
+              | `I32 -> ()
+              | `I64 ->
+                  keyword pp "i64";
+                  space pp ());
+              reftype pp rt;
+              print_limits pp limits);
+          semicolon pp))
+
 let rec modulefield pp field =
   atomic_node pp (Some field.info) @@ fun () ->
   match field.desc with
@@ -1587,25 +1653,10 @@ let rec modulefield pp field =
               space pp ();
               instr Instruction pp def;
               semicolon pp))
-  | Fundecl { name; typ; sign; exact; attributes = a } ->
-      print_attr_prefix pp a (fun () ->
-          box pp (fun () ->
-              fundecl ~exact ~tag:false pp (name, typ, sign);
-              semicolon pp))
   | Tag { name; typ; sign; attributes = a } ->
       print_attr_prefix pp a (fun () ->
           box pp (fun () ->
               fundecl ~tag:true pp (name, typ, sign);
-              semicolon pp))
-  | GlobalDecl { name; mut; typ; attributes = a } ->
-      print_attr_prefix pp a (fun () ->
-          box pp ~indent:indent_level (fun () ->
-              keyword pp (if mut then "let" else "const");
-              space pp ();
-              identifier pp name.desc;
-              punctuation pp ":";
-              space pp ();
-              valtype pp typ;
               semicolon pp))
   | Memory
       {
@@ -1745,6 +1796,30 @@ let rec modulefield pp field =
                       fields);
                 space pp ());
               punctuation pp "}"))
+  | Import { module_; decl } ->
+      box pp (fun () ->
+          keyword pp "import";
+          space pp ();
+          print_data_bytes pp module_.desc;
+          space pp ();
+          print_import_decl pp decl.desc)
+  | Import_group { module_; decls } ->
+      hvbox pp (fun () ->
+          box pp (fun () ->
+              keyword pp "import";
+              space pp ();
+              print_data_bytes pp module_.desc;
+              space pp ();
+              punctuation pp "{");
+          if decls <> [] then (
+            indent pp indent_level (fun () ->
+                List.iter
+                  (fun d ->
+                    space pp ();
+                    print_import_decl pp d.desc)
+                  decls);
+            space pp ());
+          punctuation pp "}")
   | Conditional { cond; then_fields; else_fields } ->
       let branch fields =
         match fields with

@@ -1,7 +1,6 @@
 #[if(wasi)]
 {
-    #[import = ("m", "g")]
-    fn g() -> i32;
+    import "m" fn g() -> i32;
 }
 fn h() -> i32 {
     let x: i32;

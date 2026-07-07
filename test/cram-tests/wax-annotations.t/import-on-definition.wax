@@ -1,1 +1,1 @@
-#[import = ("e", "f")] fn f() {}
+#[import = "f"] fn f() {}

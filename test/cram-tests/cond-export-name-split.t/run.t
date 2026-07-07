@@ -5,8 +5,7 @@ function's name is not reused for every split sibling (which used to bind the
 same Wax name twice and fail with "already bound").
 
   $ wax multi.wat -f wax
-  #[import = ("x", "getuid")]
-  fn getuid() -> i32;
+  import "x" fn getuid() -> i32;
   #[if(wasi)]
   #[export]
   #[export = "caml_unix_getuid"]

@@ -41,6 +41,7 @@ let reserved =
       "descriptor";
       "inf";
       "if";
+      "import";
       "is";
       "let";
       "loop";

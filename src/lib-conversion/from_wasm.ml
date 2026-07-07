@@ -2627,12 +2627,6 @@ let exports ctx kind name e =
       else ("export", Some (string_of_name nm)))
     (e @ standalone)
 
-let import module_ name =
-  ( "import",
-    Some
-      (Ast.no_loc
-         (Ast.Sequence [ string_of_name module_; string_of_name name ])) )
-
 (* The [#[start]] attribute, if function [name] is the module's start. *)
 let start_attribute ctx name =
   if ctx.start = Some name.Ast.desc then [ ("start", None) ] else []
@@ -2783,68 +2777,63 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
                attributes = start_attribute ctx name @ exports ctx Func name e;
              })
     | Import { module_; name = nm; desc; exports = e; _ } -> (
+        (* Build a single [import "module" <decl>;]. A name-only
+           [#[import = "name"]] is emitted only when the imported name differs
+           from the Wax name; consecutive same-module imports are grouped into
+           blocks in a later pass. *)
+        let build id kind export_kind =
+          let attributes =
+            (if nm.Ast.desc = id.Ast.desc then []
+             else [ ("import", Some (string_of_name nm)) ])
+            @ exports ctx export_kind id e
+          in
+          Some
+            (Ast.Import
+               {
+                 module_;
+                 decl =
+                   { Ast.desc = { Ast.id; kind; attributes }; info = f.info };
+               })
+        in
         match desc with
         | Func { exact; typ } ->
             let typ, sign = typeuse ctx typ in
-            let name = Sequence.get_current ctx.functions in
-            Some
-              (Fundecl
-                 {
-                   name;
-                   typ;
-                   sign;
-                   exact;
-                   attributes = import module_ nm :: exports ctx Func name e;
-                 })
+            build
+              (Sequence.get_current ctx.functions)
+              (Import_func { typ; sign; exact })
+              Func
         | Tag typ ->
             let typ, sign = typeuse ctx typ in
-            let name = Sequence.get_current ctx.tags in
-            Some
-              (Tag
-                 {
-                   name;
-                   typ;
-                   sign;
-                   attributes = import module_ nm :: exports ctx Tag name e;
-                 })
+            build (Sequence.get_current ctx.tags) (Import_tag { typ; sign }) Tag
         | Global typ ->
             let typ' = globaltype ctx typ in
-            let name = Sequence.get_current ctx.globals in
-            Some
-              (GlobalDecl
-                 {
-                   name;
-                   mut = typ'.mut;
-                   typ = typ'.typ;
-                   attributes = import module_ nm :: exports ctx Global name e;
-                 })
+            build
+              (Sequence.get_current ctx.globals)
+              (Import_global { mut = typ'.mut; typ = typ'.typ })
+              Global
         | Memory lim ->
             let l = lim.Ast.desc in
-            let name = Sequence.get_current ctx.memories in
-            Some
-              (Memory
+            build
+              (Sequence.get_current ctx.memories)
+              (Import_memory
                  {
-                   name;
                    address_type = l.address_type;
                    limits = Some (l.mi, l.ma);
                    page_size_log2 = l.page_size_log2;
                    shared = l.shared;
-                   data = [];
-                   attributes = import module_ nm :: exports ctx Memory name e;
                  })
+              Memory
         | Table tt ->
-            let name = Sequence.get_current ctx.tables in
             let l = tt.Src.limits.Ast.desc in
-            Some
-              (Table
+            build
+              (Sequence.get_current ctx.tables)
+              (Import_table
                  {
-                   name;
                    address_type = l.address_type;
                    reftype = reftype ctx tt.Src.reftype;
                    limits = Some (l.mi, l.ma);
-                   init = None;
-                   attributes = import module_ nm :: exports ctx Table name e;
-                 }))
+                 })
+              Table)
     | Global { typ; init; exports = e; _ } ->
         let typ' = globaltype ctx typ in
         let name = Sequence.get_current ctx.globals in
@@ -3353,6 +3342,60 @@ let extra_type_decls ctx =
   in
   loop []
 
+(* Merge maximal runs of consecutive single imports from the same module into
+   one [import "module" { ... }] block; a lone import stays as the standalone
+   [import "module" <decl>;] form. Recurses through groups and conditionals. *)
+let rec group_imports fields =
+  let recurse f =
+    match f.Ast.desc with
+    | Ast.Group g ->
+        {
+          f with
+          Ast.desc = Ast.Group { g with fields = group_imports g.fields };
+        }
+    | Ast.Conditional c ->
+        {
+          f with
+          Ast.desc =
+            Ast.Conditional
+              {
+                c with
+                then_fields = group_imports c.then_fields;
+                else_fields = Option.map group_imports c.else_fields;
+              };
+        }
+    | _ -> f
+  in
+  let rec merge = function
+    | [] -> []
+    | f :: rest -> (
+        match f.Ast.desc with
+        | Ast.Import { module_; decl } ->
+            let rec take acc = function
+              | g :: tl
+                when match g.Ast.desc with
+                     | Ast.Import { module_ = m2; _ } ->
+                         m2.Ast.desc = module_.desc
+                     | _ -> false ->
+                  let d =
+                    match g.Ast.desc with
+                    | Ast.Import { decl; _ } -> decl
+                    | _ -> assert false
+                  in
+                  take (d :: acc) tl
+              | tl -> (List.rev acc, tl)
+            in
+            let decls, tl = take [ decl ] rest in
+            let field =
+              match decls with
+              | [ _ ] -> f
+              | _ -> { f with Ast.desc = Ast.Import_group { module_; decls } }
+            in
+            field :: merge tl
+        | _ -> f :: merge rest)
+  in
+  merge (List.map recurse fields)
+
 let module_ ?(strict_constants = false) diagnostics (module_name, fields) =
   Wax_utils.Debug.timed "convert" @@ fun () ->
   try
@@ -3472,7 +3515,7 @@ let module_ ?(strict_constants = false) diagnostics (module_name, fields) =
           ]
       | None -> []
     in
-    name_annotation @ recovered
+    name_annotation @ group_imports recovered
   with
   | Numeric_ref_in_conditional location ->
       Wax_utils.Diagnostic.report diagnostics ~location ~severity:Error

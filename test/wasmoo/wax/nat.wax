@@ -21,16 +21,9 @@
 // are unsigned. Carry-sensitive arithmetic is done in i64 to mirror the
 // JS implementation's use of doubles.
 
-#[import = ("marshal", "caml_serialize_int_4")]
-fn caml_serialize_int_4(&eq, i32);
-#[import = ("marshal", "caml_deserialize_int_4")]
-fn caml_deserialize_int_4(&eq) -> i32;
-#[import = ("hash", "caml_hash_mix_int")]
-fn caml_hash_mix_int(i32, i32) -> i32;
-#[import = ("int32", "caml_copy_nativeint")]
-fn caml_copy_nativeint(i32) -> &eq;
-#[import = ("int32", "Nativeint_val")]
-fn Nativeint_val(&eq) -> i32;
+import "marshal" { fn caml_serialize_int_4(&eq, i32); fn caml_deserialize_int_4(&eq) -> i32; }
+import "hash" fn caml_hash_mix_int(i32, i32) -> i32;
+import "int32" { fn caml_copy_nativeint(i32) -> &eq; fn Nativeint_val(&eq) -> i32; }
 
 type bytes = [mut i8];
 type compare = fn(&eq, &eq, i32) -> i32;

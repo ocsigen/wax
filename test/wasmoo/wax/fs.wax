@@ -18,96 +18,65 @@
 #[if(wasi)]
 {
     type path_op = fn(i32, i32, i32) -> i32;
-    #[import = ("libc", "memory")]
-    memory m: i32 [2];
-    #[import = ("libc", "free")]
-    fn free(i32);
-    #[import = ("wasi_memory", "checked_malloc")]
-    fn checked_malloc(i32) -> i32;
-    #[import = ("wasi_memory", "get_buffer")]
-    fn get_buffer() -> i32;
-    #[import = ("wasi_memory", "write_string_to_memory")]
-    fn write_string_to_memory(i32, i32, &eq) -> i32;
-    #[import = ("wasi_memory", "blit_memory_to_string")]
-    fn blit_memory_to_string(i32, i32) -> &bytes;
-    #[import = ("wasi_snapshot_preview1", "fd_prestat_get")]
-    fn fd_prestat_get(i32, i32) -> i32;
-    #[import = ("wasi_snapshot_preview1", "fd_prestat_dir_name")]
-    fn fd_prestat_dir_name(i32, i32, i32) -> i32;
-    #[import = ("wasi_snapshot_preview1", "path_rename")]
-    fn path_rename(i32, i32, i32, i32, i32, i32) -> i32;
-    #[import = ("wasi_snapshot_preview1", "path_unlink_file")]
-    fn path_unlink_file: path_op ;
-    #[import = ("wasi_snapshot_preview1", "path_create_directory")]
-    fn path_create_directory: path_op ;
-    #[import = ("wasi_snapshot_preview1", "path_remove_directory")]
-    fn path_remove_directory: path_op ;
-    #[import = ("wasi_snapshot_preview1", "path_filestat_get")]
-    fn path_filestat_get(i32, i32, i32, i32, i32) -> i32;
-    #[import = ("wasi_snapshot_preview1", "path_open")]
-    fn path_open(i32, i32, i32, i32, i32, i64, i64, i32, i32) -> i32;
-    #[import = ("wasi_snapshot_preview1", "fd_readdir")]
-    fn fd_readddir(i32, i32, i32, i64, i32) -> i32;
-    #[import = ("wasi_snapshot_preview1", "fd_close")]
-    fn fd_close(i32) -> i32;
-    #[import = ("sys", "caml_handle_sys_error")]
-    fn caml_handle_sys_error(&eq, i32);
-    #[import = ("sys", "caml_handle_sys_error_if")]
-    fn caml_handle_sys_error_if(&eq, i32);
+    import "libc" {
+        #[import = "memory"]
+        memory m: i32 [2];
+        fn free(i32);
+    }
+    import "wasi_memory" {
+        fn checked_malloc(i32) -> i32;
+        fn get_buffer() -> i32;
+        fn write_string_to_memory(i32, i32, &eq) -> i32;
+        fn blit_memory_to_string(i32, i32) -> &bytes;
+    }
+    import "wasi_snapshot_preview1" {
+        fn fd_prestat_get(i32, i32) -> i32;
+        fn fd_prestat_dir_name(i32, i32, i32) -> i32;
+        fn path_rename(i32, i32, i32, i32, i32, i32) -> i32;
+        fn path_unlink_file: path_op ;
+        fn path_create_directory: path_op ;
+        fn path_remove_directory: path_op ;
+        fn path_filestat_get(i32, i32, i32, i32, i32) -> i32;
+        fn path_open(i32, i32, i32, i32, i32, i64, i64, i32, i32) -> i32;
+        #[import = "fd_readdir"]
+        fn fd_readddir(i32, i32, i32, i64, i32) -> i32;
+        fn fd_close(i32) -> i32;
+    }
+    import "sys" { fn caml_handle_sys_error(&eq, i32); fn caml_handle_sys_error_if(&eq, i32); }
 }
 #[else]
 {
-    #[import = ("bindings", "on_windows")]
-    const on_windows: i32;
-    #[import = ("bindings", "getcwd")]
-    fn getcwd() -> &?any;
-    #[import = ("bindings", "chdir")]
-    fn chdir(&?any);
-    #[import = ("bindings", "mkdir")]
-    fn mkdir(&?any, i32);
-    #[import = ("bindings", "rmdir")]
-    fn rmdir(&?any);
-    #[import = ("bindings", "unlink")]
-    fn unlink(&?any);
-    #[import = ("bindings", "tmpdir")]
-    fn tmpdir() -> &?any;
-    #[import = ("bindings", "read_dir")]
-    fn read_dir(&?any) -> &extern;
-    #[import = ("bindings", "file_exists")]
-    fn file_exists(&?any) -> &eq;
-    #[import = ("bindings", "is_directory")]
-    fn is_directory(&?any) -> &eq;
-    #[import = ("bindings", "is_file")]
-    fn is_file(&?any) -> &eq;
-    #[import = ("bindings", "rename")]
-    fn rename(&?any, &?any);
-    #[import = ("jslib", "wrap")]
-    fn wrap(&?any) -> &eq;
-    #[import = ("jslib", "unwrap")]
-    fn unwrap(&eq) -> &?any;
-    #[import = ("jslib", "caml_string_of_jsstring")]
-    fn caml_string_of_jsstring(&eq) -> &eq;
-    #[import = ("jslib", "caml_jsstring_of_string")]
-    fn caml_jsstring_of_string(&eq) -> &eq;
-    #[import = ("jslib", "caml_js_to_string_array")]
-    fn caml_js_to_string_array(a: &extern) -> &eq;
-    #[import = ("fail", "javascript_exception")]
-    tag javascript_exception(&?extern);
-    #[import = ("sys", "caml_handle_sys_error")]
-    fn caml_handle_sys_error(&?extern);
-    #[import = ("bigarray", "caml_uint8_array_of_string")]
-    fn caml_uint8_array_of_string(&eq) -> &eq;
-    #[import = ("bigarray", "caml_string_of_uint8_array")]
-    fn caml_string_of_uint8_array(&eq) -> &eq;
+    import "bindings" {
+        const on_windows: i32;
+        fn getcwd() -> &?any;
+        fn chdir(&?any);
+        fn mkdir(&?any, i32);
+        fn rmdir(&?any);
+        fn unlink(&?any);
+        fn tmpdir() -> &?any;
+        fn read_dir(&?any) -> &extern;
+        fn file_exists(&?any) -> &eq;
+        fn is_directory(&?any) -> &eq;
+        fn is_file(&?any) -> &eq;
+        fn rename(&?any, &?any);
+    }
+    import "jslib" {
+        fn wrap(&?any) -> &eq;
+        fn unwrap(&eq) -> &?any;
+        fn caml_string_of_jsstring(&eq) -> &eq;
+        fn caml_jsstring_of_string(&eq) -> &eq;
+        fn caml_js_to_string_array(a: &extern) -> &eq;
+    }
+    import "fail" tag javascript_exception(&?extern);
+    import "sys" fn caml_handle_sys_error(&?extern);
+    import "bigarray" {
+        fn caml_uint8_array_of_string(&eq) -> &eq;
+        fn caml_string_of_uint8_array(&eq) -> &eq;
+    }
 }
-#[import = ("string", "caml_string_concat")]
-fn caml_string_concat(&eq, &eq) -> &eq;
-#[import = ("fail", "caml_raise_sys_error")]
-fn caml_raise_sys_error(&eq);
-#[import = ("bindings", "register_file")]
-fn register_file(&?any, &?any);
-#[import = ("bindings", "read_file")]
-fn read_file(&?any) -> &?any;
+import "string" fn caml_string_concat(&eq, &eq) -> &eq;
+import "fail" fn caml_raise_sys_error(&eq);
+import "bindings" { fn register_file(&?any, &?any); fn read_file(&?any) -> &?any; }
 
 type bytes = [mut i8];
 type block = [mut &eq];

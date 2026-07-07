@@ -1,2 +1,2 @@
 type ft = fn(i32) -> i32;
-#[import = ("m", "n")] fn f: ft (i32) -> i32;
+import "m" #[import = "n"] fn f: ft (i32) -> i32;

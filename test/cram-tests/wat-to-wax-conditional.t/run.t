@@ -42,21 +42,9 @@ not produce an infeasible configuration, so the result type-checks.
   // import (the converter must visit @then before @else, matching the order
   // names were registered).
   #[if(wasi)]
-  {
-      #[import = ("a", "x")]
-      fn x() -> i32;
-      #[import = ("a", "g")]
-      fn g() -> i32;
-  }
+  import "a" { fn x() -> i32; fn g() -> i32; }
   #[else]
-  {
-      #[import = ("b", "y")]
-      fn y() -> i32;
-      #[import = ("b", "g")]
-      fn g() -> i32;
-      #[import = ("b", "z")]
-      fn z() -> i32;
-  }
+  import "b" { fn y() -> i32; fn g() -> i32; fn z() -> i32; }
   // A sibling conditional on the negated condition. $h is defined and used
   // only when (not $wasi); the explorer must not build the infeasible
   // $wasi & (not $wasi) configuration where $h would be used but undefined.

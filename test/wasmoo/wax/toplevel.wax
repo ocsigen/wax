@@ -17,34 +17,25 @@
 
 #[if(not(wasi))]
 {
-    #[import = ("stdlib", "caml_global_data")]
-    let caml_global_data: &block;
-    #[import = ("stdlib", "link_info")]
-    let link_info: &block;
-    #[import = ("obj", "caml_callback_2")]
-    fn caml_callback_2(&eq, &eq, &eq) -> &eq;
-    #[import = ("fail", "caml_failwith")]
-    fn caml_failwith(&eq);
-    #[import = ("string", "caml_string_concat")]
-    fn caml_string_concat(&eq, &eq) -> &eq;
-    #[import = ("jslib", "wrap")]
-    fn wrap(&?any) -> &eq;
-    #[import = ("jslib", "unwrap")]
-    fn unwrap(&eq) -> &?any;
-    #[import = ("jslib", "caml_jsstring_of_string")]
-    fn caml_jsstring_of_string(&eq) -> &eq;
-    #[import = ("jslib", "caml_string_of_jsstring")]
-    fn caml_string_of_jsstring(&eq) -> &eq;
-    #[import = ("bindings", "get_ocaml_unit_list")]
-    fn get_ocaml_unit_list() -> &?any;
-    #[import = ("bindings", "get_prim_list")]
-    fn get_prim_list() -> &?any;
-    #[import = ("bindings", "get_crcs")]
-    fn get_crcs() -> &?any;
-    #[import = ("bigarray", "caml_ba_to_typed_array")]
-    fn caml_ba_to_typed_array(&eq) -> &eq;
-    #[import = ("bigarray", "caml_string_of_uint8_array")]
-    fn caml_string_of_uint8_array(&eq) -> &eq;
+    import "stdlib" { let caml_global_data: &block; let link_info: &block; }
+    import "obj" fn caml_callback_2(&eq, &eq, &eq) -> &eq;
+    import "fail" fn caml_failwith(&eq);
+    import "string" fn caml_string_concat(&eq, &eq) -> &eq;
+    import "jslib" {
+        fn wrap(&?any) -> &eq;
+        fn unwrap(&eq) -> &?any;
+        fn caml_jsstring_of_string(&eq) -> &eq;
+        fn caml_string_of_jsstring(&eq) -> &eq;
+    }
+    import "bindings" {
+        fn get_ocaml_unit_list() -> &?any;
+        fn get_prim_list() -> &?any;
+        fn get_crcs() -> &?any;
+    }
+    import "bigarray" {
+        fn caml_ba_to_typed_array(&eq) -> &eq;
+        fn caml_string_of_uint8_array(&eq) -> &eq;
+    }
 
     type block = [mut &eq];
     type bytes = [mut i8];

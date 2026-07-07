@@ -73,3 +73,7 @@ val confusing_precedence : binop_kind -> binop_kind -> bool
     [outer] whose operand is a binary operator of kind [inner] is a precedence
     footgun — a shift mixed with arithmetic, or a comparison mixed with a
     bitwise operator. Symmetric. *)
+
+val import_name : Ast.import_decl -> (string, Ast.location) Ast.annotated
+(** [import_name decl] is the name [decl] is imported under: its [import_as]
+    override if present, else the Wax name [decl.id]. *)

@@ -1,14 +1,16 @@
-(* A bare-word keyword of the Wax lexer must be registered in three places, two
-   of which fail silently when forgotten:
+(* A bare-word keyword of the Wax lexer must be registered in several places,
+   most of which fail silently when forgotten:
 
    - [src/lib-wax/lexer.ml]        the keyword itself (source of truth)
    - [src/lib-wax/parser.mly]      [ident_or_keyword], so it still works as a label
    - [src/lib-conversion/namespace.ml] [reserved], so [from_wasm] renames a
                                     generated entity that would collide with it
+   - [editors/vscode/syntaxes/wax.tmLanguage.json] a keyword-highlighting rule,
+                                    so the editor grammar colours it
 
    This test extracts the keyword set from the lexer and checks each one appears
-   in the other two lists, so adding a keyword without updating them fails the
-   build with the exact culprit named. It relies on the Wax lexer having no
+   in the other lists, so adding a keyword without updating them fails the build
+   with the exact culprit named. It relies on the Wax lexer having no
    instruction-mnemonic keywords (unlike the Wasm lexer), so its bare lowercase
    arms are exactly the structural keywords. *)
 
@@ -38,10 +40,12 @@ let region ~start ~stop text =
   String.sub text i (j - i)
 
 let () =
-  let lexer, parser_, namespace =
+  let lexer, parser_, namespace, grammar =
     match Sys.argv with
-    | [| _; a; b; c |] -> (a, b, c)
-    | _ -> failwith "usage: check_keywords lexer.ml parser.mly namespace.ml"
+    | [| _; a; b; c; d |] -> (a, b, c, d)
+    | _ ->
+        failwith
+          "usage: check_keywords lexer.ml parser.mly namespace.ml grammar.json"
   in
   (* Bare lowercase keyword arms [| "word" -> TOKEN], excluding the [_] hole. *)
   let keywords =
@@ -56,19 +60,41 @@ let () =
     region ~start:"let reserved =" ~stop:"]" (read_file namespace)
     |> all_group1 (Str.regexp {|"\([a-z_]+\)"|})
   in
+  (* The words listed in the grammar's keyword-highlighting rules, which have the
+     shape ["match": "\\b(word|word|...)\\b"]. *)
+  let grammar_words =
+    all_group1 (Str.regexp {|\\\\b(\([a-z_|]+\))|}) (read_file grammar)
+    |> List.concat_map (String.split_on_char '|')
+    |> List.sort_uniq compare
+  in
+  (* A keyword the lexer defines but a list forgets (adding a keyword without
+     registering it). *)
   let missing_from name set =
     List.filter (fun k -> not (List.mem k set)) keywords
-    |> List.map (fun k -> (k, name))
+    |> List.map (fun k -> Printf.sprintf "keyword %S is missing from %s" k name)
   in
+  (* A list entry that is no longer a lexer keyword (removing a keyword without
+     cleaning up). Only checked for the lists that hold exactly the keyword set;
+     the grammar also highlights non-keyword words (attribute names, …), so it
+     is checked one way only. *)
+  let stale_in name set =
+    List.filter (fun k -> not (List.mem k keywords)) set
+    |> List.map (fun k ->
+        Printf.sprintf "%S in %s is not a lexer keyword" k name)
+  in
+  let ident_or_keyword_name = "ident_or_keyword (src/lib-wax/parser.mly)" in
+  let reserved_name = "reserved (src/lib-conversion/namespace.ml)" in
   let problems =
-    missing_from "ident_or_keyword (src/lib-wax/parser.mly)" ident_or_keyword
-    @ missing_from "reserved (src/lib-conversion/namespace.ml)" reserved
+    missing_from ident_or_keyword_name ident_or_keyword
+    @ missing_from reserved_name reserved
+    @ missing_from
+        "keyword highlighting (editors/vscode/syntaxes/wax.tmLanguage.json)"
+        grammar_words
+    @ stale_in ident_or_keyword_name ident_or_keyword
+    @ stale_in reserved_name reserved
   in
   match problems with
   | [] -> ()
   | _ ->
-      List.iter
-        (fun (kw, where) ->
-          Printf.eprintf "keyword %S is missing from %s\n" kw where)
-        problems;
+      List.iter (fun m -> Printf.eprintf "%s\n" m) problems;
       exit 1

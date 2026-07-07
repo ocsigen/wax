@@ -15,17 +15,11 @@
 // along with this program; if not, write to the Free Software
 // Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
-#[import = ("fail", "caml_failwith")]
-fn caml_failwith(&eq);
-#[import = ("custom", "caml_is_custom")]
-fn caml_is_custom(&eq) -> i32;
-#[import = ("custom", "caml_dup_custom")]
-fn caml_dup_custom(&eq) -> &eq;
-#[import = ("effect", "caml_is_continuation")]
-fn caml_is_continuation(&eq) -> i32;
+import "fail" fn caml_failwith(&eq);
+import "custom" { fn caml_is_custom(&eq) -> i32; fn caml_dup_custom(&eq) -> &eq; }
+import "effect" fn caml_is_continuation(&eq) -> i32;
 #[if(effects = "cps")]
-#[import = ("effect", "caml_cps_trampoline")]
-fn caml_cps_trampoline(&eq, &eq) -> &eq;
+import "effect" fn caml_cps_trampoline(&eq, &eq) -> &eq;
 
 type block = [mut &eq];
 type bytes = [mut i8];

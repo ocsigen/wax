@@ -15,65 +15,40 @@
 // along with this program; if not, write to the Free Software
 // Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
-#[import = ("jslib", "wrap")]
-fn wrap(&?any) -> &eq;
-#[import = ("jslib", "unwrap")]
-fn unwrap(&eq) -> &?any;
-#[import = ("jslib", "caml_js_get")]
-fn caml_js_get(&eq, &eq) -> &eq;
-#[import = ("bigarray", "caml_ba_to_typed_array")]
-#[export = "bigstring_to_typed_array"]
-fn caml_ba_to_typed_array(&eq) -> &eq;
-#[import = ("bigarray", "caml_ba_from_typed_array")]
-fn caml_ba_from_typed_array(&eq) -> &eq;
-#[import = ("bigarray", "caml_ba_char_of_typed_array")]
-fn caml_ba_char_of_typed_array(&eq) -> &eq;
-#[import = ("bigarray", "caml_ba_sub")]
-fn caml_ba_sub(&eq, &eq, &eq) -> &eq;
-#[import = ("bigarray", "caml_ba_fill")]
-fn caml_ba_fill(&eq, &eq) -> &eq;
-#[import = ("bigarray", "caml_ba_get_data")]
-fn caml_ba_get_data(&eq) -> &extern;
-#[import = ("bigarray", "caml_ba_get_view")]
-fn caml_ba_get_view(&eq) -> &extern;
-#[import = ("bigarray", "caml_ba_num_elts")]
-fn caml_ba_num_elts(&eq) -> i32;
-#[import = ("bigarray", "caml_blit_dataview_to_bytes")]
-fn caml_blit_dataview_to_bytes(&extern, i32, &bytes, i32, i32);
-#[import = ("bigarray", "caml_blit_bytes_to_dataview")]
-fn caml_blit_bytes_to_dataview(&bytes, i32, &extern, i32, i32);
+import "jslib" { fn wrap(&?any) -> &eq; fn unwrap(&eq) -> &?any; fn caml_js_get(&eq, &eq) -> &eq; }
+import "bigarray" {
+    #[export = "bigstring_to_typed_array"]
+    fn caml_ba_to_typed_array(&eq) -> &eq;
+    fn caml_ba_from_typed_array(&eq) -> &eq;
+    fn caml_ba_char_of_typed_array(&eq) -> &eq;
+    fn caml_ba_sub(&eq, &eq, &eq) -> &eq;
+    fn caml_ba_fill(&eq, &eq) -> &eq;
+    fn caml_ba_get_data(&eq) -> &extern;
+    fn caml_ba_get_view(&eq) -> &extern;
+    fn caml_ba_num_elts(&eq) -> i32;
+    fn caml_blit_dataview_to_bytes(&extern, i32, &bytes, i32, i32);
+    fn caml_blit_bytes_to_dataview(&bytes, i32, &extern, i32, i32);
+}
 #[if(wasi)]
-{
-    #[import = ("bigarray", "ta_subarray")]
+import "bigarray" {
     fn ta_subarray(&extern, i32, i32) -> &extern;
-    #[import = ("bigarray", "ta_set")]
     fn ta_set(&extern, &extern, i32);
-    #[import = ("bigarray", "dv_get_i32_unaligned")]
     fn dv_get_i32_unaligned(&extern, i32, i32) -> i32;
-    #[import = ("bigarray", "dv_get_ui8")]
     fn dv_get_ui8(&extern, i32) -> i32;
-    #[import = ("bigarray", "dv_set_i8")]
     fn dv_set_i8(&extern, i32, i32);
 }
 #[else]
-{
-    #[import = ("bindings", "ta_create")]
+import "bindings" {
     fn ta_create(i32, &?any) -> &?any;
-    #[import = ("bindings", "dv_get_i32")]
+    #[import = "dv_get_i32"]
     fn dv_get_i32_unaligned(&?extern, i32, i32) -> i32;
-    #[import = ("bindings", "dv_get_ui8")]
     fn dv_get_ui8(&?extern, i32) -> i32;
-    #[import = ("bindings", "dv_set_i8")]
     fn dv_set_i8(&?extern, i32, i32);
-    #[import = ("bindings", "ta_subarray")]
     fn ta_subarray(&extern, i32, i32) -> &extern;
-    #[import = ("bindings", "ta_set")]
     fn ta_set(&extern, &extern, i32);
-    #[import = ("bindings", "ta_bytes")]
     fn ta_bytes(&?any) -> &?any;
 }
-#[import = ("hash", "caml_hash_mix_int")]
-fn caml_hash_mix_int(i32, i32) -> i32;
+import "hash" fn caml_hash_mix_int(i32, i32) -> i32;
 
 type bytes = [mut i8];
 

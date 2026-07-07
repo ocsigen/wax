@@ -15,20 +15,12 @@
 // along with this program; if not, write to the Free Software
 // Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
-#[import = ("float32", "float32_ops")]
-const float32_ops: &custom_operations;
-#[import = ("int32", "int32_ops")]
-const int32_ops: &custom_operations;
-#[import = ("int32", "nativeint_ops")]
-const nativeint_ops: &custom_operations;
-#[import = ("int64", "int64_ops")]
-const int64_ops: &custom_operations;
-#[import = ("bigarray", "bigarray_ops")]
-const bigarray_ops: &custom_operations;
-#[import = ("nat", "nat_ops")]
-const nat_ops: &custom_operations;
-#[import = ("string", "caml_bytes_equal")]
-fn caml_bytes_equal(&eq, &eq) -> &eq;
+import "float32" const float32_ops: &custom_operations;
+import "int32" { const int32_ops: &custom_operations; const nativeint_ops: &custom_operations; }
+import "int64" const int64_ops: &custom_operations;
+import "bigarray" const bigarray_ops: &custom_operations;
+import "nat" const nat_ops: &custom_operations;
+import "string" fn caml_bytes_equal(&eq, &eq) -> &eq;
 
 type bytes = [mut i8];
 type compare = fn(&eq, &eq, i32) -> i32;

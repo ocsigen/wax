@@ -6,8 +6,7 @@ it is materialised as a named [type] declaration on decompilation.
   $ wax ref.wat -f wax
   type t = fn(i32) -> i64;
   // An inline function-import signature synthesises an implicit type (index 0).
-  #[import = ("env", "f")]
-  fn f(i32) -> i64;
+  import "env" fn f(i32) -> i64;
   // Referencing that implicit type from a ref-type position: Wax has no inline
   // function-type form here, so it is given a name and a `type` declaration.
   let g: &?t = null;

@@ -15,10 +15,8 @@
 // along with this program; if not, write to the Free Software
 // Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
-#[import = ("obj", "caml_callback_1")]
-fn caml_callback_1(&eq, &eq) -> &eq;
-#[import = ("fail", "caml_invalid_argument")]
-fn caml_invalid_argument(&eq);
+import "obj" fn caml_callback_1(&eq, &eq) -> &eq;
+import "fail" fn caml_invalid_argument(&eq);
 
 type float = { f: f64 };
 type block = [mut &eq];

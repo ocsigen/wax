@@ -17,36 +17,33 @@
 
 #[if(ocaml_version >= (5, 1, 0))]
 {
-    #[import = ("fail", "caml_failwith")]
-    fn caml_failwith(&eq);
-    #[import = ("marshal", "caml_intern_decompress_input")]
-    let caml_intern_decompress_input: &?decompress;
-    #[import = ("zstd", "zstd_memory")]
-    memory m: i32 [2];
-    #[import = ("zstd", "zstd_reset")]
-    fn zstd_reset();
-    #[import = ("zstd", "zstd_alloc")]
-    fn zstd_alloc(i32) -> i32;
-    #[import = ("zstd", "zstd_decompress")]
-    fn zstd_decompress(i32, i32, i32, i32) -> i32;
-    #[import = ("zstd", "zstd_window_size")]
-    fn window_size(i32, i32) -> i32;
-    #[import = ("zstd", "zstd_in_buf")]
-    fn in_buf() -> i32;
-    #[import = ("zstd", "zstd_in_cap")]
-    fn in_cap() -> i32;
-    #[import = ("zstd", "zstd_out_buf")]
-    fn out_buf() -> i32;
-    #[import = ("zstd", "zstd_stream_init")]
-    fn stream_init() -> i32;
-    #[import = ("zstd", "zstd_stream_set_input")]
-    fn stream_set_input(i32);
-    #[import = ("zstd", "zstd_stream_run")]
-    fn stream_run() -> i32;
-    #[import = ("zstd", "zstd_out_produced")]
-    fn out_produced() -> i32;
-    #[import = ("zstd", "zstd_in_done")]
-    fn in_done() -> i32;
+    import "fail" fn caml_failwith(&eq);
+    import "marshal" let caml_intern_decompress_input: &?decompress;
+    import "zstd" {
+        #[import = "zstd_memory"]
+        memory m: i32 [2];
+        fn zstd_reset();
+        fn zstd_alloc(i32) -> i32;
+        fn zstd_decompress(i32, i32, i32, i32) -> i32;
+        #[import = "zstd_window_size"]
+        fn window_size(i32, i32) -> i32;
+        #[import = "zstd_in_buf"]
+        fn in_buf() -> i32;
+        #[import = "zstd_in_cap"]
+        fn in_cap() -> i32;
+        #[import = "zstd_out_buf"]
+        fn out_buf() -> i32;
+        #[import = "zstd_stream_init"]
+        fn stream_init() -> i32;
+        #[import = "zstd_stream_set_input"]
+        fn stream_set_input(i32);
+        #[import = "zstd_stream_run"]
+        fn stream_run() -> i32;
+        #[import = "zstd_out_produced"]
+        fn out_produced() -> i32;
+        #[import = "zstd_in_done"]
+        fn in_done() -> i32;
+    }
 
     type bytes = [mut i8];
     type decompress = fn(&bytes, i32, i32, i32) -> &bytes;

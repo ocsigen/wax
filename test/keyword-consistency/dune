@@ -12,10 +12,12 @@
   check_keywords.exe
   %{project_root}/src/lib-wax/lexer.ml
   %{project_root}/src/lib-wax/parser.mly
-  %{project_root}/src/lib-conversion/namespace.ml)
+  %{project_root}/src/lib-conversion/namespace.ml
+  %{project_root}/editors/vscode/syntaxes/wax.tmLanguage.json)
  (action
   (run
    ./check_keywords.exe
    %{project_root}/src/lib-wax/lexer.ml
    %{project_root}/src/lib-wax/parser.mly
-   %{project_root}/src/lib-conversion/namespace.ml)))
+   %{project_root}/src/lib-conversion/namespace.ml
+   %{project_root}/editors/vscode/syntaxes/wax.tmLanguage.json)))

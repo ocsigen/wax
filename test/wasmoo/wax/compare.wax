@@ -15,30 +15,20 @@
 // along with this program; if not, write to the Free Software
 // Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
-#[import = ("bindings", "equals")]
-fn equals(&?any, &?any) -> i32;
-#[import = ("obj", "forward_tag")]
-const forward_tag: i32;
-#[import = ("obj", "object_tag")]
-const object_tag: i32;
-#[import = ("obj", "double_array_tag")]
-const double_array_tag: i32;
-#[import = ("obj", "caml_obj_tag")]
-fn caml_obj_tag(&eq) -> &eq;
-#[import = ("obj", "caml_is_closure")]
-fn caml_is_closure(&eq) -> i32;
-#[import = ("obj", "null")]
-const null_value: &eq;
-#[import = ("fail", "caml_invalid_argument")]
-fn caml_invalid_argument(&eq);
-#[import = ("effect", "caml_is_continuation")]
-fn caml_is_continuation(&eq) -> i32;
-#[import = ("string", "caml_string_compare")]
-fn caml_string_compare(&eq, &eq) -> &eq;
-#[import = ("jsstring", "jsstring_test")]
-fn jsstring_test(&?any) -> i32;
-#[import = ("jsstring", "jsstring_compare")]
-fn jsstring_compare(&?any, &?any) -> i32;
+import "bindings" fn equals(&?any, &?any) -> i32;
+import "obj" {
+    const forward_tag: i32;
+    const object_tag: i32;
+    const double_array_tag: i32;
+    fn caml_obj_tag(&eq) -> &eq;
+    fn caml_is_closure(&eq) -> i32;
+    #[import = "null"]
+    const null_value: &eq;
+}
+import "fail" fn caml_invalid_argument(&eq);
+import "effect" fn caml_is_continuation(&eq) -> i32;
+import "string" fn caml_string_compare(&eq, &eq) -> &eq;
+import "jsstring" { fn jsstring_test(&?any) -> i32; fn jsstring_compare(&?any, &?any) -> i32; }
 
 type block = [mut &eq];
 type bytes = [mut i8];

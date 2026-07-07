@@ -3,10 +3,10 @@ function type, just as a tag does.
 
   $ wax check bad.wax
   Error: Expected function type.
-   ──➤  bad.wax:2:30
+   ──➤  bad.wax:2:34
   1 │ type point = { x: i32, y: i32 };
-  2 │ #[import = ("m", "n")] fn f: point;
-    ·                              ^^^^^
+  2 │ import "m" #[import = "n"] fn f: point;
+    ·                                  ^^^^^
   3 │ 
   [128]
 
@@ -21,10 +21,10 @@ signature must match the referenced type (this holds for tags too):
 
   $ wax check inline-bad.wax
   Error: The inline function type does not match the type definition.
-   ──➤  inline-bad.wax:2:30
+   ──➤  inline-bad.wax:2:34
   1 │ type ft = fn(i32) -> i32;
-  2 │ #[import = ("m", "n")] fn f: ft (f64) -> f64;
-    ·                              ^^
+  2 │ import "m" #[import = "n"] fn f: ft (f64) -> f64;
+    ·                                  ^^
   3 │ 
   [128]
 

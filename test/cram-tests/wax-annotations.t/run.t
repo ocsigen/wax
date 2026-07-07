@@ -1,6 +1,5 @@
 Annotations are validated: only known ones are accepted, their values must be
-well-formed, they may appear only where they are meaningful, and a body-less
-declaration must be imported.
+well-formed, and they may appear only where they are meaningful.
 
 An unknown annotation is rejected:
 
@@ -12,8 +11,8 @@ An unknown annotation is rejected:
   2 │ 
   [128]
 
-The export annotation takes a string; the import annotation takes a module and
-name:
+The export annotation takes a string; inside an import block the name-only
+import annotation also takes a string:
 
   $ wax check export-bad-value.wax
   Error: The export annotation expects a string.
@@ -23,40 +22,31 @@ name:
   2 │ 
   [128]
   $ wax check import-bad-value.wax
-  Error: The import annotation expects a module and name, e.g. ("env", "f").
-   ──➤  import-bad-value.wax:1:12
-  1 │ #[import = "env"] fn f();
-    ·            ^^^^^
+  Error: The import annotation expects a string.
+   ──➤  import-bad-value.wax:1:23
+  1 │ import "m" #[import = 5] fn f();
+    ·                       ^
   2 │ 
   [128]
 
-import is for declarations, not definitions:
+The import annotation overrides an imported name, so it is meaningful only on an
+import, not a definition:
 
   $ wax check import-on-definition.wax
   Error: The import annotation is not allowed here.
    ──➤  import-on-definition.wax:1:12
-  1 │ #[import = ("e", "f")] fn f() {}
-    ·            ^^^^^^^^^^
+  1 │ #[import = "f"] fn f() {}
+    ·            ^^^
   2 │ 
   [128]
 
-A field can have at most one import:
+An import can have at most one import-name annotation:
 
   $ wax check two-imports.wax
-  Error: A field can have at most one import annotation.
-   ──➤  two-imports.wax:1:35
-  1 │ #[import = ("a", "b")] #[import = ("c", "d")] fn f();
-    ·                                   ^^^^^^^^^^
-  2 │ 
-  [128]
-
-A function (or global) declaration with no body needs an import:
-
-  $ wax check decl-no-import.wax
-  Error: This declaration has no definition; it needs an import annotation.
-   ──➤  decl-no-import.wax:1:1
-  1 │ fn f();
-    · ^^^^^^^
+  Error: An import can have at most one import-name annotation.
+   ──➤  two-imports.wax:1:39
+  1 │ import "a" #[import = "b"] #[import = "c"] fn f();
+    ·                                       ^^^
   2 │ 
   [128]
 

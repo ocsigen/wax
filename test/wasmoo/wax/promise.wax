@@ -21,14 +21,13 @@
 
 #[if(not(wasi))]
 {
-    #[import = ("jslib", "wrap")]
-    fn wrap(&?any) -> &eq;
-    #[import = ("jslib", "unwrap")]
-    fn unwrap(&eq) -> &?any;
-    #[import = ("js", "caml_jsoo_promise_wrap")]
-    fn caml_jsoo_promise_wrap_js(&?any) -> &?any;
-    #[import = ("js", "caml_jsoo_promise_unwrap")]
-    fn caml_jsoo_promise_unwrap_js(&?any) -> &?any;
+    import "jslib" { fn wrap(&?any) -> &eq; fn unwrap(&eq) -> &?any; }
+    import "js" {
+        #[import = "caml_jsoo_promise_wrap"]
+        fn caml_jsoo_promise_wrap_js(&?any) -> &?any;
+        #[import = "caml_jsoo_promise_unwrap"]
+        fn caml_jsoo_promise_unwrap_js(&?any) -> &?any;
+    }
 
     #[export]
     fn caml_jsoo_promise_wrap(v: &eq) -> &eq {

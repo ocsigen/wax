@@ -1,11 +1,8 @@
-#[import = ("m", "used")]
-fn used() -> i32;
-
-#[import = ("m", "dead")]
-fn dead() -> i32;
-
-#[import = ("m", "ignored")]
-const _ignored: i32;
+import "m" {
+    fn used() -> i32;
+    fn dead() -> i32;
+    #[import = "ignored"] const _ignored: i32;
+}
 
 #[export = "main"]
 fn main() -> i32 { used(); }

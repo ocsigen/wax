@@ -15,13 +15,13 @@
 // along with this program; if not, write to the Free Software
 // Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
-#[import = ("stdlib", "caml_global_data")]
-let caml_global_data: &block;
+import "stdlib" let caml_global_data: &block;
 #[if(wasi)]
 #[export]
 tag javascript_exception(&?extern);
 #[else]
-#[import = ("bindings", "jstag")]
+import "bindings"
+#[import = "jstag"]
 #[export]
 tag javascript_exception(&?extern);
 

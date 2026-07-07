@@ -893,8 +893,7 @@ Call through a function reference:
 
 ## Imports and Exports
 
-A module talks to its host through imports and exports, both written as
-attributes on the field.
+A module talks to its host through imports and exports.
 
 **Export** a definition under a name with `#[export = "name"]`. It applies to
 functions, globals, memories, tables, and tags, and a field may carry several.
@@ -908,23 +907,29 @@ fn add(x: i32, y: i32) -> i32 { x + y; }
 const PI: f64 = 3.14159;
 ```
 
-**Import** a field from the host with `#[import = ("module", "name")]`. An
-imported field has no body — a function is declared with just its signature and
-a trailing `;`, and a global with its type:
+**Import** fields from a host module with an `import "module" { … }` block. Each
+entry has no body — a function is declared with just its signature, a global
+with its type. It is imported under its own Wax name unless a name-only
+`#[import = "name"]` overrides that:
 
 ```wax,check
-#[import = ("env", "log")]
-fn log(x: i32);
-
-#[import = ("env", "base")]
-const base: i32;
+import "env" {
+    fn log(x: i32);
+    #[import = "base_value"]
+    const base: i32;
+}
 
 #[export = "run"]
 fn run() { log(base); }
 ```
 
-The same field can be both imported and re-exported by giving it both
-attributes.
+A lone import can be written on one line, `import "module" <declaration>;`:
+
+```wax,check
+import "env" fn trace(x: i32);
+```
+
+An imported field is re-exported by adding `#[export]` to its declaration.
 
 ## References
 

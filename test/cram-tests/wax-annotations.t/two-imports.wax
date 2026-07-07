@@ -1,1 +1,1 @@
-#[import = ("a", "b")] #[import = ("c", "d")] fn f();
+import "a" #[import = "b"] #[import = "c"] fn f();

@@ -17,33 +17,28 @@
 
 #[if(not(wasi))]
 {
-    #[import = ("wasm:js-string", "compare")]
-    fn compare_strings(&?extern, &?extern) -> i32;
-    #[import = ("wasm:js-string", "test")]
-    fn is_string(&?extern) -> i32;
-    #[import = ("wasm:js-string", "length")]
-    fn string_length(&?extern) -> i32;
-    #[import = ("wasm:js-string", "fromCharCodeArray")]
-    fn fromCharCodeArray(&?wstring, i32, i32) -> &extern;
-    #[import = ("wasm:js-string", "intoCharCodeArray")]
-    fn intoCharCodeArray(&?extern, &?wstring, i32) -> i32;
+    import "wasm:js-string" {
+        #[import = "compare"]
+        fn compare_strings(&?extern, &?extern) -> i32;
+        #[import = "test"]
+        fn is_string(&?extern) -> i32;
+        #[import = "length"]
+        fn string_length(&?extern) -> i32;
+        fn fromCharCodeArray(&?wstring, i32, i32) -> &extern;
+        fn intoCharCodeArray(&?extern, &?wstring, i32) -> i32;
+    }
 
-    #[import = ("wasm:text-decoder", "decodeStringFromUTF8Array")]
-    fn decodeStringFromUTF8Array(&?bytes, i32, i32) -> &extern;
-    #[import = ("wasm:text-encoder", "encodeStringToUTF8Array")]
-    fn encodeStringToUTF8Array(&?extern) -> &bytes;
+    import "wasm:text-decoder" fn decodeStringFromUTF8Array(&?bytes, i32, i32) -> &extern;
+    import "wasm:text-encoder" fn encodeStringToUTF8Array(&?extern) -> &bytes;
 
-    #[import = ("bindings", "hash_string")]
-    #[export = "jsstring_hash"]
-    fn hash_string(i32, &?any) -> i32;
-    #[import = ("bindings", "read_string")]
-    fn read_string(i32) -> &?any;
-    #[import = ("bindings", "read_string_stream")]
-    fn read_string_stream(i32, i32) -> &?any;
-    #[import = ("bindings", "write_string")]
-    fn write_string(&?any) -> i32;
-    #[import = ("bindings", "append_string")]
-    fn append_string(&?any, &?any) -> &?any;
+    import "bindings" {
+        #[export = "jsstring_hash"]
+        fn hash_string(i32, &?any) -> i32;
+        fn read_string(i32) -> &?any;
+        fn read_string_stream(i32, i32) -> &?any;
+        fn write_string(&?any) -> i32;
+        fn append_string(&?any, &?any) -> &?any;
+    }
 
     type bytes = [mut i8];
     type wstring = [mut i16];

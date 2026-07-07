@@ -15,34 +15,25 @@
 // along with this program; if not, write to the Free Software
 // Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
-#[import = ("fail", "caml_failwith")]
-fn caml_failwith(&eq);
-#[import = ("fail", "caml_invalid_argument")]
-fn caml_invalid_argument(&eq);
-#[import = ("fail", "caml_raise_end_of_file")]
-fn caml_raise_end_of_file();
-#[import = ("obj", "object_tag")]
-const object_tag: i32;
-#[import = ("obj", "null")]
-const null_value: &eq;
-#[import = ("obj", "caml_set_oo_id")]
-fn caml_set_oo_id(&eq) -> &eq;
-#[import = ("string", "caml_string_concat")]
-fn caml_string_concat(&eq, &eq) -> &eq;
-#[import = ("obj", "caml_is_closure")]
-fn caml_is_closure(&eq) -> i32;
-#[import = ("effect", "caml_is_continuation")]
-fn caml_is_continuation(&eq) -> i32;
-#[import = ("io", "caml_really_putblock")]
-fn caml_really_putblock(&eq, &bytes, i32, i32);
-#[import = ("io", "caml_really_getblock")]
-fn caml_really_getblock(&eq, &bytes, i32, i32) -> i32;
-#[import = ("io", "caml_flush_if_unbuffered")]
-fn caml_flush_if_unbuffered(&eq);
-#[import = ("custom", "caml_init_custom_operations")]
-fn caml_init_custom_operations();
-#[import = ("custom", "caml_find_custom_operations")]
-fn caml_find_custom_operations(&bytes) -> &?custom_operations;
+import "fail" { fn caml_failwith(&eq); fn caml_invalid_argument(&eq); fn caml_raise_end_of_file(); }
+import "obj" {
+    const object_tag: i32;
+    #[import = "null"]
+    const null_value: &eq;
+    fn caml_set_oo_id(&eq) -> &eq;
+}
+import "string" fn caml_string_concat(&eq, &eq) -> &eq;
+import "obj" fn caml_is_closure(&eq) -> i32;
+import "effect" fn caml_is_continuation(&eq) -> i32;
+import "io" {
+    fn caml_really_putblock(&eq, &bytes, i32, i32);
+    fn caml_really_getblock(&eq, &bytes, i32, i32) -> i32;
+    fn caml_flush_if_unbuffered(&eq);
+}
+import "custom" {
+    fn caml_init_custom_operations();
+    fn caml_find_custom_operations(&bytes) -> &?custom_operations;
+}
 type block = [mut &eq];
 #[if(wasi)]
 {
@@ -82,12 +73,9 @@ type block = [mut &eq];
     }
 }
 #[else]
-{
-    #[import = ("bindings", "map_new")]
+import "bindings" {
     fn map_new() -> &any;
-    #[import = ("bindings", "map_get")]
     fn map_get(&any, &eq) -> &?i31;
-    #[import = ("bindings", "map_set")]
     fn map_set(&any, &eq, &i31);
 }
 

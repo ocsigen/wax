@@ -153,7 +153,7 @@
         },
         {
           "name": "storage.type.wax",
-          "match": "\\b(fn|let|const|type|rec|tag|memory|table|data|elem)\\b"
+          "match": "\\b(fn|let|const|type|rec|tag|memory|import|table|data|elem)\\b"
         },
         {
           "name": "storage.modifier.wax",

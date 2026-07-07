@@ -1,5 +1,4 @@
-#[import = ("m", "g")]
-fn g();
+import "m" fn g();
 
 #[export = "f"]
 fn f() -> &func {

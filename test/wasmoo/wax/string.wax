@@ -15,10 +15,7 @@
 // along with this program; if not, write to the Free Software
 // Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
-#[import = ("fail", "caml_bound_error")]
-fn caml_bound_error();
-#[import = ("fail", "caml_invalid_argument")]
-fn caml_invalid_argument(arg: &eq);
+import "fail" { fn caml_bound_error(); fn caml_invalid_argument(arg: &eq); }
 
 type bytes = [mut i8];
 

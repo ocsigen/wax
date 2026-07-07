@@ -15,12 +15,8 @@
 // along with this program; if not, write to the Free Software
 // Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
-#[import = ("obj", "abstract_tag")]
-const abstract_tag: i32;
-#[import = ("obj", "caml_obj_dup")]
-fn caml_obj_dup(&eq) -> &eq;
-#[import = ("fail", "caml_invalid_argument")]
-fn caml_invalid_argument(arg: &eq);
+import "obj" { const abstract_tag: i32; fn caml_obj_dup(&eq) -> &eq; }
+import "fail" fn caml_invalid_argument(arg: &eq);
 
 #[if(wasi)]
 {
@@ -39,20 +35,14 @@ fn caml_invalid_argument(arg: &eq);
 }
 #[else]
 {
-    #[import = ("bindings", "weak_new")]
-    fn weak_new(&eq) -> &?any;
-    #[import = ("bindings", "weak_deref")]
-    fn weak_deref(&?any) -> &?eq;
-    #[import = ("bindings", "weak_map_new")]
-    fn weak_map_new() -> &any;
-    #[import = ("bindings", "map_get")]
-    fn map_get(&any, &eq) -> &?any;
-    #[import = ("bindings", "map_set")]
-    fn map_set(&any, &eq, &any);
-    #[import = ("jslib", "unwrap")]
-    fn unwrap(&eq) -> &?any;
-    #[import = ("jslib", "wrap")]
-    fn wrap(&?any) -> &eq;
+    import "bindings" {
+        fn weak_new(&eq) -> &?any;
+        fn weak_deref(&?any) -> &?eq;
+        fn weak_map_new() -> &any;
+        fn map_get(&any, &eq) -> &?any;
+        fn map_set(&any, &eq, &any);
+    }
+    import "jslib" { fn unwrap(&eq) -> &?any; fn wrap(&?any) -> &eq; }
 }
 
 type block = [mut &eq];

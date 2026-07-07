@@ -1,35 +1,24 @@
-#[import = ("fail", "caml_failwith")]
-fn caml_failwith(&eq);
-#[import = ("marshal", "caml_serialize_int_4")]
-fn caml_serialize_int_4(&eq, i32);
-#[import = ("marshal", "caml_deserialize_int_4")]
-fn caml_deserialize_int_4(&eq) -> i32;
-#[import = ("float", "caml_parse_float")]
-fn caml_parse_float(&eq, &eq) -> &eq;
-#[import = ("float", "caml_format_float")]
-fn caml_format_float(&eq, &eq) -> &eq;
-#[import = ("float", "caml_fma_float")]
-fn caml_fma_float(&eq, &eq, &eq) -> &eq;
-#[import = ("float", "caml_erf_float")]
-fn caml_erf_float(f64) -> f64;
-#[import = ("float", "caml_erfc_float")]
-fn caml_erfc_float(f64) -> f64;
-#[import = ("float", "caml_frexp_float")]
-fn caml_frexp_float(&eq) -> &eq;
-#[import = ("float", "caml_ldexp_float")]
-fn caml_ldexp_float(f64, i32) -> f64;
-#[import = ("bigarray", "caml_ba_uint8_get32")]
-fn caml_ba_uint8_get32(&eq, i32) -> i32;
-#[import = ("bigarray", "caml_ba_uint8_set32")]
-fn caml_ba_uint8_set32(&eq, i32, i32) -> &eq;
-#[import = ("string", "caml_string_get32")]
-fn caml_string_get32(&eq, i32) -> i32;
-#[import = ("string", "caml_bytes_get32")]
-fn caml_bytes_get32(&eq, i32) -> i32;
-#[import = ("string", "caml_bytes_set32")]
-fn caml_bytes_set32(&eq, i32, i32) -> &eq;
-#[import = ("array", "caml_make_vect")]
-fn caml_make_vect(&eq, &eq) -> &eq;
+import "fail" fn caml_failwith(&eq);
+import "marshal" { fn caml_serialize_int_4(&eq, i32); fn caml_deserialize_int_4(&eq) -> i32; }
+import "float" {
+    fn caml_parse_float(&eq, &eq) -> &eq;
+    fn caml_format_float(&eq, &eq) -> &eq;
+    fn caml_fma_float(&eq, &eq, &eq) -> &eq;
+    fn caml_erf_float(f64) -> f64;
+    fn caml_erfc_float(f64) -> f64;
+    fn caml_frexp_float(&eq) -> &eq;
+    fn caml_ldexp_float(f64, i32) -> f64;
+}
+import "bigarray" {
+    fn caml_ba_uint8_get32(&eq, i32) -> i32;
+    fn caml_ba_uint8_set32(&eq, i32, i32) -> &eq;
+}
+import "string" {
+    fn caml_string_get32(&eq, i32) -> i32;
+    fn caml_bytes_get32(&eq, i32) -> i32;
+    fn caml_bytes_set32(&eq, i32, i32) -> &eq;
+}
+import "array" fn caml_make_vect(&eq, &eq) -> &eq;
 
 type float = { f: f64 };
 

@@ -507,13 +507,11 @@ fn sum_list(head: &?list) -> i32 {
 ### Wax
 
 ```wax
-// Import a function from the host environment
-#[import = ("env", "log")]
-fn log(value: i32);
-
-// Import a global
-#[import = ("env", "base_value")]
-const base_value: i32;
+// Import a function and a global from the host environment
+import "env" {
+    fn log(value: i32);
+    const base_value: i32;
+}
 
 // Export a function that uses the imports
 #[export = "compute_and_log"]

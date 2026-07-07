@@ -19,100 +19,97 @@
 {
 
     // Imports from other wasm modules
-    #[import = ("fail", "caml_failwith")]
-    fn caml_failwith(&eq);
-    #[import = ("fail", "caml_raise_with_arg")]
-    fn caml_raise_with_arg(&eq, &eq);
-    #[import = ("stdlib", "caml_named_value")]
-    fn caml_named_value(&eq) -> &?eq;
-    #[import = ("jslib", "wrap")]
-    fn wrap(&?any) -> &eq;
-    #[import = ("jslib", "unwrap")]
-    fn unwrap(&eq) -> &?any;
-    #[import = ("jslib", "caml_jsstring_of_string")]
-    fn caml_jsstring_of_string(&eq) -> &eq;
-    #[import = ("bindings", "identity")]
-    fn from_int32(i32) -> &?any;
-    #[import = ("bindings", "new_array")]
-    fn new_array(i32) -> &extern;
-    #[import = ("bindings", "array_set")]
-    fn array_set(&extern, i32, &?any);
+    import "fail" { fn caml_failwith(&eq); fn caml_raise_with_arg(&eq, &eq); }
+    import "stdlib" fn caml_named_value(&eq) -> &?eq;
+    import "jslib" {
+        fn wrap(&?any) -> &eq;
+        fn unwrap(&eq) -> &?any;
+        fn caml_jsstring_of_string(&eq) -> &eq;
+    }
+    import "bindings" {
+        #[import = "identity"]
+        fn from_int32(i32) -> &?any;
+        fn new_array(i32) -> &extern;
+        fn array_set(&extern, i32, &?any);
+    }
 
     // JS helper imports
-    #[import = ("js", "gr_state_for_wasm")]
-    fn gr_state() -> &?any;
-    #[import = ("js", "gr_open_for_wasm")]
-    fn gr_open(&?any) -> i32;
-    #[import = ("js", "gr_close_for_wasm")]
-    fn gr_close();
-    #[import = ("js", "gr_clear_for_wasm")]
-    fn gr_clear();
-    #[import = ("js", "gr_size_x_for_wasm")]
-    fn gr_size_x() -> i32;
-    #[import = ("js", "gr_size_y_for_wasm")]
-    fn gr_size_y() -> i32;
-    #[import = ("js", "gr_current_x_for_wasm")]
-    fn gr_current_x() -> i32;
-    #[import = ("js", "gr_current_y_for_wasm")]
-    fn gr_current_y() -> i32;
-    #[import = ("js", "gr_set_color_for_wasm")]
-    fn gr_set_color(i32);
-    #[import = ("js", "gr_plot_for_wasm")]
-    fn gr_plot(i32, i32);
-    #[import = ("js", "gr_point_color_for_wasm")]
-    fn gr_point_color(i32, i32) -> i32;
-    #[import = ("js", "gr_moveto_for_wasm")]
-    fn gr_moveto(i32, i32);
-    #[import = ("js", "gr_lineto_for_wasm")]
-    fn gr_lineto(i32, i32);
-    #[import = ("js", "gr_draw_rect_for_wasm")]
-    fn gr_draw_rect(i32, i32, i32, i32);
-    #[import = ("js", "gr_fill_rect_for_wasm")]
-    fn gr_fill_rect(i32, i32, i32, i32);
-    #[import = ("js", "gr_draw_arc_for_wasm")]
-    fn gr_draw_arc(i32, i32, i32, i32, i32, i32);
-    #[import = ("js", "gr_fill_arc_for_wasm")]
-    fn gr_fill_arc(i32, i32, i32, i32, i32, i32);
-    #[import = ("js", "gr_set_line_width_for_wasm")]
-    fn gr_set_line_width(i32);
-    #[import = ("js", "gr_resize_window_for_wasm")]
-    fn gr_resize_window(i32, i32);
-    #[import = ("js", "gr_draw_char_for_wasm")]
-    fn gr_draw_char(i32);
-    #[import = ("js", "gr_draw_str_for_wasm")]
-    fn gr_draw_str(&?any);
-    #[import = ("js", "gr_set_font_for_wasm")]
-    fn gr_set_font(&?any);
-    #[import = ("js", "gr_set_text_size_for_wasm")]
-    fn gr_set_text_size(i32);
-    #[import = ("js", "gr_set_window_title_for_wasm")]
-    fn gr_set_window_title(&?any);
-    #[import = ("js", "gr_text_size_w_for_wasm")]
-    fn gr_text_size_w(&?any) -> i32;
-    #[import = ("js", "gr_text_size_h_for_wasm")]
-    fn gr_text_size_h() -> i32;
-    #[import = ("js", "gr_fill_poly_for_wasm")]
-    fn gr_fill_poly(&?any, i32);
-    #[import = ("js", "gr_create_image_for_wasm")]
-    fn gr_create_image(i32, i32) -> &?any;
-    #[import = ("js", "gr_draw_image_for_wasm")]
-    fn gr_draw_image(&?any, i32, i32);
-    #[import = ("js", "gr_blit_image_for_wasm")]
-    fn gr_blit_image(&?any, i32, i32);
-    #[import = ("js", "gr_make_image_for_wasm")]
-    fn gr_make_image(&?any, i32, i32) -> &?any;
-    #[import = ("js", "gr_dump_image_width_for_wasm")]
-    fn gr_dump_image_width(&?any) -> i32;
-    #[import = ("js", "gr_dump_image_height_for_wasm")]
-    fn gr_dump_image_height(&?any) -> i32;
-    #[import = ("js", "gr_dump_image_pixel_for_wasm")]
-    fn gr_dump_image_pixel(&?any, i32, i32) -> i32;
-    #[import = ("js", "gr_state_set_for_wasm")]
-    fn gr_state_set(&?any);
-    #[import = ("js", "gr_state_create_for_wasm")]
-    fn gr_state_create(&?any, i32, i32) -> &?any;
-    #[import = ("js", "gr_doc_of_state_for_wasm")]
-    fn gr_doc_of_state(&?any) -> &?any;
+    import "js" {
+        #[import = "gr_state_for_wasm"]
+        fn gr_state() -> &?any;
+        #[import = "gr_open_for_wasm"]
+        fn gr_open(&?any) -> i32;
+        #[import = "gr_close_for_wasm"]
+        fn gr_close();
+        #[import = "gr_clear_for_wasm"]
+        fn gr_clear();
+        #[import = "gr_size_x_for_wasm"]
+        fn gr_size_x() -> i32;
+        #[import = "gr_size_y_for_wasm"]
+        fn gr_size_y() -> i32;
+        #[import = "gr_current_x_for_wasm"]
+        fn gr_current_x() -> i32;
+        #[import = "gr_current_y_for_wasm"]
+        fn gr_current_y() -> i32;
+        #[import = "gr_set_color_for_wasm"]
+        fn gr_set_color(i32);
+        #[import = "gr_plot_for_wasm"]
+        fn gr_plot(i32, i32);
+        #[import = "gr_point_color_for_wasm"]
+        fn gr_point_color(i32, i32) -> i32;
+        #[import = "gr_moveto_for_wasm"]
+        fn gr_moveto(i32, i32);
+        #[import = "gr_lineto_for_wasm"]
+        fn gr_lineto(i32, i32);
+        #[import = "gr_draw_rect_for_wasm"]
+        fn gr_draw_rect(i32, i32, i32, i32);
+        #[import = "gr_fill_rect_for_wasm"]
+        fn gr_fill_rect(i32, i32, i32, i32);
+        #[import = "gr_draw_arc_for_wasm"]
+        fn gr_draw_arc(i32, i32, i32, i32, i32, i32);
+        #[import = "gr_fill_arc_for_wasm"]
+        fn gr_fill_arc(i32, i32, i32, i32, i32, i32);
+        #[import = "gr_set_line_width_for_wasm"]
+        fn gr_set_line_width(i32);
+        #[import = "gr_resize_window_for_wasm"]
+        fn gr_resize_window(i32, i32);
+        #[import = "gr_draw_char_for_wasm"]
+        fn gr_draw_char(i32);
+        #[import = "gr_draw_str_for_wasm"]
+        fn gr_draw_str(&?any);
+        #[import = "gr_set_font_for_wasm"]
+        fn gr_set_font(&?any);
+        #[import = "gr_set_text_size_for_wasm"]
+        fn gr_set_text_size(i32);
+        #[import = "gr_set_window_title_for_wasm"]
+        fn gr_set_window_title(&?any);
+        #[import = "gr_text_size_w_for_wasm"]
+        fn gr_text_size_w(&?any) -> i32;
+        #[import = "gr_text_size_h_for_wasm"]
+        fn gr_text_size_h() -> i32;
+        #[import = "gr_fill_poly_for_wasm"]
+        fn gr_fill_poly(&?any, i32);
+        #[import = "gr_create_image_for_wasm"]
+        fn gr_create_image(i32, i32) -> &?any;
+        #[import = "gr_draw_image_for_wasm"]
+        fn gr_draw_image(&?any, i32, i32);
+        #[import = "gr_blit_image_for_wasm"]
+        fn gr_blit_image(&?any, i32, i32);
+        #[import = "gr_make_image_for_wasm"]
+        fn gr_make_image(&?any, i32, i32) -> &?any;
+        #[import = "gr_dump_image_width_for_wasm"]
+        fn gr_dump_image_width(&?any) -> i32;
+        #[import = "gr_dump_image_height_for_wasm"]
+        fn gr_dump_image_height(&?any) -> i32;
+        #[import = "gr_dump_image_pixel_for_wasm"]
+        fn gr_dump_image_pixel(&?any, i32, i32) -> i32;
+        #[import = "gr_state_set_for_wasm"]
+        fn gr_state_set(&?any);
+        #[import = "gr_state_create_for_wasm"]
+        fn gr_state_create(&?any, i32, i32) -> &?any;
+        #[import = "gr_doc_of_state_for_wasm"]
+        fn gr_doc_of_state(&?any) -> &?any;
+    }
 
     // Types
     type block = [mut &eq];

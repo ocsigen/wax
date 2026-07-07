@@ -325,8 +325,9 @@ let rec map_modulefield f field =
   match field with
   | Type t -> Type t
   | Module_annotation a -> Module_annotation a
-  | Fundecl f -> Fundecl f
-  | GlobalDecl g -> GlobalDecl g
+  (* Imports carry no instructions, so the info type is free to change. *)
+  | Import { module_; decl } -> Import { module_; decl }
+  | Import_group { module_; decls } -> Import_group { module_; decls }
   | Tag t -> Tag t
   | Func ({ body = s, instrs; _ } as func) ->
       Func { func with body = (s, List.map (map_instr f) instrs) }
@@ -413,3 +414,18 @@ let confusing_precedence (outer : binop_kind) (inner : binop_kind) =
   | `Shift, `Arith | `Arith, `Shift -> true
   | `Comparison, `Bitwise | `Bitwise, `Comparison -> true
   | _ -> false
+
+(* The name an imported entity is bound to in Wasm: the name-only
+   [#[import = "name"]] override if present, else the Wax name [id]. *)
+let import_name (decl : import_decl) =
+  let override =
+    List.find_map
+      (fun (k, v) ->
+        if k <> "import" then None
+        else
+          match v with
+          | Some { desc = String (_, s); info } -> Some { desc = s; info }
+          | _ -> None)
+      decl.attributes
+  in
+  Option.value override ~default:decl.id

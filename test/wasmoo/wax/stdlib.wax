@@ -15,42 +15,26 @@
 // along with this program; if not, write to the Free Software
 // Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
-#[import = ("hash", "caml_string_hash")]
-fn caml_string_hash(&eq, &eq) -> &eq;
-#[import = ("string", "caml_string_equal")]
-fn caml_string_equal(&eq, &eq) -> &eq;
+import "hash" fn caml_string_hash(&eq, &eq) -> &eq;
+import "string" fn caml_string_equal(&eq, &eq) -> &eq;
 
-#[import = ("jslib", "caml_jsstring_of_string")]
-fn caml_jsstring_of_string(&eq) -> &eq;
-#[import = ("jslib", "unwrap")]
-fn unwrap(&eq) -> &?any;
-#[import = ("obj", "caml_callback_1")]
-fn caml_callback_1(&eq, &eq) -> &eq;
-#[import = ("obj", "caml_callback_2")]
-fn caml_callback_2(&eq, &eq, &eq) -> &eq;
-#[import = ("string", "caml_string_concat")]
-fn caml_string_concat(&eq, &eq) -> &eq;
-#[import = ("printexc", "caml_format_exception")]
-fn caml_format_exception(&eq) -> &eq;
-#[import = ("sys", "ocaml_exit")]
-tag ocaml_exit();
-#[import = ("fail", "ocaml_exception")]
-tag ocaml_exception(&eq);
+import "jslib" { fn caml_jsstring_of_string(&eq) -> &eq; fn unwrap(&eq) -> &?any; }
+import "obj" { fn caml_callback_1(&eq, &eq) -> &eq; fn caml_callback_2(&eq, &eq, &eq) -> &eq; }
+import "string" fn caml_string_concat(&eq, &eq) -> &eq;
+import "printexc" fn caml_format_exception(&eq) -> &eq;
+import "sys" tag ocaml_exit();
+import "fail" tag ocaml_exception(&eq);
 #[if(wasi)]
 {
-    #[import = ("wasi_snapshot_preview1", "proc_exit")]
+    import "wasi_snapshot_preview1"
+    #[import = "proc_exit"]
     fn exit(i32);
-    #[import = ("io", "write_all_to_fd")]
-    fn write_all_to_fd(i32, &eq);
+    import "io" fn write_all_to_fd(i32, &eq);
 }
 #[else]
 {
-    #[import = ("fail", "javascript_exception")]
-    tag javascript_exception(&?extern);
-    #[import = ("bindings", "write")]
-    fn write(i32, &?any);
-    #[import = ("bindings", "exit")]
-    fn exit(i32);
+    import "fail" tag javascript_exception(&?extern);
+    import "bindings" { fn write(i32, &?any); fn exit(i32); }
 }
 
 type block = [mut &eq];

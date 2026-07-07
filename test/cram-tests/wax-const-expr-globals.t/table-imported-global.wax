@@ -1,3 +1,2 @@
-#[import = ("env", "g")]
-const g: &?func;
+import "env" const g: &?func;
 table t: &?func [10] = g;

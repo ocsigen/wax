@@ -15,12 +15,9 @@
 // along with this program; if not, write to the Free Software
 // Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
-#[import = ("obj", "caml_callback_1")]
-fn caml_callback_1(&eq, &eq) -> &eq;
-#[import = ("fail", "ocaml_exception")]
-tag ocaml_exception(&eq);
-#[import = ("sync", "caml_ml_mutex_unlock")]
-fn caml_ml_mutex_unlock(&eq) -> &eq;
+import "obj" fn caml_callback_1(&eq, &eq) -> &eq;
+import "fail" tag ocaml_exception(&eq);
+import "sync" fn caml_ml_mutex_unlock(&eq) -> &eq;
 
 type block = [mut &eq];
 

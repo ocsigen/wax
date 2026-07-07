@@ -40,7 +40,7 @@ parameter list and no type reference) is a syntax error, not an empty signature.
   
    ──➤  -:1:1
   1 │ tag stop;
-    · ^^^^^^^^^
+    · ^^^^^^^^
   2 │ 
   [128]
 

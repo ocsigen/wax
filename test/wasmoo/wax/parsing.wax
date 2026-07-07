@@ -15,16 +15,13 @@
 // along with this program; if not, write to the Free Software
 // Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
-#[import = ("io", "caml_stderr")]
-let caml_stderr: &eq;
-#[import = ("io", "caml_ml_output")]
-fn caml_ml_output(&eq, &eq, &eq, &eq) -> &eq;
-#[import = ("io", "caml_ml_flush")]
-fn caml_ml_flush(&eq) -> &eq;
-#[import = ("ints", "caml_format_int")]
-fn caml_format_int(&eq, &eq) -> &eq;
-#[import = ("float", "caml_format_float")]
-fn caml_format_float(&eq, &eq) -> &eq;
+import "io" {
+    let caml_stderr: &eq;
+    fn caml_ml_output(&eq, &eq, &eq, &eq) -> &eq;
+    fn caml_ml_flush(&eq) -> &eq;
+}
+import "ints" fn caml_format_int(&eq, &eq) -> &eq;
+import "float" fn caml_format_float(&eq, &eq) -> &eq;
 
 type float = { f: f64 };
 type block = [mut &eq];

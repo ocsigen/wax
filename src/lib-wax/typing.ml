@@ -305,12 +305,9 @@ module Error = struct
   let annotation_not_allowed context ~location name =
     report context ~location "The %s annotation is not allowed here." name
 
-  let declaration_without_import context ~location =
-    report context ~location
-      "This declaration has no definition; it needs an import annotation."
-
   let multiple_import context ~location =
-    report context ~location "A field can have at most one import annotation."
+    report context ~location
+      "An import can have at most one import-name annotation."
 
   let final_supertype context ~location name =
     report context ~location
@@ -8837,7 +8834,7 @@ let rec functions ctx fields =
       | Before
           ({
              desc =
-               Type _ | Module_annotation _ | Fundecl _ | GlobalDecl _ | Tag _;
+               Type _ | Module_annotation _ | Import _ | Import_group _ | Tag _;
              _;
            } as f) ->
           Some f)
@@ -8902,9 +8899,7 @@ let fundecl ctx name typ sign =
 
 let field_attributes (field : _ modulefield) =
   match field with
-  | Fundecl { attributes; _ }
   | Func { attributes; _ }
-  | GlobalDecl { attributes; _ }
   | Global { attributes; _ }
   | Tag { attributes; _ }
   | Memory { attributes; _ }
@@ -8914,28 +8909,24 @@ let field_attributes (field : _ modulefield) =
   | Group { attributes; _ }
   | Module_annotation attributes ->
       attributes
-  | Type _ | Conditional _ -> []
+  (* An import's attributes hang off each [import_decl]; they are validated
+     while walking the import, not through [field_attributes]. *)
+  | Type _ | Conditional _ | Import _ | Import_group _ -> []
 
-(* Validate the annotations on a module field: reject unknown ones, check the
-   value shape of [export] / [import] / [start], allow each only where it is
-   meaningful, and require an [import] on a body-less declaration. *)
-let check_attributes diagnostics field =
-  let export_ok, import_ok, start_ok, module_ok =
-    match field.desc with
-    | Func _ -> (true, false, true, false)
-    | Fundecl _ | GlobalDecl _ -> (true, true, false, false)
-    | Global _ -> (true, false, false, false)
-    | Memory _ | Table _ | Tag _ -> (true, true, false, false)
-    | Module_annotation _ -> (false, false, false, true)
-    | Data _ | Elem _ | Type _ | Group _ | Conditional _ ->
-        (false, false, false, false)
-  in
+(* Reject unknown attributes and validate the value shape of the ones that are
+   allowed on the entity carrying them. [import_ok] is set for the declarations
+   inside an [import "module" { ... }] block, where a name-only
+   [#[import = "name"]] overrides the imported name. *)
+let check_attribute_list diagnostics ~export_ok ~start_ok ~module_ok ~import_ok
+    ~default_location attributes =
   List.iter
     (fun (name, value) ->
-      let location = match value with Some v -> v.info | None -> field.info in
+      let location =
+        match value with Some v -> v.info | None -> default_location
+      in
       match name with
       | "export" ->
-          (* A bare [#[export]] (no value) reuses the field's Wax name as the
+          (* A bare [#[export]] (no value) reuses the entity's Wax name as the
              export name; an explicit name must be a string. *)
           (match value with
           | None | Some { desc = String _; _ } -> ()
@@ -8944,20 +8935,6 @@ let check_attributes diagnostics field =
                 "a string");
           if not export_ok then
             Error.annotation_not_allowed diagnostics ~location "export"
-      | "import" ->
-          (match value with
-          | Some
-              {
-                desc =
-                  Sequence [ { desc = String _; _ }; { desc = String _; _ } ];
-                _;
-              } ->
-              ()
-          | _ ->
-              Error.annotation_value_mismatch diagnostics ~location "import"
-                "a module and name, e.g. (\"env\", \"f\")");
-          if not import_ok then
-            Error.annotation_not_allowed diagnostics ~location "import"
       | "start" ->
           (match value with
           | None -> ()
@@ -8974,20 +8951,33 @@ let check_attributes diagnostics field =
                 "a string");
           if not module_ok then
             Error.annotation_not_allowed diagnostics ~location "module"
+      | "import" ->
+          (match value with
+          | Some { desc = String _; _ } -> ()
+          | _ ->
+              Error.annotation_value_mismatch diagnostics ~location "import"
+                "a string");
+          if not import_ok then
+            Error.annotation_not_allowed diagnostics ~location "import"
       | _ -> Error.unknown_annotation diagnostics ~location name)
-    (field_attributes field.desc);
-  let imports =
-    List.filter (fun (n, _) -> n = "import") (field_attributes field.desc)
+    attributes
+
+(* Validate the annotations on a module field: reject unknown ones, check the
+   value shape of [export] / [start] / [module], and allow each only where it is
+   meaningful. *)
+let check_attributes diagnostics field =
+  let export_ok, start_ok, module_ok =
+    match field.desc with
+    | Func _ -> (true, true, false)
+    | Global _ | Memory _ | Table _ | Tag _ -> (true, false, false)
+    | Module_annotation _ -> (false, false, true)
+    | Data _ | Elem _ | Type _ | Group _ | Import _ | Import_group _
+    | Conditional _ ->
+        (false, false, false)
   in
-  (match imports with
-  | _ :: (_, value) :: _ ->
-      let location = match value with Some v -> v.info | None -> field.info in
-      Error.multiple_import diagnostics ~location
-  | _ -> ());
-  match field.desc with
-  | (Fundecl _ | GlobalDecl _) when imports = [] ->
-      Error.declaration_without_import diagnostics ~location:field.info
-  | _ -> ()
+  check_attribute_list diagnostics ~export_ok ~start_ok ~module_ok
+    ~import_ok:false ~default_location:field.info
+    (field_attributes field.desc)
 
 (*** Type-checking a configuration ***)
 
@@ -9082,6 +9072,42 @@ let type_configuration ?(warn_unused = false) ?(build = true)
   in
   check_type_definitions ctx;
   let memory_index = ref 0 in
+  (* Register a tag's type from its [typ]/[sign], shared by imported and defined
+     tags. *)
+  let register_tag name typ sign =
+    let>@ typ =
+      match (typ, sign) with
+      | Some typ, _ -> (
+          let*@ info = Tbl.find ctx.diagnostics ctx.types typ in
+          match snd info with
+          | { typ = Func ft; _ } ->
+              check_inline_type ctx ~location:typ.info ft sign;
+              Some ft
+          | _ ->
+              Error.expected_func_type ctx.diagnostics ~location:typ.info;
+              None)
+      | None, Some sign -> Some (funsig ctx sign)
+      | None, None -> assert false
+    in
+    Tbl.add diagnostics ctx.tags name typ
+  in
+  (* Register an imported entity under its Wax name. *)
+  let register_import (decl : Ast.import_decl) =
+    match decl.kind with
+    | Import_func { typ; sign; exact } ->
+        let>@ i, n = fundecl ctx decl.id typ sign in
+        Tbl.add diagnostics ctx.functions decl.id (i, n, exact)
+    | Import_global { mut; typ } ->
+        let>@ typ = internalize_valtype ctx typ in
+        Tbl.add diagnostics ctx.globals decl.id (mut, Some typ)
+    | Import_tag { typ; sign } -> register_tag decl.id typ sign
+    | Import_memory { address_type; _ } ->
+        let i = !memory_index in
+        incr memory_index;
+        Tbl.add diagnostics ctx.memories decl.id (i, address_type)
+    | Import_table { address_type; reftype = rt; _ } ->
+        Tbl.add diagnostics ctx.tables decl.id (address_type, rt)
+  in
   walk_fields
     (fun field ->
       match field.desc with
@@ -9095,12 +9121,9 @@ let type_configuration ?(warn_unused = false) ?(build = true)
                 (fun n -> Tbl.add diagnostics ctx.datas n ())
                 d.data_name)
             data
-      | Fundecl { name; typ; sign; exact; _ } ->
-          let>@ i, n = fundecl ctx name typ sign in
-          Tbl.add diagnostics ctx.functions name (i, n, exact)
-      | GlobalDecl { name; mut; typ; _ } ->
-          let>@ typ = internalize_valtype ctx typ in
-          Tbl.add diagnostics ctx.globals name (mut, Some typ)
+      | Import { decl; _ } -> register_import decl.desc
+      | Import_group { decls; _ } ->
+          List.iter (fun d -> register_import d.desc) decls
       | Func { name; typ; sign; _ } ->
           (* A module-defined function has exactly its declared type, so a
              reference to it is exact — but exact reference types are part of
@@ -9112,22 +9135,7 @@ let type_configuration ?(warn_unused = false) ?(build = true)
               Wax_utils.Feature.Custom_descriptors
           in
           Tbl.add diagnostics ctx.functions name (i, n, exact)
-      | Tag { name; typ; sign; _ } ->
-          let>@ typ =
-            match (typ, sign) with
-            | Some typ, _ -> (
-                let*@ info = Tbl.find ctx.diagnostics ctx.types typ in
-                match snd info with
-                | { typ = Func ft; _ } ->
-                    check_inline_type ctx ~location:typ.info ft sign;
-                    Some ft
-                | _ ->
-                    Error.expected_func_type ctx.diagnostics ~location:typ.info;
-                    None)
-            | None, Some sign -> Some (funsig ctx sign)
-            | None, None -> assert false
-          in
-          Tbl.add diagnostics ctx.tags name typ
+      | Tag { name; typ; sign; _ } -> register_tag name typ sign
       | Data { name; _ } ->
           Option.iter (fun n -> Tbl.add diagnostics ctx.datas n ()) name
       | Table { name; address_type; reftype = rt; _ } ->
@@ -9146,65 +9154,98 @@ let type_configuration ?(warn_unused = false) ?(build = true)
   let field_name field =
     match field.desc with
     | Func { name; _ }
-    | Fundecl { name; _ }
-    | GlobalDecl { name; _ }
     | Global { name; _ }
     | Memory { name; _ }
     | Table { name; _ }
     | Tag { name; _ } ->
         Some name
-    | Data _ | Elem _ | Group _ | Conditional _ | Type _ | Module_annotation _
-      ->
+    | Data _ | Elem _ | Group _ | Import _ | Import_group _ | Conditional _
+    | Type _ | Module_annotation _ ->
         None
+  in
+  (* Process the [export]/[start]/[module] attributes carried by an entity whose
+     Wax name is [default_name] (used as the export name of a bare [#[export]]).
+     [location] blames the entity when an attribute carries no value. *)
+  let process_attrs ~default_name ~location attributes =
+    List.iter
+      (fun (key, v) ->
+        match (key, Option.map (fun (v : _ instr) -> v.desc) v) with
+        | "export", ((Some (String _) | None) as value) ->
+            (* The export name and the location to blame: the explicit string
+               for [#[export = "nm"]], the entity's own name for a bare
+               [#[export]]. *)
+            let entry =
+              match value with
+              | Some (String (_, name)) -> Some (name, (Option.get v).info)
+              | _ -> (
+                  match default_name with
+                  | Some (id : ident) -> Some (id.desc, id.info)
+                  | None -> None)
+            in
+            Option.iter
+              (fun (name, location) ->
+                (* Two exports of the same name clash only when the conditional
+                   branches guarding them can hold at once; the same name in
+                   mutually exclusive branches is fine. Each remembered guard is
+                   the path condition ([!cond]) under which an export was
+                   seen. *)
+                let guards =
+                  Option.value ~default:[] (Hashtbl.find_opt exports name)
+                in
+                if
+                  List.exists
+                    (fun g -> Cond.is_satisfiable (Cond.and_ g !cond))
+                    guards
+                then Error.duplicated_export diagnostics ~location name;
+                Hashtbl.replace exports name (!cond :: guards))
+              entry
+        | "start", _ ->
+            (* A module may name at most one start function. *)
+            if !start_seen then Error.multiple_start diagnostics ~location
+            else start_seen := true
+        | "module", _ ->
+            (* A module may carry at most one name annotation. *)
+            if !module_seen then Error.multiple_module diagnostics ~location
+            else module_seen := true
+        | _ -> ())
+      attributes
+  in
+  (* Validate and process the attributes on one imported declaration: a
+     name-only [#[import = "name"]] override and [#[export]] (a re-export) are
+     meaningful there. *)
+  let check_import_decl (decl : (Ast.import_decl, location) annotated) =
+    check_attribute_list diagnostics ~export_ok:true ~start_ok:false
+      ~module_ok:false ~import_ok:true ~default_location:decl.info
+      decl.desc.attributes;
+    (match List.filter (fun (k, _) -> k = "import") decl.desc.attributes with
+    | _ :: (_, value) :: _ ->
+        let location =
+          match value with Some v -> v.info | None -> decl.info
+        in
+        Error.multiple_import diagnostics ~location
+    | _ -> ());
+    (* An imported memory/table still has size limits to validate, the same as
+       a defined one. *)
+    (match decl.desc.kind with
+    | Import_memory { address_type; limits; page_size_log2; shared } ->
+        check_limits ctx ~location:decl.info "memory" ~shared address_type
+          page_size_log2 limits max_memory_size
+    | Import_table { address_type; limits; _ } ->
+        check_limits ctx ~location:decl.info "table" ~shared:false address_type
+          None limits max_table_size
+    | Import_func _ | Import_global _ | Import_tag _ -> ());
+    process_attrs ~default_name:(Some decl.desc.id) ~location:decl.info
+      decl.desc.attributes
   in
   walk_fields
     (fun field ->
       check_attributes diagnostics field;
-      List.iter
-        (fun (key, v) ->
-          match (key, Option.map (fun (v : _ instr) -> v.desc) v) with
-          | "export", ((Some (String _) | None) as value) ->
-              (* The export name and the location to blame: the explicit string
-                 for [#[export = "nm"]], the field's own name for a bare
-                 [#[export]]. *)
-              let entry =
-                match value with
-                | Some (String (_, name)) -> Some (name, (Option.get v).info)
-                | _ -> (
-                    match field_name field with
-                    | Some id -> Some (id.desc, id.info)
-                    | None -> None)
-                (* [check_attributes] rejects [#[export]] on an unnamed field *)
-              in
-              Option.iter
-                (fun (name, location) ->
-                  (* Two exports of the same name clash only when the conditional
-                     branches guarding them can hold at once; the same name in
-                     mutually exclusive branches is fine. Each remembered guard
-                     is the path condition ([!cond]) under which an export was
-                     seen. *)
-                  let guards =
-                    Option.value ~default:[] (Hashtbl.find_opt exports name)
-                  in
-                  if
-                    List.exists
-                      (fun g -> Cond.is_satisfiable (Cond.and_ g !cond))
-                      guards
-                  then Error.duplicated_export diagnostics ~location name;
-                  Hashtbl.replace exports name (!cond :: guards))
-                entry
-          | "start", _ ->
-              (* A module may name at most one start function. *)
-              if !start_seen then
-                Error.multiple_start diagnostics ~location:field.info
-              else start_seen := true
-          | "module", _ ->
-              (* A module may carry at most one name annotation. *)
-              if !module_seen then
-                Error.multiple_module diagnostics ~location:field.info
-              else module_seen := true
-          | _ -> ())
-        (field_attributes field.desc))
+      match field.desc with
+      | Import { decl; _ } -> check_import_decl decl
+      | Import_group { decls; _ } -> List.iter check_import_decl decls
+      | _ ->
+          process_attrs ~default_name:(field_name field) ~location:field.info
+            (field_attributes field.desc))
     fields;
   let _ : _ option =
     let name = Ast.no_loc "<string>" in
@@ -9241,20 +9282,28 @@ let type_configuration ?(warn_unused = false) ?(build = true)
   if warn_unused then begin
     let exempt field =
       List.exists
-        (fun (k, _) -> k = "export" || k = "start" || k = "import")
-        (field_attributes field)
-    in
-    (* An import always carries an [import] annotation, so the definition-level
-       [exempt] would exempt every one of them; for imports only [export] and
-       [start] make them externally reachable. *)
-    let exempt_import field =
-      List.exists
         (fun (k, _) -> k = "export" || k = "start")
         (field_attributes field)
     in
     let unused tbl (name : ident) =
       (not (String.length name.desc > 0 && name.desc.[0] = '_'))
       && not (Tbl.is_used tbl name.desc)
+    in
+    (* An imported function or global that is never referenced (and not
+       re-exported) is reported, the same way an unused definition is. *)
+    let check_unused_import (decl : (Ast.import_decl, location) annotated) =
+      let exempt =
+        List.exists (fun (k, _) -> k = "export") decl.desc.attributes
+      in
+      if not exempt then
+        match decl.desc.kind with
+        | Import_func _ when unused ctx.functions decl.desc.id ->
+            Error.unused_import ctx.diagnostics ~location:decl.desc.id.info
+              "function" decl.desc.id
+        | Import_global _ when unused ctx.globals decl.desc.id ->
+            Error.unused_import ctx.diagnostics ~location:decl.desc.id.info
+              "global" decl.desc.id
+        | _ -> ()
     in
     walk_fields
       (fun field ->
@@ -9266,14 +9315,8 @@ let type_configuration ?(warn_unused = false) ?(build = true)
         | Global { name; _ }
           when (not (exempt field.desc)) && unused ctx.globals name ->
             Error.unused_field ctx.diagnostics ~location:name.info "global" name
-        | Fundecl { name; _ }
-          when (not (exempt_import field.desc)) && unused ctx.functions name ->
-            Error.unused_import ctx.diagnostics ~location:name.info "function"
-              name
-        | GlobalDecl { name; _ }
-          when (not (exempt_import field.desc)) && unused ctx.globals name ->
-            Error.unused_import ctx.diagnostics ~location:name.info "global"
-              name
+        | Import { decl; _ } -> check_unused_import decl
+        | Import_group { decls; _ } -> List.iter check_unused_import decls
         | _ -> ())
       fields
   end;

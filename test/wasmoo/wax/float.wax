@@ -17,50 +17,36 @@
 
 #[if(wasi)]
 {
-    #[import = ("io", "IO_BUFFER_SIZE")]
-    const IO_BUFFER_SIZE: i32;
-    #[import = ("libc", "memory")]
-    memory m: i32 [2];
-    #[import = ("libc", "free")]
-    fn free(i32);
-    #[import = ("libc", "format_float")]
-    fn format_float(i32, i32, i32, f64) -> i32;
-    #[import = ("libc", "strtod")]
-    fn strtod(i32, i32) -> f64;
-    #[import = ("libc", "exp")]
-    fn exp(f64) -> f64;
-    #[import = ("wasi_memory", "checked_malloc")]
-    fn checked_malloc(i32) -> i32;
-    #[import = ("wasi_memory", "get_buffer")]
-    fn get_buffer() -> i32;
-    #[import = ("wasi_memory", "write_string_to_memory")]
-    fn write_string_to_memory(i32, i32, &eq) -> i32;
-    #[import = ("wasi_memory", "release_memory")]
-    fn release_memory(i32, i32);
-    #[import = ("wasi_memory", "blit_string_to_memory")]
-    fn blit_string_to_memory(i32, &bytes);
-    #[import = ("wasi_memory", "blit_memory_to_string")]
-    fn blit_memory_to_string(i32, i32) -> &bytes;
+    import "io" const IO_BUFFER_SIZE: i32;
+    import "libc" {
+        #[import = "memory"]
+        memory m: i32 [2];
+        fn free(i32);
+        fn format_float(i32, i32, i32, f64) -> i32;
+        fn strtod(i32, i32) -> f64;
+        fn exp(f64) -> f64;
+    }
+    import "wasi_memory" {
+        fn checked_malloc(i32) -> i32;
+        fn get_buffer() -> i32;
+        fn write_string_to_memory(i32, i32, &eq) -> i32;
+        fn release_memory(i32, i32);
+        fn blit_string_to_memory(i32, &bytes);
+        fn blit_memory_to_string(i32, i32) -> &bytes;
+    }
 }
 #[else]
 {
-    #[import = ("bindings", "format_float")]
-    fn format_float(i32, i32, i32, f64) -> &?any;
-    #[import = ("bindings", "identity")]
-    fn parse_float(&?any) -> f64;
-    #[import = ("Math", "exp")]
-    fn exp(f64) -> f64;
+    import "bindings" {
+        fn format_float(i32, i32, i32, f64) -> &?any;
+        #[import = "identity"]
+        fn parse_float(&?any) -> f64;
+    }
+    import "Math" fn exp(f64) -> f64;
 }
-#[import = ("fail", "caml_failwith")]
-fn caml_failwith(&eq);
-#[import = ("fail", "caml_invalid_argument")]
-fn caml_invalid_argument(&eq);
-#[import = ("ints", "lowercase_hex_table")]
-const lowercase_hex_table: &chars;
-#[import = ("jsstring", "jsstring_of_bytes")]
-fn jsstring_of_bytes(&bytes) -> &?any;
-#[import = ("jsstring", "bytes_of_jsstring")]
-fn bytes_of_jsstring(&?any) -> &bytes;
+import "fail" { fn caml_failwith(&eq); fn caml_invalid_argument(&eq); }
+import "ints" const lowercase_hex_table: &chars;
+import "jsstring" { fn jsstring_of_bytes(&bytes) -> &?any; fn bytes_of_jsstring(&?any) -> &bytes; }
 
 type float = { f: f64 };
 type bytes = [mut i8];

@@ -15,88 +15,64 @@
 // along with this program; if not, write to the Free Software
 // Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
-#[import = ("fail", "caml_raise_sys_error")]
-fn caml_raise_sys_error(&eq);
-#[import = ("fail", "caml_raise_not_found")]
-fn caml_raise_not_found();
+import "fail" { fn caml_raise_sys_error(&eq); fn caml_raise_not_found(); }
 #[if(wasi)]
 {
-    #[import = ("wasi_snapshot_preview1", "random_get")]
-    fn random_get(i32, i32) -> i32;
-    #[import = ("wasi_snapshot_preview1", "clock_time_get")]
-    fn clock_time_get(i32, i64, i32) -> i32;
-    #[import = ("wasi_snapshot_preview1", "args_get")]
-    fn args_get(i32, i32) -> i32;
-    #[import = ("wasi_snapshot_preview1", "args_sizes_get")]
-    fn args_sizes_get(i32, i32) -> i32;
-    #[import = ("wasi_snapshot_preview1", "environ_get")]
-    fn environ_get(i32, i32) -> i32;
-    #[import = ("wasi_snapshot_preview1", "environ_sizes_get")]
-    fn environ_sizes_get(i32, i32) -> i32;
-    #[import = ("wasi_snapshot_preview1", "proc_exit")]
-    fn exit(i32);
-    #[import = ("libc", "memory")]
-    memory m: i32 [2];
-    #[import = ("libc", "free")]
-    fn free(i32);
-    #[import = ("libc", "strlen")]
-    fn strlen(i32) -> i32;
-    #[import = ("wasi_memory", "checked_malloc")]
-    fn checked_malloc(i32) -> i32;
-    #[import = ("wasi_memory", "get_buffer")]
-    fn get_buffer() -> i32;
-    #[import = ("wasi_memory", "blit_memory_to_string")]
-    fn blit_memory_to_string(i32, i32) -> &bytes;
-    #[import = ("wasi_errors", "error_messages")]
-    const error_messages: &block;
-    #[import = ("string", "caml_string_concat")]
-    fn caml_string_concat(&eq, &eq) -> &eq;
-    #[import = ("fail", "caml_invalid_argument")]
-    fn caml_invalid_argument(&eq);
+    import "wasi_snapshot_preview1" {
+        fn random_get(i32, i32) -> i32;
+        fn clock_time_get(i32, i64, i32) -> i32;
+        fn args_get(i32, i32) -> i32;
+        fn args_sizes_get(i32, i32) -> i32;
+        fn environ_get(i32, i32) -> i32;
+        fn environ_sizes_get(i32, i32) -> i32;
+        #[import = "proc_exit"]
+        fn exit(i32);
+    }
+    import "libc" {
+        #[import = "memory"]
+        memory m: i32 [2];
+        fn free(i32);
+        fn strlen(i32) -> i32;
+    }
+    import "wasi_memory" {
+        fn checked_malloc(i32) -> i32;
+        fn get_buffer() -> i32;
+        fn blit_memory_to_string(i32, i32) -> &bytes;
+    }
+    import "wasi_errors" const error_messages: &block;
+    import "string" fn caml_string_concat(&eq, &eq) -> &eq;
+    import "fail" fn caml_invalid_argument(&eq);
 }
 #[else]
 {
-    #[import = ("bindings", "ta_length")]
-    fn ta_length(&extern) -> i32;
-    #[import = ("bindings", "ta_get_i32")]
-    fn ta_get_i32(&extern, i32) -> i32;
-    #[import = ("bindings", "random_seed")]
-    fn random_seed() -> &extern;
-    #[import = ("jslib", "unwrap")]
-    fn unwrap(&eq) -> &?any;
-    #[import = ("jslib", "wrap")]
-    fn wrap(&?any) -> &eq;
-    #[import = ("jslib", "caml_jsstring_of_string")]
-    fn caml_jsstring_of_string(&eq) -> &eq;
-    #[import = ("jslib", "caml_string_of_jsstring")]
-    fn caml_string_of_jsstring(&eq) -> &eq;
-    #[import = ("jslib", "caml_js_to_string_array")]
-    fn caml_js_to_string_array(a: &extern) -> &eq;
-    #[import = ("jslib", "caml_js_meth_call")]
-    fn caml_js_meth_call(&eq, &eq, &eq) -> &eq;
-    #[import = ("bindings", "argv")]
-    fn argv_fn() -> &extern;
-    #[import = ("bindings", "on_windows")]
-    const on_windows: i32;
-    #[import = ("bindings", "on_arm64")]
-    const on_arm64: i32;
-    #[import = ("bindings", "isatty")]
-    fn isatty(&eq) -> &eq;
-    #[import = ("bindings", "system")]
-    fn system(&?any) -> &eq;
-    #[import = ("bindings", "getenv")]
-    fn getenv(&?any) -> &?any;
-    #[import = ("bindings", "time")]
-    fn time() -> f64;
-    #[import = ("fail", "javascript_exception")]
-    tag javascript_exception(&?extern);
-    #[import = ("jsstring", "jsstring_test")]
-    fn jsstring_test(&?any) -> i32;
-    #[import = ("bindings", "exit")]
-    fn exit(i32);
+    import "bindings" {
+        fn ta_length(&extern) -> i32;
+        fn ta_get_i32(&extern, i32) -> i32;
+        fn random_seed() -> &extern;
+    }
+    import "jslib" {
+        fn unwrap(&eq) -> &?any;
+        fn wrap(&?any) -> &eq;
+        fn caml_jsstring_of_string(&eq) -> &eq;
+        fn caml_string_of_jsstring(&eq) -> &eq;
+        fn caml_js_to_string_array(a: &extern) -> &eq;
+        fn caml_js_meth_call(&eq, &eq, &eq) -> &eq;
+    }
+    import "bindings" {
+        #[import = "argv"]
+        fn argv_fn() -> &extern;
+        const on_windows: i32;
+        const on_arm64: i32;
+        fn isatty(&eq) -> &eq;
+        fn system(&?any) -> &eq;
+        fn getenv(&?any) -> &?any;
+        fn time() -> f64;
+    }
+    import "fail" tag javascript_exception(&?extern);
+    import "jsstring" fn jsstring_test(&?any) -> i32;
+    import "bindings" fn exit(i32);
 }
-#[import = ("io", "caml_channel_descriptor")]
-fn caml_channel_descriptor(&eq) -> &eq;
+import "io" fn caml_channel_descriptor(&eq) -> &eq;
 
 type block = [mut &eq];
 type bytes = [mut i8];

@@ -95,6 +95,7 @@
 %token MATCH
 %token MEMORY DATA TABLE ELEM PAGESIZE SHARED
 %token DESCRIPTOR DESCRIBES
+%token IMPORT
 
 %on_error_reduce statement plaininstr separated_nonempty_list_trailing(",",structure_type_field) list(module_field) separated_nonempty_list_trailing(",",value_type) block_type separated_nonempty_list_trailing(",",function_parameter) list(label) list(attribute) list(typedef) list(legacy_catch) separated_nonempty_list_trailing(",",catch) separated_nonempty_list_trailing(",",let_pattern) blockinstr statement_list loption(separated_nonempty_list_trailing(",",catch)) separated_nonempty_list_trailing(",",expression) let_pattern structure_field separated_nonempty_list_trailing(",",structure_field) constant_expression attribute_expression parenthesized_expression index_expression then_branch condition_expression length_expression optional_function_type structure_type result_type_ expression_list structure
 
@@ -189,6 +190,12 @@ let with_loc loc desc =
    Wax_utils.Trivia.with_pos Context.context {loc_start = fst loc; loc_end = snd loc} desc
 
 let location_of loc : location = {loc_start = fst loc; loc_end = snd loc}
+
+(* Build an import declaration from its parsed attributes and kind. The
+   attributes (a name-only [#[import = "name"]] override, [#[export]], …) are
+   kept as-is and interpreted downstream. *)
+let make_import_decl loc attributes (id, kind) =
+  with_loc loc {id; kind; attributes}
 
 (* Branch-hinting proposal: [#[likely]]/[#[unlikely]] may only prefix a
    conditional branch. Wrap it in [Hinted]; reject the attribute anywhere else. *)
@@ -321,6 +328,7 @@ ident_or_keyword:
 | RESUME_THROW_REF { "resume_throw_ref" }
 | SWITCH { "switch" }
 | MEMORY { "memory" }
+| IMPORT { "import" }
 | PAGESIZE { "pagesize" }
 | SHARED { "shared" }
 | DATA { "data" }
@@ -449,9 +457,16 @@ rectype:
 
 attribute_expression: e = expression { e }
 
+(* [import] is a keyword (it heads a grouped-import block), so it is not lexed as
+   an [IDENT]; accept it explicitly as an attribute name so [#[import = ...]]
+   keeps working. *)
+%inline attribute_name:
+| name = IDENT { name }
+| IMPORT { "import" }
+
 attribute:
-| "#" "[" name = IDENT "=" i = attribute_expression "]" { (name, Some i) }
-| "#" "[" name = IDENT "]" { (name, None) }
+| "#" "[" name = attribute_name "=" i = attribute_expression "]" { (name, Some i) }
+| "#" "[" name = attribute_name "]" { (name, None) }
 
 (* Branch-hinting proposal: [#[likely]]/[#[unlikely]] prefixing an [if]/[br_if].
    Lexed as dedicated tokens (like [#[if(]) so the form does not collide with the
@@ -523,10 +538,10 @@ func:
 tag_name:
 | i = ident { i }
 
-tag:
+tag_sig:
 | TAG name = tag_name
   t = ioption(":" t = type_name { t } )
-  sign = optional_function_type ";"
+  sign = optional_function_type
   { (name, t, decl_sign $sloc t sign) }
 
 %inline block_label: l = ioption(l = label ":" { l }) { l }
@@ -879,20 +894,10 @@ global:
   "=" def = constant_expression ";"
   { fun attributes -> with_loc $sloc (Global {name; mut; typ; def; attributes}) }
 
-globaldecl:
-| mut = globalmut name = ident ":" typ = value_type ";"
+tag_def:
+| s = tag_sig ";"
   { fun attributes ->
-    with_loc $sloc (GlobalDecl {name; mut; typ; attributes}) }
-
-declaration:
-| f = fundecl ";"
-  { fun attributes ->
-    let (name, typ, sign, exact) = f in
-    with_loc $sloc (Fundecl {name; typ; sign; exact; attributes}) }
-| g = globaldecl { g }
-| f = tag
-  { fun attributes ->
-    let (name, typ, sign) = f in
+    let (name, typ, sign) = s in
     with_loc $sloc (Tag {name; typ; sign; attributes}) }
 
 definition:
@@ -902,6 +907,7 @@ definition:
 | d = data { d }
 | t = table { t }
 | e = elem { e }
+| t = tag_def { t }
 
 address_type:
 | t = IDENT
@@ -976,12 +982,42 @@ elem:
 module_field:
 | r = rectype { {desc = Type r.desc; info = r.info} }
 | a = inner_attribute { with_loc $sloc (Module_annotation [a]) }
-| attributes = list(attribute) d = declaration { attributed $sloc attributes d }
 | attributes = list(attribute) d = definition { attributed $sloc attributes d }
 | attributes = list(attribute) "{" fields = list(module_field) "}"
   { with_loc $sloc (Group {attributes; fields}) }
+| IMPORT m = STRING d = import_item
+  { with_loc $sloc (Import {module_ = m; decl = d}) }
+| IMPORT m = STRING "{" decls = list(import_item) "}"
+  { with_loc $sloc (Import_group {module_ = m; decls}) }
 | "#[if(" c = condition ")" "]" t = module_field e = else_clause
   { with_loc $sloc (Conditional {cond = c; then_fields = [t]; else_fields = e}) }
+
+(* One entry of an import block: an [fn]/[const]/[let]/[tag]/[memory]/[table]
+   declaration, optionally carrying a name-only [#[import = "name"]] (imported
+   under that name rather than the Wax name) or other attributes like
+   [#[export]]. *)
+import_item:
+| attributes = list(attribute) k = import_kind_decl ";"
+  { make_import_decl $sloc attributes k }
+
+import_kind_decl:
+| f = fundecl
+  { let (name, typ, sign, exact) = f in
+    (name, Import_func {typ; sign; exact}) }
+| mut = globalmut name = ident ":" typ = value_type
+  { (name, Import_global {mut; typ}) }
+| s = tag_sig
+  { let (name, typ, sign) = s in (name, Import_tag {typ; sign}) }
+| MEMORY name = ident ":" at = address_type lim = ioption(mem_limits)
+  ps = ioption(mem_pagesize) sh = boption(SHARED)
+  { (name,
+     Import_memory {address_type = at; limits = lim; page_size_log2 = ps;
+                    shared = sh}) }
+| TABLE name = ident ":" at = ioption(address_type) rt = reference_type
+  lim = ioption(mem_limits)
+  { (name,
+     Import_table {address_type = Option.value ~default:`I32 at; reftype = rt;
+                   limits = lim}) }
 
 else_clause:
 | %prec prec_no_else { None }

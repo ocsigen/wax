@@ -1,15 +1,13 @@
 #[if(wasi)]
 {
-    #[import = ("libc", "memory")]
-    memory m: i32 [2];
-    #[import = ("libc", "malloc")]
-    fn malloc(i32) -> i32;
-    #[import = ("libc", "free")]
-    fn free(i32);
-    #[import = ("io", "IO_BUFFER_SIZE")]
-    const IO_BUFFER_SIZE: i32;
-    #[import = ("fail", "caml_raise_out_of_memory")]
-    fn caml_raise_out_of_memory();
+    import "libc" {
+        #[import = "memory"]
+        memory m: i32 [2];
+        fn malloc(i32) -> i32;
+        fn free(i32);
+    }
+    import "io" const IO_BUFFER_SIZE: i32;
+    import "fail" fn caml_raise_out_of_memory();
 
     type bytes = [mut i8];
 

@@ -15,114 +15,79 @@
 // along with this program; if not, write to the Free Software
 // Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
-#[import = ("fail", "caml_raise_end_of_file")]
-fn caml_raise_end_of_file();
-#[import = ("fail", "caml_raise_sys_error")]
-fn caml_raise_sys_error(&eq);
-#[import = ("jslib", "wrap")]
-fn wrap(&?any) -> &eq;
-#[import = ("jslib", "unwrap")]
-fn unwrap(&eq) -> &?any;
-#[import = ("jslib", "caml_jsstring_of_string")]
-fn caml_jsstring_of_string(&eq) -> &eq;
-#[import = ("jslib", "caml_list_of_js_array")]
-fn caml_list_of_js_array(&eq) -> &eq;
+import "fail" { fn caml_raise_end_of_file(); fn caml_raise_sys_error(&eq); }
+import "jslib" {
+    fn wrap(&?any) -> &eq;
+    fn unwrap(&eq) -> &?any;
+    fn caml_jsstring_of_string(&eq) -> &eq;
+    fn caml_list_of_js_array(&eq) -> &eq;
+}
 #[if(wasi)]
 {
-    #[import = ("wasi_snapshot_preview1", "fd_close")]
-    fn fd_close(i32) -> i32;
-    #[import = ("wasi_snapshot_preview1", "fd_write")]
-    fn fd_write(i32, i32, i32, i32) -> i32;
-    #[import = ("wasi_snapshot_preview1", "fd_read")]
-    fn fd_read(i32, i32, i32, i32) -> i32;
-    #[import = ("wasi_snapshot_preview1", "fd_seek")]
-    fn fd_seek(i32, i64, i32, i32) -> i32;
-    #[import = ("wasi_snapshot_preview1", "path_open")]
-    fn path_open(i32, i32, i32, i32, i32, i64, i64, i32, i32) -> i32;
-    #[import = ("libc", "memory")]
-    memory m: i32 [2];
-    #[import = ("libc", "free")]
-    fn free(i32);
-    #[import = ("wasi_memory", "get_buffer")]
-    fn get_buffer() -> i32;
-    #[import = ("wasi_memory", "blit_memory_to_substring")]
-    fn blit_memory_to_substring(i32, &bytes, i32, i32);
-    #[import = ("wasi_memory", "blit_substring_to_memory")]
-    fn blit_substring_to_memory(i32, &bytes, i32, i32);
-    #[import = ("wasi_memory", "write_string_to_memory")]
-    fn write_string_to_memory(i32, i32, &eq) -> i32;
-    #[import = ("wasi_memory", "release_memory")]
-    fn release_memory(i32, i32);
-    #[import = ("sys", "caml_handle_sys_error")]
-    fn caml_handle_sys_error(&eq, i32);
-    #[import = ("sys", "caml_handle_sys_error_if")]
-    fn caml_handle_sys_error_if(&eq, i32);
-    #[import = ("fail", "caml_invalid_argument")]
-    fn caml_invalid_argument(&eq);
-    #[import = ("fs", "caml_sys_resolve_path")]
-    fn caml_sys_resolve_path(&eq) -> (i32, i32, i32);
+    import "wasi_snapshot_preview1" {
+        fn fd_close(i32) -> i32;
+        fn fd_write(i32, i32, i32, i32) -> i32;
+        fn fd_read(i32, i32, i32, i32) -> i32;
+        fn fd_seek(i32, i64, i32, i32) -> i32;
+        fn path_open(i32, i32, i32, i32, i32, i64, i64, i32, i32) -> i32;
+    }
+    import "libc" {
+        #[import = "memory"]
+        memory m: i32 [2];
+        fn free(i32);
+    }
+    import "wasi_memory" {
+        fn get_buffer() -> i32;
+        fn blit_memory_to_substring(i32, &bytes, i32, i32);
+        fn blit_substring_to_memory(i32, &bytes, i32, i32);
+        fn write_string_to_memory(i32, i32, &eq) -> i32;
+        fn release_memory(i32, i32);
+    }
+    import "sys" { fn caml_handle_sys_error(&eq, i32); fn caml_handle_sys_error_if(&eq, i32); }
+    import "fail" fn caml_invalid_argument(&eq);
+    import "fs" fn caml_sys_resolve_path(&eq) -> (i32, i32, i32);
 }
 #[else]
 {
-    #[import = ("bindings", "open")]
-    fn open_fn(&?any, i32, i32) -> i32;
-    #[import = ("bindings", "close")]
-    fn close(i32);
-    #[import = ("bindings", "write")]
-    fn write(i32, &extern, i32, i32, i64) -> i32;
-    #[import = ("bindings", "write")]
-    fn write'(i32, &extern, i32, i32, &?noextern) -> i32;
-    #[import = ("bindings", "read")]
-    fn read(i32, &extern, i32, i32, i64) -> i32;
-    #[import = ("bindings", "read")]
-    fn read'(i32, &extern, i32, i32, &?noextern) -> i32;
-    #[import = ("bindings", "file_size")]
-    fn file_size(i32) -> i64;
-    #[import = ("bindings", "register_channel")]
-    fn register_channel(&eq);
-    #[import = ("bindings", "unregister_channel")]
-    fn unregister_channel(&eq);
-    #[import = ("bindings", "channel_list")]
-    fn channel_list() -> &?any;
-    #[import = ("jslib", "caml_js_fun_call")]
-    fn caml_js_fun_call(&eq, &eq) -> &eq;
-    #[import = ("jslib", "caml_jsbytes_of_string")]
-    fn caml_jsbytes_of_string(&eq) -> &eq;
-    #[import = ("bindings", "ta_new")]
-    fn ta_new(i32) -> &extern;
-    #[import = ("bindings", "ta_copy")]
-    fn ta_copy(&extern, i32, i32, i32);
-    #[import = ("bindings", "ta_subarray")]
-    fn ta_subarray(&extern, i32, i32) -> &extern;
-    #[import = ("bindings", "ta_set")]
-    fn ta_set(&extern, &extern, i32);
-    #[import = ("bindings", "dv_make")]
-    fn dv_make(&extern) -> &extern;
-    #[import = ("bindings", "dv_get_ui8")]
-    fn dv_get_ui8(&?extern, i32) -> i32;
-    #[import = ("bindings", "dv_set_i8")]
-    fn dv_set_i8(&?extern, i32, i32);
-    #[import = ("sys", "caml_handle_sys_error")]
-    fn caml_handle_sys_error(&?extern);
-    #[import = ("fail", "javascript_exception")]
-    tag javascript_exception(&?extern);
-    #[import = ("bigarray", "caml_blit_dataview_to_bytes")]
-    fn caml_blit_dataview_to_bytes(&extern, i32, &bytes, i32, i32);
-    #[import = ("bigarray", "caml_blit_bytes_to_dataview")]
-    fn caml_blit_bytes_to_dataview(&bytes, i32, &extern, i32, i32);
+    import "bindings" {
+        #[import = "open"]
+        fn open_fn(&?any, i32, i32) -> i32;
+        fn close(i32);
+        fn write(i32, &extern, i32, i32, i64) -> i32;
+        #[import = "write"]
+        fn write'(i32, &extern, i32, i32, &?noextern) -> i32;
+        fn read(i32, &extern, i32, i32, i64) -> i32;
+        #[import = "read"]
+        fn read'(i32, &extern, i32, i32, &?noextern) -> i32;
+        fn file_size(i32) -> i64;
+        fn register_channel(&eq);
+        fn unregister_channel(&eq);
+        fn channel_list() -> &?any;
+    }
+    import "jslib" { fn caml_js_fun_call(&eq, &eq) -> &eq; fn caml_jsbytes_of_string(&eq) -> &eq; }
+    import "bindings" {
+        fn ta_new(i32) -> &extern;
+        fn ta_copy(&extern, i32, i32, i32);
+        fn ta_subarray(&extern, i32, i32) -> &extern;
+        fn ta_set(&extern, &extern, i32);
+        fn dv_make(&extern) -> &extern;
+        fn dv_get_ui8(&?extern, i32) -> i32;
+        fn dv_set_i8(&?extern, i32, i32);
+    }
+    import "sys" fn caml_handle_sys_error(&?extern);
+    import "fail" tag javascript_exception(&?extern);
+    import "bigarray" {
+        fn caml_blit_dataview_to_bytes(&extern, i32, &bytes, i32, i32);
+        fn caml_blit_bytes_to_dataview(&bytes, i32, &extern, i32, i32);
+    }
 }
-#[import = ("custom", "custom_compare_id")]
-fn custom_compare_id(&eq, &eq, i32) -> i32;
-#[import = ("custom", "custom_hash_id")]
-fn custom_hash_id(&eq) -> i32;
-#[import = ("custom", "custom_next_id")]
-fn custom_next_id() -> i64;
-#[import = ("int64", "caml_copy_int64")]
-fn caml_copy_int64(i64) -> &eq;
-#[import = ("int64", "Int64_val")]
-fn Int64_val(&eq) -> i64;
-#[import = ("bigarray", "caml_ba_get_data")]
-fn caml_ba_get_data(&eq) -> &extern;
+import "custom" {
+    fn custom_compare_id(&eq, &eq, i32) -> i32;
+    fn custom_hash_id(&eq) -> i32;
+    fn custom_next_id() -> i64;
+}
+import "int64" { fn caml_copy_int64(i64) -> &eq; fn Int64_val(&eq) -> i64; }
+import "bigarray" fn caml_ba_get_data(&eq) -> &extern;
 
 #[if(wasi)]
 {
@@ -228,14 +193,12 @@ fn caml_ba_get_data(&eq) -> &extern;
 }
 #[else]
 {
-    #[import = ("bindings", "map_new")]
-    fn map_new() -> &extern;
-    #[import = ("bindings", "map_get")]
-    fn map_get(&extern, i32) -> &?fd_offset;
-    #[import = ("bindings", "map_set")]
-    fn map_set(&extern, i32, &fd_offset);
-    #[import = ("bindings", "map_delete")]
-    fn map_delete(&extern, i32);
+    import "bindings" {
+        fn map_new() -> &extern;
+        fn map_get(&extern, i32) -> &?fd_offset;
+        fn map_set(&extern, i32, &fd_offset);
+        fn map_delete(&extern, i32);
+    }
 
     fn ta_blit_from_buffer(buf: &extern, i: i32, ta: &extern, j: i32, len: i32) {
         ta_set(ta, ta_subarray(buf, i, i + len), j);

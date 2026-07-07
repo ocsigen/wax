@@ -115,11 +115,10 @@ let state: &?any = null;
 ### Imported Globals
 
 ```wax
-#[import = ("env", "base")]
-const base: i32;
-
-#[import = ("env", "counter")]
-let counter: i32;
+import "env" {
+    const base: i32;
+    let counter: i32;
+}
 ```
 
 ## Tags
@@ -153,8 +152,7 @@ tag yield(value: i32) -> i32;
 ### Imported Tags
 
 ```wax
-#[import = ("env", "js_error")]
-tag js_error(&?extern);
+import "env" tag js_error(&?extern);
 ```
 
 ## Attributes
@@ -204,29 +202,30 @@ fn init() {
 }
 ```
 
-### Import Attribute
+## Imports
 
-Import a field from a module. Takes a tuple of `("module", "name")`:
+Import fields from a host module with an `import "module" { … }` block; a lone
+import can use the one-line `import "module" <declaration>;` form. Each entry is
+imported under its own Wax name, unless a name-only `#[import = "name"]`
+overrides that.
 
 ```wax
-#[import = ("env", "log")]
-fn log(msg: i32);
+import "env" {
+    fn log(msg: i32);
+    const memory_base: i32;
+    #[import = "js_error"]
+    tag error(code: i32);
+}
 
-#[import = ("env", "memory_base")]
-const memory_base: i32;
-
-#[import = ("env", "error")]
-tag error(code: i32);
+import "env" fn trace(msg: i32);
 ```
 
 ### Combined Import and Export
 
-A field can be both imported and re-exported:
+A field can be both imported and re-exported by adding `#[export]` to it:
 
 ```wax
-#[import = ("env", "value")]
-#[export = "value"]
-const value: i32;
+import "env" #[export = "value"] const value: i32;
 ```
 
 ## Conditional Annotations
@@ -385,11 +384,10 @@ type point = { x: i32, y: i32 };
 type callback = fn(_: i32) -> i32;
 
 // 2. Imported globals and functions
-#[import = ("env", "log")]
-fn log(value: i32);
-
-#[import = ("env", "base")]
-const base: i32;
+import "env" {
+    fn log(value: i32);
+    const base: i32;
+}
 
 // 3. Tags
 tag my_error(code: i32);

@@ -15,10 +15,8 @@
 // along with this program; if not, write to the Free Software
 // Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
-#[import = ("io", "caml_getblock")]
-fn caml_getblock(&eq, &bytes, i32, i32) -> i32;
-#[import = ("fail", "caml_raise_end_of_file")]
-fn caml_raise_end_of_file();
+import "io" fn caml_getblock(&eq, &bytes, i32, i32) -> i32;
+import "fail" fn caml_raise_end_of_file();
 
 type bytes = [mut i8];
 type int_array = [mut i32];

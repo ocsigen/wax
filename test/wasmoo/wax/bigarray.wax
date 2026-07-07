@@ -15,62 +15,40 @@
 // along with this program; if not, write to the Free Software
 // Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
-#[import = ("fail", "caml_bound_error")]
-fn caml_bound_error();
-#[import = ("fail", "caml_raise_out_of_memory")]
-fn caml_raise_out_of_memory();
-#[import = ("fail", "caml_invalid_argument")]
-fn caml_invalid_argument(&eq);
-#[import = ("fail", "caml_failwith")]
-fn caml_failwith(&eq);
-#[import = ("jslib", "wrap")]
-fn wrap(&?any) -> &eq;
-#[import = ("jslib", "unwrap")]
-fn unwrap(&eq) -> &?any;
-#[import = ("int32", "caml_copy_int32")]
-fn caml_copy_int32(i32) -> &eq;
-#[import = ("int32", "Int32_val")]
-fn Int32_val(&eq) -> i32;
-#[import = ("int32", "caml_copy_nativeint")]
-fn caml_copy_nativeint(i32) -> &eq;
-#[import = ("int64", "caml_copy_int64")]
-fn caml_copy_int64(i64) -> &eq;
-#[import = ("int64", "Int64_val")]
-fn Int64_val(&eq) -> i64;
-#[import = ("obj", "double_array_tag")]
-const double_array_tag: i32;
-#[import = ("compare", "unordered")]
-const unordered: i32;
-#[import = ("hash", "caml_hash_mix_int")]
-fn caml_hash_mix_int(i32, i32) -> i32;
-#[import = ("hash", "caml_hash_mix_int64")]
-fn caml_hash_mix_int64(i32, i64) -> i32;
-#[import = ("hash", "caml_hash_mix_double")]
-fn caml_hash_mix_double(i32, f64) -> i32;
-#[import = ("hash", "caml_hash_mix_float")]
-fn caml_hash_mix_float(i32, f32) -> i32;
-#[import = ("hash", "caml_hash_mix_float16")]
-fn caml_hash_mix_float16(i32, i32) -> i32;
-#[import = ("marshal", "caml_serialize_int_1")]
-fn caml_serialize_int_1(&eq, i32);
-#[import = ("marshal", "caml_serialize_int_2")]
-fn caml_serialize_int_2(&eq, i32);
-#[import = ("marshal", "caml_serialize_int_4")]
-fn caml_serialize_int_4(&eq, i32);
-#[import = ("marshal", "caml_serialize_int_8")]
-fn caml_serialize_int_8(&eq, i64);
-#[import = ("marshal", "caml_deserialize_uint_1")]
-fn caml_deserialize_uint_1(&eq) -> i32;
-#[import = ("marshal", "caml_deserialize_sint_1")]
-fn caml_deserialize_sint_1(&eq) -> i32;
-#[import = ("marshal", "caml_deserialize_uint_2")]
-fn caml_deserialize_uint_2(&eq) -> i32;
-#[import = ("marshal", "caml_deserialize_sint_2")]
-fn caml_deserialize_sint_2(&eq) -> i32;
-#[import = ("marshal", "caml_deserialize_int_4")]
-fn caml_deserialize_int_4(&eq) -> i32;
-#[import = ("marshal", "caml_deserialize_int_8")]
-fn caml_deserialize_int_8(&eq) -> i64;
+import "fail" {
+    fn caml_bound_error();
+    fn caml_raise_out_of_memory();
+    fn caml_invalid_argument(&eq);
+    fn caml_failwith(&eq);
+}
+import "jslib" { fn wrap(&?any) -> &eq; fn unwrap(&eq) -> &?any; }
+import "int32" {
+    fn caml_copy_int32(i32) -> &eq;
+    fn Int32_val(&eq) -> i32;
+    fn caml_copy_nativeint(i32) -> &eq;
+}
+import "int64" { fn caml_copy_int64(i64) -> &eq; fn Int64_val(&eq) -> i64; }
+import "obj" const double_array_tag: i32;
+import "compare" const unordered: i32;
+import "hash" {
+    fn caml_hash_mix_int(i32, i32) -> i32;
+    fn caml_hash_mix_int64(i32, i64) -> i32;
+    fn caml_hash_mix_double(i32, f64) -> i32;
+    fn caml_hash_mix_float(i32, f32) -> i32;
+    fn caml_hash_mix_float16(i32, i32) -> i32;
+}
+import "marshal" {
+    fn caml_serialize_int_1(&eq, i32);
+    fn caml_serialize_int_2(&eq, i32);
+    fn caml_serialize_int_4(&eq, i32);
+    fn caml_serialize_int_8(&eq, i64);
+    fn caml_deserialize_uint_1(&eq) -> i32;
+    fn caml_deserialize_sint_1(&eq) -> i32;
+    fn caml_deserialize_uint_2(&eq) -> i32;
+    fn caml_deserialize_sint_2(&eq) -> i32;
+    fn caml_deserialize_int_4(&eq) -> i32;
+    fn caml_deserialize_int_8(&eq) -> i64;
+}
 
 #[if(wasi)]
 {
@@ -393,66 +371,44 @@ fn caml_deserialize_int_8(&eq) -> i64;
     const littleEndian = 1;
 }
 #[else]
-{
-    #[import = ("bindings", "ta_create")]
+import "bindings" {
     fn ta_create(i32, i32) -> &extern;
-    #[import = ("bindings", "ta_normalize")]
     fn ta_normalize(&extern) -> &extern;
-    #[import = ("bindings", "ta_kind")]
     fn ta_kind(&extern) -> i32;
-    #[import = ("bindings", "ta_length")]
     fn ta_length(&extern) -> i32;
-    #[import = ("bindings", "ta_fill")]
+    #[import = "ta_fill"]
     fn ta_fill_int(&extern, i32);
-    #[import = ("bindings", "ta_fill")]
+    #[import = "ta_fill"]
     fn ta_fill_float(&extern, f64);
-    #[import = ("bindings", "ta_blit")]
     fn ta_blit(&extern, &extern);
-    #[import = ("bindings", "ta_subarray")]
     fn ta_subarray(&extern, i32, i32) -> &extern;
-    #[import = ("bindings", "dv_make")]
     fn dv_make(&extern) -> &extern;
-    #[import = ("bindings", "dv_get_f64")]
     fn dv_get_f64(&?extern, i32, i32) -> f64;
-    #[import = ("bindings", "dv_get_f32")]
     fn dv_get_f32(&?extern, i32, i32) -> f32;
-    #[import = ("bindings", "dv_get_i64")]
     fn dv_get_i64(&?extern, i32, i32) -> i64;
-    #[import = ("bindings", "dv_get_i32")]
     fn dv_get_i32(&?extern, i32, i32) -> i32;
-    #[import = ("bindings", "dv_get_i16")]
     fn dv_get_i16(&?extern, i32, i32) -> i32;
-    #[import = ("bindings", "dv_get_ui16")]
     fn dv_get_ui16(&?extern, i32, i32) -> i32;
-    #[import = ("bindings", "dv_get_i8")]
     fn dv_get_i8(&?extern, i32) -> i32;
-    #[import = ("bindings", "dv_get_ui8")]
     fn dv_get_ui8(&?extern, i32) -> i32;
-    #[import = ("bindings", "dv_set_f64")]
     fn dv_set_f64(&?extern, i32, f64, i32);
-    #[import = ("bindings", "dv_set_f32")]
     fn dv_set_f32(&?extern, i32, f32, i32);
-    #[import = ("bindings", "dv_set_i64")]
     fn dv_set_i64(&?extern, i32, i64, i32);
-    #[import = ("bindings", "dv_set_i32")]
     fn dv_set_i32(&?extern, i32, i32, i32);
-    #[import = ("bindings", "dv_set_i16")]
     fn dv_set_i16(&?extern, i32, i32, i32);
-    #[import = ("bindings", "dv_set_i8")]
     fn dv_set_i8(&?extern, i32, i32);
-    #[import = ("bindings", "dv_get_i64")]
+    #[import = "dv_get_i64"]
     fn dv_get_i64_unaligned(&?extern, i32, i32) -> i64;
-    #[import = ("bindings", "dv_get_i32")]
+    #[import = "dv_get_i32"]
     fn dv_get_i32_unaligned(&?extern, i32, i32) -> i32;
-    #[import = ("bindings", "dv_get_ui16")]
+    #[import = "dv_get_ui16"]
     fn dv_get_ui16_unaligned(&?extern, i32, i32) -> i32;
-    #[import = ("bindings", "dv_set_i64")]
+    #[import = "dv_set_i64"]
     fn dv_set_i64_unaligned(&?extern, i32, i64, i32);
-    #[import = ("bindings", "dv_set_i32")]
+    #[import = "dv_set_i32"]
     fn dv_set_i32_unaligned(&?extern, i32, i32, i32);
-    #[import = ("bindings", "dv_set_i16")]
+    #[import = "dv_set_i16"]
     fn dv_set_i16_unaligned(&?extern, i32, i32, i32);
-    #[import = ("bindings", "littleEndian")]
     const littleEndian: i32;
 }
 

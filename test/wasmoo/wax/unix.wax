@@ -18,222 +18,140 @@
 #[if(wasi)]
 {
     type path_op = fn(i32, i32, i32) -> i32;
-    #[import = ("wasi_snapshot_preview1", "clock_time_get")]
-    fn clock_time_get(i32, i64, i32) -> i32;
-    #[import = ("wasi_snapshot_preview1", "path_filestat_get")]
-    fn path_filestat_get(i32, i32, i32, i32, i32) -> i32;
-    #[import = ("wasi_snapshot_preview1", "path_rename")]
-    fn path_rename(i32, i32, i32, i32, i32, i32) -> i32;
-    #[import = ("wasi_snapshot_preview1", "path_link")]
-    fn path_link(i32, i32, i32, i32, i32, i32, i32) -> i32;
-    #[import = ("wasi_snapshot_preview1", "path_symlink")]
-    fn path_symlink(i32, i32, i32, i32, i32) -> i32;
-    #[import = ("wasi_snapshot_preview1", "path_readlink")]
-    fn path_readlink(i32, i32, i32, i32, i32, i32) -> i32;
-    #[import = ("wasi_snapshot_preview1", "path_create_directory")]
-    fn path_create_directory: path_op ;
-    #[import = ("wasi_snapshot_preview1", "path_unlink_file")]
-    fn path_unlink_file: path_op ;
-    #[import = ("wasi_snapshot_preview1", "path_remove_directory")]
-    fn path_remove_directory: path_op ;
-    #[import = ("wasi_snapshot_preview1", "path_open")]
-    fn path_open(i32, i32, i32, i32, i32, i64, i64, i32, i32) -> i32;
-    #[import = ("wasi_snapshot_preview1", "path_filestat_set_times")]
-    fn path_filestat_set_times(i32, i32, i32, i32, i64, i64, i32) -> i32;
-    #[import = ("wasi_snapshot_preview1", "fd_filestat_get")]
-    fn fd_filestat_get(i32, i32) -> i32;
-    #[import = ("wasi_snapshot_preview1", "fd_filestat_set_size")]
-    fn fd_filestat_set_size(i32, i64) -> i32;
-    #[import = ("wasi_snapshot_preview1", "fd_write")]
-    fn fd_write(i32, i32, i32, i32) -> i32;
-    #[import = ("wasi_snapshot_preview1", "fd_read")]
-    fn fd_read(i32, i32, i32, i32) -> i32;
-    #[import = ("wasi_snapshot_preview1", "fd_seek")]
-    fn fd_seek(i32, i64, i32, i32) -> i32;
-    #[import = ("wasi_snapshot_preview1", "fd_sync")]
-    fn fd_sync(i32) -> i32;
-    #[import = ("wasi_snapshot_preview1", "fd_close")]
-    fn fd_close(i32) -> i32;
-    #[import = ("wasi_snapshot_preview1", "fd_readdir")]
-    fn fd_readddir(i32, i32, i32, i64, i32) -> i32;
-    #[import = ("libc", "memory")]
-    memory m: i32 [2];
-    #[import = ("libc", "free")]
-    fn free(i32);
-    #[import = ("libc", "gmtime")]
-    fn gmtime(i32) -> i32;
-    #[import = ("libc", "localtime")]
-    fn localtime(i32) -> i32;
-    #[import = ("libc", "mktime")]
-    fn mktime(i32) -> i64;
-    #[import = ("wasi_memory", "checked_malloc")]
-    fn checked_malloc(i32) -> i32;
-    #[import = ("wasi_memory", "get_buffer")]
-    fn get_buffer() -> i32;
-    #[import = ("wasi_memory", "write_string_to_memory")]
-    fn write_string_to_memory(i32, i32, &eq) -> i32;
-    #[import = ("wasi_memory", "blit_memory_to_string")]
-    fn blit_memory_to_string(i32, i32) -> &bytes;
-    #[import = ("wasi_memory", "blit_memory_to_substring")]
-    fn blit_memory_to_substring(i32, &bytes, i32, i32);
-    #[import = ("wasi_memory", "blit_substring_to_memory")]
-    fn blit_substring_to_memory(i32, &bytes, i32, i32);
-    #[import = ("fs", "wasi_resolve_path")]
-    fn wasi_resolve_path(&eq) -> (i32, i32, i32);
-    #[import = ("fs", "wasi_chdir")]
-    fn wasi_chdir(&eq);
-    #[import = ("wasi_errors", "error_messages")]
-    const error_messages: &block;
-    #[import = ("ints", "caml_format_int")]
-    fn caml_format_int(&eq, &eq) -> &eq;
-    #[import = ("string", "caml_string_concat")]
-    fn caml_string_concat(&eq, &eq) -> &eq;
+    import "wasi_snapshot_preview1" {
+        fn clock_time_get(i32, i64, i32) -> i32;
+        fn path_filestat_get(i32, i32, i32, i32, i32) -> i32;
+        fn path_rename(i32, i32, i32, i32, i32, i32) -> i32;
+        fn path_link(i32, i32, i32, i32, i32, i32, i32) -> i32;
+        fn path_symlink(i32, i32, i32, i32, i32) -> i32;
+        fn path_readlink(i32, i32, i32, i32, i32, i32) -> i32;
+        fn path_create_directory: path_op ;
+        fn path_unlink_file: path_op ;
+        fn path_remove_directory: path_op ;
+        fn path_open(i32, i32, i32, i32, i32, i64, i64, i32, i32) -> i32;
+        fn path_filestat_set_times(i32, i32, i32, i32, i64, i64, i32) -> i32;
+        fn fd_filestat_get(i32, i32) -> i32;
+        fn fd_filestat_set_size(i32, i64) -> i32;
+        fn fd_write(i32, i32, i32, i32) -> i32;
+        fn fd_read(i32, i32, i32, i32) -> i32;
+        fn fd_seek(i32, i64, i32, i32) -> i32;
+        fn fd_sync(i32) -> i32;
+        fn fd_close(i32) -> i32;
+        #[import = "fd_readdir"]
+        fn fd_readddir(i32, i32, i32, i64, i32) -> i32;
+    }
+    import "libc" {
+        #[import = "memory"]
+        memory m: i32 [2];
+        fn free(i32);
+        fn gmtime(i32) -> i32;
+        fn localtime(i32) -> i32;
+        fn mktime(i32) -> i64;
+    }
+    import "wasi_memory" {
+        fn checked_malloc(i32) -> i32;
+        fn get_buffer() -> i32;
+        fn write_string_to_memory(i32, i32, &eq) -> i32;
+        fn blit_memory_to_string(i32, i32) -> &bytes;
+        fn blit_memory_to_substring(i32, &bytes, i32, i32);
+        fn blit_substring_to_memory(i32, &bytes, i32, i32);
+    }
+    import "fs" { fn wasi_resolve_path(&eq) -> (i32, i32, i32); fn wasi_chdir(&eq); }
+    import "wasi_errors" const error_messages: &block;
+    import "ints" fn caml_format_int(&eq, &eq) -> &eq;
+    import "string" fn caml_string_concat(&eq, &eq) -> &eq;
 }
 #[else]
 {
-    #[import = ("bindings", "gettimeofday")]
-    fn gettimeofday() -> f64;
-    #[import = ("bindings", "times")]
-    fn times() -> &eq;
-    #[import = ("bindings", "gmtime")]
-    fn gmtime(f64) -> &eq;
-    #[import = ("bindings", "localtime")]
-    fn localtime(f64) -> &eq;
-    #[import = ("bindings", "mktime")]
-    fn mktime(i32, i32, i32, i32, i32, i32) -> f64;
-    #[import = ("bindings", "utimes")]
-    fn utimes(&?any, f64, f64);
-    #[import = ("bindings", "stat")]
-    fn stat(&?any, i32) -> &eq;
-    #[import = ("bindings", "lstat")]
-    fn lstat(&?any, i32) -> &eq;
-    #[import = ("bindings", "fstat")]
-    fn fstat(&eq, i32) -> &eq;
-    #[import = ("bindings", "chmod")]
-    fn chmod(&?any, &eq);
-    #[import = ("bindings", "fchmod")]
-    fn fchmod(&eq, &eq);
-    #[import = ("bindings", "rename")]
-    fn rename(&?any, &?any);
-    #[import = ("bindings", "getcwd")]
-    fn getcwd() -> &?any;
-    #[import = ("bindings", "chdir")]
-    fn chdir(&?any);
-    #[import = ("bindings", "mkdir")]
-    fn mkdir(&?any, i32);
-    #[import = ("bindings", "opendir")]
-    fn opendir(&?any) -> &?any;
-    #[import = ("bindings", "readdir")]
-    fn readdir(&?any) -> &?any;
-    #[import = ("bindings", "closedir")]
-    fn closedir(&?any);
-    #[import = ("bindings", "rmdir")]
-    fn rmdir(&?any);
-    #[import = ("bindings", "link")]
-    fn link(&?any, &?any);
-    #[import = ("bindings", "symlink")]
-    fn symlink(&?any, &?any, i32);
-    #[import = ("bindings", "readlink")]
-    fn readlink(&?any) -> &?any;
-    #[import = ("bindings", "unlink")]
-    fn unlink(&?any);
-    #[import = ("bindings", "truncate")]
-    fn truncate(&?any, &eq);
-    #[import = ("bindings", "truncate")]
-    fn truncate_64(&?any, f64);
-    #[import = ("bindings", "ftruncate")]
-    fn ftruncate(&eq, &eq);
-    #[import = ("bindings", "ftruncate")]
-    fn ftruncate_64(&eq, f64);
-    #[import = ("bindings", "file_size")]
-    fn file_size(i32) -> i64;
-    #[import = ("bindings", "access")]
-    fn access(&?any, i32);
-    #[import = ("bindings", "open")]
-    fn open_fn(&?any, i32, i32) -> i32;
-    #[import = ("bindings", "write")]
-    fn write(i32, &extern, i32, i32, i64) -> i32;
-    #[import = ("bindings", "write")]
-    fn write'(i32, &extern, i32, i32, &?noextern) -> i32;
-    #[import = ("bindings", "read")]
-    fn read(i32, &extern, i32, i32, i64) -> i32;
-    #[import = ("bindings", "read")]
-    fn read'(i32, &extern, i32, i32, &?noextern) -> i32;
-    #[import = ("bindings", "fsync")]
-    fn fsync(&eq);
-    #[import = ("bindings", "close")]
-    fn close(&eq);
-    #[import = ("bindings", "isatty")]
-    #[export = "unix_isatty"]
-    #[export = "caml_unix_isatty"]
-    fn isatty(&eq) -> &eq;
-    #[import = ("bindings", "getuid")]
-    fn getuid() -> i32;
-    #[import = ("bindings", "geteuid")]
-    fn geteuid() -> i32;
-    #[import = ("bindings", "getgid")]
-    fn getgid() -> i32;
-    #[import = ("bindings", "getegid")]
-    fn getegid() -> i32;
-    #[import = ("js", "unix_error")]
-    const unix_error_js: &any;
-    #[import = ("js", "caml_strerror")]
-    fn caml_strerror(i32) -> &any;
-    #[import = ("jslib", "wrap")]
-    fn wrap(&?any) -> &eq;
-    #[import = ("jslib", "unwrap")]
-    fn unwrap(&eq) -> &?any;
-    #[import = ("jslib", "caml_js_meth_call")]
-    fn caml_js_meth_call(&eq, &eq, &eq) -> &eq;
-    #[import = ("jslib", "caml_js_get")]
-    fn caml_js_get(&eq, &eq) -> &eq;
-    #[import = ("jslib", "caml_string_of_jsstring")]
-    fn caml_string_of_jsstring(&eq) -> &eq;
-    #[import = ("jslib", "caml_jsstring_of_string")]
-    fn caml_jsstring_of_string(&eq) -> &eq;
-    #[import = ("jsstring", "jsstring_test")]
-    fn jsstring_test(&?any) -> i32;
+    import "bindings" {
+        fn gettimeofday() -> f64;
+        fn times() -> &eq;
+        fn gmtime(f64) -> &eq;
+        fn localtime(f64) -> &eq;
+        fn mktime(i32, i32, i32, i32, i32, i32) -> f64;
+        fn utimes(&?any, f64, f64);
+        fn stat(&?any, i32) -> &eq;
+        fn lstat(&?any, i32) -> &eq;
+        fn fstat(&eq, i32) -> &eq;
+        fn chmod(&?any, &eq);
+        fn fchmod(&eq, &eq);
+        fn rename(&?any, &?any);
+        fn getcwd() -> &?any;
+        fn chdir(&?any);
+        fn mkdir(&?any, i32);
+        fn opendir(&?any) -> &?any;
+        fn readdir(&?any) -> &?any;
+        fn closedir(&?any);
+        fn rmdir(&?any);
+        fn link(&?any, &?any);
+        fn symlink(&?any, &?any, i32);
+        fn readlink(&?any) -> &?any;
+        fn unlink(&?any);
+        fn truncate(&?any, &eq);
+        #[import = "truncate"]
+        fn truncate_64(&?any, f64);
+        fn ftruncate(&eq, &eq);
+        #[import = "ftruncate"]
+        fn ftruncate_64(&eq, f64);
+        fn file_size(i32) -> i64;
+        fn access(&?any, i32);
+        #[import = "open"]
+        fn open_fn(&?any, i32, i32) -> i32;
+        fn write(i32, &extern, i32, i32, i64) -> i32;
+        #[import = "write"]
+        fn write'(i32, &extern, i32, i32, &?noextern) -> i32;
+        fn read(i32, &extern, i32, i32, i64) -> i32;
+        #[import = "read"]
+        fn read'(i32, &extern, i32, i32, &?noextern) -> i32;
+        fn fsync(&eq);
+        fn close(&eq);
+        #[export = "unix_isatty"]
+        #[export = "caml_unix_isatty"]
+        fn isatty(&eq) -> &eq;
+        fn getuid() -> i32;
+        fn geteuid() -> i32;
+        fn getgid() -> i32;
+        fn getegid() -> i32;
+    }
+    import "js" {
+        #[import = "unix_error"]
+        const unix_error_js: &any;
+        fn caml_strerror(i32) -> &any;
+    }
+    import "jslib" {
+        fn wrap(&?any) -> &eq;
+        fn unwrap(&eq) -> &?any;
+        fn caml_js_meth_call(&eq, &eq, &eq) -> &eq;
+        fn caml_js_get(&eq, &eq) -> &eq;
+        fn caml_string_of_jsstring(&eq) -> &eq;
+        fn caml_jsstring_of_string(&eq) -> &eq;
+    }
+    import "jsstring" fn jsstring_test(&?any) -> i32;
 }
-#[import = ("stdlib", "caml_named_value")]
-fn caml_named_value(&eq) -> &?eq;
-#[import = ("fail", "ocaml_exception")]
-tag ocaml_exception(&eq);
-#[import = ("fail", "javascript_exception")]
-tag javascript_exception(&?extern);
-#[import = ("fail", "caml_raise_end_of_file")]
-fn caml_raise_end_of_file();
-#[import = ("fail", "caml_invalid_argument")]
-fn caml_invalid_argument(&eq);
-#[import = ("fail", "caml_raise_not_found")]
-fn caml_raise_not_found();
-#[import = ("io", "convert_flag_list")]
-fn convert_flag_list(&flags, &eq) -> i32;
-#[import = ("io", "IO_BUFFER_SIZE")]
-const IO_BUFFER_SIZE: i32;
-#[import = ("io", "initialize_fd_offset")]
-fn initialize_fd_offset(i32, i64, i32);
-#[import = ("io", "get_fd_offset_unchecked")]
-fn get_fd_offset_unchecked(i32) -> &?fd_offset;
-#[import = ("io", "release_fd_offset")]
-fn release_fd_offset(i32);
-#[import = ("io", "caml_ml_open_descriptor_in")]
-fn caml_ml_open_descriptor_in(&eq) -> &eq;
-#[import = ("io", "caml_ml_open_descriptor_out")]
-fn caml_ml_open_descriptor_out(&eq) -> &eq;
-#[import = ("bindings", "ta_new")]
-fn ta_new(i32) -> &extern;
-#[import = ("bindings", "dv_make")]
-fn dv_make(&extern) -> &extern;
-#[import = ("bigarray", "caml_blit_dataview_to_bytes")]
-fn caml_blit_dataview_to_bytes(&extern, i32, &bytes, i32, i32);
-#[import = ("bigarray", "caml_blit_bytes_to_dataview")]
-fn caml_blit_bytes_to_dataview(&bytes, i32, &extern, i32, i32);
-#[import = ("bigarray", "caml_ba_get_data")]
-fn caml_ba_get_data(&eq) -> &extern;
-#[import = ("int64", "caml_copy_int64")]
-fn caml_copy_int64(i64) -> &eq;
-#[import = ("int64", "Int64_val")]
-fn Int64_val(&eq) -> i64;
+import "stdlib" fn caml_named_value(&eq) -> &?eq;
+import "fail" {
+    tag ocaml_exception(&eq);
+    tag javascript_exception(&?extern);
+    fn caml_raise_end_of_file();
+    fn caml_invalid_argument(&eq);
+    fn caml_raise_not_found();
+}
+import "io" {
+    fn convert_flag_list(&flags, &eq) -> i32;
+    const IO_BUFFER_SIZE: i32;
+    fn initialize_fd_offset(i32, i64, i32);
+    fn get_fd_offset_unchecked(i32) -> &?fd_offset;
+    fn release_fd_offset(i32);
+    fn caml_ml_open_descriptor_in(&eq) -> &eq;
+    fn caml_ml_open_descriptor_out(&eq) -> &eq;
+}
+import "bindings" { fn ta_new(i32) -> &extern; fn dv_make(&extern) -> &extern; }
+import "bigarray" {
+    fn caml_blit_dataview_to_bytes(&extern, i32, &bytes, i32, i32);
+    fn caml_blit_bytes_to_dataview(&bytes, i32, &extern, i32, i32);
+    fn caml_ba_get_data(&eq) -> &extern;
+}
+import "int64" { fn caml_copy_int64(i64) -> &eq; fn Int64_val(&eq) -> i64; }
 
 type bytes = [mut i8];
 type block = [mut &eq];

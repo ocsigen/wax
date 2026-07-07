@@ -32,13 +32,13 @@ A cast to an inline function type [&fn(..)]:
 
   $ wax check cast.wax
   Error: Expecting type i32 but got type fn(i32) -> i32.
-   ──➤  cast.wax:5:6
-  3 │ 
-  4 │ fn f() -> i32 {
-  5 │     (g as &fn(i32) -> i32);
+   ──➤  cast.wax:4:6
+  2 │ 
+  3 │ fn f() -> i32 {
+  4 │     (g as &fn(i32) -> i32);
     ·      ^^^^^^^^^^^^^^^^^^^^
-  6 │ }
-  7 │ 
+  5 │ }
+  6 │ 
   [128]
 
 The inline function type is minted while type-checking, so it lies outside the

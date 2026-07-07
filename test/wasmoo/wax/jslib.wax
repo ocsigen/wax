@@ -19,100 +19,65 @@ type bytes = [mut i8];
 
 #[if(not(wasi))]
 {
-    #[import = ("bindings", "identity")]
-    fn to_float(&?any) -> f64;
-    #[import = ("bindings", "identity")]
-    fn from_float(f64) -> &?any;
-    #[import = ("bindings", "identity")]
-    fn to_bool(&?any) -> i32;
-    #[import = ("bindings", "identity")]
-    fn to_int32(&?any) -> i32;
-    #[import = ("bindings", "identity")]
-    fn from_int32(i32) -> &?any;
-    #[import = ("bindings", "from_bool")]
-    fn from_bool(i32) -> &?any;
-    #[import = ("bindings", "get")]
-    fn get(&extern, &?any) -> &?any;
-    #[import = ("bindings", "set")]
-    fn set(&?any, &?any, &?any);
-    #[import = ("bindings", "delete")]
-    fn delete(&?any, &?any);
-    #[import = ("bindings", "instanceof")]
-    fn instanceof(&?any, &?any) -> i32;
-    #[import = ("bindings", "is_js_error")]
-    fn is_js_error(&?any) -> i32;
-    #[import = ("bindings", "to_js_string")]
-    fn to_js_string(&?any) -> &?any;
-    #[import = ("bindings", "typeof")]
-    fn typeof(&?any) -> &?any;
-    #[import = ("bindings", "equals")]
-    fn equals(&?any, &?any) -> i32;
-    #[import = ("bindings", "strict_equals")]
-    fn strict_equals(&?any, &?any) -> i32;
-    #[import = ("bindings", "fun_call")]
-    fn fun_call(&?any, &?any, &?any) -> &?any;
-    #[import = ("bindings", "meth_call")]
-    fn meth_call(&?any, &?any, &?any) -> &?any;
-    #[import = ("bindings", "new")]
-    fn new(&?any, &?any) -> &?any;
-    #[import = ("bindings", "new_obj")]
-    fn new_obj() -> &?any;
-    #[import = ("bindings", "new_array")]
-    fn new_array(i32) -> &extern;
-    #[import = ("bindings", "global_this")]
-    const global_this: &?any;
-    #[import = ("bindings", "iter_props")]
-    fn iter_props(&?any, &?any);
-    #[import = ("bindings", "array_length")]
-    fn array_length(&extern) -> i32;
-    #[import = ("bindings", "array_get")]
-    fn array_get(&extern, i32) -> &?any;
-    #[import = ("bindings", "array_set")]
-    fn array_set(&extern, i32, &?any);
-    #[import = ("bindings", "wrap_callback")]
-    fn wrap_callback(&eq) -> &?any;
-    #[import = ("bindings", "wrap_callback_args")]
-    fn wrap_callback_args(&eq) -> &?any;
-    #[import = ("bindings", "wrap_callback_strict")]
-    fn wrap_callback_strict(i32, &eq) -> &?any;
-    #[import = ("bindings", "wrap_callback_unsafe")]
-    fn wrap_callback_unsafe(&eq) -> &?any;
-    #[import = ("bindings", "wrap_meth_callback")]
-    fn wrap_meth_callback(&eq) -> &?any;
-    #[import = ("bindings", "wrap_meth_callback_args")]
-    fn wrap_meth_callback_args(&eq) -> &?any;
-    #[import = ("bindings", "wrap_meth_callback_strict")]
-    fn wrap_meth_callback_strict(i32, &eq) -> &?any;
-    #[import = ("bindings", "wrap_meth_callback_unsafe")]
-    fn wrap_meth_callback_unsafe(&eq) -> &?any;
-    #[import = ("bindings", "wrap_fun_arguments")]
-    fn wrap_fun_arguments(&?any) -> &?any;
-    #[import = ("fail", "caml_failwith_tag")]
-    fn caml_failwith_tag() -> &eq;
-    #[import = ("fail", "javascript_exception")]
-    tag javascript_exception(&?extern);
-    #[import = ("stdlib", "caml_named_value")]
-    fn caml_named_value(&eq) -> &?eq;
-    #[import = ("obj", "caml_callback_1")]
-    fn caml_callback_1(&eq, &eq) -> &eq;
-    #[import = ("obj", "caml_is_closure")]
-    fn caml_is_closure(&eq) -> i32;
-    #[import = ("obj", "caml_is_last_arg")]
-    fn caml_is_last_arg(&eq) -> i32;
-    #[import = ("jsstring", "jsstring_of_bytes")]
-    fn jsstring_of_bytes(&bytes) -> &?any;
-    #[import = ("jsstring", "bytes_of_jsstring")]
-    fn bytes_of_jsstring(&?any) -> &bytes;
-    #[import = ("jsstring", "jsstring_of_subbytes")]
-    fn jsstring_of_subbytes(&bytes, i32, i32) -> &?any;
-    #[import = ("int32", "caml_copy_int32")]
-    fn caml_copy_int32(i32) -> &eq;
-    #[import = ("int32", "Int32_val")]
-    fn Int32_val(&eq) -> i32;
-    #[import = ("int32", "caml_copy_nativeint")]
-    fn caml_copy_nativeint(i32) -> &eq;
-    #[import = ("int32", "Nativeint_val")]
-    fn Nativeint_val(&eq) -> i32;
+    import "bindings" {
+        #[import = "identity"]
+        fn to_float(&?any) -> f64;
+        #[import = "identity"]
+        fn from_float(f64) -> &?any;
+        #[import = "identity"]
+        fn to_bool(&?any) -> i32;
+        #[import = "identity"]
+        fn to_int32(&?any) -> i32;
+        #[import = "identity"]
+        fn from_int32(i32) -> &?any;
+        fn from_bool(i32) -> &?any;
+        fn get(&extern, &?any) -> &?any;
+        fn set(&?any, &?any, &?any);
+        fn delete(&?any, &?any);
+        fn instanceof(&?any, &?any) -> i32;
+        fn is_js_error(&?any) -> i32;
+        fn to_js_string(&?any) -> &?any;
+        fn typeof(&?any) -> &?any;
+        fn equals(&?any, &?any) -> i32;
+        fn strict_equals(&?any, &?any) -> i32;
+        fn fun_call(&?any, &?any, &?any) -> &?any;
+        fn meth_call(&?any, &?any, &?any) -> &?any;
+        fn new(&?any, &?any) -> &?any;
+        fn new_obj() -> &?any;
+        fn new_array(i32) -> &extern;
+        const global_this: &?any;
+        fn iter_props(&?any, &?any);
+        fn array_length(&extern) -> i32;
+        fn array_get(&extern, i32) -> &?any;
+        fn array_set(&extern, i32, &?any);
+        fn wrap_callback(&eq) -> &?any;
+        fn wrap_callback_args(&eq) -> &?any;
+        fn wrap_callback_strict(i32, &eq) -> &?any;
+        fn wrap_callback_unsafe(&eq) -> &?any;
+        fn wrap_meth_callback(&eq) -> &?any;
+        fn wrap_meth_callback_args(&eq) -> &?any;
+        fn wrap_meth_callback_strict(i32, &eq) -> &?any;
+        fn wrap_meth_callback_unsafe(&eq) -> &?any;
+        fn wrap_fun_arguments(&?any) -> &?any;
+    }
+    import "fail" { fn caml_failwith_tag() -> &eq; tag javascript_exception(&?extern); }
+    import "stdlib" fn caml_named_value(&eq) -> &?eq;
+    import "obj" {
+        fn caml_callback_1(&eq, &eq) -> &eq;
+        fn caml_is_closure(&eq) -> i32;
+        fn caml_is_last_arg(&eq) -> i32;
+    }
+    import "jsstring" {
+        fn jsstring_of_bytes(&bytes) -> &?any;
+        fn bytes_of_jsstring(&?any) -> &bytes;
+        fn jsstring_of_subbytes(&bytes, i32, i32) -> &?any;
+    }
+    import "int32" {
+        fn caml_copy_int32(i32) -> &eq;
+        fn Int32_val(&eq) -> i32;
+        fn caml_copy_nativeint(i32) -> &eq;
+        fn Nativeint_val(&eq) -> i32;
+    }
 
     type block = [mut &eq];
     type float = { f: f64 };

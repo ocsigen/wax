@@ -209,6 +209,30 @@ and 'info instr = ('info instr_desc, 'info) annotated
 
 type attributes = (string * location instr option) list
 
+(* What an [import "module" { ... }] entry brings in. Imports have no body, so
+   these carry only type-level information (no ['info]-annotated instructions):
+   [exact] marks an exact function import ([fn f: !t]). *)
+type import_kind =
+  | Import_func of { typ : ident option; sign : functype option; exact : bool }
+  | Import_global of { mut : bool; typ : valtype }
+  | Import_tag of { typ : ident option; sign : functype option }
+  | Import_memory of {
+      address_type : [ `I32 | `I64 ];
+      limits : (Wax_utils.Uint64.t * Wax_utils.Uint64.t option) option;
+      page_size_log2 : int option;
+      shared : bool;
+    }
+  | Import_table of {
+      address_type : [ `I32 | `I64 ];
+      reftype : reftype;
+      limits : (Wax_utils.Uint64.t * Wax_utils.Uint64.t option) option;
+    }
+
+(* A single imported entity. [id] is its Wax name; it is imported under that
+   name unless a name-only [#[import = "name"]] attribute overrides it.
+   [attributes] also carries e.g. [#[export]] to re-export it. *)
+type import_decl = { id : ident; kind : import_kind; attributes : attributes }
+
 type 'info memdata = {
   data_name : ident option;
   offset : 'info instr;
@@ -220,24 +244,11 @@ type 'info elemmode = EPassive | EActive of ident * 'info instr
 
 type 'info modulefield =
   | Type of rectype
-  | Fundecl of {
-      name : ident;
-      typ : ident option;
-      sign : functype option;
-      exact : bool;
-      attributes : attributes;
-    }
   | Func of {
       name : ident;
       typ : ident option;
       sign : functype option;
       body : label option * 'info instr list;
-      attributes : attributes;
-    }
-  | GlobalDecl of {
-      name : ident;
-      mut : bool;
-      typ : valtype;
       attributes : attributes;
     }
   | Global of {
@@ -288,6 +299,17 @@ type 'info modulefield =
   | Group of {
       attributes : attributes;
       fields : ('info modulefield, location) annotated list;
+    }
+  (* A single import, [import "module" fn f();]. *)
+  | Import of {
+      module_ : (string, location) annotated;
+      decl : (import_decl, location) annotated;
+    }
+  (* A grouped import block, [import "module" { fn f(); const c: i32; }]: several
+     imports sharing one module. *)
+  | Import_group of {
+      module_ : (string, location) annotated;
+      decls : (import_decl, location) annotated list;
     }
   (* A module-level inner attribute, [#![module = "name"]]. Unlike the outer
      attributes above it is attached to the whole module rather than a field;

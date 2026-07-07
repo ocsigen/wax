@@ -4,13 +4,13 @@ The same three lints on Wax source, in the type checker.
 
   $ wax check -W unused=warning imports.wax
   Warning: The imported function 'dead' is never used.
-   ──➤  imports.wax:5:4
-  3 │ 
-  4 │ #[import = ("m", "dead")]
-  5 │ fn dead() -> i32;
-    ·    ^^^^
-  6 │ 
-  7 │ #[import = ("m", "ignored")]
+   ──➤  imports.wax:3:8
+  1 │ import "m" {
+  2 │     fn used() -> i32;
+  3 │     fn dead() -> i32;
+    ·        ^^^^
+  4 │     #[import = "ignored"] const _ignored: i32;
+  5 │ }
 
 `redundant-operation` (off by default) — an identity/absorbing/self operation:
 

@@ -15,8 +15,7 @@
 // along with this program; if not, write to the Free Software
 // Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
-#[import = ("fail", "caml_invalid_argument")]
-fn caml_invalid_argument(&eq);
+import "fail" fn caml_invalid_argument(&eq);
 #[if(wasi)]
 {
     let backtrace_status: &eq = 0 as &i31;
@@ -28,10 +27,9 @@ fn caml_invalid_argument(&eq);
     }
 }
 #[else]
-{
-    #[import = ("bindings", "backtrace_status")]
+import "bindings" {
+    #[import = "backtrace_status"]
     fn get_backtrace_status() -> &eq;
-    #[import = ("bindings", "record_backtrace")]
     fn record_backtrace(&eq);
 }
 

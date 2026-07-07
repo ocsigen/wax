@@ -11,7 +11,6 @@ import form (binary import kind [0x20]).
   ;; `!` marks the type exact, mirroring `&!t`. A named type uses `: !ft`; an
   ;; inline signature marks the name (`fn h!(...)`).
   (import "env" "g" (func $g (exact (type $ft))))
-  
   (import "env" "h" (func $h (exact (param i32) (result i64))))
 
 
@@ -20,7 +19,8 @@ A WAT module using an exact function import decompiles back to the [!] form.
 
   $ wax -X custom-descriptors roundtrip.wat -f wax
   type ft = fn(i32) -> i64;
-  #[import = ("env", "g")]
+  import "env"
+  #[import = "g"]
   fn g_2: !ft ;
   const g = g_2;
 

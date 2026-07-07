@@ -17,34 +17,19 @@
 
 #[if(effects = "native")]
 {
-    #[import = ("fail", "caml_raise_constant")]
-    fn caml_raise_constant(&eq);
-    #[import = ("fail", "caml_raise_with_arg")]
-    fn caml_raise_with_arg(tg: &eq, arg: &eq);
-    #[import = ("obj", "caml_fresh_oo_id")]
-    fn caml_fresh_oo_id(&eq) -> &eq;
-    #[import = ("obj", "cont_tag")]
-    const cont_tag: i32;
-    #[import = ("obj", "object_tag")]
-    const object_tag: i32;
-    #[import = ("stdlib", "caml_named_value")]
-    fn caml_named_value(&eq) -> &?eq;
-    #[import = ("fail", "ocaml_exception")]
-    tag ocaml_exception(&eq);
-    #[import = ("fail", "javascript_exception")]
-    tag javascript_exception(&?extern);
-    #[import = ("stdlib", "caml_main_wrapper")]
-    let caml_main_wrapper: &?wrapper_func;
-    #[import = ("effect", "effect_allowed")]
-    let effect_allowed: i32;
+    import "fail" { fn caml_raise_constant(&eq); fn caml_raise_with_arg(tg: &eq, arg: &eq); }
+    import "obj" { fn caml_fresh_oo_id(&eq) -> &eq; const cont_tag: i32; const object_tag: i32; }
+    import "stdlib" fn caml_named_value(&eq) -> &?eq;
+    import "fail" { tag ocaml_exception(&eq); tag javascript_exception(&?extern); }
+    import "stdlib" let caml_main_wrapper: &?wrapper_func;
+    import "effect" let effect_allowed: i32;
     #[if(wasi)]
     // Never actually called since there is no JavaScript exception
     fn caml_wrap_exception(&?extern) -> &eq {
         0 as &i31;
     }
     #[else]
-    #[import = ("jslib", "caml_wrap_exception")]
-    fn caml_wrap_exception(&?extern) -> &eq;
+    import "jslib" fn caml_wrap_exception(&?extern) -> &eq;
 
     type block = [mut &eq];
     type bytes = [mut i8];

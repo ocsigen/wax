@@ -2,5 +2,4 @@
 {
     fn f() {}
 }
-#[import = ("m", "g")]
-fn g();
+import "m" fn g();

@@ -1773,21 +1773,6 @@ and instruction_desc ret ctx i : location Text.instr list =
 
 (*** Module-field conversion ***)
 
-let import attributes =
-  List.find_map
-    (fun (k, v) ->
-      match (k, Option.map (fun v -> v.desc) v) with
-      | ( "import",
-          Some
-            (Sequence
-               [
-                 { desc = String (_, m); info = l };
-                 { desc = String (_, n); info = l' };
-               ]) ) ->
-          Some ({ desc = m; info = l }, { desc = n; info = l' })
-      | _ -> None)
-    attributes
-
 (* [#[export = "nm"]] exports under the given name; the bare [#[export]] reuses
    the field's own Wax name ([~name]) as the export name. *)
 let exports ~name attributes =
@@ -1942,6 +1927,15 @@ let module_ diagnostics types fields =
         | None -> s)
     | _ -> s
   in
+  let register_import (decl : Wax_lang.Ast.import_decl) =
+    match decl.kind with
+    | Import_func _ -> Hashtbl.replace ctx.functions decl.id.desc ()
+    | Import_global _ -> Hashtbl.replace ctx.globals decl.id.desc ()
+    | Import_memory _ -> Hashtbl.replace ctx.memories decl.id.desc ()
+    | Import_table { reftype = rt; _ } ->
+        Hashtbl.replace ctx.tables decl.id.desc rt
+    | Import_tag _ -> ()
+  in
   Wax_lang.Ast_utils.iter_fields
     (fun field ->
       match field.desc with
@@ -1968,9 +1962,10 @@ let module_ diagnostics types fields =
               Hashtbl.add ctx.type_kinds idx.desc kind)
             rectype
       | Func { name; _ } -> Hashtbl.replace ctx.functions name.desc ()
-      | GlobalDecl { name; _ } -> Hashtbl.replace ctx.globals name.desc ()
       | Global { name; _ } -> Hashtbl.replace ctx.globals name.desc ()
-      | Fundecl { name; _ } -> Hashtbl.replace ctx.functions name.desc ()
+      | Import { decl; _ } -> register_import decl.desc
+      | Import_group { decls; _ } ->
+          List.iter (fun d -> register_import d.desc) decls
       | Memory { name; _ } -> Hashtbl.replace ctx.memories name.desc ()
       | Table { name; reftype = rt; _ } ->
           Hashtbl.replace ctx.tables name.desc rt
@@ -2023,11 +2018,55 @@ let module_ diagnostics types fields =
   (* Now that the top-level types are recorded, install the synthesized-type
      remapping used by [index] while converting. *)
   type_remap := make_type_remap ctx;
+  (* Lower one entry of an [import "module" { ... }] block to a [Text.Import]. *)
+  let lower_import module_ (d : (import_decl, location) annotated) =
+    let decl = d.desc in
+    let name = decl.id in
+    let import_name = Wax_lang.Ast_utils.import_name decl in
+    let exports = exports ~name decl.attributes in
+    let import_limits limits address_type ~shared ~page_size_log2 : Ast.limits =
+      let mi, ma =
+        match limits with
+        | Some (mi, ma) -> (mi, ma)
+        | None -> (Wax_utils.Uint64.of_int 0, None)
+      in
+      { mi; ma; address_type; page_size_log2; shared }
+    in
+    let desc : Text.importdesc =
+      match decl.kind with
+      | Import_func { typ; sign; exact } ->
+          Func { exact; typ = typeuse typ sign }
+      | Import_global { mut; typ } -> Global (globaltype mut typ)
+      | Import_tag { typ; sign } -> Tag (typeuse typ sign)
+      | Import_memory { address_type; limits; page_size_log2; shared } ->
+          Memory
+            (Ast.no_loc
+               (import_limits limits address_type ~shared ~page_size_log2))
+      | Import_table { address_type; reftype = rt; limits } ->
+          Table
+            {
+              limits =
+                Ast.no_loc
+                  (import_limits limits address_type ~shared:false
+                     ~page_size_log2:None);
+              reftype = reftype rt;
+            }
+    in
+    {
+      desc =
+        Text.Import
+          { module_; name = import_name; id = Some name; desc; exports };
+      info = d.info;
+    }
+  in
   let rec convert_fields fields =
     List.concat_map
       (fun field ->
         match field.desc with
         | Group { fields = flds; _ } -> convert_fields flds
+        | Import { module_; decl } -> [ lower_import module_ decl ]
+        | Import_group { module_; decls } ->
+            List.map (lower_import module_) decls
         (* The module name is lowered separately into the name section; the
            annotation itself produces no module field. *)
         | Module_annotation _ -> []
@@ -2056,24 +2095,13 @@ let module_ diagnostics types fields =
                   }
             in
             let memory_field =
-              match import attributes with
-              | Some (module_, import_name) ->
-                  Text.Import
-                    {
-                      module_;
-                      name = import_name;
-                      id = Some name;
-                      desc = Memory (Ast.no_loc limits_value);
-                      exports;
-                    }
-              | None ->
-                  Text.Memory
-                    {
-                      id = Some name;
-                      limits = Ast.no_loc limits_value;
-                      init = None;
-                      exports;
-                    }
+              Text.Memory
+                {
+                  id = Some name;
+                  limits = Ast.no_loc limits_value;
+                  init = None;
+                  exports;
+                }
             in
             let ictx =
               { ctx with referenced_functions = func_refs_outside_func }
@@ -2149,18 +2177,7 @@ let module_ diagnostics types fields =
                   Init_expr (instruction no_ret ictx e)
             in
             let table_field =
-              match import attributes with
-              | Some (module_, import_name) ->
-                  Text.Import
-                    {
-                      module_;
-                      name = import_name;
-                      id = Some name;
-                      desc = Table typ;
-                      exports;
-                    }
-              | None ->
-                  Text.Table { id = Some name; typ; init = init_value; exports }
+              Text.Table { id = Some name; typ; init = init_value; exports }
             in
             [ { field with desc = table_field } ]
         | Elem { name; reftype = rt; mode; init; _ } ->
@@ -2231,41 +2248,9 @@ let module_ diagnostics types fields =
                       init;
                       exports = exports ~name attributes;
                     }
-              | GlobalDecl { name; mut; typ; attributes } ->
-                  let module_, import_name = Option.get (import attributes) in
-                  Text.Import
-                    {
-                      module_;
-                      name = import_name;
-                      id = Some name;
-                      desc = Global (globaltype mut typ);
-                      exports = exports ~name attributes;
-                    }
-              | Fundecl { name; typ; sign; exact; attributes } ->
-                  let module_, import_name = Option.get (import attributes) in
-                  Text.Import
-                    {
-                      module_;
-                      name = import_name;
-                      id = Some name;
-                      desc = Func { exact; typ = typeuse typ sign };
-                      exports = exports ~name attributes;
-                    }
-              | Tag { name; typ; sign; attributes } -> (
+              | Tag { name; typ; sign; attributes } ->
                   let exports = exports ~name attributes in
-                  match import attributes with
-                  | Some (module_, import_name) ->
-                      Text.Import
-                        {
-                          module_;
-                          name = import_name;
-                          id = Some name;
-                          desc = Tag (typeuse typ sign);
-                          exports;
-                        }
-                  | None ->
-                      Text.Tag
-                        { id = Some name; typ = typeuse typ sign; exports })
+                  Text.Tag { id = Some name; typ = typeuse typ sign; exports }
               | Func { name; sign; typ; body = label, instrs; attributes } ->
                   let namespace = Namespace.make () in
                   let allocated_locals = ref [] in
@@ -2313,8 +2298,8 @@ let module_ diagnostics types fields =
                       instrs;
                       exports = exports ~name attributes;
                     }
-              | Group _ | Conditional _ | Memory _ | Data _ | Table _ | Elem _
-              | Module_annotation _ ->
+              | Group _ | Import _ | Import_group _ | Conditional _ | Memory _
+              | Data _ | Table _ | Elem _ | Module_annotation _ ->
                   assert false
             in
             let field' = { field with desc } in

@@ -15,20 +15,14 @@
 // along with this program; if not, write to the Free Software
 // Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
-#[import = ("ints", "parse_int")]
-fn parse_int(&eq, i32, &eq) -> i32;
-#[import = ("ints", "format_int")]
-fn format_int(&eq, i32, i32) -> &eq;
-#[import = ("fail", "caml_failwith")]
-fn caml_failwith(&eq);
-#[import = ("marshal", "caml_serialize_int_1")]
-fn caml_serialize_int_1(&eq, i32);
-#[import = ("marshal", "caml_serialize_int_4")]
-fn caml_serialize_int_4(&eq, i32);
-#[import = ("marshal", "caml_deserialize_uint_1")]
-fn caml_deserialize_uint_1(&eq) -> i32;
-#[import = ("marshal", "caml_deserialize_int_4")]
-fn caml_deserialize_int_4(&eq) -> i32;
+import "ints" { fn parse_int(&eq, i32, &eq) -> i32; fn format_int(&eq, i32, i32) -> &eq; }
+import "fail" fn caml_failwith(&eq);
+import "marshal" {
+    fn caml_serialize_int_1(&eq, i32);
+    fn caml_serialize_int_4(&eq, i32);
+    fn caml_deserialize_uint_1(&eq) -> i32;
+    fn caml_deserialize_int_4(&eq) -> i32;
+}
 
 type bytes = [mut i8];
 type compare = fn(&eq, &eq, i32) -> i32;
