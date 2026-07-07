@@ -9,3 +9,11 @@ fn f(c: i32, r: &any) -> i32 {
   match r { _ => {} };
   0;
 }
+
+#[export = "g"]
+fn g() -> i32 {
+  ;
+  let x = 1;;
+  ;;
+  x;
+}
