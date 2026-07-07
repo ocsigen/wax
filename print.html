@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-509dfe47.js";
+            window.path_to_searchindex_js = "searchindex-c4d75136.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-0d649137.js"></script>
@@ -414,10 +414,10 @@ character’s Unicode code point as an <code>i32</code> — it is simply a reada
 an <code>i32.const</code>:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-string">'A'</span>;            <span class="hljs-comment">// 65</span>
 <span class="hljs-string">'\n'</span>;           <span class="hljs-comment">// 10</span>
-<span class="hljs-string">'\41'</span>;          <span class="hljs-comment">// 65, a byte written as two hex digits</span>
+'\x41';         <span class="hljs-comment">// 65, a byte written as two hex digits</span>
 <span class="hljs-string">'\u{1F600}'</span>;    <span class="hljs-comment">// 128512, a Unicode code point</span></span></pre>
 
-<p>The recognised escapes are <code>\t</code>, <code>\n</code>, <code>\r</code>, <code>\'</code>, <code>\"</code>, <code>\\</code>, <code>\NN</code> (exactly
+<p>The recognised escapes are <code>\t</code>, <code>\n</code>, <code>\r</code>, <code>\'</code>, <code>\"</code>, <code>\\</code>, <code>\xNN</code> (exactly
 two hex digits, one byte), and <code>\u{...}</code> (a Unicode code point in hex). For
 text, see <a href="#strings">Strings</a>.</p>
 <p>A character literal round-trips through WAT, where it is written with a
@@ -1103,7 +1103,7 @@ by an expected type from the context:</p>
 <span class="hljs-keyword">let</span> s: &amp;<span class="hljs-type">chars</span> = <span class="hljs-string">"yo"</span>;       <span class="hljs-comment">// type taken from the annotation</span></span></pre>
 
 <p>String literals recognise the same escapes as <a href="#characters">character literals</a>
-— <code>\t</code>, <code>\n</code>, <code>\r</code>, <code>\'</code>, <code>\"</code>, <code>\\</code>, <code>\NN</code> (two hex digits, one byte), and
+— <code>\t</code>, <code>\n</code>, <code>\r</code>, <code>\'</code>, <code>\"</code>, <code>\\</code>, <code>\xNN</code> (two hex digits, one byte), and
 <code>\u{...}</code> (a Unicode code point, encoded as its UTF-8 bytes):</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-string">"tab\tend"</span>;
 <span class="hljs-string">"smile \u{1F600}"</span>;</span></pre>
@@ -1173,7 +1173,7 @@ intrinsic.</p>
     <span class="hljs-keyword">data</span> greeting @ [<span class="hljs-number">0x2000</span>] = <span class="hljs-string">"hi"</span>;     <span class="hljs-comment">// active, named</span>
 }
 
-<span class="hljs-keyword">data</span> seg = <span class="hljs-string">"raw\00bytes"</span>;                <span class="hljs-comment">// top-level passive segment</span>
+<span class="hljs-keyword">data</span> seg = <span class="hljs-string">"raw</span><span class="hljs-deletion">\x</span><span class="hljs-string">00bytes"</span>;               <span class="hljs-comment">// top-level passive segment</span>
 <span class="hljs-keyword">data</span> init @ mem0 [<span class="hljs-number">0</span>] = <span class="hljs-string">"hello"</span>;          <span class="hljs-comment">// top-level active segment</span></span></pre>
 
 <h3 id="load-and-store"><a class="header" href="#load-and-store">Load and Store</a></h3>
@@ -2926,10 +2926,10 @@ mem0.<span class="hljs-title">store32</span>(p, v, <span class="hljs-number">1</
 }</span></pre>
 
 <p>Top-level <code>data</code> defines a passive segment, or an active segment for a named memory:</p>
-<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">data</span> seg = <span class="hljs-string">"raw\00bytes"</span>;
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">data</span> seg = <span class="hljs-string">"raw</span><span class="hljs-deletion">\x</span><span class="hljs-string">00bytes"</span>;
 <span class="hljs-keyword">data</span> init @ mem0 [<span class="hljs-number">0</span>] = <span class="hljs-string">"hello"</span>;</span></pre>
 
-<p>Data bytes are ordinary <a href="#strings">string literals</a>; escapes such as <code>\41</code> and <code>\00</code> (two hex digits) decode to raw bytes.</p>
+<p>Data bytes are ordinary <a href="#strings">string literals</a>; escapes such as <code>\x41</code> and <code>\x00</code> (two hex digits) decode to raw bytes.</p>
 <h2 id="tables"><a class="header" href="#tables">Tables</a></h2>
 <p>A table is declared with <code>table</code>, followed by its element <a href="#types">reference type</a> and, optionally, its limits as <code>[min]</code> or <code>[min, max]</code>:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">table</span> funcs: &amp;?<span class="hljs-type">func</span> [<span class="hljs-number">1</span>, <span class="hljs-number">10</span>];
