@@ -333,3 +333,27 @@ bad* (`128`). A rejected input reports `128` wherever the error is found —
 syntax, validation, or type-checking — so `check` exits `0` when every input is
 valid and `128` otherwise, which is what a CI gate wants. For scripting, treat
 any non-zero status as failure.
+
+## Shell completion
+
+`wax` supports `zsh`, `bash`, and PowerShell completion: subcommands, flag
+names, flag values (`--format` → `wat`/`wasm`/`wax`, `-W`/`-X` names and values,
+`--color`, `--debug`), and input/output file paths.
+
+Completion has two halves. The generic per-shell scripts ship with the
+[`cmdliner`](https://opam.ocaml.org/packages/cmdliner/) package; the `wax`
+package installs its own completion definitions (and man pages) alongside the
+binary. Installing `wax` through opam puts both in place.
+
+Then hook the generic scripts into your shell once. For `zsh`, ensure the
+site-functions directory is on `$fpath` **before** `compinit`:
+
+```sh
+FPATH="$(opam var share)/zsh/site-functions:$FPATH"
+autoload -Uz compinit && compinit
+```
+
+For `bash`, with [`bash-completion`](https://github.com/scop/bash-completion)
+installed, point it at the cmdliner share directory. See the
+[cmdliner completion guide](https://erratique.ch/software/cmdliner/doc/cli.html#cli_completion)
+for the per-shell details and the PowerShell setup.

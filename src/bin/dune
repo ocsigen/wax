@@ -5,6 +5,27 @@
  (package wax)
  (libraries wax_wasm wax_lang wax_conversion cmdliner unix))
 
+; Install shell completions and manpages for the wax tool (cmdliner 2.x).
+; `cmdliner install tool-support` runs the built binary to extract them into a
+; PREFIX; we install that PREFIX's share/ subtree — bash/zsh/PowerShell
+; completion definitions and man pages — under the opam share root. The generic
+; per-shell completion scripts are shipped by the cmdliner package itself, not
+; here; see docs/src/cli.md for how users enable completion in their shell.
+
+(rule
+ (target
+  (dir cmdliner-support))
+ (deps main.exe)
+ (action
+  (ignore-stdout
+   (run cmdliner install tool-support ./main.exe:wax cmdliner-support))))
+
+(install
+ (package wax)
+ (section share_root)
+ (dirs
+  (cmdliner-support/share as .)))
+
 ; Private developer/test executables, not installed (no public names):
 ; run_wasm_testsuite drives the spec suite (see test/dune); fuzz_mutate is the
 ; AST mutator behind fuzz/mutate-wax.sh and fuzz_gen the AST generator behind

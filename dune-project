@@ -1,5 +1,8 @@
 (lang dune 3.20)
 (using menhir 3.0)
+; The wax tool's completion/manpage install rule produces a whole directory
+; (src/bin/dune); directory targets need this extension.
+(using directory-targets 0.1)
 (name wax)
 (generate_opam_files true)
 
@@ -29,6 +32,8 @@
   (depends
     (ocaml (>= 4.14))
     (wax-lib (= :version))
-    (cmdliner (>= 1.1.0))
+    ; 2.0 for the Conv.make/Arg.Completion API and the completion protocol in
+    ; Cmd.eval, plus `cmdliner install tool-support` at build time.
+    (cmdliner (>= 2.0.0))
   )
 )
