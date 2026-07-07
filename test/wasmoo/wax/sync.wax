@@ -58,14 +58,14 @@ const mutex_ops =
 
 type mutex: custom_with_id = { .., state: mut i32 };
 
-#[export = "caml_ml_mutex_new"]
+#[export]
 fn caml_ml_mutex_new(&eq) -> &eq {
     { ops: mutex_ops, id: custom_next_id(), state: 0 };
 }
 
 const lock_failure = "Mutex.lock: mutex already locked. Cannot wait.";
 
-#[export = "caml_ml_mutex_lock"]
+#[export]
 fn caml_ml_mutex_lock(vt: &eq) -> &eq {
     let t = vt as &mutex;
     if t.state {
@@ -75,7 +75,7 @@ fn caml_ml_mutex_lock(vt: &eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_ml_mutex_try_lock"]
+#[export]
 fn caml_ml_mutex_try_lock(vt: &eq) -> &eq {
     let t = vt as &mutex;
     if t.state {
@@ -86,7 +86,7 @@ fn caml_ml_mutex_try_lock(vt: &eq) -> &eq {
     }
 }
 
-#[export = "caml_ml_mutex_unlock"]
+#[export]
 fn caml_ml_mutex_unlock(vt: &eq) -> &eq {
     (vt as &mutex).state = 0;
     0 as &i31;
@@ -106,7 +106,7 @@ const condition_ops =
 
 type condition: custom_with_id = { .. };
 
-#[export = "caml_ml_condition_new"]
+#[export]
 fn caml_ml_condition_new(&eq) -> &eq {
     // Each condition variable gets a distinct identity, like the JS runtime
     // (which allocates a fresh object). The previous immediate 0 made all
@@ -114,7 +114,7 @@ fn caml_ml_condition_new(&eq) -> &eq {
     {condition| ops: condition_ops, id: custom_next_id() };
 }
 
-#[export = "caml_ml_condition_wait"]
+#[export]
 fn caml_ml_condition_wait(&eq, &eq) -> &eq {
     // A no-op, like the JS runtime: single-threaded, there is nothing to
     // wait for. The two runtimes must agree (the JS one returns 0 rather
@@ -122,12 +122,12 @@ fn caml_ml_condition_wait(&eq, &eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_ml_condition_signal"]
+#[export]
 fn caml_ml_condition_signal(&eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_ml_condition_broadcast"]
+#[export]
 fn caml_ml_condition_broadcast(&eq) -> &eq {
     0 as &i31;
 }

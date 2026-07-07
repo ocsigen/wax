@@ -172,14 +172,14 @@
         }
     }
 
-    #[export = "caml_zstd_initialize"]
+    #[export]
     fn caml_zstd_initialize(&eq) -> &eq {
         caml_intern_decompress_input = decompress;
         1 as &i31;
     }
 }
 #[else]
-#[export = "caml_zstd_initialize"]
+#[export]
 fn caml_zstd_initialize(&eq) -> &eq {
     0 as &i31;
 }

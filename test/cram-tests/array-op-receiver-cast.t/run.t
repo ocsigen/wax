@@ -16,7 +16,7 @@ determine the type of this expression". Regression: differential-validation fuzz
   > WAT
   $ wax -i wat -f wax al.wat
   type a = [i32];
-  #[export = "f"]
+  #[export]
   fn f() -> i32 {
       unreachable;
       (_ as &?array).length();
@@ -32,7 +32,7 @@ determine the type of this expression". Regression: differential-validation fuzz
   > WAT
   $ wax -i wat -f wax af.wat
   type a = [mut i32];
-  #[export = "g"]
+  #[export]
   fn g() {
       unreachable;
       (_ as &?a).fill(_, _, _);

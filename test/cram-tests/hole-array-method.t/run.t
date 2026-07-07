@@ -20,7 +20,7 @@ before a hole '_'."
 
   $ wax -i wat -f wax fill.wat
   type arr = [mut i32];
-  #[export = "f"]
+  #[export]
   fn f(x: &arr) {
       x;
       do (&arr) {

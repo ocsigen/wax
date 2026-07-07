@@ -17,7 +17,7 @@ Regression: found by the smith fuzzer.
   $ wax -i wat -f wax t.wat
   type a = [i64];
   let g: &?extern = null;
-  #[export = "f"]
+  #[export]
   fn f() {
       g = null as &?a as &?extern;
   }

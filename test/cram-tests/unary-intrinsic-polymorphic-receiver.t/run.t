@@ -14,7 +14,7 @@ determine the type". Regression: found by the differential-validation fuzzer.
   > WAT
 
   $ wax -i wat -f wax m.wat
-  #[export = "f"]
+  #[export]
   fn f() {
       unreachable;
       _ = (_?_:_).floor();

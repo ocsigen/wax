@@ -24,7 +24,7 @@ fn caml_ml_mutex_unlock(&eq) -> &eq;
 
 type block = [mut &eq];
 
-#[export = "caml_atomic_cas"]
+#[export]
 fn caml_atomic_cas(ref: &eq, o: &eq, n: &eq) -> &eq {
     let b = ref as &block;
     if b[1] == o {
@@ -35,7 +35,7 @@ fn caml_atomic_cas(ref: &eq, o: &eq, n: &eq) -> &eq {
     }
 }
 
-#[export = "caml_atomic_cas_field"]
+#[export]
 fn caml_atomic_cas_field(ref: &eq, i: &eq, o: &eq, n: &eq) -> &eq {
     let j = i as i32_u + 1;
     let b = ref as &block;
@@ -47,7 +47,7 @@ fn caml_atomic_cas_field(ref: &eq, i: &eq, o: &eq, n: &eq) -> &eq {
     }
 }
 
-#[export = "caml_atomic_compare_exchange"]
+#[export]
 fn caml_atomic_compare_exchange(ref: &eq, o: &eq, n: &eq) -> &eq {
     let b = ref as &block;
     let old = b[1];
@@ -59,17 +59,17 @@ fn caml_atomic_compare_exchange(ref: &eq, o: &eq, n: &eq) -> &eq {
     }
 }
 
-#[export = "caml_atomic_load"]
+#[export]
 fn caml_atomic_load(b: &eq) -> &eq {
     (b as &block)[1];
 }
 
-#[export = "caml_atomic_load_field"]
+#[export]
 fn caml_atomic_load_field(b: &eq, i: &eq) -> &eq {
     (b as &block)[i as i32_u + 1];
 }
 
-#[export = "caml_atomic_fetch_add"]
+#[export]
 fn caml_atomic_fetch_add(ref: &eq, i: &eq) -> &eq {
     let b = ref as &block;
     let old = b[1];
@@ -77,7 +77,7 @@ fn caml_atomic_fetch_add(ref: &eq, i: &eq) -> &eq {
     old;
 }
 
-#[export = "caml_atomic_fetch_add_field"]
+#[export]
 fn caml_atomic_fetch_add_field(ref: &eq, i: &eq, n: &eq) -> &eq {
     let j = i as i32_u + 1;
     let b = ref as &block;
@@ -86,7 +86,7 @@ fn caml_atomic_fetch_add_field(ref: &eq, i: &eq, n: &eq) -> &eq {
     old;
 }
 
-#[export = "caml_atomic_add"]
+#[export]
 fn caml_atomic_add(ref: &eq, i: &eq) -> &eq {
     let b = ref as &block;
     let old = b[1];
@@ -94,7 +94,7 @@ fn caml_atomic_add(ref: &eq, i: &eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_atomic_sub"]
+#[export]
 fn caml_atomic_sub(ref: &eq, i: &eq) -> &eq {
     let b = ref as &block;
     let old = b[1];
@@ -102,7 +102,7 @@ fn caml_atomic_sub(ref: &eq, i: &eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_atomic_land"]
+#[export]
 fn caml_atomic_land(ref: &eq, i: &eq) -> &eq {
     let b = ref as &block;
     let old = b[1];
@@ -110,7 +110,7 @@ fn caml_atomic_land(ref: &eq, i: &eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_atomic_lor"]
+#[export]
 fn caml_atomic_lor(ref: &eq, i: &eq) -> &eq {
     let b = ref as &block;
     let old = b[1];
@@ -118,7 +118,7 @@ fn caml_atomic_lor(ref: &eq, i: &eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_atomic_lxor"]
+#[export]
 fn caml_atomic_lxor(ref: &eq, i: &eq) -> &eq {
     let b = ref as &block;
     let old = b[1];
@@ -126,7 +126,7 @@ fn caml_atomic_lxor(ref: &eq, i: &eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_atomic_exchange"]
+#[export]
 fn caml_atomic_exchange(ref: &eq, v: &eq) -> &eq {
     let b = ref as &block;
     let r = b[1];
@@ -134,7 +134,7 @@ fn caml_atomic_exchange(ref: &eq, v: &eq) -> &eq {
     r;
 }
 
-#[export = "caml_atomic_exchange_field"]
+#[export]
 fn caml_atomic_exchange_field(ref: &eq, i: &eq, v: &eq) -> &eq {
     let j = i as i32_u + 1;
     let b = ref as &block;
@@ -143,27 +143,27 @@ fn caml_atomic_exchange_field(ref: &eq, i: &eq, v: &eq) -> &eq {
     r;
 }
 
-#[export = "caml_atomic_set"]
+#[export]
 fn caml_atomic_set(ref: &eq, v: &eq) -> &eq {
     let b = ref as &block;
     b[1] = v;
     0 as &i31;
 }
 
-#[export = "caml_atomic_make_contended"]
+#[export]
 fn caml_atomic_make_contended(v: &eq) -> &eq {
     [block|0 as &i31, v];
 }
 
 let caml_domain_dls: &eq = [block|0 as &i31];
 
-#[export = "caml_domain_dls_set"]
+#[export]
 fn caml_domain_dls_set(a: &eq) -> &eq {
     caml_domain_dls = a;
     0 as &i31;
 }
 
-#[export = "caml_domain_dls_compare_and_set"]
+#[export]
 fn caml_domain_dls_compare_and_set(old: &eq, new: &eq) -> &eq {
     if caml_domain_dls == old {
         caml_domain_dls = new;
@@ -173,48 +173,48 @@ fn caml_domain_dls_compare_and_set(old: &eq, new: &eq) -> &eq {
     }
 }
 
-#[export = "caml_domain_dls_get"]
+#[export]
 fn caml_domain_dls_get(&eq) -> &eq {
     caml_domain_dls;
 }
 
 let caml_domain_tls: &eq = [block|0 as &i31];
 
-#[export = "caml_domain_tls_set"]
+#[export]
 fn caml_domain_tls_set(a: &eq) -> &eq {
     caml_domain_tls = a;
     0 as &i31;
 }
 
-#[export = "caml_domain_tls_get"]
+#[export]
 fn caml_domain_tls_get(&eq) -> &eq {
     caml_domain_tls;
 }
 
 const domain_unique_token: &eq = [block|0 as &i31];
 
-#[export = "caml_ml_domain_unique_token"]
+#[export]
 fn caml_ml_domain_unique_token(&eq) -> &eq {
     domain_unique_token;
 }
 
-#[export = "caml_ml_domain_set_name"]
+#[export]
 fn caml_ml_domain_set_name(&eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_recommended_domain_count"]
+#[export]
 fn caml_recommended_domain_count(&eq) -> &eq {
     1 as &i31;
 }
 
-#[export = "caml_domain_id"]
+#[export]
 let caml_domain_id = 0;
-#[export = "caml_domain_latest_id"]
+#[export]
 let caml_domain_latest_id = 1;
 
 #[if(ocaml_version >= (5, 2, 0))]
-#[export = "caml_domain_spawn"]
+#[export]
 fn caml_domain_spawn(f: &eq, term_sync_v: &eq) -> &eq {
     let id = caml_domain_latest_id;
     caml_domain_latest_id = id + 1;
@@ -243,7 +243,7 @@ fn caml_domain_spawn(f: &eq, term_sync_v: &eq) -> &eq {
     id as &i31;
 }
 #[else]
-#[export = "caml_domain_spawn"]
+#[export]
 fn caml_domain_spawn(f: &eq, mutex: &eq) -> &eq {
     let id = caml_domain_latest_id;
     caml_domain_latest_id = id + 1;
@@ -264,23 +264,23 @@ fn caml_domain_spawn(f: &eq, mutex: &eq) -> &eq {
     id as &i31;
 }
 
-#[export = "caml_ml_domain_id"]
+#[export]
 #[export = "caml_ml_domain_index"]
 fn caml_ml_domain_id(&eq) -> &eq {
     caml_domain_id as &i31;
 }
 
-#[export = "caml_ml_domain_cpu_relax"]
+#[export]
 fn caml_ml_domain_cpu_relax(&eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_domain_count"]
+#[export]
 fn caml_domain_count(&eq) -> &eq {
     1 as &i31;
 }
 
-#[export = "caml_atomic_add_field"]
+#[export]
 fn caml_atomic_add_field(ref: &eq, field: &eq, i: &eq) -> &eq {
     let b = ref as &block;
     let idx = field as i32_s + 1;
@@ -289,7 +289,7 @@ fn caml_atomic_add_field(ref: &eq, field: &eq, i: &eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_atomic_sub_field"]
+#[export]
 fn caml_atomic_sub_field(ref: &eq, field: &eq, i: &eq) -> &eq {
     let b = ref as &block;
     let idx = field as i32_s + 1;
@@ -298,7 +298,7 @@ fn caml_atomic_sub_field(ref: &eq, field: &eq, i: &eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_atomic_land_field"]
+#[export]
 fn caml_atomic_land_field(ref: &eq, field: &eq, i: &eq) -> &eq {
     let b = ref as &block;
     let idx = field as i32_s + 1;
@@ -307,7 +307,7 @@ fn caml_atomic_land_field(ref: &eq, field: &eq, i: &eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_atomic_lor_field"]
+#[export]
 fn caml_atomic_lor_field(ref: &eq, field: &eq, i: &eq) -> &eq {
     let b = ref as &block;
     let idx = field as i32_s + 1;
@@ -316,7 +316,7 @@ fn caml_atomic_lor_field(ref: &eq, field: &eq, i: &eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_atomic_lxor_field"]
+#[export]
 fn caml_atomic_lxor_field(ref: &eq, field: &eq, i: &eq) -> &eq {
     let b = ref as &block;
     let idx = field as i32_s + 1;
@@ -325,7 +325,7 @@ fn caml_atomic_lxor_field(ref: &eq, field: &eq, i: &eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_atomic_compare_exchange_field"]
+#[export]
 fn caml_atomic_compare_exchange_field(ref: &eq, field: &eq, o: &eq, n: &eq) -> &eq {
     let b = ref as &block;
     let idx = field as i32_s + 1;
@@ -336,7 +336,7 @@ fn caml_atomic_compare_exchange_field(ref: &eq, field: &eq, o: &eq, n: &eq) -> &
     old;
 }
 
-#[export = "caml_atomic_set_field"]
+#[export]
 fn caml_atomic_set_field(ref: &eq, field: &eq, v: &eq) -> &eq {
     let b = ref as &block;
     let idx = field as i32_s + 1;

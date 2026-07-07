@@ -9,7 +9,7 @@ valid fallback). Here ref.null exn + ref.as_non_null must keep its &?exn so the
   > (module (func (export "f") (result (ref exn)) ref.null exn ref.as_non_null))
   > WAT
   $ wax -i wat -f wax t.wat
-  #[export = "f"]
+  #[export]
   fn f() -> &exn {
       (null as &?exn)!;
   }

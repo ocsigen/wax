@@ -25,7 +25,7 @@ unaffected.
 
   $ wax -X custom-descriptors roundtrip.wat -f wax
   type point = { f: i32, f_2: i32 };
-  #[export = "g"]
+  #[export]
   fn g() -> &point {
       { f: 1, f_2: 2 };
   }

@@ -17,7 +17,7 @@ Regression: found by the differential-validation fuzzer.
   > WAT
 
   $ wax -i wat -f wax lj.wat
-  #[export = "f"]
+  #[export]
   fn f() -> i64 {
       (if 1 {
            5793170017578347395;

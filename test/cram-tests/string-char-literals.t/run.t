@@ -39,38 +39,38 @@ as for a redundant name on any other construction literal.
   $ wax lit.wax -f wat -o lit.wat && wax lit.wat -f wax
   type chars = [i8];
   
-  #[export = "newline"]
+  #[export]
   fn newline() -> i32 {
       '\n';
   }
   
-  #[export = "byte_escape"]
+  #[export]
   fn byte_escape() -> i32 {
       'A';
   }
   
-  #[export = "code_point"]
+  #[export]
   fn code_point() -> i32 {
       '😀';
   }
   
-  #[export = "default_string"]
+  #[export]
   fn default_string() -> &eq {
       "hi";
   }
   
-  #[export = "named_string"]
+  #[export]
   fn named_string() -> &chars {
       "hi!";
   }
   
-  #[export = "from_context"]
+  #[export]
   fn from_context() -> &chars {
       let s: &chars = "yo";
       s;
   }
   
-  #[export = "binary_blob"]
+  #[export]
   fn binary_blob() -> &chars {
       "\x61\x01\x62";
   }
@@ -86,32 +86,32 @@ string; `binary_blob` (which holds a control byte) stays an array literal.
   type t_2 = fn() -> &eq;
   type t_3 = fn() -> &chars;
   type t_4 = [mut i8];
-  #[export = "newline"]
+  #[export]
   fn newline() -> i32 {
       10;
   }
-  #[export = "byte_escape"]
+  #[export]
   fn byte_escape() -> i32 {
       65;
   }
-  #[export = "code_point"]
+  #[export]
   fn code_point() -> i32 {
       128512;
   }
-  #[export = "default_string"]
+  #[export]
   fn default_string() -> &eq {
       "hi";
   }
-  #[export = "named_string"]
+  #[export]
   fn named_string() -> &chars {
       "hi!";
   }
-  #[export = "from_context"]
+  #[export]
   fn from_context() -> &chars {
       let s: &chars = "yo";
       s;
   }
-  #[export = "binary_blob"]
+  #[export]
   fn binary_blob() -> &chars {
       [97, 1, 98];
   }

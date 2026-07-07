@@ -3,7 +3,7 @@ every value reaching its exit — the fall-through value plus each `br` to its o
 label — so the explicit result annotation drops:
 
   $ wax multi-exit.wat -f wax
-  #[export = "f"]
+  #[export]
   fn f(c: i32) -> i32 {
       0
           + 'b: do {

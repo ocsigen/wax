@@ -51,7 +51,7 @@ type custom_operations = {
 };
 type custom = open { ops: &custom_operations };
 
-#[export = "int64_ops"]
+#[export]
 const int64_ops =
     {
         id: "_j",
@@ -92,23 +92,23 @@ fn int64_dup(v: &eq) -> &eq {
     { ops: int64_ops, i64: (v as &int64).i64 };
 }
 
-#[export = "caml_copy_int64"]
+#[export]
 fn caml_copy_int64(i: i64) -> &eq {
     { ops: int64_ops, i64: i };
 }
 
-#[export = "Int64_val"]
+#[export]
 fn Int64_val(v: &eq) -> i64 {
     (v as &int64).i64;
 }
 
-#[export = "caml_int64_bswap"]
+#[export]
 fn caml_int64_bswap(i: i64) -> i64 {
     (i & 0x000000FF000000FF).rotr(8) | (i & 0x0000FF000000FF00).rotr(24)
         | ((i & 0x00FF000000FF0000).rotl(24) | (i & 0xFF000000FF000000).rotl(8));
 }
 
-#[export = "caml_int64_compare"]
+#[export]
 fn caml_int64_compare(i1: i64, i2: i64) -> i32 {
     (i1 >s i2) - (i1 <s i2);
 }
@@ -120,7 +120,7 @@ const INT64_ERRMSG = "Int64.of_string";
 // In case of failure raise [Failure $errmsg].
 // Used by $caml_int64_of_string below and by $caml_uint64_of_string in
 // package "integers".
-#[export = "caml_i64_of_digits"]
+#[export]
 fn caml_i64_of_digits(
     base: i32,
     signedness: i32,
@@ -175,7 +175,7 @@ fn caml_i64_of_digits(
     res;
 }
 
-#[export = "caml_int64_of_string"]
+#[export]
 fn caml_int64_of_string(v: &eq) -> &eq {
     let s = v as &bytes;
     let (i, signedness, sign, base) = parse_sign_and_base(s);
@@ -211,7 +211,7 @@ fn format_int64_default(d: i64) -> &eq {
 
 type chars = [i8];
 
-#[export = "caml_int64_format"]
+#[export]
 fn caml_int64_format(vs: &eq, vd: &eq) -> &eq {
     let s = vs as &bytes;
     let d = (vd as &int64).i64;
@@ -283,7 +283,7 @@ fn caml_int64_format(vs: &eq, vd: &eq) -> &eq {
 
 const unsupported = "caml_reinterpret_unboxed_int64_as_tagged_int63 is not supported in wasm.";
 
-#[export = "caml_reinterpret_unboxed_int64_as_tagged_int63"]
+#[export]
 fn caml_reinterpret_unboxed_int64_as_tagged_int63(&eq) -> &eq {
     caml_failwith(unsupported);
     0 as &i31;

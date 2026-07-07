@@ -30,15 +30,15 @@ Exact references survive a binary round-trip.
   type t = fn(&?s) -> &!s;
   type t_2 = fn(&?!s) -> i32;
   type t_3 = fn(&!s) -> &s;
-  #[export = "cast"]
+  #[export]
   fn cast(x: &?s) -> &!s {
       x as &!s;
   }
-  #[export = "test"]
+  #[export]
   fn test(x: &?!s) -> i32 {
       x is &!s;
   }
-  #[export = "widen"]
+  #[export]
   fn widen(x: &!s) -> &s {
       x;
   }
@@ -47,7 +47,7 @@ A WAT module using exact references decompiles to the [&!] forms and back.
 
   $ wax -X custom-descriptors roundtrip.wat -f wax
   type s = { f: i32 };
-  #[export = "cast"]
+  #[export]
   fn cast(x: &?s) -> &!s {
       x as &!s;
   }

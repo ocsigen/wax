@@ -114,23 +114,23 @@
         output;
     }
 
-    #[export = "caml_blake2_create"]
+    #[export]
     fn caml_blake2_create(hashlen: &eq, key: &eq) -> &eq {
         do_create(hashlen as i32_u, key as &bytes);
     }
 
-    #[export = "caml_blake2_update"]
+    #[export]
     fn caml_blake2_update(ctx: &eq, buf: &eq, ofs: &eq, len: &eq) -> &eq {
         do_update(ctx as &bytes, buf as &bytes, ofs as i32_u, len as i32_u);
         0 as &i31;
     }
 
-    #[export = "caml_blake2_final"]
+    #[export]
     fn caml_blake2_final(ctx: &eq, hashlen: &eq) -> &eq {
         do_final(ctx as &bytes, hashlen as i32_u);
     }
 
-    #[export = "caml_blake2_string"]
+    #[export]
     #[export = "caml_blake2_bytes"]
     fn caml_blake2_string(hashlen: &eq, key: &eq, buf: &eq, ofs: &eq, len: &eq) -> &eq {
         let hl = hashlen as i32_u;

@@ -119,91 +119,91 @@ type bytes = [mut i8];
     type float_array = [mut f64];
     type js = { js: &?any };
 
-    #[export = "wrap"]
+    #[export]
     fn wrap(v: &?any) -> &eq {
         'is_eq: do {
             return { js: br_on_cast 'is_eq &eq v };
         }
     }
 
-    #[export = "unwrap"]
+    #[export]
     fn unwrap(v: &eq) -> &?any {
         'not_js: do {
             return (br_on_cast_fail 'not_js &js v).js;
         }
     }
 
-    #[export = "caml_js_equals"]
+    #[export]
     fn caml_js_equals(v1: &eq, v2: &eq) -> &eq {
         equals(unwrap(v1), unwrap(v2)) as &i31;
     }
 
-    #[export = "caml_js_strict_equals"]
+    #[export]
     fn caml_js_strict_equals(v1: &eq, v2: &eq) -> &eq {
         strict_equals(unwrap(v1), unwrap(v2)) as &i31;
     }
 
-    #[export = "caml_js_global"]
+    #[export]
     fn caml_js_global(&eq) -> &eq {
         wrap(global_this);
     }
 
-    #[export = "caml_js_to_float"]
+    #[export]
     fn caml_js_to_float(v: &eq) -> &eq {
         { f: to_float(unwrap(v)) };
     }
 
-    #[export = "caml_js_from_float"]
+    #[export]
     fn caml_js_from_float(v: &eq) -> &eq {
         become wrap(from_float((v as &float).f));
     }
 
-    #[export = "caml_js_to_bool"]
+    #[export]
     fn caml_js_to_bool(v: &eq) -> &eq {
         to_bool(unwrap(v)) as &i31;
     }
 
-    #[export = "caml_js_from_bool"]
+    #[export]
     fn caml_js_from_bool(v: &eq) -> &eq {
         { js: from_bool(v as i32_s) };
     }
 
-    #[export = "caml_js_to_int32"]
+    #[export]
     fn caml_js_to_int32(v: &eq) -> &eq {
         become caml_copy_int32(to_int32(unwrap(v)));
     }
 
-    #[export = "caml_js_from_int32"]
+    #[export]
     fn caml_js_from_int32(v: &eq) -> &eq {
         become wrap(from_int32(Int32_val(v)));
     }
 
-    #[export = "caml_js_to_nativeint"]
+    #[export]
     fn caml_js_to_nativeint(v: &eq) -> &eq {
         become caml_copy_nativeint(to_int32(unwrap(v)));
     }
 
-    #[export = "caml_js_from_nativeint"]
+    #[export]
     fn caml_js_from_nativeint(v: &eq) -> &eq {
         become wrap(from_int32(Nativeint_val(v)));
     }
 
-    #[export = "caml_js_pure_expr"]
+    #[export]
     fn caml_js_pure_expr(f: &eq) -> &eq {
         become caml_callback_1(f, 0 as &i31);
     }
 
-    #[export = "caml_js_fun_call"]
+    #[export]
     fn caml_js_fun_call(f: &eq, args: &eq) -> &eq {
         become wrap(fun_call(unwrap(f), null, unwrap(caml_js_from_array(args))));
     }
 
-    #[export = "caml_js_call"]
+    #[export]
     fn caml_js_call(f: &eq, o: &eq, args: &eq) -> &eq {
         become wrap(fun_call(unwrap(f), unwrap(o), unwrap(caml_js_from_array(args))));
     }
 
-    #[export = "caml_js_meth_call"]
+    #[export]
     fn caml_js_meth_call(o: &eq, f: &eq, args: &eq) -> &eq {
         // Decode the method name as UTF-8, like the JS runtime
         // (caml_js_meth_call uses caml_jsstring_of_string); a non-ASCII method
@@ -214,7 +214,7 @@ type bytes = [mut i8];
         become wrap(meth_call(unwrap(o), unwrap(f), unwrap(caml_js_from_array(args))));
     }
 
-    #[export = "caml_js_get"]
+    #[export]
     fn caml_js_get(o: &eq, f: &eq) -> &eq {
         if f is &bytes {
             f = caml_jsbytes_of_bytes(f);
@@ -222,7 +222,7 @@ type bytes = [mut i8];
         become wrap(get((unwrap(o) as &?extern)!, unwrap(f)));
     }
 
-    #[export = "caml_js_set"]
+    #[export]
     fn caml_js_set(o: &eq, f: &eq, v: &eq) -> &eq {
         if f is &bytes {
             f = caml_jsbytes_of_bytes(f);
@@ -231,7 +231,7 @@ type bytes = [mut i8];
         0 as &i31;
     }
 
-    #[export = "caml_js_delete"]
+    #[export]
     fn caml_js_delete(o: &eq, f: &eq) -> &eq {
         if f is &bytes {
             f = caml_jsbytes_of_bytes(f);
@@ -240,33 +240,33 @@ type bytes = [mut i8];
         0 as &i31;
     }
 
-    #[export = "caml_js_instanceof"]
+    #[export]
     fn caml_js_instanceof(v1: &eq, v2: &eq) -> &eq {
         instanceof(unwrap(v1), unwrap(v2)) as &i31;
     }
 
-    #[export = "caml_js_typeof"]
+    #[export]
     fn caml_js_typeof(v: &eq) -> &eq {
         { js: typeof(unwrap(v)) };
     }
 
-    #[export = "caml_js_new"]
+    #[export]
     fn caml_js_new(c: &eq, args: &eq) -> &eq {
         become wrap(new(unwrap(c), unwrap(caml_js_from_array(args))));
     }
 
-    #[export = "caml_ojs_new_arr"]
+    #[export]
     fn caml_ojs_new_arr(c: &eq, args: &eq) -> &eq {
         become wrap(new(unwrap(c), unwrap(args)));
     }
 
-    #[export = "caml_ojs_iterate_properties"]
+    #[export]
     fn caml_ojs_iterate_properties(o: &eq, f: &eq) -> &eq {
         iter_props(unwrap(o), unwrap(f));
         0 as &i31;
     }
 
-    #[export = "caml_js_object"]
+    #[export]
     fn caml_js_object(va: &eq) -> &eq {
         let a = va as &block;
         let l = a.length();
@@ -279,7 +279,7 @@ type bytes = [mut i8];
         { js: o };
     }
 
-    #[export = "caml_js_from_array"]
+    #[export]
     fn caml_js_from_array(va: &eq) -> &eq {
         let a': &extern;
         let i: i32;
@@ -307,7 +307,7 @@ type bytes = [mut i8];
         }
     }
 
-    #[export = "caml_js_to_array"]
+    #[export]
     fn caml_js_to_array(v: &eq) -> &eq {
         let a = (unwrap(v) as &?extern)!;
         let l = array_length(a);
@@ -330,7 +330,7 @@ type bytes = [mut i8];
         a';
     }
 
-    #[export = "caml_js_to_string_array"]
+    #[export]
     fn caml_js_to_string_array(a: &extern) -> &eq {
         let l = array_length(a);
         let a': &block = [0 as &i31; l + 1];
@@ -341,52 +341,52 @@ type bytes = [mut i8];
         a';
     }
 
-    #[export = "caml_js_wrap_callback"]
+    #[export]
     fn caml_js_wrap_callback(f: &eq) -> &eq {
         become wrap(wrap_callback(f));
     }
 
-    #[export = "caml_js_wrap_callback_arguments"]
+    #[export]
     fn caml_js_wrap_callback_arguments(f: &eq) -> &eq {
         become wrap(wrap_callback_args(f));
     }
 
-    #[export = "caml_js_wrap_callback_strict"]
+    #[export]
     fn caml_js_wrap_callback_strict(n: &eq, f: &eq) -> &eq {
         become wrap(wrap_callback_strict(n as i32_u, f));
     }
 
-    #[export = "caml_js_wrap_callback_unsafe"]
+    #[export]
     fn caml_js_wrap_callback_unsafe(f: &eq) -> &eq {
         become wrap(wrap_callback_unsafe(f));
     }
 
-    #[export = "caml_js_wrap_meth_callback"]
+    #[export]
     fn caml_js_wrap_meth_callback(f: &eq) -> &eq {
         become wrap(wrap_meth_callback(f));
     }
 
-    #[export = "caml_js_wrap_meth_callback_arguments"]
+    #[export]
     fn caml_js_wrap_meth_callback_arguments(f: &eq) -> &eq {
         become wrap(wrap_meth_callback_args(f));
     }
 
-    #[export = "caml_js_wrap_meth_callback_strict"]
+    #[export]
     fn caml_js_wrap_meth_callback_strict(n: &eq, f: &eq) -> &eq {
         become wrap(wrap_meth_callback_strict(n as i32_u, f));
     }
 
-    #[export = "caml_js_wrap_meth_callback_unsafe"]
+    #[export]
     fn caml_js_wrap_meth_callback_unsafe(f: &eq) -> &eq {
         become wrap(wrap_meth_callback_unsafe(f));
     }
 
-    #[export = "caml_ojs_wrap_fun_arguments"]
+    #[export]
     fn caml_ojs_wrap_fun_arguments(f: &eq) -> &eq {
         become wrap(wrap_fun_arguments(wrap_callback_strict(1, f)));
     }
 
-    #[export = "caml_callback"]
+    #[export]
     fn caml_callback(
         f: &eq,
         count: i32,
@@ -426,7 +426,7 @@ type bytes = [mut i8];
         return { js: jsstring_of_bytes(s) };
     }
 
-    #[export = "caml_jsstring_of_substring"]
+    #[export]
     fn caml_jsstring_of_substring(s: &eq, i: &eq, l: &eq) -> &eq {
         return { js: jsstring_of_subbytes(s as &bytes, i as i32_u, l as i32_u) };
     }
@@ -462,13 +462,13 @@ type bytes = [mut i8];
         return { js: jsstring_of_bytes(s') };
     }
 
-    #[export = "caml_string_of_jsstring"]
+    #[export]
     #[export = "caml_js_to_string"]
     fn caml_string_of_jsstring(s: &eq) -> &eq {
         become bytes_of_jsstring((s as &js).js);
     }
 
-    #[export = "caml_string_of_jsbytes"]
+    #[export]
     fn caml_string_of_jsbytes(s: &eq) -> &eq {
         let s' = bytes_of_jsstring((s as &js).js);
         let l = s'.length();
@@ -499,7 +499,7 @@ type bytes = [mut i8];
         s'';
     }
 
-    #[export = "caml_list_to_js_array"]
+    #[export]
     fn caml_list_to_js_array(v: &eq) -> &eq {
         let i = 0;
         let l = v;
@@ -529,7 +529,7 @@ type bytes = [mut i8];
         { js: a as &any };
     }
 
-    #[export = "caml_list_of_js_array"]
+    #[export]
     fn caml_list_of_js_array(v: &eq) -> &eq {
         let a = (unwrap(v) as &?extern)!;
         let len = array_length(a);
@@ -546,7 +546,7 @@ type bytes = [mut i8];
 
     const toString = "toString";
 
-    #[export = "caml_wrap_exception"]
+    #[export]
     fn caml_wrap_exception(vexn: &?extern) -> &eq {
         let exn = vexn as &?any;
         // ZZZ special case for stack overflows?
@@ -561,7 +561,7 @@ type bytes = [mut i8];
         [block|0 as &i31, caml_failwith_tag(), caml_string_of_jsstring(wrap(to_js_string(exn)))];
     }
 
-    #[export = "caml_js_error_option_of_exception"]
+    #[export]
     fn caml_js_error_option_of_exception(vexn: &eq) -> &eq {
         let exn = vexn as &block;
         if exn[0] == 0 as &i31 {
@@ -572,12 +572,12 @@ type bytes = [mut i8];
         0 as &i31;
     }
 
-    #[export = "caml_throw_js_exception"]
+    #[export]
     fn caml_throw_js_exception(exn: &eq) -> &eq {
         throw javascript_exception unwrap(exn) as &?extern;
     }
 
-    #[export = "caml_js_error_of_exception"]
+    #[export]
     fn caml_js_error_of_exception(vexn: &eq) -> &eq {
         let exn = vexn as &block;
         if exn[0] == 0 as &i31 {
@@ -589,17 +589,17 @@ type bytes = [mut i8];
     }
 }
 
-#[export = "caml_exn_with_js_backtrace"]
+#[export]
 fn caml_exn_with_js_backtrace(exn: &eq, &eq) -> &eq {
     exn;
 }
 
-#[export = "caml_jsoo_flags_use_js_string"]
+#[export]
 fn caml_jsoo_flags_use_js_string(&eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_jsoo_flags_effects"]
+#[export]
 fn caml_jsoo_flags_effects(&eq) -> &eq {
     #[if(effects = "cps")]
     {

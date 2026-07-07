@@ -24,7 +24,7 @@ failed validation ("Expected struct type"). The cast is now kept:
 
   $ wax -i wat m.wat -f wax
   type s = { f: i32 };
-  #[export = "f"]
+  #[export]
   fn f() -> i32 {
       _ =
           'l: do {

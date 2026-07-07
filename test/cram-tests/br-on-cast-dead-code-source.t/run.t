@@ -18,7 +18,7 @@ target, which is always a valid source (`rt2 <: rt2`):
   >       (br_on_cast_fail $l (ref any) (ref struct)))))
   > WAT
   $ wax -i wat -f wax b.wat
-  #[export = "f"]
+  #[export]
   fn f() -> &?any {
       'l: do {
           unreachable;

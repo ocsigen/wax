@@ -14,7 +14,7 @@ differential-validation fuzzer.
   > WAT
 
   $ wax -i wat -f wax lic.wat
-  #[export = "f"]
+  #[export]
   fn f() -> i32 {
       unreachable;
       _ <=u 5793170017578347395;

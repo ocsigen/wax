@@ -337,7 +337,7 @@ fn re_match(vre: &eq, s: &bytes, pos: i32, accept_partial_match: i32) -> &eq {
 
 const search_forward = "Str.search_forward";
 
-#[export = "re_search_forward"]
+#[export]
 fn re_search_forward(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     // ZZZ startchars
     let s = vs as &bytes;
@@ -359,7 +359,7 @@ fn re_search_forward(re: &eq, vs: &eq, vpos: &eq) -> &eq {
 
 const search_backward = "Str.search_backward";
 
-#[export = "re_search_backward"]
+#[export]
 fn re_search_backward(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     // ZZZ startchars
     let s = vs as &bytes;
@@ -381,7 +381,7 @@ fn re_search_backward(re: &eq, vs: &eq, vpos: &eq) -> &eq {
 
 const string_match = "Str.string_match";
 
-#[export = "re_string_match"]
+#[export]
 fn re_string_match(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     // ZZZ startchars
     let s = vs as &bytes;
@@ -399,7 +399,7 @@ fn re_string_match(re: &eq, vs: &eq, vpos: &eq) -> &eq {
 
 const string_partial_match = "Str.string_partial_match";
 
-#[export = "re_partial_match"]
+#[export]
 fn re_partial_match(re: &eq, vs: &eq, vpos: &eq) -> &eq {
     // ZZZ startchars
     let s = vs as &bytes;
@@ -418,7 +418,7 @@ fn re_partial_match(re: &eq, vs: &eq, vpos: &eq) -> &eq {
 const illegal_backslash = "Str.replace: illegal backslash sequence";
 const unmatched_group = "Str.replace: reference to unmatched group";
 
-#[export = "re_replacement_text"]
+#[export]
 fn re_replacement_text(vrepl: &eq, vgroups: &eq, vorig: &eq) -> &eq {
     let repl = vrepl as &bytes;
     let l = repl.length();

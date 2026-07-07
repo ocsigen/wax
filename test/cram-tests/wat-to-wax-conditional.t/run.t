@@ -21,12 +21,12 @@ branches reuses one Wax name rather than being disambiguated with a `_2` suffix.
 
   $ wax export-name.wat -o export-name.wax && cat export-name.wax
   #[if(wasi)]
-  #[export = "init"]
+  #[export]
   fn init(x: &eq) -> &eq {
       x;
   }
   #[else]
-  #[export = "init"]
+  #[export]
   fn init(x: &eq) -> &eq {
       x;
   }

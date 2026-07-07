@@ -72,17 +72,17 @@
         }
     }
 
-    #[export = "jsstring_compare"]
+    #[export]
     fn jsstring_compare(s: &?any, s': &?any) -> i32 {
         become compare_strings(s as &?extern, s' as &?extern);
     }
 
-    #[export = "jsstring_test"]
+    #[export]
     fn jsstring_test(s: &?any) -> i32 {
         become is_string(s as &?extern);
     }
 
-    #[export = "jsstring_of_subbytes"]
+    #[export]
     #[export = "jsstring_of_substring" // compatibility with zarith stubs
         ]
     fn jsstring_of_subbytes(s: &bytes, pos: i32, len: i32) -> &?any {
@@ -101,12 +101,12 @@
         become jsstring_of_subbytes_fallback(s, pos, len);
     }
 
-    #[export = "jsstring_of_bytes"]
+    #[export]
     fn jsstring_of_bytes(s: &bytes) -> &?any {
         become jsstring_of_subbytes(s, 0, s.length());
     }
 
-    #[export = "bytes_of_jsstring"]
+    #[export]
     fn bytes_of_jsstring(s: &?any) -> &bytes {
         if text_converters_available {
             become encodeStringToUTF8Array(s as &?extern);
@@ -131,7 +131,7 @@
 
     // Fallback implementation of string conversion functions
 
-    #[export = "caml_buffer"]
+    #[export]
     memory caml_buffer: i32 [1];
 
     const buffer_size = 65536;
@@ -206,7 +206,7 @@
         s';
     }
 
-    #[export = "caml_extract_bytes"]
+    #[export]
     fn caml_extract_bytes(len: i32) {
         let s: &bytes = [0; len];
         read_from_buffer(s, 0, len);

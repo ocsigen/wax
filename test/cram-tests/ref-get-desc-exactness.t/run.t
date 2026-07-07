@@ -9,7 +9,7 @@ type.
   $ wax -X custom-descriptors -i wat -f wax rgd.wat
   rec { type a = descriptor b { }; type b = describes a { }; }
   // exact operand -> exact descriptor
-  #[export = "exact"]
+  #[export]
   fn exact(x: &!a) -> &!b {
       x.descriptor;
   }
@@ -19,7 +19,7 @@ type.
       (null as &?!a).descriptor;
   }
   // inexact operand -> inexact descriptor
-  #[export = "inexact"]
+  #[export]
   fn inexact(x: &a) -> &b {
       x.descriptor;
   }

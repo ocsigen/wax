@@ -49,7 +49,7 @@ const lex_code_field = 11;
 
 const lexing_empty_token = "lexing: empty token";
 
-#[export = "caml_lex_engine"]
+#[export]
 fn caml_lex_engine(vtbl: &eq, start_state: &eq, vlexbuf: &eq) -> &eq {
     let tbl = vtbl as &block;
     let lexbuf = vlexbuf as &block;
@@ -135,7 +135,7 @@ fn run_tag(s: &bytes, i: i32, lexbuf: &block) {
     become run_mem(s, i, lexbuf, -1 as &i31);
 }
 
-#[export = "caml_new_lex_engine"]
+#[export]
 fn caml_new_lex_engine(vtbl: &eq, start_state: &eq, vlexbuf: &eq) -> &eq {
     let tbl = vtbl as &block;
     let lexbuf = vlexbuf as &block;

@@ -8,7 +8,7 @@ same Wax name twice and fail with "already bound").
   #[import = ("x", "getuid")]
   fn getuid() -> i32;
   #[if(wasi)]
-  #[export = "unix_getuid"]
+  #[export]
   #[export = "caml_unix_getuid"]
   #[export = "unix_geteuid"]
   #[export = "caml_unix_geteuid"]
@@ -17,12 +17,12 @@ same Wax name twice and fail with "already bound").
   }
   #[else]
   {
-      #[export = "unix_getuid"]
+      #[export]
       #[export = "caml_unix_getuid"]
       fn unix_getuid(&eq) -> &eq {
           getuid() as &i31;
       }
-      #[export = "unix_geteuid"]
+      #[export]
       #[export = "caml_unix_geteuid"]
       fn unix_geteuid(&eq) -> &eq {
           getuid() as &i31;

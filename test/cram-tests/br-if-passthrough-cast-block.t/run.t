@@ -28,7 +28,7 @@ regardless of what pins the pass-through downstream, and the module round-trips:
   > WAT
   $ wax -i wat -f wax f.wat
   let g: i64 = 0;
-  #[export = "f"]
+  #[export]
   fn f(c: i32) -> i64 {
       ('l: do f64 {
            br 'l 1.5;

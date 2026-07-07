@@ -21,7 +21,7 @@ The result type is recovered (on the `try`), so the catch's value has a target:
 
   $ wax -i wat -f wax c.wat
   tag e(f64);
-  #[export = "f"]
+  #[export]
   fn f(x: i32) {
       _ =
           'l: if x {

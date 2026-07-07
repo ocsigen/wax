@@ -15,7 +15,7 @@ type int". Regression: found by the differential-validation fuzzer.
 
   $ wax -i wat -f wax st.wat
   memory m: i32 [1];
-  #[export = "f"]
+  #[export]
   fn f() {
       m.store8(0, 5793170017578347395);
   }

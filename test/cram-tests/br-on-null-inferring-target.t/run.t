@@ -19,7 +19,7 @@ cell to the declared annotation. Regression: differential-validation fuzzer.
   > WAT
 
   $ wax -i wat -f wax bon.wat
-  #[export = "f"]
+  #[export]
   fn f(x: &?func) -> i32 {
       'l: do {
           br_on_null 'l (5, x);

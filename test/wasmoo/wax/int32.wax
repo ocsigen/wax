@@ -49,7 +49,7 @@ type custom_operations = {
 };
 type custom = open { ops: &custom_operations };
 
-#[export = "int32_ops"]
+#[export]
 const int32_ops =
     {
         id: "_i",
@@ -90,18 +90,18 @@ fn int32_dup(v: &eq) -> &eq {
     { ops: d.ops, i32: d.i32 };
 }
 
-#[export = "caml_copy_int32"]
+#[export]
 fn caml_copy_int32(i: i32) -> &eq {
     { ops: int32_ops, i32: i };
 }
 
-#[export = "Int32_val"]
+#[export]
 #[export = "Nativeint_val"]
 fn Int32_val(v: &eq) -> i32 {
     (v as &int32).i32;
 }
 
-#[export = "caml_int32_bswap"]
+#[export]
 #[export = "caml_nativeint_bswap"]
 fn caml_int32_bswap(i: i32) -> i32 {
     (i & 0x00FF00FF).rotr(8) | (i & 0xFF00FF00).rotl(8);
@@ -109,18 +109,18 @@ fn caml_int32_bswap(i: i32) -> i32 {
 
 const INT32_ERRMSG = "Int32.of_string";
 
-#[export = "caml_int32_of_string"]
+#[export]
 fn caml_int32_of_string(v: &eq) -> &eq {
     become caml_copy_int32(parse_int(v, 32, INT32_ERRMSG));
 }
 
-#[export = "caml_int32_compare"]
+#[export]
 #[export = "caml_nativeint_compare"]
 fn caml_int32_compare(i1: i32, i2: i32) -> i32 {
     (i1 >s i2) - (i1 <s i2);
 }
 
-#[export = "nativeint_ops"]
+#[export]
 const nativeint_ops =
     {
         id: "_n",
@@ -150,19 +150,19 @@ fn nativeint_deserialize(s: &eq) -> (&eq, i32) {
     4;
 }
 
-#[export = "caml_copy_nativeint"]
+#[export]
 fn caml_copy_nativeint(i: i32) -> &eq {
     { ops: nativeint_ops, i32: i };
 }
 
 const NATIVEINT_ERRMSG = "Nativeint.of_string";
 
-#[export = "caml_nativeint_of_string"]
+#[export]
 fn caml_nativeint_of_string(v: &eq) -> &eq {
     become caml_copy_nativeint(parse_int(v, 32, NATIVEINT_ERRMSG));
 }
 
-#[export = "caml_int32_format"]
+#[export]
 #[export = "caml_nativeint_format"]
 fn caml_int32_format(v: &eq, vi: &eq) -> &eq {
     become format_int(v, (vi as &int32).i32, 0);

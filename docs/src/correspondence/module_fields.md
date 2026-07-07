@@ -176,6 +176,13 @@ const PI: f64 = 3.14159;
 tag my_error(code: i32);
 ```
 
+The name is optional: a bare `#[export]` exports the field under its own Wax name.
+
+```wax
+#[export]
+fn add(x: i32, y: i32) -> i32 { x + y; }
+```
+
 Multiple exports can share the same function:
 
 ```wax

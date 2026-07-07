@@ -21,7 +21,7 @@ The set stays a statement and the following instruction takes a hole operand:
 
   $ wax -i wat -f wax ss.wat
   type s = { f: mut i32 };
-  #[export = "f"]
+  #[export]
   fn f() -> i32 {
       unreachable;
       {s| .. }.f = 5;

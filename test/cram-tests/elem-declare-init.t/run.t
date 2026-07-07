@@ -8,7 +8,7 @@ a dropped passive one (`table.init` of a non-zero length traps either way).
   table t: &?func [10];
   elem e: &func = [];
   fn f() {}
-  #[export = "init"]
+  #[export]
   fn init() {
       t.init(e, 0, 0, 1);
   }

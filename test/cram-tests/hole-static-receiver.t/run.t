@@ -20,7 +20,7 @@ not be reported as "occurring before a hole".
   $ wax -i wat -f wax copy.wat
   memory a: i32 [1];
   memory b: i32 [1];
-  #[export = "f"]
+  #[export]
   fn f(s: i32, n: i32) {
       0;
       do (i32) {
@@ -51,7 +51,7 @@ decompiles to `m.init(d, _, s, n)`: the segment `d` is a name, the destination
   $ wax -i wat -f wax init.wat
   memory m: i32 [1];
   data d = "ab";
-  #[export = "f"]
+  #[export]
   fn f(s: i32, n: i32) {
       0;
       do (i32) {

@@ -17,7 +17,7 @@ Regression: found by the execution-oracle fuzzer.
 The dropped `i64` tree keeps its width via a `_: i64` annotation:
 
   $ wax -i wat -f wax m.wat
-  #[export = "f"]
+  #[export]
   fn f() {
       _: i64 = 1 /u (2147483648 + 2147483648);
   }
@@ -42,7 +42,7 @@ tree with a typed anchor (an `i64` local re-pins it) need no annotation:
   > WAT
 
   $ wax -i wat -f wax n.wat
-  #[export = "g"]
+  #[export]
   fn g(x: i64) {
       _: f32 = 1 + 2;
       _ = 1 + 2;

@@ -2,7 +2,7 @@ A value-producing `if` infers its result type from the values reaching its exit
 (its branch tails), so converting from Wasm drops the redundant `=> T`:
 
   $ wax convert --input-format wat --format wax infer.wat
-  #[export = "f"]
+  #[export]
   fn f(c: i32) -> i32 {
       if c {
           1;

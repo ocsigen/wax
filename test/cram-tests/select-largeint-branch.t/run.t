@@ -10,7 +10,7 @@ join_value_types. Regression: found by the differential-validation fuzzer.
   > WAT
 
   $ wax -i wat -f wax sli.wat
-  #[export = "f"]
+  #[export]
   fn f(x: i32) -> i64 {
       x?5793170017578347395:1;
   }

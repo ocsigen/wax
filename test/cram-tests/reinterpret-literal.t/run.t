@@ -11,19 +11,19 @@ default the abstract operand.
   type t_2 = fn() -> i32;
   type t_3 = fn() -> f32;
   type t_4 = fn() -> f64;
-  #[export = "f64nan"]
+  #[export]
   fn f64nan() -> i64 {
       (nan:0x8000000000000).to_bits();
   }
-  #[export = "f32nan"]
+  #[export]
   fn f32nan() -> i32 {
       (nan:0x400000 as f32).to_bits();
   }
-  #[export = "i32fb"]
+  #[export]
   fn i32fb() -> f32 {
       (5).from_bits();
   }
-  #[export = "i64fb"]
+  #[export]
   fn i64fb() -> f64 {
       (5 as i64).from_bits();
   }

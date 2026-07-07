@@ -13,7 +13,7 @@ A WebAssembly module using custom page sizes decompiles back to the same
 [pagesize] clause.
 
   $ wax roundtrip.wat -f wax
-  #[export = "small"]
+  #[export]
   memory small: i32 [4096] pagesize 1;
   memory m: i32 [2, 4] pagesize 65536;
 

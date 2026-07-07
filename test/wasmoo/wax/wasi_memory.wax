@@ -13,7 +13,7 @@
 
     type bytes = [mut i8];
 
-    #[export = "checked_malloc"]
+    #[export]
     fn checked_malloc(size: i32) -> i32 {
         let p = malloc(size);
         if !p {
@@ -22,7 +22,7 @@
         p;
     }
 
-    #[export = "blit_substring_to_memory"]
+    #[export]
     fn blit_substring_to_memory(buf: i32, s: &bytes, ofs: i32, len: i32) {
         let i: i32;
         while i <u len : (i += 1) {
@@ -30,7 +30,7 @@
         }
     }
 
-    #[export = "blit_string_to_memory"]
+    #[export]
     fn blit_string_to_memory(buf: i32, s: &bytes) {
         let len = s.length();
         let i: i32;
@@ -39,7 +39,7 @@
         }
     }
 
-    #[export = "blit_memory_to_substring"]
+    #[export]
     fn blit_memory_to_substring(buf: i32, s: &bytes, ofs: i32, len: i32) {
         let i: i32;
         while i <u len : (i += 1) {
@@ -47,7 +47,7 @@
         }
     }
 
-    #[export = "blit_memory_to_string"]
+    #[export]
     fn blit_memory_to_string(buf: i32, len: i32) -> &bytes {
         let s: &bytes = [0; len];
         let i: i32;
@@ -57,7 +57,7 @@
         s;
     }
 
-    #[export = "write_string_to_memory"]
+    #[export]
     fn write_string_to_memory(buf: i32, avail: i32, v: &eq) -> i32 {
         let i: i32;
         let s = v as &bytes;
@@ -70,7 +70,7 @@
         buf;
     }
 
-    #[export = "release_memory"]
+    #[export]
     fn release_memory(initial_buffer: i32, buf: i32) {
         if initial_buffer != buf {
             free(buf);
@@ -79,7 +79,7 @@
 
     let buffer = 0;
 
-    #[export = "get_buffer"]
+    #[export]
     fn get_buffer() -> i32 {
         if !buffer {
             buffer = checked_malloc(IO_BUFFER_SIZE + 12);

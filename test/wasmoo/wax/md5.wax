@@ -30,7 +30,7 @@ type context = {
     intermediate: &bytes
 }; // intermediate buffer
 
-#[export = "caml_md5_string"]
+#[export]
 #[export = "caml_md5_bytes"]
 fn caml_md5_string(vs: &eq, vofs: &eq, vlen: &eq) -> &eq {
     let ctx = MD5Init();
@@ -38,7 +38,7 @@ fn caml_md5_string(vs: &eq, vofs: &eq, vlen: &eq) -> &eq {
     become MD5Final(ctx);
 }
 
-#[export = "caml_md5_chan"]
+#[export]
 fn caml_md5_chan(ch: &eq, vlen: &eq) -> &eq {
     let len = vlen as i32_s;
     let buf: &bytes = [0; 4096];

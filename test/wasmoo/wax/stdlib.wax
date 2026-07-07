@@ -96,7 +96,7 @@ fn assoc_find(s: &eq, l: &?assoc) -> &?assoc {
     }
 }
 
-#[export = "caml_named_value"]
+#[export]
 fn caml_named_value(s: &eq) -> &?eq {
     'not_found: do {
         return
@@ -109,7 +109,7 @@ fn caml_named_value(s: &eq) -> &?eq {
     return null;
 }
 
-#[export = "caml_register_named_value"]
+#[export]
 fn caml_register_named_value(name: &eq, v: &eq) -> &eq {
     let h = caml_string_hash(0 as &i31, name) as i32_s %u Named_value_size;
     let r = named_value_table[h];
@@ -122,7 +122,7 @@ fn caml_register_named_value(name: &eq, v: &eq) -> &eq {
 }
 
 // Used only for testing (tests-jsoo/bin), but inconvenient to pull out
-#[export = "caml_unregister_named_value"]
+#[export]
 fn caml_unregister_named_value(name: &eq) -> &eq {
     let h = caml_string_hash(0 as &i31, name) as i32_s %u Named_value_size;
     let r = named_value_table[h];
@@ -148,7 +148,7 @@ fn caml_unregister_named_value(name: &eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_global_data"]
+#[export]
 let caml_global_data: &block = [0 as &i31; 13];
 
 // Grow caml_global_data so that index $min_idx is valid.
@@ -170,7 +170,7 @@ fn grow_global_data(min_idx: i32) {
 //   field 3: prim_count — int (number of registered primitives)
 //   field 4: aliases    — (string * string) list of primitive aliases
 // All fields default to 0 (unit/empty).
-#[export = "link_info"]
+#[export]
 let link_info: &block = [0 as &i31, 0 as &i31, 0 as &i31, 0 as &i31, 0 as &i31];
 
 // Field indices for $link_info (after tag at 0)
@@ -183,7 +183,7 @@ const LINK_INFO_ALIASES = 4;
 // static symbols table. Initialized when symbols are set.
 let next_idx = 0;
 
-#[export = "caml_set_link_info"]
+#[export]
 fn caml_set_link_info(info: &eq) -> &eq {
     link_info = info as &block;
     // Compute next_idx from symbols field
@@ -230,10 +230,10 @@ fn caml_set_link_info(info: &eq) -> &eq {
 // Relocation callback: set by wasm_of_ocaml_compiler_dynlink when
 // the toplevel is active. Maps a name (string) to its symtable index.
 // Similar to jsoo_toplevel_reloc in the JS runtime.
-#[export = "toplevel_reloc"]
+#[export]
 let toplevel_reloc: &eq = 0 as &i31;
 
-#[export = "wasm_toplevel_init_reloc"]
+#[export]
 fn wasm_toplevel_init_reloc(f: &eq) -> &eq {
     toplevel_reloc = f;
     0 as &i31;
@@ -259,7 +259,7 @@ fn lookup_symbol(name: &eq, kind: i32) -> i32 {
 
 let caml_register_global_idx = 0;
 
-#[export = "caml_register_global_by_index"]
+#[export]
 fn caml_register_global_by_index(v: &eq, idx: &eq) -> &eq {
     // caml_global_data is a $block: index 0 is the tag, data starts at 1
     let i = idx as i32_u + 1;
@@ -305,17 +305,17 @@ fn do_register_global(v: &eq, name: &eq, is_predef: i32) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_register_global"]
+#[export]
 fn caml_register_global(v: &eq, name: &eq) -> &eq {
     do_register_global(v, name, 0);
 }
 
-#[export = "caml_register_global_predef"]
+#[export]
 fn caml_register_global_predef(v: &eq, name: &eq) -> &eq {
     do_register_global(v, name, 1);
 }
 
-#[export = "caml_get_global_data"]
+#[export]
 fn caml_get_global_data(&eq) -> &eq {
     caml_global_data;
 }
@@ -335,7 +335,7 @@ let uncaught_exception: &?extern = null;
         0 as &i31;
     }
 
-    #[export = "caml_handle_uncaught_exception"]
+    #[export]
     fn caml_handle_uncaught_exception(exn: &?extern) {
         uncaught_exception = exn;
         caml_main(reraise_exception);
@@ -343,10 +343,10 @@ let uncaught_exception: &?extern = null;
 }
 
 type wrapper_func = fn(&thunk);
-#[export = "caml_main_wrapper"]
+#[export]
 let caml_main_wrapper: &?wrapper_func = null;
 
-#[export = "caml_main"]
+#[export]
 fn caml_main(start: &func) {
     try {
         'fallback: do {
@@ -397,7 +397,7 @@ fn caml_main(start: &func) {
     }
 }
 
-#[export = "caml_with_async_exns"]
+#[export]
 fn caml_with_async_exns(f: &eq) -> &eq {
     become caml_callback_1(f, 0 as &i31);
 }

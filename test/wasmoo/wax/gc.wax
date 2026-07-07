@@ -24,34 +24,34 @@ type float = { f: f64 };
 type block = [mut &eq];
 type bytes = [mut i8];
 
-#[export = "caml_gc_minor"]
+#[export]
 fn caml_gc_minor(&eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_gc_major"]
+#[export]
 fn caml_gc_major(&eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_gc_full_major"]
+#[export]
 fn caml_gc_full_major(&eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_gc_compaction"]
+#[export]
 fn caml_gc_compaction(&eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_gc_counters"]
+#[export]
 fn caml_gc_counters(&eq) -> &eq {
     let f = { f: 0 };
     [block|0 as &i31, f, f, f];
 }
 
 #[if(ocaml_version >= (5, 5, 0))]
-#[export = "caml_gc_stat"]
+#[export]
 #[export = "caml_gc_quick_stat"]
 fn caml_gc_stat(&eq) -> &eq {
     let f = { f: 0 };
@@ -78,7 +78,7 @@ fn caml_gc_stat(&eq) -> &eq {
     ];
 }
 #[else]
-#[export = "caml_gc_stat"]
+#[export]
 #[export = "caml_gc_quick_stat"]
 fn caml_gc_stat(&eq) -> &eq {
     let f = { f: 0 };
@@ -104,12 +104,12 @@ fn caml_gc_stat(&eq) -> &eq {
     ];
 }
 
-#[export = "caml_gc_set"]
+#[export]
 fn caml_gc_set(&eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_gc_get"]
+#[export]
 fn caml_gc_get(&eq) -> &eq {
     [block|
         0 as &i31,
@@ -127,117 +127,117 @@ fn caml_gc_get(&eq) -> &eq {
     ];
 }
 
-#[export = "caml_gc_huge_fallback_count"]
+#[export]
 fn caml_gc_huge_fallback_count(&eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_gc_major_slice"]
+#[export]
 fn caml_gc_major_slice(&eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_gc_major_bucket"]
+#[export]
 fn caml_gc_major_bucket(&eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_gc_major_credit"]
+#[export]
 fn caml_gc_major_credit(&eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_gc_minor_free"]
+#[export]
 fn caml_gc_minor_free(&eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_gc_minor_words"]
+#[export]
 fn caml_gc_minor_words(&eq) -> &eq {
     { f: 0 };
 }
 
-#[export = "caml_final_register"]
+#[export]
 fn caml_final_register(&eq, &eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_final_register_called_without_value"]
+#[export]
 fn caml_final_register_called_without_value(&eq, &eq) -> &eq {
     // ZZZ Use FinalizationRegistry?
     0 as &i31;
 }
 
-#[export = "caml_final_release"]
+#[export]
 fn caml_final_release(&eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_memprof_start"]
+#[export]
 fn caml_memprof_start(&eq, &eq, &eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_memprof_set"]
+#[export]
 fn caml_memprof_set(&eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_memprof_stop"]
+#[export]
 fn caml_memprof_stop(&eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_memprof_discard"]
+#[export]
 fn caml_memprof_discard(&eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_memprof_participate"]
+#[export]
 fn caml_memprof_participate(&eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_eventlog_pause"]
+#[export]
 fn caml_eventlog_pause(&eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_eventlog_resume"]
+#[export]
 fn caml_eventlog_resume(&eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_ml_gc_ramp_up"]
+#[export]
 fn caml_ml_gc_ramp_up(f: &eq) -> &eq {
     [block|0 as &i31, caml_callback_1(f, 0 as &i31), 0 as &i31];
 }
 
-#[export = "caml_ml_gc_ramp_down"]
+#[export]
 fn caml_ml_gc_ramp_down(&eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_memprof_is_sampling"]
+#[export]
 fn caml_memprof_is_sampling(&eq) -> &eq {
     0 as &i31;
 }
 
 const gc_tweak_error = "Gc.Tweak: parameter not found";
 
-#[export = "caml_gc_tweak_get"]
+#[export]
 fn caml_gc_tweak_get(&eq) -> &eq {
     caml_invalid_argument(gc_tweak_error);
     0 as &i31;
 }
 
-#[export = "caml_gc_tweak_set"]
+#[export]
 fn caml_gc_tweak_set(&eq, &eq) -> &eq {
     caml_invalid_argument(gc_tweak_error);
     0 as &i31;
 }
 
-#[export = "caml_gc_tweak_list_active"]
+#[export]
 fn caml_gc_tweak_list_active(&eq) -> &eq {
     0 as &i31;
 }

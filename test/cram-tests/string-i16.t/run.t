@@ -45,11 +45,11 @@ The element type also drives decompilation, so the arrays come back as strings:
   type utf8 = [mut i8];
   type t = fn() -> &utf16;
   type t_2 = fn() -> &utf8;
-  #[export = "wide"]
+  #[export]
   fn wide() -> &utf16 {
       "hé😀";
   }
-  #[export = "narrow"]
+  #[export]
   fn narrow() -> &utf8 {
       "hé";
   }

@@ -15,7 +15,7 @@ any and float." Regression: found by the differential-validation fuzzer.
   > WAT
 
   $ wax -i wat -f wax dm.wat
-  #[export = "f"]
+  #[export]
   fn f() -> f64 {
       unreachable;
       (_ as f64).min(1);

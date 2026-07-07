@@ -20,7 +20,7 @@ Regression: found by the differential-validation fuzzer.
 
   $ wax -i wat -f wax m.wat
   type t = { };
-  #[export = "f"]
+  #[export]
   fn f(x: &?t) -> &?t {
       'b: do {
           _ = br_on_cast_fail 'b &none {t| .. };

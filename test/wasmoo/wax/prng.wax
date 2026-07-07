@@ -35,7 +35,7 @@ fn caml_ba_get_view(&eq) -> &extern;
     const littleEndian: i32;
 }
 
-#[export = "caml_lxm_next"]
+#[export]
 fn caml_lxm_next(v: &eq) -> i64 {
     let view = caml_ba_get_view(v);
     let a = dv_get_i64(view, 0, littleEndian);

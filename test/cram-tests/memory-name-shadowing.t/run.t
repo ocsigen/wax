@@ -17,7 +17,7 @@ with memory `$x` and is renamed; `x.load32` still names the memory):
 
   $ wax -i wat -f wax collide.wat
   memory x: i32 [1];
-  #[export = "f"]
+  #[export]
   fn f(x_2: i32) -> i32 {
       x.load32(x_2);
   }

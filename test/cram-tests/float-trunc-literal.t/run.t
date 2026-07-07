@@ -7,15 +7,15 @@ rejected as "float cannot be cast". (Regression: smith-found round-trip failure.
   $ wax -i wasm -f wax trunc.wasm
   type t = fn() -> i64;
   type t_2 = fn() -> i32;
-  #[export = "s"]
+  #[export]
   fn s() -> i64 {
       0x1.8p+0 as i64_s_strict;
   }
-  #[export = "u"]
+  #[export]
   fn u() -> i32 {
       0x1.4p+1 as i32_u_strict;
   }
-  #[export = "ext"]
+  #[export]
   fn ext() -> i64 {
       0x1.cp+1 as i64_s_strict as i32 as i64_s;
   }

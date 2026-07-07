@@ -147,7 +147,7 @@
 
     // --- Open / Close / Clear ---
 
-    #[export = "caml_gr_open_graph"]
+    #[export]
     fn caml_gr_open_graph(s: &eq) -> &eq {
         if gr_open(unwrap(caml_jsstring_of_string(s))) {
             caml_failwith(open_failed);
@@ -155,14 +155,14 @@
         0 as &i31;
     }
 
-    #[export = "caml_gr_close_graph"]
+    #[export]
     fn caml_gr_close_graph(&eq) -> &eq {
         check_state();
         gr_close();
         0 as &i31;
     }
 
-    #[export = "caml_gr_clear_graph"]
+    #[export]
     fn caml_gr_clear_graph(&eq) -> &eq {
         check_state();
         gr_clear();
@@ -171,25 +171,25 @@
 
     // --- Size / Position getters ---
 
-    #[export = "caml_gr_size_x"]
+    #[export]
     fn caml_gr_size_x(&eq) -> &eq {
         check_state();
         gr_size_x() as &i31;
     }
 
-    #[export = "caml_gr_size_y"]
+    #[export]
     fn caml_gr_size_y(&eq) -> &eq {
         check_state();
         gr_size_y() as &i31;
     }
 
-    #[export = "caml_gr_current_x"]
+    #[export]
     fn caml_gr_current_x(&eq) -> &eq {
         check_state();
         gr_current_x() as &i31;
     }
 
-    #[export = "caml_gr_current_y"]
+    #[export]
     fn caml_gr_current_y(&eq) -> &eq {
         check_state();
         gr_current_y() as &i31;
@@ -197,76 +197,76 @@
 
     // --- Drawing with ints ---
 
-    #[export = "caml_gr_set_color"]
+    #[export]
     fn caml_gr_set_color(c: &eq) -> &eq {
         check_state();
         gr_set_color(c as i32_s);
         0 as &i31;
     }
 
-    #[export = "caml_gr_plot"]
+    #[export]
     fn caml_gr_plot(x: &eq, y: &eq) -> &eq {
         check_state();
         gr_plot(x as i32_s, y as i32_s);
         0 as &i31;
     }
 
-    #[export = "caml_gr_point_color"]
+    #[export]
     fn caml_gr_point_color(x: &eq, y: &eq) -> &eq {
         check_state();
         gr_point_color(x as i32_s, y as i32_s) as &i31;
     }
 
-    #[export = "caml_gr_moveto"]
+    #[export]
     fn caml_gr_moveto(x: &eq, y: &eq) -> &eq {
         check_state();
         gr_moveto(x as i32_s, y as i32_s);
         0 as &i31;
     }
 
-    #[export = "caml_gr_lineto"]
+    #[export]
     fn caml_gr_lineto(x: &eq, y: &eq) -> &eq {
         check_state();
         gr_lineto(x as i32_s, y as i32_s);
         0 as &i31;
     }
 
-    #[export = "caml_gr_draw_rect"]
+    #[export]
     fn caml_gr_draw_rect(x: &eq, y: &eq, w: &eq, h: &eq) -> &eq {
         check_state();
         gr_draw_rect(x as i32_s, y as i32_s, w as i32_s, h as i32_s);
         0 as &i31;
     }
 
-    #[export = "caml_gr_fill_rect"]
+    #[export]
     fn caml_gr_fill_rect(x: &eq, y: &eq, w: &eq, h: &eq) -> &eq {
         check_state();
         gr_fill_rect(x as i32_s, y as i32_s, w as i32_s, h as i32_s);
         0 as &i31;
     }
 
-    #[export = "caml_gr_draw_arc"]
+    #[export]
     fn caml_gr_draw_arc(x: &eq, y: &eq, rx: &eq, ry: &eq, a1: &eq, a2: &eq) -> &eq {
         check_state();
         gr_draw_arc(x as i32_s, y as i32_s, rx as i32_s, ry as i32_s, a1 as i32_s, a2 as i32_s);
         0 as &i31;
     }
 
-    #[export = "caml_gr_fill_arc"]
+    #[export]
     fn caml_gr_fill_arc(x: &eq, y: &eq, rx: &eq, ry: &eq, a1: &eq, a2: &eq) -> &eq {
         check_state();
         gr_fill_arc(x as i32_s, y as i32_s, rx as i32_s, ry as i32_s, a1 as i32_s, a2 as i32_s);
         0 as &i31;
     }
 
-    #[export = "caml_gr_set_line_width"]
+    #[export]
     fn caml_gr_set_line_width(w: &eq) -> &eq {
         check_state();
         gr_set_line_width(w as i32_s);
         0 as &i31;
     }
 
-    #[export = "caml_gr_resize_window"]
+    #[export]
     fn caml_gr_resize_window(w: &eq, h: &eq) -> &eq {
         check_state();
         gr_resize_window(w as i32_s, h as i32_s);
@@ -275,42 +275,42 @@
 
     // --- Text / String operations ---
 
-    #[export = "caml_gr_draw_char"]
+    #[export]
     fn caml_gr_draw_char(c: &eq) -> &eq {
         check_state();
         gr_draw_char(c as i32_s);
         0 as &i31;
     }
 
-    #[export = "caml_gr_draw_string"]
+    #[export]
     fn caml_gr_draw_string(s: &eq) -> &eq {
         check_state();
         gr_draw_str(unwrap(caml_jsstring_of_string(s)));
         0 as &i31;
     }
 
-    #[export = "caml_gr_set_font"]
+    #[export]
     fn caml_gr_set_font(s: &eq) -> &eq {
         check_state();
         gr_set_font(unwrap(caml_jsstring_of_string(s)));
         0 as &i31;
     }
 
-    #[export = "caml_gr_set_text_size"]
+    #[export]
     fn caml_gr_set_text_size(s: &eq) -> &eq {
         check_state();
         gr_set_text_size(s as i32_s);
         0 as &i31;
     }
 
-    #[export = "caml_gr_set_window_title"]
+    #[export]
     fn caml_gr_set_window_title(s: &eq) -> &eq {
         check_state();
         gr_set_window_title(unwrap(caml_jsstring_of_string(s)));
         0 as &i31;
     }
 
-    #[export = "caml_gr_text_size"]
+    #[export]
     fn caml_gr_text_size(s: &eq) -> &eq {
         check_state();
         [block|
@@ -322,7 +322,7 @@
 
     // --- Polygon ---
 
-    #[export = "caml_gr_fill_poly"]
+    #[export]
     fn caml_gr_fill_poly(ar: &eq) -> &eq {
         check_state();
         let a = ar as &block;
@@ -340,27 +340,27 @@
 
     // --- Image operations ---
 
-    #[export = "caml_gr_create_image"]
+    #[export]
     fn caml_gr_create_image(w: &eq, h: &eq) -> &eq {
         check_state();
         { js: gr_create_image(w as i32_s, h as i32_s) };
     }
 
-    #[export = "caml_gr_draw_image"]
+    #[export]
     fn caml_gr_draw_image(im: &eq, x: &eq, y: &eq) -> &eq {
         check_state();
         gr_draw_image(unwrap(im), x as i32_s, y as i32_s);
         0 as &i31;
     }
 
-    #[export = "caml_gr_blit_image"]
+    #[export]
     fn caml_gr_blit_image(im: &eq, x: &eq, y: &eq) -> &eq {
         check_state();
         gr_blit_image(unwrap(im), x as i32_s, y as i32_s);
         0 as &i31;
     }
 
-    #[export = "caml_gr_make_image"]
+    #[export]
     fn caml_gr_make_image(arr: &eq) -> &eq {
         check_state();
         let a = arr as &block;
@@ -381,7 +381,7 @@
         { js: gr_make_image(flat as &any, w, h) };
     }
 
-    #[export = "caml_gr_dump_image"]
+    #[export]
     fn caml_gr_dump_image(im: &eq) -> &eq {
         let js_im = unwrap(im);
         let w = gr_dump_image_width(js_im);
@@ -401,79 +401,79 @@
 
     // --- Graphics_js state management ---
 
-    #[export = "caml_gr_state_get"]
+    #[export]
     fn caml_gr_state_get(&eq) -> &eq {
         check_state();
         wrap(gr_state());
     }
 
-    #[export = "caml_gr_state_set"]
+    #[export]
     fn caml_gr_state_set(s: &eq) -> &eq {
         gr_state_set(unwrap(s));
         0 as &i31;
     }
 
-    #[export = "caml_gr_state_create"]
+    #[export]
     fn caml_gr_state_create(s: &eq, w: &eq, h: &eq) -> &eq {
         wrap(gr_state_create(unwrap(s), w as i32_s, h as i32_s));
     }
 
-    #[export = "caml_gr_doc_of_state"]
+    #[export]
     fn caml_gr_doc_of_state(s: &eq) -> &eq {
         wrap(gr_doc_of_state(unwrap(s)));
     }
 
     // --- Stubs returning unit ---
 
-    #[export = "caml_gr_sigio_handler"]
+    #[export]
     fn caml_gr_sigio_handler(&eq) -> &eq {
         0 as &i31;
     }
 
-    #[export = "caml_gr_sigio_signal"]
+    #[export]
     fn caml_gr_sigio_signal(&eq) -> &eq {
         0 as &i31;
     }
 
     // --- Stubs raising Failure ---
 
-    #[export = "caml_gr_wait_event"]
+    #[export]
     fn caml_gr_wait_event(&eq) -> &eq {
         caml_failwith(wait_event);
         0 as &i31;
     }
 
-    #[export = "caml_gr_synchronize"]
+    #[export]
     fn caml_gr_synchronize(&eq) -> &eq {
         caml_failwith(synchronize);
         0 as &i31;
     }
 
-    #[export = "caml_gr_remember_mode"]
+    #[export]
     fn caml_gr_remember_mode(&eq) -> &eq {
         caml_failwith(remember_mode);
         0 as &i31;
     }
 
-    #[export = "caml_gr_display_mode"]
+    #[export]
     fn caml_gr_display_mode(&eq) -> &eq {
         caml_failwith(display_mode);
         0 as &i31;
     }
 
-    #[export = "caml_gr_window_id"]
+    #[export]
     fn caml_gr_window_id(&eq) -> &eq {
         caml_failwith(window_id);
         0 as &i31;
     }
 
-    #[export = "caml_gr_open_subwindow"]
+    #[export]
     fn caml_gr_open_subwindow(&eq, &eq, &eq, &eq) -> &eq {
         caml_failwith(open_subwindow);
         0 as &i31;
     }
 
-    #[export = "caml_gr_close_subwindow"]
+    #[export]
     fn caml_gr_close_subwindow(&eq) -> &eq {
         caml_failwith(close_subwindow);
         0 as &i31;

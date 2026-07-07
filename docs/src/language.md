@@ -897,10 +897,11 @@ A module talks to its host through imports and exports, both written as
 attributes on the field.
 
 **Export** a definition under a name with `#[export = "name"]`. It applies to
-functions, globals, memories, tables, and tags, and a field may carry several:
+functions, globals, memories, tables, and tags, and a field may carry several.
+The bare `#[export]` (no name) exports the field under its own Wax name:
 
 ```wax,check
-#[export = "add"]
+#[export]
 fn add(x: i32, y: i32) -> i32 { x + y; }
 
 #[export = "PI"]

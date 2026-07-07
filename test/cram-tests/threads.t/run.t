@@ -33,17 +33,17 @@ memory whose name is the WAT mnemonic with '.' rewritten as '_'
 A module using atomics decompiles back to the same method / path forms.
 
   $ wax roundtrip.wat -f wax
-  #[export = "mem"]
+  #[export]
   memory mem: i32 [1, 1] shared;
-  #[export = "l"]
+  #[export]
   fn l(x: i32) -> i32 {
       mem.i32_atomic_load(x);
   }
-  #[export = "s"]
+  #[export]
   fn s(x: i32, x_2: i64) {
       mem.i64_atomic_store8(x, x_2);
   }
-  #[export = "f"]
+  #[export]
   fn f() {
       atomic::fence();
   }

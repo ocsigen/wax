@@ -2619,7 +2619,13 @@ let exports ctx kind name e =
             else None)
           entries
   in
-  List.map (fun nm -> ("export", Some (string_of_name nm))) (e @ standalone)
+  (* Reuse the bare [#[export]] short form when the export name matches the
+     field's own Wax name; only a differing name needs to be spelled out. *)
+  List.map
+    (fun nm ->
+      if nm.Ast.desc = name.Ast.desc then ("export", None)
+      else ("export", Some (string_of_name nm)))
+    (e @ standalone)
 
 let import module_ name =
   ( "import",

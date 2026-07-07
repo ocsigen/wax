@@ -115,7 +115,7 @@ fn push_compare_stack(stack: &compare_stack, v1: &block, v2: &block, p: i32) -> 
     stack;
 }
 
-#[export = "unordered"]
+#[export]
 const unordered = 0x80000000;
 
 fn compare_bytes(s1: &bytes, s2: &bytes) -> i32 {
@@ -450,7 +450,7 @@ fn do_compare_val(stack: &compare_stack, v1: &eq, v2: &eq, total: i32) -> i32 {
     0;
 }
 
-#[export = "caml_compare"]
+#[export]
 fn caml_compare(v1: &eq, v2: &eq) -> i32 {
     let res = compare_val(v1, v2, 1);
     if res <s 0 {
@@ -462,34 +462,34 @@ fn caml_compare(v1: &eq, v2: &eq) -> i32 {
     0;
 }
 
-#[export = "caml_equal"]
+#[export]
 fn caml_equal(v1: &eq, v2: &eq) -> i32 {
     !compare_val(v1, v2, 0);
 }
 
-#[export = "caml_notequal"]
+#[export]
 fn caml_notequal(v1: &eq, v2: &eq) -> i32 {
     0 != compare_val(v1, v2, 0);
 }
 
-#[export = "caml_lessthan"]
+#[export]
 fn caml_lessthan(v1: &eq, v2: &eq) -> i32 {
     let res = compare_val(v1, v2, 0);
     (res <s 0) & (res != unordered);
 }
 
-#[export = "caml_lessequal"]
+#[export]
 fn caml_lessequal(v1: &eq, v2: &eq) -> i32 {
     let res = compare_val(v1, v2, 0);
     (res <=s 0) & (res != unordered);
 }
 
-#[export = "caml_greaterthan"]
+#[export]
 fn caml_greaterthan(v1: &eq, v2: &eq) -> i32 {
     0 <s compare_val(v1, v2, 0);
 }
 
-#[export = "caml_greaterequal"]
+#[export]
 fn caml_greaterequal(v1: &eq, v2: &eq) -> i32 {
     0 <=s compare_val(v1, v2, 0);
 }

@@ -265,7 +265,7 @@ const no_arg = "";
 
 #[if(wasi)]
 {
-    #[export = "unix_resolve_path"]
+    #[export]
     fn unix_resolve_path(cmd: &eq, path: &eq) -> (i32, i32, i32) {
         let (res_0, res_1, res_2) = wasi_resolve_path(path);
         if res_0 <s 0 {
@@ -475,7 +475,7 @@ const no_arg = "";
         }
     }
 
-    #[export = "unix_error_message"]
+    #[export]
     #[export = "caml_unix_error_message"]
     fn unix_error_message(err: &eq) -> &eq {
         let i: i32;
@@ -556,7 +556,7 @@ const no_arg = "";
             ];
     }
 
-    #[export = "unix_error_message"]
+    #[export]
     #[export = "caml_unix_error_message"]
     fn unix_error_message(err: &eq) -> &eq {
         let errno =
@@ -570,7 +570,7 @@ const no_arg = "";
 }
 
 #[if(wasi)]
-#[export = "unix_gettimeofday"]
+#[export]
 #[export = "caml_unix_gettimeofday"]
 fn unix_gettimeofday(&eq) -> &eq {
     let buffer = get_buffer();
@@ -579,14 +579,14 @@ fn unix_gettimeofday(&eq) -> &eq {
     { f: m.load64(buffer) as f64_u * 1e-9 };
 }
 #[else]
-#[export = "unix_gettimeofday"]
+#[export]
 #[export = "caml_unix_gettimeofday"]
 fn unix_gettimeofday(&eq) -> &eq {
     { f: gettimeofday() };
 }
 
 #[if(wasi)]
-#[export = "unix_times"]
+#[export]
 #[export = "caml_unix_times"]
 fn unix_times(&eq) -> &eq {
     let buffer = get_buffer();
@@ -601,12 +601,12 @@ fn unix_times(&eq) -> &eq {
 }
 #[else]
 {
-    #[export = "caml_alloc_times"]
+    #[export]
     fn caml_alloc_times(u: f64, s: f64) -> &eq {
         [float_array|u, s, 0, 0];
     }
 
-    #[export = "unix_times"]
+    #[export]
     #[export = "caml_unix_times"]
     fn unix_times(&eq) -> &eq {
         become times();
@@ -629,7 +629,7 @@ fn alloc_tm(tm: i32) -> &eq {
     ];
 }
 #[else]
-#[export = "caml_alloc_tm"]
+#[export]
 fn caml_alloc_tm(
     sec: i32,
     min: i32,
@@ -656,7 +656,7 @@ fn caml_alloc_tm(
 }
 
 #[if(wasi)]
-#[export = "caml_unix_gmtime"]
+#[export]
 #[export = "unix_gmtime"]
 fn caml_unix_gmtime(t: &eq) -> &eq {
     let buffer = get_buffer();
@@ -668,14 +668,14 @@ fn caml_unix_gmtime(t: &eq) -> &eq {
     become alloc_tm(tm);
 }
 #[else]
-#[export = "caml_unix_gmtime"]
+#[export]
 #[export = "unix_gmtime"]
 fn caml_unix_gmtime(t: &eq) -> &eq {
     gmtime((t as &float).f);
 }
 
 #[if(wasi)]
-#[export = "caml_unix_localtime"]
+#[export]
 #[export = "unix_localtime"]
 fn caml_unix_localtime(t: &eq) -> &eq {
     let buffer = get_buffer();
@@ -687,14 +687,14 @@ fn caml_unix_localtime(t: &eq) -> &eq {
     become alloc_tm(tm);
 }
 #[else]
-#[export = "caml_unix_localtime"]
+#[export]
 #[export = "unix_localtime"]
 fn caml_unix_localtime(t: &eq) -> &eq {
     localtime((t as &float).f);
 }
 
 #[if(wasi)]
-#[export = "caml_unix_time"]
+#[export]
 #[export = "unix_time"]
 fn caml_unix_time(&eq) -> &eq {
     let buffer = get_buffer();
@@ -703,14 +703,14 @@ fn caml_unix_time(&eq) -> &eq {
     { f: (m.load64(buffer) as f64_u * 1e-9).floor() };
 }
 #[else]
-#[export = "caml_unix_time"]
+#[export]
 #[export = "unix_time"]
 fn caml_unix_time(&eq) -> &eq {
     { f: gettimeofday().floor() };
 }
 
 #[if(wasi)]
-#[export = "caml_unix_mktime"]
+#[export]
 #[export = "unix_mktime"]
 fn caml_unix_mktime(v: &eq) -> &eq {
     let t = v as &block;
@@ -731,7 +731,7 @@ fn caml_unix_mktime(v: &eq) -> &eq {
     [block|0 as &i31, { f: time as f64_s }, alloc_tm(tm)];
 }
 #[else]
-#[export = "caml_unix_mktime"]
+#[export]
 #[export = "unix_mktime"]
 fn caml_unix_mktime(v: &eq) -> &eq {
     let tm = v as &block;
@@ -751,7 +751,7 @@ fn caml_unix_mktime(v: &eq) -> &eq {
 {
     const utimes_str = "utimes";
 
-    #[export = "unix_utimes"]
+    #[export]
     #[export = "caml_unix_utimes"]
     fn unix_utimes(path: &eq, atime: &eq, mtime: &eq) -> &eq {
         let (p_fd, p_addr, p_len) = unix_resolve_path(utimes_str, path);
@@ -780,7 +780,7 @@ fn caml_unix_mktime(v: &eq) -> &eq {
     }
 }
 #[else]
-#[export = "unix_utimes"]
+#[export]
 #[export = "caml_unix_utimes"]
 fn unix_utimes(path: &eq, atime: &eq, mtime: &eq) -> &eq {
     let at = (atime as &float).f;
@@ -826,7 +826,7 @@ fn unix_utimes(path: &eq, atime: &eq, mtime: &eq) -> &eq {
     }
 }
 
-#[export = "caml_alloc_stat"]
+#[export]
 fn caml_alloc_stat(
     large: i32,
     dev: i32,
@@ -883,13 +883,13 @@ fn caml_alloc_stat(
 
     const stat_str = "stat";
 
-    #[export = "unix_stat"]
+    #[export]
     #[export = "caml_unix_stat"]
     fn unix_stat(path: &eq) -> &eq {
         become stat(path, 0, 1, stat_str);
     }
 
-    #[export = "unix_stat_64"]
+    #[export]
     #[export = "caml_unix_stat_64"]
     fn unix_stat_64(path: &eq) -> &eq {
         become stat(path, 1, 1, stat_str);
@@ -897,13 +897,13 @@ fn caml_alloc_stat(
 
     const lstat_str = "lstat";
 
-    #[export = "unix_lstat"]
+    #[export]
     #[export = "caml_unix_lstat"]
     fn unix_lstat(path: &eq) -> &eq {
         become stat(path, 0, 0, lstat_str);
     }
 
-    #[export = "unix_lstat_64"]
+    #[export]
     #[export = "caml_unix_lstat_64"]
     fn unix_lstat_64(path: &eq) -> &eq {
         become stat(path, 1, 0, lstat_str);
@@ -916,13 +916,13 @@ fn caml_alloc_stat(
         become alloc_stat(large, buffer);
     }
 
-    #[export = "unix_fstat"]
+    #[export]
     #[export = "caml_unix_fstat"]
     fn unix_fstat(fd: &eq) -> &eq {
         become fstat(fd, 0);
     }
 
-    #[export = "unix_fstat_64"]
+    #[export]
     #[export = "caml_unix_fstat_64"]
     fn unix_fstat_64(fd: &eq) -> &eq {
         become fstat(fd, 1);
@@ -930,7 +930,7 @@ fn caml_alloc_stat(
 }
 #[else]
 {
-    #[export = "unix_stat"]
+    #[export]
     #[export = "caml_unix_stat"]
     fn unix_stat(path: &eq) -> &eq {
         try {
@@ -943,7 +943,7 @@ fn caml_alloc_stat(
         }
     }
 
-    #[export = "unix_stat_64"]
+    #[export]
     #[export = "caml_unix_stat_64"]
     fn unix_stat_64(path: &eq) -> &eq {
         try {
@@ -956,7 +956,7 @@ fn caml_alloc_stat(
         }
     }
 
-    #[export = "unix_lstat"]
+    #[export]
     #[export = "caml_unix_lstat"]
     fn unix_lstat(path: &eq) -> &eq {
         try {
@@ -969,7 +969,7 @@ fn caml_alloc_stat(
         }
     }
 
-    #[export = "unix_lstat_64"]
+    #[export]
     #[export = "caml_unix_lstat_64"]
     fn unix_lstat_64(path: &eq) -> &eq {
         try {
@@ -982,7 +982,7 @@ fn caml_alloc_stat(
         }
     }
 
-    #[export = "unix_fstat"]
+    #[export]
     #[export = "caml_unix_fstat"]
     fn unix_fstat(fd: &eq) -> &eq {
         try {
@@ -995,7 +995,7 @@ fn caml_alloc_stat(
         }
     }
 
-    #[export = "unix_fstat_64"]
+    #[export]
     #[export = "caml_unix_fstat_64"]
     fn unix_fstat_64(fd: &eq) -> &eq {
         try {
@@ -1013,7 +1013,7 @@ fn caml_alloc_stat(
 {
     const chmod_str = "chmod";
 
-    #[export = "unix_chmod"]
+    #[export]
     #[export = "caml_unix_chmod"]
     fn unix_chmod(path: &eq, perms: &eq) -> &eq {
         // WASI has no notion of permissions, so the mode change is a no-op; but
@@ -1028,7 +1028,7 @@ fn caml_alloc_stat(
     }
 }
 #[else]
-#[export = "unix_chmod"]
+#[export]
 #[export = "caml_unix_chmod"]
 fn unix_chmod(path: &eq, perms: &eq) -> &eq {
     try {
@@ -1042,14 +1042,14 @@ fn unix_chmod(path: &eq, perms: &eq) -> &eq {
 }
 
 #[if(wasi)]
-#[export = "unix_fchmod"]
+#[export]
 #[export = "caml_unix_fchmod"]
 fn unix_fchmod(&eq, &eq) -> &eq {
     // no notion of permissions in WASI
     0 as &i31;
 }
 #[else]
-#[export = "unix_fchmod"]
+#[export]
 #[export = "caml_unix_fchmod"]
 fn unix_fchmod(fd: &eq, perms: &eq) -> &eq {
     try {
@@ -1066,7 +1066,7 @@ fn unix_fchmod(fd: &eq, perms: &eq) -> &eq {
 {
     const rename_str = "rename";
 
-    #[export = "unix_rename"]
+    #[export]
     #[export = "caml_unix_rename"]
     fn unix_rename(o: &eq, n: &eq) -> &eq {
         // Resolve both paths without raising, so that the first buffer is
@@ -1089,7 +1089,7 @@ fn unix_fchmod(fd: &eq, perms: &eq) -> &eq {
     }
 }
 #[else]
-#[export = "unix_rename"]
+#[export]
 #[export = "caml_unix_rename"]
 fn unix_rename(o: &eq, n: &eq) -> &eq {
     try {
@@ -1106,7 +1106,7 @@ fn unix_rename(o: &eq, n: &eq) -> &eq {
 {
     const chdir_str = "chdir";
 
-    #[export = "unix_chdir"]
+    #[export]
     #[export = "caml_unix_chdir"]
     fn unix_chdir(name: &eq) -> &eq {
         let (p_fd, p_addr, p_len) = unix_resolve_path(chdir_str, name);
@@ -1128,7 +1128,7 @@ fn unix_rename(o: &eq, n: &eq) -> &eq {
 }
 #[else]
 {
-    #[export = "unix_getcwd"]
+    #[export]
     #[export = "caml_unix_getcwd"]
     fn unix_getcwd(&eq) -> &eq {
         try {
@@ -1141,7 +1141,7 @@ fn unix_rename(o: &eq, n: &eq) -> &eq {
         }
     }
 
-    #[export = "unix_chdir"]
+    #[export]
     #[export = "caml_unix_chdir"]
     fn unix_chdir(name: &eq) -> &eq {
         try {
@@ -1159,14 +1159,14 @@ fn unix_rename(o: &eq, n: &eq) -> &eq {
 {
     const mkdir_str = "mkdir";
 
-    #[export = "unix_mkdir"]
+    #[export]
     #[export = "caml_unix_mkdir"]
     fn unix_mkdir(path: &eq, perm: &eq) -> &eq {
         become unix_path_op(mkdir_str, path, path_create_directory);
     }
 }
 #[else]
-#[export = "unix_mkdir"]
+#[export]
 #[export = "caml_unix_mkdir"]
 fn unix_mkdir(name: &eq, perm: &eq) -> &eq {
     try {
@@ -1195,7 +1195,7 @@ fn unix_mkdir(name: &eq, perm: &eq) -> &eq {
 
     const opendir_str = "opendir";
 
-    #[export = "unix_opendir"]
+    #[export]
     #[export = "caml_unix_opendir"]
     fn unix_opendir(name: &eq) -> &eq {
         let (p_fd, p_addr, p_len) = unix_resolve_path(opendir_str, name);
@@ -1295,7 +1295,7 @@ fn unix_mkdir(name: &eq, perm: &eq) -> &eq {
         0 as &i31;
     }
 
-    #[export = "unix_closedir"]
+    #[export]
     #[export = "caml_unix_closedir"]
     fn unix_closedir(vdir: &eq) -> &eq {
         let dir = vdir as &directory;
@@ -1324,7 +1324,7 @@ fn unix_mkdir(name: &eq, perm: &eq) -> &eq {
         0 as &i31;
     }
 
-    #[export = "unix_rewinddir"]
+    #[export]
     #[export = "caml_unix_rewinddir"]
     fn unix_rewinddir(vdir: &eq) -> &eq {
         let dir = vdir as &directory;
@@ -1337,7 +1337,7 @@ fn unix_mkdir(name: &eq, perm: &eq) -> &eq {
 }
 #[else]
 {
-    #[export = "unix_opendir"]
+    #[export]
     #[export = "caml_unix_opendir"]
     fn unix_opendir(name: &eq) -> &eq {
         try {
@@ -1379,7 +1379,7 @@ fn unix_mkdir(name: &eq, perm: &eq) -> &eq {
         0 as &i31;
     }
 
-    #[export = "unix_closedir"]
+    #[export]
     #[export = "caml_unix_closedir"]
     #[export = "win_findclose"]
     #[export = "caml_unix_findclose"]
@@ -1395,7 +1395,7 @@ fn unix_mkdir(name: &eq, perm: &eq) -> &eq {
         0 as &i31;
     }
 
-    #[export = "unix_rewinddir"]
+    #[export]
     #[export = "caml_unix_rewinddir"]
     fn unix_rewinddir(&eq) -> &eq {
         caml_invalid_argument("rewinddir not implemented");
@@ -1403,7 +1403,7 @@ fn unix_mkdir(name: &eq, perm: &eq) -> &eq {
     }
 }
 
-#[export = "unix_readdir"]
+#[export]
 #[export = "caml_unix_readdir"]
 fn unix_readdir(dir: &eq) -> &eq {
     'return: do {
@@ -1427,7 +1427,7 @@ fn win_find_next(dir: &eq) -> &eq {
     }
 }
 
-#[export = "win_findfirst"]
+#[export]
 #[export = "caml_unix_findfirst"]
 fn win_findfirst(vpath: &eq) -> &eq {
     let p = vpath as &bytes;
@@ -1442,14 +1442,14 @@ fn win_findfirst(vpath: &eq) -> &eq {
 {
     const unlink_str = "unlink";
 
-    #[export = "unix_unlink"]
+    #[export]
     #[export = "caml_unix_unlink"]
     fn unix_unlink(path: &eq) -> &eq {
         become unix_path_op(unlink_str, path, path_unlink_file);
     }
 }
 #[else]
-#[export = "unix_unlink"]
+#[export]
 #[export = "caml_unix_unlink"]
 fn unix_unlink(p: &eq) -> &eq {
     try {
@@ -1466,14 +1466,14 @@ fn unix_unlink(p: &eq) -> &eq {
 {
     const rmdir_str = "rmdir";
 
-    #[export = "unix_rmdir"]
+    #[export]
     #[export = "caml_unix_rmdir"]
     fn unix_rmdir(path: &eq) -> &eq {
         become unix_path_op(rmdir_str, path, path_remove_directory);
     }
 }
 #[else]
-#[export = "unix_rmdir"]
+#[export]
 #[export = "caml_unix_rmdir"]
 fn unix_rmdir(p: &eq) -> &eq {
     try {
@@ -1490,7 +1490,7 @@ fn unix_rmdir(p: &eq) -> &eq {
 {
     const link_str = "link";
 
-    #[export = "unix_link"]
+    #[export]
     #[export = "caml_unix_link"]
     fn unix_link(follow: &eq, o: &eq, n: &eq) -> &eq {
         // Resolve both paths without raising, so that the first buffer is
@@ -1517,7 +1517,7 @@ fn unix_rmdir(p: &eq) -> &eq {
     }
 }
 #[else]
-#[export = "unix_link"]
+#[export]
 #[export = "caml_unix_link"]
 fn unix_link(follow: &eq, d: &eq, s: &eq) -> &eq {
     if follow is &block {
@@ -1541,7 +1541,7 @@ fn unix_link(follow: &eq, d: &eq, s: &eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "unix_has_symlink"]
+#[export]
 #[export = "caml_unix_has_symlink"]
 fn unix_has_symlink(&eq) -> &eq {
     1 as &i31;
@@ -1551,7 +1551,7 @@ fn unix_has_symlink(&eq) -> &eq {
 {
     const symlink_str = "symlink";
 
-    #[export = "unix_symlink"]
+    #[export]
     #[export = "caml_unix_symlink"]
     fn unix_symlink(to_dir: &eq, o: &eq, n: &eq) -> &eq {
         let flags: i32;
@@ -1575,7 +1575,7 @@ fn unix_has_symlink(&eq) -> &eq {
     }
 }
 #[else]
-#[export = "unix_symlink"]
+#[export]
 #[export = "caml_unix_symlink"]
 fn unix_symlink(to_dir: &eq, t: &eq, p: &eq) -> &eq {
     let kind: i32;
@@ -1596,7 +1596,7 @@ fn unix_symlink(to_dir: &eq, t: &eq, p: &eq) -> &eq {
 {
     const readlink_str = "readlink";
 
-    #[export = "unix_readlink"]
+    #[export]
     #[export = "caml_unix_readlink"]
     fn unix_readlink(path: &eq) -> &eq {
         let (p_fd, p_addr, p_len) = unix_resolve_path(readlink_str, path);
@@ -1609,7 +1609,7 @@ fn unix_symlink(to_dir: &eq, t: &eq, p: &eq) -> &eq {
     }
 }
 #[else]
-#[export = "unix_readlink"]
+#[export]
 #[export = "caml_unix_readlink"]
 fn unix_readlink(path: &eq) -> &eq {
     try {
@@ -1659,13 +1659,13 @@ fn unix_readlink(path: &eq) -> &eq {
         return 0 as &i31;
     }
 
-    #[export = "unix_truncate"]
+    #[export]
     #[export = "caml_unix_truncate"]
     fn unix_truncate(path: &eq, len: &eq) -> &eq {
         become truncate_impl(path, len as i64_s);
     }
 
-    #[export = "unix_truncate_64"]
+    #[export]
     #[export = "caml_unix_truncate_64"]
     fn unix_truncate_64(path: &eq, len: &eq) -> &eq {
         become truncate_impl(path, Int64_val(len));
@@ -1673,7 +1673,7 @@ fn unix_readlink(path: &eq) -> &eq {
 }
 #[else]
 {
-    #[export = "unix_truncate"]
+    #[export]
     #[export = "caml_unix_truncate"]
     fn unix_truncate(path: &eq, len: &eq) -> &eq {
         try {
@@ -1686,7 +1686,7 @@ fn unix_readlink(path: &eq) -> &eq {
         0 as &i31;
     }
 
-    #[export = "unix_truncate_64"]
+    #[export]
     #[export = "caml_unix_truncate_64"]
     fn unix_truncate_64(path: &eq, vlen: &eq) -> &eq {
         let len = Int64_val(vlen);
@@ -1710,13 +1710,13 @@ fn unix_readlink(path: &eq) -> &eq {
         0 as &i31;
     }
 
-    #[export = "unix_ftruncate"]
+    #[export]
     #[export = "caml_unix_ftruncate"]
     fn unix_ftruncate(fd: &eq, len: &eq) -> &eq {
         become ftruncate(fd, len as i64_s);
     }
 
-    #[export = "unix_ftruncate_64"]
+    #[export]
     #[export = "caml_unix_ftruncate_64"]
     fn unix_ftruncate_64(fd: &eq, len: &eq) -> &eq {
         become ftruncate(fd, Int64_val(len));
@@ -1724,7 +1724,7 @@ fn unix_readlink(path: &eq) -> &eq {
 }
 #[else]
 {
-    #[export = "unix_ftruncate"]
+    #[export]
     #[export = "caml_unix_ftruncate"]
     fn unix_ftruncate(fd: &eq, vlen: &eq) -> &eq {
         // POSIX ftruncate leaves the seek pointer unchanged, even when it
@@ -1739,7 +1739,7 @@ fn unix_readlink(path: &eq) -> &eq {
         0 as &i31;
     }
 
-    #[export = "unix_ftruncate_64"]
+    #[export]
     #[export = "caml_unix_ftruncate_64"]
     fn unix_ftruncate_64(fd: &eq, vlen: &eq) -> &eq {
         // POSIX ftruncate leaves the seek pointer unchanged, even when it
@@ -1760,7 +1760,7 @@ fn unix_readlink(path: &eq) -> &eq {
     const access_str = "access";
 
     // We can only check that the file exists
-    #[export = "unix_access"]
+    #[export]
     #[export = "caml_unix_access"]
     fn unix_access(path: &eq, flags: &eq) -> &eq {
         let (p_fd, p_addr, p_len) = unix_resolve_path(access_str, path);
@@ -1775,7 +1775,7 @@ fn unix_readlink(path: &eq) -> &eq {
 {
     const access_flags: &flags = [1, 2, 4, 8];
 
-    #[export = "unix_access"]
+    #[export]
     #[export = "caml_unix_access"]
     fn unix_access(path: &eq, vflags: &eq) -> &eq {
         let flags = convert_flag_list(access_flags, vflags);
@@ -1811,7 +1811,7 @@ type flags = [i16];
 
     const open_str = "open";
 
-    #[export = "unix_open"]
+    #[export]
     #[export = "caml_unix_open"]
     fn unix_open(vpath: &eq, vflags: &eq, perm: &eq) -> &eq {
         let offset: i64;
@@ -1850,7 +1850,7 @@ type flags = [i16];
     // 1024 O_SYNC
     const unix_open_flags: &flags = [1, 2, 4, 128, 8, 16, 32, 64, 256, 512, 1024, 0, 0, 0, 0];
 
-    #[export = "unix_open"]
+    #[export]
     #[export = "caml_unix_open"]
     fn unix_open(path: &eq, vflags: &eq, perm: &eq) -> &eq {
         let flags = convert_flag_list(unix_open_flags, vflags);
@@ -1895,7 +1895,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
 
 #[if(wasi)]
 {
-    #[export = "unix_write"]
+    #[export]
     #[export = "caml_unix_write"]
     fn unix_write(vfd: &eq, vbuf: &eq, vpos: &eq, vlen: &eq) -> &eq {
         let fd = vfd as i32_u;
@@ -1922,7 +1922,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
         written as &i31;
     }
 
-    #[export = "unix_single_write"]
+    #[export]
     #[export = "caml_unix_single_write"]
     fn unix_single_write(vfd: &eq, vbuf: &eq, vpos: &eq, vlen: &eq) -> &eq {
         let written: i32;
@@ -1948,7 +1948,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
         m.load32(nwritten) as &i31;
     }
 
-    #[export = "unix_read"]
+    #[export]
     #[export = "caml_unix_read"]
     fn unix_read(vfd: &eq, vbuf: &eq, vpos: &eq, vlen: &eq) -> &eq {
         let fd = vfd as i32_u;
@@ -1973,7 +1973,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
 
     type dat = { array: &array, offset: i32, len: i32 };
 
-    #[export = "unix_write_bigarray"]
+    #[export]
     #[export = "caml_unix_write_bigarray"]
     fn unix_write_bigarray(vfd: &eq, vbuf: &eq, vpos: &eq, vlen: &eq, vsingle: &eq) -> &eq {
         let fd = vfd as i32_u;
@@ -2005,7 +2005,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
         written as &i31;
     }
 
-    #[export = "unix_read_bigarray"]
+    #[export]
     #[export = "caml_unix_read_bigarray"]
     fn unix_read_bigarray(vfd: &eq, vbuf: &eq, vpos: &eq, vlen: &eq) -> &eq {
         let fd = vfd as i32_u;
@@ -2032,7 +2032,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
 }
 #[else]
 {
-    #[export = "unix_write"]
+    #[export]
     #[export = "caml_unix_write"]
     fn unix_write(vfd: &eq, vbuf: &eq, vpos: &eq, vlen: &eq) -> &eq {
         let fd = vfd as i32_u;
@@ -2073,7 +2073,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
         written as &i31;
     }
 
-    #[export = "unix_single_write"]
+    #[export]
     #[export = "caml_unix_single_write"]
     fn unix_single_write(vfd: &eq, vbuf: &eq, vpos: &eq, vlen: &eq) -> &eq {
         let fd = vfd as i32_u;
@@ -2111,7 +2111,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
         n as &i31;
     }
 
-    #[export = "unix_read"]
+    #[export]
     #[export = "caml_unix_read"]
     fn unix_read(vfd: &eq, vbuf: &eq, vpos: &eq, vlen: &eq) -> &eq {
         let fd = vfd as i32_u;
@@ -2143,7 +2143,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
         n as &i31;
     }
 
-    #[export = "unix_write_bigarray"]
+    #[export]
     #[export = "caml_unix_write_bigarray"]
     fn unix_write_bigarray(vfd: &eq, vbuf: &eq, vpos: &eq, vlen: &eq, vsingle: &eq) -> &eq {
         let fd = vfd as i32_u;
@@ -2184,7 +2184,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
         written as &i31;
     }
 
-    #[export = "unix_read_bigarray"]
+    #[export]
     #[export = "caml_unix_read_bigarray"]
     fn unix_read_bigarray(vfd: &eq, vbuf: &eq, vpos: &eq, vlen: &eq) -> &eq {
         let fd = vfd as i32_u;
@@ -2248,20 +2248,20 @@ fn lseek(fd: &eq, offset: i64, cmd: &eq) -> i64 {
     }
 }
 
-#[export = "unix_lseek"]
+#[export]
 #[export = "caml_unix_lseek"]
 fn unix_lseek(fd: &eq, ofs: &eq, cmd: &eq) -> &eq {
     lseek(fd, ofs as i64_s, cmd) as &i31;
 }
 
-#[export = "unix_lseek_64"]
+#[export]
 #[export = "caml_unix_lseek_64"]
 fn unix_lseek_64(fd: &eq, ofs: &eq, cmd: &eq) -> &eq {
     become caml_copy_int64(lseek(fd, Int64_val(ofs), cmd));
 }
 
 #[if(wasi)]
-#[export = "unix_fsync"]
+#[export]
 #[export = "caml_unix_fsync"]
 fn unix_fsync(fd: &eq) -> &eq {
     let res = fd_sync(fd as i32_u);
@@ -2269,7 +2269,7 @@ fn unix_fsync(fd: &eq) -> &eq {
     0 as &i31;
 }
 #[else]
-#[export = "unix_fsync"]
+#[export]
 #[export = "caml_unix_fsync"]
 fn unix_fsync(fd: &eq) -> &eq {
     try {
@@ -2332,7 +2332,7 @@ fn caml_unix_check_stream_semantics(fd: &eq, out: i32) {
     }
 }
 
-#[export = "unix_inchannel_of_filedescr"]
+#[export]
 #[export = "win_inchannel_of_filedescr"]
 #[export = "caml_unix_inchannel_of_filedescr"]
 fn unix_inchannel_of_filedescr(fd: &eq) -> &eq {
@@ -2340,7 +2340,7 @@ fn unix_inchannel_of_filedescr(fd: &eq) -> &eq {
     become caml_ml_open_descriptor_in(fd);
 }
 
-#[export = "unix_outchannel_of_filedescr"]
+#[export]
 #[export = "win_outchannel_of_filedescr"]
 #[export = "caml_unix_outchannel_of_filedescr"]
 fn unix_outchannel_of_filedescr(fd: &eq) -> &eq {
@@ -2349,7 +2349,7 @@ fn unix_outchannel_of_filedescr(fd: &eq) -> &eq {
 }
 
 #[if(wasi)]
-#[export = "unix_close"]
+#[export]
 #[export = "caml_unix_close"]
 fn unix_close(fd: &eq) -> &eq {
     let res = fd_close(fd as i32_u);
@@ -2357,7 +2357,7 @@ fn unix_close(fd: &eq) -> &eq {
     0 as &i31;
 }
 #[else]
-#[export = "unix_close"]
+#[export]
 #[export = "caml_unix_close"]
 fn unix_close(fd: &eq) -> &eq {
     release_fd_offset(fd as i32_u);
@@ -2372,7 +2372,7 @@ fn unix_close(fd: &eq) -> &eq {
 }
 
 #[if(wasi)]
-#[export = "unix_isatty"]
+#[export]
 #[export = "caml_unix_isatty"]
 fn unix_isatty(&eq) -> &eq {
     0 as &i31;
@@ -2384,22 +2384,22 @@ fn unix_isatty(&eq) -> &eq {
 {
     // WASI has no notion of user/group ids; return 1 like the JS runtime's
     // fallback when [process.getuid] and friends are unavailable.
-    #[export = "unix_getuid"]
+    #[export]
     #[export = "caml_unix_getuid"]
     fn unix_getuid(&eq) -> &eq {
         1 as &i31;
     }
-    #[export = "unix_geteuid"]
+    #[export]
     #[export = "caml_unix_geteuid"]
     fn unix_geteuid(&eq) -> &eq {
         1 as &i31;
     }
-    #[export = "unix_getgid"]
+    #[export]
     #[export = "caml_unix_getgid"]
     fn unix_getgid(&eq) -> &eq {
         1 as &i31;
     }
-    #[export = "unix_getegid"]
+    #[export]
     #[export = "caml_unix_getegid"]
     fn unix_getegid(&eq) -> &eq {
         1 as &i31;
@@ -2409,29 +2409,29 @@ fn unix_isatty(&eq) -> &eq {
 {
     // On Node, return the real ids (the bindings fall back to 1 in a browser
     // or wherever [process.getuid] is missing), matching runtime/js/unix.js.
-    #[export = "unix_getuid"]
+    #[export]
     #[export = "caml_unix_getuid"]
     fn unix_getuid(&eq) -> &eq {
         getuid() as &i31;
     }
-    #[export = "unix_geteuid"]
+    #[export]
     #[export = "caml_unix_geteuid"]
     fn unix_geteuid(&eq) -> &eq {
         geteuid() as &i31;
     }
-    #[export = "unix_getgid"]
+    #[export]
     #[export = "caml_unix_getgid"]
     fn unix_getgid(&eq) -> &eq {
         getgid() as &i31;
     }
-    #[export = "unix_getegid"]
+    #[export]
     #[export = "caml_unix_getegid"]
     fn unix_getegid(&eq) -> &eq {
         getegid() as &i31;
     }
 }
 
-#[export = "unix_getpwnam"]
+#[export]
 #[export = "caml_unix_getpwnam"]
 #[export = "unix_getpwuid"]
 #[export = "caml_unix_getpwuid"]
@@ -2444,19 +2444,19 @@ fn unix_getpwnam(&eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "unix_inet_addr_of_string"]
+#[export]
 #[export = "caml_unix_inet_addr_of_string"]
 fn unix_inet_addr_of_string(&eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "win_handle_fd"]
+#[export]
 #[export = "caml_unix_filedescr_of_fd"]
 fn win_handle_fd(v: &eq) -> &eq {
     v;
 }
 
-#[export = "win_cleanup"]
+#[export]
 #[export = "caml_unix_cleanup"]
 fn win_cleanup(&eq) -> &eq {
     0 as &i31;

@@ -5,7 +5,7 @@ type — here the field names match a single struct, so even the type name drops
 
   $ wax point.wat -f wax
   type point = { x: i32, y: i32 };
-  #[export = "f"]
+  #[export]
   fn f(c: i32) -> i32 {
       (if c {
            { x: 1, y: 2 };

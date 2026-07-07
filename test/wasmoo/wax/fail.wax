@@ -18,25 +18,25 @@
 #[import = ("stdlib", "caml_global_data")]
 let caml_global_data: &block;
 #[if(wasi)]
-#[export = "javascript_exception"]
+#[export]
 tag javascript_exception(&?extern);
 #[else]
 #[import = ("bindings", "jstag")]
-#[export = "javascript_exception"]
+#[export]
 tag javascript_exception(&?extern);
 
 type block = [mut &eq];
 type bytes = [mut i8];
 
-#[export = "ocaml_exception"]
+#[export]
 tag ocaml_exception(&eq);
 
-#[export = "caml_raise_constant"]
+#[export]
 fn caml_raise_constant(v: &eq) {
     throw ocaml_exception v;
 }
 
-#[export = "caml_raise_with_arg"]
+#[export]
 fn caml_raise_with_arg(tg: &eq, arg: &eq) {
     throw ocaml_exception [block|0 as &i31, tg, arg];
 }
@@ -44,61 +44,61 @@ fn caml_raise_with_arg(tg: &eq, arg: &eq) {
 // caml_global_data is a $block: index 0 is the tag, data starts at 1
 const OUT_OF_MEMORY_EXN = 1;
 
-#[export = "caml_raise_out_of_memory"]
+#[export]
 fn caml_raise_out_of_memory() {
     become caml_raise_constant(caml_global_data[OUT_OF_MEMORY_EXN]);
 }
 
 const SYS_ERROR_EXN = 2;
 
-#[export = "caml_raise_sys_error"]
+#[export]
 fn caml_raise_sys_error(msg: &eq) {
     become caml_raise_with_arg(caml_global_data[SYS_ERROR_EXN], msg);
 }
 
 const FAILURE_EXN = 3;
 
-#[export = "caml_failwith_tag"]
+#[export]
 fn caml_failwith_tag() -> &eq {
     caml_global_data[FAILURE_EXN];
 }
 
-#[export = "caml_failwith"]
+#[export]
 fn caml_failwith(arg: &eq) {
     become caml_raise_with_arg(caml_global_data[FAILURE_EXN], arg);
 }
 
 const INVALID_EXN = 4;
 
-#[export = "caml_invalid_argument"]
+#[export]
 fn caml_invalid_argument(arg: &eq) {
     become caml_raise_with_arg(caml_global_data[INVALID_EXN], arg);
 }
 
 const index_out_of_bounds = "index out of bounds";
 
-#[export = "caml_bound_error"]
+#[export]
 fn caml_bound_error() {
     become caml_invalid_argument(index_out_of_bounds);
 }
 
 const END_OF_FILE_EXN = 5;
 
-#[export = "caml_raise_end_of_file"]
+#[export]
 fn caml_raise_end_of_file() {
     become caml_raise_constant(caml_global_data[END_OF_FILE_EXN]);
 }
 
 const ZERO_DIVIDE_EXN = 6;
 
-#[export = "caml_raise_zero_divide"]
+#[export]
 fn caml_raise_zero_divide() {
     become caml_raise_constant(caml_global_data[ZERO_DIVIDE_EXN]);
 }
 
 const NOT_FOUND_EXN = 7;
 
-#[export = "caml_raise_not_found"]
+#[export]
 fn caml_raise_not_found() {
     become caml_raise_constant(caml_global_data[NOT_FOUND_EXN]);
 }
@@ -109,12 +109,12 @@ const UNDEFINED_RECURSIVE_MODULE_EXN = 12;
 
 const no_bytecode_impl = "No bytecode implementation provided for this external";
 
-#[export = "caml_no_bytecode_impl"]
+#[export]
 fn caml_no_bytecode_impl() {
     become caml_failwith(no_bytecode_impl);
 }
 
-#[export = "caml_is_special_exception"]
+#[export]
 fn caml_is_special_exception(v: &eq) -> i32 {
     (v == caml_global_data[MATCH_FAILURE_EXN])
         | ((v == caml_global_data[ASSERT_FAILURE_EXN])

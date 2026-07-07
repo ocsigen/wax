@@ -49,7 +49,7 @@
     type block = [mut &eq];
     type bytes = [mut i8];
 
-    #[export = "caml_terminfo_rows"]
+    #[export]
     fn caml_terminfo_rows(&eq) -> &eq {
         0 as &i31;
     }
@@ -57,7 +57,7 @@
     // Grow caml_global_data to accommodate at least len+1 entries.
     // caml_global_data is a $block: index 0 is the tag, data starts at 1,
     // so the array length must be len + 2.
-    #[export = "caml_realloc_global"]
+    #[export]
     fn caml_realloc_global(len: &eq) -> &eq {
         let new_len = len as i32_u + 2;
         if new_len >u caml_global_data.length() {
@@ -76,7 +76,7 @@
     // Compile callback: set by OCaml-side init code
     let toplevel_compile: &eq = 0 as &i31;
 
-    #[export = "wasm_toplevel_init_compile"]
+    #[export]
     fn wasm_toplevel_init_compile(f: &eq) -> &eq {
         toplevel_compile = f;
         0 as &i31;
@@ -92,7 +92,7 @@
     // concatenated into a single string.
 
     #[if(ocaml_version >= (5, 2, 0))]
-    #[export = "caml_reify_bytecode"]
+    #[export]
     fn caml_reify_bytecode(code: &eq, debug: &eq, digest: &eq) -> &eq {
         if toplevel_compile is &i31 {
             caml_failwith("Toplevel compile callback not initialized");
@@ -109,7 +109,7 @@
         ];
     }
     #[else]
-    #[export = "caml_reify_bytecode"]
+    #[export]
     fn caml_reify_bytecode(code: &eq, debug: &eq, digest: &eq) -> &eq {
         if toplevel_compile is &i31 {
             caml_failwith("Toplevel compile callback not initialized");
@@ -146,7 +146,7 @@
         [block|0 as &i31, 0 as &i31, caml_callback_2(toplevel_compile, buf, debug)];
     }
 
-    #[export = "caml_static_release_bytecode"]
+    #[export]
     fn caml_static_release_bytecode(&eq) -> &eq {
         0 as &i31;
     }
@@ -182,7 +182,7 @@
     }
 
     #[if(ocaml_version < (5, 3, 0))]
-    #[export = "caml_get_section_table"]
+    #[export]
     fn caml_get_section_table(&eq) -> &eq {
         let sections = get_sections();
         let symb = sections[1];
@@ -208,17 +208,17 @@
 
     // Returns the bytecode_sections record registered by OCaml init code.
     // { symb: GlobalMap.t; crcs: ...; prim: string list; dlpt: string list }
-    #[export = "caml_dynlink_get_bytecode_sections"]
+    #[export]
     fn caml_dynlink_get_bytecode_sections(&eq) -> &eq {
         get_sections();
     }
 
-    #[export = "wasm_get_bytecode_sections"]
+    #[export]
     fn wasm_get_bytecode_sections(&eq) -> &eq {
         get_sections();
     }
 
-    #[export = "wasm_get_runtime_aliases"]
+    #[export]
     fn wasm_get_runtime_aliases(&eq) -> &eq {
         link_info[LINK_INFO_ALIASES];
     }
@@ -228,19 +228,19 @@
     // exception (via caml_failwith) instead of a JS Error from dummy stubs,
     // which would cause "illegal cast" in OCaml exception handlers.
 
-    #[export = "caml_sys_modify_argv"]
+    #[export]
     fn caml_sys_modify_argv(&eq) -> &eq {
         // no-op: Sys.argv modification is not meaningful in Wasm
         0 as &i31;
     }
 
-    #[export = "caml_get_current_environment"]
+    #[export]
     fn caml_get_current_environment(&eq) -> &eq {
         caml_failwith("caml_get_current_environment: not available in Wasm");
         unreachable;
     }
 
-    #[export = "caml_invoke_traced_function"]
+    #[export]
     fn caml_invoke_traced_function(&eq, &eq, &eq) -> &eq {
         caml_failwith("caml_invoke_traced_function: not available in Wasm");
         unreachable;

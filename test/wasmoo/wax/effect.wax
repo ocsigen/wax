@@ -76,10 +76,10 @@ fn raise_unhandled(eff: &eq, &eq) -> &eq {
 
 const raise_unhandled_closure: &closure = { func: raise_unhandled };
 
-#[export = "effect_allowed"]
+#[export]
 let effect_allowed = 1;
 
-#[export = "caml_continuation_use_noexc"]
+#[export]
 fn caml_continuation_use_noexc(vcont: &eq) -> &eq {
     _ =
         'used: do {
@@ -91,7 +91,7 @@ fn caml_continuation_use_noexc(vcont: &eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_continuation_use_and_update_handler_noexc"]
+#[export]
 fn caml_continuation_use_and_update_handler_noexc(
     continuation: &eq,
     hval: &eq,
@@ -108,7 +108,7 @@ fn caml_continuation_use_and_update_handler_noexc(
     stack;
 }
 
-#[export = "caml_continuation_update_handler_noexc"]
+#[export]
 fn caml_continuation_update_handler_noexc(
     continuation: &eq,
     hval: &eq,
@@ -126,12 +126,12 @@ fn caml_continuation_update_handler_noexc(
     continuation;
 }
 
-#[export = "caml_get_continuation_callstack"]
+#[export]
 fn caml_get_continuation_callstack(&eq, &eq) -> &eq {
     [block|0 as &i31];
 }
 
-#[export = "caml_is_continuation"]
+#[export]
 fn caml_is_continuation(v: &eq) -> i32 {
     match v {
         blk: &block => {
@@ -340,7 +340,7 @@ fn caml_is_continuation(v: &eq) -> i32 {
         become continuation.cont_func({ f, v: x }, continuation := pop_fiber());
     }
 
-    #[export = "caml_start_fiber"]
+    #[export]
     fn caml_start_fiber(p: &?eq) {
         // Start executing some code in a new fiber
         let res =
@@ -361,7 +361,7 @@ fn caml_is_continuation(v: &eq) -> i32 {
         become call_handler(stack.value, res);
     }
 
-    #[export = "caml_alloc_stack"]
+    #[export]
     fn caml_alloc_stack(hv: &eq, hx: &eq, hf: &eq) -> &eq {
         { value: hv, exn: hx, effect: hf, continuation: initial_cont_closure, next: null };
     }
@@ -410,7 +410,7 @@ fn caml_is_continuation(v: &eq) -> i32 {
             next: null,
         };
 
-    #[export = "caml_push_trap"]
+    #[export]
     fn caml_push_trap(h: &eq) -> &eq {
         cps_fiber_stack.exn_stack = { h, next: cps_fiber_stack.exn_stack };
         0 as &i31;
@@ -422,7 +422,7 @@ fn caml_is_continuation(v: &eq) -> i32 {
 
     const raise_exception_closure: &eq = {closure| func: raise_exception };
 
-    #[export = "caml_pop_trap"]
+    #[export]
     fn caml_pop_trap() -> &eq {
         'empty: do {
             let top = br_on_null 'empty cps_fiber_stack.exn_stack;
@@ -432,7 +432,7 @@ fn caml_is_continuation(v: &eq) -> i32 {
         raise_exception_closure;
     }
 
-    #[export = "caml_maybe_attach_backtrace"]
+    #[export]
     fn caml_maybe_attach_backtrace(exn: &eq, &eq) -> &eq {
         exn;
     }
@@ -475,7 +475,7 @@ fn caml_is_continuation(v: &eq) -> i32 {
         );
     }
 
-    #[export = "caml_apply_continuation"]
+    #[export]
     fn caml_apply_continuation(args: &eq) -> &eq {
         { func: apply_iterator, i: 1, args: args as &block };
     }
@@ -555,7 +555,7 @@ fn caml_is_continuation(v: &eq) -> i32 {
         f.continuation;
     }
 
-    #[export = "caml_resume_stack"]
+    #[export]
     fn caml_resume_stack(vhead: &eq, vtail: &eq, k: &eq) -> &eq {
         match vhead {
             head: &cps_fiber => {
@@ -585,7 +585,7 @@ fn caml_is_continuation(v: &eq) -> i32 {
         }
     }
 
-    #[export = "caml_perform_effect"]
+    #[export]
     fn caml_perform_effect(eff: &eq, k0: &eq) -> &eq {
         if !cps_fiber_stack.next {
             become raise_unhandled(eff, 0 as &i31);
@@ -598,7 +598,7 @@ fn caml_is_continuation(v: &eq) -> i32 {
         become (handler as &cps_closure_3).direct(eff, continuation, last_fiber, k1, handler);
     }
 
-    #[export = "caml_reperform_effect"]
+    #[export]
     fn caml_reperform_effect(eff: &eq, vcont: &eq, vtail: &eq, k0: &eq) -> &eq {
         if !cps_fiber_stack.next {
             _ = caml_resume_stack(caml_continuation_use_noexc(vcont), vtail, k0);
@@ -631,7 +631,7 @@ fn caml_is_continuation(v: &eq) -> i32 {
 
     const exn_handler_closure: &closure = { func: exn_handler };
 
-    #[export = "caml_alloc_stack"]
+    #[export]
     fn caml_alloc_stack(hv: &eq, hx: &eq, hf: &eq) -> &eq {
         {
             value: hv,
@@ -644,7 +644,7 @@ fn caml_is_continuation(v: &eq) -> i32 {
     }
 }
 
-#[export = "caml_assume_no_perform"]
+#[export]
 fn caml_assume_no_perform(f: &eq) -> &eq {
     let saved_effect_allowed = effect_allowed;
     effect_allowed = 0;

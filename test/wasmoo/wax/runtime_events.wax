@@ -19,7 +19,7 @@ type block = [mut &eq];
 
 let caml_custom_event_index = 0;
 
-#[export = "caml_runtime_events_user_register"]
+#[export]
 fn caml_runtime_events_user_register(evname: &eq, evtag: &eq, evtype: &eq) -> &eq {
     caml_custom_event_index += 1;
     // The record is { id; name; typ; tag } -- typ comes before tag.
@@ -27,57 +27,57 @@ fn caml_runtime_events_user_register(evname: &eq, evtag: &eq, evtype: &eq) -> &e
 }
 
 #[if(ocaml_version >= (5, 2, 0))]
-#[export = "caml_runtime_events_user_write"]
+#[export]
 fn caml_runtime_events_user_write(&eq, &eq, &eq) -> &eq {
     0 as &i31;
 }
 #[else]
-#[export = "caml_runtime_events_user_write"]
+#[export]
 fn caml_runtime_events_user_write(&eq, &eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_runtime_events_user_resolve"]
+#[export]
 fn caml_runtime_events_user_resolve(&eq, &eq, &eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_ml_runtime_events_start"]
+#[export]
 fn caml_ml_runtime_events_start(&eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_ml_runtime_events_pause"]
+#[export]
 fn caml_ml_runtime_events_pause(&eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_ml_runtime_events_resume"]
+#[export]
 fn caml_ml_runtime_events_resume(&eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_ml_runtime_events_are_active"]
+#[export]
 fn caml_ml_runtime_events_are_active(&eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_ml_runtime_events_create_cursor"]
+#[export]
 fn caml_ml_runtime_events_create_cursor(&eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_ml_runtime_events_free_cursor"]
+#[export]
 fn caml_ml_runtime_events_free_cursor(&eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_ml_runtime_events_read_poll"]
+#[export]
 fn caml_ml_runtime_events_read_poll(&eq, &eq, &eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_ml_runtime_events_path"]
+#[export]
 fn caml_ml_runtime_events_path(&eq) -> &eq {
     0 as &i31;
 }

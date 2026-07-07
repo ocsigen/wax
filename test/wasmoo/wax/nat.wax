@@ -54,7 +54,7 @@ type custom = open { f: &custom_operations };
 type digits = [mut i32];
 type nat: custom = { .., dat: &digits };
 
-#[export = "nat_ops"]
+#[export]
 const nat_ops =
     {
         id: "_nat",
@@ -151,22 +151,22 @@ fn deserialize_nat(s: &eq) -> (&eq, i32) {
 
 // Primitives
 
-#[export = "initialize_nat"]
+#[export]
 fn initialize_nat(&eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "create_nat"]
+#[export]
 fn create_nat(size: &eq) -> &eq {
     become alloc_nat(int(size), -1);
 }
 
-#[export = "length_nat"]
+#[export]
 fn length_nat(nat: &eq) -> &eq {
     get_data(nat).length() as &i31;
 }
 
-#[export = "set_to_zero_nat"]
+#[export]
 fn set_to_zero_nat(nat: &eq, ofs: &eq, len: &eq) -> &eq {
     let d = get_data(nat);
     let o = int(ofs);
@@ -178,45 +178,45 @@ fn set_to_zero_nat(nat: &eq, ofs: &eq, len: &eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "blit_nat"]
+#[export]
 fn blit_nat(nat1: &eq, ofs1: &eq, nat2: &eq, ofs2: &eq, len: &eq) -> &eq {
     get_data(nat1).copy(int(ofs1), get_data(nat2), int(ofs2), int(len));
     0 as &i31;
 }
 
-#[export = "set_digit_nat"]
+#[export]
 fn set_digit_nat(nat: &eq, ofs: &eq, digit: &eq) -> &eq {
     get_data(nat)[int(ofs)] = int(digit);
     0 as &i31;
 }
 
-#[export = "nth_digit_nat"]
+#[export]
 fn nth_digit_nat(nat: &eq, ofs: &eq) -> &eq {
     get_data(nat)[int(ofs)] as &i31;
 }
 
-#[export = "set_digit_nat_native"]
+#[export]
 fn set_digit_nat_native(nat: &eq, ofs: &eq, digit: &eq) -> &eq {
     get_data(nat)[int(ofs)] = Nativeint_val(digit);
     0 as &i31;
 }
 
-#[export = "nth_digit_nat_native"]
+#[export]
 fn nth_digit_nat_native(nat: &eq, ofs: &eq) -> &eq {
     become caml_copy_nativeint(get_data(nat)[int(ofs)]);
 }
 
-#[export = "num_digits_nat"]
+#[export]
 fn num_digits_nat(nat: &eq, ofs: &eq, len: &eq) -> &eq {
     num_digits(get_data(nat), int(ofs), int(len)) as &i31;
 }
 
-#[export = "num_leading_zero_bits_in_digit"]
+#[export]
 fn num_leading_zero_bits_in_digit(nat: &eq, ofs: &eq) -> &eq {
     get_data(nat)[int(ofs)].clz() as &i31;
 }
 
-#[export = "is_digit_int"]
+#[export]
 fn is_digit_int(nat: &eq, ofs: &eq) -> &eq {
     // Does the digit fit in a positive OCaml int? An int on wasm is 31 bits
     // (like the native 32-bit platform that the num library targets), so the
@@ -225,17 +225,17 @@ fn is_digit_int(nat: &eq, ofs: &eq) -> &eq {
     (get_data(nat)[int(ofs)] <u 0x40000000) as &i31;
 }
 
-#[export = "is_digit_zero"]
+#[export]
 fn is_digit_zero(nat: &eq, ofs: &eq) -> &eq {
     !get_data(nat)[int(ofs)] as &i31;
 }
 
-#[export = "is_digit_normalized"]
+#[export]
 fn is_digit_normalized(nat: &eq, ofs: &eq) -> &eq {
     1 as &i31;
 }
 
-#[export = "is_digit_odd"]
+#[export]
 fn is_digit_odd(nat: &eq, ofs: &eq) -> &eq {
     (get_data(nat)[int(ofs)] & 1) as &i31;
 }
@@ -254,7 +254,7 @@ fn incr(d: &digits, ofs: i32, len: i32, carry: i32) -> i32 {
     carry;
 }
 
-#[export = "incr_nat"]
+#[export]
 fn incr_nat(nat: &eq, ofs: &eq, len: &eq, carry: &eq) -> &eq {
     incr(get_data(nat), int(ofs), int(len), int(carry)) as &i31;
 }
@@ -269,13 +269,13 @@ fn add(d1: &digits, o1: i32, l1: i32, d2: &digits, o2: i32, l2: i32, carry: i32)
     become incr(d1, o1 + l2, l1 - l2, carry);
 }
 
-#[export = "add_nat"]
+#[export]
 fn add_nat(nat1: &eq, ofs1: &eq, len1: &eq, nat2: &eq, ofs2: &eq, len2: &eq, carry: &eq) -> &eq {
     add(get_data(nat1), int(ofs1), int(len1), get_data(nat2), int(ofs2), int(len2), int(carry))
         as &i31;
 }
 
-#[export = "complement_nat"]
+#[export]
 fn complement_nat(nat: &eq, ofs: &eq, len: &eq) -> &eq {
     let d = get_data(nat);
     let o = int(ofs);
@@ -304,7 +304,7 @@ fn decr(d: &digits, ofs: i32, len: i32, carry_in: i32) -> i32 {
     !borrow;
 }
 
-#[export = "decr_nat"]
+#[export]
 fn decr_nat(nat: &eq, ofs: &eq, len: &eq, carry: &eq) -> &eq {
     decr(get_data(nat), int(ofs), int(len), int(carry)) as &i31;
 }
@@ -320,7 +320,7 @@ fn sub(d1: &digits, o1: i32, l1: i32, d2: &digits, o2: i32, l2: i32, carry_in: i
     become decr(d1, o1 + l2, l1 - l2, !borrow);
 }
 
-#[export = "sub_nat"]
+#[export]
 fn sub_nat(nat1: &eq, ofs1: &eq, len1: &eq, nat2: &eq, ofs2: &eq, len2: &eq, carry: &eq) -> &eq {
     sub(get_data(nat1), int(ofs1), int(len1), get_data(nat2), int(ofs2), int(len2), int(carry))
         as &i31;
@@ -357,7 +357,7 @@ fn mult_digit(
     carry as i32;
 }
 
-#[export = "mult_digit_nat"]
+#[export]
 fn mult_digit_nat(
     nat1: &eq,
     ofs1: &eq,
@@ -399,7 +399,7 @@ fn mult(
     carry;
 }
 
-#[export = "mult_nat"]
+#[export]
 fn mult_nat(
     nat1: &eq,
     ofs1: &eq,
@@ -424,7 +424,7 @@ fn mult_nat(
     ) as &i31;
 }
 
-#[export = "square_nat"]
+#[export]
 fn square_nat(nat1: &eq, ofs1: &eq, len1: &eq, nat2: &eq, ofs2: &eq, len2: &eq) -> &eq {
     let d1 = get_data(nat1);
     let o1 = int(ofs1);
@@ -453,7 +453,7 @@ fn shift_left(d1: &digits, o1: i32, l1: i32, d2: &digits, o2: i32, nbits: i32) {
     d2[o2] = wrap;
 }
 
-#[export = "shift_left_nat"]
+#[export]
 fn shift_left_nat(nat1: &eq, ofs1: &eq, len1: &eq, nat2: &eq, ofs2: &eq, nbits: &eq) -> &eq {
     shift_left(get_data(nat1), int(ofs1), int(len1), get_data(nat2), int(ofs2), int(nbits));
     0 as &i31;
@@ -475,7 +475,7 @@ fn shift_right(d1: &digits, o1: i32, l1: i32, d2: &digits, o2: i32, nbits: i32) 
     d2[o2] = wrap;
 }
 
-#[export = "shift_right_nat"]
+#[export]
 fn shift_right_nat(nat1: &eq, ofs1: &eq, len1: &eq, nat2: &eq, ofs2: &eq, nbits: &eq) -> &eq {
     shift_right(get_data(nat1), int(ofs1), int(len1), get_data(nat2), int(ofs2), int(nbits));
     0 as &i31;
@@ -504,12 +504,12 @@ fn compare(d1: &digits, o1: i32, l1: i32, d2: &digits, o2: i32, l2: i32) -> i32 
     0;
 }
 
-#[export = "compare_nat"]
+#[export]
 fn compare_nat(nat1: &eq, ofs1: &eq, len1: &eq, nat2: &eq, ofs2: &eq, len2: &eq) -> &eq {
     compare(get_data(nat1), int(ofs1), int(len1), get_data(nat2), int(ofs2), int(len2)) as &i31;
 }
 
-#[export = "compare_digits_nat"]
+#[export]
 fn compare_digits_nat(nat1: &eq, ofs1: &eq, nat2: &eq, ofs2: &eq) -> &eq {
     let x = get_data(nat1)[int(ofs1)];
     let y = get_data(nat2)[int(ofs2)];
@@ -517,7 +517,7 @@ fn compare_digits_nat(nat1: &eq, ofs1: &eq, nat2: &eq, ofs2: &eq) -> &eq {
     ((x >s y) - (x <s y)) as &i31;
 }
 
-#[export = "land_digit_nat"]
+#[export]
 fn land_digit_nat(nat1: &eq, ofs1: &eq, nat2: &eq, ofs2: &eq) -> &eq {
     let d1 = get_data(nat1);
     let o1 = int(ofs1);
@@ -525,7 +525,7 @@ fn land_digit_nat(nat1: &eq, ofs1: &eq, nat2: &eq, ofs2: &eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "lor_digit_nat"]
+#[export]
 fn lor_digit_nat(nat1: &eq, ofs1: &eq, nat2: &eq, ofs2: &eq) -> &eq {
     let d1 = get_data(nat1);
     let o1 = int(ofs1);
@@ -533,7 +533,7 @@ fn lor_digit_nat(nat1: &eq, ofs1: &eq, nat2: &eq, ofs2: &eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "lxor_digit_nat"]
+#[export]
 fn lxor_digit_nat(nat1: &eq, ofs1: &eq, nat2: &eq, ofs2: &eq) -> &eq {
     let d1 = get_data(nat1);
     let o1 = int(ofs1);
@@ -565,7 +565,7 @@ fn div_digit(
     dr[or] = rem;
 }
 
-#[export = "div_digit_nat"]
+#[export]
 fn div_digit_nat(
     natq: &eq,
     ofsq: &eq,
@@ -591,7 +591,7 @@ fn div_digit_nat(
     0 as &i31;
 }
 
-#[export = "div_nat"]
+#[export]
 fn div_nat(nat1: &eq, ofs1: &eq, len1: &eq, nat2: &eq, ofs2: &eq, len2: &eq) -> &eq {
     let d1 = get_data(nat1);
     let o1 = int(ofs1);

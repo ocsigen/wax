@@ -12,7 +12,7 @@ type." Regression: found by the differential-validation fuzzer.
   > WAT
 
   $ wax -i wat -f wax lc.wat
-  #[export = "f"]
+  #[export]
   fn f() -> i32 {
       70368744177664 as i32;
   }

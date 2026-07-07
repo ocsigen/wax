@@ -30,12 +30,12 @@
     #[import = ("js", "caml_jsoo_promise_unwrap")]
     fn caml_jsoo_promise_unwrap_js(&?any) -> &?any;
 
-    #[export = "caml_jsoo_promise_wrap"]
+    #[export]
     fn caml_jsoo_promise_wrap(v: &eq) -> &eq {
         become wrap(caml_jsoo_promise_wrap_js(unwrap(v)));
     }
 
-    #[export = "caml_jsoo_promise_unwrap"]
+    #[export]
     fn caml_jsoo_promise_unwrap(v: &eq) -> &eq {
         become wrap(caml_jsoo_promise_unwrap_js(unwrap(v)));
     }

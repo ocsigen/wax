@@ -12,7 +12,7 @@ ref.eq on two bottom references:
   >   unreachable ref.as_non_null ref.as_non_null ref.eq))
   > WAT
   $ wax -i wat -f wax eq.wat
-  #[export = "f"]
+  #[export]
   fn f() -> i32 {
       unreachable;
       _ == _!!;
@@ -27,7 +27,7 @@ typed (reference) select, not an untyped one:
   >   unreachable ref.as_non_null ref.as_non_null local.get 0 select (result anyref)))
   > WAT
   $ wax -i wat -f wax sel.wat
-  #[export = "f"]
+  #[export]
   fn f(x: i32) -> &?any {
       unreachable;
       x?_:_!!;
@@ -43,7 +43,7 @@ hierarchy, rather than resolving to the default any-hierarchy `&none`:
   >   unreachable ref.as_non_null ref.as_non_null local.get 0 select (result funcref)))
   > WAT
   $ wax -i wat -f wax fsel.wat
-  #[export = "f"]
+  #[export]
   fn f(x: i32) -> &?func {
       unreachable;
       x?_:_!!;

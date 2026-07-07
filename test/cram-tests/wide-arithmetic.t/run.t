@@ -35,11 +35,11 @@ form (here both results flow straight to the function's results, so no binding
 is needed).
 
   $ wax roundtrip.wat -f wax
-  #[export = "add"]
+  #[export]
   fn add(x: i64, x_2: i64, x_3: i64, x_4: i64) -> (i64, i64) {
       i64::add128(x, x_2, x_3, x_4);
   }
-  #[export = "mul"]
+  #[export]
   fn mul(x: i64, x_2: i64) -> (i64, i64) {
       i64::mul_wide_u(x, x_2);
   }

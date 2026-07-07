@@ -16,7 +16,7 @@ When decompiling, a local that would collide with a segment name is renamed, so
 
   $ wax -i wat -f wax collide.wat
   data x = "ab";
-  #[export = "f"]
+  #[export]
   fn f(x_2: i32) {
       x.drop();
       _ = x_2;

@@ -1788,12 +1788,15 @@ let import attributes =
       | _ -> None)
     attributes
 
-let exports attributes =
+(* [#[export = "nm"]] exports under the given name; the bare [#[export]] reuses
+   the field's own Wax name ([~name]) as the export name. *)
+let exports ~name attributes =
   List.filter_map
     (fun (k, v) ->
       match (k, v) with
       | "export", Some ({ desc = String (_, n); _ } as v) ->
           Some { v with desc = n }
+      | "export", None -> Some name
       | _ -> None)
     attributes
 
@@ -2038,7 +2041,7 @@ let module_ diagnostics types fields =
               data;
               attributes;
             } ->
-            let exports = exports attributes in
+            let exports = exports ~name attributes in
             let limits_value : Ast.limits =
               match limits with
               | Some (mi, ma) ->
@@ -2116,7 +2119,7 @@ let module_ diagnostics types fields =
             ]
         | Table { name; address_type; reftype = rt; limits; init; attributes }
           ->
-            let exports = exports attributes in
+            let exports = exports ~name attributes in
             let mi, ma =
               match limits with
               | Some (mi, ma) -> (mi, ma)
@@ -2226,7 +2229,7 @@ let module_ diagnostics types fields =
                       id = Some name;
                       typ = globaltype mut typ;
                       init;
-                      exports = exports attributes;
+                      exports = exports ~name attributes;
                     }
               | GlobalDecl { name; mut; typ; attributes } ->
                   let module_, import_name = Option.get (import attributes) in
@@ -2236,7 +2239,7 @@ let module_ diagnostics types fields =
                       name = import_name;
                       id = Some name;
                       desc = Global (globaltype mut typ);
-                      exports = exports attributes;
+                      exports = exports ~name attributes;
                     }
               | Fundecl { name; typ; sign; exact; attributes } ->
                   let module_, import_name = Option.get (import attributes) in
@@ -2246,10 +2249,10 @@ let module_ diagnostics types fields =
                       name = import_name;
                       id = Some name;
                       desc = Func { exact; typ = typeuse typ sign };
-                      exports = exports attributes;
+                      exports = exports ~name attributes;
                     }
               | Tag { name; typ; sign; attributes } -> (
-                  let exports = exports attributes in
+                  let exports = exports ~name attributes in
                   match import attributes with
                   | Some (module_, import_name) ->
                       Text.Import
@@ -2308,7 +2311,7 @@ let module_ diagnostics types fields =
                       typ = typeuse typ sign;
                       locals = List.map Ast.no_loc func_locals;
                       instrs;
-                      exports = exports attributes;
+                      exports = exports ~name attributes;
                     }
               | Group _ | Conditional _ | Memory _ | Data _ | Table _ | Elem _
               | Module_annotation _ ->

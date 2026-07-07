@@ -3,7 +3,7 @@ though the unnamed local at index 0 is registered first, `$x` keeps `x` and the
 unnamed one is decompiled as `x_2` (not the reverse):
 
   $ wax locals.wat -f wax
-  #[export = "f"]
+  #[export]
   fn f() -> i32 {
       let x_2 = 1;
       let x = 2;

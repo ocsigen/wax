@@ -72,12 +72,12 @@ const infinity: &chars = "infinity";
 
 const nan_chars: &chars = "nan";
 
-#[export = "Double_val"]
+#[export]
 fn Double_val(v: &eq) -> f64 {
     (v as &float).f;
 }
 
-#[export = "caml_hexstring_of_float"]
+#[export]
 fn caml_hexstring_of_float(v: &eq, vprec: &eq, vstyle: &eq) -> &eq {
     let prec = vprec as i32_s;
     let style = vstyle as i32_s;
@@ -244,7 +244,7 @@ fn parse_format(s: &bytes) -> (i32, i32, i32, i32) {
 const inf_chars: &chars = "inf";
 
 #[if(wasi)]
-#[export = "caml_format_float"]
+#[export]
 fn caml_format_float(vfmt: &eq, arg: &eq) -> &eq {
     let fmt = vfmt as &bytes;
     let d = (arg as &float).f;
@@ -266,7 +266,7 @@ fn caml_format_float(vfmt: &eq, arg: &eq) -> &eq {
     res;
 }
 #[else]
-#[export = "caml_format_float"]
+#[export]
 fn caml_format_float(vfmt: &eq, arg: &eq) -> &eq {
     let f = (arg as &float).f;
     let b = f.to_bits();
@@ -441,7 +441,7 @@ fn on_whitespace(s: &bytes, i: i32) -> i32 {
     (c == ' ') | (c - 9 <=u 4);
 }
 
-#[export = "caml_parse_float"]
+#[export]
 fn caml_parse_float(err_msg: &eq, v: &eq) -> &eq {
     let s = v as &bytes;
     let len = s.length();
@@ -597,12 +597,12 @@ fn caml_parse_float(err_msg: &eq, v: &eq) -> &eq {
 
 const float_of_string = "float_of_string";
 
-#[export = "caml_float_of_string"]
+#[export]
 fn caml_float_of_string(s: &eq) -> &eq {
     become caml_parse_float(float_of_string, s);
 }
 
-#[export = "caml_nextafter_float"]
+#[export]
 fn caml_nextafter_float(x: f64, y: f64) -> f64 {
     if x != x {
         return x;
@@ -631,7 +631,7 @@ fn caml_nextafter_float(x: f64, y: f64) -> f64 {
     }
 }
 
-#[export = "caml_classify_float"]
+#[export]
 fn caml_classify_float(x: f64) -> i32 {
     let a = x.abs();
     if a >= 0x1p-1022 {
@@ -653,7 +653,7 @@ fn caml_classify_float(x: f64) -> i32 {
     }
 } // nan
 
-#[export = "caml_modf_float"]
+#[export]
 fn caml_modf_float(v: &eq) -> &eq {
     let x = (v as &float).f;
     let a = x.abs();
@@ -724,7 +724,7 @@ fn frexp(x: f64) -> (f64, i32) {
     e - 0x3fe;
 }
 
-#[export = "caml_frexp_float"]
+#[export]
 fn caml_frexp_float(v: &eq) -> &eq {
     let (r_0, r_1) = frexp((v as &float).f);
     [block|0 as &i31, { f: r_0 }, r_1 as &i31];
@@ -743,12 +743,12 @@ fn erf(x: f64) -> f64 {
     y.copysign(x);
 }
 
-#[export = "caml_erfc_float"]
+#[export]
 fn caml_erfc_float(x: f64) -> f64 {
     1 - erf(x);
 }
 
-#[export = "caml_fma_float"]
+#[export]
 fn caml_fma_float(vx: &eq, vy: &eq, vz: &eq) -> &eq {
     let x = (vx as &float).f;
     let y = (vy as &float).f;
@@ -907,12 +907,12 @@ fn caml_fma_float(vx: &eq, vy: &eq, vz: &eq) -> &eq {
     { f: y };
 }
 
-#[export = "caml_float_compare"]
+#[export]
 fn caml_float_compare(x: f64, y: f64) -> i32 {
     (x > y) - (x < y) + ((x == x) - (y == y));
 }
 
-#[export = "caml_round_float"]
+#[export]
 fn caml_round_float(x: f64) -> f64 {
     let y: f64;
     if x >= 0 {

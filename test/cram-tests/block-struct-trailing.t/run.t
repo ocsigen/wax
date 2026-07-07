@@ -8,7 +8,7 @@ pin its type and the annotation is kept:
   type point = { f: i32, f_2: i32 };
   type pair = { f: i32, f_2: i32 };
   type vec3 = { f: i32, f_2: i32, f_3: i32 };
-  #[export = "unique"]
+  #[export]
   fn unique(a: i32) -> &vec3 {
       let x =
           do {
@@ -16,7 +16,7 @@ pin its type and the annotation is kept:
           };
       x;
   }
-  #[export = "ambiguous"]
+  #[export]
   fn ambiguous(a: i32) -> &point {
       let x: &point =
           do {

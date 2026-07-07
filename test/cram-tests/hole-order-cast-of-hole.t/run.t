@@ -20,7 +20,7 @@ differential-validation fuzzer.
 
   $ wax -i wat -f wax m.wat
   elem e: &func = [];
-  #[export = "f"]
+  #[export]
   fn f() -> f32 {
       1;
       2;

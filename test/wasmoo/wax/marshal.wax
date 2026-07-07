@@ -93,7 +93,7 @@ type block = [mut &eq];
 
 const input_val_from_string = "input_value_from_string";
 
-#[export = "caml_input_value_from_bytes"]
+#[export]
 #[export = "caml_input_value_from_string"]
 fn caml_input_value_from_bytes(vstr: &eq, vofs: &eq) -> &eq {
     let str = vstr as &bytes;
@@ -111,7 +111,7 @@ const truncated_obj = "input_value: truncated object";
 
 const input_value = "input_value";
 
-#[export = "caml_input_value"]
+#[export]
 fn caml_input_value(ch: &eq) -> &eq {
     // ZZZ check binary channel?
     let header: &bytes = [0; 64];
@@ -318,32 +318,32 @@ fn readfloats(s: &intern_state, code: i32, len: i32) -> &eq {
     dest;
 }
 
-#[export = "caml_deserialize_uint_1"]
+#[export]
 fn caml_deserialize_uint_1(s: &eq) -> i32 {
     become read8u(s as &intern_state);
 }
 
-#[export = "caml_deserialize_sint_1"]
+#[export]
 fn caml_deserialize_sint_1(s: &eq) -> i32 {
     become read8s(s as &intern_state);
 }
 
-#[export = "caml_deserialize_uint_2"]
+#[export]
 fn caml_deserialize_uint_2(s: &eq) -> i32 {
     become read16u(s as &intern_state);
 }
 
-#[export = "caml_deserialize_sint_2"]
+#[export]
 fn caml_deserialize_sint_2(s: &eq) -> i32 {
     become read16s(s as &intern_state);
 }
 
-#[export = "caml_deserialize_int_4"]
+#[export]
 fn caml_deserialize_int_4(s: &eq) -> i32 {
     become read32(s as &intern_state);
 }
 
-#[export = "caml_deserialize_int_8"]
+#[export]
 fn caml_deserialize_int_8(vs: &eq) -> i64 {
     let s = vs as &intern_state;
     read32(s) as i64_u << 32 | read32(s) as i64_u;
@@ -393,7 +393,7 @@ fn intern_custom(s: &intern_state, code: i32) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_intern_decompress_input"]
+#[export]
 let caml_intern_decompress_input: &?decompress = null;
 
 fn decompress_input(s: &intern_state, h: &marshal_header, prim: &eq) {
@@ -687,13 +687,13 @@ fn parse_header(s: &intern_state, prim: &eq) -> &marshal_header {
 const marshal_data_size = "Marshal.data_size";
 
 #[if(ocaml_version >= (5, 1, 0))]
-#[export = "caml_marshal_header_size"]
+#[export]
 const caml_marshal_header_size = 16;
 #[else]
-#[export = "caml_marshal_header_size"]
+#[export]
 const caml_marshal_header_size = 20;
 
-#[export = "caml_marshal_data_size"]
+#[export]
 fn caml_marshal_data_size(buf: &eq, ofs: &eq) -> &eq {
     let s = get_intern_state(buf as &bytes, ofs as i32_u);
     let magic = read32(s);
@@ -1154,7 +1154,7 @@ fn extern_value(
     s;
 }
 
-#[export = "caml_output_value_to_string"]
+#[export]
 #[export = "caml_output_value_to_bytes"]
 fn caml_output_value_to_string(v: &eq, flags: &eq) -> &eq {
     let blk = { next: null, end: SIZE_EXTERN_OUTPUT_BLOCK, dat: [0; SIZE_EXTERN_OUTPUT_BLOCK] };
@@ -1174,7 +1174,7 @@ fn caml_output_value_to_string(v: &eq, flags: &eq) -> &eq {
     res;
 }
 
-#[export = "caml_output_value_to_buffer"]
+#[export]
 fn caml_output_value_to_buffer(vbuf: &eq, vpos: &eq, vlen: &eq, v: &eq, flags: &eq) -> &eq {
     let buf = vbuf as &bytes;
     let pos = vpos as i32_u;
@@ -1186,7 +1186,7 @@ fn caml_output_value_to_buffer(vbuf: &eq, vpos: &eq, vlen: &eq, v: &eq, flags: &
     (r_0 + 20) as &i31;
 }
 
-#[export = "caml_output_value"]
+#[export]
 fn caml_output_value(ch: &eq, v: &eq, flags: &eq) -> &eq {
     // ZZZ check if binary channel?
     let blk = { next: null, end: SIZE_EXTERN_OUTPUT_BLOCK, dat: [0; SIZE_EXTERN_OUTPUT_BLOCK] };
@@ -1203,28 +1203,28 @@ fn caml_output_value(ch: &eq, v: &eq, flags: &eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_serialize_int_1"]
+#[export]
 fn caml_serialize_int_1(vs: &eq, i: i32) {
     let s = vs as &extern_state;
     let pos = reserve_extern_output(s, 1);
     s.buf[pos] = i;
 }
 
-#[export = "caml_serialize_int_2"]
+#[export]
 fn caml_serialize_int_2(vs: &eq, i: i32) {
     let s = vs as &extern_state;
     let pos = reserve_extern_output(s, 2);
     store16(s.buf, pos, i);
 }
 
-#[export = "caml_serialize_int_4"]
+#[export]
 fn caml_serialize_int_4(vs: &eq, i: i32) {
     let s = vs as &extern_state;
     let pos = reserve_extern_output(s, 4);
     store32(s.buf, pos, i);
 }
 
-#[export = "caml_serialize_int_8"]
+#[export]
 fn caml_serialize_int_8(vs: &eq, i: i64) {
     let s = vs as &extern_state;
     let pos = reserve_extern_output(s, 8);

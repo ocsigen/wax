@@ -19,7 +19,7 @@ longer treats an `extern`/`noextern` operand as a plain `ref.cast` receiver:
   > WAT
   $ wax -i wat -f wax f.wat
   type s = { };
-  #[export = "f"]
+  #[export]
   fn f() -> i32 {
       {s| .. } as &extern as &i31 as i32_u;
   }

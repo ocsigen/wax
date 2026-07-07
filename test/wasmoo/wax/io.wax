@@ -309,19 +309,19 @@ fn get_fd_offsets() -> &extern {
     fd_offsets!;
 }
 
-#[export = "initialize_fd_offset"]
+#[export]
 fn initialize_fd_offset(fd: i32, offset: i64, append: i32) {
     map_set(get_fd_offsets(), fd, { offset, seeked: 0, append });
 }
 
-#[export = "release_fd_offset"]
+#[export]
 fn release_fd_offset(fd: i32) {
     map_delete(get_fd_offsets(), fd);
 }
 
 const bad_file_descriptor = "Bad file descriptor";
 
-#[export = "get_fd_offset_unchecked"]
+#[export]
 fn get_fd_offset_unchecked(fd: i32) -> &?fd_offset {
     become map_get(get_fd_offsets(), fd);
 }
@@ -334,7 +334,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
     res!;
 }
 
-#[export = "IO_BUFFER_SIZE"]
+#[export]
 const IO_BUFFER_SIZE = 65536;
 
 type open_flags = [i16];
@@ -359,7 +359,7 @@ const sys_open_flags: &open_flags = [1, 2, 0x102, 0x10, 0x80, 0x40, 0, 0, 0x400]
 // 128 O_NONBLOCK
 const sys_open_flags: &open_flags = [1, 2, 10, 16, 32, 64, 0, 0, 128];
 
-#[export = "convert_flag_list"]
+#[export]
 fn convert_flag_list(tbl: &open_flags, vflags: &eq) -> i32 {
     let flags: i32;
     'loop: loop {
@@ -376,7 +376,7 @@ fn convert_flag_list(tbl: &open_flags, vflags: &eq) -> i32 {
 }
 
 #[if(wasi)]
-#[export = "caml_sys_open"]
+#[export]
 fn caml_sys_open(vpath: &eq, vflags: &eq, perm: &eq) -> &eq {
     let (path_0, path_1, path_2) = caml_sys_resolve_path(vpath);
     let buffer = get_buffer();
@@ -408,7 +408,7 @@ fn caml_sys_open(vpath: &eq, vflags: &eq, perm: &eq) -> &eq {
     fd as &i31;
 }
 #[else]
-#[export = "caml_sys_open"]
+#[export]
 fn caml_sys_open(path: &eq, vflags: &eq, perm: &eq) -> &eq {
     let flags = convert_flag_list(sys_open_flags, vflags);
     let fd: i32;
@@ -431,7 +431,7 @@ fn caml_sys_open(path: &eq, vflags: &eq, perm: &eq) -> &eq {
 }
 
 #[if(wasi)]
-#[export = "caml_sys_close"]
+#[export]
 fn caml_sys_close(vfd: &eq) -> &eq {
     let fd = vfd as i32_u;
     release_fd_offset(fd);
@@ -440,7 +440,7 @@ fn caml_sys_close(vfd: &eq) -> &eq {
     0 as &i31;
 }
 #[else]
-#[export = "caml_sys_close"]
+#[export]
 fn caml_sys_close(vfd: &eq) -> &eq {
     let res: i32;
     let fd = vfd as i32_u;
@@ -455,12 +455,12 @@ fn caml_sys_close(vfd: &eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_sys_io_buffer_size"]
+#[export]
 fn caml_sys_io_buffer_size(&eq) -> &eq {
     IO_BUFFER_SIZE as &i31;
 }
 
-#[export = "caml_ml_set_channel_name"]
+#[export]
 fn caml_ml_set_channel_name(&eq, &eq) -> &eq {
     0 as &i31;
 }
@@ -471,13 +471,13 @@ fn caml_ml_set_channel_name(&eq, &eq) -> &eq {
     // The WASI runtime reads and writes through real file descriptors and
     // ignores these hooks, so the setters raise rather than silently doing
     // nothing.
-    #[export = "caml_ml_set_channel_output"]
+    #[export]
     fn caml_ml_set_channel_output(ch: &eq, f: &eq) -> &eq {
         caml_invalid_argument("caml_ml_set_channel_output not supported with WASI");
         0 as &i31;
     }
 
-    #[export = "caml_ml_set_channel_refill"]
+    #[export]
     fn caml_ml_set_channel_refill(ch: &eq, f: &eq) -> &eq {
         caml_invalid_argument("caml_ml_set_channel_refill not supported with WASI");
         0 as &i31;
@@ -485,13 +485,13 @@ fn caml_ml_set_channel_name(&eq, &eq) -> &eq {
 }
 #[else]
 {
-    #[export = "caml_ml_set_channel_output"]
+    #[export]
     fn caml_ml_set_channel_output(ch: &eq, f: &eq) -> &eq {
         (ch as &channel).output = f;
         0 as &i31;
     }
 
-    #[export = "caml_ml_set_channel_refill"]
+    #[export]
     fn caml_ml_set_channel_refill(ch: &eq, f: &eq) -> &eq {
         (ch as &channel).refill = f;
         0 as &i31;
@@ -510,17 +510,17 @@ fn push_channel(l: &eq, ch: &eq) -> &eq {
 }
 
 #[if(wasi)]
-#[export = "caml_ml_out_channels_list"]
+#[export]
 fn caml_ml_out_channels_list(&eq) -> &eq {
     out_channels;
 }
 #[else]
-#[export = "caml_ml_out_channels_list"]
+#[export]
 fn caml_ml_out_channels_list(&eq) -> &eq {
     become caml_list_of_js_array(wrap(channel_list()));
 }
 
-#[export = "caml_ml_open_descriptor_in"]
+#[export]
 fn caml_ml_open_descriptor_in(fd: &eq) -> &eq {
     let buffer = ta_new(IO_BUFFER_SIZE);
     {
@@ -538,10 +538,10 @@ fn caml_ml_open_descriptor_in(fd: &eq) -> &eq {
     };
 }
 
-#[export = "caml_stderr"]
+#[export]
 let caml_stderr: &eq = 0 as &i31;
 
-#[export = "caml_ml_open_descriptor_out"]
+#[export]
 fn caml_ml_open_descriptor_out(fd: &eq) -> &eq {
     let buffer = ta_new(IO_BUFFER_SIZE);
     let res =
@@ -565,17 +565,17 @@ fn caml_ml_open_descriptor_out(fd: &eq) -> &eq {
     res;
 }
 
-#[export = "caml_ml_set_binary_mode"]
+#[export]
 fn caml_ml_set_binary_mode(&eq, &eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_ml_is_binary_mode"]
+#[export]
 fn caml_ml_is_binary_mode(&eq) -> &eq {
     1 as &i31;
 }
 
-#[export = "caml_channel_descriptor"]
+#[export]
 fn caml_channel_descriptor(ch: &eq) -> &eq {
     let fd = (ch as &channel).fd;
     if fd == -1 {
@@ -584,7 +584,7 @@ fn caml_channel_descriptor(ch: &eq) -> &eq {
     fd as &i31;
 }
 
-#[export = "caml_ml_close_channel"]
+#[export]
 fn caml_ml_close_channel(vch: &eq) -> &eq {
     let ch = vch as &channel;
     // output channels: any output will trigger a flush since the
@@ -714,7 +714,7 @@ fn caml_refill(ch: &channel) -> i32 {
     return dv_get_ui8(view, 0);
 }
 
-#[export = "caml_getblock"]
+#[export]
 fn caml_getblock(vch: &eq, s: &bytes, pos: i32, len: i32) -> i32 {
     if !len {
         return 0;
@@ -763,7 +763,7 @@ fn caml_getblock_typed_array(vch: &eq, d: &extern, pos: i32, len: i32) -> i32 {
     len;
 }
 
-#[export = "caml_really_getblock"]
+#[export]
 fn caml_really_getblock(ch: &eq, s: &bytes, pos: i32, len: i32) -> i32 {
     let n = len;
     while n : (n -= read) {
@@ -776,7 +776,7 @@ fn caml_really_getblock(ch: &eq, s: &bytes, pos: i32, len: i32) -> i32 {
     len;
 }
 
-#[export = "caml_ml_input"]
+#[export]
 fn caml_ml_input(vch: &eq, vs: &eq, vpos: &eq, vlen: &eq) -> &eq {
     let ch = vch as &channel;
     let s = vs as &bytes;
@@ -813,12 +813,12 @@ fn caml_getch(ch: &channel) -> i32 {
     become dv_get_ui8(ch.buffer_view, curr);
 }
 
-#[export = "caml_ml_input_char"]
+#[export]
 fn caml_ml_input_char(ch: &eq) -> &eq {
     caml_getch(ch as &channel) as &i31;
 }
 
-#[export = "caml_ml_input_int"]
+#[export]
 fn caml_ml_input_int(vch: &eq) -> &eq {
     let ch = vch as &channel;
     let res = caml_getch(ch) << 24;
@@ -827,25 +827,25 @@ fn caml_ml_input_int(vch: &eq) -> &eq {
     return (res | caml_getch(ch)) as &i31;
 }
 
-#[export = "caml_ml_pos_in"]
+#[export]
 fn caml_ml_pos_in(vch: &eq) -> &eq {
     let ch = vch as &channel;
     (caml_ml_get_channel_offset(ch) as i32 - (ch.max - ch.curr)) as &i31;
 }
 
-#[export = "caml_ml_pos_in_64"]
+#[export]
 fn caml_ml_pos_in_64(vch: &eq) -> &eq {
     let ch = vch as &channel;
     caml_copy_int64(caml_ml_get_channel_offset(ch) - (ch.max - ch.curr) as i64_s);
 }
 
-#[export = "caml_ml_pos_out"]
+#[export]
 fn caml_ml_pos_out(vch: &eq) -> &eq {
     let ch = vch as &channel;
     (caml_ml_get_channel_offset(ch) as i32 + ch.curr) as &i31;
 }
 
-#[export = "caml_ml_pos_out_64"]
+#[export]
 fn caml_ml_pos_out_64(vch: &eq) -> &eq {
     let ch = vch as &channel;
     caml_copy_int64(caml_ml_get_channel_offset(ch) + ch.curr as i64_s);
@@ -881,17 +881,17 @@ fn caml_seek_in(ch: &channel, dest: i64) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_ml_seek_in"]
+#[export]
 fn caml_ml_seek_in(ch: &eq, dest: &eq) -> &eq {
     become caml_seek_in(ch as &channel, dest as i64_s);
 }
 
-#[export = "caml_ml_seek_in_64"]
+#[export]
 fn caml_ml_seek_in_64(ch: &eq, dest: &eq) -> &eq {
     become caml_seek_in(ch as &channel, Int64_val(dest));
 }
 
-#[export = "caml_ml_seek_out"]
+#[export]
 fn caml_ml_seek_out(vch: &eq, voffset: &eq) -> &eq {
     let ch = vch as &channel;
     caml_flush(ch);
@@ -919,7 +919,7 @@ fn caml_ml_seek_out(vch: &eq, voffset: &eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_ml_seek_out_64"]
+#[export]
 fn caml_ml_seek_out_64(vch: &eq, voffset: &eq) -> &eq {
     let ch = vch as &channel;
     caml_flush(ch);
@@ -947,7 +947,7 @@ fn caml_ml_seek_out_64(vch: &eq, voffset: &eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_ml_input_scan_line"]
+#[export]
 fn caml_ml_input_scan_line(vch: &eq) -> &eq {
     let ch = vch as &channel;
     let p = ch.curr;
@@ -987,7 +987,7 @@ fn caml_flush(ch: &channel) {
     }
 }
 
-#[export = "caml_flush_if_unbuffered"]
+#[export]
 fn caml_flush_if_unbuffered(vch: &eq) {
     let ch = vch as &channel;
     if ch.unbuffered {
@@ -995,7 +995,7 @@ fn caml_flush_if_unbuffered(vch: &eq) {
     }
 }
 
-#[export = "caml_ml_flush"]
+#[export]
 fn caml_ml_flush(vch: &eq) -> &eq {
     let ch = vch as &channel;
     if ch.fd != -1 {
@@ -1022,7 +1022,7 @@ fn write(fd: i32, buf: &extern, pos: i32, n: i32) -> i32 {
 
 #[if(wasi)]
 {
-    #[export = "write_all_to_fd"]
+    #[export]
     fn write_all_to_fd(fd: i32, v: &eq) {
         let len = (v as &bytes).length();
         let buffer = get_buffer();
@@ -1139,7 +1139,7 @@ fn caml_putblock_typed_array(ch: &channel, d: &extern, pos: i32, len: i32) -> i3
     len;
 }
 
-#[export = "caml_really_putblock"]
+#[export]
 fn caml_really_putblock(ch: &eq, s: &bytes, pos: i32, len: i32) {
     while len : (len -= written) {
         let written = caml_putblock(ch as &channel, s, pos, len);
@@ -1154,7 +1154,7 @@ fn caml_really_putblock_typed_array(ch: &eq, d: &extern, pos: i32, len: i32) {
     }
 }
 
-#[export = "caml_ml_output"]
+#[export]
 #[export = "caml_ml_output_bytes"]
 fn caml_ml_output(ch: &eq, s: &eq, vpos: &eq, vlen: &eq) -> &eq {
     let pos = vpos as i32_u;
@@ -1176,14 +1176,14 @@ fn caml_putch(ch: &channel, c: i32) {
     ch.curr = curr + 1;
 }
 
-#[export = "caml_ml_output_char"]
+#[export]
 fn caml_ml_output_char(ch: &eq, c: &eq) -> &eq {
     caml_putch(ch as &channel, c as i32_u);
     caml_flush_if_unbuffered(ch);
     0 as &i31;
 }
 
-#[export = "caml_ml_output_int"]
+#[export]
 fn caml_ml_output_int(vch: &eq, vn: &eq) -> &eq {
     let ch = vch as &channel;
     let n = vn as i32_u;
@@ -1195,12 +1195,12 @@ fn caml_ml_output_int(vch: &eq, vn: &eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_ml_is_buffered"]
+#[export]
 fn caml_ml_is_buffered(ch: &eq) -> &eq {
     !(ch as &channel).unbuffered as &i31;
 }
 
-#[export = "caml_ml_set_buffered"]
+#[export]
 fn caml_ml_set_buffered(vch: &eq, mode: &eq) -> &eq {
     let ch = vch as &channel;
     if mode as i32_s {
@@ -1214,29 +1214,29 @@ fn caml_ml_set_buffered(vch: &eq, mode: &eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_ml_channel_size"]
+#[export]
 fn caml_ml_channel_size(vch: &eq) -> &eq {
     // ZZZ check for overflow
     file_size(caml_ml_get_channel_fd(vch)) as &i31;
 }
 
-#[export = "caml_ml_channel_size_64"]
+#[export]
 fn caml_ml_channel_size_64(vch: &eq) -> &eq {
     caml_copy_int64(file_size(caml_ml_get_channel_fd(vch)));
 }
 
-#[export = "caml_ml_get_channel_fd"]
+#[export]
 fn caml_ml_get_channel_fd(vch: &eq) -> i32 {
     (vch as &channel).fd;
 }
 
-#[export = "caml_ml_set_channel_fd"]
+#[export]
 fn caml_ml_set_channel_fd(vch: &eq, fd: i32) {
     (vch as &channel).fd = fd;
 }
 
 #[if(wasi)]
-#[export = "caml_ml_get_channel_offset"]
+#[export]
 fn caml_ml_get_channel_offset(ch: &eq) -> i64 {
     let fd = (ch as &channel).fd;
     let buffer = get_buffer();
@@ -1245,12 +1245,12 @@ fn caml_ml_get_channel_offset(ch: &eq) -> i64 {
     m.load64(buffer);
 }
 #[else]
-#[export = "caml_ml_get_channel_offset"]
+#[export]
 fn caml_ml_get_channel_offset(ch: &eq) -> i64 {
     get_fd_offset((ch as &channel).fd).offset;
 }
 
-#[export = "caml_ml_output_bigarray"]
+#[export]
 fn caml_ml_output_bigarray(ch: &eq, a: &eq, vpos: &eq, vlen: &eq) -> &eq {
     let d = caml_ba_get_data(a);
     let pos = vpos as i32_u;
@@ -1259,7 +1259,7 @@ fn caml_ml_output_bigarray(ch: &eq, a: &eq, vpos: &eq, vlen: &eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_ml_input_bigarray"]
+#[export]
 fn caml_ml_input_bigarray(ch: &eq, a: &eq, vpos: &eq, vlen: &eq) -> &eq {
     let d = caml_ba_get_data(a);
     let pos = vpos as i32_u;

@@ -35,21 +35,21 @@
     type block = [mut &eq];
     type bytes = [mut i8];
 
-    #[export = "caml_js_html_entities"]
+    #[export]
     fn caml_js_html_entities(v: &eq) -> &eq {
         become wrap(caml_js_html_entities_js(unwrap(v)));
     }
 
     const console = "console";
 
-    #[export = "caml_js_get_console"]
+    #[export]
     fn caml_js_get_console(&eq) -> &eq {
         become caml_js_get(caml_js_global(0 as &i31), console);
     }
 
     const XMLHttpRequest = "XMLHttpRequest";
 
-    #[export = "caml_xmlhttprequest_create"]
+    #[export]
     fn caml_xmlhttprequest_create(&eq) -> &eq {
         become caml_js_new(
             caml_js_get(caml_js_global(0 as &i31), XMLHttpRequest),

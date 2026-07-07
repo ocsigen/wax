@@ -19,7 +19,7 @@ Regression: found by the differential-validation fuzzer.
 The if's result is inferred (the `=> i32` annotation is dropped as redundant):
 
   $ wax -i wat -f wax g.wat
-  #[export = "f"]
+  #[export]
   fn f() -> i32 {
       (if 1 {
            unreachable;

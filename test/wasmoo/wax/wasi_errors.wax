@@ -2,7 +2,7 @@
 {
     type block = [mut &eq];
     type bytes = [mut i8];
-    #[export = "error_messages"]
+    #[export]
     const error_messages: &block =
         [
             "Success",

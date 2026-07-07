@@ -16,7 +16,7 @@ before a hole '_'." Regression: found by the differential-validation fuzzer.
 The receiver appears as a hole and the lane index stays an immediate argument:
 
   $ wax -i wat -f wax lane.wat
-  #[export = "f"]
+  #[export]
   fn f(x: v128) -> i32 {
       x;
       do (v128) -> i32 {
@@ -42,7 +42,7 @@ it must not be reported as occurring before the receiver hole.
   > WAT
 
   $ wax -i wat -f wax cs.wat
-  #[export = "f"]
+  #[export]
   fn f(x: f64) -> f64 {
       x;
       do (f64) -> f64 {

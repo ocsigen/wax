@@ -8,7 +8,7 @@ results:
   type f1 = fn();
   type k1 = cont f1;
   fn f1() {}
-  #[export = "u3"]
+  #[export]
   fn u3() {
       _ =
           'h: do &k1 {

@@ -27,7 +27,7 @@ const Array_make = "Array.make";
 
 const empty_array: &eq = [block|0 as &i31];
 
-#[export = "caml_make_vect"]
+#[export]
 #[export = "caml_array_make"]
 fn caml_make_vect(n: &eq, v: &eq) -> &eq {
     let sz = n as i32_s;
@@ -56,7 +56,7 @@ fn caml_make_vect(n: &eq, v: &eq) -> &eq {
     }
 }
 
-#[export = "caml_floatarray_make"]
+#[export]
 fn caml_floatarray_make(n: &eq, v: &eq) -> &eq {
     let sz = n as i32_s;
     if sz >=u 0x7ffffff {
@@ -70,7 +70,7 @@ fn caml_floatarray_make(n: &eq, v: &eq) -> &eq {
 }
 
 #[export = "caml_make_float_vect"]
-#[export = "caml_floatarray_create"]
+#[export]
 #[export = "caml_array_create_float"]
 #[export = "caml_floatarray_create_local"]
 fn caml_floatarray_create(n: &eq) -> &eq {
@@ -84,7 +84,7 @@ fn caml_floatarray_create(n: &eq) -> &eq {
     [float_array|0; sz];
 }
 
-#[export = "caml_array_of_uniform_array"]
+#[export]
 #[export = "caml_make_array"]
 fn caml_array_of_uniform_array(vinit: &eq) -> &eq {
     let init = vinit as &block;
@@ -105,18 +105,18 @@ fn caml_array_of_uniform_array(vinit: &eq) -> &eq {
     return init;
 }
 
-#[export = "caml_floatarray_unsafe_get"]
+#[export]
 fn caml_floatarray_unsafe_get(a: &eq, i: &eq) -> &eq {
     { f: (a as &float_array)[i as i32_s] };
 }
 
-#[export = "caml_floatarray_unsafe_set"]
+#[export]
 fn caml_floatarray_unsafe_set(a: &eq, i: &eq, v: &eq) -> &eq {
     (a as &float_array)[i as i32_s] = (v as &float).f;
     0 as &i31;
 }
 
-#[export = "caml_array_sub"]
+#[export]
 #[export = "caml_array_sub_local"]
 fn caml_array_sub(a: &eq, i: &eq, vlen: &eq) -> &eq {
     let len = vlen as i32_u;
@@ -139,7 +139,7 @@ fn caml_array_sub(a: &eq, i: &eq, vlen: &eq) -> &eq {
     }
 }
 
-#[export = "caml_floatarray_sub"]
+#[export]
 fn caml_floatarray_sub(a: &eq, i: &eq, vlen: &eq) -> &eq {
     let len = vlen as i32_u;
     if !len {
@@ -158,7 +158,7 @@ fn caml_floatarray_dup(a: &float_array) -> &eq {
     a';
 }
 
-#[export = "caml_array_append"]
+#[export]
 #[export = "caml_array_append_local"]
 fn caml_array_append(va1: &eq, va2: &eq) -> &eq {
     let l1: i32;
@@ -198,7 +198,7 @@ fn caml_array_append(va1: &eq, va2: &eq) -> &eq {
     }
 }
 
-#[export = "caml_floatarray_append"]
+#[export]
 fn caml_floatarray_append(va1: &eq, va2: &eq) -> &eq {
     let fa1 = va1 as &float_array;
     match va2 {
@@ -216,7 +216,7 @@ fn caml_floatarray_append(va1: &eq, va2: &eq) -> &eq {
     }
 }
 
-#[export = "caml_array_concat"]
+#[export]
 #[export = "caml_array_concat_local"]
 fn caml_array_concat(vl: &eq) -> &eq {
     let l = vl;
@@ -285,7 +285,7 @@ fn caml_array_concat(vl: &eq) -> &eq {
     }
 }
 
-#[export = "caml_floatarray_concat"]
+#[export]
 fn caml_floatarray_concat(vl: &eq) -> &eq {
     let l = vl;
     let len = 0;
@@ -326,7 +326,7 @@ fn caml_floatarray_concat(vl: &eq) -> &eq {
     fa;
 }
 
-#[export = "caml_uniform_array_concat"]
+#[export]
 fn caml_uniform_array_concat(vl: &eq) -> &eq {
     let l = vl;
     let len = 0;
@@ -359,7 +359,7 @@ fn caml_uniform_array_concat(vl: &eq) -> &eq {
     a;
 }
 
-#[export = "caml_floatarray_blit"]
+#[export]
 fn caml_floatarray_blit(a1: &eq, i1: &eq, a2: &eq, i2: &eq, vlen: &eq) -> &eq {
     let len = vlen as i32_s;
     if len {
@@ -368,7 +368,7 @@ fn caml_floatarray_blit(a1: &eq, i1: &eq, a2: &eq, i2: &eq, vlen: &eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_array_blit"]
+#[export]
 fn caml_array_blit(a1: &eq, i1: &eq, a2: &eq, i2: &eq, vlen: &eq) -> &eq {
     let len = vlen as i32_s;
     if len {
@@ -381,7 +381,7 @@ fn caml_array_blit(a1: &eq, i1: &eq, a2: &eq, i2: &eq, vlen: &eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_array_fill"]
+#[export]
 fn caml_array_fill(a: &eq, i: &eq, vlen: &eq, v: &eq) -> &eq {
     let len = vlen as i32_u;
     'done: if len {
@@ -395,7 +395,7 @@ fn caml_array_fill(a: &eq, i: &eq, vlen: &eq, v: &eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_floatarray_fill"]
+#[export]
 fn caml_floatarray_fill(a: &eq, i: &eq, vlen: &eq, v: &eq) -> &eq {
     let len = vlen as i32_u;
     if len {

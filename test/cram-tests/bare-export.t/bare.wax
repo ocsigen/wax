@@ -1,0 +1,11 @@
+#[export]
+fn add(a: i32, b: i32) -> i32 { a + b; }
+
+#[export = "mul"]
+fn multiply(a: i32, b: i32) -> i32 { a * b; }
+
+#[export]
+let counter: i32 = 42;
+
+#[export]
+memory mem: i32 [1, 1];

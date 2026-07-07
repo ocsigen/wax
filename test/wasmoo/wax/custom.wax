@@ -51,12 +51,12 @@ type custom = open { ops: &custom_operations };
 
 type custom_with_id: custom = open { .., id: i64 };
 
-#[export = "caml_is_custom"]
+#[export]
 fn caml_is_custom(v: &eq) -> i32 {
     v is &custom;
 }
 
-#[export = "caml_dup_custom"]
+#[export]
 fn caml_dup_custom(v: &eq) -> &eq {
     ('custom: do {
          _ = br_on_cast 'custom &custom v;
@@ -66,21 +66,21 @@ fn caml_dup_custom(v: &eq) -> &eq {
     );
 }
 
-#[export = "custom_compare_id"]
+#[export]
 fn custom_compare_id(v1: &eq, v2: &eq, i32) -> i32 {
     let i1 = (v1 as &custom_with_id).id;
     let i2 = (v2 as &custom_with_id).id;
     (i1 >s i2) - (i1 <s i2);
 }
 
-#[export = "custom_hash_id"]
+#[export]
 fn custom_hash_id(v: &eq) -> i32 {
     (v as &custom_with_id).id as i32;
 }
 
 let next_id: i64 = 0;
 
-#[export = "custom_next_id"]
+#[export]
 fn custom_next_id() -> i64 {
     let id = next_id;
     next_id = id + 1;
@@ -91,12 +91,12 @@ type custom_operations_list = { ops: &custom_operations, next: &?custom_operatio
 
 let custom_operations: &?custom_operations_list = null;
 
-#[export = "caml_register_custom_operations"]
+#[export]
 fn caml_register_custom_operations(ops: &custom_operations) {
     custom_operations = { ops, next: custom_operations };
 }
 
-#[export = "caml_find_custom_operations"]
+#[export]
 fn caml_find_custom_operations(id: &bytes) -> &?custom_operations {
     'not_found: do {
         let l = br_on_null 'not_found custom_operations;
@@ -113,7 +113,7 @@ fn caml_find_custom_operations(id: &bytes) -> &?custom_operations {
 
 let initialized = 0;
 
-#[export = "caml_init_custom_operations"]
+#[export]
 fn caml_init_custom_operations() {
     if initialized {
         return;
@@ -129,7 +129,7 @@ fn caml_init_custom_operations() {
 
 const empty_custom = "";
 
-#[export = "caml_custom_identifier"]
+#[export]
 fn caml_custom_identifier(v: &eq) -> &eq {
     _ =
         'not_custom: do {

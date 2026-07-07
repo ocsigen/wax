@@ -22,12 +22,12 @@ fn caml_invalid_argument(&eq);
 
 type bytes = [mut i8];
 
-#[export = "caml_format_int"]
+#[export]
 fn caml_format_int(v: &eq, n: &eq) -> &eq {
     become format_int(v, n as i32_s, 1);
 }
 
-#[export = "parse_sign_and_base"]
+#[export]
 fn parse_sign_and_base(s: &bytes) -> (i32, i32, i32, i32) {
     let i = 0;
     let len = s.length();
@@ -79,7 +79,7 @@ fn parse_sign_and_base(s: &bytes) -> (i32, i32, i32, i32) {
     base;
 }
 
-#[export = "parse_digit"]
+#[export]
 fn parse_digit(c: i32) -> i32 {
     if (c >=u '0') & (c <=u '9') {
         return c - '0';
@@ -93,7 +93,7 @@ fn parse_digit(c: i32) -> i32 {
     return -1;
 }
 
-#[export = "parse_int"]
+#[export]
 fn parse_int(v: &eq, nbits: i32, errmsg: &eq) -> i32 {
     let s = v as &bytes;
     let len = s.length();
@@ -153,26 +153,26 @@ fn parse_int(v: &eq, nbits: i32, errmsg: &eq) -> i32 {
 
 const INT_ERRMSG = "int_of_string";
 
-#[export = "caml_int_of_string"]
+#[export]
 fn caml_int_of_string(v: &eq) -> &eq {
     parse_int(v, 31, INT_ERRMSG) as &i31;
 }
 
 const INT8_ERRMSG = "Int8.of_string";
 
-#[export = "caml_int8_of_string"]
+#[export]
 fn caml_int8_of_string(v: &eq) -> &eq {
     parse_int(v, 8, INT8_ERRMSG).extend8_s() as &i31;
 }
 
 const INT16_ERRMSG = "Int16.of_string";
 
-#[export = "caml_int16_of_string"]
+#[export]
 fn caml_int16_of_string(v: &eq) -> &eq {
     parse_int(v, 16, INT16_ERRMSG).extend16_s() as &i31;
 }
 
-#[export = "caml_bswap16"]
+#[export]
 fn caml_bswap16(vx: &eq) -> &eq {
     let x = vx as i32_s;
     ((x & 0xFF) << 8 | x >>u 8 & 0xFF) as &i31;
@@ -180,10 +180,10 @@ fn caml_bswap16(vx: &eq) -> &eq {
 
 type chars = [i8];
 
-#[export = "lowercase_hex_table"]
+#[export]
 const lowercase_hex_table: &chars = "0123456789abcdef";
 
-#[export = "uppercase_hex_table"]
+#[export]
 const uppercase_hex_table: &chars = "0123456789ABCDEF";
 
 fn format_int_default(d: i32) -> &eq {
@@ -215,7 +215,7 @@ fn format_int_default(d: i32) -> &eq {
 
 const format_error = "format_int: bad format";
 
-#[export = "parse_int_format"]
+#[export]
 fn parse_int_format(s: &bytes) -> (i32, i32, i32, i32, i32) {
     let len = s.length();
     let i = 1;
@@ -283,7 +283,7 @@ fn parse_int_format(s: &bytes) -> (i32, i32, i32, i32, i32) {
     uppercase;
 }
 
-#[export = "format_int"]
+#[export]
 fn format_int(vs: &eq, d: i32, small: i32) -> &eq {
     let s = vs as &bytes;
     if s.length() == 2 {

@@ -41,18 +41,18 @@ type bytes = [mut i8];
 
 #[if(not(wasi))]
 {
-    #[export = "caml_wasm_load_module"]
+    #[export]
     fn caml_wasm_load_module(str: &eq) -> &eq {
         wrap(load_module(unwrap(caml_uint8_array_of_string(str))));
     }
 
-    #[export = "caml_wasm_load_wasmo"]
+    #[export]
     fn caml_wasm_load_wasmo(str: &eq) -> &eq {
         load_wasmo(unwrap(caml_uint8_array_of_string(str)));
         0 as &i31;
     }
 
-    #[export = "caml_wasm_register_fragments"]
+    #[export]
     fn caml_wasm_register_fragments(unit_name: &eq, source: &eq) -> &eq {
         register_fragments(
             unwrap(caml_jsstring_of_string(unit_name)),
@@ -68,40 +68,40 @@ const LINK_INFO_PRIM_COUNT = 3;
 // Standard OCaml dynlink primitives
 
 #[if(all(ocaml_version >= (5, 1, 0), not(oxcaml)))]
-#[export = "caml_dynlink_open_lib"]
+#[export]
 fn caml_dynlink_open_lib(&eq) -> &eq {
     0 as &i31;
 }
 #[else]
-#[export = "caml_dynlink_open_lib"]
+#[export]
 fn caml_dynlink_open_lib(&eq, &eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_dynlink_close_lib"]
+#[export]
 fn caml_dynlink_close_lib(&eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_dynlink_lookup_symbol"]
+#[export]
 fn caml_dynlink_lookup_symbol(&eq, &eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_dynlink_add_primitive"]
+#[export]
 fn caml_dynlink_add_primitive(&eq) -> &eq {
     let idx = link_info[LINK_INFO_PRIM_COUNT] as i32_u;
     link_info[LINK_INFO_PRIM_COUNT] = (idx + 1) as &i31;
     idx as &i31;
 }
 
-#[export = "caml_dynlink_get_current_libs"]
+#[export]
 fn caml_dynlink_get_current_libs(&eq) -> &eq {
     [block|0 as &i31];
 }
 
 #[if(ocaml_version >= (5, 5, 0))]
-#[export = "caml_dynlink_parse_ld_conf"]
+#[export]
 fn caml_dynlink_parse_ld_conf(&eq) -> &eq {
     0 as &i31;
 }

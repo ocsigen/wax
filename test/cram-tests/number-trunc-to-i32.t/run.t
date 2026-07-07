@@ -16,7 +16,7 @@ signed conversion.) Regression: found by the differential-validation fuzzer.
   > WAT
 
   $ wax -i wat -f wax m.wat
-  #[export = "f"]
+  #[export]
   fn f() -> i32 {
       unreachable;
       -(_ * _) as f32 as i32_s_strict;

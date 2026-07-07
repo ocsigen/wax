@@ -180,7 +180,7 @@
         become (f as &closure).func(x, f);
     }
 
-    #[export = "caml_alloc_stack"]
+    #[export]
     fn caml_alloc_stack(hv: &eq, hx: &eq, hf: &eq) -> &eq {
         { value: hv, exn: hx, effect: hf, continuation: cont_new continuation(initial_cont) };
     }

@@ -14,7 +14,7 @@ Regression: found by the differential-validation fuzzer.
   > WAT
 
   $ wax -i wat -f wax in.wat
-  #[export = "f"]
+  #[export]
   fn f() -> i32 {
       unreachable;
       !_!;

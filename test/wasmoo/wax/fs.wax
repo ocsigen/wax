@@ -241,7 +241,7 @@ type block = [mut &eq];
         abs_path;
     }
 
-    #[export = "wasi_chdir"]
+    #[export]
     fn wasi_chdir(name: &eq) {
         let abs_path = make_absolute(name as &bytes);
         let i = abs_path.length() - 1;
@@ -330,7 +330,7 @@ type block = [mut &eq];
         return (fd, ".");
     }
 
-    #[export = "wasi_resolve_path"]
+    #[export]
     fn wasi_resolve_path(vpath: &eq /*fd*/ /*address*/ /*length*/ ) -> (i32, i32, i32) {
         // An empty path matches no entry and fails with ENOENT like native,
         // rather than resolving to the current directory. This is checked on
@@ -347,7 +347,7 @@ type block = [mut &eq];
         return (res_0, p, res_1.length());
     }
 
-    #[export = "caml_sys_resolve_path"]
+    #[export]
     fn caml_sys_resolve_path(path: &eq) -> (i32, i32, i32) {
         let (res_0, res_1, res_2) = wasi_resolve_path(path);
         if res_0 <s 0 { // ENOENT
@@ -371,7 +371,7 @@ type block = [mut &eq];
         0 as &i31;
     }
 
-    #[export = "caml_sys_getcwd"]
+    #[export]
     #[export = "unix_getcwd"]
     #[export = "caml_unix_getcwd"]
     fn caml_sys_getcwd(&eq) -> &eq {
@@ -382,7 +382,7 @@ type block = [mut &eq];
     }
 }
 #[else]
-#[export = "caml_sys_getcwd"]
+#[export]
 fn caml_sys_getcwd(&eq) -> &eq {
     try {
         caml_string_of_jsstring(wrap(getcwd()));
@@ -395,7 +395,7 @@ fn caml_sys_getcwd(&eq) -> &eq {
 }
 
 #[if(wasi)]
-#[export = "caml_sys_chdir"]
+#[export]
 fn caml_sys_chdir(name: &eq) -> &eq {
     let (p_fd, p_addr, p_len) = caml_sys_resolve_path(name);
     let buffer = get_buffer();
@@ -410,7 +410,7 @@ fn caml_sys_chdir(name: &eq) -> &eq {
     0 as &i31;
 }
 #[else]
-#[export = "caml_sys_chdir"]
+#[export]
 fn caml_sys_chdir(name: &eq) -> &eq {
     try {
         chdir(unwrap(caml_jsstring_of_string(name)));
@@ -423,12 +423,12 @@ fn caml_sys_chdir(name: &eq) -> &eq {
 }
 
 #[if(wasi)]
-#[export = "caml_sys_mkdir"]
+#[export]
 fn caml_sys_mkdir(name: &eq, perm: &eq) -> &eq {
     become sys_path_op(name, path_create_directory);
 }
 #[else]
-#[export = "caml_sys_mkdir"]
+#[export]
 fn caml_sys_mkdir(name: &eq, perm: &eq) -> &eq {
     try {
         mkdir(unwrap(caml_jsstring_of_string(name)), perm as i32_u);
@@ -441,7 +441,7 @@ fn caml_sys_mkdir(name: &eq, perm: &eq) -> &eq {
 }
 
 #[if(wasi)]
-#[export = "caml_sys_read_directory"]
+#[export]
 fn caml_sys_read_directory(name: &eq) -> &eq {
     let (p_fd, p_addr, p_len) = caml_sys_resolve_path(name);
     let buffer = get_buffer();
@@ -535,7 +535,7 @@ fn caml_sys_read_directory(name: &eq) -> &eq {
     new_tbl;
 }
 #[else]
-#[export = "caml_sys_read_directory"]
+#[export]
 fn caml_sys_read_directory(name: &eq) -> &eq {
     try {
         caml_js_to_string_array(read_dir(unwrap(caml_jsstring_of_string(name))));
@@ -548,12 +548,12 @@ fn caml_sys_read_directory(name: &eq) -> &eq {
 }
 
 #[if(wasi)]
-#[export = "caml_sys_rmdir"]
+#[export]
 fn caml_sys_rmdir(name: &eq) -> &eq {
     become sys_path_op(name, path_remove_directory);
 }
 #[else]
-#[export = "caml_sys_rmdir"]
+#[export]
 fn caml_sys_rmdir(name: &eq) -> &eq {
     try {
         rmdir(unwrap(caml_jsstring_of_string(name)));
@@ -566,12 +566,12 @@ fn caml_sys_rmdir(name: &eq) -> &eq {
 }
 
 #[if(wasi)]
-#[export = "caml_sys_remove"]
+#[export]
 fn caml_sys_remove(name: &eq) -> &eq {
     become sys_path_op(name, path_unlink_file);
 }
 #[else]
-#[export = "caml_sys_remove"]
+#[export]
 fn caml_sys_remove(name: &eq) -> &eq {
     try {
         unlink(unwrap(caml_jsstring_of_string(name)));
@@ -584,7 +584,7 @@ fn caml_sys_remove(name: &eq) -> &eq {
 }
 
 #[if(wasi)]
-#[export = "caml_sys_rename"]
+#[export]
 fn caml_sys_rename(o: &eq, n: &eq) -> &eq {
     // Resolve both paths without raising, so that the first buffer is
     // always freed below even if resolving the second path fails.
@@ -605,7 +605,7 @@ fn caml_sys_rename(o: &eq, n: &eq) -> &eq {
     0 as &i31;
 }
 #[else]
-#[export = "caml_sys_rename"]
+#[export]
 fn caml_sys_rename(o: &eq, n: &eq) -> &eq {
     try {
         rename(unwrap(caml_jsstring_of_string(o)), unwrap(caml_jsstring_of_string(n)));
@@ -618,7 +618,7 @@ fn caml_sys_rename(o: &eq, n: &eq) -> &eq {
 }
 
 #[if(wasi)]
-#[export = "caml_sys_file_exists"]
+#[export]
 fn caml_sys_file_exists(name: &eq) -> &eq {
     let (p_fd, p_addr, p_len) = wasi_resolve_path(name);
     if p_fd <s 0 {
@@ -631,7 +631,7 @@ fn caml_sys_file_exists(name: &eq) -> &eq {
     !res as &i31;
 }
 #[else]
-#[export = "caml_sys_file_exists"]
+#[export]
 fn caml_sys_file_exists(name: &eq) -> &eq {
     become file_exists(unwrap(caml_jsstring_of_string(name)));
 }
@@ -643,13 +643,13 @@ fn caml_raise_no_such_file(name: &eq) {
 }
 
 #[if(wasi)]
-#[export = "caml_read_file_content"]
+#[export]
 fn caml_read_file_content(name: &eq) -> &eq {
     caml_raise_no_such_file(name);
     0 as &i31;
 }
 #[else]
-#[export = "caml_read_file_content"]
+#[export]
 fn caml_read_file_content(name: &eq) -> &eq {
     let res = read_file(unwrap(caml_jsstring_of_string(name)));
     if !res {
@@ -660,12 +660,12 @@ fn caml_read_file_content(name: &eq) -> &eq {
 }
 
 #[if(wasi)]
-#[export = "caml_create_file"]
+#[export]
 fn caml_create_file(name: &eq, content: &eq) -> &eq {
     0 as &i31;
 }
 #[else]
-#[export = "caml_create_file"]
+#[export]
 fn caml_create_file(name: &eq, content: &eq) -> &eq {
     register_file(
         unwrap(caml_jsstring_of_string(name)),
@@ -674,7 +674,7 @@ fn caml_create_file(name: &eq, content: &eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_fs_init"]
+#[export]
 fn caml_fs_init() -> &eq {
     0 as &i31;
 }
@@ -690,13 +690,13 @@ fn caml_fs_init() -> &eq {
         m.load8(buffer, 1, 16) as i32_u;
     }
 
-    #[export = "caml_sys_is_directory"]
+    #[export]
     fn caml_sys_is_directory(name: &eq) -> &eq {
         (caml_sys_file_mode(name) == 3) as &i31;
     }
 }
 #[else]
-#[export = "caml_sys_is_directory"]
+#[export]
 fn caml_sys_is_directory(name: &eq) -> &eq {
     try {
         is_directory(unwrap(caml_jsstring_of_string(name)));
@@ -709,12 +709,12 @@ fn caml_sys_is_directory(name: &eq) -> &eq {
 }
 
 #[if(wasi)]
-#[export = "caml_sys_is_regular_file"]
+#[export]
 fn caml_sys_is_regular_file(name: &eq) -> &eq {
     (caml_sys_file_mode(name) == 4) as &i31;
 }
 #[else]
-#[export = "caml_sys_is_regular_file"]
+#[export]
 fn caml_sys_is_regular_file(name: &eq) -> &eq {
     try {
         is_file(unwrap(caml_jsstring_of_string(name)));
@@ -727,12 +727,12 @@ fn caml_sys_is_regular_file(name: &eq) -> &eq {
 }
 
 #[if(wasi)]
-#[export = "caml_sys_temp_dir_name"]
+#[export]
 fn caml_sys_temp_dir_name(&eq) -> &eq {
     "/tmp";
 }
 #[else]
-#[export = "caml_sys_temp_dir_name"]
+#[export]
 fn caml_sys_temp_dir_name(&eq) -> &eq {
     if on_windows {
         become caml_string_of_jsstring(wrap(tmpdir()));
@@ -740,17 +740,17 @@ fn caml_sys_temp_dir_name(&eq) -> &eq {
     "";
 }
 
-#[export = "caml_mount_autoload"]
+#[export]
 fn caml_mount_autoload(&eq, &eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_list_mount_point"]
+#[export]
 fn caml_list_mount_point(&eq) -> &eq {
     0 as &i31;
 }
 
-#[export = "caml_unmount"]
+#[export]
 fn caml_unmount(&eq) -> &eq {
     0 as &i31;
 }

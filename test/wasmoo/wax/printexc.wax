@@ -60,7 +60,7 @@ fn add_string(buf: &buffer, v: &eq) {
     buf.pos = pos + len;
 }
 
-#[export = "caml_format_exception"]
+#[export]
 fn caml_format_exception(vexn: &eq) -> &eq {
     let exn = vexn as &block;
     if exn[0] == 0 as &i31 {

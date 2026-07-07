@@ -3,7 +3,7 @@ an unreachable stack after it, converts (and infers its result) without a
 spurious "value remains on the stack":
 
   $ wax dead.wat -f wax
-  #[export = "f"]
+  #[export]
   fn f() -> i32 {
       let x: i32;
       x +=

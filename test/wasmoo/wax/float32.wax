@@ -61,7 +61,7 @@ type custom_operations = {
 };
 type custom = open { ops: &custom_operations };
 
-#[export = "float32_ops"]
+#[export]
 const float32_ops =
     {
         id: "_f32",
@@ -129,7 +129,7 @@ fn caml_float32_of_float(f64: &eq) -> &eq {
     box_float32(unbox_float(f64) as f32);
 }
 
-#[export = "caml_round_float32_bytecode"]
+#[export]
 fn caml_round_float32_bytecode(x: f32) -> f32 {
     let y: f32;
     if x >= 0 {
@@ -151,22 +151,22 @@ fn caml_round_float32_bytecode(x: f32) -> f32 {
 
 const float32_of_string = "float32_of_string";
 
-#[export = "caml_float32_of_string"]
+#[export]
 fn caml_float32_of_string(s: &eq) -> &eq {
     caml_float32_of_float(caml_parse_float(float32_of_string, s));
 }
 
-#[export = "caml_format_float32"]
+#[export]
 fn caml_format_float32(s: &eq, f: &eq) -> &eq {
     caml_format_float(s, caml_float_of_float32(f));
 }
 
-#[export = "caml_float32_compare"]
+#[export]
 fn caml_float32_compare(x: f32, y: f32) -> i32 {
     (x > y) - (x < y) + ((x == x) - (y == y));
 }
 
-#[export = "caml_modf_float32"]
+#[export]
 fn caml_modf_float32(vx: &eq) -> &eq {
     let x = unbox_float32(vx);
     let a = x.abs();
@@ -189,7 +189,7 @@ fn caml_modf_float32(vx: &eq) -> &eq {
     [block|0 as &i31, box_float32(f), box_float32(i)];
 }
 
-#[export = "caml_nextafter_float32_bytecode"]
+#[export]
 fn caml_nextafter_float32_bytecode(x: f32, y: f32) -> f32 {
     if x != x {
         return x;
@@ -218,7 +218,7 @@ fn caml_nextafter_float32_bytecode(x: f32, y: f32) -> f32 {
     }
 }
 
-#[export = "caml_classify_float32_bytecode"]
+#[export]
 fn caml_classify_float32_bytecode(a: f32) -> i32 {
     a = a.abs();
     if a >= 0x1p-126 {
@@ -240,28 +240,28 @@ fn caml_classify_float32_bytecode(a: f32) -> i32 {
     }
 } // nan
 
-#[export = "caml_ldexp_float32_bytecode"]
+#[export]
 fn caml_ldexp_float32_bytecode(x: f32, n: i32) -> f32 {
     caml_ldexp_float(x as f64, n) as f32;
 }
 
-#[export = "caml_frexp_float32"]
+#[export]
 fn caml_frexp_float32(v: &eq) -> &eq {
     let frexp = caml_frexp_float(caml_float_of_float32(v)) as &block;
     [block|0 as &i31, caml_float32_of_float(frexp[1]), frexp[2]];
 }
 
-#[export = "caml_erf_float32_bytecode"]
+#[export]
 fn caml_erf_float32_bytecode(x: f32) -> f32 {
     caml_erf_float(x as f64) as f32;
 }
 
-#[export = "caml_erfc_float32_bytecode"]
+#[export]
 fn caml_erfc_float32_bytecode(x: f32) -> f32 {
     caml_erfc_float(x as f64) as f32;
 }
 
-#[export = "caml_fma_float32_bytecode"]
+#[export]
 fn caml_fma_float32_bytecode(x: &eq, y: &eq, z: &eq) -> &eq {
     caml_float32_of_float(
         caml_fma_float(caml_float_of_float32(
@@ -272,27 +272,27 @@ fn caml_fma_float32_bytecode(x: &eq, y: &eq, z: &eq) -> &eq {
 
 const zero = { ops: float32_ops, f32: 0 };
 
-#[export = "caml_ba_uint8_getf32"]
+#[export]
 fn caml_ba_uint8_getf32(a: &eq, i: i32) -> f32 {
     caml_ba_uint8_get32(a, i).from_bits();
 }
 
-#[export = "caml_ba_uint8_setf32"]
+#[export]
 fn caml_ba_uint8_setf32(a: &eq, i: i32, v: f32) -> &eq {
     caml_ba_uint8_set32(a, i, v.to_bits());
 }
 
-#[export = "caml_string_getf32"]
+#[export]
 fn caml_string_getf32(a: &eq, i: i32) -> f32 {
     caml_string_get32(a, i).from_bits();
 }
 
-#[export = "caml_bytes_getf32"]
+#[export]
 fn caml_bytes_getf32(a: &eq, i: i32) -> f32 {
     caml_bytes_get32(a, i).from_bits();
 }
 
-#[export = "caml_bytes_setf32"]
+#[export]
 fn caml_bytes_setf32(a: &eq, i: i32, v: f32) -> &eq {
     caml_bytes_set32(a, i, v.to_bits());
 }
@@ -300,7 +300,7 @@ fn caml_bytes_setf32(a: &eq, i: i32, v: f32) -> &eq {
 // Mirrors x86 MINSS/MAXSS: returns $y when the comparison fails
 // (NaN or equal, including ±0). Unlike f32.min/f32.max, which
 // propagate NaN and canonicalise -0 vs +0.
-#[export = "caml_simd_float32_min_bytecode"]
+#[export]
 fn caml_simd_float32_min_bytecode(x: f32, y: f32) -> f32 {
     if x < y {
         x;
@@ -309,7 +309,7 @@ fn caml_simd_float32_min_bytecode(x: f32, y: f32) -> f32 {
     }
 }
 
-#[export = "caml_simd_float32_max_bytecode"]
+#[export]
 fn caml_simd_float32_max_bytecode(x: f32, y: f32) -> f32 {
     if x > y {
         x;

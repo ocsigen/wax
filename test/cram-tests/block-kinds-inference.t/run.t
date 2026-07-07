@@ -3,7 +3,7 @@ checking context on re-parse) applies to every value-producing block form, not
 just `if` and `do`. A `loop` takes its result from the function's return type:
 
   $ wax loop.wat -f wax
-  #[export = "f"]
+  #[export]
   fn f(n: i32) -> i32 {
       'l: loop {
           br_if 'l n;
@@ -20,7 +20,7 @@ just `if` and `do`. A `loop` takes its result from the function's return type:
 
   $ wax try_table.wat -f wax
   tag e();
-  #[export = "f"]
+  #[export]
   fn f() -> i32 {
       'h: do {
           return
@@ -43,7 +43,7 @@ no expected type — here as an operand of `+`), where the result is inferred fr
 the values reaching the exit rather than taken from the context:
 
   $ wax loop-synthesis.wat -f wax
-  #[export = "f"]
+  #[export]
   fn f(n: i32) -> i32 {
       0
           + 'l: loop {

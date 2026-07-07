@@ -177,7 +177,7 @@ const discarding_last_token_read = "Discarding last token read";
 const shift_to_state = ": shift to state ";
 const reduce_by_rule = ": reduce by rule ";
 
-#[export = "caml_parse_engine"]
+#[export]
 fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
     let tables = vtables as &block;
     let tbl_defred = tables[tbl_defred_field] as &bytes;
@@ -428,7 +428,7 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
     res as &i31;
 }
 
-#[export = "caml_set_parser_trace"]
+#[export]
 fn caml_set_parser_trace(v: &eq) -> &eq {
     let oldflag = caml_parser_trace;
     caml_parser_trace = v as i32_s;

@@ -41,7 +41,7 @@ A WAT module name decompiles to the inner attribute:
 
   $ wax -i wat -f wax named.wat
   #![module = "fromwat"]
-  #[export = "g"]
+  #[export]
   fn g() -> i32 {
       2;
   }
@@ -52,7 +52,7 @@ The name also survives a round-trip through the binary format:
   $ wax -i wasm -f wax named.wasm
   #![module = "mymod"]
   type t = fn() -> i32;
-  #[export = "f"]
+  #[export]
   fn f() -> i32 {
       1;
   }

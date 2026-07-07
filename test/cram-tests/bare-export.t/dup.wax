@@ -1,0 +1,5 @@
+#[export]
+fn add(a: i32, b: i32) -> i32 { a + b; }
+
+#[export = "add"]
+fn other(a: i32) -> i32 { a; }

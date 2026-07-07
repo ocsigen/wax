@@ -8935,8 +8935,10 @@ let check_attributes diagnostics field =
       let location = match value with Some v -> v.info | None -> field.info in
       match name with
       | "export" ->
+          (* A bare [#[export]] (no value) reuses the field's Wax name as the
+             export name; an explicit name must be a string. *)
           (match value with
-          | Some { desc = String _; _ } -> ()
+          | None | Some { desc = String _; _ } -> ()
           | _ ->
               Error.annotation_value_mismatch diagnostics ~location "export"
                 "a string");
@@ -9140,28 +9142,57 @@ let type_configuration ?(warn_unused = false) ?(build = true)
   let exports = Hashtbl.create 16 in
   let start_seen = ref false in
   let module_seen = ref false in
+  (* The Wax name a bare [#[export]] reuses as its export name. *)
+  let field_name field =
+    match field.desc with
+    | Func { name; _ }
+    | Fundecl { name; _ }
+    | GlobalDecl { name; _ }
+    | Global { name; _ }
+    | Memory { name; _ }
+    | Table { name; _ }
+    | Tag { name; _ } ->
+        Some name
+    | Data _ | Elem _ | Group _ | Conditional _ | Type _ | Module_annotation _
+      ->
+        None
+  in
   walk_fields
     (fun field ->
       check_attributes diagnostics field;
       List.iter
         (fun (key, v) ->
           match (key, Option.map (fun (v : _ instr) -> v.desc) v) with
-          | "export", Some (String (_, name)) ->
-              (* Two exports of the same name clash only when the conditional
-                 branches guarding them can hold at once; the same name in
-                 mutually exclusive branches is fine. Each remembered guard is
-                 the path condition ([!cond]) under which an export was seen. *)
-              let guards =
-                Option.value ~default:[] (Hashtbl.find_opt exports name)
+          | "export", ((Some (String _) | None) as value) ->
+              (* The export name and the location to blame: the explicit string
+                 for [#[export = "nm"]], the field's own name for a bare
+                 [#[export]]. *)
+              let entry =
+                match value with
+                | Some (String (_, name)) -> Some (name, (Option.get v).info)
+                | _ -> (
+                    match field_name field with
+                    | Some id -> Some (id.desc, id.info)
+                    | None -> None)
+                (* [check_attributes] rejects [#[export]] on an unnamed field *)
               in
-              if
-                List.exists
-                  (fun g -> Cond.is_satisfiable (Cond.and_ g !cond))
-                  guards
-              then
-                Error.duplicated_export diagnostics
-                  ~location:(Option.get v).info name;
-              Hashtbl.replace exports name (!cond :: guards)
+              Option.iter
+                (fun (name, location) ->
+                  (* Two exports of the same name clash only when the conditional
+                     branches guarding them can hold at once; the same name in
+                     mutually exclusive branches is fine. Each remembered guard
+                     is the path condition ([!cond]) under which an export was
+                     seen. *)
+                  let guards =
+                    Option.value ~default:[] (Hashtbl.find_opt exports name)
+                  in
+                  if
+                    List.exists
+                      (fun g -> Cond.is_satisfiable (Cond.and_ g !cond))
+                      guards
+                  then Error.duplicated_export diagnostics ~location name;
+                  Hashtbl.replace exports name (!cond :: guards))
+                entry
           | "start", _ ->
               (* A module may name at most one start function. *)
               if !start_seen then
