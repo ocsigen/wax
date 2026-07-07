@@ -308,11 +308,11 @@ memory mem1: i64 {
 Top-level `data` defines a passive segment, or an active segment for a named memory:
 
 ```wax
-data seg = "raw\00bytes";
+data seg = "raw\x00bytes";
 data init @ mem0 [0] = "hello";
 ```
 
-Data bytes are ordinary [string literals](../language.md#strings); escapes such as `\41` and `\00` (two hex digits) decode to raw bytes.
+Data bytes are ordinary [string literals](../language.md#strings); escapes such as `\x41` and `\x00` (two hex digits) decode to raw bytes.
 
 ## Tables
 

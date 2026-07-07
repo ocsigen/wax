@@ -1,2 +1,2 @@
 type w = [mut i16];
-fn f() -> &w { w # "\ff"; }
+fn f() -> &w { w # "\xff"; }

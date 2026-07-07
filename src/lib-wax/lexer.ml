@@ -29,7 +29,7 @@ let stringchar =
     | "\\t" | "\\n" | "\\r" | "\\'" | "\\\"" | "\\\\"
     | "\\u{", hexnum, "}" )]
 
-let stringelem = [%sedlex.regexp? stringchar | "\\", hexdigit, hexdigit]
+let stringelem = [%sedlex.regexp? stringchar | "\\x", hexdigit, hexdigit]
 let linechar = [%sedlex.regexp? Sub (any, (10 | 13))]
 let linecomment = [%sedlex.regexp? "//", Star linechar, (newline | eof)]
 let string_buffer = Buffer.create 256
@@ -93,8 +93,8 @@ let rec string lexbuf =
   | "\\\\" ->
       Buffer.add_char string_buffer '\\';
       string lexbuf
-  | '\\', hexdigit, hexdigit ->
-      let s = String.sub (Sedlexing.Utf8.lexeme lexbuf) 1 2 in
+  | "\\x", hexdigit, hexdigit ->
+      let s = String.sub (Sedlexing.Utf8.lexeme lexbuf) 2 2 in
       Buffer.add_char string_buffer (Char.chr (int_of_string ("0x" ^ s)));
       string lexbuf
   | "\\u{", hexnum, "}" ->
@@ -272,8 +272,8 @@ let rec token_rec ctx lexbuf =
         Sedlexing.Utf8.sub_lexeme lexbuf 4 (Sedlexing.lexeme_length lexbuf - 6)
       in
       CHAR (unicode_escape lexbuf n)
-  | "'\\", hexdigit, hexdigit, "'" ->
-      let s = String.sub (Sedlexing.Utf8.lexeme lexbuf) 2 2 in
+  | "'\\x", hexdigit, hexdigit, "'" ->
+      let s = String.sub (Sedlexing.Utf8.lexeme lexbuf) 3 2 in
       let n = int_of_string ("0x" ^ s) in
       if n > 127 then
         raise

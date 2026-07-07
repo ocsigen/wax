@@ -151,7 +151,7 @@
         0 as &i31;
     }
 
-    const nul = "\00";
+    const nul = "\x00";
 
     // Convert an OCaml string list to a \0-separated string.
     // E.g. ["a"; "b"; "c"] -> "a\x00b\x00c\x00"
@@ -161,7 +161,7 @@
             'loop: loop {
                 br_if 'done l is &i31;
                 let cell = l as &block;
-                acc = caml_string_concat(acc, caml_string_concat(cell[1], "\00"));
+                acc = caml_string_concat(acc, caml_string_concat(cell[1], "\x00"));
                 l = cell[2];
                 br 'loop;
             }

@@ -70,8 +70,8 @@ Unicode:
   Error: A string building an [i16] array must be a valid Unicode string.
    ──➤  bad-unicode.wax:2:16
   1 │ type w = [mut i16];
-  2 │ fn f() -> &w { w # "\ff"; }
-    ·                ^^^^^^^^^
+  2 │ fn f() -> &w { w # "\xff"; }
+    ·                ^^^^^^^^^^
   3 │ 
   [128]
 

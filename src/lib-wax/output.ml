@@ -947,7 +947,9 @@ let rec instr prec pp (i : _ instr) =
       let n = Uchar.utf_8_byte_length c in
       let b = Bytes.create n in
       ignore (Bytes.set_utf_8_uchar b 0 c);
-      let len, s = Wax_utils.Unicode.escape_string (Bytes.to_string b) in
+      let len, s =
+        Wax_utils.Unicode.escape_string ~hex_prefix:"x" (Bytes.to_string b)
+      in
       string pp "\'";
       string pp ~len:(Some len) s;
       string pp "\'"
@@ -957,7 +959,7 @@ let rec instr prec pp (i : _ instr) =
           type_ pp t.desc;
           operator pp "#")
         t;
-      let len, s = Wax_utils.Unicode.escape_string s in
+      let len, s = Wax_utils.Unicode.escape_string ~hex_prefix:"x" s in
       string pp "\"";
       string pp ~len:(Some len) s;
       string pp "\""
@@ -1448,7 +1450,7 @@ let print_attr_prefix pp attributes_list content_fn =
       content_fn ())
 
 let print_data_bytes pp s =
-  let len, s = Wax_utils.Unicode.escape_string s in
+  let len, s = Wax_utils.Unicode.escape_string ~hex_prefix:"x" s in
   string pp "\"";
   string pp ~len:(Some len) s;
   string pp "\""

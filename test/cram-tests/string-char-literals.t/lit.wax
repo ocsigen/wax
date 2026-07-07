@@ -7,7 +7,7 @@ fn newline() -> i32 {
 
 #[export = "byte_escape"]
 fn byte_escape() -> i32 {
-    '\41';
+    '\x41';
 }
 
 #[export = "code_point"]
@@ -33,5 +33,5 @@ fn from_context() -> &chars {
 
 #[export = "binary_blob"]
 fn binary_blob() -> &chars {
-    chars # "a\01b";
+    chars # "a\x01b";
 }

@@ -72,7 +72,7 @@ as for a redundant name on any other construction literal.
   
   #[export = "binary_blob"]
   fn binary_blob() -> &chars {
-      "\61\01\62";
+      "\x61\x01\x62";
   }
 
 Through WASM the round-trip is best-effort. Character literals lowered to a

@@ -86,7 +86,7 @@ let has_hex_escape s =
       || c = 127)
     s
 
-let escape_string s =
+let escape_string ?(hex_prefix = "") s =
   let b = Buffer.create (String.length s + 2) in
   if String.is_valid_utf_8 s && not (has_hex_escape s) then
     (* Valid UTF-8 with no character needing a hex escape: keep it readable,
@@ -105,13 +105,15 @@ let escape_string s =
            | '\r' -> Buffer.add_string b "\\r"
            | '"' -> Buffer.add_string b "\\\""
            | '\\' -> Buffer.add_string b "\\\\"
-           | _ -> Printf.bprintf b "\\%02x" c);
+           | _ -> Printf.bprintf b "\\%s%02x" hex_prefix c);
         loop (i + Uchar.utf_decode_length dec) len)
     in
     loop 0 (String.length s)
   else
-    (* Not valid UTF-8: this is binary data, so dump every byte as a [\HH]
-       escape rather than interleaving decoded text with byte escapes. *)
-    String.iter (fun c -> Printf.bprintf b "\\%02x" (Char.code c)) s;
+    (* Not valid UTF-8: this is binary data, so dump every byte as a hex escape
+       rather than interleaving decoded text with byte escapes. *)
+    String.iter
+      (fun c -> Printf.bprintf b "\\%s%02x" hex_prefix (Char.code c))
+      s;
   let s' = Buffer.contents b in
   (terminal_width s', s')

@@ -113,11 +113,11 @@ an `i32.const`:
 ```wax
 'A';            // 65
 '\n';           // 10
-'\41';          // 65, a byte written as two hex digits
+'\x41';         // 65, a byte written as two hex digits
 '\u{1F600}';    // 128512, a Unicode code point
 ```
 
-The recognised escapes are `\t`, `\n`, `\r`, `\'`, `\"`, `\\`, `\NN` (exactly
+The recognised escapes are `\t`, `\n`, `\r`, `\'`, `\"`, `\\`, `\xNN` (exactly
 two hex digits, one byte), and `\u{...}` (a Unicode code point in hex). For
 text, see [Strings](#strings).
 
@@ -1088,7 +1088,7 @@ let s: &chars = "yo";       // type taken from the annotation
 ```
 
 String literals recognise the same escapes as [character literals](#characters)
-— `\t`, `\n`, `\r`, `\'`, `\"`, `\\`, `\NN` (two hex digits, one byte), and
+— `\t`, `\n`, `\r`, `\'`, `\"`, `\\`, `\xNN` (two hex digits, one byte), and
 `\u{...}` (a Unicode code point, encoded as its UTF-8 bytes):
 
 ```wax
@@ -1188,7 +1188,7 @@ memory mem1: i64 {
     data greeting @ [0x2000] = "hi";     // active, named
 }
 
-data seg = "raw\00bytes";                // top-level passive segment
+data seg = "raw\x00bytes";               // top-level passive segment
 data init @ mem0 [0] = "hello";          // top-level active segment
 ```
 

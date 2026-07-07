@@ -29,7 +29,11 @@ val scalar_of_hex : string -> Uchar.t option
     a native int, or is out of the scalar range (above U+10FFFF or a surrogate).
 *)
 
-val escape_string : string -> int * string
+val escape_string : ?hex_prefix:string -> string -> int * string
 (** [escape_string s] returns a pair [(len, escaped)] where [escaped] is the
     escaped version of [s] suitable for WAT/Wax string literals, and [len] is
-    its display length. *)
+    its display length.
+
+    Byte escapes are written [\HH] by default; [hex_prefix] is inserted after
+    the backslash, so [~hex_prefix:"x"] produces Rust-style [\xHH] escapes for
+    Wax. *)
