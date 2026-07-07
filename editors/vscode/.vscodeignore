@@ -1,5 +1,6 @@
 .vscode/**
 .gitignore
+CONTRIBUTING.md
 node_modules/**
 package-lock.json
 test/**

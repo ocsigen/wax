@@ -11,6 +11,7 @@
     { "include": "#numbers" },
     { "include": "#function-definition" },
     { "include": "#type-definition" },
+    { "include": "#reference-type" },
     { "include": "#keywords" },
     { "include": "#constants" },
     { "include": "#types" },
@@ -199,6 +200,43 @@
         "1": { "name": "storage.type.wax" },
         "2": { "name": "entity.name.type.wax" }
       }
+    },
+    "reference-type": {
+      "comments": [
+        "Reference types: &foo, &?foo, &!foo, &?!foo (& then optional ? nullable, optional ! exact, then a heap type), plus the &?fn / &fn function-reference form.",
+        "The sigils must abut the type name with no whitespace. This keeps binary-and (a & b) and and-not (a & !b), which are written spaced, from being mis-scoped; only the rare space-less a &foo / a &!foo is a false positive. The &? forms are unambiguous regardless."
+      ],
+      "patterns": [
+        {
+          "comment": "Function reference: &fn ..., &?fn ...",
+          "match": "(&)(\\?)?(fn)\\b",
+          "captures": {
+            "1": { "name": "keyword.operator.reference.wax" },
+            "2": { "name": "keyword.operator.reference.wax" },
+            "3": { "name": "storage.type.function.wax" }
+          }
+        },
+        {
+          "comment": "Reference to an abstract heap type: &any, &?func, &extern, ...",
+          "match": "(&)(\\?)?(!)?(func|nofunc|exn|noexn|cont|nocont|extern|noextern|any|eq|i31|struct|array|none)\\b",
+          "captures": {
+            "1": { "name": "keyword.operator.reference.wax" },
+            "2": { "name": "keyword.operator.reference.wax" },
+            "3": { "name": "keyword.operator.reference.wax" },
+            "4": { "name": "support.type.heap.wax" }
+          }
+        },
+        {
+          "comment": "Reference to a user-defined type: &Point, &?!Node, ...",
+          "match": "(&)(\\?)?(!)?([\\p{L}_][\\p{L}\\p{N}_]*)",
+          "captures": {
+            "1": { "name": "keyword.operator.reference.wax" },
+            "2": { "name": "keyword.operator.reference.wax" },
+            "3": { "name": "keyword.operator.reference.wax" },
+            "4": { "name": "entity.name.type.wax" }
+          }
+        }
+      ]
     },
     "aggregate-type": {
       "comments": "The type prefix in aggregate literals: {point| ...}, [bytes| ...], chars # \"...\"",

@@ -2,10 +2,18 @@
   "name": "wax",
   "displayName": "Wax",
   "description": "Syntax highlighting for Wax, a Rust-like syntax for WebAssembly.",
-  "version": "0.1.0",
+  "icon": "images/wax.png",
+  "galleryBanner": {
+    "color": "#140D26",
+    "theme": "dark"
+  },
+  "version": "0.1.1",
   "publisher": "wax-wasm",
   "license": "Apache-2.0",
   "author": "Jérôme Vouillon",
+  "bugs": {
+    "url": "https://github.com/ocsigen/wax/issues"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/ocsigen/wax.git",
