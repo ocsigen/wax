@@ -1,7 +1,13 @@
 (library
  (name wax_utils)
  (public_name wax-lib.utils)
- (libraries unix))
+ (libraries unix)
+ (foreign_stubs
+  (language c)
+  (names pager_stubs))
+ (wasm_of_ocaml
+  (javascript_files pager_node.js)
+  (wasm_files pager_node.wat)))
 
 ; unicode_widths.ml is a committed, generated table (character display
 ; widths). Its generator, scripts/build_unicode_width_table.exe, depends on
