@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-c4d75136.js";
+            window.path_to_searchindex_js = "searchindex-870ae184.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-0d649137.js"></script>
@@ -319,6 +319,18 @@ reached, following an unconditional branch, <code>return</code>, or
 whose operand can never have the target type (the two are unrelated in
 the type hierarchy), so the cast always traps and the test is always
 false. Shown by default.</li>
+<li><code>eager-select</code> (group <code>correctness</code>) — a trapping or effectful
+operation in a branch of a <code>?:</code> (which compiles to a <code>select</code>,
+evaluating both branches unconditionally), so it runs even when the
+condition selects the other branch. Shown by default. On Wasm input
+the check covers a folded <code>select</code> (its value operands are distinct
+subtrees); an unfolded <code>select</code> is not flagged.</li>
+<li><code>precedence</code> (group <code>correctness</code>) — two operators whose relative
+precedence is easy to misremember are mixed without parentheses: a
+shift (<code>&lt;&lt;</code>/<code>&gt;&gt;</code>) with arithmetic (<code>+</code>, <code>-</code>, …), or a comparison with
+a bitwise operator (<code>&amp;</code>, <code>|</code>, <code>^</code>). The code is correct, but a reader
+may misread the grouping (<code>1 &lt;&lt; nbits - 1</code> is <code>1 &lt;&lt; (nbits - 1)</code>).
+Shown by default. Wax-only — WAT/WASM have no infix precedence.</li>
 <li><code>redundant-operation</code> (group <code>redundant</code>) — an operation with no effect
 on its result: an arithmetic identity (<code>x + 0</code>, <code>x * 1</code>, <code>x &lt;&lt; 0</code>, …),
 an absorbing operand (<code>x * 0</code>, <code>x &amp; 0</code>), two identical operands
@@ -354,9 +366,11 @@ unused locals.</li>
 text input; the <code>unused</code>/<code>correctness</code> lints are turned on only by
 <code>--validate</code>, and always for <code>check</code>. The <code>naming</code> warnings are produced
 when converting a Wasm module to Wax.</li>
-<li>Every one of these lints applies to WebAssembly text/binary input as well
+<li>Almost all of these lints apply to WebAssembly text/binary input as well
 as Wax — the Wasm validator runs the same checks, so <code>wax check foo.wat</code>
-reports them. On Wasm input <code>unused-result</code> covers discarding a constant or
+reports them. (The exceptions are <code>precedence</code>, which is Wax-only since
+WAT/WASM have no infix precedence, and <code>eager-select</code>, whose Wasm side
+covers only a folded <code>select</code>.) On Wasm input <code>unused-result</code> covers discarding a constant or
 a pure <code>local.get</code>/<code>global.get</code> read; for <code>unused-label</code> a numeric <code>br N</code>
 counts as a use of the label <code>N</code> levels out; <code>cast-always-fails</code> and
 <code>redundant-operation</code> reason about <code>ref.cast</code>/<code>ref.test</code> and constant
@@ -554,7 +568,8 @@ names, flag values (<code>--format</code> → <code>wat</code>/<code>wasm</code>
 <p>Completion has two halves. The generic per-shell scripts ship with the
 <a href="https://opam.ocaml.org/packages/cmdliner/"><code>cmdliner</code></a> package; the <code>wax</code>
 package installs its own completion definitions (and man pages) alongside the
-binary. Installing <code>wax</code> through opam puts both in place.</p>
+binary. Installing <code>wax</code> through opam puts both in place. (These extra files are
+installed on Unix only; they are skipped on native Windows.)</p>
 <p>Then hook the generic scripts into your shell once. For <code>zsh</code>, ensure the
 site-functions directory is on <code>$fpath</code> <strong>before</strong> <code>compinit</code>:</p>
 <pre><code class="language-sh">FPATH="$(opam var share)/zsh/site-functions:$FPATH"

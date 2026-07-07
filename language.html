@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-c4d75136.js";
+            window.path_to_searchindex_js = "searchindex-870ae184.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-0d649137.js"></script>
@@ -404,6 +404,43 @@ x &lt;=u y     <span class="hljs-comment">// Less or equal unsigned</span>
 +x          <span class="hljs-comment">// Positive (no-op for integers)</span>
 !x          <span class="hljs-comment">// Logical not / is_null for references</span></span></pre>
 
+<h3 id="operator-precedence"><a class="header" href="#operator-precedence">Operator Precedence</a></h3>
+<p>Operators are listed below from highest precedence (binds tightest) to lowest.
+The ordering follows <strong>Rust’s</strong> for every operator the two share (Wax adds
+<code>? :</code>, which Rust lacks, just above assignment; it has no short-circuit <code>&amp;&amp;</code>/<code>||</code>
+— <code>&amp;</code>/<code>|</code> are bitwise). Two mixes are worth committing to memory:</p>
+<ul>
+<li><code>&amp;</code>, <code>^</code>, <code>|</code> bind <strong>tighter</strong> than the comparison operators, so <code>a &amp; b == c</code>
+parses as <code>(a &amp; b) == c</code>. Rust agrees; C is the opposite — there it means
+<code>a &amp; (b == c)</code>.</li>
+<li>The shifts bind <strong>looser</strong> than <code>+</code>/<code>-</code>, so <code>1 &lt;&lt; nbits - 1</code> parses as
+<code>1 &lt;&lt; (nbits - 1)</code>, not <code>(1 &lt;&lt; nbits) - 1</code>. (Same in Rust and C.)</li>
+</ul>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Precedence</th><th>Operators</th><th>Associativity</th></tr>
+</thead>
+<tbody>
+<tr><td>highest</td><td><code>.field</code>   <code>f(…)</code>   <code>[…]</code> (field, call, index)</td><td>left</td></tr>
+<tr><td></td><td><code>-x</code>   <code>+x</code>   <code>!x</code> (unary)</td><td>—</td></tr>
+<tr><td></td><td><code>as</code>   <code>is</code> (cast, test)</td><td>left</td></tr>
+<tr><td></td><td><code>*</code>   <code>/</code>   <code>/s</code>   <code>/u</code>   <code>%s</code>   <code>%u</code></td><td>left</td></tr>
+<tr><td></td><td><code>+</code>   <code>-</code></td><td>left</td></tr>
+<tr><td></td><td><code>&lt;&lt;</code>   <code>&gt;&gt;s</code>   <code>&gt;&gt;u</code></td><td>left</td></tr>
+<tr><td></td><td><code>&amp;</code></td><td>left</td></tr>
+<tr><td></td><td><code>^</code></td><td>left</td></tr>
+<tr><td></td><td><code>|</code></td><td>left</td></tr>
+<tr><td></td><td><code>==</code>   <code>!=</code>   <code>&lt;</code>   <code>&gt;</code>   <code>&lt;=</code>   <code>&gt;=</code> (and <code>s</code>/<code>u</code> forms)</td><td>none</td></tr>
+<tr><td></td><td><code>? :</code></td><td>right</td></tr>
+<tr><td>lowest</td><td><code>=</code>   <code>:=</code>   <code>+=</code> … (assignment)</td><td>right</td></tr>
+</tbody>
+</table>
+</div>
+<p>Because the two cross-class mixes above are easy to misread, the
+<a href="cli.html"><code>precedence</code> lint</a> (in the <code>correctness</code> group, on by default) flags a
+shift mixed with arithmetic, or a comparison mixed with a bitwise operator, when
+it is written without disambiguating parentheses.</p>
 <h3 id="method-style-operations"><a class="header" href="#method-style-operations">Method-Style Operations</a></h3>
 <p>Some operations use method syntax. These are calls, so they take parentheses
 even when they have no argument:</p>
@@ -464,7 +501,29 @@ x.<span class="hljs-title">from_bits</span>()   <span class="hljs-comment">// Re
 <pre class="wax-highlight"><span class="hljs wax-code">cond ? val_true : val_false</span></pre>
 
 <p>This maps directly to Wasm’s <code>select</code> instruction.</p>
+<blockquote>
+<p><strong>⚠ Warning — both branches are always evaluated.</strong> Unlike the <code>?:</code> (or
+<code>if</code>/<code>else</code> expression) of most languages, this operator is <em>not</em> lazy: it
+compiles to a <code>select</code>, which computes <em>both</em> <code>val_true</code> and <code>val_false</code>
+before choosing between them. So <code>cond ? 1 /s x : 0</code> still divides by <code>x</code>
+even when <code>cond</code> is false (trapping if <code>x</code> is <code>0</code>), and <code>cond ? f() : g()</code>
+calls <em>both</em> <code>f</code> and <code>g</code>. When a branch may trap or has a side effect, use an
+<a href="#if-expressions"><code>if</code> expression</a> instead — it evaluates only the chosen
+branch. The
+<a href="cli.html"><code>eager-select</code> lint</a> (in the <code>correctness</code> group, on by default)
+flags a trapping or effectful operation in a <code>?:</code> branch.</p>
+</blockquote>
 <h2 id="control-flow"><a class="header" href="#control-flow">Control Flow</a></h2>
+<p>Statements are terminated by <code>;</code>, including the final one that produces the
+block’s or function’s value. The block-shaped statements below —
+<code>do</code>, <code>if</code>, <code>while</code>, <code>loop</code>, <code>dispatch</code>, <code>match</code>, and <code>try</code> — are the
+exception: their closing <code>}</code> ends the statement, so no <code>;</code> is needed. A bare
+<code>;</code> is an empty statement (it does nothing), so a redundant one is harmless
+anywhere and dropped on formatting — most usefully after a block, where the
+reflex of ending every line with <code>;</code> would otherwise be an error. The same
+holds outside function bodies: a stray <code>;</code> is an empty element wherever items
+are listed — among module fields, the declarations of an <code>import</code> block, and
+the arms of a <code>dispatch</code>, <code>match</code>, or <code>catch</code>.</p>
 <h3 id="blocks"><a class="header" href="#blocks">Blocks</a></h3>
 <p>A block groups a sequence of statements, written with <code>do</code>.</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">do</span> {
@@ -785,30 +844,33 @@ module may have at most one:</p>
 <pre class="wax-highlight"><span class="hljs wax-code">(func_ref <span class="hljs-keyword">as</span> &amp;?<span class="hljs-type">callback</span>)(arg)</span></pre>
 
 <h2 id="imports-and-exports"><a class="header" href="#imports-and-exports">Imports and Exports</a></h2>
-<p>A module talks to its host through imports and exports, both written as
-attributes on the field.</p>
+<p>A module talks to its host through imports and exports.</p>
 <p><strong>Export</strong> a definition under a name with <code>#[export = "name"]</code>. It applies to
-functions, globals, memories, tables, and tags, and a field may carry several:</p>
-<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export = </span><span class="hljs-string">"add"</span><span class="hljs-meta">]</span>
+functions, globals, memories, tables, and tags, and a field may carry several.
+The bare <code>#[export]</code> (no name) exports the field under its own Wax name:</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">add</span>(x: <span class="hljs-type">i32</span>, y: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> { x + y; }
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"PI"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">const</span> PI: <span class="hljs-type">f64</span> = <span class="hljs-number">3.14159</span>;</span></pre>
 
-<p><strong>Import</strong> a field from the host with <code>#[import = ("module", "name")]</code>. An
-imported field has no body — a function is declared with just its signature and
-a trailing <code>;</code>, and a global with its type:</p>
-<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[import = (</span><span class="hljs-string">"env"</span><span class="hljs-meta">, </span><span class="hljs-string">"log"</span><span class="hljs-meta">)]</span>
-<span class="hljs-keyword">fn</span> <span class="hljs-title">log</span>(x: <span class="hljs-type">i32</span>);
-
-<span class="hljs-meta">#[import = (</span><span class="hljs-string">"env"</span><span class="hljs-meta">, </span><span class="hljs-string">"base"</span><span class="hljs-meta">)]</span>
-<span class="hljs-keyword">const</span> base: <span class="hljs-type">i32</span>;
+<p><strong>Import</strong> fields from a host module with an <code>import "module" { … }</code> block. Each
+entry has no body — a function is declared with just its signature, a global
+with its type. It is imported under its own Wax name unless a name-only
+<code>#[import = "name"]</code> overrides that:</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">import</span> <span class="hljs-string">"env"</span> {
+    <span class="hljs-keyword">fn</span> <span class="hljs-title">log</span>(x: <span class="hljs-type">i32</span>);
+    <span class="hljs-meta">#[import = </span><span class="hljs-string">"base_value"</span><span class="hljs-meta">]</span>
+    <span class="hljs-keyword">const</span> base: <span class="hljs-type">i32</span>;
+}
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"run"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">run</span>() { <span class="hljs-title">log</span>(base); }</span></pre>
 
-<p>The same field can be both imported and re-exported by giving it both
-attributes.</p>
+<p>A lone import can be written on one line, <code>import "module" &lt;declaration&gt;;</code>:</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">import</span> <span class="hljs-string">"env"</span> <span class="hljs-keyword">fn</span> <span class="hljs-title">trace</span>(x: <span class="hljs-type">i32</span>);</span></pre>
+
+<p>An imported field is re-exported by adding <code>#[export]</code> to its declaration.</p>
 <h2 id="references"><a class="header" href="#references">References</a></h2>
 <h3 id="reference-types"><a class="header" href="#reference-types">Reference Types</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code">&amp;<span class="hljs-type">type</span>           <span class="hljs-comment">// Non-nullable reference</span>

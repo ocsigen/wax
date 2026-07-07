@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-c4d75136.js";
+            window.path_to_searchindex_js = "../searchindex-870ae184.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-0d649137.js"></script>
@@ -245,11 +245,10 @@ subsection of the <code>name</code> custom section, written <code>$name</code> i
 <span class="hljs-keyword">let</span> state: &amp;?<span class="hljs-type">any</span> = <span class="hljs-literal">null</span>;</span></pre>
 
 <h3 id="imported-globals"><a class="header" href="#imported-globals">Imported Globals</a></h3>
-<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[import = (</span><span class="hljs-string">"env"</span><span class="hljs-meta">, </span><span class="hljs-string">"base"</span><span class="hljs-meta">)]</span>
-<span class="hljs-keyword">const</span> base: <span class="hljs-type">i32</span>;
-
-<span class="hljs-meta">#[import = (</span><span class="hljs-string">"env"</span><span class="hljs-meta">, </span><span class="hljs-string">"counter"</span><span class="hljs-meta">)]</span>
-<span class="hljs-keyword">let</span> counter: <span class="hljs-type">i32</span>;</span></pre>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">import</span> <span class="hljs-string">"env"</span> {
+    <span class="hljs-keyword">const</span> base: <span class="hljs-type">i32</span>;
+    <span class="hljs-keyword">let</span> counter: <span class="hljs-type">i32</span>;
+}</span></pre>
 
 <h2 id="tags"><a class="header" href="#tags">Tags</a></h2>
 <p>Tags define exception types for structured exception handling.</p>
@@ -269,8 +268,7 @@ subsection of the <code>name</code> custom section, written <code>$name</code> i
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">tag</span> <span class="hljs-title">yield</span>(value: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span>;</span></pre>
 
 <h3 id="imported-tags"><a class="header" href="#imported-tags">Imported Tags</a></h3>
-<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[import = (</span><span class="hljs-string">"env"</span><span class="hljs-meta">, </span><span class="hljs-string">"js_error"</span><span class="hljs-meta">)]</span>
-<span class="hljs-keyword">tag</span> <span class="hljs-title">js_error</span>(&amp;?<span class="hljs-type">extern</span>);</span></pre>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">import</span> <span class="hljs-string">"env"</span> <span class="hljs-keyword">tag</span> <span class="hljs-title">js_error</span>(&amp;?<span class="hljs-type">extern</span>);</span></pre>
 
 <h2 id="attributes"><a class="header" href="#attributes">Attributes</a></h2>
 <p>Attributes modify module fields. They use the syntax <code>#[name = value]</code>, or <code>#[name]</code> when no value is needed, and appear before the field they modify.</p>
@@ -284,6 +282,10 @@ subsection of the <code>name</code> custom section, written <code>$name</code> i
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"my_error"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">tag</span> <span class="hljs-title">my_error</span>(code: <span class="hljs-type">i32</span>);</span></pre>
+
+<p>The name is optional: a bare <code>#[export]</code> exports the field under its own Wax name.</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export]</span>
+<span class="hljs-keyword">fn</span> <span class="hljs-title">add</span>(x: <span class="hljs-type">i32</span>, y: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> { x + y; }</span></pre>
 
 <p>Multiple exports can share the same function:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export = </span><span class="hljs-string">"add"</span><span class="hljs-meta">]</span>
@@ -299,22 +301,23 @@ field):</p>
     <span class="hljs-comment">// initialization code</span>
 }</span></pre>
 
-<h3 id="import-attribute"><a class="header" href="#import-attribute">Import Attribute</a></h3>
-<p>Import a field from a module. Takes a tuple of <code>("module", "name")</code>:</p>
-<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[import = (</span><span class="hljs-string">"env"</span><span class="hljs-meta">, </span><span class="hljs-string">"log"</span><span class="hljs-meta">)]</span>
-<span class="hljs-keyword">fn</span> <span class="hljs-title">log</span>(msg: <span class="hljs-type">i32</span>);
+<h2 id="imports"><a class="header" href="#imports">Imports</a></h2>
+<p>Import fields from a host module with an <code>import "module" { … }</code> block; a lone
+import can use the one-line <code>import "module" &lt;declaration&gt;;</code> form. Each entry is
+imported under its own Wax name, unless a name-only <code>#[import = "name"]</code>
+overrides that.</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">import</span> <span class="hljs-string">"env"</span> {
+    <span class="hljs-keyword">fn</span> <span class="hljs-title">log</span>(msg: <span class="hljs-type">i32</span>);
+    <span class="hljs-keyword">const</span> memory_base: <span class="hljs-type">i32</span>;
+    <span class="hljs-meta">#[import = </span><span class="hljs-string">"js_error"</span><span class="hljs-meta">]</span>
+    <span class="hljs-keyword">tag</span> <span class="hljs-title">error</span>(code: <span class="hljs-type">i32</span>);
+}
 
-<span class="hljs-meta">#[import = (</span><span class="hljs-string">"env"</span><span class="hljs-meta">, </span><span class="hljs-string">"memory_base"</span><span class="hljs-meta">)]</span>
-<span class="hljs-keyword">const</span> memory_base: <span class="hljs-type">i32</span>;
-
-<span class="hljs-meta">#[import = (</span><span class="hljs-string">"env"</span><span class="hljs-meta">, </span><span class="hljs-string">"error"</span><span class="hljs-meta">)]</span>
-<span class="hljs-keyword">tag</span> <span class="hljs-title">error</span>(code: <span class="hljs-type">i32</span>);</span></pre>
+<span class="hljs-keyword">import</span> <span class="hljs-string">"env"</span> <span class="hljs-keyword">fn</span> <span class="hljs-title">trace</span>(msg: <span class="hljs-type">i32</span>);</span></pre>
 
 <h3 id="combined-import-and-export"><a class="header" href="#combined-import-and-export">Combined Import and Export</a></h3>
-<p>A field can be both imported and re-exported:</p>
-<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[import = (</span><span class="hljs-string">"env"</span><span class="hljs-meta">, </span><span class="hljs-string">"value"</span><span class="hljs-meta">)]</span>
-<span class="hljs-meta">#[export = </span><span class="hljs-string">"value"</span><span class="hljs-meta">]</span>
-<span class="hljs-keyword">const</span> value: <span class="hljs-type">i32</span>;</span></pre>
+<p>A field can be both imported and re-exported by adding <code>#[export]</code> to it:</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">import</span> <span class="hljs-string">"env"</span> <span class="hljs-meta">#[export = </span><span class="hljs-string">"value"</span><span class="hljs-meta">]</span> <span class="hljs-keyword">const</span> value: <span class="hljs-type">i32</span>;</span></pre>
 
 <h2 id="conditional-annotations"><a class="header" href="#conditional-annotations">Conditional Annotations</a></h2>
 <p>Both formats can guard module fields by a condition that a downstream preprocessor evaluates. Wax uses <code>#[if(...)]</code> / <code>#[else]</code>; WAT uses the annotation form <code>(@if &lt;cond&gt; (@then ...) (@else ...))</code>.</p>
@@ -410,11 +413,10 @@ funcs[i] = g;</span></pre>
 <span class="hljs-keyword">type</span> <span class="hljs-type">callback</span> = <span class="hljs-keyword">fn</span>(_: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span>;
 
 <span class="hljs-comment">// 2. Imported globals and functions</span>
-<span class="hljs-meta">#[import = (</span><span class="hljs-string">"env"</span><span class="hljs-meta">, </span><span class="hljs-string">"log"</span><span class="hljs-meta">)]</span>
-<span class="hljs-keyword">fn</span> <span class="hljs-title">log</span>(value: <span class="hljs-type">i32</span>);
-
-<span class="hljs-meta">#[import = (</span><span class="hljs-string">"env"</span><span class="hljs-meta">, </span><span class="hljs-string">"base"</span><span class="hljs-meta">)]</span>
-<span class="hljs-keyword">const</span> base: <span class="hljs-type">i32</span>;
+<span class="hljs-keyword">import</span> <span class="hljs-string">"env"</span> {
+    <span class="hljs-keyword">fn</span> <span class="hljs-title">log</span>(value: <span class="hljs-type">i32</span>);
+    <span class="hljs-keyword">const</span> base: <span class="hljs-type">i32</span>;
+}
 
 <span class="hljs-comment">// 3. Tags</span>
 <span class="hljs-keyword">tag</span> <span class="hljs-title">my_error</span>(code: <span class="hljs-type">i32</span>);
