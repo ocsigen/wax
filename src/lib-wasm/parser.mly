@@ -1000,15 +1000,21 @@ exports:
 
 locals:
 | { [] }
-| LPAREN_LOCAL i = ID t = value_type ")" r = locals
-  { with_loc $sloc (Some i, t) :: r }
+| l = local_decl r = locals { l @ r }
+
+(* One [(local …)] declaration. Kept a separate nonterminal so its [$sloc] spans
+   just this declaration — a rule that also matched the following [locals] would
+   stretch the span (and an anonymous local's diagnostic, which has no name to
+   point at) across every later local. *)
+local_decl:
+| LPAREN_LOCAL i = ID t = value_type ")"
+  { [ with_loc $sloc (Some i, t) ] }
 (* As for fields, only the single-local case gets a comment-anchoring
    location; an anonymous (local t1 t2 ...) shares one span. *)
-| LPAREN_LOCAL l = value_type * ")" r = locals
-  { (match l with
-     | [ t ] -> [ with_loc $sloc (None, t) ]
-     | _ -> List.map (fun t -> Ast.no_loc (None, t)) l)
-    @ r }
+| LPAREN_LOCAL l = value_type * ")"
+  { match l with
+    | [ t ] -> [ with_loc $sloc (None, t) ]
+    | _ -> List.map (fun t -> Ast.no_loc (None, t)) l }
 
 memory:
 | "(" MEMORY id = ID? exports = exports limits = memory_type ")"
