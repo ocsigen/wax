@@ -1423,7 +1423,7 @@ let code ch =
   if pos_in ch - start_pos <> size then error ch "function body size mismatch";
   (* [start_pos] is where this function's locals declaration begins — the origin
      for branch-hint offsets (branch-hinting proposal). *)
-  (start_pos, { locals; instrs })
+  (start_pos, { locals; instrs; loc = Ast.dummy_loc })
 
 let data ch =
   let mode_byte = uint ch in

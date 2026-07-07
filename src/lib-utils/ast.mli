@@ -7,6 +7,9 @@ type ('desc, 'info) annotated = { desc : 'desc; info : 'info }
 type location = { loc_start : Lexing.position; loc_end : Lexing.position }
 (** A source code location range. *)
 
+val dummy_loc : location
+(** A location with dummy start/end positions, for synthesized nodes. *)
+
 val no_loc : 'desc -> ('desc, location) annotated
 (** [no_loc v] wraps [v] with a dummy location. *)
 

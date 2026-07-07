@@ -9,6 +9,7 @@ type location = Wax_utils.Ast.location = {
 }
 
 let no_loc = Wax_utils.Ast.no_loc
+let dummy_loc = Wax_utils.Ast.dummy_loc
 
 module Uint32 = Wax_utils.Uint32
 module Uint64 = Wax_utils.Uint64
@@ -1013,7 +1014,15 @@ module Binary = struct
     mode : 'info elemmode;
   }
 
-  type 'info code = { locals : valtype list; instrs : 'info instr list }
+  type 'info code = {
+    locals : valtype list;
+    instrs : 'info instr list;
+    loc : location;
+        (* The defining function's source span; its [loc_end] is where the body's
+           terminating [end] opcode is mapped (closing brace). [dummy_loc] for a
+           function decoded from a binary, which carries no source location. *)
+  }
+
   type 'info data = { init : string; mode : 'info datamode }
 
   module IntMap = Map.Make (Int)

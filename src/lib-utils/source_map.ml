@@ -30,23 +30,21 @@ let register_file t filename =
       t.next_file_idx <- idx + 1;
       idx
 
-let add_mapping t ~generated_offset ~original_location =
-  let file_idx =
-    register_file t original_location.Ast.loc_start.Lexing.pos_fname
-  in
+let add_mapping_at t ~generated_offset ~(position : Lexing.position) =
+  let file_idx = register_file t position.Lexing.pos_fname in
   let new_mapping =
     {
       generated_offset;
       original_file_idx = file_idx;
-      original_line = original_location.Ast.loc_start.Lexing.pos_lnum - 1;
-      (* 0-indexed *)
+      original_line = position.Lexing.pos_lnum - 1 (* 0-indexed *);
       original_column =
-        original_location.Ast.loc_start.Lexing.pos_cnum
-        - original_location.Ast.loc_start.Lexing.pos_bol;
-      (* 0-indexed *)
+        position.Lexing.pos_cnum - position.Lexing.pos_bol (* 0-indexed *);
     }
   in
   t.mappings <- Mapped new_mapping :: t.mappings
+
+let add_mapping t ~generated_offset ~original_location =
+  add_mapping_at t ~generated_offset ~position:original_location.Ast.loc_start
 
 (* Record that the code at [generated_offset] has no original location, so the
    previous mapping does not bleed into it. *)

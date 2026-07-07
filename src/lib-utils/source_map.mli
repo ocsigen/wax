@@ -12,6 +12,12 @@ val register_file : t -> string -> int
 
 val add_mapping :
   t -> generated_offset:int -> original_location:Ast.location -> unit
+(** Map [generated_offset] to the {e start} of [original_location]. *)
+
+val add_mapping_at :
+  t -> generated_offset:int -> position:Lexing.position -> unit
+(** Map [generated_offset] to a specific source [position] — used to attach the
+    closing [end] opcode of a block or expression to its end position. *)
 
 val add_absent_mapping : t -> generated_offset:int -> unit
 (** [add_absent_mapping t ~generated_offset] records that the code at

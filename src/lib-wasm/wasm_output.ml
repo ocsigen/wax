@@ -240,6 +240,23 @@ module Encoder = struct
      encoding. See [output_branch_hint_section] / the code-section encoder. *)
   let branch_hint_sink = ref (fun (_ : int) (_ : bool) -> ())
 
+  (* A source position is real when it names a file and carries a line/column; a
+     synthesized node instead has [""]/[-1] sentinels. *)
+  let is_real_pos (p : Lexing.position) =
+    p.Lexing.pos_fname <> "" && p.Lexing.pos_lnum <> -1
+    && p.Lexing.pos_cnum <> -1
+
+  (* Record a mapping at the current buffer offset for a closing [end] opcode,
+     attaching it to [pos] (the end of the block or expression). Without this the
+     [end] byte would inherit the previous instruction's location by the source
+     map's sticky rule. A synthesized construct gets an absent mapping instead. *)
+  let map_end ~source_map_t b (pos : Lexing.position) =
+    let generated_offset = Buffer.length b in
+    if is_real_pos pos then
+      Wax_utils.Source_map.add_mapping_at source_map_t ~generated_offset
+        ~position:pos
+    else Wax_utils.Source_map.add_absent_mapping source_map_t ~generated_offset
+
   let rec instr ~source_map_t b (i : Ast.location instr) =
     (* Record where this instruction starts. A synthesized instruction has no
        source location; emit an absent mapping there so the previous location
@@ -255,11 +272,7 @@ module Encoder = struct
     (match i.desc with
     | Folded _ | Hinted _ -> ()
     | _ ->
-        if
-          i.info.Wax_utils.Ast.loc_start.Lexing.pos_fname <> ""
-          && i.info.Wax_utils.Ast.loc_start.Lexing.pos_lnum <> -1
-          && i.info.Wax_utils.Ast.loc_start.Lexing.pos_cnum <> -1
-        then
+        if is_real_pos i.info.Wax_utils.Ast.loc_start then
           Wax_utils.Source_map.add_mapping source_map_t ~generated_offset
             ~original_location:i.info
         else
@@ -303,11 +316,13 @@ module Encoder = struct
         byte b 0x02;
         (match typ with Some t -> blocktype b t | None -> byte b 0x40);
         List.iter (instr ~source_map_t b) block;
+        map_end ~source_map_t b i.info.loc_end;
         byte b 0x0B
     | Loop { typ; block; _ } ->
         byte b 0x03;
         (match typ with Some t -> blocktype b t | None -> byte b 0x40);
         List.iter (instr ~source_map_t b) block;
+        map_end ~source_map_t b i.info.loc_end;
         byte b 0x0B
     | If { typ; if_block; else_block; _ } ->
         byte b 0x04;
@@ -316,6 +331,7 @@ module Encoder = struct
         if else_block.desc <> [] then (
           byte b 0x05;
           List.iter (instr ~source_map_t b) else_block.desc);
+        map_end ~source_map_t b i.info.loc_end;
         byte b 0x0B
     | TryTable { typ; block; catches; _ } ->
         byte b 0x1F;
@@ -339,6 +355,7 @@ module Encoder = struct
                 uint b label)
           b catches;
         List.iter (instr ~source_map_t b) block;
+        map_end ~source_map_t b i.info.loc_end;
         byte b 0x0B
     | Try { typ; block; catches; catch_all; _ } ->
         byte b 0x06;
@@ -355,6 +372,7 @@ module Encoder = struct
             byte b 0x19;
             List.iter (instr ~source_map_t b) block
         | None -> ());
+        map_end ~source_map_t b i.info.loc_end;
         byte b 0x0B
     | Br i ->
         byte b 0x0C;
@@ -1192,8 +1210,24 @@ module Encoder = struct
         List.iter (instr ~source_map_t b) is;
         instr ~source_map_t b i
 
-  let expr ~source_map_t b e =
+  let expr ?end_pos ~source_map_t b e =
     List.iter (instr ~source_map_t b) e;
+    (* Attach the terminating [end] to [end_pos] when the caller knows the
+       enclosing construct's closing position (a function's [}]); otherwise fall
+       back to the end of the last expression, which is the nearest available
+       end-of-body position for a global's [;] or an offset/init expression. An
+       empty body with no fallback gets an absent mapping. *)
+    let rec last = function [] -> None | [ x ] -> Some x | _ :: r -> last r in
+    let pos =
+      match end_pos with
+      | Some _ -> end_pos
+      | None -> Option.map (fun i -> i.Ast.info.loc_end) (last e)
+    in
+    (match pos with
+    | Some pos -> map_end ~source_map_t b pos
+    | None ->
+        Wax_utils.Source_map.add_absent_mapping source_map_t
+          ~generated_offset:(Buffer.length b));
     byte b 0x0B
 end
 
@@ -1538,7 +1572,7 @@ let module_ ~out_channel ?output_file ?opt_source_map_file
                 section-content-relative. The [map_section]-style outer shift
                 below then lifts the whole section to file-absolute offsets. *)
              let cp_fn = Wax_utils.Source_map.checkpoint source_map_t in
-             (Encoder.expr ~source_map_t b_code) c.instrs;
+             Encoder.expr ~end_pos:c.loc.loc_end ~source_map_t b_code c.instrs;
              Encoder.uint b (Buffer.length b_code);
              Wax_utils.Source_map.shift_since source_map_t cp_fn
                ~delta:(Buffer.length b);

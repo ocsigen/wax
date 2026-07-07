@@ -15,6 +15,9 @@ type location = Wax_utils.Ast.location = {
 val no_loc : 'desc -> ('desc, location) annotated
 (** [no_loc d] creates an annotated node with a dummy location. *)
 
+val dummy_loc : location
+(** A location with dummy start/end positions, for synthesized nodes. *)
+
 module Uint32 = Wax_utils.Uint32
 module Uint64 = Wax_utils.Uint64
 
@@ -884,7 +887,15 @@ module Binary : sig
     mode : 'info elemmode;
   }
 
-  type 'info code = { locals : valtype list; instrs : 'info instr list }
+  type 'info code = {
+    locals : valtype list;
+    instrs : 'info instr list;
+    loc : location;
+        (** The defining function's source span; its [loc_end] locates the
+            body's terminating [end] opcode (closing brace) in a source map.
+            [dummy_loc] for a function decoded from a binary. *)
+  }
+
   type 'info data = { init : string; mode : 'info datamode }
 
   module IntMap : Map.S with type key = idx

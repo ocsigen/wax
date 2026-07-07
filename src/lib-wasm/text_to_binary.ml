@@ -742,7 +742,7 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
     let rec process_funcs func_types_by_idx fields func_idx acc =
       match fields with
       | [] -> List.rev acc
-      | { desc = T.Func { typ; locals; instrs; _ }; _ } :: rest ->
+      | { desc = T.Func { typ; locals; instrs; _ }; info = func_loc } :: rest ->
           (* Build local context *)
           let locals_space =
             let num_unnamed_params =
@@ -793,6 +793,7 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
                 List.map
                   (instr ~resolve_string_type ~resolve_func_type func_ctx)
                   instrs;
+              loc = func_loc;
             }
           in
 
