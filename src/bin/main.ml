@@ -707,18 +707,47 @@ let check format_opt strict color warnings features debug defines files =
 
 (*** Command-line interface ***)
 
+(* Shell-completion helpers (cmdliner drives completion through [Cmd.eval]; a
+   converter's [~completion] is what makes its option's *values* complete). *)
+
+(* A completion offering a fixed set of literal tokens, each with a doc string. *)
+let string_completion items =
+  Arg.Completion.make (fun _ ~token:_ ->
+      Ok (List.map (fun (s, doc) -> Arg.Completion.string ~doc s) items))
+
+(* A string argument (a path) that completes to filenames. *)
+let file_conv =
+  let completion =
+    Arg.Completion.make (fun _ ~token:_ -> Ok [ Arg.Completion.files ])
+  in
+  Arg.Conv.of_conv ~completion Arg.string
+
+(* The wax/wat/wasm format converter, shared by every format option. *)
+let format_conv =
+  Arg.Conv.make ~docv:"FORMAT"
+    ~completion:
+      (string_completion
+         [
+           ("wat", "Wasm text format");
+           ("wasm", "Wasm binary format");
+           ("wax", "Wax language");
+         ])
+    ~parser:(fun s -> Result.map_error (fun (`Msg m) -> m) (format_of_string s))
+    ~pp:(fun ppf f -> Format.pp_print_string ppf (string_of_format f))
+    ()
+
 (* Define the input file argument (optional for stdin) *)
 let input_file =
   let doc =
     "Input file (.wat, .wasm, or .wax). Reads from stdin if not specified."
   in
-  Arg.(value & pos 0 (some string) None & info [] ~docv:"INPUT" ~doc)
+  Arg.(value & pos 0 (some file_conv) None & info [] ~docv:"INPUT" ~doc)
 
 (* Define the --output/-o option *)
 let output_file =
   let doc = "Output file. Writes to stdout if not specified." in
   Arg.(
-    value & opt (some string) None & info [ "o"; "output" ] ~docv:"FILE" ~doc)
+    value & opt (some file_conv) None & info [ "o"; "output" ] ~docv:"FILE" ~doc)
 
 (* Define the --input-format option *)
 let input_format =
@@ -726,11 +755,6 @@ let input_format =
     "Input format: wat (Wasm text format), wasm (Wasm binary format), or wax \
      (Wax language). If not specified, auto-detected from filename or defaults \
      to wax."
-  in
-  let format_conv =
-    Arg.conv
-      ( format_of_string,
-        fun ppf fmt -> Format.fprintf ppf "%s" (string_of_format fmt) )
   in
   Arg.(
     value
@@ -742,11 +766,6 @@ let output_format =
   let doc =
     "Output format: wat (Wasm text format), wasm (Wasm binary format), or wax \
      (Wax language). If not specified, defaults to wasm."
-  in
-  let format_conv =
-    Arg.conv
-      ( format_of_string,
-        fun ppf fmt -> Format.fprintf ppf "%s" (string_of_format fmt) )
   in
   Arg.(
     value
@@ -790,8 +809,18 @@ let color_option =
      if output is a TTY."
   in
   let color_conv =
-    Arg.conv
-      (color_of_string, fun ppf c -> Format.fprintf ppf "%s" (string_of_color c))
+    Arg.Conv.make ~docv:"WHEN"
+      ~completion:
+        (string_completion
+           [
+             ("auto", "Color only if the output is a TTY");
+             ("always", "Always color");
+             ("never", "Never color");
+           ])
+      ~parser:(fun s ->
+        Result.map_error (fun (`Msg m) -> m) (color_of_string s))
+      ~pp:(fun ppf c -> Format.pp_print_string ppf (string_of_color c))
+      ()
   in
   Arg.(value & opt color_conv Auto & info [ "color" ] ~docv:"WHEN" ~doc)
 
@@ -800,7 +829,7 @@ let source_map_file_option =
   let doc = "Generate a source map file." in
   Arg.(
     value
-    & opt (some string) None
+    & opt (some file_conv) None
     & info [ "source-map-file" ] ~docv:"FILE" ~doc)
 
 (* Define the --define/-D option (set conditional-compilation variables) *)
@@ -847,20 +876,32 @@ let debug_option =
      pass)."
   in
   let category_conv =
-    let parse s =
-      match Wax_utils.Debug.parse s with
-      | Ok c -> Ok c
-      | Error e -> Error (`Msg e)
-    in
-    let print ppf c =
-      Format.pp_print_string ppf
-        (match (c : Wax_utils.Debug.category) with Timing -> "timing")
-    in
-    Arg.conv (parse, print)
+    Arg.Conv.make ~docv:"CATEGORY" ~parser:Wax_utils.Debug.parse
+      ~pp:(fun ppf c ->
+        Format.pp_print_string ppf
+          (match (c : Wax_utils.Debug.category) with Timing -> "timing"))
+      ()
+  in
+  (* The value is a comma-separated list, so [list category_conv]'s own
+     completion (not the element's) is what fires; complete the last segment,
+     preserving any earlier comma-separated prefix. *)
+  let category_completion =
+    Arg.Completion.make (fun _ ~token ->
+        let prefix =
+          match String.rindex_opt token ',' with
+          | Some i -> String.sub token 0 (i + 1)
+          | None -> ""
+        in
+        Ok
+          (List.map
+             (fun c -> Arg.Completion.string (prefix ^ c))
+             Wax_utils.Debug.categories))
   in
   Arg.(
     value
-    & opt_all (list category_conv) []
+    & opt_all
+        (Arg.Conv.of_conv ~completion:category_completion (list category_conv))
+        []
     & info [ "debug" ] ~docv:"CATEGORY" ~doc)
 
 (* Define the --warn/-W option (set the level of a named warning or group) *)
@@ -874,10 +915,38 @@ let warn_option =
      Repeatable. The $(b,WAX_WARN) environment variable sets defaults applied \
      before these (see the ENVIRONMENT section)."
   in
+  (* [NAME=LEVEL]: before the [=] complete the warning/group names, after it the
+     three levels (as full [NAME=LEVEL] tokens, since a directive replaces the
+     whole argument). *)
+  let warn_completion =
+    Arg.Completion.make (fun _ ~token ->
+        match String.index_opt token '=' with
+        | Some i ->
+            let name = String.sub token 0 i in
+            Ok
+              (List.map
+                 (fun lvl -> Arg.Completion.string (name ^ "=" ^ lvl))
+                 [ "hidden"; "warning"; "error" ])
+        | None ->
+            let warnings =
+              List.map
+                (fun w ->
+                  Arg.Completion.string
+                    ~doc:(Wax_utils.Warning.description w)
+                    (Wax_utils.Warning.name w))
+                Wax_utils.Warning.all
+            in
+            let groups =
+              List.map
+                (fun g -> Arg.Completion.string ~doc:"warning group" g)
+                ("all" :: Wax_utils.Warning.groups)
+            in
+            Ok (warnings @ groups))
+  in
   let warn_conv =
     let parse s =
       match Wax_utils.Warning.parse_spec s with
-      | Error e -> Error (`Msg e)
+      | Error e -> Error e
       | Ok (name, level) -> (
           (* Reject an unknown name now (rather than when building the policy)
              so the error is reported like any other argument error. *)
@@ -885,7 +954,7 @@ let warn_option =
             Wax_utils.Warning.set Wax_utils.Warning.default_policy name level
           with
           | Ok _ -> Ok (name, level)
-          | Error e -> Error (`Msg e))
+          | Error e -> Error e)
     in
     let print ppf ((name, level) : string * Wax_utils.Warning.level) =
       let level =
@@ -896,7 +965,8 @@ let warn_option =
       in
       Format.fprintf ppf "%s=%s" name level
     in
-    Arg.conv (parse, print)
+    Arg.Conv.make ~docv:"NAME=LEVEL" ~completion:warn_completion ~parser:parse
+      ~pp:print ()
   in
   Arg.(
     value & opt_all warn_conv [] & info [ "W"; "warn" ] ~docv:"NAME=LEVEL" ~doc)
@@ -909,17 +979,30 @@ let feature_option =
      settings win. Known: $(b,custom-descriptors), $(b,compact-import-section) \
      (both off by default)."
   in
+  (* [NAME[=on|off]]: before the [=] complete the feature names, after it the two
+     values (as full tokens). *)
+  let feature_completion =
+    Arg.Completion.make (fun _ ~token ->
+        match String.index_opt token '=' with
+        | Some i ->
+            let name = String.sub token 0 i in
+            Ok
+              (List.map
+                 (fun v -> Arg.Completion.string (name ^ "=" ^ v))
+                 [ "on"; "off" ])
+        | None ->
+            Ok
+              (List.map
+                 (fun f -> Arg.Completion.string (Wax_utils.Feature.name f))
+                 Wax_utils.Feature.all))
+  in
   let feature_conv =
-    let parse s =
-      match Wax_utils.Feature.parse_spec s with
-      | Ok v -> Ok v
-      | Error e -> Error (`Msg e)
-    in
-    let print ppf ((t, b) : Wax_utils.Feature.t * bool) =
-      Format.fprintf ppf "%s=%s" (Wax_utils.Feature.name t)
-        (if b then "on" else "off")
-    in
-    Arg.conv (parse, print)
+    Arg.Conv.make ~docv:"NAME" ~completion:feature_completion
+      ~parser:Wax_utils.Feature.parse_spec
+      ~pp:(fun ppf ((t, b) : Wax_utils.Feature.t * bool) ->
+        Format.fprintf ppf "%s=%s" (Wax_utils.Feature.name t)
+          (if b then "on" else "off"))
+      ()
   in
   Arg.(
     value & opt_all feature_conv [] & info [ "X"; "feature" ] ~docv:"NAME" ~doc)
@@ -944,11 +1027,6 @@ let format_input =
     "Treat all input files as this format (wat, wasm or wax), overriding the \
      detection from each file's extension."
   in
-  let format_conv =
-    Arg.conv
-      ( format_of_string,
-        fun ppf fmt -> Format.fprintf ppf "%s" (string_of_format fmt) )
-  in
   Arg.(
     value
     & opt (some format_conv) None
@@ -957,12 +1035,12 @@ let format_input =
 (* Define the input files of the format command *)
 let format_files =
   let doc = "Input files (.wat, .wasm or .wax) to format." in
-  Arg.(non_empty & pos_all string [] & info [] ~docv:"FILE" ~doc)
+  Arg.(non_empty & pos_all file_conv [] & info [] ~docv:"FILE" ~doc)
 
 (* Define the input files of the check command *)
 let check_files =
   let doc = "Input files (.wat, .wasm or .wax) to validate." in
-  Arg.(non_empty & pos_all string [] & info [] ~docv:"FILE" ~doc)
+  Arg.(non_empty & pos_all file_conv [] & info [] ~docv:"FILE" ~doc)
 
 (* Combine into command *)
 let convert_term =
