@@ -28,7 +28,7 @@ literal builds a byte array via `array.new_fixed`, with its type taken from a
   )
   
   (func $binary_blob (export "binary_blob") (result (ref $chars))
-    (@string $chars "a\01b")
+    (@string $chars "\61\01\62")
   )
 
 Through WAT the literals are kept as `(@char …)` / `(@string …)` annotations, so
@@ -72,7 +72,7 @@ as for a redundant name on any other construction literal.
   
   #[export = "binary_blob"]
   fn binary_blob() -> &chars {
-      "a\01b";
+      "\61\01\62";
   }
 
 Through WASM the round-trip is best-effort. Character literals lowered to a

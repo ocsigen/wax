@@ -74,11 +74,23 @@ let scalar_of_hex s =
   | Some n when Uchar.is_valid n -> Some (Uchar.unsafe_of_int n)
   | _ -> None
 
+(* Whether [s] contains a control character that a readable rendering would
+   have to emit as a [\HH] hex escape (anything below U+0020 other than tab,
+   newline and carriage return, or U+007F). In valid UTF-8 such code points are
+   always single ASCII bytes, so we can scan the bytes directly. *)
+let has_hex_escape s =
+  String.exists
+    (fun c ->
+      let c = Char.code c in
+      (c < 32 && c <> 9 (* '\t' *) && c <> 10 (* '\n' *) && c <> 13 (* '\r' *))
+      || c = 127)
+    s
+
 let escape_string s =
   let b = Buffer.create (String.length s + 2) in
-  if String.is_valid_utf_8 s then
-    (* Valid UTF-8: keep it readable, escaping only the characters a string
-       literal cannot carry raw (controls, the quote and the backslash). *)
+  if String.is_valid_utf_8 s && not (has_hex_escape s) then
+    (* Valid UTF-8 with no character needing a hex escape: keep it readable,
+       escaping only the quote and the backslash. *)
     let rec loop i len =
       if i < len then (
         let dec = String.get_utf_8_uchar s i in
