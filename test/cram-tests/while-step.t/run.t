@@ -121,3 +121,30 @@ lowers back to the same Wasm.
       }
       t;
   }
+
+A labelled loop wraps its body in a block, so the continue-expression is
+evaluated *outside* that block. A local written in the body but read by the step
+therefore cannot be declared inside the body — its declaration stays before the
+loop, where both the body and the step can see it:
+
+  $ wax -i wat -f wax - <<'WAT'
+  > (module (func $f (param $n i32) (result i32) (local $i i32) (local $stride i32)
+  >   (loop $loop
+  >     (if (i32.lt_s (local.get $i) (local.get $n))
+  >       (then
+  >         (block $l
+  >           (local.set $stride (i32.mul (local.get $i) (i32.const 2)))
+  >           (br_if $l (i32.gt_s (local.get $stride) (i32.const 100))))
+  >         (local.set $i (i32.add (local.get $i) (local.get $stride)))
+  >         (br $loop))))
+  >   (local.get $i)))
+  > WAT
+  fn f(n: i32) -> i32 {
+      let i: i32;
+      let stride: i32;
+      'l: while i <s n : (i += stride) {
+          stride = i * 2;
+          br_if 'l stride >s 100;
+      }
+      i;
+  }

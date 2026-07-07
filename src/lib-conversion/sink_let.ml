@@ -278,12 +278,40 @@ let rec sink_into ((name, _) as decl) s =
       if loop_carried name.desc r.block then None
       else Some { s with desc = Loop { r with block = bl r.block } }
   | TryTable r -> Some { s with desc = TryTable { r with block = bl r.block } }
-  | While r ->
-      (* The test is evaluated in the enclosing scope (re-checked each
+  | While r -> (
+      if
+        (* The test is evaluated in the enclosing scope (re-checked each
          iteration), so a use there pins the declaration outside the loop; so
          does a value the body carries across iterations. *)
-      if occurs name.desc r.cond || loop_carried name.desc r.block then None
-      else Some { s with desc = While { r with block = bl r.block } }
+        occurs name.desc r.cond || loop_carried name.desc r.block
+      then None
+      else
+        match r.step with
+        | Some step when occurs name.desc step -> (
+            (* The continue-expression reads the local. A labelled loop wraps its
+               body in a block (the continue target) and runs the step outside
+               that block (see [Ast_utils.lower_while]), so no declaration in the
+               body can reach the step — leave it before the loop. An unlabelled
+               loop lowers the step right after the body in the same scope, so
+               sink across body-and-step, then split the step back off. *)
+            match r.label with
+            | Some _ -> None
+            | None -> (
+                match List.rev (sink_decl decl (r.block @ [ step ])) with
+                | step' :: rev_block ->
+                    Some
+                      {
+                        s with
+                        desc =
+                          While
+                            {
+                              r with
+                              block = List.rev rev_block;
+                              step = Some step';
+                            };
+                      }
+                | [] -> None))
+        | _ -> Some { s with desc = While { r with block = bl r.block } })
   | If r ->
       (* The condition is evaluated in the enclosing scope, so a use there
          pins the declaration outside the [If]; a use in both branches cannot
