@@ -2937,12 +2937,13 @@ let binop_kind_name = function
   | `Bitwise -> "bitwise"
   | `Comparison -> "comparison"
 
-(* The two operator-class pairs whose relative precedence is a classic footgun:
-   a shift mixed with arithmetic (in Wax, as in C, [+]/[-] bind tighter than
-   [<<], so [1 << n - 1] means [1 << (n - 1)]), and a comparison mixed with a
-   bitwise operator (Wax binds [&]/[|]/[^] tighter than comparison — the reverse
-   of C, where [a & b == c] means [a & (b == c)]). In every such mix the inner
-   (child) operator is the tighter-binding one. *)
+(* The two operator-class pairs whose relative precedence is a classic footgun.
+   Wax follows Rust's precedence: a shift mixed with arithmetic ([+]/[-] bind
+   tighter than [<<] in Rust and C alike, so [1 << n - 1] means [1 << (n - 1)]),
+   and a comparison mixed with a bitwise operator (Rust and Wax bind [&]/[|]/[^]
+   tighter than comparison — the reverse of C, where [a & b == c] means
+   [a & (b == c)]). In every such mix the inner (child) operator is the
+   tighter-binding one. *)
 let confusing_precedence outer inner =
   match (outer, inner) with
   | `Shift, `Arith | `Arith, `Shift -> true

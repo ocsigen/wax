@@ -317,13 +317,15 @@ x <=u y     // Less or equal unsigned
 ### Operator Precedence
 
 Operators are listed below from highest precedence (binds tightest) to lowest.
-Wax's table differs from C's in two ways worth committing to memory:
+The ordering follows **Rust's** for every operator the two share (Wax adds
+`? :`, which Rust lacks, just above assignment; it has no short-circuit `&&`/`||`
+— `&`/`|` are bitwise). Two mixes are worth committing to memory:
 
 - `&`, `^`, `|` bind **tighter** than the comparison operators, so `a & b == c`
-  parses as `(a & b) == c` — the sane grouping, and the opposite of C, where it
-  means `a & (b == c)`.
-- The shifts bind **looser** than `+`/`-` (as in C), so `1 << nbits - 1` parses
-  as `1 << (nbits - 1)`, not `(1 << nbits) - 1`.
+  parses as `(a & b) == c`. Rust agrees; C is the opposite — there it means
+  `a & (b == c)`.
+- The shifts bind **looser** than `+`/`-`, so `1 << nbits - 1` parses as
+  `1 << (nbits - 1)`, not `(1 << nbits) - 1`. (Same in Rust and C.)
 
 | Precedence | Operators | Associativity |
 |------------|-----------|---------------|

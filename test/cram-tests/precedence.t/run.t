@@ -1,9 +1,10 @@
 The `precedence` lint (in the `correctness` group) flags two operator mixes
-whose relative precedence is easy to misremember: a shift with arithmetic (in
-Wax, as in C, `+`/`-` bind tighter than `<<`, so `1 << nbits - 1` means
-`1 << (nbits - 1)`), and a comparison with a bitwise operator (Wax binds
-`&`/`|`/`^` tighter than comparison — the reverse of C). It is purely syntactic
-and Wax-only: WAT/WASM have no infix precedence to misread.
+whose relative precedence is easy to misremember. Wax follows Rust's precedence:
+a shift with arithmetic (`+`/`-` bind tighter than `<<` in Rust and C alike, so
+`1 << nbits - 1` means `1 << (nbits - 1)`), and a comparison with a bitwise
+operator (Rust and Wax bind `&`/`|`/`^` tighter than comparison — the reverse of
+C). It is purely syntactic and Wax-only: WAT/WASM have no infix precedence to
+misread.
 
 It fires only when the confusingly-tighter operator is not already
 parenthesized, so both explicit groupings below stay silent, as does a mix
