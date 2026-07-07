@@ -2922,33 +2922,15 @@ let lint_eager_select ctx ~select arm =
   | Some location -> Error.eager_select ctx.diagnostics ~location ~select
   | None -> ()
 
-(* The precedence class of a binary operator, for the [precedence] lint. Within
-   a class the relative precedence is either standard or explicit (assignment),
-   so only cross-class mixes matter. *)
-let binop_kind = function
-  | Shl | Shr _ -> `Shift
-  | Add | Sub | Mul | Div _ | Rem _ -> `Arith
-  | And | Or | Xor -> `Bitwise
-  | Eq | Ne | Lt _ | Gt _ | Le _ | Ge _ -> `Comparison
-
+(* Human-readable name of a binary operator's precedence class, for the
+   [precedence] lint's message. The classification and the confusing-mix table
+   are shared with the Wax printer — see {!Ast_utils.binop_kind} and
+   {!Ast_utils.confusing_precedence}. *)
 let binop_kind_name = function
   | `Shift -> "shift"
   | `Arith -> "arithmetic"
   | `Bitwise -> "bitwise"
   | `Comparison -> "comparison"
-
-(* The two operator-class pairs whose relative precedence is a classic footgun.
-   Wax follows Rust's precedence: a shift mixed with arithmetic ([+]/[-] bind
-   tighter than [<<] in Rust and C alike, so [1 << n - 1] means [1 << (n - 1)]),
-   and a comparison mixed with a bitwise operator (Rust and Wax bind [&]/[|]/[^]
-   tighter than comparison — the reverse of C, where [a & b == c] means
-   [a & (b == c)]). In every such mix the inner (child) operator is the
-   tighter-binding one. *)
-let confusing_precedence outer inner =
-  match (outer, inner) with
-  | `Shift, `Arith | `Arith, `Shift -> true
-  | `Comparison, `Bitwise | `Bitwise, `Comparison -> true
-  | _ -> false
 
 (* Whether the operand [child] of a binary operator was written parenthesized.
    Parentheses are erased by the grammar ([1 << (n - 1)] and [1 << n - 1] parse
@@ -2980,18 +2962,21 @@ let operand_parenthesized ctx ~side (child : _ Ast.instr) =
 
 (* The [precedence] lint: flag a binary operator [op] one of whose operands is
    itself a binary operator of a confusingly-related class (see
-   {!confusing_precedence}), written without disambiguating parentheses. *)
+   {!Ast_utils.confusing_precedence}), written without disambiguating
+   parentheses. The Wax printer parenthesises exactly these mixes (see
+   [Output]), so re-printed / decompiled Wax stays quiet under the lint. *)
 let lint_precedence ctx (op : (binop, location) annotated) e1 e2 =
-  let outer = binop_kind op.desc in
+  let outer = Ast_utils.binop_kind op.desc in
   List.iter
     (fun (child, side) ->
       match child.desc with
       | BinOp (inner_op, _, _)
-        when confusing_precedence outer (binop_kind inner_op.desc)
+        when Ast_utils.confusing_precedence outer
+               (Ast_utils.binop_kind inner_op.desc)
              && not (operand_parenthesized ctx ~side child) ->
           Error.precedence ctx.diagnostics ~location:op.info
             ~inner:inner_op.info ~outer_kind:(binop_kind_name outer)
-            ~inner_kind:(binop_kind_name (binop_kind inner_op.desc))
+            ~inner_kind:(binop_kind_name (Ast_utils.binop_kind inner_op.desc))
       | _ -> ())
     [ (e1, `Left); (e2, `Right) ]
 

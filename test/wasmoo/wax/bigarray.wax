@@ -518,7 +518,7 @@ fn double_to_float16(f: f64) -> i32 {
         if x <u 0x38800000 {
             o = (x.from_bits() + 0.5).to_bits() - 0x3f000000;
         } else {
-            o = x + 0xC8000FFF + (x >>u 13 & 1) >>u 13;
+            o = (x + 0xC8000FFF + (x >>u 13 & 1)) >>u 13;
         }
     }
     o | sign >>u 16;

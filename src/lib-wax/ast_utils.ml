@@ -390,3 +390,26 @@ let rec iter_fields f l =
           Option.iter (iter_fields f) else_fields
       | _ -> ())
     l
+
+(* The precedence class of a binary operator. Shared by the [precedence] lint
+   (see [Typing.lint_precedence]) and the Wax printer (see [Output]), so the
+   parentheses the printer adds match exactly the mixes the lint would flag. *)
+type binop_kind = [ `Shift | `Arith | `Bitwise | `Comparison ]
+
+let binop_kind : Ast.binop -> binop_kind = function
+  | Shl | Shr _ -> `Shift
+  | Add | Sub | Mul | Div _ | Rem _ -> `Arith
+  | And | Or | Xor -> `Bitwise
+  | Eq | Ne | Lt _ | Gt _ | Le _ | Ge _ -> `Comparison
+
+(* Whether a binary operator of kind [outer] applied to an operand that is
+   itself a binary operator of kind [inner] is a precedence footgun: a shift
+   mixed with arithmetic, or a comparison mixed with a bitwise operator. In such
+   a mix the inner (operand) operator is the tighter-binding one, and a reader
+   coming from C (whose table differs — see docs/src/language.md) may misgroup
+   it. The relation is symmetric. *)
+let confusing_precedence (outer : binop_kind) (inner : binop_kind) =
+  match (outer, inner) with
+  | `Shift, `Arith | `Arith, `Shift -> true
+  | `Comparison, `Bitwise | `Bitwise, `Comparison -> true
+  | _ -> false

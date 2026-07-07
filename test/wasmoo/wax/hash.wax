@@ -71,8 +71,8 @@ fn caml_hash_mix_int64(h: i32, d: i64) -> i32 {
 #[export = "caml_hash_mix_double"]
 fn caml_hash_mix_double(h: i32, d: f64) -> i32 {
     let i = d.to_bits();
-    if i & 0x7FF0000000000000 == 0x7ff0000000000000 {
-        if i & 0xFFFFFFFFFFFFF != 0 {
+    if (i & 0x7FF0000000000000) == 0x7ff0000000000000 {
+        if (i & 0xFFFFFFFFFFFFF) != 0 {
             i = 0x7ff0000000000001;
         }
     }
@@ -85,8 +85,8 @@ fn caml_hash_mix_double(h: i32, d: f64) -> i32 {
 #[export = "caml_hash_mix_float"]
 fn caml_hash_mix_float(h: i32, d: f32) -> i32 {
     let i = d.to_bits();
-    if i & 0x7F800000 == 0x7F800000 {
-        if i & 0x7FFFFF != 0 {
+    if (i & 0x7F800000) == 0x7F800000 {
+        if (i & 0x7FFFFF) != 0 {
             i = 0x7F800001;
         }
     }
@@ -98,7 +98,7 @@ fn caml_hash_mix_float(h: i32, d: f32) -> i32 {
 
 #[export = "caml_hash_mix_float16"]
 fn caml_hash_mix_float16(h: i32, i: i32) -> i32 {
-    if i & 0x7c00 == 0x7c00 {
+    if (i & 0x7c00) == 0x7c00 {
         if i & 0x03ff {
             i = 0x7C01;
         }
@@ -200,7 +200,7 @@ fn caml_hash(count: &eq, limit: &eq, seed: &eq, obj: &eq) -> &eq {
                         // abstract tag: block contents unknown, do nothing
                         br_if 'loop tg == abstract_tag;
                         len = bv.length();
-                        h = caml_hash_mix_int(h, len - 1 << 10 | tg);
+                        h = caml_hash_mix_int(h, (len - 1) << 10 | tg);
                         i = 1;
                         'block_iter: loop {
                             br_if 'loop i >=u len;

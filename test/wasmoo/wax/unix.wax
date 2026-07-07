@@ -1825,7 +1825,7 @@ type flags = [i16];
                 path_addr,
                 path_len,
                 flags >>u 4 & 0xF,
-                flags & 3 == 3?0x860007e:flags & 2?0x860007c:0x820003e,
+                (flags & 3) == 3?0x860007e:flags & 2?0x860007c:0x820003e,
                 0,
                 flags >>u 8,
                 buffer,

@@ -448,7 +448,7 @@ fn shift_left(d1: &digits, o1: i32, l1: i32, d2: &digits, o2: i32, nbits: i32) {
         let idx = o1 + i;
         let a = d1[idx];
         d1[idx] = a << nbits | wrap;
-        wrap = a >>u 32 - nbits;
+        wrap = a >>u (32 - nbits);
     }
     d2[o2] = wrap;
 }
@@ -470,7 +470,7 @@ fn shift_right(d1: &digits, o1: i32, l1: i32, d2: &digits, o2: i32, nbits: i32) 
         let idx = o1 + i;
         let a = d1[idx];
         d1[idx] = a >>u nbits | wrap;
-        wrap = a << 32 - nbits;
+        wrap = a << (32 - nbits);
     }
     d2[o2] = wrap;
 }

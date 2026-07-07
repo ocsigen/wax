@@ -402,7 +402,7 @@ fn caml_get_cached_method(obj: &eq, vtag: &eq, vcacheid: &eq) -> &eq {
     let li = 3;
     let hi = (meths[1] as i32_u << 1) + 1;
     while li <u hi {
-        let mi = li + hi >>u 1 | 1;
+        let mi = (li + hi) >>u 1 | 1;
         if tg <s meths[mi + 1] as i32_s {
             hi = mi - 2;
         } else {
@@ -420,7 +420,7 @@ fn caml_get_public_method(obj: &eq, vtag: &eq) -> &eq {
     let li = 3;
     let hi = (meths[1] as i32_u << 1) + 1;
     while li <u hi {
-        let mi = li + hi >>u 1 | 1;
+        let mi = (li + hi) >>u 1 | 1;
         if tg <s meths[mi + 1] as i32_s {
             hi = mi - 2;
         } else {

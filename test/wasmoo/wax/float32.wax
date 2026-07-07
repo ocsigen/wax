@@ -94,8 +94,8 @@ fn float32_hash(v: &eq) -> i32 {
     let i = unbox_float32(v).to_bits();
     // Normalize NaNs and negative zero so that equal float32 values hash
     // identically, like caml_hash_mix_float.
-    if i & 0x7F800000 == 0x7F800000 {
-        if i & 0x7FFFFF != 0 {
+    if (i & 0x7F800000) == 0x7F800000 {
+        if (i & 0x7FFFFF) != 0 {
             i = 0x7F800001;
         }
     }

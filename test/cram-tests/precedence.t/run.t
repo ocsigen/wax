@@ -30,3 +30,34 @@ within one class (`x + y * 2`):
   6 │ 
   7 │ #[export = "paren_inner"]
   Hint: Add parentheses to make the grouping explicit.
+
+The Wax printer adds these same parentheses when it emits code, so decompiled or
+reformatted Wax stays quiet under the lint (the confusion table is shared). The
+two flagged mixes gain parentheses; the already-parenthesised and same-class
+forms are unchanged:
+
+  $ wax convert -f wax prec.wax
+  #[export = "shift_arith"]
+  fn shift_arith(nbits: i32) -> i32 {
+      1 << (nbits - 1);
+  }
+  
+  #[export = "cmp_bitwise"]
+  fn cmp_bitwise(x: i32, y: i32) -> i32 {
+      (x & y) == 0;
+  }
+  
+  #[export = "paren_inner"]
+  fn paren_inner(nbits: i32) -> i32 {
+      1 << (nbits - 1);
+  }
+  
+  #[export = "paren_outer"]
+  fn paren_outer(nbits: i32) -> i32 {
+      (1 << nbits) - 1;
+  }
+  
+  #[export = "same_class"]
+  fn same_class(x: i32, y: i32) -> i32 {
+      x + y * 2;
+  }

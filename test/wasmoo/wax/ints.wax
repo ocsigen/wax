@@ -130,7 +130,7 @@ fn parse_int(v: &eq, nbits: i32, errmsg: &eq) -> i32 {
         }
     }
     if signedness {
-        threshold = 1 << nbits - 1;
+        threshold = 1 << (nbits - 1);
         if sign >s 0 {
             if res >=u threshold {
                 caml_failwith(errmsg);

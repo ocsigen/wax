@@ -1081,8 +1081,23 @@ let rec instr prec pp (i : _ instr) =
           instr Instruction pp i3)
   | BinOp (op, i, i') ->
       let _, left, right = prec_op op.desc in
+      (* The [precedence] lint (see [Typing.lint_precedence]) flags a shift mixed
+         with arithmetic, or a comparison with a bitwise operator, written
+         without parentheses — precedence alone would not require them. Emit them
+         anyway around such an operand (by demanding an [Atom] there) so
+         re-printed / decompiled Wax stays quiet under the lint. The confusion
+         table is shared with the lint ({!Ast_utils.confusing_precedence}). *)
+      let operand_prec default (child : _ instr) =
+        match child.desc with
+        | BinOp (child_op, _, _)
+          when Ast_utils.confusing_precedence
+                 (Ast_utils.binop_kind op.desc)
+                 (Ast_utils.binop_kind child_op.desc) ->
+            Atom
+        | _ -> default
+      in
       box pp ~indent:indent_level (fun () ->
-          instr left pp i;
+          instr (operand_prec left i) pp i;
           (* Break *before* the operator (rustfmt style: a wrapped operator
              leads its continuation line), so only the space ahead of it may
              break; the space after it is a plain, non-breaking blank. The
@@ -1091,7 +1106,7 @@ let rec instr prec pp (i : _ instr) =
           space pp ();
           atomic_node pp (Some op.info) (fun () -> operator pp (binop op.desc));
           Wax_utils.Printer.string pp.base.printer " ";
-          instr right pp i')
+          instr (operand_prec right i') pp i')
   | UnOp (op, i) ->
       atomic_node pp (Some op.info) (fun () -> operator pp (unop op.desc));
       instr UnaryPrefix pp i

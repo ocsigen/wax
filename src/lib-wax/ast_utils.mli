@@ -59,3 +59,17 @@ val iter_fields :
   (('info Ast.modulefield, Ast.location) Ast.annotated -> unit) ->
   'info Ast.module_ ->
   unit
+
+type binop_kind = [ `Shift | `Arith | `Bitwise | `Comparison ]
+(** The precedence class of a binary operator, shared by the [precedence] lint
+    ({!Typing}) and the Wax printer ({!Output}) so the parentheses the printer
+    emits match exactly the operator mixes the lint would flag. *)
+
+val binop_kind : Ast.binop -> binop_kind
+(** [binop_kind op] is the precedence class of [op]. *)
+
+val confusing_precedence : binop_kind -> binop_kind -> bool
+(** [confusing_precedence outer inner] is whether a binary operator of kind
+    [outer] whose operand is a binary operator of kind [inner] is a precedence
+    footgun — a shift mixed with arithmetic, or a comparison mixed with a
+    bitwise operator. Symmetric. *)
