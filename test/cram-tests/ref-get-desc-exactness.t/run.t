@@ -15,7 +15,7 @@ type.
   }
   // a bottom (null) operand fits the exact operand type -> exact descriptor
   #[export = "null"]
-  fn null_2() -> &!b {
+  fn f() -> &!b {
       (null as &?!a).descriptor;
   }
   // inexact operand -> inexact descriptor

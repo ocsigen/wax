@@ -34,6 +34,12 @@ val add' : ?loc:Wax_utils.Ast.location -> t -> string -> string * outcome
     was previously claimed. [loc] records this name's source location, so a
     later collision with it can point back here. *)
 
+val is_reserved : t -> string -> bool
+(** [is_reserved t name] is [true] when [name] is one of the namespace's
+    reserved words (a Wax keyword), independent of any names already added. Used
+    to skip an inferred name (an export or import name) that is a keyword, since
+    the suffixed rename it would force reads worse than a generated default. *)
+
 val reserve : t -> string -> unit
 (** [reserve t name] reserves [name] in the namespace [t]. If [name] is already
     taken or reserved, nothing happens. If it is free, it is marked as taken.

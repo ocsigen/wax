@@ -20,8 +20,7 @@
     import "fail" fn caml_failwith(&eq);
     import "marshal" let caml_intern_decompress_input: &?decompress;
     import "zstd" {
-        #[import = "zstd_memory"]
-        memory m: i32 [2];
+        memory zstd_memory: i32 [2];
         fn zstd_reset();
         fn zstd_alloc(i32) -> i32;
         fn zstd_decompress(i32, i32, i32, i32) -> i32;
@@ -59,7 +58,7 @@
             let i: i32;
             'cont: loop {
                 br_if 'done i == len;
-                m.store8(dst + i, src[src_ofs + i] as i32_u);
+                zstd_memory.store8(dst + i, src[src_ofs + i] as i32_u);
                 i += 1;
                 br 'cont;
             }
@@ -72,7 +71,7 @@
             let i: i32;
             'cont: loop {
                 br_if 'done i == len;
-                dst[dst_ofs + i] = m.load8(src + i) as i32_u;
+                dst[dst_ofs + i] = zstd_memory.load8(src + i) as i32_u;
                 i += 1;
                 br 'cont;
             }

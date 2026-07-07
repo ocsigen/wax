@@ -20,7 +20,7 @@
     (import "fail" "caml_failwith" (func $caml_failwith (param (ref eq))))
     (import "marshal" "caml_intern_decompress_input"
       (global $caml_intern_decompress_input (mut (ref null $decompress))))
-    (import "zstd" "zstd_memory" (memory $m 2))
+    (import "zstd" "zstd_memory" (memory $zstd_memory 2))
     (import "zstd" "zstd_reset" (func $zstd_reset))
     (import "zstd" "zstd_alloc" (func $zstd_alloc (param i32) (result i32)))
     (import "zstd" "zstd_decompress"
@@ -55,7 +55,7 @@
       (block $done
         (loop $cont
           (br_if $done (i32.eq (local.get $i) (local.get $len)))
-          (i32.store8 $m (i32.add (local.get $dst) (local.get $i))
+          (i32.store8 $zstd_memory (i32.add (local.get $dst) (local.get $i))
             (array.get_u $bytes (local.get $src)
               (i32.add (local.get $src_ofs) (local.get $i))))
           (local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -71,7 +71,8 @@
           (br_if $done (i32.eq (local.get $i) (local.get $len)))
           (array.set $bytes (local.get $dst)
             (i32.add (local.get $dst_ofs) (local.get $i))
-            (i32.load8_u $m (i32.add (local.get $src) (local.get $i))))
+            (i32.load8_u $zstd_memory
+              (i32.add (local.get $src) (local.get $i))))
           (local.set $i (i32.add (local.get $i) (i32.const 1)))
           (br $cont))))
 

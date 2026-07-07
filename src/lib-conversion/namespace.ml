@@ -123,6 +123,7 @@ let add' ?loc ns x =
       (x, Available)
 
 let add ns x = fst (add' ns x)
+let is_reserved ns x = StringMap.mem x ns.reserved
 
 let reserve ns x =
   if not (StringMap.mem x ns.existing_names) then

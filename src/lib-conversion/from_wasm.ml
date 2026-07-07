@@ -133,20 +133,35 @@ module Sequence = struct
           (* [src] is the source identifier the name was taken from (with its
              location), or [None] for a synthesized default; only a renamed
              source identifier is worth a warning. *)
+          (* An inferred name -- an export name, or the import-name / parent-field
+             [hint] -- is usable only when it is a valid Wax identifier that is
+             not a keyword: borrowing a keyword would force a suffixed rename
+             (e.g. [memory_2]) that reads worse than the generated default. An
+             explicit [$id] is authoritative and kept as-is even when it is a
+             keyword (it is renamed with a warning, as before). *)
+          let usable_inferred nm =
+            Lexer.is_valid_identifier nm.Ast.desc
+            && not (Namespace.is_reserved seq.namespace nm.Ast.desc)
+          in
+          let default_or_hint () =
+            match hint with
+            | Some h when not (Namespace.is_reserved seq.namespace h) ->
+                (h, None)
+            | _ -> (seq.default, None)
+          in
           let candidate, src =
             match (id, exports) with
-            | (Some nm, _ | None, nm :: _)
-              when Lexer.is_valid_identifier nm.Ast.desc ->
+            | Some nm, _ when Lexer.is_valid_identifier nm.Ast.desc ->
                 (nm.Ast.desc, Some nm)
+            | None, nm :: _ when usable_inferred nm -> (nm.Ast.desc, Some nm)
             | _ -> (
                 match kind with
-                | None -> (Option.value hint ~default:seq.default, None)
+                | None -> default_or_hint ()
                 | Some kind -> (
                     match Hashtbl.find_opt export_tbl (kind, Src.Num idx) with
-                    | Some (nm :: _) when Lexer.is_valid_identifier nm.Ast.desc
-                      ->
+                    | Some (nm :: _) when usable_inferred nm ->
                         (nm.Ast.desc, Some nm)
-                    | _ -> (seq.default, None)))
+                    | _ -> default_or_hint ()))
           in
           let name, outcome =
             match src with
@@ -177,8 +192,8 @@ module Sequence = struct
     | [] -> ());
     name
 
-  let register ?claimed seq export_tbl kind id exports =
-    ignore (register' ?claimed seq export_tbl kind id exports)
+  let register ?hint ?claimed seq export_tbl kind id exports =
+    ignore (register' ?hint ?claimed seq export_tbl kind id exports)
 
   (* Claim source name [candidate] in the namespace ahead of positional
      registration, reporting a rename (reserved word, or a collision with an
@@ -614,11 +629,11 @@ let lookup_type (type typ) ctx (kind : typ kind) idx : typ =
   | Func -> get ctx.functions ctx.function_types idx
   | Tag -> get ctx.tags ctx.tag_types idx
 
-let register_type (type typ) ctx export_tbl (kind : typ kind) idx exports
+let register_type (type typ) ?hint ctx export_tbl (kind : typ kind) idx exports
     (typ : typ) =
   let register seq tbl kind idx =
     CondTbl.add tbl ctx.cond_asm
-      (Sequence.register' seq export_tbl kind idx exports)
+      (Sequence.register' ?hint seq export_tbl kind idx exports)
       typ
   in
   match kind with
@@ -3150,19 +3165,27 @@ let register_names ctx export_tbl fields =
     List.iter
       (fun (field : (_ Src.modulefield, _) Ast.annotated) ->
         match field.desc with
-        | Import { id; desc; exports; _ } -> (
+        | Import { id; name; desc; exports; _ } -> (
+            (* Failing an explicit [$id] and an export name, borrow the imported
+               name as the Wax name (like an export name), so an imported
+               [malloc] is named [malloc] rather than the generic default. *)
+            let hint =
+              if Lexer.is_valid_identifier name.Ast.desc then Some name.Ast.desc
+              else None
+            in
             match desc with
             | Func _ -> ()
             | Memory _ ->
-                Sequence.register ctx.memories export_tbl
+                Sequence.register ?hint ctx.memories export_tbl
                   (Some (Memory : Src.exportable))
                   id exports
             | Table _ ->
-                Sequence.register ctx.tables export_tbl (Some Table) id exports
-            | Global _ ->
-                Sequence.register ctx.globals export_tbl (Some Global) id
+                Sequence.register ?hint ctx.tables export_tbl (Some Table) id
                   exports
-            | Tag ty -> register_type ctx export_tbl Tag id exports ty)
+            | Global _ ->
+                Sequence.register ?hint ctx.globals export_tbl (Some Global) id
+                  exports
+            | Tag ty -> register_type ?hint ctx export_tbl Tag id exports ty)
         | Types rectype ->
             Array.iter
               (fun e ->
@@ -3237,10 +3260,15 @@ let register_names ctx export_tbl fields =
     List.iter
       (fun (field : (_ Src.modulefield, _) Ast.annotated) ->
         match field.desc with
-        | Import { id; desc; exports; _ } -> (
+        | Import { id; name; desc; exports; _ } -> (
             match desc with
             | Func { typ; _ } ->
-                register_type ctx export_tbl Func id exports typ
+                let hint =
+                  if Lexer.is_valid_identifier name.Ast.desc then
+                    Some name.Ast.desc
+                  else None
+                in
+                register_type ?hint ctx export_tbl Func id exports typ
             | Memory _ | Table _ | Global _ | Tag _ -> ())
         | Func { id; exports; typ; _ } ->
             register_type ctx export_tbl Func id exports typ

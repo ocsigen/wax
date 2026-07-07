@@ -18,8 +18,7 @@
 #[if(ocaml_version >= (5, 2, 0))]
 {
     import "blake2" {
-        #[import = "blake2_memory"]
-        memory m: i32 [1];
+        memory blake2_memory: i32 [1];
         #[import = "blake2_state_buf"]
         fn state_buf() -> i32;
         #[import = "blake2_key_buf"]
@@ -50,7 +49,7 @@
             let i: i32;
             'cont: loop {
                 br_if 'done i == len;
-                m.store8(dst + i, src[src_ofs + i] as i32_u);
+                blake2_memory.store8(dst + i, src[src_ofs + i] as i32_u);
                 i += 1;
                 br 'cont;
             }
@@ -63,7 +62,7 @@
             let i: i32;
             'cont: loop {
                 br_if 'done i == len;
-                dst[dst_ofs + i] = m.load8(src + i) as i32_u;
+                dst[dst_ofs + i] = blake2_memory.load8(src + i) as i32_u;
                 i += 1;
                 br 'cont;
             }

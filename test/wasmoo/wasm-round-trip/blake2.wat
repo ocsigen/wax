@@ -17,7 +17,7 @@
 
 (@if (>= $ocaml_version (5 2 0))
   (@then
-    (import "blake2" "blake2_memory" (memory $m 1))
+    (import "blake2" "blake2_memory" (memory $blake2_memory 1))
     (import "blake2" "blake2_state_buf" (func $state_buf (result i32)))
     (import "blake2" "blake2_key_buf" (func $key_buf (result i32)))
     (import "blake2" "blake2_out_buf" (func $out_buf (result i32)))
@@ -45,7 +45,7 @@
       (block $done
         (loop $cont
           (br_if $done (i32.eq (local.get $i) (local.get $len)))
-          (i32.store8 $m (i32.add (local.get $dst) (local.get $i))
+          (i32.store8 $blake2_memory (i32.add (local.get $dst) (local.get $i))
             (array.get_u $bytes (local.get $src)
               (i32.add (local.get $src_ofs) (local.get $i))))
           (local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -61,7 +61,8 @@
           (br_if $done (i32.eq (local.get $i) (local.get $len)))
           (array.set $bytes (local.get $dst)
             (i32.add (local.get $dst_ofs) (local.get $i))
-            (i32.load8_u $m (i32.add (local.get $src) (local.get $i))))
+            (i32.load8_u $blake2_memory
+              (i32.add (local.get $src) (local.get $i))))
           (local.set $i (i32.add (local.get $i) (i32.const 1)))
           (br $cont))))
 
