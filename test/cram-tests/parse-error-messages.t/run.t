@@ -60,8 +60,8 @@ underlines just the '(' — not the whole `(elem` region:
 
 The "unmatched" caret is a single delimiter character even when the opener is a
 multi-character token — WAT lexes `(result` (and `(then`, `(param`, …) as one
-token whose span starts after the '(', so the hint walks the source back to the
-paren itself:
+token. The lexer gives that token the '(' as its start (so the location really
+begins at the paren), and the hint shrinks the range to that one character:
 
   $ wax check result.wat
   Error: Expecting ')'.

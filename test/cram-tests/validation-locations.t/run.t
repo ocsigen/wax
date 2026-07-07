@@ -40,11 +40,11 @@ definition:
 
   $ wax --validate cont_not_func.wat -o out.wat
   Error: Type $s should be a function type.
-   ──➤  cont_not_func.wat:3:4
+   ──➤  cont_not_func.wat:3:3
   1 │ (module
   2 │   (type $s (struct))
   3 │   (type $c (cont $s)))
-    ·    ^^^^^^^^^^^^^^^^^^
+    ·   ^^^^^^^^^^^^^^^^^^^
   4 │ 
   [128]
 
@@ -53,11 +53,11 @@ The wrapped type is named as the source wrote it, even when an identical type
 
   $ wax --validate cont_not_func_dup.wat -o out.wat
   Error: Type $a should be a function type.
-   ──➤  cont_not_func_dup.wat:4:4
+   ──➤  cont_not_func_dup.wat:4:3
   2 │   (type $a (struct))
   3 │   (type $b (struct))
   4 │   (type $c (cont $a)))
-    ·    ^^^^^^^^^^^^^^^^^^
+    ·   ^^^^^^^^^^^^^^^^^^^
   5 │ 
   [128]
 
@@ -65,10 +65,10 @@ An invalid subtype declaration points at the offending type definition:
 
   $ wax --validate bad_subtype.wat -o out.wat
   Error: This type is not a valid subtype of its declared supertype.
-   ──➤  bad_subtype.wat:3:4
+   ──➤  bad_subtype.wat:3:3
   1 │ (module
   2 │   (type $a (sub (func (param i32))))
   3 │   (type $b (sub $a (func (param i64)))))
-    ·    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ·   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   4 │ 
   [128]

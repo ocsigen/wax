@@ -953,11 +953,28 @@ let rec token_rec ctx lexbuf =
 
 let token ctx =
   let prev_token = ref None in
-  fun lexbuf ->
+  (* A compound opener — [(param], [(then], [(catch], … — is two lexemes: the
+     [(] is read first (stashed as [LPAREN]) and the keyword next, so the
+     lexbuf's reported start would be the keyword's, not the [(]'s. Capture the
+     [(] position when it is stashed and, when the pair is combined into one
+     token, report it as that token's start via [start_override] (read by the
+     supplier in [Parsing]). The combined token's span thus really begins at its
+     opening parenthesis. *)
+  let paren_start = ref Lexing.dummy_pos in
+  let start_override = ref None in
+  let f lexbuf =
+    start_override := None;
     let rec loop () =
       let t = token_rec ctx lexbuf in
       let end_ = Sedlexing.lexing_bytes_position_curr lexbuf in
       Wax_utils.Trivia.report_token ctx end_.pos_cnum;
+      (* Emit a token combined from the stashed [(] and its keyword, starting at
+         the [(]. *)
+      let combined tok =
+        prev_token := None;
+        start_override := Some !paren_start;
+        tok
+      in
       match (!prev_token, t) with
       | ( None,
           ( LPAREN_CATCH_ALL_REF | LPAREN_CATCH_REF | LPAREN_EXPORT
@@ -970,22 +987,18 @@ let token ctx =
                  Printf.sprintf "Unexpected keyword '%s'.\n"
                    (Sedlexing.Utf8.lexeme lexbuf) ))
       | None, LPAREN ->
+          paren_start := fst (Sedlexing.lexing_bytes_positions lexbuf);
           prev_token := Some t;
           loop ()
       | None, _ -> t
-      | Some LPAREN, CATCH ->
-          prev_token := None;
-          LPAREN_CATCH
-      | Some LPAREN, CATCH_ALL ->
-          prev_token := None;
-          LPAREN_CATCH_ALL
+      | Some LPAREN, CATCH -> combined LPAREN_CATCH
+      | Some LPAREN, CATCH_ALL -> combined LPAREN_CATCH_ALL
       | ( Some LPAREN,
           ( LPAREN_CATCH_ALL_REF | LPAREN_CATCH_REF | LPAREN_EXPORT
           | LPAREN_IMPORT | LPAREN_LOCAL | LPAREN_PARAM | LPAREN_RESULT
           | LPAREN_THEN | LPAREN_TYPE | LPAREN_ON | LPAREN_DESCRIPTOR
           | LPAREN_DESCRIBES ) ) ->
-          prev_token := None;
-          t
+          combined t
       | Some t', _ ->
           prev_token := Some t;
           t'
@@ -995,6 +1008,8 @@ let token ctx =
         prev_token := None;
         t
     | _ -> loop ()
+  in
+  (f, start_override)
 
 let is_valid_identifier s =
   let buf = Sedlexing.Utf8.from_string s in

@@ -43,11 +43,11 @@ are reported; a name starting with `_` is intentionally unused:
   4 │     (local.set $used (local.get $n))
   5 │     (local.get $used)))
   Warning: This local is never used.
-   ──➤  unused.wat:3:42
+   ──➤  unused.wat:3:41
   1 │ (module
   2 │   (func $f (param $n i32) (result i32)
   3 │     (local $used i32) (local $dead i32) (local i32) (local $_ignored i32)
-    ·                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ·                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   4 │     (local.set $used (local.get $n))
   5 │     (local.get $used)))
   (func $f (param $n i32) (result i32)

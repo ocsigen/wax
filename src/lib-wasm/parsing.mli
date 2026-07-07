@@ -39,7 +39,9 @@ end) (_ : sig
 end) (_ : sig
   val message : int -> string
 end) (_ : sig
-  val token : Wax_utils.Trivia.context -> Sedlexing.lexbuf -> Tokens.token
+  val token :
+    Wax_utils.Trivia.context ->
+    (Sedlexing.lexbuf -> Tokens.token) * Lexing.position option ref
 end) : sig
   val parse :
     ?color:Wax_utils.Colors.flag ->

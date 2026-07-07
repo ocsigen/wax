@@ -295,11 +295,16 @@ let rec token_rec ctx lexbuf =
            ( Sedlexing.lexing_bytes_positions lexbuf,
              Printf.sprintf "Syntax error.\n" ))
 
-let token ctx lexbuf =
-  let t = token_rec ctx lexbuf in
-  let end_ = Sedlexing.lexing_bytes_position_curr lexbuf in
-  Wax_utils.Trivia.report_token ctx end_.pos_cnum;
-  t
+(* The Wax lexer never combines tokens, so a token's lexbuf position is always
+   its true start; the [start_override] ref (part of the shared lexer interface,
+   see {!Wax_wasm.Lexer.token}) therefore stays [None]. *)
+let token ctx =
+  ( (fun lexbuf ->
+      let t = token_rec ctx lexbuf in
+      let end_ = Sedlexing.lexing_bytes_position_curr lexbuf in
+      Wax_utils.Trivia.report_token ctx end_.pos_cnum;
+      t),
+    ref None )
 
 let is_valid_identifier s =
   let buf = Sedlexing.Utf8.from_string s in

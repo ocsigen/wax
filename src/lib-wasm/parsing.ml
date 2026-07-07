@@ -34,7 +34,9 @@ end) (Fast_parser : sig
 end) (Parser_messages : sig
   val message : int -> string
 end) (Lexer : sig
-  val token : Wax_utils.Trivia.context -> Sedlexing.lexbuf -> Tokens.token
+  val token :
+    Wax_utils.Trivia.context ->
+    (Sedlexing.lexbuf -> Tokens.token) * Lexing.position option ref
 end) =
 struct
   module E = MenhirLib.ErrorReports
@@ -64,9 +66,16 @@ struct
     Sedlexing.set_filename lexbuf filename;
     lexbuf
 
-  let lexer_lexbuf_to_supplier lexer (lexbuf : Sedlexing.lexbuf) () =
+  (* [Lexer.token] returns the tokenizer and a [start_override] ref: for a
+     compound opener ([(param], [(then], …) the lexer reads the [(] and its
+     keyword as two lexemes, so the lexbuf's reported start is the keyword's; the
+     ref carries the [(]'s position instead, so the token's span really begins at
+     its opening parenthesis. *)
+  let lexer_lexbuf_to_supplier (lexer, start_override)
+      (lexbuf : Sedlexing.lexbuf) () =
     let token = lexer lexbuf in
     let startp, endp = Sedlexing.lexing_bytes_positions lexbuf in
+    let startp = match !start_override with Some p -> p | None -> startp in
     (token, startp, endp)
 
   module Inner (Context : sig
@@ -134,14 +143,12 @@ struct
               let msg = String.trim (String.sub line (i + 1) (len - i - 1)) in
               match P.MenhirInterpreter.get (depth - 1) env with
               | Some (Element (_, _, pos1, _pos2)) ->
-                  (* This hint points at an opening delimiter, and should
-                     underline just the single '('/'['/'{' character. The stack
-                     token's own span is not it: WAT's [(then]/[(param]/… lex the
-                     keyword as one token whose span starts *after* the '(', and
-                     a spurious reduction can even surface a token just past the
-                     delimiter. In every such case the delimiter sits immediately
-                     before the token (modulo blanks) on the same line, so scan
-                     the source back to it; fall back to the token start. *)
+                  (* This hint points at a single opening delimiter, so underline
+                     one character. The delimiter is normally the token's start —
+                     the lexer gives a compound opener ([(then]/[(param]/…) the
+                     '(' as its start — but a spurious reduction can surface a
+                     plain token (e.g. ELEM) sitting just past the '('; in that
+                     case walk the source back over blanks to the delimiter. *)
                   let cnum = pos1.Lexing.pos_cnum in
                   let is_delim c = c = '(' || c = '[' || c = '{' in
                   let blank c = c = ' ' || c = '\t' in
