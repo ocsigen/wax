@@ -53,6 +53,29 @@ let add_mapping t ~generated_offset ~original_location =
 let add_absent_mapping t ~generated_offset =
   t.mappings <- Unmapped generated_offset :: t.mappings
 
+type checkpoint = entry list
+
+(* A checkpoint is the mappings list as it stood at capture time. Since mappings
+   are only ever prepended, that list stays a physical suffix of [t.mappings]
+   until a shift rebuilds the newer cells — and a shift only rebuilds cells newer
+   than its own checkpoint, so an outer checkpoint survives inner shifts. *)
+let checkpoint t = t.mappings
+
+let shift_since t (cp : checkpoint) ~delta =
+  if delta <> 0 then begin
+    let rec loop l =
+      if l == cp then l
+      else
+        match l with
+        | [] -> []
+        | Mapped m :: rest ->
+            Mapped { m with generated_offset = m.generated_offset + delta }
+            :: loop rest
+        | Unmapped o :: rest -> Unmapped (o + delta) :: loop rest
+    in
+    t.mappings <- loop t.mappings
+  end
+
 (* Base64 VLQ encoding for source maps: each 5-bit group is emitted low bits
    first, with bit 6 (0x20) marking a continuation, and the resulting 6-bit
    value indexes the base64 alphabet. *)

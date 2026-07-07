@@ -18,4 +18,16 @@ val add_absent_mapping : t -> generated_offset:int -> unit
     [generated_offset] has no original location, emitting a segment that resets
     the mapping so the previous location does not bleed into it. *)
 
+type checkpoint
+
+val checkpoint : t -> checkpoint
+(** [checkpoint t] captures the set of mappings recorded so far, for a later
+    {!shift_since}. Mappings are recorded with generated offsets relative to
+    whichever buffer is being encoded; a checkpoint plus {!shift_since} rebases
+    the ones added afterwards once their absolute file offset is known. *)
+
+val shift_since : t -> checkpoint -> delta:int -> unit
+(** [shift_since t cp ~delta] adds [delta] to the generated offset of every
+    mapping recorded since the checkpoint [cp]. *)
+
 val to_json : t -> file_name:string -> string
