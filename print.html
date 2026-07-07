@@ -13,8 +13,8 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff">
 
-        <link rel="icon" href="favicon-de23e50b.svg">
-        <link rel="shortcut icon" href="favicon-8114d1fc.png">
+        <link rel="icon" href="favicon-5320e0d8.svg">
+        <link rel="shortcut icon" href="favicon-63bebb14.png">
         <link rel="stylesheet" href="css/variables-8adf115d.css">
         <link rel="stylesheet" href="css/general-e96d0476.css">
         <link rel="stylesheet" href="css/chrome-d279d366.css">
@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-870ae184.js";
+            window.path_to_searchindex_js = "searchindex-a0782670.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-0d649137.js"></script>
@@ -2041,7 +2041,7 @@ feature flag required).</p>
 <li><strong>Expressions vs Stack</strong>: Wax uses variables (<code>let</code>) and nested expressions instead of explicit stack manipulation (<code>local.get</code>/<code>set</code>, <code>drop</code>).</li>
 <li><strong>Control Flow</strong>: Wax uses structured control flow (<code>if</code>, <code>loop</code>, <code>do</code>, <code>try</code>) that resembles high-level languages but maps directly to Wasm structured control instructions.</li>
 <li><strong>Types</strong>: Wax types define a direct mapping to Wasm types, with a slightly more concise syntax.</li>
-<li><strong>Modules</strong>: Wax modules use attributes to handle imports and exports, rather than separate import/export definitions.</li>
+<li><strong>Modules</strong>: Wax modules group imports under an <code>import "module" { … }</code> block and mark exports with an <code>#[export]</code> attribute on the field itself, rather than using separate import/export definitions.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="types"><a class="header" href="#types">Types</a></h1>
