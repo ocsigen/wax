@@ -48,6 +48,15 @@ let pick a = a.(rnd (Array.length a))
 let nl = Ast.no_loc
 let id s = nl s
 
+(* A monotonically increasing counter, for minting unique local / label names
+   (see [local_while_seq]) that never collide with each other or with the fixed
+   param/global/function names. *)
+let fresh =
+  let c = ref 0 in
+  fun () ->
+    incr c;
+    !c
+
 (* The value types expressions are built to: four numeric, the v128 vector,
    references to the two struct types and the array type, and the abstract eq
    supertype. *)
@@ -682,6 +691,41 @@ let rec stmt d : Ast.location Ast.instr =
       let t = pick num_ty in
       nl (Ast.Set (id (pname t), None, gen t d))
 
+(* A labelled [while] whose continue-expression reads a body-scoped local that
+   the body writes:
+     [let v: i32; 'l: while c : (a += v) { v = e; br_if 'l c; }]
+   Returned as a two-statement sequence (declaration then loop) so [v] is a real
+   function-body local, in scope for both the loop and the rest of the body.
+
+   This is the shape that drives sink_let's labelled-loop step arm: a labelled
+   loop wraps its body in a block and runs the step *outside* it, so a
+   declaration the body writes cannot be sunk into the body when the step reads
+   it. The param-only [stmt] bodies never reach that arm — their while-steps read
+   always-live params, so no *sinkable* local is ever live into a step. The [a]
+   in [a += v] is the i32 param; [v] is the local, read there and written in the
+   body (before the [br_if], so it is definitely assigned on every continue). *)
+let local_while_seq d : Ast.location Ast.instr list =
+  let n = fresh () in
+  let v = "lv" ^ string_of_int n in
+  let lbl = "ll" ^ string_of_int n in
+  [
+    nl (Ast.Let ([ (Some (id v), Some (valtype I32)) ], None));
+    nl
+      (Ast.While
+         {
+           label = Some (id lbl);
+           cond = gen I32 (d - 1);
+           step =
+             Some
+               (nl (Ast.Set (id "a", Some (nl Ast.Add), nl (Ast.Get (id v)))));
+           block =
+             [
+               nl (Ast.Set (id v, None, gen I32 (d - 1)));
+               nl (Ast.Br_if (id lbl, gen I32 (d - 1)));
+             ];
+         });
+  ]
+
 (* One clean type error, to reach the checker's mismatch-reporting arms. *)
 let poison () : Ast.location Ast.instr =
   match rnd 7 with
@@ -929,7 +973,13 @@ let func k : Ast.location Ast.modulefield =
   let sign = Ast.{ params; results = [| valtype res |] } in
   let body =
     let ns = 1 + rnd 3 in
-    let stmts = List.init ns (fun _ -> stmt 2) in
+    (* Some statement slots expand to a labelled while over a body-scoped local
+       (a two-statement sequence) instead of a single statement. *)
+    let stmts =
+      List.concat
+        (List.init ns (fun _ ->
+             if rnd 5 = 0 then local_while_seq 2 else [ stmt 2 ]))
+    in
     let poison = if err && k = nf - 1 then [ poison () ] else [] in
     (* Occasionally end the function with a returning [match] instead of a plain
        value expression (a match must diverge, so it is a tail, not a value). *)
