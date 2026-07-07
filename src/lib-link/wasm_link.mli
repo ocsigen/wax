@@ -28,3 +28,5 @@ val f :
   input list ->
   output_file:string ->
   Js_source_map.t
+
+val get_instruction_offsets : filename:string -> string -> int list * int

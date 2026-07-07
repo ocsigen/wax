@@ -323,47 +323,40 @@ let next src = next' src src.string src.pos src.len
 let flush buf src start pos =
   if start < pos then Buffer.add_substring buf src.string start (pos - start)
 
-let rec resize_rec buf start src resize_data i col0 delta0 col =
-  let pos = src.pos in
-  let delta = Vlq64.decode src in
-  let col = col + delta in
-  if col < col0 then
-    if next src then resize_rec buf start src resize_data i col0 delta0 col
-    else flush buf src start src.len
-  else
-    let delta = delta + delta0 in
-    adjust buf start src delta pos resize_data i col
-
-and adjust buf start src delta pos (resize_data : resize_data) i col =
-  assert (delta > 0);
-  if i < resize_data.i then
-    let col0 = resize_data.pos.(i) in
-    let delta0 = resize_data.delta.(i) in
-    if col < col0 then (
-      flush buf src start pos;
-      Vlq64.encode buf delta;
-      let start = src.pos in
-      if next src then
-        resize_rec buf start src resize_data (i + 1) col0 delta0 col
-      else flush buf src start src.len)
-    else
-      let delta = delta + delta0 in
-      adjust buf start src delta pos resize_data (i + 1) col
-  else (
-    flush buf src start pos;
-    Vlq64.encode buf delta;
-    let start = src.pos in
-    flush buf src start src.len)
-
 let resize_mappings (resize_data : resize_data) mappings =
   if String.equal mappings "" || resize_data.i = 0 then mappings
   else
-    let col0 = resize_data.pos.(0) in
-    let delta0 = resize_data.delta.(0) in
-    let buf = Buffer.create (String.length mappings) in
-    resize_rec buf 0
+    let src =
       { Vlq64.string = mappings; pos = 0; len = String.length mappings }
-      resize_data 1 col0 delta0 0;
+    in
+    let buf = Buffer.create (String.length mappings) in
+    let col = ref 0 in
+    let new_col_acc = ref 0 in
+    let idx = ref 0 in
+    let shift = ref 0 in
+    let rec loop start =
+      let pos = src.pos in
+      let delta = Vlq64.decode src in
+      col := !col + delta;
+      while !idx < resize_data.i && !col >= resize_data.pos.(!idx) do
+        shift := !shift + resize_data.delta.(!idx);
+        idx := !idx + 1
+      done;
+      let new_col = !col + !shift in
+      if new_col < 0 then (
+        flush buf src start pos;
+        let next_exists = next src in
+        let start = if next_exists then src.pos else src.len in
+        if next_exists then loop start else ())
+      else (
+        flush buf src start pos;
+        let new_relative_col = new_col - !new_col_acc in
+        new_col_acc := new_col;
+        Vlq64.encode buf new_relative_col;
+        let start = src.pos in
+        if next src then loop start else flush buf src start src.len)
+    in
+    loop 0;
     Buffer.contents buf
 
 let resize resize_data (sm : Standard.t) =
