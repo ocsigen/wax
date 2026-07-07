@@ -46,6 +46,12 @@ type t =
           appears in a branch of a [?:]. Since [?:] compiles to a [select],
           which evaluates {e both} branches, that operation runs even when the
           condition selects the other branch. *)
+  | Precedence
+      (** Two operators whose relative precedence is easy to misremember are
+          mixed without parentheses: a shift ([<<]/[>>]) with an arithmetic
+          operator ([+], [-], [*], …), or a comparison with a bitwise operator
+          ([&], [|], [^]). The code is correct, but a reader (especially one
+          used to C's different table) may misread the grouping. *)
   | Redundant_operation
       (** An operation with no effect on its result: an arithmetic identity
           ([x + 0], [x * 1], [x << 0], …), an absorbing operand ([x * 0],

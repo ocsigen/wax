@@ -1,0 +1,14 @@
+#[export = "shift_arith"]
+fn shift_arith(nbits: i32) -> i32 { 1 << nbits - 1; }
+
+#[export = "cmp_bitwise"]
+fn cmp_bitwise(x: i32, y: i32) -> i32 { x & y == 0; }
+
+#[export = "paren_inner"]
+fn paren_inner(nbits: i32) -> i32 { 1 << (nbits - 1); }
+
+#[export = "paren_outer"]
+fn paren_outer(nbits: i32) -> i32 { (1 << nbits) - 1; }
+
+#[export = "same_class"]
+fn same_class(x: i32, y: i32) -> i32 { x + y * 2; }

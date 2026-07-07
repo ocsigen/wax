@@ -314,6 +314,37 @@ x <=u y     // Less or equal unsigned
 !x          // Logical not / is_null for references
 ```
 
+### Operator Precedence
+
+Operators are listed below from highest precedence (binds tightest) to lowest.
+Wax's table differs from C's in two ways worth committing to memory:
+
+- `&`, `^`, `|` bind **tighter** than the comparison operators, so `a & b == c`
+  parses as `(a & b) == c` — the sane grouping, and the opposite of C, where it
+  means `a & (b == c)`.
+- The shifts bind **looser** than `+`/`-` (as in C), so `1 << nbits - 1` parses
+  as `1 << (nbits - 1)`, not `(1 << nbits) - 1`.
+
+| Precedence | Operators | Associativity |
+|------------|-----------|---------------|
+| highest | `.field` &nbsp; `f(…)` &nbsp; `[…]` (field, call, index) | left |
+|  | `-x` &nbsp; `+x` &nbsp; `!x` (unary) | — |
+|  | `as` &nbsp; `is` (cast, test) | left |
+|  | `*` &nbsp; `/` &nbsp; `/s` &nbsp; `/u` &nbsp; `%s` &nbsp; `%u` | left |
+|  | `+` &nbsp; `-` | left |
+|  | `<<` &nbsp; `>>s` &nbsp; `>>u` | left |
+|  | `&` | left |
+|  | `^` | left |
+|  | <code>&#124;</code> | left |
+|  | `==` &nbsp; `!=` &nbsp; `<` &nbsp; `>` &nbsp; `<=` &nbsp; `>=` (and `s`/`u` forms) | none |
+|  | `? :` | right |
+| lowest | `=` &nbsp; `:=` &nbsp; `+=` … (assignment) | right |
+
+Because the two cross-class mixes above are easy to misread, the
+[`precedence` lint](cli.md) (in the `correctness` group, on by default) flags a
+shift mixed with arithmetic, or a comparison mixed with a bitwise operator, when
+it is written without disambiguating parentheses.
+
 ### Method-Style Operations
 
 Some operations use method syntax. These are calls, so they take parentheses

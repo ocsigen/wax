@@ -159,6 +159,27 @@ module Error = struct
       "This operation is evaluated even when the condition selects the other \
        branch."
 
+  (* Two operators whose relative precedence is easy to misremember are mixed
+     without parentheses (see {!lint_precedence}). [location] is the outer
+     operator, [inner] the tighter-binding one; the [kind]s name the two
+     operator classes ("shift", "arithmetic", "comparison", "bitwise"). *)
+  let precedence context ~location ~inner ~outer_kind ~inner_kind =
+    warn ~warning:Wax_utils.Warning.Precedence ~universal:true context ~location
+      ~related:
+        [
+          {
+            Wax_utils.Diagnostic.location = inner;
+            message =
+              (fun f () ->
+                Format.fprintf f
+                  "This %s operator binds tighter than the %s operator."
+                  inner_kind outer_kind);
+          };
+        ]
+      ~hint:(fun f () ->
+        Format.fprintf f "Add parentheses to make the grouping explicit.")
+      "Operator precedence here is easy to misread."
+
   let empty_stack context ~location =
     report context ~location "The stack is empty."
 
@@ -2901,6 +2922,78 @@ let lint_eager_select ctx ~select arm =
   | Some location -> Error.eager_select ctx.diagnostics ~location ~select
   | None -> ()
 
+(* The precedence class of a binary operator, for the [precedence] lint. Within
+   a class the relative precedence is either standard or explicit (assignment),
+   so only cross-class mixes matter. *)
+let binop_kind = function
+  | Shl | Shr _ -> `Shift
+  | Add | Sub | Mul | Div _ | Rem _ -> `Arith
+  | And | Or | Xor -> `Bitwise
+  | Eq | Ne | Lt _ | Gt _ | Le _ | Ge _ -> `Comparison
+
+let binop_kind_name = function
+  | `Shift -> "shift"
+  | `Arith -> "arithmetic"
+  | `Bitwise -> "bitwise"
+  | `Comparison -> "comparison"
+
+(* The two operator-class pairs whose relative precedence is a classic footgun:
+   a shift mixed with arithmetic (in Wax, as in C, [+]/[-] bind tighter than
+   [<<], so [1 << n - 1] means [1 << (n - 1)]), and a comparison mixed with a
+   bitwise operator (Wax binds [&]/[|]/[^] tighter than comparison — the reverse
+   of C, where [a & b == c] means [a & (b == c)]). In every such mix the inner
+   (child) operator is the tighter-binding one. *)
+let confusing_precedence outer inner =
+  match (outer, inner) with
+  | `Shift, `Arith | `Arith, `Shift -> true
+  | `Comparison, `Bitwise | `Bitwise, `Comparison -> true
+  | _ -> false
+
+(* Whether the operand [child] of a binary operator was written parenthesized.
+   Parentheses are erased by the grammar ([1 << (n - 1)] and [1 << n - 1] parse
+   to the same tree), so this is decided from the source text: a parenthesized
+   operand is immediately preceded by [(] (a right operand) or followed by [)]
+   (a left operand), skipping whitespace. With no source available, assume it is
+   parenthesized (so the lint stays silent rather than risk a false positive). *)
+let operand_parenthesized ctx ~side (child : _ Ast.instr) =
+  match Wax_utils.Diagnostic.source ctx.diagnostics with
+  | None -> true
+  | Some src -> (
+      let is_space = function ' ' | '\t' | '\n' | '\r' -> true | _ -> false in
+      let n = String.length src in
+      match side with
+      | `Right ->
+          let rec back i =
+            if i < 0 then false
+            else if is_space src.[i] then back (i - 1)
+            else src.[i] = '('
+          in
+          back (child.info.loc_start.pos_cnum - 1)
+      | `Left ->
+          let rec fwd i =
+            if i >= n then false
+            else if is_space src.[i] then fwd (i + 1)
+            else src.[i] = ')'
+          in
+          fwd child.info.loc_end.pos_cnum)
+
+(* The [precedence] lint: flag a binary operator [op] one of whose operands is
+   itself a binary operator of a confusingly-related class (see
+   {!confusing_precedence}), written without disambiguating parentheses. *)
+let lint_precedence ctx (op : (binop, location) annotated) e1 e2 =
+  let outer = binop_kind op.desc in
+  List.iter
+    (fun (child, side) ->
+      match child.desc with
+      | BinOp (inner_op, _, _)
+        when confusing_precedence outer (binop_kind inner_op.desc)
+             && not (operand_parenthesized ctx ~side child) ->
+          Error.precedence ctx.diagnostics ~location:op.info
+            ~inner:inner_op.info ~outer_kind:(binop_kind_name outer)
+            ~inner_kind:(binop_kind_name (binop_kind inner_op.desc))
+      | _ -> ())
+    [ (e1, `Left); (e2, `Right) ]
+
 (* Walk the source AST (before any lowering, so [while] keeps its own condition
    rather than the [if] it desugars to) and report the purely-syntactic lints: a
    constant branch/loop/select condition, and a drop ([_ = e]) of a
@@ -2973,14 +3066,17 @@ let rec lint_source ctx (i : _ Ast.instr) =
   | StructDesc (d, fields) ->
       lint_source ctx d;
       List.iter (fun (_, e) -> Option.iter (lint_source ctx) e) fields
+  | BinOp (op, e1, e2) ->
+      lint_precedence ctx op e1 e2;
+      lint_source ctx e1;
+      lint_source ctx e2
   | CastDesc (e1, _, e2)
   | Br_on_cast_desc_eq (_, _, e1, e2)
   | Br_on_cast_desc_eq_fail (_, _, e1, e2)
   | StructSet (e1, _, e2)
   | Array (_, e1, e2)
   | ArraySegment (_, _, e1, e2)
-  | ArrayGet (e1, e2)
-  | BinOp (_, e1, e2) ->
+  | ArrayGet (e1, e2) ->
       lint_source ctx e1;
       lint_source ctx e2
   | ArraySet (e1, e2, e3) ->

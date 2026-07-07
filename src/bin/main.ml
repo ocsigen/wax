@@ -650,7 +650,7 @@ let check format_opt strict color warnings features debug defines files =
         let source = match fmt with Wasm -> None | Wat | Wax -> Some text in
         (* Collect errors without printing or exiting, so every file is checked
            and all its errors are reported, then re-report them below. *)
-        let d = Wax_utils.Diagnostic.collector () in
+        let d = Wax_utils.Diagnostic.collector ~source:text () in
         (try
            match fmt with
            | Wax ->

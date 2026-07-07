@@ -121,6 +121,12 @@ mistaken for a subcommand). The `format` subcommand reformats files (see
           condition selects the other branch. Shown by default. On Wasm input
           the check covers a folded `select` (its value operands are distinct
           subtrees); an unfolded `select` is not flagged.
+        - `precedence` (group `correctness`) — two operators whose relative
+          precedence is easy to misremember are mixed without parentheses: a
+          shift (`<<`/`>>`) with arithmetic (`+`, `-`, …), or a comparison with
+          a bitwise operator (`&`, `|`, `^`). The code is correct, but a reader
+          may misread the grouping (`1 << nbits - 1` is `1 << (nbits - 1)`).
+          Shown by default. Wax-only — WAT/WASM have no infix precedence.
         - `redundant-operation` (group `redundant`) — an operation with no effect
           on its result: an arithmetic identity (`x + 0`, `x * 1`, `x << 0`, …),
           an absorbing operand (`x * 0`, `x & 0`), two identical operands
@@ -151,9 +157,11 @@ mistaken for a subcommand). The `format` subcommand reformats files (see
       text input; the `unused`/`correctness` lints are turned on only by
       `--validate`, and always for `check`. The `naming` warnings are produced
       when converting a Wasm module to Wax.
-    - Every one of these lints applies to WebAssembly text/binary input as well
+    - Almost all of these lints apply to WebAssembly text/binary input as well
       as Wax — the Wasm validator runs the same checks, so `wax check foo.wat`
-      reports them. On Wasm input `unused-result` covers discarding a constant or
+      reports them. (The exceptions are `precedence`, which is Wax-only since
+      WAT/WASM have no infix precedence, and `eager-select`, whose Wasm side
+      covers only a folded `select`.) On Wasm input `unused-result` covers discarding a constant or
       a pure `local.get`/`global.get` read; for `unused-label` a numeric `br N`
       counts as a use of the label `N` levels out; `cast-always-fails` and
       `redundant-operation` reason about `ref.cast`/`ref.test` and constant

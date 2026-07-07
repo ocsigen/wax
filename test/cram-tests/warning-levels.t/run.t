@@ -107,9 +107,9 @@ An unknown warning or group name is rejected:
        unused-local, unused-field, unused-import, unused-label,
        shift-count-overflow, constant-trap, tautological-comparison,
        constant-condition, unused-result, dead-code, cast-always-fails,
-       eager-select, redundant-operation, truncated-coverage, naming-conflict,
-       reserved-word-rename, generated-name, unused, correctness, redundant,
-       naming, all.
+       eager-select, precedence, redundant-operation, truncated-coverage,
+       naming-conflict, reserved-word-rename, generated-name, unused,
+       correctness, redundant, naming, all.
   [124]
 
 An unknown level is rejected:

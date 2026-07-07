@@ -21,6 +21,12 @@ val run :
     each {e named} warning reported with [report]'s [warning] argument; it
     defaults to the policy installed by {!set_policy}. *)
 
+val source : context -> string option
+(** [source context] is the source code the context was created with (via
+    {!run}'s [~source]), if any. Byte offsets in a diagnostic's [location]
+    ([pos_cnum]) index into this string; used by lints that need to inspect the
+    original text, e.g. to tell whether a subexpression was parenthesized. *)
+
 val set_policy : Warning.policy -> unit
 (** [set_policy policy] installs [policy] as the default for every context
     created afterwards (those that do not pass an explicit [?policy]). Intended
@@ -64,10 +70,11 @@ val abort : unit -> 'a
     so they can be inspected and re-reported. Used for path-sensitive
     validation, where the same code is validated under several assumptions. *)
 
-val collector : unit -> context
-(** A context that buffers reported errors without printing or exiting. As it
-    never renders diagnostics, it needs none of {!run}'s output parameters
-    ([source], [color], …). *)
+val collector : ?source:string -> unit -> context
+(** A context that buffers reported errors without printing or exiting. It never
+    renders diagnostics, so it needs none of {!run}'s rendering parameters
+    ([color], [output]); pass [?source] only when a lint reads the original text
+    via {!source} while reporting against this context. *)
 
 type entry
 (** A collected diagnostic. *)

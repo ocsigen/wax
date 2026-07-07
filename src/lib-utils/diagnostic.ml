@@ -332,6 +332,7 @@ type context = {
    explicit [?policy] still overrides it. *)
 let global_policy = ref Warning.default_policy
 let set_policy policy = global_policy := policy
+let source context = context.source
 
 let make ?color ~source ?(related = []) ?(exit_on_error = true) ?(max = 1)
     ?(output = Format.err_formatter) ?(policy = !global_policy)
@@ -353,10 +354,12 @@ let make ?color ~source ?(related = []) ?(exit_on_error = true) ?(max = 1)
 let null_formatter = Format.make_formatter (fun _ _ _ -> ()) (fun () -> ())
 
 (* A context that accumulates errors in its queue without ever printing or
-   exiting, so they can be inspected with [collected]. Output parameters
-   ([source], [color], …) are irrelevant since nothing is rendered. *)
-let collector () =
-  make ~source:None ~exit_on_error:false ~max:max_int ~output:null_formatter
+   exiting, so they can be inspected with [collected]. Rendering parameters
+   ([color], [output]) are irrelevant since nothing is printed, but [source] is
+   still worth threading: a lint that inspects the original text via {!source}
+   (e.g. the [precedence] lint) runs against this context and needs it. *)
+let collector ?source () =
+  make ~source ~exit_on_error:false ~max:max_int ~output:null_formatter
     ~collecting:true ()
 
 type entry = t
