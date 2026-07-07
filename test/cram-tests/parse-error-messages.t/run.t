@@ -44,7 +44,8 @@ the raw `separated_nonempty_list_trailing(comma,on_clause)`:
   [128]
 
 The same generator drives the WAT parser. Here the head noun governs agreement
-("the list of indices is complete", not "are"):
+("the list of indices is complete", not "are"), and the "unmatched" hint
+underlines just the '(' — not the whole `(elem` region:
 
   $ wax check indices.wat
   Error: Assuming that the list of indices is complete, expecting ')'.
@@ -53,6 +54,20 @@ The same generator drives the WAT parser. Here the head noun governs agreement
   2 │   (func $f)
   3 │   (table funcref (elem $f (nop))))
     ·                            ^^^
-    ·                   ^^^^ This '(' might be unmatched.
+    ·                  ^ This '(' might be unmatched.
   4 │ 
+  [128]
+
+The "unmatched" caret is a single delimiter character even when the opener is a
+multi-character token — WAT lexes `(result` (and `(then`, `(param`, …) as one
+token whose span starts after the '(', so the hint walks the source back to the
+paren itself:
+
+  $ wax check result.wat
+  Error: Expecting ')'.
+   ──➤  result.wat:1:27
+  1 │ (module (func (result i32 $x)))
+    ·                           ^^
+    ·               ^ This '(' might be unmatched.
+  2 │ 
   [128]

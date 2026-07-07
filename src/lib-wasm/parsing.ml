@@ -133,9 +133,35 @@ struct
               let depth = int_of_string (String.sub line 1 (i - 1)) in
               let msg = String.trim (String.sub line (i + 1) (len - i - 1)) in
               match P.MenhirInterpreter.get (depth - 1) env with
-              | Some (Element (_, _, pos1, pos2)) ->
+              | Some (Element (_, _, pos1, _pos2)) ->
+                  (* This hint points at an opening delimiter, and should
+                     underline just the single '('/'['/'{' character. The stack
+                     token's own span is not it: WAT's [(then]/[(param]/… lex the
+                     keyword as one token whose span starts *after* the '(', and
+                     a spurious reduction can even surface a token just past the
+                     delimiter. In every such case the delimiter sits immediately
+                     before the token (modulo blanks) on the same line, so scan
+                     the source back to it; fall back to the token start. *)
+                  let cnum = pos1.Lexing.pos_cnum in
+                  let is_delim c = c = '(' || c = '[' || c = '{' in
+                  let blank c = c = ' ' || c = '\t' in
+                  let dcnum =
+                    if cnum < String.length text && is_delim text.[cnum] then
+                      cnum
+                    else
+                      let rec back i =
+                        if i < 0 || not (blank text.[i]) then
+                          if i >= 0 && is_delim text.[i] then i else cnum
+                        else back (i - 1)
+                      in
+                      back (cnum - 1)
+                  in
+                  let start = { pos1 with Lexing.pos_cnum = dcnum } in
                   let loc =
-                    { Wax_utils.Ast.loc_start = pos1; loc_end = pos2 }
+                    {
+                      Wax_utils.Ast.loc_start = start;
+                      loc_end = { start with Lexing.pos_cnum = dcnum + 1 };
+                    }
                   in
                   related :=
                     {
