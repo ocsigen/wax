@@ -726,6 +726,73 @@ let local_while_seq d : Ast.location Ast.instr list =
          });
   ]
 
+(* A body-scoped local used across a control construct — the general shape that
+   drives sink_let's per-construct sink decisions. The declaration is left
+   *uninitialised* ([let v: i32;]): an initialiser would be an outer-scope use
+   that pins the declaration above the construct, so sink_let would never reach
+   the branch decision. Instead every use assigns [v] before reading it (so it is
+   definitely assigned wherever placed), and the declaration's only uses lie
+   inside exactly one — or both — of an [if]'s branches, a loop body, or a
+   labelled block. sink_let must then sink the declaration into the sole branch
+   that uses it, leave it in place when both branches do, and respect the loop
+   guard. These are the arms the param-only [stmt] bodies never reach: a param is
+   live everywhere, so it is never a sink candidate. *)
+let local_liveness_seq d : Ast.location Ast.instr list =
+  let n = fresh () in
+  let v = "lv" ^ string_of_int n in
+  (* Assign then read [v] — a self-contained use, so [v] is definitely assigned
+     before the read wherever this lands. *)
+  let use () =
+    let read =
+      match rnd 3 with
+      | 0 -> nl (Ast.Set (id "a", Some (nl Ast.Add), nl (Ast.Get (id v))))
+      | 1 -> nl (Ast.StructSet (leaf Point, id "x", nl (Ast.Get (id v))))
+      | _ -> nl (Ast.Let ([ (None, None) ], Some (nl (Ast.Get (id v)))))
+    in
+    [ nl (Ast.Set (id v, None, gen I32 (d - 1))); read ]
+  in
+  let void = Ast.{ params = [||]; results = [||] } in
+  let branch then_ else_ =
+    nl
+      (Ast.If
+         {
+           label = None;
+           typ = void;
+           cond = gen I32 (d - 1);
+           if_block = nl then_;
+           else_block = Some (nl else_);
+         })
+  in
+  let control =
+    match rnd 5 with
+    | 0 ->
+        branch (use ()) [ stmt (d - 1) ]
+        (* used in then only — sink into then *)
+    | 1 ->
+        branch [ stmt (d - 1) ] (use ())
+        (* used in else only — sink into else *)
+    | 2 -> branch (use ()) (use ()) (* used in both — must NOT sink *)
+    | 3 ->
+        nl
+          (Ast.While
+             {
+               label = None;
+               cond = gen I32 (d - 1);
+               step = None;
+               block = use ();
+             })
+    | _ ->
+        let lbl = id ("lb" ^ string_of_int n) in
+        nl
+          (Ast.Block
+             {
+               label = Some lbl;
+               typ = void;
+               block = use () @ [ nl (Ast.Br_if (lbl, gen I32 (d - 1))) ];
+             })
+  in
+  [ nl (Ast.Let ([ (Some (id v), Some (valtype I32)) ], None)); control ]
+
 (* One clean type error, to reach the checker's mismatch-reporting arms. *)
 let poison () : Ast.location Ast.instr =
   match rnd 7 with
@@ -973,12 +1040,16 @@ let func k : Ast.location Ast.modulefield =
   let sign = Ast.{ params; results = [| valtype res |] } in
   let body =
     let ns = 1 + rnd 3 in
-    (* Some statement slots expand to a labelled while over a body-scoped local
-       (a two-statement sequence) instead of a single statement. *)
+    (* Some statement slots expand to a two-statement sequence that declares a
+       body-scoped local and reads it across a control construct, instead of a
+       single statement — exercising sink_let's per-construct sink decisions. *)
     let stmts =
       List.concat
         (List.init ns (fun _ ->
-             if rnd 5 = 0 then local_while_seq 2 else [ stmt 2 ]))
+             match rnd 5 with
+             | 0 -> local_while_seq 2
+             | 1 -> local_liveness_seq 2
+             | _ -> [ stmt 2 ]))
     in
     let poison = if err && k = nf - 1 then [ poison () ] else [] in
     (* Occasionally end the function with a returning [match] instead of a plain
