@@ -3,7 +3,7 @@
   "displayName": "Wax",
   "description": "Syntax highlighting for Wax, a Rust-like syntax for WebAssembly.",
   "version": "0.1.0",
-  "publisher": "vouillon",
+  "publisher": "wax-wasm",
   "license": "Apache-2.0",
   "author": "Jérôme Vouillon",
   "repository": {

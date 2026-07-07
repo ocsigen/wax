@@ -21,17 +21,11 @@ WebAssembly — in `.wax` files.
 
 ## Installing locally
 
-This extension is not published to the Marketplace. To use it from a checkout:
+This extension is not published to the Marketplace. To install it from a checkout:
 
-```sh
-# Symlink (or copy) into your VS Code extensions directory:
-ln -s "$(pwd)/editors/vscode" ~/.vscode/extensions/wax-0.1.0
-```
+### Option A: Install via packaged `.vsix` (Recommended)
 
-Then reload VS Code. Any `.wax` file will pick up the `wax` language mode.
-
-## Packaging a `.vsix`
-
+Run the following commands to package and install the extension:
 ```sh
 cd editors/vscode
 npm install           # installs @vscode/vsce (a dev dependency)
@@ -39,8 +33,22 @@ npm run package       # produces wax-<version>.vsix
 code --install-extension wax-*.vsix
 ```
 
-`npm run package` runs `vsce package --no-dependencies` (this extension has no
-runtime dependencies). In VS Code you can instead run the **package vsix** build
+### Option B: Symlink (for development)
+
+1. Symlink (or copy) into your VS Code extensions directory:
+```sh
+ln -s "$(pwd)/editors/vscode" ~/.vscode/extensions/vouillon.wax-0.1.0
+```
+2. In modern versions of VS Code, manually placed extensions are not scanned automatically due to caching. You need to register the folder:
+   - Open the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`).
+   - Run the command: **`Developer: Install Extension from Location...`**
+   - Select the `~/.vscode/extensions/vouillon.wax-0.1.0` folder.
+
+Then reload VS Code. Any `.wax` file will pick up the `wax` language mode.
+
+## Packaging a `.vsix`
+
+In VS Code you can instead run the **package vsix** build
 task — `Terminal → Run Build Task…`, or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd>
 (<kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd> on macOS) — which invokes the same script.
 

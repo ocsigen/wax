@@ -1,5 +1,5 @@
 {
-  "name": "wax",
+  "name": "@wax-wasm/wax",
   "version": "0.1.0",
   "description": "A Rust-like syntax for WebAssembly — convert between .wax, .wat and .wasm",
   "bin": {
