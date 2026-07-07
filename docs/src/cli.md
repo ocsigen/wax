@@ -357,7 +357,8 @@ names, flag values (`--format` → `wat`/`wasm`/`wax`, `-W`/`-X` names and value
 Completion has two halves. The generic per-shell scripts ship with the
 [`cmdliner`](https://opam.ocaml.org/packages/cmdliner/) package; the `wax`
 package installs its own completion definitions (and man pages) alongside the
-binary. Installing `wax` through opam puts both in place.
+binary. Installing `wax` through opam puts both in place. (These extra files are
+installed on Unix only; they are skipped on native Windows.)
 
 Then hook the generic scripts into your shell once. For `zsh`, ensure the
 site-functions directory is on `$fpath` **before** `compinit`:

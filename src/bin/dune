@@ -11,10 +11,19 @@
 ; completion definitions and man pages — under the opam share root. The generic
 ; per-shell completion scripts are shipped by the cmdliner package itself, not
 ; here; see docs/src/cli.md for how users enable completion in their shell.
+;
+; Skipped on native Windows: dune fails to install the directory target there
+; ("<...>/cmdliner-support/share: Permission denied"), which broke the whole
+; package build on the Windows CI. Both the rule and the install are gated so
+; the extraction never runs on Windows either. (js_of_ocaml hit the same class
+; of dune directory-target install trouble and disabled its equivalent stanza
+; outright; a single-package repo like ours only needs the Windows exclusion.)
 
 (rule
  (target
   (dir cmdliner-support))
+ (enabled_if
+  (<> %{os_type} Win32))
  (deps main.exe)
  (action
   (ignore-stdout
@@ -22,6 +31,8 @@
 
 (install
  (package wax)
+ (enabled_if
+  (<> %{os_type} Win32))
  (section share_root)
  (dirs
   (cmdliner-support/share as .)))
