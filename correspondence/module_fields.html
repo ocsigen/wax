@@ -15,8 +15,8 @@
         <link rel="icon" href="../favicon-de23e50b.svg">
         <link rel="shortcut icon" href="../favicon-8114d1fc.png">
         <link rel="stylesheet" href="../css/variables-8adf115d.css">
-        <link rel="stylesheet" href="../css/general-0392ca55.css">
-        <link rel="stylesheet" href="../css/chrome-fc474251.css">
+        <link rel="stylesheet" href="../css/general-e96d0476.css">
+        <link rel="stylesheet" href="../css/chrome-d279d366.css">
         <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
 
         <!-- Fonts -->
@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-0d0cc0ae.js";
+            window.path_to_searchindex_js = "../searchindex-509dfe47.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-0d649137.js"></script>
@@ -201,8 +201,8 @@ subsection of the <code>name</code> custom section, written <code>$name</code> i
 <h3 id="recursive-types"><a class="header" href="#recursive-types">Recursive Types</a></h3>
 <p>Use <code>rec</code> when types reference each other:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">rec</span> {
-    <span class="hljs-keyword">type</span> <span class="hljs-type">list</span> = { head: <span class="hljs-type">i32</span>, tail: &amp;?node };
-    <span class="hljs-keyword">type</span> <span class="hljs-type">node</span> = { rest: &amp;list };
+    <span class="hljs-keyword">type</span> <span class="hljs-type">list</span> = { head: <span class="hljs-type">i32</span>, tail: &amp;?<span class="hljs-type">node</span> };
+    <span class="hljs-keyword">type</span> <span class="hljs-type">node</span> = { rest: &amp;<span class="hljs-type">list</span> };
 }</span></pre>
 
 <h3 id="supertypes-and-finality"><a class="header" href="#supertypes-and-finality">Supertypes and Finality</a></h3>
@@ -258,7 +258,7 @@ subsection of the <code>name</code> custom section, written <code>$name</code> i
 
 <span class="hljs-keyword">tag</span> <span class="hljs-title">my_error</span>(code: <span class="hljs-type">i32</span>);
 <span class="hljs-keyword">tag</span> <span class="hljs-title">empty_error</span>();
-<span class="hljs-keyword">tag</span> <span class="hljs-title">multi_arg</span>(a: <span class="hljs-type">i32</span>, b: &amp;string);</span></pre>
+<span class="hljs-keyword">tag</span> <span class="hljs-title">multi_arg</span>(a: <span class="hljs-type">i32</span>, b: &amp;<span class="hljs-type">string</span>);</span></pre>
 
 <p>Maps to:</p>
 <pre><code class="language-wat">(tag $my_error (param i32))
@@ -386,7 +386,7 @@ funcs[i] = g;</span></pre>
 <p>There is no dedicated <code>call_indirect</code> syntax: it is written as a call through a table slot, narrowing the slot to the callee’s <a href="#functions">function type</a> with a cast. WAT <code>call_indirect</code> round-trips through this form:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">cmp</span> = <span class="hljs-keyword">fn</span>(_: <span class="hljs-type">i32</span>, _: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span>;
 
-(funcs[i] <span class="hljs-keyword">as</span> &amp;cmp)(x, y)        <span class="hljs-comment">// call_indirect $funcs (type $cmp)</span></span></pre>
+(funcs[i] <span class="hljs-keyword">as</span> &amp;<span class="hljs-type">cmp</span>)(x, y)        <span class="hljs-comment">// call_indirect $funcs (type $cmp)</span></span></pre>
 
 <p>The other table-management instructions have method syntax too: <code>t.size()</code>,
 <code>t.grow(init, n)</code>, <code>t.fill(dst, val, n)</code>, <code>t.copy(dst, src, n)</code>,
@@ -401,7 +401,7 @@ funcs[i] = g;</span></pre>
 <p>A passive element segment can initialize a GC array with <a href="instructions.html#aggregate-instructions"><code>array.new_elem</code></a>, written with the same <code>[t| seg @ off; count]</code> syntax as <code>array.new_data</code> — which one applies is determined by the array’s element type (a reference element selects the element segment):</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">handlers</span> = [&amp;?<span class="hljs-type">func</span>];
 
-<span class="hljs-keyword">let</span> hs: &amp;handlers = [<span class="hljs-type">handlers</span>| <span class="hljs-keyword">dispatch</span> @ <span class="hljs-number">0</span>; <span class="hljs-number">3</span>];</span></pre>
+<span class="hljs-keyword">let</span> hs: &amp;<span class="hljs-type">handlers</span> = [<span class="hljs-type">handlers</span>| <span class="hljs-keyword">dispatch</span> @ <span class="hljs-number">0</span>; <span class="hljs-number">3</span>];</span></pre>
 
 <h2 id="module-structure"><a class="header" href="#module-structure">Module Structure</a></h2>
 <p>A typical Wax module follows this structure:</p>
@@ -486,7 +486,7 @@ funcs[i] = g;</span></pre>
 
         <script src="../clipboard-1626706a.min.js"></script>
         <script src="../highlight-abc7f01d.js"></script>
-        <script src="../book-c22b7243.js"></script>
+        <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
         <script src="../assets/wax-copy-90f63bdb.js"></script>

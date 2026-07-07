@@ -15,8 +15,8 @@
         <link rel="icon" href="favicon-de23e50b.svg">
         <link rel="shortcut icon" href="favicon-8114d1fc.png">
         <link rel="stylesheet" href="css/variables-8adf115d.css">
-        <link rel="stylesheet" href="css/general-0392ca55.css">
-        <link rel="stylesheet" href="css/chrome-fc474251.css">
+        <link rel="stylesheet" href="css/general-e96d0476.css">
+        <link rel="stylesheet" href="css/chrome-d279d366.css">
         <link rel="stylesheet" href="css/print-9e4910d8.css" media="print">
 
         <!-- Fonts -->
@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-0d0cc0ae.js";
+            window.path_to_searchindex_js = "searchindex-509dfe47.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-0d649137.js"></script>
@@ -267,7 +267,7 @@
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">ints</span> = [<span class="hljs-type">i32</span>];
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"find_first_zero"</span><span class="hljs-meta">]</span>
-<span class="hljs-keyword">fn</span> <span class="hljs-title">find_first_zero</span>(arr: &amp;ints) -&gt; <span class="hljs-type">i32</span> {
+<span class="hljs-keyword">fn</span> <span class="hljs-title">find_first_zero</span>(arr: &amp;<span class="hljs-type">ints</span>) -&gt; <span class="hljs-type">i32</span> {
     <span class="hljs-keyword">let</span> len = arr.<span class="hljs-title">length</span>();
     <span class="hljs-keyword">let</span> i = <span class="hljs-number">0</span>;
     <span class="hljs-symbol">'search</span>: <span class="hljs-keyword">loop</span> {
@@ -397,8 +397,8 @@
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"sum_list"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">sum_list</span>(v: &amp;?<span class="hljs-type">eq</span>) -&gt; <span class="hljs-type">i32</span> {
     <span class="hljs-keyword">match</span> v {
-        c: &amp;cons =&gt; { <span class="hljs-keyword">return</span> (c.<span class="hljs-variable">head</span> <span class="hljs-keyword">as</span> &amp;cell).<span class="hljs-variable">value</span> + <span class="hljs-title">sum_list</span>(c.<span class="hljs-variable">tail</span>); }
-        x: &amp;cell =&gt; { <span class="hljs-keyword">return</span> x.<span class="hljs-variable">value</span>; }
+        c: &amp;<span class="hljs-type">cons</span> =&gt; { <span class="hljs-keyword">return</span> (c.<span class="hljs-variable">head</span> <span class="hljs-keyword">as</span> &amp;<span class="hljs-type">cell</span>).<span class="hljs-variable">value</span> + <span class="hljs-title">sum_list</span>(c.<span class="hljs-variable">tail</span>); }
+        x: &amp;<span class="hljs-type">cell</span> =&gt; { <span class="hljs-keyword">return</span> x.<span class="hljs-variable">value</span>; }
         _ =&gt; { <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>; }
     }
 }</span></pre>
@@ -432,12 +432,12 @@ carrying the narrowed value, and the default trails the outer escape block:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">point</span> = { x: <span class="hljs-type">i32</span>, y: <span class="hljs-type">i32</span> };
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"make_point"</span><span class="hljs-meta">]</span>
-<span class="hljs-keyword">fn</span> <span class="hljs-title">make_point</span>(x: <span class="hljs-type">i32</span>, y: <span class="hljs-type">i32</span>) -&gt; &amp;point {
+<span class="hljs-keyword">fn</span> <span class="hljs-title">make_point</span>(x: <span class="hljs-type">i32</span>, y: <span class="hljs-type">i32</span>) -&gt; &amp;<span class="hljs-type">point</span> {
     {<span class="hljs-type">point</span>| x, y};             <span class="hljs-comment">// field shorthand: {x, y} means {x: x, y: y}</span>
 }
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"distance_squared"</span><span class="hljs-meta">]</span>
-<span class="hljs-keyword">fn</span> <span class="hljs-title">distance_squared</span>(p1: &amp;point, p2: &amp;point) -&gt; <span class="hljs-type">i32</span> {
+<span class="hljs-keyword">fn</span> <span class="hljs-title">distance_squared</span>(p1: &amp;<span class="hljs-type">point</span>, p2: &amp;<span class="hljs-type">point</span>) -&gt; <span class="hljs-type">i32</span> {
     <span class="hljs-keyword">let</span> dx = p1.<span class="hljs-variable">x</span> - p2.<span class="hljs-variable">x</span>;
     <span class="hljs-keyword">let</span> dy = p1.<span class="hljs-variable">y</span> - p2.<span class="hljs-variable">y</span>;
     dx * dx + dy * dy;
@@ -448,17 +448,17 @@ carrying the narrowed value, and the default trails the outer escape block:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">counter</span> = { value: <span class="hljs-keyword">mut</span> <span class="hljs-type">i32</span> };
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"new_counter"</span><span class="hljs-meta">]</span>
-<span class="hljs-keyword">fn</span> <span class="hljs-title">new_counter</span>() -&gt; &amp;counter {
+<span class="hljs-keyword">fn</span> <span class="hljs-title">new_counter</span>() -&gt; &amp;<span class="hljs-type">counter</span> {
     {<span class="hljs-type">counter</span>| value: <span class="hljs-number">0</span>};
 }
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"increment"</span><span class="hljs-meta">]</span>
-<span class="hljs-keyword">fn</span> <span class="hljs-title">increment</span>(c: &amp;counter) {
+<span class="hljs-keyword">fn</span> <span class="hljs-title">increment</span>(c: &amp;<span class="hljs-type">counter</span>) {
     c.<span class="hljs-variable">value</span> = c.<span class="hljs-variable">value</span> + <span class="hljs-number">1</span>;
 }
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"get_value"</span><span class="hljs-meta">]</span>
-<span class="hljs-keyword">fn</span> <span class="hljs-title">get_value</span>(c: &amp;counter) -&gt; <span class="hljs-type">i32</span> {
+<span class="hljs-keyword">fn</span> <span class="hljs-title">get_value</span>(c: &amp;<span class="hljs-type">counter</span>) -&gt; <span class="hljs-type">i32</span> {
     c.<span class="hljs-variable">value</span>;
 }</span></pre>
 
@@ -470,14 +470,14 @@ carrying the narrowed value, and the default trails the outer escape block:</p>
 <span class="hljs-comment">// Where an expected type fixes the result — here a `let` annotation — the</span>
 <span class="hljs-comment">// struct or array type name may be omitted.</span>
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"origin"</span><span class="hljs-meta">]</span>
-<span class="hljs-keyword">fn</span> <span class="hljs-title">origin</span>() -&gt; &amp;point {
-    <span class="hljs-keyword">let</span> p: &amp;point = {x: <span class="hljs-number">0</span>, y: <span class="hljs-number">0</span>};
+<span class="hljs-keyword">fn</span> <span class="hljs-title">origin</span>() -&gt; &amp;<span class="hljs-type">point</span> {
+    <span class="hljs-keyword">let</span> p: &amp;<span class="hljs-type">point</span> = {x: <span class="hljs-number">0</span>, y: <span class="hljs-number">0</span>};
     p;
 }
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"zeros"</span><span class="hljs-meta">]</span>
-<span class="hljs-keyword">fn</span> <span class="hljs-title">zeros</span>() -&gt; &amp;ints {
-    <span class="hljs-keyword">let</span> a: &amp;ints = [<span class="hljs-number">0</span>; <span class="hljs-number">16</span>];
+<span class="hljs-keyword">fn</span> <span class="hljs-title">zeros</span>() -&gt; &amp;<span class="hljs-type">ints</span> {
+    <span class="hljs-keyword">let</span> a: &amp;<span class="hljs-type">ints</span> = [<span class="hljs-number">0</span>; <span class="hljs-number">16</span>];
     a;
 }
 
@@ -493,7 +493,7 @@ carrying the narrowed value, and the default trails the outer escape block:</p>
 <span class="hljs-comment">// branch may omit the name — here the `{..}` default is resolved from the</span>
 <span class="hljs-comment">// `-&gt; &amp;point` result type flowing through the `?:`.</span>
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"pick"</span><span class="hljs-meta">]</span>
-<span class="hljs-keyword">fn</span> <span class="hljs-title">pick</span>(c: <span class="hljs-type">i32</span>) -&gt; &amp;point {
+<span class="hljs-keyword">fn</span> <span class="hljs-title">pick</span>(c: <span class="hljs-type">i32</span>) -&gt; &amp;<span class="hljs-type">point</span> {
     c ? {..} : {x: <span class="hljs-number">1</span>, y: <span class="hljs-number">2</span>};
 }</span></pre>
 
@@ -526,7 +526,7 @@ the block produces or by the surrounding context:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">bytes</span> = [<span class="hljs-keyword">mut</span> <span class="hljs-type">i8</span>];
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"sum_bytes"</span><span class="hljs-meta">]</span>
-<span class="hljs-keyword">fn</span> <span class="hljs-title">sum_bytes</span>(arr: &amp;bytes) -&gt; <span class="hljs-type">i32</span> {
+<span class="hljs-keyword">fn</span> <span class="hljs-title">sum_bytes</span>(arr: &amp;<span class="hljs-type">bytes</span>) -&gt; <span class="hljs-type">i32</span> {
     <span class="hljs-keyword">let</span> sum = <span class="hljs-number">0</span>;
     <span class="hljs-keyword">let</span> i = <span class="hljs-number">0</span>;
     <span class="hljs-keyword">let</span> len = arr.<span class="hljs-title">length</span>();
@@ -542,7 +542,7 @@ the block produces or by the surrounding context:</p>
 }
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"fill_bytes"</span><span class="hljs-meta">]</span>
-<span class="hljs-keyword">fn</span> <span class="hljs-title">fill_bytes</span>(arr: &amp;bytes, val: <span class="hljs-type">i32</span>) {
+<span class="hljs-keyword">fn</span> <span class="hljs-title">fill_bytes</span>(arr: &amp;<span class="hljs-type">bytes</span>, val: <span class="hljs-type">i32</span>) {
     <span class="hljs-keyword">let</span> i = <span class="hljs-number">0</span>;
     <span class="hljs-keyword">let</span> len = arr.<span class="hljs-title">length</span>();
     <span class="hljs-symbol">'loop</span>: <span class="hljs-keyword">loop</span> {
@@ -580,15 +580,15 @@ the block produces or by the surrounding context:</p>
 
 <h2 id="recursive-types-linked-list"><a class="header" href="#recursive-types-linked-list">Recursive Types (Linked List)</a></h2>
 <h3 id="wax-14"><a class="header" href="#wax-14">Wax</a></h3>
-<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">list</span> = { value: <span class="hljs-type">i32</span>, next: &amp;?list };
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">list</span> = { value: <span class="hljs-type">i32</span>, next: &amp;?<span class="hljs-type">list</span> };
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"make_node"</span><span class="hljs-meta">]</span>
-<span class="hljs-keyword">fn</span> <span class="hljs-title">make_node</span>(value: <span class="hljs-type">i32</span>, next: &amp;?list) -&gt; &amp;list {
+<span class="hljs-keyword">fn</span> <span class="hljs-title">make_node</span>(value: <span class="hljs-type">i32</span>, next: &amp;?<span class="hljs-type">list</span>) -&gt; &amp;<span class="hljs-type">list</span> {
     {<span class="hljs-type">list</span>| value, next};
 }
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"sum_list"</span><span class="hljs-meta">]</span>
-<span class="hljs-keyword">fn</span> <span class="hljs-title">sum_list</span>(head: &amp;?list) -&gt; <span class="hljs-type">i32</span> {
+<span class="hljs-keyword">fn</span> <span class="hljs-title">sum_list</span>(head: &amp;?<span class="hljs-type">list</span>) -&gt; <span class="hljs-type">i32</span> {
     <span class="hljs-keyword">if</span> !head {
         <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;
     }
@@ -646,12 +646,12 @@ UTF-16 code units. See <a href="language.html#strings">Strings</a>.</p>
 }
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"greeting"</span><span class="hljs-meta">]</span>
-<span class="hljs-keyword">fn</span> <span class="hljs-title">greeting</span>() -&gt; &amp;chars {
+<span class="hljs-keyword">fn</span> <span class="hljs-title">greeting</span>() -&gt; &amp;<span class="hljs-type">chars</span> {
     <span class="hljs-type">chars</span> # <span class="hljs-string">"hi\u{21}"</span>;         <span class="hljs-comment">// the bytes 'h', 'i', '!'</span>
 }
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"wide_greeting"</span><span class="hljs-meta">]</span>
-<span class="hljs-keyword">fn</span> <span class="hljs-title">wide_greeting</span>() -&gt; &amp;wide {
+<span class="hljs-keyword">fn</span> <span class="hljs-title">wide_greeting</span>() -&gt; &amp;<span class="hljs-type">wide</span> {
     <span class="hljs-type">wide</span> # <span class="hljs-string">"café"</span>;              <span class="hljs-comment">// the UTF-16 units 'c', 'a', 'f', 'é'</span>
 }</span></pre>
 
@@ -760,17 +760,17 @@ cast on descriptor equality (a leading <code>?</code> makes the result nullable)
 }
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"make"</span><span class="hljs-meta">]</span>
-<span class="hljs-keyword">fn</span> <span class="hljs-title">make</span>(kind: <span class="hljs-type">i32</span>, x: <span class="hljs-type">i32</span>) -&gt; &amp;!obj {
+<span class="hljs-keyword">fn</span> <span class="hljs-title">make</span>(kind: <span class="hljs-type">i32</span>, x: <span class="hljs-type">i32</span>) -&gt; &amp;!<span class="hljs-type">obj</span> {
     { <span class="hljs-keyword">descriptor</span>({<span class="hljs-type">obj_desc</span>| kind})| x };
 }
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"kind_of"</span><span class="hljs-meta">]</span>
-<span class="hljs-keyword">fn</span> <span class="hljs-title">kind_of</span>(o: &amp;obj) -&gt; <span class="hljs-type">i32</span> {
+<span class="hljs-keyword">fn</span> <span class="hljs-title">kind_of</span>(o: &amp;<span class="hljs-type">obj</span>) -&gt; <span class="hljs-type">i32</span> {
     o.<span class="hljs-variable">descriptor</span>.<span class="hljs-variable">kind</span>;
 }
 
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"narrow"</span><span class="hljs-meta">]</span>
-<span class="hljs-keyword">fn</span> <span class="hljs-title">narrow</span>(v: &amp;?<span class="hljs-type">any</span>, d: &amp;!obj_desc) -&gt; &amp;?obj {
+<span class="hljs-keyword">fn</span> <span class="hljs-title">narrow</span>(v: &amp;?<span class="hljs-type">any</span>, d: &amp;!<span class="hljs-type">obj_desc</span>) -&gt; &amp;?<span class="hljs-type">obj</span> {
     v <span class="hljs-keyword">as</span> ?<span class="hljs-keyword">descriptor</span>(d);
 }</span></pre>
 
@@ -845,7 +845,7 @@ feature flag required).</p>
 
         <script src="clipboard-1626706a.min.js"></script>
         <script src="highlight-abc7f01d.js"></script>
-        <script src="book-c22b7243.js"></script>
+        <script src="book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
         <script src="assets/wax-copy-90f63bdb.js"></script>

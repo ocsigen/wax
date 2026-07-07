@@ -15,8 +15,8 @@
         <link rel="icon" href="favicon-de23e50b.svg">
         <link rel="shortcut icon" href="favicon-8114d1fc.png">
         <link rel="stylesheet" href="css/variables-8adf115d.css">
-        <link rel="stylesheet" href="css/general-0392ca55.css">
-        <link rel="stylesheet" href="css/chrome-fc474251.css">
+        <link rel="stylesheet" href="css/general-e96d0476.css">
+        <link rel="stylesheet" href="css/chrome-d279d366.css">
         <link rel="stylesheet" href="css/print-9e4910d8.css" media="print">
 
         <!-- Fonts -->
@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-0d0cc0ae.js";
+            window.path_to_searchindex_js = "searchindex-509dfe47.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-0d649137.js"></script>
@@ -691,8 +691,8 @@ reference type. Each arm tests the scrutinee against a reference type, optionall
 binding the narrowed value, and runs its body when the test succeeds:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">fn</span> <span class="hljs-title">classify</span>(v: &amp;?<span class="hljs-type">eq</span>) -&gt; <span class="hljs-type">i32</span> {
     <span class="hljs-keyword">match</span> v {
-        p: &amp;point =&gt; { <span class="hljs-keyword">return</span> p.<span class="hljs-variable">x</span> + p.<span class="hljs-variable">y</span>; }   <span class="hljs-comment">// v is a &amp;point, bound to p</span>
-        a: &amp;bytes =&gt; { <span class="hljs-keyword">return</span> a.<span class="hljs-title">length</span>(); }  <span class="hljs-comment">// else if v is a &amp;bytes</span>
+        p: &amp;<span class="hljs-type">point</span> =&gt; { <span class="hljs-keyword">return</span> p.<span class="hljs-variable">x</span> + p.<span class="hljs-variable">y</span>; }   <span class="hljs-comment">// v is a &amp;point, bound to p</span>
+        a: &amp;<span class="hljs-type">bytes</span> =&gt; { <span class="hljs-keyword">return</span> a.<span class="hljs-title">length</span>(); }  <span class="hljs-comment">// else if v is a &amp;bytes</span>
         <span class="hljs-literal">null</span>      =&gt; { <span class="hljs-keyword">return</span> -<span class="hljs-number">1</span>; }           <span class="hljs-comment">// else if v is null</span>
         _         =&gt; { <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>; }            <span class="hljs-comment">// otherwise (the default)</span>
     }
@@ -714,8 +714,8 @@ to whatever comes after, including the rest of the enclosing block:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">let</span> r: <span class="hljs-type">i32</span>;
 <span class="hljs-symbol">'done</span>: <span class="hljs-keyword">do</span> {
     <span class="hljs-keyword">match</span> v {
-        p: &amp;point =&gt; { r = p.<span class="hljs-variable">x</span>; <span class="hljs-keyword">br</span> <span class="hljs-symbol">'done</span>; }
-        a: &amp;bytes =&gt; { r = a.<span class="hljs-title">length</span>(); <span class="hljs-keyword">br</span> <span class="hljs-symbol">'done</span>; }
+        p: &amp;<span class="hljs-type">point</span> =&gt; { r = p.<span class="hljs-variable">x</span>; <span class="hljs-keyword">br</span> <span class="hljs-symbol">'done</span>; }
+        a: &amp;<span class="hljs-type">bytes</span> =&gt; { r = a.<span class="hljs-title">length</span>(); <span class="hljs-keyword">br</span> <span class="hljs-symbol">'done</span>; }
         _ =&gt; { r = <span class="hljs-number">0</span>; }   <span class="hljs-comment">// also reached by a non-point, non-bytes v</span>
     }
 }</span></pre>
@@ -782,7 +782,7 @@ module may have at most one:</p>
 
 <h3 id="indirect-calls"><a class="header" href="#indirect-calls">Indirect Calls</a></h3>
 <p>Call through a function reference:</p>
-<pre class="wax-highlight"><span class="hljs wax-code">(func_ref <span class="hljs-keyword">as</span> &amp;?callback)(arg)</span></pre>
+<pre class="wax-highlight"><span class="hljs wax-code">(func_ref <span class="hljs-keyword">as</span> &amp;?<span class="hljs-type">callback</span>)(arg)</span></pre>
 
 <h2 id="imports-and-exports"><a class="header" href="#imports-and-exports">Imports and Exports</a></h2>
 <p>A module talks to its host through imports and exports, both written as
@@ -811,8 +811,8 @@ a trailing <code>;</code>, and a global with its type:</p>
 attributes.</p>
 <h2 id="references"><a class="header" href="#references">References</a></h2>
 <h3 id="reference-types"><a class="header" href="#reference-types">Reference Types</a></h3>
-<pre class="wax-highlight"><span class="hljs wax-code">&amp;<span class="hljs-keyword">type</span>           <span class="hljs-comment">// Non-nullable reference</span>
-&amp;?<span class="hljs-keyword">type</span>          <span class="hljs-comment">// Nullable reference</span></span></pre>
+<pre class="wax-highlight"><span class="hljs wax-code">&amp;<span class="hljs-type">type</span>           <span class="hljs-comment">// Non-nullable reference</span>
+&amp;?<span class="hljs-type">type</span>          <span class="hljs-comment">// Nullable reference</span></span></pre>
 
 <h3 id="null"><a class="header" href="#null">Null</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-literal">null</span>            <span class="hljs-comment">// Null reference (requires type context)</span></span></pre>
@@ -822,8 +822,8 @@ attributes.</p>
 ref!            <span class="hljs-comment">// Assert non-null (trap if null)</span></span></pre>
 
 <h3 id="type-testing-and-casting"><a class="header" href="#type-testing-and-casting">Type Testing and Casting</a></h3>
-<pre class="wax-highlight"><span class="hljs wax-code">val <span class="hljs-keyword">is</span> &amp;<span class="hljs-keyword">type</span>    <span class="hljs-comment">// Test if val is of type (returns i32)</span>
-val <span class="hljs-keyword">as</span> &amp;<span class="hljs-keyword">type</span>    <span class="hljs-comment">// Cast val to type (trap on failure)</span></span></pre>
+<pre class="wax-highlight"><span class="hljs wax-code">val <span class="hljs-keyword">is</span> &amp;<span class="hljs-type">type</span>    <span class="hljs-comment">// Test if val is of type (returns i32)</span>
+val <span class="hljs-keyword">as</span> &amp;<span class="hljs-type">type</span>    <span class="hljs-comment">// Cast val to type (trap on failure)</span></span></pre>
 
 <p>Structs and arrays are WebAssembly GC heap types: a value of such a type is
 always held through a reference (<code>&amp;point</code>, <code>&amp;bytes</code>, …), not inline.</p>
@@ -862,7 +862,7 @@ given when the field set is ambiguous (several types share it) or absent (a
 <p>A field written as a bare name is <strong>punned</strong> to the like-named local or global:
 <code>{x}</code> is shorthand for <code>{x: x}</code>. Punned and explicit fields mix freely, in any
 order:</p>
-<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">fn</span> <span class="hljs-title">make</span>(x: <span class="hljs-type">i32</span>, y: <span class="hljs-type">i32</span>) -&gt; &amp;point {
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">fn</span> <span class="hljs-title">make</span>(x: <span class="hljs-type">i32</span>, y: <span class="hljs-type">i32</span>) -&gt; &amp;<span class="hljs-type">point</span> {
     {x, y: y + <span class="hljs-number">1</span>};              <span class="hljs-comment">// same as {x: x, y: y + 1}</span>
 }</span></pre>
 
@@ -896,8 +896,8 @@ be left open for extension — the WebAssembly GC type features.</p>
 <p>Types that reference each other are declared together in a <code>rec { … }</code> group, so
 each name is in scope for the others:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">rec</span> {
-    <span class="hljs-keyword">type</span> <span class="hljs-type">expr</span> = { op: <span class="hljs-type">i32</span>, args: &amp;?args };
-    <span class="hljs-keyword">type</span> <span class="hljs-type">args</span> = [<span class="hljs-keyword">mut</span> &amp;expr];
+    <span class="hljs-keyword">type</span> <span class="hljs-type">expr</span> = { op: <span class="hljs-type">i32</span>, args: &amp;?<span class="hljs-type">args</span> };
+    <span class="hljs-keyword">type</span> <span class="hljs-type">args</span> = [<span class="hljs-keyword">mut</span> &amp;<span class="hljs-type">expr</span>];
 }</span></pre>
 
 <h3 id="subtyping"><a class="header" href="#subtyping">Subtyping</a></h3>
@@ -908,7 +908,7 @@ a <code>&amp;super</code> is expected. Types are <em>final</em> by default; a ty
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">shape</span> = <span class="hljs-keyword">open</span> { kind: <span class="hljs-type">i32</span> };
 <span class="hljs-keyword">type</span> <span class="hljs-type">circle</span> : shape = { kind: <span class="hljs-type">i32</span>, radius: <span class="hljs-type">f64</span> };
 
-<span class="hljs-keyword">fn</span> <span class="hljs-title">kind_of</span>(s: &amp;shape) -&gt; <span class="hljs-type">i32</span> { s.<span class="hljs-variable">kind</span>; }   <span class="hljs-comment">// also accepts a &amp;circle</span></span></pre>
+<span class="hljs-keyword">fn</span> <span class="hljs-title">kind_of</span>(s: &amp;<span class="hljs-type">shape</span>) -&gt; <span class="hljs-type">i32</span> { s.<span class="hljs-variable">kind</span>; }   <span class="hljs-comment">// also accepts a &amp;circle</span></span></pre>
 
 <p>Since the inherited fields must be repeated verbatim, a leading <code>..</code> stands in
 for them: it copies the supertype’s field names and types, and the fields after
@@ -950,7 +950,7 @@ by an expected type from the context:</p>
 
 <span class="hljs-type">chars</span> # <span class="hljs-string">"hi"</span>;               <span class="hljs-comment">// a &amp;chars, one i8 per UTF-8 byte</span>
 <span class="hljs-type">wide</span> # <span class="hljs-string">"café"</span>;              <span class="hljs-comment">// a &amp;wide, one i16 per UTF-16 code unit</span>
-<span class="hljs-keyword">let</span> s: &amp;chars = <span class="hljs-string">"yo"</span>;       <span class="hljs-comment">// type taken from the annotation</span></span></pre>
+<span class="hljs-keyword">let</span> s: &amp;<span class="hljs-type">chars</span> = <span class="hljs-string">"yo"</span>;       <span class="hljs-comment">// type taken from the annotation</span></span></pre>
 
 <p>String literals recognise the same escapes as <a href="#characters">character literals</a>
 — <code>\t</code>, <code>\n</code>, <code>\r</code>, <code>\'</code>, <code>\"</code>, <code>\\</code>, <code>\NN</code> (two hex digits, one byte), and
@@ -1046,7 +1046,7 @@ mem0.<span class="hljs-title">store32</span>(p, v, <span class="hljs-number">1</
 
 funcs[i]                              <span class="hljs-comment">// table.get</span>
 funcs[i] = g;                         <span class="hljs-comment">// table.set</span>
-(funcs[i] <span class="hljs-keyword">as</span> &amp;cmp)(x, y)              <span class="hljs-comment">// indirect call (call_indirect)</span></span></pre>
+(funcs[i] <span class="hljs-keyword">as</span> &amp;<span class="hljs-type">cmp</span>)(x, y)              <span class="hljs-comment">// indirect call (call_indirect)</span></span></pre>
 
 <p>A passive element segment initializes a GC array of references with the same <code>[t| seg @ off; count]</code> form used for data segments — a reference element type selects the element segment:</p>
 <pre class="wax-highlight"><span class="hljs wax-code">[<span class="hljs-type">handlers</span>| pool @ <span class="hljs-number">0</span>; <span class="hljs-number">3</span>]               <span class="hljs-comment">// array.new_elem</span></span></pre>
@@ -1116,9 +1116,9 @@ suspended tag to a label (empty here):</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">unit_task</span> = <span class="hljs-keyword">fn</span>() -&gt; <span class="hljs-type">i32</span>;
 <span class="hljs-keyword">type</span> <span class="hljs-type">k0</span> = <span class="hljs-keyword">cont</span> unit_task;
 
-<span class="hljs-keyword">fn</span> <span class="hljs-title">spawn</span>() -&gt; &amp;k { <span class="hljs-keyword">cont_new</span> <span class="hljs-title">k </span>(worker); }          <span class="hljs-comment">// wrap `worker` (a task)</span>
-<span class="hljs-keyword">fn</span> <span class="hljs-title">prime</span>(c: &amp;k) -&gt; &amp;k0 { <span class="hljs-keyword">cont_bind</span> k <span class="hljs-title">k0 </span>(<span class="hljs-number">7</span>, c); }  <span class="hljs-comment">// bind the argument</span>
-<span class="hljs-keyword">fn</span> <span class="hljs-title">go</span>(c: &amp;k0) -&gt; <span class="hljs-type">i32</span> { <span class="hljs-keyword">resume</span> k0 [] (c); }         <span class="hljs-comment">// run until it suspends</span></span></pre>
+<span class="hljs-keyword">fn</span> <span class="hljs-title">spawn</span>() -&gt; &amp;<span class="hljs-type">k</span> { <span class="hljs-keyword">cont_new</span> <span class="hljs-title">k </span>(worker); }          <span class="hljs-comment">// wrap `worker` (a task)</span>
+<span class="hljs-keyword">fn</span> <span class="hljs-title">prime</span>(c: &amp;<span class="hljs-type">k</span>) -&gt; &amp;<span class="hljs-type">k0</span> { <span class="hljs-keyword">cont_bind</span> k <span class="hljs-title">k0 </span>(<span class="hljs-number">7</span>, c); }  <span class="hljs-comment">// bind the argument</span>
+<span class="hljs-keyword">fn</span> <span class="hljs-title">go</span>(c: &amp;<span class="hljs-type">k0</span>) -&gt; <span class="hljs-type">i32</span> { <span class="hljs-keyword">resume</span> k0 [] (c); }         <span class="hljs-comment">// run until it suspends</span></span></pre>
 
 <p>The abstract continuation heap types are written <code>&amp;cont</code> and <code>&amp;nocont</code> (with
 <code>&amp;?cont</code> for the nullable form).</p>
@@ -1251,7 +1251,7 @@ Hint: reachable when not debug
 
         <script src="clipboard-1626706a.min.js"></script>
         <script src="highlight-abc7f01d.js"></script>
-        <script src="book-c22b7243.js"></script>
+        <script src="book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
         <script src="assets/wax-copy-90f63bdb.js"></script>

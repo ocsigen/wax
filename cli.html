@@ -15,8 +15,8 @@
         <link rel="icon" href="favicon-de23e50b.svg">
         <link rel="shortcut icon" href="favicon-8114d1fc.png">
         <link rel="stylesheet" href="css/variables-8adf115d.css">
-        <link rel="stylesheet" href="css/general-0392ca55.css">
-        <link rel="stylesheet" href="css/chrome-fc474251.css">
+        <link rel="stylesheet" href="css/general-e96d0476.css">
+        <link rel="stylesheet" href="css/chrome-d279d366.css">
         <link rel="stylesheet" href="css/print-9e4910d8.css" media="print">
 
         <!-- Fonts -->
@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-0d0cc0ae.js";
+            window.path_to_searchindex_js = "searchindex-509dfe47.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-0d649137.js"></script>
@@ -547,6 +547,23 @@ bad</em> (<code>128</code>). A rejected input reports <code>128</code> wherever 
 syntax, validation, or type-checking — so <code>check</code> exits <code>0</code> when every input is
 valid and <code>128</code> otherwise, which is what a CI gate wants. For scripting, treat
 any non-zero status as failure.</p>
+<h2 id="shell-completion"><a class="header" href="#shell-completion">Shell completion</a></h2>
+<p><code>wax</code> supports <code>zsh</code>, <code>bash</code>, and PowerShell completion: subcommands, flag
+names, flag values (<code>--format</code> → <code>wat</code>/<code>wasm</code>/<code>wax</code>, <code>-W</code>/<code>-X</code> names and values,
+<code>--color</code>, <code>--debug</code>), and input/output file paths.</p>
+<p>Completion has two halves. The generic per-shell scripts ship with the
+<a href="https://opam.ocaml.org/packages/cmdliner/"><code>cmdliner</code></a> package; the <code>wax</code>
+package installs its own completion definitions (and man pages) alongside the
+binary. Installing <code>wax</code> through opam puts both in place.</p>
+<p>Then hook the generic scripts into your shell once. For <code>zsh</code>, ensure the
+site-functions directory is on <code>$fpath</code> <strong>before</strong> <code>compinit</code>:</p>
+<pre><code class="language-sh">FPATH="$(opam var share)/zsh/site-functions:$FPATH"
+autoload -Uz compinit &amp;&amp; compinit
+</code></pre>
+<p>For <code>bash</code>, with <a href="https://github.com/scop/bash-completion"><code>bash-completion</code></a>
+installed, point it at the cmdliner share directory. See the
+<a href="https://erratique.ch/software/cmdliner/doc/cli.html#cli_completion">cmdliner completion guide</a>
+for the per-shell details and the PowerShell setup.</p>
 
                     </main>
 
@@ -590,7 +607,7 @@ any non-zero status as failure.</p>
 
         <script src="clipboard-1626706a.min.js"></script>
         <script src="highlight-abc7f01d.js"></script>
-        <script src="book-c22b7243.js"></script>
+        <script src="book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
         <script src="assets/wax-copy-90f63bdb.js"></script>

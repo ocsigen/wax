@@ -15,8 +15,8 @@
         <link rel="icon" href="../favicon-de23e50b.svg">
         <link rel="shortcut icon" href="../favicon-8114d1fc.png">
         <link rel="stylesheet" href="../css/variables-8adf115d.css">
-        <link rel="stylesheet" href="../css/general-0392ca55.css">
-        <link rel="stylesheet" href="../css/chrome-fc474251.css">
+        <link rel="stylesheet" href="../css/general-e96d0476.css">
+        <link rel="stylesheet" href="../css/chrome-d279d366.css">
         <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
 
         <!-- Fonts -->
@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-0d0cc0ae.js";
+            window.path_to_searchindex_js = "../searchindex-509dfe47.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-0d649137.js"></script>
@@ -205,8 +205,8 @@
 points to values of exactly one concrete type, with no subtypes. Wax writes the
 exactness marker <code>!</code> between the <code>&amp;</code>/<code>&amp;?</code> sigil and the type name, so it sits
 alongside the nullability <code>?</code>:</p>
-<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">let</span> a: &amp;!point = ...;   <span class="hljs-comment">// (ref (exact $point))</span>
-<span class="hljs-keyword">let</span> b: &amp;?!point = ...;  <span class="hljs-comment">// (ref null (exact $point))</span></span></pre>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">let</span> a: &amp;!<span class="hljs-type">point</span> = ...;   <span class="hljs-comment">// (ref (exact $point))</span>
+<span class="hljs-keyword">let</span> b: &amp;?!<span class="hljs-type">point</span> = ...;  <span class="hljs-comment">// (ref null (exact $point))</span></span></pre>
 
 <p>Only a concrete (declared) type can be exact; <code>&amp;!any</code> and other abstract heap
 types are rejected. An exact reference is a subtype of the corresponding inexact
@@ -272,8 +272,8 @@ the additional packed types available only in struct and array fields.</p>
 <h3 id="recursive-types"><a class="header" href="#recursive-types">Recursive Types</a></h3>
 <p>Wax allows defining recursive reference types using <code>rec { ... }</code>.</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">rec</span> {
-    <span class="hljs-keyword">type</span> <span class="hljs-type">tree</span> = { value: <span class="hljs-type">i32</span>, children: &amp;forest };
-    <span class="hljs-keyword">type</span> <span class="hljs-type">forest</span> = [&amp;?tree];
+    <span class="hljs-keyword">type</span> <span class="hljs-type">tree</span> = { value: <span class="hljs-type">i32</span>, children: &amp;<span class="hljs-type">forest</span> };
+    <span class="hljs-keyword">type</span> <span class="hljs-type">forest</span> = [&amp;?<span class="hljs-type">tree</span>];
 }</span></pre>
 
 <h3 id="structs"><a class="header" href="#structs">Structs</a></h3>
@@ -388,7 +388,7 @@ covariantly.</li>
 
         <script src="../clipboard-1626706a.min.js"></script>
         <script src="../highlight-abc7f01d.js"></script>
-        <script src="../book-c22b7243.js"></script>
+        <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
         <script src="../assets/wax-copy-90f63bdb.js"></script>
