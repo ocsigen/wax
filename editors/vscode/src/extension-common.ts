@@ -283,7 +283,9 @@ function registerDiagnostics(
 // open the conversion in a read-only virtual document beside the source, kept
 // live as the source changes. The virtual document's URI encodes the target
 // language in its path extension and keeps the source URI in its query, so the
-// content provider can re-read and re-convert on demand.
+// content provider can re-read and re-convert on demand. While the source is
+// temporarily invalid, the last successful conversion is kept (marked stale)
+// rather than blanking the preview.
 
 const PREVIEW_SCHEME = "wax-preview";
 
@@ -309,8 +311,8 @@ function previewTarget(uri: vscode.Uri): "wat" | "wax" {
   return uri.path.endsWith(".wax") ? "wax" : "wat";
 }
 
-// A conversion failure or a missing source is shown as a comment in the target
-// language, so the preview stays valid-looking and highlighted.
+// A message rendered as comment lines in the target language, so a preview that
+// cannot show real output stays valid-looking and highlighted.
 function asComment(target: "wat" | "wax", message: string): string {
   const lead = target === "wat" ? ";; " : "// ";
   return message
@@ -324,31 +326,53 @@ function registerConvert(
   opts: LoadOptions,
 ): void {
   const changed = new vscode.EventEmitter<vscode.Uri>();
+  // The last successful conversion per preview URI. While the source is
+  // temporarily invalid (mid-edit), we keep showing this rather than blanking
+  // the preview to an error, so it does not flicker on every keystroke.
+  const lastGood = new Map<string, string>();
 
   const provider: vscode.TextDocumentContentProvider = {
     onDidChange: changed.event,
     async provideTextDocumentContent(uri, token): Promise<string> {
       const target = previewTarget(uri);
+      // Cannot produce fresh output: keep the last good conversion, prefixed
+      // with a stale marker; fall back to the reason only if there is none yet.
+      const degraded = (reason: string, detail?: string): string => {
+        const prev = lastGood.get(uri.toString());
+        return prev !== undefined
+          ? asComment(
+              target,
+              `⚠ ${reason} Showing the last successful conversion.`,
+            ) +
+              "\n\n" +
+              prev
+          : asComment(target, detail ?? reason);
+      };
+
       let source: vscode.TextDocument;
       try {
         source = await vscode.workspace.openTextDocument(
           vscode.Uri.parse(uri.query),
         );
       } catch {
-        return asComment(target, "the source document is no longer open");
+        return degraded("The source document is no longer open.");
       }
       if (token.isCancellationRequested) return "";
       let wax: Wax;
       try {
         wax = await loadWax(context, opts);
       } catch {
-        return asComment(target, "failed to load the Wax runtime");
+        return degraded("Failed to load the Wax runtime.");
       }
       const text = source.getText();
       const result = target === "wat" ? wax.toWat(text) : wax.toWax(text);
       if (!result.ok || result.text === null) {
-        return asComment(target, "conversion failed:\n" + (result.error ?? ""));
+        return degraded(
+          "The source has errors.",
+          "Conversion failed:\n" + (result.error ?? ""),
+        );
       }
+      lastGood.set(uri.toString(), result.text);
       return result.text;
     },
   };
@@ -387,6 +411,9 @@ function registerConvert(
       provider,
     ),
     vscode.workspace.onDidChangeTextDocument((e) => refreshFor(e.document)),
+    vscode.workspace.onDidCloseTextDocument((doc) => {
+      if (doc.uri.scheme === PREVIEW_SCHEME) lastGood.delete(doc.uri.toString());
+    }),
     vscode.commands.registerCommand("wax.showWat", () => show("wat")),
     vscode.commands.registerCommand("wax.showWax", () => show("wax")),
   );

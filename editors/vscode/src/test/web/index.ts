@@ -145,5 +145,26 @@ export async function run(): Promise<void> {
     throw new Error("web: preview lacked compiled WAT: " + preview.getText());
   }
 
+  // Editing the source to be invalid keeps the last successful conversion in the
+  // preview, marked stale, rather than blanking it to an error.
+  const edit = new vscode.WorkspaceEdit();
+  edit.replace(
+    untitled.uri,
+    new vscode.Range(
+      untitled.positionAt(0),
+      untitled.positionAt(untitled.getText().length),
+    ),
+    "fn f( {",
+  );
+  await vscode.workspace.applyEdit(edit);
+  let stale = preview.getText();
+  for (let i = 0; i < 100 && !stale.includes("⚠"); i++) {
+    await new Promise((r) => setTimeout(r, 20));
+    stale = preview.getText();
+  }
+  if (!stale.includes("⚠") || !stale.includes("func")) {
+    throw new Error("web: stale preview should keep the last good output: " + stale);
+  }
+
   console.log("WEB SMOKE TEST PASSED");
 }

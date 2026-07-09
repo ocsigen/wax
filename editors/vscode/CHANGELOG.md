@@ -4,6 +4,8 @@
 
 - Formatting a file with syntax errors now says so in the status bar instead of
   doing nothing (the errors themselves are shown as squiggles / in Problems).
+- The WAT / Wax preview keeps the last successful conversion (marked stale) while
+  the source is temporarily invalid, instead of blanking to an error.
 
 ## 0.2.1
 
