@@ -450,9 +450,13 @@ type ctx = {
          exists in several mutually exclusive branches receives only the exports
          of its own branch, and an export narrower than its target's reachability
          is emitted as a guarded attribute. *)
-  mutable start : string option;
-      (* Wax name of the start function, if any; rendered as a [#[start]]
-         attribute on that function rather than a separate field. *)
+  starts : (string, (Cond.t * Wax_wasm.Ast.cond) list) Hashtbl.t;
+      (* [(start …)] fields, keyed by the Wax name of their function, rendered as
+         a [#[start]] attribute on it rather than a separate field. As with
+         [exports], each is paired with the branch condition under which it
+         appears, so a start narrower than its function's reachability becomes a
+         guarded [#[start, if <cond>]] and mutually exclusive starts (at most one
+         per configuration) stay on their own functions. *)
   locals : Sequence.t;
   labels : LabelStack.t;
   tag_types : Src.typeuse CondTbl.t;
@@ -2671,64 +2675,76 @@ let rec collect_local_refs acc (i : _ Src.instr) =
 
 and collect_local_refs_instrs acc l = List.iter (collect_local_refs acc) l
 
+(* The guard printed on a folded attribute (an [export]/[start] moved onto a
+   definition) is its branch condition with the conjuncts already entailed by
+   the target's own position ([ctx.cond_asm]) dropped: the target is emitted
+   inside those enclosing conditionals, so repeating them would be redundant
+   (and, worse, would re-accumulate on every round-trip). [location] anchors the
+   condition, which has no source of its own in the binary. *)
+let simplify_guard ctx ~location (syn : Wax_wasm.Ast.cond) :
+    (Wax_wasm.Ast.cond, Ast.location) Ast.annotated =
+  let rec conjuncts (c : Wax_wasm.Ast.cond) =
+    match c with Cond_and l -> List.concat_map conjuncts l | c -> [ c ]
+  in
+  let kept =
+    List.filter
+      (fun c ->
+        not
+          (Cond.logical_implies ctx.cond_asm
+             (Cond.of_cond ctx.cond_env ctx.cond_diag ~location c)))
+      (conjuncts syn)
+  in
+  {
+    Ast.desc = (match kept with [] -> syn | [ c ] -> c | l -> Cond_and l);
+    info = location;
+  }
+
+(* Fold the branch conditions [entries] of some attribute that a [(…)] field
+   attaches to a definition (an export, a start) into attribute guards on a
+   target at [ctx.cond_asm]: drop the attribute where its branch is unreachable,
+   keep it plain where the target's position already entails the branch, and
+   otherwise guard it with the branch condition simplified against the position.
+   [make guard nm] builds the attribute for one entry, [guard] being [None] for
+   a plain attribute. *)
+let folded_attrs ctx ~location entries make =
+  List.filter_map
+    (fun (c, syn, nm) ->
+      if not (Cond.is_satisfiable (Cond.and_ ctx.cond_asm c)) then None
+      else if Cond.logical_implies ctx.cond_asm c then Some (make None nm)
+      else Some (make (Some (simplify_guard ctx ~location syn)) nm))
+    entries
+
 let exports ctx kind name e =
   (* Reuse the bare [#[export]] short form when the export name matches the
      field's own Wax name; only a differing name needs to be spelled out.
      [guard] makes just this export conditional. *)
-  let attr ?guard nm =
+  let attr guard nm =
     let value =
       if nm.Ast.desc = name.Ast.desc then None else Some (string_of_name nm)
-    in
-    (* The guard has no source of its own in the binary; anchor it at the
-       target's name. *)
-    let guard =
-      Option.map (fun g -> { Ast.desc = g; info = name.Ast.info }) guard
     in
     ("export", value, guard)
   in
   (* [e] are the inline exports declared on this field (already in the right
      branch), so they inherit the field's reachability unconditionally. *)
-  let inline = List.map (fun nm -> attr nm) e in
-  (* The guard printed on the target is the export's branch condition with the
-     conjuncts already entailed by the target's own position dropped: the target
-     is emitted inside those enclosing conditionals, so repeating them would be
-     redundant (and, worse, would re-accumulate on every round-trip). *)
-  let simplify_guard (syn : Wax_wasm.Ast.cond) : Wax_wasm.Ast.cond =
-    let rec conjuncts (c : Wax_wasm.Ast.cond) =
-      match c with Cond_and l -> List.concat_map conjuncts l | c -> [ c ]
-    in
-    let kept =
-      List.filter
-        (fun c ->
-          not
-            (Cond.logical_implies ctx.cond_asm
-               (Cond.of_cond ctx.cond_env ctx.cond_diag ~location:name.Ast.info
-                  c)))
-        (conjuncts syn)
-    in
-    match kept with [] -> syn | [ c ] -> c | l -> Cond_and l
-  in
-  (* The table holds standalone exports. An export is kept only when its branch
-     can be reached under the field's current assumption; if the field is
-     reachable in cases where the export is not (its branch does not follow from
-     the field's), the export cannot be a plain attribute -- it becomes a guarded
-     [#[export …, if <cond>]] carrying its own branch condition. *)
+  let inline = List.map (fun nm -> attr None nm) e in
+  (* The table holds standalone exports; each is kept only when its branch is
+     reachable here, plain or guarded per [folded_attrs]. *)
   let standalone =
     match Hashtbl.find_opt ctx.exports (kind, name.Ast.desc) with
     | None -> []
-    | Some entries ->
-        List.filter_map
-          (fun (c, syn, nm) ->
-            if not (Cond.is_satisfiable (Cond.and_ ctx.cond_asm c)) then None
-            else if Cond.logical_implies ctx.cond_asm c then Some (attr nm)
-            else Some (attr ~guard:(simplify_guard syn) nm))
-          entries
+    | Some entries -> folded_attrs ctx ~location:name.Ast.info entries attr
   in
   inline @ standalone
 
-(* The [#[start]] attribute, if function [name] is the module's start. *)
+(* The [#[start]] attribute(s) on function [name]: a [(start …)] whose branch is
+   reachable here, plain or guarded like a standalone export. *)
 let start_attribute ctx name =
-  if ctx.start = Some name.Ast.desc then [ ("start", None, None) ] else []
+  match Hashtbl.find_opt ctx.starts name.Ast.desc with
+  | None -> []
+  | Some entries ->
+      folded_attrs ctx ~location:name.Ast.info
+        (List.map (fun (c, syn) -> (c, syn, ())) entries)
+        (fun guard () -> ("start", None, guard))
 
 let single_expression ctx ~location l =
   match l with
@@ -3391,6 +3407,7 @@ let register_names ctx export_tbl fields =
 let collect_exports cond_env diagnostics fields =
   let tbl = Hashtbl.create 16 in
   let lst = ref [] in
+  let start_lst = ref [] in
   (* Combine the accumulated branch conditions ([syn], a list of conjuncts, each
      already negated for an [@else]) into one syntactic condition, kept alongside
      the solved [asm] so a standalone export narrower than its target can be
@@ -3411,6 +3428,7 @@ let collect_exports cond_env diagnostics fields =
             let k = (kind, index.Ast.desc) in
             Hashtbl.replace tbl k
               (name :: (try Hashtbl.find tbl k with Not_found -> []))
+        | Start index -> start_lst := (index, asm, combine syn) :: !start_lst
         | Module_if_annotation { cond; then_fields; else_fields } ->
             let c =
               Cond.of_cond cond_env diagnostics ~location:field.info cond
@@ -3426,7 +3444,7 @@ let collect_exports cond_env diagnostics fields =
       fields
   in
   go Cond.true_ [] fields;
-  (tbl, !lst)
+  (tbl, !lst, !start_lst)
 
 (*** Module conversion ***)
 
@@ -3582,7 +3600,7 @@ let module_ ?(strict_constants = false) diagnostics (module_name, fields) =
         function_types = CondTbl.make ();
         tag_types = CondTbl.make ();
         exports = Hashtbl.create 16;
-        start = None;
+        starts = Hashtbl.create 16;
         locals = Sequence.make ~diagnostics common_namespace "x";
         labels = LabelStack.make ();
         label_arities = [];
@@ -3593,19 +3611,21 @@ let module_ ?(strict_constants = false) diagnostics (module_name, fields) =
         cond_asm = Cond.true_;
       }
     in
-    let export_tbl, export_lst =
+    let export_tbl, export_lst, start_lst =
       collect_exports ctx.cond_env ctx.cond_diag fields
     in
     register_names ctx export_tbl fields;
-    (* Resolve the start function (if any) to its Wax name; it is rendered as a
-       [#[start]] attribute on that function. *)
-    List.iter
-      (fun f ->
-        match f.Ast.desc with
-        | Src.Start i -> ctx.start <- Some (idx ctx `Func i).Ast.desc
-        | _ -> ())
-      fields;
     if not forbid_numeric then elaborate_implicit_types ctx fields;
+    (* Resolve each [(start …)] to its function's Wax name, keeping the branch
+       condition it appeared under; rendered as a [#[start]] attribute on that
+       function (guarded when the start is narrower than the function). *)
+    List.iter
+      (fun (index, asm, syn) ->
+        let name = (idx ctx `Func index).Ast.desc in
+        Hashtbl.replace ctx.starts name
+          ((asm, syn)
+          :: Option.value ~default:[] (Hashtbl.find_opt ctx.starts name)))
+      start_lst;
     List.iter
       (fun (kind, index, name, asm, syn) ->
         let k =

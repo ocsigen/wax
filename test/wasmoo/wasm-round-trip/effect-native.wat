@@ -130,6 +130,7 @@
 
     (func $init
       (global.set $caml_main_wrapper (ref.func $unhandled_effect_wrapper)))
+    (start $init)
 
     ;; Resume
 

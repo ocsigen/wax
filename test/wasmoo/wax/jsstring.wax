@@ -49,6 +49,7 @@
     const utf16_buffer_size = 1024;
     let buffer: &wstring = [0; 0];
 
+    #[start]
     fn init() {
         // Our dummy implementation of string conversion always returns
         // the empty string.

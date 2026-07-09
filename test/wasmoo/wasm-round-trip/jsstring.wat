@@ -86,6 +86,7 @@
               (global.set $buffer
                 (array.new $wstring (i32.const 0)
                   (global.get $utf16_buffer_size))))))))
+    (start $init)
 
     (func $jsstring_compare (export "jsstring_compare")
       (param $s anyref) (param $s' anyref) (result i32)

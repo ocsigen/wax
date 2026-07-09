@@ -1853,7 +1853,26 @@ let guarded_export_fields ~loc ~kind ~field_name attributes =
       | _ -> None)
     attributes
 
-let has_start attributes = List.exists (fun (k, _, _) -> k = "start") attributes
+(* The [(start $f)] field for a function's [#[start]] attribute: inline when
+   unguarded, wrapped in [(@if <cond> …)] when guarded, like a guarded export. *)
+let start_fields ~loc ~field_name attributes =
+  List.filter_map
+    (fun (k, _, guard) ->
+      match (k, guard) with
+      | "start", None -> Some (with_loc loc (Text.Start (index field_name)))
+      | "start", Some cond ->
+          Some
+            (with_loc loc
+               (Text.Module_if_annotation
+                  {
+                    cond = cond.Ast.desc;
+                    then_fields =
+                      with_loc loc
+                        [ with_loc loc (Text.Start (index field_name)) ];
+                    else_fields = None;
+                  }))
+      | _ -> None)
+    attributes
 
 (* The module name carried by a [#![module = "name"]] inner attribute, if any.
    Lowered into the binary's module-name subsection (the WAT [(module $name)]),
@@ -2314,7 +2333,7 @@ let module_ diagnostics types fields =
                     };
               };
             ]
-        | _ -> (
+        | _ ->
             let desc =
               match field.desc with
               | Type rectype ->
@@ -2415,13 +2434,15 @@ let module_ diagnostics types fields =
                     ~field_name:name attributes
               | _ -> []
             in
-            (* A [#[start]] function also emits a [(start $f)] field. *)
-            match field.desc with
-            | Func { name; attributes; _ } when has_start attributes ->
-                field'
-                :: { field with desc = Text.Start (index name) }
-                :: guarded
-            | _ -> field' :: guarded))
+            (* A [#[start]] function also emits a [(start $f)] field, guarded the
+               same way as a conditional export. *)
+            let start =
+              match field.desc with
+              | Func { name; attributes; _ } ->
+                  start_fields ~loc:field.info ~field_name:name attributes
+              | _ -> []
+            in
+            (field' :: start) @ guarded)
       fields
   in
   let wasm_fields = convert_fields fields in

@@ -307,7 +307,8 @@ module Error = struct
 
   let guard_not_allowed context ~location name =
     report context ~location
-      "A conditional guard is only allowed on an export annotation, not on %s."
+      "A conditional guard is only allowed on an export or start annotation, \
+       not on %s."
       name
 
   let multiple_import context ~location =
@@ -9018,10 +9019,10 @@ let check_attribute_list diagnostics ~export_ok ~start_ok ~module_ok ~import_ok
       let location =
         match value with Some v -> v.info | None -> default_location
       in
-      (* A per-attribute [if <cond>] guard is only meaningful on [export]; blame
-         its own [if] keyword. *)
+      (* A per-attribute [if <cond>] guard is only meaningful on [export] and
+         [start]; blame its own [if] keyword. *)
       (match guard with
-      | Some g when name <> "export" ->
+      | Some g when name <> "export" && name <> "start" ->
           Error.guard_not_allowed diagnostics ~location:g.info name
       | _ -> ());
       match name with
@@ -9246,7 +9247,9 @@ let type_configuration ?(warn_unused = false) ?(build = true)
      conditionals per branch, so exports in mutually exclusive branches do not
      clash. *)
   let exports = Hashtbl.create 16 in
-  let start_seen = ref false in
+  (* The conditions under which a [#[start]] has been seen; like [exports], a
+     second start clashes only when its condition can hold at the same time. *)
+  let starts = ref [] in
   let module_seen = ref false in
   (* The Wax name a bare [#[export]] reuses as its export name. *)
   let field_name field =
@@ -9267,6 +9270,16 @@ let type_configuration ?(warn_unused = false) ?(build = true)
   let process_attrs ~default_name ~location attributes =
     List.iter
       (fun (key, v, guard) ->
+        (* The condition under which this attribute is actually present: the
+           field's own branch assumption ([!cond]) narrowed by an optional
+           per-attribute [if <cond>] guard (only [export]/[start] carry one). *)
+        let cond =
+          match guard with
+          | None -> !cond
+          | Some g ->
+              Cond.and_ !cond
+                (Cond.of_cond cond_env diagnostics ~location:g.info g.desc)
+        in
         match (key, Option.map (fun (v : _ instr) -> v.desc) v) with
         | "export", ((Some (String _) | None) as value) ->
             (* The export name and the location to blame: the explicit string
@@ -9279,16 +9292,6 @@ let type_configuration ?(warn_unused = false) ?(build = true)
                   match default_name with
                   | Some (id : ident) -> Some (id.desc, id.info)
                   | None -> None)
-            in
-            (* The condition under which this export is actually present: the
-               field's own branch assumption ([!cond]) narrowed by an optional
-               per-attribute [if <cond>] guard. *)
-            let cond =
-              match guard with
-              | None -> !cond
-              | Some g ->
-                  Cond.and_ !cond
-                    (Cond.of_cond cond_env diagnostics ~location:g.info g.desc)
             in
             Option.iter
               (fun (name, location) ->
@@ -9307,9 +9310,14 @@ let type_configuration ?(warn_unused = false) ?(build = true)
                 Hashtbl.replace exports name (cond :: guards))
               entry
         | "start", _ ->
-            (* A module may name at most one start function. *)
-            if !start_seen then Error.multiple_start diagnostics ~location
-            else start_seen := true
+            (* A module may name at most one start function per configuration;
+               starts in mutually exclusive branches are fine. *)
+            if
+              List.exists
+                (fun g -> Cond.is_satisfiable (Cond.and_ g cond))
+                !starts
+            then Error.multiple_start diagnostics ~location;
+            starts := cond :: !starts
         | "module", _ ->
             (* A module may carry at most one name annotation. *)
             if !module_seen then Error.multiple_module diagnostics ~location

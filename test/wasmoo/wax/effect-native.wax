@@ -106,6 +106,7 @@
         }
     }
 
+    #[start]
     fn init() {
         caml_main_wrapper = unhandled_effect_wrapper;
     }

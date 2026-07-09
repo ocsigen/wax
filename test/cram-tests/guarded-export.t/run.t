@@ -93,14 +93,26 @@ and dropped otherwise.
       v;
   }
 
-A guard is only meaningful on an export, not on other attributes:
+A `start` is folded onto its function the same way, so a `(start …)` inside an
+`(@if …)` on a function defined outside it becomes a guarded `#[start]` (rather
+than being silently dropped), and round-trips faithfully:
+
+  $ wax cstart.wat -f wax
+  #[start, if debug]
+  fn init() {}
+  $ wax cstart.wat -f wax | wax -i wax -f wat
+  (func $init)
+  (@if $debug (@then (start $init)))
+
+A guard is only meaningful on an export or start, not on other attributes:
 
   $ wax check badguard.wax
   Error:
-    A conditional guard is only allowed on an export annotation, not on start.
-   ──➤  badguard.wax:1:10
-  1 │ #[start, if portable]
-    ·          ^^
-  2 │ fn s() { }
-  3 │ 
+    A conditional guard is only allowed on an export or start annotation, not on import.
+   ──➤  badguard.wax:2:21
+  1 │ import "m" {
+  2 │     #[import = "n", if debug]
+    ·                     ^^
+  3 │     fn f(&eq) -> &eq;
+  4 │ }
   [128]

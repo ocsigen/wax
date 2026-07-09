@@ -1,2 +1,6 @@
-#[start, if portable]
-fn s() { }
+import "m" {
+    #[import = "n", if debug]
+    fn f(&eq) -> &eq;
+}
+#[export]
+fn g(x: &eq) -> &eq { f(x); }
