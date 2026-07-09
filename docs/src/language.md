@@ -985,7 +985,8 @@ types**:
 
 So `&any`, `&?extern`, and `&eq` are all valid reference types. The exception
 and stack-switching hierarchies add `exn` and `cont`/`nocont`/`noexn`; see
-[Types → Heap Types](correspondence/types.md#heap-types) for the complete list.
+[Types → Heap Types](correspondence/types.md#heap-types) for the complete list
+and the subtype hierarchy.
 
 ### Null
 
