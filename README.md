@@ -120,12 +120,6 @@ A [Wax extension for Visual Studio Code](https://marketplace.visualstudio.com/it
 provides syntax highlighting and snippets. Its source lives in
 [`editors/vscode/`](editors/vscode/).
 
-## Editor support
-
-A [Wax extension for Visual Studio Code](https://marketplace.visualstudio.com/items?itemName=wax-wasm.wax)
-provides syntax highlighting and snippets. Its source lives in
-[`editors/vscode/`](editors/vscode/).
-
 ## Installation
 
 ### Prebuilt binaries
