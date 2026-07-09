@@ -21,6 +21,7 @@ interface LanguageSpec {
   id: string;
   format(wax: Wax, src: string): FormatResult;
   check(wax: Wax, src: string): WaxDiagnostic[];
+  symbols(wax: Wax, src: string): WaxSymbol[];
 }
 
 const LANGUAGES: LanguageSpec[] = [
@@ -28,11 +29,13 @@ const LANGUAGES: LanguageSpec[] = [
     id: "wax",
     format: (wax, src) => wax.format(src),
     check: (wax, src) => wax.check(src),
+    symbols: (wax, src) => wax.symbols(src),
   },
   {
     id: "wat",
     format: (wax, src) => wax.formatWat(src),
     check: (wax, src) => wax.checkWat(src),
+    symbols: (wax, src) => wax.symbolsWat(src),
   },
 ];
 
@@ -44,9 +47,11 @@ export function activateWith(
   context.subscriptions.push(log);
   log.appendLine("Wax extension activated.");
 
-  for (const lang of LANGUAGES) registerFormatter(context, opts, log, lang);
+  for (const lang of LANGUAGES) {
+    registerFormatter(context, opts, log, lang);
+    registerOutline(context, opts, lang);
+  }
   registerDiagnostics(context, opts);
-  registerOutline(context, opts);
 
   // Warm the runtime now (loadWax caches its promise) so the first format or
   // diagnostics run has no load lag — in particular the first format-on-save.
@@ -133,6 +138,7 @@ function symbolKind(kind: string): vscode.SymbolKind {
 function registerOutline(
   context: vscode.ExtensionContext,
   opts: LoadOptions,
+  lang: LanguageSpec,
 ): void {
   const build = (s: WaxSymbol): vscode.DocumentSymbol => {
     const range = new vscode.Range(
@@ -167,13 +173,12 @@ function registerOutline(
         return [];
       }
       if (token.isCancellationRequested) return [];
-      return wax.symbols(document.getText()).map(build);
+      return lang.symbols(wax, document.getText()).map(build);
     },
   };
 
-  // Outline is Wax-only for now (the wasm module exposes no WAT symbol walk).
   context.subscriptions.push(
-    vscode.languages.registerDocumentSymbolProvider("wax", provider),
+    vscode.languages.registerDocumentSymbolProvider(lang.id, provider),
   );
 }
 

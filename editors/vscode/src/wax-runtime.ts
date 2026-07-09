@@ -58,9 +58,10 @@ export interface Wax {
   format(src: string): FormatResult;
   check(src: string): WaxDiagnostic[];
   symbols(src: string): WaxSymbol[];
-  // Wasm text (WAT). Same one wasm module; no outline yet.
+  // Wasm text (WAT). Same one wasm module.
   formatWat(src: string): FormatResult;
   checkWat(src: string): WaxDiagnostic[];
+  symbolsWat(src: string): WaxSymbol[];
 }
 
 export interface LoadOptions {

@@ -13,9 +13,9 @@ analysis.
 - Diagnostics as you type: syntax errors, type errors, and lints, via a
   `check(src)` export that parses (`parse_diagnostics`) then type-checks with a
   non-printing diagnostic collector.
-- WebAssembly text (`.wat`): formatting and diagnostics via `formatWat` /
-  `checkWat` exports (same wasm module; the WAT parser validates instead of
-  type-checking). No WAT outline yet.
+- WebAssembly text (`.wat`): formatting, diagnostics and document outline via
+  `formatWat` / `checkWat` / `symbolsWat` exports (same wasm module; the WAT
+  parser validates instead of type-checking).
 
 ## Tier 1: cheap wins (reuse existing toolchain output)
 
@@ -45,14 +45,15 @@ analysis.
   `x = x + e` -> `x += e` (compound assignment), redundant-operation removal,
   struct-field punning. Feasible wherever the rewrite is derivable from the lint.
 - [x] **WAT support.** The toolchain already parses, validates, and formats `.wat`.
-  Added a `wat` language contribution plus `formatWat` / `checkWat` exports so the
-  same in-process runtime gives WAT users formatting and diagnostics too.
+  Added a `wat` language contribution plus `formatWat` / `checkWat` / `symbolsWat`
+  exports so the same in-process runtime gives WAT users formatting, diagnostics
+  and a document outline too.
   Implemented as **option A** (one combined wasm module, both languages) after
   measuring the alternatives: the WAT lexer/parser/validator adds ~490 KB raw
   (730 KB -> 1220 KB; +87 KB gzipped), which was deemed acceptable given the load
   is already instant and option A avoids duplicating the TS providers and the
   build/publish story that two modules (option B) or two extensions (option C)
-  would need. A WAT outline (`symbolsWat`) is the natural follow-up.
+  would need.
 
 ## Tier 3: bigger language-server features
 

@@ -9,7 +9,8 @@
    - [check src] / [checkWat src] -> array of { severity; message; startLine;
      startChar; endLine; endChar; hint; related }: parse and check (type-check
      for Wax, validate for Wasm text), returning diagnostics for the editor.
-   - [symbols src] -> the Wax module's top-level definitions, for the outline.
+   - [symbols src] / [symbolsWat src] -> the module's top-level definitions, for
+     the outline.
 
    Shipping both languages in one wasm module (rather than two) keeps a single
    build and load path; the WAT lexer/parser/validator it adds cost ~0.5 MB.
@@ -307,6 +308,82 @@ let symbols_string src =
   | Error _ -> []
   | Ok (ast, _ctx) -> List.concat_map field_symbols ast
 
+(* The same outline for a Wasm-text module. Its fields differ from Wax's: the
+   [$id] name is optional, and a definition carries its exports separately, so an
+   anonymous definition is named by its first export, else by a fallback word. *)
+let wat_field_symbols
+    (field :
+      ( Wax_utils.Ast.location Wax_wasm.Ast.Text.modulefield,
+        Wax_utils.Ast.location )
+      Wax_wasm.Ast.annotated) : sym list =
+  (* [Ast] for the [annotated] record labels ([desc]/[info]); [Ast.Text] for the
+     module-field constructors. *)
+  let open Wax_wasm.Ast in
+  let open Wax_wasm.Ast.Text in
+  let one s_name s_kind s_selection =
+    { s_name; s_kind; s_range = field.info; s_selection; s_children = [] }
+  in
+  (* The lexer stores a [$id] without its leading [$] (but the id's span still
+     covers it), so re-add it to display and to distinguish an id from an export
+     name, which is shown bare. *)
+  let id_name (n : name) = "$" ^ n.desc in
+  let named (id : name option) (exports : name list) kind fallback =
+    match id with
+    | Some n -> [ one (id_name n) kind n.info ]
+    | None -> (
+        match exports with
+        | e :: _ -> [ one e.desc kind e.info ]
+        | [] -> [ one fallback kind field.info ])
+  in
+  match field.desc with
+  | Func { id; exports; _ } -> named id exports "function" "func"
+  | Global { id; exports; _ } -> named id exports "variable" "global"
+  | Memory { id; exports; _ } -> named id exports "memory" "memory"
+  | Table { id; exports; _ } -> named id exports "table" "table"
+  | Tag { id; exports; _ } -> named id exports "event" "tag"
+  | Elem { id = Some n; _ } -> [ one (id_name n) "array" n.info ]
+  | Elem { id = None; _ } -> []
+  | Data { id = Some n; _ } -> [ one (id_name n) "data" n.info ]
+  | Data { id = None; _ } -> []
+  | String_global { id; _ } -> [ one (id_name id) "variable" id.info ]
+  | Import { module_; name; id; desc; _ } ->
+      let kind =
+        match desc with
+        | Func _ -> "function"
+        | Memory _ -> "memory"
+        | Table _ -> "table"
+        | Global _ -> "variable"
+        | Tag _ -> "event"
+      in
+      let s_name, s_selection =
+        match id with
+        | Some n -> (id_name n, n.info)
+        | None -> (module_.desc ^ "." ^ name.desc, field.info)
+      in
+      [ one s_name kind s_selection ]
+  | Types rectype ->
+      Array.to_list rectype
+      |> List.filter_map (fun entry ->
+          let id, _ = entry.desc in
+          match (id : name option) with
+          | Some n ->
+              Some
+                {
+                  s_name = id_name n;
+                  s_kind = "type";
+                  s_range = entry.info;
+                  s_selection = n.info;
+                  s_children = [];
+                }
+          | None -> None)
+  | Export _ | Start _ -> []
+  | Module_if_annotation _ -> []
+
+let symbols_wat_string src =
+  match Wat_parser.parse_diagnostics ~filename:"<buffer>" src with
+  | Error _ -> []
+  | Ok ((_name, fields), _ctx) -> List.concat_map wat_field_symbols fields
+
 let rec js_symbol s =
   let start_line, start_char = js_position s.s_range.loc_start in
   let end_line, end_char = js_position s.s_range.loc_end in
@@ -326,8 +403,8 @@ let rec js_symbol s =
     val children = Js.array (Array.of_list (List.map js_symbol s.s_children))
   end
 
-let symbols_result src =
-  let syms = try symbols_string (Js.to_string src) with _ -> [] in
+let symbols_result symbols_fn src =
+  let syms = try symbols_fn (Js.to_string src) with _ -> [] in
   Js.array (Array.of_list (List.map js_symbol syms))
 
 let () =
@@ -335,7 +412,8 @@ let () =
     object%js
       method format src = format_result format_string src
       method check src = check_result check_string src
-      method symbols src = symbols_result src
+      method symbols src = symbols_result symbols_string src
       method formatWat src = format_result format_wat_string src
       method checkWat src = check_result check_wat_string src
+      method symbolsWat src = symbols_result symbols_wat_string src
     end

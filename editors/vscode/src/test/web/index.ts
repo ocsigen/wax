@@ -82,5 +82,19 @@ export async function run(): Promise<void> {
     throw new Error("web: expected a WAT validation error: " + JSON.stringify(watDiags));
   }
 
+  // WAT outline: a named function and global become symbols (named by their id).
+  const watSyms = wax.symbolsWat(
+    "(module (global $g i32 (i32.const 0)) (func $f))",
+  );
+  if (
+    watSyms.length !== 2 ||
+    watSyms[0].name !== "$g" ||
+    watSyms[0].kind !== "variable" ||
+    watSyms[1].name !== "$f" ||
+    watSyms[1].kind !== "function"
+  ) {
+    throw new Error("web: expected WAT outline symbols: " + JSON.stringify(watSyms));
+  }
+
   console.log("WEB SMOKE TEST PASSED");
 }
