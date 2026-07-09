@@ -66,19 +66,11 @@ let table =
            List.mapi (fun i (t, w) -> (base + i, AtomicRmw (op, t, w))) variants)
          rmw_ops)
 
+let all = List.map snd table
 let by_opcode = Hashtbl.create 128
-let by_name = Hashtbl.create 128
-
-let () =
-  List.iter
-    (fun (code, op) ->
-      Hashtbl.replace by_opcode code op;
-      Hashtbl.replace by_name (name op) op)
-    table
-
+let () = List.iter (fun (code, op) -> Hashtbl.replace by_opcode code op) table
 let opcode op = fst (List.find (fun (_, o) -> o = op) table)
 let of_opcode code = Hashtbl.find_opt by_opcode code
-let of_name n = Hashtbl.find_opt by_name n
 
 (* The Wax method spelling on a memory receiver: the WAT mnemonic with a leading
    [memory.] dropped (the receiver is the memory) and [.] rewritten as [_], e.g.

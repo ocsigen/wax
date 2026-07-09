@@ -5,8 +5,9 @@
 val name : Ast.atomicop -> string
 (** The WAT mnemonic, e.g. [i64.atomic.rmw16.add_u]. *)
 
-val of_name : string -> Ast.atomicop option
-(** Recognise an atomic mnemonic ([atomic.fence] excluded). *)
+val all : Ast.atomicop list
+(** Every atomic op ([atomic.fence] excluded), for enumerating their mnemonics.
+*)
 
 val opcode : Ast.atomicop -> int
 (** The sub-opcode following the [0xFE] prefix. *)
