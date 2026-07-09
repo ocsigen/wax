@@ -1,6 +1,6 @@
 # Module Fields
 
-Wax modules are defined by a sequence of top-level fields: types, functions, globals, tags, memories, and data segments.
+Wax modules are defined by a sequence of top-level fields: types, functions, globals, memories, tables, and tags.
 
 ## Module Name
 
@@ -119,6 +119,131 @@ import "env" {
     const base: i32;
     let counter: i32;
 }
+```
+
+## Memories
+
+A memory is declared with `memory`, followed by its address type (`i32` or `i64`) and, optionally, its limits as `[min]` or `[min, max]` (in pages of 64 KiB):
+
+```wax
+memory mem0: i32 [1, 1000];
+memory mem1: i64 [2];
+memory mem2: i32;
+```
+
+Maps to:
+
+```wat
+(memory $mem0 i32 1 1000)
+(memory $mem1 i64 2)
+(memory $mem2 i32 ...)
+```
+
+When the limits are omitted, the minimum size is derived from the extent of the memory's data segments (using their literal offsets).
+
+A custom page size is written with a `pagesize` clause after the limits, mapping to the WAT `(pagesize N)` form. The page size must be `1` or `65536` (the default), and the limits are counted in pages of that size:
+
+```wax
+memory small: i32 [4096] pagesize 1;
+```
+
+```wat
+(memory $small 4096 (pagesize 1))
+```
+
+A `shared` clause (the threads proposal) marks the memory shared; it must have a maximum size:
+
+```wax
+memory pool: i32 [1, 16] shared;
+```
+
+```wat
+(memory $pool 1 16 shared)
+```
+
+Loads and stores use method-call syntax on the memory, with the value's width in the method name and its signedness expressed by the surrounding [`as iN_s`/`as iN_u` cast](instructions.md#memory-access) — the same convention as packed array access:
+
+```wax
+let x: i32 = mem0.load32(p);
+let b: i32 = mem0.load8(p) as i32_u;
+mem0.store16(p, v);
+mem0.store32(p, v, 1, 16);     // align=1, offset=16
+```
+
+See [Memory Access](instructions.md#memory-access) for the full instruction mapping.
+
+### Data Segments
+
+A memory declaration may carry active data segments in a block, placed at a constant offset:
+
+```wax
+memory mem1: i64 {
+    data _ @ [0x1000] = "hello world";
+    data greeting @ [0x2000] = "hi";
+}
+```
+
+Top-level `data` defines a passive segment, or an active segment for a named memory:
+
+```wax
+data seg = "raw\x00bytes";
+data init @ mem0 [0] = "hello";
+```
+
+Data bytes are ordinary [string literals](../language.md#strings); escapes such as `\x41` and `\x00` (two hex digits) decode to raw bytes.
+
+## Tables
+
+A table is declared with `table`, followed by its element [reference type](types.md) and, optionally, its limits as `[min]` or `[min, max]`:
+
+```wax
+table funcs: &?func [1, 10];
+table objs: &?any [0];
+```
+
+Maps to:
+
+```wat
+(table $funcs 1 10 funcref)
+(table $objs 0 anyref)
+```
+
+A table element is read and written with index syntax, like an array — `tab[i]` is `table.get` and `tab[i] = v` is `table.set`:
+
+```wax
+let f: &?func = funcs[i];
+funcs[i] = g;
+```
+
+There is no dedicated `call_indirect` syntax: it is written as a call through a table slot, narrowing the slot to the callee's [function type](#functions) with a cast. WAT `call_indirect` round-trips through this form:
+
+```wax
+type cmp = fn(_: i32, _: i32) -> i32;
+
+(funcs[i] as &cmp)(x, y)        // call_indirect $funcs (type $cmp)
+```
+
+The other table-management instructions have method syntax too: `t.size()`,
+`t.grow(init, n)`, `t.fill(dst, val, n)`, `t.copy(dst, src, n)`,
+`t.init(seg, dst, src, n)`, and `seg.drop()` on an element segment (see
+[Instructions](instructions.md)).
+
+### Element Segments
+
+An element segment is declared with `elem`, its element reference type, and a bracketed list of constant element expressions. A bare `elem` is passive; `@ table[offset]` makes it an active segment that initializes a table:
+
+```wax
+elem dispatch: &?func = [handler_a, handler_b, handler_c];   // passive
+elem init: &?func @ funcs[0] = [handler_a, handler_b];       // active
+elem nums: &?i31 = [1 as &i31, 2 as &i31];                   // expression form
+```
+
+A passive element segment can initialize a GC array with [`array.new_elem`](instructions.md#aggregate-instructions), written with the same `[t| seg @ off; count]` syntax as `array.new_data` — which one applies is determined by the array's element type (a reference element selects the element segment):
+
+```wax
+type handlers = [&?func];
+
+let hs: &handlers = [handlers| dispatch @ 0; 3];
 ```
 
 ## Tags
@@ -248,131 +373,6 @@ const size: i32 = 20;
 The conditions are equivalent — note the surface differences: Wax variables are bare (`ocaml_version`) while WAT variables are `$`-prefixed; Wax versions are tuples `(5, 1, 0)` while WAT writes them `(5 1 0)`; Wax combines conditions with `all`/`any`/`not`, WAT with `and`/`or`/`not`.
 
 The conditions are preserved, not evaluated. Type checking (`--validate`) explores each reachable combination independently (see the [Language Guide](../language.md#conditional-compilation)). Conversion between the Wax and WAT forms is not yet implemented; conditionals are currently supported within each format on its own.
-
-## Memories
-
-A memory is declared with `memory`, followed by its address type (`i32` or `i64`) and, optionally, its limits as `[min]` or `[min, max]` (in pages of 64 KiB):
-
-```wax
-memory mem0: i32 [1, 1000];
-memory mem1: i64 [2];
-memory mem2: i32;
-```
-
-Maps to:
-
-```wat
-(memory $mem0 i32 1 1000)
-(memory $mem1 i64 2)
-(memory $mem2 i32 ...)
-```
-
-When the limits are omitted, the minimum size is derived from the extent of the memory's data segments (using their literal offsets).
-
-A custom page size is written with a `pagesize` clause after the limits, mapping to the WAT `(pagesize N)` form. The page size must be `1` or `65536` (the default), and the limits are counted in pages of that size:
-
-```wax
-memory small: i32 [4096] pagesize 1;
-```
-
-```wat
-(memory $small 4096 (pagesize 1))
-```
-
-A `shared` clause (the threads proposal) marks the memory shared; it must have a maximum size:
-
-```wax
-memory pool: i32 [1, 16] shared;
-```
-
-```wat
-(memory $pool 1 16 shared)
-```
-
-Loads and stores use method-call syntax on the memory, with the value's width in the method name and its signedness expressed by the surrounding [`as iN_s`/`as iN_u` cast](instructions.md#memory-access) — the same convention as packed array access:
-
-```wax
-let x: i32 = mem0.load32(p);
-let b: i32 = mem0.load8(p) as i32_u;
-mem0.store16(p, v);
-mem0.store32(p, v, 1, 16);     // align=1, offset=16
-```
-
-See [Memory Access](instructions.md#memory-access) for the full instruction mapping.
-
-### Data Segments
-
-A memory declaration may carry active data segments in a block, placed at a constant offset:
-
-```wax
-memory mem1: i64 {
-    data _ @ [0x1000] = "hello world";
-    data greeting @ [0x2000] = "hi";
-}
-```
-
-Top-level `data` defines a passive segment, or an active segment for a named memory:
-
-```wax
-data seg = "raw\x00bytes";
-data init @ mem0 [0] = "hello";
-```
-
-Data bytes are ordinary [string literals](../language.md#strings); escapes such as `\x41` and `\x00` (two hex digits) decode to raw bytes.
-
-## Tables
-
-A table is declared with `table`, followed by its element [reference type](types.md) and, optionally, its limits as `[min]` or `[min, max]`:
-
-```wax
-table funcs: &?func [1, 10];
-table objs: &?any [0];
-```
-
-Maps to:
-
-```wat
-(table $funcs 1 10 funcref)
-(table $objs 0 anyref)
-```
-
-A table element is read and written with index syntax, like an array — `tab[i]` is `table.get` and `tab[i] = v` is `table.set`:
-
-```wax
-let f: &?func = funcs[i];
-funcs[i] = g;
-```
-
-There is no dedicated `call_indirect` syntax: it is written as a call through a table slot, narrowing the slot to the callee's [function type](#functions) with a cast. WAT `call_indirect` round-trips through this form:
-
-```wax
-type cmp = fn(_: i32, _: i32) -> i32;
-
-(funcs[i] as &cmp)(x, y)        // call_indirect $funcs (type $cmp)
-```
-
-The other table-management instructions have method syntax too: `t.size()`,
-`t.grow(init, n)`, `t.fill(dst, val, n)`, `t.copy(dst, src, n)`,
-`t.init(seg, dst, src, n)`, and `seg.drop()` on an element segment (see
-[Instructions](instructions.md)).
-
-## Element Segments
-
-An element segment is declared with `elem`, its element reference type, and a bracketed list of constant element expressions. A bare `elem` is passive; `@ table[offset]` makes it an active segment that initializes a table:
-
-```wax
-elem dispatch: &?func = [handler_a, handler_b, handler_c];   // passive
-elem init: &?func @ funcs[0] = [handler_a, handler_b];       // active
-elem nums: &?i31 = [1 as &i31, 2 as &i31];                   // expression form
-```
-
-A passive element segment can initialize a GC array with [`array.new_elem`](instructions.md#aggregate-instructions), written with the same `[t| seg @ off; count]` syntax as `array.new_data` — which one applies is determined by the array's element type (a reference element selects the element segment):
-
-```wax
-type handlers = [&?func];
-
-let hs: &handlers = [handlers| dispatch @ 0; 3];
-```
 
 ## Module Structure
 

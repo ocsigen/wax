@@ -326,6 +326,80 @@ that can be dropped.
 
 A packed (`i8`/`i16`) struct field or array element read sign- or zero-extends to `i32` via the `as i32_s`/`as i32_u` cast, as shown above (`struct.get_s`/`_u`, `array.get_s`/`_u`). Widening straight to `i64` — `val.field as i64_s` or `arr[idx] as i64_u` — emits the packed read followed by `i64.extend_i32_s`/`_u`.
 
+## SIMD (Vector) Instructions
+
+`v128` vector operations are written as method intrinsics with the lane shape baked into the name. The Wax name is the WebAssembly mnemonic with the leading shape moved to the end: `i32x4.add` becomes `add_i32x4`, `f32x4.sqrt` becomes `sqrt_f32x4`, and the whole-vector `v128.and` becomes `and_v128`. Signed/unsigned variants keep the `_s`/`_u` (`min_s_i8x16`, `extract_lane_u_i8x16`). Constant lane immediates (lane indices, shuffle indices) come first in the argument list, before any remaining stack operands.
+
+Lanewise unary and binary operations (the receiver is the first operand):
+
+| Wasm | Wax |
+|------|-----|
+| `i32x4.add` | `a.add_i32x4(b)` |
+| `f32x4.mul` | `a.mul_f32x4(b)` |
+| `i8x16.min_s` / `i8x16.min_u` | `a.min_s_i8x16(b)` / `a.min_u_i8x16(b)` |
+| `i16x8.lt_u` | `a.lt_u_i16x8(b)` |
+| `i32x4.neg` | `v.neg_i32x4()` |
+| `f64x2.sqrt` | `v.sqrt_f64x2()` |
+| `i8x16.narrow_i16x8_s` | `a.narrow_i16x8_s_i8x16(b)` |
+| `f32x4.convert_i32x4_s` | `v.convert_i32x4_s_f32x4()` |
+
+Whole-vector bitwise operations, bit selection (a free function):
+
+| Wasm | Wax |
+|------|-----|
+| `v128.and` / `or` / `xor` / `andnot` | `a.and_v128(b)`, `a.or_v128(b)`, `a.xor_v128(b)`, `a.andnot_v128(b)` |
+| `v128.not` | `v.not_v128()` |
+| `v128.bitselect` | `v128::bitselect(a, b, mask)` |
+
+Splat, lane access, and shuffle:
+
+| Wasm | Wax |
+|------|-----|
+| `i32x4.splat` | `x.splat_i32x4()` |
+| `i32x4.extract_lane` | `v.extract_lane_i32x4(lane)` |
+| `i8x16.extract_lane_u` | `v.extract_lane_u_i8x16(lane)` |
+| `i32x4.replace_lane` | `v.replace_lane_i32x4(lane, x)` |
+| `i8x16.shuffle` | `a.shuffle_i8x16(l0, ..., l15, b)` |
+
+Shifts, tests, and bitmask:
+
+| Wasm | Wax |
+|------|-----|
+| `i16x8.shl` | `v.shl_i16x8(n)` |
+| `i32x4.shr_s` / `i32x4.shr_u` | `v.shr_s_i32x4(n)` / `v.shr_u_i32x4(n)` |
+| `v128.any_true` | `v.any_true_v128()` |
+| `i32x4.all_true` | `v.all_true_i32x4()` |
+| `i8x16.bitmask` | `v.bitmask_i8x16()` |
+
+Constants are `v128::` free functions (one argument per lane: 16, 8, 4, or 2). `v128.const` is a constant expression, so it may initialise a global:
+
+| Wasm | Wax |
+|------|-----|
+| `v128.const i32x4 1 2 3 4` | `v128::const_i32x4(1, 2, 3, 4)` |
+| `v128.const f32x4 1.5 2.5 3.5 4.5` | `v128::const_f32x4(1.5, 2.5, 3.5, 4.5)` |
+| `v128.const i8x16 0 1 ... 15` | `v128::const_i8x16(0, 1, ..., 15)` |
+
+Memory loads and stores are methods on a [memory](module_fields.md#memories), like the scalar [memory accesses](#memory-access) (the optional trailing `align`/`offset` arguments work the same way):
+
+| Wax | Wasm |
+|-----|------|
+| `m.v128_load(p)` | `v128.load` |
+| `m.v128_store(p, v)` | `v128.store` |
+| `m.v128_load8x8_s(p)` | `v128.load8x8_s` (and `16x4`/`32x2`, `_s`/`_u`) |
+| `m.v128_load32_zero(p)` | `v128.load32_zero` (and `64_zero`) |
+| `m.v128_load8_splat(p)` | `v128.load8_splat` (and `16`/`32`/`64`) |
+| `m.v128_load8_lane(p, v, lane)` | `v128.load8_lane` (and `16`/`32`/`64`) |
+| `m.v128_store8_lane(p, v, lane)` | `v128.store8_lane` (and `16`/`32`/`64`) |
+
+Relaxed-SIMD operations follow the same scheme:
+
+| Wasm | Wax |
+|------|-----|
+| `f32x4.relaxed_madd` | `a.relaxed_madd_f32x4(b, c)` |
+| `i8x16.relaxed_swizzle` | `a.relaxed_swizzle_i8x16(b)` |
+
+No intrinsic can clash with a module entity name: the free-function intrinsics are written as `v128::`/`i64::` qualified paths and every other is a method on a receiver, so a function may freely be named e.g. `v128_bitselect` without any renaming.
+
 ## Memory Access
 
 Loads and stores are method calls on a [memory](module_fields.md#memories). The method name carries the access width; the value's signedness (for narrow loads) and its `i32`/`i64` type are expressed with the surrounding `as iN_s`/`as iN_u` cast, mirroring packed array access.
@@ -445,77 +519,3 @@ These correspond to the WebAssembly [stack-switching proposal](https://github.co
 Operands are written in WebAssembly stack order, so the continuation reference is the last argument. The handler list in `[ ... ]` mirrors the `try ... catch [ ... ]` syntax: `tag -> 'l` is an `(on $tag $l)` clause and `tag -> switch` is an `(on $tag switch)` clause.
 
 Tags used with `suspend`/`resume` may have result types (unlike exception tags); see [Tags](module_fields.md#tags). When a function reference is passed to `cont_new` for a continuation whose function type belongs to a recursion group, declare the function with an explicit type (`fn f: ft (...) { ... }`) so its type matches the continuation's.
-
-## SIMD (Vector) Instructions
-
-`v128` vector operations are written as method intrinsics with the lane shape baked into the name. The Wax name is the WebAssembly mnemonic with the leading shape moved to the end: `i32x4.add` becomes `add_i32x4`, `f32x4.sqrt` becomes `sqrt_f32x4`, and the whole-vector `v128.and` becomes `and_v128`. Signed/unsigned variants keep the `_s`/`_u` (`min_s_i8x16`, `extract_lane_u_i8x16`). Constant lane immediates (lane indices, shuffle indices) come first in the argument list, before any remaining stack operands.
-
-Lanewise unary and binary operations (the receiver is the first operand):
-
-| Wasm | Wax |
-|------|-----|
-| `i32x4.add` | `a.add_i32x4(b)` |
-| `f32x4.mul` | `a.mul_f32x4(b)` |
-| `i8x16.min_s` / `i8x16.min_u` | `a.min_s_i8x16(b)` / `a.min_u_i8x16(b)` |
-| `i16x8.lt_u` | `a.lt_u_i16x8(b)` |
-| `i32x4.neg` | `v.neg_i32x4()` |
-| `f64x2.sqrt` | `v.sqrt_f64x2()` |
-| `i8x16.narrow_i16x8_s` | `a.narrow_i16x8_s_i8x16(b)` |
-| `f32x4.convert_i32x4_s` | `v.convert_i32x4_s_f32x4()` |
-
-Whole-vector bitwise operations, bit selection (a free function):
-
-| Wasm | Wax |
-|------|-----|
-| `v128.and` / `or` / `xor` / `andnot` | `a.and_v128(b)`, `a.or_v128(b)`, `a.xor_v128(b)`, `a.andnot_v128(b)` |
-| `v128.not` | `v.not_v128()` |
-| `v128.bitselect` | `v128::bitselect(a, b, mask)` |
-
-Splat, lane access, and shuffle:
-
-| Wasm | Wax |
-|------|-----|
-| `i32x4.splat` | `x.splat_i32x4()` |
-| `i32x4.extract_lane` | `v.extract_lane_i32x4(lane)` |
-| `i8x16.extract_lane_u` | `v.extract_lane_u_i8x16(lane)` |
-| `i32x4.replace_lane` | `v.replace_lane_i32x4(lane, x)` |
-| `i8x16.shuffle` | `a.shuffle_i8x16(l0, ..., l15, b)` |
-
-Shifts, tests, and bitmask:
-
-| Wasm | Wax |
-|------|-----|
-| `i16x8.shl` | `v.shl_i16x8(n)` |
-| `i32x4.shr_s` / `i32x4.shr_u` | `v.shr_s_i32x4(n)` / `v.shr_u_i32x4(n)` |
-| `v128.any_true` | `v.any_true_v128()` |
-| `i32x4.all_true` | `v.all_true_i32x4()` |
-| `i8x16.bitmask` | `v.bitmask_i8x16()` |
-
-Constants are `v128::` free functions (one argument per lane: 16, 8, 4, or 2). `v128.const` is a constant expression, so it may initialise a global:
-
-| Wasm | Wax |
-|------|-----|
-| `v128.const i32x4 1 2 3 4` | `v128::const_i32x4(1, 2, 3, 4)` |
-| `v128.const f32x4 1.5 2.5 3.5 4.5` | `v128::const_f32x4(1.5, 2.5, 3.5, 4.5)` |
-| `v128.const i8x16 0 1 ... 15` | `v128::const_i8x16(0, 1, ..., 15)` |
-
-Memory loads and stores are methods on a [memory](module_fields.md#memories), like the scalar accesses above (the optional trailing `align`/`offset` arguments work the same way):
-
-| Wax | Wasm |
-|-----|------|
-| `m.v128_load(p)` | `v128.load` |
-| `m.v128_store(p, v)` | `v128.store` |
-| `m.v128_load8x8_s(p)` | `v128.load8x8_s` (and `16x4`/`32x2`, `_s`/`_u`) |
-| `m.v128_load32_zero(p)` | `v128.load32_zero` (and `64_zero`) |
-| `m.v128_load8_splat(p)` | `v128.load8_splat` (and `16`/`32`/`64`) |
-| `m.v128_load8_lane(p, v, lane)` | `v128.load8_lane` (and `16`/`32`/`64`) |
-| `m.v128_store8_lane(p, v, lane)` | `v128.store8_lane` (and `16`/`32`/`64`) |
-
-Relaxed-SIMD operations follow the same scheme:
-
-| Wasm | Wax |
-|------|-----|
-| `f32x4.relaxed_madd` | `a.relaxed_madd_f32x4(b, c)` |
-| `i8x16.relaxed_swizzle` | `a.relaxed_swizzle_i8x16(b)` |
-
-No intrinsic can clash with a module entity name: the free-function intrinsics are written as `v128::`/`i64::` qualified paths and every other is a method on a receiver, so a function may freely be named e.g. `v128_bitselect` without any renaming.
