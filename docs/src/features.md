@@ -1,6 +1,6 @@
 # Feature Support
 
-Wax works across all three formats (Wax, WAT, WASM) and targets recent
+Wax works across all three formats (Wax, WAT, Wasm) and targets recent
 WebAssembly proposals, several of them **on by default**, that most toolchains
 still gate. This page summarises what the toolchain accepts and produces.
 

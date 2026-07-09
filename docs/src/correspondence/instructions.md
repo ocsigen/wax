@@ -15,7 +15,7 @@ an `i16` array holds the UTF-16 code units (so the string must be valid Unicode)
 | `array.new_fixed $t` (constant elements) | `"..."` or `t # "..."` |
 
 In WAT both forms are written with annotations (`(@char …)` and `(@string …)`),
-so they round-trip faithfully through WAT. A WASM binary keeps only the
+so they round-trip faithfully through WAT. A Wasm binary keeps only the
 underlying `i32.const` / `array.new_fixed`: a character decompiles to a plain
 integer, and an `array.new_fixed` is recovered as a string only when its
 elements, decoded by the array's element type (UTF-8 for `i8`, UTF-16 for
@@ -217,7 +217,7 @@ reaching the block's exit or from the surrounding context (see
 [Type inference](../language.md#blocks)). Parameterized and multi-result block
 types are always kept.
 
-### Branch hints
+### Branch Hints
 
 The [branch-hinting proposal](https://github.com/WebAssembly/branch-hinting)
 annotates a conditional branch as likely or unlikely taken. Wax writes the hint
@@ -474,7 +474,7 @@ A [table](module_fields.md#tables) is indexed like an array, and an indirect cal
 | `call_indirect $t (result i32)` | `(t[i] as &?fn() -> i32)(args)` |
 | `return_call_indirect $t (type $ft)` | `return (t[i] as &?ft)(args)` |
 
-`call_indirect` is reconstructed from this pattern on conversion to WAT/WASM, so it round-trips. The cast target names the callee's function type, a defined type (`ft`) or an inline one written `fn(params) -> results` (used when the WAT type is anonymous), and matches the table's element type: for a `funcref` table (the usual case) it is the nullable `&?ft`, as shown. When the element type is already a non-null `&ft`, the cast may be omitted (`t[i](args)`).
+`call_indirect` is reconstructed from this pattern on conversion to WAT/Wasm, so it round-trips. The cast target names the callee's function type, a defined type (`ft`) or an inline one written `fn(params) -> results` (used when the WAT type is anonymous), and matches the table's element type: for a `funcref` table (the usual case) it is the nullable `&?ft`, as shown. When the element type is already a non-null `&ft`, the cast may be omitted (`t[i](args)`).
 
 The other table operations are methods on the table (an element segment is named directly):
 

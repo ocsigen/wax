@@ -41,7 +41,7 @@ mistaken for a subcommand). The `format` subcommand reformats files (see
     - Force validation, and additionally report unused locals.
     - For Wax: Runs type checking.
     - For Wasm Text: Runs well-formedness checks.
-    - A text input (Wax/Wat) is **validated by default before it is converted to a different format**: the conversion and lowering passes trust that their input is well-formed, so a malformed module is rejected up front rather than reaching them. A same-format conversion (`wat` → `wat`, `wax` → `wax`) only re-prints and is *not* validated by default; a Wasm *binary* input is trusted and *not* validated. `--validate` forces validation in every case.
+    - A text input (Wax/WAT) is **validated by default before it is converted to a different format**: the conversion and lowering passes trust that their input is well-formed, so a malformed module is rejected up front rather than reaching them. A same-format conversion (`wat` → `wat`, `wax` → `wax`) only re-prints and is *not* validated by default; a Wasm *binary* input is trusted and *not* validated. `--validate` forces validation in every case.
     - Reports a warning for any local that is declared but never read: a Wax `let` binding, or a Wasm Text `(local …)`. This reporting is only enabled by `--validate` (the default validation above does not turn it on). Prefix the name with `_` (e.g. `let _x = …`, `(local $_x i32)`) to mark it intentionally unused and silence the warning; function parameters are never reported. This `unused-local` warning can be silenced, kept, or promoted to an error with [`-W`](#options) (e.g. `-W unused-local=error`).
     - For input containing conditional annotations (`#[if]` / `(@if ...)`), every reachable combination of conditions is checked independently, and each error is reported with the assumption (`reachable when ...`) under which it occurs.
 
@@ -126,7 +126,7 @@ mistaken for a subcommand). The `format` subcommand reformats files (see
           shift (`<<`/`>>`) with arithmetic (`+`, `-`, …), or a comparison with
           a bitwise operator (`&`, `|`, `^`). The code is correct, but a reader
           may misread the grouping (`1 << nbits - 1` is `1 << (nbits - 1)`).
-          Shown by default. Wax-only: WAT/WASM have no infix precedence.
+          Shown by default. Wax-only: WAT/Wasm have no infix precedence.
         - `redundant-operation` (group `redundant`): an operation with no effect
           on its result: an arithmetic identity (`x + 0`, `x * 1`, `x << 0`, …),
           an absorbing operand (`x * 0`, `x & 0`), two identical operands
@@ -160,7 +160,7 @@ mistaken for a subcommand). The `format` subcommand reformats files (see
     - Almost all of these lints apply to WebAssembly text/binary input as well
       as Wax: the Wasm validator runs the same checks, so `wax check foo.wat`
       reports them. (The exceptions are `precedence`, which is Wax-only since
-      WAT/WASM have no infix precedence, and `eager-select`, whose Wasm side
+      WAT/Wasm have no infix precedence, and `eager-select`, whose Wasm side
       covers only a folded `select`.) On Wasm input `unused-result` covers discarding a constant or
       a pure `local.get`/`global.get` read; for `unused-label` a numeric `br N`
       counts as a use of the label `N` levels out; `cast-always-fails` and

@@ -127,8 +127,8 @@ two hex digits, one byte), and `\u{...}` (a Unicode code point in hex). For
 text, see [Strings](#strings).
 
 A character literal round-trips through WAT, where it is written with a
-`(@char …)` annotation. A WASM binary keeps only the underlying `i32.const`,
-though, so decompiling from WASM yields the plain integer code point.
+`(@char …)` annotation. A Wasm binary keeps only the underlying `i32.const`,
+though, so decompiling from Wasm yields the plain integer code point.
 
 ## Variables
 
@@ -618,7 +618,7 @@ which is exactly:
 It is void, and the test must be an `i32`. It may carry a label
 (`'l: while …`), which names the loop, so a `br 'l` from inside the body is a
 *continue*: it jumps back to re-test. Decompiling recovers a `while` from this
-shape, so a loop written this way survives a round trip through WAT or WASM.
+shape, so a loop written this way survives a round trip through WAT or Wasm.
 
 A `while` may carry a *continue-expression* after the condition,
 `while cond : (step) { … }`, a statement run at the end of every iteration,
@@ -714,7 +714,7 @@ Any conditional branch accepts a hint: `if`, `br_if`, `br_on_null`,
 `br_on_non_null`, `br_on_cast`, and `br_on_cast_fail`. The hint is purely
 advisory (it does not change behaviour) and is preserved across every conversion
 to and from WebAssembly, so no compiler flag is needed. See
-[Instructions → Branch hints](correspondence/instructions.md#branch-hints) for
+[Instructions → Branch Hints](correspondence/instructions.md#branch-hints) for
 the WebAssembly encoding.
 
 ### Dispatch
@@ -760,7 +760,7 @@ let r: i32;
 }
 ```
 
-This is the shape compilers emit for a dense switch, so decompiling WAT/WASM to
+This is the shape compilers emit for a dense switch, so decompiling WAT/Wasm to
 Wax recovers `dispatch` from it (and a Wax `dispatch` round-trips through the
 binary).
 
@@ -808,7 +808,7 @@ let r: i32;
 }
 ```
 
-This is the shape hand-written GC code uses, so decompiling WAT/WASM to Wax
+This is the shape hand-written GC code uses, so decompiling WAT/Wasm to Wax
 recovers `match` from such a ladder, even a single type test that branches out
 and then falls through to a default (and a Wax `match` round-trips through the
 binary).
@@ -1180,7 +1180,7 @@ As with a [packed struct field](#field-access), reading one needs an explicit
 Struct and array types can refer to one another, form subtype hierarchies, and
 be left open for extension: the WebAssembly GC type features.
 
-### Recursive groups
+### Recursive Groups
 
 Types that reference each other are declared together in a `rec { … }` group, so
 each name is in scope for the others:
@@ -1338,7 +1338,7 @@ String literals recognise the same escapes as [character literals](#characters):
 A string also supplies the bytes of a [data segment](#data-segments).
 
 A string literal round-trips faithfully through WAT, where it is written with a
-`(@string …)` annotation. Through WASM it is best-effort: the binary keeps only
+`(@string …)` annotation. Through Wasm it is best-effort: the binary keeps only
 the `array.new_fixed`, which is recovered as a string literal only when its
 elements, decoded by the array's element type (UTF-8 for `i8`, UTF-16 for
 `i16`), form a *reasonable* string: valid text with no control characters other
@@ -1651,7 +1651,7 @@ fn bad() -> i32 {
 This restriction keeps holes unambiguous: they always refer to values already on
 the stack, never to operands appearing later in the expression.
 
-When decompiling WASM or WAT back to Wax, the compiler introduces holes wherever
+When decompiling Wasm or WAT back to Wax, the compiler introduces holes wherever
 an instruction takes an operand from the stack instead of from a nested
 sub-expression, so this same mechanism round-trips stack-style code.
 

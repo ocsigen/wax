@@ -588,7 +588,7 @@ they round-trip back to Wax unchanged:
   (@string $wide "café"))
 ```
 
-In a WASM binary these lower to `i32.const 10` and an `array.new_fixed`: the
+In a Wasm binary these lower to `i32.const 10` and an `array.new_fixed`: the
 `i8` greeting holds the three bytes `104, 105, 33`, and the `i16` greeting the
 four UTF-16 units `99, 97, 102, 233`. The character comes back as the integer
 `10`, while each string is still recovered (its elements are reasonable text).
