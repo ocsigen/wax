@@ -117,8 +117,10 @@ complete set of options.
 ## Editor support
 
 A [Wax extension for Visual Studio Code](https://marketplace.visualstudio.com/items?itemName=wax-wasm.wax)
-provides syntax highlighting and snippets. Its source lives in
-[`editors/vscode/`](editors/vscode/).
+supports both `.wax` and WebAssembly text (`.wat`) files: syntax highlighting,
+formatting (with format on save), diagnostics as you type, a document outline,
+snippets, and side-by-side compile/decompile previews. It works in both desktop
+and web VS Code. Its source lives in [`editors/vscode/`](editors/vscode/).
 
 ## Installation
 
