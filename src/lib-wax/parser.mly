@@ -555,7 +555,7 @@ simple_pattern:
 | "_" { None }
 
 function_parameter:
-| x = simple_pattern ":" t = value_type { with_loc $sloc (x, t) }
+| x = ident ":" t = value_type { with_loc $sloc (Some x, t) }
 | t = value_type { with_loc $sloc (None, t) }
 
 parameter_list:
