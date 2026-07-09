@@ -16,42 +16,8 @@ Wax types map directly to WebAssembly types.
 | `(ref (exact <t>))` | `&!<t>` | Reference to *exactly* concrete type `<t>` |
 | `(ref null (exact <t>))` | `&?!<t>` | Nullable reference to exactly `<t>` |
 
-### Exact References
-
-An **exact** reference (from the
-[custom-descriptors proposal](https://github.com/WebAssembly/custom-descriptors))
-points to values of exactly one concrete type, with no subtypes. Wax writes the
-exactness marker `!` between the `&`/`&?` sigil and the type name, so it sits
-alongside the nullability `?`:
-
-```wax
-let a: &!point = ...;   // (ref (exact $point))
-let b: &?!point = ...;  // (ref null (exact $point))
-```
-
-Only a concrete (declared) type can be exact; `&!any` and other abstract heap
-types are rejected. An exact reference is a subtype of the corresponding inexact
-one (`&!point` flows where an `&point` is expected), but exactness is invariant
-among distinct concrete types.
-
-Because the `!` marker precedes the type name, it never clashes with the postfix
-[non-null assertion](instructions.md#reference-instructions) `!`: `x as &!point`
-is a cast to an exact reference, whereas `(x as &point)!` asserts the cast result
-is non-null.
-
-A concrete allocation (a struct or array [construction](instructions.md#aggregate-instructions))
-produces an exact reference (the fresh object has exactly the allocated type),
-so a construction literal can be delivered where an `&!point` is required without
-a cast. In ordinary (synthesis) position the plainer inexact type is kept, since
-an exact result is always usable where an inexact one is expected.
-
-A **function import** can be declared exact, so that referencing it yields an
-exact reference. The `!` marks the type exact in the [function declaration](module_fields.md#functions):
-`fn g: !ft;` for a named type, or `fn h!(x: i32) -> i64;` for an inline
-signature. It maps to the WAT `(func (exact <type>))` import descriptor. (A
-module-defined function is always exact, so the marker is only written on an
-import.) A plainly imported function is *not* exact (its dynamic type may be a
-subtype), so a reference to it must be cast to reach an exact type.
+Exact references (`&!<t>` / `&?!<t>`, gated on `-X custom-descriptors`) are
+explained in the [language guide](../language.md#exact-references).
 
 ## Storage Types
 

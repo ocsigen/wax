@@ -86,6 +86,11 @@ Declare a function signature without a body (used with imports):
 fn external_function(x: i32) -> i32;
 ```
 
+An imported function can be marked [exact](../language.md#exact-references) so
+that referencing it yields an exact reference: `fn g: !ft;` for a named type, or
+`fn h!(x: i32) -> i64;` for an inline signature. This maps to the WAT
+`(func (exact <type>))` import descriptor.
+
 ### Block Type Annotation
 
 Functions can have a block type on the body:

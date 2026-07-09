@@ -1213,17 +1213,26 @@ name, next to the nullability `?`:
 
 Only a concrete (declared) type can be exact; `&!any` and other abstract heap
 types are rejected. An exact reference is a subtype of the plain one, so an
-`&!point` is accepted where an `&point` is expected. A struct or array
-construction already yields an exact reference, since the new object has exactly
-the allocated type. The `as` and `is` operators reach an exact type explicitly:
+`&!point` is accepted where an `&point` is expected, but exactness is invariant
+across distinct concrete types. The `as` and `is` operators reach an exact type
+explicitly:
 
 ```wax
 x as &!point    // cast to an exact reference
 x is &!point    // test for an exact type
 ```
 
-See [Types → Exact References](correspondence/types.md#exact-references) for the
-mapping and how an exact function import is declared.
+Because `!` comes before the type name, it never clashes with the postfix
+[non-null assertion](#null-check) `!`: `x as &!point` casts to an exact
+reference, whereas `(x as &point)!` asserts the cast result is non-null.
+
+A struct or array construction already yields an exact reference, since the new
+object has exactly the allocated type, so a literal can go where an `&!point` is
+expected without a cast. A module-defined function is likewise always exact; only
+an **imported** function needs the marker to be treated as exact, written on the
+declaration as `fn g: !ft;` (named type) or `fn h!(x: i32) -> i64;` (inline
+signature). A plainly imported function is not exact, so a reference to it must
+be cast to reach an exact type.
 
 ### Descriptors
 
