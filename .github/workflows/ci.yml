@@ -64,6 +64,56 @@ jobs:
         if: matrix.ocaml-compiler != '4.14' && matrix.os != 'windows-latest'
         run: opam exec -- dune runtest
 
+  web:
+    name: Web extension test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: "5.4"
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Set up Binaryen
+        # wasm_of_ocaml needs Binaryen (wasm-opt/wasm-merge) to build the wasm
+        # runtime; same action and version as the npm-package workflow.
+        uses: Aandreba/setup-binaryen@v1.0.0
+        with:
+          token: ${{ github.token }}
+
+      - name: Install dependencies
+        run: |
+          # dune 3.24.0 breaks wasm_of_ocaml 9.4; hold dune at 3.23.1 (as in the
+          # npm-package workflow). js_of_ocaml + ppx are needed by the editor
+          # export; uucp is not (the committed unicode/XID tables are used, not
+          # the scripts/ generators).
+          opam pin add --yes --no-action dune 3.23.1
+          opam install . --deps-only
+          opam install js_of_ocaml js_of_ocaml-ppx wasm_of_ocaml-compiler
+
+      - name: Install extension dependencies
+        working-directory: editors/vscode
+        run: npm install
+
+      # @vscode/test-web runs the extension in headless Chromium (the same stack
+      # as vscode.dev). npm install fetches the browser via @playwright/
+      # browser-chromium; this installs the system libraries it needs.
+      - name: Install Playwright system dependencies
+        working-directory: editors/vscode
+        run: npx --yes playwright install-deps chromium
+
+      # `npm run test:web` builds the wasm runtime (dune, hence opam exec),
+      # bundles the extension and its test, and runs the smoke test in Chromium.
+      - name: Build and run the web smoke test
+        run: opam exec -- npm --prefix editors/vscode run test:web
+
   fuzz:
     name: Fuzz guards
     runs-on: ubuntu-latest
