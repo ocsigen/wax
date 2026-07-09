@@ -1144,7 +1144,11 @@ type mutable_ints = [mut i32];
 [bytes| seg @ 0; 100]       // New array from a data segment (offset, count)
 ```
 
-The last form is `array.new_data`: it initializes the array from the named [data segment](#data-segments) `seg`, reading `count` elements starting at byte `offset`.
+The last form builds the array from a named passive segment, copying `count`
+elements starting at `offset`. For a numeric array, `seg` is a
+[data segment](#data-segments) and this is `array.new_data`; for a reference
+array it is an [element segment](#tables-and-element-segments) and the same
+syntax is `array.new_elem`.
 
 As with structs, the type name may be omitted when an expected type supplies it,
 e.g. `let xs: &bytes = [0; 100];`.
