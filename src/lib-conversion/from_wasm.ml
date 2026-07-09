@@ -1698,11 +1698,13 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       let catches =
         List.map
           (fun (t, block) ->
-            (idx ctx `Tag t, Stack.run (instructions ctx block)))
+            (idx ctx `Tag t, Ast.no_loc (Stack.run (instructions ctx block))))
           catches
       in
       let catch_all =
-        Option.map (fun block -> Stack.run (instructions ctx block)) catch_all
+        Option.map
+          (fun block -> Ast.no_loc (Stack.run (instructions ctx block)))
+          catch_all
       in
       let inputs, outputs = blocktype_arity ctx typ in
       let* () = Stack.consume inputs in

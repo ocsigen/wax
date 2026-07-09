@@ -633,10 +633,10 @@ on_clauses:
 | "[" l = separated_list_trailing(",", on_clause) "]" { l }
 
 legacy_catch:
-| t = ident "=>" "{" l = statement_list "}" { (t, l) }
+| t = ident "=>" l = braced_block { (t, l) }
 
 legacy_catch_all:
-| "_" "=>"  "{" l = statement_list "}" { l }
+| "_" "=>" l = braced_block { l }
 
 %inline block:
 | label = block_label "{" l = statement_list "}" { (label, l) }
@@ -654,7 +654,7 @@ structure:
    names the case (matched to one of the bracket labels); the body runs when the
    index selects it (and falls through into the following cases). *)
 dispatch_arm:
-| l = label ":" "{" body = statement_list "}" { (l, body) }
+| l = label ":" body = braced_block { (l, body) }
 
 (* A [match] arm: a reference-type test (optionally binding the narrowed value)
    or a [null] test, then a brace-delimited body that must leave the [match]
@@ -665,12 +665,12 @@ match_pattern:
 | NULL { MatchNull }
 
 match_arm:
-| p = match_pattern "=>" "{" body = statement_list "}" { (p, body) }
+| p = match_pattern "=>" body = braced_block { (p, body) }
 
 (* The default arm is required (like a [dispatch]'s [else]): no-match always has
    a written destination. *)
 match_default:
-| "_" "=>" "{" body = statement_list "}" { body }
+| "_" "=>" body = braced_block { body }
 
 (* A [list(X)] that also swallows bare [;] empty elements — the list analogue of
    [statement_list]'s empty statement (see there). Used for the lists where an

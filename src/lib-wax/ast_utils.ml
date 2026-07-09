@@ -54,9 +54,13 @@ let rec map_instr f instr =
             block = { block with desc = List.map (map_instr f) block.desc };
             catches =
               List.map
-                (fun (tag, block) -> (tag, List.map (map_instr f) block))
+                (fun (tag, block) ->
+                  (tag, { block with desc = List.map (map_instr f) block.desc }))
                 catches;
-            catch_all = Option.map (List.map (map_instr f)) catch_all;
+            catch_all =
+              Option.map
+                (fun b -> { b with desc = List.map (map_instr f) b.desc })
+                catch_all;
           }
     | ( Unreachable | Nop | Hole | Null | Get _ | Path _ | Char _ | String _
       | Int _ | Float _ | StructDefault _ ) as x ->
@@ -104,7 +108,10 @@ let rec map_instr f instr =
             cases;
             default;
             arms =
-              List.map (fun (l, body) -> (l, List.map (map_instr f) body)) arms;
+              List.map
+                (fun (l, body) ->
+                  (l, { body with desc = List.map (map_instr f) body.desc }))
+                arms;
           }
     | Match { scrutinee; arms; default } ->
         Match
@@ -112,9 +119,11 @@ let rec map_instr f instr =
             scrutinee = map_instr f scrutinee;
             arms =
               List.map
-                (fun (pat, body) -> (pat, List.map (map_instr f) body))
+                (fun (pat, body) ->
+                  (pat, { body with desc = List.map (map_instr f) body.desc }))
                 arms;
-            default = List.map (map_instr f) default;
+            default =
+              { default with desc = List.map (map_instr f) default.desc };
           }
     | Br_on_null (label, v) -> Br_on_null (label, map_instr f v)
     | Br_on_non_null (label, v) -> Br_on_non_null (label, map_instr f v)
@@ -183,13 +192,13 @@ let lower_dispatch ~block_info ~index ~cases ~default ~arms =
              {
                label = Some c;
                typ = void;
-               block = no_loc (build rest :: next_body);
+               block = no_loc (build rest :: next_body.desc);
              })
     | [] -> br
   in
   match List.rev arms with
   | [] -> [ br ]
-  | (_, outer_body) :: _ as rev_arms -> build rev_arms :: outer_body
+  | (_, outer_body) :: _ as rev_arms -> build rev_arms :: outer_body.desc
 
 (* Label of the [loop] a label-less [while]/[do]-[while] lowers to during type
    checking. The [#] is not a Wax identifier character, so it can never clash
@@ -294,7 +303,7 @@ let lower_match ~block_info ~labels ~scrutinee ~arms ~default =
     | MatchNull -> blk :: body
   in
   match arms with
-  | [] -> default
+  | [] -> default.desc
   | (p0, b0) :: rest_arms ->
       let rec unsnoc = function
         | [ x ] -> ([], x)
@@ -337,7 +346,7 @@ let lower_match ~block_info ~labels ~scrutinee ~arms ~default =
                    typ = void;
                    block = no_loc (consume prev_block prev_pat prev_body);
                  })
-            :: default
+            :: default.desc
         | lbl :: labels', (pat, body) :: arms' ->
             let blk =
               mk
@@ -348,10 +357,10 @@ let lower_match ~block_info ~labels ~scrutinee ~arms ~default =
                      block = no_loc (consume prev_block prev_pat prev_body);
                    })
             in
-            wrap blk pat body labels' arms'
+            wrap blk pat body.desc labels' arms'
         | _ -> assert false
       in
-      wrap block_l0 p0 b0 rest_labels rest_arms
+      wrap block_l0 p0 b0.desc rest_labels rest_arms
 
 let rec map_modulefield f field =
   match field with

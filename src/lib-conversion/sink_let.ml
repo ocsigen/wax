@@ -21,8 +21,8 @@ let rec occurs name i =
       || match else_block with Some b -> in_list b.desc | None -> false)
   | Try { block; catches; catch_all; _ } -> (
       in_list block.desc
-      || List.exists (fun (_, b) -> in_list b) catches
-      || match catch_all with Some b -> in_list b | None -> false)
+      || List.exists (fun (_, b) -> in_list b.desc) catches
+      || match catch_all with Some b -> in_list b.desc | None -> false)
   | Call (t, args) | TailCall (t, args) -> occurs name t || in_list args
   | Cast (e, _)
   | Test (e, _)
@@ -66,11 +66,11 @@ let rec occurs name i =
   | Sequence l ->
       in_list l
   | Dispatch { index; arms; _ } ->
-      occurs name index || List.exists (fun (_, b) -> in_list b) arms
+      occurs name index || List.exists (fun (_, b) -> in_list b.desc) arms
   | Match { scrutinee; arms; default } ->
       occurs name scrutinee
-      || List.exists (fun (_, b) -> in_list b) arms
-      || in_list default
+      || List.exists (fun (_, b) -> in_list b.desc) arms
+      || in_list default.desc
   | Let (_, body) -> in_opt body
   | Br (_, o) | Throw (_, o) | Return o -> in_opt o
   | If_annotation { then_body; else_body; _ } -> (
@@ -154,8 +154,8 @@ let rec first_access name i =
   | Try { block; catches; catch_all; _ } ->
       fst2 (fl block.desc)
         (List.fold_left
-           (fun acc (_, b) -> agree acc (fl b))
-           (match catch_all with Some b -> fl b | None -> None)
+           (fun acc (_, b) -> agree acc (fl b.desc))
+           (match catch_all with Some b -> fl b.desc | None -> None)
            catches)
   | Call (t, args) | TailCall (t, args) -> fst2 (fl args) (first_access name t)
   | Cast (e, _)
@@ -203,14 +203,16 @@ let rec first_access name i =
       fl l
   | Dispatch { index; arms; _ } ->
       fst2 (first_access name index)
-        (List.fold_left (fun acc (_, b) -> agree acc (fl b)) None arms)
+        (List.fold_left (fun acc (_, b) -> agree acc (fl b.desc)) None arms)
   | Match { scrutinee; arms; default } ->
       (* The scrutinee is evaluated first; the arms and default are the
          (mutually exclusive) runtime-dependent alternatives, so commit only
          when they agree. *)
       fst2
         (first_access name scrutinee)
-        (List.fold_left (fun acc (_, b) -> agree acc (fl b)) (fl default) arms)
+        (List.fold_left
+           (fun acc (_, b) -> agree acc (fl b.desc))
+           (fl default.desc) arms)
   | Let (_, body) -> fo body
   | Br (_, o) | Throw (_, o) | Return o -> fo o
   | If_annotation { then_body; else_body; _ } ->
@@ -357,11 +359,11 @@ let rec sink_into ((name, _) as decl) s =
       let in_block = list_occurs name.desc r.block.desc in
       let n_catches =
         List.length
-          (List.filter (fun (_, b) -> list_occurs name.desc b) r.catches)
+          (List.filter (fun (_, b) -> list_occurs name.desc b.desc) r.catches)
       in
       let in_all =
         match r.catch_all with
-        | Some b -> list_occurs name.desc b
+        | Some b -> list_occurs name.desc b.desc
         | None -> false
       in
       let count =
@@ -372,12 +374,15 @@ let rec sink_into ((name, _) as decl) s =
         Some { s with desc = Try { r with block = bl_loc r.block } }
       else if in_all then
         Some
-          { s with desc = Try { r with catch_all = Option.map bl r.catch_all } }
+          {
+            s with
+            desc = Try { r with catch_all = Option.map bl_loc r.catch_all };
+          }
       else
         let catches =
           List.map
             (fun (tag, b) ->
-              if list_occurs name.desc b then (tag, bl b) else (tag, b))
+              if list_occurs name.desc b.desc then (tag, bl_loc b) else (tag, b))
             r.catches
         in
         Some { s with desc = Try { r with catches } }
@@ -387,14 +392,15 @@ let rec sink_into ((name, _) as decl) s =
          declaration can cover at most one. *)
       if occ r.index then None
       else if
-        List.length (List.filter (fun (_, b) -> list_occurs name.desc b) r.arms)
+        List.length
+          (List.filter (fun (_, b) -> list_occurs name.desc b.desc) r.arms)
         <> 1
       then None
       else
         let arms =
           List.map
             (fun (l, b) ->
-              if list_occurs name.desc b then (l, bl b) else (l, b))
+              if list_occurs name.desc b.desc then (l, bl_loc b) else (l, b))
             r.arms
         in
         Some { s with desc = Dispatch { r with arms } }

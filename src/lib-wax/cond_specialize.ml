@@ -105,8 +105,12 @@ let module_ ctx env (fields : location Ast.module_) :
             label;
             typ;
             block = { block with desc = sinstrs block.desc };
-            catches = List.map (fun (t, l) -> (t, sinstrs l)) catches;
-            catch_all = Option.map sinstrs catch_all;
+            catches =
+              List.map
+                (fun (t, l) -> (t, { l with desc = sinstrs l.desc }))
+                catches;
+            catch_all =
+              Option.map (fun b -> { b with desc = sinstrs b.desc }) catch_all;
           }
     | Set (idx, op, v) -> Set (idx, op, sone v)
     | Tee (idx, v) -> Tee (idx, sone v)
@@ -144,14 +148,21 @@ let module_ ctx env (fields : location Ast.module_) :
             index = sone index;
             cases;
             default;
-            arms = List.map (fun (l, body) -> (l, sinstrs body)) arms;
+            arms =
+              List.map
+                (fun (l, body) -> (l, { body with desc = sinstrs body.desc }))
+                arms;
           }
     | Match { scrutinee; arms; default } ->
         Match
           {
             scrutinee = sone scrutinee;
-            arms = List.map (fun (pat, body) -> (pat, sinstrs body)) arms;
-            default = sinstrs default;
+            arms =
+              List.map
+                (fun (pat, body) ->
+                  (pat, { body with desc = sinstrs body.desc }))
+                arms;
+            default = { default with desc = sinstrs default.desc };
           }
     | Br_on_null (l, v) -> Br_on_null (l, sone v)
     | Br_on_non_null (l, v) -> Br_on_non_null (l, sone v)

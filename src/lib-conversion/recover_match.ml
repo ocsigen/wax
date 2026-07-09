@@ -154,7 +154,8 @@ let rec diverges_instr i =
   | If { if_block; else_block = Some else_block; _ } ->
       diverges_list if_block.desc && diverges_list else_block.desc
   | Match { arms; default; _ } ->
-      List.for_all (fun (_, b) -> diverges_list b) arms && diverges_list default
+      List.for_all (fun (_, b) -> diverges_list b.desc) arms
+      && diverges_list default.desc
   | Loop { block; _ } ->
       (* A loop whose body always branches (back to the loop or out) never falls
          through to the statement after it. *)
@@ -283,7 +284,7 @@ and try_fold (i : location instr) (trailing : location instr list) :
             | `Null, None -> Some MatchNull
             | `Null, Some _ -> None
           in
-          Option.map (fun pat -> (pat, rewrite_list body)) pat
+          Option.map (fun pat -> (pat, no_loc (rewrite_list body))) pat
         in
         let arms = List.map2 arm tests (List.rev levels) in
         if List.exists Option.is_none arms then None
@@ -314,7 +315,7 @@ and try_fold (i : location instr) (trailing : location instr list) :
                     {
                       scrutinee = rewrite_instr scrut;
                       arms;
-                      default = rewrite_list trailing;
+                      default = no_loc (rewrite_list trailing);
                     };
               } )
 
@@ -339,8 +340,10 @@ and rewrite_list stmts =
                         {
                           scrutinee = rewrite_instr scrut;
                           arms =
-                            List.map (fun (p, b) -> (p, rewrite_list b)) arms;
-                          default = rewrite_list trailing;
+                            List.map
+                              (fun (p, b) -> (p, no_loc (rewrite_list b)))
+                              arms;
+                          default = no_loc (rewrite_list trailing);
                         };
                   };
                 ]
@@ -387,8 +390,14 @@ and rewrite_desc (desc : location instr_desc) : location instr_desc =
           label;
           typ;
           block = { block with desc = rewrite_list block.desc };
-          catches = List.map (fun (t, l) -> (t, rewrite_list l)) catches;
-          catch_all = Option.map rewrite_list catch_all;
+          catches =
+            List.map
+              (fun (t, l) -> (t, { l with desc = rewrite_list l.desc }))
+              catches;
+          catch_all =
+            Option.map
+              (fun b -> { b with desc = rewrite_list b.desc })
+              catch_all;
         }
   | Dispatch { index; cases; default; arms } ->
       Dispatch
@@ -396,14 +405,20 @@ and rewrite_desc (desc : location instr_desc) : location instr_desc =
           index = rewrite_instr index;
           cases;
           default;
-          arms = List.map (fun (l, b) -> (l, rewrite_list b)) arms;
+          arms =
+            List.map
+              (fun (l, b) -> (l, { b with desc = rewrite_list b.desc }))
+              arms;
         }
   | Match { scrutinee; arms; default } ->
       Match
         {
           scrutinee = rewrite_instr scrutinee;
-          arms = List.map (fun (p, b) -> (p, rewrite_list b)) arms;
-          default = rewrite_list default;
+          arms =
+            List.map
+              (fun (p, b) -> (p, { b with desc = rewrite_list b.desc }))
+              arms;
+          default = { default with desc = rewrite_list default.desc };
         }
   | If_annotation { cond; then_body; else_body } ->
       If_annotation

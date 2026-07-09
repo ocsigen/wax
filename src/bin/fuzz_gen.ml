@@ -346,8 +346,8 @@ and try_ t d : Ast.location Ast.instr =
          label = None;
          typ;
          block = nl [ gen t (d - 1) ];
-         catches = [ (id "stop", [ gen t (d - 1) ]) ];
-         catch_all = Some [ gen t (d - 1) ];
+         catches = [ (id "stop", nl [ gen t (d - 1) ]) ];
+         catch_all = Some (nl [ gen t (d - 1) ]);
        })
 
 (* An expression of type [t] at depth [d]. *)
@@ -577,19 +577,20 @@ let tail_match res : Ast.location Ast.instr =
     if res = I32 then
       let fld = if t = Point then "x" else "a" in
       ( Ast.MatchCast (Some (id "mv"), reftype t),
-        [
-          nl
-            (Ast.Return
-               (Some (nl (Ast.StructGet (nl (Ast.Get (id "mv")), id fld)))));
-        ] )
-    else (Ast.MatchCast (None, reftype t), [ ret () ])
+        nl
+          [
+            nl
+              (Ast.Return
+                 (Some (nl (Ast.StructGet (nl (Ast.Get (id "mv")), id fld)))));
+          ] )
+    else (Ast.MatchCast (None, reftype t), nl [ ret () ])
   in
   nl
     (Ast.Match
        {
          scrutinee = leaf Eq;
          arms = [ arm Point; arm Pair ];
-         default = [ ret () ];
+         default = nl [ ret () ];
        })
 
 (* A `dispatch` (jump table) as a function TAIL: an i32 selects a case label,
@@ -606,7 +607,7 @@ let tail_dispatch res : Ast.location Ast.instr =
          index = gen I32 1;
          cases;
          default;
-         arms = List.map (fun l -> (l, [ ret () ])) (cases @ [ default ]);
+         arms = List.map (fun l -> (l, nl [ ret () ])) (cases @ [ default ]);
        })
 
 (* Branch-hinting proposal: wrap a conditional branch in [#[likely]] (true) or

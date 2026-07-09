@@ -2696,8 +2696,10 @@ let rec collect_assigned_locals acc i =
       Option.fold ~none:acc ~some:(fun b -> in_list acc b.desc) else_block
   | Try { block; catches; catch_all; _ } ->
       let acc = in_list acc block.desc in
-      let acc = List.fold_left (fun acc (_, b) -> in_list acc b) acc catches in
-      Option.fold ~none:acc ~some:(in_list acc) catch_all
+      let acc =
+        List.fold_left (fun acc (_, b) -> in_list acc b.desc) acc catches
+      in
+      Option.fold ~none:acc ~some:(fun b -> in_list acc b.desc) catch_all
   | Call (t, args) | TailCall (t, args) ->
       in_list (collect_assigned_locals acc t) args
   | Cast (e, _)
@@ -2754,13 +2756,15 @@ let rec collect_assigned_locals acc i =
       in_list acc l
   | Dispatch { index; arms; _ } ->
       List.fold_left
-        (fun acc (_, b) -> in_list acc b)
+        (fun acc (_, b) -> in_list acc b.desc)
         (collect_assigned_locals acc index)
         arms
   | Match { scrutinee; arms; default } ->
       let acc = collect_assigned_locals acc scrutinee in
-      let acc = List.fold_left (fun acc (_, b) -> in_list acc b) acc arms in
-      in_list acc default
+      let acc =
+        List.fold_left (fun acc (_, b) -> in_list acc b.desc) acc arms
+      in
+      in_list acc default.desc
   | Let (_, body) -> in_opt acc body
   | Br (_, o) | Throw (_, o) | Return o -> in_opt acc o
   | If_annotation { then_body; else_body; _ } ->
@@ -2796,8 +2800,10 @@ let rec collect_labels acc (i : _ Ast.instr) =
       Option.fold ~none:acc ~some:(fun b -> in_list acc b.desc) else_block
   | Try { label; block; catches; catch_all; _ } ->
       let acc = in_list (add acc label) block.desc in
-      let acc = List.fold_left (fun acc (_, b) -> in_list acc b) acc catches in
-      Option.fold ~none:acc ~some:(in_list acc) catch_all
+      let acc =
+        List.fold_left (fun acc (_, b) -> in_list acc b.desc) acc catches
+      in
+      Option.fold ~none:acc ~some:(fun b -> in_list acc b.desc) catch_all
   | Call (t, args) | TailCall (t, args) -> in_list (collect_labels acc t) args
   | Set (_, _, e)
   | Tee (_, e)
@@ -2847,12 +2853,14 @@ let rec collect_labels acc (i : _ Ast.instr) =
       in_list acc l
   | Dispatch { index; arms; _ } ->
       List.fold_left
-        (fun acc (_, b) -> in_list acc b)
+        (fun acc (_, b) -> in_list acc b.desc)
         (collect_labels acc index) arms
   | Match { scrutinee; arms; default } ->
       let acc = collect_labels acc scrutinee in
-      let acc = List.fold_left (fun acc (_, b) -> in_list acc b) acc arms in
-      in_list acc default
+      let acc =
+        List.fold_left (fun acc (_, b) -> in_list acc b.desc) acc arms
+      in
+      in_list acc default.desc
   | Let (_, body) -> in_opt acc body
   | Br (_, o) | Throw (_, o) | Return o -> in_opt acc o
   | If_annotation { then_body; else_body; _ } ->
@@ -3011,8 +3019,8 @@ let rec lint_source ctx (i : _ Ast.instr) =
       list block.desc
   | Try { block; catches; catch_all; _ } ->
       list block.desc;
-      List.iter (fun (_, b) -> list b) catches;
-      Option.iter list catch_all
+      List.iter (fun (_, b) -> list b.desc) catches;
+      Option.iter (fun b -> list b.desc) catch_all
   | Call (t, args) | TailCall (t, args) ->
       lint_source ctx t;
       list args
@@ -3078,11 +3086,11 @@ let rec lint_source ctx (i : _ Ast.instr) =
       list l
   | Dispatch { index; arms; _ } ->
       lint_source ctx index;
-      List.iter (fun (_, b) -> list b) arms
+      List.iter (fun (_, b) -> list b.desc) arms
   | Match { scrutinee; arms; default } ->
       lint_source ctx scrutinee;
-      List.iter (fun (_, b) -> list b) arms;
-      list default
+      List.iter (fun (_, b) -> list b.desc) arms;
+      list default.desc
   | Let (bindings, body) ->
       (* A drop [_ = e] is a single anonymous binding; if [e] is effect-free,
          computing it only to discard the result is pointless. *)
@@ -3856,12 +3864,14 @@ let extract_dispatch wrapper k =
 let rebuild_dispatch typed_list arms =
   match (List.rev arms, typed_list) with
   | [], [ { desc = Ast.Br_table (_, idx); _ } ] -> (idx, [])
-  | (outer_label, _) :: rest_arms, outer :: outer_body ->
+  | (outer_label, outer_orig) :: rest_arms, outer :: outer_body ->
       let idx, rest_bodies = extract_dispatch outer (List.length rest_arms) in
       ( idx,
         List.rev
-          ((outer_label, outer_body)
-          :: List.map2 (fun (l, _) b -> (l, b)) rest_arms rest_bodies) )
+          ((outer_label, { outer_orig with desc = outer_body })
+          :: List.map2
+               (fun (l, orig) b -> (l, { orig with desc = b }))
+               rest_arms rest_bodies) )
   | _ -> assert false
 
 (* Peel a type-checked [while] lowering (see [Ast_utils.lower_while]) back to the
@@ -3934,9 +3944,9 @@ let rebuild_match typed_list arms =
       in
       let rec peel blk = function
         | [] -> [] (* [blk] is the innermost block (test chain + escape). *)
-        | (pat, _) :: rest_rev ->
+        | (pat, orig) :: rest_rev ->
             let inner, arm_body = unwrap pat (block_body blk) in
-            (pat, arm_body) :: peel inner rest_rev
+            (pat, { orig with desc = arm_body }) :: peel inner rest_rev
       in
       let arms_rev = peel escape (List.rev arms) in
       (List.rev arms_rev, default)
@@ -5769,7 +5779,12 @@ and type_block_construct ctx i =
       let typed = block ctx i.info None [||] [||] [||] lowered in
       let arms', default' = rebuild_match typed arms in
       return_statement i
-        (Match { scrutinee = scrut'; arms = arms'; default = default' })
+        (Match
+           {
+             scrutinee = scrut';
+             arms = arms';
+             default = { default with desc = default' };
+           })
         [||]
   | Loop { label; typ; block = { desc = instrs; _ } as blkloc } -> (
       if Array.length typ.params > 0 then
@@ -7770,7 +7785,12 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
       let* typed = block_contents ctx [||] lowered in
       let arms', default' = rebuild_match typed arms in
       return_statement i
-        (Match { scrutinee = scrut'; arms = arms'; default = default' })
+        (Match
+           {
+             scrutinee = scrut';
+             arms = arms';
+             default = { default with desc = default' };
+           })
         [||]
   | TailCall _ | Br _ | Br_table _ | Throw _ | ThrowRef _ | Return _ ->
       let count = count_holes i in
@@ -7858,13 +7878,17 @@ and type_try_catches ctx i label ~results catches catch_all =
         let+@ params =
           array_map_opt (fun p -> internalize ctx (snd p.desc)) params
         in
-        let body' = block ctx i.info label params results results body in
-        (tag, body'))
+        let body' = block ctx i.info label params results results body.desc in
+        (tag, { body with desc = body' }))
       catches
   in
   let catch_all =
     Option.map
-      (fun body -> block ctx i.info label [||] results results body)
+      (fun body ->
+        {
+          body with
+          desc = block ctx i.info label [||] results results body.desc;
+        })
       catch_all
   in
   (catches, catch_all)
@@ -9438,17 +9462,17 @@ let rec instr_has_conditional (i : (_ instr_desc, _) annotated) =
       || Option.fold ~none:false ~some:(fun b -> any b.desc) else_block
   | Try { block; catches; catch_all; _ } ->
       any block.desc
-      || List.exists (fun (_, l) -> any l) catches
-      || Option.fold ~none:false ~some:any catch_all
+      || List.exists (fun (_, l) -> any l.desc) catches
+      || Option.fold ~none:false ~some:(fun b -> any b.desc) catch_all
   | Sequence l -> any l
   | ArrayFixed (_, l) -> any l
   | Dispatch { index; arms; _ } ->
       instr_has_conditional index
-      || List.exists (fun (_, body) -> any body) arms
+      || List.exists (fun (_, body) -> any body.desc) arms
   | Match { scrutinee; arms; default } ->
       instr_has_conditional scrutinee
-      || List.exists (fun (_, body) -> any body) arms
-      || any default
+      || List.exists (fun (_, body) -> any body.desc) arms
+      || any default.desc
   | ContBind (_, _, l)
   | Suspend (_, l)
   | Resume (_, _, l)
@@ -9599,8 +9623,14 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
             label;
             typ;
             block = { block with desc = sinstrs asm block.desc };
-            catches = List.map (fun (t, l) -> (t, sinstrs asm l)) catches;
-            catch_all = Option.map (sinstrs asm) catch_all;
+            catches =
+              List.map
+                (fun (t, l) -> (t, { l with desc = sinstrs asm l.desc }))
+                catches;
+            catch_all =
+              Option.map
+                (fun b -> { b with desc = sinstrs asm b.desc })
+                catch_all;
           }
     | Set (idx, op, v) -> Set (idx, op, sone asm v)
     | Tee (idx, v) -> Tee (idx, sone asm v)
@@ -9641,14 +9671,22 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
             index = sone asm index;
             cases;
             default;
-            arms = List.map (fun (l, body) -> (l, sinstrs asm body)) arms;
+            arms =
+              List.map
+                (fun (l, body) ->
+                  (l, { body with desc = sinstrs asm body.desc }))
+                arms;
           }
     | Match { scrutinee; arms; default } ->
         Match
           {
             scrutinee = sone asm scrutinee;
-            arms = List.map (fun (pat, body) -> (pat, sinstrs asm body)) arms;
-            default = sinstrs asm default;
+            arms =
+              List.map
+                (fun (pat, body) ->
+                  (pat, { body with desc = sinstrs asm body.desc }))
+                arms;
+            default = { default with desc = sinstrs asm default.desc };
           }
     | Br_on_null (l, v) -> Br_on_null (l, sone asm v)
     | Br_on_non_null (l, v) -> Br_on_non_null (l, sone asm v)
@@ -9709,14 +9747,15 @@ let sub_instrs (i : (_ instr_desc, _) annotated) =
       @ Option.fold ~none:[] ~some:(fun b -> b.desc) else_block
   | Try { block; catches; catch_all; _ } ->
       block.desc
-      @ List.concat_map snd catches
-      @ Option.value ~default:[] catch_all
+      @ List.concat_map (fun (_, b) -> b.desc) catches
+      @ Option.fold ~none:[] ~some:(fun b -> b.desc) catch_all
   | If_annotation { then_body; else_body; _ } -> (
       then_body.desc @ match else_body with Some b -> b.desc | None -> [])
   | Sequence l | ArrayFixed (_, l) -> l
-  | Dispatch { index; arms; _ } -> index :: List.concat_map snd arms
+  | Dispatch { index; arms; _ } ->
+      index :: List.concat_map (fun (_, b) -> b.desc) arms
   | Match { scrutinee; arms; default } ->
-      (scrutinee :: List.concat_map snd arms) @ default
+      (scrutinee :: List.concat_map (fun (_, b) -> b.desc) arms) @ default.desc
   | ContBind (_, _, l)
   | Suspend (_, l)
   | Resume (_, _, l)

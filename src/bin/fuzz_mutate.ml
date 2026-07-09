@@ -201,8 +201,12 @@ and rebuild : location instr_desc -> location instr_desc = function
         {
           r with
           block = { r.block with desc = go_list r.block.desc };
-          catches = List.map (fun (id, b) -> (id, go_list b)) r.catches;
-          catch_all = Option.map go_list r.catch_all;
+          catches =
+            List.map
+              (fun (id, b) -> (id, { b with desc = go_list b.desc }))
+              r.catches;
+          catch_all =
+            Option.map (fun b -> { b with desc = go_list b.desc }) r.catch_all;
         }
   | TryTable r ->
       TryTable { r with block = { r.block with desc = go_list r.block.desc } }

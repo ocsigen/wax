@@ -131,8 +131,8 @@ type 'info instr_desc =
       label : label option;
       typ : functype;
       block : ('info instr list, location) annotated;
-      catches : (ident * 'info instr list) list;
-      catch_all : 'info instr list option;
+      catches : (ident * ('info instr list, location) annotated) list;
+      catch_all : ('info instr list, location) annotated option;
     }
   | Unreachable
   | Nop
@@ -188,12 +188,12 @@ type 'info instr_desc =
       index : 'info instr;
       cases : label list;
       default : label;
-      arms : (label * 'info instr list) list;
+      arms : (label * ('info instr list, location) annotated) list;
     }
   | Match of {
       scrutinee : 'info instr;
-      arms : (match_pattern * 'info instr list) list;
-      default : 'info instr list;
+      arms : (match_pattern * ('info instr list, location) annotated) list;
+      default : ('info instr list, location) annotated;
     }
   | Br_on_null of label * 'info instr
   | Br_on_non_null of label * 'info instr

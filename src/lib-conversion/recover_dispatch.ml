@@ -89,7 +89,9 @@ and try_fold (i : location instr) (trailing : location instr list) :
                           cases;
                           default;
                           arms =
-                            List.map (fun (l, b) -> (l, rewrite_list b)) arms;
+                            List.map
+                              (fun (l, b) -> (l, no_loc (rewrite_list b)))
+                              arms;
                         };
                   }
               else None
@@ -138,8 +140,14 @@ and rewrite_desc (desc : location instr_desc) : location instr_desc =
           label;
           typ;
           block = { block with desc = rewrite_list block.desc };
-          catches = List.map (fun (t, l) -> (t, rewrite_list l)) catches;
-          catch_all = Option.map rewrite_list catch_all;
+          catches =
+            List.map
+              (fun (t, l) -> (t, { l with desc = rewrite_list l.desc }))
+              catches;
+          catch_all =
+            Option.map
+              (fun b -> { b with desc = rewrite_list b.desc })
+              catch_all;
         }
   | Dispatch { index; cases; default; arms } ->
       Dispatch
@@ -147,14 +155,20 @@ and rewrite_desc (desc : location instr_desc) : location instr_desc =
           index = rewrite_instr index;
           cases;
           default;
-          arms = List.map (fun (l, b) -> (l, rewrite_list b)) arms;
+          arms =
+            List.map
+              (fun (l, b) -> (l, { b with desc = rewrite_list b.desc }))
+              arms;
         }
   | Match { scrutinee; arms; default } ->
       Match
         {
           scrutinee = rewrite_instr scrutinee;
-          arms = List.map (fun (p, b) -> (p, rewrite_list b)) arms;
-          default = rewrite_list default;
+          arms =
+            List.map
+              (fun (p, b) -> (p, { b with desc = rewrite_list b.desc }))
+              arms;
+          default = { default with desc = rewrite_list default.desc };
         }
   | If_annotation { cond; then_body; else_body } ->
       If_annotation

@@ -833,7 +833,7 @@ let rec instr prec pp (i : _ instr) =
                               punctuation pp "=>";
                               space pp ();
                               punctuation pp "{");
-                          block_contents pp block;
+                          located_block_contents pp block;
                           punctuation pp "}"))
                     catches;
                   Option.iter
@@ -846,7 +846,7 @@ let rec instr prec pp (i : _ instr) =
                               punctuation pp "=>";
                               space pp ();
                               punctuation pp "{");
-                          block_contents pp block;
+                          located_block_contents pp block;
                           punctuation pp "}"))
                     catch_all);
               (* The break before the closing [}] must sit outside the [indent]
@@ -1210,7 +1210,7 @@ let rec instr prec pp (i : _ instr) =
                     newline pp ();
                     block pp (Some l) None
                       { params = [||]; results = [||] }
-                      (no_loc body))
+                      body)
                   arms);
             newline pp ());
           punctuation pp "}")
@@ -1224,7 +1224,7 @@ let rec instr prec pp (i : _ instr) =
                 punctuation pp "=>";
                 space pp ();
                 punctuation pp "{");
-            block_contents pp body;
+            located_block_contents pp body;
             punctuation pp "}")
       in
       hvbox pp (fun () ->

@@ -402,15 +402,15 @@ let labels_in_list l =
     | Try { label; block; catches; catch_all; _ } ->
         add label;
         lst block.desc;
-        List.iter (fun (_, b) -> lst b) catches;
-        Option.iter lst catch_all
+        List.iter (fun (_, b) -> lst b.desc) catches;
+        Option.iter (fun b -> lst b.desc) catch_all
     | Dispatch { index; arms; _ } ->
         instr index;
-        List.iter (fun (_, b) -> lst b) arms
+        List.iter (fun (_, b) -> lst b.desc) arms
     | Match { scrutinee; arms; default } ->
         instr scrutinee;
-        List.iter (fun (_, b) -> lst b) arms;
-        lst default
+        List.iter (fun (_, b) -> lst b.desc) arms;
+        lst default.desc
     | If_annotation { then_body; else_body; _ } ->
         lst then_body.desc;
         Option.iter (fun b -> lst b.desc) else_body
@@ -711,14 +711,16 @@ and instruction_desc ret ctx i : location Text.instr list =
           (fun (tag, block) ->
             let inner_ctx = { ctx with locals = ctx.locals } in
             ( index tag,
-              List.concat_map (instruction (push ret label) inner_ctx) block ))
+              List.concat_map
+                (instruction (push ret label) inner_ctx)
+                block.desc ))
           catches
       in
       let catch_all =
         Option.map
           (fun block ->
             let inner_ctx = { ctx with locals = ctx.locals } in
-            List.concat_map (instruction (push ret label) inner_ctx) block)
+            List.concat_map (instruction (push ret label) inner_ctx) block.desc)
           catch_all
       in
       folded loc

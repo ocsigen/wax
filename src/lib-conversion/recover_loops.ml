@@ -45,11 +45,11 @@ let rec refs_instr name (i : location instr) : bool =
       lab l || refs_instr name e || refs_instr name d
   | Dispatch { index; cases; default; arms } ->
       lab default || List.exists lab cases || refs_instr name index
-      || List.exists (fun (_, b) -> any b) arms
+      || List.exists (fun (_, b) -> any b.desc) arms
   | Match { scrutinee; arms; default } ->
       refs_instr name scrutinee
-      || List.exists (fun (_, b) -> any b) arms
-      || any default
+      || List.exists (fun (_, b) -> any b.desc) arms
+      || any default.desc
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
       any block.desc
   | While { cond; step; block; _ } ->
@@ -59,8 +59,8 @@ let rec refs_instr name (i : location instr) : bool =
       || match else_block with Some b -> any b.desc | None -> false)
   | Try { block; catches; catch_all; _ } -> (
       any block.desc
-      || List.exists (fun (_, b) -> any b) catches
-      || match catch_all with Some b -> any b | None -> false)
+      || List.exists (fun (_, b) -> any b.desc) catches
+      || match catch_all with Some b -> any b.desc | None -> false)
   | If_annotation { then_body; else_body; _ } -> (
       any then_body.desc
       || match else_body with Some b -> any b.desc | None -> false)
@@ -246,8 +246,14 @@ and rewrite_desc (desc : location instr_desc) : location instr_desc =
           label;
           typ;
           block = { block with desc = rewrite_list block.desc };
-          catches = List.map (fun (t, l) -> (t, rewrite_list l)) catches;
-          catch_all = Option.map rewrite_list catch_all;
+          catches =
+            List.map
+              (fun (t, l) -> (t, { l with desc = rewrite_list l.desc }))
+              catches;
+          catch_all =
+            Option.map
+              (fun b -> { b with desc = rewrite_list b.desc })
+              catch_all;
         }
   | Dispatch { index; cases; default; arms } ->
       Dispatch
@@ -255,14 +261,20 @@ and rewrite_desc (desc : location instr_desc) : location instr_desc =
           index = rewrite_instr index;
           cases;
           default;
-          arms = List.map (fun (l, b) -> (l, rewrite_list b)) arms;
+          arms =
+            List.map
+              (fun (l, b) -> (l, { b with desc = rewrite_list b.desc }))
+              arms;
         }
   | Match { scrutinee; arms; default } ->
       Match
         {
           scrutinee = rewrite_instr scrutinee;
-          arms = List.map (fun (p, b) -> (p, rewrite_list b)) arms;
-          default = rewrite_list default;
+          arms =
+            List.map
+              (fun (p, b) -> (p, { b with desc = rewrite_list b.desc }))
+              arms;
+          default = { default with desc = rewrite_list default.desc };
         }
   | If_annotation { cond; then_body; else_body } ->
       If_annotation

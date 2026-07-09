@@ -7,7 +7,7 @@ val lower_dispatch :
   index:'info Ast.instr ->
   cases:Ast.label list ->
   default:Ast.label ->
-  arms:(Ast.label * 'info Ast.instr list) list ->
+  arms:(Ast.label * ('info Ast.instr list, Ast.location) Ast.annotated) list ->
   'info Ast.instr list
 (** [lower_dispatch] desugars a [dispatch] to its
     nested-block-around-a-[br_table] form: a list of the outermost case block
@@ -39,8 +39,10 @@ val lower_match :
   block_info:'info ->
   labels:Ast.label list ->
   scrutinee:'info Ast.instr ->
-  arms:(Ast.match_pattern * 'info Ast.instr list) list ->
-  default:'info Ast.instr list ->
+  arms:
+    (Ast.match_pattern * ('info Ast.instr list, Ast.location) Ast.annotated)
+    list ->
+  default:('info Ast.instr list, Ast.location) Ast.annotated ->
   'info Ast.instr list
 (** [lower_match] desugars a [match] to a nested type-test ladder: the scrutinee
     is evaluated once and threaded through a [br_on_cast]/[br_on_null] chain in
