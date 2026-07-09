@@ -187,18 +187,20 @@ let u32 ~style ?loc i = atom ~style ?loc (Uint32.to_string i)
 let u64 ?loc i = atom ?loc (Uint64.to_string i)
 let escape_string = Wax_utils.Unicode.escape_string
 
-let id ?(style = Identifier) ?loc x =
+(* The source text of a [$id] and its terminal width: a plain identifier is
+   written [$x], anything else in the quoted [$"…"] form with escaping. *)
+let id_parts x =
   if Lexer.is_valid_identifier x then
-    Atom
-      {
-        loc;
-        style;
-        len = Some (Wax_utils.Unicode.terminal_width x + 1);
-        s = "$" ^ x;
-      }
+    (Wax_utils.Unicode.terminal_width x + 1, "$" ^ x)
   else
     let i, s = escape_string x in
-    Atom { loc; style; len = Some (i + 3); s = "$\"" ^ s ^ "\"" }
+    (i + 3, "$\"" ^ s ^ "\"")
+
+let id_string x = snd (id_parts x)
+
+let id ?(style = Identifier) ?loc x =
+  let len, s = id_parts x in
+  Atom { loc; style; len = Some len; s }
 
 let opt_id = option (fun i -> [ id ~loc:i.Ast.info i.Ast.desc ])
 

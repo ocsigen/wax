@@ -1,5 +1,10 @@
 (** Pretty-printing for Wasm Text Format. *)
 
+val id_string : string -> string
+(** [id_string x] is the source text of the identifier whose name (without the
+    leading [$]) is [x]: [$x] for a plain identifier, or the quoted [$"…"] form
+    with escaping otherwise. This is how {!module_} renders identifiers. *)
+
 val module_ :
   ?color:Wax_utils.Colors.flag ->
   ?out_channel:out_channel ->
