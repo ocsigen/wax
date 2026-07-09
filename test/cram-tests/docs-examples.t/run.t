@@ -11,7 +11,7 @@ Confirm the expected number of examples was extracted (bump this and promote
 when you add or remove an example):
 
   $ ls blk*.wax | wc -l | tr -d ' '
-  23
+  26
 
 Each example must type-check and convert to WAT (optional proposals the examples
 may use, such as custom-descriptors, are enabled). A failing block prints its

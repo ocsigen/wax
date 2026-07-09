@@ -749,3 +749,84 @@ fn drain(n: i32) {
     }
 }
 ```
+
+## Linear Memory
+
+A `memory` declaration reserves linear memory. `load`/`store` methods on it read
+and write, with the access width in the method name; a narrow (`load8`/`load16`)
+load returns raw bits, so it needs an explicit sign/zero-extending cast.
+
+### Wax
+
+```wax
+memory mem: i32 [1];
+
+#[export = "sum_bytes"]
+fn sum_bytes(start: i32, end: i32) -> i32 {
+    let total: i32 = 0;
+    let p: i32 = start;
+    while p <u end {
+        total += mem.load8(p) as i32_u;   // byte load, zero-extended
+        p += 1;
+    }
+    total;
+}
+```
+
+## SIMD
+
+`v128` vector operations are method intrinsics with the lane shape baked into the
+name (`mul_i32x4`, `add_i32x4`, `extract_lane_i32x4`).
+
+### Wax
+
+```wax
+#[export = "madd_i32x4"]
+fn madd_i32x4(a: v128, b: v128, c: v128) -> v128 {
+    a.mul_i32x4(b).add_i32x4(c);          // a * b + c, four i32 lanes at once
+}
+
+#[export = "sum_lanes"]
+fn sum_lanes(v: v128) -> i32 {
+    v.extract_lane_i32x4(0) + v.extract_lane_i32x4(1)
+        + v.extract_lane_i32x4(2) + v.extract_lane_i32x4(3);
+}
+```
+
+## Stack Switching
+
+A continuation type wraps a function type with `cont`. A coroutine `suspend`s
+with a value; a driver `resume`s it, routing the suspended tag to a handler
+label that receives the payload and the paused continuation. Note that the
+continuation's type changes after a suspend, since resuming it now needs the
+reply value.
+
+### Wax
+
+```wax
+type task = fn() -> i32;
+type k = cont task;
+type resumed = fn(i32) -> i32;   // the continuation's type after a suspend
+type kr = cont resumed;
+
+tag yield(i32) -> i32;
+
+// A coroutine: yield 10, then return the reply plus one.
+fn worker() -> i32 {
+    let reply: i32 = suspend yield(10);
+    reply + 1;
+}
+
+// Run the worker until its first suspend and return the value it yielded.
+#[export = "first_yield"]
+fn first_yield() -> i32 {
+    let c: &?k = cont_new k (worker);
+    let (v, rest) =
+        'on_yield: do () -> (i32, &kr) {
+            _ = resume k [yield -> 'on_yield] (c!);   // worker returned; drop its result
+            return -1;
+        };
+    _ = rest;            // `rest` could be resumed with a reply to continue the worker
+    v;
+}
+```
