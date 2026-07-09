@@ -841,9 +841,10 @@ type.
 ### Unreachable and Nop
 
 `unreachable` marks code that should never run: it traps if reached. `nop` does
-nothing. Both are statements, not expressions, so they cannot be bound to a name
-or used as an operand. As a block's final statement, `unreachable` lets the
-block satisfy any result type, since control never falls through to it.
+nothing. Neither is an expression, so neither can be bound to a name or written
+as an operand. Because `unreachable` diverges, the code after it is dead and the
+stack polymorphic there, so `unreachable` can satisfy any block result type,
+fill any [hole](#holes) `_`, and supply any block parameter.
 
 ```wax
 if x <s 0 {
@@ -1142,7 +1143,7 @@ type mutable_ints = [mut i32];
 [bytes| 0; 100]             // New array: 100 elements, all 0
 [bytes| ..; 100]            // New array: 100 elements, default value
 [bytes| 1, 2, 3, 4]         // New array with specific values
-[bytes| seg @ 0; 100]       // New array from a data segment (offset, count)
+[bytes| seg @ 0; 100]       // New array from a segment (offset, count)
 ```
 
 The last form builds the array from a named passive segment, copying `count`
