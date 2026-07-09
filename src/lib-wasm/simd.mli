@@ -99,3 +99,15 @@ type mem_intrinsic = {
 
 val mem_method : string -> mem_intrinsic option
 val is_mem_method : string -> bool
+
+(** {1 WAT mnemonics for plain vector instructions}
+
+    The plain vector instructions are those the WAT lexer emits as a single
+    [INSTR] token (splat, unop, binop, shift, test, bitmask); the single source
+    of their WAT mnemonics, shared by [output.ml] and the WAT lexer. *)
+
+val wat_mnemonic : _ Ast.Text.instr_desc -> string option
+(** The WAT mnemonic of a plain vector instruction; [None] for anything else. *)
+
+val plain_vec_instrs : Ast.location Ast.Text.instr_desc list
+(** Every plain vector instruction, for the WAT lexer's keyword table. *)

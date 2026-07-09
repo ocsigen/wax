@@ -440,129 +440,12 @@ let vec_shape = function
   | F32x4 -> "f32x4"
   | F64x2 -> "f64x2"
 
-let vec_un_op op =
-  match op with
-  | VecNeg _ -> "neg"
-  | VecAbs _ -> "abs"
-  | VecSqrt _ -> "sqrt"
-  | VecNot -> "not"
-  | VecTruncSat (f, s) -> (
-      (* The f64x2 form is spelled with a trailing [_zero] (it fills the upper
-         two i32x4 lanes with zero) — the only spec name for opcodes 252/253.
-         Without it wasm-tools and the spec reject the output. *)
-      match f with
-      | `F32 -> signage "trunc_sat_f32x4" s
-      | `F64 -> signage "trunc_sat_f64x2" s ^ "_zero")
-  | VecConvert (f, s) ->
-      let low = match f with `F32 -> "" | `F64 -> "low_" in
-      signage ("convert_" ^ low ^ "i32x4") s
-  | VecExtend (h, sz, s) ->
-      let h_str = match h with `Low -> "low" | `High -> "high" in
-      let sz_str =
-        match sz with `_8 -> "i8x16" | `_16 -> "i16x8" | `_32 -> "i32x4"
-      in
-      signage ("extend_" ^ h_str ^ "_" ^ sz_str) s
-  | VecPromote -> "promote_low_f32x4"
-  | VecDemote -> "demote_f64x2_zero"
-  | VecCeil _ -> "ceil"
-  | VecFloor _ -> "floor"
-  | VecTrunc _ -> "trunc"
-  | VecNearest _ -> "nearest"
-  | VecPopcnt -> "popcnt"
-  | VecExtAddPairwise (s, sz) ->
-      signage
-        ("extadd_pairwise_" ^ match sz with `I8 -> "i8x16" | `I16 -> "i16x8")
-        s
-  (* Relaxed SIMD *)
-  | VecRelaxedTrunc s -> signage "relaxed_trunc_f32x4" s
-  | VecRelaxedTruncZero s -> signage "relaxed_trunc_f64x2" s ^ "_zero"
-
-let vec_bin_op op =
-  match op with
-  | VecAdd _ -> "add"
-  | VecSub _ -> "sub"
-  | VecMul _ -> "mul"
-  | VecDiv _ -> "div"
-  | VecMin (s, _) ->
-      "min" ^ Option.fold ~none:"" ~some:(fun s -> signage "" s) s
-  | VecMax (s, _) ->
-      "max" ^ Option.fold ~none:"" ~some:(fun s -> signage "" s) s
-  | VecPMin _ -> "pmin"
-  | VecPMax _ -> "pmax"
-  | VecAvgr _ -> "avgr_u"
-  | VecQ15MulrSat -> "q15mulr_sat_s"
-  | VecAddSat (s, _) -> signage "add_sat" s
-  | VecSubSat (s, _) -> signage "sub_sat" s
-  | VecDot -> "dot_i16x8_s"
-  | VecEq _ -> "eq"
-  | VecNe _ -> "ne"
-  | VecLt (s, shape) -> (
-      match (shape, s) with
-      | (I8x16 | I16x8 | I32x4 | I64x2), Some Signed -> "lt_s"
-      | (I8x16 | I16x8 | I32x4), Some Unsigned -> "lt_u"
-      | (F32x4 | F64x2), None -> "lt"
-      | _ -> assert false)
-  | VecGt (s, shape) -> (
-      match (shape, s) with
-      | (I8x16 | I16x8 | I32x4 | I64x2), Some Signed -> "gt_s"
-      | (I8x16 | I16x8 | I32x4), Some Unsigned -> "gt_u"
-      | (F32x4 | F64x2), None -> "gt"
-      | _ -> assert false)
-  | VecLe (s, shape) -> (
-      match (shape, s) with
-      | (I8x16 | I16x8 | I32x4 | I64x2), Some Signed -> "le_s"
-      | (I8x16 | I16x8 | I32x4), Some Unsigned -> "le_u"
-      | (F32x4 | F64x2), None -> "le"
-      | _ -> assert false)
-  | VecGe (s, shape) -> (
-      match (shape, s) with
-      | (I8x16 | I16x8 | I32x4 | I64x2), Some Signed -> "ge_s"
-      | (I8x16 | I16x8 | I32x4), Some Unsigned -> "ge_u"
-      | (F32x4 | F64x2), None -> "ge"
-      | _ -> assert false)
-  | VecAnd -> "and"
-  | VecOr -> "or"
-  | VecXor -> "xor"
-  | VecAndNot -> "andnot"
-  | VecNarrow (s, sh) ->
-      let in_shape = match sh with `I8 -> "i16x8" | `I16 -> "i32x4" in
-      signage ("narrow_" ^ in_shape) s
-  | VecSwizzle -> "swizzle"
-  | VecExtMulLow (s, sh) ->
-      let in_shape =
-        match sh with `_8 -> "i8x16" | `_16 -> "i16x8" | `_32 -> "i32x4"
-      in
-      signage ("extmul_low_" ^ in_shape) s
-  | VecExtMulHigh (s, sh) ->
-      let in_shape =
-        match sh with `_8 -> "i8x16" | `_16 -> "i16x8" | `_32 -> "i32x4"
-      in
-      signage ("extmul_high_" ^ in_shape) s
-  (* Relaxed SIMD *)
-  | VecRelaxedSwizzle -> "relaxed_swizzle"
-  | VecRelaxedMin _ -> "relaxed_min"
-  | VecRelaxedMax _ -> "relaxed_max"
-  | VecRelaxedQ15Mulr -> "relaxed_q15mulr_s"
-  | VecRelaxedDot -> "relaxed_dot_i8x16_i7x16_s"
-
 let vec_tern_op op =
   match op with
   | VecRelaxedMAdd _ -> "relaxed_madd"
   | VecRelaxedNMAdd _ -> "relaxed_nmadd"
   | VecRelaxedLaneSelect _ -> "relaxed_laneselect"
   | VecRelaxedDotAdd -> "relaxed_dot_i8x16_i7x16_add_s"
-
-let vec_test_op op =
-  match op with
-  | AnyTrue -> "v128.any_true"
-  | AllTrue shape -> vec_shape shape ^ ".all_true"
-
-let vec_shift_op op =
-  match op with
-  | Shl shape -> vec_shape shape ^ ".shl"
-  | Shr (s, shape) -> signage (vec_shape shape ^ ".shr") s
-
-let vec_bitmask_op_shape = function Bitmask s -> s
 
 let vec_const { Wax_utils.V128.shape; components } =
   keyword
@@ -712,68 +595,11 @@ let rec instr i =
           instruction ~loc (vec_shape op ^ ".replace_lane");
           atom ~style:Constant (Int.to_string lane);
         ]
-  | VecSplat sh -> instruction ~loc (vec_shape sh ^ ".splat")
-  | VecUnOp op ->
-      let shape_str =
-        match op with
-        | VecNeg s | VecAbs s -> vec_shape s
-        | VecPopcnt -> "i8x16"
-        | VecNot -> "v128"
-        | VecTruncSat _ -> vec_shape I32x4
-        | VecCeil f
-        | VecFloor f
-        | VecTrunc f
-        | VecNearest f
-        | VecSqrt f
-        | VecConvert (f, _) ->
-            vec_shape (match f with `F32 -> F32x4 | `F64 -> F64x2)
-        | VecExtend (_, sz, _) ->
-            vec_shape
-              (match sz with `_8 -> I16x8 | `_16 -> I32x4 | `_32 -> I64x2)
-        | VecPromote -> vec_shape F64x2
-        | VecDemote -> vec_shape F32x4
-        | VecExtAddPairwise (_, sz) ->
-            vec_shape (match sz with `I8 -> I16x8 | `I16 -> I32x4)
-        | VecRelaxedTrunc _ -> vec_shape I32x4
-        | VecRelaxedTruncZero _ -> vec_shape I32x4
-      in
-      instruction ~loc (shape_str ^ "." ^ vec_un_op op)
-  | VecBinOp op ->
-      let shape_str =
-        match op with
-        | VecAdd s
-        | VecSub s
-        | VecMul s
-        | VecMin (_, s)
-        | VecMax (_, s)
-        | VecEq s
-        | VecNe s
-        | VecLt (_, s)
-        | VecGt (_, s)
-        | VecLe (_, s)
-        | VecGe (_, s) ->
-            vec_shape s
-        | VecDiv s | VecPMin s | VecPMax s -> (
-            match s with `F32 -> "f32x4" | `F64 -> "f64x2")
-        | VecDot -> "i32x4"
-        | VecNarrow (_, s) | VecAvgr s | VecAddSat (_, s) | VecSubSat (_, s)
-          -> (
-            match s with `I8 -> "i8x16" | `I16 -> "i16x8")
-        | VecAnd | VecOr | VecXor | VecAndNot -> "v128"
-        | VecSwizzle | VecRelaxedSwizzle -> "i8x16"
-        | VecQ15MulrSat -> "i16x8"
-        | VecRelaxedMin s | VecRelaxedMax s -> vec_shape s
-        | VecRelaxedQ15Mulr -> "i16x8"
-        | VecRelaxedDot -> "i16x8"
-        | VecExtMulLow (_, s) | VecExtMulHigh (_, s) ->
-            vec_shape
-              (match s with `_8 -> I16x8 | `_16 -> I32x4 | `_32 -> I64x2)
-      in
-      instruction ~loc (shape_str ^ "." ^ vec_bin_op op)
-  | VecTest op -> instruction ~loc (vec_test_op op)
-  | VecShift op -> instruction ~loc (vec_shift_op op)
-  | VecBitmask op ->
-      instruction ~loc (vec_shape (vec_bitmask_op_shape op) ^ ".bitmask")
+  | (VecSplat _ | VecUnOp _ | VecBinOp _ | VecTest _ | VecShift _ | VecBitmask _)
+    as desc ->
+      (* Plain vector instructions share their WAT mnemonics with the lexer via
+         the Simd registry. *)
+      instruction ~loc (Option.get (Simd.wat_mnemonic desc))
   | VecTernOp op ->
       let shape_str =
         match op with

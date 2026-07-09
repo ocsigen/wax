@@ -337,14 +337,7 @@ let keyword_table : (string, token) Hashtbl.t =
       ("f32x4.replace_lane", VEC_REPLACE F32x4);
       ("f64x2.extract_lane", VEC_EXTRACT (F64x2, None));
       ("f64x2.replace_lane", VEC_REPLACE F64x2);
-      ("i8x16.splat", INSTR (VecSplat I8x16));
-      ("i16x8.splat", INSTR (VecSplat I16x8));
-      ("i32x4.splat", INSTR (VecSplat I32x4));
-      ("i64x2.splat", INSTR (VecSplat I64x2));
-      ("f32x4.splat", INSTR (VecSplat F32x4));
-      ("f64x2.splat", INSTR (VecSplat F64x2));
       ("i8x16.shuffle", VEC_SHUFFLE);
-      ("i8x16.swizzle", INSTR (VecBinOp VecSwizzle));
       ("i32.store8", STORES (`I32, `I8));
       ("i64.store8", STORES (`I64, `I8));
       ("i32.store16", STORES (`I32, `I16));
@@ -505,118 +498,7 @@ let keyword_table : (string, token) Hashtbl.t =
       ("f64.gt", INSTR (BinOp (F64 Gt)));
       ("f64.le", INSTR (BinOp (F64 Le)));
       ("f64.ge", INSTR (BinOp (F64 Ge)));
-      ("v128.not", INSTR (VecUnOp VecNot));
-      ("v128.and", INSTR (VecBinOp VecAnd));
-      ("v128.andnot", INSTR (VecBinOp VecAndNot));
-      ("v128.or", INSTR (VecBinOp VecOr));
-      ("v128.xor", INSTR (VecBinOp VecXor));
       ("v128.bitselect", INSTR VecBitselect);
-      ("v128.any_true", INSTR (VecTest AnyTrue));
-      ("i8x16.abs", INSTR (VecUnOp (VecAbs I8x16)));
-      ("i8x16.neg", INSTR (VecUnOp (VecNeg I8x16)));
-      ("i8x16.popcnt", INSTR (VecUnOp VecPopcnt));
-      ("i8x16.all_true", INSTR (VecTest (AllTrue I8x16)));
-      ("i8x16.bitmask", INSTR (VecBitmask (Bitmask I8x16)));
-      ("i8x16.narrow_i16x8_s", INSTR (VecBinOp (VecNarrow (Signed, `I8))));
-      ("i8x16.narrow_i16x8_u", INSTR (VecBinOp (VecNarrow (Unsigned, `I8))));
-      ("i8x16.shl", INSTR (VecShift (Shl I8x16)));
-      ("i8x16.shr_s", INSTR (VecShift (Shr (Signed, I8x16))));
-      ("i8x16.shr_u", INSTR (VecShift (Shr (Unsigned, I8x16))));
-      ("i8x16.add", INSTR (VecBinOp (VecAdd I8x16)));
-      ("i8x16.add_sat_s", INSTR (VecBinOp (VecAddSat (Signed, `I8))));
-      ("i8x16.add_sat_u", INSTR (VecBinOp (VecAddSat (Unsigned, `I8))));
-      ("i8x16.sub", INSTR (VecBinOp (VecSub I8x16)));
-      ("i8x16.sub_sat_s", INSTR (VecBinOp (VecSubSat (Signed, `I8))));
-      ("i8x16.sub_sat_u", INSTR (VecBinOp (VecSubSat (Unsigned, `I8))));
-      ("i8x16.min_s", INSTR (VecBinOp (VecMin (Some Signed, I8x16))));
-      ("i8x16.min_u", INSTR (VecBinOp (VecMin (Some Unsigned, I8x16))));
-      ("i8x16.max_s", INSTR (VecBinOp (VecMax (Some Signed, I8x16))));
-      ("i8x16.max_u", INSTR (VecBinOp (VecMax (Some Unsigned, I8x16))));
-      ("i8x16.avgr_u", INSTR (VecBinOp (VecAvgr `I8)));
-      ("i8x16.eq", INSTR (VecBinOp (VecEq I8x16)));
-      ("i8x16.ne", INSTR (VecBinOp (VecNe I8x16)));
-      ("i8x16.lt_s", INSTR (VecBinOp (VecLt (Some Signed, I8x16))));
-      ("i8x16.lt_u", INSTR (VecBinOp (VecLt (Some Unsigned, I8x16))));
-      ("i8x16.gt_s", INSTR (VecBinOp (VecGt (Some Signed, I8x16))));
-      ("i8x16.gt_u", INSTR (VecBinOp (VecGt (Some Unsigned, I8x16))));
-      ("i8x16.le_s", INSTR (VecBinOp (VecLe (Some Signed, I8x16))));
-      ("i8x16.le_u", INSTR (VecBinOp (VecLe (Some Unsigned, I8x16))));
-      ("i8x16.ge_s", INSTR (VecBinOp (VecGe (Some Signed, I8x16))));
-      ("i8x16.ge_u", INSTR (VecBinOp (VecGe (Some Unsigned, I8x16))));
-      ("i16x8.abs", INSTR (VecUnOp (VecAbs I16x8)));
-      ("i16x8.neg", INSTR (VecUnOp (VecNeg I16x8)));
-      ("i16x8.all_true", INSTR (VecTest (AllTrue I16x8)));
-      ("i16x8.bitmask", INSTR (VecBitmask (Bitmask I16x8)));
-      ("i16x8.narrow_i32x4_s", INSTR (VecBinOp (VecNarrow (Signed, `I16))));
-      ("i16x8.narrow_i32x4_u", INSTR (VecBinOp (VecNarrow (Unsigned, `I16))));
-      ( "i16x8.extend_low_i8x16_s",
-        INSTR (VecUnOp (VecExtend (`Low, `_8, Signed))) );
-      ( "i16x8.extend_high_i8x16_s",
-        INSTR (VecUnOp (VecExtend (`High, `_8, Signed))) );
-      ( "i16x8.extend_low_i8x16_u",
-        INSTR (VecUnOp (VecExtend (`Low, `_8, Unsigned))) );
-      ( "i16x8.extend_high_i8x16_u",
-        INSTR (VecUnOp (VecExtend (`High, `_8, Unsigned))) );
-      ("i16x8.shl", INSTR (VecShift (Shl I16x8)));
-      ("i16x8.shr_s", INSTR (VecShift (Shr (Signed, I16x8))));
-      ("i16x8.shr_u", INSTR (VecShift (Shr (Unsigned, I16x8))));
-      ("i16x8.add", INSTR (VecBinOp (VecAdd I16x8)));
-      ("i16x8.add_sat_s", INSTR (VecBinOp (VecAddSat (Signed, `I16))));
-      ("i16x8.add_sat_u", INSTR (VecBinOp (VecAddSat (Unsigned, `I16))));
-      ("i16x8.sub", INSTR (VecBinOp (VecSub I16x8)));
-      ("i16x8.sub_sat_s", INSTR (VecBinOp (VecSubSat (Signed, `I16))));
-      ("i16x8.sub_sat_u", INSTR (VecBinOp (VecSubSat (Unsigned, `I16))));
-      ("i16x8.mul", INSTR (VecBinOp (VecMul I16x8)));
-      ("i16x8.min_s", INSTR (VecBinOp (VecMin (Some Signed, I16x8))));
-      ("i16x8.min_u", INSTR (VecBinOp (VecMin (Some Unsigned, I16x8))));
-      ("i16x8.max_s", INSTR (VecBinOp (VecMax (Some Signed, I16x8))));
-      ("i16x8.max_u", INSTR (VecBinOp (VecMax (Some Unsigned, I16x8))));
-      ("i16x8.avgr_u", INSTR (VecBinOp (VecAvgr `I16)));
-      ("i16x8.q15mulr_sat_s", INSTR (VecBinOp VecQ15MulrSat));
-      ( "i16x8.extadd_pairwise_i8x16_s",
-        INSTR (VecUnOp (VecExtAddPairwise (Signed, `I8))) );
-      ( "i16x8.extadd_pairwise_i8x16_u",
-        INSTR (VecUnOp (VecExtAddPairwise (Unsigned, `I8))) );
-      ("i16x8.eq", INSTR (VecBinOp (VecEq I16x8)));
-      ("i16x8.ne", INSTR (VecBinOp (VecNe I16x8)));
-      ("i16x8.lt_s", INSTR (VecBinOp (VecLt (Some Signed, I16x8))));
-      ("i16x8.lt_u", INSTR (VecBinOp (VecLt (Some Unsigned, I16x8))));
-      ("i16x8.gt_s", INSTR (VecBinOp (VecGt (Some Signed, I16x8))));
-      ("i16x8.gt_u", INSTR (VecBinOp (VecGt (Some Unsigned, I16x8))));
-      ("i16x8.le_s", INSTR (VecBinOp (VecLe (Some Signed, I16x8))));
-      ("i16x8.le_u", INSTR (VecBinOp (VecLe (Some Unsigned, I16x8))));
-      ("i16x8.ge_s", INSTR (VecBinOp (VecGe (Some Signed, I16x8))));
-      ("i16x8.ge_u", INSTR (VecBinOp (VecGe (Some Unsigned, I16x8))));
-      ("i32x4.abs", INSTR (VecUnOp (VecAbs I32x4)));
-      ("i32x4.neg", INSTR (VecUnOp (VecNeg I32x4)));
-      ("i32x4.max_u", INSTR (VecBinOp (VecMax (Some Unsigned, I32x4))));
-      ("i32x4.all_true", INSTR (VecTest (AllTrue I32x4)));
-      ("i32x4.bitmask", INSTR (VecBitmask (Bitmask I32x4)));
-      ( "i32x4.extend_low_i16x8_s",
-        INSTR (VecUnOp (VecExtend (`Low, `_16, Signed))) );
-      ( "i32x4.extend_high_i16x8_s",
-        INSTR (VecUnOp (VecExtend (`High, `_16, Signed))) );
-      ( "i32x4.extend_low_i16x8_u",
-        INSTR (VecUnOp (VecExtend (`Low, `_16, Unsigned))) );
-      ( "i32x4.extend_high_i16x8_u",
-        INSTR (VecUnOp (VecExtend (`High, `_16, Unsigned))) );
-      ("i32x4.shl", INSTR (VecShift (Shl I32x4)));
-      ("i32x4.shr_s", INSTR (VecShift (Shr (Signed, I32x4))));
-      ("i32x4.shr_u", INSTR (VecShift (Shr (Unsigned, I32x4))));
-      ("i32x4.add", INSTR (VecBinOp (VecAdd I32x4)));
-      ("i32x4.sub", INSTR (VecBinOp (VecSub I32x4)));
-      ("i32x4.mul", INSTR (VecBinOp (VecMul I32x4)));
-      ("i32x4.min_s", INSTR (VecBinOp (VecMin (Some Signed, I32x4))));
-      ("i32x4.min_u", INSTR (VecBinOp (VecMin (Some Unsigned, I32x4))));
-      ("i32x4.max_s", INSTR (VecBinOp (VecMax (Some Signed, I32x4))));
-      ("i8x16.relaxed_swizzle", INSTR (VecBinOp VecRelaxedSwizzle));
-      ("v128.i8x16.swizzle", INSTR (VecBinOp VecSwizzle));
-      ("i32x4.relaxed_trunc_f32x4_s", INSTR (VecUnOp (VecRelaxedTrunc Signed)));
-      ("i32x4.relaxed_trunc_f32x4_u", INSTR (VecUnOp (VecRelaxedTrunc Unsigned)));
-      ( "i32x4.relaxed_trunc_f64x2_s_zero",
-        INSTR (VecUnOp (VecRelaxedTruncZero Signed)) );
-      ( "i32x4.relaxed_trunc_f64x2_u_zero",
-        INSTR (VecUnOp (VecRelaxedTruncZero Unsigned)) );
       ("f32x4.relaxed_madd", VEC_TERN_OP (VecRelaxedMAdd `F32));
       ("f32x4.relaxed_nmadd", VEC_TERN_OP (VecRelaxedNMAdd `F32));
       ("f64x2.relaxed_madd", VEC_TERN_OP (VecRelaxedMAdd `F64));
@@ -625,130 +507,7 @@ let keyword_table : (string, token) Hashtbl.t =
       ("i16x8.relaxed_laneselect", VEC_TERN_OP (VecRelaxedLaneSelect I16x8));
       ("i32x4.relaxed_laneselect", VEC_TERN_OP (VecRelaxedLaneSelect I32x4));
       ("i64x2.relaxed_laneselect", VEC_TERN_OP (VecRelaxedLaneSelect I64x2));
-      ("f32x4.relaxed_min", INSTR (VecBinOp (VecRelaxedMin F32x4)));
-      ("f32x4.relaxed_max", INSTR (VecBinOp (VecRelaxedMax F32x4)));
-      ("f64x2.relaxed_min", INSTR (VecBinOp (VecRelaxedMin F64x2)));
-      ("f64x2.relaxed_max", INSTR (VecBinOp (VecRelaxedMax F64x2)));
-      ("i16x8.relaxed_q15mulr_s", INSTR (VecBinOp VecRelaxedQ15Mulr));
-      ("i16x8.relaxed_dot_i8x16_i7x16_s", INSTR (VecBinOp VecRelaxedDot));
       ("i32x4.relaxed_dot_i8x16_i7x16_add_s", VEC_TERN_OP VecRelaxedDotAdd);
-      ("i32x4.dot_i16x8_s", INSTR (VecBinOp VecDot));
-      ("i16x8.extmul_low_i8x16_s", INSTR (VecBinOp (VecExtMulLow (Signed, `_8))));
-      ( "i16x8.extmul_high_i8x16_s",
-        INSTR (VecBinOp (VecExtMulHigh (Signed, `_8))) );
-      ( "i16x8.extmul_low_i8x16_u",
-        INSTR (VecBinOp (VecExtMulLow (Unsigned, `_8))) );
-      ( "i16x8.extmul_high_i8x16_u",
-        INSTR (VecBinOp (VecExtMulHigh (Unsigned, `_8))) );
-      ( "i32x4.extmul_low_i16x8_s",
-        INSTR (VecBinOp (VecExtMulLow (Signed, `_16))) );
-      ( "i32x4.extmul_high_i16x8_s",
-        INSTR (VecBinOp (VecExtMulHigh (Signed, `_16))) );
-      ( "i32x4.extmul_low_i16x8_u",
-        INSTR (VecBinOp (VecExtMulLow (Unsigned, `_16))) );
-      ( "i32x4.extmul_high_i16x8_u",
-        INSTR (VecBinOp (VecExtMulHigh (Unsigned, `_16))) );
-      ( "i64x2.extmul_low_i32x4_s",
-        INSTR (VecBinOp (VecExtMulLow (Signed, `_32))) );
-      ( "i64x2.extmul_high_i32x4_s",
-        INSTR (VecBinOp (VecExtMulHigh (Signed, `_32))) );
-      ( "i64x2.extmul_low_i32x4_u",
-        INSTR (VecBinOp (VecExtMulLow (Unsigned, `_32))) );
-      ( "i64x2.extmul_high_i32x4_u",
-        INSTR (VecBinOp (VecExtMulHigh (Unsigned, `_32))) );
-      ( "i32x4.extadd_pairwise_i16x8_s",
-        INSTR (VecUnOp (VecExtAddPairwise (Signed, `I16))) );
-      ( "i32x4.extadd_pairwise_i16x8_u",
-        INSTR (VecUnOp (VecExtAddPairwise (Unsigned, `I16))) );
-      ("i32x4.eq", INSTR (VecBinOp (VecEq I32x4)));
-      ("i32x4.ne", INSTR (VecBinOp (VecNe I32x4)));
-      ("i32x4.lt_s", INSTR (VecBinOp (VecLt (Some Signed, I32x4))));
-      ("i32x4.lt_u", INSTR (VecBinOp (VecLt (Some Unsigned, I32x4))));
-      ("i32x4.gt_s", INSTR (VecBinOp (VecGt (Some Signed, I32x4))));
-      ("i32x4.gt_u", INSTR (VecBinOp (VecGt (Some Unsigned, I32x4))));
-      ("i32x4.le_s", INSTR (VecBinOp (VecLe (Some Signed, I32x4))));
-      ("i32x4.le_u", INSTR (VecBinOp (VecLe (Some Unsigned, I32x4))));
-      ("i32x4.ge_s", INSTR (VecBinOp (VecGe (Some Signed, I32x4))));
-      ("i32x4.ge_u", INSTR (VecBinOp (VecGe (Some Unsigned, I32x4))));
-      ("i64x2.abs", INSTR (VecUnOp (VecAbs I64x2)));
-      ("i64x2.neg", INSTR (VecUnOp (VecNeg I64x2)));
-      ("i64x2.all_true", INSTR (VecTest (AllTrue I64x2)));
-      ("i64x2.bitmask", INSTR (VecBitmask (Bitmask I64x2)));
-      ("f32x4.eq", INSTR (VecBinOp (VecEq F32x4)));
-      ("f32x4.ne", INSTR (VecBinOp (VecNe F32x4)));
-      ("f32x4.lt", INSTR (VecBinOp (VecLt (None, F32x4))));
-      ("f32x4.gt", INSTR (VecBinOp (VecGt (None, F32x4))));
-      ("f32x4.le", INSTR (VecBinOp (VecLe (None, F32x4))));
-      ("f32x4.ge", INSTR (VecBinOp (VecGe (None, F32x4))));
-      ("f64x2.eq", INSTR (VecBinOp (VecEq F64x2)));
-      ("f64x2.ne", INSTR (VecBinOp (VecNe F64x2)));
-      ("f64x2.lt", INSTR (VecBinOp (VecLt (None, F64x2))));
-      ("f64x2.gt", INSTR (VecBinOp (VecGt (None, F64x2))));
-      ("f64x2.le", INSTR (VecBinOp (VecLe (None, F64x2))));
-      ("f64x2.ge", INSTR (VecBinOp (VecGe (None, F64x2))));
-      ( "i64x2.extend_low_i32x4_s",
-        INSTR (VecUnOp (VecExtend (`Low, `_32, Signed))) );
-      ( "i64x2.extend_high_i32x4_s",
-        INSTR (VecUnOp (VecExtend (`High, `_32, Signed))) );
-      ( "i64x2.extend_low_i32x4_u",
-        INSTR (VecUnOp (VecExtend (`Low, `_32, Unsigned))) );
-      ( "i64x2.extend_high_i32x4_u",
-        INSTR (VecUnOp (VecExtend (`High, `_32, Unsigned))) );
-      ("i64x2.shl", INSTR (VecShift (Shl I64x2)));
-      ("i64x2.shr_s", INSTR (VecShift (Shr (Signed, I64x2))));
-      ("i64x2.shr_u", INSTR (VecShift (Shr (Unsigned, I64x2))));
-      ("i64x2.add", INSTR (VecBinOp (VecAdd I64x2)));
-      ("i64x2.sub", INSTR (VecBinOp (VecSub I64x2)));
-      ("i64x2.mul", INSTR (VecBinOp (VecMul I64x2)));
-      ("i64x2.eq", INSTR (VecBinOp (VecEq I64x2)));
-      ("i64x2.ne", INSTR (VecBinOp (VecNe I64x2)));
-      ("i64x2.lt_s", INSTR (VecBinOp (VecLt (Some Signed, I64x2))));
-      ("i64x2.gt_s", INSTR (VecBinOp (VecGt (Some Signed, I64x2))));
-      ("i64x2.le_s", INSTR (VecBinOp (VecLe (Some Signed, I64x2))));
-      ("i64x2.ge_s", INSTR (VecBinOp (VecGe (Some Signed, I64x2))));
-      ("f32x4.abs", INSTR (VecUnOp (VecAbs F32x4)));
-      ("f32x4.neg", INSTR (VecUnOp (VecNeg F32x4)));
-      ("f32x4.sqrt", INSTR (VecUnOp (VecSqrt `F32)));
-      ("f32x4.ceil", INSTR (VecUnOp (VecCeil `F32)));
-      ("f32x4.floor", INSTR (VecUnOp (VecFloor `F32)));
-      ("f32x4.trunc", INSTR (VecUnOp (VecTrunc `F32)));
-      ("f32x4.nearest", INSTR (VecUnOp (VecNearest `F32)));
-      ("f32x4.add", INSTR (VecBinOp (VecAdd F32x4)));
-      ("f32x4.sub", INSTR (VecBinOp (VecSub F32x4)));
-      ("f32x4.mul", INSTR (VecBinOp (VecMul F32x4)));
-      ("f32x4.div", INSTR (VecBinOp (VecDiv `F32)));
-      ("f32x4.min", INSTR (VecBinOp (VecMin (None, F32x4))));
-      ("f32x4.max", INSTR (VecBinOp (VecMax (None, F32x4))));
-      ("f32x4.pmin", INSTR (VecBinOp (VecPMin `F32)));
-      ("f32x4.pmax", INSTR (VecBinOp (VecPMax `F32)));
-      ("f64x2.abs", INSTR (VecUnOp (VecAbs F64x2)));
-      ("f64x2.neg", INSTR (VecUnOp (VecNeg F64x2)));
-      ("f64x2.sqrt", INSTR (VecUnOp (VecSqrt `F64)));
-      ("f64x2.ceil", INSTR (VecUnOp (VecCeil `F64)));
-      ("f64x2.floor", INSTR (VecUnOp (VecFloor `F64)));
-      ("f64x2.trunc", INSTR (VecUnOp (VecTrunc `F64)));
-      ("f64x2.nearest", INSTR (VecUnOp (VecNearest `F64)));
-      ("f64x2.add", INSTR (VecBinOp (VecAdd F64x2)));
-      ("f64x2.sub", INSTR (VecBinOp (VecSub F64x2)));
-      ("f64x2.mul", INSTR (VecBinOp (VecMul F64x2)));
-      ("f64x2.div", INSTR (VecBinOp (VecDiv `F64)));
-      ("f64x2.min", INSTR (VecBinOp (VecMin (None, F64x2))));
-      ("f64x2.max", INSTR (VecBinOp (VecMax (None, F64x2))));
-      ("f64x2.pmin", INSTR (VecBinOp (VecPMin `F64)));
-      ("f64x2.pmax", INSTR (VecBinOp (VecPMax `F64)));
-      ("i32x4.trunc_sat_f32x4_s", INSTR (VecUnOp (VecTruncSat (`F32, Signed))));
-      ("i32x4.trunc_sat_f32x4_u", INSTR (VecUnOp (VecTruncSat (`F32, Unsigned))));
-      ("f32x4.convert_i32x4_s", INSTR (VecUnOp (VecConvert (`F32, Signed))));
-      ("f32x4.convert_i32x4_u", INSTR (VecUnOp (VecConvert (`F32, Unsigned))));
-      ( "i32x4.trunc_sat_f64x2_s_zero",
-        INSTR (VecUnOp (VecTruncSat (`F64, Signed))) );
-      ( "i32x4.trunc_sat_f64x2_u_zero",
-        INSTR (VecUnOp (VecTruncSat (`F64, Unsigned))) );
-      ("f64x2.convert_low_i32x4_s", INSTR (VecUnOp (VecConvert (`F64, Signed))));
-      ( "f64x2.convert_low_i32x4_u",
-        INSTR (VecUnOp (VecConvert (`F64, Unsigned))) );
-      ("f32x4.demote_f64x2_zero", INSTR (VecUnOp VecDemote));
-      ("f64x2.promote_low_f32x4", INSTR (VecUnOp VecPromote));
       ("i32.wrap_i64", INSTR I32WrapI64);
       ("i32.trunc_f32_s", INSTR (UnOp (I32 (Trunc (`F32, Signed)))));
       ("i32.trunc_f32_u", INSTR (UnOp (I32 (Trunc (`F32, Unsigned)))));
@@ -844,6 +603,12 @@ let keyword_table : (string, token) Hashtbl.t =
   List.iter
     (fun op -> Hashtbl.replace h (Atomics.name op) (ATOMIC op))
     Atomics.all;
+  (* Plain vector instructions (splat/unop/binop/shift/test/bitmask), from the
+     shared Simd registry. *)
+  List.iter
+    (fun d ->
+      Option.iter (fun n -> Hashtbl.replace h n (INSTR d)) (Simd.wat_mnemonic d))
+    Simd.plain_vec_instrs;
   (* Regular keywords last, so they win on any name collision with an atomic. *)
   List.iter (fun (k, v) -> Hashtbl.replace h k v) entries;
   h

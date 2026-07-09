@@ -601,3 +601,216 @@ let mem_method name : mem_intrinsic option =
   | _ -> None
 
 let is_mem_method name = mem_method name <> None
+
+(* {1 WebAssembly text (WAT) mnemonics for plain vector instructions}
+
+   The "plain" vector instructions are those the WAT lexer emits as a single
+   [INSTR] token — splat, unop, binop, shift, test, bitmask — i.e. those with no
+   trailing immediate. Their WAT mnemonics live here so that output.ml (printing)
+   and the WAT lexer (recognising) share one source. The immediate/memory ops
+   (extract, replace, shuffle, ternary, loads/stores) use dedicated tokens and
+   keep their own handling. *)
+
+let wat_shape = function
+  | Ast.I8x16 -> "i8x16"
+  | Ast.I16x8 -> "i16x8"
+  | Ast.I32x4 -> "i32x4"
+  | Ast.I64x2 -> "i64x2"
+  | Ast.F32x4 -> "f32x4"
+  | Ast.F64x2 -> "f64x2"
+
+let wat_signage op (s : Ast.signage) =
+  op ^ match s with Ast.Signed -> "_s" | Ast.Unsigned -> "_u"
+
+let wat_un_op op =
+  let open Ast in
+  match op with
+  | VecNeg _ -> "neg"
+  | VecAbs _ -> "abs"
+  | VecSqrt _ -> "sqrt"
+  | VecNot -> "not"
+  | VecTruncSat (f, s) -> (
+      match f with
+      | `F32 -> wat_signage "trunc_sat_f32x4" s
+      | `F64 -> wat_signage "trunc_sat_f64x2" s ^ "_zero")
+  | VecConvert (f, s) ->
+      let low = match f with `F32 -> "" | `F64 -> "low_" in
+      wat_signage ("convert_" ^ low ^ "i32x4") s
+  | VecExtend (h, sz, s) ->
+      let h_str = match h with `Low -> "low" | `High -> "high" in
+      let sz_str =
+        match sz with `_8 -> "i8x16" | `_16 -> "i16x8" | `_32 -> "i32x4"
+      in
+      wat_signage ("extend_" ^ h_str ^ "_" ^ sz_str) s
+  | VecPromote -> "promote_low_f32x4"
+  | VecDemote -> "demote_f64x2_zero"
+  | VecCeil _ -> "ceil"
+  | VecFloor _ -> "floor"
+  | VecTrunc _ -> "trunc"
+  | VecNearest _ -> "nearest"
+  | VecPopcnt -> "popcnt"
+  | VecExtAddPairwise (s, sz) ->
+      wat_signage
+        ("extadd_pairwise_" ^ match sz with `I8 -> "i8x16" | `I16 -> "i16x8")
+        s
+  | VecRelaxedTrunc s -> wat_signage "relaxed_trunc_f32x4" s
+  | VecRelaxedTruncZero s -> wat_signage "relaxed_trunc_f64x2" s ^ "_zero"
+
+let wat_bin_op op =
+  let open Ast in
+  match op with
+  | VecAdd _ -> "add"
+  | VecSub _ -> "sub"
+  | VecMul _ -> "mul"
+  | VecDiv _ -> "div"
+  | VecMin (s, _) ->
+      "min" ^ Option.fold ~none:"" ~some:(fun s -> wat_signage "" s) s
+  | VecMax (s, _) ->
+      "max" ^ Option.fold ~none:"" ~some:(fun s -> wat_signage "" s) s
+  | VecPMin _ -> "pmin"
+  | VecPMax _ -> "pmax"
+  | VecAvgr _ -> "avgr_u"
+  | VecQ15MulrSat -> "q15mulr_sat_s"
+  | VecAddSat (s, _) -> wat_signage "add_sat" s
+  | VecSubSat (s, _) -> wat_signage "sub_sat" s
+  | VecDot -> "dot_i16x8_s"
+  | VecEq _ -> "eq"
+  | VecNe _ -> "ne"
+  | VecLt (s, shape) -> (
+      match (shape, s) with
+      | (I8x16 | I16x8 | I32x4 | I64x2), Some Signed -> "lt_s"
+      | (I8x16 | I16x8 | I32x4), Some Unsigned -> "lt_u"
+      | (F32x4 | F64x2), None -> "lt"
+      | _ -> assert false)
+  | VecGt (s, shape) -> (
+      match (shape, s) with
+      | (I8x16 | I16x8 | I32x4 | I64x2), Some Signed -> "gt_s"
+      | (I8x16 | I16x8 | I32x4), Some Unsigned -> "gt_u"
+      | (F32x4 | F64x2), None -> "gt"
+      | _ -> assert false)
+  | VecLe (s, shape) -> (
+      match (shape, s) with
+      | (I8x16 | I16x8 | I32x4 | I64x2), Some Signed -> "le_s"
+      | (I8x16 | I16x8 | I32x4), Some Unsigned -> "le_u"
+      | (F32x4 | F64x2), None -> "le"
+      | _ -> assert false)
+  | VecGe (s, shape) -> (
+      match (shape, s) with
+      | (I8x16 | I16x8 | I32x4 | I64x2), Some Signed -> "ge_s"
+      | (I8x16 | I16x8 | I32x4), Some Unsigned -> "ge_u"
+      | (F32x4 | F64x2), None -> "ge"
+      | _ -> assert false)
+  | VecAnd -> "and"
+  | VecOr -> "or"
+  | VecXor -> "xor"
+  | VecAndNot -> "andnot"
+  | VecNarrow (s, sh) ->
+      let in_shape = match sh with `I8 -> "i16x8" | `I16 -> "i32x4" in
+      wat_signage ("narrow_" ^ in_shape) s
+  | VecSwizzle -> "swizzle"
+  | VecExtMulLow (s, sh) ->
+      let in_shape =
+        match sh with `_8 -> "i8x16" | `_16 -> "i16x8" | `_32 -> "i32x4"
+      in
+      wat_signage ("extmul_low_" ^ in_shape) s
+  | VecExtMulHigh (s, sh) ->
+      let in_shape =
+        match sh with `_8 -> "i8x16" | `_16 -> "i16x8" | `_32 -> "i32x4"
+      in
+      wat_signage ("extmul_high_" ^ in_shape) s
+  | VecRelaxedSwizzle -> "relaxed_swizzle"
+  | VecRelaxedMin _ -> "relaxed_min"
+  | VecRelaxedMax _ -> "relaxed_max"
+  | VecRelaxedQ15Mulr -> "relaxed_q15mulr_s"
+  | VecRelaxedDot -> "relaxed_dot_i8x16_i7x16_s"
+
+let wat_un_op_shape op =
+  let open Ast in
+  match op with
+  | VecNeg s | VecAbs s -> wat_shape s
+  | VecPopcnt -> "i8x16"
+  | VecNot -> "v128"
+  | VecTruncSat _ -> wat_shape I32x4
+  | VecCeil f
+  | VecFloor f
+  | VecTrunc f
+  | VecNearest f
+  | VecSqrt f
+  | VecConvert (f, _) ->
+      wat_shape (match f with `F32 -> F32x4 | `F64 -> F64x2)
+  | VecExtend (_, sz, _) ->
+      wat_shape (match sz with `_8 -> I16x8 | `_16 -> I32x4 | `_32 -> I64x2)
+  | VecPromote -> wat_shape F64x2
+  | VecDemote -> wat_shape F32x4
+  | VecExtAddPairwise (_, sz) ->
+      wat_shape (match sz with `I8 -> I16x8 | `I16 -> I32x4)
+  | VecRelaxedTrunc _ | VecRelaxedTruncZero _ -> wat_shape I32x4
+
+let wat_bin_op_shape op =
+  let open Ast in
+  match op with
+  | VecAdd s
+  | VecSub s
+  | VecMul s
+  | VecMin (_, s)
+  | VecMax (_, s)
+  | VecEq s
+  | VecNe s
+  | VecLt (_, s)
+  | VecGt (_, s)
+  | VecLe (_, s)
+  | VecGe (_, s) ->
+      wat_shape s
+  | VecDiv s | VecPMin s | VecPMax s -> (
+      match s with `F32 -> "f32x4" | `F64 -> "f64x2")
+  | VecDot -> "i32x4"
+  | VecNarrow (_, s) | VecAvgr s | VecAddSat (_, s) | VecSubSat (_, s) -> (
+      match s with `I8 -> "i8x16" | `I16 -> "i16x8")
+  | VecAnd | VecOr | VecXor | VecAndNot -> "v128"
+  | VecSwizzle | VecRelaxedSwizzle -> "i8x16"
+  | VecQ15MulrSat -> "i16x8"
+  | VecRelaxedMin s | VecRelaxedMax s -> wat_shape s
+  | VecRelaxedQ15Mulr -> "i16x8"
+  | VecRelaxedDot -> "i16x8"
+  | VecExtMulLow (_, s) | VecExtMulHigh (_, s) ->
+      wat_shape (match s with `_8 -> I16x8 | `_16 -> I32x4 | `_32 -> I64x2)
+
+(* The WAT mnemonic of a plain vector instruction; [None] for any other. *)
+let wat_mnemonic (desc : _ Ast.Text.instr_desc) : string option =
+  let open Ast.Text in
+  match desc with
+  | VecSplat sh -> Some (wat_shape sh ^ ".splat")
+  | VecUnOp op -> Some (wat_un_op_shape op ^ "." ^ wat_un_op op)
+  | VecBinOp op -> Some (wat_bin_op_shape op ^ "." ^ wat_bin_op op)
+  | VecTest op -> (
+      match op with
+      | AnyTrue -> Some "v128.any_true"
+      | AllTrue shape -> Some (wat_shape shape ^ ".all_true"))
+  | VecShift op -> (
+      match op with
+      | Shl shape -> Some (wat_shape shape ^ ".shl")
+      | Shr (s, shape) -> Some (wat_signage (wat_shape shape ^ ".shr") s))
+  | VecBitmask (Bitmask s) -> Some (wat_shape s ^ ".bitmask")
+  | _ -> None
+
+(* Every plain vector instruction, for the WAT lexer to fold into its keyword
+   table. Mirrors the valid sets accepted by the validator. *)
+let plain_vec_instrs : Ast.location Ast.Text.instr_desc list =
+  let open Ast.Text in
+  List.concat
+    [
+      List.map (fun s -> VecSplat s) all_shapes;
+      List.map (fun o -> VecUnOp o) unops;
+      List.map (fun o -> VecBinOp o) binops;
+      List.map (fun s -> VecTest (AllTrue s)) int_shapes;
+      [ VecTest AnyTrue ];
+      List.concat_map
+        (fun s ->
+          [
+            VecShift (Shl s);
+            VecShift (Shr (Signed, s));
+            VecShift (Shr (Unsigned, s));
+          ])
+        int_shapes;
+      List.map (fun s -> VecBitmask (Bitmask s)) int_shapes;
+    ]
