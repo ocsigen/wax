@@ -68,8 +68,8 @@ fn caml_floatarray_make(n: &eq, v: &eq) -> &eq {
     [float_array|f; sz];
 }
 
-#[export = "caml_make_float_vect"]
 #[export]
+#[export = "caml_make_float_vect"]
 #[export = "caml_array_create_float"]
 #[export = "caml_floatarray_create_local"]
 fn caml_floatarray_create(n: &eq) -> &eq {

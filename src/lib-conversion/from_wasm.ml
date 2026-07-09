@@ -2734,7 +2734,13 @@ let exports ctx kind name e =
     | None -> []
     | Some entries -> folded_attrs ctx ~location:name.Ast.info entries attr
   in
-  inline @ standalone
+  (* When a field carries several exports, put the unnamed [#[export]] (the one
+     reusing the field's own Wax name) first; [partition] is stable, so the rest
+     keep their order. *)
+  let unnamed, named =
+    List.partition (fun (_, v, _) -> Option.is_none v) (inline @ standalone)
+  in
+  unnamed @ named
 
 (* The [#[start]] attribute(s) on function [name]: a [(start …)] whose branch is
    reachable here, plain or guarded like a standalone export. *)

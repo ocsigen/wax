@@ -67,8 +67,8 @@
   (array.new $float_array (local.get $f) (local.get $sz))
 )
 
-(func $caml_floatarray_create (export "caml_make_float_vect")
-  (export "caml_floatarray_create") (export "caml_array_create_float")
+(func $caml_floatarray_create (export "caml_floatarray_create")
+  (export "caml_make_float_vect") (export "caml_array_create_float")
   (export "caml_floatarray_create_local")
   (param $n (ref eq)) (result (ref eq))
   (local $sz i32)
