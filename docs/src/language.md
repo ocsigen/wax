@@ -1141,18 +1141,68 @@ inherit from. An inherited field that is *renamed* or whose type is *refined*
 (a covariant subtype) is no longer a verbatim copy, so it must be written out
 explicitly rather than covered by `..`.
 
-### Descriptors (experimental)
+## Exact References and Descriptors
 
-Behind `-X custom-descriptors`, a struct type can carry a runtime *descriptor*
-(another type it points to) via the `descriptor` / `describes` clauses, declared
-together in a `rec` group:
+The [custom-descriptors proposal](https://github.com/WebAssembly/custom-descriptors)
+adds two related features, enabled together with `-X custom-descriptors` (off by
+default).
+
+### Exact references
+
+An **exact** reference points to values of exactly one concrete type, with no
+subtypes. The exactness marker `!` goes between the `&`/`&?` sigil and the type
+name, next to the nullability `?`:
+
+```wax
+&!point         // a non-null reference to exactly point
+&?!point        // nullable, exactly point
+```
+
+Only a concrete (declared) type can be exact; `&!any` and other abstract heap
+types are rejected. An exact reference is a subtype of the plain one, so an
+`&!point` is accepted where an `&point` is expected. A struct or array
+construction already yields an exact reference, since the new object has exactly
+the allocated type. The `as` and `is` operators reach an exact type explicitly:
+
+```wax
+x as &!point    // cast to an exact reference
+x is &!point    // test for an exact type
+```
+
+See [Types → Exact References](correspondence/types.md#exact-references) for the
+mapping and how an exact function import is declared.
+
+### Descriptors
+
+A struct can carry a runtime *descriptor*: a second struct linked to it, handy
+for modelling a runtime type or a vtable. The described type names its
+descriptor with a `descriptor` clause, and the descriptor names what it
+describes with a `describes` clause. The two are declared together in a `rec`
+group:
 
 ```wax,check
 rec {
     type obj = descriptor obj_desc { x: i32 };
-    type obj_desc = describes obj { };
+    type obj_desc = describes obj { info: i32 };
+}
+
+#[export = "make"]
+fn make(d: &!obj_desc) -> &obj {
+    {descriptor(d)| x: 42};      // construct, supplying the descriptor
+}
+
+#[export = "describe"]
+fn describe(o: &obj) -> &obj_desc {
+    o.descriptor;                // read the descriptor back
 }
 ```
+
+Construction takes the descriptor as an **exact** reference (`&!obj_desc`).
+Reading `.descriptor` gives an `&obj_desc`, or the exact `&!obj_desc` when the
+value's own type is exact. A descriptor-based cast checks that a reference's
+descriptor is a given one, `o as descriptor(d)` (or `as ?descriptor(d)` to allow
+null). The reciprocity and rec-group rules the two types must satisfy are listed
+under [Types → Custom Descriptors](correspondence/types.md#custom-descriptors).
 
 ## Strings
 
