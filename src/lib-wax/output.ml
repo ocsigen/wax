@@ -80,6 +80,7 @@ let branch_hint_attr pp likely =
    the WebAssembly printer in [Wax_utils.Trivia]. *)
 
 let print_trivia pp lst = Wax_utils.Styled_printer.print_trivia pp.base lst
+let get_trivia pp (loc : location option) = Wax_utils.Styled_printer.get_trivia pp.base loc
 
 let atomic_node pp (loc : location option) f =
   Wax_utils.Styled_printer.atomic_node pp.base loc f
@@ -1396,11 +1397,24 @@ and block_contents pp (l : _ instr list) =
     newline pp ())
 
 (* Print the contents of a brace-delimited block, looking the block's own
-   location up so any comment opening the clause (e.g. a [(then ...)]/[(else
-   ...)] clause comment carried over from Wasm) attaches here rather than to the
-   condition or the previous clause. *)
+   location up so a comment opening the clause attaches here rather than to the
+   condition, and so an own-line comment trailing the last statement (anchored
+   before the [}], hence [within] the block's span) renders *inside* the block at
+   the statement indentation rather than leaking onto the next sibling. [before]
+   still precedes the body and [after] still follows it. *)
 and located_block_contents pp (b : (_ instr list, location) annotated) =
-  atomic_node pp (Some b.info) (fun () -> block_contents pp b.desc)
+  let assoc = get_trivia pp (Some b.info) in
+  print_trivia pp assoc.before;
+  if b.desc <> [] || assoc.within <> [] then (
+    indent pp indent_level (fun () ->
+        List.iter
+          (fun i ->
+            newline pp ();
+            deliminated_instr pp i)
+          b.desc;
+        print_trivia pp assoc.within);
+    newline pp ());
+  print_trivia pp assoc.after
 
 (*** Declarations, attributes, and module fields ***)
 

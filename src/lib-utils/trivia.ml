@@ -210,7 +210,24 @@ let associate ?only ctx =
       let upto = if next_sib <= hi then scnum next_sib else ecnum lo + 1 in
       let before, rem1 = split_before (scnum lo) comments in
       let rem2 = process_range child_lo child_hi rem1 in
-      let within_candidates, rem3 = split_before (ecnum lo) rem2 in
+      let within_all, rem3 = split_before (ecnum lo) rem2 in
+      (* Comments anchored inside the node but past its last child are its
+         trailing region — for a block, whatever sits between the last statement
+         (whose span stops before its [;]) and the closing [}]. An own-line
+         ([Line_start]) comment there reads as part of the block and renders
+         inside it ([within]); an inline one trails the last statement and reads
+         as trailing the whole construct, so it renders after the node ([after]),
+         e.g. after a [)]/[}] rather than dangling inside before it. Non-block
+         nodes rarely reach here (their last child, not separated by a [;], grabs
+         its own trailing comment), so this is in practice block-specific. *)
+      let within_candidates, inline_trailing =
+        List.partition
+          (fun e ->
+            match (e.trivia, e.position) with
+            | Item { kind = Line_comment; _ }, Inline -> false
+            | _ -> true)
+          within_all
+      in
       let steal_candidate =
         if child_hi >= child_lo && ecnum child_hi = ecnum lo then
           Some arr.(child_hi)
@@ -228,7 +245,11 @@ let associate ?only ctx =
         | None -> get_after (ecnum lo) ~upto rem3
       in
       Hashtbl.add tbl arr.(lo)
-        { before; within = within_candidates; after = final_after };
+        {
+          before;
+          within = within_candidates;
+          after = inline_trailing @ final_after;
+        };
       process_range next_sib hi rem4
   in
   let leftover = process_range 0 (n - 1) comments in

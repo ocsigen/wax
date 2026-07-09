@@ -740,16 +740,15 @@ blockinstr:
   { with_loc $sloc
       (Try {label; typ = blocktype bt; block = l; catches; catch_all}) }
 
-(* A brace-delimited statement list carrying a location, so a comment opening
-   the block attaches to it rather than leaking onto the preceding condition
-   (see the (then ...)/(else ...) clauses of a folded Wasm if). The location
-   starts at the opening brace but stops at the statement list, excluding the
-   closing brace: the enclosing [if] reaches the [}], so it stays strictly
-   larger than the block and a comment trailing the [}] attaches to the [if]
-   rather than to the block (as a folded Wasm if owns the comment after its
-   outer paren). *)
+(* A brace-delimited statement list carrying a location spanning the whole
+   [{ … }] (including the braces), so an own-line comment trailing the last
+   statement — anchored before the [}] — falls *within* the block and stays
+   attached to it instead of leaking onto the next sibling (e.g. an [#[else]] or
+   the [else] arm of an [if]). A comment after the [}] is anchored past the
+   block's end, so it still attaches to the enclosing construct. *)
 braced_block:
-| "{" l = statement_list "}" { with_loc ($startpos, $endpos(l)) l }
+| "{" l = statement_list rb = "}"
+  { ignore rb; with_loc ($startpos, $startpos(rb)) l }
 
 parenthesized_expression: e = expression { e }
 (* The [descriptor(d)] clause shared by the custom-descriptors instructions
