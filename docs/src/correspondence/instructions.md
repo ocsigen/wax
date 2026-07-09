@@ -321,6 +321,8 @@ that can be dropped.
 | `array.new_elem $t $e` | `[ e @ offset; count ]` |
 | `array.init_data $t $d` | `arr.init(d, dest, src, count)` |
 | `array.init_elem $t $e` | `arr.init(e, dest, src, count)` |
+| `array.fill $t` | `arr.fill(idx, val, count)` |
+| `array.copy $t1 $t2` | `arr.copy(idx, src_arr, src_idx, count)` |
 | `array.get $t` | `arr[idx]` |
 | `array.get_s $t` | `arr[idx] as i32_s` |
 | `array.get_u $t` | `arr[idx] as i32_u` |
