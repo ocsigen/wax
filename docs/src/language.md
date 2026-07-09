@@ -305,6 +305,9 @@ x <=u y     // Less or equal unsigned
 // Similarly: >, >=, >s, >u, >=s, >=u
 ```
 
+On reference operands (any subtype of `&eq`), `==` and `!=` are reference
+identity, not a numeric comparison.
+
 ### Unary Operations
 
 ```wax
@@ -959,10 +962,30 @@ An imported field is re-exported by adding `#[export]` to its declaration.
 
 ### Reference Types
 
+A reference type is written `&type` (non-nullable) or `&?type` (nullable):
+
 ```wax
 &type           // Non-nullable reference
 &?type          // Nullable reference
 ```
+
+`type` is either a declared type (a struct, array, [function](#function-types),
+or [continuation](#stack-switching)) or one of WebAssembly's **abstract heap
+types**:
+
+| Heap type | Refers to |
+|-----------|-----------|
+| `any` | any internal (GC) reference |
+| `eq` | references that support `==` |
+| `struct` / `array` | any struct / any array |
+| `i31` | an integer boxed in a reference (see [i31](#i31)) |
+| `func` | any function reference |
+| `extern` | a host (external) reference |
+| `none` / `nofunc` / `noextern` | bottom types, inhabited only by `null` |
+
+So `&any`, `&?extern`, and `&eq` are all valid reference types. The exception
+and stack-switching hierarchies add `exn` and `cont`/`nocont`/`noexn`; see
+[Types → Heap Types](correspondence/types.md#heap-types) for the complete list.
 
 ### Null
 
@@ -986,6 +1009,21 @@ val as &type    // Cast val to type (trap on failure)
 
 Structs and arrays are WebAssembly GC heap types: a value of such a type is
 always held through a reference (`&point`, `&bytes`, …), not inline.
+
+### i31
+
+An `i31` reference packs a 31-bit signed integer directly into a reference, with
+no heap allocation. Box an `i32` with `as &i31`, and read it back with a signed
+or unsigned cast:
+
+```wax
+x as &i31       // box an i32 (its low 31 bits) into a reference
+r as i32_s      // read an &i31 back, sign-extended
+r as i32_u      //   or zero-extended
+```
+
+`&i31` is a subtype of `&eq` and `&any`, so it can stand in wherever one of those
+is expected.
 
 ## Structs
 
