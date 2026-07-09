@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-654e73ab.js";
+            window.path_to_searchindex_js = "searchindex-c9821482.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-41a4b7e9.js"></script>
@@ -1059,6 +1059,16 @@ with its type. It is imported under its own Wax name unless a name-only
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">import</span> <span class="hljs-string">"env"</span> <span class="hljs-keyword">fn</span> <span class="hljs-title">trace</span>(x: <span class="hljs-type">i32</span>);</span></pre>
 
 <p>An imported field is re-exported by adding <code>#[export]</code> to its declaration.</p>
+<p>An <code>#[export]</code> can carry an <code>if &lt;condition&gt;</code> guard, making just that export
+<a href="#conditional-compilation">conditional</a> independently of the field’s own
+reachability. This is how a definition can be exported under an extra name only
+in some configurations:</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export]</span>
+<span class="hljs-meta">#[export = </span><span class="hljs-string">"add_alias"</span><span class="hljs-meta">, if not(bootstrap)]</span>
+<span class="hljs-keyword">fn</span> <span class="hljs-title">add</span>(x: <span class="hljs-type">i32</span>, y: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> { x + y; }</span></pre>
+
+<p>Here <code>add</code> is always exported under its own name, and also as <code>add_alias</code>
+except when <code>bootstrap</code> holds. Only <code>#[export]</code> accepts a guard.</p>
 <h2 id="references"><a class="header" href="#references">References</a></h2>
 <h3 id="reference-types"><a class="header" href="#reference-types">Reference Types</a></h3>
 <p>A reference type is written <code>&amp;type</code> (non-nullable) or <code>&amp;?type</code> (nullable):</p>
@@ -1593,7 +1603,7 @@ ocaml_version &gt;= (5, 1, 0)
     }
 }</span></pre>
 
-<p>These two are the only levels at which conditional compilation applies: whole module items and whole statements. A condition cannot guard part of an expression.</p>
+<p>These two are the only levels at which conditional compilation applies: whole module items and whole statements. A condition cannot guard part of an expression. The one finer-grained case is the <code>if &lt;condition&gt;</code> guard on an <a href="#imports-and-exports"><code>#[export]</code></a>, which makes a single export conditional without wrapping its definition in an <code>#[if]</code> block; its condition is simplified against any enclosing <code>#[if]</code> and resolved by <code>-D</code> just like a block condition.</p>
 <p>A statement-level branch cannot introduce a local with <code>let</code>, since the two branches are mutually exclusive and a binding made in one would not be in scope after the conditional. Declare the local before the conditional and assign to it inside each branch instead:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">fn</span> <span class="hljs-title">size</span>() -&gt; <span class="hljs-type">i32</span> {
     <span class="hljs-keyword">let</span> s: <span class="hljs-type">i32</span>;
