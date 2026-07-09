@@ -21,7 +21,10 @@ import "custom" {
     fn caml_dup_custom(&eq) -> &eq;
 }
 import "effect" fn caml_is_continuation(&eq) -> i32;
-#[if(effects = "cps")] { import "effect" fn caml_cps_trampoline(&eq, &eq) -> &eq; }
+#[if(effects = "cps")]
+{
+    import "effect" fn caml_cps_trampoline(&eq, &eq) -> &eq;
+}
 
 type block = [mut &eq];
 type bytes = [mut i8];

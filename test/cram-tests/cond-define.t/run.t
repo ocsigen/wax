@@ -16,7 +16,10 @@ A boolean set to true selects the #[if] branch; the conditional disappears.
       const size: i32 = 20;
   }
   
-  #[if(target = "wasi")] { const y: i32 = 3; }
+  #[if(target = "wasi")]
+  {
+      const y: i32 = 3;
+  }
 
 A boolean set to false selects the #[else] branch.
 
@@ -46,7 +49,10 @@ A version compares against a version literal.
   
   const size: i32 = 16;
   
-  #[if(all(debug, target = "wasi"))] { const y: i32 = 3; }
+  #[if(all(debug, target = "wasi"))]
+  {
+      const y: i32 = 3;
+  }
 
   $ wax -f wax -D ocaml_version=4.14.0 def.wax
   #[if(debug)]
@@ -60,7 +66,10 @@ A version compares against a version literal.
   
   const size: i32 = 20;
   
-  #[if(all(debug, target = "wasi"))] { const y: i32 = 3; }
+  #[if(all(debug, target = "wasi"))]
+  {
+      const y: i32 = 3;
+  }
 
 Several variables can be set at once. Here every condition is determined.
 
@@ -86,7 +95,10 @@ all(debug, target = "wasi") reduces to target = "wasi".
       const size: i32 = 20;
   }
   
-  #[if(target = "wasi")] { const y: i32 = 3; }
+  #[if(target = "wasi")]
+  {
+      const y: i32 = 3;
+  }
 
 With debug=false that whole conditional is removed.
 

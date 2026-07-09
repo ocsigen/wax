@@ -350,7 +350,11 @@ fn caml_sys_const_max_wosize(&eq) -> &eq {
     0xfffffff as &i31;
 }
 
-#[if(wasi)] { const on_windows = 0; const on_arm64 = 0; }
+#[if(wasi)]
+{
+    const on_windows = 0;
+    const on_arm64 = 0;
+}
 
 #[export]
 fn caml_sys_const_ostype_unix(&eq) -> &eq {

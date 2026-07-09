@@ -11,7 +11,10 @@ round-trip. Versions are integer tuples; conditions combine with all/any/not.
       const caml_marshal_header_size: i32 = 20;
   }
   
-  #[if(feature = "gc")] { fn gc_init() {} }
+  #[if(feature = "gc")]
+  {
+      fn gc_init() {}
+  }
   
   #[if(all(debug, not(target = "wasm32")))]
   {

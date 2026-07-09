@@ -1827,9 +1827,11 @@ let rec modulefield pp field =
             newline pp ());
           punctuation pp "}")
   | Conditional { cond; then_fields; else_fields } ->
-      (* Braces are mandatory; a branch is a located field list, so an own-line
-         comment trailing its last field renders inside it (see
-         [located_block_contents] for the statement-level analogue). *)
+      (* Braces are mandatory; a branch is a located field list. Like a block
+         body (see [located_block_contents]), a non-empty branch always breaks
+         across lines — hard [newline]s, so the [{] and each field land on their
+         own line even for a short branch — and an own-line comment trailing its
+         last field renders inside it. *)
       let branch b =
         space pp ();
         punctuation pp "{";
@@ -1839,11 +1841,11 @@ let rec modulefield pp field =
           indent pp indent_level (fun () ->
               List.iter
                 (fun f ->
-                  space pp ();
+                  newline pp ();
                   modulefield pp f)
                 b.desc;
               print_trivia pp assoc.within);
-          space pp ());
+          newline pp ());
         print_trivia pp assoc.after;
         punctuation pp "}"
       in
