@@ -386,15 +386,15 @@ Constants are `v128::` free functions (one argument per lane: 16, 8, 4, or 2). `
 
 Memory loads and stores are methods on a [memory](module_fields.md#memories), like the scalar [memory accesses](#memory-access) (the optional trailing `align`/`offset` arguments work the same way):
 
-| Wax | Wasm |
-|-----|------|
-| `m.v128_load(p)` | `v128.load` |
-| `m.v128_store(p, v)` | `v128.store` |
-| `m.v128_load8x8_s(p)` | `v128.load8x8_s` (and `16x4`/`32x2`, `_s`/`_u`) |
-| `m.v128_load32_zero(p)` | `v128.load32_zero` (and `64_zero`) |
-| `m.v128_load8_splat(p)` | `v128.load8_splat` (and `16`/`32`/`64`) |
-| `m.v128_load8_lane(p, v, lane)` | `v128.load8_lane` (and `16`/`32`/`64`) |
-| `m.v128_store8_lane(p, v, lane)` | `v128.store8_lane` (and `16`/`32`/`64`) |
+| Wasm | Wax |
+|------|-----|
+| `v128.load` | `m.v128_load(p)` |
+| `v128.store` | `m.v128_store(p, v)` |
+| `v128.load8x8_s` (and `16x4`/`32x2`, `_s`/`_u`) | `m.v128_load8x8_s(p)` |
+| `v128.load32_zero` (and `64_zero`) | `m.v128_load32_zero(p)` |
+| `v128.load8_splat` (and `16`/`32`/`64`) | `m.v128_load8_splat(p)` |
+| `v128.load8_lane` (and `16`/`32`/`64`) | `m.v128_load8_lane(p, v, lane)` |
+| `v128.store8_lane` (and `16`/`32`/`64`) | `m.v128_store8_lane(p, v, lane)` |
 
 Relaxed-SIMD operations follow the same scheme:
 
@@ -409,19 +409,19 @@ No intrinsic can clash with a module entity name: the free-function intrinsics a
 
 Loads and stores are method calls on a [memory](module_fields.md#memories). The method name carries the access width; the value's signedness (for narrow loads) and its `i32`/`i64` type are expressed with the surrounding `as iN_s`/`as iN_u` cast, mirroring packed array access.
 
-| Wax | Wasm |
-|-----|------|
-| `m.load32(p)` | `i32.load` |
-| `m.load64(p)` | `i64.load` |
-| `m.loadf32(p)` / `m.loadf64(p)` | `f32.load` / `f64.load` |
-| `m.load8(p) as i32_s` | `i32.load8_s` |
-| `m.load16(p) as i32_u` | `i32.load16_u` |
-| `m.load32(p) as i64_s` | `i64.load32_s` |
-| `m.load8(p) as i64_s` | `i64.load8_s` |
-| `m.load16(p) as i64_u` | `i64.load16_u` |
-| `m.store32(p, v)` | `i32.store` (`v: i32`) or `i64.store32` (`v: i64`) |
-| `m.store16(p, v)` | `i32.store16` or `i64.store16` (by `v`'s type) |
-| `m.store64(p, v)` / `m.storef64(p, v)` | `i64.store` / `f64.store` |
+| Wasm | Wax |
+|------|-----|
+| `i32.load` | `m.load32(p)` |
+| `i64.load` | `m.load64(p)` |
+| `f32.load` / `f64.load` | `m.loadf32(p)` / `m.loadf64(p)` |
+| `i32.load8_s` | `m.load8(p) as i32_s` |
+| `i32.load16_u` | `m.load16(p) as i32_u` |
+| `i64.load32_s` | `m.load32(p) as i64_s` |
+| `i64.load8_s` | `m.load8(p) as i64_s` |
+| `i64.load16_u` | `m.load16(p) as i64_u` |
+| `i32.store` (`v: i32`) or `i64.store32` (`v: i64`) | `m.store32(p, v)` |
+| `i32.store16` or `i64.store16` (by `v`'s type) | `m.store16(p, v)` |
+| `i64.store` / `f64.store` | `m.store64(p, v)` / `m.storef64(p, v)` |
 
 A bare narrow load (`m.load8(p)` with no cast) defaults to unsigned `i32`, like `array.get_u`. The store value's `i32`/`i64` type is inferred from the operand.
 
@@ -437,15 +437,15 @@ The alignment defaults to the access's natural alignment and is only printed whe
 
 The remaining memory operations are also methods on the memory (a data segment is named directly, not as a value):
 
-| Wax | Wasm |
-|-----|------|
-| `m.size()` | `memory.size` |
-| `m.grow(n)` | `memory.grow` |
-| `m.fill(dest, val, len)` | `memory.fill` |
-| `m.copy(dest, src, len)` | `memory.copy` (within `m`) |
-| `m.copy(m2, dest, src, len)` | `memory.copy m m2` (copy from `m2` into `m`) |
-| `m.init(seg, dest, src, len)` | `memory.init seg` |
-| `seg.drop()` | `data.drop seg` |
+| Wasm | Wax |
+|------|-----|
+| `memory.size` | `m.size()` |
+| `memory.grow` | `m.grow(n)` |
+| `memory.fill` | `m.fill(dest, val, len)` |
+| `memory.copy` (within `m`) | `m.copy(dest, src, len)` |
+| `memory.copy m m2` (copy from `m2` into `m`) | `m.copy(m2, dest, src, len)` |
+| `memory.init seg` | `m.init(seg, dest, src, len)` |
+| `data.drop seg` | `seg.drop()` |
 
 ### Atomics
 
@@ -478,15 +478,15 @@ A [table](module_fields.md#tables) is indexed like an array, and an indirect cal
 
 The other table operations are methods on the table (an element segment is named directly):
 
-| Wax | Wasm |
-|-----|------|
-| `t.size()` | `table.size` |
-| `t.grow(val, n)` | `table.grow` |
-| `t.fill(dest, val, len)` | `table.fill` |
-| `t.copy(dest, src, len)` | `table.copy` (within `t`) |
-| `t.copy(t2, dest, src, len)` | `table.copy t t2` (copy from `t2` into `t`) |
-| `t.init(seg, dest, src, len)` | `table.init seg` |
-| `seg.drop()` | `elem.drop seg` |
+| Wasm | Wax |
+|------|-----|
+| `table.size` | `t.size()` |
+| `table.grow` | `t.grow(val, n)` |
+| `table.fill` | `t.fill(dest, val, len)` |
+| `table.copy` (within `t`) | `t.copy(dest, src, len)` |
+| `table.copy t t2` (copy from `t2` into `t`) | `t.copy(t2, dest, src, len)` |
+| `table.init seg` | `t.init(seg, dest, src, len)` |
+| `elem.drop seg` | `seg.drop()` |
 
 A GC array can also be filled from a segment with `arr.init(seg, dest, src, len)` (`array.init_data`/`array.init_elem`, selected by the array's element type), the segment-from-array counterpart of [`array.new_data`/`array.new_elem`](#aggregate-instructions).
 
