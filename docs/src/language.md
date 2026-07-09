@@ -840,9 +840,10 @@ type.
 
 ### Unreachable and Nop
 
-`unreachable` marks a point the program should never reach; it traps if it ever
-executes, and type-checks as producing whatever the context expects. `nop` does
-nothing.
+`unreachable` marks code that should never run: it traps if reached. `nop` does
+nothing. Both are statements, not expressions, so they cannot be bound to a name
+or used as an operand. As a block's final statement, `unreachable` lets the
+block satisfy any result type, since control never falls through to it.
 
 ```wax
 if x <s 0 {
