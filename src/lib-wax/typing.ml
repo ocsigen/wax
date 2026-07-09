@@ -6400,7 +6400,7 @@ and type_unary_intrinsic_call ctx i func recv meth =
         match def.typ with
         | Array _ -> Some i32_cell
         | Struct _ | Func _ | Cont _ ->
-            Error.expected_array_type ctx.diagnostics ~location:i.info;
+            Error.expected_array_type ctx.diagnostics ~location:(snd recv'.info);
             None)
     (* [array.len] accepts any subtype of [(ref null array)]: the abstract
        array, a bare [null], and the bottom reference [&none] (which is below
@@ -6789,7 +6789,7 @@ and check_instruction ?(drop_supertype = false) ctx expected
                 (Array.for_all
                    (fun field -> field_has_default (snd field.desc))
                    fields)
-            then Error.not_defaultable ctx.diagnostics ~location:i.info;
+            then Error.not_defaultable ctx.diagnostics ~location:typ.info;
             require_no_descriptor typ;
             let emitted =
               emitted_name ty typ ~parseable:true ~field_unique:false
@@ -7488,7 +7488,7 @@ and type_indirect_call ctx i i' l =
       Error.unknown_operand_type ctx.diagnostics ~location:(snd i'.info);
       return_statement i (Call (i', l')) [||]
   | _ ->
-      Error.expected_func_type ctx.diagnostics ~location:i.info;
+      Error.expected_func_type ctx.diagnostics ~location:(snd i'.info);
       return_statement i (Call (i', l')) [||]
 
 and call_instruction ctx i =
