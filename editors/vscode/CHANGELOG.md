@@ -2,8 +2,9 @@
 
 ## 0.2.2
 
-- Formatting a file with syntax errors now says so in the status bar instead of
-  doing nothing (the errors themselves are shown as squiggles / in Problems).
+- Formatting now reports in the status bar when it cannot format a file (a
+  syntax error, or a module too large or deeply nested for the wasm build)
+  instead of silently doing nothing.
 - The WAT / Wax preview keeps the last successful conversion (marked stale) while
   the source is temporarily invalid, instead of blanking to an error.
 

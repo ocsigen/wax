@@ -90,7 +90,27 @@ function registerFormatter(
       if (token.isCancellationRequested) return [];
 
       const text = document.getText();
-      const result = lang.format(wax, text);
+      let result: FormatResult;
+      try {
+        result = lang.format(wax, text);
+      } catch (err) {
+        // The wasm runtime can throw a JS error the OCaml layer cannot catch —
+        // notably a stack overflow (RangeError) on a very large or deeply nested
+        // module, whose printer recursion exceeds the (small) wasm call stack.
+        // Report it rather than letting VS Code silently swallow the exception.
+        const detail =
+          err instanceof RangeError
+            ? "the module is too large or deeply nested for the formatter"
+            : err instanceof Error
+              ? err.message
+              : String(err);
+        log.appendLine("Formatting failed: " + detail);
+        vscode.window.setStatusBarMessage(
+          "$(error) Wax: formatting failed — " + detail,
+          5000,
+        );
+        return [];
+      }
       if (!result.ok || result.text === null) {
         // Syntax error or similar: leave the document untouched rather than
         // overwrite it (important on format-on-save). Log the detail, and say so
