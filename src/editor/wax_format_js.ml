@@ -14,6 +14,27 @@
 
 open Js_of_ocaml
 
+(* The editor path parses through [parse_diagnostics], which uses the incremental
+   parser directly and never touches the fast parser. Passing a stub as the
+   [Fast_parser] argument (instead of [Wax_lang.Fast_parser]) keeps the fast
+   parser's tables out of the linked program: the bytecode linker pulls in a
+   whole compilation unit as soon as it is referenced, even only as a functor
+   argument, so referencing the real module would link its tables regardless. *)
+module No_fast_parser = struct
+  module Make (_ : sig
+    type t = Wax_utils.Trivia.context
+
+    val context : t
+  end) =
+  struct
+    type token = Wax_lang.Tokens.token
+
+    exception Error
+
+    let parse _ _ = raise Error
+  end
+end
+
 module Wax_parser =
   Wax_wasm.Parsing.Make_parser
     (struct
@@ -21,7 +42,7 @@ module Wax_parser =
     end)
     (Wax_lang.Tokens)
     (Wax_lang.Parser)
-    (Wax_lang.Fast_parser)
+    (No_fast_parser)
     (Wax_lang.Parser_messages)
     (Wax_lang.Lexer)
 
