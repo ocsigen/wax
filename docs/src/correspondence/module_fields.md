@@ -355,7 +355,7 @@ import "env" #[export = "value"] const value: i32;
 
 ## Conditional Annotations
 
-Both formats can guard module fields by a condition that a downstream preprocessor evaluates. Wax uses `#[if(...)]` / `#[else]`; WAT uses the annotation form `(@if <cond> (@then ...) (@else ...))`.
+Both formats can guard module fields by a condition that a downstream preprocessor evaluates. Wax uses `#[if(...)] { ... }` / `#[else] { ... }`, with the braces required around each branch; WAT uses the annotation form `(@if <cond> (@then ...) (@else ...))`.
 
 ```wax
 #[if(ocaml_version >= (5, 1, 0))]
@@ -376,7 +376,7 @@ Both formats can guard module fields by a condition that a downstream preprocess
 
 The conditions are equivalent; note the surface differences: Wax variables are bare (`ocaml_version`) while WAT variables are `$`-prefixed; Wax versions are tuples `(5, 1, 0)` while WAT writes them `(5 1 0)`; Wax combines conditions with `all`/`any`/`not`, WAT with `and`/`or`/`not`.
 
-The conditions are preserved, not evaluated. Type checking (`--validate`) explores each reachable combination independently (see the [Language Guide](../language.md#conditional-compilation)). Conversion between the Wax and WAT forms is not yet implemented; conditionals are currently supported within each format on its own.
+The conditions are preserved, not evaluated. Type checking (`--validate`) explores each reachable combination independently (see the [Language Guide](../language.md#conditional-compilation)). The two forms convert to each other, so a conditional written in Wax survives a round-trip through WAT and back.
 
 ## Module Structure
 

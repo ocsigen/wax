@@ -1484,15 +1484,15 @@ A condition is one of:
 - a **boolean variable**, e.g. `debug`;
 - a **comparison** `variable op literal`, where `op` is `=`, `!=`, `<`, `<=`, `>` or `>=`, and the literal is either a **version** tuple `(major, minor, patch)` or a **string** `"..."`:
 
-  ```wax
-  #[if(feature = "gc")]
-  #[if(ocaml_version >= (5, 1, 0))]
+  ```text
+  feature = "gc"
+  ocaml_version >= (5, 1, 0)
   ```
 
 - a **combination** built with `all(...)` (conjunction), `any(...)` (disjunction) or `not(...)` (negation), nested arbitrarily:
 
-  ```wax
-  #[if(all(debug, not(target = "wasm32")))]
+  ```text
+  all(debug, not(target = "wasm32"))
   ```
 
 A branch groups any number of items, so several can be guarded at once:
@@ -1504,6 +1504,40 @@ A branch groups any number of items, so several can be guarded at once:
     fn debug_log(msg: i32) {
         // ...
     }
+}
+```
+
+The same `#[if(...)] { ... }` / `#[else] { ... }` form also guards **statements** inside a function body:
+
+```wax
+fn size() -> i32 {
+    #[if(debug)]
+    {
+        return 16;
+    }
+    #[else]
+    {
+        return 20;
+    }
+}
+```
+
+These two are the only levels at which conditional compilation applies: whole module items and whole statements. A condition cannot guard part of an expression.
+
+A statement-level branch cannot introduce a local with `let`, since the two branches are mutually exclusive and a binding made in one would not be in scope after the conditional. Declare the local before the conditional and assign to it inside each branch instead:
+
+```wax
+fn size() -> i32 {
+    let s: i32;
+    #[if(debug)]
+    {
+        s = 16;
+    }
+    #[else]
+    {
+        s = 20;
+    }
+    return s;
 }
 ```
 
