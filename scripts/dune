@@ -4,6 +4,11 @@
  (libraries uucp))
 
 (executable
+ (name build_xid_table)
+ (modules build_xid_table)
+ (libraries uucp))
+
+(executable
  (name generate_error_messages)
  (modules generate_error_messages parse_messages)
  (libraries str))

@@ -1,10 +1,40 @@
 let white = [%sedlex.regexp? Plus (' ' | '\t')]
 let newline = [%sedlex.regexp? '\r' | '\n' | "\r\n"]
+let id_start_c = [%sedlex.regexp? 'a' .. 'z' | 'A' .. 'Z' | 0x80 .. 0x10FFFF]
 
-let ident =
+let id_cont_c =
   [%sedlex.regexp?
-    xid_start, Star (xid_continue | '\'') | '_', Plus (xid_continue | '\'')]
+    'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_' | 0x80 .. 0x10FFFF | '\'']
 
+(* Coarse identifier rule: ASCII identifier characters plus any non-ASCII scalar.
+   The strict Unicode XID check is done separately in [validate_identifier],
+   keeping the large XID character classes out of the sedlex DFA. *)
+let ident = [%sedlex.regexp? id_start_c, Star id_cont_c | '_', Plus id_cont_c]
+
+(* Revalidate a coarsely-lexed identifier against the strict XID classes. ASCII
+   characters accepted by the coarse rule are exactly the intended identifier
+   characters, so only non-ASCII scalars need checking: the first against
+   XID_Start, the rest against XID_Continue. Returns the byte offset and byte
+   length of the first character that is not allowed, or [None] if the whole
+   identifier is valid. *)
+let invalid_identifier_char s =
+  let n = String.length s in
+  let rec go i first =
+    if i >= n then None
+    else
+      let d = String.get_utf_8_uchar s i in
+      let len = Uchar.utf_decode_length d in
+      let c = Uchar.to_int (Uchar.utf_decode_uchar d) in
+      let ok =
+        if c < 0x80 then true
+        else if first then Wax_utils.Xid.is_xid_start c
+        else Wax_utils.Xid.is_xid_continue c
+      in
+      if ok then go (i + len) false else Some (i, len)
+  in
+  go 0 true
+
+let validate_identifier s = invalid_identifier_char s = None
 let sign = [%sedlex.regexp? Opt ('+' | '-')]
 let digit = [%sedlex.regexp? '0' .. '9']
 let hexdigit = [%sedlex.regexp? '0' .. '9' | 'a' .. 'f' | 'A' .. 'F']
@@ -251,7 +281,23 @@ let rec token_rec ctx lexbuf =
   | "elem" -> ELEM
   | int -> INT (Sedlexing.Utf8.lexeme lexbuf)
   | float -> FLOAT (Sedlexing.Utf8.lexeme lexbuf)
-  | ident -> IDENT (Sedlexing.Utf8.lexeme lexbuf)
+  | ident -> (
+      let s = Sedlexing.Utf8.lexeme lexbuf in
+      match invalid_identifier_char s with
+      | None -> IDENT s
+      | Some (off, len) ->
+          (* Report the offending character exactly as the [Compl 'x'] arm below
+             would have on the strict lexer: same message, same one-character
+             location. The coarse rule only ever absorbs a non-ASCII character
+             that could not start a valid token anyway, so this is equivalent. *)
+          let startp, _ = Sedlexing.lexing_bytes_positions lexbuf in
+          let p0 = { startp with Lexing.pos_cnum = startp.pos_cnum + off } in
+          let p1 = { p0 with Lexing.pos_cnum = p0.pos_cnum + len } in
+          raise
+            (Wax_wasm.Parsing.Syntax_error
+               ( (p0, p1),
+                 Printf.sprintf "Unexpected character '%s'.\n"
+                   (String.sub s off len) )))
   | '"' -> STRING (with_loc string lexbuf)
   | "'", Sub (any, (0 .. 31 | 0x7f | '"' | '\\')), "'" ->
       (* One code point between the quotes; it may be multibyte (e.g. an emoji),
@@ -304,4 +350,5 @@ let token ctx =
 
 let is_valid_identifier s =
   let buf = Sedlexing.Utf8.from_string s in
-  match%sedlex buf with ident, eof -> true | _ -> false
+  (match%sedlex buf with ident, eof -> true | _ -> false)
+  && validate_identifier s

@@ -19,7 +19,7 @@
 ; has uucp, with:
 ;   dune build @src/lib-utils/regenerate-unicode-widths
 
-(vendored_dirs unicode-widths-gen)
+(vendored_dirs unicode-widths-gen xid-gen)
 
 (subdir
  unicode-widths-gen
@@ -40,3 +40,24 @@
 (alias
  (name regenerate-unicode-widths)
  (deps unicode-widths-gen/unicode_widths.ml))
+
+; xid.ml is a committed, generated table (Unicode XID_Start / XID_Continue
+; ranges) with the same dev-only-uucp arrangement as unicode_widths above.
+; Regenerate with: dune build @src/lib-utils/regenerate-xid
+
+(subdir
+ xid-gen
+ (rule
+  (target xid.ml)
+  (deps %{project_root}/scripts/build_xid_table.exe (universe))
+  (mode
+   (promote
+    (into ..)))
+  (action
+   (with-stdout-to
+    xid.ml
+    (run %{project_root}/scripts/build_xid_table.exe)))))
+
+(alias
+ (name regenerate-xid)
+ (deps xid-gen/xid.ml))

@@ -6,7 +6,57 @@ type syntax_error = {
   related : Wax_utils.Diagnostic.label list;
 }
 
-module Make_parser (Output : sig
+(* Internal marker raised by [fail_detailed] to carry a structured error out of
+   [loop_handle] to [parse_diagnostics]; never escapes this module. *)
+exception Detailed_error of syntax_error
+
+(* Helpers independent of the functor parameters, shared by both {!Make} and
+   {!Make_parser}. *)
+module E = MenhirLib.ErrorReports
+module Lu = MenhirLib.LexerUtil
+
+let succeed v = v
+
+let show text positions =
+  E.extract text positions |> E.sanitize |> E.compress
+  |> E.shorten 20 (* max width 43 *)
+
+let report_syntax_error ?(related = []) ~color source (loc_start, loc_end) msg =
+  let theme = Wax_utils.Diagnostic.get_theme ?color () in
+  Wax_utils.Diagnostic.output_error_with_source ~theme ~source ~severity:Error
+    ~location:{ loc_start; loc_end } ~related (fun f () ->
+      Format.fprintf f "%s" msg);
+  (* The diagnostic has been printed; re-raise so the caller decides how to
+     terminate rather than exiting the process here. The CLI maps this to exit
+     code 128 (rejected input, like a validation or type error, not the
+     usage-error code; see the exit-code contract in bin/main.ml), while an
+     in-process embedder can catch it instead of having the whole process die. *)
+  raise (Syntax_error ((loc_start, loc_end), msg))
+
+let read filename = In_channel.with_open_bin filename In_channel.input_all
+
+let initialize_lexing filename text =
+  let lexbuf = Sedlexing.Utf8.from_string text in
+  Sedlexing.set_filename lexbuf filename;
+  lexbuf
+
+(* [Lexer.token] returns the tokenizer and a [start_override] ref: for a
+   compound opener ([(param], [(then], …) the lexer reads the [(] and its
+   keyword as two lexemes, so the lexbuf's reported start is the keyword's; the
+   ref carries the [(]'s position instead, so the token's span really begins at
+   its opening parenthesis. *)
+let lexer_lexbuf_to_supplier (lexer, start_override) (lexbuf : Sedlexing.lexbuf)
+    () =
+  let token = lexer lexbuf in
+  let startp, endp = Sedlexing.lexing_bytes_positions lexbuf in
+  let startp = match !start_override with Some p -> p | None -> startp in
+  (token, startp, endp)
+
+(* Core parser over a Menhir incremental API, without the fast parser: the
+   incremental parser produces both the AST (happy path) and the error (with
+   [Parser_messages]) in a single pass. Provides [parse_diagnostics] (structured
+   error, no printing) and [parse_from_string] (prints and re-raises). *)
+module Make (Output : sig
   type t
 end) (Tokens : sig
   type token
@@ -25,18 +75,6 @@ end) (Parser : sig
       val parse : Lexing.position -> Output.t MenhirInterpreter.checkpoint
     end
   end
-end) (Fast_parser : sig
-  module Make (_ : sig
-    type t = Wax_utils.Trivia.context
-
-    val context : t
-  end) : sig
-    type token = Tokens.token
-
-    exception Error
-
-    val parse : (Lexing.lexbuf -> token) -> Lexing.lexbuf -> Output.t
-  end
 end) (Parser_messages : sig
   val message : int -> string
 end) (Lexer : sig
@@ -45,47 +83,6 @@ end) (Lexer : sig
     (Sedlexing.lexbuf -> Tokens.token) * Lexing.position option ref
 end) =
 struct
-  module E = MenhirLib.ErrorReports
-  module Lu = MenhirLib.LexerUtil
-
-  let succeed v = v
-
-  let show text positions =
-    E.extract text positions |> E.sanitize |> E.compress
-    |> E.shorten 20 (* max width 43 *)
-
-  let report_syntax_error ?(related = []) ~color source (loc_start, loc_end) msg
-      =
-    let theme = Wax_utils.Diagnostic.get_theme ?color () in
-    Wax_utils.Diagnostic.output_error_with_source ~theme ~source ~severity:Error
-      ~location:{ loc_start; loc_end } ~related (fun f () ->
-        Format.fprintf f "%s" msg);
-    (* The diagnostic has been printed; re-raise so the caller decides how to
-       terminate rather than exiting the process here. The CLI maps this to exit
-       code 128 (rejected input, like a validation or type error, not the
-       usage-error code; see the exit-code contract in bin/main.ml), while an
-       in-process embedder can catch it instead of having the whole process die. *)
-    raise (Syntax_error ((loc_start, loc_end), msg))
-
-  let read filename = In_channel.with_open_bin filename In_channel.input_all
-
-  let initialize_lexing filename text =
-    let lexbuf = Sedlexing.Utf8.from_string text in
-    Sedlexing.set_filename lexbuf filename;
-    lexbuf
-
-  (* [Lexer.token] returns the tokenizer and a [start_override] ref: for a
-     compound opener ([(param], [(then], …) the lexer reads the [(] and its
-     keyword as two lexemes, so the lexbuf's reported start is the keyword's; the
-     ref carries the [(]'s position instead, so the token's span really begins at
-     its opening parenthesis. *)
-  let lexer_lexbuf_to_supplier (lexer, start_override)
-      (lexbuf : Sedlexing.lexbuf) () =
-    let token = lexer lexbuf in
-    let startp, endp = Sedlexing.lexing_bytes_positions lexbuf in
-    let startp = match !start_override with Some p -> p | None -> startp in
-    (token, startp, endp)
-
   module Inner (Context : sig
     type t = Wax_utils.Trivia.context
 
@@ -93,7 +90,6 @@ struct
   end) =
   struct
     module P = Parser.Make (Context)
-    module F = Fast_parser.Make (Context)
 
     let state checkpoint : int =
       match checkpoint with
@@ -203,16 +199,6 @@ struct
       let message = String.concat "\n" main_message in
       (location, message, related_labels)
 
-    (* Internal marker raised by [fail_detailed] to carry a structured error out
-       of [loop_handle] to [parse_diagnostics]; never escapes this module. *)
-    exception Detailed_error of syntax_error
-
-    let fail ~color text buffer checkpoint =
-      let location, message, related =
-        build_syntax_error text buffer checkpoint
-      in
-      report_syntax_error ~related ~color text location message
-
     let fail_detailed text buffer checkpoint =
       let (loc_start, loc_end), message, related =
         build_syntax_error text buffer checkpoint
@@ -221,49 +207,18 @@ struct
         (Detailed_error
            { location = { Wax_utils.Ast.loc_start; loc_end }; message; related })
 
-    let parse_from_string ?color ~filename text =
-      let lexbuf = initialize_lexing filename text in
-      try
-        let supplier =
-          lexer_lexbuf_to_supplier (Lexer.token Context.context) lexbuf
-        in
-        let revised_parser =
-          MenhirLib.Convert.Simplified.traditional2revised F.parse
-        in
-        revised_parser supplier
-      with
-      | F.Error ->
-          let lexbuf = initialize_lexing filename text in
-          let supplier =
-            lexer_lexbuf_to_supplier (Lexer.token Context.context) lexbuf
-          in
-          let buffer, supplier = E.wrap_supplier supplier in
-          let checkpoint =
-            P.Incremental.parse (snd (Sedlexing.lexing_bytes_positions lexbuf))
-          in
-          P.MenhirInterpreter.loop_handle succeed (fail ~color text buffer)
-            supplier checkpoint
-      | Syntax_error (loc, msg) -> report_syntax_error ~color text loc msg
-      | Sedlexing.InvalidCodepoint _ | Sedlexing.MalFormed ->
-          report_syntax_error text ~color
-            (Sedlexing.lexing_bytes_positions lexbuf)
-            "Input file contains malformed UTF-8 byte sequences\n"
-
-    (* Parse, returning either the AST or a structured syntax error, without
-       printing and without the fast parser: on the happy path the incremental
-       parser produces the AST directly, and on error it yields the location and
-       message natively (one pass). For in-process/editor use, where the caller
-       wants the error as data rather than a stderr diagnostic and an exit. *)
+    (* Parse, returning the AST or a structured syntax error, without printing:
+       the incremental parser produces both, in a single pass. *)
     let parse_diagnostics ~filename text =
       let lexbuf = initialize_lexing filename text in
+      let supplier =
+        lexer_lexbuf_to_supplier (Lexer.token Context.context) lexbuf
+      in
+      let buffer, supplier = E.wrap_supplier supplier in
+      let checkpoint =
+        P.Incremental.parse (snd (Sedlexing.lexing_bytes_positions lexbuf))
+      in
       try
-        let supplier =
-          lexer_lexbuf_to_supplier (Lexer.token Context.context) lexbuf
-        in
-        let buffer, supplier = E.wrap_supplier supplier in
-        let checkpoint =
-          P.Incremental.parse (snd (Sedlexing.lexing_bytes_positions lexbuf))
-        in
         Ok
           (P.MenhirInterpreter.loop_handle succeed
              (fail_detailed text buffer)
@@ -285,6 +240,14 @@ struct
               message = "Input file contains malformed UTF-8 byte sequences\n";
               related = [];
             }
+
+    (* Printing variant, as the CLI expects: report the structured error (same
+       message and labels) and re-raise via [report_syntax_error]. *)
+    let parse_from_string ?color ~filename text =
+      match parse_diagnostics ~filename text with
+      | Ok ast -> ast
+      | Error { location = { loc_start; loc_end }; message; related } ->
+          report_syntax_error ~related ~color text (loc_start, loc_end) message
   end
 
   let parse_from_string ?color ~filename text =
@@ -313,4 +276,81 @@ struct
     match I.parse_diagnostics ~filename text with
     | Ok ast -> Ok (ast, ctx)
     | Error e -> Error e
+end
+
+(* The full parser: {!Make} plus the fast parser, used for its speed on the
+   happy path. [parse_from_string] tries the fast parser and, on any failure,
+   falls back to the core's incremental [parse_from_string], which re-parses and
+   either succeeds or raises the reported syntax error. The fast attempt only
+   fails on a syntax error (both parsers accept the same grammar), so the
+   fallback always ends in that error; its partial trivia context is therefore
+   irrelevant and discarded. *)
+module Make_parser (Output : sig
+  type t
+end) (Tokens : sig
+  type token
+end) (Parser : sig
+  module Make (_ : sig
+    type t = Wax_utils.Trivia.context
+
+    val context : t
+  end) : sig
+    type token = Tokens.token
+
+    module MenhirInterpreter :
+      MenhirLib.IncrementalEngine.INCREMENTAL_ENGINE with type token = token
+
+    module Incremental : sig
+      val parse : Lexing.position -> Output.t MenhirInterpreter.checkpoint
+    end
+  end
+end) (Fast_parser : sig
+  module Make (_ : sig
+    type t = Wax_utils.Trivia.context
+
+    val context : t
+  end) : sig
+    type token = Tokens.token
+
+    exception Error
+
+    val parse : (Lexing.lexbuf -> token) -> Lexing.lexbuf -> Output.t
+  end
+end) (Parser_messages : sig
+  val message : int -> string
+end) (Lexer : sig
+  val token :
+    Wax_utils.Trivia.context ->
+    (Sedlexing.lexbuf -> Tokens.token) * Lexing.position option ref
+end) =
+struct
+  module Core = Make (Output) (Tokens) (Parser) (Parser_messages) (Lexer)
+  include Core
+
+  let parse_from_string ?color ~filename text =
+    Wax_utils.Debug.timed "parse" @@ fun () ->
+    let ctx = Wax_utils.Trivia.make () in
+    let module Context = struct
+      type t = Wax_utils.Trivia.context
+
+      let context = ctx
+    end in
+    let module F = Fast_parser.Make (Context) in
+    let lexbuf = initialize_lexing filename text in
+    try
+      let supplier =
+        lexer_lexbuf_to_supplier (Lexer.token Context.context) lexbuf
+      in
+      let revised_parser =
+        MenhirLib.Convert.Simplified.traditional2revised F.parse
+      in
+      (revised_parser supplier, ctx)
+    with
+    | F.Error | Syntax_error _ | Sedlexing.InvalidCodepoint _
+    | Sedlexing.MalFormed
+    ->
+      Core.parse_from_string ?color ~filename text
+
+  let parse ?color ~filename () =
+    parse_from_string ?color ~filename (read filename)
 end
