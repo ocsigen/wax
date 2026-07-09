@@ -25,6 +25,21 @@ Both compile to identical WebAssembly bytecode.
 
 ## Installation
 
+### Prebuilt binaries
+
+Native `wax` executables for Linux, macOS (Apple silicon and Intel), and
+Windows (with `SHA256SUMS`) are attached to the
+[`edge` prerelease](https://github.com/ocsigen/wax/releases/tag/edge), which is
+rebuilt on every push to `main`. Download the one for your platform, make it
+executable, and put it on your `PATH`:
+
+```sh
+curl -LO https://github.com/ocsigen/wax/releases/download/edge/wax-linux-x86_64
+chmod +x wax-linux-x86_64 && mv wax-linux-x86_64 /usr/local/bin/wax
+```
+
+### From source
+
 **Requirements:** [Opam](https://opam.ocaml.org/) (2.1+) and OCaml 4.14+ (5.0+
 to run the full test suite).
 
