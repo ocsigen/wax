@@ -54,10 +54,12 @@ struct
     Wax_utils.Diagnostic.output_error_with_source ~theme ~source ~severity:Error
       ~location:{ loc_start; loc_end } ~related (fun f () ->
         Format.fprintf f "%s" msg);
-    (* A syntax error is a rejected input, like a validation or type error, so
-       it shares their exit code (128) rather than the usage-error code. See
-       the exit-code contract in bin/main.ml. *)
-    exit 128
+    (* The diagnostic has been printed; re-raise so the caller decides how to
+       terminate rather than exiting the process here. The CLI maps this to exit
+       code 128 (rejected input, like a validation or type error, not the
+       usage-error code; see the exit-code contract in bin/main.ml), while an
+       in-process embedder can catch it instead of having the whole process die. *)
+    raise (Syntax_error ((loc_start, loc_end), msg))
 
   let read filename = In_channel.with_open_bin filename In_channel.input_all
 

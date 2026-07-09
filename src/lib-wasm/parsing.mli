@@ -49,12 +49,15 @@ end) : sig
     unit ->
     Output.t * Wax_utils.Trivia.context
   (** Parse a file from a filename (reads from stdin if filename is empty or
-      "-"). *)
+      "-"). On a syntax error the diagnostic is printed and {!Syntax_error} is
+      raised; the caller decides how to terminate (the CLI exits 128). *)
 
   val parse_from_string :
     ?color:Wax_utils.Colors.flag ->
     filename:string ->
     string ->
     Output.t * Wax_utils.Trivia.context
-  (** Parse from a string. *)
+  (** Parse from a string. On a syntax error the diagnostic is printed and
+      {!Syntax_error} is raised; the caller decides how to terminate (the CLI
+      exits 128). *)
 end

@@ -1219,4 +1219,17 @@ let () =
         Array.of_list (exe :: Cmd.name convert_cmd :: first :: rest)
     | _ -> Sys.argv
   in
-  exit (Cmd.eval ~argv main_cmd)
+  (* A syntax error escapes the parser as [Syntax_error] (already reported); map
+     it to the rejected-input exit code 128. [~catch:false] lets it through
+     cmdliner's own catch-all (which would otherwise report it as an internal
+     error, 125); we keep that 125 behaviour for any genuinely unexpected
+     exception here. *)
+  let code =
+    try Cmd.eval ~catch:false ~argv main_cmd with
+    | Wax_wasm.Parsing.Syntax_error _ -> 128
+    | e ->
+        Printf.eprintf "wax: internal error, uncaught exception:\n%s\n"
+          (Printexc.to_string e);
+        Cmd.Exit.internal_error
+  in
+  exit code
