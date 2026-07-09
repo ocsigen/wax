@@ -170,9 +170,113 @@ let check_result src =
   let diagnostics = try check_string (Js.to_string src) with _ -> [] in
   Js.array (Array.of_list (List.map js_diagnostic diagnostics))
 
+(* Document outline: the module's top-level definitions (functions, globals,
+   types, memories, tags, tables, elems, data, imports) with their spans, for the
+   editor's outline / breadcrumbs. Only a syntactically-valid module yields
+   symbols. *)
+type sym = {
+  s_name : string;
+  s_kind : string;
+  s_range : Wax_utils.Ast.location; (* the whole definition span *)
+  s_selection : Wax_utils.Ast.location; (* the name span *)
+  s_children : sym list;
+}
+
+let import_kind_str (k : Wax_lang.Ast.import_kind) =
+  match k with
+  | Import_func _ -> "function"
+  | Import_global _ -> "variable"
+  | Import_tag _ -> "event"
+  | Import_memory _ -> "memory"
+  | Import_table _ -> "table"
+
+let import_symbol
+    (decl :
+      (Wax_lang.Ast.import_decl, Wax_utils.Ast.location) Wax_lang.Ast.annotated)
+    =
+  let d = decl.desc in
+  {
+    s_name = d.id.desc;
+    s_kind = import_kind_str d.kind;
+    s_range = decl.info;
+    s_selection = d.id.info;
+    s_children = [];
+  }
+
+let field_symbols
+    (field :
+      ( Wax_utils.Ast.location Wax_lang.Ast.modulefield,
+        Wax_utils.Ast.location )
+      Wax_lang.Ast.annotated) : sym list =
+  let open Wax_lang.Ast in
+  let one s_name s_kind s_selection =
+    { s_name; s_kind; s_range = field.info; s_selection; s_children = [] }
+  in
+  match field.desc with
+  | Func { name; _ } -> [ one name.desc "function" name.info ]
+  | Global { name; _ } -> [ one name.desc "variable" name.info ]
+  | Tag { name; _ } -> [ one name.desc "event" name.info ]
+  | Memory { name; _ } -> [ one name.desc "memory" name.info ]
+  | Table { name; _ } -> [ one name.desc "table" name.info ]
+  | Elem { name; _ } -> [ one name.desc "array" name.info ]
+  | Data { name = Some n; _ } -> [ one n.desc "data" n.info ]
+  | Data { name = None; _ } -> []
+  | Type rectype ->
+      Array.to_list rectype
+      |> List.map (fun entry ->
+          let id, _ = entry.desc in
+          {
+            s_name = id.desc;
+            s_kind = "type";
+            s_range = entry.info;
+            s_selection = id.info;
+            s_children = [];
+          })
+  | Import { decl; _ } -> [ import_symbol decl ]
+  | Import_group { module_; decls } ->
+      [
+        {
+          s_name = module_.desc;
+          s_kind = "namespace";
+          s_range = field.info;
+          s_selection = module_.info;
+          s_children = List.map import_symbol decls;
+        };
+      ]
+  | Module_annotation _ | Conditional _ -> []
+
+let symbols_string src =
+  match Wax_parser.parse_diagnostics ~filename:"<buffer>" src with
+  | Error _ -> []
+  | Ok (ast, _ctx) -> List.concat_map field_symbols ast
+
+let rec js_symbol s =
+  let start_line, start_char = js_position s.s_range.loc_start in
+  let end_line, end_char = js_position s.s_range.loc_end in
+  let sel_start_line, sel_start_char = js_position s.s_selection.loc_start in
+  let sel_end_line, sel_end_char = js_position s.s_selection.loc_end in
+  object%js
+    val name = Js.string s.s_name
+    val kind = Js.string s.s_kind
+    val startLine = start_line
+    val startChar = start_char
+    val endLine = end_line
+    val endChar = end_char
+    val selStartLine = sel_start_line
+    val selStartChar = sel_start_char
+    val selEndLine = sel_end_line
+    val selEndChar = sel_end_char
+    val children = Js.array (Array.of_list (List.map js_symbol s.s_children))
+  end
+
+let symbols_result src =
+  let syms = try symbols_string (Js.to_string src) with _ -> [] in
+  Js.array (Array.of_list (List.map js_symbol syms))
+
 let () =
   Js.export "wax"
     object%js
       method format src = format_result src
       method check src = check_result src
+      method symbols src = symbols_result src
     end

@@ -4,7 +4,7 @@
 // registered formatter when `editor.formatOnSave` is on.
 
 import * as vscode from "vscode";
-import { loadWax, LoadOptions, Wax } from "./wax-runtime";
+import { loadWax, LoadOptions, Wax, WaxSymbol } from "./wax-runtime";
 
 export function activateWith(
   context: vscode.ExtensionContext,
@@ -16,6 +16,7 @@ export function activateWith(
 
   registerFormatter(context, opts, log);
   registerDiagnostics(context, opts);
+  registerOutline(context, opts);
 
   // Warm the runtime now (loadWax caches its promise) so the first format or
   // diagnostics run has no load lag — in particular the first format-on-save.
@@ -73,6 +74,74 @@ function registerFormatter(
 
   context.subscriptions.push(
     vscode.languages.registerDocumentFormattingEditProvider("wax", provider),
+  );
+}
+
+function symbolKind(kind: string): vscode.SymbolKind {
+  switch (kind) {
+    case "function":
+      return vscode.SymbolKind.Function;
+    case "variable":
+      return vscode.SymbolKind.Variable;
+    case "type":
+      return vscode.SymbolKind.Struct;
+    case "event":
+      return vscode.SymbolKind.Event;
+    case "memory":
+      return vscode.SymbolKind.Object;
+    case "table":
+    case "array":
+      return vscode.SymbolKind.Array;
+    case "namespace":
+      return vscode.SymbolKind.Namespace;
+    default:
+      return vscode.SymbolKind.Variable;
+  }
+}
+
+function registerOutline(
+  context: vscode.ExtensionContext,
+  opts: LoadOptions,
+): void {
+  const build = (s: WaxSymbol): vscode.DocumentSymbol => {
+    const range = new vscode.Range(
+      s.startLine,
+      s.startChar,
+      s.endLine,
+      s.endChar,
+    );
+    const selection = new vscode.Range(
+      s.selStartLine,
+      s.selStartChar,
+      s.selEndLine,
+      s.selEndChar,
+    );
+    const symbol = new vscode.DocumentSymbol(
+      s.name,
+      "",
+      symbolKind(s.kind),
+      range,
+      selection,
+    );
+    symbol.children = s.children.map(build);
+    return symbol;
+  };
+
+  const provider: vscode.DocumentSymbolProvider = {
+    async provideDocumentSymbols(document, token) {
+      let wax: Wax;
+      try {
+        wax = await loadWax(context, opts);
+      } catch {
+        return [];
+      }
+      if (token.isCancellationRequested) return [];
+      return wax.symbols(document.getText()).map(build);
+    },
+  };
+
+  context.subscriptions.push(
+    vscode.languages.registerDocumentSymbolProvider("wax", provider),
   );
 }
 

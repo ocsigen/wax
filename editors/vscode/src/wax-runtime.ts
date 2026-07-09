@@ -39,9 +39,24 @@ export interface WaxDiagnostic extends WaxRange {
   related: WaxRelated[];
 }
 
+export interface WaxSymbol {
+  name: string;
+  kind: string;
+  startLine: number;
+  startChar: number;
+  endLine: number;
+  endChar: number;
+  selStartLine: number;
+  selStartChar: number;
+  selEndLine: number;
+  selEndChar: number;
+  children: WaxSymbol[];
+}
+
 export interface Wax {
   format(src: string): FormatResult;
   check(src: string): WaxDiagnostic[];
+  symbols(src: string): WaxSymbol[];
 }
 
 export interface LoadOptions {

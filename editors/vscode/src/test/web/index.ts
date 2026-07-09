@@ -51,5 +51,11 @@ export async function run(): Promise<void> {
     throw new Error("web: expected a related label: " + JSON.stringify(unclosed));
   }
 
+  // Document outline: top-level definitions become symbols.
+  const syms = wax.symbols("const c: i32 = 0;\nfn f() -> i32 { 1; }");
+  if (syms.length !== 2 || syms[1].kind !== "function") {
+    throw new Error("web: expected outline symbols: " + JSON.stringify(syms));
+  }
+
   console.log("WEB SMOKE TEST PASSED");
 }
