@@ -80,7 +80,9 @@ let branch_hint_attr pp likely =
    the WebAssembly printer in [Wax_utils.Trivia]. *)
 
 let print_trivia pp lst = Wax_utils.Styled_printer.print_trivia pp.base lst
-let get_trivia pp (loc : location option) = Wax_utils.Styled_printer.get_trivia pp.base loc
+
+let get_trivia pp (loc : location option) =
+  Wax_utils.Styled_printer.get_trivia pp.base loc
 
 let atomic_node pp (loc : location option) f =
   Wax_utils.Styled_printer.atomic_node pp.base loc f
@@ -771,7 +773,7 @@ let rec instr prec pp (i : _ instr) =
                       punctuation pp ")");
               space pp ();
               punctuation pp "{");
-          block_contents pp l;
+          located_block_contents pp l;
           punctuation pp "}")
   | If { label; typ; cond; if_block; else_block } ->
       hvbox pp (fun () ->
@@ -812,7 +814,7 @@ let rec instr prec pp (i : _ instr) =
                 blocktype pp typ;
                 space pp ());
               punctuation pp "{");
-          block_contents pp l;
+          located_block_contents pp l;
           hvbox pp (fun () ->
               box pp (fun () ->
                   punctuation pp "}";
@@ -862,7 +864,7 @@ let rec instr prec pp (i : _ instr) =
                 blocktype pp bt;
                 space pp ());
               punctuation pp "{");
-          block_contents pp l;
+          located_block_contents pp l;
           hvbox pp (fun () ->
               box pp (fun () ->
                   punctuation pp "}";
@@ -1208,7 +1210,7 @@ let rec instr prec pp (i : _ instr) =
                     newline pp ();
                     block pp (Some l) None
                       { params = [||]; results = [||] }
-                      body)
+                      (no_loc body))
                   arms);
             newline pp ());
           punctuation pp "}")
@@ -1356,7 +1358,7 @@ and field_receiver pp i =
           punctuation pp ")")
   | _ -> instr CallAndFieldAccess pp i
 
-and block pp label kind bt (l : _ instr list) =
+and block pp label kind bt (l : (_ instr list, location) annotated) =
   hvbox pp (fun () ->
       box pp (fun () ->
           block_label pp label;
@@ -1369,7 +1371,7 @@ and block pp label kind bt (l : _ instr list) =
             blocktype pp bt;
             space pp ());
           punctuation pp "{");
-      block_contents pp l;
+      located_block_contents pp l;
       punctuation pp "}")
 
 and deliminated_instr pp (i : _ instr) =

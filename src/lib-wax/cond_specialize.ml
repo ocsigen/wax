@@ -65,15 +65,17 @@ let module_ ctx env (fields : location Ast.module_) :
   and sone i = match sinstr i with [ x ] -> x | _ -> assert false
   and sdesc (desc : location instr_desc) : location instr_desc =
     match desc with
-    | Block { label; typ; block } -> Block { label; typ; block = sinstrs block }
-    | Loop { label; typ; block } -> Loop { label; typ; block = sinstrs block }
+    | Block { label; typ; block } ->
+        Block { label; typ; block = { block with desc = sinstrs block.desc } }
+    | Loop { label; typ; block } ->
+        Loop { label; typ; block = { block with desc = sinstrs block.desc } }
     | While { label; cond; step; block } ->
         While
           {
             label;
             cond = sone cond;
             step = Option.map sone step;
-            block = sinstrs block;
+            block = { block with desc = sinstrs block.desc };
           }
     | If { label; typ; cond; if_block; else_block } ->
         If
@@ -86,13 +88,19 @@ let module_ ctx env (fields : location Ast.module_) :
               Option.map (fun b -> { b with desc = sinstrs b.desc }) else_block;
           }
     | TryTable { label; typ; catches; block } ->
-        TryTable { label; typ; catches; block = sinstrs block }
+        TryTable
+          {
+            label;
+            typ;
+            catches;
+            block = { block with desc = sinstrs block.desc };
+          }
     | Try { label; typ; block; catches; catch_all } ->
         Try
           {
             label;
             typ;
-            block = sinstrs block;
+            block = { block with desc = sinstrs block.desc };
             catches = List.map (fun (t, l) -> (t, sinstrs l)) catches;
             catch_all = Option.map sinstrs catch_all;
           }

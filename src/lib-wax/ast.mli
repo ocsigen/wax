@@ -85,15 +85,23 @@ type on_clause = OnLabel of ident * label | OnSwitch of ident
 type match_pattern = MatchCast of ident option * reftype | MatchNull
 
 type 'info instr_desc =
-  | Block of { label : label option; typ : functype; block : 'info instr list }
-  | Loop of { label : label option; typ : functype; block : 'info instr list }
+  | Block of {
+      label : label option;
+      typ : functype;
+      block : ('info instr list, location) annotated;
+    }
+  | Loop of {
+      label : label option;
+      typ : functype;
+      block : ('info instr list, location) annotated;
+    }
   | While of {
       label : label option;
       cond : 'info instr;
       (* Zig-style continue-expression: a statement run at the end of every
          iteration, including on a [continue] (a branch to the loop label). *)
       step : 'info instr option;
-      block : 'info instr list;
+      block : ('info instr list, location) annotated;
     }
   | If of {
       label : label option;
@@ -106,12 +114,12 @@ type 'info instr_desc =
       label : label option;
       typ : functype;
       catches : catch list;
-      block : 'info instr list;
+      block : ('info instr list, location) annotated;
     }
   | Try of {
       label : label option;
       typ : functype;
-      block : 'info instr list;
+      block : ('info instr list, location) annotated;
       catches : (ident * 'info instr list) list;
       catch_all : 'info instr list option;
     }

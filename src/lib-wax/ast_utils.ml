@@ -3,17 +3,27 @@ open Ast
 let rec map_instr f instr =
   let desc =
     match instr.desc with
-    | Block { label; typ; block = instrs } ->
-        Block { label; typ; block = List.map (map_instr f) instrs }
-    | Loop { label; typ; block = instrs } ->
-        Loop { label; typ; block = List.map (map_instr f) instrs }
-    | While { label; cond; step; block = instrs } ->
+    | Block { label; typ; block } ->
+        Block
+          {
+            label;
+            typ;
+            block = { block with desc = List.map (map_instr f) block.desc };
+          }
+    | Loop { label; typ; block } ->
+        Loop
+          {
+            label;
+            typ;
+            block = { block with desc = List.map (map_instr f) block.desc };
+          }
+    | While { label; cond; step; block } ->
         While
           {
             label;
             cond = map_instr f cond;
             step = Option.map (map_instr f) step;
-            block = List.map (map_instr f) instrs;
+            block = { block with desc = List.map (map_instr f) block.desc };
           }
     | If { label; typ; cond; if_block; else_block } ->
         If
@@ -29,13 +39,19 @@ let rec map_instr f instr =
                 else_block;
           }
     | TryTable { label; typ; block; catches } ->
-        TryTable { label; typ; block = List.map (map_instr f) block; catches }
+        TryTable
+          {
+            label;
+            typ;
+            block = { block with desc = List.map (map_instr f) block.desc };
+            catches;
+          }
     | Try { label; typ; block; catches; catch_all } ->
         Try
           {
             label;
             typ;
-            block = List.map (map_instr f) block;
+            block = { block with desc = List.map (map_instr f) block.desc };
             catches =
               List.map
                 (fun (tag, block) -> (tag, List.map (map_instr f) block))
@@ -156,10 +172,15 @@ let lower_dispatch ~block_info ~index ~cases ~default ~arms =
   let rec build = function
     | [ (c, _) ] ->
         (* innermost case block holds just the [br_table] *)
-        mk (Block { label = Some c; typ = void; block = [ br ] })
+        mk (Block { label = Some c; typ = void; block = no_loc [ br ] })
     | (c, _) :: ((_, next_body) :: _ as rest) ->
         mk
-          (Block { label = Some c; typ = void; block = build rest :: next_body })
+          (Block
+             {
+               label = Some c;
+               typ = void;
+               block = no_loc (build rest :: next_body);
+             })
     | [] -> br
   in
   match List.rev arms with
@@ -203,7 +224,9 @@ let lower_while ~block_info ~fresh_loop ~label ~cond ~step ~block =
   in
   match (step, label) with
   | Some step, Some blk_l ->
-      let body_block = mk (Block { label = Some blk_l; typ = void; block }) in
+      let body_block =
+        mk (Block { label = Some blk_l; typ = void; block = no_loc block })
+      in
       [
         mk
           (Loop
@@ -211,7 +234,8 @@ let lower_while ~block_info ~fresh_loop ~label ~cond ~step ~block =
                label = Some fresh_loop;
                typ = void;
                block =
-                 [ if_ cond [ body_block; step; mk (Br (fresh_loop, None)) ] ];
+                 no_loc
+                   [ if_ cond [ body_block; step; mk (Br (fresh_loop, None)) ] ];
              });
       ]
   | _ ->
@@ -220,7 +244,11 @@ let lower_while ~block_info ~fresh_loop ~label ~cond ~step ~block =
       [
         mk
           (Loop
-             { label = Some l; typ = void; block = [ if_ cond (block @ tail) ] });
+             {
+               label = Some l;
+               typ = void;
+               block = no_loc [ if_ cond (block @ tail) ];
+             });
       ]
 
 (* Lower a [match] to the conventional nested type-test ladder that compilers
@@ -291,7 +319,7 @@ let lower_match ~block_info ~labels ~scrutinee ~arms ~default =
         [ mk (Let ([ (None, None) ], Some chain)); mk (Br (escape, None)) ]
       in
       let block_l0 =
-        mk (Block { label = Some l0; typ = res p0; block = inner })
+        mk (Block { label = Some l0; typ = res p0; block = no_loc inner })
       in
       (* Wrap outward: each block holds the previous block (its result consumed
          for the previous arm) followed by that arm's body. *)
@@ -303,7 +331,7 @@ let lower_match ~block_info ~labels ~scrutinee ~arms ~default =
                  {
                    label = Some escape;
                    typ = void;
-                   block = consume prev_block prev_pat prev_body;
+                   block = no_loc (consume prev_block prev_pat prev_body);
                  })
             :: default
         | lbl :: labels', (pat, body) :: arms' ->
@@ -313,7 +341,7 @@ let lower_match ~block_info ~labels ~scrutinee ~arms ~default =
                    {
                      label = Some lbl;
                      typ = res pat;
-                     block = consume prev_block prev_pat prev_body;
+                     block = no_loc (consume prev_block prev_pat prev_body);
                    })
             in
             wrap blk pat body labels' arms'

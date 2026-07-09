@@ -84,7 +84,7 @@ let consume_step stmts =
    block's label, the chain, the escape label, and the declarations to hoist. *)
 let rec descend blk =
   match blk.desc with
-  | Block { label = Some lbl; block = body; _ } -> (
+  | Block { label = Some lbl; block = { desc = body; _ }; _ } -> (
       let decls0, body = split_decls body in
       match body with
       | [
@@ -158,7 +158,7 @@ let rec diverges_instr i =
   | Loop { block; _ } ->
       (* A loop whose body always branches (back to the loop or out) never falls
          through to the statement after it. *)
-      diverges_list block
+      diverges_list block.desc
   | _ -> false
 
 and diverges_list l =
@@ -173,8 +173,12 @@ let arm_block stmt =
   | Let
       ( [ (None, _) ],
         Some
-          { desc = Block { label = Some self; typ; block = test :: body }; _ }
-      )
+          {
+            desc =
+              Block
+                { label = Some self; typ; block = { desc = test :: body; _ } };
+            _;
+          } )
     when typ.params = [||] && Array.length typ.results = 1 && diverges_list body
     -> (
       match test.desc with
@@ -345,16 +349,17 @@ and rewrite_list stmts =
 and rewrite_desc (desc : location instr_desc) : location instr_desc =
   match desc with
   | Block { label; typ; block } ->
-      Block { label; typ; block = rewrite_list block }
+      Block
+        { label; typ; block = { block with desc = rewrite_list block.desc } }
   | Loop { label; typ; block } ->
-      Loop { label; typ; block = rewrite_list block }
+      Loop { label; typ; block = { block with desc = rewrite_list block.desc } }
   | While { label; cond; step; block } ->
       While
         {
           label;
           cond = rewrite_instr cond;
           step = Option.map rewrite_instr step;
-          block = rewrite_list block;
+          block = { block with desc = rewrite_list block.desc };
         }
   | If { label; typ; cond; if_block; else_block } ->
       If
@@ -369,13 +374,19 @@ and rewrite_desc (desc : location instr_desc) : location instr_desc =
               else_block;
         }
   | TryTable { label; typ; catches; block } ->
-      TryTable { label; typ; catches; block = rewrite_list block }
+      TryTable
+        {
+          label;
+          typ;
+          catches;
+          block = { block with desc = rewrite_list block.desc };
+        }
   | Try { label; typ; block; catches; catch_all } ->
       Try
         {
           label;
           typ;
-          block = rewrite_list block;
+          block = { block with desc = rewrite_list block.desc };
           catches = List.map (fun (t, l) -> (t, rewrite_list l)) catches;
           catch_all = Option.map rewrite_list catch_all;
         }

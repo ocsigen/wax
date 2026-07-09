@@ -175,15 +175,17 @@ let rec go (i : location instr) : location instr =
 and rebuild : location instr_desc -> location instr_desc = function
   | BinOp (op, a, b) -> BinOp (op, go a, go b)
   | UnOp (op, e) -> UnOp (op, go e)
-  | Block r -> Block { r with block = go_list r.block }
-  | Loop r -> Loop { r with block = go_list r.block }
+  | Block r ->
+      Block { r with block = { r.block with desc = go_list r.block.desc } }
+  | Loop r ->
+      Loop { r with block = { r.block with desc = go_list r.block.desc } }
   | While r ->
       While
         {
           r with
           cond = go r.cond;
           step = Option.map go r.step;
-          block = go_list r.block;
+          block = { r.block with desc = go_list r.block.desc };
         }
   | If r ->
       If
@@ -198,11 +200,12 @@ and rebuild : location instr_desc -> location instr_desc = function
       Try
         {
           r with
-          block = go_list r.block;
+          block = { r.block with desc = go_list r.block.desc };
           catches = List.map (fun (id, b) -> (id, go_list b)) r.catches;
           catch_all = Option.map go_list r.catch_all;
         }
-  | TryTable r -> TryTable { r with block = go_list r.block }
+  | TryTable r ->
+      TryTable { r with block = { r.block with desc = go_list r.block.desc } }
   | Sequence l -> Sequence (go_list l)
   | Set (id, op, e) -> Set (id, op, go e)
   | Tee (id, e) -> Tee (id, go e)

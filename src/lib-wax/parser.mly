@@ -710,10 +710,10 @@ blockinstr:
 | MATCH scrutinee = expression
   "{" arms = semi_list(match_arm) default = match_default "}"
   { with_loc $sloc (Match {scrutinee; arms; default}) }
-| label = block_label DO bt = option(block_type) "{" l = statement_list "}"
+| label = block_label DO bt = option(block_type) l = braced_block
   { with_loc $sloc (Block{label; typ = blocktype bt; block = l}) }
 | label = block_label WHILE cond = condition_expression
-  "{" l = statement_list "}"
+  l = braced_block
   { with_loc $sloc (While{label; cond; step = None; block = l}) }
 (* Zig-style continue-expression: [while c : (step) { … }]. The step is a
    parenthesized statement run at the end of every iteration (incl. [continue]).
@@ -721,20 +721,20 @@ blockinstr:
    for branch statements). *)
 | label = block_label WHILE cond = condition_expression
   ":" "(" step = statement ")"
-  "{" l = statement_list "}"
+  l = braced_block
   { with_loc $sloc (While{label; cond; step = Some step; block = l}) }
 | label = block_label LOOP bt = option(block_type)
-  "{" l = statement_list "}"
+  l = braced_block
   { with_loc $sloc (Loop{label; typ = blocktype bt; block = l}) }
 | label = block_label IF e = condition_expression
   bt = option("=>" bt = block_type { bt })
   l1 = braced_block
   l2 = ioption(ELSE l = braced_block { l })
   { with_loc $sloc (If{label; typ = blocktype bt; cond = e; if_block = l1; else_block = l2}) }
-| label = block_label TRY bt = option(block_type) "{" l = statement_list "}"
+| label = block_label TRY bt = option(block_type) l = braced_block
   CATCH "[" catches = separated_list_trailing(",", catch) "]"
   { with_loc $sloc (TryTable {label; typ = blocktype bt; catches; block = l}) }
-| label = block_label TRY bt = option(block_type) "{" l = statement_list "}"
+| label = block_label TRY bt = option(block_type) l = braced_block
   CATCH
   "{" catches = semi_list(legacy_catch); catch_all = option(legacy_catch_all) "}"
   { with_loc $sloc

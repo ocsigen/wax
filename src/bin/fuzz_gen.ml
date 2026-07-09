@@ -345,7 +345,7 @@ and try_ t d : Ast.location Ast.instr =
        {
          label = None;
          typ;
-         block = [ gen t (d - 1) ];
+         block = nl [ gen t (d - 1) ];
          catches = [ (id "stop", [ gen t (d - 1) ]) ];
          catch_all = Some [ gen t (d - 1) ];
        })
@@ -685,7 +685,7 @@ let rec stmt d : Ast.location Ast.instr =
              label = None;
              cond = gen I32 (d - 1);
              step;
-             block = [ stmt (d - 1) ];
+             block = nl [ stmt (d - 1) ];
            })
   | _ ->
       let t = pick num_ty in
@@ -719,10 +719,11 @@ let local_while_seq d : Ast.location Ast.instr list =
              Some
                (nl (Ast.Set (id "a", Some (nl Ast.Add), nl (Ast.Get (id v)))));
            block =
-             [
-               nl (Ast.Set (id v, None, gen I32 (d - 1)));
-               nl (Ast.Br_if (id lbl, gen I32 (d - 1)));
-             ];
+             nl
+               [
+                 nl (Ast.Set (id v, None, gen I32 (d - 1)));
+                 nl (Ast.Br_if (id lbl, gen I32 (d - 1)));
+               ];
          });
   ]
 
@@ -779,7 +780,7 @@ let local_liveness_seq d : Ast.location Ast.instr list =
                label = None;
                cond = gen I32 (d - 1);
                step = None;
-               block = use ();
+               block = nl (use ());
              })
     | _ ->
         let lbl = id ("lb" ^ string_of_int n) in
@@ -788,7 +789,7 @@ let local_liveness_seq d : Ast.location Ast.instr list =
              {
                label = Some lbl;
                typ = void;
-               block = use () @ [ nl (Ast.Br_if (lbl, gen I32 (d - 1))) ];
+               block = nl (use () @ [ nl (Ast.Br_if (lbl, gen I32 (d - 1))) ]);
              })
   in
   [ nl (Ast.Let ([ (Some (id v), Some (valtype I32)) ], None)); control ]

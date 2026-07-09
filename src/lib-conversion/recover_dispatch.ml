@@ -32,7 +32,8 @@ let is_void (t : functype) = t.params = [||] && t.results = [||]
 let rec descend block =
   match block with
   | [ { desc = Br_table (br_labels, index); _ } ] -> Some ([], br_labels, index)
-  | { desc = Block { label = Some c; typ; block = inner }; _ } :: body
+  | { desc = Block { label = Some c; typ; block = { desc = inner; _ } }; _ }
+    :: body
     when is_void typ -> (
       match descend inner with
       | Some (arms, br_labels, index) ->
@@ -58,7 +59,7 @@ and try_fold (i : location instr) (trailing : location instr list) :
     location instr option =
   match i.desc with
   | Block { label = Some c0; typ; block } when is_void typ -> (
-      match descend block with
+      match descend block.desc with
       | Some (inner_arms, br_labels, index) -> (
           match List.rev br_labels with
           | default :: rev_cases ->
@@ -99,16 +100,17 @@ and try_fold (i : location instr) (trailing : location instr list) :
 and rewrite_desc (desc : location instr_desc) : location instr_desc =
   match desc with
   | Block { label; typ; block } ->
-      Block { label; typ; block = rewrite_list block }
+      Block
+        { label; typ; block = { block with desc = rewrite_list block.desc } }
   | Loop { label; typ; block } ->
-      Loop { label; typ; block = rewrite_list block }
+      Loop { label; typ; block = { block with desc = rewrite_list block.desc } }
   | While { label; cond; step; block } ->
       While
         {
           label;
           cond = rewrite_instr cond;
           step = Option.map rewrite_instr step;
-          block = rewrite_list block;
+          block = { block with desc = rewrite_list block.desc };
         }
   | If { label; typ; cond; if_block; else_block } ->
       If
@@ -123,13 +125,19 @@ and rewrite_desc (desc : location instr_desc) : location instr_desc =
               else_block;
         }
   | TryTable { label; typ; catches; block } ->
-      TryTable { label; typ; catches; block = rewrite_list block }
+      TryTable
+        {
+          label;
+          typ;
+          catches;
+          block = { block with desc = rewrite_list block.desc };
+        }
   | Try { label; typ; block; catches; catch_all } ->
       Try
         {
           label;
           typ;
-          block = rewrite_list block;
+          block = { block with desc = rewrite_list block.desc };
           catches = List.map (fun (t, l) -> (t, rewrite_list l)) catches;
           catch_all = Option.map rewrite_list catch_all;
         }

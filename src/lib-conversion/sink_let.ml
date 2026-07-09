@@ -13,14 +13,14 @@ let rec occurs name i =
   | Tee (id, e) -> String.equal id.desc name || occurs name e
   | Set (id, _, e) -> String.equal id.desc name || occurs name e
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
-      in_list block
+      in_list block.desc
   | While { cond; step; block; _ } ->
-      occurs name cond || in_opt step || in_list block
+      occurs name cond || in_opt step || in_list block.desc
   | If { cond; if_block; else_block; _ } -> (
       occurs name cond || in_list if_block.desc
       || match else_block with Some b -> in_list b.desc | None -> false)
   | Try { block; catches; catch_all; _ } -> (
-      in_list block
+      in_list block.desc
       || List.exists (fun (_, b) -> in_list b) catches
       || match catch_all with Some b -> in_list b | None -> false)
   | Call (t, args) | TailCall (t, args) -> occurs name t || in_list args
@@ -142,16 +142,17 @@ let rec first_access name i =
   | Set (id, _, e) ->
       fst2 (first_access name e)
         (if String.equal id.desc name then Some `Write else None)
-  | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } -> fl block
+  | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
+      fl block.desc
   | While { cond; step; block; _ } ->
       (* One iteration reads [cond], then the body, then the step. *)
-      fst2 (first_access name cond) (fst2 (fl block) (fo step))
+      fst2 (first_access name cond) (fst2 (fl block.desc) (fo step))
   | If { cond; if_block; else_block; _ } ->
       fst2 (first_access name cond)
         (agree (fl if_block.desc)
            (match else_block with Some b -> fl b.desc | None -> None))
   | Try { block; catches; catch_all; _ } ->
-      fst2 (fl block)
+      fst2 (fl block.desc)
         (List.fold_left
            (fun acc (_, b) -> agree acc (fl b))
            (match catch_all with Some b -> fl b | None -> None)
@@ -250,6 +251,7 @@ let loop_carried name l = first_access_list name l = Some `Read
    [If_annotation] branch, so those are never entered. *)
 let rec sink_into ((name, _) as decl) s =
   let bl block = sink_decl decl block in
+  let bl_loc block = { block with desc = sink_decl decl block.desc } in
   let occ e = occurs name.desc e in
   (* Recurse into the unique sub-expression of [s] holding every use of the
      local and rebuild [s] around the result. With all uses in one operand no
@@ -271,19 +273,20 @@ let rec sink_into ((name, _) as decl) s =
       l
   in
   match s.desc with
-  | Block r -> Some { s with desc = Block { r with block = bl r.block } }
+  | Block r -> Some { s with desc = Block { r with block = bl_loc r.block } }
   | Loop r ->
       (* A loop re-enters its body, so a value carried across iterations pins
          the declaration outside it (see [loop_carried]). *)
-      if loop_carried name.desc r.block then None
-      else Some { s with desc = Loop { r with block = bl r.block } }
-  | TryTable r -> Some { s with desc = TryTable { r with block = bl r.block } }
+      if loop_carried name.desc r.block.desc then None
+      else Some { s with desc = Loop { r with block = bl_loc r.block } }
+  | TryTable r ->
+      Some { s with desc = TryTable { r with block = bl_loc r.block } }
   | While r -> (
       if
         (* The test is evaluated in the enclosing scope (re-checked each
          iteration), so a use there pins the declaration outside the loop; so
          does a value the body carries across iterations. *)
-        occurs name.desc r.cond || loop_carried name.desc r.block
+        occurs name.desc r.cond || loop_carried name.desc r.block.desc
       then None
       else
         match r.step with
@@ -297,7 +300,7 @@ let rec sink_into ((name, _) as decl) s =
             match r.label with
             | Some _ -> None
             | None -> (
-                match List.rev (sink_decl decl (r.block @ [ step ])) with
+                match List.rev (sink_decl decl (r.block.desc @ [ step ])) with
                 | step' :: rev_block ->
                     Some
                       {
@@ -306,12 +309,12 @@ let rec sink_into ((name, _) as decl) s =
                           While
                             {
                               r with
-                              block = List.rev rev_block;
+                              block = { r.block with desc = List.rev rev_block };
                               step = Some step';
                             };
                       }
                 | [] -> None))
-        | _ -> Some { s with desc = While { r with block = bl r.block } })
+        | _ -> Some { s with desc = While { r with block = bl_loc r.block } })
   | If r ->
       (* The condition is evaluated in the enclosing scope, so a use there
          pins the declaration outside the [If]; a use in both branches cannot
@@ -351,7 +354,7 @@ let rec sink_into ((name, _) as decl) s =
             }
         else None
   | Try r ->
-      let in_block = list_occurs name.desc r.block in
+      let in_block = list_occurs name.desc r.block.desc in
       let n_catches =
         List.length
           (List.filter (fun (_, b) -> list_occurs name.desc b) r.catches)
@@ -366,7 +369,7 @@ let rec sink_into ((name, _) as decl) s =
       in
       if count <> 1 then None
       else if in_block then
-        Some { s with desc = Try { r with block = bl r.block } }
+        Some { s with desc = Try { r with block = bl_loc r.block } }
       else if in_all then
         Some
           { s with desc = Try { r with catch_all = Option.map bl r.catch_all } }

@@ -2684,18 +2684,18 @@ let rec collect_assigned_locals acc i =
   | Set (id, _, e) | Tee (id, e) ->
       collect_assigned_locals (StringSet.add id.desc acc) e
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
-      in_list acc block
+      in_list acc block.desc
   | While { cond; step; block; _ } ->
       let acc = collect_assigned_locals acc cond in
       let acc =
         Option.fold ~none:acc ~some:(collect_assigned_locals acc) step
       in
-      in_list acc block
+      in_list acc block.desc
   | If { cond; if_block; else_block; _ } ->
       let acc = in_list (collect_assigned_locals acc cond) if_block.desc in
       Option.fold ~none:acc ~some:(fun b -> in_list acc b.desc) else_block
   | Try { block; catches; catch_all; _ } ->
-      let acc = in_list acc block in
+      let acc = in_list acc block.desc in
       let acc = List.fold_left (fun acc (_, b) -> in_list acc b) acc catches in
       Option.fold ~none:acc ~some:(in_list acc) catch_all
   | Call (t, args) | TailCall (t, args) ->
@@ -2786,16 +2786,16 @@ let rec collect_labels acc (i : _ Ast.instr) =
   | Block { label; block; _ }
   | Loop { label; block; _ }
   | TryTable { label; block; _ } ->
-      in_list (add acc label) block
+      in_list (add acc label) block.desc
   | While { label; cond; step; block; _ } ->
       let acc = collect_labels (add acc label) cond in
       let acc = Option.fold ~none:acc ~some:(collect_labels acc) step in
-      in_list acc block
+      in_list acc block.desc
   | If { label; cond; if_block; else_block; _ } ->
       let acc = in_list (collect_labels (add acc label) cond) if_block.desc in
       Option.fold ~none:acc ~some:(fun b -> in_list acc b.desc) else_block
   | Try { label; block; catches; catch_all; _ } ->
-      let acc = in_list (add acc label) block in
+      let acc = in_list (add acc label) block.desc in
       let acc = List.fold_left (fun acc (_, b) -> in_list acc b) acc catches in
       Option.fold ~none:acc ~some:(in_list acc) catch_all
   | Call (t, args) | TailCall (t, args) -> in_list (collect_labels acc t) args
@@ -2996,7 +2996,7 @@ let rec lint_source ctx (i : _ Ast.instr) =
       lint_condition ctx ~is_while:true cond;
       lint_source ctx cond;
       opt step;
-      list block
+      list block.desc
   | Select (c, t, e) ->
       lint_condition ctx c;
       lint_eager_select ctx ~select:i.info t;
@@ -3007,9 +3007,10 @@ let rec lint_source ctx (i : _ Ast.instr) =
   | Br_if (_, c) ->
       lint_condition ctx c;
       lint_source ctx c
-  | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } -> list block
+  | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
+      list block.desc
   | Try { block; catches; catch_all; _ } ->
-      list block;
+      list block.desc;
       List.iter (fun (_, b) -> list b) catches;
       Option.iter list catch_all
   | Call (t, args) | TailCall (t, args) ->
@@ -3830,7 +3831,7 @@ let anon_function_type ctx (sign : functype) =
    lowering we just type-checked guarantees the shape. *)
 let extract_dispatch wrapper k =
   let body_of w =
-    match w.desc with Ast.Block { block; _ } -> block | _ -> assert false
+    match w.desc with Ast.Block { block; _ } -> block.desc | _ -> assert false
   in
   let rec peel block n =
     if n = 0 then
@@ -3872,7 +3873,9 @@ let rebuild_while ~stepped ~labelled typed_list =
   match typed_list with
   | [
    {
-     desc = Ast.Loop { block = [ { desc = If { cond; if_block; _ }; _ } ]; _ };
+     desc =
+       Ast.Loop
+         { block = { desc = [ { desc = If { cond; if_block; _ }; _ } ]; _ }; _ };
      _;
    };
   ] -> (
@@ -3881,7 +3884,9 @@ let rebuild_while ~stepped ~labelled typed_list =
       | true, true -> (
           match if_block.desc with
           | [
-           { desc = Ast.Block { block = body; _ }; _ }; step; { desc = Br _; _ };
+           { desc = Ast.Block { block = { desc = body; _ }; _ }; _ };
+           step;
+           { desc = Br _; _ };
           ] ->
               (cond, Some step, body)
           | _ -> assert false)
@@ -3908,7 +3913,7 @@ let rebuild_match typed_list arms =
   | _ ->
       let block_body blk =
         match blk.desc with
-        | Ast.Block { block; _ } -> block
+        | Ast.Block { block; _ } -> block.desc
         | _ -> assert false
       in
       (* Strip a wrapper block's leading consume of its inner block, returning
@@ -5692,7 +5697,7 @@ and type_block_construct ctx i =
      try, try_table), which type their bodies and results through the
      block-inference helpers. *)
   match i.desc with
-  | Block { label; typ; block = instrs } -> (
+  | Block { label; typ; block = { desc = instrs; _ } as blkloc } -> (
       (* An expression-position block draws nothing from a stack, so a parameter
          type has no source; report it, then recover by supplying the declared
          parameters anyway so the body does not underflow into spurious "stack
@@ -5703,7 +5708,7 @@ and type_block_construct ctx i =
          on [simplify] drop) its result type, admitting branches to its own
          label (unlike [if]). An omitted annotation is therefore always a dropped
          single result, never a void block. *)
-      match block_inference ctx i label typ ~instrs with
+      match block_inference ctx i label typ ~instrs:blkloc with
       | Some (desc, results) -> return_statement i desc results
       | None ->
           let*! params =
@@ -5711,7 +5716,9 @@ and type_block_construct ctx i =
           in
           let*! results = array_map_opt (internalize ctx) typ.results in
           let instrs' = block ctx i.info label params results results instrs in
-          return_statement i (Block { label; typ; block = instrs' }) results)
+          return_statement i
+            (Block { label; typ; block = { blkloc with desc = instrs' } })
+            results)
   | Dispatch { index; cases; default; arms } ->
       (* The case (arm) labels become distinct block labels in the lowering and
          key the arm bodies, so they must be distinct. *)
@@ -5764,10 +5771,10 @@ and type_block_construct ctx i =
       return_statement i
         (Match { scrutinee = scrut'; arms = arms'; default = default' })
         [||]
-  | Loop { label; typ; block = instrs } -> (
+  | Loop { label; typ; block = { desc = instrs; _ } as blkloc } -> (
       if Array.length typ.params > 0 then
         Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
-      match loop_inference ctx i label typ ~instrs with
+      match loop_inference ctx i label typ ~instrs:blkloc with
       | Some (desc, results) -> return_statement i desc results
       | None ->
           let*! params =
@@ -5775,8 +5782,10 @@ and type_block_construct ctx i =
           in
           let*! results = array_map_opt (internalize ctx) typ.results in
           let instrs' = block ctx i.info label params results params instrs in
-          return_statement i (Loop { label; typ; block = instrs' }) results)
-  | While { label; cond; step; block = instrs } ->
+          return_statement i
+            (Loop { label; typ; block = { blkloc with desc = instrs' } })
+            results)
+  | While { label; cond; step; block = { desc = instrs; _ } as blkloc } ->
       (* Type-check the equivalent loop (see [Ast_utils.lower_while]): this
          validates that [cond] is an [i32], the continue-expression and body are
          well-typed, and — for a labelled step — that a [br] to the loop label
@@ -5793,7 +5802,13 @@ and type_block_construct ctx i =
         rebuild_while ~stepped:(step <> None) ~labelled:(label <> None) typed
       in
       return_statement i
-        (While { label; cond = cond'; step = step'; block = instrs' })
+        (While
+           {
+             label;
+             cond = cond';
+             step = step';
+             block = { blkloc with desc = instrs' };
+           })
         [||]
   | If { label; typ; cond; if_block; else_block } -> (
       let* cond' = instruction ctx cond in
@@ -5854,10 +5869,10 @@ and type_block_construct ctx i =
       return_statement i
         (If_annotation { cond; then_body = then_body'; else_body = else_body' })
         [||]
-  | TryTable { label; typ; block = body; catches } -> (
+  | TryTable { label; typ; block = { desc = body; _ } as blkloc; catches } -> (
       if Array.length typ.params > 0 then
         Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
-      match trytable_inference ctx i label typ ~body ~catches with
+      match trytable_inference ctx i label typ ~body:blkloc ~catches with
       | Some (desc, results) -> return_statement i desc results
       | None ->
           let*! params =
@@ -5867,11 +5882,13 @@ and type_block_construct ctx i =
           let body' = block ctx i.info label params results results body in
           check_trytable_catches ctx catches;
           return_statement i
-            (TryTable { label; typ; block = body'; catches })
+            (TryTable
+               { label; typ; block = { blkloc with desc = body' }; catches })
             results)
-  | Try { label; typ; block = body; catches; catch_all } -> (
+  | Try { label; typ; block = { desc = body; _ } as blkloc; catches; catch_all }
+    -> (
       assert (typ.params = [||]);
-      match try_inference ctx i label typ ~body ~catches ~catch_all with
+      match try_inference ctx i label typ ~body:blkloc ~catches ~catch_all with
       | Some (desc, results) -> return_statement i desc results
       | None ->
           let*! results = array_map_opt (internalize ctx) typ.results in
@@ -5880,7 +5897,14 @@ and type_block_construct ctx i =
             type_try_catches ctx i label ~results catches catch_all
           in
           return_statement i
-            (Try { label; typ; block = body'; catches; catch_all })
+            (Try
+               {
+                 label;
+                 typ;
+                 block = { blkloc with desc = body' };
+                 catches;
+                 catch_all;
+               })
             results)
   | _ -> assert false (* only invoked on a block-like construct *)
 
@@ -7176,7 +7200,8 @@ and check_instruction ?(drop_supertype = false) ctx expected
      [true]: unlike an [if], the value may arrive via a branch the cheap
      fall-through test would miss, so a surrounding binding annotation is kept —
      safe, at worst occasionally redundant. *)
-  | Block { label; typ; block = instrs } when has_expectation expected ->
+  | Block { label; typ; block = { desc = instrs; _ } as blkloc }
+    when has_expectation expected ->
       if Array.length typ.params > 0 then
         Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
       let result_cell = context_result_cell ctx typ ~expected in
@@ -7189,11 +7214,12 @@ and check_instruction ?(drop_supertype = false) ctx expected
       let typ = context_block_typ ctx typ ~expected ~result_cell in
       let* node =
         return_statement i
-          (Block { label; typ; block = instrs' })
+          (Block { label; typ; block = { blkloc with desc = instrs' } })
           [| result_cell |]
       in
       return (node, needed)
-  | Loop { label; typ; block = instrs } when has_expectation expected ->
+  | Loop { label; typ; block = { desc = instrs; _ } as blkloc }
+    when has_expectation expected ->
       if Array.length typ.params > 0 then
         Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
       let result_cell = context_result_cell ctx typ ~expected in
@@ -7210,12 +7236,12 @@ and check_instruction ?(drop_supertype = false) ctx expected
       let typ = context_block_typ ctx typ ~expected ~result_cell in
       let* node =
         return_statement i
-          (Loop { label; typ; block = instrs' })
+          (Loop { label; typ; block = { blkloc with desc = instrs' } })
           [| result_cell |]
       in
       return (node, needed)
-  | TryTable { label; typ; block = body; catches } when has_expectation expected
-    ->
+  | TryTable { label; typ; block = { desc = body; _ } as blkloc; catches }
+    when has_expectation expected ->
       if Array.length typ.params > 0 then
         Error.parameterized_block_expression ctx.diagnostics ~location:i.info;
       let result_cell = context_result_cell ctx typ ~expected in
@@ -7231,11 +7257,12 @@ and check_instruction ?(drop_supertype = false) ctx expected
       let typ = context_block_typ ctx typ ~expected ~result_cell in
       let* node =
         return_statement i
-          (TryTable { label; typ; block = body'; catches })
+          (TryTable
+             { label; typ; block = { blkloc with desc = body' }; catches })
           [| result_cell |]
       in
       return (node, needed)
-  | Try { label; typ; block = body; catches; catch_all }
+  | Try { label; typ; block = { desc = body; _ } as blkloc; catches; catch_all }
     when has_expectation expected ->
       assert (typ.params = [||]);
       let result_cell = context_result_cell ctx typ ~expected in
@@ -7255,7 +7282,14 @@ and check_instruction ?(drop_supertype = false) ctx expected
       let typ = context_block_typ ctx typ ~expected ~result_cell in
       let* node =
         return_statement i
-          (Try { label; typ; block = body'; catches; catch_all })
+          (Try
+             {
+               label;
+               typ;
+               block = { blkloc with desc = body' };
+               catches;
+               catch_all;
+             })
           [| result_cell |]
       in
       return (node, needed)
@@ -7601,22 +7635,26 @@ and instructions ctx l : _ -> _ * _ list =
 and toplevel_instruction ctx i : stack -> stack * 'b =
   if debug then Format.eprintf "%a@." Output.instr i;
   match i.desc with
-  | Block { label; typ; block = instrs } ->
+  | Block { label; typ; block = { desc = instrs; _ } as blkloc } ->
       let*! params =
         array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
       in
       let*! results = array_map_opt (internalize ctx) typ.results in
       let* () = pop_args ctx ~location:i.info params in
       let instrs' = block ctx i.info label params results results instrs in
-      return_statement i (Block { label; typ; block = instrs' }) results
-  | Loop { label; typ; block = instrs } ->
+      return_statement i
+        (Block { label; typ; block = { blkloc with desc = instrs' } })
+        results
+  | Loop { label; typ; block = { desc = instrs; _ } as blkloc } ->
       let*! params =
         array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
       in
       let*! results = array_map_opt (internalize ctx) typ.results in
       let* () = pop_args ctx ~location:i.info params in
       let instrs' = block ctx i.info label params results params instrs in
-      return_statement i (Loop { label; typ; block = instrs' }) results
+      return_statement i
+        (Loop { label; typ; block = { blkloc with desc = instrs' } })
+        results
   | If { label; typ; cond; if_block; else_block } ->
       (* A statement-position [if] is void (a value-producing one is consumed by
          its context, so it is typed in expression position). Like a
@@ -7652,7 +7690,7 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
             None
       in
       return_statement i (If { label; typ; cond; if_block; else_block }) results
-  | TryTable { label; typ; block = body; catches } ->
+  | TryTable { label; typ; block = { desc = body; _ } as blkloc; catches } ->
       let*! params =
         array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
       in
@@ -7661,9 +7699,10 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
       let body' = block ctx i.info label params results results body in
       check_trytable_catches ctx catches;
       return_statement i
-        (TryTable { label; typ; block = body'; catches })
+        (TryTable { label; typ; block = { blkloc with desc = body' }; catches })
         results
-  | Try { label; typ; block = body; catches; catch_all } ->
+  | Try { label; typ; block = { desc = body; _ } as blkloc; catches; catch_all }
+    ->
       let*! params =
         array_map_opt (fun p -> internalize ctx (snd p.desc)) typ.params
       in
@@ -7674,7 +7713,14 @@ and toplevel_instruction ctx i : stack -> stack * 'b =
         type_try_catches ctx i label ~results catches catch_all
       in
       return_statement i
-        (Try { label; typ; block = body'; catches; catch_all })
+        (Try
+           {
+             label;
+             typ;
+             block = { blkloc with desc = body' };
+             catches;
+             catch_all;
+           })
         results
   | Nop -> return_statement i Nop [||]
   | Unreachable -> return_statement i Unreachable [||] |> unreachable
@@ -8289,8 +8335,8 @@ and infer_block_applies ctx typ =
    shape, with one body. *)
 and block_inference ctx i label typ ~instrs =
   infer_synthesized ctx i typ ~type_body:(fun ~cs ~r ->
-      let body' = collect_into ctx i.info label ~cs ~r instrs in
-      fun typ -> Block { label; typ; block = body' })
+      let body' = collect_into ctx i.info label ~cs ~r instrs.desc in
+      fun typ -> Block { label; typ; block = { instrs with desc = body' } })
 
 (* Expression-position synthesis inference for [loop]/[try]/[try_table], the
    analogue of [block_inference] for [do]. Type the body (and, for [try], the
@@ -8301,24 +8347,27 @@ and block_inference ctx i label typ ~instrs =
    loop's value is only its fall-through; the others deliver to their label. *)
 and loop_inference ctx i label typ ~instrs =
   infer_synthesized ctx i typ ~type_body:(fun ~cs:_ ~r ->
-      let instrs' = block ctx i.info label [||] [| r |] [||] instrs in
-      fun typ -> Loop { label; typ; block = instrs' })
+      let instrs' = block ctx i.info label [||] [| r |] [||] instrs.desc in
+      fun typ -> Loop { label; typ; block = { instrs with desc = instrs' } })
 
 and trytable_inference ctx i label typ ~body ~catches =
   infer_synthesized ctx i typ ~type_body:(fun ~cs:_ ~r ->
       let results = [| r |] in
-      let body' = block ctx i.info label [||] results results body in
+      let body' = block ctx i.info label [||] results results body.desc in
       check_trytable_catches ctx catches;
-      fun typ -> TryTable { label; typ; block = body'; catches })
+      fun typ ->
+        TryTable { label; typ; block = { body with desc = body' }; catches })
 
 and try_inference ctx i label typ ~body ~catches ~catch_all =
   infer_synthesized ctx i typ ~type_body:(fun ~cs:_ ~r ->
       let results = [| r |] in
-      let body' = block ctx i.info label [||] results results body in
+      let body' = block ctx i.info label [||] results results body.desc in
       let catches, catch_all =
         type_try_catches ctx i label ~results catches catch_all
       in
-      fun typ -> Try { label; typ; block = body'; catches; catch_all })
+      fun typ ->
+        Try
+          { label; typ; block = { body with desc = body' }; catches; catch_all })
 
 (*** Module type and constant checking ***)
 
@@ -9364,16 +9413,17 @@ let rec instr_has_conditional (i : (_ instr_desc, _) annotated) =
   let opt = Option.fold ~none:false ~some:instr_has_conditional in
   match i.desc with
   | If_annotation _ -> true
-  | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } -> any block
+  | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
+      any block.desc
   | While { cond; step; block; _ } ->
       instr_has_conditional cond
       || Option.fold ~none:false ~some:instr_has_conditional step
-      || any block
+      || any block.desc
   | If { cond; if_block; else_block; _ } ->
       instr_has_conditional cond || any if_block.desc
       || Option.fold ~none:false ~some:(fun b -> any b.desc) else_block
   | Try { block; catches; catch_all; _ } ->
-      any block
+      any block.desc
       || List.exists (fun (_, l) -> any l) catches
       || Option.fold ~none:false ~some:any catch_all
   | Sequence l -> any l
@@ -9497,16 +9547,18 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
   and sdesc asm (desc : _ instr_desc) : _ instr_desc =
     match desc with
     | Block { label; typ; block } ->
-        Block { label; typ; block = sinstrs asm block }
+        Block
+          { label; typ; block = { block with desc = sinstrs asm block.desc } }
     | Loop { label; typ; block } ->
-        Loop { label; typ; block = sinstrs asm block }
+        Loop
+          { label; typ; block = { block with desc = sinstrs asm block.desc } }
     | While { label; cond; step; block } ->
         While
           {
             label;
             cond = sone asm cond;
             step = Option.map (sone asm) step;
-            block = sinstrs asm block;
+            block = { block with desc = sinstrs asm block.desc };
           }
     | If { label; typ; cond; if_block; else_block } ->
         If
@@ -9521,13 +9573,19 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
                 else_block;
           }
     | TryTable { label; typ; catches; block } ->
-        TryTable { label; typ; catches; block = sinstrs asm block }
+        TryTable
+          {
+            label;
+            typ;
+            catches;
+            block = { block with desc = sinstrs asm block.desc };
+          }
     | Try { label; typ; block; catches; catch_all } ->
         Try
           {
             label;
             typ;
-            block = sinstrs asm block;
+            block = { block with desc = sinstrs asm block.desc };
             catches = List.map (fun (t, l) -> (t, sinstrs asm l)) catches;
             catch_all = Option.map (sinstrs asm) catch_all;
           }
@@ -9634,13 +9692,15 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
    traversals. *)
 let sub_instrs (i : (_ instr_desc, _) annotated) =
   match i.desc with
-  | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } -> block
-  | While { cond; step; block; _ } -> (cond :: Option.to_list step) @ block
+  | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } -> block.desc
+  | While { cond; step; block; _ } -> (cond :: Option.to_list step) @ block.desc
   | If { cond; if_block; else_block; _ } ->
       (cond :: if_block.desc)
       @ Option.fold ~none:[] ~some:(fun b -> b.desc) else_block
   | Try { block; catches; catch_all; _ } ->
-      block @ List.concat_map snd catches @ Option.value ~default:[] catch_all
+      block.desc
+      @ List.concat_map snd catches
+      @ Option.value ~default:[] catch_all
   | If_annotation { then_body; else_body; _ } ->
       then_body @ Option.value ~default:[] else_body
   | Sequence l | ArrayFixed (_, l) -> l

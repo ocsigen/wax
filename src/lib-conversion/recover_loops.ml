@@ -50,14 +50,15 @@ let rec refs_instr name (i : location instr) : bool =
       refs_instr name scrutinee
       || List.exists (fun (_, b) -> any b) arms
       || any default
-  | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } -> any block
+  | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
+      any block.desc
   | While { cond; step; block; _ } ->
-      refs_instr name cond || opt step || any block
+      refs_instr name cond || opt step || any block.desc
   | If { cond; if_block; else_block; _ } -> (
       refs_instr name cond || any if_block.desc
       || match else_block with Some b -> any b.desc | None -> false)
   | Try { block; catches; catch_all; _ } -> (
-      any block
+      any block.desc
       || List.exists (fun (_, b) -> any b) catches
       || match catch_all with Some b -> any b | None -> false)
   | If_annotation { then_body; else_body; _ } -> (
@@ -129,7 +130,7 @@ let rec reads_var name (i : location instr) : bool =
   | Call (f, args) | TailCall (f, args) -> reads_var name f || any args
   | Tee (id, e) -> String.equal id.desc name || reads_var name e
   | Set (id, _, e) -> String.equal id.desc name || reads_var name e
-  | Block { block; _ } | Loop { block; _ } -> any block
+  | Block { block; _ } | Loop { block; _ } -> any block.desc
   | If { cond; if_block; else_block; _ } -> (
       reads_var name cond || any if_block.desc
       || match else_block with Some b -> any b.desc | None -> false)
@@ -138,7 +139,7 @@ let rec reads_var name (i : location instr) : bool =
 (* Fold an already-rewritten void [loop] labelled [l] into a [while] when its
    body is the leading-test shape, else leave it a [loop]. *)
 let fold_loop l typ block =
-  match block with
+  match block.desc with
   (* Leading test: the body is a single label-less void [if] with no else whose
      own body ends in the back-edge. *)
   | [
@@ -163,7 +164,7 @@ let fold_loop l typ block =
           ]
             when is_void bt
                  && (not (String.equal blk.desc l.desc))
-                 && refs_list blk.desc inner ->
+                 && refs_list blk.desc inner.desc ->
               While { label = Some blk; cond; step = Some step; block = inner }
           | _ -> (
               let label = keep_label l cond body in
@@ -183,9 +184,16 @@ let fold_loop l typ block =
                       label = None;
                       cond;
                       step = Some step;
-                      block = List.rev rev_rest;
+                      block = { block with desc = List.rev rev_rest };
                     }
-              | _ -> While { label; cond; step = None; block = body }))
+              | _ ->
+                  While
+                    {
+                      label;
+                      cond;
+                      step = None;
+                      block = { block with desc = body };
+                    }))
       | _ -> Loop { label = Some l; typ; block })
   | _ -> Loop { label = Some l; typ; block }
 
@@ -197,18 +205,19 @@ and rewrite_list l = List.map rewrite_instr l
 and rewrite_desc (desc : location instr_desc) : location instr_desc =
   match desc with
   | Loop { label = Some l; typ; block } when is_void typ ->
-      fold_loop l typ (rewrite_list block)
+      fold_loop l typ { block with desc = rewrite_list block.desc }
   | Loop { label; typ; block } ->
-      Loop { label; typ; block = rewrite_list block }
+      Loop { label; typ; block = { block with desc = rewrite_list block.desc } }
   | Block { label; typ; block } ->
-      Block { label; typ; block = rewrite_list block }
+      Block
+        { label; typ; block = { block with desc = rewrite_list block.desc } }
   | While { label; cond; step; block } ->
       While
         {
           label;
           cond = rewrite_instr cond;
           step = Option.map rewrite_instr step;
-          block = rewrite_list block;
+          block = { block with desc = rewrite_list block.desc };
         }
   | If { label; typ; cond; if_block; else_block } ->
       If
@@ -223,13 +232,19 @@ and rewrite_desc (desc : location instr_desc) : location instr_desc =
               else_block;
         }
   | TryTable { label; typ; catches; block } ->
-      TryTable { label; typ; catches; block = rewrite_list block }
+      TryTable
+        {
+          label;
+          typ;
+          catches;
+          block = { block with desc = rewrite_list block.desc };
+        }
   | Try { label; typ; block; catches; catch_all } ->
       Try
         {
           label;
           typ;
-          block = rewrite_list block;
+          block = { block with desc = rewrite_list block.desc };
           catches = List.map (fun (t, l) -> (t, rewrite_list l)) catches;
           catch_all = Option.map rewrite_list catch_all;
         }

@@ -1599,7 +1599,13 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       let* () = Stack.consume inputs in
       Stack.push
         (if inputs > 0 then 0 else outputs)
-        (with_loc (Block { label = label (); typ = blocktype ctx typ; block }))
+        (with_loc
+           (Block
+              {
+                label = label ();
+                typ = blocktype ctx typ;
+                block = Ast.no_loc block;
+              }))
   | Loop { label; typ; block } ->
       let label, ctx =
         push_label ctx ~loop:true ~targeted:(label_targeted block) label typ
@@ -1609,7 +1615,13 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       let* () = Stack.consume inputs in
       Stack.push
         (if inputs > 0 then 0 else outputs)
-        (with_loc (Loop { label = label (); typ = blocktype ctx typ; block }))
+        (with_loc
+           (Loop
+              {
+                label = label ();
+                typ = blocktype ctx typ;
+                block = Ast.no_loc block;
+              }))
   | If { label; typ; if_block; else_block } ->
       let label, ctx =
         push_label ctx ~loop:false
@@ -1667,7 +1679,12 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
         (if inputs > 0 then 0 else outputs)
         (with_loc
            (TryTable
-              { label = labl (); typ = blocktype ctx typ; block; catches }))
+              {
+                label = labl ();
+                typ = blocktype ctx typ;
+                block = Ast.no_loc block;
+                catches;
+              }))
   | Try { label; typ; block; catches; catch_all } ->
       (* A [br] out of the try's body or any of its handler blocks targets the
          one try scope, so all of them bear on whether this label renders. *)
@@ -1696,7 +1713,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
               {
                 label = label ();
                 typ = blocktype ctx typ;
-                block;
+                block = Ast.no_loc block;
                 catches;
                 catch_all;
               }))

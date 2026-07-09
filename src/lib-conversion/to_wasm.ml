@@ -385,12 +385,12 @@ let labels_in_list l =
     match i.desc with
     | Block { label; block; _ } | Loop { label; block; _ } ->
         add label;
-        lst block
+        lst block.desc
     | While { label; cond; step; block } ->
         add label;
         instr cond;
         opt step;
-        lst block
+        lst block.desc
     | If { label; cond; if_block; else_block; _ } ->
         add label;
         instr cond;
@@ -398,10 +398,10 @@ let labels_in_list l =
         Option.iter (fun b -> lst b.desc) else_block
     | TryTable { label; block; _ } ->
         add label;
-        lst block
+        lst block.desc
     | Try { label; block; catches; catch_all; _ } ->
         add label;
-        lst block;
+        lst block.desc;
         List.iter (fun (_, b) -> lst b) catches;
         Option.iter lst catch_all
     | Dispatch { index; arms; _ } ->
@@ -648,13 +648,13 @@ and instruction_desc ret ctx i : location Text.instr list =
   | Block { label; typ; block = body } ->
       let inner_ctx = { ctx with locals = ctx.locals } in
       let block =
-        List.concat_map (instruction (push ret label) inner_ctx) body
+        List.concat_map (instruction (push ret label) inner_ctx) body.desc
       in
       folded loc (Block { label; typ = blocktype typ; block }) []
   | Loop { label; typ; block = body } ->
       let inner_ctx = { ctx with locals = ctx.locals } in
       let block =
-        List.concat_map (instruction (push ret label) inner_ctx) body
+        List.concat_map (instruction (push ret label) inner_ctx) body.desc
       in
       folded loc (Loop { label; typ = blocktype typ; block }) []
   | If { label; typ; cond; if_block; else_block } ->
@@ -686,7 +686,7 @@ and instruction_desc ret ctx i : location Text.instr list =
   | TryTable { label = labl; typ; block; catches } ->
       let inner_ctx = { ctx with locals = ctx.locals } in
       let block =
-        List.concat_map (instruction (push ret labl) inner_ctx) block
+        List.concat_map (instruction (push ret labl) inner_ctx) block.desc
       in
       let catches =
         List.map
@@ -704,7 +704,7 @@ and instruction_desc ret ctx i : location Text.instr list =
   | Try { label; typ; block; catches; catch_all } ->
       let inner_ctx = { ctx with locals = ctx.locals } in
       let block =
-        List.concat_map (instruction (push ret label) inner_ctx) block
+        List.concat_map (instruction (push ret label) inner_ctx) block.desc
       in
       let catches =
         List.map
@@ -1643,12 +1643,12 @@ and instruction_desc ret ctx i : location Text.instr list =
          into [ret]), any label nested in the body, and the user's own label. *)
       let avoid =
         (match label with Some l -> [ l.desc ] | None -> [])
-        @ labels_in_list ((cond :: Option.to_list step) @ block)
+        @ labels_in_list ((cond :: Option.to_list step) @ block.desc)
       in
       let fresh_loop = Ast.no_loc (fresh_loop_label ret avoid) in
       List.concat_map (instruction ret ctx)
         (Wax_lang.Ast_utils.lower_while ~block_info:i.info ~fresh_loop ~label
-           ~cond ~step ~block)
+           ~cond ~step ~block:block.desc)
   | Match { scrutinee; arms; default } ->
       (* Lower to the nested type-test ladder (see [Ast_utils.lower_match]) and
          convert each statement. Readable [arm]/[default] labels (one per arm,
