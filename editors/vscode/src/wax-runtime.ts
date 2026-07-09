@@ -68,12 +68,13 @@ async function bootstrap(
 
   let restoreFetch: (() => void) | undefined;
 
-  if (isNode) {
-    loaderSrc = loaderSrc
-      .split("require.main.filename")
-      .join("globalThis.__waxLoaderFile");
-    (globalThis as Record<string, unknown>).__waxLoaderFile = loaderUri.fsPath;
-  } else {
+  // The loader's Node branch resolves the .wasm relative to
+  // `require.main.filename` (VS Code's entry, not ours). Redirect it to this
+  // file's own path via `module.filename`, supplying a synthetic `module` below.
+  // Inert on web, where the Node branch never runs (no `process`).
+  loaderSrc = loaderSrc.split("require.main.filename").join("module.filename");
+
+  if (!isNode) {
     const wasmName = wasmNameFromLoader(loaderSrc);
     const wasmBytes = await vscode.workspace.fs.readFile(
       vscode.Uri.joinPath(assetsDir, wasmName),
@@ -82,10 +83,13 @@ async function bootstrap(
   }
 
   try {
-    // Run the loader in its own scope with `require` injected. It self-executes
-    // and, once the OCaml top-level finishes, installs globalThis.wax. The
-    // loader does not hand back its ready-promise, so poll for the export.
-    new Function("require", loaderSrc)(opts.nodeRequire);
+    // Run the loader in its own scope with `require` and a `module` (only its
+    // `filename` is used, by the redirect above) injected. It self-executes and,
+    // once the OCaml top-level finishes, installs globalThis.wax; the loader does
+    // not hand back its ready-promise, so poll for the export.
+    new Function("require", "module", loaderSrc)(opts.nodeRequire, {
+      filename: loaderUri.fsPath,
+    });
     return await waitForGlobal<Wax>("wax", 10000);
   } finally {
     // The .wasm is fetched during instantiation, before the export appears, so
