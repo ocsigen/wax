@@ -1,0 +1,11 @@
+; The Wax formatter compiled to WebAssembly for the VS Code extension. It is a
+; wasm-only executable (no native/bytecode entry): running the generated loader
+; installs [globalThis.wax], which the extension calls to format on save. Built
+; explicitly by editors/vscode's package step, not installed.
+
+(executable
+ (name wax_format_js)
+ (modes wasm)
+ (libraries wax_wasm wax_lang js_of_ocaml)
+ (preprocess
+  (pps js_of_ocaml-ppx)))

@@ -1,13 +1,13 @@
 {
   "name": "wax",
   "displayName": "Wax",
-  "description": "Syntax highlighting for Wax, a Rust-like syntax for WebAssembly.",
+  "description": "Syntax highlighting and formatting for Wax, a Rust-like syntax for WebAssembly.",
   "icon": "images/wax.png",
   "galleryBanner": {
     "color": "#140D26",
     "theme": "dark"
   },
-  "version": "0.1.2",
+  "version": "0.2.0",
   "publisher": "wax-wasm",
   "license": "Apache-2.0",
   "author": "Jérôme Vouillon",
@@ -22,15 +22,30 @@
   "engines": {
     "vscode": "^1.60.0"
   },
-  "categories": ["Programming Languages"],
+  "categories": ["Programming Languages", "Formatters"],
   "keywords": ["wax", "webassembly", "wasm", "wat"],
+  "main": "./dist/extension.node.js",
+  "browser": "./dist/extension.web.js",
+  "activationEvents": ["onLanguage:wax"],
   "scripts": {
+    "build": "bash ./build.sh",
+    "typecheck": "tsc --noEmit",
+    "vscode:prepublish": "bash ./build.sh --minify",
     "package": "vsce package --no-dependencies"
   },
   "devDependencies": {
-    "@vscode/vsce": "^3.2.0"
+    "@types/node": "^18.19.0",
+    "@types/vscode": "^1.60.0",
+    "@vscode/vsce": "^3.2.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.5.0"
   },
   "contributes": {
+    "configurationDefaults": {
+      "[wax]": {
+        "editor.defaultFormatter": "wax-wasm.wax"
+      }
+    },
     "languages": [
       {
         "id": "wax",

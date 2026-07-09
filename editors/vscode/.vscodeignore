@@ -4,4 +4,8 @@ CONTRIBUTING.md
 node_modules/**
 package-lock.json
 test/**
+src/**
+build.sh
+esbuild.mjs
+tsconfig.json
 **/*.map

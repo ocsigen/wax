@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.0
+
+- Formatting: reformat `.wax` files with the Wax formatter, compiled to
+  WebAssembly and run in-process. Works via "Format Document" and "Format on
+  Save", in both the desktop and web extension hosts. A file that fails to parse
+  is left unchanged.
+
 ## 0.1.2
 
 - Follow the new import syntax: imports are written as `import "module" { … }`

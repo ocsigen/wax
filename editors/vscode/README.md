@@ -1,11 +1,15 @@
 # Wax for Visual Studio Code
 
-Syntax highlighting, bracket matching, and snippets for
+Syntax highlighting, formatting, bracket matching, and snippets for
 [Wax](https://github.com/ocsigen/wax) (a Rust-like syntax for
 WebAssembly) in `.wax` files.
 
 ## Features
 
+- **Formatting** with the Wax formatter itself, compiled to WebAssembly and run
+  in-process, so it works the same in desktop and web VS Code with no separate
+  install. Run "Format Document", or turn on "Format on Save"
+  (`editor.formatOnSave`). Files with syntax errors are left untouched.
 - **Syntax highlighting** via a TextMate grammar covering the full language:
   keywords and control flow (`fn`, `let`, `do`, `loop`, `match`, `dispatch`,
   `try`/`catch`, the `br*` branch family, stack-switching, …), primitive and
