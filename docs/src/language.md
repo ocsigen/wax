@@ -84,12 +84,17 @@ let b = 5_000_000_000;  // too big for i32 -> i64
 let c = 3.14;           // float literal -> f64
 ```
 
-Once a literal is used where only integers are allowed (a bitwise op, a shift,
-`ctz`, …) it commits to the **integer** family and can then only be `i32` or
-`i64`: it can no longer become a float by inference. These are *implicit*
-coercions; an explicit [`as` cast](#type-conversions) is broader and emits the
-conversion: e.g. an out-of-range constant `as i32` wraps to its low 32 bits, and
-an integer `as f64` converts.
+Wax performs **no implicit conversions** between numeric types. A numeric
+expression must be coherent: an operator's operands must share one type, so
+mixing an `i32` with an `i64`, or an integer with a float, does not type-check.
+A flexible literal is never converted; it simply takes the type that keeps its
+expression coherent. An operation that accepts only integers (a bitwise op, a
+shift, `ctz`, …) holds the flexible literals feeding it to the integer family,
+so they can only be `i32` or `i64`, never a float.
+
+Changing a value's type takes an explicit [`as` cast](#type-conversions), which
+emits the conversion: an out-of-range constant `as i32` wraps to its low 32
+bits, and an integer `as f64` converts.
 
 ### Floating Point
 
