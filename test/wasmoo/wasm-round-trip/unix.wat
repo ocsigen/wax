@@ -2438,7 +2438,6 @@
     (func $unix_isatty (export "unix_isatty") (export "caml_unix_isatty")
       (param (ref eq)) (result (ref eq))
       (ref.i31 (i32.const 0))))
-  (@else)
 )
 
 (@if $wasi

@@ -228,9 +228,17 @@ type 'info instr_desc =
 
 and 'info instr = ('info instr_desc, 'info) annotated
 
-(* An attribute is a name with an optional value expression: [#[export = "f"]]
-   carries a value, [#[start]] does not. *)
-type attributes = (string * location instr option) list
+(* An attribute is a name with an optional value expression and an optional
+   conditional-compilation guard: [#[export = "f"]] carries a value, [#[start]]
+   does not, and [#[export = "f", if not(portable)]] carries a guard that makes
+   just this export conditional (independent of the field's own reachability).
+   Only [export] may be guarded. The guard is located at its [if] keyword, to
+   anchor a diagnostic. *)
+type attributes =
+  (string
+  * location instr option
+  * (Wax_wasm.Ast.cond, location) annotated option)
+  list
 
 (* What an [import "module" { ... }] entry brings in. Imports have no body, so
    these carry only type-level information (no ['info]-annotated instructions):

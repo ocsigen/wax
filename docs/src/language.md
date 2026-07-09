@@ -973,6 +973,20 @@ import "env" fn trace(x: i32);
 
 An imported field is re-exported by adding `#[export]` to its declaration.
 
+An `#[export]` can carry an `if <condition>` guard, making just that export
+[conditional](#conditional-compilation) independently of the field's own
+reachability. This is how a definition can be exported under an extra name only
+in some configurations:
+
+```wax,check
+#[export]
+#[export = "add_alias", if not(bootstrap)]
+fn add(x: i32, y: i32) -> i32 { x + y; }
+```
+
+Here `add` is always exported under its own name, and also as `add_alias`
+except when `bootstrap` holds. Only `#[export]` accepts a guard.
+
 ## References
 
 ### Reference Types
@@ -1713,7 +1727,7 @@ fn size() -> i32 {
 }
 ```
 
-These two are the only levels at which conditional compilation applies: whole module items and whole statements. A condition cannot guard part of an expression.
+These two are the only levels at which conditional compilation applies: whole module items and whole statements. A condition cannot guard part of an expression. The one finer-grained case is the `if <condition>` guard on an [`#[export]`](#imports-and-exports), which makes a single export conditional without wrapping its definition in an `#[if]` block; its condition is simplified against any enclosing `#[if]` and resolved by `-D` just like a block condition.
 
 A statement-level branch cannot introduce a local with `let`, since the two branches are mutually exclusive and a binding made in one would not be in scope after the conditional. Declare the local before the conditional and assign to it inside each branch instead:
 

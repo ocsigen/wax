@@ -2368,8 +2368,6 @@ fn unix_outchannel_of_filedescr(fd: &eq) -> &eq {
         0 as &i31;
     }
 }
-#[else]
-{}
 
 #[if(wasi)]
 {

@@ -1444,7 +1444,7 @@ let fundecl ?(exact = false) ~tag pp (name, typ, sign) =
             typ);
       Option.iter (fun ty -> raw_functype pp ty) sign)
 
-let print_attribute_gen open_ pp (name, i) =
+let print_attribute_gen open_ pp (name, i, guard) =
   box pp ~indent:indent_level (fun () ->
       attribute pp open_;
       attribute pp name;
@@ -1455,6 +1455,13 @@ let print_attribute_gen open_ pp (name, i) =
           attribute pp "=";
           space pp ();
           with_style pp Attribute (fun () -> instr Instruction pp i));
+      (* A per-attribute guard, [#[export = "n", if <cond>]]. *)
+      (match guard with
+      | None -> ()
+      | Some c ->
+          attribute pp ",";
+          space pp ();
+          attribute pp (Printf.sprintf "if %s" (cond_to_string c.desc)));
       attribute pp "]")
 
 let print_attribute pp a = print_attribute_gen "#[" pp a

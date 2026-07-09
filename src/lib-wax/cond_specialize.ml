@@ -189,6 +189,27 @@ let module_ ctx env (fields : location Ast.module_) :
       | Int _ | Float _ | StructDefault _ ) as x ->
         x
   in
+  (* Resolve each per-attribute [if <cond>] guard: a determined-true guard is
+     dropped (the export stays), a determined-false one drops the whole
+     attribute, and an undetermined one is kept with its condition simplified. *)
+  let sattrs (attrs : attributes) : attributes =
+    List.filter_map
+      (fun (k, v, guard) ->
+        match guard with
+        | None -> Some (k, v, None)
+        | Some g -> (
+            match eval g.desc with
+            | True -> Some (k, v, None)
+            | False -> None
+            | Residual c -> Some (k, v, Some { g with desc = c })))
+      attrs
+  in
+  let sdecl (decl : (import_decl, location) annotated) =
+    {
+      decl with
+      desc = { decl.desc with attributes = sattrs decl.desc.attributes };
+    }
+  in
   let rec sfields fl = List.concat_map sfield fl
   and sfield (f : (location modulefield, location) annotated) =
     match f.desc with
@@ -218,11 +239,45 @@ let module_ ctx env (fields : location Ast.module_) :
                     };
               };
             ])
-    | Func ({ body = lbl, instrs; _ } as r) ->
-        [ { f with desc = Func { r with body = (lbl, sinstrs instrs) } } ]
-    | Global ({ def; _ } as g) ->
-        [ { f with desc = Global { g with def = sone def } } ]
-    | _ -> [ f ]
+    | Func ({ body = lbl, instrs; attributes; _ } as r) ->
+        [
+          {
+            f with
+            desc =
+              Func
+                {
+                  r with
+                  body = (lbl, sinstrs instrs);
+                  attributes = sattrs attributes;
+                };
+          };
+        ]
+    | Global ({ def; attributes; _ } as g) ->
+        [
+          {
+            f with
+            desc =
+              Global { g with def = sone def; attributes = sattrs attributes };
+          };
+        ]
+    | Tag ({ attributes; _ } as r) ->
+        [ { f with desc = Tag { r with attributes = sattrs attributes } } ]
+    | Memory ({ attributes; _ } as r) ->
+        [ { f with desc = Memory { r with attributes = sattrs attributes } } ]
+    | Table ({ attributes; _ } as r) ->
+        [ { f with desc = Table { r with attributes = sattrs attributes } } ]
+    | Import { module_; decl } ->
+        [ { f with desc = Import { module_; decl = sdecl decl } } ]
+    | Import_group { module_; decls } ->
+        [
+          {
+            f with
+            desc = Import_group { module_; decls = List.map sdecl decls };
+          };
+        ]
+    | Module_annotation attrs ->
+        [ { f with desc = Module_annotation (sattrs attrs) } ]
+    | Type _ | Data _ | Elem _ -> [ f ]
   in
   let fields = sfields fields in
   (fields, List.rev !ranges)

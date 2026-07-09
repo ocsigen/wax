@@ -1,0 +1,4 @@
+#[export = "e", if portable]
+fn a(v: &eq) -> &eq { v; }
+#[export = "e"]
+fn b(v: &eq) -> &eq { v; }

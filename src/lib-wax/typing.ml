@@ -305,6 +305,11 @@ module Error = struct
   let annotation_not_allowed context ~location name =
     report context ~location "The %s annotation is not allowed here." name
 
+  let guard_not_allowed context ~location name =
+    report context ~location
+      "A conditional guard is only allowed on an export annotation, not on %s."
+      name
+
   let multiple_import context ~location =
     report context ~location
       "An import can have at most one import-name annotation."
@@ -8791,7 +8796,7 @@ let rec functions ctx fields =
           in
           (* A [#[start]] function must have no parameters and no results. *)
           if
-            List.exists (fun (k, _) -> k = "start") attributes
+            List.exists (fun (k, _, _) -> k = "start") attributes
             && not
                  (Array.length func_typ.params = 0
                  && Array.length func_typ.results = 0)
@@ -9009,10 +9014,16 @@ let field_attributes (field : _ modulefield) =
 let check_attribute_list diagnostics ~export_ok ~start_ok ~module_ok ~import_ok
     ~default_location attributes =
   List.iter
-    (fun (name, value) ->
+    (fun (name, value, guard) ->
       let location =
         match value with Some v -> v.info | None -> default_location
       in
+      (* A per-attribute [if <cond>] guard is only meaningful on [export]; blame
+         its own [if] keyword. *)
+      (match guard with
+      | Some g when name <> "export" ->
+          Error.guard_not_allowed diagnostics ~location:g.info name
+      | _ -> ());
       match name with
       | "export" ->
           (* A bare [#[export]] (no value) reuses the entity's Wax name as the
@@ -9255,7 +9266,7 @@ let type_configuration ?(warn_unused = false) ?(build = true)
      [location] blames the entity when an attribute carries no value. *)
   let process_attrs ~default_name ~location attributes =
     List.iter
-      (fun (key, v) ->
+      (fun (key, v, guard) ->
         match (key, Option.map (fun (v : _ instr) -> v.desc) v) with
         | "export", ((Some (String _) | None) as value) ->
             (* The export name and the location to blame: the explicit string
@@ -9269,22 +9280,31 @@ let type_configuration ?(warn_unused = false) ?(build = true)
                   | Some (id : ident) -> Some (id.desc, id.info)
                   | None -> None)
             in
+            (* The condition under which this export is actually present: the
+               field's own branch assumption ([!cond]) narrowed by an optional
+               per-attribute [if <cond>] guard. *)
+            let cond =
+              match guard with
+              | None -> !cond
+              | Some g ->
+                  Cond.and_ !cond
+                    (Cond.of_cond cond_env diagnostics ~location:g.info g.desc)
+            in
             Option.iter
               (fun (name, location) ->
-                (* Two exports of the same name clash only when the conditional
-                   branches guarding them can hold at once; the same name in
-                   mutually exclusive branches is fine. Each remembered guard is
-                   the path condition ([!cond]) under which an export was
-                   seen. *)
+                (* Two exports of the same name clash only when the conditions
+                   guarding them can hold at once; the same name in mutually
+                   exclusive branches is fine. Each remembered guard is the
+                   condition under which an export was seen. *)
                 let guards =
                   Option.value ~default:[] (Hashtbl.find_opt exports name)
                 in
                 if
                   List.exists
-                    (fun g -> Cond.is_satisfiable (Cond.and_ g !cond))
+                    (fun g -> Cond.is_satisfiable (Cond.and_ g cond))
                     guards
                 then Error.duplicated_export diagnostics ~location name;
-                Hashtbl.replace exports name (!cond :: guards))
+                Hashtbl.replace exports name (cond :: guards))
               entry
         | "start", _ ->
             (* A module may name at most one start function. *)
@@ -9304,8 +9324,8 @@ let type_configuration ?(warn_unused = false) ?(build = true)
     check_attribute_list diagnostics ~export_ok:true ~start_ok:false
       ~module_ok:false ~import_ok:true ~default_location:decl.info
       decl.desc.attributes;
-    (match List.filter (fun (k, _) -> k = "import") decl.desc.attributes with
-    | _ :: (_, value) :: _ ->
+    (match List.filter (fun (k, _, _) -> k = "import") decl.desc.attributes with
+    | _ :: (_, value, _) :: _ ->
         let location =
           match value with Some v -> v.info | None -> decl.info
         in
@@ -9369,7 +9389,7 @@ let type_configuration ?(warn_unused = false) ?(build = true)
   if warn_unused then begin
     let exempt field =
       List.exists
-        (fun (k, _) -> k = "export" || k = "start")
+        (fun (k, _, _) -> k = "export" || k = "start")
         (field_attributes field)
     in
     let unused tbl (name : ident) =
@@ -9380,7 +9400,7 @@ let type_configuration ?(warn_unused = false) ?(build = true)
        re-exported) is reported, the same way an unused definition is. *)
     let check_unused_import (decl : (Ast.import_decl, location) annotated) =
       let exempt =
-        List.exists (fun (k, _) -> k = "export") decl.desc.attributes
+        List.exists (fun (k, _, _) -> k = "export") decl.desc.attributes
       in
       if not exempt then
         match decl.desc.kind with
@@ -9714,6 +9734,38 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
       | Int _ | Float _ | StructDefault _ ) as x ->
         x
   in
+  (* Resolve each per-attribute [if <cond>] guard against the configuration.
+     A guard gates the presence of just this export, so it partitions the space
+     exactly like an [#[if]] block: [choose] prunes the export in configurations
+     where the guard cannot hold and enqueues the complementary configuration
+     where it does not, threading the surviving assumption into later fields. The
+     guard itself is dropped -- in each explored configuration the export is
+     unconditionally present or absent. *)
+  let sattrs asm (attrs : attributes) : attributes * S.t =
+    List.fold_left
+      (fun (acc, asm) (k, v, guard) ->
+        match guard with
+        | None -> (acc @ [ (k, v, None) ], asm)
+        | Some g ->
+            let kept, asm =
+              choose asm g.desc ~location:g.info
+                ~then_branch:(fun _ -> [ (k, v, None) ])
+                ~else_branch:(fun _ -> [])
+            in
+            (acc @ kept, asm))
+      ([], asm) attrs
+  in
+  let sdecl asm (decl : (Ast.import_decl, location) annotated) =
+    let attributes, asm = sattrs asm decl.desc.attributes in
+    ({ decl with desc = { decl.desc with attributes } }, asm)
+  in
+  let rec sdecls asm = function
+    | [] -> ([], asm)
+    | d :: rest ->
+        let d, asm = sdecl asm d in
+        let ds, asm = sdecls asm rest in
+        (d :: ds, asm)
+  in
   let rec sfields asm fl =
     match fl with
     | [] -> []
@@ -9721,18 +9773,46 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
         let fields, asm = sfield asm f in
         fields @ sfields asm rest
   and sfield asm (f : (_ modulefield, _) annotated) =
+    let sa attributes = sattrs asm attributes in
     match f.desc with
     | Conditional { cond; then_fields; else_fields } ->
         choose asm cond ~location:f.info
           ~then_branch:(fun asm' -> sfields asm' then_fields.desc)
           ~else_branch:(fun asm' ->
             match else_fields with Some e -> sfields asm' e.desc | None -> [])
-    | Func ({ body = lbl, instrs; _ } as r) ->
-        ( [ { f with desc = Func { r with body = (lbl, sinstrs asm instrs) } } ],
+    | Func ({ body = lbl, instrs; attributes; _ } as r) ->
+        let attributes, asm = sa attributes in
+        ( [
+            {
+              f with
+              desc =
+                Func { r with body = (lbl, sinstrs asm instrs); attributes };
+            };
+          ],
           asm )
-    | Global ({ def; _ } as g) ->
-        ([ { f with desc = Global { g with def = sone asm def } } ], asm)
-    | _ -> ([ f ], asm)
+    | Global ({ def; attributes; _ } as g) ->
+        let attributes, asm = sa attributes in
+        ( [ { f with desc = Global { g with def = sone asm def; attributes } } ],
+          asm )
+    | Tag ({ attributes; _ } as r) ->
+        let attributes, asm = sa attributes in
+        ([ { f with desc = Tag { r with attributes } } ], asm)
+    | Memory ({ attributes; _ } as r) ->
+        let attributes, asm = sa attributes in
+        ([ { f with desc = Memory { r with attributes } } ], asm)
+    | Table ({ attributes; _ } as r) ->
+        let attributes, asm = sa attributes in
+        ([ { f with desc = Table { r with attributes } } ], asm)
+    | Import { module_; decl } ->
+        let decl, asm = sdecl asm decl in
+        ([ { f with desc = Import { module_; decl } } ], asm)
+    | Import_group { module_; decls } ->
+        let decls, asm = sdecls asm decls in
+        ([ { f with desc = Import_group { module_; decls } } ], asm)
+    | Module_annotation attrs ->
+        let attrs, asm = sa attrs in
+        ([ { f with desc = Module_annotation attrs } ], asm)
+    | Type _ | Data _ | Elem _ -> ([ f ], asm)
   in
   sfields asm0 fields
 

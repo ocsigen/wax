@@ -1,0 +1,2 @@
+#[start, if portable]
+fn s() { }

@@ -21,7 +21,7 @@ import "jslib" {
     fn caml_js_get(&eq, &eq) -> &eq;
 }
 import "bigarray" {
-    #[export = "bigstring_to_typed_array"]
+    #[export = "bigstring_to_typed_array", if not(wasi)]
     fn caml_ba_to_typed_array(&eq) -> &eq;
     fn caml_ba_from_typed_array(&eq) -> &eq;
     fn caml_ba_char_of_typed_array(&eq) -> &eq;

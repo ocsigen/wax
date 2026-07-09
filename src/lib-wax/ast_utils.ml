@@ -457,7 +457,7 @@ let confusing_precedence (outer : binop_kind) (inner : binop_kind) =
 let import_name (decl : import_decl) =
   let override =
     List.find_map
-      (fun (k, v) ->
+      (fun (k, v, _) ->
         if k <> "import" then None
         else
           match v with

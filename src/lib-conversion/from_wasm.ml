@@ -438,12 +438,18 @@ type ctx = {
          function-type form). Each is emitted as a [type <name> = fn(..)]
          declaration; accumulated in reverse order of first use. *)
   function_types : Src.typeuse CondTbl.t;
-  exports : (Src.exportable * string, (Cond.t * Src.name) list) Hashtbl.t;
+  exports :
+    ( Src.exportable * string,
+      (Cond.t * Wax_wasm.Ast.cond * Src.name) list )
+    Hashtbl.t;
       (* Standalone [(export …)] fields, keyed by the Wax name of their target,
          attached to that target as [#[export]] attributes. Each is paired with
-         the conditional-branch assumption under which it appears, so a target
-         that exists in several mutually exclusive branches receives only the
-         exports of its own branch (and not the same export once per branch). *)
+         the conditional-branch assumption under which it appears -- both the
+         solved form (for satisfiability/implication tests) and the syntactic
+         condition (for a [#[export …, if <cond>]] guard) -- so a target that
+         exists in several mutually exclusive branches receives only the exports
+         of its own branch, and an export narrower than its target's reachability
+         is emitted as a guarded attribute. *)
   mutable start : string option;
       (* Wax name of the start function, if any; rendered as a [#[start]]
          attribute on that function rather than a separate field. *)
@@ -2666,30 +2672,63 @@ let rec collect_local_refs acc (i : _ Src.instr) =
 and collect_local_refs_instrs acc l = List.iter (collect_local_refs acc) l
 
 let exports ctx kind name e =
+  (* Reuse the bare [#[export]] short form when the export name matches the
+     field's own Wax name; only a differing name needs to be spelled out.
+     [guard] makes just this export conditional. *)
+  let attr ?guard nm =
+    let value =
+      if nm.Ast.desc = name.Ast.desc then None else Some (string_of_name nm)
+    in
+    (* The guard has no source of its own in the binary; anchor it at the
+       target's name. *)
+    let guard =
+      Option.map (fun g -> { Ast.desc = g; info = name.Ast.info }) guard
+    in
+    ("export", value, guard)
+  in
   (* [e] are the inline exports declared on this field (already in the right
-     branch); the table holds the standalone exports, kept only when their
-     branch is reachable under the current assumption. *)
+     branch), so they inherit the field's reachability unconditionally. *)
+  let inline = List.map (fun nm -> attr nm) e in
+  (* The guard printed on the target is the export's branch condition with the
+     conjuncts already entailed by the target's own position dropped: the target
+     is emitted inside those enclosing conditionals, so repeating them would be
+     redundant (and, worse, would re-accumulate on every round-trip). *)
+  let simplify_guard (syn : Wax_wasm.Ast.cond) : Wax_wasm.Ast.cond =
+    let rec conjuncts (c : Wax_wasm.Ast.cond) =
+      match c with Cond_and l -> List.concat_map conjuncts l | c -> [ c ]
+    in
+    let kept =
+      List.filter
+        (fun c ->
+          not
+            (Cond.logical_implies ctx.cond_asm
+               (Cond.of_cond ctx.cond_env ctx.cond_diag ~location:name.Ast.info
+                  c)))
+        (conjuncts syn)
+    in
+    match kept with [] -> syn | [ c ] -> c | l -> Cond_and l
+  in
+  (* The table holds standalone exports. An export is kept only when its branch
+     can be reached under the field's current assumption; if the field is
+     reachable in cases where the export is not (its branch does not follow from
+     the field's), the export cannot be a plain attribute -- it becomes a guarded
+     [#[export …, if <cond>]] carrying its own branch condition. *)
   let standalone =
     match Hashtbl.find_opt ctx.exports (kind, name.Ast.desc) with
     | None -> []
     | Some entries ->
         List.filter_map
-          (fun (c, nm) ->
-            if Cond.is_satisfiable (Cond.and_ ctx.cond_asm c) then Some nm
-            else None)
+          (fun (c, syn, nm) ->
+            if not (Cond.is_satisfiable (Cond.and_ ctx.cond_asm c)) then None
+            else if Cond.logical_implies ctx.cond_asm c then Some (attr nm)
+            else Some (attr ~guard:(simplify_guard syn) nm))
           entries
   in
-  (* Reuse the bare [#[export]] short form when the export name matches the
-     field's own Wax name; only a differing name needs to be spelled out. *)
-  List.map
-    (fun nm ->
-      if nm.Ast.desc = name.Ast.desc then ("export", None)
-      else ("export", Some (string_of_name nm)))
-    (e @ standalone)
+  inline @ standalone
 
 (* The [#[start]] attribute, if function [name] is the module's start. *)
 let start_attribute ctx name =
-  if ctx.start = Some name.Ast.desc then [ ("start", None) ] else []
+  if ctx.start = Some name.Ast.desc then [ ("start", None, None) ] else []
 
 let single_expression ctx ~location l =
   match l with
@@ -2844,7 +2883,7 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
         let build id kind export_kind =
           let attributes =
             (if nm.Ast.desc = id.Ast.desc then []
-             else [ ("import", Some (string_of_name nm)) ])
+             else [ ("import", Some (string_of_name nm), None) ])
             @ exports ctx export_kind id e
           in
           Some
@@ -3092,7 +3131,15 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
               })
             else_fields
         in
-        Some (Conditional { cond; then_fields; else_fields })
+        (* An [@else] emptied by pulling out its standalone exports carries no
+           fields, so drop it; a conditional left empty in both branches -- e.g.
+           one that held only a standalone [(export …)] now re-emitted as a
+           guard on its target -- is a no-op and is dropped entirely. *)
+        let else_fields =
+          match else_fields with Some e when e.Ast.desc = [] -> None | e -> e
+        in
+        if then_fields.Ast.desc = [] && else_fields = None then None
+        else Some (Conditional { cond; then_fields; else_fields })
   in
   Option.to_list (Option.map (fun desc -> { f with desc }) desc) @ !extra
 
@@ -3344,15 +3391,23 @@ let register_names ctx export_tbl fields =
 let collect_exports cond_env diagnostics fields =
   let tbl = Hashtbl.create 16 in
   let lst = ref [] in
-  (* [asm] is the branch assumption under which the fields being walked appear,
-     so each standalone export is recorded with the condition that guards it. *)
-  let rec go asm fields =
+  (* Combine the accumulated branch conditions ([syn], a list of conjuncts, each
+     already negated for an [@else]) into one syntactic condition, kept alongside
+     the solved [asm] so a standalone export narrower than its target can be
+     re-emitted as a [#[export …, if <cond>]] guard. *)
+  let combine syn : Wax_wasm.Ast.cond =
+    match syn with [ c ] -> c | l -> Cond_and l
+  in
+  (* [asm]/[syn] are the branch assumption under which the fields being walked
+     appear (solved / syntactic), so each standalone export is recorded with the
+     condition that guards it. *)
+  let rec go asm syn fields =
     List.iter
       (fun (field : (_ Src.modulefield, _) Ast.annotated) ->
         match field.desc with
         | Export { name; kind; index } ->
             (* Don't keep a meaningless location *)
-            lst := (kind, index, Ast.no_loc name.desc, asm) :: !lst;
+            lst := (kind, index, Ast.no_loc name.desc, asm, combine syn) :: !lst;
             let k = (kind, index.Ast.desc) in
             Hashtbl.replace tbl k
               (name :: (try Hashtbl.find tbl k with Not_found -> []))
@@ -3360,14 +3415,17 @@ let collect_exports cond_env diagnostics fields =
             let c =
               Cond.of_cond cond_env diagnostics ~location:field.info cond
             in
-            go (Cond.and_ asm c) then_fields.desc;
+            go (Cond.and_ asm c) (syn @ [ cond ]) then_fields.desc;
             Option.iter
-              (fun e -> go (Cond.and_ asm (Cond.not_ c)) e.Ast.desc)
+              (fun e ->
+                go
+                  (Cond.and_ asm (Cond.not_ c))
+                  (syn @ [ Cond_not cond ]) e.Ast.desc)
               else_fields
         | _ -> ())
       fields
   in
-  go Cond.true_ fields;
+  go Cond.true_ [] fields;
   (tbl, !lst)
 
 (*** Module conversion ***)
@@ -3549,7 +3607,7 @@ let module_ ?(strict_constants = false) diagnostics (module_name, fields) =
       fields;
     if not forbid_numeric then elaborate_implicit_types ctx fields;
     List.iter
-      (fun (kind, index, name, asm) ->
+      (fun (kind, index, name, asm, syn) ->
         let k =
           ( kind,
             (idx ctx
@@ -3563,7 +3621,7 @@ let module_ ?(strict_constants = false) diagnostics (module_name, fields) =
               .desc )
         in
         let l =
-          (asm, name)
+          (asm, syn, name)
           ::
           (match Hashtbl.find_opt ctx.exports k with
           | None -> []
@@ -3601,7 +3659,8 @@ let module_ ?(strict_constants = false) diagnostics (module_name, fields) =
       | Some nm ->
           [
             Ast.no_loc
-              (Ast.Module_annotation [ ("module", Some (string_of_name nm)) ]);
+              (Ast.Module_annotation
+                 [ ("module", Some (string_of_name nm), None) ]);
           ]
       | None -> []
     in

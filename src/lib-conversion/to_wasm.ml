@@ -1804,26 +1804,63 @@ and instruction_desc ret ctx i : location Text.instr list =
 
 (*** Module-field conversion ***)
 
+(* The export name carried by an [#[export]] attribute: the explicit
+   [#[export = "nm"]] string, or the field's own Wax name ([~name]) for the bare
+   form. *)
+let export_name ~name v =
+  match v with
+  | Some ({ desc = String (_, n); _ } as v) -> { v with desc = n }
+  | _ -> name
+
 (* [#[export = "nm"]] exports under the given name; the bare [#[export]] reuses
-   the field's own Wax name ([~name]) as the export name. *)
+   the field's own Wax name ([~name]). Only the unguarded exports become inline
+   exports on the field; a guarded [#[export = "nm", if <cond>]] is emitted
+   separately by [guarded_export_fields] as a conditional standalone export. *)
 let exports ~name attributes =
   List.filter_map
-    (fun (k, v) ->
-      match (k, v) with
-      | "export", Some ({ desc = String (_, n); _ } as v) ->
-          Some { v with desc = n }
-      | "export", None -> Some name
+    (fun (k, v, guard) ->
+      match (k, guard) with
+      | "export", None -> Some (export_name ~name v)
       | _ -> None)
     attributes
 
-let has_start attributes = List.exists (fun (k, _) -> k = "start") attributes
+(* The sibling module fields for the guarded exports of a field: each becomes a
+   standalone [(export …)] wrapped in the conditional [(@if <cond> …)], so the
+   export is present only when its guard holds -- independent of the field's own
+   reachability. [field_name] indexes the exported entity, [kind] is its export
+   sort. *)
+let guarded_export_fields ~loc ~kind ~field_name attributes =
+  List.filter_map
+    (fun (k, v, guard) ->
+      match (k, guard) with
+      | "export", Some cond ->
+          let export : _ Text.modulefield =
+            Text.Export
+              {
+                name = export_name ~name:field_name v;
+                kind;
+                index = index field_name;
+              }
+          in
+          Some
+            (with_loc loc
+               (Text.Module_if_annotation
+                  {
+                    cond = cond.Ast.desc;
+                    then_fields = with_loc loc [ with_loc loc export ];
+                    else_fields = None;
+                  }))
+      | _ -> None)
+    attributes
+
+let has_start attributes = List.exists (fun (k, _, _) -> k = "start") attributes
 
 (* The module name carried by a [#![module = "name"]] inner attribute, if any.
    Lowered into the binary's module-name subsection (the WAT [(module $name)]),
    not into a module field. *)
 let module_name attributes =
   List.find_map
-    (fun (k, v) ->
+    (fun (k, v, _) ->
       match (k, v) with
       | "module", Some { desc = String (_, n); info } ->
           Some { Ast.desc = n; info }
@@ -2084,20 +2121,36 @@ let module_ diagnostics types fields =
               reftype = reftype rt;
             }
     in
-    {
-      desc =
-        Text.Import
-          { module_; name = import_name; id = Some name; desc; exports };
-      info = d.info;
-    }
+    let export_kind : Text.exportable =
+      match decl.kind with
+      | Import_func _ -> Func
+      | Import_global _ -> Global
+      | Import_tag _ -> Tag
+      | Import_memory _ -> Memory
+      | Import_table _ -> Table
+    in
+    ( {
+        desc =
+          Text.Import
+            { module_; name = import_name; id = Some name; desc; exports };
+        info = d.info;
+      },
+      guarded_export_fields ~loc:d.info ~kind:export_kind ~field_name:name
+        decl.attributes )
   in
   let rec convert_fields fields =
     List.concat_map
       (fun field ->
         match field.desc with
-        | Import { module_; decl } -> [ lower_import module_ decl ]
+        | Import { module_; decl } ->
+            let import, guarded = lower_import module_ decl in
+            import :: guarded
         | Import_group { module_; decls } ->
-            List.map (lower_import module_) decls
+            (* Emit every import of the group before any of their guarded
+               standalone exports, so the run of same-module imports stays
+               contiguous and re-groups on the way back. *)
+            let imports = List.map (lower_import module_) decls in
+            List.map fst imports @ List.concat_map snd imports
         (* The module name is lowered separately into the name section; the
            annotation itself produces no module field. *)
         | Module_annotation _ -> []
@@ -2153,7 +2206,11 @@ let module_ diagnostics types fields =
                   })
                 data
             in
-            { field with desc = memory_field } :: data_fields
+            let guarded =
+              guarded_export_fields ~loc:field.info ~kind:Text.Memory
+                ~field_name:name attributes
+            in
+            ({ field with desc = memory_field } :: guarded) @ data_fields
         | Data { name; mode; init; _ } ->
             let mode : _ Text.datamode =
               match mode with
@@ -2210,7 +2267,9 @@ let module_ diagnostics types fields =
             let table_field =
               Text.Table { id = Some name; typ; init = init_value; exports }
             in
-            [ { field with desc = table_field } ]
+            { field with desc = table_field }
+            :: guarded_export_fields ~loc:field.info ~kind:Text.Table
+                 ~field_name:name attributes
         | Elem { name; reftype = rt; mode; init; _ } ->
             let ictx =
               { ctx with referenced_functions = func_refs_outside_func }
@@ -2341,11 +2400,28 @@ let module_ diagnostics types fields =
                   assert false
             in
             let field' = { field with desc } in
+            (* Guarded exports become standalone conditional exports after the
+               field (see [guarded_export_fields]). *)
+            let guarded =
+              match field.desc with
+              | Func { name; attributes; _ } ->
+                  guarded_export_fields ~loc:field.info ~kind:Text.Func
+                    ~field_name:name attributes
+              | Global { name; attributes; _ } ->
+                  guarded_export_fields ~loc:field.info ~kind:Text.Global
+                    ~field_name:name attributes
+              | Tag { name; attributes; _ } ->
+                  guarded_export_fields ~loc:field.info ~kind:Text.Tag
+                    ~field_name:name attributes
+              | _ -> []
+            in
             (* A [#[start]] function also emits a [(start $f)] field. *)
             match field.desc with
             | Func { name; attributes; _ } when has_start attributes ->
-                [ field'; { field with desc = Text.Start (index name) } ]
-            | _ -> [ field' ]))
+                field'
+                :: { field with desc = Text.Start (index name) }
+                :: guarded
+            | _ -> field' :: guarded))
       fields
   in
   let wasm_fields = convert_fields fields in

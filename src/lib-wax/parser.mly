@@ -207,7 +207,7 @@ let hinted loc h (i : _ instr) =
 (* [#[likely]]/[#[unlikely]] are parsed as ordinary attributes (the lexer no
    longer has dedicated tokens); recover the hint's boolean, rejecting any other
    attribute in a branch-hint position. *)
-let branch_hint_of_attr loc (name, value) =
+let branch_hint_of_attr loc (name, value, _guard) =
   match (name, value) with
   | "likely", None -> true
   | "unlikely", None -> false
@@ -523,9 +523,16 @@ attribute_expression: e = expression { e }
 | name = IDENT { name }
 | IMPORT { "import" }
 
+(* An optional conditional-compilation guard on a single attribute,
+   [#[export = "n", if not(portable)]]. The guard reuses the [#[if(...)]]
+   condition grammar; only [export] accepts one (checked in the typer). *)
+attribute_guard:
+| { None }
+| "," _kw = IF c = condition { Some {desc = c; info = location_of $loc(_kw)} }
+
 attribute:
-| "#" "[" name = attribute_name "=" i = attribute_expression "]" { (name, Some i) }
-| "#" "[" name = attribute_name "]" { (name, None) }
+| "#" "[" name = attribute_name "=" i = attribute_expression g = attribute_guard "]" { (name, Some i, g) }
+| "#" "[" name = attribute_name g = attribute_guard "]" { (name, None, g) }
 
 (* Branch-hinting proposal: [#[likely]]/[#[unlikely]] prefixing an [if]/[br_if].
    Parsed as an ordinary attribute (the lexer no longer has dedicated tokens);
@@ -547,8 +554,8 @@ branch_expr:
 
 (* A module-level inner attribute, [#![module = "name"]]. *)
 inner_attribute:
-| "#" "!" "[" name = IDENT "=" i = attribute_expression "]" { (name, Some i) }
-| "#" "!" "[" name = IDENT "]" { (name, None) }
+| "#" "!" "[" name = IDENT "=" i = attribute_expression "]" { (name, Some i, None) }
+| "#" "!" "[" name = IDENT "]" { (name, None, None) }
 
 simple_pattern:
 | x = ident { Some x }

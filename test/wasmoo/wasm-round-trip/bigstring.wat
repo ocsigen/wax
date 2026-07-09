@@ -20,9 +20,8 @@
 (import "jslib" "caml_js_get"
   (func $caml_js_get (param (ref eq) (ref eq)) (result (ref eq)))
 )
-(func $caml_ba_to_typed_array (export "bigstring_to_typed_array")
-  (import "bigarray" "caml_ba_to_typed_array")
-  (param (ref eq)) (result (ref eq))
+(import "bigarray" "caml_ba_to_typed_array"
+  (func $caml_ba_to_typed_array (param (ref eq)) (result (ref eq)))
 )
 (import "bigarray" "caml_ba_from_typed_array"
   (func $caml_ba_from_typed_array (param (ref eq)) (result (ref eq)))
@@ -52,6 +51,9 @@
 (import "bigarray" "caml_blit_bytes_to_dataview"
   (func $caml_blit_bytes_to_dataview
     (param (ref $bytes) i32 (ref extern) i32 i32))
+)
+(@if (not $wasi)
+  (@then (export "bigstring_to_typed_array" (func $caml_ba_to_typed_array)))
 )
 (@if $wasi
   (@then
