@@ -88,17 +88,6 @@ the additional packed types available only in struct and array fields.
 
 ## Composite Types
 
-### Recursive Types
-
-Wax allows defining recursive reference types using `rec { ... }`.
-
-```wax
-rec {
-    type tree = { value: i32, children: &forest };
-    type forest = [&?tree];
-}
-```
-
 ### Structs
 ```wax
 type point = { x: i32, y: i32 };
@@ -127,6 +116,18 @@ type k = cont ft;
 Maps to Wasm `(type $k (cont $ft))`. See [Stack Switching Instructions](instructions.md#stack-switching-instructions) for the operations on continuations.
 
 `cont` and `nocont` are reserved heap types (like `func`/`struct`), so the abstract continuation references `&cont`, `&?cont` and `&nocont` are available directly in addition to references to declared continuation types (`&k`, `&?k`). Because these names are reserved, a WebAssembly type literally named `$cont` is renamed (e.g. to `cont_2`) when decompiling to Wax.
+
+### Recursive Types
+
+Wax allows defining recursive reference types using `rec { ... }`.
+
+```wax
+rec {
+    type tree = { value: i32, children: &forest };
+    type forest = [&?tree];
+}
+```
+
 ### Supertypes and Finality
 
 Types are final by default. To make a type open (extensible), use the `open` keyword.
