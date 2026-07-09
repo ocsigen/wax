@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// mdbook preprocessor: syntax-highlight ```wax code blocks using the same
-// TextMate grammar the VS Code extension ships (editors/vscode/syntaxes).
+// mdbook preprocessor: syntax-highlight ```wax and ```wat code blocks. The wax
+// grammar is the same TextMate grammar the VS Code extension ships
+// (editors/vscode/syntaxes); the wat grammar lives beside this script.
 //
 // It tokenizes each block with vscode-textmate + vscode-oniguruma and emits a
 // <pre class="hljs wax-highlight"> whose spans carry mdbook's own hljs-* CSS
@@ -16,7 +17,8 @@ const path = require('path');
 const vsctm = require('vscode-textmate');
 const oniguruma = require('vscode-oniguruma');
 
-const SCOPE = 'source.wax';
+// Fenced-block language -> TextMate scope name.
+const LANG_SCOPE = { wax: 'source.wax', wat: 'source.wat' };
 
 // --- protocol: `supports <renderer>` probe, else JSON on stdin -------------
 
@@ -39,6 +41,7 @@ const SCOPE_CLASS = [
   ['entity.name.function', 'hljs-title'],
   ['entity.name.type', 'hljs-type'],
   ['entity.name.label', 'hljs-symbol'],
+  ['variable.other', 'hljs-variable'],
   ['entity.other.attribute-name', 'hljs-meta'],
   ['meta.attribute', 'hljs-meta'],
   ['punctuation.definition.attribute', 'hljs-meta'],
@@ -72,7 +75,7 @@ function escapeHtml(s) {
 
 // --- grammar registry ------------------------------------------------------
 
-function makeRegistry(grammarPath) {
+function makeRegistry(scopePaths) {
   const wasmBin = fs.readFileSync(
     require.resolve('vscode-oniguruma/release/onig.wasm')
   ).buffer;
@@ -83,7 +86,8 @@ function makeRegistry(grammarPath) {
   return new vsctm.Registry({
     onigLib,
     loadGrammar: async (scopeName) => {
-      if (scopeName !== SCOPE) return null;
+      const grammarPath = scopePaths[scopeName];
+      if (!grammarPath) return null;
       const data = fs.readFileSync(grammarPath, 'utf8');
       return vsctm.parseRawGrammar(data, grammarPath);
     },
@@ -133,12 +137,13 @@ function highlight(grammar, code) {
 }
 
 // --- fenced-code scanner ---------------------------------------------------
-// Replaces top-level ```wax (and ~~~wax, and info strings like `wax,check`)
-// blocks. Leaves every other fence untouched for mdbook's own highlighter.
+// Replaces top-level ```wax / ```wat (and ~~~ variants, and info strings like
+// `wax,check`) blocks. Leaves every other fence untouched for mdbook's own
+// highlighter.
 
 const FENCE_OPEN = /^(\s*)(`{3,}|~{3,})\s*([^\n]*)$/;
 
-function transformContent(content, grammar) {
+function transformContent(content, grammars) {
   const lines = content.split('\n');
   const out = [];
   for (let i = 0; i < lines.length; i++) {
@@ -162,11 +167,11 @@ function transformContent(content, grammar) {
       body.push(lines[j]);
     }
     const closed = j < lines.length;
-    if (lang === 'wax' && closed) {
+    if (grammars[lang] && closed) {
       // Blank lines around the raw HTML so pulldown-cmark treats it as an
       // HTML block rather than folding it into a paragraph.
       out.push('');
-      out.push(highlight(grammar, body.join('\n') + '\n'));
+      out.push(highlight(grammars[lang], body.join('\n') + '\n'));
       out.push('');
     } else {
       out.push(lines[i]);
@@ -178,14 +183,14 @@ function transformContent(content, grammar) {
   return out.join('\n');
 }
 
-function walk(section, grammar) {
+function walk(section, grammars) {
   if (section && section.Chapter) {
     const ch = section.Chapter;
     if (typeof ch.content === 'string') {
-      ch.content = transformContent(ch.content, grammar);
+      ch.content = transformContent(ch.content, grammars);
     }
     if (Array.isArray(ch.sub_items)) {
-      ch.sub_items.forEach((s) => walk(s, grammar));
+      ch.sub_items.forEach((s) => walk(s, grammars));
     }
   }
 }
@@ -195,15 +200,22 @@ function walk(section, grammar) {
 async function main() {
   const input = fs.readFileSync(0, 'utf8');
   const [context, book] = JSON.parse(input);
-  const grammarPath = path.resolve(
-    context.root,
-    '..',
-    'editors/vscode/syntaxes/wax.tmLanguage.json'
-  );
-  const registry = makeRegistry(grammarPath);
-  const grammar = await registry.loadGrammar(SCOPE);
-  if (!grammar) throw new Error(`could not load grammar ${SCOPE}`);
-  book.items.forEach((s) => walk(s, grammar));
+  const scopePaths = {
+    'source.wax': path.resolve(
+      context.root,
+      '..',
+      'editors/vscode/syntaxes/wax.tmLanguage.json'
+    ),
+    'source.wat': path.resolve(__dirname, 'wat.tmLanguage.json'),
+  };
+  const registry = makeRegistry(scopePaths);
+  const grammars = {};
+  for (const [lang, scope] of Object.entries(LANG_SCOPE)) {
+    const grammar = await registry.loadGrammar(scope);
+    if (!grammar) throw new Error(`could not load grammar ${scope}`);
+    grammars[lang] = grammar;
+  }
+  book.items.forEach((s) => walk(s, grammars));
   process.stdout.write(JSON.stringify(book));
 }
 

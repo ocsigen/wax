@@ -1,0 +1,77 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "WebAssembly Text",
+  "scopeName": "source.wat",
+  "fileTypes": ["wat", "wast"],
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#annotations" },
+    { "include": "#strings" },
+    { "include": "#identifiers" },
+    { "include": "#instructions" },
+    { "include": "#types" },
+    { "include": "#numbers" },
+    { "include": "#keywords" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-semicolon.wat",
+          "begin": ";;",
+          "end": "$"
+        },
+        {
+          "name": "comment.block.wat",
+          "begin": "\\(;",
+          "end": ";\\)",
+          "patterns": [{ "include": "#comments" }]
+        }
+      ]
+    },
+    "annotations": {
+      "comments": "Annotation clauses such as (@custom ...), (@if ...), (@then ...).",
+      "patterns": [
+        {
+          "name": "entity.other.attribute-name.wat",
+          "match": "@[A-Za-z_][A-Za-z0-9_.-]*"
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.wat",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.wat",
+          "match": "\\\\([ntr\"'\\\\]|[0-9a-fA-F]{2}|u\\{[0-9a-fA-F]+\\})"
+        }
+      ]
+    },
+    "identifiers": {
+      "comments": "Symbolic identifiers, e.g. $my_func, $L0.",
+      "name": "variable.other.wat",
+      "match": "\\$[0-9A-Za-z!#$%&'*+\\-./:<=>?@\\\\^_`|~]+"
+    },
+    "instructions": {
+      "comments": "Dotted mnemonics like i32.add, local.get, ref.null, array.new_fixed.",
+      "name": "keyword.control.instruction.wat",
+      "match": "\\b[a-z][a-zA-Z0-9]*(?:\\.[a-zA-Z0-9_]+)+\\b"
+    },
+    "types": {
+      "comments": "Numeric, vector and reference value types.",
+      "name": "support.type.wat",
+      "match": "\\b(i8|i16|i32|i64|f32|f64|v128|funcref|externref|anyref|eqref|i31ref|structref|arrayref|exnref|nullref|nullfuncref|nullexternref|nullexnref)\\b"
+    },
+    "numbers": {
+      "name": "constant.numeric.wat",
+      "match": "[+-]?(?:0x[0-9a-fA-F_]+(?:\\.[0-9a-fA-F_]*)?(?:[pP][+-]?[0-9]+)?|[0-9][0-9_]*(?:\\.[0-9_]*)?(?:[eE][+-]?[0-9]+)?|inf|nan(?::0x[0-9a-fA-F_]+)?)\\b"
+    },
+    "keywords": {
+      "comments": "Structural keywords and remaining bare-word instructions; in WAT nearly every lowercase word is one.",
+      "name": "keyword.control.wat",
+      "match": "\\b[a-z][a-zA-Z0-9_]*\\b"
+    }
+  }
+}
