@@ -62,6 +62,9 @@ export interface Wax {
   formatWat(src: string): FormatResult;
   checkWat(src: string): WaxDiagnostic[];
   symbolsWat(src: string): WaxSymbol[];
+  // Cross-language conversion (for the preview commands).
+  toWat(src: string): FormatResult;
+  toWax(src: string): FormatResult;
 }
 
 export interface LoadOptions {

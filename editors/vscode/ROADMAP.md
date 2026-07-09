@@ -26,12 +26,13 @@ analysis.
   here") and the typer's `entry_hint`. Surface them as
   `Diagnostic.relatedInformation` and append the hint. Small change, real UX
   bump.
-- [ ] **Convert / preview commands.** The toolchain's reason for existing is
-  wax <-> wat <-> wasm. Add `toWat(src)` / `toWasm(src)` exports and commands
-  like "Wax: Show compiled WAT" (open a read-only virtual document) and
-  "Convert to .wat / .wasm". This is what makes the extension more than a
-  formatter; a live side-by-side WAT preview is especially compelling. Moderate
-  effort.
+- [x] **Convert / preview commands.** The toolchain's reason for existing is
+  wax <-> wat <-> wasm. Added `toWat` / `toWax` exports and the commands "Wax:
+  Show compiled WAT" (from a `.wax` file) and "Wax: Show as Wax" (from a `.wat`
+  file), each opening the conversion in a read-only virtual document
+  (`wax-preview:` scheme) beside the source and re-rendering live as the source
+  changes. Still open: a `toWasm` binary export plus "Convert to .wasm" writing a
+  file (binary has no useful text preview, so it is a separate file-I/O feature).
 - [x] **Warm the runtime on `activate()`** so the first format/check has no lag.
   Tiny.
 - [ ] **Settings.** e.g. `wax.diagnostics.enable`, and expose the formatter width

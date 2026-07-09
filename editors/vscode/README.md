@@ -12,6 +12,10 @@ Syntax highlighting, formatting, diagnostics, and snippets for
   (`editor.formatOnSave`). Files with syntax errors are left untouched.
 - **Diagnostics** as you type: syntax errors, type errors, and lints from the
   same toolchain are shown inline (squiggles) and in the Problems panel.
+- **Convert / preview**: "Wax: Show compiled WAT" (in a `.wax` file) opens the
+  compiled WebAssembly text in a read-only document beside the source, updating
+  live as you edit; "Wax: Show as Wax" does the reverse from a `.wat` file. Both
+  are on the editor toolbar and in the command palette.
 - **WebAssembly text (`.wat`)**: the same features apply to `.wat` files too:
   formatting, diagnostics, document outline, syntax highlighting, snippets, and
   comment/bracket handling, all from the same in-process toolchain and grammar.

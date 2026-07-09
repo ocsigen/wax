@@ -26,7 +26,12 @@
   "keywords": ["wax", "webassembly", "wasm", "wat"],
   "main": "./dist/extension.node.js",
   "browser": "./dist/extension.web.js",
-  "activationEvents": ["onLanguage:wax", "onLanguage:wat"],
+  "activationEvents": [
+    "onLanguage:wax",
+    "onLanguage:wat",
+    "onCommand:wax.showWat",
+    "onCommand:wax.showWax"
+  ],
   "capabilities": {
     "untrustedWorkspaces": { "supported": true },
     "virtualWorkspaces": true
@@ -90,6 +95,36 @@
         "language": "wat",
         "path": "./snippets/wat.json"
       }
-    ]
+    ],
+    "commands": [
+      {
+        "command": "wax.showWat",
+        "title": "Show compiled WAT",
+        "category": "Wax"
+      },
+      {
+        "command": "wax.showWax",
+        "title": "Show as Wax",
+        "category": "Wax"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        { "command": "wax.showWat", "when": "resourceLangId == wax" },
+        { "command": "wax.showWax", "when": "resourceLangId == wat" }
+      ],
+      "editor/title": [
+        {
+          "command": "wax.showWat",
+          "when": "resourceLangId == wax",
+          "group": "navigation"
+        },
+        {
+          "command": "wax.showWax",
+          "when": "resourceLangId == wat",
+          "group": "navigation"
+        }
+      ]
+    }
   }
 }

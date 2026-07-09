@@ -6,6 +6,6 @@
 (executable
  (name wax_format_js)
  (modes wasm)
- (libraries wax_wasm wax_lang js_of_ocaml)
+ (libraries wax_wasm wax_lang wax_conversion js_of_ocaml)
  (preprocess
   (pps js_of_ocaml-ppx)))

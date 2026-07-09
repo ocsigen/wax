@@ -102,5 +102,29 @@ export async function run(): Promise<void> {
     throw new Error("web: expected a quoted WAT id: " + JSON.stringify(quotedSyms));
   }
 
+  // Conversion: Wax compiles to WAT and WAT decompiles to Wax; a round trip
+  // preserves the function.
+  const wat2 = wax.toWat("fn f() -> i32 { 1; }");
+  if (!wat2.ok || wat2.text === null || !wat2.text.includes("func")) {
+    throw new Error("web: unexpected toWat result: " + JSON.stringify(wat2));
+  }
+  const wax2 = wax.toWax(cleanWat);
+  if (!wax2.ok || wax2.text === null || !wax2.text.includes("fn f(")) {
+    throw new Error("web: unexpected toWax result: " + JSON.stringify(wax2));
+  }
+  // A conversion of un-typeable input reports an error rather than throwing.
+  const bad2 = wax.toWat("fn f() -> i32 { }");
+  if (bad2.ok) {
+    throw new Error("web: toWat should reject an ill-typed module: " + JSON.stringify(bad2));
+  }
+
+  // The preview commands are registered.
+  const commands = await vscode.commands.getCommands(true);
+  for (const id of ["wax.showWat", "wax.showWax"]) {
+    if (!commands.includes(id)) {
+      throw new Error("web: command not registered: " + id);
+    }
+  }
+
   console.log("WEB SMOKE TEST PASSED");
 }

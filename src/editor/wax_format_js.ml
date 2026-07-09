@@ -11,6 +11,9 @@
      for Wax, validate for Wasm text), returning diagnostics for the editor.
    - [symbols src] / [symbolsWat src] -> the module's top-level definitions, for
      the outline.
+   - [toWat src] / [toWax src] -> { ok; text; error }: convert between the
+     languages (compile Wax to Wasm text, decompile Wasm text to Wax), for the
+     side-by-side preview commands.
 
    Shipping both languages in one wasm module (rather than two) keeps a single
    build and load path; the WAT lexer/parser/validator it adds cost ~0.5 MB.
@@ -54,21 +57,27 @@ module Wat_parser =
 let null_formatter () = Format.make_formatter (fun _ _ _ -> ()) (fun () -> ())
 
 (* Comments and blank-line trivia keyed by source location, restricted to the
-   locations the printer actually visits. Same logic as [wax_trivia] in
-   bin/main.ml. *)
-let wax_trivia ctx ast =
+   locations the printer actually visits. [retarget], when given, rewrites the
+   comment delimiters from the source language's syntax to the target's (used by
+   the cross-language conversions, whose converted nodes carry the source
+   locations). Same logic as [wax_trivia] / [wat_trivia] in bin/main.ml. *)
+let wax_trivia ?retarget ctx ast =
   let used = Hashtbl.create 256 in
   Wax_utils.Printer.run (null_formatter ()) (fun p ->
       Wax_lang.Output.module_ p ~trivia:(Hashtbl.create 0) ~collect:used ast);
-  Wax_utils.Trivia.associate ~only:used ctx
+  let trivia, tail = Wax_utils.Trivia.associate ~only:used ctx in
+  match retarget with
+  | None -> (trivia, tail)
+  | Some (src, dst) -> Wax_utils.Trivia.retarget ~src ~dst trivia tail
 
-(* As [wax_trivia] but for the Wasm-text printer (mirrors [wat_trivia] in
-   bin/main.ml). *)
-let wat_trivia ctx ast =
+let wat_trivia ?retarget ctx ast =
   let used = Hashtbl.create 256 in
   Wax_utils.Printer.run (null_formatter ()) (fun p ->
       Wax_wasm.Output.module_ p ~trivia:(Hashtbl.create 0) ~collect:used ast);
-  Wax_utils.Trivia.associate ~only:used ctx
+  let trivia, tail = Wax_utils.Trivia.associate ~only:used ctx in
+  match retarget with
+  | None -> (trivia, tail)
+  | Some (src, dst) -> Wax_utils.Trivia.retarget ~src ~dst trivia tail
 
 let format_string src =
   match Wax_parser.parse_diagnostics ~filename:"<buffer>" src with
@@ -160,6 +169,85 @@ let check_wat_string src =
       (try Wax_wasm.Validation.f ~warn_unused:true d ast
        with Wax_utils.Diagnostic.Aborted -> ());
       collected_diags d
+
+(* Whether a collector holds any error (as opposed to only warnings), and its
+   errors joined into one message. Used by the conversions, which need a
+   well-typed / valid input and so give up — reporting why — on any error. *)
+let has_errors d =
+  List.exists
+    (fun e ->
+      Wax_utils.Diagnostic.entry_severity e = Wax_utils.Diagnostic.Error)
+    (Wax_utils.Diagnostic.collected d)
+
+let errors_string d =
+  Wax_utils.Diagnostic.collected d
+  |> List.filter (fun e ->
+      Wax_utils.Diagnostic.entry_severity e = Wax_utils.Diagnostic.Error)
+  |> List.map (fun e -> render (Wax_utils.Diagnostic.entry_message e))
+  |> String.concat "\n"
+
+(* Cross-language conversion, for the preview commands. [to_wat] compiles Wax to
+   Wasm text (mirrors [wax_to_wat] in bin/main.ml: type-check, [To_wasm], print);
+   [to_wax] decompiles Wasm text to Wax ([wat_to_wax]: [From_wasm], re-type and
+   erase, print). Both trust their input is well formed once it has no errors, so
+   they return the source's diagnostics rather than a partial result on failure.
+   The converted nodes carry the source locations, so the source comments map
+   onto them once their delimiters are retargeted to the other syntax. *)
+let to_wat_string src =
+  match Wax_parser.parse_diagnostics ~filename:"<buffer>" src with
+  | Error { message; _ } -> Error (String.trim message)
+  | Ok (ast, ctx) -> (
+      let d = Wax_utils.Diagnostic.collector ~source:src () in
+      try
+        let types, ast = Wax_lang.Typing.f ~warn_unused:false d ast in
+        if has_errors d then Error (errors_string d)
+        else
+          let wasm_ast = Wax_conversion.To_wasm.module_ d types ast in
+          let trivia, tail =
+            wat_trivia
+              ~retarget:
+                (Wax_utils.Trivia.wax_syntax, Wax_utils.Trivia.wat_syntax)
+              ctx wasm_ast
+          in
+          let buf = Buffer.create (String.length src) in
+          let fmt = Format.formatter_of_buffer buf in
+          let print_wat f m =
+            Wax_utils.Printer.run f (fun p ->
+                Wax_wasm.Output.module_ ~color:Wax_utils.Colors.Never p ~trivia
+                  ~tail m)
+          in
+          Format.fprintf fmt "%a@." print_wat wasm_ast;
+          Ok (Buffer.contents buf)
+      with Wax_utils.Diagnostic.Aborted -> Error (errors_string d))
+
+let to_wax_string src =
+  match Wat_parser.parse_diagnostics ~filename:"<buffer>" src with
+  | Error { message; _ } -> Error (String.trim message)
+  | Ok (ast, ctx) -> (
+      let d = Wax_utils.Diagnostic.collector ~source:src () in
+      try
+        let wax_ast = Wax_conversion.From_wasm.module_ d ast in
+        if has_errors d then Error (errors_string d)
+        else
+          let wax_ast =
+            Wax_lang.Typing.f ~simplify:true d wax_ast
+            |> snd |> Wax_lang.Typing.erase_types
+          in
+          let trivia, tail =
+            wax_trivia
+              ~retarget:
+                (Wax_utils.Trivia.wat_syntax, Wax_utils.Trivia.wax_syntax)
+              ctx wax_ast
+          in
+          let buf = Buffer.create (String.length src) in
+          let fmt = Format.formatter_of_buffer buf in
+          let print_wax f m =
+            Wax_utils.Printer.run ~width:Wax_lang.Output.width f (fun p ->
+                Wax_lang.Output.module_ p ~trivia ~tail m)
+          in
+          Format.fprintf fmt "%a@." print_wax wax_ast;
+          Ok (Buffer.contents buf)
+      with Wax_utils.Diagnostic.Aborted -> Error (errors_string d))
 
 (* VS Code positions are zero-based for both line and character; Lexing lines are
    one-based and [pos_cnum - pos_bol] is the zero-based column. *)
@@ -417,4 +505,6 @@ let () =
       method formatWat src = format_result format_wat_string src
       method checkWat src = check_result check_wat_string src
       method symbolsWat src = symbols_result symbols_wat_string src
+      method toWat src = format_result to_wat_string src
+      method toWax src = format_result to_wax_string src
     end

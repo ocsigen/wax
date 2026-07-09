@@ -8,6 +8,8 @@
   is left unchanged.
 - Diagnostics: syntax errors, type errors, and lints from the toolchain are
   reported inline as you type (and in the Problems panel).
+- Convert / preview: "Wax: Show compiled WAT" and "Wax: Show as Wax" open the
+  conversion in a live read-only document beside the source.
 - WebAssembly text (`.wat`): `.wat` files now get the same treatment as Wax:
   formatting, diagnostics, document outline, syntax highlighting (the grammar
   the documentation already used), snippets, and comment/bracket handling.

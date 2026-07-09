@@ -52,6 +52,7 @@ export function activateWith(
     registerOutline(context, opts, lang);
   }
   registerDiagnostics(context, opts);
+  registerConvert(context, opts);
 
   // Warm the runtime now (loadWax caches its promise) so the first format or
   // diagnostics run has no load lag — in particular the first format-on-save.
@@ -267,4 +268,111 @@ function registerDiagnostics(
 
   // Check documents already open at activation.
   for (const document of vscode.workspace.textDocuments) schedule(document);
+}
+
+// --- Convert / preview -----------------------------------------------------
+// "Show compiled WAT" (from a .wax file) and "Show as Wax" (from a .wat file)
+// open the conversion in a read-only virtual document beside the source, kept
+// live as the source changes. The virtual document's URI carries the target
+// language in its authority and the source URI in its query, so the content
+// provider can re-read and re-convert on demand.
+
+const PREVIEW_SCHEME = "wax-preview";
+
+// Each source language previews as the other.
+const PREVIEW_TARGET: Record<string, "wat" | "wax"> = { wax: "wat", wat: "wax" };
+
+function previewUri(source: vscode.Uri, target: "wat" | "wax"): vscode.Uri {
+  // Swap the extension for a readable tab title ("foo.wat"); the query keeps the
+  // authoritative source URI (a distinct source therefore gets a distinct URI).
+  const base = source.path.replace(/\.[^/.]+$/, "");
+  return vscode.Uri.from({
+    scheme: PREVIEW_SCHEME,
+    authority: target,
+    path: `${base}.${target}`,
+    query: source.toString(),
+  });
+}
+
+// A conversion failure or a missing source is shown as a comment in the target
+// language, so the preview stays valid-looking and highlighted.
+function asComment(target: "wat" | "wax", message: string): string {
+  const lead = target === "wat" ? ";; " : "// ";
+  return message
+    .split("\n")
+    .map((line) => lead + line)
+    .join("\n");
+}
+
+function registerConvert(
+  context: vscode.ExtensionContext,
+  opts: LoadOptions,
+): void {
+  const changed = new vscode.EventEmitter<vscode.Uri>();
+
+  const provider: vscode.TextDocumentContentProvider = {
+    onDidChange: changed.event,
+    async provideTextDocumentContent(uri, token): Promise<string> {
+      const target = uri.authority === "wax" ? "wax" : "wat";
+      let source: vscode.TextDocument;
+      try {
+        source = await vscode.workspace.openTextDocument(
+          vscode.Uri.parse(uri.query),
+        );
+      } catch {
+        return asComment(target, "the source document is no longer open");
+      }
+      if (token.isCancellationRequested) return "";
+      let wax: Wax;
+      try {
+        wax = await loadWax(context, opts);
+      } catch {
+        return asComment(target, "failed to load the Wax runtime");
+      }
+      const text = source.getText();
+      const result = target === "wat" ? wax.toWat(text) : wax.toWax(text);
+      if (!result.ok || result.text === null) {
+        return asComment(target, "conversion failed:\n" + (result.error ?? ""));
+      }
+      return result.text;
+    },
+  };
+
+  async function show(target: "wat" | "wax"): Promise<void> {
+    const editor = vscode.window.activeTextEditor;
+    const from = target === "wat" ? "wax" : "wat";
+    if (!editor || editor.document.languageId !== from) {
+      void vscode.window.showInformationMessage(
+        `Wax: open a .${from} file to convert it to ${target.toUpperCase()}.`,
+      );
+      return;
+    }
+    const uri = previewUri(editor.document.uri, target);
+    changed.fire(uri); // refresh if a stale preview is already open
+    let doc = await vscode.workspace.openTextDocument(uri);
+    if (doc.languageId !== target)
+      doc = await vscode.languages.setTextDocumentLanguage(doc, target);
+    await vscode.window.showTextDocument(doc, {
+      viewColumn: vscode.ViewColumn.Beside,
+      preview: true,
+      preserveFocus: true,
+    });
+  }
+
+  // Re-render an open preview when its source changes.
+  function refreshFor(document: vscode.TextDocument): void {
+    const target = PREVIEW_TARGET[document.languageId];
+    if (target) changed.fire(previewUri(document.uri, target));
+  }
+
+  context.subscriptions.push(
+    changed,
+    vscode.workspace.registerTextDocumentContentProvider(
+      PREVIEW_SCHEME,
+      provider,
+    ),
+    vscode.workspace.onDidChangeTextDocument((e) => refreshFor(e.document)),
+    vscode.commands.registerCommand("wax.showWat", () => show("wat")),
+    vscode.commands.registerCommand("wax.showWax", () => show("wax")),
+  );
 }
