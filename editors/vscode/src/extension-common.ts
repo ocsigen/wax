@@ -273,9 +273,9 @@ function registerDiagnostics(
 // --- Convert / preview -----------------------------------------------------
 // "Show compiled WAT" (from a .wax file) and "Show as Wax" (from a .wat file)
 // open the conversion in a read-only virtual document beside the source, kept
-// live as the source changes. The virtual document's URI carries the target
-// language in its authority and the source URI in its query, so the content
-// provider can re-read and re-convert on demand.
+// live as the source changes. The virtual document's URI encodes the target
+// language in its path extension and keeps the source URI in its query, so the
+// content provider can re-read and re-convert on demand.
 
 const PREVIEW_SCHEME = "wax-preview";
 
@@ -285,13 +285,20 @@ const PREVIEW_TARGET: Record<string, "wat" | "wax"> = { wax: "wat", wat: "wax" }
 function previewUri(source: vscode.Uri, target: "wat" | "wax"): vscode.Uri {
   // Swap the extension for a readable tab title ("foo.wat"); the query keeps the
   // authoritative source URI (a distinct source therefore gets a distinct URI).
+  // The path must begin with "/" (an untitled/in-memory source path may not), so
+  // normalise it; no authority is used, which would additionally require that.
   const base = source.path.replace(/\.[^/.]+$/, "");
+  const path = (base.startsWith("/") ? base : "/" + base) + "." + target;
   return vscode.Uri.from({
     scheme: PREVIEW_SCHEME,
-    authority: target,
-    path: `${base}.${target}`,
+    path,
     query: source.toString(),
   });
+}
+
+// The target language a preview URI produces (from its path extension).
+function previewTarget(uri: vscode.Uri): "wat" | "wax" {
+  return uri.path.endsWith(".wax") ? "wax" : "wat";
 }
 
 // A conversion failure or a missing source is shown as a comment in the target
@@ -313,7 +320,7 @@ function registerConvert(
   const provider: vscode.TextDocumentContentProvider = {
     onDidChange: changed.event,
     async provideTextDocumentContent(uri, token): Promise<string> {
-      const target = uri.authority === "wax" ? "wax" : "wat";
+      const target = previewTarget(uri);
       let source: vscode.TextDocument;
       try {
         source = await vscode.workspace.openTextDocument(

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1
+
+- Fix "Show compiled WAT" / "Show as Wax" failing to open on the web host
+  (vscode.dev) for untitled or in-memory files.
+
 ## 0.2.0
 
 - Formatting: reformat `.wax` files with the Wax formatter, compiled to
@@ -8,8 +13,9 @@
   is left unchanged.
 - Diagnostics: syntax errors, type errors, and lints from the toolchain are
   reported inline as you type (and in the Problems panel).
-- Convert / preview: "Wax: Show compiled WAT" and "Wax: Show as Wax" open the
-  conversion in a live read-only document beside the source.
+- Convert / preview: "Wax: Show compiled WAT" (from a `.wax` file) and "Wax:
+  Show as Wax" (from a `.wat` file) open the conversion in a live read-only
+  document beside the source.
 - WebAssembly text (`.wat`): `.wat` files now get the same treatment as Wax:
   formatting, diagnostics, document outline, syntax highlighting (the grammar
   the documentation already used), snippets, and comment/bracket handling.

@@ -126,5 +126,24 @@ export async function run(): Promise<void> {
     }
   }
 
+  // Run "Show compiled WAT" end to end. Regression: an untitled document's path
+  // has no leading slash, which made the preview URI construction throw a
+  // UriError on the web host.
+  const untitled = await vscode.workspace.openTextDocument({
+    language: "wax",
+    content: "fn f() -> i32 { 1; }",
+  });
+  await vscode.window.showTextDocument(untitled);
+  await vscode.commands.executeCommand("wax.showWat");
+  const preview = vscode.workspace.textDocuments.find(
+    (d) => d.uri.scheme === "wax-preview",
+  );
+  if (!preview) {
+    throw new Error("web: Show compiled WAT did not open a preview");
+  }
+  if (!preview.getText().includes("func")) {
+    throw new Error("web: preview lacked compiled WAT: " + preview.getText());
+  }
+
   console.log("WEB SMOKE TEST PASSED");
 }
