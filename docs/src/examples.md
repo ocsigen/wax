@@ -19,7 +19,7 @@ fn square(x: i32) -> i32 {
 
 ### Equivalent WAT
 
-```wat
+```wat,check
 (module $calculator
   (func $square (export "square") (param $x i32) (result i32)
     local.get $x
@@ -45,7 +45,7 @@ fn multiply(x: i32, y: i32) -> i32 {
 
 ### Equivalent WAT
 
-```wat
+```wat,check
 (func $add (export "add") (param $x i32) (param $y i32) (result i32)
   local.get $x
   local.get $y
@@ -74,7 +74,7 @@ fn factorial(n: i32) -> i32 {
 
 ### Equivalent WAT
 
-```wat
+```wat,check
 (func $factorial (export "factorial") (param $n i32) (result i32)
   local.get $n
   i32.const 1
@@ -200,7 +200,7 @@ fn countdown(n: i32) -> i32 {
 
 ### Equivalent WAT
 
-```wat
+```wat,check
 (func $triangle (export "triangle") (param $n i32) (result i32)
   (local $i i32) (local $total i32)
   (local.set $i (i32.const 0))
@@ -243,7 +243,7 @@ fn rgb_channel(color: i32, value: i32) -> i32 {
 
 ### Equivalent WAT
 
-```wat
+```wat,check
 (func $rgb_channel (export "rgb_channel")
   (param $color i32) (param $value i32) (result i32)
   (block $red
@@ -612,7 +612,7 @@ fn blend(x: i32, y: i32) -> i32 {
 
 ### Equivalent WAT
 
-```wat
+```wat,check
 (func $blend (export "blend") (param $x i32) (param $y i32) (result i32)
   local.get $x
   i32.const 2
@@ -646,7 +646,7 @@ fn checksum(a: i32, b: i32) -> i32 {
 
 ### Equivalent WAT
 
-```wat
+```wat,check
 (func $divmod (param $a i32) (param $b i32) (result i32 i32)
   local.get $a
   local.get $b

@@ -6,7 +6,7 @@ Wax is a Rust-like syntax for WebAssembly that compiles to standard Wasm binary 
 
 WebAssembly Text format (WAT) uses S-expressions and stack-based operations, which can be verbose and unfamiliar to most programmers:
 
-```wat
+```wat,check
 (func $add (param $x i32) (param $y i32) (result i32)
   local.get $x
   local.get $y

@@ -131,7 +131,7 @@ rec {
 
 Maps to Wasm:
 
-```wat
+```wat,check
 (rec
   (type $obj (descriptor $obj_desc) (struct (field $x i32)))
   (type $obj_desc (describes $obj) (struct)))

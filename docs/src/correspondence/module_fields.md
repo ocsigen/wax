@@ -55,7 +55,7 @@ type circle : shape = { x: i32, y: i32, radius: i32 };
 
 Maps to:
 
-```wat
+```wat,check
 (type $shape (sub (struct (field $x i32) (field $y i32))))
 (type $circle (sub $shape (struct (field $x i32) (field $y i32) (field $radius i32))))
 ```
@@ -152,7 +152,7 @@ A custom page size is written with a `pagesize` clause after the limits, mapping
 memory small: i32 [4096] pagesize 1;
 ```
 
-```wat
+```wat,check
 (memory $small 4096 (pagesize 1))
 ```
 
@@ -162,7 +162,7 @@ A `shared` clause (the threads proposal) marks the memory shared; it must have a
 memory pool: i32 [1, 16] shared;
 ```
 
-```wat
+```wat,check
 (memory $pool 1 16 shared)
 ```
 
@@ -208,7 +208,7 @@ table objs: &?any [0];
 
 Maps to:
 
-```wat
+```wat,check
 (table $funcs 1 10 funcref)
 (table $objs 0 anyref)
 ```
