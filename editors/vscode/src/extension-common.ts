@@ -16,6 +16,11 @@ export function activateWith(
 
   registerFormatter(context, opts, log);
   registerDiagnostics(context, opts);
+
+  // Warm the runtime now (loadWax caches its promise) so the first format or
+  // diagnostics run has no load lag — in particular the first format-on-save.
+  // Failures are reported by the formatter/diagnostics paths; ignore here.
+  void loadWax(context, opts).catch(() => {});
 }
 
 function registerFormatter(
