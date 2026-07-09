@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-a0782670.js";
+            window.path_to_searchindex_js = "searchindex-654e73ab.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-0d649137.js"></script>
+        <script src="toc-41a4b7e9.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -191,12 +191,12 @@
 }</span></pre>
 
 <h3 id="equivalent-wat"><a class="header" href="#equivalent-wat">Equivalent WAT</a></h3>
-<pre><code class="language-wat">(module $calculator
-  (func $square (export "square") (param $x i32) (result i32)
-    local.get $x
-    local.get $x
-    i32.mul))
-</code></pre>
+<pre class="wax-highlight"><span class="hljs wax-code">(<span class="hljs-keyword">module</span> <span class="hljs-variable">$calculator</span>
+  (<span class="hljs-keyword">func</span> <span class="hljs-variable">$square</span> (<span class="hljs-keyword">export</span> <span class="hljs-string">"square"</span>) (<span class="hljs-keyword">param</span> <span class="hljs-variable">$x</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">result</span> <span class="hljs-type">i32</span>)
+    <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$x</span>
+    <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$x</span>
+    <span class="hljs-keyword">i32.mul</span>))</span></pre>
+
 <h2 id="arithmetic-functions"><a class="header" href="#arithmetic-functions">Arithmetic Functions</a></h2>
 <h3 id="wax-1"><a class="header" href="#wax-1">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export = </span><span class="hljs-string">"add"</span><span class="hljs-meta">]</span>
@@ -210,16 +210,16 @@
 }</span></pre>
 
 <h3 id="equivalent-wat-1"><a class="header" href="#equivalent-wat-1">Equivalent WAT</a></h3>
-<pre><code class="language-wat">(func $add (export "add") (param $x i32) (param $y i32) (result i32)
-  local.get $x
-  local.get $y
-  i32.add)
+<pre class="wax-highlight"><span class="hljs wax-code">(<span class="hljs-keyword">func</span> <span class="hljs-variable">$add</span> (<span class="hljs-keyword">export</span> <span class="hljs-string">"add"</span>) (<span class="hljs-keyword">param</span> <span class="hljs-variable">$x</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">param</span> <span class="hljs-variable">$y</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">result</span> <span class="hljs-type">i32</span>)
+  <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$x</span>
+  <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$y</span>
+  <span class="hljs-keyword">i32.add</span>)
 
-(func $multiply (export "multiply") (param $x i32) (param $y i32) (result i32)
-  local.get $x
-  local.get $y
-  i32.mul)
-</code></pre>
+(<span class="hljs-keyword">func</span> <span class="hljs-variable">$multiply</span> (<span class="hljs-keyword">export</span> <span class="hljs-string">"multiply"</span>) (<span class="hljs-keyword">param</span> <span class="hljs-variable">$x</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">param</span> <span class="hljs-variable">$y</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">result</span> <span class="hljs-type">i32</span>)
+  <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$x</span>
+  <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$y</span>
+  <span class="hljs-keyword">i32.mul</span>)</span></pre>
+
 <h2 id="factorial-with-recursion"><a class="header" href="#factorial-with-recursion">Factorial with Recursion</a></h2>
 <h3 id="wax-2"><a class="header" href="#wax-2">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export = </span><span class="hljs-string">"factorial"</span><span class="hljs-meta">]</span>
@@ -232,21 +232,21 @@
 }</span></pre>
 
 <h3 id="equivalent-wat-2"><a class="header" href="#equivalent-wat-2">Equivalent WAT</a></h3>
-<pre><code class="language-wat">(func $factorial (export "factorial") (param $n i32) (result i32)
-  local.get $n
-  i32.const 1
-  i32.le_s
-  if (result i32)
-    i32.const 1
-  else
-    local.get $n
-    local.get $n
-    i32.const 1
-    i32.sub
-    call $factorial
-    i32.mul
-  end)
-</code></pre>
+<pre class="wax-highlight"><span class="hljs wax-code">(<span class="hljs-keyword">func</span> <span class="hljs-variable">$factorial</span> (<span class="hljs-keyword">export</span> <span class="hljs-string">"factorial"</span>) (<span class="hljs-keyword">param</span> <span class="hljs-variable">$n</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">result</span> <span class="hljs-type">i32</span>)
+  <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$n</span>
+  <span class="hljs-keyword">i32.const</span> <span class="hljs-number">1</span>
+  <span class="hljs-keyword">i32.le_s</span>
+  <span class="hljs-keyword">if</span> (<span class="hljs-keyword">result</span> <span class="hljs-type">i32</span>)
+    <span class="hljs-keyword">i32.const</span> <span class="hljs-number">1</span>
+  <span class="hljs-keyword">else</span>
+    <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$n</span>
+    <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$n</span>
+    <span class="hljs-keyword">i32.const</span> <span class="hljs-number">1</span>
+    <span class="hljs-keyword">i32.sub</span>
+    <span class="hljs-keyword">call</span> <span class="hljs-variable">$factorial</span>
+    <span class="hljs-keyword">i32.mul</span>
+  <span class="hljs-keyword">end</span>)</span></pre>
+
 <h2 id="factorial-with-tail-call"><a class="header" href="#factorial-with-tail-call">Factorial with Tail Call</a></h2>
 <h3 id="wax-3"><a class="header" href="#wax-3">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export = </span><span class="hljs-string">"factorial"</span><span class="hljs-meta">]</span>
@@ -284,37 +284,37 @@
 }</span></pre>
 
 <h3 id="equivalent-wat-3"><a class="header" href="#equivalent-wat-3">Equivalent WAT</a></h3>
-<pre><code class="language-wat">(func $find_first_zero (export "find_first_zero")
-      (param $arr (ref $array_i32)) (result i32)
-  (local $len i32)
-  (local $i i32)
-  local.get $arr
-  array.len
-  local.set $len
-  i32.const 0
-  local.set $i
-  (loop $search
-    local.get $i
-    local.get $len
-    i32.ge_s
-    if
-      i32.const -1
-      return
-    end
-    local.get $arr
-    local.get $i
-    array.get $array_i32
-    i32.eqz
-    if
-      local.get $i
-      return
-    end
-    local.get $i
-    i32.const 1
-    i32.add
-    local.set $i
-    br $search))
-</code></pre>
+<pre class="wax-highlight"><span class="hljs wax-code">(<span class="hljs-keyword">func</span> <span class="hljs-variable">$find_first_zero</span> (<span class="hljs-keyword">export</span> <span class="hljs-string">"find_first_zero"</span>)
+      (<span class="hljs-keyword">param</span> <span class="hljs-variable">$arr</span> (<span class="hljs-keyword">ref</span> <span class="hljs-variable">$array_i32</span>)) (<span class="hljs-keyword">result</span> <span class="hljs-type">i32</span>)
+  (<span class="hljs-keyword">local</span> <span class="hljs-variable">$len</span> <span class="hljs-type">i32</span>)
+  (<span class="hljs-keyword">local</span> <span class="hljs-variable">$i</span> <span class="hljs-type">i32</span>)
+  <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$arr</span>
+  <span class="hljs-keyword">array.len</span>
+  <span class="hljs-keyword">local.set</span> <span class="hljs-variable">$len</span>
+  <span class="hljs-keyword">i32.const</span> <span class="hljs-number">0</span>
+  <span class="hljs-keyword">local.set</span> <span class="hljs-variable">$i</span>
+  (<span class="hljs-keyword">loop</span> <span class="hljs-variable">$search</span>
+    <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$i</span>
+    <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$len</span>
+    <span class="hljs-keyword">i32.ge_s</span>
+    <span class="hljs-keyword">if</span>
+      <span class="hljs-keyword">i32.const</span> <span class="hljs-number">-1</span>
+      <span class="hljs-keyword">return</span>
+    <span class="hljs-keyword">end</span>
+    <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$arr</span>
+    <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$i</span>
+    <span class="hljs-keyword">array.get</span> <span class="hljs-variable">$array_i32</span>
+    <span class="hljs-keyword">i32.eqz</span>
+    <span class="hljs-keyword">if</span>
+      <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$i</span>
+      <span class="hljs-keyword">return</span>
+    <span class="hljs-keyword">end</span>
+    <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$i</span>
+    <span class="hljs-keyword">i32.const</span> <span class="hljs-number">1</span>
+    <span class="hljs-keyword">i32.add</span>
+    <span class="hljs-keyword">local.set</span> <span class="hljs-variable">$i</span>
+    <span class="hljs-keyword">br</span> <span class="hljs-variable">$search</span>))</span></pre>
+
 <h2 id="while-loops"><a class="header" href="#while-loops">While Loops</a></h2>
 <h3 id="wax-5"><a class="header" href="#wax-5">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export = </span><span class="hljs-string">"triangle"</span><span class="hljs-meta">]</span>
@@ -340,29 +340,29 @@
 }</span></pre>
 
 <h3 id="equivalent-wat-4"><a class="header" href="#equivalent-wat-4">Equivalent WAT</a></h3>
-<pre><code class="language-wat">(func $triangle (export "triangle") (param $n i32) (result i32)
-  (local $i i32) (local $total i32)
-  (local.set $i (i32.const 0))
-  (local.set $total (i32.const 0))
-  (loop $loop
-    (if (i32.lt_s (local.get $i) (local.get $n))
-      (then
-        (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (local.set $total (i32.add (local.get $total) (local.get $i)))
-        (br $loop))))
-  (local.get $total)
+<pre class="wax-highlight"><span class="hljs wax-code">(<span class="hljs-keyword">func</span> <span class="hljs-variable">$triangle</span> (<span class="hljs-keyword">export</span> <span class="hljs-string">"triangle"</span>) (<span class="hljs-keyword">param</span> <span class="hljs-variable">$n</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">result</span> <span class="hljs-type">i32</span>)
+  (<span class="hljs-keyword">local</span> <span class="hljs-variable">$i</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">local</span> <span class="hljs-variable">$total</span> <span class="hljs-type">i32</span>)
+  (<span class="hljs-keyword">local.set</span> <span class="hljs-variable">$i</span> (<span class="hljs-keyword">i32.const</span> <span class="hljs-number">0</span>))
+  (<span class="hljs-keyword">local.set</span> <span class="hljs-variable">$total</span> (<span class="hljs-keyword">i32.const</span> <span class="hljs-number">0</span>))
+  (<span class="hljs-keyword">loop</span> <span class="hljs-variable">$loop</span>
+    (<span class="hljs-keyword">if</span> (<span class="hljs-keyword">i32.lt_s</span> (<span class="hljs-keyword">local.get</span> <span class="hljs-variable">$i</span>) (<span class="hljs-keyword">local.get</span> <span class="hljs-variable">$n</span>))
+      (<span class="hljs-keyword">then</span>
+        (<span class="hljs-keyword">local.set</span> <span class="hljs-variable">$i</span> (<span class="hljs-keyword">i32.add</span> (<span class="hljs-keyword">local.get</span> <span class="hljs-variable">$i</span>) (<span class="hljs-keyword">i32.const</span> <span class="hljs-number">1</span>)))
+        (<span class="hljs-keyword">local.set</span> <span class="hljs-variable">$total</span> (<span class="hljs-keyword">i32.add</span> (<span class="hljs-keyword">local.get</span> <span class="hljs-variable">$total</span>) (<span class="hljs-keyword">local.get</span> <span class="hljs-variable">$i</span>)))
+        (<span class="hljs-keyword">br</span> <span class="hljs-variable">$loop</span>))))
+  (<span class="hljs-keyword">local.get</span> <span class="hljs-variable">$total</span>)
 )
 
-(func $countdown (export "countdown") (param $n i32) (result i32)
-  (local $steps i32)
-  (local.set $steps (i32.const 0))
-  (loop $loop
-    (local.set $n (i32.sub (local.get $n) (i32.const 1)))
-    (local.set $steps (i32.add (local.get $steps) (i32.const 1)))
-    (br_if $loop (i32.gt_s (local.get $n) (i32.const 0))))
-  (local.get $steps)
-)
-</code></pre>
+(<span class="hljs-keyword">func</span> <span class="hljs-variable">$countdown</span> (<span class="hljs-keyword">export</span> <span class="hljs-string">"countdown"</span>) (<span class="hljs-keyword">param</span> <span class="hljs-variable">$n</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">result</span> <span class="hljs-type">i32</span>)
+  (<span class="hljs-keyword">local</span> <span class="hljs-variable">$steps</span> <span class="hljs-type">i32</span>)
+  (<span class="hljs-keyword">local.set</span> <span class="hljs-variable">$steps</span> (<span class="hljs-keyword">i32.const</span> <span class="hljs-number">0</span>))
+  (<span class="hljs-keyword">loop</span> <span class="hljs-variable">$loop</span>
+    (<span class="hljs-keyword">local.set</span> <span class="hljs-variable">$n</span> (<span class="hljs-keyword">i32.sub</span> (<span class="hljs-keyword">local.get</span> <span class="hljs-variable">$n</span>) (<span class="hljs-keyword">i32.const</span> <span class="hljs-number">1</span>)))
+    (<span class="hljs-keyword">local.set</span> <span class="hljs-variable">$steps</span> (<span class="hljs-keyword">i32.add</span> (<span class="hljs-keyword">local.get</span> <span class="hljs-variable">$steps</span>) (<span class="hljs-keyword">i32.const</span> <span class="hljs-number">1</span>)))
+    (<span class="hljs-keyword">br_if</span> <span class="hljs-variable">$loop</span> (<span class="hljs-keyword">i32.gt_s</span> (<span class="hljs-keyword">local.get</span> <span class="hljs-variable">$n</span>) (<span class="hljs-keyword">i32.const</span> <span class="hljs-number">0</span>))))
+  (<span class="hljs-keyword">local.get</span> <span class="hljs-variable">$steps</span>)
+)</span></pre>
+
 <h2 id="dispatch-jump-table"><a class="header" href="#dispatch-jump-table">Dispatch (Jump Table)</a></h2>
 <h3 id="wax-6"><a class="header" href="#wax-6">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export = </span><span class="hljs-string">"rgb_channel"</span><span class="hljs-meta">]</span>
@@ -376,19 +376,19 @@
 }</span></pre>
 
 <h3 id="equivalent-wat-5"><a class="header" href="#equivalent-wat-5">Equivalent WAT</a></h3>
-<pre><code class="language-wat">(func $rgb_channel (export "rgb_channel")
-  (param $color i32) (param $value i32) (result i32)
-  (block $red
-    (block $green
-      (block $blue
-        (block $bad (br_table $red $green $blue $bad (local.get $color)))
-        (return (i32.const -1)))
-      (return (i32.and (local.get $value) (i32.const 255))))
-    (return
-      (i32.shl (i32.and (local.get $value) (i32.const 255)) (i32.const 8))))
-  (return
-    (i32.shl (i32.and (local.get $value) (i32.const 255)) (i32.const 16))))
-</code></pre>
+<pre class="wax-highlight"><span class="hljs wax-code">(<span class="hljs-keyword">func</span> <span class="hljs-variable">$rgb_channel</span> (<span class="hljs-keyword">export</span> <span class="hljs-string">"rgb_channel"</span>)
+  (<span class="hljs-keyword">param</span> <span class="hljs-variable">$color</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">param</span> <span class="hljs-variable">$value</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">result</span> <span class="hljs-type">i32</span>)
+  (<span class="hljs-keyword">block</span> <span class="hljs-variable">$red</span>
+    (<span class="hljs-keyword">block</span> <span class="hljs-variable">$green</span>
+      (<span class="hljs-keyword">block</span> <span class="hljs-variable">$blue</span>
+        (<span class="hljs-keyword">block</span> <span class="hljs-variable">$bad</span> (<span class="hljs-keyword">br_table</span> <span class="hljs-variable">$red</span> <span class="hljs-variable">$green</span> <span class="hljs-variable">$blue</span> <span class="hljs-variable">$bad</span> (<span class="hljs-keyword">local.get</span> <span class="hljs-variable">$color</span>)))
+        (<span class="hljs-keyword">return</span> (<span class="hljs-keyword">i32.const</span> <span class="hljs-number">-1</span>)))
+      (<span class="hljs-keyword">return</span> (<span class="hljs-keyword">i32.and</span> (<span class="hljs-keyword">local.get</span> <span class="hljs-variable">$value</span>) (<span class="hljs-keyword">i32.const</span> <span class="hljs-number">255</span>))))
+    (<span class="hljs-keyword">return</span>
+      (<span class="hljs-keyword">i32.shl</span> (<span class="hljs-keyword">i32.and</span> (<span class="hljs-keyword">local.get</span> <span class="hljs-variable">$value</span>) (<span class="hljs-keyword">i32.const</span> <span class="hljs-number">255</span>)) (<span class="hljs-keyword">i32.const</span> <span class="hljs-number">8</span>))))
+  (<span class="hljs-keyword">return</span>
+    (<span class="hljs-keyword">i32.shl</span> (<span class="hljs-keyword">i32.and</span> (<span class="hljs-keyword">local.get</span> <span class="hljs-variable">$value</span>) (<span class="hljs-keyword">i32.const</span> <span class="hljs-number">255</span>)) (<span class="hljs-keyword">i32.const</span> <span class="hljs-number">16</span>))))</span></pre>
+
 <h2 id="type-match"><a class="header" href="#type-match">Type Match</a></h2>
 <h3 id="wax-7"><a class="header" href="#wax-7">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">cell</span> = { value: <span class="hljs-type">i32</span> };
@@ -408,25 +408,25 @@
 innermost block; each test branches out to its arm’s block (named by a readable
 <code>$arm</code>/<code>$default</code> label, picked fresh so it cannot capture a user branch)
 carrying the narrowed value, and the default trails the outer escape block:</p>
-<pre><code class="language-wat">(func $sum_list (export "sum_list") (param $v eqref) (result i32)
-  (local $x (ref $cell)) (local $c (ref $cons))
-  (block $default
-    (local.set $x
-      (block $arm_1 (result (ref $cell))
-        (local.set $c
-          (block $arm (result (ref $cons))
-            (drop
-              (br_on_cast $arm_1 eqref (ref $cell)
-                (br_on_cast $arm eqref (ref $cons) (local.get $v))))
-            (br $default)))
-        (return
-          (i32.add
-            (struct.get $cell $value
-              (ref.cast (ref $cell) (struct.get $cons $head (local.get $c))))
-            (call $sum_list (struct.get $cons $tail (local.get $c)))))))
-    (return (struct.get $cell $value (local.get $x))))
-  (return (i32.const 0)))
-</code></pre>
+<pre class="wax-highlight"><span class="hljs wax-code">(<span class="hljs-keyword">func</span> <span class="hljs-variable">$sum_list</span> (<span class="hljs-keyword">export</span> <span class="hljs-string">"sum_list"</span>) (<span class="hljs-keyword">param</span> <span class="hljs-variable">$v</span> <span class="hljs-type">eqref</span>) (<span class="hljs-keyword">result</span> <span class="hljs-type">i32</span>)
+  (<span class="hljs-keyword">local</span> <span class="hljs-variable">$x</span> (<span class="hljs-keyword">ref</span> <span class="hljs-variable">$cell</span>)) (<span class="hljs-keyword">local</span> <span class="hljs-variable">$c</span> (<span class="hljs-keyword">ref</span> <span class="hljs-variable">$cons</span>))
+  (<span class="hljs-keyword">block</span> <span class="hljs-variable">$default</span>
+    (<span class="hljs-keyword">local.set</span> <span class="hljs-variable">$x</span>
+      (<span class="hljs-keyword">block</span> <span class="hljs-variable">$arm_1</span> (<span class="hljs-keyword">result</span> (<span class="hljs-keyword">ref</span> <span class="hljs-variable">$cell</span>))
+        (<span class="hljs-keyword">local.set</span> <span class="hljs-variable">$c</span>
+          (<span class="hljs-keyword">block</span> <span class="hljs-variable">$arm</span> (<span class="hljs-keyword">result</span> (<span class="hljs-keyword">ref</span> <span class="hljs-variable">$cons</span>))
+            (<span class="hljs-keyword">drop</span>
+              (<span class="hljs-keyword">br_on_cast</span> <span class="hljs-variable">$arm_1</span> <span class="hljs-type">eqref</span> (<span class="hljs-keyword">ref</span> <span class="hljs-variable">$cell</span>)
+                (<span class="hljs-keyword">br_on_cast</span> <span class="hljs-variable">$arm</span> <span class="hljs-type">eqref</span> (<span class="hljs-keyword">ref</span> <span class="hljs-variable">$cons</span>) (<span class="hljs-keyword">local.get</span> <span class="hljs-variable">$v</span>))))
+            (<span class="hljs-keyword">br</span> <span class="hljs-variable">$default</span>)))
+        (<span class="hljs-keyword">return</span>
+          (<span class="hljs-keyword">i32.add</span>
+            (<span class="hljs-keyword">struct.get</span> <span class="hljs-variable">$cell</span> <span class="hljs-variable">$value</span>
+              (<span class="hljs-keyword">ref.cast</span> (<span class="hljs-keyword">ref</span> <span class="hljs-variable">$cell</span>) (<span class="hljs-keyword">struct.get</span> <span class="hljs-variable">$cons</span> <span class="hljs-variable">$head</span> (<span class="hljs-keyword">local.get</span> <span class="hljs-variable">$c</span>))))
+            (<span class="hljs-keyword">call</span> <span class="hljs-variable">$sum_list</span> (<span class="hljs-keyword">struct.get</span> <span class="hljs-variable">$cons</span> <span class="hljs-variable">$tail</span> (<span class="hljs-keyword">local.get</span> <span class="hljs-variable">$c</span>)))))))
+    (<span class="hljs-keyword">return</span> (<span class="hljs-keyword">struct.get</span> <span class="hljs-variable">$cell</span> <span class="hljs-variable">$value</span> (<span class="hljs-keyword">local.get</span> <span class="hljs-variable">$x</span>))))
+  (<span class="hljs-keyword">return</span> (<span class="hljs-keyword">i32.const</span> <span class="hljs-number">0</span>)))</span></pre>
+
 <h2 id="structs-and-methods"><a class="header" href="#structs-and-methods">Structs and Methods</a></h2>
 <h3 id="wax-8"><a class="header" href="#wax-8">Wax</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">point</span> = { x: <span class="hljs-type">i32</span>, y: <span class="hljs-type">i32</span> };
@@ -467,7 +467,7 @@ carrying the narrowed value, and the default trails the outer escape block:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">point</span> = { x: <span class="hljs-type">i32</span>, y: <span class="hljs-type">i32</span> };
 <span class="hljs-keyword">type</span> <span class="hljs-type">ints</span> = [<span class="hljs-keyword">mut</span> <span class="hljs-type">i32</span>];
 
-<span class="hljs-comment">// Where an expected type fixes the result — here a `let` annotation — the</span>
+<span class="hljs-comment">// Where an expected type fixes the result (here a `let` annotation) the</span>
 <span class="hljs-comment">// struct or array type name may be omitted.</span>
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"origin"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">origin</span>() -&gt; &amp;<span class="hljs-type">point</span> {
@@ -482,7 +482,7 @@ carrying the narrowed value, and the default trails the outer escape block:</p>
 }
 
 <span class="hljs-comment">// A struct type can also be inferred from its field set alone, with no</span>
-<span class="hljs-comment">// expected type — only `point` has the fields {x, y}, so its name may be</span>
+<span class="hljs-comment">// expected type: only `point` has the fields {x, y}, so its name may be</span>
 <span class="hljs-comment">// dropped here too.</span>
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"make_origin"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">make_origin</span>() -&gt; &amp;<span class="hljs-type">eq</span> {
@@ -490,7 +490,7 @@ carrying the narrowed value, and the default trails the outer escape block:</p>
 }
 
 <span class="hljs-comment">// The expected type also reaches into both branches of a conditional `?:`, so a</span>
-<span class="hljs-comment">// branch may omit the name — here the `{..}` default is resolved from the</span>
+<span class="hljs-comment">// branch may omit the name: here the `{..}` default is resolved from the</span>
 <span class="hljs-comment">// `-&gt; &amp;point` result type flowing through the `?:`.</span>
 <span class="hljs-meta">#[export = </span><span class="hljs-string">"pick"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">pick</span>(c: <span class="hljs-type">i32</span>) -&gt; &amp;<span class="hljs-type">point</span> {
@@ -499,8 +499,8 @@ carrying the narrowed value, and the default trails the outer escape block:</p>
 
 <h2 id="inferring-block-result-types"><a class="header" href="#inferring-block-result-types">Inferring Block Result Types</a></h2>
 <h3 id="wax-11"><a class="header" href="#wax-11">Wax</a></h3>
-<p>A block’s result type — <code>=&gt; T</code> on an <code>if</code>, or the type after <code>do</code> (and likewise
-<code>loop</code>, <code>try</code>, and <code>try_table</code>) — may be omitted where it is fixed by the values
+<p>A block’s result type, <code>=&gt; T</code> on an <code>if</code>, or the type after <code>do</code> (and likewise
+<code>loop</code>, <code>try</code>, and <code>try_table</code>), may be omitted where it is fixed by the values
 the block produces or by the surrounding context:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export = </span><span class="hljs-string">"max0"</span><span class="hljs-meta">]</span>
 <span class="hljs-keyword">fn</span> <span class="hljs-title">max0</span>(n: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> {
@@ -656,15 +656,15 @@ UTF-16 code units. See <a href="language.html#strings">Strings</a>.</p>
 <h3 id="equivalent-wat-7"><a class="header" href="#equivalent-wat-7">Equivalent WAT</a></h3>
 <p><code>wax -f wat</code> keeps the literals as <code>(@char …)</code> / <code>(@string …)</code> annotations, so
 they round-trip back to Wax unchanged:</p>
-<pre><code class="language-wat">(func $newline (export "newline") (result i32) (@char "\n"))
+<pre class="wax-highlight"><span class="hljs wax-code">(<span class="hljs-keyword">func</span> <span class="hljs-variable">$newline</span> (<span class="hljs-keyword">export</span> <span class="hljs-string">"newline"</span>) (<span class="hljs-keyword">result</span> <span class="hljs-type">i32</span>) (<span class="hljs-meta">@char</span> <span class="hljs-string">"\n"</span>))
 
-(func $greeting (export "greeting") (result (ref $chars))
-  (@string $chars "hi!"))
+(<span class="hljs-keyword">func</span> <span class="hljs-variable">$greeting</span> (<span class="hljs-keyword">export</span> <span class="hljs-string">"greeting"</span>) (<span class="hljs-keyword">result</span> (<span class="hljs-keyword">ref</span> <span class="hljs-variable">$chars</span>))
+  (<span class="hljs-meta">@string</span> <span class="hljs-variable">$chars</span> <span class="hljs-string">"hi!"</span>))
 
-(func $wide_greeting (export "wide_greeting") (result (ref $wide))
-  (@string $wide "café"))
-</code></pre>
-<p>In a WASM binary these lower to <code>i32.const 10</code> and an <code>array.new_fixed</code>: the
+(<span class="hljs-keyword">func</span> <span class="hljs-variable">$wide_greeting</span> (<span class="hljs-keyword">export</span> <span class="hljs-string">"wide_greeting"</span>) (<span class="hljs-keyword">result</span> (<span class="hljs-keyword">ref</span> <span class="hljs-variable">$wide</span>))
+  (<span class="hljs-meta">@string</span> <span class="hljs-variable">$wide</span> <span class="hljs-string">"café"</span>))</span></pre>
+
+<p>In a Wasm binary these lower to <code>i32.const 10</code> and an <code>array.new_fixed</code>: the
 <code>i8</code> greeting holds the three bytes <code>104, 105, 33</code>, and the <code>i16</code> greeting the
 four UTF-16 units <code>99, 97, 102, 233</code>. The character comes back as the integer
 <code>10</code>, while each string is still recovered (its elements are reasonable text).</p>
@@ -681,15 +681,15 @@ they were produced. See <a href="language.html#holes">Holes</a> for the full rul
 }</span></pre>
 
 <h3 id="equivalent-wat-8"><a class="header" href="#equivalent-wat-8">Equivalent WAT</a></h3>
-<pre><code class="language-wat">(func $blend (export "blend") (param $x i32) (param $y i32) (result i32)
-  local.get $x
-  i32.const 2
-  i32.mul
-  local.get $y
-  i32.const 3
-  i32.mul
-  i32.add)
-</code></pre>
+<pre class="wax-highlight"><span class="hljs wax-code">(<span class="hljs-keyword">func</span> <span class="hljs-variable">$blend</span> (<span class="hljs-keyword">export</span> <span class="hljs-string">"blend"</span>) (<span class="hljs-keyword">param</span> <span class="hljs-variable">$x</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">param</span> <span class="hljs-variable">$y</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">result</span> <span class="hljs-type">i32</span>)
+  <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$x</span>
+  <span class="hljs-keyword">i32.const</span> <span class="hljs-number">2</span>
+  <span class="hljs-keyword">i32.mul</span>
+  <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$y</span>
+  <span class="hljs-keyword">i32.const</span> <span class="hljs-number">3</span>
+  <span class="hljs-keyword">i32.mul</span>
+  <span class="hljs-keyword">i32.add</span>)</span></pre>
+
 <h2 id="multiple-return-values"><a class="header" href="#multiple-return-values">Multiple Return Values</a></h2>
 <p>A function may return several values, and a <code>let</code> can bind them all at once
 from a parenthesised list of names. The call runs once and its results are
@@ -707,25 +707,25 @@ stored into the locals. See <a href="language.html#local-variables">Local Variab
 }</span></pre>
 
 <h3 id="equivalent-wat-9"><a class="header" href="#equivalent-wat-9">Equivalent WAT</a></h3>
-<pre><code class="language-wat">(func $divmod (param $a i32) (param $b i32) (result i32 i32)
-  local.get $a
-  local.get $b
-  i32.div_s
-  local.get $a
-  local.get $b
-  i32.rem_s)
+<pre class="wax-highlight"><span class="hljs wax-code">(<span class="hljs-keyword">func</span> <span class="hljs-variable">$divmod</span> (<span class="hljs-keyword">param</span> <span class="hljs-variable">$a</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">param</span> <span class="hljs-variable">$b</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">result</span> <span class="hljs-type">i32</span> <span class="hljs-type">i32</span>)
+  <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$a</span>
+  <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$b</span>
+  <span class="hljs-keyword">i32.div_s</span>
+  <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$a</span>
+  <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$b</span>
+  <span class="hljs-keyword">i32.rem_s</span>)
 
-(func $checksum (export "checksum") (param $a i32) (param $b i32) (result i32)
-  (local $q i32) (local $r i32)
-  local.get $a
-  local.get $b
-  call $divmod
-  local.set $r
-  local.set $q
-  local.get $q
-  local.get $r
-  i32.add)
-</code></pre>
+(<span class="hljs-keyword">func</span> <span class="hljs-variable">$checksum</span> (<span class="hljs-keyword">export</span> <span class="hljs-string">"checksum"</span>) (<span class="hljs-keyword">param</span> <span class="hljs-variable">$a</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">param</span> <span class="hljs-variable">$b</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">result</span> <span class="hljs-type">i32</span>)
+  (<span class="hljs-keyword">local</span> <span class="hljs-variable">$q</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">local</span> <span class="hljs-variable">$r</span> <span class="hljs-type">i32</span>)
+  <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$a</span>
+  <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$b</span>
+  <span class="hljs-keyword">call</span> <span class="hljs-variable">$divmod</span>
+  <span class="hljs-keyword">local.set</span> <span class="hljs-variable">$r</span>
+  <span class="hljs-keyword">local.set</span> <span class="hljs-variable">$q</span>
+  <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$q</span>
+  <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$r</span>
+  <span class="hljs-keyword">i32.add</span>)</span></pre>
+
 <h2 id="wide-arithmetic"><a class="header" href="#wide-arithmetic">Wide Arithmetic</a></h2>
 <p>128-bit integer arithmetic uses the <code>i64::</code> intrinsics, which take and return
 their operands as <code>(low, high)</code> pairs of <code>i64</code> values. Each returns two
@@ -744,7 +744,7 @@ results, so a multi-value <code>let</code> binds them.</p>
 }</span></pre>
 
 <h2 id="custom-descriptors"><a class="header" href="#custom-descriptors">Custom Descriptors</a></h2>
-<p>A struct can carry a <em>descriptor</em> — a second struct linked to it by reciprocal
+<p>A struct can carry a <em>descriptor</em>: a second struct linked to it by reciprocal
 <a href="correspondence/types.html#descriptors"><code>descriptor</code>/<code>describes</code> clauses</a>. The
 descriptor instructions never name the target type: it is recovered from the
 descriptor operand (the type the operand <em>describes</em>), so all of them share one
@@ -794,12 +794,78 @@ feature flag required).</p>
     }
 }</span></pre>
 
+<h2 id="linear-memory"><a class="header" href="#linear-memory">Linear Memory</a></h2>
+<p>A <code>memory</code> declaration reserves linear memory. <code>load</code>/<code>store</code> methods on it read
+and write, with the access width in the method name; a narrow (<code>load8</code>/<code>load16</code>)
+load returns raw bits, so it needs an explicit sign/zero-extending cast.</p>
+<h3 id="wax-23"><a class="header" href="#wax-23">Wax</a></h3>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">memory</span> mem: <span class="hljs-type">i32</span> [<span class="hljs-number">1</span>];
+
+<span class="hljs-meta">#[export = </span><span class="hljs-string">"sum_bytes"</span><span class="hljs-meta">]</span>
+<span class="hljs-keyword">fn</span> <span class="hljs-title">sum_bytes</span>(start: <span class="hljs-type">i32</span>, end: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> {
+    <span class="hljs-keyword">let</span> total: <span class="hljs-type">i32</span> = <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">let</span> p: <span class="hljs-type">i32</span> = start;
+    <span class="hljs-keyword">while</span> p &lt;u end {
+        total += mem.<span class="hljs-title">load8</span>(p) <span class="hljs-keyword">as</span> <span class="hljs-type">i32_u</span>;   <span class="hljs-comment">// byte load, zero-extended</span>
+        p += <span class="hljs-number">1</span>;
+    }
+    total;
+}</span></pre>
+
+<h2 id="simd"><a class="header" href="#simd">SIMD</a></h2>
+<p><code>v128</code> vector operations are method intrinsics with the lane shape baked into the
+name (<code>mul_i32x4</code>, <code>add_i32x4</code>, <code>extract_lane_i32x4</code>).</p>
+<h3 id="wax-24"><a class="header" href="#wax-24">Wax</a></h3>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export = </span><span class="hljs-string">"madd_i32x4"</span><span class="hljs-meta">]</span>
+<span class="hljs-keyword">fn</span> <span class="hljs-title">madd_i32x4</span>(a: <span class="hljs-type">v128</span>, b: <span class="hljs-type">v128</span>, c: <span class="hljs-type">v128</span>) -&gt; <span class="hljs-type">v128</span> {
+    a.<span class="hljs-title">mul_i32x4</span>(b).<span class="hljs-title">add_i32x4</span>(c);          <span class="hljs-comment">// a * b + c, four i32 lanes at once</span>
+}
+
+<span class="hljs-meta">#[export = </span><span class="hljs-string">"sum_lanes"</span><span class="hljs-meta">]</span>
+<span class="hljs-keyword">fn</span> <span class="hljs-title">sum_lanes</span>(v: <span class="hljs-type">v128</span>) -&gt; <span class="hljs-type">i32</span> {
+    v.<span class="hljs-title">extract_lane_i32x4</span>(<span class="hljs-number">0</span>) + v.<span class="hljs-title">extract_lane_i32x4</span>(<span class="hljs-number">1</span>)
+        + v.<span class="hljs-title">extract_lane_i32x4</span>(<span class="hljs-number">2</span>) + v.<span class="hljs-title">extract_lane_i32x4</span>(<span class="hljs-number">3</span>);
+}</span></pre>
+
+<h2 id="stack-switching"><a class="header" href="#stack-switching">Stack Switching</a></h2>
+<p>A continuation type wraps a function type with <code>cont</code>. A coroutine <code>suspend</code>s
+with a value; a driver <code>resume</code>s it, routing the suspended tag to a handler
+label that receives the payload and the paused continuation. Note that the
+continuation’s type changes after a suspend, since resuming it now needs the
+reply value.</p>
+<h3 id="wax-25"><a class="header" href="#wax-25">Wax</a></h3>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">task</span> = <span class="hljs-keyword">fn</span>() -&gt; <span class="hljs-type">i32</span>;
+<span class="hljs-keyword">type</span> <span class="hljs-type">k</span> = <span class="hljs-keyword">cont</span> task;
+<span class="hljs-keyword">type</span> <span class="hljs-type">resumed</span> = <span class="hljs-keyword">fn</span>(<span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span>;   <span class="hljs-comment">// the continuation's type after a suspend</span>
+<span class="hljs-keyword">type</span> <span class="hljs-type">kr</span> = <span class="hljs-keyword">cont</span> resumed;
+
+<span class="hljs-keyword">tag</span> <span class="hljs-title">yield</span>(<span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span>;
+
+<span class="hljs-comment">// A coroutine: yield 10, then return the reply plus one.</span>
+<span class="hljs-keyword">fn</span> <span class="hljs-title">worker</span>() -&gt; <span class="hljs-type">i32</span> {
+    <span class="hljs-keyword">let</span> reply: <span class="hljs-type">i32</span> = <span class="hljs-keyword">suspend</span> <span class="hljs-title">yield</span>(<span class="hljs-number">10</span>);
+    reply + <span class="hljs-number">1</span>;
+}
+
+<span class="hljs-comment">// Run the worker until its first suspend and return the value it yielded.</span>
+<span class="hljs-meta">#[export = </span><span class="hljs-string">"first_yield"</span><span class="hljs-meta">]</span>
+<span class="hljs-keyword">fn</span> <span class="hljs-title">first_yield</span>() -&gt; <span class="hljs-type">i32</span> {
+    <span class="hljs-keyword">let</span> c: &amp;?<span class="hljs-type">k</span> = <span class="hljs-keyword">cont_new</span> <span class="hljs-title">k </span>(worker);
+    <span class="hljs-keyword">let</span> (v, rest) =
+        <span class="hljs-symbol">'on_yield</span>: <span class="hljs-keyword">do</span> () -&gt; (<span class="hljs-type">i32</span>, &amp;<span class="hljs-type">kr</span>) {
+            _ = <span class="hljs-keyword">resume</span> k [yield -&gt; <span class="hljs-symbol">'on_yield</span>] (c!);   <span class="hljs-comment">// worker returned; drop its result</span>
+            <span class="hljs-keyword">return</span> -<span class="hljs-number">1</span>;
+        };
+    _ = rest;            <span class="hljs-comment">// `rest` could be resumed with a reply to continue the worker</span>
+    v;
+}</span></pre>
+
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="language.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="cheatsheet.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
@@ -813,7 +879,7 @@ feature flag required).</p>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="language.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="cheatsheet.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 

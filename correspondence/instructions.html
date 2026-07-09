@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-a0782670.js";
+            window.path_to_searchindex_js = "../searchindex-654e73ab.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-0d649137.js"></script>
+        <script src="../toc-41a4b7e9.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -196,12 +196,12 @@ an <code>i16</code> array holds the UTF-16 code units (so the string must be val
 </tbody>
 </table>
 </div>
-<p>In WAT both forms are written with annotations — <code>(@char …)</code> and <code>(@string …)</code>
-— so they round-trip faithfully through WAT. A WASM binary keeps only the
+<p>In WAT both forms are written with annotations (<code>(@char …)</code> and <code>(@string …)</code>),
+so they round-trip faithfully through WAT. A Wasm binary keeps only the
 underlying <code>i32.const</code> / <code>array.new_fixed</code>: a character decompiles to a plain
 integer, and an <code>array.new_fixed</code> is recovered as a string only when its
-elements — decoded by the array’s element type (UTF-8 for <code>i8</code>, UTF-16 for
-<code>i16</code>) — form a reasonable string (valid text, no control characters other
+elements, decoded by the array’s element type (UTF-8 for <code>i8</code>, UTF-16 for
+<code>i16</code>), form a reasonable string (valid text, no control characters other
 than tab/newline/carriage return); otherwise it stays an
 <a href="#aggregate-instructions">array literal</a>.</p>
 <h2 id="numeric-instructions"><a class="header" href="#numeric-instructions">Numeric Instructions</a></h2>
@@ -347,8 +347,8 @@ its own assignment.</p>
 <p>A <a href="../language.html#assignment">compound assignment</a> <code>x op= val</code> is shorthand for
 <code>x = x op val</code>; it lowers to a <code>local.get</code>/<code>global.get</code> of <code>x</code>, the operand, the
 binary operator, and a <code>local.set</code>/<code>global.set</code> back into <code>x</code>. The reverse
-direction recognises exactly this shape — a <code>set</code> of <code>x</code> whose value is a binary
-operator with <code>x</code> as its <em>left</em> operand — and reconstructs the compound form
+direction recognises exactly this shape (a <code>set</code> of <code>x</code> whose value is a binary
+operator with <code>x</code> as its <em>left</em> operand) and reconstructs the compound form
 (<code>x = x + 1</code> becomes <code>x += 1</code>). A comparison, or <code>x</code> in the right operand
 (<code>x = 1 - x</code>), is left as an ordinary assignment.</p>
 <h2 id="control-instructions"><a class="header" href="#control-instructions">Control Instructions</a></h2>
@@ -385,7 +385,7 @@ operator with <code>x</code> as its <em>left</em> operand — and reconstructs t
 </tbody>
 </table>
 </div>
-<p>A <code>drop</code> becomes an assignment to <code>_</code> — an anonymous binding that evaluates its
+<p>A <code>drop</code> becomes an assignment to <code>_</code>, an anonymous binding that evaluates its
 value and discards it (see <a href="../language.html#discarding-a-value">Discarding a value</a>).
 When the dropped value is a bare numeric expression whose width the Wax syntax
 would not otherwise carry, the conversion pins it with a type annotation,
@@ -418,7 +418,7 @@ it wherever it is redundant: a <code>do i32 { ... }</code> becomes <code>do { ..
 reaching the block’s exit or from the surrounding context (see
 <a href="../language.html#blocks">Type inference</a>). Parameterized and multi-result block
 types are always kept.</p>
-<h3 id="branch-hints"><a class="header" href="#branch-hints">Branch hints</a></h3>
+<h3 id="branch-hints"><a class="header" href="#branch-hints">Branch Hints</a></h3>
 <p>The <a href="https://github.com/WebAssembly/branch-hinting">branch-hinting proposal</a>
 annotates a conditional branch as likely or unlikely taken. Wax writes the hint
 as an attribute on the branch and preserves it on every round-trip (it is stored
@@ -426,7 +426,7 @@ in the <code>metadata.code.branch_hint</code> custom section; no feature flag is
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[likely]</span> <span class="hljs-keyword">if</span> cond { ... } <span class="hljs-keyword">else</span> { ... }
 <span class="hljs-meta">#[unlikely]</span> <span class="hljs-keyword">br_if</span> <span class="hljs-symbol">'l</span> cond</span></pre>
 
-<p>Any conditional branch may be hinted — <code>if</code>, <code>br_if</code>, <code>br_on_null</code>,
+<p>Any conditional branch may be hinted: <code>if</code>, <code>br_if</code>, <code>br_on_null</code>,
 <code>br_on_non_null</code>, <code>br_on_cast</code>, and <code>br_on_cast_fail</code>. In WAT the same hint is
 the <code>(@metadata.code.branch_hint "\00"|"\01")</code> annotation preceding the branch
 (<code>"\01"</code> = likely, <code>"\00"</code> = unlikely).</p>
@@ -434,7 +434,7 @@ the <code>(@metadata.code.branch_hint "\00"|"\01")</code> annotation preceding t
 <p>Two Wax control constructs have no instruction of their own: they are readable
 spellings of a lower-level <em>shape</em>, so they lower to that shape and are
 <em>recovered</em> from it on decompilation (both round-trip through the binary). See
-the language guide for the surface syntax — <a href="../language.html#dispatch"><code>dispatch</code></a>
+the language guide for the surface syntax: <a href="../language.html#dispatch"><code>dispatch</code></a>
 and <a href="../language.html#match"><code>match</code></a>.</p>
 <p><code>dispatch</code> is a jump table. It lowers to one nested block per case with a
 <code>br_table</code> in the innermost block and the case bodies (which fall through) after
@@ -463,6 +463,7 @@ delivering the narrowed value out to its arm; such a ladder decompiles back to
 </thead>
 <tbody>
 <tr><td><code>ref.null</code></td><td><code>null</code></td></tr>
+<tr><td><code>ref.func $f</code></td><td><code>f</code></td></tr>
 <tr><td><code>ref.is_null</code></td><td><code>!val</code></td></tr>
 <tr><td><code>ref.as_non_null</code></td><td><code>val!</code></td></tr>
 <tr><td><code>ref.i31</code></td><td><code>val as &amp;i31</code></td></tr>
@@ -477,17 +478,18 @@ delivering the narrowed value out to its arm; such a ladder decompiles back to
 </tbody>
 </table>
 </div>
+<p>A bare function name used as a value, <code>f</code> rather than the call <code>f(args)</code>, is <code>ref.func $f</code>: it produces a reference to the function. This works in a global initializer and anywhere a <code>&amp;func</code> reference is expected (for example the callee of an <a href="../language.html#indirect-calls">indirect call</a>).</p>
 <p>These casts can also chain through a forced intermediate, written as a single <code>as</code>:</p>
 <ul>
-<li><strong><code>&amp;ref as i32_s</code>/<code>as i32_u</code></strong> on a reference that is not already <code>&amp;i31</code> (e.g. an <code>&amp;any</code> or <code>&amp;eq</code>) inserts a <code>ref.cast (ref i31)</code> before the <code>i31.get</code> — so it covers both <code>i31.get_s</code> and <code>ref.cast (ref i31)</code> + <code>i31.get_s</code>.</li>
+<li><strong><code>&amp;ref as i32_s</code>/<code>as i32_u</code></strong> on a reference that is not already <code>&amp;i31</code> (e.g. an <code>&amp;any</code> or <code>&amp;eq</code>) inserts a <code>ref.cast (ref i31)</code> before the <code>i31.get</code>, so it covers both <code>i31.get_s</code> and <code>ref.cast (ref i31)</code> + <code>i31.get_s</code>.</li>
 <li><strong><code>&amp;ref as i64_s</code>/<code>as i64_u</code></strong> widens that further: the <code>i31.get</code> (with the <code>ref.cast</code> above as needed) is followed by <code>i64.extend_i32_s</code>/<code>_u</code>.</li>
 <li><strong><code>i64 as &amp;i31</code></strong> wraps to <code>i32</code> (<code>i32.wrap_i64</code>) before <code>ref.i31</code>.</li>
 <li><strong><code>extern_val as &amp;T</code></strong> for an <code>any</code>-hierarchy <code>T</code> (e.g. a struct type) inserts <code>any.convert_extern</code> before the <code>ref.cast (ref T)</code>; likewise an <code>any</code>-hierarchy value <code>as &amp;extern</code> uses <code>extern.convert_any</code>.</li>
 <li><strong><code>i32_val as &amp;extern</code></strong> boxes the <code>i32</code> with <code>ref.i31</code> before <code>extern.convert_any</code>.</li>
 </ul>
 <h2 id="aggregate-instructions"><a class="header" href="#aggregate-instructions">Aggregate Instructions</a></h2>
-<p>A struct or array literal takes an optional type prefix — <code>{t| … }</code> for a
-struct, <code>[t| … ]</code> for an array — but it is omitted whenever the literal’s type
+<p>A struct or array literal takes an optional type prefix (<code>{t| … }</code> for a
+struct, <code>[t| … ]</code> for an array), but it is omitted whenever the literal’s type
 can be inferred from context (an assignment, a return, a call argument), which
 is the common case shown below. Write the prefix only when the type is
 ambiguous. The <code>{descriptor(d)| … }</code> forms are different: <code>descriptor(d)</code>
@@ -513,6 +515,8 @@ that can be dropped.</p>
 <tr><td><code>array.new_elem $t $e</code></td><td><code>[ e @ offset; count ]</code></td></tr>
 <tr><td><code>array.init_data $t $d</code></td><td><code>arr.init(d, dest, src, count)</code></td></tr>
 <tr><td><code>array.init_elem $t $e</code></td><td><code>arr.init(e, dest, src, count)</code></td></tr>
+<tr><td><code>array.fill $t</code></td><td><code>arr.fill(idx, val, count)</code></td></tr>
+<tr><td><code>array.copy $t1 $t2</code></td><td><code>arr.copy(idx, src_arr, src_idx, count)</code></td></tr>
 <tr><td><code>array.get $t</code></td><td><code>arr[idx]</code></td></tr>
 <tr><td><code>array.get_s $t</code></td><td><code>arr[idx] as i32_s</code></td></tr>
 <tr><td><code>array.get_u $t</code></td><td><code>arr[idx] as i32_u</code></td></tr>
@@ -521,148 +525,7 @@ that can be dropped.</p>
 </tbody>
 </table>
 </div>
-<p>A packed (<code>i8</code>/<code>i16</code>) struct field or array element read sign- or zero-extends to <code>i32</code> via the <code>as i32_s</code>/<code>as i32_u</code> cast, as shown above (<code>struct.get_s</code>/<code>_u</code>, <code>array.get_s</code>/<code>_u</code>). Widening straight to <code>i64</code> — <code>val.field as i64_s</code> or <code>arr[idx] as i64_u</code> — emits the packed read followed by <code>i64.extend_i32_s</code>/<code>_u</code>.</p>
-<h2 id="memory-access"><a class="header" href="#memory-access">Memory Access</a></h2>
-<p>Loads and stores are method calls on a <a href="module_fields.html#memories">memory</a>. The method name carries the access width; the value’s signedness (for narrow loads) and its <code>i32</code>/<code>i64</code> type are expressed with the surrounding <code>as iN_s</code>/<code>as iN_u</code> cast, mirroring packed array access.</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Wax</th><th>Wasm</th></tr>
-</thead>
-<tbody>
-<tr><td><code>m.load32(p)</code></td><td><code>i32.load</code></td></tr>
-<tr><td><code>m.load64(p)</code></td><td><code>i64.load</code></td></tr>
-<tr><td><code>m.loadf32(p)</code> / <code>m.loadf64(p)</code></td><td><code>f32.load</code> / <code>f64.load</code></td></tr>
-<tr><td><code>m.load8(p) as i32_s</code></td><td><code>i32.load8_s</code></td></tr>
-<tr><td><code>m.load16(p) as i32_u</code></td><td><code>i32.load16_u</code></td></tr>
-<tr><td><code>m.load32(p) as i64_s</code></td><td><code>i64.load32_s</code></td></tr>
-<tr><td><code>m.load8(p) as i64_s</code></td><td><code>i64.load8_s</code></td></tr>
-<tr><td><code>m.load16(p) as i64_u</code></td><td><code>i64.load16_u</code></td></tr>
-<tr><td><code>m.store32(p, v)</code></td><td><code>i32.store</code> (<code>v: i32</code>) or <code>i64.store32</code> (<code>v: i64</code>)</td></tr>
-<tr><td><code>m.store16(p, v)</code></td><td><code>i32.store16</code> or <code>i64.store16</code> (by <code>v</code>’s type)</td></tr>
-<tr><td><code>m.store64(p, v)</code> / <code>m.storef64(p, v)</code></td><td><code>i64.store</code> / <code>f64.store</code></td></tr>
-</tbody>
-</table>
-</div>
-<p>A bare narrow load (<code>m.load8(p)</code> with no cast) defaults to unsigned <code>i32</code>, like <code>array.get_u</code>. The store value’s <code>i32</code>/<code>i64</code> type is inferred from the operand.</p>
-<p>Two optional trailing arguments give the <code>align</code> and <code>offset</code> of the access (both constant integers); <code>offset</code> requires <code>align</code> to fill its positional slot:</p>
-<pre class="wax-highlight"><span class="hljs wax-code">m.<span class="hljs-title">load32</span>(p);          <span class="hljs-comment">// i32.load</span>
-m.<span class="hljs-title">load32</span>(p, <span class="hljs-number">1</span>);       <span class="hljs-comment">// i32.load align=1</span>
-m.<span class="hljs-title">load32</span>(p, <span class="hljs-number">1</span>, <span class="hljs-number">16</span>);   <span class="hljs-comment">// i32.load align=1 offset=16</span></span></pre>
-
-<p>The alignment defaults to the access’s natural alignment and is only printed when it differs; the offset defaults to <code>0</code>.</p>
-<p>The remaining memory operations are also methods on the memory (a data segment is named directly, not as a value):</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Wax</th><th>Wasm</th></tr>
-</thead>
-<tbody>
-<tr><td><code>m.size()</code></td><td><code>memory.size</code></td></tr>
-<tr><td><code>m.grow(n)</code></td><td><code>memory.grow</code></td></tr>
-<tr><td><code>m.fill(dest, val, len)</code></td><td><code>memory.fill</code></td></tr>
-<tr><td><code>m.copy(dest, src, len)</code></td><td><code>memory.copy</code> (within <code>m</code>)</td></tr>
-<tr><td><code>m.copy(m2, dest, src, len)</code></td><td><code>memory.copy m m2</code> (copy from <code>m2</code> into <code>m</code>)</td></tr>
-<tr><td><code>m.init(seg, dest, src, len)</code></td><td><code>memory.init seg</code></td></tr>
-<tr><td><code>seg.drop()</code></td><td><code>data.drop seg</code></td></tr>
-</tbody>
-</table>
-</div>
-<h3 id="atomics"><a class="header" href="#atomics">Atomics</a></h3>
-<p>Atomic accesses (the threads proposal) are methods on a memory, named after the WebAssembly mnemonic with <code>.</code> rewritten as <code>_</code> (the value type stays in the name). They require exactly their natural alignment. <code>atomic.fence</code> has no memory operand and is the <a href="language.html#qualified-intrinsics"><code>atomic::fence()</code></a> intrinsic.</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Wasm</th><th>Wax</th></tr>
-</thead>
-<tbody>
-<tr><td><code>i32.atomic.load</code></td><td><code>m.i32_atomic_load(p)</code></td></tr>
-<tr><td><code>i64.atomic.store8</code></td><td><code>m.i64_atomic_store8(p, v)</code></td></tr>
-<tr><td><code>i32.atomic.rmw.add</code></td><td><code>m.i32_atomic_rmw_add(p, v)</code></td></tr>
-<tr><td><code>i64.atomic.rmw16.add_u</code></td><td><code>m.i64_atomic_rmw16_add_u(p, v)</code></td></tr>
-<tr><td><code>i32.atomic.rmw.cmpxchg</code></td><td><code>m.i32_atomic_rmw_cmpxchg(p, expected, replacement)</code></td></tr>
-<tr><td><code>memory.atomic.notify</code></td><td><code>m.atomic_notify(p, count)</code></td></tr>
-<tr><td><code>memory.atomic.wait32</code></td><td><code>m.atomic_wait32(p, expected, timeout)</code></td></tr>
-<tr><td><code>atomic.fence</code></td><td><code>atomic::fence()</code></td></tr>
-</tbody>
-</table>
-</div>
-<h2 id="table-access"><a class="header" href="#table-access">Table Access</a></h2>
-<p>A <a href="module_fields.html#tables">table</a> is indexed like an array, and an indirect call is written as a call through a table slot cast to the callee’s function type.</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Wasm</th><th>Wax</th></tr>
-</thead>
-<tbody>
-<tr><td><code>table.get $t</code></td><td><code>t[i]</code></td></tr>
-<tr><td><code>table.set $t</code></td><td><code>t[i] = v</code></td></tr>
-<tr><td><code>call_indirect $t (type $ft)</code></td><td><code>(t[i] as &amp;?ft)(args)</code></td></tr>
-<tr><td><code>call_indirect $t (result i32)</code></td><td><code>(t[i] as &amp;?fn() -&gt; i32)(args)</code></td></tr>
-<tr><td><code>return_call_indirect $t (type $ft)</code></td><td><code>return (t[i] as &amp;?ft)(args)</code></td></tr>
-</tbody>
-</table>
-</div>
-<p><code>call_indirect</code> is reconstructed from this pattern on conversion to WAT/WASM, so it round-trips. The cast target names the callee’s function type — a defined type (<code>ft</code>) or an inline one written <code>fn(params) -&gt; results</code> (used when the WAT type is anonymous) — and matches the table’s element type: for a <code>funcref</code> table (the usual case) it is the nullable <code>&amp;?ft</code>, as shown. When the element type is already a non-null <code>&amp;ft</code>, the cast may be omitted (<code>t[i](args)</code>).</p>
-<p>The other table operations are methods on the table (an element segment is named directly):</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Wax</th><th>Wasm</th></tr>
-</thead>
-<tbody>
-<tr><td><code>t.size()</code></td><td><code>table.size</code></td></tr>
-<tr><td><code>t.grow(val, n)</code></td><td><code>table.grow</code></td></tr>
-<tr><td><code>t.fill(dest, val, len)</code></td><td><code>table.fill</code></td></tr>
-<tr><td><code>t.copy(dest, src, len)</code></td><td><code>table.copy</code> (within <code>t</code>)</td></tr>
-<tr><td><code>t.copy(t2, dest, src, len)</code></td><td><code>table.copy t t2</code> (copy from <code>t2</code> into <code>t</code>)</td></tr>
-<tr><td><code>t.init(seg, dest, src, len)</code></td><td><code>table.init seg</code></td></tr>
-<tr><td><code>seg.drop()</code></td><td><code>elem.drop seg</code></td></tr>
-</tbody>
-</table>
-</div>
-<p>A GC array can also be filled from a segment with <code>arr.init(seg, dest, src, len)</code> (<code>array.init_data</code>/<code>array.init_elem</code>, selected by the array’s element type) — the segment-from-array counterpart of <a href="#aggregate-instructions"><code>array.new_data</code>/<code>array.new_elem</code></a>.</p>
-<h2 id="exception-instructions"><a class="header" href="#exception-instructions">Exception Instructions</a></h2>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Wasm</th><th>Wax</th></tr>
-</thead>
-<tbody>
-<tr><td><code>throw $tag</code></td><td><code>throw tag</code> (no payload), <code>throw tag x</code> (one), <code>throw tag (x, y)</code> (several)</td></tr>
-<tr><td><code>throw_ref</code></td><td><code>throw_ref</code></td></tr>
-<tr><td><code>try_table ... catch $tag $l ...</code></td><td><code>try { ... } catch [ tag -&gt; 'l, ... ]</code></td></tr>
-<tr><td><code>try_table ... catch_ref $tag $l ...</code></td><td><code>try { ... } catch [ tag &amp; -&gt; 'l, ... ]</code></td></tr>
-<tr><td><code>try_table ... catch_all $l ...</code></td><td><code>try { ... } catch [ _ -&gt; 'l, ... ]</code></td></tr>
-<tr><td><code>try_table ... catch_all_ref $l ...</code></td><td><code>try { ... } catch [ _ &amp; -&gt; 'l, ... ]</code></td></tr>
-<tr><td><code>try ... catch $tag ...</code></td><td><code>try { ... } catch { tag =&gt; { ... } ... }</code></td></tr>
-<tr><td><code>try ... catch_all ...</code></td><td><code>try { ... } catch { _ =&gt; { ... } }</code></td></tr>
-</tbody>
-</table>
-</div>
-<p>The <code>try { ... } catch [ ... ]</code> syntax compiles to WebAssembly’s <code>try_table</code> instruction (the current standard). The <code>try { ... } catch { tag =&gt; { ... } }</code> syntax compiles to the older <code>try</code>/<code>catch</code> instructions (deprecated but still supported for compatibility).</p>
-<h2 id="stack-switching-instructions"><a class="header" href="#stack-switching-instructions">Stack Switching Instructions</a></h2>
-<p>These correspond to the WebAssembly <a href="https://github.com/WebAssembly/stack-switching">stack-switching proposal</a>. A continuation type is declared with <code>type k = cont ft;</code> (see <a href="types.html">Types</a>); <code>&lt;k&gt;</code> and <code>&lt;tag&gt;</code> below are the names of a continuation type and a tag respectively.</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Wasm</th><th>Wax</th></tr>
-</thead>
-<tbody>
-<tr><td><code>cont.new $k</code></td><td><code>cont_new k (func)</code></td></tr>
-<tr><td><code>cont.bind $k1 $k2</code></td><td><code>cont_bind k1 k2 (args, cont)</code></td></tr>
-<tr><td><code>suspend $tag</code></td><td><code>suspend tag (args)</code></td></tr>
-<tr><td><code>resume $k</code></td><td><code>resume k [] (args, cont)</code></td></tr>
-<tr><td><code>resume $k (on $tag $l) ...</code></td><td><code>resume k [ tag -&gt; 'l, ... ] (args, cont)</code></td></tr>
-<tr><td><code>resume $k (on $tag switch) ...</code></td><td><code>resume k [ tag -&gt; switch, ... ] (args, cont)</code></td></tr>
-<tr><td><code>resume_throw $k $tag ...</code></td><td><code>resume_throw k tag [ ... ] (args, cont)</code></td></tr>
-<tr><td><code>resume_throw_ref $k ...</code></td><td><code>resume_throw_ref k [ ... ] (exn, cont)</code></td></tr>
-<tr><td><code>switch $k $tag</code></td><td><code>switch k tag (args, cont)</code></td></tr>
-</tbody>
-</table>
-</div>
-<p>Operands are written in WebAssembly stack order, so the continuation reference is the last argument. The handler list in <code>[ ... ]</code> mirrors the <code>try ... catch [ ... ]</code> syntax: <code>tag -&gt; 'l</code> is an <code>(on $tag $l)</code> clause and <code>tag -&gt; switch</code> is an <code>(on $tag switch)</code> clause.</p>
-<p>Tags used with <code>suspend</code>/<code>resume</code> may have result types (unlike exception tags); see <a href="module_fields.html#tags">Tags</a>. When a function reference is passed to <code>cont_new</code> for a continuation whose function type belongs to a recursion group, declare the function with an explicit type (<code>fn f: ft (...) { ... }</code>) so its type matches the continuation’s.</p>
+<p>A packed (<code>i8</code>/<code>i16</code>) struct field or array element read sign- or zero-extends to <code>i32</code> via the <code>as i32_s</code>/<code>as i32_u</code> cast, as shown above (<code>struct.get_s</code>/<code>_u</code>, <code>array.get_s</code>/<code>_u</code>). Widening straight to <code>i64</code> (<code>val.field as i64_s</code> or <code>arr[idx] as i64_u</code>) emits the packed read followed by <code>i64.extend_i32_s</code>/<code>_u</code>.</p>
 <h2 id="simd-vector-instructions"><a class="header" href="#simd-vector-instructions">SIMD (Vector) Instructions</a></h2>
 <p><code>v128</code> vector operations are written as method intrinsics with the lane shape baked into the name. The Wax name is the WebAssembly mnemonic with the leading shape moved to the end: <code>i32x4.add</code> becomes <code>add_i32x4</code>, <code>f32x4.sqrt</code> becomes <code>sqrt_f32x4</code>, and the whole-vector <code>v128.and</code> becomes <code>and_v128</code>. Signed/unsigned variants keep the <code>_s</code>/<code>_u</code> (<code>min_s_i8x16</code>, <code>extract_lane_u_i8x16</code>). Constant lane immediates (lane indices, shuffle indices) come first in the argument list, before any remaining stack operands.</p>
 <p>Lanewise unary and binary operations (the receiver is the first operand):</p>
@@ -739,20 +602,20 @@ m.<span class="hljs-title">load32</span>(p, <span class="hljs-number">1</span>, 
 </tbody>
 </table>
 </div>
-<p>Memory loads and stores are methods on a <a href="module_fields.html#memories">memory</a>, like the scalar accesses above (the optional trailing <code>align</code>/<code>offset</code> arguments work the same way):</p>
+<p>Memory loads and stores are methods on a <a href="module_fields.html#memories">memory</a>, like the scalar <a href="#memory-access">memory accesses</a> (the optional trailing <code>align</code>/<code>offset</code> arguments work the same way):</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Wax</th><th>Wasm</th></tr>
+<tr><th>Wasm</th><th>Wax</th></tr>
 </thead>
 <tbody>
-<tr><td><code>m.v128_load(p)</code></td><td><code>v128.load</code></td></tr>
-<tr><td><code>m.v128_store(p, v)</code></td><td><code>v128.store</code></td></tr>
-<tr><td><code>m.v128_load8x8_s(p)</code></td><td><code>v128.load8x8_s</code> (and <code>16x4</code>/<code>32x2</code>, <code>_s</code>/<code>_u</code>)</td></tr>
-<tr><td><code>m.v128_load32_zero(p)</code></td><td><code>v128.load32_zero</code> (and <code>64_zero</code>)</td></tr>
-<tr><td><code>m.v128_load8_splat(p)</code></td><td><code>v128.load8_splat</code> (and <code>16</code>/<code>32</code>/<code>64</code>)</td></tr>
-<tr><td><code>m.v128_load8_lane(p, v, lane)</code></td><td><code>v128.load8_lane</code> (and <code>16</code>/<code>32</code>/<code>64</code>)</td></tr>
-<tr><td><code>m.v128_store8_lane(p, v, lane)</code></td><td><code>v128.store8_lane</code> (and <code>16</code>/<code>32</code>/<code>64</code>)</td></tr>
+<tr><td><code>v128.load</code></td><td><code>m.v128_load(p)</code></td></tr>
+<tr><td><code>v128.store</code></td><td><code>m.v128_store(p, v)</code></td></tr>
+<tr><td><code>v128.load8x8_s</code> (and <code>16x4</code>/<code>32x2</code>, <code>_s</code>/<code>_u</code>)</td><td><code>m.v128_load8x8_s(p)</code></td></tr>
+<tr><td><code>v128.load32_zero</code> (and <code>64_zero</code>)</td><td><code>m.v128_load32_zero(p)</code></td></tr>
+<tr><td><code>v128.load8_splat</code> (and <code>16</code>/<code>32</code>/<code>64</code>)</td><td><code>m.v128_load8_splat(p)</code></td></tr>
+<tr><td><code>v128.load8_lane</code> (and <code>16</code>/<code>32</code>/<code>64</code>)</td><td><code>m.v128_load8_lane(p, v, lane)</code></td></tr>
+<tr><td><code>v128.store8_lane</code> (and <code>16</code>/<code>32</code>/<code>64</code>)</td><td><code>m.v128_store8_lane(p, v, lane)</code></td></tr>
 </tbody>
 </table>
 </div>
@@ -769,6 +632,147 @@ m.<span class="hljs-title">load32</span>(p, <span class="hljs-number">1</span>, 
 </table>
 </div>
 <p>No intrinsic can clash with a module entity name: the free-function intrinsics are written as <code>v128::</code>/<code>i64::</code> qualified paths and every other is a method on a receiver, so a function may freely be named e.g. <code>v128_bitselect</code> without any renaming.</p>
+<h2 id="memory-access"><a class="header" href="#memory-access">Memory Access</a></h2>
+<p>Loads and stores are method calls on a <a href="module_fields.html#memories">memory</a>. The method name carries the access width; the value’s signedness (for narrow loads) and its <code>i32</code>/<code>i64</code> type are expressed with the surrounding <code>as iN_s</code>/<code>as iN_u</code> cast, mirroring packed array access.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Wasm</th><th>Wax</th></tr>
+</thead>
+<tbody>
+<tr><td><code>i32.load</code></td><td><code>m.load32(p)</code></td></tr>
+<tr><td><code>i64.load</code></td><td><code>m.load64(p)</code></td></tr>
+<tr><td><code>f32.load</code> / <code>f64.load</code></td><td><code>m.loadf32(p)</code> / <code>m.loadf64(p)</code></td></tr>
+<tr><td><code>i32.load8_s</code></td><td><code>m.load8(p) as i32_s</code></td></tr>
+<tr><td><code>i32.load16_u</code></td><td><code>m.load16(p) as i32_u</code></td></tr>
+<tr><td><code>i64.load32_s</code></td><td><code>m.load32(p) as i64_s</code></td></tr>
+<tr><td><code>i64.load8_s</code></td><td><code>m.load8(p) as i64_s</code></td></tr>
+<tr><td><code>i64.load16_u</code></td><td><code>m.load16(p) as i64_u</code></td></tr>
+<tr><td><code>i32.store</code> (<code>v: i32</code>) or <code>i64.store32</code> (<code>v: i64</code>)</td><td><code>m.store32(p, v)</code></td></tr>
+<tr><td><code>i32.store16</code> or <code>i64.store16</code> (by <code>v</code>’s type)</td><td><code>m.store16(p, v)</code></td></tr>
+<tr><td><code>i64.store</code> / <code>f64.store</code></td><td><code>m.store64(p, v)</code> / <code>m.storef64(p, v)</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>A bare narrow load (<code>m.load8(p)</code> with no cast) defaults to unsigned <code>i32</code>, like <code>array.get_u</code>. The store value’s <code>i32</code>/<code>i64</code> type is inferred from the operand.</p>
+<p>Two optional trailing arguments give the <code>align</code> and <code>offset</code> of the access (both constant integers); <code>offset</code> requires <code>align</code> to fill its positional slot:</p>
+<pre class="wax-highlight"><span class="hljs wax-code">m.<span class="hljs-title">load32</span>(p);          <span class="hljs-comment">// i32.load</span>
+m.<span class="hljs-title">load32</span>(p, <span class="hljs-number">1</span>);       <span class="hljs-comment">// i32.load align=1</span>
+m.<span class="hljs-title">load32</span>(p, <span class="hljs-number">1</span>, <span class="hljs-number">16</span>);   <span class="hljs-comment">// i32.load align=1 offset=16</span></span></pre>
+
+<p>The alignment defaults to the access’s natural alignment and is only printed when it differs; the offset defaults to <code>0</code>.</p>
+<p>The remaining memory operations are also methods on the memory (a data segment is named directly, not as a value):</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Wasm</th><th>Wax</th></tr>
+</thead>
+<tbody>
+<tr><td><code>memory.size</code></td><td><code>m.size()</code></td></tr>
+<tr><td><code>memory.grow</code></td><td><code>m.grow(n)</code></td></tr>
+<tr><td><code>memory.fill</code></td><td><code>m.fill(dest, val, len)</code></td></tr>
+<tr><td><code>memory.copy</code> (within <code>m</code>)</td><td><code>m.copy(dest, src, len)</code></td></tr>
+<tr><td><code>memory.copy m m2</code> (copy from <code>m2</code> into <code>m</code>)</td><td><code>m.copy(m2, dest, src, len)</code></td></tr>
+<tr><td><code>memory.init seg</code></td><td><code>m.init(seg, dest, src, len)</code></td></tr>
+<tr><td><code>data.drop seg</code></td><td><code>seg.drop()</code></td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="atomics"><a class="header" href="#atomics">Atomics</a></h3>
+<p>Atomic accesses (the threads proposal) are methods on a memory, named after the WebAssembly mnemonic with <code>.</code> rewritten as <code>_</code> (the value type stays in the name). They require exactly their natural alignment. <code>atomic.fence</code> has no memory operand and is the <a href="language.html#qualified-intrinsics"><code>atomic::fence()</code></a> intrinsic.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Wasm</th><th>Wax</th></tr>
+</thead>
+<tbody>
+<tr><td><code>i32.atomic.load</code></td><td><code>m.i32_atomic_load(p)</code></td></tr>
+<tr><td><code>i64.atomic.store8</code></td><td><code>m.i64_atomic_store8(p, v)</code></td></tr>
+<tr><td><code>i32.atomic.rmw.add</code></td><td><code>m.i32_atomic_rmw_add(p, v)</code></td></tr>
+<tr><td><code>i64.atomic.rmw16.add_u</code></td><td><code>m.i64_atomic_rmw16_add_u(p, v)</code></td></tr>
+<tr><td><code>i32.atomic.rmw.cmpxchg</code></td><td><code>m.i32_atomic_rmw_cmpxchg(p, expected, replacement)</code></td></tr>
+<tr><td><code>memory.atomic.notify</code></td><td><code>m.atomic_notify(p, count)</code></td></tr>
+<tr><td><code>memory.atomic.wait32</code></td><td><code>m.atomic_wait32(p, expected, timeout)</code></td></tr>
+<tr><td><code>atomic.fence</code></td><td><code>atomic::fence()</code></td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="table-access"><a class="header" href="#table-access">Table Access</a></h2>
+<p>A <a href="module_fields.html#tables">table</a> is indexed like an array, and an indirect call is written as a call through a table slot cast to the callee’s function type.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Wasm</th><th>Wax</th></tr>
+</thead>
+<tbody>
+<tr><td><code>table.get $t</code></td><td><code>t[i]</code></td></tr>
+<tr><td><code>table.set $t</code></td><td><code>t[i] = v</code></td></tr>
+<tr><td><code>call_indirect $t (type $ft)</code></td><td><code>(t[i] as &amp;?ft)(args)</code></td></tr>
+<tr><td><code>call_indirect $t (result i32)</code></td><td><code>(t[i] as &amp;?fn() -&gt; i32)(args)</code></td></tr>
+<tr><td><code>return_call_indirect $t (type $ft)</code></td><td><code>return (t[i] as &amp;?ft)(args)</code></td></tr>
+</tbody>
+</table>
+</div>
+<p><code>call_indirect</code> is reconstructed from this pattern on conversion to WAT/Wasm, so it round-trips. The cast target names the callee’s function type, a defined type (<code>ft</code>) or an inline one written <code>fn(params) -&gt; results</code> (used when the WAT type is anonymous), and matches the table’s element type: for a <code>funcref</code> table (the usual case) it is the nullable <code>&amp;?ft</code>, as shown. When the element type is already a non-null <code>&amp;ft</code>, the cast may be omitted (<code>t[i](args)</code>).</p>
+<p>The other table operations are methods on the table (an element segment is named directly):</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Wasm</th><th>Wax</th></tr>
+</thead>
+<tbody>
+<tr><td><code>table.size</code></td><td><code>t.size()</code></td></tr>
+<tr><td><code>table.grow</code></td><td><code>t.grow(val, n)</code></td></tr>
+<tr><td><code>table.fill</code></td><td><code>t.fill(dest, val, len)</code></td></tr>
+<tr><td><code>table.copy</code> (within <code>t</code>)</td><td><code>t.copy(dest, src, len)</code></td></tr>
+<tr><td><code>table.copy t t2</code> (copy from <code>t2</code> into <code>t</code>)</td><td><code>t.copy(t2, dest, src, len)</code></td></tr>
+<tr><td><code>table.init seg</code></td><td><code>t.init(seg, dest, src, len)</code></td></tr>
+<tr><td><code>elem.drop seg</code></td><td><code>seg.drop()</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>A GC array can also be filled from a segment with <code>arr.init(seg, dest, src, len)</code> (<code>array.init_data</code>/<code>array.init_elem</code>, selected by the array’s element type), the segment-from-array counterpart of <a href="#aggregate-instructions"><code>array.new_data</code>/<code>array.new_elem</code></a>.</p>
+<h2 id="exception-instructions"><a class="header" href="#exception-instructions">Exception Instructions</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Wasm</th><th>Wax</th></tr>
+</thead>
+<tbody>
+<tr><td><code>throw $tag</code></td><td><code>throw tag</code> (no payload), <code>throw tag x</code> (one), <code>throw tag (x, y)</code> (several)</td></tr>
+<tr><td><code>throw_ref</code></td><td><code>throw_ref</code></td></tr>
+<tr><td><code>try_table ... catch $tag $l ...</code></td><td><code>try { ... } catch [ tag -&gt; 'l, ... ]</code></td></tr>
+<tr><td><code>try_table ... catch_ref $tag $l ...</code></td><td><code>try { ... } catch [ tag &amp; -&gt; 'l, ... ]</code></td></tr>
+<tr><td><code>try_table ... catch_all $l ...</code></td><td><code>try { ... } catch [ _ -&gt; 'l, ... ]</code></td></tr>
+<tr><td><code>try_table ... catch_all_ref $l ...</code></td><td><code>try { ... } catch [ _ &amp; -&gt; 'l, ... ]</code></td></tr>
+<tr><td><code>try ... catch $tag ...</code></td><td><code>try { ... } catch { tag =&gt; { ... } ... }</code></td></tr>
+<tr><td><code>try ... catch_all ...</code></td><td><code>try { ... } catch { _ =&gt; { ... } }</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>The <code>try { ... } catch [ ... ]</code> syntax compiles to WebAssembly’s <code>try_table</code> instruction (the current standard). The <code>try { ... } catch { tag =&gt; { ... } }</code> syntax compiles to the older <code>try</code>/<code>catch</code> instructions (deprecated but still supported for compatibility).</p>
+<h2 id="stack-switching-instructions"><a class="header" href="#stack-switching-instructions">Stack Switching Instructions</a></h2>
+<p>These correspond to the WebAssembly <a href="https://github.com/WebAssembly/stack-switching">stack-switching proposal</a>. A continuation type is declared with <code>type k = cont ft;</code> (see <a href="types.html">Types</a>); <code>&lt;k&gt;</code> and <code>&lt;tag&gt;</code> below are the names of a continuation type and a tag respectively.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Wasm</th><th>Wax</th></tr>
+</thead>
+<tbody>
+<tr><td><code>cont.new $k</code></td><td><code>cont_new k (func)</code></td></tr>
+<tr><td><code>cont.bind $k1 $k2</code></td><td><code>cont_bind k1 k2 (args, cont)</code></td></tr>
+<tr><td><code>suspend $tag</code></td><td><code>suspend tag (args)</code></td></tr>
+<tr><td><code>resume $k</code></td><td><code>resume k [] (args, cont)</code></td></tr>
+<tr><td><code>resume $k (on $tag $l) ...</code></td><td><code>resume k [ tag -&gt; 'l, ... ] (args, cont)</code></td></tr>
+<tr><td><code>resume $k (on $tag switch) ...</code></td><td><code>resume k [ tag -&gt; switch, ... ] (args, cont)</code></td></tr>
+<tr><td><code>resume_throw $k $tag ...</code></td><td><code>resume_throw k tag [ ... ] (args, cont)</code></td></tr>
+<tr><td><code>resume_throw_ref $k ...</code></td><td><code>resume_throw_ref k [ ... ] (exn, cont)</code></td></tr>
+<tr><td><code>switch $k $tag</code></td><td><code>switch k tag (args, cont)</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>Operands are written in WebAssembly stack order, so the continuation reference is the last argument. The handler list in <code>[ ... ]</code> mirrors the <code>try ... catch [ ... ]</code> syntax: <code>tag -&gt; 'l</code> is an <code>(on $tag $l)</code> clause and <code>tag -&gt; switch</code> is an <code>(on $tag switch)</code> clause.</p>
+<p>Tags used with <code>suspend</code>/<code>resume</code> may have result types (unlike exception tags); see <a href="module_fields.html#tags">Tags</a>. When a function reference is passed to <code>cont_new</code> for a continuation whose function type belongs to a recursion group, declare the function with an explicit type (<code>fn f: ft (...) { ... }</code>) so its type matches the continuation’s.</p>
 
                     </main>
 

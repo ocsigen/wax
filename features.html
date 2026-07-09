@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-a0782670.js";
+            window.path_to_searchindex_js = "searchindex-654e73ab.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-0d649137.js"></script>
+        <script src="toc-41a4b7e9.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -179,11 +179,11 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="feature-support"><a class="header" href="#feature-support">Feature Support</a></h1>
-<p>Wax works across all three formats (Wax, WAT, WASM) and targets recent
-WebAssembly proposals — several of them <strong>on by default</strong> that most toolchains
+<p>Wax works across all three formats (Wax, WAT, Wasm) and targets recent
+WebAssembly proposals, several of them <strong>on by default</strong>, that most toolchains
 still gate. This page summarises what the toolchain accepts and produces.</p>
 <h2 id="on-by-default"><a class="header" href="#on-by-default">On by default</a></h2>
-<p>Wax fully supports the <strong>WebAssembly 3.0</strong> standard — garbage collection
+<p>Wax fully supports the <strong>WebAssembly 3.0</strong> standard: garbage collection
 (WasmGC), exception handling (<code>try_table</code>), tail calls, multiple memories,
 64-bit memory (memory64), reference types, bulk memory, and SIMD (including
 relaxed SIMD).</p>
@@ -211,7 +211,7 @@ relaxed SIMD).</p>
 </thead>
 <tbody>
 <tr><td><code>custom-descriptors</code></td><td>exact reference types, descriptor structs, and the descriptor instructions (<code>descriptor</code> / <code>describes</code>)</td></tr>
-<tr><td><code>compact-import-section</code></td><td>groups same-module imports in the binary — a binary-encoding option, gated on output but always accepted on input</td></tr>
+<tr><td><code>compact-import-section</code></td><td>groups same-module imports in the binary, a binary-encoding option gated on output but always accepted on input</td></tr>
 </tbody>
 </table>
 </div>
@@ -222,13 +222,13 @@ relaxed SIMD).</p>
 <tr><th>Feature</th><th>Notes</th></tr>
 </thead>
 <tbody>
-<tr><td>Legacy <code>delegate</code> / <code>rethrow</code></td><td>rejected on input. The rest of legacy exception handling — <code>try</code>/<code>catch</code>/<code>catch_all</code> — <em>is</em> supported: it has dedicated Wax syntax (<code>try { … } catch { … }</code>) and round-trips through the legacy binary opcodes</td></tr>
+<tr><td>Legacy <code>delegate</code> / <code>rethrow</code></td><td>rejected on input. The rest of legacy exception handling (<code>try</code>/<code>catch</code>/<code>catch_all</code>) <em>is</em> supported: it has dedicated Wax syntax (<code>try { … } catch { … }</code>) and round-trips through the legacy binary opcodes</td></tr>
 <tr><td>Component Model</td><td></td></tr>
 </tbody>
 </table>
 </div>
 <h3 id="a-deliberate-relaxation"><a class="header" href="#a-deliberate-relaxation">A deliberate relaxation</a></h3>
-<p>A tag may carry a <strong>result type</strong> — <code>tag yield(i32) -&gt; i32</code>. The MVP requires
+<p>A tag may carry a <strong>result type</strong>: <code>tag yield(i32) -&gt; i32</code>. The MVP requires
 tags to have empty results; the stack-switching proposal lifts that (a suspended
 tag resumes with a value), so Wax permits it on purpose. See
 <a href="./language.html#stack-switching">Stack Switching</a>.</p>

@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-a0782670.js";
+            window.path_to_searchindex_js = "../searchindex-654e73ab.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-0d649137.js"></script>
+        <script src="../toc-41a4b7e9.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -188,6 +188,12 @@
 <li><strong>Control Flow</strong>: Wax uses structured control flow (<code>if</code>, <code>loop</code>, <code>do</code>, <code>try</code>) that resembles high-level languages but maps directly to Wasm structured control instructions.</li>
 <li><strong>Types</strong>: Wax types define a direct mapping to Wasm types, with a slightly more concise syntax.</li>
 <li><strong>Modules</strong>: Wax modules group imports under an <code>import "module" { … }</code> block and mark exports with an <code>#[export]</code> attribute on the field itself, rather than using separate import/export definitions.</li>
+</ul>
+<h2 id="extensions-to-wat"><a class="header" href="#extensions-to-wat">Extensions to WAT</a></h2>
+<p>Wax understands a few non-standard annotations in WAT. They reuse the standard <code>(@name …)</code> annotation syntax, but Wax gives them a meaning a stock WAT tool would not, so WAT that uses them round-trips only through Wax:</p>
+<ul>
+<li><strong>Literals</strong>: <code>(@char "c")</code> and <code>(@string $t "…")</code> are character and string literals. <code>(@char …)</code> stands in for the <code>i32.const</code> of a code point; <code>(@string …)</code> for the <code>array.new_fixed</code> that builds an <code>i8</code> or <code>i16</code> array. They round-trip through WAT, but a Wasm binary keeps only the underlying instructions. See <a href="instructions.html#literals">Literals</a>. Use <a href="../cli.html#options"><code>--desugar</code></a> to expand them into plain wasm.</li>
+<li><strong>Conditional compilation</strong>: <code>(@if &lt;cond&gt; (@then …) (@else …))</code> guards a module field by a condition that a downstream preprocessor resolves. It is the WAT counterpart of Wax’s <code>#[if]</code>. See <a href="module_fields.html#conditional-annotations">Conditional Annotations</a>. Resolve conditions with <a href="../cli.html#options"><code>-D</code></a>; an unresolved <code>(@if …)</code> makes <code>--desugar</code> fail.</li>
 </ul>
 
                     </main>

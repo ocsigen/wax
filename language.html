@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-a0782670.js";
+            window.path_to_searchindex_js = "searchindex-654e73ab.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-0d649137.js"></script>
+        <script src="toc-41a4b7e9.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -192,7 +192,7 @@
 <p>Unlike the <code>#[...]</code> outer attributes that decorate a following field (such as
 <code>#[export = "name"]</code>), <code>#![...]</code> is an <em>inner</em> attribute: it applies to the
 enclosing module. A module may carry at most one name.</p>
-<p>(This maps to the WebAssembly module name stored in the <code>name</code> custom section —
+<p>(This maps to the WebAssembly module name stored in the <code>name</code> custom section,
 the <code>$name</code> in a WAT <code>(module $name …)</code>; see
 <a href="./correspondence/module_fields.html#module-name">Module Fields</a>.)</p>
 <h2 id="comments"><a class="header" href="#comments">Comments</a></h2>
@@ -204,7 +204,7 @@ the <code>$name</code> in a WAT <code>(module $name …)</code>; see
 
 <h2 id="trailing-commas"><a class="header" href="#trailing-commas">Trailing Commas</a></h2>
 <p>A trailing comma is allowed after the last element of any comma-separated
-list — function parameters, call arguments, struct fields, result types, and
+list: function parameters, call arguments, struct fields, result types, and
 so on:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">point</span> = { x: <span class="hljs-type">i32</span>, y: <span class="hljs-type">i32</span>, };
 
@@ -220,7 +220,7 @@ so on:</p>
 <span class="hljs-number">0b101010</span>    <span class="hljs-comment">// Binary</span></span></pre>
 
 <p>A numeric literal is <strong>flexible</strong>: it has no fixed type of its own but takes a
-concrete one from its context — a type annotation, the operation it feeds, or a
+concrete one from its context: a type annotation, the operation it feeds, or a
 function’s result type.</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">let</span> x: <span class="hljs-type">i64</span> = <span class="hljs-number">42</span>;        <span class="hljs-comment">// takes i64 from the annotation</span></span></pre>
 
@@ -243,12 +243,16 @@ function’s result type.</p>
 <span class="hljs-keyword">let</span> b = <span class="hljs-number">5_000_000_000</span>;  <span class="hljs-comment">// too big for i32 -&gt; i64</span>
 <span class="hljs-keyword">let</span> c = <span class="hljs-number">3.14</span>;           <span class="hljs-comment">// float literal -&gt; f64</span></span></pre>
 
-<p>Once a literal is used where only integers are allowed (a bitwise op, a shift,
-<code>ctz</code>, …) it commits to the <strong>integer</strong> family and can then only be <code>i32</code> or
-<code>i64</code> — it can no longer become a float by inference. These are <em>implicit</em>
-coercions; an explicit <a href="#type-conversions"><code>as</code> cast</a> is broader and emits the
-conversion — e.g. an out-of-range constant <code>as i32</code> wraps to its low 32 bits, and
-an integer <code>as f64</code> converts.</p>
+<p>Wax performs <strong>no implicit conversions</strong> between numeric types. A numeric
+expression must be coherent: an operator’s operands must share one type, so
+mixing an <code>i32</code> with an <code>i64</code>, or an integer with a float, does not type-check.
+A flexible literal is never converted; it simply takes the type that keeps its
+expression coherent. An operation that accepts only integers (a bitwise op, a
+shift, <code>ctz</code>, …) holds the flexible literals feeding it to the integer family,
+so they can only be <code>i32</code> or <code>i64</code>, never a float.</p>
+<p>Changing a value’s type takes an explicit <a href="#type-conversions"><code>as</code> cast</a>, which
+emits the conversion: an out-of-range constant <code>as i32</code> wraps to its low 32
+bits, and an integer <code>as f64</code> converts.</p>
 <h3 id="floating-point"><a class="header" href="#floating-point">Floating Point</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-number">3.14</span>        <span class="hljs-comment">// Decimal</span>
 <span class="hljs-number">1.0e10</span>      <span class="hljs-comment">// Scientific notation</span>
@@ -260,7 +264,7 @@ an integer <code>as f64</code> converts.</p>
 unconstrained (see the table above).</p>
 <h3 id="characters"><a class="header" href="#characters">Characters</a></h3>
 <p>A character literal is a single character in single quotes. It evaluates to that
-character’s Unicode code point as an <code>i32</code> — it is simply a readable spelling of
+character’s Unicode code point as an <code>i32</code>: it is simply a readable spelling of
 an <code>i32.const</code>:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-string">'A'</span>;            <span class="hljs-comment">// 65</span>
 <span class="hljs-string">'\n'</span>;           <span class="hljs-comment">// 10</span>
@@ -271,8 +275,8 @@ an <code>i32.const</code>:</p>
 two hex digits, one byte), and <code>\u{...}</code> (a Unicode code point in hex). For
 text, see <a href="#strings">Strings</a>.</p>
 <p>A character literal round-trips through WAT, where it is written with a
-<code>(@char …)</code> annotation. A WASM binary keeps only the underlying <code>i32.const</code>,
-though, so decompiling from WASM yields the plain integer code point.</p>
+<code>(@char …)</code> annotation. A Wasm binary keeps only the underlying <code>i32.const</code>,
+though, so decompiling from Wasm yields the plain integer code point.</p>
 <h2 id="variables"><a class="header" href="#variables">Variables</a></h2>
 <h3 id="local-variables"><a class="header" href="#local-variables">Local Variables</a></h3>
 <p>Declare local variables with <code>let</code>. Each variable gets a type, either from an
@@ -291,7 +295,7 @@ an otherwise-unconstrained integer literal then defaults to <code>i32</code> and
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">let</span> count: <span class="hljs-type">i64</span> = <span class="hljs-number">0</span>;</span></pre>
 
 <p>A <code>let</code> can bind several names at once from an initializer that produces
-multiple values — a call to a <a href="#functions">multi-result function</a>,
+multiple values, a call to a <a href="#functions">multi-result function</a>,
 for instance. The names are written as a parenthesised list and each takes the
 corresponding value, left to right. As with a single binding, each name may be
 annotated or left to be inferred, and <code>_</code> discards its value:</p>
@@ -305,7 +309,7 @@ annotated or left to be inferred, and <code>_</code> discards its value:</p>
 <p>Use <code>:=</code> for assignment that also returns the value (like <code>local.tee</code>):</p>
 <pre class="wax-highlight"><span class="hljs wax-code">y = (x := <span class="hljs-number">42</span>) + <span class="hljs-number">1</span>;  <span class="hljs-comment">// x is set to 42, y is set to 43</span></span></pre>
 
-<p><code>:=</code> works on local variables only — WebAssembly has no <code>global.tee</code>, so applying
+<p><code>:=</code> works on local variables only: WebAssembly has no <code>global.tee</code>, so applying
 it to a global is an error.</p>
 <p>A compound assignment combines a binary operator with <code>=</code>: <code>x op= e</code> is
 shorthand for <code>x = x op e</code>, where the left-hand side is a local or global
@@ -320,20 +324,14 @@ total /s= n;         <span class="hljs-comment">// total = total /s n</span></sp
 unsigned variants apply to integers, while the sign-agnostic <code>/=</code> is float
 division. Comparisons have no compound form.</p>
 <h3 id="discarding-a-value"><a class="header" href="#discarding-a-value">Discarding a value</a></h3>
-<p>Assigning to <code>_</code> evaluates an expression and throws its result away — the
+<p>Assigning to <code>_</code> evaluates an expression and throws its result away, the
 equivalent of WebAssembly’s <code>drop</code>. Nothing is bound, so no name comes into
 scope:</p>
 <pre class="wax-highlight"><span class="hljs wax-code">_ = <span class="hljs-title">f</span>();            <span class="hljs-comment">// call f for its side effects, ignore its result</span></span></pre>
 
 <p>An optional type annotation, <code>_: t = e</code>, pins the type of the discarded value.
-It is only ever needed for a bare numeric expression whose type the surrounding
-syntax does not otherwise fix: an unconstrained integer literal defaults to
-<code>i32</code> and a float to <code>f64</code>, so without the annotation a discarded <code>i64</code>
-computation would be re-read at the wrong width (silently changing a value, or
-turning a well-defined result into a trap). Hand-written code rarely needs it;
-converting from WebAssembly adds it only where it is load-bearing:</p>
-<pre class="wax-highlight"><span class="hljs wax-code">_: <span class="hljs-type">i64</span> = <span class="hljs-number">1</span> &lt;&lt; <span class="hljs-number">40</span>;   <span class="hljs-comment">// discarded, but kept i64 — without the pin it would be</span>
-                    <span class="hljs-comment">// i32.shl, whose count wraps mod 32 to a different result</span></span></pre>
+This is hardly ever needed, since the value is thrown away anyway:</p>
+<pre class="wax-highlight"><span class="hljs wax-code">_: <span class="hljs-type">i64</span> = <span class="hljs-number">1</span> &lt;&lt; <span class="hljs-number">40</span>;   <span class="hljs-comment">// discard the result, but keep it i64</span></span></pre>
 
 <h3 id="global-variables"><a class="header" href="#global-variables">Global Variables</a></h3>
 <p>Globals are declared at module level. <code>const</code> is immutable; <code>let</code> is mutable:</p>
@@ -348,12 +346,12 @@ initializer (an unconstrained integer literal defaults to <code>i32</code>):</p>
 global, or a simple reference-building expression).</p>
 <h3 id="names-and-scope"><a class="header" href="#names-and-scope">Names and Scope</a></h3>
 <p>Functions, globals, memories, and tables share one module-level namespace: a
-name must be distinct across all four — you cannot, say, declare both a memory
+name must be distinct across all four: you cannot, say, declare both a memory
 and a global named <code>buf</code>. Types, tags, and data/element segments each have their
 own namespace, so those names may overlap with the above and with one another.</p>
 <p>A local variable is scoped to its function and takes precedence over module-level
 names. A bare name resolves to a local before a global or function, and the
-name-based module forms — <code>mem.load(..)</code>, <code>tab[i]</code>, <code>seg.drop()</code> — likewise defer
+name-based module forms (<code>mem.load(..)</code>, <code>tab[i]</code>, <code>seg.drop()</code>) likewise defer
 to a same-named local. So a local that reuses a memory, table, or segment name
 shadows it; rename the local if you still need to reach the module entity.</p>
 <h2 id="expressions"><a class="header" href="#expressions">Expressions</a></h2>
@@ -361,7 +359,7 @@ shadows it; rename the local if you still need to reach the module entity.</p>
 model: the <strong>operand stack</strong>. A function or block body is a sequence of
 statements, each ended with <code>;</code>. Evaluating a statement may push values onto the
 stack and pop values off it, and whatever remains on the stack when the body
-ends is its result — which must match the declared result type. A
+ends is its result, which must match the declared result type. A
 value-returning function therefore ends with a statement that leaves that value:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">fn</span> <span class="hljs-title">double</span>(x: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> {
     x * <span class="hljs-number">2</span>;
@@ -399,6 +397,8 @@ x &lt;=s y     <span class="hljs-comment">// Less or equal signed</span>
 x &lt;=u y     <span class="hljs-comment">// Less or equal unsigned</span>
 <span class="hljs-comment">// Similarly: &gt;, &gt;=, &gt;s, &gt;u, &gt;=s, &gt;=u</span></span></pre>
 
+<p>On reference operands (any subtype of <code>&amp;eq</code>), <code>==</code> and <code>!=</code> are reference
+identity, not a numeric comparison.</p>
 <h3 id="unary-operations"><a class="header" href="#unary-operations">Unary Operations</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code">-x          <span class="hljs-comment">// Negate</span>
 +x          <span class="hljs-comment">// Positive (no-op for integers)</span>
@@ -407,11 +407,11 @@ x &lt;=u y     <span class="hljs-comment">// Less or equal unsigned</span>
 <h3 id="operator-precedence"><a class="header" href="#operator-precedence">Operator Precedence</a></h3>
 <p>Operators are listed below from highest precedence (binds tightest) to lowest.
 The ordering follows <strong>Rust’s</strong> for every operator the two share (Wax adds
-<code>? :</code>, which Rust lacks, just above assignment; it has no short-circuit <code>&amp;&amp;</code>/<code>||</code>
-— <code>&amp;</code>/<code>|</code> are bitwise). Two mixes are worth committing to memory:</p>
+<code>? :</code>, which Rust lacks, just above assignment; it has no short-circuit <code>&amp;&amp;</code>/<code>||</code>:
+<code>&amp;</code>/<code>|</code> are bitwise). Two mixes are worth committing to memory:</p>
 <ul>
 <li><code>&amp;</code>, <code>^</code>, <code>|</code> bind <strong>tighter</strong> than the comparison operators, so <code>a &amp; b == c</code>
-parses as <code>(a &amp; b) == c</code>. Rust agrees; C is the opposite — there it means
+parses as <code>(a &amp; b) == c</code>. Rust agrees; C is the opposite: there it means
 <code>a &amp; (b == c)</code>.</li>
 <li>The shifts bind <strong>looser</strong> than <code>+</code>/<code>-</code>, so <code>1 &lt;&lt; nbits - 1</code> parses as
 <code>1 &lt;&lt; (nbits - 1)</code>, not <code>(1 &lt;&lt; nbits) - 1</code>. (Same in Rust and C.)</li>
@@ -423,7 +423,7 @@ parses as <code>(a &amp; b) == c</code>. Rust agrees; C is the opposite — ther
 </thead>
 <tbody>
 <tr><td>highest</td><td><code>.field</code>   <code>f(…)</code>   <code>[…]</code> (field, call, index)</td><td>left</td></tr>
-<tr><td></td><td><code>-x</code>   <code>+x</code>   <code>!x</code> (unary)</td><td>—</td></tr>
+<tr><td></td><td><code>-x</code>   <code>+x</code>   <code>!x</code> (unary)</td><td>n/a</td></tr>
 <tr><td></td><td><code>as</code>   <code>is</code> (cast, test)</td><td>left</td></tr>
 <tr><td></td><td><code>*</code>   <code>/</code>   <code>/s</code>   <code>/u</code>   <code>%s</code>   <code>%u</code></td><td>left</td></tr>
 <tr><td></td><td><code>+</code>   <code>-</code></td><td>left</td></tr>
@@ -466,18 +466,18 @@ x.<span class="hljs-title">rotr</span>(y)      <span class="hljs-comment">// Rot
 <h3 id="qualified-intrinsics"><a class="header" href="#qualified-intrinsics">Qualified Intrinsics</a></h3>
 <p>Most built-in operations are written as methods on a receiver (<code>x.clz()</code>,
 <code>a.add_i32x4(b)</code> above). The few that have no natural receiver are written
-instead as a <strong>qualified path</strong>, <code>type::member(args)</code> — a built-in free
+instead as a <strong>qualified path</strong>, <code>type::member(args)</code>, a built-in free
 function namespaced by the WebAssembly type it belongs to. These names are
 built in, not user functions, and because the <code>::</code> form is distinct from an
 ordinary name it can never clash with your own functions, globals, or locals.</p>
 <p>Two families use this syntax today.</p>
-<p><strong><code>v128::</code> — SIMD free functions.</strong> The vector constants (one argument per
+<p><strong><code>v128::</code>: SIMD free functions.</strong> The vector constants (one argument per
 lane) and <code>bitselect</code>, which have no receiver:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-type">v128</span>::<span class="hljs-title">const_i32x4</span>(<span class="hljs-number">1</span>, <span class="hljs-number">2</span>, <span class="hljs-number">3</span>, <span class="hljs-number">4</span>)         <span class="hljs-comment">// a v128 constant (also a constant expression)</span>
 <span class="hljs-type">v128</span>::<span class="hljs-title">const_f32x4</span>(<span class="hljs-number">1.5</span>, <span class="hljs-number">2.5</span>, <span class="hljs-number">3.5</span>, <span class="hljs-number">4.5</span>)
 <span class="hljs-type">v128</span>::<span class="hljs-title">bitselect</span>(a, b, mask)           <span class="hljs-comment">// per-bit select</span></span></pre>
 
-<p><strong><code>i64::</code> — wide arithmetic.</strong> 128-bit integer operations, taking and returning
+<p><strong><code>i64::</code>: wide arithmetic.</strong> 128-bit integer operations, taking and returning
 their operands as <code>(low, high)</code> pairs of <code>i64</code>, so each returns two results
 (bind them with a multi-value <code>let</code>):</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-type">i64</span>::<span class="hljs-title">add128</span>(a_lo, a_hi, b_lo, b_hi)   <span class="hljs-comment">// 128-bit add, returns (lo, hi)</span>
@@ -502,27 +502,27 @@ x.<span class="hljs-title">from_bits</span>()   <span class="hljs-comment">// Re
 
 <p>This maps directly to Wasm’s <code>select</code> instruction.</p>
 <blockquote>
-<p><strong>⚠ Warning — both branches are always evaluated.</strong> Unlike the <code>?:</code> (or
+<p><strong>⚠ Warning: both branches are always evaluated.</strong> Unlike the <code>?:</code> (or
 <code>if</code>/<code>else</code> expression) of most languages, this operator is <em>not</em> lazy: it
 compiles to a <code>select</code>, which computes <em>both</em> <code>val_true</code> and <code>val_false</code>
 before choosing between them. So <code>cond ? 1 /s x : 0</code> still divides by <code>x</code>
 even when <code>cond</code> is false (trapping if <code>x</code> is <code>0</code>), and <code>cond ? f() : g()</code>
 calls <em>both</em> <code>f</code> and <code>g</code>. When a branch may trap or has a side effect, use an
-<a href="#if-expressions"><code>if</code> expression</a> instead — it evaluates only the chosen
+<a href="#if-expressions"><code>if</code> expression</a> instead: it evaluates only the chosen
 branch. The
 <a href="cli.html"><code>eager-select</code> lint</a> (in the <code>correctness</code> group, on by default)
 flags a trapping or effectful operation in a <code>?:</code> branch.</p>
 </blockquote>
 <h2 id="control-flow"><a class="header" href="#control-flow">Control Flow</a></h2>
 <p>Statements are terminated by <code>;</code>, including the final one that produces the
-block’s or function’s value. The block-shaped statements below —
-<code>do</code>, <code>if</code>, <code>while</code>, <code>loop</code>, <code>dispatch</code>, <code>match</code>, and <code>try</code> — are the
+block’s or function’s value. The block-shaped statements below
+(<code>do</code>, <code>if</code>, <code>while</code>, <code>loop</code>, <code>dispatch</code>, <code>match</code>, and <code>try</code>) are the
 exception: their closing <code>}</code> ends the statement, so no <code>;</code> is needed. A bare
 <code>;</code> is an empty statement (it does nothing), so a redundant one is harmless
-anywhere and dropped on formatting — most usefully after a block, where the
+anywhere and dropped on formatting, most usefully after a block, where the
 reflex of ending every line with <code>;</code> would otherwise be an error. The same
 holds outside function bodies: a stray <code>;</code> is an empty element wherever items
-are listed — among module fields, the declarations of an <code>import</code> block, and
+are listed: among module fields, the declarations of an <code>import</code> block, and
 the arms of a <code>dispatch</code>, <code>match</code>, or <code>catch</code>.</p>
 <h3 id="blocks"><a class="header" href="#blocks">Blocks</a></h3>
 <p>A block groups a sequence of statements, written with <code>do</code>.</p>
@@ -532,8 +532,8 @@ the arms of a <code>dispatch</code>, <code>match</code>, or <code>catch</code>.<
     <span class="hljs-title">use</span>(x);
 }</span></pre>
 
-<p>By default a block is <strong>void</strong>: it produces no value, so — like a function with
-no result type — its body must leave the operand stack empty.</p>
+<p>By default a block is <strong>void</strong>: it produces no value, so, like a function with
+no result type, its body must leave the operand stack empty.</p>
 <p>To make a block produce a value, give it a result type after <code>do</code>. The body
 must leave a value of that type on the stack, and that becomes the block’s
 value:</p>
@@ -542,9 +542,9 @@ value:</p>
 };</span></pre>
 
 <p>This is a stack discipline, not a “last expression” rule: the body must leave
-<em>exactly</em> the values the block’s type describes — no more, no less. A void
+<em>exactly</em> the values the block’s type describes: no more, no less. A void
 block that leaves a value, or a <code>do i32</code> block that leaves two, is an error.</p>
-<p>The result type may be <strong>omitted</strong> and inferred — from the value the body leaves
+<p>The result type may be <strong>omitted</strong> and inferred: from the value the body leaves
 (including a value branched to the block’s own label), or from the surrounding
 context such as a function’s result type, a typed binding, or a call argument.
 It is needed only where neither determines it, for instance when two branches
@@ -574,7 +574,7 @@ _ + <span class="hljs-number">1</span>;                    <span class="hljs-com
 <p>Blocks can be labelled and used as branch targets; see
 <a href="#labels-and-branches">Labels and Branches</a>.</p>
 <h3 id="if-expressions"><a class="header" href="#if-expressions">If Expressions</a></h3>
-<p><code>if</code> tests a condition — any <code>i32</code>, where non-zero means true — and runs the
+<p><code>if</code> tests a condition (any <code>i32</code>, where non-zero means true) and runs the
 matching branch. Like a block it is <strong>void</strong> by default (the branches leave no
 value), and the <code>else</code> is optional:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">if</span> condition {
@@ -589,7 +589,7 @@ branches must then leave a value of that type, so the <code>else</code> becomes 
     <span class="hljs-number">0</span>;
 }</span></pre>
 
-<p>Like a block’s result type, the <code>=&gt; &lt;type&gt;</code> may be <strong>omitted</strong> and inferred —
+<p>Like a block’s result type, the <code>=&gt; &lt;type&gt;</code> may be <strong>omitted</strong> and inferred:
 from the branches (here both produce <code>i32</code>) or from the surrounding context. The
 <code>else</code> stays required, since a value-producing <code>if</code> needs both branches:</p>
 <pre class="wax-highlight"><span class="hljs wax-code">x = <span class="hljs-keyword">if</span> condition {
@@ -599,7 +599,7 @@ from the branches (here both produce <code>i32</code>) or from the surrounding c
 };</span></pre>
 
 <h3 id="loops"><a class="header" href="#loops">Loops</a></h3>
-<p>A <code>loop</code> runs its body once and then falls through to whatever follows — it does
+<p>A <code>loop</code> runs its body once and then falls through to whatever follows: it does
 <em>not</em> repeat on its own. What makes it a loop is its label: branching to a
 loop’s label jumps back to the <strong>start</strong> of its body. So a loop iterates by
 branching to itself, and stops once control reaches the end of the body without
@@ -639,12 +639,12 @@ tests <em>before</em> each iteration:</p>
 
 <p>It is void, and the test must be an <code>i32</code>. It may carry a label
 (<code>'l: while …</code>), which names the loop, so a <code>br 'l</code> from inside the body is a
-<em>continue</em> — it jumps back to re-test. Decompiling recovers a <code>while</code> from this
-shape, so a loop written this way survives a round trip through WAT or WASM.</p>
+<em>continue</em>: it jumps back to re-test. Decompiling recovers a <code>while</code> from this
+shape, so a loop written this way survives a round trip through WAT or Wasm.</p>
 <p>A <code>while</code> may carry a <em>continue-expression</em> after the condition,
-<code>while cond : (step) { … }</code> — a statement run at the end of every iteration,
+<code>while cond : (step) { … }</code>, a statement run at the end of every iteration,
 including on a <code>continue</code>. It keeps the loop’s step next to its header instead of
-at the bottom of the body, and — unlike a step written as the last statement —
+at the bottom of the body, and, unlike a step written as the last statement,
 it still runs when the body branches to the loop label:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-symbol">'l</span>: <span class="hljs-keyword">while</span> i &lt;s n : (i += <span class="hljs-number">1</span>) {
     <span class="hljs-keyword">if</span> <span class="hljs-title">skip</span>(i) { <span class="hljs-keyword">br</span> <span class="hljs-symbol">'l</span>; }   <span class="hljs-comment">// continue: runs `i += 1`, then re-tests</span>
@@ -653,7 +653,7 @@ it still runs when the body branches to the loop label:</p>
 
 <p>The step must be parenthesised (a bare statement would be ambiguous with the
 loop body). Without a <code>continue</code> this is equivalent to writing the step as the
-last statement of the body — and decompiling recovers it: a loop whose last
+last statement of the body, and decompiling recovers it: a loop whose last
 statement updates a variable its condition reads (the induction variable) is
 rendered as <code>while … : (step) { … }</code>, so index-and-stride loops read like <code>for</code>
 loops.</p>
@@ -668,10 +668,10 @@ leading-<code>while</code> form. Write it directly as a <code>loop</code> with a
 <p>Labels start with <code>'</code> and prefix a block, loop, <code>if</code>, or <code>try</code>. A branch targets
 a label; <strong>where</strong> it lands depends on the labelled construct: branching to a
 block, <code>if</code>, or <code>try</code> jumps <em>past</em> it (an exit), while branching to a <code>loop</code>
-jumps to its <em>start</em> (an iteration — see <a href="#loops">Loops</a>).</p>
+jumps to its <em>start</em> (an iteration, see <a href="#loops">Loops</a>).</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-symbol">'done</span>: <span class="hljs-keyword">do</span> {
     <span class="hljs-keyword">if</span> condition {
-        <span class="hljs-keyword">br</span> <span class="hljs-symbol">'done</span>;   <span class="hljs-comment">// jump past the block — exits it</span>
+        <span class="hljs-keyword">br</span> <span class="hljs-symbol">'done</span>;   <span class="hljs-comment">// jump past the block (exits it)</span>
     }
     <span class="hljs-comment">// ...</span>
 }</span></pre>
@@ -683,7 +683,17 @@ jumps to its <em>start</em> (an iteration — see <a href="#loops">Loops</a>).</
 
 <p>The labels in a <code>br_table</code> are separated by spaces, and <code>else</code> gives the
 fallback for an out-of-range index. A branch also carries any values its target
-expects — a <code>do i32</code> target receives an <code>i32</code>, and so on.</p>
+expects: a <code>do i32</code> target receives an <code>i32</code>, and so on.</p>
+<p>Four more branch instructions test a reference and branch on the result, passing
+the refined reference to the target. They appear mainly in Wax decompiled from
+WebAssembly; hand-written code usually reaches for <a href="#match"><code>match</code></a>, a
+<a href="#null-check">null check</a>, or a <a href="#type-testing-and-casting">cast or test</a>
+instead.</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">br_on_null</span> <span class="hljs-symbol">'l</span> val;          <span class="hljs-comment">// branch if val is null; else continue with val non-null</span>
+<span class="hljs-keyword">br_on_non_null</span> <span class="hljs-symbol">'l</span> val;      <span class="hljs-comment">// branch (passing val) if val is non-null; else continue</span>
+<span class="hljs-keyword">br_on_cast</span> <span class="hljs-symbol">'l</span> &amp;<span class="hljs-type">t</span> val;       <span class="hljs-comment">// branch (passing val as &amp;t) if val is a &amp;t; else continue</span>
+<span class="hljs-keyword">br_on_cast_fail</span> <span class="hljs-symbol">'l</span> &amp;<span class="hljs-type">t</span> val;  <span class="hljs-comment">// branch if val is not a &amp;t; else continue with val as &amp;t</span></span></pre>
+
 <h3 id="branch-hints"><a class="header" href="#branch-hints">Branch Hints</a></h3>
 <p>A conditional branch can be annotated <code>#[likely]</code> or <code>#[unlikely]</code> to tell the
 engine which way it usually goes (the
@@ -699,14 +709,14 @@ attribute prefixes the branch:</p>
     <span class="hljs-meta">#[unlikely]</span> <span class="hljs-keyword">br_if</span> <span class="hljs-symbol">'next</span> done;   <span class="hljs-comment">// rarely taken</span>
 }</span></pre>
 
-<p>Any conditional branch accepts a hint — <code>if</code>, <code>br_if</code>, <code>br_on_null</code>,
+<p>Any conditional branch accepts a hint: <code>if</code>, <code>br_if</code>, <code>br_on_null</code>,
 <code>br_on_non_null</code>, <code>br_on_cast</code>, and <code>br_on_cast_fail</code>. The hint is purely
 advisory (it does not change behaviour) and is preserved across every conversion
 to and from WebAssembly, so no compiler flag is needed. See
-<a href="correspondence/instructions.html#branch-hints">Instructions → Branch hints</a> for
+<a href="correspondence/instructions.html#branch-hints">Instructions → Branch Hints</a> for
 the WebAssembly encoding.</p>
 <h3 id="dispatch"><a class="header" href="#dispatch">Dispatch</a></h3>
-<p>A <code>dispatch</code> is a multi-way branch — the readable form of a <code>br_table</code> jump
+<p>A <code>dispatch</code> is a multi-way branch, the readable form of a <code>br_table</code> jump
 table. A bracket maps an index to a case label (with an <code>else</code> default for an
 out-of-range index), and each arm gives that case’s body:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">fn</span> <span class="hljs-title">classify</span>(x: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> {
@@ -728,7 +738,7 @@ distinct.</p>
 innermost block and each case body just after its block. As in a C <code>switch</code>,
 cases <strong>fall through</strong>: reaching a case runs its body and then falls into the
 <em>next</em> arm listed, unless it branches away first. So the arms are written in
-fall-through order, which is the reverse of the bracket’s index order — the
+fall-through order, which is the reverse of the bracket’s index order: the
 last arm is the one index <code>0</code> reaches. The example above gives each case its
 own result via <code>return</code>; to break out instead, branch to an enclosing label:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">let</span> r: <span class="hljs-type">i32</span>;
@@ -740,11 +750,11 @@ own result via <code>return</code>; to break out instead, branch to an enclosing
     }
 }</span></pre>
 
-<p>This is the shape compilers emit for a dense switch, so decompiling WAT/WASM to
+<p>This is the shape compilers emit for a dense switch, so decompiling WAT/Wasm to
 Wax recovers <code>dispatch</code> from it (and a Wax <code>dispatch</code> round-trips through the
 binary).</p>
 <h3 id="match"><a class="header" href="#match">Match</a></h3>
-<p>A <code>match</code> is a multi-way <em>type</em> test — the readable form of the nested type-test
+<p>A <code>match</code> is a multi-way <em>type</em> test, the readable form of the nested type-test
 ladder that hand-written GC code uses to take apart a value of some general
 reference type. Each arm tests the scrutinee against a reference type, optionally
 binding the narrowed value, and runs its body when the test succeeds:</p>
@@ -761,14 +771,14 @@ binding the narrowed value, and runs its body when the test succeeds:</p>
 test without binding. A <code>null</code> arm matches a null reference, and the required
 <code>_</code> arm (as with a <code>dispatch</code>’s <code>else</code>) is the default. The scrutinee must be a
 reference type; it is evaluated once.</p>
-<p><code>match</code> lowers to a nested ladder of blocks — one per arm plus an outer <em>escape</em>
+<p><code>match</code> lowers to a nested ladder of blocks, one per arm plus an outer <em>escape</em>
 block. The scrutinee is threaded through a <code>br_on_cast</code> (or <code>br_on_null</code> for a
 <code>null</code> arm) chain in the innermost block; each test, on success, branches <em>out</em>
 to its arm’s block carrying the narrowed value, and the arm body follows that
 block. As with <code>dispatch</code>, an arm’s body must leave the <code>match</code> (here each
 <code>return</code>s); to continue past it, branch to an enclosing label. When no test
 matches, the chain falls through to a <code>br</code> past all the arm bodies, and the
-default follows the escape block as trailing code — so reaching it falls through
+default follows the escape block as trailing code, so reaching it falls through
 to whatever comes after, including the rest of the enclosing block:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">let</span> r: <span class="hljs-type">i32</span>;
 <span class="hljs-symbol">'done</span>: <span class="hljs-keyword">do</span> {
@@ -779,8 +789,8 @@ to whatever comes after, including the rest of the enclosing block:</p>
     }
 }</span></pre>
 
-<p>This is the shape hand-written GC code uses, so decompiling WAT/WASM to Wax
-recovers <code>match</code> from such a ladder — even a single type test that branches out
+<p>This is the shape hand-written GC code uses, so decompiling WAT/Wasm to Wax
+recovers <code>match</code> from such a ladder, even a single type test that branches out
 and then falls through to a default (and a Wax <code>match</code> round-trips through the
 binary).</p>
 <h3 id="return"><a class="header" href="#return">Return</a></h3>
@@ -798,8 +808,19 @@ binary).</p>
 
 <p><code>become</code> also accepts an intrinsic operation (for example <code>become mem.grow(n)</code>);
 since there is no tail-call instruction for intrinsics, this is equivalent to
-<code>return mem.grow(n)</code> — the intrinsic’s result must match the function’s result
+<code>return mem.grow(n)</code>: the intrinsic’s result must match the function’s result
 type.</p>
+<h3 id="unreachable-and-nop"><a class="header" href="#unreachable-and-nop">Unreachable and Nop</a></h3>
+<p><code>unreachable</code> marks code that should never run: it traps if reached. <code>nop</code> does
+nothing. Neither is an expression, so neither can be bound to a name or written
+as an operand. Because <code>unreachable</code> diverges, the code after it is dead and the
+stack polymorphic there, so <code>unreachable</code> can satisfy any block result type,
+fill any <a href="#holes">hole</a> <code>_</code>, and supply any block parameter.</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">if</span> x &lt;s <span class="hljs-number">0</span> {
+    <span class="hljs-keyword">unreachable</span>;            <span class="hljs-comment">// this branch cannot happen</span>
+}
+<span class="hljs-keyword">nop</span>;                        <span class="hljs-comment">// no operation</span></span></pre>
+
 <h2 id="functions"><a class="header" href="#functions">Functions</a></h2>
 <h3 id="definition"><a class="header" href="#definition">Definition</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">fn</span> <span class="hljs-title">name</span>(param1: type1, param2: type2) -&gt; return_type {
@@ -833,14 +854,19 @@ module may have at most one:</p>
 <p>Function types use <code>fn</code>:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">binary_op</span> = <span class="hljs-keyword">fn</span>(<span class="hljs-type">i32</span>, <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span>;</span></pre>
 
-<p>Anonymous parameters use <code>_</code>:</p>
-<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">callback</span> = <span class="hljs-keyword">fn</span>(_: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span>;</span></pre>
+<p>An unnamed parameter is written as just its type:</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">callback</span> = <span class="hljs-keyword">fn</span>(<span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span>;</span></pre>
 
 <h3 id="calls"><a class="header" href="#calls">Calls</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code">result = <span class="hljs-title">my_function</span>(arg1, arg2);</span></pre>
 
 <h3 id="indirect-calls"><a class="header" href="#indirect-calls">Indirect Calls</a></h3>
-<p>Call through a function reference:</p>
+<p>Writing a function’s name without calling it is a reference to that function (a
+<code>&amp;func</code> value). This is how you get one: to store in a global or a
+<a href="#tables-and-element-segments">table</a>, or to pass as an argument.</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">const</span> handler: &amp;<span class="hljs-type">callback</span> = inc;   <span class="hljs-comment">// a reference to `inc`, not a call</span></span></pre>
+
+<p>Call through such a reference by casting it to the expected function type:</p>
 <pre class="wax-highlight"><span class="hljs wax-code">(func_ref <span class="hljs-keyword">as</span> &amp;?<span class="hljs-type">callback</span>)(arg)</span></pre>
 
 <h2 id="imports-and-exports"><a class="header" href="#imports-and-exports">Imports and Exports</a></h2>
@@ -855,7 +881,7 @@ The bare <code>#[export]</code> (no name) exports the field under its own Wax na
 <span class="hljs-keyword">const</span> PI: <span class="hljs-type">f64</span> = <span class="hljs-number">3.14159</span>;</span></pre>
 
 <p><strong>Import</strong> fields from a host module with an <code>import "module" { … }</code> block. Each
-entry has no body — a function is declared with just its signature, a global
+entry has no body: a function is declared with just its signature, a global
 with its type. It is imported under its own Wax name unless a name-only
 <code>#[import = "name"]</code> overrides that:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">import</span> <span class="hljs-string">"env"</span> {
@@ -873,9 +899,39 @@ with its type. It is imported under its own Wax name unless a name-only
 <p>An imported field is re-exported by adding <code>#[export]</code> to its declaration.</p>
 <h2 id="references"><a class="header" href="#references">References</a></h2>
 <h3 id="reference-types"><a class="header" href="#reference-types">Reference Types</a></h3>
+<p>A reference type is written <code>&amp;type</code> (non-nullable) or <code>&amp;?type</code> (nullable):</p>
 <pre class="wax-highlight"><span class="hljs wax-code">&amp;<span class="hljs-type">type</span>           <span class="hljs-comment">// Non-nullable reference</span>
 &amp;?<span class="hljs-type">type</span>          <span class="hljs-comment">// Nullable reference</span></span></pre>
 
+<p><code>type</code> is either a declared type (a struct, array, <a href="#function-types">function</a>,
+or <a href="#stack-switching">continuation</a>) or one of WebAssembly’s <strong>abstract heap
+types</strong>. These form five disjoint subtype hierarchies; a reference to a type
+accepts any reference to a type below it in the same tree (a <code>&amp;any</code> accepts an
+<code>&amp;eq</code>, an <code>&amp;i31</code>, a declared struct, and so on):</p>
+<pre><code>any     (internal / GC references)
+└─ eq   (comparable with ==)
+   ├─ i31
+   ├─ struct
+   │  └─ declared struct types
+   └─ array
+      └─ declared array types
+
+func    (function references)
+└─ declared function types
+
+extern  (host references)
+
+exn     (exceptions)
+
+cont    (continuations)
+└─ declared continuation types
+</code></pre>
+<p>Each hierarchy also has a <strong>bottom</strong> type, a subtype of everything in its tree
+and inhabited only by <code>null</code>: <code>none</code> under <code>any</code>, <code>nofunc</code> under <code>func</code>,
+<code>noextern</code> under <code>extern</code>, <code>noexn</code> under <code>exn</code>, and <code>nocont</code> under <code>cont</code>. So
+<code>&amp;any</code>, <code>&amp;?extern</code>, and <code>&amp;eq</code> are all valid reference types; see
+<a href="correspondence/types.html#heap-types">Types → Heap Types</a> for how each maps to
+WebAssembly.</p>
 <h3 id="null"><a class="header" href="#null">Null</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-literal">null</span>            <span class="hljs-comment">// Null reference (requires type context)</span></span></pre>
 
@@ -889,6 +945,16 @@ val <span class="hljs-keyword">as</span> &amp;<span class="hljs-type">type</span
 
 <p>Structs and arrays are WebAssembly GC heap types: a value of such a type is
 always held through a reference (<code>&amp;point</code>, <code>&amp;bytes</code>, …), not inline.</p>
+<h3 id="i31"><a class="header" href="#i31">i31</a></h3>
+<p>An <code>i31</code> reference packs a 31-bit signed integer directly into a reference, with
+no heap allocation. Box an <code>i32</code> with <code>as &amp;i31</code>, and read it back with a signed
+or unsigned cast:</p>
+<pre class="wax-highlight"><span class="hljs wax-code">x <span class="hljs-keyword">as</span> &amp;<span class="hljs-type">i31</span>       <span class="hljs-comment">// box an i32 (its low 31 bits) into a reference</span>
+r <span class="hljs-keyword">as</span> <span class="hljs-type">i32_s</span>      <span class="hljs-comment">// read an &amp;i31 back, sign-extended</span>
+r <span class="hljs-keyword">as</span> <span class="hljs-type">i32_u</span>      <span class="hljs-comment">//   or zero-extended</span></span></pre>
+
+<p><code>&amp;i31</code> is a subtype of <code>&amp;eq</code> and <code>&amp;any</code>, so it can stand in wherever one of those
+is expected.</p>
 <h2 id="structs"><a class="header" href="#structs">Structs</a></h2>
 <h3 id="definition-1"><a class="header" href="#definition-1">Definition</a></h3>
 <p>A struct is a named record. Mark a field <code>mut</code> to allow assignment after
@@ -897,6 +963,9 @@ is held as <code>&amp;point</code>.</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">point</span> = { x: <span class="hljs-type">i32</span>, y: <span class="hljs-type">i32</span> };
 <span class="hljs-keyword">type</span> <span class="hljs-type">mutable_point</span> = { x: <span class="hljs-keyword">mut</span> <span class="hljs-type">i32</span>, y: <span class="hljs-keyword">mut</span> <span class="hljs-type">i32</span> };</span></pre>
 
+<p>A field may also hold a packed storage type, <code>i8</code> or <code>i16</code>, stored in one or two
+bytes rather than a full <code>i32</code>. Reading one back needs an explicit cast,
+described under <a href="#field-access">Field Access</a>.</p>
 <h3 id="creation"><a class="header" href="#creation">Creation</a></h3>
 <p><code>{T| …}</code> allocates a new struct of type <code>T</code> and yields a <code>&amp;T</code>. Give every field
 a value, or use <code>..</code> to default them all (each field type must have a zero/null
@@ -905,12 +974,14 @@ default):</p>
 {<span class="hljs-type">point</span>| ..}                 <span class="hljs-comment">// every field defaulted</span></span></pre>
 
 <p>The type name may be omitted in two cases. The first is when an expected type
-supplies it — for example a <code>let</code>/<code>const</code> annotation, a function parameter, a
-struct field, or an array element: <code>let p: &amp;point = {x: 10, y: 20};</code> is
-equivalent to writing <code>{point| …}</code>. Such an expectation also reaches into both
+supplies it: a <code>let</code>/<code>const</code> annotation, the surrounding struct or array type
+(when the literal is a field value or an element), the parameter type of a
+function being called (when it is an argument), or the result type of a function
+or block. So <code>let p: &amp;point = {x: 10, y: 20};</code> is equivalent to writing
+<code>{point| …}</code>. Such an expectation also reaches into both
 branches of a conditional <code>?:</code>, so a branch may omit the name (or default it
 with <code>{..}</code>): <code>let p: &amp;point = cond ? {x: 0, y: 0} : {..};</code>. The second is when
-the <strong>field set</strong> names the type unambiguously — if exactly one struct type in
+the <strong>field set</strong> names the type unambiguously: if exactly one struct type in
 the module has that exact set of field names, it is inferred even with no
 expected type:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">fn</span> <span class="hljs-title">origin</span>() -&gt; &amp;<span class="hljs-type">eq</span> {
@@ -932,6 +1003,10 @@ order:</p>
 <pre class="wax-highlight"><span class="hljs wax-code">p.<span class="hljs-variable">x</span>                         <span class="hljs-comment">// read a field</span>
 p.<span class="hljs-variable">x</span> = <span class="hljs-number">42</span>;                   <span class="hljs-comment">// write a field (only if it is `mut`)</span></span></pre>
 
+<p>A packed (<code>i8</code>/<code>i16</code>) field is read as its raw bits, so accessing one needs an
+explicit <code>as i32_s</code> (sign-extend) or <code>as i32_u</code> (zero-extend) cast; there is no
+implicit widening. Storing to a packed field needs no cast, as the value is
+truncated to the field width.</p>
 <h2 id="arrays"><a class="header" href="#arrays">Arrays</a></h2>
 <h3 id="definition-2"><a class="header" href="#definition-2">Definition</a></h3>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">bytes</span> = [<span class="hljs-type">i8</span>];
@@ -941,9 +1016,13 @@ p.<span class="hljs-variable">x</span> = <span class="hljs-number">42</span>;   
 <pre class="wax-highlight"><span class="hljs wax-code">[<span class="hljs-type">bytes</span>| <span class="hljs-number">0</span>; <span class="hljs-number">100</span>]             <span class="hljs-comment">// New array: 100 elements, all 0</span>
 [<span class="hljs-type">bytes</span>| ..; <span class="hljs-number">100</span>]            <span class="hljs-comment">// New array: 100 elements, default value</span>
 [<span class="hljs-type">bytes</span>| <span class="hljs-number">1</span>, <span class="hljs-number">2</span>, <span class="hljs-number">3</span>, <span class="hljs-number">4</span>]         <span class="hljs-comment">// New array with specific values</span>
-[<span class="hljs-type">bytes</span>| seg @ <span class="hljs-number">0</span>; <span class="hljs-number">100</span>]       <span class="hljs-comment">// New array from a data segment (offset, count)</span></span></pre>
+[<span class="hljs-type">bytes</span>| seg @ <span class="hljs-number">0</span>; <span class="hljs-number">100</span>]       <span class="hljs-comment">// New array from a segment (offset, count)</span></span></pre>
 
-<p>The last form is <code>array.new_data</code>: it initializes the array from the named <a href="#data-segments">data segment</a> <code>seg</code>, reading <code>count</code> elements starting at byte <code>offset</code>.</p>
+<p>The last form builds the array from a named passive segment, copying <code>count</code>
+elements starting at <code>offset</code>. For a numeric array, <code>seg</code> is a
+<a href="#data-segments">data segment</a> and this is <code>array.new_data</code>; for a reference
+array it is an <a href="#tables-and-element-segments">element segment</a> and the same
+syntax is <code>array.new_elem</code>.</p>
 <p>As with structs, the type name may be omitted when an expected type supplies it,
 e.g. <code>let xs: &amp;bytes = [0; 100];</code>.</p>
 <h3 id="element-access"><a class="header" href="#element-access">Element Access</a></h3>
@@ -951,10 +1030,18 @@ e.g. <code>let xs: &amp;bytes = [0; 100];</code>.</p>
 arr[i] = val;               <span class="hljs-comment">// Set element (if mutable)</span>
 arr.<span class="hljs-title">length</span>()                <span class="hljs-comment">// Array length</span></span></pre>
 
+<p>Bulk operations are method calls on the array:</p>
+<pre class="wax-highlight"><span class="hljs wax-code">arr.<span class="hljs-title">fill</span>(idx, val, count)             <span class="hljs-comment">// fill count elements from idx with val</span>
+arr.<span class="hljs-title">copy</span>(idx, src, src_idx, count)    <span class="hljs-comment">// copy from another array src</span>
+arr.<span class="hljs-title">init</span>(seg, idx, src_idx, count)    <span class="hljs-comment">// fill from a passive data/element segment</span></span></pre>
+
+<p>An element may be a packed storage type (<code>i8</code> or <code>i16</code>), like <code>bytes</code> above.
+As with a <a href="#field-access">packed struct field</a>, reading one needs an explicit
+<code>as i32_s</code>/<code>as i32_u</code> cast, while storing needs none.</p>
 <h2 id="recursive-and-subtyped-types"><a class="header" href="#recursive-and-subtyped-types">Recursive and Subtyped Types</a></h2>
 <p>Struct and array types can refer to one another, form subtype hierarchies, and
-be left open for extension — the WebAssembly GC type features.</p>
-<h3 id="recursive-groups"><a class="header" href="#recursive-groups">Recursive groups</a></h3>
+be left open for extension: the WebAssembly GC type features.</p>
+<h3 id="recursive-groups"><a class="header" href="#recursive-groups">Recursive Groups</a></h3>
 <p>Types that reference each other are declared together in a <code>rec { … }</code> group, so
 each name is in scope for the others:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">rec</span> {
@@ -983,20 +1070,71 @@ just its delta:</p>
 inherit from. An inherited field that is <em>renamed</em> or whose type is <em>refined</em>
 (a covariant subtype) is no longer a verbatim copy, so it must be written out
 explicitly rather than covered by <code>..</code>.</p>
-<h3 id="descriptors-experimental"><a class="header" href="#descriptors-experimental">Descriptors (experimental)</a></h3>
-<p>Behind <code>-X custom-descriptors</code>, a struct type can carry a runtime <em>descriptor</em> —
-another type it points to — via the <code>descriptor</code> / <code>describes</code> clauses, declared
-together in a <code>rec</code> group:</p>
+<h2 id="exact-references-and-descriptors"><a class="header" href="#exact-references-and-descriptors">Exact References and Descriptors</a></h2>
+<p>The <a href="https://github.com/WebAssembly/custom-descriptors">custom-descriptors proposal</a>
+adds two related features, enabled together with <code>-X custom-descriptors</code> (off by
+default).</p>
+<h3 id="exact-references"><a class="header" href="#exact-references">Exact references</a></h3>
+<p>An <strong>exact</strong> reference points to values of exactly one concrete type, with no
+subtypes. The exactness marker <code>!</code> goes between the <code>&amp;</code>/<code>&amp;?</code> sigil and the type
+name, next to the nullability <code>?</code>:</p>
+<pre class="wax-highlight"><span class="hljs wax-code">&amp;!<span class="hljs-type">point</span>         <span class="hljs-comment">// a non-null reference to exactly point</span>
+&amp;?!<span class="hljs-type">point</span>        <span class="hljs-comment">// nullable, exactly point</span></span></pre>
+
+<p>Only a concrete (declared) type can be exact; <code>&amp;!any</code> and other abstract heap
+types are rejected. An exact reference is a subtype of the plain one, so an
+<code>&amp;!point</code> is accepted where an <code>&amp;point</code> is expected, but exactness is invariant
+across distinct concrete types. The <code>as</code> and <code>is</code> operators reach an exact type
+explicitly:</p>
+<pre class="wax-highlight"><span class="hljs wax-code">x <span class="hljs-keyword">as</span> &amp;!<span class="hljs-type">point</span>    <span class="hljs-comment">// cast to an exact reference</span>
+x <span class="hljs-keyword">is</span> &amp;!<span class="hljs-type">point</span>    <span class="hljs-comment">// test for an exact type</span></span></pre>
+
+<p>Because <code>!</code> comes before the type name, it never clashes with the postfix
+<a href="#null-check">non-null assertion</a> <code>!</code>: <code>x as &amp;!point</code> casts to an exact
+reference, whereas <code>(x as &amp;point)!</code> asserts the cast result is non-null.</p>
+<p>A struct or array construction already yields an exact reference, since the new
+object has exactly the allocated type, so a literal can go where an <code>&amp;!point</code> is
+expected without a cast. A module-defined function is likewise always exact; only
+an <strong>imported</strong> function needs the marker to be treated as exact, written on the
+declaration as <code>fn g: !ft;</code> (named type) or <code>fn h!(x: i32) -&gt; i64;</code> (inline
+signature). A plainly imported function is not exact, so a reference to it must
+be cast to reach an exact type.</p>
+<h3 id="descriptors"><a class="header" href="#descriptors">Descriptors</a></h3>
+<p>A struct can carry a runtime <em>descriptor</em>: a second struct linked to it, handy
+for modelling a runtime type or a vtable. The described type names its
+descriptor with a <code>descriptor</code> clause, and the descriptor names what it
+describes with a <code>describes</code> clause. The two are declared together in a <code>rec</code>
+group:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">rec</span> {
     <span class="hljs-keyword">type</span> <span class="hljs-type">obj</span> = <span class="hljs-keyword">descriptor</span> obj_desc { x: <span class="hljs-type">i32</span> };
-    <span class="hljs-keyword">type</span> <span class="hljs-type">obj_desc</span> = <span class="hljs-keyword">describes</span> obj { };
+    <span class="hljs-keyword">type</span> <span class="hljs-type">obj_desc</span> = <span class="hljs-keyword">describes</span> obj { info: <span class="hljs-type">i32</span> };
+}
+
+<span class="hljs-meta">#[export = </span><span class="hljs-string">"make"</span><span class="hljs-meta">]</span>
+<span class="hljs-keyword">fn</span> <span class="hljs-title">make</span>(d: &amp;!<span class="hljs-type">obj_desc</span>) -&gt; &amp;<span class="hljs-type">obj</span> {
+    {<span class="hljs-keyword">descriptor</span>(d)| x: <span class="hljs-number">42</span>};      <span class="hljs-comment">// construct, supplying the descriptor</span>
+}
+
+<span class="hljs-meta">#[export = </span><span class="hljs-string">"describe"</span><span class="hljs-meta">]</span>
+<span class="hljs-keyword">fn</span> <span class="hljs-title">describe</span>(o: &amp;<span class="hljs-type">obj</span>) -&gt; &amp;<span class="hljs-type">obj_desc</span> {
+    o.<span class="hljs-variable">descriptor</span>;                <span class="hljs-comment">// read the descriptor back</span>
 }</span></pre>
 
+<p>Construction takes the descriptor as an <strong>exact</strong> reference (<code>&amp;!obj_desc</code>).
+Reading <code>.descriptor</code> gives an <code>&amp;obj_desc</code>, or the exact <code>&amp;!obj_desc</code> when the
+value’s own type is exact. A descriptor-based cast checks that a reference’s
+descriptor is a given one: <code>o as descriptor(d)</code>, or <code>as ?descriptor(d)</code> to allow
+null. The <a href="#labels-and-branches"><code>br_on_cast</code> and <code>br_on_cast_fail</code></a> branches
+accept the same <code>descriptor(d)</code> operand in place of a type
+(<code>br_on_cast 'l descriptor(d) val</code>, with an optional <code>?</code> for the nullable form),
+branching on that descriptor check. The reciprocity and rec-group rules the two
+types must satisfy are listed under
+<a href="correspondence/types.html#custom-descriptors">Types → Custom Descriptors</a>.</p>
 <h2 id="strings"><a class="header" href="#strings">Strings</a></h2>
 <p>A string literal builds a new array and lowers to an <code>array.new_fixed</code>. The
 element type must be <code>i8</code> or <code>i16</code>, and it decides the encoding:</p>
 <ul>
-<li>an <code>i8</code> array holds the raw bytes of the (UTF-8) text — one element per byte;</li>
+<li>an <code>i8</code> array holds the raw bytes of the (UTF-8) text, one element per byte;</li>
 <li>an <code>i16</code> array holds the UTF-16 code units of the text, so it must be a valid
 Unicode string (a code point outside the basic plane becomes a surrogate pair,
 hence two elements).</li>
@@ -1005,7 +1143,7 @@ hence two elements).</li>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-string">"hello"</span>;                    <span class="hljs-comment">// a new [mut i8] holding the 5 bytes</span></span></pre>
 
 <p>As with <a href="#arrays">array</a> and <a href="#structs">struct</a> literals, a different array type
-can be selected — either by prefixing the string with the type name and <code>#</code>, or
+can be selected: either by prefixing the string with the type name and <code>#</code>, or
 by an expected type from the context:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">type</span> <span class="hljs-type">chars</span> = [<span class="hljs-type">i8</span>];
 <span class="hljs-keyword">type</span> <span class="hljs-type">wide</span> = [<span class="hljs-type">i16</span>];
@@ -1014,18 +1152,18 @@ by an expected type from the context:</p>
 <span class="hljs-type">wide</span> # <span class="hljs-string">"café"</span>;              <span class="hljs-comment">// a &amp;wide, one i16 per UTF-16 code unit</span>
 <span class="hljs-keyword">let</span> s: &amp;<span class="hljs-type">chars</span> = <span class="hljs-string">"yo"</span>;       <span class="hljs-comment">// type taken from the annotation</span></span></pre>
 
-<p>String literals recognise the same escapes as <a href="#characters">character literals</a>
-— <code>\t</code>, <code>\n</code>, <code>\r</code>, <code>\'</code>, <code>\"</code>, <code>\\</code>, <code>\xNN</code> (two hex digits, one byte), and
+<p>String literals recognise the same escapes as <a href="#characters">character literals</a>:
+<code>\t</code>, <code>\n</code>, <code>\r</code>, <code>\'</code>, <code>\"</code>, <code>\\</code>, <code>\xNN</code> (two hex digits, one byte), and
 <code>\u{...}</code> (a Unicode code point, encoded as its UTF-8 bytes):</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-string">"tab\tend"</span>;
 <span class="hljs-string">"smile \u{1F600}"</span>;</span></pre>
 
 <p>A string also supplies the bytes of a <a href="#data-segments">data segment</a>.</p>
 <p>A string literal round-trips faithfully through WAT, where it is written with a
-<code>(@string …)</code> annotation. Through WASM it is best-effort: the binary keeps only
+<code>(@string …)</code> annotation. Through Wasm it is best-effort: the binary keeps only
 the <code>array.new_fixed</code>, which is recovered as a string literal only when its
-elements — decoded by the array’s element type (UTF-8 for <code>i8</code>, UTF-16 for
-<code>i16</code>) — form a <em>reasonable</em> string: valid text with no control characters other
+elements, decoded by the array’s element type (UTF-8 for <code>i8</code>, UTF-16 for
+<code>i16</code>), form a <em>reasonable</em> string: valid text with no control characters other
 than tab, newline, and carriage return. Anything else (arbitrary binary data)
 decompiles as an ordinary <a href="#arrays">array literal</a> instead.</p>
 <h2 id="simd-v128"><a class="header" href="#simd-v128">SIMD (v128)</a></h2>
@@ -1100,6 +1238,9 @@ mem0.<span class="hljs-title">store16</span>(p, v);
 mem0.<span class="hljs-title">store32</span>(p, v, <span class="hljs-number">1</span>, <span class="hljs-number">16</span>);  <span class="hljs-comment">// align=1, offset=16</span></span></pre>
 
 <p>The two optional trailing arguments are the access <code>align</code> and <code>offset</code> (constant integers).</p>
+<p>A <code>load8</code> or <code>load16</code> returns raw bits, so it needs an explicit <code>as i32_s</code>/<code>as i32_u</code>
+(or <code>as i64_s</code>/<code>as i64_u</code>) cast to extend to the value type, as the lines above
+show; <code>load32</code>/<code>load64</code> and the stores need none.</p>
 <h2 id="tables-and-element-segments"><a class="header" href="#tables-and-element-segments">Tables and Element Segments</a></h2>
 <p>A table holds references and is indexed like an array. Element segments declare lists of references, optionally initializing a table.</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">table</span> funcs: &amp;?<span class="hljs-type">func</span> [<span class="hljs-number">1</span>, <span class="hljs-number">10</span>];          <span class="hljs-comment">// table of function references</span>
@@ -1110,13 +1251,22 @@ funcs[i]                              <span class="hljs-comment">// table.get</s
 funcs[i] = g;                         <span class="hljs-comment">// table.set</span>
 (funcs[i] <span class="hljs-keyword">as</span> &amp;<span class="hljs-type">cmp</span>)(x, y)              <span class="hljs-comment">// indirect call (call_indirect)</span></span></pre>
 
-<p>A passive element segment initializes a GC array of references with the same <code>[t| seg @ off; count]</code> form used for data segments — a reference element type selects the element segment:</p>
+<p>The table-management instructions are method calls on the table (and <code>drop</code> on
+an element segment):</p>
+<pre class="wax-highlight"><span class="hljs wax-code">funcs.<span class="hljs-title">size</span>()                          <span class="hljs-comment">// current size</span>
+funcs.<span class="hljs-title">grow</span>(init, n)                   <span class="hljs-comment">// grow by n, filling with init; returns the old size</span>
+funcs.<span class="hljs-title">fill</span>(dst, val, n)               <span class="hljs-comment">// set n slots from dst to val</span>
+funcs.<span class="hljs-title">copy</span>(dst, src, n)               <span class="hljs-comment">// copy n slots within the table</span>
+funcs.<span class="hljs-title">init</span>(pool, dst, src, n)         <span class="hljs-comment">// copy n refs from element segment pool</span>
+pool.<span class="hljs-title">drop</span>();                          <span class="hljs-comment">// drop a passive element segment</span></span></pre>
+
+<p>A passive element segment initializes a GC array of references with the same <code>[t| seg @ off; count]</code> form used for data segments; a reference element type selects the element segment:</p>
 <pre class="wax-highlight"><span class="hljs wax-code">[<span class="hljs-type">handlers</span>| pool @ <span class="hljs-number">0</span>; <span class="hljs-number">3</span>]               <span class="hljs-comment">// array.new_elem</span></span></pre>
 
 <h2 id="exceptions"><a class="header" href="#exceptions">Exceptions</a></h2>
 <h3 id="tags"><a class="header" href="#tags">Tags</a></h3>
 <p>A tag declares an exception, optionally carrying a payload. The parameter list
-is required — write <code>()</code> for no payload:</p>
+is required; write <code>()</code> for no payload:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">tag</span> <span class="hljs-title">stop</span>();                 <span class="hljs-comment">// no payload</span>
 <span class="hljs-keyword">tag</span> <span class="hljs-title">overflow</span>(<span class="hljs-type">i32</span>);          <span class="hljs-comment">// carries an i32</span>
 <span class="hljs-keyword">tag</span> <span class="hljs-title">pair</span>(<span class="hljs-type">i32</span>, <span class="hljs-type">f64</span>);         <span class="hljs-comment">// carries several values</span></span></pre>
@@ -1154,7 +1304,7 @@ mapping directly to WebAssembly’s <code>try_table</code>:</p>
 <span class="hljs-keyword">try</span> { <span class="hljs-title">might_throw</span>(); } <span class="hljs-keyword">catch</span> [_ -&gt; <span class="hljs-symbol">'h</span>]           <span class="hljs-comment">// catch any exception</span></span></pre>
 
 <p>The target label receives the payload (and, with <code>&amp;</code>, the exception reference,
-of type <code>&amp;exn</code> — or <code>&amp;?exn</code> for the nullable form), so the labelled block’s type
+of type <code>&amp;exn</code>, or <code>&amp;?exn</code> for the nullable form), so the labelled block’s type
 must match what it is handed.</p>
 <h2 id="stack-switching"><a class="header" href="#stack-switching">Stack Switching</a></h2>
 <p><em>Stack switching</em> (the WebAssembly typed-continuations proposal) lets a
@@ -1184,6 +1334,10 @@ suspended tag to a label (empty here):</p>
 
 <p>The abstract continuation heap types are written <code>&amp;cont</code> and <code>&amp;nocont</code> (with
 <code>&amp;?cont</code> for the nullable form).</p>
+<p><code>switch</code> hands control straight to another continuation instead of suspending
+back to a handler. Written <code>switch k tag (args, cont)</code>, it passes <code>args</code> and the
+current continuation to <code>cont</code>, tagged by <code>tag</code>; the <code>resume</code> that drives things
+enables it with a <code>tag -&gt; switch</code> arm in its handler list.</p>
 <h2 id="holes"><a class="header" href="#holes">Holes</a></h2>
 <p>A hole (<code>_</code>) is a placeholder for a value that an <strong>earlier statement in the
 same sequence</strong> has left on WebAssembly’s implicit operand stack. It is the
@@ -1197,7 +1351,7 @@ you leave a hole where it should be plugged in.</p>
 consume them.</p>
 <p><strong>How many, and in what order.</strong> The number of holes in an expression is the
 number of stack values it pulls in. They are filled <strong>left-to-right with the
-stack values in the order those values were produced</strong> — the earliest value
+stack values in the order those values were produced</strong>: the earliest value
 fills the leftmost hole. Order therefore matters for non-commutative
 operators:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">fn</span> <span class="hljs-title">diff</span>() -&gt; <span class="hljs-type">i32</span> {
@@ -1225,30 +1379,38 @@ are fine:</p>
 
 <p>This restriction keeps holes unambiguous: they always refer to values already on
 the stack, never to operands appearing later in the expression.</p>
-<p>When decompiling WASM or WAT back to Wax, the compiler introduces holes wherever
+<p>When decompiling Wasm or WAT back to Wax, the compiler introduces holes wherever
 an instruction takes an operand from the stack instead of from a nested
 sub-expression, so this same mechanism round-trips stack-style code.</p>
 <h2 id="conditional-compilation"><a class="header" href="#conditional-compilation">Conditional Compilation</a></h2>
-<p>Top-level items can be guarded by conditions, using a Rust-like attribute syntax. <code>#[if(&lt;condition&gt;)]</code> keeps the following item only when <code>&lt;condition&gt;</code> holds; an optional <code>#[else]</code> provides an alternative:</p>
+<p>Top-level items can be guarded by conditions, using a Rust-like attribute syntax. <code>#[if(&lt;condition&gt;)] { ... }</code> keeps the braced items only when <code>&lt;condition&gt;</code> holds; an optional <code>#[else] { ... }</code> provides an alternative. The braces are required:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[if(ocaml_version &gt;= (</span><span class="hljs-number">5</span><span class="hljs-meta">, </span><span class="hljs-number">1</span><span class="hljs-meta">, </span><span class="hljs-number">0</span><span class="hljs-meta">))]</span>
-<span class="hljs-keyword">const</span> caml_marshal_header_size: <span class="hljs-type">i32</span> = <span class="hljs-number">16</span>;
+{
+    <span class="hljs-keyword">const</span> caml_marshal_header_size: <span class="hljs-type">i32</span> = <span class="hljs-number">16</span>;
+}
 <span class="hljs-meta">#[else]</span>
-<span class="hljs-keyword">const</span> caml_marshal_header_size: <span class="hljs-type">i32</span> = <span class="hljs-number">20</span>;</span></pre>
+{
+    <span class="hljs-keyword">const</span> caml_marshal_header_size: <span class="hljs-type">i32</span> = <span class="hljs-number">20</span>;
+}</span></pre>
 
 <p>A condition is one of:</p>
 <ul>
-<li>a <strong>boolean variable</strong>, e.g. <code>debug</code>;</li>
-<li>a <strong>comparison</strong> <code>variable op literal</code>, where <code>op</code> is <code>=</code>, <code>!=</code>, <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code> or <code>&gt;=</code>, and the literal is either a <strong>version</strong> tuple <code>(major, minor, patch)</code> or a <strong>string</strong> <code>"..."</code>:</li>
+<li>
+<p>a <strong>boolean variable</strong>, e.g. <code>debug</code>;</p>
+</li>
+<li>
+<p>a <strong>comparison</strong> <code>variable op literal</code>, where <code>op</code> is <code>=</code>, <code>!=</code>, <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code> or <code>&gt;=</code>, and the literal is either a <strong>version</strong> tuple <code>(major, minor, patch)</code> or a <strong>string</strong> <code>"..."</code>:</p>
+<pre><code class="language-text">feature = "gc"
+ocaml_version &gt;= (5, 1, 0)
+</code></pre>
+</li>
+<li>
+<p>a <strong>combination</strong> built with <code>all(...)</code> (conjunction), <code>any(...)</code> (disjunction) or <code>not(...)</code> (negation), nested arbitrarily:</p>
+<pre><code class="language-text">all(debug, not(target = "wasm32"))
+</code></pre>
+</li>
 </ul>
-<pre class="wax-highlight"><span class="hljs wax-code">  <span class="hljs-meta">#[if(feature = </span><span class="hljs-string">"gc"</span><span class="hljs-meta">)]</span>
-  <span class="hljs-meta">#[if(ocaml_version &gt;= (</span><span class="hljs-number">5</span><span class="hljs-meta">, </span><span class="hljs-number">1</span><span class="hljs-meta">, </span><span class="hljs-number">0</span><span class="hljs-meta">))]</span></span></pre>
-
-<ul>
-<li>a <strong>combination</strong> built with <code>all(...)</code> (conjunction), <code>any(...)</code> (disjunction) or <code>not(...)</code> (negation), nested arbitrarily:</li>
-</ul>
-<pre class="wax-highlight"><span class="hljs wax-code">  <span class="hljs-meta">#[if(all(debug, not(target = </span><span class="hljs-string">"wasm32"</span><span class="hljs-meta">)))]</span></span></pre>
-
-<p>To guard several items at once, follow the attribute with a block:</p>
+<p>A branch groups any number of items, so several can be guarded at once:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[if(debug)]</span>
 {
     <span class="hljs-keyword">const</span> debug_enabled: <span class="hljs-type">i32</span> = <span class="hljs-number">1</span>;
@@ -1257,7 +1419,34 @@ sub-expression, so this same mechanism round-trips stack-style code.</p>
     }
 }</span></pre>
 
-<p>The conditions are <strong>not evaluated</strong> by the compiler; they are preserved for a downstream preprocessor. The <code>#[if]</code> and <code>#[else]</code> branches are <strong>mutually exclusive</strong> — they never coexist — so, for instance, the same name may be defined in both.</p>
+<p>The same <code>#[if(...)] { ... }</code> / <code>#[else] { ... }</code> form also guards <strong>statements</strong> inside a function body:</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">fn</span> <span class="hljs-title">size</span>() -&gt; <span class="hljs-type">i32</span> {
+    <span class="hljs-meta">#[if(debug)]</span>
+    {
+        <span class="hljs-keyword">return</span> <span class="hljs-number">16</span>;
+    }
+    <span class="hljs-meta">#[else]</span>
+    {
+        <span class="hljs-keyword">return</span> <span class="hljs-number">20</span>;
+    }
+}</span></pre>
+
+<p>These two are the only levels at which conditional compilation applies: whole module items and whole statements. A condition cannot guard part of an expression.</p>
+<p>A statement-level branch cannot introduce a local with <code>let</code>, since the two branches are mutually exclusive and a binding made in one would not be in scope after the conditional. Declare the local before the conditional and assign to it inside each branch instead:</p>
+<pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">fn</span> <span class="hljs-title">size</span>() -&gt; <span class="hljs-type">i32</span> {
+    <span class="hljs-keyword">let</span> s: <span class="hljs-type">i32</span>;
+    <span class="hljs-meta">#[if(debug)]</span>
+    {
+        s = <span class="hljs-number">16</span>;
+    }
+    <span class="hljs-meta">#[else]</span>
+    {
+        s = <span class="hljs-number">20</span>;
+    }
+    <span class="hljs-keyword">return</span> s;
+}</span></pre>
+
+<p>The conditions are <strong>not evaluated</strong> by the compiler; they are preserved for a downstream preprocessor. The <code>#[if]</code> and <code>#[else]</code> branches are <strong>mutually exclusive</strong> (they never coexist), so, for instance, the same name may be defined in both.</p>
 <p>Variables can be given values on the command line with <a href="cli.html"><code>-D</code>/<code>--define</code></a>, which specializes the conditionals: a condition that becomes fully determined causes its conditional to be removed (the surviving branch is spliced in), and one that still mentions unset variables is kept with its condition simplified. For example, <code>wax -D debug=true</code> turns <code>#[if(all(debug, target = "wasi"))]</code> into <code>#[if(target = "wasi")]</code>, and <code>wax -D debug=false</code> removes that conditional altogether.</p>
 <p>When type checking is enabled (<code>--validate</code>), every reachable combination of conditions is checked independently. Because branches are mutually exclusive, a name defined in both the <code>#[if]</code> and <code>#[else]</code> branch is accepted. An error that occurs only under some conditions is reported together with the assumption that makes it reachable:</p>
 <pre><code>Error: This instruction has type float but is expected to have type i32.
@@ -1273,7 +1462,7 @@ Hint: reachable when not debug
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="examples.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="cheatsheet.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -1287,7 +1476,7 @@ Hint: reachable when not debug
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="examples.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="cheatsheet.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

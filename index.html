@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-a0782670.js";
+            window.path_to_searchindex_js = "searchindex-654e73ab.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-0d649137.js"></script>
+        <script src="toc-41a4b7e9.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -182,11 +182,11 @@
 <p>Wax is a Rust-like syntax for WebAssembly that compiles to standard Wasm binary or text formats. It provides a more familiar programming experience while maintaining a direct correspondence to WebAssembly concepts. It is validated against the official WebAssembly spec test suite and a differential, round-trip fuzzing harness, so conversions preserve meaning across all three formats. See <a href="./features.html">Feature Support</a> for the proposals it covers.</p>
 <h2 id="why-wax"><a class="header" href="#why-wax">Why Wax?</a></h2>
 <p>WebAssembly Text format (WAT) uses S-expressions and stack-based operations, which can be verbose and unfamiliar to most programmers:</p>
-<pre><code class="language-wat">(func $add (param $x i32) (param $y i32) (result i32)
-  local.get $x
-  local.get $y
-  i32.add)
-</code></pre>
+<pre class="wax-highlight"><span class="hljs wax-code">(<span class="hljs-keyword">func</span> <span class="hljs-variable">$add</span> (<span class="hljs-keyword">param</span> <span class="hljs-variable">$x</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">param</span> <span class="hljs-variable">$y</span> <span class="hljs-type">i32</span>) (<span class="hljs-keyword">result</span> <span class="hljs-type">i32</span>)
+  <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$x</span>
+  <span class="hljs-keyword">local.get</span> <span class="hljs-variable">$y</span>
+  <span class="hljs-keyword">i32.add</span>)</span></pre>
+
 <p>Wax provides an expression-oriented syntax that feels more natural:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-keyword">fn</span> <span class="hljs-title">add</span>(x: <span class="hljs-type">i32</span>, y: <span class="hljs-type">i32</span>) -&gt; <span class="hljs-type">i32</span> {
     x + y;
@@ -194,6 +194,16 @@
 
 <p>Both compile to identical WebAssembly bytecode.</p>
 <h2 id="installation"><a class="header" href="#installation">Installation</a></h2>
+<h3 id="prebuilt-binaries"><a class="header" href="#prebuilt-binaries">Prebuilt binaries</a></h3>
+<p>Native <code>wax</code> executables for Linux, macOS (Apple silicon and Intel), and
+Windows (with <code>SHA256SUMS</code>) are attached to the
+<a href="https://github.com/ocsigen/wax/releases/tag/edge"><code>edge</code> prerelease</a>, which is
+rebuilt on every push to <code>main</code>. Download the one for your platform, make it
+executable, and put it on your <code>PATH</code>:</p>
+<pre><code class="language-sh">curl -LO https://github.com/ocsigen/wax/releases/download/edge/wax-linux-x86_64
+chmod +x wax-linux-x86_64 &amp;&amp; mv wax-linux-x86_64 /usr/local/bin/wax
+</code></pre>
+<h3 id="from-source"><a class="header" href="#from-source">From source</a></h3>
 <p><strong>Requirements:</strong> <a href="https://opam.ocaml.org/">Opam</a> (2.1+) and OCaml 4.14+ (5.0+
 to run the full test suite).</p>
 <pre><code class="language-sh"># Install dependencies
@@ -205,6 +215,8 @@ dune build
 # Install globally
 opam install .
 </code></pre>
+<h2 id="editor-support"><a class="header" href="#editor-support">Editor support</a></h2>
+<p>A <a href="https://marketplace.visualstudio.com/items?itemName=wax-wasm.wax">Wax extension for Visual Studio Code</a> supports both <code>.wax</code> and WebAssembly text (<code>.wat</code>) files: syntax highlighting, formatting (with format on save), diagnostics as you type, a document outline, snippets, and commands to preview the compiled WAT or decompiled Wax side by side. It runs the toolchain compiled to WebAssembly in-process, so it works the same in desktop and web VS Code (including <a href="https://vscode.dev">vscode.dev</a>).</p>
 <h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
 <p>Create a file <code>hello.wax</code>:</p>
 <pre class="wax-highlight"><span class="hljs wax-code"><span class="hljs-meta">#[export = </span><span class="hljs-string">"add"</span><span class="hljs-meta">]</span>
@@ -251,7 +263,7 @@ opam install .
 </table>
 </div>
 <h2 id="type-checking"><a class="header" href="#type-checking">Type Checking</a></h2>
-<p>Compiling Wax to <code>.wat</code> or <code>.wasm</code> type-checks it automatically — type errors
+<p>Compiling Wax to <code>.wat</code> or <code>.wasm</code> type-checks it automatically; type errors
 are reported before any output is produced. For example, adding an <code>i32</code> and an
 <code>f64</code>:</p>
 <pre><code>Error: This operator cannot be applied to operands of types i32 and f64.
@@ -267,9 +279,9 @@ same-format conversion (<code>.wax</code> → <code>.wax</code>) or a trusted <c
 unused locals.</p>
 <h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
 <ul>
-<li><a href="./language.html">Language Guide</a> — Variables, expressions, and control flow</li>
-<li><a href="./correspondence/intro.html">Correspondence</a> — How Wax maps to WebAssembly</li>
-<li><a href="./cli.html">CLI Reference</a> — Complete command-line options</li>
+<li><a href="./language.html">Language Guide</a>: Variables, expressions, and control flow</li>
+<li><a href="./correspondence/intro.html">Correspondence</a>: How Wax maps to WebAssembly</li>
+<li><a href="./cli.html">CLI Reference</a>: Complete command-line options</li>
 </ul>
 
                     </main>
