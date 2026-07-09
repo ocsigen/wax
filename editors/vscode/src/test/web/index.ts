@@ -45,5 +45,11 @@ export async function run(): Promise<void> {
     throw new Error("web: expected an error diagnostic: " + JSON.stringify(diags));
   }
 
+  // Related labels are surfaced: an unclosed delimiter points back at its opener.
+  const unclosed = wax.check("fn f() -> i32 { (i32.add 1 2 }");
+  if (unclosed.length === 0 || unclosed[0].related.length === 0) {
+    throw new Error("web: expected a related label: " + JSON.stringify(unclosed));
+  }
+
   console.log("WEB SMOKE TEST PASSED");
 }

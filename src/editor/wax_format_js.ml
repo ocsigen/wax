@@ -57,23 +57,51 @@ let format_string src =
       Format.fprintf fmt "%a@." print_wax ast;
       Ok (Buffer.contents buf)
 
+type diag = {
+  severity : Wax_utils.Diagnostic.severity;
+  location : Wax_utils.Ast.location;
+  message : string;
+  hint : string option;
+  related : (string * Wax_utils.Ast.location) list;
+      (* a message and the source span it points at (e.g. the matching opener) *)
+}
+
+let render f = Format.asprintf "%a" f ()
+
+let render_labels labels =
+  List.map
+    (fun (l : Wax_utils.Diagnostic.label) -> (render l.message, l.location))
+    labels
+
 (* Diagnostics: a syntax error (one, from the parser) or, if parsing succeeds,
-   the type-checker's errors and warnings collected without printing. *)
+   the type-checker's errors and warnings collected without printing. Both carry
+   any related labels (e.g. "the matching ( is here"); type-checker entries also
+   carry a hint. *)
 let check_string src =
   match Wax_parser.parse_diagnostics ~filename:"<buffer>" src with
-  | Error e -> [ (Wax_utils.Diagnostic.Error, e.location, e.message) ]
+  | Error e ->
+      [
+        {
+          severity = Wax_utils.Diagnostic.Error;
+          location = e.location;
+          message = e.message;
+          hint = None;
+          related = render_labels e.related;
+        };
+      ]
   | Ok (ast, _ctx) ->
       let d = Wax_utils.Diagnostic.collector ~source:src () in
       (try Wax_lang.Typing.check ~warn_unused:true d ast
        with Wax_utils.Diagnostic.Aborted -> ());
       List.map
         (fun e ->
-          let message =
-            Format.asprintf "%a" (Wax_utils.Diagnostic.entry_message e) ()
-          in
-          ( Wax_utils.Diagnostic.entry_severity e,
-            Wax_utils.Diagnostic.entry_location e,
-            message ))
+          {
+            severity = Wax_utils.Diagnostic.entry_severity e;
+            location = Wax_utils.Diagnostic.entry_location e;
+            message = render (Wax_utils.Diagnostic.entry_message e);
+            hint = Option.map render (Wax_utils.Diagnostic.entry_hint e);
+            related = render_labels (Wax_utils.Diagnostic.entry_related e);
+          })
         (Wax_utils.Diagnostic.collected d)
 
 (* VS Code positions are zero-based for both line and character; Lexing lines are
@@ -81,21 +109,39 @@ let check_string src =
 let js_position (p : Lexing.position) =
   (p.Lexing.pos_lnum - 1, p.Lexing.pos_cnum - p.Lexing.pos_bol)
 
-let js_diagnostic (severity, (location : Wax_utils.Ast.location), message) =
+let js_related (message, (location : Wax_utils.Ast.location)) =
   let start_line, start_char = js_position location.loc_start in
   let end_line, end_char = js_position location.loc_end in
   object%js
-    val severity =
-      Js.string
-        (match severity with
-        | Wax_utils.Diagnostic.Error -> "error"
-        | Warning -> "warning")
-
     val message = Js.string (String.trim message)
     val startLine = start_line
     val startChar = start_char
     val endLine = end_line
     val endChar = end_char
+  end
+
+let js_diagnostic d =
+  let start_line, start_char = js_position d.location.loc_start in
+  let end_line, end_char = js_position d.location.loc_end in
+  object%js
+    val severity =
+      Js.string
+        (match d.severity with
+        | Wax_utils.Diagnostic.Error -> "error"
+        | Warning -> "warning")
+
+    val message = Js.string (String.trim d.message)
+    val startLine = start_line
+    val startChar = start_char
+    val endLine = end_line
+    val endChar = end_char
+
+    val hint =
+      match d.hint with
+      | Some h -> Js.some (Js.string (String.trim h))
+      | None -> Js.null
+
+    val related = Js.array (Array.of_list (List.map js_related d.related))
   end
 
 let result ~ok ~text ~error =

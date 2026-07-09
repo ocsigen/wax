@@ -101,8 +101,23 @@ function registerDiagnostics(
         d.severity === "error"
           ? vscode.DiagnosticSeverity.Error
           : vscode.DiagnosticSeverity.Warning;
-      const diagnostic = new vscode.Diagnostic(range, d.message, severity);
+      // Append the toolchain's hint to the message; surface related labels
+      // (e.g. the matching opening delimiter) as related information.
+      const message = d.hint ? `${d.message}\n${d.hint}` : d.message;
+      const diagnostic = new vscode.Diagnostic(range, message, severity);
       diagnostic.source = "wax";
+      if (d.related.length > 0) {
+        diagnostic.relatedInformation = d.related.map(
+          (r) =>
+            new vscode.DiagnosticRelatedInformation(
+              new vscode.Location(
+                document.uri,
+                new vscode.Range(r.startLine, r.startChar, r.endLine, r.endChar),
+              ),
+              r.message,
+            ),
+        );
+      }
       return diagnostic;
     });
     collection.set(document.uri, items);

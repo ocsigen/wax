@@ -21,13 +21,22 @@ export interface FormatResult {
   error: string | null;
 }
 
-export interface WaxDiagnostic {
-  severity: "error" | "warning";
-  message: string;
+export interface WaxRange {
   startLine: number;
   startChar: number;
   endLine: number;
   endChar: number;
+}
+
+export interface WaxRelated extends WaxRange {
+  message: string;
+}
+
+export interface WaxDiagnostic extends WaxRange {
+  severity: "error" | "warning";
+  message: string;
+  hint: string | null;
+  related: WaxRelated[];
 }
 
 export interface Wax {
