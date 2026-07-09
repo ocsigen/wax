@@ -889,7 +889,15 @@ result = my_function(arg1, arg2);
 
 ### Indirect Calls
 
-Call through a function reference:
+Writing a function's name without calling it is a reference to that function (a
+`&func` value). This is how you get one: to store in a global or a
+[table](#tables-and-element-segments), or to pass as an argument.
+
+```wax
+const handler: &callback = inc;   // a reference to `inc`, not a call
+```
+
+Call through such a reference by casting it to the expected function type:
 
 ```wax
 (func_ref as &?callback)(arg)
