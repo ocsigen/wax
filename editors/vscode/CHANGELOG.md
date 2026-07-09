@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.2
+
+- Formatting a file with syntax errors now says so in the status bar instead of
+  doing nothing (the errors themselves are shown as squiggles / in Problems).
+
 ## 0.2.1
 
 - Fix "Show compiled WAT" / "Show as Wax" failing to open on the web host

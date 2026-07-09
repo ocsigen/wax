@@ -93,9 +93,17 @@ function registerFormatter(
       const result = lang.format(wax, text);
       if (!result.ok || result.text === null) {
         // Syntax error or similar: leave the document untouched rather than
-        // overwrite it (important on format-on-save). Log why.
+        // overwrite it (important on format-on-save). Log the detail, and say so
+        // in the status bar so the action is not a silent no-op. A transient
+        // status-bar message rather than a notification, since format-on-save
+        // fires on every save and a popup each time would be noise; the errors
+        // themselves are already shown as squiggles and in the Problems panel.
         log.appendLine(
           "Not formatting (input rejected): " + (result.error ?? "unknown"),
+        );
+        vscode.window.setStatusBarMessage(
+          "$(error) Wax: not formatted — the file has syntax errors",
+          5000,
         );
         return [];
       }
