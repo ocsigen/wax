@@ -502,12 +502,12 @@ and instruction ch =
         let typ = blocktype ch in
         let block = instructions ch [] in
         expect_end ch;
-        Block { label = (); typ; block }
+        Block { label = (); typ; block = Ast.no_loc block }
     | 0x03 ->
         let typ = blocktype ch in
         let block = instructions ch [] in
         expect_end ch;
-        Loop { label = (); typ; block }
+        Loop { label = (); typ; block = Ast.no_loc block }
     | 0x04 ->
         let typ = blocktype ch in
         let if_block = instructions ch [] in
@@ -543,7 +543,14 @@ and instruction ch =
           | c -> error ch "unexpected opcode 0x%02x in try block" c
         in
         let catches, catch_all = loop_catches [] in
-        Try { label = (); typ; block; catches; catch_all }
+        Try
+          {
+            label = ();
+            typ;
+            block = Ast.no_loc block;
+            catches = List.map (fun (t, b) -> (t, Ast.no_loc b)) catches;
+            catch_all = Option.map Ast.no_loc catch_all;
+          }
     | 0x08 -> Throw (uint ch)
     | 0x0A -> ThrowRef
     | 0xE0 -> ContNew (uint ch)
@@ -617,7 +624,7 @@ and instruction ch =
         in
         let block = instructions ch [] in
         expect_end ch;
-        TryTable { label = (); typ; catches; block }
+        TryTable { label = (); typ; catches; block = Ast.no_loc block }
     | 0x20 -> LocalGet (uint ch)
     | 0x21 -> LocalSet (uint ch)
     | 0x22 -> LocalTee (uint ch)
@@ -1526,8 +1533,10 @@ let attach_branch_hints ~num_func_imports ~code_starts ~sections
       let lst = List.map (go start_pos tbl) in
       let desc =
         match i.desc with
-        | Block b -> Block { b with block = lst b.block }
-        | Loop b -> Loop { b with block = lst b.block }
+        | Block b ->
+            Block { b with block = { b.block with desc = lst b.block.desc } }
+        | Loop b ->
+            Loop { b with block = { b.block with desc = lst b.block.desc } }
         | If b ->
             If
               {
@@ -1535,14 +1544,21 @@ let attach_branch_hints ~num_func_imports ~code_starts ~sections
                 if_block = { b.if_block with desc = lst b.if_block.desc };
                 else_block = { b.else_block with desc = lst b.else_block.desc };
               }
-        | TryTable b -> TryTable { b with block = lst b.block }
+        | TryTable b ->
+            TryTable { b with block = { b.block with desc = lst b.block.desc } }
         | Try b ->
             Try
               {
                 b with
-                block = lst b.block;
-                catches = List.map (fun (t, bl) -> (t, lst bl)) b.catches;
-                catch_all = Option.map lst b.catch_all;
+                block = { b.block with desc = lst b.block.desc };
+                catches =
+                  List.map
+                    (fun (t, bl) -> (t, { bl with Ast.desc = lst bl.Ast.desc }))
+                    b.catches;
+                catch_all =
+                  Option.map
+                    (fun bl -> { bl with Ast.desc = lst bl.Ast.desc })
+                    b.catch_all;
               }
         | d -> d
       in

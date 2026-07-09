@@ -27,13 +27,21 @@ let map_instrs ?(enter = fun ~location:_ _cond _positive f -> f ()) func
             {
               b with
               then_fields =
-                enter ~location:f.info cond true (fun () ->
-                    List.map map_field then_fields);
+                {
+                  then_fields with
+                  Ast.desc =
+                    enter ~location:f.info cond true (fun () ->
+                        List.map map_field then_fields.Ast.desc);
+                };
               else_fields =
                 Option.map
                   (fun e ->
-                    enter ~location:f.info cond false (fun () ->
-                        List.map map_field e))
+                    {
+                      e with
+                      Ast.desc =
+                        enter ~location:f.info cond false (fun () ->
+                            List.map map_field e.Ast.desc);
+                    })
                   else_fields;
             }
       | Types _ | Import _ | Memory _ | Tag _ | Export _ | Start _ | Data _
@@ -156,11 +164,12 @@ type outer_env = {
 let fold_fields cctx add tbl ~location cond then_fields else_fields =
   let tbl =
     with_cond cctx ~location cond true (fun () ->
-        List.fold_left add tbl then_fields)
+        List.fold_left add tbl then_fields.Ast.desc)
   in
   match else_fields with
   | Some l ->
-      with_cond cctx ~location cond false (fun () -> List.fold_left add tbl l)
+      with_cond cctx ~location cond false (fun () ->
+          List.fold_left add tbl l.Ast.desc)
   | None -> tbl
 
 let types cctx m =
@@ -534,7 +543,7 @@ let rec fold_stream env folded stream : _ Ast.Text.instr list =
       let block =
         let _, i = blocktype_arity env typ in
         let env = { env with labels = (label, i) :: env.labels } in
-        fold_stream env [] block
+        { block with desc = fold_stream env [] block.desc }
       in
       let inputs, outputs = arity env i in
       let folded = consume inputs folded in
@@ -550,7 +559,7 @@ let rec fold_stream env folded stream : _ Ast.Text.instr list =
       let block =
         let i, _ = blocktype_arity env typ in
         let env = { env with labels = (label, i) :: env.labels } in
-        fold_stream env [] block
+        { block with desc = fold_stream env [] block.desc }
       in
       let inputs, outputs = arity env i in
       let folded = consume inputs folded in
@@ -614,7 +623,7 @@ let rec fold_stream env folded stream : _ Ast.Text.instr list =
       let block =
         let _, i = blocktype_arity env typ in
         let env = { env with labels = (label, i) :: env.labels } in
-        fold_stream env [] block
+        { block with desc = fold_stream env [] block.desc }
       in
       let inputs, outputs = arity env i in
       let folded = consume inputs folded in
@@ -633,11 +642,18 @@ let rec fold_stream env folded stream : _ Ast.Text.instr list =
         let _, i = blocktype_arity env typ in
         { env with labels = (label, i) :: env.labels }
       in
-      let block = fold_stream env' [] block in
+      let block = { block with desc = fold_stream env' [] block.desc } in
       let catches =
-        List.map (fun (i, l) -> (i, fold_stream env' [] l)) catches
+        List.map
+          (fun (i, l) ->
+            (i, { l with Ast.desc = fold_stream env' [] l.Ast.desc }))
+          catches
       in
-      let catch_all = Option.map (fold_stream env' []) catch_all in
+      let catch_all =
+        Option.map
+          (fun c -> { c with Ast.desc = fold_stream env' [] c.Ast.desc })
+          catch_all
+      in
       let inputs, outputs = arity env i in
       let folded = consume inputs folded in
       fold_stream env
@@ -654,14 +670,22 @@ let rec fold_stream env folded stream : _ Ast.Text.instr list =
     :: rem ->
       let cctx = env.outer_env.cctx in
       let then_body =
-        with_cond cctx ~location:i.info cond true (fun () ->
-            fold_stream env [] then_body)
+        {
+          then_body with
+          desc =
+            with_cond cctx ~location:i.info cond true (fun () ->
+                fold_stream env [] then_body.desc);
+        }
       in
       let else_body =
         Option.map
           (fun e ->
-            with_cond cctx ~location:i.info cond false (fun () ->
-                fold_stream env [] e))
+            {
+              e with
+              Ast.desc =
+                with_cond cctx ~location:i.info cond false (fun () ->
+                    fold_stream env [] e.Ast.desc);
+            })
           else_body
       in
       let inputs, outputs = arity env i in
@@ -735,9 +759,11 @@ let rec unfold_stream stream start =
       let rec unfold_block i =
         match i.Ast.desc with
         | Block ({ block; _ } as b) ->
-            Block { b with block = unfold_instrs block }
+            Block
+              { b with block = { block with desc = unfold_instrs block.desc } }
         | Loop ({ block; _ } as b) ->
-            Loop { b with block = unfold_instrs block }
+            Loop
+              { b with block = { block with desc = unfold_instrs block.desc } }
         | If ({ if_block; else_block; _ } as b) ->
             If
               {
@@ -747,21 +773,33 @@ let rec unfold_stream stream start =
                   { else_block with desc = unfold_instrs else_block.desc };
               }
         | TryTable ({ block; _ } as b) ->
-            TryTable { b with block = unfold_instrs block }
+            TryTable
+              { b with block = { block with desc = unfold_instrs block.desc } }
         | Try ({ block; catches; catch_all; _ } as b) ->
             Try
               {
                 b with
-                block = unfold_instrs block;
-                catches = List.map (fun (i, l) -> (i, unfold_instrs l)) catches;
-                catch_all = Option.map unfold_instrs catch_all;
+                block = { block with desc = unfold_instrs block.desc };
+                catches =
+                  List.map
+                    (fun (i, l) ->
+                      (i, { l with Ast.desc = unfold_instrs l.Ast.desc }))
+                    catches;
+                catch_all =
+                  Option.map
+                    (fun c -> { c with Ast.desc = unfold_instrs c.Ast.desc })
+                    catch_all;
               }
         | If_annotation ({ then_body; else_body; _ } as b) ->
             If_annotation
               {
                 b with
-                then_body = unfold_instrs then_body;
-                else_body = Option.map unfold_instrs else_body;
+                then_body =
+                  { then_body with desc = unfold_instrs then_body.desc };
+                else_body =
+                  Option.map
+                    (fun e -> { e with Ast.desc = unfold_instrs e.Ast.desc })
+                    else_body;
               }
         | Hinted (h, inner) ->
             (* Branch-hinting proposal: unfold the wrapped branch, keeping the

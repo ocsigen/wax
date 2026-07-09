@@ -546,12 +546,12 @@ end) : sig
     | Block of {
         label : X.label;
         typ : blocktype option;
-        block : 'info instr list;
+        block : ('info instr list, location) annotated;
       }
     | Loop of {
         label : X.label;
         typ : blocktype option;
-        block : 'info instr list;
+        block : ('info instr list, location) annotated;
       }
     | If of {
         label : X.label;
@@ -563,14 +563,14 @@ end) : sig
         label : X.label;
         typ : blocktype option;
         catches : catch list;
-        block : 'info instr list;
+        block : ('info instr list, location) annotated;
       }
     | Try of {
         label : X.label;
         typ : blocktype option;
-        block : 'info instr list;
-        catches : (X.idx * 'info instr list) list;
-        catch_all : 'info instr list option;
+        block : ('info instr list, location) annotated;
+        catches : (X.idx * ('info instr list, location) annotated) list;
+        catch_all : ('info instr list, location) annotated option;
       }
     | Unreachable
     | Nop
@@ -699,8 +699,8 @@ end) : sig
     | Char of Uchar.t
     | If_annotation of {
         cond : cond;
-        then_body : 'info instr list;
-        else_body : 'info instr list option;
+        then_body : ('info instr list, location) annotated;
+        else_body : ('info instr list, location) annotated option;
       }
 
   and 'info instr = ('info instr_desc, 'info) annotated
@@ -816,8 +816,11 @@ module Text : sig
     | String_global of { id : name; typ : idx option; init : datastring }
     | Module_if_annotation of {
         cond : cond;
-        then_fields : ('info modulefield, location) annotated list;
-        else_fields : ('info modulefield, location) annotated list option;
+        then_fields :
+          (('info modulefield, location) annotated list, location) annotated;
+        else_fields :
+          (('info modulefield, location) annotated list, location) annotated
+          option;
       }
 
   type 'info module_ =

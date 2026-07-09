@@ -235,11 +235,11 @@ let module_ ctx env ((name, fields) : Ast.location Ast.Text.module_) :
         let else_present = Option.is_some else_fields in
         match eval ctx env cond with
         | True ->
-            drop_else f.info then_fields ~else_present;
-            sfields then_fields
+            drop_else f.info then_fields.desc ~else_present;
+            sfields then_fields.desc
         | False -> (
-            drop_then f.info then_fields ~else_present;
-            match else_fields with Some e -> sfields e | None -> [])
+            drop_then f.info then_fields.desc ~else_present;
+            match else_fields with Some e -> sfields e.desc | None -> [])
         | Residual cond ->
             [
               {
@@ -248,8 +248,12 @@ let module_ ctx env ((name, fields) : Ast.location Ast.Text.module_) :
                   Module_if_annotation
                     {
                       cond;
-                      then_fields = sfields then_fields;
-                      else_fields = Option.map sfields else_fields;
+                      then_fields =
+                        { then_fields with desc = sfields then_fields.desc };
+                      else_fields =
+                        Option.map
+                          (fun e -> { e with Ast.desc = sfields e.Ast.desc })
+                          else_fields;
                     };
               };
             ])
@@ -289,11 +293,11 @@ let module_ ctx env ((name, fields) : Ast.location Ast.Text.module_) :
         let else_present = Option.is_some else_body in
         match eval ctx env cond with
         | True ->
-            drop_else i.info then_body ~else_present;
-            sinstrs then_body
+            drop_else i.info then_body.desc ~else_present;
+            sinstrs then_body.desc
         | False -> (
-            drop_then i.info then_body ~else_present;
-            match else_body with Some e -> sinstrs e | None -> [])
+            drop_then i.info then_body.desc ~else_present;
+            match else_body with Some e -> sinstrs e.desc | None -> [])
         | Residual cond ->
             [
               {
@@ -302,16 +306,22 @@ let module_ ctx env ((name, fields) : Ast.location Ast.Text.module_) :
                   If_annotation
                     {
                       cond;
-                      then_body = sinstrs then_body;
-                      else_body = Option.map sinstrs else_body;
+                      then_body =
+                        { then_body with desc = sinstrs then_body.desc };
+                      else_body =
+                        Option.map
+                          (fun e -> { e with Ast.desc = sinstrs e.Ast.desc })
+                          else_body;
                     };
               };
             ])
     | desc -> [ { i with desc = sstructured desc } ]
   and sstructured (desc : Ast.location instr_desc) : Ast.location instr_desc =
     match desc with
-    | Block b -> Block { b with block = sinstrs b.block }
-    | Loop b -> Loop { b with block = sinstrs b.block }
+    | Block b ->
+        Block { b with block = { b.block with desc = sinstrs b.block.desc } }
+    | Loop b ->
+        Loop { b with block = { b.block with desc = sinstrs b.block.desc } }
     | If b ->
         If
           {
@@ -319,14 +329,22 @@ let module_ ctx env ((name, fields) : Ast.location Ast.Text.module_) :
             if_block = { b.if_block with desc = sinstrs b.if_block.desc };
             else_block = { b.else_block with desc = sinstrs b.else_block.desc };
           }
-    | TryTable b -> TryTable { b with block = sinstrs b.block }
+    | TryTable b ->
+        TryTable { b with block = { b.block with desc = sinstrs b.block.desc } }
     | Try b ->
         Try
           {
             b with
-            block = sinstrs b.block;
-            catches = List.map (fun (idx, l) -> (idx, sinstrs l)) b.catches;
-            catch_all = Option.map sinstrs b.catch_all;
+            block = { b.block with desc = sinstrs b.block.desc };
+            catches =
+              List.map
+                (fun (idx, l) ->
+                  (idx, { l with Ast.desc = sinstrs l.Ast.desc }))
+                b.catches;
+            catch_all =
+              Option.map
+                (fun b -> { b with Ast.desc = sinstrs b.Ast.desc })
+                b.catch_all;
           }
     | Folded (h, l) -> Folded ({ h with desc = sstructured h.desc }, sinstrs l)
     | Hinted (hint, inner) ->

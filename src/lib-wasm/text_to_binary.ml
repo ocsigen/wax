@@ -183,9 +183,10 @@ let rec instr ~resolve_string_type ~resolve_func_type ctx (i : 'info T.instr) =
             label = ();
             typ = Option.map (block_type ~resolve_func_type ctx) typ;
             block =
-              List.map
-                (instr ~resolve_string_type ~resolve_func_type ctx')
-                block;
+              Ast.no_loc
+                (List.map
+                   (instr ~resolve_string_type ~resolve_func_type ctx')
+                   block.desc);
           }
     | Loop { label; typ; block } ->
         let ctx' = push_label ctx label in
@@ -194,9 +195,10 @@ let rec instr ~resolve_string_type ~resolve_func_type ctx (i : 'info T.instr) =
             label = ();
             typ = Option.map (block_type ~resolve_func_type ctx) typ;
             block =
-              List.map
-                (instr ~resolve_string_type ~resolve_func_type ctx')
-                block;
+              Ast.no_loc
+                (List.map
+                   (instr ~resolve_string_type ~resolve_func_type ctx')
+                   block.desc);
           }
     | If { label; typ; if_block; else_block } ->
         let ctx' = push_label ctx label in
@@ -305,9 +307,10 @@ let rec instr ~resolve_string_type ~resolve_func_type ctx (i : 'info T.instr) =
             typ = Option.map (block_type ~resolve_func_type ctx) typ;
             catches = List.map (catch ctx) catches;
             block =
-              List.map
-                (instr ~resolve_string_type ~resolve_func_type ctx')
-                block;
+              Ast.no_loc
+                (List.map
+                   (instr ~resolve_string_type ~resolve_func_type ctx')
+                   block.desc);
           }
     | Try { label; typ; block; catches; catch_all } ->
         let ctx' = push_label ctx label in
@@ -316,20 +319,26 @@ let rec instr ~resolve_string_type ~resolve_func_type ctx (i : 'info T.instr) =
             label = ();
             typ = Option.map (block_type ~resolve_func_type ctx) typ;
             block =
-              List.map
-                (instr ~resolve_string_type ~resolve_func_type ctx')
-                block;
+              Ast.no_loc
+                (List.map
+                   (instr ~resolve_string_type ~resolve_func_type ctx')
+                   block.desc);
             catches =
               List.map
                 (fun (tag, b) ->
                   ( resolve_idx ctx.tags tag,
-                    List.map
-                      (instr ~resolve_string_type ~resolve_func_type ctx')
-                      b ))
+                    Ast.no_loc
+                      (List.map
+                         (instr ~resolve_string_type ~resolve_func_type ctx')
+                         b.Ast.desc) ))
                 catches;
             catch_all =
               Option.map
-                (List.map (instr ~resolve_string_type ~resolve_func_type ctx'))
+                (fun b ->
+                  Ast.no_loc
+                    (List.map
+                       (instr ~resolve_string_type ~resolve_func_type ctx')
+                       b.Ast.desc))
                 catch_all;
           }
     | Throw i -> Throw (resolve_idx ctx.tags i)
@@ -453,16 +462,18 @@ let collect_labels instrs ctr map =
       (fun map (i : _ T.instr) ->
         match i.desc with
         | Block { label; block; _ } | Loop { label; block; _ } ->
-            add ctr map label |> go block ctr
+            add ctr map label |> go block.desc ctr
         | If { label; if_block; else_block; _ } ->
             add ctr map label |> go if_block.desc ctr |> go else_block.desc ctr
-        | TryTable { label; block; _ } -> add ctr map label |> go block ctr
+        | TryTable { label; block; _ } -> add ctr map label |> go block.desc ctr
         | Try { label; block; catches; catch_all; _ } -> (
-            let map = add ctr map label |> go block ctr in
+            let map = add ctr map label |> go block.desc ctr in
             let map =
-              List.fold_left (fun map (_, b) -> go b ctr map) map catches
+              List.fold_left
+                (fun map (_, b) -> go b.Ast.desc ctr map)
+                map catches
             in
-            match catch_all with Some b -> go b ctr map | None -> map)
+            match catch_all with Some b -> go b.Ast.desc ctr map | None -> map)
         | _ -> map)
       map instrs
   in

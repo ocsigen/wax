@@ -573,10 +573,10 @@ branch_hint_annot:
 blockinstr:
 | BLOCK label = label typ = block_type block =instructions END label2 = label
   { check_labels label label2;
-    with_loc $sloc (Block {label; typ; block}) }
+    with_loc $sloc (Block {label; typ; block = Ast.no_loc block}) }
 | LOOP label = label typ = block_type block = instructions END label2 = label
   { check_labels label label2;
-    with_loc $sloc (Loop {label; typ; block}) }
+    with_loc $sloc (Loop {label; typ; block = Ast.no_loc block}) }
 | IF label = label typ = block_type if_block = instructions ELSE
   label2 = label else_block = instructions END
   label3 = label
@@ -594,11 +594,11 @@ blockinstr:
 | TRY_TABLE label = label typ = block_type catches = catches block = instructions
   END label2 = label
    { check_labels label label2;
-     with_loc $sloc (TryTable {label; typ; catches; block}) }
+     with_loc $sloc (TryTable {label; typ; catches; block = Ast.no_loc block}) }
 | TRY label = label typ = block_type block = instructions c = legacy_catches label2 = label
   { check_labels label label2;
     let (catches, catch_all) = c in
-    with_loc $sloc (Try {label; typ; block; catches; catch_all}) }
+    with_loc $sloc (Try {label; typ; block = Ast.no_loc block; catches; catch_all}) }
 
 catches:
 | { [] }
@@ -620,9 +620,9 @@ on_clauses:
 
 legacy_catches:
 | END { [], None }
-| CATCH_ALL l = instructions END { [], Some l }
+| CATCH_ALL l = instructions END { [], Some (Ast.no_loc l) }
 | CATCH i = index l = instructions rem = legacy_catches
-  { map_fst (fun r -> (i, l) :: r) rem }
+  { map_fst (fun r -> (i, Ast.no_loc l) :: r) rem }
 
 label:
 | i = ID ? { i }
@@ -859,10 +859,19 @@ cmp_op:
 | CMP_LE { Ast.Le }
 | CMP_GE { Ast.Ge }
 
+(* Each [(@then ...)] / [(@else ...)] clause carries the location of the whole
+   clause (the annotation and closing paren included) so a comment trailing the
+   clause attaches to it rather than leaking into the next one. *)
+cond_then:
+| THEN_ANNOT then_body = instructions ")" { with_loc $sloc then_body }
+
+cond_else:
+| ELSE_ANNOT e = instructions ")" { with_loc $sloc e }
+
 cond_instr:
 | IF_ANNOT c = cond
-  THEN_ANNOT then_body = instructions ")"
-  else_body = option(ELSE_ANNOT e = instructions ")" { e })
+  then_body = cond_then
+  else_body = option(cond_else)
   ")"
   { with_loc $sloc (If_annotation { cond = c; then_body; else_body }) }
 
@@ -879,10 +888,10 @@ folded_instruction:
    that closing position. *)
 | "(" BLOCK label = label typ = block_type block = instructions ")"
   { with_loc $sloc
-      (Folded (with_loc ($startpos, $endpos(block)) (Block {label; typ; block}), [])) }
+      (Folded (with_loc ($startpos, $endpos(block)) (Block {label; typ; block = with_loc ($startpos(block), $endpos(block)) block}), [])) }
 | "(" LOOP label = label typ = block_type block = instructions ")"
   { with_loc $sloc
-      (Folded (with_loc ($startpos, $endpos(block)) (Loop {label; typ; block}), [])) }
+      (Folded (with_loc ($startpos, $endpos(block)) (Loop {label; typ; block = with_loc ($startpos(block), $endpos(block)) block}), [])) }
 | "(" IF label = label
   typ = block_type l = folded_instructions if_block = folded_then
   else_block = option(folded_else)
@@ -897,7 +906,7 @@ folded_instruction:
   block = instructions  ")"
    { with_loc $sloc
        (Folded
-          (with_loc ($startpos, $endpos(block)) (TryTable {label; typ; catches; block}),
+          (with_loc ($startpos, $endpos(block)) (TryTable {label; typ; catches; block = with_loc ($startpos(block), $endpos(block)) block}),
           [])) }
 | "(" TRY label = label
   typ = block_type "(" DO block = instructions ")"
@@ -905,7 +914,7 @@ folded_instruction:
   { let (catches, catch_all) = c in
     with_loc $sloc
       (Folded
-        (with_loc ($startpos, $endpos(c)) (Try {label; typ; block; catches; catch_all}), [])) }
+        (with_loc ($startpos, $endpos(c)) (Try {label; typ; block = with_loc ($startpos(block), $endpos(block)) block; catches; catch_all}), [])) }
 | STRING_ANNOT id = option(index) l = string_list ")"
     { with_loc $sloc (String (id, l)) }
 | CHAR_ANNOT s = STRING ")"
@@ -932,9 +941,9 @@ folded_else:
 
 folded_catches:
 | { [], None }
-| LPAREN_CATCH_ALL l = instructions ")" { [], Some l }
+| LPAREN_CATCH_ALL l = instructions ")" { [], Some (with_loc ($startpos(l), $endpos(l)) l) }
 | LPAREN_CATCH i = index l = instructions ")" rem = folded_catches
-  { map_fst (fun r -> (i, l) :: r) rem }
+  { map_fst (fun r -> (i, with_loc ($startpos(l), $endpos(l)) l) :: r) rem }
 
 folded_instructions:
 | { [] }
@@ -1170,12 +1179,19 @@ module_field:
 | f = cond_module_field
   { f }
 
+cond_then_fields:
+| THEN_ANNOT then_fields = list(module_field) ")" { with_loc $sloc then_fields }
+
+cond_else_fields:
+| ELSE_ANNOT e = list(module_field) ")" { with_loc $sloc e }
+
 cond_module_field:
 | IF_ANNOT c = cond
-  THEN_ANNOT then_fields = list(module_field) ")"
-  else_fields = option(ELSE_ANNOT e = list(module_field) ")" { e })
+  then_fields = cond_then_fields
+  else_fields = option(cond_else_fields)
   ")"
-  { with_loc $sloc (Module_if_annotation { cond = c; then_fields; else_fields }) }
+  { with_loc $sloc
+      (Module_if_annotation { cond = c; then_fields; else_fields }) }
 
 parse:
 | "(" MODULE name = ID ? l = module_field * ")" EOF

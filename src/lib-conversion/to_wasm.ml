@@ -648,13 +648,21 @@ and instruction_desc ret ctx i : location Text.instr list =
   | Block { label; typ; block = body } ->
       let inner_ctx = { ctx with locals = ctx.locals } in
       let block =
-        List.concat_map (instruction (push ret label) inner_ctx) body.desc
+        {
+          body with
+          Ast.desc =
+            List.concat_map (instruction (push ret label) inner_ctx) body.desc;
+        }
       in
       folded loc (Block { label; typ = blocktype typ; block }) []
   | Loop { label; typ; block = body } ->
       let inner_ctx = { ctx with locals = ctx.locals } in
       let block =
-        List.concat_map (instruction (push ret label) inner_ctx) body.desc
+        {
+          body with
+          Ast.desc =
+            List.concat_map (instruction (push ret label) inner_ctx) body.desc;
+        }
       in
       folded loc (Loop { label; typ = blocktype typ; block }) []
   | If { label; typ; cond; if_block; else_block } ->
@@ -686,7 +694,11 @@ and instruction_desc ret ctx i : location Text.instr list =
   | TryTable { label = labl; typ; block; catches } ->
       let inner_ctx = { ctx with locals = ctx.locals } in
       let block =
-        List.concat_map (instruction (push ret labl) inner_ctx) block.desc
+        {
+          block with
+          Ast.desc =
+            List.concat_map (instruction (push ret labl) inner_ctx) block.desc;
+        }
       in
       let catches =
         List.map
@@ -704,23 +716,37 @@ and instruction_desc ret ctx i : location Text.instr list =
   | Try { label; typ; block; catches; catch_all } ->
       let inner_ctx = { ctx with locals = ctx.locals } in
       let block =
-        List.concat_map (instruction (push ret label) inner_ctx) block.desc
+        {
+          block with
+          Ast.desc =
+            List.concat_map (instruction (push ret label) inner_ctx) block.desc;
+        }
       in
       let catches =
         List.map
           (fun (tag, block) ->
             let inner_ctx = { ctx with locals = ctx.locals } in
             ( index tag,
-              List.concat_map
-                (instruction (push ret label) inner_ctx)
-                block.desc ))
+              {
+                block with
+                Ast.desc =
+                  List.concat_map
+                    (instruction (push ret label) inner_ctx)
+                    block.desc;
+              } ))
           catches
       in
       let catch_all =
         Option.map
           (fun block ->
             let inner_ctx = { ctx with locals = ctx.locals } in
-            List.concat_map (instruction (push ret label) inner_ctx) block.desc)
+            {
+              block with
+              Ast.desc =
+                List.concat_map
+                  (instruction (push ret label) inner_ctx)
+                  block.desc;
+            })
           catch_all
       in
       folded loc
@@ -1768,8 +1794,11 @@ and instruction_desc ret ctx i : location Text.instr list =
           (Text.If_annotation
              {
                cond;
-               then_body = conv then_body.desc;
-               else_body = Option.map (fun b -> conv b.desc) else_body;
+               then_body = { then_body with Ast.desc = conv then_body.desc };
+               else_body =
+                 Option.map
+                   (fun b -> { b with Ast.desc = conv b.desc })
+                   else_body;
              });
       ]
 
@@ -1870,8 +1899,10 @@ let reorder_imports lst =
     match f.desc with
     | Func _ | Memory _ | Table _ | Tag _ | Global _ | String_global _ -> true
     | Module_if_annotation { then_fields; else_fields; _ } ->
-        List.exists defines then_fields
-        || Option.fold ~none:false ~some:(List.exists defines) else_fields
+        List.exists defines then_fields.desc
+        || Option.fold ~none:false
+             ~some:(fun e -> List.exists defines e.Ast.desc)
+             else_fields
     | Import _ | Types _ | Export _ | Start _ | Elem _ | Data _ -> false
   in
   let rec traverse acc (cur : (_ Ast.Text.modulefield, _) Ast.annotated list) =
@@ -2212,9 +2243,15 @@ let module_ diagnostics types fields =
                   Text.Module_if_annotation
                     {
                       cond;
-                      then_fields = conv_branch then_fields.desc;
+                      then_fields =
+                        {
+                          then_fields with
+                          Ast.desc = conv_branch then_fields.desc;
+                        };
                       else_fields =
-                        Option.map (fun b -> conv_branch b.desc) else_fields;
+                        Option.map
+                          (fun b -> { b with Ast.desc = conv_branch b.desc })
+                          else_fields;
                     };
               };
             ]

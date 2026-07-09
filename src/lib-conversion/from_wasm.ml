@@ -1377,11 +1377,11 @@ let label_targeted (instrs : _ Src.instr list) =
     | Br_on_cast_desc_eq_fail (i, _, _) ->
         hit depth i
     | Br_table (labels, lab) -> List.exists (hit depth) (lab :: labels)
-    | Block { block; _ } | Loop { block; _ } -> any (depth + 1) block
+    | Block { block; _ } | Loop { block; _ } -> any (depth + 1) block.desc
     | If { if_block; else_block; _ } ->
         any (depth + 1) if_block.desc || any (depth + 1) else_block.desc
     | TryTable { block; catches; _ } ->
-        any (depth + 1) block
+        any (depth + 1) block.desc
         || List.exists
              (fun (c : Src.catch) ->
                match c with
@@ -1389,9 +1389,12 @@ let label_targeted (instrs : _ Src.instr list) =
                    hit depth l)
              catches
     | Try { block; catches; catch_all; _ } -> (
-        any (depth + 1) block
-        || List.exists (fun (_, b) -> any (depth + 1) b) catches
-        || match catch_all with Some b -> any (depth + 1) b | None -> false)
+        any (depth + 1) block.desc
+        || List.exists (fun (_, b) -> any (depth + 1) b.Ast.desc) catches
+        ||
+        match catch_all with
+        | Some b -> any (depth + 1) b.Ast.desc
+        | None -> false)
     | Resume (_, handlers)
     | ResumeThrowRef (_, handlers)
     | ResumeThrow (_, _, handlers) ->
@@ -1592,9 +1595,11 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
   match i.desc with
   | Block { label; typ; block } ->
       let label, ctx =
-        push_label ctx ~loop:false ~targeted:(label_targeted block) label typ
+        push_label ctx ~loop:false
+          ~targeted:(label_targeted block.desc)
+          label typ
       in
-      let block = Stack.run (instructions ctx block) in
+      let block = Stack.run (instructions ctx block.desc) in
       let inputs, outputs = blocktype_arity ctx typ in
       let* () = Stack.consume inputs in
       Stack.push
@@ -1608,9 +1613,11 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
               }))
   | Loop { label; typ; block } ->
       let label, ctx =
-        push_label ctx ~loop:true ~targeted:(label_targeted block) label typ
+        push_label ctx ~loop:true
+          ~targeted:(label_targeted block.desc)
+          label typ
       in
-      let block = Stack.run (instructions ctx block) in
+      let block = Stack.run (instructions ctx block.desc) in
       let inputs, outputs = blocktype_arity ctx typ in
       let* () = Stack.consume inputs in
       Stack.push
@@ -1660,9 +1667,11 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
               }))
   | TryTable { label = labl; typ; block; catches } ->
       let labl, block_ctx =
-        push_label ctx ~loop:false ~targeted:(label_targeted block) labl typ
+        push_label ctx ~loop:false
+          ~targeted:(label_targeted block.desc)
+          labl typ
       in
-      let block = Stack.run (instructions block_ctx block) in
+      let block = Stack.run (instructions block_ctx block.desc) in
       let catches =
         List.map
           (fun (catch : Src.catch) : Ast.catch ->
@@ -1689,21 +1698,26 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       (* A [br] out of the try's body or any of its handler blocks targets the
          one try scope, so all of them bear on whether this label renders. *)
       let targeted =
-        label_targeted block
-        || List.exists (fun (_, b) -> label_targeted b) catches
-        || match catch_all with Some b -> label_targeted b | None -> false
+        label_targeted block.desc
+        || List.exists (fun (_, b) -> label_targeted b.Ast.desc) catches
+        ||
+        match catch_all with
+        | Some b -> label_targeted b.Ast.desc
+        | None -> false
       in
       let label, ctx = push_label ctx ~loop:false ~targeted label typ in
-      let block = Stack.run (instructions ctx block) in
+      let block = Stack.run (instructions ctx block.desc) in
       let catches =
         List.map
           (fun (t, block) ->
-            (idx ctx `Tag t, Ast.no_loc (Stack.run (instructions ctx block))))
+            ( idx ctx `Tag t,
+              Ast.no_loc (Stack.run (instructions ctx block.Ast.desc)) ))
           catches
       in
       let catch_all =
         Option.map
-          (fun block -> Ast.no_loc (Stack.run (instructions ctx block)))
+          (fun block ->
+            Ast.no_loc (Stack.run (instructions ctx block.Ast.desc)))
           catch_all
       in
       let inputs, outputs = blocktype_arity ctx typ in
@@ -2299,24 +2313,25 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       Stack.push 1 (with_loc (String (Option.map (idx ctx `Type) t, s)))
   | If_annotation { cond; then_body; else_body } ->
       let then_body =
-        with_cond ctx ~location:i.info cond true (fun () ->
-            Stack.run (instructions ctx then_body))
+        {
+          then_body with
+          Ast.desc =
+            with_cond ctx ~location:i.info cond true (fun () ->
+                Stack.run (instructions ctx then_body.desc));
+        }
       in
       let else_body =
         Option.map
           (fun b ->
-            with_cond ctx ~location:i.info cond false (fun () ->
-                Stack.run (instructions ctx b)))
+            {
+              b with
+              Ast.desc =
+                with_cond ctx ~location:i.info cond false (fun () ->
+                    Stack.run (instructions ctx b.Ast.desc));
+            })
           else_body
       in
-      Stack.push 0
-        (with_loc
-           (If_annotation
-              {
-                cond;
-                then_body = Ast.no_loc then_body;
-                else_body = Option.map Ast.no_loc else_body;
-              }))
+      Stack.push 0 (with_loc (If_annotation { cond; then_body; else_body }))
   | MemorySize m -> Stack.push 1 (mem_call m "size" [])
   | MemoryGrow m ->
       let* d = Stack.pop_width_preserved in
@@ -2535,17 +2550,17 @@ let string_of_name (nm : Src.name) =
 let rec reserve_module_names_in_instr ctx ns (i : _ Src.instr) =
   match i.desc with
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
-      reserve_module_names_in_instrs ctx ns block
+      reserve_module_names_in_instrs ctx ns block.desc
   | If { if_block; else_block; _ } ->
       reserve_module_names_in_instrs ctx ns if_block.desc;
       reserve_module_names_in_instrs ctx ns else_block.desc
   | Try { block; catches; catch_all; _ } ->
-      reserve_module_names_in_instrs ctx ns block;
+      reserve_module_names_in_instrs ctx ns block.desc;
       List.iter
-        (fun (_, block) -> reserve_module_names_in_instrs ctx ns block)
+        (fun (_, block) -> reserve_module_names_in_instrs ctx ns block.Ast.desc)
         catches;
       Option.iter
-        (fun block -> reserve_module_names_in_instrs ctx ns block)
+        (fun block -> reserve_module_names_in_instrs ctx ns block.Ast.desc)
         catch_all
   | Folded (i, l) ->
       reserve_module_names_in_instrs ctx ns l;
@@ -2602,14 +2617,18 @@ and reserve_module_names_in_instrs ctx ns l =
 let rec collect_elem_refs ctx acc (i : _ Src.instr) =
   match i.desc with
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
-      collect_elem_refs_instrs ctx acc block
+      collect_elem_refs_instrs ctx acc block.desc
   | If { if_block; else_block; _ } ->
       collect_elem_refs_instrs ctx acc if_block.desc;
       collect_elem_refs_instrs ctx acc else_block.desc
   | Try { block; catches; catch_all; _ } ->
-      collect_elem_refs_instrs ctx acc block;
-      List.iter (fun (_, b) -> collect_elem_refs_instrs ctx acc b) catches;
-      Option.iter (collect_elem_refs_instrs ctx acc) catch_all
+      collect_elem_refs_instrs ctx acc block.desc;
+      List.iter
+        (fun (_, b) -> collect_elem_refs_instrs ctx acc b.Ast.desc)
+        catches;
+      Option.iter
+        (fun b -> collect_elem_refs_instrs ctx acc b.Ast.desc)
+        catch_all
   | Folded (i, l) ->
       collect_elem_refs_instrs ctx acc l;
       collect_elem_refs ctx acc i
@@ -2628,14 +2647,14 @@ and collect_elem_refs_instrs ctx acc l = List.iter (collect_elem_refs ctx acc) l
 let rec collect_local_refs acc (i : _ Src.instr) =
   match i.desc with
   | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
-      collect_local_refs_instrs acc block
+      collect_local_refs_instrs acc block.desc
   | If { if_block; else_block; _ } ->
       collect_local_refs_instrs acc if_block.desc;
       collect_local_refs_instrs acc else_block.desc
   | Try { block; catches; catch_all; _ } ->
-      collect_local_refs_instrs acc block;
-      List.iter (fun (_, b) -> collect_local_refs_instrs acc b) catches;
-      Option.iter (collect_local_refs_instrs acc) catch_all
+      collect_local_refs_instrs acc block.desc;
+      List.iter (fun (_, b) -> collect_local_refs_instrs acc b.Ast.desc) catches;
+      Option.iter (fun b -> collect_local_refs_instrs acc b.Ast.desc) catch_all
   | Folded (i, l) ->
       collect_local_refs_instrs acc l;
       collect_local_refs acc i
@@ -3055,23 +3074,25 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
            (e.g. an import with a branch-dependent signature) resolve correctly
            in the branch's bodies. *)
         let then_fields =
-          with_cond ctx ~location:f.info cond true (fun () ->
-              List.concat_map (modulefield ctx export_tbl) then_fields)
+          {
+            then_fields with
+            Ast.desc =
+              with_cond ctx ~location:f.info cond true (fun () ->
+                  List.concat_map (modulefield ctx export_tbl) then_fields.desc);
+          }
         in
         let else_fields =
           Option.map
             (fun e ->
-              with_cond ctx ~location:f.info cond false (fun () ->
-                  List.concat_map (modulefield ctx export_tbl) e))
+              {
+                e with
+                Ast.desc =
+                  with_cond ctx ~location:f.info cond false (fun () ->
+                      List.concat_map (modulefield ctx export_tbl) e.Ast.desc);
+              })
             else_fields
         in
-        Some
-          (Conditional
-             {
-               cond;
-               then_fields = Ast.no_loc then_fields;
-               else_fields = Option.map Ast.no_loc else_fields;
-             })
+        Some (Conditional { cond; then_fields; else_fields })
   in
   Option.to_list (Option.map (fun desc -> { f with desc }) desc) @ !extra
 
@@ -3152,19 +3173,19 @@ let elaborate_implicit_types ctx fields =
     | CallIndirect (_, tu) | ReturnCallIndirect (_, tu) -> consider tu
     | Block { typ; block; _ } | Loop { typ; block; _ } ->
         blocktype typ;
-        instrs block
+        instrs block.desc
     | If { typ; if_block; else_block; _ } ->
         blocktype typ;
         instrs if_block.Ast.desc;
         instrs else_block.Ast.desc
     | TryTable { typ; block; _ } ->
         blocktype typ;
-        instrs block
+        instrs block.desc
     | Try { typ; block; catches; catch_all; _ } ->
         blocktype typ;
-        instrs block;
-        List.iter (fun (_, b) -> instrs b) catches;
-        Option.iter instrs catch_all
+        instrs block.desc;
+        List.iter (fun (_, b) -> instrs b.Ast.desc) catches;
+        Option.iter (fun b -> instrs b.Ast.desc) catch_all
     | Folded (i, l) ->
         instr i;
         instrs l
@@ -3280,11 +3301,11 @@ let register_names ctx export_tbl fields =
             Sequence.register ctx.globals export_tbl (Some Global) (Some id) []
         | Module_if_annotation { then_fields; else_fields; cond } ->
             with_cond ctx ~location:field.info cond true (fun () ->
-                pass1 then_fields);
+                pass1 then_fields.desc);
             Option.iter
               (fun e ->
                 with_cond ctx ~location:field.info cond false (fun () ->
-                    pass1 e))
+                    pass1 e.Ast.desc))
               else_fields)
       fields
   in
@@ -3306,11 +3327,11 @@ let register_names ctx export_tbl fields =
             register_type ctx export_tbl Func id exports typ
         | Module_if_annotation { then_fields; else_fields; cond } ->
             with_cond ctx ~location:field.info cond true (fun () ->
-                pass2 then_fields);
+                pass2 then_fields.desc);
             Option.iter
               (fun e ->
                 with_cond ctx ~location:field.info cond false (fun () ->
-                    pass2 e))
+                    pass2 e.Ast.desc))
               else_fields
         | Types _ | Global _ | Export _ | Start _ | Elem _ | Data _ | Memory _
         | Table _ | Tag _ | String_global _ ->
@@ -3339,8 +3360,10 @@ let collect_exports cond_env diagnostics fields =
             let c =
               Cond.of_cond cond_env diagnostics ~location:field.info cond
             in
-            go (Cond.and_ asm c) then_fields;
-            Option.iter (go (Cond.and_ asm (Cond.not_ c))) else_fields
+            go (Cond.and_ asm c) then_fields.desc;
+            Option.iter
+              (fun e -> go (Cond.and_ asm (Cond.not_ c)) e.Ast.desc)
+              else_fields
         | _ -> ())
       fields
   in
@@ -3354,8 +3377,10 @@ let rec module_has_conditional fields =
     (fun (f : (_ Src.modulefield, _) Ast.annotated) ->
       match f.desc with
       | Module_if_annotation { then_fields; else_fields; _ } ->
-          module_has_conditional then_fields
-          || Option.fold ~none:false ~some:module_has_conditional else_fields
+          module_has_conditional then_fields.desc
+          || Option.fold ~none:false
+               ~some:(fun e -> module_has_conditional e.Ast.desc)
+               else_fields
           || true
       | _ -> false)
     fields
@@ -3366,8 +3391,11 @@ let rec count_memories fields =
       match f.desc with
       | Memory _ | Import { desc = Memory _; _ } -> n + 1
       | Module_if_annotation { then_fields; else_fields; _ } ->
-          n + count_memories then_fields
-          + Option.fold ~none:0 ~some:count_memories else_fields
+          n
+          + count_memories then_fields.desc
+          + Option.fold ~none:0
+              ~some:(fun e -> count_memories e.Ast.desc)
+              else_fields
       | _ -> n)
     0 fields
 
@@ -3551,8 +3579,8 @@ let module_ ?(strict_constants = false) diagnostics (module_name, fields) =
       | Func { instrs; _ } ->
           collect_elem_refs_instrs ctx ctx.referenced_elems instrs
       | Module_if_annotation { then_fields; else_fields; _ } ->
-          List.iter collect_field then_fields;
-          Option.iter (List.iter collect_field) else_fields
+          List.iter collect_field then_fields.desc;
+          Option.iter (fun e -> List.iter collect_field e.Ast.desc) else_fields
       | _ -> ()
     in
     List.iter collect_field fields;

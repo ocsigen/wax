@@ -143,8 +143,18 @@ let module_ ((name, fields) : Ast.location module_) : Ast.location module_ =
   and map_structured (desc : Ast.location instr_desc) : Ast.location instr_desc
       =
     match desc with
-    | Block b -> Block { b with block = List.map map_instr b.block }
-    | Loop b -> Loop { b with block = List.map map_instr b.block }
+    | Block b ->
+        Block
+          {
+            b with
+            block = { b.block with desc = List.map map_instr b.block.desc };
+          }
+    | Loop b ->
+        Loop
+          {
+            b with
+            block = { b.block with desc = List.map map_instr b.block.desc };
+          }
     | If b ->
         If
           {
@@ -154,15 +164,26 @@ let module_ ((name, fields) : Ast.location module_) : Ast.location module_ =
             else_block =
               { b.else_block with desc = List.map map_instr b.else_block.desc };
           }
-    | TryTable b -> TryTable { b with block = List.map map_instr b.block }
+    | TryTable b ->
+        TryTable
+          {
+            b with
+            block = { b.block with desc = List.map map_instr b.block.desc };
+          }
     | Try b ->
         Try
           {
             b with
-            block = List.map map_instr b.block;
+            block = { b.block with desc = List.map map_instr b.block.desc };
             catches =
-              List.map (fun (t, l) -> (t, List.map map_instr l)) b.catches;
-            catch_all = Option.map (List.map map_instr) b.catch_all;
+              List.map
+                (fun (t, l) ->
+                  (t, { l with Ast.desc = List.map map_instr l.Ast.desc }))
+                b.catches;
+            catch_all =
+              Option.map
+                (fun b -> { b with Ast.desc = List.map map_instr b.Ast.desc })
+                b.catch_all;
           }
     (* [@string]/[@char] print as a folded head with no operands; expand them at
        the folded level so no redundant parenthesis is left behind. *)

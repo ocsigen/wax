@@ -154,9 +154,10 @@ let rec instr (names : B.names) local_names label_names label_counter stack
             label = Option.map Ast.no_loc name;
             typ = Option.map (blocktype names.types) typ;
             block =
-              List.map
-                (instr names local_names label_names label_counter stack')
-                block;
+              Ast.no_loc
+                (List.map
+                   (instr names local_names label_names label_counter stack')
+                   block.desc);
           }
     | Loop { label = _; typ; block } ->
         let name = get_label_name label_names label_counter in
@@ -166,9 +167,10 @@ let rec instr (names : B.names) local_names label_names label_counter stack
             label = Option.map Ast.no_loc name;
             typ = Option.map (blocktype names.types) typ;
             block =
-              List.map
-                (instr names local_names label_names label_counter stack')
-                block;
+              Ast.no_loc
+                (List.map
+                   (instr names local_names label_names label_counter stack')
+                   block.desc);
           }
     | If { label = _; typ; if_block; else_block } ->
         let name = get_label_name label_names label_counter in
@@ -197,9 +199,10 @@ let rec instr (names : B.names) local_names label_names label_counter stack
             typ = Option.map (blocktype names.types) typ;
             catches = List.map (catch names stack) catches;
             block =
-              List.map
-                (instr names local_names label_names label_counter stack')
-                block;
+              Ast.no_loc
+                (List.map
+                   (instr names local_names label_names label_counter stack')
+                   block.desc);
           }
     | Try { label = _; typ; block; catches; catch_all } ->
         let name = get_label_name label_names label_counter in
@@ -209,21 +212,27 @@ let rec instr (names : B.names) local_names label_names label_counter stack
             label = Option.map Ast.no_loc name;
             typ = Option.map (blocktype names.types) typ;
             block =
-              List.map
-                (instr names local_names label_names label_counter stack')
-                block;
+              Ast.no_loc
+                (List.map
+                   (instr names local_names label_names label_counter stack')
+                   block.desc);
             catches =
               List.map
                 (fun (tag, b) ->
                   ( index ~map:names.tags tag,
-                    List.map
-                      (instr names local_names label_names label_counter stack')
-                      b ))
+                    Ast.no_loc
+                      (List.map
+                         (instr names local_names label_names label_counter
+                            stack')
+                         b.desc) ))
                 catches;
             catch_all =
               Option.map
-                (List.map
-                   (instr names local_names label_names label_counter stack'))
+                (fun b ->
+                  Ast.no_loc
+                    (List.map
+                       (instr names local_names label_names label_counter stack')
+                       b.desc))
                 catch_all;
           }
     | Unreachable -> Unreachable

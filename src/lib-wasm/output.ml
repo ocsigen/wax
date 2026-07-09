@@ -983,7 +983,7 @@ let rec instr i =
         [
           Delimiter
             (block (instruction "block" :: (opt_id label @ blocktype typ)));
-          Contents (List.map instr b);
+          Contents (List.map instr b.desc);
           Delimiter (instruction "end");
         ]
   | Loop { label; typ; block = b } ->
@@ -991,7 +991,7 @@ let rec instr i =
         [
           Delimiter
             (block (instruction "loop" :: (opt_id label @ blocktype typ)));
-          Contents (List.map instr b);
+          Contents (List.map instr b.desc);
           Delimiter (instruction "end");
         ]
   | TryTable { label; typ; catches = c; block = b } ->
@@ -999,19 +999,19 @@ let rec instr i =
         [
           Delimiter
             (block (instruction "try_table" :: (opt_id label @ blocktype typ)));
-          Contents (catches c @ List.map instr b);
+          Contents (catches c @ List.map instr b.desc);
           Delimiter (instruction "end");
         ]
   | Try { label; typ; block = b; catches; catch_all } ->
       structured_block ~loc
         (Delimiter (block (instruction "try" :: (opt_id label @ blocktype typ)))
-        :: Contents (List.map instr b)
+        :: Contents (List.map instr b.desc)
         :: (List.flatten
               (List.map
                  (fun (i, l) ->
                    [
                      Delimiter (block [ instruction "catch"; index i ]);
-                     Contents (List.map instr l);
+                     Contents (List.map instr l.Ast.desc);
                    ])
                  catches)
            @ (match catch_all with
@@ -1019,7 +1019,7 @@ let rec instr i =
              | Some c ->
                  [
                    Delimiter (instruction "catch_all");
-                   Contents (List.map instr c);
+                   Contents (List.map instr c.desc);
                  ])
            @ [ Delimiter (instruction "end") ]))
   | Br_table (l, i) ->
@@ -1097,32 +1097,36 @@ let rec instr i =
       assert (l = []);
       list ~loc
         (block (instruction "block" :: (opt_id label @ blocktype typ))
-        :: List.map instr b)
+        :: List.map instr b.desc)
   | Folded ({ desc = Loop { label; typ; block = b }; _ }, l) ->
       assert (l = []);
       list ~loc
         (block (instruction "loop" :: (opt_id label @ blocktype typ))
-        :: List.map instr b)
+        :: List.map instr b.desc)
   | Folded ({ desc = TryTable { label; typ; catches = c; block = b }; _ }, l) ->
       assert (l = []);
       list ~loc
         (block (instruction "try_table" :: (opt_id label @ blocktype typ))
         :: block (catches c)
-        :: List.map instr b)
+        :: List.map instr b.desc)
   | Folded ({ desc = Try { label; typ; block = b; catches; catch_all }; _ }, l)
     ->
       assert (l = []);
       list ~loc
         (block (instruction "try" :: (opt_id label @ blocktype typ))
-        :: list (instruction "do" :: List.map instr b)
+        :: list (instruction "do" :: List.map instr b.desc)
         :: (List.map
               (fun (i, l) ->
-                list (block [ instruction "catch"; index i ] :: List.map instr l))
+                list
+                  (block [ instruction "catch"; index i ]
+                  :: List.map instr l.Ast.desc))
               catches
            @
            match catch_all with
            | None -> []
-           | Some l -> [ list (instruction "catch_all" :: List.map instr l) ]))
+           | Some l ->
+               [ list (instruction "catch_all" :: List.map instr l.Ast.desc) ])
+        )
   | String (id, s) | Folded ({ desc = String (id, s); _ }, []) ->
       list ~loc
         (block
@@ -1159,7 +1163,8 @@ let rec instr i =
   | If_annotation { cond; then_body; else_body }
   | Folded ({ desc = If_annotation { cond; then_body; else_body }; _ }, []) ->
       let clause head body =
-        list (atom ~style:Annotation ("@" ^ head) :: List.map instr body)
+        list ~loc:body.Ast.info
+          (atom ~style:Annotation ("@" ^ head) :: List.map instr body.Ast.desc)
       in
       list ~loc
         (block [ atom ~style:Annotation "@if"; cond_doc cond ]
@@ -1447,7 +1452,9 @@ let rec modulefield f =
              init)
   | Module_if_annotation { cond; then_fields; else_fields } ->
       let clause head fields =
-        list (atom ~style:Annotation ("@" ^ head) :: List.map modulefield fields)
+        list ~loc:fields.Ast.info
+          (atom ~style:Annotation ("@" ^ head)
+          :: List.map modulefield fields.Ast.desc)
       in
       list ~loc
         (block [ atom ~style:Annotation "@if"; cond_doc cond ]

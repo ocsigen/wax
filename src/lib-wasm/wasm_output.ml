@@ -315,13 +315,13 @@ module Encoder = struct
     | Block { typ; block; _ } ->
         byte b 0x02;
         (match typ with Some t -> blocktype b t | None -> byte b 0x40);
-        List.iter (instr ~source_map_t b) block;
+        List.iter (instr ~source_map_t b) block.desc;
         map_end ~source_map_t b i.info.loc_end;
         byte b 0x0B
     | Loop { typ; block; _ } ->
         byte b 0x03;
         (match typ with Some t -> blocktype b t | None -> byte b 0x40);
-        List.iter (instr ~source_map_t b) block;
+        List.iter (instr ~source_map_t b) block.desc;
         map_end ~source_map_t b i.info.loc_end;
         byte b 0x0B
     | If { typ; if_block; else_block; _ } ->
@@ -354,23 +354,23 @@ module Encoder = struct
                 byte b 0x03;
                 uint b label)
           b catches;
-        List.iter (instr ~source_map_t b) block;
+        List.iter (instr ~source_map_t b) block.desc;
         map_end ~source_map_t b i.info.loc_end;
         byte b 0x0B
     | Try { typ; block; catches; catch_all; _ } ->
         byte b 0x06;
         (match typ with Some t -> blocktype b t | None -> byte b 0x40);
-        List.iter (instr ~source_map_t b) block;
+        List.iter (instr ~source_map_t b) block.desc;
         List.iter
           (fun (tag, block) ->
             byte b 0x07;
             uint b tag;
-            List.iter (instr ~source_map_t b) block)
+            List.iter (instr ~source_map_t b) block.Ast.desc)
           catches;
         (match catch_all with
         | Some block ->
             byte b 0x19;
-            List.iter (instr ~source_map_t b) block
+            List.iter (instr ~source_map_t b) block.Ast.desc
         | None -> ());
         map_end ~source_map_t b i.info.loc_end;
         byte b 0x0B

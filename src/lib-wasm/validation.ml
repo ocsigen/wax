@@ -2196,14 +2196,14 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let* () = pop_args ctx loc ~source:param_source params in
       let used = track_label ctx label in
       block ctx loc label ~used ~param_source ~result_source
-        ~br_source:result_source ~params ~results ~br_params:results b;
+        ~br_source:result_source ~params ~results ~br_params:results b.desc;
       push_results ~source:result_source results
   | Loop { label; typ; block = b } ->
       let*! params, results, param_source, result_source = blocktype ctx typ in
       let* () = pop_args ctx loc ~source:param_source params in
       let used = track_label ctx label in
       block ctx loc label ~used ~param_source ~result_source
-        ~br_source:param_source ~params ~results ~br_params:params b;
+        ~br_source:param_source ~params ~results ~br_params:params b.desc;
       push_results ~source:result_source results
   | If { label; typ; if_block; else_block } ->
       let*! params, results, param_source, result_source = blocktype ctx typ in
@@ -2222,7 +2222,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let* () = pop_args ctx loc ~source:param_source params in
       let used = track_label ctx label in
       block ctx loc label ~used ~param_source ~result_source
-        ~br_source:result_source ~params ~results ~br_params:results b;
+        ~br_source:result_source ~params ~results ~br_params:results b.desc;
       List.iter
         (fun (catch : Ast.Text.catch) ->
           match catch with
@@ -2271,18 +2271,19 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let* () = pop_args ctx loc ~source:param_source params in
       let used = track_label ctx label in
       block ctx loc label ~used ~param_source ~result_source
-        ~br_source:result_source ~params ~results ~br_params:results b;
+        ~br_source:result_source ~params ~results ~br_params:results b.desc;
       List.iter
         (fun (tag, b) ->
           let*? params', param_source = lookup_tag_type ctx tag in
           block ctx loc label ~used ~param_source ~result_source
             ~br_source:result_source ~params:params' ~results ~br_params:results
-            b)
+            b.Ast.desc)
         catches;
       Option.iter
         (fun b ->
           block ctx loc label ~used ~param_source ~result_source
-            ~br_source:result_source ~params ~results ~br_params:results b)
+            ~br_source:result_source ~params ~results ~br_params:results
+            b.Ast.desc)
         catch_all;
       push_results ~source:result_source results
   | Unreachable -> unreachable
@@ -4540,14 +4541,14 @@ let lint_body ctx instrs =
   and recurse (i : _ Ast.Text.instr) =
     match i.desc with
     | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
-        walk block
+        walk block.desc
     | If { if_block; else_block; _ } ->
         walk if_block.desc;
         walk else_block.desc
     | Try { block; catches; catch_all; _ } ->
-        walk block;
-        List.iter (fun (_, b) -> walk b) catches;
-        Option.iter walk catch_all
+        walk block.desc;
+        List.iter (fun (_, b) -> walk b.Ast.desc) catches;
+        Option.iter (fun b -> walk b.Ast.desc) catch_all
     | _ -> ()
   in
   (* The [eager-select] lint. A [select] evaluates both of its value operands,
@@ -4603,14 +4604,14 @@ let lint_body ctx instrs =
         List.iter sel_walk operands;
         sel_walk op
     | Block { block; _ } | Loop { block; _ } | TryTable { block; _ } ->
-        List.iter sel_walk block
+        List.iter sel_walk block.desc
     | If { if_block; else_block; _ } ->
         List.iter sel_walk if_block.desc;
         List.iter sel_walk else_block.desc
     | Try { block; catches; catch_all; _ } ->
-        List.iter sel_walk block;
-        List.iter (fun (_, b) -> List.iter sel_walk b) catches;
-        Option.iter (List.iter sel_walk) catch_all
+        List.iter sel_walk block.desc;
+        List.iter (fun (_, b) -> List.iter sel_walk b.Ast.desc) catches;
+        Option.iter (fun b -> List.iter sel_walk b.Ast.desc) catch_all
     | Hinted (_, inner) -> sel_walk inner
     | _ -> ()
   in
@@ -5095,9 +5096,9 @@ let specialize env diagnostics ~enqueue ~record asm0 fields =
     match f.desc with
     | Module_if_annotation { cond; then_fields; else_fields } ->
         choose asm cond ~location:f.info
-          ~then_branch:(fun asm' -> sfields asm' then_fields)
+          ~then_branch:(fun asm' -> sfields asm' then_fields.desc)
           ~else_branch:(fun asm' ->
-            match else_fields with Some e -> sfields asm' e | None -> [])
+            match else_fields with Some e -> sfields asm' e.desc | None -> [])
     | Func { id; typ; locals; instrs; exports } ->
         let desc : _ Ast.Text.modulefield =
           Func { id; typ; locals; instrs = sinstrs asm instrs; exports }
@@ -5147,14 +5148,17 @@ let specialize env diagnostics ~enqueue ~record asm0 fields =
     match i.desc with
     | If_annotation { cond; then_body; else_body } ->
         choose asm cond ~location:i.info
-          ~then_branch:(fun asm' -> sinstrs asm' then_body)
+          ~then_branch:(fun asm' -> sinstrs asm' then_body.desc)
           ~else_branch:(fun asm' ->
-            match else_body with Some e -> sinstrs asm' e | None -> [])
+            match else_body with Some e -> sinstrs asm' e.desc | None -> [])
     | desc -> ([ { i with desc = sstructured asm desc } ], asm)
   and sstructured asm (desc : _ Ast.Text.instr_desc) =
     match desc with
-    | Block b -> Block { b with block = sinstrs asm b.block }
-    | Loop b -> Loop { b with block = sinstrs asm b.block }
+    | Block b ->
+        Block
+          { b with block = { b.block with desc = sinstrs asm b.block.desc } }
+    | Loop b ->
+        Loop { b with block = { b.block with desc = sinstrs asm b.block.desc } }
     | If b ->
         If
           {
@@ -5163,14 +5167,23 @@ let specialize env diagnostics ~enqueue ~record asm0 fields =
             else_block =
               { b.else_block with desc = sinstrs asm b.else_block.desc };
           }
-    | TryTable b -> TryTable { b with block = sinstrs asm b.block }
+    | TryTable b ->
+        TryTable
+          { b with block = { b.block with desc = sinstrs asm b.block.desc } }
     | Try b ->
         Try
           {
             b with
-            block = sinstrs asm b.block;
-            catches = List.map (fun (idx, l) -> (idx, sinstrs asm l)) b.catches;
-            catch_all = Option.map (sinstrs asm) b.catch_all;
+            block = { b.block with desc = sinstrs asm b.block.desc };
+            catches =
+              List.map
+                (fun (idx, l) ->
+                  (idx, { l with Ast.desc = sinstrs asm l.Ast.desc }))
+                b.catches;
+            catch_all =
+              Option.map
+                (fun b -> { b with Ast.desc = sinstrs asm b.Ast.desc })
+                b.catch_all;
           }
     | Folded (h, l) ->
         Folded ({ h with desc = sstructured asm h.desc }, sinstrs asm l)

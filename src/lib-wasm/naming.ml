@@ -22,8 +22,12 @@ let rec map_fields fields =
               Text.Module_if_annotation
                 {
                   cond;
-                  then_fields = map_fields then_fields;
-                  else_fields = Option.map map_fields else_fields;
+                  then_fields =
+                    { then_fields with desc = map_fields then_fields.desc };
+                  else_fields =
+                    Option.map
+                      (fun e -> { e with desc = map_fields e.desc })
+                      else_fields;
                 };
           }
       | _ -> field)
