@@ -6,6 +6,9 @@
   WebAssembly and run in-process. Works via "Format Document" and "Format on
   Save", in both the desktop and web extension hosts. A file that fails to parse
   is left unchanged.
+- The extension is declared safe in untrusted and virtual workspaces (the
+  formatter only reads the buffer), so highlighting and formatting keep working
+  without trusting the workspace. Diagnostics go to a "Wax" output channel.
 
 ## 0.1.2
 

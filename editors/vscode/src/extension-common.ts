@@ -9,6 +9,12 @@ export function activateWith(
   context: vscode.ExtensionContext,
   opts: LoadOptions,
 ): void {
+  const log = vscode.window.createOutputChannel("Wax");
+  context.subscriptions.push(log);
+  log.appendLine("Wax extension activated.");
+
+  let warnedLoadFailure = false;
+
   const provider: vscode.DocumentFormattingEditProvider = {
     async provideDocumentFormattingEdits(document, _options, token) {
       let wax: Wax;
@@ -16,8 +22,15 @@ export function activateWith(
         wax = await loadWax(context, opts);
       } catch (err) {
         // A failure to load the runtime must not clobber the buffer; report it
-        // and format nothing.
-        console.error("wax: failed to load the formatter runtime", err);
+        // loudly (once) so it is not a silent no-op.
+        const message = err instanceof Error ? err.stack || err.message : String(err);
+        log.appendLine("Failed to load the formatter runtime:\n" + message);
+        if (!warnedLoadFailure) {
+          warnedLoadFailure = true;
+          void vscode.window.showErrorMessage(
+            "Wax: failed to load the formatter runtime (see the Wax output channel).",
+          );
+        }
         return [];
       }
       if (token.isCancellationRequested) return [];
@@ -26,7 +39,8 @@ export function activateWith(
       const result = wax.format(text);
       if (!result.ok || result.text === null) {
         // Syntax error or similar: leave the document untouched rather than
-        // overwrite it (important on format-on-save).
+        // overwrite it (important on format-on-save). Log why.
+        log.appendLine("Not formatting (input rejected): " + (result.error ?? "unknown"));
         return [];
       }
       if (result.text === text) return []; // already formatted

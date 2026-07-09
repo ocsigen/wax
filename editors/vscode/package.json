@@ -27,6 +27,10 @@
   "main": "./dist/extension.node.js",
   "browser": "./dist/extension.web.js",
   "activationEvents": ["onLanguage:wax"],
+  "capabilities": {
+    "untrustedWorkspaces": { "supported": true },
+    "virtualWorkspaces": true
+  },
   "scripts": {
     "build": "bash ./build.sh",
     "typecheck": "tsc --noEmit",
