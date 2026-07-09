@@ -971,22 +971,36 @@ A reference type is written `&type` (non-nullable) or `&?type` (nullable):
 
 `type` is either a declared type (a struct, array, [function](#function-types),
 or [continuation](#stack-switching)) or one of WebAssembly's **abstract heap
-types**:
+types**. These form five disjoint subtype hierarchies; a reference to a type
+accepts any reference to a type below it in the same tree (a `&any` accepts an
+`&eq`, an `&i31`, a declared struct, and so on):
 
-| Heap type | Refers to |
-|-----------|-----------|
-| `any` | any internal (GC) reference |
-| `eq` | references that support `==` |
-| `struct` / `array` | any struct / any array |
-| `i31` | an integer boxed in a reference (see [i31](#i31)) |
-| `func` | any function reference |
-| `extern` | a host (external) reference |
-| `none` / `nofunc` / `noextern` | bottom types, inhabited only by `null` |
+```
+any     (internal / GC references)
+└─ eq   (comparable with ==)
+   ├─ i31
+   ├─ struct
+   │  └─ declared struct types
+   └─ array
+      └─ declared array types
 
-So `&any`, `&?extern`, and `&eq` are all valid reference types. The exception
-and stack-switching hierarchies add `exn` and `cont`/`nocont`/`noexn`; see
-[Types → Heap Types](correspondence/types.md#heap-types) for the complete list
-and the subtype hierarchy.
+func    (function references)
+└─ declared function types
+
+extern  (host references)
+
+exn     (exceptions)
+
+cont    (continuations)
+└─ declared continuation types
+```
+
+Each hierarchy also has a **bottom** type, a subtype of everything in its tree
+and inhabited only by `null`: `none` under `any`, `nofunc` under `func`,
+`noextern` under `extern`, `noexn` under `exn`, and `nocont` under `cont`. So
+`&any`, `&?extern`, and `&eq` are all valid reference types; see
+[Types → Heap Types](correspondence/types.md#heap-types) for how each maps to
+WebAssembly.
 
 ### Null
 

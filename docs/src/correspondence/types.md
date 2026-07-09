@@ -86,35 +86,6 @@ the additional packed types available only in struct and array fields.
 | `none` | `none` |
 | `<typeidx>` | `<identifier>` |
 
-The abstract heap types form five disjoint subtype hierarchies. A reference to a
-type accepts any reference to a type below it in the same tree (a `&any` accepts
-an `&eq`, an `&i31`, a declared struct, and so on):
-
-```
-any     (internal / GC references)
-└─ eq
-   ├─ i31
-   ├─ struct
-   │  └─ declared struct types
-   └─ array
-      └─ declared array types
-
-func    (function references)
-└─ declared function types
-
-extern  (host references)
-
-exn     (exceptions)
-
-cont    (continuations)
-└─ declared continuation types
-```
-
-Each hierarchy also has a **bottom** type, a subtype of everything in its tree
-and inhabited only by `null`: `none` under `any`, `nofunc` under `func`,
-`noextern` under `extern`, `noexn` under `exn`, and `nocont` under `cont`. The
-five hierarchies are disjoint, with no subtyping between them.
-
 ## Composite Types
 
 ### Structs
