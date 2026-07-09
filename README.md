@@ -6,7 +6,7 @@
 
 [![CI](https://github.com/ocsigen/wax/actions/workflows/ci.yml/badge.svg)](https://github.com/ocsigen/wax/actions/workflows/ci.yml)
 [![Nightly fuzzing](https://github.com/ocsigen/wax/actions/workflows/fuzz-nightly.yml/badge.svg)](https://github.com/ocsigen/wax/actions/workflows/fuzz-nightly.yml)
-[![Documentation](https://img.shields.io/badge/docs-ocsigen.github.io%2Fwax-blue)](https://ocsigen.github.io/wax/)
+[![Documentation](https://img.shields.io/badge/docs-ocsigen.org%2Fwax-blue)](https://ocsigen.org/wax/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
 **Wax is a Rust-like syntax for WebAssembly.** Write Wasm (including WasmGC)
@@ -77,7 +77,7 @@ fn sum(l: &?list) -> i32 {
 - **Full WebAssembly 3.0**: garbage collection, exception handling, tail
   calls, multiple and 64-bit memories, SIMD, plus stack switching, threads,
   wide arithmetic, and branch hints on by default. See
-  [Feature Support](https://ocsigen.github.io/wax/features.html).
+  [Feature Support](https://ocsigen.org/wax/features.html).
 - **Every direction**: all 9 conversions between `wax`, `wat`, and `wasm`
   work, including decompiling an arbitrary `.wasm` binary into readable Wax.
 - **A real type checker**: errors are caught before any output is produced,
@@ -111,7 +111,7 @@ The input format is detected from the file extension (override with `-i`); the
 default output format is `wasm` (override with `-f`). `wax` reads from `stdin`
 when no input file is given and writes to `stdout` when `-o` is omitted.
 
-See the [CLI reference](https://ocsigen.github.io/wax/cli.html) for the
+See the [CLI reference](https://ocsigen.org/wax/cli.html) for the
 complete set of options.
 
 ## Editor support
@@ -158,7 +158,7 @@ opam install .
 ## Documentation
 
 Full documentation is available at
-[ocsigen.github.io/wax/](https://ocsigen.github.io/wax/): a language guide,
+[ocsigen.org/wax/](https://ocsigen.org/wax/): a language guide,
 the Wax↔WebAssembly correspondence, examples, and the CLI reference. You can
 also build it locally with `mdbook build docs` (requires
 [mdBook](https://rust-lang.github.io/mdBook/)).
