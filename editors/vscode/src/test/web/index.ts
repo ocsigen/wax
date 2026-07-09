@@ -1,0 +1,40 @@
+// Web-host smoke test, run by @vscode/test-web inside the browser extension
+// host (the same stack vscode.dev uses). It loads the wasm runtime directly so
+// a load failure surfaces its actual error (the formatter provider would
+// otherwise swallow it into the output channel).
+
+import * as vscode from "vscode";
+import { loadWax } from "../../wax-runtime";
+
+const EXPECTED = "fn f(x: i32) -> i32 {\n    x;\n}\n";
+
+export async function run(): Promise<void> {
+  const ext = vscode.extensions.getExtension("wax-wasm.wax");
+  if (!ext) throw new Error("extension wax-wasm.wax not found");
+  await ext.activate();
+
+  const context = {
+    extensionUri: ext.extensionUri,
+    subscriptions: [] as vscode.Disposable[],
+  } as unknown as vscode.ExtensionContext;
+
+  let wax;
+  try {
+    wax = await loadWax(context, {});
+  } catch (e) {
+    const detail = e instanceof Error ? e.stack || e.message : String(e);
+    throw new Error("loadWax failed in web host:\n" + detail);
+  }
+
+  const ok = wax.format("fn   f( x:i32 )->i32{  x;  }");
+  if (!ok.ok || ok.text !== EXPECTED) {
+    throw new Error("web: unexpected format result: " + JSON.stringify(ok));
+  }
+
+  const bad = wax.format("fn bad( {");
+  if (bad.ok || bad.text !== null) {
+    throw new Error("web: syntax error should have been rejected: " + JSON.stringify(bad));
+  }
+
+  console.log("WEB SMOKE TEST PASSED");
+}

@@ -4,6 +4,7 @@ CONTRIBUTING.md
 node_modules/**
 package-lock.json
 test/**
+dist/test/**
 src/**
 build.sh
 esbuild.mjs

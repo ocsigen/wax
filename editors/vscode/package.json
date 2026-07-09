@@ -34,12 +34,14 @@
   "scripts": {
     "build": "bash ./build.sh",
     "typecheck": "tsc --noEmit",
+    "test:web": "npm run build && esbuild src/test/web/index.ts --bundle --outfile=dist/test/web/index.js --format=cjs --platform=browser --external:vscode --target=es2022 && vscode-test-web --headless --browserType=chromium --extensionDevelopmentPath=. --extensionTestsPath=./dist/test/web/index.js",
     "vscode:prepublish": "bash ./build.sh --minify",
     "package": "vsce package --no-dependencies"
   },
   "devDependencies": {
     "@types/node": "^18.19.0",
     "@types/vscode": "^1.60.0",
+    "@vscode/test-web": "^0.0.81",
     "@vscode/vsce": "^3.2.0",
     "esbuild": "^0.24.0",
     "typescript": "^5.5.0"

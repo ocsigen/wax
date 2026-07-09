@@ -44,6 +44,13 @@ In VS Code you can instead run the **package vsix** build
 task, `Terminal → Run Build Task…`, or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd>
 (<kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd> on macOS), which invokes the same script.
 
+## Testing the web build
+
+`npm run test:web` builds the extension and runs a smoke test in a real browser
+extension host (via `@vscode/test-web`, the same stack as vscode.dev): it loads
+the wasm formatter and checks it formats a buffer and rejects a syntax error.
+The test lives in `src/test/web/index.ts`.
+
 ## Layout
 
 | File | Purpose |

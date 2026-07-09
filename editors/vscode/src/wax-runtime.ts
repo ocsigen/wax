@@ -64,7 +64,7 @@ async function bootstrap(
       .join("globalThis.__waxLoaderFile");
     (globalThis as Record<string, unknown>).__waxLoaderFile = loaderUri.fsPath;
   } else {
-    const wasmName = await findWasm(assetsDir);
+    const wasmName = wasmNameFromLoader(loaderSrc);
     const wasmBytes = await vscode.workspace.fs.readFile(
       vscode.Uri.joinPath(assetsDir, wasmName),
     );
@@ -84,13 +84,17 @@ async function bootstrap(
   }
 }
 
-async function findWasm(assetsDir: vscode.Uri): Promise<string> {
-  // The .wasm carries a content hash in its name; read whichever one is there
-  // rather than hardcoding the hash.
-  const entries = await vscode.workspace.fs.readDirectory(assetsDir);
-  const wasm = entries.find(([name]) => name.endsWith(".wasm"));
-  if (!wasm) throw new Error(`wax: no .wasm found in ${assetsDir.toString()}`);
-  return wasm[0];
+function wasmNameFromLoader(loaderSrc: string): string {
+  // The loader bakes in its module list as e.g. "link":[["code-<hash>",0]], and
+  // the file on disk is that name + ".wasm". Deriving it from the loader text
+  // avoids a readDirectory call, which the web extension host's virtual
+  // filesystem rejects (EntryNotADirectory). The release build links a single
+  // module, so the first entry is the one we serve.
+  const match = loaderSrc.match(/"link":\s*\[\s*\[\s*"([^"]+)"/);
+  if (!match) {
+    throw new Error("wax: could not find the wasm module name in the loader");
+  }
+  return match[1] + ".wasm";
 }
 
 function installFetchShim(bytes: Uint8Array): () => void {
