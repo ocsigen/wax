@@ -894,6 +894,16 @@ fn init() {
 }
 ```
 
+Like `#[export]`, `#[start]` can carry an `if <condition>` guard, so a function
+is the start only in some configurations (at most one start per configuration):
+
+```wax,check
+#[start, if debug]
+fn init() {
+    // only run under `-D debug=true`
+}
+```
+
 (This maps to the WebAssembly `start` field; see
 [Module Fields](./correspondence/module_fields.md#start-attribute).)
 
@@ -985,7 +995,8 @@ fn add(x: i32, y: i32) -> i32 { x + y; }
 ```
 
 Here `add` is always exported under its own name, and also as `add_alias`
-except when `bootstrap` holds. Only `#[export]` accepts a guard.
+except when `bootstrap` holds. `#[export]` and [`#[start]`](#start-function) are
+the only attributes that accept a guard.
 
 ## References
 
@@ -1727,7 +1738,7 @@ fn size() -> i32 {
 }
 ```
 
-These two are the only levels at which conditional compilation applies: whole module items and whole statements. A condition cannot guard part of an expression. The one finer-grained case is the `if <condition>` guard on an [`#[export]`](#imports-and-exports), which makes a single export conditional without wrapping its definition in an `#[if]` block; its condition is simplified against any enclosing `#[if]` and resolved by `-D` just like a block condition.
+These two are the only levels at which conditional compilation applies: whole module items and whole statements. A condition cannot guard part of an expression. The one finer-grained case is the `if <condition>` guard on an [`#[export]`](#imports-and-exports) or [`#[start]`](#start-function), which makes a single export (or the start) conditional without wrapping its definition in an `#[if]` block; its condition is simplified against any enclosing `#[if]` and resolved by `-D` just like a block condition.
 
 A statement-level branch cannot introduce a local with `let`, since the two branches are mutually exclusive and a binding made in one would not be in scope after the conditional. Declare the local before the conditional and assign to it inside each branch instead:
 
