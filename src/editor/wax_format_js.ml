@@ -325,8 +325,14 @@ let wat_field_symbols
   in
   (* The lexer stores a [$id] without its leading [$] (but the id's span still
      covers it), so re-add it to display and to distinguish an id from an export
-     name, which is shown bare. *)
-  let id_name (n : name) = "$" ^ n.desc in
+     name, which is shown bare. An id that is not a plain identifier is written
+     in the quoted [$"…"] form, exactly as {!Wax_wasm.Output.id} prints it. *)
+  let id_name (n : name) =
+    if Wax_wasm.Lexer.is_valid_identifier n.desc then "$" ^ n.desc
+    else
+      let _, s = Wax_utils.Unicode.escape_string n.desc in
+      "$\"" ^ s ^ "\""
+  in
   let named (id : name option) (exports : name list) kind fallback =
     match id with
     | Some n -> [ one (id_name n) kind n.info ]

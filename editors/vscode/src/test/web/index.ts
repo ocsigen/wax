@@ -96,5 +96,11 @@ export async function run(): Promise<void> {
     throw new Error("web: expected WAT outline symbols: " + JSON.stringify(watSyms));
   }
 
+  // An id that is not a plain identifier is shown in the quoted $"…" form.
+  const quotedSyms = wax.symbolsWat('(module (func $"a b"))');
+  if (quotedSyms.length !== 1 || quotedSyms[0].name !== '$"a b"') {
+    throw new Error("web: expected a quoted WAT id: " + JSON.stringify(quotedSyms));
+  }
+
   console.log("WEB SMOKE TEST PASSED");
 }
