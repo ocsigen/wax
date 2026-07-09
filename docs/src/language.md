@@ -1200,9 +1200,13 @@ fn describe(o: &obj) -> &obj_desc {
 Construction takes the descriptor as an **exact** reference (`&!obj_desc`).
 Reading `.descriptor` gives an `&obj_desc`, or the exact `&!obj_desc` when the
 value's own type is exact. A descriptor-based cast checks that a reference's
-descriptor is a given one, `o as descriptor(d)` (or `as ?descriptor(d)` to allow
-null). The reciprocity and rec-group rules the two types must satisfy are listed
-under [Types → Custom Descriptors](correspondence/types.md#custom-descriptors).
+descriptor is a given one: `o as descriptor(d)`, or `as ?descriptor(d)` to allow
+null. The [`br_on_cast` and `br_on_cast_fail`](#labels-and-branches) branches
+accept the same `descriptor(d)` operand in place of a type
+(`br_on_cast 'l descriptor(d) val`, with an optional `?` for the nullable form),
+branching on that descriptor check. The reciprocity and rec-group rules the two
+types must satisfy are listed under
+[Types → Custom Descriptors](correspondence/types.md#custom-descriptors).
 
 ## Strings
 
