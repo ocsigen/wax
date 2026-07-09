@@ -3,6 +3,7 @@
 - [Introduction](./introduction.md)
 - [Feature Support](./features.md)
 - [Language Guide](./language.md)
+- [Cheat Sheet](./cheatsheet.md)
 - [Examples](./examples.md)
 
 - [Correspondence](./correspondence/intro.md)
