@@ -255,6 +255,7 @@ let diagnostic_of_diag uri src (d : Editor_common.diag) =
     match d.severity with
     | Wax_utils.Diagnostic.Error -> DiagnosticSeverity.Error
     | Warning -> DiagnosticSeverity.Warning
+    | Suggestion -> DiagnosticSeverity.Hint
   in
   (* Fold the hint into the message; editors show one message per diagnostic. *)
   let message =

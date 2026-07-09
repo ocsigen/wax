@@ -70,6 +70,16 @@ type t =
   | Generated_name
       (** Converting from Wasm, an unnamed but referenced parameter was given a
           generated name (it cannot be rendered anonymously). *)
+  | Compound_assignment
+      (** A plain assignment could use the compound form: [x = x + e] reads back
+          as [x += e]. Carries a machine-applicable rewrite ([Suggestion]). *)
+  | Field_punning
+      (** A struct field initialised from a like-named local/global could use
+          the punning shorthand: [{x: x}] reads back as [{x}] ([Suggestion]). *)
+  | Redundant_annotation
+      (** A [let] type annotation the inferred type already makes redundant
+          could be dropped: [let x: t = e] reads back as [let x = e]
+          ([Suggestion]). *)
 
 val all : t list
 (** Every named warning. *)
@@ -99,7 +109,9 @@ type policy
 val default_policy : policy
 (** The policy giving each warning its default level. Most warnings default to
     {!Displayed}; the From_wasm renaming warnings ([naming-conflict],
-    [reserved-word-rename]) default to {!Hidden}. *)
+    [reserved-word-rename]), [redundant-operation], and the [suggestion] group
+    ([compound-assignment], [field-punning], [redundant-annotation]) default to
+    {!Hidden}. *)
 
 val resolve : policy -> t -> level
 (** [resolve policy w] is the level configured for [w]. *)

@@ -45,7 +45,8 @@ let with_style color g f x =
     (if color = "" then "" else Colors.Ansi.reset)
 
 type label = { location : Ast.location; message : Message.t }
-type severity = Error | Warning
+type severity = Error | Warning | Suggestion
+type edit = { edit_location : Ast.location; new_text : string }
 
 type t = {
   location : Ast.location;
@@ -55,6 +56,9 @@ type t = {
          be applied when it is finally reported (see [report]). *)
   message : Message.t;
   hint : Message.t option;
+  edit : edit option;
+      (* A machine-applicable rewrite carried by a [Suggestion] (see [report]'s
+         [edit] parameter). Surfaced through [entry_edit]. *)
   related : label list;
   universal : bool;
       (* Reported during path-sensitive exploration only if it holds in every
@@ -93,7 +97,10 @@ let output_error_json ~output ~location ~severity ?warning ?hint ?(related = [])
       ([
          ( "severity",
            `String
-             (match severity with Error -> "error" | Warning -> "warning") );
+             (match severity with
+             | Error -> "error"
+             | Warning -> "warning"
+             | Suggestion -> "suggestion") );
          ("file", `String location.Ast.loc_start.Lexing.pos_fname);
        ]
       @ span location
@@ -134,7 +141,12 @@ let output_error_short ~output ~location ~severity ?warning msg =
          (fun c -> if c = '\n' then ' ' else c)
          (Message.to_plain_string m))
   in
-  let sev = match severity with Error -> "error" | Warning -> "warning" in
+  let sev =
+    match severity with
+    | Error -> "error"
+    | Warning -> "warning"
+    | Suggestion -> "suggestion"
+  in
   let suffix =
     match warning with
     | Some w -> Printf.sprintf " [%s]" (Warning.name w)
@@ -172,7 +184,9 @@ let output_error_no_loc ?(output = Format.err_formatter) ~theme ~severity ~hint
     | Error ->
         with_style theme.error_header (fun f () -> Format.fprintf f "Error")
     | Warning ->
-        with_style theme.warning_header (fun f () -> Format.fprintf f "Warning"))
+        with_style theme.warning_header (fun f () -> Format.fprintf f "Warning")
+    | Suggestion ->
+        with_style theme.hint_header (fun f () -> Format.fprintf f "Suggestion"))
     ()
     (fun f -> render_body ~theme f msg);
   print_hint ~output ~theme hint
@@ -217,6 +231,7 @@ let get_annotations ~theme ~severity ~location ~related =
       match severity with
       | Error -> theme.error_label
       | Warning -> theme.warning_label
+      | Suggestion -> theme.secondary_label
     in
     { start_line; end_line; start_col; end_col; color; label = None }
   in
@@ -504,6 +519,7 @@ let entry_warning (e : entry) = e.warning
 let entry_universal (e : entry) = e.universal
 let entry_message (e : entry) = e.message
 let entry_hint (e : entry) = e.hint
+let entry_edit (e : entry) = e.edit
 let entry_related (e : entry) = e.related
 
 let output_errors ?exit_on_error context =
@@ -523,6 +539,7 @@ let output_errors ?exit_on_error context =
                   message;
                   related;
                   warning;
+                  edit = _;
                   universal = _;
                 } :
                  t) ->
@@ -533,7 +550,7 @@ let output_errors ?exit_on_error context =
         Queue.clear context.queue;
         if exit_on_error then exit 128)
 
-let report context ~location ~severity ?warning ?(universal = false) ?hint
+let report context ~location ~severity ?warning ?(universal = false) ?hint ?edit
     ?(related = []) ~message () =
   let all_related = context.related @ related in
   let entry severity =
@@ -543,33 +560,35 @@ let report context ~location ~severity ?warning ?(universal = false) ?hint
       warning;
       message;
       hint;
+      edit;
       related = all_related;
       universal;
     }
   in
   match context.render with
   | None ->
-      (* A collecting context buffers everything raw; the policy is applied
-         later, when the buffered entries are re-reported to a rendering
-         context. *)
+      (* A collecting context buffers everything raw (with its [edit], so
+         [collected] can surface it); the policy is applied later, when the
+         buffered entries are re-reported to a rendering context. *)
       Queue.push (entry severity) context.queue
   | Some render -> (
-      (* Resolve a named warning's level now: hide it, leave it a warning, or
-         promote it to an error. *)
+      (* Resolve a named warning's (or suggestion's) level now: hide it, leave
+         it as-is, or promote it to an error. A displayed suggestion stays a
+         [Suggestion]. *)
       let severity =
         match (severity, warning) with
-        | Warning, Some w -> (
+        | (Warning | Suggestion), Some w -> (
             match Warning.resolve context.policy w with
             | Warning.Hidden -> None
-            | Warning.Displayed -> Some Warning
+            | Warning.Displayed -> Some severity
             | Warning.Error -> Some Error)
         | _ -> Some severity
       in
       match severity with
       | None -> ()
-      | Some Warning ->
+      | Some ((Warning | Suggestion) as severity) ->
           output_error ~output:render.output ~theme:render.theme
-            ~source:context.source ~location ~severity:Warning ?warning ?hint
+            ~source:context.source ~location ~severity ?warning ?hint
             ~related:all_related message
       | Some Error ->
           Queue.push (entry Error) context.queue;

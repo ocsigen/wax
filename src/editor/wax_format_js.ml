@@ -70,7 +70,8 @@ let js_diagnostic src d =
       Js.string
         (match d.severity with
         | Wax_utils.Diagnostic.Error -> "error"
-        | Warning -> "warning")
+        | Warning -> "warning"
+        | Suggestion -> "suggestion")
 
     val message = Js.string (String.trim d.message)
     val startLine = start_line
@@ -86,6 +87,23 @@ let js_diagnostic src d =
     val hint =
       match d.hint with
       | Some h -> Js.some (Js.string (String.trim h))
+      | None -> Js.null
+
+    val edit =
+      match d.edit with
+      | Some { edit_location; new_text } ->
+          let start_line, start_char =
+            utf16_position src edit_location.loc_start
+          in
+          let end_line, end_char = utf16_position src edit_location.loc_end in
+          Js.some
+            object%js
+              val startLine = start_line
+              val startChar = start_char
+              val endLine = end_line
+              val endChar = end_char
+              val newText = Js.string new_text
+            end
       | None -> Js.null
 
     val related = Js.array (Array.of_list (List.map (js_related src) d.related))

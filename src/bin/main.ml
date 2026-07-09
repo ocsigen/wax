@@ -757,7 +757,7 @@ let check format_opt strict color warnings features debug error_format defines
                match ast_opt with
                | Some ast ->
                    let ast = specialize_wax ~color ~text defines ast in
-                   Wax_lang.Typing.check ~warn_unused:true d ast
+                   Wax_lang.Typing.check ~warn_unused:true ~suggest:true d ast
                | None -> ())
            | Wat when all_errors -> (
                (* As the Wax arm, for WAT: recover every syntax error, then
@@ -779,7 +779,7 @@ let check format_opt strict color warnings features debug error_format defines
                  Wax_parser.parse_from_string ~color ~filename:file text
                in
                let ast = specialize_wax ~color ~text defines ast in
-               Wax_lang.Typing.check ~warn_unused:true d ast
+               Wax_lang.Typing.check ~warn_unused:true ~suggest:true d ast
            | Wat ->
                let ast, _ =
                  Wat_parser.parse_from_string ~color ~filename:file text
@@ -810,17 +810,20 @@ let check format_opt strict color warnings features debug error_format defines
                          ~severity:(Wax_utils.Diagnostic.entry_severity e)
                          ?warning:(Wax_utils.Diagnostic.entry_warning e)
                          ?hint:(Wax_utils.Diagnostic.entry_hint e)
+                         ?edit:(Wax_utils.Diagnostic.entry_edit e)
                          ~related:(Wax_utils.Diagnostic.entry_related e)
                          ~message:(Wax_utils.Diagnostic.entry_message e)
                          ())
                      entries));
-            (* Warnings (e.g. unused locals) are reported but do not fail the
-               check; only errors do — including a warning promoted to an error
-               by the policy (e.g. -W unused-local=error). *)
+            (* Warnings (e.g. unused locals) and suggestions are reported but do
+               not fail the check; only errors do — including a warning or
+               suggestion promoted to an error by the policy (e.g.
+               -W unused-local=error). *)
             let is_error e =
               match Wax_utils.Diagnostic.entry_severity e with
               | Wax_utils.Diagnostic.Error -> true
-              | Wax_utils.Diagnostic.Warning -> (
+              | Wax_utils.Diagnostic.Warning | Wax_utils.Diagnostic.Suggestion
+                -> (
                   match Wax_utils.Diagnostic.entry_warning e with
                   | Some w ->
                       Wax_utils.Warning.resolve policy w

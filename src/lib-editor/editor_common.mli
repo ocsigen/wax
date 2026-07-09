@@ -14,6 +14,7 @@ type diag = {
   unnecessary : bool;
       (* the warning marks removable/unreachable code, for faded rendering *)
   hint : string option;
+  edit : Wax_utils.Diagnostic.edit option;
   related : (string * Wax_utils.Ast.location) list;
 }
 

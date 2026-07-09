@@ -44,9 +44,14 @@ analysis.
   the module AST from `parse_diagnostics`; walk it to emit functions, globals,
   types, memories, and tags. Enables the outline view, breadcrumbs,
   Ctrl+Shift+O, and sticky scroll, with no new analysis. Cheapest big-feel win.
-- [ ] **Quick fixes** (`CodeActionProvider`) for the mechanical lints, e.g.
-  `x = x + e` -> `x += e` (compound assignment), redundant-operation removal,
-  struct-field punning. Feasible wherever the rewrite is derivable from the lint.
+- [x] **Quick fixes** (`CodeActionProvider`) for the mechanical lints, e.g.
+  `x = x + e` -> `x += e` (compound assignment), redundant-operation (cast)
+  removal, struct-field punning, and a redundant `let` annotation. The toolchain
+  emits these as `Suggestion`-severity diagnostics carrying a machine-applicable
+  `edit` (built by slicing the source), mirroring what the `simplify` pass
+  rewrites on the Wasm->Wax path; the extension turns any diagnostic with an
+  `edit` into a quick fix and keeps the suggestion-severity ones out of the
+  Problems panel. `wax check -W suggestion=warning` shows them on the CLI.
 - [x] **WAT support.** The toolchain already parses, validates, and formats `.wat`.
   Added a `wat` language contribution plus `formatWat` / `checkWat` / `symbolsWat`
   exports so the same in-process runtime gives WAT users formatting, diagnostics

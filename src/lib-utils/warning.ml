@@ -17,6 +17,9 @@ type t =
   | Naming_conflict
   | Reserved_word_rename
   | Generated_name
+  | Compound_assignment
+  | Field_punning
+  | Redundant_annotation
 
 let all =
   [
@@ -38,6 +41,9 @@ let all =
     Naming_conflict;
     Reserved_word_rename;
     Generated_name;
+    Compound_assignment;
+    Field_punning;
+    Redundant_annotation;
   ]
 
 let name = function
@@ -59,6 +65,9 @@ let name = function
   | Naming_conflict -> "naming-conflict"
   | Reserved_word_rename -> "reserved-word-rename"
   | Generated_name -> "generated-name"
+  | Compound_assignment -> "compound-assignment"
+  | Field_punning -> "field-punning"
+  | Redundant_annotation -> "redundant-annotation"
 
 let description = function
   | Unused_local -> "A local that is declared but never read."
@@ -102,6 +111,12 @@ let description = function
   | Reserved_word_rename -> "A Wasm name is a reserved word and was renamed."
   | Generated_name ->
       "An unnamed but used parameter was given a generated name."
+  | Compound_assignment ->
+      "A plain assignment 'x = x op e' could use the compound form 'x op= e'."
+  | Field_punning ->
+      "A struct field 'x: x' could use the punning shorthand 'x'."
+  | Redundant_annotation ->
+      "A 'let' type annotation the inferred type already makes redundant."
 
 (* Whether the warning flags code that can be removed with no change in
    behaviour: an unused binding, import, or label, or an unreachable statement.
@@ -114,7 +129,8 @@ let is_unnecessary = function
   | Shift_overflow | Constant_trap | Tautological_comparison
   | Constant_condition | Unused_result | Cast_always_fails | Eager_select
   | Precedence | Redundant_operation | Truncated_coverage | Naming_conflict
-  | Reserved_word_rename | Generated_name ->
+  | Reserved_word_rename | Generated_name | Compound_assignment | Field_punning
+  | Redundant_annotation ->
       false
 
 (* Group name -> members. The special group "all" is handled separately by
@@ -139,6 +155,7 @@ let group_table =
       ] );
     ("redundant", [ Redundant_operation ]);
     ("naming", [ Naming_conflict; Reserved_word_rename; Generated_name ]);
+    ("suggestion", [ Compound_assignment; Field_punning; Redundant_annotation ]);
   ]
 
 let groups = List.map fst group_table
@@ -155,7 +172,8 @@ type policy = t -> level
    everything else is shown. *)
 let default_policy = function
   | Naming_conflict | Reserved_word_rename | Generated_name
-  | Redundant_operation ->
+  | Redundant_operation | Compound_assignment | Field_punning
+  | Redundant_annotation ->
       Hidden
   | Unused_local | Unused_field | Unused_import | Unused_label | Shift_overflow
   | Constant_trap | Tautological_comparison | Constant_condition | Unused_result

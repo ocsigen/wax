@@ -108,8 +108,9 @@ An unknown warning or group name is rejected:
        shift-count-overflow, constant-trap, tautological-comparison,
        constant-condition, unused-result, dead-code, cast-always-fails,
        eager-select, precedence, redundant-operation, truncated-coverage,
-       naming-conflict, reserved-word-rename, generated-name, unused,
-       correctness, redundant, naming, all.
+       naming-conflict, reserved-word-rename, generated-name,
+       compound-assignment, field-punning, redundant-annotation, unused,
+       correctness, redundant, naming, suggestion, all.
   [124]
 
 An unknown level is rejected:

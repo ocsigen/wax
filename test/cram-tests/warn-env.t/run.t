@@ -40,7 +40,7 @@ A malformed or unknown entry is reported on stderr and skipped, rather than
 aborting the run (the remaining default policy still shows the lint):
 
   $ WAX_WARN=bogus=error wax check f.wax
-  wax: WAX_WARN: Unknown warning or group 'bogus'. Known names: unused-local, unused-field, unused-import, unused-label, shift-count-overflow, constant-trap, tautological-comparison, constant-condition, unused-result, dead-code, cast-always-fails, eager-select, precedence, redundant-operation, truncated-coverage, naming-conflict, reserved-word-rename, generated-name, unused, correctness, redundant, naming, all.
+  wax: WAX_WARN: Unknown warning or group 'bogus'. Known names: unused-local, unused-field, unused-import, unused-label, shift-count-overflow, constant-trap, tautological-comparison, constant-condition, unused-result, dead-code, cast-always-fails, eager-select, precedence, redundant-operation, truncated-coverage, naming-conflict, reserved-word-rename, generated-name, compound-assignment, field-punning, redundant-annotation, unused, correctness, redundant, naming, suggestion, all.
   Warning: The shift count 40 is at least the operand width (32 bits).
    ──➤  f.wax:3:7
   1 │ #[export = "f"]

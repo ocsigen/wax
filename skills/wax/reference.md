@@ -4532,6 +4532,26 @@ server](#language-server)).
         - `generated-name` (group `naming`): converting from Wasm, an unnamed
           but referenced parameter was given a generated name (e.g. `x`), since
           it cannot be rendered anonymously. Hidden by default.
+        - `compound-assignment` (group `suggestion`): a plain assignment
+          `x = x op e` can be written with the compound operator `x op= e`
+          (arithmetic and bitwise operators only; `x` must be the operator's
+          *first* operand, so `x = e - x` is left alone). Hidden by default.
+        - `field-punning` (group `suggestion`): a struct field initialised from
+          the like-named local or global, `{x: x}`, can use the punning
+          shorthand `{x}`. Hidden by default.
+        - `redundant-annotation` (group `suggestion`): a type the inferred type
+          already makes redundant and so can be dropped: a `let` annotation
+          (`let x: t = e` → `let x = e`, including the anonymous `_: t = e` and
+          each binding of a tuple `let (a: t, b) = e`), a construction type name
+          (`{T| …}` → `{…}`), or a block result type (`do t { … }` → `do { … }`).
+          Hidden by default.
+    - The `suggestion` group is reported at a distinct **Suggestion** severity
+      (not a warning), and each entry carries a machine-applicable rewrite. These
+      are optional simplifications, so they are hidden by default and surface as
+      on-demand quick fixes in the VS Code extension; `wax check` prints them
+      when enabled with `-W suggestion=warning` (or an individual name). A
+      redundant *cast* removal is offered too, but as a fix attached to the
+      existing `redundant-operation` warning rather than a separate suggestion.
     - *LEVEL* is one of:
         - `hidden`: suppress the warning entirely.
         - `warning`: report it as a warning.

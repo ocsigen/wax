@@ -1,5 +1,5 @@
 type context
-type severity = Error | Warning
+type severity = Error | Warning | Suggestion
 
 type output_format =
   | Human
@@ -12,6 +12,11 @@ type output_format =
       *)
 
 type label = { location : Ast.location; message : Message.t }
+
+type edit = { edit_location : Ast.location; new_text : string }
+(** A machine-applicable rewrite carried by a [Suggestion] diagnostic: replace
+    the source spanned by [edit_location] with [new_text]. The diagnostic's
+    message doubles as the quick-fix title. *)
 
 val run :
   color:Colors.flag ->
@@ -61,20 +66,25 @@ val report :
   ?warning:Warning.t ->
   ?universal:bool ->
   ?hint:Message.t ->
+  ?edit:edit ->
   ?related:label list ->
   message:Message.t ->
   unit ->
   unit
-(** [report context ~location ~severity ?warning ?universal ?hint ?related
+(** [report context ~location ~severity ?warning ?universal ?hint ?edit ?related
      ~message ()] reports a diagnostic. [warning] names the warning so the
     context's policy can decide its level (hide it, display it, or promote it to
-    an error); it is meaningful only with [~severity:Warning] and is ignored for
-    errors. [universal] (default [false]) marks a diagnostic that is meaningful
-    only when it holds in {e every} reachable configuration; during
-    path-sensitive exploration (see {!Cond_explore.check_all}) such a diagnostic
-    is reported only if it arises under all assumptions, not just some. The
-    unused-local warning is universal: a local used in one conditional branch is
-    not "unused" merely because another configuration prunes that branch. *)
+    an error); it is meaningful with [~severity:Warning] and
+    [~severity:Suggestion] (both honour the policy) and is ignored for errors.
+    [edit] carries a machine-applicable rewrite, meaningful for
+    [~severity:Suggestion]; it is surfaced through {!entry_edit} on a collected
+    entry (e.g. for editor quick fixes) and otherwise ignored. [universal]
+    (default [false]) marks a diagnostic that is meaningful only when it holds
+    in {e every} reachable configuration; during path-sensitive exploration (see
+    {!Cond_explore.check_all}) such a diagnostic is reported only if it arises
+    under all assumptions, not just some. The unused-local warning is universal:
+    a local used in one conditional branch is not "unused" merely because
+    another configuration prunes that branch. *)
 
 exception Aborted
 (** Raised by {!abort} to unwind a pass that cannot meaningfully continue after
@@ -125,6 +135,7 @@ val entry_warning : entry -> Warning.t option
 val entry_universal : entry -> bool
 val entry_message : entry -> Message.t
 val entry_hint : entry -> Message.t option
+val entry_edit : entry -> edit option
 val entry_related : entry -> label list
 
 type theme

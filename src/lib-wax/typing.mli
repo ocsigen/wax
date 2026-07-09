@@ -17,6 +17,7 @@ type types
 val f :
   ?simplify:bool ->
   ?warn_unused:bool ->
+  ?suggest:bool ->
   ?features:Wax_utils.Feature.set ->
   Wax_utils.Diagnostic.context ->
   Ast.location Ast.module_ ->
@@ -33,7 +34,11 @@ val f :
     When [warn_unused] is set (default [false]), a [let]-bound local that is
     never read is reported as a warning (unless its name starts with [_]). A
     conditional module is checked per reachable configuration, so the warning
-    fires there too. *)
+    fires there too.
+
+    When [suggest] is set (default [false]), machine-applicable simplifications
+    are reported as [Suggestion] diagnostics (see {!check}); it is mutually
+    exclusive with [simplify]. *)
 
 val reserved_type_names : string list
 (** The built-in type names a [type] declaration (or a [rec] member) may not
@@ -172,6 +177,7 @@ type reference = {
 val f_infer :
   ?simplify:bool ->
   ?warn_unused:bool ->
+  ?suggest:bool ->
   ?resolve_links:reference list ref option ->
   ?pun_spans:Ast.location list ref option ->
   ?member_completions:(Ast.location * member_receiver) list ref option ->
@@ -198,6 +204,7 @@ val f_infer :
 
 val check :
   ?warn_unused:bool ->
+  ?suggest:bool ->
   ?features:Wax_utils.Feature.set ->
   Wax_utils.Diagnostic.context ->
   Ast.location Ast.module_ ->
@@ -207,7 +214,12 @@ val check :
     conversion, the [check] command) that discard the typed AST; [f] is reserved
     for conversion to Wasm/WAT, which consumes it.
 
-    [warn_unused] behaves as for [f]. *)
+    [warn_unused] behaves as for [f]. When [suggest] is set (default [false]),
+    simplifications the typer would apply under [simplify] (redundant-cast
+    removal, a redundant [let] annotation), plus struct-field punning and
+    compound assignment, are reported as [Suggestion] diagnostics carrying a
+    machine-applicable {!Wax_utils.Diagnostic.edit} — for editor quick fixes and
+    [wax check]. The AST is not rewritten. *)
 
 val erase_types :
   typed_module_annotation Ast.module_ -> Ast.location Ast.module_

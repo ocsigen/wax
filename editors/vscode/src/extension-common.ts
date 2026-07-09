@@ -191,6 +191,7 @@ export function activateWith(
   registerDiagnostics(context, opts);
   registerInactiveDimming(context, opts);
   registerDefineStatusBar(context);
+  registerCodeActions(context, opts);
   registerConvert(context, opts);
 
   // Warm the runtime now (loadWax caches its promise) so the first format or
@@ -955,47 +956,60 @@ function registerDiagnostics(
     const defines = vscode.workspace
       .getConfiguration("wax")
       .get<string[]>("define", []);
-    const items = lang.check(wax, document.getText(), defines).map((d) => {
-      const range = new vscode.Range(
-        d.startLine,
-        d.startChar,
-        d.endLine,
-        d.endChar,
-      );
-      const severity =
-        d.severity === "error"
-          ? vscode.DiagnosticSeverity.Error
-          : vscode.DiagnosticSeverity.Warning;
-      // Append the toolchain's hint to the message; surface related labels
-      // (e.g. the matching opening delimiter) as related information.
-      const message = d.hint ? `${d.message}\n${d.hint}` : d.message;
-      const diagnostic = new vscode.Diagnostic(range, message, severity);
-      diagnostic.source = "wax";
-      // Surface a lint's -W name as the diagnostic code (shown as "wax(name)"
-      // in the Problems panel, and usable in rule-based filtering), linking it
-      // to the hosted documentation of the lints.
-      if (d.warning)
-        diagnostic.code = {
-          value: d.warning,
-          target: vscode.Uri.parse("https://ocsigen.org/wax/cli.html#warnings"),
-        };
-      // A lint that flags removable/unreachable code is tagged Unnecessary, so
-      // VS Code renders the range faded (its greyed-out dead-code style).
-      if (d.unnecessary) diagnostic.tags = [vscode.DiagnosticTag.Unnecessary];
-      if (d.related.length > 0) {
-        diagnostic.relatedInformation = d.related.map(
-          (r) =>
-            new vscode.DiagnosticRelatedInformation(
-              new vscode.Location(
-                document.uri,
-                new vscode.Range(r.startLine, r.startChar, r.endLine, r.endChar),
-              ),
-              r.message,
-            ),
+    const items = lang
+      .check(wax, document.getText(), defines)
+      // Suggestions are surfaced as on-demand quick fixes (see
+      // registerCodeActions), not squiggles, so keep them out of the
+      // diagnostics collection / Problems panel.
+      .filter((d) => d.severity !== "suggestion")
+      .map((d) => {
+        const range = new vscode.Range(
+          d.startLine,
+          d.startChar,
+          d.endLine,
+          d.endChar,
         );
-      }
-      return diagnostic;
-    });
+        const severity =
+          d.severity === "error"
+            ? vscode.DiagnosticSeverity.Error
+            : vscode.DiagnosticSeverity.Warning;
+        // Append the toolchain's hint to the message; surface related labels
+        // (e.g. the matching opening delimiter) as related information.
+        const message = d.hint ? `${d.message}\n${d.hint}` : d.message;
+        const diagnostic = new vscode.Diagnostic(range, message, severity);
+        diagnostic.source = "wax";
+        // Surface a lint's -W name as the diagnostic code (shown as "wax(name)"
+        // in the Problems panel, and usable in rule-based filtering), linking it
+        // to the hosted documentation of the lints.
+        if (d.warning)
+          diagnostic.code = {
+            value: d.warning,
+            target: vscode.Uri.parse(
+              "https://ocsigen.org/wax/cli.html#warnings",
+            ),
+          };
+        // A lint that flags removable/unreachable code is tagged Unnecessary, so
+        // VS Code renders the range faded (its greyed-out dead-code style).
+        if (d.unnecessary) diagnostic.tags = [vscode.DiagnosticTag.Unnecessary];
+        if (d.related.length > 0) {
+          diagnostic.relatedInformation = d.related.map(
+            (r) =>
+              new vscode.DiagnosticRelatedInformation(
+                new vscode.Location(
+                  document.uri,
+                  new vscode.Range(
+                    r.startLine,
+                    r.startChar,
+                    r.endLine,
+                    r.endChar,
+                  ),
+                ),
+                r.message,
+              ),
+          );
+        }
+        return diagnostic;
+      });
     collection.set(document.uri, items);
   }
 
@@ -1171,6 +1185,73 @@ function registerDefineStatusBar(context: vscode.ExtensionContext): void {
     }),
   );
   update();
+}
+
+// --- Quick fixes -----------------------------------------------------------
+// Turn the toolchain's machine-applicable suggestions (field punning, compound
+// assignment, a redundant type annotation, a redundant cast) into on-demand
+// code actions. Any diagnostic carrying an `edit` becomes a quick fix — this
+// covers both the "suggestion"-severity ones (kept out of the Problems panel)
+// and the redundant-cast "warning". The rewrite runs the same in-process check
+// the diagnostics use, filtered to the edits overlapping the requested range.
+function registerCodeActions(
+  context: vscode.ExtensionContext,
+  opts: LoadOptions,
+): void {
+  const specById = new Map(LANGUAGES.map((l) => [l.id, l]));
+
+  const provider: vscode.CodeActionProvider = {
+    async provideCodeActions(document, range) {
+      const lang = specById.get(document.languageId);
+      if (!lang) return [];
+      let wax: Wax;
+      try {
+        wax = await loadWax(context, opts);
+      } catch {
+        return [];
+      }
+      const defines = vscode.workspace
+        .getConfiguration("wax")
+        .get<string[]>("define", []);
+      const actions: vscode.CodeAction[] = [];
+      for (const d of lang.check(wax, document.getText(), defines)) {
+        if (!d.edit) continue;
+        const editRange = new vscode.Range(
+          d.edit.startLine,
+          d.edit.startChar,
+          d.edit.endLine,
+          d.edit.endChar,
+        );
+        const diagRange = new vscode.Range(
+          d.startLine,
+          d.startChar,
+          d.endLine,
+          d.endChar,
+        );
+        // Offer the fix when the cursor/selection touches either the diagnostic
+        // it anchors to or the span it would rewrite.
+        if (!diagRange.intersection(range) && !editRange.intersection(range)) {
+          continue;
+        }
+        const action = new vscode.CodeAction(
+          d.message,
+          vscode.CodeActionKind.QuickFix,
+        );
+        action.edit = new vscode.WorkspaceEdit();
+        action.edit.replace(document.uri, editRange, d.edit.newText);
+        actions.push(action);
+      }
+      return actions;
+    },
+  };
+
+  context.subscriptions.push(
+    vscode.languages.registerCodeActionsProvider(
+      LANGUAGES.map((l) => l.id),
+      provider,
+      { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] },
+    ),
+  );
 }
 
 // --- Convert / preview -----------------------------------------------------

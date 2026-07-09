@@ -33,7 +33,7 @@ export interface WaxRelated extends WaxRange {
 }
 
 export interface WaxDiagnostic extends WaxRange {
-  severity: "error" | "warning";
+  severity: "error" | "warning" | "suggestion";
   message: string;
   // The `-W` name of a lint warning (e.g. "unused-local"), or null.
   warning: string | null;
@@ -41,6 +41,10 @@ export interface WaxDiagnostic extends WaxRange {
   // (VS Code's DiagnosticTag.Unnecessary).
   unnecessary: boolean;
   hint: string | null;
+  // A machine-applicable rewrite for a quick fix (every "suggestion", and a
+  // redundant-cast "warning"); the diagnostic's message is the fix title. See
+  // WaxEdit below (also used by rename).
+  edit: WaxEdit | null;
   related: WaxRelated[];
 }
 

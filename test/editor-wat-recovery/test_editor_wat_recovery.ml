@@ -9,6 +9,7 @@
 let sev = function
   | Wax_utils.Diagnostic.Error -> "error"
   | Wax_utils.Diagnostic.Warning -> "warning"
+  | Wax_utils.Diagnostic.Suggestion -> "suggestion"
 
 let report name src =
   Printf.printf "=== %s ===\n" name;

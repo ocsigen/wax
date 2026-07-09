@@ -39,6 +39,9 @@ type diag = {
       (* the warning flags removable/unreachable code ([Warning.is_unnecessary]),
          so an editor can render it faded *)
   hint : string option;
+  edit : Wax_utils.Diagnostic.edit option;
+      (* a machine-applicable rewrite, for a quick fix (a [Suggestion], or a
+         fixable warning like a redundant cast) *)
   related : (string * Wax_utils.Ast.location) list;
       (* a message and the source span it points at (e.g. the matching opener) *)
 }
@@ -59,6 +62,7 @@ let syntax_error_diag (e : Wax_wasm.Parsing.syntax_error) =
     warning = None;
     unnecessary = false;
     hint = None;
+    edit = None;
     related = render_labels e.related;
   }
 
@@ -78,6 +82,7 @@ let collected_diags d =
           | Some w -> Wax_utils.Warning.is_unnecessary w
           | None -> false);
         hint = Option.map render (Wax_utils.Diagnostic.entry_hint e);
+        edit = Wax_utils.Diagnostic.entry_edit e;
         related = render_labels (Wax_utils.Diagnostic.entry_related e);
       })
     (Wax_utils.Diagnostic.collected d)

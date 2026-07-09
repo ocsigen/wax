@@ -168,7 +168,7 @@ let analyze_uncached src =
         try
           Some
             (snd
-               (Wax_lang.Typing.f_infer ~warn_unused:true
+               (Wax_lang.Typing.f_infer ~warn_unused:true ~suggest:true
                   ~resolve_links:(Some links) ~pun_spans:(Some puns)
                   ~member_completions:(Some members) d ast))
         with Wax_utils.Diagnostic.Aborted -> None
@@ -245,7 +245,7 @@ let check_string_with_defines src defines =
         let d = Wax_utils.Diagnostic.collector ~source:src () in
         Wax_utils.Diagnostic.set_recovery d (syntax_errors <> []);
         let ast, _dropped = Wax_lang.Cond_specialize.module_ d bindings ast in
-        (try Wax_lang.Typing.check ~warn_unused:true d ast
+        (try Wax_lang.Typing.check ~warn_unused:true ~suggest:true d ast
          with Wax_utils.Diagnostic.Aborted -> ());
         a_syntax @ collected_diags d
 
