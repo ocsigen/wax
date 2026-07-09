@@ -41,11 +41,11 @@ let module_ ctx env (fields : location Ast.module_) :
         let else_present = Option.is_some else_body in
         match eval cond with
         | True ->
-            drop_else i.info then_body ~else_present;
-            sinstrs then_body
+            drop_else i.info then_body.desc ~else_present;
+            sinstrs then_body.desc
         | False -> (
-            drop_then i.info then_body ~else_present;
-            match else_body with Some e -> sinstrs e | None -> [])
+            drop_then i.info then_body.desc ~else_present;
+            match else_body with Some e -> sinstrs e.desc | None -> [])
         | Residual cond ->
             [
               {
@@ -54,8 +54,12 @@ let module_ ctx env (fields : location Ast.module_) :
                   If_annotation
                     {
                       cond;
-                      then_body = sinstrs then_body;
-                      else_body = Option.map sinstrs else_body;
+                      then_body =
+                        { then_body with desc = sinstrs then_body.desc };
+                      else_body =
+                        Option.map
+                          (fun b -> { b with desc = sinstrs b.desc })
+                          else_body;
                     };
               };
             ])

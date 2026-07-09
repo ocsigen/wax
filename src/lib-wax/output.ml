@@ -740,7 +740,7 @@ let rec instr prec pp (i : _ instr) =
       let branch body =
         space pp ();
         punctuation pp "{";
-        block_contents pp body;
+        located_block_contents pp body;
         punctuation pp "}"
       in
       hvbox pp (fun () ->

@@ -222,8 +222,8 @@ type 'info instr_desc =
   | Select of 'info instr * 'info instr * 'info instr
   | If_annotation of {
       cond : Wax_wasm.Ast.cond;
-      then_body : 'info instr list;
-      else_body : 'info instr list option;
+      then_body : ('info instr list, location) annotated;
+      else_body : ('info instr list, location) annotated option;
     }
 
 and 'info instr = ('info instr_desc, 'info) annotated

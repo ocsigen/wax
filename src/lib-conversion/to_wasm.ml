@@ -412,8 +412,8 @@ let labels_in_list l =
         List.iter (fun (_, b) -> lst b) arms;
         lst default
     | If_annotation { then_body; else_body; _ } ->
-        lst then_body;
-        Option.iter lst else_body
+        lst then_body.desc;
+        Option.iter (fun b -> lst b.desc) else_body
     | Call (a, l) | TailCall (a, l) ->
         instr a;
         lst l
@@ -1766,8 +1766,8 @@ and instruction_desc ret ctx i : location Text.instr list =
           (Text.If_annotation
              {
                cond;
-               then_body = conv then_body;
-               else_body = Option.map conv else_body;
+               then_body = conv then_body.desc;
+               else_body = Option.map (fun b -> conv b.desc) else_body;
              });
       ]
 

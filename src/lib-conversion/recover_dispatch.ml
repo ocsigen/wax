@@ -160,8 +160,11 @@ and rewrite_desc (desc : location instr_desc) : location instr_desc =
       If_annotation
         {
           cond;
-          then_body = rewrite_list then_body;
-          else_body = Option.map rewrite_list else_body;
+          then_body = { then_body with desc = rewrite_list then_body.desc };
+          else_body =
+            Option.map
+              (fun b -> { b with desc = rewrite_list b.desc })
+              else_body;
         }
   | Set (x, op, e) -> Set (x, op, rewrite_instr e)
   | Tee (x, e) -> Tee (x, rewrite_instr e)

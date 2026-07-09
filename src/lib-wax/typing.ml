@@ -2764,8 +2764,8 @@ let rec collect_assigned_locals acc i =
   | Let (_, body) -> in_opt acc body
   | Br (_, o) | Throw (_, o) | Return o -> in_opt acc o
   | If_annotation { then_body; else_body; _ } ->
-      let acc = in_list acc then_body in
-      Option.fold ~none:acc ~some:(in_list acc) else_body
+      let acc = in_list acc then_body.desc in
+      Option.fold ~none:acc ~some:(fun b -> in_list acc b.desc) else_body
   | Get _ | Path _ | Unreachable | Nop | Hole | Null | Char _ | String _ | Int _
   | Float _ | StructDefault _ ->
       acc
@@ -2856,8 +2856,8 @@ let rec collect_labels acc (i : _ Ast.instr) =
   | Let (_, body) -> in_opt acc body
   | Br (_, o) | Throw (_, o) | Return o -> in_opt acc o
   | If_annotation { then_body; else_body; _ } ->
-      let acc = in_list acc then_body in
-      Option.fold ~none:acc ~some:(in_list acc) else_body
+      let acc = in_list acc then_body.desc in
+      Option.fold ~none:acc ~some:(fun b -> in_list acc b.desc) else_body
   | Get _ | Path _ | Unreachable | Nop | Hole | Null | Char _ | String _ | Int _
   | Float _ | StructDefault _ ->
       acc
@@ -3093,8 +3093,8 @@ let rec lint_source ctx (i : _ Ast.instr) =
       opt body
   | Br (_, o) | Throw (_, o) | Return o -> opt o
   | If_annotation { then_body; else_body; _ } ->
-      list then_body;
-      Option.iter list else_body
+      list then_body.desc;
+      Option.iter (fun b -> list b.desc) else_body
   | Get _ | Path _ | Unreachable | Nop | Hole | Null | Char _ | String _ | Int _
   | Float _ | StructDefault _ ->
       ()
@@ -5856,14 +5856,22 @@ and type_block_construct ctx i =
          names resolve per branch (a name may be declared only in, or with a
          different type in, the matching configuration). *)
       let then_body' =
-        with_cond ctx ~location:i.info cond true (fun () ->
-            block ctx i.info None [||] [||] [||] then_body)
+        {
+          then_body with
+          desc =
+            with_cond ctx ~location:i.info cond true (fun () ->
+                block ctx i.info None [||] [||] [||] then_body.desc);
+        }
       in
       let else_body' =
         Option.map
           (fun b ->
-            with_cond ctx ~location:i.info cond false (fun () ->
-                block ctx i.info None [||] [||] [||] b))
+            {
+              b with
+              desc =
+                with_cond ctx ~location:i.info cond false (fun () ->
+                    block ctx i.info None [||] [||] [||] b.desc);
+            })
           else_body
       in
       return_statement i
@@ -9539,9 +9547,9 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
     match i.desc with
     | If_annotation { cond; then_body; else_body } ->
         choose asm cond ~location:i.info
-          ~then_branch:(fun asm' -> sinstrs asm' then_body)
+          ~then_branch:(fun asm' -> sinstrs asm' then_body.desc)
           ~else_branch:(fun asm' ->
-            match else_body with Some e -> sinstrs asm' e | None -> [])
+            match else_body with Some e -> sinstrs asm' e.desc | None -> [])
     | desc -> ([ { i with desc = sdesc asm desc } ], asm)
   and sone asm i = match sinstr asm i with [ x ], _ -> x | _ -> assert false
   and sdesc asm (desc : _ instr_desc) : _ instr_desc =
@@ -9701,8 +9709,8 @@ let sub_instrs (i : (_ instr_desc, _) annotated) =
       block.desc
       @ List.concat_map snd catches
       @ Option.value ~default:[] catch_all
-  | If_annotation { then_body; else_body; _ } ->
-      then_body @ Option.value ~default:[] else_body
+  | If_annotation { then_body; else_body; _ } -> (
+      then_body.desc @ match else_body with Some b -> b.desc | None -> [])
   | Sequence l | ArrayFixed (_, l) -> l
   | Dispatch { index; arms; _ } -> index :: List.concat_map snd arms
   | Match { scrutinee; arms; default } ->
@@ -9771,8 +9779,8 @@ let rec check_let_in_conditionals diagnostics (i : (_ instr_desc, _) annotated)
                 Error.let_in_conditional diagnostics ~location:s.info
             | _ -> ())
       in
-      check_branch then_body;
-      Option.iter check_branch else_body
+      check_branch then_body.desc;
+      Option.iter (fun b -> check_branch b.desc) else_body
   | _ -> ());
   List.iter (check_let_in_conditionals diagnostics) (sub_instrs i)
 

@@ -74,8 +74,8 @@ let rec occurs name i =
   | Let (_, body) -> in_opt body
   | Br (_, o) | Throw (_, o) | Return o -> in_opt o
   | If_annotation { then_body; else_body; _ } -> (
-      in_list then_body
-      || match else_body with Some b -> in_list b | None -> false)
+      in_list then_body.desc
+      || match else_body with Some b -> in_list b.desc | None -> false)
   | Path _ | Unreachable | Nop | Hole | Null | Char _ | String _ | Int _
   | Float _ | StructDefault _ ->
       false
@@ -214,8 +214,8 @@ let rec first_access name i =
   | Let (_, body) -> fo body
   | Br (_, o) | Throw (_, o) | Return o -> fo o
   | If_annotation { then_body; else_body; _ } ->
-      agree (fl then_body)
-        (match else_body with Some b -> fl b | None -> None)
+      agree (fl then_body.desc)
+        (match else_body with Some b -> fl b.desc | None -> None)
   | Path _ | Unreachable | Nop | Hole | Null | Char _ | String _ | Int _
   | Float _ | StructDefault _ ->
       None

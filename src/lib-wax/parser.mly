@@ -224,8 +224,9 @@ let branch_hint_of_attr loc (name, value) =
 type raw_stmt =
   | RS_plain of location instr
   | RS_if of (Lexing.position * Lexing.position) * Wax_wasm.Ast.cond
-      * location instr list
-  | RS_else of (Lexing.position * Lexing.position) * location instr list
+      * (location instr list, location) annotated
+  | RS_else of (Lexing.position * Lexing.position)
+      * (location instr list, location) annotated
 
 let rec process_stmts = function
   | [] -> []
@@ -966,10 +967,8 @@ raw_statement_list:
    is a transparent statement list (not a block). Each [#[if]]/[#[else]] group is
    a marker; [process_stmts] pairs adjacent ones into an [If_annotation]. *)
 cond_stmt:
-| "#" "[" IF "(" c = condition ")" "]" "{" t = statement_list "}"
-  { RS_if ($sloc, c, t) }
-| "#" "[" ELSE "]" "{" b = statement_list "}"
-  { RS_else ($sloc, b) }
+| "#" "[" IF "(" c = condition ")" "]" t = braced_block { RS_if ($sloc, c, t) }
+| "#" "[" ELSE "]" b = braced_block { RS_else ($sloc, b) }
 
 globalmut:
 | LET { true }

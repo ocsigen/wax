@@ -62,7 +62,8 @@ let rec refs_instr name (i : location instr) : bool =
       || List.exists (fun (_, b) -> any b) catches
       || match catch_all with Some b -> any b | None -> false)
   | If_annotation { then_body; else_body; _ } -> (
-      any then_body || match else_body with Some b -> any b | None -> false)
+      any then_body.desc
+      || match else_body with Some b -> any b.desc | None -> false)
   | Set (_, _, e)
   | Tee (_, e)
   | Cast (e, _)
@@ -267,8 +268,11 @@ and rewrite_desc (desc : location instr_desc) : location instr_desc =
       If_annotation
         {
           cond;
-          then_body = rewrite_list then_body;
-          else_body = Option.map rewrite_list else_body;
+          then_body = { then_body with desc = rewrite_list then_body.desc };
+          else_body =
+            Option.map
+              (fun b -> { b with desc = rewrite_list b.desc })
+              else_body;
         }
   | Set (x, op, e) -> Set (x, op, rewrite_instr e)
   | Tee (x, e) -> Tee (x, rewrite_instr e)

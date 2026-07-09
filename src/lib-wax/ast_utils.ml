@@ -145,8 +145,12 @@ let rec map_instr f instr =
         If_annotation
           {
             cond;
-            then_body = List.map (map_instr f) then_body;
-            else_body = Option.map (List.map (map_instr f)) else_body;
+            then_body =
+              { then_body with desc = List.map (map_instr f) then_body.desc };
+            else_body =
+              Option.map
+                (fun b -> { b with desc = List.map (map_instr f) b.desc })
+                else_body;
           }
   in
   { desc; info = f instr.info }

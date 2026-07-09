@@ -2307,7 +2307,14 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
                 Stack.run (instructions ctx b)))
           else_body
       in
-      Stack.push 0 (with_loc (If_annotation { cond; then_body; else_body }))
+      Stack.push 0
+        (with_loc
+           (If_annotation
+              {
+                cond;
+                then_body = Ast.no_loc then_body;
+                else_body = Option.map Ast.no_loc else_body;
+              }))
   | MemorySize m -> Stack.push 1 (mem_call m "size" [])
   | MemoryGrow m ->
       let* d = Stack.pop_width_preserved in
