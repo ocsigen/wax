@@ -838,6 +838,19 @@ since there is no tail-call instruction for intrinsics, this is equivalent to
 `return mem.grow(n)`: the intrinsic's result must match the function's result
 type.
 
+### Unreachable and Nop
+
+`unreachable` marks a point the program should never reach; it traps if it ever
+executes, and type-checks as producing whatever the context expects. `nop` does
+nothing.
+
+```wax
+if x <s 0 {
+    unreachable;            // this branch cannot happen
+}
+nop;                        // no operation
+```
+
 ## Functions
 
 ### Definition
@@ -1144,6 +1157,14 @@ arr[i] = val;               // Set element (if mutable)
 arr.length()                // Array length
 ```
 
+Bulk operations are method calls on the array:
+
+```wax
+arr.fill(idx, val, count)             // fill count elements from idx with val
+arr.copy(idx, src, src_idx, count)    // copy from another array src
+arr.init(seg, idx, src_idx, count)    // fill from a passive data/element segment
+```
+
 An element may be a packed storage type (`i8` or `i16`), like `bytes` above.
 As with a [packed struct field](#field-access), reading one needs an explicit
 `as i32_s`/`as i32_u` cast, while storing needs none.
@@ -1438,6 +1459,18 @@ funcs[i] = g;                         // table.set
 (funcs[i] as &cmp)(x, y)              // indirect call (call_indirect)
 ```
 
+The table-management instructions are method calls on the table (and `drop` on
+an element segment):
+
+```wax
+funcs.size()                          // current size
+funcs.grow(init, n)                   // grow by n, filling with init; returns the old size
+funcs.fill(dst, val, n)               // set n slots from dst to val
+funcs.copy(dst, src, n)               // copy n slots within the table
+funcs.init(pool, dst, src, n)         // copy n refs from element segment pool
+pool.drop();                          // drop a passive element segment
+```
+
 A passive element segment initializes a GC array of references with the same `[t| seg @ off; count]` form used for data segments; a reference element type selects the element segment:
 
 ```wax
@@ -1547,6 +1580,11 @@ fn go(c: &k0) -> i32 { resume k0 [] (c); }         // run until it suspends
 
 The abstract continuation heap types are written `&cont` and `&nocont` (with
 `&?cont` for the nullable form).
+
+`switch` hands control straight to another continuation instead of suspending
+back to a handler. Written `switch k tag (args, cont)`, it passes `args` and the
+current continuation to `cont`, tagged by `tag`; the `resume` that drives things
+enables it with a `tag -> switch` arm in its handler list.
 
 ## Holes
 
