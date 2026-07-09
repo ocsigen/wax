@@ -905,10 +905,10 @@ Function types use `fn`:
 type binary_op = fn(i32, i32) -> i32;
 ```
 
-Anonymous parameters use `_`:
+An unnamed parameter is written as just its type:
 
 ```wax,check
-type callback = fn(_: i32) -> i32;
+type callback = fn(i32) -> i32;
 ```
 
 ### Calls

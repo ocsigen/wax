@@ -70,7 +70,7 @@ Maps to Wasm `(type $bytes (array i8))`.
 
 ### Functions
 ```wax,check
-type binop = fn(_: i32, _: i32) -> i32;
+type binop = fn(i32, i32) -> i32;
 ```
 Maps to Wasm `(type $binop (func (param i32 i32) (result i32)))`.
 ### Continuations

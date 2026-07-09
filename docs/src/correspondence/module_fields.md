@@ -30,7 +30,7 @@ Types are defined using `type` for single definitions or `rec { ... }` for mutua
 ```wax,check
 type point = { x: i32, y: i32 };
 type bytes = [i8];
-type callback = fn(_: i32) -> i32;
+type callback = fn(i32) -> i32;
 ```
 
 ### Recursive Types
@@ -223,7 +223,7 @@ funcs[i] = g;
 There is no dedicated `call_indirect` syntax: it is written as a call through a table slot, narrowing the slot to the callee's [function type](#functions) with a cast. WAT `call_indirect` round-trips through this form:
 
 ```wax
-type cmp = fn(_: i32, _: i32) -> i32;
+type cmp = fn(i32, i32) -> i32;
 
 (funcs[i] as &cmp)(x, y)        // call_indirect $funcs (type $cmp)
 ```
@@ -390,7 +390,7 @@ A typical Wax module follows this structure:
 ```wax,check
 // 1. Type definitions
 type point = { x: i32, y: i32 };
-type callback = fn(_: i32) -> i32;
+type callback = fn(i32) -> i32;
 
 // 2. Imported globals and functions
 import "env" {
