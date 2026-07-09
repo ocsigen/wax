@@ -987,6 +987,10 @@ type point = { x: i32, y: i32 };
 type mutable_point = { x: mut i32, y: mut i32 };
 ```
 
+A field may also hold a packed storage type, `i8` or `i16`, stored in one or two
+bytes rather than a full `i32`. Reading one back needs an explicit cast,
+described under [Field Access](#field-access).
+
 ### Creation
 
 `{T| …}` allocates a new struct of type `T` and yields a `&T`. Give every field
@@ -1038,6 +1042,11 @@ p.x                         // read a field
 p.x = 42;                   // write a field (only if it is `mut`)
 ```
 
+A packed (`i8`/`i16`) field is read as its raw bits, so accessing one needs an
+explicit `as i32_s` (sign-extend) or `as i32_u` (zero-extend) cast; there is no
+implicit widening. Storing to a packed field needs no cast, as the value is
+truncated to the field width.
+
 ## Arrays
 
 ### Definition
@@ -1068,6 +1077,10 @@ arr[i]                      // Get element
 arr[i] = val;               // Set element (if mutable)
 arr.length()                // Array length
 ```
+
+An element may be a packed storage type (`i8` or `i16`), like `bytes` above.
+As with a [packed struct field](#field-access), reading one needs an explicit
+`as i32_s`/`as i32_u` cast, while storing needs none.
 
 ## Recursive and Subtyped Types
 
@@ -1277,6 +1290,10 @@ mem0.store32(p, v, 1, 16);  // align=1, offset=16
 ```
 
 The two optional trailing arguments are the access `align` and `offset` (constant integers).
+
+A `load8` or `load16` returns raw bits, so it needs an explicit `as i32_s`/`as i32_u`
+(or `as i64_s`/`as i64_u`) cast to extend to the value type, as the lines above
+show; `load32`/`load64` and the stores need none.
 
 ## Tables and Element Segments
 
