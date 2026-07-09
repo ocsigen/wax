@@ -272,6 +272,7 @@ delivering the narrowed value out to its arm; such a ladder decompiles back to
 | Wasm | Wax |
 |------|-----|
 | `ref.null` | `null` |
+| `ref.func $f` | `f` |
 | `ref.is_null` | `!val` |
 | `ref.as_non_null` | `val!` |
 | `ref.i31` | `val as &i31` |
@@ -283,6 +284,8 @@ delivering the narrowed value out to its arm; such a ladder decompiles back to
 | `ref.test (ref (exact $t))` | `val is &!t` |
 | `ref.cast_desc_eq $t` | `val as descriptor(d)` |
 | `ref.cast_desc_eq (ref null …) $t` | `val as ?descriptor(d)` |
+
+A bare function name used as a value, `f` rather than the call `f(args)`, is `ref.func $f`: it produces a reference to the function. This works in a global initializer and anywhere a `&func` reference is expected (for example the callee of an [indirect call](../language.md#indirect-calls)).
 
 These casts can also chain through a forced intermediate, written as a single `as`:
 
