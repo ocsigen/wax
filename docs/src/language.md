@@ -7,7 +7,7 @@ This guide covers Wax syntax and semantics. For the detailed mapping to WebAssem
 A whole `.wax` file is a module. To give the module a name, place a
 `#![module = "..."]` inner attribute at the top of the file:
 
-```wax
+```wax,check
 #![module = "my_module"]
 
 fn f() -> i32 {
@@ -27,7 +27,7 @@ the `$name` in a WAT `(module $name …)`; see
 
 Wax supports C-style comments:
 
-```wax
+```wax,check
 // Single-line comment
 
 /* Multi-line
@@ -40,7 +40,7 @@ A trailing comma is allowed after the last element of any comma-separated
 list: function parameters, call arguments, struct fields, result types, and
 so on:
 
-```wax
+```wax,check
 type point = { x: i32, y: i32, };
 
 fn add(a: i32, b: i32,) -> i32 {
@@ -63,7 +63,7 @@ A numeric literal is **flexible**: it has no fixed type of its own but takes a
 concrete one from its context: a type annotation, the operation it feeds, or a
 function's result type.
 
-```wax
+```wax,check
 let x: i64 = 42;        // takes i64 from the annotation
 ```
 
@@ -78,7 +78,7 @@ Which concrete types a literal can take depends on its magnitude:
 
 The *defaults* apply only when nothing constrains the literal:
 
-```wax
+```wax,check
 let a = 42;             // unconstrained -> i32
 let b = 5_000_000_000;  // too big for i32 -> i64
 let c = 3.14;           // float literal -> f64
@@ -137,7 +137,7 @@ though, so decompiling from Wasm yields the plain integer code point.
 Declare local variables with `let`. Each variable gets a type, either from an
 explicit annotation or from an initializer:
 
-```wax
+```wax,check
 fn example() -> i32 {
     let x: i32;        // annotated, no initializer
     let y = 20;        // type inferred from the initializer (i32)
@@ -151,7 +151,7 @@ A local declared without an initializer starts at its type's zero value (`0`,
 an otherwise-unconstrained integer literal then defaults to `i32` and a float to
 `f64`. An annotation and an initializer can be combined, and must agree:
 
-```wax
+```wax,check
 let count: i64 = 0;
 ```
 
@@ -220,7 +220,7 @@ _: i64 = 1 << 40;   // discard the result, but keep it i64
 
 Globals are declared at module level. `const` is immutable; `let` is mutable:
 
-```wax
+```wax,check
 const PI: f64 = 3.14159;        // immutable global
 let counter: i32 = 0;           // mutable global
 ```
@@ -228,7 +228,7 @@ let counter: i32 = 0;           // mutable global
 As with locals, an initialized global may omit its type and take it from the
 initializer (an unconstrained integer literal defaults to `i32`):
 
-```wax
+```wax,check
 const answer = 42;              // i32
 ```
 
@@ -257,7 +257,7 @@ stack and pop values off it, and whatever remains on the stack when the body
 ends is its result, which must match the declared result type. A
 value-returning function therefore ends with a statement that leaves that value:
 
-```wax
+```wax,check
 fn double(x: i32) -> i32 {
     x * 2;
 }
@@ -723,7 +723,7 @@ A `dispatch` is a multi-way branch, the readable form of a `br_table` jump
 table. A bracket maps an index to a case label (with an `else` default for an
 out-of-range index), and each arm gives that case's body:
 
-```wax
+```wax,check
 fn classify(x: i32) -> i32 {
     dispatch x ['zero 'one 'two else 'big] {
         'big:  { return 99; }
@@ -823,7 +823,7 @@ return value;
 
 Use `become` for tail calls (guaranteed not to grow the stack):
 
-```wax
+```wax,check
 fn factorial_helper(n: i32, acc: i32) -> i32 {
     if n <=s 1 => i32 {
         acc;
@@ -865,7 +865,7 @@ fn name(param1: type1, param2: type2) -> return_type {
 
 Functions without a return type return nothing:
 
-```wax
+```wax,check
 fn log_value(x: i32) {
     // side effects only
 }
@@ -874,7 +874,7 @@ fn log_value(x: i32) {
 A function may return several values, written as a parenthesized list; the body
 leaves them all on the stack, in order:
 
-```wax
+```wax,check
 fn divmod(a: i32, b: i32) -> (i32, i32) {
     a /s b;
     a %s b;
@@ -887,7 +887,7 @@ A function marked with the `#[start]` attribute runs automatically when the
 module is instantiated. It must take no parameters and return nothing, and a
 module may have at most one:
 
-```wax
+```wax,check
 #[start]
 fn init() {
     // initialization code
@@ -901,13 +901,13 @@ fn init() {
 
 Function types use `fn`:
 
-```wax
+```wax,check
 type binary_op = fn(i32, i32) -> i32;
 ```
 
 Anonymous parameters use `_`:
 
-```wax
+```wax,check
 type callback = fn(_: i32) -> i32;
 ```
 
@@ -1063,7 +1063,7 @@ A struct is a named record. Mark a field `mut` to allow assignment after
 creation; a plain field is set only at creation time. A value of `type point`
 is held as `&point`.
 
-```wax
+```wax,check
 type point = { x: i32, y: i32 };
 type mutable_point = { x: mut i32, y: mut i32 };
 ```
@@ -1132,7 +1132,7 @@ truncated to the field width.
 
 ### Definition
 
-```wax
+```wax,check
 type bytes = [i8];
 type mutable_ints = [mut i32];
 ```
@@ -1378,7 +1378,7 @@ and the whole-vector `*_v128` operations).
 
 ### Declaration
 
-```wax
+```wax,check
 memory mem0: i32 [1, 1000];     // address type i32, min 1 page, max 1000
 memory mem1: i64 [2];           // min 2 pages, no maximum
 memory mem2: i32;               // size derived from data segments
@@ -1388,7 +1388,7 @@ A memory may declare a custom page size with a `pagesize` clause after its
 limits. The page size is a byte count and must be `1` or `65536` (the default);
 limits are then counted in pages of that size:
 
-```wax
+```wax,check
 memory small: i32 [4096] pagesize 1;      // 4096 pages of 1 byte
 memory mem3: i32 [1, 1000] pagesize 65536; // the default page size, explicit
 ```
@@ -1396,7 +1396,7 @@ memory mem3: i32 [1, 1000] pagesize 65536; // the default page size, explicit
 A memory may be declared `shared` (the threads proposal), for use with atomic
 accesses across threads. A shared memory must specify a maximum size:
 
-```wax
+```wax,check
 memory pool: i32 [1, 16] shared;
 ```
 
@@ -1490,7 +1490,7 @@ A passive element segment initializes a GC array of references with the same `[t
 A tag declares an exception, optionally carrying a payload. The parameter list
 is required; write `()` for no payload:
 
-```wax
+```wax,check
 tag stop();                 // no payload
 tag overflow(i32);          // carries an i32
 tag pair(i32, f64);         // carries several values
@@ -1500,7 +1500,7 @@ A tag may also declare a **result type**, written like a function signature.
 This is used by [stack switching](#stack-switching): resuming a suspended
 continuation hands this value back to the `suspend` expression.
 
-```wax
+```wax,check
 tag yield(i32) -> i32;      // carries an i32; resumes with an i32
 ```
 
@@ -1554,7 +1554,7 @@ must match what it is handed.
 computation suspend itself, yield control to a scheduler, and later be resumed.
 A **continuation type** wraps a function type with `cont`:
 
-```wax
+```wax,check
 type task = fn(i32) -> i32;
 type k = cont task;
 ```
@@ -1562,7 +1562,7 @@ type k = cont task;
 A [tag with a result type](#tags) is the suspend/resume channel: `suspend`
 passes the tag's payload out and evaluates to its result once resumed.
 
-```wax
+```wax,check
 tag yield(i32) -> i32;
 
 fn worker(x: i32) -> i32 {
@@ -1599,7 +1599,7 @@ same sequence** has left on WebAssembly's implicit operand stack. It is the
 surface syntax for that stack flow: rather than naming an intermediate value,
 you leave a hole where it should be plugged in.
 
-```wax
+```wax,check
 fn example() -> i32 {
     1; 2; _ + _;    // Equivalent to: let a = 1; let b = 2; a + b
 }
@@ -1614,7 +1614,7 @@ stack values in the order those values were produced**: the earliest value
 fills the leftmost hole. Order therefore matters for non-commutative
 operators:
 
-```wax
+```wax,check
 fn diff() -> i32 {
     10; 20; _ - _;    // 10 - 20, not 20 - 10
 }
@@ -1623,7 +1623,7 @@ fn diff() -> i32 {
 A single hole is common when combining one stacked value with an explicit
 operand:
 
-```wax
+```wax,check
 fn add_one(x: i32) -> i32 {
     x; _ + 1;
 }
@@ -1634,7 +1634,7 @@ evaluation order) any explicit value-producing operand. Once a non-hole operand
 appears, no further holes may follow it. Explicit operands *after* all the holes
 are fine:
 
-```wax
+```wax,check
 fn ok() -> i32 {
     1; 2; _ + _ + 3;    // OK: the literal 3 comes after both holes
 }
@@ -1659,7 +1659,7 @@ sub-expression, so this same mechanism round-trips stack-style code.
 
 Top-level items can be guarded by conditions, using a Rust-like attribute syntax. `#[if(<condition>)] { ... }` keeps the braced items only when `<condition>` holds; an optional `#[else] { ... }` provides an alternative. The braces are required:
 
-```wax
+```wax,check
 #[if(ocaml_version >= (5, 1, 0))]
 {
     const caml_marshal_header_size: i32 = 16;
@@ -1688,7 +1688,7 @@ A condition is one of:
 
 A branch groups any number of items, so several can be guarded at once:
 
-```wax
+```wax,check
 #[if(debug)]
 {
     const debug_enabled: i32 = 1;
@@ -1700,7 +1700,7 @@ A branch groups any number of items, so several can be guarded at once:
 
 The same `#[if(...)] { ... }` / `#[else] { ... }` form also guards **statements** inside a function body:
 
-```wax
+```wax,check
 fn size() -> i32 {
     #[if(debug)]
     {
@@ -1717,7 +1717,7 @@ These two are the only levels at which conditional compilation applies: whole mo
 
 A statement-level branch cannot introduce a local with `let`, since the two branches are mutually exclusive and a binding made in one would not be in scope after the conditional. Declare the local before the conditional and assign to it inside each branch instead:
 
-```wax
+```wax,check
 fn size() -> i32 {
     let s: i32;
     #[if(debug)]

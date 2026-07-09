@@ -1,9 +1,10 @@
-Opt-in compile check for the correspondence pages (types.md, instructions.md,
-module_fields.md). Like the language guide, a block is checked only when it opts
-in by fencing it ```wax,check instead of ```wax; many correspondence snippets
-are fragments (single expressions, partial forms) that do not stand alone. A
-marked block must type-check and convert to WAT. To update after editing the
-docs, re-run `dune runtest` and `dune promote`.
+Compile check for the self-contained examples on the correspondence pages
+(types.md, instructions.md, module_fields.md). Like the language guide, the
+check is opt-in because many correspondence snippets are fragments (single
+expressions, partial forms) that do not stand alone: fence a block ```wax,check
+(instead of plain ```wax) whenever it is self-contained, and it will be
+type-checked and converted to WAT. Mark every standalone block this way. To
+update after editing the docs, re-run `dune runtest` and `dune promote`.
 
 Extract each ```wax,check block, prefixed by its page:
 

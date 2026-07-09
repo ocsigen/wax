@@ -1,10 +1,11 @@
-Opt-in compile check for docs/src/language.md. Unlike examples.md and
-introduction.md — whose every ```wax block is checked — the language guide is
-mostly illustrative fragments (holes, ellipses, build-up sequences) that do not
-compile standalone. So a block is checked only when it opts in by fencing it
-```wax,check instead of ```wax; such a block must be self-contained and must
-type-check and convert to WAT. To update after editing the docs, re-run
-`dune runtest` and `dune promote`.
+Compile check for the self-contained ```wax examples in docs/src/language.md.
+Unlike examples.md and introduction.md, whose every ```wax block is checked, the
+language guide also has many illustrative fragments (holes, ellipses, build-up
+sequences, bare syntax snippets) that do not compile on their own, so the check
+cannot blindly cover every block. It is therefore opt-in: fence a block
+```wax,check (instead of plain ```wax) whenever it is self-contained, and it will
+be type-checked and converted to WAT. Mark every standalone block this way. To
+update after editing the docs, re-run `dune runtest` and `dune promote`.
 
 Extract each ```wax,check block:
 
@@ -13,7 +14,7 @@ Extract each ```wax,check block:
 Confirm the count (bump and promote when you mark or unmark a block):
 
   $ ls blk*.wax | wc -l | tr -d ' '
-  9
+  43
 
 Each marked block must compile (a failing block prints its name and first
 error; success prints nothing):
