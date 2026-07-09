@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// mdbook preprocessor: syntax-highlight ```wax and ```wat code blocks. The wax
-// grammar is the same TextMate grammar the VS Code extension ships
-// (editors/vscode/syntaxes); the wat grammar lives beside this script.
+// mdbook preprocessor: syntax-highlight ```wax and ```wat code blocks. Both
+// grammars are the same TextMate grammars the VS Code extension ships
+// (editors/vscode/syntaxes).
 //
 // It tokenizes each block with vscode-textmate + vscode-oniguruma and emits a
 // <pre class="hljs wax-highlight"> whose spans carry mdbook's own hljs-* CSS
@@ -206,7 +206,11 @@ async function main() {
       '..',
       'editors/vscode/syntaxes/wax.tmLanguage.json'
     ),
-    'source.wat': path.resolve(__dirname, 'wat.tmLanguage.json'),
+    'source.wat': path.resolve(
+      context.root,
+      '..',
+      'editors/vscode/syntaxes/wat.tmLanguage.json'
+    ),
   };
   const registry = makeRegistry(scopePaths);
   const grammars = {};

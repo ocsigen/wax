@@ -74,12 +74,21 @@
         "language": "wax",
         "scopeName": "source.wax",
         "path": "./syntaxes/wax.tmLanguage.json"
+      },
+      {
+        "language": "wat",
+        "scopeName": "source.wat",
+        "path": "./syntaxes/wat.tmLanguage.json"
       }
     ],
     "snippets": [
       {
         "language": "wax",
         "path": "./snippets/wax.json"
+      },
+      {
+        "language": "wat",
+        "path": "./snippets/wat.json"
       }
     ]
   }

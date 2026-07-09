@@ -1,9 +1,8 @@
 # Wax for Visual Studio Code
 
-Syntax highlighting, formatting, bracket matching, and snippets for
-[Wax](https://github.com/ocsigen/wax) (a Rust-like syntax for
-WebAssembly) in `.wax` files, plus formatting and diagnostics for
-WebAssembly text (`.wat`) files.
+Syntax highlighting, formatting, diagnostics, and snippets for
+[Wax](https://github.com/ocsigen/wax) (a Rust-like syntax for WebAssembly) in
+`.wax` files and for WebAssembly text (`.wat`) files.
 
 ## Features
 
@@ -13,10 +12,9 @@ WebAssembly text (`.wat`) files.
   (`editor.formatOnSave`). Files with syntax errors are left untouched.
 - **Diagnostics** as you type: syntax errors, type errors, and lints from the
   same toolchain are shown inline (squiggles) and in the Problems panel.
-- **WebAssembly text (`.wat`)**: the same in-process toolchain also formats and
-  validates `.wat` files (formatting, diagnostics, document outline,
-  comment/bracket handling). Syntax highlighting for `.wat` comes from another
-  extension if you have one installed.
+- **WebAssembly text (`.wat`)**: the same features apply to `.wat` files too:
+  formatting, diagnostics, document outline, syntax highlighting, snippets, and
+  comment/bracket handling, all from the same in-process toolchain and grammar.
 - **Syntax highlighting** via a TextMate grammar covering the full language:
   keywords and control flow (`fn`, `let`, `do`, `loop`, `match`, `dispatch`,
   `try`/`catch`, the `br*` branch family, stack-switching, …), primitive and

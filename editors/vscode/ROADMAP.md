@@ -13,9 +13,11 @@ analysis.
 - Diagnostics as you type: syntax errors, type errors, and lints, via a
   `check(src)` export that parses (`parse_diagnostics`) then type-checks with a
   non-printing diagnostic collector.
-- WebAssembly text (`.wat`): formatting, diagnostics and document outline via
-  `formatWat` / `checkWat` / `symbolsWat` exports (same wasm module; the WAT
-  parser validates instead of type-checking).
+- WebAssembly text (`.wat`): at parity with Wax. Formatting, diagnostics and
+  document outline via `formatWat` / `checkWat` / `symbolsWat` exports (same wasm
+  module; the WAT parser validates instead of type-checking), plus syntax
+  highlighting (the TextMate grammar moved from the docs into the extension, now
+  the single source both use), snippets, and language configuration.
 
 ## Tier 1: cheap wins (reuse existing toolchain output)
 
