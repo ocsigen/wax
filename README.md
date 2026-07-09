@@ -9,7 +9,7 @@
 [![Documentation](https://img.shields.io/badge/docs-ocsigen.github.io%2Fwax-blue)](https://ocsigen.github.io/wax/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
-**Wax is a Rust-like syntax for WebAssembly.** Write Wasm — including WasmGC —
+**Wax is a Rust-like syntax for WebAssembly.** Write Wasm (including WasmGC)
 in a familiar, expression-oriented notation, and convert between Wax,
 WebAssembly Text (WAT), and the binary format, in any direction.
 
@@ -30,7 +30,7 @@ fn add(x: i32, y: i32) -> i32 {
 }
 ```
 
-Both compile to identical bytecode — and the payoff grows with the program.
+Both compile to identical bytecode, and the payoff grows with the program.
 Struct types, nullable references, casts, and loops stay readable where the
 equivalent WAT sprawls:
 
@@ -74,13 +74,13 @@ fn sum(l: &?list) -> i32 {
 
 ## Highlights
 
-- **Full WebAssembly 3.0** — garbage collection, exception handling, tail
-  calls, multiple and 64-bit memories, SIMD — plus stack switching, threads,
+- **Full WebAssembly 3.0**: garbage collection, exception handling, tail
+  calls, multiple and 64-bit memories, SIMD, plus stack switching, threads,
   wide arithmetic, and branch hints on by default. See
   [Feature Support](https://ocsigen.github.io/wax/features.html).
-- **Every direction** — all 9 conversions between `wax`, `wat`, and `wasm`
+- **Every direction**: all 9 conversions between `wax`, `wat`, and `wasm`
   work, including decompiling an arbitrary `.wasm` binary into readable Wax.
-- **A real type checker** — errors are caught before any output is produced,
+- **A real type checker**: errors are caught before any output is produced,
   and reported with source context:
 
   ```
@@ -93,7 +93,7 @@ fn sum(l: &?list) -> i32 {
   4 │ }
   ```
 
-- **A toolchain, not just a compiler** — a formatter (`wax format`), a
+- **A toolchain, not just a compiler**: a formatter (`wax format`), a
   validator (`wax check`), configurable lints (`-W`), conditional compilation
   (`-D`), and source maps for debugging the generated Wasm in the browser.
 
@@ -131,7 +131,7 @@ provides syntax highlighting and snippets. Its source lives in
 ### Prebuilt binaries
 
 Native `wax` executables for Linux, macOS (Apple silicon and Intel), and
-Windows — with `SHA256SUMS` — are attached to the
+Windows (with `SHA256SUMS`) are attached to the
 [`edge` prerelease](https://github.com/ocsigen/wax/releases/tag/edge), which is
 rebuilt on every push to `main`. Download the one for your platform, make it
 executable, and put it on your `PATH`:
@@ -164,7 +164,7 @@ opam install .
 ## Documentation
 
 Full documentation is available at
-[ocsigen.github.io/wax/](https://ocsigen.github.io/wax/) — a language guide,
+[ocsigen.github.io/wax/](https://ocsigen.github.io/wax/): a language guide,
 the Wax↔WebAssembly correspondence, examples, and the CLI reference. You can
 also build it locally with `mdbook build docs` (requires
 [mdBook](https://rust-lang.github.io/mdBook/)).

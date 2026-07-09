@@ -14,12 +14,12 @@ an `i16` array holds the UTF-16 code units (so the string must be valid Unicode)
 | `i32.const <code point>` | `'c'` |
 | `array.new_fixed $t` (constant elements) | `"..."` or `t # "..."` |
 
-In WAT both forms are written with annotations — `(@char …)` and `(@string …)`
-— so they round-trip faithfully through WAT. A WASM binary keeps only the
+In WAT both forms are written with annotations (`(@char …)` and `(@string …)`),
+so they round-trip faithfully through WAT. A WASM binary keeps only the
 underlying `i32.const` / `array.new_fixed`: a character decompiles to a plain
 integer, and an `array.new_fixed` is recovered as a string only when its
-elements — decoded by the array's element type (UTF-8 for `i8`, UTF-16 for
-`i16`) — form a reasonable string (valid text, no control characters other
+elements, decoded by the array's element type (UTF-8 for `i8`, UTF-16 for
+`i16`), form a reasonable string (valid text, no control characters other
 than tab/newline/carriage return); otherwise it stays an
 [array literal](#aggregate-instructions).
 
@@ -140,8 +140,8 @@ its own assignment.
 A [compound assignment](../language.md#assignment) `x op= val` is shorthand for
 `x = x op val`; it lowers to a `local.get`/`global.get` of `x`, the operand, the
 binary operator, and a `local.set`/`global.set` back into `x`. The reverse
-direction recognises exactly this shape — a `set` of `x` whose value is a binary
-operator with `x` as its *left* operand — and reconstructs the compound form
+direction recognises exactly this shape (a `set` of `x` whose value is a binary
+operator with `x` as its *left* operand) and reconstructs the compound form
 (`x = x + 1` becomes `x += 1`). A comparison, or `x` in the right operand
 (`x = 1 - x`), is left as an ordinary assignment.
 
@@ -174,7 +174,7 @@ operator with `x` as its *left* operand — and reconstructs the compound form
 | `select` | `cond ? v1 : v2` |
 | `drop` | `_ = val` |
 
-A `drop` becomes an assignment to `_` — an anonymous binding that evaluates its
+A `drop` becomes an assignment to `_`, an anonymous binding that evaluates its
 value and discards it (see [Discarding a value](../language.md#discarding-a-value)).
 When the dropped value is a bare numeric expression whose width the Wax syntax
 would not otherwise carry, the conversion pins it with a type annotation,
@@ -229,7 +229,7 @@ in the `metadata.code.branch_hint` custom section; no feature flag is needed):
 #[unlikely] br_if 'l cond
 ```
 
-Any conditional branch may be hinted — `if`, `br_if`, `br_on_null`,
+Any conditional branch may be hinted: `if`, `br_if`, `br_on_null`,
 `br_on_non_null`, `br_on_cast`, and `br_on_cast_fail`. In WAT the same hint is
 the `(@metadata.code.branch_hint "\00"|"\01")` annotation preceding the branch
 (`"\01"` = likely, `"\00"` = unlikely).
@@ -239,7 +239,7 @@ the `(@metadata.code.branch_hint "\00"|"\01")` annotation preceding the branch
 Two Wax control constructs have no instruction of their own: they are readable
 spellings of a lower-level *shape*, so they lower to that shape and are
 *recovered* from it on decompilation (both round-trip through the binary). See
-the language guide for the surface syntax — [`dispatch`](../language.md#dispatch)
+the language guide for the surface syntax: [`dispatch`](../language.md#dispatch)
 and [`match`](../language.md#match).
 
 `dispatch` is a jump table. It lowers to one nested block per case with a
@@ -286,7 +286,7 @@ delivering the narrowed value out to its arm; such a ladder decompiles back to
 
 These casts can also chain through a forced intermediate, written as a single `as`:
 
-- **`&ref as i32_s`/`as i32_u`** on a reference that is not already `&i31` (e.g. an `&any` or `&eq`) inserts a `ref.cast (ref i31)` before the `i31.get` — so it covers both `i31.get_s` and `ref.cast (ref i31)` + `i31.get_s`.
+- **`&ref as i32_s`/`as i32_u`** on a reference that is not already `&i31` (e.g. an `&any` or `&eq`) inserts a `ref.cast (ref i31)` before the `i31.get`, so it covers both `i31.get_s` and `ref.cast (ref i31)` + `i31.get_s`.
 - **`&ref as i64_s`/`as i64_u`** widens that further: the `i31.get` (with the `ref.cast` above as needed) is followed by `i64.extend_i32_s`/`_u`.
 - **`i64 as &i31`** wraps to `i32` (`i32.wrap_i64`) before `ref.i31`.
 - **`extern_val as &T`** for an `any`-hierarchy `T` (e.g. a struct type) inserts `any.convert_extern` before the `ref.cast (ref T)`; likewise an `any`-hierarchy value `as &extern` uses `extern.convert_any`.
@@ -294,8 +294,8 @@ These casts can also chain through a forced intermediate, written as a single `a
 
 ## Aggregate Instructions
 
-A struct or array literal takes an optional type prefix — `{t| … }` for a
-struct, `[t| … ]` for an array — but it is omitted whenever the literal's type
+A struct or array literal takes an optional type prefix (`{t| … }` for a
+struct, `[t| … ]` for an array), but it is omitted whenever the literal's type
 can be inferred from context (an assignment, a return, a call argument), which
 is the common case shown below. Write the prefix only when the type is
 ambiguous. The `{descriptor(d)| … }` forms are different: `descriptor(d)`
@@ -324,7 +324,7 @@ that can be dropped.
 | `array.set $t` | `arr[idx] = val` |
 | `array.len` | `arr.length()` |
 
-A packed (`i8`/`i16`) struct field or array element read sign- or zero-extends to `i32` via the `as i32_s`/`as i32_u` cast, as shown above (`struct.get_s`/`_u`, `array.get_s`/`_u`). Widening straight to `i64` — `val.field as i64_s` or `arr[idx] as i64_u` — emits the packed read followed by `i64.extend_i32_s`/`_u`.
+A packed (`i8`/`i16`) struct field or array element read sign- or zero-extends to `i32` via the `as i32_s`/`as i32_u` cast, as shown above (`struct.get_s`/`_u`, `array.get_s`/`_u`). Widening straight to `i64` (`val.field as i64_s` or `arr[idx] as i64_u`) emits the packed read followed by `i64.extend_i32_s`/`_u`.
 
 ## SIMD (Vector) Instructions
 
@@ -469,7 +469,7 @@ A [table](module_fields.md#tables) is indexed like an array, and an indirect cal
 | `call_indirect $t (result i32)` | `(t[i] as &?fn() -> i32)(args)` |
 | `return_call_indirect $t (type $ft)` | `return (t[i] as &?ft)(args)` |
 
-`call_indirect` is reconstructed from this pattern on conversion to WAT/WASM, so it round-trips. The cast target names the callee's function type — a defined type (`ft`) or an inline one written `fn(params) -> results` (used when the WAT type is anonymous) — and matches the table's element type: for a `funcref` table (the usual case) it is the nullable `&?ft`, as shown. When the element type is already a non-null `&ft`, the cast may be omitted (`t[i](args)`).
+`call_indirect` is reconstructed from this pattern on conversion to WAT/WASM, so it round-trips. The cast target names the callee's function type, a defined type (`ft`) or an inline one written `fn(params) -> results` (used when the WAT type is anonymous), and matches the table's element type: for a `funcref` table (the usual case) it is the nullable `&?ft`, as shown. When the element type is already a non-null `&ft`, the cast may be omitted (`t[i](args)`).
 
 The other table operations are methods on the table (an element segment is named directly):
 
@@ -483,7 +483,7 @@ The other table operations are methods on the table (an element segment is named
 | `t.init(seg, dest, src, len)` | `table.init seg` |
 | `seg.drop()` | `elem.drop seg` |
 
-A GC array can also be filled from a segment with `arr.init(seg, dest, src, len)` (`array.init_data`/`array.init_elem`, selected by the array's element type) — the segment-from-array counterpart of [`array.new_data`/`array.new_elem`](#aggregate-instructions).
+A GC array can also be filled from a segment with `arr.init(seg, dest, src, len)` (`array.init_data`/`array.init_elem`, selected by the array's element type), the segment-from-array counterpart of [`array.new_data`/`array.new_elem`](#aggregate-instructions).
 
 ## Exception Instructions
 

@@ -4,7 +4,7 @@ Thanks for your interest in improving Wax. This document covers both the
 mechanics of submitting a change and the engineering knowledge you need to make
 one safely. It complements [`CLAUDE.md`](CLAUDE.md) (which holds the
 non-negotiable rules and the full command reference) and the architecture
-overview in the [README](README.md) — read those too.
+overview in the [README](README.md); read those too.
 
 ## Getting set up
 
@@ -24,21 +24,21 @@ dune runtest                 # full test suite
    dune build @fmt    # code is formatted (fixes are shown as a diff)
    dune runtest       # the whole suite is green
    ```
-   Accept intended output changes with `dune promote` — **never** hand-edit
+   Accept intended output changes with `dune promote`; **never** hand-edit
    `.expected` files or `test/` `dune` rules to make a test pass
    ([`CLAUDE.md`](CLAUDE.md) Rule 1).
 4. **Add tests** for new behaviour, including the interesting negative cases (see
    the testing notes below).
 5. **Update the docs in the same commit** as the behaviour they describe (see
    [Docs move with behaviour](#docs-move-with-behaviour-same-commit)).
-6. **Keep commits and diffs minimal** — change only what the change needs; don't
+6. **Keep commits and diffs minimal**: change only what the change needs; don't
    reformat or refactor unrelated code in the same commit.
 
 Commit messages follow the existing history: a short `area: summary` subject
 (e.g. `typing: …`, `ci: …`, `fuzz: …`), imperative mood.
 
 The rest of this document is the engineering side: how the compiler is
-structured and what must move together when you touch it — the *cross-cutting*
+structured and what must move together when you touch it: the *cross-cutting*
 changes, where touching one thing means updating several others.
 
 ## The data flow (know which way you're going)
@@ -50,15 +50,15 @@ Wax source ─ lib-wax (parse → type) ─→ typed AST ─ lib-conversion/to_w
 WAT/WASM ─ lib-wasm (parse) ─→ lib-conversion/from_wasm ─→ Wax AST ─ lib-wax (type) ─→ lib-wax/output ─→ Wax
 ```
 
-- **`lib-wax/`** — the Wax AST (`ast.ml`/`ast.mli`), Menhir parser (`parser.mly`),
+- **`lib-wax/`**: the Wax AST (`ast.ml`/`ast.mli`), Menhir parser (`parser.mly`),
   lexer (`lexer.ml`), type checker (`typing.ml`), and the Wax printer
   (`output.ml`).
-- **`lib-conversion/`** — `to_wasm.ml` (Wax → Wasm, *trusts* its input), `from_wasm.ml`
+- **`lib-conversion/`**: `to_wasm.ml` (Wax → Wasm, *trusts* its input), `from_wasm.ml`
   (Wasm → Wax), and the `recover_*` / `sink_let` passes that reconstruct
   higher-level Wax structure from decompiled Wasm.
-- **`lib-wasm/`** — the Wasm AST, binary and text formats, validation.
+- **`lib-wasm/`**: the Wasm AST, binary and text formats, validation.
 
-### Which AST gets printed in which pipeline — the trap
+### Which AST gets printed in which pipeline: the trap
 
 The **typed** AST (what `Typing.f` returns) is used for *both* lowering *and*
 printing, depending on the pipeline (see `src/bin/main.ml`):
@@ -71,7 +71,7 @@ printing, depending on the pipeline (see `src/bin/main.ml`):
 
 The consequence that bites: **a rewrite you do in `typing.ml` for the benefit of
 lowering also changes what `wat→wax`/`wasm→wax` print.** If typing "desugars" a
-node into a lower-level form, the printed Wax reflects the desugared form — even
+node into a lower-level form, the printed Wax reflects the desugared form, even
 though the source (or the `from_wasm` reconstruction) used the nice surface form.
 So a surface construct that must round-trip has to be **preserved through typing
 and lowered by `to_wasm`**, not desugared away in the type checker. (This is
@@ -86,14 +86,14 @@ Adding, removing, or changing the arity of a constructor in
    they must match or the build fails with an opaque interface-mismatch error.
 2. **Let the compiler find the match sites.** `dune build` and fix each
    non-exhaustive match. Representative places that pattern-match instructions
-   (not exhaustive — trust the compiler):
-   - `lib-wax/typing.ml` (the checker — usually the real work)
-   - `lib-wax/output.ml` (the Wax printer — **round-trip depends on this**)
+   (not exhaustive, trust the compiler):
+   - `lib-wax/typing.ml` (the checker, usually the real work)
+   - `lib-wax/output.ml` (the Wax printer, **round-trip depends on this**)
    - `lib-wax/ast_utils.ml`, `lib-wax/cond_specialize.ml`
    - `lib-conversion/to_wasm.ml` (lowering)
    - `lib-conversion/from_wasm.ml` (reconstruction) and the
      `recover_match.ml` / `recover_loops.ml` / `recover_dispatch.ml` / `sink_let.ml` passes
-   - `src/bin/fuzz_gen.ml` and `src/bin/fuzz_mutate.ml` — **easy to forget**; they
+   - `src/bin/fuzz_gen.ml` and `src/bin/fuzz_mutate.ml` (**easy to forget**); they
      are executables, not part of the libraries, and they pattern-match the AST.
 3. **Decide the round-trip story** using the table above. If the construct has a
    surface syntax that should survive `wasm → wax`, keep it in the typed AST and
@@ -111,7 +111,7 @@ On top of the AST checklist:
 - **Parser** (`lib-wax/parser.mly`): token declarations (with their string
   aliases) and grammar rules. The canonical grammars are `src/lib-wax/parser.mly`
   and `src/lib-wasm/parser.mly`, with Wasm parser error messages in
-  `src/lib-wasm/spec.mlyl` — only edit those sources, never the generated `.ml`
+  `src/lib-wasm/spec.mlyl`: only edit those sources, never the generated `.ml`
   or the `dune.menhir` include. Don't add precedence declarations you don't need:
   Menhir warns "the precedence level assigned to X is never useful", which means
   remove it.
@@ -121,7 +121,7 @@ On top of the AST checklist:
   operators/keywords. TextMate/Oniguruma alternation is **leftmost-first, not
   longest**, so a multi-char operator must be listed *before* any single-char
   operator that is its prefix (put `+=`, `<<=`, … ahead of `=`, `<`, `<=`).
-- **Docs** — see below.
+- **Docs**: see below.
 
 ## Fuzzers must be *exercised*, not just compiled
 
@@ -134,10 +134,10 @@ mutates a Wax AST. If you add a construct, add a case that **produces** it:
   typing, `to_wasm` lowering, *and* `from_wasm` reconstruction in one shot.
 - Keep generated modules well-typed (reuse the existing type-directed helpers and
   operator pools) so rejections stay meaningful; `fuzz_mutate.ml` may legitimately
-  produce ill-typed mutants — those are *expected rejections*, not crashes.
+  produce ill-typed mutants: those are *expected rejections*, not crashes.
 
 The oracles live in `fuzz/` (see `fuzz/oracle.sh`, `fuzz/lib.sh`, `fuzz/PLAN.md`);
-`fuzz/lib.sh`'s `classify_wax` mirrors the CLI exit-status contract — keep them in
+`fuzz/lib.sh`'s `classify_wax` mirrors the CLI exit-status contract; keep them in
 sync if you change exit codes.
 
 ## Docs move with behaviour (same commit)
@@ -146,9 +146,9 @@ Per `CLAUDE.md`:
 
 - Language syntax / types → `docs/src/language.md`, plus an example in
   `docs/src/examples.md` (**every `wax` block there is compiled** by
-  `test/cram-tests/docs-examples.t` — bump its expected count when you add one).
+  `test/cram-tests/docs-examples.t`; bump its expected count when you add one).
 - CLI flags / defaults → `docs/src/cli.md` *and* the CLI table in `CLAUDE.md`.
-- Wax↔Wasm mapping → `docs/src/correspondence/*.md` (document *both* directions —
+- Wax↔Wasm mapping → `docs/src/correspondence/*.md` (document *both* directions:
   what a construct lowers to, and whether the reverse reconstructs it).
 
 ## Testing notes
@@ -165,4 +165,4 @@ A few things specific to writing and reviewing tests:
   WebAssembly spec suite and round-trip corpora (`test/wasmoo/**`).
 - **Read a large `promote` diff before accepting it.** A feature can legitimately
   rewrite many round-trip corpus files, but every changed line should be
-  explainable by your change — a surprise line is a bug, not a golden update.
+  explainable by your change: a surprise line is a bug, not a golden update.

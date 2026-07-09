@@ -19,7 +19,7 @@ Unlike the `#[...]` outer attributes that decorate a following field (such as
 `#[export = "name"]`), `#![...]` is an *inner* attribute: it applies to the
 enclosing module. A module may carry at most one name.
 
-(This maps to the WebAssembly module name stored in the `name` custom section —
+(This maps to the WebAssembly module name stored in the `name` custom section,
 the `$name` in a WAT `(module $name …)`; see
 [Module Fields](./correspondence/module_fields.md#module-name).)
 
@@ -37,7 +37,7 @@ Wax supports C-style comments:
 ## Trailing Commas
 
 A trailing comma is allowed after the last element of any comma-separated
-list — function parameters, call arguments, struct fields, result types, and
+list: function parameters, call arguments, struct fields, result types, and
 so on:
 
 ```wax
@@ -60,7 +60,7 @@ fn add(a: i32, b: i32,) -> i32 {
 ```
 
 A numeric literal is **flexible**: it has no fixed type of its own but takes a
-concrete one from its context — a type annotation, the operation it feeds, or a
+concrete one from its context: a type annotation, the operation it feeds, or a
 function's result type.
 
 ```wax
@@ -86,9 +86,9 @@ let c = 3.14;           // float literal -> f64
 
 Once a literal is used where only integers are allowed (a bitwise op, a shift,
 `ctz`, …) it commits to the **integer** family and can then only be `i32` or
-`i64` — it can no longer become a float by inference. These are *implicit*
+`i64`: it can no longer become a float by inference. These are *implicit*
 coercions; an explicit [`as` cast](#type-conversions) is broader and emits the
-conversion — e.g. an out-of-range constant `as i32` wraps to its low 32 bits, and
+conversion: e.g. an out-of-range constant `as i32` wraps to its low 32 bits, and
 an integer `as f64` converts.
 
 ### Floating Point
@@ -107,7 +107,7 @@ unconstrained (see the table above).
 ### Characters
 
 A character literal is a single character in single quotes. It evaluates to that
-character's Unicode code point as an `i32` — it is simply a readable spelling of
+character's Unicode code point as an `i32`: it is simply a readable spelling of
 an `i32.const`:
 
 ```wax
@@ -151,7 +151,7 @@ let count: i64 = 0;
 ```
 
 A `let` can bind several names at once from an initializer that produces
-multiple values — a call to a [multi-result function](#functions),
+multiple values, a call to a [multi-result function](#functions),
 for instance. The names are written as a parenthesised list and each takes the
 corresponding value, left to right. As with a single binding, each name may be
 annotated or left to be inferred, and `_` discards its value:
@@ -175,7 +175,7 @@ Use `:=` for assignment that also returns the value (like `local.tee`):
 y = (x := 42) + 1;  // x is set to 42, y is set to 43
 ```
 
-`:=` works on local variables only — WebAssembly has no `global.tee`, so applying
+`:=` works on local variables only: WebAssembly has no `global.tee`, so applying
 it to a global is an error.
 
 A compound assignment combines a binary operator with `=`: `x op= e` is
@@ -196,7 +196,7 @@ division. Comparisons have no compound form.
 
 ### Discarding a value
 
-Assigning to `_` evaluates an expression and throws its result away — the
+Assigning to `_` evaluates an expression and throws its result away, the
 equivalent of WebAssembly's `drop`. Nothing is bound, so no name comes into
 scope:
 
@@ -213,7 +213,7 @@ turning a well-defined result into a trap). Hand-written code rarely needs it;
 converting from WebAssembly adds it only where it is load-bearing:
 
 ```wax
-_: i64 = 1 << 40;   // discarded, but kept i64 — without the pin it would be
+_: i64 = 1 << 40;   // discarded, but kept i64; without the pin it would be
                     // i32.shl, whose count wraps mod 32 to a different result
 ```
 
@@ -239,13 +239,13 @@ global, or a simple reference-building expression).
 ### Names and Scope
 
 Functions, globals, memories, and tables share one module-level namespace: a
-name must be distinct across all four — you cannot, say, declare both a memory
+name must be distinct across all four: you cannot, say, declare both a memory
 and a global named `buf`. Types, tags, and data/element segments each have their
 own namespace, so those names may overlap with the above and with one another.
 
 A local variable is scoped to its function and takes precedence over module-level
 names. A bare name resolves to a local before a global or function, and the
-name-based module forms — `mem.load(..)`, `tab[i]`, `seg.drop()` — likewise defer
+name-based module forms (`mem.load(..)`, `tab[i]`, `seg.drop()`) likewise defer
 to a same-named local. So a local that reuses a memory, table, or segment name
 shadows it; rename the local if you still need to reach the module entity.
 
@@ -255,7 +255,7 @@ Wax is a readable layer over WebAssembly, and it keeps WebAssembly's execution
 model: the **operand stack**. A function or block body is a sequence of
 statements, each ended with `;`. Evaluating a statement may push values onto the
 stack and pop values off it, and whatever remains on the stack when the body
-ends is its result — which must match the declared result type. A
+ends is its result, which must match the declared result type. A
 value-returning function therefore ends with a statement that leaves that value:
 
 ```wax
@@ -318,11 +318,11 @@ x <=u y     // Less or equal unsigned
 
 Operators are listed below from highest precedence (binds tightest) to lowest.
 The ordering follows **Rust's** for every operator the two share (Wax adds
-`? :`, which Rust lacks, just above assignment; it has no short-circuit `&&`/`||`
-— `&`/`|` are bitwise). Two mixes are worth committing to memory:
+`? :`, which Rust lacks, just above assignment; it has no short-circuit `&&`/`||`:
+`&`/`|` are bitwise). Two mixes are worth committing to memory:
 
 - `&`, `^`, `|` bind **tighter** than the comparison operators, so `a & b == c`
-  parses as `(a & b) == c`. Rust agrees; C is the opposite — there it means
+  parses as `(a & b) == c`. Rust agrees; C is the opposite: there it means
   `a & (b == c)`.
 - The shifts bind **looser** than `+`/`-`, so `1 << nbits - 1` parses as
   `1 << (nbits - 1)`, not `(1 << nbits) - 1`. (Same in Rust and C.)
@@ -330,7 +330,7 @@ The ordering follows **Rust's** for every operator the two share (Wax adds
 | Precedence | Operators | Associativity |
 |------------|-----------|---------------|
 | highest | `.field` &nbsp; `f(…)` &nbsp; `[…]` (field, call, index) | left |
-|  | `-x` &nbsp; `+x` &nbsp; `!x` (unary) | — |
+|  | `-x` &nbsp; `+x` &nbsp; `!x` (unary) | n/a |
 |  | `as` &nbsp; `is` (cast, test) | left |
 |  | `*` &nbsp; `/` &nbsp; `/s` &nbsp; `/u` &nbsp; `%s` &nbsp; `%u` | left |
 |  | `+` &nbsp; `-` | left |
@@ -380,14 +380,14 @@ x.rotr(y)      // Rotate right
 
 Most built-in operations are written as methods on a receiver (`x.clz()`,
 `a.add_i32x4(b)` above). The few that have no natural receiver are written
-instead as a **qualified path**, `type::member(args)` — a built-in free
+instead as a **qualified path**, `type::member(args)`, a built-in free
 function namespaced by the WebAssembly type it belongs to. These names are
 built in, not user functions, and because the `::` form is distinct from an
 ordinary name it can never clash with your own functions, globals, or locals.
 
 Two families use this syntax today.
 
-**`v128::` — SIMD free functions.** The vector constants (one argument per
+**`v128::`: SIMD free functions.** The vector constants (one argument per
 lane) and `bitselect`, which have no receiver:
 
 ```wax
@@ -396,7 +396,7 @@ v128::const_f32x4(1.5, 2.5, 3.5, 4.5)
 v128::bitselect(a, b, mask)           // per-bit select
 ```
 
-**`i64::` — wide arithmetic.** 128-bit integer operations, taking and returning
+**`i64::`: wide arithmetic.** 128-bit integer operations, taking and returning
 their operands as `(low, high)` pairs of `i64`, so each returns two results
 (bind them with a multi-value `let`):
 
@@ -431,13 +431,13 @@ cond ? val_true : val_false
 
 This maps directly to Wasm's `select` instruction.
 
-> **⚠ Warning — both branches are always evaluated.** Unlike the `?:` (or
+> **⚠ Warning: both branches are always evaluated.** Unlike the `?:` (or
 > `if`/`else` expression) of most languages, this operator is *not* lazy: it
 > compiles to a `select`, which computes *both* `val_true` and `val_false`
 > before choosing between them. So `cond ? 1 /s x : 0` still divides by `x`
 > even when `cond` is false (trapping if `x` is `0`), and `cond ? f() : g()`
 > calls *both* `f` and `g`. When a branch may trap or has a side effect, use an
-> [`if` expression](#if-expressions) instead — it evaluates only the chosen
+> [`if` expression](#if-expressions) instead: it evaluates only the chosen
 > branch. The
 > [`eager-select` lint](cli.md) (in the `correctness` group, on by default)
 > flags a trapping or effectful operation in a `?:` branch.
@@ -445,14 +445,14 @@ This maps directly to Wasm's `select` instruction.
 ## Control Flow
 
 Statements are terminated by `;`, including the final one that produces the
-block's or function's value. The block-shaped statements below —
-`do`, `if`, `while`, `loop`, `dispatch`, `match`, and `try` — are the
+block's or function's value. The block-shaped statements below
+(`do`, `if`, `while`, `loop`, `dispatch`, `match`, and `try`) are the
 exception: their closing `}` ends the statement, so no `;` is needed. A bare
 `;` is an empty statement (it does nothing), so a redundant one is harmless
-anywhere and dropped on formatting — most usefully after a block, where the
+anywhere and dropped on formatting, most usefully after a block, where the
 reflex of ending every line with `;` would otherwise be an error. The same
 holds outside function bodies: a stray `;` is an empty element wherever items
-are listed — among module fields, the declarations of an `import` block, and
+are listed: among module fields, the declarations of an `import` block, and
 the arms of a `dispatch`, `match`, or `catch`.
 
 ### Blocks
@@ -467,8 +467,8 @@ do {
 }
 ```
 
-By default a block is **void**: it produces no value, so — like a function with
-no result type — its body must leave the operand stack empty.
+By default a block is **void**: it produces no value, so, like a function with
+no result type, its body must leave the operand stack empty.
 
 To make a block produce a value, give it a result type after `do`. The body
 must leave a value of that type on the stack, and that becomes the block's
@@ -481,10 +481,10 @@ answer = do i32 {
 ```
 
 This is a stack discipline, not a "last expression" rule: the body must leave
-*exactly* the values the block's type describes — no more, no less. A void
+*exactly* the values the block's type describes: no more, no less. A void
 block that leaves a value, or a `do i32` block that leaves two, is an error.
 
-The result type may be **omitted** and inferred — from the value the body leaves
+The result type may be **omitted** and inferred: from the value the body leaves
 (including a value branched to the block's own label), or from the surrounding
 context such as a function's result type, a typed binding, or a call argument.
 It is needed only where neither determines it, for instance when two branches
@@ -526,7 +526,7 @@ Blocks can be labelled and used as branch targets; see
 
 ### If Expressions
 
-`if` tests a condition — any `i32`, where non-zero means true — and runs the
+`if` tests a condition (any `i32`, where non-zero means true) and runs the
 matching branch. Like a block it is **void** by default (the branches leave no
 value), and the `else` is optional:
 
@@ -547,7 +547,7 @@ if condition => i32 {
 }
 ```
 
-Like a block's result type, the `=> <type>` may be **omitted** and inferred —
+Like a block's result type, the `=> <type>` may be **omitted** and inferred:
 from the branches (here both produce `i32`) or from the surrounding context. The
 `else` stays required, since a value-producing `if` needs both branches:
 
@@ -561,7 +561,7 @@ x = if condition {
 
 ### Loops
 
-A `loop` runs its body once and then falls through to whatever follows — it does
+A `loop` runs its body once and then falls through to whatever follows: it does
 *not* repeat on its own. What makes it a loop is its label: branching to a
 loop's label jumps back to the **start** of its body. So a loop iterates by
 branching to itself, and stops once control reaches the end of the body without
@@ -615,13 +615,13 @@ which is exactly:
 
 It is void, and the test must be an `i32`. It may carry a label
 (`'l: while …`), which names the loop, so a `br 'l` from inside the body is a
-*continue* — it jumps back to re-test. Decompiling recovers a `while` from this
+*continue*: it jumps back to re-test. Decompiling recovers a `while` from this
 shape, so a loop written this way survives a round trip through WAT or WASM.
 
 A `while` may carry a *continue-expression* after the condition,
-`while cond : (step) { … }` — a statement run at the end of every iteration,
+`while cond : (step) { … }`, a statement run at the end of every iteration,
 including on a `continue`. It keeps the loop's step next to its header instead of
-at the bottom of the body, and — unlike a step written as the last statement —
+at the bottom of the body, and, unlike a step written as the last statement,
 it still runs when the body branches to the loop label:
 
 ```wax
@@ -633,7 +633,7 @@ it still runs when the body branches to the loop label:
 
 The step must be parenthesised (a bare statement would be ambiguous with the
 loop body). Without a `continue` this is equivalent to writing the step as the
-last statement of the body — and decompiling recovers it: a loop whose last
+last statement of the body, and decompiling recovers it: a loop whose last
 statement updates a variable its condition reads (the induction variable) is
 rendered as `while … : (step) { … }`, so index-and-stride loops read like `for`
 loops.
@@ -653,12 +653,12 @@ leading-`while` form. Write it directly as a `loop` with a back-`br_if`:
 Labels start with `'` and prefix a block, loop, `if`, or `try`. A branch targets
 a label; **where** it lands depends on the labelled construct: branching to a
 block, `if`, or `try` jumps *past* it (an exit), while branching to a `loop`
-jumps to its *start* (an iteration — see [Loops](#loops)).
+jumps to its *start* (an iteration, see [Loops](#loops)).
 
 ```wax
 'done: do {
     if condition {
-        br 'done;   // jump past the block — exits it
+        br 'done;   // jump past the block (exits it)
     }
     // ...
 }
@@ -674,7 +674,7 @@ br_table ['a 'b else 'default] i;   // branch to the i-th label, else 'default
 
 The labels in a `br_table` are separated by spaces, and `else` gives the
 fallback for an out-of-range index. A branch also carries any values its target
-expects — a `do i32` target receives an `i32`, and so on.
+expects: a `do i32` target receives an `i32`, and so on.
 
 ### Branch Hints
 
@@ -695,7 +695,7 @@ attribute prefixes the branch:
 }
 ```
 
-Any conditional branch accepts a hint — `if`, `br_if`, `br_on_null`,
+Any conditional branch accepts a hint: `if`, `br_if`, `br_on_null`,
 `br_on_non_null`, `br_on_cast`, and `br_on_cast_fail`. The hint is purely
 advisory (it does not change behaviour) and is preserved across every conversion
 to and from WebAssembly, so no compiler flag is needed. See
@@ -704,7 +704,7 @@ the WebAssembly encoding.
 
 ### Dispatch
 
-A `dispatch` is a multi-way branch — the readable form of a `br_table` jump
+A `dispatch` is a multi-way branch, the readable form of a `br_table` jump
 table. A bracket maps an index to a case label (with an `else` default for an
 out-of-range index), and each arm gives that case's body:
 
@@ -730,7 +730,7 @@ distinct.
 innermost block and each case body just after its block. As in a C `switch`,
 cases **fall through**: reaching a case runs its body and then falls into the
 *next* arm listed, unless it branches away first. So the arms are written in
-fall-through order, which is the reverse of the bracket's index order — the
+fall-through order, which is the reverse of the bracket's index order: the
 last arm is the one index `0` reaches. The example above gives each case its
 own result via `return`; to break out instead, branch to an enclosing label:
 
@@ -751,7 +751,7 @@ binary).
 
 ### Match
 
-A `match` is a multi-way *type* test — the readable form of the nested type-test
+A `match` is a multi-way *type* test, the readable form of the nested type-test
 ladder that hand-written GC code uses to take apart a value of some general
 reference type. Each arm tests the scrutinee against a reference type, optionally
 binding the narrowed value, and runs its body when the test succeeds:
@@ -772,14 +772,14 @@ test without binding. A `null` arm matches a null reference, and the required
 `_` arm (as with a `dispatch`'s `else`) is the default. The scrutinee must be a
 reference type; it is evaluated once.
 
-`match` lowers to a nested ladder of blocks — one per arm plus an outer *escape*
+`match` lowers to a nested ladder of blocks, one per arm plus an outer *escape*
 block. The scrutinee is threaded through a `br_on_cast` (or `br_on_null` for a
 `null` arm) chain in the innermost block; each test, on success, branches *out*
 to its arm's block carrying the narrowed value, and the arm body follows that
 block. As with `dispatch`, an arm's body must leave the `match` (here each
 `return`s); to continue past it, branch to an enclosing label. When no test
 matches, the chain falls through to a `br` past all the arm bodies, and the
-default follows the escape block as trailing code — so reaching it falls through
+default follows the escape block as trailing code, so reaching it falls through
 to whatever comes after, including the rest of the enclosing block:
 
 ```wax
@@ -794,7 +794,7 @@ let r: i32;
 ```
 
 This is the shape hand-written GC code uses, so decompiling WAT/WASM to Wax
-recovers `match` from such a ladder — even a single type test that branches out
+recovers `match` from such a ladder, even a single type test that branches out
 and then falls through to a default (and a Wax `match` round-trips through the
 binary).
 
@@ -820,7 +820,7 @@ fn factorial_helper(n: i32, acc: i32) -> i32 {
 
 `become` also accepts an intrinsic operation (for example `become mem.grow(n)`);
 since there is no tail-call instruction for intrinsics, this is equivalent to
-`return mem.grow(n)` — the intrinsic's result must match the function's result
+`return mem.grow(n)`: the intrinsic's result must match the function's result
 type.
 
 ## Functions
@@ -912,7 +912,7 @@ const PI: f64 = 3.14159;
 ```
 
 **Import** fields from a host module with an `import "module" { … }` block. Each
-entry has no body — a function is declared with just its signature, a global
+entry has no body: a function is declared with just its signature, a global
 with its type. It is imported under its own Wax name unless a name-only
 `#[import = "name"]` overrides that:
 
@@ -992,12 +992,12 @@ default):
 ```
 
 The type name may be omitted in two cases. The first is when an expected type
-supplies it — for example a `let`/`const` annotation, a function parameter, a
+supplies it: for example a `let`/`const` annotation, a function parameter, a
 struct field, or an array element: `let p: &point = {x: 10, y: 20};` is
 equivalent to writing `{point| …}`. Such an expectation also reaches into both
 branches of a conditional `?:`, so a branch may omit the name (or default it
 with `{..}`): `let p: &point = cond ? {x: 0, y: 0} : {..};`. The second is when
-the **field set** names the type unambiguously — if exactly one struct type in
+the **field set** names the type unambiguously: if exactly one struct type in
 the module has that exact set of field names, it is inferred even with no
 expected type:
 
@@ -1063,7 +1063,7 @@ arr.length()                // Array length
 ## Recursive and Subtyped Types
 
 Struct and array types can refer to one another, form subtype hierarchies, and
-be left open for extension — the WebAssembly GC type features.
+be left open for extension: the WebAssembly GC type features.
 
 ### Recursive groups
 
@@ -1108,8 +1108,8 @@ explicitly rather than covered by `..`.
 
 ### Descriptors (experimental)
 
-Behind `-X custom-descriptors`, a struct type can carry a runtime *descriptor* —
-another type it points to — via the `descriptor` / `describes` clauses, declared
+Behind `-X custom-descriptors`, a struct type can carry a runtime *descriptor*
+(another type it points to) via the `descriptor` / `describes` clauses, declared
 together in a `rec` group:
 
 ```wax,check
@@ -1124,7 +1124,7 @@ rec {
 A string literal builds a new array and lowers to an `array.new_fixed`. The
 element type must be `i8` or `i16`, and it decides the encoding:
 
-- an `i8` array holds the raw bytes of the (UTF-8) text — one element per byte;
+- an `i8` array holds the raw bytes of the (UTF-8) text, one element per byte;
 - an `i16` array holds the UTF-16 code units of the text, so it must be a valid
   Unicode string (a code point outside the basic plane becomes a surrogate pair,
   hence two elements).
@@ -1136,7 +1136,7 @@ By default its type is `[mut i8]`:
 ```
 
 As with [array](#arrays) and [struct](#structs) literals, a different array type
-can be selected — either by prefixing the string with the type name and `#`, or
+can be selected: either by prefixing the string with the type name and `#`, or
 by an expected type from the context:
 
 ```wax
@@ -1148,8 +1148,8 @@ wide # "café";              // a &wide, one i16 per UTF-16 code unit
 let s: &chars = "yo";       // type taken from the annotation
 ```
 
-String literals recognise the same escapes as [character literals](#characters)
-— `\t`, `\n`, `\r`, `\'`, `\"`, `\\`, `\xNN` (two hex digits, one byte), and
+String literals recognise the same escapes as [character literals](#characters):
+`\t`, `\n`, `\r`, `\'`, `\"`, `\\`, `\xNN` (two hex digits, one byte), and
 `\u{...}` (a Unicode code point, encoded as its UTF-8 bytes):
 
 ```wax
@@ -1162,8 +1162,8 @@ A string also supplies the bytes of a [data segment](#data-segments).
 A string literal round-trips faithfully through WAT, where it is written with a
 `(@string …)` annotation. Through WASM it is best-effort: the binary keeps only
 the `array.new_fixed`, which is recovered as a string literal only when its
-elements — decoded by the array's element type (UTF-8 for `i8`, UTF-16 for
-`i16`) — form a *reasonable* string: valid text with no control characters other
+elements, decoded by the array's element type (UTF-8 for `i8`, UTF-16 for
+`i16`), form a *reasonable* string: valid text with no control characters other
 than tab, newline, and carriage return. Anything else (arbitrary binary data)
 decompiles as an ordinary [array literal](#arrays) instead.
 
@@ -1283,7 +1283,7 @@ funcs[i] = g;                         // table.set
 (funcs[i] as &cmp)(x, y)              // indirect call (call_indirect)
 ```
 
-A passive element segment initializes a GC array of references with the same `[t| seg @ off; count]` form used for data segments — a reference element type selects the element segment:
+A passive element segment initializes a GC array of references with the same `[t| seg @ off; count]` form used for data segments; a reference element type selects the element segment:
 
 ```wax
 [handlers| pool @ 0; 3]               // array.new_elem
@@ -1294,7 +1294,7 @@ A passive element segment initializes a GC array of references with the same `[t
 ### Tags
 
 A tag declares an exception, optionally carrying a payload. The parameter list
-is required — write `()` for no payload:
+is required; write `()` for no payload:
 
 ```wax
 tag stop();                 // no payload
@@ -1351,7 +1351,7 @@ try { might_throw(); } catch [_ -> 'h]           // catch any exception
 ```
 
 The target label receives the payload (and, with `&`, the exception reference,
-of type `&exn` — or `&?exn` for the nullable form), so the labelled block's type
+of type `&exn`, or `&?exn` for the nullable form), so the labelled block's type
 must match what it is handed.
 
 ## Stack Switching
@@ -1411,7 +1411,7 @@ consume them.
 
 **How many, and in what order.** The number of holes in an expression is the
 number of stack values it pulls in. They are filled **left-to-right with the
-stack values in the order those values were produced** — the earliest value
+stack values in the order those values were produced**: the earliest value
 fills the leftmost hole. Order therefore matters for non-commutative
 operators:
 
@@ -1495,7 +1495,7 @@ To guard several items at once, follow the attribute with a block:
 }
 ```
 
-The conditions are **not evaluated** by the compiler; they are preserved for a downstream preprocessor. The `#[if]` and `#[else]` branches are **mutually exclusive** — they never coexist — so, for instance, the same name may be defined in both.
+The conditions are **not evaluated** by the compiler; they are preserved for a downstream preprocessor. The `#[if]` and `#[else]` branches are **mutually exclusive** (they never coexist), so, for instance, the same name may be defined in both.
 
 Variables can be given values on the command line with [`-D`/`--define`](cli.md), which specializes the conditionals: a condition that becomes fully determined causes its conditional to be removed (the surviving branch is spliced in), and one that still mentions unset variables is kept with its condition simplified. For example, `wax -D debug=true` turns `#[if(all(debug, target = "wasi"))]` into `#[if(target = "wasi")]`, and `wax -D debug=false` removes that conditional altogether.
 

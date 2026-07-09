@@ -355,7 +355,7 @@ fn get_value(c: &counter) -> i32 {
 type point = { x: i32, y: i32 };
 type ints = [mut i32];
 
-// Where an expected type fixes the result — here a `let` annotation — the
+// Where an expected type fixes the result (here a `let` annotation) the
 // struct or array type name may be omitted.
 #[export = "origin"]
 fn origin() -> &point {
@@ -370,7 +370,7 @@ fn zeros() -> &ints {
 }
 
 // A struct type can also be inferred from its field set alone, with no
-// expected type — only `point` has the fields {x, y}, so its name may be
+// expected type: only `point` has the fields {x, y}, so its name may be
 // dropped here too.
 #[export = "make_origin"]
 fn make_origin() -> &eq {
@@ -378,7 +378,7 @@ fn make_origin() -> &eq {
 }
 
 // The expected type also reaches into both branches of a conditional `?:`, so a
-// branch may omit the name — here the `{..}` default is resolved from the
+// branch may omit the name: here the `{..}` default is resolved from the
 // `-> &point` result type flowing through the `?:`.
 #[export = "pick"]
 fn pick(c: i32) -> &point {
@@ -390,8 +390,8 @@ fn pick(c: i32) -> &point {
 
 ### Wax
 
-A block's result type — `=> T` on an `if`, or the type after `do` (and likewise
-`loop`, `try`, and `try_table`) — may be omitted where it is fixed by the values
+A block's result type, `=> T` on an `if`, or the type after `do` (and likewise
+`loop`, `try`, and `try_table`), may be omitted where it is fixed by the values
 the block produces or by the surrounding context:
 
 ```wax
@@ -691,7 +691,7 @@ fn mul_u64_to_u128(a: i64, b: i64) -> (i64, i64) {
 
 ## Custom Descriptors
 
-A struct can carry a *descriptor* — a second struct linked to it by reciprocal
+A struct can carry a *descriptor*: a second struct linked to it by reciprocal
 [`descriptor`/`describes` clauses](correspondence/types.md#descriptors). The
 descriptor instructions never name the target type: it is recovered from the
 descriptor operand (the type the operand *describes*), so all of them share one

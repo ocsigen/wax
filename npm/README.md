@@ -1,18 +1,18 @@
 # wax
 
 A compiler toolchain for [Wax](https://github.com/ocsigen/wax), a
-Rust-like syntax for WebAssembly. It converts between three formats — Wax
-(`.wax`), WebAssembly text (`.wat`), and WebAssembly binary (`.wasm`) — and can
+Rust-like syntax for WebAssembly. It converts between three formats, Wax
+(`.wax`), WebAssembly text (`.wat`), and WebAssembly binary (`.wasm`), and can
 type-check and format Wax.
 
 This package is the `wax` command line tool, compiled from OCaml to WebAssembly
 with [wasm_of_ocaml](https://github.com/ocsigen/js_of_ocaml). It is a single
-self-contained package that runs on Node — the same package works on Linux,
+self-contained package that runs on Node: the same package works on Linux,
 macOS and Windows, with no per-platform native binaries.
 
 ## Requirements
 
-Node.js with WebAssembly GC support — **Node 22 or newer**.
+Node.js with WebAssembly GC support: **Node 22 or newer**.
 
 ## Install
 

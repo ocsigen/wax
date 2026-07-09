@@ -95,7 +95,7 @@ Wax supports all 9 combinations of input and output formats:
 
 ## Type Checking
 
-Compiling Wax to `.wat` or `.wasm` type-checks it automatically — type errors
+Compiling Wax to `.wat` or `.wasm` type-checks it automatically; type errors
 are reported before any output is produced. For example, adding an `i32` and an
 `f64`:
 
@@ -115,6 +115,6 @@ unused locals.
 
 ## Next Steps
 
-- [Language Guide](./language.md) — Variables, expressions, and control flow
-- [Correspondence](./correspondence/intro.md) — How Wax maps to WebAssembly
-- [CLI Reference](./cli.md) — Complete command-line options
+- [Language Guide](./language.md): Variables, expressions, and control flow
+- [Correspondence](./correspondence/intro.md): How Wax maps to WebAssembly
+- [CLI Reference](./cli.md): Complete command-line options

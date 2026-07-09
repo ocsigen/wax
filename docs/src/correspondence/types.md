@@ -39,8 +39,8 @@ Because the `!` marker precedes the type name, it never clashes with the postfix
 is a cast to an exact reference, whereas `(x as &point)!` asserts the cast result
 is non-null.
 
-A concrete allocation — a struct or array [construction](instructions.md#aggregate-instructions)
-— produces an exact reference (the fresh object has exactly the allocated type),
+A concrete allocation (a struct or array [construction](instructions.md#aggregate-instructions))
+produces an exact reference (the fresh object has exactly the allocated type),
 so a construction literal can be delivered where an `&!point` is required without
 a cast. In ordinary (synthesis) position the plainer inexact type is kept, since
 an exact result is always usable where an inexact one is expected.
@@ -50,8 +50,8 @@ exact reference. The `!` marks the type exact in the [function declaration](modu
 `fn g: !ft;` for a named type, or `fn h!(x: i32) -> i64;` for an inline
 signature. It maps to the WAT `(func (exact <type>))` import descriptor. (A
 module-defined function is always exact, so the marker is only written on an
-import.) A plainly imported function is *not* exact — its dynamic type may be a
-subtype — so a reference to it must be cast to reach an exact type.
+import.) A plainly imported function is *not* exact (its dynamic type may be a
+subtype), so a reference to it must be cast to reach an exact type.
 
 ## Storage Types
 
@@ -141,7 +141,7 @@ type sub_point : open_point = { x: i32, y: i32 }; // extends open_point
 
 A subtype repeats its supertype's fields in order; a leading `..` abbreviates
 that repeated prefix (`type sub_point : open_point = { .., y: i32 };`). There is
-no Wasm counterpart — every Wasm struct lists all its fields — so `..` is
+no Wasm counterpart (every Wasm struct lists all its fields), so `..` is
 expanded on the way to Wasm. Decompiling reverses it: when a subtype's leading
 fields exactly match (name and type) its supertype's, they are collapsed back to
 `..`. A renamed or covariantly-refined inherited field does not match, so it is
@@ -175,7 +175,7 @@ The two types must satisfy several well-formedness rules, all checked during
 validation:
 
 - both must be **structs**, declared in the **same `rec` group**;
-- the clauses must be **reciprocal** — if `obj` names `obj_desc` as its
+- the clauses must be **reciprocal**: if `obj` names `obj_desc` as its
   descriptor, then `obj_desc` must describe `obj`;
 - a described type must be declared **before** its descriptor;
 - in a subtype hierarchy, if a supertype has a descriptor its subtypes must too

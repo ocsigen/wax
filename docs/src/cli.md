@@ -41,8 +41,8 @@ mistaken for a subcommand). The `format` subcommand reformats files (see
     - Force validation, and additionally report unused locals.
     - For Wax: Runs type checking.
     - For Wasm Text: Runs well-formedness checks.
-    - A text input (Wax/Wat) is **validated by default before it is converted to a different format** — the conversion and lowering passes trust that their input is well-formed, so a malformed module is rejected up front rather than reaching them. A same-format conversion (`wat` → `wat`, `wax` → `wax`) only re-prints and is *not* validated by default; a Wasm *binary* input is trusted and *not* validated. `--validate` forces validation in every case.
-    - Reports a warning for any local that is declared but never read — a Wax `let` binding, or a Wasm Text `(local …)`. This reporting is only enabled by `--validate` (the default validation above does not turn it on). Prefix the name with `_` (e.g. `let _x = …`, `(local $_x i32)`) to mark it intentionally unused and silence the warning; function parameters are never reported. This `unused-local` warning can be silenced, kept, or promoted to an error with [`-W`](#options) (e.g. `-W unused-local=error`).
+    - A text input (Wax/Wat) is **validated by default before it is converted to a different format**: the conversion and lowering passes trust that their input is well-formed, so a malformed module is rejected up front rather than reaching them. A same-format conversion (`wat` → `wat`, `wax` → `wax`) only re-prints and is *not* validated by default; a Wasm *binary* input is trusted and *not* validated. `--validate` forces validation in every case.
+    - Reports a warning for any local that is declared but never read: a Wax `let` binding, or a Wasm Text `(local …)`. This reporting is only enabled by `--validate` (the default validation above does not turn it on). Prefix the name with `_` (e.g. `let _x = …`, `(local $_x i32)`) to mark it intentionally unused and silence the warning; function parameters are never reported. This `unused-local` warning can be silenced, kept, or promoted to an error with [`-W`](#options) (e.g. `-W unused-local=error`).
     - For input containing conditional annotations (`#[if]` / `(@if ...)`), every reachable combination of conditions is checked independently, and each error is reported with the assumption (`reachable when ...`) under which it occurs.
 
 - **`-s`**, **`--strict-validate`**
@@ -50,8 +50,8 @@ mistaken for a subcommand). The `format` subcommand reformats files (see
 
 - **`-D`** *NAME[=VALUE]*, **`--define`** *NAME[=VALUE]*
     - Set a conditional-compilation variable, specializing `#[if(...)]` (Wax) and
-      `(@if ...)` (WAT) annotations. A fully determined conditional is removed —
-      its surviving branch is spliced in — and a partially determined one is kept
+      `(@if ...)` (WAT) annotations. A fully determined conditional is removed
+      (its surviving branch is spliced in) and a partially determined one is kept
       with its condition simplified (the set variables substituted, the rest
       left). Comments inside a removed branch are dropped.
     - The value kind is inferred: a bare *NAME* (or `NAME=true` / `NAME=false`)
@@ -64,10 +64,10 @@ mistaken for a subcommand). The `format` subcommand reformats files (see
     - Enable (or disable) an optional WebAssembly proposal, off by default.
       Bare *NAME* or `NAME=on`/`true`/`yes` enables it; `NAME=off`/`false`/`no`
       disables it. Repeatable. Known features:
-        - `custom-descriptors` — exact reference types (`&!t`), `descriptor`/`describes`
+        - `custom-descriptors`: exact reference types (`&!t`), `descriptor`/`describes`
           struct clauses, and the descriptor instructions. Without it these
           constructs are rejected during validation.
-        - `compact-import-section` — group a module's consecutive same-module
+        - `compact-import-section`: group a module's consecutive same-module
           imports under one module name in the binary import section. Gated on
           *output* only: it is emitted just when enabled, but the compact form is
           always accepted on input.
@@ -75,90 +75,90 @@ mistaken for a subcommand). The `format` subcommand reformats files (see
 - **`-W`** *NAME=LEVEL*, **`--warn`** *NAME=LEVEL*
     - Set the reporting level of a warning produced during validation.
     - *NAME* is a single warning, a group, or `all`:
-        - `unused-local` (group `unused`) — a local that is declared but never
+        - `unused-local` (group `unused`): a local that is declared but never
           read. Produced while validating; shown by default.
-        - `unused-field` (groups `unused`, `correctness`) — a module field (a
+        - `unused-field` (groups `unused`, `correctness`): a module field (a
           function or global) that is defined but never referenced, exported, or
           used as the start function. The module-level analog of `unused-local`;
           prefix its name with `_` to silence one. Shown by default.
-        - `unused-import` (groups `unused`, `correctness`) — an imported function
+        - `unused-import` (groups `unused`, `correctness`): an imported function
           or global that is never referenced, exported, or used as the start
           function. Like `unused-field`, but for imports; `_` silences one. Shown
           by default.
-        - `unused-label` (groups `unused`, `correctness`) — a block label that
+        - `unused-label` (groups `unused`, `correctness`): a block label that
           is declared but never branched to. Prefix its name with `_` to silence
           one. Shown by default.
-        - `shift-count-overflow` (group `correctness`) — a shift by a constant
+        - `shift-count-overflow` (group `correctness`): a shift by a constant
           count at least the operand's bit width. Wasm masks the count modulo
           the width, so the shift is almost certainly not what was meant. Shown
           by default.
-        - `constant-trap` (group `correctness`) — an operation that always traps
+        - `constant-trap` (group `correctness`): an operation that always traps
           on a constant operand: an integer division or remainder by zero, or a
           trapping float-to-integer conversion of an out-of-range constant.
           Shown by default.
-        - `tautological-comparison` (group `correctness`) — a comparison whose
+        - `tautological-comparison` (group `correctness`): a comparison whose
           result is constant regardless of its variable operand: an unsigned
           comparison against zero (`x >=u 0`, `x <u 0`), or two identical
           operands (`x == x`). Shown by default.
-        - `constant-condition` (group `correctness`) — a branch, loop, or
+        - `constant-condition` (group `correctness`): a branch, loop, or
           `select` condition that is a constant literal (the idiomatic infinite
           loop `while <nonzero>` is not flagged). Shown by default.
-        - `unused-result` (group `correctness`) — the result of a
+        - `unused-result` (group `correctness`): the result of a
           side-effect-free expression is computed and then discarded, as in
           `_ = x + 1`. Covers reads, constants, pure arithmetic, and heap
           allocations (a discarded struct/array literal) whose operands are
           themselves effect-free. Shown by default.
-        - `dead-code` (group `correctness`) — a statement that can never be
+        - `dead-code` (group `correctness`): a statement that can never be
           reached, following an unconditional branch, `return`, or
           `unreachable`. Shown by default.
-        - `cast-always-fails` (group `correctness`) — a reference cast or test
+        - `cast-always-fails` (group `correctness`): a reference cast or test
           whose operand can never have the target type (the two are unrelated in
           the type hierarchy), so the cast always traps and the test is always
           false. Shown by default.
-        - `eager-select` (group `correctness`) — a trapping or effectful
+        - `eager-select` (group `correctness`): a trapping or effectful
           operation in a branch of a `?:` (which compiles to a `select`,
           evaluating both branches unconditionally), so it runs even when the
           condition selects the other branch. Shown by default. On Wasm input
           the check covers a folded `select` (its value operands are distinct
           subtrees); an unfolded `select` is not flagged.
-        - `precedence` (group `correctness`) — two operators whose relative
+        - `precedence` (group `correctness`): two operators whose relative
           precedence is easy to misremember are mixed without parentheses: a
           shift (`<<`/`>>`) with arithmetic (`+`, `-`, …), or a comparison with
           a bitwise operator (`&`, `|`, `^`). The code is correct, but a reader
           may misread the grouping (`1 << nbits - 1` is `1 << (nbits - 1)`).
-          Shown by default. Wax-only — WAT/WASM have no infix precedence.
-        - `redundant-operation` (group `redundant`) — an operation with no effect
+          Shown by default. Wax-only: WAT/WASM have no infix precedence.
+        - `redundant-operation` (group `redundant`): an operation with no effect
           on its result: an arithmetic identity (`x + 0`, `x * 1`, `x << 0`, …),
           an absorbing operand (`x * 0`, `x & 0`), two identical operands
           (`x - x`, `x ^ x`), a self-assignment (`x = x`), or a cast to a type
           the operand already has. **Hidden by default** (these are common in
           generated code); enable with `-W redundant=warning`.
-        - `truncated-coverage` — path-sensitive validation gave up after too
+        - `truncated-coverage`: path-sensitive validation gave up after too
           many conditional configurations. Shown by default.
-        - `naming-conflict` (group `naming`) — converting from Wasm, a source
+        - `naming-conflict` (group `naming`): converting from Wasm, a source
           name collided with another and was renamed (e.g. `foo` → `foo_2`).
           Hidden by default.
-        - `reserved-word-rename` (group `naming`) — converting from Wasm, a
+        - `reserved-word-rename` (group `naming`): converting from Wasm, a
           source name is a Wax reserved word and was renamed (e.g. `if` →
           `if_2`). Hidden by default.
-        - `generated-name` (group `naming`) — converting from Wasm, an unnamed
+        - `generated-name` (group `naming`): converting from Wasm, an unnamed
           but referenced parameter was given a generated name (e.g. `x`), since
           it cannot be rendered anonymously. Hidden by default.
     - *LEVEL* is one of:
-        - `hidden` — suppress the warning entirely.
-        - `warning` — report it as a warning.
-        - `error` — promote it to an error, so the run fails.
+        - `hidden`: suppress the warning entirely.
+        - `warning`: report it as a warning.
+        - `error`: promote it to an error, so the run fails.
     - Repeatable; later settings override earlier ones. For example,
       `-W all=error -W unused-local=warning` makes every warning fatal except
       unused locals.
-    - The validation warnings — `truncated-coverage`, and the `unused` and
-      `correctness` lints — are produced only while validating.
+    - The validation warnings (`truncated-coverage`, and the `unused` and
+      `correctness` lints) are produced only while validating.
       `truncated-coverage` can arise from the validation `convert` runs on a
       text input; the `unused`/`correctness` lints are turned on only by
       `--validate`, and always for `check`. The `naming` warnings are produced
       when converting a Wasm module to Wax.
     - Almost all of these lints apply to WebAssembly text/binary input as well
-      as Wax — the Wasm validator runs the same checks, so `wax check foo.wat`
+      as Wax: the Wasm validator runs the same checks, so `wax check foo.wat`
       reports them. (The exceptions are `precedence`, which is Wax-only since
       WAT/WASM have no infix precedence, and `eager-select`, whose Wasm side
       covers only a folded `select`.) On Wasm input `unused-result` covers discarding a constant or
@@ -172,7 +172,7 @@ mistaken for a subcommand). The `format` subcommand reformats files (see
       the `-W` options. Its value is a list of `NAME=LEVEL` specs separated by
       commas or whitespace, e.g. `WAX_WARN="correctness=hidden
       unused-local=error"`. Unlike a plain environment fallback, these defaults
-      still apply when `-W` is given — the command line only refines them (so
+      still apply when `-W` is given: the command line only refines them (so
       `WAX_WARN=correctness=hidden` with `-W dead-code=warning` hides the tier
       except dead code). A malformed or unknown entry is reported on stderr and
       skipped.
@@ -213,7 +213,7 @@ mistaken for a subcommand). The `format` subcommand reformats files (see
       value may list several categories separated by commas
       (`--debug timing,…`).
     - Categories:
-        - `timing` — log the wall-clock running time of each compiler pass
+        - `timing`: log the wall-clock running time of each compiler pass
           (parse, specialize, validate, type-check, convert, output) to stderr,
           one line per pass as it finishes. The normal output on stdout is
           unchanged.
@@ -249,7 +249,7 @@ wax input.wax -D debug=false -D ocaml_version=5.1.0 -D target=wasi -o output.was
 
 The `format` subcommand reformats files in their own format (`.wat` → `.wat`,
 `.wax` → `.wax`, `.wasm` → `.wasm`), detected from each file's extension.
-Formatting never validates — it only re-prints; use [`check`](#checking) to
+Formatting never validates: it only re-prints; use [`check`](#checking) to
 validate.
 
 ```sh
@@ -269,11 +269,11 @@ wax format [OPTIONS] FILE…
 - **`-f`**, **`--format`**, **`--input-format`** *FORMAT*
     - Treat all input files as this format (`wat`, `wasm` or `wax`), overriding
       the detection from each file's extension.
-- **`-W`** *NAME=LEVEL*, **`--warn`** *NAME=LEVEL* — set a warning's level, as
+- **`-W`** *NAME=LEVEL*, **`--warn`** *NAME=LEVEL*: set a warning's level, as
   above.
-- **`--color`** *WHEN* — as above (ignored when writing back in place).
-- **`--fold`** / **`--unfold`** — as above.
-- **`--debug`** *CATEGORY* — as above.
+- **`--color`** *WHEN*: as above (ignored when writing back in place).
+- **`--fold`** / **`--unfold`**: as above.
+- **`--debug`** *CATEGORY*: as above.
 
 ### Examples
 
@@ -298,7 +298,7 @@ The `check` subcommand validates files (type-checking for Wax, well-formedness
 for Wasm) without producing any output, reporting diagnostics and exiting with a
 non-zero status if any file fails. It takes one or more files. Unused-local
 warnings (see [`--validate`](#options)) are reported too, but do not by
-themselves cause a non-zero exit — unless promoted to an error with
+themselves cause a non-zero exit, unless promoted to an error with
 [`-W`](#options) (e.g. `wax check -W unused-local=error src/*.wax`).
 
 ```sh
@@ -307,21 +307,21 @@ wax check [OPTIONS] FILE…
 
 ### Options
 
-- **`-f`**, **`--format`**, **`--input-format`** *FORMAT* — force the format of
+- **`-f`**, **`--format`**, **`--input-format`** *FORMAT*: force the format of
   all files, overriding extension detection.
-- **`-s`**, **`--strict-validate`** — strict reference validation for Wasm Text,
+- **`-s`**, **`--strict-validate`**: strict reference validation for Wasm Text,
   as above (Wasm binary is always strict).
-- **`-D`** *NAME[=VALUE]*, **`--define`** *NAME[=VALUE]* — set a
+- **`-D`** *NAME[=VALUE]*, **`--define`** *NAME[=VALUE]*: set a
   conditional-compilation variable, as for [`convert`](#options): the
   conditionals are specialized before validation. A full set validates one
   configuration; a partial set leaves the remaining conditionals for the
   path-sensitive check to explore. Repeatable.
-- **`-X`** *NAME[=on|off]*, **`--feature`** *NAME[=on|off]* — enable or disable
+- **`-X`** *NAME[=on|off]*, **`--feature`** *NAME[=on|off]*: enable or disable
   an optional proposal, as for [`convert`](#options). Repeatable.
-- **`-W`** *NAME=LEVEL*, **`--warn`** *NAME=LEVEL* — set a warning's level, as
+- **`-W`** *NAME=LEVEL*, **`--warn`** *NAME=LEVEL*: set a warning's level, as
   above.
-- **`--color`** *WHEN* — as above.
-- **`--debug`** *CATEGORY* — as above.
+- **`--color`** *WHEN*: as above.
+- **`--debug`** *CATEGORY*: as above.
 
 ### Example
 
@@ -337,14 +337,14 @@ All three commands share the same exit codes:
 | Code | Meaning |
 |------|---------|
 | `0`  | Success. For `check` / `format --check`, also means every file passed. |
-| `123` | A **usage** error — an invalid combination of flags (e.g. `--source-map-file` with text output, or binary output to a terminal) — or a `format --check` run that found files needing formatting. |
+| `123` | A **usage** error: an invalid combination of flags (e.g. `--source-map-file` with text output, or binary output to a terminal), or a `format --check` run that found files needing formatting. |
 | `124` | A command-line parse error: an unknown flag or a bad option value (reported by the argument parser). |
 | `125` | An internal error (an uncaught exception). |
 | `128` | The input was **rejected by a diagnostic**: a parse, validation, or type error, or a malformed wasm binary. This is also the status of a `check` run that found any problem. |
 
 The distinction is *how you used the tool* (`123`/`124`) versus *the input is
-bad* (`128`). A rejected input reports `128` wherever the error is found —
-syntax, validation, or type-checking — so `check` exits `0` when every input is
+bad* (`128`). A rejected input reports `128` wherever the error is found
+(syntax, validation, or type-checking) so `check` exits `0` when every input is
 valid and `128` otherwise, which is what a CI gate wants. For scripting, treat
 any non-zero status as failure.
 

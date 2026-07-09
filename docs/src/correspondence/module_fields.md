@@ -5,7 +5,7 @@ Wax modules are defined by a sequence of top-level fields: types, functions, glo
 ## Module Name
 
 A `#![module = "..."]` inner attribute at the top of the file names the module.
-It maps to the WebAssembly module name — the symbolic name stored in the module
+It maps to the WebAssembly module name, the symbolic name stored in the module
 subsection of the `name` custom section, written `$name` in WAT:
 
 ```wax
@@ -161,7 +161,7 @@ memory pool: i32 [1, 16] shared;
 (memory $pool 1 16 shared)
 ```
 
-Loads and stores use method-call syntax on the memory, with the value's width in the method name and its signedness expressed by the surrounding [`as iN_s`/`as iN_u` cast](instructions.md#memory-access) — the same convention as packed array access:
+Loads and stores use method-call syntax on the memory, with the value's width in the method name and its signedness expressed by the surrounding [`as iN_s`/`as iN_u` cast](instructions.md#memory-access), the same convention as packed array access:
 
 ```wax
 let x: i32 = mem0.load32(p);
@@ -208,7 +208,7 @@ Maps to:
 (table $objs 0 anyref)
 ```
 
-A table element is read and written with index syntax, like an array — `tab[i]` is `table.get` and `tab[i] = v` is `table.set`:
+A table element is read and written with index syntax, like an array: `tab[i]` is `table.get` and `tab[i] = v` is `table.set`:
 
 ```wax
 let f: &?func = funcs[i];
@@ -238,7 +238,7 @@ elem init: &?func @ funcs[0] = [handler_a, handler_b];       // active
 elem nums: &?i31 = [1 as &i31, 2 as &i31];                   // expression form
 ```
 
-A passive element segment can initialize a GC array with [`array.new_elem`](instructions.md#aggregate-instructions), written with the same `[t| seg @ off; count]` syntax as `array.new_data` — which one applies is determined by the array's element type (a reference element selects the element segment):
+A passive element segment can initialize a GC array with [`array.new_elem`](instructions.md#aggregate-instructions), written with the same `[t| seg @ off; count]` syntax as `array.new_data`; which one applies is determined by the array's element type (a reference element selects the element segment):
 
 ```wax
 type handlers = [&?func];
@@ -370,7 +370,7 @@ const size: i32 = 20;
   (@else (global $size i32 (i32.const 20))))
 ```
 
-The conditions are equivalent — note the surface differences: Wax variables are bare (`ocaml_version`) while WAT variables are `$`-prefixed; Wax versions are tuples `(5, 1, 0)` while WAT writes them `(5 1 0)`; Wax combines conditions with `all`/`any`/`not`, WAT with `and`/`or`/`not`.
+The conditions are equivalent; note the surface differences: Wax variables are bare (`ocaml_version`) while WAT variables are `$`-prefixed; Wax versions are tuples `(5, 1, 0)` while WAT writes them `(5 1 0)`; Wax combines conditions with `all`/`any`/`not`, WAT with `and`/`or`/`not`.
 
 The conditions are preserved, not evaluated. Type checking (`--validate`) explores each reachable combination independently (see the [Language Guide](../language.md#conditional-compilation)). Conversion between the Wax and WAT forms is not yet implemented; conditionals are currently supported within each format on its own.
 

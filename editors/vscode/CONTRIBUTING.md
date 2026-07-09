@@ -30,8 +30,8 @@ Then reload VS Code. Any `.wax` file will pick up the `wax` language mode.
 ## Packaging a `.vsix`
 
 In VS Code you can instead run the **package vsix** build
-task — `Terminal → Run Build Task…`, or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd>
-(<kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd> on macOS) — which invokes the same script.
+task, `Terminal → Run Build Task…`, or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd>
+(<kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd> on macOS), which invokes the same script.
 
 ## Layout
 
