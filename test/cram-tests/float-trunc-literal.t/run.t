@@ -35,7 +35,7 @@ A strict cast still requires a float operand: an integer source is rejected.
    ──➤  bad.wax:2:5
   1 │ fn f(x: i64) -> i32 {
   2 │     x as i32_s_strict;
-    ·     ^^^^^^^^^^^^^^^^^
+    ·     ^
   3 │ }
   4 │ 
   [128]

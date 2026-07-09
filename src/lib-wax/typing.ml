@@ -5127,12 +5127,12 @@ and type_cast ctx i =
         match target_valtype with
         | Some t ->
             if not (cast ctx ty' t) then
-              Error.invalid_cast ctx.diagnostics ~location:i.info ty'
+              Error.invalid_cast ctx.diagnostics ~location:(snd i'.info) ty'
         | None -> (
             match typ with
             | Signedtype { typ; _ } ->
                 if not (signed_cast ctx ty' typ) then
-                  Error.invalid_cast ctx.diagnostics ~location:i.info ty'
+                  Error.invalid_cast ctx.diagnostics ~location:(snd i'.info) ty'
             | Valtype _ | Functype _ -> assert false)
       in
       (* Lint the cast against its operand's natural type (snapshotted before
@@ -5220,7 +5220,7 @@ and type_cast ctx i =
       let*! ty = internalize ctx (Ref t) in
       let ty' = expression_type ctx value' in
       if not (cast ctx ty' (Ref t)) then
-        Error.invalid_cast ctx.diagnostics ~location:i.info ty';
+        Error.invalid_cast ctx.diagnostics ~location:(snd value'.info) ty';
       return_expression i (CastDesc (value', nullable, d')) ty
   | Test (i, ty) ->
       let* i' = instruction ctx i in

@@ -26,10 +26,10 @@ integer-to-i32 signed conversion, so it is still rejected:
   $ printf 'fn f() -> i32 {\n    (5 & 5) as i32_s;\n}\n' > bad.wax
   $ wax -i wax -f wasm bad.wax -o /dev/null
   Error: This value of type int cannot be cast to the target type.
-   ──➤  bad.wax:2:5
+   ──➤  bad.wax:2:6
   1 │ fn f() -> i32 {
   2 │     (5 & 5) as i32_s;
-    ·     ^^^^^^^^^^^^^^^^
+    ·      ^^^^^
   3 │ }
   4 │ 
   [128]
