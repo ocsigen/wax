@@ -2,9 +2,11 @@
 
 ## 0.2.2
 
-- Formatting now reports in the status bar when it cannot format a file (a
-  syntax error, or a module too large or deeply nested for the wasm build)
-  instead of silently doing nothing.
+- Large `.wat` / `.wax` files now format in the editor; a non-tail recursion in
+  the formatter previously overflowed the (small) wasm call stack on big modules,
+  which just silently did nothing.
+- Formatting now reports in the status bar when it cannot format a file (e.g. a
+  syntax error) instead of silently doing nothing.
 - The WAT / Wax preview keeps the last successful conversion (marked stale) while
   the source is temporarily invalid, instead of blanking to an error.
 

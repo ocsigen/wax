@@ -120,12 +120,17 @@ let associate ?only ctx =
       a.Ast.loc_start.Lexing.pos_cnum = b.Ast.loc_start.Lexing.pos_cnum
       && a.Ast.loc_end.Lexing.pos_cnum = b.Ast.loc_end.Lexing.pos_cnum
     in
-    let rec dedup = function
-      | a :: (b :: _ as rest) when same a b -> dedup rest
-      | a :: rest -> a :: dedup rest
-      | [] -> []
+    (* Tail-recursive (accumulate then reverse): [a :: dedup rest] is not
+       tail-recursive (OCaml's tail-modulo-cons is opt-in, via [@tail_mod_cons]),
+       so it recurses to the list length. The native stack absorbs that, but the
+       much smaller wasm call stack overflows on a large module with many
+       recorded locations (e.g. formatting a big .wat in the editor). *)
+    let rec dedup acc = function
+      | a :: (b :: _ as rest) when same a b -> dedup acc rest
+      | a :: rest -> dedup (a :: acc) rest
+      | [] -> List.rev acc
     in
-    dedup locs
+    dedup [] locs
   in
   let pos_of_entry e = e.anchor in
   let split_before threshold comments =
