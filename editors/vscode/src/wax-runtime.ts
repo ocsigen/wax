@@ -62,39 +62,38 @@ async function bootstrap(
   const loaderUri = vscode.Uri.joinPath(dir, "wax_format_js.bc.wasm.js");
   const assetsDir = vscode.Uri.joinPath(dir, "wax_format_js.bc.wasm.assets");
 
-  let loaderSrc = new TextDecoder().decode(
-    await vscode.workspace.fs.readFile(loaderUri),
-  );
-
-  let restoreFetch: (() => void) | undefined;
-
-  // The loader's Node branch resolves the .wasm relative to
-  // `require.main.filename` (VS Code's entry, not ours). Redirect it to this
-  // file's own path via `module.filename`, supplying a synthetic `module` below.
-  // Inert on web, where the Node branch never runs (no `process`).
-  loaderSrc = loaderSrc.split("require.main.filename").join("module.filename");
-
-  if (!isNode) {
-    const wasmName = wasmNameFromLoader(loaderSrc);
-    const wasmBytes = await vscode.workspace.fs.readFile(
-      vscode.Uri.joinPath(assetsDir, wasmName),
-    );
-    restoreFetch = installFetchShim(wasmBytes);
+  if (isNode) {
+    // Desktop: require the loader as a CommonJS module. The build rewrote its
+    // require.main.filename to module.filename, so it resolves the .wasm sitting
+    // next to it on disk. It self-executes and, once the OCaml top-level
+    // finishes, installs globalThis.wax (it does not return a ready-promise, so
+    // we poll for the export).
+    if (!opts.nodeRequire) {
+      throw new Error("wax: nodeRequire is required on the desktop host");
+    }
+    opts.nodeRequire(loaderUri.fsPath);
+    return waitForGlobal<Wax>("wax", 10000);
   }
 
+  // Web: no require and a virtual filesystem, so read the loader, serve its
+  // .wasm from memory via a fetch shim (the loader takes its fetch branch here),
+  // and run it in a Function. The build's module.filename rewrite is in the
+  // loader's Node branch, which never runs on web.
+  const loaderSrc = new TextDecoder().decode(
+    await vscode.workspace.fs.readFile(loaderUri),
+  );
+  const wasmName = wasmNameFromLoader(loaderSrc);
+  const wasmBytes = await vscode.workspace.fs.readFile(
+    vscode.Uri.joinPath(assetsDir, wasmName),
+  );
+  const restoreFetch = installFetchShim(wasmBytes);
   try {
-    // Run the loader in its own scope with `require` and a `module` (only its
-    // `filename` is used, by the redirect above) injected. It self-executes and,
-    // once the OCaml top-level finishes, installs globalThis.wax; the loader does
-    // not hand back its ready-promise, so poll for the export.
-    new Function("require", "module", loaderSrc)(opts.nodeRequire, {
-      filename: loaderUri.fsPath,
-    });
+    new Function("require", loaderSrc)(undefined);
     return await waitForGlobal<Wax>("wax", 10000);
   } finally {
     // The .wasm is fetched during instantiation, before the export appears, so
     // by now the shim has done its job and can be removed.
-    restoreFetch?.();
+    restoreFetch();
   }
 }
 
