@@ -7,11 +7,9 @@ import "env" {
 
 const c: i32 = 1;;
 
-{
-  ;
-  fn grouped() -> i32 { c; }
-  ;
-}
+;
+fn grouped() -> i32 { c; }
+;
 
 #[export = "arms"]
 fn arms(x: i32, r: &any) -> i32 {

@@ -7,12 +7,14 @@ same Wax name twice and fail with "already bound").
   $ wax multi.wat -f wax
   import "x" fn getuid() -> i32;
   #[if(wasi)]
-  #[export]
-  #[export = "caml_unix_getuid"]
-  #[export = "unix_geteuid"]
-  #[export = "caml_unix_geteuid"]
-  fn unix_getuid(&eq) -> &eq {
-      1 as &i31;
+  {
+      #[export]
+      #[export = "caml_unix_getuid"]
+      #[export = "unix_geteuid"]
+      #[export = "caml_unix_geteuid"]
+      fn unix_getuid(&eq) -> &eq {
+          1 as &i31;
+      }
   }
   #[else]
   {

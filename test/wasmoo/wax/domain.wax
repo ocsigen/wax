@@ -211,54 +211,58 @@ let caml_domain_id = 0;
 let caml_domain_latest_id = 1;
 
 #[if(ocaml_version >= (5, 2, 0))]
-#[export]
-fn caml_domain_spawn(f: &eq, term_sync_v: &eq) -> &eq {
-    let id = caml_domain_latest_id;
-    caml_domain_latest_id = id + 1;
-    let old = caml_domain_id;
-    caml_domain_id = id;
-    let ts = term_sync_v as &block;
-    let result: &?eq;
-    try {
-        // state = Finished (Ok res)
-        result = [block|0 as &i31, [block|0 as &i31, caml_callback_1(f, 0 as &i31)]];
-    } catch {
-        ocaml_exception => {
-            let exn = _;
-            // state = Finished (Error exn) for OCaml < 5.5
-            // state = Finished (Error (exn, backtrace)) for OCaml >= 5.5
-            #[if(ocaml_version >= (5, 5, 0))]
-            {
-                exn = [block|0 as &i31, exn, [block|0 as &i31]];
+{
+    #[export]
+    fn caml_domain_spawn(f: &eq, term_sync_v: &eq) -> &eq {
+        let id = caml_domain_latest_id;
+        caml_domain_latest_id = id + 1;
+        let old = caml_domain_id;
+        caml_domain_id = id;
+        let ts = term_sync_v as &block;
+        let result: &?eq;
+        try {
+            // state = Finished (Ok res)
+            result = [block|0 as &i31, [block|0 as &i31, caml_callback_1(f, 0 as &i31)]];
+        } catch {
+            ocaml_exception => {
+                let exn = _;
+                // state = Finished (Error exn) for OCaml < 5.5
+                // state = Finished (Error (exn, backtrace)) for OCaml >= 5.5
+                #[if(ocaml_version >= (5, 5, 0))]
+                {
+                    exn = [block|0 as &i31, exn, [block|0 as &i31]];
+                }
+                result = [block|0 as &i31, [block|1 as &i31, exn]];
             }
-            result = [block|0 as &i31, [block|1 as &i31, exn]];
         }
+        caml_domain_id = old;
+        _ = caml_ml_mutex_unlock(ts[2]);
+        ts[1] = result!;
+        id as &i31;
     }
-    caml_domain_id = old;
-    _ = caml_ml_mutex_unlock(ts[2]);
-    ts[1] = result!;
-    id as &i31;
 }
 #[else]
-#[export]
-fn caml_domain_spawn(f: &eq, mutex: &eq) -> &eq {
-    let id = caml_domain_latest_id;
-    caml_domain_latest_id = id + 1;
-    let old = caml_domain_id;
-    caml_domain_id = id;
-    try {
-        _ = caml_callback_1(f, 0 as &i31);
-    } catch {
-        ocaml_exception => {
-            let exn = _;
-            caml_domain_id = old;
-            _ = caml_ml_mutex_unlock(mutex);
-            throw ocaml_exception exn;
+{
+    #[export]
+    fn caml_domain_spawn(f: &eq, mutex: &eq) -> &eq {
+        let id = caml_domain_latest_id;
+        caml_domain_latest_id = id + 1;
+        let old = caml_domain_id;
+        caml_domain_id = id;
+        try {
+            _ = caml_callback_1(f, 0 as &i31);
+        } catch {
+            ocaml_exception => {
+                let exn = _;
+                caml_domain_id = old;
+                _ = caml_ml_mutex_unlock(mutex);
+                throw ocaml_exception exn;
+            }
         }
+        caml_domain_id = old;
+        _ = caml_ml_mutex_unlock(mutex);
+        id as &i31;
     }
-    caml_domain_id = old;
-    _ = caml_ml_mutex_unlock(mutex);
-    id as &i31;
 }
 
 #[export]

@@ -8562,7 +8562,6 @@ and check_constant_field ctx (name, i) =
 type ('before, 'after) phased =
   | Before of 'before
   | After of 'after
-  | PhasedGroup of { before : 'before; fields : ('before, 'after) phased list }
   | PhasedConditional of {
       before : 'before;
       then_ : ('before, 'after) phased list;
@@ -8729,21 +8728,18 @@ let rec globals ctx fields =
           in
           check_constant_instruction ctx def';
           After { field with desc = Global { g with typ; def = def' } }
-      | Group { fields; _ } ->
-          let fields = globals ctx fields in
-          PhasedGroup { before = field; fields }
       | Conditional { cond; then_fields; else_fields } ->
           PhasedConditional
             {
               before = field;
               then_ =
                 with_cond ctx ~location:field.info cond true (fun () ->
-                    globals ctx then_fields);
+                    globals ctx then_fields.desc);
               else_ =
                 Option.map
                   (fun e ->
                     with_cond ctx ~location:field.info cond false (fun () ->
-                        globals ctx e))
+                        globals ctx e.desc))
                   else_fields;
             }
       | _ -> Before field)
@@ -8854,12 +8850,16 @@ let rec functions ctx fields =
               f with
               desc = Func { name; sign; body = (label, body); typ; attributes };
             }
-      | PhasedGroup
-          { before = { desc = Group { attributes; _ }; info }; fields } ->
-          Some
-            { info; desc = Group { attributes; fields = functions ctx fields } }
       | PhasedConditional
-          { before = { desc = Conditional { cond; _ }; info }; then_; else_ } ->
+          {
+            before =
+              {
+                desc = Conditional { cond; then_fields = tf; else_fields = ef };
+                info;
+              };
+            then_;
+            else_;
+          } ->
           Some
             {
               info;
@@ -8868,22 +8868,31 @@ let rec functions ctx fields =
                   {
                     cond;
                     then_fields =
-                      with_cond ctx ~location:info cond true (fun () ->
-                          functions ctx then_);
+                      {
+                        tf with
+                        desc =
+                          with_cond ctx ~location:info cond true (fun () ->
+                              functions ctx then_);
+                      };
                     else_fields =
-                      Option.map
-                        (fun e ->
-                          with_cond ctx ~location:info cond false (fun () ->
-                              functions ctx e))
-                        else_;
+                      (match (ef, else_) with
+                      | Some ef, Some e ->
+                          Some
+                            {
+                              ef with
+                              desc =
+                                with_cond ctx ~location:info cond false
+                                  (fun () -> functions ctx e);
+                            }
+                      | None, None -> None
+                      | _ -> assert false);
                   };
             }
-      | PhasedGroup _ | PhasedConditional _
+      | PhasedConditional _
       | Before
           {
             desc =
-              ( Global _ | Group _ | Conditional _ | Memory _ | Data _ | Elem _
-              | Table _ );
+              Global _ | Conditional _ | Memory _ | Data _ | Elem _ | Table _;
             _;
           } ->
           assert false
@@ -8963,7 +8972,6 @@ let field_attributes (field : _ modulefield) =
   | Data { attributes; _ }
   | Table { attributes; _ }
   | Elem { attributes; _ }
-  | Group { attributes; _ }
   | Module_annotation attributes ->
       attributes
   (* An import's attributes hang off each [import_decl]; they are validated
@@ -9028,8 +9036,7 @@ let check_attributes diagnostics field =
     | Func _ -> (true, true, false)
     | Global _ | Memory _ | Table _ | Tag _ -> (true, false, false)
     | Module_annotation _ -> (false, false, true)
-    | Data _ | Elem _ | Type _ | Group _ | Import _ | Import_group _
-    | Conditional _ ->
+    | Data _ | Elem _ | Type _ | Import _ | Import_group _ | Conditional _ ->
         (false, false, false)
   in
   check_attribute_list diagnostics ~export_ok ~start_ok ~module_ok
@@ -9057,14 +9064,13 @@ let type_configuration ?(warn_unused = false) ?(build = true)
     List.iter
       (fun (field : (_ modulefield, _) annotated) ->
         match field.desc with
-        | Group { fields; _ } -> walk_fields f fields
         | Conditional { cond = c; then_fields; else_fields } ->
             with_cond_ref cond cond_env diagnostics ~location:field.info c true
-              (fun () -> walk_fields f then_fields);
+              (fun () -> walk_fields f then_fields.desc);
             Option.iter
               (fun e ->
                 with_cond_ref cond cond_env diagnostics ~location:field.info c
-                  false (fun () -> walk_fields f e))
+                  false (fun () -> walk_fields f e.desc))
               else_fields
         | _ -> f field)
       fields
@@ -9198,7 +9204,7 @@ let type_configuration ?(warn_unused = false) ?(build = true)
       | Table { name; address_type; reftype = rt; _ } ->
           Tbl.add diagnostics ctx.tables name (address_type, rt)
       | Elem { name; reftype = rt; _ } -> Tbl.add diagnostics ctx.elems name rt
-      | Group _ | Conditional _ | Type _ | Global _ | Module_annotation _ -> ())
+      | Conditional _ | Type _ | Global _ | Module_annotation _ -> ())
     fields;
   (* A module may not export the same name twice. Each [#[export = "..."]]
      attribute is one export; [walk_fields] descends into groups and resolves
@@ -9216,8 +9222,8 @@ let type_configuration ?(warn_unused = false) ?(build = true)
     | Table { name; _ }
     | Tag { name; _ } ->
         Some name
-    | Data _ | Elem _ | Group _ | Import _ | Import_group _ | Conditional _
-    | Type _ | Module_annotation _ ->
+    | Data _ | Elem _ | Import _ | Import_group _ | Conditional _ | Type _
+    | Module_annotation _ ->
         None
   in
   (* Process the [export]/[start]/[module] attributes carried by an entity whose
@@ -9498,10 +9504,9 @@ let rec instr_has_conditional (i : (_ instr_desc, _) annotated) =
   | Float _ | StructDefault _ ->
       false
 
-let rec field_has_conditional (f : (_ modulefield, _) annotated) =
+let field_has_conditional (f : (_ modulefield, _) annotated) =
   match f.desc with
   | Conditional _ -> true
-  | Group { fields; _ } -> List.exists field_has_conditional fields
   | Func { body = _, instrs; _ } -> List.exists instr_has_conditional instrs
   | Global { def; _ } -> instr_has_conditional def
   | _ -> false
@@ -9681,12 +9686,9 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
     match f.desc with
     | Conditional { cond; then_fields; else_fields } ->
         choose asm cond ~location:f.info
-          ~then_branch:(fun asm' -> sfields asm' then_fields)
+          ~then_branch:(fun asm' -> sfields asm' then_fields.desc)
           ~else_branch:(fun asm' ->
-            match else_fields with Some e -> sfields asm' e | None -> [])
-    | Group { attributes; fields } ->
-        ( [ { f with desc = Group { attributes; fields = sfields asm fields } } ],
-          asm )
+            match else_fields with Some e -> sfields asm' e.desc | None -> [])
     | Func ({ body = lbl, instrs; _ } as r) ->
         ( [ { f with desc = Func { r with body = (lbl, sinstrs asm instrs) } } ],
           asm )

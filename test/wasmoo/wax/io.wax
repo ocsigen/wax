@@ -315,24 +315,28 @@ const IO_BUFFER_SIZE = 65536;
 type open_flags = [i16];
 
 #[if(wasi)]
-//      1 O_RDONLY
-//      2 O_WRONLY
-//   0x10 O_CREAT
-//   0x40 O_EXCL
-//   0x80 O_TRUNC
-//  0x100 O_APPEND
-//  0x400 O_NONBLOCK
-const sys_open_flags: &open_flags = [1, 2, 0x102, 0x10, 0x80, 0x40, 0, 0, 0x400];
+{
+    //      1 O_RDONLY
+    //      2 O_WRONLY
+    //   0x10 O_CREAT
+    //   0x40 O_EXCL
+    //   0x80 O_TRUNC
+    //  0x100 O_APPEND
+    //  0x400 O_NONBLOCK
+    const sys_open_flags: &open_flags = [1, 2, 0x102, 0x10, 0x80, 0x40, 0, 0, 0x400];
+}
 #[else]
-//   1 O_RDONLY
-//   2 O_WRONLY
-//   4 O_RDWR
-//   8 O_APPEND
-//  16 O_CREAT
-//  32 O_TRUNC
-//  64 O_EXCL
-// 128 O_NONBLOCK
-const sys_open_flags: &open_flags = [1, 2, 10, 16, 32, 64, 0, 0, 128];
+{
+    //   1 O_RDONLY
+    //   2 O_WRONLY
+    //   4 O_RDWR
+    //   8 O_APPEND
+    //  16 O_CREAT
+    //  32 O_TRUNC
+    //  64 O_EXCL
+    // 128 O_NONBLOCK
+    const sys_open_flags: &open_flags = [1, 2, 10, 16, 32, 64, 0, 0, 128];
+}
 
 #[export]
 fn convert_flag_list(tbl: &open_flags, vflags: &eq) -> i32 {
@@ -351,83 +355,91 @@ fn convert_flag_list(tbl: &open_flags, vflags: &eq) -> i32 {
 }
 
 #[if(wasi)]
-#[export]
-fn caml_sys_open(vpath: &eq, vflags: &eq, perm: &eq) -> &eq {
-    let (path_0, path_1, path_2) = caml_sys_resolve_path(vpath);
-    let buffer = get_buffer();
-    let flags = convert_flag_list(sys_open_flags, vflags);
-    let res =
-        path_open(
-            path_0,
-            1, // symlink_follow
-            path_1,
-            path_2,
-            flags >>u 4 & 0xF,
-            flags & 2?0x860007c:0x820003e,
-            0,
-            flags >>u 8,
-            buffer,
+{
+    #[export]
+    fn caml_sys_open(vpath: &eq, vflags: &eq, perm: &eq) -> &eq {
+        let (path_0, path_1, path_2) = caml_sys_resolve_path(vpath);
+        let buffer = get_buffer();
+        let flags = convert_flag_list(sys_open_flags, vflags);
+        let res =
+            path_open(
+                path_0,
+                1, // symlink_follow
+                path_1,
+                path_2,
+                flags >>u 4 & 0xF,
+                flags & 2?0x860007c:0x820003e,
+                0,
+                flags >>u 8,
+                buffer,
+            );
+        free(path_1);
+        caml_handle_sys_error_if(vpath, res);
+        let fd = m.load32(buffer);
+        let offset: i64;
+        // Like native [O_APPEND], the fd position starts at 0 (WASI's O_APPEND
+        // fdflag makes each write go to EOF regardless), so [pos_out] reports 0
+        // right after opening, matching native.
+        initialize_fd_offset(
+            fd,
+            offset,
+            flags & 0x100 // O_APPEND
         );
-    free(path_1);
-    caml_handle_sys_error_if(vpath, res);
-    let fd = m.load32(buffer);
-    let offset: i64;
-    // Like native [O_APPEND], the fd position starts at 0 (WASI's O_APPEND
-    // fdflag makes each write go to EOF regardless), so [pos_out] reports 0
-    // right after opening, matching native.
-    initialize_fd_offset(
-        fd,
-        offset,
-        flags & 0x100 // O_APPEND
-    );
-    fd as &i31;
+        fd as &i31;
+    }
 }
 #[else]
-#[export]
-fn caml_sys_open(path: &eq, vflags: &eq, perm: &eq) -> &eq {
-    let flags = convert_flag_list(sys_open_flags, vflags);
-    let fd: i32;
-    try {
-        fd = open_fn(unwrap(caml_jsstring_of_string(path)), flags, perm as i32_u);
-    } catch {
-        javascript_exception => {
-            caml_handle_sys_error(_);
+{
+    #[export]
+    fn caml_sys_open(path: &eq, vflags: &eq, perm: &eq) -> &eq {
+        let flags = convert_flag_list(sys_open_flags, vflags);
+        let fd: i32;
+        try {
+            fd = open_fn(unwrap(caml_jsstring_of_string(path)), flags, perm as i32_u);
+        } catch {
+            javascript_exception => {
+                caml_handle_sys_error(_);
+            }
         }
+        let offset: i64;
+        // Like native [O_APPEND], the offset starts at 0; writes reposition to
+        // EOF (see [caml_flush_partial]).
+        initialize_fd_offset(
+            fd,
+            offset,
+            flags & 8 // O_APPEND
+        );
+        fd as &i31;
     }
-    let offset: i64;
-    // Like native [O_APPEND], the offset starts at 0; writes reposition to
-    // EOF (see [caml_flush_partial]).
-    initialize_fd_offset(
-        fd,
-        offset,
-        flags & 8 // O_APPEND
-    );
-    fd as &i31;
 }
 
 #[if(wasi)]
-#[export]
-fn caml_sys_close(vfd: &eq) -> &eq {
-    let fd = vfd as i32_u;
-    release_fd_offset(fd);
-    let res = fd_close(fd);
-    caml_handle_sys_error_if(0 as &i31, res);
-    0 as &i31;
+{
+    #[export]
+    fn caml_sys_close(vfd: &eq) -> &eq {
+        let fd = vfd as i32_u;
+        release_fd_offset(fd);
+        let res = fd_close(fd);
+        caml_handle_sys_error_if(0 as &i31, res);
+        0 as &i31;
+    }
 }
 #[else]
-#[export]
-fn caml_sys_close(vfd: &eq) -> &eq {
-    let res: i32;
-    let fd = vfd as i32_u;
-    release_fd_offset(fd);
-    try {
-        close(fd);
-    } catch {
-        javascript_exception => {
-            caml_handle_sys_error(_);
+{
+    #[export]
+    fn caml_sys_close(vfd: &eq) -> &eq {
+        let res: i32;
+        let fd = vfd as i32_u;
+        release_fd_offset(fd);
+        try {
+            close(fd);
+        } catch {
+            javascript_exception => {
+                caml_handle_sys_error(_);
+            }
         }
+        0 as &i31;
     }
-    0 as &i31;
 }
 
 #[export]
@@ -474,25 +486,31 @@ fn caml_ml_set_channel_name(&eq, &eq) -> &eq {
 }
 
 #[if(wasi)]
-fn push_channel(l: &eq, ch: &eq) -> &eq {
-    'continue: do {
-        br_if 'continue !(ch is &channel);
-        let c = ch as &channel;
-        br_if 'continue c.fd == -1;
-        l = [block|0 as &i31, ch, l];
+{
+    fn push_channel(l: &eq, ch: &eq) -> &eq {
+        'continue: do {
+            br_if 'continue !(ch is &channel);
+            let c = ch as &channel;
+            br_if 'continue c.fd == -1;
+            l = [block|0 as &i31, ch, l];
+        }
+        l;
     }
-    l;
 }
 
 #[if(wasi)]
-#[export]
-fn caml_ml_out_channels_list(&eq) -> &eq {
-    out_channels;
+{
+    #[export]
+    fn caml_ml_out_channels_list(&eq) -> &eq {
+        out_channels;
+    }
 }
 #[else]
-#[export]
-fn caml_ml_out_channels_list(&eq) -> &eq {
-    become caml_list_of_js_array(wrap(channel_list()));
+{
+    #[export]
+    fn caml_ml_out_channels_list(&eq) -> &eq {
+        become caml_list_of_js_array(wrap(channel_list()));
+    }
 }
 
 #[export]
@@ -596,20 +614,22 @@ fn caml_ml_close_channel(vch: &eq) -> &eq {
 }
 
 #[if(wasi)]
-fn read(fd: i32, buf: &extern, pos: i32, n: i32) -> i32 {
-    let buffer = get_buffer();
-    let nread = buffer;
-    let iovs = buffer + 4;
-    buffer += 12;
-    m.store32(iovs, buffer);
-    m.store32(iovs, n, 4, 4);
-    let iovs_len = 1;
-    let res = fd_read(fd, iovs, iovs_len, nread);
-    caml_handle_sys_error_if(0 as &i31, res);
-    n = m.load32(nread);
-    let s = buf as &bytes;
-    blit_memory_to_substring(buffer, s, pos, n);
-    n;
+{
+    fn read(fd: i32, buf: &extern, pos: i32, n: i32) -> i32 {
+        let buffer = get_buffer();
+        let nread = buffer;
+        let iovs = buffer + 4;
+        buffer += 12;
+        m.store32(iovs, buffer);
+        m.store32(iovs, n, 4, 4);
+        let iovs_len = 1;
+        let res = fd_read(fd, iovs, iovs_len, nread);
+        caml_handle_sys_error_if(0 as &i31, res);
+        n = m.load32(nread);
+        let s = buf as &bytes;
+        blit_memory_to_substring(buffer, s, pos, n);
+        n;
+    }
 }
 
 fn caml_do_read(ch: &channel, pos: i32, len: i32) -> i32 {
@@ -643,39 +663,43 @@ fn caml_do_read(ch: &channel, pos: i32, len: i32) -> i32 {
 }
 
 #[if(wasi)]
-// The refill hook is not supported with WASI (see
-// caml_ml_set_channel_refill), so this always reads from the fd.
-fn caml_do_read_or_refill(ch: &channel, pos: i32, len: i32) -> i32 {
-    become caml_do_read(ch, pos, len);
+{
+    // The refill hook is not supported with WASI (see
+    // caml_ml_set_channel_refill), so this always reads from the fd.
+    fn caml_do_read_or_refill(ch: &channel, pos: i32, len: i32) -> i32 {
+        become caml_do_read(ch, pos, len);
+    }
 }
 #[else]
-fn caml_do_read_or_refill(ch: &channel, pos: i32, len: i32) -> i32 {
-    let f = ch.refill;
-    if !f {
-        return caml_do_read(ch, pos, len);
+{
+    fn caml_do_read_or_refill(ch: &channel, pos: i32, len: i32) -> i32 {
+        let f = ch.refill;
+        if !f {
+            return caml_do_read(ch, pos, len);
+        }
+        let str = caml_js_fun_call(f!, [block|0 as &i31]) as &bytes;
+        let str_len = str.length();
+        if !str_len {
+            ch.refill = null;
+            return 0;
+        }
+        // Grow the channel buffer if the refilled data does not fit, so that
+        // no bytes are dropped (the JS runtime does the same), preserving the
+        // bytes already buffered before $pos.
+        if pos + str_len >u ch.size {
+            let new_size = pos + str_len;
+            let new_buffer = ta_new(new_size);
+            ta_set(new_buffer, ch.buffer, 0);
+            ch.buffer = new_buffer;
+            ch.buffer_view = dv_make(new_buffer);
+            ch.size = new_size;
+        }
+        caml_blit_bytes_to_dataview(str, 0, ch.buffer_view, pos, str_len);
+        // Advance the channel offset so that pos_in/pos_out stay consistent.
+        let fd_offset = get_fd_offset(ch.fd);
+        fd_offset.offset = fd_offset.offset + str_len as i64_u;
+        str_len;
     }
-    let str = caml_js_fun_call(f!, [block|0 as &i31]) as &bytes;
-    let str_len = str.length();
-    if !str_len {
-        ch.refill = null;
-        return 0;
-    }
-    // Grow the channel buffer if the refilled data does not fit, so that
-    // no bytes are dropped (the JS runtime does the same), preserving the
-    // bytes already buffered before $pos.
-    if pos + str_len >u ch.size {
-        let new_size = pos + str_len;
-        let new_buffer = ta_new(new_size);
-        ta_set(new_buffer, ch.buffer, 0);
-        ch.buffer = new_buffer;
-        ch.buffer_view = dv_make(new_buffer);
-        ch.size = new_size;
-    }
-    caml_blit_bytes_to_dataview(str, 0, ch.buffer_view, pos, str_len);
-    // Advance the channel offset so that pos_in/pos_out stay consistent.
-    let fd_offset = get_fd_offset(ch.fd);
-    fd_offset.offset = fd_offset.offset + str_len as i64_u;
-    str_len;
 }
 
 fn caml_refill(ch: &channel) -> i32 {
@@ -827,33 +851,37 @@ fn caml_ml_pos_out_64(vch: &eq) -> &eq {
 }
 
 #[if(wasi)]
-fn caml_seek_in(ch: &channel, dest: i64) -> &eq {
-    let fd = ch.fd;
-    let buffer = get_buffer();
-    // ZZZ store current offset in channel do avoid some syscalls?
-    let res = fd_seek(fd, dest, 0, buffer);
-    caml_handle_sys_error_if(0 as &i31, res);
-    ch.curr = 0;
-    ch.max = 0;
-    0 as &i31;
-}
-#[else]
-fn caml_seek_in(ch: &channel, dest: i64) -> &eq {
-    let fd = ch.fd;
-    let fd_offset = get_fd_offset(fd);
-    let offset = fd_offset.offset;
-    if (dest >=s offset - ch.max as i64_s) & (dest <=s offset) {
-        ch.curr = ch.max - (offset - dest) as i32;
-    } else {
-        if dest <s 0 {
-            caml_raise_sys_error("Invalid argument");
-        }
-        fd_offset.offset = dest;
-        fd_offset.seeked = 1;
+{
+    fn caml_seek_in(ch: &channel, dest: i64) -> &eq {
+        let fd = ch.fd;
+        let buffer = get_buffer();
+        // ZZZ store current offset in channel do avoid some syscalls?
+        let res = fd_seek(fd, dest, 0, buffer);
+        caml_handle_sys_error_if(0 as &i31, res);
         ch.curr = 0;
         ch.max = 0;
+        0 as &i31;
     }
-    0 as &i31;
+}
+#[else]
+{
+    fn caml_seek_in(ch: &channel, dest: i64) -> &eq {
+        let fd = ch.fd;
+        let fd_offset = get_fd_offset(fd);
+        let offset = fd_offset.offset;
+        if (dest >=s offset - ch.max as i64_s) & (dest <=s offset) {
+            ch.curr = ch.max - (offset - dest) as i32;
+        } else {
+            if dest <s 0 {
+                caml_raise_sys_error("Invalid argument");
+            }
+            fd_offset.offset = dest;
+            fd_offset.seeked = 1;
+            ch.curr = 0;
+            ch.max = 0;
+        }
+        0 as &i31;
+    }
 }
 
 #[export]
@@ -980,19 +1008,21 @@ fn caml_ml_flush(vch: &eq) -> &eq {
 }
 
 #[if(wasi)]
-fn write(fd: i32, buf: &extern, pos: i32, n: i32) -> i32 {
-    let buffer = get_buffer();
-    let nwritten = buffer;
-    let iovs = buffer + 4;
-    buffer += 12;
-    m.store32(iovs, buffer);
-    m.store32(iovs, n, 4, 4);
-    let iovs_len = 1;
-    let s = buf as &bytes;
-    blit_substring_to_memory(buffer, s, pos, n);
-    let res = fd_write(fd, iovs, iovs_len, nwritten);
-    caml_handle_sys_error_if(0 as &i31, res);
-    m.load32(nwritten);
+{
+    fn write(fd: i32, buf: &extern, pos: i32, n: i32) -> i32 {
+        let buffer = get_buffer();
+        let nwritten = buffer;
+        let iovs = buffer + 4;
+        buffer += 12;
+        m.store32(iovs, buffer);
+        m.store32(iovs, n, 4, 4);
+        let iovs_len = 1;
+        let s = buf as &bytes;
+        blit_substring_to_memory(buffer, s, pos, n);
+        let res = fd_write(fd, iovs, iovs_len, nwritten);
+        caml_handle_sys_error_if(0 as &i31, res);
+        m.load32(nwritten);
+    }
 }
 
 #[if(wasi)]
@@ -1038,50 +1068,52 @@ fn write(fd: i32, buf: &extern, pos: i32, n: i32) -> i32 {
     }
 }
 #[else]
-fn caml_flush_partial(ch: &channel) -> i32 {
-    let towrite = ch.curr;
-    if towrite >u 0 {
-        let buf = ch.buffer;
-        if !ch.output {
-            let fd = ch.fd;
-            let fd_offset = get_fd_offset(fd);
-            let offset = fd_offset.offset;
-            // [O_APPEND]: every write goes to the end of the file,
-            // regardless of the current offset (which [seek] may have
-            // moved). Reposition to EOF before writing, like fs_node.js:
-            // the OS append flag alone is not portable for a positioned
-            // write (it appends on Linux but not macOS).
-            if fd_offset.append {
-                offset = file_size(fd);
-            }
-            let written: i32;
-            try {
-                written =
-                    if fd_offset.seeked {
-                        write(fd, buf, 0, towrite, offset);
-                    } else {
-                        write'(fd, buf, 0, towrite, null);
-                    };
-            } catch {
-                javascript_exception => {
-                    caml_handle_sys_error(_);
+{
+    fn caml_flush_partial(ch: &channel) -> i32 {
+        let towrite = ch.curr;
+        if towrite >u 0 {
+            let buf = ch.buffer;
+            if !ch.output {
+                let fd = ch.fd;
+                let fd_offset = get_fd_offset(fd);
+                let offset = fd_offset.offset;
+                // [O_APPEND]: every write goes to the end of the file,
+                // regardless of the current offset (which [seek] may have
+                // moved). Reposition to EOF before writing, like fs_node.js:
+                // the OS append flag alone is not portable for a positioned
+                // write (it appends on Linux but not macOS).
+                if fd_offset.append {
+                    offset = file_size(fd);
                 }
+                let written: i32;
+                try {
+                    written =
+                        if fd_offset.seeked {
+                            write(fd, buf, 0, towrite, offset);
+                        } else {
+                            write'(fd, buf, 0, towrite, null);
+                        };
+                } catch {
+                    javascript_exception => {
+                        caml_handle_sys_error(_);
+                    }
+                }
+                fd_offset.offset = offset + written as i64_u;
+                if towrite >u written {
+                    ta_copy(buf, 0, written, towrite);
+                }
+                towrite -= written;
+                ch.curr = towrite;
+            } else {
+                let tmp: &bytes = [0; towrite];
+                caml_blit_dataview_to_bytes(ch.buffer_view, 0, tmp, 0, towrite);
+                _ = caml_js_fun_call(ch.output!, [block|0 as &i31, caml_jsbytes_of_string(tmp)]);
+                ch.curr = 0;
+                towrite = 0;
             }
-            fd_offset.offset = offset + written as i64_u;
-            if towrite >u written {
-                ta_copy(buf, 0, written, towrite);
-            }
-            towrite -= written;
-            ch.curr = towrite;
-        } else {
-            let tmp: &bytes = [0; towrite];
-            caml_blit_dataview_to_bytes(ch.buffer_view, 0, tmp, 0, towrite);
-            _ = caml_js_fun_call(ch.output!, [block|0 as &i31, caml_jsbytes_of_string(tmp)]);
-            ch.curr = 0;
-            towrite = 0;
         }
+        !towrite;
     }
-    !towrite;
 }
 
 fn caml_putblock(ch: &channel, s: &bytes, pos: i32, len: i32) -> i32 {
@@ -1211,18 +1243,22 @@ fn caml_ml_set_channel_fd(vch: &eq, fd: i32) {
 }
 
 #[if(wasi)]
-#[export]
-fn caml_ml_get_channel_offset(ch: &eq) -> i64 {
-    let fd = (ch as &channel).fd;
-    let buffer = get_buffer();
-    let res = fd_seek(fd, 0, 1, buffer);
-    caml_handle_sys_error_if(0 as &i31, res);
-    m.load64(buffer);
+{
+    #[export]
+    fn caml_ml_get_channel_offset(ch: &eq) -> i64 {
+        let fd = (ch as &channel).fd;
+        let buffer = get_buffer();
+        let res = fd_seek(fd, 0, 1, buffer);
+        caml_handle_sys_error_if(0 as &i31, res);
+        m.load64(buffer);
+    }
 }
 #[else]
-#[export]
-fn caml_ml_get_channel_offset(ch: &eq) -> i64 {
-    get_fd_offset((ch as &channel).fd).offset;
+{
+    #[export]
+    fn caml_ml_get_channel_offset(ch: &eq) -> i64 {
+        get_fd_offset((ch as &channel).fd).offset;
+    }
 }
 
 #[export]

@@ -153,12 +153,14 @@ fn caml_sys_exit(code: &eq) -> &eq {
     }
 }
 #[else]
-fn caml_getenv(name: &eq) -> &?eq {
-    let res = getenv(unwrap(caml_jsstring_of_string(name)));
-    if !jsstring_test(res) {
-        return null;
+{
+    fn caml_getenv(name: &eq) -> &?eq {
+        let res = getenv(unwrap(caml_jsstring_of_string(name)));
+        if !jsstring_test(res) {
+            return null;
+        }
+        become caml_string_of_jsstring(wrap(res));
     }
-    become caml_string_of_jsstring(wrap(res));
 }
 
 #[export]
@@ -245,75 +247,87 @@ fn caml_sys_proc_self_exe(&eq) -> &eq {
 }
 
 #[if(wasi)]
-#[export]
-#[export = "caml_sys_time_include_children"]
-fn caml_sys_time(&eq) -> &eq {
-    let buffer = get_buffer();
-    let res = clock_time_get(2, 1, buffer);
-    // wasmtime does not support the CPU-time clock, so use the
-    // monotonic clock instead as a fallback
-    if res == 8 {
-        res = clock_time_get(1, 1, buffer);
-    }
-    if res {
-        caml_handle_sys_error(0 as &i31, res);
-    }
-    { f: m.load64(buffer) as f64_u * 1e-9 };
-}
-#[else]
-#[export]
-#[export = "caml_sys_time_include_children"]
-fn caml_sys_time(&eq) -> &eq {
-    { f: time() * 0.001 };
-}
-
-#[if(wasi)]
-#[export]
-fn caml_sys_system_command(&eq) -> &eq {
-    caml_invalid_argument("Sys.command not implemented");
-    return 0 as &i31;
-}
-#[else]
-#[export]
-fn caml_sys_system_command(cmd: &eq) -> &eq {
-    try {
-        return system(unwrap(caml_jsstring_of_string(cmd)));
-    } catch {
-        javascript_exception => {
-            caml_handle_sys_error(_);
+{
+    #[export]
+    #[export = "caml_sys_time_include_children"]
+    fn caml_sys_time(&eq) -> &eq {
+        let buffer = get_buffer();
+        let res = clock_time_get(2, 1, buffer);
+        // wasmtime does not support the CPU-time clock, so use the
+        // monotonic clock instead as a fallback
+        if res == 8 {
+            res = clock_time_get(1, 1, buffer);
         }
+        if res {
+            caml_handle_sys_error(0 as &i31, res);
+        }
+        { f: m.load64(buffer) as f64_u * 1e-9 };
     }
-    return 0 as &i31;
+}
+#[else]
+{
+    #[export]
+    #[export = "caml_sys_time_include_children"]
+    fn caml_sys_time(&eq) -> &eq {
+        { f: time() * 0.001 };
+    }
 }
 
 #[if(wasi)]
-#[export]
-fn caml_sys_random_seed(&eq) -> &eq {
-    let r: &extern;
-    let n = 12;
-    let buffer = get_buffer();
-    let res = random_get(buffer, n << 2);
-    if res {
-        caml_handle_sys_error(0 as &i31, res);
+{
+    #[export]
+    fn caml_sys_system_command(&eq) -> &eq {
+        caml_invalid_argument("Sys.command not implemented");
+        return 0 as &i31;
     }
-    let a: &block = [0 as &i31; n + 1];
-    let i: i32;
-    while i <u n : (i += 1) {
-        a[i + 1] = m.load32(buffer + (i << 2)) as &i31;
-    }
-    a;
 }
 #[else]
-#[export]
-fn caml_sys_random_seed(&eq) -> &eq {
-    let r = random_seed();
-    let n = ta_length(r);
-    let a: &block = [0 as &i31; n + 1];
-    let i: i32;
-    while i <u n : (i += 1) {
-        a[i + 1] = ta_get_i32(r, i) as &i31;
+{
+    #[export]
+    fn caml_sys_system_command(cmd: &eq) -> &eq {
+        try {
+            return system(unwrap(caml_jsstring_of_string(cmd)));
+        } catch {
+            javascript_exception => {
+                caml_handle_sys_error(_);
+            }
+        }
+        return 0 as &i31;
     }
-    a;
+}
+
+#[if(wasi)]
+{
+    #[export]
+    fn caml_sys_random_seed(&eq) -> &eq {
+        let r: &extern;
+        let n = 12;
+        let buffer = get_buffer();
+        let res = random_get(buffer, n << 2);
+        if res {
+            caml_handle_sys_error(0 as &i31, res);
+        }
+        let a: &block = [0 as &i31; n + 1];
+        let i: i32;
+        while i <u n : (i += 1) {
+            a[i + 1] = m.load32(buffer + (i << 2)) as &i31;
+        }
+        a;
+    }
+}
+#[else]
+{
+    #[export]
+    fn caml_sys_random_seed(&eq) -> &eq {
+        let r = random_seed();
+        let n = ta_length(r);
+        let a: &block = [0 as &i31; n + 1];
+        let i: i32;
+        while i <u n : (i += 1) {
+            a[i + 1] = ta_get_i32(r, i) as &i31;
+        }
+        a;
+    }
 }
 
 #[export]
@@ -336,8 +350,7 @@ fn caml_sys_const_max_wosize(&eq) -> &eq {
     0xfffffff as &i31;
 }
 
-#[if(wasi)]
-{ const on_windows = 0; const on_arm64 = 0; }
+#[if(wasi)] { const on_windows = 0; const on_arm64 = 0; }
 
 #[export]
 fn caml_sys_const_ostype_unix(&eq) -> &eq {
@@ -388,14 +401,18 @@ fn caml_sys_get_config(&eq) -> &eq {
 }
 
 #[if(wasi)]
-#[export]
-fn caml_sys_isatty(ch: &eq) -> &eq {
-    0 as &i31;
+{
+    #[export]
+    fn caml_sys_isatty(ch: &eq) -> &eq {
+        0 as &i31;
+    }
 }
 #[else]
-#[export]
-fn caml_sys_isatty(ch: &eq) -> &eq {
-    become isatty(caml_channel_descriptor(ch));
+{
+    #[export]
+    fn caml_sys_isatty(ch: &eq) -> &eq {
+        become isatty(caml_channel_descriptor(ch));
+    }
 }
 
 #[export]
@@ -473,9 +490,13 @@ const toString = "toString";
     }
 }
 #[else]
-#[export]
-fn caml_handle_sys_error(exn: &?extern) {
-    caml_raise_sys_error(
-        caml_string_of_jsstring(caml_js_meth_call(wrap(exn as &?any), toString, [block|0 as &i31])),
-    );
+{
+    #[export]
+    fn caml_handle_sys_error(exn: &?extern) {
+        caml_raise_sys_error(
+            caml_string_of_jsstring(
+                caml_js_meth_call(wrap(exn as &?any), toString, [block|0 as &i31]),
+            ),
+        );
+    }
 }

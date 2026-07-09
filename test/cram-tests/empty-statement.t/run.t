@@ -57,10 +57,8 @@ level and inside a group `{…}`), import items, and the arm lists of `dispatch`
   
   const c: i32 = 1;
   
-  {
-      fn grouped() -> i32 {
-          c;
-      }
+  fn grouped() -> i32 {
+      c;
   }
   
   #[export = "arms"]

@@ -49,57 +49,61 @@ fn caml_gc_counters(&eq) -> &eq {
 }
 
 #[if(ocaml_version >= (5, 5, 0))]
-#[export]
-#[export = "caml_gc_quick_stat"]
-fn caml_gc_stat(&eq) -> &eq {
-    let f = { f: 0 };
-    [block|
-        0 as &i31,
-        f,
-        f,
-        f,
-        0 as &i31,
-        0 as &i31,
-        0 as &i31,
-        0 as &i31,
-        0 as &i31,
-        0 as &i31,
-        0 as &i31,
-        0 as &i31,
-        0 as &i31,
-        0 as &i31,
-        0 as &i31,
-        0 as &i31,
-        0 as &i31,
-        0 as &i31,
-        0 as &i31,
-    ];
+{
+    #[export]
+    #[export = "caml_gc_quick_stat"]
+    fn caml_gc_stat(&eq) -> &eq {
+        let f = { f: 0 };
+        [block|
+            0 as &i31,
+            f,
+            f,
+            f,
+            0 as &i31,
+            0 as &i31,
+            0 as &i31,
+            0 as &i31,
+            0 as &i31,
+            0 as &i31,
+            0 as &i31,
+            0 as &i31,
+            0 as &i31,
+            0 as &i31,
+            0 as &i31,
+            0 as &i31,
+            0 as &i31,
+            0 as &i31,
+            0 as &i31,
+        ];
+    }
 }
 #[else]
-#[export]
-#[export = "caml_gc_quick_stat"]
-fn caml_gc_stat(&eq) -> &eq {
-    let f = { f: 0 };
-    [block|
-        0 as &i31,
-        f,
-        f,
-        f,
-        0 as &i31,
-        0 as &i31,
-        0 as &i31,
-        0 as &i31,
-        0 as &i31,
-        0 as &i31,
-        0 as &i31,
-        0 as &i31,
-        0 as &i31,
-        0 as &i31,
-        0 as &i31,
-        0 as &i31,
-        0 as &i31,
-        0 as &i31,
-    ];
+{
+    #[export]
+    #[export = "caml_gc_quick_stat"]
+    fn caml_gc_stat(&eq) -> &eq {
+        let f = { f: 0 };
+        [block|
+            0 as &i31,
+            f,
+            f,
+            f,
+            0 as &i31,
+            0 as &i31,
+            0 as &i31,
+            0 as &i31,
+            0 as &i31,
+            0 as &i31,
+            0 as &i31,
+            0 as &i31,
+            0 as &i31,
+            0 as &i31,
+            0 as &i31,
+            0 as &i31,
+            0 as &i31,
+            0 as &i31,
+        ];
+    }
 }
 
 #[export]

@@ -359,9 +359,13 @@ Both formats can guard module fields by a condition that a downstream preprocess
 
 ```wax
 #[if(ocaml_version >= (5, 1, 0))]
-const size: i32 = 16;
+{
+    const size: i32 = 16;
+}
 #[else]
-const size: i32 = 20;
+{
+    const size: i32 = 20;
+}
 ```
 
 ```wat

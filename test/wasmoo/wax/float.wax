@@ -236,83 +236,87 @@ fn parse_format(s: &bytes) -> (i32, i32, i32, i32) {
 const inf_chars: &chars = "inf";
 
 #[if(wasi)]
-#[export]
-fn caml_format_float(vfmt: &eq, arg: &eq) -> &eq {
-    let fmt = vfmt as &bytes;
-    let d = (arg as &float).f;
-    let buffer = get_buffer();
-    let fmt_len = fmt.length();
-    blit_string_to_memory(buffer, fmt);
-    m.store8(buffer + fmt_len, 0);
-    let out_buffer = buffer + (fmt_len + 1);
-    let avail = IO_BUFFER_SIZE - fmt_len;
-    let len = format_float(out_buffer, avail, buffer, d);
-    if len >=u avail {
-        out_buffer = checked_malloc(len + 1);
-        _ = format_float(out_buffer, len + 1, buffer, d);
+{
+    #[export]
+    fn caml_format_float(vfmt: &eq, arg: &eq) -> &eq {
+        let fmt = vfmt as &bytes;
+        let d = (arg as &float).f;
+        let buffer = get_buffer();
+        let fmt_len = fmt.length();
+        blit_string_to_memory(buffer, fmt);
+        m.store8(buffer + fmt_len, 0);
+        let out_buffer = buffer + (fmt_len + 1);
+        let avail = IO_BUFFER_SIZE - fmt_len;
+        let len = format_float(out_buffer, avail, buffer, d);
+        if len >=u avail {
+            out_buffer = checked_malloc(len + 1);
+            _ = format_float(out_buffer, len + 1, buffer, d);
+        }
+        let res = blit_memory_to_string(out_buffer, len);
+        if len >=u avail {
+            free(out_buffer);
+        }
+        res;
     }
-    let res = blit_memory_to_string(out_buffer, len);
-    if len >=u avail {
-        free(out_buffer);
-    }
-    res;
 }
 #[else]
-#[export]
-fn caml_format_float(vfmt: &eq, arg: &eq) -> &eq {
-    let f = (arg as &float).f;
-    let b = f.to_bits();
-    let (sign_style, precision, conversion, uppercase) = parse_format(vfmt as &bytes);
-    let negative = (b >>u 63) as i32;
-    let i = negative | (sign_style != 0);
-    let len: i32;
-    let s: &bytes;
-    s =
-        'sign: do {
-            let exp = (b >>u 52) as i32 & 0x7FF;
-            if exp == 0x7FF {
-                let m = b << 12;
-                let txt =
-                    if !m {
-                        inf_chars;
-                    } else {
-                        negative = 0;
-                        i = sign_style != 0;
-                        nan_chars;
-                    };
-                len = txt.length();
-                s = [0; i + len];
-                s.copy(i, txt, 0, len);
+{
+    #[export]
+    fn caml_format_float(vfmt: &eq, arg: &eq) -> &eq {
+        let f = (arg as &float).f;
+        let b = f.to_bits();
+        let (sign_style, precision, conversion, uppercase) = parse_format(vfmt as &bytes);
+        let negative = (b >>u 63) as i32;
+        let i = negative | (sign_style != 0);
+        let len: i32;
+        let s: &bytes;
+        s =
+            'sign: do {
+                let exp = (b >>u 52) as i32 & 0x7FF;
+                if exp == 0x7FF {
+                    let m = b << 12;
+                    let txt =
+                        if !m {
+                            inf_chars;
+                        } else {
+                            negative = 0;
+                            i = sign_style != 0;
+                            nan_chars;
+                        };
+                    len = txt.length();
+                    s = [0; i + len];
+                    s.copy(i, txt, 0, len);
+                    br 'sign s;
+                }
+                let num = format_float(precision, conversion, i, f.abs());
+                s = bytes_of_jsstring(num);
                 br 'sign s;
-            }
-            let num = format_float(precision, conversion, i, f.abs());
-            s = bytes_of_jsstring(num);
-            br 'sign s;
-        };
-    if negative {
-        s[0] = '-';
-    } else {
-        if sign_style {
-            if sign_style == 1 {
-                s[0] = '+';
-            } else {
-                s[0] = ' ';
+            };
+        if negative {
+            s[0] = '-';
+        } else {
+            if sign_style {
+                if sign_style == 1 {
+                    s[0] = '+';
+                } else {
+                    s[0] = ' ';
+                }
             }
         }
-    }
-    if uppercase {
-        i = 0;
-        len = s.length();
-        'uppercase: loop {
-            let c = s[i] as i32_u;
-            if (c >=u 'a') & (c <=u 'z') {
-                s[i] = c - 32;
+        if uppercase {
+            i = 0;
+            len = s.length();
+            'uppercase: loop {
+                let c = s[i] as i32_u;
+                if (c >=u 'a') & (c <=u 'z') {
+                    s[i] = c - 32;
+                }
+                i += 1;
+                br_if 'uppercase i <u len;
             }
-            i += 1;
-            br_if 'uppercase i <u len;
         }
+        s;
     }
-    s;
 }
 
 fn caml_float_of_hex(err_msg: &eq, s: &bytes, i: i32) -> f64 {

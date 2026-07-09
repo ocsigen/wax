@@ -34,23 +34,27 @@ import "bigarray" {
     fn caml_blit_bytes_to_dataview(&bytes, i32, &extern, i32, i32);
 }
 #[if(wasi)]
-import "bigarray" {
-    fn ta_subarray(&extern, i32, i32) -> &extern;
-    fn ta_set(&extern, &extern, i32);
-    fn dv_get_i32_unaligned(&extern, i32, i32) -> i32;
-    fn dv_get_ui8(&extern, i32) -> i32;
-    fn dv_set_i8(&extern, i32, i32);
+{
+    import "bigarray" {
+        fn ta_subarray(&extern, i32, i32) -> &extern;
+        fn ta_set(&extern, &extern, i32);
+        fn dv_get_i32_unaligned(&extern, i32, i32) -> i32;
+        fn dv_get_ui8(&extern, i32) -> i32;
+        fn dv_set_i8(&extern, i32, i32);
+    }
 }
 #[else]
-import "bindings" {
-    fn ta_create(i32, &?any) -> &?any;
-    #[import = "dv_get_i32"]
-    fn dv_get_i32_unaligned(&?extern, i32, i32) -> i32;
-    fn dv_get_ui8(&?extern, i32) -> i32;
-    fn dv_set_i8(&?extern, i32, i32);
-    fn ta_subarray(&extern, i32, i32) -> &extern;
-    fn ta_set(&extern, &extern, i32);
-    fn ta_bytes(&?any) -> &?any;
+{
+    import "bindings" {
+        fn ta_create(i32, &?any) -> &?any;
+        #[import = "dv_get_i32"]
+        fn dv_get_i32_unaligned(&?extern, i32, i32) -> i32;
+        fn dv_get_ui8(&?extern, i32) -> i32;
+        fn dv_set_i8(&?extern, i32, i32);
+        fn ta_subarray(&extern, i32, i32) -> &extern;
+        fn ta_set(&extern, &extern, i32);
+        fn ta_bytes(&?any) -> &?any;
+    }
 }
 import "hash" fn caml_hash_mix_int(i32, i32) -> i32;
 

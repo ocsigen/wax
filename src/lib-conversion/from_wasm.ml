@@ -3063,7 +3063,13 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
                   List.concat_map (modulefield ctx export_tbl) e))
             else_fields
         in
-        Some (Conditional { cond; then_fields; else_fields })
+        Some
+          (Conditional
+             {
+               cond;
+               then_fields = Ast.no_loc then_fields;
+               else_fields = Option.map Ast.no_loc else_fields;
+             })
   in
   Option.to_list (Option.map (fun desc -> { f with desc }) desc) @ !extra
 
@@ -3400,11 +3406,6 @@ let extra_type_decls ctx =
 let rec group_imports fields =
   let recurse f =
     match f.Ast.desc with
-    | Ast.Group g ->
-        {
-          f with
-          Ast.desc = Ast.Group { g with fields = group_imports g.fields };
-        }
     | Ast.Conditional c ->
         {
           f with
@@ -3412,8 +3413,15 @@ let rec group_imports fields =
             Ast.Conditional
               {
                 c with
-                then_fields = group_imports c.then_fields;
-                else_fields = Option.map group_imports c.else_fields;
+                then_fields =
+                  {
+                    c.then_fields with
+                    Ast.desc = group_imports c.then_fields.Ast.desc;
+                  };
+                else_fields =
+                  Option.map
+                    (fun b -> { b with Ast.desc = group_imports b.Ast.desc })
+                    c.else_fields;
               };
         }
     | _ -> f

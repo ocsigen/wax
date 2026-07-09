@@ -27,14 +27,18 @@ fn caml_runtime_events_user_register(evname: &eq, evtag: &eq, evtype: &eq) -> &e
 }
 
 #[if(ocaml_version >= (5, 2, 0))]
-#[export]
-fn caml_runtime_events_user_write(&eq, &eq, &eq) -> &eq {
-    0 as &i31;
+{
+    #[export]
+    fn caml_runtime_events_user_write(&eq, &eq, &eq) -> &eq {
+        0 as &i31;
+    }
 }
 #[else]
-#[export]
-fn caml_runtime_events_user_write(&eq, &eq) -> &eq {
-    0 as &i31;
+{
+    #[export]
+    fn caml_runtime_events_user_write(&eq, &eq) -> &eq {
+        0 as &i31;
+    }
 }
 
 #[export]

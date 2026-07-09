@@ -185,11 +185,11 @@ let module_ ctx env (fields : location Ast.module_) :
         let else_present = Option.is_some else_fields in
         match eval cond with
         | True ->
-            drop_else f.info then_fields ~else_present;
-            sfields then_fields
+            drop_else f.info then_fields.desc ~else_present;
+            sfields then_fields.desc
         | False -> (
-            drop_then f.info then_fields ~else_present;
-            match else_fields with Some e -> sfields e | None -> [])
+            drop_then f.info then_fields.desc ~else_present;
+            match else_fields with Some e -> sfields e.desc | None -> [])
         | Residual cond ->
             [
               {
@@ -198,13 +198,15 @@ let module_ ctx env (fields : location Ast.module_) :
                   Conditional
                     {
                       cond;
-                      then_fields = sfields then_fields;
-                      else_fields = Option.map sfields else_fields;
+                      then_fields =
+                        { then_fields with desc = sfields then_fields.desc };
+                      else_fields =
+                        Option.map
+                          (fun b -> { b with desc = sfields b.desc })
+                          else_fields;
                     };
               };
             ])
-    | Group { attributes; fields } ->
-        [ { f with desc = Group { attributes; fields = sfields fields } } ]
     | Func ({ body = lbl, instrs; _ } as r) ->
         [ { f with desc = Func { r with body = (lbl, sinstrs instrs) } } ]
     | Global ({ def; _ } as g) ->

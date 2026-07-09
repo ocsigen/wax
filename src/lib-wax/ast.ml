@@ -319,10 +319,6 @@ type 'info modulefield =
       init : 'info instr list;
       attributes : attributes;
     }
-  | Group of {
-      attributes : attributes;
-      fields : ('info modulefield, location) annotated list;
-    }
   (* A single import, [import "module" fn f();]. *)
   | Import of {
       module_ : (string, location) annotated;
@@ -340,8 +336,11 @@ type 'info modulefield =
   | Module_annotation of attributes
   | Conditional of {
       cond : Wax_wasm.Ast.cond;
-      then_fields : ('info modulefield, location) annotated list;
-      else_fields : ('info modulefield, location) annotated list option;
+      then_fields :
+        (('info modulefield, location) annotated list, location) annotated;
+      else_fields :
+        (('info modulefield, location) annotated list, location) annotated
+        option;
     }
 
 type 'info module_ = ('info modulefield, location) annotated list

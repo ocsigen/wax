@@ -1972,14 +1972,14 @@ let module_ diagnostics types fields =
       | Elem { name; _ } -> Hashtbl.replace ctx.elems name.desc ()
       | Data { name; _ } ->
           Option.iter (fun n -> Hashtbl.replace ctx.datas n.desc ()) name
-      | Tag _ | Group _ | Conditional _ | Module_annotation _ -> ())
+      | Tag _ | Conditional _ | Module_annotation _ -> ())
     fields;
   (* Record unconditionally-declared types as reuse targets for synthesized
      types. Descend into [Group] (always present) but not [Conditional]: a type
      guarded by [#[if]] is not available everywhere a synthesized type like
      [<string>] is referenced, so reusing it could leave a dangling reference. *)
   let collect_reuse_types fields =
-    let rec aux acc fields =
+    let aux acc fields =
       List.fold_left
         (fun acc field ->
           match field.desc with
@@ -1992,7 +1992,6 @@ let module_ diagnostics types fields =
                     (subtype, idx.desc) :: acc
                   else acc)
                 acc rectype
-          | Group { fields; _ } -> aux acc fields
           | _ -> acc)
         acc fields
     in
@@ -2063,7 +2062,6 @@ let module_ diagnostics types fields =
     List.concat_map
       (fun field ->
         match field.desc with
-        | Group { fields = flds; _ } -> convert_fields flds
         | Import { module_; decl } -> [ lower_import module_ decl ]
         | Import_group { module_; decls } ->
             List.map (lower_import module_) decls
@@ -2212,8 +2210,9 @@ let module_ diagnostics types fields =
                   Text.Module_if_annotation
                     {
                       cond;
-                      then_fields = conv_branch then_fields;
-                      else_fields = Option.map conv_branch else_fields;
+                      then_fields = conv_branch then_fields.desc;
+                      else_fields =
+                        Option.map (fun b -> conv_branch b.desc) else_fields;
                     };
               };
             ]
@@ -2298,8 +2297,8 @@ let module_ diagnostics types fields =
                       instrs;
                       exports = exports ~name attributes;
                     }
-              | Group _ | Import _ | Import_group _ | Conditional _ | Memory _
-              | Data _ | Table _ | Elem _ | Module_annotation _ ->
+              | Import _ | Import_group _ | Conditional _ | Memory _ | Data _
+              | Table _ | Elem _ | Module_annotation _ ->
                   assert false
             in
             let field' = { field with desc } in

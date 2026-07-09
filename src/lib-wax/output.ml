@@ -1799,19 +1799,6 @@ let rec modulefield pp field =
               | EActive (tab, off) -> print_targeted_offset pp tab off);
               print_eq_square_instr_list pp init;
               semicolon pp))
-  | Group { attributes; fields } ->
-      print_attr_prefix pp attributes (fun () ->
-          hvbox pp (fun () ->
-              punctuation pp "{";
-              if fields <> [] then (
-                indent pp indent_level (fun () ->
-                    List.iter
-                      (fun f ->
-                        space pp ();
-                        modulefield pp f)
-                      fields);
-                space pp ());
-              punctuation pp "}"))
   | Import { module_; decl } ->
       box pp (fun () ->
           keyword pp "import";
@@ -1840,31 +1827,33 @@ let rec modulefield pp field =
             newline pp ());
           punctuation pp "}")
   | Conditional { cond; then_fields; else_fields } ->
-      let branch fields =
-        match fields with
-        | [ f ] -> modulefield pp f
-        | _ ->
-            hvbox pp (fun () ->
-                punctuation pp "{";
-                if fields <> [] then (
-                  indent pp indent_level (fun () ->
-                      List.iter
-                        (fun f ->
-                          space pp ();
-                          modulefield pp f)
-                        fields);
-                  space pp ());
-                punctuation pp "}")
+      (* Braces are mandatory; a branch is a located field list, so an own-line
+         comment trailing its last field renders inside it (see
+         [located_block_contents] for the statement-level analogue). *)
+      let branch b =
+        space pp ();
+        punctuation pp "{";
+        let assoc = get_trivia pp (Some b.info) in
+        print_trivia pp assoc.before;
+        if b.desc <> [] || assoc.within <> [] then (
+          indent pp indent_level (fun () ->
+              List.iter
+                (fun f ->
+                  space pp ();
+                  modulefield pp f)
+                b.desc;
+              print_trivia pp assoc.within);
+          space pp ());
+        print_trivia pp assoc.after;
+        punctuation pp "}"
       in
       hvbox pp (fun () ->
           attribute pp (Printf.sprintf "#[if(%s)]" (cond_to_string cond));
-          newline pp ();
           branch then_fields;
           Option.iter
             (fun e ->
               newline pp ();
               attribute pp "#[else]";
-              newline pp ();
               branch e)
             else_fields)
 

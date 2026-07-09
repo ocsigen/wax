@@ -392,18 +392,15 @@ let rec map_modulefield f field =
             | EActive (tab, off) -> EActive (tab, map_instr f off));
           init = List.map (map_instr f) init;
         }
-  | Group { attributes; fields } ->
-      Group
+  | Conditional { cond; then_fields; else_fields } ->
+      let map_fields b =
         {
-          attributes;
-          fields =
+          b with
+          desc =
             List.map
               (fun a -> { a with desc = map_modulefield f a.desc })
-              fields;
+              b.desc;
         }
-  | Conditional { cond; then_fields; else_fields } ->
-      let map_fields =
-        List.map (fun a -> { a with desc = map_modulefield f a.desc })
       in
       Conditional
         {
@@ -417,10 +414,9 @@ let rec iter_fields f l =
     (fun field ->
       f field;
       match field.desc with
-      | Group { fields; _ } -> iter_fields f fields
       | Conditional { then_fields; else_fields; _ } ->
-          iter_fields f then_fields;
-          Option.iter (iter_fields f) else_fields
+          iter_fields f then_fields.desc;
+          Option.iter (fun b -> iter_fields f b.desc) else_fields
       | _ -> ())
     l
 

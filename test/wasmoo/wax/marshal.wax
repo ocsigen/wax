@@ -77,10 +77,12 @@ type block = [mut &eq];
     }
 }
 #[else]
-import "bindings" {
-    fn map_new() -> &any;
-    fn map_get(&any, &eq) -> &?i31;
-    fn map_set(&any, &eq, &i31);
+{
+    import "bindings" {
+        fn map_new() -> &any;
+        fn map_get(&any, &eq) -> &?i31;
+        fn map_set(&any, &eq, &i31);
+    }
 }
 
 const input_val_from_string = "input_value_from_string";
@@ -679,11 +681,15 @@ fn parse_header(s: &intern_state, prim: &eq) -> &marshal_header {
 const marshal_data_size = "Marshal.data_size";
 
 #[if(ocaml_version >= (5, 1, 0))]
-#[export]
-const caml_marshal_header_size = 16;
+{
+    #[export]
+    const caml_marshal_header_size = 16;
+}
 #[else]
-#[export]
-const caml_marshal_header_size = 20;
+{
+    #[export]
+    const caml_marshal_header_size = 20;
+}
 
 #[export]
 fn caml_marshal_data_size(buf: &eq, ofs: &eq) -> &eq {

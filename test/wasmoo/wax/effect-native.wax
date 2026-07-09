@@ -34,12 +34,16 @@
     import "stdlib" let caml_main_wrapper: &?wrapper_func;
     import "effect" let effect_allowed: i32;
     #[if(wasi)]
-    // Never actually called since there is no JavaScript exception
-    fn caml_wrap_exception(&?extern) -> &eq {
-        0 as &i31;
+    {
+        // Never actually called since there is no JavaScript exception
+        fn caml_wrap_exception(&?extern) -> &eq {
+            0 as &i31;
+        }
     }
     #[else]
-    import "jslib" fn caml_wrap_exception(&?extern) -> &eq;
+    {
+        import "jslib" fn caml_wrap_exception(&?extern) -> &eq;
+    }
 
     type block = [mut &eq];
     type bytes = [mut i8];

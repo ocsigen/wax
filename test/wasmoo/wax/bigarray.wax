@@ -377,45 +377,47 @@ import "marshal" {
     const littleEndian = 1;
 }
 #[else]
-import "bindings" {
-    fn ta_create(i32, i32) -> &extern;
-    fn ta_normalize(&extern) -> &extern;
-    fn ta_kind(&extern) -> i32;
-    fn ta_length(&extern) -> i32;
-    #[import = "ta_fill"]
-    fn ta_fill_int(&extern, i32);
-    #[import = "ta_fill"]
-    fn ta_fill_float(&extern, f64);
-    fn ta_blit(&extern, &extern);
-    fn ta_subarray(&extern, i32, i32) -> &extern;
-    fn dv_make(&extern) -> &extern;
-    fn dv_get_f64(&?extern, i32, i32) -> f64;
-    fn dv_get_f32(&?extern, i32, i32) -> f32;
-    fn dv_get_i64(&?extern, i32, i32) -> i64;
-    fn dv_get_i32(&?extern, i32, i32) -> i32;
-    fn dv_get_i16(&?extern, i32, i32) -> i32;
-    fn dv_get_ui16(&?extern, i32, i32) -> i32;
-    fn dv_get_i8(&?extern, i32) -> i32;
-    fn dv_get_ui8(&?extern, i32) -> i32;
-    fn dv_set_f64(&?extern, i32, f64, i32);
-    fn dv_set_f32(&?extern, i32, f32, i32);
-    fn dv_set_i64(&?extern, i32, i64, i32);
-    fn dv_set_i32(&?extern, i32, i32, i32);
-    fn dv_set_i16(&?extern, i32, i32, i32);
-    fn dv_set_i8(&?extern, i32, i32);
-    #[import = "dv_get_i64"]
-    fn dv_get_i64_unaligned(&?extern, i32, i32) -> i64;
-    #[import = "dv_get_i32"]
-    fn dv_get_i32_unaligned(&?extern, i32, i32) -> i32;
-    #[import = "dv_get_ui16"]
-    fn dv_get_ui16_unaligned(&?extern, i32, i32) -> i32;
-    #[import = "dv_set_i64"]
-    fn dv_set_i64_unaligned(&?extern, i32, i64, i32);
-    #[import = "dv_set_i32"]
-    fn dv_set_i32_unaligned(&?extern, i32, i32, i32);
-    #[import = "dv_set_i16"]
-    fn dv_set_i16_unaligned(&?extern, i32, i32, i32);
-    const littleEndian: i32;
+{
+    import "bindings" {
+        fn ta_create(i32, i32) -> &extern;
+        fn ta_normalize(&extern) -> &extern;
+        fn ta_kind(&extern) -> i32;
+        fn ta_length(&extern) -> i32;
+        #[import = "ta_fill"]
+        fn ta_fill_int(&extern, i32);
+        #[import = "ta_fill"]
+        fn ta_fill_float(&extern, f64);
+        fn ta_blit(&extern, &extern);
+        fn ta_subarray(&extern, i32, i32) -> &extern;
+        fn dv_make(&extern) -> &extern;
+        fn dv_get_f64(&?extern, i32, i32) -> f64;
+        fn dv_get_f32(&?extern, i32, i32) -> f32;
+        fn dv_get_i64(&?extern, i32, i32) -> i64;
+        fn dv_get_i32(&?extern, i32, i32) -> i32;
+        fn dv_get_i16(&?extern, i32, i32) -> i32;
+        fn dv_get_ui16(&?extern, i32, i32) -> i32;
+        fn dv_get_i8(&?extern, i32) -> i32;
+        fn dv_get_ui8(&?extern, i32) -> i32;
+        fn dv_set_f64(&?extern, i32, f64, i32);
+        fn dv_set_f32(&?extern, i32, f32, i32);
+        fn dv_set_i64(&?extern, i32, i64, i32);
+        fn dv_set_i32(&?extern, i32, i32, i32);
+        fn dv_set_i16(&?extern, i32, i32, i32);
+        fn dv_set_i8(&?extern, i32, i32);
+        #[import = "dv_get_i64"]
+        fn dv_get_i64_unaligned(&?extern, i32, i32) -> i64;
+        #[import = "dv_get_i32"]
+        fn dv_get_i32_unaligned(&?extern, i32, i32) -> i32;
+        #[import = "dv_get_ui16"]
+        fn dv_get_ui16_unaligned(&?extern, i32, i32) -> i32;
+        #[import = "dv_set_i64"]
+        fn dv_set_i64_unaligned(&?extern, i32, i64, i32);
+        #[import = "dv_set_i32"]
+        fn dv_set_i32_unaligned(&?extern, i32, i32, i32);
+        #[import = "dv_set_i16"]
+        fn dv_set_i16_unaligned(&?extern, i32, i32, i32);
+        const littleEndian: i32;
+    }
 }
 
 type block = [mut &eq];

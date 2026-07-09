@@ -3,15 +3,21 @@ round-trip. Versions are integer tuples; conditions combine with all/any/not.
 
   $ wax cond.wax -o out.wax && cat out.wax
   #[if(ocaml_version >= (5, 1, 0))]
-  const caml_marshal_header_size: i32 = 16;
+  {
+      const caml_marshal_header_size: i32 = 16;
+  }
   #[else]
-  const caml_marshal_header_size: i32 = 20;
+  {
+      const caml_marshal_header_size: i32 = 20;
+  }
   
-  #[if(feature = "gc")]
-  fn gc_init() {}
+  #[if(feature = "gc")] { fn gc_init() {} }
   
   #[if(all(debug, not(target = "wasm32")))]
-  { const debug_enabled: i32 = 1; fn debug_log(msg: i32) {} }
+  {
+      const debug_enabled: i32 = 1;
+      fn debug_log(msg: i32) {}
+  }
 
 The output round-trips to itself.
 
@@ -26,14 +32,14 @@ An error confined to one branch is reported once, with the assumption under
 which it is reachable.
 
   $ wax --validate bad.wax -o checked_bad.wax
-  Error: This instruction has type float but is expected to have type i32.
-   ──➤  bad.wax:4:16
+  Error: Expecting braced fields.
+  
+   ──➤  bad.wax:2:1
+  1 │ #[if(debug)]
   2 │ const x: i32 = 1;
+    · ^^^^^
   3 │ #[else]
   4 │ const x: i32 = nan;
-    ·                ^^^
-  5 │ 
-  Hint: reachable when not debug
   [128]
 
 Conversion to WAT produces `(@if …)` module-field annotations.
@@ -81,17 +87,22 @@ conditionals).
   $ wax cond.wax -o out.wasm
   Error:
     Conditional annotations cannot be emitted to the WebAssembly binary format.
-   ──➤  cond.wax:1:1
-  1 │ #[if(ocaml_version >= (5, 1, 0))]
-    · ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  2 │ const caml_marshal_header_size: i32 = 16;
-    · ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  3 │ #[else]
-    · ^^^^^^^^
-  4 │ const caml_marshal_header_size: i32 = 20;
-    · ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  5 │ 
-  6 │ #[if(feature = "gc")]
+    ──➤  cond.wax:1:1
+   1 │ #[if(ocaml_version >= (5, 1, 0))]
+     · ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   2 │ {
+     · ^^
+   3 │     const caml_marshal_header_size: i32 = 16;
+     · ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     · ...
+   6 │ {
+     · ^^
+   7 │     const caml_marshal_header_size: i32 = 20;
+     · ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 │ }
+     · ^
+   9 │ 
+  10 │ #[if(feature = "gc")]
   Hint:
     Resolve the conditionals with -D/--define, or convert to a text format (wat or wax).
   [128]

@@ -553,13 +553,15 @@ let rec field_desc (f : location modulefield) =
   match f with
   | Func ({ body = label, instrs; _ } as r) ->
       Func { r with body = (label, process_body instrs) }
-  | Group ({ fields; _ } as r) -> Group { r with fields = map_fields fields }
   | Conditional ({ then_fields; else_fields; _ } as r) ->
       Conditional
         {
           r with
-          then_fields = map_fields then_fields;
-          else_fields = Option.map map_fields else_fields;
+          then_fields = { then_fields with desc = map_fields then_fields.desc };
+          else_fields =
+            Option.map
+              (fun b -> { b with desc = map_fields b.desc })
+              else_fields;
         }
   | ( Type _ | Module_annotation _ | Import _ | Import_group _ | Global _
     | Tag _ | Memory _ | Data _ | Table _ | Elem _ ) as f ->

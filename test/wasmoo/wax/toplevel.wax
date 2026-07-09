@@ -86,58 +86,62 @@
     // concatenated into a single string.
 
     #[if(ocaml_version >= (5, 2, 0))]
-    #[export]
-    fn caml_reify_bytecode(code: &eq, debug: &eq, digest: &eq) -> &eq {
-        if toplevel_compile is &i31 {
-            caml_failwith("Toplevel compile callback not initialized");
-            unreachable;
+    {
+        #[export]
+        fn caml_reify_bytecode(code: &eq, debug: &eq, digest: &eq) -> &eq {
+            if toplevel_compile is &i31 {
+                caml_failwith("Toplevel compile callback not initialized");
+                unreachable;
+            }
+            [block|
+                0 as &i31,
+                0 as &i31,
+                caml_callback_2(
+                    toplevel_compile,
+                    caml_string_of_uint8_array(caml_ba_to_typed_array(code)),
+                    debug,
+                ),
+            ];
         }
-        [block|
-            0 as &i31,
-            0 as &i31,
-            caml_callback_2(
-                toplevel_compile,
-                caml_string_of_uint8_array(caml_ba_to_typed_array(code)),
-                debug,
-            ),
-        ];
     }
     #[else]
-    #[export]
-    fn caml_reify_bytecode(code: &eq, debug: &eq, digest: &eq) -> &eq {
-        if toplevel_compile is &i31 {
-            caml_failwith("Toplevel compile callback not initialized");
-            unreachable;
-        }
-        // code is a block: [tag, bytes0, bytes1, ...].
-        // First pass: compute total length.
-        let arr = code as &block;
-        let i = 1;
-        let len: i32;
-        'done1: do {
-            'loop1: loop {
-                br_if 'done1 i >=u arr.length();
-                len += (arr[i] as &bytes).length();
-                i += 1;
-                br 'loop1;
+    {
+        #[export]
+        fn caml_reify_bytecode(code: &eq, debug: &eq, digest: &eq) -> &eq {
+            if toplevel_compile is &i31 {
+                caml_failwith("Toplevel compile callback not initialized");
+                unreachable;
             }
-        }
-        // Second pass: concatenate into a single $bytes.
-        let buf: &bytes = [0; len];
-        i = 1;
-        let pos = 0;
-        'done2: do {
-            'loop2: loop {
-                br_if 'done2 i >=u arr.length();
-                let chunk = arr[i] as &bytes;
-                let chunk_len = chunk.length();
-                buf.copy(pos, chunk, 0, chunk_len);
-                pos += chunk_len;
-                i += 1;
-                br 'loop2;
+            // code is a block: [tag, bytes0, bytes1, ...].
+            // First pass: compute total length.
+            let arr = code as &block;
+            let i = 1;
+            let len: i32;
+            'done1: do {
+                'loop1: loop {
+                    br_if 'done1 i >=u arr.length();
+                    len += (arr[i] as &bytes).length();
+                    i += 1;
+                    br 'loop1;
+                }
             }
+            // Second pass: concatenate into a single $bytes.
+            let buf: &bytes = [0; len];
+            i = 1;
+            let pos = 0;
+            'done2: do {
+                'loop2: loop {
+                    br_if 'done2 i >=u arr.length();
+                    let chunk = arr[i] as &bytes;
+                    let chunk_len = chunk.length();
+                    buf.copy(pos, chunk, 0, chunk_len);
+                    pos += chunk_len;
+                    i += 1;
+                    br 'loop2;
+                }
+            }
+            [block|0 as &i31, 0 as &i31, caml_callback_2(toplevel_compile, buf, debug)];
         }
-        [block|0 as &i31, 0 as &i31, caml_callback_2(toplevel_compile, buf, debug)];
     }
 
     #[export]
@@ -176,28 +180,30 @@
     }
 
     #[if(ocaml_version < (5, 3, 0))]
-    #[export]
-    fn caml_get_section_table(&eq) -> &eq {
-        let sections = get_sections();
-        let symb = sections[1];
-        let crcs = sections[2];
-        let prim = string_list_to_sep(sections[3]);
-        let dlpt = string_list_to_sep(sections[4]);
-        // Return assoc list: [("SYMB",symb); ("CRCS",crcs); ("PRIM",prim); ("DLPT",dlpt)]
-        // Cons = [0, head, tail], pair = [0, fst, snd], nil = 0
-        [block|
-            0 as &i31,
-            [block|0 as &i31, "SYMB", symb],
+    {
+        #[export]
+        fn caml_get_section_table(&eq) -> &eq {
+            let sections = get_sections();
+            let symb = sections[1];
+            let crcs = sections[2];
+            let prim = string_list_to_sep(sections[3]);
+            let dlpt = string_list_to_sep(sections[4]);
+            // Return assoc list: [("SYMB",symb); ("CRCS",crcs); ("PRIM",prim); ("DLPT",dlpt)]
+            // Cons = [0, head, tail], pair = [0, fst, snd], nil = 0
             [block|
                 0 as &i31,
-                [block|0 as &i31, "CRCS", crcs],
+                [block|0 as &i31, "SYMB", symb],
                 [block|
                     0 as &i31,
-                    [block|0 as &i31, "PRIM", prim],
-                    [block|0 as &i31, [block|0 as &i31, "DLPT", dlpt], 0 as &i31],
+                    [block|0 as &i31, "CRCS", crcs],
+                    [block|
+                        0 as &i31,
+                        [block|0 as &i31, "PRIM", prim],
+                        [block|0 as &i31, [block|0 as &i31, "DLPT", dlpt], 0 as &i31],
+                    ],
                 ],
-            ],
-        ];
+            ];
+        }
     }
 
     // Returns the bytecode_sections record registered by OCaml init code.

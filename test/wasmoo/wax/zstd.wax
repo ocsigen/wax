@@ -175,7 +175,9 @@
     }
 }
 #[else]
-#[export]
-fn caml_zstd_initialize(&eq) -> &eq {
-    0 as &i31;
+{
+    #[export]
+    fn caml_zstd_initialize(&eq) -> &eq {
+        0 as &i31;
+    }
 }

@@ -8,12 +8,15 @@ A boolean set to true selects the #[if] branch; the conditional disappears.
   const x: i32 = 1;
   
   #[if(ocaml_version >= (5, 1, 0))]
-  const size: i32 = 16;
+  {
+      const size: i32 = 16;
+  }
   #[else]
-  const size: i32 = 20;
+  {
+      const size: i32 = 20;
+  }
   
-  #[if(target = "wasi")]
-  const y: i32 = 3;
+  #[if(target = "wasi")] { const y: i32 = 3; }
 
 A boolean set to false selects the #[else] branch.
 
@@ -21,33 +24,43 @@ A boolean set to false selects the #[else] branch.
   const x: i32 = 2;
   
   #[if(ocaml_version >= (5, 1, 0))]
-  const size: i32 = 16;
+  {
+      const size: i32 = 16;
+  }
   #[else]
-  const size: i32 = 20;
+  {
+      const size: i32 = 20;
+  }
 
 A version compares against a version literal.
 
   $ wax -f wax -D ocaml_version=5.1.0 def.wax
   #[if(debug)]
-  const x: i32 = 1;
+  {
+      const x: i32 = 1;
+  }
   #[else]
-  const x: i32 = 2;
+  {
+      const x: i32 = 2;
+  }
   
   const size: i32 = 16;
   
-  #[if(all(debug, target = "wasi"))]
-  const y: i32 = 3;
+  #[if(all(debug, target = "wasi"))] { const y: i32 = 3; }
 
   $ wax -f wax -D ocaml_version=4.14.0 def.wax
   #[if(debug)]
-  const x: i32 = 1;
+  {
+      const x: i32 = 1;
+  }
   #[else]
-  const x: i32 = 2;
+  {
+      const x: i32 = 2;
+  }
   
   const size: i32 = 20;
   
-  #[if(all(debug, target = "wasi"))]
-  const y: i32 = 3;
+  #[if(all(debug, target = "wasi"))] { const y: i32 = 3; }
 
 Several variables can be set at once. Here every condition is determined.
 
@@ -65,12 +78,15 @@ all(debug, target = "wasi") reduces to target = "wasi".
   const x: i32 = 1;
   
   #[if(ocaml_version >= (5, 1, 0))]
-  const size: i32 = 16;
+  {
+      const size: i32 = 16;
+  }
   #[else]
-  const size: i32 = 20;
+  {
+      const size: i32 = 20;
+  }
   
-  #[if(target = "wasi")]
-  const y: i32 = 3;
+  #[if(target = "wasi")] { const y: i32 = 3; }
 
 With debug=false that whole conditional is removed.
 
@@ -78,9 +94,13 @@ With debug=false that whole conditional is removed.
   const x: i32 = 2;
   
   #[if(ocaml_version >= (5, 1, 0))]
-  const size: i32 = 16;
+  {
+      const size: i32 = 16;
+  }
   #[else]
-  const size: i32 = 20;
+  {
+      const size: i32 = 20;
+  }
 
 Instruction-level conditionals are specialized too.
 
@@ -139,8 +159,8 @@ Setting a variable to a value of the wrong kind is an error.
    ──➤  def.wax:1:6
   1 │ #[if(debug)]
     ·      ^^^^^
-  2 │ const x: i32 = 1;
-  3 │ #[else]
+  2 │ {
+  3 │     const x: i32 = 1;
   [128]
 
 An empty variable name is rejected.
@@ -165,8 +185,12 @@ With no -D, both branches and their comments are preserved.
 
   $ wax -f wax comments.wax
   #[if(debug)]
-  // comment in the then-branch
-  const x: i32 = 1;
+  {
+      // comment in the then-branch
+      const x: i32 = 1;
+  }
   #[else]
-  // comment in the else-branch
-  const x: i32 = 2;
+  {
+      // comment in the else-branch
+      const x: i32 = 2;
+  }

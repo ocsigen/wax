@@ -17,13 +17,17 @@
 
 import "stdlib" let caml_global_data: &block;
 #[if(wasi)]
-#[export]
-tag javascript_exception(&?extern);
+{
+    #[export]
+    tag javascript_exception(&?extern);
+}
 #[else]
-import "bindings"
-#[import = "jstag"]
-#[export]
-tag javascript_exception(&?extern);
+{
+    import "bindings"
+    #[import = "jstag"]
+    #[export]
+    tag javascript_exception(&?extern);
+}
 
 type block = [mut &eq];
 type bytes = [mut i8];

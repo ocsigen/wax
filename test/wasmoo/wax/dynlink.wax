@@ -64,14 +64,18 @@ const LINK_INFO_PRIM_COUNT = 3;
 // Standard OCaml dynlink primitives
 
 #[if(all(ocaml_version >= (5, 1, 0), not(oxcaml)))]
-#[export]
-fn caml_dynlink_open_lib(&eq) -> &eq {
-    0 as &i31;
+{
+    #[export]
+    fn caml_dynlink_open_lib(&eq) -> &eq {
+        0 as &i31;
+    }
 }
 #[else]
-#[export]
-fn caml_dynlink_open_lib(&eq, &eq) -> &eq {
-    0 as &i31;
+{
+    #[export]
+    fn caml_dynlink_open_lib(&eq, &eq) -> &eq {
+        0 as &i31;
+    }
 }
 
 #[export]
@@ -97,7 +101,9 @@ fn caml_dynlink_get_current_libs(&eq) -> &eq {
 }
 
 #[if(ocaml_version >= (5, 5, 0))]
-#[export]
-fn caml_dynlink_parse_ld_conf(&eq) -> &eq {
-    0 as &i31;
+{
+    #[export]
+    fn caml_dynlink_parse_ld_conf(&eq) -> &eq {
+        0 as &i31;
+    }
 }

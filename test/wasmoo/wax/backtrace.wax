@@ -27,10 +27,12 @@ import "fail" fn caml_invalid_argument(&eq);
     }
 }
 #[else]
-import "bindings" {
-    #[import = "backtrace_status"]
-    fn get_backtrace_status() -> &eq;
-    fn record_backtrace(&eq);
+{
+    import "bindings" {
+        #[import = "backtrace_status"]
+        fn get_backtrace_status() -> &eq;
+        fn record_backtrace(&eq);
+    }
 }
 
 type block = [mut &eq];

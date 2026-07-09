@@ -1,6 +1,10 @@
 #[if(debug)]
-// comment in the then-branch
-const x: i32 = 1;
+{
+    // comment in the then-branch
+    const x: i32 = 1;
+}
 #[else]
-// comment in the else-branch
-const x: i32 = 2;
+{
+    // comment in the else-branch
+    const x: i32 = 2;
+}

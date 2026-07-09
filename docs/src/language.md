@@ -1466,13 +1466,17 @@ sub-expression, so this same mechanism round-trips stack-style code.
 
 ## Conditional Compilation
 
-Top-level items can be guarded by conditions, using a Rust-like attribute syntax. `#[if(<condition>)]` keeps the following item only when `<condition>` holds; an optional `#[else]` provides an alternative:
+Top-level items can be guarded by conditions, using a Rust-like attribute syntax. `#[if(<condition>)] { ... }` keeps the braced items only when `<condition>` holds; an optional `#[else] { ... }` provides an alternative. The braces are required:
 
 ```wax
 #[if(ocaml_version >= (5, 1, 0))]
-const caml_marshal_header_size: i32 = 16;
+{
+    const caml_marshal_header_size: i32 = 16;
+}
 #[else]
-const caml_marshal_header_size: i32 = 20;
+{
+    const caml_marshal_header_size: i32 = 20;
+}
 ```
 
 A condition is one of:
@@ -1491,7 +1495,7 @@ A condition is one of:
   #[if(all(debug, not(target = "wasm32")))]
   ```
 
-To guard several items at once, follow the attribute with a block:
+A branch groups any number of items, so several can be guarded at once:
 
 ```wax
 #[if(debug)]

@@ -259,49 +259,33 @@ let attributed loc attributes d =
   match attributes with [] -> f | _ :: _ -> with_loc loc f.desc
 
 (* Module-field conditional annotations, the [#[if(...)]]/[#[else]] counterpart
-   of [raw_stmt]. [#[if(c)] field] and [#[else] field] recurse on a whole
-   [module_field] (so nested [#[if]] stays as-is, matching the former grammar),
-   producing markers; [lower_fields] then pairs a marker with the following
-   [#[else]] sibling into a [Conditional]. The [#[else]] binds to the nearest —
-   i.e. innermost — [#[if]] (see [lower_if]), preserving the former
-   [%prec]-based dangling-else behaviour. *)
+   of [raw_stmt]. Braces are mandatory: [#[if(c)] { fields }] and
+   [#[else] { fields }] carry a located field list, and [lower_fields] pairs a
+   marker with the following [#[else]] sibling into a [Conditional]. Nesting is
+   expressed by the braces (a nested [#[if]] lives inside a branch's field list),
+   so pairing is plain adjacency — no dangling-else search. *)
+type located_fields = (location module_, location) annotated
+
 type raw_field =
   | RF_plain of (location modulefield, location) annotated
-  | RF_if of (Lexing.position * Lexing.position) * Wax_wasm.Ast.cond * raw_field
-  | RF_else of (Lexing.position * Lexing.position) * raw_field
+  | RF_if of (Lexing.position * Lexing.position) * Wax_wasm.Ast.cond
+      * located_fields
+  | RF_else of (Lexing.position * Lexing.position) * located_fields
 
 let rec lower_fields = function
   | [] -> []
   | RF_plain f :: rest -> f :: lower_fields rest
-  | (RF_if _ as rif) :: RF_else (eloc, eb) :: rest ->
-      lower_if ~else_for:(eloc, eb) rif @ lower_fields rest
-  | (RF_if _ as rif) :: rest -> lower_if rif @ lower_fields rest
+  | RF_if (loc, cond, then_fields) :: RF_else (eloc, else_fields) :: rest ->
+      with_loc (fst loc, snd eloc)
+        (Conditional { cond; then_fields; else_fields = Some else_fields })
+      :: lower_fields rest
+  | RF_if (loc, cond, then_fields) :: rest ->
+      with_loc loc (Conditional { cond; then_fields; else_fields = None })
+      :: lower_fields rest
   | RF_else (loc, _) :: _ ->
       raise
         (Wax_wasm.Parsing.Syntax_error
            (loc, "An '#[else]' must directly follow an '#[if(...)]' field.\n"))
-
-(* Lower one [#[if]] marker, attaching [else_for] to the innermost [#[if]]
-   (nearest-if binding). When an else is present, every conditional in the chain
-   ends at the else's closing position, matching the span the former single
-   [#[if(...)] … #[else] …] production reported. *)
-and lower_if ?else_for = function
-  | RF_if (loc, cond, then_raw) ->
-      let end_pos =
-        match else_for with Some (eloc, _) -> snd eloc | None -> snd loc
-      in
-      let then_fields, else_fields =
-        match then_raw with
-        | RF_if _ ->
-            (* Not innermost: carry [else_for] down; this level has no else. *)
-            (lower_if ?else_for then_raw, None)
-        | _ ->
-            ( lower_fields [ then_raw ],
-              Option.map (fun (_, e) -> lower_fields [ e ]) else_for )
-      in
-      [ with_loc (fst loc, end_pos)
-          (Conditional { cond; then_fields; else_fields }) ]
-  | (RF_plain _ | RF_else _) as f -> lower_fields [ f ]
 
 let blocktype bt = Option.value ~default:{params = [||]; results = [||]} bt
 
@@ -1067,22 +1051,29 @@ elem:
         (Elem {name; reftype = rt; mode = EActive (tab, off); init = l;
                attributes}) }
 
-(* A module field returns a [raw_field]: [#[if]]/[#[else]] recurse on a whole
-   field, producing markers that [lower_fields] pairs into [Conditional]s (see
-   the header). Every other production is a plain field. *)
+(* A module field returns a [raw_field]. [#[if(c)] { … }]/[#[else] { … }] carry a
+   located field list (braces mandatory) and become markers that [lower_fields]
+   pairs into [Conditional]s (see the header); every other production is a plain
+   field. There is no standalone brace group: [{ … }] only appears as a
+   conditional branch body. *)
 module_field:
 | r = rectype { RF_plain {desc = Type r.desc; info = r.info} }
 | a = inner_attribute { RF_plain (with_loc $sloc (Module_annotation [a])) }
 | attributes = list(attribute) d = definition
   { RF_plain (attributed $sloc attributes d) }
-| attributes = list(attribute) "{" fields = semi_list(module_field) "}"
-  { RF_plain (with_loc $sloc (Group {attributes; fields = lower_fields fields})) }
 | IMPORT m = STRING d = import_item
   { RF_plain (with_loc $sloc (Import {module_ = m; decl = d})) }
 | IMPORT m = STRING "{" decls = semi_list(import_item) "}"
   { RF_plain (with_loc $sloc (Import_group {module_ = m; decls})) }
-| "#" "[" IF "(" c = condition ")" "]" t = module_field { RF_if ($sloc, c, t) }
-| "#" "[" ELSE "]" e = module_field { RF_else ($sloc, e) }
+| "#" "[" IF "(" c = condition ")" "]" b = braced_fields { RF_if ($sloc, c, b) }
+| "#" "[" ELSE "]" b = braced_fields { RF_else ($sloc, b) }
+
+(* A brace-delimited, lowered field list carrying a location spanning through the
+   [}] (like [braced_block]), so a comment trailing the last field stays within
+   the branch. *)
+braced_fields:
+| "{" fields = semi_list(module_field) rb = "}"
+  { ignore rb; with_loc ($startpos, $startpos(rb)) (lower_fields fields) }
 
 (* One entry of an import block: an [fn]/[const]/[let]/[tag]/[memory]/[table]
    declaration, optionally carrying a name-only [#[import = "name"]] (imported

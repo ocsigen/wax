@@ -25,10 +25,12 @@ import "bigarray" fn caml_ba_get_view(&eq) -> &extern;
     const littleEndian = 1;
 }
 #[else]
-import "bindings" {
-    fn dv_get_i64(&?extern, i32, i32) -> i64;
-    fn dv_set_i64(&?extern, i32, i64, i32);
-    const littleEndian: i32;
+{
+    import "bindings" {
+        fn dv_get_i64(&?extern, i32, i32) -> i64;
+        fn dv_set_i64(&?extern, i32, i64, i32);
+        const littleEndian: i32;
+    }
 }
 
 #[export]

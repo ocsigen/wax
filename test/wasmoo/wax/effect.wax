@@ -32,8 +32,10 @@ import "fail" {
     tag javascript_exception(&?extern);
 }
 #[if(wasi)]
-fn caml_wrap_exception(&?extern) -> &eq {
-    unreachable;
+{
+    fn caml_wrap_exception(&?extern) -> &eq {
+        unreachable;
+    }
 }
 #[else]
 {

@@ -4,9 +4,13 @@ references stay coherent.
 
   $ wax cond.wat -o out.wax && cat out.wax
   #[if(ocaml_version >= (5, 1, 0))]
-  const size = 16;
+  {
+      const size = 16;
+  }
   #[else]
-  const size = 20;
+  {
+      const size = 20;
+  }
   fn get() -> i32 {
       size;
   }
@@ -21,14 +25,18 @@ branches reuses one Wax name rather than being disambiguated with a `_2` suffix.
 
   $ wax export-name.wat -o export-name.wax && cat export-name.wax
   #[if(wasi)]
-  #[export]
-  fn init(x: &eq) -> &eq {
-      x;
+  {
+      #[export]
+      fn init(x: &eq) -> &eq {
+          x;
+      }
   }
   #[else]
-  #[export]
-  fn init(x: &eq) -> &eq {
-      x;
+  {
+      #[export]
+      fn init(x: &eq) -> &eq {
+          x;
+      }
   }
   $ wax --validate export-name.wat -o checked-export-name.wax
 
@@ -42,22 +50,28 @@ not produce an infeasible configuration, so the result type-checks.
   // import (the converter must visit @then before @else, matching the order
   // names were registered).
   #[if(wasi)]
-  import "a" {
-      fn x() -> i32;
-      fn g() -> i32;
+  {
+      import "a" {
+          fn x() -> i32;
+          fn g() -> i32;
+      }
   }
   #[else]
-  import "b" {
-      fn y() -> i32;
-      fn g() -> i32;
-      fn z() -> i32;
+  {
+      import "b" {
+          fn y() -> i32;
+          fn g() -> i32;
+          fn z() -> i32;
+      }
   }
   // A sibling conditional on the negated condition. $h is defined and used
   // only when (not $wasi); the explorer must not build the infeasible
   // $wasi & (not $wasi) configuration where $h would be used but undefined.
   #[if(not(wasi))]
-  fn h() -> i32 {
-      g();
+  {
+      fn h() -> i32 {
+          g();
+      }
   }
   fn f() -> i32 {
       g();
