@@ -675,6 +675,19 @@ The labels in a `br_table` are separated by spaces, and `else` gives the
 fallback for an out-of-range index. A branch also carries any values its target
 expects: a `do i32` target receives an `i32`, and so on.
 
+Four more branch instructions test a reference and branch on the result, passing
+the refined reference to the target. They appear mainly in Wax decompiled from
+WebAssembly; hand-written code usually reaches for [`match`](#match), a
+[null check](#null-check), or a [cast or test](#type-testing-and-casting)
+instead.
+
+```wax
+br_on_null 'l val;          // branch if val is null; else continue with val non-null
+br_on_non_null 'l val;      // branch (passing val) if val is non-null; else continue
+br_on_cast 'l &t val;       // branch (passing val as &t) if val is a &t; else continue
+br_on_cast_fail 'l &t val;  // branch if val is not a &t; else continue with val as &t
+```
+
 ### Branch Hints
 
 A conditional branch can be annotated `#[likely]` or `#[unlikely]` to tell the
