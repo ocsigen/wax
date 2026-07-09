@@ -57,5 +57,30 @@ export async function run(): Promise<void> {
     throw new Error("web: expected outline symbols: " + JSON.stringify(syms));
   }
 
+  // WAT support shares the same wasm module. Formatting is idempotent, a syntax
+  // error is rejected, a clean module has no diagnostics, and an invalid one
+  // reports at least one error. (The clean module exports its function so the
+  // unused-function lint does not fire.)
+  const wat = wax.formatWat("(module (func $f (result i32) (i32.const 1)))");
+  if (!wat.ok || wat.text === null) {
+    throw new Error("web: unexpected WAT format result: " + JSON.stringify(wat));
+  }
+  if (wax.formatWat(wat.text).text !== wat.text) {
+    throw new Error("web: WAT formatting is not idempotent: " + JSON.stringify(wat));
+  }
+  const badWat = wax.formatWat("(module (func");
+  if (badWat.ok || badWat.text !== null) {
+    throw new Error("web: WAT syntax error should have been rejected: " + JSON.stringify(badWat));
+  }
+  const cleanWat =
+    '(module (func $f (result i32) (i32.const 1)) (export "f" (func $f)))';
+  if (wax.checkWat(cleanWat).length !== 0) {
+    throw new Error("web: clean WAT module should have no diagnostics");
+  }
+  const watDiags = wax.checkWat("(module (func (result i32)))");
+  if (!watDiags.some((d) => d.severity === "error")) {
+    throw new Error("web: expected a WAT validation error: " + JSON.stringify(watDiags));
+  }
+
   console.log("WEB SMOKE TEST PASSED");
 }

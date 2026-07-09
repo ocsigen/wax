@@ -26,7 +26,7 @@
   "keywords": ["wax", "webassembly", "wasm", "wat"],
   "main": "./dist/extension.node.js",
   "browser": "./dist/extension.web.js",
-  "activationEvents": ["onLanguage:wax"],
+  "activationEvents": ["onLanguage:wax", "onLanguage:wat"],
   "capabilities": {
     "untrustedWorkspaces": { "supported": true },
     "virtualWorkspaces": true
@@ -50,6 +50,9 @@
     "configurationDefaults": {
       "[wax]": {
         "editor.defaultFormatter": "wax-wasm.wax"
+      },
+      "[wat]": {
+        "editor.defaultFormatter": "wax-wasm.wax"
       }
     },
     "languages": [
@@ -58,6 +61,12 @@
         "aliases": ["Wax", "wax"],
         "extensions": [".wax"],
         "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "wat",
+        "aliases": ["WebAssembly Text", "wat"],
+        "extensions": [".wat"],
+        "configuration": "./wat-language-configuration.json"
       }
     ],
     "grammars": [

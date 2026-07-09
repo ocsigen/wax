@@ -1,10 +1,40 @@
-// Shared activation: register a document formatter for Wax and publish
-// diagnostics (syntax / type / lint), both computed by the wasm-compiled
-// toolchain in-process. Format-on-save needs no extra code — VS Code drives any
-// registered formatter when `editor.formatOnSave` is on.
+// Shared activation: register a document formatter and publish diagnostics
+// (syntax / type / lint) for both the Wax and the Wasm-text (WAT) languages, and
+// a document outline for Wax. All are computed by the wasm-compiled toolchain
+// in-process. Format-on-save needs no extra code — VS Code drives any registered
+// formatter when `editor.formatOnSave` is on.
 
 import * as vscode from "vscode";
-import { loadWax, LoadOptions, Wax, WaxSymbol } from "./wax-runtime";
+import {
+  loadWax,
+  LoadOptions,
+  Wax,
+  WaxSymbol,
+  FormatResult,
+  WaxDiagnostic,
+} from "./wax-runtime";
+
+// One entry per language this extension serves. Both dispatch into the same
+// wasm module (see wax_format_js.ml); they differ only in which method they call
+// (Wax type-checks, WAT validates).
+interface LanguageSpec {
+  id: string;
+  format(wax: Wax, src: string): FormatResult;
+  check(wax: Wax, src: string): WaxDiagnostic[];
+}
+
+const LANGUAGES: LanguageSpec[] = [
+  {
+    id: "wax",
+    format: (wax, src) => wax.format(src),
+    check: (wax, src) => wax.check(src),
+  },
+  {
+    id: "wat",
+    format: (wax, src) => wax.formatWat(src),
+    check: (wax, src) => wax.checkWat(src),
+  },
+];
 
 export function activateWith(
   context: vscode.ExtensionContext,
@@ -14,7 +44,7 @@ export function activateWith(
   context.subscriptions.push(log);
   log.appendLine("Wax extension activated.");
 
-  registerFormatter(context, opts, log);
+  for (const lang of LANGUAGES) registerFormatter(context, opts, log, lang);
   registerDiagnostics(context, opts);
   registerOutline(context, opts);
 
@@ -28,6 +58,7 @@ function registerFormatter(
   context: vscode.ExtensionContext,
   opts: LoadOptions,
   log: vscode.OutputChannel,
+  lang: LanguageSpec,
 ): void {
   let warnedLoadFailure = false;
 
@@ -53,7 +84,7 @@ function registerFormatter(
       if (token.isCancellationRequested) return [];
 
       const text = document.getText();
-      const result = wax.format(text);
+      const result = lang.format(wax, text);
       if (!result.ok || result.text === null) {
         // Syntax error or similar: leave the document untouched rather than
         // overwrite it (important on format-on-save). Log why.
@@ -73,7 +104,7 @@ function registerFormatter(
   };
 
   context.subscriptions.push(
-    vscode.languages.registerDocumentFormattingEditProvider("wax", provider),
+    vscode.languages.registerDocumentFormattingEditProvider(lang.id, provider),
   );
 }
 
@@ -140,6 +171,7 @@ function registerOutline(
     },
   };
 
+  // Outline is Wax-only for now (the wasm module exposes no WAT symbol walk).
   context.subscriptions.push(
     vscode.languages.registerDocumentSymbolProvider("wax", provider),
   );
@@ -152,11 +184,16 @@ function registerDiagnostics(
   const collection = vscode.languages.createDiagnosticCollection("wax");
   context.subscriptions.push(collection);
 
+  const specById = new Map(LANGUAGES.map((l) => [l.id, l]));
+  const supported = (document: vscode.TextDocument): LanguageSpec | undefined =>
+    specById.get(document.languageId);
+
   // Debounce per document so we re-check on a pause in typing, not every keystroke.
   const timers = new Map<string, ReturnType<typeof setTimeout>>();
 
   async function refresh(document: vscode.TextDocument): Promise<void> {
-    if (document.languageId !== "wax") return;
+    const lang = supported(document);
+    if (!lang) return;
     let wax: Wax;
     try {
       wax = await loadWax(context, opts);
@@ -164,7 +201,7 @@ function registerDiagnostics(
       // The formatter path surfaces load failures; here just skip diagnostics.
       return;
     }
-    const items = wax.check(document.getText()).map((d) => {
+    const items = lang.check(wax, document.getText()).map((d) => {
       const range = new vscode.Range(
         d.startLine,
         d.startChar,
@@ -198,7 +235,7 @@ function registerDiagnostics(
   }
 
   function schedule(document: vscode.TextDocument): void {
-    if (document.languageId !== "wax") return;
+    if (!supported(document)) return;
     const key = document.uri.toString();
     const existing = timers.get(key);
     if (existing) clearTimeout(existing);

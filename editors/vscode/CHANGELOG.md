@@ -8,6 +8,9 @@
   is left unchanged.
 - Diagnostics: syntax errors, type errors, and lints from the toolchain are
   reported inline as you type (and in the Problems panel).
+- WebAssembly text (`.wat`): the same in-process toolchain now formats and
+  validates `.wat` files, with comment and bracket handling. (Syntax
+  highlighting for `.wat` is left to another extension.)
 - The extension is declared safe in untrusted and virtual workspaces (the
   formatter only reads the buffer), so highlighting and formatting keep working
   without trusting the workspace. Load failures go to a "Wax" output channel.

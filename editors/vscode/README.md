@@ -2,7 +2,8 @@
 
 Syntax highlighting, formatting, bracket matching, and snippets for
 [Wax](https://github.com/ocsigen/wax) (a Rust-like syntax for
-WebAssembly) in `.wax` files.
+WebAssembly) in `.wax` files, plus formatting and diagnostics for
+WebAssembly text (`.wat`) files.
 
 ## Features
 
@@ -12,6 +13,10 @@ WebAssembly) in `.wax` files.
   (`editor.formatOnSave`). Files with syntax errors are left untouched.
 - **Diagnostics** as you type: syntax errors, type errors, and lints from the
   same toolchain are shown inline (squiggles) and in the Problems panel.
+- **WebAssembly text (`.wat`)**: the same in-process toolchain also formats and
+  validates `.wat` files (formatting, diagnostics, comment/bracket handling).
+  Syntax highlighting for `.wat` comes from another extension if you have one
+  installed.
 - **Syntax highlighting** via a TextMate grammar covering the full language:
   keywords and control flow (`fn`, `let`, `do`, `loop`, `match`, `dispatch`,
   `try`/`catch`, the `br*` branch family, stack-switching, …), primitive and

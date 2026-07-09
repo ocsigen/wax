@@ -1,12 +1,18 @@
 (* The Wax toolchain's formatter and checker exported to JavaScript, for the VS
    Code extension. It runs in-process under wasm_of_ocaml in both Node (the
    desktop extension host) and the browser (the web extension), and installs
-   [globalThis.wax] with two methods:
+   [globalThis.wax] with methods for both the Wax and the Wasm-text languages:
 
-   - [format src] -> { ok; text; error }: reprint the module with its comments
-     preserved (mirrors [wax_to_wax] in bin/main.ml), or report why it could not.
-   - [check src] -> array of { severity; message; startLine; startChar; endLine;
-     endChar }: parse and type-check, returning diagnostics for the editor.
+   - [format src] / [formatWat src] -> { ok; text; error }: reprint the module
+     with its comments preserved (mirrors [wax_to_wax] / [wat_to_wat] in
+     bin/main.ml), or report why it could not.
+   - [check src] / [checkWat src] -> array of { severity; message; startLine;
+     startChar; endLine; endChar; hint; related }: parse and check (type-check
+     for Wax, validate for Wasm text), returning diagnostics for the editor.
+   - [symbols src] -> the Wax module's top-level definitions, for the outline.
+
+   Shipping both languages in one wasm module (rather than two) keeps a single
+   build and load path; the WAT lexer/parser/validator it adds cost ~0.5 MB.
 
    Parsing goes through [parse_diagnostics], which yields the AST or a structured
    error without printing or exiting (and without the fast parser), so a syntax
@@ -30,6 +36,18 @@ module Wax_parser =
     (Wax_lang.Parser_messages)
     (Wax_lang.Lexer)
 
+(* The Wasm-text parser, instantiated the same way (no fast parser). Its lexer,
+   parser and {!Wax_wasm.Validation} are what make this module cover WAT too. *)
+module Wat_parser =
+  Wax_wasm.Parsing.Make
+    (struct
+      type t = Wax_wasm.Ast.location Wax_wasm.Ast.Text.module_
+    end)
+    (Wax_wasm.Tokens)
+    (Wax_wasm.Parser)
+    (Wax_wasm.Parser_messages)
+    (Wax_wasm.Lexer)
+
 (* A formatter that discards everything, for the dry pass that records which
    source locations the printer looks up (as in bin/main.ml). *)
 let null_formatter () = Format.make_formatter (fun _ _ _ -> ()) (fun () -> ())
@@ -41,6 +59,14 @@ let wax_trivia ctx ast =
   let used = Hashtbl.create 256 in
   Wax_utils.Printer.run (null_formatter ()) (fun p ->
       Wax_lang.Output.module_ p ~trivia:(Hashtbl.create 0) ~collect:used ast);
+  Wax_utils.Trivia.associate ~only:used ctx
+
+(* As [wax_trivia] but for the Wasm-text printer (mirrors [wat_trivia] in
+   bin/main.ml). *)
+let wat_trivia ctx ast =
+  let used = Hashtbl.create 256 in
+  Wax_utils.Printer.run (null_formatter ()) (fun p ->
+      Wax_wasm.Output.module_ p ~trivia:(Hashtbl.create 0) ~collect:used ast);
   Wax_utils.Trivia.associate ~only:used ctx
 
 let format_string src =
@@ -55,6 +81,21 @@ let format_string src =
             Wax_lang.Output.module_ p ~trivia ~tail m)
       in
       Format.fprintf fmt "%a@." print_wax ast;
+      Ok (Buffer.contents buf)
+
+let format_wat_string src =
+  match Wat_parser.parse_diagnostics ~filename:"<buffer>" src with
+  | Error { message; _ } -> Error (String.trim message)
+  | Ok (ast, ctx) ->
+      let trivia, tail = wat_trivia ctx ast in
+      let buf = Buffer.create (String.length src) in
+      let fmt = Format.formatter_of_buffer buf in
+      let print_wat f m =
+        Wax_utils.Printer.run f (fun p ->
+            Wax_wasm.Output.module_ ~color:Wax_utils.Colors.Never p ~trivia
+              ~tail m)
+      in
+      Format.fprintf fmt "%a@." print_wat ast;
       Ok (Buffer.contents buf)
 
 type diag = {
@@ -73,36 +114,51 @@ let render_labels labels =
     (fun (l : Wax_utils.Diagnostic.label) -> (render l.message, l.location))
     labels
 
+(* The single syntax error the parser returns, as a diagnostic (with its related
+   labels but no hint). *)
+let syntax_error_diag (e : Wax_wasm.Parsing.syntax_error) =
+  {
+    severity = Wax_utils.Diagnostic.Error;
+    location = e.location;
+    message = e.message;
+    hint = None;
+    related = render_labels e.related;
+  }
+
+(* The errors and warnings a checker collected (without printing), as diagnostics
+   carrying their hints and related labels. *)
+let collected_diags d =
+  List.map
+    (fun e ->
+      {
+        severity = Wax_utils.Diagnostic.entry_severity e;
+        location = Wax_utils.Diagnostic.entry_location e;
+        message = render (Wax_utils.Diagnostic.entry_message e);
+        hint = Option.map render (Wax_utils.Diagnostic.entry_hint e);
+        related = render_labels (Wax_utils.Diagnostic.entry_related e);
+      })
+    (Wax_utils.Diagnostic.collected d)
+
 (* Diagnostics: a syntax error (one, from the parser) or, if parsing succeeds,
-   the type-checker's errors and warnings collected without printing. Both carry
-   any related labels (e.g. "the matching ( is here"); type-checker entries also
-   carry a hint. *)
+   the checker's errors and warnings collected without printing. For Wax that
+   checker is the type-checker; for Wasm text it is the validator. *)
 let check_string src =
   match Wax_parser.parse_diagnostics ~filename:"<buffer>" src with
-  | Error e ->
-      [
-        {
-          severity = Wax_utils.Diagnostic.Error;
-          location = e.location;
-          message = e.message;
-          hint = None;
-          related = render_labels e.related;
-        };
-      ]
+  | Error e -> [ syntax_error_diag e ]
   | Ok (ast, _ctx) ->
       let d = Wax_utils.Diagnostic.collector ~source:src () in
       (try Wax_lang.Typing.check ~warn_unused:true d ast
        with Wax_utils.Diagnostic.Aborted -> ());
-      List.map
-        (fun e ->
-          {
-            severity = Wax_utils.Diagnostic.entry_severity e;
-            location = Wax_utils.Diagnostic.entry_location e;
-            message = render (Wax_utils.Diagnostic.entry_message e);
-            hint = Option.map render (Wax_utils.Diagnostic.entry_hint e);
-            related = render_labels (Wax_utils.Diagnostic.entry_related e);
-          })
-        (Wax_utils.Diagnostic.collected d)
+      collected_diags d
+
+let check_wat_string src =
+  match Wat_parser.parse_diagnostics ~filename:"<buffer>" src with
+  | Error e -> [ syntax_error_diag e ]
+  | Ok (ast, _ctx) ->
+      let d = Wax_utils.Diagnostic.collector ~source:src () in
+      (try Wax_wasm.Validation.f ~warn_unused:true d ast
+       with Wax_utils.Diagnostic.Aborted -> ());
+      collected_diags d
 
 (* VS Code positions are zero-based for both line and character; Lexing lines are
    one-based and [pos_cnum - pos_bol] is the zero-based column. *)
@@ -157,17 +213,18 @@ let result ~ok ~text ~error =
 
 (* Never let a failure escape as an uncaught exception: [format] reports
    [ok:false] so the provider leaves the buffer untouched, and [check] returns no
-   diagnostics rather than crashing the extension host. *)
-let format_result src =
+   diagnostics rather than crashing the extension host. [format_fn]/[check_fn]
+   select the language (Wax or Wasm text). *)
+let format_result format_fn src =
   try
-    match format_string (Js.to_string src) with
+    match format_fn (Js.to_string src) with
     | Ok text -> result ~ok:true ~text:(Some text) ~error:None
     | Error message -> result ~ok:false ~text:None ~error:(Some message)
   with exn ->
     result ~ok:false ~text:None ~error:(Some (Printexc.to_string exn))
 
-let check_result src =
-  let diagnostics = try check_string (Js.to_string src) with _ -> [] in
+let check_result check_fn src =
+  let diagnostics = try check_fn (Js.to_string src) with _ -> [] in
   Js.array (Array.of_list (List.map js_diagnostic diagnostics))
 
 (* Document outline: the module's top-level definitions (functions, globals,
@@ -276,7 +333,9 @@ let symbols_result src =
 let () =
   Js.export "wax"
     object%js
-      method format src = format_result src
-      method check src = check_result src
+      method format src = format_result format_string src
+      method check src = check_result check_string src
       method symbols src = symbols_result src
+      method formatWat src = format_result format_wat_string src
+      method checkWat src = check_result check_wat_string src
     end
