@@ -330,15 +330,23 @@ function registerConvert(
   // temporarily invalid (mid-edit), we keep showing this rather than blanking
   // the preview to an error, so it does not flicker on every keystroke.
   const lastGood = new Map<string, string>();
+  // Scheduling: convert immediately when idle (leading edge), and if the source
+  // changes while a conversion is running, reconvert once when it finishes
+  // (coalesced trailing edge) — so conversions never pile up nor lag behind a
+  // fixed interval. [converting] holds previews with a conversion in flight;
+  // [dirty] those whose source changed during it.
+  const converting = new Set<string>();
+  const dirty = new Set<string>();
 
   const provider: vscode.TextDocumentContentProvider = {
     onDidChange: changed.event,
     async provideTextDocumentContent(uri, token): Promise<string> {
+      const key = uri.toString();
       const target = previewTarget(uri);
       // Cannot produce fresh output: keep the last good conversion, prefixed
       // with a stale marker; fall back to the reason only if there is none yet.
       const degraded = (reason: string, detail?: string): string => {
-        const prev = lastGood.get(uri.toString());
+        const prev = lastGood.get(key);
         return prev !== undefined
           ? asComment(
               target,
@@ -349,31 +357,42 @@ function registerConvert(
           : asComment(target, detail ?? reason);
       };
 
-      let source: vscode.TextDocument;
       try {
-        source = await vscode.workspace.openTextDocument(
-          vscode.Uri.parse(uri.query),
-        );
-      } catch {
-        return degraded("The source document is no longer open.");
+        let source: vscode.TextDocument;
+        try {
+          source = await vscode.workspace.openTextDocument(
+            vscode.Uri.parse(uri.query),
+          );
+        } catch {
+          return degraded("The source document is no longer open.");
+        }
+        if (token.isCancellationRequested) return "";
+        let wax: Wax;
+        try {
+          wax = await loadWax(context, opts);
+        } catch {
+          return degraded("Failed to load the Wax runtime.");
+        }
+        const text = source.getText();
+        const result = target === "wat" ? wax.toWat(text) : wax.toWax(text);
+        if (!result.ok || result.text === null) {
+          return degraded(
+            "The source has errors.",
+            "Conversion failed:\n" + (result.error ?? ""),
+          );
+        }
+        lastGood.set(key, result.text);
+        return result.text;
+      } finally {
+        // This conversion finished. If the source changed while it ran, run one
+        // more with the latest text; otherwise the preview is now idle.
+        if (dirty.has(key)) {
+          dirty.delete(key);
+          queueMicrotask(() => changed.fire(uri));
+        } else {
+          converting.delete(key);
+        }
       }
-      if (token.isCancellationRequested) return "";
-      let wax: Wax;
-      try {
-        wax = await loadWax(context, opts);
-      } catch {
-        return degraded("Failed to load the Wax runtime.");
-      }
-      const text = source.getText();
-      const result = target === "wat" ? wax.toWat(text) : wax.toWax(text);
-      if (!result.ok || result.text === null) {
-        return degraded(
-          "The source has errors.",
-          "Conversion failed:\n" + (result.error ?? ""),
-        );
-      }
-      lastGood.set(uri.toString(), result.text);
-      return result.text;
     },
   };
 
@@ -387,6 +406,7 @@ function registerConvert(
       return;
     }
     const uri = previewUri(editor.document.uri, target);
+    converting.add(uri.toString()); // the open/refresh below runs the first conversion
     changed.fire(uri); // refresh if a stale preview is already open
     let doc = await vscode.workspace.openTextDocument(uri);
     if (doc.languageId !== target)
@@ -398,10 +418,19 @@ function registerConvert(
     });
   }
 
-  // Re-render an open preview when its source changes.
+  // On a source change: convert now if the preview is idle, else mark it dirty
+  // so the running conversion reconverts once it finishes.
   function refreshFor(document: vscode.TextDocument): void {
     const target = PREVIEW_TARGET[document.languageId];
-    if (target) changed.fire(previewUri(document.uri, target));
+    if (!target) return;
+    const uri = previewUri(document.uri, target);
+    const key = uri.toString();
+    if (converting.has(key)) {
+      dirty.add(key);
+    } else {
+      converting.add(key);
+      changed.fire(uri);
+    }
   }
 
   context.subscriptions.push(
@@ -412,7 +441,11 @@ function registerConvert(
     ),
     vscode.workspace.onDidChangeTextDocument((e) => refreshFor(e.document)),
     vscode.workspace.onDidCloseTextDocument((doc) => {
-      if (doc.uri.scheme === PREVIEW_SCHEME) lastGood.delete(doc.uri.toString());
+      if (doc.uri.scheme !== PREVIEW_SCHEME) return;
+      const key = doc.uri.toString();
+      converting.delete(key);
+      dirty.delete(key);
+      lastGood.delete(key);
     }),
     vscode.commands.registerCommand("wax.showWat", () => show("wat")),
     vscode.commands.registerCommand("wax.showWax", () => show("wax")),
