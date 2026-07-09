@@ -21,8 +21,18 @@ export interface FormatResult {
   error: string | null;
 }
 
+export interface WaxDiagnostic {
+  severity: "error" | "warning";
+  message: string;
+  startLine: number;
+  startChar: number;
+  endLine: number;
+  endChar: number;
+}
+
 export interface Wax {
   format(src: string): FormatResult;
+  check(src: string): WaxDiagnostic[];
 }
 
 export interface LoadOptions {

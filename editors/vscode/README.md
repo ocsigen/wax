@@ -10,6 +10,8 @@ WebAssembly) in `.wax` files.
   in-process, so it works the same in desktop and web VS Code with no separate
   install. Run "Format Document", or turn on "Format on Save"
   (`editor.formatOnSave`). Files with syntax errors are left untouched.
+- **Diagnostics** as you type: syntax errors, type errors, and lints from the
+  same toolchain are shown inline (squiggles) and in the Problems panel.
 - **Syntax highlighting** via a TextMate grammar covering the full language:
   keywords and control flow (`fn`, `let`, `do`, `loop`, `match`, `dispatch`,
   `try`/`catch`, the `br*` branch family, stack-switching, …), primitive and

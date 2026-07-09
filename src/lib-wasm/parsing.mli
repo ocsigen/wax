@@ -4,6 +4,15 @@ exception Syntax_error of (Lexing.position * Lexing.position) * string
 (** Exception raised when a syntax error occurs, with location range and
     message. *)
 
+type syntax_error = {
+  location : Wax_utils.Ast.location;
+  message : string;
+  related : Wax_utils.Diagnostic.label list;
+}
+(** A syntax error returned as data by {!Make_parser.parse_diagnostics}: the
+    location range, the human-readable message, and any related labels (e.g. the
+    matching opening delimiter). *)
+
 (** Functor to create a parser from a Menhir incremental API. *)
 module Make_parser (Output : sig
   type t
@@ -60,4 +69,15 @@ end) : sig
   (** Parse from a string. On a syntax error the diagnostic is printed and
       {!Syntax_error} is raised; the caller decides how to terminate (the CLI
       exits 128). *)
+
+  val parse_diagnostics :
+    filename:string ->
+    string ->
+    (Output.t * Wax_utils.Trivia.context, syntax_error) result
+  (** Parse from a string, returning [Ok (ast, context)] or [Error error]
+      without printing or exiting, and without the fast parser (the incremental
+      parser produces both the AST and the error in a single pass). For
+      in-process use — e.g. an editor that wants the syntax error as data to
+      report as a diagnostic — where the print-and-exit behaviour of
+      {!parse_from_string} is unwanted. *)
 end

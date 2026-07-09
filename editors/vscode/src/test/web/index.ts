@@ -36,5 +36,14 @@ export async function run(): Promise<void> {
     throw new Error("web: syntax error should have been rejected: " + JSON.stringify(bad));
   }
 
+  // check(): a valid module has no diagnostics; a broken one reports at least one.
+  if (wax.check("fn f() -> i32 { 1; }").length !== 0) {
+    throw new Error("web: valid module should have no diagnostics");
+  }
+  const diags = wax.check("fn bad( {");
+  if (diags.length === 0 || diags[0].severity !== "error") {
+    throw new Error("web: expected an error diagnostic: " + JSON.stringify(diags));
+  }
+
   console.log("WEB SMOKE TEST PASSED");
 }

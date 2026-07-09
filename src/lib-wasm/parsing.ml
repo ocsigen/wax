@@ -1,5 +1,11 @@
 exception Syntax_error of (Lexing.position * Lexing.position) * string
 
+type syntax_error = {
+  location : Wax_utils.Ast.location;
+  message : string;
+  related : Wax_utils.Diagnostic.label list;
+}
+
 module Make_parser (Output : sig
   type t
 end) (Tokens : sig
@@ -112,7 +118,11 @@ struct
           | None -> "???")
       | _ -> assert false
 
-    let fail ~color text buffer checkpoint =
+    (* Compute the structured diagnostic (location, message, related labels) for
+       a menhir syntax error, without printing anything. Both the printing
+       handler [fail] (for the CLI) and the non-printing [fail_detailed] (for
+       in-process/editor use via [parse_diagnostics]) build on this. *)
+    let build_syntax_error text buffer checkpoint =
       let env =
         match checkpoint with
         | P.MenhirInterpreter.HandlingError env -> env
@@ -191,7 +201,25 @@ struct
         | _ -> main_message
       in
       let message = String.concat "\n" main_message in
-      report_syntax_error ~related:related_labels ~color text location message
+      (location, message, related_labels)
+
+    (* Internal marker raised by [fail_detailed] to carry a structured error out
+       of [loop_handle] to [parse_diagnostics]; never escapes this module. *)
+    exception Detailed_error of syntax_error
+
+    let fail ~color text buffer checkpoint =
+      let location, message, related =
+        build_syntax_error text buffer checkpoint
+      in
+      report_syntax_error ~related ~color text location message
+
+    let fail_detailed text buffer checkpoint =
+      let (loc_start, loc_end), message, related =
+        build_syntax_error text buffer checkpoint
+      in
+      raise
+        (Detailed_error
+           { location = { Wax_utils.Ast.loc_start; loc_end }; message; related })
 
     let parse_from_string ?color ~filename text =
       let lexbuf = initialize_lexing filename text in
@@ -220,6 +248,43 @@ struct
           report_syntax_error text ~color
             (Sedlexing.lexing_bytes_positions lexbuf)
             "Input file contains malformed UTF-8 byte sequences\n"
+
+    (* Parse, returning either the AST or a structured syntax error, without
+       printing and without the fast parser: on the happy path the incremental
+       parser produces the AST directly, and on error it yields the location and
+       message natively (one pass). For in-process/editor use, where the caller
+       wants the error as data rather than a stderr diagnostic and an exit. *)
+    let parse_diagnostics ~filename text =
+      let lexbuf = initialize_lexing filename text in
+      try
+        let supplier =
+          lexer_lexbuf_to_supplier (Lexer.token Context.context) lexbuf
+        in
+        let buffer, supplier = E.wrap_supplier supplier in
+        let checkpoint =
+          P.Incremental.parse (snd (Sedlexing.lexing_bytes_positions lexbuf))
+        in
+        Ok
+          (P.MenhirInterpreter.loop_handle succeed
+             (fail_detailed text buffer)
+             supplier checkpoint)
+      with
+      | Detailed_error e -> Error e
+      | Syntax_error ((loc_start, loc_end), msg) ->
+          Error
+            {
+              location = { Wax_utils.Ast.loc_start; loc_end };
+              message = msg;
+              related = [];
+            }
+      | Sedlexing.InvalidCodepoint _ | Sedlexing.MalFormed ->
+          let loc_start, loc_end = Sedlexing.lexing_bytes_positions lexbuf in
+          Error
+            {
+              location = { Wax_utils.Ast.loc_start; loc_end };
+              message = "Input file contains malformed UTF-8 byte sequences\n";
+              related = [];
+            }
   end
 
   let parse_from_string ?color ~filename text =
@@ -235,4 +300,17 @@ struct
 
   let parse ?color ~filename () =
     parse_from_string ?color ~filename (read filename)
+
+  let parse_diagnostics ~filename text =
+    Wax_utils.Debug.timed "parse" @@ fun () ->
+    let ctx = Wax_utils.Trivia.make () in
+    let module Context = struct
+      type t = Wax_utils.Trivia.context
+
+      let context = ctx
+    end in
+    let module I = Inner (Context) in
+    match I.parse_diagnostics ~filename text with
+    | Ok ast -> Ok (ast, ctx)
+    | Error e -> Error e
 end

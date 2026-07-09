@@ -1,6 +1,7 @@
-// Shared activation: register a document formatter for Wax that runs the
-// wasm-compiled toolchain in-process. Format-on-save needs no extra code — VS
-// Code drives any registered formatter when `editor.formatOnSave` is on.
+// Shared activation: register a document formatter for Wax and publish
+// diagnostics (syntax / type / lint), both computed by the wasm-compiled
+// toolchain in-process. Format-on-save needs no extra code — VS Code drives any
+// registered formatter when `editor.formatOnSave` is on.
 
 import * as vscode from "vscode";
 import { loadWax, LoadOptions, Wax } from "./wax-runtime";
@@ -13,6 +14,15 @@ export function activateWith(
   context.subscriptions.push(log);
   log.appendLine("Wax extension activated.");
 
+  registerFormatter(context, opts, log);
+  registerDiagnostics(context, opts);
+}
+
+function registerFormatter(
+  context: vscode.ExtensionContext,
+  opts: LoadOptions,
+  log: vscode.OutputChannel,
+): void {
   let warnedLoadFailure = false;
 
   const provider: vscode.DocumentFormattingEditProvider = {
@@ -23,7 +33,8 @@ export function activateWith(
       } catch (err) {
         // A failure to load the runtime must not clobber the buffer; report it
         // loudly (once) so it is not a silent no-op.
-        const message = err instanceof Error ? err.stack || err.message : String(err);
+        const message =
+          err instanceof Error ? err.stack || err.message : String(err);
         log.appendLine("Failed to load the formatter runtime:\n" + message);
         if (!warnedLoadFailure) {
           warnedLoadFailure = true;
@@ -40,7 +51,9 @@ export function activateWith(
       if (!result.ok || result.text === null) {
         // Syntax error or similar: leave the document untouched rather than
         // overwrite it (important on format-on-save). Log why.
-        log.appendLine("Not formatting (input rejected): " + (result.error ?? "unknown"));
+        log.appendLine(
+          "Not formatting (input rejected): " + (result.error ?? "unknown"),
+        );
         return [];
       }
       if (result.text === text) return []; // already formatted
@@ -56,4 +69,71 @@ export function activateWith(
   context.subscriptions.push(
     vscode.languages.registerDocumentFormattingEditProvider("wax", provider),
   );
+}
+
+function registerDiagnostics(
+  context: vscode.ExtensionContext,
+  opts: LoadOptions,
+): void {
+  const collection = vscode.languages.createDiagnosticCollection("wax");
+  context.subscriptions.push(collection);
+
+  // Debounce per document so we re-check on a pause in typing, not every keystroke.
+  const timers = new Map<string, ReturnType<typeof setTimeout>>();
+
+  async function refresh(document: vscode.TextDocument): Promise<void> {
+    if (document.languageId !== "wax") return;
+    let wax: Wax;
+    try {
+      wax = await loadWax(context, opts);
+    } catch {
+      // The formatter path surfaces load failures; here just skip diagnostics.
+      return;
+    }
+    const items = wax.check(document.getText()).map((d) => {
+      const range = new vscode.Range(
+        d.startLine,
+        d.startChar,
+        d.endLine,
+        d.endChar,
+      );
+      const severity =
+        d.severity === "error"
+          ? vscode.DiagnosticSeverity.Error
+          : vscode.DiagnosticSeverity.Warning;
+      const diagnostic = new vscode.Diagnostic(range, d.message, severity);
+      diagnostic.source = "wax";
+      return diagnostic;
+    });
+    collection.set(document.uri, items);
+  }
+
+  function schedule(document: vscode.TextDocument): void {
+    if (document.languageId !== "wax") return;
+    const key = document.uri.toString();
+    const existing = timers.get(key);
+    if (existing) clearTimeout(existing);
+    timers.set(
+      key,
+      setTimeout(() => {
+        timers.delete(key);
+        void refresh(document);
+      }, 300),
+    );
+  }
+
+  context.subscriptions.push(
+    vscode.workspace.onDidOpenTextDocument(schedule),
+    vscode.workspace.onDidChangeTextDocument((e) => schedule(e.document)),
+    vscode.workspace.onDidCloseTextDocument((document) => {
+      const key = document.uri.toString();
+      const existing = timers.get(key);
+      if (existing) clearTimeout(existing);
+      timers.delete(key);
+      collection.delete(document.uri);
+    }),
+  );
+
+  // Check documents already open at activation.
+  for (const document of vscode.workspace.textDocuments) schedule(document);
 }
