@@ -8,7 +8,7 @@ A `#![module = "..."]` inner attribute at the top of the file names the module.
 It maps to the WebAssembly module name, the symbolic name stored in the module
 subsection of the `name` custom section, written `$name` in WAT:
 
-```wax
+```wax,check
 #![module = "my_module"]
 ```
 
@@ -27,7 +27,7 @@ Types are defined using `type` for single definitions or `rec { ... }` for mutua
 
 ### Simple Types
 
-```wax
+```wax,check
 type point = { x: i32, y: i32 };
 type bytes = [i8];
 type callback = fn(_: i32) -> i32;
@@ -37,7 +37,7 @@ type callback = fn(_: i32) -> i32;
 
 Use `rec` when types reference each other:
 
-```wax
+```wax,check
 rec {
     type list = { head: i32, tail: &?node };
     type node = { rest: &list };
@@ -48,7 +48,7 @@ rec {
 
 Types are final (non-extensible) by default. Use `open` to allow subtypes:
 
-```wax
+```wax,check
 type shape = open { x: i32, y: i32 };
 type circle : shape = { x: i32, y: i32, radius: i32 };
 ```
@@ -72,7 +72,7 @@ fn name(param: type, ...) -> return_type {
 
 Functions without a return type:
 
-```wax
+```wax,check
 fn log_value(x: i32) {
     // no return
 }
@@ -105,21 +105,21 @@ fn example() -> i32 'label: {
 
 ### Immutable Globals
 
-```wax
+```wax,check
 const PI: f64 = 3.14159;
 const MAX_SIZE: i32 = 1024;
 ```
 
 ### Mutable Globals
 
-```wax
+```wax,check
 let counter: i32 = 0;
 let state: &?any = null;
 ```
 
 ### Imported Globals
 
-```wax
+```wax,check
 import "env" {
     const base: i32;
     let counter: i32;
@@ -130,7 +130,7 @@ import "env" {
 
 A memory is declared with `memory`, followed by its address type (`i32` or `i64`) and, optionally, its limits as `[min]` or `[min, max]` (in pages of 64 KiB):
 
-```wax
+```wax,check
 memory mem0: i32 [1, 1000];
 memory mem1: i64 [2];
 memory mem2: i32;
@@ -148,7 +148,7 @@ When the limits are omitted, the minimum size is derived from the extent of the 
 
 A custom page size is written with a `pagesize` clause after the limits, mapping to the WAT `(pagesize N)` form. The page size must be `1` or `65536` (the default), and the limits are counted in pages of that size:
 
-```wax
+```wax,check
 memory small: i32 [4096] pagesize 1;
 ```
 
@@ -158,7 +158,7 @@ memory small: i32 [4096] pagesize 1;
 
 A `shared` clause (the threads proposal) marks the memory shared; it must have a maximum size:
 
-```wax
+```wax,check
 memory pool: i32 [1, 16] shared;
 ```
 
@@ -181,7 +181,7 @@ See [Memory Access](instructions.md#memory-access) for the full instruction mapp
 
 A memory declaration may carry active data segments in a block, placed at a constant offset:
 
-```wax
+```wax,check
 memory mem1: i64 {
     data _ @ [0x1000] = "hello world";
     data greeting @ [0x2000] = "hi";
@@ -201,7 +201,7 @@ Data bytes are ordinary [string literals](../language.md#strings); escapes such 
 
 A table is declared with `table`, followed by its element [reference type](types.md) and, optionally, its limits as `[min]` or `[min, max]`:
 
-```wax
+```wax,check
 table funcs: &?func [1, 10];
 table objs: &?any [0];
 ```
@@ -257,7 +257,7 @@ Tags define exception types for structured exception handling.
 
 ### Definition
 
-```wax
+```wax,check
 type string = [mut i8];
 
 tag my_error(code: i32);
@@ -275,13 +275,13 @@ Maps to:
 
 A tag may also declare a result type, in which case it is used as a suspension tag for [stack switching](instructions.md#stack-switching-instructions) rather than for exceptions:
 
-```wax
+```wax,check
 tag yield(value: i32) -> i32;
 ```
 
 ### Imported Tags
 
-```wax
+```wax,check
 import "env" tag js_error(&?extern);
 ```
 
@@ -293,7 +293,7 @@ Attributes modify module fields. They use the syntax `#[name = value]`, or `#[na
 
 Export a field with a given name:
 
-```wax
+```wax,check
 #[export = "add"]
 fn add(x: i32, y: i32) -> i32 { x + y; }
 
@@ -306,14 +306,14 @@ tag my_error(code: i32);
 
 The name is optional: a bare `#[export]` exports the field under its own Wax name.
 
-```wax
+```wax,check
 #[export]
 fn add(x: i32, y: i32) -> i32 { x + y; }
 ```
 
 Multiple exports can share the same function:
 
-```wax
+```wax,check
 #[export = "add"]
 #[export = "plus"]
 fn add(x: i32, y: i32) -> i32 { x + y; }
@@ -325,7 +325,7 @@ Mark a function to run at module instantiation. It takes no value and the
 function must have no parameters and no results (it maps to the Wasm `start`
 field):
 
-```wax
+```wax,check
 #[start]
 fn init() {
     // initialization code
@@ -339,7 +339,7 @@ import can use the one-line `import "module" <declaration>;` form. Each entry is
 imported under its own Wax name, unless a name-only `#[import = "name"]`
 overrides that.
 
-```wax
+```wax,check
 import "env" {
     fn log(msg: i32);
     const memory_base: i32;
@@ -354,7 +354,7 @@ import "env" fn trace(msg: i32);
 
 A field can be both imported and re-exported by adding `#[export]` to it:
 
-```wax
+```wax,check
 import "env" #[export = "value"] const value: i32;
 ```
 
@@ -362,7 +362,7 @@ import "env" #[export = "value"] const value: i32;
 
 Both formats can guard module fields by a condition that a downstream preprocessor evaluates. Wax uses `#[if(...)] { ... }` / `#[else] { ... }`, with the braces required around each branch; WAT uses the annotation form `(@if <cond> (@then ...) (@else ...))`.
 
-```wax
+```wax,check
 #[if(ocaml_version >= (5, 1, 0))]
 {
     const size: i32 = 16;
@@ -387,7 +387,7 @@ The conditions are preserved, not evaluated. Type checking (`--validate`) explor
 
 A typical Wax module follows this structure:
 
-```wax
+```wax,check
 // 1. Type definitions
 type point = { x: i32, y: i32 };
 type callback = fn(_: i32) -> i32;

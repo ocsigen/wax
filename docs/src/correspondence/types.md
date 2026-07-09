@@ -55,27 +55,27 @@ the additional packed types available only in struct and array fields.
 ## Composite Types
 
 ### Structs
-```wax
+```wax,check
 type point = { x: i32, y: i32 };
 type mutable_point = { x: mut i32, y: mut i32 };
 ```
 Maps to Wasm `(type $point (struct (field i32) (field i32)))`.
 
 ### Arrays
-```wax
+```wax,check
 type bytes = [i8];
 type mutable_bytes = [mut i8];
 ```
 Maps to Wasm `(type $bytes (array i8))`.
 
 ### Functions
-```wax
+```wax,check
 type binop = fn(_: i32, _: i32) -> i32;
 ```
 Maps to Wasm `(type $binop (func (param i32 i32) (result i32)))`.
 ### Continuations
 A continuation type (from the [stack-switching proposal](https://github.com/WebAssembly/stack-switching)) wraps a function type:
-```wax
+```wax,check
 type ft = fn(i32) -> i32;
 type k = cont ft;
 ```
@@ -87,7 +87,7 @@ Maps to Wasm `(type $k (cont $ft))`. See [Stack Switching Instructions](instruct
 
 Wax allows defining recursive reference types using `rec { ... }`.
 
-```wax
+```wax,check
 rec {
     type tree = { value: i32, children: &forest };
     type forest = [&?tree];
@@ -99,7 +99,7 @@ rec {
 Types are final by default. To make a type open (extensible), use the `open` keyword.
 To specify a supertype, use `: supertype` before the assignment.
 
-```wax
+```wax,check
 type point = { x: i32, y: i32 };                  // final by default
 type open_point = open { x: i32 };                // non-final: extensible
 type sub_point : open_point = { x: i32, y: i32 }; // extends open_point
@@ -122,7 +122,7 @@ descriptor with a `descriptor <name>` clause, and the descriptor names what it
 describes with a `describes <name>` clause. Both clauses sit between the `open`
 marker and the struct body:
 
-```wax
+```wax,check
 rec {
   type obj = descriptor obj_desc { x: i32 };
   type obj_desc = describes obj { };
