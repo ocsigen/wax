@@ -424,6 +424,22 @@ let wat_field_symbols
         | e :: _ -> [ one e.desc kind e.info ]
         | [] -> [ one fallback kind field.info ])
   in
+  let import_kind (desc : importdesc) =
+    match desc with
+    | Func _ -> "function"
+    | Memory _ -> "memory"
+    | Table _ -> "table"
+    | Global _ -> "variable"
+    | Tag _ -> "event"
+  in
+  let import_sym module_ (name : name) (id : name option) desc =
+    let s_name, s_selection =
+      match id with
+      | Some n -> (id_name n, n.info)
+      | None -> (module_ ^ "." ^ name.desc, name.info)
+    in
+    one s_name (import_kind desc) s_selection
+  in
   match field.desc with
   | Func { id; exports; _ } -> named id exports "function" "func"
   | Global { id; exports; _ } -> named id exports "variable" "global"
@@ -436,20 +452,13 @@ let wat_field_symbols
   | Data { id = None; _ } -> []
   | String_global { id; _ } -> [ one (id_name id) "variable" id.info ]
   | Import { module_; name; id; desc; _ } ->
-      let kind =
-        match desc with
-        | Func _ -> "function"
-        | Memory _ -> "memory"
-        | Table _ -> "table"
-        | Global _ -> "variable"
-        | Tag _ -> "event"
-      in
-      let s_name, s_selection =
-        match id with
-        | Some n -> (id_name n, n.info)
-        | None -> (module_.desc ^ "." ^ name.desc, field.info)
-      in
-      [ one s_name kind s_selection ]
+      [ import_sym module_.desc name id desc ]
+  | Import_group1 { module_; items } ->
+      List.map
+        (fun (name, id, desc) -> import_sym module_.desc name id desc)
+        items
+  | Import_group2 { module_; desc; items } ->
+      List.map (fun (name, id) -> import_sym module_.desc name id desc) items
   | Types rectype ->
       Array.to_list rectype
       |> List.filter_map (fun entry ->

@@ -3916,7 +3916,7 @@ let collect_implicit_types d ctx fields =
       match field.desc with
       | Func { instrs; _ } -> collect_instrs instrs
       | _ -> ())
-    fields
+    (List.concat_map Ast_utils.expand_import_group fields)
 
 let build_initial_env ctx fields =
   List.iter
@@ -3987,7 +3987,7 @@ let build_initial_env ctx fields =
           register_exports ctx exports;
           Sequence.register ctx.tags id (ty, sign)
       | _ -> ())
-    fields
+    (List.concat_map Ast_utils.expand_import_group fields)
 
 let check_type_definitions ctx =
   for i = 0 to ctx.types.last_index - 1 do
@@ -4245,7 +4245,7 @@ let declared_func_exports ctx fields =
             (fun i -> Hashtbl.replace ctx.refs i ())
             (Sequence.get_index_opt ctx.functions index)
       | _ -> ())
-    fields
+    (List.concat_map Ast_utils.expand_import_group fields)
 
 (*** Correctness lints over a function body (see {!Wax_utils.Warning}) ***)
 
@@ -4907,6 +4907,21 @@ let check_syntax ctx lst =
         else Hashtbl.add seen id.desc ())
       (param_ids @ local_ids)
   in
+  let check_import id (desc : Ast.Text.importdesc) =
+    let tbl, kind =
+      match desc with
+      | Func _ -> (functions, "function")
+      | Memory _ -> (memories, "memory")
+      | Table _ -> (tables, "table")
+      | Global _ -> (globals, "global")
+      | Tag _ -> (tags, "tag")
+    in
+    check_unbound tbl kind id;
+    match desc with
+    | Func { typ = Some idx, Some sign; _ } -> check_inline_type idx sign
+    | Tag (Some idx, Some sign) -> check_inline_type idx sign
+    | _ -> ()
+  in
   List.iter
     (fun (field : (_ Ast.Text.modulefield, _) Ast.annotated) ->
       match field.desc with
@@ -4922,20 +4937,11 @@ let check_syntax ctx lst =
                     (fun e -> check_unbound fields "field" (fst e.Ast.desc))
                     lst)
             lst
-      | Import { id; desc; _ } -> (
-          let tbl, kind =
-            match desc with
-            | Func _ -> (functions, "function")
-            | Memory _ -> (memories, "memory")
-            | Table _ -> (tables, "table")
-            | Global _ -> (globals, "global")
-            | Tag _ -> (tags, "tag")
-          in
-          check_unbound tbl kind id;
-          match desc with
-          | Func { typ = Some idx, Some sign; _ } -> check_inline_type idx sign
-          | Tag (Some idx, Some sign) -> check_inline_type idx sign
-          | _ -> ())
+      | Import { id; desc; _ } -> check_import id desc
+      | Import_group1 { items; _ } ->
+          List.iter (fun (_, id, desc) -> check_import id desc) items
+      | Import_group2 { desc; items; _ } ->
+          List.iter (fun (_, id) -> check_import id desc) items
       | Func { id; typ; locals; instrs; _ } ->
           check_unbound functions "function" id;
           (match typ with
@@ -5076,8 +5082,8 @@ let field_has_conditional (f : (_ Ast.Text.modulefield, _) Ast.annotated) =
       match mode with
       | Active (_, offset) -> expr_has_conditional offset
       | Passive -> false)
-  | Types _ | Import _ | Memory _ | Tag _ | Export _ | Start _ | String_global _
-    ->
+  | Types _ | Import _ | Import_group1 _ | Import_group2 _ | Memory _ | Tag _
+  | Export _ | Start _ | String_global _ ->
       false
 
 (* Specialize a module for one configuration: resolve every conditional using
@@ -5157,8 +5163,8 @@ let specialize env diagnostics ~enqueue ~record asm0 fields =
           | Passive as mode -> mode
         in
         ([ { f with desc = Data { id; init; mode } } ], asm)
-    | Types _ | Import _ | Memory _ | Tag _ | Export _ | Start _
-    | String_global _ ->
+    | Types _ | Import _ | Import_group1 _ | Import_group2 _ | Memory _ | Tag _
+    | Export _ | Start _ | String_global _ ->
         ([ f ], asm)
   and sinstrs asm l =
     match l with
@@ -5251,7 +5257,7 @@ let check_import_order diagnostics fields =
     (List.fold_left
        (fun can_import (field : (_ Ast.Text.modulefield, _) Ast.annotated) ->
          match (can_import, field.desc) with
-         | Some previous, Import _ ->
+         | Some previous, (Import _ | Import_group1 _ | Import_group2 _) ->
              Error.import_after_definition diagnostics ~location:field.info
                previous;
              can_import
@@ -5264,7 +5270,7 @@ let check_import_order diagnostics fields =
          | ( Some _,
              (Func _ | Memory _ | Table _ | Tag _ | Global _ | String_global _)
            )
-         | None, Import _
+         | None, (Import _ | Import_group1 _ | Import_group2 _)
          | ( _,
              ( Types _ | Export _ | Start _ | Elem _ | Data _
              | Module_if_annotation _ ) ) ->

@@ -279,6 +279,51 @@ let check_constant f loc s =
          ( loc,
            Printf.sprintf "Constant %s is out of range.\n" s))
 
+(* Build a compact import group [(import "m" (item …) …)] from its elements
+   (compact-import-section proposal). Each item is [(item $id? "name" <type>?)]:
+   the [$id] is a wax extension over the standard name-only form. Either every
+   item carries its own type ([Import_group1], id living in that type) or all
+   items are name-only and share one final type that binds no id ([Import_group2],
+   where the per-item [$id] extension applies); mixing is rejected. *)
+let compact_import loc module_ elems : _ Ast.Text.modulefield =
+  let as_item = function
+    | `Item it -> it
+    | `Type _ ->
+        raise (Parsing.Syntax_error
+                 (loc, "A shared import type must be the group's last element.\n"))
+  in
+  let items, trailing =
+    match List.rev elems with
+    | `Type t :: rev_rest -> (List.rev_map as_item rev_rest, Some t)
+    | _ -> (List.map as_item elems, None)
+  in
+  match trailing with
+  | Some (tid, tdesc) ->
+      if Option.is_some tid then
+        raise (Parsing.Syntax_error
+                 (loc, "A shared import type may not bind an identifier.\n"));
+      if List.exists (fun (_, _, t) -> Option.is_some t) items then
+        raise (Parsing.Syntax_error
+                 (loc, "With a shared type, each import item names only.\n"));
+      Import_group2
+        { module_; desc = tdesc; items = List.map (fun (id, name, _) -> (name, id)) items }
+  | None ->
+      let items =
+        List.map
+          (fun (id, name, t) ->
+            match t with
+            | Some (tid, desc) ->
+                if Option.is_some id then
+                  raise (Parsing.Syntax_error
+                           (loc, "An import item with its own type binds its id in that type.\n"));
+                (name, tid, desc)
+            | None ->
+                raise (Parsing.Syntax_error
+                         (loc, "This import item needs a type, or a shared final type.\n")))
+          items
+      in
+      Import_group1 { module_; items }
+
 (* Range-checked NAT conversions: a plain [Uint32/Uint64.of_string] raises (and
    [Uint64.of_string] also prints) on an out-of-range literal, so guard with
    [check_constant] first to report a clean "out of range" parse error instead of
@@ -969,6 +1014,13 @@ import:
 | LPAREN_IMPORT module_ = name name = name desc = external_type ")"
     { let (id, desc) = desc in
       with_loc $sloc (Import {module_; name; id; desc; exports = [] }) }
+| LPAREN_IMPORT module_ = name elems = nonempty_list(import_group_elem) ")"
+    { with_loc $sloc (compact_import $sloc module_ elems) }
+
+import_group_elem:
+| "(" ITEM id = ioption(ID) name = name t = ioption(external_type) ")"
+    { `Item (id, name, t) }
+| e = external_type { `Type e }
 
 external_type:
 | "(" FUNC i = ID ? t = type_use ")"

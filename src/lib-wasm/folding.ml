@@ -44,8 +44,8 @@ let map_instrs ?(enter = fun ~location:_ _cond _positive f -> f ()) func
                     })
                   else_fields;
             }
-      | Types _ | Import _ | Memory _ | Tag _ | Export _ | Start _ | Data _
-      | String_global _ ->
+      | Types _ | Import _ | Import_group1 _ | Import_group2 _ | Memory _
+      | Tag _ | Export _ | Start _ | Data _ | String_global _ ->
           f.desc
     in
     { f with desc }
@@ -183,8 +183,9 @@ let types cctx m =
           tbl l
     | Module_if_annotation { cond; then_fields; else_fields } ->
         fold_fields cctx add tbl ~location:f.info cond then_fields else_fields
-    | Import _ | Func _ | Memory _ | Table _ | Tag _ | Global _ | Export _
-    | Start _ | Elem _ | Data _ | String_global _ ->
+    | Import _ | Import_group1 _ | Import_group2 _ | Func _ | Memory _ | Table _
+    | Tag _ | Global _ | Export _ | Start _ | Elem _ | Data _ | String_global _
+      ->
         tbl
   in
   List.fold_left add (Tbl.empty cctx) m
@@ -196,6 +197,8 @@ let functions cctx f =
         Tbl.add id typ tbl
     | Module_if_annotation { cond; then_fields; else_fields } ->
         fold_fields cctx add tbl ~location:f.info cond then_fields else_fields
+    | Import_group1 _ | Import_group2 _ ->
+        List.fold_left add tbl (Ast_utils.expand_import_group f)
     | Import { desc = Memory _ | Table _ | Global _ | Tag _; _ }
     | Types _ | Memory _ | Table _ | Tag _ | Global _ | Export _ | Start _
     | Elem _ | Data _ | String_global _ ->
@@ -213,6 +216,8 @@ let globals cctx f =
         Tbl.add (Some id) { mut = false; typ = (I32 : valtype) } tbl
     | Module_if_annotation { cond; then_fields; else_fields } ->
         fold_fields cctx add tbl ~location:f.info cond then_fields else_fields
+    | Import_group1 _ | Import_group2 _ ->
+        List.fold_left add tbl (Ast_utils.expand_import_group f)
     | Import { desc = Func _ | Memory _ | Table _ | Tag _; _ }
     | Types _ | Func _ | Memory _ | Table _ | Tag _ | Export _ | Start _
     | Elem _ | Data _ ->
@@ -227,6 +232,8 @@ let tags cctx f =
         Tbl.add id typ tbl
     | Module_if_annotation { cond; then_fields; else_fields } ->
         fold_fields cctx add tbl ~location:f.info cond then_fields else_fields
+    | Import_group1 _ | Import_group2 _ ->
+        List.fold_left add tbl (Ast_utils.expand_import_group f)
     | Import { desc = Func _ | Memory _ | Table _ | Global _; _ }
     | Types _ | Func _ | Memory _ | Table _ | Global _ | Export _ | Start _
     | Elem _ | Data _ | String_global _ ->

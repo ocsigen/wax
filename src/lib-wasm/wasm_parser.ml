@@ -413,27 +413,32 @@ let importdesc ch d =
       Tag (uint ch)
   | _ -> error ch "malformed import kind 0x%02x" d
 
-(* One entry of the import section, expanded to the imports it denotes. The
-   compact-import-section proposal reuses the externtype-kind position: after the
-   module name and a (conventionally empty) second name, a [0x7F] marker groups a
-   whole [(field name, externtype)] list under the one module name, and [0x7E]
-   groups a [field name] list that all share one externtype. Neither marker is a
-   valid kind byte, so a plain import stays unambiguous. *)
+(* One entry of the import section, kept as an [import_entry] so the compact
+   grouping survives a round-trip. The compact-import-section proposal reuses the
+   externtype-kind position: after the module name and a (conventionally empty)
+   second name, a [0x7F] marker groups a whole [(field name, externtype)] list
+   under the one module name ([Group1]), and [0x7E] groups a [field name] list
+   that all share one externtype ([Group2]). Neither marker is a valid kind byte,
+   so a plain import stays unambiguous. *)
 let import_entry ch =
   let module_ = name ch in
   let nm = name ch in
   match uint ch with
   | 0x7F ->
-      Array.to_list
-        (vec
-           (fun ch ->
-             let name = name ch in
-             { module_; name; desc = importdesc ch (uint ch) })
-           ch)
+      let items =
+        Array.to_list
+          (vec
+             (fun ch ->
+               let name = name ch in
+               (name, importdesc ch (uint ch)))
+             ch)
+      in
+      Group1 { module_; items }
   | 0x7E ->
       let desc = importdesc ch (uint ch) in
-      Array.to_list (vec (fun ch -> { module_; name = name ch; desc }) ch)
-  | d -> [ { module_; name = nm; desc = importdesc ch d } ]
+      let names = Array.to_list (vec (fun ch -> name ch) ch) in
+      Group2 { module_; desc; names }
+  | d -> Single { module_; name = nm; desc = importdesc ch d }
 
 let exportable_kind d : exportable =
   match d with
@@ -1630,12 +1635,9 @@ let module_ diagnostics ?filename buf =
               (* Type section *)
               { m with types = Array.to_list (type_section ch) }
           | 2 ->
-              (* Import section (entries may expand to several imports under the
-                 compact-import-section proposal). *)
-              {
-                m with
-                imports = List.concat (Array.to_list (vec import_entry ch));
-              }
+              (* Import section — each entry kept as an [import_entry] so a
+                 compact-import-section group survives the round-trip. *)
+              { m with imports = Array.to_list (vec import_entry ch) }
           | 3 ->
               (* Function section *)
               { m with functions = Array.to_list (vec typeidx ch) }
@@ -1817,7 +1819,8 @@ let module_ diagnostics ?filename buf =
   let num_func_imports =
     List.fold_left
       (fun n (i : import) -> match i.desc with Func _ -> n + 1 | _ -> n)
-      0 res.imports
+      0
+      (Ast_utils.flatten_binary_imports res.imports)
   in
   {
     res with

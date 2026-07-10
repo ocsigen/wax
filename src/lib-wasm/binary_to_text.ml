@@ -513,39 +513,85 @@ let module_ (m : _ B.module_) : _ T.module_ =
       ([], 0) m.types
   in
   let types = List.rev types in
-  let (func_cnt, table_cnt, mem_cnt, global_cnt, tag_cnt), imports =
+  (* Assign the import an id from the name section and advance the index space
+     for its kind. *)
+  let id_of (f_i, t_i, m_i, g_i, tg_i) (bdesc : B.importdesc) =
+    match bdesc with
+    | Func _ -> (id m.names.functions f_i, (f_i + 1, t_i, m_i, g_i, tg_i))
+    | Table _ -> (id m.names.tables t_i, (f_i, t_i + 1, m_i, g_i, tg_i))
+    | Memory _ -> (id m.names.memories m_i, (f_i, t_i, m_i + 1, g_i, tg_i))
+    | Global _ -> (id m.names.globals g_i, (f_i, t_i, m_i, g_i + 1, tg_i))
+    | Tag _ -> (id m.names.tags tg_i, (f_i, t_i, m_i, g_i, tg_i + 1))
+  in
+  let desc_of (f_i, _, _, _, _) (bdesc : B.importdesc) : T.importdesc =
+    match bdesc with
+    | Func { exact; typ = i } ->
+        let typ, sign = expand_functype f_i i in
+        T.Func { exact; typ = (typ, Some sign) }
+    | Memory l -> T.Memory (Ast.no_loc l)
+    | Table t -> T.Table (tabletype m.names.types t)
+    | Global gt -> T.Global (globaltype m.names.types gt)
+    | Tag i -> T.Tag (Some (index ~map:m.names.types i), None)
+  in
+  (* Lift one import to (id, text desc), advancing the index space. [desc_of]
+     reads the pre-increment counts (matching the func index for locals). *)
+  let lift_one counts bdesc =
+    let id, counts' = id_of counts bdesc in
+    (id, desc_of counts bdesc, counts')
+  in
+  let counts, imports =
     List.fold_left
-      (fun ((f_i, t_i, m_i, g_i, tg_i), acc) (imp : B.import) ->
-        let id, counts =
-          match imp.desc with
-          | Func _ -> (id m.names.functions f_i, (f_i + 1, t_i, m_i, g_i, tg_i))
-          | Table _ -> (id m.names.tables t_i, (f_i, t_i + 1, m_i, g_i, tg_i))
-          | Memory _ -> (id m.names.memories m_i, (f_i, t_i, m_i + 1, g_i, tg_i))
-          | Global _ -> (id m.names.globals g_i, (f_i, t_i, m_i, g_i + 1, tg_i))
-          | Tag _ -> (id m.names.tags tg_i, (f_i, t_i, m_i, g_i, tg_i + 1))
+      (fun (counts, acc) (entry : B.import_entry) ->
+        let field, counts =
+          match entry with
+          | Single imp ->
+              let id, desc, counts = lift_one counts imp.desc in
+              ( T.Import
+                  {
+                    module_ = no_loc imp.module_;
+                    name = no_loc imp.name;
+                    id;
+                    desc;
+                    exports = [];
+                  },
+                counts )
+          | Group1 { module_; items } ->
+              let counts, ritems =
+                List.fold_left
+                  (fun (counts, r) (name, bdesc) ->
+                    let id, desc, counts = lift_one counts bdesc in
+                    (counts, (no_loc name, id, desc) :: r))
+                  (counts, []) items
+              in
+              ( T.Import_group1
+                  { module_ = no_loc module_; items = List.rev ritems },
+                counts )
+          | Group2 { module_; desc; names } ->
+              (* The shared type is converted once (with the group's first index)
+                 for the printed [Import_group2]; each name still advances the
+                 index space and picks up its name-section id (the wax [(item $id
+                 …)] extension), so a named Group2 no longer degrades to Group1. *)
+              let shared = desc_of counts desc in
+              let counts, ritems =
+                List.fold_left
+                  (fun (counts, r) name ->
+                    let id, _, counts = lift_one counts desc in
+                    (counts, (no_loc name, id) :: r))
+                  (counts, []) names
+              in
+              ( T.Import_group2
+                  {
+                    module_ = no_loc module_;
+                    desc = shared;
+                    items = List.rev ritems;
+                  },
+                counts )
         in
-        let item =
-          T.Import
-            {
-              module_ = Ast.no_loc imp.module_;
-              name = Ast.no_loc imp.name;
-              id;
-              desc =
-                (match imp.desc with
-                | Func { exact; typ = i } ->
-                    let typ, sign = expand_functype f_i i in
-                    T.Func { exact; typ = (typ, Some sign) }
-                | Memory l -> T.Memory (Ast.no_loc l)
-                | Table t -> T.Table (tabletype m.names.types t)
-                | Global gt -> T.Global (globaltype m.names.types gt)
-                | Tag i -> T.Tag (Some (index ~map:m.names.types i), None));
-              exports = [];
-            }
-        in
-        (counts, item :: acc))
+        (counts, field :: acc))
       ((0, 0, 0, 0, 0), [])
       m.imports
   in
+  let func_cnt, table_cnt, mem_cnt, global_cnt, tag_cnt = counts in
   let imports = List.rev imports in
   let funcs =
     List.mapi

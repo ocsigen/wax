@@ -2771,6 +2771,15 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
   let desc : _ Ast.modulefield option =
     match f.desc with
     | Types t -> Some (Type (collapse_splices ctx (rectype ctx t)))
+    | Import_group1 _ | Import_group2 _ ->
+        (* Wax has no compact-import concept: flatten the group into individual
+           imports (each converted as usual), which [group_imports] later
+           re-forms as a Wax [import "m" { … }] block. *)
+        extra :=
+          List.concat_map
+            (modulefield ctx export_tbl)
+            (Wax_wasm.Ast_utils.expand_import_group f);
+        None
     | Func { locals; instrs; typ; exports = e; _ } ->
         let label, labels =
           LabelStack.push ~targeted:(label_targeted instrs) (LabelStack.make ())
@@ -3280,10 +3289,12 @@ let elaborate_implicit_types ctx fields =
       | Elem { init; _ } -> List.iter instrs init
       | Table { init = Init_expr e; _ } -> instrs e
       | Table { init = Init_segment l; _ } -> List.iter instrs l
-      | Types _ | Import _ | Memory _ | Table _ | Export _ | Start _ | Data _
-      | String_global _ | Module_if_annotation _ ->
+      (* Groups are flattened below, so only their [Import] members reach here. *)
+      | Import_group1 _ | Import_group2 _ | Types _ | Import _ | Memory _
+      | Table _ | Export _ | Start _ | Data _ | String_global _
+      | Module_if_annotation _ ->
           ())
-    fields
+    (List.concat_map Wax_wasm.Ast_utils.expand_import_group fields)
 
 let register_names ctx export_tbl fields =
   (* Both passes recurse into the branches of a conditional, in the same order
@@ -3362,7 +3373,8 @@ let register_names ctx export_tbl fields =
               rectype
         | Global { id; exports; _ } ->
             Sequence.register ctx.globals export_tbl (Some Global) id exports
-        | Func _ | Export _ | Start _ -> ()
+        (* Groups are flattened below, so only their [Import] members reach here. *)
+        | Func _ | Export _ | Start _ | Import_group1 _ | Import_group2 _ -> ()
         | Elem { id; _ } -> Sequence.register ctx.elems export_tbl None id []
         | Data { id; _ } -> Sequence.register ctx.datas export_tbl None id []
         | Memory { id; exports; _ } ->
@@ -3381,7 +3393,7 @@ let register_names ctx export_tbl fields =
                 with_cond ctx ~location:field.info cond false (fun () ->
                     pass1 e.Ast.desc))
               else_fields)
-      fields
+      (List.concat_map Wax_wasm.Ast_utils.expand_import_group fields)
   in
   let rec pass2 fields =
     List.iter
@@ -3408,9 +3420,10 @@ let register_names ctx export_tbl fields =
                     pass2 e.Ast.desc))
               else_fields
         | Types _ | Global _ | Export _ | Start _ | Elem _ | Data _ | Memory _
-        | Table _ | Tag _ | String_global _ ->
+        | Table _ | Tag _ | String_global _ | Import_group1 _ | Import_group2 _
+          ->
             ())
-      fields
+      (List.concat_map Wax_wasm.Ast_utils.expand_import_group fields)
   in
   pass1 fields;
   pass2 fields

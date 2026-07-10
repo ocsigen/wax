@@ -283,8 +283,8 @@ let module_ ctx env ((name, fields) : Ast.location Ast.Text.module_) :
           | Passive as mode -> mode
         in
         [ { f with desc = Data { r with mode } } ]
-    | Types _ | Import _ | Memory _ | Tag _ | Export _ | Start _
-    | String_global _ ->
+    | Types _ | Import _ | Import_group1 _ | Import_group2 _ | Memory _ | Tag _
+    | Export _ | Start _ | String_global _ ->
         [ f ]
   and sinstrs l = List.concat_map sinstr l
   and sinstr (i : Ast.location instr) =

@@ -905,6 +905,23 @@ module Text = struct
         desc : importdesc;
         exports : name list;
       }
+    (* compact-import-section proposal: a run of same-module imports written as
+       one [(import "m" (item …) …)]. [Import_group1] carries a type per item;
+       [Import_group2] shares one type across name-only items. Both expand to
+       individual imports in every lowering pass; only the parser, printer and
+       binary codec treat them as groups (to preserve the form on round-trip). *)
+    | Import_group1 of {
+        module_ : name;
+        items : (name * name option * importdesc) list;
+      }
+    (* [items] is [(name, id)] per entry; the id is a wax extension — the standard
+       form writes name-only [(item "n")]. It is text-only, round-tripping through
+       the binary name section rather than the import section. *)
+    | Import_group2 of {
+        module_ : name;
+        desc : importdesc;
+        items : (name * name option) list;
+      }
     | Func of {
         id : name option;
         typ : typeuse;
@@ -999,6 +1016,16 @@ module Binary = struct
     | Tag of typeuse
 
   type import = { module_ : string; name : string; desc : importdesc }
+
+  (* compact-import-section proposal: one import-section entry, either a plain
+     import or a same-module group ([Group1] = a type per item, [Group2] = one
+     shared type). The decoder keeps these instead of flattening and the encoder
+     emits them directly, so the compact form survives a binary round-trip. *)
+  type import_entry =
+    | Single of import
+    | Group1 of { module_ : string; items : (string * importdesc) list }
+    | Group2 of { module_ : string; desc : importdesc; names : string list }
+
   type 'info table = { typ : tabletype; expr : 'info expr option }
 
   type 'info memory = {
@@ -1050,7 +1077,7 @@ module Binary = struct
 
   type 'info module_ = {
     types : rectype list;
-    imports : import list;
+    imports : import_entry list;
     functions : idx list;
     tables : 'info table list;
     memories : limits list;

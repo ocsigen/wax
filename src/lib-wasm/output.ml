@@ -1097,6 +1097,22 @@ let function_indices lst =
     Some (List.filter_map extract lst)
   else None
 
+(* The [(kind …)] descriptor s-expression shared by a plain import and a compact
+   group item, e.g. [(func $id (type 0))] / [(global i32)]. *)
+let import_desc_block id (desc : importdesc) =
+  let kind, typ =
+    match desc with
+    | Func { exact; typ } ->
+        ( "func",
+          if exact then [ list (type_ "exact" :: fundecl typ) ] else fundecl typ
+        )
+    | Global ty -> ("global", [ globaltype ty ])
+    | Tag typ -> ("tag", fundecl typ)
+    | Memory l -> ("memory", limits l)
+    | Table ty -> ("table", tabletype ty)
+  in
+  block (keyword kind :: (opt_id id @ typ))
+
 let rec modulefield f =
   let loc = f.Ast.info in
   match f.Ast.desc with
@@ -1121,26 +1137,26 @@ let rec modulefield f =
         (block (keyword "func" :: (opt_id id @ exports e @ fundecl typ))
         :: (locals_block @ instrs i))
   | Import { module_; name; id; desc; exports = e } -> (
-      let kind, typ =
-        match desc with
-        | Func { exact; typ } ->
-            ( "func",
-              if exact then [ list (type_ "exact" :: fundecl typ) ]
-              else fundecl typ )
-        | Global ty -> ("global", [ globaltype ty ])
-        | Tag typ -> ("tag", fundecl typ)
-        | Memory l -> ("memory", limits l)
-        | Table ty -> ("table", tabletype ty)
-      in
       match e with
       | [] ->
           list ~loc
             [
               block
                 [ keyword "import"; quoted_string module_; quoted_string name ];
-              list [ block (keyword kind :: (opt_id id @ typ)) ];
+              list [ import_desc_block id desc ];
             ]
       | _ ->
+          let kind, typ =
+            match desc with
+            | Func { exact; typ } ->
+                ( "func",
+                  if exact then [ list (type_ "exact" :: fundecl typ) ]
+                  else fundecl typ )
+            | Global ty -> ("global", [ globaltype ty ])
+            | Tag typ -> ("tag", fundecl typ)
+            | Memory l -> ("memory", limits l)
+            | Table ty -> ("table", tabletype ty)
+          in
           list ~loc
             (block
                (keyword kind
@@ -1154,6 +1170,29 @@ let rec modulefield f =
                         ];
                     ]))
             :: typ))
+  (* compact-import-section: [(import "m" (item "n" (kind …)) …)] with a type per
+     item, and [(import "m" (item "n") … (kind …))] with one shared trailing
+     type on name-only items. *)
+  | Import_group1 { module_; items } ->
+      list ~loc
+        (block [ keyword "import"; quoted_string module_ ]
+        :: List.map
+             (fun (name, id, desc) ->
+               list
+                 [
+                   keyword "item";
+                   quoted_string name;
+                   list [ import_desc_block id desc ];
+                 ])
+             items)
+  | Import_group2 { module_; desc; items } ->
+      list ~loc
+        (block [ keyword "import"; quoted_string module_ ]
+         :: List.map
+              (fun (name, id) ->
+                list (keyword "item" :: (opt_id id @ [ quoted_string name ])))
+              items
+        @ [ list [ import_desc_block None desc ] ])
   | Global { id; typ; init; exports = e } ->
       list ~loc
         (block (keyword "global" :: (opt_id id @ exports e @ [ globaltype typ ]))

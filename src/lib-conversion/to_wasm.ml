@@ -1959,7 +1959,9 @@ let reorder_imports lst =
         || Option.fold ~none:false
              ~some:(fun e -> List.exists defines e.Ast.desc)
              else_fields
-    | Import _ | Types _ | Export _ | Start _ | Elem _ | Data _ -> false
+    | Import _ | Import_group1 _ | Import_group2 _ | Types _ | Export _
+    | Start _ | Elem _ | Data _ ->
+        false
   in
   let rec traverse acc (cur : (_ Ast.Text.modulefield, _) Ast.annotated list) =
     match cur with
@@ -1969,7 +1971,9 @@ let reorder_imports lst =
         let imports, others =
           List.partition
             (fun f ->
-              match f.desc with Ast.Text.Import _ -> true | _ -> false)
+              match f.desc with
+              | Ast.Text.Import _ | Import_group1 _ | Import_group2 _ -> true
+              | _ -> false)
             cur
         in
         List.rev_append acc (imports @ others)

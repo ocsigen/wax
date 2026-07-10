@@ -1284,70 +1284,77 @@ let leb_len n =
   let rec go n acc = if n < 128 then acc else go (n lsr 7) (acc + 1) in
   go n 1
 
-(* Import-section entries: maximal runs of consecutive imports sharing a module
-   name, kept grouped only when grouping is actually smaller — else the run is
-   split back into singletons (each written plainly). Only consecutive imports
-   may be grouped: an import's index is its position, so reordering to gather
-   non-adjacent same-module imports would break references.
-
-   A group of [n] imports from module [m] writes [m]'s (length-prefixed) name
-   once instead of [n] times, saving [(n-1) * (1 + |m|)] bytes, but adds the
-   empty second name, the marker byte, and the inner count — [2 + leb_len n]. *)
-let import_entries imports =
-  let should_group (first : import) n =
-    n >= 2 && (n - 1) * (1 + String.length first.module_) > 2 + leb_len n
+(* When the compact-import-section feature is enabled, coalesce maximal runs of
+   consecutive plain [Single] imports sharing a module name into one [Group1] —
+   but only when grouping is actually smaller: writing the module name once
+   instead of [n] times saves [(n-1) * (1 + |m|)] bytes against the [2 + leb_len
+   n] overhead (empty second name + marker byte + inner count). Explicit groups
+   already in the AST are preserved verbatim and break a run. Only consecutive
+   imports may be grouped: an import's index is its position, so reordering would
+   break references. *)
+let coalesce_singles entries =
+  let should_group module_ n =
+    n >= 2 && (n - 1) * (1 + String.length module_) > 2 + leb_len n
   in
   let rec go = function
     | [] -> []
-    | (first : import) :: _ as l ->
+    | ((Group1 _ | Group2 _) as g) :: rest -> g :: go rest
+    | Single (first : import) :: _ as l ->
         let rec take acc = function
-          | (i : import) :: rest when i.module_ = first.module_ ->
+          | Single (i : import) :: rest when i.module_ = first.module_ ->
               take (i :: acc) rest
           | rest -> (List.rev acc, rest)
         in
         let run, rest = take [] l in
-        let entries =
-          if should_group first (List.length run) then [ run ]
-          else List.map (fun i -> [ i ]) run
+        let here =
+          if should_group first.module_ (List.length run) then
+            [
+              Group1
+                {
+                  module_ = first.module_;
+                  items = List.map (fun (i : import) -> (i.name, i.desc)) run;
+                };
+            ]
+          else List.map (fun i -> Single i) run
         in
-        entries @ go rest
+        here @ go rest
   in
-  go imports
+  go entries
 
-(* Import section. With the compact-import-section proposal a run of same-module
-   imports is written once under its module name, followed by [0x00] (empty
-   second name), the [0x7F] marker, and the list of (field name, externtype)
-   pairs — the marker sits where an externtype kind byte would, and [0x7F] is not
-   a valid kind, so a plain import (kind byte next) stays unambiguous. *)
+(* Import section. A [Group1]/[Group2] entry writes its module name once,
+   followed by [0x00] (empty second name), the [0x7F]/[0x7E] marker, and the
+   item list — the marker sits where an externtype kind byte would, and neither
+   is a valid kind, so a plain import (kind byte next) stays unambiguous. Groups
+   present in the AST are emitted verbatim (preserving a compact input); the
+   feature only drives coalescing of ungrouped [Single] imports above. *)
 let output_import_section out_channel imports =
   let compact =
     Wax_utils.Feature.is_enabled
       (Wax_utils.Feature.default ())
       Wax_utils.Feature.Compact_import_section
   in
-  let write_plain b (i : import) =
-    Encoder.name b i.module_;
-    Encoder.name b i.name;
-    import_desc b i.desc
+  let write_named_desc b name desc =
+    Encoder.name b name;
+    import_desc b desc
   in
-  if not compact then
-    output_section out_channel 2 (Encoder.vec write_plain) imports
-  else
-    output_section out_channel 2
-      (Encoder.vec (fun b run ->
-           match run with
-           | [ i ] -> write_plain b i
-           | (i0 : import) :: _ ->
-               Encoder.name b i0.module_;
-               Encoder.name b "";
-               Encoder.byte b 0x7F;
-               Encoder.vec
-                 (fun b (i : import) ->
-                   Encoder.name b i.name;
-                   import_desc b i.desc)
-                 b run
-           | [] -> assert false))
-      (import_entries imports)
+  let write_entry b = function
+    | Single (i : import) ->
+        Encoder.name b i.module_;
+        write_named_desc b i.name i.desc
+    | Group1 { module_; items } ->
+        Encoder.name b module_;
+        Encoder.name b "";
+        Encoder.byte b 0x7F;
+        Encoder.vec (fun b (name, desc) -> write_named_desc b name desc) b items
+    | Group2 { module_; desc; names } ->
+        Encoder.name b module_;
+        Encoder.name b "";
+        Encoder.byte b 0x7E;
+        import_desc b desc;
+        Encoder.vec Encoder.name b names
+  in
+  output_section out_channel 2 (Encoder.vec write_entry)
+    (if compact then coalesce_singles imports else imports)
 
 (* Branch-hinting proposal: emit the [metadata.code.branch_hint] custom section.
    [func_hints] maps a (absolute) function index to its hints, each a byte offset
@@ -1547,7 +1554,8 @@ let module_ ~out_channel ?output_file ?opt_source_map_file
     let num_func_imports =
       List.fold_left
         (fun n (i : import) -> match i.desc with Func _ -> n + 1 | _ -> n)
-        0 m.imports
+        0
+        (Ast_utils.flatten_binary_imports m.imports)
     in
     let code_index = ref 0 in
     let content_start = !file_pos + 1 in

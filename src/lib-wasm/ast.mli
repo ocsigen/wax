@@ -777,6 +777,15 @@ module Text : sig
         desc : importdesc;
         exports : name list;
       }
+    | Import_group1 of {
+        module_ : name;
+        items : (name * name option * importdesc) list;
+      }
+    | Import_group2 of {
+        module_ : name;
+        desc : importdesc;
+        items : (name * name option) list;
+      }
     | Func of {
         id : name option;
         typ : typeuse;
@@ -872,6 +881,12 @@ module Binary : sig
     | Tag of typeuse
 
   type import = { module_ : string; name : string; desc : importdesc }
+
+  type import_entry =
+    | Single of import
+    | Group1 of { module_ : string; items : (string * importdesc) list }
+    | Group2 of { module_ : string; desc : importdesc; names : string list }
+
   type 'info table = { typ : tabletype; expr : 'info expr option }
 
   type 'info memory = {
@@ -923,7 +938,7 @@ module Binary : sig
 
   type 'info module_ = {
     types : rectype list;
-    imports : import list;
+    imports : import_entry list;
     functions : idx list;
     tables : 'info table list;
     memories : limits list;

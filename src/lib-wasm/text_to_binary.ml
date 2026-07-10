@@ -490,6 +490,15 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
   let ctx = empty_context in
 
   let func_types_by_idx = B.IntMap.empty in
+  (* Bind one imported entity's id in the name space its kind belongs to. *)
+  let register_import ctx id (desc : T.importdesc) =
+    match desc with
+    | Func _ -> { ctx with funcs = fst (add_name ctx.funcs id) }
+    | Table _ -> { ctx with tables = fst (add_name ctx.tables id) }
+    | Memory _ -> { ctx with memories = fst (add_name ctx.memories id) }
+    | Global _ -> { ctx with globals = fst (add_name ctx.globals id) }
+    | Tag _ -> { ctx with tags = fst (add_name ctx.tags id) }
+  in
   let ctx, func_types_by_idx =
     List.fold_left
       (fun (ctx, acc_func_types) f ->
@@ -531,23 +540,18 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
                    (0, ctx.wide_arrays) r)
             in
             ({ ctx with types = types_space; wide_arrays }, acc_func_types)
-        | T.Import { id; desc; _ } -> (
-            match desc with
-            | T.Func _ ->
-                ( { ctx with funcs = fst (add_name ctx.funcs id) },
-                  acc_func_types )
-            | T.Table _ ->
-                ( { ctx with tables = fst (add_name ctx.tables id) },
-                  acc_func_types )
-            | T.Memory _ ->
-                ( { ctx with memories = fst (add_name ctx.memories id) },
-                  acc_func_types )
-            | T.Global _ ->
-                ( { ctx with globals = fst (add_name ctx.globals id) },
-                  acc_func_types )
-            | T.Tag _ ->
-                ({ ctx with tags = fst (add_name ctx.tags id) }, acc_func_types)
-            )
+        | T.Import { id; desc; _ } ->
+            (register_import ctx id desc, acc_func_types)
+        | T.Import_group1 { items; _ } ->
+            ( List.fold_left
+                (fun ctx (_, id, desc) -> register_import ctx id desc)
+                ctx items,
+              acc_func_types )
+        | T.Import_group2 { desc; items; _ } ->
+            ( List.fold_left
+                (fun ctx (_, id) -> register_import ctx id desc)
+                ctx items,
+              acc_func_types )
         | T.Func { id; _ } ->
             ({ ctx with funcs = fst (add_name ctx.funcs id) }, acc_func_types)
         | T.Table { id; _ } ->
@@ -692,26 +696,53 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
   in
 
   (* Pass 2: Convert *)
+  let convert_import_desc (desc : T.importdesc) : B.importdesc =
+    match desc with
+    | Func { exact; typ = Some i, _ } ->
+        Func { exact; typ = resolve_idx ctx.types i }
+    | Func { exact; typ = None, Some ty } ->
+        Func { exact; typ = resolve_func_type ctx ty }
+    | Func { typ = None, None; _ } -> assert false
+    | Table t -> Table (table_type ctx t)
+    | Memory l -> Memory l.desc
+    | Global g -> Global (global_type ctx g)
+    | Tag (Some i, _) -> Tag (resolve_idx ctx.types i)
+    | Tag (None, Some ty) -> Tag (resolve_func_type ctx ty)
+    | Tag (None, None) -> failwith "Tag import missing type"
+  in
   let imports =
     List.filter_map
       (fun f ->
         match f.desc with
         | T.Import { module_; name; desc; _ } ->
-            let desc : B.importdesc =
-              match desc with
-              | Func { exact; typ = Some i, _ } ->
-                  Func { exact; typ = resolve_idx ctx.types i }
-              | Func { exact; typ = None, Some ty } ->
-                  Func { exact; typ = resolve_func_type ctx ty }
-              | Func { typ = None, None; _ } -> assert false
-              | Table t -> Table (table_type ctx t)
-              | Memory l -> Memory l.desc
-              | Global g -> Global (global_type ctx g)
-              | Tag (Some i, _) -> Tag (resolve_idx ctx.types i)
-              | Tag (None, Some ty) -> Tag (resolve_func_type ctx ty)
-              | Tag (None, None) -> failwith "Tag import missing type"
-            in
-            Some { B.module_ = module_.desc; name = name.desc; desc }
+            Some
+              (B.Single
+                 {
+                   B.module_ = module_.desc;
+                   name = name.desc;
+                   desc = convert_import_desc desc;
+                 })
+        | T.Import_group1 { module_; items; _ } ->
+            Some
+              (B.Group1
+                 {
+                   module_ = module_.desc;
+                   items =
+                     List.map
+                       (fun (name, _, desc) ->
+                         (name.Ast.desc, convert_import_desc desc))
+                       items;
+                 })
+        | T.Import_group2 { module_; desc; items } ->
+            (* The binary section carries only the external names; each item's id
+               (the wax extension) reaches the binary via the name section. *)
+            Some
+              (B.Group2
+                 {
+                   module_ = module_.desc;
+                   desc = convert_import_desc desc;
+                   names = List.map (fun (n, _) -> n.Ast.desc) items;
+                 })
         | _ -> None)
       fields
   in
@@ -737,13 +768,17 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
   in
 
   (* Prepare for Code Generation: Calculate Import Count for Indexing *)
+  (* Index counting and the inline-export scan only care about individual
+     imports, so a compact group is flattened to its members here (the grouped
+     form is kept for the binary [imports] section above). *)
+  let expanded_fields = List.concat_map Ast_utils.expand_import_group fields in
   let func_import_count =
     List.fold_left
       (fun acc f ->
         match f.desc with
         | T.Import { desc = T.Func _; _ } -> acc + 1
         | _ -> acc)
-      0 fields
+      0 expanded_fields
   in
 
   let locals_names = ref B.IntMap.empty in
@@ -952,7 +987,7 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
           in
           scan rest funcs tables memories globals tags acc
     in
-    scan fields 0 0 0 0 0 []
+    scan expanded_fields 0 0 0 0 0 []
   in
 
   let start =
@@ -970,7 +1005,7 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
         match f.desc with
         | T.Import { desc = T.Table _; _ } -> acc + 1
         | _ -> acc)
-      0 fields
+      0 expanded_fields
   in
 
   let elem =
@@ -1035,7 +1070,7 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
         match f.desc with
         | T.Import { desc = T.Memory _; _ } -> acc + 1
         | _ -> acc)
-      0 fields
+      0 expanded_fields
   in
 
   let data =
