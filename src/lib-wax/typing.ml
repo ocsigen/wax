@@ -8555,6 +8555,10 @@ let rec check_constant_instruction ctx i =
   | Array (_, i1, i2) ->
       check_constant_instruction ctx i1;
       check_constant_instruction ctx i2
+  (* [cont.new] allocates a fresh continuation from a (constant) function
+     reference, so it is itself constant; its operand must be constant too. This
+     tracks the open stack-switching spec PR (the spec does not list it yet). *)
+  | ContNew (_, f) -> check_constant_instruction ctx f
   | BinOp ({ desc = Add | Sub | Mul; _ }, i1, i2) -> (
       check_constant_instruction ctx i1;
       check_constant_instruction ctx i2;
@@ -8616,9 +8620,9 @@ let rec check_constant_instruction ctx i =
   | GetDescriptor _ | StructSet _ | ArraySegment _ | ArrayGet _ | ArraySet _
   | Let _ | Br _ | Br_if _ | Br_table _ | Br_on_null _ | Br_on_non_null _
   | Br_on_cast _ | Br_on_cast_fail _ | Br_on_cast_desc_eq _
-  | Br_on_cast_desc_eq_fail _ | Hinted _ | Throw _ | ThrowRef _ | ContNew _
-  | ContBind _ | Suspend _ | Resume _ | ResumeThrow _ | ResumeThrowRef _
-  | Switch _ | Return _ | Sequence _ | Select _ | If_annotation _ ->
+  | Br_on_cast_desc_eq_fail _ | Hinted _ | Throw _ | ThrowRef _ | ContBind _
+  | Suspend _ | Resume _ | ResumeThrow _ | ResumeThrowRef _ | Switch _
+  | Return _ | Sequence _ | Select _ | If_annotation _ ->
       Error.constant_expression_required ctx.diagnostics ~location
 
 (* A struct-literal field in a constant expression. An explicit value is checked

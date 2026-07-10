@@ -1,0 +1,8 @@
+type ft = fn();
+type k = cont ft;
+
+fn g() {}
+
+const C: &k = cont_new k (g);
+
+fn use_it() -> &k { return C; }
