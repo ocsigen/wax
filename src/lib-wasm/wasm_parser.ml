@@ -1510,9 +1510,15 @@ let indirect_name_map ch =
    entries: for each (absolute) function index, a list of (body-relative offset,
    hint). [code_starts] gives, in defined-function order, the byte offset where
    each function body (its locals declaration) begins — the origin for those
-   offsets. Wrap in [Hinted] the conditional branch whose opcode sits at the
-   matching offset (its source location records that absolute offset). A hint whose
-   offset does not fall on a conditional branch is dropped. *)
+   offsets. Wrap in [Hinted] the instruction whose opcode sits at the matching
+   offset (its source location records that absolute offset). Whether that
+   instruction is a legal target is a validation concern, not a decoding one, so
+   the hint is attached wherever its offset lands and [validation] rejects a
+   non-branch placement — matching the text path. Our own encoder always records
+   the branch opcode's offset, so a round-tripped valid module lands on a branch;
+   only an externally-produced, malformed section can point elsewhere, and then
+   the placement is diagnosed rather than silently dropped. An offset falling
+   between opcodes (matching no instruction start) still cannot attach. *)
 let attach_branch_hints ~num_func_imports ~code_starts ~sections
     (code : Ast.location code list) =
   if sections = [] then code
@@ -1530,12 +1536,6 @@ let attach_branch_hints ~num_func_imports ~code_starts ~sections
         in
         List.iter (fun (off, h) -> Hashtbl.replace tbl off h) hints)
       sections;
-    let is_conditional_branch = function
-      | If _ | Br_if _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
-      | Br_on_cast_fail _ | Br_on_cast_desc_eq _ | Br_on_cast_desc_eq_fail _ ->
-          true
-      | _ -> false
-    in
     let rec go start_pos tbl (i : Ast.location instr) =
       let lst = List.map (go start_pos tbl) in
       let desc =
@@ -1572,9 +1572,8 @@ let attach_branch_hints ~num_func_imports ~code_starts ~sections
       let i = { i with desc } in
       let rel = i.info.Wax_utils.Ast.loc_start.Lexing.pos_cnum - start_pos in
       match Hashtbl.find_opt tbl rel with
-      | Some h when is_conditional_branch i.desc ->
-          { i with desc = Hinted (h, i) }
-      | _ -> i
+      | Some h -> { i with desc = Hinted (h, i) }
+      | None -> i
     in
     List.mapi
       (fun ci (c : Ast.location code) ->

@@ -476,6 +476,14 @@ module Error = struct
         Format.fprintf f "The custom page size must be 1 or 65536.")
       ()
 
+  let branch_hint_invalid_target context ~location =
+    Diagnostic.report context ~location ~severity:Error
+      ~message:(fun f () ->
+        Format.fprintf f
+          "A branch hint may only prefix a conditional branch (if, br_if, or \
+           br_on_*).")
+      ()
+
   let shared_memory_without_max context ~location =
     Diagnostic.report context ~location ~severity:Error
       ~message:(fun f () ->
@@ -2461,8 +2469,22 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       let* () = pop_args ctx loc ~source:param_source params in
       push_results ~source:param_source params
   (* Branch-hinting proposal: the wrapper is advisory and has the exact stack
-     effect of the branch it wraps. *)
-  | Hinted (_, inner) -> instruction ctx inner
+     effect of the branch it wraps. The hint is only allowed on a conditional
+     branch ([if]/[br_if]/[br_on_*], through a folded wrapper); reject it
+     anywhere else. *)
+  | Hinted (_, inner) ->
+      let rec is_branch_hint_target (d : _ Ast.Text.instr_desc) =
+        match d with
+        | If _ | Br_if _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
+        | Br_on_cast_fail _ | Br_on_cast_desc_eq _ | Br_on_cast_desc_eq_fail _
+          ->
+            true
+        | Folded (b, _) -> is_branch_hint_target b.Ast.desc
+        | _ -> false
+      in
+      if not (is_branch_hint_target inner.Ast.desc) then
+        Error.branch_hint_invalid_target ctx.modul.diagnostics ~location:loc;
+      instruction ctx inner
   | Br_table (lst, idx) ->
       let* () = pop_known ctx loc I32 in
       let*! params, _ = branch_target ctx idx in

@@ -380,12 +380,21 @@ module Encoder = struct
     | Br_if i ->
         byte b 0x0D;
         uint b i
-    (* Branch-hinting proposal: the wrapper emits no bytecode; it records its hint
-       at [generated_offset] (the wrapped branch's opcode, which [instr inner]
-       writes next) and emits the inner instruction. *)
-    | Hinted (h, inner) ->
-        !branch_hint_sink generated_offset h;
-        instr ~source_map_t b inner
+    (* Branch-hinting proposal: the wrapper emits no bytecode; it records its
+       hint at the wrapped branch's opcode. When the branch is folded
+       ([Folded (branch, operands)]) the opcode is emitted only after its
+       operands, so encode those first and take the offset there — not at the
+       wrapper's own start, which precedes the operands. An unfolded branch sits
+       at the wrapper's start offset. *)
+    | Hinted (h, inner) -> (
+        match inner.desc with
+        | Folded (head, operands) ->
+            List.iter (instr ~source_map_t b) operands;
+            !branch_hint_sink (Buffer.length b) h;
+            instr ~source_map_t b head
+        | _ ->
+            !branch_hint_sink generated_offset h;
+            instr ~source_map_t b inner)
     | Br_table (ls, d) ->
         byte b 0x0E;
         vec uint b ls;

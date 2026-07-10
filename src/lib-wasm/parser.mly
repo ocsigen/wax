@@ -184,6 +184,8 @@
 %token REGISTER
 %token INVOKE
 %token GET
+%token THREAD
+%token WAIT
 %token NAN
 %token V128
 %token REF_HOST
@@ -201,6 +203,8 @@
 %token ASSERT_EXHAUSTION
 %token ASSERT_MALFORMED
 %token ASSERT_INVALID
+%token ASSERT_MALFORMED_CUSTOM
+%token ASSERT_INVALID_CUSTOM
 %token ASSERT_UNLINKABLE
 %token V128_CONST
 %token REF_EXTERN
@@ -300,30 +304,22 @@ let check_labels lab (lab' : Ast.Text.name option) =
 (* Branch-hinting proposal: decode a [(@metadata.code.branch_hint "…")] payload.
    The string is a single byte: 0x00 = unlikely, otherwise likely. *)
 let branch_hint_of_annotation loc (s : (string, Ast.location) Ast.annotated) =
-  if String.length s.Ast.desc <> 1 then
-    raise
-      (Parsing.Syntax_error
-         (loc, "A branch hint must be a single byte (\"\\00\" or \"\\01\").\n"))
-  else Char.code s.Ast.desc.[0] <> 0
+  match if String.length s.Ast.desc = 1 then Char.code s.Ast.desc.[0] else -1 with
+  | 0 -> false
+  | 1 -> true
+  | _ ->
+      raise
+        (Parsing.Syntax_error
+           (loc, "A branch hint must be \"\\00\" or \"\\01\".\n"))
 
-(* A branch hint may only prefix a conditional branch (looking through a folded
-   wrapper). Reject the annotation anywhere else. *)
-let rec is_branch_hint_target d =
-  match d with
-  | If _ | Br_if _ | Br_on_null _ | Br_on_non_null _ | Br_on_cast _
-  | Br_on_cast_fail _ | Br_on_cast_desc_eq _ | Br_on_cast_desc_eq_fail _ ->
-      true
-  | Folded (i, _) -> is_branch_hint_target i.Ast.desc
-  | _ -> false
-
-let hinted loc h (i : _ instr) =
-  if is_branch_hint_target i.Ast.desc then with_loc loc (Hinted (h, i))
-  else
-    raise
-      (Parsing.Syntax_error
-         ( loc,
-           "A branch hint may only prefix a conditional branch (if, br_if, or \
-            br_on_*).\n" ))
+(* The branch hint wraps the instruction that follows it. Whether that
+   instruction is a legal target (only [if]/[br_if]/[br_on_*]) is a *validation*
+   concern, not a syntactic one — the reference tools attach the annotation
+   during parsing and diagnose a bad placement afterwards, which also lets a
+   malformed inline module inside an [assert_invalid] parse far enough to be
+   rejected. So the grammar attaches it unconditionally; [validation] (and the
+   Wax typer) reject a hint on anything but a conditional branch. *)
+let hinted loc h (i : _ instr) = with_loc loc (Hinted (h, i))
 
 
 %}
@@ -1214,8 +1210,22 @@ cmd:
 | instance { [] }
 | register { [] }
 | action { [] }
+| thread { [] }
+| wait { [] }
 | c = assertion { c }
 | c = meta { c }
+
+(* The threads test format wraps modules/actions in [(thread $T (shared (module
+   $M)) …)] with [(wait $T)] barriers. We don't run threads, so both are parsed
+   and ignored (their inner modules are not tested). *)
+thread:
+| "(" THREAD ID? ioption(shared_clause) cmd* ")" {}
+
+shared_clause:
+| "(" SHARED nonempty_list("(" MODULE ID ")" {}) ")" {}
+
+wait:
+| "(" WAIT ID? ")" {}
 
 
 module_:
@@ -1274,6 +1284,13 @@ assertion:
 | "(" ASSERT_MALFORMED m = module_ r = STRING ")"
   { m (`Malformed ((fun s -> s.Ast.desc) r)) }
 | "(" ASSERT_INVALID m = module_ r = STRING ")"
+  { m (`Invalid ((fun s -> s.Ast.desc) r)) }
+(* The [_custom] variants (reference-interpreter custom-section tests) assert
+   malformedness / invalidity arising from a custom section — for our purposes
+   the module must still be rejected, exactly like the base assertions. *)
+| "(" ASSERT_MALFORMED_CUSTOM m = module_ r = STRING ")"
+  { m (`Malformed ((fun s -> s.Ast.desc) r)) }
+| "(" ASSERT_INVALID_CUSTOM m = module_ r = STRING ")"
   { m (`Invalid ((fun s -> s.Ast.desc) r)) }
 | "(" ASSERT_UNLINKABLE m = script_instance STRING ")" { m `Valid }
 | "(" ASSERT_TRAP m = script_instance STRING ")" { m `Valid }
