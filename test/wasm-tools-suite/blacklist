@@ -45,7 +45,13 @@ tail-call-after-end.wast
 # golden (that would enshrine the false-accept).
 stack-switching/validate-switch-label.wast
 
+# Bare (unfolded) instructions used as operands inside a folded instruction,
+# e.g. `(select (result (ref $a)) unreachable unreachable (i32.const 0))` — a
+# wasm-tools leniency (folded operands must themselves be folded); the spec
+# reference interpreter rejects it too, so wax matches it. (Typed select with a
+# reference result type *is* supported; only the bare-operand form is not.)
+gc/gc-ref.wast
+
 # Syntax wax does not parse (yet).
 producers.wast                 # (@producers …) annotation
 wat-numerics.wast              # wasm-tools typed-data literals (data (i8 …) (i16 …))
-gc/gc-ref.wast                 # typed select with a reference result type
