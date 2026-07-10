@@ -36,3 +36,43 @@
   (diff
    wasm_test_suite.custom-descriptors.expected
    wasm_test_suite.custom-descriptors.output)))
+
+; The vendored wasm-tools self-checking corpus (test/wasm-tools-suite/): the
+; subset of wasm-tools' tests/cli that carries spec assertions. Its own golden,
+; kept separate from the spec suite above for clean provenance.
+
+(rule
+ (deps
+  (glob_files_rec wasm-tools-suite/*.wast))
+ (action
+  (with-stdout-to
+   wasm_tools_suite.output
+   (run ../src/bin/run_wasm_testsuite.exe --no-color wasm-tools-suite))))
+
+(rule
+ (alias runtest)
+ (action
+  (diff wasm_tools_suite.expected wasm_tools_suite.output)))
+
+; The same corpus with custom-descriptors enabled, to exercise the vendored
+; custom-descriptors tests (skipped as feature-disabled in the default run).
+
+(rule
+ (deps
+  (glob_files_rec wasm-tools-suite/*.wast))
+ (action
+  (with-stdout-to
+   wasm_tools_suite.custom-descriptors.output
+   (run
+    ../src/bin/run_wasm_testsuite.exe
+    --no-color
+    --enable
+    custom-descriptors
+    wasm-tools-suite))))
+
+(rule
+ (alias runtest)
+ (action
+  (diff
+   wasm_tools_suite.custom-descriptors.expected
+   wasm_tools_suite.custom-descriptors.output)))

@@ -1,0 +1,336 @@
+==== custom-descriptors-disabled.wast ====
+Validation should have failed (custom descriptors required for exact reference types):
+  (type $t (struct))
+  (func (param (ref (exact $t))))
+Validation should have failed (custom descriptors required for exact reference types):
+  (type $t (struct))
+  (func (param (ref (exact $t))))
+Wax type-checking should have failed (custom descriptors required for exact reference types):
+  type t = { }; fn f(&!t) {}
+from wasm: (type $t (struct))
+  (func (param (ref (exact $t))))
+==== empty.wast ====
+Parsing should have failed (x): 
+Parsing should have failed (x): (; foo ;)
+Parsing should have failed (x):  
+Parsing should have failed (x): 	
+==== gc/br-on-non-null.wast ====
+Wax type-checking should have failed (expected anyref, found funcref):
+  fn f() {
+      match (null as &?func) {
+          null => {
+              unreachable;
+          }
+          _ => {}
+      }
+  }
+from wasm:
+  (func
+    block $l (result anyref)
+      ref.null func
+      br_on_non_null $l
+      unreachable
+    end
+    drop
+  )
+==== gc/gc-subtyping-too-deep.wast ====
+Validation should have failed (sub type hierarchy too deep: found depth 64, cannot exceed depth 63):
+  (type (sub (struct)))
+  (type (sub 0 (struct)))
+  (type (sub 1 (struct)))
+  (type (sub 2 (struct)))
+  (type (sub 3 (struct)))
+  (type (sub 4 (struct)))
+  (type (sub 5 (struct)))
+  (type (sub 6 (struct)))
+  (type (sub 7 (struct)))
+  (type (sub 8 (struct)))
+  (type (sub 9 (struct)))
+  (type (sub 10 (struct)))
+  (type (sub 11 (struct)))
+  (type (sub 12 (struct)))
+  (type (sub 13 (struct)))
+  (type (sub 14 (struct)))
+  (type (sub 15 (struct)))
+  (type (sub 16 (struct)))
+  (type (sub 17 (struct)))
+  (type (sub 18 (struct)))
+  (type (sub 19 (struct)))
+  (type (sub 20 (struct)))
+  (type (sub 21 (struct)))
+  (type (sub 22 (struct)))
+  (type (sub 23 (struct)))
+  (type (sub 24 (struct)))
+  (type (sub 25 (struct)))
+  (type (sub 26 (struct)))
+  (type (sub 27 (struct)))
+  (type (sub 28 (struct)))
+  (type (sub 29 (struct)))
+  (type (sub 30 (struct)))
+  (type (sub 31 (struct)))
+  (type (sub 32 (struct)))
+  (type (sub 33 (struct)))
+  (type (sub 34 (struct)))
+  (type (sub 35 (struct)))
+  (type (sub 36 (struct)))
+  (type (sub 37 (struct)))
+  (type (sub 38 (struct)))
+  (type (sub 39 (struct)))
+  (type (sub 40 (struct)))
+  (type (sub 41 (struct)))
+  (type (sub 42 (struct)))
+  (type (sub 43 (struct)))
+  (type (sub 44 (struct)))
+  (type (sub 45 (struct)))
+  (type (sub 46 (struct)))
+  (type (sub 47 (struct)))
+  (type (sub 48 (struct)))
+  (type (sub 49 (struct)))
+  (type (sub 50 (struct)))
+  (type (sub 51 (struct)))
+  (type (sub 52 (struct)))
+  (type (sub 53 (struct)))
+  (type (sub 54 (struct)))
+  (type (sub 55 (struct)))
+  (type (sub 56 (struct)))
+  (type (sub 57 (struct)))
+  (type (sub 58 (struct)))
+  (type (sub 59 (struct)))
+  (type (sub 60 (struct)))
+  (type (sub 61 (struct)))
+  (type (sub 62 (struct)))
+  (type (sub 63 (struct)))
+Validation should have failed (sub type hierarchy too deep: found depth 64, cannot exceed depth 63):
+  (type (sub (struct)))
+  (type (sub 0 (struct)))
+  (type (sub 1 (struct)))
+  (type (sub 2 (struct)))
+  (type (sub 3 (struct)))
+  (type (sub 4 (struct)))
+  (type (sub 5 (struct)))
+  (type (sub 6 (struct)))
+  (type (sub 7 (struct)))
+  (type (sub 8 (struct)))
+  (type (sub 9 (struct)))
+  (type (sub 10 (struct)))
+  (type (sub 11 (struct)))
+  (type (sub 12 (struct)))
+  (type (sub 13 (struct)))
+  (type (sub 14 (struct)))
+  (type (sub 15 (struct)))
+  (type (sub 16 (struct)))
+  (type (sub 17 (struct)))
+  (type (sub 18 (struct)))
+  (type (sub 19 (struct)))
+  (type (sub 20 (struct)))
+  (type (sub 21 (struct)))
+  (type (sub 22 (struct)))
+  (type (sub 23 (struct)))
+  (type (sub 24 (struct)))
+  (type (sub 25 (struct)))
+  (type (sub 26 (struct)))
+  (type (sub 27 (struct)))
+  (type (sub 28 (struct)))
+  (type (sub 29 (struct)))
+  (type (sub 30 (struct)))
+  (type (sub 31 (struct)))
+  (type (sub 32 (struct)))
+  (type (sub 33 (struct)))
+  (type (sub 34 (struct)))
+  (type (sub 35 (struct)))
+  (type (sub 36 (struct)))
+  (type (sub 37 (struct)))
+  (type (sub 38 (struct)))
+  (type (sub 39 (struct)))
+  (type (sub 40 (struct)))
+  (type (sub 41 (struct)))
+  (type (sub 42 (struct)))
+  (type (sub 43 (struct)))
+  (type (sub 44 (struct)))
+  (type (sub 45 (struct)))
+  (type (sub 46 (struct)))
+  (type (sub 47 (struct)))
+  (type (sub 48 (struct)))
+  (type (sub 49 (struct)))
+  (type (sub 50 (struct)))
+  (type (sub 51 (struct)))
+  (type (sub 52 (struct)))
+  (type (sub 53 (struct)))
+  (type (sub 54 (struct)))
+  (type (sub 55 (struct)))
+  (type (sub 56 (struct)))
+  (type (sub 57 (struct)))
+  (type (sub 58 (struct)))
+  (type (sub 59 (struct)))
+  (type (sub 60 (struct)))
+  (type (sub 61 (struct)))
+  (type (sub 62 (struct)))
+  (type (sub 63 (struct)))
+Wax type-checking should have failed (sub type hierarchy too deep: found depth 64, cannot exceed depth 63):
+  type t = open { };
+  type t_2: t = open { };
+  type t_3: t_2 = open { };
+  type t_4: t_3 = open { };
+  type t_5: t_4 = open { };
+  type t_6: t_5 = open { };
+  type t_7: t_6 = open { };
+  type t_8: t_7 = open { };
+  type t_9: t_8 = open { };
+  type t_10: t_9 = open { };
+  type t_11: t_10 = open { };
+  type t_12: t_11 = open { };
+  type t_13: t_12 = open { };
+  type t_14: t_13 = open { };
+  type t_15: t_14 = open { };
+  type t_16: t_15 = open { };
+  type t_17: t_16 = open { };
+  type t_18: t_17 = open { };
+  type t_19: t_18 = open { };
+  type t_20: t_19 = open { };
+  type t_21: t_20 = open { };
+  type t_22: t_21 = open { };
+  type t_23: t_22 = open { };
+  type t_24: t_23 = open { };
+  type t_25: t_24 = open { };
+  type t_26: t_25 = open { };
+  type t_27: t_26 = open { };
+  type t_28: t_27 = open { };
+  type t_29: t_28 = open { };
+  type t_30: t_29 = open { };
+  type t_31: t_30 = open { };
+  type t_32: t_31 = open { };
+  type t_33: t_32 = open { };
+  type t_34: t_33 = open { };
+  type t_35: t_34 = open { };
+  type t_36: t_35 = open { };
+  type t_37: t_36 = open { };
+  type t_38: t_37 = open { };
+  type t_39: t_38 = open { };
+  type t_40: t_39 = open { };
+  type t_41: t_40 = open { };
+  type t_42: t_41 = open { };
+  type t_43: t_42 = open { };
+  type t_44: t_43 = open { };
+  type t_45: t_44 = open { };
+  type t_46: t_45 = open { };
+  type t_47: t_46 = open { };
+  type t_48: t_47 = open { };
+  type t_49: t_48 = open { };
+  type t_50: t_49 = open { };
+  type t_51: t_50 = open { };
+  type t_52: t_51 = open { };
+  type t_53: t_52 = open { };
+  type t_54: t_53 = open { };
+  type t_55: t_54 = open { };
+  type t_56: t_55 = open { };
+  type t_57: t_56 = open { };
+  type t_58: t_57 = open { };
+  type t_59: t_58 = open { };
+  type t_60: t_59 = open { };
+  type t_61: t_60 = open { };
+  type t_62: t_61 = open { };
+  type t_63: t_62 = open { };
+  type t_64: t_63 = open { };
+  type t_65: t_64 = open { };
+from wasm:
+  (type (sub (struct)))
+  (type (sub 0 (struct)))
+  (type (sub 1 (struct)))
+  (type (sub 2 (struct)))
+  (type (sub 3 (struct)))
+  (type (sub 4 (struct)))
+  (type (sub 5 (struct)))
+  (type (sub 6 (struct)))
+  (type (sub 7 (struct)))
+  (type (sub 8 (struct)))
+  (type (sub 9 (struct)))
+  (type (sub 10 (struct)))
+  (type (sub 11 (struct)))
+  (type (sub 12 (struct)))
+  (type (sub 13 (struct)))
+  (type (sub 14 (struct)))
+  (type (sub 15 (struct)))
+  (type (sub 16 (struct)))
+  (type (sub 17 (struct)))
+  (type (sub 18 (struct)))
+  (type (sub 19 (struct)))
+  (type (sub 20 (struct)))
+  (type (sub 21 (struct)))
+  (type (sub 22 (struct)))
+  (type (sub 23 (struct)))
+  (type (sub 24 (struct)))
+  (type (sub 25 (struct)))
+  (type (sub 26 (struct)))
+  (type (sub 27 (struct)))
+  (type (sub 28 (struct)))
+  (type (sub 29 (struct)))
+  (type (sub 30 (struct)))
+  (type (sub 31 (struct)))
+  (type (sub 32 (struct)))
+  (type (sub 33 (struct)))
+  (type (sub 34 (struct)))
+  (type (sub 35 (struct)))
+  (type (sub 36 (struct)))
+  (type (sub 37 (struct)))
+  (type (sub 38 (struct)))
+  (type (sub 39 (struct)))
+  (type (sub 40 (struct)))
+  (type (sub 41 (struct)))
+  (type (sub 42 (struct)))
+  (type (sub 43 (struct)))
+  (type (sub 44 (struct)))
+  (type (sub 45 (struct)))
+  (type (sub 46 (struct)))
+  (type (sub 47 (struct)))
+  (type (sub 48 (struct)))
+  (type (sub 49 (struct)))
+  (type (sub 50 (struct)))
+  (type (sub 51 (struct)))
+  (type (sub 52 (struct)))
+  (type (sub 53 (struct)))
+  (type (sub 54 (struct)))
+  (type (sub 55 (struct)))
+  (type (sub 56 (struct)))
+  (type (sub 57 (struct)))
+  (type (sub 58 (struct)))
+  (type (sub 59 (struct)))
+  (type (sub 60 (struct)))
+  (type (sub 61 (struct)))
+  (type (sub 62 (struct)))
+  (type (sub 63 (struct)))
+==== gc/invalid.wast ====
+Parsing failed unexpectedly: \000asm\001\000\000\000\001\007\002^\127\000`\000\000\003\002\001\001\n\r\001\011\000A\000A\000\251\t\000\000\026\011\011\006\001\001\003xxx
+File "wasm-tools-suite/gc/invalid.wast", line 1, characters 32-32:
+Error: data count section required
+
+Wax type-checking should have failed (type mismatch: expected structref, found anyref):
+  fn f(x: &?any) -> &?any 'l: {
+      br_on_null 'l (null as &?struct, x);
+      _ = _;
+      br_on_cast_fail 'l &?struct _;
+  }
+from wasm:
+  (func (param anyref) (result anyref)
+    ref.null struct
+    local.get 0
+    br_on_null 0
+    drop
+    br_on_cast_fail 0 structref structref
+  )
+Wax type-checking should have failed (type mismatch: expected structref, found anyref):
+  fn f(x: &?any) -> &?any 'l: {
+      null as &?struct;
+      unreachable;
+      br_on_null 'l (_, x);
+      _ = _;
+      br_on_cast_fail 'l &?struct _;
+  }
+from wasm:
+  (func (param anyref) (result anyref)
+    ref.null struct
+    unreachable
+    local.get 0
+    br_on_null 0
+    drop
+    br_on_cast_fail 0 structref structref
+  )

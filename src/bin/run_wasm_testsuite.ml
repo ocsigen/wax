@@ -10,6 +10,7 @@ let wasm_only = ref false
 let color = ref Wax_utils.Colors.Always
 let all_errors = ref false
 let feature_specs = ref []
+let dir_args = ref []
 
 let () =
   let speclist =
@@ -29,8 +30,8 @@ let () =
     ]
   in
   Arg.parse speclist
-    (fun arg -> raise (Arg.Bad (Printf.sprintf "Unexpected argument: %s" arg)))
-    "Usage: run_wasm_testsuite [options]";
+    (fun arg -> dir_args := !dir_args @ [ arg ])
+    "Usage: run_wasm_testsuite [options] [dir ...]";
   Wax_utils.Feature.set_config !feature_specs
 
 let print_flushed s =
@@ -518,7 +519,13 @@ let output path s =
       (match !color with Always -> Wax_utils.Colors.Ansi.reset | _ -> "");
     print_flushed s)
 
-let dirs = [ "wasm-test-suite"; "additional-tests" ]
+(* The directories to walk for [.wast] files: the ones named on the command
+   line, or the built-in spec suite when none are given. A separate golden (e.g.
+   the vendored wasm-tools corpus) is produced by passing its dir explicitly. *)
+let dirs =
+  match !dir_args with
+  | [] -> [ "wasm-test-suite"; "additional-tests" ]
+  | l -> l
 
 let custom_descriptors_on =
   Wax_utils.Feature.is_enabled
