@@ -1638,6 +1638,19 @@ let named_ref_source idx : source_type =
 let named_ref_null_source idx : source_type =
   Plain (Ref { nullable = true; typ = Type idx })
 
+(* The push-source of a value a concrete allocator produces at exactly type [idx]
+   ([struct.new], [array.new*], [cont.new], [cont.bind]): these push an *exact*
+   internal reference, so under custom-descriptors the source is rendered exact
+   to match. Without the proposal exact reference types are not expressible, so it
+   falls back to the plain named source (the internal type stays exact, but that
+   extra precision is unobservable there). *)
+let exact_ref_source ctx idx : source_type =
+  if
+    Wax_utils.Feature.is_enabled ctx.modul.types.features
+      Wax_utils.Feature.Custom_descriptors
+  then Plain (Ref { nullable = false; typ = Exact idx })
+  else named_ref_source idx
+
 (* The source rendering of the descriptor of the type at global index
    [described] — the [_desc_eq] cast/branch operand (nullable), or the
    [ref.get_desc] result (non-null, via [~nullable:false]). The descriptor type
@@ -2326,7 +2339,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
         pop ctx loc ~expected_source:func_source
           (Ref { nullable = true; typ = Type ft })
       in
-      push ~source:(named_ref_source x) (Some loc)
+      push ~source:(exact_ref_source ctx x) (Some loc)
         (Ref { nullable = false; typ = Exact ty })
   | ContBind (x, y) ->
       let*! xty, _, ftx = lookup_cont_type ctx x in
@@ -2363,7 +2376,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
                    x)
               (Array.append ts11 [| Ref { nullable = true; typ = Type xty } |])
           in
-          push ~source:(named_ref_source y) (Some loc)
+          push ~source:(exact_ref_source ctx y) (Some loc)
             (Ref { nullable = false; typ = Exact yty })
         end
       end
@@ -3108,7 +3121,12 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
          meaningless, as the interned index space is deduplicated). *)
       let source =
         match type_idx with
-        | Some ({ desc = Id _; _ } as idx) -> named_ref_source idx
+        | Some ({ desc = Id _; _ } as idx) ->
+            (* Match the pushed internal type's exactness (below) so the source
+               rendering agrees with it — but only when the exactness is
+               expressible ([exact_ref_source] renders exact under
+               custom-descriptors, plain otherwise). *)
+            if exact then exact_ref_source ctx idx else named_ref_source idx
         | _ -> Inline_ref (Func sign)
       in
       push ~source (Some loc)
@@ -3225,7 +3243,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
                match f.typ with Value v -> v | Packed _ -> I32)
              fields)
       in
-      push ~source:(named_ref_source idx) (Some loc)
+      push ~source:(exact_ref_source ctx idx) (Some loc)
         (Ref { nullable = false; typ = Exact ty })
   | StructNewDefault idx ->
       let*! ty, _, fields = lookup_struct_type ctx idx in
@@ -3237,7 +3255,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
       then
         Error.descriptor_allocation_required ctx.modul.diagnostics
           ~location:i.info;
-      push ~source:(named_ref_source idx) (Some loc)
+      push ~source:(exact_ref_source ctx idx) (Some loc)
         (Ref { nullable = false; typ = Exact ty })
   | StructNewDesc idx ->
       let*! ty, _, fields = lookup_struct_type ctx idx in
@@ -3258,7 +3276,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
                match f.typ with Value v -> v | Packed _ -> I32)
              fields)
       in
-      push ~source:(named_ref_source idx) (Some loc)
+      push ~source:(exact_ref_source ctx idx) (Some loc)
         (Ref { nullable = false; typ = Exact ty })
   | StructNewDefaultDesc idx ->
       let*! ty, _, fields = lookup_struct_type ctx idx in
@@ -3271,7 +3289,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
             (descriptor_operand_source ctx.modul.types (Exact ty))
           (Ref { nullable = true; typ = Exact desc })
       in
-      push ~source:(named_ref_source idx) (Some loc)
+      push ~source:(exact_ref_source ctx idx) (Some loc)
         (Ref { nullable = false; typ = Exact ty })
   | StructGet (signage, idx, idx') ->
       let*! ty, field_map, fields = lookup_struct_type ctx idx in
@@ -3313,14 +3331,14 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           ~expected_source:(source_element_valtype ctx idx)
           (unpack_type field)
       in
-      push ~source:(named_ref_source idx) (Some loc)
+      push ~source:(exact_ref_source ctx idx) (Some loc)
         (Ref { nullable = false; typ = Exact ty })
   | ArrayNewDefault idx ->
       let*! ty, field = lookup_array_type ctx idx in
       if not (field_has_default field) then
         Error.not_defaultable ctx.modul.diagnostics ~location:i.info;
       let* () = pop_known ctx loc I32 in
-      push ~source:(named_ref_source idx) (Some loc)
+      push ~source:(exact_ref_source ctx idx) (Some loc)
         (Ref { nullable = false; typ = Exact ty })
   | ArrayNewFixed (idx, n) ->
       let*! ty, field = lookup_array_type ctx idx in
@@ -3329,7 +3347,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           ~expected_source:(source_element_valtype ctx idx)
           (unpack_type field) (Uint32.to_int n)
       in
-      push ~source:(named_ref_source idx) (Some loc)
+      push ~source:(exact_ref_source ctx idx) (Some loc)
         (Ref { nullable = false; typ = Exact ty })
   | ArrayNewData (idx, idx') ->
       let*! ty, field = lookup_array_type ctx idx in
@@ -3340,7 +3358,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           Error.numeric_array_required ctx.modul.diagnostics ~location:i.info);
       let* () = pop_known ctx loc I32 in
       let* () = pop_known ctx loc I32 in
-      push ~source:(named_ref_source idx) (Some loc)
+      push ~source:(exact_ref_source ctx idx) (Some loc)
         (Ref { nullable = false; typ = Exact ty })
   | ArrayNewElem (idx, idx') ->
       let*! ty, field = lookup_array_type ctx idx in
@@ -3353,7 +3371,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
             ~location:i.info);
       let* () = pop_known ctx loc I32 in
       let* () = pop_known ctx loc I32 in
-      push ~source:(named_ref_source idx) (Some loc)
+      push ~source:(exact_ref_source ctx idx) (Some loc)
         (Ref { nullable = false; typ = Exact ty })
   | ArrayGet (signage, idx) ->
       let*! ty, field = lookup_array_type ctx idx in
@@ -3541,7 +3559,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
             Error.string_not_unicode ctx.modul.diagnostics ~location:i.info
       | Value _ ->
           Error.string_array_required ctx.modul.diagnostics ~location:i.info);
-      push ~source:(named_ref_source idx) (Some loc)
+      push ~source:(exact_ref_source ctx idx) (Some loc)
         (Ref { nullable = false; typ = Exact ty })
   | String (None, _) ->
       let i = string_type ctx.modul.types in
@@ -3592,7 +3610,10 @@ let rec check_constant_instruction ctx (i : _ Ast.Text.instr) =
       Hashtbl.replace ctx.refs (Sequence.get_index ctx.functions i) ()
   | RefNull _ | StructNew _ | StructNewDefault _ | StructNewDesc _
   | StructNewDefaultDesc _ | ArrayNew _ | ArrayNewDefault _ | ArrayNewFixed _
-  | RefI31 | Const _
+  (* [cont.new] allocates a fresh continuation from a (constant) function
+     reference, so it is itself a constant expression. The stack-switching spec
+     and reference tools do not list it yet; this tracks the open spec PR. *)
+  | ContNew _ | RefI31 | Const _
   | BinOp (I32 (Add | Sub | Mul) | I64 (Add | Sub | Mul))
   | ExternConvertAny | AnyConvertExtern | VecConst _ | String _ | Char _ ->
       ()
@@ -3600,7 +3621,7 @@ let rec check_constant_instruction ctx (i : _ Ast.Text.instr) =
       check_constant_instruction ctx i;
       check_constant_instructions ctx l
   | Block _ | Loop _ | If _ | TryTable _ | Try _ | Unreachable | Nop | Throw _
-  | ThrowRef | ContNew _ | ContBind _ | Suspend _ | Resume _ | ResumeThrow _
+  | ThrowRef | ContBind _ | Suspend _ | Resume _ | ResumeThrow _
   | ResumeThrowRef _ | Switch _ | Br _ | Br_if _ | Br_table _ | Br_on_null _
   | Br_on_non_null _ | Br_on_cast _ | Br_on_cast_fail _ | Br_on_cast_desc_eq _
   | Br_on_cast_desc_eq_fail _ | Hinted _ | Return | Call _ | CallRef _
