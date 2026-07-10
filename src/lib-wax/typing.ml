@@ -2467,7 +2467,7 @@ let missing_else_ok ctx params results =
    type. Mirrors [Validation.cont_functype_of_heaptype]. *)
 let cont_functype ctx (h : Internal.heaptype) : Internal.functype option =
   match h with
-  | Type ty -> (
+  | Type ty | Exact ty -> (
       match (Wax_wasm.Types.get_subtype (subtyping_info ctx) ty).typ with
       | Cont ft -> (
           match (Wax_wasm.Types.get_subtype (subtyping_info ctx) ft).typ with
@@ -4631,7 +4631,22 @@ and type_stack_switching ctx i =
       let*! ft = lookup_cont_inner ctx ct in
       (let>@ fref = internalize ctx (Ref { nullable = true; typ = Type ft }) in
        check_type ctx f' fref);
-      let*! cref = internalize ctx (Ref { nullable = false; typ = Type ct }) in
+      (* [cont.new] allocates a fresh continuation of exactly [ct], so its result
+         is an exact reference. As for [struct.new]/[array.new], we type it exact
+         only under custom-descriptors (exact reference types are part of that
+         proposal); the Wasm validator always tracks it exact internally. *)
+      let want_exact =
+        Wax_utils.Feature.is_enabled ctx.type_context.features
+          Wax_utils.Feature.Custom_descriptors
+      in
+      let*! cref =
+        internalize ctx
+          (Ref
+             {
+               nullable = false;
+               typ = (if want_exact then Exact ct else Type ct);
+             })
+      in
       return_expression i (ContNew (ct, f')) cref
   | ContBind (src, dst, l) ->
       let* l' = instructions ctx l in
@@ -4672,8 +4687,19 @@ and type_stack_switching ctx i =
          internalize ctx (Ref { nullable = true; typ = Type src })
        in
        check_operands ctx l' (Array.append bound [| srcref |]));
+      (* Like [cont.new], [cont.bind] yields a fresh continuation of exactly
+         [dst], so an exact reference (gated on custom-descriptors as above). *)
+      let want_exact =
+        Wax_utils.Feature.is_enabled ctx.type_context.features
+          Wax_utils.Feature.Custom_descriptors
+      in
       let*! dstref =
-        internalize ctx (Ref { nullable = false; typ = Type dst })
+        internalize ctx
+          (Ref
+             {
+               nullable = false;
+               typ = (if want_exact then Exact dst else Type dst);
+             })
       in
       return_expression i (ContBind (src, dst, l')) dstref
   | Suspend (tag, l) ->

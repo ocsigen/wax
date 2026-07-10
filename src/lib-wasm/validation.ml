@@ -1504,7 +1504,7 @@ let lookup_cont_type ctx idx =
 (* The continuation type referenced by a heap type, if any. *)
 let cont_functype_of_heaptype ctx (h : heaptype) =
   match h with
-  | Type ty -> (
+  | Type ty | Exact ty -> (
       match (Types.get_subtype ctx.modul.subtyping_info ty).typ with
       | Cont ft -> (
           match (Types.get_subtype ctx.modul.subtyping_info ft).typ with
@@ -2327,7 +2327,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
           (Ref { nullable = true; typ = Type ft })
       in
       push ~source:(named_ref_source x) (Some loc)
-        (Ref { nullable = false; typ = Type ty })
+        (Ref { nullable = false; typ = Exact ty })
   | ContBind (x, y) ->
       let*! xty, _, ftx = lookup_cont_type ctx x in
       let*! yty, _, fty = lookup_cont_type ctx y in
@@ -2364,7 +2364,7 @@ let rec instruction ctx (i : _ Ast.Text.instr) =
               (Array.append ts11 [| Ref { nullable = true; typ = Type xty } |])
           in
           push ~source:(named_ref_source y) (Some loc)
-            (Ref { nullable = false; typ = Type yty })
+            (Ref { nullable = false; typ = Exact yty })
         end
       end
   | Suspend x ->
