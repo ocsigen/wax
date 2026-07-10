@@ -996,7 +996,12 @@ let integer i n : _ Ast.instr =
   if is_negative n then { i with desc = UnOp (op_loc i Ast.Neg, e) } else e
 
 let float i n =
-  if is_integer n then integer i n
+  (* Test the magnitude, not the signed string: a negative integer-valued float
+     (e.g. [-4.0] printed as [-4]) must take the [integer] path too, else it
+     becomes a [Float] node whose integer-looking text ([-4]) re-lexes as an
+     integer literal on the round-trip — dropping the block/cast annotation that
+     pinned it to a float and leaving [.to_bits()] applied to an [i64]. *)
+  if is_integer (remove_sign n) then integer i n
   else
     let e : _ Ast.instr = { i with desc = Float (remove_sign n) } in
     if is_negative n then { i with desc = UnOp (op_loc i Ast.Neg, e) } else e

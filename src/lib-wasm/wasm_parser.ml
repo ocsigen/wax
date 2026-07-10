@@ -274,7 +274,10 @@ let valtype i ch =
       | _ -> Ref { nullable = false; typ = heaptype ch })
   | _ -> Ref (reftype i ch)
 
-let valtype_first_byte ch = valtype (uint ch) ch
+(* The discriminator is a single byte (the spec reads it as [s7], a one-byte
+   signed LEB), not an unbounded LEB: an overlong encoding like [ff 00] must be
+   rejected, not read as its 7-bit value ([0x7f], i.e. [i32]). *)
+let valtype_first_byte ch = valtype (input_byte ch) ch
 
 let blocktype ch =
   let c = peek_byte ch in
@@ -864,6 +867,10 @@ and instruction ch =
             let i = uint ch in
             ArrayNewFixed (i, Wax_utils.Uint32.of_int (uint ch))
         | 9 ->
+            (* Like [memory.init]/[data.drop], [array.new_data] references a data
+               segment, so the data section (which follows the code section)
+               must be sized ahead of time by a data count section. *)
+            if not ch.has_data_count then error ch "data count section required";
             let i = uint ch in
             ArrayNewData (i, uint ch)
         | 10 ->

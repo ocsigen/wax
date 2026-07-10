@@ -45,3 +45,22 @@ by the WAT-mutation fuzzer.
   $ printf 'fn f() -> i64 { (-4294967295).to_bits(); }\n' > tobits.wax
   $ wax -i wax -f wat tobits.wax
   (func $f (result i64) (i64.reinterpret_f64 (f64.const -4294967295)))
+
+A *negative* integer-valued float constant must take the same integer-literal
+path as a positive one: decompiling it as a `Float` node (rather than an `Int`)
+would print integer-looking text that re-lexes as an integer on the round-trip,
+dropping the `do f64` block annotation that pinned it to a float and leaving
+`to_bits` applied to an `i64`. Here the value is even out of `i64` range, so the
+block annotation is what carries the width. Regression: found by the
+WAT-mutation fuzzer.
+
+  $ cat > blk.wat <<'EOF'
+  > (module (type (func (result i64)))
+  >   (func (result i64)
+  >     block (result f64) f64.const -18446744073709551615 end
+  >     i64.reinterpret_f64))
+  > EOF
+  $ wax -i wat -f wax blk.wat -o blk.wax
+  $ wax -i wax -f wasm blk.wax -o blk.wasm --validate
+  $ wax -i wasm -f wat blk.wasm --validate | grep -c reinterpret
+  1
