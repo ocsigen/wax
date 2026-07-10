@@ -1,6 +1,7 @@
 (rule
  (deps
   (glob_files_rec wasm-test-suite/*.wast)
+  (glob_files wasm-test-suite/blacklist)
   (glob_files_rec additional-tests/*.wast))
  (action
   (with-stdout-to
@@ -20,6 +21,7 @@
 (rule
  (deps
   (glob_files_rec wasm-test-suite/*.wast)
+  (glob_files wasm-test-suite/blacklist)
   (glob_files_rec additional-tests/*.wast))
  (action
   (with-stdout-to
@@ -37,13 +39,14 @@
    wasm_test_suite.custom-descriptors.expected
    wasm_test_suite.custom-descriptors.output)))
 
-; The vendored wasm-tools self-checking corpus (test/wasm-tools-suite/): the
-; subset of wasm-tools' tests/cli that carries spec assertions. Its own golden,
-; kept separate from the spec suite above for clean provenance.
+; The vendored wasm-tools corpus (test/wasm-tools-suite/): all of wasm-tools'
+; tests/cli, with a blacklist for the tests wax cannot run (see the blacklist
+; file). Its own golden, kept separate from the spec suite above.
 
 (rule
  (deps
-  (glob_files_rec wasm-tools-suite/*.wast))
+  (glob_files_rec wasm-tools-suite/*.wast)
+  (glob_files wasm-tools-suite/blacklist))
  (action
   (with-stdout-to
    wasm_tools_suite.output
@@ -59,7 +62,8 @@
 
 (rule
  (deps
-  (glob_files_rec wasm-tools-suite/*.wast))
+  (glob_files_rec wasm-tools-suite/*.wast)
+  (glob_files wasm-tools-suite/blacklist))
  (action
   (with-stdout-to
    wasm_tools_suite.custom-descriptors.output

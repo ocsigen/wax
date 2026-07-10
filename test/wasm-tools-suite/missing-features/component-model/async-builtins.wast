@@ -1,0 +1,57 @@
+;; RUN: wast % --assert default --snapshot tests/snapshots \
+;;        -f=cm-async,-cm-more-async-builtins
+
+;; {future,stream}.cancel-{read,write}
+(assert_invalid
+  (component
+    (type $t (future))
+    (core func (canon future.cancel-read $t async)))
+  "requires the component model more async builtins feature")
+(assert_invalid
+  (component
+    (type $t (future))
+    (core func (canon future.cancel-write $t async)))
+  "requires the component model more async builtins feature")
+(assert_invalid
+  (component
+    (type $t (stream))
+    (core func (canon stream.cancel-read $t async)))
+  "requires the component model more async builtins feature")
+(assert_invalid
+  (component
+    (type $t (stream))
+    (core func (canon stream.cancel-write $t async)))
+  "requires the component model more async builtins feature")
+
+(component
+  (type $f (future))
+  (type $s (stream))
+  (core func (canon future.cancel-read $f))
+  (core func (canon future.cancel-write $f))
+  (core func (canon stream.cancel-read $s))
+  (core func (canon stream.cancel-write $s))
+)
+
+(assert_invalid
+  (component
+    (type $t (stream))
+    (core func (canon stream.write $t)))
+  "requires the component model more async builtins feature")
+
+(assert_invalid
+  (component
+    (type $t (stream))
+    (core func (canon stream.read $t)))
+  "requires the component model more async builtins feature")
+
+(assert_invalid
+  (component
+    (type $t (future))
+    (core func (canon future.write $t)))
+  "requires the component model more async builtins feature")
+
+(assert_invalid
+  (component
+    (type $t (future))
+    (core func (canon future.read $t)))
+  "requires the component model more async builtins feature")

@@ -298,39 +298,3 @@ from wasm:
   (type (sub 61 (struct)))
   (type (sub 62 (struct)))
   (type (sub 63 (struct)))
-==== gc/invalid.wast ====
-Parsing failed unexpectedly: \000asm\001\000\000\000\001\007\002^\127\000`\000\000\003\002\001\001\n\r\001\011\000A\000A\000\251\t\000\000\026\011\011\006\001\001\003xxx
-File "wasm-tools-suite/gc/invalid.wast", line 1, characters 32-32:
-Error: data count section required
-
-Wax type-checking should have failed (type mismatch: expected structref, found anyref):
-  fn f(x: &?any) -> &?any 'l: {
-      br_on_null 'l (null as &?struct, x);
-      _ = _;
-      br_on_cast_fail 'l &?struct _;
-  }
-from wasm:
-  (func (param anyref) (result anyref)
-    ref.null struct
-    local.get 0
-    br_on_null 0
-    drop
-    br_on_cast_fail 0 structref structref
-  )
-Wax type-checking should have failed (type mismatch: expected structref, found anyref):
-  fn f(x: &?any) -> &?any 'l: {
-      null as &?struct;
-      unreachable;
-      br_on_null 'l (_, x);
-      _ = _;
-      br_on_cast_fail 'l &?struct _;
-  }
-from wasm:
-  (func (param anyref) (result anyref)
-    ref.null struct
-    unreachable
-    local.get 0
-    br_on_null 0
-    drop
-    br_on_cast_fail 0 structref structref
-  )

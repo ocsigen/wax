@@ -124,17 +124,47 @@ let in_child_process ?(quiet = false) f =
 let counter = ref 0
 let outputs = ref []
 
+(* A per-corpus blacklist: an optional [<root>/blacklist] file listing tests to
+   skip, one per line, [#]-comments and blank lines ignored. An entry is either a
+   path relative to the corpus root, a directory prefix (trailing [/], skips the
+   whole subtree), or a bare basename (matches that file in any subdirectory).
+   Prefer this over a hardcoded skip for anything static — only feature-dependent
+   skips need to stay in code. *)
+let read_blacklist root =
+  let file = Filename.concat root "blacklist" in
+  if not (Sys.file_exists file) then fun _ -> false
+  else
+    let entries =
+      In_channel.with_open_text file In_channel.input_lines
+      |> List.filter_map (fun line ->
+          let line =
+            match String.index_opt line '#' with
+            | Some i -> String.sub line 0 i
+            | None -> line
+          in
+          let line = String.trim line in
+          if line = "" then None else Some line)
+    in
+    let matches path entry =
+      let n = String.length entry in
+      if n > 0 && entry.[n - 1] = '/' then
+        String.length path >= n && String.sub path 0 n = entry
+      else if String.contains entry '/' then path = entry
+      else Filename.basename path = entry
+    in
+    fun path -> List.exists (matches path) entries
+
 let iter_files dirs skip suffix ~output f =
   let pool = create_pool (Domain.recommended_domain_count ()) in
-  let rec visit root dir =
+  let rec visit blacklisted root dir =
     let entries = Sys.readdir (Filename.concat root dir) in
     Array.sort compare entries;
     Array.iter
       (fun entry ->
         let path = Filename.concat dir entry in
-        if not (skip path) then
+        if not (blacklisted path || skip path) then
           let full_path = Filename.concat root path in
-          if Sys.is_directory full_path then visit root path
+          if Sys.is_directory full_path then visit blacklisted root path
           else if Filename.check_suffix entry suffix then (
             let i = !counter in
             incr counter;
@@ -143,7 +173,7 @@ let iter_files dirs skip suffix ~output f =
               (fun () -> f full_path path)))
       entries
   in
-  List.iter (fun root -> visit root "") dirs;
+  List.iter (fun root -> visit (read_blacklist root) root "") dirs;
   wait_all_children pool;
   List.iter (fun (_, path, s) -> output path s) (List.sort compare !outputs)
 
@@ -532,14 +562,14 @@ let custom_descriptors_on =
     (Wax_utils.Feature.default ())
     Wax_utils.Feature.Custom_descriptors
 
-(* The custom-descriptors tests only make sense with the feature enabled; the
+(* Feature-dependent skips (static ones live in each corpus's [blacklist] file):
+   the custom-descriptors tests only make sense with the feature enabled; the
    pre-proposal [gc/br_on_cast*] tests, conversely, conflict with the relaxed
    branching-cast typing the proposal introduces (same-hierarchy casts they
    assert invalid become valid), so they are skipped when it is on. *)
 let skip path =
   let base = Filename.basename path in
-  List.mem base [ "try_delegate.wast"; "rethrow.wast" ]
-  || (contains_substring path "custom-descriptors" && not custom_descriptors_on)
+  (contains_substring path "custom-descriptors" && not custom_descriptors_on)
   || custom_descriptors_on
      && Filename.basename (Filename.dirname path) = "gc"
      && List.mem base [ "br_on_cast.wast"; "br_on_cast_fail.wast" ]

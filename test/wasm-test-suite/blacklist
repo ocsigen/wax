@@ -1,0 +1,8 @@
+# Tests skipped by run_wasm_testsuite (one per line; # comments, blank lines
+# ignored). An entry is a path relative to this dir, a directory prefix
+# (trailing /), or a bare basename (matches in any subdirectory).
+
+# Legacy exception-handling (try/delegate, rethrow); wax implements the
+# try_table proposal instead.
+try_delegate.wast
+rethrow.wast

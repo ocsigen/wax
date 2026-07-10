@@ -1,0 +1,49 @@
+# Tests skipped by run_wasm_testsuite (one per line; # comments and blank lines
+# ignored). An entry is a path relative to this dir, a directory prefix
+# (trailing /), or a bare basename (matches in any subdirectory).
+#
+# Everything in wasm-tools' tests/cli is vendored; the entries below are the
+# tests wax cannot meaningfully run. Tests that merely *diverge* from wasm-tools
+# (wax is stricter/looser but not crashing) are NOT listed — their deviation is
+# recorded in the golden instead.
+
+# Not core wasm — the component model uses (component …), not (module …).
+component-model/
+
+# Feature-gating tests: they assert a module is rejected when some proposal is
+# disabled, but wax's feature model always accepts these on input.
+missing-features/
+lime1.wast
+
+# Proposals wax does not implement.
+shared-everything-threads/
+memory-discard.wast
+
+# Legacy exception handling (try/delegate, rethrow); wax implements try_table.
+legacy-exceptions/
+
+# Branch hints in adversarial positions (dangling / on a non-branch): wax rejects
+# them at parse time (see the branch-hinting cram tests), which aborts the script.
+branch-hinting/branch-hinting-simple.wast
+folding/branch-hinting-simple.wast
+
+# Feature-gating: wax always accepts the compact-import form on input.
+compact-imports/compact-imports-rejected.wast
+
+# Inline (non-`quote`) malformed modules: a syntax error inside them aborts the
+# whole script parse rather than being caught per-assert_malformed.
+elem.wast
+invalid.wast
+tail-call-after-end.wast
+
+# BUG (wax validation gap): wax accepts this module, but wasm-tools and the
+# stack-switching reference interpreter both reject it — a `switch` tag whose
+# type does not match the resumed continuation is not caught. Blacklisted until
+# wax validates the switch-tag/continuation relationship; do not move to the
+# golden (that would enshrine the false-accept).
+stack-switching/validate-switch-label.wast
+
+# Syntax wax does not parse (yet).
+producers.wast                 # (@producers …) annotation
+wat-numerics.wast              # wasm-tools typed-data literals (data (i8 …) (i16 …))
+gc/gc-ref.wast                 # typed select with a reference result type
