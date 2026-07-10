@@ -287,3 +287,13 @@ from wasm:
   (type (sub 61 (struct)))
   (type (sub 62 (struct)))
   (type (sub 63 (struct)))
+==== stack-switching/validate-switch-label.wast ====
+Error: Type mismatch in this stack switching instruction:
+  the results of a 'switch' handler's tag must match the resumed continuation's results.
+  ──➤  wasm-tools-suite/stack-switching/validate-switch-label.wast:95:8
+93 │   (func
+94 │     block $label
+95 │       (resume $ct (on $t switch) (ref.null $ct))
+   ·        ^^^^^^^^^^^^^^^^^^^^^^^^^
+96 │       unreachable
+97 │     end

@@ -2597,9 +2597,14 @@ let check_resume_handlers ctx ~result_types handlers =
                 Error.stack_switching_type_mismatch ctx.diagnostics
                   ~location:tag.info ~descr
               in
-              (* A switch handler tag has type [] -> [t*]; the [resume] rule
-                 requires each handler to have the continuation's result type,
-                 so [t*] must be a subtype of the resumed continuation's results. *)
+              (* A switch handler tag has type [] -> [t*]. The reified current
+                 continuation ([cont [t2*] -> [t*]]) runs to this [resume]
+                 boundary, whose results are [result_types], so [t*] must
+                 *equal* those results (equivalence, not merely subtyping): a
+                 subtype would let a continuation whose completion produces the
+                 boundary results be observed by a peer at the narrower tag type.
+                 Mirrors [Validation]'s [result_equivalent] check; the older
+                 written subtyping rule is unsound. *)
               if Array.length ts3 <> 0 then
                 mismatch "the tag of a 'switch' handler must take no parameters"
               else
@@ -2609,7 +2614,9 @@ let check_resume_handlers ctx ~result_types handlers =
                       Array.length tr <> Array.length cr
                       || not
                            (Array.for_all2
-                              (fun a b -> Wax_wasm.Types.val_subtype info a b)
+                              (fun a b ->
+                                Wax_wasm.Types.val_subtype info a b
+                                && Wax_wasm.Types.val_subtype info b a)
                               tr cr)
                     then
                       mismatch

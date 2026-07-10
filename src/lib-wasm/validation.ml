@@ -1534,6 +1534,12 @@ let result_subtype info (ts : valtype array) (ts' : valtype array) =
   && Array.for_all Fun.id
        (Array.mapi (fun i t -> Types.val_subtype info t ts'.(i)) ts)
 
+(* [result_equivalent info ts ts'] holds when the two result types are
+   equivalent, i.e. mutual subtypes (which coincides with equality in the
+   single-inheritance reference-type lattice). *)
+let result_equivalent info ts ts' =
+  result_subtype info ts ts' && result_subtype info ts' ts
+
 (* Source type of struct field [n] of the type that reference [idx] names, when
    the field has a (non-packed) value type. Packed fields surface as i32, so
    they get no name. Resolving through the reference (not the deduplicated
@@ -2160,18 +2166,21 @@ let check_resume_table ctx loc ts2 clauses =
           match lookup_tag_signature ctx tag with
           | None -> ()
           | Some ({ params = ts3; results = ts4 }, _) ->
-              (* A switch handler tag has type [] -> [t*] (no parameters), and the
-                 [resume] rule requires each handler to have the continuation's
-                 result type ([hdl : t2*]), so [t*] must be a subtype of the
-                 resumed continuation's results [ts2]. NB: this is *subtyping*, as
-                 the spec's typing rules and wasm-tools use; V8 checks exact
-                 equivalence here (stricter — it would reject a [nullfuncref]-tag
-                 resumed as a [funcref] continuation), but we follow the spec. *)
+              (* A switch handler tag has type [] -> [t*] (no parameters). The
+                 canonical stack-switching rule reifies the current continuation
+                 as [cont [t2*] -> [t*]] and runs it to this [resume] boundary,
+                 whose continuation results are [ts2]; for that to be consistent
+                 [t*] must *equal* [ts2] (equivalence, not merely subtyping). A
+                 subtype would let a continuation whose completion actually
+                 produces [ts2] be observed by a peer at the narrower tag type
+                 [t*] — an unchecked narrowing. This matches V8
+                 (IsEquivalentTypeVec) and the spec author's fix; the older
+                 written subtyping rule is unsound. *)
               if Array.length ts3 <> 0 then
                 Error.stack_switching_type_mismatch ctx.modul.diagnostics
                   ~location:loc
                   ~descr:"the tag of a 'switch' handler must take no parameters"
-              else if not (result_subtype info ts4 ts2) then
+              else if not (result_equivalent info ts4 ts2) then
                 Error.stack_switching_type_mismatch ctx.modul.diagnostics
                   ~location:loc
                   ~descr:
