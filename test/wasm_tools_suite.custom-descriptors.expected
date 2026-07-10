@@ -298,3 +298,136 @@ from wasm:
   (type (sub 61 (struct)))
   (type (sub 62 (struct)))
   (type (sub 63 (struct)))
+==== stack-switching/validate-switch-label.wast ====
+Validation should have failed (type mismatch: switch tag does not match continuation):
+  (type $ft (func))
+  (type $ct (cont $ft))
+  (type $tag_ft (func (result i32)))
+  (tag $t (type $tag_ft))
+  (func
+    block $label
+      (resume $ct (on $t switch) (ref.null $ct))
+      unreachable
+    end
+  )
+Validation should have failed (type mismatch: switch tag does not match continuation):
+  (type $ft (func (result i64)))
+  (type $ct (cont $ft))
+  (type $tag_ft (func (result i32)))
+  (tag $t (type $tag_ft))
+  (func
+    block $label
+      (resume $ct (on $t switch) (ref.null $ct))
+      unreachable
+    end
+  )
+Validation should have failed (type mismatch: switch tag does not match continuation):
+  (type $ft (func (result nullfuncref)))
+  (type $ct (cont $ft))
+  (type $tag_ft (func (result funcref)))
+  (tag $t (type $tag_ft))
+  (func
+    block $label
+      (resume $ct (on $t switch) (ref.null $ct))
+      unreachable
+    end
+  )
+Validation should have failed (type mismatch: switch tag does not match continuation):
+  (type $ft (func))
+  (type $ct (cont $ft))
+  (type $tag_ft (func (result i32)))
+  (tag $t (type $tag_ft))
+  (func
+    block $label
+      (resume $ct (on $t switch) (ref.null $ct))
+      unreachable
+    end
+  )
+Validation should have failed (type mismatch: switch tag does not match continuation):
+  (type $ft (func (result i64)))
+  (type $ct (cont $ft))
+  (type $tag_ft (func (result i32)))
+  (tag $t (type $tag_ft))
+  (func
+    block $label
+      (resume $ct (on $t switch) (ref.null $ct))
+      unreachable
+    end
+  )
+Validation should have failed (type mismatch: switch tag does not match continuation):
+  (type $ft (func (result nullfuncref)))
+  (type $ct (cont $ft))
+  (type $tag_ft (func (result funcref)))
+  (tag $t (type $tag_ft))
+  (func
+    block $label
+      (resume $ct (on $t switch) (ref.null $ct))
+      unreachable
+    end
+  )
+Wax type-checking should have failed (type mismatch: switch tag does not match continuation):
+  type ft = fn();
+  type ct = cont ft;
+  type tag_ft = fn() -> i32;
+  tag t: tag_ft ;
+  fn f() {
+      'label: do {
+          resume ct [t -> switch](null as &?ct);
+          unreachable;
+      }
+  }
+from wasm:
+  (type $ft (func))
+  (type $ct (cont $ft))
+  (type $tag_ft (func (result i32)))
+  (tag $t (type $tag_ft))
+  (func
+    block $label
+      (resume $ct (on $t switch) (ref.null $ct))
+      unreachable
+    end
+  )
+Wax type-checking should have failed (type mismatch: switch tag does not match continuation):
+  type ft = fn() -> i64;
+  type ct = cont ft;
+  type tag_ft = fn() -> i32;
+  tag t: tag_ft ;
+  fn f() {
+      'label: do {
+          resume ct [t -> switch](null as &?ct);
+          unreachable;
+      }
+  }
+from wasm:
+  (type $ft (func (result i64)))
+  (type $ct (cont $ft))
+  (type $tag_ft (func (result i32)))
+  (tag $t (type $tag_ft))
+  (func
+    block $label
+      (resume $ct (on $t switch) (ref.null $ct))
+      unreachable
+    end
+  )
+Wax type-checking should have failed (type mismatch: switch tag does not match continuation):
+  type ft = fn() -> &?nofunc;
+  type ct = cont ft;
+  type tag_ft = fn() -> &?func;
+  tag t: tag_ft ;
+  fn f() {
+      'label: do {
+          resume ct [t -> switch](null as &?ct);
+          unreachable;
+      }
+  }
+from wasm:
+  (type $ft (func (result nullfuncref)))
+  (type $ct (cont $ft))
+  (type $tag_ft (func (result funcref)))
+  (tag $t (type $tag_ft))
+  (func
+    block $label
+      (resume $ct (on $t switch) (ref.null $ct))
+      unreachable
+    end
+  )

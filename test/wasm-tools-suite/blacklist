@@ -38,13 +38,6 @@ elem.wast
 invalid.wast
 tail-call-after-end.wast
 
-# BUG (wax validation gap): wax accepts this module, but wasm-tools and the
-# stack-switching reference interpreter both reject it — a `switch` tag whose
-# type does not match the resumed continuation is not caught. Blacklisted until
-# wax validates the switch-tag/continuation relationship; do not move to the
-# golden (that would enshrine the false-accept).
-stack-switching/validate-switch-label.wast
-
 # Bare (unfolded) instructions used as operands inside a folded instruction,
 # e.g. `(select (result (ref $a)) unreachable unreachable (i32.const 0))` — a
 # wasm-tools leniency (folded operands must themselves be folded); the spec
