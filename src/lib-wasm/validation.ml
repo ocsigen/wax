@@ -2150,7 +2150,10 @@ let check_resume_table ctx loc ts2 clauses =
               (* A switch handler tag has type [] -> [t*] (no parameters), and the
                  [resume] rule requires each handler to have the continuation's
                  result type ([hdl : t2*]), so [t*] must be a subtype of the
-                 resumed continuation's results [ts2]. *)
+                 resumed continuation's results [ts2]. NB: this is *subtyping*, as
+                 the spec's typing rules and wasm-tools use; V8 checks exact
+                 equivalence here (stricter — it would reject a [nullfuncref]-tag
+                 resumed as a [funcref] continuation), but we follow the spec. *)
               if Array.length ts3 <> 0 then
                 Error.stack_switching_type_mismatch ctx.modul.diagnostics
                   ~location:loc
