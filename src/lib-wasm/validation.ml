@@ -2146,12 +2146,21 @@ let check_resume_table ctx loc ts2 clauses =
       | OnSwitch tag -> (
           match lookup_tag_signature ctx tag with
           | None -> ()
-          | Some ({ params = ts3; _ }, _) ->
+          | Some ({ params = ts3; results = ts4 }, _) ->
+              (* A switch handler tag has type [] -> [t*] (no parameters), and the
+                 [resume] rule requires each handler to have the continuation's
+                 result type ([hdl : t2*]), so [t*] must be a subtype of the
+                 resumed continuation's results [ts2]. *)
               if Array.length ts3 <> 0 then
                 Error.stack_switching_type_mismatch ctx.modul.diagnostics
                   ~location:loc
                   ~descr:"the tag of a 'switch' handler must take no parameters"
-          ))
+              else if not (result_subtype info ts4 ts2) then
+                Error.stack_switching_type_mismatch ctx.modul.diagnostics
+                  ~location:loc
+                  ~descr:
+                    "the results of a 'switch' handler's tag must match the \
+                     resumed continuation's results"))
     clauses
 
 (* Look up an entry in a module-level index space, reporting an unbound-index

@@ -2592,12 +2592,30 @@ let check_resume_handlers ctx ~result_types handlers =
       | OnSwitch tag -> (
           match Tbl.find ctx.diagnostics ctx.tags tag with
           | None -> ()
-          | Some { params = ts3; _ } ->
-              if Array.length ts3 <> 0 then
+          | Some { params = ts3; results = ts4 } -> (
+              let mismatch descr =
                 Error.stack_switching_type_mismatch ctx.diagnostics
-                  ~location:tag.info
-                  ~descr:"the tag of a 'switch' handler must take no parameters"
-          ))
+                  ~location:tag.info ~descr
+              in
+              (* A switch handler tag has type [] -> [t*]; the [resume] rule
+                 requires each handler to have the continuation's result type,
+                 so [t*] must be a subtype of the resumed continuation's results. *)
+              if Array.length ts3 <> 0 then
+                mismatch "the tag of a 'switch' handler must take no parameters"
+              else
+                match (to_internal ts4, to_internal result_types) with
+                | Some tr, Some cr ->
+                    if
+                      Array.length tr <> Array.length cr
+                      || not
+                           (Array.for_all2
+                              (fun a b -> Wax_wasm.Types.val_subtype info a b)
+                              tr cr)
+                    then
+                      mismatch
+                        "the results of a 'switch' handler's tag must match \
+                         the resumed continuation's results"
+                | _ -> ())))
     handlers
 
 let rec count_holes i =
