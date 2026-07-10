@@ -31,7 +31,9 @@ folding/branch-hinting-simple.wast
 compact-imports/compact-imports-rejected.wast
 
 # Inline (non-`quote`) malformed modules: a syntax error inside them aborts the
-# whole script parse rather than being caught per-assert_malformed.
+# whole script parse rather than being caught per-assert_malformed. This is a
+# wasm-tools authoring style (the spec convention is `(module quote …)`); the
+# spec reference interpreter fails on these too, so wax matches it here.
 elem.wast
 invalid.wast
 tail-call-after-end.wast
