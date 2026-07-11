@@ -3,7 +3,25 @@
  (modes exe wasm)
  (public_name wax)
  (package wax)
- (libraries wax_wasm wax_lang wax_conversion wax_lsp cmdliner unix))
+ (modules main mcp reference_data)
+ (libraries wax_wasm wax_lang wax_conversion wax_lsp cmdliner unix yojson))
+
+; Embed the generated language reference (docs/llms.txt) as an OCaml string, so
+; `wax mcp`'s wax_reference tool can serve it with no runtime file dependency.
+; Depends on docs/llms.txt (itself generated from the mdbook by docs/gen_llms),
+; so editing a doc page and rebuilding re-embeds it. The quoted-string
+; delimiter is chosen not to occur in the docs.
+
+(rule
+ (target reference_data.ml)
+ (deps ../../docs/llms.txt)
+ (action
+  (with-stdout-to
+   reference_data.ml
+   (progn
+    (echo "let content = {wax_llms_reference|")
+    (cat ../../docs/llms.txt)
+    (echo "|wax_llms_reference}")))))
 
 ; Install shell completions and manpages for the wax tool (cmdliner 2.x).
 ; `cmdliner install tool-support` runs the built binary to extract them into a
@@ -44,4 +62,5 @@
 
 (executables
  (names run_wasm_testsuite fuzz_mutate fuzz_gen fuzz_recover)
+ (modules run_wasm_testsuite fuzz_mutate fuzz_gen fuzz_recover)
  (libraries wax_wasm wax_lang wax_conversion menhirLib re unix cmdliner))

@@ -809,6 +809,154 @@ let check format_opt strict color warnings features debug error_format defines
   if not (List.fold_left (fun ok file -> check_one file && ok) true files) then
     exit 128
 
+(* Minimal base64 (RFC 4648) encoder, to return a binary wasm module inside a
+   JSON string (which cannot carry raw bytes). Dependency-free to avoid pulling
+   in a base64 library for one call site. *)
+let base64_encode s =
+  let tbl =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+  in
+  let n = String.length s in
+  let buf = Buffer.create ((n + 2) / 3 * 4) in
+  let byte i = if i < n then Char.code s.[i] else 0 in
+  let rec loop i =
+    if i < n then begin
+      let b0 = byte i and b1 = byte (i + 1) and b2 = byte (i + 2) in
+      Buffer.add_char buf tbl.[b0 lsr 2];
+      Buffer.add_char buf tbl.[((b0 land 0x3) lsl 4) lor (b1 lsr 4)];
+      Buffer.add_char buf
+        (if i + 1 < n then tbl.[((b1 land 0xf) lsl 2) lor (b2 lsr 6)] else '=');
+      Buffer.add_char buf (if i + 2 < n then tbl.[b2 land 0x3f] else '=');
+      loop (i + 3)
+    end
+  in
+  loop 0;
+  Buffer.contents buf
+
+(* Run the wax binary itself as a subprocess. Used by the MCP convert tool to
+   reuse the full validated conversion pipeline without risking the long-lived
+   server on a malformed input (the in-process pipelines exit the process on a
+   diagnostic). stdout is discarded — the output goes to the [-o] file — and
+   stderr is captured to [stderr_file]. Returns the child's exit code. *)
+let run_self args ~stderr_file =
+  let exe = Sys.executable_name in
+  let null_in = Unix.openfile Filename.null [ Unix.O_RDONLY ] 0 in
+  let null_out = Unix.openfile Filename.null [ Unix.O_WRONLY ] 0 in
+  let err =
+    Unix.openfile stderr_file
+      [ Unix.O_WRONLY; Unix.O_CREAT; Unix.O_TRUNC ]
+      0o600
+  in
+  Fun.protect
+    ~finally:(fun () -> List.iter Unix.close [ null_in; null_out; err ])
+    (fun () ->
+      let pid =
+        Unix.create_process exe
+          (Array.of_list (exe :: args))
+          null_in null_out err
+      in
+      match Unix.waitpid [] pid with _, WEXITED n -> n | _ -> 125)
+
+(* Serve the toolchain over MCP (Model Context Protocol) on stdio, so an AI
+   assistant can fetch the language reference and validate Wax/WAT snippets it
+   produces. See ADOPTION.md, Phase 6. The parser/validator wiring is passed to
+   [Mcp.serve] as callbacks, keeping [mcp.ml] free of the parser functors; the
+   [check] callback mirrors the [check] command but collects diagnostics
+   (via [parse_diagnostics], which returns a syntax error as data) instead of
+   printing and exiting, since the server outlives any one request. *)
+let mcp strict warnings features debug =
+  Wax_utils.Diagnostic.set_policy (build_policy warnings);
+  Wax_utils.Feature.set_config features;
+  Wax_utils.Debug.enable debug;
+  (* The language reference (docs/llms.txt) is embedded at build time as an
+     OCaml string; see [reference_data.ml]'s rule in the dune file. *)
+  let reference () = Reference_data.content in
+  let report_syntax_error d (se : Wax_wasm.Parsing.syntax_error) =
+    Wax_utils.Diagnostic.report d ~location:se.location ~severity:Error
+      ~related:se.related
+      ~message:(fun f () -> Format.pp_print_string f se.message)
+      ()
+  in
+  let run fmt source =
+    Wax_wasm.Validation.validate_refs := strict;
+    let d = Wax_utils.Diagnostic.collector ~source () in
+    (try
+       match fmt with
+       | Wax -> (
+           match Wax_parser.parse_diagnostics ~filename:"<mcp>" source with
+           | Ok (ast, _) -> Wax_lang.Typing.check ~warn_unused:true d ast
+           | Error se -> report_syntax_error d se)
+       | Wat -> (
+           match Wat_parser.parse_diagnostics ~filename:"<mcp>" source with
+           | Ok (ast, _) -> Wax_wasm.Validation.f d ast
+           | Error se -> report_syntax_error d se)
+       | Wasm -> ()
+     with Wax_utils.Diagnostic.Aborted -> ());
+    Wax_utils.Diagnostic.collected d
+  in
+  let check ~format ~source =
+    match format with
+    | "wax" -> Ok (run Wax source)
+    | "wat" -> Ok (run Wat source)
+    | "wasm" -> Error "wax_check accepts \"wax\" or \"wat\" text, not binary"
+    | s -> Error (Printf.sprintf "unknown format: %s" s)
+  in
+  (* Convert via a subprocess over temp files (see [run_self]). The feature
+     flags are forwarded so a feature-gated syntax converts the same way it
+     validates; -D/-W forwarding is left for later. *)
+  let feature_args =
+    List.concat_map
+      (fun (f, on) ->
+        [
+          "-X";
+          Printf.sprintf "%s=%s" (Wax_utils.Feature.name f)
+            (if on then "on" else "off");
+        ])
+      features
+  in
+  let convert ~from_ ~to_ ~source =
+    let known = function "wax" | "wat" | "wasm" -> true | _ -> false in
+    if not (known from_) then
+      Error (Printf.sprintf "unknown input format: %s" from_)
+    else if not (known to_) then
+      Error (Printf.sprintf "unknown output format: %s" to_)
+    else
+      let inp = Filename.temp_file "wax-mcp-in-" ("." ^ from_) in
+      let outp = Filename.temp_file "wax-mcp-out-" ("." ^ to_) in
+      let errp = Filename.temp_file "wax-mcp-err-" ".txt" in
+      Fun.protect
+        ~finally:(fun () ->
+          List.iter
+            (fun f -> try Sys.remove f with Sys_error _ -> ())
+            [ inp; outp; errp ])
+        (fun () ->
+          Out_channel.with_open_bin inp (fun oc ->
+              Out_channel.output_string oc source);
+          let args =
+            [
+              "convert"; "-i"; from_; "-f"; to_; "--color"; "never"; "-o"; outp;
+            ]
+            @ feature_args
+            @ (if strict then [ "-s" ] else [])
+            @ [ inp ]
+          in
+          let code = run_self args ~stderr_file:errp in
+          if code = 0 then
+            let out = In_channel.with_open_bin outp In_channel.input_all in
+            if to_ = "wasm" then
+              Ok Mcp.{ output = base64_encode out; encoding = "base64" }
+            else Ok Mcp.{ output = out; encoding = "utf-8" }
+          else
+            let err =
+              String.trim (In_channel.with_open_bin errp In_channel.input_all)
+            in
+            Error
+              (if err = "" then
+                 Printf.sprintf "conversion failed (exit %d)" code
+               else err))
+  in
+  Mcp.serve ~reference ~check ~convert ()
+
 (*** Command-line interface ***)
 
 (* Shell-completion helpers (cmdliner drives completion through [Cmd.eval]; a
@@ -1290,6 +1438,27 @@ let check_term =
   check format_opt strict color warnings features (List.concat debug)
     error_format defines all_errors files
 
+let mcp_term =
+  let+ strict = strict_validate_flag
+  and+ warnings = warn_option
+  and+ features = feature_option
+  and+ debug = debug_option in
+  mcp strict warnings features (List.concat debug)
+
+let mcp_cmd =
+  let doc = "Serve the toolchain to AI assistants over MCP (stdio)" in
+  let man =
+    [
+      `S Manpage.s_description;
+      `P
+        "Run a Model Context Protocol server on stdin/stdout, exposing the Wax \
+         language reference and a Wax/WAT validator as tools an AI assistant \
+         can call. Experimental.";
+      `S Manpage.s_options;
+    ]
+  in
+  Cmd.v (Cmd.info "mcp" ~doc ~man ~exits ~envs:[ warn_env_info ]) mcp_term
+
 let check_cmd =
   let doc = "Validate WebAssembly files without producing output" in
   let man =
@@ -1384,7 +1553,7 @@ let main_cmd =
   Cmd.group
     (Cmd.info "wax" ~doc ~man ~exits ~envs:[ warn_env_info ])
     ~default:convert_term
-    [ convert_cmd; format_cmd; check_cmd; lsp_cmd ]
+    [ convert_cmd; format_cmd; check_cmd; lsp_cmd; mcp_cmd ]
 
 (* cmdliner reads the first token as a subcommand name and, even with a default
    command, errors on an unrecognised one rather than falling through. So that
