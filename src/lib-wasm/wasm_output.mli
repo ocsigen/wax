@@ -27,7 +27,7 @@ val module_ :
     account for it; [Wasm_link] uses them purely for their effect. *)
 
 val type_section : out_channel -> Ast.Binary.rectype list -> int
-val import_section : out_channel -> Ast.Binary.import list -> int
+val import_section : out_channel -> Ast.Binary.import_entry list -> int
 val function_section : out_channel -> int list -> int
 val memory_section : out_channel -> Ast.Binary.limits list -> int
 val tag_section : out_channel -> int list -> int
