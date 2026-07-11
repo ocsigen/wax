@@ -1265,7 +1265,7 @@ let import_desc b (desc : importdesc) =
   match desc with
   | Func { exact; typ = i } ->
       Encoder.byte b (if exact then 0x20 else 0x00);
-      Encoder.sint b i
+      Encoder.uint b i
   | Table t ->
       Encoder.byte b 0x01;
       Encoder.tabletype b t
@@ -1278,7 +1278,7 @@ let import_desc b (desc : importdesc) =
   | Tag t ->
       Encoder.byte b 0x04;
       Encoder.byte b 0x00;
-      Encoder.sint b t
+      Encoder.uint b t
 
 let leb_len n =
   let rec go n acc = if n < 128 then acc else go (n lsr 7) (acc + 1) in
@@ -1392,7 +1392,7 @@ let import_section out_channel imports =
     ~coalesce_imports:false out_channel imports
 
 let function_section out_channel functions =
-  output_section out_channel 3 (Encoder.vec Encoder.sint) functions
+  output_section out_channel 3 (Encoder.vec Encoder.uint) functions
 
 let memory_section out_channel memories =
   output_section out_channel 5 (Encoder.vec Encoder.limits) memories
@@ -1414,11 +1414,11 @@ let export_section out_channel exports =
          | Memory -> Encoder.byte b 0x02
          | Global -> Encoder.byte b 0x03
          | Tag -> Encoder.byte b 0x04);
-         Encoder.sint b e.index))
+         Encoder.uint b e.index))
     exports
 
 let start_section out_channel start =
-  output_section out_channel 8 Encoder.sint start
+  output_section out_channel 8 Encoder.uint start
 
 let datacount_section out_channel count =
   output_section out_channel 12 Encoder.uint count
