@@ -156,3 +156,44 @@ Link two modules with source maps and verify instruction boundaries match:
   $ wax link -o map_linked.wasm --source-map-file map_linked.wasm.map m1:map1.wasm m2:map2.wasm
   $ ../../check-sourcemap/check_sourcemap.exe map_linked.wasm map_linked.wasm.map map1.wasm map2.wasm
   Instruction-boundary source map verification successful!
+
+Name-aware type coalescing (--distinct-named-types). Two modules define a
+structurally-identical struct under different type and field names:
+  $ cat > ta.wat <<EOF2
+  > (module
+  >   (type \$Point (struct (field \$x i32) (field \$y i32)))
+  >   (func (export "mk_a") (result (ref \$Point))
+  >     (struct.new \$Point (i32.const 1) (i32.const 2))))
+  > EOF2
+  $ cat > tb.wat <<EOF2
+  > (module
+  >   (type \$Pt (struct (field \$a i32) (field \$b i32)))
+  >   (func (export "mk_b") (result (ref \$Pt))
+  >     (struct.new \$Pt (i32.const 3) (i32.const 4))))
+  > EOF2
+  $ wax ta.wat -o ta.wasm
+  $ wax tb.wat -o tb.wasm
+
+By default the two structs are merged structurally into a single type; both
+functions reference it and tb's names are dropped:
+  $ wax link -o tdef.wasm a:ta.wasm b:tb.wasm
+  $ wax tdef.wasm -f wat | grep -E 'type |struct.new'
+  (type $Point (struct (field $x i32) (field $y i32)))
+  (type (func (result (ref $Point))))
+    struct.new $Point
+    struct.new $Point
+
+With --distinct-named-types the differently-named struct is kept as a separate,
+structurally-identical copy so its names survive:
+  $ wax link --distinct-named-types -o tdist.wasm a:ta.wasm b:tb.wasm
+  $ wax tdist.wasm -f wat | grep -E 'type |struct.new'
+  (type $Point (struct (field $x i32) (field $y i32)))
+  (type (func (result (ref $Point))))
+  (type $Pt (struct (field $a i32) (field $b i32)))
+  (type (func (result (ref $Pt))))
+    struct.new $Point
+    struct.new $Pt
+
+The result still validates:
+  $ wax -v -f wasm -o /dev/null tdist.wasm && echo OK
+  OK
