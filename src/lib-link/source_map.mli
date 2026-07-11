@@ -17,68 +17,23 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  *)
 
-module Source_content : sig
-  type t
-
-  val create : string -> t
-  val of_stringlit : [ `Stringlit of string ] -> t
-end
-
-type map =
-  | Gen of { gen_line : int; gen_col : int }
-  | Gen_Ori of {
-      gen_line : int;
-      gen_col : int;
-      ori_source : int;
-      ori_line : int;
-      ori_col : int;
-    }
-  | Gen_Ori_Name of {
-      gen_line : int;
-      gen_col : int;
-      ori_source : int;
-      ori_line : int;
-      ori_col : int;
-      ori_name : int;
-    }
-
-module Offset : sig
-  type t = { gen_line : int; gen_column : int }
-end
-
-module Mappings : sig
-  type t
-
-  val empty : t
-  val is_empty : t -> bool
-  val of_string_unsafe : string -> t
-  val to_string : t -> string
-end
-
+(* A single (non-indexed) source map, as read from a [.map] file. Opaque: the
+   linker only carries it from [of_file] through [resize] to [concatenate]. *)
 module Standard : sig
-  type t = {
-    version : int;
-    file : string option;
-    sourceroot : string option;
-    sources : string list;
-    sources_content : Source_content.t option list option;
-    names : string list;
-    mappings : Mappings.t;
-    ignore_list : string list;
-  }
+  type t
 
   val of_file : ?tmp_buf:Buffer.t -> string -> t
 end
 
-module Index : sig
-  type section = { offset : Offset.t; map : Standard.t }
-  type t = { version : int; file : string option; sections : section list }
-end
+(* The linked output's source map: the indexed form produced by [concatenate]. *)
+type t
 
-type t = Standard of Standard.t | Index of Index.t
+val to_file : t -> string -> unit
 
-val to_file : ?rewrite_paths:bool -> t -> string -> unit
-
+(* A sequence of [(pos, delta)] byte-shift entries with strictly increasing
+   [pos], describing how the code section grew/shrank when instructions were
+   re-encoded during linking. Built imperatively by the code scan, hence the
+   mutable growable arrays; [i] is the number of live entries. *)
 type resize_data = {
   mutable i : int;
   mutable pos : int array;
@@ -86,6 +41,14 @@ type resize_data = {
 }
 
 val is_empty : Standard.t -> bool
+
+(* [resize_mappings data m] rewrites the VLQ "mappings" string [m], shifting each
+   generated column by the cumulative [data] delta at that column and dropping a
+   segment whose column would become negative (folding its source/name deltas
+   into the next survivor). Exposed for testing. *)
 val resize_mappings : resize_data -> string -> string
 val resize : resize_data -> Standard.t -> Standard.t
+
+(* Combine per-module maps, each offset by its code-section start, into one
+   indexed source map for the linked output. *)
 val concatenate : (int * Standard.t) list -> t

@@ -35,28 +35,9 @@ let list_is_empty = function [] -> true | _ -> false
 module Source_content = struct
   type t = Sc_as_Stringlit of string
 
-  let create s = Sc_as_Stringlit (Yojson.Safe.to_string (`String s))
   let of_stringlit (`Stringlit s) = Sc_as_Stringlit s
   let to_json (Sc_as_Stringlit s) = `Stringlit s
 end
-
-type map =
-  | Gen of { gen_line : int; gen_col : int }
-  | Gen_Ori of {
-      gen_line : int;
-      gen_col : int;
-      ori_source : int;
-      ori_line : int;
-      ori_col : int;
-    }
-  | Gen_Ori_Name of {
-      gen_line : int;
-      gen_col : int;
-      ori_source : int;
-      ori_line : int;
-      ori_col : int;
-      ori_name : int;
-    }
 
 module Offset = struct
   type t = { gen_line : int; gen_column : int }
@@ -84,7 +65,6 @@ module Standard = struct
   }
 
   let version_is_valid = function 3 -> true | _ -> false
-  let rewrite_path path = path
   let invalid () = invalid_arg "Source_map.of_json"
 
   let string_of_stringlit ?tmp_buf (`Stringlit s) =
@@ -233,17 +213,6 @@ module Standard = struct
 
   let of_file ?tmp_buf f =
     of_json ?tmp_buf (Yojson.Raw.from_file ?buf:tmp_buf f)
-
-  let rewrite_paths sm =
-    {
-      sm with
-      file = Option.map rewrite_path sm.file;
-      sourceroot = Option.map rewrite_path sm.sourceroot;
-      sources = List.map ~f:rewrite_path sm.sources;
-    }
-
-  let to_file ?rewrite_paths:(rewrite = true) m file =
-    Yojson.Raw.to_file file (json (if rewrite then rewrite_paths m else m))
 end
 
 module Index = struct
@@ -280,26 +249,13 @@ module Index = struct
                      t.sections)) );
          ])
 
-  let rewrite_paths m =
-    {
-      m with
-      file = Option.map Standard.rewrite_path m.file;
-      sections =
-        List.map
-          ~f:(fun m -> { m with map = Standard.rewrite_paths m.map })
-          m.sections;
-    }
-
-  let to_file ?rewrite_paths:(rewrite = true) m file =
-    Yojson.Raw.to_file file (json (if rewrite then rewrite_paths m else m))
+  let to_file m file = Yojson.Raw.to_file file (json m)
 end
 
-type t = Standard of Standard.t | Index of Index.t
+(* The linker only ever produces the indexed form (see [concatenate]). *)
+type t = Index.t
 
-let to_file ?rewrite_paths x f =
-  match x with
-  | Standard m -> Standard.to_file ?rewrite_paths m f
-  | Index i -> Index.to_file ?rewrite_paths i f
+let to_file = Index.to_file
 
 type resize_data = {
   mutable i : int;
@@ -409,13 +365,12 @@ let resize resize_data (sm : Standard.t) =
 let is_empty { Standard.mappings; _ } = Mappings.is_empty mappings
 
 let concatenate l =
-  Index
-    {
-      version = 3;
-      file = None;
-      sections =
-        List.map
-          ~f:(fun (ofs, map) ->
-            { Index.offset = { Offset.gen_line = 0; gen_column = ofs }; map })
-          l;
-    }
+  {
+    Index.version = 3;
+    file = None;
+    sections =
+      List.map
+        ~f:(fun (ofs, map) ->
+          { Index.offset = { Offset.gen_line = 0; gen_column = ofs }; map })
+        l;
+  }
