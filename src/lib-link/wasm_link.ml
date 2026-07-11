@@ -1156,7 +1156,12 @@ let check_export_import_types d ~subtyping_info ~files i (desc : importdesc) i'
     import =
   let ok =
     match (desc, import.desc) with
-    | Func { typ = t; _ }, Func { typ = t'; _ } -> subtype subtyping_info t t'
+    | Func { typ = t; _ }, Func { exact; typ = t' } ->
+        (* An exact import ([(func (exact …))], custom-descriptors) requires the
+           export's function type to be *exactly* the imported type, not merely
+           a subtype. Canonicalisation gives equal types equal indices, so
+           equality is an index comparison. *)
+        if exact then t = t' else subtype subtyping_info t t'
     | ( Table { limits; reftype = typ },
         Table { limits = limits'; reftype = typ' } ) ->
         check_limits limits limits' && reftype_eq subtyping_info typ typ'
