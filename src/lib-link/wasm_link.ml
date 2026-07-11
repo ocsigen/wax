@@ -425,7 +425,10 @@ module Read = struct
     let imports =
       if find_section contents 2 then (
         let type_mapping = get_type_mapping types contents in
-        let raw_imports = Wax_wasm.Wasm_parser.import_section contents.ch in
+        let raw_imports =
+          Wax_wasm.Ast_utils.flatten_binary_imports
+            (Wax_wasm.Wasm_parser.import_section contents.ch)
+        in
         let tbl = make_exportable_info [] in
         List.iter
           (fun (imp : import) ->
@@ -1479,7 +1482,8 @@ let f ?(filter_export = fun _ -> true) files ~output_file =
           intfs
       in
       ignore
-        (Wax_wasm.Wasm_output.import_section out_ch (List.rev !import_list)
+        (Wax_wasm.Wasm_output.import_section out_ch
+           (List.rev_map (fun i -> Single i) !import_list)
           : int);
 
       let start_count =

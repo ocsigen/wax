@@ -529,7 +529,7 @@ let export ch =
   let kind = exportable_kind d in
   { name = export_name; kind; index = idx }
 
-let import_section ch = List.concat (Array.to_list (vec import_entry ch))
+let import_section ch = Array.to_list (vec import_entry ch)
 let export_section ch = vec export ch
 
 let memarg ch =

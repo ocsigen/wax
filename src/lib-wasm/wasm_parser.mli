@@ -21,7 +21,7 @@ val name : ch -> string
 val tabletype : ch -> Ast.Binary.tabletype
 val globaltype : ch -> Ast.Binary.globaltype
 val type_section : ch -> Ast.Binary.subtype array array
-val import_section : ch -> Ast.Binary.import list
+val import_section : ch -> Ast.Binary.import_entry list
 val export_section : ch -> Ast.Binary.export array
 val function_section : ch -> int array
 val memory_section : ch -> Ast.Binary.limits array
