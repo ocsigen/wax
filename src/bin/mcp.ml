@@ -4,13 +4,14 @@
    from `wax_reference` and self-check its output with `wax_check`, without the
    language being in its training data.
 
-   SKELETON. Deliberately incomplete, with the design decisions the author
-   should own left as TODOs:
-     - Transport framing. Real MCP over stdio frames each JSON-RPC message with
-       an LSP-style `Content-Length:` header. This skeleton uses newline-
-       delimited JSON, which is enough to drive by hand or from a test but not
-       wire-compatible with MCP clients. Replace {!read_message}/{!write} with
-       header framing before shipping.
+   Transport: the MCP stdio spec frames messages as newline-delimited JSON
+   (one JSON-RPC message per line, no embedded newlines) — NOT the
+   `Content-Length:` headers of LSP, a common point of confusion. So the
+   line-based {!read_message}/{!write} here is the conformant framing, not a
+   placeholder. The one liberty is that {!read_message} does not reassemble a
+   pretty-printed (multi-line) object, but a conformant client never sends one.
+
+   Otherwise a SKELETON, with these left as TODOs:
      - `wax_convert` is backed by [convert], which main.ml implements for now by
        shelling out to `wax convert` over temp files (robust — a malformed input
        cannot take the server down — but not the eventual in-memory path).
@@ -221,10 +222,14 @@ let handle ~reference ~check ~convert (msg : J.t) : J.t option =
       else Some (error_response id (-32601) ("method not found: " ^ other))
   | None -> None
 
-(* TODO: real MCP framing is `Content-Length: N\r\n\r\n<body>`. This reads one
-   JSON object per line, which is enough for manual testing. *)
+(* MCP stdio delimits messages by newlines with no embedded newlines, so one
+   input line is exactly one message. *)
 let read_message () = In_channel.input_line stdin
 
+(* Write one message per line. [to_channel] emits compact JSON (any newline
+   inside a string is escaped as \n), so the "no embedded newlines" rule holds;
+   the trailing '\n' is the delimiter. Only MCP messages go to stdout — logging
+   and the convert subprocess's output are kept off it — as the spec requires. *)
 let write (msg : J.t) =
   J.to_channel stdout msg;
   output_char stdout '\n';

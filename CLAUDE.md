@@ -163,8 +163,9 @@ validator via a diagnostic collector so a bad snippet never exits the long-lived
 server) and `wax_convert` (convert between formats by shelling out to `wax
 convert` over temp files, wasm output base64-encoded). Options: `-s`
 `--strict-validate`, `-X` `--feature`, `-W` `--warn`, `--debug` (all as for the
-other commands). The transport uses newline framing (not MCP's `Content-Length`
-headers) and the in-memory convert path is a TODO — both noted in `mcp.ml`.
+other commands). The transport is newline-delimited JSON-RPC, which is the
+conformant MCP stdio framing (not LSP's `Content-Length` headers); the
+in-memory convert path remains a TODO — see `mcp.ml`.
 
 **Exit status** (shared by all commands; see `docs/src/cli.md`): `0` success;
 `123` a usage error (bad flag combination) or a `format --check` run that found
