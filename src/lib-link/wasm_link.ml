@@ -100,7 +100,10 @@ let valtype_eq (info : link_subtyping_info) t1 t2 =
   let vt2 = to_internal_valtype info.types_map t2 in
   Wax_wasm.Types.valtype_equal vt1 vt2
 
-let rec to_normalized_heaptype types_map (ht : heaptype) :
+(* [resolve] maps a source type index (as it appears in the module being read)
+   to its canonical reference: [Rec pos] for a member of the rec group currently
+   being added, [Def id] for an already-canonicalised type. *)
+let rec to_normalized_heaptype resolve (ht : heaptype) :
     Wax_wasm.Types.Normalized.heaptype =
   match ht with
   | Func -> Func
@@ -117,14 +120,14 @@ let rec to_normalized_heaptype types_map (ht : heaptype) :
   | Struct -> Struct
   | Array -> Array
   | None_ -> None_
-  | Type idx -> Type (Hashtbl.find types_map idx)
-  | Exact idx -> Exact (Hashtbl.find types_map idx)
+  | Type idx -> Type (resolve idx)
+  | Exact idx -> Exact (resolve idx)
 
-and to_normalized_reftype types_map (rt : reftype) :
+and to_normalized_reftype resolve (rt : reftype) :
     Wax_wasm.Types.Normalized.reftype =
-  { nullable = rt.nullable; typ = to_normalized_heaptype types_map rt.typ }
+  { nullable = rt.nullable; typ = to_normalized_heaptype resolve rt.typ }
 
-and to_normalized_valtype types_map (vt : valtype) :
+and to_normalized_valtype resolve (vt : valtype) :
     Wax_wasm.Types.Normalized.valtype =
   match vt with
   | I32 -> I32
@@ -132,42 +135,41 @@ and to_normalized_valtype types_map (vt : valtype) :
   | F32 -> F32
   | F64 -> F64
   | V128 -> V128
-  | Ref rt -> Ref (to_normalized_reftype types_map rt)
+  | Ref rt -> Ref (to_normalized_reftype resolve rt)
 
 let to_normalized_packedtype (pt : packedtype) :
     Wax_wasm.Types.Normalized.packedtype =
   match pt with I8 -> I8 | I16 -> I16
 
-let to_normalized_storagetype types_map (st : storagetype) :
+let to_normalized_storagetype resolve (st : storagetype) :
     Wax_wasm.Types.Normalized.storagetype =
   match st with
-  | Value vt -> Value (to_normalized_valtype types_map vt)
+  | Value vt -> Value (to_normalized_valtype resolve vt)
   | Packed pt -> Packed (to_normalized_packedtype pt)
 
-let to_normalized_fieldtype types_map (ft : fieldtype) :
+let to_normalized_fieldtype resolve (ft : fieldtype) :
     Wax_wasm.Types.Normalized.fieldtype =
-  { mut = ft.mut; typ = to_normalized_storagetype types_map ft.typ }
+  { mut = ft.mut; typ = to_normalized_storagetype resolve ft.typ }
 
-let to_normalized_comptype types_map (ct : comptype) :
+let to_normalized_comptype resolve (ct : comptype) :
     Wax_wasm.Types.Normalized.comptype =
   match ct with
   | Func { params; results } ->
       Func
         {
-          params = Array.map (to_normalized_valtype types_map) params;
-          results = Array.map (to_normalized_valtype types_map) results;
+          params = Array.map (to_normalized_valtype resolve) params;
+          results = Array.map (to_normalized_valtype resolve) results;
         }
-  | Struct fields ->
-      Struct (Array.map (to_normalized_fieldtype types_map) fields)
-  | Array field -> Array (to_normalized_fieldtype types_map field)
-  | Cont idx -> Cont (Hashtbl.find types_map idx)
+  | Struct fields -> Struct (Array.map (to_normalized_fieldtype resolve) fields)
+  | Array field -> Array (to_normalized_fieldtype resolve field)
+  | Cont idx -> Cont (resolve idx)
 
-let to_normalized_subtype types_map { final; supertype; typ; _ } =
-  let supertype = Option.map (Hashtbl.find types_map) supertype in
+let to_normalized_subtype resolve { final; supertype; typ; _ } =
+  let supertype = Option.map resolve supertype in
   {
     Wax_wasm.Types.Normalized.final;
     supertype;
-    typ = to_normalized_comptype types_map typ;
+    typ = to_normalized_comptype resolve typ;
     descriptor = None;
     describes = None;
   }
@@ -334,30 +336,34 @@ module Read = struct
         ignore (Wax_wasm.Wasm_parser.name ch);
         { contents with ch }
 
-  let add_rectype types type_mapping ty =
-    let group_start_idx = Hashtbl.length types.types_map in
+  (* Add one rec group to the shared store and return its canonical base index.
+     [source_base] is the group's first type's index in the module being read.
+     References are resolved (like the validator's type-section pass) against the
+     stable source-index mapping: a member of this group is [Rec], an
+     already-canonicalised type is looked up by its canonical index in
+     [types_map]. [types_map] is keyed by the canonical index (never the shifting
+     [Hashtbl.length], and never removed on dedup), so a reference to a type that
+     was itself deduplicated still resolves correctly. *)
+  let add_rectype types type_mapping ~source_base ty =
     let count = Array.length ty in
-    for i = 0 to count - 1 do
-      Hashtbl.replace types.types_map (group_start_idx + i)
-        (Wax_wasm.Types.Rec i)
-    done;
-    let normalized = Array.map (to_normalized_subtype types.types_map) ty in
+    let resolve idx =
+      if idx >= source_base && idx < source_base + count then
+        Wax_wasm.Types.Rec (idx - source_base)
+      else Hashtbl.find types.types_map type_mapping.(idx)
+    in
+    let normalized = Array.map (to_normalized_subtype resolve) ty in
+    let canonical_before = Wax_wasm.Types.last_index types.types_store in
     let first_id = Wax_wasm.Types.add_rectype types.types_store normalized in
     let first_int = Wax_wasm.Types.Id.to_int_for_tests_only first_id in
-    if first_int < group_start_idx then (
-      (* Deduplicated! *)
+    if first_int >= canonical_before then (
+      (* A new (non-deduplicated) group: record its canonical members and keep
+         it for emission in the merged type section. *)
       for i = 0 to count - 1 do
-        Hashtbl.remove types.types_map (group_start_idx + i)
-      done;
-      first_int)
-    else (
-      (* New type group *)
-      for i = 0 to count - 1 do
-        Hashtbl.replace types.types_map (group_start_idx + i)
+        Hashtbl.replace types.types_map (first_int + i)
           (Wax_wasm.Types.Def (Wax_wasm.Types.Id.add first_id i))
       done;
-      types.kept_rectypes <- (type_mapping, ty) :: types.kept_rectypes;
-      first_int)
+      types.kept_rectypes <- (type_mapping, ty) :: types.kept_rectypes);
+    first_int
 
   let translate_heaptype type_mapping (ht : heaptype) : heaptype =
     match ht with
@@ -404,7 +410,7 @@ module Read = struct
     Array.iter
       (fun ty ->
         let count = Array.length ty in
-        let pos' = add_rectype types type_mapping ty in
+        let pos' = add_rectype types type_mapping ~source_base:!pos ty in
         for i = 0 to count - 1 do
           type_mapping.(!pos + i) <- pos' + i
         done;
@@ -1530,7 +1536,7 @@ let f ?(filter_export = fun _ -> true) files ~output_file =
           if start_count > 1 then
             let ty =
               let typ : comptype = Func { params = [||]; results = [||] } in
-              Read.add_rectype types [||]
+              Read.add_rectype types [||] ~source_base:0
                 [|
                   {
                     final = true;
