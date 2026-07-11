@@ -164,14 +164,18 @@ let to_normalized_comptype resolve (ct : comptype) :
   | Array field -> Array (to_normalized_fieldtype resolve field)
   | Cont idx -> Cont (resolve idx)
 
-let to_normalized_subtype resolve { final; supertype; typ; _ } =
-  let supertype = Option.map resolve supertype in
+let to_normalized_subtype resolve
+    { final; supertype; typ; descriptor; describes } =
   {
     Wax_wasm.Types.Normalized.final;
-    supertype;
+    supertype = Option.map resolve supertype;
     typ = to_normalized_comptype resolve typ;
-    descriptor = None;
-    describes = None;
+    (* [descriptor]/[describes] (custom-descriptors) are part of a type's
+       identity — dropping them made two structs that differ only in their
+       descriptor/describes clauses (e.g. [$a (descriptor $b)] and
+       [$b (describes $a)]) canonicalise to the same type and be merged. *)
+    descriptor = Option.map resolve descriptor;
+    describes = Option.map resolve describes;
   }
 
 let map_heaptype f (ht : heaptype) : heaptype =
@@ -704,7 +708,9 @@ module Scan = struct
     let laneidx pos = pos + 1 in
     let heaptype pos =
       let c = get pos in
-      if c >= 64 && c < 128 then (* absheaptype *) pos + 1
+      if c = 0x62 (* exact: 0x62 then an (unsigned) type index *) then
+        pos + 1 |> typeidx
+      else if c >= 64 && c < 128 then (* absheaptype *) pos + 1
       else signed_typeidx pos
     in
     let absheaptype pos =
