@@ -56,6 +56,25 @@ jobs:
       - name: Build
         run: opam install .
 
+      # The linker suite (run_link_testsuite) replays each linking script's
+      # behavioural assertions against the merged module through the WebAssembly
+      # reference interpreter whenever $REF points at it — catching a remapping
+      # bug that validates but computes the wrong answer. Build it from a pinned
+      # spec commit so the check runs, and is reproducible, in CI. A sparse,
+      # blobless checkout of just interpreter/ keeps it lean; the interpreter is
+      # stdlib-only, so dune builds it with no extra dependencies. Same cells as
+      # the test step below.
+      - name: Build the WebAssembly reference interpreter
+        if: matrix.ocaml-compiler != '4.14' && matrix.os != 'windows-latest'
+        run: |
+          git clone --filter=blob:none --sparse --no-checkout \
+            https://github.com/WebAssembly/spec.git "$HOME/wasm-spec"
+          git -C "$HOME/wasm-spec" sparse-checkout set interpreter
+          git -C "$HOME/wasm-spec" checkout d7b37e4170d8315f2f1283aed4e8076591a9a333
+          opam exec -- dune build --root "$HOME/wasm-spec/interpreter" wasm.exe
+          echo "REF=$HOME/wasm-spec/interpreter/_build/default/wasm.exe" \
+            >> "$GITHUB_ENV"
+
       # Skip the suite where it cannot run: on OCaml 4.14 (run_wasm_testsuite
       # uses Domain, 5.0+) and on Windows (it uses Unix.fork and the cram tests
       # assume a POSIX shell, e.g. /dev/null). Those cells are a build-only
