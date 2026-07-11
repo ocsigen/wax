@@ -380,7 +380,7 @@ let link_outcome ~registry test_file =
         (Wax_linker.Wasm_link.f
            ~filter_export:(fun _ -> false)
            inputs ~output_file:out
-          : Wax_linker.Js_source_map.t);
+          : Wax_linker.Source_map.t);
       (match parse_binary ~color:!color (read_file out) with
       | Ok m ->
           if m.Wax_wasm.Ast.Binary.imports <> [] then exit 3;

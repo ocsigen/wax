@@ -628,7 +628,7 @@ module Scan = struct
       tag = [||];
     }
 
-  type resize_data = Js_source_map.resize_data = {
+  type resize_data = Source_map.resize_data = {
     mutable i : int;
     mutable pos : int array;
     mutable delta : int array;
@@ -1206,7 +1206,7 @@ type t = {
   module_name : string;
   file : string;
   contents : Read.t;
-  source_map_contents : Js_source_map.Standard.t option;
+  source_map_contents : Source_map.Standard.t option;
 }
 
 type import_status = Resolved of int * int | Unresolved of int
@@ -1536,7 +1536,7 @@ type input = {
   module_name : string;
   file : string;
   code : string option;
-  opt_source_map : Js_source_map.Standard.t option;
+  opt_source_map : Source_map.Standard.t option;
 }
 
 let f ?(filter_export = fun _ -> true) ?(distinct_named_types = false) files
@@ -2084,9 +2084,9 @@ let f ?(filter_export = fun _ -> true) ?(distinct_named_types = false) files
               hints;
             Option.iter
               (fun sm ->
-                if not (Js_source_map.is_empty sm) then
+                if not (Source_map.is_empty sm) then
                   source_maps :=
-                    (pos, Js_source_map.resize resize_data sm) :: !source_maps)
+                    (pos, Source_map.resize resize_data sm) :: !source_maps)
               source_map_contents))
         files;
       if start_count > 1 then (
@@ -2103,20 +2103,24 @@ let f ?(filter_export = fun _ -> true) ?(distinct_named_types = false) files
         Write.uint code_pieces (Buffer.length buf);
         Buffer.add_buffer code_pieces buf;
         Buffer.clear buf);
-      let code_section_offset =
-        let b = Buffer.create 5 in
-        Write.uint b (Buffer.length code_pieces);
-        pos_out out_ch + 1 + Buffer.length b
-      in
-      add_section out_ch ~id:10 code_pieces;
+      (* The branch-hint custom section must precede the code section (the
+         branch-hinting proposal requires it, and the decoder rejects a later
+         one), so emit it before writing code. Its offsets are relative to each
+         function body, so they need no rebasing against the code position. *)
       let sorted_branch_hints = List.rev !linked_branch_hints in
       if sorted_branch_hints <> [] then
         ignore
           (Wax_wasm.Wasm_output.output_branch_hint_section out_ch
              sorted_branch_hints
             : int);
+      let code_section_offset =
+        let b = Buffer.create 5 in
+        Write.uint b (Buffer.length code_pieces);
+        pos_out out_ch + 1 + Buffer.length b
+      in
+      add_section out_ch ~id:10 code_pieces;
       let source_map =
-        Js_source_map.concatenate
+        Source_map.concatenate
           (List.map
              (fun (pos, sm) -> (pos + code_section_offset, sm))
              (List.rev !source_maps))
