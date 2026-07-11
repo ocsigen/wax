@@ -885,22 +885,24 @@ module Scan = struct
       | c -> failwith (Printf.sprintf "Bad instruction 0xFB 0x%02X" c)
     and vector_instruction pos =
       if debug then Format.eprintf "  %d@." (get pos);
+      (* [uint32] already consumes the (LEB-encoded) SIMD sub-opcode, so each
+         arm starts at the immediate — do not skip another byte. *)
       let pos, i = uint32 pos in
       match i with
       | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 92
       | 93 (* v128.load / store *) ->
-          pos + 1 |> memarg |> instructions
+          pos |> memarg |> instructions
       | 84 | 85 | 86 | 87 | 88 | 89 | 90 | 91 (* v128.load/store_lane *) ->
-          pos + 1 |> memarg |> laneidx |> instructions
-      | 12 (* v128.const *) | 13 (* v128.shuffle *) -> pos + 17 |> instructions
+          pos |> memarg |> laneidx |> instructions
+      | 12 (* v128.const *) | 13 (* v128.shuffle *) -> pos + 16 |> instructions
       | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33
       | 34 (* xx.extract/replace_lane *) ->
-          pos + 1 |> laneidx |> instructions
+          pos |> laneidx |> instructions
       | ( 162 | 165 | 166 | 175 | 176 | 178 | 179 | 180 | 187 | 194 | 197 | 198
         | 207 | 208 | 210 | 211 | 212 | 226 | 238 ) as c ->
           failwith (Printf.sprintf "Bad instruction 0xFD 0x%02X" c)
       | c ->
-          if c <= 275 then pos + 1 |> instructions
+          if c <= 275 then pos |> instructions
           else failwith (Printf.sprintf "Bad instruction 0xFD 0x%02X" c)
     and atomic_instruction pos =
       if debug then Format.eprintf "  %d@." (get pos);
@@ -918,7 +920,7 @@ module Scan = struct
       | 72 | 73 | 74 | 75 | 76 | 77 | 78 (* xx.atomic.rmw.cmpxchg *) ->
           pos + 1 |> memarg |> instructions
       | 3 (* memory.fence *) ->
-          let c = get pos + 1 in
+          let c = get (pos + 1) in
           assert (c = 0);
           pos + 2 |> instructions
       | c -> failwith (Printf.sprintf "Bad instruction 0xFE 0x%02X" c)

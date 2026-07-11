@@ -26,8 +26,6 @@ Should instantiate, but the linker rejected an import
 ==== core/multi-memory/imports4.wast ====
 Should instantiate, but the linker rejected an import
 Should instantiate, but the linker rejected an import
-==== core/simd/simd_linking.wast ====
-Should instantiate, but the linker crashed
 ==== core/stack-switching/cont.wast ====
 Should instantiate, but the linker rejected an import
 Should instantiate, but the linker rejected an import
