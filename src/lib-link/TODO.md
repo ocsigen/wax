@@ -15,12 +15,12 @@
   (v129). Supporting it would require inlining the (constant) global initializer
   into the table initializer in place of the `global.get`.
 
-- Exact function imports (custom-descriptors, `(func (exact …))`) are not fully
-  matched: the export side is treated as inexact and `check_export_import_types`
-  ignores the `exact` flag. So an exact import that should be rejected on a
-  supertype export is accepted, and one satisfied only by an inexact export's
-  *dynamic* type is rejected. Matching them properly means tracking per-export
-  exactness (a directly-defined function is exact; a re-exported inexact import
-  is not); the dynamic-type cases are, like all instantiation-time checks,
-  beyond a static merge linker. See `exact-func-import.wast` in the linker
-  suite's custom-descriptors golden.
+- Exact function imports (custom-descriptors, `(func (exact …))`) are matched by
+  requiring the export's function type to equal the imported type exactly. This
+  is correct when the export's static type is its real type (a directly-defined
+  function, or an exact re-export). It cannot accept the case where an exact
+  import is satisfied only by an *inexact* re-export whose declared type is a
+  supertype but whose runtime type is the imported type — that is an
+  instantiation-time (dynamic) check, beyond a static merge linker, so the
+  linker rejects it. See `exact-func-import.wast` in the linker suite's
+  custom-descriptors golden (the one remaining rejection).
