@@ -197,3 +197,48 @@ structurally-identical copy so its names survive:
 The result still validates:
   $ wax -v -f wasm -o /dev/null tdist.wasm && echo OK
   OK
+
+A global import that resolves to a *later* input module. When the import is only
+read from a function body (no ordering constraint), linking succeeds regardless
+of the order the modules are given in:
+  $ cat > gprov.wat <<EOF
+  > (module (global (export "g") i32 (i32.const 42)))
+  > EOF
+  $ cat > gcode.wat <<EOF
+  > (module
+  >   (import "p" "g" (global \$g i32))
+  >   (func (export "get") (result i32) global.get \$g))
+  > EOF
+  $ wax gprov.wat -o gprov.wasm
+  $ wax gcode.wat -o gcode.wasm
+  $ wax link -o gcode_linked.wasm c:gcode.wasm p:gprov.wasm
+  $ wax gcode_linked.wasm -f wat | grep -E 'global|global.get'
+    global.get 0
+  (global i32
+  (export "g" (global 0))
+  $ wax -v -f wasm -o /dev/null gcode_linked.wasm && echo OK
+  OK
+
+But a global *initializer* may only read a preceding global, so reading a global
+import that resolves to a later module is rejected, naming the import, and no
+output file is left behind:
+  $ cat > ginit.wat <<EOF
+  > (module
+  >   (import "p" "g" (global \$g i32))
+  >   (global \$h i32 (global.get \$g)))
+  > EOF
+  $ wax ginit.wat -o ginit.wasm
+  $ wax link -o ginit_linked.wasm c:ginit.wasm p:gprov.wasm
+  Error:
+    In module "ginit.wasm", a global initializer reads the global import "p" /
+    "g", which linking resolves to a definition in the later module
+    "gprov.wasm". A global initializer may only read a preceding global, so the
+    linked module would be invalid.
+  [128]
+  $ test -e ginit_linked.wasm && echo PRESENT || echo ABSENT
+  ABSENT
+
+Given in the other order (exporter first) the same modules link:
+  $ wax link -o ginit_ok.wasm p:gprov.wasm c:ginit.wasm
+  $ wax -v -f wasm -o /dev/null ginit_ok.wasm && echo OK
+  OK
