@@ -1,27 +1,13 @@
 ==== core/gc/i31.wast ====
 Should instantiate, but the linker rejected an import
-==== core/gc/type-subtyping.wast ====
-Should instantiate, but the linker rejected an import
-Should instantiate, but the linker crashed
-Should instantiate, but the linker rejected an import
-Should instantiate, but the linker crashed
-Should instantiate, but the linker rejected an import
-Should instantiate, but the linker crashed
-Linked, but the spec says unlinkable (incompatible import type)
 ==== core/memory_grow.wast ====
 Should instantiate, but the linker rejected an import
 Should instantiate, but the linker rejected an import
 ==== core/multi-memory/imports4.wast ====
 Should instantiate, but the linker rejected an import
 Should instantiate, but the linker rejected an import
-==== core/stack-switching/cont.wast ====
-Should instantiate, but the linker rejected an import
-Should instantiate, but the linker rejected an import
-Should instantiate, but the linker rejected an import
 ==== core/table.wast ====
 Should instantiate, but the linker rejected an import
 ==== core/table_grow.wast ====
 Should instantiate, but the linker rejected an import
-Should instantiate, but the linker rejected an import
-==== core/type-equivalence.wast ====
 Should instantiate, but the linker rejected an import
