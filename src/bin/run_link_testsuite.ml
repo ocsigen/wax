@@ -185,7 +185,12 @@ type repr =
 type command =
   [ `Module of Wax_wasm.Ast.Text.name option * repr
   | `Register of string * Wax_wasm.Ast.Text.name option
-  | `Unlinkable of (Wax_wasm.Ast.Text.name option * repr) * string ]
+  | `Unlinkable of (Wax_wasm.Ast.Text.name option * repr) * string
+  | (* A behavioural assertion ([assert_return]/[assert_trap]/…): the module id
+       its action targets, and the source span of the whole command so the
+       harness can slice the original text and replay it against the merged
+       module. *)
+    `Assert of Wax_wasm.Ast.Text.name option * Wax_wasm.Ast.location ]
 
 module Link_script_parser = struct
   module Make (Context : sig
@@ -307,6 +312,25 @@ let import_module_names file =
            m.Wax_wasm.Ast.Binary.imports)
   | Error _ -> []
 
+(* Whether replaying [file]'s assertions against its merged form is meaningful.
+   A merge preserves behaviour only when the state shared across the link
+   boundary is immutable — functions, immutable globals, tags. A mutable global,
+   table or memory is a shared *cell* a sibling can mutate through its own
+   exports; internalising it into the merged module severs that sharing, so an
+   assertion that reads it after a sibling wrote it would (correctly) diverge.
+   Such modules are excluded from the behavioural step rather than reported as
+   mismatches. *)
+let behaviourally_mergeable file =
+  match parse_binary ~color:!color (read_file file) with
+  | Error _ -> false
+  | Ok m ->
+      List.for_all
+        (fun (i : Wax_wasm.Ast.Binary.import) ->
+          match i.desc with
+          | Func _ | Tag _ | Global { mut = false; _ } -> true
+          | Global { mut = true; _ } | Table _ | Memory _ -> false)
+        (Wax_wasm.Ast_utils.flatten_binary_imports m.Wax_wasm.Ast.Binary.imports)
+
 (* Whether [file] imports anything from a module currently in the registry, i.e.
    whether linking it actually resolves a cross-module reference. Standalone
    modules (no such import) do not exercise linking — relinking them would only
@@ -403,13 +427,65 @@ let link_outcome ~registry test_file =
           then exit 4
       | Error _ -> exit 3);
       exit 0
-  | pid -> (
-      match Unix.waitpid [] pid with
-      | _, Unix.WEXITED 0 -> Linked
-      | _, Unix.WEXITED 3 -> Unresolved
-      | _, Unix.WEXITED 4 -> Invalid
-      | _, Unix.WEXITED 128 -> Rejected (* Wasm_link.f's diagnostic exit *)
-      | _ -> Crashed)
+  | pid ->
+      (* [out] holds the merged binary (still in [scratch], removed at end of
+         script); returned so the behavioural step can run its exports. *)
+      let outcome =
+        match Unix.waitpid [] pid with
+        | _, Unix.WEXITED 0 -> Linked
+        | _, Unix.WEXITED 3 -> Unresolved
+        | _, Unix.WEXITED 4 -> Invalid
+        | _, Unix.WEXITED 128 -> Rejected (* Wasm_link.f's diagnostic exit *)
+        | _ -> Crashed
+      in
+      (outcome, out)
+
+(* --- Behavioural check via the WebAssembly reference interpreter --- *)
+
+(* The reference interpreter runs a [.wast] directly, exiting non-zero (with the
+   failing assertion on stderr) on any mismatch. It supports every merged
+   proposal, unlike wabt or Node. Absent by default off CI, so the whole
+   behavioural step is skipped when it is not found — the golden then only
+   reflects the link-time outcomes above. *)
+let ref_interp =
+  match Sys.getenv_opt "REF" with
+  | Some p -> p
+  | None -> (
+      match Sys.getenv_opt "HOME" with
+      | Some h -> Filename.concat h "sources/Wasm/interpreter/wasm"
+      | None -> "")
+
+let ref_available =
+  ref_interp <> ""
+  &&
+    try
+      Unix.access ref_interp [ Unix.X_OK ];
+      true
+    with Unix.Unix_error _ -> false
+
+(* Escape a binary module as a wat string literal for [(module binary "…")]. *)
+let escape_binary s =
+  let b = Buffer.create (String.length s * 4) in
+  String.iter
+    (fun c -> Buffer.add_string b (Printf.sprintf "\\%02x" (Char.code c)))
+    s;
+  Buffer.contents b
+
+(* Run [wast] through the reference interpreter, returning its diagnostic on a
+   non-zero exit (an assertion mismatch or a load error) and [None] on success. *)
+let ref_run wast =
+  let script = fresh_wasm () ^ ".wast" in
+  scratch := script :: !scratch;
+  Out_channel.with_open_text script (fun oc -> output_string oc wast);
+  let err = fresh_wasm () ^ ".out" in
+  scratch := err :: !scratch;
+  let code =
+    Sys.command
+      (Printf.sprintf "%s %s > %s 2>&1"
+         (Filename.quote ref_interp)
+         (Filename.quote script) (Filename.quote err))
+  in
+  if code = 0 then None else Some (read_file err)
 
 let contains_substring s sub =
   let n = String.length s and m = String.length sub in
@@ -448,15 +524,74 @@ let compile_spectest ~color =
 
 let clean_spectest () = try Sys.remove !spectest_file with _ -> ()
 
+(* Replay the collected behavioural assertions. [resolved] is a list of
+   [(merged-binary, module-id-text, assertion-text)] gathered in source order;
+   the assertions are grouped by the binary they were resolved against (unique
+   per module definition) and each group is emitted as [(module <id> binary "…")]
+   followed by the assertions verbatim, then run through the reference
+   interpreter. Slicing the assertions from the source keeps every value/result
+   form intact, and binding the module to the id they invoke needs no rewriting.
+   This is where a remapping bug that still validates — an [invoke] resolving to
+   the wrong same-typed entity — finally shows up. *)
+let run_behavioural resolved =
+  let groups : (string, string * Buffer.t) Hashtbl.t = Hashtbl.create 16 in
+  List.iter
+    (fun (out, id_text, atext) ->
+      let _, buf =
+        match Hashtbl.find_opt groups out with
+        | Some g -> g
+        | None ->
+            let g = (id_text, Buffer.create 256) in
+            Hashtbl.add groups out g;
+            g
+      in
+      Buffer.add_string buf atext;
+      Buffer.add_char buf '\n')
+    resolved;
+  Hashtbl.iter
+    (fun out (id_text, buf) ->
+      let wast =
+        Printf.sprintf "(module %s binary \"%s\")\n%s" id_text
+          (escape_binary (read_file out))
+          (Buffer.contents buf)
+      in
+      match ref_run wast with
+      | None -> ()
+      | Some err ->
+          Format.eprintf
+            "Behavioural mismatch for module %s under the reference \
+             interpreter:@.%s@."
+            id_text err)
+    groups
+
 let runtest filename _ =
   let color = !color in
-  let cmds, _ =
-    LinkScriptParser.parse_from_string ~color ~filename (read_file filename)
-  in
+  let source = read_file filename in
+  let cmds, _ = LinkScriptParser.parse_from_string ~color ~filename source in
   let registry : (string, string) Hashtbl.t = Hashtbl.create 16 in
   Hashtbl.replace registry "spectest" !spectest_file;
   let by_id : (string, string) Hashtbl.t = Hashtbl.create 16 in
+  (* The module currently open for behavioural replay — the most recently
+     linked, behaviourally-mergeable definition, as [(script-id, merged-binary)].
+     Any later module definition may instantiate and mutate shared state, so it
+     resets this: an assertion is replayed only against the module whose own block
+     it sits in. [beh] accumulates the resolved [(binary, id-text, text)] triples
+     in source order. *)
+  let current = ref None in
+  let beh = ref [] in
   let last = ref None in
+  (* Slice the original source. An [ID]'s own span is exact; an assertion's
+     [$sloc] starts just past its opening [(] (the paren terminal is outside the
+     span), so pull it back in to form a complete s-expression. *)
+  let text a b = String.sub source a (b - a) in
+  let id_text (n : Wax_wasm.Ast.Text.name) =
+    text n.Wax_wasm.Ast.info.loc_start.pos_cnum n.info.loc_end.pos_cnum
+  in
+  let assert_text (l : Wax_wasm.Ast.location) =
+    let a = l.loc_start.pos_cnum in
+    let a = if a > 0 && source.[a - 1] = '(' then a - 1 else a in
+    text a l.loc_end.pos_cnum
+  in
   let materialise repr =
     try Some (module_to_file ~color ~filename repr)
     with e ->
@@ -467,6 +602,9 @@ let runtest filename _ =
     (fun (cmd : command) ->
       match cmd with
       | `Module (id, repr) -> (
+          (* A new module definition may instantiate and mutate shared state, so
+             it ends the previous module's replay block. *)
+          current := None;
           match materialise repr with
           | None -> ()
           | Some file -> (
@@ -476,18 +614,26 @@ let runtest filename _ =
                  linking; a standalone module has nothing to link. *)
               if imports_registered ~registry file then
                 match link_outcome ~registry file with
-                | Linked -> ()
-                | Unresolved ->
+                | Linked, out ->
+                    (* Open this merged binary for behavioural replay, named by
+                       its script id (only when the merge preserves observable
+                       behaviour). *)
+                    Option.iter
+                      (fun n ->
+                        if behaviourally_mergeable file then
+                          current := Some (name_desc n, out))
+                      id
+                | Unresolved, _ ->
                     Format.eprintf
                       "Should instantiate, but an import is left unresolved@."
-                | Invalid ->
+                | Invalid, _ ->
                     Format.eprintf
                       "Should instantiate, but linking produced an invalid \
                        module@."
-                | Rejected ->
+                | Rejected, _ ->
                     Format.eprintf
                       "Should instantiate, but the linker rejected an import@."
-                | Crashed ->
+                | Crashed, _ ->
                     Format.eprintf
                       "Should instantiate, but the linker crashed@."))
       | `Register (name, id) ->
@@ -505,14 +651,21 @@ let runtest filename _ =
             | None -> ()
             | Some file -> (
                 match link_outcome ~registry file with
-                | Linked ->
+                | Linked, _ ->
                     Format.eprintf "Linked, but the spec says unlinkable (%s)@."
                       reason
                 (* Unresolved / Invalid / Rejected / Crashed all mean the module
                    did not link, which is what the spec asserts — nothing to
                    report. *)
-                | Unresolved | Invalid | Rejected | Crashed -> ())))
+                | (Unresolved | Invalid | Rejected | Crashed), _ -> ()))
+      | `Assert (target, loc) -> (
+          (* Replay only against the module whose block this assertion sits in. *)
+          match (target, !current) with
+          | Some n, Some (desc, out) when name_desc n = desc ->
+              beh := (out, id_text n, assert_text loc) :: !beh
+          | _ -> ()))
     cmds;
+  if ref_available then run_behavioural (List.rev !beh);
   clean_scratch ()
 
 let output path s =
