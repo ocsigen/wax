@@ -106,6 +106,7 @@
  (deps
   (glob_files_rec wasm-test-suite/*.wast)
   (glob_files wasm-test-suite/blacklist)
+  (glob_files wasm-test-suite/link-blacklist)
   spectest.wat)
  (action
   (with-stdout-to
@@ -124,6 +125,7 @@
  (deps
   (glob_files_rec wasm-test-suite/*.wast)
   (glob_files wasm-test-suite/blacklist)
+  (glob_files wasm-test-suite/link-blacklist)
   spectest.wat)
  (action
   (with-stdout-to

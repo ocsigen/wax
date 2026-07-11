@@ -1,0 +1,13 @@
+# Tests skipped by run_link_testsuite only (one per line; # comments, blank
+# lines ignored; same entry format as the shared blacklist). The shared
+# blacklist still applies too; this file is for tests a static merge linker
+# structurally cannot run, so they are not linker bugs.
+
+# These files' only linking content imports a memory / table that the spec
+# grows at instantiation *before* the importing module is instantiated, so the
+# import's declared minimum exceeds the exporter's declared minimum. A static
+# merge linker checks the declared limits and rightly rejects it — it cannot
+# observe the runtime growth. (Files with other, linkable, import tests are
+# kept; only wholly-runtime-growth files are skipped here.)
+memory_grow.wast
+table_grow.wast
