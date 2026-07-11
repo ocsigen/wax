@@ -272,6 +272,10 @@ let page_size_log2 loc (n : Uint32.t) =
 let with_loc loc desc =
   Wax_utils.Trivia.with_pos Context.context {loc_start = fst loc; loc_end = snd loc} desc
 
+(* The raw source span of a production, for the link-script grammar to slice the
+   original text of an assertion back out (see [bin/run_link_testsuite.ml]). *)
+let link_loc (loc_start, loc_end) : Ast.location = { loc_start; loc_end }
+
 let map_fst f (x, y) = (f x, y)
 
 let check_constant f loc s =
@@ -401,9 +405,11 @@ let hinted loc h (i : _ instr) = with_loc loc (Hinted (h, i))
    (see [bin/run_link_testsuite.ml]). Unlike [parse_script] it preserves the
    information a merge linker needs and that [parse_script] discards: each
    module's identifier, [register] commands (a name, optionally targeting a
-   module by id), and [assert_unlinkable] (the module plus the expected
-   reason). Runtime commands (actions, other assertions, threads) are still
-   ignored. *)
+   module by id), [assert_unlinkable] (the module plus the expected reason), and
+   the behavioural assertions ([assert_return], [assert_trap], … over an
+   [invoke]/[get] action) as [`Assert (target-module-id, source-span)] so the
+   harness can replay them against the merged module. Threads and meta commands
+   are still ignored. *)
 %start <[ `Module of Ast.Text.name option *
             [ `Parsed of Ast.location Ast.Text.module_
             | `Text of string | `Binary of string ]
@@ -412,7 +418,8 @@ let hinted loc h (i : _ instr) = with_loc loc (Hinted (h, i))
             (Ast.Text.name option *
              [ `Parsed of Ast.location Ast.Text.module_
              | `Text of string | `Binary of string ])
-            * string ] list> parse_link_script
+            * string
+        | `Assert of Ast.Text.name option * Ast.location ] list> parse_link_script
 
  (* To avoid unused token report and refer to Context in the mli *)
 %start <Context.t> dummy_ctx
@@ -1502,12 +1509,22 @@ link_script_instance:
 | instance { None }
 | m = link_module { Some m }
 
+(* Like [action] but returns the target module identifier (if any) instead of
+   discarding it, so a behavioural assertion can be paired with the module it
+   names. *)
+link_action:
+| "(" INVOKE id = ID ? STRING const * ")" { id }
+| "(" GET id = ID ? STRING ")" { id }
+
 link_assertion:
-| "(" ASSERT_RETURN action result_pat* ")" { [] }
-| "(" ASSERT_RETURN_NAN action ")" { [] }
-| "(" ASSERT_EXCEPTION action ")" { [] }
-| "(" ASSERT_SUSPENSION action STRING ")" { [] }
-| "(" ASSERT_EXHAUSTION action STRING ")" { [] }
+| "(" ASSERT_RETURN a = link_action result_pat* ")"
+  { [ `Assert (a, link_loc $sloc) ] }
+| "(" ASSERT_RETURN_NAN a = link_action ")" { [ `Assert (a, link_loc $sloc) ] }
+| "(" ASSERT_EXCEPTION a = link_action ")" { [ `Assert (a, link_loc $sloc) ] }
+| "(" ASSERT_SUSPENSION a = link_action STRING ")"
+  { [ `Assert (a, link_loc $sloc) ] }
+| "(" ASSERT_EXHAUSTION a = link_action STRING ")"
+  { [ `Assert (a, link_loc $sloc) ] }
 | "(" ASSERT_MALFORMED module_ STRING ")" { [] }
 | "(" ASSERT_INVALID module_ STRING ")" { [] }
 | "(" ASSERT_MALFORMED_CUSTOM module_ STRING ")" { [] }
@@ -1515,7 +1532,7 @@ link_assertion:
 | "(" ASSERT_UNLINKABLE m = link_script_instance r = STRING ")"
   { match m with Some md -> [ `Unlinkable (md, r.Ast.desc) ] | None -> [] }
 | "(" ASSERT_TRAP link_script_instance STRING ")" { [] }
-| "(" ASSERT_TRAP action STRING ")" { [] }
+| "(" ASSERT_TRAP a = link_action STRING ")" { [ `Assert (a, link_loc $sloc) ] }
 
 parse_link_script:
 | s = link_script EOF { s }
