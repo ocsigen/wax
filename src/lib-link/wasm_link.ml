@@ -1098,7 +1098,16 @@ type t = {
 type import_status = Resolved of int * int | Unresolved of int
 
 let check_limits export import =
-  Uint64.compare export.mi import.mi >= 0
+  (* Beyond the min/max bounds, a memory or table type only matches an import
+     when the address type (i32 / i64), the page size and the shared flag are
+     the same — otherwise, e.g., an i32 memory would satisfy an i64 import.
+     [page_size_log2 = None] denotes the default page (2^16), so normalise
+     before comparing. *)
+  export.address_type = import.address_type
+  && export.shared = import.shared
+  && Option.value ~default:16 export.page_size_log2
+     = Option.value ~default:16 import.page_size_log2
+  && Uint64.compare export.mi import.mi >= 0
   &&
   match (export.ma, import.ma) with
   | _, None -> true
