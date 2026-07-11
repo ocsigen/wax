@@ -7,10 +7,11 @@ map mappings). The linker is reached through the `wax link` CLI subcommand,
 which calls `Wax_linker.Wasm_link.f`; the base64-VLQ codec it relies on lives in
 `Wax_utils.Source_map.Vlq64`.
 
-**Status.** Phases 1 and 2 are implemented (`test/pbt/test_source_map.ml` and
-`test/check-sourcemap/` + `test/cram-tests/link.t`); the spec suite's linking
-cases run through `src/bin/run_link_testsuite.ml` (golden `test/link_suite*.expected`).
-Phases 3–8 are the remaining, roughly-ordered work.
+**Status.** Phases 1–3 are implemented (`test/pbt/test_source_map.ml`,
+`test/check-sourcemap/` + `test/cram-tests/link.t`, and
+`test/cram-tests/link-name-section.t`); the spec suite's linking cases run
+through `src/bin/run_link_testsuite.ml` (golden `test/link_suite*.expected`).
+Phases 4–8 are the remaining, roughly-ordered work.
 
 ## 1. Risk inventory
 
@@ -24,7 +25,7 @@ Where bugs can hide, and how visible they currently are:
 | Index remapping in code bodies | `Scan.scanner`, `Scan.func`, `build_mappings` | Yes — wrong indices almost always fail validation or tests |
 | Byte-shift bookkeeping (LEB width changes) | `Scan.push_resize`, the resize entries pushed in the code-section loop of `f` | **No** — only affects source maps; covered now by Phase 1/2, nothing else checks them |
 | Source map rewriting | `Source_map.resize_mappings` | Now checked by Phase 1 (PBT) and Phase 2 (boundary checker) |
-| Name section rewriting (incl. indirect name maps) | `write_namemap`, `write_indirectnamemap`, `write_simple_namemap` | **No** — engines silently ignore malformed custom sections |
+| Name section rewriting (incl. indirect name maps) | `write_namemap`, `write_indirectnamemap`, `write_simple_namemap` | Now checked by Phase 3 (round-trip through the disassembler) |
 | Export filtering (`~filter_export`) | index compaction after dropping exports | Partially — shrinking indices across LEB width boundaries is a rare path |
 
 Key observation: the linked output is validated only where a test explicitly
@@ -89,27 +90,27 @@ compile a program with known source locations, link with source maps, run under
 Node with `--enable-source-maps`, throw, and snapshot-test that the stack trace
 resolves to the right file/line.
 
-## 4. Phase 3 — Name section round-trip — **todo**
+## 4. Phase 3 — Name section round-trip — **done**
 
 Engines ignore broken custom sections, so this needs an explicit test.
-`link.t` incidentally shows type/field names surviving (it disassembles with
-`-f wat` and greps for `$name`s), but there is no dedicated round-trip check of
-the function/local/label/type/field name maps against remapped indices.
+Implemented as `test/cram-tests/link-name-section.t`: two richly-named modules
+are linked and the names read back with the disassembler (`-f wat`), which
+decodes the name section through `from_wasm` — an independent path from the
+linker's writer. The test asserts:
 
-- Link modules whose inputs have rich name sections (module/function/local/type
-  names).
-- Re-parse the linked output's name section (with `Read` + `Scan.local_namemap`,
-  or externally with `wasm-tools print` and grep the symbolic names) and assert:
-  - every function kept in the output has the name it had in its input module,
-    associated with the *remapped* index;
-  - indirect name maps (local names, labels) survive with correct outer
-    (function) and inner indices, including functions whose index moved across a
-    LEB width boundary (exercising `write_indirectnamemap`'s reliance on
-    order-preserving `func_mappings`);
-  - no dangling entries for functions removed by `~filter_export`/import
-    resolution.
-- A cram test (or `.expected` snapshot) on a small crafted pair of `.wat` inputs
-  is enough; one large input as a smoke test.
+- every function/type/field/global/table/memory/tag kept in the output carries
+  its input name at the *remapped* index (the second module's definitions land
+  after the first's, so its indices genuinely move);
+- indirect name maps survive with correct outer (function) and inner indices —
+  locals *and* labels, which the disassembler now prints after
+  `ebee8640` (both go through `write_indirectnamemap`, so remapping the outer
+  index is exercised for the same code that handles labels);
+- a resolved import leaves a single name, no dangling duplicate;
+- function names whose *output* index crosses the 128 LEB-width boundary still
+  round-trip (a 130-function module shifted up by a small one).
+
+A larger smoke input (e.g. the standard library) could still be added, but the
+crafted pair already exercises every subsection the disassembler surfaces.
 
 ## 5. Phase 4 — Crafted `.wat` unit tests for cliff edges — **partial**
 
@@ -216,13 +217,13 @@ already surface enough.
 |---|---|---|---|
 | 1 | QCheck oracle for `resize` | done | — |
 | 2 | Instruction-boundary source map checker | done | — |
-| 3 | Name section round-trip | todo | ~½ day |
+| 3 | Name section round-trip | done | — |
 | 4 | Crafted `.wat` cliff-edge tests | partial | 1–2 days |
 | 5 | External `wasm-tools validate` in tests | partial | ~½ day |
 | 6 | Self-check mode + `bisect_ppx` report | todo | ~1 day |
 | 7 | Differential vs `wasm-merge` | todo | 1 day |
 | 8 | Split-and-relink fuzzing | todo | 2–4 days |
 
-Phases 3–5 are the core remaining work; after them, every output the linker
+Phases 4–5 are the core remaining work; after them, every output the linker
 produces (typed sections, source maps, name section) is checked by something
 other than the code that produced it.
