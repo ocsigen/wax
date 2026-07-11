@@ -1,4 +1,4 @@
 (library
  (name wax)
  (public_name wax-lib)
- (libraries wax_wasm wax_conversion))
+ (libraries wax_wasm wax_conversion wax_linker))

@@ -4,12 +4,14 @@ module Standard : sig
   type t
 
   val of_file : ?tmp_buf:Buffer.t -> string -> t
+  val of_string : ?tmp_buf:Buffer.t -> string -> t
 end
 
 (* The linked output's source map: the indexed form produced by [concatenate]. *)
 type t
 
 val to_file : t -> string -> unit
+val to_string : t -> string
 
 (* A sequence of [(pos, delta)] byte-shift entries with strictly increasing
    [pos], describing how the code section grew/shrank when instructions were

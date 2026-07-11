@@ -191,6 +191,9 @@ module Standard = struct
 
   let of_file ?tmp_buf f =
     of_json ?tmp_buf (Yojson.Raw.from_file ?buf:tmp_buf f)
+
+  let of_string ?tmp_buf s =
+    of_json ?tmp_buf (Yojson.Raw.from_string ?buf:tmp_buf s)
 end
 
 module Index = struct
@@ -233,6 +236,7 @@ end
 type t = Index.t
 
 let to_file = Index.to_file
+let to_string m = Yojson.Raw.to_string (Index.json m)
 
 type resize_data = {
   mutable i : int;
