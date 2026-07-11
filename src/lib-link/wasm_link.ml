@@ -497,6 +497,15 @@ let read_branch_hints (contents : Read.t) =
     Array.to_list (Wax_wasm.Wasm_parser.branch_hint_section contents.ch)
   else []
 
+(* Raised by the table-section scan when a table initializer reads a global that
+   linking resolves to a module-internal definition. Such a global is emitted
+   after the table section, so the initializer would forward-reference it and
+   the merged module would be invalid (a table initializer may only read an
+   imported global). Signalled with the [global] map: a resolved-import global
+   is set to the sentinel [-1] in the table scan's map, which [global_map]
+   turns into this exception. *)
+exception Table_init_reads_internal_global
+
 module Scan = struct
   let debug = false
 
@@ -669,7 +678,14 @@ module Scan = struct
     let tableidx pos = rewrite table_map pos in
     let mem_map idx = maps.mem.(idx) in
     let memidx pos = rewrite mem_map pos in
-    let global_map idx = maps.global.(idx) in
+    let global_map idx =
+      (* [-1] marks a global the table scan must reject (see
+         [Table_init_reads_internal_global]); a real map only holds valid
+         indices, so this never fires outside the table section. *)
+      let v = maps.global.(idx) in
+      if v < 0 then raise Table_init_reads_internal_global;
+      v
+    in
     let globalidx pos = rewrite global_map pos in
     let elem_map idx = maps.elem.(idx) in
     let elemidx pos = rewrite elem_map pos in
@@ -1593,14 +1609,43 @@ let f ?(filter_export = fun _ -> true) files ~output_file =
         Array.init (Array.length files) (fun _ -> Scan.create_position_data ())
       in
       let table_counts =
-        write_section_with_scan ~types ~files ~out_ch ~buf ~id:4
-          ~scan:(fun i maps ->
-            Scan.table_section positions.(i)
-              {
-                maps with
-                func = func_mappings.(i);
-                global = global_mappings.(i);
-              })
+        (* A table initializer may only read an *imported* global; a global that
+           linking internalises (a resolved import) would follow the table
+           section in the output and make the initializer a forward reference —
+           an invalid module. Mark resolved-import globals with [-1] so the
+           table scan rejects them ([Table_init_reads_internal_global]) rather
+           than silently producing an invalid module (as binaryen's wasm-merge
+           does — it drops the initializer). *)
+        try
+          write_section_with_scan ~types ~files ~out_ch ~buf ~id:4
+            ~scan:(fun i maps ->
+              let imports = get_exportable_info resolved_imports.(i) Global in
+              let import_count = Array.length imports in
+              let global =
+                Array.mapi
+                  (fun j idx ->
+                    if
+                      j < import_count
+                      &&
+                      match imports.(j) with
+                      | Resolved _ -> true
+                      | _ -> false
+                    then -1
+                    else idx)
+                  global_mappings.(i)
+              in
+              Scan.table_section positions.(i)
+                { maps with func = func_mappings.(i); global })
+        with Table_init_reads_internal_global ->
+          Wax_utils.Diagnostic.report d ~location:dummy_loc ~severity:Error
+            ~message:(fun f () ->
+              Format.fprintf f
+                "A table initializer reads a global that linking resolves to a \
+                 definition in another module. A table initializer may only \
+                 read an imported global, so the linked module would be \
+                 invalid.")
+            ();
+          Wax_utils.Diagnostic.abort ()
       in
       let table_mappings =
         build_mappings resolved_imports unresolved_imports Table table_counts
