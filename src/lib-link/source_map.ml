@@ -23,6 +23,7 @@ module Array = ArrayLabels
 module String = StringLabels
 module IntSet = Set.Make (Int)
 module StringSet = Set.Make (String)
+module Vlq64 = Wax_utils.Source_map.Vlq64
 
 let list_string_assoc name l =
   List.find_map

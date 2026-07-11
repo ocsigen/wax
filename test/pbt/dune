@@ -1,6 +1,6 @@
 (executable
  (name test_source_map)
- (libraries qcheck wax-lib.linker))
+ (libraries qcheck wax-lib.linker wax-lib.utils))
 
 (rule
  (alias runtest)

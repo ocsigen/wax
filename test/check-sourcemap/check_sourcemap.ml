@@ -1,4 +1,5 @@
 open Wax_linker
+module Vlq64 = Wax_utils.Source_map.Vlq64
 
 type mapping = {
   gen_col : int;

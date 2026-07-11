@@ -1,5 +1,5 @@
 open Wax_linker.Source_map
-module Vlq64 = Wax_linker.Vlq64
+module Vlq64 = Wax_utils.Source_map.Vlq64
 
 (* Naive reference implementation. Structurally independent of the streaming
    [resize_mappings] (split on ',', full [decode_l] per segment) but with the
