@@ -1607,6 +1607,17 @@ let name_assoc ch =
 let namemap ch = vec name_assoc ch
 let name_map ch = name_map' name_assoc ch
 
+(* An indirect name map (e.g. the field-name subsection 10) as raw, unsorted
+   arrays: for each outer index, the (inner index, name) pairs. Unlike
+   [indirect_name_map] this keeps the wire order and avoids the [IntMap]
+   representation, so a caller can consume it without depending on that type. *)
+let indirect_namemap ch =
+  vec
+    (fun ch ->
+      let i = uint ch in
+      (i, namemap ch))
+    ch
+
 let indirect_name_map ch =
   name_map'
     (fun ch ->

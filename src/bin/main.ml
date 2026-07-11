@@ -854,7 +854,7 @@ let check format_opt strict color warnings features debug error_format defines
   if not (List.fold_left (fun ok file -> check_one file && ok) true files) then
     exit 128
 
-let link output_file source_map_file inputs =
+let link output_file source_map_file distinct_named_types inputs =
   let inputs =
     List.map
       (fun (module_name, file) ->
@@ -869,7 +869,9 @@ let link output_file source_map_file inputs =
       inputs
   in
   match
-    try Ok (Wax_linker.Wasm_link.f inputs ~output_file) with
+    try
+      Ok (Wax_linker.Wasm_link.f ~distinct_named_types inputs ~output_file)
+    with
     | Wax_utils.Diagnostic.Aborted -> exit 128
     | exn -> Error (Printexc.to_string exn)
   with
@@ -1066,6 +1068,17 @@ let link_output_file =
   let doc = "Specify the Wasm binary output file." in
   Arg.(
     required & opt (some string) None & info [ "o"; "output" ] ~docv:"FILE" ~doc)
+
+(* Name-aware type coalescing: keep structurally-equal but differently-named
+   types as distinct output types. *)
+let link_distinct_named_types =
+  let doc =
+    "Coalesce two structurally-equal types into one output type only when they \
+     also share the same type name and field names; otherwise keep them as \
+     separate, structurally-identical copies so their names survive. Off by \
+     default (purely structural deduplication)."
+  in
+  Arg.(value & flag & info [ "distinct-named-types" ] ~doc)
 
 (* Define the --define/-D option (set conditional-compilation variables) *)
 let define_option =
@@ -1443,8 +1456,9 @@ let lsp_cmd =
 let link_term =
   let+ output = link_output_file
   and+ source_map_file = source_map_file_option
+  and+ distinct_named_types = link_distinct_named_types
   and+ inputs = link_inputs in
-  link output source_map_file inputs
+  link output source_map_file distinct_named_types inputs
 
 let link_cmd =
   let doc = "Link WebAssembly binary modules together" in
