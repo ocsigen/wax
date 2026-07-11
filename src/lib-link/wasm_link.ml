@@ -69,83 +69,27 @@ let valtype_eq (info : link_subtyping_info) t1 t2 =
   let vt2 = To_internal.valtype info.types_map t2 in
   Wax_wasm.Types.valtype_equal vt1 vt2
 
-(* [resolve] maps a source type index (as it appears in the module being read)
-   to its canonical reference: [Rec pos] for a member of the rec group currently
-   being added, [Def id] for an already-canonicalised type. *)
-let rec to_normalized_heaptype resolve (ht : heaptype) :
-    Wax_wasm.Types.Normalized.heaptype =
-  match ht with
-  | Func -> Func
-  | NoFunc -> NoFunc
-  | Extern -> Extern
-  | NoExtern -> NoExtern
-  | Exn -> Exn
-  | NoExn -> NoExn
-  | Cont -> Cont
-  | NoCont -> NoCont
-  | Any -> Any
-  | Eq -> Eq
-  | I31 -> I31
-  | Struct -> Struct
-  | Array -> Array
-  | None_ -> None_
-  | Type idx -> Type (resolve idx)
-  | Exact idx -> Exact (resolve idx)
+(* Normalize a Binary rec group for the structural store. The context is
+   [resolve], mapping a source type index (as it appears in the module being
+   read) to its canonical reference: [Rec pos] for a member of the rec group
+   currently being added, [Def id] for an already-canonicalised type. The array
+   wrappers are plain [Array.map], as in [Remap] below.
 
-and to_normalized_reftype resolve (rt : reftype) :
-    Wax_wasm.Types.Normalized.reftype =
-  { nullable = rt.nullable; typ = to_normalized_heaptype resolve rt.typ }
+   [Map_types.subtype] carries [descriptor]/[describes] (custom-descriptors)
+   through [resolve] like any other index; that is essential, not incidental —
+   they are part of a type's identity, and dropping them once made two structs
+   differing only in their descriptor/describes clauses (e.g. [$a (descriptor $b)]
+   and [$b (describes $a)]) canonicalise to the same type and be merged. *)
+module To_normalized =
+  Wax_wasm.Ast.Map_types (Wax_wasm.Ast.Binary) (Wax_wasm.Types.Normalized)
+    (struct
+      type ctx = idx -> Wax_wasm.Types.ref_index
 
-and to_normalized_valtype resolve (vt : valtype) :
-    Wax_wasm.Types.Normalized.valtype =
-  match vt with
-  | I32 -> I32
-  | I64 -> I64
-  | F32 -> F32
-  | F64 -> F64
-  | V128 -> V128
-  | Ref rt -> Ref (to_normalized_reftype resolve rt)
-
-let to_normalized_packedtype (pt : packedtype) :
-    Wax_wasm.Types.Normalized.packedtype =
-  match pt with I8 -> I8 | I16 -> I16
-
-let to_normalized_storagetype resolve (st : storagetype) :
-    Wax_wasm.Types.Normalized.storagetype =
-  match st with
-  | Value vt -> Value (to_normalized_valtype resolve vt)
-  | Packed pt -> Packed (to_normalized_packedtype pt)
-
-let to_normalized_fieldtype resolve (ft : fieldtype) :
-    Wax_wasm.Types.Normalized.fieldtype =
-  { mut = ft.mut; typ = to_normalized_storagetype resolve ft.typ }
-
-let to_normalized_comptype resolve (ct : comptype) :
-    Wax_wasm.Types.Normalized.comptype =
-  match ct with
-  | Func { params; results } ->
-      Func
-        {
-          params = Array.map (to_normalized_valtype resolve) params;
-          results = Array.map (to_normalized_valtype resolve) results;
-        }
-  | Struct fields -> Struct (Array.map (to_normalized_fieldtype resolve) fields)
-  | Array field -> Array (to_normalized_fieldtype resolve field)
-  | Cont idx -> Cont (resolve idx)
-
-let to_normalized_subtype resolve
-    { final; supertype; typ; descriptor; describes } =
-  {
-    Wax_wasm.Types.Normalized.final;
-    supertype = Option.map resolve supertype;
-    typ = to_normalized_comptype resolve typ;
-    (* [descriptor]/[describes] (custom-descriptors) are part of a type's
-       identity — dropping them made two structs that differ only in their
-       descriptor/describes clauses (e.g. [$a (descriptor $b)] and
-       [$b (describes $a)]) canonicalise to the same type and be merged. *)
-    descriptor = Option.map resolve descriptor;
-    describes = Option.map resolve describes;
-  }
+      let idx f i = f i
+      let params _ f a = Array.map f a
+      let fields _ f a = Array.map f a
+      let members _ f a = Array.map f a
+    end)
 
 (* Remap every type index in a Binary type (e.g. renumbering into output space).
    Instantiated from the shared type-family functor rather than hand-written; the
@@ -411,7 +355,7 @@ module Read = struct
         if types.distinct_named then ext_refs := out_slot :: !ext_refs;
         Hashtbl.find types.types_map out_slot
     in
-    let normalized = Array.map (to_normalized_subtype resolve) ty in
+    let normalized = To_normalized.rectype resolve ty in
     let first_id = Wax_wasm.Types.add_rectype types.types_store normalized in
     let fill base =
       if source_base + count <= Array.length type_mapping then
