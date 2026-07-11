@@ -116,9 +116,8 @@ let wait_all_children pool =
 let counter = ref 0
 let outputs = ref []
 
-(* A per-corpus blacklist, identical in format to run_wasm_testsuite's. *)
-let read_blacklist root =
-  let file = Filename.concat root "blacklist" in
+(* A per-corpus blacklist file, in run_wasm_testsuite's format. *)
+let read_blacklist_file file =
   if not (Sys.file_exists file) then fun _ -> false
   else
     let entries =
@@ -140,6 +139,15 @@ let read_blacklist root =
       else Filename.basename path = entry
     in
     fun path -> List.exists (matches path) entries
+
+(* The linker suite honours the shared corpus [blacklist] and its own
+   [link-blacklist] — tests a static merge linker structurally cannot run
+   (e.g. importing a memory/table the spec grows at instantiation before the
+   import, which the linker rightly rejects on the declared limits). *)
+let read_blacklist root =
+  let shared = read_blacklist_file (Filename.concat root "blacklist") in
+  let linker = read_blacklist_file (Filename.concat root "link-blacklist") in
+  fun path -> shared path || linker path
 
 let iter_files dirs skip suffix ~output f =
   let pool = create_pool (Domain.recommended_domain_count ()) in
