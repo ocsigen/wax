@@ -1,5 +1,4 @@
 ==== core/custom-descriptors/exact-func-import.wast ====
-Linked, but the spec says unlinkable (incompatible import type)
 Should instantiate, but the linker rejected an import
 ==== core/gc/i31.wast ====
 Should instantiate, but the linker rejected an import
