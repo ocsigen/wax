@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"wax_convert","arguments":{"from":"wax","to":"wat","source":"#[export = \"sq\"]\nfn sq(x: i32) -> i32 { x * x; }"}}}

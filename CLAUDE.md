@@ -35,8 +35,8 @@ All 9 conversion pipelines are supported (any combination of wax/wat/wasm as inp
 
 ## CLI Interface
 
-`wax` is a `Cmd.group` with `convert` as the default command and `format` /
-`check` subcommands. cmdliner won't fall through to the default on a leading
+`wax` is a `Cmd.group` with `convert` as the default command and `format`,
+`check`, and `mcp` subcommands. cmdliner won't fall through to the default on a leading
 positional, so `main.ml` rewrites `Sys.argv` (the js_of_ocaml trick) to keep the
 bare `wax <file>` form working — edit that heuristic if adding subcommands.
 
@@ -152,6 +152,19 @@ in.
 | Flag | Long | Description |
 |------|------|-------------|
 |      | `--stdio` | Accepted and ignored (stdin/stdout is the only transport); present so editors that pass it by convention do not error |
+
+**mcp** — `dune exec wax -- mcp [options]`. Serves the toolchain to AI
+assistants over the Model Context Protocol (newline-delimited JSON-RPC on
+stdin/stdout; see `src/bin/mcp.ml`, aimed at assistants with little Wax in their
+training data — ADOPTION.md Phase 6). Exposes three tools: `wax_reference` (the
+embedded language reference, generated from `docs/llms.txt`), `wax_check`
+(validate a Wax/WAT snippet, structured diagnostics; reuses the parser +
+validator via a diagnostic collector so a bad snippet never exits the long-lived
+server) and `wax_convert` (convert between formats by shelling out to `wax
+convert` over temp files, wasm output base64-encoded). Options: `-s`
+`--strict-validate`, `-X` `--feature`, `-W` `--warn`, `--debug` (all as for the
+other commands). The transport uses newline framing (not MCP's `Content-Length`
+headers) and the in-memory convert path is a TODO — both noted in `mcp.ml`.
 
 **Exit status** (shared by all commands; see `docs/src/cli.md`): `0` success;
 `123` a usage error (bad flag combination) or a `format --check` run that found

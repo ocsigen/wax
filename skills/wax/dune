@@ -1,11 +1,16 @@
 ; The skill's reference.md is the generated language reference (docs/llms.txt),
-; copied here so the skill folder is self-contained and ready to drop into an
-; agent's skills directory. Depends on docs/llms.txt, so a doc edit re-copies it
-; on the next build. `dune build skills/wax/reference.md` regenerates it.
+; committed here so the skill folder is self-contained and ready to drop into an
+; agent's skills directory. Keep it in sync: copy docs/llms.txt to
+; reference.md.gen and diff against the committed copy under `dune runtest`.
+; After docs/llms.txt changes, `dune runtest` fails and `dune promote` updates
+; reference.md.
 
 (rule
- (target reference.md)
  (deps ../../docs/llms.txt)
- (mode promote)
  (action
-  (copy ../../docs/llms.txt reference.md)))
+  (copy ../../docs/llms.txt reference.md.gen)))
+
+(rule
+ (alias runtest)
+ (action
+  (diff reference.md reference.md.gen)))

@@ -1,21 +1,25 @@
 ; The llms.txt generator (see gen_llms.ml and ADOPTION.md Phase 6). Not
-; installed; run to (re)generate the flat single-file reference.
+; installed; assembles the mdbook sources into the flat single-file reference.
 
 (executable
  (name gen_llms)
  (modules gen_llms))
 
-; Assemble docs/src/*.md into docs/llms.txt. A promote-mode rule so
-; `dune build docs/llms.txt` regenerates the committed file in the source tree;
-; the doc pages are dependencies, so editing any of them makes it stale.
+; Keep the committed docs/llms.txt in sync with the mdbook sources: regenerate
+; it into llms.txt.gen and diff against the committed copy under `dune runtest`.
+; After editing a doc page, `dune runtest` fails and `dune promote` updates
+; docs/llms.txt (which the binary embed and the skill's reference.md copy from).
 
 (rule
- (target llms.txt)
- (mode promote)
  (deps
   (glob_files src/*.md)
   (glob_files src/correspondence/*.md))
  (action
   (with-stdout-to
-   llms.txt
+   llms.txt.gen
    (run %{exe:gen_llms.exe} src))))
+
+(rule
+ (alias runtest)
+ (action
+  (diff llms.txt llms.txt.gen)))

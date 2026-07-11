@@ -10,14 +10,16 @@ wax convert [OPTIONS] [INPUT] # the same, named explicitly
 wax format [OPTIONS] FILE…    # reformat files
 wax check [OPTIONS] FILE…     # validate files
 wax lsp                       # run the language server (over stdin/stdout)
+wax mcp [OPTIONS]             # serve the toolchain to AI assistants (MCP)
 ```
 
 By default `wax` converts between formats; this command is also available under
 its explicit name, `wax convert` (useful when an input filename could be
 mistaken for a subcommand). The `format` subcommand reformats files (see
 [Formatting](#formatting)), `check` validates them (see [Checking](#checking)),
-and `lsp` starts a Language Server Protocol server for editors (see [Language
-server](#language-server)).
+`lsp` starts a Language Server Protocol server for editors (see [Language
+server](#language-server)), and `mcp` serves the toolchain to AI assistants
+(see [Serving over MCP](#serving-over-mcp)).
 
 ## Positional Arguments
 
@@ -426,9 +428,45 @@ for Neovim, Helix, and Emacs — paired with the `tree-sitter-wax` grammar for
 highlighting — live under [`editors/`](https://github.com/ocsigen/wax/tree/main/editors)
 in the repository (one directory per editor, each with a README).
 
+## Serving over MCP
+
+The `mcp` subcommand runs a [Model Context Protocol](https://modelcontextprotocol.io)
+server on stdin/stdout, so an AI coding assistant can use the toolchain as a set
+of tools. It targets assistants that have little or no Wax in their training
+data: they can fetch the language reference and validate or convert Wax without
+leaving the editor. (Experimental.)
+
+```sh
+wax mcp [OPTIONS]
+```
+
+Messages are newline-delimited JSON-RPC, one request per line. The server
+exposes three tools:
+
+- **`wax_reference`** — returns the full Wax language reference as one document,
+  for the assistant to read into context.
+- **`wax_check`** — validates a Wax or WAT snippet and returns its diagnostics
+  as structured JSON, so the assistant can act on them mechanically.
+- **`wax_convert`** — converts a module between `wax`, `wat` and `wasm`; text
+  output is returned as UTF-8, binary output as base64.
+
+A malformed snippet is reported through the tool result rather than by exiting,
+so the server stays up across requests; it exits `0` at end of input.
+
+### Options
+
+- **`-s`**, **`--strict-validate`**: strict reference validation, as for
+  [`check`](#checking).
+- **`-X`** *NAME[=on|off]*, **`--feature`** *NAME[=on|off]*: enable or disable
+  an optional proposal, as for [`convert`](#options). Repeatable.
+- **`-W`** *NAME=LEVEL*, **`--warn`** *NAME=LEVEL*: set a warning's level, as
+  above.
+- **`--debug`** *CATEGORY*: as above.
+
 ## Exit status
 
-All three commands share the same exit codes:
+The `convert`, `format`, and `check` commands share the same exit codes (`mcp`
+normally exits `0` at end of input, or `125` on an internal error):
 
 | Code | Meaning |
 |------|---------|
