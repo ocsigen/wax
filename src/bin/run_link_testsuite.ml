@@ -322,6 +322,10 @@ let imports_registered ~registry file =
    registered — so merging unrelated modules cannot introduce spurious failures.
    A referenced module absent from the registry is simply left out, so its
    import stays unresolved and is caught by the residual-import check below. *)
+(* The module name given to the module under test, distinct from any registered
+   dependency's name so [rename_export] can single it out. *)
+let test_module_name = "$link-test"
+
 let link_inputs ~registry test_file =
   let deps = Hashtbl.create 16 in
   let rec add file =
@@ -339,7 +343,7 @@ let link_inputs ~registry test_file =
   Hashtbl.fold
     (fun name file acc -> input_of ~module_name:name file :: acc)
     deps
-    [ input_of ~module_name:"$link-test" test_file ]
+    [ input_of ~module_name:test_module_name test_file ]
 
 (* The outcome of linking a module against its registry dependencies.
    [Linked] the merge succeeded, every import resolved, and the merged module
@@ -365,9 +369,10 @@ let in_child f =
 (* Link [test_file] against its dependencies and classify the result. Runs in a
    forked child because [Wasm_link.f] [exit]s (128) on a link error and may
    raise on inputs it cannot yet decode; the child's exit status carries the
-   outcome back. Exports are dropped ([~filter_export:(fun _ -> false)]) so a
-   dependency's own exports cannot collide in the merged output — only import
-   resolution decides the outcome. *)
+   outcome back. Only the module under test keeps its exports (a dependency's are
+   dropped by [rename_export]) so cross-module export names cannot collide in the
+   merged output — import resolution alone decides the outcome, and the test
+   module's exports remain to invoke in the behavioural step. *)
 let link_outcome ~registry test_file =
   let out = fresh_wasm () in
   let inputs = link_inputs ~registry test_file in
@@ -378,7 +383,8 @@ let link_outcome ~registry test_file =
       Unix.close dev_null;
       ignore
         (Wax_linker.Wasm_link.f
-           ~filter_export:(fun _ -> false)
+           ~rename_export:(fun m nm ->
+             if m = test_module_name then Some nm else None)
            inputs ~output_file:out
           : Wax_linker.Source_map.t);
       (match parse_binary ~color:!color (read_file out) with
