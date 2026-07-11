@@ -309,23 +309,9 @@ type resize_data = {
 
 type input = Vlq64.input = { string : string; mutable pos : int; len : int }
 
-let rec next' src mappings pos len =
-  pos < len
-  &&
-  match mappings.[pos] with
-  | ',' ->
-      src.pos <- pos + 1;
-      true
-  | _ -> next' src mappings (pos + 1) len
-
-let next src = next' src src.string src.pos src.len
-
-let flush buf src start pos =
-  if start < pos then Buffer.add_substring buf src.string start (pos - start)
-
 let resize_mappings (resize_data : resize_data) mappings =
   if String.equal mappings "" || resize_data.i = 0 then mappings
-  else
+  else begin
     let src =
       { Vlq64.string = mappings; pos = 0; len = String.length mappings }
     in
@@ -334,30 +320,86 @@ let resize_mappings (resize_data : resize_data) mappings =
     let new_col_acc = ref 0 in
     let idx = ref 0 in
     let shift = ref 0 in
-    let rec loop start =
-      let pos = src.pos in
-      let delta = Vlq64.decode src in
-      col := !col + delta;
-      while !idx < resize_data.i && !col >= resize_data.pos.(!idx) do
-        shift := !shift + resize_data.delta.(!idx);
-        idx := !idx + 1
-      done;
-      let new_col = !col + !shift in
-      if new_col < 0 then (
-        flush buf src start pos;
-        let next_exists = next src in
-        let start = if next_exists then src.pos else src.len in
-        if next_exists then loop start else ())
-      else (
-        flush buf src start pos;
-        let new_relative_col = new_col - !new_col_acc in
-        new_col_acc := new_col;
-        Vlq64.encode buf new_relative_col;
-        let start = src.pos in
-        if next src then loop start else flush buf src start src.len)
+    (* A segment's fields after the generated column (source index, original
+       line/column, name index) are encoded as deltas relative to the previous
+       segment, and accumulate across the whole mappings string. Dropping a
+       segment therefore cannot simply discard those deltas: doing so would
+       shift the source position of every surviving segment after it. Carry the
+       deltas of dropped segments in these accumulators and fold each into the
+       next survivor that emits the corresponding field. A field is reset only
+       when it is emitted, so its chain stays intact across intervening
+       survivors that omit it (e.g. a bare generated-column segment). *)
+    let pending_source = ref 0 in
+    let pending_line = ref 0 in
+    let pending_col = ref 0 in
+    let pending_name = ref 0 in
+    let emitted = ref false in
+    (* The generated-column field is already decoded; read the remaining fields
+       of the current segment (0 for a bare column, 3, or 4 with a name), up to
+       the next separator or the end. *)
+    let read_tail () =
+      let rec loop acc =
+        if src.pos < src.len && Vlq64.in_alphabet src.string.[src.pos] then
+          loop (Vlq64.decode src :: acc)
+        else List.rev acc
+      in
+      loop []
     in
-    loop 0;
+    let accumulate tail =
+      match tail with
+      | source :: line :: column :: rest -> (
+          pending_source := !pending_source + source;
+          pending_line := !pending_line + line;
+          pending_col := !pending_col + column;
+          match rest with
+          | name :: _ -> pending_name := !pending_name + name
+          | [] -> ())
+      | _ -> ()
+    in
+    let emit_tail tail =
+      match tail with
+      | [] -> ()
+      | source :: line :: column :: rest -> (
+          Vlq64.encode buf (source + !pending_source);
+          Vlq64.encode buf (line + !pending_line);
+          Vlq64.encode buf (column + !pending_col);
+          pending_source := 0;
+          pending_line := 0;
+          pending_col := 0;
+          match rest with
+          | [] -> ()
+          | name :: rest ->
+              Vlq64.encode buf (name + !pending_name);
+              pending_name := 0;
+              List.iter ~f:(Vlq64.encode buf) rest)
+      | fields -> List.iter ~f:(Vlq64.encode buf) fields
+    in
+    let rec segment () =
+      if src.pos < src.len && Vlq64.in_alphabet src.string.[src.pos] then begin
+        col := !col + Vlq64.decode src;
+        let tail = read_tail () in
+        while !idx < resize_data.i && !col >= resize_data.pos.(!idx) do
+          shift := !shift + resize_data.delta.(!idx);
+          idx := !idx + 1
+        done;
+        let new_col = !col + !shift in
+        if new_col < 0 then accumulate tail
+        else begin
+          if !emitted then Buffer.add_char buf ',';
+          emitted := true;
+          Vlq64.encode buf (new_col - !new_col_acc);
+          new_col_acc := new_col;
+          emit_tail tail
+        end
+      end;
+      if src.pos < src.len && Char.equal src.string.[src.pos] ',' then begin
+        src.pos <- src.pos + 1;
+        segment ()
+      end
+    in
+    segment ();
     Buffer.contents buf
+  end
 
 let resize resize_data (sm : Standard.t) =
   let mappings = Mappings.to_string sm.mappings in
