@@ -53,3 +53,25 @@ val output_binary :
 (** [output_binary ~out_channel ?source_map ast] outputs the Wasm binary AST
     [ast] to [out_channel]. A source map is additionally generated if
     [source_map] is true. *)
+
+(** Merge (statically link) several WebAssembly binary modules into one. *)
+module Link : sig
+  type input = {
+    module_name : string;  (** the name imports resolve against *)
+    file : string;  (** used only in diagnostics *)
+    code : string option;  (** the module bytes; read from [file] if [None] *)
+    source_map : string option;  (** the module's source map, as JSON text *)
+  }
+
+  val f :
+    ?filter_export:(string -> bool) ->
+    input list ->
+    output_file:string ->
+    string option
+  (** [f inputs ~output_file] links [inputs] into a single binary written to
+      [output_file], resolving each import against the export of the input whose
+      [module_name] matches; an unresolved import survives as an import of the
+      result. Returns the merged source map as JSON text when any input carried
+      one, else [None]. Boundary types are plain strings so no Wax source-map
+      representation leaks to the caller. *)
+end
