@@ -1547,6 +1547,47 @@ let f ?(filter_export = fun _ -> true) files ~output_file =
              ~kind:Func ~get:(fun idx : importdesc ->
                Func { exact = false; typ = func_types.(idx) }));
 
+      (* Global index maps, computed before the table section because a table's
+         initializer expression may read a global ([(table … (global.get $g))]);
+         the global bodies themselves are emitted later, in section 6. This
+         reads each module's section-6 count but does not scan its bodies. *)
+      let global_mappings = Array.make (Array.length files) [||] in
+      let global_counts =
+        let current_offset =
+          ref (get_exportable_info unresolved_imports Global)
+        in
+        Array.mapi
+          (fun i { file; contents; _ } ->
+            let imports = get_exportable_info resolved_imports.(i) Global in
+            let import_count = Array.length imports in
+            let offset = !current_offset - import_count in
+            let count =
+              if Read.find_section contents 6 then Read.uint contents.ch else 0
+            in
+            let map =
+              Array.init (import_count + count) (fun j ->
+                  if j < import_count then (
+                    match imports.(j) with
+                    | Unresolved j' -> j'
+                    | Resolved (i', j') ->
+                        (if i' > i then
+                           let import =
+                             (get_exportable_info intfs.(i).imports Global).(j)
+                           in
+                           failwith
+                             (Printf.sprintf
+                                "In module %s, the import %s / %s refers to an \
+                                 export in a later module %s"
+                                file import.module_ import.name files.(i').file));
+                        global_mappings.(i').(j'))
+                  else j + offset)
+            in
+            global_mappings.(i) <- map;
+            current_offset := !current_offset + count;
+            count)
+          files
+      in
+
       (* 4: table *)
       let positions =
         Array.init (Array.length files) (fun _ -> Scan.create_position_data ())
@@ -1555,7 +1596,11 @@ let f ?(filter_export = fun _ -> true) files ~output_file =
         write_section_with_scan ~types ~files ~out_ch ~buf ~id:4
           ~scan:(fun i maps ->
             Scan.table_section positions.(i)
-              { maps with func = func_mappings.(i) })
+              {
+                maps with
+                func = func_mappings.(i);
+                global = global_mappings.(i);
+              })
       in
       let table_mappings =
         build_mappings resolved_imports unresolved_imports Table table_counts
@@ -1592,63 +1637,20 @@ let f ?(filter_export = fun _ -> true) files ~output_file =
           ~files
       in
 
-      (* 6: global *)
-      let global_mappings = Array.make (Array.length files) [||] in
-      let global_counts =
-        let current_offset =
-          ref (get_exportable_info unresolved_imports Global)
-        in
-        Array.mapi
-          (fun i { file; contents; _ } ->
-            let imports = get_exportable_info resolved_imports.(i) Global in
-            let import_count = Array.length imports in
-            let offset = !current_offset - import_count in
-            let build_map count =
-              let map =
-                Array.init
-                  (Array.length imports + count)
-                  (fun j ->
-                    if j < import_count then (
-                      match imports.(j) with
-                      | Unresolved j' -> j'
-                      | Resolved (i', j') ->
-                          (if i' > i then
-                             let import =
-                               (get_exportable_info intfs.(i).imports Global).(j)
-                             in
-                             failwith
-                               (Printf.sprintf
-                                  "In module %s, the import %s / %s refers to \
-                                   an export in a later module %s"
-                                  file import.module_ import.name
-                                  files.(i').file));
-                          global_mappings.(i').(j'))
-                    else j + offset)
-              in
-              global_mappings.(i) <- map;
-              map
-            in
-            let count =
-              if Read.find_section contents 6 then (
-                let count = Read.uint contents.ch in
-                let map = build_map count in
-                Scan.global_section positions.(i)
-                  {
-                    Scan.default_maps with
-                    typ = Read.get_type_mapping types contents;
-                    func = func_mappings.(i);
-                    global = map;
-                  }
-                  buf contents.ch.buf contents.ch.pos ~count;
-                count)
-              else (
-                ignore (build_map 0);
-                0)
-            in
-            current_offset := !current_offset + count;
-            count)
-          files
-      in
+      (* 6: global (index maps already computed above) *)
+      Array.iteri
+        (fun i { contents; _ } ->
+          if Read.find_section contents 6 then
+            let count = Read.uint contents.ch in
+            Scan.global_section positions.(i)
+              {
+                Scan.default_maps with
+                typ = Read.get_type_mapping types contents;
+                func = func_mappings.(i);
+                global = global_mappings.(i);
+              }
+              buf contents.ch.buf contents.ch.pos ~count)
+        files;
       add_section out_ch ~id:6
         ~count:(Array.fold_left ( + ) 0 global_counts)
         buf;
