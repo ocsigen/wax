@@ -29,6 +29,7 @@ val tag_section : ch -> int array
 val start_section : ch -> int
 val datacount_section : ch -> int
 val namemap : ch -> (int * string) array
+val indirect_namemap : ch -> (int * (int * string) array) array
 val branch_hint_section : ch -> (int * (int * bool) list) array
 
 type section = { id : int; pos : int; size : int }

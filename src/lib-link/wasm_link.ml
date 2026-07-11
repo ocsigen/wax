@@ -48,6 +48,12 @@ let import_atom module_ name =
 
 type link_subtyping_info = {
   wasm_info : Wax_wasm.Types.subtyping_info;
+  (* Resolves a type index to its canonical identity. Keyed by canonical index,
+     but under [--distinct-named-types] it *also* holds every appended
+     name-variant's output index, mapped to the same canonical [ref_index] as
+     the representative it copies. So a descriptor expressed in output space
+     resolves straight to canonical identity here — no separate index map — and
+     subtyping/exact-match are decided on that identity. *)
   types_map : (int, Wax_wasm.Types.ref_index) Hashtbl.t;
 }
 
@@ -55,6 +61,10 @@ let get_id types_map idx =
   match Hashtbl.find types_map idx with
   | Wax_wasm.Types.Def id -> id
   | Rec _ -> assert false
+
+(* Canonical-identity equality of two (possibly output-space) type indices. *)
+let type_id_eq types_map i i' =
+  Wax_wasm.Types.Id.equal (get_id types_map i) (get_id types_map i')
 
 let rec to_internal_heaptype types_map (ht : heaptype) :
     Wax_wasm.Types.Internal.heaptype =
@@ -304,23 +314,68 @@ module Read = struct
         Wax_wasm.Wasm_parser.check_header ch;
         { id; ch; index = Wax_wasm.Wasm_parser.index ch })
 
+  (* A module's parsed type/field names (name subsections 4 and 10), read once
+     and cached: the same data feeds both the dedup signature and the emitted
+     merged name section. *)
+  type name_data = {
+    type_names : (int * string) array;
+    field_names : (int * (int * string) array) array;
+  }
+
   type types = {
+    (* Structural store: assigns each distinct *structure* an internal index.
+       Purely internal — it exists only to answer subtyping/exact-match queries
+       (via [subtyping_info]); it plays no part in how the output is laid out. *)
     types_store : Wax_wasm.Types.t;
+    (* Resolves an *output* type index to its internal (structural) identity, so
+       a descriptor expressed in output space can be canonicalised for a
+       subtyping query. Populated as each output type is created. *)
     types_map : (int, Wax_wasm.Types.ref_index) Hashtbl.t;
+    (* Per module, source type index -> output index (the emitted type-section
+       slot). The only per-module mapping: every consumer (emission, code type
+       references, name sections, interface descriptors, and reference
+       normalization for the store) reads output indices through [types_map]. *)
     type_mappings : int array array;
+    (* The output type section, one entry [(mapping, ty)] per emitted rec group
+       in reverse order. Output indices are just positions here — a group's slot
+       is the running [output_type_count] when it is appended. [mapping] is the
+       defining module's source->output map, so emitted references are output
+       indices. *)
     mutable kept_rectypes : (int array * subtype array) list;
+    mutable output_type_count : int;
+    (* Name-aware coalescing (the [--distinct-named-types] flag). Off: two
+       structurally-equal groups share one output type. On: they share one only
+       if their type/field names also match, else each is emitted separately so
+       its names survive. The decision is [output_table]; its key is the
+       structure ([first_id]) and, when on, the type/field names together with
+       the output slots of the group's external references (so a reference to a
+       name-variant keeps the referrer distinct too). The structural store is
+       unaffected. *)
+    distinct_named : bool;
+    output_table : (Wax_wasm.Types.Id.t * int list * string, int) Hashtbl.t;
+    mutable current_signatures : int -> string;
+    (* Per module, the parsed name subsections 4/10, filled on first use. *)
+    name_cache : name_data option array;
   }
 
   let get_type_mapping types st = types.type_mappings.(st.id)
   let set_type_mapping types st map = types.type_mappings.(st.id) <- map
 
-  let create_types n =
+  let create_types ?(distinct_named = false) n =
     {
       types_store = Wax_wasm.Types.create ();
       types_map = Hashtbl.create 16;
       type_mappings = Array.make n [||];
       kept_rectypes = [];
+      output_type_count = 0;
+      distinct_named;
+      output_table = Hashtbl.create 16;
+      current_signatures = (fun _ -> "");
+      name_cache = Array.make n None;
     }
+
+  (* Number of types in the emitted type section. *)
+  let output_type_count types = types.output_type_count
 
   let find_section contents n =
     Wax_wasm.Wasm_parser.find_section contents.ch contents.index n
@@ -340,34 +395,115 @@ module Read = struct
         ignore (Wax_wasm.Wasm_parser.name ch);
         { contents with ch }
 
-  (* Add one rec group to the shared store and return its canonical base index.
-     [source_base] is the group's first type's index in the module being read.
-     References are resolved (like the validator's type-section pass) against the
-     stable source-index mapping: a member of this group is [Rec], an
-     already-canonicalised type is looked up by its canonical index in
-     [types_map]. [types_map] is keyed by the canonical index (never the shifting
-     [Hashtbl.length], and never removed on dedup), so a reference to a type that
-     was itself deduplicated still resolves correctly. *)
+  (* Parse a module's type/field names (name subsections 4 and 10) once, caching
+     the result so both the dedup signature and the emitted name section reuse
+     the single parse. *)
+  let name_data types contents =
+    match types.name_cache.(contents.id) with
+    | Some d -> d
+    | None ->
+        let name_section = focus_on_custom_section contents "name" in
+        let type_names =
+          if find_section name_section 4 then
+            Wax_wasm.Wasm_parser.namemap name_section.ch
+          else [||]
+        in
+        let field_names =
+          if find_section name_section 10 then
+            Wax_wasm.Wasm_parser.indirect_namemap name_section.ch
+          else [||]
+        in
+        let d = { type_names; field_names } in
+        types.name_cache.(contents.id) <- Some d;
+        d
+
+  (* A per-type name signature (type name from name subsection 4, field names
+     from subsection 10), so the dedup key can be built while rec groups are
+     added. Missing names yield the empty string, so unnamed types coalesce
+     exactly as before. *)
+  let read_name_signatures types contents =
+    let { type_names; field_names } = name_data types contents in
+    let sigs = Hashtbl.create 64 in
+    Array.iter (fun (idx, n) -> Hashtbl.replace sigs idx ("t:" ^ n)) type_names;
+    Array.iter
+      (fun (idx, fields) ->
+        let buf = Buffer.create 32 in
+        Array.iter
+          (fun (fidx, n) ->
+            Buffer.add_string buf (Printf.sprintf "|f%d:%s" fidx n))
+          fields;
+        let prev = try Hashtbl.find sigs idx with Not_found -> "" in
+        Hashtbl.replace sigs idx (prev ^ Buffer.contents buf))
+      field_names;
+    fun idx -> try Hashtbl.find sigs idx with Not_found -> ""
+
+  (* Add one rec group and return the output index its first member maps to,
+     filling [type_mapping] over the group's source range ([source_base ..]).
+
+     Two independent things happen. (1) The group is added to the structural
+     store, which assigns it an internal identity ([first_id]); references are
+     normalized against earlier types via [type_mapping] (output index) →
+     [types_map] (→ internal), and an in-group member is [Rec]. (2) An output
+     slot is chosen: groups sharing a dedup key collapse to one output type.
+     The key is the structure ([first_id]); when on, also the type/field names
+     and the output slots of the group's external references, so differently-
+     named structural twins, and twins that reference them, each get their own
+     output type. A new key appends the group to [kept_rectypes] at the running
+     [output_type_count]; [types_map] records the new output indices → internal
+     identity so later descriptors in output space resolve for subtyping. *)
   let add_rectype types type_mapping ~source_base ty =
     let count = Array.length ty in
+    (* Output slots of the group's external references, gathered as the group is
+       normalized. They discriminate the output type beyond its structure: two
+       structural twins that reference differently-named (hence differently-
+       slotted) types must stay distinct, so a func type returning [$Point]
+       does not collapse onto one returning the identically-shaped [$Vec2].
+       In-group references need no such treatment — [first_id] already captures
+       the recursive topology. *)
+    let ext_refs = ref [] in
     let resolve idx =
       if idx >= source_base && idx < source_base + count then
         Wax_wasm.Types.Rec (idx - source_base)
-      else Hashtbl.find types.types_map type_mapping.(idx)
+      else
+        let out_slot = type_mapping.(idx) in
+        (* Only the name-aware key distinguishes by external slot; off, structural
+           twins already share slots, so skip gathering them. *)
+        if types.distinct_named then ext_refs := out_slot :: !ext_refs;
+        Hashtbl.find types.types_map out_slot
     in
     let normalized = Array.map (to_normalized_subtype resolve) ty in
-    let canonical_before = Wax_wasm.Types.last_index types.types_store in
     let first_id = Wax_wasm.Types.add_rectype types.types_store normalized in
-    let first_int = Wax_wasm.Types.Id.to_int_for_tests_only first_id in
-    if first_int >= canonical_before then (
-      (* A new (non-deduplicated) group: record its canonical members and keep
-         it for emission in the merged type section. *)
+    let fill base =
+      if source_base + count <= Array.length type_mapping then
+        for i = 0 to count - 1 do
+          type_mapping.(source_base + i) <- base + i
+        done
+    in
+    let emit () =
+      let base = types.output_type_count in
+      types.output_type_count <- base + count;
+      fill base;
       for i = 0 to count - 1 do
-        Hashtbl.replace types.types_map (first_int + i)
+        Hashtbl.replace types.types_map (base + i)
           (Wax_wasm.Types.Def (Wax_wasm.Types.Id.add first_id i))
       done;
-      types.kept_rectypes <- (type_mapping, ty) :: types.kept_rectypes);
-    first_int
+      types.kept_rectypes <- (type_mapping, ty) :: types.kept_rectypes;
+      base
+    in
+    let names =
+      if types.distinct_named then
+        String.concat "\x00"
+          (List.init count (fun i -> types.current_signatures (source_base + i)))
+      else ""
+    in
+    let key = (first_id, List.rev !ext_refs, names) in
+    match Hashtbl.find_opt types.output_table key with
+    | Some base ->
+        fill base;
+        base
+    | None ->
+        Hashtbl.add types.output_table key types.output_type_count;
+        emit ()
 
   let translate_heaptype type_mapping (ht : heaptype) : heaptype =
     match ht with
@@ -410,15 +546,13 @@ module Read = struct
     let n = Array.fold_left (fun acc g -> acc + Array.length g) 0 groups in
     let type_mapping = Array.make n 0 in
     set_type_mapping types st type_mapping;
+    if types.distinct_named then
+      types.current_signatures <- read_name_signatures types st;
     let pos = ref 0 in
     Array.iter
       (fun ty ->
-        let count = Array.length ty in
-        let pos' = add_rectype types type_mapping ~source_base:!pos ty in
-        for i = 0 to count - 1 do
-          type_mapping.(!pos + i) <- pos' + i
-        done;
-        pos := !pos + count)
+        ignore (add_rectype types type_mapping ~source_base:!pos ty : int);
+        pos := !pos + Array.length ty)
       groups
 
   type interface = {
@@ -432,6 +566,10 @@ module Read = struct
   let interface types contents =
     let imports =
       if find_section contents 2 then (
+        (* Descriptors carry output indices: they go straight to emission, and
+           [types_map] resolves them to internal identity for resolution. Read
+           right after the module's own types, whose output slots are already
+           assigned. *)
         let type_mapping = get_type_mapping types contents in
         let raw_imports =
           Wax_wasm.Ast_utils.flatten_binary_imports
@@ -1112,10 +1250,6 @@ module Scan = struct
     local_namemap
 end
 
-let interface types contents =
-  Read.type_section types contents;
-  Read.interface types contents
-
 type t = {
   module_name : string;
   file : string;
@@ -1162,9 +1296,11 @@ let check_export_import_types d ~subtyping_info ~files i (desc : importdesc) i'
            merely a subtype: an inexact export (an inexactly-imported function
            re-exported) could dynamically be a subtype, which a static linker
            cannot rule out, so it is rejected. A defined function is exact
-           (see below); canonicalisation gives equal types equal indices, so
-           type equality is an index comparison. *)
-        if i_exact then e_exact && t = t' else subtype subtyping_info t t'
+           (see below); canonicalisation gives equal types equal identities, and
+           [types_map] resolves both output-space descriptor indices to that
+           identity (a name-variant copy resolves to its representative). *)
+        if i_exact then e_exact && type_id_eq subtyping_info.types_map t t'
+        else subtype subtyping_info t t'
     | ( Table { limits; reftype = typ },
         Table { limits = limits'; reftype = typ' } ) ->
         check_limits limits limits' && reftype_eq subtyping_info typ typ'
@@ -1174,7 +1310,7 @@ let check_export_import_types d ~subtyping_info ~files i (desc : importdesc) i'
         &&
         if mut then valtype_eq subtyping_info typ typ'
         else val_subtype subtyping_info typ typ'
-    | Tag t, Tag t' -> t = t'
+    | Tag t, Tag t' -> type_id_eq subtyping_info.types_map t t'
     | _ -> false
   in
   if not ok then (
@@ -1439,7 +1575,8 @@ type input = {
   opt_source_map : Js_source_map.Standard.t option;
 }
 
-let f ?(filter_export = fun _ -> true) files ~output_file =
+let f ?(filter_export = fun _ -> true) ?(distinct_named_types = false) files
+    ~output_file =
   Wax_utils.Diagnostic.run ~color:Wax_utils.Colors.Never
     ~palette:Wax_utils.Colors.wat_theme ~source:None (fun d ->
       let files =
@@ -1465,8 +1602,50 @@ let f ?(filter_export = fun _ -> true) files ~output_file =
       let buf = Buffer.create 100000 in
 
       (* 1: type *)
-      let types = Read.create_types (Array.length files) in
-      let intfs = Array.map (fun f -> interface types f.contents) files in
+      let types =
+        Read.create_types ~distinct_named:distinct_named_types
+          (Array.length files)
+      in
+      (* Output type slots are assigned eagerly as each module's rec groups are
+         added, so a module's interface descriptors (read straight after its
+         types) already see final output indices. *)
+      let intfs =
+        Array.map
+          (fun f ->
+            Read.type_section types f.contents;
+            Read.interface types f.contents)
+          files
+      in
+      (* If more than one input has a start, the merged module needs a start
+         function of type [] -> [] calling each. Add that type now, before the
+         type section is emitted, so it participates in the normal output like
+         any other type (emitted if new). It is unnamed, so clear the per-module
+         signatures first. *)
+      let start_count =
+        Array.fold_left
+          (fun count f ->
+            match Read.start f.contents with
+            | None -> count
+            | Some _ -> count + 1)
+          0 files
+      in
+      let start_type =
+        if start_count > 1 then (
+          types.current_signatures <- (fun _ -> "");
+          let typ : comptype = Func { params = [||]; results = [||] } in
+          Some
+            (Read.add_rectype types [||] ~source_base:0
+               [|
+                 {
+                   final = true;
+                   supertype = None;
+                   typ;
+                   descriptor = None;
+                   describes = None;
+                 };
+               |]))
+        else None
+      in
       let subtyping_info =
         {
           wasm_info = Wax_wasm.Types.subtyping_info types.types_store;
@@ -1531,15 +1710,6 @@ let f ?(filter_export = fun _ -> true) files ~output_file =
            (List.rev_map (fun i -> Single i) !import_list)
           : int);
 
-      let start_count =
-        Array.fold_left
-          (fun count f ->
-            match Read.start f.contents with
-            | None -> count
-            | Some _ -> count + 1)
-          0 files
-      in
-
       (* 3: function *)
       let functions =
         Array.map (fun f -> Read.functions types f.contents) files
@@ -1547,22 +1717,7 @@ let f ?(filter_export = fun _ -> true) files ~output_file =
       let func_types =
         let l = Array.to_list functions in
         let l =
-          if start_count > 1 then
-            let ty =
-              let typ : comptype = Func { params = [||]; results = [||] } in
-              Read.add_rectype types [||] ~source_base:0
-                [|
-                  {
-                    final = true;
-                    supertype = None;
-                    typ;
-                    descriptor = None;
-                    describes = None;
-                  };
-                |]
-            in
-            l @ [ [| ty |] ]
-          else l
+          match start_type with Some ty -> l @ [ [| ty |] ] | None -> l
         in
         Array.concat l
       in
@@ -1987,20 +2142,16 @@ let f ?(filter_export = fun _ -> true) files ~output_file =
         ~section_id:3 ~mappings:func_mappings;
 
       (* 4: types *)
-      let type_names =
-        Array.make (Wax_wasm.Types.last_index types.types_store) None
-      in
-      Array.iter2
-        (fun { contents; _ } name_section ->
-          if Read.find_section name_section 4 then
-            let map = Read.namemap name_section in
-            Array.iter
-              (fun (idx, name) ->
-                let idx = (Read.get_type_mapping types contents).(idx) in
-                if Option.is_none type_names.(idx) then
-                  type_names.(idx) <- Some (idx, name))
-              map)
-        files name_sections;
+      let type_names = Array.make (Read.output_type_count types) None in
+      Array.iter
+        (fun { contents; _ } ->
+          Array.iter
+            (fun (idx, name) ->
+              let idx = (Read.get_type_mapping types contents).(idx) in
+              if Option.is_none type_names.(idx) then
+                type_names.(idx) <- Some (idx, name))
+            (Read.name_data types contents).type_names)
+        files;
       Write.namemap buf
         (Array.of_list
            (List.filter_map (fun x -> x) (Array.to_list type_names)));
@@ -2026,36 +2177,26 @@ let f ?(filter_export = fun _ -> true) files ~output_file =
         ~section_id:9 ~mappings:data_mappings;
 
       (* 10: field names *)
-      let type_field_names =
-        Array.make (Wax_wasm.Types.last_index types.types_store) None
-      in
-      Array.iter2
-        (fun { contents; _ } name_section ->
-          if Read.find_section name_section 10 then
-            let n = Read.uint name_section.ch in
-            let scan_map = Scan.local_namemap buf name_section.ch.buf in
-            for _ = 1 to n do
-              let idx =
-                (Read.get_type_mapping types contents).(Read.uint
-                                                          name_section.ch)
-              in
-              scan_map name_section.ch.pos;
-              name_section.ch.pos <- name_section.ch.pos + Buffer.length buf;
+      let type_field_names = Array.make (Read.output_type_count types) None in
+      Array.iter
+        (fun { contents; _ } ->
+          Array.iter
+            (fun (idx, fields) ->
+              let idx = (Read.get_type_mapping types contents).(idx) in
               if Option.is_none type_field_names.(idx) then
-                type_field_names.(idx) <- Some (idx, Buffer.contents buf);
-              Buffer.clear buf
-            done)
-        files name_sections;
+                type_field_names.(idx) <- Some (idx, fields))
+            (Read.name_data types contents).field_names)
+        files;
       let type_field_names =
         Array.of_list
           (List.filter_map (fun x -> x) (Array.to_list type_field_names))
       in
       Write.uint buf (Array.length type_field_names);
-      for i = 0 to Array.length type_field_names - 1 do
-        let idx, map = type_field_names.(i) in
-        Write.uint buf idx;
-        Buffer.add_string buf map
-      done;
+      Array.iter
+        (fun (idx, fields) ->
+          Write.uint buf idx;
+          Write.namemap buf fields)
+        type_field_names;
       add_subsection name_section_buffer ~id:10 buf;
 
       (* 11: tags *)
