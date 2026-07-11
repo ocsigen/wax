@@ -1,8 +1,6 @@
 ==== core/custom-descriptors/exact-func-import.wast ====
 Linked, but the spec says unlinkable (incompatible import type)
 Should instantiate, but the linker rejected an import
-==== core/custom-descriptors/struct_new_desc.wast ====
-Should instantiate, but linking produced an invalid module
 ==== core/gc/i31.wast ====
 Should instantiate, but the linker rejected an import
 ==== core/multi-memory/imports4.wast ====
