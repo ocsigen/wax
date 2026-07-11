@@ -269,8 +269,6 @@ fn add(a: i32, b: i32,) -> i32 {
 ```wax
 42          // Decimal
 0x2A        // Hexadecimal
-0o52        // Octal
-0b101010    // Binary
 ```
 
 A numeric literal is **flexible**: it has no fixed type of its own but takes a
@@ -359,6 +357,11 @@ fn example() -> i32 {
     x + y;
 }
 ```
+
+Unlike Rust, a local is freely mutable: there is no `let mut`, and no
+immutable-local form. (`mut` exists in Wax, but it marks
+[struct fields](#structs) and array element types, not bindings; the
+immutable module-level form is [`const`](#global-variables).)
 
 A local declared without an initializer starts at its type's zero value (`0`,
 `0.0`, or `null`). When the type is omitted, it is taken from the initializer;
@@ -530,6 +533,10 @@ identity, not a numeric comparison.
 !x          // Logical not / is_null for references
 ```
 
+Unlike Rust, `!` on an integer is *logical* not, not bitwise complement: it
+yields `1` for `0` and `0` for any non-zero value (Wasm's `eqz`), so `!5` is
+`0`, not `-6`. For a bitwise complement, write `x ^ -1`.
+
 ### Operator Precedence
 
 Operators are listed below from highest precedence (binds tightest) to lowest.
@@ -661,7 +668,9 @@ This maps directly to Wasm's `select` instruction.
 ## Control Flow
 
 Statements are terminated by `;`, including the final one that produces the
-block's or function's value. The block-shaped statements below
+block's or function's value. Unlike Rust, this trailing `;` is required and does
+not discard that value: the value stays on the stack and becomes the result.
+The block-shaped statements below
 (`do`, `if`, `while`, `loop`, `dispatch`, `match`, and `try`) are the
 exception: their closing `}` ends the statement, so no `;` is needed. A bare
 `;` is an empty statement (it does nothing), so a redundant one is harmless
@@ -2024,7 +2033,7 @@ bottom types `none nofunc noextern noexn nocont`.
 ## Literals
 
 ```wax
-42  0x2A  0o52  0b101010  // integers (flexible: i32/i64/f32/f64 by context)
+42  0x2A  // integers (flexible: i32/i64/f32/f64 by context)
 3.14  1.0e10  0x1.5p3  inf  nan   // floats
 'A'  '\n'  '\u{1F600}'    // char, an i32 code point
 "text"  bytes # "text"    // string, an i8/i16 array
@@ -4316,6 +4325,21 @@ and `mcp` serves the toolchain to AI assistants (see
     - Values: `always`, `never`, `auto`.
     - Default: `auto` (colors enabled only if output is a TTY).
 
+- **`--error-format`** *FORMAT*
+    - How diagnostics are rendered.
+    - Values: `human` (source snippets, the default), `json`, or `short`.
+    - With `json`, every diagnostic — errors, warnings, and syntax errors — is
+      written to stderr as one JSON object per line (JSON Lines), for an editor,
+      CI job, or AI assistant to parse. Each object has `severity`, `file`,
+      `startLine`/`startColumn`/`endLine`/`endColumn` (1-based line, 0-based
+      column), `startOffset`/`endOffset` (byte offsets), `message`, `warning`
+      (the [`-W`](#options) name, or null), `hint`, and `related`.
+    - With `short`, each diagnostic is one
+      `file:line:col: severity: message` line (gcc/rustc style, 1-based column),
+      for an editor with a line-based error parser (Vim's `errorformat`, Emacs
+      Flymake, …). A named warning's `-W` name is appended as `[name]`.
+    - Exit codes are unchanged. Also accepted by `check` and `format`.
+
 
 - **`--fold`**
     - Fold instructions into nested S-expressions.
@@ -4386,6 +4410,16 @@ The `format` subcommand reformats files in their own format (`.wat` → `.wat`,
 Formatting never validates: it only re-prints; use [`check`](#checking) to
 validate.
 
+With no `FILE`, `format` reads standard input and writes the formatted result to
+standard output. The format cannot be detected without a filename, so `--format`
+is required in this mode (and `--inplace` / `--check`, which act on named files,
+are not allowed). This is the interface an editor formatter or a shell pipe
+uses:
+
+```sh
+echo 'fn f(x:i32)->i32{x*x;}' | wax format -f wax
+```
+
 ```sh
 wax format [OPTIONS] FILE…
 ```
@@ -4395,7 +4429,8 @@ wax format [OPTIONS] FILE…
 - **`-i`**, **`--inplace`**
     - Write the formatted output back to each input file.
     - Without this flag (and without `--check`), exactly one file must be given
-      and its formatted output is written to `stdout`.
+      and its formatted output is written to `stdout` — or no file, to format
+      `stdin` to `stdout` (see above).
 - **`-c`**, **`--check`**
     - Write nothing; list the files that are not already formatted and exit with
       a non-zero status if any are found. Useful in CI. Cannot be combined with
@@ -4406,6 +4441,8 @@ wax format [OPTIONS] FILE…
 - **`-W`** *NAME=LEVEL*, **`--warn`** *NAME=LEVEL*: set a warning's level, as
   above.
 - **`--color`** *WHEN*: as above (ignored when writing back in place).
+- **`--error-format`** *FORMAT*: `human`, `json`, or `short`, as above (a
+  malformed file still reports its syntax error).
 - **`--fold`** / **`--unfold`**: as above.
 - **`--debug`** *CATEGORY*: as above.
 
@@ -4454,7 +4491,17 @@ wax check [OPTIONS] FILE…
   an optional proposal, as for [`convert`](#options). Repeatable.
 - **`-W`** *NAME=LEVEL*, **`--warn`** *NAME=LEVEL*: set a warning's level, as
   above.
+- **`--all-errors`**: report *every* syntax error instead of stopping at the
+  first. Normally the parser gives up at the first unexpected token; with this
+  flag it uses panic-mode error recovery — resynchronizing at statement and
+  block boundaries (`;`, `}`, `)`, `]`, and the keywords that begin a new item
+  or statement) and continuing — so a single run lists all the syntax errors.
+  The recovered module is then type-checked too, so genuine type errors in the
+  intact regions surface alongside the syntax errors; the "not bound" errors
+  that a construct dropped during recovery would otherwise cascade are
+  suppressed. Wax input only (ignored for Wat/Wasm).
 - **`--color`** *WHEN*: as above.
+- **`--error-format`** *FORMAT*: `human`, `json`, or `short`, as above.
 - **`--debug`** *CATEGORY*: as above.
 
 ### Example
@@ -4462,6 +4509,11 @@ wax check [OPTIONS] FILE…
 **Type-check several Wax files (e.g. in CI):**
 ```sh
 wax check src/*.wax
+```
+
+**Report all syntax errors in a Wax file at once:**
+```sh
+wax check --all-errors src/foo.wax
 ```
 
 ## Serving over MCP
