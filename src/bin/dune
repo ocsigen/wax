@@ -63,3 +63,11 @@
 (executables
  (names fuzz_mutate fuzz_gen fuzz_recover)
  (libraries wax_wasm wax_lang wax_conversion menhirLib re unix cmdliner))
+
+; run_link_testsuite drives the linker through the spec suite's linking
+; commands (register / assert_unlinkable); see test/dune. Kept separate so
+; only it depends on wax_linker.
+
+(executable
+ (name run_link_testsuite)
+ (libraries wax_wasm wax_linker menhirLib unix))
