@@ -66,48 +66,25 @@ let get_id types_map idx =
 let type_id_eq types_map i i' =
   Wax_wasm.Types.Id.equal (get_id types_map i) (get_id types_map i')
 
-let rec to_internal_heaptype types_map (ht : heaptype) :
-    Wax_wasm.Types.Internal.heaptype =
-  match ht with
-  | Func -> Func
-  | NoFunc -> NoFunc
-  | Extern -> Extern
-  | NoExtern -> NoExtern
-  | Exn -> Exn
-  | NoExn -> NoExn
-  | Cont -> Cont
-  | NoCont -> NoCont
-  | Any -> Any
-  | Eq -> Eq
-  | I31 -> I31
-  | Struct -> Struct
-  | Array -> Array
-  | None_ -> None_
-  | Type idx -> Type (get_id types_map idx)
-  | Exact idx -> Exact (get_id types_map idx)
+(* Resolve a Binary type to the internal (resolved) representation the store
+   reasons about, mapping each output-space index to its identity via [get_id].
+   Only the spine (heaptype/reftype/valtype) is needed, so [Map_types_spine]. *)
+module To_internal =
+  Wax_wasm.Ast.Map_types_spine (Wax_wasm.Ast.Binary) (Wax_wasm.Types.Internal)
+    (struct
+      type ctx = (int, Wax_wasm.Types.ref_index) Hashtbl.t
 
-and to_internal_reftype types_map (rt : reftype) :
-    Wax_wasm.Types.Internal.reftype =
-  { nullable = rt.nullable; typ = to_internal_heaptype types_map rt.typ }
-
-and to_internal_valtype types_map (vt : valtype) :
-    Wax_wasm.Types.Internal.valtype =
-  match vt with
-  | I32 -> I32
-  | I64 -> I64
-  | F32 -> F32
-  | F64 -> F64
-  | V128 -> V128
-  | Ref rt -> Ref (to_internal_reftype types_map rt)
+      let idx = get_id
+    end)
 
 let reftype_eq (info : link_subtyping_info) t1 t2 =
-  let rt1 = to_internal_reftype info.types_map t1 in
-  let rt2 = to_internal_reftype info.types_map t2 in
+  let rt1 = To_internal.reftype info.types_map t1 in
+  let rt2 = To_internal.reftype info.types_map t2 in
   Wax_wasm.Types.reftype_equal rt1 rt2
 
 let valtype_eq (info : link_subtyping_info) t1 t2 =
-  let vt1 = to_internal_valtype info.types_map t1 in
-  let vt2 = to_internal_valtype info.types_map t2 in
+  let vt1 = To_internal.valtype info.types_map t1 in
+  let vt2 = To_internal.valtype info.types_map t2 in
   Wax_wasm.Types.valtype_equal vt1 vt2
 
 (* [resolve] maps a source type index (as it appears in the module being read)
@@ -188,39 +165,20 @@ let to_normalized_subtype resolve
     describes = Option.map resolve describes;
   }
 
-let map_heaptype f (ht : heaptype) : heaptype =
-  match ht with
-  | Type idx -> Type (f idx)
-  | Exact idx -> Exact (f idx)
-  | other -> other
+(* Remap every type index in a Binary type (e.g. renumbering into output space).
+   Instantiated from the shared type-family functor rather than hand-written; the
+   context is the index-renaming function and every array wrapper is a plain
+   [Array.map]. *)
+module Remap =
+  Wax_wasm.Ast.Map_types (Wax_wasm.Ast.Binary) (Wax_wasm.Ast.Binary)
+    (struct
+      type ctx = idx -> idx
 
-let map_reftype f (rt : reftype) : reftype =
-  { rt with typ = map_heaptype f rt.typ }
-
-let map_valtype f (vt : valtype) : valtype =
-  match vt with Ref rt -> Ref (map_reftype f rt) | other -> other
-
-let map_storagetype f (st : storagetype) : storagetype =
-  match st with Value vt -> Value (map_valtype f vt) | Packed pt -> Packed pt
-
-let map_fieldtype f { mut; typ } = { mut; typ = map_storagetype f typ }
-
-let map_comptype f (ct : comptype) : comptype =
-  match ct with
-  | Func { params; results } ->
-      Func
-        {
-          params = Array.map (map_valtype f) params;
-          results = Array.map (map_valtype f) results;
-        }
-  | Struct fields -> Struct (Array.map (map_fieldtype f) fields)
-  | Array field -> Array (map_fieldtype f field)
-  | Cont idx -> Cont (f idx)
-
-let map_subtype f (st : subtype) : subtype =
-  { st with supertype = Option.map f st.supertype; typ = map_comptype f st.typ }
-
-let map_rectype f (group : rectype) : rectype = Array.map (map_subtype f) group
+      let idx f i = f i
+      let params _ f a = Array.map f a
+      let fields _ f a = Array.map f a
+      let members _ f a = Array.map f a
+    end)
 
 let rec output_uint ch i =
   if i < 128 then output_byte ch i
@@ -505,25 +463,11 @@ module Read = struct
         Hashtbl.add types.output_table key types.output_type_count;
         emit ()
 
-  let translate_heaptype type_mapping (ht : heaptype) : heaptype =
-    match ht with
-    | Type idx -> Type type_mapping.(idx)
-    | Exact idx -> Exact type_mapping.(idx)
-    | other -> other
-
-  let translate_reftype type_mapping (rt : reftype) : reftype =
-    { rt with typ = translate_heaptype type_mapping rt.typ }
-
-  let translate_valtype type_mapping (vt : valtype) : valtype =
-    match vt with
-    | Ref rt -> Ref (translate_reftype type_mapping rt)
-    | other -> other
-
   let translate_tabletype type_mapping (tt : tabletype) : tabletype =
-    { tt with reftype = translate_reftype type_mapping tt.reftype }
+    { tt with reftype = Remap.reftype (Array.get type_mapping) tt.reftype }
 
   let translate_globaltype type_mapping (gt : globaltype) : globaltype =
-    { gt with typ = translate_valtype type_mapping gt.typ }
+    { gt with typ = Remap.valtype (Array.get type_mapping) gt.typ }
 
   let translate_importdesc type_mapping (desc : importdesc) : importdesc =
     match desc with
@@ -1283,8 +1227,8 @@ let subtype (info : link_subtyping_info) (i : int) (i' : int) =
 
 let val_subtype (info : link_subtyping_info) (ty : valtype) (ty' : valtype) =
   Wax_wasm.Types.val_subtype info.wasm_info
-    (to_internal_valtype info.types_map ty)
-    (to_internal_valtype info.types_map ty')
+    (To_internal.valtype info.types_map ty)
+    (To_internal.valtype info.types_map ty')
 
 let check_export_import_types d ~subtyping_info ~files i (desc : importdesc) i'
     import =
@@ -1655,7 +1599,7 @@ let f ?(filter_export = fun _ -> true) ?(distinct_named_types = false) files
       let binary_rectypes =
         List.map
           (fun (mapping, rectype) ->
-            map_rectype (fun idx -> mapping.(idx)) rectype)
+            Remap.rectype (fun idx -> mapping.(idx)) rectype)
           (List.rev types.kept_rectypes)
       in
       ignore (Wax_wasm.Wasm_output.type_section out_ch binary_rectypes : int);
