@@ -1,0 +1,41 @@
+==== core/custom-page-sizes/custom-page-sizes-invalid.wast ====
+Linked, but the spec says unlinkable (incompatible import type)
+Linked, but the spec says unlinkable (incompatible import type)
+==== core/gc/i31.wast ====
+Should instantiate, but the linker crashed
+==== core/gc/type-subtyping.wast ====
+Should instantiate, but the linker rejected an import
+Should instantiate, but the linker crashed
+Should instantiate, but the linker rejected an import
+Should instantiate, but the linker crashed
+Should instantiate, but the linker rejected an import
+Should instantiate, but the linker crashed
+Linked, but the spec says unlinkable (incompatible import type)
+==== core/memory64/memory64-imports.wast ====
+Linked, but the spec says unlinkable (incompatible import type)
+Linked, but the spec says unlinkable (incompatible import type)
+Linked, but the spec says unlinkable (incompatible import type)
+Linked, but the spec says unlinkable (incompatible import type)
+Linked, but the spec says unlinkable (incompatible import type)
+Linked, but the spec says unlinkable (incompatible import type)
+Linked, but the spec says unlinkable (incompatible import type)
+Linked, but the spec says unlinkable (incompatible import type)
+==== core/memory_grow.wast ====
+Should instantiate, but the linker rejected an import
+Should instantiate, but the linker rejected an import
+==== core/multi-memory/imports4.wast ====
+Should instantiate, but the linker rejected an import
+Should instantiate, but the linker rejected an import
+==== core/simd/simd_linking.wast ====
+Should instantiate, but the linker crashed
+==== core/stack-switching/cont.wast ====
+Should instantiate, but the linker rejected an import
+Should instantiate, but the linker rejected an import
+Should instantiate, but the linker rejected an import
+==== core/table.wast ====
+Should instantiate, but the linker crashed
+==== core/table_grow.wast ====
+Should instantiate, but the linker rejected an import
+Should instantiate, but the linker rejected an import
+==== core/type-equivalence.wast ====
+Should instantiate, but the linker rejected an import

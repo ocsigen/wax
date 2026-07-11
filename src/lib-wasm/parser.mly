@@ -397,6 +397,23 @@ let hinted loc h (i : _ instr) = with_loc loc (Hinted (h, i))
          [`Parsed of Ast.location Ast.Text.module_
          | `Text of string | `Binary of string ]) list> parse_script
 
+(* A linking-oriented view of a [.wast] script, used by the linker test harness
+   (see [bin/run_link_testsuite.ml]). Unlike [parse_script] it preserves the
+   information a merge linker needs and that [parse_script] discards: each
+   module's identifier, [register] commands (a name, optionally targeting a
+   module by id), and [assert_unlinkable] (the module plus the expected
+   reason). Runtime commands (actions, other assertions, threads) are still
+   ignored. *)
+%start <[ `Module of Ast.Text.name option *
+            [ `Parsed of Ast.location Ast.Text.module_
+            | `Text of string | `Binary of string ]
+        | `Register of string * Ast.Text.name option
+        | `Unlinkable of
+            (Ast.Text.name option *
+             [ `Parsed of Ast.location Ast.Text.module_
+             | `Text of string | `Binary of string ])
+            * string ] list> parse_link_script
+
  (* To avoid unused token report and refer to Context in the mli *)
 %start <Context.t> dummy_ctx
 
@@ -1452,3 +1469,54 @@ meta:
 | "(" SCRIPT ID? s = script ")" { s }
 | "(" INPUT ID? STRING ")" { [] }
 | "(" OUTPUT ID? STRING? ")" { [] }
+
+(* The linking-oriented script grammar (start symbol [parse_link_script]). It
+   mirrors [script]/[cmd]/[assertion] but keeps the module identifiers,
+   [register] commands and [assert_unlinkable] modules the plain script grammar
+   throws away. Commands with no bearing on linking (actions, runtime
+   assertions, threads, meta) reduce to []. Leaf rules ([module_field],
+   [instance], [action], [thread], [wait], [meta], [result_pat]) are shared
+   with the plain grammar. *)
+link_script:
+| l = link_cmd* { List.concat l }
+
+link_cmd:
+| m = link_module { [ `Module m ] }
+| "(" REGISTER s = STRING id = ID ? ")" { [ `Register (s.Ast.desc, id) ] }
+| instance { [] }
+| action { [] }
+| thread { [] }
+| wait { [] }
+| c = link_assertion { c }
+| meta { [] }
+
+link_module:
+| "(" MODULE DEFINITION ? name = ID ? l = module_field * ")"
+  { (name, `Parsed (name, l)) }
+| "(" MODULE DEFINITION ? id = ID ? BINARY s = STRING * ")"
+  { (id, `Binary (Wax_utils.Ast.concat_desc s)) }
+| "(" MODULE DEFINITION ? id = ID ? QUOTE s = STRING * ")"
+  { (id, `Text (String.concat "\n" (List.map (fun s -> s.Ast.desc) s))) }
+
+link_script_instance:
+| instance { None }
+| m = link_module { Some m }
+
+link_assertion:
+| "(" ASSERT_RETURN action result_pat* ")" { [] }
+| "(" ASSERT_RETURN_NAN action ")" { [] }
+| "(" ASSERT_EXCEPTION action ")" { [] }
+| "(" ASSERT_SUSPENSION action STRING ")" { [] }
+| "(" ASSERT_EXHAUSTION action STRING ")" { [] }
+| "(" ASSERT_MALFORMED module_ STRING ")" { [] }
+| "(" ASSERT_INVALID module_ STRING ")" { [] }
+| "(" ASSERT_MALFORMED_CUSTOM module_ STRING ")" { [] }
+| "(" ASSERT_INVALID_CUSTOM module_ STRING ")" { [] }
+| "(" ASSERT_UNLINKABLE m = link_script_instance r = STRING ")"
+  { match m with Some md -> [ `Unlinkable (md, r.Ast.desc) ] | None -> [] }
+| "(" ASSERT_TRAP link_script_instance STRING ")" { [] }
+| "(" ASSERT_TRAP action STRING ")" { [] }
+
+parse_link_script:
+| s = link_script EOF { s }
+| l = module_field + EOF { [ `Module (None, `Parsed (None, l)) ] }
