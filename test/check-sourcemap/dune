@@ -1,3 +1,3 @@
 (executable
  (name check_sourcemap)
- (libraries yojson wax-lib.linker))
+ (libraries yojson wax-lib.linker wax-lib.utils))
