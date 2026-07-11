@@ -289,15 +289,13 @@ module Read = struct
 
   type t = { id : int; ch : ch; index : index }
 
-  let next_id = ref 0
-
-  let open_in f buf =
+  (* [id] is the module's position among the linked inputs; it indexes the
+     per-call [type_mappings] array, so the caller passes the input index. *)
+  let open_in id f buf =
     Wax_utils.Diagnostic.run ~color:Wax_utils.Colors.Never
       ~palette:Wax_utils.Colors.wat_theme ~source:(Some buf) (fun d ->
         let ch = Wax_wasm.Wasm_parser.make_ch d ~filename:f buf 0 in
         Wax_wasm.Wasm_parser.check_header ch;
-        let id = !next_id in
-        incr next_id;
         { id; ch; index = Wax_wasm.Wasm_parser.index ch })
 
   type types = {
@@ -1398,14 +1396,14 @@ let f ?(filter_export = fun _ -> true) files ~output_file =
   Wax_utils.Diagnostic.run ~color:Wax_utils.Colors.Never
     ~palette:Wax_utils.Colors.wat_theme ~source:None (fun d ->
       let files =
-        Array.map
-          (fun { module_name; file; code; opt_source_map } ->
+        Array.mapi
+          (fun id { module_name; file; code; opt_source_map } ->
             let data =
               match code with
               | None -> In_channel.with_open_bin file In_channel.input_all
               | Some data -> data
             in
-            let contents = Read.open_in file data in
+            let contents = Read.open_in id file data in
             {
               module_name;
               file;
@@ -1733,6 +1731,7 @@ let f ?(filter_export = fun _ -> true) files ~output_file =
               {
                 maps with
                 func = func_mappings.(i);
+                table = table_mappings.(i);
                 global = global_mappings.(i);
               })
       in
