@@ -1,5 +1,6 @@
 ==== core/custom-descriptors/exact-func-import.wast ====
 Should instantiate, but the linker rejected an import
+Should instantiate, but the linker rejected an import
 ==== core/gc/i31.wast ====
 Should instantiate, but the linker rejected an import
 ==== core/multi-memory/imports4.wast ====
