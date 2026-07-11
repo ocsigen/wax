@@ -1,34 +1,10 @@
-(* Js_of_ocaml compiler
- * http://www.ocsigen.org/js_of_ocaml/
- * Copyright (C) 2013 Hugo Heuzard
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as published by
- * the Free Software Foundation, with linking exception;
- * either version 2.1 of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
- *)
-
-open! Stdlib
-module List = ListLabels
-module Array = ArrayLabels
-module String = StringLabels
 module IntSet = Set.Make (Int)
 module StringSet = Set.Make (String)
 module Vlq64 = Wax_utils.Source_map.Vlq64
 
 let list_string_assoc name l =
   List.find_map
-    ~f:(fun (name', value) ->
-      if String.equal name name' then Some value else None)
+    (fun (name', value) -> if String.equal name name' then Some value else None)
     l
 
 let list_is_empty = function [] -> true | _ -> false
@@ -86,8 +62,7 @@ module Standard = struct
   let list_stringlit name rest =
     match list_string_assoc name rest with
     | Some (`List l) ->
-        Some
-          (List.map l ~f:(function `Stringlit _ as s -> s | _ -> invalid ()))
+        Some (List.map (function `Stringlit _ as s -> s | _ -> invalid ()) l)
     | Some _ -> invalid ()
     | None -> None
 
@@ -95,17 +70,17 @@ module Standard = struct
     match list_string_assoc name rest with
     | Some (`List l) ->
         Some
-          (List.map l ~f:(function
-            | `Stringlit _ as s -> Some s
-            | `Null -> None
-            | _ -> invalid ()))
+          (List.map
+             (function
+               | `Stringlit _ as s -> Some s | `Null -> None | _ -> invalid ())
+             l)
     | Some _ -> invalid ()
     | None -> None
 
   let list_intlit name rest =
     match list_string_assoc name rest with
     | Some (`List l) ->
-        Some (List.map l ~f:(function `Intlit _ as s -> s | _ -> invalid ()))
+        Some (List.map (function `Intlit _ as s -> s | _ -> invalid ()) l)
     | Some _ -> invalid ()
     | None -> None
 
@@ -113,7 +88,7 @@ module Standard = struct
     let stringlit s = `Stringlit (Yojson.Safe.to_string (`String s)) in
     `Assoc
       (List.filter_map
-         ~f:(fun (name, v) ->
+         (fun (name, v) ->
            match v with None -> None | Some v -> Some (name, v))
          [
            ("version", Some (`Intlit (string_of_int t.version)));
@@ -125,17 +100,17 @@ module Standard = struct
              Option.map
                (fun s -> `Stringlit (Yojson.Safe.to_string (`String s)))
                t.sourceroot );
-           ( "sources",
-             Some (`List (List.map t.sources ~f:(fun s -> stringlit s))) );
+           ("sources", Some (`List (List.map (fun s -> stringlit s) t.sources)));
            ( "sourcesContent",
              Option.map
                (fun l ->
                  `List
-                   (List.map l ~f:(function
-                     | None -> `Null
-                     | Some s -> Source_content.to_json s)))
+                   (List.map
+                      (function
+                        | None -> `Null | Some s -> Source_content.to_json s)
+                      l))
                t.sources_content );
-           ("names", Some (`List (List.map t.names ~f:(fun s -> stringlit s))));
+           ("names", Some (`List (List.map (fun s -> stringlit s) t.names)));
            ("mappings", Some (stringlit (Mappings.to_string t.mappings)));
            ( "ignoreList",
              if not (list_is_empty t.ignore_list) then
@@ -143,13 +118,13 @@ module Standard = struct
                Some
                  (`List
                     (List.filter_map
+                       (fun x -> x)
                        (List.mapi
-                          ~f:(fun i nm ->
+                          (fun i nm ->
                             if StringSet.mem nm ignore_set then
                               Some (`Intlit (string_of_int i))
                             else None)
-                          t.sources)
-                       ~f:(fun x -> x)))
+                          t.sources)))
              else None );
          ])
 
@@ -167,21 +142,23 @@ module Standard = struct
         let names =
           match list_stringlit "names" rest with
           | None -> []
-          | Some l -> List.map ~f:string_of_stringlit l
+          | Some l -> List.map string_of_stringlit l
         in
         let sources =
           match list_stringlit "sources" rest with
           | None -> []
-          | Some l -> List.map ~f:string_of_stringlit l
+          | Some l -> List.map string_of_stringlit l
         in
         let sources_content =
           match list_stringlit_opt "sourcesContent" rest with
           | None -> None
           | Some l ->
               Some
-                (List.map l ~f:(function
-                  | None -> None
-                  | Some s -> Some (Source_content.of_stringlit s)))
+                (List.map
+                   (function
+                     | None -> None
+                     | Some s -> Some (Source_content.of_stringlit s))
+                   l)
         in
         let mappings =
           match stringlit "mappings" rest with
@@ -191,14 +168,14 @@ module Standard = struct
         let ignore_list =
           let s =
             IntSet.of_list
-              (List.map ~f:int_of_intlit
+              (List.map int_of_intlit
                  (Option.value ~default:[] (list_intlit "ignoreList" rest)))
           in
           List.filter_map
+            (fun x -> x)
             (List.mapi
-               ~f:(fun i nm -> if IntSet.mem i s then Some nm else None)
+               (fun i nm -> if IntSet.mem i s then Some nm else None)
                sources)
-            ~f:(fun x -> x)
         in
         {
           version = int_of_string version;
@@ -223,7 +200,7 @@ module Index = struct
   let json t =
     `Assoc
       (List.filter_map
-         ~f:(fun (name, v) ->
+         (fun (name, v) ->
            match v with None -> None | Some v -> Some (name, v))
          [
            ("version", Some (`Intlit (string_of_int t.version)));
@@ -235,8 +212,7 @@ module Index = struct
              Some
                (`List
                   (List.map
-                     ~f:(fun
-                         { offset = { Offset.gen_line; gen_column }; map } ->
+                     (fun { offset = { Offset.gen_line; gen_column }; map } ->
                        `Assoc
                          [
                            ( "offset",
@@ -328,8 +304,8 @@ let resize_mappings (resize_data : resize_data) mappings =
           | name :: rest ->
               Vlq64.encode buf (name + !pending_name);
               pending_name := 0;
-              List.iter ~f:(Vlq64.encode buf) rest)
-      | fields -> List.iter ~f:(Vlq64.encode buf) fields
+              List.iter (Vlq64.encode buf) rest)
+      | fields -> List.iter (Vlq64.encode buf) fields
     in
     let rec segment () =
       if src.pos < src.len && Vlq64.in_alphabet src.string.[src.pos] then begin
@@ -371,7 +347,7 @@ let concatenate l =
     file = None;
     sections =
       List.map
-        ~f:(fun (ofs, map) ->
+        (fun (ofs, map) ->
           { Index.offset = { Offset.gen_line = 0; gen_column = ofs }; map })
         l;
   }
