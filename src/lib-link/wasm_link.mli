@@ -21,7 +21,7 @@ type input = {
 }
 
 val f :
-  ?filter_export:(string -> bool) ->
+  ?rename_export:(string -> string -> string option) ->
   ?distinct_named_types:bool ->
   input list ->
   output_file:string ->
@@ -31,8 +31,11 @@ val f :
     (incompatible import/export, duplicate export, unresolvable forward
     reference) is reported through {!Wax_utils.Diagnostic} and aborts.
 
-    [filter_export] keeps only the exports whose name it accepts (default: keep
-    every export).
+    [rename_export module_name export_name] gives the name that export should
+    carry in the merged module, or [None] to drop it (default: keep every export
+    unchanged). Being told the defining module's name lets the caller keep the
+    exports of one input only, or rename otherwise-colliding exports of
+    different inputs to distinct names so both survive.
 
     [distinct_named_types] (default [false]) makes type deduplication
     name-aware: two structurally-equal types are coalesced into one output type

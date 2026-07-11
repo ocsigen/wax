@@ -1517,8 +1517,8 @@ type input = {
   opt_source_map : Source_map.Standard.t option;
 }
 
-let f ?(filter_export = fun _ -> true) ?(distinct_named_types = false) files
-    ~output_file =
+let f ?(rename_export = fun _ nm -> Some nm) ?(distinct_named_types = false)
+    files ~output_file =
   Wax_utils.Diagnostic.run ~color:Wax_utils.Colors.Never
     ~palette:Wax_utils.Colors.wat_theme ~source:None (fun d ->
       let files =
@@ -1882,11 +1882,17 @@ let f ?(filter_export = fun _ -> true) ?(distinct_named_types = false) files
 
       (* 7: export *)
       let exports =
-        Array.map
-          (fun intf ->
+        Array.mapi
+          (fun i intf ->
+            let module_name = files.(i).module_name in
             map_exportable_info
               (fun _ exports ->
-                List.filter (fun (nm, _) -> filter_export nm) exports)
+                List.filter_map
+                  (fun (nm, idx) ->
+                    Option.map
+                      (fun nm' -> (nm', idx))
+                      (rename_export module_name nm))
+                  exports)
               intf.Read.exports)
           intfs
       in
