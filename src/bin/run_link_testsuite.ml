@@ -16,9 +16,11 @@
 
    Because a merge linker leaves an *unresolved* import as a residual import of
    the output rather than erroring, "import not found" is detected by re-reading
-   the merged module and treating any remaining import as non-linkability; see
-   [link_outcome], which classifies each link as linked / unresolved / rejected
-   (the linker reported an incompatible import) / crashed.
+   the merged module and treating any remaining import as non-linkability; and
+   because a successful merge can still produce an invalid module, the merged
+   module is validated. See [link_outcome], which classifies each link as
+   linked / unresolved / invalid / rejected (the linker reported an incompatible
+   import) / crashed.
 
    Output is a golden diff like the other suites: per-file lines under a
    [==== path ====] header naming each disagreement with the spec (see
@@ -332,12 +334,25 @@ let link_inputs ~registry test_file =
     [ input_of ~module_name:"$link-test" test_file ]
 
 (* The outcome of linking a module against its registry dependencies.
-   [Linked] the merge succeeded and every import resolved; [Unresolved] it
-   succeeded but left an import dangling (a merge linker does not error on an
-   unsatisfiable import, so we detect it by re-reading the output); [Rejected]
-   [Wasm_link.f] reported an incompatible import and [exit]ed; [Crashed] the
-   linker raised (an unsupported instruction, an index bug, …). *)
-type outcome = Linked | Unresolved | Rejected | Crashed
+   [Linked] the merge succeeded, every import resolved, and the merged module
+   validates; [Unresolved] it succeeded but left an import dangling (a merge
+   linker does not error on an unsatisfiable import, so we detect it by
+   re-reading the output); [Invalid] it succeeded but produced an invalid
+   module; [Rejected] [Wasm_link.f] reported an incompatible import and
+   [exit]ed; [Crashed] the linker raised (an unsupported instruction, an index
+   bug, …). *)
+type outcome = Linked | Unresolved | Invalid | Rejected | Crashed
+
+(* Run [f] in a forked child, returning whether it exited normally. Used to run
+   the validator, which [exit]s on an invalid module, without taking the caller
+   down with it. *)
+let in_child f =
+  match Unix.fork () with
+  | 0 ->
+      f ();
+      exit 0
+  | pid -> (
+      match Unix.waitpid [] pid with _, Unix.WEXITED 0 -> true | _ -> false)
 
 (* Link [test_file] against its dependencies and classify the result. Runs in a
    forked child because [Wasm_link.f] [exit]s (128) on a link error and may
@@ -359,13 +374,26 @@ let link_outcome ~registry test_file =
            inputs ~output_file:out
           : Wax_linker.Js_source_map.t);
       (match parse_binary ~color:!color (read_file out) with
-      | Ok m -> if m.Wax_wasm.Ast.Binary.imports <> [] then exit 3
+      | Ok m ->
+          if m.Wax_wasm.Ast.Binary.imports <> [] then exit 3;
+          (* The merged module must validate: a successful merge can still
+             produce an invalid module (e.g. a table initializer referencing a
+             now-internalised global that follows it). *)
+          if
+            not
+              (in_child (fun () ->
+                   Wax_utils.Diagnostic.run ~color:Wax_utils.Colors.Never
+                     ~palette:Wax_utils.Colors.wat_theme ~source:None (fun d ->
+                       Wax_wasm.Validation.f ~warn_unused:false d
+                         (Wax_wasm.Binary_to_text.module_ m))))
+          then exit 4
       | Error _ -> exit 3);
       exit 0
   | pid -> (
       match Unix.waitpid [] pid with
       | _, Unix.WEXITED 0 -> Linked
       | _, Unix.WEXITED 3 -> Unresolved
+      | _, Unix.WEXITED 4 -> Invalid
       | _, Unix.WEXITED 128 -> Rejected (* Wasm_link.f's diagnostic exit *)
       | _ -> Crashed)
 
@@ -438,6 +466,10 @@ let runtest filename _ =
                 | Unresolved ->
                     Format.eprintf
                       "Should instantiate, but an import is left unresolved@."
+                | Invalid ->
+                    Format.eprintf
+                      "Should instantiate, but linking produced an invalid \
+                       module@."
                 | Rejected ->
                     Format.eprintf
                       "Should instantiate, but the linker rejected an import@."
@@ -462,9 +494,10 @@ let runtest filename _ =
                 | Linked ->
                     Format.eprintf "Linked, but the spec says unlinkable (%s)@."
                       reason
-                (* Unresolved / Rejected / Crashed all mean the module did not
-                   link, which is what the spec asserts — nothing to report. *)
-                | Unresolved | Rejected | Crashed -> ())))
+                (* Unresolved / Invalid / Rejected / Crashed all mean the module
+                   did not link, which is what the spec asserts — nothing to
+                   report. *)
+                | Unresolved | Invalid | Rejected | Crashed -> ())))
     cmds;
   clean_scratch ()
 
