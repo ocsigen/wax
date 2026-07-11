@@ -744,6 +744,10 @@ module Scan = struct
         let p' = Buffer.length buf in
         let dp = p' - p in
         let dpos = pos' - pos in
+        (* The width change reshapes the immediate spanning [pos, pos'); it
+           shifts the bytes that *follow* it, so the resize is recorded at
+           [pos'] (positions < pos' are unaffected). [rewrite_signed] and
+           [memarg] report at [pos'] for the same reason. *)
         if dp <> dpos then report pos' (dp - dpos));
       pos'
     in
@@ -762,7 +766,7 @@ module Scan = struct
         let p' = Buffer.length buf in
         let dp = p' - p in
         let dpos = pos' - pos in
-        if dp <> dpos then report pos (dp - dpos));
+        if dp <> dpos then report pos' (dp - dpos));
       pos'
     in
     let typ_map idx = maps.typ.(idx) in
@@ -840,7 +844,7 @@ module Scan = struct
           let p' = Buffer.length buf in
           let dp = p' - p in
           let dpos = pos' - pos in
-          if dp <> dpos then report pos (dp - dpos));
+          if dp <> dpos then report pos' (dp - dpos));
         pos' |> int)
       else pos' |> memidx |> int
     in
