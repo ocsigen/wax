@@ -64,14 +64,16 @@ module Link : sig
   }
 
   val f :
-    ?filter_export:(string -> bool) ->
+    ?rename_export:(string -> string -> string option) ->
     input list ->
     output_file:string ->
     string option
   (** [f inputs ~output_file] links [inputs] into a single binary written to
       [output_file], resolving each import against the export of the input whose
       [module_name] matches; an unresolved import survives as an import of the
-      result. Returns the merged source map as JSON text when any input carried
-      one, else [None]. Boundary types are plain strings so no Wax source-map
+      result. [rename_export module_name export_name] gives each export's name
+      in the merged module, or [None] to drop it (default: keep all). Returns
+      the merged source map as JSON text when any input carried one, else
+      [None]. Boundary types are plain strings so no Wax source-map
       representation leaks to the caller. *)
 end

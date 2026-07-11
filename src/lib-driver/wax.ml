@@ -28,7 +28,7 @@ module Link = struct
     source_map : string option;
   }
 
-  let f ?filter_export inputs ~output_file =
+  let f ?rename_export inputs ~output_file =
     let any_source_map = List.exists (fun i -> i.source_map <> None) inputs in
     let inputs =
       List.map
@@ -42,6 +42,6 @@ module Link = struct
           })
         inputs
     in
-    let sm = Wax_linker.Wasm_link.f ?filter_export inputs ~output_file in
+    let sm = Wax_linker.Wasm_link.f ?rename_export inputs ~output_file in
     if any_source_map then Some (Wax_linker.Source_map.to_string sm) else None
 end
