@@ -1156,12 +1156,15 @@ let check_export_import_types d ~subtyping_info ~files i (desc : importdesc) i'
     import =
   let ok =
     match (desc, import.desc) with
-    | Func { typ = t; _ }, Func { exact; typ = t' } ->
+    | Func { exact = e_exact; typ = t }, Func { exact = i_exact; typ = t' } ->
         (* An exact import ([(func (exact …))], custom-descriptors) requires the
-           export's function type to be *exactly* the imported type, not merely
-           a subtype. Canonicalisation gives equal types equal indices, so
-           equality is an index comparison. *)
-        if exact then t = t' else subtype subtyping_info t t'
+           export to be exact too and to have exactly the imported type, not
+           merely a subtype: an inexact export (an inexactly-imported function
+           re-exported) could dynamically be a subtype, which a static linker
+           cannot rule out, so it is rejected. A defined function is exact
+           (see below); canonicalisation gives equal types equal indices, so
+           type equality is an index comparison. *)
+        if i_exact then e_exact && t = t' else subtype subtyping_info t t'
     | ( Table { limits; reftype = typ },
         Table { limits = limits'; reftype = typ' } ) ->
         check_limits limits limits' && reftype_eq subtyping_info typ typ'
@@ -1578,7 +1581,11 @@ let f ?(filter_export = fun _ -> true) files ~output_file =
         ~to_desc:
           (index_in_output ~unresolved_imports ~mappings:func_mappings
              ~kind:Func ~get:(fun idx : importdesc ->
-               Func { exact = false; typ = func_types.(idx) }));
+               (* This is a defined function of the merged module (an import
+                  resolves either to a definition here or to a residual import
+                  handled elsewhere), and a defined function's reference is
+                  exact. *)
+               Func { exact = true; typ = func_types.(idx) }));
 
       (* Global index maps, computed before the table section because a table's
          initializer expression may read a global ([(table … (global.get $g))]);
