@@ -96,3 +96,47 @@
   (diff
    wasm_tools_suite.custom-descriptors.expected
    wasm_tools_suite.custom-descriptors.output)))
+
+; The linker suite: drive Wax_linker through the spec suite's linking commands
+; (register / assert_unlinkable). Golden output is the set of modules whose
+; link outcome disagrees with the spec — empty for a fully linking-correct
+; linker. Needs spectest.wat (the host module the corpus imports from).
+
+(rule
+ (deps
+  (glob_files_rec wasm-test-suite/*.wast)
+  (glob_files wasm-test-suite/blacklist)
+  spectest.wat)
+ (action
+  (with-stdout-to
+   link_suite.output
+   (run ../src/bin/run_link_testsuite.exe --no-color))))
+
+(rule
+ (alias runtest)
+ (action
+  (diff link_suite.expected link_suite.output)))
+
+; The same, with custom-descriptors enabled, to exercise linking of the
+; custom-descriptors tests (skipped as feature-disabled in the default run).
+
+(rule
+ (deps
+  (glob_files_rec wasm-test-suite/*.wast)
+  (glob_files wasm-test-suite/blacklist)
+  spectest.wat)
+ (action
+  (with-stdout-to
+   link_suite.custom-descriptors.output
+   (run
+    ../src/bin/run_link_testsuite.exe
+    --no-color
+    --enable
+    custom-descriptors))))
+
+(rule
+ (alias runtest)
+ (action
+  (diff
+   link_suite.custom-descriptors.expected
+   link_suite.custom-descriptors.output)))
