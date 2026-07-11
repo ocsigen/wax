@@ -1,4 +1,4 @@
-open Wax_linker.Js_source_map
+open Wax_linker.Source_map
 module Vlq64 = Wax_linker.Vlq64
 
 (* Naive reference implementation. Structurally independent of the streaming

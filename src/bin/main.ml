@@ -861,7 +861,7 @@ let link output_file source_map_file distinct_named_types inputs =
         let opt_source_map =
           let map_file = file ^ ".map" in
           if Sys.file_exists map_file then
-            try Some (Wax_linker.Js_source_map.Standard.of_file map_file)
+            try Some (Wax_linker.Source_map.Standard.of_file map_file)
             with _ -> None
           else None
         in
@@ -877,7 +877,7 @@ let link output_file source_map_file distinct_named_types inputs =
   with
   | Ok map ->
       Option.iter
-        (fun map_file -> Wax_linker.Js_source_map.to_file map map_file)
+        (fun map_file -> Wax_linker.Source_map.to_file map map_file)
         source_map_file
   | Error msg ->
       Printf.eprintf "Link error: %s\n" msg;
