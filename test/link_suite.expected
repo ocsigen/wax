@@ -1,5 +1,5 @@
 ==== core/gc/i31.wast ====
-Should instantiate, but linking produced an invalid module
+Should instantiate, but the linker rejected an import
 ==== core/gc/type-subtyping.wast ====
 Should instantiate, but the linker rejected an import
 Should instantiate, but the linker crashed
@@ -19,7 +19,7 @@ Should instantiate, but the linker rejected an import
 Should instantiate, but the linker rejected an import
 Should instantiate, but the linker rejected an import
 ==== core/table.wast ====
-Should instantiate, but linking produced an invalid module
+Should instantiate, but the linker rejected an import
 ==== core/table_grow.wast ====
 Should instantiate, but the linker rejected an import
 Should instantiate, but the linker rejected an import
