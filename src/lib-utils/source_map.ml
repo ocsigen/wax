@@ -1,3 +1,88 @@
+(* Base64 VLQ, the integer encoding used by source-map "mappings". *)
+module Vlq64 = struct
+  let alphabet =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/="
+
+  let code_rev =
+    let a = Array.make 256 (-1) in
+    for i = 0 to String.length alphabet - 1 do
+      a.(Char.code alphabet.[i]) <- i
+    done;
+    a
+
+  let in_alphabet x = code_rev.(Char.code x) <> -1
+  let vlq_base_shift = 5
+
+  (* binary: 100000 *)
+  let vlq_base = 1 lsl vlq_base_shift
+
+  (* binary: 011111 *)
+  let vlq_base_mask = vlq_base - 1
+
+  (* binary: 100000 *)
+  let vlq_continuation_bit = vlq_base
+  let toVLQSigned v = if v < 0 then (-v lsl 1) + 1 else v lsl 1
+
+  let fromVLQSigned v =
+    let is_neg = v land 1 = 1 in
+    let shift = v lsr 1 in
+    if is_neg then -shift else shift
+
+  let add_char buf x = Buffer.add_char buf alphabet.[x]
+
+  let rec encode' buf x =
+    let digit = x land vlq_base_mask in
+    let rest = x lsr vlq_base_shift in
+    if rest = 0 then add_char buf digit
+    else (
+      add_char buf (digit lor vlq_continuation_bit);
+      encode' buf rest)
+
+  let encode b x =
+    let vql = toVLQSigned x in
+    encode' b vql
+
+  let encode_l b l = List.iter (encode b) l
+
+  let rec decode' acc s start pos =
+    let digit = code_rev.(Char.code s.[pos]) in
+    if digit = -1 then invalid_arg "Vlq64.decode'";
+    let cont = digit land vlq_continuation_bit = vlq_continuation_bit in
+    let digit = digit land vlq_base_mask in
+    let acc = acc + (digit lsl ((pos - start) * vlq_base_shift)) in
+    if cont then decode' acc s start (succ pos) else (acc, succ pos)
+
+  let decode s p =
+    let d, i = decode' 0 s p p in
+    (fromVLQSigned d, i)
+
+  let decode_l s ~pos ~len =
+    let rec aux pos acc len =
+      if len = 0 then List.rev acc
+      else if len < 0 then invalid_arg "Vlq64.decode_l"
+      else
+        let d, i = decode s pos in
+        let len = len - (i - pos) in
+        aux i (d :: acc) len
+    in
+    aux pos [] len
+
+  type input = { string : string; mutable pos : int; len : int }
+
+  let rec decode' src s pos len offset i =
+    if pos = len then invalid_arg "Vlq64.decode'";
+    let digit = Array.unsafe_get code_rev (Char.code s.[pos]) in
+    if digit = -1 then invalid_arg "Vlq64.decode'";
+    let i = i + ((digit land vlq_base_mask) lsl offset) in
+    if digit >= vlq_continuation_bit then
+      decode' src s (pos + 1) len (offset + vlq_base_shift) i
+    else (
+      src.pos <- pos + 1;
+      i)
+
+  let decode src = fromVLQSigned (decode' src src.string src.pos src.len 0 0)
+end
+
 type t = {
   enabled : bool;
       (* When false, recording is a no-op: [mappings] stays empty, so the whole
@@ -118,21 +203,10 @@ let shift_since t (cp : checkpoint) ~delta =
     t.mappings <- loop [] t.mappings
   end
 
-(* Base64 VLQ encoding for source maps: each 5-bit group is emitted low bits
-   first, with bit 6 (0x20) marking a continuation, and the resulting 6-bit
-   value indexes the base64 alphabet. *)
-let base64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-
 let encode_vlq_int n =
-  let n' = ref (if n < 0 then (abs n lsl 1) lor 1 else n lsl 1) in
-  let result = ref [] in
-  while !n' <> 0 || !result = [] do
-    let digit = !n' land 0x1F in
-    n' := !n' lsr 5;
-    if !n' <> 0 then result := base64.[digit lor 0x20] :: !result
-    else result := base64.[digit] :: !result
-  done;
-  List.rev !result |> List.to_seq |> String.of_seq
+  let b = Buffer.create 8 in
+  Vlq64.encode b n;
+  Buffer.contents b
 
 (* A JSON string literal (quoted and escaped) — file names may contain
    backslashes or other characters that must not appear raw in the JSON. *)
