@@ -1477,6 +1477,18 @@ let write_namemap ~resolved_imports ~unresolved_imports ~name_sections
     name_sections;
   add_subsection name_section_buffer ~id:section_id ~count:!count buf
 
+(* Merge the indirect name maps (locals, labels) of each input, remapping the
+   outer (function) index through [mappings] (= [func_mappings]) and copying the
+   inner map verbatim (local/label indices are per-function, so linking leaves
+   them untouched). The concatenation is emitted without an explicit sort yet is
+   a valid — sorted, duplicate-free — name map: an indirect name map only ever
+   names *defined* functions (imports have no body, hence no locals or labels),
+   and for definitions [func_mappings] is order-preserving. Each module's
+   defined functions form one contiguous output block with strictly increasing
+   bases in module order, the inputs are visited in that same order, and every
+   input map is already sorted, so the blocks land back-to-back in order. This
+   would only break for a name entry on an *imported* function, which
+   well-formed input cannot contain. *)
 let write_indirectnamemap ~name_sections ~name_section_buffer ~buf ~section_id
     ~mappings =
   let count = ref 0 in
