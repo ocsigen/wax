@@ -658,6 +658,18 @@ module Scan = struct
     p.(i) <- pos;
     position_data.i <- i + 1
 
+  (* The byte-level rewriter at the heart of linking. It walks a section payload
+     in [code], copies bytes verbatim into [buf], and renumbers every embedded
+     index through [maps] (rewriting the LEB immediate in place). Two callbacks
+     observe the walk:
+     - [report pos delta]: an index's LEB encoding changed width, so all bytes
+       from output position [pos] on are shifted by [delta] (feeds source-map
+       resizing);
+     - [mark pos]: record a notable *input* position — an entity start, and, with
+       [mark_instructions], every instruction start.
+     It returns one closure per section kind it knows how to scan; they all
+     capture this call's mutable state ([start], [buf], …), so a caller selects
+     the closure it needs and ignores the others. *)
   let scanner ?(mark_instructions = false) report mark maps buf code =
     let rec output_uint buf i =
       if i < 128 then Buffer.add_char buf (Char.chr i)
@@ -1191,6 +1203,10 @@ type t = {
   source_map_contents : Source_map.Standard.t option;
 }
 
+(* Fate of one import after resolution. [Resolved (m, k)]: it binds to entity
+   [k] (in the kind's local index space) of input module [m]. [Unresolved i]:
+   it stays an import of the merged module, at index [i] among that kind's
+   residual imports. *)
 type import_status = Resolved of int * int | Unresolved of int
 
 let check_limits export import =
@@ -1260,6 +1276,18 @@ let check_export_import_types d ~subtyping_info ~files i (desc : importdesc) i'
       ();
     Wax_utils.Diagnostic.abort ())
 
+(* Output index of every entity of [kind], per input module. The merged layout
+   places all residual (unresolved) imports first (there are
+   [unresolved_imports] of them), then each module's definitions in module
+   order; [counts.(i)] is module [i]'s definition count. The result
+   [mappings.(i).(k)] is the output index of local entity [k] of module [i]
+   (its imports first, then its definitions).
+
+   Two passes: the first lays out definitions and residual imports, leaving a
+   resolved import at [-1]; the second patches each resolved import to the
+   output index of its target. The split is required because an import may
+   resolve to a definition in a *later* module, whose layout the first pass has
+   not reached yet. *)
 let build_mappings resolved_imports unresolved_imports kind counts =
   let current_offset = ref (get_exportable_info unresolved_imports kind) in
   let mappings =
@@ -1288,6 +1316,8 @@ let build_mappings resolved_imports unresolved_imports kind counts =
     mappings;
   mappings
 
+(* [build_mappings] for kinds that have no imports (elements, data segments):
+   the output is just each module's entities concatenated in module order. *)
 let build_simple_mappings ~counts =
   let current_offset = ref 0 in
   Array.map
@@ -1321,6 +1351,12 @@ let add_subsection buf ~id ?count buf' =
       Buffer.add_buffer buf buf';
       Buffer.clear buf'
 
+(* Re-check every resolved import against the export it bound to, now that the
+   export's own (possibly remapped) type is known. [resolve] already checked
+   each hop, but only against the interface as read; this catches mismatches
+   that surface once definitions are laid out. [to_desc i' idx'] recovers the
+   type of entity [idx'] defined by module [i'] (or [None] if that entity is
+   itself a residual import, which needs no check here). *)
 let check_exports_against_imports d ~intfs ~subtyping_info ~resolved_imports
     ~files ~kind ~to_desc =
   Array.iteri
@@ -1340,6 +1376,14 @@ let check_exports_against_imports d ~intfs ~subtyping_info ~resolved_imports
         imports statuses)
     intfs
 
+(* Two ways to supply [check_exports_against_imports]'s [to_desc], i.e. to
+   recover a defined entity's type. [read_desc_from_file] re-reads it from the
+   input at a byte position stashed during the section scan (used when the type
+   was never materialised, e.g. tables/globals); it returns [None] for the
+   entity's imports, whose descriptors precede the definitions ([j < offset]).
+   [index_in_output] instead reads it from an in-memory array of already-parsed
+   entries, indexed by output slot; [None] when that output slot is a residual
+   import rather than a definition. *)
 let read_desc_from_file ~intfs ~files ~positions ~read i j =
   let offset =
     Array.length (get_exportable_info intfs.(i).Read.imports Table)
@@ -1494,6 +1538,14 @@ let write_indirectnamemap ~name_sections ~name_section_buffer ~buf ~section_id
     name_sections mappings;
   add_subsection name_section_buffer ~id:section_id ~count:!count buf
 
+(* Resolve an import to the (module, index) that ultimately provides it,
+   following re-export chains: when the matched export is itself an imported
+   entity (its index falls in the exporting module's import range) recurse into
+   that import, stopping at the first real definition — or at the last hop whose
+   own target is not exported by the set. Raises [Not_found] (from
+   [Hashtbl.find]) when [(module_, name)] is exported nowhere, which leaves the
+   import unresolved. [depth] guards against a re-export cycle; every hop is
+   type-checked. *)
 let rec resolve d depth ~files ~intfs ~subtyping_info ~exports ~kind i
     ({ module_; name; _ } as import) =
   let i', index = Hashtbl.find exports (module_, name) in
