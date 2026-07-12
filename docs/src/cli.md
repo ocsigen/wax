@@ -447,8 +447,10 @@ exposes three tools:
   for the assistant to read into context.
 - **`wax_check`** — validates a Wax or WAT snippet and returns its diagnostics
   as structured JSON, so the assistant can act on them mechanically.
-- **`wax_convert`** — converts a module between `wax`, `wat` and `wasm`; text
-  output is returned as UTF-8, binary output as base64.
+- **`wax_convert`** — converts a module between `wax`, `wat` and `wasm`,
+  in-memory; text output is returned as UTF-8, binary output as base64. On
+  failure it returns structured diagnostics (like `wax_check`) rather than the
+  converted module.
 
 A malformed snippet is reported through the tool result rather than by exiting,
 so the server stays up across requests; it exits `0` at end of input.

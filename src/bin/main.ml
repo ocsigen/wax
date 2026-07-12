@@ -149,6 +149,29 @@ let output_wat ?(tail = []) ~output_file ~color ~trivia ast =
       let fmt = Format.formatter_of_out_channel oc in
       Format.fprintf fmt "%a@." print_wat ast)
 
+(* Render a WAT / Wax text module to a string in memory (no channel). These
+   mirror [output_wat] and the Wax printing in [wax_to_wax] but target a buffer
+   with color disabled; used by the in-memory MCP convert. *)
+let wat_to_string ?(tail = []) ~trivia ast =
+  let buf = Buffer.create 4096 in
+  let fmt = Format.formatter_of_buffer buf in
+  let print_wat f m =
+    Wax_utils.Printer.run f (fun p ->
+        Wax_wasm.Output.module_ ~color:Wax_utils.Colors.Never ~tail p ~trivia m)
+  in
+  Format.fprintf fmt "%a@." print_wat ast;
+  Buffer.contents buf
+
+let wax_to_string ?(tail = []) ~trivia ast =
+  let buf = Buffer.create 4096 in
+  let fmt = Format.formatter_of_buffer buf in
+  let print_wax f m =
+    Wax_utils.Printer.run ~width:Wax_lang.Output.width f (fun p ->
+        Wax_lang.Output.module_ ~color:Wax_utils.Colors.Never ~tail p ~trivia m)
+  in
+  Format.fprintf fmt "%a@." print_wax ast;
+  Buffer.contents buf
+
 (* A formatter that discards everything, for the dry pass that records which
    locations the printer looks up. *)
 let null_formatter () = Format.make_formatter (fun _ _ _ -> ()) (fun () -> ())
@@ -833,30 +856,6 @@ let base64_encode s =
   loop 0;
   Buffer.contents buf
 
-(* Run the wax binary itself as a subprocess. Used by the MCP convert tool to
-   reuse the full validated conversion pipeline without risking the long-lived
-   server on a malformed input (the in-process pipelines exit the process on a
-   diagnostic). stdout is discarded — the output goes to the [-o] file — and
-   stderr is captured to [stderr_file]. Returns the child's exit code. *)
-let run_self args ~stderr_file =
-  let exe = Sys.executable_name in
-  let null_in = Unix.openfile Filename.null [ Unix.O_RDONLY ] 0 in
-  let null_out = Unix.openfile Filename.null [ Unix.O_WRONLY ] 0 in
-  let err =
-    Unix.openfile stderr_file
-      [ Unix.O_WRONLY; Unix.O_CREAT; Unix.O_TRUNC ]
-      0o600
-  in
-  Fun.protect
-    ~finally:(fun () -> List.iter Unix.close [ null_in; null_out; err ])
-    (fun () ->
-      let pid =
-        Unix.create_process exe
-          (Array.of_list (exe :: args))
-          null_in null_out err
-      in
-      match Unix.waitpid [] pid with _, WEXITED n -> n | _ -> 125)
-
 (* Serve the toolchain over MCP (Model Context Protocol) on stdio, so an AI
    assistant can fetch the language reference and validate Wax/WAT snippets it
    produces. See ADOPTION.md, Phase 6. The parser/validator wiring is passed to
@@ -865,7 +864,8 @@ let run_self args ~stderr_file =
    (via [parse_diagnostics], which returns a syntax error as data) instead of
    printing and exiting, since the server outlives any one request. *)
 let mcp strict warnings features debug =
-  Wax_utils.Diagnostic.set_policy (build_policy warnings);
+  let policy = build_policy warnings in
+  Wax_utils.Diagnostic.set_policy policy;
   Wax_utils.Feature.set_config features;
   Wax_utils.Debug.enable debug;
   (* The language reference (docs/llms.txt) is embedded at build time as an
@@ -873,9 +873,7 @@ let mcp strict warnings features debug =
   let reference () = Reference_data.content in
   let report_syntax_error d (se : Wax_wasm.Parsing.syntax_error) =
     Wax_utils.Diagnostic.report d ~location:se.location ~severity:Error
-      ~related:se.related
-      ~message:(fun f () -> Format.pp_print_string f se.message)
-      ()
+      ~related:se.related ~message:se.message ()
   in
   let run fmt source =
     Wax_wasm.Validation.validate_refs := strict;
@@ -901,59 +899,157 @@ let mcp strict warnings features debug =
     | "wasm" -> Error "wax_check accepts \"wax\" or \"wat\" text, not binary"
     | s -> Error (Printf.sprintf "unknown format: %s" s)
   in
-  (* Convert via a subprocess over temp files (see [run_self]). The feature
-     flags are forwarded so a feature-gated syntax converts the same way it
-     validates; -D/-W forwarding is left for later. *)
-  let feature_args =
-    List.concat_map
-      (fun (f, on) ->
-        [
-          "-X";
-          Printf.sprintf "%s=%s" (Wax_utils.Feature.name f)
-            (if on then "on" else "off");
-        ])
-      features
+  (* A collector buffers every reported warning regardless of policy (the policy
+     is meant to be applied at display time); apply it here so the tool result
+     shows only what the policy displays (or promotes to an error), respecting
+     any [-W]. An error is always shown; a named warning is dropped when hidden. *)
+  let level e =
+    match Wax_utils.Diagnostic.entry_severity e with
+    | Wax_utils.Diagnostic.Error -> Wax_utils.Warning.Error
+    | Wax_utils.Diagnostic.Warning -> (
+        match Wax_utils.Diagnostic.entry_warning e with
+        | Some w -> Wax_utils.Warning.resolve policy w
+        | None -> Wax_utils.Warning.Displayed)
   in
+  let is_error e = level e = Wax_utils.Warning.Error in
+  let visible e = level e <> Wax_utils.Warning.Hidden in
+  (* Convert in memory: parse (syntax errors become data), run the pass sequence
+     for the chosen pair against a [collector] so nothing exits, and render to a
+     string (binary base64-encoded). This mirrors the CLI pipeline functions
+     (wat_to_wat … wasm_to_wax) but collector-based and buffer-output; comments
+     are carried across via the parse context's trivia, as those pipelines do.
+     [-X] features / [-s] strict are already global (set above), so needn't be
+     forwarded. *)
   let convert ~from_ ~to_ ~source =
     let known = function "wax" | "wat" | "wasm" -> true | _ -> false in
     if not (known from_) then
       Error (Printf.sprintf "unknown input format: %s" from_)
     else if not (known to_) then
       Error (Printf.sprintf "unknown output format: %s" to_)
-    else
-      let inp = Filename.temp_file "wax-mcp-in-" ("." ^ from_) in
-      let outp = Filename.temp_file "wax-mcp-out-" ("." ^ to_) in
-      let errp = Filename.temp_file "wax-mcp-err-" ".txt" in
-      Fun.protect
-        ~finally:(fun () ->
-          List.iter
-            (fun f -> try Sys.remove f with Sys_error _ -> ())
-            [ inp; outp; errp ])
-        (fun () ->
-          Out_channel.with_open_bin inp (fun oc ->
-              Out_channel.output_string oc source);
-          let args =
-            [
-              "convert"; "-i"; from_; "-f"; to_; "--color"; "never"; "-o"; outp;
-            ]
-            @ feature_args
-            @ (if strict then [ "-s" ] else [])
-            @ [ inp ]
-          in
-          let code = run_self args ~stderr_file:errp in
-          if code = 0 then
-            let out = In_channel.with_open_bin outp In_channel.input_all in
-            if to_ = "wasm" then
-              Ok Mcp.{ output = base64_encode out; encoding = "base64" }
-            else Ok Mcp.{ output = out; encoding = "utf-8" }
-          else
-            let err =
-              String.trim (In_channel.with_open_bin errp In_channel.input_all)
-            in
-            Error
-              (if err = "" then
-                 Printf.sprintf "conversion failed (exit %d)" code
-               else err))
+    else begin
+      Wax_wasm.Validation.validate_refs := strict || from_ = "wasm";
+      let d = Wax_utils.Diagnostic.collector ~source () in
+      let output = ref None in
+      let emit_text s = output := Some (s, "utf-8") in
+      let emit_binary bin =
+        output :=
+          Some (base64_encode (Wax_wasm.Wasm_output.to_string bin), "base64")
+      in
+      (* [Text_to_binary.module_] raises; report into the collector and abort,
+         as main.ml's [to_binary] does (but without exiting). *)
+      let to_binary ast =
+        try Wax_wasm.Text_to_binary.module_ ast with
+        | Wax_wasm.Text_to_binary.Conditional_in_binary location ->
+            Wax_utils.Diagnostic.report d ~location ~severity:Error
+              ~message:
+                (Wax_utils.Message.text
+                   "Conditional annotations cannot be emitted to the \
+                    WebAssembly binary format.")
+              ();
+            Wax_utils.Diagnostic.abort ()
+        | Wax_wasm.Text_to_binary.Unresolved_reference (location, message) ->
+            Wax_utils.Diagnostic.report d ~location ~severity:Error
+              ~message:(Wax_utils.Message.text message)
+              ();
+            Wax_utils.Diagnostic.abort ()
+      in
+      let to_wax_from_text ast =
+        let wax_ast = Wax_conversion.From_wasm.module_ d ast in
+        Wax_lang.Typing.f ~simplify:true d wax_ast
+        |> snd |> Wax_lang.Typing.erase_types
+      in
+      let parse_wax () =
+        Wax_parser.parse_diagnostics ~filename:"<mcp>" source
+      in
+      let parse_wat () =
+        Wat_parser.parse_diagnostics ~filename:"<mcp>" source
+      in
+      let parse_wasm () =
+        Wax_wasm.Wasm_parser.module_ d ~filename:"<mcp>" source
+      in
+      (try
+         match (from_, to_) with
+         | "wax", "wax" -> (
+             (* Same-format: re-print only, as the CLI does (no validation). *)
+             match parse_wax () with
+             | Error se -> report_syntax_error d se
+             | Ok (ast, ctx) ->
+                 let trivia, tail = wax_trivia ctx ast in
+                 emit_text (wax_to_string ~trivia ~tail ast))
+         | "wax", (("wat" | "wasm") as out) -> (
+             match parse_wax () with
+             | Error se -> report_syntax_error d se
+             | Ok (ast, ctx) ->
+                 let types, tast = Wax_lang.Typing.f ~warn_unused:false d ast in
+                 let wasm_text = Wax_conversion.To_wasm.module_ d types tast in
+                 if out = "wat" then
+                   let trivia, tail =
+                     wat_trivia
+                       ~retarget:
+                         ( Wax_utils.Trivia.wax_syntax,
+                           Wax_utils.Trivia.wat_syntax )
+                       ctx wasm_text
+                   in
+                   emit_text (wat_to_string ~trivia ~tail wasm_text)
+                 else emit_binary (to_binary wasm_text))
+         | "wat", "wat" -> (
+             match parse_wat () with
+             | Error se -> report_syntax_error d se
+             | Ok (ast, ctx) ->
+                 let trivia, tail = wat_trivia ctx ast in
+                 emit_text (wat_to_string ~trivia ~tail ast))
+         | "wat", "wax" -> (
+             match parse_wat () with
+             | Error se -> report_syntax_error d se
+             | Ok (ast, ctx) ->
+                 Wax_wasm.Validation.f ~warn_unused:false d ast;
+                 let wax_ast = to_wax_from_text ast in
+                 let trivia, tail =
+                   wax_trivia
+                     ~retarget:
+                       (Wax_utils.Trivia.wat_syntax, Wax_utils.Trivia.wax_syntax)
+                     ctx wax_ast
+                 in
+                 emit_text (wax_to_string ~trivia ~tail wax_ast))
+         | "wat", "wasm" -> (
+             match parse_wat () with
+             | Error se -> report_syntax_error d se
+             | Ok (ast, _ctx) ->
+                 let ast = Wax_wasm.Declare_refs.module_ ast in
+                 Wax_wasm.Validation.f ~warn_unused:false d ast;
+                 emit_binary (to_binary ast))
+         | "wasm", "wasm" -> emit_binary (parse_wasm ())
+         | "wasm", "wat" ->
+             let ast = Wax_wasm.Binary_to_text.module_ (parse_wasm ()) in
+             Wax_wasm.Validation.f ~warn_unused:false d ast;
+             emit_text (wat_to_string ~trivia:(Hashtbl.create 0) ast)
+         | "wasm", "wax" ->
+             let ast = Wax_wasm.Binary_to_text.module_ (parse_wasm ()) in
+             emit_text
+               (wax_to_string ~trivia:(Hashtbl.create 0) (to_wax_from_text ast))
+         | _ -> assert false (* the three formats are validated above *)
+       with
+      | Wax_utils.Diagnostic.Aborted -> ()
+      | (Assert_failure _ | Failure _) as e ->
+          let dummy = Lexing.dummy_pos in
+          Wax_utils.Diagnostic.report d
+            ~location:{ Wax_utils.Ast.loc_start = dummy; loc_end = dummy }
+            ~severity:Error
+            ~message:
+              (Wax_utils.Message.text
+                 (Printf.sprintf "Internal error during conversion: %s"
+                    (Printexc.to_string e)))
+            ());
+      let entries = List.filter visible (Wax_utils.Diagnostic.collected d) in
+      let out, encoding =
+        if List.exists is_error entries then (None, "utf-8")
+        else
+          match !output with
+          | Some (s, e) -> (Some s, e)
+          | None -> (None, "utf-8")
+      in
+      Ok Mcp.{ output = out; encoding; diagnostics = entries }
+    end
   in
   Mcp.serve ~reference ~check ~convert ()
 

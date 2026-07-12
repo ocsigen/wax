@@ -1246,19 +1246,19 @@ end
    as a whole occupies [1 + leb_size len + len] bytes on the channel (id byte +
    the LEB128 length prefix + the content). Callers thread that total through a
    running file position so source-map offsets can be rebased to the file. *)
-let output_section ch id encoder data =
+let output_section buf id encoder data =
   let b = Buffer.create 1024 in
   encoder b data;
-  Out_channel.output_byte ch id;
+  Buffer.add_char buf (Char.chr id);
   let len = Buffer.length b in
   let rec output_uint i =
-    if i < 128 then Out_channel.output_byte ch i
+    if i < 128 then Buffer.add_char buf (Char.chr i)
     else (
-      Out_channel.output_byte ch (128 + (i land 127));
+      Buffer.add_char buf (Char.chr (128 + (i land 127)));
       output_uint (i lsr 7))
   in
   output_uint len;
-  Buffer.output_buffer ch b;
+  Buffer.add_buffer buf b;
   len
 
 let import_desc b (desc : importdesc) =
@@ -1327,7 +1327,7 @@ let coalesce_singles entries =
    is a valid kind, so a plain import (kind byte next) stays unambiguous. Groups
    present in the AST are emitted verbatim (preserving a compact input); the
    feature only drives coalescing of ungrouped [Single] imports above. *)
-let output_import_section out_channel imports =
+let output_import_section buf imports =
   let compact =
     Wax_utils.Feature.is_enabled
       (Wax_utils.Feature.default ())
@@ -1353,7 +1353,7 @@ let output_import_section out_channel imports =
         import_desc b desc;
         Encoder.vec Encoder.name b names
   in
-  output_section out_channel 2 (Encoder.vec write_entry)
+  output_section buf 2 (Encoder.vec write_entry)
     (if compact then coalesce_singles imports else imports)
 
 (* Branch-hinting proposal: emit the [metadata.code.branch_hint] custom section.
@@ -1363,9 +1363,9 @@ let output_import_section out_channel imports =
    each function's hints are already in increasing-offset order (functions are
    encoded in order; a body's opcodes are emitted at strictly increasing
    offsets), as the section requires. *)
-let output_branch_hint_section out_channel
-    (func_hints : (int * (int * bool) list) list) =
-  output_section out_channel 0
+let output_branch_hint_section buf (func_hints : (int * (int * bool) list) list)
+    =
+  output_section buf 0
     (fun b () ->
       Encoder.name b "metadata.code.branch_hint";
       Encoder.vec
@@ -1382,10 +1382,16 @@ let output_branch_hint_section out_channel
 
 (*** The module writer ***)
 
-let module_ ~out_channel ?output_file ?(source_map = false)
-    (m : Ast.location module_) =
+(* Assemble the binary into [buf] (and, if [source_map] is set, append the
+   [sourceMappingURL] custom section and write the source map next to
+   [output_file]). The byte-offset tracking used for the source map counts bytes
+   written, independent of the sink, so writing into a buffer here yields the
+   same offsets as writing to a channel. [module_] and [to_string] below are the
+   two public sinks over this. *)
+let to_buffer buf ?output_file ?(source_map = false) (m : Ast.location module_)
+    =
   Wax_utils.Debug.timed "output" @@ fun () ->
-  Out_channel.output_string out_channel "\x00\x61\x73\x6D\x01\x00\x00\x00";
+  Buffer.add_string buf "\x00\x61\x73\x6D\x01\x00\x00\x00";
 
   let source_map_t = Wax_utils.Source_map.create () in
 
@@ -1400,9 +1406,7 @@ let module_ ~out_channel ?output_file ?(source_map = false)
   (* Advance the position past a just-written section whose content was [len]
      bytes (id byte + LEB128 length prefix + content). *)
   let bump len = file_pos := !file_pos + 1 + leb_size len + len in
-  let section id encoder data =
-    bump (output_section out_channel id encoder data)
-  in
+  let section id encoder data = bump (output_section buf id encoder data) in
   (* A section carrying source-mapped code / const-exprs. Its mappings were
      recorded relative to the section content buffer, so once the section is
      written — and its absolute content start is known — rebase them to the file
@@ -1410,7 +1414,7 @@ let module_ ~out_channel ?output_file ?(source_map = false)
   let map_section id encoder data =
     let content_start = !file_pos + 1 in
     let cp = Wax_utils.Source_map.checkpoint source_map_t in
-    let len = output_section out_channel id encoder data in
+    let len = output_section buf id encoder data in
     Wax_utils.Source_map.shift_since source_map_t cp
       ~delta:(content_start + leb_size len);
     bump len
@@ -1420,7 +1424,7 @@ let module_ ~out_channel ?output_file ?(source_map = false)
   if m.types <> [] then section 1 (Encoder.vec Encoder.rectype) m.types;
 
   (* 2. Import Section *)
-  if m.imports <> [] then bump (output_import_section out_channel m.imports);
+  if m.imports <> [] then bump (output_import_section buf m.imports);
 
   (* 3. Function Section *)
   if m.functions <> [] then section 3 (Encoder.vec Encoder.sint) m.functions;
@@ -1561,7 +1565,7 @@ let module_ ~out_channel ?output_file ?(source_map = false)
     let content_start = !file_pos + 1 in
     let cp = Wax_utils.Source_map.checkpoint source_map_t in
     let len =
-      output_section out_channel 10
+      output_section buf 10
         (Encoder.vec (fun b (c : Ast.location code) ->
              let this = ref [] in
              (Encoder.branch_hint_sink :=
@@ -1611,7 +1615,7 @@ let module_ ~out_channel ?output_file ?(source_map = false)
      to; custom sections may appear anywhere). *)
   (match List.rev !branch_hints with
   | [] -> ()
-  | fhs -> bump (output_branch_hint_section out_channel fhs));
+  | fhs -> bump (output_branch_hint_section buf fhs));
 
   (* 12. Data Section *)
   if m.data <> [] then
@@ -1706,17 +1710,17 @@ let module_ ~out_channel ?output_file ?(source_map = false)
     Encoder.name b_custom_section_content "name";
     Buffer.add_buffer b_custom_section_content b_names;
 
-    Out_channel.output_byte out_channel 0;
+    Buffer.add_char buf '\x00';
     (* Custom section ID (0) *)
     let len = Buffer.length b_custom_section_content in
     let rec output_uint i =
-      if i < 128 then Out_channel.output_byte out_channel i
+      if i < 128 then Buffer.add_char buf (Char.chr i)
       else (
-        Out_channel.output_byte out_channel (128 + (i land 127));
+        Buffer.add_char buf (Char.chr (128 + (i land 127)));
         output_uint (i lsr 7))
     in
     output_uint len;
-    Buffer.output_buffer out_channel b_custom_section_content);
+    Buffer.add_buffer buf b_custom_section_content);
 
   (* Generate source map file and custom section *)
   if source_map then
@@ -1732,15 +1736,15 @@ let module_ ~out_channel ?output_file ?(source_map = false)
         Encoder.name b_custom map_basename;
         let custom_len = Buffer.length b_custom in
 
-        Out_channel.output_byte out_channel 0;
+        Buffer.add_char buf '\x00';
         let rec output_uint i =
-          if i < 128 then Out_channel.output_byte out_channel i
+          if i < 128 then Buffer.add_char buf (Char.chr i)
           else (
-            Out_channel.output_byte out_channel (128 + (i land 127));
+            Buffer.add_char buf (Char.chr (128 + (i land 127)));
             output_uint (i lsr 7))
         in
         output_uint custom_len;
-        Buffer.output_buffer out_channel b_custom;
+        Buffer.add_buffer buf b_custom;
 
         let json_content =
           Wax_utils.Source_map.to_json source_map_t ~file_name
@@ -1748,3 +1752,17 @@ let module_ ~out_channel ?output_file ?(source_map = false)
         Out_channel.with_open_text map_file_name (fun oc ->
             Out_channel.output_string oc json_content)
     | None -> failwith "--source-map requires an output file"
+
+(* Write the binary to a channel, optionally emitting a source map file
+   alongside [output_file]. *)
+let module_ ~out_channel ?output_file ?source_map m =
+  let buf = Buffer.create 65536 in
+  to_buffer buf ?output_file ?source_map m;
+  Buffer.output_buffer out_channel buf
+
+(* Return the binary as a string, entirely in memory (no channel, no source
+   map). Used by the in-process embedding paths, e.g. the MCP convert tool. *)
+let to_string ?output_file m =
+  let buf = Buffer.create 65536 in
+  to_buffer buf ?output_file m;
+  Buffer.contents buf

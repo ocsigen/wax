@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"wax_convert","arguments":{"from":"wax","to":"wat","source":"fn h() -> i32 { 1.0; }"}}}

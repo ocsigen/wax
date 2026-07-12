@@ -11,28 +11,26 @@
    placeholder. The one liberty is that {!read_message} does not reassemble a
    pretty-printed (multi-line) object, but a conformant client never sends one.
 
-   Otherwise a SKELETON, with these left as TODOs:
-     - `wax_convert` is backed by [convert], which main.ml implements for now by
-       shelling out to `wax convert` over temp files (robust — a malformed input
-       cannot take the server down — but not the eventual in-memory path).
-     - `wax_reference` returns whatever [reference] yields; main.ml embeds the
-       generated docs/llms.txt there at build time (see docs/gen_llms.ml).
-
-   The valuable, real part is `wax_check`: it runs the same parser + validator
-   the CLI `check` command uses (via the [check] callback) and returns
-   structured diagnostics an agent can act on. *)
+   The three tools are backed by callbacks main.ml supplies (keeping this module
+   free of the parser functors):
+     - `wax_check` runs the parser + validator the CLI `check` command uses and
+       returns structured diagnostics an agent can act on.
+     - `wax_convert` converts between formats in-memory (no subprocess), also
+       via a collector, so a bad input yields structured diagnostics rather than
+       taking the long-lived server down.
+     - `wax_reference` returns the reference [reference] yields; main.ml embeds
+       the generated docs/llms.txt there at build time (see docs/gen_llms.ml). *)
 
 module J = Yojson.Safe
 
-type convert_result = { output : string; encoding : string }
+type convert_result = {
+  output : string option;
+  encoding : string;
+  diagnostics : Wax_utils.Diagnostic.entry list;
+}
 
-(* Render a diagnostic's [Format]-printed message to a plain string. *)
-let to_string pr =
-  let b = Buffer.create 128 in
-  let f = Format.formatter_of_buffer b in
-  pr f ();
-  Format.pp_print_flush f ();
-  Buffer.contents b
+(* Render a diagnostic's structured message to a plain string. *)
+let to_string = Wax_utils.Message.to_plain_string
 
 (* A collected diagnostic as JSON. Line/column are 1-based / 0-based following
    the usual editor convention; byte offsets ([pos_cnum]) are included too since
@@ -165,17 +163,22 @@ let call_tool ~reference ~check ~convert params : J.t =
           string_member "source" args )
       with
       | Some from_, Some to_, Some source -> (
+          let diags ds = `List (List.map diagnostic_to_json ds) in
           match convert ~from_ ~to_ ~source with
           | Error msg -> text_result ~is_error:true ("wax_convert: " ^ msg)
-          | Ok { output; encoding } ->
+          | Ok { output = Some out; encoding; diagnostics } ->
               text_result
                 (J.to_string
                    (`Assoc
                       [
                         ("format", `String to_);
                         ("encoding", `String encoding);
-                        ("output", `String output);
-                      ])))
+                        ("output", `String out);
+                        ("diagnostics", diags diagnostics);
+                      ]))
+          | Ok { output = None; diagnostics; _ } ->
+              text_result ~is_error:true
+                (J.to_string (`Assoc [ ("diagnostics", diags diagnostics) ])))
       | _ ->
           text_result ~is_error:true
             "wax_convert: requires \"from\", \"to\" and \"source\"")

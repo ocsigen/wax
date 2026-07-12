@@ -3,10 +3,16 @@
     delimited framing rather than MCP's [Content-Length] headers. See {!mcp.ml}
     for the remaining TODOs. *)
 
-type convert_result = { output : string; encoding : string }
-(** The output of a conversion: [output] is the converted module, encoded per
-    [encoding] — ["utf-8"] for text (wat/wax) output, or ["base64"] for a binary
-    (wasm) module (JSON strings cannot carry raw bytes). *)
+type convert_result = {
+  output : string option;
+  encoding : string;
+  diagnostics : Wax_utils.Diagnostic.entry list;
+}
+(** The result of a conversion. [output] is the converted module ([Some]) or
+    [None] if the conversion failed, encoded per [encoding] — ["utf-8"] for text
+    (wat/wax) output, or ["base64"] for a binary (wasm) module (JSON strings
+    cannot carry raw bytes). [diagnostics] are the warnings emitted on success,
+    or the errors on failure ([output = None]). *)
 
 val serve :
   reference:(unit -> string) ->

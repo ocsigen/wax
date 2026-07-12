@@ -40,6 +40,14 @@ wax_convert to the binary format returns base64:
   $ wax mcp < convert-wasm.json | grep -oE '\\"encoding\\":\\"[a-z0-9]*'
   \"encoding\":\"base64
 
+wax_convert on invalid input returns structured diagnostics (not a module) and
+keeps the server up:
+
+  $ wax mcp < convert-bad.json | grep -o '"isError":true'
+  "isError":true
+  $ wax mcp < convert-bad.json | grep -oE '\\"severity\\":\\"error'
+  \"severity\":\"error
+
 wax_reference returns the embedded language reference (not an error):
 
   $ wax mcp < ref.json | grep -o '"isError":false'

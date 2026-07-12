@@ -160,12 +160,14 @@ training data — ADOPTION.md Phase 6). Exposes three tools: `wax_reference` (th
 embedded language reference, generated from `docs/llms.txt`), `wax_check`
 (validate a Wax/WAT snippet, structured diagnostics; reuses the parser +
 validator via a diagnostic collector so a bad snippet never exits the long-lived
-server) and `wax_convert` (convert between formats by shelling out to `wax
-convert` over temp files, wasm output base64-encoded). Options: `-s`
-`--strict-validate`, `-X` `--feature`, `-W` `--warn`, `--debug` (all as for the
-other commands). The transport is newline-delimited JSON-RPC, which is the
-conformant MCP stdio framing (not LSP's `Content-Length` headers); the
-in-memory convert path remains a TODO — see `mcp.ml`.
+server) and `wax_convert` (convert between formats fully in-memory via the same
+collector — text output UTF-8, wasm output base64-encoded via
+`Wax_wasm.Wasm_output.to_string` — returning structured diagnostics on failure
+rather than taking the server down; comments are carried across via the parse
+context's trivia, as the CLI pipelines do). Options: `-s` `--strict-validate`,
+`-X` `--feature`, `-W` `--warn`, `--debug` (all as for the other commands). The
+transport is newline-delimited JSON-RPC, which is the conformant MCP stdio
+framing (not LSP's `Content-Length` headers) — see `mcp.ml`.
 
 **Exit status** (shared by all commands; see `docs/src/cli.md`): `0` success;
 `123` a usage error (bad flag combination) or a `format --check` run that found
