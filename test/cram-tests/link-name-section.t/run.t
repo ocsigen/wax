@@ -103,8 +103,8 @@ index; the empty labelled blocks are there only to carry a label name:
   (global $scale (mut i32)
     i32.const 3
   )
-  (export "run" (func $exported))
   (export "helper" (func $helper))
+  (export "run" (func $exported))
   (export "main" (func $main))
   (tag $err (type 4))
 

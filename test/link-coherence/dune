@@ -1,0 +1,293 @@
+(executable
+ (name check_coherence)
+ (libraries wax-lib.wasm wax-lib.linker wax-lib.utils))
+
+; Cross-check that the linker's three independent encodings of the binary
+; format (Wasm_parser decode, Wasm_output encode, Wasm_link.Scan byte-rewrite)
+; agree, over binary modules built with the wax CLI (the trusted producer).
+;
+; Two corpora. (1) A dozen-odd real js_of_ocaml programs from the round-trip
+; [.wat] fixtures -- a set-cover subset that between them hit every opcode the
+; whole wasm-source corpus uses; the [-D] flags resolve their conditional
+; annotations. Being js_of_ocaml output they lean on GC / calls and little else,
+; so (2) the local simd/atomics/bulk fixtures densely cover the immediate
+; decoders that corpus misses: SIMD (0xFD), atomics (0xFE), the 0xFC family
+; (bulk memory, table ops, trunc_sat), call_indirect, table get/set, select,
+; br_table and assorted load/store memarg widths.
+
+(rule
+ (deps
+  %{bin:wax}
+  (glob_files ../wasmoo/wasm-source/*.wat))
+ (targets
+  bigarray.wasm
+  custom.wasm
+  effect-native.wasm
+  float.wasm
+  float32.wasm
+  hash.wasm
+  int32.wasm
+  int64.wasm
+  ints.wasm
+  io.wasm
+  jsstring.wasm
+  marshal.wasm
+  nat.wasm
+  str.wasm
+  unix.wasm)
+ (action
+  (progn
+   (run
+    wax
+    -D
+    ocaml_version=5.4.0
+    -D
+    effects=native
+    -D
+    wasi=false
+    -f
+    wasm
+    ../wasmoo/wasm-source/bigarray.wat
+    -o
+    bigarray.wasm)
+   (run
+    wax
+    -D
+    ocaml_version=5.4.0
+    -D
+    effects=native
+    -D
+    wasi=false
+    -f
+    wasm
+    ../wasmoo/wasm-source/custom.wat
+    -o
+    custom.wasm)
+   (run
+    wax
+    -D
+    ocaml_version=5.4.0
+    -D
+    effects=native
+    -D
+    wasi=false
+    -f
+    wasm
+    ../wasmoo/wasm-source/effect-native.wat
+    -o
+    effect-native.wasm)
+   (run
+    wax
+    -D
+    ocaml_version=5.4.0
+    -D
+    effects=native
+    -D
+    wasi=false
+    -f
+    wasm
+    ../wasmoo/wasm-source/float.wat
+    -o
+    float.wasm)
+   (run
+    wax
+    -D
+    ocaml_version=5.4.0
+    -D
+    effects=native
+    -D
+    wasi=false
+    -f
+    wasm
+    ../wasmoo/wasm-source/float32.wat
+    -o
+    float32.wasm)
+   (run
+    wax
+    -D
+    ocaml_version=5.4.0
+    -D
+    effects=native
+    -D
+    wasi=false
+    -f
+    wasm
+    ../wasmoo/wasm-source/hash.wat
+    -o
+    hash.wasm)
+   (run
+    wax
+    -D
+    ocaml_version=5.4.0
+    -D
+    effects=native
+    -D
+    wasi=false
+    -f
+    wasm
+    ../wasmoo/wasm-source/int32.wat
+    -o
+    int32.wasm)
+   (run
+    wax
+    -D
+    ocaml_version=5.4.0
+    -D
+    effects=native
+    -D
+    wasi=false
+    -f
+    wasm
+    ../wasmoo/wasm-source/int64.wat
+    -o
+    int64.wasm)
+   (run
+    wax
+    -D
+    ocaml_version=5.4.0
+    -D
+    effects=native
+    -D
+    wasi=false
+    -f
+    wasm
+    ../wasmoo/wasm-source/ints.wat
+    -o
+    ints.wasm)
+   (run
+    wax
+    -D
+    ocaml_version=5.4.0
+    -D
+    effects=native
+    -D
+    wasi=false
+    -f
+    wasm
+    ../wasmoo/wasm-source/io.wat
+    -o
+    io.wasm)
+   (run
+    wax
+    -D
+    ocaml_version=5.4.0
+    -D
+    effects=native
+    -D
+    wasi=false
+    -f
+    wasm
+    ../wasmoo/wasm-source/jsstring.wat
+    -o
+    jsstring.wasm)
+   (run
+    wax
+    -D
+    ocaml_version=5.4.0
+    -D
+    effects=native
+    -D
+    wasi=false
+    -f
+    wasm
+    ../wasmoo/wasm-source/marshal.wat
+    -o
+    marshal.wasm)
+   (run
+    wax
+    -D
+    ocaml_version=5.4.0
+    -D
+    effects=native
+    -D
+    wasi=false
+    -f
+    wasm
+    ../wasmoo/wasm-source/nat.wat
+    -o
+    nat.wasm)
+   (run
+    wax
+    -D
+    ocaml_version=5.4.0
+    -D
+    effects=native
+    -D
+    wasi=false
+    -f
+    wasm
+    ../wasmoo/wasm-source/str.wat
+    -o
+    str.wasm)
+   (run
+    wax
+    -D
+    ocaml_version=5.4.0
+    -D
+    effects=native
+    -D
+    wasi=false
+    -f
+    wasm
+    ../wasmoo/wasm-source/unix.wat
+    -o
+    unix.wasm))))
+
+(rule
+ (deps %{bin:wax} simd.wat atomics.wat bulk.wat)
+ (targets simd.wasm atomics.wasm bulk.wasm)
+ (action
+  (progn
+   (run wax -f wasm simd.wat -o simd.wasm)
+   (run wax -f wasm atomics.wat -o atomics.wasm)
+   (run wax -f wasm bulk.wat -o bulk.wasm))))
+
+(rule
+ (deps
+  check_coherence.exe
+  bigarray.wasm
+  custom.wasm
+  effect-native.wasm
+  float.wasm
+  float32.wasm
+  hash.wasm
+  int32.wasm
+  int64.wasm
+  ints.wasm
+  io.wasm
+  jsstring.wasm
+  marshal.wasm
+  nat.wasm
+  str.wasm
+  unix.wasm
+  simd.wasm
+  atomics.wasm
+  bulk.wasm)
+ (action
+  (with-stdout-to
+   link_coherence.output
+   (run
+    ./check_coherence.exe
+    bigarray.wasm
+    custom.wasm
+    effect-native.wasm
+    float.wasm
+    float32.wasm
+    hash.wasm
+    int32.wasm
+    int64.wasm
+    ints.wasm
+    io.wasm
+    jsstring.wasm
+    marshal.wasm
+    nat.wasm
+    str.wasm
+    unix.wasm
+    simd.wasm
+    atomics.wasm
+    bulk.wasm))))
+
+(rule
+ (alias runtest)
+ (action
+  (diff link_coherence.expected link_coherence.output)))
