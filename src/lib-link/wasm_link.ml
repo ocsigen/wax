@@ -472,7 +472,10 @@ module Read = struct
              set_exportable_info tbl exp.kind
                ((exp.name, exp.index) :: get_exportable_info tbl exp.kind))
            raw_exports);
-      tbl
+      (* Prepending above builds each per-kind list in reverse; restore input
+         order so the merged module's exports follow it (and linking is
+         idempotent), mirroring the imports table above. *)
+      map_exportable_info (fun _ l -> List.rev l) tbl
     in
     { imports; exports }
 
@@ -2244,6 +2247,25 @@ let get_instruction_offsets ~filename buf =
   let offsets = ref [] in
   let mark pos = offsets := pos :: !offsets in
   let count = ref 0 in
+  (* The scanner renumbers every index immediate through [maps]; here we only
+     want the instruction *positions*, so every index must map to itself.
+     [Scan.default_maps] holds empty arrays (any index lookup is then out of
+     bounds), so give the scanner identity maps instead. One shared array
+     suffices: an index in a valid module is smaller than the module's byte
+     length (each referenced entity occupies at least one byte). *)
+  let identity = Array.init (String.length buf) Fun.id in
+  let identity_maps =
+    {
+      Scan.typ = identity;
+      func = identity;
+      table = identity;
+      mem = identity;
+      global = identity;
+      elem = identity;
+      data = identity;
+      tag = identity;
+    }
+  in
   Wax_utils.Diagnostic.run ~color:Wax_utils.Colors.Never
     ~palette:Wax_utils.Colors.wat_theme ~source:(Some buf) (fun d ->
       let ch = Wax_wasm.Wasm_parser.make_ch d ~filename buf 0 in
@@ -2260,7 +2282,7 @@ let get_instruction_offsets ~filename buf =
           let _, _, _, _, func, _ =
             Scan.scanner ~mark_instructions:true
               (fun _ _ -> ())
-              mark Scan.default_maps (Buffer.create 0) ch.buf
+              mark identity_maps (Buffer.create 0) ch.buf
           in
           let _ = func pos' in
           ch.pos <- ch.pos + size
