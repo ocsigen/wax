@@ -8,12 +8,16 @@ on:
       - "tree-sitter-wax/**"
       - "src/lib-wax/parser.mly"
       - "src/lib-wax/lexer.ml"
+      - "test/cram-tests/**"
+      - "test/wasmoo/wax/**"
       - ".github/workflows/tree-sitter.yml"
   pull_request:
     paths:
       - "tree-sitter-wax/**"
       - "src/lib-wax/parser.mly"
       - "src/lib-wax/lexer.ml"
+      - "test/cram-tests/**"
+      - "test/wasmoo/wax/**"
       - ".github/workflows/tree-sitter.yml"
 
 jobs:
@@ -23,9 +27,9 @@ jobs:
       run:
         working-directory: tree-sitter-wax
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: "22"
 
