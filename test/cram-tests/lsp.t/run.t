@@ -59,10 +59,10 @@ header, reads the framed replies back, and prints a compact summary:
   > def rng(r): return "(%d,%d)-(%d,%d)" % (
   >     r["start"]["line"], r["start"]["character"], r["end"]["line"], r["end"]["character"])
   > cap = by_id[1]["capabilities"]
-  > print("initialize: name=%s hover=%s definition=%s references=%s rename=%s"
+  > print("initialize: name=%s hover=%s definition=%s references=%s rename=%s codeAction=%s"
   >       % (by_id[1]["serverInfo"]["name"], cap["hoverProvider"],
   >          cap["definitionProvider"], cap["referencesProvider"],
-  >          cap["renameProvider"]["prepareProvider"]))
+  >          cap["renameProvider"]["prepareProvider"], cap["codeActionProvider"]))
   > print("encoding:", cap["positionEncoding"])
   > d = [n for n in notifs if n["method"] == "textDocument/publishDiagnostics"]
   > print("diagnostics:", len(d[0]["params"]["diagnostics"]) if d else "none")
@@ -77,7 +77,7 @@ header, reads the framed replies back, and prints a compact summary:
   > print("shutdown:", json.dumps(by_id[7]))
   > print("stderr:", p.stderr.decode().strip() or "(empty)")
   > PY
-  initialize: name=wax-lsp hover=True definition=True references=True rename=True
+  initialize: name=wax-lsp hover=True definition=True references=True rename=True codeAction=True
   encoding: utf-16
   diagnostics: 0
   hover: ```wax | i32 | ```
@@ -220,6 +220,43 @@ same module without it reports the gated construct.
   declared.wax: clean
   plain.wax: ['This uses the custom-descriptors feature', 'This uses the custom-descriptors feature']
   declared.wat: clean
+
+`textDocument/codeAction` turns a machine-applicable diagnostic into a quick fix.
+A redundant `let` annotation carries an edit that deletes it; the server returns
+a `CodeAction` with the fix title, kind `quickfix`, and a `WorkspaceEdit`:
+
+  $ python3 - <<'PY'
+  > import subprocess, json
+  > def frame(o):
+  >     b=json.dumps(o).encode(); return b"Content-Length: %d\r\n\r\n%s"%(len(b),b)
+  > uri="file:///ca.wax"; td={"uri":uri}
+  > src="fn f(x: i32) -> i32 {\n  let a: i32 = x;\n  a;\n}\n"
+  > line1=len("  let a: i32 = x;")
+  > S=[{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":None,"rootUri":None,"capabilities":{}}},
+  >    {"jsonrpc":"2.0","method":"initialized","params":{}},
+  >    {"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":uri,"languageId":"wax","version":1,"text":src}}},
+  >    {"jsonrpc":"2.0","id":2,"method":"textDocument/codeAction","params":{"textDocument":td,"range":{"start":{"line":1,"character":0},"end":{"line":1,"character":line1}},"context":{"diagnostics":[]}}},
+  >    {"jsonrpc":"2.0","id":9,"method":"shutdown"},{"jsonrpc":"2.0","method":"exit"}]
+  > p=subprocess.run(["wax","lsp"],input=b"".join(frame(m) for m in S),stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+  > o,i,by=p.stdout,0,{}
+  > while i<len(o) and o[i:].startswith(b"Content-Length:"):
+  >     n=int(o[o.index(b":",i)+1:o.index(b"\r\n",i)]); s=o.index(b"\r\n\r\n",i)+4
+  >     r=json.loads(o[s:s+n]); i=s+n
+  >     if "id" in r: by[r["id"]]=r["result"]
+  > acts=by[2]
+  > def rng(r): return "(%d,%d)-(%d,%d)"%(r["start"]["line"],r["start"]["character"],r["end"]["line"],r["end"]["character"])
+  > print("actions:", len(acts))
+  > a=acts[0]; te=a["edit"]["changes"][uri][0]
+  > print("title:", a["title"])
+  > print("kind:", a["kind"])
+  > print("edit:", rng(te["range"]), "newText=%r"%te["newText"])
+  > print("stderr:", p.stderr.decode().strip() or "(empty)")
+  > PY
+  actions: 1
+  title: This type annotation is redundant; the initializer's type is inferred.
+  kind: quickfix
+  edit: (1,7)-(1,12) newText=''
+  stderr: (empty)
 
 Diagnostics on `didChange` are debounced: a burst of edits coalesces into one
 analysis (published once the client falls quiet, or on end of input), rather

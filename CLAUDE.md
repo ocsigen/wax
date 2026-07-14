@@ -112,9 +112,14 @@ a `?encoding` that defaults to UTF-16, so the JS wrapper is unaffected, and
 map 1:1 to the editor functions (hover, definition, type-definition,
 references, document-highlight, prepare-rename/rename, document-symbol,
 completion, signature-help, inlay-hint, folding, selection-range,
-semantic-tokens, formatting); diagnostics are pushed via `publishDiagnostics` on
+semantic-tokens, formatting); `code-action` reuses the diagnostics pass, turning
+each `diag` that carries a machine-applicable `edit` (a `Suggestion`, or a
+fixable warning like a redundant cast) whose span meets the request range into a
+`quickfix` `WorkspaceEdit` — the native mirror of the VS Code
+`CodeActionProvider`. Diagnostics are pushed via `publishDiagnostics` on
 open/change (lint diagnostics carry the `-W` code, a `codeDescription` link to
-the docs, and `DiagnosticTag.Unnecessary` via `Warning.is_unnecessary`). The one
+the docs, and `DiagnosticTag.Unnecessary` via `Warning.is_unnecessary`; a
+`Suggestion` maps to `DiagnosticSeverity.Hint`). The one
 setting is `wax.define` (conditional-compilation defines, mirroring `-D`), read
 from `initializationOptions` and `workspace/didChangeConfiguration` and threaded
 into `check_string_with_defines`/`completion_string`. A Wasm-text document is
