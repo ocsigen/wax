@@ -57,5 +57,7 @@ errors: 1
 (import "m" "n" (func $f))
 === comment between ( and the keyword still triggers the barrier ===
 errors: 1
-(func (i32.const 1)) ;; c
+(func
+  (i32.const 1) ;; c
+)
 (func (nop))
