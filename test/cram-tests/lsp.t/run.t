@@ -221,3 +221,46 @@ open publishes once, and the three changes collapse to a single publish.
   > print("publishes:", pubs)
   > PY
   publishes: [[], ['error']]
+
+Rename renames every occurrence of the symbol, but first checks the new name is
+usable and does not change any name's resolution. Renaming the parameter `a`: to
+a fresh name it succeeds (both occurrences rewritten); to `b` it is rejected,
+since a second parameter `b` is already in scope and the rename would change
+which one some name refers to; to a name that is not a valid identifier it is
+also rejected. A rejected rename comes back as a JSON-RPC error (shown to the
+user), not an edit.
+
+  $ cat > ren.wax <<'WAX'
+  > fn f(a: i32, b: i32) -> i32 { let t: i32 = a; t + b; }
+  > WAX
+
+  $ python3 - <<'PY'
+  > import subprocess, json
+  > def frame(o):
+  >     b=json.dumps(o).encode(); return b"Content-Length: %d\r\n\r\n%s"%(len(b),b)
+  > uri="file:///ren.wax"; td={"uri":uri}; src=open("ren.wax").read()
+  > def ren(id, newName):
+  >     return {"jsonrpc":"2.0","id":id,"method":"textDocument/rename",
+  >             "params":{"textDocument":td,"position":{"line":0,"character":5},"newName":newName}}
+  > S=[{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":None,"rootUri":None,"capabilities":{}}},
+  >    {"jsonrpc":"2.0","method":"initialized","params":{}},
+  >    {"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":uri,"languageId":"wax","version":1,"text":src}}},
+  >    ren(2, "count"), ren(3, "b"), ren(4, "2bad"),
+  >    {"jsonrpc":"2.0","id":9,"method":"shutdown"},{"jsonrpc":"2.0","method":"exit"}]
+  > p=subprocess.run(["wax","lsp"],input=b"".join(frame(m) for m in S),stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+  > o,i,by=p.stdout,0,{}
+  > while i<len(o) and o[i:].startswith(b"Content-Length:"):
+  >     n=int(o[o.index(b":",i)+1:o.index(b"\r\n",i)]); s=o.index(b"\r\n\r\n",i)+4
+  >     r=json.loads(o[s:s+n]); i=s+n
+  >     if "id" in r and r["id"] in (2,3,4): by[r["id"]]=r
+  > def summ(r):
+  >     if "error" in r: return "error: "+r["error"]["message"]
+  >     edits=r["result"]["changes"][uri]
+  >     return "%d edit(s) -> %s" % (len(edits), ",".join(e["newText"] for e in edits))
+  > print("a->count:", summ(by[2]))
+  > print("a->b:    ", summ(by[3]))
+  > print("a->2bad: ", summ(by[4]))
+  > PY
+  a->count: 2 edit(s) -> count,count
+  a->b:     error: Cannot rename to "b": that name is already in use, and the rename would change which definition one or more names refer to.
+  a->2bad:  error: "2bad" is not a valid identifier.

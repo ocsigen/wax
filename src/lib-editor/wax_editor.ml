@@ -709,16 +709,99 @@ let rename_prepare_string ?(encoding = UTF16) src line ch =
     (occurrence_at ~encoding src line ch)
     (references_string ~encoding src line ch)
 
+(* The outcome of a rename: the edits to apply, or a message rejecting it —
+   [newname] is not a usable identifier, or carrying the rename out would change
+   which definition some name resolves to. We decide the latter structurally,
+   from the def-use graph ([a_defs], the links go-to-definition is built on) of
+   the buffer with the edits applied, not from diagnostics: a parse error
+   suppresses the "already bound" message but the graph still resolves what it
+   can, so the check keeps working — it only loses coverage, never gains false
+   positives — on a buffer that does not fully parse. *)
+type rename_outcome =
+  | Rename_conflict of string
+  | Rename_edits of (Wax_utils.Ast.location * string) list
+
+(* Splice the rename edits into [src], returning the new buffer and, in the new
+   buffer's byte offsets, the span of each replaced identifier. The new name
+   sits at the end of every replacement (plain [newname], or [field: newname]
+   for a punned struct field), so it is the last [String.length newname] bytes;
+   these spans are exactly the renamed symbol's occurrences in the new graph. *)
+let apply_rename_edits src newname edits =
+  let sorted =
+    List.sort
+      (fun ((a : Wax_utils.Ast.location), _) ((b : Wax_utils.Ast.location), _)
+         -> compare a.loc_start.Lexing.pos_cnum b.loc_start.pos_cnum)
+      edits
+  in
+  let buf = Buffer.create (String.length src + 16) in
+  let n = String.length newname in
+  let cur, spans =
+    List.fold_left
+      (fun (cur, spans) ((loc : Wax_utils.Ast.location), repl) ->
+        let s = loc.loc_start.pos_cnum and e = loc.loc_end.pos_cnum in
+        Buffer.add_substring buf src cur (s - cur);
+        Buffer.add_string buf repl;
+        let stop = Buffer.length buf in
+        (e, (stop - n, stop) :: spans))
+      (0, []) sorted
+  in
+  Buffer.add_substring buf src cur (String.length src - cur);
+  (Buffer.contents buf, spans)
+
+(* Does some reference in the renamed graph cross the boundary of the renamed
+   symbol — a use outside it now binding to one of its definitions (a foreign
+   name captured, or the reverse half of a collision), or a use of it now
+   binding to a definition outside it (it escaped to a shadowing name)? Either
+   way the rename changed a name's resolution. [renamed_spans] are the symbol's
+   occurrences in [src']'s byte offsets. *)
+let rename_crosses_binding src' renamed_spans =
+  let renamed = Hashtbl.create 16 in
+  List.iter (fun k -> Hashtbl.replace renamed k ()) renamed_spans;
+  let is_ours (l : Wax_utils.Ast.location) =
+    Hashtbl.mem renamed (l.loc_start.Lexing.pos_cnum, l.loc_end.pos_cnum)
+  in
+  let crosses (r : Wax_lang.Typing.reference) =
+    let our_use = is_ours r.use in
+    let binds_ours = List.exists is_ours r.definitions in
+    let binds_foreign = List.exists (fun d -> not (is_ours d)) r.definitions in
+    (our_use && binds_foreign) || ((not our_use) && binds_ours)
+  in
+  List.exists crosses (analyze src').a_defs
+
 let rename_string ?(encoding = UTF16) src line ch newname =
-  let puns = (analyze src).a_puns in
-  List.map
-    (fun (loc : Wax_utils.Ast.location) ->
-      let replacement =
-        if List.exists (same_span loc) puns then slice src loc ^ ": " ^ newname
-        else newname
-      in
-      (loc, replacement))
-    (references_string ~encoding src line ch)
+  let a = analyze src in
+  let edits =
+    List.map
+      (fun (loc : Wax_utils.Ast.location) ->
+        let replacement =
+          if List.exists (same_span loc) a.a_puns then
+            slice src loc ^ ": " ^ newname
+          else newname
+        in
+        (loc, replacement))
+      (references_string ~encoding src line ch)
+  in
+  if edits = [] then Rename_edits []
+  else if not (Wax_lang.Lexer.is_valid_identifier newname) then
+    Rename_conflict (Printf.sprintf "%S is not a valid identifier." newname)
+  else
+    let src', renamed_spans = apply_rename_edits src newname edits in
+    let a' = analyze src' in
+    (* A name that lexes as an identifier can still be a reserved word in the
+       positions it lands in (a keyword like [let] or [if]); such a name breaks
+       parsing where a valid one would not, so a syntax error the original did
+       not have means the name is unusable here. Only trust this when the
+       original parsed cleanly — otherwise we cannot attribute the error. *)
+    if a.a_syntax = [] && a'.a_syntax <> [] then
+      Rename_conflict
+        (Printf.sprintf "%S cannot be used as a name here." newname)
+    else if rename_crosses_binding src' renamed_spans then
+      Rename_conflict
+        (Printf.sprintf
+           "Cannot rename to %S: that name is already in use, and the rename \
+            would change which definition one or more names refer to."
+           newname)
+    else Rename_edits edits
 
 let check_wat_string src =
   match Wat_parser.parse_diagnostics ~filename:"<buffer>" src with

@@ -26,8 +26,9 @@
      endChar }: every occurrence of the symbol at the position. Wax only.
    - [renamePrepare src line ch] -> { startLine; startChar; endLine; endChar } or
      null: the span of the renameable symbol at the position. Wax only.
-   - [rename src line ch newname] -> array of { startLine; startChar; endLine;
-     endChar; newText }: the edits to rename the symbol at the position. Wax only.
+   - [rename src line ch newname] -> { edits; error }: the edits (each { startLine;
+     startChar; endLine; endChar; newText }) to rename the symbol at the position,
+     or a non-null [error] message when the rename is rejected. Wax only.
    - [symbols src] / [symbolsWat src] -> nested { name; kind; startLine; …;
      selStartLine; …; children }: the module's definitions, for the outline.
    - [completion src line ch defines] -> array of { name; kind; detail }:
@@ -205,11 +206,23 @@ let js_edit src (loc, newText) =
     val newText = Js.string newText
   end
 
+(* [{ edits; error }]: the rename edits, or an [error] message when the rename
+   is rejected (an unusable name, or a change that would clash with an existing
+   name); the provider surfaces the message instead of editing. *)
 let rename_result src line ch newname =
   let s = Js.to_string src in
   let n = Js.to_string newname in
-  let edits = try rename_string s line ch n with _ -> [] in
-  Js.array (Array.of_list (List.map (js_edit s) edits))
+  let edits, error =
+    match try rename_string s line ch n with _ -> Rename_edits [] with
+    | Rename_edits edits -> (edits, None)
+    | Rename_conflict message -> ([], Some message)
+  in
+  object%js
+    val edits = Js.array (Array.of_list (List.map (js_edit s) edits))
+
+    val error =
+      match error with Some e -> Js.some (Js.string e) | None -> Js.null
+  end
 
 let rec js_symbol src s =
   let start_line, start_char = utf16_position src s.s_range.loc_start in

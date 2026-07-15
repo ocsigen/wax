@@ -14,6 +14,7 @@ import {
   WaxInlay,
   WaxRange,
   WaxEdit,
+  WaxRenameResult,
   WaxCompletion,
   WaxSignature,
   WaxSemanticToken,
@@ -76,7 +77,7 @@ interface LanguageSpec {
     line: number,
     character: number,
     newName: string,
-  ): WaxEdit[];
+  ): WaxRenameResult;
   // Names in scope at a position, for completion, specialized to the active
   // `wax.define` set (an empty array keeps the all-configurations behaviour).
   // Wax only.
@@ -599,13 +600,15 @@ function registerRename(
       if (!newName.trim()) throw new Error("The new name must not be empty.");
       const wax = await loadWax(context, opts);
       if (token.isCancellationRequested) return undefined;
-      const edits = rename(
+      const result = rename(
         wax,
         document.getText(),
         position.line,
         position.character,
         newName,
       );
+      if (result.error) throw new Error(result.error);
+      const edits = result.edits;
       if (edits.length === 0) return undefined;
       const workspace = new vscode.WorkspaceEdit();
       for (const e of edits) {

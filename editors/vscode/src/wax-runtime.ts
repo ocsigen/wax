@@ -62,6 +62,13 @@ export interface WaxEdit extends WaxRange {
   newText: string;
 }
 
+export interface WaxRenameResult {
+  // The edits to apply, empty when the position is not a renameable symbol.
+  edits: WaxEdit[];
+  // A message rejecting the rename, or null when it is allowed.
+  error: string | null;
+}
+
 export interface WaxCompletion {
   name: string;
   // "function" | "variable" | "type" | "event" | "memory" | "table" | "array" |
@@ -133,14 +140,16 @@ export interface Wax {
   references(src: string, line: number, character: number): WaxRange[];
   // The span of the renameable symbol at the position, or null if none. Wax only.
   renamePrepare(src: string, line: number, character: number): WaxRange | null;
-  // Edits renaming the symbol at the position to `newName` (puns expanded).
-  // Empty when the position is not a renameable symbol. Wax only.
+  // Edits renaming the symbol at the position to `newName` (puns expanded), or
+  // a non-null `error` message when the rename is rejected (an unusable name, or
+  // a change that would clash with an existing name). `edits` is empty when the
+  // position is not a renameable symbol. Wax only.
   rename(
     src: string,
     line: number,
     character: number,
     newName: string,
-  ): WaxEdit[];
+  ): WaxRenameResult;
   symbols(src: string): WaxSymbol[];
   // Names in scope at the position (module defs, the enclosing function's
   // params/locals, keywords), for completion, specialized to the given

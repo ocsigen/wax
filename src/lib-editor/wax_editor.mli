@@ -129,16 +129,24 @@ val rename_prepare_string :
   int ->
   Wax_utils.Ast.location option
 
-(* The rename edits — [(span, replacement)] for every occurrence, a punned
-   struct field expanded to [x: newname]; empty when the position is not on a
-   renameable symbol. Wax only. *)
+(* The outcome of a rename. [Rename_edits] carries [(span, replacement)] for
+   every occurrence (a punned struct field expanded to [x: newname]), and is
+   empty when the position is not on a renameable symbol. [Rename_conflict]
+   carries a message rejecting the rename: [newname] is not a usable identifier,
+   or carrying it out would change which definition some name resolves to (a
+   collision with an existing name, or a local silently shadowing another
+   binding). Wax only. *)
+type rename_outcome =
+  | Rename_conflict of string
+  | Rename_edits of (Wax_utils.Ast.location * string) list
+
 val rename_string :
   ?encoding:position_encoding ->
   string ->
   int ->
   int ->
   string ->
-  (Wax_utils.Ast.location * string) list
+  rename_outcome
 
 (* The module's top-level definitions, for the outline. [symbols_wat_string] is
    the Wasm-text form. *)
