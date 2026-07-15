@@ -473,4 +473,9 @@ let () =
     "(module (func (local.get)))\n";
   diags "missing const number" "(module (func (i32.const)))\n";
   diags "missing float const number" "(module (func (f32.const)))\n";
+  (* A bad token the lexer skips at the operand slot already flags the gap, so
+     recovery does not stack a redundant "Missing index" caret on top: one error,
+     whether the slot is touching the token or a space away. *)
+  diags "bare $ (one error, not two)" "(module (func $f (local.get $)))\n";
+  diags "bare $ then space (one error)" "(module (func $f (local.get $ )))\n";
   print_newline ()

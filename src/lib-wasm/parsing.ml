@@ -339,15 +339,37 @@ struct
           :: !errors
       in
       (* A missing token, reported as a zero-width caret just before the
-         offending token (where the inserted token belongs). *)
+         offending token (where the inserted token belongs) — unless an error was
+         already flagged ending at that very spot (only whitespace between). That
+         happens when the lexer skipped a bad token there (a bare ["$"] the user
+         is still turning into an identifier, say): its error already reports the
+         gap, and the placeholder is inserted only to keep the tree well-formed,
+         so a second "Missing …" caret on top would be redundant. *)
+      let only_blank_between lo hi =
+        let ok = ref (lo <= hi) in
+        for i = lo to hi - 1 do
+          match text.[i] with
+          | ' ' | '\t' | '\n' | '\r' -> ()
+          | _ -> ok := false
+        done;
+        !ok
+      in
       let record_missing message (pos : Lexing.position) =
-        errors :=
-          {
-            location = { Wax_utils.Ast.loc_start = pos; loc_end = pos };
-            message;
-            related = [];
-          }
-          :: !errors
+        let already_flagged =
+          match !errors with
+          | { location; _ } :: _ ->
+              only_blank_between location.Wax_utils.Ast.loc_end.Lexing.pos_cnum
+                pos.pos_cnum
+          | [] -> false
+        in
+        if not already_flagged then
+          errors :=
+            {
+              location = { Wax_utils.Ast.loc_start = pos; loc_end = pos };
+              message;
+              related = [];
+            }
+            :: !errors
       in
       (* Return the token to resynchronize on: the next boundary (or terminal)
          reached by discarding tokens from the supplier. [tok0] is the token

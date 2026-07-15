@@ -127,4 +127,6 @@
   missing local index (no spurious unbound) -> [Missing index.]
   missing const number -> [Missing number.]
   missing float const number -> [Missing number.]
+  bare $ (one error, not two) -> [Unknown token '$'.]
+  bare $ then space (one error) -> [Unknown token '$'.]
 
