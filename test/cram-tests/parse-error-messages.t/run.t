@@ -38,7 +38,7 @@ the raw `separated_nonempty_list_trailing(comma,on_clause)`:
   1 │ fn f() {
   2 │   resume k [_ => switch 5] ()
     ·             ^
-    ·            ^ This '[' might be unmatched.
+    ·            ^ This '[' opens the enclosing construct.
   3 │ }
   4 │ 
   [128]
@@ -54,7 +54,7 @@ underlines just the '(' — not the whole `(elem` region:
   2 │   (func $f)
   3 │   (table funcref (elem $f (nop))))
     ·                            ^^^
-    ·                  ^ This '(' might be unmatched.
+    ·                  ^ This '(' opens the enclosing construct.
   4 │ 
   [128]
 
@@ -68,6 +68,6 @@ begins at the paren), and the hint shrinks the range to that one character:
    ──➤  result.wat:1:27
   1 │ (module (func (result i32 $x)))
     ·                           ^^
-    ·               ^ This '(' might be unmatched.
+    ·               ^ This '(' opens the enclosing construct.
   2 │ 
   [128]

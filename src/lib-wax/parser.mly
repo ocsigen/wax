@@ -93,7 +93,26 @@
 %token DESCRIPTOR DESCRIBES
 %token IMPORT
 
-%on_error_reduce statement plaininstr separated_nonempty_list_trailing(",",structure_type_field) semi_list(module_field) separated_nonempty_list_trailing(",",value_type) block_type separated_nonempty_list_trailing(",",function_parameter) list(label) list(attribute) list(typedef) semi_list(legacy_catch) separated_nonempty_list_trailing(",",catch) separated_nonempty_list_trailing(",",let_pattern) blockinstr statement_list loption(separated_nonempty_list_trailing(",",catch)) separated_nonempty_list_trailing(",",expression) let_pattern structure_field separated_nonempty_list_trailing(",",structure_field) constant_expression attribute_expression parenthesized_expression index_expression then_branch condition_expression length_expression optional_function_type structure_type result_type_ expression_list structure
+(* Nonterminals Menhir should reduce *before* reporting a syntax error, so the
+   error surfaces one state higher — where the enclosing construct's closer is
+   expected — rather than deep inside the nonterminal itself. This matters most
+   for the list-like/emptyable contents of a bracketed construct: without the
+   directive, an unclosed "{ … EOF" reports the internal "Expecting a raw
+   statement list" with no idea a "}" is missing; with it, the empty tail reduces
+   and the error becomes "expecting '}'" with a hint pointing back at the opener.
+   INVARIANT: every list-like nonterminal that sits directly inside a "{ … }" /
+   "( … )" / "[ … ]" belongs here — the semi_list/list instantiations used as
+   brace-block bodies (statement_list/raw_statement_list, the match/dispatch/
+   import/try/module-field arm lists, list(data_item)) and the separated lists.
+   When you add a new brace-delimited list construct, add its list nonterminal
+   here too.
+
+   Note the tradeoff: because the same error state is reached whether the
+   construct is unclosed (EOF) or has an invalid token inside an already-closed
+   one, the opener hint is worded locationally ("opens the enclosing construct",
+   see generate_error_messages.ml) rather than claiming it is unmatched, which
+   would be false in the latter case. *)
+%on_error_reduce statement plaininstr separated_nonempty_list_trailing(",",structure_type_field) semi_list(module_field) separated_nonempty_list_trailing(",",value_type) block_type separated_nonempty_list_trailing(",",function_parameter) list(label) list(attribute) list(typedef) list(data_item) semi_list(legacy_catch) separated_nonempty_list_trailing(",",catch) separated_nonempty_list_trailing(",",let_pattern) separated_nonempty_list_trailing(",",block_param_type) separated_nonempty_list_trailing(",",condition) separated_nonempty_list_trailing(",",data_number) separated_nonempty_list_trailing(",",data_run_item) separated_nonempty_list_trailing(",",on_clause) blockinstr statement_list raw_statement_list semi_list(match_arm) semi_list(dispatch_arm) semi_list(import_item) loption(separated_nonempty_list_trailing(",",catch)) separated_nonempty_list_trailing(",",expression) let_pattern structure_field separated_nonempty_list_trailing(",",structure_field) constant_expression attribute_expression parenthesized_expression index_expression then_branch condition_expression length_expression optional_function_type structure_type result_type_ expression_list structure
 
 
 %nonassoc prec_ident (* {a|...} *) prec_block

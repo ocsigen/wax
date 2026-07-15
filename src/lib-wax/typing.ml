@@ -34,15 +34,27 @@ module Error = struct
 
   (* Warnings share the same envelope as [report] but with severity [Warning],
      so they are printed without aborting the pass. [warning] names the warning
-     so its level can be configured (see {!Wax_utils.Warning}). *)
+     so its level can be configured (see {!Wax_utils.Warning}).
+
+     In error-recovery mode (type-checking a best-effort AST past syntax errors)
+     every warning is at best secondary and usually a cascade: a local is
+     "unused" only because its use was dropped at a sync boundary or auto-closed
+     away at EOF, a result is "unused" because the following code was skipped,
+     and the lints may fire on mangled recovered code. Warnings are advisory, so
+     suppress them wholesale here — the user fixes the syntax errors first and the
+     warnings surface on a clean re-check. This is the warning-severity analogue
+     of the [unbound_name]/[empty_stack] cascade guards. *)
   let warn ?warning ?universal ?hint ?related context ~location fmt =
-    Format.kdprintf
-      (fun msg ->
-        Diagnostic.report context ~location ~severity:Warning ?warning
-          ?universal ?hint ?related
-          ~message:(fun f () -> msg f)
-          ())
-      fmt
+    if Wax_utils.Diagnostic.in_recovery context then
+      Format.ikfprintf (fun _ -> ()) Format.err_formatter fmt
+    else
+      Format.kdprintf
+        (fun msg ->
+          Diagnostic.report context ~location ~severity:Warning ?warning
+            ?universal ?hint ?related
+            ~message:(fun f () -> msg f)
+            ())
+        fmt
 
   (* A local declared by a [let] but never read. Prefix its name with [_] to
      silence the warning. *)
@@ -260,8 +272,15 @@ module Error = struct
       ty output_inferred_type ty'
 
   let not_an_expression context ~location n =
-    report context ~location
-      "An expression is expected here. This instruction returns %d values." n
+    (* Suppress in error-recovery mode, like [empty_stack]: an instruction with
+       the wrong number of values in expression position is usually a cascade
+       from recovery mangling the surrounding code (a dropped operand, or a
+       construct auto-closed at EOF). Both callers recover with [Error], so
+       nothing downstream cascades; a genuine arity error in intact code still
+       surfaces on a clean re-check. *)
+    if not (Wax_utils.Diagnostic.in_recovery context) then
+      report context ~location
+        "An expression is expected here. This instruction returns %d values." n
 
   let binop_type_mismatch context ~location ty1 ty2 =
     report context ~location

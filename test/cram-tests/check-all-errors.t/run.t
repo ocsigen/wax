@@ -87,13 +87,32 @@ real syntax error is reported (a genuine underflow in intact code still surfaces
 on a clean re-check):
 
   $ wax check --all-errors stack-cascade.wax
-  Error: Expecting a statement list.
-  
+  Error: Assuming that the statement list is complete, expecting '}'.
    ──➤  stack-cascade.wax:2:5
   1 │ fn f() -> i32 {
+    ·               ^ This '{' opens the enclosing construct.
   2 │     @
     ·     ^
   3 │ }
   4 │ 
   [128]
+
+
+When input ends inside an unclosed block, the grammar reduces the empty
+statement-list tail (the %on_error_reduce directive in parser.mly) so the error
+names the missing '}' and points back at the '{' that opened the block. The hint
+is worded locationally ("opens the enclosing construct"), not "unmatched": the
+same error state also arises for an invalid token inside an already-closed block
+(as in stack-cascade.wax above), where "unmatched" would be false.
+
+  $ wax check --all-errors unclosed-brace.wax
+  Error: Assuming that the statement list is complete, expecting '}'.
+   ──➤  unclosed-brace.wax:3:1
+  1 │ fn f() -> i32 {
+    ·               ^ This '{' opens the enclosing construct.
+  2 │     let x = 1;
+  3 │ 
+      ^
+  [128]
+
 

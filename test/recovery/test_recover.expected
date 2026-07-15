@@ -57,12 +57,12 @@ errors: 1
 === unclosed fn body is auto-closed at EOF ===
 AST: recovered (1 defs)
 errors: 1
-  3:0-3:0: Expecting a raw statement list.
+  3:0-3:0: Assuming that the statement list is complete, expecting '}'.
 
 === complete fn kept, unclosed one recovered too ===
 AST: recovered (2 defs)
 errors: 1
-  4:0-4:0: Expecting a raw statement list.
+  4:0-4:0: Assuming that the statement list is complete, expecting '}'.
 
 === auto-close inserts ')' then ';' then '}' at EOF ===
 AST: recovered (1 defs)

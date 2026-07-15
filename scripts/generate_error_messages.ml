@@ -450,8 +450,15 @@ let generate_message grammar terminals entry =
   let full_message =
     match unclosed_details with
     | Some (depth, opener, _) ->
+        (* Locate the opener of the construct the error sits inside, without
+           claiming it is unmatched: the same error state is reached both when
+           the construct is genuinely unclosed (an EOF cut it short) and when a
+           later token inside an already-closed construct is invalid, so a
+           "might be unmatched" reading would be false in the latter, common
+           case. A purely locational hint is true in both. *)
         message_body ^ "\n"
-        ^ Printf.sprintf "<%d>This '%s' might be unmatched." depth opener
+        ^ Printf.sprintf "<%d>This '%s' opens the enclosing construct." depth
+            opener
     | None -> message_body
   in
 
