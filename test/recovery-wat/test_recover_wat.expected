@@ -28,3 +28,10 @@ errors: 1
 errors: 1
 (func (nop))
 (func (nop))
+=== unrepairable operand drops the group, keeps the func ===
+errors: 1
+(func)
+(func (nop))
+=== unrepairable field drops without absorbing its sibling ===
+errors: 1
+(func (nop))
