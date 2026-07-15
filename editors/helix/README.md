@@ -48,6 +48,9 @@ cp /path/to/wax/editors/helix/queries/wax/*.scm \
    ~/.config/helix/runtime/queries/wax/
 ```
 
+This copies `highlights`, `locals`, and `injections`, plus `indents` (auto-indent)
+and `textobjects` (function/parameter/comment selections, e.g. `mif` / `maf`).
+
 ## Verify
 
 `hx --health wax` should show the grammar and highlight queries as present.

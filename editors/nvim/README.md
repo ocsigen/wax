@@ -34,9 +34,14 @@ Then run `:TSInstall wax`. Install the queries onto the runtimepath:
 
 ```sh
 mkdir -p ~/.config/nvim/queries/wax
-cp /path/to/wax/tree-sitter-wax/queries/{highlights,locals,injections}.scm \
+cp /path/to/wax/tree-sitter-wax/queries/{highlights,locals,injections,indents,textobjects}.scm \
    ~/.config/nvim/queries/wax/
 ```
+
+`indents.scm` drives the nvim-treesitter indent module and `textobjects.scm`
+the [nvim-treesitter-textobjects](https://github.com/nvim-treesitter/nvim-treesitter-textobjects)
+plugin (function/parameter/call/conditional/loop/comment objects); both are
+optional and used only if you enable those modules.
 
 ## Option B — built-in tree-sitter (no plugin)
 
