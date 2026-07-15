@@ -42,6 +42,19 @@ Format on save:
           (lambda () (add-hook 'before-save-hook #'wax-format-buffer nil t)))
 ```
 
+## Diagnostics (errors & warnings)
+
+The mode registers a Flymake backend that runs
+`wax check --error-format=short` over the buffer and reports errors and warnings
+inline. Turn it on with `M-x flymake-mode` (or automatically):
+
+```elisp
+(add-hook 'wax-ts-mode-hook #'flymake-mode)
+```
+
+Warnings carry their `-W` name in the message (`… [unused-local]`). Override the
+command via `wax-check-command`.
+
 ## What you get
 
 Syntax highlighting (font-lock up to `treesit-font-lock-level`), tree-sitter

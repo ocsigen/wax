@@ -38,6 +38,13 @@ formatter protocol. Format the current buffer with `:format`, or on every save
 via `auto-format = true` (drop that line to format only on demand). `wax` must
 be on your `PATH`.
 
+## Diagnostics
+
+Helix surfaces diagnostics only through a language server, which Wax does not
+yet provide, so errors and warnings are not shown inline here. `wax check`
+reports them on the command line (`wax check --error-format=short file.wax` for
+a compact `file:line:col: severity: message` listing).
+
 ## Build and install the queries
 
 ```sh

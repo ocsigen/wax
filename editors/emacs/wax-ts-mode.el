@@ -23,6 +23,7 @@
 ;;; Code:
 
 (require 'treesit)
+(require 'flymake)
 
 (defgroup wax nil
   "Major mode for the Wax language."
@@ -37,6 +38,13 @@
   "Command used by `wax-format-buffer' to reformat Wax source.
 It receives the buffer on standard input and must write the formatted
 result to standard output."
+  :type '(repeat string))
+
+(defcustom wax-check-command '("wax" "check" "--error-format=short" "-f" "wax")
+  "Command used by the Flymake backend to diagnose Wax source.
+The path of a temporary file holding the buffer is appended to it; the
+command must write `file:line:col: severity: message' lines (as
+`--error-format=short' does)."
   :type '(repeat string))
 
 ;; The bare-word keywords of the language (lexer.ml). `import' heads grouped
@@ -181,6 +189,58 @@ On a formatter error the buffer is left unchanged and the error is shown."
       (kill-buffer out)
       (delete-file errfile))))
 
+(defvar-local wax--flymake-proc nil
+  "The running Flymake process for this buffer, if any.")
+
+(defun wax-flymake (report-fn &rest _args)
+  "A Flymake backend for Wax, running `wax-check-command'.
+REPORT-FN is Flymake's callback. The buffer is written to a temporary
+file (so unsaved edits are checked) whose path is passed to the command;
+diagnostics are parsed from its `file:line:col: severity: message' lines.
+Using a file rather than a stdin pipe avoids a closed-descriptor error
+when the process exits before its input is fully sent."
+  (unless (executable-find (car wax-check-command))
+    (error "Cannot find the wax executable (%s)" (car wax-check-command)))
+  (when (process-live-p wax--flymake-proc)
+    (kill-process wax--flymake-proc))
+  (let ((source (current-buffer))
+        (tmp (make-temp-file "wax-flymake" nil ".wax")))
+    (save-restriction
+      (widen)
+      ;; A `no-message' VISIT arg keeps write-region from echoing "Wrote …"
+      ;; (make-temp-file's TEXT argument would print it on every check).
+      (write-region (point-min) (point-max) tmp nil 'no-message))
+    (setq
+     wax--flymake-proc
+     (make-process
+      :name "wax-flymake" :noquery t :connection-type 'pipe
+      :buffer (generate-new-buffer " *wax-flymake*")
+      :command (append wax-check-command (list tmp))
+      :sentinel
+      (lambda (proc _event)
+        (when (memq (process-status proc) '(exit signal))
+          (unwind-protect
+              (if (with-current-buffer source (eq proc wax--flymake-proc))
+                  (with-current-buffer (process-buffer proc)
+                    (goto-char (point-min))
+                    (let (diags)
+                      (while (re-search-forward
+                              "^[^:\n]*:\\([0-9]+\\):\\([0-9]+\\): \\(error\\|warning\\): \\(.*\\)$"
+                              nil t)
+                        (let* ((line (string-to-number (match-string 1)))
+                               (col (string-to-number (match-string 2)))
+                               (type (if (equal (match-string 3) "error")
+                                         :error :warning))
+                               (msg (match-string 4))
+                               (region (flymake-diag-region source line col)))
+                          (push (flymake-make-diagnostic
+                                 source (car region) (cdr region) type msg)
+                                diags)))
+                      (funcall report-fn (nreverse diags))))
+                (flymake-log :warning "canceling obsolete check %s" proc))
+            (ignore-errors (delete-file tmp))
+            (kill-buffer (process-buffer proc)))))))))
+
 ;;;###autoload
 (define-derived-mode wax-ts-mode prog-mode "Wax"
   "Major mode for editing Wax, powered by tree-sitter."
@@ -196,6 +256,7 @@ On a formatter error the buffer is left unchanged and the error is shown."
     (setq-local treesit-simple-imenu-settings
                 '(("Function" "\\`function_definition\\'" nil nil)
                   ("Type" "\\`type_definition\\'" nil nil)))
+    (add-hook 'flymake-diagnostic-functions #'wax-flymake nil t)
     (treesit-major-mode-setup)))
 
 ;;;###autoload

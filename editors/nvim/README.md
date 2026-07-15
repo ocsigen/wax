@@ -121,6 +121,56 @@ vim.api.nvim_create_autocmd("BufWritePre", {
 > or null-ls at the same command (`wax format -f wax`, stdin) and it works the
 > same way.
 
+## Diagnostics (errors & warnings)
+
+`wax check --error-format=short` prints one `file:line:col: severity: message`
+line per diagnostic, which maps straight onto `vim.diagnostic`. A small module
+`lua/wax_diagnostics.lua`:
+
+```lua
+local ns = vim.api.nvim_create_namespace("wax")
+local severity = {
+  error = vim.diagnostic.severity.ERROR,
+  warning = vim.diagnostic.severity.WARN,
+}
+return function(buf)
+  buf = buf or vim.api.nvim_get_current_buf()
+  local file = vim.api.nvim_buf_get_name(buf)
+  if file == "" then return end
+  vim.system({ "wax", "check", "--error-format=short", file }, { text = true },
+    function(res)
+      local diags = {}
+      for line in (res.stderr or ""):gmatch("[^\n]+") do
+        local l, c, s, msg = line:match("^.-:(%d+):(%d+): (%a+): (.+)$")
+        if l then
+          table.insert(diags, {
+            lnum = tonumber(l) - 1, col = tonumber(c) - 1,
+            severity = severity[s] or vim.diagnostic.severity.ERROR,
+            message = msg, source = "wax",
+          })
+        end
+      end
+      vim.schedule(function() vim.diagnostic.set(ns, buf, diags) end)
+    end)
+end
+```
+
+Run it when a `.wax` buffer is read and after each save:
+
+```lua
+vim.api.nvim_create_autocmd({ "BufReadPost", "BufWritePost" }, {
+  pattern = "*.wax",
+  callback = function(args) require("wax_diagnostics")(args.buf) end,
+})
+```
+
+Errors and warnings then show as signs/virtual text, and the warning's `-W`
+name rides along in the message (`… [unused-local]`).
+
+> Prefer a linter plugin? [nvim-lint](https://github.com/mfussenegger/nvim-lint)
+> can run the same command; parse its output with `require('lint.parser').from_pattern`
+> (or an `errorformat`) using `%f:%l:%c: %t%*[^:]: %m`.
+
 ## Verify
 
 Open a `.wax` file, then `:InspectTree` for the parse tree. With
