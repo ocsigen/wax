@@ -491,8 +491,9 @@ let warn_env_info =
 
 let convert input_file output_file input_format_opt output_format_opt validate
     strict_validate color opt_source_map_file fold_mode desugar defines warnings
-    features debug =
+    features debug error_format =
   Wax_utils.Diagnostic.set_policy (build_policy warnings);
+  Wax_utils.Diagnostic.set_format error_format;
   Wax_utils.Feature.set_config features;
   Wax_utils.Debug.enable debug;
   let defines = Wax_wasm.Cond_specialize.of_list defines in
@@ -561,8 +562,10 @@ let convert input_file output_file input_format_opt output_format_opt validate
    is written and files that are not already formatted are listed (a non-zero
    exit status reports this); otherwise exactly one file is formatted to stdout.
    Formatting never validates: it only re-prints. *)
-let format inplace check format_opt color fold_mode warnings debug files =
+let format inplace check format_opt color fold_mode warnings debug error_format
+    files =
   Wax_utils.Diagnostic.set_policy (build_policy warnings);
+  Wax_utils.Diagnostic.set_format error_format;
   Wax_utils.Debug.enable debug;
   if inplace && check then
     usage_error "--inplace and --check cannot be combined.";
@@ -646,10 +649,12 @@ let format inplace check format_opt color fold_mode warnings debug files =
    without producing any output, reporting diagnostics and exiting with a
    non-zero status if any file fails. [format_opt] forces the format; otherwise
    it is detected from the extension. *)
-let check format_opt strict color warnings features debug defines files =
+let check format_opt strict color warnings features debug error_format defines
+    files =
   Wax_wasm.Validation.validate_refs := strict;
   let policy = build_policy warnings in
   Wax_utils.Diagnostic.set_policy policy;
+  Wax_utils.Diagnostic.set_format error_format;
   Wax_utils.Feature.set_config features;
   Wax_utils.Debug.enable debug;
   (* -D bindings specialize the conditionals before validation, exactly as in
@@ -845,6 +850,36 @@ let color_option =
       ()
   in
   Arg.(value & opt color_conv Auto & info [ "color" ] ~docv:"WHEN" ~doc)
+
+(* Define the --error-format option (human vs machine-readable diagnostics) *)
+let error_format_option =
+  let doc =
+    "Diagnostic output format: $(b,human) (source snippets, the default) or \
+     $(b,json) (one JSON object per diagnostic per line, on stderr) for \
+     consumption by an editor, CI job, or AI assistant."
+  in
+  let error_conv =
+    Arg.Conv.make ~docv:"FORMAT"
+      ~completion:
+        (string_completion
+           [
+             ("human", "Human-readable diagnostics");
+             ("json", "One JSON object per diagnostic per line");
+           ])
+      ~parser:(fun s ->
+        match s with
+        | "human" -> Ok Wax_utils.Diagnostic.Human
+        | "json" -> Ok Wax_utils.Diagnostic.Json
+        | s -> Error (Printf.sprintf "Unknown error format: %s" s))
+      ~pp:(fun ppf (f : Wax_utils.Diagnostic.output_format) ->
+        Format.pp_print_string ppf
+          (match f with Human -> "human" | Json -> "json"))
+      ()
+  in
+  Arg.(
+    value
+    & opt error_conv Wax_utils.Diagnostic.Human
+    & info [ "error-format" ] ~docv:"FORMAT" ~doc)
 
 (* Define the --source-map-file option *)
 let source_map_file_option =
@@ -1083,10 +1118,11 @@ let convert_term =
   and+ defines = define_option
   and+ warnings = warn_option
   and+ features = feature_option
-  and+ debug = debug_option in
+  and+ debug = debug_option
+  and+ error_format = error_format_option in
   convert input output in_fmt out_fmt validate strict_validate color
     source_map_file fold_mode desugar defines warnings features
-    (List.concat debug)
+    (List.concat debug) error_format
 
 let format_term =
   let+ inplace = inplace_flag
@@ -1096,9 +1132,10 @@ let format_term =
   and+ fold_mode = fold_mode_option
   and+ warnings = warn_option
   and+ debug = debug_option
+  and+ error_format = error_format_option
   and+ files = format_files in
   format inplace check format_opt color fold_mode warnings (List.concat debug)
-    files
+    error_format files
 
 (* Exit codes, documented in docs/src/cli.md. Given explicitly rather than
    extending [Cmd.Exit.defaults] because the toolchain repurposes 123 (usage
@@ -1155,10 +1192,11 @@ let check_term =
   and+ warnings = warn_option
   and+ features = feature_option
   and+ debug = debug_option
+  and+ error_format = error_format_option
   and+ defines = define_option
   and+ files = check_files in
-  check format_opt strict color warnings features (List.concat debug) defines
-    files
+  check format_opt strict color warnings features (List.concat debug)
+    error_format defines files
 
 let check_cmd =
   let doc = "Validate WebAssembly files without producing output" in

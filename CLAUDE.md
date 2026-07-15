@@ -55,6 +55,7 @@ bare `wax <file>` form working — edit that heuristic if adding subcommands.
 |      | `--fold` / `--unfold` | Force folded / unfolded instruction form (default: auto) |
 |      | `--desugar` | Expand the Wax-specific `(@string …)`/`(@char …)` annotations into core wasm (`array.new_fixed`/`i32.const`) so the output is plain WebAssembly text. Wat output only (usage error `123` otherwise); fails (`128`) if an `(@if …)` remains unresolved — resolve with `-D` |
 |      | `--color` | Color output: `auto`/`always`/`never` |
+|      | `--error-format` | Diagnostic rendering: `human` (default) or `json`. `json` emits one JSON object per diagnostic per line (JSON Lines) to stderr — errors, warnings, and syntax errors alike — for editors/CI/AI. Set process-wide via `Diagnostic.set_format` (like `set_policy`); the emitter (`output_error_json` in `lib-utils/diagnostic.ml`) uses yojson. Also on `check`/`format` |
 |      | `--source-map-file` | Emit a source map to the given file (wasm output only; rejected for wat/wax output) |
 |      | `--debug` | Enable developer debug output for a category (repeatable, comma-separated). Categories: `timing` (log each pass's wall-clock time to stderr) |
 

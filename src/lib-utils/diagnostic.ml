@@ -58,6 +58,76 @@ type t = {
          reachable configuration (see [report]'s [universal] parameter). *)
 }
 
+(* Machine-readable diagnostic output. When the global output format is [Json],
+   each diagnostic is emitted as one JSON object on its own line (JSON Lines),
+   as rustc/cargo do, so a CI job or an editor can parse diagnostics
+   mechanically. Set once from the command line via [set_format], mirroring
+   [set_policy]. The default is [Human], so nothing changes unless requested. *)
+type output_format = Human | Json
+
+let global_format = ref Human
+let set_format f = global_format := f
+
+(* Render a [Format]-printed message to a string with a wide margin, so the
+   printer inserts no line breaks (a stray one is harmless — yojson escapes it
+   as \n, keeping one JSON object per physical line). *)
+let pp_to_string pp =
+  let b = Buffer.create 128 in
+  let f = Format.formatter_of_buffer b in
+  Format.pp_set_margin f 1_000_000;
+  pp f ();
+  Format.pp_print_flush f ();
+  Buffer.contents b
+
+(* Emit one diagnostic as a single-line JSON object. Line/column are the usual
+   1-based line / 0-based column; byte offsets ([pos_cnum]) index into the
+   source, for an agent that rewrites the raw bytes. [warning]/[hint] are null
+   when absent; [related] is always an array. *)
+let output_error_json ~output ~location ~severity ?warning ?hint ?(related = [])
+    msg =
+  let col (p : Lexing.position) = p.pos_cnum - p.pos_bol in
+  let span { Ast.loc_start; loc_end } : (string * Yojson.Safe.t) list =
+    [
+      ("startLine", `Int loc_start.Lexing.pos_lnum);
+      ("startColumn", `Int (col loc_start));
+      ("endLine", `Int loc_end.Lexing.pos_lnum);
+      ("endColumn", `Int (col loc_end));
+      ("startOffset", `Int loc_start.Lexing.pos_cnum);
+      ("endOffset", `Int loc_end.Lexing.pos_cnum);
+    ]
+  in
+  let obj : Yojson.Safe.t =
+    `Assoc
+      ([
+         ( "severity",
+           `String
+             (match severity with Error -> "error" | Warning -> "warning") );
+         ("file", `String location.Ast.loc_start.Lexing.pos_fname);
+       ]
+      @ span location
+      @ [
+          ("message", `String (pp_to_string msg));
+          ( "warning",
+            match warning with
+            | Some w -> `String (Warning.name w)
+            | None -> `Null );
+          ( "hint",
+            match hint with
+            | Some pp -> `String (pp_to_string pp)
+            | None -> `Null );
+          ( "related",
+            `List
+              (List.map
+                 (fun (l : label) : Yojson.Safe.t ->
+                   `Assoc
+                     (span l.location
+                     @ [ ("message", `String (pp_to_string l.message)) ]))
+                 related) );
+        ])
+  in
+  Format.pp_print_string output (Yojson.Safe.to_string obj);
+  Format.pp_print_newline output ()
+
 let print_hint ?(output = Format.err_formatter) ~theme hint =
   match hint with
   | None -> ()
@@ -165,148 +235,160 @@ let modern = true
 
 let output_error_with_source ?(output = Format.err_formatter) ~theme ~source
     ~location ~severity ?hint ?(related = []) msg =
-  let annotations = get_annotations ~theme ~severity ~location ~related in
-  let hunks = get_hunks annotations in
-  let rec count_lines s i acc =
-    try
-      let j = String.index_from s i '\n' in
-      count_lines s (j + 1) (acc + 1)
-    with Not_found -> acc + 1
-  in
-  let total_lines = count_lines source 0 0 in
-  let max_line =
-    List.fold_left (fun acc (_, e) -> max acc e) 0 hunks |> min total_lines
-  in
-  let gutter_width = max 1 (String.length (string_of_int max_line)) in
-  let gutter_padding = String.make gutter_width ' ' in
-  let filename = location.Ast.loc_start.Lexing.pos_fname in
-  let start_line = location.Ast.loc_start.Lexing.pos_lnum in
-  let start_col =
-    location.Ast.loc_start.Lexing.pos_cnum
-    - location.Ast.loc_start.Lexing.pos_bol
-  in
-  output_error_no_loc ~output ~theme ~severity ~hint:None msg;
-  if modern then
-    Format.fprintf output "%a %a@."
-      (with_style theme.line_numbers (fun f () ->
-           Format.fprintf f "%s──➤" gutter_padding))
-      ()
-      (fun f () ->
-        Format.fprintf f " %s:%d:%d" filename start_line (start_col + 1))
-      ();
-  let find_eol text start_pos =
-    try String.index_from text start_pos '\n'
-    with Not_found -> String.length text
-  in
-  let get_line_info text pos_bol =
-    if pos_bol >= String.length text then ("", pos_bol)
-    else
-      let line_end = find_eol text pos_bol in
-      let content = String.sub text pos_bol (line_end - pos_bol) in
-      (content, line_end)
-  in
-  let print_line ?(gutter_char = "│") header contents =
-    Format.fprintf output "%a %a@."
-      (with_style theme.line_numbers (fun f () ->
-           Format.fprintf f "%a %a" header ()
-             (fun f () -> Format.pp_print_as f 1 gutter_char)
-             ()))
-      () contents ()
-  in
-  let curr_pos = ref 0 in
-  let curr_line = ref 1 in
-  let seek line =
-    while !curr_line < line do
-      let eol = find_eol source !curr_pos in
-      curr_pos := min (String.length source) (eol + 1);
-      incr curr_line
-    done
-  in
-  let total_hunks = List.length hunks in
-  List.iteri
-    (fun i (s_line, e_line) ->
-      if i > 0 then
-        Format.fprintf output "%a %s@."
+  match !global_format with
+  | Json -> output_error_json ~output ~location ~severity ?hint ~related msg
+  | Human ->
+      let annotations = get_annotations ~theme ~severity ~location ~related in
+      let hunks = get_hunks annotations in
+      let rec count_lines s i acc =
+        try
+          let j = String.index_from s i '\n' in
+          count_lines s (j + 1) (acc + 1)
+        with Not_found -> acc + 1
+      in
+      let total_lines = count_lines source 0 0 in
+      let max_line =
+        List.fold_left (fun acc (_, e) -> max acc e) 0 hunks |> min total_lines
+      in
+      let gutter_width = max 1 (String.length (string_of_int max_line)) in
+      let gutter_padding = String.make gutter_width ' ' in
+      let filename = location.Ast.loc_start.Lexing.pos_fname in
+      let start_line = location.Ast.loc_start.Lexing.pos_lnum in
+      let start_col =
+        location.Ast.loc_start.Lexing.pos_cnum
+        - location.Ast.loc_start.Lexing.pos_bol
+      in
+      output_error_no_loc ~output ~theme ~severity ~hint:None msg;
+      if modern then
+        Format.fprintf output "%a %a@."
           (with_style theme.line_numbers (fun f () ->
-               Format.fprintf f "%s %a" gutter_padding
-                 (fun f () -> Format.pp_print_as f 1 "·")
+               Format.fprintf f "%s──➤" gutter_padding))
+          ()
+          (fun f () ->
+            Format.fprintf f " %s:%d:%d" filename start_line (start_col + 1))
+          ();
+      let find_eol text start_pos =
+        try String.index_from text start_pos '\n'
+        with Not_found -> String.length text
+      in
+      let get_line_info text pos_bol =
+        if pos_bol >= String.length text then ("", pos_bol)
+        else
+          let line_end = find_eol text pos_bol in
+          let content = String.sub text pos_bol (line_end - pos_bol) in
+          (content, line_end)
+      in
+      let print_line ?(gutter_char = "│") header contents =
+        Format.fprintf output "%a %a@."
+          (with_style theme.line_numbers (fun f () ->
+               Format.fprintf f "%a %a" header ()
+                 (fun f () -> Format.pp_print_as f 1 gutter_char)
                  ()))
-          () "...";
-      seek s_line;
-      while !curr_line <= min e_line total_lines do
-        let is_last_line =
-          !curr_line = min e_line total_lines && i = total_hunks - 1
-        in
-        let raw_content, next_eol = get_line_info source !curr_pos in
-        let display_content = Unicode.expand_tabs raw_content in
-        print_line
-          (fun f () -> Format.fprintf f "%*d" gutter_width !curr_line)
-          (fun f () -> Format.fprintf f "%s" display_content);
-        let line_annotations =
-          List.filter
-            (fun a -> !curr_line >= a.start_line && !curr_line <= a.end_line)
-            annotations
-        in
-        let num_annots = List.length line_annotations in
-        List.iteri
-          (fun j a ->
-            let is_last_annot = is_last_line && j = num_annots - 1 in
-            let gutter_char = if is_last_annot then " " else "·" in
-            let is_start = !curr_line = a.start_line in
-            let is_end = !curr_line = a.end_line in
-            let visual_start, visual_len =
-              if is_start && is_end then
-                let start_col = min (String.length raw_content) a.start_col in
-                let end_col = min (String.length raw_content) a.end_col in
-                let prefix = String.sub raw_content 0 start_col in
-                let visual_start = Unicode.terminal_width prefix in
-                let len_bytes = max 0 (end_col - start_col) in
-                let part = String.sub raw_content start_col len_bytes in
-                (visual_start, Unicode.terminal_width part)
-              else if is_start then
-                let start_col = min (String.length raw_content) a.start_col in
-                let prefix = String.sub raw_content 0 start_col in
-                let visual_start = Unicode.terminal_width prefix in
-                let len_bytes = String.length raw_content - start_col in
-                let part = String.sub raw_content start_col len_bytes in
-                (visual_start, Unicode.terminal_width part + 1)
-              else if is_end then
-                let end_col = min (String.length raw_content) a.end_col in
-                let part = String.sub raw_content 0 end_col in
-                (0, Unicode.terminal_width part)
-              else (0, Unicode.terminal_width raw_content + 1)
+          () contents ()
+      in
+      let curr_pos = ref 0 in
+      let curr_line = ref 1 in
+      let seek line =
+        while !curr_line < line do
+          let eol = find_eol source !curr_pos in
+          curr_pos := min (String.length source) (eol + 1);
+          incr curr_line
+        done
+      in
+      let total_hunks = List.length hunks in
+      List.iteri
+        (fun i (s_line, e_line) ->
+          if i > 0 then
+            Format.fprintf output "%a %s@."
+              (with_style theme.line_numbers (fun f () ->
+                   Format.fprintf f "%s %a" gutter_padding
+                     (fun f () -> Format.pp_print_as f 1 "·")
+                     ()))
+              () "...";
+          seek s_line;
+          while !curr_line <= min e_line total_lines do
+            let is_last_line =
+              !curr_line = min e_line total_lines && i = total_hunks - 1
             in
-            print_line ~gutter_char
-              (fun f () -> Format.fprintf f "%s" gutter_padding)
-              (fun f () ->
-                Format.fprintf f "%*s%a" visual_start ""
-                  (with_style a.color (fun f () ->
-                       let underline = String.make (max 1 visual_len) '^' in
-                       Format.fprintf f "%s" underline))
-                  ();
-                match a.label with
-                | Some pp when is_end ->
-                    Format.fprintf f " ";
-                    with_style a.color pp f ()
-                | _ -> ()))
-          line_annotations;
-        curr_pos := min (String.length source) (next_eol + 1);
-        incr curr_line
-      done)
-    hunks;
-  print_hint ~output ~theme hint
+            let raw_content, next_eol = get_line_info source !curr_pos in
+            let display_content = Unicode.expand_tabs raw_content in
+            print_line
+              (fun f () -> Format.fprintf f "%*d" gutter_width !curr_line)
+              (fun f () -> Format.fprintf f "%s" display_content);
+            let line_annotations =
+              List.filter
+                (fun a ->
+                  !curr_line >= a.start_line && !curr_line <= a.end_line)
+                annotations
+            in
+            let num_annots = List.length line_annotations in
+            List.iteri
+              (fun j a ->
+                let is_last_annot = is_last_line && j = num_annots - 1 in
+                let gutter_char = if is_last_annot then " " else "·" in
+                let is_start = !curr_line = a.start_line in
+                let is_end = !curr_line = a.end_line in
+                let visual_start, visual_len =
+                  if is_start && is_end then
+                    let start_col =
+                      min (String.length raw_content) a.start_col
+                    in
+                    let end_col = min (String.length raw_content) a.end_col in
+                    let prefix = String.sub raw_content 0 start_col in
+                    let visual_start = Unicode.terminal_width prefix in
+                    let len_bytes = max 0 (end_col - start_col) in
+                    let part = String.sub raw_content start_col len_bytes in
+                    (visual_start, Unicode.terminal_width part)
+                  else if is_start then
+                    let start_col =
+                      min (String.length raw_content) a.start_col
+                    in
+                    let prefix = String.sub raw_content 0 start_col in
+                    let visual_start = Unicode.terminal_width prefix in
+                    let len_bytes = String.length raw_content - start_col in
+                    let part = String.sub raw_content start_col len_bytes in
+                    (visual_start, Unicode.terminal_width part + 1)
+                  else if is_end then
+                    let end_col = min (String.length raw_content) a.end_col in
+                    let part = String.sub raw_content 0 end_col in
+                    (0, Unicode.terminal_width part)
+                  else (0, Unicode.terminal_width raw_content + 1)
+                in
+                print_line ~gutter_char
+                  (fun f () -> Format.fprintf f "%s" gutter_padding)
+                  (fun f () ->
+                    Format.fprintf f "%*s%a" visual_start ""
+                      (with_style a.color (fun f () ->
+                           let underline = String.make (max 1 visual_len) '^' in
+                           Format.fprintf f "%s" underline))
+                      ();
+                    match a.label with
+                    | Some pp when is_end ->
+                        Format.fprintf f " ";
+                        with_style a.color pp f ()
+                    | _ -> ()))
+              line_annotations;
+            curr_pos := min (String.length source) (next_eol + 1);
+            incr curr_line
+          done)
+        hunks;
+      print_hint ~output ~theme hint
 
 let output_error ?(output = Format.err_formatter) ~theme ~source ~location
-    ~severity ?hint ?(related = []) msg =
-  if location.Ast.loc_start = Lexing.dummy_pos then
-    output_error_no_loc ~output ~theme ~severity ~hint msg
-  else
-    match source with
-    | None ->
-        output_error_no_source ~output ~theme ~location ~severity ?hint msg
-    | Some source ->
-        output_error_with_source ~output ~theme ~source ~location ~severity
-          ?hint ~related msg
+    ~severity ?warning ?hint ?(related = []) msg =
+  match !global_format with
+  | Json ->
+      output_error_json ~output ~location ~severity ?warning ?hint ~related msg
+  | Human -> (
+      if location.Ast.loc_start = Lexing.dummy_pos then
+        output_error_no_loc ~output ~theme ~severity ~hint msg
+      else
+        match source with
+        | None ->
+            output_error_no_source ~output ~theme ~location ~severity ?hint msg
+        | Some source ->
+            output_error_with_source ~output ~theme ~source ~location ~severity
+              ?hint ~related msg)
 
 type context = {
   max : int;
@@ -385,12 +467,13 @@ let output_errors ?exit_on_error context =
               hint;
               message;
               related;
-              warning = _;
+              warning;
               universal = _;
             } :
              t) ->
         output_error ~output:context.output ~theme:context.theme
-          ~source:context.source ~location ~severity ?hint ~related message)
+          ~source:context.source ~location ~severity ?warning ?hint ~related
+          message)
       context.queue;
     Queue.clear context.queue;
     if exit_on_error then exit 128)
@@ -433,7 +516,7 @@ let report context ~location ~severity ?warning ?(universal = false) ?hint
             context.queue
       | Warning ->
           output_error ~output:context.output ~theme:context.theme
-            ~source:context.source ~location ~severity ?hint
+            ~source:context.source ~location ~severity ?warning ?hint
             ~related:all_related message
       | Error ->
           Queue.push

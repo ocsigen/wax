@@ -184,6 +184,17 @@ mistaken for a subcommand). The `format` subcommand reformats files (see
     - Values: `always`, `never`, `auto`.
     - Default: `auto` (colors enabled only if output is a TTY).
 
+- **`--error-format`** *FORMAT*
+    - How diagnostics are rendered.
+    - Values: `human` (source snippets, the default) or `json`.
+    - With `json`, every diagnostic — errors, warnings, and syntax errors — is
+      written to stderr as one JSON object per line (JSON Lines), for an editor,
+      CI job, or AI assistant to parse. Each object has `severity`, `file`,
+      `startLine`/`startColumn`/`endLine`/`endColumn` (1-based line, 0-based
+      column), `startOffset`/`endOffset` (byte offsets), `message`, `warning`
+      (the [`-W`](#options) name, or null), `hint`, and `related`. Exit codes are
+      unchanged. Also accepted by `check` and `format`.
+
 
 - **`--fold`**
     - Fold instructions into nested S-expressions.
@@ -285,6 +296,8 @@ wax format [OPTIONS] FILE…
 - **`-W`** *NAME=LEVEL*, **`--warn`** *NAME=LEVEL*: set a warning's level, as
   above.
 - **`--color`** *WHEN*: as above (ignored when writing back in place).
+- **`--error-format`** *FORMAT*: `human` or `json`, as above (a malformed file
+  still reports its syntax error).
 - **`--fold`** / **`--unfold`**: as above.
 - **`--debug`** *CATEGORY*: as above.
 
@@ -334,6 +347,7 @@ wax check [OPTIONS] FILE…
 - **`-W`** *NAME=LEVEL*, **`--warn`** *NAME=LEVEL*: set a warning's level, as
   above.
 - **`--color`** *WHEN*: as above.
+- **`--error-format`** *FORMAT*: `human` or `json`, as above.
 - **`--debug`** *CATEGORY*: as above.
 
 ### Example

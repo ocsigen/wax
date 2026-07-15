@@ -1,6 +1,13 @@
 type context
 type severity = Error | Warning
 
+type output_format =
+  | Human
+  | Json
+      (** How diagnostics are rendered: [Human] (source snippets, the default)
+          or [Json] (one JSON object per diagnostic per line, i.e. JSON Lines).
+      *)
+
 type label = {
   location : Ast.location;
   message : Format.formatter -> unit -> unit;
@@ -31,6 +38,12 @@ val set_policy : Warning.policy -> unit
 (** [set_policy policy] installs [policy] as the default for every context
     created afterwards (those that do not pass an explicit [?policy]). Intended
     to be called once, from the command line. *)
+
+val set_format : output_format -> unit
+(** [set_format fmt] selects how diagnostics are rendered (default [Human]).
+    With [Json], every diagnostic — errors, warnings, and syntax errors — is
+    written to stderr as one JSON object per line. Intended to be called once,
+    from the command line. *)
 
 val report :
   context ->

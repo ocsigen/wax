@@ -15,6 +15,7 @@ depends: [
   "menhir" {build & >= "20220210"}
   "menhirLib" {>= "20220210"}
   "re" {>= "1.10.0"}
+  "yojson" {>= "2.0.0"}
   "uucp" {with-dev-setup & >= "16.0.0"}
   "odoc" {with-doc}
 ]

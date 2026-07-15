@@ -21,6 +21,7 @@
     (menhir (and :build (>= 20220210)))
     (menhirLib (>= 20220210))
     (re (>= 1.10.0))
+    (yojson (>= 2.0.0))
     (uucp (and :with-dev-setup (>= 16.0.0)))
   )
 )
@@ -32,6 +33,7 @@
   (depends
     (ocaml (>= 4.14))
     (wax-lib (= :version))
+    (yojson (>= 2.0.0))
     ; 2.0 for the Conv.make/Arg.Completion API and the completion protocol in
     ; Cmd.eval, plus `cmdliner install tool-support` at build time.
     (cmdliner (>= 2.0.0))
