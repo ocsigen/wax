@@ -1104,9 +1104,34 @@ let member_fields_at src line ch members =
 let member_completion (c : Wax_lang.Typing.member_candidate) =
   {
     k_name = c.member_name;
-    k_kind = (match c.member_kind with Field -> "field" | Method -> "method");
+    k_kind =
+      (match c.member_kind with
+      | Field -> "field"
+      | Method -> "method"
+      | Function -> "function");
     k_detail = c.member_detail;
   }
+
+(* If the cursor is completing an intrinsic namespace path — it follows [ns::]
+   with an identifier prefix (possibly empty), where [ns] is an identifier and
+   [::] immediately precedes the prefix — the namespace name [ns]. A text test,
+   like {!is_member_position}: the [::] operator only introduces a namespace
+   path, so name completion never belongs here. *)
+let namespace_position src line ch =
+  let off = line_start_offset src line + byte_column src line ch in
+  let i = ref (off - 1) in
+  while !i >= 0 && is_ident_char src.[!i] do
+    decr i
+  done;
+  (* [!i] now indexes the char before the (possibly empty) member prefix. *)
+  if !i >= 1 && src.[!i] = ':' && src.[!i - 1] = ':' then (
+    let j = ref (!i - 2) in
+    let stop = !j in
+    while !j >= 0 && is_ident_char src.[!j] do
+      decr j
+    done;
+    if !j < stop then Some (String.sub src (!j + 1) (stop - !j)) else None)
+  else None
 
 let completion_string src line ch =
   if is_member_position src line ch then
@@ -1130,39 +1155,45 @@ let completion_string src line ch =
         | Some candidates -> List.map member_completion candidates
         | None -> [])
   else
-    let target = (line + 1, byte_column src line ch) in
-    let ast_opt, _syntax_errors, _ctx =
-      Wax_parser.parse_recover ~filename:"<buffer>" ~sync:Wax_lang.Recover.sync
-        ~insert:Wax_lang.Recover.insert src
-    in
-    let keywords =
-      List.map
-        (fun k -> { k_name = k; k_kind = "keyword"; k_detail = "" })
-        wax_keywords
-    in
-    match ast_opt with
-    | None -> keywords
-    | Some ast ->
-        (* [iter_fields] descends into conditional branches, so a definition
+    match namespace_position src line ch with
+    | Some ns ->
+        (* After [ns::]: the intrinsic namespace's free functions, known
+           textually (the namespaces are keywords), so this needs no parse. *)
+        List.map member_completion (Wax_lang.Typing.namespace_members ns)
+    | None -> (
+        let target = (line + 1, byte_column src line ch) in
+        let ast_opt, _syntax_errors, _ctx =
+          Wax_parser.parse_recover ~filename:"<buffer>"
+            ~sync:Wax_lang.Recover.sync ~insert:Wax_lang.Recover.insert src
+        in
+        let keywords =
+          List.map
+            (fun k -> { k_name = k; k_kind = "keyword"; k_detail = "" })
+            wax_keywords
+        in
+        match ast_opt with
+        | None -> keywords
+        | Some ast ->
+            (* [iter_fields] descends into conditional branches, so a definition
            under [#[if]] (or a function with several conditional definitions) is
            included, not just the top-level fields. *)
-        let module_ = ref [] in
-        Wax_lang.Ast_utils.iter_fields
-          (fun field -> module_ := !module_ @ field_completions field)
-          ast;
-        let module_ = !module_ in
-        let locals = function_locals ast target in
-        (* Locals shadow module names of the same name; keep the first
+            let module_ = ref [] in
+            Wax_lang.Ast_utils.iter_fields
+              (fun field -> module_ := !module_ @ field_completions field)
+              ast;
+            let module_ = !module_ in
+            let locals = function_locals ast target in
+            (* Locals shadow module names of the same name; keep the first
            occurrence of each (name, kind). *)
-        let seen = Hashtbl.create 64 in
-        List.filter
-          (fun c ->
-            let k = (c.k_name, c.k_kind) in
-            if Hashtbl.mem seen k then false
-            else (
-              Hashtbl.add seen k ();
-              true))
-          (locals @ module_ @ keywords)
+            let seen = Hashtbl.create 64 in
+            List.filter
+              (fun c ->
+                let k = (c.k_name, c.k_kind) in
+                if Hashtbl.mem seen k then false
+                else (
+                  Hashtbl.add seen k ();
+                  true))
+              (locals @ module_ @ keywords))
 
 (* The same outline for a Wasm-text module. Its fields differ from Wax's: the
    [$id] name is optional, and a definition carries its exports separately, so an

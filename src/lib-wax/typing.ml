@@ -54,11 +54,11 @@ let record_pun (sink : location list ref option) (name_info : location) =
   | Some r when is_source name_info -> r := name_info :: !r
   | _ -> ()
 
-(* A member-completion candidate for [recv.<here>]: a struct field or a value
-   method, its [member_kind] driving the editor's icon and [member_detail] a
-   rendered type/signature — the field's declared type or the method's
-   signature. *)
-type member_kind = Field | Method
+(* A member-completion candidate for [recv.<here>] or [ns::<here>]: a struct
+   field, a value method, or a namespace free function, its [member_kind]
+   driving the editor's icon and [member_detail] a rendered type/signature —
+   the field's declared type or the method/function's signature. *)
+type member_kind = Field | Method | Function
 
 type member_candidate = {
   member_name : string;
@@ -3980,6 +3980,50 @@ let simd_method_candidate name =
    the call). *)
 let simd_v128_methods () =
   List.map simd_method_candidate (Simd.method_names Simd.TV128)
+
+(* Free-function members offered after [v128::] — [bitselect] and the per-shape
+   const constructors — with signatures from the SIMD registry. *)
+let simd_free_members () =
+  List.map
+    (fun name ->
+      let full = Simd.free_full name in
+      let detail =
+        match Simd.const_shape_of_name full with
+        | Some shape ->
+            Printf.sprintf "fn(%d lanes) -> v128" (Simd.const_arity shape)
+        | None -> (
+            match Simd.classify full with
+            | Some { operands; result; _ } ->
+                Printf.sprintf "fn(%s) -> %s"
+                  (String.concat ", " (List.map simd_ty_name operands))
+                  (match result with Some t -> simd_ty_name t | None -> "()")
+            | None -> "")
+      in
+      { member_name = name; member_kind = Function; member_detail = detail })
+    Simd.free_member_names
+
+(* The free functions offered by completion after an intrinsic namespace path
+   [ns::]: [v128::] holds the SIMD const constructors and [bitselect], [i64::]
+   the wide-arithmetic ops, [atomic::] the memory fence. Mirrors the dispatch in
+   [type_path_intrinsic_call] / [type_wide_arith_call] (test/method-consistency
+   type-checks each offered call). Empty for an unknown namespace. *)
+let namespace_members ns : member_candidate list =
+  let fn member_name member_detail =
+    { member_name; member_kind = Function; member_detail }
+  in
+  let wide = "fn(i64, i64, i64, i64) -> (i64, i64)" in
+  let mul = "fn(i64, i64) -> (i64, i64)" in
+  match ns with
+  | "v128" -> simd_free_members ()
+  | "i64" ->
+      [
+        fn "add128" wide;
+        fn "sub128" wide;
+        fn "mul_wide_s" mul;
+        fn "mul_wide_u" mul;
+      ]
+  | "atomic" -> [ fn "fence" "fn() -> ()" ]
+  | _ -> []
 
 (* Memory access method names. The value width is in the name; signedness and the
    i32/i64 result come from a surrounding [as iN_s/u] cast (see [to_wasm]). *)

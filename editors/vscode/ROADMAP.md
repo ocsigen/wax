@@ -178,9 +178,19 @@ does not carry. Three distinct prerequisites:
   offered with the "method" completion kind (a distinct icon) and a rendered
   signature (`fn() -> i32`, `fn(f32) -> f32`, `fn(16 lane indices, v128) ->
   v128`); the member sink carries a kind and detail per candidate, not a bare
-  name. Follow-ups: memory/table method completion (a different dispatch path
-  where the receiver is not a value), intrinsic namespaces after `::`, and
-  per-point local scoping (currently every local in the function is offered).
+  name.
+
+  **Intrinsic namespaces** after `::` are offered too: `v128::` (the SIMD const
+  constructors and `bitselect`), `i64::` (the wide-arithmetic ops) and
+  `atomic::` (`fence`), each a "function" completion with its signature
+  (`Typing.namespace_members`, the `v128::` set drawn from `Wax_wasm.Simd`).
+  Since the namespaces are keywords, the editor detects `ns::` textually (no
+  parse needed, so it survives a broken buffer), on the `:` trigger.
+
+  Follow-ups: memory/table method completion (a different dispatch path where
+  the receiver is not a value), offering the namespace names themselves before
+  `::`, and per-point local scoping (currently every local in the function is
+  offered).
 - [x] **Multi-error syntax recovery.** *Was* prereq 3, now delivered: `check`
   runs through `parse_recover` and reports every syntax error at once, not just
   the first.
@@ -197,9 +207,9 @@ hover, inlay hints, go-to-definition, find-references / document-highlight,
 rename, and completion (names and struct members). What is left refines them:
 
 - **Completion polish** — value methods after `.` are done (numeric, array and
-  v128 receivers, with a method icon + signature), and struct fields carry their
-  type; still open are memory/table method completion, intrinsic namespaces
-  after `::`, and per-point local scoping.
+  v128 receivers, with a method icon + signature), struct fields carry their
+  type, and intrinsic namespaces after `::` are offered; still open are
+  memory/table method completion and per-point local scoping.
 - **Deeper rename** conflict/shadowing detection.
 - **Semantic tokens** — low value given the TextMate grammar.
 

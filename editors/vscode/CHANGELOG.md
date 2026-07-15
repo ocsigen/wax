@@ -36,6 +36,9 @@
   `extract_lane_s_i8x16`, `shuffle_i8x16`, …) on a `v128`. Each carries a method
   icon and its signature (e.g. `fn(f32) -> f32`), and struct fields now show
   their declared type (`i32`, `mut i32`, `&point`).
+- Completion after `::` offers an intrinsic namespace's free functions —
+  `v128::` (const constructors, `bitselect`), `i64::` (wide arithmetic) and
+  `atomic::` (`fence`) — each with its signature.
 
 ## 0.2.2
 

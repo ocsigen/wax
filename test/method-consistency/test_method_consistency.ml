@@ -143,4 +143,55 @@ let () =
       "replace_lane_i32x4";
       "shuffle_i8x16";
       "splat_i32x4" (* a scalar-receiver method: must NOT be offered here *);
-    ]
+    ];
+  (* The intrinsic-namespace free functions offered after [ns::]. Each offered
+     member is type-checked with a valid call (built to the member's shape), so
+     [namespace_members] cannot offer a name [type_path_intrinsic_call] rejects;
+     an offered member with no known call shape prints UNCHECKED so it is
+     noticed. *)
+  let ns_call ns (c : Typing.member_candidate) =
+    let name = c.member_name in
+    match ns with
+    | "atomic" -> Some "fn t() { atomic::fence(); }\n"
+    | "i64" ->
+        let argc = match name with "add128" | "sub128" -> 4 | _ -> 2 in
+        let args = String.concat ", " (List.init argc (fun _ -> "a")) in
+        Some
+          (Printf.sprintf "fn t(a: i64) -> (i64, i64) { i64::%s(%s); }\n" name
+             args)
+    | "v128" when name = "bitselect" ->
+        Some "fn t(v: v128) -> v128 { v128::bitselect(v, v, v); }\n"
+    | "v128" -> (
+        match
+          Wax_wasm.Simd.const_shape_of_name (Wax_wasm.Simd.free_full name)
+        with
+        | Some sh ->
+            let lane = if Wax_wasm.Simd.const_is_float sh then "0.0" else "0" in
+            let args =
+              String.concat ", "
+                (List.init (Wax_wasm.Simd.const_arity sh) (fun _ -> lane))
+            in
+            Some (Printf.sprintf "fn t() -> v128 { v128::%s(%s); }\n" name args)
+        | None -> None)
+    | _ -> None
+  in
+  Printf.printf "\nnamespace members:\n";
+  List.iter
+    (fun ns ->
+      let members = Typing.namespace_members ns in
+      Printf.printf "  %s:: (%d)\n" ns (List.length members);
+      List.iter
+        (fun (c : Typing.member_candidate) ->
+          let status =
+            match ns_call ns c with
+            | None -> "UNCHECKED"
+            | Some src -> (
+                match error_count src with
+                | 0 -> "ok"
+                | -1 -> "PARSE ERROR"
+                | n -> Printf.sprintf "FAIL(%d)" n)
+          in
+          Printf.printf "    %-12s %-38s %s\n" c.member_name c.member_detail
+            status)
+        members)
+    [ "v128"; "i64"; "atomic" ]

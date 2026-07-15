@@ -592,8 +592,9 @@ function registerCompletion(
   };
 
   context.subscriptions.push(
-    // "." triggers member completion; identifier typing triggers the rest.
-    vscode.languages.registerCompletionItemProvider(lang.id, provider, "."),
+    // "." triggers member completion, ":" the "ns::" namespace paths;
+    // identifier typing triggers the rest.
+    vscode.languages.registerCompletionItemProvider(lang.id, provider, ".", ":"),
   );
 }
 

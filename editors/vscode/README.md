@@ -35,7 +35,8 @@ Syntax highlighting, formatting, diagnostics, and snippets for
   globals, types, and tags, the enclosing function's parameters and locals, and
   keywords — and, after `.`, the fields of a struct value (including chains like
   `l.a.x`) plus the value methods for the receiver (`clz`/`sqrt`/… on a number,
-  `length` on an array, the SIMD ops on a `v128`). Works while the file is
+  `length` on an array, the SIMD ops on a `v128`); after `::`, an intrinsic
+  namespace's functions (`v128::`, `i64::`, `atomic::`). Works while the file is
   mid-edit.
 - **Convert / preview**: "Wax: Show compiled WAT" (in a `.wax` file) opens the
   compiled WebAssembly text in a read-only document beside the source, updating

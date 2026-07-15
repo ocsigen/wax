@@ -34,18 +34,19 @@ val f :
     never read is reported as a warning (unless its name starts with [_]). Only
     honored for conditional-free modules. *)
 
-type member_kind = Field | Method
+type member_kind = Field | Method | Function
 
 type member_candidate = {
   member_name : string;
   member_kind : member_kind;
   member_detail : string;
 }
-(** A candidate for member completion at [recv.<here>]: a struct field or a
-    value method, with the [member_kind] driving the editor's icon and
-    [member_detail] a rendered type/signature — the field's declared type
-    ([i32], [mut i32], [&point]) or the method's signature ([fn() -> i32]).
-    Collected by {!f_infer} via [member_completions]. *)
+(** A candidate for member completion at [recv.<here>] or [ns::<here>]: a struct
+    field, a value method, or a namespace free function, with the [member_kind]
+    driving the editor's icon and [member_detail] a rendered type/signature —
+    the field's declared type ([i32], [mut i32], [&point]) or the
+    method/function's signature ([fn() -> i32]). Collected by {!f_infer} via
+    [member_completions], or produced by {!namespace_members}. *)
 
 type method_result =
   | Same
@@ -74,6 +75,12 @@ val simd_v128_methods : unit -> member_candidate list
     vector ops [v.add_i32x4(w)], with their signatures. Enumerated from the SIMD
     registry ({!Wax_wasm.Simd.method_names}), which is also what the typer
     dispatches through, so the list cannot drift from what type-checks. *)
+
+val namespace_members : string -> member_candidate list
+(** The free functions completion offers after an intrinsic namespace path
+    [ns::]: [v128::] (SIMD const constructors and [bitselect]), [i64::]
+    (wide-arithmetic ops) and [atomic::] ([fence]), each with its signature.
+    Empty for any other [ns]. *)
 
 type hover_target =
   | Value_type of Infer.inferred_valtype

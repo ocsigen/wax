@@ -50,3 +50,20 @@ sample signatures:
   replace_lane_i32x4     fn(lane index, i32) -> v128
   shuffle_i8x16          fn(16 lane indices, v128) -> v128
   splat_i32x4            (not offered)
+
+namespace members:
+  v128:: (7)
+    bitselect    fn(v128, v128, v128) -> v128           ok
+    i8x16        fn(16 lanes) -> v128                   ok
+    i16x8        fn(8 lanes) -> v128                    ok
+    i32x4        fn(4 lanes) -> v128                    ok
+    i64x2        fn(2 lanes) -> v128                    ok
+    f32x4        fn(4 lanes) -> v128                    ok
+    f64x2        fn(2 lanes) -> v128                    ok
+  i64:: (4)
+    add128       fn(i64, i64, i64, i64) -> (i64, i64)   ok
+    sub128       fn(i64, i64, i64, i64) -> (i64, i64)   ok
+    mul_wide_s   fn(i64, i64) -> (i64, i64)             ok
+    mul_wide_u   fn(i64, i64) -> (i64, i64)             ok
+  atomic:: (1)
+    fence        fn() -> ()                             ok

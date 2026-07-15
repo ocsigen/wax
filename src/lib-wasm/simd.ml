@@ -203,6 +203,14 @@ let free_member full =
   let p = String.length free_namespace + 1 in
   String.sub full p (String.length full - p)
 
+(* The [v128::] free-function members: [bitselect] and one const constructor per
+   shape ([i8x16] … [f64x2]). *)
+let free_member_names =
+  free_member bitselect_name
+  :: List.map
+       (fun s -> free_member (const_name s))
+       [ I8x16; I16x8; I32x4; I64x2; F32x4; F64x2 ]
+
 let extract_name s (sign : Ast.signage option) =
   "extract_lane"
   ^ (match sign with Some x -> sgn x | None -> "")

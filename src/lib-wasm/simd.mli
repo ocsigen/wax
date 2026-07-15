@@ -46,6 +46,10 @@ val free_member : string -> string
 (** [free_member "v128_bitselect" = "bitselect"]: the [v128::] member name for a
     full registry key (the inverse of {!free_full}). *)
 
+val free_member_names : string list
+(** Every [v128::] free-function member: [bitselect] and one const constructor
+    per shape ([i8x16] … [f64x2]). For completion after [v128::]. *)
+
 val vec_load_name : Ast.vec_load_op -> string
 val load_lane_name : [ `I8 | `I16 | `I32 | `I64 ] -> string
 val store_lane_name : [ `I8 | `I16 | `I32 | `I64 ] -> string
