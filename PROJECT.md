@@ -250,7 +250,7 @@ editing. Tested in `test/editor-wat-recovery/`.
 
 ### Possible follow-ups
 
-The `wax check --all-errors` CLI path is still Wax-only (`main.ml` guards on
-`Wax`); it could route WAT through `wat_parse_recover` too. And an overlong
+`wax check --all-errors` now covers WAT too (commit 03e422df: the `Wat` arm in
+`main.ml` recovers, then validates in recovery mode). Remaining: an overlong
 integer literal still crashes `parse_recover` (see the aside above), independent
 of all this.
