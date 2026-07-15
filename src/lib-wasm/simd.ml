@@ -477,6 +477,15 @@ let table : (string, intrinsic) Hashtbl.t =
 
 let classify name = Hashtbl.find_opt table name
 
+let method_names recv_ty =
+  Hashtbl.fold
+    (fun name i acc ->
+      match i.operands with
+      | hd :: _ when (not i.free) && hd = recv_ty -> name :: acc
+      | _ -> acc)
+    table []
+  |> List.sort compare
+
 let const_shape_of_name name : Wax_utils.V128.shape option =
   let prefix = "v128_" in
   if

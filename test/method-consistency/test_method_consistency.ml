@@ -56,6 +56,48 @@ let check recv (m : Typing.value_method) =
     | -1 -> "PARSE ERROR"
     | n -> Printf.sprintf "FAIL (%d errors)" n)
 
+(* The [v128] methods are enumerated from the SIMD registry rather than curated,
+   so completion offers exactly what the typer classifies — no drift by
+   construction. This still type-checks each: a call built from the intrinsic's
+   own shape (leading lane immediates, then the non-receiver operands, result
+   bound to its claimed type), so a bad enumeration or a wrong rendered signature
+   would surface. Since there are many, only failures are listed; a curated
+   sample's rendered signature is printed to lock in the formatting. *)
+let ty_name : Wax_wasm.Simd.ty -> string = function
+  | TV128 -> "v128"
+  | TI32 -> "i32"
+  | TI64 -> "i64"
+  | TF32 -> "f32"
+  | TF64 -> "f64"
+
+let ty_var : Wax_wasm.Simd.ty -> string = function
+  | TV128 -> "v"
+  | TI32 -> "i"
+  | TI64 -> "l"
+  | TF32 -> "f"
+  | TF64 -> "d"
+
+let v128_call_errors name =
+  match Wax_wasm.Simd.classify name with
+  | Some { operands = _receiver :: rest; result; imm; _ } ->
+      let imms =
+        match imm with
+        | Wax_wasm.Simd.No_imm -> []
+        | Lane _ -> [ "0" ]
+        | Shuffle -> List.init 16 (fun _ -> "0")
+      in
+      let args = String.concat ", " (imms @ List.map ty_var rest) in
+      let call = Printf.sprintf "v.%s(%s)" name args in
+      let body =
+        match result with
+        | Some t -> Printf.sprintf "let r: %s = %s; _ = r;" (ty_name t) call
+        | None -> call ^ ";"
+      in
+      error_count
+        (Printf.sprintf "fn t(v: v128, i: i32, l: i64, f: f32, d: f64) { %s }\n"
+           body)
+  | _ -> -1
+
 let () =
   List.iter (check "i32") Typing.integer_methods;
   List.iter (check "i64") Typing.integer_methods;
@@ -65,4 +107,40 @@ let () =
     "type arr = [i32];\nfn t(x: &arr) { let r: i32 = x.length(); _ = r; }\n"
   in
   Printf.printf "arr .length      %s\n"
-    (match error_count src with 0 -> "ok" | _ -> "FAIL")
+    (match error_count src with 0 -> "ok" | _ -> "FAIL");
+  let v128 = Typing.simd_v128_methods () in
+  Printf.printf "\nv128: %d methods offered\n" (List.length v128);
+  let failures =
+    List.filter
+      (fun (c : Typing.member_candidate) -> v128_call_errors c.member_name <> 0)
+      v128
+  in
+  (match failures with
+  | [] -> Printf.printf "all type-check\n"
+  | fs ->
+      List.iter
+        (fun (c : Typing.member_candidate) ->
+          Printf.printf "  FAIL %s\n" c.member_name)
+        fs);
+  Printf.printf "\nsample signatures:\n";
+  List.iter
+    (fun name ->
+      match
+        List.find_opt
+          (fun (c : Typing.member_candidate) -> c.member_name = name)
+          v128
+      with
+      | Some c -> Printf.printf "  %-22s %s\n" c.member_name c.member_detail
+      | None -> Printf.printf "  %-22s (not offered)\n" name)
+    [
+      "neg_i32x4";
+      "add_i32x4";
+      "shl_i32x4";
+      "eq_i32x4";
+      "any_true_v128";
+      "bitmask_i8x16";
+      "extract_lane_s_i8x16";
+      "replace_lane_i32x4";
+      "shuffle_i8x16";
+      "splat_i32x4" (* a scalar-receiver method: must NOT be offered here *);
+    ]

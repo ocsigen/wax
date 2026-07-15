@@ -69,6 +69,12 @@ val float_methods : value_method list
     type-checks each — arity and result type included — to keep it in step with
     the typer. *)
 
+val simd_v128_methods : unit -> member_candidate list
+(** The value methods member completion offers for a [v128] receiver — the
+    vector ops [v.add_i32x4(w)], with their signatures. Enumerated from the SIMD
+    registry ({!Wax_wasm.Simd.method_names}), which is also what the typer
+    dispatches through, so the list cannot drift from what type-checks. *)
+
 type hover_target =
   | Value_type of Infer.inferred_valtype
   | Type_def of Ast.subtype

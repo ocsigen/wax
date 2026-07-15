@@ -166,17 +166,21 @@ does not carry. Three distinct prerequisites:
 
   **Value methods** after `.` are offered too: on a numeric receiver the typer
   records a curated registry (`Typing.integer_methods` / `float_methods` —
-  `clz`, `sqrt`, `min`, …) at the same field-access choke point, and an array
-  receiver records `length`. The registry is curated because the method dispatch
-  is match-based, not enumerable; `test/method-consistency` type-checks each
-  entry — arity and result type included — so the list cannot drift from what the
-  typer accepts. Each is offered with the "method" completion kind (a distinct
-  icon) and a rendered signature (`fn() -> i32`, `fn(f32) -> f32`); the member
-  sink carries a kind and detail per candidate, not a bare name. Follow-ups:
-  memory/table method completion (a different dispatch path where the receiver
-  is not a value), v128 methods (enumerable from `Wax_wasm.Simd`), intrinsic
-  namespaces after `::`, and per-point local scoping (currently every local in
-  the function is offered).
+  `clz`, `sqrt`, `min`, …) at the same field-access choke point, an array
+  receiver records `length`, and a `v128` receiver records the SIMD vector ops
+  (`add_i32x4`, `extract_lane_s_i8x16`, `shuffle_i8x16`, …). The scalar registry
+  is curated because that dispatch is match-based, not enumerable, so
+  `test/method-consistency` type-checks each entry — arity and result type
+  included — to keep it from drifting; the v128 set instead comes straight from
+  `Wax_wasm.Simd.method_names`, the very table the typer classifies calls
+  through, so no drift is possible (the test still type-checks the ~230 offered
+  and confirms scalar-receiver methods like `splat` are excluded). Each is
+  offered with the "method" completion kind (a distinct icon) and a rendered
+  signature (`fn() -> i32`, `fn(f32) -> f32`, `fn(16 lane indices, v128) ->
+  v128`); the member sink carries a kind and detail per candidate, not a bare
+  name. Follow-ups: memory/table method completion (a different dispatch path
+  where the receiver is not a value), intrinsic namespaces after `::`, and
+  per-point local scoping (currently every local in the function is offered).
 - [x] **Multi-error syntax recovery.** *Was* prereq 3, now delivered: `check`
   runs through `parse_recover` and reports every syntax error at once, not just
   the first.
@@ -192,10 +196,10 @@ The core language-server features are all in: diagnostics, formatting, outline,
 hover, inlay hints, go-to-definition, find-references / document-highlight,
 rename, and completion (names and struct members). What is left refines them:
 
-- **Completion polish** — value methods after `.` are done (curated registry,
-  numeric + array receivers, with a method icon + signature), and struct fields
-  carry their type; still open are memory/table method completion, v128 methods,
-  intrinsic namespaces after `::`, and per-point local scoping.
+- **Completion polish** — value methods after `.` are done (numeric, array and
+  v128 receivers, with a method icon + signature), and struct fields carry their
+  type; still open are memory/table method completion, intrinsic namespaces
+  after `::`, and per-point local scoping.
 - **Deeper rename** conflict/shadowing detection.
 - **Semantic tokens** — low value given the TextMate grammar.
 

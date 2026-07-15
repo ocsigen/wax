@@ -35,3 +35,18 @@ f64 .min         ok
 f64 .max         ok
 f64 .copysign    ok
 arr .length      ok
+
+v128: 228 methods offered
+all type-check
+
+sample signatures:
+  neg_i32x4              fn() -> v128
+  add_i32x4              fn(v128) -> v128
+  shl_i32x4              fn(i32) -> v128
+  eq_i32x4               fn(v128) -> v128
+  any_true_v128          fn() -> i32
+  bitmask_i8x16          fn() -> i32
+  extract_lane_s_i8x16   fn(lane index) -> i32
+  replace_lane_i32x4     fn(lane index, i32) -> v128
+  shuffle_i8x16          fn(16 lane indices, v128) -> v128
+  splat_i32x4            (not offered)

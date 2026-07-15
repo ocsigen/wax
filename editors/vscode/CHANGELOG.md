@@ -32,9 +32,10 @@
   `fn(a: i32) -> i32`) where the declaration gives one.
 - Member completion after `.` now also offers the value methods that apply to
   the receiver: the numeric methods (`clz`, `sqrt`, `min`, …) on an integer or
-  float value, and `length` on an array. Each carries a method icon and its
-  signature (e.g. `fn(f32) -> f32`), and struct fields now show their declared
-  type (`i32`, `mut i32`, `&point`).
+  float value, `length` on an array, and the SIMD vector ops (`add_i32x4`,
+  `extract_lane_s_i8x16`, `shuffle_i8x16`, …) on a `v128`. Each carries a method
+  icon and its signature (e.g. `fn(f32) -> f32`), and struct fields now show
+  their declared type (`i32`, `mut i32`, `&point`).
 
 ## 0.2.2
 

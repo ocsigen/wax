@@ -3949,6 +3949,37 @@ let simd_valtype : Simd.ty -> inferred_valtype = function
   | TF64 -> f64_valtype
 
 let simd_cell t = valtype_cell (simd_valtype t)
+let simd_ty_name t = numtype_name (simd_valtype t).typ
+
+(* The member-completion candidate for a SIMD method [name] (e.g. [add_i32x4]),
+   its signature read straight from the registry the typer dispatches through
+   ([Simd.classify]): the leading constant lane immediates, then the
+   non-receiver stack operands, then the result. *)
+let simd_method_candidate name =
+  let detail =
+    match Simd.classify name with
+    | Some { operands = _receiver :: rest; result; imm; _ } ->
+        let imm_params =
+          match imm with
+          | Simd.No_imm -> []
+          | Lane _ -> [ "lane index" ]
+          | Shuffle -> [ "16 lane indices" ]
+        in
+        let params = imm_params @ List.map simd_ty_name rest in
+        let result =
+          match result with Some t -> simd_ty_name t | None -> "()"
+        in
+        Printf.sprintf "fn(%s) -> %s" (String.concat ", " params) result
+    | _ -> ""
+  in
+  { member_name = name; member_kind = Method; member_detail = detail }
+
+(* The value methods offered by member completion for a [v128] receiver — the
+   vector ops [v.add_i32x4(w)], enumerated from the SIMD registry (so, unlike
+   the scalar registries above, no drift is possible: the same table classifies
+   the call). *)
+let simd_v128_methods () =
+  List.map simd_method_candidate (Simd.method_names Simd.TV128)
 
 (* Memory access method names. The value width is in the name; signedness and the
    i32/i64 result come from a surrounding [as iN_s/u] cast (see [to_wasm]). *)
@@ -5615,6 +5646,8 @@ and type_aggregate_access ctx i =
         | Valtype { typ = (F32 | F64) as recv; _ } ->
             record_members ctx.member_completions field.info (fun () ->
                 method_candidates recv float_methods)
+        | Valtype { typ = V128; _ } ->
+            record_members ctx.member_completions field.info simd_v128_methods
         | _ -> ());
         match (Cell.get ty, field.desc) with
         | Valtype { typ = Ref { typ = Type ty | Exact ty; _ }; _ }, _ -> (

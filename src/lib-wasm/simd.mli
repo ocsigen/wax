@@ -74,6 +74,13 @@ type intrinsic = {
 val classify : string -> intrinsic option
 (** Recognise a method or free-function SIMD intrinsic by name. *)
 
+val method_names : ty -> string list
+(** The names of every SIMD *method* intrinsic (not a free function) whose
+    receiver — its first stack operand — is [ty], sorted. [method_names TV128]
+    is the vector ops written [v.add_i32x4(w)]; the scalar-receiver [splat]s
+    live under their lane type (e.g. [TI32] for [splat_i32x4]). For member
+    completion after [.] on a value of that type. *)
+
 val is_free_intrinsic : string -> bool
 (** A reserved free-function name (a [v128_<shape>] constant, [v128_bitselect]);
     these shadow a user function of the same name only when it is unbound. *)
