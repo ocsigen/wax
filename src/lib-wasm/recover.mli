@@ -19,8 +19,10 @@ val insert : (Tokens.token * Wax_utils.Message.t) list
     operand or index — each with the diagnostic to report. Passed as its
     [?insert] argument. *)
 
-val barrier : Tokens.token * (Tokens.token -> bool)
-(** The [(] token and the field-keyword predicate {!Parsing.Make.parse_recover}
-    uses to recognize a missing closer (a field keyword offered where an
-    instruction was expected) and restart at the new field. Passed as its
-    [?barrier] argument. *)
+val barrier : Tokens.token * (Tokens.token -> bool) * (Tokens.token -> bool)
+(** The barrier {!Parsing.Make.parse_recover} uses to recognize a missing closer
+    (a new field offered where an instruction was expected) and restart at that
+    field: the [(] token to re-offer, the predicate for a field keyword written
+    after a bare [(] (offered as a pair), and the predicate for a fused
+    [(type]/[(import]/[(export] opener (offered alone). Passed as its [?barrier]
+    argument. *)

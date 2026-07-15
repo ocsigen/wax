@@ -35,15 +35,23 @@ let insert = [ (Tokens.NAT "0", Wax_utils.Message.text "Missing integer.") ]
 
 (* A missing closer — [(module (func … (func …] with a [)] left out — surfaces
    as a field-opening keyword offered where an instruction was expected. This
-   [barrier] (the [(] to re-offer, and the predicate recognizing those keywords)
-   lets [Parsing.parse_recover] close the enclosing field and restart at the new
-   one instead of letting paren-depth counting swallow it. Only the bare field
-   keywords (not the compound [(type]/[(import]/… openers, which also occur
-   nested) are treated as barriers. Passed as [?barrier]. *)
+   [barrier] lets [Parsing.parse_recover] close the enclosing field and restart
+   at the new one instead of letting paren-depth counting swallow it. It has
+   three parts: the bare [(] to re-offer; the predicate recognizing a field
+   keyword written after a bare [(] (offered as the pair [( ; keyword]); and the
+   predicate recognizing a {e fused} field opener the lexer folds into one token
+   ([(type]/[(import]/[(export]), offered alone. The bare field keywords have no
+   fused form; the fused openers are also valid nested (a [(type …)] typeuse, an
+   inline [(import …)]/[(export …)]), so both predicates fire only at the
+   enclosing recovery level, never on skipped nested content. Passed as
+   [?barrier]. *)
 let barrier =
   ( Tokens.LPAREN,
-    function
+    (function
     | Tokens.FUNC | Tokens.GLOBAL | Tokens.MEMORY | Tokens.TABLE | Tokens.ELEM
     | Tokens.DATA | Tokens.TAG | Tokens.START | Tokens.REC | Tokens.MODULE ->
         true
+    | _ -> false),
+    function
+    | Tokens.LPAREN_TYPE | Tokens.LPAREN_IMPORT | Tokens.LPAREN_EXPORT -> true
     | _ -> false )
