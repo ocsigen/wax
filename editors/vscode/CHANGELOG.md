@@ -56,7 +56,10 @@
 - Completion respects conditional compilation: a definition in a `#[if]`/`#[else]`
   branch is offered only where its condition is compatible with the cursor's, so
   an `#[else]` function is not suggested while editing the matching `#[if]`
-  branch (even when the branch is an `#[if]` inside a function body).
+  branch (even when the branch is an `#[if]` inside a function body). With
+  `wax.define` set, that configuration is fed in as an extra assumption
+  (mirroring `-D`), so a definition in a branch the defines rule out is not
+  offered at all.
 - Signature help for `.wax`: while typing a call, the callee's signature is
   shown with the active argument highlighted — for functions, imported
   functions, `ns::` intrinsics, and methods (`x.min(…)`, `v.add_i32x4(…)`,

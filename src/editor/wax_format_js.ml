@@ -300,6 +300,18 @@ let check_string src =
   let a = analyze src in
   a.a_syntax @ a.a_type
 
+(* The editor's [wax.define] strings parsed into specialization bindings
+   (unparseable entries silently dropped), shared by the diagnostics and
+   completion paths that specialize to the chosen configuration. *)
+let define_bindings defines =
+  Wax_wasm.Cond_specialize.of_list
+    (List.filter_map
+       (fun s ->
+         match Wax_wasm.Cond_specialize.parse_define s with
+         | Ok b -> Some b
+         | Error _ -> None)
+       defines)
+
 (* Diagnostics specialized to a chosen conditional-compilation configuration,
    mirroring [wax -D … check]. With no (parseable) defines this is the plain
    [check_string] — the all-configurations path-sensitive check. With defines,
@@ -313,15 +325,7 @@ let check_string src =
    wanted) still surfaces. Syntax errors are configuration-independent and always
    reported. *)
 let check_string_with_defines src defines =
-  let bindings =
-    Wax_wasm.Cond_specialize.of_list
-      (List.filter_map
-         (fun s ->
-           match Wax_wasm.Cond_specialize.parse_define s with
-           | Ok b -> Some b
-           | Error _ -> None)
-         defines)
-  in
+  let bindings = define_bindings defines in
   if Wax_wasm.Cond_specialize.is_empty bindings then check_string src
   else
     let ast_opt, syntax_errors, _ctx =
@@ -1146,7 +1150,7 @@ let function_locals ast target =
    the cursor's — so a definition in a branch mutually exclusive with the cursor's
    position (an [#[else]] when the cursor is in the [#[if]], say) is dropped. With
    no conditionals every guard is [true], so all definitions are offered. *)
-let module_completions src ast target =
+let module_completions src ast target bindings =
   let open Wax_lang.Ast in
   let pos (p : Lexing.position) =
     (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
@@ -1157,7 +1161,18 @@ let module_completions src ast target =
   in
   let env = Wax_wasm.Cond_solver.create () in
   let dctx = Wax_utils.Diagnostic.collector ~source:src () in
-  let formula loc c = Wax_wasm.Cond_solver.of_cond env dctx ~location:loc c in
+  (* A branch condition as a solver formula, first partially evaluated against
+     the [wax.define] bindings: a condition the configuration determines
+     collapses to [true_] / [false_] (so a ruled-out branch's definitions become
+     unsatisfiable and drop out), while one that still mentions unset variables
+     stays symbolic and path-sensitive. With empty bindings [eval] leaves every
+     condition residual, so this is exactly the former [of_cond]. *)
+  let formula loc c =
+    match Wax_wasm.Cond_specialize.eval dctx bindings c with
+    | True -> Wax_wasm.Cond_solver.true_
+    | False -> Wax_wasm.Cond_solver.false_
+    | Residual c -> Wax_wasm.Cond_solver.of_cond env dctx ~location:loc c
+  in
   let ( &&& ) = Wax_wasm.Cond_solver.and_ in
   let neg = Wax_wasm.Cond_solver.not_ in
   (* The cursor's path condition. *)
@@ -1297,7 +1312,7 @@ let namespace_position src line ch =
     if !j < stop then Some (String.sub src (!j + 1) (stop - !j)) else None)
   else None
 
-let completion_string src line ch =
+let completion_string src line ch defines =
   if is_member_position src line ch then
     match member_receiver_at src line ch (analyze src).a_members with
     | Some r -> List.map member_completion (Wax_lang.Typing.member_candidates r)
@@ -1354,8 +1369,13 @@ let completion_string src line ch =
         | Some ast ->
             (* The module's definitions in scope at the cursor (descending into
                conditional branches, but dropping ones a mutually-exclusive
-               [#[if]] arm guards; see [module_completions]). *)
-            let module_ = module_completions src ast target in
+               [#[if]] arm guards; see [module_completions]). The chosen
+               [wax.define] set is fed in as an extra assumption, so a definition
+               in a branch the configuration rules out drops away and a partial
+               set stays path-sensitive. *)
+            let module_ =
+              module_completions src ast target (define_bindings defines)
+            in
             let locals = function_locals ast target in
             (* Locals shadow module names of the same name; keep the first
            occurrence of each (name, kind). *)
@@ -1925,8 +1945,14 @@ let js_completion c =
     val detail = Js.string c.k_detail
   end
 
-let completion_result src line ch =
-  let items = try completion_string (Js.to_string src) line ch with _ -> [] in
+let completion_result src line ch defines =
+  let defines =
+    try Js.to_array defines |> Array.to_list |> List.map Js.to_string
+    with _ -> []
+  in
+  let items =
+    try completion_string (Js.to_string src) line ch defines with _ -> []
+  in
   Js.array (Array.of_list (List.map js_completion items))
 
 let signature_result src line ch =
@@ -1996,7 +2022,10 @@ let () =
       method renamePrepare src line ch = rename_prepare_result src line ch
       method rename src line ch newname = rename_result src line ch newname
       method symbols src = symbols_result symbols_string src
-      method completion src line ch = completion_result src line ch
+
+      method completion src line ch defines =
+        completion_result src line ch defines
+
       method signatureHelp src line ch = signature_result src line ch
       method semanticTokens src = semantic_result src
       method inactiveRanges src defines = inactive_ranges_result src defines

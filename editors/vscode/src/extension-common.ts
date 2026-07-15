@@ -68,12 +68,15 @@ interface LanguageSpec {
     character: number,
     newName: string,
   ): WaxEdit[];
-  // Names in scope at a position, for completion. Wax only.
+  // Names in scope at a position, for completion, specialized to the active
+  // `wax.define` set (an empty array keeps the all-configurations behaviour).
+  // Wax only.
   completion?(
     wax: Wax,
     src: string,
     line: number,
     character: number,
+    defines: string[],
   ): WaxCompletion[];
   // The enclosing call's signature at a position, for signature help. Wax only.
   signatureHelp?(
@@ -102,8 +105,8 @@ const LANGUAGES: LanguageSpec[] = [
       wax.renamePrepare(src, line, character),
     rename: (wax, src, line, character, newName) =>
       wax.rename(src, line, character, newName),
-    completion: (wax, src, line, character) =>
-      wax.completion(src, line, character),
+    completion: (wax, src, line, character, defines) =>
+      wax.completion(src, line, character, defines),
     signatureHelp: (wax, src, line, character) =>
       wax.signatureHelp(src, line, character),
     semanticTokens: (wax, src) => wax.semanticTokens(src),
@@ -598,6 +601,9 @@ function registerCompletion(
         return [];
       }
       if (token.isCancellationRequested) return [];
+      const defines = vscode.workspace
+        .getConfiguration("wax")
+        .get<string[]>("define", []);
       let items: WaxCompletion[];
       try {
         items = completion(
@@ -605,6 +611,7 @@ function registerCompletion(
           document.getText(),
           position.line,
           position.character,
+          defines,
         );
       } catch {
         return [];

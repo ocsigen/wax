@@ -164,9 +164,12 @@ does not carry. Three distinct prerequisites:
   `#[if]`/`#[else]` branches (`Cond_specialize.module_`, as `main.ml`'s
   `specialize_wax` does) before type-checking, so the Problems match a
   `wax -D … check` (a type error confined to the inactive branch disappears; a
-  partial set leaves the rest for the path-sensitive check). Follow-up: feeding
-  the defines into completion so it specialises to the configuration too. Wax
-  only.
+  partial set leaves the rest for the path-sensitive check). Completion
+  specialises to the same defines too: the bindings are fed into
+  `module_completions` as an extra assumption (each branch condition run through
+  `Cond_specialize.eval` first, collapsing a determined branch to `true`/`false`
+  and leaving a partial one residual for the path-sensitive filter), so a
+  definition in a ruled-out branch is not offered. Wax only.
 - [x] **Completion.** A `completion` export offers the names in scope at a
   position — the module's top-level definitions (reusing the outline walk), the
   enclosing function's parameters and locals, and the keywords — each tagged with
@@ -186,7 +189,10 @@ does not carry. Three distinct prerequisites:
   cursor's path condition (`Wax_wasm.Cond_solver`). So an `#[else]` definition
   is dropped when the cursor is in the matching `#[if]`, even across the
   module/function boundary; with no conditionals every guard is `true` and all
-  definitions are offered.
+  definitions are offered. When `wax.define` is set, each branch condition is
+  first partially evaluated against the bindings (`Cond_specialize.eval`), so a
+  branch the configuration determines collapses to `true`/`false` (dropping a
+  ruled-out branch's definitions) and only unset variables stay path-sensitive.
 
   Member completion after `.` **is** done: at a struct field access `recv.field`
   the typer records the receiver struct's field names keyed by the field span

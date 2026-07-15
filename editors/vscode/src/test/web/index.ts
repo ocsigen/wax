@@ -118,7 +118,7 @@ export async function run(): Promise<void> {
     const p = at(
       "const c: i32 = 0;\nfn f(a: i32) {\n  let x = 1;\n‸  let y = 2;\n}\n",
     );
-    const n = names(wax.completion(p.src, p.line, p.character));
+    const n = names(wax.completion(p.src, p.line, p.character, []));
     for (const want of ["c", "f", "a", "x"]) {
       if (!n.includes(want)) {
         throw new Error("web: completion missing " + want + ": " + n);
@@ -129,25 +129,48 @@ export async function run(): Promise<void> {
     }
   }
 
+  // completion specialized to defines: a definition in the branch the
+  // configuration rules out is not offered (mirroring `wax -D`); without defines
+  // both branches' names are offered.
+  {
+    const p = at(
+      "#[if(debug)] { fn dbg() {} }\n#[else] { fn rel() {} }\nfn use_it() {\n‸}\n",
+    );
+    const both = names(wax.completion(p.src, p.line, p.character, []));
+    if (!both.includes("dbg") || !both.includes("rel")) {
+      throw new Error("web: no-define completion should offer both: " + both);
+    }
+    const on = names(wax.completion(p.src, p.line, p.character, ["debug=true"]));
+    if (!on.includes("dbg") || on.includes("rel")) {
+      throw new Error("web: debug=true should offer dbg, not rel: " + on);
+    }
+    const off = names(
+      wax.completion(p.src, p.line, p.character, ["debug=false"]),
+    );
+    if (!off.includes("rel") || off.includes("dbg")) {
+      throw new Error("web: debug=false should offer rel, not dbg: " + off);
+    }
+  }
+
   // member completion after ".": a struct's fields, and a numeric receiver's
   // value methods.
   {
     const p = at("type p = { x: i32, y: i32 };\nfn g(q: &p) {\n  _ = q.‸x;\n}\n");
-    const n = names(wax.completion(p.src, p.line, p.character));
+    const n = names(wax.completion(p.src, p.line, p.character, []));
     if (!n.includes("x") || !n.includes("y")) {
       throw new Error("web: member completion: " + n);
     }
   }
   {
     const p = at("fn m(v: f32) {\n  _ = v.‸s;\n}\n");
-    if (!names(wax.completion(p.src, p.line, p.character)).includes("sqrt")) {
+    if (!names(wax.completion(p.src, p.line, p.character, [])).includes("sqrt")) {
       throw new Error("web: value-method completion missing sqrt");
     }
   }
   // completion after "::": an intrinsic namespace's members.
   {
     const p = at("fn m() {\n  _ = i64::‸a;\n}\n");
-    if (!names(wax.completion(p.src, p.line, p.character)).includes("add128")) {
+    if (!names(wax.completion(p.src, p.line, p.character, [])).includes("add128")) {
       throw new Error("web: namespace completion missing add128");
     }
   }

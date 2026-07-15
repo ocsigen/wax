@@ -38,8 +38,9 @@ Syntax highlighting, formatting, diagnostics, and snippets for
   `length`/`fill`/… on an array, the SIMD ops on a `v128`, the
   load/store/management ops
   on a memory or table); after `::`, an intrinsic namespace's functions
-  (`v128::`, `i64::`, `atomic::`). Works while the file is
-  mid-edit.
+  (`v128::`, `i64::`, `atomic::`). Suggestions respect conditional compilation
+  and the `wax.define` configuration, so a definition in a branch the defines
+  rule out is not offered. Works while the file is mid-edit.
 - **Signature help** (`.wax`): while typing a call, shows the callee's signature
   with the active argument highlighted — for functions, imported functions,
   `ns::` intrinsics, and methods (`x.min(…)`, `mem.load8(…)`).

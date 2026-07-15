@@ -129,8 +129,15 @@ export interface Wax {
   ): WaxEdit[];
   symbols(src: string): WaxSymbol[];
   // Names in scope at the position (module defs, the enclosing function's
-  // params/locals, keywords), for completion. Wax only.
-  completion(src: string, line: number, character: number): WaxCompletion[];
+  // params/locals, keywords), for completion, specialized to the given
+  // conditional-compilation defines (an empty array keeps the all-configurations
+  // path-sensitive behaviour). Wax only.
+  completion(
+    src: string,
+    line: number,
+    character: number,
+    defines: string[],
+  ): WaxCompletion[];
   // The enclosing call's signature at the position, or null if the cursor is
   // not inside a call to a named function. Wax only.
   signatureHelp(
