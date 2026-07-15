@@ -595,54 +595,56 @@ let format inplace check format_opt color fold_mode warnings debug error_format
           ~source_map_file:None ~fold_mode ~desugar:false
           ~defines:(Wax_wasm.Cond_specialize.of_list []))
   else begin
-  if (not inplace) && (not check) && List.length files <> 1 then
-    usage_error
-      "Exactly one input file must be specified without --inplace or --check.";
-  let read path = In_channel.with_open_bin path In_channel.input_all in
-  (* Returns false on an error or, in check mode, a file that needs formatting. *)
-  let format_one file =
-    match
-      match format_opt with Some _ -> format_opt | None -> detect_format file
-    with
-    | None ->
-        Printf.eprintf
-          "%s: cannot detect format (expected .wat, .wax or .wasm)\n" file;
-        false
-    | Some fmt ->
-        let same_format = same_format_of fmt in
-        let run ~output_file ~output_color =
-          same_format ~input_file:(Some file) ~output_file ~validate:false
-            ~warn_unused:false ~color ~output_color ~source_map_file:None
-            ~fold_mode ~desugar:false
-            ~defines:(Wax_wasm.Cond_specialize.of_list [])
-        in
-        if check then
-          (* Format into a temporary file and compare with the original, so the
-             check matches exactly what --inplace would write. *)
-          let tmp = Filename.temp_file "wax-format-" "" in
-          Fun.protect
-            ~finally:(fun () -> try Sys.remove tmp with Sys_error _ -> ())
-            (fun () ->
-              run ~output_file:(Some tmp) ~output_color:Wax_utils.Colors.Never;
-              String.equal (read file) (read tmp)
-              ||
-              (print_endline file;
-               false))
-        else if (not inplace) && fmt = Wasm && Unix.isatty Unix.stdout then (
-          Printf.eprintf "Binary output not allowed on terminal\n";
-          false)
-        else
-          (* Writing back into a source file must never embed ANSI colors;
-             when formatting to stdout, resolve color as usual. *)
-          let output_color =
-            if inplace then Wax_utils.Colors.Never
-            else Wax_utils.Colors.update_flag ~color
+    if (not inplace) && (not check) && List.length files <> 1 then
+      usage_error
+        "Exactly one input file must be specified without --inplace or --check.";
+    let read path = In_channel.with_open_bin path In_channel.input_all in
+    (* Returns false on an error or, in check mode, a file that needs formatting. *)
+    let format_one file =
+      match
+        match format_opt with
+        | Some _ -> format_opt
+        | None -> detect_format file
+      with
+      | None ->
+          Printf.eprintf
+            "%s: cannot detect format (expected .wat, .wax or .wasm)\n" file;
+          false
+      | Some fmt ->
+          let same_format = same_format_of fmt in
+          let run ~output_file ~output_color =
+            same_format ~input_file:(Some file) ~output_file ~validate:false
+              ~warn_unused:false ~color ~output_color ~source_map_file:None
+              ~fold_mode ~desugar:false
+              ~defines:(Wax_wasm.Cond_specialize.of_list [])
           in
-          run ~output_file:(if inplace then Some file else None) ~output_color;
-          true
-  in
-  if not (List.fold_left (fun ok file -> format_one file && ok) true files) then
-    exit 123
+          if check then
+            (* Format into a temporary file and compare with the original, so the
+             check matches exactly what --inplace would write. *)
+            let tmp = Filename.temp_file "wax-format-" "" in
+            Fun.protect
+              ~finally:(fun () -> try Sys.remove tmp with Sys_error _ -> ())
+              (fun () ->
+                run ~output_file:(Some tmp) ~output_color:Wax_utils.Colors.Never;
+                String.equal (read file) (read tmp)
+                ||
+                (print_endline file;
+                 false))
+          else if (not inplace) && fmt = Wasm && Unix.isatty Unix.stdout then (
+            Printf.eprintf "Binary output not allowed on terminal\n";
+            false)
+          else
+            (* Writing back into a source file must never embed ANSI colors;
+             when formatting to stdout, resolve color as usual. *)
+            let output_color =
+              if inplace then Wax_utils.Colors.Never
+              else Wax_utils.Colors.update_flag ~color
+            in
+            run ~output_file:(if inplace then Some file else None) ~output_color;
+            true
+    in
+    if not (List.fold_left (fun ok file -> format_one file && ok) true files)
+    then exit 123
   end
 
 (* Check files: parse and validate each (type-check Wax, well-formedness Wasm)
@@ -854,9 +856,11 @@ let color_option =
 (* Define the --error-format option (human vs machine-readable diagnostics) *)
 let error_format_option =
   let doc =
-    "Diagnostic output format: $(b,human) (source snippets, the default) or \
-     $(b,json) (one JSON object per diagnostic per line, on stderr) for \
-     consumption by an editor, CI job, or AI assistant."
+    "Diagnostic output format: $(b,human) (source snippets, the default), \
+     $(b,json) (one JSON object per diagnostic per line), or $(b,short) (one \
+     $(b,file:line:col: severity: message) line per diagnostic, gcc/rustc \
+     style). The machine-readable forms go to stderr, for consumption by an \
+     editor, CI job, or AI assistant."
   in
   let error_conv =
     Arg.Conv.make ~docv:"FORMAT"
@@ -865,15 +869,18 @@ let error_format_option =
            [
              ("human", "Human-readable diagnostics");
              ("json", "One JSON object per diagnostic per line");
+             ( "short",
+               "One file:line:col: severity: message line per diagnostic" );
            ])
       ~parser:(fun s ->
         match s with
         | "human" -> Ok Wax_utils.Diagnostic.Human
         | "json" -> Ok Wax_utils.Diagnostic.Json
+        | "short" -> Ok Wax_utils.Diagnostic.Short
         | s -> Error (Printf.sprintf "Unknown error format: %s" s))
       ~pp:(fun ppf (f : Wax_utils.Diagnostic.output_format) ->
         Format.pp_print_string ppf
-          (match f with Human -> "human" | Json -> "json"))
+          (match f with Human -> "human" | Json -> "json" | Short -> "short"))
       ()
   in
   Arg.(

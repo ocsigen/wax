@@ -4,8 +4,11 @@ type severity = Error | Warning
 type output_format =
   | Human
   | Json
-      (** How diagnostics are rendered: [Human] (source snippets, the default)
-          or [Json] (one JSON object per diagnostic per line, i.e. JSON Lines).
+  | Short
+      (** How diagnostics are rendered: [Human] (source snippets, the default),
+          [Json] (one JSON object per diagnostic per line, i.e. JSON Lines), or
+          [Short] (one [file:line:col: severity: message] line per diagnostic,
+          gcc/rustc style, for editors with a simple line-based error parser).
       *)
 
 type label = {

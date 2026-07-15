@@ -63,7 +63,7 @@ type t = {
    as rustc/cargo do, so a CI job or an editor can parse diagnostics
    mechanically. Set once from the command line via [set_format], mirroring
    [set_policy]. The default is [Human], so nothing changes unless requested. *)
-type output_format = Human | Json
+type output_format = Human | Json | Short
 
 let global_format = ref Human
 let set_format f = global_format := f
@@ -127,6 +127,31 @@ let output_error_json ~output ~location ~severity ?warning ?hint ?(related = [])
   in
   Format.pp_print_string output (Yojson.Safe.to_string obj);
   Format.pp_print_newline output ()
+
+(* Emit one diagnostic as a single [file:line:col: severity: message] line
+   (gcc/rustc "short" style), for editors whose error parser is line-based
+   (Vim's errorformat, Emacs Flymake, …). The column is 1-based, matching the
+   human location line. A named warning's name is appended as [ [name]], as
+   clang/eslint do. The message is flattened to one physical line. *)
+let output_error_short ~output ~location ~severity ?warning msg =
+  let one_line pp =
+    String.trim
+      (String.map (fun c -> if c = '\n' then ' ' else c) (pp_to_string pp))
+  in
+  let sev = match severity with Error -> "error" | Warning -> "warning" in
+  let suffix =
+    match warning with
+    | Some w -> Printf.sprintf " [%s]" (Warning.name w)
+    | None -> ""
+  in
+  let p = location.Ast.loc_start in
+  if p = Lexing.dummy_pos then
+    Format.fprintf output "%s: %s%s@." sev (one_line msg) suffix
+  else
+    Format.fprintf output "%s:%d:%d: %s: %s%s@." p.Lexing.pos_fname
+      p.Lexing.pos_lnum
+      (p.Lexing.pos_cnum - p.Lexing.pos_bol + 1)
+      sev (one_line msg) suffix
 
 let print_hint ?(output = Format.err_formatter) ~theme hint =
   match hint with
@@ -237,6 +262,7 @@ let output_error_with_source ?(output = Format.err_formatter) ~theme ~source
     ~location ~severity ?hint ?(related = []) msg =
   match !global_format with
   | Json -> output_error_json ~output ~location ~severity ?hint ~related msg
+  | Short -> output_error_short ~output ~location ~severity msg
   | Human ->
       let annotations = get_annotations ~theme ~severity ~location ~related in
       let hunks = get_hunks annotations in
@@ -379,6 +405,7 @@ let output_error ?(output = Format.err_formatter) ~theme ~source ~location
   match !global_format with
   | Json ->
       output_error_json ~output ~location ~severity ?warning ?hint ~related msg
+  | Short -> output_error_short ~output ~location ~severity ?warning msg
   | Human -> (
       if location.Ast.loc_start = Lexing.dummy_pos then
         output_error_no_loc ~output ~theme ~severity ~hint msg
