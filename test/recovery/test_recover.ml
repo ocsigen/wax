@@ -47,4 +47,16 @@ let () =
      parsing resumes past it (here the ';' after the dropped '$' still errors),
      so recovery is not truncated by a stray character. *)
   report "lexer error is recorded and skipped"
-    "fn f() -> i32 { let x = $; 1; }\n"
+    "fn f() -> i32 { let x = $; 1; }\n";
+  (* A dropped statement separator is repaired by *inserting* a ';' (rather than
+     skipping to a boundary): the state after a complete statement can shift ';'
+     and the following statement then parses, so recovery reports a single
+     precise "Missing ';'" and salvages the rest. *)
+  report "missing ';' is repaired by insertion"
+    "fn f() -> i32 {\n    let x = 1\n    let y = 2;\n    x + y;\n}\n";
+  (* Insertion is validated before it is committed: here ';' is shiftable after
+     the complete statement, but the offending '@' still cannot start the next
+     one, so the repair is rejected and no spurious "Missing ';'" is added on top
+     of the genuine error (only the standard diagnostic remains). *)
+  report "unhelpful insertion is rejected, not reported"
+    "fn f() -> i32 {\n    let x = 1 @\n    x;\n}\n"

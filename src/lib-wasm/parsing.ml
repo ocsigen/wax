@@ -346,29 +346,44 @@ struct
           | Some env' -> unwind env' sync_tok
           | None -> None
       in
+      (* Drive a checkpoint through shifts and reductions to the next decision
+         point ([InputNeeded]/[Accepted]/[HandlingError]/[Rejected]). *)
+      let rec settle checkpoint =
+        match checkpoint with
+        | MI.Shifting _ | MI.AboutToReduce _ -> settle (MI.resume checkpoint)
+        | _ -> checkpoint
+      in
       (* Try to recover by inserting a missing token (typically a statement
          separator [";"]) in front of the offending token, rather than skipping
          to a boundary. When the erroring state can shift [insert] — [acceptable]
          answers this directly, no need to read the error message — offer a
-         zero-width [insert] there, then re-offer the held token. Returns the
-         resumed checkpoint, with the held token already re-offered, or [None] to
-         fall through to skip-based recovery. Insertion is attempted at most once
-         per source position ([last_insert]) so a mis-guess cannot loop: on the
-         retry the held token errors again at the same spot and we skip instead. *)
+         zero-width [insert] there. But [acceptable] only proves the {e inserted}
+         token fits, not that the {e held} (offending) token then does: inserting
+         [";"] before an [@] that cannot start a statement would just add a
+         spurious "Missing ';'" on top of the real error. So we validate the
+         repair by offering the held token on top and requiring that it too be
+         consumed — the parser must reach the next [InputNeeded] (held shifted,
+         wanting more input) or [Accepted], not an error state. Only a validated
+         repair is recorded and returned, with the held token already consumed;
+         otherwise [None] falls through to skip-based recovery. Attempted at most
+         once per source position ([last_insert]) so it cannot loop. *)
       let try_insert env last =
         match (insert, last) with
         | Some (tok, label), Some ((_, startp, _) as held)
           when !last_insert <> startp.Lexing.pos_cnum
-               && MI.acceptable (MI.input_needed env) tok startp ->
+               && MI.acceptable (MI.input_needed env) tok startp -> (
             last_insert := startp.Lexing.pos_cnum;
-            record_missing label startp;
-            let rec drive checkpoint =
-              match checkpoint with
-              | MI.InputNeeded _ -> MI.offer checkpoint held
-              | MI.Shifting _ | MI.AboutToReduce _ -> drive (MI.resume checkpoint)
-              | MI.HandlingError _ | MI.Accepted _ | MI.Rejected -> checkpoint
+            let after_insert =
+              settle (MI.offer (MI.input_needed env) (tok, startp, startp))
             in
-            Some (drive (MI.offer (MI.input_needed env) (tok, startp, startp)))
+            match after_insert with
+            | MI.InputNeeded _ -> (
+                match settle (MI.offer after_insert held) with
+                | (MI.InputNeeded _ | MI.Accepted _) as after_held ->
+                    record_missing label startp;
+                    Some after_held
+                | _ -> None)
+            | _ -> None)
         | _ -> None
       in
       (* Main loop: [last] is the most recently offered token, so at a
@@ -384,7 +399,7 @@ struct
         | MI.Rejected -> None
       and recover checkpoint env last =
         match try_insert env last with
-        | Some checkpoint -> run checkpoint last
+        | Some checkpoint -> run checkpoint None
         | None ->
             (* Insertion did not apply: record the standard error and skip to a
                boundary. *)
@@ -398,7 +413,9 @@ struct
             (* No stacked state can shift this boundary. At end of input there is
                nothing left to try; otherwise drop this boundary and scan on for
                the next one, keeping the same error state to unwind from. *)
-            match sync tok with Terminal -> None | _ -> skip env None)
+            match sync tok with
+            | Terminal -> None
+            | _ -> skip env None)
       in
       (* Lexer errors are handled by [recovering_supplier] above (recorded, then
          skipped). [Lexing_gave_up] means it could not make progress, so stop —
