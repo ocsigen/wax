@@ -47,7 +47,7 @@ it:
   #[export]
   fn try_drops(n: i64) -> i64 {
       let x =
-          try {
+          try_legacy {
               n;
           } catch {
               e => {
@@ -87,7 +87,7 @@ it:
   #[export]
   fn try_handler_drops(n: i64) -> i64 {
       let x =
-          try {
+          try_legacy {
               return n;
           } catch {
               e => {

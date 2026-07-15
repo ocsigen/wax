@@ -390,7 +390,7 @@ fn convert_flag_list(tbl: &open_flags, vflags: &eq) -> i32 {
     fn caml_sys_open(path: &eq, vflags: &eq, perm: &eq) -> &eq {
         let flags = convert_flag_list(sys_open_flags, vflags);
         let fd: i32;
-        try {
+        try_legacy {
             fd = open_fn(unwrap(caml_jsstring_of_string(path)), flags, perm as i32_u);
         } catch {
             javascript_exception => {
@@ -423,7 +423,7 @@ fn convert_flag_list(tbl: &open_flags, vflags: &eq) -> i32 {
         let res: i32;
         let fd = vfd as i32_u;
         release_fd_offset(fd);
-        try {
+        try_legacy {
             close(fd);
         } catch {
             javascript_exception => {
@@ -592,7 +592,7 @@ fn caml_ml_close_channel(vch: &eq) -> &eq {
         }
         #[else]
         {
-            try {
+            try_legacy {
                 close(fd);
             } catch {
                 javascript_exception => {
@@ -637,7 +637,7 @@ fn caml_do_read(ch: &channel, pos: i32, len: i32) -> i32 {
     {
         fd_offset = get_fd_offset(fd);
         offset = fd_offset.offset;
-        try {
+        try_legacy {
             n =
                 if fd_offset.seeked {
                     read(fd, ch.buffer, pos, len, offset);
@@ -1078,7 +1078,7 @@ fn caml_ml_flush(vch: &eq) -> &eq {
                     offset = file_size(fd);
                 }
                 let written: i32;
-                try {
+                try_legacy {
                     written =
                         if fd_offset.seeked {
                             write(fd, buf, 0, towrite, offset);

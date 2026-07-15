@@ -596,8 +596,8 @@ let rec get_prec (i : _ Ast.instr) =
   (* Branch-hinting proposal: the hint is a transparent prefix; the wrapped
      branch drives precedence, block-ness, and layout. *)
   | Hinted (_, i) -> get_prec i
-  | Block _ | Loop _ | While _ | If _ | Try _ | TryTable _ | If_annotation _
-  | Dispatch _ | Match _ ->
+  | Block _ | Loop _ | While _ | If _ | Try _ | TryCatch _ | TryTable _
+  | If_annotation _ | Dispatch _ | Match _ ->
       Atom
   | Unreachable | Nop | Hole | Null | Get _ | Path _ | Char _ | String _ | Int _
   | Float _ | Struct _ | StructDefault _ | StructDesc _ | StructDefaultDesc _
@@ -629,8 +629,8 @@ let rec get_prec (i : _ Ast.instr) =
 let rec is_block (i : _ Ast.instr) =
   match i.desc with
   | Hinted (_, i) -> is_block i
-  | Block _ | Loop _ | While _ | If _ | Try _ | TryTable _ | If_annotation _
-  | Dispatch _ | Match _ ->
+  | Block _ | Loop _ | While _ | If _ | Try _ | TryCatch _ | TryTable _
+  | If_annotation _ | Dispatch _ | Match _ ->
       true
   | Call _ | Unreachable | Nop | Hole | Null | Get _ | Path _ | Set _ | Tee _
   | TailCall _ | Char _ | String _ | Int _ | Float _ | Cast _ | CastDesc _
@@ -650,8 +650,8 @@ let rec starts_with_block_prec prec (i : 'a Ast.instr) =
   else
     match i.desc with
     | Hinted (_, i) -> starts_with_block_prec prec i
-    | Block _ | Loop _ | While _ | If _ | Try _ | TryTable _ | If_annotation _
-    | Dispatch _ | Match _ ->
+    | Block _ | Loop _ | While _ | If _ | Try _ | TryCatch _ | TryTable _
+    | If_annotation _ | Dispatch _ | Match _ ->
         true
     | Call (i, _) | ArrayGet (i, _) | ArraySet (i, _, _) ->
         starts_with_block_prec CallAndFieldAccess i
@@ -845,11 +845,54 @@ let rec instr prec pp (i : _ instr) =
                   let else_after = located_block_contents pp else_block in
                   close_block pp else_after)
           | None -> close_block pp if_after)
-  | Try { label; typ; block = l; catches; catch_all } ->
+  | TryCatch { label; typ; block = l; arms } ->
       hvbox pp (fun () ->
           box pp (fun () ->
               block_label pp label;
               keyword pp "try";
+              space pp ();
+              if need_blocktype typ then (
+                blocktype pp typ;
+                space pp ());
+              punctuation pp "{");
+          let block_after = located_block_contents pp l in
+          hvbox pp (fun () ->
+              box pp (fun () ->
+                  punctuation pp "}";
+                  print_trivia pp block_after;
+                  space pp ();
+                  keyword pp "catch";
+                  space pp ();
+                  punctuation pp "{");
+              indent pp indent_level (fun () ->
+                  List.iter
+                    (fun arm ->
+                      space pp ();
+                      hvbox pp (fun () ->
+                          box pp (fun () ->
+                              (match arm.arm_tag with
+                              | Some tag -> identifier pp tag.desc
+                              | None -> operator pp "_");
+                              space pp ();
+                              if arm.arm_ref then (
+                                operator pp "&";
+                                space pp ());
+                              punctuation pp "=>";
+                              space pp ();
+                              punctuation pp "{");
+                          let after = located_block_contents pp arm.arm_body in
+                          close_block pp after))
+                    arms);
+              (* The break before the closing [}] must sit outside the [indent]
+                 above so it lands at the catch block's own column, not the
+                 arms' deeper indent. *)
+              space pp ();
+              punctuation pp "}"))
+  | Try { label; typ; block = l; catches; catch_all } ->
+      hvbox pp (fun () ->
+          box pp (fun () ->
+              block_label pp label;
+              keyword pp "try_legacy";
               space pp ();
               if need_blocktype typ then (
                 blocktype pp typ;

@@ -34,7 +34,8 @@ const KEYWORDS = [
   'null', 'inf', 'nan', 'tag', 'fn', 'mut', 'type', 'rec', 'open', 'nop',
   'unreachable', 'do', 'while', 'loop', 'if', 'else', 'let', 'const', 'as',
   'is', 'become', 'br', 'br_if', 'br_table', 'dispatch', 'match', 'br_on_null',
-  'br_on_non_null', 'br_on_cast', 'br_on_cast_fail', 'return', 'try', 'catch',
+  'br_on_non_null', 'br_on_cast', 'br_on_cast_fail', 'return', 'try',
+  'try_legacy', 'catch',
   'throw', 'throw_ref', 'cont', 'suspend', 'on', 'memory', 'import', 'pagesize',
   'shared', 'descriptor', 'describes', 'data', 'table', 'elem',
 ];
@@ -630,6 +631,7 @@ module.exports = grammar({
       $.dispatch_expression,
       $.try_table_expression,
       $.try_expression,
+      $.try_legacy_expression,
     ),
 
     do_expression: $ => seq(
@@ -724,9 +726,33 @@ module.exports = grammar({
       seq('_', '&', '->', field('label', $.label)),
     ),
 
+    // The structured try (try_table with inline fall-through arms;
+    // parser.mly TryCatch); the catch-all arm is last.
     try_expression: $ => seq(
       optional($.block_label),
       'try',
+      optional(field('type', $._block_type)),
+      field('body', $._braced_block),
+      'catch',
+      '{',
+      repeat(choice($.trycatch_arm, ';')),
+      optional(seq($.trycatch_all, repeat(';'))),
+      '}',
+    ),
+
+    trycatch_arm: $ => seq(
+      field('tag', $.identifier),
+      optional('&'),
+      '=>',
+      field('body', $._braced_block),
+    ),
+
+    trycatch_all: $ => seq('_', optional('&'), '=>', field('body', $._braced_block)),
+
+    // The deprecated legacy try/catch instructions, under their own keyword.
+    try_legacy_expression: $ => seq(
+      optional($.block_label),
+      'try_legacy',
       optional(field('type', $._block_type)),
       field('body', $._braced_block),
       'catch',

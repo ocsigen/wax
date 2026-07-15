@@ -3789,7 +3789,8 @@ let module_ ?(strict_constants = false) diagnostics (module_name, fields) =
     let recovered =
       Recover_match.module_
         (Sink_let.module_
-           (Recover_loops.module_ (Recover_dispatch.module_ converted)))
+           (Recover_loops.module_
+              (Recover_trycatch.module_ (Recover_dispatch.module_ converted))))
     in
     (* A named module becomes a leading [#![module = "name"]] inner attribute. *)
     let name_annotation =

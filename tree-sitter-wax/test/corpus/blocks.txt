@@ -47,10 +47,10 @@ fn f() { try { nop; } catch [e -> 'h, _ -> 'a]; }
             name: (identifier)))))))
 
 ==================
-legacy try-catch
+structured try-catch
 ==================
 
-fn f() { try { nop; } catch { e => { nop; } _ => { nop; } } }
+fn f() { try { nop; } catch { e => { nop; } t & => { nop; } _ => { nop; } } }
 
 ---
 
@@ -60,6 +60,30 @@ fn f() { try { nop; } catch { e => { nop; } _ => { nop; } } }
     parameters: (parameter_list)
     body: (block
       (try_expression
+        body: (nop)
+        (trycatch_arm
+          tag: (identifier)
+          body: (nop))
+        (trycatch_arm
+          tag: (identifier)
+          body: (nop))
+        (trycatch_all
+          body: (nop))))))
+
+==================
+legacy try-catch
+==================
+
+fn f() { try_legacy { nop; } catch { e => { nop; } _ => { nop; } } }
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (block
+      (try_legacy_expression
         body: (nop)
         (legacy_catch
           tag: (identifier)

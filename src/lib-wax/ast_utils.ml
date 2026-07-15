@@ -62,6 +62,25 @@ let rec map_instr f instr =
                 (fun b -> { b with desc = List.map (map_instr f) b.desc })
                 catch_all;
           }
+    | TryCatch { label; typ; block; arms } ->
+        TryCatch
+          {
+            label;
+            typ;
+            block = { block with desc = List.map (map_instr f) block.desc };
+            arms =
+              List.map
+                (fun a ->
+                  {
+                    a with
+                    arm_body =
+                      {
+                        a.arm_body with
+                        desc = List.map (map_instr f) a.arm_body.desc;
+                      };
+                  })
+                arms;
+          }
     | ( Unreachable | Nop | Hole | Null | Get _ | Path _ | Char _ | String _
       | Int _ | Float _ | StructDefault _ ) as x ->
         x
@@ -180,6 +199,8 @@ let sub_instrs (i : (_ Ast.instr_desc, _) Ast.annotated) =
       block.desc
       @ List.concat_map (fun (_, b) -> b.desc) catches
       @ Option.fold ~none:[] ~some:(fun b -> b.desc) catch_all
+  | TryCatch { block; arms; _ } ->
+      block.desc @ List.concat_map (fun a -> a.arm_body.desc) arms
   | If_annotation { then_body; else_body; _ } -> (
       then_body.desc @ match else_body with Some b -> b.desc | None -> [])
   | Sequence l | ArrayFixed (_, l) -> l
@@ -283,6 +304,55 @@ let lower_dispatch ~block_info ~index ~cases ~default ~arms =
    Wat — so this synthetic one only ever labels the discarded type-check
    lowering; see [To_wasm].) *)
 let synthetic_loop_label = "#loop"
+
+(* Lower a structured [try] to the [try_table]-plus-block-ladder shape: one
+   block per arm (the first arm innermost) plus the [join] block, the
+   [try_table] innermost with one catch clause per arm branching to its arm's
+   block, and each arm body as the trailing code just after its block — so an
+   arm's completion falls into the next arm, and the last arm's falls out of
+   the [join] as the try's value. The body's normal completion escapes past
+   all arms with the one implicit [br 'join], carrying the try's value. Each
+   arm block's result type is the arm's entry stack ([arm_types], the tag's
+   payload plus the [&exn] for a [&] arm, filled by the typer). [join] is the
+   try's own label when it has one. This is the exact inverse of
+   {!Recover_trycatch} and is used by Wax-to-Wasm conversion (type checking
+   types the structured node directly). *)
+let lower_trycatch ~block_info ~join ~arm_labels ~typ ~block ~arms =
+  let mk desc = { desc; info = block_info } in
+  let catches =
+    List.map2
+      (fun l arm ->
+        match (arm.arm_tag, arm.arm_ref) with
+        | Some t, false -> Catch (t, l)
+        | Some t, true -> CatchRef (t, l)
+        | None, false -> CatchAll l
+        | None, true -> CatchAllRef l)
+      arm_labels arms
+  in
+  let trytable = mk (TryTable { label = None; typ; catches; block }) in
+  let inner =
+    if typ.results = [||] then [ trytable; mk (Br (join, None)) ]
+    else [ mk (Br (join, Some trytable)) ]
+  in
+  let rec wrap inner labels arms =
+    match (labels, arms) with
+    | [], [] -> inner
+    | l :: labels', arm :: arms' ->
+        let blk =
+          mk
+            (Block
+               {
+                 label = Some l;
+                 typ = { params = [||]; results = arm.arm_types };
+                 block = no_loc inner;
+               })
+        in
+        wrap (blk :: arm.arm_body.desc) labels' arms'
+    | _ -> assert false
+  in
+  mk
+    (Block
+       { label = Some join; typ; block = no_loc (wrap inner arm_labels arms) })
 
 (* Lower a leading-test [while C { B }] to ['L: loop { if C { B; br 'L; } }]:
    each iteration re-tests [C] and, while it holds, runs the body and branches

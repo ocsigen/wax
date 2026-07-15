@@ -123,6 +123,19 @@ type 'info instr_desc =
       catches : (ident * ('info instr list, location) annotated) list;
       catch_all : ('info instr list, location) annotated option;
     }
+      (** The deprecated legacy exception handler ([try_legacy]), compiling to
+          the legacy [try]/[catch] instructions. *)
+  | TryCatch of {
+      label : label option;
+      typ : functype;
+      block : ('info instr list, location) annotated;
+      arms : 'info trycatch_arm list;
+    }
+      (** The structured [try { … } catch { tag => { … } … }], lowering to
+          [try_table] plus a block ladder. Arms are honest trailing code in
+          clause order: an arm's completion falls into the next arm, the last
+          arm's into the join; the body's completion escapes past all arms. The
+          label (the join) is a block-like exit carrying the result. *)
   | Unreachable
   | Nop
   | Hole
@@ -220,6 +233,16 @@ type 'info instr_desc =
     }
 
 and 'info instr = ('info instr_desc, 'info) annotated
+
+and 'info trycatch_arm = {
+  arm_tag : ident option;  (** [None] for the trailing catch-all *)
+  arm_ref : bool;  (** [&] arm: the [&exn] is delivered above the payload *)
+  arm_types : valtype array;
+      (** the arm's entry stack — the tag's payload, plus the [&exn] for a [&]
+          arm: [[||]] as parsed, filled by the typer for [To_wasm]'s re-lowering
+      *)
+  arm_body : ('info instr list, location) annotated;
+}
 
 (* Each attribute is a name, an optional value, and an optional
    conditional-compilation guard ([#[export = "f", if not(portable)]]); only

@@ -1,0 +1,9 @@
+tag overflow(i32);
+fn f(k: i32) -> i32 {
+    't: try i32 {
+        k;
+    } catch {
+        overflow => { _ = _; br 't 0; }
+        _ & => { throw_ref _; }
+    };
+}

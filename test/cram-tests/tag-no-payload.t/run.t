@@ -27,10 +27,14 @@ type-checks, round-trips, and lowers to WAT and to the binary format.
   $ wax -f wat --validate stop.wax
   (tag $stop)
   (func $m (throw $stop))
-  (func $f (try (do (call $m)) (catch $stop (nop))))
+  (func $f
+    (block $join
+      (block $catch (try_table (catch $stop $catch) (call $m)) (br $join))
+      (nop))
+  )
 
   $ wax -f wasm stop.wax -o stop.wasm && wc -c < stop.wasm | tr -d ' '
-  68
+  96
 
 The parentheses are required: a bare `tag NAME;` or `fn NAME { … }` (no
 parameter list and no type reference) is a syntax error, not an empty signature.

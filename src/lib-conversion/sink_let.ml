@@ -23,6 +23,8 @@ let rec occurs name i =
       in_list block.desc
       || List.exists (fun (_, b) -> in_list b.desc) catches
       || match catch_all with Some b -> in_list b.desc | None -> false)
+  | TryCatch { block; arms; _ } ->
+      in_list block.desc || List.exists (fun a -> in_list a.arm_body.desc) arms
   | Call (t, args) | TailCall (t, args) -> occurs name t || in_list args
   | Labelled (_, e)
   | Cast (e, _)
@@ -160,6 +162,9 @@ let rec first_access name i =
            (fun acc (_, b) -> agree acc (fl b.desc))
            (match catch_all with Some b -> fl b.desc | None -> None)
            catches)
+  | TryCatch { block; arms; _ } ->
+      fst2 (fl block.desc)
+        (List.fold_left (fun acc a -> agree acc (fl a.arm_body.desc)) None arms)
   | Call (t, args) | TailCall (t, args) -> fst2 (fl args) (first_access name t)
   | Labelled (_, e)
   | Cast (e, _)

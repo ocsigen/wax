@@ -1,0 +1,9 @@
+tag oops(i32);
+fn f(k: i32) -> i32 {
+    try_legacy i32 {
+        k;
+    } catch {
+        oops => { _; }
+        _ => { 0; }
+    };
+}

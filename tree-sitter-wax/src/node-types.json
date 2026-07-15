@@ -28,6 +28,10 @@
         "named": true
       },
       {
+        "type": "try_legacy_expression",
+        "named": true
+      },
+      {
         "type": "try_table_expression",
         "named": true
       },
@@ -2855,6 +2859,10 @@
             "named": false
           },
           {
+            "type": "try_legacy",
+            "named": false
+          },
+          {
             "type": "type",
             "named": false
           },
@@ -4294,6 +4302,112 @@
           "named": true
         },
         {
+          "type": "trycatch_all",
+          "named": true
+        },
+        {
+          "type": "trycatch_arm",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "try_legacy_expression",
+    "named": true,
+    "fields": {
+      "body": {
+        "multiple": true,
+        "required": true,
+        "types": [
+          {
+            "type": ";",
+            "named": false
+          },
+          {
+            "type": "_block_instruction",
+            "named": true
+          },
+          {
+            "type": "_statement",
+            "named": true
+          },
+          {
+            "type": "conditional_else_statement",
+            "named": true
+          },
+          {
+            "type": "conditional_if_statement",
+            "named": true
+          },
+          {
+            "type": "{",
+            "named": false
+          },
+          {
+            "type": "}",
+            "named": false
+          }
+        ]
+      },
+      "result": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "(",
+            "named": false
+          },
+          {
+            "type": ")",
+            "named": false
+          },
+          {
+            "type": ",",
+            "named": false
+          },
+          {
+            "type": "_value_type",
+            "named": true
+          }
+        ]
+      },
+      "type": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "(",
+            "named": false
+          },
+          {
+            "type": ")",
+            "named": false
+          },
+          {
+            "type": ",",
+            "named": false
+          },
+          {
+            "type": "->",
+            "named": false
+          },
+          {
+            "type": "_value_type",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "block_label",
+          "named": true
+        },
+        {
           "type": "legacy_catch",
           "named": true
         },
@@ -4404,6 +4518,96 @@
           "named": true
         }
       ]
+    }
+  },
+  {
+    "type": "trycatch_all",
+    "named": true,
+    "fields": {
+      "body": {
+        "multiple": true,
+        "required": true,
+        "types": [
+          {
+            "type": ";",
+            "named": false
+          },
+          {
+            "type": "_block_instruction",
+            "named": true
+          },
+          {
+            "type": "_statement",
+            "named": true
+          },
+          {
+            "type": "conditional_else_statement",
+            "named": true
+          },
+          {
+            "type": "conditional_if_statement",
+            "named": true
+          },
+          {
+            "type": "{",
+            "named": false
+          },
+          {
+            "type": "}",
+            "named": false
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "trycatch_arm",
+    "named": true,
+    "fields": {
+      "body": {
+        "multiple": true,
+        "required": true,
+        "types": [
+          {
+            "type": ";",
+            "named": false
+          },
+          {
+            "type": "_block_instruction",
+            "named": true
+          },
+          {
+            "type": "_statement",
+            "named": true
+          },
+          {
+            "type": "conditional_else_statement",
+            "named": true
+          },
+          {
+            "type": "conditional_if_statement",
+            "named": true
+          },
+          {
+            "type": "{",
+            "named": false
+          },
+          {
+            "type": "}",
+            "named": false
+          }
+        ]
+      },
+      "tag": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
     }
   },
   {
@@ -5095,6 +5299,10 @@
   },
   {
     "type": "try",
+    "named": false
+  },
+  {
+    "type": "try_legacy",
     "named": false
   },
   {

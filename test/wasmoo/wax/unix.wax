@@ -745,7 +745,7 @@ const no_arg = "";
             at = gettimeofday();
             mt = at;
         }
-        try {
+        try_legacy {
             utimes(unwrap(caml_jsstring_of_string(path)), at, mt);
         } catch {
             javascript_exception => {
@@ -890,7 +890,7 @@ fn caml_alloc_stat(
     #[export]
     #[export = "caml_unix_stat"]
     fn unix_stat(path: &eq) -> &eq {
-        try {
+        try_legacy {
             stat(unwrap(caml_jsstring_of_string(path)), 0);
         } catch {
             javascript_exception => {
@@ -903,7 +903,7 @@ fn caml_alloc_stat(
     #[export]
     #[export = "caml_unix_stat_64"]
     fn unix_stat_64(path: &eq) -> &eq {
-        try {
+        try_legacy {
             stat(unwrap(caml_jsstring_of_string(path)), 1);
         } catch {
             javascript_exception => {
@@ -916,7 +916,7 @@ fn caml_alloc_stat(
     #[export]
     #[export = "caml_unix_lstat"]
     fn unix_lstat(path: &eq) -> &eq {
-        try {
+        try_legacy {
             lstat(unwrap(caml_jsstring_of_string(path)), 0);
         } catch {
             javascript_exception => {
@@ -929,7 +929,7 @@ fn caml_alloc_stat(
     #[export]
     #[export = "caml_unix_lstat_64"]
     fn unix_lstat_64(path: &eq) -> &eq {
-        try {
+        try_legacy {
             lstat(unwrap(caml_jsstring_of_string(path)), 1);
         } catch {
             javascript_exception => {
@@ -942,7 +942,7 @@ fn caml_alloc_stat(
     #[export]
     #[export = "caml_unix_fstat"]
     fn unix_fstat(fd: &eq) -> &eq {
-        try {
+        try_legacy {
             fstat(fd, 0);
         } catch {
             javascript_exception => {
@@ -955,7 +955,7 @@ fn caml_alloc_stat(
     #[export]
     #[export = "caml_unix_fstat_64"]
     fn unix_fstat_64(fd: &eq) -> &eq {
-        try {
+        try_legacy {
             fstat(fd, 1);
         } catch {
             javascript_exception => {
@@ -989,7 +989,7 @@ fn caml_alloc_stat(
     #[export]
     #[export = "caml_unix_chmod"]
     fn unix_chmod(path: &eq, perms: &eq) -> &eq {
-        try {
+        try_legacy {
             chmod(unwrap(caml_jsstring_of_string(path)), perms);
         } catch {
             javascript_exception => {
@@ -1014,7 +1014,7 @@ fn caml_alloc_stat(
     #[export]
     #[export = "caml_unix_fchmod"]
     fn unix_fchmod(fd: &eq, perms: &eq) -> &eq {
-        try {
+        try_legacy {
             fchmod(fd, perms);
         } catch {
             javascript_exception => {
@@ -1056,7 +1056,7 @@ fn caml_alloc_stat(
     #[export]
     #[export = "caml_unix_rename"]
     fn unix_rename(o: &eq, n: &eq) -> &eq {
-        try {
+        try_legacy {
             rename(unwrap(caml_jsstring_of_string(o)), unwrap(caml_jsstring_of_string(n)));
         } catch {
             javascript_exception => {
@@ -1096,7 +1096,7 @@ fn caml_alloc_stat(
     #[export]
     #[export = "caml_unix_getcwd"]
     fn unix_getcwd(&eq) -> &eq {
-        try {
+        try_legacy {
             caml_string_of_jsstring(wrap(getcwd()));
         } catch {
             javascript_exception => {
@@ -1109,7 +1109,7 @@ fn caml_alloc_stat(
     #[export]
     #[export = "caml_unix_chdir"]
     fn unix_chdir(name: &eq) -> &eq {
-        try {
+        try_legacy {
             chdir(unwrap(caml_jsstring_of_string(name)));
         } catch {
             javascript_exception => {
@@ -1135,7 +1135,7 @@ fn caml_alloc_stat(
     #[export]
     #[export = "caml_unix_mkdir"]
     fn unix_mkdir(name: &eq, perm: &eq) -> &eq {
-        try {
+        try_legacy {
             mkdir(unwrap(caml_jsstring_of_string(name)), perm as i32_u);
         } catch {
             javascript_exception => {
@@ -1307,7 +1307,7 @@ fn caml_alloc_stat(
     #[export]
     #[export = "caml_unix_opendir"]
     fn unix_opendir(name: &eq) -> &eq {
-        try {
+        try_legacy {
             wrap(opendir(unwrap(caml_jsstring_of_string(name))));
         } catch {
             javascript_exception => {
@@ -1332,7 +1332,7 @@ fn caml_alloc_stat(
     fn readdir_helper(dir: &eq) -> &eq {
         'end: do {
             return
-                try {
+                try_legacy {
                     caml_string_of_jsstring(wrap(br_on_null 'end readdir(unwrap(dir))));
                 } catch {
                     javascript_exception => {
@@ -1351,7 +1351,7 @@ fn caml_alloc_stat(
     #[export = "win_findclose"]
     #[export = "caml_unix_findclose"]
     fn unix_closedir(dir: &eq) -> &eq {
-        try {
+        try_legacy {
             closedir(unwrap(dir));
         } catch {
             javascript_exception => {
@@ -1420,7 +1420,7 @@ fn win_findfirst(vpath: &eq) -> &eq {
     #[export]
     #[export = "caml_unix_unlink"]
     fn unix_unlink(p: &eq) -> &eq {
-        try {
+        try_legacy {
             unlink(unwrap(caml_jsstring_of_string(p)));
         } catch {
             javascript_exception => {
@@ -1446,7 +1446,7 @@ fn win_findfirst(vpath: &eq) -> &eq {
     #[export]
     #[export = "caml_unix_rmdir"]
     fn unix_rmdir(p: &eq) -> &eq {
-        try {
+        try_legacy {
             rmdir(unwrap(caml_jsstring_of_string(p)));
         } catch {
             javascript_exception => {
@@ -1503,7 +1503,7 @@ fn win_findfirst(vpath: &eq) -> &eq {
                 ],
             );
         }
-        try {
+        try_legacy {
             link(unwrap(caml_jsstring_of_string(d)), unwrap(caml_jsstring_of_string(s)));
         } catch {
             javascript_exception => {
@@ -1556,7 +1556,7 @@ fn unix_has_symlink(&eq) -> &eq {
         if to_dir is &block {
             kind = 1 + (to_dir as &block)[1] as i32_s;
         }
-        try {
+        try_legacy {
             symlink(unwrap(caml_jsstring_of_string(t)), unwrap(caml_jsstring_of_string(p)), kind);
         } catch {
             javascript_exception => {
@@ -1588,7 +1588,7 @@ fn unix_has_symlink(&eq) -> &eq {
     #[export]
     #[export = "caml_unix_readlink"]
     fn unix_readlink(path: &eq) -> &eq {
-        try {
+        try_legacy {
             become caml_string_of_jsstring(wrap(readlink(unwrap(caml_jsstring_of_string(path)))));
         } catch {
             javascript_exception => {
@@ -1653,7 +1653,7 @@ fn unix_has_symlink(&eq) -> &eq {
     #[export]
     #[export = "caml_unix_truncate"]
     fn unix_truncate(path: &eq, len: &eq) -> &eq {
-        try {
+        try_legacy {
             truncate(unwrap(caml_jsstring_of_string(path)), len);
         } catch {
             javascript_exception => {
@@ -1667,7 +1667,7 @@ fn unix_has_symlink(&eq) -> &eq {
     #[export = "caml_unix_truncate_64"]
     fn unix_truncate_64(path: &eq, vlen: &eq) -> &eq {
         let len = Int64_val(vlen);
-        try {
+        try_legacy {
             truncate_64(unwrap(caml_jsstring_of_string(path)), len as f64_s);
         } catch {
             javascript_exception => {
@@ -1706,7 +1706,7 @@ fn unix_has_symlink(&eq) -> &eq {
     fn unix_ftruncate(fd: &eq, vlen: &eq) -> &eq {
         // POSIX ftruncate leaves the seek pointer unchanged, even when it
         // ends up past the (now shorter) end of the file.
-        try {
+        try_legacy {
             ftruncate(fd, vlen);
         } catch {
             javascript_exception => {
@@ -1721,7 +1721,7 @@ fn unix_has_symlink(&eq) -> &eq {
     fn unix_ftruncate_64(fd: &eq, vlen: &eq) -> &eq {
         // POSIX ftruncate leaves the seek pointer unchanged, even when it
         // ends up past the (now shorter) end of the file.
-        try {
+        try_legacy {
             ftruncate_64(fd, Int64_val(vlen) as f64_s);
         } catch {
             javascript_exception => {
@@ -1756,7 +1756,7 @@ fn unix_has_symlink(&eq) -> &eq {
     #[export = "caml_unix_access"]
     fn unix_access(path: &eq, vflags: &eq) -> &eq {
         let flags = convert_flag_list(access_flags, vflags);
-        try {
+        try_legacy {
             access(unwrap(caml_jsstring_of_string(path)), flags);
         } catch {
             javascript_exception => {
@@ -1832,7 +1832,7 @@ type flags = [i16];
     fn unix_open(path: &eq, vflags: &eq, perm: &eq) -> &eq {
         let flags = convert_flag_list(unix_open_flags, vflags);
         let fd: i32;
-        try {
+        try_legacy {
             fd = open_fn(unwrap(caml_jsstring_of_string(path)), flags, perm as i32_u);
         } catch {
             javascript_exception => {
@@ -2026,7 +2026,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
             let numbytes = len >u IO_BUFFER_SIZE?IO_BUFFER_SIZE:len;
             caml_blit_bytes_to_dataview(s, pos, buf_view, 0, numbytes);
             let n: i32;
-            try {
+            try_legacy {
                 n =
                     if fd_offset.seeked {
                         write(fd, buf, 0, numbytes, offset);
@@ -2066,7 +2066,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
         if len >u 0 {
             let numbytes = len >u IO_BUFFER_SIZE?IO_BUFFER_SIZE:len;
             caml_blit_bytes_to_dataview(s, pos, buf_view, 0, numbytes);
-            try {
+            try_legacy {
                 n =
                     if fd_offset.seeked {
                         write(fd, buf, 0, numbytes, offset);
@@ -2098,7 +2098,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
         let fd_offset = get_fd_offset(fd);
         let offset = fd_offset.offset;
         let n: i32;
-        try {
+        try_legacy {
             n =
                 if fd_offset.seeked {
                     read(fd, buf, 0, len, offset);
@@ -2134,7 +2134,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
         'loop: loop {
             if len >u 0 {
                 let n: i32;
-                try {
+                try_legacy {
                     n =
                         if fd_offset.seeked {
                             write(fd, buf, pos, len, offset);
@@ -2167,7 +2167,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
         let fd_offset = get_fd_offset(fd);
         let offset = fd_offset.offset;
         let n: i32;
-        try {
+        try_legacy {
             n =
                 if fd_offset.seeked {
                     read(fd, buf, pos, len, offset);
@@ -2250,7 +2250,7 @@ fn unix_lseek_64(fd: &eq, ofs: &eq, cmd: &eq) -> &eq {
     #[export]
     #[export = "caml_unix_fsync"]
     fn unix_fsync(fd: &eq) -> &eq {
-        try {
+        try_legacy {
             fsync(fd);
         } catch {
             javascript_exception => {
@@ -2289,7 +2289,7 @@ fn channel_of_descr_name(out: i32) -> &eq {
 {
     fn caml_unix_check_stream_semantics(fd: &eq, out: i32) {
         let s =
-            try {
+            try_legacy {
                 fstat(fd, 0);
             } catch {
                 javascript_exception => {
@@ -2347,7 +2347,7 @@ fn unix_outchannel_of_filedescr(fd: &eq) -> &eq {
     #[export = "caml_unix_close"]
     fn unix_close(fd: &eq) -> &eq {
         release_fd_offset(fd as i32_u);
-        try {
+        try_legacy {
             close(fd);
         } catch {
             javascript_exception => {

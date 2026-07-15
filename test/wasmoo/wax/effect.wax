@@ -340,8 +340,8 @@ fn caml_is_continuation(v: &eq) -> i32 {
     fn caml_start_fiber(p: &?eq) {
         // Start executing some code in a new fiber
         let res =
-            try {
-                try {
+            try_legacy {
+                try_legacy {
                     apply_pair(p as &pair);
                 } catch {
                     javascript_exception => {
@@ -496,7 +496,7 @@ fn caml_is_continuation(v: &eq) -> i32 {
         let args = vargs as &block;
         let res: &eq;
         let exn =
-            try {
+            try_legacy {
                 res =
                     if args.length() == 1 {
                         (f as &cps_closure_0).func(identity_closure, f);
@@ -524,7 +524,7 @@ fn caml_is_continuation(v: &eq) -> i32 {
                 let top = br_on_null 'empty cps_fiber_stack.exn_stack;
                 cps_fiber_stack.exn_stack = top.next;
                 f = top.h;
-                try {
+                try_legacy {
                     res = (f as &closure).func(exn, f);
                     cps_fiber_stack = saved_fiber_stack;
                     return res;
@@ -646,7 +646,7 @@ fn caml_assume_no_perform(f: &eq) -> &eq {
     effect_allowed = 0;
     let exn: &eq;
     let res =
-        try {
+        try_legacy {
             caml_callback_1(f, 0 as &i31);
         } catch {
             ocaml_exception => {

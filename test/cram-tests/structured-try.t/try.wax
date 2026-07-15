@@ -1,0 +1,43 @@
+tag overflow(i32);
+tag timeout();
+tag jsexc(&eq);
+tag ocamlexc(&eq);
+
+fn find(k: i32) -> i32 { if k >s 10 { throw overflow(k); } k; }
+fn wrap(e: &eq) -> &eq { e; }
+
+// multi-arm fall-through with payload handoff, catch-all default
+fn f(k: i32) -> i32 {
+    't: try i32 {
+        find(k);
+    } catch {
+        overflow => { br 't _; }
+        timeout & => { _ = _; br 't (0 - 1); }
+        _ => { 0; }
+    };
+}
+
+// normalize-then-handle: first arm's completion IS the second arm's payload
+fn norm(p: i32) -> &eq {
+    let res: &eq = try &eq {
+        throw jsexc(p as &i31);
+    } catch {
+        jsexc => { wrap(_); }
+        ocamlexc => { _; }
+    };
+    res;
+}
+
+// propagation with no catch-all; void try
+fn v(k: i32) {
+    try {
+        _ = find(k);
+    } catch {
+        timeout => { }
+    };
+}
+
+// expression-position try with a diverging arm
+fn e(k: i32) -> i32 {
+    (try i32 { find(k); } catch { overflow => { _ = _; return 0 - 1; } }) + 1;
+}

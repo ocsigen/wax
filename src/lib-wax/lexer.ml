@@ -262,6 +262,7 @@ let rec token_rec ctx lexbuf =
   | "br_on_cast_fail" -> BR_ON_CAST_FAIL
   | "return" -> RETURN
   | "try" -> TRY
+  | "try_legacy" -> TRY_LEGACY
   | "catch" -> CATCH
   | "throw" -> THROW
   | "throw_ref" -> THROW_REF

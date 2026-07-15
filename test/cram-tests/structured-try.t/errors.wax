@@ -1,0 +1,13 @@
+tag overflow(i32);
+tag timeout();
+
+// arm 1's completion (i32 payload passed through) does not match arm 2's
+// entry (the parameterless catch-all)
+fn mismatch(k: i32) -> i32 {
+    try i32 {
+        k;
+    } catch {
+        overflow => { _; }
+        _ => { 0; }
+    };
+}

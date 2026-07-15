@@ -133,7 +133,7 @@
       "patterns": [
         {
           "name": "keyword.control.wax",
-          "match": "\\b(do|while|loop|if|else|return|become|dispatch|match|try|catch|throw|throw_ref|suspend|on)\\b"
+          "match": "\\b(do|while|loop|if|else|return|become|dispatch|match|try|try_legacy|catch|throw|throw_ref|suspend|on)\\b"
         },
         {
           "name": "keyword.control.branch.wax",
