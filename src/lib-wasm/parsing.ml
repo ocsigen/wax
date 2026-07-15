@@ -397,30 +397,25 @@ struct
         in
         match tok0 with Some tok -> step tok | None -> step (supplier ())
       in
-      (* Unwind the parser stack to the closest state that can shift [tok] and
-         shift it there, returning the resumed checkpoint; [None] if no stacked
-         state accepts it. *)
-      let rec unwind env ((tok, startp, _endp) as sync_tok) =
-        let checkpoint = MI.input_needed env in
-        if MI.acceptable checkpoint tok startp then
-          Some (MI.offer checkpoint sync_tok)
-        else
-          match MI.pop env with
-          | Some env' -> unwind env' sync_tok
-          | None -> None
-      in
-      (* Like [unwind] but stops one step short: pop to the closest state that
-         {e could} shift [tok] and return that env {e without} offering [tok].
-         Used by group-drop to climb out of a broken inner group — the state
-         reached is the enclosing context, past the group's opener, from which
-         the {e next} boundary (not this closer) is resynchronized. [None] if no
-         stacked state accepts [tok]. *)
+      (* Pop the parser stack to the closest state that could shift [tok] and
+         return that env, {e without} offering [tok]. Group-drop uses it to climb
+         out of a broken inner group — the state reached is the enclosing context,
+         past the group's opener, from which the {e next} boundary (not this
+         closer) is resynchronized. [None] if no stacked state accepts [tok]. *)
       let rec pop_to env tok (startp : Lexing.position) =
         if MI.acceptable (MI.input_needed env) tok startp then Some env
         else
           match MI.pop env with
           | Some env' -> pop_to env' tok startp
           | None -> None
+      in
+      (* Unwind the parser stack to the closest state that can shift [tok] and
+         shift it there ([pop_to] then offer), returning the resumed checkpoint;
+         [None] if no stacked state accepts it. *)
+      let unwind env ((tok, startp, _endp) as sync_tok) =
+        match pop_to env tok startp with
+        | Some env' -> Some (MI.offer (MI.input_needed env') sync_tok)
+        | None -> None
       in
       (* Drive a checkpoint through shifts and reductions to the next decision
          point ([InputNeeded]/[Accepted]/[HandlingError]/[Rejected]). *)
@@ -492,17 +487,25 @@ struct
          the previous insertion was not itself a separator ([prev_sep]); no two
          separators run consecutively, and a closer or the target must follow.
          [fuel] is a final backstop, not the real bound. *)
-      let close_pending env last =
-        match (last, closers) with
-        | Some ((t, pos, _) as target), _ :: _
-          when match sync t with
-               | Close | Boundary | Terminal -> true
-               | Open | Leader | Skip -> false ->
-            let rec loop checkpoint prev_sep fuel =
-              if fuel <= 0 then None
-              else if MI.acceptable checkpoint t pos then
-                Some (settle (MI.offer checkpoint target))
-              else
+      (* Insert acceptable [closers] one at a time — or, when none fits and
+         [with_insert] is set, an acceptable [insert] candidate (a statement
+         separator, or a placeholder operand that lets a construct complete), but
+         never two non-closers in a row — up to [fuel] steps, until [goal
+         checkpoint] returns [Some]. Shared by [close_pending] (auto-close a
+         construct in front of a boundary, [~with_insert:true]) and [place_field]
+         (barrier placement, [~with_insert:false] — closers only). Termination:
+         every inserted closer shifts a closing bracket, strictly reducing the
+         open-bracket nesting, and no two non-closers run consecutively (a bare
+         [";"] is a valid empty statement, so it would otherwise self-loop), so
+         only finitely many are inserted; [fuel] is a backstop. [pos] is the
+         zero-width position the inserted tokens carry. *)
+      let insert_to_goal ~goal ~with_insert pos checkpoint =
+        let rec loop checkpoint prev_insert fuel =
+          if fuel <= 0 then None
+          else
+            match goal checkpoint with
+            | Some _ as r -> r
+            | None -> (
                 match
                   List.find_opt
                     (fun c -> MI.acceptable checkpoint c pos)
@@ -513,12 +516,7 @@ struct
                       (settle (MI.offer checkpoint (c, pos, pos)))
                       false (fuel - 1)
                 | None -> (
-                    if
-                      (* No closer fits: try an [insert] candidate (a statement
-                       separator, or a placeholder operand that lets a construct
-                       complete), but never two non-closers in a row. *)
-                      prev_sep
-                    then None
+                    if (not with_insert) || prev_insert then None
                     else
                       match
                         List.find_opt
@@ -529,9 +527,21 @@ struct
                           loop
                             (settle (MI.offer checkpoint (tok, pos, pos)))
                             true (fuel - 1)
-                      | None -> None)
-            in
-            loop (MI.input_needed env) false 1000
+                      | None -> None))
+        in
+        loop checkpoint false 1000
+      in
+      let close_pending env last =
+        match (last, closers) with
+        | Some ((t, pos, _) as target), _ :: _
+          when match sync t with
+               | Close | Boundary | Terminal -> true
+               | Open | Leader | Skip -> false ->
+            insert_to_goal ~with_insert:true pos (MI.input_needed env)
+              ~goal:(fun cp ->
+                if MI.acceptable cp t pos then
+                  Some (settle (MI.offer cp target))
+                else None)
         | _ -> None
       in
       (* A fully-parenthesized grammar (WAT) has no separator or leader token, so
@@ -582,24 +592,10 @@ struct
           in
           go checkpoint toks
         in
-        let rec by_insert checkpoint fuel =
-          if fuel <= 0 then None
-          else
-            match offer_all checkpoint with
-            | Some _ as r -> r
-            | None -> (
-                match
-                  List.find_opt
-                    (fun c -> MI.acceptable checkpoint c pos)
-                    closers
-                with
-                | Some c ->
-                    by_insert
-                      (settle (MI.offer checkpoint (c, pos, pos)))
-                      (fuel - 1)
-                | None -> None)
-        in
-        by_insert (MI.input_needed env) 1000
+        (* Climb by inserting closers (value-preserving, no [insert] candidates)
+           until the barrier tokens settle; see [insert_to_goal]. *)
+        insert_to_goal ~goal:offer_all ~with_insert:false pos
+          (MI.input_needed env)
       in
       (* Direct-error barrier route: the held token is a field keyword whose [(]
          already shifted as a folded-instruction opener (the [(module (func …
