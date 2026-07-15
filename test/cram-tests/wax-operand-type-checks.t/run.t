@@ -206,6 +206,18 @@ match, the error names the tag/target mismatch and points at the target label:
   4 │ 
   [128]
 
+A memory/table management call whose argument form matches no known shape
+(here `mem.fill` with one argument instead of three) names the method:
+
+  $ wax check mem-mgmt-bad-args.wax
+  Error: Invalid arguments in call to 'fill'.
+   ──➤  mem-mgmt-bad-args.wax:2:10
+  1 │ memory m: i32 [1];
+  2 │ fn f() { m.fill(0 as i32); }
+    ·          ^^^^^^^^^^^^^^^^
+  3 │ 
+  [128]
+
 Matching element types and correct receivers pass:
 
   $ wax check ok.wax

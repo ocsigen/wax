@@ -490,6 +490,9 @@ module Error = struct
       "This operation cannot be applied to a value of type@ @[<2>%a@]."
       output_inferred_type ty
 
+  let invalid_management_call context ~location name =
+    report context ~location "Invalid arguments in call to '%s'." name
+
   let if_without_else context ~location =
     report context ~location
       "This 'if' must produce a value and so requires an 'else' branch."
@@ -6834,9 +6837,12 @@ and type_mem_mgmt_call ctx i func recv name meth args =
       ({ desc = StructGet (recv', meth); info = ([||], func.info) }, args')
   in
   let bad () =
-    Error.value_count_mismatch ctx.diagnostics ~location:i.info ~expected:0
-      ~provided:(List.length args);
-    return_statement i (mk []) [||]
+    Error.invalid_management_call ctx.diagnostics ~location:i.info meth.desc;
+    (* The (method, args) form matched nothing, so the result type is unknown;
+       recover with an [Error] value rather than [||] — some of these methods
+       ([size], [grow]) produce a value, and claiming none would cascade into a
+       spurious value-count error where the call is used as an expression. *)
+    return_statement i (mk []) [| Cell.make Error |]
   in
   match (meth.desc, args) with
   | "size", [] -> return_expression i (mk []) (addr ())
@@ -6907,9 +6913,12 @@ and type_table_mgmt_call ctx i func recv name meth args =
       ({ desc = StructGet (recv', meth); info = ([||], func.info) }, args')
   in
   let bad () =
-    Error.value_count_mismatch ctx.diagnostics ~location:i.info ~expected:0
-      ~provided:(List.length args);
-    return_statement i (mk []) [||]
+    Error.invalid_management_call ctx.diagnostics ~location:i.info meth.desc;
+    (* The (method, args) form matched nothing, so the result type is unknown;
+       recover with an [Error] value rather than [||] — some of these methods
+       ([size], [grow]) produce a value, and claiming none would cascade into a
+       spurious value-count error where the call is used as an expression. *)
+    return_statement i (mk []) [| Cell.make Error |]
   in
   match (meth.desc, args) with
   | "size", [] -> return_expression i (mk []) (addr ())
@@ -8211,16 +8220,16 @@ and type_indirect_call ctx i i' l =
   | Error ->
       (* The callee already failed to type (e.g. an unbound name); recover
          silently rather than adding a spurious "expected function type". *)
-      return_statement i (Call (i', l')) [||]
+      return_statement i (Call (i', l')) [| Cell.make Error |]
   | Unknown | UnknownRef ->
       (* The callee's type is unknown (unreachable / branch code) or only a
          reference (its function type cannot be resolved), so the call cannot be
          compiled. *)
       Error.unknown_operand_type ctx.diagnostics ~location:(snd i'.info);
-      return_statement i (Call (i', l')) [||]
+      return_statement i (Call (i', l')) [| Cell.make Error |]
   | _ ->
       Error.expected_func_type ctx.diagnostics ~location:(snd i'.info);
-      return_statement i (Call (i', l')) [||]
+      return_statement i (Call (i', l')) [| Cell.make Error |]
 
 and call_instruction ctx i =
   (* Dispatches a [Call]: first the intrinsic method/free-function

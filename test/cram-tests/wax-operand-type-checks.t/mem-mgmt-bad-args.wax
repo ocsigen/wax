@@ -1,0 +1,2 @@
+memory m: i32 [1];
+fn f() { m.fill(0 as i32); }

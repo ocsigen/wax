@@ -45,16 +45,4 @@ of silently using the memory behind the local's back:
     ·     ^
   5 │ }
   6 │ 
-  Error: The stack is empty.
-   ──➤  shadow.wax:2:1
-  1 │ memory m: i32 [1];
-  2 │ fn f() -> i32 {
-    · ^^^^^^^^^^^^^^^^
-  3 │     let m: i32 = 0;
-    · ^^^^^^^^^^^^^^^^^^^^
-  4 │     m.load32(0);
-    · ^^^^^^^^^^^^^^^^^
-  5 │ }
-    · ^
-  6 │ 
   [128]
