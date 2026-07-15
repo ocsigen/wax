@@ -1,0 +1,53 @@
+==================
+reference types
+==================
+
+type a = { f: mut &?T, g: &!U };
+
+---
+
+(source_file
+  (type_definition
+    name: (identifier)
+    body: (struct_type
+      (struct_type_field
+        name: (identifier)
+        type: (field_type
+          type: (reference_type
+            heap: (type_identifier))))
+      (struct_type_field
+        name: (identifier)
+        type: (field_type
+          type: (reference_type
+            heap: (type_identifier)))))))
+
+==================
+composite
+==================
+
+rec { type l = { hd: i32, tl: &?l }; type arr = [mut i8]; }
+
+---
+
+(source_file
+  (rec_type
+    (type_definition
+      name: (identifier)
+      body: (struct_type
+        (struct_type_field
+          name: (identifier)
+          type: (field_type
+            type: (primitive_type
+              (identifier))))
+        (struct_type_field
+          name: (identifier)
+          type: (field_type
+            type: (reference_type
+              heap: (type_identifier))))))
+    (type_definition
+      name: (identifier)
+      body: (array_type
+        (field_type
+          type: (primitive_type
+            (identifier)))))))
+

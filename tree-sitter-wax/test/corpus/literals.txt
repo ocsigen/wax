@@ -1,0 +1,72 @@
+==================
+integers
+==================
+
+fn f() { 42; 0xFF; 1_000; }
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (block
+      (integer_literal)
+      (integer_literal)
+      (integer_literal))))
+
+==================
+floats
+==================
+
+fn f() { 3.14; 1.0e10; 0x1.5p10; nan:0x1; inf; nan; }
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (block
+      (float_literal)
+      (float_literal)
+      (float_literal)
+      (float_literal)
+      (inf)
+      (nan))))
+
+==================
+string with escapes
+==================
+
+fn f() { "a\tb\u{1F600}\x41"; }
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (block
+      (string_literal
+        (escape_sequence)
+        (escape_sequence)
+        (escape_sequence)))))
+
+==================
+char
+==================
+
+fn f() { 'a'; '\n'; '\u{1F600}'; }
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (block
+      (char_literal)
+      (char_literal)
+      (char_literal))))
+

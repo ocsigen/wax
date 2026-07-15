@@ -1,0 +1,44 @@
+==================
+import group
+==================
+
+import "env" { fn log: t; const g: i32; }
+
+---
+
+(source_file
+  (import_group
+    module: (string_literal)
+    (import_item
+      (import_function
+        name: (identifier)
+        type: (type_identifier)))
+    (import_item
+      (import_global
+        name: (identifier)
+        type: (primitive_type
+          (identifier))))))
+
+==================
+memory and data
+==================
+
+memory m: i32 [1, 2] shared;
+data d @ m [0] = "abc";
+
+---
+
+(source_file
+  (memory_definition
+    name: (identifier)
+    address_type: (identifier)
+    (limits
+      min: (integer_literal)
+      max: (integer_literal)))
+  (data_definition
+    name: (identifier)
+    memory: (identifier)
+    offset: (integer_literal)
+    init: (data_init
+      (string_literal))))
+

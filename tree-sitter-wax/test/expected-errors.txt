@@ -1,0 +1,13 @@
+# Curated .wax fixtures that are *syntactically* invalid and MUST be rejected
+# (they produce ERROR/MISSING nodes). Paths are relative to the repo root.
+# The smoke test asserts each of these DOES error — a negative test — and flags
+# any that start parsing cleanly. Everything else in the corpus must parse clean.
+#
+# (Fixtures named `bad*.wax` that are merely *semantic* errors — e.g. type
+# errors — are NOT listed here: they parse cleanly and are positive tests.)
+test/cram-tests/match.t/err_no_default.wax
+test/cram-tests/parse-error-messages.t/block.wax
+test/cram-tests/parse-error-messages.t/limits.wax
+test/cram-tests/parse-error-messages.t/onclause.wax
+test/cram-tests/unicode-identifier.t/bad.wax
+test/cram-tests/wax-conditional.t/bad.wax

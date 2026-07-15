@@ -1,0 +1,23 @@
+{
+  "grammars": [
+    {
+      "name": "wax",
+      "camelcase": "Wax",
+      "scope": "source.wax",
+      "file-types": ["wax"],
+      "highlights": ["queries/highlights.scm"],
+      "injections": ["queries/injections.scm"],
+      "locals": ["queries/locals.scm"]
+    }
+  ],
+  "metadata": {
+    "version": "0.0.1",
+    "license": "MIT",
+    "description": "Wax grammar for tree-sitter",
+    "authors": [
+      {
+        "name": "Jérôme Vouillon"
+      }
+    ]
+  }
+}

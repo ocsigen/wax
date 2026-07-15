@@ -1,0 +1,78 @@
+==================
+let forms
+==================
+
+fn f() { let x; let y: i32 = 1; let (a, b) = g(); }
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (block
+      (let_statement
+        pattern: (identifier))
+      (let_statement
+        pattern: (identifier)
+        type: (primitive_type
+          (identifier))
+        value: (integer_literal))
+      (let_statement
+        (let_binding
+          pattern: (identifier))
+        (let_binding
+          pattern: (identifier))
+        value: (call_expression
+          function: (identifier)
+          arguments: (argument_list))))))
+
+==================
+assignment and compound
+==================
+
+fn f() { x = 1; y += 2; z := 3; }
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (block
+      (assignment_statement
+        name: (identifier)
+        value: (integer_literal))
+      (compound_assignment_statement
+        name: (identifier)
+        value: (integer_literal))
+      (tee_expression
+        name: (identifier)
+        value: (integer_literal)))))
+
+==================
+control transfers
+==================
+
+fn f() { return 1; br 'l; throw t v; become g(x); }
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (block
+      (return_statement
+        value: (integer_literal))
+      (br_statement
+        label: (label
+          name: (identifier)))
+      (throw_statement
+        tag: (type_identifier)
+        value: (identifier))
+      (become_statement
+        function: (identifier)
+        (argument_list
+          (identifier))))))
+

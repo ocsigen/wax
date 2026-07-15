@@ -1,0 +1,55 @@
+{
+  "name": "tree-sitter-wax",
+  "version": "0.0.1",
+  "description": "Tree-sitter grammar for the Wax language (a Rust-like syntax for WebAssembly)",
+  "license": "MIT",
+  "author": "Jérôme Vouillon",
+  "main": "bindings/node",
+  "keywords": [
+    "tree-sitter",
+    "parser",
+    "wax",
+    "webassembly",
+    "wasm"
+  ],
+  "files": [
+    "grammar.js",
+    "binding.gyp",
+    "bindings/node/*",
+    "queries/*",
+    "src/**"
+  ],
+  "scripts": {
+    "generate": "tree-sitter generate",
+    "test": "tree-sitter test && ./scripts/smoke-parse.sh",
+    "parse": "tree-sitter parse",
+    "install": "node-gyp-build"
+  },
+  "dependencies": {
+    "node-addon-api": "^8.0.0",
+    "node-gyp-build": "^4.8.0"
+  },
+  "devDependencies": {
+    "prebuildify": "^6.0.0",
+    "tree-sitter-cli": "^0.26.10"
+  },
+  "peerDependencies": {
+    "tree-sitter": "^0.25.0"
+  },
+  "peerDependenciesMeta": {
+    "tree-sitter": {
+      "optional": true
+    }
+  },
+  "tree-sitter": [
+    {
+      "scope": "source.wax",
+      "file-types": [
+        "wax"
+      ],
+      "highlights": "queries/highlights.scm",
+      "injections": "queries/injections.scm",
+      "locals": "queries/locals.scm"
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+==================
+nested block comment
+==================
+
+fn f() { /* a /* b */ c */ nop; }
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (block
+      (block_comment)
+      (nop))))
+
+==================
+line comment
+==================
+
+fn f() { nop; // trailing
+}
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (block
+      (nop)
+      (line_comment))))
+

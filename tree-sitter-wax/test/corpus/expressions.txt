@@ -1,0 +1,143 @@
+==================
+precedence add mul
+==================
+
+fn f() { a + b * c; }
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (block
+      (binary_expression
+        left: (identifier)
+        right: (binary_expression
+          left: (identifier)
+          right: (identifier))))))
+
+==================
+comparison and shift
+==================
+
+fn f() { a << b == c; }
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (block
+      (binary_expression
+        left: (binary_expression
+          left: (identifier)
+          right: (identifier))
+        right: (identifier)))))
+
+==================
+unary and postfix
+==================
+
+fn f() { !a.b!; -x; }
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (block
+      (unary_expression
+        operand: (non_null_expression
+          (struct_get_expression
+            value: (identifier)
+            field: (identifier))))
+      (unary_expression
+        operand: (identifier)))))
+
+==================
+ternary
+==================
+
+fn f() { c ? a : b; }
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (block
+      (select_expression
+        condition: (identifier)
+        consequence: (identifier)
+        alternative: (identifier)))))
+
+==================
+cast and test
+==================
+
+fn f() { x as i64; y is &Cat; }
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (block
+      (cast_expression
+        value: (identifier)
+        type: (primitive_type
+          (identifier)))
+      (test_expression
+        value: (identifier)
+        type: (reference_type
+          heap: (type_identifier))))))
+
+==================
+struct and field
+==================
+
+fn f() { {P| x: 1, y}.x; }
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (block
+      (struct_get_expression
+        value: (struct_expression
+          base: (identifier)
+          (field_initializer
+            name: (identifier)
+            value: (integer_literal))
+          (field_initializer
+            name: (identifier)))
+        field: (identifier)))))
+
+==================
+call and index
+==================
+
+fn f() { g(a, b)[i]; }
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (block
+      (array_get_expression
+        array: (call_expression
+          function: (identifier)
+          arguments: (argument_list
+            (identifier)
+            (identifier)))
+        index: (identifier)))))
+

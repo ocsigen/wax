@@ -1,0 +1,43 @@
+name: tree-sitter-wax
+
+on:
+  push:
+    paths:
+      - "tree-sitter-wax/**"
+      - "src/lib-wax/parser.mly"
+      - "src/lib-wax/lexer.ml"
+      - ".github/workflows/tree-sitter.yml"
+  pull_request:
+    paths:
+      - "tree-sitter-wax/**"
+      - "src/lib-wax/parser.mly"
+      - "src/lib-wax/lexer.ml"
+      - ".github/workflows/tree-sitter.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tree-sitter-wax
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check the committed parser is up to date
+        run: |
+          npx tree-sitter generate
+          git diff --exit-code -- src/ \
+            || (echo "src/ is stale — run 'tree-sitter generate' and commit."; exit 1)
+
+      - name: Unit tests
+        run: npx tree-sitter test
+
+      - name: Corpus smoke test (zero ERROR/MISSING)
+        run: ./scripts/smoke-parse.sh

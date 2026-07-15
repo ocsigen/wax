@@ -1,0 +1,57 @@
+==================
+char vs label
+==================
+
+fn f() { 'search: loop { br 'search; } let c = 'a'; }
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (block
+      (loop_expression
+        (block_label
+          (label
+            name: (identifier)))
+        body: (br_statement
+          label: (label
+            name: (identifier))))
+      (let_statement
+        pattern: (identifier)
+        value: (char_literal)))))
+
+==================
+keyword label
+==================
+
+fn f() { 'loop: loop { br 'loop; } }
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (block
+      (loop_expression
+        (block_label
+          (label))
+        body: (br_statement
+          label: (label))))))
+
+==================
+empty typed struct
+==================
+
+const z = {T| };
+
+---
+
+(source_file
+  (global_definition
+    name: (identifier)
+    value: (struct_expression
+      base: (identifier))))
+
