@@ -123,11 +123,17 @@ does not carry. Three distinct prerequisites:
   recorded references for the use under the cursor and returns its definition
   span(s) (several only across conditional branches); a `DefinitionProvider` in
   `extension-common.ts`. Wax only.
-- [ ] **Find references / rename.** The inverse of the same `reference` links
-  (group uses by definition). Recording currently keeps only the resolved
-  definition per use, which suffices for go-to-def and could be inverted for
-  find-references; rename additionally needs every occurrence (including the
-  declaration) and edit safety.
+- [x] **Find references + document highlight.** The inverse of the `reference`
+  links: the cursor picks a symbol (from a use it sits on, or a definition), and
+  a `references` export gathers every reference sharing a target definition plus
+  the definition(s). A `ReferenceProvider` (Find All References) and a
+  `DocumentHighlightProvider` (highlight the symbol in the document) share it —
+  both want the same set, since every occurrence is in this file. Wax only.
+- [ ] **Rename.** The same inversion, but it *edits*, so it needs completeness:
+  every occurrence must be recorded or rename silently corrupts code. Audit that
+  the reference index catches all occurrences (and add the declaration where a
+  definition is not itself a recorded use) before trusting it. Then a
+  `RenameProvider` with a conflict/validity check.
 - [ ] **Semantic tokens.** Distinguishing locals / params / functions / types
   could reuse the resolution now recorded (classify each use by its binder kind);
   a coarser version could come from parse-tree structure alone.
@@ -145,10 +151,11 @@ does not carry. Three distinct prerequisites:
 
 ## Suggested next step
 
-Name resolution now records use -> definition links during type checking, and
-go-to-definition ships on top. The remaining language-server features all build
-on the same foundation: **find-references / rename** invert the links (and rename
-needs every occurrence + edit safety), **semantic tokens** classify each use by
-its binder kind, and **completion** enumerates the in-scope binders. Any of these
-is now a provider-level task rather than a new prerequisite. Find-references is
-the natural next step, closest to what is already recorded.
+Name resolution records use -> definition links during type checking; go-to-
+definition, hover-on-names, and find-references / document-highlight all ship on
+top. What is left is provider-level, not new analysis: **semantic tokens**
+(classify each use by its binder kind — a small `kind` on the recorded reference,
+then a token provider), **completion** (enumerate the in-scope binders), and
+**rename** (find-references that edits, so gated on auditing the reference index
+for completeness). Semantic tokens is the smallest next step and reuses the links
+directly; rename is the highest-value but needs the completeness audit first.

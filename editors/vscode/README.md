@@ -24,6 +24,9 @@ Syntax highlighting, formatting, diagnostics, and snippets for
 - **Go to definition** (`.wax`): jump from a use to its definition — a function,
   global, type, or tag; a `let`/parameter binding; or a block/loop label. Works
   through shadowing (a use resolves to the binding actually in scope).
+- **Find all references / highlight** (`.wax`): from a use or a definition, list
+  every occurrence of the symbol (Shift+F12), and highlight them in the file when
+  the cursor is on one.
 - **Convert / preview**: "Wax: Show compiled WAT" (in a `.wax` file) opens the
   compiled WebAssembly text in a read-only document beside the source, updating
   live as you edit; "Wax: Show as Wax" does the reverse from a `.wat` file. Both

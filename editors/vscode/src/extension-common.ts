@@ -32,6 +32,9 @@ interface LanguageSpec {
   inlays?(wax: Wax, src: string): WaxInlay[];
   // Definition span(s) at a position, for go-to-definition. Wax only.
   definition?(wax: Wax, src: string, line: number, character: number): WaxRange[];
+  // Every occurrence of the symbol at a position, for find-references and
+  // document highlight. Wax only.
+  references?(wax: Wax, src: string, line: number, character: number): WaxRange[];
 }
 
 const LANGUAGES: LanguageSpec[] = [
@@ -44,6 +47,8 @@ const LANGUAGES: LanguageSpec[] = [
     inlays: (wax, src) => wax.inlays(src),
     definition: (wax, src, line, character) =>
       wax.definition(src, line, character),
+    references: (wax, src, line, character) =>
+      wax.references(src, line, character),
   },
   {
     id: "wat",
@@ -67,6 +72,7 @@ export function activateWith(
     if (lang.hover) registerHover(context, opts, lang);
     if (lang.inlays) registerInlayHints(context, opts, lang);
     if (lang.definition) registerDefinition(context, opts, lang);
+    if (lang.references) registerReferences(context, opts, lang);
   }
   registerDiagnostics(context, opts);
   registerConvert(context, opts);
@@ -364,6 +370,60 @@ function registerDefinition(
 
   context.subscriptions.push(
     vscode.languages.registerDefinitionProvider(lang.id, provider),
+  );
+}
+
+function registerReferences(
+  context: vscode.ExtensionContext,
+  opts: LoadOptions,
+  lang: LanguageSpec,
+): void {
+  const references = lang.references;
+  if (!references) return;
+
+  // Every occurrence of the symbol under the cursor, computed once and reused by
+  // both providers (they want the same set — all occurrences are in this file).
+  const occurrences = async (
+    document: vscode.TextDocument,
+    position: vscode.Position,
+    token: vscode.CancellationToken,
+  ): Promise<vscode.Range[]> => {
+    let wax: Wax;
+    try {
+      wax = await loadWax(context, opts);
+    } catch {
+      return [];
+    }
+    if (token.isCancellationRequested) return [];
+    let ranges: WaxRange[];
+    try {
+      ranges = references(
+        wax,
+        document.getText(),
+        position.line,
+        position.character,
+      );
+    } catch {
+      return [];
+    }
+    return ranges.map(
+      (r) => new vscode.Range(r.startLine, r.startChar, r.endLine, r.endChar),
+    );
+  };
+
+  context.subscriptions.push(
+    vscode.languages.registerReferenceProvider(lang.id, {
+      async provideReferences(document, position, _context, token) {
+        const ranges = await occurrences(document, position, token);
+        return ranges.map((range) => new vscode.Location(document.uri, range));
+      },
+    }),
+    vscode.languages.registerDocumentHighlightProvider(lang.id, {
+      async provideDocumentHighlights(document, position, token) {
+        const ranges = await occurrences(document, position, token);
+        return ranges.map((range) => new vscode.DocumentHighlight(range));
+      },
+    }),
   );
 }
 

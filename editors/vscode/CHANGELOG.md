@@ -16,6 +16,8 @@
 - Hover extended to names that are not expressions: a type reference (e.g.
   `&point`) shows the type's definition, and an assignment target or global
   shows its type.
+- Find all references and document highlight for `.wax`: from a use or a
+  definition, list every occurrence of the symbol and highlight them in the file.
 
 ## 0.2.2
 

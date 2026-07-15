@@ -24,6 +24,9 @@
      endChar }: the definition span(s) for the name or label use at the
      (zero-based) position, for go-to-definition. Several only for a name defined
      in multiple conditional-compilation branches. Wax only.
+   - [references src line ch] -> array of { startLine; startChar; endLine;
+     endChar }: every occurrence (definitions and uses) of the symbol at the
+     (zero-based) position, for find-references and document highlight. Wax only.
    - [symbols src] / [symbolsWat src] -> the module's top-level definitions, for
      the outline.
    - [toWat src] / [toWax src] -> { ok; text; error }: convert between the
@@ -447,6 +450,57 @@ let definition_string src line ch =
   in
   match best with None -> [] | Some (_, defs) -> defs
 
+(* Find-references / document-highlight (Wax only): every occurrence of the
+   symbol under the cursor — its definition(s) and all uses that resolve to
+   them — for "Find All References" and highlighting the symbol in the document.
+   The cursor identifies the symbol whether it sits on a use (take that
+   reference's definitions) or on a definition itself (take that def span); then
+   collect every reference sharing a target definition, plus the targets. Both
+   consumers get the same set, since every occurrence is in this document. *)
+let same_span (a : Wax_utils.Ast.location) (b : Wax_utils.Ast.location) =
+  a.loc_start.Lexing.pos_cnum = b.loc_start.pos_cnum
+  && a.loc_end.pos_cnum = b.loc_end.pos_cnum
+
+let references_string src line ch =
+  let refs = (analyze src).a_defs in
+  let target = (line + 1, byte_column src line ch) in
+  let pos (p : Lexing.position) =
+    (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
+  in
+  let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
+  let contains (loc : Wax_utils.Ast.location) =
+    le (pos loc.loc_start) target && le target (pos loc.loc_end)
+  in
+  (* The definition span(s) the cursor picks out: from a use it sits on, or a
+     definition it sits on directly. *)
+  let targets =
+    List.concat_map
+      (fun (r : Wax_lang.Typing.reference) ->
+        (if contains r.use then r.definitions else [])
+        @ List.filter contains r.definitions)
+      refs
+  in
+  if targets = [] then []
+  else
+    let is_target loc = List.exists (same_span loc) targets in
+    let uses =
+      List.filter_map
+        (fun (r : Wax_lang.Typing.reference) ->
+          if List.exists is_target r.definitions then Some r.use else None)
+        refs
+    in
+    (* The definitions and every use, deduplicated by span (the typer may
+       resolve a name more than once). *)
+    let seen = Hashtbl.create 16 in
+    List.filter
+      (fun (l : Wax_utils.Ast.location) ->
+        let k = (l.loc_start.Lexing.pos_cnum, l.loc_end.pos_cnum) in
+        if Hashtbl.mem seen k then false
+        else (
+          Hashtbl.add seen k ();
+          true))
+      (targets @ uses)
+
 let check_wat_string src =
   match Wat_parser.parse_diagnostics ~filename:"<buffer>" src with
   | Error e -> [ syntax_error_diag e ]
@@ -661,6 +715,11 @@ let definition_result src line ch =
   let defs = try definition_string s line ch with _ -> [] in
   Js.array (Array.of_list (List.map (js_range s) defs))
 
+let references_result src line ch =
+  let s = Js.to_string src in
+  let occurrences = try references_string s line ch with _ -> [] in
+  Js.array (Array.of_list (List.map (js_range s) occurrences))
+
 (* Document outline: the module's top-level definitions (functions, globals,
    types, memories, tags, tables, elems, data, imports) with their spans, for the
    editor's outline / breadcrumbs. Only a syntactically-valid module yields
@@ -873,6 +932,7 @@ let () =
       method hover src line ch = hover_result src line ch
       method inlays src = inlays_result src
       method definition src line ch = definition_result src line ch
+      method references src line ch = references_result src line ch
       method symbols src = symbols_result symbols_string src
       method formatWat src = format_result format_wat_string src
       method checkWat src = check_result check_wat_string src
