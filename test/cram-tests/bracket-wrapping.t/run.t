@@ -13,8 +13,8 @@ own column rather than hugging the last entry.
   
   fn dispatch_wide(x: i32) {
       dispatch x [
-          'case_one 'case_two 'case_one 'case_two 'case_one 'case_two 'case_one 'case_two 'case_one
-          else 'case_dflt
+          'case_one, 'case_two, 'case_one, 'case_two, 'case_one, 'case_two, 'case_one, 'case_two,
+          'case_one, else 'case_dflt
       ] {
           'case_one: {
               return;
@@ -32,8 +32,8 @@ own column rather than hugging the last entry.
       'label_aaaa: do {
           'label_bbbb: do {
               br_table [
-                  'label_aaaa 'label_bbbb 'label_aaaa 'label_bbbb 'label_aaaa 'label_bbbb 'label_aaaa
-                  else 'label_bbbb
+                  'label_aaaa, 'label_bbbb, 'label_aaaa, 'label_bbbb, 'label_aaaa, 'label_bbbb,
+                  'label_aaaa, else 'label_bbbb
               ] x;
           }
       }

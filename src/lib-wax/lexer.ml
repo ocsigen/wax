@@ -187,6 +187,7 @@ let rec token_rec ctx lexbuf =
   | ".." -> DOTDOT
   | "!" -> BANG
   | "+" -> PLUS
+  | "++" -> PLUSPLUS
   | "+=" -> PLUSEQUAL
   | "-" -> MINUS
   | "-=" -> MINUSEQUAL

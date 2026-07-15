@@ -472,7 +472,7 @@ and rewrite_desc (desc : location instr_desc) : location instr_desc =
       Br_on_cast_desc_eq (l, t, rewrite_instr e, rewrite_instr d)
   | Br_on_cast_desc_eq_fail (l, t, e, d) ->
       Br_on_cast_desc_eq_fail (l, t, rewrite_instr e, rewrite_instr d)
-  | Throw (idx, e) -> Throw (idx, Option.map rewrite_instr e)
+  | Throw (idx, e) -> Throw (idx, List.map rewrite_instr e)
   | ThrowRef e -> ThrowRef (rewrite_instr e)
   | ContNew (ct, e) -> ContNew (ct, rewrite_instr e)
   | ContBind (src, dst, l) -> ContBind (src, dst, List.map rewrite_instr l)

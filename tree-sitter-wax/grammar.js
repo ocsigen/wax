@@ -593,7 +593,7 @@ module.exports = grammar({
     br_table_statement: $ => seq(
       'br_table',
       '[',
-      repeat($.label),
+      repeat(seq($.label, ',')),
       'else',
       field('default', $.label),
       ']',
@@ -605,11 +605,11 @@ module.exports = grammar({
       optional(field('value', $._expression)),
     )),
 
-    throw_statement: $ => prec.right(PREC.branch, seq(
+    throw_statement: $ => seq(
       'throw',
       field('tag', $._type_name),
-      optional(field('value', $._expression)),
-    )),
+      field('arguments', $.argument_list),
+    ),
 
     throw_ref_statement: $ => seq('throw_ref', field('value', $._expression)),
 
@@ -699,7 +699,7 @@ module.exports = grammar({
       'dispatch',
       field('index', $._expression),
       '[',
-      repeat($.label),
+      repeat(seq($.label, ',')),
       'else',
       field('default', $.label),
       ']',
@@ -870,7 +870,7 @@ module.exports = grammar({
 
     _data_name: $ => choice(alias('_', $.wildcard), $.identifier),
 
-    data_init: $ => sepBy1Trailing(',', $._data_element),
+    data_init: $ => sepBy1('++', $._data_element),
 
     _data_element: $ => choice(
       $.string_literal,
@@ -1004,7 +1004,7 @@ module.exports = grammar({
       '#', '[',
       field('name', $._attribute_name),
       optional(seq('=', field('value', $._expression))),
-      optional(seq(',', 'if', field('guard', $._condition))),
+      optional(seq(',', 'if', '(', field('guard', $._condition), ')')),
       ']',
     ),
 
@@ -1056,6 +1056,11 @@ module.exports = grammar({
 /** Zero or more `rule` separated by `sep`, with optional trailing separator. */
 function sepByTrailing(sep, rule) {
   return optional(sepBy1Trailing(sep, rule));
+}
+
+/** One or more `rule` separated by `sep` (no trailing separator). */
+function sepBy1(sep, rule) {
+  return seq(rule, repeat(seq(sep, rule)));
 }
 
 /** One or more `rule` separated by `sep`, with optional trailing separator. */

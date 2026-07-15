@@ -456,9 +456,10 @@ let labels_in_list l =
     | ResumeThrow (_, _, _, l)
     | ResumeThrowRef (_, _, l)
     | Switch (_, _, l)
+    | Throw (_, l)
     | Sequence l ->
         lst l
-    | Let (_, e) | Throw (_, e) | Return e | Br (_, e) -> opt e
+    | Let (_, e) | Return e | Br (_, e) -> opt e
     | Br_if (_, e)
     | Hinted (_, e)
     | Br_table (_, e)
@@ -1719,10 +1720,9 @@ and instruction_desc ret ctx i : location Text.instr list =
              reftype target_reftype ))
         (instruction ret ctx expr @ instruction ret ctx d)
   | Throw (tag_idx, args) ->
-      let args =
-        match args with None -> [] | Some args -> instruction ret ctx args
-      in
-      folded loc (Throw (index tag_idx)) args
+      folded loc
+        (Throw (index tag_idx))
+        (List.concat_map (instruction ret ctx) args)
   | ThrowRef expr -> folded loc ThrowRef (instruction ret ctx expr)
   | ContNew (ct, f) -> folded loc (ContNew (index ct)) (instruction ret ctx f)
   | ContBind (src, dst, l) ->

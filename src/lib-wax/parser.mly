@@ -28,6 +28,7 @@
 %token DOTDOT ".."
 %token BANG "!"
 %token PLUS "+"
+%token PLUSPLUS "++"
 %token PLUSEQUAL "+="
 %token MINUS "-"
 %token MINUSEQUAL "-="
@@ -112,7 +113,7 @@
    one, the opener hint is worded locationally ("opens the enclosing construct",
    see generate_error_messages.ml) rather than claiming it is unmatched, which
    would be false in the latter case. *)
-%on_error_reduce statement plaininstr separated_nonempty_list_trailing(",",structure_type_field) semi_list(module_field) separated_nonempty_list_trailing(",",value_type) block_type separated_nonempty_list_trailing(",",function_parameter) list(label) list(attribute) list(typedef) list(data_item) semi_list(legacy_catch) separated_nonempty_list_trailing(",",catch) separated_nonempty_list_trailing(",",let_pattern) separated_nonempty_list_trailing(",",block_param_type) separated_nonempty_list_trailing(",",condition) separated_nonempty_list_trailing(",",data_number) separated_nonempty_list_trailing(",",data_run_item) separated_nonempty_list_trailing(",",on_clause) blockinstr statement_list raw_statement_list semi_list(match_arm) semi_list(dispatch_arm) semi_list(import_item) loption(separated_nonempty_list_trailing(",",catch)) separated_nonempty_list_trailing(",",expression) let_pattern structure_field separated_nonempty_list_trailing(",",structure_field) constant_expression attribute_expression parenthesized_expression index_expression then_branch condition_expression length_expression optional_function_type structure_type result_type_ expression_list structure argument separated_nonempty_list_trailing(",",argument) argument_list
+%on_error_reduce statement plaininstr separated_nonempty_list_trailing(",",structure_type_field) semi_list(module_field) separated_nonempty_list_trailing(",",value_type) block_type separated_nonempty_list_trailing(",",function_parameter) labels_else list(attribute) list(typedef) list(data_item) semi_list(legacy_catch) separated_nonempty_list_trailing(",",catch) separated_nonempty_list_trailing(",",let_pattern) separated_nonempty_list_trailing(",",block_param_type) separated_nonempty_list_trailing(",",condition) separated_nonempty_list_trailing(",",data_number) separated_nonempty_list_trailing(",",data_run_item) separated_nonempty_list_trailing(",",on_clause) blockinstr statement_list raw_statement_list semi_list(match_arm) semi_list(dispatch_arm) semi_list(import_item) loption(separated_nonempty_list_trailing(",",catch)) separated_nonempty_list_trailing(",",expression) let_pattern structure_field separated_nonempty_list_trailing(",",structure_field) constant_expression attribute_expression parenthesized_expression index_expression then_branch condition_expression length_expression optional_function_type structure_type result_type_ expression_list structure argument separated_nonempty_list_trailing(",",argument) argument_list
 
 
 %nonassoc prec_ident (* {a|...} *) prec_block
@@ -551,6 +552,13 @@ label_name:
 %inline label:
 | "'" l = label_name { with_loc $sloc l }
 
+(* The comma-separated case labels of a [br_table]/[dispatch] bracket, ending
+   in the mandatory [else <default>]: ['a, 'b, else 'd] or [else 'd]. *)
+labels_else:
+| ELSE d = label { ([], d) }
+| x = label "," rest = labels_else
+  { let ls, d = rest in (x :: ls, d) }
+
 heap_type:
 | CONT { (Cont : heaptype) }
 | t = ident { try Hashtbl.find absheaptype_tbl t.desc with Not_found -> Type t }
@@ -668,11 +676,13 @@ attribute_expression: e = expression { e }
 | IMPORT { "import" }
 
 (* An optional conditional-compilation guard on a single attribute,
-   [#[export = "n", if not(portable)]]. The guard reuses the [#[if(...)]]
-   condition grammar; only [export] accepts one (checked in the typer). *)
+   [#[export = "n", if(not(portable))]]. The guard reuses the [#[if(...)]]
+   condition grammar, parentheses included; only [export] accepts one (checked
+   in the typer). *)
 attribute_guard:
 | { None }
-| "," _kw = IF c = condition { Some {desc = c; info = location_of $loc(_kw)} }
+| "," _kw = IF "(" c = condition ")"
+  { Some {desc = c; info = location_of $loc(_kw)} }
 
 attribute:
 | "#" "[" name = attribute_name "=" i = attribute_expression g = attribute_guard "]" { (name, Some i, g) }
@@ -842,9 +852,10 @@ blockinstr:
    block form. *)
 | h = branch_hint_attr i = blockinstr { hinted $sloc h i }
 | DISPATCH index = expression
-  "[" cases = list(label) ELSE default = label "]"
+  "[" le = labels_else "]"
   "{" arms = semi_list(dispatch_arm) "}"
-  { with_loc $sloc (Dispatch {index; cases; default; arms}) }
+  { let cases, default = le in
+    with_loc $sloc (Dispatch {index; cases; default; arms}) }
 | MATCH scrutinee = expression
   "{" arms = semi_list(match_arm) default = match_default "}"
   { with_loc $sloc (Match {scrutinee; arms; default}) }
@@ -1075,11 +1086,11 @@ statement:
   { with_loc $sloc (Let (l, i)) }
 | BR l = label i = ioption(expression)
   { with_loc $sloc (Br (l, i)) }
-| BR_TABLE "[" lst = list(label) ELSE l = label  "]" i = expression
-  { with_loc $sloc (Br_table (lst @ [l], i)) }
+| BR_TABLE "[" le = labels_else "]" i = expression
+  { let lst, l = le in with_loc $sloc (Br_table (lst @ [l], i)) }
 | RETURN i = ioption(expression) { with_loc $sloc (Return i) }
-| THROW t = tag_name  i = ioption(expression)
-  { with_loc $sloc (Throw (t, i)) }
+| THROW t = tag_name "(" l = expression_list ")"
+  { with_loc $sloc (Throw (t, l)) }
 | THROW_REF i = expression
   { with_loc $sloc (ThrowRef i) }
 | BECOME i = expression "(" l = argument_list ")"
@@ -1164,9 +1175,10 @@ data_name:
 | x = ident { Some x }
 
 (* A data segment's contents: one or more elements (a string literal, a numeric
-   run [[f32: 1.5, nan]], or a [v128] constant), concatenated. See {!Ast.Data}. *)
+   run [[f32: 1.5, nan]], or a [v128] constant), concatenated with [++]. See
+   {!Ast.Data}. *)
 data_init:
-| l = separated_nonempty_list_trailing(",", data_elem) { l }
+| l = separated_nonempty_list("++", data_elem) { l }
 
 data_elem:
 | s = STRING { Data_string s.desc }

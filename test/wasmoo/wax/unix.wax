@@ -386,14 +386,15 @@ const no_arg = "";
     }
 
     fn caml_unix_error(errcode: i32, cmd_name: &eq, cmd_arg: &eq) {
-        throw ocaml_exception
+        throw ocaml_exception(
             [block|
                 0 as &i31,
                 get_unix_error_exn(),
                 caml_unix_error_of_code(errcode),
                 cmd_name,
                 cmd_arg,
-            ];
+            ],
+        );
     }
 
     fn caml_unix_error_if(errcode: i32, cmd_name: &eq, cmd_arg: &eq) {
@@ -469,7 +470,7 @@ const no_arg = "";
                 } as &i31;
             variant = [block|0 as &i31, errno];
         }
-        throw ocaml_exception
+        throw ocaml_exception(
             [block|
                 0 as &i31,
                 get_unix_error_exn(),
@@ -480,7 +481,8 @@ const no_arg = "";
                     cmd!;
                 },
                 ensure_string(caml_js_get(exn, path)),
-            ];
+            ],
+        );
     }
 
     #[export]
@@ -1316,14 +1318,15 @@ fn caml_alloc_stat(
     }
 
     fn throw_ebadf(cmd: &eq) {
-        throw ocaml_exception
+        throw ocaml_exception(
             [block|
                 0 as &i31,
                 get_unix_error_exn(),
                 3 as &i31, // EBADF
                 cmd,
                 no_arg,
-            ];
+            ],
+        );
     }
 
     fn readdir_helper(dir: &eq) -> &eq {
@@ -1490,14 +1493,15 @@ fn win_findfirst(vpath: &eq) -> &eq {
     #[export = "caml_unix_link"]
     fn unix_link(follow: &eq, d: &eq, s: &eq) -> &eq {
         if follow is &block {
-            throw ocaml_exception
+            throw ocaml_exception(
                 [block|
                     0 as &i31,
                     get_unix_error_exn(),
                     25 as &i31, // ENOSYS
                     "link",
                     no_arg,
-                ];
+                ],
+            );
         }
         try {
             link(unwrap(caml_jsstring_of_string(d)), unwrap(caml_jsstring_of_string(s)));
@@ -2201,7 +2205,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
         let fd_offset =
             'non_null: do {
                 br_on_non_null 'non_null get_fd_offset_unchecked(fd);
-                throw ocaml_exception lseek_exn(3);
+                throw ocaml_exception(lseek_exn(3));
             }; // EBADF
         if cmd == 1 as &i31 {
             offset = fd_offset.offset + offset;
@@ -2211,7 +2215,7 @@ fn get_fd_offset(fd: i32) -> &fd_offset {
             }
         }
         if offset <s 0 {
-            throw ocaml_exception lseek_exn(12);
+            throw ocaml_exception(lseek_exn(12));
         } // EINVAL
         fd_offset.offset = offset;
         fd_offset.seeked = 1;
@@ -2273,7 +2277,7 @@ fn channel_of_descr_name(out: i32) -> &eq {
         let res = fd_filestat_get(fd as i32_u, buffer);
         caml_unix_error_if(res, channel_of_descr_name(out), no_arg);
         let kind = m.load8(buffer, offset: 16) as i32_u;
-        dispatch kind [ 'ok 'bad 'ok 'bad 'ok 'bad 'ok else 'bad ] {
+        dispatch kind [ 'ok, 'bad, 'ok, 'bad, 'ok, 'bad, 'ok, else 'bad ] {
             'bad: {
                 caml_unix_error(28 /* EINVAL */ , channel_of_descr_name(out), no_arg);
             }
@@ -2294,16 +2298,17 @@ fn channel_of_descr_name(out: i32) -> &eq {
                 }
             } as &block;
         let kind = s[3] as i32_u;
-        dispatch kind [ 'ok 'bad 'ok 'bad 'bad else 'ok ] {
+        dispatch kind [ 'ok, 'bad, 'ok, 'bad, 'bad, else 'ok ] {
             'bad: {
-                throw ocaml_exception
+                throw ocaml_exception(
                     [block|
                         0 as &i31,
                         get_unix_error_exn(),
                         12 as &i31, // EINVAL
                         channel_of_descr_name(out),
                         no_arg,
-                    ];
+                    ],
+                );
             }
             'ok: {}
         }

@@ -173,7 +173,7 @@ let module_ ctx env (fields : location Ast.module_) :
         Br_on_cast_desc_eq (l, t, sone v, sone d)
     | Br_on_cast_desc_eq_fail (l, t, v, d) ->
         Br_on_cast_desc_eq_fail (l, t, sone v, sone d)
-    | Throw (idx, v) -> Throw (idx, Option.map sone v)
+    | Throw (idx, v) -> Throw (idx, List.map sone v)
     | ThrowRef v -> ThrowRef (sone v)
     | ContNew (ct, v) -> ContNew (ct, sone v)
     | ContBind (src, dst, l) -> ContBind (src, dst, List.map sone l)

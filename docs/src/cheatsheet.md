@@ -66,9 +66,9 @@ c ? a : b                            // conditional expression
 do { }        'l: do t { }           // block (optionally labeled / typed)
 loop { }                             // loop
 while c { }   'l: while c : (step) { }   // while (optional continue-expression)
-br 'l;   br_if 'l c;   br_table ['a 'b else 'd] i;
+br 'l;   br_if 'l c;   br_table ['a, 'b, else 'd] i;
 br_on_null 'l v;   br_on_cast 'l &t v;   // also _non_null / _cast_fail
-dispatch i ['a 'b else 'd] { 'a: { } 'b: { } 'd: { } }   // jump table (falls through)
+dispatch i ['a, 'b, else 'd] { 'a: { } 'b: { } 'd: { } }   // jump table (falls through)
 match v { p: &t => { }  null => { }  _ => { } }          // type match
 return e;   become f(x);             // return / tail call
 unreachable;   nop;                  // trap / no-op (statements, not expressions)
@@ -121,7 +121,7 @@ m.size()   m.grow(n)   m.fill(d, v, n)   m.copy(d, s, n)   // management
 
 ```wax
 try t { } catch { oops => { _; }  _ => { } }     // try / catch (payload via hole _)
-throw oops 42;                                   // throw
+throw oops(42);                                   // throw
 try { } catch [oops -> 'h]                       // branch-to-label form (try_table)
 type k = cont ft;                                // continuation type
 suspend yield(x);   resume k [tag -> 'l] (args, c);   // suspend / resume

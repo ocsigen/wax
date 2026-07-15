@@ -232,7 +232,7 @@ fn countdown(n: i32) -> i32 {
 ```wax
 #[export = "rgb_channel"]
 fn rgb_channel(color: i32, value: i32) -> i32 {
-    dispatch color ['red 'green 'blue else 'bad] {
+    dispatch color ['red, 'green, 'blue, else 'bad] {
         'bad:   { return -1; }
         'blue:  { return value & 255; }
         'green: { return (value & 255) << 8; }
@@ -464,7 +464,7 @@ tag overflow();
 #[export = "safe_divide"]
 fn safe_divide(a: i32, b: i32) -> i32 {
     if b == 0 {
-        throw divide_by_zero;
+        throw divide_by_zero();
     }
     a /s b;
 }
@@ -785,9 +785,9 @@ memory mem: i32 [1];
 
 // "GIF89a" header, then a 4-lane f32 palette and two i16 dimensions.
 data header @ mem[0] =
-    "GIF89a",
-    [f32: 1.0, 0.5, 0.25, 0.0],
-    [i16: 640, 480];
+    "GIF89a"
+    ++ [f32: 1.0, 0.5, 0.25, 0.0]
+    ++ [i16: 640, 480];
 ```
 
 ## SIMD

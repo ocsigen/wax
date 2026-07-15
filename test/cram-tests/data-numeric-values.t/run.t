@@ -7,8 +7,8 @@ A Wax data segment with numeric runs lowers to WAT numlists (runs preserved):
 
   $ cat > d.wax <<'EOF'
   > memory mem: i32 [1];
-  > data seg = "abcd", [i16: -1], [f32: 0.2, nan, inf];
-  > data seg2 @ mem[0] = [i8: 1, 2, 3, 4], "xy";
+  > data seg = "abcd" ++ [i16: -1] ++ [f32: 0.2, nan, inf];
+  > data seg2 @ mem[0] = [i8: 1, 2, 3, 4] ++ "xy";
   > data vecs = [v128: i32x4(1, 2, 3, 4), f64x2(1.0, 2.0)];
   > EOF
   $ wax -f wat d.wax
@@ -22,7 +22,7 @@ as the equivalent escaped strings:
 
   $ cat > b.wax <<'EOF'
   > memory mem: i32 [1];
-  > data seg = "abcd", [i16: -1], [f32: 0.2, 0.3, 0.4];
+  > data seg = "abcd" ++ [i16: -1] ++ [f32: 0.2, 0.3, 0.4];
   > EOF
   $ wax -f wasm b.wax -o b.wasm && wax -i wasm -f wat b.wasm
   (memory $mem 1)
@@ -41,7 +41,7 @@ one run:
   > EOF
   $ wax -i wat -f wax n.wat
   memory mem: i32 [1];
-  data seg = "abcd", [i16: -1], [f32: 0.2, nan, inf];
+  data seg = "abcd" ++ [i16: -1] ++ [f32: 0.2, nan, inf];
   data d = [f32: nan, nan];
   data d_2 = [v128: i32x4(1, 2, 3, 4), i64x2(5, 6)];
 

@@ -3100,7 +3100,6 @@ let rec count_holes i =
   | Br_on_cast (_, _, i)
   | Br_on_cast_fail (_, _, i)
   | ArrayDefault (_, i)
-  | Throw (_, Some i)
   | ThrowRef i
   | ContNew (_, i)
   | Return (Some i)
@@ -3130,7 +3129,8 @@ let rec count_holes i =
   | Resume (_, _, l)
   | ResumeThrow (_, _, _, l)
   | ResumeThrowRef (_, _, l)
-  | Switch (_, _, l) ->
+  | Switch (_, _, l)
+  | Throw (_, l) ->
       List.fold_left (fun acc i -> acc + count_holes i) 0 l
   | Select (c, t, e) -> count_holes c + count_holes t + count_holes e
   (* [dispatch]/[match], [while] and [do]-[while] are block-like: their
@@ -3141,7 +3141,6 @@ let rec count_holes i =
   | Get _ | Path _ | Null | Unreachable | Nop
   | Let (_, None)
   | Br (_, None)
-  | Throw (_, None)
   | Return None ->
       0
 
@@ -3231,6 +3230,7 @@ let rec collect_assigned_locals acc i =
   | ResumeThrow (_, _, _, l)
   | ResumeThrowRef (_, _, l)
   | Switch (_, _, l)
+  | Throw (_, l)
   | Sequence l ->
       in_list acc l
   | Dispatch { index; arms; _ } ->
@@ -3245,7 +3245,7 @@ let rec collect_assigned_locals acc i =
       in
       in_list acc default.desc
   | Let (_, body) -> in_opt acc body
-  | Br (_, o) | Throw (_, o) | Return o -> in_opt acc o
+  | Br (_, o) | Return o -> in_opt acc o
   | If_annotation { then_body; else_body; _ } ->
       let acc = in_list acc then_body.desc in
       Option.fold ~none:acc ~some:(fun b -> in_list acc b.desc) else_body
@@ -3329,6 +3329,7 @@ let rec collect_labels acc (i : _ Ast.instr) =
   | ResumeThrow (_, _, _, l)
   | ResumeThrowRef (_, _, l)
   | Switch (_, _, l)
+  | Throw (_, l)
   | Sequence l ->
       in_list acc l
   | Dispatch { index; arms; _ } ->
@@ -3342,7 +3343,7 @@ let rec collect_labels acc (i : _ Ast.instr) =
       in
       in_list acc default.desc
   | Let (_, body) -> in_opt acc body
-  | Br (_, o) | Throw (_, o) | Return o -> in_opt acc o
+  | Br (_, o) | Return o -> in_opt acc o
   | If_annotation { then_body; else_body; _ } ->
       let acc = in_list acc then_body.desc in
       Option.fold ~none:acc ~some:(fun b -> in_list acc b.desc) else_body
@@ -3565,6 +3566,7 @@ let rec lint_source ctx (i : _ Ast.instr) =
   | ResumeThrow (_, _, _, l)
   | ResumeThrowRef (_, _, l)
   | Switch (_, _, l)
+  | Throw (_, l)
   | Sequence l ->
       list l
   | Dispatch { index; arms; _ } ->
@@ -3582,7 +3584,7 @@ let rec lint_source ctx (i : _ Ast.instr) =
           Error.unused_result ctx.diagnostics ~location:e.info
       | _ -> ());
       opt body
-  | Br (_, o) | Throw (_, o) | Return o -> opt o
+  | Br (_, o) | Return o -> opt o
   | If_annotation { then_body; else_body; _ } ->
       list then_body.desc;
       Option.iter (fun b -> list b.desc) else_body
@@ -3735,7 +3737,6 @@ let rec check_hole_order_rec ctx i n =
         | Float _ | Get _ | Path _ | Null | Unreachable | Nop
         | Let (_, None)
         | Br (_, None)
-        | Throw (_, None)
         | Return None ->
             n
         (* A table reference [tab[..]] has a static receiver (the table name),
@@ -3806,7 +3807,6 @@ let rec check_hole_order_rec ctx i n =
         | Br_on_cast (_, _, i)
         | Br_on_cast_fail (_, _, i)
         | ArrayDefault (_, i)
-        | Throw (_, Some i)
         | ThrowRef i
         | ContNew (_, i)
         | Return (Some i)
@@ -3826,7 +3826,8 @@ let rec check_hole_order_rec ctx i n =
         | Resume (_, _, l)
         | ResumeThrow (_, _, _, l)
         | ResumeThrowRef (_, _, l)
-        | Switch (_, _, l) ->
+        | Switch (_, _, l)
+        | Throw (_, l) ->
             check_hole_order_in_list ctx l n
         | Struct (_, l) ->
             let fields =
@@ -6625,28 +6626,31 @@ and type_exception ctx i =
   (* Raising exceptions: [throw tag(..)] ([Throw]) and re-raising a caught
      exnref ([ThrowRef]). *)
   match i.desc with
-  | Throw (tag, i') ->
-      let* i' =
-        match i' with
-        | Some i' ->
-            let* i' = instruction ctx i' in
-            return (Some i')
-        | None -> return None
-      in
+  | Throw (tag, l) ->
+      let* l' = instructions ctx l in
       (let>@ { params; results } = Tbl.find ctx.diagnostics ctx.tags tag in
        if results <> [||] then
          Error.tag_with_results ctx.diagnostics ~location:tag.info;
        let>@ types =
          array_map_opt (fun p -> internalize ctx (snd p.desc)) params
        in
-       match i' with
-       | Some i' ->
-           check_subtypes ctx ~location:(snd i'.info) (fst i'.info) types
-       | None ->
-           if types <> [||] then
-             Error.value_count_mismatch ctx.diagnostics ~location:i.info
-               ~expected:(Array.length types) ~provided:0);
-      return_statement i (Throw (tag, i')) [||]
+       (* An argument may itself produce several values (a multi-result call),
+          so check the flattened values against the tag's parameters, each at
+          its own argument's location. *)
+       let provided =
+         List.concat_map
+           (fun a ->
+             List.map (fun ty -> (ty, snd a.info)) (Array.to_list (fst a.info)))
+           l'
+       in
+       if List.length provided <> Array.length types then
+         Error.value_count_mismatch ctx.diagnostics ~location:i.info
+           ~expected:(Array.length types) ~provided:(List.length provided)
+       else
+         List.iteri
+           (fun k (ty', location) -> check_subtype ctx ~location ty' types.(k))
+           provided);
+      return_statement i (Throw (tag, l')) [||]
   | ThrowRef i' ->
       let* i' = instruction ctx i' in
       (let>@ typ = internalize ctx (Ref { nullable = true; typ = Exn }) in
@@ -10608,7 +10612,8 @@ let rec instr_has_conditional (i : (_ instr_desc, _) annotated) =
   | Resume (_, _, l)
   | ResumeThrow (_, _, _, l)
   | ResumeThrowRef (_, _, l)
-  | Switch (_, _, l) ->
+  | Switch (_, _, l)
+  | Throw (_, l) ->
       any l
   | Call (a, l) | TailCall (a, l) -> instr_has_conditional a || any l
   (* A punned field ([None]) is a [Get] and carries no conditional. *)
@@ -10654,7 +10659,7 @@ let rec instr_has_conditional (i : (_ instr_desc, _) annotated) =
   | ThrowRef i
   | ContNew (_, i) ->
       instr_has_conditional i
-  | Let (_, i) | Br (_, i) | Throw (_, i) | Return i -> opt i
+  | Let (_, i) | Br (_, i) | Return i -> opt i
   | Unreachable | Nop | Hole | Null | Get _ | Path _ | Char _ | String _ | Int _
   | Float _ | StructDefault _ ->
       false
@@ -10828,7 +10833,7 @@ let specialize_fields env diagnostics ~enqueue ~record asm0 fields =
         Br_on_cast_desc_eq (l, t, sone asm v, sone asm d)
     | Br_on_cast_desc_eq_fail (l, t, v, d) ->
         Br_on_cast_desc_eq_fail (l, t, sone asm v, sone asm d)
-    | Throw (idx, v) -> Throw (idx, Option.map (sone asm) v)
+    | Throw (idx, v) -> Throw (idx, List.map (sone asm) v)
     | ThrowRef v -> ThrowRef (sone asm v)
     | ContNew (ct, v) -> ContNew (ct, sone asm v)
     | ContBind (src, dst, l) -> ContBind (src, dst, List.map (sone asm) l)

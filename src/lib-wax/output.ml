@@ -667,21 +667,16 @@ let rec cond_to_string (c : Wax_wasm.Ast.cond) =
 
 and cond_list l = String.concat ", " (List.map cond_to_string l)
 
-(* The space-separated case labels of a [br_table]/[dispatch] bracket, ending in
-   [else <default>]; printed inside a fill box so they pack and wrap. *)
+(* The comma-separated case labels of a [br_table]/[dispatch] bracket, ending
+   in [else <default>]; printed inside a fill box so they pack and wrap. *)
 let label_seq pp cases default =
-  (match cases with
-  | [] -> ()
-  | first :: rest ->
+  List.iter
+    (fun (l : Ast.ident) ->
       identifier pp "'";
-      identifier pp first.desc;
-      List.iter
-        (fun l ->
-          space pp ();
-          identifier pp "'";
-          identifier pp l.desc)
-        rest;
-      space pp ());
+      identifier pp l.desc;
+      punctuation pp ",";
+      space pp ())
+    cases;
   keyword pp "else";
   space pp ();
   identifier pp "'";
@@ -1251,16 +1246,14 @@ let rec instr prec pp (i : _ instr) =
               space pp ();
               instr Branch pp i)
             i)
-  | Throw (tag, i) ->
-      box pp ~indent:indent_level (fun () ->
-          keyword pp "throw";
-          space pp ();
-          identifier pp tag.desc;
-          Option.iter
-            (fun i ->
+  | Throw (tag, args) ->
+      (* Call-like: [throw tag(x, y)]. *)
+      hvbox pp (fun () ->
+          hbox pp (fun () ->
+              keyword pp "throw";
               space pp ();
-              instr Branch pp i)
-            i)
+              identifier pp tag.desc);
+          print_arg_list (instr Instruction) pp args)
   | ThrowRef i ->
       box pp ~indent:indent_level (fun () ->
           keyword pp "throw_ref";
@@ -1464,13 +1457,13 @@ let print_attribute_gen open_ pp (name, i, guard) =
           attribute pp "=";
           space pp ();
           with_style pp Attribute (fun () -> instr Instruction pp i));
-      (* A per-attribute guard, [#[export = "n", if <cond>]]. *)
+      (* A per-attribute guard, [#[export = "n", if(<cond>)]]. *)
       (match guard with
       | None -> ()
       | Some c ->
           attribute pp ",";
           space pp ();
-          attribute pp (Printf.sprintf "if %s" (cond_to_string c.desc)));
+          attribute pp (Printf.sprintf "if(%s)" (cond_to_string c.desc)));
       attribute pp "]")
 
 let print_attribute pp a = print_attribute_gen "#[" pp a
@@ -1536,8 +1529,8 @@ let print_v128_group pp (v : (Wax_utils.V128.t, _) Ast.annotated) =
       list_commasep (fun pp c -> constant pp c) pp v.desc.components);
   punctuation pp ")"
 
-(* A data segment's contents: a comma-separated list of constant elements
-   (string literals, numeric runs [[i16: …]], [v128] runs). Only called for a
+(* A data segment's contents: constant elements (string literals, numeric runs
+   [[i16: …]], [v128] runs) concatenated with [++]. Only called for a
    non-empty segment; an empty one omits the [= …] entirely (see callers). *)
 let print_data_elem pp = function
   | Ast.Data_string s -> print_data_bytes pp s
@@ -1548,7 +1541,21 @@ let print_data_elem pp = function
   | Ast.Data_v128 vs -> print_run pp "v128" print_v128_group vs
 
 let print_data_init pp init =
-  hvbox pp ~indent:0 (fun () -> list_commasep print_data_elem pp init)
+  box pp ~indent:indent_level (fun () ->
+      match init with
+      | [] -> ()
+      | first :: rest ->
+          print_data_elem pp first;
+          List.iter
+            (fun e ->
+              (* Fold like a binary operator (see [BinOp]): break *before*
+                 [++], which then leads its continuation line; the space after
+                 it never breaks. *)
+              space pp ();
+              operator pp "++";
+              Wax_utils.Printer.string pp.base.printer " ";
+              print_data_elem pp e)
+            rest)
 
 let print_data_name pp n =
   match n with

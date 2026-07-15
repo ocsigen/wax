@@ -3,7 +3,7 @@ type-checks, round-trips, and lowers to WAT and to the binary format.
 
   $ cat > stop.wax <<'EOF'
   > tag stop();
-  > fn m() { throw stop; }
+  > fn m() { throw stop(); }
   > fn f() {
   >     try { m(); } catch { stop => { nop; } }
   > }
@@ -12,7 +12,7 @@ type-checks, round-trips, and lowers to WAT and to the binary format.
   $ wax -f wax --validate stop.wax
   tag stop();
   fn m() {
-      throw stop;
+      throw stop();
   }
   fn f() {
       try {

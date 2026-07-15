@@ -28,7 +28,7 @@ none) — this is purely an input tolerance and does not round-trip:
       while i <u c : (i += 1) {
           nop;
       }
-      dispatch c [ 'a 'b else 'd ] {
+      dispatch c [ 'a, 'b, else 'd ] {
           'a: {}
           'b: {}
           'd: {}
@@ -63,7 +63,7 @@ level and inside a group `{…}`), import items, and the arm lists of `dispatch`
   
   #[export = "arms"]
   fn arms(x: i32, r: &any) -> i32 {
-      dispatch x [ 'a else 'b ] {
+      dispatch x [ 'a, else 'b ] {
           'a: {
               return 1;
           }

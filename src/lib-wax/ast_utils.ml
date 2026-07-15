@@ -134,7 +134,7 @@ let rec map_instr f instr =
         Br_on_cast_desc_eq (label, t, map_instr f v, map_instr f d)
     | Br_on_cast_desc_eq_fail (label, t, v, d) ->
         Br_on_cast_desc_eq_fail (label, t, map_instr f v, map_instr f d)
-    | Throw (idx, args) -> Throw (idx, Option.map (map_instr f) args)
+    | Throw (idx, args) -> Throw (idx, List.map (map_instr f) args)
     | ThrowRef v -> ThrowRef (map_instr f v)
     | ContNew (ct, v) -> ContNew (ct, map_instr f v)
     | ContBind (src, dst, args) ->
@@ -191,7 +191,8 @@ let sub_instrs (i : (_ Ast.instr_desc, _) Ast.annotated) =
   | Resume (_, _, l)
   | ResumeThrow (_, _, _, l)
   | ResumeThrowRef (_, _, l)
-  | Switch (_, _, l) ->
+  | Switch (_, _, l)
+  | Throw (_, l) ->
       l
   | Call (a, l) | TailCall (a, l) -> a :: l
   | Struct (_, l) -> List.filter_map snd l
@@ -227,7 +228,7 @@ let sub_instrs (i : (_ Ast.instr_desc, _) Ast.annotated) =
   | ThrowRef i
   | ContNew (_, i) ->
       [ i ]
-  | Let (_, o) | Br (_, o) | Throw (_, o) | Return o -> Option.to_list o
+  | Let (_, o) | Br (_, o) | Return o -> Option.to_list o
   | Unreachable | Nop | Hole | Null | Get _ | Path _ | Char _ | String _ | Int _
   | Float _ | StructDefault _ ->
       []

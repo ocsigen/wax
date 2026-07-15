@@ -213,7 +213,7 @@ type 'info instr_desc =
      no runtime effect; on lowering the hint is emitted into the
      [metadata.code.branch_hint] section at the wrapped instruction's offset. *)
   | Hinted of (* likely *) bool * 'info instr
-  | Throw of ident * 'info instr option
+  | Throw of ident * 'info instr list
   | ThrowRef of 'info instr
   | ContNew of ident * 'info instr
   | ContBind of ident * ident * 'info instr list

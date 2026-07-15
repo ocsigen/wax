@@ -454,12 +454,14 @@ fn intern_rec(s: &intern_state, h: &marshal_header) -> &eq {
                                         br 'read_string;
                                     } else {
                                         dispatch code [
-                                            'INT8 'INT16 'INT32 'INT64 'SHARED8 'SHARED16 'SHARED32
-                                            'DOUBLE_ARRAY32 'BLOCK32 'STRING8 'STRING32 'DOUBLE
-                                            'DOUBLE 'DOUBLE_ARRAY8 'DOUBLE_ARRAY8 'DOUBLE_ARRAY32
-                                            'CODEPOINTER 'CODEPOINTER 'CUSTOM 'default 'default
-                                            'default 'default 'default 'CUSTOM 'CUSTOM 'default
-                                            'default 'default 'default 'default 'NULL else 'default
+                                            'INT8, 'INT16, 'INT32, 'INT64, 'SHARED8, 'SHARED16,
+                                            'SHARED32, 'DOUBLE_ARRAY32, 'BLOCK32, 'STRING8,
+                                            'STRING32, 'DOUBLE, 'DOUBLE, 'DOUBLE_ARRAY8,
+                                            'DOUBLE_ARRAY8, 'DOUBLE_ARRAY32, 'CODEPOINTER,
+                                            'CODEPOINTER, 'CUSTOM, 'default, 'default, 'default,
+                                            'default, 'default, 'CUSTOM, 'CUSTOM, 'default,
+                                            'default, 'default, 'default, 'default, 'NULL, else
+                                            'default
                                         ] {
                                             'default: {
                                                 // default

@@ -199,8 +199,8 @@ fn caml_parse_engine(vtables: &eq, venv: &eq, vcmd: &eq, varg: &eq) -> &eq {
             let n2: i32;
             let state1: i32;
             dispatch cmd [
-                'START 'TOKEN_READ 'STACKS_GROWN_1 'STACKS_GROWN_2 'SEMANTIC_ACTION_COMPUTED
-                'ERROR_DETECTED 'loop 'testshift 'shift 'shift_recover 'reduce else 'default
+                'START, 'TOKEN_READ, 'STACKS_GROWN_1, 'STACKS_GROWN_2, 'SEMANTIC_ACTION_COMPUTED,
+                'ERROR_DETECTED, 'loop, 'testshift, 'shift, 'shift_recover, 'reduce, else 'default
             ] {
                 'START: {
                     // START:

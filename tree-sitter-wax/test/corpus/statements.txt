@@ -54,7 +54,7 @@ fn f() { x = 1; y += 2; z := 3; }
 control transfers
 ==================
 
-fn f() { return 1; br 'l; throw t v; become g(x); }
+fn f() { return 1; br 'l; throw t(v); become g(x); }
 
 ---
 
@@ -70,7 +70,8 @@ fn f() { return 1; br 'l; throw t v; become g(x); }
           name: (identifier)))
       (throw_statement
         tag: (type_identifier)
-        value: (identifier))
+        arguments: (argument_list
+          (identifier)))
       (become_statement
         function: (identifier)
         (argument_list

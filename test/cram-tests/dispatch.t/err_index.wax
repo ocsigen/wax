@@ -1,6 +1,6 @@
 fn g(x: f64) {
     'out: do {
-        dispatch x ['a else 'out] {
+        dispatch x ['a, else 'out] {
             'a: { nop; }
         }
     }
