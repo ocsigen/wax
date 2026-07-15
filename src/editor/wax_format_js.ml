@@ -37,12 +37,14 @@
    - [symbols src] / [symbolsWat src] -> the module's top-level definitions, for
      the outline.
    - [completion src line ch] -> array of { name; kind; detail }: completion
-     candidates at the (zero-based) position. After [name.] (a struct field
-     access), the receiver struct's field names; otherwise the names in scope —
-     the module's top-level definitions, the enclosing function's parameters and
-     locals, and the keywords. [detail] is a one-line type / signature rendered
-     from the declaration (empty when none). The editor filters by the typed
-     prefix. Wax only.
+     candidates at the (zero-based) position. After [recv.] (a member access),
+     the receiver's members — a struct's fields, or the value methods of a
+     numeric / v128 / memory / table receiver; after [ns::], the intrinsic
+     namespace's free functions; otherwise the names in scope — the module's
+     top-level definitions, the enclosing function's parameters and the locals
+     bound before the cursor, the keywords, and the intrinsic namespace names.
+     [detail] is a one-line type / signature (empty when none). The editor
+     filters by the typed prefix. Wax only.
    - [toWat src] / [toWax src] -> { ok; text; error }: convert between the
      languages (compile Wax to Wasm text, decompile Wasm text to Wax), for the
      side-by-side preview commands.
@@ -1188,8 +1190,20 @@ let completion_string src line ch =
             (fun k -> { k_name = k; k_kind = "keyword"; k_detail = "" })
             wax_keywords
         in
+        (* The intrinsic namespace names, so [v128::] / [i64::] / [atomic::] is
+           discoverable; selecting one leaves the cursor before the [::]. *)
+        let namespaces =
+          List.map
+            (fun n ->
+              {
+                k_name = n;
+                k_kind = "namespace";
+                k_detail = "intrinsic namespace";
+              })
+            Wax_lang.Typing.intrinsic_namespaces
+        in
         match ast_opt with
-        | None -> keywords
+        | None -> keywords @ namespaces
         | Some ast ->
             (* [iter_fields] descends into conditional branches, so a definition
            under [#[if]] (or a function with several conditional definitions) is
@@ -1210,7 +1224,7 @@ let completion_string src line ch =
                 else (
                   Hashtbl.add seen k ();
                   true))
-              (locals @ module_ @ keywords))
+              (locals @ module_ @ keywords @ namespaces))
 
 (* The same outline for a Wasm-text module. Its fields differ from Wax's: the
    [$id] name is optional, and a definition carries its exports separately, so an

@@ -103,6 +103,10 @@ val namespace_members : string -> member_candidate list
     (wide-arithmetic ops) and [atomic::] ([fence]), each with its signature.
     Empty for any other [ns]. *)
 
+val intrinsic_namespaces : string list
+(** The intrinsic namespace names ([v128]/[i64]/[atomic]) — the [ns] a [::] path
+    can start with — for completion of the namespace itself. *)
+
 type hover_target =
   | Value_type of Infer.inferred_valtype
   | Type_def of Ast.subtype

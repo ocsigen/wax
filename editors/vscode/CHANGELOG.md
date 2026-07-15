@@ -51,6 +51,8 @@
   it is bound and only within its block, so a local declared later in the
   function, or inside a sibling block, no longer appears. Parameters are always
   offered.
+- The intrinsic namespace names (`v128`, `i64`, `atomic`) are offered in general
+  completion, so the `::` intrinsics are discoverable.
 
 ## 0.2.2
 

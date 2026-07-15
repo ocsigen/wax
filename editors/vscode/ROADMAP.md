@@ -208,9 +208,9 @@ does not carry. Three distinct prerequisites:
   `atomic::` (`fence`), each a "function" completion with its signature
   (`Typing.namespace_members`, the `v128::` set drawn from `Wax_wasm.Simd`).
   Since the namespaces are keywords, the editor detects `ns::` textually (no
-  parse needed, so it survives a broken buffer), on the `:` trigger.
-
-  Follow-ups: offering the namespace names themselves before `::`.
+  parse needed, so it survives a broken buffer), on the `:` trigger. The
+  namespace names themselves (`Typing.intrinsic_namespaces`) are offered in
+  general completion too, so `::` is discoverable.
 - [x] **Multi-error syntax recovery.** *Was* prereq 3, now delivered: `check`
   runs through `parse_recover` and reports every syntax error at once, not just
   the first.
@@ -228,9 +228,9 @@ rename, and completion (names and struct members). What is left refines them:
 
 - **Completion polish** — value methods after `.` are done (numeric, array,
   v128, and memory/table receivers, with a method icon + signature), struct
-  fields carry their type, intrinsic namespaces after `::` are offered, and
-  locals are scoped to the cursor point; the one remaining bit is offering the
-  namespace names themselves before `::`.
+  fields carry their type, intrinsic namespaces (and their names) are offered,
+  and locals are scoped to the cursor point. Completion is essentially
+  feature-complete.
 - **Deeper rename** conflict/shadowing detection.
 - **Semantic tokens** — low value given the TextMate grammar.
 

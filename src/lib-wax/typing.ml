@@ -4171,6 +4171,10 @@ let namespace_members ns : member_candidate list =
   | "atomic" -> [ fn "fence" "fn() -> ()" ]
   | _ -> []
 
+(* The intrinsic namespace names ([v128], [i64], [atomic]), for completion of
+   the [ns] before [::]. Exactly the namespaces {!namespace_members} answers. *)
+let intrinsic_namespaces = [ "v128"; "i64"; "atomic" ]
+
 (* Memory access method names. The value width is in the name; signedness and the
    i32/i64 result come from a surrounding [as iN_s/u] cast (see [to_wasm]). *)
 let mem_load_result meth : inferred_type option =
