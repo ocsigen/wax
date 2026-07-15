@@ -5,6 +5,7 @@ type kind =
   | Func
   | Global
   | Type
+  | Param
   | Local
   | Label
   | Memory
@@ -54,10 +55,13 @@ let f ((_, fields) : location Text.module_) : binding list =
       s_by_index = Hashtbl.create 16;
     }
   in
-  (* Register a definition in [sp] at the next index, recording its id span. *)
-  let register sp (id : Text.name option) hover =
+  (* Register a definition in [sp] at the next index, recording its id span.
+     [kind] overrides the space's kind (a function's parameters and its declared
+     locals share one index space but are distinct kinds). *)
+  let register ?kind sp (id : Text.name option) hover =
     let b =
-      add_binding sp.s_kind
+      add_binding
+        (Option.value kind ~default:sp.s_kind)
         (Option.map (fun (n : Text.name) -> n.info) id)
         hover
     in
@@ -420,18 +424,23 @@ let f ((_, fields) : location Text.module_) : binding list =
         | Text.Import_group2 { desc; _ } -> use_importdesc desc
         | Text.Func { typ; locals = decls; instrs; _ } ->
             use_typeuse typ;
+            (* Parameters and declared locals share one index space but are
+               distinct kinds. *)
             let locals = make_space Local in
             (match typ with
             | _, Some ft ->
                 Array.iter
                   (fun p ->
                     let pid, _ = p.desc in
-                    ignore (register locals pid None))
+                    ignore (register ~kind:Param locals pid None))
                   ft.Text.params
             | _ -> ());
             List.iter
               (fun l ->
-                let lid, _ = l.desc in
+                let lid, ltyp = l.desc in
+                (* Resolve the declared type's own type references, e.g.
+                   [$t] in [(local $x (ref $t))]. *)
+                use_valtype ltyp;
                 ignore (register locals lid None))
               decls;
             walk_instrs locals [] instrs

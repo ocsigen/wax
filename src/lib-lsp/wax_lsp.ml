@@ -542,15 +542,17 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
             Some (`List (List.map completion_item items)))
   | Lsp.Client_request.SignatureHelp { textDocument; position; _ } -> (
       let empty = SignatureHelp.create ~signatures:[] () in
-      (* No WAT signature help yet. *)
-      match
-        if is_wat textDocument.uri then None else get_doc textDocument.uri
-      with
+      let uri = textDocument.uri in
+      match get_doc uri with
       | None -> empty
       | Some src -> (
+          let signature_help =
+            if is_wat uri then Wax_editor.signature_help_wat_string
+            else Wax_editor.signature_help_string
+          in
           match
-            Wax_editor.signature_help_string ~encoding:!encoding src
-              position.line position.character
+            signature_help ~encoding:!encoding src position.line
+              position.character
           with
           | None -> empty
           | Some (label, ranges, active) ->
@@ -624,15 +626,16 @@ let on_request (type r) (r : r Lsp.Client_request.t) : r =
                     ())
             positions)
   | Lsp.Client_request.SemanticTokensFull { textDocument; _ } ->
-      if is_wat textDocument.uri then None
-      else
-        with_doc textDocument.uri (fun src ->
-            Some
-              (SemanticTokens.create
-                 ~data:
-                   (semantic_data
-                      (Wax_editor.semantic_tokens_string ~encoding:!encoding src))
-                 ()))
+      let uri = textDocument.uri in
+      with_doc uri (fun src ->
+          let semantic_tokens =
+            if is_wat uri then Wax_editor.semantic_tokens_wat_string
+            else Wax_editor.semantic_tokens_string
+          in
+          Some
+            (SemanticTokens.create
+               ~data:(semantic_data (semantic_tokens ~encoding:!encoding src))
+               ()))
   | Lsp.Client_request.TextDocumentFormatting { textDocument; _ } -> (
       let uri = textDocument.uri in
       match get_doc uri with

@@ -243,6 +243,15 @@ let render_recorded_type = function
         (Printf.sprintf "(func%s)"
            (String.concat "" (List.map (fun s -> " " ^ s) parts)))
 
+(* The rendered parameter and result types of a recorded function signature (a
+   [call]/[ref.func] identifier), for signature help; [None] for any other kind. *)
+let signature_labels = function
+  | Signature (params, results) ->
+      Some
+        ( Array.to_list (Array.map render_source_type params),
+          Array.to_list (Array.map render_source_type results) )
+  | _ -> None
+
 (* Editor type sink. Like [validate_refs], a module-level ref rather than a
    threaded parameter: the push chokepoints below record into it without
    carrying it through the ~130 call sites. When set (only in editor mode, via
@@ -4862,6 +4871,10 @@ let functions ?(warn_unused = true) ctx fields =
                         (* Dummy value *) Ref { nullable = false; typ = None_ }
                     | Some typ' -> typ'
                   in
+                  (* Give the parameter's declaration its type on hover. *)
+                  record
+                    (Option.map (fun (n : Ast.Text.name) -> n.Ast.info) id)
+                    (Pushed (Plain typ));
                   Sequence.register locals id (interned, Plain typ))
                 params
           | _ ->
@@ -4900,6 +4913,10 @@ let functions ?(warn_unused = true) ctx fields =
                 (!i, Option.map (fun id -> id.Ast.desc) id, location)
                 :: !declared_locals;
               incr i;
+              (* Give the local's declaration its type on hover. *)
+              record
+                (Option.map (fun (n : Ast.Text.name) -> n.Ast.info) id)
+                (Pushed (Plain typ));
               Sequence.register locals id (typ', Plain typ))
             locs;
           let ctx =

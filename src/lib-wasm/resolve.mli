@@ -13,6 +13,7 @@ type kind =
   | Func
   | Global
   | Type
+  | Param
   | Local
   | Label
   | Memory

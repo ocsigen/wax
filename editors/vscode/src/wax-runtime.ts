@@ -202,6 +202,12 @@ export interface Wax {
   ): WaxEdit[];
   selectionRangeWat(src: string, line: number, character: number): WaxRange[];
   foldingRangesWat(src: string): WaxFolding[];
+  semanticTokensWat(src: string): WaxSemanticToken[];
+  signatureHelpWat(
+    src: string,
+    line: number,
+    character: number,
+  ): WaxSignature | null;
   // Cross-language conversion (for the preview commands).
   toWat(src: string): FormatResult;
   toWax(src: string): FormatResult;
