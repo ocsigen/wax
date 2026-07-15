@@ -8,7 +8,8 @@ structural selection, folding, indentation, and symbol navigation, across every
 tree-sitter host (Neovim, Helix, Zed, GitHub, …).
 
 Editor setup lives next to the other editor integrations:
-[`editors/nvim/`](../editors/nvim/) and [`editors/helix/`](../editors/helix/).
+[`editors/nvim/`](../editors/nvim/), [`editors/helix/`](../editors/helix/), and
+[`editors/emacs/`](../editors/emacs/).
 
 ## Status
 
