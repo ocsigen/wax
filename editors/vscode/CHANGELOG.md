@@ -21,6 +21,10 @@
 - Rename for `.wax`: rename a symbol across all its occurrences (F2), resolving
   through shadowing. A punned struct field is expanded (`{p| x}` to `{p| x: new}`)
   so the field is preserved; rename is declined off a renameable symbol.
+- Fixed the `.wax` word pattern, which used Unicode property escapes (`\p{L}`)
+  that VS Code compiles without the `u` flag, so ordinary letters were not
+  recognized as word characters — auto-completion only triggered after `_`, and
+  word selection was off. Now uses plain character ranges.
 - Completion for `.wax`: suggests the names in scope (module functions, globals,
   types, tags; the enclosing function's parameters and locals) and keywords, and
   after `.` the fields of a struct value (including chained accesses), working
