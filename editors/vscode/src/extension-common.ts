@@ -13,6 +13,7 @@ import {
   WaxHover,
   WaxInlay,
   WaxRange,
+  WaxEdit,
   FormatResult,
   WaxDiagnostic,
 } from "./wax-runtime";
@@ -35,6 +36,21 @@ interface LanguageSpec {
   // Every occurrence of the symbol at a position, for find-references and
   // document highlight. Wax only.
   references?(wax: Wax, src: string, line: number, character: number): WaxRange[];
+  // Rename support: the renameable symbol's span at a position, and the edits to
+  // rename it. Wax only.
+  renamePrepare?(
+    wax: Wax,
+    src: string,
+    line: number,
+    character: number,
+  ): WaxRange | null;
+  rename?(
+    wax: Wax,
+    src: string,
+    line: number,
+    character: number,
+    newName: string,
+  ): WaxEdit[];
 }
 
 const LANGUAGES: LanguageSpec[] = [
@@ -49,6 +65,10 @@ const LANGUAGES: LanguageSpec[] = [
       wax.definition(src, line, character),
     references: (wax, src, line, character) =>
       wax.references(src, line, character),
+    renamePrepare: (wax, src, line, character) =>
+      wax.renamePrepare(src, line, character),
+    rename: (wax, src, line, character, newName) =>
+      wax.rename(src, line, character, newName),
   },
   {
     id: "wat",
@@ -73,6 +93,7 @@ export function activateWith(
     if (lang.inlays) registerInlayHints(context, opts, lang);
     if (lang.definition) registerDefinition(context, opts, lang);
     if (lang.references) registerReferences(context, opts, lang);
+    if (lang.rename) registerRename(context, opts, lang);
   }
   registerDiagnostics(context, opts);
   registerConvert(context, opts);
@@ -424,6 +445,65 @@ function registerReferences(
         return ranges.map((range) => new vscode.DocumentHighlight(range));
       },
     }),
+  );
+}
+
+function registerRename(
+  context: vscode.ExtensionContext,
+  opts: LoadOptions,
+  lang: LanguageSpec,
+): void {
+  const renamePrepare = lang.renamePrepare;
+  const rename = lang.rename;
+  if (!renamePrepare || !rename) return;
+
+  const provider: vscode.RenameProvider = {
+    // Refuse (so VS Code shows "cannot rename here") unless the cursor is on a
+    // renameable symbol; return its range so the rename box pre-fills the name.
+    async prepareRename(document, position, token) {
+      const wax = await loadWax(context, opts);
+      if (token.isCancellationRequested) throw new Error("cancelled");
+      const range = renamePrepare(
+        wax,
+        document.getText(),
+        position.line,
+        position.character,
+      );
+      if (!range)
+        throw new Error("You cannot rename this element.");
+      return new vscode.Range(
+        range.startLine,
+        range.startChar,
+        range.endLine,
+        range.endChar,
+      );
+    },
+    async provideRenameEdits(document, position, newName, token) {
+      if (!newName.trim()) throw new Error("The new name must not be empty.");
+      const wax = await loadWax(context, opts);
+      if (token.isCancellationRequested) return undefined;
+      const edits = rename(
+        wax,
+        document.getText(),
+        position.line,
+        position.character,
+        newName,
+      );
+      if (edits.length === 0) return undefined;
+      const workspace = new vscode.WorkspaceEdit();
+      for (const e of edits) {
+        workspace.replace(
+          document.uri,
+          new vscode.Range(e.startLine, e.startChar, e.endLine, e.endChar),
+          e.newText,
+        );
+      }
+      return workspace;
+    },
+  };
+
+  context.subscriptions.push(
+    vscode.languages.registerRenameProvider(lang.id, provider),
   );
 }
 

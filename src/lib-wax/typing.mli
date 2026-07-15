@@ -57,6 +57,7 @@ val f_infer :
   ?simplify:bool ->
   ?warn_unused:bool ->
   ?resolve_links:reference list ref option ->
+  ?pun_spans:Ast.location list ref option ->
   ?features:Wax_utils.Feature.set ->
   Wax_utils.Diagnostic.context ->
   Ast.location Ast.module_ ->
@@ -69,8 +70,11 @@ val f_infer :
 
     When [resolve_links] is a [Some ref], every name and label reference
     resolved while type checking is appended to it as a {!reference} (use span
-    -> definition spans), for go-to-definition. Left [None] (the default) an
-    ordinary run records nothing. *)
+    -> definition spans), for go-to-definition. When [pun_spans] is a
+    [Some ref], the span of each punned struct-literal field (the bare-name form
+    [x] for [x: x]) is appended to it — such a span is both a field name and a
+    variable use, so a rename must expand it rather than replace it. Both
+    default to [None], so an ordinary run records nothing. *)
 
 val check :
   ?warn_unused:bool ->

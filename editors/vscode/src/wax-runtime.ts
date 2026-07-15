@@ -54,6 +54,11 @@ export interface WaxInlay {
   label: string;
 }
 
+export interface WaxEdit extends WaxRange {
+  // Replacement text for this span (a punned field expands to "x: new").
+  newText: string;
+}
+
 export interface WaxSymbol {
   name: string;
   kind: string;
@@ -83,6 +88,16 @@ export interface Wax {
   // Every occurrence (definitions + uses) of the symbol at the position, for
   // find-references and document highlight. Wax only.
   references(src: string, line: number, character: number): WaxRange[];
+  // The span of the renameable symbol at the position, or null if none. Wax only.
+  renamePrepare(src: string, line: number, character: number): WaxRange | null;
+  // Edits renaming the symbol at the position to `newName` (puns expanded).
+  // Empty when the position is not a renameable symbol. Wax only.
+  rename(
+    src: string,
+    line: number,
+    character: number,
+    newName: string,
+  ): WaxEdit[];
   symbols(src: string): WaxSymbol[];
   // Wasm text (WAT). Same one wasm module.
   formatWat(src: string): FormatResult;

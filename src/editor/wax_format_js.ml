@@ -27,6 +27,13 @@
    - [references src line ch] -> array of { startLine; startChar; endLine;
      endChar }: every occurrence (definitions and uses) of the symbol at the
      (zero-based) position, for find-references and document highlight. Wax only.
+   - [renamePrepare src line ch] -> { startLine; startChar; endLine; endChar } or
+     null: the span of the renameable symbol at the position, or null if there is
+     none (the editor then declines to rename). Wax only.
+   - [rename src line ch newname] -> array of { startLine; startChar; endLine;
+     endChar; newText }: the edits to rename the symbol at the position to
+     [newname] — every occurrence, with a punned field expanded to [x: newname].
+     Wax only.
    - [symbols src] / [symbolsWat src] -> the module's top-level definitions, for
      the outline.
    - [toWat src] / [toWax src] -> { ok; text; error }: convert between the
@@ -197,6 +204,8 @@ type analysis = {
     Wax_lang.Typing.inferred_module_annotation Wax_lang.Ast.module_ option;
   a_defs : Wax_lang.Typing.reference list;
       (* use -> definition(s) references, for go-to-definition. *)
+  a_puns : Wax_utils.Ast.location list;
+      (* punned struct-literal field spans, which rename must expand. *)
 }
 
 let analyze_uncached src =
@@ -206,7 +215,7 @@ let analyze_uncached src =
   in
   let a_syntax = List.map syntax_error_diag syntax_errors in
   match ast_opt with
-  | None -> { a_syntax; a_type = []; a_typed = None; a_defs = [] }
+  | None -> { a_syntax; a_type = []; a_typed = None; a_defs = []; a_puns = [] }
   | Some ast ->
       let d = Wax_utils.Diagnostic.collector ~source:src () in
       Wax_utils.Diagnostic.set_recovery d (syntax_errors <> []);
@@ -216,15 +225,22 @@ let analyze_uncached src =
          (which hover renders via [Infer.output_inferred_type]) and, given a
          sink, records the use -> definition references go-to-definition needs. *)
       let links = ref [] in
+      let puns = ref [] in
       let a_typed =
         try
           Some
             (snd
                (Wax_lang.Typing.f_infer ~warn_unused:true
-                  ~resolve_links:(Some links) d ast))
+                  ~resolve_links:(Some links) ~pun_spans:(Some puns) d ast))
         with Wax_utils.Diagnostic.Aborted -> None
       in
-      { a_syntax; a_type = collected_diags d; a_typed; a_defs = !links }
+      {
+        a_syntax;
+        a_type = collected_diags d;
+        a_typed;
+        a_defs = !links;
+        a_puns = !puns;
+      }
 
 (* Cache the analysis, keyed by the exact source, so hover — invoked repeatedly
    on an unchanged buffer, once per mouse-hover — does not re-parse and
@@ -501,6 +517,36 @@ let references_string src line ch =
           true))
       (targets @ uses)
 
+(* Rename (Wax only). The occurrences are exactly find-references; each is
+   replaced with the new name, except a punned struct field (the bare-name form
+   [x] for [x: x]), whose span is the field name, is expanded to [x: new] so
+   renaming the variable does not silently rename the field. Returns
+   [(span, replacement)] edits, empty when the cursor is not on a renameable
+   symbol — the provider then declines. *)
+let occurrence_at src line ch (loc : Wax_utils.Ast.location) =
+  let target = (line + 1, byte_column src line ch) in
+  let pos (p : Lexing.position) =
+    (p.Lexing.pos_lnum, p.Lexing.pos_cnum - p.Lexing.pos_bol)
+  in
+  let le (l1, c1) (l2, c2) = l1 < l2 || (l1 = l2 && c1 <= c2) in
+  le (pos loc.loc_start) target && le target (pos loc.loc_end)
+
+(* The span of the token to rename (for the editor's prepare step), or [None]
+   when the cursor is not on a renameable symbol. *)
+let rename_prepare_string src line ch =
+  List.find_opt (occurrence_at src line ch) (references_string src line ch)
+
+let rename_string src line ch newname =
+  let puns = (analyze src).a_puns in
+  List.map
+    (fun (loc : Wax_utils.Ast.location) ->
+      let replacement =
+        if List.exists (same_span loc) puns then slice src loc ^ ": " ^ newname
+        else newname
+      in
+      (loc, replacement))
+    (references_string src line ch)
+
 let check_wat_string src =
   match Wat_parser.parse_diagnostics ~filename:"<buffer>" src with
   | Error e -> [ syntax_error_diag e ]
@@ -720,6 +766,31 @@ let references_result src line ch =
   let occurrences = try references_string s line ch with _ -> [] in
   Js.array (Array.of_list (List.map (js_range s) occurrences))
 
+(* [null] when the cursor is not on a renameable symbol; the provider then
+   reports that rename is not available here. *)
+let rename_prepare_result src line ch =
+  let s = Js.to_string src in
+  match try rename_prepare_string s line ch with _ -> None with
+  | None -> Js.null
+  | Some loc -> Js.some (js_range s loc)
+
+let js_edit src (loc, newText) =
+  let start_line, start_char = js_position src loc.Wax_utils.Ast.loc_start in
+  let end_line, end_char = js_position src loc.loc_end in
+  object%js
+    val startLine = start_line
+    val startChar = start_char
+    val endLine = end_line
+    val endChar = end_char
+    val newText = Js.string newText
+  end
+
+let rename_result src line ch newname =
+  let s = Js.to_string src in
+  let n = Js.to_string newname in
+  let edits = try rename_string s line ch n with _ -> [] in
+  Js.array (Array.of_list (List.map (js_edit s) edits))
+
 (* Document outline: the module's top-level definitions (functions, globals,
    types, memories, tags, tables, elems, data, imports) with their spans, for the
    editor's outline / breadcrumbs. Only a syntactically-valid module yields
@@ -933,6 +1004,8 @@ let () =
       method inlays src = inlays_result src
       method definition src line ch = definition_result src line ch
       method references src line ch = references_result src line ch
+      method renamePrepare src line ch = rename_prepare_result src line ch
+      method rename src line ch newname = rename_result src line ch newname
       method symbols src = symbols_result symbols_string src
       method formatWat src = format_result format_wat_string src
       method checkWat src = check_result check_wat_string src

@@ -27,6 +27,10 @@ Syntax highlighting, formatting, diagnostics, and snippets for
 - **Find all references / highlight** (`.wax`): from a use or a definition, list
   every occurrence of the symbol (Shift+F12), and highlight them in the file when
   the cursor is on one.
+- **Rename** (`.wax`): rename a symbol (F2) across all its occurrences, resolving
+  through shadowing. A punned struct field is expanded (`{p| x}` becomes
+  `{p| x: new}`) so the struct's field is left intact; rename is declined when the
+  cursor is not on a renameable symbol.
 - **Convert / preview**: "Wax: Show compiled WAT" (in a `.wax` file) opens the
   compiled WebAssembly text in a read-only document beside the source, updating
   live as you edit; "Wax: Show as Wax" does the reverse from a `.wat` file. Both

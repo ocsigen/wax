@@ -129,11 +129,17 @@ does not carry. Three distinct prerequisites:
   the definition(s). A `ReferenceProvider` (Find All References) and a
   `DocumentHighlightProvider` (highlight the symbol in the document) share it —
   both want the same set, since every occurrence is in this file. Wax only.
-- [ ] **Rename.** The same inversion, but it *edits*, so it needs completeness:
-  every occurrence must be recorded or rename silently corrupts code. Audit that
-  the reference index catches all occurrences (and add the declaration where a
-  definition is not itself a recorded use) before trusting it. Then a
-  `RenameProvider` with a conflict/validity check.
+- [x] **Rename.** Find-references that edits, so gated on completeness. A
+  completeness audit found the index catches every use of the supported symbol
+  kinds (all resolve through the recording choke points) and the declaration
+  (it is a definition span), with one hazard: a *punned* struct field
+  (`{ p| x }`, `x` standing for `x: x`) is a variable use whose span is the field
+  name, so a plain replace would silently rename the struct's field. The typer
+  now records those pun spans (`pun_spans`), and rename **expands** them
+  (`x` -> `x: new`). A `RenameProvider` refuses (`prepareRename`) when the cursor
+  is not on a recorded symbol, so fields / intrinsics / keywords are never
+  half-renamed. Deeper new-name conflict/shadowing detection (beyond a
+  non-empty check) is a follow-up. Wax only.
 - [ ] **Semantic tokens.** Distinguishing locals / params / functions / types
   could reuse the resolution now recorded (classify each use by its binder kind);
   a coarser version could come from parse-tree structure alone.
@@ -152,10 +158,9 @@ does not carry. Three distinct prerequisites:
 ## Suggested next step
 
 Name resolution records use -> definition links during type checking; go-to-
-definition, hover-on-names, and find-references / document-highlight all ship on
-top. What is left is provider-level, not new analysis: **semantic tokens**
-(classify each use by its binder kind — a small `kind` on the recorded reference,
-then a token provider), **completion** (enumerate the in-scope binders), and
-**rename** (find-references that edits, so gated on auditing the reference index
-for completeness). Semantic tokens is the smallest next step and reuses the links
-directly; rename is the highest-value but needs the completeness audit first.
+definition, hover-on-names, find-references / document-highlight, and rename all
+ship on top. **Completion** is the remaining big feature (enumerate the in-scope
+binders at a point, member completion after `.`, intrinsics); it is the one users
+feel most and the largest build. Smaller follow-ups: deeper rename
+conflict/shadowing detection, and — lower value given the TextMate grammar —
+semantic tokens for role-based coloring.

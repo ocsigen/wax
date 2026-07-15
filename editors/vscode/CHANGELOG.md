@@ -18,6 +18,9 @@
   shows its type.
 - Find all references and document highlight for `.wax`: from a use or a
   definition, list every occurrence of the symbol and highlight them in the file.
+- Rename for `.wax`: rename a symbol across all its occurrences (F2), resolving
+  through shadowing. A punned struct field is expanded (`{p| x}` to `{p| x: new}`)
+  so the field is preserved; rename is declined off a renameable symbol.
 
 ## 0.2.2
 

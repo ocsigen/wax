@@ -45,7 +45,11 @@ let resolve name src =
   | Ok (ast, _ctx) ->
       let d = Wax_utils.Diagnostic.collector ~source:src () in
       let links = ref [] in
-      (try ignore (Typing.f_infer ~resolve_links:(Some links) d ast)
+      let puns = ref [] in
+      (try
+         ignore
+           (Typing.f_infer ~resolve_links:(Some links) ~pun_spans:(Some puns) d
+              ast)
        with Wax_utils.Diagnostic.Aborted -> ());
       !links
       |> List.map (fun (r : Typing.reference) ->
@@ -61,6 +65,10 @@ let resolve name src =
          same each time, so present the distinct ones, ordered. *)
       |> List.sort_uniq compare
       |> List.iter print_endline;
+      (* Punned struct fields, which rename must expand rather than replace. *)
+      List.iter
+        (fun l -> Printf.printf "pun %S @ %s\n" (slice src l) (span l))
+        (List.sort_uniq compare !puns);
       print_newline ()
 
 let () =
@@ -72,4 +80,7 @@ let () =
     "type point = { x: i32, y: i32 };\n\
      const g: i32 = 0;\n\
      fn get_g(p: &point) -> i32 { g; }\n";
-  resolve "label" "fn f() {\n  'outer: loop { br 'outer; }\n}\n"
+  resolve "label" "fn f() {\n  'outer: loop { br 'outer; }\n}\n";
+  resolve "struct pun"
+    "type point = { x: i32, y: i32 };\n\
+     fn mk(x: i32, y: i32) -> &point { {point| x, y: y }; }\n"

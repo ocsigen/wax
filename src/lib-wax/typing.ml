@@ -47,6 +47,13 @@ let same_span (a : location) (b : location) =
   a.loc_start.Lexing.pos_cnum = b.loc_start.Lexing.pos_cnum
   && a.loc_end.Lexing.pos_cnum = b.loc_end.Lexing.pos_cnum
 
+(* Record a punned struct-literal field's span (the field name, which is also
+   the variable use), so the editor can expand it on rename. *)
+let record_pun (sink : location list ref option) (name_info : location) =
+  match sink with
+  | Some r when is_source name_info -> r := name_info :: !r
+  | _ -> ()
+
 let record_reference ?(hover = None) (sink : resolve_sink) use definitions =
   match sink with
   | Some r when is_source use -> (
@@ -1260,6 +1267,12 @@ type module_context = {
          [resolve_variable], labels via [branch_target]; module fields via
          [Tbl.resolve] through the namespaces). The same sink the namespaces
          hold; [None] outside the editor. *)
+  pun_spans : location list ref option;
+      (* The span of each punned struct-literal field (the bare-name form,
+         [x] standing for [x: x]), recorded at the field name. Such a span is
+         both a field name and a variable use, so the editor must expand it
+         ([x] -> [x: new]) rather than replace it on rename. [None] outside the
+         editor. *)
 }
 
 (* The subtyping info for the current type space, memoised on [type_context] and
@@ -6915,6 +6928,7 @@ and check_instruction ?(drop_supertype = false) ctx expected
               List.fold_left
                 (fun prev (name, written) ->
                   let* l = prev in
+                  if written = None then record_pun ctx.pun_spans name.info;
                   let* fi' = instruction ctx (field_value name written) in
                   return ((name, Option.map (fun _ -> fi') written) :: l))
                 (return []) fields
@@ -6941,6 +6955,7 @@ and check_instruction ?(drop_supertype = false) ctx expected
                       prev
                   | Some (name, written) ->
                       let* l = prev in
+                      if written = None then record_pun ctx.pun_spans name.info;
                       (* Check the field value against its declared type, so a
                          nested struct/array literal can drop its own name. *)
                       let* checked =
@@ -7024,6 +7039,7 @@ and check_instruction ?(drop_supertype = false) ctx expected
               List.fold_left
                 (fun prev (name, written) ->
                   let* l = prev in
+                  if written = None then record_pun ctx.pun_spans name.info;
                   let* fi' = instruction ctx (field_value name written) in
                   return ((name, Option.map (fun _ -> fi') written) :: l))
                 (return []) fields
@@ -9351,8 +9367,8 @@ let check_attributes diagnostics field =
 (*** Type-checking a configuration ***)
 
 let type_configuration ?(warn_unused = false) ?(build = true)
-    ?(resolve_links = None) ?(features = Wax_utils.Feature.default ()) ~simplify
-    diagnostics fields =
+    ?(resolve_links = None) ?(pun_spans = None)
+    ?(features = Wax_utils.Feature.default ()) ~simplify diagnostics fields =
   let cond = ref Cond.true_ in
   let cond_env = Cond.create () in
   let links = resolve_links in
@@ -9438,6 +9454,7 @@ let type_configuration ?(warn_unused = false) ?(build = true)
       cond;
       cond_env;
       resolve_links = links;
+      pun_spans;
       simplify;
     }
   in
@@ -10149,12 +10166,13 @@ let check_configurations ~warn_unused ~features ~simplify diagnostics fields =
     ()
 
 let f_infer ?(simplify = false) ?(warn_unused = false) ?(resolve_links = None)
-    ?(features = Wax_utils.Feature.default ()) diagnostics fields =
+    ?(pun_spans = None) ?(features = Wax_utils.Feature.default ()) diagnostics
+    fields =
   Wax_utils.Debug.timed "type-check" @@ fun () ->
   check_let_bindings diagnostics fields;
   if not (List.exists field_has_conditional fields) then
-    type_configuration ~warn_unused ~resolve_links ~features ~simplify
-      diagnostics fields
+    type_configuration ~warn_unused ~resolve_links ~pun_spans ~features
+      ~simplify diagnostics fields
   else begin
     check_configurations ~warn_unused ~features ~simplify diagnostics fields;
     (* Build the typed module (consumed only by the deferred WAT conversion and
@@ -10164,7 +10182,7 @@ let f_infer ?(simplify = false) ?(warn_unused = false) ?(resolve_links = None)
        typed under its own assumption. Diagnostics are discarded —
        [check_configurations] above did the real checking; references are
        recorded here, off the single tree the editor consumes. *)
-    type_configuration ~resolve_links ~features ~simplify
+    type_configuration ~resolve_links ~pun_spans ~features ~simplify
       (Wax_utils.Diagnostic.collector ())
       fields
   end
