@@ -537,6 +537,23 @@ let heaptype = Map.heaptype
 let reftype = Map.reftype
 let valtype = Map.valtype
 
+let storagetype ctx (st : Src.storagetype) : Ast.storagetype =
+  match st with Value v -> Value (valtype ctx v) | Packed p -> Packed p
+
+(* Convert one WAT data-segment element back to a Wax data element: a string
+   stays a string, a scalar numlist becomes a [Data_run] of literal strings (the
+   type is stated once, so nan/inf need no suffix), and a [v128] run stays one
+   [Data_v128] grouping all its constants (preserving the WAT grouping). *)
+let data_elem_to_wax ctx (e : (Src.datavalelem, Ast.location) Ast.annotated) :
+    Ast.data_elem =
+  match e.Ast.desc with
+  | Str s -> Ast.Data_string s
+  | Numlist (st, vals) ->
+      Ast.Data_run (storagetype ctx st, List.map Ast.no_loc vals)
+  | V128list vs -> Ast.Data_v128 (List.map Ast.no_loc vs)
+
+let data_init_to_wax ctx init = List.map (data_elem_to_wax ctx) init
+
 (* Render a function type's parameters into a fresh namespace, renaming a named
    parameter that is a reserved word or collides with an earlier one (and
    warning about it, as for any other declared name). Unnamed parameters stay
@@ -2994,12 +3011,11 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
           match init with
           | None -> []
           | Some bytes ->
-              let s = Wax_utils.Ast.concat_desc bytes in
               [
                 {
                   Ast.data_name = None;
                   offset = Ast.no_loc (Ast.Int "0");
-                  init = s;
+                  init = data_init_to_wax ctx bytes;
                 };
               ]
         in
@@ -3016,7 +3032,7 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
              })
     | Data { init; mode; _ } ->
         let name = Sequence.get_current ctx.datas in
-        let s = Wax_utils.Ast.concat_desc init in
+        let init = data_init_to_wax ctx init in
         let mode' : _ Ast.datamode =
           match mode with
           | Passive -> Passive
@@ -3026,8 +3042,7 @@ let rec modulefield ctx export_tbl (f : (_ Src.modulefield, _) Ast.annotated) =
                   single_expression ctx ~location:f.info
                     (Stack.run (instructions ctx off)) )
         in
-        Some
-          (Data { name = Some name; mode = mode'; init = s; attributes = [] })
+        Some (Data { name = Some name; mode = mode'; init; attributes = [] })
     | Table { typ = tt; init; exports = e; _ } ->
         let name = Sequence.get_current ctx.tables in
         let l = tt.Src.limits.Ast.desc in

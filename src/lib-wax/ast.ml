@@ -264,10 +264,22 @@ type import_kind =
    [attributes] also carries e.g. [#[export]] to re-export it. *)
 type import_decl = { id : ident; kind : import_kind; attributes : attributes }
 
+(* One element of a data segment's contents (WAT "numeric values" proposal): a
+   string literal (its raw bytes), a scalar numeric run [[f32: 1.5, nan, …]], or a
+   [v128] run [[v128: i32x4(1,2,3,4), …]]. In a run the element type is stated
+   once and the values are raw literal strings, packed little-endian. Holds no
+   instructions — every value is a literal. *)
+type data_elem =
+  | Data_string of string
+  | Data_run of storagetype * (string, location) annotated list
+  | Data_v128 of (Wax_utils.V128.t, location) annotated list
+
+(* A data segment's contents: elements concatenated in order; an empty list is an
+   empty segment. *)
 type 'info memdata = {
   data_name : ident option;
   offset : 'info instr;
-  init : string;
+  init : data_elem list;
 }
 
 type 'info datamode = Passive | Active of ident * 'info instr
@@ -309,7 +321,7 @@ type 'info modulefield =
   | Data of {
       name : ident option;
       mode : 'info datamode;
-      init : string;
+      init : data_elem list;
       attributes : attributes;
     }
   | Table of {

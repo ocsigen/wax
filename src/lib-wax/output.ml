@@ -238,6 +238,16 @@ let packedtype pp t = type_ pp (match t with I8 -> "i8" | I16 -> "i16")
 let storagetype pp t =
   match t with Value t -> valtype pp t | Packed t -> packedtype pp t
 
+(* The bare name of a numeric-literal type suffix ([1i32] -> ["i32"]). *)
+let suffix_string : Ast.storagetype -> string = function
+  | Packed I8 -> "i8"
+  | Packed I16 -> "i16"
+  | Value I32 -> "i32"
+  | Value I64 -> "i64"
+  | Value F32 -> "f32"
+  | Value F64 -> "f64"
+  | Value (V128 | Ref _) -> assert false
+
 let muttype t pp { mut; typ } =
   if mut then
     box pp ~indent:indent_level (fun () ->
@@ -1493,6 +1503,54 @@ let print_data_bytes pp s =
   string pp ~len:(Some len) s;
   string pp "\""
 
+let vec_shape_name : Wax_utils.V128.shape -> string = function
+  | I8x16 -> "i8x16"
+  | I16x8 -> "i16x8"
+  | I32x4 -> "i32x4"
+  | I64x2 -> "i64x2"
+  | F32x4 -> "f32x4"
+  | F64x2 -> "f64x2"
+
+(* A data numeric run [[head: e1, e2, …]]: kept in one indented box so it lays
+   out inline when it fits and, when it overflows, breaks after the [:] with its
+   values indented under the [[] rather than splitting the run head. Laid out
+   exactly like an array literal (see [array_instr]): inline when it fits;
+   otherwise one value per line with a trailing comma and the [\]] dedented on
+   its own line — differing only in the [type:] head (vs an array's [type|]). *)
+let print_run pp head print_elem elems =
+  hvbox pp ~indent:0 (fun () ->
+      box pp (fun () ->
+          punctuation pp "[";
+          type_ pp head;
+          punctuation pp ":");
+      indent pp indent_level (fun () ->
+          space pp ();
+          list_commasep_trailing print_elem pp elems);
+      cut pp ();
+      punctuation pp "]")
+
+(* One lane group of a [v128] run: [i32x4(1, 2, 3, 4)]. *)
+let print_v128_group pp (v : (Wax_utils.V128.t, _) Ast.annotated) =
+  type_ pp (vec_shape_name v.desc.shape);
+  punctuation pp "(";
+  box pp (fun () ->
+      list_commasep (fun pp c -> constant pp c) pp v.desc.components);
+  punctuation pp ")"
+
+(* A data segment's contents: a comma-separated list of constant elements
+   (string literals, numeric runs [[i16: …]], [v128] runs). Only called for a
+   non-empty segment; an empty one omits the [= …] entirely (see callers). *)
+let print_data_elem pp = function
+  | Ast.Data_string s -> print_data_bytes pp s
+  | Ast.Data_run (st, values) ->
+      print_run pp (suffix_string st)
+        (fun pp (v : (string, _) Ast.annotated) -> constant pp v.desc)
+        values
+  | Ast.Data_v128 vs -> print_run pp "v128" print_v128_group vs
+
+let print_data_init pp init =
+  hvbox pp ~indent:0 (fun () -> list_commasep print_data_elem pp init)
+
 let print_data_name pp n =
   match n with
   | Some (n : ident) -> identifier pp n.desc
@@ -1560,11 +1618,12 @@ let print_memdata pp (d : _ Ast.memdata) =
           space pp ();
           operator pp "@");
       print_offset_brackets pp d.offset;
-      hbox pp (fun () ->
-          space pp ();
-          punctuation pp "=");
-      space pp ();
-      print_data_bytes pp d.init;
+      if d.init <> [] then (
+        hbox pp (fun () ->
+            space pp ();
+            punctuation pp "=");
+        space pp ();
+        print_data_init pp d.init);
       punctuation pp ";")
 
 let print_limits pp limits =
@@ -1748,11 +1807,12 @@ let rec modulefield pp field =
               (match mode with
               | Passive -> ()
               | Active (mem, off) -> print_targeted_offset pp mem off);
-              hbox pp (fun () ->
-                  space pp ();
-                  punctuation pp "=");
-              space pp ();
-              print_data_bytes pp init;
+              if init <> [] then (
+                hbox pp (fun () ->
+                    space pp ();
+                    punctuation pp "=");
+                space pp ();
+                print_data_init pp init);
               semicolon pp))
   | Table { name; address_type; reftype = rt; limits; init; attributes = a } ->
       print_attr_prefix pp a (fun () ->

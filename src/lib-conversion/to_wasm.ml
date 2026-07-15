@@ -1891,6 +1891,20 @@ let globaltype mut t : Text.globaltype = { mut; typ = valtype t }
 (* Smallest memory size (in 64KiB pages) that holds the declared active data
    segments, used when a memory omits explicit limits. Only literal offsets
    contribute; others are ignored. *)
+(* Lower one Wax data-segment element to its WAT form: a string stays a string, a
+   scalar run becomes a typed numlist, and a [v128] run a list of v128 constants.
+   Every value is already a raw literal string. *)
+let lower_data_elem (e : Wax_lang.Ast.data_elem) : Text.datavalelem =
+  match e with
+  | Data_string s -> Text.Str s
+  | Data_run (st, values) ->
+      Text.Numlist
+        (Map.storagetype () st, List.map (fun v -> v.Wax_lang.Ast.desc) values)
+  | Data_v128 vs -> Text.V128list (List.map (fun v -> v.Wax_lang.Ast.desc) vs)
+
+let lower_data_init loc (init : Wax_lang.Ast.data_elem list) : Text.dataval =
+  List.map (fun e -> { desc = lower_data_elem e; info = loc }) init
+
 let derive_min_pages (data : _ Wax_lang.Ast.memdata list) =
   let extent =
     List.fold_left
@@ -1900,7 +1914,9 @@ let derive_min_pages (data : _ Wax_lang.Ast.memdata list) =
             try
               Int64.max acc
                 (Int64.add (Int64.of_string s)
-                   (Int64.of_int (String.length d.init)))
+                   (Int64.of_int
+                      (Wax_wasm.Misc.dataval_byte_length
+                         (lower_data_init Wax_utils.Ast.dummy_loc d.init))))
             with _ -> acc)
         | _ -> acc)
       0L data
@@ -2222,7 +2238,7 @@ let module_ diagnostics types fields =
                       Text.Data
                         {
                           id = d.data_name;
-                          init = [ { desc = d.init; info = field.info } ];
+                          init = lower_data_init field.info d.init;
                           mode =
                             Active (index name, instruction no_ret ictx d.offset);
                         };
@@ -2249,11 +2265,7 @@ let module_ diagnostics types fields =
                 field with
                 desc =
                   Text.Data
-                    {
-                      id = name;
-                      init = [ { desc = init; info = field.info } ];
-                      mode;
-                    };
+                    { id = name; init = lower_data_init field.info init; mode };
               };
             ]
         | Table { name; address_type; reftype = rt; limits; init; attributes }

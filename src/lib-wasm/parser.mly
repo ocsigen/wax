@@ -1080,8 +1080,7 @@ memory:
   exports = exports at = ioption(address_type) ps = ioption(pagesize_clause)
   "(" DATA s = data_string ")" ")"
   { let address_type = Option.value ~default:`I32 at in
-    let data_len =
-      List.fold_left (fun len {Ast.desc; _} -> len + String.length desc) 0 s in
+    let data_len = Misc.dataval_byte_length s in
     (* Size in whole pages of the (custom or default) page size. *)
     let page_bits = match ps with Some p -> p | None -> 16 in
     let page_mask = (1 lsl page_bits) - 1 in
@@ -1200,8 +1199,57 @@ offset:
 | "(" OFFSET e = expression ")" { e }
 | instr = folded_instruction { [instr] }
 
+(* A data segment's contents (WAT numeric-values proposal): a sequence of byte
+   strings, typed numeric runs [(i16 -1 2)], and [v128] constant runs. Values are
+   kept as raw literal strings; they are range-checked here and encoded little-
+   endian at lowering. *)
 data_string:
-| l = STRING * { l }
+| l = list(data_elem) { l }
+
+data_elem:
+| s = STRING { { s with Ast.desc = Str s.Ast.desc } }
+| "(" t = PACKEDTYPE l = list(int_lit) ")"
+  { List.iter
+      (check_constant (match t with I8 -> Misc.is_int8 | I16 -> Misc.is_int16) $sloc)
+      l;
+    with_loc $sloc (Numlist (Packed t, l)) }
+| "(" I32 l = list(int_lit) ")"
+  { List.iter (check_constant Misc.is_int32 $sloc) l;
+    with_loc $sloc (Numlist (Value I32, l)) }
+| "(" I64 l = list(int_lit) ")"
+  { List.iter (check_constant Misc.is_int64 $sloc) l;
+    with_loc $sloc (Numlist (Value I64, l)) }
+| "(" F32 l = list(float_lit) ")"
+  { List.iter (check_constant Misc.is_float32 $sloc) l;
+    with_loc $sloc (Numlist (Value F32, l)) }
+| "(" F64 l = list(float_lit) ")"
+  { List.iter (check_constant Misc.is_float64 $sloc) l;
+    with_loc $sloc (Numlist (Value F64, l)) }
+| "(" V128 l = nonempty_list(v128_const_body) ")"
+  { with_loc $sloc (V128list l) }
+
+int_lit:
+| n = NAT { n }
+| n = INT { n }
+
+float_lit:
+| f = NAT { f }
+| f = INT { f }
+| f = FLOAT { f }
+
+v128_const_body:
+| I8X16 c0=i8 c1=i8 c2=i8 c3=i8 c4=i8 c5=i8 c6=i8 c7=i8
+        c8=i8 c9=i8 c10=i8 c11=i8 c12=i8 c13=i8 c14=i8 c15=i8
+  { {V128.shape = I8x16;
+     components = [c0;c1;c2;c3;c4;c5;c6;c7;c8;c9;c10;c11;c12;c13;c14;c15]} }
+| I16X8 c0=i16 c1=i16 c2=i16 c3=i16 c4=i16 c5=i16 c6=i16 c7=i16
+  { {V128.shape = I16x8; components = [c0;c1;c2;c3;c4;c5;c6;c7]} }
+| I32X4 c0=i32 c1=i32 c2=i32 c3=i32
+  { {V128.shape = I32x4; components = [c0;c1;c2;c3]} }
+| I64X2 c0=i64 c1=i64 { {V128.shape = I64x2; components = [c0;c1]} }
+| F32X4 c0=f32 c1=f32 c2=f32 c3=f32
+  { {V128.shape = F32x4; components = [c0;c1;c2;c3]} }
+| F64X2 c0=f64 c1=f64 { {V128.shape = F64x2; components = [c0;c1]} }
 
 %inline memuse:
 | "(" MEMORY i = index ")" { i }

@@ -709,7 +709,8 @@ let module_ (m : _ B.module_) : _ T.module_ =
         Data
           {
             id = id m.names.data i;
-            init = [ Ast.no_loc d.init ];
+            (* A binary segment is a flat byte string with no run structure. *)
+            init = [ Ast.no_loc (T.Str d.init) ];
             mode = datamode m.names B.IntMap.empty d.mode;
           })
       m.data

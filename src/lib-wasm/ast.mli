@@ -752,6 +752,17 @@ module Text : sig
 
   type datastring = (string, location) annotated list
 
+  (* A data segment's contents (WAT numeric-values proposal): a sequence of
+     elements, each a byte string, a typed numeric run ([(i16 -1 2)], values kept
+     as raw literal strings), or a run of [v128] constants. Encoded little-endian
+     and concatenated at lowering. *)
+  type datavalelem =
+    | Str of string
+    | Numlist of storagetype * string list
+    | V128list of Wax_utils.V128.t list
+
+  type dataval = (datavalelem, location) annotated list
+
   type importdesc =
     | Func of { exact : bool; typ : typeuse }
     | Memory of (limits, location) annotated
@@ -796,7 +807,7 @@ module Text : sig
     | Memory of {
         id : name option;
         limits : (limits, location) annotated;
-        init : datastring option;
+        init : dataval option;
         exports : name list;
       }
     | Table of {
@@ -820,7 +831,7 @@ module Text : sig
         init : 'info expr list;
         mode : 'info elemmode;
       }
-    | Data of { id : name option; init : datastring; mode : 'info datamode }
+    | Data of { id : name option; init : dataval; mode : 'info datamode }
     (* Our extensions *)
     | String_global of { id : name; typ : idx option; init : datastring }
     | Module_if_annotation of {

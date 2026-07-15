@@ -460,6 +460,14 @@ let vec_const { Wax_utils.V128.shape; components } =
     | F64x2 -> "f64x2")
   :: List.map (atom ~style:Constant) components
 
+(* One data-segment element (WAT numeric-values proposal): a quoted byte string,
+   a typed numeric run [(i16 -1 2)], or a run of [v128] constants. *)
+let data_elem_sexp e =
+  match e.Ast.desc with
+  | Str s -> quoted_string { e with Ast.desc = s }
+  | Numlist (ty, l) -> list (storagetype ty :: List.map (atom ~style:Constant) l)
+  | V128list vs -> list (keyword "v128" :: List.concat_map vec_const vs)
+
 let vec_load_op_nat_align = function
   | Load128 -> 16
   | Load8x8S | Load8x8U | Load16x4S | Load16x4U | Load32x2S | Load32x2U
@@ -1212,7 +1220,7 @@ let rec modulefield f =
                 else [ list [ keyword "memory"; index i ] ])
                @ [ expr "offset" e ])
       in
-      list ~loc (block head :: List.map quoted_string init)
+      list ~loc (block head :: List.map data_elem_sexp init)
   | Start idx -> list ~loc [ keyword "start"; index idx ]
   | Memory { id; limits = l; init; exports = e } ->
       let head =
@@ -1228,7 +1236,7 @@ let rec modulefield f =
         ::
         (match init with
         | None -> []
-        | Some init -> [ list (keyword "data" :: List.map quoted_string init) ])
+        | Some init -> [ list (keyword "data" :: List.map data_elem_sexp init) ])
         )
   | Table { id; typ; init; exports = e } ->
       list ~loc

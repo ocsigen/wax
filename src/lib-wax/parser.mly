@@ -304,6 +304,63 @@ let decl_sign loc t sign =
    so parse across the full unsigned range. *)
 let u64_of_int_literal n = Wax_utils.Uint64.of_string n
 
+module V128 = Wax_utils.V128
+
+let syntax_error loc msg = raise (Wax_wasm.Parsing.Syntax_error (loc, msg ^ "\n"))
+
+(* The scalar storage type named by a data-segment numeric run [[f32: …]].
+   [i8]/[i16] are [Packed]; the rest are [Value]. *)
+let scalar_storagetype loc (t : ident) : storagetype =
+  match t.desc with
+  | "i8" -> Packed I8
+  | "i16" -> Packed I16
+  | "i32" -> Value I32
+  | "i64" -> Value I64
+  | "f32" -> Value F32
+  | "f64" -> Value F64
+  | _ ->
+      syntax_error loc
+        "A data numeric run needs a scalar element type (i8, i16, i32, i64, \
+         f32, or f64)."
+
+(* The vector shape named by a [v128] run element [i32x4(…)]. *)
+let vec_shape loc (s : ident) : V128.shape =
+  match s.desc with
+  | "i8x16" -> I8x16
+  | "i16x8" -> I16x8
+  | "i32x4" -> I32x4
+  | "i64x2" -> I64x2
+  | "f32x4" -> F32x4
+  | "f64x2" -> F64x2
+  | _ ->
+      syntax_error loc
+        "A v128 run element is a lane group like i32x4(1, 2, 3, 4)."
+
+(* Build a data numeric run [[t: …]]: a [v128] run of lane groups, or a scalar
+   run of literals. Elements are tagged [`Vec]/[`Num] by their shape; the wrong
+   kind for the run type is a syntax error. *)
+let data_run loc (t : ident) items =
+  let bad (info : location) msg =
+    syntax_error (info.loc_start, info.loc_end) msg
+  in
+  if t.desc = "v128" then
+    Data_v128
+      (List.map
+         (function
+           | `Vec v -> v
+           | `Num (n : (string, location) annotated) ->
+               bad n.info "Expected a v128 lane group like i32x4(1, 2, 3, 4).")
+         items)
+  else
+    Data_run
+      ( scalar_storagetype loc t,
+        List.map
+          (function
+            | `Num n -> n
+            | `Vec (v : (V128.t, location) annotated) ->
+                bad v.info "Expected a scalar literal, not a v128 lane group.")
+          items )
+
 (* A custom page size is written [pagesize 65536] but stored as its base-2
    logarithm, so require a power of two (the restriction to 1 or 65536 is a
    type-checking concern). *)
@@ -1000,9 +1057,47 @@ data_name:
 | "_" { None }
 | x = ident { Some x }
 
+(* A data segment's contents: one or more elements (a string literal, a numeric
+   run [[f32: 1.5, nan]], or a [v128] constant), concatenated. See {!Ast.Data}. *)
+data_init:
+| l = separated_nonempty_list_trailing(",", data_elem) { l }
+
+data_elem:
+| s = STRING { Data_string s.desc }
+| "[" t = ident ":" l = separated_list_trailing(",", data_run_item) "]"
+  { data_run $loc(t) t l }
+
+(* One element of a data run: a scalar literal, or a [v128] lane group
+   [shape(lane, …)]. [data_run] checks it matches the run's element type. *)
+data_run_item:
+| n = data_number { `Num n }
+| sh = ident "(" l = separated_list_trailing(",", data_number) ")"
+  { `Vec
+      (with_loc $sloc
+         { V128.shape = vec_shape $loc(sh) sh;
+           components = List.map (fun (n : _ Ast.annotated) -> n.desc) l }) }
+
+(* A bare numeric literal in a data run: an [int]/[float]/[inf]/[nan] literal
+   with an optional sign, kept as its raw text (values are range-checked and
+   encoded at typing/lowering, like the WAT numlist form). *)
+data_number:
+| s = ioption(data_sign) n = raw_number
+  { with_loc $sloc (Option.value ~default:"" s ^ n) }
+
+data_sign:
+| "-" { "-" }
+| "+" { "" }
+
+raw_number:
+| n = INT { n }
+| f = FLOAT { f }
+| INF { "inf" }
+| NAN { "nan" }
+
 data_item:
-| DATA n = data_name "@" "[" off = constant_expression "]" "=" s = STRING ";"
-  { { data_name = n; offset = off; init = s.desc } }
+| DATA n = data_name "@" "[" off = constant_expression "]"
+  init = loption("=" i = data_init { i }) ";"
+  { { data_name = n; offset = off; init } }
 
 mem_pagesize:
 | PAGESIZE n = INT { page_size_log2 $loc(n) n }
@@ -1023,14 +1118,14 @@ memory:
             shared = sh; data = items; attributes}) }
 
 data:
-| DATA n = data_name "=" s = STRING ";"
+| DATA n = data_name init = loption("=" i = data_init { i }) ";"
   { fun attributes ->
-      with_loc $sloc (Data {name = n; mode = Passive; init = s.desc; attributes}) }
+      with_loc $sloc (Data {name = n; mode = Passive; init; attributes}) }
 | DATA n = data_name "@" mem = ident "[" off = constant_expression "]"
-  "=" s = STRING ";"
+  init = loption("=" i = data_init { i }) ";"
   { fun attributes ->
       with_loc $sloc
-        (Data {name = n; mode = Active (mem, off); init = s.desc; attributes}) }
+        (Data {name = n; mode = Active (mem, off); init; attributes}) }
 
 table:
 | TABLE name = ident ":" at = ioption(address_type) rt = reference_type

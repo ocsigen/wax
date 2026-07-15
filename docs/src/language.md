@@ -1456,6 +1456,22 @@ data seg = "raw\x00bytes";               // top-level passive segment
 data init @ mem0 [0] = "hello";          // top-level active segment
 ```
 
+A segment's contents may mix string literals with **numeric runs** — a bracketed
+list `[type: values]` whose element type is stated once and whose values are
+packed little-endian — instead of hand-escaping every byte:
+
+```wax
+data table = "hdr", [f32: 0.2, 0.3, 0.4], [i16: -1, -2], [i8: 1, 2, 3, 4];
+```
+
+The scalar element types are `i8`, `i16`, `i32`, `i64`, `f32`, and `f64`; values
+(including `nan`/`inf`) are ordinary literals. A `v128` run holds lane groups
+written `shape(lanes)`:
+
+```wax
+data vectors = [v128: i32x4(1, 2, 3, 4), f64x2(1.0, 2.0)];
+```
+
 ### Load and Store
 
 ```wax

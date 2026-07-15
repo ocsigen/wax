@@ -773,6 +773,23 @@ fn sum_bytes(start: i32, end: i32) -> i32 {
 }
 ```
 
+## Data Segments with Numeric Values
+
+A data segment's contents can mix string literals with typed numeric runs —
+`[type: values]`, packed little-endian — instead of hand-escaping every byte.
+
+### Wax
+
+```wax
+memory mem: i32 [1];
+
+// "GIF89a" header, then a 4-lane f32 palette and two i16 dimensions.
+data header @ mem[0] =
+    "GIF89a",
+    [f32: 1.0, 0.5, 0.25, 0.0],
+    [i16: 640, 480];
+```
+
 ## SIMD
 
 `v128` vector operations are method intrinsics with the lane shape baked into the

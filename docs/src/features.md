@@ -21,6 +21,7 @@ On top of that, it enables these further proposals by default:
 | Branch hinting | `#[likely]` / `#[unlikely]` |
 | Custom page sizes | `pagesize` |
 | [Extended name section](https://github.com/WebAssembly/extended-name-section) | `$`-identifiers for types, tables, memories, globals, data/element segments, fields, and labels survive the binary round-trip |
+| [WAT numeric values](https://github.com/WebAssembly/wat-numeric-values) | typed numeric runs in [data segments](./language.md#data-segments) (`data d = [i16: -1, 2], [f32: 0.5, nan], [v128: i32x4(1,2,3,4)];`); runs survive the wax↔wat round-trip |
 
 ## Enabled with `-X`
 

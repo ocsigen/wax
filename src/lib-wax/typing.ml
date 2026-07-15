@@ -453,6 +453,14 @@ module Error = struct
   let constant_expression_required context ~location =
     report context ~location "Only constant expressions are allowed here."
 
+  let data_run_bad_element context ~location typename =
+    report context ~location
+      "This value is out of range for the data run's element type '%s'."
+      typename
+
+  let data_v128_arity context ~location count =
+    report context ~location "This v128 lane group must have %d lanes." count
+
   let memory_offset_too_large context ~location max_offset =
     report context ~location "The memory offset should be less than 0x%Lx."
       (Wax_utils.Uint64.to_int64 max_offset)
@@ -8663,6 +8671,84 @@ let type_data_offset ctx address_type off =
   check_constant_instruction ctx off';
   off'
 
+(*** Data segment contents (WAT numeric-values proposal) ***)
+
+let storagetype_name : storagetype -> string = function
+  | Packed I8 -> "i8"
+  | Packed I16 -> "i16"
+  | Value I32 -> "i32"
+  | Value I64 -> "i64"
+  | Value F32 -> "f32"
+  | Value F64 -> "f64"
+  | Value (V128 | Ref _) -> "?"
+
+(* Whether a raw literal string is a valid value of the run's element type. Reuse
+   the same predicates the WAT numlist form validates with, so the two agree. *)
+let data_run_element_valid (st : storagetype) s =
+  match st with
+  | Packed I8 -> Wax_wasm.Misc.is_int8 s
+  | Packed I16 -> Wax_wasm.Misc.is_int16 s
+  | Value I32 -> Wax_wasm.Misc.is_int32 s
+  | Value I64 -> Wax_wasm.Misc.is_int64 s
+  | Value F32 -> Wax_wasm.Misc.is_float32 s
+  | Value F64 -> Wax_wasm.Misc.is_float64 s
+  | Value (V128 | Ref _) -> false
+
+(* The lane count and per-lane validity of a [v128] run element's shape. *)
+let vec_lane_count : Wax_utils.V128.shape -> int = function
+  | I8x16 -> 16
+  | I16x8 -> 8
+  | I32x4 | F32x4 -> 4
+  | I64x2 | F64x2 -> 2
+
+let vec_lane_name : Wax_utils.V128.shape -> string = function
+  | I8x16 -> "i8"
+  | I16x8 -> "i16"
+  | I32x4 -> "i32"
+  | I64x2 -> "i64"
+  | F32x4 -> "f32"
+  | F64x2 -> "f64"
+
+let vec_lane_valid (shape : Wax_utils.V128.shape) s =
+  match shape with
+  | I8x16 -> Wax_wasm.Misc.is_int8 s
+  | I16x8 -> Wax_wasm.Misc.is_int16 s
+  | I32x4 -> Wax_wasm.Misc.is_int32 s
+  | I64x2 -> Wax_wasm.Misc.is_int64 s
+  | F32x4 -> Wax_wasm.Misc.is_float32 s
+  | F64x2 -> Wax_wasm.Misc.is_float64 s
+
+(* Validate one data-segment element: string (nothing to check), scalar run (each
+   value in range for the element type), or [v128] run (each lane group has its
+   shape's lane count, and every lane is in range). Values are raw literal
+   strings — nothing is typed as an expression. *)
+let type_data_element ctx (e : Ast.data_elem) =
+  match e with
+  | Data_string _ -> ()
+  | Data_run (st, values) ->
+      List.iter
+        (fun (v : (string, location) Ast.annotated) ->
+          if not (data_run_element_valid st v.desc) then
+            Error.data_run_bad_element ctx.diagnostics ~location:v.info
+              (storagetype_name st))
+        values
+  | Data_v128 vs ->
+      List.iter
+        (fun (v : (Wax_utils.V128.t, location) Ast.annotated) ->
+          let { Wax_utils.V128.shape; components } = v.desc in
+          if List.length components <> vec_lane_count shape then
+            Error.data_v128_arity ctx.diagnostics ~location:v.info
+              (vec_lane_count shape);
+          List.iter
+            (fun c ->
+              if not (vec_lane_valid shape c) then
+                Error.data_run_bad_element ctx.diagnostics ~location:v.info
+                  (vec_lane_name shape))
+            components)
+        vs
+
+let type_data_init ctx init = List.iter (type_data_element ctx) init
+
 let rec globals ctx fields =
   List.map
     (fun field ->
@@ -8673,6 +8759,7 @@ let rec globals ctx fields =
           let data =
             List.map
               (fun (d : _ Ast.memdata) ->
+                type_data_init ctx d.init;
                 { d with offset = type_data_offset ctx address_type d.offset })
               data
           in
@@ -8697,6 +8784,7 @@ let rec globals ctx fields =
                 in
                 Active (mem, type_data_offset ctx address_type off)
           in
+          type_data_init ctx d.init;
           After { field with desc = Data { d with mode } }
       | Elem ({ reftype = rt; mode; init; _ } as e) ->
           let mode =

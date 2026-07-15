@@ -1135,7 +1135,7 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
                       (instr ~resolve_string_type ~resolve_func_type ctx)
                       ex )
           in
-          let init = Wax_utils.Ast.concat_desc init in
+          let init = Misc.encode_dataval init in
           let d = { B.init; mode } in
           scan rest mem_idx (d :: acc)
       | { desc = T.Memory { init = Some init; limits; _ }; _ } :: rest ->
@@ -1150,7 +1150,7 @@ let module_ (m : 'info T.module_) : 'info B.module_ =
                        | `I64 -> B.I64 0L));
                 ] )
           in
-          let init = Wax_utils.Ast.concat_desc init in
+          let init = Misc.encode_dataval init in
           let d = { B.init; mode } in
           scan rest (mem_idx + 1) (d :: acc)
       | { desc = T.Memory _; _ } :: rest -> scan rest (mem_idx + 1) acc

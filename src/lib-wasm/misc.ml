@@ -61,3 +61,40 @@ let is_float32 s =
       <> 0x7f800000l)
 
 let is_float64 s = check_float s 52 (fun s -> Float.(is_finite (of_string s)))
+
+(*** Data-segment numeric values (WAT numeric-values proposal) ***)
+
+(* The [count] low-order bytes of [v], little-endian. *)
+let le_bytes count v =
+  String.init count (fun k ->
+      Char.chr
+        (Int64.to_int
+           (Int64.logand (Int64.shift_right_logical v (8 * k)) 0xffL)))
+
+(* One scalar of a numeric run to its little-endian bytes: two's complement for
+   integers, IEEE-754 for floats. *)
+let encode_scalar (ty : Ast.Text.storagetype) s =
+  let open Wax_utils.Number_parsing in
+  match ty with
+  | Packed I8 -> le_bytes 1 (Int64.of_int32 (int32 s))
+  | Packed I16 -> le_bytes 2 (Int64.of_int32 (int32 s))
+  | Value I32 -> le_bytes 4 (Int64.of_int32 (int32 s))
+  | Value I64 -> le_bytes 8 (int64 s)
+  | Value F32 -> le_bytes 4 (Int64.of_int32 (float32_bits s))
+  | Value F64 -> le_bytes 8 (Int64.bits_of_float (float64 s))
+  | Value (V128 | Ref _) -> assert false
+
+let encode_datavalelem : Ast.Text.datavalelem -> string = function
+  | Str s -> s
+  | Numlist (ty, l) -> String.concat "" (List.map (encode_scalar ty) l)
+  | V128list vs -> String.concat "" (List.map Wax_utils.V128.to_string vs)
+
+(* The whole contents of a data segment as raw bytes. *)
+let encode_dataval (l : Ast.Text.dataval) =
+  String.concat "" (List.map (fun e -> encode_datavalelem e.Ast.desc) l)
+
+(* The byte length of a data segment without materializing its bytes. *)
+let dataval_byte_length (l : Ast.Text.dataval) =
+  List.fold_left
+    (fun n e -> n + String.length (encode_datavalelem e.Ast.desc))
+    0 l
