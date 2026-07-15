@@ -116,19 +116,24 @@ complete set of options.
 
 ## Editor support
 
-A [Wax extension for Visual Studio Code](https://marketplace.visualstudio.com/items?itemName=wax-wasm.wax)
-supports both `.wax` and WebAssembly text (`.wat`) files: syntax highlighting,
-formatting (with format on save), snippets, side-by-side compile/decompile
-previews, and the full language-server feature set (diagnostics, hover, go to
-definition, find references, rename, completion, signature help, and more). It
-works in both desktop and web VS Code. Its source lives in
-[`editors/vscode/`](editors/vscode/).
+Editor integrations live under [`editors/`](editors/), all sharing the same
+analysis:
 
-Any other editor with a Language Server Protocol client (Neovim, Emacs, Helix,
-Zed, and others) gets the same features by launching `wax lsp`, the built-in
-language server. Ready-to-use Neovim, Helix, and Emacs configurations, paired
-with the `tree-sitter-wax` grammar for highlighting, are under
-[`editors/`](editors/).
+- **[Visual Studio Code](editors/vscode/)** (on the
+  [Marketplace](https://marketplace.visualstudio.com/items?itemName=wax-wasm.wax)):
+  a full extension for `.wax` and `.wat`, with syntax highlighting, formatting,
+  snippets, side-by-side compile/decompile previews, and the complete
+  language-server feature set. It runs the toolchain compiled to WebAssembly
+  in-process, so it works the same in desktop and web VS Code.
+- **[Neovim](editors/nvim/)**, **[Helix](editors/helix/)**, and
+  **[Emacs](editors/emacs/)**: the [`tree-sitter-wax`](tree-sitter-wax/) grammar
+  for highlighting, plus the built-in `wax lsp` language server for diagnostics,
+  hover, go to definition, find references, rename, completion, and signature
+  help.
+
+Any other editor with a Language Server Protocol client gets the same features
+by launching `wax lsp`. See the [documentation](docs/src/editor.md) for setup
+details.
 
 ## Installation
 

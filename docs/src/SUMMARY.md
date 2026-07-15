@@ -12,3 +12,4 @@
     - [Module Fields](./correspondence/module_fields.md)
 
 - [CLI Reference](./cli.md)
+- [Editor Support](./editor.md)
