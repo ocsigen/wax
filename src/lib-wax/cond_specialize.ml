@@ -114,6 +114,7 @@ let module_ ctx env (fields : location Ast.module_) :
           }
     | Set (idx, op, v) -> Set (idx, op, sone v)
     | Tee (idx, v) -> Tee (idx, sone v)
+    | Labelled (l, v) -> Labelled (l, sone v)
     | Call (t, args) -> Call (sone t, List.map sone args)
     | TailCall (t, args) -> TailCall (sone t, List.map sone args)
     | Cast (v, t) -> Cast (sone v, t)

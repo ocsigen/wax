@@ -5,26 +5,25 @@ grafting an edge-value literal into a memarg.
 
   $ cat > bad.wax <<'EOF'
   > fn f(p: i32) -> i32 {
-  >     m.load32(p, 18446744073709551616, 4);
+  >     m.load32(p, offset: 18446744073709551616);
   > }
   > memory m: i32 [1];
   > EOF
   $ wax -i wax -f wasm bad.wax -o /dev/null
   Error: This memory offset or alignment must fit a 64-bit unsigned integer.
-   ──➤  bad.wax:2:17
+   ──➤  bad.wax:2:25
   1 │ fn f(p: i32) -> i32 {
-  2 │     m.load32(p, 18446744073709551616, 4);
-    ·                 ^^^^^^^^^^^^^^^^^^^^
+  2 │     m.load32(p, offset: 18446744073709551616);
+    ·                         ^^^^^^^^^^^^^^^^^^^^
   3 │ }
   4 │ memory m: i32 [1];
   [128]
 
-A large-but-in-u64 offset (the third arg; the second is alignment) is fine on an
-i64 memory:
+A large-but-in-u64 offset is fine on an i64 memory:
 
   $ cat > ok.wax <<'EOF'
   > fn f(p: i64) -> i32 {
-  >     m.load32(p, 4, 9223372036854775807);
+  >     m.load32(p, offset: 9223372036854775807);
   > }
   > memory m: i64 [1];
   > EOF

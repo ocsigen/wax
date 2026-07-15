@@ -66,6 +66,7 @@ let rec refs_instr name (i : location instr) : bool =
       || match else_body with Some b -> any b.desc | None -> false)
   | Set (_, _, e)
   | Tee (_, e)
+  | Labelled (_, e)
   | Cast (e, _)
   | Test (e, _)
   | NonNull e
@@ -288,6 +289,7 @@ and rewrite_desc (desc : location instr_desc) : location instr_desc =
         }
   | Set (x, op, e) -> Set (x, op, rewrite_instr e)
   | Tee (x, e) -> Tee (x, rewrite_instr e)
+  | Labelled (l, e) -> Labelled (l, rewrite_instr e)
   | Call (t, args) -> Call (rewrite_instr t, List.map rewrite_instr args)
   | TailCall (t, args) -> TailCall (rewrite_instr t, List.map rewrite_instr args)
   | Cast (e, t) -> Cast (rewrite_instr e, t)

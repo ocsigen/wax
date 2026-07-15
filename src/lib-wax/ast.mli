@@ -142,6 +142,9 @@ type 'info instr_desc =
   | Tee of ident * 'info instr
   | Call of 'info instr * 'info instr list
   | TailCall of 'info instr * 'info instr list
+  (* A labelled call argument [name: expr], used for the static [offset]/
+     [align]/[lane] immediates of a memory access; see [ast.ml]. *)
+  | Labelled of ident * 'info instr
   | Char of Uchar.t
   | String of ident option * string
   | Int of string

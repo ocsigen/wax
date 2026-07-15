@@ -112,7 +112,7 @@
    one, the opener hint is worded locationally ("opens the enclosing construct",
    see generate_error_messages.ml) rather than claiming it is unmatched, which
    would be false in the latter case. *)
-%on_error_reduce statement plaininstr separated_nonempty_list_trailing(",",structure_type_field) semi_list(module_field) separated_nonempty_list_trailing(",",value_type) block_type separated_nonempty_list_trailing(",",function_parameter) list(label) list(attribute) list(typedef) list(data_item) semi_list(legacy_catch) separated_nonempty_list_trailing(",",catch) separated_nonempty_list_trailing(",",let_pattern) separated_nonempty_list_trailing(",",block_param_type) separated_nonempty_list_trailing(",",condition) separated_nonempty_list_trailing(",",data_number) separated_nonempty_list_trailing(",",data_run_item) separated_nonempty_list_trailing(",",on_clause) blockinstr statement_list raw_statement_list semi_list(match_arm) semi_list(dispatch_arm) semi_list(import_item) loption(separated_nonempty_list_trailing(",",catch)) separated_nonempty_list_trailing(",",expression) let_pattern structure_field separated_nonempty_list_trailing(",",structure_field) constant_expression attribute_expression parenthesized_expression index_expression then_branch condition_expression length_expression optional_function_type structure_type result_type_ expression_list structure
+%on_error_reduce statement plaininstr separated_nonempty_list_trailing(",",structure_type_field) semi_list(module_field) separated_nonempty_list_trailing(",",value_type) block_type separated_nonempty_list_trailing(",",function_parameter) list(label) list(attribute) list(typedef) list(data_item) semi_list(legacy_catch) separated_nonempty_list_trailing(",",catch) separated_nonempty_list_trailing(",",let_pattern) separated_nonempty_list_trailing(",",block_param_type) separated_nonempty_list_trailing(",",condition) separated_nonempty_list_trailing(",",data_number) separated_nonempty_list_trailing(",",data_run_item) separated_nonempty_list_trailing(",",on_clause) blockinstr statement_list raw_statement_list semi_list(match_arm) semi_list(dispatch_arm) semi_list(import_item) loption(separated_nonempty_list_trailing(",",catch)) separated_nonempty_list_trailing(",",expression) let_pattern structure_field separated_nonempty_list_trailing(",",structure_field) constant_expression attribute_expression parenthesized_expression index_expression then_branch condition_expression length_expression optional_function_type structure_type result_type_ expression_list structure argument separated_nonempty_list_trailing(",",argument) argument_list
 
 
 %nonassoc prec_ident (* {a|...} *) prec_block
@@ -900,6 +900,16 @@ length_expression: e = expression { e }
 expression_list:
 | l = separated_list_trailing(",", expression) { l }
 
+(* A call argument: either an expression or a labelled immediate [name: expr]
+   (the [offset]/[align]/[lane] immediates of a memory access; typing rejects
+   labels anywhere else). *)
+argument:
+| e = expression { e }
+| l = ident ":" e = expression { with_loc $sloc (Labelled (l, e)) }
+
+argument_list:
+| l = separated_list_trailing(",", argument) { l }
+
 plaininstr:
 | NULL { with_loc $sloc Null }
 | "_" {with_loc $sloc Hole }
@@ -908,7 +918,7 @@ plaininstr:
 | "(" l = parenthesized_expression ")" { l }
 | "(" i = expression "," l = expression_list ")"
   { with_loc $sloc (Sequence (i :: l)) }
-| i = expression "(" l = expression_list ")"
+| i = expression "(" l = argument_list ")"
    { with_loc $sloc (Call(i, l)) }
 | c = CHAR
   { with_loc $loc (Char c) }
@@ -1072,7 +1082,7 @@ statement:
   { with_loc $sloc (Throw (t, i)) }
 | THROW_REF i = expression
   { with_loc $sloc (ThrowRef i) }
-| BECOME i = expression "(" l = expression_list ")"
+| BECOME i = expression "(" l = argument_list ")"
    { with_loc $sloc (TailCall(i, l)) }
 | i1 = expression "[" i2 = index_expression "]" "=" i3 = expression
   { with_loc $sloc (ArraySet (i1, i2, i3)) }

@@ -613,7 +613,7 @@ fn caml_ml_close_channel(vch: &eq) -> &eq {
         let iovs = buffer + 4;
         buffer += 12;
         m.store32(iovs, buffer);
-        m.store32(iovs, n, 4, 4);
+        m.store32(iovs, n, offset: 4);
         let iovs_len = 1;
         let res = fd_read(fd, iovs, iovs_len, nread);
         caml_handle_sys_error_if(0 as &i31, res);
@@ -1007,7 +1007,7 @@ fn caml_ml_flush(vch: &eq) -> &eq {
         let iovs = buffer + 4;
         buffer += 12;
         m.store32(iovs, buffer);
-        m.store32(iovs, n, 4, 4);
+        m.store32(iovs, n, offset: 4);
         let iovs_len = 1;
         let s = buf as &bytes;
         blit_substring_to_memory(buffer, s, pos, n);
@@ -1030,7 +1030,7 @@ fn caml_ml_flush(vch: &eq) -> &eq {
         let remaining = buf;
         'write: loop {
             m.store32(iovs, remaining);
-            m.store32(iovs, len, 4, 4);
+            m.store32(iovs, len, offset: 4);
             let res = fd_write(fd, iovs, 1, nwritten);
             if !res {
                 len -= m.load32(nwritten);

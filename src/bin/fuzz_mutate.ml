@@ -215,6 +215,7 @@ and rebuild : location instr_desc -> location instr_desc = function
   | Tee (id, e) -> Tee (id, go e)
   | Call (f, args) -> Call (go f, List.map go args)
   | TailCall (f, args) -> TailCall (go f, List.map go args)
+  | Labelled (l, e) -> Labelled (l, go e)
   | Cast (e, t) -> Cast (go e, t)
   | Test (e, t) -> Test (go e, t)
   | NonNull e -> NonNull (go e)

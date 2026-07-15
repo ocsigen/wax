@@ -423,6 +423,7 @@ let labels_in_list l =
         instr d
     | Set (_, _, e)
     | Tee (_, e)
+    | Labelled (_, e)
     | Cast (e, _)
     | Test (e, _)
     | NonNull e
@@ -550,45 +551,43 @@ let mem_natural_align = function
   | "load32" | "store32" | "loadf32" | "storef32" -> 4
   | _ -> 8
 
-(* Build a [memarg] from the trailing literal [align]/[offset] arguments (after
-   the [nstack] stack operands), defaulting [align] to the natural alignment. *)
-let mem_memarg meth nstack args : Ast.memarg =
-  let int_lit a =
-    match a.desc with
-    (* [Uint64.of_string] handles the full unsigned 64-bit range; a memory64
-       offset/align may exceed [Int64.max_int]. *)
-    | Int s -> Wax_utils.Uint64.of_string s
-    | _ -> assert false
-  in
-  let extra = List.filteri (fun k _ -> k >= nstack) args in
-  let align =
-    match extra with
-    | a :: _ -> int_lit a
-    | [] -> Wax_utils.Uint64.of_int (mem_natural_align meth)
-  in
-  let offset =
-    match extra with _ :: o :: _ -> int_lit o | _ -> Wax_utils.Uint64.zero
-  in
-  { offset; align }
+(* Split a memory-access call's arguments into the positional stack operands
+   and the labelled immediates ([offset]/[align]/[lane]); typing guarantees
+   every [Labelled] argument is one of those, with an integer-literal
+   payload. *)
+let split_labelled args =
+  List.partition_map
+    (fun a ->
+      match a.desc with
+      | Labelled (l, e) -> Either.Right (l.desc, e)
+      | _ -> Either.Left a)
+    args
 
-(* [mem_memarg] for an atomic op, whose natural (default) alignment is fixed by
-   the access size. *)
-let atomic_memarg op nstack args : Ast.memarg =
-  let int_lit a =
-    match a.desc with
-    | Int s -> Wax_utils.Uint64.of_string s
-    | _ -> assert false
-  in
-  let extra = List.filteri (fun k _ -> k >= nstack) args in
-  let align =
-    match extra with
-    | a :: _ -> int_lit a
-    | [] -> Wax_utils.Uint64.of_int (1 lsl Atomics.natural_align_log2 op)
-  in
-  let offset =
-    match extra with _ :: o :: _ -> int_lit o | _ -> Wax_utils.Uint64.zero
-  in
-  { offset; align }
+let int_lit a =
+  match a.desc with
+  (* [Uint64.of_string] handles the full unsigned 64-bit range; a memory64
+     offset/align may exceed [Int64.max_int]. *)
+  | Int s -> Wax_utils.Uint64.of_string s
+  | _ -> assert false
+
+(* Build a [memarg] from the labelled [align]/[offset] immediates, defaulting
+   [align] to the natural alignment. *)
+let memarg_of_labels ~natural labels : Ast.memarg =
+  {
+    align =
+      (match List.assoc_opt "align" labels with
+      | Some a -> int_lit a
+      | None -> Wax_utils.Uint64.of_int natural);
+    offset =
+      (match List.assoc_opt "offset" labels with
+      | Some o -> int_lit o
+      | None -> Wax_utils.Uint64.zero);
+  }
+
+(* [memarg_of_labels] for a scalar load/store, whose natural (default)
+   alignment follows from the method name. *)
+let mem_memarg meth args : Ast.memarg =
+  memarg_of_labels ~natural:(mem_natural_align meth) (snd (split_labelled args))
 
 (* Literal value of a [v128::<shape>] lane argument, as a string for
    [Wax_utils.V128.t]; a negative literal is [UnOp (Neg, _)]. *)
@@ -795,7 +794,13 @@ and instruction_desc ret ctx i : location Text.instr list =
       let wasm_name = StringMap.find idx.desc ctx.locals in
       folded loc (LocalTee (with_loc idx.info (Text.Id wasm_name))) code
   | Call (f, args) -> (
-      let arg_code = List.concat_map (instruction ret ctx) args in
+      (* Only a memory access has [Labelled] immediates among its arguments,
+         and its cases below rebuild their own code from the positional
+         operands instead of using [arg_code]; skip the labels so this eager
+         shared lowering never sees one. *)
+      let arg_code =
+        List.concat_map (instruction ret ctx) (fst (split_labelled args))
+      in
       match f.desc with
       (* Qualified-path intrinsics. [v128::<shape>(..)] / [v128::bitselect]
          are the SIMD free functions; [i64::add128(..)] etc. are wide arithmetic
@@ -826,25 +831,28 @@ and instruction_desc ret ctx i : location Text.instr list =
           else
             let code = instruction ret ctx f in
             folded loc (CallRef (index (expr_type_name f))) (arg_code @ code)
-      (* Atomic access: mem.iN_atomic_*(addr [, val…] [, align [, offset]]). *)
+      (* Atomic access: mem.iN_atomic_*(addr [, val…] [, offset: N]). *)
       | StructGet ({ desc = Get memname; _ }, meth)
         when memory_receiver ctx memname.desc
              && Atomics.of_method_name meth.desc <> None ->
           let op = Option.get (Atomics.of_method_name meth.desc) in
           let memidx = index memname in
-          let operands, _ = Atomics.signature op in
-          let nstack = 1 + List.length operands in
-          let memarg = atomic_memarg op nstack args in
-          let stack_args = List.filteri (fun k _ -> k < nstack) args in
+          let stack_args, labels = split_labelled args in
+          let memarg =
+            memarg_of_labels
+              ~natural:(1 lsl Atomics.natural_align_log2 op)
+              labels
+          in
           let code = List.concat_map (instruction ret ctx) stack_args in
           folded loc (Atomic (memidx, op, memarg)) code
-      (* Memory access: mem.loadN/storeN(addr [, align [, offset]]). Signed
-         narrow loads are handled (under an [as iN_s] cast) in the Cast case. *)
+      (* Memory access: mem.loadN/storeN(addr [, offset: N] [, align: N]).
+         Signed narrow loads are handled (under an [as iN_s] cast) in the Cast
+         case. *)
       | StructGet ({ desc = Get memname; _ }, meth)
         when memory_receiver ctx memname.desc && is_mem_method meth.desc ->
           let memidx = index memname in
+          let memarg = mem_memarg meth.desc args in
           if mem_store_method meth.desc then
-            let memarg = mem_memarg meth.desc 2 args in
             let addr_code = instruction ret ctx (List.nth args 0) in
             let value = List.nth args 1 in
             let value_code = instruction ret ctx value in
@@ -864,7 +872,6 @@ and instruction_desc ret ctx i : location Text.instr list =
             in
             folded loc desc (addr_code @ value_code)
           else
-            let memarg = mem_memarg meth.desc 1 args in
             let addr_code = instruction ret ctx (List.nth args 0) in
             let desc =
               match meth.desc with
@@ -876,40 +883,20 @@ and instruction_desc ret ctx i : location Text.instr list =
               | _ -> Text.Load (memidx, memarg, NumF64)
             in
             folded loc desc addr_code
-      (* SIMD memory accesses: mem.v128_load(addr [,align[,offset]]),
-         mem.v128_store(addr, v, ...), mem.v128_load8_lane(addr, v, lane, ...).
-         Stack operands first, then the constant lane immediate (if any), then
-         align/offset. *)
+      (* SIMD memory accesses: mem.v128_load(addr [, offset: N] [, align: N]),
+         mem.v128_store(addr, v, ...), mem.v128_load8_lane(addr, v, lane: N,
+         ...). The stack operands are positional; the lane (mandatory on lane
+         accesses) and align/offset immediates are labelled. *)
       | StructGet ({ desc = Get memname; _ }, meth)
         when memory_receiver ctx memname.desc && Simd.is_mem_method meth.desc ->
           let mop = Option.get (Simd.mem_method meth.desc) in
           let memidx = index memname in
-          let nstack = List.length mop.m_operands in
-          let nimm = if mop.m_lane then 1 else 0 in
+          let stack_args, labels = split_labelled args in
           let lane =
-            if mop.m_lane then lane_imm (List.nth args nstack) else 0
+            if mop.m_lane then lane_imm (List.assoc "lane" labels) else 0
           in
-          let extra = List.filteri (fun k _ -> k >= nstack + nimm) args in
-          let int_lit a =
-            match a.desc with
-            | Int s -> Wax_utils.Uint64.of_string s
-            | _ -> assert false
-          in
-          let align =
-            match extra with
-            | a :: _ -> int_lit a
-            | [] -> Wax_utils.Uint64.of_int mop.m_nat_align
-          in
-          let offset =
-            match extra with
-            | _ :: o :: _ -> int_lit o
-            | _ -> Wax_utils.Uint64.zero
-          in
-          let memarg : Ast.memarg = { offset; align } in
-          let operand_code =
-            List.concat_map (instruction ret ctx)
-              (List.filteri (fun k _ -> k < nstack) args)
-          in
+          let memarg = memarg_of_labels ~natural:mop.m_nat_align labels in
+          let operand_code = List.concat_map (instruction ret ctx) stack_args in
           folded loc (mop.m_make memidx memarg lane) operand_code
       (* Binary intrinsics, written with the dot notation *)
       | StructGet (obj, { desc = "rotl"; _ }) when receiver_is_value obj -> (
@@ -1317,7 +1304,7 @@ and instruction_desc ret ctx i : location Text.instr list =
           match cast_ty with
           | Signedtype { typ = `I64; signage = s2; _ } when s1 = s2 ->
               let memidx = index memname in
-              let memarg = mem_memarg meth.desc 1 args in
+              let memarg = mem_memarg meth.desc args in
               let addr_code = instruction ret ctx (List.nth args 0) in
               let size = if meth.desc = "load8" then `I8 else `I16 in
               folded (snd expr.info)
@@ -1332,7 +1319,7 @@ and instruction_desc ret ctx i : location Text.instr list =
                || meth.desc = "load32") -> (
           let emit result_ty size signage =
             let memidx = index memname in
-            let memarg = mem_memarg meth.desc 1 args in
+            let memarg = mem_memarg meth.desc args in
             let addr_code = instruction ret ctx (List.nth args 0) in
             folded (snd expr.info)
               (LoadS (memidx, memarg, result_ty, size, signage))
@@ -1801,6 +1788,11 @@ and instruction_desc ret ctx i : location Text.instr list =
                    else_body;
              });
       ]
+  | Labelled _ ->
+      (* Typing only accepts a labelled argument as a memory-access immediate,
+         and the memory-access cases above consume the labels before lowering
+         their operands, so one never reaches here. *)
+      assert false
 
 (*** Module-field conversion ***)
 

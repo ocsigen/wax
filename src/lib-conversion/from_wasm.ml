@@ -1476,16 +1476,21 @@ let bottom_heap_type ctx (t : Src.heaptype) : Ast.heaptype =
       | Struct _ | Array _ -> None_
       | Func _ -> NoFunc)
 *)
-(* Trailing [align]/[offset] literal arguments of a memory access: [align] only
-   when it differs from the natural alignment, [offset] only when non-zero (and
-   then [align] too, since they are positional). *)
+(* A labelled immediate argument [name: v] of a memory access. *)
+let labelled with_loc name v = with_loc (Ast.Labelled (Ast.no_loc name, v))
+
+(* Trailing labelled [offset]/[align] arguments of a memory access: [offset]
+   only when non-zero, [align] only when it differs from the natural
+   alignment. *)
 let mem_extra with_loc (memarg : Src.memarg) nat =
   let lit v = with_loc (Ast.Int (Wax_utils.Uint64.to_string v)) in
   let nat = Wax_utils.Uint64.of_int nat in
-  if Wax_utils.Uint64.compare memarg.offset Wax_utils.Uint64.zero <> 0 then
-    [ lit memarg.align; lit memarg.offset ]
-  else if Wax_utils.Uint64.compare memarg.align nat <> 0 then
-    [ lit memarg.align ]
+  (if Wax_utils.Uint64.compare memarg.offset Wax_utils.Uint64.zero <> 0 then
+     [ labelled with_loc "offset" (lit memarg.offset) ]
+   else [])
+  @
+  if Wax_utils.Uint64.compare memarg.align nat <> 0 then
+    [ labelled with_loc "align" (lit memarg.align) ]
   else []
 
 (* The callee of an indirect call: [tab[index]] narrowed to the call's function
@@ -2538,7 +2543,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       Stack.push 1
         (mem_call m (Simd.load_lane_name w)
            (addr :: v
-           :: integer i (Int.to_string lane)
+           :: labelled with_loc "lane" (integer i (Int.to_string lane))
            :: mem_extra with_loc memarg nat))
   | VecStoreLane (m, w, memarg, lane) ->
       let* v = Stack.pop_width_preserved in
@@ -2547,7 +2552,7 @@ let rec instruction ctx (i : _ Src.instr) : unit Stack.t =
       Stack.push 0
         (mem_call m (Simd.store_lane_name w)
            (addr :: v
-           :: integer i (Int.to_string lane)
+           :: labelled with_loc "lane" (integer i (Int.to_string lane))
            :: mem_extra with_loc memarg nat))
 
 and instructions ctx l =

@@ -172,7 +172,7 @@ Loads and stores use method-call syntax on the memory, with the value's width in
 let x: i32 = mem0.load32(p);
 let b: i32 = mem0.load8(p) as i32_u;
 mem0.store16(p, v);
-mem0.store32(p, v, 1, 16);     // align=1, offset=16
+mem0.store32(p, v, offset: 16, align: 1);
 ```
 
 See [Memory Access](instructions.md#memory-access) for the full instruction mapping.

@@ -1,1 +1,1 @@
-memory m: i32 [1, 2]; fn f() { _ = m.load32(0, 4, 8); }
+memory m: i32 [1, 2]; fn f() { _ = m.load32(0, offset: 8, align: 4); }

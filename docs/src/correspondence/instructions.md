@@ -333,7 +333,7 @@ A packed (`i8`/`i16`) struct field or array element read sign- or zero-extends t
 
 ## SIMD (Vector) Instructions
 
-`v128` vector operations are written as method intrinsics with the lane shape baked into the name. The Wax name is the WebAssembly mnemonic with the leading shape moved to the end: `i32x4.add` becomes `add_i32x4`, `f32x4.sqrt` becomes `sqrt_f32x4`, and the whole-vector `v128.and` becomes `and_v128`. Signed/unsigned variants keep the `_s`/`_u` (`min_s_i8x16`, `extract_lane_u_i8x16`). Constant lane immediates (lane indices, shuffle indices) come first in the argument list, before any remaining stack operands.
+`v128` vector operations are written as method intrinsics with the lane shape baked into the name. The Wax name is the WebAssembly mnemonic with the leading shape moved to the end: `i32x4.add` becomes `add_i32x4`, `f32x4.sqrt` becomes `sqrt_f32x4`, and the whole-vector `v128.and` becomes `and_v128`. Signed/unsigned variants keep the `_s`/`_u` (`min_s_i8x16`, `extract_lane_u_i8x16`). The constant lane immediates of the value-receiver operations (lane indices, shuffle indices) come first in the argument list, before any remaining stack operands; the lane index of a memory lane access is instead the labelled `lane:` argument (see the loads and stores below).
 
 Lanewise unary and binary operations (the receiver is the first operand):
 
@@ -384,7 +384,7 @@ Constants are `v128::` free functions (one argument per lane: 16, 8, 4, or 2). `
 | `v128.const f32x4 1.5 2.5 3.5 4.5` | `v128::f32x4(1.5, 2.5, 3.5, 4.5)` |
 | `v128.const i8x16 0 1 ... 15` | `v128::i8x16(0, 1, ..., 15)` |
 
-Memory loads and stores are methods on a [memory](module_fields.md#memories), like the scalar [memory accesses](#memory-access) (the optional trailing `align`/`offset` arguments work the same way):
+Memory loads and stores are methods on a [memory](module_fields.md#memories), like the scalar [memory accesses](#memory-access) (the optional labelled `offset:`/`align:` arguments work the same way). The lane index of a lane access is the labelled `lane:` argument, mandatory and in any order with `offset:`/`align:`:
 
 | Wasm | Wax |
 |------|-----|
@@ -393,8 +393,8 @@ Memory loads and stores are methods on a [memory](module_fields.md#memories), li
 | `v128.load8x8_s` (and `16x4`/`32x2`, `_s`/`_u`) | `m.v128_load8x8_s(p)` |
 | `v128.load32_zero` (and `64_zero`) | `m.v128_load32_zero(p)` |
 | `v128.load8_splat` (and `16`/`32`/`64`) | `m.v128_load8_splat(p)` |
-| `v128.load8_lane` (and `16`/`32`/`64`) | `m.v128_load8_lane(p, v, lane)` |
-| `v128.store8_lane` (and `16`/`32`/`64`) | `m.v128_store8_lane(p, v, lane)` |
+| `v128.load8_lane` (and `16`/`32`/`64`) | `m.v128_load8_lane(p, v, lane: l)` |
+| `v128.store8_lane` (and `16`/`32`/`64`) | `m.v128_store8_lane(p, v, lane: l)` |
 
 Relaxed-SIMD operations follow the same scheme:
 
@@ -425,15 +425,16 @@ Loads and stores are method calls on a [memory](module_fields.md#memories). The 
 
 A bare narrow load (`m.load8(p)` with no cast) defaults to unsigned `i32`, like `array.get_u`. The store value's `i32`/`i64` type is inferred from the operand.
 
-Two optional trailing arguments give the `align` and `offset` of the access (both constant integers); `offset` requires `align` to fill its positional slot:
+The `offset` and `align` of the access (both constant integers) are optional labelled arguments, written after the operands in either order:
 
 ```wax
-m.load32(p);          // i32.load
-m.load32(p, 1);       // i32.load align=1
-m.load32(p, 1, 16);   // i32.load align=1 offset=16
+m.load32(p);                        // i32.load
+m.load32(p, offset: 16);            // i32.load offset=16
+m.load32(p, offset: 16, align: 1);  // i32.load offset=16 align=1
+m.load32(p, align: 1);              // i32.load align=1
 ```
 
-The alignment defaults to the access's natural alignment and is only printed when it differs; the offset defaults to `0`.
+The alignment defaults to the access's natural alignment and is only printed when it differs; the offset defaults to `0` and is only printed when non-zero.
 
 The remaining memory operations are also methods on the memory (a data segment is named directly, not as a value):
 
@@ -449,7 +450,7 @@ The remaining memory operations are also methods on the memory (a data segment i
 
 ### Atomics
 
-Atomic accesses (the threads proposal) are methods on a memory, named after the WebAssembly mnemonic with `.` rewritten as `_` (the value type stays in the name). They require exactly their natural alignment. `atomic.fence` has no memory operand and is the [`atomic::fence()`](language.md#qualified-intrinsics) intrinsic.
+Atomic accesses (the threads proposal) are methods on a memory, named after the WebAssembly mnemonic with `.` rewritten as `_` (the value type stays in the name). They take the same labelled `offset:` argument as the other accesses; an `align:` argument is accepted but must be exactly the natural alignment, which is also the default. `atomic.fence` has no memory operand and is the [`atomic::fence()`](language.md#qualified-intrinsics) intrinsic.
 
 | Wasm | Wax |
 |---|---|

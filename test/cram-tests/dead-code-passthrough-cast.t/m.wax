@@ -24,7 +24,7 @@ fn f: t_3 () -> (v128, i64, v128) 'l: {
         1,
     );
     {t_12| .. };
-    m.load8(m.size(), 1, 516901061) as i64_u as i32 as i64_s;
+    m.load8(m.size(), offset: 516901061) as i64_u as i32 as i64_s;
     'l_2: do {
         m.load16(
             2,

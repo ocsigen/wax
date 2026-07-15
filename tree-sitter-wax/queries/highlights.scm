@@ -88,6 +88,7 @@
 (parameter name: (identifier) @variable.parameter)
 
 (field_initializer name: (identifier) @property)
+(labelled_argument label: (identifier) @property)
 (struct_get_expression field: (identifier) @property)
 (struct_type_field name: (identifier) @property)
 

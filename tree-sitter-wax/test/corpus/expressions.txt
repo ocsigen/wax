@@ -141,3 +141,30 @@ fn f() { g(a, b)[i]; }
             (identifier)))
         index: (identifier)))))
 
+
+==================
+labelled arguments
+==================
+
+fn f() { m.store32(p, v, offset: 16, align: 1); }
+
+---
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (block
+      (call_expression
+        function: (struct_get_expression
+          value: (identifier)
+          field: (identifier))
+        arguments: (argument_list
+          (identifier)
+          (identifier)
+          (labelled_argument
+            label: (identifier)
+            value: (integer_literal))
+          (labelled_argument
+            label: (identifier)
+            value: (integer_literal)))))))
